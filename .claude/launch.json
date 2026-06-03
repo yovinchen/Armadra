@@ -1,0 +1,37 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@ai-coding-canvas/web",
+        "exec",
+        "vite",
+        "--port",
+        "1421",
+        "--host",
+        "localhost"
+      ],
+      "port": 1421,
+      "url": "http://localhost:1421"
+    },
+    {
+      "name": "web-review",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@ai-coding-canvas/web",
+        "exec",
+        "vite",
+        "--port",
+        "1422",
+        "--host",
+        "localhost"
+      ],
+      "port": 1422,
+      "url": "http://localhost:1422"
+    }
+  ]
+}
