@@ -1,0 +1,11 @@
+packages:
+  - apps/web
+  - apps/desktop
+  - packages/*
+
+allowBuilds:
+  esbuild: true
+
+minimumReleaseAgeExclude:
+  - "@xyflow/react@12.11.3"
+  - "@xyflow/system@0.0.80"
