@@ -1,0 +1,37 @@
+[package]
+name = "ai-coding-canvas-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+name = "ai_coding_canvas_runtime"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ai-coding-canvas-runtime"
+path = "src/main.rs"
+
+[dependencies]
+agent-client-protocol = "2.0.0"
+anyhow = "1.0.100"
+axum = { version = "0.8.9", features = ["ws", "macros"] }
+chrono = { version = "0.4.42", features = ["serde"] }
+futures-util = "0.3.31"
+mime_guess = "2.0.5"
+portable-pty = "0.9.0"
+regex = "1.11.2"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+sqlx = { version = "0.9.0", features = ["runtime-tokio", "sqlite", "migrate"] }
+thiserror = "2.0.17"
+tokio = { version = "1.53.1", features = ["full"] }
+tower-http = { version = "0.7.0", features = ["cors", "trace"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+uuid = { version = "1.24.0", features = ["v4", "v7", "serde"] }
+
+[dev-dependencies]
+tempfile = "3.23.0"
+tower = { version = "0.5.2", features = ["util"] }
