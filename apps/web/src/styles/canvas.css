@@ -1,0 +1,497 @@
+/* Canvas surface, toolbar, zoom column, semantic edges, pen strokes and the
+ * link semantics popover — docs/redesign-plan.md §1.2 / SPEC §3–§6 [B1].
+ * The only literal colours here are `#fff` on accent fills; the pen palette
+ * itself lives in `canvas/CanvasToolbar.tsx`.
+ */
+
+.canvas-stage {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.canvas-stage.is-pen {
+  cursor: crosshair;
+}
+
+.canvas-stage .react-flow {
+  background: transparent;
+}
+
+.canvas-stage .react-flow__attribution {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- empty --- */
+
+.canvas-empty {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inset: 0;
+  pointer-events: none;
+}
+
+.canvas-empty-card {
+  width: min(520px, calc(100% - 48px));
+  text-align: center;
+  pointer-events: auto;
+}
+
+.canvas-empty-glyph {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 14px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--card);
+  color: var(--accent);
+  font-size: 22px;
+  box-shadow: var(--shadow);
+  place-items: center;
+}
+
+.canvas-empty h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.canvas-empty p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.canvas-empty-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+  gap: 8px;
+}
+
+.canvas-empty-actions button {
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+}
+
+.canvas-empty-actions button:hover {
+  border-color: var(--accent);
+}
+
+.canvas-empty-actions .canvas-empty-primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* -------------------------------------------------------------- toolbar --- */
+
+.canvas-toolbar {
+  position: absolute;
+  z-index: 45;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  gap: 3px;
+  box-shadow: var(--shadow);
+}
+
+.canvas-tool {
+  display: flex;
+  height: 26px;
+  align-items: center;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  gap: 5px;
+}
+
+.canvas-tool:hover {
+  background: var(--card2);
+}
+
+.canvas-tool.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.canvas-tool--ghost {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.canvas-toolbar-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: var(--border);
+}
+
+.canvas-pen-color {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.canvas-pen-color.is-active {
+  border-color: var(--text);
+}
+
+/* ----------------------------------------------------------------- zoom --- */
+
+.canvas-zoom {
+  position: absolute;
+  z-index: 45;
+  bottom: 12px;
+  left: 12px;
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.canvas-zoom button {
+  width: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.canvas-zoom button:hover {
+  background: var(--card2);
+}
+
+.canvas-zoom-step {
+  height: 30px;
+  font-size: 14px;
+}
+
+.canvas-zoom-value {
+  height: 26px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-zoom-fit {
+  height: 28px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ---------------------------------------------------------------- pills --- */
+
+.canvas-pill {
+  position: absolute;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 11.5px;
+  gap: 8px;
+  box-shadow: var(--shadow);
+}
+
+.canvas-pill-glyph {
+  color: var(--accent);
+}
+
+.canvas-pill button {
+  padding: 0 0 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11.5px;
+}
+
+.canvas-summary-hint {
+  bottom: 12px;
+  left: 54px;
+}
+
+.canvas-focus-hint {
+  z-index: 80;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+/* --------------------------------------------------------------- focus --- */
+
+.canvas-focus-layer {
+  position: absolute;
+  z-index: 60;
+  inset: 0;
+  pointer-events: none;
+}
+
+.canvas-focus-layer > .canvas-node {
+  pointer-events: auto;
+}
+
+/* -------------------------------------------------------------- strokes --- */
+
+.canvas-strokes {
+  position: absolute;
+  overflow: visible;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.canvas-pen-capture {
+  position: absolute;
+  z-index: 20;
+  cursor: crosshair;
+  inset: 0;
+  touch-action: none;
+}
+
+/* ---------------------------------------------------------------- edges --- */
+
+.semantic-marker-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.semantic-edge {
+  stroke: var(--faint);
+  stroke-width: 2;
+}
+
+.semantic-edge--dashed {
+  stroke-dasharray: 6 5;
+}
+
+.semantic-edge.is-highlighted,
+.react-flow__edge.selected .semantic-edge,
+.react-flow__edge:hover .semantic-edge {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+.semantic-edge-label {
+  /* The label renderer only positions its children through `transform`, so the
+   * pill has to take itself out of flow or it stretches the whole layer. */
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  padding: 3px 9px 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 11px;
+  gap: 5px;
+  pointer-events: all;
+  white-space: nowrap;
+  box-shadow: var(--shadow);
+}
+
+.semantic-edge-label.is-highlighted {
+  border-color: var(--accent-line);
+}
+
+.semantic-edge-glyph {
+  color: var(--muted);
+}
+
+.semantic-edge-arrow {
+  color: var(--faint);
+}
+
+/* --------------------------------------------------------------- picker --- */
+
+.edge-picker {
+  position: absolute;
+  z-index: 50;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: var(--shadow-lg);
+}
+
+.edge-picker-head {
+  display: flex;
+  align-items: center;
+  padding: 2px 6px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  gap: 8px;
+}
+
+.edge-picker-head strong {
+  overflow: hidden;
+  max-width: 100px;
+  color: var(--text);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edge-picker-eyebrow {
+  padding: 0 6px 6px;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.edge-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.edge-picker-option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  gap: 10px;
+  text-align: left;
+}
+
+.edge-picker-option:hover,
+.edge-picker-option:focus-visible {
+  background: var(--card2);
+  outline: none;
+}
+
+.edge-picker-glyph {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 7px;
+  background: var(--card2);
+  color: var(--muted);
+  font-size: 12px;
+  place-items: center;
+}
+
+.edge-picker-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.edge-picker-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.edge-picker-desc {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.edge-picker-key {
+  flex: none;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+/* -------------------------------------------------------------- handles --- */
+
+.semantic-handle {
+  width: 14px;
+  min-width: 0;
+  height: 14px;
+  min-height: 0;
+  border: 2px solid var(--faint);
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+.semantic-handle.react-flow__handle-left {
+  left: -7px;
+}
+
+.semantic-handle--source {
+  width: 16px;
+  height: 16px;
+  border-color: var(--bg);
+  background: var(--accent);
+  cursor: crosshair;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.semantic-handle.react-flow__handle-right {
+  right: -8px;
+}
+
+/* Invisible 44px target so the ports stay reachable on a trackpad. */
+.semantic-handle::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.canvas-node-wrapper.is-focused .semantic-handle {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-pill,
+  .edge-picker {
+    transition: none;
+  }
+}

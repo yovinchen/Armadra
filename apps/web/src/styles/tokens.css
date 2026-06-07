@@ -1,0 +1,105 @@
+/*
+ * Theme tokens — docs/redesign-plan.md §6.
+ * Every colour in the app comes from here; switching the theme only swaps
+ * these variables (SPEC §12).
+ */
+
+:root {
+  --bg: #f3f4f8;
+  --panel: #ffffff;
+  --card: #ffffff;
+  --card2: #f5f6fa;
+  --border: rgb(25 28 50 / 9%);
+  --text: #1b1d26;
+  --muted: #6b7080;
+  --faint: #a0a5b3;
+  --dot: rgb(25 28 50 / 10%);
+  --accent: #5b5bd6;
+  --accent-soft: rgb(91 91 214 / 12%);
+  --accent-line: rgb(91 91 214 / 35%);
+  --ok: #1f9d64;
+  --warn: #d18f0f;
+  --warn-soft: rgb(209 143 15 / 10%);
+  --err: #dc4c4a;
+  --err-soft: rgb(220 76 74 / 10%);
+  --info: #2e7cf6;
+  --info-soft: rgb(46 124 246 / 12%);
+  --diff: #8a4fd6;
+  --diff-soft: rgb(138 79 214 / 12%);
+  --shadow: 0 6px 20px rgb(30 30 70 / 7%);
+  --shadow-lg: 0 24px 60px rgb(30 30 70 / 22%);
+  --term-bg: #1b1d26;
+  --topbar-h: 36px;
+  --rail-w: 52px;
+  --sidebar-w: 236px;
+  --inspector-w: 272px;
+  --statusbar-h: 24px;
+  --font-ui:
+    -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    system-ui, sans-serif;
+  --font-mono: ui-monospace, menlo, monospace;
+
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0e0f12;
+  --panel: #15161a;
+  --card: #1b1c21;
+  --card2: #23252b;
+  --border: rgb(255 255 255 / 8%);
+  --text: #edeef2;
+  --muted: #9a9fad;
+  --faint: #666b78;
+  --dot: rgb(255 255 255 / 8%);
+  --accent: #7c7cf0;
+  --accent-soft: rgb(124 124 240 / 18%);
+  --accent-line: rgb(124 124 240 / 45%);
+  --ok: #3fbf7f;
+  --warn: #e3b341;
+  --warn-soft: rgb(227 179 65 / 12%);
+  --err: #f0605d;
+  --err-soft: rgb(240 96 93 / 14%);
+  --info: #5b9bf0;
+  --info-soft: rgb(91 155 240 / 16%);
+  --diff: #c792ea;
+  --diff-soft: rgb(199 146 234 / 16%);
+  --shadow: 0 10px 28px rgb(0 0 0 / 45%);
+  --shadow-lg: 0 30px 70px rgb(0 0 0 / 60%);
+  --term-bg: #0a0b0d;
+
+  color-scheme: dark;
+}
+
+/* The `running` / `connecting` glyph is the only looping animation we ship
+   (plan §0), and even that stops for users who ask for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .brand-tile,
+  .rail-tile,
+  .canvas-node.is-selected,
+  .semantic-edge-label,
+  .runtime-dot,
+  .semantic-handle {
+    forced-color-adjust: auto;
+  }
+
+  .canvas-node.is-selected,
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid Highlight;
+  }
+}
