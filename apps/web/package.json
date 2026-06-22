@@ -1,0 +1,41 @@
+{
+  "name": "@ai-coding-canvas/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "predev": "pnpm --filter @ai-coding-canvas/shared build",
+    "dev": "vite --port 1420",
+    "prebuild": "pnpm --filter @ai-coding-canvas/shared build",
+    "build": "tsc -b && vite build",
+    "test": "vitest run",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "@ai-coding-canvas/shared": "workspace:*",
+    "@tanstack/react-query": "5.101.4",
+    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-dialog": "2.7.3",
+    "@tauri-apps/plugin-opener": "2.5.5",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
+    "@xyflow/react": "12.11.3",
+    "lucide-react": "1.31.0",
+    "motion": "13.1.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "4.4.3",
+    "zustand": "5.0.14"
+  },
+  "devDependencies": {
+    "@testing-library/react": "16.3.2",
+    "@types/node": "24.3.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.5",
+    "jsdom": "30.0.1",
+    "typescript": "5.9.2",
+    "vite": "8.2.1",
+    "vitest": "3.2.4"
+  }
+}
