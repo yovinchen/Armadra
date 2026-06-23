@@ -1,0 +1,13 @@
+{
+  "name": "@ai-coding-canvas/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tauri dev",
+    "prepare:sidecar": "node scripts/prepare-sidecar.mjs",
+    "build": "pnpm prepare:sidecar && tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.4"
+  }
+}
