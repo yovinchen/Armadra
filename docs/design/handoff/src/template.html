@@ -1,0 +1,4400 @@
+<helmet>
+  <style>
+    body {
+      margin: 0;
+      background: #0b0b0e;
+      font-family:
+        -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+        system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a {
+      color: var(--accent, #5b5bd6);
+    }
+    a:hover {
+      opacity: 0.85;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--faint, #999);
+      border-radius: 8px;
+      opacity: 0.5;
+    }
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+    @keyframes blink {
+      50% {
+        opacity: 0.25;
+      }
+    }
+    input,
+    textarea,
+    button,
+    select {
+      font-family: inherit;
+    }
+  </style>
+</helmet>
+<div
+  style="
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 24px 0 40px;
+    background: linear-gradient(135deg, #b9c6f5 0%, #8c7be8 45%, #c58bd8 100%);
+  "
+>
+  <div
+    style="
+      display: flex;
+      gap: 4px;
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      border-radius: 999px;
+      padding: 4px;
+      box-shadow: 0 6px 20px rgba(40, 30, 90, 0.15);
+    "
+  >
+    <span style="padding: 6px 10px; font-size: 12px; color: #5d6272"
+      >原型画面</span
+    >
+    <sc-for list="{{ screens }}" as="s" hint-placeholder-count="6">
+      <button
+        onClick="{{ s.go }}"
+        style="border:0;cursor:pointer;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;background:{{ s.bg }};color:{{ s.fg }}"
+      >
+        {{ s.label }}
+      </button>
+    </sc-for>
+    <button
+      onClick="{{ toggleTheme }}"
+      style="
+        border: 0;
+        cursor: pointer;
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        background: #1b1d26;
+        color: #fff;
+      "
+    >
+      {{ themeLabel }}
+    </button>
+  </div>
+
+  <div style="{{ rootVars }}">
+    <div
+      style="
+        width: 1440px;
+        height: 900px;
+        background: var(--bg);
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        box-shadow: 0 30px 80px rgba(20, 10, 60, 0.35);
+        overflow: hidden;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        color: var(--text);
+      "
+    >
+      <!-- 顶栏 36px -->
+      <div
+        style="
+          height: 36px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 0 12px;
+          background: var(--panel);
+          border-bottom: 1px solid var(--border);
+          flex: none;
+          font-size: 12px;
+        "
+      >
+        <div style="display: flex; gap: 7px; width: 56px">
+          <span
+            style="
+              width: 12px;
+              height: 12px;
+              border-radius: 50%;
+              background: #ff5f57;
+            "
+          ></span
+          ><span
+            style="
+              width: 12px;
+              height: 12px;
+              border-radius: 50%;
+              background: #febc2e;
+            "
+          ></span
+          ><span
+            style="
+              width: 12px;
+              height: 12px;
+              border-radius: 50%;
+              background: #28c840;
+            "
+          ></span>
+        </div>
+        <sc-if value="{{ isMain }}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; align-items: center; gap: 6px">
+            <span
+              style="
+                width: 18px;
+                height: 18px;
+                border-radius: 6px;
+                background: var(--accent);
+                color: #fff;
+                display: grid;
+                place-items: center;
+                font-size: 10px;
+                font-weight: 800;
+              "
+              >✦</span
+            ><span style="font-weight: 600">{{ wsName }}</span
+            ><span style="color: var(--faint)">/</span
+            ><span style="color: var(--muted)">{{ boardName }}</span>
+          </div>
+          <div style="flex: 1"></div>
+          <span
+            style="
+              display: flex;
+              align-items: center;
+              gap: 5px;
+              color: var(--muted);
+            "
+            ><span
+              style="
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: var(--ok);
+              "
+            ></span
+            >Runtime 0.1.0</span
+          >
+          <span
+            style="
+              display: flex;
+              align-items: center;
+              gap: 5px;
+              color: var(--muted);
+            "
+            ><span style="color: var(--ok)">✓</span>已保存到本地</span
+          >
+          <span
+            style="display:flex;align-items:center;gap:5px;color:{{ gwColor }}"
+            ><span>{{ gwIcon }}</span>网关 · {{ gwText }}</span
+          >
+          <span
+            style="
+              display: flex;
+              align-items: center;
+              gap: 5px;
+              color: var(--muted);
+            "
+            ><span>⑂</span>{{ gitText }}</span
+          >
+          <div style="flex: 1"></div>
+          <button
+            onClick="{{ openDiffScan }}"
+            style="
+              display: flex;
+              align-items: center;
+              gap: 5px;
+              border: 1px solid var(--border);
+              background: var(--card);
+              color: var(--text);
+              border-radius: 7px;
+              padding: 3px 9px;
+              font-size: 12px;
+              cursor: pointer;
+            "
+            style-hover="border-color:var(--accent)"
+          >
+            ± 扫描 Diff<span
+              style="
+                background: var(--accentSoft);
+                color: var(--accent);
+                border-radius: 999px;
+                padding: 0 6px;
+                font-size: 10.5px;
+                font-weight: 700;
+              "
+              >3</span
+            >
+          </button>
+          <button
+            onClick="{{ openCmd }}"
+            style="
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              border: 1px solid var(--border);
+              background: var(--card2);
+              color: var(--muted);
+              border-radius: 7px;
+              padding: 3px 9px;
+              font-size: 12px;
+              cursor: pointer;
+              min-width: 160px;
+            "
+            style-hover="border-color:var(--accent)"
+          >
+            <span>⌕</span>搜索或输入命令<span
+              style="
+                margin-left: auto;
+                font-family: ui-monospace, Menlo, monospace;
+                font-size: 10.5px;
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                padding: 0 4px;
+              "
+              >⌘K</span
+            >
+          </button>
+          <button
+            onClick="{{ toggleTheme }}"
+            title="切换主题"
+            style="
+              border: 0;
+              background: transparent;
+              color: var(--muted);
+              width: 26px;
+              height: 26px;
+              border-radius: 6px;
+              cursor: pointer;
+              font-size: 13px;
+            "
+            style-hover="background:var(--card2)"
+          >
+            {{ themeIcon }}
+          </button>
+          <button
+            onClick="{{ openSettings }}"
+            title="设置"
+            style="
+              border: 0;
+              background: transparent;
+              color: var(--muted);
+              width: 26px;
+              height: 26px;
+              border-radius: 6px;
+              cursor: pointer;
+              font-size: 13px;
+            "
+            style-hover="background:var(--card2)"
+          >
+            ⚙
+          </button>
+        </sc-if>
+        <sc-if value="{{ isLauncher }}" hint-placeholder-val="{{ false }}"
+          ><span style="color: var(--muted)">AI Coding Canvas</span></sc-if
+        >
+      </div>
+
+      <!-- 启动页 -->
+      <sc-if value="{{ isLauncher }}" hint-placeholder-val="{{ false }}">
+        <div style="flex: 1; display: flex; min-height: 0">
+          <div
+            style="
+              width: 300px;
+              background: var(--panel);
+              border-right: 1px solid var(--border);
+              padding: 28px 22px;
+              display: flex;
+              flex-direction: column;
+              gap: 18px;
+            "
+          >
+            <div style="display: flex; align-items: center; gap: 12px">
+              <span
+                style="
+                  width: 44px;
+                  height: 44px;
+                  border-radius: 14px;
+                  background: var(--accent);
+                  color: #fff;
+                  display: grid;
+                  place-items: center;
+                  font-size: 20px;
+                  font-weight: 800;
+                  box-shadow: 0 8px 20px var(--accentSoft);
+                "
+                >✦</span
+              >
+              <div>
+                <div style="font-size: 16px; font-weight: 700">
+                  AI Coding Canvas
+                </div>
+                <div style="font-size: 11.5px; color: var(--muted)">
+                  0.1.0 · 本地运行时已就绪
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <button
+                onClick="{{ openWorkspaceDemo }}"
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 10px;
+                  text-align: left;
+                  border: 0;
+                  background: var(--accent);
+                  color: #fff;
+                  border-radius: 12px;
+                  padding: 11px 14px;
+                  font-size: 13px;
+                  font-weight: 600;
+                  cursor: pointer;
+                "
+              >
+                <span>▤</span>打开项目位置…<span
+                  style="margin-left: auto; font-size: 11px; opacity: 0.8"
+                  >⌘O</span
+                >
+              </button>
+              <button
+                onClick="{{ openNewWs }}"
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 10px;
+                  text-align: left;
+                  border: 1px solid var(--border);
+                  background: var(--card);
+                  color: var(--text);
+                  border-radius: 12px;
+                  padding: 11px 14px;
+                  font-size: 13px;
+                  font-weight: 600;
+                  cursor: pointer;
+                "
+                style-hover="border-color:var(--accent)"
+              >
+                <span>＋</span>新建工作空间<span
+                  style="
+                    margin-left: auto;
+                    font-size: 11px;
+                    color: var(--muted);
+                  "
+                  >⌘N</span
+                >
+              </button>
+              <button
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 10px;
+                  text-align: left;
+                  border: 1px solid var(--border);
+                  background: var(--card);
+                  color: var(--text);
+                  border-radius: 12px;
+                  padding: 11px 14px;
+                  font-size: 13px;
+                  font-weight: 600;
+                  cursor: pointer;
+                "
+                style-hover="border-color:var(--accent)"
+              >
+                <span>⇄</span>连接远程网关…<span
+                  style="
+                    margin-left: auto;
+                    font-size: 11px;
+                    color: var(--muted);
+                  "
+                  >外部端</span
+                >
+              </button>
+            </div>
+            <div style="flex: 1"></div>
+            <div
+              style="
+                border: 1.5px dashed var(--border);
+                border-radius: 14px;
+                padding: 18px;
+                text-align: center;
+                color: var(--muted);
+                font-size: 12px;
+                line-height: 1.6;
+              "
+            >
+              <div style="font-size: 20px; margin-bottom: 4px">⤓</div>
+              把项目文件夹拖到这里<br />即可创建工作空间
+            </div>
+            <div
+              style="
+                display: flex;
+                gap: 10px;
+                font-size: 11.5px;
+                color: var(--faint);
+              "
+            >
+              <button
+                onClick="{{ openSettings }}"
+                style="
+                  border: 0;
+                  background: transparent;
+                  color: var(--muted);
+                  cursor: pointer;
+                  padding: 0;
+                  font-size: 11.5px;
+                "
+              >
+                ⚙ 设置</button
+              ><span>·</span><span>快捷键</span><span>·</span><span>文档</span>
+            </div>
+          </div>
+          <div
+            style="
+              flex: 1;
+              padding: 28px 32px;
+              overflow: auto;
+              display: flex;
+              flex-direction: column;
+              gap: 16px;
+            "
+          >
+            <div style="display: flex; align-items: center; gap: 10px">
+              <div style="font-size: 15px; font-weight: 700">
+                最近的工作空间
+              </div>
+              <div style="flex: 1"></div>
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 6px;
+                  border: 1px solid var(--border);
+                  background: var(--card);
+                  border-radius: 8px;
+                  padding: 5px 10px;
+                  font-size: 12px;
+                  color: var(--muted);
+                  min-width: 220px;
+                "
+              >
+                <span>⌕</span>搜索工作空间或路径
+              </div>
+            </div>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 12px;
+              "
+            >
+              <sc-for list="{{ recents }}" as="r" hint-placeholder-count="4">
+                <button
+                  onClick="{{ r.open }}"
+                  style="
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                    text-align: left;
+                    border: 1px solid var(--border);
+                    background: var(--card);
+                    border-radius: 16px;
+                    padding: 16px;
+                    cursor: pointer;
+                    color: var(--text);
+                    box-shadow: var(--shadow);
+                  "
+                  style-hover="border-color:var(--accent)"
+                >
+                  <div style="display: flex; align-items: center; gap: 10px">
+                    <span
+                      style="width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:14px;font-weight:800;color:#fff;background:{{ r.color }}"
+                      >{{ r.letter }}</span
+                    >
+                    <div style="flex: 1; min-width: 0">
+                      <div style="font-size: 13.5px; font-weight: 700">
+                        {{ r.name }}
+                      </div>
+                      <div
+                        style="
+                          font-family: ui-monospace, Menlo, monospace;
+                          font-size: 11px;
+                          color: var(--muted);
+                          white-space: nowrap;
+                          overflow: hidden;
+                          text-overflow: ellipsis;
+                        "
+                      >
+                        {{ r.path }}
+                      </div>
+                    </div>
+                    <span style="font-size: 11px; color: var(--faint)"
+                      >{{ r.when }}</span
+                    >
+                  </div>
+                  <div style="display: flex; gap: 6px; flex-wrap: wrap">
+                    <sc-for
+                      list="{{ r.boards }}"
+                      as="b"
+                      hint-placeholder-count="2"
+                      ><span
+                        style="
+                          font-size: 11px;
+                          background: var(--card2);
+                          border: 1px solid var(--border);
+                          border-radius: 999px;
+                          padding: 2px 8px;
+                          color: var(--muted);
+                        "
+                        >▦ {{ b }}</span
+                      ></sc-for
+                    >
+                  </div>
+                  <div
+                    style="
+                      display: flex;
+                      gap: 12px;
+                      font-size: 11px;
+                      color: var(--muted);
+                    "
+                  >
+                    <span>⑂ {{ r.git }}</span><span>{{ r.stats }}</span
+                    ><span
+                      style="margin-left:auto;display:flex;align-items:center;gap:4px;color:{{ r.gwColor }}"
+                      >{{ r.gwIcon }} {{ r.gw }}</span
+                    >
+                  </div>
+                </button>
+              </sc-for>
+            </div>
+            <div
+              style="
+                font-size: 11.5px;
+                color: var(--faint);
+                margin-top: auto;
+                line-height: 1.6;
+              "
+            >
+              每个工作空间对应一个项目位置，可包含多个看板；默认包含一个 Default
+              空看板。外部端（浏览器 / 移动端）通过网关接入同一工作空间。
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- 主工作区 -->
+      <sc-if value="{{ isMain }}" hint-placeholder-val="{{ true }}">
+        <div style="flex: 1; display: flex; min-height: 0">
+          <!-- 工作空间轨 -->
+          <div
+            style="
+              width: 52px;
+              flex: none;
+              background: var(--panel);
+              border-right: 1px solid var(--border);
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              padding: 10px 0;
+              gap: 8px;
+            "
+          >
+            <sc-for list="{{ wsRail }}" as="w" hint-placeholder-count="2">
+              <button
+                onClick="{{ w.select }}"
+                title="{{ w.name }}"
+                style="position:relative;width:34px;height:34px;border-radius:10px;border:2px solid {{ w.ring }};background:{{ w.color }};color:#fff;font-size:13px;font-weight:800;cursor:pointer;display:grid;place-items:center"
+              >
+                {{ w.letter }}<sc-if
+                  value="{{ w.running }}"
+                  hint-placeholder-val="{{ false }}"
+                  ><span
+                    style="
+                      position: absolute;
+                      right: -4px;
+                      bottom: -4px;
+                      width: 12px;
+                      height: 12px;
+                      border-radius: 50%;
+                      background: var(--warn);
+                      border: 2px solid var(--panel);
+                    "
+                  ></span
+                ></sc-if>
+              </button>
+            </sc-for>
+            <button
+              onClick="{{ openNewWs }}"
+              title="新建工作空间"
+              style="
+                width: 34px;
+                height: 34px;
+                border-radius: 10px;
+                border: 1.5px dashed var(--border);
+                background: transparent;
+                color: var(--muted);
+                font-size: 16px;
+                cursor: pointer;
+              "
+              style-hover="border-color:var(--accent);color:var(--accent)"
+            >
+              ＋
+            </button>
+            <div style="flex: 1"></div>
+            <button
+              title="外部端连接"
+              style="width:34px;height:34px;border-radius:10px;border:0;background:transparent;color:{{ gwColor }};font-size:14px;cursor:pointer"
+            >
+              {{ gwIcon }}
+            </button>
+            <button
+              onClick="{{ openSettings }}"
+              title="设置"
+              style="
+                width: 34px;
+                height: 34px;
+                border-radius: 10px;
+                border: 0;
+                background: transparent;
+                color: var(--muted);
+                font-size: 15px;
+                cursor: pointer;
+              "
+              style-hover="background:var(--card2)"
+            >
+              ⚙
+            </button>
+          </div>
+
+          <!-- 侧栏：看板 + 文件 -->
+          <div
+            style="
+              width: 236px;
+              flex: none;
+              background: var(--panel);
+              border-right: 1px solid var(--border);
+              display: flex;
+              flex-direction: column;
+              min-height: 0;
+            "
+          >
+            <div
+              style="
+                padding: 12px 12px 8px;
+                border-bottom: 1px solid var(--border);
+              "
+            >
+              <div style="font-size: 13px; font-weight: 700">{{ wsName }}</div>
+              <div
+                style="
+                  font-family: ui-monospace, Menlo, monospace;
+                  font-size: 10.5px;
+                  color: var(--muted);
+                  white-space: nowrap;
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                "
+              >
+                {{ wsPath }}
+              </div>
+            </div>
+            <div
+              style="
+                padding: 10px 8px 4px;
+                display: flex;
+                align-items: center;
+                font-size: 10.5px;
+                color: var(--faint);
+                letter-spacing: 0.06em;
+              "
+            >
+              <span style="padding-left: 4px">看板</span
+              ><button
+                onClick="{{ addBoard }}"
+                title="新建看板"
+                style="
+                  margin-left: auto;
+                  border: 0;
+                  background: transparent;
+                  color: var(--muted);
+                  cursor: pointer;
+                  font-size: 14px;
+                  width: 22px;
+                  height: 22px;
+                  border-radius: 6px;
+                "
+                style-hover="background:var(--card2)"
+              >
+                ＋
+              </button>
+            </div>
+            <div
+              style="
+                padding: 0 8px;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+              "
+            >
+              <sc-for list="{{ boards }}" as="b" hint-placeholder-count="2">
+                <button
+                  onClick="{{ b.select }}"
+                  style="display:flex;align-items:center;gap:8px;text-align:left;width:100%;border:0;border-radius:8px;padding:6px 8px;font-size:12.5px;cursor:pointer;background:{{ b.bg }};color:{{ b.fg }};font-weight:{{ b.weight }}"
+                >
+                  <span style="font-size: 11px">▦</span
+                  ><span
+                    style="
+                      flex: 1;
+                      overflow: hidden;
+                      text-overflow: ellipsis;
+                      white-space: nowrap;
+                    "
+                    >{{ b.name }}</span
+                  ><span style="font-size: 10.5px; color: var(--faint)"
+                    >{{ b.count }}</span
+                  ><sc-if
+                    value="{{ b.running }}"
+                    hint-placeholder-val="{{ false }}"
+                    ><span
+                      style="
+                        width: 6px;
+                        height: 6px;
+                        border-radius: 50%;
+                        background: var(--warn);
+                      "
+                    ></span
+                  ></sc-if>
+                </button>
+              </sc-for>
+            </div>
+            <div
+              style="
+                padding: 14px 8px 4px;
+                display: flex;
+                align-items: center;
+                font-size: 10.5px;
+                color: var(--faint);
+                letter-spacing: 0.06em;
+              "
+            >
+              <span style="padding-left: 4px">项目文件</span
+              ><span
+                style="
+                  margin-left: auto;
+                  font-size: 10px;
+                  color: var(--faint);
+                  letter-spacing: 0;
+                "
+                >拖到画布创建节点</span
+              >
+            </div>
+            <div
+              style="
+                padding: 0 8px;
+                overflow: auto;
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                gap: 1px;
+              "
+            >
+              <sc-for list="{{ files }}" as="f" hint-placeholder-count="8">
+                <div
+                  draggable="true"
+                  onDragStart="{{ f.dragStart }}"
+                  onClick="{{ f.toggle }}"
+                  style="display:flex;align-items:center;gap:7px;padding:5px 8px;padding-left:{{ f.pad }}px;border-radius:7px;font-size:12px;cursor:grab;color:{{ f.color }}"
+                  style-hover="background:var(--card2)"
+                >
+                  <span
+                    style="font-size: 10.5px; color: var(--muted); width: 12px"
+                    >{{ f.icon }}</span
+                  ><span
+                    style="
+                      flex: 1;
+                      overflow: hidden;
+                      text-overflow: ellipsis;
+                      white-space: nowrap;
+                    "
+                    >{{ f.name }}</span
+                  ><span
+                    style="font-size:10px;color:{{ f.badgeColor }};font-family:ui-monospace,Menlo,monospace"
+                    >{{ f.badge }}</span
+                  >
+                </div>
+              </sc-for>
+            </div>
+            <div
+              style="
+                padding: 10px 8px 4px;
+                font-size: 10.5px;
+                color: var(--faint);
+                letter-spacing: 0.06em;
+                border-top: 1px solid var(--border);
+              "
+            >
+              <span style="padding-left: 4px">添加节点</span>
+            </div>
+            <div
+              style="
+                padding: 0 8px 10px;
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 5px;
+              "
+            >
+              <sc-for list="{{ palette }}" as="p" hint-placeholder-count="6">
+                <button
+                  draggable="true"
+                  onDragStart="{{ p.dragStart }}"
+                  onClick="{{ p.add }}"
+                  title="{{ p.desc }}"
+                  style="
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 4px;
+                    border: 1px solid var(--border);
+                    background: var(--card);
+                    border-radius: 9px;
+                    padding: 7px 4px;
+                    cursor: grab;
+                    color: var(--text);
+                  "
+                  style-hover="border-color:var(--accent)"
+                >
+                  <span
+                    style="width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:700;background:{{ p.bg }};color:{{ p.color }}"
+                    >{{ p.icon }}</span
+                  ><span style="font-size: 10.5px">{{ p.name }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+
+          <!-- 画布 -->
+          <div
+            ref="{{ vpRef }}"
+            tabindex="0"
+            onMouseDown="{{ onBgDown }}"
+            onMouseMove="{{ onMove }}"
+            onMouseUp="{{ onUp }}"
+            onMouseLeave="{{ onUp }}"
+            onWheel="{{ onWheel }}"
+            onDragOver="{{ onDragOver }}"
+            onDragLeave="{{ onDragLeave }}"
+            onDrop="{{ onDrop }}"
+            onPaste="{{ onPaste }}"
+            style="flex:1;position:relative;overflow:hidden;outline:none;background-color:var(--bg);background-image:radial-gradient(var(--dot) 1px,transparent 1px);background-size:{{ gridSize }}px {{ gridSize }}px;background-position:{{ gridPos }};cursor:{{ vpCursor }};user-select:none"
+          >
+            <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+              <div
+                style="
+                  position: absolute;
+                  inset: 0;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  pointer-events: none;
+                "
+              >
+                <div
+                  style="pointer-events: auto; text-align: center; width: 520px"
+                >
+                  <div
+                    style="
+                      width: 64px;
+                      height: 64px;
+                      margin: 0 auto 14px;
+                      border-radius: 20px;
+                      background: var(--card);
+                      border: 1px solid var(--border);
+                      box-shadow: var(--shadow);
+                      display: grid;
+                      place-items: center;
+                      font-size: 22px;
+                      color: var(--accent);
+                    "
+                  >
+                    ▦
+                  </div>
+                  <div style="font-size: 16px; font-weight: 700">
+                    {{ boardName }} 是空看板
+                  </div>
+                  <div
+                    style="
+                      font-size: 12.5px;
+                      color: var(--muted);
+                      margin-top: 6px;
+                      line-height: 1.65;
+                    "
+                  >
+                    从左侧拖入文件、文件夹或节点类型；粘贴一段文字会直接创建
+                    Task。<br />拖文件到 Agent 上会自动建立「引用」连线。
+                  </div>
+                  <div
+                    style="
+                      display: flex;
+                      gap: 8px;
+                      justify-content: center;
+                      margin-top: 18px;
+                    "
+                  >
+                    <button
+                      onClick="{{ seedDemo }}"
+                      style="
+                        border: 0;
+                        background: var(--accent);
+                        color: #fff;
+                        border-radius: 10px;
+                        padding: 9px 14px;
+                        font-size: 12.5px;
+                        font-weight: 600;
+                        cursor: pointer;
+                      "
+                    >
+                      ☰ 从任务开始
+                    </button>
+                    <button
+                      onClick="{{ addAgentHere }}"
+                      style="
+                        border: 1px solid var(--border);
+                        background: var(--card);
+                        color: var(--text);
+                        border-radius: 10px;
+                        padding: 9px 14px;
+                        font-size: 12.5px;
+                        cursor: pointer;
+                      "
+                      style-hover="border-color:var(--accent)"
+                    >
+                      ✦ 新建 Agent (ACP)
+                    </button>
+                    <button
+                      onClick="{{ openCmd }}"
+                      style="
+                        border: 1px solid var(--border);
+                        background: var(--card);
+                        color: var(--text);
+                        border-radius: 10px;
+                        padding: 9px 14px;
+                        font-size: 12.5px;
+                        cursor: pointer;
+                      "
+                      style-hover="border-color:var(--accent)"
+                    >
+                      ⌘K 命令
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ dropHint }}" hint-placeholder-val="{{ false }}">
+              <div
+                style="
+                  position: absolute;
+                  inset: 10px;
+                  border: 2px dashed var(--accent);
+                  border-radius: 16px;
+                  background: var(--accentSoft);
+                  display: flex;
+                  align-items: flex-start;
+                  justify-content: center;
+                  padding-top: 18px;
+                  pointer-events: none;
+                  z-index: 60;
+                "
+              >
+                <span
+                  style="
+                    background: var(--accent);
+                    color: #fff;
+                    border-radius: 999px;
+                    padding: 6px 14px;
+                    font-size: 12.5px;
+                    font-weight: 600;
+                  "
+                  >{{ dropHint }}</span
+                >
+              </div>
+            </sc-if>
+
+            <svg
+              style="
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+                overflow: visible;
+                pointer-events: none;
+              "
+            >
+              <defs>
+                <marker
+                  id="arw"
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="8"
+                  markerHeight="8"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M0,0 L10,5 L0,10 z" fill="{{ edgeColor }}"></path>
+                </marker>
+                <marker
+                  id="arwA"
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="8"
+                  markerHeight="8"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M0,0 L10,5 L0,10 z" fill="{{ accentColor }}"></path>
+                </marker>
+              </defs>
+              <sc-for
+                list="{{ strokeViews }}"
+                as="k"
+                hint-placeholder-count="0"
+              >
+                <path
+                  d="{{ k.d }}"
+                  fill="none"
+                  stroke="{{ k.color }}"
+                  stroke-width="{{ k.sw }}"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                ></path>
+              </sc-for>
+              <sc-if
+                value="{{ pendingStroke }}"
+                hint-placeholder-val="{{ false }}"
+              >
+                <path
+                  d="{{ pendingStroke.d }}"
+                  fill="none"
+                  stroke="{{ pendingStroke.color }}"
+                  stroke-width="{{ pendingStroke.sw }}"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                ></path>
+              </sc-if>
+              <sc-for list="{{ edgeViews }}" as="e" hint-placeholder-count="0">
+                <path
+                  d="{{ e.d }}"
+                  fill="none"
+                  stroke="{{ e.stroke }}"
+                  stroke-width="{{ e.sw }}"
+                  stroke-dasharray="{{ e.dash }}"
+                  marker-end="{{ e.marker }}"
+                ></path>
+              </sc-for>
+              <sc-if value="{{ pendingD }}" hint-placeholder-val="{{ false }}">
+                <path
+                  d="{{ pendingD }}"
+                  fill="none"
+                  stroke="{{ accentColor }}"
+                  stroke-width="2"
+                  stroke-dasharray="6 5"
+                  marker-end="url(#arwA)"
+                ></path>
+              </sc-if>
+            </svg>
+            <sc-for list="{{ edgeViews }}" as="e" hint-placeholder-count="0">
+              <div
+                style="position:absolute;left:{{ e.lx }}px;top:{{ e.ly }}px;transform:translate(-50%,-50%) scale({{ e.ls }});display:flex;align-items:center;gap:5px;background:var(--card);border:1px solid var(--border);border-radius:999px;padding:3px 9px 3px 7px;font-size:11px;color:var(--text);white-space:nowrap;box-shadow:var(--shadow)"
+              >
+                <span style="color: var(--muted)">{{ e.icon }}</span>{{ e.label
+                }}<span style="color: var(--faint)">→</span>
+              </div>
+            </sc-for>
+
+            <sc-for list="{{ nodeViews }}" as="n" hint-placeholder-count="0">
+              <div
+                onMouseUp="{{ n.onDropTarget }}"
+                onDragOver="{{ n.onDragOver }}"
+                onDrop="{{ n.onFileDrop }}"
+                style="{{ n.style }}"
+              >
+                <div
+                  onMouseDown="{{ n.onHeadDown }}"
+                  onDoubleClick="{{ n.toggleFocus }}"
+                  style="display:flex;flex-direction:column;height:100%;border-radius:{{ n.radius }}px;background:var(--card);border:1.5px solid {{ n.borderColor }};box-shadow:{{ n.shadow }};overflow:hidden"
+                >
+                  <div
+                    style="display:flex;align-items:center;gap:8px;padding:{{ n.headPad }};cursor:grab;flex:none;border-bottom:{{ n.headBorder }}"
+                  >
+                    <span
+                      title="{{ n.typeName }}"
+                      style="width:18px;height:18px;border-radius:5px;display:grid;place-items:center;font-size:10px;font-weight:700;background:{{ n.typeBg }};color:{{ n.typeColor }};flex:none"
+                      >{{ n.typeIcon }}</span
+                    >
+                    <div
+                      style="
+                        flex: 1;
+                        min-width: 0;
+                        font-size: 12px;
+                        font-weight: 600;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                      "
+                    >
+                      {{ n.title }}
+                    </div>
+                    <span
+                      style="display:flex;align-items:center;gap:3px;font-size:10px;font-weight:600;color:{{ n.statusColor }};flex:none"
+                      ><span
+                        style="display:inline-block;animation:{{ n.statusAnim }}"
+                        >{{ n.statusIcon }}</span
+                      >{{ n.statusText }}</span
+                    >
+                    <sc-if
+                      value="{{ n.showControls }}"
+                      hint-placeholder-val="{{ false }}"
+                    >
+                      <div style="display: flex; gap: 1px; flex: none">
+                        <button
+                          onClick="{{ n.setMini }}"
+                          onMouseDown="{{ stop }}"
+                          title="缩小"
+                          style="
+                            border: 0;
+                            background: transparent;
+                            color: var(--muted);
+                            width: 20px;
+                            height: 20px;
+                            border-radius: 5px;
+                            cursor: pointer;
+                            font-size: 12px;
+                          "
+                          style-hover="background:var(--card2)"
+                        >
+                          −
+                        </button>
+                        <button
+                          onClick="{{ n.toggleFocus }}"
+                          onMouseDown="{{ stop }}"
+                          title="{{ n.focusTitle }}"
+                          style="
+                            border: 0;
+                            background: transparent;
+                            color: var(--muted);
+                            width: 20px;
+                            height: 20px;
+                            border-radius: 5px;
+                            cursor: pointer;
+                            font-size: 12px;
+                          "
+                          style-hover="background:var(--card2)"
+                        >
+                          {{ n.focusGlyph }}
+                        </button>
+                      </div>
+                    </sc-if>
+                    <sc-if
+                      value="{{ n.isMini }}"
+                      hint-placeholder-val="{{ false }}"
+                      ><button
+                        onClick="{{ n.setNormal }}"
+                        onMouseDown="{{ stop }}"
+                        title="展开"
+                        style="
+                          border: 0;
+                          background: transparent;
+                          color: var(--muted);
+                          width: 22px;
+                          height: 22px;
+                          border-radius: 6px;
+                          cursor: pointer;
+                          font-size: 12px;
+                        "
+                        style-hover="background:var(--card2)"
+                      >
+                        ＋
+                      </button></sc-if
+                    >
+                  </div>
+
+                  <sc-if
+                    value="{{ n.showBody }}"
+                    hint-placeholder-val="{{ true }}"
+                  >
+                    <sc-if
+                      value="{{ n.isTask }}"
+                      hint-placeholder-val="{{ false }}"
+                    >
+                      <div
+                        onMouseDown="{{ stop }}"
+                        style="
+                          flex: 1;
+                          padding: 12px 14px;
+                          display: flex;
+                          flex-direction: column;
+                          gap: 10px;
+                          font-size: 12.5px;
+                          cursor: default;
+                          overflow: auto;
+                        "
+                      >
+                        <div style="line-height: 1.6; color: var(--text)">
+                          {{ n.body }}
+                        </div>
+
+                        <div
+                          style="
+                            display: flex;
+                            flex-direction: column;
+                            gap: 6px;
+                            margin-top: 2px;
+                          "
+                        >
+                          <div
+                            style="
+                              display: flex;
+                              gap: 8px;
+                              align-items: center;
+                              color: var(--muted);
+                            "
+                          >
+                            <span style="color: var(--ok)">☑</span
+                            ><span style="text-decoration: line-through"
+                              >分析现有中间件</span
+                            >
+                          </div>
+                          <div
+                            style="display: flex; gap: 8px; align-items: center"
+                          >
+                            <span style="color: var(--accent)">▶</span
+                            >实现令牌桶限制器
+                          </div>
+                          <div
+                            style="
+                              display: flex;
+                              gap: 8px;
+                              align-items: center;
+                              color: var(--muted);
+                            "
+                          >
+                            <span>☐</span>补充 login.test.ts
+                          </div>
+                        </div>
+                        <div style="margin-top: auto; display: flex; gap: 6px">
+                          <button
+                            style="
+                              flex: 1;
+                              border: 0;
+                              background: var(--accent);
+                              color: #fff;
+                              border-radius: 8px;
+                              padding: 6px;
+                              font-size: 12px;
+                              font-weight: 600;
+                              cursor: pointer;
+                            "
+                          >
+                            ➤ 派发
+                          </button>
+                        </div>
+                      </div>
+                    </sc-if>
+                    <sc-if
+                      value="{{ n.isFile }}"
+                      hint-placeholder-val="{{ false }}"
+                    >
+                      <div
+                        onMouseDown="{{ stop }}"
+                        style="
+                          flex: 1;
+                          display: flex;
+                          flex-direction: column;
+                          cursor: default;
+                          min-height: 0;
+                        "
+                      >
+                        <pre
+                          style="
+                            margin: 0;
+                            flex: 1;
+                            overflow: auto;
+                            padding: 10px 12px;
+                            font-family: ui-monospace, Menlo, monospace;
+                            font-size: 11px;
+                            line-height: 1.7;
+                            color: var(--text);
+                            background: var(--card2);
+                          "
+                        >
+{{ n.body }}</pre
+                        >
+                      </div>
+                    </sc-if>
+                    <sc-if
+                      value="{{ n.isContext }}"
+                      hint-placeholder-val="{{ false }}"
+                    >
+                      <div
+                        onMouseDown="{{ stop }}"
+                        style="
+                          flex: 1;
+                          padding: 10px 12px;
+                          display: flex;
+                          flex-direction: column;
+                          gap: 8px;
+                          cursor: default;
+                          overflow: auto;
+                          font-size: 12px;
+                        "
+                      >
+                        <div
+                          style="
+                            font-family: ui-monospace, Menlo, monospace;
+                            font-size: 11px;
+                            color: var(--muted);
+                          "
+                        >
+                          {{ n.body }}
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 5px">
+                          <span
+                            style="
+                              font-size: 11px;
+                              background: var(--card2);
+                              border: 1px solid var(--border);
+                              border-radius: 6px;
+                              padding: 2px 7px;
+                            "
+                            >login.ts</span
+                          ><span
+                            style="
+                              font-size: 11px;
+                              background: var(--card2);
+                              border: 1px solid var(--border);
+                              border-radius: 6px;
+                              padding: 2px 7px;
+                            "
+                            >session.ts</span
+                          ><span
+                            style="
+                              font-size: 11px;
+                              background: var(--card2);
+                              border: 1px solid var(--border);
+                              border-radius: 6px;
+                              padding: 2px 7px;
+                            "
+                            >rateLimit.ts</span
+                          ><span
+                            style="
+                              font-size: 11px;
+                              color: var(--muted);
+                              padding: 2px 4px;
+                            "
+                            >+9</span
+                          >
+                        </div>
+                        <div style="font-size: 11px; color: var(--muted)">
+                          约 6.2k tokens
+                        </div>
+                      </div>
+                    </sc-if>
+                    <sc-if
+                      value="{{ n.isNote }}"
+                      hint-placeholder-val="{{ false }}"
+                    >
+                      <div
+                        onMouseDown="{{ stop }}"
+                        style="flex:1;display:flex;flex-direction:column;min-height:0;cursor:default;background:{{ n.noteBg }}"
+                      >
+                        <textarea
+                          value="{{ n.body }}"
+                          onChange="{{ n.setBody }}"
+                          placeholder="写点什么…"
+                          style="
+                            flex: 1;
+                            resize: none;
+                            border: 0;
+                            background: transparent;
+                            padding: 10px 12px;
+                            font-size: 12.5px;
+                            line-height: 1.65;
+                            color: var(--text);
+                            outline: none;
+                          "
+                        ></textarea>
+                        <div
+                          style="
+                            display: flex;
+                            align-items: center;
+                            gap: 6px;
+                            padding: 6px 10px;
+                            border-top: 1px solid var(--border);
+                            font-size: 11px;
+                            color: var(--muted);
+                          "
+                        >
+                          <span>{{ n.charCount }} 字</span>
+                          <div style="flex: 1"></div>
+                          <button
+                            style="
+                              border: 1px solid var(--border);
+                              background: var(--card);
+                              color: var(--text);
+                              border-radius: 7px;
+                              padding: 3px 8px;
+                              font-size: 11px;
+                              cursor: pointer;
+                            "
+                          >
+                            @ Agent</button
+                          ><button
+                            onClick="{{ n.toTask }}"
+                            style="
+                              border: 0;
+                              background: var(--accent);
+                              color: #fff;
+                              border-radius: 7px;
+                              padding: 3px 8px;
+                              font-size: 11px;
+                              font-weight: 600;
+                              cursor: pointer;
+                            "
+                          >
+                            ☰ 转为任务
+                          </button>
+                        </div>
+                      </div>
+                    </sc-if>
+                    <sc-if
+                      value="{{ n.isBrowser }}"
+                      hint-placeholder-val="{{ false }}"
+                    >
+                      <div
+                        onMouseDown="{{ stop }}"
+                        style="
+                          flex: 1;
+                          display: flex;
+                          flex-direction: column;
+                          min-height: 0;
+                          cursor: default;
+                        "
+                      >
+                        <div
+                          style="
+                            display: flex;
+                            align-items: center;
+                            gap: 4px;
+                            padding: 5px 8px;
+                            border-bottom: 1px solid var(--border);
+                            background: var(--card2);
+                          "
+                        >
+                          <button
+                            style="
+                              border: 0;
+                              background: transparent;
+                              color: var(--muted);
+                              width: 22px;
+                              height: 22px;
+                              border-radius: 6px;
+                              cursor: pointer;
+                              font-size: 13px;
+                            "
+                            style-hover="background:var(--card)"
+                          >
+                            ‹
+                          </button>
+                          <button
+                            style="
+                              border: 0;
+                              background: transparent;
+                              color: var(--faint);
+                              width: 22px;
+                              height: 22px;
+                              border-radius: 6px;
+                              cursor: pointer;
+                              font-size: 13px;
+                            "
+                          >
+                            ›
+                          </button>
+                          <button
+                            style="
+                              border: 0;
+                              background: transparent;
+                              color: var(--muted);
+                              width: 22px;
+                              height: 22px;
+                              border-radius: 6px;
+                              cursor: pointer;
+                              font-size: 12px;
+                            "
+                            style-hover="background:var(--card)"
+                          >
+                            ↻
+                          </button>
+                          <div
+                            style="
+                              flex: 1;
+                              display: flex;
+                              align-items: center;
+                              gap: 6px;
+                              background: var(--card);
+                              border: 1px solid var(--border);
+                              border-radius: 7px;
+                              padding: 3px 8px;
+                              font-size: 11px;
+                            "
+                          >
+                            <span style="color: var(--ok)" title="安全连接"
+                              >⊙</span
+                            ><input
+                              value="{{ n.url }}"
+                              onChange="{{ n.setUrl }}"
+                              style="
+                                flex: 1;
+                                border: 0;
+                                background: transparent;
+                                color: var(--text);
+                                font-size: 11px;
+                                font-family: ui-monospace, Menlo, monospace;
+                                outline: none;
+                              "
+                            />
+                          </div>
+                          <button
+                            title="在系统浏览器打开"
+                            style="
+                              border: 0;
+                              background: transparent;
+                              color: var(--muted);
+                              width: 22px;
+                              height: 22px;
+                              border-radius: 6px;
+                              cursor: pointer;
+                              font-size: 12px;
+                            "
+                            style-hover="background:var(--card)"
+                          >
+                            ↗
+                          </button>
+                        </div>
+                        <div
+                          style="
+                            flex: 1;
+                            min-height: 0;
+                            position: relative;
+                            background: repeating-linear-gradient(
+                              135deg,
+                              var(--card2) 0 10px,
+                              var(--card) 10px 20px
+                            );
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                          "
+                        >
+                          <div
+                            style="
+                              text-align: center;
+                              font-family: ui-monospace, Menlo, monospace;
+                              font-size: 11px;
+                              color: var(--muted);
+                              line-height: 1.8;
+                              background: var(--card);
+                              border: 1px dashed var(--border);
+                              border-radius: 10px;
+                              padding: 10px 14px;
+                            "
+                          >
+                            {{ n.url }}
+                          </div>
+                        </div>
+                        <div
+                          style="
+                            display: flex;
+                            align-items: center;
+                            gap: 6px;
+                            padding: 6px 10px;
+                            border-top: 1px solid var(--border);
+                            font-size: 11px;
+                            color: var(--muted);
+                            background: var(--card2);
+                          "
+                        >
+                          <div style="flex: 1"></div>
+                          <button
+                            style="
+                              border: 1px solid var(--border);
+                              background: var(--card);
+                              color: var(--text);
+                              border-radius: 7px;
+                              padding: 3px 8px;
+                              font-size: 11px;
+                              cursor: pointer;
+                            "
+                          >
+                            ⤓ 截图到画布</button
+                          ><button
+                            style="
+                              border: 1px solid var(--border);
+                              background: var(--card);
+                              color: var(--text);
+                              border-radius: 7px;
+                              padding: 3px 8px;
+                              font-size: 11px;
+                              cursor: pointer;
+                            "
+                          >
+                            @ 发送给 Agent
+                          </button>
+                        </div>
+                      </div>
+                    </sc-if>
+                    <sc-if
+                      value="{{ n.isLog }}"
+                      hint-placeholder-val="{{ false }}"
+                    >
+                      <div
+                        onMouseDown="{{ stop }}"
+                        style="
+                          flex: 1;
+                          display: flex;
+                          flex-direction: column;
+                          cursor: default;
+                          min-height: 0;
+                          font-size: 11.5px;
+                        "
+                      >
+                        <div
+                          style="
+                            display: flex;
+                            gap: 6px;
+                            padding: 7px 12px;
+                            border-bottom: 1px solid var(--border);
+                          "
+                        >
+                          <span
+                            style="
+                              font-size: 11px;
+                              padding: 2px 8px;
+                              border-radius: 999px;
+                              background: var(--accentSoft);
+                              color: var(--accent);
+                            "
+                            >全部</span
+                          ><span
+                            style="
+                              font-size: 11px;
+                              padding: 2px 8px;
+                              border-radius: 999px;
+                              color: var(--muted);
+                            "
+                            >Agent</span
+                          ><span
+                            style="
+                              font-size: 11px;
+                              padding: 2px 8px;
+                              border-radius: 999px;
+                              color: var(--muted);
+                            "
+                            >终端</span
+                          ><span
+                            style="
+                              font-size: 11px;
+                              padding: 2px 8px;
+                              border-radius: 999px;
+                              color: var(--muted);
+                            "
+                            >网关</span
+                          >
+                        </div>
+                        <div
+                          style="
+                            flex: 1;
+                            overflow: auto;
+                            padding: 8px 12px;
+                            display: flex;
+                            flex-direction: column;
+                            gap: 6px;
+                            font-family: ui-monospace, Menlo, monospace;
+                            font-size: 10.5px;
+                            color: var(--muted);
+                          "
+                        >
+                          <div>
+                            <span style="color: var(--faint)">14:02:11</span>
+                            <span style="color: var(--ok)">✓</span> ACP v1
+                            已连接 (claude)
+                          </div>
+                          <div>
+                            <span style="color: var(--faint)">14:02:14</span>
+                            <span style="color: var(--info)">⚙</span> 读取
+                            src/auth/login.ts
+                          </div>
+                          <div>
+                            <span style="color: var(--faint)">14:02:31</span>
+                            <span style="color: var(--warn)">⏸</span>
+                            等待权限：执行 npm test
+                          </div>
+                          <div>
+                            <span style="color: var(--faint)">14:02:40</span>
+                            <span style="color: var(--info)">⇄</span> 外部端
+                            iPhone 通过网关加入会话
+                          </div>
+                        </div>
+                      </div>
+                    </sc-if>
+                    <sc-if
+                      value="{{ n.isAgent }}"
+                      hint-placeholder-val="{{ false }}"
+                    >
+                      <div
+                        onMouseDown="{{ stop }}"
+                        style="
+                          flex: 1;
+                          display: flex;
+                          flex-direction: column;
+                          min-height: 0;
+                          cursor: default;
+                        "
+                      >
+                        <div
+                          style="
+                            display: flex;
+                            align-items: center;
+                            gap: 8px;
+                            padding: 6px 10px;
+                            border-bottom: 1px solid var(--border);
+                            font-size: 11px;
+                            color: var(--muted);
+                            background: var(--card2);
+                          "
+                        >
+                          <span
+                            style="display:flex;align-items:center;gap:5px;color:{{ acpColor }};font-weight:600"
+                            ><span
+                              style="display:inline-block;animation:{{ acpAnim }}"
+                              >{{ acpIcon }}</span
+                            >{{ acpText }}</span
+                          >
+                          <select
+                            value="{{ model }}"
+                            onChange="{{ setModel }}"
+                            style="
+                              background: var(--card);
+                              color: var(--text);
+                              border: 1px solid var(--border);
+                              border-radius: 6px;
+                              padding: 2px 6px;
+                              font-size: 11px;
+                              cursor: pointer;
+                            "
+                          >
+                            <option value="claude">Claude Code</option>
+                            <option value="codex">Codex</option>
+                            <option value="gemini">Gemini CLI</option>
+                          </select>
+                          <span
+                            style="
+                              margin-left: auto;
+                              font-variant-numeric: tabular-nums;
+                            "
+                            >⇅ {{ tokens }}</span
+                          ><span style="font-variant-numeric: tabular-nums"
+                            >◷ {{ elapsed }}</span
+                          >
+                        </div>
+                        <div
+                          style="
+                            flex: 1;
+                            overflow: auto;
+                            padding: 12px;
+                            display: flex;
+                            flex-direction: column;
+                            gap: 10px;
+                          "
+                        >
+                          <sc-for
+                            list="{{ messages }}"
+                            as="m"
+                            hint-placeholder-count="4"
+                          >
+                            <sc-if
+                              value="{{ m.isUser }}"
+                              hint-placeholder-val="{{ false }}"
+                              ><div
+                                style="
+                                  align-self: flex-end;
+                                  max-width: 85%;
+                                  background: var(--accentSoft);
+                                  border: 1px solid var(--accentLine);
+                                  border-radius: 14px 14px 4px 14px;
+                                  padding: 8px 12px;
+                                  font-size: 12.5px;
+                                  line-height: 1.55;
+                                "
+                              >
+                                {{ m.text }}
+                              </div></sc-if
+                            >
+                            <sc-if
+                              value="{{ m.isAssistant }}"
+                              hint-placeholder-val="{{ false }}"
+                              ><div
+                                style="
+                                  align-self: flex-start;
+                                  max-width: 92%;
+                                  display: flex;
+                                  gap: 8px;
+                                "
+                              >
+                                <span
+                                  style="
+                                    width: 22px;
+                                    height: 22px;
+                                    border-radius: 7px;
+                                    background: var(--accent);
+                                    color: #fff;
+                                    display: grid;
+                                    place-items: center;
+                                    font-size: 10px;
+                                    flex: none;
+                                  "
+                                  >✦</span
+                                >
+                                <div
+                                  style="
+                                    background: var(--card2);
+                                    border: 1px solid var(--border);
+                                    border-radius: 4px 14px 14px 14px;
+                                    padding: 8px 12px;
+                                    font-size: 12.5px;
+                                    line-height: 1.55;
+                                  "
+                                >
+                                  {{ m.text }}
+                                </div>
+                              </div></sc-if
+                            >
+                            <sc-if
+                              value="{{ m.isThinking }}"
+                              hint-placeholder-val="{{ false }}"
+                            >
+                              <div
+                                style="
+                                  align-self: stretch;
+                                  border: 1px dashed var(--border);
+                                  border-radius: 10px;
+                                  overflow: hidden;
+                                "
+                              >
+                                <button
+                                  onClick="{{ m.toggle }}"
+                                  style="
+                                    width: 100%;
+                                    border: 0;
+                                    background: transparent;
+                                    color: var(--muted);
+                                    display: flex;
+                                    align-items: center;
+                                    gap: 8px;
+                                    padding: 7px 10px;
+                                    font-size: 11.5px;
+                                    cursor: pointer;
+                                    text-align: left;
+                                  "
+                                >
+                                  <span style="font-size: 10px"
+                                    >{{ m.chev }}</span
+                                  >思考过程 · {{ m.dur }}<span
+                                    style="margin-left: auto"
+                                    >{{ m.hint }}</span
+                                  >
+                                </button>
+                                <sc-if
+                                  value="{{ m.open }}"
+                                  hint-placeholder-val="{{ false }}"
+                                  ><div
+                                    style="
+                                      padding: 0 10px 10px;
+                                      font-size: 11.5px;
+                                      line-height: 1.6;
+                                      color: var(--muted);
+                                      font-style: italic;
+                                    "
+                                  >
+                                    {{ m.text }}
+                                  </div></sc-if
+                                >
+                              </div>
+                            </sc-if>
+                            <sc-if
+                              value="{{ m.isTool }}"
+                              hint-placeholder-val="{{ false }}"
+                            >
+                              <div
+                                style="
+                                  align-self: stretch;
+                                  display: flex;
+                                  align-items: center;
+                                  gap: 8px;
+                                  background: var(--card2);
+                                  border: 1px solid var(--border);
+                                  border-radius: 10px;
+                                  padding: 7px 10px;
+                                  font-size: 11.5px;
+                                "
+                              >
+                                <span
+                                  style="
+                                    width: 20px;
+                                    height: 20px;
+                                    border-radius: 6px;
+                                    display: grid;
+                                    place-items: center;
+                                    font-size: 10px;
+                                    background: var(--infoSoft);
+                                    color: var(--info);
+                                  "
+                                  >⚙</span
+                                >
+                                <span style="color: var(--muted)"
+                                  >{{ m.tool }}</span
+                                ><span
+                                  style="
+                                    font-family: ui-monospace, Menlo, monospace;
+                                    overflow: hidden;
+                                    text-overflow: ellipsis;
+                                    white-space: nowrap;
+                                    flex: 1;
+                                  "
+                                  >{{ m.arg }}</span
+                                >
+                                <span
+                                  style="display:flex;align-items:center;gap:4px;color:{{ m.color }};font-weight:600;flex:none"
+                                  ><span
+                                    style="display:inline-block;animation:{{ m.anim }}"
+                                    >{{ m.icon }}</span
+                                  >{{ m.result }}</span
+                                >
+                              </div>
+                            </sc-if>
+                            <sc-if
+                              value="{{ m.isPermission }}"
+                              hint-placeholder-val="{{ false }}"
+                            >
+                              <div
+                                style="
+                                  align-self: stretch;
+                                  background: var(--warnSoft);
+                                  border: 1.5px solid var(--warn);
+                                  border-radius: 12px;
+                                  padding: 12px;
+                                "
+                              >
+                                <div
+                                  style="
+                                    display: flex;
+                                    align-items: center;
+                                    gap: 8px;
+                                    font-size: 12.5px;
+                                    font-weight: 700;
+                                    color: var(--warn);
+                                  "
+                                >
+                                  <span>⏸</span>需要权限确认
+                                </div>
+                                <div
+                                  style="
+                                    font-family: ui-monospace, Menlo, monospace;
+                                    font-size: 11.5px;
+                                    background: var(--termBg);
+                                    color: #e6e7eb;
+                                    border-radius: 8px;
+                                    padding: 8px 10px;
+                                    margin-top: 6px;
+                                  "
+                                >
+                                  $ npm test -- login
+                                </div>
+                                <sc-if
+                                  value="{{ m.pending }}"
+                                  hint-placeholder-val="{{ true }}"
+                                >
+                                  <div
+                                    style="
+                                      display: flex;
+                                      gap: 6px;
+                                      margin-top: 10px;
+                                    "
+                                  >
+                                    <button
+                                      onClick="{{ m.allowOnce }}"
+                                      style="
+                                        flex: 1;
+                                        border: 0;
+                                        background: var(--warn);
+                                        color: #1a1a1a;
+                                        border-radius: 8px;
+                                        padding: 7px;
+                                        font-size: 12px;
+                                        font-weight: 700;
+                                        cursor: pointer;
+                                      "
+                                    >
+                                      ✓ 允许一次
+                                    </button>
+                                    <button
+                                      onClick="{{ m.allowAlways }}"
+                                      style="
+                                        flex: 1;
+                                        border: 1px solid var(--border);
+                                        background: var(--card);
+                                        color: var(--text);
+                                        border-radius: 8px;
+                                        padding: 7px;
+                                        font-size: 12px;
+                                        cursor: pointer;
+                                      "
+                                    >
+                                      ✓✓ 始终允许
+                                    </button>
+                                    <button
+                                      onClick="{{ m.deny }}"
+                                      style="
+                                        border: 1px solid var(--err);
+                                        background: transparent;
+                                        color: var(--err);
+                                        border-radius: 8px;
+                                        padding: 7px 10px;
+                                        font-size: 12px;
+                                        cursor: pointer;
+                                      "
+                                    >
+                                      ✕ 拒绝
+                                    </button>
+                                  </div>
+                                </sc-if>
+                                <sc-if
+                                  value="{{ m.decided }}"
+                                  hint-placeholder-val="{{ false }}"
+                                  ><div
+                                    style="margin-top:8px;font-size:11.5px;color:{{ m.decColor }};display:flex;gap:6px;align-items:center"
+                                  >
+                                    <span>{{ m.decIcon }}</span>{{ m.decText }}
+                                  </div></sc-if
+                                >
+                              </div>
+                            </sc-if>
+                          </sc-for>
+                        </div>
+                        <div
+                          style="
+                            border-top: 1px solid var(--border);
+                            padding: 8px 10px;
+                            display: flex;
+                            flex-direction: column;
+                            gap: 6px;
+                            flex: none;
+                          "
+                        >
+                          <div style="display: flex; gap: 5px; flex-wrap: wrap">
+                            <sc-for
+                              list="{{ ctxChips }}"
+                              as="c"
+                              hint-placeholder-count="2"
+                              ><span
+                                style="
+                                  display: flex;
+                                  align-items: center;
+                                  gap: 4px;
+                                  font-size: 10.5px;
+                                  background: var(--card2);
+                                  border: 1px solid var(--border);
+                                  border-radius: 6px;
+                                  padding: 2px 7px;
+                                  color: var(--muted);
+                                "
+                                ><span>{{ c.icon }}</span>{{ c.name }}<button
+                                  onClick="{{ c.remove }}"
+                                  style="
+                                    border: 0;
+                                    background: transparent;
+                                    color: var(--faint);
+                                    cursor: pointer;
+                                    padding: 0 0 0 2px;
+                                    font-size: 10px;
+                                  "
+                                >
+                                  ✕
+                                </button></span
+                              ></sc-for
+                            >
+                          </div>
+                          <textarea
+                            value="{{ draft }}"
+                            onChange="{{ setDraft }}"
+                            onKeyDown="{{ onDraftKey }}"
+                            placeholder="输入任务或追问…"
+                            rows="2"
+                            style="
+                              resize: none;
+                              width: 100%;
+                              background: var(--card2);
+                              border: 1px solid var(--border);
+                              border-radius: 10px;
+                              padding: 8px 10px;
+                              color: var(--text);
+                              font-size: 12.5px;
+                              line-height: 1.5;
+                              outline: none;
+                            "
+                            style-focus="border-color:var(--accent)"
+                          ></textarea>
+                          <div
+                            style="display: flex; gap: 6px; align-items: center"
+                          >
+                            <div style="flex: 1"></div>
+                            <sc-if
+                              value="{{ agentRunning }}"
+                              hint-placeholder-val="{{ false }}"
+                              ><button
+                                onClick="{{ stopAgent }}"
+                                style="
+                                  border: 1px solid var(--err);
+                                  background: var(--errSoft);
+                                  color: var(--err);
+                                  border-radius: 8px;
+                                  padding: 6px 12px;
+                                  font-size: 12px;
+                                  font-weight: 600;
+                                  cursor: pointer;
+                                "
+                              >
+                                ■ 停止
+                              </button></sc-if
+                            >
+                            <button
+                              onClick="{{ sendDraft }}"
+                              style="border:0;background:var(--accent);color:#fff;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;opacity:{{ runOpacity }}"
+                            >
+                              ▶ 运行
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </sc-if>
+                    <sc-if
+                      value="{{ n.isTerminal }}"
+                      hint-placeholder-val="{{ false }}"
+                    >
+                      <div
+                        onMouseDown="{{ stop }}"
+                        style="
+                          flex: 1;
+                          display: flex;
+                          flex-direction: column;
+                          min-height: 0;
+                          cursor: default;
+                          background: var(--termBg);
+                        "
+                      >
+                        <div
+                          style="
+                            display: flex;
+                            align-items: center;
+                            gap: 10px;
+                            padding: 5px 12px;
+                            font-size: 11px;
+                            color: var(--muted);
+                            border-bottom: 1px solid var(--border);
+                            background: var(--card2);
+                          "
+                        >
+                          <span
+                            style="font-family: ui-monospace, Menlo, monospace"
+                            >~/code/acme-web</span
+                          >
+                          <span
+                            style="margin-left:auto;display:flex;align-items:center;gap:5px;color:{{ connColor }};font-weight:600"
+                            ><span
+                              style="display:inline-block;animation:{{ connAnim }}"
+                              >{{ connIcon }}</span
+                            >{{ connText }}</span
+                          >
+                        </div>
+                        <div
+                          ref="{{ termRef }}"
+                          style="flex:1;overflow:auto;padding:10px 12px;font-family:ui-monospace,Menlo,monospace;font-size:{{ n.termFont }}px;line-height:1.65"
+                        >
+                          <sc-for
+                            list="{{ termLines }}"
+                            as="l"
+                            hint-placeholder-count="3"
+                            ><div
+                              style="white-space:pre-wrap;color:{{ l.color }}"
+                            >
+                              {{ l.text }}
+                            </div></sc-for
+                          >
+                          <sc-if
+                            value="{{ termRunning }}"
+                            hint-placeholder-val="{{ true }}"
+                            ><div>
+                              <span
+                                style="
+                                  display: inline-block;
+                                  width: 8px;
+                                  height: 14px;
+                                  background: var(--accent);
+                                  vertical-align: -2px;
+                                  animation: blink 1s steps(1) infinite;
+                                "
+                              ></span></div
+                          ></sc-if>
+                          <sc-if
+                            value="{{ termIdle }}"
+                            hint-placeholder-val="{{ false }}"
+                            ><div style="color: #5fd39a">
+                              $
+                              <span
+                                style="
+                                  display: inline-block;
+                                  width: 8px;
+                                  height: 14px;
+                                  background: #9da1ab;
+                                  vertical-align: -2px;
+                                "
+                              ></span></div
+                          ></sc-if>
+                        </div>
+                        <div
+                          style="
+                            display: flex;
+                            align-items: center;
+                            gap: 6px;
+                            padding: 7px 12px;
+                            border-top: 1px solid var(--border);
+                            background: var(--card2);
+                            flex: none;
+                          "
+                        >
+                          <span style="font-size: 11px; color: var(--muted)"
+                            >{{ termSummary }}</span
+                          >
+                          <div style="flex: 1"></div>
+                          <button
+                            onClick="{{ termClear }}"
+                            style="
+                              border: 1px solid var(--border);
+                              background: transparent;
+                              color: var(--text);
+                              border-radius: 8px;
+                              padding: 4px 10px;
+                              font-size: 12px;
+                              cursor: pointer;
+                            "
+                          >
+                            清屏</button
+                          ><button
+                            onClick="{{ termReconnect }}"
+                            style="
+                              border: 1px solid var(--border);
+                              background: transparent;
+                              color: var(--text);
+                              border-radius: 8px;
+                              padding: 4px 10px;
+                              font-size: 12px;
+                              cursor: pointer;
+                            "
+                          >
+                            ↻ 重连
+                          </button>
+                          <sc-if
+                            value="{{ termRunning }}"
+                            hint-placeholder-val="{{ true }}"
+                            ><button
+                              onClick="{{ termStop }}"
+                              style="
+                                border: 0;
+                                background: var(--err);
+                                color: #fff;
+                                border-radius: 8px;
+                                padding: 4px 12px;
+                                font-size: 12px;
+                                font-weight: 600;
+                                cursor: pointer;
+                              "
+                            >
+                              ■ 停止
+                            </button></sc-if
+                          >
+                          <sc-if
+                            value="{{ termIdle }}"
+                            hint-placeholder-val="{{ false }}"
+                            ><button
+                              onClick="{{ termRerun }}"
+                              style="
+                                border: 0;
+                                background: var(--accent);
+                                color: #fff;
+                                border-radius: 8px;
+                                padding: 4px 12px;
+                                font-size: 12px;
+                                font-weight: 600;
+                                cursor: pointer;
+                              "
+                            >
+                              ▶ 重新运行
+                            </button></sc-if
+                          >
+                        </div>
+                      </div>
+                    </sc-if>
+                    <sc-if
+                      value="{{ n.isDiff }}"
+                      hint-placeholder-val="{{ false }}"
+                    >
+                      <div
+                        onMouseDown="{{ stop }}"
+                        style="
+                          flex: 1;
+                          display: flex;
+                          flex-direction: column;
+                          min-height: 0;
+                          cursor: default;
+                        "
+                      >
+                        <div
+                          style="
+                            display: flex;
+                            align-items: center;
+                            gap: 10px;
+                            padding: 7px 12px;
+                            font-size: 11.5px;
+                            color: var(--muted);
+                            border-bottom: 1px solid var(--border);
+                          "
+                        >
+                          <span>{{ diffFileCount }} 个文件</span
+                          ><span style="color: var(--ok); font-weight: 600"
+                            >+{{ diffAdd }}</span
+                          ><span style="color: var(--err); font-weight: 600"
+                            >−{{ diffDel }}</span
+                          ><span style="margin-left: auto"
+                            >{{ diffProgress }}</span
+                          >
+                        </div>
+                        <div style="flex: 1; overflow: auto">
+                          <sc-for
+                            list="{{ diffFiles }}"
+                            as="f"
+                            hint-placeholder-count="3"
+                          >
+                            <div style="border-bottom: 1px solid var(--border)">
+                              <div
+                                style="
+                                  display: flex;
+                                  align-items: center;
+                                  gap: 8px;
+                                  padding: 7px 12px;
+                                  font-size: 12px;
+                                "
+                              >
+                                <button
+                                  onClick="{{ f.toggle }}"
+                                  style="
+                                    border: 0;
+                                    background: transparent;
+                                    color: var(--muted);
+                                    width: 18px;
+                                    cursor: pointer;
+                                    font-size: 10px;
+                                    padding: 0;
+                                  "
+                                >
+                                  {{ f.chev }}
+                                </button>
+                                <span
+                                  style="font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;background:{{ f.kindBg }};color:{{ f.kindColor }}"
+                                  >{{ f.kind }}</span
+                                >
+                                <span
+                                  onClick="{{ f.toggle }}"
+                                  style="
+                                    font-family: ui-monospace, Menlo, monospace;
+                                    flex: 1;
+                                    overflow: hidden;
+                                    text-overflow: ellipsis;
+                                    white-space: nowrap;
+                                    cursor: pointer;
+                                  "
+                                  >{{ f.path }}</span
+                                >
+                                <span
+                                  style="
+                                    color: var(--ok);
+                                    font-variant-numeric: tabular-nums;
+                                  "
+                                  >+{{ f.add }}</span
+                                ><span
+                                  style="
+                                    color: var(--err);
+                                    font-variant-numeric: tabular-nums;
+                                  "
+                                  >−{{ f.del }}</span
+                                >
+                                <span
+                                  style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:{{ f.stColor }};min-width:52px;justify-content:flex-end"
+                                  ><span>{{ f.stIcon }}</span>{{ f.stText
+                                  }}</span
+                                >
+                              </div>
+                              <sc-if
+                                value="{{ f.open }}"
+                                hint-placeholder-val="{{ false }}"
+                              >
+                                <div
+                                  style="
+                                    background: var(--card2);
+                                    font-family: ui-monospace, Menlo, monospace;
+                                    font-size: 11px;
+                                    line-height: 1.65;
+                                  "
+                                >
+                                  <div
+                                    style="
+                                      padding: 4px 12px;
+                                      color: var(--info);
+                                      background: var(--infoSoft);
+                                    "
+                                  >
+                                    {{ f.hunk }}
+                                  </div>
+                                  <sc-for
+                                    list="{{ f.lines }}"
+                                    as="l"
+                                    hint-placeholder-count="4"
+                                    ><div
+                                      style="display:flex;background:{{ l.bg }};color:{{ l.color }}"
+                                    >
+                                      <span
+                                        style="
+                                          width: 38px;
+                                          text-align: right;
+                                          padding-right: 8px;
+                                          color: var(--faint);
+                                          flex: none;
+                                        "
+                                        >{{ l.no }}</span
+                                      ><span style="width: 14px; flex: none"
+                                        >{{ l.sign }}</span
+                                      ><span style="white-space: pre"
+                                        >{{ l.text }}</span
+                                      >
+                                    </div></sc-for
+                                  >
+                                  <div
+                                    style="
+                                      display: flex;
+                                      gap: 6px;
+                                      padding: 8px 12px;
+                                      justify-content: flex-end;
+                                      border-top: 1px solid var(--border);
+                                    "
+                                  >
+                                    <button
+                                      onClick="{{ f.revert }}"
+                                      style="
+                                        border: 1px solid var(--border);
+                                        background: transparent;
+                                        color: var(--text);
+                                        border-radius: 7px;
+                                        padding: 4px 10px;
+                                        font-size: 11.5px;
+                                        cursor: pointer;
+                                      "
+                                    >
+                                      ↶ 回滚此文件
+                                    </button>
+                                    <button
+                                      onClick="{{ f.accept }}"
+                                      style="
+                                        border: 0;
+                                        background: var(--ok);
+                                        color: #fff;
+                                        border-radius: 7px;
+                                        padding: 4px 10px;
+                                        font-size: 11.5px;
+                                        font-weight: 700;
+                                        cursor: pointer;
+                                      "
+                                    >
+                                      ✓ 接受此文件
+                                    </button>
+                                  </div>
+                                </div>
+                              </sc-if>
+                            </div>
+                          </sc-for>
+                        </div>
+                        <div
+                          style="
+                            display: flex;
+                            gap: 6px;
+                            padding: 9px 12px;
+                            border-top: 1px solid var(--border);
+                            flex: none;
+                            align-items: center;
+                          "
+                        >
+                          <div style="flex: 1"></div>
+                          <button
+                            onClick="{{ diffRevertAll }}"
+                            style="
+                              border: 1px solid var(--err);
+                              background: transparent;
+                              color: var(--err);
+                              border-radius: 8px;
+                              padding: 5px 12px;
+                              font-size: 12px;
+                              font-weight: 600;
+                              cursor: pointer;
+                            "
+                          >
+                            ↶ 全部回滚
+                          </button>
+                          <button
+                            onClick="{{ diffAcceptAll }}"
+                            style="
+                              border: 0;
+                              background: var(--ok);
+                              color: #fff;
+                              border-radius: 8px;
+                              padding: 5px 12px;
+                              font-size: 12px;
+                              font-weight: 700;
+                              cursor: pointer;
+                            "
+                          >
+                            ✓ 全部接受
+                          </button>
+                        </div>
+                      </div>
+                    </sc-if>
+                  </sc-if>
+                </div>
+                <sc-if
+                  value="{{ n.showPorts }}"
+                  hint-placeholder-val="{{ true }}"
+                >
+                  <div
+                    title="输入"
+                    style="
+                      position: absolute;
+                      left: -7px;
+                      top: 50%;
+                      margin-top: -7px;
+                      width: 14px;
+                      height: 14px;
+                      border-radius: 50%;
+                      background: var(--bg);
+                      border: 2px solid var(--faint);
+                    "
+                  ></div>
+                  <div
+                    onMouseDown="{{ n.onPortDown }}"
+                    title="拖动以创建连线"
+                    style="
+                      position: absolute;
+                      right: -8px;
+                      top: 50%;
+                      margin-top: -8px;
+                      width: 16px;
+                      height: 16px;
+                      border-radius: 50%;
+                      background: var(--accent);
+                      border: 2px solid var(--bg);
+                      cursor: crosshair;
+                      box-shadow: 0 0 0 2px var(--accentSoft);
+                    "
+                  ></div>
+                </sc-if>
+              </div>
+            </sc-for>
+
+            <sc-if value="{{ picker }}" hint-placeholder-val="{{ false }}">
+              <div
+                onMouseDown="{{ stop }}"
+                style="position:absolute;left:{{ picker.x }}px;top:{{ picker.y }}px;width:280px;background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadowLg);padding:10px;z-index:50"
+              >
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 2px 6px 8px;
+                    font-size: 12px;
+                    color: var(--muted);
+                  "
+                >
+                  <span style="color: var(--text); font-weight: 600"
+                    >{{ picker.fromTitle }}</span
+                  ><span>→</span
+                  ><span style="color: var(--text); font-weight: 600"
+                    >{{ picker.toTitle }}</span
+                  >
+                </div>
+                <div
+                  style="
+                    font-size: 11px;
+                    color: var(--faint);
+                    padding: 0 6px 6px;
+                  "
+                >
+                  选择连线语义
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 3px">
+                  <sc-for
+                    list="{{ semantics }}"
+                    as="s"
+                    hint-placeholder-count="5"
+                  >
+                    <button
+                      onClick="{{ s.pick }}"
+                      style="
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                        text-align: left;
+                        width: 100%;
+                        border: 0;
+                        background: transparent;
+                        color: var(--text);
+                        border-radius: 9px;
+                        padding: 7px 8px;
+                        cursor: pointer;
+                      "
+                      style-hover="background:var(--card2)"
+                    >
+                      <span
+                        style="
+                          width: 24px;
+                          height: 24px;
+                          border-radius: 7px;
+                          display: grid;
+                          place-items: center;
+                          font-size: 12px;
+                          background: var(--card2);
+                          color: var(--muted);
+                        "
+                        >{{ s.icon }}</span
+                      >
+                      <span style="flex: 1"
+                        ><span
+                          style="
+                            display: block;
+                            font-size: 12.5px;
+                            font-weight: 600;
+                          "
+                          >{{ s.label }}</span
+                        ><span
+                          style="
+                            display: block;
+                            font-size: 11px;
+                            color: var(--muted);
+                          "
+                          >{{ s.desc }}</span
+                        ></span
+                      >
+                      <span
+                        style="
+                          font-size: 10.5px;
+                          color: var(--faint);
+                          font-family: ui-monospace, Menlo, monospace;
+                        "
+                        >{{ s.key }}</span
+                      >
+                    </button>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <!-- 画布工具栏 -->
+            <sc-if value="{{ showToolbar }}" hint-placeholder-val="{{ true }}">
+              <div
+                onMouseDown="{{ stop }}"
+                style="
+                  position: absolute;
+                  right: 12px;
+                  top: 12px;
+                  display: flex;
+                  align-items: center;
+                  gap: 3px;
+                  background: var(--card);
+                  border: 1px solid var(--border);
+                  border-radius: 10px;
+                  padding: 4px;
+                  box-shadow: var(--shadow);
+                  z-index: 45;
+                "
+              >
+                <sc-for list="{{ tools }}" as="t" hint-placeholder-count="2"
+                  ><button
+                    onClick="{{ t.set }}"
+                    title="{{ t.title }}"
+                    style="display:flex;align-items:center;gap:5px;border:0;border-radius:7px;padding:0 9px;height:26px;font-size:11.5px;font-weight:600;cursor:pointer;background:{{ t.bg }};color:{{ t.fg }}"
+                  >
+                    <span>{{ t.icon }}</span>{{ t.label }}
+                  </button></sc-for
+                >
+                <sc-if value="{{ penMode }}" hint-placeholder-val="{{ false }}">
+                  <span
+                    style="
+                      width: 1px;
+                      height: 18px;
+                      background: var(--border);
+                      margin: 0 3px;
+                    "
+                  ></span>
+                  <sc-for
+                    list="{{ penColors }}"
+                    as="c"
+                    hint-placeholder-count="4"
+                    ><button
+                      onClick="{{ c.set }}"
+                      style="width:18px;height:18px;border-radius:50%;background:{{ c.color }};border:2px solid {{ c.ring }};cursor:pointer;padding:0"
+                    ></button
+                  ></sc-for>
+                  <button
+                    onClick="{{ clearStrokes }}"
+                    style="
+                      border: 0;
+                      background: transparent;
+                      color: var(--muted);
+                      border-radius: 7px;
+                      padding: 0 8px;
+                      height: 26px;
+                      font-size: 11.5px;
+                      cursor: pointer;
+                    "
+                    style-hover="background:var(--card2)"
+                  >
+                    清除笔迹
+                  </button>
+                </sc-if>
+                <span
+                  style="
+                    width: 1px;
+                    height: 18px;
+                    background: var(--border);
+                    margin: 0 3px;
+                  "
+                ></span>
+                <button
+                  onClick="{{ autoArrange }}"
+                  title="按连线流向分列排布并适应画布"
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 5px;
+                    border: 0;
+                    border-radius: 7px;
+                    padding: 0 9px;
+                    height: 26px;
+                    font-size: 11.5px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    background: transparent;
+                    color: var(--text);
+                  "
+                  style-hover="background:var(--card2)"
+                >
+                  <span>⊞</span>一键整理
+                </button>
+              </div>
+            </sc-if>
+            <!-- 缩放控件 + 提示 -->
+            <div
+              style="
+                position: absolute;
+                left: 12px;
+                bottom: 12px;
+                display: flex;
+                flex-direction: column;
+                background: var(--card);
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                overflow: hidden;
+                box-shadow: var(--shadow);
+              "
+            >
+              <button
+                onClick="{{ zoomIn }}"
+                style="
+                  border: 0;
+                  background: transparent;
+                  color: var(--text);
+                  width: 32px;
+                  height: 30px;
+                  cursor: pointer;
+                  font-size: 14px;
+                "
+                style-hover="background:var(--card2)"
+              >
+                +
+              </button>
+              <button
+                onClick="{{ zoomReset }}"
+                style="
+                  border: 0;
+                  border-top: 1px solid var(--border);
+                  border-bottom: 1px solid var(--border);
+                  background: transparent;
+                  color: var(--muted);
+                  width: 32px;
+                  height: 26px;
+                  cursor: pointer;
+                  font-size: 10px;
+                  font-variant-numeric: tabular-nums;
+                "
+              >
+                {{ zoomPct }}
+              </button>
+              <button
+                onClick="{{ zoomOut }}"
+                style="
+                  border: 0;
+                  background: transparent;
+                  color: var(--text);
+                  width: 32px;
+                  height: 30px;
+                  cursor: pointer;
+                  font-size: 14px;
+                "
+                style-hover="background:var(--card2)"
+              >
+                −
+              </button>
+              <button
+                onClick="{{ zoomFit }}"
+                title="适应画布"
+                style="
+                  border: 0;
+                  border-top: 1px solid var(--border);
+                  background: transparent;
+                  color: var(--muted);
+                  width: 32px;
+                  height: 28px;
+                  cursor: pointer;
+                  font-size: 12px;
+                "
+                style-hover="background:var(--card2)"
+              >
+                ⛶
+              </button>
+            </div>
+            <sc-if value="{{ summaryMode }}" hint-placeholder-val="{{ false }}">
+              <div
+                style="
+                  position: absolute;
+                  left: 54px;
+                  bottom: 12px;
+                  display: flex;
+                  align-items: center;
+                  gap: 8px;
+                  background: var(--card);
+                  border: 1px solid var(--border);
+                  border-radius: 999px;
+                  padding: 6px 12px;
+                  font-size: 11.5px;
+                  color: var(--muted);
+                  box-shadow: var(--shadow);
+                "
+              >
+                <span style="color: var(--accent)">◎</span>缩放 {{ zoomPct }} ·
+                摘要视图<button
+                  onClick="{{ zoomReset }}"
+                  style="
+                    border: 0;
+                    background: transparent;
+                    color: var(--accent);
+                    cursor: pointer;
+                    font-size: 11.5px;
+                    padding: 0 0 0 4px;
+                  "
+                >
+                  回到 100%
+                </button>
+              </div>
+            </sc-if>
+            <sc-if value="{{ focusHint }}" hint-placeholder-val="{{ false }}">
+              <div
+                style="
+                  position: absolute;
+                  left: 50%;
+                  top: 14px;
+                  transform: translateX(-50%);
+                  z-index: 40;
+                  display: flex;
+                  align-items: center;
+                  gap: 8px;
+                  background: var(--card);
+                  border: 1px solid var(--border);
+                  border-radius: 999px;
+                  padding: 6px 12px;
+                  font-size: 11.5px;
+                  color: var(--muted);
+                  box-shadow: var(--shadow);
+                "
+              >
+                <span style="color: var(--accent)">⤢</span>聚焦：{{ focusHint
+                }}<button
+                  onClick="{{ exitFocus }}"
+                  style="
+                    border: 0;
+                    background: transparent;
+                    color: var(--accent);
+                    cursor: pointer;
+                    font-size: 11.5px;
+                    padding: 0 0 0 4px;
+                  "
+                >
+                  退出 (Esc)
+                </button>
+              </div>
+            </sc-if>
+          </div>
+
+          <!-- Inspector -->
+          <div
+            style="
+              width: 272px;
+              flex: none;
+              background: var(--panel);
+              border-left: 1px solid var(--border);
+              display: flex;
+              flex-direction: column;
+              min-height: 0;
+              overflow: auto;
+            "
+          >
+            <div
+              style="
+                padding: 12px 14px 8px;
+                font-size: 10.5px;
+                color: var(--faint);
+                letter-spacing: 0.06em;
+                display: flex;
+                align-items: center;
+              "
+            >
+              INSPECTOR<span
+                style="
+                  margin-left: auto;
+                  letter-spacing: 0;
+                  color: var(--muted);
+                "
+                >{{ inspHint }}</span
+              >
+            </div>
+            <sc-if value="{{ sel }}" hint-placeholder-val="{{ false }}">
+              <div
+                style="
+                  padding: 0 14px 14px;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 12px;
+                "
+              >
+                <div style="display: flex; align-items: center; gap: 10px">
+                  <span
+                    style="width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font-size:13px;font-weight:700;background:{{ sel.typeBg }};color:{{ sel.typeColor }}"
+                    >{{ sel.typeIcon }}</span
+                  >
+                  <div style="flex: 1; min-width: 0">
+                    <input
+                      value="{{ sel.title }}"
+                      onChange="{{ sel.rename }}"
+                      style="
+                        width: 100%;
+                        background: transparent;
+                        border: 0;
+                        border-bottom: 1px solid transparent;
+                        color: var(--text);
+                        font-size: 13.5px;
+                        font-weight: 600;
+                        padding: 2px 0;
+                        outline: none;
+                      "
+                      style-focus="border-bottom-color:var(--accent)"
+                    />
+                    <div style="font-size: 11px; color: var(--muted)">
+                      {{ sel.typeName }} · {{ sel.id }}
+                    </div>
+                  </div>
+                </div>
+                <div
+                  style="
+                    background: var(--card);
+                    border: 1px solid var(--border);
+                    border-radius: 12px;
+                    padding: 10px 12px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 7px;
+                    font-size: 12px;
+                  "
+                >
+                  <div style="display: flex; justify-content: space-between">
+                    <span style="color: var(--muted)">状态</span
+                    ><span
+                      style="display:flex;gap:5px;align-items:center;color:{{ sel.statusColor }};font-weight:600"
+                      ><span>{{ sel.statusIcon }}</span>{{ sel.statusText
+                      }}</span
+                    >
+                  </div>
+                  <div style="display: flex; justify-content: space-between">
+                    <span style="color: var(--muted)">位置</span
+                    ><span style="font-family: ui-monospace, Menlo, monospace"
+                      >{{ sel.pos }}</span
+                    >
+                  </div>
+                  <div style="display: flex; justify-content: space-between">
+                    <span style="color: var(--muted)">尺寸</span
+                    ><span style="font-family: ui-monospace, Menlo, monospace"
+                      >{{ sel.size }}</span
+                    >
+                  </div>
+                </div>
+                <div>
+                  <div
+                    style="
+                      font-size: 11px;
+                      color: var(--faint);
+                      margin-bottom: 6px;
+                    "
+                  >
+                    显示状态
+                  </div>
+                  <div
+                    style="
+                      display: flex;
+                      background: var(--card);
+                      border: 1px solid var(--border);
+                      border-radius: 10px;
+                      padding: 3px;
+                      gap: 3px;
+                    "
+                  >
+                    <sc-for
+                      list="{{ sel.zoomOpts }}"
+                      as="z"
+                      hint-placeholder-count="3"
+                      ><button
+                        onClick="{{ z.set }}"
+                        style="flex:1;border:0;border-radius:8px;padding:6px;font-size:11.5px;font-weight:600;cursor:pointer;background:{{ z.bg }};color:{{ z.fg }}"
+                      >
+                        {{ z.icon }} {{ z.label }}
+                      </button></sc-for
+                    >
+                  </div>
+                </div>
+                <div>
+                  <div
+                    style="
+                      font-size: 11px;
+                      color: var(--faint);
+                      margin-bottom: 6px;
+                    "
+                  >
+                    连接（{{ sel.edgeCount }}）
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 4px">
+                    <sc-for
+                      list="{{ sel.edges }}"
+                      as="e"
+                      hint-placeholder-count="1"
+                      ><div
+                        style="
+                          display: flex;
+                          align-items: center;
+                          gap: 8px;
+                          background: var(--card);
+                          border: 1px solid var(--border);
+                          border-radius: 10px;
+                          padding: 7px 10px;
+                          font-size: 12px;
+                        "
+                      >
+                        <span style="color: var(--muted)">{{ e.dirIcon }}</span
+                        ><span
+                          style="
+                            flex: 1;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                            white-space: nowrap;
+                          "
+                          >{{ e.other }}</span
+                        ><span
+                          style="
+                            font-size: 11px;
+                            color: var(--accent);
+                            background: var(--accentSoft);
+                            border-radius: 999px;
+                            padding: 1px 7px;
+                          "
+                          >{{ e.label }}</span
+                        ><button
+                          onClick="{{ e.remove }}"
+                          style="
+                            border: 0;
+                            background: transparent;
+                            color: var(--faint);
+                            cursor: pointer;
+                            font-size: 12px;
+                            padding: 0 2px;
+                          "
+                        >
+                          ✕
+                        </button>
+                      </div></sc-for
+                    >
+                    <sc-if
+                      value="{{ sel.noEdges }}"
+                      hint-placeholder-val="{{ false }}"
+                      ><div
+                        style="
+                          font-size: 11.5px;
+                          color: var(--faint);
+                          padding: 4px 0;
+                        "
+                      >
+                        尚无连接。从右侧端口拖出可创建。
+                      </div></sc-if
+                    >
+                  </div>
+                </div>
+                <div>
+                  <div
+                    style="
+                      font-size: 11px;
+                      color: var(--faint);
+                      margin-bottom: 6px;
+                    "
+                  >
+                    可执行动作
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 4px">
+                    <sc-for
+                      list="{{ sel.actions }}"
+                      as="a"
+                      hint-placeholder-count="2"
+                      ><button
+                        style="
+                          display: flex;
+                          align-items: center;
+                          gap: 8px;
+                          text-align: left;
+                          border: 1px solid var(--border);
+                          background: var(--card);
+                          color: var(--text);
+                          border-radius: 9px;
+                          padding: 7px 10px;
+                          font-size: 12px;
+                          cursor: pointer;
+                        "
+                        style-hover="border-color:var(--accent)"
+                      >
+                        <span style="color: var(--muted)">{{ a.icon }}</span>{{
+                        a.label }}
+                      </button></sc-for
+                    >
+                  </div>
+                </div>
+                <div style="display: flex; gap: 6px">
+                  <button
+                    onClick="{{ sel.duplicate }}"
+                    style="
+                      flex: 1;
+                      border: 1px solid var(--border);
+                      background: transparent;
+                      color: var(--text);
+                      border-radius: 9px;
+                      padding: 7px;
+                      font-size: 12px;
+                      cursor: pointer;
+                    "
+                  >
+                    ⧉ 复制</button
+                  ><button
+                    onClick="{{ sel.remove }}"
+                    style="
+                      flex: 1;
+                      border: 1px solid var(--err);
+                      background: transparent;
+                      color: var(--err);
+                      border-radius: 9px;
+                      padding: 7px;
+                      font-size: 12px;
+                      cursor: pointer;
+                    "
+                  >
+                    ✕ 删除
+                  </button>
+                </div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ noSel }}" hint-placeholder-val="{{ true }}">
+              <div
+                style="
+                  padding: 0 14px 14px;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 12px;
+                "
+              >
+                <div
+                  style="
+                    background: var(--card);
+                    border: 1px solid var(--border);
+                    border-radius: 12px;
+                    padding: 10px 12px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 7px;
+                    font-size: 12px;
+                  "
+                >
+                  <div style="display: flex; justify-content: space-between">
+                    <span style="color: var(--muted)">看板</span
+                    ><span>{{ boardName }}</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between">
+                    <span style="color: var(--muted)">节点 / 连线</span
+                    ><span>{{ nodeCount }} / {{ edgeCount }}</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between">
+                    <span style="color: var(--muted)">缩放</span
+                    ><span style="font-family: ui-monospace, Menlo, monospace"
+                      >{{ zoomPct }}</span
+                    >
+                  </div>
+                  <div style="display: flex; justify-content: space-between">
+                    <span style="color: var(--muted)">外部端</span
+                    ><span
+                      style="display:flex;gap:4px;align-items:center;color:{{ gwColor }}"
+                      >{{ gwIcon }} {{ gwDevices }}</span
+                    >
+                  </div>
+                </div>
+                <div>
+                  <div
+                    style="
+                      font-size: 11px;
+                      color: var(--faint);
+                      margin-bottom: 6px;
+                    "
+                  >
+                    运行概览
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 4px">
+                    <sc-for
+                      list="{{ overview }}"
+                      as="o"
+                      hint-placeholder-count="4"
+                      ><button
+                        onClick="{{ o.select }}"
+                        style="
+                          display: flex;
+                          align-items: center;
+                          gap: 8px;
+                          width: 100%;
+                          text-align: left;
+                          background: var(--card);
+                          border: 1px solid var(--border);
+                          border-radius: 10px;
+                          padding: 7px 10px;
+                          font-size: 12px;
+                          color: var(--text);
+                          cursor: pointer;
+                        "
+                        style-hover="border-color:var(--accent)"
+                      >
+                        <span
+                          style="width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:10px;font-weight:700;background:{{ o.typeBg }};color:{{ o.typeColor }}"
+                          >{{ o.typeIcon }}</span
+                        ><span
+                          style="
+                            flex: 1;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                            white-space: nowrap;
+                          "
+                          >{{ o.title }}</span
+                        ><span
+                          style="display:flex;gap:4px;align-items:center;font-size:11px;color:{{ o.statusColor }};font-weight:600"
+                          ><span>{{ o.statusIcon }}</span>{{ o.statusText
+                          }}</span
+                        >
+                      </button></sc-for
+                    >
+                    <sc-if
+                      value="{{ isEmpty }}"
+                      hint-placeholder-val="{{ false }}"
+                      ><div style="font-size: 11.5px; color: var(--faint)">
+                        暂无节点。
+                      </div></sc-if
+                    >
+                  </div>
+                </div>
+                <div
+                  style="
+                    font-size: 11.5px;
+                    color: var(--faint);
+                    line-height: 1.6;
+                  "
+                >
+                  选择一个节点查看属性、连接关系和可执行动作。缩放低于 {{
+                  thresholdPct }} 时切换为摘要。
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+
+        <!-- 状态栏 -->
+        <div
+          style="
+            height: 24px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 0 12px;
+            background: var(--panel);
+            border-top: 1px solid var(--border);
+            font-size: 11px;
+            color: var(--muted);
+            flex: none;
+          "
+        >
+          <span>{{ localText }}</span><span>{{ statsText }}</span>
+          <div style="flex: 1"></div>
+          <span
+            style="display:flex;align-items:center;gap:4px;color:{{ gwColor }}"
+            >{{ gwIcon }} 网关 {{ gwPort }}</span
+          ><span style="font-family: ui-monospace, Menlo, monospace"
+            >{{ wsPath }}</span
+          >
+        </div>
+      </sc-if>
+
+      <!-- 弹层：新建工作空间 -->
+      <sc-if value="{{ modalNewWs }}" hint-placeholder-val="{{ false }}">
+        <div
+          onMouseDown="{{ closeModals }}"
+          style="
+            position: absolute;
+            inset: 0;
+            background: rgba(10, 10, 20, 0.45);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+          "
+        >
+          <div
+            onMouseDown="{{ stop }}"
+            style="
+              width: 520px;
+              background: var(--card);
+              border: 1px solid var(--border);
+              border-radius: 18px;
+              box-shadow: var(--shadowLg);
+              padding: 24px;
+              display: flex;
+              flex-direction: column;
+              gap: 16px;
+            "
+          >
+            <div>
+              <div style="font-size: 16px; font-weight: 700">新建工作空间</div>
+              <div
+                style="font-size: 12px; color: var(--muted); margin-top: 2px"
+              >
+                选择项目位置，将自动创建 Default 空看板
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label style="font-size: 11.5px; color: var(--muted)">名称</label
+              ><input
+                value="{{ newWsName }}"
+                onChange="{{ setNewWsName }}"
+                placeholder="例如 acme-web"
+                style="
+                  background: var(--card2);
+                  border: 1px solid var(--border);
+                  border-radius: 10px;
+                  padding: 9px 12px;
+                  color: var(--text);
+                  font-size: 13px;
+                  outline: none;
+                "
+                style-focus="border-color:var(--accent)"
+              />
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label style="font-size: 11.5px; color: var(--muted)"
+                >项目位置</label
+              >
+              <div style="display: flex; gap: 6px">
+                <input
+                  value="{{ newWsPath }}"
+                  onChange="{{ setNewWsPath }}"
+                  placeholder="~/code/…"
+                  style="
+                    flex: 1;
+                    background: var(--card2);
+                    border: 1px solid var(--border);
+                    border-radius: 10px;
+                    padding: 9px 12px;
+                    color: var(--text);
+                    font-size: 12.5px;
+                    font-family: ui-monospace, Menlo, monospace;
+                    outline: none;
+                  "
+                  style-focus="border-color:var(--accent)"
+                /><button
+                  style="
+                    border: 1px solid var(--border);
+                    background: var(--card);
+                    color: var(--text);
+                    border-radius: 10px;
+                    padding: 0 14px;
+                    font-size: 12.5px;
+                    cursor: pointer;
+                  "
+                >
+                  浏览…
+                </button>
+              </div>
+            </div>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 8px;
+              "
+            >
+              <sc-for list="{{ newWsPerms }}" as="p" hint-placeholder-count="3"
+                ><button
+                  onClick="{{ p.toggle }}"
+                  style="display:flex;flex-direction:column;gap:4px;text-align:left;border:1px solid {{ p.border }};background:var(--card2);border-radius:12px;padding:10px;cursor:pointer;color:var(--text)"
+                >
+                  <span
+                    style="
+                      display: flex;
+                      align-items: center;
+                      gap: 6px;
+                      font-size: 12.5px;
+                      font-weight: 600;
+                    "
+                    ><span style="color:{{ p.markColor }}">{{ p.mark }}</span>{{
+                    p.name }}</span
+                  ><span style="font-size: 11px; color: var(--muted)"
+                    >{{ p.desc }}</span
+                  >
+                </button></sc-for
+              >
+            </div>
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                background: var(--card2);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 10px 12px;
+                font-size: 12px;
+              "
+            >
+              <span style="color: var(--info)">⇄</span
+              ><span style="flex: 1"
+                ><span style="font-weight: 600">允许外部端通过网关接入</span
+                ><span
+                  style="display: block; color: var(--muted); font-size: 11px"
+                  >浏览器 / 移动端可查看看板并确认权限请求</span
+                ></span
+              ><button
+                onClick="{{ toggleNewWsGw }}"
+                style="width:38px;height:22px;border-radius:999px;border:0;cursor:pointer;background:{{ newWsGwBg }};position:relative"
+              >
+                <span
+                  style="position:absolute;top:3px;left:{{ newWsGwKnob }}px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s"
+                ></span>
+              </button>
+            </div>
+            <div style="display: flex; gap: 8px; justify-content: flex-end">
+              <button
+                onClick="{{ closeModals }}"
+                style="
+                  border: 1px solid var(--border);
+                  background: transparent;
+                  color: var(--text);
+                  border-radius: 10px;
+                  padding: 9px 16px;
+                  font-size: 13px;
+                  cursor: pointer;
+                "
+              >
+                取消</button
+              ><button
+                onClick="{{ createWs }}"
+                style="
+                  border: 0;
+                  background: var(--accent);
+                  color: #fff;
+                  border-radius: 10px;
+                  padding: 9px 16px;
+                  font-size: 13px;
+                  font-weight: 600;
+                  cursor: pointer;
+                "
+              >
+                创建并打开
+              </button>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- 弹层：设置 -->
+      <sc-if value="{{ modalSettings }}" hint-placeholder-val="{{ false }}">
+        <div
+          onMouseDown="{{ closeModals }}"
+          style="
+            position: absolute;
+            inset: 0;
+            background: rgba(10, 10, 20, 0.45);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+          "
+        >
+          <div
+            onMouseDown="{{ stop }}"
+            style="
+              width: 760px;
+              height: 540px;
+              background: var(--card);
+              border: 1px solid var(--border);
+              border-radius: 18px;
+              box-shadow: var(--shadowLg);
+              display: flex;
+              overflow: hidden;
+            "
+          >
+            <div
+              style="
+                width: 180px;
+                background: var(--panel);
+                border-right: 1px solid var(--border);
+                padding: 16px 10px;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+              "
+            >
+              <div
+                style="font-size: 14px; font-weight: 700; padding: 0 8px 12px"
+              >
+                设置
+              </div>
+              <sc-for
+                list="{{ settingsTabs }}"
+                as="t"
+                hint-placeholder-count="5"
+                ><button
+                  onClick="{{ t.select }}"
+                  style="display:flex;align-items:center;gap:8px;text-align:left;border:0;border-radius:8px;padding:7px 10px;font-size:12.5px;cursor:pointer;background:{{ t.bg }};color:{{ t.fg }};font-weight:{{ t.weight }}"
+                >
+                  <span style="width: 14px">{{ t.icon }}</span>{{ t.label }}
+                </button></sc-for
+              >
+            </div>
+            <div
+              style="
+                flex: 1;
+                padding: 22px 24px;
+                overflow: auto;
+                display: flex;
+                flex-direction: column;
+                gap: 14px;
+              "
+            >
+              <sc-if value="{{ stModels }}" hint-placeholder-val="{{ true }}">
+                <div style="font-size: 15px; font-weight: 700">
+                  模型与提供方
+                </div>
+                <sc-for list="{{ providers }}" as="p" hint-placeholder-count="3"
+                  ><div
+                    style="
+                      display: flex;
+                      align-items: center;
+                      gap: 12px;
+                      border: 1px solid var(--border);
+                      background: var(--card2);
+                      border-radius: 12px;
+                      padding: 12px 14px;
+                    "
+                  >
+                    <span
+                      style="width:32px;height:32px;border-radius:9px;background:{{ p.bg }};color:{{ p.color }};display:grid;place-items:center;font-weight:800;font-size:13px"
+                      >{{ p.letter }}</span
+                    >
+                    <div style="flex: 1">
+                      <div style="font-size: 13px; font-weight: 600">
+                        {{ p.name }}
+                      </div>
+                      <div style="font-size: 11px; color: var(--muted)">
+                        {{ p.desc }}
+                      </div>
+                    </div>
+                    <span
+                      style="display:flex;align-items:center;gap:4px;font-size:11.5px;color:{{ p.stColor }};font-weight:600"
+                      >{{ p.stIcon }} {{ p.st }}</span
+                    ><button
+                      style="
+                        border: 1px solid var(--border);
+                        background: var(--card);
+                        color: var(--text);
+                        border-radius: 8px;
+                        padding: 5px 10px;
+                        font-size: 12px;
+                        cursor: pointer;
+                      "
+                    >
+                      配置
+                    </button>
+                  </div></sc-for
+                >
+                <div
+                  style="
+                    font-size: 11.5px;
+                    color: var(--faint);
+                    line-height: 1.6;
+                  "
+                >
+                  默认 Agent 使用 Claude Code；可在每个 Agent 节点单独切换。API
+                  Key 仅保存在本地 Keychain。
+                </div>
+              </sc-if>
+              <sc-if value="{{ stAcp }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size: 15px; font-weight: 700">
+                  ACP（Agent Client Protocol）
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px">
+                  <div
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      border: 1px solid var(--border);
+                      background: var(--card2);
+                      border-radius: 12px;
+                      padding: 12px 14px;
+                      font-size: 12.5px;
+                    "
+                  >
+                    <span
+                      ><span style="font-weight: 600">协议版本</span
+                      ><span
+                        style="
+                          display: block;
+                          font-size: 11px;
+                          color: var(--muted);
+                        "
+                        >与 Agent 进程协商</span
+                      ></span
+                    ><span style="font-family: ui-monospace, Menlo, monospace"
+                      >v1</span
+                    >
+                  </div>
+                  <div
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      border: 1px solid var(--border);
+                      background: var(--card2);
+                      border-radius: 12px;
+                      padding: 12px 14px;
+                      font-size: 12.5px;
+                    "
+                  >
+                    <span
+                      ><span style="font-weight: 600"
+                        >Claude Code 可执行路径</span
+                      ><span
+                        style="
+                          display: block;
+                          font-size: 11px;
+                          color: var(--muted);
+                          font-family: ui-monospace, Menlo, monospace;
+                        "
+                        >/opt/homebrew/bin/claude</span
+                      ></span
+                    ><span style="color: var(--ok); font-size: 11.5px"
+                      >✓ 已检测</span
+                    >
+                  </div>
+                  <div
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      border: 1px solid var(--border);
+                      background: var(--card2);
+                      border-radius: 12px;
+                      padding: 12px 14px;
+                      font-size: 12.5px;
+                    "
+                  >
+                    <span
+                      ><span style="font-weight: 600">权限策略</span
+                      ><span
+                        style="
+                          display: block;
+                          font-size: 11px;
+                          color: var(--muted);
+                        "
+                        >危险操作（删除 / 覆盖 / 重写历史）总是询问</span
+                      ></span
+                    ><span
+                      style="
+                        font-size: 11.5px;
+                        background: var(--accentSoft);
+                        color: var(--accent);
+                        border-radius: 999px;
+                        padding: 2px 8px;
+                      "
+                      >逐次确认</span
+                    >
+                  </div>
+                  <div
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      border: 1px solid var(--border);
+                      background: var(--card2);
+                      border-radius: 12px;
+                      padding: 12px 14px;
+                      font-size: 12.5px;
+                    "
+                  >
+                    <span
+                      ><span style="font-weight: 600">会话保留</span
+                      ><span
+                        style="
+                          display: block;
+                          font-size: 11px;
+                          color: var(--muted);
+                        "
+                        >关闭看板后保留对话时间线</span
+                      ></span
+                    ><span style="font-size: 11.5px">30 天</span>
+                  </div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ stGateway }}" hint-placeholder-val="{{ false }}">
+                <div style="display: flex; align-items: center; gap: 10px">
+                  <div style="font-size: 15px; font-weight: 700">
+                    网关与外部端
+                  </div>
+                  <span
+                    style="display:flex;align-items:center;gap:4px;font-size:11.5px;color:{{ gwColor }};font-weight:600;margin-left:auto"
+                    >{{ gwIcon }} {{ gwText }}</span
+                  ><button
+                    onClick="{{ toggleGw }}"
+                    style="width:38px;height:22px;border-radius:999px;border:0;cursor:pointer;background:{{ gwToggleBg }};position:relative"
+                  >
+                    <span
+                      style="position:absolute;top:3px;left:{{ gwKnob }}px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s"
+                    ></span>
+                  </button>
+                </div>
+                <div
+                  style="font-size: 12px; color: var(--muted); line-height: 1.6"
+                >
+                  本机运行时作为网关，外部端（浏览器、移动端、其他设备）通过它读写同一工作空间：查看看板、跟随
+                  Agent 对话、确认权限请求、查看 Diff 与终端输出。
+                </div>
+                <div
+                  style="
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 8px;
+                  "
+                >
+                  <div
+                    style="
+                      border: 1px solid var(--border);
+                      background: var(--card2);
+                      border-radius: 12px;
+                      padding: 12px 14px;
+                      font-size: 12px;
+                    "
+                  >
+                    <div style="color: var(--muted); font-size: 11px">
+                      监听地址
+                    </div>
+                    <div
+                      style="
+                        font-family: ui-monospace, Menlo, monospace;
+                        margin-top: 4px;
+                      "
+                    >
+                      127.0.0.1:{{ gwPort }} · 局域网 192.168.1.8
+                    </div>
+                  </div>
+                  <div
+                    style="
+                      border: 1px solid var(--border);
+                      background: var(--card2);
+                      border-radius: 12px;
+                      padding: 12px 14px;
+                      font-size: 12px;
+                    "
+                  >
+                    <div style="color: var(--muted); font-size: 11px">协议</div>
+                    <div style="margin-top: 4px">
+                      WebSocket + JSON-RPC · TLS 自签证书
+                    </div>
+                  </div>
+                  <div
+                    style="
+                      border: 1px solid var(--border);
+                      background: var(--card2);
+                      border-radius: 12px;
+                      padding: 12px 14px;
+                      font-size: 12px;
+                    "
+                  >
+                    <div style="color: var(--muted); font-size: 11px">鉴权</div>
+                    <div style="margin-top: 4px">
+                      设备配对 Token · 有效期 30 天
+                    </div>
+                  </div>
+                  <div
+                    style="
+                      border: 1px solid var(--border);
+                      background: var(--card2);
+                      border-radius: 12px;
+                      padding: 12px 14px;
+                      font-size: 12px;
+                    "
+                  >
+                    <div style="color: var(--muted); font-size: 11px">
+                      外部端权限
+                    </div>
+                    <div style="margin-top: 4px">
+                      查看 ✓ · 确认权限 ✓ · 执行命令 ✕
+                    </div>
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <div style="font-size: 12.5px; font-weight: 600">
+                    已配对设备
+                  </div>
+                  <div style="flex: 1"></div>
+                  <button
+                    style="
+                      border: 0;
+                      background: var(--accent);
+                      color: #fff;
+                      border-radius: 8px;
+                      padding: 5px 12px;
+                      font-size: 12px;
+                      font-weight: 600;
+                      cursor: pointer;
+                    "
+                  >
+                    ＋ 配对新设备
+                  </button>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 6px">
+                  <sc-for list="{{ devices }}" as="d" hint-placeholder-count="2"
+                    ><div
+                      style="
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                        border: 1px solid var(--border);
+                        background: var(--card2);
+                        border-radius: 12px;
+                        padding: 10px 14px;
+                        font-size: 12.5px;
+                      "
+                    >
+                      <span
+                        style="
+                          width: 28px;
+                          height: 28px;
+                          border-radius: 8px;
+                          background: var(--infoSoft);
+                          color: var(--info);
+                          display: grid;
+                          place-items: center;
+                          font-size: 12px;
+                        "
+                        >{{ d.icon }}</span
+                      >
+                      <div style="flex: 1">
+                        <div style="font-weight: 600">{{ d.name }}</div>
+                        <div style="font-size: 11px; color: var(--muted)">
+                          {{ d.meta }}
+                        </div>
+                      </div>
+                      <span
+                        style="display:flex;align-items:center;gap:4px;font-size:11.5px;color:{{ d.stColor }};font-weight:600"
+                        >{{ d.stIcon }} {{ d.st }}</span
+                      ><button
+                        style="
+                          border: 1px solid var(--border);
+                          background: transparent;
+                          color: var(--muted);
+                          border-radius: 8px;
+                          padding: 4px 9px;
+                          font-size: 11.5px;
+                          cursor: pointer;
+                        "
+                      >
+                        撤销
+                      </button>
+                    </div></sc-for
+                  >
+                </div>
+              </sc-if>
+              <sc-if value="{{ stTheme }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size: 15px; font-weight: 700">外观</div>
+                <div style="display: flex; gap: 8px">
+                  <sc-for
+                    list="{{ themeOpts }}"
+                    as="t"
+                    hint-placeholder-count="2"
+                    ><button
+                      onClick="{{ t.set }}"
+                      style="flex:1;display:flex;flex-direction:column;gap:8px;border:2px solid {{ t.border }};background:var(--card2);border-radius:14px;padding:12px;cursor:pointer;color:var(--text);text-align:left"
+                    >
+                      <span
+                        style="display:block;height:64px;border-radius:8px;background:{{ t.preview }};border:1px solid var(--border)"
+                      ></span
+                      ><span style="font-size: 12.5px; font-weight: 600"
+                        >{{ t.label }}</span
+                      >
+                    </button></sc-for
+                  >
+                </div>
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    border: 1px solid var(--border);
+                    background: var(--card2);
+                    border-radius: 12px;
+                    padding: 12px 14px;
+                    font-size: 12.5px;
+                  "
+                >
+                  <span
+                    ><span style="font-weight: 600">语言</span
+                    ><span
+                      style="
+                        display: block;
+                        font-size: 11px;
+                        color: var(--muted);
+                      "
+                      >界面文案</span
+                    ></span
+                  ><span>简体中文</span>
+                </div>
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    border: 1px solid var(--border);
+                    background: var(--card2);
+                    border-radius: 12px;
+                    padding: 12px 14px;
+                    font-size: 12.5px;
+                  "
+                >
+                  <span
+                    ><span style="font-weight: 600">摘要阈值</span
+                    ><span
+                      style="
+                        display: block;
+                        font-size: 11px;
+                        color: var(--muted);
+                      "
+                      >画布缩放低于此值时节点切换为摘要</span
+                    ></span
+                  ><span style="font-family: ui-monospace, Menlo, monospace"
+                    >{{ thresholdPct }}</span
+                  >
+                </div>
+              </sc-if>
+              <sc-if value="{{ stKeys }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size: 15px; font-weight: 700">快捷键</div>
+                <div
+                  style="
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 6px;
+                  "
+                >
+                  <sc-for
+                    list="{{ shortcuts }}"
+                    as="k"
+                    hint-placeholder-count="8"
+                    ><div
+                      style="
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        border: 1px solid var(--border);
+                        background: var(--card2);
+                        border-radius: 10px;
+                        padding: 8px 12px;
+                        font-size: 12px;
+                      "
+                    >
+                      <span>{{ k.label }}</span
+                      ><span
+                        style="
+                          font-family: ui-monospace, Menlo, monospace;
+                          font-size: 11px;
+                          border: 1px solid var(--border);
+                          border-radius: 5px;
+                          padding: 1px 6px;
+                          color: var(--muted);
+                        "
+                        >{{ k.keys }}</span
+                      >
+                    </div></sc-for
+                  >
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ⌘K -->
+      <sc-if value="{{ modalCmd }}" hint-placeholder-val="{{ false }}">
+        <div
+          onMouseDown="{{ closeModals }}"
+          style="
+            position: absolute;
+            inset: 0;
+            background: rgba(10, 10, 20, 0.35);
+            backdrop-filter: blur(3px);
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding-top: 140px;
+            z-index: 100;
+          "
+        >
+          <div
+            onMouseDown="{{ stop }}"
+            style="
+              width: 600px;
+              background: var(--card);
+              border: 1px solid var(--border);
+              border-radius: 16px;
+              box-shadow: var(--shadowLg);
+              overflow: hidden;
+            "
+          >
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 12px 16px;
+                border-bottom: 1px solid var(--border);
+              "
+            >
+              <span style="color: var(--muted)">⌕</span
+              ><input
+                autofocus="{{ true }}"
+                value="{{ cmdQuery }}"
+                onChange="{{ setCmdQuery }}"
+                placeholder="搜索节点、文件、命令…"
+                style="
+                  flex: 1;
+                  border: 0;
+                  background: transparent;
+                  color: var(--text);
+                  font-size: 14px;
+                  outline: none;
+                "
+              /><span
+                style="
+                  font-family: ui-monospace, Menlo, monospace;
+                  font-size: 10.5px;
+                  border: 1px solid var(--border);
+                  border-radius: 4px;
+                  padding: 1px 5px;
+                  color: var(--muted);
+                "
+                >Esc</span
+              >
+            </div>
+            <div style="max-height: 360px; overflow: auto; padding: 8px">
+              <sc-for list="{{ cmdGroups }}" as="g" hint-placeholder-count="2">
+                <div
+                  style="
+                    font-size: 10.5px;
+                    color: var(--faint);
+                    letter-spacing: 0.06em;
+                    padding: 8px 8px 4px;
+                  "
+                >
+                  {{ g.title }}
+                </div>
+                <sc-for list="{{ g.items }}" as="c" hint-placeholder-count="3"
+                  ><button
+                    onClick="{{ c.run }}"
+                    style="
+                      display: flex;
+                      align-items: center;
+                      gap: 10px;
+                      width: 100%;
+                      text-align: left;
+                      border: 0;
+                      background: transparent;
+                      color: var(--text);
+                      border-radius: 9px;
+                      padding: 8px 10px;
+                      font-size: 12.5px;
+                      cursor: pointer;
+                    "
+                    style-hover="background:var(--card2)"
+                  >
+                    <span
+                      style="width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-size:11px;background:{{ c.bg }};color:{{ c.color }}"
+                      >{{ c.icon }}</span
+                    ><span style="flex: 1">{{ c.label }}</span
+                    ><span
+                      style="
+                        font-family: ui-monospace, Menlo, monospace;
+                        font-size: 10.5px;
+                        color: var(--faint);
+                      "
+                      >{{ c.keys }}</span
+                    >
+                  </button></sc-for
+                >
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- Diff 扫描面板 -->
+      <sc-if value="{{ drawerDiff }}" hint-placeholder-val="{{ false }}">
+        <div
+          onMouseDown="{{ closeModals }}"
+          style="position: absolute; inset: 0; z-index: 90"
+        >
+          <div
+            onMouseDown="{{ stop }}"
+            style="
+              position: absolute;
+              top: 44px;
+              right: 8px;
+              bottom: 32px;
+              width: 440px;
+              background: var(--card);
+              border: 1px solid var(--border);
+              border-radius: 16px;
+              box-shadow: var(--shadowLg);
+              display: flex;
+              flex-direction: column;
+              overflow: hidden;
+            "
+          >
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 12px 14px;
+                border-bottom: 1px solid var(--border);
+              "
+            >
+              <span
+                style="
+                  width: 26px;
+                  height: 26px;
+                  border-radius: 8px;
+                  background: var(--diffBg);
+                  color: var(--diff);
+                  display: grid;
+                  place-items: center;
+                  font-weight: 700;
+                "
+                >±</span
+              >
+              <div style="flex: 1">
+                <div style="font-size: 13.5px; font-weight: 700">
+                  Diff 扫描结果
+                </div>
+                <div style="font-size: 11px; color: var(--muted)">
+                  工作区 vs HEAD · 刚刚
+                </div>
+              </div>
+              <button
+                onClick="{{ rescan }}"
+                style="
+                  border: 1px solid var(--border);
+                  background: var(--card2);
+                  color: var(--text);
+                  border-radius: 8px;
+                  padding: 4px 10px;
+                  font-size: 12px;
+                  cursor: pointer;
+                "
+              >
+                ↻ 重新扫描</button
+              ><button
+                onClick="{{ closeModals }}"
+                style="
+                  border: 0;
+                  background: transparent;
+                  color: var(--muted);
+                  cursor: pointer;
+                  font-size: 14px;
+                "
+              >
+                ✕
+              </button>
+            </div>
+            <div
+              style="
+                display: flex;
+                gap: 10px;
+                padding: 10px 14px;
+                border-bottom: 1px solid var(--border);
+                font-size: 11.5px;
+                color: var(--muted);
+              "
+            >
+              <span>{{ diffFileCount }} 个文件</span
+              ><span style="color: var(--ok); font-weight: 600"
+                >+{{ diffAdd }}</span
+              ><span style="color: var(--err); font-weight: 600"
+                >−{{ diffDel }}</span
+              ><span style="margin-left: auto">来源：Agent 实现代理</span>
+            </div>
+            <div style="flex: 1; overflow: auto">
+              <sc-for list="{{ diffFiles }}" as="f" hint-placeholder-count="3">
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 9px 14px;
+                    font-size: 12px;
+                    border-bottom: 1px solid var(--border);
+                  "
+                >
+                  <span
+                    style="font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;background:{{ f.kindBg }};color:{{ f.kindColor }}"
+                    >{{ f.kind }}</span
+                  ><span
+                    style="
+                      font-family: ui-monospace, Menlo, monospace;
+                      flex: 1;
+                      overflow: hidden;
+                      text-overflow: ellipsis;
+                      white-space: nowrap;
+                    "
+                    >{{ f.path }}</span
+                  ><span style="color: var(--ok)">+{{ f.add }}</span
+                  ><span style="color: var(--err)">−{{ f.del }}</span
+                  ><span
+                    style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:{{ f.stColor }}"
+                    ><span>{{ f.stIcon }}</span>{{ f.stText }}</span
+                  >
+                </div>
+              </sc-for>
+            </div>
+            <div
+              style="
+                display: flex;
+                gap: 6px;
+                padding: 12px 14px;
+                border-top: 1px solid var(--border);
+              "
+            >
+              <button
+                onClick="{{ addDiffNode }}"
+                style="
+                  flex: 1;
+                  border: 0;
+                  background: var(--accent);
+                  color: #fff;
+                  border-radius: 9px;
+                  padding: 8px;
+                  font-size: 12.5px;
+                  font-weight: 600;
+                  cursor: pointer;
+                "
+              >
+                ± 作为 Diff 节点放到画布</button
+              ><button
+                style="
+                  border: 1px solid var(--border);
+                  background: transparent;
+                  color: var(--text);
+                  border-radius: 9px;
+                  padding: 8px 12px;
+                  font-size: 12.5px;
+                  cursor: pointer;
+                "
+              >
+                导出 patch
+              </button>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
