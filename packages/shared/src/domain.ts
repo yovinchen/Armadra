@@ -1,225 +1,164 @@
 import { z } from "zod";
 
 /**
- * Domain model v2 — see docs/redesign-plan.md §2.
+ * Domain model v3 — see docs/v3-agent-terminal-plan.md §3.4, §5 and §6.
  *
- * The three enumerations below are also exported as plain arrays so the UI can
- * iterate them (node palette, status legend, edge picker) without re-deriving
- * the list from the zod schema.
+ * Seven node types, a single
+ * persisted edge kind, no per-node `status` (agent
+ * state lives in the `agent_status` table and is pushed over the workspace
+ * event socket) and no `zoom` tri-state (collapse / resize / maximize replace
+ * it). The enumerations are exported as plain arrays so the UI can iterate
+ * them without re-deriving the list from the zod schema.
  */
+
 export const NODE_TYPES = [
-  "task",
-  "agent",
   "terminal",
+  "sticky",
+  "group",
+  "editor",
   "diff",
-  "file",
-  "context",
-  "note",
+  "files",
   "browser",
-  "image",
-  "log",
 ] as const;
 
-export const EDGE_TYPES = [
-  "link",
-  "dispatch",
-  "produce",
-  "write",
-  "trigger",
-  "ref",
+/** Only one edge kind is persisted; rope/subagent edges are derived per frame. */
+export const EDGE_KINDS = ["link"] as const;
+
+/** Node colour palette — plan §3.4. */
+export const NODE_COLORS = [
+  "#0a84ff",
+  "#32d74b",
+  "#ffd60a",
+  "#ff453a",
+  "#bf5af2",
+  "#6ac4dc",
+  "#ff9f0a",
 ] as const;
 
-export const NODE_STATUSES = [
-  "idle",
-  "running",
-  "waiting",
-  "done",
-  "review",
-  "modified",
-  "error",
-  "disconnected",
-  "connecting",
-  "linked",
-] as const;
+export const DEFAULT_NODE_COLOR = NODE_COLORS[0];
 
-export const NODE_ZOOMS = ["mini", "normal", "focus"] as const;
+export const AGENT_STATES = ["working", "waiting", "blocked", "done"] as const;
+
+export const PERMISSION_MODES = [
+  "default",
+  "auto-edit",
+  "full-auto",
+  "plan",
+] as const;
 
 export const nodeTypeSchema = z.enum(NODE_TYPES);
-export const edgeTypeSchema = z.enum(EDGE_TYPES);
-export const nodeStatusSchema = z.enum(NODE_STATUSES);
-export const nodeZoomSchema = z.enum(NODE_ZOOMS);
-
-export const syncPolicySchema = z.enum([
-  "local_only",
-  "metadata_only",
-  "full_sync",
-]);
-
-export const adapterIdSchema = z.enum([
-  "claude",
-  "codex",
-  "gemini",
-  "opencode",
-  "pi",
-  "omp",
-  "custom",
-]);
+export const edgeKindSchema = z.enum(EDGE_KINDS);
+export const nodeColorSchema = z.enum(NODE_COLORS);
+export const agentStateSchema = z.enum(AGENT_STATES);
+export const permissionModeSchema = z.enum(PERMISSION_MODES);
 
 const timestampSchema = z.string().datetime({ offset: true });
 
-const baseNodeDataSchema = z.object({
-  title: z.string().min(1).max(160),
-  subtitle: z.string().max(160).optional(),
-  status: nodeStatusSchema.default("idle"),
+/* --------------------------------- node data ----------------------------- */
+
+/**
+ * Built-in agent ids plus `custom:<id>` for user-defined CLIs. Kept here (and
+ * not in `agents.ts`) so the node schema does not depend on the registry.
+ */
+export const agentIdSchema = z
+  .string()
+  .min(1)
+  .max(80)
+  .refine(
+    (value) =>
+      ["claude", "codex", "gemini", "opencode"].includes(value) ||
+      /^custom:[A-Za-z0-9._:-]{1,64}$/.test(value),
+    { message: "Unknown agent id" },
+  );
+
+/** A launch armed by `open-agent --after A,B`; the PTY stays a plain shell until every dependency is done. */
+export const pendingLaunchSchema = z.object({
+  command: z.string().max(4_000),
+  after: z.array(z.string().uuid()).max(32).default([]),
 });
 
-export const checklistItemSchema = z.object({
-  id: z.string().min(1).max(64),
-  text: z.string().max(2_000),
-  done: z.boolean().default(false),
+export const terminalAgentSchema = z.object({
+  id: agentIdSchema,
+  accountId: z.string().max(120).optional(),
+  permissionMode: permissionModeSchema.optional(),
+  model: z.string().max(120).optional(),
+  /** Session id reported by the CLI (via hooks) or pre-minted by us. */
+  sessionId: z.string().max(200).optional(),
+  /** Launch line written into the shell once it is ready. */
+  initialCommand: z.string().max(4_000).optional(),
+  pendingLaunch: pendingLaunchSchema.optional(),
 });
 
-export const taskNodeDataSchema = baseNodeDataSchema.extend({
-  kind: z.literal("task"),
-  description: z.string().max(20_000),
-  checklist: z.array(checklistItemSchema).default([]),
+/**
+ * The SSH host a terminal node connects to (plan §21). Only the id is stored:
+ * host, user, port and key live in `settings.ssh.hosts[]`, so editing a host
+ * changes every node that points at it and a board file never carries a
+ * command line.
+ */
+export const sshTargetSchema = z.object({
+  hostId: z.string().min(1).max(64),
 });
 
-export const contextChipKindSchema = z.enum([
-  "file",
-  "context",
-  "note",
-  "browser",
-  "text",
-]);
-
-export const contextChipSchema = z.object({
-  id: z.string().min(1).max(64),
-  kind: contextChipKindSchema,
-  label: z.string().min(1).max(160),
-  value: z.string().max(20_000),
-});
-
-export const agentNodeDataSchema = baseNodeDataSchema.extend({
-  kind: z.literal("agent"),
-  adapter: adapterIdSchema,
-  sessionId: z.string().uuid().optional(),
-  projectPath: z.string(),
-  // Custom adapters are allowed to be saved before their command is complete.
-  // Execution remains disabled until the user enters a non-blank command.
-  command: z.string().max(1_024),
-  args: z.array(z.string()).default([]),
-  contextChips: z.array(contextChipSchema).default([]),
-});
-
-export const terminalNodeDataSchema = baseNodeDataSchema.extend({
+export const terminalNodeDataSchema = z.object({
   kind: z.literal("terminal"),
   sessionId: z.string().uuid().optional(),
-  cwd: z.string(),
-  shell: z.string().min(1),
-  command: z.string().max(4_000).optional(),
+  cwd: z.string().max(4_000).optional(),
+  shell: z.string().max(1_024).optional(),
+  ssh: sshTargetSchema.optional(),
+  agent: terminalAgentSchema.optional(),
   lastExitCode: z.number().int().nullable().optional(),
 });
 
-export const diffFileStatusSchema = z.enum(["M", "A", "D", "R", "?"]);
-export const diffFileStateSchema = z.enum(["pending", "accepted", "reverted"]);
+export const MAX_STICKY_CONTENT = 20_000;
 
-export const diffFileSchema = z.object({
-  path: z.string(),
-  status: diffFileStatusSchema.default("M"),
-  additions: z.number().int().nonnegative(),
-  deletions: z.number().int().nonnegative(),
-  patch: z.string(),
-  previewable: z.boolean().default(true),
-  state: diffFileStateSchema.default("pending"),
+export const stickyNodeDataSchema = z.object({
+  kind: z.literal("sticky"),
+  content: z.string().max(MAX_STICKY_CONTENT).default(""),
 });
 
-export const diffNodeDataSchema = baseNodeDataSchema.extend({
-  kind: z.literal("diff"),
-  repoPath: z.string(),
-  sourceAgentNodeId: z.string().uuid().optional(),
-  files: z.array(diffFileSchema),
+/** The group label is `node.title` and its tint is `node.color`. */
+export const groupNodeDataSchema = z.object({
+  kind: z.literal("group"),
 });
 
-export const fileNodeDataSchema = baseNodeDataSchema.extend({
-  kind: z.literal("file"),
-  path: z.string(),
-  mimeType: z.string(),
-  size: z.number().int().nonnegative(),
-  readonly: z.boolean(),
-  syncPolicy: syncPolicySchema.default("local_only"),
+export const editorNodeDataSchema = z.object({
+  kind: z.literal("editor"),
+  path: z.string().min(1).max(4_000),
   language: z.string().max(40).optional(),
+  readonly: z.boolean().optional(),
 });
 
-export const contextNodeDataSchema = baseNodeDataSchema.extend({
-  kind: z.literal("context"),
-  path: z.string(),
-  includePatterns: z.array(z.string()).default([]),
-  excludePatterns: z.array(z.string()).default([]),
+export const DIFF_SCOPES = ["worktree", "staged"] as const;
+export const diffScopeSchema = z.enum(DIFF_SCOPES);
+
+export const diffNodeDataSchema = z.object({
+  kind: z.literal("diff"),
+  repoPath: z.string().min(1).max(4_000),
+  scope: diffScopeSchema.default("worktree"),
+  paths: z.array(z.string().max(4_000)).max(1_000).optional(),
 });
 
-export const noteNodeDataSchema = baseNodeDataSchema.extend({
-  kind: z.literal("note"),
-  content: z.string().max(20_000),
+export const filesNodeDataSchema = z.object({
+  kind: z.literal("files"),
+  path: z.string().min(1).max(4_000),
 });
 
-export const MAX_BROWSER_HISTORY = 50;
-
-export const browserNodeDataSchema = baseNodeDataSchema.extend({
+export const browserNodeDataSchema = z.object({
   kind: z.literal("browser"),
-  url: z.string().max(4_000),
-  history: z.array(z.string().max(4_000)).max(MAX_BROWSER_HISTORY).default([]),
-  historyIndex: z.number().int().min(-1).default(-1),
-});
-
-export const MAX_IMAGE_SRC_BYTES = 2 * 1024 * 1024;
-
-export const imageNodeDataSchema = baseNodeDataSchema.extend({
-  kind: z.literal("image"),
-  src: z
-    .string()
-    .max(MAX_IMAGE_SRC_BYTES)
-    .refine((value) => value.startsWith("data:"), {
-      message: "Image sources must be inlined as a data: URL",
-    }),
-  mimeType: z.string(),
-  width: z.number().int().positive().optional(),
-  height: z.number().int().positive().optional(),
-  sourcePath: z.string().optional(),
-});
-
-export const logEntrySourceSchema = z.enum([
-  "agent",
-  "terminal",
-  "gateway",
-  "system",
-]);
-
-export const logEntrySchema = z.object({
-  at: timestampSchema,
-  source: logEntrySourceSchema,
-  text: z.string().max(20_000),
-});
-
-export const logNodeDataSchema = baseNodeDataSchema.extend({
-  kind: z.literal("log"),
-  content: z.string().max(100_000),
-  level: z.enum(["info", "warning", "error"]).default("info"),
-  entries: z.array(logEntrySchema).optional(),
+  url: z.string().max(4_000).default(""),
 });
 
 export const canvasNodeDataSchema = z.discriminatedUnion("kind", [
-  taskNodeDataSchema,
-  agentNodeDataSchema,
   terminalNodeDataSchema,
+  stickyNodeDataSchema,
+  groupNodeDataSchema,
+  editorNodeDataSchema,
   diffNodeDataSchema,
-  fileNodeDataSchema,
-  contextNodeDataSchema,
-  noteNodeDataSchema,
+  filesNodeDataSchema,
   browserNodeDataSchema,
-  imageNodeDataSchema,
-  logNodeDataSchema,
 ]);
+
+/* ---------------------------------- geometry ----------------------------- */
 
 export const positionSchema = z.object({
   x: z.number().finite(),
@@ -231,14 +170,33 @@ export const sizeSchema = z.object({
   height: z.number().positive(),
 });
 
+/* ----------------------------------- nodes ------------------------------- */
+
 export const canvasNodeSchema = z
   .object({
     id: z.string().uuid(),
     boardId: z.string().uuid(),
     type: nodeTypeSchema,
+    /** Header label; also the group label and the sticky heading. */
+    title: z.string().min(1).max(160),
+    color: z.string().min(1).max(32).default(DEFAULT_NODE_COLOR),
     position: positionSchema,
     size: sizeSchema.optional(),
-    zoom: nodeZoomSchema.default("normal"),
+    collapsed: z.boolean().optional(),
+    /** Height restored when the node is expanded again. */
+    expandedHeight: z.number().positive().optional(),
+    /** Id of the `group` node this node belongs to. */
+    parentId: z.string().uuid().optional(),
+    /**
+     * `+ Label` chips shown under the node header and on the kanban card
+     * (plan §17). Short and few on purpose: they are a filter, not a field.
+     *
+     * Defaulted, so a document written before migration 0008 still parses;
+     * the runtime emits both keys on every node from 0008 onwards.
+     */
+    labels: z.array(z.string().trim().min(1).max(24)).max(8).default([]),
+    /** Header comment popover — free prose the agent never reads. */
+    note: z.string().max(4_000).default(""),
     data: canvasNodeDataSchema,
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
@@ -251,25 +209,28 @@ export const canvasNodeSchema = z
         path: ["data", "kind"],
       });
     }
+    if (node.parentId === node.id) {
+      context.addIssue({
+        code: "custom",
+        message: "A node cannot be its own parent",
+        path: ["parentId"],
+      });
+    }
   });
+
+/* ----------------------------------- edges ------------------------------- */
 
 export const canvasEdgeSchema = z.object({
   id: z.string().uuid(),
   boardId: z.string().uuid(),
-  sourceNodeId: z.string().uuid(),
-  targetNodeId: z.string().uuid(),
-  type: edgeTypeSchema,
-  label: z.string().max(80).optional(),
+  source: z.string().uuid(),
+  target: z.string().uuid(),
+  kind: edgeKindSchema.default("link"),
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
 });
 
-export const strokeSchema = z.object({
-  id: z.string().uuid(),
-  color: z.string().min(1).max(32),
-  width: z.number().positive().max(64).default(3),
-  points: z.array(positionSchema),
-});
+/* ---------------------------------- boards ------------------------------- */
 
 export const viewportSchema = z.object({
   x: z.number().finite(),
@@ -279,12 +240,64 @@ export const viewportSchema = z.object({
 
 export const DEFAULT_VIEWPORT = { x: 0, y: 0, zoom: 1 } as const;
 
+/* --------------------------------- kanban -------------------------------- */
+
+/**
+ * Kanban view state — plan §17. It lives on the board rather than on the node
+ * because a card's column is a property of the board's arrangement, not of the
+ * session: deleting a column must not touch the terminals it held.
+ */
+export const kanbanColumnSchema = z.object({
+  id: z.string().min(1).max(64),
+  title: z.string().min(1).max(80),
+  color: z.string().min(1).max(32).optional(),
+});
+
+export const kanbanCardSchema = z.object({
+  columnId: z.string().min(1).max(64),
+  /** Sort key inside the column; fractional so an insert need not renumber. */
+  order: z.number().finite(),
+});
+
+export const kanbanSchema = z.object({
+  columns: z.array(kanbanColumnSchema).max(24).default([]),
+  /** Keyed by node id. A node with no entry belongs to no column. */
+  cards: z.record(z.string(), kanbanCardSchema).default({}),
+});
+
+/**
+ * An empty board.
+ *
+ * A factory rather than a shared constant: zod hands a value default straight
+ * to every parse, and the kanban view mutates what it is given, so one shared
+ * object would let two boards write into each other.
+ */
+export const emptyKanban = (): Kanban => ({ columns: [], cards: {} });
+
+/** Convenience for callers that want a literal rather than a call. */
+export const DEFAULT_KANBAN: Kanban = emptyKanban();
+
+/**
+ * Whiteboard snapshot cap — tldraw plan §6.1. Images never live inside the
+ * snapshot (they go through the asset endpoint), so this is only ink, shapes
+ * and text; 8 MiB is far beyond anything a hand can draw.
+ */
+export const MAX_WHITEBOARD_BYTES = 8 * 1024 * 1024;
+
 export const boardSchema = z.object({
   id: z.string().uuid(),
   workspaceId: z.string().uuid(),
   name: z.string().min(1).max(120),
   sortOrder: z.number().int().default(0),
   viewport: viewportSchema.default(DEFAULT_VIEWPORT),
+  /** Defaulted for the same reason as `labels`/`note` — see `canvasNodeSchema`. */
+  kanban: kanbanSchema.default(emptyKanban),
+  /**
+   * Opaque tldraw store snapshot (JSON string) holding the whiteboard-native
+   * records only — tldraw plan §6.1. Empty string = no whiteboard content.
+   * Defaulted so a document written before migration 0009 still parses.
+   */
+  whiteboard: z.string().max(MAX_WHITEBOARD_BYTES).default(""),
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
 });
@@ -293,8 +306,9 @@ export const boardDocumentSchema = z.object({
   board: boardSchema,
   nodes: z.array(canvasNodeSchema),
   edges: z.array(canvasEdgeSchema),
-  strokes: z.array(strokeSchema).default([]),
 });
+
+/* -------------------------------- workspaces ----------------------------- */
 
 export const workspacePermissionsSchema = z.object({
   read: z.boolean().default(true),
@@ -327,7 +341,6 @@ export const workspaceSchema = z.object({
   permissions: workspacePermissionsSchema.default(
     DEFAULT_WORKSPACE_PERMISSIONS,
   ),
-  gatewayEnabled: z.boolean().default(false),
   lastOpenedAt: timestampSchema,
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
@@ -343,72 +356,100 @@ export const workspaceSummarySchema = workspaceSchema.extend({
   boards: z.array(boardSummarySchema).default([]),
 });
 
-/* ------------------------------------------------------------------ */
-/* Legacy mapping (v1 → v2). Runtime performs the durable migration;   */
-/* these helpers exist so the web app and tests share one source.      */
-/* ------------------------------------------------------------------ */
+/* ------------------------------- agent status ---------------------------- */
 
-export const LEGACY_NODE_TYPE_MAP: Record<string, (typeof NODE_TYPES)[number]> =
-  {
-    folder: "context",
-  };
+export const agentStatusSchema = z.object({
+  nodeId: z.string().uuid(),
+  workspaceId: z.string().uuid(),
+  agentId: agentIdSchema,
+  state: agentStateSchema.optional(),
+  unread: z.boolean().default(false),
+  sessionId: z.string().max(200).optional(),
+  pendingId: z.string().max(200).optional(),
+  /** The reporting hook presented a node token minted by this runtime instance. */
+  verified: z.boolean().default(false),
+  /** The row was read back from SQLite after a runtime restart. */
+  restored: z.boolean().default(false),
+  /** Absolute path of the CLI transcript the last report came from, when it
+   * reported one. The transcript viewer opens this. */
+  transcriptPath: z.string().max(4_000).optional(),
+  /** When the last hook event arrived, as opposed to when the row was written. */
+  lastEventAt: timestampSchema.optional(),
+  /** `start` / `end` of the session the last event belonged to. */
+  sessionPhase: z.enum(["start", "end"]).optional(),
+  /** Last assistant message, for the session list preview. */
+  lastMessage: z.string().max(20_000).optional(),
+  /**
+   * How the last turn ended — plan §5.4, migration `0007`. Deliberately
+   * tri-state: absent means "no verdict yet" (the turn is still open, or the
+   * row predates the column), `false` means it ended cleanly, `true` drives
+   * the `TURN FAILED` / `PAUSED` pills. Both are cleared back to absent on a
+   * new turn, so a pill can never sit over live work.
+   */
+  errored: z.boolean().optional(),
+  interrupted: z.boolean().optional(),
+  updatedAt: timestampSchema,
+});
 
-export const LEGACY_EDGE_TYPE_MAP: Record<string, (typeof EDGE_TYPES)[number]> =
-  {
-    context: "ref",
-    input: "dispatch",
-    output: "produce",
-    patches: "write",
-    depends_on: "trigger",
-    verifies: "link",
-  };
+export const AGENT_EVENT_KINDS = [
+  "state",
+  "session",
+  "subagent-start",
+  "subagent-end",
+] as const;
 
-export const LEGACY_NODE_STATUS_MAP: Record<
-  string,
-  (typeof NODE_STATUSES)[number]
-> = {
-  failed: "error",
-};
+export const agentEventKindSchema = z.enum(AGENT_EVENT_KINDS);
 
-export function migrateLegacyNodeType(value: string): CanvasNodeType {
-  if ((NODE_TYPES as readonly string[]).includes(value)) {
-    return value as CanvasNodeType;
-  }
-  return LEGACY_NODE_TYPE_MAP[value] ?? "note";
-}
-
-export function migrateLegacyEdgeType(value: string): CanvasEdgeType {
-  if ((EDGE_TYPES as readonly string[]).includes(value)) {
-    return value as CanvasEdgeType;
-  }
-  return LEGACY_EDGE_TYPE_MAP[value] ?? "link";
-}
-
-export function migrateLegacyNodeStatus(value: string): NodeStatus {
-  if ((NODE_STATUSES as readonly string[]).includes(value)) {
-    return value as NodeStatus;
-  }
-  return LEGACY_NODE_STATUS_MAP[value] ?? "idle";
-}
+/** Normalized hook event — plan §5.4. */
+export const agentEventSchema = z.object({
+  nodeId: z.string().uuid(),
+  agentId: agentIdSchema,
+  kind: agentEventKindSchema,
+  state: agentStateSchema.optional(),
+  newTurn: z.boolean().optional(),
+  interrupted: z.boolean().optional(),
+  errored: z.boolean().optional(),
+  idle: z.boolean().optional(),
+  awaitingInput: z.boolean().optional(),
+  pendingId: z.string().max(200).optional(),
+  askKind: z.string().max(80).optional(),
+  sessionId: z.string().max(200).optional(),
+  sessionPhase: z.enum(["start", "end"]).optional(),
+  lastMessage: z.string().max(20_000).optional(),
+  toolUseId: z.string().max(200).optional(),
+  subagentType: z.string().max(120).optional(),
+  taskLabel: z.string().max(400).optional(),
+  durationMs: z.number().int().nonnegative().optional(),
+  tokens: z.number().int().nonnegative().optional(),
+  toolUses: z.number().int().nonnegative().optional(),
+  result: z.string().max(20_000).optional(),
+  verified: z.boolean().optional(),
+  clientRevision: z.number().int().nonnegative().optional(),
+});
 
 export type CanvasNodeType = (typeof NODE_TYPES)[number];
-export type CanvasEdgeType = (typeof EDGE_TYPES)[number];
-export type NodeStatus = (typeof NODE_STATUSES)[number];
-export type NodeZoom = (typeof NODE_ZOOMS)[number];
-export type SyncPolicy = z.infer<typeof syncPolicySchema>;
-export type AdapterId = z.infer<typeof adapterIdSchema>;
-export type ChecklistItem = z.infer<typeof checklistItemSchema>;
-export type ContextChip = z.infer<typeof contextChipSchema>;
-export type ContextChipKind = z.infer<typeof contextChipKindSchema>;
-export type DiffFile = z.infer<typeof diffFileSchema>;
-export type DiffFileStatus = z.infer<typeof diffFileStatusSchema>;
-export type DiffFileState = z.infer<typeof diffFileStateSchema>;
-export type LogEntry = z.infer<typeof logEntrySchema>;
+export type CanvasEdgeKind = (typeof EDGE_KINDS)[number];
+export type NodeColor = (typeof NODE_COLORS)[number];
+export type AgentState = (typeof AGENT_STATES)[number];
+export type PermissionMode = (typeof PERMISSION_MODES)[number];
+export type DiffScope = (typeof DIFF_SCOPES)[number];
+export type TerminalAgent = z.infer<typeof terminalAgentSchema>;
+export type SshTarget = z.infer<typeof sshTargetSchema>;
+export type PendingLaunch = z.infer<typeof pendingLaunchSchema>;
 export type CanvasNodeData = z.infer<typeof canvasNodeDataSchema>;
+export type TerminalNodeData = z.infer<typeof terminalNodeDataSchema>;
+export type StickyNodeData = z.infer<typeof stickyNodeDataSchema>;
+export type GroupNodeData = z.infer<typeof groupNodeDataSchema>;
+export type EditorNodeData = z.infer<typeof editorNodeDataSchema>;
+export type DiffNodeData = z.infer<typeof diffNodeDataSchema>;
+export type FilesNodeData = z.infer<typeof filesNodeDataSchema>;
+export type BrowserNodeData = z.infer<typeof browserNodeDataSchema>;
 export type CanvasNode = z.infer<typeof canvasNodeSchema>;
 export type CanvasEdge = z.infer<typeof canvasEdgeSchema>;
-export type Stroke = z.infer<typeof strokeSchema>;
 export type Viewport = z.infer<typeof viewportSchema>;
+export type KanbanColumn = z.infer<typeof kanbanColumnSchema>;
+export type KanbanCard = z.infer<typeof kanbanCardSchema>;
+export type Kanban = z.infer<typeof kanbanSchema>;
 export type Board = z.infer<typeof boardSchema>;
 export type BoardSummary = z.infer<typeof boardSummarySchema>;
 export type BoardDocument = z.infer<typeof boardDocumentSchema>;
@@ -417,3 +458,6 @@ export type WorkspacePermissions = z.infer<typeof workspacePermissionsSchema>;
 export type WorkspaceSummary = z.infer<typeof workspaceSummarySchema>;
 export type Position = z.infer<typeof positionSchema>;
 export type Size = z.infer<typeof sizeSchema>;
+export type AgentStatus = z.infer<typeof agentStatusSchema>;
+export type AgentEvent = z.infer<typeof agentEventSchema>;
+export type AgentEventKind = (typeof AGENT_EVENT_KINDS)[number];
