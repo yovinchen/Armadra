@@ -1,181 +1,159 @@
 import { describe, expect, it } from "vitest";
 import {
-  EDGE_TYPES,
-  NODE_STATUSES,
+  DEFAULT_NODE_COLOR,
+  EDGE_KINDS,
+  NODE_COLORS,
   NODE_TYPES,
+  agentStatusSchema,
   boardDocumentSchema,
-  buildContextPrompt,
+  boardSchema,
+  canvasEdgeSchema,
   canvasNodeSchema,
-  gitStatusSchema,
-  migrateLegacyEdgeType,
-  migrateLegacyNodeStatus,
-  migrateLegacyNodeType,
-  projectEdge,
-  projectNode,
-  strokeSchema,
+  emptyKanban,
+  kanbanSchema,
   workspaceSchema,
-  type CanvasEdge,
-  type CanvasNode,
-  type ContextItem,
 } from "../src/index.js";
 
 const timestamp = "2026-08-13T00:00:00.000Z";
 const boardId = "019ff7d1-7419-74df-89e2-b1619d36ea7d";
 const nodeId = "019ff7d1-5c48-7d75-a0ed-64b52f44e214";
+const otherNodeId = "019ff7d1-5c48-7d75-a0ed-64b52f44e215";
+const groupId = "019ff7d1-5c48-7d75-a0ed-64b52f44e216";
 
-describe("canvas domain", () => {
-  it("exposes the v2 enumerations as arrays for the UI", () => {
-    expect(NODE_TYPES).toHaveLength(10);
-    expect(NODE_TYPES).toContain("context");
-    expect(NODE_TYPES).not.toContain("folder");
-    expect(EDGE_TYPES).toEqual([
-      "link",
-      "dispatch",
-      "produce",
-      "write",
-      "trigger",
-      "ref",
+function node(overrides: Record<string, unknown> = {}) {
+  return {
+    id: nodeId,
+    boardId,
+    type: "sticky",
+    title: "Sticky",
+    position: { x: 0, y: 0 },
+    data: { kind: "sticky", content: "hello" },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    ...overrides,
+  };
+}
+
+describe("canvas domain v3", () => {
+  it("exposes the v3 enumerations as arrays for the UI", () => {
+    expect(NODE_TYPES).toEqual([
+      "terminal",
+      "sticky",
+      "group",
+      "editor",
+      "diff",
+      "files",
+      "browser",
     ]);
-    expect(NODE_STATUSES).toContain("error");
-    expect(NODE_STATUSES).not.toContain("failed");
+    expect(NODE_TYPES).not.toContain("agent");
+    expect(NODE_TYPES).not.toContain("log");
+    expect(EDGE_KINDS).toEqual(["link"]);
+    expect(NODE_COLORS).toHaveLength(7);
+    expect(NODE_COLORS.every((color) => /^#[0-9a-f]{6}$/.test(color))).toBe(
+      true,
+    );
+    expect(DEFAULT_NODE_COLOR).toBe("#0a84ff");
   });
 
   it("rejects a node whose data kind does not match its type", () => {
-    const result = canvasNodeSchema.safeParse({
-      id: nodeId,
-      boardId,
-      type: "file",
-      position: { x: 0, y: 0 },
-      data: {
-        kind: "task",
-        title: "Mismatch",
-        status: "idle",
-        description: "This must fail",
-      },
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    });
-
+    const result = canvasNodeSchema.safeParse(
+      node({ type: "editor", data: { kind: "sticky", content: "" } }),
+    );
     expect(result.success).toBe(false);
   });
 
-  it("defaults a node to the normal display mode", () => {
-    const result = canvasNodeSchema.safeParse({
-      id: nodeId,
-      boardId,
-      type: "note",
-      position: { x: 0, y: 0 },
-      data: { kind: "note", title: "Note", content: "" },
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    });
-
+  it("defaults the node colour and keeps status/zoom out of the model", () => {
+    const result = canvasNodeSchema.safeParse(node());
     expect(result.success).toBe(true);
-    expect(result.success && result.data.zoom).toBe("normal");
-    expect(result.success && result.data.data.status).toBe("idle");
+    if (!result.success) return;
+    expect(result.data.color).toBe(DEFAULT_NODE_COLOR);
+    expect(result.data).not.toHaveProperty("zoom");
+    expect(result.data.data).not.toHaveProperty("status");
   });
 
-  it("keeps oversized inline images out of the document", () => {
-    const oversized = `data:image/png;base64,${"A".repeat(2 * 1024 * 1024)}`;
-    const result = canvasNodeSchema.safeParse({
-      id: nodeId,
-      boardId,
-      type: "image",
-      position: { x: 0, y: 0 },
-      data: {
-        kind: "image",
-        title: "Screenshot",
-        src: oversized,
-        mimeType: "image/png",
+  it("accepts every v3 node payload", () => {
+    const payloads: Record<string, unknown>[] = [
+      {
+        kind: "terminal",
+        cwd: "/tmp",
+        shell: "/bin/zsh",
+        agent: {
+          id: "claude",
+          permissionMode: "auto-edit",
+          model: "opus",
+          initialCommand: "claude --permission-mode acceptEdits",
+        },
       },
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    });
-
-    expect(result.success).toBe(false);
+      { kind: "sticky", content: "note" },
+      { kind: "group" },
+      { kind: "editor", path: "src/App.tsx", language: "tsx", readonly: false },
+      { kind: "diff", repoPath: ".", scope: "staged", paths: ["a.ts"] },
+      { kind: "files", path: "src" },
+      { kind: "browser", url: "https://example.com" },
+    ];
+    for (const data of payloads) {
+      const parsed = canvasNodeSchema.safeParse(
+        node({ type: data.kind, title: String(data.kind), data }),
+      );
+      expect(parsed.success, `${String(data.kind)} rejected`).toBe(true);
+    }
+    expect(payloads).toHaveLength(NODE_TYPES.length);
   });
 
-  it("projects semantic edges without leaking permissions into the renderer", () => {
-    const edge: CanvasEdge = {
-      id: "019ff7d1-9e6d-7d45-aa28-4d125ac12fd2",
+  it("rejects unknown agent ids but accepts custom ones", () => {
+    const withCustom = canvasNodeSchema.safeParse(
+      node({
+        type: "terminal",
+        data: { kind: "terminal", agent: { id: "custom:mytool" } },
+      }),
+    );
+    expect(withCustom.success).toBe(true);
+
+    const withUnknown = canvasNodeSchema.safeParse(
+      node({
+        type: "terminal",
+        data: { kind: "terminal", agent: { id: "wat" } },
+      }),
+    );
+    expect(withUnknown.success).toBe(false);
+  });
+
+  it("carries group membership through parentId", () => {
+    const parsed = canvasNodeSchema.parse(node({ parentId: groupId }));
+    expect(parsed.parentId).toBe(groupId);
+    expect(
+      canvasNodeSchema.safeParse(node({ parentId: nodeId })).success,
+    ).toBe(false);
+  });
+
+  it("persists exactly one edge kind", () => {
+    const parsed = canvasEdgeSchema.parse({
+      id: groupId,
       boardId,
-      sourceNodeId: nodeId,
-      targetNodeId: "019ff7d1-ab76-728d-be18-3acfd6181af8",
-      type: "ref",
-      label: "只读引用",
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    };
-
-    const projection = projectEdge(edge);
-    expect(projection).toMatchObject({
-      source: edge.sourceNodeId,
-      target: edge.targetNodeId,
-      type: "semantic",
-      data: { semanticType: "ref", label: "只读引用" },
-    });
-    expect(projection.data).not.toHaveProperty("permissions");
-  });
-
-  it("projects the display mode and board so the canvas can enforce summaries", () => {
-    const node: CanvasNode = {
-      id: nodeId,
-      boardId,
-      type: "task",
-      position: { x: 80, y: 80 },
-      zoom: "focus",
-      data: {
-        kind: "task",
-        title: "Move anywhere",
-        status: "idle",
-        description: "",
-        checklist: [],
-      },
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    };
-
-    expect(projectNode(node)).toMatchObject({ zoom: "focus", boardId });
-    expect(projectNode(node)).not.toHaveProperty("dragHandle");
-  });
-
-  it("allows an incomplete custom adapter configuration to be saved", () => {
-    const result = canvasNodeSchema.safeParse({
-      id: nodeId,
-      boardId,
-      type: "agent",
-      position: { x: 0, y: 0 },
-      data: {
-        kind: "agent",
-        title: "Custom agent",
-        status: "idle",
-        adapter: "custom",
-        projectPath: ".",
-        command: "",
-        args: [],
-      },
+      source: nodeId,
+      target: otherNodeId,
       createdAt: timestamp,
       updatedAt: timestamp,
     });
-
-    expect(result.success).toBe(true);
-    expect(result.success && result.data.data).toMatchObject({
-      contextChips: [],
-    });
+    expect(parsed.kind).toBe("link");
+    expect(
+      canvasEdgeSchema.safeParse({
+        id: groupId,
+        boardId,
+        source: nodeId,
+        target: otherNodeId,
+        kind: "dispatch",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }).success,
+    ).toBe(false);
   });
 
-  it("defaults stroke width and board viewport", () => {
-    const stroke = strokeSchema.parse({
-      id: "019ff7d1-ab76-728d-be18-3acfd6181af8",
-      color: "#5B5BD6",
-      points: [{ x: 0, y: 0 }],
-    });
-    expect(stroke.width).toBe(3);
-
+  it("drops strokes from the board document", () => {
     const document = boardDocumentSchema.parse({
       board: {
         id: boardId,
-        workspaceId: "019ff7d1-0d12-7421-833d-2c5e8d64ed21",
+        workspaceId: nodeId,
         name: "Default",
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -183,153 +161,129 @@ describe("canvas domain", () => {
       nodes: [],
       edges: [],
     });
+    expect(document).not.toHaveProperty("strokes");
     expect(document.board.viewport).toEqual({ x: 0, y: 0, zoom: 1 });
-    expect(document.board.sortOrder).toBe(0);
-    expect(document.strokes).toEqual([]);
   });
 
-  it("gives a workspace the permission and gateway fields the shell renders", () => {
+  it("keeps the workspace fields but not the gateway flag", () => {
     const workspace = workspaceSchema.parse({
-      id: "019ff7d1-0d12-7421-833d-2c5e8d64ed21",
-      name: "One",
-      rootPath: "/tmp/one",
+      id: nodeId,
+      name: "Canvas",
+      rootPath: "/tmp",
       lastOpenedAt: timestamp,
       createdAt: timestamp,
       updatedAt: timestamp,
     });
-    expect(workspace).toMatchObject({
-      gatewayEnabled: false,
-      permissions: { read: true, write: true, execute: true },
+    expect(workspace.permissions.read).toBe(true);
+    expect(workspace).not.toHaveProperty("gatewayEnabled");
+  });
+});
+
+describe("agent status", () => {
+  it("carries the optional hook context on an agent status", () => {
+    const base = {
+      nodeId: "019ff7d1-5c48-7d75-a0ed-64b52f44e214",
+      workspaceId: "019ff7d1-7419-74df-89e2-b1619d36ea7d",
+      agentId: "claude",
+      updatedAt: "2026-09-04T00:00:00.000Z",
+    };
+    // Every new key is optional: a runtime that reports none still parses.
+    const minimal = agentStatusSchema.parse(base);
+    expect(minimal.transcriptPath).toBeUndefined();
+    expect(minimal.lastEventAt).toBeUndefined();
+    expect(minimal.sessionPhase).toBeUndefined();
+    expect(minimal.lastMessage).toBeUndefined();
+
+    const full = agentStatusSchema.parse({
+      ...base,
+      transcriptPath: "/home/u/.claude/projects/x/abc.jsonl",
+      lastEventAt: "2026-09-04T00:00:01.000Z",
+      sessionPhase: "start",
+      lastMessage: "done",
     });
-    expect(workspace.color).toMatch(/^#/);
-  });
-});
-
-describe("legacy mapping", () => {
-  it("renames folder nodes and failed statuses", () => {
-    expect(migrateLegacyNodeType("folder")).toBe("context");
-    expect(migrateLegacyNodeType("agent")).toBe("agent");
-    expect(migrateLegacyNodeStatus("failed")).toBe("error");
-    expect(migrateLegacyNodeStatus("running")).toBe("running");
-  });
-
-  it("maps every v1 edge semantic onto a v2 semantic", () => {
-    expect(migrateLegacyEdgeType("context")).toBe("ref");
-    expect(migrateLegacyEdgeType("input")).toBe("dispatch");
-    expect(migrateLegacyEdgeType("output")).toBe("produce");
-    expect(migrateLegacyEdgeType("patches")).toBe("write");
-    expect(migrateLegacyEdgeType("depends_on")).toBe("trigger");
-    expect(migrateLegacyEdgeType("verifies")).toBe("link");
-    expect(migrateLegacyEdgeType("nonsense")).toBe("link");
-  });
-});
-
-describe("git status", () => {
-  // The runtime omits ahead/behind when there is no upstream, but a stale
-  // binary sends them as null. Both must parse: a topbar that throws here
-  // loses the branch name and the changed-count badge entirely.
-  it("accepts every shape the runtime reports", () => {
-    expect(
-      gitStatusSchema.parse({
-        repository: false,
-        branch: null,
-        changedCount: 0,
-      }),
-    ).toMatchObject({ repository: false, branch: null });
+    expect(full.sessionPhase).toBe("start");
+    expect(full.transcriptPath).toContain("abc.jsonl");
 
     expect(
-      gitStatusSchema.parse({
-        repository: true,
-        branch: "main",
-        changedCount: 221,
-      }).ahead,
-    ).toBeUndefined();
-
+      agentStatusSchema.safeParse({ ...base, sessionPhase: "middle" }).success,
+    ).toBe(false);
     expect(
-      gitStatusSchema.parse({
-        repository: true,
-        branch: "main",
-        changedCount: 221,
-        ahead: null,
-        behind: null,
-      }).ahead,
-    ).toBeNull();
-
-    expect(
-      gitStatusSchema.parse({
-        repository: true,
-        branch: "main",
-        changedCount: 3,
-        ahead: 1,
-        behind: 2,
-      }),
-    ).toMatchObject({ ahead: 1, behind: 2 });
-  });
-
-  it("still rejects a missing branch key", () => {
-    expect(
-      gitStatusSchema.safeParse({ repository: true, changedCount: 0 }).success,
+      agentStatusSchema.safeParse({ ...base, lastEventAt: "not a date" }).success,
     ).toBe(false);
   });
 });
 
-describe("context prompt", () => {
-  it("uses task text and paths without injecting file contents", () => {
-    const items: ContextItem[] = [
-      {
-        nodeId: "019ff7d1-d1e2-780e-86f4-71a2296a8012",
-        kind: "task",
-        title: "Task",
-        value: "修复启动白屏",
-      },
-      {
-        nodeId: "019ff7d1-df88-77c1-b9dc-e07d15e684ba",
-        kind: "file",
-        title: "App.tsx",
-        value: "src/App.tsx",
-      },
-    ];
+describe("kanban, labels and notes (plan §17)", () => {
+  const board = {
+    id: boardId,
+    workspaceId: "019ff7d1-7419-74df-89e2-b1619d36ea99",
+    name: "Default",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
 
-    const prompt = buildContextPrompt(items);
-    expect(prompt).toContain("修复启动白屏");
-    expect(prompt).toContain("src/App.tsx");
-    expect(prompt).toContain("危险操作");
+  it("gives a v3 board and node the empty defaults", () => {
+    // A document written before migration 0008 has none of the three keys and
+    // must still parse — that is what keeps the upgrade from rewriting rows.
+    const parsedBoard = boardSchema.parse(board);
+    expect(parsedBoard.kanban).toEqual({ columns: [], cards: {} });
+
+    const parsedNode = canvasNodeSchema.parse(node());
+    expect(parsedNode.labels).toEqual([]);
+    expect(parsedNode.note).toBe("");
   });
 
-  it("renders the new note / browser / context / text kinds", () => {
-    const prompt = buildContextPrompt([
-      {
-        nodeId: "019ff7d1-d1e2-780e-86f4-71a2296a8012",
-        kind: "context",
-        title: "src",
-        value: "apps/web/src",
-      },
-      {
-        nodeId: "019ff7d1-df88-77c1-b9dc-e07d15e684ba",
-        kind: "note",
-        title: "决策",
-        value: "先修状态栏",
-      },
-      {
-        nodeId: "019ff7d1-ab76-728d-be18-3acfd6181af8",
-        kind: "browser",
-        title: "React Flow",
-        value: "https://reactflow.dev",
-      },
-      {
-        nodeId: "019ff7d1-9e6d-7d45-aa28-4d125ac12fd2",
-        kind: "text",
-        title: "片段",
-        value: "粘贴的片段",
-      },
-    ]);
+  it("hands out a fresh kanban object each time", () => {
+    // Two boards must not share one columns array.
+    const first = boardSchema.parse(board).kanban;
+    const second = boardSchema.parse({ ...board, id: nodeId }).kanban;
+    first.columns.push({ id: "todo", title: "待办" });
+    expect(second.columns).toEqual([]);
+    expect(emptyKanban()).not.toBe(emptyKanban());
+  });
 
-    expect(prompt).toContain("apps/web/src");
-    expect(prompt).toContain("笔记");
-    expect(prompt).toContain("先修状态栏");
-    expect(prompt).toContain("参考网页");
-    expect(prompt).toContain("https://reactflow.dev");
-    expect(prompt).toContain("补充上下文");
-    expect(prompt).toContain("粘贴的片段");
+  it("keeps columns and card placements", () => {
+    const parsed = kanbanSchema.parse({
+      columns: [
+        { id: "todo", title: "待办", color: "#32d74b" },
+        { id: "doing", title: "进行中" },
+      ],
+      cards: { [nodeId]: { columnId: "doing", order: 1.5 } },
+    });
+    expect(parsed.columns[1]!.color).toBeUndefined();
+    expect(parsed.cards[nodeId]).toEqual({ columnId: "doing", order: 1.5 });
+  });
+
+  it("bounds labels at eight short chips and the note at 4000 characters", () => {
+    expect(
+      canvasNodeSchema.parse(node({ labels: ["  ship  ", "P0"] })).labels,
+    ).toEqual(["ship", "P0"]);
+    expect(
+      canvasNodeSchema.safeParse(node({ labels: Array(9).fill("x") })).success,
+    ).toBe(false);
+    expect(
+      canvasNodeSchema.safeParse(node({ labels: ["x".repeat(25)] })).success,
+    ).toBe(false);
+    expect(canvasNodeSchema.safeParse(node({ labels: [""] })).success).toBe(
+      false,
+    );
+    expect(
+      canvasNodeSchema.safeParse(node({ note: "n".repeat(4_000) })).success,
+    ).toBe(true);
+    expect(
+      canvasNodeSchema.safeParse(node({ note: "n".repeat(4_001) })).success,
+    ).toBe(false);
+  });
+
+  it("rejects a malformed column or a non-finite card order", () => {
+    expect(
+      kanbanSchema.safeParse({ columns: [{ id: "", title: "x" }] }).success,
+    ).toBe(false);
+    expect(
+      kanbanSchema.safeParse({
+        columns: [],
+        cards: { [nodeId]: { columnId: "todo", order: Number.NaN } },
+      }).success,
+    ).toBe(false);
   });
 });
