@@ -1,27 +1,33 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="theme-color"
-      content="#f7f7f5"
+      content="#fdfbf7"
       media="(prefers-color-scheme: light)"
     />
     <meta
       name="theme-color"
-      content="#171717"
+      content="#1e1e1e"
       media="(prefers-color-scheme: dark)"
     />
-    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/icon.png" type="image/png" />
     <meta
       name="description"
-      content="Local-first AI coding workspace with executable semantic nodes"
+      content="本地优先的 AI 编码画布"
     />
     <title>AI Coding Canvas</title>
   </head>
   <body>
     <div id="root"></div>
+    <!--
+      `data-tauri` 由桌面壳注入（src-tauri/src/main.rs 的 on_page_load），
+      不写在这里：CSP 是 `default-src 'self'`，内联脚本会被挡掉，而 webview 的
+      `eval` 不受 CSP 约束、且每次页面加载都会重新打上。浏览器里没有这个属性，
+      侧栏回退成纯色 `--panel`（见 styles/tokens.css 末尾的 html[data-tauri]）。
+    -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
