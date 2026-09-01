@@ -3,124 +3,159 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum AdapterId {
-    Claude,
-    Codex,
-    Gemini,
-    Opencode,
-    Pi,
-    Omp,
-    Custom,
+/// Runtime mirror of `packages/shared/src/agents.ts`. Only what the runtime
+/// needs lives here — ids, labels, launch programs and capabilities. The
+/// canonical registry (flags, prompt assembly, hook events) stays in shared;
+/// the launch line is assembled in the web app and typed into the PTY.
+pub const AGENT_IDS: &[&str] = &["claude", "codex", "gemini", "opencode"];
+
+#[derive(Debug, Clone, Copy)]
+pub struct AgentDefinition {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub color: &'static str,
+    pub launch_cmd: &'static str,
+    pub prompt_mode: &'static str,
+    pub capabilities: &'static [&'static str],
 }
 
-impl AdapterId {
-    pub fn command(self) -> &'static str {
-        match self {
-            Self::Claude | Self::Codex | Self::Pi => "npx",
-            Self::Gemini => "gemini",
-            Self::Opencode => "opencode",
-            Self::Omp => "omp",
-            Self::Custom => "",
-        }
-    }
+pub const AGENT_REGISTRY: &[AgentDefinition] = &[
+    AgentDefinition {
+        id: "claude",
+        label: "Claude Code",
+        color: "#d97757",
+        launch_cmd: "claude",
+        prompt_mode: "argv",
+        capabilities: &["hooks", "resume", "subagent", "contextLink", "usage"],
+    },
+    AgentDefinition {
+        id: "codex",
+        label: "Codex",
+        color: "#10a37f",
+        launch_cmd: "codex",
+        prompt_mode: "argv",
+        capabilities: &["hooks", "resume", "subagent", "contextLink"],
+    },
+    AgentDefinition {
+        id: "gemini",
+        label: "Gemini CLI",
+        color: "#4285f4",
+        launch_cmd: "gemini",
+        prompt_mode: "flag-prompt",
+        capabilities: &["hooks", "resume", "contextLink"],
+    },
+    AgentDefinition {
+        id: "opencode",
+        label: "opencode",
+        color: "#a78bfa",
+        launch_cmd: "opencode",
+        prompt_mode: "stdin-after-start",
+        // opencode reopens sessions from its own TUI, so there is no launch
+        // line we can build for it — see packages/shared/src/agents.ts.
+        capabilities: &["hooks", "contextLink"],
+    },
+];
 
-    pub fn args(self) -> &'static [&'static str] {
-        match self {
-            Self::Claude => &["-y", "@agentclientprotocol/claude-agent-acp@latest"],
-            Self::Codex => &["-y", "@agentclientprotocol/codex-acp@latest"],
-            Self::Gemini => &["--acp"],
-            Self::Opencode => &["acp"],
-            Self::Pi => &["-y", "pi-acp@0.0.33"],
-            Self::Omp => &["acp"],
-            Self::Custom => &[],
-        }
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Claude => "Claude Agent (ACP)",
-            Self::Codex => "Codex (ACP)",
-            Self::Gemini => "Gemini (ACP)",
-            Self::Opencode => "OpenCode (ACP)",
-            Self::Pi => "Pi (ACP bridge)",
-            Self::Omp => "Oh My Pi (ACP)",
-            Self::Custom => "Custom ACP agent",
-        }
-    }
-
-    pub fn id(self) -> &'static str {
-        match self {
-            Self::Claude => "claude",
-            Self::Codex => "codex",
-            Self::Gemini => "gemini",
-            Self::Opencode => "opencode",
-            Self::Pi => "pi",
-            Self::Omp => "omp",
-            Self::Custom => "custom",
-        }
-    }
+pub fn definition(agent_id: &str) -> Option<&'static AgentDefinition> {
+    AGENT_REGISTRY.iter().find(|agent| agent.id == agent_id)
 }
 
-#[derive(Debug, Serialize)]
+/// `GET /api/agents` row. `installed` means the launch program was found on the
+/// augmented PATH; `client_revision` is the hook client revision recorded in
+/// `hook_installs` and is filled in by the API layer (None = hooks not
+/// installed for this provider).
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AdapterInfo {
-    id: &'static str,
-    name: &'static str,
-    command: &'static str,
-    args: &'static [&'static str],
-    protocol: &'static str,
-    available: bool,
-    /// Absolute path the command resolves to on the runtime's PATH, or `null`.
-    resolved_path: Option<String>,
+pub struct AgentInfo {
+    pub id: String,
+    pub label: String,
+    pub color: String,
+    pub launch_cmd: String,
+    pub prompt_mode: &'static str,
+    pub capabilities: &'static [&'static str],
+    /// Extra argv the launch line appends after the flags. Always empty for a
+    /// built-in agent; a custom one carries whatever the settings page stored.
+    pub args: Vec<String>,
+    /// The built-in agent a `custom:` entry borrows its hooks and prompt mode
+    /// from. Absent on the built-ins themselves.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_agent: Option<&'static str>,
+    /// Absolute path the launch program resolves to, or `null`.
+    pub resolved_path: Option<String>,
+    pub installed: bool,
+    pub client_revision: Option<i64>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ContextItem {
-    pub node_id: String,
-    pub kind: String,
-    pub title: String,
-    pub value: String,
-}
-
-pub fn list_adapters() -> Vec<AdapterInfo> {
-    [
-        AdapterId::Claude,
-        AdapterId::Codex,
-        AdapterId::Gemini,
-        AdapterId::Opencode,
-        AdapterId::Pi,
-        AdapterId::Omp,
-        AdapterId::Custom,
-    ]
-    .into_iter()
-    .map(|adapter| {
-        let resolved = resolve_command(adapter.command());
-        AdapterInfo {
-            id: adapter.id(),
-            name: adapter.label(),
-            command: adapter.command(),
-            args: adapter.args(),
-            protocol: "acp",
-            available: matches!(adapter, AdapterId::Custom)
-                || (matches!(adapter, AdapterId::Pi)
-                    && resolve_command("npx").is_some()
-                    && resolve_command("pi").is_some())
-                || resolved.is_some(),
+impl AgentInfo {
+    fn from_definition(agent: &AgentDefinition) -> Self {
+        let resolved = resolve_command(agent.launch_cmd);
+        Self {
+            id: agent.id.to_owned(),
+            label: agent.label.to_owned(),
+            color: agent.color.to_owned(),
+            launch_cmd: agent.launch_cmd.to_owned(),
+            prompt_mode: agent.prompt_mode,
+            capabilities: agent.capabilities,
+            args: Vec::new(),
+            base_agent: None,
+            installed: resolved.is_some(),
             resolved_path: resolved.map(|path| path.to_string_lossy().into_owned()),
+            client_revision: None,
         }
-    })
-    .collect()
+    }
 }
 
-/// Resolve `command` against the same PATH used to launch ACP children.
+/// A `settings.agents.custom[]` entry as a `GET /api/agents` row (plan §24.1).
+///
+/// Everything but the name, colour and program comes from the base agent: a
+/// custom entry is a different way to start the same CLI, so it must report the
+/// same prompt mode and capabilities or the launch line would be built wrong.
+pub fn custom_info(custom: &crate::settings::CustomAgent) -> AgentInfo {
+    let base = definition(&custom.base_agent).unwrap_or(&AGENT_REGISTRY[0]);
+    let resolved = resolve_command(&custom.launch_cmd);
+    AgentInfo {
+        id: custom.id.clone(),
+        label: custom.label.clone(),
+        // The base agent's brand colour, so a custom Claude reads as Claude on
+        // the canvas; `settings.color` is only the settings-page dot.
+        color: base.color.to_owned(),
+        launch_cmd: custom.launch_cmd.clone(),
+        prompt_mode: base.prompt_mode,
+        capabilities: base.capabilities,
+        args: custom.args.clone(),
+        base_agent: Some(base.id),
+        installed: resolved.is_some(),
+        resolved_path: resolved.map(|path| path.to_string_lossy().into_owned()),
+        client_revision: None,
+    }
+}
+
+/// Probe every built-in agent against the augmented PATH.
+pub fn detect() -> Vec<AgentInfo> {
+    AGENT_REGISTRY
+        .iter()
+        .map(AgentInfo::from_definition)
+        .collect()
+}
+
+/// Resolve `command` against the same PATH used to launch agent CLIs.
+///
+/// A command that already carries a path separator (`/opt/bin/claude`,
+/// `./wrapper.sh`) is never searched for on PATH — that is what a custom agent
+/// pointing at a script outside PATH looks like, and joining it onto every PATH
+/// entry would only produce nonsense.
 pub fn resolve_command(command: &str) -> Option<PathBuf> {
     if command.is_empty() {
         return None;
+    }
+    let path = Path::new(command);
+    if path.components().count() > 1 || path.is_absolute() {
+        if path.is_file() {
+            return Some(path.to_path_buf());
+        }
+        return executable_with_platform_suffix(path);
     }
     env::split_paths(&agent_path()).find_map(|directory| {
         let candidate = directory.join(command);
@@ -131,7 +166,7 @@ pub fn resolve_command(command: &str) -> Option<PathBuf> {
     })
 }
 
-/// Build the PATH used both for adapter detection and ACP child processes.
+/// Build the PATH used for agent detection and for PTY children.
 ///
 /// macOS GUI applications do not inherit the user's interactive shell PATH,
 /// so tools installed by Homebrew or mise would otherwise appear unavailable
@@ -178,113 +213,86 @@ fn executable_with_platform_suffix(candidate: &Path) -> Option<PathBuf> {
     }
 }
 
-pub fn build_context_prompt(items: &[ContextItem]) -> String {
-    let mut sections = vec!["你正在处理当前已授权的本地项目。".to_owned()];
-    append_section(&mut sections, "任务：", items, &["task"]);
-    append_section(
-        &mut sections,
-        "优先检查这些本地路径：",
-        items,
-        &["file", "context"],
-    );
-    append_section(&mut sections, "相关记录：", items, &["log"]);
-    append_section(
-        &mut sections,
-        "补充上下文：",
-        items,
-        &["note", "browser", "text"],
-    );
-    sections.push("请先核对现状再修改；如需执行危险操作，请等待用户在真实终端中确认。".to_owned());
-    sections.join("\n\n")
-}
-
-fn append_section(sections: &mut Vec<String>, title: &str, items: &[ContextItem], kinds: &[&str]) {
-    let lines = items
-        .iter()
-        .filter(|item| kinds.contains(&item.kind.as_str()))
-        .map(|item| {
-            if ["log", "note", "browser", "text"].contains(&item.kind.as_str()) {
-                format!("- {}: {}", item.title, item.value)
-            } else {
-                format!("- {}", item.value)
-            }
-        })
-        .collect::<Vec<_>>();
-    if !lines.is_empty() {
-        sections.push(format!("{title}\n{}", lines.join("\n")));
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn builds_path_only_context_prompt() {
-        let prompt = build_context_prompt(&[
-            ContextItem {
-                node_id: "a".into(),
-                kind: "task".into(),
-                title: "Task".into(),
-                value: "修复白屏".into(),
-            },
-            ContextItem {
-                node_id: "b".into(),
-                kind: "file".into(),
-                title: "App".into(),
-                value: "src/App.tsx".into(),
-            },
-        ]);
-        assert!(prompt.contains("修复白屏"));
-        assert!(prompt.contains("src/App.tsx"));
-        assert!(prompt.contains("等待用户"));
-    }
-
-    #[test]
-    fn built_in_adapters_use_acp_entrypoints() {
-        assert_eq!(AdapterId::Claude.command(), "npx");
-        assert!(AdapterId::Claude.args()[1].contains("claude-agent-acp"));
-        assert!(AdapterId::Codex.args()[1].contains("codex-acp"));
-        assert_eq!(AdapterId::Gemini.args(), &["--acp"]);
-        assert_eq!(AdapterId::Opencode.args(), &["acp"]);
-        assert_eq!(AdapterId::Omp.command(), "omp");
-        assert_eq!(AdapterId::Omp.args(), &["acp"]);
-        assert_eq!(AdapterId::Pi.command(), "npx");
-        assert_eq!(AdapterId::Pi.args(), &["-y", "pi-acp@0.0.33"]);
-    }
-
-    #[test]
-    fn context_prompt_covers_the_v2_kinds() {
-        let items = ["task", "file", "context", "log", "note", "browser", "text"]
-            .into_iter()
-            .enumerate()
-            .map(|(index, kind)| ContextItem {
-                node_id: index.to_string(),
-                kind: kind.into(),
-                title: format!("{kind}-title"),
-                value: format!("{kind}-value"),
-            })
-            .collect::<Vec<_>>();
-        let prompt = build_context_prompt(&items);
-        for kind in ["task", "file", "context", "log", "note", "browser", "text"] {
-            assert!(prompt.contains(&format!("{kind}-value")), "missing {kind}");
+    fn the_registry_mirrors_the_shared_agent_list() {
+        assert_eq!(AGENT_REGISTRY.len(), AGENT_IDS.len());
+        for agent in AGENT_REGISTRY {
+            assert!(AGENT_IDS.contains(&agent.id));
+            assert!(!agent.launch_cmd.is_empty());
+            assert!(agent.color.starts_with('#') && agent.color.len() == 7);
+            assert!(agent.capabilities.contains(&"hooks"));
         }
-        assert!(prompt.contains("补充上下文："));
+        assert_eq!(definition("claude").unwrap().launch_cmd, "claude");
+        assert_eq!(definition("gemini").unwrap().prompt_mode, "flag-prompt");
+        // ACP-only adapters are gone in v3.
+        assert!(definition("pi").is_none());
+        assert!(definition("omp").is_none());
     }
 
     #[test]
-    fn adapters_report_the_resolved_command_path() {
-        for adapter in list_adapters() {
-            assert_eq!(adapter.resolved_path.is_some(), {
-                let resolved = resolve_command(adapter.command);
-                resolved.is_some()
-            });
-            if let Some(path) = &adapter.resolved_path {
+    fn detection_reports_the_resolved_command_path() {
+        for agent in detect() {
+            assert_eq!(agent.installed, agent.resolved_path.is_some());
+            assert_eq!(
+                agent.resolved_path.is_some(),
+                resolve_command(&agent.launch_cmd).is_some()
+            );
+            assert!(agent.client_revision.is_none());
+            if let Some(path) = &agent.resolved_path {
                 assert!(Path::new(path).is_absolute() || Path::new(path).exists());
             }
         }
         assert!(resolve_command("").is_none());
         assert!(resolve_command("definitely-not-a-real-binary-xyz").is_none());
+    }
+
+    #[test]
+    fn a_command_with_a_path_is_resolved_as_a_path_not_searched_on_path() {
+        // `/bin/echo` is not in any PATH directory as `bin/echo`, so the only
+        // way this resolves is by treating it as the path it is.
+        assert_eq!(
+            resolve_command("/bin/echo").as_deref(),
+            Some(Path::new("/bin/echo"))
+        );
+        assert!(resolve_command("/bin/definitely-not-here").is_none());
+        assert!(resolve_command("./definitely-not-here").is_none());
+    }
+
+    #[test]
+    fn a_custom_agent_inherits_everything_but_its_name_and_program() {
+        let custom = crate::settings::CustomAgent {
+            id: "custom:echo".into(),
+            label: "Echo".into(),
+            color: "#ffffff".into(),
+            launch_cmd: "/bin/echo".into(),
+            args: vec!["hello".into()],
+            env: serde_json::Map::new(),
+            base_agent: "gemini".into(),
+        };
+        let info = custom_info(&custom);
+        assert_eq!(info.id, "custom:echo");
+        assert_eq!(info.label, "Echo");
+        assert_eq!(info.launch_cmd, "/bin/echo");
+        assert_eq!(info.args, vec!["hello".to_owned()]);
+        assert_eq!(info.base_agent, Some("gemini"));
+        // Prompt mode, capabilities and colour come from the base agent.
+        let base = definition("gemini").unwrap();
+        assert_eq!(info.prompt_mode, base.prompt_mode);
+        assert_eq!(info.capabilities, base.capabilities);
+        assert_eq!(info.color, base.color);
+        assert!(info.installed);
+        assert_eq!(info.resolved_path.as_deref(), Some("/bin/echo"));
+
+        // An unknown base falls back to the first built-in rather than vanishing.
+        let orphan = custom_info(&crate::settings::CustomAgent {
+            base_agent: "nope".into(),
+            ..custom
+        });
+        assert_eq!(orphan.base_agent, Some("claude"));
     }
 
     #[test]

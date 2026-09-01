@@ -20,6 +20,14 @@ pub enum AppError {
     Internal(String),
 }
 
+/// A `spawn_blocking` that panicked or was cancelled. Nothing a caller can act
+/// on, so it collapses into `Internal` rather than growing a variant.
+impl From<tokio::task::JoinError> for AppError {
+    fn from(error: tokio::task::JoinError) -> Self {
+        Self::Internal(format!("A background task did not finish: {error}"))
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ErrorBody {
