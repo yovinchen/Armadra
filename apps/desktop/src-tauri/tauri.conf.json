@@ -15,19 +15,38 @@
         "title": "AI Coding Canvas",
         "width": 1440,
         "height": 920,
-        "minWidth": 320,
-        "minHeight": 640,
+        "minWidth": 960,
+        "minHeight": 600,
         "visible": false,
-        "dragDropEnabled": true
+        "dragDropEnabled": true,
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 14, "y": 14 }
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:43120 ws://127.0.0.1:43120; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src http: https:"
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:43120 ws://127.0.0.1:43120; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://127.0.0.1:43120; frame-src http: https:"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "$comment": "更新器骨架，默认关闭（§17 Tauri）。启用步骤：1) `pnpm tauri signer generate` 生成密钥对，公钥填进 pubkey，私钥只放 CI secret，绝不入库；2) endpoints 填发布清单地址（形如 https://…/latest.json，可用 {{target}}/{{arch}}/{{current_version}} 占位符）；3) Cargo.toml 加 tauri-plugin-updater，main.rs 里 .plugin(tauri_plugin_updater::Builder::new().build())，capabilities/default.json 加 updater:default；4) bundle.createUpdaterArtifacts 置 true。在这些都做完之前，本段只是占位，没有任何代码读它。",
+      "active": false,
+      "endpoints": [],
+      "pubkey": "",
+      "windows": { "installMode": "passive" }
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
-    "externalBin": ["../../../target/release/ai-coding-canvas-runtime"]
+    "externalBin": [
+      "../../../target/release/ai-coding-canvas-runtime",
+      "../../../target/release/aicc-hook"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.3"
+    }
   }
 }

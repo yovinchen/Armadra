@@ -11,10 +11,20 @@ tauri-build = { version = "2.5.6", features = [] }
 [dependencies]
 reqwest = { version = "0.13.1", default-features = false, features = ["rustls", "json"] }
 serde = { version = "1.0.228", features = ["derive"] }
-tauri = { version = "2.10.2", features = [] }
+# `tauri::generate_context!` 会把 tauri.conf.json 的 `plugins` 段展开成
+# `serde_json::from_str`，所以即使代码里不直接用也必须在依赖里。
+serde_json = "1.0.145"
+# `tray-icon` 提供托盘（§17 Tauri）；`image-png` 让托盘直接吃 bundle 里的 PNG 图标。
+tauri = { version = "2.10.2", features = ["tray-icon", "image-png"] }
 tauri-plugin-dialog = "2.7.3"
+tauri-plugin-notification = "2.4.0"
 tauri-plugin-opener = "2.5.5"
 tokio = { version = "1.53.1", features = ["time"] }
+
+# 侧栏毛玻璃（§24.2「源列表侧栏」/「一致的窗口 chrome」）。只有 macOS 用得上，
+# 所以按目标平台挂依赖：Linux/Windows 上既不下载也不编译它。
+[target.'cfg(target_os = "macos")'.dependencies]
+window-vibrancy = "0.6.0"
 
 [features]
 default = ["custom-protocol"]

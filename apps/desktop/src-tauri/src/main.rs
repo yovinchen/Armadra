@@ -4,7 +4,11 @@ use std::{
     time::Duration,
 };
 
-use tauri::{Manager, RunEvent};
+use tauri::{
+    Manager, RunEvent, WebviewWindow,
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+};
 
 const RUNTIME_HEALTH_URL: &str = "http://127.0.0.1:43120/health";
 
@@ -102,19 +106,115 @@ async fn wait_for_runtime(app: &tauri::AppHandle) -> Result<(), String> {
     Err("Runtime did not become healthy within 10 seconds".into())
 }
 
+/* -------------------------------- 窗口材质 -------------------------------- */
+
+/**
+ * 侧栏毛玻璃（计划书 §24.2「源列表侧栏」「一致的窗口 chrome」）。
+ *
+ * 窗口在 tauri.conf.json 里是 `transparent: true`，这里给它贴上系统的
+ * sidebar 材质：网页那边只把侧栏那一片留成半透明（`--sidebar-material`），
+ * 画布与节点各自有实底，所以毛玻璃只会出现在该出现的地方。
+ * 半径给 12，配 `titleBarStyle: Overlay` 的无边框圆角窗。
+ *
+ * 只有 macOS 有这个材质；其他平台什么也不做，前端回退成纯色 `--panel`。
+ */
+#[cfg(target_os = "macos")]
+fn apply_window_material(window: &WebviewWindow) {
+    use window_vibrancy::{NSVisualEffectMaterial, apply_vibrancy};
+
+    if let Err(error) = apply_vibrancy(window, NSVisualEffectMaterial::Sidebar, None, Some(12.0)) {
+        // 材质贴不上不是致命错误：窗口仍然可用，只是没有毛玻璃。
+        eprintln!("Could not apply sidebar vibrancy: {error}");
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn apply_window_material(_window: &WebviewWindow) {}
+
+/**
+ * 给 <html> 打上 `data-tauri`，让样式表知道自己跑在透明窗口里
+ * （见 apps/web/src/styles/tokens.css 末尾那一段）。
+ *
+ * 不写成 index.html 的内联脚本：CSP 是 `default-src 'self'`，内联脚本会被挡。
+ * webview 的 `eval` 不走 CSP，而且挂在 `on_page_load` 上，开发时热重载
+ * 整页刷新之后也会重新打上。
+ */
+fn mark_tauri_document(webview: &tauri::Webview) {
+    let _ = webview.eval("document.documentElement.setAttribute('data-tauri','')");
+}
+
+/* --------------------------------- 托盘 ---------------------------------- */
+
+/** 把窗口从隐藏 / 最小化里拉回前台。 */
+fn reveal(window: &WebviewWindow) {
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+}
+
+/**
+ * 托盘图标（计划书 §17）。两项菜单：显示窗口 / 退出；左键单击等价于「显示窗口」。
+ *
+ * 图标复用 bundle 里那张——托盘不单独出一套资源，省得两边不同步。
+ * 「退出」走 `app.exit(0)`，这条路径最后仍会触发 `RunEvent::Exit`，
+ * Runtime sidecar 的关停逻辑（`RuntimeProcess::stop`）照常跑。
+ */
+fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let show = MenuItem::with_id(app, "tray-show", "显示窗口", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "tray-quit", "退出", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
+
+    let mut builder = TrayIconBuilder::with_id("main")
+        .tooltip("AI Coding Canvas")
+        .menu(&menu)
+        // 左键留给「点一下把窗口叫回来」，菜单只从右键出。
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "tray-show" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    reveal(&window);
+                }
+            }
+            "tray-quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+                && let Some(window) = tray.app_handle().get_webview_window("main")
+            {
+                reveal(&window);
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        builder = builder.icon(icon.clone());
+    }
+    builder.build(app)?;
+    Ok(())
+}
+
 fn main() {
     let application = tauri::Builder::default()
-        // Thin shell only (plan §0): the folder picker and "open in the system
-        // browser" are the two OS capabilities the web app cannot provide.
+        // Thin shell only (plan §0): the folder picker, "open in the system
+        // browser" and the notification tray are the OS capabilities the web
+        // app cannot provide. Notifications back the "agent needs you / agent
+        // finished" alerts of plan §5.4.
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .manage(RuntimeProcess::default())
+        .on_page_load(|webview, _payload| mark_tauri_document(webview))
         .setup(|app| {
             app.state::<RuntimeProcess>().start()?;
             let app_handle = app.handle().clone();
             let window = app
                 .get_webview_window("main")
                 .ok_or_else(|| "Main window is unavailable".to_owned())?;
+            apply_window_material(&window);
+            build_tray(app.handle())?;
             tauri::async_runtime::spawn(async move {
                 if let Err(error) = wait_for_runtime(&app_handle).await {
                     eprintln!("{error}");
