@@ -1,29 +1,55 @@
 import { agent } from "./agent";
 import { canvas } from "./canvas";
+import { collab } from "./collab";
+import { commands } from "./commands";
 import { explorer } from "./explorer";
-import { inspector } from "./inspector";
+import { format } from "./format";
+import { meta } from "./meta";
 import { launcher } from "./launcher";
 import { modals } from "./modals";
 import { nodes } from "./nodes";
+import { sessions } from "./sessions";
 import { shell } from "./shell";
+import { ssh } from "./ssh";
 import { terminal } from "./terminal";
+import { usage } from "./usage";
 
 export type Locale = "zh-CN" | "en";
 
-/** One flat namespace per feature area; see docs/redesign-plan.md §5. */
+/**
+ * 每个功能区一个扁平命名空间（§13.6）。
+ *
+ * 两种语言都是一等公民：设置页切「语言」后整棵树立刻重渲染，
+ * 所以任何面向用户的串都必须经 `useT()` / `t()` 取，不许写死在组件里。
+ * `i18n.test.ts` 会逐模块比对 `zh-CN` 与 `en` 的键集合。
+ */
 export type MessageModule = Record<Locale, Record<string, string>>;
 
-const modules: MessageModule[] = [
+/**
+ * 全部消息模块，按模块名索引。
+ *
+ * 用记录而不是数组，是为了让 `i18n.test.ts` 报错时说得出是哪个模块
+ * ——新加一个 `i18n/<模块>.ts` 只要挂进这里，守卫测试自动覆盖它。
+ */
+export const MESSAGE_MODULES = {
   shell,
   launcher,
   canvas,
   nodes,
   agent,
   terminal,
-  inspector,
+  sessions,
+  ssh,
   explorer,
   modals,
-];
+  commands,
+  format,
+  collab,
+  meta,
+  usage,
+} satisfies Record<string, MessageModule>;
+
+const modules: MessageModule[] = Object.values(MESSAGE_MODULES);
 
 function merge(locale: Locale): Record<string, string> {
   return Object.assign(
@@ -39,3 +65,22 @@ export const messages: Record<Locale, Record<string, string>> = {
 
 export const LOCALES: readonly Locale[] = ["zh-CN", "en"];
 export const DEFAULT_LOCALE: Locale = "zh-CN";
+
+export type TranslateValues = Record<string, string | number>;
+
+/**
+ * 纯函数翻译。缺键时依次退回 `zh-CN` 与键名本身——界面上宁可看到键名，
+ * 也不要一个空白按钮。
+ */
+export function translate(
+  locale: Locale,
+  key: string,
+  values: TranslateValues = {},
+): string {
+  const template = messages[locale][key] ?? messages["zh-CN"][key] ?? key;
+  return Object.entries(values).reduce(
+    (text, [name, replacement]) =>
+      text.replaceAll(`{${name}}`, String(replacement)),
+    template,
+  );
+}

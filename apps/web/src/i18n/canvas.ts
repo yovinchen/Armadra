@@ -1,95 +1,179 @@
 import type { MessageModule } from "./index";
 
-/** Canvas surface: empty state, toolbar, zoom, edge picker, focus/summary. */
-export const canvas: MessageModule = {
-  "zh-CN": {
-    "canvas.label": "AI Coding Canvas 画布",
-    "canvas.empty.title": "{board} 是空看板",
-    "canvas.empty.body":
-      "从左侧拖入文件、文件夹或节点类型；粘贴一段文字会直接创建便签。拖文件到 Agent 上会自动建立「引用」连线。",
-    "canvas.empty.task": "从任务开始",
-    "canvas.empty.agent": "新建 Agent (ACP)",
-    "canvas.empty.command": "命令",
+/**
+ * 画布文案（v3，计划书 §3.2 / §3.3 / §13.3 / §14）。
+ *
+ * 菜单规格（`menus/add-menu.ts`）只描述键，翻译发生在渲染时——
+ * 这样切语言时右键菜单、Dock `+`、命令面板三个入口一起变。
+ */
+const zh = {
+  "canvas.label": "画布",
 
-    "canvas.toolbar": "画布工具栏",
-    "canvas.tool.select": "选择",
-    "canvas.tool.select.hint": "选择 / 拖动 / 平移",
-    "canvas.tool.pen": "画笔",
-    "canvas.tool.pen.hint": "在画布上手绘标注",
-    "canvas.pen.color": "画笔颜色 {color}",
-    "canvas.pen.clear": "清除笔迹",
-    "canvas.arrange": "一键整理",
-    "canvas.arrange.hint": "按连线流向分列排布并适应画布",
+  /* 新建菜单（§13.3，画布右键 / Dock + / 会话侧栏 + 三个入口共用） */
+  "add.terminal": "新建终端",
+  "add.agent": "新建 {agent}",
+  "add.sticky": "新建便签",
+  "add.files": "新建文件管理器",
+  "add.openFile": "打开文件…",
+  "add.browser": "新建浏览器",
+  "add.notInstalled": "未安装",
 
-    "canvas.zoom.group": "画布缩放",
-    "canvas.zoom.in": "放大",
-    "canvas.zoom.out": "缩小",
-    "canvas.zoom.reset": "回到 100%",
-    "canvas.zoom.fit": "适应画布",
-    "canvas.summary.hint": "缩放 {zoom} · 摘要视图",
-    "canvas.summary.reset": "回到 100%",
-    "canvas.summaryMode": "缩放低于 {threshold} 时切换为摘要",
-    "canvas.focus.hint": "聚焦：{title}",
-    "canvas.focus.exit": "退出 (Esc)",
+  /* 白板工具（tldraw 计划 §5 的 Dock 工具组） */
+  "tool.select": "选择",
+  "tool.hand": "手形",
+  "tool.draw": "画笔",
+  "tool.highlight": "高亮",
+  "tool.geo": "形状",
+  "tool.line": "直线",
+  "tool.arrow": "箭头",
+  "tool.text": "文字",
+  "tool.frame": "画框",
+  "tool.image": "图片",
 
-    "canvas.edge.title": "选择连线语义",
-    "canvas.edge.desc.link": "引用对方内容，不产生依赖",
-    "canvas.edge.desc.dispatch": "把任务交给目标执行",
-    "canvas.edge.desc.produce": "目标是本节点的结果",
-    "canvas.edge.desc.write": "变更应用到目标文件",
-    "canvas.edge.desc.trigger": "完成后自动运行目标",
-    "canvas.edge.desc.ref": "作为上下文提供给 Agent",
+  "geo.rectangle": "矩形",
+  "geo.ellipse": "椭圆",
+  "geo.diamond": "菱形",
+  "geo.triangle": "三角形",
+  "geo.hexagon": "六边形",
+  "geo.star": "星形",
 
-    "canvas.delete.title": "删除画布内容？",
-    "canvas.delete.confirm": "确认删除",
-    "canvas.delete.nodes": "{count} 个节点",
-    "canvas.delete.edges": "{count} 条连线",
-    "canvas.delete.description":
-      "将删除{summary}。与节点关联的连线也会一并移除。",
-  },
-  en: {
-    "canvas.label": "AI Coding Canvas board",
-    "canvas.empty.title": "{board} is empty",
-    "canvas.empty.body":
-      "Drag in files, folders or node types from the left; pasting text creates a note. Dropping a file on an Agent adds a reference link.",
-    "canvas.empty.task": "Start from a task",
-    "canvas.empty.agent": "New Agent (ACP)",
-    "canvas.empty.command": "Commands",
+  /* 白板 shape 的右键菜单 */
+  "shape.bringToFront": "置顶",
+  "shape.sendToBack": "置底",
+  "shape.duplicate": "复制",
+  "shape.delete": "删除",
+  "shape.toSticky": "转成便签",
 
-    "canvas.toolbar": "Canvas toolbar",
-    "canvas.tool.select": "Select",
-    "canvas.tool.select.hint": "Select / drag / pan",
-    "canvas.tool.pen": "Pen",
-    "canvas.tool.pen.hint": "Sketch annotations on the canvas",
-    "canvas.pen.color": "Pen colour {color}",
-    "canvas.pen.clear": "Clear strokes",
-    "canvas.arrange": "Arrange",
-    "canvas.arrange.hint": "Lay out by link direction, then fit the view",
+  /* 内容链接（白板图形连到节点，§6.3）的标题里用的类型名 */
+  "content.text": "文字",
+  "content.geo": "图形",
+  "content.draw": "手绘",
+  "content.image": "图片",
+  "content.line": "直线",
+  "content.highlight": "高亮",
+  "content.frame": "画框",
+  "content.shape": "白板内容",
 
-    "canvas.zoom.group": "Canvas zoom",
-    "canvas.zoom.in": "Zoom in",
-    "canvas.zoom.out": "Zoom out",
-    "canvas.zoom.reset": "Back to 100%",
-    "canvas.zoom.fit": "Fit view",
-    "canvas.summary.hint": "Zoom {zoom} · summary view",
-    "canvas.summary.reset": "Back to 100%",
-    "canvas.summaryMode": "Nodes collapse to summaries below {threshold}",
-    "canvas.focus.hint": "Focused: {title}",
-    "canvas.focus.exit": "Exit (Esc)",
+  /* 空白右键的添加菜单里的白板项 */
+  "add.text": "新建文字",
+  "add.frame": "新建画框",
 
-    "canvas.edge.title": "Pick a link semantic",
-    "canvas.edge.desc.link": "References the other side without a dependency",
-    "canvas.edge.desc.dispatch": "Hands the task to the target",
-    "canvas.edge.desc.produce": "The target is this node's result",
-    "canvas.edge.desc.write": "Applies the change to the target file",
-    "canvas.edge.desc.trigger": "Runs the target once this finishes",
-    "canvas.edge.desc.ref": "Provided to the agent as context",
+  /* 画布动作 */
+  "canvas.selectAll": "全选",
+  "canvas.fitView": "适应视图",
+  "canvas.tidy": "整理画布",
+  "canvas.lock": "锁定视图",
+  "canvas.unlock": "解锁视图",
+  "canvas.minimap": "缩略图",
 
-    "canvas.delete.title": "Delete canvas content?",
-    "canvas.delete.confirm": "Delete",
-    "canvas.delete.nodes": "{count} nodes",
-    "canvas.delete.edges": "{count} links",
-    "canvas.delete.description":
-      "This will delete {summary}, including links attached to deleted nodes.",
-  },
+  /* 节点右键菜单（§3.2）。折叠/展开/最大化/还原/颜色/分组这些名字
+     归 `nodes.ts`——合并表是扁平的，同名键只能有一个出处。 */
+  "node.joinGroup": "加入组",
+  "node.leaveGroup": "移出组",
+  "node.duplicate": "复制",
+  "node.delete": "删除",
+
+  /* 连线（§3.3；标签按被读取的那一端的类型，§21） */
+  "edge.context": "⇄ 上下文",
+  "edge.sticky": "🗒 便签",
+  "edge.file": "文件",
+  "edge.dir": "目录",
+  "edge.web": "网页",
+  "edge.diff": "差异",
+  "edge.remove": "删除连线",
+  "edge.selfLink": "不能连到自己",
+  "edge.duplicate": "这两个节点已经连过了",
+
+  /* 白板快照超过上限时的保存失败提示（tldraw 计划 §6.1） */
+  "canvas.whiteboardTooLarge": "白板内容超出上限，未保存",
+
+  /* 资产上传（tldraw 计划 §6.2，Phase 3 content） */
+  "canvas.assetTooLarge": "图片超过 {limit} MB，没有添加",
+  "canvas.assetFailed": "{name} 上传失败",
+
+  /* 删除确认：只有节点里跑着会话时才弹 */
+  "delete.session.title": "结束会话并删除？",
+  "delete.session.confirm": "删除",
+  "delete.cancel": "取消",
+} as const;
+
+const en: Record<keyof typeof zh, string> = {
+  "canvas.label": "Canvas",
+
+  "add.terminal": "New terminal",
+  "add.agent": "New {agent}",
+  "add.sticky": "New sticky",
+  "add.files": "New file browser",
+  "add.openFile": "Open file…",
+  "add.browser": "New browser",
+  "add.notInstalled": "Not installed",
+
+  "tool.select": "Select",
+  "tool.hand": "Hand",
+  "tool.draw": "Draw",
+  "tool.highlight": "Highlight",
+  "tool.geo": "Shape",
+  "tool.line": "Line",
+  "tool.arrow": "Arrow",
+  "tool.text": "Text",
+  "tool.frame": "Frame",
+  "tool.image": "Image",
+
+  "geo.rectangle": "Rectangle",
+  "geo.ellipse": "Ellipse",
+  "geo.diamond": "Diamond",
+  "geo.triangle": "Triangle",
+  "geo.hexagon": "Hexagon",
+  "geo.star": "Star",
+
+  "shape.bringToFront": "Bring to front",
+  "shape.sendToBack": "Send to back",
+  "shape.duplicate": "Duplicate",
+  "shape.delete": "Delete",
+  "shape.toSticky": "Convert to sticky",
+
+  "content.text": "Text",
+  "content.geo": "Shape",
+  "content.draw": "Drawing",
+  "content.image": "Image",
+  "content.line": "Line",
+  "content.highlight": "Highlight",
+  "content.frame": "Frame",
+  "content.shape": "Whiteboard content",
+
+  "add.text": "New text",
+  "add.frame": "New frame",
+
+  "canvas.selectAll": "Select all",
+  "canvas.fitView": "Fit view",
+  "canvas.tidy": "Tidy",
+  "canvas.lock": "Lock camera",
+  "canvas.unlock": "Unlock camera",
+  "canvas.minimap": "Minimap",
+
+  "node.joinGroup": "Add to group",
+  "node.leaveGroup": "Remove from group",
+  "node.duplicate": "Duplicate",
+  "node.delete": "Delete",
+
+  "edge.context": "⇄ Context",
+  "edge.sticky": "🗒 Sticky",
+  "edge.file": "File",
+  "edge.dir": "Folder",
+  "edge.web": "Web page",
+  "edge.diff": "Diff",
+  "edge.remove": "Remove link",
+  "edge.selfLink": "A node cannot link to itself",
+  "edge.duplicate": "These two nodes are already linked",
+
+  "canvas.whiteboardTooLarge": "Whiteboard is too large to save",
+
+  "canvas.assetTooLarge": "Image is over {limit} MB and was not added",
+  "canvas.assetFailed": "Could not upload {name}",
+
+  "delete.session.title": "End the session and delete?",
+  "delete.session.confirm": "Delete",
+  "delete.cancel": "Cancel",
 };
+
+export const canvas: MessageModule = { "zh-CN": zh, en };
