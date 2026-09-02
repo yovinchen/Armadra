@@ -1,497 +1,201 @@
-/* Canvas surface, toolbar, zoom column, semantic edges, pen strokes and the
- * link semantics popover — docs/redesign-plan.md §1.2 / SPEC §3–§6 [B1].
- * The only literal colours here are `#fff` on accent fills; the pen palette
- * itself lives in `canvas/CanvasToolbar.tsx`.
+/*
+ * tldraw 换肤（docs/tldraw-canvas-plan.md §5「tldraw UI 槽位」）。
+ *
+ * §12 第 2 条：样式面板与缩略图复用 tldraw 的默认实现，但外观必须和
+ * Dock、设置页、侧栏是同一套。做法是把 tldraw 的 `--tl-*` 变量整体重定向到
+ * `tokens.css`，而不是逐条覆盖它的规则——这样 tldraw 升级时只要变量名没变，
+ * 换肤就还在。剩下的几条规则只处理变量表达不了的东西：面板的位置、尺寸、
+ * 字号，以及我们自己不要的那几个按钮。
+ *
+ * 作用域一律 `.canvas-stage .tl-*`（特异性 0,2,0），高于 tldraw 自己的
+ * `.tl-theme__dark` / `.tl-container`（0,1,0），所以两张样式表谁先加载都一样。
+ *
+ * 深浅色不在这里分叉：`tokens.css` 的 `:root` / `:root[data-theme="light"]`
+ * 已经把语义 token 切好了，这里只引用。tldraw 自己那套 `tl-theme__*` 类
+ * 由 `app/use-tldraw-preferences.ts` 跟着应用主题一起翻。
  */
 
-.canvas-stage {
-  position: relative;
-  overflow: hidden;
-  min-width: 0;
-  min-height: 0;
-  background: var(--bg);
+/* ------------------------- 变量映射（唯一的换肤入口） ---------------------- */
+
+.canvas-stage .tl-container {
+  /* 画布 */
+  --tl-color-background: var(--canvas-bg);
+  --tl-color-grid: var(--canvas-dot);
+  --tl-color-selection-fill: var(--brand-soft);
+  --tl-color-selection-stroke: var(--brand);
+
+  /* 三级表面：面板 = `--panel`，凹陷（缩略图底）= `--surface-deep` */
+  --tl-color-panel: var(--panel);
+  --tl-color-panel-contrast: var(--border);
+  --tl-color-panel-overlay: var(--surface-overlay);
+  --tl-color-panel-transparent: transparent;
+  --tl-color-low: var(--surface-deep);
+  --tl-color-low-border: var(--border);
+  --tl-color-divider: var(--border);
+  --tl-color-overlay: var(--scrim);
+
+  /* hover / active / 提示底，全部由 `--tint-rgb` 派生，深浅色自动跟随 */
+  --tl-color-muted-none: transparent;
+  --tl-color-muted-0: rgb(var(--tint-rgb) / 3%);
+  --tl-color-muted-1: var(--active);
+  --tl-color-muted-2: var(--hover);
+  --tl-color-hint: var(--hover);
+
+  /* 强调色只用于选中态与主要按钮（§24.2「系统强调色」） */
+  --tl-color-selected: var(--brand);
+  --tl-color-selected-contrast: var(--on-accent);
+  --tl-color-focus: var(--ring);
+  --tl-color-primary: var(--brand);
+  --tl-color-tooltip: var(--surface-overlay);
+
+  /* 文字：正文 / 次要 / 禁用三档，和侧栏、设置页同源 */
+  --tl-color-text: var(--foreground);
+  --tl-color-text-0: var(--foreground);
+  --tl-color-text-1: var(--foreground);
+  --tl-color-text-3: var(--muted-foreground);
+  --tl-color-text-disabled: var(--faint);
+  --tl-color-text-shadow: var(--canvas-bg);
+
+  /* 状态色 */
+  --tl-color-success: var(--success);
+  --tl-color-info: var(--brand);
+  --tl-color-warning: var(--warn);
+  --tl-color-danger: var(--danger);
+
+  /* 圆角四档（§24.2：控件 6 / 卡片 10 / 面板 12） */
+  --tl-radius-0: 2px;
+  --tl-radius-1: var(--r-control);
+  --tl-radius-2: var(--r-control);
+  --tl-radius-3: var(--r-card);
+  --tl-radius-4: var(--r-panel);
+
+  /* 阴影：浅色下由 tokens.css 自动减半 */
+  --tl-shadow-1: var(--shadow-pill);
+  --tl-shadow-2: var(--shadow-node);
+  --tl-shadow-3: var(--shadow-node);
+  --tl-shadow-4: var(--shadow-dialog);
+
+  /* 界面字体与字号：13 正文，11 辅助，不出现 11px 以下（§24.2） */
+  font-family: var(--font-ui);
+  font-size: var(--text-body);
 }
 
-.canvas-stage.is-pen {
-  cursor: crosshair;
-}
-
-.canvas-stage .react-flow {
-  background: transparent;
-}
-
-.canvas-stage .react-flow__attribution {
-  display: none;
-}
-
-/* ---------------------------------------------------------------- empty --- */
-
-.canvas-empty {
-  position: absolute;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inset: 0;
-  pointer-events: none;
-}
-
-.canvas-empty-card {
-  width: min(520px, calc(100% - 48px));
-  text-align: center;
-  pointer-events: auto;
-}
-
-.canvas-empty-glyph {
-  display: grid;
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 14px;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: var(--card);
-  color: var(--accent);
-  font-size: 22px;
-  box-shadow: var(--shadow);
-  place-items: center;
-}
-
-.canvas-empty h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.canvas-empty p {
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 12.5px;
-  line-height: 1.65;
-}
-
-.canvas-empty-actions {
-  display: flex;
-  justify-content: center;
-  margin-top: 18px;
-  gap: 8px;
-}
-
-.canvas-empty-actions button {
-  padding: 9px 14px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--card);
-  color: var(--text);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 12.5px;
-}
-
-.canvas-empty-actions button:hover {
-  border-color: var(--accent);
-}
-
-.canvas-empty-actions .canvas-empty-primary {
-  border-color: transparent;
-  background: var(--accent);
-  color: #fff;
-  font-weight: 600;
-}
-
-/* -------------------------------------------------------------- toolbar --- */
-
-.canvas-toolbar {
-  position: absolute;
-  z-index: 45;
-  top: 12px;
-  right: 12px;
-  display: flex;
-  align-items: center;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--card);
-  gap: 3px;
-  box-shadow: var(--shadow);
-}
-
-.canvas-tool {
-  display: flex;
-  height: 26px;
-  align-items: center;
-  padding: 0 9px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 11.5px;
-  font-weight: 600;
-  gap: 5px;
-}
-
-.canvas-tool:hover {
-  background: var(--card2);
-}
-
-.canvas-tool.is-active {
-  background: var(--accent);
-  color: #fff;
-}
-
-.canvas-tool--ghost {
-  color: var(--muted);
+/* tldraw 的 UI 层单独设了字重与字体，跟着应用字体栈走 */
+.canvas-stage .tlui-layout {
+  font-family: var(--font-ui);
   font-weight: 400;
 }
 
-.canvas-toolbar-divider {
-  width: 1px;
-  height: 18px;
-  margin: 0 3px;
-  background: var(--border);
+.canvas-stage .tlui-button,
+.canvas-stage .tlui-button__label {
+  font-size: var(--text-body);
 }
 
-.canvas-pen-color {
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 2px solid transparent;
-  border-radius: 50%;
-  cursor: pointer;
+.canvas-stage .tlui-kbd {
+  font-family: var(--font-code);
+  font-size: var(--text-caption);
 }
 
-.canvas-pen-color.is-active {
-  border-color: var(--text);
-}
+/* ------------------------------ 样式面板 --------------------------------- */
 
-/* ----------------------------------------------------------------- zoom --- */
-
-.canvas-zoom {
-  position: absolute;
-  z-index: 45;
-  bottom: 12px;
-  left: 12px;
-  display: flex;
-  overflow: hidden;
-  flex-direction: column;
+/*
+ * 右上角。工具簇（`ControlsCluster`，`right:14` + 36px 宽）占着右边，
+ * 面板贴在它左侧并与它顶部对齐：14 + 36 + 12 = 62。
+ */
+.canvas-stage .tlui-style-panel__wrapper,
+.canvas-stage .tlui-style-panel__wrapper:only-child {
+  margin: 54px 62px 0 0;
+  background-color: color-mix(in srgb, var(--panel) 92%, transparent);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--card);
-  box-shadow: var(--shadow);
+  border-radius: var(--r-panel);
+  box-shadow: var(--shadow-node);
+  backdrop-filter: blur(12px);
 }
 
-.canvas-zoom button {
-  width: 32px;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  font-family: inherit;
+/* 分组标题：11px、大写、次要色（§24.2「源列表侧栏」的分组标题规格） */
+.canvas-stage .tlui-style-panel__subheading,
+.canvas-stage .tlui-style-panel__double-select-picker,
+.canvas-stage .tlui-style-panel__double-select-picker-label {
+  font-size: var(--text-caption);
+  color: var(--muted-foreground);
 }
 
-.canvas-zoom button:hover {
-  background: var(--card2);
-}
-
-.canvas-zoom-step {
-  height: 30px;
-  font-size: 14px;
-}
-
-.canvas-zoom-value {
-  height: 26px;
-  border-top: 1px solid var(--border);
+.canvas-stage .tlui-style-panel__section:not(:last-child) {
   border-bottom: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
 }
 
-.canvas-zoom-fit {
-  height: 28px;
-  border-top: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 12px;
-}
+/* ------------------------------- 缩略图 ---------------------------------- */
 
-/* ---------------------------------------------------------------- pills --- */
-
-.canvas-pill {
-  position: absolute;
-  z-index: 45;
-  display: flex;
-  align-items: center;
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--card);
-  color: var(--muted);
-  font-size: 11.5px;
-  gap: 8px;
-  box-shadow: var(--shadow);
-}
-
-.canvas-pill-glyph {
-  color: var(--accent);
-}
-
-.canvas-pill button {
-  padding: 0 0 0 4px;
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 11.5px;
-}
-
-.canvas-summary-hint {
-  bottom: 12px;
-  left: 54px;
-}
-
-.canvas-focus-hint {
-  z-index: 80;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  pointer-events: auto;
-}
-
-/* --------------------------------------------------------------- focus --- */
-
-.canvas-focus-layer {
-  position: absolute;
-  z-index: 60;
-  inset: 0;
-  pointer-events: none;
-}
-
-.canvas-focus-layer > .canvas-node {
-  pointer-events: auto;
-}
-
-/* -------------------------------------------------------------- strokes --- */
-
-.canvas-strokes {
-  position: absolute;
-  overflow: visible;
-  width: 1px;
-  height: 1px;
-  pointer-events: none;
-}
-
-.canvas-pen-capture {
-  position: absolute;
-  z-index: 20;
-  cursor: crosshair;
-  inset: 0;
-  touch-action: none;
-}
-
-/* ---------------------------------------------------------------- edges --- */
-
-.semantic-marker-defs {
-  position: absolute;
-  width: 0;
-  height: 0;
-}
-
-.semantic-edge {
-  stroke: var(--faint);
-  stroke-width: 2;
-}
-
-.semantic-edge--dashed {
-  stroke-dasharray: 6 5;
-}
-
-.semantic-edge.is-highlighted,
-.react-flow__edge.selected .semantic-edge,
-.react-flow__edge:hover .semantic-edge {
-  stroke: var(--accent);
-  stroke-width: 2.5;
-}
-
-.semantic-edge-label {
-  /* The label renderer only positions its children through `transform`, so the
-   * pill has to take itself out of flow or it stretches the whole layer. */
-  position: absolute;
-  top: 0;
-  left: 0;
-  display: flex;
-  align-items: center;
-  padding: 3px 9px 3px 7px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--card);
-  color: var(--text);
-  font-size: 11px;
-  gap: 5px;
-  pointer-events: all;
-  white-space: nowrap;
-  box-shadow: var(--shadow);
-}
-
-.semantic-edge-label.is-highlighted {
-  border-color: var(--accent-line);
-}
-
-.semantic-edge-glyph {
-  color: var(--muted);
-}
-
-.semantic-edge-arrow {
-  color: var(--faint);
-}
-
-/* --------------------------------------------------------------- picker --- */
-
-.edge-picker {
-  position: absolute;
-  z-index: 50;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--card);
-  box-shadow: var(--shadow-lg);
-}
-
-.edge-picker-head {
-  display: flex;
-  align-items: center;
-  padding: 2px 6px 8px;
-  color: var(--muted);
-  font-size: 12px;
-  gap: 8px;
-}
-
-.edge-picker-head strong {
+/*
+ * tldraw 把缩略图挂在 `NavigationPanel` 里，默认在左下并带一排缩放钮。
+ * 缩放归 Dock（§5），所以这里只留缩略图本身，并挪回右下角——和被删掉的
+ * `StatusMiniMap` 同一个位置、同一个尺寸（200×150）。
+ *
+ * 底部留 44px：tldraw 的水印（`.tl-watermark_SEE-LICENSE`，96×32，距边 4）
+ * 钉死在右下角，§12 第 1 条决定带着水印上线，所以让缩略图给它让位，
+ * 4 + 32 + 8 = 44。
+ */
+.canvas-stage .tlui-navigation-panel {
+  right: 12px;
+  bottom: 44px;
+  left: auto;
+  width: 200px;
   overflow: hidden;
-  max-width: 100px;
-  color: var(--text);
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  background-color: color-mix(in srgb, var(--panel) 92%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-pill);
+  backdrop-filter: blur(12px);
 }
 
-.edge-picker-eyebrow {
-  padding: 0 6px 6px;
-  color: var(--faint);
-  font-size: 11px;
-}
-
-.edge-picker-list {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.edge-picker-option {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  padding: 7px 8px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  font-family: inherit;
-  gap: 10px;
-  text-align: left;
-}
-
-.edge-picker-option:hover,
-.edge-picker-option:focus-visible {
-  background: var(--card2);
-  outline: none;
-}
-
-.edge-picker-glyph {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  flex: none;
-  border-radius: 7px;
-  background: var(--card2);
-  color: var(--muted);
-  font-size: 12px;
-  place-items: center;
-}
-
-.edge-picker-text {
-  min-width: 0;
-  flex: 1;
-}
-
-.edge-picker-label {
-  display: block;
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
-.edge-picker-desc {
-  display: block;
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.edge-picker-key {
-  flex: none;
-  color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-}
-
-/* -------------------------------------------------------------- handles --- */
-
-.semantic-handle {
-  width: 14px;
-  min-width: 0;
-  height: 14px;
-  min-height: 0;
-  border: 2px solid var(--faint);
-  border-radius: 50%;
-  background: var(--bg);
-}
-
-.semantic-handle.react-flow__handle-left {
-  left: -7px;
-}
-
-.semantic-handle--source {
-  width: 16px;
-  height: 16px;
-  border-color: var(--bg);
-  background: var(--accent);
-  cursor: crosshair;
-  box-shadow: 0 0 0 2px var(--accent-soft);
-}
-
-.semantic-handle.react-flow__handle-right {
-  right: -8px;
-}
-
-/* Invisible 44px target so the ports stay reachable on a trackpad. */
-.semantic-handle::before {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 44px;
-  height: 44px;
-  content: "";
-  transform: translate(-50%, -50%);
-}
-
-.canvas-node-wrapper.is-focused .semantic-handle {
+/* 默认皮肤画的那块「左下角贴边」底衬，右下角用不上 */
+.canvas-stage .tlui-navigation-panel::before {
   display: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .canvas-pill,
-  .edge-picker {
-    transition: none;
-  }
+/* 缩放钮那一排（缩放在 Dock 上，不重复） */
+.canvas-stage .tlui-navigation-panel > .tlui-toolbar {
+  display: none;
+}
+
+.canvas-stage .tlui-minimap {
+  height: 150px;
+  min-height: 150px;
+  padding: 6px;
+}
+
+/* ------------------------------ 菜单与浮层 -------------------------------- */
+
+.canvas-stage .tlui-menu {
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-dialog);
+}
+
+.canvas-stage .tlui-toasts__container,
+.canvas-stage .tlui-dialog__content {
+  font-size: var(--text-body);
+}
+
+/* ------------------------------ 画布内容 --------------------------------- */
+
+/*
+ * 背景点阵（§5）。tldraw 的 `gridSteps` 是 64 / 16 / 4 / 1 档，
+ * `app/use-tldraw-preferences.ts` 把 `gridSize` 设成「设置里的间距 ÷ 4」，
+ * 于是可见的那档就是用户选的那个值（默认 4 × 6 = 24px）；最细的 1× 那层
+ * 在这里关掉，只留整数倍。
+ */
+.canvas-stage .tl-grid > rect:last-child {
+  display: none;
+}
+
+.canvas-stage .tl-grid-dot {
+  fill: var(--canvas-dot);
+}
+
+/* frame 名字用应用字体，字号提到 11px（默认 12px 但是另一套字体） */
+.canvas-stage .tl-frame-label {
+  font-family: var(--font-ui);
+  font-size: var(--text-caption);
+  color: var(--muted-foreground);
 }

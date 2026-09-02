@@ -1,105 +1,380 @@
 /*
- * Theme tokens — docs/redesign-plan.md §6.
- * Every colour in the app comes from here; switching the theme only swaps
- * these variables (SPEC §12).
+ * 主题 token —— docs/v3-agent-terminal-plan.md §4.3
+ *
+ * 规则：
+ *  1. 应用里所有颜色只允许通过这些变量取用，切换主题只换变量。
+ *  2. 深色为默认（无 `data-theme` 属性时即深色），浅色是暖白覆盖层。
+ *  3. 表面按“高度”命名（sunken → deep → base → raised → overlay），
+ *     不按用途命名，避免 Phase 1 各 agent 各起各的名字。
+ *  4. shadcn 别名段是 `src/ui/*`（shadcn CLI 生成，未改动）的硬契约：
+ *     那些组件直接写 `bg-accent` / `bg-muted` / `border-input`，
+ *     所以这些名字必须遵守 **shadcn 的语义**，见下面那段说明。
+ *
+ * ⚠ 与计划书 §4.3 的一处命名差异
+ *   §4.3 把品牌蓝写作 `--accent`。但 shadcn 的 `--accent` 是“菜单/列表的
+ *   高亮底色”，`--muted` 是“次要底色”而不是次要文字色。既然组件库是官方
+ *   CLI 生成的、且要求原样保留，这里就以 shadcn 语义为准：
+ *     品牌蓝  → `--brand`（并映射到 shadcn 的 `--primary`）
+ *     次要文字 → `--muted-foreground`
+ *   `--accent-text` / `--accent-soft` 这两个旧名字保留为品牌色的别名，
+ *   给尚未删除的 `styles/*.css` 用，Phase 1 删旧样式表时一并删掉。
  */
 
 :root {
-  --bg: #f3f4f8;
-  --panel: #ffffff;
-  --card: #ffffff;
-  --card2: #f5f6fa;
-  --border: rgb(25 28 50 / 9%);
-  --text: #1b1d26;
-  --muted: #6b7080;
-  --faint: #a0a5b3;
-  --dot: rgb(25 28 50 / 10%);
-  --accent: #5b5bd6;
-  --accent-soft: rgb(91 91 214 / 12%);
-  --accent-line: rgb(91 91 214 / 35%);
-  --ok: #1f9d64;
-  --warn: #d18f0f;
-  --warn-soft: rgb(209 143 15 / 10%);
-  --err: #dc4c4a;
-  --err-soft: rgb(220 76 74 / 10%);
-  --info: #2e7cf6;
-  --info-soft: rgb(46 124 246 / 12%);
-  --diff: #8a4fd6;
-  --diff-soft: rgb(138 79 214 / 12%);
-  --shadow: 0 6px 20px rgb(30 30 70 / 7%);
-  --shadow-lg: 0 24px 60px rgb(30 30 70 / 22%);
-  --term-bg: #1b1d26;
-  --topbar-h: 36px;
-  --rail-w: 52px;
-  --sidebar-w: 236px;
-  --inspector-w: 272px;
-  --statusbar-h: 24px;
+  color-scheme: dark;
+
+  /* ── 着色基准 ────────────────────────────────────────────────────── */
+  /* 边框/文字/hover 全部由这个 RGB 三元组按 alpha 派生，换主题只换它 */
+  --tint-rgb: 255 255 255;
+
+  /* ── 表面高度（§24.2「层级用材质与灰度表达」） ─────────────────────
+     三级：窗口底 `--bg` → 面板 `--panel`（+4%）→ 卡片 `--card`（+7%）。
+     线框只作辅助（1px，8% tint），层级主要靠这三档灰度。 */
+  --bg: #1c1c1c;
+  --panel: #262626;
+  /* 节点头部不再比节点体更深：与卡片同色，靠底部 1px 分隔线区分（§24.3-3） */
+  --panel-header: var(--card);
+  --canvas-bg: #000000;
+  --canvas-dot: #4a4a4a;
+
+  /* 侧栏材质：网页下是接近不透明的 `--panel`；Tauri 下换成半透明，
+     由 `window-vibrancy` 的 sidebar 材质透上来（§24.2「源列表侧栏」）。 */
+  --sidebar-material: color-mix(in srgb, var(--panel) 94%, transparent);
+
+  /* 终端表面。两套主题下都是深色（§4.3）：CLI 的 ANSI 配色是按深底
+     设计的，翻成浅色会让一半的 TUI 变得读不了。所以下面这一整组只在
+     `:root` 声明一次，浅色主题只覆盖 `--term-bg` 的具体深浅。 */
+  --term-bg: #0a0a0a;
+  --term-fg: #e6e6e6;
+  --term-selection: #3a5a8c66;
+  --term-ansi-black: #151515;
+  --term-ansi-red: #ff453a;
+  --term-ansi-green: #32d74b;
+  --term-ansi-yellow: #ffd60a;
+  --term-ansi-blue: #0a84ff;
+  --term-ansi-magenta: #bf5af2;
+  --term-ansi-cyan: #6ac4dc;
+  --term-ansi-white: #e6e6e6;
+  --term-ansi-bright-black: #6b6b6b;
+  --term-ansi-bright-red: #ff6f66;
+  --term-ansi-bright-green: #5ee07a;
+  --term-ansi-bright-yellow: #ffe45e;
+  --term-ansi-bright-blue: #4fa3ff;
+  --term-ansi-bright-magenta: #d18bf7;
+  --term-ansi-bright-cyan: #8fd8e8;
+  --term-ansi-bright-white: #ffffff;
+
+  /* 浏览器节点的页面底。网页内容大多假定白底，所以两套主题都给白色，
+     但仍然走 token——功能代码里不许出现字面色值（§4.3 规则一）。 */
+  /* 浏览器节点底色：加载前与页面四周一律黑（2026-09-04 用户要求）。 */
+  --browser-bg: #000000;
+
+  --surface-sunken: #151515;
+  --surface-deep: #202020;
+  --surface-base: var(--panel);
+  /* 卡片/节点：比窗口底亮 7%（`--card` 是它的 shadcn 别名） */
+  --surface-card: #2c2c2c;
+  --surface-raised: #333333;
+  --surface-overlay: #3a3a3a;
+
+  --scrim: rgb(0 0 0 / 55%);
+  --hover: rgb(var(--tint-rgb) / 7%);
+  --active: rgb(var(--tint-rgb) / 12%);
+
+  /* ── 线条（§24.2：深色 .08 / 浅色 .10） ──────────────────────────── */
+  --border: rgb(var(--tint-rgb) / 8%);
+  --border-strong: rgb(var(--tint-rgb) / 16%);
+
+  /* ── 文字 ────────────────────────────────────────────────────────── */
+  --text: rgb(var(--tint-rgb) / 85%);
+  --faint: rgb(var(--tint-rgb) / 38%);
+  --on-accent: #ffffff;
+
+  /* ── 品牌强调色（计划书 §4.3 里的 `--accent`） ───────────────────── */
+  --brand: #0a84ff;
+  --brand-text: #6cb0ff;
+  --brand-soft: rgb(10 132 255 / 16%);
+
+  /* ── 状态色 ──────────────────────────────────────────────────────── */
+  --danger: #ff453a;
+  --danger-soft: rgb(255 69 58 / 16%);
+  --warn: #ff9f0a;
+  --warn-soft: rgb(255 159 10 / 16%);
+  --caution: #ffd60a;
+  --success: #32d74b;
+  --success-soft: rgb(50 215 75 / 16%);
+
+  /* Agent 正在工作时的“陶土色”，与 Claude 品牌色同源（§3.4） */
+  --agent-working: #d97757;
+  --agent-working-soft: rgb(217 119 87 / 18%);
+
+  /* ── Agent 品牌色（与主题无关，两套主题共用） ─────────────────────── */
+  --agent-claude: #d97757;
+  --agent-codex: #10a37f;
+  --agent-gemini: #4285f4;
+  --agent-opencode: #a78bfa;
+
+  /* ── 节点/会话状态语义色（§3.4 状态胶囊） ─────────────────────────── */
+  --status-working: var(--agent-working);
+  --status-attention: var(--danger);
+  --status-failed: var(--danger);
+  --status-queued: var(--muted-foreground);
+  --status-paused: var(--muted-foreground);
+  --status-unread: var(--brand);
+  --status-idle: var(--faint);
+
+  /* ── 节点调色板 7 色（§3.4） ─────────────────────────────────────── */
+  --node-color-1: #0a84ff;
+  --node-color-2: #32d74b;
+  --node-color-3: #ffd60a;
+  --node-color-4: #ff453a;
+  --node-color-5: #bf5af2;
+  --node-color-6: #6ac4dc;
+  --node-color-7: #ff9f0a;
+
+  /* ── 圆角 ────────────────────────────────────────────────────────── */
+  /* `--r-*` 是原始值，`--radius*` 是 §4.3 与 shadcn 组件都要读的名字。
+     分两层是因为 Tailwind 的 `@theme` 也会写 `--radius-sm` 这类名字，
+     若两边同名互相引用就形成自引用循环。 */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  /* §24.2 的四档语义圆角：控件 6 / 卡片 10 / 面板 12 / 对话框 14 */
+  --r-control: 6px;
+  --r-card: 10px;
+  --r-panel: 12px;
+  --r-dialog: 14px;
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+
+  /* ── 字号阶梯（§24.2「字体层级」；界面里不允许出现 11px 以下） ────── */
+  --text-title: 17px;
+  --text-section: 15px;
+  --text-body: 13px;
+  --text-caption: 11px;
+
+  /* ── 动效（§24.2：只动 opacity/transform，120–180ms ease-out） ───── */
+  --dur-fast: 120ms;
+  --dur-base: 150ms;
+  --dur-slow: 180ms;
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ── 阴影（§24.3-3；浅色下整体减半） ─────────────────────────────── */
+  --shadow-node: 0 1px 2px rgb(0 0 0 / 20%), 0 8px 24px rgb(0 0 0 / 18%);
+  --shadow-dialog: 0 2px 8px rgb(0 0 0 / 24%), 0 24px 64px rgb(0 0 0 / 36%);
+  --shadow-overlay: var(--shadow-dialog);
+  --shadow-pill: 0 1px 2px rgb(0 0 0 / 24%);
+
+  /* ── 字体（全部为系统字体，不加载在线字体，§4.3 规则三） ──────────── */
   --font-ui:
-    -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
-    system-ui, sans-serif;
-  --font-mono: ui-monospace, menlo, monospace;
+    -apple-system, "SF Pro Text", "PingFang SC", system-ui, "Segoe UI",
+    "Microsoft YaHei", sans-serif;
+  /* `--font-code` 是原始值；`--font-mono` 是给旧 CSS 的同义名，
+     同时避开 Tailwind `@theme` 里同名变量的自引用循环。 */
+  --font-code:
+    ui-monospace, sfmono-regular, menlo, "JetBrains Mono", "Cascadia Mono",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
+    monospace;
+  --font-mono: var(--font-code);
+
+  /* ── 布局常量（§3.1） ───────────────────────────────────────────── */
+  --tabbar-h: 44px;
+  --sidebar-w: 240px;
+  --dock-h: 44px;
+  --drawer-w: 360px;
+  --scm-w: 460px;
+
+  /* ── z 轴栈（§3.1，唯一真相） ───────────────────────────────────── */
+  --z-pills: 5;
+  --z-sessions: 12;
+  --z-dock: 20;
+  --z-cluster: 26;
+  --z-banners: 27;
+  --z-tabbar: 30;
+  --z-focus: 40;
+  --z-menu: 46;
+  --z-dialog: 55;
+
+  /* ── shadcn 契约（`src/ui/*` 直接依赖这些名字的语义） ─────────────── */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface-card);
+  --card-foreground: var(--text);
+  --popover: var(--surface-overlay);
+  --popover-foreground: var(--text);
+  --primary: var(--brand);
+  --primary-foreground: var(--on-accent);
+  --secondary: var(--surface-raised);
+  --secondary-foreground: var(--text);
+  /* 次要底色 + 次要文字色：注意 `--muted` 是“底”不是“字” */
+  --muted: var(--surface-raised);
+  --muted-foreground: rgb(var(--tint-rgb) / 55%);
+  /* 菜单/列表项高亮底。刻意用中性色而不是品牌蓝：
+     命令面板、下拉菜单、Select 每一行都吃这个色，用蓝底会太吵。 */
+  --accent: rgb(var(--tint-rgb) / 9%);
+  --accent-foreground: var(--text);
+  --destructive: var(--danger);
+  --destructive-foreground: var(--on-accent);
+  /* shadcn 的 `--input` 是输入控件的边框色（也被 `bg-input/30` 当底用） */
+  --input: var(--border-strong);
+  --ring: var(--brand);
+
+  /* 图表色：上下文占用条、用量统计用 */
+  --chart-1: #0a84ff;
+  --chart-2: #32d74b;
+  --chart-3: #ff9f0a;
+  --chart-4: #bf5af2;
+  --chart-5: #6ac4dc;
+
+  /* shadcn sidebar 组件族的变量（本项目未使用，但 @theme 引用了它们） */
+  --sidebar: var(--panel);
+  --sidebar-foreground: var(--text);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  /* 旧样式表（styles/*.css）用的名字，Phase 1 删除它们时一并删掉 */
+  --accent-text: var(--brand-text);
+  --accent-soft: var(--brand-soft);
 
   color: var(--text);
   background: var(--bg);
+  font-family: var(--font-ui);
+}
+
+:root[data-theme="light"] {
   color-scheme: light;
+
+  --tint-rgb: 58 48 38;
+
+  --bg: #f2efe9;
+  --panel: #faf8f5;
+  --panel-header: var(--card);
+  --canvas-bg: #f6f2ea;
+  --canvas-dot: #cfc8bc;
+  --term-bg: #1c1a17;
+
+  --sidebar-material: color-mix(in srgb, var(--panel) 94%, transparent);
+
+  --surface-sunken: #e8e4dc;
+  --surface-deep: #efebe4;
+  --surface-base: var(--panel);
+  --surface-card: #ffffff;
+  --surface-raised: #f0ece5;
+  --surface-overlay: #ffffff;
+
+  --scrim: rgb(38 32 26 / 32%);
+  --hover: rgb(var(--tint-rgb) / 6%);
+  --active: rgb(var(--tint-rgb) / 11%);
+
+  --border: rgb(var(--tint-rgb) / 10%);
+  --border-strong: rgb(var(--tint-rgb) / 20%);
+
+  --text: rgb(var(--tint-rgb) / 90%);
+  --faint: rgb(var(--tint-rgb) / 50%);
+  --on-accent: #ffffff;
+
+  --brand: #007aff;
+  --brand-text: #0a5fc4;
+  --brand-soft: rgb(0 122 255 / 12%);
+
+  --danger: #d70015;
+  --danger-soft: rgb(215 0 21 / 10%);
+  --warn: #b26200;
+  --warn-soft: rgb(178 98 0 / 12%);
+  --caution: #9a7500;
+  --success: #1d8a35;
+  --success-soft: rgb(29 138 53 / 12%);
+
+  --agent-working: #b8532f;
+  --agent-working-soft: rgb(184 83 47 / 14%);
+
+  /* 浅色下阴影减半（§24.2 最后一行） */
+  --shadow-node: 0 1px 2px rgb(58 48 38 / 10%), 0 8px 24px rgb(58 48 38 / 9%);
+  --shadow-dialog:
+    0 2px 8px rgb(58 48 38 / 12%), 0 24px 64px rgb(58 48 38 / 18%);
+  --shadow-pill: 0 1px 2px rgb(58 48 38 / 12%);
+
+  /* shadcn 契约在浅色下重新声明一遍：两套主题各自分叉的余地留着，
+     `styles/tokens.test.ts` 也会逐条校验它们都在。 */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface-card);
+  --card-foreground: var(--text);
+  --popover: var(--surface-overlay);
+  --popover-foreground: var(--text);
+  --primary: var(--brand);
+  --primary-foreground: var(--on-accent);
+  --secondary: var(--surface-raised);
+  --secondary-foreground: var(--text);
+  --muted: var(--surface-raised);
+  --muted-foreground: rgb(var(--tint-rgb) / 70%);
+  --accent: rgb(var(--tint-rgb) / 8%);
+  --accent-foreground: var(--text);
+  --destructive: var(--danger);
+  --destructive-foreground: var(--on-accent);
+  --input: var(--border-strong);
+  --ring: var(--brand);
+
+  --chart-1: #007aff;
+  --chart-2: #1d8a35;
+  --chart-3: #b26200;
+  --chart-4: #8d3fc9;
+  --chart-5: #2b8fa8;
 }
 
-:root[data-theme="dark"] {
-  --bg: #0e0f12;
-  --panel: #15161a;
-  --card: #1b1c21;
-  --card2: #23252b;
-  --border: rgb(255 255 255 / 8%);
-  --text: #edeef2;
-  --muted: #9a9fad;
-  --faint: #666b78;
-  --dot: rgb(255 255 255 / 8%);
-  --accent: #7c7cf0;
-  --accent-soft: rgb(124 124 240 / 18%);
-  --accent-line: rgb(124 124 240 / 45%);
-  --ok: #3fbf7f;
-  --warn: #e3b341;
-  --warn-soft: rgb(227 179 65 / 12%);
-  --err: #f0605d;
-  --err-soft: rgb(240 96 93 / 14%);
-  --info: #5b9bf0;
-  --info-soft: rgb(91 155 240 / 16%);
-  --diff: #c792ea;
-  --diff-soft: rgb(199 146 234 / 16%);
-  --shadow: 0 10px 28px rgb(0 0 0 / 45%);
-  --shadow-lg: 0 30px 70px rgb(0 0 0 / 60%);
-  --term-bg: #0a0b0d;
-
-  color-scheme: dark;
+/*
+ * Tauri 窗口（§24.2「一致的窗口 chrome」）。
+ *
+ * `index.html` 里的内联脚本在 Tauri 下给 <html> 打上 `data-tauri`。
+ * 窗口本身是 `transparent: true` 且贴了 `NSVisualEffectMaterial::Sidebar`，
+ * 所以这里把文档链上的底色一路让开——只有侧栏那一片是半透明的，
+ * 画布仍然由 `--canvas-bg` 铺满，节点/浮层各自有自己的实底。
+ * 浏览器里没有 `data-tauri`，这一整段不生效，侧栏就是纯色 `--panel`。
+ */
+html[data-tauri],
+html[data-tauri] body,
+html[data-tauri] #root {
+  background: transparent;
 }
 
-/* The `running` / `connecting` glyph is the only looping animation we ship
-   (plan §0), and even that stops for users who ask for reduced motion. */
+html[data-tauri] #root > .bg-background {
+  background-color: transparent;
+}
+
+html[data-tauri] {
+  --sidebar-material: color-mix(in srgb, var(--panel) 62%, transparent);
+}
+
+/*
+ * 减少动效：关掉节点脉冲光晕与一切循环动画（§4.3 规则三）。
+ * 状态仍然靠“图标 + 文字”表达，所以关掉动画不丢信息。
+ */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
 @media (forced-colors: active) {
-  .brand-tile,
-  .rail-tile,
-  .canvas-node.is-selected,
-  .semantic-edge-label,
-  .runtime-dot,
-  .semantic-handle {
-    forced-color-adjust: auto;
-  }
-
-  .canvas-node.is-selected,
   button:focus-visible,
+  a:focus-visible,
   input:focus-visible,
-  textarea:focus-visible {
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
     outline: 2px solid Highlight;
+    outline-offset: 1px;
   }
 }

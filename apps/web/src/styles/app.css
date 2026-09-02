@@ -1,0 +1,246 @@
+/*
+ * Tailwind v4 入口 —— docs/v3-agent-terminal-plan.md §4.1 / §4.3
+ *
+ * 顺序很重要：先 `tailwindcss`（含它自己的 theme 变量与 preflight），
+ * 再 `tokens.css`，这样我们的 token 永远覆盖 Tailwind 的同名默认值。
+ * `main.tsx` 必须第一个 import 这个文件。
+ */
+
+@import "tailwindcss";
+/* tokens 必须排在 tailwindcss 之后：同名变量（--radius-* 等）以我们的为准 */
+@import "./tokens.css";
+/* 下面两行由 shadcn CLI 写入：tw-animate-css 提供 animate-in/out 工具类，
+   shadcn/tailwind.css 提供 data-open / data-closed 等自定义 variant。 */
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/*
+ * 深色是默认（没有 data-theme 属性时即深色），浅色靠 `[data-theme=light]`。
+ * 所以 `dark:` 变体只在显式标了 dark 时命中——用于“浅色下也要强制暗底”的
+ * 少数地方（终端、代码块）。日常配色请直接用 token，不要写 dark: 分支。
+ */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
+  /* ── shadcn 契约色 ───────────────────────────────────────────────── */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-faint: var(--faint);
+
+  /* ── 表面高度 ────────────────────────────────────────────────────── */
+  --color-panel: var(--panel);
+  --color-panel-header: var(--panel-header);
+  /* 侧栏材质（§24.2）：Tauri 下半透明 + backdrop-blur，网页下近乎纯色 */
+  --color-sidebar-material: var(--sidebar-material);
+  --color-canvas: var(--canvas-bg);
+  --color-canvas-dot: var(--canvas-dot);
+  --color-term: var(--term-bg);
+  --color-sunken: var(--surface-sunken);
+  --color-deep: var(--surface-deep);
+  --color-raised: var(--surface-raised);
+  --color-overlay: var(--surface-overlay);
+  --color-hover: var(--hover);
+  --color-active: var(--active);
+  --color-scrim: var(--scrim);
+  --color-border-strong: var(--border-strong);
+  --color-brand: var(--brand);
+  --color-brand-text: var(--brand-text);
+  --color-brand-soft: var(--brand-soft);
+
+  /* ── 状态色 ──────────────────────────────────────────────────────── */
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-caution: var(--caution);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-working: var(--agent-working);
+  --color-working-soft: var(--agent-working-soft);
+
+  /* ── Agent 品牌色 ────────────────────────────────────────────────── */
+  --color-agent-claude: var(--agent-claude);
+  --color-agent-codex: var(--agent-codex);
+  --color-agent-gemini: var(--agent-gemini);
+  --color-agent-opencode: var(--agent-opencode);
+
+  /* ── 圆角 ────────────────────────────────────────────────────────── */
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+  /* §24.2 的四档语义圆角：`rounded-control` / `-card` / `-panel` / `-dialog` */
+  --radius-control: var(--r-control);
+  --radius-card: var(--r-card);
+  --radius-panel: var(--r-panel);
+  --radius-dialog: var(--r-dialog);
+
+  /* ── 字体 ────────────────────────────────────────────────────────── */
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-code);
+  --font-heading: var(--font-ui);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    /* 正文 13px 是整个界面的基准字号（§24.2 字体层级）；
+       更大的两档（17 标题 / 15 分区标题）与 11 辅助由组件按需取。 */
+    margin: 0;
+    font-family: var(--font-ui);
+    font-size: var(--text-body);
+    line-height: 1.45;
+    /* 桌面壳里没有文档级滚动条，滚动一律交给内部的 ScrollArea */
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    @apply bg-background text-foreground;
+  }
+
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--font-code);
+  }
+
+  ::selection {
+    background: var(--brand-soft);
+  }
+}
+
+@layer utilities {
+  /* 细滚动条：抽屉、会话侧栏、菜单里到处要用 */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--tint-rgb) / 20%) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgb(var(--tint-rgb) / 18%);
+    border-radius: 999px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /*
+   * 源列表侧栏的材质（§24.2）。Tauri 下 `--sidebar-material` 是半透明的，
+   * 底下是 macOS 的 sidebar 毛玻璃；浏览器里它近乎纯色，这条等于普通底色。
+   */
+  .material-sidebar {
+    background: var(--sidebar-material);
+    backdrop-filter: saturate(180%) blur(20px);
+  }
+
+  /* §24.2 动效：hover/选中 150ms，只动颜色与不透明度，不动尺寸 */
+  .motion-hover {
+    transition:
+      background-color var(--dur-base) var(--ease-out),
+      border-color var(--dur-base) var(--ease-out),
+      color var(--dur-base) var(--ease-out),
+      opacity var(--dur-base) var(--ease-out);
+  }
+
+  /* 页面/浮层出场：120ms 纯淡入，无位移无弹跳 */
+  .motion-fade-in {
+    animation: aicc-fade-in var(--dur-fast) var(--ease-out);
+  }
+
+  /* 拖拽把手：节点头部、组标签 */
+  .drag-handle {
+    cursor: grab;
+  }
+
+  .drag-handle:active {
+    cursor: grabbing;
+  }
+}
+
+/*
+ * 状态点的呼吸动画（§3.4 的 RUNNING / NEEDS YOU 胶囊）。
+ *
+ * 浮层的进出场统一用 shadcn CLI 带进来的 tw-animate-css
+ * （`data-open:animate-in` 等），这里只补它没有的这一条。
+ * `prefers-reduced-motion` 由 tokens.css 统一压到 0.01ms。
+ */
+@keyframes aicc-dot-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes aicc-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/*
+ * 等待中的 rope 边（§3.3）：虚线朝目标方向流动。
+ * 只动 `stroke-dashoffset`，不重排也不重绘整条路径。
+ */
+@keyframes aicc-rope-flow {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+@layer utilities {
+  .anim-dot-pulse {
+    animation: aicc-dot-pulse 1.6s ease-in-out infinite;
+  }
+
+  .anim-rope-flow {
+    animation: aicc-rope-flow 1s linear infinite;
+  }
+}
