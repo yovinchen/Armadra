@@ -30,7 +30,7 @@ cargo test -p ai-coding-canvas-runtime
 | PATCH  | `/api/workspaces/{id}/boards/{boardId}`          | `{name?, sortOrder?}`                                              | `Board`                                                                            |
 | DELETE | `/api/workspaces/{id}/boards/{boardId}`          | —                                                                  | `204`；删除最后一个看板返回 `409 conflict`                                         |
 | GET    | `/api/workspaces/{id}/boards/{boardId}/document` | —                                                                  | `BoardDocument`                                                                    |
-| PUT    | `/api/workspaces/{id}/boards/{boardId}/document` | `{expectedUpdatedAt, nodes, edges, strokes, viewport}`             | `BoardDocument`；CAS 失败返回 `409 conflict`                                       |
+| PUT    | `/api/workspaces/{id}/boards/{boardId}/document` | `{expectedUpdatedAt, nodes, edges, viewport, kanban?, whiteboard?}` | `BoardDocument`；CAS 失败返回 `409 conflict`                                       |
 | GET    | `/api/workspaces/{id}/files?path=`               | —                                                                  | `{path, entries[], truncated}`                                                     |
 | GET    | `/api/workspaces/{id}/file?path=`                | —                                                                  | `{path, mimeType, content, size}`                                                  |
 | GET    | `/api/workspaces/{id}/git/status`                | —                                                                  | `{repository, branch, changedCount, ahead, behind}`                                |
@@ -64,12 +64,11 @@ ACP `update` 事件已归一化为结构化载荷：
 
 ## 数据库
 
-`migrations/0003_boards.sql` 引入 v2 模型：`boards` 表（`viewport_json` / `strokes_json`）、
-`nodes.board_id` + `nodes.zoom`、`edges.board_id`（移除 `permissions_json`）、
-`workspaces` 增加 `color` / `permissions_json` / `gateway_enabled` / `last_opened_at`，
-并在 SQL 内完成旧值映射（节点 `folder`→`context`、状态 `failed`→`error`、
-连线 `context`→`ref`、`input`→`dispatch`、`output`→`produce`、`patches`→`write`、
-`depends_on`→`trigger`、`verifies`→`link`）。旧 `canvases` 表在迁移末尾删除。
+`migrations/0001_initial.sql` 是唯一的 schema，没有任何升级路径。
+旧版本写下的数据库不做迁移也不做兼容：`db::connect` 检查 `_sqlx_migrations`，
+只要有一条记录不在本二进制自带的迁移里（版本不认识，或校验和对不上），
+就把 `canvas.db`（连同 `-wal` / `-shm`）改名为 `canvas.db.legacy-<时间戳>`，
+记一条 warn 日志，然后按当前 schema 建一个新库。
 
 ## 网关
 
