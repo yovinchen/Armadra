@@ -1,0 +1,60 @@
+import type { MessageModule } from "./index";
+
+/**
+ * SSH 主机与 SSH 终端节点（计划书 §21 SSH 行）。
+ *
+ * 只有标签，没有说明句（§14 第 1 条）；`SSH` 是协议名，两种语言都保留原文
+ * （§14 第 2 条对品牌名的例外）。
+ */
+export const ssh: MessageModule = {
+  "zh-CN": {
+    "ssh.nav": "SSH", // i18n-exempt
+    "ssh.add": "添加",
+    "ssh.edit": "编辑",
+    "ssh.delete": "删除",
+    "ssh.test": "测试连接",
+    "ssh.empty": "还没有主机",
+    "ssh.field.name": "名称",
+    "ssh.field.host": "主机",
+    "ssh.field.user": "用户",
+    "ssh.field.port": "端口",
+    "ssh.field.identity": "密钥",
+    "ssh.field.extraArgs": "额外参数",
+    "ssh.pickIdentity": "选择密钥",
+    "ssh.dialog.add": "添加主机",
+    "ssh.dialog.edit": "编辑主机",
+    "ssh.dialog.save": "保存",
+    "ssh.dialog.cancel": "取消",
+    "ssh.dialog.invalid": "填写有误",
+    "ssh.delete.title": "删除 {name}？",
+    "ssh.testing": "测试中",
+    "ssh.test.ok": "连接成功",
+    "ssh.test.failed": "连接失败",
+    "ssh.menuItem": "SSH 终端 · {name}",
+  },
+  en: {
+    "ssh.nav": "SSH",
+    "ssh.add": "Add",
+    "ssh.edit": "Edit",
+    "ssh.delete": "Delete",
+    "ssh.test": "Test",
+    "ssh.empty": "No hosts yet",
+    "ssh.field.name": "Name",
+    "ssh.field.host": "Host",
+    "ssh.field.user": "User",
+    "ssh.field.port": "Port",
+    "ssh.field.identity": "Key",
+    "ssh.field.extraArgs": "Extra args",
+    "ssh.pickIdentity": "Choose key",
+    "ssh.dialog.add": "Add host",
+    "ssh.dialog.edit": "Edit host",
+    "ssh.dialog.save": "Save",
+    "ssh.dialog.cancel": "Cancel",
+    "ssh.dialog.invalid": "Check the fields",
+    "ssh.delete.title": "Delete {name}?",
+    "ssh.testing": "Testing",
+    "ssh.test.ok": "Connected",
+    "ssh.test.failed": "Connection failed",
+    "ssh.menuItem": "SSH terminal · {name}",
+  },
+};
