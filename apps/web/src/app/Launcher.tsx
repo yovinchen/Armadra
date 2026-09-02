@@ -1,325 +1,221 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Search } from "lucide-react";
-import type { WorkspaceSummary } from "@ai-coding-canvas/shared";
-import { runtimeApi } from "../api/client";
-import { useWorkspaceFolderDrop } from "../canvas/dnd/workspace-drop";
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  FolderOpen,
+  FolderPlus,
+  GitBranch,
+  RefreshCw,
+  Settings,
+} from "lucide-react";
+import { onFileDrop, pickDirectory } from "../platform";
 import { useCanvasStore } from "../store/canvas-store";
-import { usePreferences } from "../preferences/Preferences";
-import { pickDirectory } from "../platform";
-import { NewWorkspaceModal } from "../modals/NewWorkspaceModal";
-import { SettingsModal } from "../modals/SettingsModal";
-import { setPendingWorkspacePath } from "../modals/new-workspace-state";
-import { setPendingSettingsTab } from "../modals/settings-state";
-import { letterOf } from "../shell/Rail";
+import { CloneRepoDialog } from "../panels/CloneRepoDialog";
+import { NewFolderDialog } from "../panels/NewFolderDialog";
+import { NewWorkspaceDialog } from "../panels/NewWorkspaceDialog";
+import { BrandMark } from "@/ui/brand-mark";
+import { Button } from "@/ui/button";
+import { IconButton } from "@/ui/icon-button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
+import {
+  DRAG_REGION,
+  NO_DRAG_REGION,
+  trafficLightInset,
+} from "../shell/window-region";
+import { useT } from "./preferences-store";
+import { useOpenWorkspace } from "./workspace-actions";
+import { useWorkspacesQuery, WorkspaceGrid } from "./WorkspaceGrid";
 
-/** Start page — plan §1.2, template.html "启动页". Replaces WorkspaceGate. */
+/**
+ * 首页（§20，视觉按 §24.3-1 重做，2026-09-04 再调）。
+ *
+ * 一条左对齐的 720px 内容列，三段式：品牌 lockup → 操作条 → 最近列表。
+ * 三张浮在半空的等大卡片换成**一整块分组条**（`--card` 底、1px 描边、
+ * 内部 1px 分隔），跟设置页与对话框里的分组卡片是同一种材质，视觉上是
+ * 一个物件而不是三块碎片；页面的重量因此落到「最近」列表上——那才是
+ * 用户九成时候要点的东西。
+ *
+ * 品牌 mark、操作条、列表行共用同一条左边缘，页面只有一个对齐轴。
+ *
+ * 三段操作分别对应新建文件夹（Runtime `mkdir`）、打开文件夹（系统选择器
+ * → 新建工作空间对话框）与克隆仓库。拖一个目录进窗口等同于「打开文件夹」。
+ */
 export function Launcher() {
-  const { t } = usePreferences();
-  const setWorkspace = useCanvasStore((state) => state.setWorkspace);
-  const setModal = useCanvasStore((state) => state.setModal);
-  const modal = useCanvasStore((state) => state.modal);
-  const [search, setSearch] = useState("");
+  const t = useT();
+  const workspaces = useWorkspacesQuery();
+  const openWorkspace = useOpenWorkspace();
+  const setPanel = useCanvasStore((state) => state.setPanel);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [folderDialog, setFolderDialog] = useState(false);
+  const [cloneDialog, setCloneDialog] = useState(false);
+  const [droppedPath, setDroppedPath] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
 
-  const health = useQuery({
-    queryKey: ["health"],
-    queryFn: runtimeApi.health,
-    refetchInterval: 10_000,
-    retry: false,
-  });
-  const workspaces = useQuery({
-    queryKey: ["workspaces"],
-    queryFn: runtimeApi.listWorkspaces,
-    retry: false,
-  });
-
-  const openWorkspace = (workspace: WorkspaceSummary) => {
-    localStorage.setItem("ai-canvas-workspace", workspace.id);
-    localStorage.removeItem("ai-canvas-board");
-    setWorkspace(workspace);
-    void runtimeApi.openWorkspace(workspace.id).catch(() => undefined);
-  };
-
-  /** Opens the New Workspace modal, optionally prefilled with a folder. */
-  const openNewWorkspace = useCallback(
-    (path?: string) => {
-      setPendingWorkspacePath(path ?? null);
-      setModal("newWorkspace");
-      if (path) return;
-      window.setTimeout(() => {
-        document.getElementById("workspace-path")?.focus();
-      }, 0);
-    },
-    [setModal],
+  useEffect(
+    () =>
+      onFileDrop((paths) => {
+        const first = paths[0];
+        if (!first) return;
+        setDroppedPath(first);
+        setOpenDialog(true);
+        setDragging(false);
+      }),
+    [],
   );
 
-  const browseForFolder = useCallback(async () => {
-    // On the web there is no system picker: fall through to the manual field.
+  async function browse() {
     const picked = await pickDirectory();
-    openNewWorkspace(picked ?? undefined);
-  }, [openNewWorkspace]);
-
-  const drop = useWorkspaceFolderDrop(openNewWorkspace);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey)) return;
-      if (event.key.toLowerCase() === "o") {
-        event.preventDefault();
-        void browseForFolder();
-      }
-      if (event.key.toLowerCase() === "n" && !event.shiftKey) {
-        event.preventDefault();
-        openNewWorkspace();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [browseForFolder, openNewWorkspace]);
-
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    const list = workspaces.data ?? [];
-    if (!query) return list;
-    return list.filter(
-      (item) =>
-        item.name.toLowerCase().includes(query) ||
-        item.rootPath.toLowerCase().includes(query),
-    );
-  }, [search, workspaces.data]);
-
-  const version = health.data?.version ?? "0.1.0";
+    setDroppedPath(picked);
+    setOpenDialog(true);
+  }
 
   return (
-    <div className="launcher">
-      <div className="launcher-topbar">{t("launcher.brand")}</div>
-      <div className="launcher-main">
-        <aside className="launcher-aside">
-          <div className="launcher-brand">
-            <span className="brand-big" aria-hidden="true">
-              ✦
-            </span>
-            <div>
-              <div className="brand-name">{t("launcher.brand")}</div>
-              <div className="brand-sub">
-                {health.isSuccess
-                  ? t("launcher.ready", { version })
-                  : t("launcher.offline", { version })}
-              </div>
-            </div>
-          </div>
-
-          <div className="launcher-actions">
-            <button
-              type="button"
-              className="launcher-action launcher-action--primary"
-              onClick={() => void browseForFolder()}
-            >
-              <span aria-hidden="true">▤</span>
-              {t("launcher.open")}
-              <span className="action-key">⌘O</span>
-            </button>
-            <button
-              type="button"
-              className="launcher-action"
-              onClick={() => openNewWorkspace()}
-            >
-              <span aria-hidden="true">＋</span>
-              {t("launcher.new")}
-              <span className="action-key">⌘N</span>
-            </button>
-            <button
-              type="button"
-              className="launcher-action"
-              disabled
-              title={t("launcher.remoteReserved")}
-            >
-              <span aria-hidden="true">⇄</span>
-              {t("launcher.remote")}
-              <span className="action-key">{t("launcher.remoteHint")}</span>
-            </button>
-          </div>
-
-          <div className="launcher-fill" />
-
-          <div
-            className={`launcher-drop${drop.isOver ? " is-over" : ""}`}
-            onDragOver={drop.onDragOver}
-            onDragLeave={drop.onDragLeave}
-            onDrop={drop.onDrop}
-          >
-            <div className="drop-glyph" aria-hidden="true">
-              ⤓
-            </div>
-            {t("launcher.drop")}
-            <br />
-            {t("launcher.drop2")}
-            {drop.unsupportedMessage && (
-              <span className="drop-unsupported">
-                {drop.unsupportedMessage}
-              </span>
-            )}
-          </div>
-
-          <div className="launcher-links">
-            <button type="button" onClick={() => setModal("settings")}>
-              {t("launcher.settings")}
-            </button>
-            <span>·</span>
-            <button
-              type="button"
-              onClick={() => {
-                setPendingSettingsTab("keys");
-                setModal("settings");
-              }}
-            >
-              {t("launcher.shortcuts")}
-            </button>
-          </div>
-        </aside>
-
-        <main className="launcher-recents">
-          <div className="launcher-recents-head">
-            <h1>{t("launcher.recent")}</h1>
-            <label className="launcher-search">
-              <Search size={13} aria-hidden="true" />
-              <input
-                type="search"
-                value={search}
-                placeholder={t("launcher.search")}
-                aria-label={t("launcher.search")}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </label>
-          </div>
-
-          {workspaces.isError && (
-            <div className="launcher-offline" role="alert">
-              <p className="launcher-offline-text">
-                {t("launcher.runtimeFailed", {
-                  error: workspaces.error.message,
-                })}
-              </p>
-              <button
-                type="button"
-                className="secondary-action"
-                disabled={workspaces.isFetching}
-                onClick={() => void workspaces.refetch()}
+    <div
+      className="flex h-full flex-col bg-[var(--bg)]"
+      onDragOver={(event) => {
+        event.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(event) => {
+        event.preventDefault();
+        setDragging(false);
+      }}
+    >
+      <header
+        style={{
+          ...DRAG_REGION,
+          paddingLeft: trafficLightInset() || undefined,
+        }}
+        className="flex h-[var(--tabbar-h)] shrink-0 items-center px-3"
+      >
+        <div className="ml-auto" style={NO_DRAG_REGION}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <IconButton
+                size="cluster"
+                label={t("launcher.settings")}
+                onClick={() => setPanel("settings", true)}
               >
-                {workspaces.isFetching
-                  ? t("launcher.reconnecting")
-                  : t("launcher.reconnect")}
-              </button>
-            </div>
-          )}
+                <Settings />
+              </IconButton>
+            </TooltipTrigger>
+            <TooltipContent>{t("launcher.settings")}</TooltipContent>
+          </Tooltip>
+        </div>
+      </header>
 
-          <div className="launcher-grid">
-            {filtered.map((workspace) => (
-              <WorkspaceCard
-                key={workspace.id}
-                workspace={workspace}
-                onOpen={() => openWorkspace(workspace)}
-              />
-            ))}
+      <main className="mx-auto flex min-h-0 w-full max-w-[720px] flex-1 flex-col px-6 pb-6">
+        {/* 品牌 lockup：mark 与应用名同一行、同一条左边缘（§24.3-1） */}
+        <div className="flex shrink-0 items-center gap-2.5 px-2.5 pt-4 pb-7">
+          <BrandMark className="size-7 text-[var(--brand)]" />
+          <h1 className="text-[length:var(--text-title)] font-semibold tracking-[-0.01em]">
+            {t("app.brand")}
+          </h1>
+        </div>
+
+        {/* 操作条：一整块分组卡片，段与段之间 1px 分隔（§24.2「分组表单」） */}
+        {/* 不用 overflow-hidden 裁圆角——那会连焦点环一起裁掉，
+            改成首尾两段各自圆一边（外圆角 12 减去 1px 描边 = 11）。 */}
+        <div className="grid shrink-0 grid-cols-3 rounded-[var(--r-panel)] border border-border bg-[var(--card)] [&>button+button]:border-l [&>button+button]:border-l-border [&>button:first-child]:rounded-l-[11px] [&>button:last-child]:rounded-r-[11px]">
+          <ActionSegment
+            icon={<FolderPlus />}
+            label={t("launcher.newFolder")}
+            onClick={() => setFolderDialog(true)}
+          />
+          <ActionSegment
+            icon={<FolderOpen />}
+            label={t("launcher.open")}
+            onClick={() => void browse()}
+          />
+          <ActionSegment
+            icon={<GitBranch />}
+            label={t("launcher.clone")}
+            onClick={() => setCloneDialog(true)}
+          />
+        </div>
+
+        {workspaces.isError && (
+          <div className="mt-4 flex h-9 shrink-0 items-center gap-2 rounded-[var(--r-card)] border border-[color-mix(in_srgb,var(--danger)_28%,transparent)] bg-[var(--danger-soft)] px-3">
+            <span className="text-[var(--danger)]">{t("launcher.offline")}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto"
+              disabled={workspaces.isFetching}
+              onClick={() => void workspaces.refetch()}
+            >
+              <RefreshCw />
+              {t("launcher.reconnect")}
+            </Button>
           </div>
+        )}
 
-          {workspaces.isSuccess && filtered.length === 0 && (
-            <p className="inspector-hint">
-              {search ? t("launcher.noMatch") : t("launcher.empty")}
-            </p>
-          )}
+        <div className="mt-8 flex min-h-0 flex-1 flex-col">
+          <WorkspaceGrid
+            workspaces={workspaces.data ?? []}
+            onOpen={openWorkspace}
+          />
+        </div>
+      </main>
 
-          <p className="launcher-note">{t("launcher.note")}</p>
-        </main>
-      </div>
+      {dragging && (
+        <div
+          className="motion-fade-in pointer-events-none fixed inset-0 z-[var(--z-banners)] flex items-center justify-center bg-[var(--scrim)]"
+          aria-hidden
+        >
+          <div className="absolute inset-3 rounded-[var(--r-dialog)] border-[1.5px] border-dashed border-[var(--brand)]" />
+          <div className="flex items-center gap-2 rounded-[var(--r-dialog)] border border-border bg-[var(--card)] px-4 py-3 shadow-[var(--shadow-dialog)]">
+            <FolderPlus
+              className="size-5 text-[var(--brand)] [stroke-width:1.5]"
+              aria-hidden
+            />
+            <span className="font-medium">{t("launcher.drop")}</span>
+          </div>
+        </div>
+      )}
 
-      {modal === "newWorkspace" && <NewWorkspaceModal />}
-      {modal === "settings" && <SettingsModal />}
+      <NewWorkspaceDialog
+        open={openDialog}
+        onOpenChange={setOpenDialog}
+        initialPath={droppedPath}
+        onCreated={openWorkspace}
+      />
+      <NewFolderDialog
+        open={folderDialog}
+        onOpenChange={setFolderDialog}
+        onCreated={openWorkspace}
+      />
+      <CloneRepoDialog
+        open={cloneDialog}
+        onOpenChange={setCloneDialog}
+        onCloned={openWorkspace}
+      />
     </div>
   );
 }
 
-function WorkspaceCard({
-  workspace,
-  onOpen,
+/**
+ * 操作条里的一段 = 一个图标 + 一个词，没有说明文字（§14）。
+ * 高 72、方角（圆角由外层分组卡片统一裁切），hover 只换底色。
+ */
+function ActionSegment({
+  icon,
+  label,
+  onClick,
 }: {
-  workspace: WorkspaceSummary;
-  onOpen: () => void;
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
 }) {
-  const { t } = usePreferences();
-  const nodeCount = workspace.boards.reduce(
-    (sum, board) => sum + board.nodeCount,
-    0,
-  );
   return (
-    <button type="button" className="launcher-card" onClick={onOpen}>
-      <span className="card-head">
-        <span
-          className="card-tile"
-          style={{ background: workspace.color }}
-          aria-hidden="true"
-        >
-          {letterOf(workspace.name)}
-        </span>
-        <span className="card-head-text">
-          <span className="card-name">{workspace.name}</span>
-          <span className="card-path" title={workspace.rootPath}>
-            {workspace.rootPath}
-          </span>
-        </span>
-        <span className="card-when">
-          {relativeTime(workspace.lastOpenedAt, t)}
-        </span>
+    <Button
+      variant="ghost"
+      onClick={onClick}
+      className="motion-hover group/segment h-[72px] flex-col gap-2 rounded-none border-transparent text-[length:var(--text-body)] font-medium hover:bg-[var(--surface-raised)] focus-visible:z-10 [&_svg]:size-5 [&_svg]:[stroke-width:1.5]"
+    >
+      <span className="text-muted-foreground transition-colors duration-[var(--dur-base)] ease-[var(--ease-out)] group-hover/segment:text-foreground">
+        {icon}
       </span>
-      <span className="card-boards">
-        {workspace.boards.map((board) => (
-          <span className="card-chip" key={board.id}>
-            ▦ {board.name}
-          </span>
-        ))}
-      </span>
-      <span className="card-meta">
-        <span>
-          {t("launcher.stats", {
-            boards: workspace.boards.length,
-            nodes: nodeCount,
-          })}
-        </span>
-        <span
-          className="card-gateway"
-          style={{
-            color: workspace.gatewayEnabled ? "var(--info)" : "var(--muted)",
-          }}
-        >
-          {workspace.gatewayEnabled ? "⇄" : "⊘"}{" "}
-          {workspace.gatewayEnabled
-            ? t("launcher.gatewayOn")
-            : t("launcher.gatewayOff")}
-        </span>
-      </span>
-    </button>
+      {label}
+    </Button>
   );
-}
-
-type Translate = (
-  key: string,
-  values?: Record<string, string | number>,
-) => string;
-
-/** Chinese-friendly coarse relative time; matches the prototype's wording. */
-export function relativeTime(iso: string, t: Translate): string {
-  const then = Date.parse(iso);
-  if (Number.isNaN(then)) return "";
-  const minutes = Math.max(0, Math.round((Date.now() - then) / 60_000));
-  if (minutes < 2) return t("time.justNow");
-  if (minutes < 60) return t("time.minutes", { count: minutes });
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return t("time.hours", { count: hours });
-  const days = Math.round(hours / 24);
-  if (days === 1) return t("time.yesterday");
-  if (days < 7) return t("time.days", { count: days });
-  const weeks = Math.round(days / 7);
-  if (weeks === 1) return t("time.lastWeek");
-  if (weeks < 6) return t("time.weeks", { count: weeks });
-  return t("time.longAgo");
 }
