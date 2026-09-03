@@ -1,0 +1,237 @@
+import {
+  WHITEBOARD_BACKGROUNDS,
+  WHITEBOARD_COLORS,
+  WHITEBOARD_GRID_SIZES,
+  WHITEBOARD_SIZES,
+  WHITEBOARD_STYLES,
+  usePreferencesStore,
+  useT,
+  type WhiteboardBackground,
+  type WhiteboardColor,
+  type WhiteboardGridSize,
+  type WhiteboardSize,
+  type WhiteboardStyle,
+} from "../../../app/preferences-store";
+import { SettingsGroup } from "../SettingsGroup";
+import { SettingsRow } from "../SettingsRow";
+import { CONTROL_WIDTH } from "./GeneralPage";
+import { Button } from "@/ui/button";
+import { ColorDot } from "@/ui/color-dot";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/ui/select";
+import { Switch } from "@/ui/switch";
+
+/**
+ * tldraw 13 色在浅色主题下的 `solid` 值（`DEFAULT_THEME.colors[*].solid`）。
+ *
+ * 色点只是设置页里的预览，不参与画布渲染，所以固定用浅色主题那一套：
+ * 深色主题的同名色是同一个语义，换一套只会让色点和用户记住的颜色对不上。
+ * `white` 在浅底上要靠边框才看得见，单独给一圈描边。
+ */
+const SWATCHES: Record<WhiteboardColor, string> = {
+  black: "#1d1d1d",
+  grey: "#9fa8b2",
+  white: "#ffffff",
+  blue: "#4465e9",
+  "light-blue": "#4ba1f1",
+  green: "#099268",
+  "light-green": "#4cb05e",
+  yellow: "#f1ac4b",
+  orange: "#e16919",
+  red: "#e03131",
+  "light-red": "#f87777",
+  violet: "#ae3ec9",
+  "light-violet": "#e085f4",
+};
+
+/**
+ * 设置 → 白板（2026-09-04 用户反馈：把 tldraw 原生配置引入我们的设置）。
+ *
+ * 三张卡：外观（背景、网格）、行为（吸附、动态字号、动画）、默认风格
+ * （手绘 / 整洁、颜色、粗细）。界面语言不在这里——它静默跟随应用语言。
+ */
+export function WhiteboardPage() {
+  const t = useT();
+  const whiteboard = usePreferencesStore((state) => state.whiteboard);
+  const set = usePreferencesStore((state) => state.setWhiteboardPreference);
+
+  return (
+    <>
+      <SettingsGroup>
+        <SettingsRow label={t("settings.whiteboard.background")}>
+          <Select
+            value={whiteboard.background}
+            onValueChange={(value) =>
+              set("background", value as WhiteboardBackground)
+            }
+          >
+            <SelectTrigger size="sm" className={CONTROL_WIDTH}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="z-[var(--z-dialog)]">
+              {WHITEBOARD_BACKGROUNDS.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {t(`settings.whiteboard.background.${option}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingsRow>
+
+        <SettingsRow label={t("settings.whiteboard.grid")}>
+          <Switch
+            checked={whiteboard.grid}
+            aria-label={t("settings.whiteboard.grid")}
+            onCheckedChange={(next) => set("grid", next)}
+          />
+        </SettingsRow>
+
+        <SettingsRow label={t("settings.whiteboard.gridSize")}>
+          <Select
+            value={String(whiteboard.gridSize)}
+            disabled={!whiteboard.grid}
+            onValueChange={(value) =>
+              set("gridSize", Number(value) as WhiteboardGridSize)
+            }
+          >
+            <SelectTrigger size="sm" className={CONTROL_WIDTH}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="z-[var(--z-dialog)]">
+              {WHITEBOARD_GRID_SIZES.map((option) => (
+                <SelectItem key={option} value={String(option)}>
+                  {t(`settings.whiteboard.gridSize.${option}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingsRow>
+      </SettingsGroup>
+
+      <SettingsGroup>
+        <SettingsRow label={t("settings.whiteboard.snap")}>
+          <Switch
+            checked={whiteboard.snap}
+            aria-label={t("settings.whiteboard.snap")}
+            onCheckedChange={(next) => set("snap", next)}
+          />
+        </SettingsRow>
+
+        <SettingsRow label={t("settings.whiteboard.dynamicSize")}>
+          <Switch
+            checked={whiteboard.dynamicSize}
+            aria-label={t("settings.whiteboard.dynamicSize")}
+            onCheckedChange={(next) => set("dynamicSize", next)}
+          />
+        </SettingsRow>
+
+        <SettingsRow label={t("settings.whiteboard.animation")}>
+          <Switch
+            checked={whiteboard.animation}
+            aria-label={t("settings.whiteboard.animation")}
+            onCheckedChange={(next) => set("animation", next)}
+          />
+        </SettingsRow>
+      </SettingsGroup>
+
+      <SettingsGroup>
+        <SettingsRow label={t("settings.whiteboard.style")}>
+          <Select
+            value={whiteboard.style}
+            onValueChange={(value) => set("style", value as WhiteboardStyle)}
+          >
+            <SelectTrigger size="sm" className={CONTROL_WIDTH}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="z-[var(--z-dialog)]">
+              {WHITEBOARD_STYLES.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {t(`settings.whiteboard.style.${option}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingsRow>
+
+        <SettingsRow label={t("settings.whiteboard.defaultColor")}>
+          <WhiteboardSwatches
+            value={whiteboard.defaultColor}
+            onChange={(color) => set("defaultColor", color)}
+          />
+        </SettingsRow>
+
+        <SettingsRow label={t("settings.whiteboard.defaultSize")}>
+          <Select
+            value={whiteboard.defaultSize}
+            onValueChange={(value) =>
+              set("defaultSize", value as WhiteboardSize)
+            }
+          >
+            <SelectTrigger size="sm" className={CONTROL_WIDTH}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="z-[var(--z-dialog)]">
+              {WHITEBOARD_SIZES.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {t(`settings.whiteboard.size.${option}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingsRow>
+      </SettingsGroup>
+    </>
+  );
+}
+
+/**
+ * tldraw 13 色的色板。
+ *
+ * 没有复用 `ui/color-picker` 的 `ColorSwatches`：那一个的色值白名单是节点
+ * 调色板的 7 色（`NODE_COLORS`），是画布控制 API 的契约，掺进 tldraw 的
+ * 颜色名会把两套色板搅在一起。这里只复用 `ColorDot` 与 `Button`。
+ */
+function WhiteboardSwatches({
+  value,
+  onChange,
+}: {
+  value: WhiteboardColor;
+  onChange: (color: WhiteboardColor) => void;
+}) {
+  const t = useT();
+  return (
+    <div
+      role="radiogroup"
+      aria-label={t("settings.whiteboard.defaultColor")}
+      className="flex flex-wrap items-center justify-end gap-0.5"
+    >
+      {WHITEBOARD_COLORS.map((color) => {
+        const selected = value === color;
+        return (
+          <Button
+            key={color}
+            variant="ghost"
+            size="icon-sm"
+            role="radio"
+            aria-checked={selected}
+            aria-label={t(`settings.whiteboard.color.${color}`)}
+            title={t(`settings.whiteboard.color.${color}`)}
+            onClick={() => onChange(color)}
+          >
+            <ColorDot
+              color={SWATCHES[color]}
+              size={14}
+              selected={selected}
+              className="border border-border"
+            />
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
