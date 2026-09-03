@@ -96,3 +96,68 @@ export function onFileDrop(callback: FileDropHandler): () => void {
     unlisten = null;
   };
 }
+
+/* ------------------------------- 系统通知 -------------------------------- */
+
+export interface NotifyOptions {
+  /** 点击通知时的回调（浏览器分支才有；Tauri 只把窗口拉到前面）。 */
+  onClick?: () => void;
+}
+
+/** 浏览器分支只问一次权限；被拒绝之后不再骚扰。 */
+let webPermission: NotificationPermission | null = null;
+
+async function ensureWebPermission(): Promise<boolean> {
+  if (typeof Notification === "undefined") return false;
+  if (webPermission === null) webPermission = Notification.permission;
+  if (webPermission === "granted") return true;
+  if (webPermission === "denied") return false;
+  try {
+    webPermission = await Notification.requestPermission();
+  } catch {
+    webPermission = "denied";
+  }
+  return webPermission === "granted";
+}
+
+/**
+ * 发一条系统通知（§5.4）。桌面端走 Tauri 的 notification 插件，
+ * 浏览器走 `Notification`（首次会问权限）。任何一步失败都静默返回：
+ * 通知是锦上添花，不能让状态流因为它抛异常。
+ */
+export async function notify(
+  title: string,
+  body: string,
+  options: NotifyOptions = {},
+): Promise<void> {
+  if (isTauri()) {
+    try {
+      const plugin = await import("@tauri-apps/plugin-notification");
+      const granted =
+        (await plugin.isPermissionGranted()) ||
+        (await plugin.requestPermission()) === "granted";
+      if (!granted) return;
+      plugin.sendNotification({ title, body });
+    } catch (cause) {
+      console.error("notify failed", cause);
+    }
+    return;
+  }
+
+  if (!(await ensureWebPermission())) return;
+  try {
+    const notification = new Notification(title, { body });
+    notification.onclick = () => {
+      window.focus();
+      options.onClick?.();
+      notification.close();
+    };
+  } catch (cause) {
+    console.error("notify failed", cause);
+  }
+}
+
+/** 测试用：忘掉已经问过的浏览器权限。 */
+export function resetNotifyPermission(): void {
+  webPermission = null;
+}

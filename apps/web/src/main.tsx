@@ -1,22 +1,24 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "motion/react";
-import { ReactFlowProvider } from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
 import "@xterm/xterm/css/xterm.css";
-import "./styles.css";
+// Tailwind v4 入口；它自己 @import 了 tokens.css，这里不再单独引入
+import "./styles/app.css";
+import "./styles/nodes.css";
 import { App } from "./app/App";
-import { PreferencesProvider } from "./preferences/Preferences";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      staleTime: 5_000,
-    },
-  },
-});
+/**
+ * tldraw 的导航面板把「缩略图收起」记在 localStorage 的 `minimap` 键里，
+ * 默认是收起。我们的画布一直有右下角缩略图（原 `StatusMiniMap`），
+ * 所以首次运行时把默认翻成展开；用户之后收起的选择照旧生效。
+ */
+try {
+  if (localStorage.getItem("minimap") === null) {
+    localStorage.setItem("minimap", "false");
+  }
+} catch {
+  // 隐私模式下没有 localStorage，缩略图退回 tldraw 的默认收起状态
+}
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -24,13 +26,7 @@ createRoot(document.getElementById("root")!).render(
       reducedMotion="user"
       transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}
     >
-      <QueryClientProvider client={queryClient}>
-        <PreferencesProvider>
-          <ReactFlowProvider>
-            <App />
-          </ReactFlowProvider>
-        </PreferencesProvider>
-      </QueryClientProvider>
+      <App />
     </MotionConfig>
   </StrictMode>,
 );
