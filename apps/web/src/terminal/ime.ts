@@ -16,16 +16,15 @@ const compositionEvents = [
 export function isolateTerminalInput(
   textarea: HTMLTextAreaElement,
   locale: string,
+  /** 隐藏 textarea 的无障碍名。调用方从 `useT()` 取，这里不认识 i18n。 */
+  ariaLabel = "Terminal input",
 ) {
   textarea.lang = locale;
   textarea.inputMode = "text";
   textarea.autocapitalize = "off";
   textarea.autocomplete = "off";
   textarea.spellcheck = false;
-  textarea.setAttribute(
-    "aria-label",
-    locale.startsWith("zh") ? "终端输入" : "Terminal input",
-  );
+  textarea.setAttribute("aria-label", ariaLabel);
   const stopPropagation = (event: Event) => event.stopPropagation();
   for (const event of compositionEvents)
     textarea.addEventListener(event, stopPropagation);
