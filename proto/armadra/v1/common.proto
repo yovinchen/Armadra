@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package armadra.v1;
+
+option go_package = "armadra.local/host/gen/armadra/v1";
+
+// The Hello endpoint is the only implemented capability in the M0 contract.
+message ProtocolVersion {
+  uint32 major = 1;
+  uint32 minor = 2;
+}
+
+message HelloRequest {
+  string client_id = 1;
+  ProtocolVersion protocol = 2;
+}
+
+message HelloResponse {
+  ProtocolVersion protocol = 1;
+  string host_instance_id = 2;
+  repeated string capabilities = 3;
+  uint32 max_frame_bytes = 4;
+}
+
+message ErrorResponse {
+  string code = 1;
+  string message = 2;
+}
+
+// Reserved execution contracts; their presence does not enable their operations.
+message Scope {
+  string host_id = 1;
+  string workspace_id = 2;
+  string execution_host_id = 3;
+}
+
+message CommandMeta {
+  string request_id = 1;
+  Scope scope = 2;
+  string idempotency_key = 3;
+  optional uint64 expected_revision = 4;
+  int64 deadline_unix_ms = 5;
+}
+
+message SessionAddress {
+  string session_id = 1;
+  uint64 generation = 2;
+}
+
+message TerminalInput {
+  SessionAddress session = 1;
+  string input_id = 2;
+  bytes data = 3;
+  string writer_lease_id = 4;
+}
+
+message StreamAck {
+  uint64 received_through = 1;
+  uint32 available_credit_bytes = 2;
+}
+
+message StreamFrame {
+  string stream_id = 1;
+  uint64 sequence = 2;
+  string epoch = 3;
+  oneof payload {
+    TerminalInput terminal_input = 10;
+    bytes terminal_output = 11;
+    StreamAck ack = 12;
+  }
+}

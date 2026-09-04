@@ -7,6 +7,9 @@
     "node": ">=22"
   },
   "scripts": {
+    "protocol:generate": "node scripts/protocol.mjs generate",
+    "protocol:check": "node scripts/protocol.mjs check",
+    "protocol:test": "node scripts/protocol.mjs test",
     "build": "pnpm -r --if-present build",
     "dev": "pnpm --filter @armadra/web dev",
     "format": "prettier --write .",
