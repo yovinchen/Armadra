@@ -133,7 +133,7 @@ function TitlebarRow({
 
 /**
  * 标题栏里的折叠钮：紧贴红绿灯右侧，展开与折叠时都在同一个位置。
- * `top: 9` + 26px 高 = 中心 y 22，与红绿灯同一条水平中线。
+ * 与搜索、通知统一为 28px，放在 44px 标题栏的中心线上。
  * 右上角那颗点 = 当前工作空间里有 Agent 在等你（红）或跑完没看（蓝）。
  */
 function SidebarToggle({ open }: { open: boolean }) {
@@ -149,11 +149,12 @@ function SidebarToggle({ open }: { open: boolean }) {
     <div
       {...noDragProps()}
       style={{ left: trafficLightInset() + 8 }}
-      className="fixed top-[9px] z-[calc(var(--z-tabbar)+1)]"
+      className="fixed top-0 z-[calc(var(--z-tabbar)+1)] flex h-[var(--tabbar-h)] items-center"
     >
       <Tooltip delayDuration={500}>
         <TooltipTrigger asChild>
           <IconButton
+            size="cluster"
             label={label}
             active={open}
             className="relative"

@@ -2495,8 +2495,8 @@ mod tests {
         let (status, agents) = call(&router, "GET", "/api/agents", None).await;
         assert_eq!(status, StatusCode::OK);
         let agents = agents.as_array().unwrap();
-        // The four built-ins plus the one entry that survived validation.
-        assert_eq!(agents.len(), 5);
+        // Built-ins plus the one entry that survived validation.
+        assert_eq!(agents.len(), crate::agent::AGENT_IDS.len() + 1);
         let custom = agents.last().unwrap();
         assert_eq!(custom["id"], "custom:echo");
         assert_eq!(custom["label"], "Echo");
@@ -2576,7 +2576,7 @@ mod tests {
         let (status, agents) = call(&router, "GET", "/api/agents", None).await;
         assert_eq!(status, StatusCode::OK);
         let agents = agents.as_array().unwrap();
-        assert_eq!(agents.len(), 4);
+        assert_eq!(agents.len(), crate::agent::AGENT_IDS.len());
         for agent in agents {
             assert!(agent["resolvedPath"].is_string() || agent["resolvedPath"].is_null());
             assert!(agent["installed"].is_boolean());
@@ -2584,7 +2584,7 @@ mod tests {
             assert!(!agent["launchCmd"].as_str().unwrap().is_empty());
         }
         assert!(agents.iter().any(|agent| agent["id"] == "claude"));
-        assert!(agents.iter().all(|agent| agent["id"] != "pi"));
+        assert!(agents.iter().any(|agent| agent["id"] == "pi"));
         assert!(agents.iter().all(|agent| agent["baseAgent"].is_null()));
 
         let (status, sessions) = call(
@@ -2885,7 +2885,7 @@ mod tests {
                 "workspaceId": workspace.id,
                 "cwd": ".",
                 "nodeId": uuid::Uuid::now_v7().to_string(),
-                "agent": { "id": "pi" }
+                "agent": { "id": "unknown-cli" }
             })),
         )
         .await;

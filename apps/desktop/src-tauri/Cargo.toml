@@ -15,7 +15,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 # `serde_json::from_str`，所以即使代码里不直接用也必须在依赖里。
 serde_json = "1.0.145"
 # `tray-icon` 提供托盘（§17 Tauri）；`image-png` 让托盘直接吃 bundle 里的 PNG 图标。
-tauri = { version = "2.10.2", features = ["tray-icon", "image-png"] }
+tauri = { version = "2.10.2", features = ["tray-icon", "image-png", "macos-private-api"] }
 tauri-plugin-dialog = "2.7.3"
 tauri-plugin-notification = "2.4.0"
 tauri-plugin-opener = "2.5.5"

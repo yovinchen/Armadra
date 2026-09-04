@@ -59,6 +59,14 @@ struct RateLimit {
 #[derive(Deserialize)]
 struct UsageResponse {
     rate_limit: Option<RateLimit>,
+    additional_rate_limits: Option<Vec<AdditionalRateLimit>>,
+}
+
+#[derive(Deserialize)]
+struct AdditionalRateLimit {
+    limit_name: Option<String>,
+    metered_feature: Option<String>,
+    rate_limit: Option<RateLimit>,
 }
 
 /// Bearer token + account id, or `None` when Codex is not logged in here.
@@ -92,20 +100,21 @@ fn account_id_from_jwt(token: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// Codex only ever keeps its token in `~/.codex/auth.json`, so the answer is
-/// binary: the file parses into a usable pair, or there is nothing here.
-pub async fn credential_source() -> CredentialSource {
-    if credentials().is_some() {
-        CredentialSource::File
-    } else {
-        CredentialSource::None
-    }
+pub async fn fetch(client: &reqwest::Client) -> (ProviderResult, CredentialSource) {
+    let Some((token, account_id)) = credentials() else {
+        return (Ok(None), CredentialSource::None);
+    };
+    (
+        fetch_token(client, token, account_id).await,
+        CredentialSource::File,
+    )
 }
 
-pub async fn fetch(client: &reqwest::Client) -> ProviderResult {
-    let Some((token, account_id)) = credentials() else {
-        return Ok(None);
-    };
+async fn fetch_token(
+    client: &reqwest::Client,
+    token: String,
+    account_id: String,
+) -> ProviderResult {
     let response = client
         .get(USAGE_URL)
         .bearer_auth(token)
@@ -127,9 +136,33 @@ pub async fn fetch(client: &reqwest::Client) -> ProviderResult {
 }
 
 fn windows(usage: UsageResponse) -> Vec<UsageWindow> {
-    let Some(rate_limit) = usage.rate_limit else {
-        return Vec::new();
-    };
+    let mut result = Vec::new();
+    if let Some(rate_limit) = usage.rate_limit {
+        result.extend(rate_windows(rate_limit, None, None));
+    }
+    for (index, limit) in usage
+        .additional_rate_limits
+        .unwrap_or_default()
+        .into_iter()
+        .enumerate()
+    {
+        let Some(rate_limit) = limit.rate_limit else {
+            continue;
+        };
+        let id = limit
+            .metered_feature
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| format!("additional-{index}"));
+        let name = limit
+            .limit_name
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| id.clone());
+        result.extend(rate_windows(rate_limit, Some(&id), Some(&name)));
+    }
+    result
+}
+
+fn rate_windows(rate_limit: RateLimit, id: Option<&str>, group: Option<&str>) -> Vec<UsageWindow> {
     [
         ("primary", rate_limit.primary_window),
         ("secondary", rate_limit.secondary_window),
@@ -138,7 +171,8 @@ fn windows(usage: UsageResponse) -> Vec<UsageWindow> {
     .filter_map(|(key, window)| {
         let window = window?;
         Some(UsageWindow {
-            key,
+            key: id.map_or_else(|| key.to_owned(), |id| format!("{id}:{key}")),
+            group: group.map(str::to_owned),
             label: window
                 .limit_window_seconds
                 .and_then(duration_label)
@@ -159,7 +193,9 @@ fn resets_at(window: &RateLimitWindow) -> Option<String> {
         return Some(time.to_rfc3339());
     }
     let after = window.reset_after_seconds?;
-    Some((chrono::Utc::now() + chrono::Duration::seconds(after)).to_rfc3339())
+    chrono::Duration::try_seconds(after.max(0))
+        .and_then(|delta| chrono::Utc::now().checked_add_signed(delta))
+        .map(|at| at.to_rfc3339())
 }
 
 #[cfg(test)]
@@ -183,6 +219,29 @@ mod tests {
         "additional_rate_limits": [],
         "credits": {"balance": "0"}
     }"#;
+
+    #[test]
+    fn maps_independent_model_buckets_even_without_a_base_limit() {
+        let usage: UsageResponse = serde_json::from_str(r#"{
+            "rate_limit": null,
+            "additional_rate_limits": [{
+                "limit_name": "Model quota", "metered_feature": "model_bucket",
+                "rate_limit": {
+                    "primary_window": {"used_percent": 33, "limit_window_seconds": 18000, "reset_at": 1788748204},
+                    "secondary_window": {"used_percent": 8, "limit_window_seconds": 604800}
+                }
+            }]
+        }"#).unwrap();
+        let windows = windows(usage);
+        assert_eq!(windows.len(), 2);
+        assert_eq!(windows[0].key, "model_bucket:primary");
+        assert_eq!(windows[0].group.as_deref(), Some("Model quota"));
+        assert_eq!(windows[0].label, "5h");
+        assert_eq!(windows[0].used_percent, 33.0);
+        assert_eq!(windows[1].key, "model_bucket:secondary");
+        assert_eq!(windows[1].label, "7d");
+        assert!(windows[1].resets_at.is_none());
+    }
 
     #[test]
     fn maps_the_primary_window_and_labels_it_by_duration() {

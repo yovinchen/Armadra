@@ -66,13 +66,16 @@ const CONTENT_ARROW_COLOR = "blue";
  * arrow 来消费这个标记。
  */
 let handleStartPending = false;
+let handleStartSide: "left" | "right" | undefined;
 
-export function beginHandleLink(): void {
+export function beginHandleLink(side?: "left" | "right"): void {
   handleStartPending = true;
+  handleStartSide = side;
 }
 
 export function endHandleLink(): void {
   handleStartPending = false;
+  handleStartSide = undefined;
 }
 
 /** 仅测试用。 */
@@ -82,7 +85,7 @@ export function isHandleLinkPending(): boolean {
 
 /* -------------------------------- 形状判定 -------------------------------- */
 
-function isNodeShape(shape: TLShape | undefined): boolean {
+export function isNodeShape(shape: TLShape | undefined): boolean {
   if (!shape) return false;
   if (shape.type === "armadra") return true;
   return shape.type === "frame" && isDocumentShapeId(shape.id);
@@ -90,6 +93,53 @@ function isNodeShape(shape: TLShape | undefined): boolean {
 
 function bindingsOf(editor: Editor, arrowId: TLShapeId): TLArrowBinding[] {
   return editor.getBindingsFromShape<TLArrowBinding>(arrowId, "arrow");
+}
+
+/**
+ * Native arrows initially use a centre anchor, then become precise after a
+ * dwell timer. Node ports are always precise: commit their edge midpoint
+ * before the binding enters the store, so no intermediate centre is painted.
+ * Ordinary whiteboard shapes retain tldraw's native attachment behaviour.
+ */
+export function stabilizeNodeBinding(
+  editor: Editor,
+  binding: TLArrowBinding,
+  startSide?: "left" | "right",
+): TLArrowBinding {
+  if (!isNodeShape(editor.getShape(binding.toId))) return binding;
+  const anchor = binding.props.normalizedAnchor;
+  let x = (anchor?.x ?? 0.5) < 0.5 ? 0 : 1;
+  if (binding.props.terminal === "start" && startSide)
+    x = startSide === "left" ? 0 : 1;
+  const other = bindingsOf(editor, binding.fromId).find(
+    (candidate) => candidate.props.terminal !== binding.props.terminal,
+  );
+  if (
+    other &&
+    other.toId !== binding.toId &&
+    isNodeShape(editor.getShape(other.toId))
+  ) {
+    const here = editor.getShapePageBounds(binding.toId);
+    const there = editor.getShapePageBounds(other.toId);
+    if (here && there) x = there.center.x >= here.center.x ? 1 : 0;
+  }
+  if (
+    binding.props.isPrecise &&
+    binding.props.isExact &&
+    anchor?.x === x &&
+    anchor.y === 0.5
+  ) {
+    return binding;
+  }
+  return {
+    ...binding,
+    props: {
+      ...binding.props,
+      normalizedAnchor: { x, y: 0.5 },
+      isPrecise: true,
+      isExact: true,
+    },
+  };
 }
 
 /** 画布上现有的节点（`isValidLink` 要确认两端都真实存在）。 */
@@ -146,6 +196,7 @@ export function registerLinkArrow(editor: Editor): () => void {
   const pending = new Set<TLShapeId>();
   /** 从节点把手起笔的 arrow（末端没绑到节点就删掉）。 */
   const fromHandle = new Set<TLShapeId>();
+  const handleSides = new Map<TLShapeId, "left" | "right">();
   let retry: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
 
@@ -173,6 +224,7 @@ export function registerLinkArrow(editor: Editor): () => void {
 
   const evaluate = (arrowId: TLShapeId): void => {
     const wasHandle = fromHandle.delete(arrowId);
+    handleSides.delete(arrowId);
     const arrow = editor.getShape(arrowId) as TLArrowShape | undefined;
     if (!arrow || arrow.type !== "arrow") return;
 
@@ -280,11 +332,30 @@ export function registerLinkArrow(editor: Editor): () => void {
   };
 
   const offs = [
+    editor.sideEffects.registerBeforeCreateHandler("binding", (binding) =>
+      binding.type === "arrow"
+        ? stabilizeNodeBinding(editor, binding, handleSides.get(binding.fromId))
+        : binding,
+    ),
+    editor.sideEffects.registerBeforeChangeHandler(
+      "binding",
+      (_prev, binding) =>
+        binding.type === "arrow"
+          ? stabilizeNodeBinding(
+              editor,
+              binding,
+              handleSides.get(binding.fromId),
+            )
+          : binding,
+    ),
     editor.sideEffects.registerAfterCreateHandler("shape", (shape, source) => {
       if (source !== "user" || shape.type !== "arrow") return;
       if (handleStartPending) {
         handleStartPending = false;
         fromHandle.add(shape.id as TLShapeId);
+        if (handleStartSide)
+          handleSides.set(shape.id as TLShapeId, handleStartSide);
+        handleStartSide = undefined;
       }
       schedule(shape.id as TLShapeId);
     }),
@@ -336,6 +407,8 @@ export function registerLinkArrow(editor: Editor): () => void {
     for (const off of offs) off();
     pending.clear();
     fromHandle.clear();
+    handleSides.clear();
     handleStartPending = false;
+    handleStartSide = undefined;
   };
 }

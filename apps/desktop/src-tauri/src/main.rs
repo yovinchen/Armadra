@@ -10,7 +10,13 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
-const RUNTIME_HEALTH_URL: &str = "http://127.0.0.1:43120/health";
+fn runtime_health_url() -> String {
+    let port = std::env::var("ARMADRA_RUNTIME_PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(43120);
+    format!("http://127.0.0.1:{port}/health")
+}
 
 #[derive(Default)]
 struct RuntimeProcess(Mutex<Option<Child>>);
@@ -89,11 +95,16 @@ struct HealthResponse {
 }
 
 async fn wait_for_runtime(app: &tauri::AppHandle) -> Result<(), String> {
+    let health_url = runtime_health_url();
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_millis(500))
+        .build()
+        .map_err(|error| error.to_string())?;
     for _ in 0..40 {
         if app.state::<RuntimeProcess>().exited_early() {
             return Err("Runtime process exited before becoming ready".into());
         }
-        if let Ok(response) = reqwest::get(RUNTIME_HEALTH_URL).await
+        if let Ok(response) = client.get(&health_url).send().await
             && response.status().is_success()
             && let Ok(health) = response.json::<HealthResponse>().await
             && health.status == "ok"

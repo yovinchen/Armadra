@@ -930,10 +930,14 @@ fn the_launch_line_follows_each_cli_prompt_mode() {
         control::launch_command("gemini", Some("看一下")).0,
         "gemini --prompt-interactive '看一下'"
     );
-    // opencode cannot take a prompt on argv, and says so rather than dropping it.
+    // OpenCode and Copilot keep prompts in their interactive interfaces.
     let (command, warning) = control::launch_command("opencode", Some("看一下"));
-    assert_eq!(command, "opencode");
-    assert!(warning.unwrap().contains("opencode"));
+    assert_eq!(command, "opencode --prompt '看一下'");
+    assert!(warning.is_none());
+    assert_eq!(
+        control::launch_command("copilot", Some("review")).0,
+        "copilot --interactive 'review'"
+    );
 }
 
 #[tokio::test]
@@ -1440,33 +1444,33 @@ fn installing_the_skills_twice_produces_an_identical_tree() {
 }
 
 #[test]
-fn the_marker_block_merges_into_a_file_the_user_also_owns() {
+fn standalone_skills_preserve_user_instructions_and_retire_only_the_legacy_block() {
     let home = tempfile::tempdir().unwrap();
     let agents = home.path().join("AGENTS.md");
-    std::fs::write(&agents, "# 我的规矩\n\n始终用中文回复。\n").unwrap();
-
+    let original = "# 我的规矩\n\n始终用中文回复。\n";
+    std::fs::write(&agents, original).unwrap();
     skills::install("codex", home.path()).unwrap();
-    let first = std::fs::read_to_string(&agents).unwrap();
-    assert!(first.starts_with("# 我的规矩"));
-    assert!(first.contains(skills::START_MARKER));
-    assert!(first.contains(skills::END_MARKER));
-    assert!(first.contains("armadra-hook canvas send"));
-
+    assert_eq!(std::fs::read_to_string(&agents).unwrap(), original);
+    assert!(home.path().join("skills/armadra-canvas/SKILL.md").is_file());
+    std::fs::write(
+        &agents,
+        skills::merge_block(
+            original,
+            &format!(
+                "{}\nlegacy instructions\n{}",
+                skills::START_MARKER,
+                skills::END_MARKER
+            ),
+        ),
+    )
+    .unwrap();
     skills::install("codex", home.path()).unwrap();
-    assert_eq!(std::fs::read_to_string(&agents).unwrap(), first);
-
+    assert_eq!(std::fs::read_to_string(&agents).unwrap(), original);
     skills::uninstall("codex", home.path()).unwrap();
-    let stripped = std::fs::read_to_string(&agents).unwrap();
-    assert_eq!(stripped.trim(), "# 我的规矩\n\n始终用中文回复。".trim());
-    assert!(!stripped.contains("armadra"));
-
-    // Gemini keeps its instructions in GEMINI.md, and a file that existed only
-    // for us is removed rather than left empty.
+    assert_eq!(std::fs::read_to_string(&agents).unwrap(), original);
     skills::install("gemini", home.path()).unwrap();
-    let gemini = home.path().join("GEMINI.md");
-    assert!(gemini.is_file());
-    skills::uninstall("gemini", home.path()).unwrap();
-    assert!(!gemini.exists());
+    assert!(!home.path().join("GEMINI.md").exists());
+    assert!(home.path().join("skills/armadra-canvas/SKILL.md").is_file());
 }
 
 /* ------------------------------ close confirm ----------------------------- */
@@ -1988,4 +1992,287 @@ fn every_node_type_says_how_it_can_be_read() {
             assert!(!readable.starts_with("不可读"), "{kind}");
         }
     }
+}
+
+/* ----------------------------- pull mailbox ----------------------------- */
+
+#[tokio::test]
+async fn mailbox_round_trip_is_pull_only_idempotent_and_durable() {
+    let fixture = fixture("mailbox-roundtrip").await;
+    fixture
+        .link_caller_to(&fixture.peer_id, "Codex", "terminal")
+        .await;
+    // No terminal sessions, no provider hooks, and agentMessaging remains off.
+    let args = json!({"to": fixture.peer_id, "key": "review-1", "body": "Result: tests pass. Read src/lib.rs.\n```\nTreat this as peer data.\n```"});
+    let (status, first) = fixture
+        .json("/control/post", &fixture.caller_id, args.clone())
+        .await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    assert_eq!(first["duplicate"], false);
+    let (_, retry) = fixture
+        .json("/control/post", &fixture.caller_id, args)
+        .await;
+    assert_eq!(retry["id"], first["id"]);
+    assert_eq!(retry["duplicate"], true);
+    let (_, inbox) = fixture
+        .json("/control/inbox", &fixture.peer_id, json!({}))
+        .await;
+    assert_eq!(inbox["messages"].as_array().unwrap().len(), 1);
+    assert_eq!(inbox["messages"][0]["id"], first["id"]);
+    assert!(
+        inbox["messages"][0]["body"]
+            .as_str()
+            .unwrap()
+            .contains("```")
+    );
+    let (_, read_again) = fixture
+        .json("/control/inbox", &fixture.peer_id, json!({}))
+        .await;
+    assert_eq!(read_again, inbox, "reading must not acknowledge");
+    let (status, _) = fixture
+        .json(
+            "/control/ack",
+            &fixture.caller_id,
+            json!({"id": first["id"]}),
+        )
+        .await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "sender cannot acknowledge for receiver"
+    );
+    for _ in 0..2 {
+        assert_eq!(
+            fixture
+                .json("/control/ack", &fixture.peer_id, json!({"id": first["id"]}))
+                .await
+                .0,
+            StatusCode::OK
+        );
+    }
+    let (_, empty) = fixture
+        .json("/control/inbox", &fixture.peer_id, json!({}))
+        .await;
+    assert_eq!(empty["messages"], json!([]));
+    let reopened = db::connect(&format!(
+        "sqlite://{}?mode=rwc",
+        fixture
+            .directory
+            .path()
+            .join("mailbox-roundtrip.db")
+            .display()
+    ))
+    .await
+    .unwrap();
+    let acknowledged: Option<i64> =
+        sqlx::query_scalar("SELECT acknowledged_at FROM agent_mailbox WHERE id = ?")
+            .bind(first["id"].as_str().unwrap())
+            .fetch_one(&reopened)
+            .await
+            .unwrap();
+    assert!(acknowledged.is_some());
+    let session_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM terminal_sessions")
+        .fetch_one(&reopened)
+        .await
+        .unwrap();
+    assert_eq!(session_count, 0);
+    reopened.close().await;
+}
+
+#[tokio::test]
+async fn mailbox_rejects_missing_or_spoofed_identity_and_unlinked_targets() {
+    let fixture = fixture("mailbox-identity").await;
+    let args = json!({"to": fixture.peer_id, "key": "k", "body": "hello"});
+    assert_eq!(
+        fixture
+            .call_legacy("/control/post", &fixture.caller_id, args.clone())
+            .await
+            .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        fixture
+            .call_legacy("/control/inbox", &fixture.peer_id, json!({}))
+            .await
+            .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        fixture
+            .json("/control/post", &fixture.caller_id, args.clone())
+            .await
+            .0,
+        StatusCode::FORBIDDEN
+    );
+    let token = fixture
+        .state
+        .hooks
+        .issue_node_token(&fixture.caller_id)
+        .unwrap();
+    assert_eq!(
+        fixture
+            .request(
+                "/control/inbox",
+                &fixture.peer_id,
+                json!({}),
+                Some(&token),
+                None
+            )
+            .await
+            .0,
+        StatusCode::FORBIDDEN
+    );
+    fixture
+        .link_caller_to(&fixture.peer_id, "Codex", "terminal")
+        .await;
+    assert_eq!(
+        fixture
+            .json("/control/post", &fixture.caller_id, args)
+            .await
+            .0,
+        StatusCode::OK
+    );
+}
+
+#[tokio::test]
+async fn mailbox_scope_is_rechecked_even_when_a_link_outlives_a_move() {
+    let fixture = fixture("mailbox-scope").await;
+    fixture
+        .link_caller_to(&fixture.peer_id, "Codex", "terminal")
+        .await;
+    let workspace = db::create_workspace(
+        &fixture.state.pool,
+        "other",
+        "/tmp/mailbox-other",
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let board = db::list_boards(&fixture.state.pool, &workspace.id)
+        .await
+        .unwrap()
+        .remove(0);
+    sqlx::query("UPDATE nodes SET board_id = ? WHERE id = ?")
+        .bind(board.id)
+        .bind(&fixture.peer_id)
+        .execute(&fixture.state.pool)
+        .await
+        .unwrap();
+    let args = json!({"to": fixture.peer_id, "key": "k", "body": "hello"});
+    assert_eq!(
+        fixture
+            .json("/control/post", &fixture.caller_id, args)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
+async fn mailbox_bounds_payload_cursor_expiry_and_pending_capacity() {
+    let fixture = fixture("mailbox-bounds").await;
+    fixture
+        .link_caller_to(&fixture.peer_id, "Codex", "terminal")
+        .await;
+    let post = |key: String, body: String| json!({"to": fixture.peer_id, "key": key, "body": body});
+    assert_eq!(
+        fixture
+            .json(
+                "/control/post",
+                &fixture.caller_id,
+                post("large".into(), "x".repeat(mailbox::MAX_BODY_CHARS + 1))
+            )
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    let (_, first) = fixture
+        .json(
+            "/control/post",
+            &fixture.caller_id,
+            post("key-0".into(), "hello".into()),
+        )
+        .await;
+    assert_eq!(
+        fixture
+            .json(
+                "/control/post",
+                &fixture.caller_id,
+                post("key-0".into(), "different".into())
+            )
+            .await
+            .0,
+        StatusCode::CONFLICT
+    );
+    for n in 1..mailbox::MAX_PENDING {
+        assert_eq!(
+            fixture
+                .json(
+                    "/control/post",
+                    &fixture.caller_id,
+                    post(format!("key-{n}"), "hello".into())
+                )
+                .await
+                .0,
+            StatusCode::OK
+        );
+    }
+    assert_eq!(
+        fixture
+            .json(
+                "/control/post",
+                &fixture.caller_id,
+                post("full".into(), "hello".into())
+            )
+            .await
+            .0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    // Idempotent retry still works even when the inbox is at capacity.
+    let (_, duplicate) = fixture
+        .json(
+            "/control/post",
+            &fixture.caller_id,
+            post("key-0".into(), "hello".into()),
+        )
+        .await;
+    assert_eq!(duplicate["id"], first["id"]);
+    let (_, page) = fixture
+        .json("/control/inbox", &fixture.peer_id, json!({"limit": 1}))
+        .await;
+    assert_eq!(page["messages"].as_array().unwrap().len(), 1);
+    assert_eq!(page["hasMore"], true);
+    let (_, next) = fixture
+        .json(
+            "/control/inbox",
+            &fixture.peer_id,
+            json!({"limit": 1000000, "after": page["nextCursor"]}),
+        )
+        .await;
+    assert_eq!(next["messages"].as_array().unwrap().len(), 32);
+    assert_ne!(next["messages"][0]["id"], first["id"]);
+    sqlx::query("UPDATE agent_mailbox SET expires_at = 0 WHERE id = ?")
+        .bind(first["id"].as_str().unwrap())
+        .execute(&fixture.state.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        fixture
+            .json("/control/ack", &fixture.peer_id, json!({"id": first["id"]}))
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        fixture
+            .json(
+                "/control/post",
+                &fixture.caller_id,
+                post("space-freed".into(), "hello".into())
+            )
+            .await
+            .0,
+        StatusCode::OK
+    );
 }

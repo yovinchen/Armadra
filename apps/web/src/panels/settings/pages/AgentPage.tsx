@@ -2,7 +2,7 @@ import * as React from "react";
 import { Plus } from "lucide-react";
 import {
   AGENT_IDS,
-  PERMISSION_MODES,
+  supportedPermissionModes,
   customAgentSchema,
   type BuiltinAgentId,
   type CustomAgent,
@@ -85,6 +85,20 @@ export function AgentPage() {
     [settings.data],
   );
 
+  const selectedAgentId = defaultAgentId ?? list[0]?.id ?? "claude";
+  const selectedBase =
+    list.find((agent) => agent.id === selectedAgentId)?.baseAgent ??
+    selectedAgentId;
+  const permissionModes = supportedPermissionModes(selectedBase);
+  const effectivePermission = permissionModes.includes(permissionMode)
+    ? permissionMode
+    : "default";
+
+  React.useEffect(() => {
+    if (effectivePermission !== permissionMode)
+      setPermissionMode(effectivePermission);
+  }, [effectivePermission, permissionMode, setPermissionMode]);
+
   if (subpage.current?.startsWith("agent:")) {
     return (
       <CustomAgentForm
@@ -154,8 +168,14 @@ export function AgentPage() {
       <SettingsGroup>
         <SettingsRow label={t("settings.defaultAgent")}>
           <Select
-            value={defaultAgentId ?? list[0]?.id ?? ""}
-            onValueChange={setDefaultAgentId}
+            value={selectedAgentId}
+            onValueChange={(id) => {
+              const base =
+                list.find((agent) => agent.id === id)?.baseAgent ?? id;
+              if (!supportedPermissionModes(base).includes(permissionMode))
+                setPermissionMode("default");
+              setDefaultAgentId(id);
+            }}
           >
             <SelectTrigger size="sm" className={CONTROL_WIDTH}>
               <SelectValue />
@@ -172,7 +192,7 @@ export function AgentPage() {
 
         <SettingsRow label={t("settings.defaultPermission")}>
           <Select
-            value={permissionMode}
+            value={effectivePermission}
             onValueChange={(value) =>
               setPermissionMode(value as PermissionMode)
             }
@@ -181,7 +201,7 @@ export function AgentPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="z-[var(--z-dialog)]">
-              {PERMISSION_MODES.map((mode) => (
+              {permissionModes.map((mode) => (
                 <SelectItem key={mode} value={mode}>
                   {t(`permission.${mode}`)}
                 </SelectItem>

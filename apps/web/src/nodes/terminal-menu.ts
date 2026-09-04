@@ -1,15 +1,12 @@
 import { KeyRound, Recycle, RotateCcw, Tag } from "lucide-react";
-import {
-  PERMISSION_MODES,
-  type PermissionMode,
-} from "@armadra/shared";
+import { supportedPermissionModes, type PermissionMode } from "@armadra/shared";
 
 import {
   registerNodeMenuItems,
   type NodeMenuItem,
 } from "@/canvas/menus/node-menu";
 import { useCanvasStore } from "@/store/canvas-store";
-import { permissionModeLabel } from "@/agent/launch";
+import { customAgentFor, permissionModeLabel } from "@/agent/launch";
 import { t } from "@/app/preferences-store";
 import { openNodeAnnotation } from "@/meta/annotations";
 import { terminalHandle } from "./terminal-registry";
@@ -57,7 +54,9 @@ export function registerTerminalNodeMenu(): () => void {
       },
     ];
 
-    for (const mode of PERMISSION_MODES) {
+    for (const mode of supportedPermissionModes(
+      customAgentFor(agent.id)?.baseAgent ?? agent.id,
+    )) {
       items.push({
         id: `agent.permission.${mode}`,
         label: `${t("agent.permissionMode")} · ${permissionModeLabel(mode)}`,

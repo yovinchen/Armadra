@@ -9,7 +9,9 @@ use serde::Serialize;
 /// needs lives here — ids, labels, launch programs and capabilities. The
 /// canonical registry (flags, prompt assembly, hook events) stays in shared;
 /// the launch line is assembled in the web app and typed into the PTY.
-pub const AGENT_IDS: &[&str] = &["claude", "codex", "gemini", "opencode"];
+pub const AGENT_IDS: &[&str] = &[
+    "claude", "codex", "gemini", "opencode", "pi", "omp", "copilot",
+];
 
 #[derive(Debug, Clone, Copy)]
 pub struct AgentDefinition {
@@ -48,13 +50,35 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
     },
     AgentDefinition {
         id: "opencode",
-        label: "opencode",
+        label: "OpenCode",
         color: "#a78bfa",
         launch_cmd: "opencode",
-        prompt_mode: "stdin-after-start",
-        // opencode reopens sessions from its own TUI, so there is no launch
-        // line we can build for it — see packages/shared/src/agents.ts.
-        capabilities: &["hooks", "contextLink"],
+        prompt_mode: "flag-prompt",
+        capabilities: &["hooks", "resume", "contextLink"],
+    },
+    AgentDefinition {
+        id: "pi",
+        label: "Pi",
+        color: "#e8b86d",
+        launch_cmd: "pi",
+        prompt_mode: "argv",
+        capabilities: &["resume", "contextLink"],
+    },
+    AgentDefinition {
+        id: "omp",
+        label: "Oh My Pi",
+        color: "#d4a373",
+        launch_cmd: "omp",
+        prompt_mode: "argv",
+        capabilities: &["resume", "contextLink"],
+    },
+    AgentDefinition {
+        id: "copilot",
+        label: "GitHub Copilot",
+        color: "#a371f7",
+        launch_cmd: "copilot",
+        prompt_mode: "flag-prompt",
+        capabilities: &["resume", "contextLink"],
     },
 ];
 
@@ -152,14 +176,14 @@ pub fn resolve_command(command: &str) -> Option<PathBuf> {
     }
     let path = Path::new(command);
     if path.components().count() > 1 || path.is_absolute() {
-        if path.is_file() {
+        if is_executable(path) {
             return Some(path.to_path_buf());
         }
         return executable_with_platform_suffix(path);
     }
     env::split_paths(&agent_path()).find_map(|directory| {
         let candidate = directory.join(command);
-        if candidate.is_file() {
+        if is_executable(&candidate) {
             return Some(candidate);
         }
         executable_with_platform_suffix(&candidate)
@@ -198,6 +222,24 @@ fn push_unique(directories: &mut Vec<PathBuf>, candidate: PathBuf) {
     }
 }
 
+fn is_executable(path: &Path) -> bool {
+    let Ok(metadata) = path.metadata() else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
+}
+
 fn executable_with_platform_suffix(candidate: &Path) -> Option<PathBuf> {
     #[cfg(windows)]
     {
@@ -224,13 +266,13 @@ mod tests {
             assert!(AGENT_IDS.contains(&agent.id));
             assert!(!agent.launch_cmd.is_empty());
             assert!(agent.color.starts_with('#') && agent.color.len() == 7);
-            assert!(agent.capabilities.contains(&"hooks"));
+            assert!(agent.capabilities.contains(&"contextLink"));
         }
         assert_eq!(definition("claude").unwrap().launch_cmd, "claude");
         assert_eq!(definition("gemini").unwrap().prompt_mode, "flag-prompt");
-        // ACP-only adapters are gone in v3.
-        assert!(definition("pi").is_none());
-        assert!(definition("omp").is_none());
+        assert_eq!(definition("pi").unwrap().launch_cmd, "pi");
+        assert_eq!(definition("omp").unwrap().launch_cmd, "omp");
+        assert_eq!(definition("copilot").unwrap().launch_cmd, "copilot");
     }
 
     #[test]
@@ -293,6 +335,19 @@ mod tests {
             ..custom
         });
         assert_eq!(orphan.base_agent, Some("claude"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn detection_rejects_non_executable_files() {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("fake-cli");
+        std::fs::write(&path, "#!/bin/sh\nexit 0\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(resolve_command(path.to_str().unwrap()).is_none());
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(resolve_command(path.to_str().unwrap()), Some(path));
     }
 
     #[test]

@@ -10,6 +10,7 @@
     "frontendDist": "../../web/dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "title": "Armadra",
@@ -22,7 +23,7 @@
         "transparent": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "trafficLightPosition": { "x": 14, "y": 14 }
+        "trafficLightPosition": { "x": 14, "y": 24 }
       }
     ],
     "security": {

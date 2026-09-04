@@ -10,6 +10,7 @@ import {
   SettingsDialog,
   SourceControlDrawer,
 } from "./lazy";
+import { useMinimapPreferences } from "./minimap-preferences";
 import { Banners } from "../shell/Banners";
 import { ControlsCluster } from "../shell/ControlsCluster";
 import { Dock } from "../shell/Dock";
@@ -56,6 +57,7 @@ export function App() {
  */
 function AppShell() {
   const workspace = useCanvasStore((state) => state.workspace);
+  const minimapCollapsed = useMinimapPreferences((state) => state.collapsed);
 
   useEffect(syncDocumentPreferences, []);
   useTldrawPreferences();
@@ -70,17 +72,20 @@ function AppShell() {
   return (
     <div className="flex h-full overflow-hidden bg-background">
       <LeftSidebar />
-      <div className="relative min-w-0 flex-1">
+      <div
+        className="workspace-surface relative min-w-0 flex-1"
+        data-minimap-collapsed={minimapCollapsed}
+      >
+        <WindowDragLayer />
         {workspace && <TldrawWorkspace />}
+        {workspace && (
+          <>
+            <ControlsCluster />
+            <Dock />
+            <UsageOrb />
+          </>
+        )}
       </div>
-      {workspace && (
-        <>
-          <ControlsCluster />
-          <Dock />
-          <UsageOrb />
-        </>
-      )}
-      <WindowDragLayer />
       <Banners />
       <Suspense fallback={null}>
         <ExplorerDrawer />

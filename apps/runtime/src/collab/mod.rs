@@ -19,6 +19,7 @@ pub mod context_link;
 pub mod control;
 pub mod delivery_queue;
 mod hook_write;
+pub mod mailbox;
 pub mod messaging;
 pub mod skills;
 pub mod transcript;
@@ -74,6 +75,7 @@ pub fn expected_processes(agent_id: &str) -> Vec<String> {
         "codex" => vec!["codex".to_owned()],
         "gemini" => vec!["gemini".to_owned()],
         "opencode" => vec!["opencode".to_owned()],
+        "pi" | "omp" | "copilot" => vec![agent_id.to_owned()],
         // `custom:<name>` — the suffix is the best guess we have.
         other => match other.strip_prefix("custom:") {
             Some(suffix) if !suffix.is_empty() => vec![suffix.to_owned()],

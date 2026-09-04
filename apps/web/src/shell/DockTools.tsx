@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Shapes } from "lucide-react";
 import { useValue } from "tldraw";
 import { GeoShapeGeoStyle } from "@tldraw/tlschema";
 
@@ -8,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { IconButton } from "@/ui/icon-button";
 import { Separator } from "@/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
@@ -35,6 +37,7 @@ import { commandKeysLabel, type CommandId } from "@/keybindings";
  * 画布没挂载（启动页）时整组不渲染：没有 editor 就没有工具可切。
  */
 export function DockTools() {
+  const t = useT();
   const editor = useEditorHandle();
   const locked = useCanvasLocked();
   const currentTool = useValue(
@@ -45,9 +48,8 @@ export function DockTools() {
 
   if (!editor) return null;
 
-  return (
+  const buttons = (
     <>
-      <Separator orientation="vertical" className="mx-1 h-5" />
       {CANVAS_TOOLS.map((tool) =>
         tool.id === "geo" ? (
           <GeoToolButton
@@ -66,6 +68,30 @@ export function DockTools() {
         ),
       )}
       <ImageToolButton disabled={locked} />
+    </>
+  );
+
+  return (
+    <>
+      <Separator orientation="vertical" className="mx-1 h-5" />
+      <div className="dock-tools-expanded items-center gap-1">{buttons}</div>
+      <div className="dock-tools-compact">
+        <Popover>
+          <PopoverTrigger asChild>
+            <IconButton size="dock" label={t("dock.tools")}>
+              <Shapes />
+            </IconButton>
+          </PopoverTrigger>
+          <PopoverContent
+            side="top"
+            align="center"
+            className="z-[var(--z-menu)] grid w-auto min-w-0 grid-cols-5 gap-1 p-2"
+            aria-label={t("dock.tools")}
+          >
+            {buttons}
+          </PopoverContent>
+        </Popover>
+      </div>
     </>
   );
 }

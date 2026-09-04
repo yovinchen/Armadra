@@ -56,7 +56,6 @@ pub const CODEX_HOOK_EVENTS: &[&str] = &[
     "UserPromptSubmit",
     "PreToolUse",
     "PostToolUse",
-    "Notification",
     "Stop",
     "SessionEnd",
     "SubagentStart",

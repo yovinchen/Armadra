@@ -3,7 +3,7 @@ import type { AgentInfo, SshHost, Workspace } from "@armadra/shared";
 import { buildAddMenu, sshMenuItems, type AddMenuContext } from "./add-menu";
 import { clearCanvasCommands, registerCanvasCommand } from "../commands";
 import { useCanvasStore } from "../../store/canvas-store";
-import { t } from "../../app/preferences-store";
+import { t, usePreferencesStore } from "../../app/preferences-store";
 
 const workspace = {
   id: "019ff7d1-0d12-7421-833d-2c5e8d64ed21",
@@ -61,6 +61,7 @@ function context(addNode = vi.fn()): AddMenuContext {
 
 beforeEach(() => {
   clearCanvasCommands();
+  usePreferencesStore.setState({ defaultPermissionMode: "default" });
 });
 
 const box: SshHost = {
@@ -250,4 +251,19 @@ describe("buildAddMenu", () => {
         ?.run(context()),
     ).not.toThrow();
   });
+});
+
+it("applies the saved permission default and refuses unsupported modes without creating a node", () => {
+  usePreferencesStore.setState({ defaultPermissionMode: "plan" });
+  const addNode = vi.fn();
+  buildAddMenu([claude], t)
+    .find((item) => item.id === "add.agent.claude")
+    ?.run(context(addNode));
+  expect(addNode.mock.calls[0]?.[1].data.agent.permissionMode).toBe("plan");
+  addNode.mockClear();
+  const pi = { ...claude, id: "pi", label: "Pi", launchCmd: "pi" };
+  buildAddMenu([pi], t)
+    .find((item) => item.id === "add.agent.pi")
+    ?.run(context(addNode));
+  expect(addNode).not.toHaveBeenCalled();
 });

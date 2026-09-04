@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Editor, TLShapeId } from "tldraw";
+import type { Editor, TLArrowBinding, TLArrowShape, TLShapeId } from "tldraw";
 
 /** tldraw 在模块加载时就读 `matchMedia`（见 `ArmadraShapeUtil.test.ts`）。 */
 vi.hoisted(() => {
@@ -41,7 +41,13 @@ vi.mock("../../nodes/registry", () => ({
 }));
 
 import { linkToEdge } from "../sync/derive";
-import { beginHandleLink, registerLinkArrow } from "./LinkArrow";
+import {
+  beginHandleLink,
+  registerLinkArrow,
+  stabilizeNodeBinding,
+} from "./LinkArrow";
+import { nodeArrowPreview } from "./NodeArrowShapeUtil";
+import { linkView } from "./LinkShapeUtil";
 import { toShapeId } from "./armadra-shape";
 import { LinkBindingUtil } from "./LinkBindingUtil";
 import { isLinkShape, type LinkShape } from "./link-shape";
@@ -65,6 +71,8 @@ class FakeEditor {
   handlers: Record<string, ((...args: unknown[]) => void)[]> = {};
 
   sideEffects = {
+    registerBeforeCreateHandler: (type: string, fn: never) =>
+      this.on(`before-create:${type}`, fn),
     registerAfterCreateHandler: (type: string, fn: never) =>
       this.on(`create:${type}`, fn),
     registerAfterChangeHandler: (type: string, fn: never) =>
@@ -94,6 +102,18 @@ class FakeEditor {
 
   getShape(id: string): Rec | undefined {
     return this.shapes.get(id);
+  }
+
+  getShapePageBounds(id: string) {
+    if (!this.shapes.has(id)) return undefined;
+    const x = id === toShapeId(A) ? 40 : 740;
+    return {
+      x,
+      y: 80,
+      width: 400,
+      height: 300,
+      center: { x: x + 200, y: 230 },
+    };
   }
 
   getCurrentPageShapes(): Rec[] {
@@ -173,14 +193,22 @@ class FakeEditor {
 
   /** 绑到任意 shape（内容链接的白板那一端不是节点）。 */
   bindShape(arrowId: string, terminal: "start" | "end", toId: string): void {
-    const binding = {
+    let binding: Rec = {
       id: `binding:${arrowId}-${terminal}`,
       typeName: "binding",
       type: "arrow",
       fromId: arrowId,
       toId,
-      props: { terminal },
+      props: {
+        terminal,
+        normalizedAnchor: { x: 0.5, y: 0.5 },
+        isPrecise: false,
+        isExact: false,
+      },
     };
+    for (const fn of this.handlers["before-create:binding"] ?? []) {
+      binding = (fn(binding, "user") as unknown as Rec) ?? binding;
+    }
     this.bindings.push(binding);
     this.emit("create:binding", binding, "user");
   }
@@ -252,6 +280,74 @@ afterEach(() => {
 });
 
 describe("registerLinkArrow · 换形", () => {
+  it("preserves the chosen left port even when the native tool initially snaps to centre", () => {
+    beginHandleLink("left");
+    editor.path = "select.dragging_handle";
+    editor.createArrow("shape:left-port");
+    editor.bind("shape:left-port", "start", A);
+    expect(editor.getBindingsFromShape("shape:left-port")[0]?.props).toEqual(
+      expect.objectContaining({
+        normalizedAnchor: { x: 0, y: 0.5 },
+        isPrecise: true,
+        isExact: true,
+      }),
+    );
+  });
+
+  it("anchors ports before the first drag frame and preserves the preview geometry on release", async () => {
+    editor.path = "select.dragging_handle";
+    editor.createArrow("shape:preview");
+    editor.bind("shape:preview", "start", A);
+    editor.bind("shape:preview", "end", B);
+    const bindings = editor.getBindingsFromShape(
+      "shape:preview",
+    ) as unknown as TLArrowBinding[];
+    expect(bindings.map((binding) => binding.props)).toEqual([
+      expect.objectContaining({
+        normalizedAnchor: { x: 1, y: 0.5 },
+        isPrecise: true,
+        isExact: true,
+      }),
+      expect.objectContaining({
+        normalizedAnchor: { x: 0, y: 0.5 },
+        isPrecise: true,
+        isExact: true,
+      }),
+    ]);
+    const preview = nodeArrowPreview(
+      editor as unknown as Editor,
+      editor.arrow("shape:preview") as unknown as TLArrowShape,
+    )!;
+    const before = linkView(editor as unknown as Editor, preview);
+    expect(before?.curve.sourceX).toBe(440);
+    expect(before?.curve.targetX).toBe(740);
+    await release(editor);
+    expect(linkView(editor as unknown as Editor, editor.links()[0]!)).toEqual(
+      before,
+    );
+  });
+
+  it("does not turn native content arrows into a node-link preview", () => {
+    editor.path = "select.dragging_handle";
+    editor.addBoardShape("shape:note", "geo");
+    editor.createArrow("shape:content");
+    editor.bind("shape:content", "start", A);
+    editor.bindShape("shape:content", "end", "shape:note");
+    const bindings = editor.getBindingsFromShape(
+      "shape:content",
+    ) as unknown as TLArrowBinding[];
+    expect(
+      stabilizeNodeBinding(editor as unknown as Editor, bindings[1]!),
+    ).toBe(bindings[1]);
+    expect(bindings[1]?.props.isPrecise).toBe(false);
+    expect(
+      nodeArrowPreview(
+        editor as unknown as Editor,
+        editor.arrow("shape:content") as unknown as TLArrowShape,
+      ),
+    ).toBeNull();
+  });
+
   it("两端绑到节点的箭头被换成 link shape + 两条 binding", async () => {
     editor.path = "select.dragging_handle";
     editor.createArrow("shape:rnd1");
@@ -277,9 +373,10 @@ describe("registerLinkArrow · 换形", () => {
     // 两端各一条 link binding。
     const bindings = editor.getBindingsFromShape(link.id);
     expect(bindings.map((item) => item.type)).toEqual(["link", "link"]);
-    expect(
-      bindings.map((item) => (item.props as Rec).terminal),
-    ).toEqual(["start", "end"]);
+    expect(bindings.map((item) => (item.props as Rec).terminal)).toEqual([
+      "start",
+      "end",
+    ]);
 
     // 派生出来的边就是这条 link（往返恒等）。
     const edge = linkToEdge(link, BOARD);
@@ -379,7 +476,9 @@ describe("registerLinkArrow · 内容链接", () => {
     editor.bindShape("shape:c2", "end", "shape:ink");
     await release(editor);
 
-    expect((editor.arrow("shape:c2")!.props as Rec).arrowheadStart).toBe("arrow");
+    expect((editor.arrow("shape:c2")!.props as Rec).arrowheadStart).toBe(
+      "arrow",
+    );
     const contentId = meta(editor.arrow("shape:c2")).contentId;
 
     // 用户手改成红色，再动一次 binding：颜色不该被写回蓝色，id 也不该换。

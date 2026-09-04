@@ -20,10 +20,15 @@ use crate::{
 };
 
 use super::{
-    Args, Caller, NODE_PALETTE, PLACEMENT_GAP, Refusal, collapse_newlines, default_size, messaging,
+    Args, Caller, NODE_PALETTE, PLACEMENT_GAP, Refusal, collapse_newlines, default_size, mailbox,
+    messaging,
 };
 
 pub const VERBS: &[&str] = &[
+    "help",
+    "post",
+    "inbox",
+    "ack",
     "list",
     "open-terminal",
     "open-agent",
@@ -38,7 +43,7 @@ pub const VERBS: &[&str] = &[
 ];
 
 /// Verbs a caller with no node token may run: the read-only one.
-const LEGACY_VERBS: &[&str] = &["list"];
+const LEGACY_VERBS: &[&str] = &["list", "help"];
 
 /// What a control verb answers with.
 #[derive(Debug, Clone)]
@@ -108,6 +113,14 @@ pub async fn run(
         caller.require_verified(verb)?;
     }
     match verb {
+        "help" => Ok(Outcome::with_result(
+            mailbox::HELP,
+            json!({ "protocol": "armadra.mailbox.v1" }),
+        )),
+        "post" | "inbox" | "ack" => {
+            let result = mailbox::run(state, caller, verb, args).await?;
+            Ok(Outcome::raw(result.clone(), result.to_string()))
+        }
         "list" => list(state, caller).await,
         "open-terminal" => open_terminal(state, caller, args).await,
         "open-agent" => open_agent(state, caller, args).await,
@@ -222,12 +235,14 @@ async fn open_agent(
     let agent_id = args
         .text("agent")
         .ok_or_else(|| {
-            Refusal::bad_request("open-agent 需要 --agent claude|codex|gemini|opencode。")
+            Refusal::bad_request(
+                "open-agent 需要 --agent claude|codex|gemini|opencode|pi|omp|copilot。",
+            )
         })?
         .to_owned();
     if !db::valid_agent_id(&agent_id) {
         return Err(Refusal::bad_request(format!(
-            "不认识的 agent `{agent_id}`；可用：claude / codex / gemini / opencode。"
+            "不认识的 agent `{agent_id}`；可用：claude / codex / gemini / opencode / pi / omp / copilot。"
         )));
     }
     let prompt = args.text("prompt").map(collapse_newlines);
@@ -784,7 +799,9 @@ fn clean_title(title: &str) -> Result<String, Refusal> {
 /// canvas's business.
 pub fn launch_command(agent_id: &str, prompt: Option<&str>) -> (String, Option<String>) {
     let program = match agent_id {
-        "claude" | "codex" | "gemini" | "opencode" => agent_id.to_owned(),
+        "claude" | "codex" | "gemini" | "opencode" | "pi" | "omp" | "copilot" => {
+            agent_id.to_owned()
+        }
         other => other.strip_prefix("custom:").unwrap_or(other).to_owned(),
     };
     let Some(prompt) = prompt.map(collapse_newlines).filter(|p| !p.is_empty()) else {
@@ -795,10 +812,8 @@ pub fn launch_command(agent_id: &str, prompt: Option<&str>) -> (String, Option<S
             format!("{program} --prompt-interactive {}", quote(&prompt)),
             None,
         ),
-        "opencode" => (
-            program,
-            Some("opencode 只能启动后再输入提示词，--prompt 已被忽略。".to_owned()),
-        ),
+        "opencode" => (format!("{program} --prompt {}", quote(&prompt)), None),
+        "copilot" => (format!("{program} --interactive {}", quote(&prompt)), None),
         _ => (format!("{program} {}", quote(&prompt)), None),
     }
 }

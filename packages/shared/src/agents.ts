@@ -14,7 +14,15 @@ import {
  * mirror of the ids and launch programs (apps/runtime/src/agent.rs).
  */
 
-export const AGENT_IDS = ["claude", "codex", "gemini", "opencode"] as const;
+export const AGENT_IDS = [
+  "claude",
+  "codex",
+  "gemini",
+  "opencode",
+  "pi",
+  "omp",
+  "copilot",
+] as const;
 export type BuiltinAgentId = (typeof AGENT_IDS)[number];
 
 /**
@@ -125,10 +133,11 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
     },
     opencode: {
       id: "opencode",
-      label: "opencode",
+      label: "OpenCode",
       color: "#a78bfa",
       launchCmd: "opencode",
-      promptMode: "stdin-after-start",
+      promptMode: "flag-prompt",
+      promptFlag: "--prompt",
       permissionFlag: {
         default: [],
         "auto-edit": [],
@@ -136,10 +145,64 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
         plan: [],
       },
       modelFlag: "--model",
-      // No `resume` entry: opencode picks its session from its own TUI, so we
-      // have no launch-line way to reopen one.
-      capabilities: ["hooks", "contextLink"],
+      resume: { style: "flag", flag: "--session" },
+      capabilities: ["hooks", "resume", "contextLink"],
       expectedProcess: ["opencode"],
+    },
+    pi: {
+      id: "pi",
+      label: "Pi",
+      color: "#e8b86d",
+      launchCmd: "pi",
+      promptMode: "argv",
+      // Pi has no built-in approval/plan flag. Preserve its own tool policy.
+      permissionFlag: {
+        default: [],
+        "auto-edit": [],
+        "full-auto": [],
+        plan: [],
+      },
+      modelFlag: "--model",
+      resume: { style: "flag", flag: "--session" },
+      capabilities: ["resume", "contextLink"],
+      expectedProcess: ["pi"],
+    },
+    omp: {
+      id: "omp",
+      label: "Oh My Pi",
+      color: "#d4a373",
+      launchCmd: "omp",
+      promptMode: "argv",
+      permissionFlag: {
+        default: [],
+        "auto-edit": ["--approval-mode", "write"],
+        "full-auto": ["--approval-mode", "yolo"],
+        // --plan selects a model; --plan-yolo auto-approves execution. Neither
+        // is an equivalent of a persistent read-only plan permission mode.
+        plan: [],
+      },
+      modelFlag: "--model",
+      resume: { style: "flag", flag: "--resume" },
+      capabilities: ["resume", "contextLink"],
+      expectedProcess: ["omp"],
+    },
+    copilot: {
+      id: "copilot",
+      label: "GitHub Copilot",
+      color: "#a371f7",
+      launchCmd: "copilot",
+      promptMode: "flag-prompt",
+      promptFlag: "--interactive",
+      permissionFlag: {
+        default: [],
+        "auto-edit": ["--allow-tool=write"],
+        "full-auto": ["--allow-all"],
+        plan: ["--plan"],
+      },
+      modelFlag: "--model",
+      resume: { style: "flag", flag: "--resume" },
+      capabilities: ["resume", "contextLink"],
+      expectedProcess: ["copilot"],
     },
   };
 
@@ -156,6 +219,17 @@ export function isAgentId(value: unknown): value is BuiltinAgentId {
 
 export function agentDefinition(id: string): AgentDefinition | undefined {
   return isAgentId(id) ? AGENT_REGISTRY[id] : undefined;
+}
+
+/** Only expose permission modes backed by a real CLI argument. */
+export function supportedPermissionModes(
+  agentId: string,
+): readonly PermissionMode[] {
+  const definition = agentDefinition(agentId);
+  return PERMISSION_MODES.filter(
+    (mode) =>
+      mode === "default" || (definition?.permissionFlag[mode].length ?? 0) > 0,
+  );
 }
 
 /**
@@ -306,6 +380,11 @@ export function assembleLaunchCommand(
   if (!(PERMISSION_MODES as readonly string[]).includes(permissionMode)) {
     throw new Error(`Unknown permission mode: ${permissionMode}`);
   }
+  if (!supportedPermissionModes(base.id).includes(permissionMode)) {
+    throw new Error(
+      `${base.label} does not support permission mode: ${permissionMode}`,
+    );
+  }
   for (const flag of base.permissionFlag[permissionMode]) {
     parts.push(shellQuote(flag));
   }
@@ -329,7 +408,7 @@ export function assembleLaunchCommand(
   const prompt = input.prompt ? collapsePrompt(input.prompt) : "";
   let stdinPrompt: string | undefined;
   if (prompt) {
-    switch (base.promptMode) {
+    switch (custom?.promptMode ?? base.promptMode) {
       case "argv":
         parts.push(shellQuote(prompt));
         break;

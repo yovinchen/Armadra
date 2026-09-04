@@ -51,35 +51,61 @@ struct Window {
 struct UsageResponse {
     five_hour: Option<Window>,
     seven_day: Option<Window>,
+    #[serde(flatten)]
+    other: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
-/// `None` when there is no usable token on this machine.
-///
-/// The returned `String` is the only copy of the secret; it lives on the stack
-/// of [`fetch`] and is dropped with it. Nothing in this function logs it.
-async fn access_token() -> Option<String> {
-    let raw = match keychain_credentials().await {
-        Some(raw) => Some(raw),
-        None => file_credentials(),
-    }?;
-    let parsed: Credentials = serde_json::from_str(&raw).ok()?;
-    let oauth = parsed.oauth?;
-    // An expired token would just earn a 401; skipping it keeps the pill on
-    // "unavailable" instead of flashing an error the user cannot act on.
-    if let Some(expires_at) = oauth.expires_at
-        && expires_at <= chrono::Utc::now().timestamp_millis()
+/// A stale keychain entry must not mask a usable file credential.
+fn token_from_payload(raw: &str) -> Option<String> {
+    let oauth = serde_json::from_str::<Credentials>(raw).ok()?.oauth?;
+    if oauth
+        .expires_at
+        .is_some_and(|at| at <= chrono::Utc::now().timestamp_millis())
     {
         return None;
     }
     oauth.access_token.filter(|token| !token.is_empty())
 }
 
+async fn credential() -> (Option<String>, CredentialSource) {
+    let keychain = keychain_credentials().await;
+    let file = file_credentials();
+    let keychain_entry = (keychain, CredentialSource::Keychain);
+    let file_entry = (file, CredentialSource::File);
+    let entries = if std::env::var_os("CLAUDE_CONFIG_DIR").is_some_and(|path| !path.is_empty()) {
+        [file_entry, keychain_entry]
+    } else {
+        [keychain_entry, file_entry]
+    };
+    select_credential(entries)
+}
+
+fn select_credential(
+    entries: [(Option<String>, CredentialSource); 2],
+) -> (Option<String>, CredentialSource) {
+    let mut found = CredentialSource::None;
+    for (raw, source) in entries {
+        if let Some(raw) = raw {
+            if found == CredentialSource::None {
+                found = source;
+            }
+            if let Some(token) = token_from_payload(&raw) {
+                return (Some(token), source);
+            }
+        }
+    }
+    (None, found)
+}
+
 #[cfg(target_os = "macos")]
 async fn keychain_credentials() -> Option<String> {
-    let output = tokio::process::Command::new("security")
+    let mut command = tokio::process::Command::new("security");
+    command
         .args(["find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"])
-        .output()
+        .kill_on_drop(true);
+    let output = tokio::time::timeout(std::time::Duration::from_secs(3), command.output())
         .await
+        .ok()?
         .ok()?;
     if !output.status.success() {
         return None;
@@ -103,22 +129,17 @@ fn file_credentials() -> Option<String> {
     std::fs::read_to_string(directory.join(".credentials.json")).ok()
 }
 
-/// Which of the two stores holds the credential, for the settings page.
-/// Only the location is returned; the payload is dropped immediately.
-pub async fn credential_source() -> CredentialSource {
-    if keychain_credentials().await.is_some() {
-        return CredentialSource::Keychain;
-    }
-    if file_credentials().is_some() {
-        return CredentialSource::File;
-    }
-    CredentialSource::None
+pub async fn fetch(client: &reqwest::Client) -> (ProviderResult, CredentialSource) {
+    let (token, source) = credential().await;
+    let result = match token {
+        Some(token) => fetch_token(client, token).await,
+        None if source == CredentialSource::None => Ok(None),
+        None => Err(anyhow::anyhow!("Claude credentials are expired or invalid")),
+    };
+    (result, source)
 }
 
-pub async fn fetch(client: &reqwest::Client) -> ProviderResult {
-    let Some(token) = access_token().await else {
-        return Ok(None);
-    };
+async fn fetch_token(client: &reqwest::Client, token: String) -> ProviderResult {
     let response = client
         .get(USAGE_URL)
         .bearer_auth(token)
@@ -140,23 +161,89 @@ pub async fn fetch(client: &reqwest::Client) -> ProviderResult {
 }
 
 fn windows(usage: UsageResponse) -> Vec<UsageWindow> {
-    [("5h", usage.five_hour), ("7d", usage.seven_day)]
+    let mut result: Vec<_> = [("5h", usage.five_hour), ("7d", usage.seven_day)]
         .into_iter()
         .filter_map(|(key, window)| {
             let window = window?;
             Some(UsageWindow {
-                key,
+                key: key.to_owned(),
                 label: key.to_owned(),
+                group: None,
                 used_percent: clamp_percent(window.utilization?),
                 resets_at: window.resets_at,
             })
         })
-        .collect()
+        .collect();
+    for (key, value) in usage.other {
+        let Some(model) = key.strip_prefix("seven_day_") else {
+            continue;
+        };
+        let Ok(window) = serde_json::from_value::<Window>(value) else {
+            continue;
+        };
+        let Some(percent) = window.utilization else {
+            continue;
+        };
+        let group = match model {
+            "opus" => "Opus".to_owned(),
+            "sonnet" => "Sonnet".to_owned(),
+            _ => model.replace('_', " "),
+        };
+        result.push(UsageWindow {
+            key,
+            label: "7d".to_owned(),
+            group: Some(group),
+            used_percent: clamp_percent(percent),
+            resets_at: window.resets_at,
+        });
+    }
+    result
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_expired_keychain_entry_does_not_hide_a_valid_file() {
+        let (token, source) = select_credential([
+            (
+                Some(r#"{"claudeAiOauth":{"accessToken":"old","expiresAt":1}}"#.to_owned()),
+                CredentialSource::Keychain,
+            ),
+            (
+                Some(r#"{"claudeAiOauth":{"accessToken":"valid"}}"#.to_owned()),
+                CredentialSource::File,
+            ),
+        ]);
+        assert_eq!(token.as_deref(), Some("valid"));
+        assert_eq!(source, CredentialSource::File);
+    }
+
+    #[test]
+    fn preserves_model_specific_windows_and_skips_unrelated_fields() {
+        let usage: UsageResponse = serde_json::from_str(
+            r#"{
+            "five_hour": {"utilization": 21, "resets_at": null},
+            "seven_day_sonnet": {"utilization": 82, "resets_at": "2026-09-11T00:00:00Z"},
+            "seven_day_opus": null,
+            "seven_day_other": {"utilization": null},
+            "extra_usage": {"utilization": 99},
+            "account": {"email": "private@example.com"}
+        }"#,
+        )
+        .unwrap();
+        let windows = windows(usage);
+        assert_eq!(windows.len(), 2);
+        assert_eq!(windows[1].key, "seven_day_sonnet");
+        assert_eq!(windows[1].group.as_deref(), Some("Sonnet"));
+        assert_eq!(windows[1].used_percent, 82.0);
+        assert!(
+            !serde_json::to_string(&windows)
+                .unwrap()
+                .contains("private@example.com")
+        );
+    }
 
     #[test]
     fn maps_the_two_windows_the_cli_shows() {

@@ -21,11 +21,11 @@ export function SettingsGroup({
   return (
     <section className={cn("flex flex-col gap-2", className)}>
       {title && (
-        <h3 className="px-1 text-[11px] tracking-[0.06em] text-muted-foreground uppercase">
+        <h3 className="px-0.5 text-[13px] font-medium text-foreground">
           {title}
         </h3>
       )}
-      <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border bg-card">
+      <div className="settings-group divide-y divide-border/60 rounded-lg border border-border/70 bg-card">
         {children}
       </div>
     </section>

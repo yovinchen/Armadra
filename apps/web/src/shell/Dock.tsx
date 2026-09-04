@@ -94,7 +94,7 @@ export function Dock() {
   return (
     <div
       data-slot="dock"
-      className="fixed bottom-[22px] left-1/2 z-[var(--z-dock)] flex h-[var(--dock-h)] -translate-x-1/2 items-center gap-1 rounded-[var(--r-panel)] border border-border bg-[var(--panel)]/90 px-1.5 shadow-[var(--shadow-pill)] backdrop-blur-[12px]"
+      className="canvas-dock z-[var(--z-dock)] flex h-[var(--dock-h)] items-center gap-1 rounded-[var(--r-panel)] border border-border bg-[var(--panel)]/90 px-1.5 shadow-[var(--shadow-pill)] backdrop-blur-[12px]"
     >
       <DropdownMenu>
         <Tooltip delayDuration={500}>

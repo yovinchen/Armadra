@@ -32,7 +32,7 @@ function startArrow(event: React.PointerEvent<HTMLDivElement>): void {
   editor.setCurrentTool("arrow");
   // 「这一条线是从把手起笔的」——`LinkArrow` 在交互结束时读它：末端没绑到
   // 节点就把线删掉（把手只用来连节点，§4.3）。
-  beginHandleLink();
+  beginHandleLink(event.currentTarget.dataset.side as HandleSide);
 
   // 松手回到选择工具。箭头工具自己在 `isToolLocked=false` 时也会回退，
   // 这里再兜一层：拖到一半按 Esc / 拖成零长度都不会留在箭头工具上。

@@ -25,7 +25,7 @@ pub const NODE_TYPES: &[&str] = &[
 pub const EDGE_KINDS: &[&str] = &["link"];
 pub const AGENT_STATES: &[&str] = &["working", "waiting", "blocked", "done"];
 pub const PERMISSION_MODES: &[&str] = &["default", "auto-edit", "full-auto", "plan"];
-pub const BUILTIN_AGENT_IDS: &[&str] = &["claude", "codex", "gemini", "opencode"];
+pub const BUILTIN_AGENT_IDS: &[&str] = crate::agent::AGENT_IDS;
 pub const DIFF_SCOPES: &[&str] = &["worktree", "staged"];
 
 const MAX_STICKY_CONTENT: usize = 20_000;
@@ -2262,8 +2262,12 @@ mod tests {
 
         let mut agent = sticky_node(&board.id);
         agent.node_type = "terminal".into();
-        agent.data = serde_json::json!({ "kind": "terminal", "agent": { "id": "pi" } });
+        agent.data = serde_json::json!({ "kind": "terminal", "agent": { "id": "unknown-cli" } });
         assert!(validate_document(&board.id, &[agent.clone()], &[]).is_err());
+        for id in crate::agent::AGENT_IDS {
+            agent.data = serde_json::json!({ "kind": "terminal", "agent": { "id": id } });
+            validate_document(&board.id, &[agent.clone()], &[]).unwrap();
+        }
         agent.data = serde_json::json!({ "kind": "terminal", "agent": { "id": "custom:mytool" } });
         validate_document(&board.id, &[agent.clone()], &[]).unwrap();
         agent.data = serde_json::json!({

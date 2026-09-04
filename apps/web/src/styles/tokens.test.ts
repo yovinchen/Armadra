@@ -65,6 +65,9 @@ const AGENT_COLORS: Record<string, string> = {
   "--agent-codex": "#10a37f",
   "--agent-gemini": "#4285f4",
   "--agent-opencode": "#a78bfa",
+  "--agent-pi": "#e8b86d",
+  "--agent-omp": "#d4a373",
+  "--agent-copilot": "#a371f7",
 };
 
 /** §3.4 的节点调色板 7 色。 */

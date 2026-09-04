@@ -244,3 +244,43 @@
     animation: armadra-rope-flow 1s linear infinite;
   }
 }
+
+/* Settings adapt to available dialog width; labels never disappear under controls. */
+.settings-layout {
+  container: settings / inline-size;
+}
+@container settings (max-width: 720px) {
+  .settings-navigation {
+    width: 164px;
+    padding-inline: 8px;
+  }
+  .settings-page {
+    padding-inline: 16px;
+  }
+  .settings-row {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-inline: 12px;
+  }
+  .settings-row-controls {
+    margin-left: auto;
+    flex-wrap: wrap;
+  }
+}
+@container settings (max-width: 520px) {
+  .settings-navigation {
+    width: 52px;
+    padding-inline: 6px;
+  }
+  .settings-navigation button {
+    justify-content: center;
+    padding-inline: 0;
+  }
+  .settings-nav-label,
+  .settings-nav-group {
+    display: none;
+  }
+  .settings-page {
+    padding-inline: 12px;
+  }
+}

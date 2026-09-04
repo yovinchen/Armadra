@@ -29,7 +29,9 @@ export function SettingsRow({
 }) {
   const text = (
     <span className="flex min-w-0 flex-col gap-0.5 text-left">
-      <span className="truncate text-[13px] text-foreground">{label}</span>
+      <span className="break-words text-[13px] leading-5 text-foreground">
+        {label}
+      </span>
       {footnote && (
         <span className="text-[11px] leading-4 text-muted-foreground">
           {footnote}
@@ -41,7 +43,7 @@ export function SettingsRow({
   return (
     <div
       className={cn(
-        "flex min-h-11 w-full items-center gap-4 px-4 py-2",
+        "settings-row flex min-h-12 w-full items-center gap-4 px-4 py-3",
         label === null ? "justify-start" : "justify-between",
         className,
       )}
@@ -58,7 +60,9 @@ export function SettingsRow({
       ) : (
         text
       )}
-      <div className="flex shrink-0 items-center gap-2">{children}</div>
+      <div className="settings-row-controls flex max-w-full shrink-0 items-center gap-2">
+        {children}
+      </div>
     </div>
   );
 }

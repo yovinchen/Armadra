@@ -97,7 +97,14 @@ export interface LinkView {
 }
 
 /** 画一条 link 需要的全部信息；两端缺一个时返回 null（线马上会被删掉）。 */
-export function linkView(editor: Editor, shape: LinkShape): LinkView | null {
+export type LinkVisualShape = Pick<LinkShape, "id"> & {
+  props: Pick<LinkProps, "from" | "to">;
+};
+
+export function linkView(
+  editor: Editor,
+  shape: LinkVisualShape,
+): LinkView | null {
   const source = endVisual(editor, shape.props.from);
   const target = endVisual(editor, shape.props.to);
   if (!source || !target) return null;
@@ -137,15 +144,20 @@ function arrowHead(tip: Position, from: Position): string {
 
 /* ------------------------------- 组件 ------------------------------------- */
 
-function LinkShapeContent({ shape }: { shape: LinkShape }) {
+export function LinkShapeContent({
+  shape,
+  transform,
+}: {
+  shape: LinkVisualShape;
+  transform?: string;
+}) {
   const editor = useEditor();
   const t = useT();
 
-  const view = useValue(
-    "armadra link view",
-    () => linkView(editor, shape),
-    [editor, shape],
-  );
+  const view = useValue("armadra link view", () => linkView(editor, shape), [
+    editor,
+    shape,
+  ]);
   const selected = useValue(
     "armadra link selected",
     () => editor.getSelectedShapeIds().includes(shape.id),
@@ -165,7 +177,7 @@ function LinkShapeContent({ shape }: { shape: LinkShape }) {
 
   return (
     <SVGContainer>
-      <g style={{ color }}>
+      <g style={{ color }} transform={transform}>
         <path
           d={curve.d}
           fill="none"
@@ -175,10 +187,7 @@ function LinkShapeContent({ shape }: { shape: LinkShape }) {
         />
         {view.arrowStart ? (
           <path
-            d={arrowHead(
-              { x: curve.sourceX, y: curve.sourceY },
-              curve.c1,
-            )}
+            d={arrowHead({ x: curve.sourceX, y: curve.sourceY }, curve.c1)}
             fill="none"
             stroke="currentColor"
             strokeWidth={width}

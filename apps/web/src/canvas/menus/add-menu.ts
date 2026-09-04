@@ -1,4 +1,7 @@
 import type { LucideIcon } from "lucide-react";
+import { supportedPermissionModes } from "@armadra/shared";
+import { toast } from "sonner";
+import { usePreferencesStore } from "../../app/preferences-store";
 import {
   Bot,
   FolderOpen,
@@ -14,12 +17,7 @@ import {
   Type,
 } from "lucide-react";
 import { createShapeId, toRichText } from "tldraw";
-import type {
-  AgentInfo,
-  Position,
-  SshHost,
-  Workspace,
-} from "@armadra/shared";
+import type { AgentInfo, Position, SshHost, Workspace } from "@armadra/shared";
 import type { CommandId } from "../../keybindings";
 import type { CanvasActions } from "../../store/canvas-store";
 import { useCanvasStore } from "../../store/canvas-store";
@@ -144,10 +142,26 @@ export function buildAddMenu(
     group: "agent",
     color: agent.color,
     run: (context) => {
+      const permissionMode =
+        usePreferencesStore.getState().defaultPermissionMode;
+      if (
+        !supportedPermissionModes(agent.baseAgent ?? agent.id).includes(
+          permissionMode,
+        )
+      ) {
+        toast.error(t("settings.permissionUnsupported"));
+        return;
+      }
       context.addNode("terminal", {
         position: context.position,
         title: agent.label,
-        data: { kind: "terminal", agent: { id: agent.id } },
+        data: {
+          kind: "terminal",
+          agent: {
+            id: agent.id,
+            ...(permissionMode !== "default" ? { permissionMode } : {}),
+          },
+        },
       });
     },
     // 探测不到可执行文件时不隐藏、只禁用：用户需要知道这个 CLI 存在。

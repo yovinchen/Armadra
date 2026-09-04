@@ -17,7 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
 import type { ReactNode } from "react";
 
 /**
- * 右上工具簇（§3.1，`top:54 right:14`）。
+ * 右上工具簇：首个按钮与 44px 标题栏中心线对齐。
  *
  * §24.3-2：不再是一排各自带毛玻璃的圆钮，而是**一整条** `--panel` 底、
  * 圆角 10 的条子，里面是 28×28 的 ghost 钮、间距 8。
@@ -45,9 +45,10 @@ export function ControlsCluster() {
   return (
     <>
       <div
+        data-slot="controls-cluster"
         className={cn(
           BAR,
-          "fixed top-[54px] right-[14px] z-[var(--z-cluster)]",
+          "absolute top-[3px] right-[14px] z-[var(--z-cluster)]",
         )}
       >
         <ClusterButton

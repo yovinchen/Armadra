@@ -24,6 +24,7 @@ export const shell: MessageModule = {
     "tree.menu": "工作空间菜单",
     "tree.delete": "删除",
 
+    "dock.tools": "白板工具",
     "dock.add": "新建",
     "dock.undo": "撤销",
     "dock.redo": "重做",
@@ -103,6 +104,7 @@ export const shell: MessageModule = {
     "tree.menu": "Workspace menu",
     "tree.delete": "Delete",
 
+    "dock.tools": "Canvas tools",
     "dock.add": "New",
     "dock.undo": "Undo",
     "dock.redo": "Redo",

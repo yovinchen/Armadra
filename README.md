@@ -14,10 +14,10 @@
 **Agent 终端节点**
 
 - 节点里跑的是真实 CLI，不经过中间协议；终端由 tmux 托管，Runtime 重启后会话还在。
-- 状态（工作中 / 等待 / 阻塞 / 完成）来自各 CLI 的 hook 回报，不靠猜屏幕内容。
+- 支持 Hook 的 CLI 可回报工作中 / 等待 / 阻塞 / 完成；其余 CLI 保留真实终端交互，不推断状态。
 - 权限请求在节点头部直接回答，不用切回终端敲键。
-- 支持 `default` / `auto-edit` / `full-auto` / `plan` 四种权限模式与 resume 已有会话。
-- 内置 Claude Code、Codex、Gemini CLI、opencode，可用 `custom:<id>` 接自定义 CLI。
+- 权限模式与会话恢复按各 CLI 的实际能力提供，不支持的选项不会伪装生效。
+- 内置 Claude Code、Codex、Gemini CLI、OpenCode、Pi、OMP、Copilot，可用 `custom:<id>` 接自定义 CLI。
 
 **白板**
 
@@ -31,6 +31,8 @@
 
 **Agent 协作**
 
+- 默认使用主动读取的消息箱（post / inbox / ack），不向终端自动粘贴提示，也不追加全局指令。协议见 [协作设计](docs/agent-collaboration.md)。
+
 - 互相读取转录、互发消息、在画布上开新节点、建便签、连线、改名改色、关节点。
 - 子代理以卡片形式挂在父节点旁边。
 
@@ -43,7 +45,7 @@
 **Git**：状态、diff、暂存 / 取消暂存 / 还原、提交、克隆仓库。
 
 **设置**：主题与语言（简体中文 / English）、白板偏好、快捷键、Agent 与 hook 安装、
-终端后端、SSH 主机、数据目录与备份、用量配额。
+终端后端、SSH 主机、数据目录与备份、Claude / Codex / Gemini 用量配额。
 
 ## 技术栈
 
@@ -101,11 +103,13 @@ cargo test -p armadra-runtime
 
 ## Agent 侧
 
-在设置的「Hook」页给某个 CLI 安装 hook，Runtime 会把 hook 命令写进该 CLI 的配置文件，
-并装上两个技能：`armadra-canvas`（在画布上开节点、建便签、连线、发消息）与
-`armadra-linked-context`（读取相连节点的转录、摘要或终端画面）。Claude 装成
-`~/.claude/skills/<name>/SKILL.md`，其余 CLI 写进各自指令文件里一段带标记的区块，
-卸载时原样移除。
+所有 Agent 终端都能用 `armadra-hook canvas help` 查看短帮助，通过
+`post` / `inbox` / `ack` 主动发送和读取消息。上下文按画布连线授权，消息不会
+自动写进对方的输入框。
+
+设置的「Hook」页仅为支持 Hook 的 CLI 提供安装入口。显式安装时会配置状态回报
+并提供可按需加载的协作技能，不追加全局 AGENTS.md / GEMINI.md 长指令。
+完整能力表和协议见 [Agent 协作设计](docs/agent-collaboration.md)。
 
 ## 目录
 

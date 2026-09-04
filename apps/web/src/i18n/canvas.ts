@@ -7,6 +7,8 @@ import type { MessageModule } from "./index";
  * 这样切语言时右键菜单、Dock `+`、命令面板三个入口一起变。
  */
 const zh = {
+  "canvas.expandMinimap": "展开缩略图",
+  "canvas.collapseMinimap": "收起缩略图",
   "canvas.label": "画布",
 
   /* 新建菜单（§13.3，画布右键 / Dock + / 会话侧栏 + 三个入口共用） */
@@ -17,6 +19,11 @@ const zh = {
   "add.openFile": "打开文件…",
   "add.browser": "新建浏览器",
   "add.notInstalled": "未安装",
+  "add.group.terminal": "终端",
+  "add.group.agent": "AI 助手",
+  "add.group.ssh": "远程终端",
+  "add.group.content": "内容",
+  "add.group.canvas": "画布操作",
 
   /* 白板工具（tldraw 计划 §5 的 Dock 工具组） */
   "tool.select": "选择",
@@ -122,6 +129,8 @@ const zh = {
 } as const;
 
 const en: Record<keyof typeof zh, string> = {
+  "canvas.expandMinimap": "Expand minimap",
+  "canvas.collapseMinimap": "Collapse minimap",
   "canvas.label": "Canvas",
 
   "add.terminal": "New terminal",
@@ -131,6 +140,11 @@ const en: Record<keyof typeof zh, string> = {
   "add.openFile": "Open file…",
   "add.browser": "New browser",
   "add.notInstalled": "Not installed",
+  "add.group.terminal": "Terminal",
+  "add.group.agent": "AI assistants",
+  "add.group.ssh": "Remote terminals",
+  "add.group.content": "Content",
+  "add.group.canvas": "Canvas actions",
 
   "tool.select": "Select",
   "tool.hand": "Hand",
@@ -222,3 +236,8 @@ const en: Record<keyof typeof zh, string> = {
 };
 
 export const canvas: MessageModule = { "zh-CN": zh, en };
+
+/** 补齐当前 tldraw 中文词典缺失的键。 */
+export const canvasEditorTranslations = {
+  "zh-cn": { "comments.link-copied": "链接已复制" },
+};

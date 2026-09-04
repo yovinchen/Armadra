@@ -53,6 +53,10 @@ CONTEXT OPTIONS:
   -n, --lines <N>           how many entries/lines to return
 
 CANVAS:
+  help                      short collaboration guide (no provider configuration needed)
+  post --to ID --key KEY --body TEXT   store a handoff for a linked agent
+  inbox --limit 10 --after 0           read your pending messages without acknowledgement
+  ack --id ID                         acknowledge one received message
   armadra-hook canvas <verb> [--flag value | --flag=value | --flag]...
   Repeated flags become arrays; a bare flag is `true`. `--dry-run` is passed
   through to the runtime, which then validates without mutating the board.

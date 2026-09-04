@@ -6,6 +6,12 @@ const zh = {
   "terminal.input": "终端输入",
   "terminal.interrupt": "中断",
   "terminal.more": "更多",
+  "terminal.collaboration": "Agent 协作",
+  "terminal.collaborationHint":
+    "连接节点后，助手可主动读取上下文、发送消息和查看收件箱。在此终端中运行帮助命令即可开始；消息不会自动输入其他终端。",
+  "terminal.copyHelpCommand": "复制帮助命令",
+  "terminal.commandCopied": "帮助命令已复制",
+  "terminal.copyFailed": "无法复制，请手动选择命令复制",
   "terminal.killProcess": "结束进程",
   "terminal.destroySession": "销毁会话",
   "terminal.recycle": "回收会话",
@@ -37,6 +43,13 @@ const en: Record<keyof typeof zh, string> = {
   "terminal.input": "Terminal input",
   "terminal.interrupt": "Interrupt",
   "terminal.more": "More",
+  "terminal.collaboration": "Agent collaboration",
+  "terminal.collaborationHint":
+    "Connect nodes to let agents read context, send messages and check their inbox on demand. Run the help command in this terminal to get started. Messages are never typed into another terminal automatically.",
+  "terminal.copyHelpCommand": "Copy help command",
+  "terminal.commandCopied": "Help command copied",
+  "terminal.copyFailed":
+    "Could not copy. Select the command and copy it manually.",
   "terminal.killProcess": "Kill process",
   "terminal.destroySession": "Destroy session",
   "terminal.recycle": "Recycle session",

@@ -317,40 +317,46 @@ export function NodeHeader({
 
       <NodeTitle node={node} />
 
-      {headerChips}
+      <span className="node-header-chips flex min-w-0 items-center gap-1.5">
+        {headerChips}
+      </span>
 
       {status && (
-        <StatusPill
-          tone={status.tone}
-          label={status.label}
-          {...(status.pulse === undefined ? {} : { pulse: status.pulse })}
-        />
+        <span className="node-header-status">
+          <StatusPill
+            tone={status.tone}
+            label={status.label}
+            {...(status.pulse === undefined ? {} : { pulse: status.pulse })}
+          />
+        </span>
       )}
 
       {approval && (
-        <>
+        <span className="node-header-approval flex shrink-0 items-center gap-1">
           <Button
             size="xs"
             variant="ghost"
             className="text-[var(--success)]"
+            aria-label={t("node.allow")}
             onClick={() => approval.onAnswer("allow")}
           >
             <Check />
-            {t("node.allow")}
+            <span>{t("node.allow")}</span>
           </Button>
           <Button
             size="xs"
             variant="ghost"
             className="text-[var(--danger)]"
+            aria-label={t("node.deny")}
             onClick={() => approval.onAnswer("deny")}
           >
             <X />
-            {t("node.deny")}
+            <span>{t("node.deny")}</span>
           </Button>
-        </>
+        </span>
       )}
 
-      <div className="flex-1" />
+      <div className="min-w-0 flex-1" />
 
       {headerActions}
 
@@ -400,7 +406,7 @@ function NodeTitle({ node }: { node: CanvasNode }) {
       <Input
         autoFocus
         aria-label={t("node.title")}
-        className="h-[22px] max-w-[220px] px-1.5 text-[length:var(--text-body)]"
+        className="h-[22px] min-w-0 max-w-[220px] flex-1 px-1.5 text-[length:var(--text-body)]"
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={(event) => commit(event.target.value)}
@@ -420,7 +426,7 @@ function NodeTitle({ node }: { node: CanvasNode }) {
       role="textbox"
       tabIndex={0}
       title={node.title}
-      className="max-w-[220px] cursor-text truncate text-[length:var(--text-body)] font-medium text-foreground"
+      className="node-title min-w-0 max-w-[220px] cursor-text truncate rounded-sm text-[length:var(--text-body)] font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
       onClick={() => {
         setDraft(node.title);
         setEditing(true);

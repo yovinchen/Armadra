@@ -75,6 +75,7 @@ function AgentHookRow({ agent }: { agent: AgentInfo }) {
       toast.error(t("settings.hooks.failed"), { description: cause.message }),
   });
 
+  const supported = agent.capabilities.includes("hooks");
   const revision = agent.clientRevision;
   const hooked = typeof revision === "number";
   const busy = run.isPending;
@@ -89,16 +90,18 @@ function AgentHookRow({ agent }: { agent: AgentInfo }) {
       }
     >
       <Badge variant={hooked ? "secondary" : "outline"}>
-        {!agent.installed
-          ? t("settings.agent.missing")
-          : hooked
-            ? t("settings.hooks.revision", { value: revision })
-            : t("settings.hooks.missing")}
+        {!supported
+          ? t("settings.hooks.pullOnly")
+          : !agent.installed
+            ? t("settings.agent.missing")
+            : hooked
+              ? t("settings.hooks.revision", { value: revision })
+              : t("settings.hooks.missing")}
       </Badge>
       <Button
         variant="secondary"
         size="sm"
-        disabled={!agent.installed || busy}
+        disabled={!supported || !agent.installed || busy}
         onClick={() => run.mutate("install")}
       >
         {hooked ? t("settings.hooks.reinstall") : t("settings.hooks.install")}
@@ -106,7 +109,7 @@ function AgentHookRow({ agent }: { agent: AgentInfo }) {
       <Button
         variant="secondary"
         size="sm"
-        disabled={!agent.installed || !hooked || busy}
+        disabled={!supported || !agent.installed || !hooked || busy}
         onClick={() => run.mutate("uninstall")}
       >
         {t("settings.hooks.uninstall")}

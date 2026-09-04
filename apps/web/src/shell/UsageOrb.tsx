@@ -1,41 +1,20 @@
-import { useState, type CSSProperties } from "react";
-import { RefreshCw } from "lucide-react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type {
-  Usage,
-  UsageProvider,
-  UsageWindow,
-} from "@armadra/shared";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { RefreshCw, X } from "lucide-react";
+import { useUsage } from "../app/use-usage";
+import { usagePercent, usageWindowLabel as windowLabel } from "../lib/usage";
+import type { Usage, UsageProvider } from "@armadra/shared";
 
-import { runtimeApi } from "../api/client";
 import {
   useT,
   usePreferencesStore,
   type Translate,
 } from "../app/preferences-store";
-import { formatRelativeTime } from "../lib/format";
+import { ProviderDetail } from "./ProviderDetail";
 import { IconButton } from "@/ui/icon-button";
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { Separator } from "@/ui/separator";
 
-/**
- * 右下角用量球（计划书 §19 + §19.1 修订）。
- *
- * 36px 圆球：外圈 conic-gradient 环表示「各 provider 各窗口里最高的占用」，
- * 球心是那个百分比（10px），没有任何文字标签（§14 第 1 条）。悬停或键盘
- * 聚焦时向左上展开 HoverCard，按 provider 列出每个窗口；触屏没有 hover，
- * 所以点击球体也切换面板。
- *
- * 数据全部来自 Runtime 的缓存快照：`GET /api/usage` 不会触发对外请求，
- * 所以这里 60s 轮询一次也只是读内存。刷新按钮走 `POST /api/usage/refresh`，
- * Runtime 侧 30s 内只真取一次。
- *
- * 三种情况整体不渲染：设置里关掉、Runtime 还没取到、所有 provider 都是
- * `unavailable`（本机没装那个 CLI 或没登录）。错误只表现为一条灰色横线，
- * 不弹 toast、不写字（§19「刷新」+ §14 第 1 条）。
- */
-
-const POLL_INTERVAL = 60_000;
+/** 用量球与缩略图共享导航区，显示当前有效窗口中的最高已用比例。 */
 
 type Level = "normal" | "warn" | "danger";
 
@@ -52,31 +31,8 @@ const RING_COLOR: Record<Level, string> = {
   danger: "var(--danger)",
 };
 
-/** `5h` / `7d` / `primary` 走 i18n；provider 自定义的标签原样显示。 */
-function windowLabel(t: Translate, window: UsageWindow): string {
-  const key = `usage.window.${window.label}`;
-  const translated = t(key);
-  return translated === key ? t(`usage.window.${window.key}`) : translated;
-}
-
 function percentText(t: Translate, percent: number): string {
   return t("usage.percent", { value: Math.round(percent) });
-}
-
-/** 40×4 的迷你进度条。宽度是数据，颜色是状态，所以两者分开。 */
-function UsageBar({ percent }: { percent: number }) {
-  return (
-    <span
-      aria-hidden
-      className="block h-1 w-10 shrink-0 overflow-hidden rounded-full bg-border-strong"
-    >
-      <span
-        data-level={level(percent)}
-        className="block h-full rounded-full bg-brand data-[level=danger]:bg-danger data-[level=warn]:bg-warn"
-        style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
-      />
-    </span>
-  );
 }
 
 /** 只有 `ok` 与 `error` 上球；`unavailable` 当作这台机器上没有这个 CLI。 */
@@ -87,106 +43,117 @@ function visible(usage: Usage | undefined): UsageProvider[] {
 }
 
 /** 环取所有 provider 所有窗口里的最高占用；全是错误时没有数字。 */
-function maxPercent(providers: UsageProvider[]): number | null {
+function maxPercent(providers: UsageProvider[], now: number): number | null {
   const values = providers
     .filter((provider) => provider.status === "ok")
-    .flatMap((provider) => provider.windows.map((w) => w.usedPercent));
+    .flatMap((provider) =>
+      provider.windows.map((w) => usagePercent(provider, w, now)),
+    )
+    .filter((value): value is number => value !== null);
   return values.length === 0 ? null : Math.max(...values);
 }
 
 /** 球体本身不写字，所以整段摘要塞进 `aria-label`。 */
-function summary(t: Translate, providers: UsageProvider[]): string {
+function summary(
+  t: Translate,
+  providers: UsageProvider[],
+  now: number,
+): string {
   return providers
     .map((provider) => {
       const name = t(`usage.provider.${provider.id}`);
       if (provider.status === "error")
         return `${name} ${t("usage.status.error")}`;
       const windows = provider.windows
-        .map((w) => `${windowLabel(t, w)} ${percentText(t, w.usedPercent)}`)
+        .map(
+          (w) =>
+            `${windowLabel(t, w)} ${usagePercent(provider, w, now) === null ? t("usage.awaitingRefresh") : percentText(t, w.usedPercent)}`,
+        )
         .join(" ");
       return `${name} ${windows}`;
     })
     .join(" · ");
 }
 
-function ProviderDetail({ provider }: { provider: UsageProvider }) {
-  const t = useT();
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="font-medium">{t(`usage.provider.${provider.id}`)}</div>
-      {provider.status === "error" ? (
-        <div className="text-muted-foreground">{t("usage.status.error")}</div>
-      ) : (
-        provider.windows.map((window) => (
-          <div key={window.key} className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <span className="w-14 shrink-0 text-muted-foreground">
-                {windowLabel(t, window)}
-              </span>
-              <UsageBar percent={window.usedPercent} />
-              <span className="ml-auto tabular-nums">
-                {percentText(t, window.usedPercent)}
-              </span>
-            </div>
-            {window.resetsAt && (
-              <div className="pl-16 text-xs text-muted-foreground">
-                {t("usage.resetIn", {
-                  value: formatRelativeTime(window.resetsAt),
-                })}
-              </div>
-            )}
-          </div>
-        ))
-      )}
-    </div>
-  );
-}
-
 export function UsageOrb() {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const pinned = useRef(false);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const clearHoverTimer = () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = null;
+  };
+  useEffect(
+    () => () => {
+      if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    },
+    [],
+  );
+  const preview = (pointerType: string) => {
+    if (pointerType === "touch") return;
+    clearHoverTimer();
+    if (!open)
+      hoverTimer.current = setTimeout(() => {
+        pinned.current = false;
+        setOpen(true);
+      }, 120);
+  };
+  const leavePreview = () => {
+    clearHoverTimer();
+    if (!pinned.current)
+      hoverTimer.current = setTimeout(() => {
+        if (!panelRef.current?.contains(document.activeElement)) setOpen(false);
+      }, 180);
+  };
   const showUsage = usePreferencesStore((state) => state.showUsage);
-  const queryClient = useQueryClient();
-  const usage = useQuery({
-    queryKey: ["usage"],
-    queryFn: () => runtimeApi.usage(),
-    refetchInterval: POLL_INTERVAL,
-    enabled: showUsage,
-  });
-  const refresh = useMutation({
-    mutationFn: () => runtimeApi.refreshUsage(),
-    onSuccess: (next) => queryClient.setQueryData(["usage"], next),
-  });
+  const { usage, refresh, refreshing, refreshFailed, now, cooldown } =
+    useUsage(showUsage);
 
-  const providers = visible(usage.data);
+  const providers = visible(usage.data).map((provider) =>
+    usage.isError ? { ...provider, status: "error" as const } : provider,
+  );
   if (!showUsage || providers.length === 0) return null;
 
-  const percent = maxPercent(providers);
+  const percent = maxPercent(providers, now);
   const ringLevel = percent === null ? null : level(percent);
 
   return (
-    <HoverCard
+    <Popover
       open={open}
-      onOpenChange={setOpen}
-      openDelay={120}
-      closeDelay={150}
+      onOpenChange={(next) => {
+        clearHoverTimer();
+        if (next) pinned.current = true;
+        setOpen(next);
+      }}
     >
-      {/*
-        缩略图是 tldraw 的 `NavigationPanel`，`styles/canvas.css` 把它钉在
-        右下、底边 44px（给 tldraw 水印让位），宽 200 高 152（150 加 1px 边）。
-        球压在它上方 14px：44 + 152 + 14 = 210。
-      */}
       <div
         data-slot="usage-orb"
-        className="fixed right-[14px] bottom-[210px] z-[var(--z-pills)]"
+        className="canvas-usage-orb z-[var(--z-pills)]"
       >
-        <HoverCardTrigger asChild>
+        <PopoverTrigger asChild>
           <button
             type="button"
             data-level={ringLevel ?? "none"}
-            aria-label={t("usage.orbLabel", { value: summary(t, providers) })}
+            aria-label={t("usage.orbLabel", {
+              value: summary(t, providers, now),
+            })}
             aria-expanded={open}
-            onClick={() => setOpen((value) => !value)}
+            onPointerEnter={(event) => preview(event.pointerType)}
+            onPointerLeave={leavePreview}
+            onClick={(event) => {
+              clearHoverTimer();
+              if (open && !pinned.current) {
+                // A click commits an already visible hover preview. Letting
+                // the primitive toggle here would immediately close it.
+                event.preventDefault();
+                pinned.current = true;
+                panelRef.current
+                  ?.querySelector<HTMLButtonElement>("button:not(:disabled)")
+                  ?.focus();
+              }
+            }}
             className="grid size-9 place-items-center rounded-full p-0 shadow-[var(--shadow-pill)] outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
             style={
               {
@@ -203,31 +170,68 @@ export function UsageOrb() {
               {percent === null ? "—" : percentText(t, percent)}
             </span>
           </button>
-        </HoverCardTrigger>
+        </PopoverTrigger>
       </div>
 
-      <HoverCardContent
+      <PopoverContent
+        ref={panelRef}
         data-slot="usage-panel"
+        aria-label={t("usage.label")}
         side="top"
         align="end"
-        className="z-[var(--z-menu)] flex w-64 flex-col gap-3"
+        collisionPadding={12}
+        onPointerEnter={clearHoverTimer}
+        onPointerLeave={leavePreview}
+        onFocusCapture={() => {
+          // Interacting inside a preview commits it too, so Escape restores
+          // focus even when the user clicked Refresh directly after hovering.
+          pinned.current = true;
+          clearHoverTimer();
+        }}
+        onOpenAutoFocus={(event) => {
+          if (!pinned.current) event.preventDefault();
+        }}
+        onCloseAutoFocus={(event) => {
+          if (!pinned.current) event.preventDefault();
+          pinned.current = false;
+        }}
+        className="z-[var(--z-menu)] flex w-72 max-w-[calc(100vw-24px)] max-h-[var(--radix-popover-content-available-height)] flex-col gap-3 overflow-y-auto"
       >
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-medium">{t("usage.label")}</h2>
+          <IconButton label={t("usage.close")} onClick={() => setOpen(false)}>
+            <X />
+          </IconButton>
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {t("usage.summaryHint")}
+        </div>
         {providers.map((provider, index) => (
           <div key={provider.id} className="flex flex-col gap-3">
             {index > 0 && <Separator />}
-            <ProviderDetail provider={provider} />
+            <ProviderDetail provider={provider} now={now} />
           </div>
         ))}
-        <div className="flex justify-end">
+        {(refreshFailed || usage.isError) && (
+          <div role="status" className="text-xs text-danger">
+            {t("usage.refreshError")}
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-muted-foreground">
+            {cooldown > 0
+              ? t("usage.cooldown", { seconds: cooldown })
+              : t("usage.cadence")}
+          </span>
           <IconButton
             label={t("usage.refresh")}
-            disabled={refresh.isPending}
+            disabled={refreshing || cooldown > 0}
             onClick={() => refresh.mutate()}
           >
-            <RefreshCw />
+            <RefreshCw className={refreshing ? "animate-spin" : undefined} />
           </IconButton>
         </div>
-      </HoverCardContent>
-    </HoverCard>
+      </PopoverContent>
+    </Popover>
   );
 }

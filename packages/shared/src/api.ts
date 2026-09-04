@@ -793,23 +793,20 @@ export const workspaceEventSchema = z.discriminatedUnion("type", [
  * e-mail addresses and plan names never cross the wire — a window is a
  * percentage and a reset time, nothing else.
  */
-export const usageWindowKeySchema = z.enum([
-  "5h",
-  "7d",
-  "primary",
-  "secondary",
-]);
+// 模型额度有独立 key（例如 seven_day_sonnet、codex_other:primary）。
+export const usageWindowKeySchema = z.string().min(1);
 
 export const usageWindowSchema = z.object({
   key: usageWindowKeySchema,
   /** 单位缩写（`5h` / `7d`）；前端过一层 i18n，认不出就原样显示。 */
   label: z.string(),
-  usedPercent: z.number(),
+  group: z.string().optional(),
+  usedPercent: z.number().min(0).max(100),
   /** RFC 3339，`null` 表示 provider 没给重置时间。 */
   resetsAt: z.string().nullable(),
 });
 
-export const usageProviderIdSchema = z.enum(["claude", "codex"]);
+export const usageProviderIdSchema = z.enum(["claude", "codex", "gemini"]);
 
 /**
  * `unavailable` = 本机没有该 provider 的凭据；`error` = 有凭据但取不到
@@ -835,6 +832,7 @@ export const usageProviderSchema = z.object({
 
 export const usageSchema = z.object({
   providers: z.array(usageProviderSchema),
+  refreshAvailableAt: z.string().nullable().optional(),
 });
 
 export type ApiError = z.infer<typeof apiErrorSchema>;

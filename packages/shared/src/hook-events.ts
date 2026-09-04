@@ -65,14 +65,16 @@ export const OPENCODE_HOOK_EVENTS = [
   "tool.execute.after",
 ] as const;
 
-export const HOOK_EVENTS: Readonly<
-  Record<BuiltinAgentId, readonly string[]>
-> = {
-  claude: CLAUDE_HOOK_EVENTS,
-  codex: CODEX_HOOK_EVENTS,
-  gemini: GEMINI_HOOK_EVENTS,
-  opencode: OPENCODE_HOOK_EVENTS,
-};
+export const HOOK_EVENTS: Readonly<Record<BuiltinAgentId, readonly string[]>> =
+  {
+    claude: CLAUDE_HOOK_EVENTS,
+    codex: CODEX_HOOK_EVENTS,
+    gemini: GEMINI_HOOK_EVENTS,
+    opencode: OPENCODE_HOOK_EVENTS,
+    pi: [],
+    omp: [],
+    copilot: [],
+  };
 
 export type ClaudeHookEvent = (typeof CLAUDE_HOOK_EVENTS)[number];
 export type CodexHookEvent = (typeof CODEX_HOOK_EVENTS)[number];

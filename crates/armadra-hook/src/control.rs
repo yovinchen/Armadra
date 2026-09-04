@@ -18,7 +18,9 @@ const CONTEXT_VERBS: [&str; 4] = ["list", "summary", "transcript", "terminal"];
 /// `armadra-hook context <verb> [--node <id|title>] [-n N]`
 pub fn run_context(args: &[String]) -> i32 {
     let Some(verb) = args.first() else {
-        return fail("usage: armadra-hook context <list|summary|transcript|terminal> [--node <id|title>] [-n N]");
+        return fail(
+            "usage: armadra-hook context <list|summary|transcript|terminal> [--node <id|title>] [-n N]",
+        );
     };
     if !CONTEXT_VERBS.contains(&verb.as_str()) {
         return fail(&format!(
@@ -187,6 +189,9 @@ pub fn render(response: &http::Response) -> String {
     let Ok(value) = serde_json::from_str::<Value>(&response.body) else {
         return response.body.clone();
     };
+    if value.get("protocol").is_some() || value.get("outcome").is_some() {
+        return response.body.clone();
+    }
     for key in ["message", "result", "text"] {
         match value.get(key) {
             Some(Value::String(text)) => return text.clone(),
@@ -308,6 +313,21 @@ mod tests {
             body: r#"{"ok":true,"message":"opened 2 nodes"}"#.to_string(),
         };
         assert_eq!(render(&response), "opened 2 nodes");
+    }
+
+    #[test]
+    fn mailbox_and_delivery_protocol_fields_survive_cli_rendering() {
+        for body in [
+            r#"{"ok":true,"protocol":"armadra.mailbox.v1","id":"m1","message":"stored"}"#,
+            r#"{"ok":false,"outcome":"targetBusy","retryable":true,"message":"busy"}"#,
+        ] {
+            let response = http::Response {
+                status: 200,
+                content_type: Some("application/json".into()),
+                body: body.into(),
+            };
+            assert_eq!(render(&response), body);
+        }
     }
 
     #[test]

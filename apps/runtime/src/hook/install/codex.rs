@@ -433,8 +433,8 @@ mod tests {
         let home = tempdir().unwrap();
         let report = install(home.path(), client()).unwrap();
         assert!(report.installed);
-        // The shared list has Notification, which Codex does not know.
-        assert!(report.warning.as_deref().unwrap().contains("Notification"));
+        // The registry only contains supported Codex events.
+        assert!(report.warning.is_none());
 
         let hooks: Value =
             serde_json::from_str(&fs::read_to_string(hooks_path(home.path())).unwrap()).unwrap();

@@ -1,6 +1,8 @@
 import * as React from "react";
 import {
   ArrowUpDown,
+  Copy,
+  Network,
   MessageSquare,
   MoreHorizontal,
   RotateCw,
@@ -8,6 +10,7 @@ import {
   Sparkles,
   Square,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Badge } from "@/ui/badge";
 import { IconButton } from "@/ui/icon-button";
@@ -17,6 +20,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { useT } from "@/app/preferences-store";
@@ -132,19 +139,19 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
       {sshLabel !== null && (
         <Badge
           variant="outline"
-          className="h-[15px] px-1.5 text-[length:var(--text-caption)]"
+          className="h-[18px] px-1.5 text-[length:var(--text-caption)]"
         >
           <ArrowUpDown className="size-2.5" />
           <span className="truncate">{sshLabel}</span>
         </Badge>
       )}
-      {agent && (
+      {agent && node.title !== agentLabel(agent.id) && (
         <Badge
           variant="outline"
-          className="h-[15px] px-1.5 text-[length:var(--text-caption)]"
+          className="h-[18px] px-1.5 text-[length:var(--text-caption)]"
           style={{
             color: agentColorVar(agent.id),
-            borderColor: agentColorVar(agent.id),
+            borderColor: `color-mix(in srgb, ${agentColorVar(agent.id)} 35%, transparent)`,
           }}
         >
           {agentLabel(agent.id)}
@@ -153,7 +160,7 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
       {exited && (
         <Badge
           variant="outline"
-          className="h-[15px] px-1.5 text-[length:var(--text-caption)]"
+          className="h-[18px] px-1.5 text-[length:var(--text-caption)]"
         >
           {t("terminal.exited")}
           {surface.exitCode === null ? "" : ` ${surface.exitCode}`}
@@ -180,6 +187,7 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
       )}
       {!exited && (
         <IconButton
+          className="terminal-secondary-action"
           label={t("terminal.interrupt")}
           onClick={() => surfaceRef.current?.terminate("interrupt")}
         >
@@ -189,7 +197,10 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
 
       <Popover open={findOpen} onOpenChange={setFindOpen}>
         <PopoverTrigger asChild>
-          <IconButton label={t("terminal.find")}>
+          <IconButton
+            className="terminal-secondary-action"
+            label={t("terminal.find")}
+          >
             <Search />
           </IconButton>
         </PopoverTrigger>
@@ -222,7 +233,47 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
             <MoreHorizontal />
           </IconButton>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="end" className="min-w-52">
+          <DropdownMenuItem onSelect={() => setFindOpen(true)}>
+            <Search />
+            {t("terminal.find")}
+          </DropdownMenuItem>
+          {!exited && (
+            <DropdownMenuItem
+              onSelect={() => surfaceRef.current?.terminate("interrupt")}
+            >
+              <Square />
+              {t("terminal.interrupt")}
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Network />
+              {t("terminal.collaboration")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-64 max-w-[calc(100vw-24px)]">
+              <p className="px-2 py-2 text-xs leading-relaxed text-muted-foreground">
+                {t("terminal.collaborationHint")}
+              </p>
+              <code className="block select-text px-2 pb-2 text-xs">
+                armadra-hook canvas help
+              </code>
+              <DropdownMenuItem
+                onSelect={() => {
+                  void navigator.clipboard
+                    .writeText("armadra-hook canvas help")
+                    .then(
+                      () => toast.success(t("terminal.commandCopied")),
+                      () => toast.error(t("terminal.copyFailed")),
+                    );
+                }}
+              >
+                <Copy />
+                {t("terminal.copyHelpCommand")}
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSeparator />
           {/* AI 命名 / 评论（§17）。头部不再加按钮、也不加行：终端节点的头部
               永远是一行 34px，下面直接是 xterm，多一行就会触发 fit 抖动。 */}
           {canSuggestTitle(node) && (

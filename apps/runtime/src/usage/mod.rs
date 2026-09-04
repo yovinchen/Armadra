@@ -15,6 +15,7 @@
 
 pub mod claude;
 pub mod codex;
+pub mod gemini;
 
 use std::{
     sync::{Arc, Mutex, RwLock},
@@ -53,8 +54,10 @@ pub enum UsageStatus {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageWindow {
-    pub key: &'static str,
+    pub key: String,
     pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
     /// 0–100, already rounded to one decimal by the provider modules.
     pub used_percent: f64,
     /// RFC 3339, or `null` when the provider does not say.
@@ -95,8 +98,10 @@ impl ProviderUsage {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UsageSnapshot {
     pub providers: Vec<ProviderUsage>,
+    pub refresh_available_at: Option<String>,
 }
 
 impl UsageSnapshot {
@@ -105,9 +110,11 @@ impl UsageSnapshot {
     /// the state in which the pill does not render.
     pub fn empty() -> Self {
         Self {
+            refresh_available_at: None,
             providers: vec![
                 ProviderUsage::unavailable(claude::ID),
                 ProviderUsage::unavailable(codex::ID),
+                ProviderUsage::unavailable(gemini::ID),
             ],
         }
     }
@@ -123,6 +130,7 @@ pub struct UsageService {
     client: reqwest::Client,
     snapshot: Arc<RwLock<UsageSnapshot>>,
     last_fetch: Arc<Mutex<Option<Instant>>>,
+    refresh_guard: Arc<tokio::sync::Mutex<()>>,
     settings: SettingsStore,
 }
 
@@ -137,12 +145,16 @@ impl UsageService {
             client,
             snapshot: Arc::new(RwLock::new(UsageSnapshot::empty())),
             last_fetch: Arc::new(Mutex::new(None)),
+            refresh_guard: Arc::new(tokio::sync::Mutex::new(())),
             settings,
         }
     }
 
     /// The cached snapshot. Never blocks on the network.
     pub fn snapshot(&self) -> UsageSnapshot {
+        if !self.settings.usage_enabled() {
+            return UsageSnapshot::empty();
+        }
         self.snapshot
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -167,23 +179,32 @@ impl UsageService {
             .is_some_and(|at| at.elapsed() < MANUAL_REFRESH_COOLDOWN)
     }
 
-    /// Fetch both providers now and replace the cache.
+    /// Fetch supported providers concurrently and replace the cache.
     pub async fn refresh(&self) -> UsageSnapshot {
+        let _guard = self.refresh_guard.lock().await;
+        self.refresh_locked().await
+    }
+
+    async fn refresh_locked(&self) -> UsageSnapshot {
         if !self.settings.usage_enabled() {
-            let snapshot = UsageSnapshot::empty();
-            self.store(snapshot.clone());
-            return snapshot;
+            // Pausing queries must not overwrite a real snapshot or start a
+            // cooldown for work we did not do. On resume, reuse still-recent
+            // data or perform a real fetch immediately.
+            return UsageSnapshot::empty();
         }
-        let (claude, codex, claude_source, codex_source) = tokio::join!(
+        let ((claude, claude_source), (codex, codex_source), (gemini, gemini_source)) = tokio::join!(
             claude::fetch(&self.client),
             codex::fetch(&self.client),
-            claude::credential_source(),
-            codex::credential_source(),
+            gemini::fetch(&self.client)
         );
         let snapshot = UsageSnapshot {
+            refresh_available_at: Some(
+                (chrono::Utc::now() + chrono::Duration::seconds(30)).to_rfc3339(),
+            ),
             providers: vec![
                 finish(claude::ID, claude, claude_source),
                 finish(codex::ID, codex, codex_source),
+                finish(gemini::ID, gemini, gemini_source),
             ],
         };
         self.store(snapshot.clone());
@@ -192,10 +213,12 @@ impl UsageService {
 
     /// `POST /api/usage/refresh`: refresh unless we just did.
     pub async fn refresh_throttled(&self) -> UsageSnapshot {
+        // Check after acquiring: concurrent callers share the completed fetch.
+        let _guard = self.refresh_guard.lock().await;
         if self.cooling_down() {
             return self.snapshot();
         }
-        self.refresh().await
+        self.refresh_locked().await
     }
 
     /// 10s after start, then every 5 minutes (plan §19「刷新」).
@@ -204,7 +227,7 @@ impl UsageService {
         tokio::spawn(async move {
             tokio::time::sleep(FIRST_FETCH_DELAY).await;
             loop {
-                service.refresh().await;
+                service.refresh_throttled().await;
                 tokio::time::sleep(REFRESH_INTERVAL).await;
             }
         });
@@ -229,10 +252,17 @@ fn finish(
         // No windows means no usable credential, so the source is reported as
         // it was found rather than forced to `None`: an expired keychain token
         // should still say 钥匙串.
-        Ok(_) => ProviderUsage {
+        Ok(None) => ProviderUsage {
             credential_source,
             ..ProviderUsage::unavailable(id)
         },
+        Ok(Some(_)) => finish(
+            id,
+            Err(anyhow::anyhow!(
+                "usage response contained no usable windows"
+            )),
+            credential_source,
+        ),
         Err(error) => {
             tracing::debug!(provider = id, %error, "usage fetch failed");
             ProviderUsage {
@@ -240,7 +270,7 @@ fn finish(
                 status: UsageStatus::Error,
                 credential_source,
                 windows: Vec::new(),
-                fetched_at: Some(chrono::Utc::now().to_rfc3339()),
+                fetched_at: None,
             }
         }
     }
@@ -282,10 +312,48 @@ pub(crate) fn clamp_percent(value: f64) -> f64 {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn paused_queries_do_not_start_a_cooldown_or_erase_cached_usage() {
+        let settings = SettingsStore::in_memory(serde_json::json!({"usage": {"enabled": false}}));
+        let service = UsageService::new(settings.clone());
+        service.refresh().await;
+        assert!(!service.cooling_down());
+
+        let mut cached = UsageSnapshot::empty();
+        cached.refresh_available_at = Some("2026-09-05T10:00:30Z".to_owned());
+        service.store(cached);
+        service.refresh().await;
+        assert!(service.snapshot().refresh_available_at.is_none());
+        settings
+            .patch(&serde_json::json!({"usage": {"enabled": true}}))
+            .unwrap();
+        assert_eq!(
+            service.snapshot().refresh_available_at.as_deref(),
+            Some("2026-09-05T10:00:30Z")
+        );
+    }
+
+    #[tokio::test]
+    async fn queued_refreshes_recheck_the_cooldown_after_the_active_fetch() {
+        let service = UsageService::new(SettingsStore::in_memory(serde_json::json!({})));
+        let guard = service.refresh_guard.lock().await;
+        let pending = service.clone();
+        let refresh = tokio::spawn(async move { pending.refresh_throttled().await });
+        let mut cached = UsageSnapshot::empty();
+        cached.refresh_available_at = Some("2026-09-05T10:00:30Z".to_owned());
+        service.store(cached);
+        drop(guard);
+        let result = refresh.await.unwrap();
+        assert_eq!(
+            result.refresh_available_at.as_deref(),
+            Some("2026-09-05T10:00:30Z")
+        );
+    }
+
     #[test]
     fn an_empty_snapshot_hides_the_pill() {
         let snapshot = UsageSnapshot::empty();
-        assert_eq!(snapshot.providers.len(), 2);
+        assert_eq!(snapshot.providers.len(), 3);
         assert!(
             snapshot
                 .providers
@@ -327,9 +395,9 @@ mod tests {
     }
 
     #[test]
-    fn empty_windows_count_as_unavailable() {
+    fn empty_windows_are_a_parse_error_not_missing_credentials() {
         let provider = finish("codex", Ok(Some(Vec::new())), CredentialSource::None);
-        assert_eq!(provider.status, UsageStatus::Unavailable);
+        assert_eq!(provider.status, UsageStatus::Error);
         assert_eq!(provider.credential_source, CredentialSource::None);
         assert!(provider.fetched_at.is_none());
     }

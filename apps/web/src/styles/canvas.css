@@ -104,7 +104,7 @@
  */
 .canvas-stage .tlui-style-panel__wrapper,
 .canvas-stage .tlui-style-panel__wrapper:only-child {
-  margin: 54px 62px 0 0;
+  margin: 3px 62px 0 0;
   background-color: color-mix(in srgb, var(--panel) 92%, transparent);
   border: 1px solid var(--border);
   border-radius: var(--r-panel);
@@ -136,10 +136,13 @@
  * 4 + 32 + 8 = 44。
  */
 .canvas-stage .tlui-navigation-panel {
-  right: 12px;
-  bottom: 44px;
+  position: absolute;
+  right: 14px;
+  bottom: var(--navigation-bottom);
   left: auto;
-  width: 200px;
+  width: var(--minimap-w);
+  min-width: var(--minimap-w);
+  flex-shrink: 0;
   overflow: hidden;
   background-color: color-mix(in srgb, var(--panel) 92%, transparent);
   border: 1px solid var(--border);
@@ -159,8 +162,9 @@
 }
 
 .canvas-stage .tlui-minimap {
-  height: 150px;
-  min-height: 150px;
+  height: var(--minimap-h);
+  min-height: var(--minimap-h);
+  width: 100%;
   padding: 6px;
 }
 
@@ -198,4 +202,116 @@
   font-family: var(--font-ui);
   font-size: var(--text-caption);
   color: var(--muted-foreground);
+}
+
+/* 浮层以真实画布宽度布局；侧栏折叠后容器查询也会重新计算。 */
+.workspace-surface {
+  container: workspace / inline-size;
+  isolation: isolate;
+  --minimap-w: 200px;
+  --minimap-h: 150px;
+  --navigation-bottom: 44px;
+}
+
+.canvas-dock {
+  position: absolute;
+  bottom: var(--dock-bottom, 14px);
+  left: 14px;
+  right: calc(var(--minimap-w) + 76px);
+  width: max-content;
+  max-width: calc(100% - var(--minimap-w) - 90px);
+  margin-inline: auto;
+}
+
+.dock-tools-expanded {
+  display: flex;
+}
+.dock-tools-compact {
+  display: none;
+}
+
+.canvas-usage-orb {
+  position: absolute;
+  right: calc(14px + var(--minimap-w) + 10px);
+  bottom: var(--navigation-bottom);
+}
+
+@container workspace (max-width: 1000px) {
+  .canvas-dock {
+    --dock-bottom: 38px;
+    right: 14px;
+    max-width: calc(100% - 28px);
+  }
+  .dock-tools-expanded {
+    display: none;
+  }
+  .dock-tools-compact {
+    display: block;
+  }
+  .canvas-stage .tlui-navigation-panel,
+  .canvas-usage-orb {
+    --navigation-bottom: calc(38px + var(--dock-h) + 12px);
+  }
+}
+
+@container workspace (max-width: 760px) {
+  .canvas-stage .tlui-navigation-panel,
+  .canvas-usage-orb {
+    --minimap-w: 160px;
+    --minimap-h: 120px;
+  }
+}
+
+.canvas-stage .canvas-navigation {
+  transition: width 160ms ease-out;
+}
+.canvas-navigation .minimap-toggle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: var(--panel);
+  opacity: 0.9;
+}
+.canvas-navigation[data-collapsed="true"] {
+  height: 36px;
+  display: grid;
+  place-items: center;
+}
+.canvas-navigation[data-collapsed="true"] .minimap-toggle {
+  position: static;
+  background: transparent;
+}
+.workspace-surface[data-minimap-collapsed="true"],
+.workspace-surface[data-minimap-collapsed="true"] .tlui-navigation-panel,
+.workspace-surface[data-minimap-collapsed="true"] .canvas-usage-orb {
+  --minimap-w: 36px;
+  --minimap-h: 36px;
+}
+.canvas-usage-orb {
+  transition: right 160ms ease-out;
+}
+
+/* Preserve the complete tldraw notice and its link, in one compact readable line. */
+.canvas-stage .tl-watermark_SEE-LICENSE[data-unlicensed="true"] {
+  width: 178px;
+  height: 22px;
+  right: 12px;
+  bottom: 4px;
+  border-radius: 5px;
+}
+.canvas-stage .tl-watermark_SEE-LICENSE[data-unlicensed="true"] > button,
+.canvas-stage
+  .tl-watermark_SEE-LICENSE[data-unlicensed="true"][data-mobile="true"]
+  > button {
+  display: block;
+  width: 178px;
+  height: 22px;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-stage .canvas-navigation,
+  .canvas-usage-orb {
+    transition: none;
+  }
 }

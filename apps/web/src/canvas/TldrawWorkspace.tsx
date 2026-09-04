@@ -35,7 +35,11 @@ import { useBoardAutosave } from "@/save/autosave";
 import { useCanvasStore } from "@/store/canvas-store";
 import { runtimeApi } from "@/api/client";
 import { createAssetStore } from "./assets";
-import { isCanvasLocked, setCanvasLocked, useCanvasLocked } from "./canvas-lock";
+import {
+  isCanvasLocked,
+  setCanvasLocked,
+  useCanvasLocked,
+} from "./canvas-lock";
 import { registerCanvasCommands, type CanvasCommandId } from "./commands";
 import { registerEscapeToSelect } from "./escape-to-select";
 import { CENTER_NODE_EVENT, setEditor } from "./editor-context";
@@ -48,11 +52,14 @@ import { NodeMenuContent } from "./menus/node-menu";
 import { ShapeMenuContent } from "./menus/shape-menu";
 import { CanvasOverlays } from "./overlays/CanvasOverlays";
 import { StatusMinimap } from "./overlays/StatusMinimap";
+import { canvasEditorTranslations } from "../i18n/canvas";
+import { CanvasNavigationPanel } from "./overlays/CanvasNavigationPanel";
 import { CanvasStylePanel } from "./StylePanel";
 import { ArmadraShapeUtil } from "./shapes/ArmadraShapeUtil";
 import { registerLinkArrow } from "./shapes/LinkArrow";
 import { LinkBindingUtil } from "./shapes/LinkBindingUtil";
 import { LinkShapeUtil } from "./shapes/LinkShapeUtil";
+import { NodeArrowShapeUtil } from "./shapes/NodeArrowShapeUtil";
 import {
   RETIRED_SHAPE_TYPES,
   activeShapeUtils,
@@ -121,14 +128,16 @@ const components: TLComponents = {
   TopPanel: null,
   OnTheCanvas: CanvasOverlays,
   // 缩略图按 Agent 状态描边（§3.2）：`MinimapManager` 只认 4 个全局颜色变量，
-  // 所以整块自己画。宿主仍是 `NavigationPanel`，别把它置空。
+  // 自定义宿主避免 tldraw 在窄画布上直接隐藏缩略图。
   Minimap: StatusMinimap,
+  NavigationPanel: CanvasNavigationPanel,
   // 样式面板复用 tldraw 的实现，只加一层显隐（§12 第 2 条）。
   StylePanel: CanvasStylePanel,
 };
 
 /** §5：tldraw 自己的快捷键全部摘掉，全应用只留 `keybindings.ts` 一个监听器。 */
 const overrides: TLUiOverrides = {
+  translations: canvasEditorTranslations,
   actions(_editor, actions) {
     for (const action of Object.values(actions)) delete action.kbd;
     return actions;
@@ -150,7 +159,9 @@ const overrides: TLUiOverrides = {
  * 看才完整，别只改一处。
  */
 const shapeUtils = [
-  ...activeShapeUtils(defaultShapeUtils),
+  ...activeShapeUtils(defaultShapeUtils).map((util) =>
+    util.type === "arrow" ? NodeArrowShapeUtil : util,
+  ),
   ArmadraShapeUtil,
   LinkShapeUtil,
 ];
@@ -274,9 +285,11 @@ export function TldrawWorkspace() {
    * 平移不置 dirty，`save/autosave.ts` 有单独的视口通道。
    */
   const cameraTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingCamera = React.useRef<{ x: number; y: number; z: number } | null>(
-    null,
-  );
+  const pendingCamera = React.useRef<{
+    x: number;
+    y: number;
+    z: number;
+  } | null>(null);
   const onCameraChange = React.useCallback(
     (next: { x: number; y: number; z: number }) => {
       pendingCamera.current = next;
@@ -327,19 +340,22 @@ export function TldrawWorkspace() {
 
   /* ------------------------------ 删除 ----------------------------------- */
 
-  const requestDelete = React.useCallback((nodes: string[], edges: string[]) => {
-    if (nodes.length === 0 && edges.length === 0) return;
-    if (!hasLiveSession(nodes)) {
-      const store = useCanvasStore.getState();
-      if (edges.length > 0) store.removeEdges(edges);
-      if (nodes.length > 0) {
-        endSessionsOf(nodes);
-        store.removeNodes(nodes);
+  const requestDelete = React.useCallback(
+    (nodes: string[], edges: string[]) => {
+      if (nodes.length === 0 && edges.length === 0) return;
+      if (!hasLiveSession(nodes)) {
+        const store = useCanvasStore.getState();
+        if (edges.length > 0) store.removeEdges(edges);
+        if (nodes.length > 0) {
+          endSessionsOf(nodes);
+          store.removeNodes(nodes);
+        }
+        return;
       }
-      return;
-    }
-    setPendingDelete({ nodes, edges });
-  }, []);
+      setPendingDelete({ nodes, edges });
+    },
+    [],
+  );
 
   const confirmDelete = React.useCallback(() => {
     if (!pendingDelete) return;
@@ -364,7 +380,10 @@ export function TldrawWorkspace() {
       const zoom = Math.max(editor.getZoomLevel(), 0.6);
       if (zoom !== editor.getZoomLevel()) {
         const point = editor.getCamera();
-        editor.setCamera({ x: point.x, y: point.y, z: zoom }, { immediate: true });
+        editor.setCamera(
+          { x: point.x, y: point.y, z: zoom },
+          { immediate: true },
+        );
       }
       editor.centerOnPoint(bounds.center, { animation: { duration: 200 } });
     },
@@ -455,7 +474,8 @@ export function TldrawWorkspace() {
         window.requestAnimationFrame(fitView);
       },
       "canvas.fitView": fitView,
-      "canvas.zoomIn": () => editor.zoomIn(undefined, { animation: { duration: 120 } }),
+      "canvas.zoomIn": () =>
+        editor.zoomIn(undefined, { animation: { duration: 120 } }),
       "canvas.zoomOut": () =>
         editor.zoomOut(undefined, { animation: { duration: 120 } }),
       "canvas.zoom100": () =>

@@ -47,7 +47,7 @@ const SECTION_PAGES: Record<string, () => React.ReactElement> = {
 /**
  * 设置（⌘,，§24.1）。
  *
- * ChatGPT 桌面端那一套：居中对话框，左 200px 导航，右侧是**当前分区独立的
+ * Codex 桌面端的分栏设置：居中对话框，左 200px 导航，右侧是**当前分区独立的
  * 一页**——切分区整页替换，没有跨分区滚动，也没有搜索框与 scroll-spy。
  * 子页（SSH 主机、自定义 Agent）在同一右栏里推入，页头换成「← 子页名」，
  * 不叠第二层对话框。
@@ -69,7 +69,7 @@ export function SettingsDialog() {
     >
       <DialogContent
         showCloseButton={false}
-        className="z-[var(--z-dialog)] h-[600px] max-h-[88vh] w-[820px] max-w-[92vw] gap-0 overflow-hidden rounded-[14px] p-0 sm:max-w-[92vw]"
+        className="z-[var(--z-dialog)] h-[680px] max-h-[calc(100dvh-48px)] w-[920px] max-w-[calc(100vw-48px)] gap-0 overflow-hidden rounded-[14px] p-0 sm:max-w-[calc(100vw-48px)]"
       >
         <DialogTitle className="sr-only">{t("settings.title")}</DialogTitle>
         <SettingsBody onClose={() => setPanel("settings", false)} />
@@ -93,14 +93,14 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
   const groups = React.useMemo(() => groupSections(SETTINGS_SECTIONS), []);
 
   return (
-    <div className="flex h-full min-h-0 flex-row">
+    <div className="settings-layout flex h-full min-h-0 flex-row">
       <nav
         aria-label={t("settings.title")}
-        className="flex h-full w-[200px] shrink-0 flex-col gap-2 overflow-y-auto border-r border-border bg-panel p-2"
+        className="settings-navigation flex h-full w-[200px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-border bg-panel p-3"
       >
         {groups.map((group) => (
           <div key={group.groupKey} className="flex flex-col gap-0.5">
-            <div className="px-2 pt-2 pb-1 text-[11px] tracking-[0.06em] text-muted-foreground uppercase">
+            <div className="settings-nav-group px-2 pt-2 pb-1 text-xs font-medium text-muted-foreground">
               {t(group.groupKey)}
             </div>
             {group.sections.map((item) => (
@@ -116,7 +116,7 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
       </nav>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-2 px-4">
+        <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border/60 px-6">
           {subpage && (
             <IconButton
               size="cluster"
@@ -141,7 +141,7 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
           key={subpage ?? active}
           data-testid="settings-page"
           data-section={active}
-          className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-8 pt-2 pb-6 duration-120 animate-in fade-in"
+          className="settings-page flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pt-5 pb-8 duration-150 animate-in fade-in motion-reduce:animate-none"
         >
           <Page />
         </div>
@@ -166,6 +166,8 @@ function NavItem({
       type="button"
       data-active={active}
       aria-current={active ? "page" : undefined}
+      title={t(section.labelKey)}
+      aria-label={t(section.labelKey)}
       className={cn(
         "flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] text-muted-foreground transition-colors",
         "hover:bg-muted hover:text-foreground",
@@ -174,7 +176,7 @@ function NavItem({
       onClick={() => onSelect(section.id)}
     >
       <Icon className="size-4 shrink-0" strokeWidth={1.5} />
-      <span className="truncate">{t(section.labelKey)}</span>
+      <span className="settings-nav-label truncate">{t(section.labelKey)}</span>
     </button>
   );
 }

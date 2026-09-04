@@ -83,6 +83,9 @@ export const modals: MessageModule = {
     "settings.hooks.installed": "已安装",
     "settings.hooks.revision": "已安装 rev {value}", // i18n-exempt
     "settings.hooks.missing": "未安装",
+    "settings.hooks.pullOnly": "按需协作，无 Hook 适配",
+    "settings.permissionUnsupported":
+      "此 CLI 不支持当前默认权限模式，请先在设置中选择默认模式。",
     "settings.hooks.install": "安装",
     "settings.hooks.reinstall": "重装",
     "settings.hooks.uninstall": "卸载",
@@ -287,6 +290,9 @@ export const modals: MessageModule = {
     "settings.hooks.installed": "Installed",
     "settings.hooks.revision": "Installed rev {value}",
     "settings.hooks.missing": "Not installed",
+    "settings.hooks.pullOnly": "Pull collaboration; no hook adapter",
+    "settings.permissionUnsupported":
+      "This CLI does not support the default permission mode. Choose its default mode in Settings first.",
     "settings.hooks.install": "Install",
     "settings.hooks.reinstall": "Reinstall",
     "settings.hooks.uninstall": "Uninstall",

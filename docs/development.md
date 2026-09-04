@@ -14,15 +14,15 @@
 
 根目录的 `armadra.sh` 把下面各节串成子命令，任何一步失败即停止：
 
-| 命令 | 做什么 |
-| --- | --- |
-| `./armadra.sh doctor` | 检查 node / pnpm / rust / tmux / Xcode CLT |
-| `./armadra.sh install` | `pnpm install` + `cargo fetch` |
-| `./armadra.sh check` | shared 构建、TypeScript 类型检查、`cargo fmt --check`、clippy（警告即失败） |
-| `./armadra.sh test` | shared / web / Rust workspace 全部测试 |
-| `./armadra.sh build [--bundle]` | release 二进制 + sidecar + 前端产物；`--bundle` 再打 .app / .dmg |
-| `./armadra.sh run [desktop\|web]` | 桌面端 `tauri dev`，或 Runtime + 浏览器前端（⌃C 一起退出） |
-| `./armadra.sh all` | install → check → build → run |
+| 命令                              | 做什么                                                                      |
+| --------------------------------- | --------------------------------------------------------------------------- |
+| `./armadra.sh doctor`             | 检查 node / pnpm / rust / tmux / Xcode CLT                                  |
+| `./armadra.sh install`            | `pnpm install` + `cargo fetch`                                              |
+| `./armadra.sh check`              | shared 构建、TypeScript 类型检查、`cargo fmt --check`、clippy（警告即失败） |
+| `./armadra.sh test`               | shared / web / Rust workspace 全部测试                                      |
+| `./armadra.sh build [--bundle]`   | release 二进制 + sidecar + 前端产物；`--bundle` 再打 .app / .dmg            |
+| `./armadra.sh run [desktop\|web]` | 桌面端 `tauri dev`，或 Runtime + 浏览器前端（⌃C 一起退出）                  |
+| `./armadra.sh all`                | install → check → build → run                                               |
 
 端口可用 `ARMADRA_RUNTIME_PORT` / `ARMADRA_WEB_PORT` 覆盖；43120 被占用（例如 Armadra.app 正在运行）时脚本会直接报错而不是抢端口。
 
@@ -34,7 +34,7 @@ pnpm install
 
 ## 运行
 
-Runtime 与前端是两个进程，桌面壳会自己拉起 Runtime。
+Runtime 与前端是两个进程；生产桌面包自动启动 Runtime，开发模式由脚本统一启动。
 
 ```bash
 # 1. Runtime（监听 127.0.0.1:43120）
@@ -130,7 +130,7 @@ docs/         文档（见 docs/README.md）
 ## 约定
 
 - JSON 字段一律 camelCase；错误统一 `{ "code": string, "message": string }`。
-- 数据库没有升级路径：版本不认识就把 `canvas.db` 改名为
+- 数据库支持已知的增量迁移；版本不认识或校验和不匹配时把 `canvas.db` 改名为
   `canvas.db.legacy-<时间戳>` 并新建。开发中换 schema 直接删库。
 - 界面文案走 `apps/web/src/i18n/`，组件只用 shadcn CLI 装的组件。
 - 改架构先改 [architecture.md](./architecture.md)，再动代码。

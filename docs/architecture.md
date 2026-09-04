@@ -42,9 +42,18 @@ opencode 等 CLI Agent 作为终端节点放在一块 tldraw 白板上，节点�
 - **apps/web 是唯一页面**。桌面壳与浏览器加载同一份构建产物。
 - **apps/runtime 是唯一执行服务**。所有进程、文件、Git、权限判定都在这里，
   业务逻辑不写进 Tauri command，避免出现第二套后端。
-- **apps/desktop 只做壳**。插件只启用 `dialog` 与 `opener` 两个。
+- **apps/desktop 只做壳**。插件提供目录选择、外部链接与系统通知。
 
 ## 3. 画布层
+
+窗口浮层以侧栏之外的可用画布区域为布局容器。标题栏图标共用 44px 高度的
+中心线；底部 Dock 与右侧导航区分别预留空间。窄窗口使用紧凑工具菜单，并把
+缩略图与用量球移到 Dock 上方；缩略图由自定义 NavigationPanel 承载，不跟随
+tldraw 默认的移动端断点隐藏。用量球位于缩略图左侧。
+
+用量快照保留供应商返回的基础与模型专属额度窗口，每个窗口独立显示已用比例和
+重置时间。数据采集时间与额度重置时间分开显示；后台刷新和手动刷新共用串行化
+与冷却时间，前端只轮询缓存，不把缓存轮询时间当成数据更新时间。
 
 tldraw 5 的 store 是画布在内存里的唯一真相：
 
@@ -65,7 +74,7 @@ Agent 节点就是终端节点里跑着一个 CLI，没有中间协议：
 
 1. Runtime 在 PTY 里启动 CLI，注入 `ARMADRA_NODE_ID`、`ARMADRA_ENDPOINT_FILE`
    等环境变量。
-2. Runtime 往各 CLI 的配置文件里装 hook（`apps/runtime/src/hook/install/`），
+2. 用户在设置中显式安装后，Runtime 往支持的 CLI 配置文件里装 hook（`apps/runtime/src/hook/install/`），
    hook 命令是 `armadra-hook` 这个小二进制。
 3. CLI 在回合开始 / 结束 / 请求权限时调用 `armadra-hook`，它读
    `<数据目录>/hook-endpoint.env` 找到 Runtime（优先 Unix socket，其次回环 TCP），
@@ -82,11 +91,12 @@ Agent 之间的协作走 Runtime 的两个动词表面：
 
 - `POST /context-link/{verb}`：读取被链接节点的转录、摘要或终端画面。
 - `POST /control/{verb}`：`list` / `open-terminal` / `open-agent` / `sticky` /
-  `link` / `rename` / `color` / `send` / `reply` / `notify` / `close`。
+  `link` / `rename` / `color` / `post` / `inbox` / `ack` / `send` / `reply` / `notify` / `close`。
 
-Claude 通过 `~/.claude/skills/armadra-linked-context` 与 `armadra-canvas` 两个技能
-知道这些动词；其余 CLI 通过各自的长指令文件里一段带标记的区块
-（`apps/runtime/src/collab/skills.rs`）。
+所有 Agent 终端都能调用 `armadra-hook canvas help` 读取短帮助。默认协作采用
+`post` / `inbox` / `ack` 拉取消息箱，不自动注入终端输入或追加启动提示。显式安装
+Hook 时提供独立的按需技能，不再追加全局长指令。详见
+[Agent 适配与协作协议](agent-collaboration.md)。
 
 ## 5. 数据模型与持久化
 
@@ -111,7 +121,7 @@ Claude 通过 `~/.claude/skills/armadra-linked-context` 与 `armadra-canvas` 两
   `.armadra/assets/<sha256 前 16 位>.<ext>`，快照里只留 URL 与工作区相对路径。
 - 保存是 CAS：请求带 `expectedUpdatedAt`，冲突返回 `409`。
 
-SQLite 表（`apps/runtime/migrations/0001_initial.sql`，唯一 schema，没有升级路径）：
+SQLite 基础表由 `0001_initial.sql` 创建；`0002_agent_mailbox.sql` 增量添加消息箱：
 
 | 表                                    | 内容                                                |
 | ------------------------------------- | --------------------------------------------------- |
@@ -120,12 +130,13 @@ SQLite 表（`apps/runtime/migrations/0001_initial.sql`，唯一 schema，没有
 | `terminal_sessions` / `terminal_logs` | 终端会话与回放日志                                  |
 | `agent_status`                        | 每个 Agent 节点的当前状态（hook reduce 的结果）     |
 | `agent_approvals`                     | 权限请求与答复                                      |
+| `agent_mailbox`                       | 持久化拉取消息箱（幂等发送、确认、过期）            |
 | `agent_deliveries`                    | Agent 之间的消息投递记录                            |
 | `context_links`                       | 供 Agent 查询的链接视图                             |
 | `hook_installs`                       | 每个 CLI 的 hook 安装记录                           |
 | `conversations`                       | 会话索引（provider + session id → 标题）            |
 
-数据库版本不认识时不迁移也不兼容：`db::connect` 会把 `canvas.db` 改名为
+已知迁移按版本顺序执行。版本未知或校验和不匹配时：`db::connect` 会把 `canvas.db` 改名为
 `canvas.db.legacy-<时间戳>`，记一条 warn，然后按当前 schema 建新库。
 
 终端原始输出、密钥和 `.env` 不进入画板持久化。

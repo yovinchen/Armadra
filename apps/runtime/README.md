@@ -22,7 +22,7 @@ CORS 只放行 `http://127.0.0.1:*`、`http://localhost:*`、`tauri://localhost`
 | `hook/`                               | hook 端点（回环 TCP + Unix socket）、per-node token 鉴权、各 CLI 的 hook 安装与载荷归一化、状态 reduce |
 | `collab/`                             | 上下文链接、控制动词、消息投递、审批、技能安装、板日志                                                 |
 | `index/`                              | 扫描 Claude / Codex / Gemini 的本地转录，建 `(provider, sessionId) → 标题` 索引                        |
-| `usage/`                              | Claude / Codex 配额快照，按 Runtime 自己的节奏拉取并缓存                                               |
+| `usage/`                              | Claude / Codex / Gemini 配额快照，按 Runtime 自己的节奏拉取并缓存                                      |
 | `files.rs` / `git.rs` / `security.rs` | 文件读写（原子替换）、Git 包装、路径限制在工作区根内                                                   |
 
 ## 接口
@@ -70,8 +70,8 @@ Hook 表面（`src/hook/mod.rs`，独立鉴权与 body 上限，同一份 router
 
 ## 数据库
 
-`migrations/0001_initial.sql` 是唯一的 schema，没有任何升级路径。旧版本写下的数据库
-不做迁移也不做兼容：`db::connect` 检查 `_sqlx_migrations`，只要有一条记录不在本二进制
+`migrations/0001_initial.sql` 保存基础 schema，`0002_agent_mailbox.sql` 增量添加
+协作消息箱；已知版本按 SQLx 迁移升级，保留工作空间与看板。`db::connect` 检查 `_sqlx_migrations`，只要有一条记录不在本二进制
 自带的迁移里（版本不认识，或校验和对不上），就把 `canvas.db`（连同 `-wal` / `-shm`）
 改名为 `canvas.db.legacy-<时间戳>`，记一条 warn 日志，然后按当前 schema 建一个新库。
 

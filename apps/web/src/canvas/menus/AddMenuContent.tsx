@@ -1,11 +1,13 @@
 import * as React from "react";
 import {
   ContextMenuItem,
+  ContextMenuLabel,
   ContextMenuSeparator,
   ContextMenuShortcut,
 } from "@/ui/context-menu";
 import {
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
 } from "@/ui/dropdown-menu";
@@ -35,6 +37,7 @@ export function AddMenuContent({ ctx, kind }: AddMenuContentProps) {
     [ctx.agents, hosts, t],
   );
   const Item = kind === "context" ? ContextMenuItem : DropdownMenuItem;
+  const Label = kind === "context" ? ContextMenuLabel : DropdownMenuLabel;
   const Separator =
     kind === "context" ? ContextMenuSeparator : DropdownMenuSeparator;
   const Shortcut =
@@ -48,22 +51,28 @@ export function AddMenuContent({ ctx, kind }: AddMenuContentProps) {
         const keys = item.shortcut ? commandKeysLabel(item.shortcut) : "";
         // 画布动作前的分隔线（§3.2），以及 SSH 组前的那一条（§21）。
         const previous = items[index - 1]?.group;
-        const separator =
-          (item.group === "canvas" || item.group === "ssh") &&
-          previous !== undefined &&
-          previous !== item.group;
+        const newGroup = previous !== item.group;
         return (
           <React.Fragment key={item.id}>
-            {separator ? <Separator /> : null}
+            {newGroup && previous ? <Separator /> : null}
+            {newGroup ? (
+              <Label className="px-2.5 pt-1.5 pb-1 text-xs font-medium text-muted-foreground">
+                {t(`add.group.${item.group}`)}
+              </Label>
+            ) : null}
             <Item
+              className="min-h-8 gap-2.5 rounded-md px-2.5 text-[13px]"
               disabled={disabledReason !== null}
+              title={disabledReason ?? item.label}
               onSelect={() => item.run(ctx)}
             >
               <Icon />
-              <span className="flex-1 truncate">{item.label}</span>
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
               {item.color ? <ColorDot color={item.color} size={8} /> : null}
               {disabledReason ? (
-                <Shortcut>{disabledReason}</Shortcut>
+                <span className="max-w-28 shrink-0 truncate text-[11px] text-muted-foreground">
+                  {disabledReason}
+                </span>
               ) : keys ? (
                 <Shortcut>{keys}</Shortcut>
               ) : null}

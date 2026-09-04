@@ -27,6 +27,65 @@
   opacity: 0.4;
   transform: translateY(-50%);
   transition: opacity var(--dur-fast) var(--ease-out);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* The visible port stays on the geometry midpoint; hit area does not resize it. */
+.node-connection-handle::before {
+  position: absolute;
+  inset: -7px;
+  content: "";
+}
+
+[data-slot="node-shell"] {
+  container-type: inline-size;
+  container-name: canvas-node;
+}
+
+[data-slot="node-header"] {
+  white-space: nowrap;
+}
+
+.node-title {
+  flex-shrink: 1;
+}
+
+.node-header-chips:empty {
+  display: none;
+}
+
+.node-header-chips [data-slot="badge"] {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@container canvas-node (max-width: 440px) {
+  .node-header-chips,
+  .node-header-status {
+    display: none;
+  }
+
+  .node-header-approval button > span {
+    display: none;
+  }
+
+  .node-header-approval button {
+    width: 24px;
+    padding-inline: 0;
+  }
+}
+
+@container canvas-node (max-width: 360px) {
+  .terminal-secondary-action {
+    display: none;
+  }
+
+  [data-slot="node-header"] {
+    gap: 3px;
+    padding-inline: 5px;
+  }
 }
 
 .node-connection-handle[data-side="left"] {
@@ -124,6 +183,11 @@
   display: none;
   width: 0;
   height: 0;
+}
+
+/* xterm 6 replaces the native viewport scrollbar with an overlay element. */
+[data-slot="terminal-surface"] .xterm-scrollable-element > .scrollbar {
+  display: none;
 }
 
 /*
