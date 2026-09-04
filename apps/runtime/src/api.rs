@@ -102,6 +102,56 @@ pub async fn create_workspace(
     ))
 }
 
+pub async fn open_directory_workspace(
+    State(state): State<AppState>,
+    Json(request): Json<CreateWorkspaceRequest>,
+) -> AppResult<Json<Workspace>> {
+    let name = valid_workspace_name(&request.name)?;
+    let root = imports::directory_source(&request.root_path)?;
+    Ok(Json(
+        db::create_workspace(
+            &state.pool,
+            name,
+            &root.to_string_lossy(),
+            request.color.as_deref(),
+            request.permissions.as_ref(),
+        )
+        .await?,
+    ))
+}
+
+#[derive(Deserialize)]
+pub struct WorkspaceImportQuery {
+    name: String,
+}
+
+pub async fn import_workspace(
+    State(state): State<AppState>,
+    Query(query): Query<WorkspaceImportQuery>,
+    mut multipart: axum::extract::Multipart,
+) -> AppResult<Json<Workspace>> {
+    let name = valid_workspace_name(&query.name)?;
+    let manifest = imports::read_manifest(&mut multipart, true).await?;
+    let mut batch =
+        imports::ImportBatch::workspace(&paths::data_dir().join("imported-workspaces"))?;
+    imports::receive_files(&mut multipart, &mut batch, &manifest).await?;
+    Ok(Json(
+        register_imported_workspace(&state.pool, batch, name).await?,
+    ))
+}
+
+async fn register_imported_workspace(
+    pool: &sqlx::SqlitePool,
+    batch: imports::ImportBatch,
+    name: &str,
+) -> AppResult<Workspace> {
+    let mut imported = batch.commit_workspace()?;
+    let workspace =
+        db::create_workspace(pool, name, &imported.path.to_string_lossy(), None, None).await?;
+    imported.keep();
+    Ok(workspace)
+}
+
 /// `mkdir` one level for `createDirectory: true`. Splitting the requested path
 /// into parent + leaf keeps the whole check in `security`: the parent is
 /// canonicalized and screened, and an existing leaf is a 409 rather than a
@@ -391,65 +441,10 @@ pub async fn upload_files(
             "This workspace is opened read-only".into(),
         ));
     }
-    let first = multipart
-        .next_field()
-        .await
-        .map_err(|_| AppError::BadRequest("Invalid file upload".into()))?
-        .ok_or_else(|| AppError::BadRequest("Import manifest is missing".into()))?;
-    if first.name() != Some("manifest") {
-        return Err(AppError::BadRequest(
-            "Import manifest must come first".into(),
-        ));
-    }
-    let manifest_bytes = first
-        .bytes()
-        .await
-        .map_err(|_| AppError::BadRequest("Invalid import manifest".into()))?;
-    if manifest_bytes.len() > 1024 * 1024 {
-        return Err(AppError::BadRequest("Import manifest is too large".into()));
-    }
-    let manifest: imports::ImportManifest = serde_json::from_slice(&manifest_bytes)
-        .map_err(|_| AppError::BadRequest("Invalid import manifest".into()))?;
-    imports::validate_manifest(&manifest)?;
+    let manifest = imports::read_manifest(&mut multipart, false).await?;
     let root = Path::new(&workspace.root_path);
     let mut batch = imports::ImportBatch::new(root)?;
-    for directory in &manifest.directories {
-        batch.directory(directory)?;
-    }
-    let mut received = std::collections::HashSet::new();
-    while let Some(mut field) = multipart
-        .next_field()
-        .await
-        .map_err(|_| AppError::BadRequest("Incomplete file upload".into()))?
-    {
-        let index: usize = field
-            .name()
-            .and_then(|name| name.parse().ok())
-            .filter(|index| *index < manifest.paths.len())
-            .ok_or_else(|| AppError::BadRequest("Unexpected imported file".into()))?;
-        if !received.insert(index) {
-            return Err(AppError::BadRequest("Duplicate imported file".into()));
-        }
-        let mut bytes = Vec::new();
-        while let Some(chunk) = field
-            .chunk()
-            .await
-            .map_err(|_| AppError::BadRequest("Incomplete file upload".into()))?
-        {
-            if bytes.len().saturating_add(chunk.len()) > imports::MAX_FILE_BYTES {
-                return Err(AppError::BadRequest(
-                    "A file exceeds the 16 MiB import limit".into(),
-                ));
-            }
-            bytes.extend_from_slice(&chunk);
-        }
-        batch.write(&manifest.paths[index], &bytes)?;
-    }
-    if received.len() != manifest.paths.len() {
-        return Err(AppError::BadRequest(
-            "Some imported files are missing".into(),
-        ));
-    }
+    imports::receive_files(&mut multipart, &mut batch, &manifest).await?;
     Ok(Json(batch.commit(root)?))
 }
 
@@ -2099,6 +2094,81 @@ mod tests {
 
     /// The 1×1 PNG every export / asset test uploads.
     const TINY_PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+
+    #[tokio::test]
+    async fn workspace_import_registration_failure_removes_its_owned_directory() {
+        let directory = tempdir().unwrap();
+        let parent = directory.path().join("managed");
+        let mut batch = imports::ImportBatch::workspace(&parent).unwrap();
+        batch.write("a.txt", b"uploaded").unwrap();
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        // No schema: force database registration failure after the atomic rename.
+        assert!(
+            register_imported_workspace(&pool, batch, "project")
+                .await
+                .is_err()
+        );
+        assert_eq!(std::fs::read_dir(parent).unwrap().count(), 0);
+    }
+
+    #[tokio::test]
+    async fn workspace_import_validates_names_and_manifest_before_creating_a_directory() {
+        let (router, _directory) = router_fixture("workspace-import-validation").await;
+        let (status, _, _) = raw(
+            &router,
+            "POST",
+            &format!("/api/workspaces/import?name={}", "a".repeat(121)),
+            "multipart/form-data; boundary=b",
+            b"--b--\r\n".to_vec(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let body = b"--b\r\nContent-Disposition: form-data; name=\"manifest\"\r\n\r\n{\"paths\":[\"../escape\"]}\r\n--b--\r\n".to_vec();
+        let (status, _, _) = raw(
+            &router,
+            "POST",
+            "/api/workspaces/import?name=folder",
+            "multipart/form-data; boundary=b",
+            body,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn desktop_directory_open_registers_the_original_path_without_copying() {
+        let (router, directory) = router_fixture("open-directory").await;
+        let root = directory.path().canonicalize().unwrap().join("project");
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(root.join("a.txt"), "original").unwrap();
+        let (status, first) = call(
+            &router,
+            "POST",
+            "/api/workspaces/open-directory",
+            Some(json!({"name":"project", "rootPath":root})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, second) = call(
+            &router,
+            "POST",
+            "/api/workspaces/open-directory",
+            Some(json!({"name":"project", "rootPath":root})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(first["id"], second["id"]);
+        assert_eq!(first["rootPath"], root.to_str().unwrap());
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+        let (status, _) = call(
+            &router,
+            "POST",
+            "/api/workspaces/open-directory",
+            Some(json!({"name":"file", "rootPath":root.join("a.txt")})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
 
     #[tokio::test]
     async fn file_import_roundtrip_preserves_binary_bytes_and_download_boundary() {

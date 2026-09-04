@@ -288,6 +288,16 @@ export const runtimeApi = {
       method: "DELETE",
     }),
 
+  /* ----------------------------------- 工作区导入 ----------------------- */
+  openDirectory: (input: CreateWorkspaceRequest) =>
+    request("/api/workspaces/open-directory", workspaceSchema, { method: "POST", ...json(createWorkspaceRequestSchema.parse(input)) }),
+  importWorkspace: (folder: { name: string; files: { file: File; path: string }[]; directories: string[] }) => {
+    const body = new FormData();
+    body.append("manifest", JSON.stringify({ paths: folder.files.map((entry) => entry.path), directories: folder.directories }));
+    folder.files.forEach((entry, index) => body.append(String(index), entry.file, entry.file.name));
+    return request(`/api/workspaces/import?name=${query(Array.from(folder.name).slice(0, 120).join(""))}`, workspaceSchema, { method: "POST", body });
+  },
+
   /* ----------------------------------- 看板 ----------------------------- */
   listBoards: (workspaceId: string) =>
     request(`/api/workspaces/${workspaceId}/boards`, boardListSchema),

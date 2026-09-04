@@ -25,7 +25,6 @@ import { useAgentNotifications } from "./notifications";
 import { syncDocumentPreferences } from "./preferences-store";
 import { useAppKeybindings } from "./use-app-keybindings";
 import { useBoardSync } from "./use-board-sync";
-import { useOpenDroppedFolder } from "./workspace-actions";
 import { useTldrawPreferences } from "./use-tldraw-preferences";
 
 function createQueryClient() {
@@ -62,8 +61,6 @@ function AppShell() {
   useEffect(syncDocumentPreferences, []);
   useTldrawPreferences();
   useWorkspaceEvents(workspace?.id ?? null);
-  // 没有工作空间时，拖目录进窗口直接打开它（画布挂载后由画布接管拖放）。
-  useOpenDroppedFolder(!workspace);
   useAgentNotifications();
   useBoardSync();
   const dispatch = useCommandDispatch();

@@ -102,18 +102,53 @@ pub struct ImportBatch {
     committed: bool,
 }
 
+/// The published directory is still disposable until its database transaction
+/// succeeds. Dropping a cancelled registration also removes the owned copy.
+pub struct ImportedWorkspace {
+    pub path: PathBuf,
+    registered: bool,
+}
+impl ImportedWorkspace {
+    pub fn keep(&mut self) {
+        self.registered = true;
+    }
+}
+impl Drop for ImportedWorkspace {
+    fn drop(&mut self) {
+        if !self.registered {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+}
+
 impl ImportBatch {
     pub fn new(root: &Path) -> AppResult<Self> {
         let root = canonical_directory(root)?;
         ensure_directory(&root.join(".armadra"))?;
         ensure_directory(&root.join(DIRECTORY))?;
+        Self::under(&root.join(DIRECTORY), DIRECTORY)
+    }
+
+    /// A browser folder becomes an independent workspace rooted in a managed
+    /// UUID directory. It never claims to be the browser's original folder.
+    pub fn workspace(parent: &Path) -> AppResult<Self> {
+        ensure_directory(parent)?;
+        Self::under(parent, "")
+    }
+
+    fn under(parent: &Path, prefix: &str) -> AppResult<Self> {
+        let parent = canonical_directory(parent)?;
         let id = uuid::Uuid::new_v4().to_string();
-        let staging = root.join(DIRECTORY).join(format!(".pending-{id}"));
+        let staging = parent.join(format!(".pending-{id}"));
         fs::create_dir(&staging)?;
         Ok(Self {
             staging,
-            destination: root.join(DIRECTORY).join(&id),
-            relative: format!("{DIRECTORY}/{id}"),
+            destination: parent.join(&id),
+            relative: if prefix.is_empty() {
+                id
+            } else {
+                format!("{prefix}/{id}")
+            },
             bytes: 0,
             paths: Vec::new(),
             committed: false,
@@ -187,14 +222,7 @@ impl ImportBatch {
     }
 
     pub fn commit(mut self, root: &Path) -> AppResult<ImportResult> {
-        // UUID destination is never reused; a conflicting entry is an error.
-        if self.destination.exists() {
-            return Err(AppError::Conflict(
-                "Import destination already exists".into(),
-            ));
-        }
-        fs::rename(&self.staging, &self.destination)?;
-        self.committed = true;
+        self.finish()?;
         let files = self
             .paths
             .iter()
@@ -204,6 +232,26 @@ impl ImportBatch {
             path: self.relative.clone(),
             files,
         })
+    }
+
+    pub fn commit_workspace(mut self) -> AppResult<ImportedWorkspace> {
+        self.finish()?;
+        Ok(ImportedWorkspace {
+            path: self.destination.clone(),
+            registered: false,
+        })
+    }
+
+    fn finish(&mut self) -> AppResult<()> {
+        // UUID destination is never reused; a conflicting entry is an error.
+        if self.destination.exists() {
+            return Err(AppError::Conflict(
+                "Import destination already exists".into(),
+            ));
+        }
+        fs::rename(&self.staging, &self.destination)?;
+        self.committed = true;
+        Ok(())
     }
 }
 
@@ -224,6 +272,99 @@ fn reject_symlink_components(path: &Path) -> AppResult<()> {
                 "Symbolic links cannot be imported".into(),
             ));
         }
+    }
+    Ok(())
+}
+
+pub fn directory_source(path: &str) -> AppResult<PathBuf> {
+    let path = Path::new(path);
+    if !path.is_absolute()
+        || path
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err(AppError::BadRequest(
+            "Folder source must be an absolute path without traversal".into(),
+        ));
+    }
+    reject_symlink_components(path)?;
+    canonical_directory(path)
+}
+
+pub async fn read_manifest(
+    multipart: &mut axum::extract::Multipart,
+    allow_empty_root: bool,
+) -> AppResult<ImportManifest> {
+    let mut field = multipart
+        .next_field()
+        .await
+        .map_err(|_| AppError::BadRequest("Invalid file upload".into()))?
+        .ok_or_else(|| AppError::BadRequest("Import manifest is missing".into()))?;
+    if field.name() != Some("manifest") {
+        return Err(AppError::BadRequest(
+            "Import manifest must come first".into(),
+        ));
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = field
+        .chunk()
+        .await
+        .map_err(|_| AppError::BadRequest("Invalid import manifest".into()))?
+    {
+        if bytes.len().saturating_add(chunk.len()) > 1024 * 1024 {
+            return Err(AppError::BadRequest("Import manifest is too large".into()));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    let manifest: ImportManifest = serde_json::from_slice(&bytes)
+        .map_err(|_| AppError::BadRequest("Invalid import manifest".into()))?;
+    if !(allow_empty_root && manifest.paths.is_empty() && manifest.directories.is_empty()) {
+        validate_manifest(&manifest)?;
+    }
+    Ok(manifest)
+}
+
+pub async fn receive_files(
+    multipart: &mut axum::extract::Multipart,
+    batch: &mut ImportBatch,
+    manifest: &ImportManifest,
+) -> AppResult<()> {
+    for directory in &manifest.directories {
+        batch.directory(directory)?;
+    }
+    let mut received = HashSet::new();
+    while let Some(mut field) = multipart
+        .next_field()
+        .await
+        .map_err(|_| AppError::BadRequest("Incomplete file upload".into()))?
+    {
+        let index: usize = field
+            .name()
+            .and_then(|name| name.parse().ok())
+            .filter(|index| *index < manifest.paths.len())
+            .ok_or_else(|| AppError::BadRequest("Unexpected imported file".into()))?;
+        if !received.insert(index) {
+            return Err(AppError::BadRequest("Duplicate imported file".into()));
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = field
+            .chunk()
+            .await
+            .map_err(|_| AppError::BadRequest("Incomplete file upload".into()))?
+        {
+            if bytes.len().saturating_add(chunk.len()) > MAX_FILE_BYTES {
+                return Err(AppError::BadRequest(
+                    "A file exceeds the 16 MiB import limit".into(),
+                ));
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        batch.write(&manifest.paths[index], &bytes)?;
+    }
+    if received.len() != manifest.paths.len() {
+        return Err(AppError::BadRequest(
+            "Some imported files are missing".into(),
+        ));
     }
     Ok(())
 }
@@ -274,6 +415,42 @@ fn is_text(path: &Path) -> AppResult<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn empty_workspace_copies_commit_and_unregistered_copies_are_removed() {
+        let root = tempfile::tempdir().unwrap();
+        let parent = root.path().join("managed");
+        let batch = ImportBatch::workspace(&parent).unwrap();
+        let imported = batch.commit_workspace().unwrap();
+        let path = imported.path.clone();
+        assert!(path.is_dir());
+        drop(imported);
+        assert!(!path.exists());
+
+        let batch = ImportBatch::workspace(&parent).unwrap();
+        batch.directory("empty/nested").unwrap();
+        let mut imported = batch.commit_workspace().unwrap();
+        assert!(imported.path.join("empty/nested").is_dir());
+        let path = imported.path.clone();
+        imported.keep();
+        drop(imported);
+        assert!(path.is_dir());
+    }
+
+    #[test]
+    fn directory_sources_reject_files_and_traversal() {
+        let root = tempfile::tempdir().unwrap();
+        let root = root.path().canonicalize().unwrap();
+        fs::write(root.join("file.txt"), "x").unwrap();
+        assert!(directory_source(root.to_str().unwrap()).is_ok());
+        assert!(directory_source(root.join("file.txt").to_str().unwrap()).is_err());
+        assert!(directory_source(root.join("../").to_str().unwrap()).is_err());
+        assert!(directory_source("relative").is_err());
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&root, root.join("linked-folder")).unwrap();
+            assert!(directory_source(root.join("linked-folder").to_str().unwrap()).is_err());
+        }
+    }
     #[test]
     fn imports_nested_empty_and_binary_files_without_overwriting() {
         let root = tempfile::tempdir().unwrap();

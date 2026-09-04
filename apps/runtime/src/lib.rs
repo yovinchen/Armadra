@@ -89,6 +89,16 @@ pub fn router_with_state(state: AppState) -> Router {
         }));
 
     Router::new()
+        .route(
+            "/api/workspaces/open-directory",
+            post(api::open_directory_workspace),
+        )
+        .route(
+            "/api/workspaces/import",
+            post(api::import_workspace).layer(DefaultBodyLimit::max(
+                imports::MAX_BATCH_BYTES + 1024 * 1024,
+            )),
+        )
         .route("/health", get(api::health))
         // The desktop shell and the web app both probe `/api/health`; the bare
         // path is the older one and stays for the launcher script.
