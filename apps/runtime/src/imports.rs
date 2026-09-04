@@ -218,7 +218,36 @@ impl ImportBatch {
         fs::File::open(&source)?
             .take(MAX_FILE_BYTES as u64 + 1)
             .read_to_end(&mut bytes)?;
-        self.write(name, &bytes)
+        let destination = self.available_copy_name(name)?;
+        self.write(&destination, &bytes)
+    }
+
+    /// Desktop drops can include equally named files from different source
+    /// directories. Allocate in input order and keep the extension intact;
+    /// files, directories and symlinks all reserve their existing names.
+    /// `write` still uses create_new, so a late collision cannot overwrite data.
+    fn available_copy_name(&self, name: &str) -> AppResult<String> {
+        relative_path(name)?;
+        let path = Path::new(name);
+        let stem = path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or(name);
+        let extension = path.extension().and_then(|value| value.to_str());
+        let mut candidate = name.to_owned();
+        let mut ordinal = 2;
+        loop {
+            match fs::symlink_metadata(self.staging.join(&candidate)) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(candidate),
+                Err(error) => return Err(error.into()),
+                Ok(_) => {}
+            }
+            candidate = match extension {
+                Some(extension) => format!("{stem}-{ordinal}.{extension}"),
+                None => format!("{stem}-{ordinal}"),
+            };
+            ordinal += 1;
+        }
     }
 
     pub fn commit(mut self, root: &Path) -> AppResult<ImportResult> {
@@ -468,6 +497,126 @@ mod tests {
             b"hello"
         );
     }
+    #[test]
+    fn desktop_copies_with_the_same_basename_preserve_every_file() {
+        let root = tempfile::tempdir().unwrap();
+        let sources = tempfile::tempdir().unwrap();
+        let sources = sources.path().canonicalize().unwrap();
+        fs::create_dir(sources.join("a")).unwrap();
+        fs::create_dir(sources.join("b")).unwrap();
+        let originals: [&[u8]; 2] = [b"first\0payload", b"second\0payload"];
+        for (directory, bytes) in ["a", "b"].into_iter().zip(originals) {
+            fs::write(sources.join(directory).join("report.txt"), bytes).unwrap();
+        }
+        fs::write(root.path().join("report.txt"), b"existing workspace file").unwrap();
+        let mut batch = ImportBatch::new(root.path()).unwrap();
+        for directory in ["a", "b"] {
+            batch
+                .copy(
+                    root.path(),
+                    sources.join(directory).join("report.txt").to_str().unwrap(),
+                )
+                .unwrap();
+        }
+        let result = batch.commit(root.path()).unwrap();
+        assert_eq!(
+            result
+                .files
+                .iter()
+                .map(|file| file.name.as_str())
+                .collect::<Vec<_>>(),
+            ["report.txt", "report-2.txt"]
+        );
+        for (file, bytes) in result.files.iter().zip(originals) {
+            assert_eq!(fs::read(root.path().join(&file.path)).unwrap(), bytes);
+        }
+        assert_eq!(
+            fs::read(root.path().join("report.txt")).unwrap(),
+            b"existing workspace file"
+        );
+        assert_eq!(
+            fs::read(sources.join("a/report.txt")).unwrap(),
+            originals[0]
+        );
+        assert_eq!(
+            fs::read(sources.join("b/report.txt")).unwrap(),
+            originals[1]
+        );
+    }
+
+    #[test]
+    fn desktop_copy_suffixes_skip_directories_and_existing_suffixes() {
+        let root = tempfile::tempdir().unwrap();
+        let sources = tempfile::tempdir().unwrap();
+        let source = sources.path().canonicalize().unwrap().join("report.txt");
+        fs::write(&source, b"new copy").unwrap();
+        let mut batch = ImportBatch::new(root.path()).unwrap();
+        batch
+            .write("report.txt/nested.txt", b"nested structure")
+            .unwrap();
+        batch.directory("report-2.txt").unwrap();
+        batch.write("report-3.txt", b"existing suffix").unwrap();
+        batch.copy(root.path(), source.to_str().unwrap()).unwrap();
+        let result = batch.commit(root.path()).unwrap();
+        let destination = root.path().join(&result.path);
+        assert!(destination.join("report.txt").is_dir());
+        assert!(destination.join("report-2.txt").is_dir());
+        assert_eq!(
+            fs::read(destination.join("report.txt/nested.txt")).unwrap(),
+            b"nested structure"
+        );
+        assert_eq!(
+            fs::read(destination.join("report-3.txt")).unwrap(),
+            b"existing suffix"
+        );
+        assert_eq!(
+            fs::read(destination.join("report-4.txt")).unwrap(),
+            b"new copy"
+        );
+    }
+
+    #[test]
+    fn desktop_copy_suffixes_keep_dotfiles_and_extensionless_names() {
+        let root = tempfile::tempdir().unwrap();
+        let sources = tempfile::tempdir().unwrap();
+        let sources = sources.path().canonicalize().unwrap();
+        let mut batch = ImportBatch::new(root.path()).unwrap();
+        for name in [".env", "Makefile"] {
+            let source = sources.join(name);
+            fs::write(&source, b"preserved").unwrap();
+            batch.copy(root.path(), source.to_str().unwrap()).unwrap();
+            batch.copy(root.path(), source.to_str().unwrap()).unwrap();
+        }
+        let result = batch.commit(root.path()).unwrap();
+        assert_eq!(
+            result
+                .files
+                .iter()
+                .map(|file| file.name.as_str())
+                .collect::<Vec<_>>(),
+            [".env", ".env-2", "Makefile", "Makefile-2"]
+        );
+    }
+
+    #[test]
+    fn failed_batches_still_roll_back_after_renaming_copies() {
+        let root = tempfile::tempdir().unwrap();
+        let sources = tempfile::tempdir().unwrap();
+        let source = sources.path().canonicalize().unwrap().join("report.txt");
+        fs::write(&source, b"source unchanged").unwrap();
+        let mut batch = ImportBatch::new(root.path()).unwrap();
+        batch.copy(root.path(), source.to_str().unwrap()).unwrap();
+        batch.copy(root.path(), source.to_str().unwrap()).unwrap();
+        // Manifest writes remain strict; suffix allocation applies only to copies.
+        assert!(batch.write("report-2.txt", b"overwrite").is_err());
+        drop(batch);
+        assert_eq!(
+            fs::read_dir(root.path().join(DIRECTORY)).unwrap().count(),
+            0
+        );
+        assert_eq!(fs::read(source).unwrap(), b"source unchanged");
+    }
+
     #[test]
     fn rejects_traversal_and_cleans_failed_batches() {
         for path in [
