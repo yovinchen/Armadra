@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { usePreferencesStore } from "../app/preferences-store";
 
@@ -63,12 +63,10 @@ describe("file attachments", () => {
   it("previews an image as bytes and releases its object URL on unmount", async () => {
     const createObjectURL = vi.fn(() => "blob:image-preview");
     const revokeObjectURL = vi.fn();
-    const fetchImage = vi
-      .fn()
-      .mockResolvedValue({
-        ok: true,
-        blob: async () => new Blob([new Uint8Array([137, 80, 78, 71])]),
-      });
+    const fetchImage = vi.fn().mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob([new Uint8Array([137, 80, 78, 71])]),
+    });
     vi.stubGlobal("fetch", fetchImage);
     vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
     readFile.mockClear();
@@ -101,5 +99,45 @@ describe("file attachments", () => {
     expect(readFile).not.toHaveBeenCalled();
     view.unmount();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:image-preview");
+  });
+  it("falls back to an attachment download when the browser cannot decode the image", async () => {
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:unsupported-image"),
+      revokeObjectURL: vi.fn(),
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue({
+          ok: true,
+          blob: async () => new Blob(["unsupported-image-bytes"]),
+        }),
+    );
+    fileInfo.mockResolvedValue({
+      path: "photo.heic",
+      name: "photo.heic",
+      size: 24,
+      mimeType: "image/heic",
+      preview: "image",
+    });
+    render(
+      <EditorNode
+        id="image"
+        selected={false}
+        collapsed={false}
+        focused={false}
+        node={
+          {
+            title: "photo.heic",
+            data: { kind: "editor", path: "photo.heic" },
+          } as never
+        }
+      />,
+    );
+    fireEvent.error(await screen.findByRole("img"));
+    const download = await screen.findByRole("link", { name: "下载文件" });
+    expect(download.getAttribute("download")).toBe("photo.heic");
+    expect(screen.queryByRole("img")).toBeNull();
   });
 });

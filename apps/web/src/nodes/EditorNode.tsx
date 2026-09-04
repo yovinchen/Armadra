@@ -146,7 +146,7 @@ type LoadState =
   | { kind: "loading" }
   | { kind: "error" }
   | { kind: "too-large" }
-  | { kind: "image"; src: string }
+  | { kind: "image"; src: string; info: ImportedFileInfo }
   | { kind: "attachment"; info: ImportedFileInfo }
   | { kind: "text"; content: string; size: number };
 
@@ -196,7 +196,7 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
         imageUrl = URL.createObjectURL(
           new Blob([blob], { type: info.mimeType }),
         );
-        setState({ kind: "image", src: imageUrl });
+        setState({ kind: "image", src: imageUrl, info });
         return;
       }
       if (info.preview !== "text") {
@@ -364,6 +364,14 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
         {state.kind === "image" && (
           <img
             src={state.src}
+            onError={() => {
+              URL.revokeObjectURL(state.src);
+              setState((current) =>
+                current.kind === "image" && current.src === state.src
+                  ? { kind: "attachment", info: current.info }
+                  : current,
+              );
+            }}
             alt={node.title}
             draggable={false}
             className="h-full w-full object-contain"
