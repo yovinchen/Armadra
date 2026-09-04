@@ -1,5 +1,18 @@
 # 文档
 
+## 下一阶段设计（待实施）
+
+本组文档描述目标功能，不表示当前代码已经实现。新增需求与旧计划冲突时，按总纲及对应专项文档实施；当前功能状态仍以源码与当前架构为准。
+
+| 文档                                                       | 内容                                                                             |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [canvas-platform-design.md](./canvas-platform-design.md)   | 总纲：确认范围、移除任务看板、组件位置、需求矩阵、迁移、M0–M8 阶段与验收         |
+| [host-protocol-design.md](./host-protocol-design.md)       | Go 常驻 Host、Rust Worker、Protobuf、数据所有权、SSH、设备接入、移动端与协作预留 |
+| [agent-automation-design.md](./agent-automation-design.md) | 能力继承、上下文占用、跨 Agent 交接、独立循环卡片、后台计划与自动命名            |
+| [git-github-design.md](./git-github-design.md)             | Git 全流程、历史图、worktree/Frame、AI 提交信息、Issues 状态映射与 PR 管理       |
+| [editor-browser-design.md](./editor-browser-design.md)     | 编辑器、语言服务、远程文件、受控浏览器与 Agent 操作、跨端画面                    |
+| [terminal-host-design.md](./terminal-host-design.md)       | Windows ConPTY 宿主、持久终端、渲染/休眠、资源、防休眠、快捷键与更新预留         |
+
 ## 当前有效
 
 | 文档                                                     | 是什么                                                                                              | 给谁看                           |
@@ -10,7 +23,7 @@
 | [tldraw-canvas-plan.md](./tldraw-canvas-plan.md)         | v4 实施契约：画布层换成 tldraw，shape / binding / 快照持久化。代码注释按 §N 引用它                  | 改画布、节点 shape 或白板的人    |
 | [windows-session-daemon.md](./windows-session-daemon.md) | Windows 持久化会话守护进程的设计（协议、状态文件、ConPTY、背压）。**只有设计，未实现**              | 要做 Windows 终端持久化的人      |
 
-前两份是实施契约，章节编号被代码注释引用，改动时不要重排 §N。
+`v3-agent-terminal-plan.md` 与 `tldraw-canvas-plan.md` 的章节编号被代码注释引用，改动时不要重排 §N。Windows 早期设计保留供追溯，本轮目标以 `terminal-host-design.md` 为准。
 
 ## 当前实现补充
 

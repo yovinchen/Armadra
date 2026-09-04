@@ -1,5 +1,7 @@
 # 架构
 
+> 下一阶段目标见 [画布工作平台设计总纲](./canvas-platform-design.md)及其专项文档：Go 常驻 Host、Protobuf、后台调度和跨端能力均为待实施方案。本文件继续描述当前实现，不将目标能力提前计入现状。
+
 > 当前实现的架构。画布层细节见 [tldraw-canvas-plan.md](./tldraw-canvas-plan.md)，
 > Agent 运行时与接口契约见 [v3-agent-terminal-plan.md](./v3-agent-terminal-plan.md)。
 > 选型演进的原始讨论见 [ChatGPT 会话归档](./research/chatgpt-conversation-archive.md)。

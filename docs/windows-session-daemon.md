@@ -1,5 +1,7 @@
 # Windows 持久终端：会话守护进程设计
 
+> 后续范围更新：本轮已将 Windows 持久会话纳入实施目标，新的进程归属、Protobuf 协议、阶段与验收以 [终端与主机生命周期设计](./terminal-host-design.md)为准。以下保留早期设计及当时的范围说明，供现有引用追溯。
+
 > 状态：**只是设计，Phase 4 不实现**。日期：2026-09-04。归属：desktop-packaging。
 > 上游契约：[v3-agent-terminal-plan.md §15](./v3-agent-terminal-plan.md)（终端后端选择树、`TerminalBackend` trait、WS 协议、回收策略）。
 > 本文只描述 Windows 侧第三种后端 `SessionDaemonBackend` 的形状；macOS / Linux 继续走 tmux，无 tmux 时走 direct，两者都不受影响。
