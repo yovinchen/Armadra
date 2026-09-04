@@ -6,7 +6,7 @@
  * 当前工作空间的看板取 store（`setBoards` 已按 `sortOrder` 排好），其余
  * 工作空间取列表接口里的 `boards[]`。
  *
- * 名字在树里只读：项目名与看板名都是纯文本，改名不在这条路上。Agent 也不在
+ * 双击项目名或看板名可原位编辑。Agent 不在
  * 树里——状态只在铃铛展开的 `AgentStatusPanel` 里看，树只负责「去哪块板」。
  */
 import {
@@ -22,10 +22,7 @@ import type { WorkspaceSummary } from "@armadra/shared";
 import { isAttention } from "../agent/status-store";
 import { useSessions } from "../agent/sessions";
 import { useT, usePreferencesStore } from "../app/preferences-store";
-import {
-  useOpenFolder,
-  useOpenWorkspace,
-} from "../app/workspace-actions";
+import { useOpenFolder, useOpenWorkspace } from "../app/workspace-actions";
 import { useWorkspacesQuery } from "../app/workspaces-query";
 import {
   RemoveWorkspaceDialog,
@@ -43,6 +40,8 @@ import {
 } from "@/ui/dropdown-menu";
 import { IconButton } from "@/ui/icon-button";
 import { ScrollArea } from "@/ui/scroll-area";
+import { InlineName } from "./InlineName";
+import { useWorkspaceRename } from "./use-workspace-rename";
 import { BoardRow } from "./BoardRow";
 import {
   BOARD_PAGE_SIZE,
@@ -179,7 +178,9 @@ export function WorkspaceTree() {
                       entry.board.id === boardId
                     }
                     signal={signals[entry.board.id]}
-                    onSelect={() => openBoard(entry.workspaceId, entry.board.id)}
+                    onSelect={() =>
+                      openBoard(entry.workspaceId, entry.board.id)
+                    }
                     onTogglePin={() => setBoardPinned(entry.board.id, false)}
                   />
                 ))}
@@ -324,7 +325,7 @@ function PinnedRow({
   onSelect: () => void;
   onTogglePin: () => void;
 }) {
-  const { remove } = useBoardMutations(workspaceId);
+  const { remove, rename } = useBoardMutations(workspaceId);
   return (
     <BoardRow
       board={board}
@@ -334,6 +335,7 @@ function PinnedRow({
       signal={signal}
       canDelete={false}
       onSelect={onSelect}
+      onRename={(name) => rename.mutateAsync({ id: board.id, name })}
       onDelete={() => remove.mutate(board.id)}
       onTogglePin={onTogglePin}
     />
@@ -374,14 +376,15 @@ function WorkspaceRow({
   const boardId = useCanvasStore((state) => state.boardId);
   const selectBoard = useCanvasStore((state) => state.selectBoard);
   const removeWorkspace = useRemoveWorkspace();
-  const { remove } = useBoardMutations(summary.id);
+  const { remove, rename } = useBoardMutations(summary.id);
+  const renameWorkspace = useWorkspaceRename(summary.id);
+  const [editing, setEditing] = useState(false);
 
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [expandedAll, setExpandedAll] = useState(false);
 
   const visible = visibleBoards(boards, expandedAll, activeBoardId);
   const canDelete = boards.length > 1;
-
 
   const deleteBoard = (id: string) => {
     remove.mutate(id, {
@@ -399,14 +402,14 @@ function WorkspaceRow({
     <li>
       <div className="group/ws motion-hover flex h-7 items-center gap-1 rounded-[var(--r-control)] pr-1 pl-1.5 hover:bg-[var(--hover)]">
         <Folder className="size-3.5 shrink-0 opacity-60" />
-        <Button
-          variant="ghost"
-          size="sm"
-          className="min-w-0 flex-1 justify-start gap-1.5 px-1 text-[length:var(--text-body)] font-normal hover:bg-transparent"
-          onClick={() => onToggle(!collapsed)}
-        >
-          <span className="truncate">{summary.name}</span>
-        </Button>
+        <InlineName
+          name={summary.name}
+          label={t("sidebar.workspaceName")}
+          editing={editing}
+          onEditingChange={setEditing}
+          onSelect={() => onToggle(!collapsed)}
+          onSave={(name) => renameWorkspace.mutateAsync(name)}
+        />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <IconButton
@@ -416,7 +419,16 @@ function WorkspaceRow({
               <MoreHorizontal />
             </IconButton>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="z-[var(--z-menu)]">
+          <DropdownMenuContent
+            align="start"
+            className="z-[var(--z-menu)]"
+            onCloseAutoFocus={(event) => {
+              if (editing) event.preventDefault();
+            }}
+          >
+            <DropdownMenuItem onSelect={() => setEditing(true)}>
+              {t("sidebar.rename")}
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onTogglePinWorkspace(!pinned)}>
               {pinned ? t("sidebar.unpin") : t("sidebar.pin")}
             </DropdownMenuItem>
@@ -439,6 +451,7 @@ function WorkspaceRow({
               signal={signals[board.id]}
               canDelete={canDelete}
               onSelect={() => onSelectBoard(board.id)}
+              onRename={(name) => rename.mutateAsync({ id: board.id, name })}
               onDelete={() => deleteBoard(board.id)}
               onTogglePin={() =>
                 onTogglePin(board.id, !pinnedBoardIds.includes(board.id))

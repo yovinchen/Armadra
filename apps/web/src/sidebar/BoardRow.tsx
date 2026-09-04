@@ -2,7 +2,7 @@
  * 侧栏里的一行看板（§26 →§27 →§28）。
  *
  * 行本身 = 图标 + 名称 + 行尾信号点 + `⋯`；右键与 `⋯` 给同一组动作
- * （置顶 / 删除）。名称不可改，行下面也不再挂 Agent 列表——「我的 Agent
+ * （重命名 / 置顶 / 删除）。双击名称原位编辑，行下面不挂 Agent 列表——「我的 Agent
  * 现在怎么样了」只在铃铛展开的状态面板里看。
  */
 import { useState } from "react";
@@ -20,7 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/ui/alert-dialog";
-import { Button } from "@/ui/button";
+import { InlineName } from "./InlineName";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -47,6 +47,7 @@ export interface BoardRowProps {
   onSelect: () => void;
   onDelete: () => void;
   onTogglePin: () => void;
+  onRename: (name: string) => Promise<unknown>;
   /** 置顶组里的行会带上工作空间名，作为第二行的说明。 */
   caption?: string;
   /**
@@ -65,14 +66,22 @@ export function BoardRow({
   onSelect,
   onDelete,
   onTogglePin,
+  onRename,
   caption,
   indent,
 }: BoardRowProps) {
   const t = useT();
+  const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
   /* 右键与 `⋯` 是同一组动作，所以只描述一次，两种菜单各渲染一遍。 */
   const actions = [
+    {
+      key: "rename",
+      label: t("sidebar.rename"),
+      disabled: false,
+      run: () => setEditing(true),
+    },
     {
       key: "pin",
       label: pinned ? t("sidebar.boardUnpin") : t("sidebar.boardPin"),
@@ -103,15 +112,15 @@ export function BoardRow({
             ) : (
               <LayoutGrid className="size-3.5 shrink-0 opacity-60" />
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              title={caption}
-              className="min-w-0 flex-1 justify-start px-1 text-[length:var(--text-body)] font-normal hover:bg-transparent"
-              onClick={onSelect}
-            >
-              <span className="truncate">{board.name}</span>
-            </Button>
+            <InlineName
+              name={board.name}
+              label={t("sidebar.boardName")}
+              caption={caption}
+              editing={editing}
+              onEditingChange={setEditing}
+              onSelect={onSelect}
+              onSave={onRename}
+            />
             {signal?.attention ? (
               <SignalDot tone="attention" label={t("sidebar.needsYou")} />
             ) : signal?.unread ? (
@@ -126,7 +135,13 @@ export function BoardRow({
                   <MoreHorizontal />
                 </IconButton>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="z-[var(--z-menu)]">
+              <DropdownMenuContent
+                align="start"
+                className="z-[var(--z-menu)]"
+                onCloseAutoFocus={(event) => {
+                  if (editing) event.preventDefault();
+                }}
+              >
                 {actions.map((action) => (
                   <DropdownMenuItem
                     key={action.key}
@@ -140,7 +155,12 @@ export function BoardRow({
             </DropdownMenu>
           </div>
         </ContextMenuTrigger>
-        <ContextMenuContent className="z-[var(--z-menu)]">
+        <ContextMenuContent
+          className="z-[var(--z-menu)]"
+          onCloseAutoFocus={(event) => {
+            if (editing) event.preventDefault();
+          }}
+        >
           {actions.map((action) => (
             <ContextMenuItem
               key={action.key}

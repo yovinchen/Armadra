@@ -150,29 +150,94 @@ describe("WorkspaceTree", () => {
     expect(screen.queryByText("Codex")).toBeNull();
   });
 
-  it("看板名是纯文本，没有输入框", async () => {
+  it("双击看板在原位改名，Enter保存并同步当前列表", async () => {
+    updateBoard.mockResolvedValue({ id: SECOND, name: "新实验", sortOrder: 1 });
     renderTree();
-
     fireEvent.doubleClick(await screen.findByText("实验"));
-    expect(screen.queryByLabelText("看板名称")).toBeNull();
+    const input = await screen.findByRole("textbox", { name: "看板名称" });
+    fireEvent.change(input, { target: { value: "  新实验  " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() =>
+      expect(updateBoard).toHaveBeenCalledWith(workspace.id, SECOND, {
+        name: "新实验",
+      }),
+    );
+    expect(await screen.findByText("新实验")).toBeTruthy();
+    expect(
+      useCanvasStore.getState().boards.find((board) => board.id === SECOND)
+        ?.name,
+    ).toBe("新实验");
+  });
+
+  it("双击项目改名，失焦保存，不修改磁盘路径", async () => {
+    updateWorkspace.mockResolvedValue({ ...workspace, name: "新项目" });
+    renderTree();
+    fireEvent.doubleClick(await screen.findByText("repo"));
+    const input = await screen.findByRole("textbox", { name: "工作空间名称" });
+    fireEvent.change(input, { target: { value: "新项目" } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(updateWorkspace).toHaveBeenCalledWith(workspace.id, {
+        name: "新项目",
+      }),
+    );
+    expect(await screen.findByText("新项目")).toBeTruthy();
+    expect(useCanvasStore.getState().workspace?.rootPath).toBe("/repo");
+  });
+
+  it("Escape取消编辑，不因随后失焦保存；空名字留在输入框", async () => {
+    renderTree();
+    fireEvent.doubleClick(await screen.findByText("实验"));
+    let input = await screen.findByRole("textbox", { name: "看板名称" });
+    fireEvent.change(input, { target: { value: "取消的名字" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.blur(input);
+    expect(updateBoard).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    fireEvent.doubleClick(screen.getByText("实验"));
+    input = await screen.findByRole("textbox", { name: "看板名称" });
+    fireEvent.change(input, { target: { value: "  " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      "名称不能为空",
+    );
     expect(updateBoard).not.toHaveBeenCalled();
   });
 
-  it("项目名是纯文本，没有输入框", async () => {
+  it("中文输入法确认不提交，保存失败保留草稿供重试", async () => {
+    updateBoard
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({ id: SECOND, name: "草稿", sortOrder: 1 });
     renderTree();
-
-    fireEvent.doubleClick(await screen.findByText("repo"));
-    expect(screen.queryByLabelText("工作空间名称")).toBeNull();
-    expect(updateWorkspace).not.toHaveBeenCalled();
+    fireEvent.doubleClick(await screen.findByText("实验"));
+    const input = await screen.findByRole("textbox", { name: "看板名称" });
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "草稿" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(updateBoard).not.toHaveBeenCalled();
+    fireEvent.compositionEnd(input);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      "offline",
+    );
+    expect((input as HTMLInputElement).value).toBe("草稿");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(await screen.findByText("草稿")).toBeTruthy();
   });
 
-  it("看板菜单只有置顶与删除", async () => {
+  it("看板菜单提供重命名、置顶与删除", async () => {
     renderTree();
     await screen.findByText("实验");
 
     openMenu(screen.getAllByLabelText("看板操作")[1]!);
     const items = await screen.findAllByRole("menuitem");
-    expect(items.map((item) => item.textContent)).toEqual(["置顶", "删除"]);
+    expect(items.map((item) => item.textContent)).toEqual([
+      "重命名",
+      "置顶",
+      "删除",
+    ]);
   });
 
   it("「项目」右边的 + 添加项目（浏览器里退回新建文件夹对话框）", async () => {
@@ -260,9 +325,7 @@ describe("WorkspaceTree", () => {
 
     await screen.findByText("repo");
     openMenu(screen.getByLabelText("工作空间菜单"));
-    fireEvent.click(
-      await screen.findByRole("menuitem", { name: "删除" }),
-    );
+    fireEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
 
     expect(deleteWorkspace).not.toHaveBeenCalled();
     expect(await screen.findByText("不会删除磁盘文件")).toBeTruthy();

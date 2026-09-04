@@ -7,6 +7,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import type { Board, WorkspaceSummary } from "@armadra/shared";
+import { useCanvasStore } from "../store/canvas-store";
 import { runtimeApi } from "../api/client";
 
 export function useBoardMutations(workspaceId: string) {
@@ -29,5 +31,47 @@ export function useBoardMutations(workspaceId: string) {
     onError: (cause: Error) => toast.error(cause.message),
   });
 
-  return { create, remove, refresh };
+  const rename = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: ["boards", workspaceId] }),
+        queryClient.cancelQueries({ queryKey: ["workspaces"] }),
+      ]);
+      return runtimeApi.updateBoard(workspaceId, id, { name });
+    },
+    onSuccess: (board) => {
+      queryClient.setQueryData<Board[]>(["boards", workspaceId], (rows) =>
+        rows?.map((row) => (row.id === board.id ? board : row)),
+      );
+      queryClient.setQueryData<WorkspaceSummary[]>(["workspaces"], (rows) =>
+        rows?.map((row) =>
+          row.id === workspaceId
+            ? {
+                ...row,
+                boards: row.boards.map((item) =>
+                  item.id === board.id ? { ...item, name: board.name } : item,
+                ),
+              }
+            : row,
+        ),
+      );
+      const state = useCanvasStore.getState();
+      if (state.workspace?.id !== workspaceId) return;
+      state.setBoards(
+        state.boards.map((item) =>
+          item.id === board.id ? { ...item, name: board.name } : item,
+        ),
+      );
+      // Name edits do not change the document CAS timestamp or discard unsaved shapes.
+      if (state.document?.board.id === board.id)
+        useCanvasStore.setState({
+          document: {
+            ...state.document,
+            board: { ...state.document.board, name: board.name },
+          },
+        });
+    },
+  });
+
+  return { create, remove, rename, refresh };
 }

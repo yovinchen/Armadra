@@ -8,6 +8,10 @@ import type { MessageModule } from "./index";
  */
 export const shell: MessageModule = {
   "zh-CN": {
+    "sidebar.rename": "重命名",
+    "sidebar.workspaceName": "工作空间名称",
+    "sidebar.nameRequired": "名称不能为空",
+    "sidebar.renameFailed": "重命名失败，请重试",
     "app.brand": "Armadra",
     "app.loadFailed": "看板加载失败",
     "app.retry": "重试",
@@ -88,6 +92,10 @@ export const shell: MessageModule = {
     "banner.dismiss": "忽略",
   },
   en: {
+    "sidebar.rename": "Rename",
+    "sidebar.workspaceName": "Workspace name",
+    "sidebar.nameRequired": "Name cannot be empty",
+    "sidebar.renameFailed": "Could not rename. Try again.",
     "app.brand": "Armadra",
     "app.loadFailed": "Failed to load board",
     "app.retry": "Retry",
