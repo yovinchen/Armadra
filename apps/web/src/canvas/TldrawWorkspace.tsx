@@ -615,7 +615,7 @@ export function TldrawWorkspace() {
           className="canvas-stage relative h-full w-full min-h-0 min-w-0 flex-1"
           style={{ background: "var(--canvas-bg)" }}
           onDragOver={onDragOver}
-          onDrop={onDrop}
+          onDropCapture={onDrop}
           onContextMenu={onContextMenu}
           aria-label={t("canvas.label")}
         >

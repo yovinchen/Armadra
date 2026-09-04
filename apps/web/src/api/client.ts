@@ -22,6 +22,8 @@ import {
   createTerminalRequestSchema,
   createWorkspaceRequestSchema,
   fileContentSchema,
+  fileInfoSchema,
+  importFilesResponseSchema,
   fileListSchema,
   gitCloneRequestSchema,
   gitCloneStartedSchema,
@@ -129,7 +131,7 @@ async function request<T>(
     response = await fetch(`${RUNTIME_URL}${path}`, {
       ...init,
       headers: {
-        "Content-Type": "application/json",
+        ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
         ...init?.headers,
       },
     });
@@ -336,6 +338,18 @@ export const runtimeApi = {
     ),
 
   /* ----------------------------------- 文件 ----------------------------- */
+  fileInfo: (workspaceId: string, path: string) =>
+    request(`/api/workspaces/${workspaceId}/file-info?path=${query(path)}`, fileInfoSchema),
+  fileDownloadUrl: (workspaceId: string, path: string) =>
+    `${RUNTIME_URL}/api/workspaces/${workspaceId}/file-download?path=${query(path)}`,
+  importFiles: (workspaceId: string, entries: { file: File; path: string }[], directories: string[] = []) => {
+    const body = new FormData();
+    body.append("manifest", JSON.stringify({ paths: entries.map((entry) => entry.path), directories }));
+    entries.forEach((entry, index) => body.append(String(index), entry.file, entry.file.name));
+    return request(`/api/workspaces/${workspaceId}/imports`, importFilesResponseSchema, { method: "POST", body });
+  },
+  importLocalFiles: (workspaceId: string, paths: readonly string[]) =>
+    request(`/api/workspaces/${workspaceId}/imports/local`, importFilesResponseSchema, { method: "POST", ...json({ paths }) }),
   listFiles: (workspaceId: string, path = ".") =>
     request(
       `/api/workspaces/${workspaceId}/files?path=${query(path)}`,

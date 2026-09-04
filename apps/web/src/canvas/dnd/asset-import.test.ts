@@ -7,13 +7,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * 节点。`external-content.test.ts` 覆盖的是纯函数，这里覆盖的是副作用。
  */
 
+vi.mock("tldraw", async (original) => {
+  const actual = await original<typeof import("tldraw")>();
+  return { ...actual, getAssetInfo: (editor: { getAssetForExternalContent: (content: unknown) => unknown }, file: File) => editor.getAssetForExternalContent({ type: "file", file }) };
+});
+
 const importAsset = vi.fn();
 const listFiles = vi.fn();
+const fileInfo = vi.fn();
+const importLocalFiles = vi.fn();
+const importFiles = vi.fn();
 const error = vi.fn();
 
 vi.mock("../../api/client", () => ({
   runtimeApi: {
     importAsset: (...args: unknown[]) => importAsset(...args),
+    uploadAsset: vi.fn(async () => ({ id: "0011223344556677.png", path: ".armadra/assets/0011223344556677.png" })),
+    fileInfo: (...args: unknown[]) => fileInfo(...args),
+    importLocalFiles: (...args: unknown[]) => importLocalFiles(...args),
+    importFiles: (...args: unknown[]) => importFiles(...args),
     listFiles: (...args: unknown[]) => listFiles(...args),
     assetUrl: (workspaceId: string, assetId: string) =>
       `http://127.0.0.1:43120/api/workspaces/${workspaceId}/assets/${assetId}`,
@@ -21,13 +33,13 @@ vi.mock("../../api/client", () => ({
 }));
 
 vi.mock("sonner", () => ({
-  toast: { error: (...args: unknown[]) => error(...args) },
+  toast: { info: vi.fn(), error: (...args: unknown[]) => error(...args) },
 }));
 
 const addNode = vi.fn();
 const state = {
-  document: { id: "board" } as unknown,
-  workspace: { id: "w1" } as unknown,
+  document: { board: { id: "board" } },
+  workspace: { id: "w1" },
   addNode: (...args: unknown[]) => addNode(...args),
 };
 
@@ -35,7 +47,7 @@ vi.mock("../../store/canvas-store", () => ({
   useCanvasStore: { getState: () => state },
 }));
 
-const { addNodeForPath } = await import("./external-content");
+const { addNodeForPath, addBrowserFiles } = await import("./external-content");
 const { setEditor } = await import("../editor-context");
 
 /** `createImageShapes` 只用到这几个方法，够它跑完一整趟。 */
@@ -66,6 +78,10 @@ describe("addNodeForPath", () => {
   beforeEach(() => {
     importAsset.mockReset();
     listFiles.mockReset();
+    fileInfo.mockReset().mockRejectedValue(new Error("outside workspace"));
+    importLocalFiles.mockReset().mockResolvedValue({ files: [{ path: ".armadra/imports/b/notes.md", name: "notes.md", size: 4, mimeType: "text/plain", preview: "text" }] });
+    importFiles.mockReset();
+    state.document = { board: { id: "board" } };
     addNode.mockReset();
     error.mockReset();
     setEditor(null);
@@ -113,7 +129,7 @@ describe("addNodeForPath", () => {
     expect(error).toHaveBeenCalled();
   });
 
-  it("非图片仍旧开节点：目录 → files，文件 → editor", async () => {
+  it("非图片导入副本，工作区内目录保留原路径", async () => {
     setEditor(fakeEditor() as never);
 
     listFiles.mockRejectedValue(new Error("not a directory"));
@@ -121,15 +137,15 @@ describe("addNodeForPath", () => {
     expect(addNode).toHaveBeenLastCalledWith("editor", {
       position: at,
       title: "notes.md",
-      data: { kind: "editor", path: "/Users/me/notes.md" },
+      data: { kind: "editor", path: ".armadra/imports/b/notes.md" },
     });
 
-    listFiles.mockResolvedValue({ entries: [] });
+    listFiles.mockResolvedValue({ entries: [], path: "src" });
     await addNodeForPath("/Users/me/src", at);
     expect(addNode).toHaveBeenLastCalledWith("files", {
       position: at,
       title: "src",
-      data: { kind: "files", path: "/Users/me/src" },
+      data: { kind: "files", path: "src" },
     });
     expect(importAsset).not.toHaveBeenCalled();
   });
@@ -141,5 +157,38 @@ describe("addNodeForPath", () => {
 
     expect(importAsset).not.toHaveBeenCalled();
     expect(addNode).toHaveBeenCalledWith("editor", expect.anything());
+  });
+});
+
+
+describe("browser file imports", () => {
+  it("uploads PDF bytes as an attachment instead of decoding text", async () => {
+    state.document = { board: { id: "board" } };
+    addNode.mockClear();
+    const editor = fakeEditor();
+    setEditor(editor as never);
+    const file = new File(["%PDF-1.7"], "report.pdf", { type: "application/pdf" });
+    const readText = vi.fn();
+    Object.defineProperty(file, "text", { value: readText });
+    importFiles.mockResolvedValue({ files: [{ name: file.name, path: ".armadra/imports/b/report.pdf", size: file.size, mimeType: file.type, preview: "download" }] });
+    await addBrowserFiles(editor as never, [file], at);
+    expect(readText).not.toHaveBeenCalled();
+    expect(importFiles).toHaveBeenLastCalledWith("w1", [{ file, path: "report.pdf" }]);
+    expect(addNode).toHaveBeenLastCalledWith("editor", expect.objectContaining({ data: { kind: "editor", path: ".armadra/imports/b/report.pdf" } }));
+  });
+
+  it("does not create nodes on a board switched during upload", async () => {
+    state.document = { board: { id: "board" } };
+    addNode.mockClear();
+    const editor = fakeEditor();
+    setEditor(editor as never);
+    let finish: (value: unknown) => void = () => {};
+    importFiles.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const file = new File(["hello"], "a.txt", { type: "text/plain" });
+    const pending = addBrowserFiles(editor as never, [file], at);
+    state.document = { board: { id: "other-board" } };
+    finish({ files: [{ name: file.name, path: ".armadra/imports/b/a.txt", size: 5, mimeType: file.type, preview: "text" }] });
+    await pending;
+    expect(addNode).not.toHaveBeenCalled();
   });
 });

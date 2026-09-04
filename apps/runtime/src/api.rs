@@ -24,7 +24,7 @@ use crate::{
         HookHealth,
         install::{self, InstallReport},
     },
-    index,
+    imports, index,
     model::{
         AgentStatus, Board, BoardDocument, CanvasEdge, CanvasNode, ContextLink,
         ContextLinkDocument, Conversation, Kanban, SessionSummary, TerminalSession, Viewport,
@@ -324,6 +324,160 @@ pub async fn read_file(
         Path::new(&workspace.root_path),
         &query.path,
     )?))
+}
+
+pub async fn file_info(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+    Query(query): Query<RequestedPath>,
+) -> AppResult<Json<imports::FileInfo>> {
+    let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
+    Ok(Json(imports::file_info(
+        Path::new(&workspace.root_path),
+        &query.path,
+    )?))
+}
+
+/// Raw downloads retain the same canonical workspace boundary as text reads.
+/// Always an attachment: uploaded HTML/SVG cannot execute in the Runtime origin.
+pub async fn download_file(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+    Query(query): Query<RequestedPath>,
+) -> AppResult<Response> {
+    use std::io::Read;
+    let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
+    let root = Path::new(&workspace.root_path);
+    let path = resolve_in_root(root, &query.path)?;
+    if !path.is_file() {
+        return Err(AppError::BadRequest("Requested path is not a file".into()));
+    }
+    let mut bytes = Vec::new();
+    std::fs::File::open(&path)?
+        .take(imports::MAX_FILE_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > imports::MAX_FILE_BYTES {
+        return Err(AppError::BadRequest(
+            "File exceeds the 16 MiB download limit".into(),
+        ));
+    }
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
+    let encoded: String = name
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("%{byte:02X}"))
+        .collect();
+    Response::builder()
+        .header("Content-Type", "application/octet-stream")
+        .header(
+            "Content-Disposition",
+            format!("attachment; filename*=UTF-8''{encoded}"),
+        )
+        .header("X-Content-Type-Options", "nosniff")
+        .body(axum::body::Body::from(bytes))
+        .map_err(|_| AppError::Internal("Cannot create download response".into()))
+}
+
+/// The first multipart field is a JSON manifest; subsequent field names are
+/// their zero-based indices in manifest.paths. Filenames are never trusted.
+pub async fn upload_files(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+    mut multipart: axum::extract::Multipart,
+) -> AppResult<Json<imports::ImportResult>> {
+    let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
+    if !workspace.permissions.write {
+        return Err(AppError::Forbidden(
+            "This workspace is opened read-only".into(),
+        ));
+    }
+    let first = multipart
+        .next_field()
+        .await
+        .map_err(|_| AppError::BadRequest("Invalid file upload".into()))?
+        .ok_or_else(|| AppError::BadRequest("Import manifest is missing".into()))?;
+    if first.name() != Some("manifest") {
+        return Err(AppError::BadRequest(
+            "Import manifest must come first".into(),
+        ));
+    }
+    let manifest_bytes = first
+        .bytes()
+        .await
+        .map_err(|_| AppError::BadRequest("Invalid import manifest".into()))?;
+    if manifest_bytes.len() > 1024 * 1024 {
+        return Err(AppError::BadRequest("Import manifest is too large".into()));
+    }
+    let manifest: imports::ImportManifest = serde_json::from_slice(&manifest_bytes)
+        .map_err(|_| AppError::BadRequest("Invalid import manifest".into()))?;
+    imports::validate_manifest(&manifest)?;
+    let root = Path::new(&workspace.root_path);
+    let mut batch = imports::ImportBatch::new(root)?;
+    for directory in &manifest.directories {
+        batch.directory(directory)?;
+    }
+    let mut received = std::collections::HashSet::new();
+    while let Some(mut field) = multipart
+        .next_field()
+        .await
+        .map_err(|_| AppError::BadRequest("Incomplete file upload".into()))?
+    {
+        let index: usize = field
+            .name()
+            .and_then(|name| name.parse().ok())
+            .filter(|index| *index < manifest.paths.len())
+            .ok_or_else(|| AppError::BadRequest("Unexpected imported file".into()))?;
+        if !received.insert(index) {
+            return Err(AppError::BadRequest("Duplicate imported file".into()));
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = field
+            .chunk()
+            .await
+            .map_err(|_| AppError::BadRequest("Incomplete file upload".into()))?
+        {
+            if bytes.len().saturating_add(chunk.len()) > imports::MAX_FILE_BYTES {
+                return Err(AppError::BadRequest(
+                    "A file exceeds the 16 MiB import limit".into(),
+                ));
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        batch.write(&manifest.paths[index], &bytes)?;
+    }
+    if received.len() != manifest.paths.len() {
+        return Err(AppError::BadRequest(
+            "Some imported files are missing".into(),
+        ));
+    }
+    Ok(Json(batch.commit(root)?))
+}
+
+#[derive(Deserialize)]
+pub struct ImportLocalFilesRequest {
+    paths: Vec<String>,
+}
+
+pub async fn import_local_files(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+    Json(request): Json<ImportLocalFilesRequest>,
+) -> AppResult<Json<imports::ImportResult>> {
+    let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
+    if !workspace.permissions.write {
+        return Err(AppError::Forbidden(
+            "This workspace is opened read-only".into(),
+        ));
+    }
+    if request.paths.is_empty() || request.paths.len() > imports::MAX_FILES {
+        return Err(AppError::BadRequest("Import requires 1–256 files".into()));
+    }
+    let root = Path::new(&workspace.root_path);
+    let mut batch = imports::ImportBatch::new(root)?;
+    for path in request.paths {
+        batch.copy(root, &path)?;
+    }
+    Ok(Json(batch.commit(root)?))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1945,6 +2099,109 @@ mod tests {
 
     /// The 1×1 PNG every export / asset test uploads.
     const TINY_PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+
+    #[tokio::test]
+    async fn file_import_roundtrip_preserves_binary_bytes_and_download_boundary() {
+        let (router, directory) = router_fixture("file-import").await;
+        let root = directory.path().join("project");
+        std::fs::create_dir(&root).unwrap();
+        let id = asset_workspace(&router, root.to_str().unwrap()).await;
+        let data = b"%PDF-1.7\n\0binary";
+        let mut body = b"--test-boundary\r\nContent-Disposition: form-data; name=\"manifest\"\r\n\r\n{\"paths\":[\"report.pdf\"]}\r\n--test-boundary\r\nContent-Disposition: form-data; name=\"0\"; filename=\"ignored.pdf\"\r\nContent-Type: application/pdf\r\n\r\n".to_vec();
+        body.extend_from_slice(data);
+        body.extend_from_slice(b"\r\n--test-boundary--\r\n");
+        let (status, _, result) = raw(
+            &router,
+            "POST",
+            &format!("/api/workspaces/{id}/imports"),
+            "multipart/form-data; boundary=test-boundary",
+            body,
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "{}",
+            String::from_utf8_lossy(&result)
+        );
+        let result: Value = serde_json::from_slice(&result).unwrap();
+        let path = result["files"][0]["path"].as_str().unwrap();
+        assert!(path.starts_with(".armadra/imports/"));
+        assert_eq!(result["files"][0]["preview"], "download");
+        assert_eq!(std::fs::read(root.join(path)).unwrap(), data);
+        let (status, headers, downloaded) = raw(
+            &router,
+            "GET",
+            &format!("/api/workspaces/{id}/file-download?path={path}"),
+            "application/json",
+            Vec::new(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(downloaded, data);
+        assert!(
+            headers["content-disposition"]
+                .to_str()
+                .unwrap()
+                .starts_with("attachment;")
+        );
+        assert_eq!(headers["x-content-type-options"], "nosniff");
+        let outside = directory.path().join("secret.txt");
+        std::fs::write(&outside, "secret").unwrap();
+        let (status, _) = call(
+            &router,
+            "GET",
+            &format!(
+                "/api/workspaces/{id}/file-download?path={}",
+                outside.display()
+            ),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn file_import_rejects_traversal_incomplete_payloads_and_readonly_workspaces() {
+        let (router, directory) = router_fixture("file-import-invalid").await;
+        let root = directory.path().join("project");
+        std::fs::create_dir(&root).unwrap();
+        let id = asset_workspace(&router, root.to_str().unwrap()).await;
+        for path in ["../escape", "a.txt"] {
+            let body = format!("--b\r\nContent-Disposition: form-data; name=\"manifest\"\r\n\r\n{{\"paths\":[\"{path}\"]}}\r\n--b--\r\n").into_bytes();
+            let (status, _, _) = raw(
+                &router,
+                "POST",
+                &format!("/api/workspaces/{id}/imports"),
+                "multipart/form-data; boundary=b",
+                body,
+            )
+            .await;
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+        }
+        assert_eq!(
+            std::fs::read_dir(root.join(".armadra/imports"))
+                .unwrap()
+                .count(),
+            0
+        );
+        let (status, _) = call(
+            &router,
+            "PATCH",
+            &format!("/api/workspaces/{id}"),
+            Some(json!({"permissions":{"read":true,"write":false,"execute":true,"network":true}})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) = call(
+            &router,
+            "POST",
+            &format!("/api/workspaces/{id}/imports/local"),
+            Some(json!({"paths":["file.txt"]})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+    }
 
     async fn raw(
         router: &Router,

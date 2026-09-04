@@ -1,11 +1,17 @@
 import { toast } from "sonner";
 import {
   ASSET_MIME_TYPES,
+  MAX_ASSET_BYTES,
+  MAX_IMPORT_FILES, MAX_IMPORT_FILE_BYTES, MAX_IMPORT_BATCH_BYTES,
+  type ImportedFileInfo,
   type Position,
   type CanvasNodeType,
 } from "@armadra/shared";
 import {
   createShapeId,
+  AssetRecordType,
+  getAssetInfo,
+  sanitizeSvg,
   defaultHandleExternalTextContent,
   type Editor,
   type TLAsset,
@@ -15,7 +21,7 @@ import {
 
 import { runtimeApi } from "../../api/client";
 import { getEditor } from "../editor-context";
-import { AssetTooLargeError } from "../assets";
+import { AssetTooLargeError, createAssetStore } from "../assets";
 import { t } from "../../app/preferences-store";
 import { useCanvasStore } from "../../store/canvas-store";
 
@@ -25,7 +31,7 @@ import { useCanvasStore } from "../../store/canvas-store";
  * 用户 2026-09-04 定的两条：**图片一律 tldraw 原生 image shape**（字节走
  * §6.2 的资产接口，不进快照），**文本一律 tldraw 原生 text shape**（Markdown
  * 也当纯文本，不再生成便签）。剩下的 OS 文件才是节点：目录 → `files`，
- * 其余 → `editor`。
+ * 其余文件复制到工作区后创建 `editor`（二进制显示附件）。
  *
  * tldraw 自己就监听画布的 `drop` 与文档的 `paste`，两条路最后都汇到
  * `editor.putExternalContent`，所以这里只要覆盖 `files` / `text` / `url` 三个
@@ -75,15 +81,14 @@ export function isImagePath(path: string): boolean {
  * 浏览器给的 `File` 走哪条路。
  *
  * MIME 优先（`image/png`…），拿不到 MIME 的时候退回扩展名——某些系统拖出来的
- * 文件 `type` 是空串。不是图片就当文本读，因为浏览器里的 `File` 没有真实路径，
- * 开不了 `editor` 节点。
+ * 文件 `type` 是空串。非图片按字节上传为导入副本，绝不以文件名伪造本机路径。
  */
-export type FileRoute = "image" | "text";
+export type FileRoute = "image" | "file";
 
 export function routeFile(file: { name: string; type: string }): FileRoute {
   if (IMAGE_MIME_TYPES.has(file.type)) return "image";
   if (!file.type && isImagePath(file.name)) return "image";
-  return "text";
+  return "file";
 }
 
 /**
@@ -154,14 +159,33 @@ export async function createImageShapes(
   editor: Editor,
   files: readonly File[],
   point: Position,
+  target: ImportTarget | null = captureImportTarget(),
 ): Promise<TLShapeId[]> {
   const assets: TLAsset[] = [];
   for (const file of files) {
+    if (target && !importTargetIsActive(target)) return [];
     try {
-      const asset = await editor.getAssetForExternalContent({
-        type: "file",
-        file,
-      });
+      if (file.size > MAX_ASSET_BYTES) {
+        toast.error(t("canvas.assetTooLarge", { limit: Math.round(MAX_ASSET_BYTES / 1024 / 1024) }));
+        throw new AssetTooLargeError();
+      }
+      // Keep tldraw's dimensions/hash/animation metadata and SVG sanitation,
+      // but bind uploads to the workspace captured at the start of the drop.
+      // The global asset store otherwise follows workspace switches mid-decode.
+      const mimes: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp", svg: "image/svg+xml" };
+      let safeFile = file.type ? file : new File([file], file.name, { type: mimes[extensionOf(file.name)] ?? "" });
+      if (safeFile.type === "image/svg+xml") {
+        const sanitized = sanitizeSvg(await safeFile.text());
+        if (!sanitized) throw new Error("SVG contains no safe image content");
+        safeFile = new File([sanitized], safeFile.name, { type: safeFile.type });
+      }
+      const info = await getAssetInfo(editor, safeFile);
+      if (!info) throw new Error("Unsupported image format");
+      if (!target || !importTargetIsActive(target)) return [];
+      const asset = AssetRecordType.create(info);
+      const uploaded = await createAssetStore(() => target.workspaceId).upload(asset, safeFile);
+      asset.props.src = uploaded.src;
+      if (uploaded.meta) asset.meta = { ...asset.meta, ...uploaded.meta };
       if (asset) assets.push(asset);
     } catch (cause) {
       // 超限时资产仓库已经提示过了，别再叠一条泛泛的「上传失败」。
@@ -170,7 +194,7 @@ export async function createImageShapes(
       toast.error(t("canvas.assetFailed", { name: file.name }));
     }
   }
-  if (assets.length === 0) return [];
+  if (assets.length === 0 || (target && !importTargetIsActive(target))) return [];
 
   const sizes = assets.map((asset) =>
     imageShapeSize({
@@ -212,46 +236,120 @@ export async function createImageShapes(
  * OS 真实路径 → 节点。目录能被 Runtime 列出来，所以「是不是目录」问 Runtime，
  * 不用扩展名猜（沿用 v3 的 `os-drop` 规则）。
  */
-export async function addNodeForPath(
-  path: string,
-  position: Position,
-): Promise<void> {
-  const store = useCanvasStore.getState();
-  if (!store.document) return;
-  const workspace = store.workspace;
-  const title = baseName(path);
+export interface ImportTarget {
+  workspaceId: string;
+  boardId: string;
+  editor: Editor | null;
+}
 
-  // 图片先截胡：桌面端只拿得到路径，让 Runtime 去读盘导入，然后和浏览器拖放
-  // 走同一条 image shape 的路（§8 Phase 3 / asset-import）。
-  const editor = getEditor();
-  if (editor && workspace && isImagePath(path)) {
-    await importImageShape(editor, workspace.id, path, position);
-    return;
-  }
+export function captureImportTarget(): ImportTarget | null {
+  const state = useCanvasStore.getState();
+  if (!state.workspace || !state.document) return null;
+  return { workspaceId: state.workspace.id, boardId: state.document.board.id, editor: getEditor() };
+}
 
-  let directory = false;
-  if (workspace) {
-    directory = await runtimeApi
-      .listFiles(workspace.id, path)
-      .then(() => true)
-      .catch(() => false);
-  }
+export function importTargetIsActive(target: ImportTarget): boolean {
+  const state = useCanvasStore.getState();
+  return state.workspace?.id === target.workspaceId && state.document?.board.id === target.boardId && getEditor() === target.editor;
+}
 
-  const type = routePath(directory);
-  useCanvasStore.getState().addNode(type, {
-    position,
-    title,
-    data: type === "files" ? { kind: "files", path } : { kind: "editor", path },
+function addImportedNode(target: ImportTarget, file: ImportedFileInfo, position: Position) {
+  if (!importTargetIsActive(target)) return;
+  useCanvasStore.getState().addNode("editor", {
+    position, title: file.name, data: { kind: "editor", path: file.path },
   });
 }
 
-export async function addNodesForPaths(
-  paths: readonly string[],
-  position: Position,
-): Promise<void> {
+export async function addNodeForPath(path: string, position: Position): Promise<void> {
+  await addNodesForPaths([path], position);
+}
+
+export async function addNodesForPaths(paths: readonly string[], position: Position): Promise<void> {
+  const target = captureImportTarget();
+  if (!target) return;
+  if (paths.length > MAX_IMPORT_FILES) { toast.error(t("canvas.importLimit")); return; }
+  const external: { path: string; position: Position }[] = [];
   for (const [index, path] of paths.entries()) {
-    await addNodeForPath(path, offsetBy(position, index));
+    if (!importTargetIsActive(target)) return;
+    const point = offsetBy(position, index);
+    if (target.editor && isImagePath(path)) {
+      await importImageShape(target.editor, target.workspaceId, path, point, target);
+      continue;
+    }
+    try {
+      const info = await runtimeApi.fileInfo(target.workspaceId, path);
+      addImportedNode(target, info, point);
+    } catch {
+      // Only an actual successful directory listing makes this a files node.
+      // Permission errors must never masquerade as a file-type test.
+      const directory = await runtimeApi.listFiles(target.workspaceId, path).catch(() => null);
+      if (directory) {
+        if (importTargetIsActive(target)) useCanvasStore.getState().addNode("files", {
+          position: point, title: baseName(path), data: { kind: "files", path: directory.path },
+        });
+      } else external.push({ path, position: point });
+    }
   }
+  if (!external.length || !importTargetIsActive(target)) return;
+  try {
+    const result = await runtimeApi.importLocalFiles(target.workspaceId, external.map((entry) => entry.path));
+    result.files.forEach((file, index) => addImportedNode(target, file, external[index]!.position));
+    if (!importTargetIsActive(target)) toast.info(t("canvas.importSaved"));
+  } catch (cause) {
+    toast.error(t("canvas.importFailed"), { description: (cause as Error).message });
+  }
+}
+
+/** Browser paths are names relative to an imported copy, never local paths. */
+export async function addBrowserFiles(
+  editor: Editor, files: readonly File[], point: Position,
+  target: ImportTarget | null = captureImportTarget(),
+): Promise<void> {
+  if (!target || !importTargetIsActive(target)) return;
+  if (files.length > MAX_IMPORT_FILES || files.some((file) => file.size > MAX_IMPORT_FILE_BYTES)
+      || files.reduce((sum, file) => sum + file.size, 0) > MAX_IMPORT_BATCH_BYTES) {
+    toast.error(t("canvas.importLimit")); return;
+  }
+  const images = files.filter((file) => routeFile(file) === "image");
+  const others = files.filter((file) => routeFile(file) === "file");
+  if (images.length) await createImageShapes(editor, images, point, target);
+  if (!others.length || !importTargetIsActive(target)) return;
+  // Repeated names get distinct paths without overwriting either file.
+  const used = new Set<string>();
+  const entries = others.map((file) => {
+    let path = file.name;
+    let index = 2;
+    while (used.has(path)) path = `${index++}-${file.name}`;
+    used.add(path);
+    return { file, path };
+  });
+  try {
+    const result = await runtimeApi.importFiles(target.workspaceId, entries);
+    result.files.forEach((file, index) => addImportedNode(target, file, offsetBy(point, index + images.length)));
+    if (!importTargetIsActive(target)) toast.info(t("canvas.importSaved"));
+  } catch (cause) {
+    toast.error(t("canvas.importFailed"), { description: (cause as Error).message });
+  }
+}
+
+/** A keyboard/touch-friendly alternative to drag-and-drop, reusable by menus. */
+export function pickFilesForCanvas(point?: Position): void {
+  const target = captureImportTarget();
+  const editor = target?.editor;
+  if (!target || !editor) return;
+  const input = document.createElement("input");
+  input.type = "file";
+  input.multiple = true;
+  input.hidden = true;
+  const position = point ?? fallbackPoint(editor);
+  input.addEventListener("change", () => {
+    const files = Array.from(input.files ?? []);
+    input.remove();
+    void addBrowserFiles(editor, files, position, target);
+  }, { once: true });
+  input.addEventListener("cancel", () => input.remove(), { once: true });
+  document.body.append(input);
+  input.click();
 }
 
 /**
@@ -268,6 +366,7 @@ async function importImageShape(
   workspaceId: string,
   path: string,
   position: Position,
+  target: ImportTarget,
 ): Promise<void> {
   const name = baseName(path);
   try {
@@ -277,7 +376,7 @@ async function importImageShape(
     const file = new File([await response.blob()], name, {
       type: imported.mimeType,
     });
-    await createImageShapes(editor, [file], position);
+    if (importTargetIsActive(target)) await createImageShapes(editor, [file], position, target);
   } catch (cause) {
     console.error("asset import failed", cause);
     toast.error(t("canvas.assetFailed", { name }));
@@ -292,10 +391,6 @@ function fallbackPoint(editor: Editor): Position {
   return { x: center.x, y: center.y };
 }
 
-async function readText(file: File): Promise<string> {
-  return file.text().catch(() => "");
-}
-
 /**
  * 覆盖 `files` 与 `text` 两个外部内容处理器；返回注销函数。
  *
@@ -308,21 +403,7 @@ export function registerExternalContent(editor: Editor): () => void {
       ? { x: content.point.x, y: content.point.y }
       : fallbackPoint(editor);
 
-    const images: File[] = [];
-    const others: File[] = [];
-    for (const file of content.files) {
-      if (routeFile(file) === "image") images.push(file);
-      else others.push(file);
-    }
-
-    if (images.length > 0) await createImageShapes(editor, images, point);
-
-    // 浏览器里的 `File` 没有真实路径，开不了 `editor` 节点，只能把内容当文本。
-    for (const file of others) {
-      const text = await readText(file);
-      if (!text.trim()) continue;
-      await editor.putExternalContent({ type: "text", text, point });
-    }
+    await addBrowserFiles(editor, content.files, point);
   });
 
   // 文本一律纯文本：把 `html` 丢掉，Markdown 也就只是一段字。

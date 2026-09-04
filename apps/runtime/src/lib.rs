@@ -7,6 +7,7 @@ pub mod events;
 pub mod files;
 pub mod git;
 pub mod hook;
+pub mod imports;
 pub mod index;
 pub mod model;
 pub mod paths;
@@ -117,6 +118,24 @@ pub fn router_with_state(state: AppState) -> Router {
             get(api::load_board).put(api::save_board),
         )
         .route("/api/workspaces/{workspace_id}/files", get(api::list_files))
+        .route(
+            "/api/workspaces/{workspace_id}/file-info",
+            get(api::file_info),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/file-download",
+            get(api::download_file),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/imports",
+            post(api::upload_files).layer(DefaultBodyLimit::max(
+                imports::MAX_BATCH_BYTES + 1024 * 1024,
+            )),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/imports/local",
+            post(api::import_local_files),
+        )
         .route(
             "/api/workspaces/{workspace_id}/file",
             get(api::read_file).put(api::write_file),

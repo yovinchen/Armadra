@@ -3,22 +3,24 @@ import * as React from "react";
 // 用得上，全部走动态 `import()`（§17 代码分割）。这里只留类型引用。
 import type { EditorView } from "codemirror";
 import type { Compartment, Extension } from "@codemirror/state";
-import { Save } from "lucide-react";
+import { Download, File, Save } from "lucide-react";
+import type { ImportedFileInfo } from "@armadra/shared";
 
 import { toast } from "sonner";
 
 import { Badge } from "@/ui/badge";
+import { Button } from "@/ui/button";
 import { IconButton } from "@/ui/icon-button";
 import { isConflict, runtimeApi } from "@/api/client";
 import { useCanvasStore } from "@/store/canvas-store";
 import { useT } from "@/app/preferences-store";
+import { formatBytes } from "@/lib/format";
+import { isTauri, openExternal } from "@/platform";
 import { NodeShell } from "./NodeShell";
 import type { NodeBodyProps } from "./registry";
 
 /** 超过这个大小不进编辑器，只挂一个徽标（§3.4：内容区不放解释段落）。 */
 const MAX_EDITABLE_BYTES = 1024 * 1024;
-
-const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg"]);
 
 function extensionOf(path: string): string {
   const name = path.split(/[\\/]/).pop() ?? "";
@@ -145,6 +147,7 @@ type LoadState =
   | { kind: "error" }
   | { kind: "too-large" }
   | { kind: "image"; src: string }
+  | { kind: "attachment"; info: ImportedFileInfo }
   | { kind: "text"; content: string; size: number };
 
 /**
@@ -177,27 +180,22 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
     if (!workspaceId || !path) return;
     let cancelled = false;
     setState({ kind: "loading" });
-    runtimeApi
-      .readFile(workspaceId, path)
-      .then((file) => {
+    void (async () => {
+      const info = await runtimeApi.fileInfo(workspaceId, path);
+      if (cancelled) return;
+      if (info.preview !== "text") {
+        setState({ kind: "attachment", info });
+        return;
+      }
+      const file = await runtimeApi.readFile(workspaceId, path);
         if (cancelled) return;
-        if (IMAGE_EXTENSIONS.has(extensionOf(path))) {
-          setState({
-            kind: "image",
-            src: file.content.startsWith("data:")
-              ? file.content
-              : `data:${file.mimeType};base64,${file.content}`,
-          });
-          return;
-        }
         if (file.size > MAX_EDITABLE_BYTES) {
-          setState({ kind: "too-large" });
+          setState({ kind: "attachment", info });
           return;
         }
         sizeRef.current = file.size;
         setState({ kind: "text", content: file.content, size: file.size });
-      })
-      .catch(() => {
+    })().catch(() => {
         if (!cancelled) setState({ kind: "error" });
       });
     return () => {
@@ -314,6 +312,26 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
           <Centered>
             <Badge variant="destructive">{t("editor.failed")}</Badge>
           </Centered>
+        )}
+        {state.kind === "attachment" && workspaceId && (
+          <div className="flex h-full min-w-0 flex-col items-center justify-center gap-3 overflow-auto p-5 text-center">
+            <File aria-hidden className="size-8 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 max-w-full">
+              <p className="break-all text-sm font-medium">{state.info.name}</p>
+              <p className="mt-1 break-all text-xs text-muted-foreground">{formatBytes(state.info.size)} · {state.info.mimeType}</p>
+            </div>
+            <Button variant="secondary" size="sm" asChild>
+              <a
+                href={runtimeApi.fileDownloadUrl(workspaceId, path)}
+                download={state.info.name}
+                onClick={(event) => {
+                  if (!isTauri()) return;
+                  event.preventDefault();
+                  void openExternal(runtimeApi.fileDownloadUrl(workspaceId, path));
+                }}
+              ><Download />{t("editor.download")}</a>
+            </Button>
+          </div>
         )}
         {state.kind === "image" && (
           <img

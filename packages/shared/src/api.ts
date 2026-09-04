@@ -119,6 +119,23 @@ export const fileContentSchema = z.object({
   size: z.number().int().nonnegative(),
 });
 
+export const MAX_IMPORT_FILE_BYTES = 16 * 1024 * 1024;
+export const MAX_IMPORT_BATCH_BYTES = 64 * 1024 * 1024;
+export const MAX_IMPORT_FILES = 256;
+export const fileInfoSchema = z.object({
+  path: z.string(),
+  name: z.string(),
+  size: z.number().int().nonnegative(),
+  mimeType: z.string(),
+  preview: z.enum(["text", "image", "download"]),
+});
+export const importFilesResponseSchema = z.object({
+  path: z.string(),
+  files: z.array(fileInfoSchema),
+});
+export type ImportedFileInfo = z.infer<typeof fileInfoSchema>;
+export type ImportFilesResponse = z.infer<typeof importFilesResponseSchema>;
+
 /** Runtime ceiling for `PUT /api/workspaces/{id}/file`. */
 export const MAX_WRITE_FILE_BYTES = 2 * 1024 * 1024;
 

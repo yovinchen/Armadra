@@ -118,6 +118,7 @@ describe("buildAddMenu", () => {
       "add.sticky",
       "add.files",
       "add.openFile",
+      "add.importFiles",
       "add.text",
       "add.frame",
       "add.browser",
@@ -130,6 +131,7 @@ describe("buildAddMenu", () => {
   it("没有 Agent 时依然给出全部通用项", () => {
     expect(buildAddMenu([], t).map((item) => item.group)).toEqual([
       "terminal",
+      "content",
       "content",
       "content",
       "content",

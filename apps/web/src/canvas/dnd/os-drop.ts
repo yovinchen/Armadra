@@ -3,7 +3,9 @@ import { useCallback, useEffect, type DragEvent } from "react";
 import { onFileDrop } from "../../platform";
 import { useCanvasStore } from "../../store/canvas-store";
 import { getEditor, screenToPage } from "../editor-context";
-import { addNodesForPaths } from "./external-content";
+import { addBrowserFiles, addNodesForPaths, captureImportTarget } from "./external-content";
+import { toast } from "sonner";
+import { t } from "../../app/preferences-store";
 
 /**
  * 拖放与粘贴的入口（tldraw 计划 §8 Phase 3 / content）。
@@ -32,6 +34,7 @@ export function useOsDrop(): OsDropHandlers {
     () =>
       onFileDrop((paths, point) => {
         if (!useCanvasStore.getState().document) return;
+        if (!isCanvasDropPoint(point)) return;
         void addNodesForPaths(paths, screenToPage(point));
       }),
     [],
@@ -48,17 +51,31 @@ export function useOsDrop(): OsDropHandlers {
    * 所以这里只会收到落在画布容器**外面**的那些。
    */
   const onDrop = useCallback((event: DragEvent<HTMLElement>) => {
+    if (!Array.from(event.dataTransfer.types ?? []).includes("Files")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (isTextEntry(event.target)) return;
+    if (Array.from(event.dataTransfer.items ?? []).some((item) => item.webkitGetAsEntry?.()?.isDirectory)) {
+      toast.error(t("canvas.importFolderUnsupported"));
+      return;
+    }
     const files = Array.from(event.dataTransfer.files ?? []);
     if (files.length === 0) return;
-    event.preventDefault();
     const editor = getEditor();
-    if (!editor || !useCanvasStore.getState().document) return;
+    const target = captureImportTarget();
+    if (!editor || !target) return;
     const point = screenToPage({ x: event.clientX, y: event.clientY });
     editor.markHistoryStoppingPoint("drop");
-    void editor.putExternalContent({ type: "files", files, point });
+    void addBrowserFiles(editor, files, point, target);
   }, []);
 
   return { onDragOver, onDrop };
+}
+
+/** OS events are window-wide. Sidebar/dialog drops do not belong to a board. */
+export function isCanvasDropPoint(point: { x: number; y: number }): boolean {
+  const target = document.elementFromPoint(point.x, point.y);
+  return Boolean(target?.closest(".canvas-stage")) && !target?.closest("[role='dialog'], [role='menu'], input, textarea, .xterm");
 }
 
 /* --------------------------------- 粘贴 ----------------------------------- */

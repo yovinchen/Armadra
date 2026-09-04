@@ -25,15 +25,15 @@ describe("routeFile", () => {
 
   it("MIME 为空时退回扩展名", () => {
     expect(routeFile(file("shot.JPEG", ""))).toBe("image");
-    expect(routeFile(file("no-extension", ""))).toBe("text");
+    expect(routeFile(file("no-extension", ""))).toBe("file");
   });
 
-  it("非图片一律走文本", () => {
-    expect(routeFile(file("notes.md", "text/markdown"))).toBe("text");
-    expect(routeFile(file("main.rs", ""))).toBe("text");
+  it("非图片一律持久化为文件", () => {
+    expect(routeFile(file("notes.md", "text/markdown"))).toBe("file");
+    expect(routeFile(file("main.rs", ""))).toBe("file");
     // Runtime 不收的图片格式也不当图片（会被资产接口 400）。
-    expect(routeFile(file("clip.mp4", "video/mp4"))).toBe("text");
-    expect(routeFile(file("x.tiff", "image/tiff"))).toBe("text");
+    expect(routeFile(file("clip.mp4", "video/mp4"))).toBe("file");
+    expect(routeFile(file("x.tiff", "image/tiff"))).toBe("file");
   });
 });
 

@@ -15,6 +15,7 @@ import {
   StickyNote,
   Terminal,
   Type,
+  Upload,
 } from "lucide-react";
 import { createShapeId, toRichText } from "tldraw";
 import type { AgentInfo, Position, SshHost, Workspace } from "@armadra/shared";
@@ -24,6 +25,7 @@ import { useCanvasStore } from "../../store/canvas-store";
 import type { Translate } from "../../app/preferences-store";
 import { runCanvasCommand, type CanvasCommandId } from "../commands";
 import { getEditor } from "../editor-context";
+import { pickFilesForCanvas } from "../dnd/external-content";
 
 /**
  * 新建菜单（§13.3）。
@@ -210,6 +212,13 @@ export function buildAddMenu(
       shortcut: "app.explorer",
       // 打开文件走资源管理器抽屉：文件树里点一下才知道要开哪个文件。
       run: () => useCanvasStore.getState().setPanel("explorer", "drawer"),
+    },
+    {
+      id: "add.importFiles",
+      label: t("add.importFiles"),
+      icon: Upload,
+      group: "content",
+      run: (context) => pickFilesForCanvas(context.position),
     },
     {
       id: "add.text",
