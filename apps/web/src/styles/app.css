@@ -284,3 +284,29 @@
     padding-inline: 12px;
   }
 }
+
+/* A browser's address bar and soft keyboard must not push controls off screen. */
+@supports (height: 100dvh) {
+  #root {
+    height: 100dvh;
+  }
+}
+@media (max-width: 767px) {
+  .settings-row-controls > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+  [data-slot="sheet-content"][data-side="right"] {
+    max-width: 100vw;
+  }
+  [data-slot="sidebar-toggle"] button {
+    min-width: 36px;
+    min-height: 36px;
+  }
+}
+@media (pointer: coarse) {
+  [data-slot="sheet-content"] [data-slot="icon-button"] {
+    min-width: 36px;
+    min-height: 36px;
+  }
+}

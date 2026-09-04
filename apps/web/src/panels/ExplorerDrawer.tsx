@@ -55,7 +55,7 @@ export function ExplorerDrawer() {
     return (
       <aside
         aria-label={t("explorer.title")}
-        className="fixed top-[96px] right-[14px] bottom-[14px] z-[var(--z-cluster)] flex w-[320px] flex-col overflow-hidden rounded-xl border border-border bg-[color-mix(in_srgb,var(--card)_96%,transparent)] shadow-[var(--shadow-overlay)] backdrop-blur-md"
+        className="fixed top-[96px] right-[14px] bottom-[14px] z-[var(--z-cluster)] flex w-[320px] max-w-[calc(100vw-28px)] flex-col overflow-hidden rounded-xl border border-border bg-[color-mix(in_srgb,var(--card)_96%,transparent)] shadow-[var(--shadow-overlay)] backdrop-blur-md"
       >
         {renderHeader("h2")}
         {body}

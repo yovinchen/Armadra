@@ -5,6 +5,8 @@ import {
   fireEvent,
   render,
   screen,
+  within,
+  waitFor,
 } from "@testing-library/react";
 import type { Workspace } from "@armadra/shared";
 
@@ -43,6 +45,7 @@ import { useCanvasStore } from "../store/canvas-store";
 import { LeftSidebar } from "./LeftSidebar";
 
 installDomPolyfills();
+const initialMatchMedia = window.matchMedia;
 
 const timestamp = "2026-09-04T10:00:00.000Z";
 const workspace: Workspace = {
@@ -64,7 +67,10 @@ function renderSidebar() {
   );
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  window.matchMedia = initialMatchMedia;
+});
 
 beforeEach(() => {
   useCanvasStore.setState({ workspace, boards: [], boardId: null });
@@ -161,5 +167,36 @@ describe("LeftSidebar", () => {
     expect(usePreferencesStore.getState().sidebarOpen).toBe(false);
     act(() => useCanvasStore.getState().setPanel("sidebar", "open"));
     expect(usePreferencesStore.getState().sidebarOpen).toBe(true);
+  });
+  it("窄屏侧栏作为抽屉打开，关闭后画布仍保留完整宽度", async () => {
+    const original = window.matchMedia;
+    vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+      ...original(query),
+      matches: query === "(max-width: 767px)",
+    }));
+    useCanvasStore.getState().setPanel("sidebar", "collapsed");
+    renderSidebar();
+    expect(screen.queryByRole("complementary")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "展开侧栏" }));
+    const drawer = await screen.findByRole("dialog", { name: "侧栏" });
+    expect(within(drawer).getByRole("button", { name: "搜索" })).toBeTruthy();
+    fireEvent.click(within(drawer).getByRole("button", { name: "收起侧栏" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(useCanvasStore.getState().panels.sidebar).toBe("collapsed");
+  });
+
+  it("从手机侧栏打开设置时先收起抽屉", async () => {
+    const original = window.matchMedia;
+    vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+      ...original(query),
+      matches: query === "(max-width: 767px)",
+    }));
+    renderSidebar();
+    const drawer = await screen.findByRole("dialog", { name: "侧栏" });
+    fireEvent.click(within(drawer).getByRole("button", { name: "设置" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(useCanvasStore.getState().panels.settings).toBe(true);
+    expect(useCanvasStore.getState().panels.sidebar).toBe("collapsed");
   });
 });

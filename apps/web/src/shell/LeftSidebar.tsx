@@ -17,6 +17,8 @@
  * 自上而下：标题栏（折叠 / 搜索 / 通知）/ Armadra 下拉 / 新建看板 + 置顶 +
  * 项目（通知按下时这一段换成 Agent 状态面板）/ 设置。
  */
+import { useCompactLayout } from "../platform/layout";
+import { Sheet, SheetClose, SheetContent, SheetTitle } from "@/ui/sheet";
 import { useState } from "react";
 import { Bell, PanelLeft, Search, Settings } from "lucide-react";
 
@@ -38,37 +40,86 @@ import { noDragProps, trafficLightInset } from "./window-region";
 export function LeftSidebar() {
   const t = useT();
   const open = useCanvasStore((state) => state.panels.sidebar) === "open";
+  const compact = useCompactLayout();
+  const setPanel = useCanvasStore((state) => state.setPanel);
   const [searchOpen, setSearchOpen] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
+
+  const content = (
+    <div className="flex h-full w-full flex-col overflow-hidden">
+      <div className="relative shrink-0">
+        <TitlebarRow
+          agentsOpen={agentsOpen}
+          onSearch={() => setSearchOpen(true)}
+          onToggleAgents={() => setAgentsOpen((value) => !value)}
+        />
+        {compact && (
+          <SheetClose asChild>
+            <IconButton
+              size="cluster"
+              label={t("sidebar.collapse")}
+              className="absolute top-2 left-2"
+            >
+              <PanelLeft />
+            </IconButton>
+          </SheetClose>
+        )}
+      </div>
+      <SidebarHeader />
+      {agentsOpen ? (
+        <AgentStatusPanel onClose={() => setAgentsOpen(false)} />
+      ) : (
+        <WorkspaceTree />
+      )}
+      <Separator />
+      <SidebarFooter
+        onNavigate={
+          compact ? () => setPanel("sidebar", "collapsed") : undefined
+        }
+      />
+    </div>
+  );
 
   return (
     <>
       <SidebarToggle open={open} />
-
-      <aside
-        aria-label={t("sidebar.title")}
-        aria-hidden={!open}
-        data-state={open ? "open" : "collapsed"}
-        style={{ width: open ? "var(--sidebar-w)" : 0 }}
-        className="material-sidebar h-full shrink-0 overflow-hidden border-r border-border transition-[width] duration-[var(--dur-base)] ease-out data-[state=collapsed]:border-r-0"
-      >
-        <div className="flex h-full w-[var(--sidebar-w)] flex-col overflow-hidden">
-          <TitlebarRow
-            agentsOpen={agentsOpen}
-            onSearch={() => setSearchOpen(true)}
-            onToggleAgents={() => setAgentsOpen((value) => !value)}
-          />
-          <SidebarHeader />
-          {agentsOpen ? (
-            <AgentStatusPanel onClose={() => setAgentsOpen(false)} />
-          ) : (
-            <WorkspaceTree />
-          )}
-          <Separator />
-          <SidebarFooter />
-        </div>
-      </aside>
-
+      {compact ? (
+        <Sheet
+          open={open}
+          onOpenChange={(next) =>
+            setPanel("sidebar", next ? "open" : "collapsed")
+          }
+        >
+          <SheetContent
+            side="left"
+            showCloseButton={false}
+            aria-describedby={undefined}
+            className="gap-0 bg-panel p-0 data-[side=left]:w-[min(280px,calc(100vw-48px))]"
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              document
+                .querySelector<HTMLButtonElement>(
+                  '[data-slot="sidebar-toggle"] button',
+                )
+                ?.focus();
+            }}
+          >
+            <SheetTitle className="sr-only">{t("sidebar.title")}</SheetTitle>
+            {content}
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <aside
+          aria-label={t("sidebar.title")}
+          aria-hidden={!open}
+          inert={!open}
+          data-state={open ? "open" : "collapsed"}
+          style={{ width: open ? "var(--sidebar-w)" : 0 }}
+          className="material-sidebar h-full shrink-0 overflow-hidden border-r border-border transition-[width] duration-[var(--dur-base)] ease-out data-[state=collapsed]:border-r-0"
+        >
+          <div className="h-full w-[var(--sidebar-w)]">{content}</div>
+        </aside>
+      )}
       <SidebarSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </>
   );
@@ -148,6 +199,7 @@ function SidebarToggle({ open }: { open: boolean }) {
   return (
     <div
       {...noDragProps()}
+      data-slot="sidebar-toggle"
       style={{ left: trafficLightInset() + 8 }}
       className="fixed top-0 z-[calc(var(--z-tabbar)+1)] flex h-[var(--tabbar-h)] items-center"
     >
@@ -179,7 +231,7 @@ function SidebarToggle({ open }: { open: boolean }) {
 }
 
 /** 底部一行：设置。Codex 那行的头像 / 语音 / 帮助我们不做。 */
-function SidebarFooter() {
+function SidebarFooter({ onNavigate }: { onNavigate?: () => void }) {
   const t = useT();
   const settings = useCanvasStore((state) => state.panels.settings);
   const setPanel = useCanvasStore((state) => state.setPanel);
@@ -190,7 +242,10 @@ function SidebarFooter() {
         variant="ghost"
         size="sm"
         className="motion-hover h-7 w-full justify-start gap-2 px-1.5 text-[length:var(--text-body)] font-normal hover:bg-[var(--hover)]"
-        onClick={() => setPanel("settings", !settings)}
+        onClick={() => {
+          onNavigate?.();
+          setPanel("settings", !settings);
+        }}
       >
         <Settings className="size-4 shrink-0 opacity-70" />
         <span className="truncate">{t("cluster.settings")}</span>

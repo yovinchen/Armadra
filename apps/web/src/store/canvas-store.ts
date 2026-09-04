@@ -28,6 +28,7 @@ import { edgeToLink, nodeToShape, toTldrawColor } from "../canvas/sync/project";
 import { markPushed } from "../canvas/sync/pushed";
 import { tidyPositions } from "../canvas/tidy";
 import { arrangeEditorShapes } from "../canvas/tidy-editor";
+import { isCompactLayout } from "../platform/layout";
 import { normaliseLabels } from "../meta/model";
 
 /**
@@ -155,7 +156,10 @@ const emptyBoardState = {
 };
 
 const initialPanels: PanelState = {
-  sidebar: usePreferencesStore.getState().sidebarOpen ? "open" : "collapsed",
+  sidebar:
+    !isCompactLayout() && usePreferencesStore.getState().sidebarOpen
+      ? "open"
+      : "collapsed",
   explorer: "closed",
   scm: "closed",
   settings: false,
@@ -383,9 +387,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     // 边的 arrow 也有 uuid 形状的 id，所以「是不是节点」要连类型一起看。
     const kept = editor
       .getSelectedShapes()
-      .filter(
-        (shape) => shape.type === "arrow" || !isDocumentShapeId(shape.id),
-      )
+      .filter((shape) => shape.type === "arrow" || !isDocumentShapeId(shape.id))
       .map((shape) => shape.id);
     const wanted = [...(next as string[]).map(toShapeId), ...kept];
     const same =
@@ -1126,7 +1128,8 @@ export function useCanvasNode(id: string | null): CanvasNode | undefined {
 function useEditorHistoryFlag(read: (editor: Editor) => boolean): boolean {
   const editor = useEditorHandle();
   const subscribe = React.useCallback(
-    (onChange: () => void) => (editor ? editor.store.listen(onChange) : () => {}),
+    (onChange: () => void) =>
+      editor ? editor.store.listen(onChange) : () => {},
     [editor],
   );
   const snapshot = React.useCallback(
