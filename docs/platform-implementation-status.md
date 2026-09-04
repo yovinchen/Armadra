@@ -16,7 +16,7 @@
 | 阶段  | 状态     | 已完成 / 剩余                                                                                      |
 | ----- | -------- | -------------------------------------------------------------------------------------------------- |
 | M0    | 部分完成 | 三语言协议及真实 Host 握手完成；macOS CDP 核验通过，Windows 仅交叉检查，实机与完整 Worker 仍待完成 |
-| M1    | 进行中   | 身份、单实例、HostClient、显式来源许可与连接设置页已完成；自动服务管理、认证和业务迁移未完成       |
+| M1    | 进行中   | 身份、连接设置和本机后台启停 CLI 已完成；应用自动接入、设备认证和业务迁移未完成                    |
 | M2–M7 | 待实施   | 后台调度及其他产品工作流仍按各阶段交付                                                             |
 | M8    | 预留范围 | 多人、多账号及发布更新只按设计交付前期契约                                                         |
 
@@ -48,6 +48,9 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 | `44c1dff` | 精确 Origin 许可           | 来源/预检/authority 拒绝规则、配置前置校验、Go race/vet、真实 HTTP 验证                                         |
 | `51cbcfd` | Host 连接设置页            | 39 项定向测试、类型检查/构建；真实浏览器连接、失败清理、390px 页面边界                                          |
 | `c2e55eb` | 设置与窄屏侧栏互斥         | 12 项侧栏测试；最新代码实际宽→窄切换、偏好恢复与手机侧栏导航验证                                                |
+| `ac5c6b0` | 同用户本机 IPC             | Unix 私有短路径 socket、Windows 管道及服务端身份校验、长路径/别名/权限测试                                      |
+| `f3b3326` | 实例绑定控制协议           | Status/Stop Protobuf、22 项控制测试、帧/深度/丢 ACK/断连分类和跨语言样例                                        |
+| `3339a88` | 后台启停 CLI               | 独立 start/status/stop/serve、真实子进程保活、并发收敛、HTTP 排空与重启身份                                     |
 
 协议验收覆盖：中文/emoji、uint64 最大值、int64 最小值、超过 JS 安全整数的 generation、optional 未传/零值、oneof 三个分支、截断拒绝、未知字段行为。Go/TS 默认保留未知字段；prost 会丢弃，未来 Rust 透明中继必须转发原始载荷。尚未引入枚举，不将未知枚举检查记为已完成。
 
@@ -85,7 +88,20 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - 实测时旧 Rust Runtime 故意未运行，其连接拒绝日志为已知环境状态；Host 连接检查仍独立成功。没有验证 iOS/Android 实机或打包 Tauri 原生窗口。
 - 本地截图位于 `output/playwright/host-connection-desktop.png`、`host-connection-mobile.png`、`host-connection-mobile-resize.png`，不提交临时截图/profile。测试浏览器、Vite 与 Host 均已关闭。
 
-## 执行器 PoC 结果（M0）
+## M1 第三批验收
+
+- `armadra-host start/status/stop/serve` 已实现；省略子命令仍以前台 serve 兼容运行。CLI JSON 仅作状态展示，控制通信为长度前缀 Protobuf。
+- start 使用独立进程会话/进程组和独立诊断日志，启动命令退出后 HTTP 仍可达。重复启动返回已有状态，不偷偷改动运行配置。
+- 本机控制不使用公开 TCP/CORS，不读 PID 文件并强杀进程。Unix 验证目录/socket 的 owner、类型和权限；Windows 在同一已连接 handle 上核验 pipe owner 与服务进程 SID。
+- Stop 绑定实例 ID，完整 ACK 只表示接受；CLI 继续等待 HTTP 排空及目录锁释放。零字节断连和部分帧损坏分类不同，停止结果不确定时不盲目重发。
+- 修复独立审查和真实并发测试发现的竞争：短暂锁探测不会令 serve 立即误判已有服务；无主过渡有宽限；竞争者返回前回收自己多余的子进程，防止获胜服务停止后延迟复活。诊断 processId 仅用于辨认自建进程，发送信号使用已持有的子进程对象。
+- 控制帧上限 1 MiB、期限 3 秒、最多 32 条连接；descriptor-aware 预检拒绝 group 并限制已知消息深度，未知 bytes 保持不透明。固定 Go 解码器的 RecursionLimit 不单独覆盖未知 group，已用实际失败测试确认并补齐。
+- 实际通过 `go test -race ./...`、`go vet ./...`、协议生成漂移检查和跨语言契约（Rust 7 项、TS 9 项）；daemon 控制测试 22 项。Windows Go Host、控制/管道测试程序交叉构建通过，未在 Windows/Linux 实机运行。
+- `pnpm host:lifecycle-smoke` 实际验证：启动父命令退出后服务可达、独立状态、重复/并发启动、在途 HTTP 停止排空、停止后无子进程复活、身份重启保持、损坏身份不修复、无效配置不创建目录。
+- `pnpm host:smoke` 的原有 Protobuf HTTP/CORS 链路仍通过。测试使用临时目录和私有端点，结束后停止服务并清理；本次未启动长期用户服务。
+- 不包含登录/开机自启动安装、Tauri 自动管理、远程设备认证、业务数据库切换或实际定时任务。Windows 身份/日志目录仍沿用目录 ACL，未保存账号凭据；控制管道的受保护 DACL 不等于整个数据目录隔离已验收。
+
+## 执行器 PoC 结果（M0，历史记录）
 
 - 独立临时 Chrome profile，Chrome `152.0.7977.76` / CDP `1.3`，macOS arm64。
 - 实际完成 headless 启动、HTTP 导航、1000×700 viewport、点击、英文/中文/emoji 文本注入、表单/Canvas 截图、400 px 滚轮、screencast 帧及 ACK；探针退出后 CDP 端口关闭。
@@ -95,6 +111,6 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 
 ## 下一步
 
-1. M1 下一批：建设 Host 后台服务的启动/状态/停止管理、认证接入与业务存储迁移准备；原 Rust Runtime 在切换完成前保持业务权威，禁止双写。连接设置页及其客户端、持久身份和来源许可已完成，不重复实现；当前检查按钮不承担启动或切换服务的语义。
+1. M1 下一批：接入 Tauri 对 Host 的自动启动/发现及退出保活，准备设备认证与业务存储迁移；原 Rust Runtime 在切换完成前保持业务权威，禁止双写。CLI 启停、本机 IPC、连接设置页、身份和来源许可已完成，不重复实现；当前设置检查按钮仍不承担启动或切换服务的语义。
 2. 在具备 Windows runner 后补链接与会话重附着实测；macOS 可继续建设 Browser Worker，不让平台专属验证阻止其他模块推进。
 3. 后续继续使用子 Agent 分工，每个功能验证后独立提交。自动检查维持 15 分钟，全部当前范围完成前保持启用。
