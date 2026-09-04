@@ -35,6 +35,7 @@ import { useBoardAutosave } from "@/save/autosave";
 import { useCanvasStore } from "@/store/canvas-store";
 import { runtimeApi } from "@/api/client";
 import { createAssetStore } from "./assets";
+import { visiblePageBounds } from "./tidy-editor";
 import {
   isCanvasLocked,
   setCanvasLocked,
@@ -420,17 +421,7 @@ export function TldrawWorkspace() {
      * Dock 的「适应」用的是同一套算法，两处行为必须一致。
      */
     const fitView = () => {
-      const rect = boundingBox(
-        [...editor.getCurrentPageShapeIds()]
-          .map((id) => editor.getShapePageBounds(id))
-          .filter((box) => box !== undefined)
-          .map((box) => ({
-            x: box.x,
-            y: box.y,
-            width: box.width,
-            height: box.height,
-          })),
-      );
+      const rect = visiblePageBounds(editor);
       if (!rect) return;
       // tldraw 的 `BoxLike` 用 `w/h`，我们的 `Box` 用 `width/height`。
       editor.zoomToBounds(

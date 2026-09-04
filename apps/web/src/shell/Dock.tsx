@@ -1,6 +1,7 @@
-import { Box, useValue, type Editor } from "tldraw";
+import { useValue, type Editor } from "tldraw";
 import { LayoutGrid, Plus, Redo2, Undo2 } from "lucide-react";
 import { AddMenuContent } from "../canvas/menus/AddMenuContent";
+import { visiblePageBounds } from "../canvas/tidy-editor";
 import { DockTools } from "./DockTools";
 import {
   getEditor,
@@ -51,16 +52,15 @@ function zoomToLevel(editor: Editor, zoom: number): void {
 
 /** 适应视图，只缩小不放大（§20：最多到 100%）。 */
 function zoomToFit(editor: Editor): void {
-  const boxes: Box[] = [];
-  for (const id of editor.getCurrentPageShapeIds()) {
-    const box = editor.getShapePageBounds(id);
-    if (box) boxes.push(box);
-  }
-  if (boxes.length === 0) return;
-  editor.zoomToBounds(Box.Common(boxes), {
-    targetZoom: 1,
-    animation: { duration: FIT_DURATION },
-  });
+  const bounds = visiblePageBounds(editor);
+  if (!bounds) return;
+  editor.zoomToBounds(
+    { x: bounds.x, y: bounds.y, w: bounds.width, h: bounds.height },
+    {
+      targetZoom: 1,
+      animation: { duration: FIT_DURATION },
+    },
+  );
 }
 
 /** 当前缩放百分比；画布没挂载时是 100%。 */

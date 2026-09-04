@@ -27,6 +27,7 @@ import { edgeIdOfShape } from "../canvas/sync/derive";
 import { edgeToLink, nodeToShape, toTldrawColor } from "../canvas/sync/project";
 import { markPushed } from "../canvas/sync/pushed";
 import { tidyPositions } from "../canvas/tidy";
+import { arrangeEditorShapes } from "../canvas/tidy-editor";
 import { normaliseLabels } from "../meta/model";
 
 /**
@@ -1059,6 +1060,13 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   },
 
   arrangeNodes: (options) => {
+    const editor = getEditor();
+    if (editor) {
+      // Native shapes live only in the editor's whiteboard snapshot. Mutate the
+      // complete scene once and let use-store-sync publish its document mirror.
+      arrangeEditorShapes(editor, options);
+      return;
+    }
     let positions: Record<string, Position> = {};
     set((state) => {
       if (!state.document) return state;
@@ -1084,22 +1092,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         return changed ? { ...document, nodes } : null;
       });
       return patch ?? state;
-    });
-    withEditor((editor) => {
-      editor.updateShapes(
-        Object.entries(positions)
-          .map(([id, position]) => {
-            const shape = shapeOf(editor, id);
-            if (!shape) return null;
-            return {
-              id: shape.id,
-              type: shape.type,
-              x: position.x,
-              y: position.y,
-            };
-          })
-          .filter((partial) => partial !== null),
-      );
     });
   },
 }));
