@@ -179,27 +179,45 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
   React.useEffect(() => {
     if (!workspaceId || !path) return;
     let cancelled = false;
+    let imageUrl: string | null = null;
+    const controller = new AbortController();
     setState({ kind: "loading" });
     void (async () => {
       const info = await runtimeApi.fileInfo(workspaceId, path);
       if (cancelled) return;
+      if (info.preview === "image") {
+        const response = await fetch(
+          runtimeApi.fileDownloadUrl(workspaceId, path),
+          { signal: controller.signal },
+        );
+        if (!response.ok) throw new Error("Image download failed");
+        const blob = await response.blob();
+        if (cancelled) return;
+        imageUrl = URL.createObjectURL(
+          new Blob([blob], { type: info.mimeType }),
+        );
+        setState({ kind: "image", src: imageUrl });
+        return;
+      }
       if (info.preview !== "text") {
         setState({ kind: "attachment", info });
         return;
       }
       const file = await runtimeApi.readFile(workspaceId, path);
-        if (cancelled) return;
-        if (file.size > MAX_EDITABLE_BYTES) {
-          setState({ kind: "attachment", info });
-          return;
-        }
-        sizeRef.current = file.size;
-        setState({ kind: "text", content: file.content, size: file.size });
+      if (cancelled) return;
+      if (file.size > MAX_EDITABLE_BYTES) {
+        setState({ kind: "attachment", info });
+        return;
+      }
+      sizeRef.current = file.size;
+      setState({ kind: "text", content: file.content, size: file.size });
     })().catch(() => {
-        if (!cancelled) setState({ kind: "error" });
-      });
+      if (!cancelled) setState({ kind: "error" });
+    });
     return () => {
       cancelled = true;
+      controller.abort();
+      if (imageUrl) URL.revokeObjectURL(imageUrl);
     };
   }, [path, workspaceId]);
 
@@ -315,10 +333,15 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
         )}
         {state.kind === "attachment" && workspaceId && (
           <div className="flex h-full min-w-0 flex-col items-center justify-center gap-3 overflow-auto p-5 text-center">
-            <File aria-hidden className="size-8 shrink-0 text-muted-foreground" />
+            <File
+              aria-hidden
+              className="size-8 shrink-0 text-muted-foreground"
+            />
             <div className="min-w-0 max-w-full">
               <p className="break-all text-sm font-medium">{state.info.name}</p>
-              <p className="mt-1 break-all text-xs text-muted-foreground">{formatBytes(state.info.size)} · {state.info.mimeType}</p>
+              <p className="mt-1 break-all text-xs text-muted-foreground">
+                {formatBytes(state.info.size)} · {state.info.mimeType}
+              </p>
             </div>
             <Button variant="secondary" size="sm" asChild>
               <a
@@ -327,9 +350,14 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
                 onClick={(event) => {
                   if (!isTauri()) return;
                   event.preventDefault();
-                  void openExternal(runtimeApi.fileDownloadUrl(workspaceId, path));
+                  void openExternal(
+                    runtimeApi.fileDownloadUrl(workspaceId, path),
+                  );
                 }}
-              ><Download />{t("editor.download")}</a>
+              >
+                <Download />
+                {t("editor.download")}
+              </a>
             </Button>
           </div>
         )}
