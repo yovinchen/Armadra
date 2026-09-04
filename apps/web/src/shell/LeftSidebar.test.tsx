@@ -9,6 +9,8 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { Workspace } from "@armadra/shared";
+import { useEffect } from "react";
+import { Dialog, DialogContent, DialogTitle } from "@/ui/dialog";
 
 vi.mock("../api/client", () => ({
   runtimeApi: {
@@ -59,10 +61,69 @@ const workspace: Workspace = {
   updatedAt: timestamp,
 };
 
-function renderSidebar() {
+function SettingsFocusHarness() {
+  const open = useCanvasStore((state) => state.panels.settings);
+  useEffect(() => {
+    const keydown = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.key === ",")
+        useCanvasStore.getState().setPanel("settings", true);
+    };
+    window.addEventListener("keydown", keydown);
+    return () => window.removeEventListener("keydown", keydown);
+  }, []);
+  return (
+    <Dialog open={open}>
+      <DialogContent aria-describedby={undefined} showCloseButton={false}>
+        <DialogTitle>测试设置</DialogTitle>
+        <input aria-label="设置输入" />
+        <button
+          onClick={() => useCanvasStore.getState().setPanel("settings", false)}
+        >
+          关闭设置
+        </button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function responsiveWidth(initial: number) {
+  let width = initial;
+  const listeners = new Set<EventListenerOrEventListenerObject>();
+  vi.spyOn(window, "matchMedia").mockImplementation((query) => {
+    if (query !== "(max-width: 767px)") return initialMatchMedia(query);
+    return {
+      ...initialMatchMedia(query),
+      matches: width <= 767,
+      addEventListener: (
+        _event: string,
+        listener: EventListenerOrEventListenerObject,
+      ) => {
+        listeners.add(listener);
+      },
+      removeEventListener: (
+        _event: string,
+        listener: EventListenerOrEventListenerObject,
+      ) => {
+        listeners.delete(listener);
+      },
+    };
+  });
+  return (next: number) => {
+    width = next;
+    act(() => {
+      for (const listener of listeners) {
+        if (typeof listener === "function") listener(new Event("change"));
+        else listener.handleEvent(new Event("change"));
+      }
+    });
+  };
+}
+
+function renderSidebar(withSettings = false) {
   return render(
     <TestProviders>
       <LeftSidebar />
+      {withSettings && <SettingsFocusHarness />}
     </TestProviders>,
   );
 }
@@ -75,6 +136,7 @@ afterEach(() => {
 beforeEach(() => {
   useCanvasStore.setState({ workspace, boards: [], boardId: null });
   useCanvasStore.getState().setPanel("sidebar", "open");
+  useCanvasStore.getState().setPanel("settings", false);
   usePreferencesStore.setState({
     openWorkspaceIds: [workspace.id],
     collapsedWorkspaceIds: [],
@@ -198,5 +260,50 @@ describe("LeftSidebar", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(useCanvasStore.getState().panels.settings).toBe(true);
     expect(useCanvasStore.getState().panels.sidebar).toBe("collapsed");
+    expect(usePreferencesStore.getState().sidebarOpen).toBe(false);
+  });
+
+  it("设置已打开时从桌面缩到手机宽度不会新开侧栏弹层或丢失偏好", async () => {
+    const resize = responsiveWidth(1280);
+    useCanvasStore.getState().setPanel("settings", true);
+    renderSidebar(true);
+    const input = await screen.findByRole("textbox", { name: "设置输入" });
+    input.focus();
+    resize(390);
+    expect(screen.queryByRole("dialog", { name: "侧栏" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "测试设置" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "设置输入" })).toBe(input);
+    expect(document.activeElement).toBe(input);
+    expect(useCanvasStore.getState().panels.sidebar).toBe("open");
+    expect(usePreferencesStore.getState().sidebarOpen).toBe(true);
+    expect(
+      document
+        .querySelector('[data-slot="sidebar-toggle"] button')
+        ?.getAttribute("aria-label"),
+    ).toBe("展开侧栏");
+    fireEvent.click(screen.getByRole("button", { name: "关闭设置" }));
+    expect(await screen.findByRole("dialog", { name: "侧栏" })).toBeTruthy();
+    expect(usePreferencesStore.getState().sidebarOpen).toBe(true);
+  });
+
+  it("窄屏快捷键打开设置会暂时隐藏侧栏且不把焦点抢回折叠按钮", async () => {
+    responsiveWidth(390);
+    renderSidebar(true);
+    await screen.findByRole("dialog", { name: "侧栏" });
+    const toggle = document.querySelector<HTMLButtonElement>(
+      '[data-slot="sidebar-toggle"] button',
+    )!;
+    const focusToggle = vi.spyOn(toggle, "focus");
+    fireEvent.keyDown(window, { key: ",", ctrlKey: true });
+    const input = await screen.findByRole("textbox", { name: "设置输入" });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "侧栏" })).toBeNull(),
+    );
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    expect(focusToggle).not.toHaveBeenCalled();
+    expect(useCanvasStore.getState().panels.sidebar).toBe("open");
+    expect(usePreferencesStore.getState().sidebarOpen).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "关闭设置" }));
+    expect(await screen.findByRole("dialog", { name: "侧栏" })).toBeTruthy();
   });
 });

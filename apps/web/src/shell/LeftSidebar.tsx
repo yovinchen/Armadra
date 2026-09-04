@@ -40,7 +40,11 @@ import { noDragProps, trafficLightInset } from "./window-region";
 export function LeftSidebar() {
   const t = useT();
   const open = useCanvasStore((state) => state.panels.sidebar) === "open";
+  const settingsOpen = useCanvasStore((state) => state.panels.settings);
   const compact = useCompactLayout();
+  // A compact sidebar is modal. Keep the desktop preference, but never create
+  // a second modal over settings when resizing or opening settings by shortcut.
+  const visible = open && (!compact || !settingsOpen);
   const setPanel = useCanvasStore((state) => state.setPanel);
   const [searchOpen, setSearchOpen] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
@@ -82,13 +86,14 @@ export function LeftSidebar() {
 
   return (
     <>
-      <SidebarToggle open={open} />
+      <SidebarToggle open={visible} />
       {compact ? (
         <Sheet
-          open={open}
-          onOpenChange={(next) =>
-            setPanel("sidebar", next ? "open" : "collapsed")
-          }
+          open={visible}
+          onOpenChange={(next) => {
+            if (!useCanvasStore.getState().panels.settings)
+              setPanel("sidebar", next ? "open" : "collapsed");
+          }}
         >
           <SheetContent
             side="left"
@@ -97,6 +102,9 @@ export function LeftSidebar() {
             className="gap-0 bg-panel p-0 data-[side=left]:w-[min(280px,calc(100vw-48px))]"
             onCloseAutoFocus={(event) => {
               event.preventDefault();
+              // Radix may run this after the closing render. Read current
+              // state rather than an older closure before restoring focus.
+              if (useCanvasStore.getState().panels.settings) return;
               document
                 .querySelector<HTMLButtonElement>(
                   '[data-slot="sidebar-toggle"] button',
