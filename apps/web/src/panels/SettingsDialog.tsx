@@ -9,6 +9,7 @@ import { AgentPage } from "./settings/pages/AgentPage";
 import { DataPage } from "./settings/pages/DataPage";
 import { GeneralPage } from "./settings/pages/GeneralPage";
 import { HooksPage } from "./settings/pages/HooksPage";
+import { HostPage } from "./settings/pages/HostPage";
 import { KeybindingsPage } from "./settings/pages/KeybindingsPage";
 import { NotificationsPage } from "./settings/pages/NotificationsPage";
 import { SshPage } from "./settings/pages/SshPage";
@@ -35,6 +36,7 @@ const SECTION_PAGES: Record<string, () => React.ReactElement> = {
   whiteboard: WhiteboardPage,
   agent: AgentPage,
   hooks: HooksPage,
+  host: HostPage,
   terminal: TerminalPage,
   workspace: WorkspacePage,
   ssh: SshPage,

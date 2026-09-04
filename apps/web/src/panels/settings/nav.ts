@@ -7,6 +7,7 @@ import {
   Keyboard,
   Presentation,
   Server,
+  ServerCog,
   SlidersHorizontal,
   SquareTerminal,
   Webhook,
@@ -78,6 +79,12 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     groupKey: "settings.group.connection",
     labelKey: "settings.section.workspace",
     icon: LayoutGrid,
+  },
+  {
+    id: "host",
+    groupKey: "settings.group.connection",
+    labelKey: "host.nav",
+    icon: ServerCog,
   },
   {
     id: "ssh",

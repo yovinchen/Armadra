@@ -11,6 +11,7 @@ import { nodes } from "./nodes";
 import { sessions } from "./sessions";
 import { shell } from "./shell";
 import { ssh } from "./ssh";
+import { host } from "./host";
 import { terminal } from "./terminal";
 import { usage } from "./usage";
 
@@ -40,6 +41,7 @@ export const MESSAGE_MODULES = {
   terminal,
   sessions,
   ssh,
+  host,
   explorer,
   modals,
   commands,

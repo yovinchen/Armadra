@@ -4,14 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "pnpm --filter @armadra/shared build",
+    "predev": "pnpm --filter @armadra/shared build && pnpm --filter @armadra/host-client... build",
     "dev": "vite --port 1420",
-    "prebuild": "pnpm --filter @armadra/shared build",
+    "prebuild": "pnpm --filter @armadra/shared build && pnpm --filter @armadra/host-client... build",
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
+    "@armadra/host-client": "workspace:*",
     "@armadra/shared": "workspace:*",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.12",

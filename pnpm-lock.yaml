@@ -26,6 +26,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@armadra/host-client':
+        specifier: workspace:*
+        version: link:../../packages/host-client
       '@armadra/shared':
         specifier: workspace:*
         version: link:../../packages/shared

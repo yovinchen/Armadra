@@ -8,6 +8,8 @@
 
 ## 1. 定位
 
+独立 Go Host 已有本机身份/单实例和 Protobuf 握手基础，设置页可显式检查其连接。默认应用业务仍由下述 Rust Runtime 提供；尚未切换业务数据库或接入 Host 调度。实际进度见 [平台实施记录](./platform-implementation-status.md)。
+
 Armadra 是一个 local-first 的桌面画布：把 Claude Code、Codex、Gemini CLI、
 opencode 等 CLI Agent 作为终端节点放在一块 tldraw 白板上，节点之间连一条线即
 建立上下文链接，Agent 可以读取被链接一端的转录、终端画面或白板内容。
