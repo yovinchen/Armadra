@@ -36,3 +36,5 @@ pnpm host:smoke
 正式构建建议把输出指定到仓库 `target/` 或临时目录，不将二进制加入版本控制。协议生成与跨语言验证见仓库 `proto/README.md`。
 
 `host:smoke` 自动编译临时 Go Host 和 Rust 编解码桥，使用真实 HTTP 完成 TS → Rust → Go Host → Rust → TS 握手，验证重启后持久身份不变、进程身份更新、同目录重复启动拒绝、旧 minor 兼容及畸形请求。测试结束关闭临时 Host、删除临时二进制和数据目录，Go 缓存默认放在忽略的 `target/protocol-go/`。
+
+前端复用的客户端位于 [HostClient](../../packages/host-client/README.md)。冒烟测试会构建该包并在实际 Host 重启前后调用 `hello()`；此阶段尚未替换应用现有 Runtime 客户端或开放跨源设备认证。

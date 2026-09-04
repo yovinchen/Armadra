@@ -193,6 +193,19 @@ importers:
         specifier: 3.2.6
         version: 3.2.6(@types/debug@4.1.13)(@types/node@24.3.0)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.33.0)
 
+  packages/host-client:
+    dependencies:
+      '@armadra/protocol':
+        specifier: workspace:*
+        version: link:../protocol-ts
+    devDependencies:
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+      vitest:
+        specifier: 3.2.6
+        version: 3.2.6(@types/debug@4.1.13)(@types/node@24.3.0)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.33.0)
+
   packages/protocol-ts:
     dependencies:
       '@bufbuild/protobuf':

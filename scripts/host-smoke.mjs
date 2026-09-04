@@ -106,6 +106,7 @@ async function stopHost(host) {
 }
 try {
   pnpm(["--filter", "@armadra/protocol", "build"]);
+  pnpm(["--filter", "@armadra/host-client", "build"]);
   const cargo = run(
     "cargo",
     [
@@ -171,6 +172,16 @@ try {
     HelloResponseSchema,
     ErrorResponseSchema,
   } = await import("../packages/protocol-ts/dist/index.js");
+  const { HostClient } = await import("../packages/host-client/dist/index.js");
+  const clientHello = await new HostClient({
+    baseUrl: base,
+    clientId: "HostClient 集成",
+  }).hello();
+  assert.match(clientHello.hostId, /^[a-f0-9]{32}$/);
+  assert.deepEqual(clientHello.capabilities, [
+    "protocol.hello.v1",
+    "host.identity.v1",
+  ]);
   const roundtrip = (kind, bytes) =>
     run(wire, [kind], { input: bytes, stdio: ["pipe", "pipe", "inherit"] });
   const post = (bytes) =>
@@ -237,6 +248,12 @@ try {
     new Uint8Array(await restarted.arrayBuffer()),
   );
   assert.equal(afterRestart.hostId, hostID);
+  const clientRestart = await new HostClient({
+    baseUrl: base,
+    clientId: "HostClient 重启",
+  }).hello();
+  assert.equal(clientRestart.hostId, clientHello.hostId);
+  assert.notEqual(clientRestart.hostInstanceId, clientHello.hostInstanceId);
   assert.notEqual(afterRestart.hostInstanceId, instanceID);
   // Existing minor-0 clients remain compatible with the additive identity field.
   const legacy = await post(
@@ -287,7 +304,7 @@ try {
     "ok\n",
   );
   console.log(
-    "PASS: TS → Rust → Go Host HTTP → Rust → TS; Unicode, version negotiation, single-instance lock, persistent identity across restart, reconnect, minor-0 compatibility, incompatible/malformed requests.",
+    "PASS: HostClient and TS → Rust → Go Host HTTP → Rust → TS; Unicode, version negotiation, single-instance lock, persistent identity across restart, reconnect, minor-0 compatibility, incompatible/malformed requests.",
   );
 } finally {
   for (const host of hosts) await stopHost(host);
