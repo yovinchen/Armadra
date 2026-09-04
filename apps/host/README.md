@@ -1,6 +1,6 @@
 # Armadra Host（M1 基础）
 
-独立 Go 进程的本机协议协商入口，包含持久 Host 身份和每数据目录单实例保护。当前业务入口仍只有健康检查和 Protobuf Hello；现有 Rust Runtime 仍负责应用业务，没有切换数据库、启动自动化或开放设备远程访问。
+独立 Go 进程的本机服务基础，包含持久身份、单实例和后台启停管理。公开 HTTP 仍只有健康检查和 Protobuf Hello；本机启停走受操作系统保护的独立 IPC。现有 Rust Runtime 仍负责应用业务，没有切换数据库、启动自动化或开放设备远程访问。
 
 ## 运行
 
@@ -23,7 +23,33 @@ go -C apps/host run ./cmd/armadra-host --listen 127.0.0.1:43121
 
 Unix 新目录/文件使用 0700/0600。Windows 沿用目录 ACL，POSIX mode 不等同于私有 DACL；自定义数据目录的 Windows 凭据/业务数据权限隔离仍待专门实现与实机验收。此阶段只保存公开身份元数据，不存凭据。
 
-进程独立于请求连接，所有客户端断开后仍服务；Ctrl+C/SIGTERM 触发有界退出并释放文件锁。此阶段没有 OS 后台服务安装、设备认证或业务执行接口，不能用它替代完整常驻服务。
+进程独立于请求连接，所有客户端断开后仍服务；前台模式的 Ctrl+C/SIGTERM 触发有界退出并释放文件锁。此阶段没有开机/登录自启动安装、跨设备认证或业务执行接口。
+
+## 后台启动、查询与停止
+
+建议先构建到固定位置，再启动后台进程：
+
+```sh
+mkdir -p target
+go -C apps/host build -o ../../target/armadra-host ./cmd/armadra-host
+target/armadra-host start --allow-origin http://127.0.0.1:1420
+target/armadra-host status
+target/armadra-host stop
+```
+
+Windows 构建时将文件名设为 `armadra-host.exe`，随后使用 `target\armadra-host.exe` 执行同样子命令。Windows 已交叉构建，实际后台进程与系统调用仍需 Windows 实机验收。
+
+- `serve` 为前台模式，也是省略子命令时的兼容默认值。
+- `start` 在服务就绪后返回；它创建的后台进程不依赖启动命令、终端页面或请求连接存活。已有服务时返回当前状态，不修改其地址或来源配置；改变配置需先 stop 再 start。
+- `status` 查询当前用户/指定数据目录的本机端点。缺席时报告 stopped，不创建目录或身份。锁仍被占用但 IPC 不可用时报告错误，不猜测为已停止。
+- `stop` 先读取实例 ID，再请求停止该实例，并等待 HTTP 排空和目录锁释放。不会读取 PID 文件并强杀进程，也不会停止独立的 Rust Runtime 或 tmux 会话。
+- 各命令可使用同一个 `--data-dir`。start/serve 另支持 `--listen` 和重复的 `--allow-origin`；status/stop 不接受无效的监听配置覆盖。
+
+状态以 JSON 展示 running/stopped、服务与实例标识、地址和诊断 PID；PID 不作为停止目标。进程间控制帧始终是 Protobuf。一次停止请求没有可信 ACK 时报告不确定结果，不自动重发副作用。
+
+启动诊断保存在数据目录新建的 `startup-*.log`，只包含本次服务日志；不复用外部日志路径。多启动者竞争时会回收本次创建的多余子进程，避免在获胜服务停止后延迟启动。初始化失败不会重建损坏身份。
+
+本机权限依赖 [localipc](./internal/localipc/README.md)：Unix 私有 socket，Windows 私有命名管道及服务端身份核验。网页/CORS 没有这些管理权限。后台进程目前不由 launchd/systemd/Windows 服务管理器托管，不承诺跨注销、重启或断电持续运行。
 
 ## 显式浏览器 Origin
 
@@ -49,6 +75,7 @@ go -C apps/host run ./cmd/armadra-host --listen 127.0.0.1:43121 \
 go -C apps/host test -race ./...
 go -C apps/host vet ./...
 pnpm host:smoke
+pnpm host:lifecycle-smoke
 ```
 
 正式构建建议把输出指定到仓库 `target/` 或临时目录，不将二进制加入版本控制。协议生成与跨语言验证见仓库 `proto/README.md`。
@@ -56,3 +83,5 @@ pnpm host:smoke
 `host:smoke` 自动编译临时 Go Host 和 Rust 编解码桥，使用真实 HTTP 完成 TS → Rust → Go Host → Rust → TS 握手，验证重启后持久身份不变、进程身份更新、同目录重复启动拒绝、旧 minor 兼容及畸形请求。测试结束关闭临时 Host、删除临时二进制和数据目录，Go 缓存默认放在忽略的 `target/protocol-go/`。
 
 前端复用的客户端位于 [HostClient](../../packages/host-client/README.md)。冒烟测试会构建该包并在实际 Host 重启前后调用 `hello()`；此阶段尚未替换应用现有 Runtime 客户端或开放跨源设备认证。
+
+`host:lifecycle-smoke` 另行验证启动命令退出后 HTTP 仍可达、独立 status、重复/并发 start、在途 HTTP 的停止排空、停止后无多余子进程复活、重启身份及损坏配置拒绝。所有测试使用临时数据目录，结束后通过控制协议停止服务。

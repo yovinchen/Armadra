@@ -11,9 +11,21 @@ import (
 )
 
 func openRegular(path string, create bool) (*os.File, error) {
-	flags := unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NOFOLLOW | unix.O_NONBLOCK
+	access := unix.O_RDONLY
 	if create {
-		flags = unix.O_RDWR | unix.O_CREAT | unix.O_CLOEXEC | unix.O_NOFOLLOW | unix.O_NONBLOCK
+		access = unix.O_RDWR
+	}
+	return openStateFile(path, access, create)
+}
+
+func openExistingLock(path string) (*os.File, error) {
+	return openStateFile(path, unix.O_RDWR, false)
+}
+
+func openStateFile(path string, access int, create bool) (*os.File, error) {
+	flags := access | unix.O_CLOEXEC | unix.O_NOFOLLOW | unix.O_NONBLOCK
+	if create {
+		flags |= unix.O_CREAT
 	}
 	fd, err := unix.Open(path, flags, 0600)
 	if err != nil {

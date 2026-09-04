@@ -7,6 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "host:lifecycle-smoke": "node scripts/host-lifecycle-smoke.mjs",
     "host:smoke": "node scripts/host-smoke.mjs",
     "protocol:generate": "node scripts/protocol.mjs generate",
     "protocol:check": "node scripts/protocol.mjs check",

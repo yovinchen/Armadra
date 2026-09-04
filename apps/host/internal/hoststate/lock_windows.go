@@ -9,14 +9,22 @@ import (
 )
 
 func openRegular(path string, create bool) (*os.File, error) {
-	name, err := windows.UTF16PtrFromString(path)
-	if err != nil {
-		return nil, err
-	}
 	access, disposition := uint32(windows.GENERIC_READ), uint32(windows.OPEN_EXISTING)
 	if create {
 		access |= windows.GENERIC_WRITE
 		disposition = windows.OPEN_ALWAYS
+	}
+	return openStateFile(path, access, disposition)
+}
+
+func openExistingLock(path string) (*os.File, error) {
+	return openStateFile(path, windows.GENERIC_READ|windows.GENERIC_WRITE, windows.OPEN_EXISTING)
+}
+
+func openStateFile(path string, access, disposition uint32) (*os.File, error) {
+	name, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return nil, err
 	}
 	// Open the reparse point itself so links cannot redirect the lock/identity.
 	handle, err := windows.CreateFile(name, access, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, disposition, windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)

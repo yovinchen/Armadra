@@ -11,6 +11,20 @@ import (
 // ListenLocal intentionally rejects wildcard and DNS names until the authenticated
 // remote-host surface exists. Port zero is supported for isolated tests/probes.
 func ListenLocal(address string) (net.Listener, error) {
+	endpoint, err := localAddress(address)
+	if err != nil {
+		return nil, err
+	}
+	return net.ListenTCP("tcp", endpoint)
+}
+
+// ValidateListenAddress performs no listening or filesystem I/O.
+func ValidateListenAddress(address string) error {
+	_, err := localAddress(address)
+	return err
+}
+
+func localAddress(address string) (*net.TCPAddr, error) {
 	host, _, err := net.SplitHostPort(address)
 	ip := net.ParseIP(host)
 	if err != nil || ip == nil || !ip.IsLoopback() {
@@ -20,7 +34,7 @@ func ListenLocal(address string) (net.Listener, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid listen address: %w", err)
 	}
-	return net.ListenTCP("tcp", endpoint)
+	return endpoint, nil
 }
 
 // Serve ends only on host shutdown, not when a client disconnects.

@@ -4,13 +4,19 @@ import (
 	"testing"
 
 	"armadra.local/host/internal/hoststate"
+	"armadra.local/host/internal/server"
 )
 
 func TestStartupFailureReleasesDataDirectory(t *testing.T) {
 	dir := t.TempDir()
-	// The state lock has been acquired before the listener rejects this address.
-	if err := run([]string{"--data-dir", dir, "--listen", "0.0.0.0:0"}); err == nil {
-		t.Fatal("accepted a non-loopback listener")
+	occupied, err := server.ListenLocal("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer occupied.Close()
+	// Configuration is valid, so the state lock is acquired before bind fails.
+	if err := run([]string{"--data-dir", dir, "--listen", occupied.Addr().String()}); err == nil {
+		t.Fatal("accepted an occupied listener")
 	}
 	state, err := hoststate.Open(dir)
 	if err != nil {
