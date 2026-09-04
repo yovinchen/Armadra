@@ -13,24 +13,57 @@
 
 ## 阶段状态
 
-| 阶段  | 状态     | 已完成 / 剩余                                                               |
-| ----- | -------- | --------------------------------------------------------------------------- |
-| M0    | 进行中   | Protobuf 三语言基础与本机 Host 握手正在实现；Windows/浏览器执行器核验进行中 |
-| M1–M7 | 待实施   | 后台服务切换、调度及全部产品工作流仍按各阶段交付                            |
-| M8    | 预留范围 | 多人、多账号及发布更新只按设计交付前期契约                                  |
+| 阶段  | 状态     | 已完成 / 剩余                                                                                      |
+| ----- | -------- | -------------------------------------------------------------------------------------------------- |
+| M0    | 部分完成 | 三语言协议及真实 Host 握手完成；macOS CDP 核验通过，Windows 仅交叉检查，实机与完整 Worker 仍待完成 |
+| M1–M7 | 待实施   | 后台服务切换、调度及全部产品工作流仍按各阶段交付                                                   |
+| M8    | 预留范围 | 多人、多账号及发布更新只按设计交付前期契约                                                         |
 
 ## 本轮分工
 
 - protocol_foundation：统一 `.proto`、Go/TS/Rust 生成代码、二进制互通及边界测试。
-- windows_browser_probe：独立临时环境下验证 CDP 与 Windows ConPTY 编译条件，只读仓库。
+- windows_browser_probe：独立临时环境下验证 CDP 与 Windows ConPTY 编译条件，随后整理可重复执行的探针。
+- host_review：独立只读审查 Host 请求边界、关闭生命周期、生成器跨平台启动及实际链路。
 - 主 Agent：本机 Go Host 握手入口、验证、独立审查与分功能提交。
 
 ## 运行环境与限制
 
-- Go `1.26.5`，系统 protoc `35.1`，macOS arm64。
+- Go `1.26.5`，macOS arm64；生成流程使用锁定的 vendored protoc `31.1`，不依赖系统 protoc `35.1`。
 - Rust 已安装 macOS arm64、Windows x64 MSVC、Linux x64 目标；安装 target 不代表能在本机运行 Windows/Linux 实机测试。
 - 当前已有 Runtime 仍是应用执行服务。新增 Host 在 M0 使用独立入口，未切换生产数据所有权、未启用设备远程认证、未承诺后台计划已经可用。
 
+## 独立提交与已验证功能
+
+| 提交      | 功能                    | 验证证据                                                                                                        |
+| --------- | ----------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `279ef23` | 设计文档与接续基线      | 文档范围对齐前置任务的新界面决定                                                                                |
+| `e91fa2d` | Protobuf 三语言基础     | 单一 schema；可重复生成及漂移检查；Go/Rust/TS 对照共享样例                                                      |
+| `ad564c0` | 本机 Go Host 与实机握手 | TS → Rust → Go HTTP → Rust → TS；两次连接强制关闭 TCP 后重新协商；错误协议/畸形请求拒绝                         |
+| `89128f1` | 可重复执行器核验工具    | 独立 Chromium CDP 探针与 Windows ConPTY 编译探针；结果和未验范围见 [核验记录](./research/m0-executor-probes.md) |
+
+协议验收覆盖：中文/emoji、uint64 最大值、int64 最小值、超过 JS 安全整数的 generation、optional 未传/零值、oneof 三个分支、截断拒绝、未知字段行为。Go/TS 默认保留未知字段；prost 会丢弃，未来 Rust 透明中继必须转发原始载荷。尚未引入枚举，不将未知枚举检查记为已完成。
+
+本轮实际执行且通过：
+
+- `pnpm protocol:generate` 与 `pnpm protocol:check`；锁定生成器无产物漂移。
+- `pnpm protocol:test`：Go 4 个测试函数（含共享样例子测试）、Rust 6 项、TS 7 项及类型检查。
+- `go -C apps/host test -race ./...`、`go -C apps/host vet ./...`：Host 6 个测试函数，含 13 种非法/越界请求子场景、同源 IPv6、重连和退出。
+- `cargo clippy --locked -p armadra-protocol --all-targets -- -D warnings`。
+- `pnpm host:smoke`：临时 Go 二进制、临时端口，真实跨语言请求和响应；测试后退出进程并移除临时二进制。
+- `pnpm --filter @armadra/web typecheck`、新增文件格式检查和 `git diff --check`。
+
+审查发现并解决：Host 退出需等待 Shutdown 请求排空；Windows 生成脚本不能直接执行 `.cmd`；握手实例稳定测试需显式关闭 TCP 才能作为重连证据。Windows 脚本已按进程创建规则修正，仍待实机验证。
+
+## 执行器 PoC 结果
+
+- 独立临时 Chrome profile，Chrome `152.0.7977.76` / CDP `1.3`，macOS arm64。
+- 实际完成 headless 启动、HTTP 导航、1000×700 viewport、点击、英文/中文/emoji 文本注入、表单/Canvas 截图、400 px 滚轮、screencast 帧及 ACK；探针退出后 CDP 端口关闭。
+- 这是 CDP 接口实证，未验证操作系统 IME composition、tldraw 裁剪缩放、交互延迟预算或 Windows/Linux 浏览器运行；生产 Rust Browser Worker 尚未实现。
+- Windows `windows-sys 0.61.2` ConPTY API 及 `portable-pty 0.9.0` 最小程序的离线 target 检查通过；链接失败为缺少 `link.exe`，无 Windows 可执行工件及运行证据。
+- Windows 下一步需要独立 Session Host、无头 VT 和 IPC；现有 Unix `ps` 前台检测与 direct detach 销毁行为不能直接复用为持久化方案。光标继承查询必须处理或禁用。
+
 ## 下一步
 
-完成并提交协议基础；再提交 Go Host 的版本协商及有界二进制入口。记录实际端到端结果与执行器限制，然后推进后续阶段。
+1. 按 M1 的独立切口接入 HostClient、持久 Host 身份/生命周期与业务存储迁移准备；原 Rust Runtime 在切换完成前保持业务权威，禁止双写。
+2. 在具备 Windows runner 后补链接与会话重附着实测；macOS 可继续建设 Browser Worker，不让平台专属验证阻止其他模块推进。
+3. 后续继续使用子 Agent 分工，每个功能验证后独立提交。自动检查维持 15 分钟，全部当前范围完成前保持启用。
