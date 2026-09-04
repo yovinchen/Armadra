@@ -1,0 +1,256 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import type { CanvasNode } from "@ai-coding-canvas/shared";
+
+const store = vi.hoisted(() => ({
+  document: { nodes: [] as CanvasNode[] },
+  focusNodeId: null as string | null,
+  maximized: {} as Record<string, unknown>,
+  workspace: { id: "w1", rootPath: "/tmp" },
+  selectNodes: vi.fn(),
+  updateNode: vi.fn(),
+  updateNodeData: vi.fn(),
+  setCollapsed: vi.fn(),
+  maximizeNode: vi.fn(),
+  restoreNode: vi.fn(),
+  removeNodes: vi.fn(),
+  resizeNode: vi.fn(),
+  addNode: vi.fn(),
+}));
+
+const api = vi.hoisted(() => ({ listFiles: vi.fn(), gitStatus: vi.fn() }));
+
+vi.mock("@/store/canvas-store", () => {
+  const useCanvasStore = <T,>(selector: (state: typeof store) => T) =>
+    selector(store);
+  useCanvasStore.getState = () => store;
+  return { useCanvasStore };
+});
+
+vi.mock("@/api/client", () => ({
+  runtimeApi: api,
+  terminalWebSocketUrl: (id: string) => `ws://x/${id}`,
+}));
+
+import { breadcrumbs, FilesNode } from "./FilesNode";
+
+const node = {
+  id: "f1",
+  boardId: "b1",
+  type: "files",
+  title: "文件",
+  color: "#0a84ff",
+  position: { x: 100, y: 40 },
+  size: { width: 340, height: 460 },
+  data: { kind: "files", path: "src" },
+  createdAt: "2026-09-04T00:00:00.000Z",
+  updatedAt: "2026-09-04T00:00:00.000Z",
+} as CanvasNode;
+
+function renderFiles() {
+  return render(
+    <FilesNode
+      id="f1"
+      node={node}
+      selected={false}
+      collapsed={false}
+      focused={false}
+    />,
+  );
+}
+
+beforeEach(() => {
+  api.gitStatus.mockResolvedValue({
+    repository: true,
+    branch: "main",
+    changedCount: 0,
+    files: [],
+  });
+});
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+describe("breadcrumbs", () => {
+  it("always starts at the root", () => {
+    expect(breadcrumbs(".")).toEqual([{ label: "根目录", path: "." }]);
+  });
+
+  it("accumulates one crumb per segment", () => {
+    expect(breadcrumbs("src/nodes/ui")).toEqual([
+      { label: "根目录", path: "." },
+      { label: "src", path: "src" },
+      { label: "nodes", path: "src/nodes" },
+      { label: "ui", path: "src/nodes/ui" },
+    ]);
+  });
+});
+
+describe("FilesNode", () => {
+  it("lists directories before files and navigates on click", async () => {
+    api.listFiles.mockResolvedValue({
+      path: "src",
+      truncated: false,
+      entries: [
+        {
+          name: "b.ts",
+          path: "src/b.ts",
+          kind: "file",
+          size: 1,
+          readonly: false,
+        },
+        {
+          name: "nodes",
+          path: "src/nodes",
+          kind: "directory",
+          size: 0,
+          readonly: false,
+        },
+      ],
+    });
+    renderFiles();
+
+    await waitFor(() =>
+      expect(api.listFiles).toHaveBeenCalledWith("w1", "src"),
+    );
+    const rows = await screen.findAllByRole("button");
+    const labels = rows.map((row) => row.textContent);
+    expect(labels.indexOf("nodes")).toBeLessThan(labels.indexOf("b.ts"));
+
+    fireEvent.click(await screen.findByText("nodes"));
+    expect(store.updateNodeData).toHaveBeenCalledWith("f1", {
+      path: "src/nodes",
+    });
+  });
+
+  it("opens a file as an editor node to the right", async () => {
+    api.listFiles.mockResolvedValue({
+      path: "src",
+      truncated: false,
+      entries: [
+        {
+          name: "a.ts",
+          path: "src/a.ts",
+          kind: "file",
+          size: 1,
+          readonly: false,
+        },
+      ],
+    });
+    renderFiles();
+
+    fireEvent.doubleClick(await screen.findByText("a.ts"));
+    expect(store.addNode).toHaveBeenCalledWith("editor", {
+      title: "a.ts",
+      data: { path: "src/a.ts" },
+      position: { x: 100 + 340 + 24, y: 40 },
+    });
+  });
+
+  it("navigates back through the breadcrumb", async () => {
+    api.listFiles.mockResolvedValue({
+      path: "src",
+      truncated: false,
+      entries: [],
+    });
+    renderFiles();
+    fireEvent.click(await screen.findByText("根目录"));
+    expect(store.updateNodeData).toHaveBeenCalledWith("f1", { path: "." });
+  });
+
+  it("filters the listing by name", async () => {
+    api.listFiles.mockResolvedValue({
+      path: "src",
+      truncated: false,
+      entries: [
+        {
+          name: "alpha.ts",
+          path: "src/alpha.ts",
+          kind: "file",
+          size: 1,
+          readonly: false,
+        },
+        {
+          name: "beta.ts",
+          path: "src/beta.ts",
+          kind: "file",
+          size: 1,
+          readonly: false,
+        },
+      ],
+    });
+    renderFiles();
+    await screen.findByText("alpha.ts");
+
+    fireEvent.change(screen.getByLabelText("过滤"), {
+      target: { value: "bet" },
+    });
+    expect(screen.queryByText("alpha.ts")).toBeNull();
+    expect(screen.getByText("beta.ts")).toBeTruthy();
+  });
+
+  it("badges entries from git status without asking for a diff", async () => {
+    api.listFiles.mockResolvedValue({
+      path: "src",
+      truncated: false,
+      entries: [
+        {
+          name: "a.ts",
+          path: "src/a.ts",
+          kind: "file",
+          size: 1,
+          readonly: false,
+        },
+        {
+          name: "b.ts",
+          path: "src/b.ts",
+          kind: "file",
+          size: 1,
+          readonly: false,
+        },
+      ],
+    });
+    api.gitStatus.mockResolvedValue({
+      repository: true,
+      branch: "main",
+      changedCount: 1,
+      files: [{ path: "src/a.ts", status: "M", staged: false, unstaged: true }],
+    });
+    renderFiles();
+
+    const badge = await screen.findByTitle("已修改");
+    expect(badge.textContent).toBe("M");
+    // 只有 a.ts 有变更，b.ts 不该拿到徽标。
+    expect(screen.queryByTitle("未跟踪")).toBeNull();
+    expect(api).not.toHaveProperty("gitDiff");
+  });
+
+  it("keeps listing files when the workspace is not a repository", async () => {
+    api.listFiles.mockResolvedValue({
+      path: "src",
+      truncated: false,
+      entries: [
+        {
+          name: "a.ts",
+          path: "src/a.ts",
+          kind: "file",
+          size: 1,
+          readonly: false,
+        },
+      ],
+    });
+    api.gitStatus.mockRejectedValue(new Error("not a repository"));
+    renderFiles();
+
+    await screen.findByText("a.ts");
+    expect(screen.queryByTitle("已修改")).toBeNull();
+  });
+});

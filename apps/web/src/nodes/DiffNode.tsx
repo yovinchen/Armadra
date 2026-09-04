@@ -1,251 +1,185 @@
-import { useCallback, useMemo, useState } from "react";
-import type { DiffFile, DiffFileState } from "@ai-coding-canvas/shared";
-import { runtimeApi } from "../api/client";
-import { ConfirmDialog } from "../components/ConfirmDialog";
-import { useCanvasStore } from "../store/canvas-store";
-import { usePreferences } from "../preferences/Preferences";
-import { NODE_COMMANDS } from "./actions";
-import { hasHunks, parsePatch } from "./helpers";
-import { useNodeCommand } from "./useNodeCommand";
-import type { NodeContentProps, OfKind } from "./types";
+import * as React from "react";
+import type { DiffScope, GitFileDiff } from "@ai-coding-canvas/shared";
+import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 
-const STATUS_TONE: Record<DiffFile["status"], string> = {
-  A: "add",
-  M: "mod",
-  D: "del",
-  R: "mod",
-  "?": "mod",
-};
+import { cn } from "@/lib/cn";
+import { Badge } from "@/ui/badge";
+import { Button } from "@/ui/button";
+import { IconButton } from "@/ui/icon-button";
+import { ScrollArea } from "@/ui/scroll-area";
+import { runtimeApi } from "@/api/client";
+import { useCanvasStore } from "@/store/canvas-store";
+import { useT } from "@/app/preferences-store";
+import { NodeShell } from "./NodeShell";
+import type { NodeBodyProps } from "./registry";
 
-const STATE_META: Record<
-  DiffFileState,
-  { glyph: string; label: string; tone: string }
-> = {
-  pending: { glyph: "◇", label: "diff.pending", tone: "diff" },
-  accepted: { glyph: "✓", label: "diff.accepted", tone: "ok" },
-  reverted: { glyph: "↶", label: "diff.reverted", tone: "muted" },
-};
+/**
+ * 变更节点（§3.4）：只读。接受 / 回滚在源码控制抽屉里，节点上不放，
+ * 免得同一个破坏性动作有两个入口。
+ *
+ * `data.scope` 决定看索引的哪一侧（工作区 / 已暂存），`data.paths` 非空时
+ * 只看这几个文件——抽屉里点「打开差异」就是这么开的。
+ */
+export function DiffNode({ node, selected }: NodeBodyProps) {
+  const t = useT();
+  const data = node.data.kind === "diff" ? node.data : undefined;
+  const workspaceId = useCanvasStore((state) => state.workspace?.id);
+  const scope: DiffScope = data?.scope ?? "worktree";
+  // 依赖数组要的是稳定值，节点数据里的数组每次读都是新引用。
+  const pathKey = (data?.paths ?? []).join("\n");
 
-/** Diff body: header counters, per-file rows with patch, footer bulk actions. */
-export function DiffNode({ id, data }: NodeContentProps) {
-  const { t } = usePreferences();
-  const workspace = useCanvasStore((state) => state.workspace);
-  const diff = data as OfKind<"diff">;
-  const [open, setOpen] = useState<Record<string, boolean>>({});
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [confirmRevert, setConfirmRevert] = useState<string[] | null>(null);
+  const [files, setFiles] = React.useState<GitFileDiff[] | null>(null);
+  const [failed, setFailed] = React.useState(false);
+  const [open, setOpen] = React.useState<ReadonlySet<string>>(new Set());
+  const [nonce, setNonce] = React.useState(0);
 
-  const additions = diff.files.reduce((sum, file) => sum + file.additions, 0);
-  const deletions = diff.files.reduce((sum, file) => sum + file.deletions, 0);
-  const decided = diff.files.filter((file) => file.state !== "pending").length;
+  React.useEffect(() => {
+    if (!workspaceId) return;
+    let cancelled = false;
+    setFailed(false);
+    const paths = pathKey ? pathKey.split("\n") : undefined;
+    runtimeApi
+      .gitDiff(workspaceId, { scope, paths })
+      .then((diff) => {
+        if (!cancelled) setFiles(diff.files);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [nonce, pathKey, scope, workspaceId]);
 
-  const apply = useCallback(
-    async (paths: string[], next: DiffFileState) => {
-      const state = useCanvasStore.getState();
-      const node = state.document?.nodes.find((item) => item.id === id);
-      if (!workspace || node?.data.kind !== "diff" || paths.length === 0)
-        return;
-      try {
-        setError("");
-        setBusy(true);
-        if (next === "accepted") await runtimeApi.gitStage(workspace.id, paths);
-        else await runtimeApi.gitRevert(workspace.id, paths);
-        const targets = new Set(paths);
-        const files = node.data.files.map((file) =>
-          targets.has(file.path) ? { ...file, state: next } : file,
-        );
-        const settled = files.every((file) => file.state !== "pending");
-        state.updateNode(id, {
-          files,
-          ...(settled ? { status: "done" as const } : {}),
-        });
-      } catch (cause) {
-        setError(cause instanceof Error ? cause.message : t("diff.failed"));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [id, t, workspace],
-  );
+  function toggle(path: string) {
+    setOpen((current) => {
+      const next = new Set(current);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }
 
-  const pendingPaths = useMemo(
-    () =>
-      diff.files
-        .filter((file) => file.state === "pending")
-        .map((file) => file.path),
-    [diff.files],
-  );
-
-  useNodeCommand(NODE_COMMANDS.diffAcceptAll, id, () => {
-    void apply(
-      pendingPaths.length ? pendingPaths : diff.files.map((file) => file.path),
-      "accepted",
-    );
-  });
-  useNodeCommand(NODE_COMMANDS.diffRevertAll, id, () =>
-    setConfirmRevert(
-      pendingPaths.length ? pendingPaths : diff.files.map((file) => file.path),
-    ),
+  const headerActions = (
+    <>
+      <Badge variant="ghost" className="shrink-0">
+        {scope === "staged" ? t("diff.staged") : t("diff.worktree")}
+      </Badge>
+      <IconButton
+        label={t("diff.refresh")}
+        onClick={() => setNonce((value) => value + 1)}
+      >
+        <RefreshCw />
+      </IconButton>
+    </>
   );
 
   return (
-    <div className="diffnode-body nodrag nowheel">
-      <div className="diffnode-head">
-        <span>{t("diff.files", { count: diff.files.length })}</span>
-        <span className="diffnode-add">+{additions}</span>
-        <span className="diffnode-del">−{deletions}</span>
-        <span className="diffnode-progress">
-          {t("diff.progress", { decided, total: diff.files.length })}
-        </span>
-      </div>
-
-      <div className="diffnode-list">
-        {diff.files.length === 0 && (
-          <p className="diffnode-empty">{t("diff.empty")}</p>
+    <NodeShell node={node} selected={selected} headerActions={headerActions}>
+      <ScrollArea className="h-full w-full">
+        {failed && (
+          <div className="p-2">
+            <Badge variant="destructive">{t("diff.failed")}</Badge>
+          </div>
         )}
-        {diff.files.map((file) => {
-          const expanded = open[file.path] ?? false;
-          const state = STATE_META[file.state];
-          return (
-            <div className="diffnode-file" key={file.path}>
-              <div className="diffnode-row">
-                <button
-                  type="button"
-                  className="diffnode-toggle nodrag"
-                  aria-expanded={expanded}
-                  aria-label={file.path}
-                  onClick={() =>
-                    setOpen((current) => ({
-                      ...current,
-                      [file.path]: !expanded,
-                    }))
-                  }
-                >
-                  {expanded ? "▾" : "▸"}
-                </button>
-                <span
-                  className={`diffnode-badge diffnode-badge--${STATUS_TONE[file.status]}`}
-                >
-                  {file.status}
-                </span>
-                <span className="diffnode-path" title={file.path}>
-                  {file.path}
-                </span>
-                <span className="diffnode-add">+{file.additions}</span>
-                <span className="diffnode-del">−{file.deletions}</span>
-                <span className={`diffnode-state tone-${state.tone}`}>
-                  <span aria-hidden="true">{state.glyph}</span>
-                  {t(state.label)}
-                </span>
-              </div>
-              {expanded && (
-                <div className="diffnode-patch">
-                  {parsePatch(file.patch).map((hunk, index) => (
-                    <div key={`${file.path}-${index}`}>
-                      <div className="diffnode-hunk">{hunk.header}</div>
-                      {hunk.lines.map((line, lineIndex) => (
-                        <div
-                          className={`diffnode-line diffnode-line--${
-                            line.sign === "+"
-                              ? "add"
-                              : line.sign === "-"
-                                ? "del"
-                                : "ctx"
-                          }`}
-                          key={`${index}-${lineIndex}`}
-                        >
-                          <span className="diffnode-lineno">{line.no}</span>
-                          <span className="diffnode-sign">{line.sign}</span>
-                          <span className="diffnode-text">{line.text}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                  {file.previewable === false ? (
-                    <p className="diffnode-empty">{t("diff.notPreviewable")}</p>
-                  ) : (
-                    !hasHunks(file.patch) && (
-                      <p className="diffnode-empty">{t("diff.noPatch")}</p>
-                    )
-                  )}
-                </div>
-              )}
-              {expanded && (
-                <div className="diffnode-file-actions">
-                  <button
-                    type="button"
-                    className="diffnode-revert nodrag"
-                    disabled={busy}
-                    onClick={() => setConfirmRevert([file.path])}
-                  >
-                    ↶ {t("diff.revertFile")}
-                  </button>
-                  <button
-                    type="button"
-                    className="diffnode-accept nodrag"
-                    disabled={busy}
-                    onClick={() => void apply([file.path], "accepted")}
-                  >
-                    ✓ {t("diff.acceptFile")}
-                  </button>
-                </div>
-              )}
+        {!failed && files && files.length === 0 && (
+          <div className="p-2">
+            <Badge variant="outline">{t("diff.clean")}</Badge>
+          </div>
+        )}
+        {files?.map((file) => (
+          <DiffFileRow
+            key={file.path}
+            file={file}
+            open={open.has(file.path)}
+            onToggle={() => toggle(file.path)}
+          />
+        ))}
+      </ScrollArea>
+    </NodeShell>
+  );
+}
+
+const STATUS_COLOR: Record<GitFileDiff["status"], string> = {
+  M: "var(--warn)",
+  A: "var(--success)",
+  D: "var(--danger)",
+  R: "var(--brand)",
+  "?": "var(--muted-foreground)",
+};
+
+function DiffFileRow({
+  file,
+  open,
+  onToggle,
+}: {
+  file: GitFileDiff;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const t = useT();
+  return (
+    <div className="border-b border-[var(--border)] last:border-b-0">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 w-full justify-start gap-1.5 rounded-none px-1.5 font-normal"
+        aria-expanded={open}
+        onClick={onToggle}
+      >
+        {open ? <ChevronDown /> : <ChevronRight />}
+        <span
+          aria-hidden
+          className="w-3 shrink-0 text-center font-mono text-[length:var(--text-caption)] font-bold"
+          style={{ color: STATUS_COLOR[file.status] }}
+        >
+          {file.status}
+        </span>
+        <span className="truncate font-mono text-[11px]">{file.path}</span>
+        <span className="ml-auto shrink-0 font-mono text-[length:var(--text-caption)] text-[var(--success)]">
+          +{file.additions}
+        </span>
+        <span className="shrink-0 font-mono text-[length:var(--text-caption)] text-[var(--danger)]">
+          −{file.deletions}
+        </span>
+      </Button>
+      {open && (
+        <div className="bg-[var(--surface-sunken)] py-1">
+          {file.previewable ? (
+            <PatchBody patch={file.patch} />
+          ) : (
+            <div className="px-2 py-1">
+              <Badge variant="outline">{t("diff.binary")}</Badge>
             </div>
-          );
-        })}
-      </div>
-
-      {error && (
-        <p className="diffnode-error" role="alert">
-          {error}
-        </p>
+          )}
+        </div>
       )}
-
-      <div className="diffnode-footer">
-        <button
-          type="button"
-          className="diffnode-revert-all nodrag"
-          disabled={busy || diff.files.length === 0}
-          onClick={() =>
-            setConfirmRevert(
-              pendingPaths.length
-                ? pendingPaths
-                : diff.files.map((file) => file.path),
-            )
-          }
-        >
-          ↶ {t("diff.revertAll")}
-        </button>
-        <button
-          type="button"
-          className="diffnode-accept-all nodrag"
-          disabled={busy || diff.files.length === 0}
-          onClick={() =>
-            void apply(
-              pendingPaths.length
-                ? pendingPaths
-                : diff.files.map((file) => file.path),
-              "accepted",
-            )
-          }
-        >
-          ✓ {t("diff.acceptAll")}
-        </button>
-      </div>
-
-      <ConfirmDialog
-        open={confirmRevert !== null}
-        title={t("diff.revertTitle", { count: confirmRevert?.length ?? 0 })}
-        description={t("diff.revertDescription")}
-        confirmLabel={t("diff.revertConfirm")}
-        onCancel={() => setConfirmRevert(null)}
-        onConfirm={() => {
-          const paths = confirmRevert ?? [];
-          setConfirmRevert(null);
-          void apply(paths, "reverted");
-        }}
-      />
     </div>
+  );
+}
+
+/** 逐行着色的 unified patch。行本身不可交互，所以用 `<div>` 而不是列表控件。 */
+function PatchBody({ patch }: { patch: string }) {
+  const lines = React.useMemo(() => patch.split("\n"), [patch]);
+  return (
+    <pre className="overflow-x-auto font-mono text-[11px] leading-[1.45]">
+      {lines.map((line, index) => (
+        <div
+          key={index}
+          className={cn(
+            "px-2 whitespace-pre",
+            line.startsWith("@@")
+              ? "bg-[var(--brand-soft)] text-[var(--brand-text)]"
+              : line.startsWith("+") && !line.startsWith("+++")
+                ? "bg-[var(--success-soft)] text-[var(--success)]"
+                : line.startsWith("-") && !line.startsWith("---")
+                  ? "bg-[var(--danger-soft)] text-[var(--danger)]"
+                  : "text-muted-foreground",
+          )}
+        >
+          {line || " "}
+        </div>
+      ))}
+    </pre>
   );
 }
