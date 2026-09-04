@@ -6,5 +6,5 @@ pub mod v1 {
 }
 
 pub const PROTOCOL_MAJOR: u32 = 1;
-pub const PROTOCOL_MINOR: u32 = 0;
+pub const PROTOCOL_MINOR: u32 = 1;
 pub const MAX_FRAME_BYTES: usize = 1_048_576;

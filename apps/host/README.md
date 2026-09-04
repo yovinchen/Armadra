@@ -1,6 +1,6 @@
-# Armadra Host（M0）
+# Armadra Host（M1 基础）
 
-独立 Go 进程的本机协议协商入口。当前只实现健康检查和 Protobuf Hello；现有 Rust Runtime 仍负责应用业务，没有切换数据库、启动自动化或开放设备远程访问。
+独立 Go 进程的本机协议协商入口，包含持久 Host 身份和每数据目录单实例保护。当前业务入口仍只有健康检查和 Protobuf Hello；现有 Rust Runtime 仍负责应用业务，没有切换数据库、启动自动化或开放设备远程访问。
 
 ## 运行
 
@@ -11,15 +11,19 @@ pnpm protocol:generate
 go -C apps/host run ./cmd/armadra-host --listen 127.0.0.1:43121
 ```
 
-使用 `--listen 127.0.0.1:0` 可分配临时端口。仅接受显式回环 IP，拒绝通配地址和远程监听。默认端口与现有 Runtime 的 43120 不同。
+使用 `--listen 127.0.0.1:0` 可分配临时端口。仅接受显式回环 IP，拒绝通配地址和远程监听。默认端口与现有 Runtime 的 43120 不同。`--data-dir /path/to/host-state` 指定独立数据目录；默认使用每用户的 Armadra/host，Windows 优先 LOCALAPPDATA。
 
 - `GET /health` 返回 `ok`。
 - `POST /rpc/armadra.v1.HostService/Hello` 接受和返回 `application/x-protobuf`；消息来自 `proto/armadra/v1/common.proto`。
-- 客户端需要传 clientId 及 protocol.major=1；minor 协商为双方支持范围，本轮为 0。
-- 返回 process-local hostInstanceId、`protocol.hello.v1` 能力及 1 MiB 帧上限。该 ID 不表示认证身份。
+- 客户端需要传 clientId 及 protocol.major=1；minor 协商为双方支持范围，本轮为 1，兼容 minor 0。
+- 返回持久 hostId、process-local hostInstanceId、`protocol.hello.v1` / `host.identity.v1` 能力及 1 MiB 帧上限。两个 ID 都不是认证凭据。
 - 格式错误、超大载荷、跨源访问、非回环 authority 和不兼容主版本均返回明确错误。
 
-进程独立于请求连接，所有客户端断开后仍服务；Ctrl+C/SIGTERM 触发有界退出。此阶段没有 OS 后台服务安装、持久 Host ID、设备认证或业务执行接口，不能用它替代完整常驻服务。
+数据目录使用操作系统文件锁，第二个 Host 即使选择不同端口也会拒绝启动；进程结束后锁由系统释放，保留锁文件不代表仍有进程。身份文件损坏、未知版本或非普通文件时启动失败，不自动重建身份。不要在进程运行时删除锁文件或复制数据目录作为新设备身份。
+
+Unix 新目录/文件使用 0700/0600。Windows 沿用目录 ACL，POSIX mode 不等同于私有 DACL；自定义数据目录的 Windows 凭据/业务数据权限隔离仍待专门实现与实机验收。此阶段只保存公开身份元数据，不存凭据。
+
+进程独立于请求连接，所有客户端断开后仍服务；Ctrl+C/SIGTERM 触发有界退出并释放文件锁。此阶段没有 OS 后台服务安装、设备认证或业务执行接口，不能用它替代完整常驻服务。
 
 ## 验证
 
@@ -31,4 +35,4 @@ pnpm host:smoke
 
 正式构建建议把输出指定到仓库 `target/` 或临时目录，不将二进制加入版本控制。协议生成与跨语言验证见仓库 `proto/README.md`。
 
-`host:smoke` 自动编译临时 Go Host 和 Rust 编解码桥，使用真实 HTTP 完成 TS → Rust → Go Host → Rust → TS 握手，并检查版本不兼容和畸形请求。测试结束关闭临时 Host、删除临时二进制，Go 缓存默认放在忽略的 `target/protocol-go/`。
+`host:smoke` 自动编译临时 Go Host 和 Rust 编解码桥，使用真实 HTTP 完成 TS → Rust → Go Host → Rust → TS 握手，验证重启后持久身份不变、进程身份更新、同目录重复启动拒绝、旧 minor 兼容及畸形请求。测试结束关闭临时 Host、删除临时二进制和数据目录，Go 缓存默认放在忽略的 `target/protocol-go/`。

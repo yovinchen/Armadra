@@ -38,6 +38,17 @@ fn handshake_and_unicode() {
             host_instance_id: "主机".into(),
             capabilities: vec!["protocol.hello".into()],
             max_frame_bytes: 1_048_576,
+            host_id: String::new(),
+        },
+    );
+    check(
+        "hello_identity",
+        HelloResponse {
+            protocol: Some(ProtocolVersion { major: 1, minor: 1 }),
+            host_instance_id: "新进程".into(),
+            capabilities: vec!["protocol.hello.v1".into(), "host.identity.v1".into()],
+            max_frame_bytes: 1_048_576,
+            host_id: "0123456789abcdef0123456789abcdef".into(),
         },
     );
     check(

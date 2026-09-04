@@ -24,8 +24,8 @@ func ListenLocal(address string) (net.Listener, error) {
 }
 
 // Serve ends only on host shutdown, not when a client disconnects.
-func Serve(ctx context.Context, listener net.Listener, instanceID string) error {
-	return serve(ctx, listener, NewHandler(instanceID), 5*time.Second)
+func Serve(ctx context.Context, listener net.Listener, identity Identity) error {
+	return serve(ctx, listener, NewHandler(identity), 5*time.Second)
 }
 
 func serve(ctx context.Context, listener net.Listener, handler http.Handler, drainTimeout time.Duration) error {

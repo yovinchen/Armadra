@@ -20,6 +20,8 @@ message HelloResponse {
   string host_instance_id = 2;
   repeated string capabilities = 3;
   uint32 max_frame_bytes = 4;
+  // Stable for the local Host data directory; never an authentication token.
+  string host_id = 5;
 }
 
 message ErrorResponse {

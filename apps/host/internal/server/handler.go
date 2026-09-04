@@ -20,12 +20,18 @@ const (
 	MediaType     = "application/x-protobuf"
 	MaxFrameBytes = 1 << 20
 	ProtocolMajor = 1
-	ProtocolMinor = 0
+	ProtocolMinor = 1
 )
 
-// NewHandler accepts only loopback authorities. The instance ID is process-local;
-// it must not be interpreted as a durable host identity or an authentication token.
-func NewHandler(instanceID string) http.Handler {
+// Identity separates a persistent data-directory ID from a process incarnation.
+// Neither ID is an authentication token.
+type Identity struct {
+	HostID     string
+	InstanceID string
+}
+
+// NewHandler accepts only loopback authorities and returns metadata only.
+func NewHandler(identity Identity) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -43,14 +49,14 @@ func NewHandler(instanceID string) http.Handler {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			_, _ = io.WriteString(w, "ok\n")
 		case HelloPath:
-			hello(w, r, instanceID)
+			hello(w, r, identity)
 		default:
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "Unknown endpoint")
 		}
 	})
 }
 
-func hello(w http.ResponseWriter, r *http.Request, instanceID string) {
+func hello(w http.ResponseWriter, r *http.Request, identity Identity) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
 		writeError(w, http.StatusMethodNotAllowed, "INVALID_ARGUMENT", "POST required")
@@ -92,8 +98,9 @@ func hello(w http.ResponseWriter, r *http.Request, instanceID string) {
 	}
 	writeProto(w, http.StatusOK, &pb.HelloResponse{
 		Protocol:       &pb.ProtocolVersion{Major: ProtocolMajor, Minor: min(request.Protocol.GetMinor(), ProtocolMinor)},
-		HostInstanceId: instanceID,
-		Capabilities:   []string{"protocol.hello.v1"},
+		HostInstanceId: identity.InstanceID,
+		HostId:         identity.HostID,
+		Capabilities:   []string{"protocol.hello.v1", "host.identity.v1"},
 		MaxFrameBytes:  MaxFrameBytes,
 	})
 }

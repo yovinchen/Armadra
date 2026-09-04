@@ -2,7 +2,9 @@
 
 M0 的唯一业务入口是 Hello 握手。`Scope`、`CommandMeta`、会话地址和终端流消息只是后续执行接口的契约，不代表已支持远程终端、调度或多人协作。运行时应只公布已实现的能力。
 
-`armadra/v1/common.proto` 是 Go、Rust、TypeScript 的共同消息来源。协议当前为 major 1 / minor 0，控制帧上限 1 MiB；Host 在读取 HTTP/流数据时实施上限，消息编解码器本身不负责认证、授权、大小限制或版本协商。流里的 ACK 表示接收进度，不表示命令已完成。
+`armadra/v1/common.proto` 是 Go、Rust、TypeScript 的共同消息来源。协议当前为 major 1 / minor 1，控制帧上限 1 MiB；Host 在读取 HTTP/流数据时实施上限，消息编解码器本身不负责认证、授权、大小限制或版本协商。流里的 ACK 表示接收进度，不表示命令已完成。
+
+minor 1 为 HelloResponse 增加 `host_id = 5`，表示数据目录的持久身份；`host_instance_id` 仍为每次启动变化的进程标识。两者都不是认证 token。minor 0 客户端仍可协商，旧消息的 hostId 默认为空；共享样例同时覆盖新旧消息。
 
 ## 生成与验证
 

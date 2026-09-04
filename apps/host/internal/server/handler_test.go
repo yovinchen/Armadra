@@ -24,7 +24,7 @@ func helloBytes(t *testing.T, major, minor uint32) []byte {
 }
 
 func TestNegotiatesOnlyImplementedCapabilities(t *testing.T) {
-	s := httptest.NewServer(NewHandler("instance-1"))
+	s := httptest.NewServer(NewHandler(Identity{HostID: "persistent-host", InstanceID: "instance-1"}))
 	defer s.Close()
 	for _, minor := range []uint32{0, 42} {
 		response, err := http.Post(s.URL+HelloPath, MediaType, bytes.NewReader(helloBytes(t, 1, minor)))
@@ -43,10 +43,10 @@ func TestNegotiatesOnlyImplementedCapabilities(t *testing.T) {
 		if err := proto.Unmarshal(data, result); err != nil {
 			t.Fatal(err)
 		}
-		if result.GetHostInstanceId() != "instance-1" || result.GetProtocol().GetMajor() != 1 || result.GetProtocol().GetMinor() != 0 || result.MaxFrameBytes != MaxFrameBytes {
+		if result.GetHostInstanceId() != "instance-1" || result.GetHostId() != "persistent-host" || result.GetProtocol().GetMajor() != 1 || result.GetProtocol().GetMinor() != min(minor, ProtocolMinor) || result.MaxFrameBytes != MaxFrameBytes {
 			t.Fatalf("unexpected negotiation: %v", result)
 		}
-		if len(result.Capabilities) != 1 || result.Capabilities[0] != "protocol.hello.v1" {
+		if len(result.Capabilities) != 2 || result.Capabilities[0] != "protocol.hello.v1" || result.Capabilities[1] != "host.identity.v1" {
 			t.Fatalf("unimplemented capability advertised: %v", result.Capabilities)
 		}
 	}
@@ -96,7 +96,7 @@ func TestRejectsInvalidOrUnsafeRequests(t *testing.T) {
 			r.Header.Set("Content-Encoding", tc.encoding)
 			r.Header.Set("Sec-Fetch-Site", tc.fetchSite)
 			w := httptest.NewRecorder()
-			NewHandler("instance").ServeHTTP(w, r)
+			NewHandler(Identity{HostID: "persistent-host", InstanceID: "instance"}).ServeHTTP(w, r)
 			if w.Code != tc.status {
 				t.Fatalf("status %d, want %d", w.Code, tc.status)
 			}
@@ -117,7 +117,7 @@ func TestSameOriginAndIPv6Authorities(t *testing.T) {
 		r.Header.Set("Content-Type", MediaType)
 		r.Header.Set("Origin", "http://"+host)
 		w := httptest.NewRecorder()
-		NewHandler("instance").ServeHTTP(w, r)
+		NewHandler(Identity{HostID: "persistent-host", InstanceID: "instance"}).ServeHTTP(w, r)
 		if w.Code != 200 {
 			t.Fatalf("%s: status %d", host, w.Code)
 		}
@@ -138,7 +138,7 @@ func TestLocalListenerAndHostShutdown(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { done <- Serve(ctx, l, "host-lifecycle") }()
+	go func() { done <- Serve(ctx, l, Identity{HostID: "persistent-host", InstanceID: "host-lifecycle"}) }()
 	client := &http.Client{Timeout: 2 * time.Second}
 	for i := 0; i < 2; i++ {
 		res, err := client.Get("http://" + l.Addr().String() + "/health")

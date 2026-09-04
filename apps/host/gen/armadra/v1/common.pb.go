@@ -132,8 +132,10 @@ type HelloResponse struct {
 	HostInstanceId string                 `protobuf:"bytes,2,opt,name=host_instance_id,json=hostInstanceId,proto3" json:"host_instance_id,omitempty"`
 	Capabilities   []string               `protobuf:"bytes,3,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
 	MaxFrameBytes  uint32                 `protobuf:"varint,4,opt,name=max_frame_bytes,json=maxFrameBytes,proto3" json:"max_frame_bytes,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Stable for the local Host data directory; never an authentication token.
+	HostId        string `protobuf:"bytes,5,opt,name=host_id,json=hostId,proto3" json:"host_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *HelloResponse) Reset() {
@@ -192,6 +194,13 @@ func (x *HelloResponse) GetMaxFrameBytes() uint32 {
 		return x.MaxFrameBytes
 	}
 	return 0
+}
+
+func (x *HelloResponse) GetHostId() string {
+	if x != nil {
+		return x.HostId
+	}
+	return ""
 }
 
 type ErrorResponse struct {
@@ -688,12 +697,13 @@ const file_armadra_v1_common_proto_rawDesc = "" +
 	"\x05minor\x18\x02 \x01(\rR\x05minor\"d\n" +
 	"\fHelloRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x127\n" +
-	"\bprotocol\x18\x02 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\"\xbe\x01\n" +
+	"\bprotocol\x18\x02 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\"\xd7\x01\n" +
 	"\rHelloResponse\x127\n" +
 	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\x12(\n" +
 	"\x10host_instance_id\x18\x02 \x01(\tR\x0ehostInstanceId\x12\"\n" +
 	"\fcapabilities\x18\x03 \x03(\tR\fcapabilities\x12&\n" +
-	"\x0fmax_frame_bytes\x18\x04 \x01(\rR\rmaxFrameBytes\"=\n" +
+	"\x0fmax_frame_bytes\x18\x04 \x01(\rR\rmaxFrameBytes\x12\x17\n" +
+	"\ahost_id\x18\x05 \x01(\tR\x06hostId\"=\n" +
 	"\rErrorResponse\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"o\n" +

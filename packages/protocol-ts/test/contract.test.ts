@@ -54,6 +54,19 @@ describe("shared Go / Rust / TypeScript wire contracts", () => {
     });
   });
 
+  it("keeps durable identity separate from a process incarnation", () => {
+    check("hello_identity", HelloResponseSchema, {
+      protocol: { major: 1, minor: 1 },
+      hostInstanceId: "新进程",
+      hostId: "0123456789abcdef0123456789abcdef",
+      capabilities: ["protocol.hello.v1", "host.identity.v1"],
+      maxFrameBytes: 1_048_576,
+    });
+    expect(
+      fromBinary(HelloResponseSchema, fixture("hello_response")).hostId,
+    ).toBe("");
+  });
+
   it("distinguishes absent and zero optional values", () => {
     check("meta_absent", CommandMetaSchema, { requestId: "请求" });
     check("meta_zero", CommandMetaSchema, {

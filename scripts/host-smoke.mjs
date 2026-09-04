@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +9,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const temporary = mkdtempSync(join(tmpdir(), "armadra-host-smoke-"));
 const cache = join(root, "target", "protocol-go");
 mkdirSync(cache, { recursive: true });
+const dataDirectory = join(temporary, "state");
 const env = {
   ...process.env,
   GOCACHE: process.env.GOCACHE ?? join(cache, "build"),
@@ -37,8 +38,72 @@ function pnpm(args) {
   return run("pnpm", args);
 }
 
-let host;
-let closed;
+const hosts = new Set();
+async function startHost(binary) {
+  const child = spawn(
+    binary,
+    ["--listen", "127.0.0.1:0", "--data-dir", dataDirectory],
+    {
+      cwd: root,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  const host = {
+    child,
+    closed: new Promise((resolve) => child.once("close", resolve)),
+  };
+  hosts.add(host);
+  let diagnostics = "";
+  child.stderr.on("data", (chunk) => {
+    diagnostics = (diagnostics + chunk.toString()).slice(-4096);
+  });
+  host.base = await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("Host startup timed out"));
+    }, 15000);
+    let output = "";
+    const onData = (chunk) => {
+      output += chunk.toString();
+      const match = output.match(/listening on (http:\/\/127\.0\.0\.1:\d+)/);
+      if (match) {
+        cleanup();
+        resolve(match[1]);
+      }
+    };
+    const onError = (error) => {
+      cleanup();
+      reject(error);
+    };
+    const onExit = (code) => {
+      cleanup();
+      reject(new Error(`Host exited at startup (${code}): ${diagnostics}`));
+    };
+    function cleanup() {
+      clearTimeout(timeout);
+      child.stdout.off("data", onData);
+      child.off("error", onError);
+      child.off("exit", onExit);
+    }
+    child.stdout.on("data", onData);
+    child.once("error", onError);
+    child.once("exit", onExit);
+  });
+  return host;
+}
+async function stopHost(host) {
+  if (host.child.exitCode === null && host.child.signalCode === null) {
+    host.child.kill("SIGTERM");
+    const timeout = setTimeout(() => host.child.kill("SIGKILL"), 7000);
+    try {
+      await host.closed;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  hosts.delete(host);
+}
 try {
   pnpm(["--filter", "@armadra/protocol", "build"]);
   const cargo = run(
@@ -78,48 +143,25 @@ try {
     binary,
     "./cmd/armadra-host",
   ]);
-  host = spawn(binary, ["--listen", "127.0.0.1:0"], {
-    cwd: root,
-    env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  closed = new Promise((resolve) => host.once("close", resolve));
-  let diagnostics = "";
-  host.stderr.on("data", (chunk) => {
-    diagnostics = (diagnostics + chunk.toString()).slice(-4096);
-  });
-  const base = await new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error("Host startup timed out"));
-    }, 15_000);
-    let output = "";
-    const onData = (chunk) => {
-      output += chunk.toString();
-      const match = output.match(/listening on (http:\/\/127\.0\.0\.1:\d+)/);
-      if (match) {
-        cleanup();
-        resolve(match[1]);
-      }
-    };
-    const onError = (error) => {
-      cleanup();
-      reject(error);
-    };
-    const onExit = (code) => {
-      cleanup();
-      reject(new Error(`Host exited at startup (${code}): ${diagnostics}`));
-    };
-    function cleanup() {
-      clearTimeout(timeout);
-      host.stdout.off("data", onData);
-      host.off("error", onError);
-      host.off("exit", onExit);
-    }
-    host.stdout.on("data", onData);
-    host.once("error", onError);
-    host.once("exit", onExit);
-  });
+  let host = await startHost(binary);
+  let base = host.base;
+  const duplicate = spawnSync(
+    binary,
+    ["--listen", "127.0.0.1:0", "--data-dir", dataDirectory],
+    {
+      cwd: root,
+      env,
+      encoding: "utf8",
+      timeout: 5000,
+    },
+  );
+  assert.ifError(duplicate.error);
+  assert.equal(
+    duplicate.status,
+    1,
+    "A second Host must reject the occupied data directory",
+  );
+  assert.doesNotMatch(duplicate.stdout, /listening on/);
 
   const {
     create,
@@ -142,6 +184,7 @@ try {
       signal: AbortSignal.timeout(5000),
     });
   let instanceID;
+  let hostID;
   for (const clientId of ["桌面客户端 📡", "移动客户端 📱"]) {
     const request = toBinary(
       HelloRequestSchema,
@@ -162,13 +205,55 @@ try {
       roundtrip("hello-response", new Uint8Array(await response.arrayBuffer())),
     );
     assert.equal(reply.protocol.major, 1);
-    assert.equal(reply.protocol.minor, 0);
+    assert.equal(reply.protocol.minor, 1);
     assert.equal(reply.maxFrameBytes, 1_048_576);
-    assert.deepEqual(reply.capabilities, ["protocol.hello.v1"]);
+    assert.deepEqual(reply.capabilities, [
+      "protocol.hello.v1",
+      "host.identity.v1",
+    ]);
+    assert.match(reply.hostId, /^[a-f0-9]{32}$/);
+    if (hostID) assert.equal(reply.hostId, hostID);
+    hostID = reply.hostId;
     assert.match(reply.hostInstanceId, /^[a-f0-9]{32}$/);
     if (instanceID) assert.equal(reply.hostInstanceId, instanceID);
     instanceID = reply.hostInstanceId;
   }
+  // A graceful process restart changes incarnation but retains directory identity.
+  await stopHost(host);
+  host = await startHost(binary);
+  base = host.base;
+  const restarted = await post(
+    toBinary(
+      HelloRequestSchema,
+      create(HelloRequestSchema, {
+        clientId: "restart-check",
+        protocol: { major: 1, minor: 1 },
+      }),
+    ),
+  );
+  assert.equal(restarted.status, 200);
+  const afterRestart = fromBinary(
+    HelloResponseSchema,
+    new Uint8Array(await restarted.arrayBuffer()),
+  );
+  assert.equal(afterRestart.hostId, hostID);
+  assert.notEqual(afterRestart.hostInstanceId, instanceID);
+  // Existing minor-0 clients remain compatible with the additive identity field.
+  const legacy = await post(
+    toBinary(
+      HelloRequestSchema,
+      create(HelloRequestSchema, {
+        clientId: "legacy-check",
+        protocol: { major: 1, minor: 0 },
+      }),
+    ),
+  );
+  assert.equal(legacy.status, 200);
+  assert.equal(
+    fromBinary(HelloResponseSchema, new Uint8Array(await legacy.arrayBuffer()))
+      .protocol.minor,
+    0,
+  );
   const incompatible = await post(
     toBinary(
       HelloRequestSchema,
@@ -202,17 +287,9 @@ try {
     "ok\n",
   );
   console.log(
-    "PASS: TS → Rust → Go Host HTTP → Rust → TS; Unicode, version negotiation, reconnect identity, incompatible/malformed requests.",
+    "PASS: TS → Rust → Go Host HTTP → Rust → TS; Unicode, version negotiation, single-instance lock, persistent identity across restart, reconnect, minor-0 compatibility, incompatible/malformed requests.",
   );
 } finally {
-  if (host && host.exitCode === null && host.signalCode === null) {
-    host.kill("SIGTERM");
-    const timeout = setTimeout(() => host.kill("SIGKILL"), 7000);
-    try {
-      await closed;
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
+  for (const host of hosts) await stopHost(host);
   rmSync(temporary, { recursive: true, force: true });
 }

@@ -43,6 +43,7 @@ func cases() map[string]proto.Message {
 	return map[string]proto.Message{
 		"hello":          &pb.HelloRequest{ClientId: "客户端📡", Protocol: &pb.ProtocolVersion{Major: 1}},
 		"hello_response": &pb.HelloResponse{Protocol: &pb.ProtocolVersion{Major: 1}, HostInstanceId: "主机", Capabilities: []string{"protocol.hello"}, MaxFrameBytes: 1048576},
+		"hello_identity": &pb.HelloResponse{Protocol: &pb.ProtocolVersion{Major: 1, Minor: 1}, HostInstanceId: "新进程", HostId: "0123456789abcdef0123456789abcdef", Capabilities: []string{"protocol.hello.v1", "host.identity.v1"}, MaxFrameBytes: 1048576},
 		"error":          &pb.ErrorResponse{Code: "UNSUPPORTED", Message: "尚未实现"},
 		"meta_absent":    &pb.CommandMeta{RequestId: "请求"},
 		"meta_zero":      &pb.CommandMeta{RequestId: "请求", ExpectedRevision: proto.Uint64(0)},
