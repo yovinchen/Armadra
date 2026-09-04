@@ -30,30 +30,56 @@ type Identity struct {
 	InstanceID string
 }
 
-// NewHandler accepts only loopback authorities and returns metadata only.
+// NewHandler accepts only loopback authorities and same-origin/CLI requests.
 func NewHandler(identity Identity) http.Handler {
+	handler, _ := NewHandlerWithOptions(identity, Options{})
+	return handler
+}
+
+// NewHandlerWithOptions validates the explicit origin allowlist once.
+func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, error) {
+	allowed, err := originSet(options)
+	if err != nil {
+		return nil, err
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		if !loopbackAuthority(r.Host) || !sameOrigin(r) {
-			writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "Local same-origin requests only")
+		w.Header().Add("Vary", "Origin")
+		origin, explicit, permitted := checkOrigin(r, allowed)
+		if !loopbackAuthority(r.Host) || !permitted {
+			writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "Local request origin is not allowed")
 			return
 		}
+		var method string
 		switch r.URL.Path {
 		case "/health":
-			if r.Method != http.MethodGet {
-				w.Header().Set("Allow", "GET")
-				writeError(w, http.StatusMethodNotAllowed, "INVALID_ARGUMENT", "GET required")
-				return
-			}
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			_, _ = io.WriteString(w, "ok\n")
+			method = http.MethodGet
 		case HelloPath:
-			hello(w, r, identity)
+			method = http.MethodPost
 		default:
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "Unknown endpoint")
+			return
 		}
-	})
+		if r.Method == http.MethodOptions {
+			preflight(w, r, origin, method)
+			return
+		}
+		if r.Method != method {
+			w.Header().Set("Allow", method)
+			writeError(w, http.StatusMethodNotAllowed, "INVALID_ARGUMENT", method+" required")
+			return
+		}
+		if explicit {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+		if r.URL.Path == "/health" {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = io.WriteString(w, "ok\n")
+			return
+		}
+		hello(w, r, identity)
+	}), nil
 }
 
 func hello(w http.ResponseWriter, r *http.Request, identity Identity) {

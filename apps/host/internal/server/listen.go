@@ -28,6 +28,15 @@ func Serve(ctx context.Context, listener net.Listener, identity Identity) error 
 	return serve(ctx, listener, NewHandler(identity), 5*time.Second)
 }
 
+// ServeWithOptions serves the same metadata routes with explicit browser origins.
+func ServeWithOptions(ctx context.Context, listener net.Listener, identity Identity, options Options) error {
+	handler, err := NewHandlerWithOptions(identity, options)
+	if err != nil {
+		return err
+	}
+	return serve(ctx, listener, handler, 5*time.Second)
+}
+
 func serve(ctx context.Context, listener net.Listener, handler http.Handler, drainTimeout time.Duration) error {
 	s := &http.Server{
 		Handler:           handler,

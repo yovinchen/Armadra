@@ -42,7 +42,14 @@ const hosts = new Set();
 async function startHost(binary) {
   const child = spawn(
     binary,
-    ["--listen", "127.0.0.1:0", "--data-dir", dataDirectory],
+    [
+      "--listen",
+      "127.0.0.1:0",
+      "--data-dir",
+      dataDirectory,
+      "--allow-origin",
+      "https://canvas.example",
+    ],
     {
       cwd: root,
       env,
@@ -182,6 +189,53 @@ try {
     "protocol.hello.v1",
     "host.identity.v1",
   ]);
+  const preflight = await fetch(`${base}/rpc/armadra.v1.HostService/Hello`, {
+    method: "OPTIONS",
+    headers: {
+      Origin: "https://canvas.example",
+      "Access-Control-Request-Method": "POST",
+      "Access-Control-Request-Headers": "content-type",
+    },
+    signal: AbortSignal.timeout(5000),
+  });
+  assert.equal(preflight.status, 204);
+  assert.equal(
+    preflight.headers.get("access-control-allow-origin"),
+    "https://canvas.example",
+  );
+  assert.match(preflight.headers.get("vary"), /Origin/i);
+  assert.equal(
+    preflight.headers.has("access-control-allow-credentials"),
+    false,
+  );
+  const allowed = await fetch(`${base}/rpc/armadra.v1.HostService/Hello`, {
+    method: "POST",
+    headers: {
+      Origin: "https://canvas.example",
+      "Content-Type": "application/x-protobuf",
+    },
+    body: toBinary(
+      HelloRequestSchema,
+      create(HelloRequestSchema, {
+        clientId: "cors-check",
+        protocol: { major: 1, minor: 1 },
+      }),
+    ),
+    signal: AbortSignal.timeout(5000),
+  });
+  assert.equal(allowed.status, 200);
+  assert.equal(
+    allowed.headers.get("access-control-allow-origin"),
+    "https://canvas.example",
+  );
+  await allowed.arrayBuffer();
+  const denied = await fetch(`${base}/health`, {
+    headers: { Origin: "https://other.example" },
+    signal: AbortSignal.timeout(5000),
+  });
+  assert.equal(denied.status, 403);
+  assert.equal(denied.headers.has("access-control-allow-origin"), false);
+  await denied.arrayBuffer();
   const roundtrip = (kind, bytes) =>
     run(wire, [kind], { input: bytes, stdio: ["pipe", "pipe", "inherit"] });
   const post = (bytes) =>
