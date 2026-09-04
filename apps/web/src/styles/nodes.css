@@ -45,11 +45,74 @@
 }
 
 [data-slot="node-header"] {
+  position: relative;
   white-space: nowrap;
+}
+
+.node-frame {
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 8%),
+    0 3px 10px rgb(0 0 0 / 10%);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+
+[data-slot="node-shell"]:focus-within > .node-frame {
+  border-color: var(--border-strong);
+}
+
+[data-slot="node-shell"][data-selected="true"] > .node-frame {
+  border-color: var(--brand);
+}
+
+/* An inset separator does not change the header's measured height on collapse. */
+[data-slot="node-shell"]:not([data-collapsed="true"])
+  [data-slot="node-header"]::after {
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+  background: var(--border);
+  content: "";
+  pointer-events: none;
+}
+
+/* Reserve action slots so labels never move when controls appear. Keyboard
+   focus reveals the controls; coarse pointers always get the full affordance. */
+.node-secondary-action {
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+[data-slot="node-shell"]:hover .node-secondary-action,
+[data-slot="node-shell"]:focus-within .node-secondary-action,
+[data-slot="node-shell"][data-selected="true"] .node-secondary-action,
+.node-secondary-action[aria-expanded="true"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none), (any-pointer: coarse) {
+  .node-secondary-action {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-frame,
+  .node-secondary-action {
+    transition: none;
+  }
 }
 
 .node-title {
   flex-shrink: 1;
+}
+
+.node-header-chips {
+  max-width: 28%;
 }
 
 .node-header-chips:empty {

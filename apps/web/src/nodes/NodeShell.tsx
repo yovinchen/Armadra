@@ -21,6 +21,7 @@ import { getEditor } from "@/canvas/editor-context";
 import { ConnectionHandles } from "@/canvas/shapes/ConnectionHandles";
 import { NodeAnnotationHost, NodeMetaActions } from "@/meta/NodeMeta";
 import { COLLAPSED_HEIGHT, DRAG_HANDLE_CLASS, nodeMeta } from "./registry";
+import { HEADER_HEIGHT } from "./geometry";
 
 /* -------------------------------------------------------------------------- */
 /* 契约（计划书 §13.2）                                                        */
@@ -177,6 +178,9 @@ const HEADER_CONTROLS =
 
 function onHeaderPointerDown(event: React.PointerEvent<HTMLElement>): void {
   const target = event.target as HTMLElement | null;
+  // A read-only title fills the header's free space and remains a drag target.
+  // Its click handler enters rename only when the pointer did not move.
+  if (target?.closest('[data-node-title="true"]')) return;
   if (target?.closest(HEADER_CONTROLS) && !pointsAtOverlay(event)) {
     event.stopPropagation();
   }
@@ -206,6 +210,7 @@ export function NodeShell({
       data-glow={glow}
       data-collapsed={collapsed ? "true" : undefined}
       data-selected={selected ? "true" : undefined}
+      data-node-type={node.type}
       className="node-glow relative h-full w-full"
       style={collapsed ? { height: COLLAPSED_HEIGHT } : undefined}
     >
@@ -213,10 +218,9 @@ export function NodeShell({
           最小尺寸在 `ArmadraShapeUtil.onResize` 里按 `NODE_META.minSize` 夹住。 */}
       <div
         className={cn(
-          "flex h-full w-full flex-col overflow-hidden rounded-[var(--r-card)]",
+          "node-frame flex h-full w-full flex-col overflow-hidden rounded-[var(--r-card)]",
           "border border-[var(--border)] bg-[var(--card)]",
-          "shadow-[var(--shadow-node)]",
-          selected && "ring-[1.5px] ring-[var(--brand)]",
+          selected && "border-[var(--brand)]",
         )}
       >
         <NodeHeader
@@ -277,11 +281,10 @@ export function NodeHeader({
       data-slot="node-header"
       className={cn(
         DRAG_HANDLE_CLASS,
-        // §24.3-3：32px、与节点体同色，只靠底部 1px 分隔线区分（折叠时不画线）
-        "flex h-[32px] shrink-0 items-center gap-1.5 px-2",
+        "flex shrink-0 items-center gap-1.5 px-2",
         "bg-[var(--card)]",
-        !collapsed && "border-b border-[var(--border)]",
       )}
+      style={{ height: HEADER_HEIGHT }}
       // 头部是拖拽区：只有里面的控件吃掉 pointerdown，其余放行给 select 工具
       onPointerDown={onHeaderPointerDown}
     >
@@ -337,8 +340,6 @@ export function NodeHeader({
         </span>
       )}
 
-      <div className="min-w-0 flex-1" />
-
       {headerActions}
 
       {/* 评论 / AI 命名（§17）。终端不走这里：它的两项在自己的「更多」下拉里，
@@ -346,6 +347,7 @@ export function NodeHeader({
       {node.type !== "terminal" && <NodeMetaActions node={node} />}
 
       <IconButton
+        className="node-secondary-action"
         label={maximized ? t("node.restore") : t("node.maximize")}
         onClick={() => {
           focusNode(node.id);
@@ -358,7 +360,7 @@ export function NodeHeader({
       </IconButton>
 
       <IconButton
-        className="hover:text-[var(--danger)]"
+        className="node-secondary-action hover:text-[var(--danger)]"
         label={t("node.close")}
         onClick={() => closeNode(node.id)}
       >
@@ -368,18 +370,109 @@ export function NodeHeader({
   );
 }
 
-/** 标题：平时是一行省略的文字，点击变 Input，Enter / Esc / blur 提交。 */
+/** A click or Enter edits; dragging the title still moves the node. */
 function NodeTitle({ node }: { node: CanvasNode }) {
   const t = useT();
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(node.title);
+  const active = React.useRef(false);
+  const composing = React.useRef(false);
+  const titleRef = React.useRef<HTMLSpanElement>(null);
+  const pointerStart = React.useRef<{ x: number; y: number } | null>(null);
+  const gestureCleanup = React.useRef<(() => void) | null>(null);
+  const suppressClick = React.useRef(false);
 
-  function commit(value: string) {
+  React.useEffect(() => () => gestureCleanup.current?.(), []);
+
+  function begin() {
+    gestureCleanup.current?.();
+    suppressClick.current = false;
+    active.current = true;
+    composing.current = false;
+    setDraft(node.title);
+    setEditing(true);
+  }
+
+  function restoreFocus() {
+    window.requestAnimationFrame(() => titleRef.current?.focus());
+  }
+
+  function startTitleGesture(event: React.PointerEvent<HTMLSpanElement>) {
+    if (
+      event.button !== 0 ||
+      event.isPrimary === false ||
+      event.shiftKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey ||
+      pointsAtOverlay(event)
+    )
+      return;
+    // This title owns the touch gesture. Prevent Radix's enclosing canvas menu
+    // from arming its long-press timer while tldraw captures the pointer.
+    // Keep bubbling so the native canvas drag state still receives pointerdown.
+    if (event.pointerType === "touch" || event.pointerType === "pen")
+      event.preventDefault();
+    gestureCleanup.current?.();
+    const start = { x: event.clientX, y: event.clientY };
+    pointerStart.current = start;
+    suppressClick.current = false;
+    let dragged = false;
+    const distance = (next: PointerEvent) =>
+      Math.hypot(next.clientX - start.x, next.clientY - start.y);
+    const move = (next: PointerEvent) => {
+      if (next.pointerId === event.pointerId && distance(next) > 4)
+        dragged = true;
+    };
+    const cancel = () => {
+      suppressClick.current = true;
+      cleanup();
+    };
+    const key = (next: KeyboardEvent) => {
+      if (next.key === "Escape") cancel();
+    };
+    const finish = (next: PointerEvent) => {
+      if (next.pointerId !== event.pointerId) return;
+      suppressClick.current =
+        dragged ||
+        distance(next) > 4 ||
+        next.shiftKey ||
+        next.ctrlKey ||
+        next.metaKey ||
+        next.altKey;
+      cleanup();
+      // tldraw captures pointerup and click on its canvas. Wait until its
+      // pointing state settles, then turn a short press into inline rename.
+      if (!suppressClick.current)
+        queueMicrotask(() => {
+          if (titleRef.current?.isConnected) begin();
+        });
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", move, true);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", cancel);
+      window.removeEventListener("keydown", key);
+      pointerStart.current = null;
+      gestureCleanup.current = null;
+    };
+    gestureCleanup.current = cleanup;
+    window.addEventListener("pointermove", move, true);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", cancel);
+    window.addEventListener("keydown", key);
+  }
+
+  function commit(value: string, focus = false) {
+    // A cancelled/committed input may still emit blur before React removes it.
+    if (!active.current) return;
+    active.current = false;
     setEditing(false);
     const title = value.trim();
     if (title && title !== node.title) {
       useCanvasStore.getState().updateNode(node.id, { title });
     }
+    if (focus) restoreFocus();
   }
 
   if (editing) {
@@ -387,15 +480,39 @@ function NodeTitle({ node }: { node: CanvasNode }) {
       <Input
         autoFocus
         aria-label={t("node.title")}
-        className="h-[22px] min-w-0 max-w-[220px] flex-1 px-1.5 text-[length:var(--text-body)]"
+        className="node-title h-7 min-w-0 flex-1 px-1.5 text-[length:var(--text-body)]"
         value={draft}
+        onFocus={(event) => event.currentTarget.select()}
         onChange={(event) => setDraft(event.target.value)}
+        onCompositionStart={() => {
+          composing.current = true;
+        }}
+        onCompositionEnd={() => {
+          composing.current = false;
+        }}
         onBlur={(event) => commit(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") commit(draft);
+        onKeyDownCapture={(event) => {
+          // tldraw has native key listeners inside the React root. Capture is
+          // required to isolate input before those listeners can blur it.
+          event.stopPropagation();
+          if (
+            composing.current ||
+            event.nativeEvent.isComposing ||
+            event.keyCode === 229
+          )
+            return;
+          if (event.key === "Enter") {
+            event.preventDefault();
+            event.stopPropagation();
+            commit(event.currentTarget.value, true);
+          }
           if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            active.current = false;
             setDraft(node.title);
             setEditing(false);
+            restoreFocus();
           }
         }}
       />
@@ -404,18 +521,34 @@ function NodeTitle({ node }: { node: CanvasNode }) {
 
   return (
     <span
+      ref={titleRef}
+      data-node-title="true"
       role="textbox"
       tabIndex={0}
       title={node.title}
-      className="node-title min-w-0 max-w-[220px] cursor-text truncate rounded-sm text-[length:var(--text-body)] font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      onClick={() => {
-        setDraft(node.title);
-        setEditing(true);
+      className="node-title min-w-0 flex-1 cursor-text truncate rounded-sm text-[length:var(--text-body)] font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      onPointerDown={startTitleGesture}
+      onClick={(event) => {
+        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey)
+          return;
+        const start = pointerStart.current;
+        pointerStart.current = null;
+        if (suppressClick.current) return;
+        if (
+          start &&
+          Math.hypot(event.clientX - start.x, event.clientY - start.y) > 4
+        )
+          return;
+        // Screen readers and synthetic clicks have no pointer gesture.
+        if (event.detail === 0) begin();
       }}
-      onKeyDown={(event) => {
+      onKeyDownCapture={(event) => {
+        if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey)
+          return;
         if (event.key === "Enter") {
-          setDraft(node.title);
-          setEditing(true);
+          event.preventDefault();
+          event.stopPropagation();
+          begin();
         }
       }}
     >

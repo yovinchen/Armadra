@@ -180,7 +180,7 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
       )}
       {!exited && (
         <IconButton
-          className="terminal-secondary-action"
+          className="node-secondary-action terminal-secondary-action"
           label={t("terminal.interrupt")}
           onClick={() => surfaceRef.current?.terminate("interrupt")}
         >
@@ -191,7 +191,7 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
       <Popover open={findOpen} onOpenChange={setFindOpen}>
         <PopoverTrigger asChild>
           <IconButton
-            className="terminal-secondary-action"
+            className="node-secondary-action terminal-secondary-action"
             label={t("terminal.find")}
           >
             <Search />

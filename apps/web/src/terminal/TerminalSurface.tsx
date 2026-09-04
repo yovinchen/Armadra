@@ -22,6 +22,7 @@ import {
 import { useCanvasStore } from "@/store/canvas-store";
 import { useAgentStatusStore } from "@/agent/status-store";
 import { agentLabel, buildAgentLaunch } from "@/agent/launch";
+import { TERMINAL_PADDING } from "@/nodes/geometry";
 import {
   armPendingLaunch,
   disarmPendingLaunch,
@@ -846,7 +847,8 @@ function TerminalSurfaceImpl({
             ref={containerRef}
             data-slot="terminal-surface"
             aria-label={t("terminal.label")}
-            className="absolute inset-0 p-1"
+            className="absolute inset-0"
+            style={{ padding: TERMINAL_PADDING }}
           />
         </div>
       </ContextMenuTrigger>

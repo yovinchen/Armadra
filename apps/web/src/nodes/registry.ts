@@ -56,11 +56,7 @@ export interface NodeMeta {
 export const DRAG_HANDLE_CLASS = "drag-handle";
 export const NODE_DRAG_HANDLE = `.${DRAG_HANDLE_CLASS}`;
 
-/** 折叠后的整体高度（§3.4：只剩头部）。 */
-export const COLLAPSED_HEIGHT = 40;
-
-/** 头部高度，节点体计算可用行数时用得上。 */
-export const HEADER_HEIGHT = 34;
+export { COLLAPSED_HEIGHT, HEADER_HEIGHT } from "./geometry";
 
 /** 便签的默认色 = 调色板里的黄（`--node-color-3`）。 */
 const STICKY_COLOR = "#ffd60a";

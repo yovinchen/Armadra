@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import * as React from "react";
 import {
   act,
   cleanup,
@@ -36,6 +37,7 @@ vi.mock("@/store/canvas-store", () => {
 import { installDomPolyfills } from "@/app/test-harness";
 import { openNodeAnnotation } from "@/meta/annotations";
 import { NodeShell } from "./NodeShell";
+import { COLLAPSED_HEIGHT, HEADER_HEIGHT } from "./geometry";
 
 beforeAll(installDomPolyfills);
 
@@ -71,6 +73,228 @@ afterEach(() => {
 });
 
 describe("NodeShell", () => {
+  it("uses the shared header geometry and keeps the body mounted across collapse", () => {
+    const mounted = vi.fn();
+    const unmounted = vi.fn();
+    function Body() {
+      React.useEffect(() => {
+        mounted();
+        return unmounted;
+      }, []);
+      return <div data-testid="persistent-body" />;
+    }
+    const node = makeNode();
+    const view = render(
+      <NodeShell node={node} selected={false}>
+        <Body />
+      </NodeShell>,
+    );
+    const body = screen.getByTestId("persistent-body");
+    expect(
+      (view.container.querySelector('[data-slot="node-header"]') as HTMLElement)
+        .style.height,
+    ).toBe(`${HEADER_HEIGHT}px`);
+    view.rerender(
+      <NodeShell node={{ ...node, collapsed: true }} selected={false}>
+        <Body />
+      </NodeShell>,
+    );
+    expect(
+      (view.container.querySelector('[data-slot="node-shell"]') as HTMLElement)
+        .style.height,
+    ).toBe(`${COLLAPSED_HEIGHT}px`);
+    expect(
+      (view.container.querySelector('[data-slot="node-body"]') as HTMLElement)
+        .style.display,
+    ).toBe("none");
+    view.rerender(
+      <NodeShell node={node} selected={false}>
+        <Body />
+      </NodeShell>,
+    );
+    expect(screen.getByTestId("persistent-body")).toBe(body);
+    expect(mounted).toHaveBeenCalledTimes(1);
+    expect(unmounted).not.toHaveBeenCalled();
+  });
+
+  it("does not enter rename after dragging the title", async () => {
+    renderShell();
+    const title = screen.getByText("便签 1");
+    fireEvent.pointerDown(title, {
+      button: 0,
+      isPrimary: true,
+      pointerId: 1,
+      clientX: 100,
+      clientY: 100,
+    });
+    fireEvent.pointerMove(window, {
+      isPrimary: true,
+      pointerId: 1,
+      clientX: 150,
+      clientY: 130,
+    });
+    await act(async () => {
+      fireEvent.pointerUp(window, {
+        button: 0,
+        isPrimary: true,
+        pointerId: 1,
+        clientX: 150,
+        clientY: 130,
+      });
+      await Promise.resolve();
+    });
+    fireEvent.click(title, { detail: 1, clientX: 150, clientY: 130 });
+    expect(screen.queryByLabelText("标题")).toBeNull();
+  });
+
+  it.each(["shiftKey", "ctrlKey", "metaKey", "altKey"])(
+    "preserves %s modified selection gestures",
+    async (modifier) => {
+      renderShell();
+      const event = {
+        button: 0,
+        isPrimary: true,
+        pointerId: 1,
+        clientX: 100,
+        clientY: 100,
+        [modifier]: true,
+      };
+      fireEvent.pointerDown(screen.getByText("便签 1"), event);
+      await act(async () => {
+        fireEvent.pointerUp(window, event);
+        await Promise.resolve();
+      });
+      expect(screen.queryByLabelText("标题")).toBeNull();
+    },
+  );
+
+  it("opens rename after pointerup is captured by the canvas", async () => {
+    renderShell();
+    const title = screen.getByText("便签 1");
+    fireEvent.pointerDown(title, {
+      button: 0,
+      pointerId: 1,
+      isPrimary: true,
+      clientX: 100,
+      clientY: 100,
+    });
+    await act(async () => {
+      fireEvent.pointerUp(window, {
+        button: 0,
+        pointerId: 1,
+        isPrimary: true,
+        clientX: 100,
+        clientY: 100,
+      });
+      await Promise.resolve();
+    });
+    expect(screen.getByLabelText("标题")).toBeTruthy();
+  });
+
+  it("keeps touch dragging events bubbling without arming the enclosing long-press menu", () => {
+    renderShell();
+    const escaped = vi.fn((event: Event) =>
+      expect(event.defaultPrevented).toBe(true),
+    );
+    document.addEventListener("pointerdown", escaped);
+    try {
+      fireEvent.pointerDown(screen.getByText("便签 1"), {
+        button: 0,
+        isPrimary: true,
+        pointerId: 1,
+        pointerType: "touch",
+        clientX: 100,
+        clientY: 100,
+      });
+      expect(escaped).toHaveBeenCalledTimes(1);
+    } finally {
+      document.removeEventListener("pointerdown", escaped);
+    }
+  });
+
+  it("does not rename after dragging away and back to the starting point", async () => {
+    renderShell();
+    fireEvent.pointerDown(screen.getByText("便签 1"), {
+      button: 0,
+      pointerId: 1,
+      isPrimary: true,
+      clientX: 100,
+      clientY: 100,
+    });
+    fireEvent.pointerMove(window, {
+      pointerId: 1,
+      isPrimary: true,
+      clientX: 150,
+      clientY: 130,
+    });
+    await act(async () => {
+      fireEvent.pointerUp(window, {
+        button: 0,
+        pointerId: 1,
+        isPrimary: true,
+        clientX: 100,
+        clientY: 100,
+      });
+      await Promise.resolve();
+    });
+    expect(screen.queryByLabelText("标题")).toBeNull();
+  });
+
+  it("lets IME confirm or cancel composition without committing the node title", () => {
+    renderShell();
+    fireEvent.click(screen.getByText("便签 1"));
+    const input = screen.getByLabelText("标题");
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "中文标题" } });
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    fireEvent.keyDown(input, { key: "Escape", isComposing: true });
+    expect(screen.getByLabelText("标题")).toBe(input);
+    expect(store.updateNode).not.toHaveBeenCalled();
+    fireEvent.compositionEnd(input);
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
+    expect(store.updateNode).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(store.updateNode).toHaveBeenCalledTimes(1);
+    expect(store.updateNode).toHaveBeenCalledWith("n1", { title: "中文标题" });
+  });
+
+  it("does not send composition keys to canvas keyboard handlers", () => {
+    renderShell();
+    fireEvent.click(screen.getByText("便签 1"));
+    const escaped = vi.fn();
+    const canvas = screen
+      .getByLabelText("标题")
+      .closest('[data-slot="node-shell"]')!;
+    canvas.addEventListener("keydown", escaped);
+    try {
+      fireEvent.keyDown(screen.getByLabelText("标题"), {
+        key: "Enter",
+        isComposing: true,
+      });
+      fireEvent.keyDown(screen.getByLabelText("标题"), {
+        key: "Escape",
+        isComposing: true,
+      });
+      expect(escaped).not.toHaveBeenCalled();
+      expect(store.updateNode).not.toHaveBeenCalled();
+    } finally {
+      canvas.removeEventListener("keydown", escaped);
+    }
+  });
+
+  it("ignores blur after Escape cancels a rename in the same event batch", () => {
+    renderShell();
+    fireEvent.click(screen.getByText("便签 1"));
+    const input = screen.getByLabelText("标题");
+    fireEvent.change(input, { target: { value: "cancelled draft" } });
+    act(() => {
+      fireEvent.keyDown(input, { key: "Escape" });
+      fireEvent.blur(input);
+    });
+    expect(store.updateNode).not.toHaveBeenCalled();
+    expect(screen.getByText("便签 1")).toBeTruthy();
+  });
+
   it("ignores historical custom colours and does not expose a colour picker", () => {
     const node = makeNode({
       type: "terminal",

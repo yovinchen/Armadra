@@ -10,6 +10,8 @@ import {
   minNodeSize,
   nodeMeta,
 } from "./registry";
+import { HEADER_HEIGHT, NODE_BORDER_WIDTH } from "./geometry";
+import { COLLAPSED_HEIGHT as STORED_COLLAPSED_HEIGHT } from "../store/defaults";
 
 /** 计划书 §3.4 的尺寸表，逐字抄一遍作为回归基线。 */
 const EXPECTED = {
@@ -76,6 +78,8 @@ describe("node registry", () => {
 
   it("collapses to the header height from §3.4", () => {
     expect(COLLAPSED_HEIGHT).toBe(40);
+    expect(COLLAPSED_HEIGHT).toBe(HEADER_HEIGHT + NODE_BORDER_WIDTH * 2);
+    expect(STORED_COLLAPSED_HEIGHT).toBe(COLLAPSED_HEIGHT);
   });
 
   it("has a translatable label key and an icon for every type", () => {

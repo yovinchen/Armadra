@@ -1,8 +1,4 @@
-import type {
-  CanvasNodeData,
-  CanvasNodeType,
-  Size,
-} from "@armadra/shared";
+import type { CanvasNodeData, CanvasNodeType, Size } from "@armadra/shared";
 import { t } from "../app/preferences-store";
 import { nodeMeta } from "../nodes/registry";
 
@@ -24,8 +20,7 @@ import { nodeMeta } from "../nodes/registry";
  */
 export const DEFAULT_BROWSER_URL = "https://www.google.com/webhp?igu=1";
 
-/** 折叠后只剩头部（§3.4）。 */
-export const COLLAPSED_HEIGHT = 40;
+export { COLLAPSED_HEIGHT } from "../nodes/geometry";
 
 export function defaultNodeSize(type: CanvasNodeType): Size {
   return { ...nodeMeta(type).defaultSize };
