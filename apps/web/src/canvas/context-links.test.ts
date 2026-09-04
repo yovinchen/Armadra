@@ -217,9 +217,9 @@ describe("buildLinkDocuments · 内容链接", () => {
       ...shapeLink,
       id: `${SHAPE.slice(0, -2)}${index.toString(16).padStart(2, "0")}`,
     }));
-    expect(buildLinkDocuments(document([]), { claude: many }).claude).toHaveLength(
-      64,
-    );
+    expect(
+      buildLinkDocuments(document([]), { claude: many }).claude,
+    ).toHaveLength(64);
   });
 
   it("`sameLinks`：正文或 PNG 路径变了就要重推", () => {
@@ -229,8 +229,28 @@ describe("buildLinkDocuments · 内容链接", () => {
     };
     expect(sameLinks([shapeLink], [shapeLink])).toBe(true);
     expect(sameLinks([shapeLink], [changed])).toBe(false);
-    expect(changedDocuments({ claude: [shapeLink] }, { claude: [changed] })).toEqual(
-      ["claude"],
-    );
+    expect(
+      changedDocuments({ claude: [shapeLink] }, { claude: [changed] }),
+    ).toEqual(["claude"]);
   });
+});
+
+it("deduplicates native references by source object, not only by arrow UUID", () => {
+  const documents = buildLinkDocuments(document([]), {
+    claude: [
+      {
+        id: "first",
+        title: "Note",
+        kind: "shape",
+        content: { sourceShapeId: "shape:note", text: "note" },
+      },
+      {
+        id: "second",
+        title: "Note",
+        kind: "shape",
+        content: { sourceShapeId: "shape:note", text: "note" },
+      },
+    ],
+  });
+  expect(documents.claude).toHaveLength(1);
 });
