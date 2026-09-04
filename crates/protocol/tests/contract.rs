@@ -61,6 +61,48 @@ fn handshake_and_unicode() {
 }
 
 #[test]
+fn local_control_contracts() {
+    check(
+        "control_status",
+        HostControlRequest {
+            request_id: "控制请求".into(),
+            action: Some(host_control_request::Action::Status(HostStatusRequest {})),
+        },
+    );
+    check(
+        "control_stop",
+        HostControlRequest {
+            request_id: "停止请求".into(),
+            action: Some(host_control_request::Action::Stop(HostStopRequest {
+                expected_instance_id: "instance-1".into(),
+            })),
+        },
+    );
+    check(
+        "control_status_reply",
+        HostControlResponse {
+            request_id: "控制请求".into(),
+            result: Some(host_control_response::Result::Status(HostStatus {
+                host_id: "host-1".into(),
+                host_instance_id: "instance-1".into(),
+                http_endpoint: "http://127.0.0.1:43121".into(),
+                started_at_unix_ms: 1_788_556_300_000,
+                process_id: 321,
+            })),
+        },
+    );
+    check(
+        "control_stop_reply",
+        HostControlResponse {
+            request_id: "停止请求".into(),
+            result: Some(host_control_response::Result::Stopped(HostStopResponse {
+                accepted: true,
+            })),
+        },
+    );
+}
+
+#[test]
 fn optional_presence_and_64_bit_extremes() {
     check(
         "meta_absent",

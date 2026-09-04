@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_common: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Chdhcm1hZHJhL3YxL2NvbW1vbi5wcm90bxIKYXJtYWRyYS52MSIvCg9Qcm90b2NvbFZlcnNpb24SDQoFbWFqb3IYASABKA0SDQoFbWlub3IYAiABKA0iUAoMSGVsbG9SZXF1ZXN0EhEKCWNsaWVudF9pZBgBIAEoCRItCghwcm90b2NvbBgCIAEoCzIbLmFybWFkcmEudjEuUHJvdG9jb2xWZXJzaW9uIpgBCg1IZWxsb1Jlc3BvbnNlEi0KCHByb3RvY29sGAEgASgLMhsuYXJtYWRyYS52MS5Qcm90b2NvbFZlcnNpb24SGAoQaG9zdF9pbnN0YW5jZV9pZBgCIAEoCRIUCgxjYXBhYmlsaXRpZXMYAyADKAkSFwoPbWF4X2ZyYW1lX2J5dGVzGAQgASgNEg8KB2hvc3RfaWQYBSABKAkiLgoNRXJyb3JSZXNwb25zZRIMCgRjb2RlGAEgASgJEg8KB21lc3NhZ2UYAiABKAkiSQoFU2NvcGUSDwoHaG9zdF9pZBgBIAEoCRIUCgx3b3Jrc3BhY2VfaWQYAiABKAkSGQoRZXhlY3V0aW9uX2hvc3RfaWQYAyABKAkirAEKC0NvbW1hbmRNZXRhEhIKCnJlcXVlc3RfaWQYASABKAkSIAoFc2NvcGUYAiABKAsyES5hcm1hZHJhLnYxLlNjb3BlEhcKD2lkZW1wb3RlbmN5X2tleRgDIAEoCRIeChFleHBlY3RlZF9yZXZpc2lvbhgEIAEoBEgAiAEBEhgKEGRlYWRsaW5lX3VuaXhfbXMYBSABKANCFAoSX2V4cGVjdGVkX3JldmlzaW9uIjgKDlNlc3Npb25BZGRyZXNzEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBCJ1Cg1UZXJtaW5hbElucHV0EisKB3Nlc3Npb24YASABKAsyGi5hcm1hZHJhLnYxLlNlc3Npb25BZGRyZXNzEhAKCGlucHV0X2lkGAIgASgJEgwKBGRhdGEYAyABKAwSFwoPd3JpdGVyX2xlYXNlX2lkGAQgASgJIkUKCVN0cmVhbUFjaxIYChByZWNlaXZlZF90aHJvdWdoGAEgASgEEh4KFmF2YWlsYWJsZV9jcmVkaXRfYnl0ZXMYAiABKA0iwgEKC1N0cmVhbUZyYW1lEhEKCXN0cmVhbV9pZBgBIAEoCRIQCghzZXF1ZW5jZRgCIAEoBBINCgVlcG9jaBgDIAEoCRIzCg50ZXJtaW5hbF9pbnB1dBgKIAEoCzIZLmFybWFkcmEudjEuVGVybWluYWxJbnB1dEgAEhkKD3Rlcm1pbmFsX291dHB1dBgLIAEoDEgAEiQKA2FjaxgMIAEoCzIVLmFybWFkcmEudjEuU3RyZWFtQWNrSABCCQoHcGF5bG9hZEIjWiFhcm1hZHJhLmxvY2FsL2hvc3QvZ2VuL2FybWFkcmEvdjFiBnByb3RvMw",
+    "Chdhcm1hZHJhL3YxL2NvbW1vbi5wcm90bxIKYXJtYWRyYS52MSIvCg9Qcm90b2NvbFZlcnNpb24SDQoFbWFqb3IYASABKA0SDQoFbWlub3IYAiABKA0iUAoMSGVsbG9SZXF1ZXN0EhEKCWNsaWVudF9pZBgBIAEoCRItCghwcm90b2NvbBgCIAEoCzIbLmFybWFkcmEudjEuUHJvdG9jb2xWZXJzaW9uIpgBCg1IZWxsb1Jlc3BvbnNlEi0KCHByb3RvY29sGAEgASgLMhsuYXJtYWRyYS52MS5Qcm90b2NvbFZlcnNpb24SGAoQaG9zdF9pbnN0YW5jZV9pZBgCIAEoCRIUCgxjYXBhYmlsaXRpZXMYAyADKAkSFwoPbWF4X2ZyYW1lX2J5dGVzGAQgASgNEg8KB2hvc3RfaWQYBSABKAkiLgoNRXJyb3JSZXNwb25zZRIMCgRjb2RlGAEgASgJEg8KB21lc3NhZ2UYAiABKAkiSQoFU2NvcGUSDwoHaG9zdF9pZBgBIAEoCRIUCgx3b3Jrc3BhY2VfaWQYAiABKAkSGQoRZXhlY3V0aW9uX2hvc3RfaWQYAyABKAkirAEKC0NvbW1hbmRNZXRhEhIKCnJlcXVlc3RfaWQYASABKAkSIAoFc2NvcGUYAiABKAsyES5hcm1hZHJhLnYxLlNjb3BlEhcKD2lkZW1wb3RlbmN5X2tleRgDIAEoCRIeChFleHBlY3RlZF9yZXZpc2lvbhgEIAEoBEgAiAEBEhgKEGRlYWRsaW5lX3VuaXhfbXMYBSABKANCFAoSX2V4cGVjdGVkX3JldmlzaW9uIjgKDlNlc3Npb25BZGRyZXNzEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBCJ1Cg1UZXJtaW5hbElucHV0EisKB3Nlc3Npb24YASABKAsyGi5hcm1hZHJhLnYxLlNlc3Npb25BZGRyZXNzEhAKCGlucHV0X2lkGAIgASgJEgwKBGRhdGEYAyABKAwSFwoPd3JpdGVyX2xlYXNlX2lkGAQgASgJIkUKCVN0cmVhbUFjaxIYChByZWNlaXZlZF90aHJvdWdoGAEgASgEEh4KFmF2YWlsYWJsZV9jcmVkaXRfYnl0ZXMYAiABKA0iwgEKC1N0cmVhbUZyYW1lEhEKCXN0cmVhbV9pZBgBIAEoCRIQCghzZXF1ZW5jZRgCIAEoBBINCgVlcG9jaBgDIAEoCRIzCg50ZXJtaW5hbF9pbnB1dBgKIAEoCzIZLmFybWFkcmEudjEuVGVybWluYWxJbnB1dEgAEhkKD3Rlcm1pbmFsX291dHB1dBgLIAEoDEgAEiQKA2FjaxgMIAEoCzIVLmFybWFkcmEudjEuU3RyZWFtQWNrSABCCQoHcGF5bG9hZCJ+CgpIb3N0U3RhdHVzEg8KB2hvc3RfaWQYASABKAkSGAoQaG9zdF9pbnN0YW5jZV9pZBgCIAEoCRIVCg1odHRwX2VuZHBvaW50GAMgASgJEhoKEnN0YXJ0ZWRfYXRfdW5peF9tcxgEIAEoAxISCgpwcm9jZXNzX2lkGAUgASgNIhMKEUhvc3RTdGF0dXNSZXF1ZXN0Ii8KD0hvc3RTdG9wUmVxdWVzdBIcChRleHBlY3RlZF9pbnN0YW5jZV9pZBgBIAEoCSIkChBIb3N0U3RvcFJlc3BvbnNlEhAKCGFjY2VwdGVkGAEgASgIIpABChJIb3N0Q29udHJvbFJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIvCgZzdGF0dXMYCiABKAsyHS5hcm1hZHJhLnYxLkhvc3RTdGF0dXNSZXF1ZXN0SAASKwoEc3RvcBgLIAEoCzIbLmFybWFkcmEudjEuSG9zdFN0b3BSZXF1ZXN0SABCCAoGYWN0aW9uIroBChNIb3N0Q29udHJvbFJlc3BvbnNlEhIKCnJlcXVlc3RfaWQYASABKAkSKAoGc3RhdHVzGAogASgLMhYuYXJtYWRyYS52MS5Ib3N0U3RhdHVzSAASLwoHc3RvcHBlZBgLIAEoCzIcLmFybWFkcmEudjEuSG9zdFN0b3BSZXNwb25zZUgAEioKBWVycm9yGAwgASgLMhkuYXJtYWRyYS52MS5FcnJvclJlc3BvbnNlSABCCAoGcmVzdWx0QiNaIWFybWFkcmEubG9jYWwvaG9zdC9nZW4vYXJtYWRyYS92MWIGcHJvdG8z",
   );
 
 /**
@@ -327,3 +327,177 @@ export type StreamFrame = Message<"armadra.v1.StreamFrame"> & {
 export const StreamFrameSchema: GenMessage<StreamFrame> =
   /*@__PURE__*/
   messageDesc(file_armadra_v1_common, 9);
+
+/**
+ * Local OS-protected control channel only. Never exposed by HTTP/CORS.
+ *
+ * @generated from message armadra.v1.HostStatus
+ */
+export type HostStatus = Message<"armadra.v1.HostStatus"> & {
+  /**
+   * @generated from field: string host_id = 1;
+   */
+  hostId: string;
+
+  /**
+   * @generated from field: string host_instance_id = 2;
+   */
+  hostInstanceId: string;
+
+  /**
+   * @generated from field: string http_endpoint = 3;
+   */
+  httpEndpoint: string;
+
+  /**
+   * @generated from field: int64 started_at_unix_ms = 4;
+   */
+  startedAtUnixMs: bigint;
+
+  /**
+   * Diagnostic/launch ownership only; never use this value to signal a process.
+   *
+   * @generated from field: uint32 process_id = 5;
+   */
+  processId: number;
+};
+
+/**
+ * Describes the message armadra.v1.HostStatus.
+ * Use `create(HostStatusSchema)` to create a new message.
+ */
+export const HostStatusSchema: GenMessage<HostStatus> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_common, 10);
+
+/**
+ * @generated from message armadra.v1.HostStatusRequest
+ */
+export type HostStatusRequest = Message<"armadra.v1.HostStatusRequest"> & {};
+
+/**
+ * Describes the message armadra.v1.HostStatusRequest.
+ * Use `create(HostStatusRequestSchema)` to create a new message.
+ */
+export const HostStatusRequestSchema: GenMessage<HostStatusRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_common, 11);
+
+/**
+ * @generated from message armadra.v1.HostStopRequest
+ */
+export type HostStopRequest = Message<"armadra.v1.HostStopRequest"> & {
+  /**
+   * @generated from field: string expected_instance_id = 1;
+   */
+  expectedInstanceId: string;
+};
+
+/**
+ * Describes the message armadra.v1.HostStopRequest.
+ * Use `create(HostStopRequestSchema)` to create a new message.
+ */
+export const HostStopRequestSchema: GenMessage<HostStopRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_common, 12);
+
+/**
+ * @generated from message armadra.v1.HostStopResponse
+ */
+export type HostStopResponse = Message<"armadra.v1.HostStopResponse"> & {
+  /**
+   * @generated from field: bool accepted = 1;
+   */
+  accepted: boolean;
+};
+
+/**
+ * Describes the message armadra.v1.HostStopResponse.
+ * Use `create(HostStopResponseSchema)` to create a new message.
+ */
+export const HostStopResponseSchema: GenMessage<HostStopResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_common, 13);
+
+/**
+ * @generated from message armadra.v1.HostControlRequest
+ */
+export type HostControlRequest = Message<"armadra.v1.HostControlRequest"> & {
+  /**
+   * @generated from field: string request_id = 1;
+   */
+  requestId: string;
+
+  /**
+   * @generated from oneof armadra.v1.HostControlRequest.action
+   */
+  action:
+    | {
+        /**
+         * @generated from field: armadra.v1.HostStatusRequest status = 10;
+         */
+        value: HostStatusRequest;
+        case: "status";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.HostStopRequest stop = 11;
+         */
+        value: HostStopRequest;
+        case: "stop";
+      }
+    | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message armadra.v1.HostControlRequest.
+ * Use `create(HostControlRequestSchema)` to create a new message.
+ */
+export const HostControlRequestSchema: GenMessage<HostControlRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_common, 14);
+
+/**
+ * @generated from message armadra.v1.HostControlResponse
+ */
+export type HostControlResponse = Message<"armadra.v1.HostControlResponse"> & {
+  /**
+   * @generated from field: string request_id = 1;
+   */
+  requestId: string;
+
+  /**
+   * @generated from oneof armadra.v1.HostControlResponse.result
+   */
+  result:
+    | {
+        /**
+         * @generated from field: armadra.v1.HostStatus status = 10;
+         */
+        value: HostStatus;
+        case: "status";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.HostStopResponse stopped = 11;
+         */
+        value: HostStopResponse;
+        case: "stopped";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.ErrorResponse error = 12;
+         */
+        value: ErrorResponse;
+        case: "error";
+      }
+    | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message armadra.v1.HostControlResponse.
+ * Use `create(HostControlResponseSchema)` to create a new message.
+ */
+export const HostControlResponseSchema: GenMessage<HostControlResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_common, 15);

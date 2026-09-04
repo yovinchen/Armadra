@@ -13,6 +13,8 @@ import {
   ErrorResponseSchema,
   CommandMetaSchema,
   StreamFrameSchema,
+  HostControlRequestSchema,
+  HostControlResponseSchema,
 } from "../src/index.js";
 
 function fixture(name: string): Uint8Array {
@@ -37,6 +39,33 @@ function check<T extends DescMessage>(
 const maxUint64 = 18_446_744_073_709_551_615n;
 
 describe("shared Go / Rust / TypeScript wire contracts", () => {
+  it("encodes local control requests and acknowledgements across runtimes", () => {
+    check("control_status", HostControlRequestSchema, {
+      requestId: "控制请求",
+      action: { case: "status", value: {} },
+    });
+    check("control_stop", HostControlRequestSchema, {
+      requestId: "停止请求",
+      action: { case: "stop", value: { expectedInstanceId: "instance-1" } },
+    });
+    check("control_status_reply", HostControlResponseSchema, {
+      requestId: "控制请求",
+      result: {
+        case: "status",
+        value: {
+          hostId: "host-1",
+          hostInstanceId: "instance-1",
+          httpEndpoint: "http://127.0.0.1:43121",
+          startedAtUnixMs: 1_788_556_300_000n,
+          processId: 321,
+        },
+      },
+    });
+    check("control_stop_reply", HostControlResponseSchema, {
+      requestId: "停止请求",
+      result: { case: "stopped", value: { accepted: true } },
+    });
+  });
   it("preserves UTF-8 and handshake fields", () => {
     check("hello", HelloRequestSchema, {
       clientId: "客户端📡",

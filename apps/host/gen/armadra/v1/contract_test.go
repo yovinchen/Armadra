@@ -41,16 +41,20 @@ func fixture(t *testing.T, name string, data []byte) []byte {
 
 func cases() map[string]proto.Message {
 	return map[string]proto.Message{
-		"hello":          &pb.HelloRequest{ClientId: "客户端📡", Protocol: &pb.ProtocolVersion{Major: 1}},
-		"hello_response": &pb.HelloResponse{Protocol: &pb.ProtocolVersion{Major: 1}, HostInstanceId: "主机", Capabilities: []string{"protocol.hello"}, MaxFrameBytes: 1048576},
-		"hello_identity": &pb.HelloResponse{Protocol: &pb.ProtocolVersion{Major: 1, Minor: 1}, HostInstanceId: "新进程", HostId: "0123456789abcdef0123456789abcdef", Capabilities: []string{"protocol.hello.v1", "host.identity.v1"}, MaxFrameBytes: 1048576},
-		"error":          &pb.ErrorResponse{Code: "UNSUPPORTED", Message: "尚未实现"},
-		"meta_absent":    &pb.CommandMeta{RequestId: "请求"},
-		"meta_zero":      &pb.CommandMeta{RequestId: "请求", ExpectedRevision: proto.Uint64(0)},
-		"meta_large":     &pb.CommandMeta{RequestId: "请求", Scope: &pb.Scope{HostId: "主机", WorkspaceId: "工作区", ExecutionHostId: "执行主机"}, IdempotencyKey: "唯一", ExpectedRevision: proto.Uint64(math.MaxUint64), DeadlineUnixMs: math.MinInt64},
-		"frame_input":    &pb.StreamFrame{StreamId: "流", Sequence: math.MaxUint64, Epoch: "纪元", Payload: &pb.StreamFrame_TerminalInput{TerminalInput: &pb.TerminalInput{Session: &pb.SessionAddress{SessionId: "会话", Generation: 9007199254740993}, InputId: "输入", Data: []byte{0, 255, 27, 10}, WriterLeaseId: "租约"}}},
-		"frame_output":   &pb.StreamFrame{Sequence: 9007199254740993, Payload: &pb.StreamFrame_TerminalOutput{TerminalOutput: []byte{0, 255, 27, 10}}},
-		"frame_ack":      &pb.StreamFrame{Payload: &pb.StreamFrame_Ack{Ack: &pb.StreamAck{ReceivedThrough: math.MaxUint64, AvailableCreditBytes: 1048576}}},
+		"control_status":       &pb.HostControlRequest{RequestId: "控制请求", Action: &pb.HostControlRequest_Status{Status: &pb.HostStatusRequest{}}},
+		"control_stop":         &pb.HostControlRequest{RequestId: "停止请求", Action: &pb.HostControlRequest_Stop{Stop: &pb.HostStopRequest{ExpectedInstanceId: "instance-1"}}},
+		"control_status_reply": &pb.HostControlResponse{RequestId: "控制请求", Result: &pb.HostControlResponse_Status{Status: &pb.HostStatus{HostId: "host-1", HostInstanceId: "instance-1", HttpEndpoint: "http://127.0.0.1:43121", StartedAtUnixMs: 1788556300000, ProcessId: 321}}},
+		"control_stop_reply":   &pb.HostControlResponse{RequestId: "停止请求", Result: &pb.HostControlResponse_Stopped{Stopped: &pb.HostStopResponse{Accepted: true}}},
+		"hello":                &pb.HelloRequest{ClientId: "客户端📡", Protocol: &pb.ProtocolVersion{Major: 1}},
+		"hello_response":       &pb.HelloResponse{Protocol: &pb.ProtocolVersion{Major: 1}, HostInstanceId: "主机", Capabilities: []string{"protocol.hello"}, MaxFrameBytes: 1048576},
+		"hello_identity":       &pb.HelloResponse{Protocol: &pb.ProtocolVersion{Major: 1, Minor: 1}, HostInstanceId: "新进程", HostId: "0123456789abcdef0123456789abcdef", Capabilities: []string{"protocol.hello.v1", "host.identity.v1"}, MaxFrameBytes: 1048576},
+		"error":                &pb.ErrorResponse{Code: "UNSUPPORTED", Message: "尚未实现"},
+		"meta_absent":          &pb.CommandMeta{RequestId: "请求"},
+		"meta_zero":            &pb.CommandMeta{RequestId: "请求", ExpectedRevision: proto.Uint64(0)},
+		"meta_large":           &pb.CommandMeta{RequestId: "请求", Scope: &pb.Scope{HostId: "主机", WorkspaceId: "工作区", ExecutionHostId: "执行主机"}, IdempotencyKey: "唯一", ExpectedRevision: proto.Uint64(math.MaxUint64), DeadlineUnixMs: math.MinInt64},
+		"frame_input":          &pb.StreamFrame{StreamId: "流", Sequence: math.MaxUint64, Epoch: "纪元", Payload: &pb.StreamFrame_TerminalInput{TerminalInput: &pb.TerminalInput{Session: &pb.SessionAddress{SessionId: "会话", Generation: 9007199254740993}, InputId: "输入", Data: []byte{0, 255, 27, 10}, WriterLeaseId: "租约"}}},
+		"frame_output":         &pb.StreamFrame{Sequence: 9007199254740993, Payload: &pb.StreamFrame_TerminalOutput{TerminalOutput: []byte{0, 255, 27, 10}}},
+		"frame_ack":            &pb.StreamFrame{Payload: &pb.StreamFrame_Ack{Ack: &pb.StreamAck{ReceivedThrough: math.MaxUint64, AvailableCreditBytes: 1048576}}},
 	}
 }
 

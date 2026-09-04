@@ -41,6 +41,8 @@ TS 所有 64 位整数字段使用 `bigint`。禁止通过 `Number()` 转换序�
 
 ## 兼容边界
 
+本机控制增加 `HostControlRequest/Response`、`HostStatus` 和实例绑定的停止请求。它们只用于操作系统保护的 IPC，不增加 HTTP 可调用能力。控制帧使用 4 字节大端长度前缀；CLI 展示可以输出 JSON，进程间传输仍为 Protobuf。控制通道的大小、深度及错误规则见 [控制协议说明](../apps/host/internal/daemon/README.md)。
+
 共享样例覆盖中文及 emoji、二进制载荷、uint64 最大值、超过 JS 安全整数范围的 generation、int64 最小值、optional 未传与零值、三个 oneof 分支和最后一个分支生效的规则。三个运行时独立编码后与同一份样例比较，并测试截断数据拒绝行为。当前 schema 没有枚举，未知枚举的验收留待引入首个枚举时补充。
 
 未知字段行为已通过测试确认：

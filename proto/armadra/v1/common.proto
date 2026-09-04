@@ -71,3 +71,31 @@ message StreamFrame {
     StreamAck ack = 12;
   }
 }
+
+// Local OS-protected control channel only. Never exposed by HTTP/CORS.
+message HostStatus {
+  string host_id = 1;
+  string host_instance_id = 2;
+  string http_endpoint = 3;
+  int64 started_at_unix_ms = 4;
+  // Diagnostic/launch ownership only; never use this value to signal a process.
+  uint32 process_id = 5;
+}
+message HostStatusRequest {}
+message HostStopRequest { string expected_instance_id = 1; }
+message HostStopResponse { bool accepted = 1; }
+message HostControlRequest {
+  string request_id = 1;
+  oneof action {
+    HostStatusRequest status = 10;
+    HostStopRequest stop = 11;
+  }
+}
+message HostControlResponse {
+  string request_id = 1;
+  oneof result {
+    HostStatus status = 10;
+    HostStopResponse stopped = 11;
+    ErrorResponse error = 12;
+  }
+}
