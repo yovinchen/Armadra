@@ -314,6 +314,14 @@ pub struct ContextLink {
 #[serde(rename_all = "camelCase")]
 pub struct ContextLinkContent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_shape_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shape_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_truncated: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
     /// Workspace-relative path, resolved inside the workspace before it is
     /// handed to an agent; a doctored one cannot escape the root.

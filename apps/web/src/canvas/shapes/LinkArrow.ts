@@ -9,7 +9,8 @@ import type {
 
 import { t } from "@/app/preferences-store";
 import { isValidLink } from "../connection";
-import { contentArrowEnds, ensureContentId } from "../content-links";
+import { referenceCountForNode } from "../create-content-reference";
+import { contentArrowEnds, ensureContentId, MAX_LINKS } from "../content-links";
 import { arrowArmadraMeta, arrowEnds } from "../sync/derive";
 import { linkRecords } from "../sync/project";
 import { isDocumentShapeId, toNodeId } from "./armadra-shape";
@@ -53,7 +54,7 @@ import { isLinkShape, type LinkShape } from "./link-shape";
  * 而 tldraw 的 `blue` 自己就跟着明暗主题走，所以这里直接钉在颜色名上，不去读
  * CSS 变量再做一次有损映射。
  */
-const CONTENT_ARROW_COLOR = "blue";
+const CONTENT_ARROW_COLOR = "grey";
 
 /* ------------------------------ 把手起笔标记 ------------------------------- */
 
@@ -237,6 +238,11 @@ export function registerLinkArrow(editor: Editor): () => void {
         editor.getShape(id),
       );
       if (content) {
+        if (referenceCountForNode(editor, `shape:${content.nodeId}` as TLShapeId) > MAX_LINKS) {
+          discard(editor, arrowId);
+          toast.error(t("shape.referenceLimit", { limit: MAX_LINKS }));
+          return;
+        }
         styleContentArrow(arrow, content.nodeEnd);
         return;
       }

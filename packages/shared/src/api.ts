@@ -433,6 +433,11 @@ export const suggestTitleResponseSchema = z.object({
  * rasterised by the client and referenced by a workspace-relative PNG path.
  */
 export const contextLinkContentSchema = z.object({
+  /** Render status is explicit: a visible link need not have a ready image. */
+  status: z.enum(["pending", "ready", "error"]).optional(),
+  sourceShapeId: z.string().max(160).optional(),
+  shapeType: z.string().max(40).optional(),
+  textTruncated: z.boolean().optional(),
   text: z.string().max(20_000).optional(),
   pngPath: z.string().max(4_000).optional(),
 });

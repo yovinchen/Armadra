@@ -1246,6 +1246,25 @@ pub async fn put_context_links(
         ));
     }
     for link in links {
+        if let Some(content) = &link.content {
+            if content
+                .status
+                .as_deref()
+                .is_some_and(|status| !["pending", "ready", "error"].contains(&status))
+                || content
+                    .source_shape_id
+                    .as_ref()
+                    .is_some_and(|id| id.len() > 160)
+                || content
+                    .shape_type
+                    .as_ref()
+                    .is_some_and(|kind| kind.len() > 40)
+            {
+                return Err(AppError::BadRequest(
+                    "Invalid whiteboard reference metadata".into(),
+                ));
+            }
+        }
         if Uuid::parse_str(&link.id).is_err() || link.title.len() > 160 || link.kind.len() > 40 {
             return Err(AppError::BadRequest("Context link is invalid".into()));
         }
@@ -1993,6 +2012,7 @@ mod tests {
             content: Some(crate::model::ContextLinkContent {
                 text: Some("runtime -> web".into()),
                 png_path: Some(".armadra/exports/diagram.png".into()),
+                ..Default::default()
             }),
         }];
         put_context_links(&pool, &workspace.id, &node_id, &links)
@@ -2018,6 +2038,7 @@ mod tests {
                     content: Some(crate::model::ContextLinkContent {
                         text: Some("x".repeat(20_001)),
                         png_path: None,
+                        ..Default::default()
                     }),
                 }],
             )

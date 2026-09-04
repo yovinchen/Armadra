@@ -3,9 +3,7 @@ import type { Editor, TLShape, TLShapeId } from "tldraw";
 /**
  * 停用 tldraw 的四种原生 shape（计划 §4.5）。
  *
- * - `note`：便签是我们的 `armadra:sticky`——Agent 的控制动词 `sticky` 要写
- *   `nodes` 表，而 Runtime 不解析白板快照。两种便签并存只会让人分不清
- *   哪个 Agent 读得到。
+ * Native notes are preserved and readable through content references.
  * - `bookmark` / `embed`：需要抓取远端网页的 og 信息，离线的桌面壳里只会
  *   显示一块空白；粘贴 URL 改成落一段文字（`dnd/external-content.ts`）。
  * - `video`：没有对应的资产类型（`ASSET_MIME_TYPES` 只有 8 种图片），
@@ -23,7 +21,6 @@ import type { Editor, TLShape, TLShapeId } from "tldraw";
  * 「创建」这一刻，读旧数据照旧。
  */
 export const RETIRED_SHAPE_TYPES = [
-  "note",
   "bookmark",
   "embed",
   "video",

@@ -83,3 +83,9 @@ describe("createAssetStore", () => {
     expect(store.resolve?.({ props: {} } as never, {} as never)).toBeNull();
   });
 });
+
+it("managed assets use the current runtime URL after reopening in desktop or web", () => {
+  const store = createAssetStore(() => "current-workspace");
+  const managed = { props: { src: "http://127.0.0.1:9999/old.png" }, meta: { armadra: { path: ".armadra/assets/0123456789abcdef.png" } } };
+  expect(store.resolve?.(managed as never, {} as never)).toBe("http://127.0.0.1:43120/api/workspaces/current-workspace/assets/0123456789abcdef.png");
+});

@@ -1,4 +1,4 @@
-import type { TLRecord, TLStoreSnapshot } from "tldraw";
+import type { Editor, TLRecord, TLShape, TLShapeId, TLStoreSnapshot } from "tldraw";
 
 import { isDocumentShapeId } from "../shapes/armadra-shape";
 import { LINK_SHAPE_TYPE } from "../shapes/link-shape";
@@ -6,8 +6,8 @@ import { LINK_SHAPE_TYPE } from "../shapes/link-shape";
 /**
  * 白板快照的过滤与合并（tldraw 计划 §6.1，归属 canvas）。纯函数。
  *
- * 快照里**只留白板原生记录**：`armadra` shape、`frame` shape、上下文链接的
- * `link` shape 及其 binding 由 `nodes` / `edges` 表承载，序列化前必须剔掉；
+ * 快照里只留白板原生记录：`armadra`、作为节点的 `frame`、`link` 及其绑定
+ * 由 `nodes` / `edges` 承载。节点 frame 内的原生子孙仍保存在白板快照；
  * 加载时先灌快照，再把文档投影成 shape 合并进去。
  *
  * 判据是「绑到谁」而不是「id 长什么样」：用户手画的箭头也可能两端都落在
@@ -77,24 +77,10 @@ export function stripDocumentRecords(
       .map(([arrowId]) => arrowId),
   );
 
-  /*
-   * 不进快照的 shape：节点自己、link、边箭头，以及**挂在它们下面的子孙**
-   * （父级不在快照里，加载时 tldraw 会把孤儿扔掉）。子孙要一层层往下收，
-   * 组里套组也要算进来。
-   */
+  // Native descendants remain whiteboard data even when their frame is a
+  // document node. Defer those records until the frame has been projected on
+  // load; deleting them here permanently loses drawings/text on every save.
   const dropped = new Set<string>([...nodeShapes, ...linkShapes, ...edgeArrows]);
-  for (;;) {
-    let grew = false;
-    for (const record of Object.values(store)) {
-      if (!isShape(record) || dropped.has(record.id)) continue;
-      const parentId = (record as unknown as { parentId: string }).parentId;
-      if (dropped.has(parentId)) {
-        dropped.add(record.id);
-        grew = true;
-      }
-    }
-    if (!grew) break;
-  }
 
   const kept: Record<string, TLRecord> = {};
   for (const [id, record] of Object.entries(store)) {
@@ -130,12 +116,32 @@ export function splitPendingBindings(snapshot: TLStoreSnapshot): {
     if (isShape(record)) present.add(record.id);
   }
 
+  const deferred = new Set<string>();
+  for (;;) {
+    let changed = false;
+    for (const record of Object.values(store)) {
+      if (!isShape(record) || deferred.has(record.id)) continue;
+      const parent = (record as unknown as { parentId?: string }).parentId;
+      if (parent?.startsWith("shape:") && (!present.has(parent) || deferred.has(parent))) {
+        deferred.add(record.id);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
   const base: Record<string, TLRecord> = {};
   const pending: TLRecord[] = [];
   for (const [id, record] of Object.entries(store)) {
-    if (isBinding(record) && !present.has(record.toId)) {
-      if (present.has(record.fromId)) pending.push(record);
+    if (isShape(record) && deferred.has(id)) {
+      pending.push(record);
       continue;
+    }
+    if (isBinding(record)) {
+      if (!present.has(record.fromId)) continue;
+      if (!present.has(record.toId) || deferred.has(record.fromId) || deferred.has(record.toId)) {
+        pending.push(record);
+        continue;
+      }
     }
     base[id] = record;
   }
@@ -161,4 +167,27 @@ export function parseWhiteboard(json: string): TLStoreSnapshot | null {
   } catch {
     return null;
   }
+}
+
+
+/** Restore records deferred because their document-owned parents/endpoints
+ * were absent from the native snapshot. Caller runs this as remote changes. */
+export function restorePendingRecords(editor: Pick<Editor, "getShape" | "store">, pending: readonly TLRecord[]): void {
+  let shapes = pending.filter((record) => record.typeName === "shape");
+  while (shapes.length > 0) {
+    const ready = shapes.filter((record) => {
+      const parent = (record as TLShape).parentId;
+      return !parent.startsWith("shape:") || Boolean(editor.getShape(parent));
+    });
+    if (ready.length === 0) break;
+    editor.store.put(ready);
+    const restored = new Set(ready.map((record) => record.id));
+    shapes = shapes.filter((record) => !restored.has(record.id));
+  }
+  const bindings = pending.filter((record) => {
+    if (record.typeName !== "binding") return false;
+    const binding = record as unknown as { fromId: TLShapeId; toId: TLShapeId };
+    return Boolean(editor.getShape(binding.fromId) && editor.getShape(binding.toId));
+  });
+  if (bindings.length > 0) editor.store.put(bindings);
 }

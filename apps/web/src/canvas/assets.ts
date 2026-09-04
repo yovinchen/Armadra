@@ -81,6 +81,12 @@ export function createAssetStore(
 
     /** 上传时存的已经是可直接加载的绝对地址，原样返回。 */
     resolve(asset) {
+      // Saved localhost URLs may refer to a previous runtime port. Managed
+      // assets are resolved against this session's runtime in desktop and web.
+      const workspaceId = getWorkspaceId();
+      const path = assetPath(asset);
+      const id = path?.match(/^\.armadra\/assets\/([a-f0-9]{16}\.[a-z0-9]+)$/i)?.[1];
+      if (workspaceId && id) return runtimeApi.assetUrl(workspaceId, id);
       const src = (asset.props as { src?: string | null }).src;
       return src ?? null;
     },

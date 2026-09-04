@@ -1,4 +1,6 @@
 import * as React from "react";
+import { toast } from "sonner";
+import { t } from "@/app/preferences-store";
 import type { BoardDocument, ContextLink } from "@armadra/shared";
 
 import { runtimeApi } from "@/api/client";
@@ -63,7 +65,10 @@ export function buildLinkDocuments(
     const links = documents[nodeId];
     if (!links) continue;
     for (const link of shapes) {
-      if (links.some((existing) => existing.id === link.id)) continue;
+      if (links.some((existing) => existing.id === link.id || (
+        existing.kind === "shape" && link.content?.sourceShapeId &&
+        existing.content?.sourceShapeId === link.content.sourceShapeId
+      ))) continue;
       links.push(link);
     }
   }
@@ -118,30 +123,73 @@ export function usePublishContextLinks(): void {
   const edges = useCanvasStore((state) => state.document?.edges);
   const board = useCanvasStore((state) => state.document?.board.id);
   const content = useContentLinks();
-  const published = React.useRef<LinkDocuments>({});
-
-  // 换看板等于换一整张图：清掉记忆，重新推一次。
-  React.useEffect(() => {
-    published.current = {};
-  }, [board, workspaceId]);
+  const latest = React.useRef<LinkDocuments>({});
+  const kick = React.useRef<(() => void) | null>(null);
 
   React.useEffect(() => {
-    if (!workspaceId || !nodes || !edges) return;
     const document = useCanvasStore.getState().document;
-    if (!document) return;
-    const timer = setTimeout(() => {
-      const next = buildLinkDocuments(document, content);
-      for (const nodeId of changedDocuments(published.current, next)) {
-        const links = next[nodeId] ?? [];
-        published.current[nodeId] = links;
-        void runtimeApi
-          .putContextLinks(workspaceId, nodeId, links)
-          .catch(() => {
-            // 推失败就忘掉这次，下一次改动会重试；这里不打扰用户。
-            delete published.current[nodeId];
-          });
+    latest.current = document ? buildLinkDocuments(document, content) : {};
+    kick.current?.();
+  }, [content, nodes, edges, board, workspaceId]);
+
+  React.useEffect(() => {
+    if (!workspaceId || !board) return;
+    let disposed = false;
+    let running = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let retries = 0;
+    const toastId = `reference-publish-${workspaceId}-${board}`;
+    const published: LinkDocuments = {};
+    const schedule = (delay = PUBLISH_DELAY_MS) => {
+      if (disposed || timer !== null) return;
+      timer = setTimeout(() => { timer = null; void flush(); }, delay);
+    };
+    const flush = async () => {
+      if (disposed || running) return;
+      running = true;
+      const wanted = latest.current;
+      let failed = false;
+      try {
+        for (const nodeId of changedDocuments(published, wanted)) {
+          const links = wanted[nodeId] ?? [];
+          try {
+            await runtimeApi.putContextLinks(workspaceId, nodeId, links);
+            if (disposed) return;
+            // Record only confirmed writes. One request at a time prevents an
+            // old slow PUT from overwriting a newer link document.
+            published[nodeId] = links;
+          } catch { failed = true; }
+          if (disposed) return;
+        }
+      } finally {
+        running = false;
+        if (!disposed) {
+          if (failed) {
+            if (retries < 3) { retries += 1; schedule(1000 * 2 ** retries); }
+            else toast.error(t("shape.referenceSyncFailed"), {
+              id: toastId,
+              description: t("shape.referenceSyncFailureNote"),
+              action: { label: t("shape.refreshReference"), onClick: request },
+            });
+          } else {
+            toast.dismiss(toastId);
+            if (changedDocuments(published, latest.current).length > 0) schedule();
+          }
+        }
       }
-    }, PUBLISH_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [content, edges, nodes, workspaceId]);
+    };
+    const request = () => { retries = 0; schedule(); };
+    kick.current = request;
+    window.addEventListener("online", request);
+    window.addEventListener("armadra:refresh-content-references", request);
+    request();
+    return () => {
+      disposed = true;
+      kick.current = null;
+      toast.dismiss(toastId);
+      if (timer !== null) clearTimeout(timer);
+      window.removeEventListener("online", request);
+      window.removeEventListener("armadra:refresh-content-references", request);
+    };
+  }, [board, workspaceId]);
 }

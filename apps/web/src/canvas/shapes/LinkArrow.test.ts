@@ -459,7 +459,7 @@ describe("registerLinkArrow · 内容链接", () => {
     expect(arrow).toBeDefined();
     // 换形只发生在两端都是节点时；内容链接仍然是原生 arrow。
     expect(editor.links()).toHaveLength(0);
-    expect((arrow!.props as Rec).color).toBe("blue");
+    expect((arrow!.props as Rec).color).toBe("grey");
     // 箭头指向节点（节点在 end 这一端）。
     expect((arrow!.props as Rec).arrowheadEnd).toBe("arrow");
     expect((arrow!.props as Rec).arrowheadStart).toBe("none");
@@ -540,4 +540,17 @@ describe("registerLinkArrow · 把手与级联", () => {
     });
     expect(editor.links()).toHaveLength(0);
   });
+});
+
+
+it("refuses a dragged native reference past the readable-object limit with feedback", async () => {
+  for (let i = 0; i < 64; i++) editor.shapes.set(`shape:peer-${i}`, { id: `shape:peer-${i}`, type: "link", props: { from: toShapeId(B), to: `shape:node-${i}` } });
+  editor.addBoardShape("shape:overflow-note", "note");
+  editor.path = "select.dragging_handle";
+  editor.createArrow("shape:overflow-ref");
+  editor.bindShape("shape:overflow-ref", "start", "shape:overflow-note");
+  editor.bind("shape:overflow-ref", "end", B);
+  await release(editor);
+  expect(editor.arrow("shape:overflow-ref")).toBeUndefined();
+  expect(toast.error).toHaveBeenCalledWith("shape.referenceLimit");
 });

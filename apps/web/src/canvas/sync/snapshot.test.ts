@@ -3,6 +3,7 @@ import type { TLStoreSnapshot } from "tldraw";
 
 import {
   parseWhiteboard,
+  restorePendingRecords,
   serializeWhiteboard,
   splitPendingBindings,
   stripDocumentRecords,
@@ -180,15 +181,17 @@ describe("内容链接的箭头（一端节点、一端白板 shape）", () => {
     );
   });
 
-  it("指向组员（跟着 frame 一起被剔掉的 shape）的 binding 是悬空的，丢掉", () => {
-    expect(ids.has(CHILD)).toBe(false);
-    expect(ids.has("binding:orphan")).toBe(false);
+  it("原生组员及其绑定保留，不能随文档frame一起丢失", () => {
+    expect(ids.has(CHILD)).toBe(true);
+    expect(ids.has("binding:orphan")).toBe(true);
   });
 
   it("`splitPendingBindings` 把指向节点的 binding 拆出来，其余原样留在 base 里", () => {
     const { base, pending } = splitPendingBindings(stripped);
     expect(pending.map((record) => (record as { id: string }).id)).toEqual([
+      CHILD,
       "binding:content-end",
+      "binding:orphan",
     ]);
     const baseIds = new Set(Object.keys(base.store));
     expect(baseIds.has("binding:content-end")).toBe(false);
@@ -321,7 +324,7 @@ function generate(random: () => number): Generated {
       props: {},
       meta: {},
     };
-    (inFrame ? dropped : kept).add(id);
+    kept.add(id);
   }
 
   // 箭头：两端都绑节点 = 一条 edges 行（剔）；只绑一端或绑白板 = 白板箭头（留）。
@@ -445,4 +448,29 @@ describe("白板快照的往返性质（200 个随机用例）", () => {
       expect(JSON.stringify(snapshot)).toBe(before);
     }
   });
+});
+
+
+it("round-trips nested native children of a document frame and restores bindings last", () => {
+  const root = "shape:019ff7d1-0d12-7421-833d-2c5e8d64ed03";
+  const records: Record<string, unknown> = {
+    [root]: { id: root, typeName: "shape", type: "frame", parentId: "page:page" },
+    "shape:child": { id: "shape:child", typeName: "shape", type: "group", parentId: root, x: 12, y: 34 },
+    "shape:grandchild": { id: "shape:grandchild", typeName: "shape", type: "note", parentId: "shape:child", x: 5, y: 9, props: { richText: "keep me" } },
+    "shape:ref": { id: "shape:ref", typeName: "shape", type: "arrow", parentId: "page:page" },
+    "binding:ref": { id: "binding:ref", typeName: "binding", type: "arrow", fromId: "shape:ref", toId: "shape:grandchild" },
+  };
+  const snapshot = { store: records, schema: { schemaVersion: 2, sequences: {} } } as unknown as TLStoreSnapshot;
+  const saved = parseWhiteboard(serializeWhiteboard(snapshot))!;
+  const { base, pending } = splitPendingBindings(saved);
+  const live = new Map<string, unknown>(Object.entries(base.store));
+  // Document projection creates the parent before deferred native records.
+  live.set(root, records[root]);
+  const batches: string[][] = [];
+  restorePendingRecords({ getShape: (id: string) => live.get(id), store: { put: (batch: { id: string }[]) => {
+    batches.push(batch.map((record) => record.id));
+    for (const record of batch) live.set(record.id, record);
+  } } } as never, pending);
+  expect(live.get("shape:grandchild")).toEqual(records["shape:grandchild"]);
+  expect(batches).toEqual([["shape:child"], ["shape:grandchild"], ["binding:ref"]]);
 });

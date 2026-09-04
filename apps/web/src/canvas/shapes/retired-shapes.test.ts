@@ -39,14 +39,13 @@ function fakeEditor() {
 const flush = () => new Promise<void>((resolve) => queueMicrotask(resolve));
 
 describe("retired shapes", () => {
-  it("四种停用类型：note / bookmark / embed / video", () => {
+  it("仅停用bookmark/embed/video，原生note可引用", () => {
     expect([...RETIRED_SHAPE_TYPES]).toEqual([
-      "note",
       "bookmark",
       "embed",
       "video",
     ]);
-    expect(isRetiredShapeType("note")).toBe(true);
+    expect(isRetiredShapeType("note")).toBe(false);
     expect(isRetiredShapeType("geo")).toBe(false);
   });
 
@@ -60,6 +59,7 @@ describe("retired shapes", () => {
     ];
     expect(activeShapeUtils(utils).map((util) => util.type)).toEqual([
       "geo",
+      "note",
       "draw",
       "image",
     ]);
@@ -70,11 +70,12 @@ describe("retired shapes", () => {
     const off = registerRetiredShapes(editor as never);
 
     editor.create({ id: "shape:note", type: "note" });
+    editor.create({ id: "shape:video", type: "video" });
     editor.create({ id: "shape:geo", type: "geo" });
     await flush();
 
-    expect(deleted).toEqual([["shape:note"]]);
-    expect([...shapes.keys()]).toEqual(["shape:geo"]);
+    expect(deleted).toEqual([["shape:video"]]);
+    expect([...shapes.keys()]).toEqual(["shape:note", "shape:geo"]);
     off();
   });
 

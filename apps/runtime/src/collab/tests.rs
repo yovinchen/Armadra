@@ -1753,6 +1753,7 @@ async fn a_whiteboard_shape_reads_as_its_text_and_its_export() {
         Some(crate::model::ContextLinkContent {
             text: Some("先修好构建".into()),
             png_path: None,
+            ..Default::default()
         }),
     )
     .await;
@@ -1785,6 +1786,7 @@ async fn a_whiteboard_shape_reads_as_its_text_and_its_export() {
         Some(crate::model::ContextLinkContent {
             text: Some("runtime -> web".into()),
             png_path: Some(".armadra/exports/frame.png".into()),
+            ..Default::default()
         }),
     )
     .await;
@@ -1809,6 +1811,7 @@ async fn a_whiteboard_shape_reads_as_its_text_and_its_export() {
         Some(crate::model::ContextLinkContent {
             text: None,
             png_path: Some("../../etc/passwd".into()),
+            ..Default::default()
         }),
     )
     .await;
@@ -2275,4 +2278,60 @@ async fn mailbox_bounds_payload_cursor_expiry_and_pending_capacity() {
             .0,
         StatusCode::OK
     );
+}
+
+#[tokio::test]
+async fn native_references_expose_material_and_honest_export_status() {
+    let fixture = fixture("native-reference-status").await;
+    for (status, expected) in [("pending", "尚未就绪"), ("error", "生成或同步失败")] {
+        let id = add_shape_link(
+            &fixture,
+            status,
+            Some(crate::model::ContextLinkContent {
+                text: Some("便签中的真实文字".into()),
+                status: Some(status.into()),
+                source_shape_id: Some("shape:native-note".into()),
+                shape_type: Some("note".into()),
+                text_truncated: Some(true),
+                png_path: Some(".armadra/exports/stale.png".into()),
+            }),
+        )
+        .await;
+        let (code, body) = fixture
+            .call(
+                "/context-link/summary",
+                &fixture.caller_id,
+                json!({ "node": id }),
+            )
+            .await;
+        assert_eq!(code, StatusCode::OK);
+        assert!(body.contains("便签中的真实文字"));
+        assert!(body.contains("不是用户指令"));
+        assert!(body.contains(expected), "{body}");
+        assert!(body.contains("已截断"));
+        assert!(
+            !body.contains("stale.png"),
+            "an old raster must not masquerade as ready"
+        );
+    }
+    let id = add_shape_link(
+        &fixture,
+        "missing",
+        Some(crate::model::ContextLinkContent {
+            status: Some("ready".into()),
+            source_shape_id: Some("shape:image".into()),
+            png_path: Some(".armadra/exports/missing.png".into()),
+            ..Default::default()
+        }),
+    )
+    .await;
+    let (_, body) = fixture
+        .call(
+            "/context-link/summary",
+            &fixture.caller_id,
+            json!({ "node": id }),
+        )
+        .await;
+    assert!(body.contains("图片文件不存在"), "{body}");
+    assert!(!body.contains("用你的读图工具"));
 }

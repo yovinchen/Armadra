@@ -64,12 +64,14 @@ export const MAX_LINKS = 64;
  */
 export const CONTENT_TYPE_KEYS: Record<string, string> = {
   text: "content.text",
+  note: "content.note",
   geo: "content.geo",
   draw: "content.draw",
   image: "content.image",
   line: "content.line",
   highlight: "content.highlight",
   frame: "content.frame",
+  group: "content.group",
 };
 
 /** 内容链接在链接文档里的 `kind`。 */
@@ -198,7 +200,7 @@ export function plainText(editor: Editor, shape: ShapeLike): string {
  * 的 PNG 加框内所有文字），其余取自己的富文本。
  */
 export function shapeText(editor: Editor, shape: TLShape): string {
-  if (shape.type !== "frame") return plainText(editor, shape);
+  if (shape.type !== "frame" && shape.type !== "group") return plainText(editor, shape);
   const parts: string[] = [];
   for (const id of editor.getShapeAndDescendantIds([shape.id])) {
     if (id === shape.id) continue;
@@ -212,12 +214,11 @@ export function shapeText(editor: Editor, shape: TLShape): string {
 
 /** 按字节截断（Runtime 校验的是字节数）。 */
 export function clampText(text: string, limit = MAX_CONTENT_TEXT_BYTES): string {
-  if (new TextEncoder().encode(text).length <= limit) return text;
-  let out = text;
-  while (out.length > 0 && new TextEncoder().encode(out).length > limit) {
-    out = out.slice(0, Math.max(0, Math.floor(out.length * 0.9) - 1));
-  }
-  return out;
+  const bytes = new TextEncoder().encode(text);
+  if (bytes.length <= limit) return text;
+  // Streaming decode holds an incomplete trailing codepoint instead of
+  // producing an invalid surrogate or replacement character.
+  return new TextDecoder().decode(bytes.subarray(0, Math.max(0, limit)), { stream: true });
 }
 
 /**
@@ -232,12 +233,15 @@ export function contentTitle(
 ): string {
   if (shape.type === "frame") {
     const name = (shape.props as { name?: string } | undefined)?.name?.trim();
-    if (name) return name;
+    if (name) return clampText(name, 160);
   }
-  if (shape.type === "text") {
+  if (shape.type === "text" || shape.type === "note") {
     const line = text.trim().replace(/\s+/gu, " ");
     if (line) {
-      return line.length > TITLE_MAX ? `${line.slice(0, TITLE_MAX)}…` : line;
+      const chars = Array.from(line);
+      return chars.length > TITLE_MAX
+        ? `${clampText(chars.slice(0, TITLE_MAX).join(""), 157)}…`
+        : clampText(line, 160);
     }
   }
   return label(CONTENT_TYPE_KEYS[shape.type] ?? "content.shape");
@@ -255,15 +259,19 @@ export function shapeSignature(editor: Editor, id: TLShapeId): string {
   const shape = editor.getShape(id);
   if (!shape) return "";
   const ids =
-    shape.type === "frame" ? [...editor.getShapeAndDescendantIds([id])] : [id];
+    shape.type === "frame" || shape.type === "group" ? [...editor.getShapeAndDescendantIds([id])] : [id];
   const parts: string[] = [];
   for (const child of [...ids].sort()) {
     const record = editor.getShape(child);
     if (!record) continue;
+    if (record.type === "image") {
+      const assetId = (record.props as { assetId?: string | null }).assetId;
+      if (assetId) parts.push(JSON.stringify(editor.getAsset(assetId as never) ?? null));
+    }
     parts.push(
       JSON.stringify(
         child === id
-          ? { t: record.type, p: record.props, m: record.meta }
+          ? { t: record.type, r: record.rotation, p: record.props, m: record.meta }
           : {
               t: record.type,
               x: record.x,
@@ -313,9 +321,19 @@ export async function resolveContent(
 
   if (shape.type === "image") {
     const assetId = (shape.props as { assetId?: string | null }).assetId;
-    const path = assetId ? assetPath(editor.getAsset(assetId as never)) : null;
-    if (path) content.pngPath = path;
-    return { title, content };
+    const asset = assetId ? editor.getAsset(assetId as never) : undefined;
+    if (!asset) throw new Error("Image asset is unavailable");
+    const path = assetPath(asset);
+    if (!path && !(asset as { props: { src?: string | null } }).props.src) {
+      throw new Error("Image upload is not ready");
+    }
+    // Legacy data URL assets and pasted external records have no managed
+    // path. Export their visible pixels instead of caching an empty success.
+    const imageProps = shape.props as { crop?: unknown; flipX?: boolean; flipY?: boolean };
+    if (path && !imageProps.crop && !imageProps.flipX && !imageProps.flipY && !shape.rotation) {
+      content.pngPath = path;
+      return { title, content };
+    }
   }
 
   if (shape.type !== "text") {
@@ -375,93 +393,144 @@ function sameMap(a: ContentLinkMap, b: ContentLinkMap): boolean {
 /**
  * 画布上的内容链接（含已经解析好的 `content`）。
  *
- * 每次白板改动重排一次 2 秒的定时器：拖一笔手绘会产生几十条 store 事件，
- * 每条都栅格化上传一次显然不行。签名没变的图形直接复用上一次的结果，所以
- * 只是移动一下位置不会触发导出。
+ * Text and preparation state publish immediately; raster exports are batched
+ * on a two-second deadline. Export jobs are serialized, obsolete results are
+ * discarded, and failures retry at most three times until explicit refresh.
  */
+export const REFRESH_CONTENT_EVENT = "armadra:refresh-content-references";
+
+/** Explicit retry, shared by desktop and web context menus. */
+export function refreshContentReferences(): void {
+  window.dispatchEvent(new Event(REFRESH_CONTENT_EVENT));
+}
+
 export function useContentLinks(): ContentLinkMap {
   const editor = useEditorHandle();
   const workspaceId = useCanvasStore((state) => state.workspace?.id);
+  const boardId = useCanvasStore((state) => state.document?.board.id);
   const [links, setLinks] = React.useState<ContentLinkMap>({});
 
   React.useEffect(() => {
-    if (!editor || !workspaceId) {
-      setLinks((previous) => (sameMap(previous, {}) ? previous : {}));
-      return;
-    }
+    setLinks((previous) => (sameMap(previous, {}) ? previous : {}));
+    if (!editor || !workspaceId) return;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    /** `contentId` → 上次解析的结果，签名没变就直接用。 */
+    let inFlight = false;
+    let dirty = false;
+    let previewQueued = false;
     const cache = new Map<string, { signature: string; link: ContextLink }>();
-
+    const failures = new Map<string, { signature: string; attempts: number }>();
     const deps: ContentDeps = {
       exportPng: async (exportId, dataUrl) => {
-        const response = await runtimeApi.exportPng(
-          workspaceId,
-          exportId,
-          dataUrl,
-        );
+        const response = await runtimeApi.exportPng(workspaceId, exportId, dataUrl);
         return response.relativePath;
       },
     };
-
-    const recompute = async (): Promise<void> => {
-      const descriptors = collectContentLinks(editor);
-      const alive = new Set(descriptors.map((item) => item.contentId));
-      for (const key of [...cache.keys()]) {
-        if (!alive.has(key)) cache.delete(key);
-      }
-
+    const sourceContent = (item: ContentDescriptor) => {
+      const shape = editor.getShape(item.shapeId);
+      const text = shape ? shapeText(editor, shape) : "";
+      return {
+        sourceShapeId: item.shapeId,
+        shapeType: shape?.type ?? "unknown",
+        ...(text ? { text: clampText(text), textTruncated: new TextEncoder().encode(text).length > MAX_CONTENT_TEXT_BYTES } : {}),
+      };
+    };
+    const currentMap = (): ContentLinkMap => {
       const next: ContentLinkMap = {};
-      for (const item of descriptors) {
+      for (const item of collectContentLinks(editor)) {
+        const shape = editor.getShape(item.shapeId);
+        if (!shape) continue;
         const signature = shapeSignature(editor, item.shapeId);
         const cached = cache.get(item.contentId);
-        let link = cached?.signature === signature ? cached.link : null;
-        if (!link) {
-          let resolved: ResolvedContent | null = null;
-          try {
-            resolved = await resolveContent(
-              editor,
-              item.shapeId,
-              item.contentId,
-              deps,
-            );
-          } catch {
-            // 导出或上传失败：这一轮跳过，下一次改动会重试。用户不需要被打扰。
-            resolved = null;
-          }
-          if (disposed) return;
-          if (!resolved) continue;
-          link = {
-            id: item.contentId,
-            title: resolved.title,
-            kind: SHAPE_KIND,
-            content: resolved.content,
-          };
-          cache.set(item.contentId, { signature, link });
-        }
+        const source = sourceContent(item);
+        const failed = failures.get(item.contentId);
+        const link = cached?.signature === signature ? cached.link : {
+          id: item.contentId,
+          title: contentTitle(shape, source.text ?? ""),
+          kind: SHAPE_KIND,
+          content: {
+            ...source,
+            status: shape.type === "text" ? "ready" as const
+              : failed?.signature === signature ? "error" as const : "pending" as const,
+          },
+        };
         (next[item.nodeId] ??= []).push(link);
       }
+      return next;
+    };
+    const publishPreview = () => {
       if (disposed) return;
-      setLinks((previous) => (sameMap(previous, next) ? previous : next));
+      const next = currentMap();
+      setLinks((previous) => sameMap(previous, next) ? previous : next);
     };
-
-    const schedule = (): void => {
-      if (timer !== null) clearTimeout(timer);
-      timer = setTimeout(() => {
-        timer = null;
-        void recompute();
-      }, EXPORT_DELAY_MS);
+    const stillCurrent = (item: ContentDescriptor, signature: string) => {
+      const arrow = editor.getShape(item.arrowId);
+      if (!arrow || arrow.type !== "arrow") return false;
+      const ends = contentArrowEnds(item.arrowId, editor.getBindingsFromShape(item.arrowId, "arrow"), (id) => editor.getShape(id));
+      return ends?.nodeId === item.nodeId && ends.shapeId === item.shapeId && shapeSignature(editor, item.shapeId) === signature;
     };
-
+    const run = async () => {
+      timer = null;
+      if (disposed) return;
+      if (inFlight) { dirty = true; return; }
+      inFlight = true;
+      dirty = false;
+      const descriptors = collectContentLinks(editor);
+      let retry = false;
+      try {
+        const alive = new Set(descriptors.map((item) => item.contentId));
+        for (const key of cache.keys()) if (!alive.has(key)) cache.delete(key);
+        for (const key of failures.keys()) if (!alive.has(key)) failures.delete(key);
+        for (const item of descriptors) {
+          const signature = shapeSignature(editor, item.shapeId);
+          if (cache.get(item.contentId)?.signature === signature) continue;
+          const failure = failures.get(item.contentId);
+          const attempts = failure?.signature === signature ? failure.attempts : 0;
+          if (attempts >= 3) continue;
+          try {
+            const resolved = await resolveContent(editor, item.shapeId, item.contentId, deps);
+            if (disposed || !stillCurrent(item, signature)) { dirty = true; break; }
+            if (!resolved) continue;
+            cache.set(item.contentId, {
+              signature,
+              link: { id: item.contentId, title: resolved.title, kind: SHAPE_KIND,
+                content: { ...sourceContent(item), ...resolved.content, status: "ready" } },
+            });
+            failures.delete(item.contentId);
+          } catch {
+            if (disposed || !stillCurrent(item, signature)) { dirty = true; break; }
+            failures.set(item.contentId, { signature, attempts: attempts + 1 });
+            retry ||= attempts + 1 < 3;
+          }
+        }
+      } finally {
+        inFlight = false;
+        if (!disposed) {
+          publishPreview();
+          if (dirty || retry) schedule();
+        }
+      }
+    };
+    function schedule() {
+      if (disposed) return;
+      dirty = true;
+      // A leading deadline avoids starvation during unrelated document edits.
+      if (timer === null) timer = setTimeout(() => { void run(); }, EXPORT_DELAY_MS);
+      if (!previewQueued) {
+        previewQueued = true;
+        queueMicrotask(() => { previewQueued = false; publishPreview(); });
+      }
+    }
+    const refresh = () => { cache.clear(); failures.clear(); schedule(); };
     schedule();
     const off = editor.store.listen(schedule, { scope: "document" });
+    window.addEventListener(REFRESH_CONTENT_EVENT, refresh);
     return () => {
       disposed = true;
       if (timer !== null) clearTimeout(timer);
       off();
+      window.removeEventListener(REFRESH_CONTENT_EVENT, refresh);
     };
-  }, [editor, workspaceId]);
-
+  }, [editor, workspaceId, boardId]);
   return links;
 }

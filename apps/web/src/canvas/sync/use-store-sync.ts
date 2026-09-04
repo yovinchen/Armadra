@@ -19,6 +19,7 @@ import { edgeToLink, nodeToShape } from "./project";
 import { isPushed, markPushed } from "./pushed";
 import {
   parseWhiteboard,
+  restorePendingRecords,
   serializeWhiteboard,
   splitPendingBindings,
 } from "./snapshot";
@@ -250,16 +251,9 @@ function load(editor: Editor, document: BoardDocument): void {
   editor.store.mergeRemoteChanges(() => push(editor, document));
 
   if (pending.length > 0) {
-    const alive = pending.filter((record) => {
-      const { fromId, toId } = record as unknown as {
-        fromId: TLShapeId;
-        toId: TLShapeId;
-      };
-      return Boolean(editor.getShape(fromId) && editor.getShape(toId));
+    editor.store.mergeRemoteChanges(() => {
+      restorePendingRecords(editor, pending);
     });
-    if (alive.length > 0) {
-      editor.store.mergeRemoteChanges(() => editor.store.put(alive));
-    }
   }
 
   // 打开看板不该是「可以撤销的一步」。

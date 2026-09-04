@@ -4,13 +4,15 @@ import {
   type TLShape,
   type TLShapeId,
 } from "tldraw";
-import { ArrowDownToLine, ArrowUpToLine, Copy, StickyNote, Trash2 } from "lucide-react";
+import { ArrowDownToLine, ArrowUpToLine, Copy, Link2, RefreshCw, StickyNote, Trash2 } from "lucide-react";
 
-import { ContextMenuItem, ContextMenuSeparator } from "@/ui/context-menu";
+import { ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuSubTrigger, ContextMenuSubContent } from "@/ui/context-menu";
 import { useT } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
 import { getEditor } from "../editor-context";
 import { isWhiteboardShapeType } from "../tools";
+import { isContentShape, refreshContentReferences } from "../content-links";
+import { createContentReference, referenceTargets } from "../create-content-reference";
 
 /**
  * 白板 shape 的右键菜单（§5「右键」那一行的第三种情况）。
@@ -74,9 +76,26 @@ export function ShapeMenuContent({ shape }: { shape: TLShape }) {
 
   const targets = shapeMenuTargets(editor, shape);
   const convertible = canConvertToSticky(shape);
+  const agents = referenceTargets(editor);
 
   return (
     <>
+      {isContentShape(shape) ? (
+        <>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger><Link2 />{t("shape.referenceAgent")}</ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+              {agents.length === 0 ? <ContextMenuItem disabled>{t("shape.noAgents")}</ContextMenuItem> : agents.map((agent) => (
+                <ContextMenuItem key={agent.id} onSelect={() => createContentReference(editor, shape.id, agent.id)}>
+                  {(agent.props as { title?: string }).title || agent.id}
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          <ContextMenuItem onSelect={refreshContentReferences}><RefreshCw />{t("shape.refreshReference")}</ContextMenuItem>
+          <ContextMenuSeparator />
+        </>
+      ) : null}
       <ContextMenuItem onSelect={() => editor.bringToFront(targets)}>
         <ArrowUpToLine />
         {t("shape.bringToFront")}
