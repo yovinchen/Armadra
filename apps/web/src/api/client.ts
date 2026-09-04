@@ -1,3 +1,4 @@
+import { resolveRuntimeUrl, runtimeSocketUrl } from "./runtime-url";
 import {
   agentListSchema,
   agentStatusSchema,
@@ -83,8 +84,10 @@ import { t } from "../app/preferences-store";
  *  3. 这里不做任何缓存 / 重试 / 状态；调用方自己决定。
  */
 
-export const RUNTIME_URL =
-  import.meta.env.VITE_RUNTIME_URL ?? "http://127.0.0.1:43120";
+export const RUNTIME_URL = resolveRuntimeUrl(
+  import.meta.env.VITE_RUNTIME_URL,
+  typeof window === "undefined" ? "http://localhost/" : window.location.href,
+);
 
 /** 204 / 空响应体在进 schema 之前先变成 `undefined`。 */
 const noContentSchema = z.unknown().transform(() => undefined);
@@ -702,10 +705,7 @@ export const runtimeApi = {
 /* ------------------------------- WebSocket URL ---------------------------- */
 
 function socketUrl(pathname: string): string {
-  const url = new URL(RUNTIME_URL);
-  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  url.pathname = pathname;
-  return url.toString();
+  return runtimeSocketUrl(RUNTIME_URL, pathname);
 }
 
 export function terminalWebSocketUrl(sessionId: string): string {

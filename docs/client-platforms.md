@@ -14,6 +14,6 @@ Armadra 使用同一套 React/tldraw 页面。桌面端通过 Tauri 提供本机
 
 手机浏览器是客户端，不在手机上启动桌面 CLI。终端、Git、文件与 Agent 仍由电脑上的 Runtime 执行。当前项目未提供 iOS/Android 原生安装包，也未提供远程配对、账户认证或公网服务。
 
-电脑上的浏览器可直接使用 `./armadra.sh run web`。如果已有带认证的 HTTPS 反向代理，可将 Web 静态产物和 Runtime 的 `/api/*`、`/health`、WebSocket 代理到同一来源，并在构建时把 `VITE_RUNTIME_URL` 设置为该来源，例如 `https://canvas.example.com`（此处仅为配置示例）。Runtime 本身仍保持回环监听；代理必须保护 HTTP 与 WebSocket 的所有入口，不能把可执行终端和主机文件 API 裸露到网络。
+电脑上的浏览器可直接使用 `./armadra.sh run web`。如果已有带认证的 HTTPS 反向代理，可将 Web 静态产物和 Runtime 的 `/api/*`、`/health`、WebSocket 代理到同一来源，并在构建时把 `VITE_RUNTIME_URL` 设置为该来源，例如 `https://canvas.example.com`（此处仅为配置示例）。也可以显式设置空值使用当前来源，或设置 `/runtime` 这样的反向代理前缀；HTTP 与 WebSocket 会保留同一前缀。Runtime 本身仍保持回环监听；代理必须保护 HTTP 与 WebSocket 的所有入口，不能把可执行终端和主机文件 API 裸露到网络。
 
 这份客户端适配不会自动更改监听地址、CORS、账户配置或主机权限。手机原生打包与安全远程连接属于独立后续实现，不应把响应式页面等同于完整远程主机产品。
