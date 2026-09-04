@@ -357,6 +357,18 @@ describe("折叠", () => {
     expect(byId(a.id)?.size).toEqual({ width: 640, height: 440 });
   });
 
+  it("折叠捕获当前尺寸，不恢复原生拖拽前的旧高度", () => {
+    const a = makeNode("terminal", {
+      size: { width: 640, height: 720 },
+      expandedHeight: 440,
+    });
+    load([a]);
+    state().setCollapsed(a.id, true);
+    expect(byId(a.id)?.expandedHeight).toBe(720);
+    state().setCollapsed(a.id, false);
+    expect(byId(a.id)?.size).toEqual({ width: 640, height: 720 });
+  });
+
   it("折叠只置 dirty", () => {
     const a = makeNode("terminal");
     load([a]);

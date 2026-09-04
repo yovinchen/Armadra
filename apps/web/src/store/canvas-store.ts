@@ -615,7 +615,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         const height = node.size?.height ?? defaultNodeSize(node.type).height;
         const width = node.size?.width ?? defaultNodeSize(node.type).width;
         if (collapsed) {
-          const expandedHeight = node.expandedHeight ?? height;
+          // The visible size is authoritative after native canvas resizing.
+          const expandedHeight = height;
           next = {
             size: { width, height: COLLAPSED_HEIGHT },
             expandedHeight,

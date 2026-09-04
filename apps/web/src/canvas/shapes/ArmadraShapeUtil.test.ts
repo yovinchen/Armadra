@@ -116,6 +116,7 @@ describe("ArmadraShapeUtil", () => {
     const next = util.onResize.call(util, shape, resizeInfo(shape, 2, 2));
     expect(next?.props?.w).toBe(480);
     expect(next?.props?.h).toBe(400);
+    expect(next?.props?.expandedHeight).toBe(400);
   });
 
   /** 折叠时高度钉死、上下边不动：纵向 resize 被禁掉（§4.1）。 */

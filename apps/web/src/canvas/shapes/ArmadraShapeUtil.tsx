@@ -22,7 +22,11 @@ import {
 import { NodeShell } from "@/nodes/NodeShell";
 import { useCanvasNode, useCanvasStore } from "@/store/canvas-store";
 
-import { toNodeId, type ArmadraProps, type ArmadraShape } from "./armadra-shape";
+import {
+  toNodeId,
+  type ArmadraProps,
+  type ArmadraShape,
+} from "./armadra-shape";
 
 /**
  * 节点 shape（tldraw 计划 §4.1，归属 nodes）。
@@ -221,6 +225,7 @@ export class ArmadraShapeUtil extends ShapeUtil<ArmadraShape> {
         ...next.props,
         w: Math.max(min.width, next.props.w),
         h: Math.max(min.height, next.props.h),
+        expandedHeight: Math.max(min.height, next.props.h),
       },
     };
   }
