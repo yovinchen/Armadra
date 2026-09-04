@@ -16,7 +16,7 @@
 | 阶段  | 状态     | 已完成 / 剩余                                                                                      |
 | ----- | -------- | -------------------------------------------------------------------------------------------------- |
 | M0    | 部分完成 | 三语言协议及真实 Host 握手完成；macOS CDP 核验通过，Windows 仅交叉检查，实机与完整 Worker 仍待完成 |
-| M1    | 进行中   | 持久 Host 身份、单实例锁和独立 HostClient 已完成；应用接线、服务管理与业务迁移未完成               |
+| M1    | 进行中   | 身份、单实例、HostClient、显式来源许可与连接设置页已完成；自动服务管理、认证和业务迁移未完成       |
 | M2–M7 | 待实施   | 后台调度及其他产品工作流仍按各阶段交付                                                             |
 | M8    | 预留范围 | 多人、多账号及发布更新只按设计交付前期契约                                                         |
 
@@ -45,6 +45,9 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 | `89128f1` | 可重复执行器核验工具       | 独立 Chromium CDP 探针与 Windows ConPTY 编译探针；结果和未验范围见 [核验记录](./research/m0-executor-probes.md) |
 | `41b9b15` | 持久 Host 身份与单实例保护 | OS 文件锁、损坏身份拒绝、跨进程竞争/强杀恢复、真实 CLI 重启与 minor 0 兼容                                      |
 | `b4a21e8` | 独立 Protobuf HostClient   | 63 项单测及实际 Host 重启前后握手；代理路径前缀、响应限额、取消/超时与错误分类                                  |
+| `44c1dff` | 精确 Origin 许可           | 来源/预检/authority 拒绝规则、配置前置校验、Go race/vet、真实 HTTP 验证                                         |
+| `51cbcfd` | Host 连接设置页            | 39 项定向测试、类型检查/构建；真实浏览器连接、失败清理、390px 页面边界                                          |
+| `c2e55eb` | 设置与窄屏侧栏互斥         | 12 项侧栏测试；最新代码实际宽→窄切换、偏好恢复与手机侧栏导航验证                                                |
 
 协议验收覆盖：中文/emoji、uint64 最大值、int64 最小值、超过 JS 安全整数的 generation、optional 未传/零值、oneof 三个分支、截断拒绝、未知字段行为。Go/TS 默认保留未知字段；prost 会丢弃，未来 Rust 透明中继必须转发原始载荷。尚未引入枚举，不将未知枚举检查记为已完成。
 
@@ -70,7 +73,19 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - Unix 使用 0700/0600；Windows 继承目录 ACL，未建立自定义目录的私有 DACL，不将其记为凭据/业务数据权限隔离完成。当前仅保存公开身份元数据。
 - 独立 HostClient 已通过 Node 实际网络验证，但尚未接入应用运行页面、Tauri 生命周期、远程登录或跨源认证；本轮不宣称 M1 已整体完成。
 
-## 执行器 PoC 结果
+## M1 第二批验收
+
+- Go CLI 支持重复传入 `--allow-origin`，仅明确允许的规范化来源可读取 metadata；保留回环 authority 限制。合法 OPTIONS 返回精确 ACAO/Vary，未启用 credentials CORS，未知路由/方法/header/Origin 拒绝。
+- 无效来源配置在数据目录和监听操作前失败；错误不回显潜在凭据。Tauri 的三种精确来源可显式配置，未将此等同于设备认证。
+- 设置 → 连接 → 后台服务可显式检查/取消、保留本设备有效地址、展开查看持久/进程标识。编辑、失败、卸载不保留旧连接成功。当前仍不自动启动 Host、不切换 Runtime 业务。
+- 默认桌面 CSP 新增 `http://127.0.0.1:43121`，未开放任意远程地址。Web 依赖链的 predev/prebuild 构建协议和客户端包。
+- 定向测试：连接状态 16 项、页面 7 项、i18n 7 项、SettingsDialog 9 项，共 39 项；独立侧栏修复另 12 项。web typecheck/build、Go race/vet 与 Windows Go 交叉构建通过。
+- Playwright 使用独立浏览器和 Vite 1442、真实 Go Host 43121，验证显式跨源握手成功，改错地址后旧 ID 清除，重新连接成功；1280px 与 390×844 视口下控件可见、无面板横向溢出。
+- 复测发现开发服务器返回旧模块，重启并确认返回最新代码后重新执行宽→窄回归：设置保持可操作、关闭后恢复侧栏偏好、手机侧栏进入设置会收起抽屉。不能将旧模块上的失败算为新代码验证。
+- 实测时旧 Rust Runtime 故意未运行，其连接拒绝日志为已知环境状态；Host 连接检查仍独立成功。没有验证 iOS/Android 实机或打包 Tauri 原生窗口。
+- 本地截图位于 `output/playwright/host-connection-desktop.png`、`host-connection-mobile.png`、`host-connection-mobile-resize.png`，不提交临时截图/profile。测试浏览器、Vite 与 Host 均已关闭。
+
+## 执行器 PoC 结果（M0）
 
 - 独立临时 Chrome profile，Chrome `152.0.7977.76` / CDP `1.3`，macOS arm64。
 - 实际完成 headless 启动、HTTP 导航、1000×700 viewport、点击、英文/中文/emoji 文本注入、表单/Canvas 截图、400 px 滚轮、screencast 帧及 ACK；探针退出后 CDP 端口关闭。
@@ -80,6 +95,6 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 
 ## 下一步
 
-1. M1 下一批：将已完成的 HostClient 接到明确的前端服务连接适配层，建设后台服务管理/认证接入和业务存储迁移准备；原 Rust Runtime 在切换完成前保持业务权威，禁止双写。已存在持久身份、单实例和客户端包，不重复实现。
+1. M1 下一批：建设 Host 后台服务的启动/状态/停止管理、认证接入与业务存储迁移准备；原 Rust Runtime 在切换完成前保持业务权威，禁止双写。连接设置页及其客户端、持久身份和来源许可已完成，不重复实现；当前检查按钮不承担启动或切换服务的语义。
 2. 在具备 Windows runner 后补链接与会话重附着实测；macOS 可继续建设 Browser Worker，不让平台专属验证阻止其他模块推进。
 3. 后续继续使用子 Agent 分工，每个功能验证后独立提交。自动检查维持 15 分钟，全部当前范围完成前保持启用。
