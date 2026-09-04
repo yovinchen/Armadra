@@ -1,13 +1,308 @@
-import { TerminalSurface } from "../terminal/TerminalSurface";
-import type { NodeContentProps, OfKind } from "./types";
+import * as React from "react";
+import {
+  ArrowUpDown,
+  MessageSquare,
+  MoreHorizontal,
+  RotateCw,
+  Search,
+  Sparkles,
+  Square,
+} from "lucide-react";
 
-/** Terminal body — the xterm surface owns the header, screen and footer. */
-export function TerminalNode({ id, data, focused }: NodeContentProps) {
+import { Badge } from "@/ui/badge";
+import { IconButton } from "@/ui/icon-button";
+import { Input } from "@/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
+import { useT } from "@/app/preferences-store";
+import { agentColorVar, agentLabel } from "@/agent/launch";
+import { PendingLaunchButton } from "@/agent/PendingLaunchButton";
+import {
+  agentHeaderState,
+  useAgentStatus,
+  useAgentStatusStore,
+} from "@/agent/status-store";
+import {
+  BELL_FLASH_MS,
+  TerminalSurface,
+  type TerminalSurfaceHandle,
+  type TerminalSurfaceStatus,
+} from "@/terminal/TerminalSurface";
+import {
+  canSuggestTitle,
+  openNodeAnnotation,
+  suggestNodeTitle,
+} from "@/meta/annotations";
+import { useSshHosts } from "@/panels/settings/ssh-hosts";
+import { NodeShell } from "./NodeShell";
+import type { NodeBodyProps } from "./registry";
+import { answerApproval } from "./runtime-extras";
+import { registerTerminalHandle } from "./terminal-registry";
+// 副作用：注册 Agent 专属的右键菜单项（重启 / 权限模式 / 回收）
+import "./terminal-menu";
+
+/** 清未读（本地 + 回执）。已读时是空操作，可以随手调。 */
+function markNodeRead(nodeId: string): void {
+  const store = useAgentStatusStore.getState();
+  if (store.statuses[nodeId]?.unread) store.markRead(nodeId);
+}
+
+/**
+ * 终端节点（含 Agent，§5.1）。节点体就是 xterm；头部按 §3.4 排：
+ * Agent chip → 退出码 → 状态胶囊 →（blocked 时）允许/拒绝 → 右侧图标钮。
+ */
+export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
+  const t = useT();
+  const data = node.data.kind === "terminal" ? node.data : undefined;
+  const agent = data?.agent;
+  // SSH 终端（§21）：头部 chip 显示主机名；主机被删掉时退回 id，
+  // 免得节点看起来像一个普通本地终端。
+  const hosts = useSshHosts();
+  const sshLabel = data?.ssh
+    ? (hosts.find((host) => host.id === data.ssh?.hostId)?.name ??
+      data.ssh.hostId)
+    : null;
+  const agentStatus = useAgentStatus(id);
+  const surfaceRef = React.useRef<TerminalSurfaceHandle>(null);
+
+  const [surface, setSurface] = React.useState<TerminalSurfaceStatus>({
+    connection: "idle",
+    exitCode: data?.lastExitCode ?? null,
+    error: null,
+  });
+  const [findOpen, setFindOpen] = React.useState(false);
+  const [query, setQuery] = React.useState("");
+  /** BEL：头部图标闪 600ms（§18.3 铃声行）。只换颜色，不改任何尺寸。 */
+  const [bell, setBell] = React.useState(false);
+  const bellTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onStatusChange = React.useCallback((next: TerminalSurfaceStatus) => {
+    setSurface(next);
+  }, []);
+
+  const onBell = React.useCallback(() => {
+    setBell(true);
+    if (bellTimerRef.current) clearTimeout(bellTimerRef.current);
+    bellTimerRef.current = setTimeout(() => setBell(false), BELL_FLASH_MS);
+  }, []);
+
+  const onFind = React.useCallback(() => setFindOpen(true), []);
+
+  React.useEffect(
+    () => () => {
+      if (bellTimerRef.current) clearTimeout(bellTimerRef.current);
+    },
+    [],
+  );
+
+  // 右键菜单和画布控制 API 拿不到组件 ref，句柄统一走 terminal-registry
+  React.useEffect(() => {
+    const handle = surfaceRef.current;
+    if (!handle) return;
+    return registerTerminalHandle(id, handle);
+  }, [id]);
+
+  // 胶囊 / 光晕的映射表在 status-store：会话侧栏与子代理卡片读同一张表。
+  const header = agent ? agentHeaderState(agentStatus) : {};
+
+  const approval =
+    agent && agentStatus?.state === "blocked" && agentStatus.pendingId
+      ? {
+          pendingId: agentStatus.pendingId,
+          onAnswer: (decision: "allow" | "deny") => {
+            const pendingId = agentStatus.pendingId as string;
+            // 先收起按钮：Runtime 的下一条 `agent.status` 未必立刻到，
+            // 让用户对着一个已经答过的请求再点一次是最糟的。
+            useAgentStatusStore.getState().resolveApproval(pendingId);
+            void answerApproval(pendingId, decision);
+          },
+        }
+      : undefined;
+
+  const exited =
+    surface.connection === "exited" || surface.connection === "failed";
+
+  const headerChips = (
+    <>
+      {sshLabel !== null && (
+        <Badge
+          variant="outline"
+          className="h-[15px] px-1.5 text-[length:var(--text-caption)]"
+        >
+          <ArrowUpDown className="size-2.5" />
+          <span className="truncate">{sshLabel}</span>
+        </Badge>
+      )}
+      {agent && (
+        <Badge
+          variant="outline"
+          className="h-[15px] px-1.5 text-[length:var(--text-caption)]"
+          style={{
+            color: agentColorVar(agent.id),
+            borderColor: agentColorVar(agent.id),
+          }}
+        >
+          {agentLabel(agent.id)}
+        </Badge>
+      )}
+      {exited && (
+        <Badge
+          variant="outline"
+          className="h-[15px] px-1.5 text-[length:var(--text-caption)]"
+        >
+          {t("terminal.exited")}
+          {surface.exitCode === null ? "" : ` ${surface.exitCode}`}
+        </Badge>
+      )}
+    </>
+  );
+
+  const headerActions = (
+    // `display:contents` 的包裹层：只为了给下面的图标挂一个铃声闪烁类，
+    // 它自己不占布局，头部仍然是一行 34px（§18.2 规则 1）。
+    <span
+      style={{ display: "contents" }}
+      {...(bell ? { "data-bell": "true" } : {})}
+    >
+      <PendingLaunchButton nodeId={id} />
+      {exited && (
+        <IconButton
+          label={t("terminal.rerun")}
+          onClick={() => surfaceRef.current?.restart()}
+        >
+          <RotateCw />
+        </IconButton>
+      )}
+      {!exited && (
+        <IconButton
+          label={t("terminal.interrupt")}
+          onClick={() => surfaceRef.current?.terminate("interrupt")}
+        >
+          <Square />
+        </IconButton>
+      )}
+
+      <Popover open={findOpen} onOpenChange={setFindOpen}>
+        <PopoverTrigger asChild>
+          <IconButton label={t("terminal.find")}>
+            <Search />
+          </IconButton>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-[220px] p-1.5">
+          <Input
+            autoFocus
+            aria-label={t("terminal.find")}
+            className="h-7 text-xs"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                surfaceRef.current?.find(
+                  query,
+                  event.shiftKey ? "previous" : "next",
+                );
+              }
+              if (event.key === "Escape") {
+                surfaceRef.current?.clearSearch();
+                setFindOpen(false);
+              }
+            }}
+          />
+        </PopoverContent>
+      </Popover>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <IconButton label={t("terminal.more")}>
+            <MoreHorizontal />
+          </IconButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {/* AI 命名 / 评论（§17）。头部不再加按钮、也不加行：终端节点的头部
+              永远是一行 34px，下面直接是 xterm，多一行就会触发 fit 抖动。 */}
+          {canSuggestTitle(node) && (
+            <DropdownMenuItem onSelect={() => void suggestNodeTitle(id)}>
+              <Sparkles />
+              {t("meta.suggestTitle")}
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onSelect={() => openNodeAnnotation(id, "note")}>
+            <MessageSquare />
+            {t("meta.note")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => surfaceRef.current?.terminate("process")}
+          >
+            {t("terminal.killProcess")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            variant="destructive"
+            onSelect={() => surfaceRef.current?.terminate("session")}
+          >
+            {t("terminal.destroySession")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => surfaceRef.current?.recycle()}>
+            {t("terminal.recycle")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => surfaceRef.current?.restart()}>
+            {t("terminal.rerun")}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </span>
+  );
+
+  if (!data) return null;
+
   return (
-    <TerminalSurface
-      id={id}
-      data={data as OfKind<"terminal">}
-      focused={focused}
-    />
+    <div
+      className="h-full w-full"
+      // 摸一下终端就算读过了（`markRead` 顺手把回执 POST 给 Runtime）。
+      // 指针与鼠标两条路都挂：合成点击（自动化、部分输入设备）只发其中一种。
+      onPointerDownCapture={() => markNodeRead(id)}
+      onMouseDownCapture={() => markNodeRead(id)}
+      onKeyDown={(event) => {
+        // ⌘F / Ctrl+F 在终端里打开头部的搜索框，而不是浏览器查找
+        if (
+          (event.metaKey || event.ctrlKey) &&
+          event.key.toLowerCase() === "f"
+        ) {
+          event.preventDefault();
+          setFindOpen(true);
+        }
+      }}
+    >
+      <NodeShell
+        node={node}
+        selected={selected}
+        {...(header.pill
+          ? {
+              status: {
+                tone: header.pill.tone,
+                label: t(header.pill.labelKey),
+              },
+            }
+          : {})}
+        {...(header.glow ? { glow: header.glow } : {})}
+        {...(approval ? { approval } : {})}
+        headerChips={headerChips}
+        headerActions={headerActions}
+      >
+        <TerminalSurface
+          ref={surfaceRef}
+          nodeId={id}
+          data={data}
+          collapsed={collapsed}
+          onStatusChange={onStatusChange}
+          onBell={onBell}
+          onFind={onFind}
+        />
+      </NodeShell>
+    </div>
   );
 }

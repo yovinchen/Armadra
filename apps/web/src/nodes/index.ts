@@ -1,52 +1,25 @@
-import type { ComponentType } from "react";
-import type { CanvasNodeType } from "@ai-coding-canvas/shared";
-import { AgentNode } from "./AgentNode";
-import { BrowserNode } from "./BrowserNode";
-import { ContextNode } from "./ContextNode";
-import { DiffNode } from "./DiffNode";
-import { FileNode } from "./FileNode";
-import { ImageNode } from "./ImageNode";
-import { LogNode } from "./LogNode";
-import { NoteNode } from "./NoteNode";
-import { TaskNode } from "./TaskNode";
-import { TerminalNode } from "./TerminalNode";
-import type { NodeContentProps } from "./types";
-
-export type { NodeContentProps, OfKind } from "./types";
-
+/**
+ * 节点模块的对外面（计划书 §13.2 / tldraw 计划 §9.4）。
+ *
+ * 画布侧的入口不再是 React Flow 的 `nodeTypes`，而是 `canvas/shapes/
+ * AiccShapeUtil` —— 它按 `NODE_BODY` 渲染节点体，按 `NODE_META` 夹住最小
+ * 尺寸。这里只保留菜单、面板、侧栏要用的东西。
+ */
+export { NodeShell, maximizeRect, type NodeShellProps } from "./NodeShell";
 export {
-  EDGE_META,
+  COLLAPSED_HEIGHT,
+  DRAG_HANDLE_CLASS,
+  HEADER_HEIGHT,
+  NODE_BODY,
+  NODE_DRAG_HANDLE,
   NODE_META,
-  PALETTE_TYPES,
-  SPINNING_STATUSES,
-  STATUS_META,
-  type EdgeMeta,
+  NODE_SHELL_SELF,
+  defaultNodeSize,
+  minNodeSize,
+  nodeMeta,
+  type NodeBodyProps,
   type NodeMeta,
-  type StatusMeta,
-  type StatusTone,
-} from "./meta";
-
-export {
-  NODE_ACTIONS,
-  emitNodeCommand,
-  NODE_COMMANDS,
-  type NodeAction,
-  type NodeActionContext,
-} from "./actions";
-
-/** Type → body component. The shell (header/handles) lives in `canvas/NodeCard`. */
-export const NODE_CONTENT: Record<
-  CanvasNodeType,
-  ComponentType<NodeContentProps>
-> = {
-  task: TaskNode,
-  agent: AgentNode,
-  terminal: TerminalNode,
-  diff: DiffNode,
-  file: FileNode,
-  context: ContextNode,
-  note: NoteNode,
-  browser: BrowserNode,
-  image: ImageNode,
-  log: LogNode,
-};
+} from "./registry";
+export { SubagentCard, type SubagentCardProps } from "./SubagentCard";
+export { normalizeUrl } from "./BrowserNode";
+export { breadcrumbs } from "./FilesNode";
