@@ -6,7 +6,6 @@ import {
   Group,
   Maximize2,
   Minimize2,
-  Palette,
   Trash2,
   Ungroup,
 } from "lucide-react";
@@ -19,7 +18,6 @@ import {
   ContextMenuSubContent,
   ContextMenuSubTrigger,
 } from "@/ui/context-menu";
-import { ColorSwatches } from "@/ui/color-picker";
 import { useT } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
 import { runCanvasCommand } from "../commands";
@@ -155,21 +153,6 @@ export function NodeMenuContent({ node }: { node: CanvasNode }) {
           {t("node.leaveGroup")}
         </ContextMenuItem>
       ) : null}
-
-      <ContextMenuSub>
-        <ContextMenuSubTrigger>
-          <Palette />
-          {t("node.color")}
-        </ContextMenuSubTrigger>
-        <ContextMenuSubContent className="p-1.5">
-          <ColorSwatches
-            value={node.color}
-            onChange={(color) => {
-              for (const id of targetIds) store().updateNode(id, { color });
-            }}
-          />
-        </ContextMenuSubContent>
-      </ContextMenuSub>
 
       <ContextMenuItem onSelect={() => store().duplicateNodes(targetIds)}>
         <Copy />

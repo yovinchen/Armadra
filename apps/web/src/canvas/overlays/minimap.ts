@@ -29,7 +29,7 @@ export interface MinimapItem {
   /** 节点 id（`armadra` shape）或 shape id（白板内容）。 */
   id: string;
   rect: MinimapRect;
-  /** 节点色（`CanvasNode.color`）；白板 shape 没有。 */
+  /** Legacy input only; custom node colours are no longer rendered. */
   color?: string;
   glow?: AgentGlow;
   selected?: boolean;
@@ -59,8 +59,7 @@ export interface MinimapPalette {
  * 状态 → 描边色（§3.2）。
  *
  * 三种状态的优先级由 `agentHeaderState()` 定好了（一个节点同一时刻只会有
- * 一种光晕），这里只做映射；没有状态就用节点自己的颜色，让缩略图仍然能
- * 一眼看出「哪块是哪个节点」。
+ * 一种光晕），这里只做映射；没有状态的节点使用中性描边。
  */
 export function minimapStroke(
   item: Pick<MinimapItem, "glow" | "color" | "plain">,
@@ -75,7 +74,7 @@ export function minimapStroke(
     case "unread":
       return palette.unread;
     default:
-      return item.color ?? palette.shape;
+      return palette.shape;
   }
 }
 

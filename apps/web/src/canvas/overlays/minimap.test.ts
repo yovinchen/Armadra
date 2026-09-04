@@ -40,14 +40,17 @@ describe("minimap status stroke", () => {
     );
   });
 
-  it("falls back to the node colour, then to the shape colour", () => {
-    expect(minimapStroke({ color: NODE_COLOR }, PALETTE)).toBe(NODE_COLOR);
+  it("ignores historical custom colours for nodes without a semantic state", () => {
+    expect(minimapStroke({ color: NODE_COLOR }, PALETTE)).toBe(PALETTE.shape);
     expect(minimapStroke({}, PALETTE)).toBe(PALETTE.shape);
   });
 
   it("never paints whiteboard shapes with a status colour", () => {
     expect(
-      minimapStroke({ plain: true, glow: "working", color: NODE_COLOR }, PALETTE),
+      minimapStroke(
+        { plain: true, glow: "working", color: NODE_COLOR },
+        PALETTE,
+      ),
     ).toBe(PALETTE.shape);
   });
 

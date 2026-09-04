@@ -84,12 +84,10 @@ function collectItems(
     if (!shape) continue;
     if (shape.type === "armadra" && isDocumentShapeId(id)) {
       const nodeId = toNodeId(id);
-      const color = (shape.props as { color?: string }).color;
       const glow = glowOf(nodeId);
       nodes.push({
         id: nodeId,
         rect,
-        ...(color ? { color } : {}),
         ...(glow ? { glow } : {}),
         selected: selected.has(id),
       });
@@ -126,7 +124,10 @@ export function drawMinimap({
       (box, item) => unionRect(box, item.rect),
       undefined,
     ) ?? viewport;
-  const view = fitPageBounds(unionRect(content, viewport) ?? EMPTY_VIEW, width / height);
+  const view = fitPageBounds(
+    unionRect(content, viewport) ?? EMPTY_VIEW,
+    width / height,
+  );
   const zoom = minimapZoom(view, width);
 
   const ctx = canvas.getContext("2d");
@@ -148,7 +149,7 @@ export function drawMinimap({
   for (const item of items) {
     const { x, y, width: w, height: h } = item.rect;
     ctx.globalAlpha = minimapFillAlpha(item);
-    ctx.fillStyle = item.plain ? palette.shape : (item.color ?? palette.shape);
+    ctx.fillStyle = palette.shape;
     ctx.fillRect(x, y, w, h);
     ctx.globalAlpha = 1;
     if (item.plain) continue;

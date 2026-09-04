@@ -17,11 +17,6 @@ import { beginHandleLink, endHandleLink } from "./LinkArrow";
  * 把手只管起笔。
  */
 
-export interface ConnectionHandlesProps {
-  /** 节点色：把手是它的实心圆点。 */
-  color: string;
-}
-
 type HandleSide = "left" | "right";
 
 function startArrow(event: React.PointerEvent<HTMLDivElement>): void {
@@ -50,11 +45,9 @@ function startArrow(event: React.PointerEvent<HTMLDivElement>): void {
 
 function ConnectionHandle({
   side,
-  color,
   label,
 }: {
   side: HandleSide;
-  color: string;
   label: string;
 }) {
   return (
@@ -65,18 +58,17 @@ function ConnectionHandle({
       data-slot="connection-handle"
       data-side={side}
       className="node-connection-handle"
-      style={{ background: color }}
       onPointerDown={startArrow}
     />
   );
 }
 
-export function ConnectionHandles({ color }: ConnectionHandlesProps) {
+export function ConnectionHandles() {
   const t = useT();
   return (
     <>
-      <ConnectionHandle side="left" color={color} label={t("node.linkIn")} />
-      <ConnectionHandle side="right" color={color} label={t("node.linkOut")} />
+      <ConnectionHandle side="left" label={t("node.linkIn")} />
+      <ConnectionHandle side="right" label={t("node.linkOut")} />
     </>
   );
 }

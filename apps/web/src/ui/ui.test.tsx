@@ -2,8 +2,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
-import { ColorDot, NODE_COLORS, isNodeColor } from "@/ui/color-dot";
-import { ColorPicker, ColorSwatches } from "@/ui/color-picker";
+import { ColorDot } from "@/ui/color-dot";
 import { IconButton } from "@/ui/icon-button";
 import { Kbd, KbdGroup } from "@/ui/kbd";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
@@ -103,69 +102,14 @@ describe("StatusPill", () => {
   });
 });
 
-describe("ColorDot / ColorPicker", () => {
-  it("调色板就是 §3.4 的 7 色", () => {
-    expect(NODE_COLORS).toEqual([
-      "#0a84ff",
-      "#32d74b",
-      "#ffd60a",
-      "#ff453a",
-      "#bf5af2",
-      "#6ac4dc",
-      "#ff9f0a",
-    ]);
-    expect(isNodeColor("#0a84ff")).toBe(true);
-    expect(isNodeColor("#123456")).toBe(false);
-  });
-
-  it("ColorDot 按 size 出直径", () => {
+describe("ColorDot", () => {
+  it("supports semantic status indicators and whiteboard colour swatches", () => {
     const { container } = render(<ColorDot color="#0a84ff" size={8} />);
     const dot = container.querySelector(
       "[data-slot='color-dot']",
     ) as HTMLElement;
     expect(dot.style.width).toBe("8px");
     expect(dot.style.backgroundColor).toBe("rgb(10, 132, 255)");
-  });
-
-  it("色板是一个 radiogroup，选中项 aria-checked", () => {
-    render(<ColorSwatches value="#32d74b" onChange={() => {}} />);
-    const group = screen.getByRole("radiogroup", { name: "节点颜色" });
-    const radios = screen.getAllByRole("radio");
-    expect(group).toBeTruthy();
-    expect(radios).toHaveLength(7);
-    expect(radios[1]!.getAttribute("aria-checked")).toBe("true");
-    // 组内只有选中项进 Tab 序
-    expect(
-      radios.filter((node) => node.getAttribute("tabindex") === "0"),
-    ).toHaveLength(1);
-  });
-
-  it("点击色块回调具体颜色", () => {
-    const onChange = vi.fn();
-    render(<ColorSwatches onChange={onChange} />);
-    fireEvent.click(screen.getAllByRole("radio")[3]!);
-    expect(onChange).toHaveBeenCalledWith("#ff453a");
-  });
-
-  it("左右方向键在色块之间移动焦点并首尾相接", () => {
-    render(<ColorSwatches value="#0a84ff" onChange={() => {}} />);
-    const radios = screen.getAllByRole("radio");
-    radios[0]!.focus();
-    fireEvent.keyDown(radios[0]!, { key: "ArrowRight" });
-    expect(document.activeElement).toBe(radios[1]);
-    fireEvent.keyDown(radios[0]!, { key: "ArrowLeft" });
-    expect(document.activeElement).toBe(radios[6]);
-  });
-
-  it("ColorPicker 点击触发器后弹出色板", () => {
-    render(
-      <ColorPicker value="#0a84ff" onChange={() => {}}>
-        <button type="button">颜色</button>
-      </ColorPicker>,
-    );
-    expect(screen.queryByRole("radiogroup")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "颜色" }));
-    expect(screen.getByRole("radiogroup", { name: "节点颜色" })).toBeTruthy();
   });
 });
 

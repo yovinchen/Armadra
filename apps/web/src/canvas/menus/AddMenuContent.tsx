@@ -11,7 +11,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuShortcut,
 } from "@/ui/dropdown-menu";
-import { ColorDot } from "@/ui/color-dot";
 import { useT } from "@/app/preferences-store";
 import { commandKeysLabel } from "@/keybindings";
 import { useSshHosts } from "@/panels/settings/ssh-hosts";
@@ -68,7 +67,6 @@ export function AddMenuContent({ ctx, kind }: AddMenuContentProps) {
             >
               <Icon />
               <span className="min-w-0 flex-1 truncate">{item.label}</span>
-              {item.color ? <ColorDot color={item.color} size={8} /> : null}
               {disabledReason ? (
                 <span className="max-w-28 shrink-0 truncate text-[11px] text-muted-foreground">
                   {disabledReason}

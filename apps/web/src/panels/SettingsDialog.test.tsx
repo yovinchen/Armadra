@@ -149,6 +149,7 @@ describe("SettingsDialog", () => {
       SETTINGS_SECTIONS.length,
     );
     expect(screen.queryByPlaceholderText(/搜索/)).toBeNull();
+    expect(screen.queryByText(zh("settings.nodeColorStyle"))).toBeNull();
   });
 
   /**

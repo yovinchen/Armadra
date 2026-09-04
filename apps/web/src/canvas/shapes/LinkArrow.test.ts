@@ -319,6 +319,7 @@ describe("registerLinkArrow · 换形", () => {
       editor.arrow("shape:preview") as unknown as TLArrowShape,
     )!;
     const before = linkView(editor as unknown as Editor, preview);
+    expect(before?.color).toBe("var(--muted-foreground)");
     expect(before?.curve.sourceX).toBe(440);
     expect(before?.curve.targetX).toBe(740);
     await release(editor);

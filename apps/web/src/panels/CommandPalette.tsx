@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Bot } from "lucide-react";
 import { basename } from "../agent/sessions";
-import { agentColorVar } from "../agent/launch";
 import { formatRelativeTime } from "../lib/format";
 import {
   resumeLaunchCommand,
@@ -169,7 +168,7 @@ export function CommandPalette() {
                 value={`${t("meta.conversations")} ${conversation.title} ${basename(conversation.cwd)} ${conversation.provider}`}
                 onSelect={() => resume(conversation)}
               >
-                <Bot style={{ color: agentColorVar(conversation.provider) }} />
+                <Bot />
                 <span className="min-w-0 flex-1 truncate">
                   {conversation.title}
                 </span>

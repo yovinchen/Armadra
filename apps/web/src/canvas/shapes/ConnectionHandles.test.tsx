@@ -16,7 +16,7 @@ afterEach(() => {
 
 describe("ConnectionHandles", () => {
   it("renders one handle per side", () => {
-    const { container } = render(<ConnectionHandles color="#0a84ff" />);
+    const { container } = render(<ConnectionHandles />);
     const handles = container.querySelectorAll(
       '[data-slot="connection-handle"]',
     );
@@ -25,9 +25,7 @@ describe("ConnectionHandles", () => {
       "left",
       "right",
     ]);
-    expect((handles[0] as HTMLElement).style.background).toBe(
-      "rgb(10, 132, 255)",
-    );
+    expect((handles[0] as HTMLElement).style.background).toBe("");
   });
 
   /**
@@ -35,7 +33,7 @@ describe("ConnectionHandles", () => {
    * 箭头工具在那里接管拖动（§4.3）。所以这里**不**能 stopPropagation。
    */
   it("switches to the arrow tool on pointer down and back on pointer up", () => {
-    render(<ConnectionHandles color="#0a84ff" />);
+    render(<ConnectionHandles />);
     const handle = screen.getByLabelText("发出上下文");
 
     const escaped = vi.fn();
@@ -53,7 +51,7 @@ describe("ConnectionHandles", () => {
   });
 
   it("ignores non-primary buttons", () => {
-    render(<ConnectionHandles color="#0a84ff" />);
+    render(<ConnectionHandles />);
     fireEvent.pointerDown(screen.getByLabelText("接收上下文"), { button: 2 });
     expect(editor.setCurrentTool).not.toHaveBeenCalled();
   });

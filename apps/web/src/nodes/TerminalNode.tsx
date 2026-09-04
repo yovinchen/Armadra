@@ -27,7 +27,7 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { useT } from "@/app/preferences-store";
-import { agentColorVar, agentLabel } from "@/agent/launch";
+import { agentLabel } from "@/agent/launch";
 import { PendingLaunchButton } from "@/agent/PendingLaunchButton";
 import {
   agentHeaderState,
@@ -146,16 +146,9 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
         </Badge>
       )}
       {agent && node.title !== agentLabel(agent.id) && (
-        <Badge
-          variant="outline"
-          className="h-[18px] px-1.5 text-[length:var(--text-caption)]"
-          style={{
-            color: agentColorVar(agent.id),
-            borderColor: `color-mix(in srgb, ${agentColorVar(agent.id)} 35%, transparent)`,
-          }}
-        >
+        <span className="truncate text-[length:var(--text-caption)] text-muted-foreground">
           {agentLabel(agent.id)}
-        </Badge>
+        </span>
       )}
       {exited && (
         <Badge

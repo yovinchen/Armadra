@@ -12,7 +12,7 @@ import { useT } from "@/app/preferences-store";
 import type { NodeBodyProps } from "./registry";
 
 /**
- * 便签（§3.4）。底色 `${color}22`、边框取节点色；平时渲染 Markdown，
+ * 便签（§3.4）。使用中性节点表面；平时渲染 Markdown，
  * 点击切成 textarea，失焦提交。底部只有一行相对时间——没有字数、没有提示。
  */
 export function StickyNode({ id, node }: NodeBodyProps) {
@@ -35,11 +35,7 @@ export function StickyNode({ id, node }: NodeBodyProps) {
   return (
     <div
       data-slot="sticky-node"
-      className="flex h-full w-full flex-col"
-      style={{
-        background: `${node.color}22`,
-        boxShadow: `inset 0 0 0 1px ${node.color}`,
-      }}
+      className="flex h-full w-full flex-col bg-[var(--card)]"
     >
       {editing ? (
         <Textarea

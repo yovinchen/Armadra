@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { Bell, Check, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { agentColorVar, agentLabel } from "../agent/launch";
+import { agentLabel } from "../agent/launch";
 import { basename, type SessionRow as SessionRowData } from "../agent/sessions";
 import { isAttention, useAgentStatusStore } from "../agent/status-store";
 import { runtimeApi } from "../api/client";
@@ -29,7 +29,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../ui/alert-dialog";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { ColorDot } from "../ui/color-dot";
 import { IconButton } from "../ui/icon-button";
@@ -151,13 +150,9 @@ export function SessionRow({ row }: { row: SessionRowData }) {
               {row.title}
             </span>
             {agentId && (
-              <Badge
-                variant="ghost"
-                className="h-4 shrink-0 px-1 text-[length:var(--text-caption)]"
-                style={{ color: agentColorVar(agentId) }}
-              >
+              <span className="shrink-0 text-[length:var(--text-caption)] text-muted-foreground">
                 {agentLabel(agentId)}
-              </Badge>
+              </span>
             )}
           </span>
           <span className="flex w-full items-center gap-1.5 text-[length:var(--text-caption)] font-normal text-muted-foreground">

@@ -1,9 +1,7 @@
 import {
-  NODE_COLOR_STYLES,
   THEME_PREFERENCES,
   usePreferencesStore,
   useT,
-  type NodeColorStyle,
   type ThemePreference,
 } from "../../../app/preferences-store";
 import { LOCALES, type Locale } from "../../../i18n";
@@ -31,10 +29,6 @@ export function GeneralPage() {
   const setLocale = usePreferencesStore((state) => state.setLocale);
   const showUsage = usePreferencesStore((state) => state.showUsage);
   const setShowUsage = usePreferencesStore((state) => state.setShowUsage);
-  const nodeColorStyle = usePreferencesStore((state) => state.nodeColorStyle);
-  const setNodeColorStyle = usePreferencesStore(
-    (state) => state.setNodeColorStyle,
-  );
   const restore = usePreferencesStore((state) => state.restoreLastWorkspace);
   const setRestore = usePreferencesStore(
     (state) => state.setRestoreLastWorkspace,
@@ -78,25 +72,6 @@ export function GeneralPage() {
               {LOCALES.map((option) => (
                 <SelectItem key={option} value={option}>
                   {t(`settings.locale.${option}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </SettingsRow>
-        <SettingsRow label={t("settings.nodeColorStyle")}>
-          <Select
-            value={nodeColorStyle}
-            onValueChange={(value) =>
-              setNodeColorStyle(value as NodeColorStyle)
-            }
-          >
-            <SelectTrigger size="sm" className={CONTROL_WIDTH}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="z-[var(--z-dialog)]">
-              {NODE_COLOR_STYLES.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {t(`settings.nodeColorStyle.${option}`)}
                 </SelectItem>
               ))}
             </SelectContent>

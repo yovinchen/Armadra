@@ -67,10 +67,9 @@ describe("derived edges", () => {
     expect(dataOf(edges[0]!)).toEqual({
       variant: "rope",
       waiting: true,
-      // 颜色取的是**上游**节点的品牌色，不是等待方的。
-      color: "var(--agent-claude)",
+      color: "var(--muted-foreground)",
     });
-    expect(dataOf(edges[1]!).color).toBe("var(--agent-codex)");
+    expect(dataOf(edges[1]!).color).toBe("var(--muted-foreground)");
     // 派生边不进文档，所以它根本不是 shape：只有 `variant` 这一个类型标记。
     expect(edges[0]!.variant).toBe("rope");
   });
@@ -127,17 +126,17 @@ describe("derived edges", () => {
     expect(dataOf(edges[0]!)).toEqual({
       variant: "subagent",
       waiting: true,
-      color: "var(--agent-working)",
+      color: "var(--status-working)",
     });
     // 结束的卡片不再流动。
     expect(dataOf(edges[1]!).waiting).toBe(false);
   });
 
-  it("falls back to the accent colour for non-agent dependencies", () => {
-    expect(ropeColor(undefined)).toBe("var(--brand)");
-    expect(ropeColor(terminal(A))).toBe("var(--brand)");
+  it("uses neutral links for every provider and preserves semantic running colours", () => {
+    expect(ropeColor(undefined)).toBe("var(--muted-foreground)");
+    expect(ropeColor(terminal(A))).toBe("var(--muted-foreground)");
     expect(ropeColor(terminal(A, { id: "opencode" }))).toBe(
-      "var(--agent-opencode)",
+      "var(--muted-foreground)",
     );
   });
 

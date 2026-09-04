@@ -16,7 +16,6 @@ import { useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { Bot, LayoutGrid } from "lucide-react";
 
-import { agentColorVar } from "../agent/launch";
 import { basename } from "../agent/sessions";
 import { useT } from "../app/preferences-store";
 import { runtimeApi } from "../api/client";
@@ -195,9 +194,7 @@ export function SidebarSearch({ open, onOpenChange }: SidebarSearchProps) {
                     value={`chat:${conversation.provider}:${conversation.sessionId}`}
                     onSelect={() => resume(conversation)}
                   >
-                    <Bot
-                      style={{ color: agentColorVar(conversation.provider) }}
-                    />
+                    <Bot />
                     <span className="min-w-0 flex-1 truncate">
                       {conversation.title}
                     </span>

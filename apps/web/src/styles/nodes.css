@@ -24,6 +24,7 @@
   width: 10px;
   height: 10px;
   border-radius: 999px;
+  background: var(--muted-foreground);
   opacity: 0.4;
   transform: translateY(-50%);
   transition: opacity var(--dur-fast) var(--ease-out);

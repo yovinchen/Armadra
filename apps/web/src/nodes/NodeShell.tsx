@@ -11,12 +11,10 @@ import {
 
 import { cn } from "@/lib/cn";
 import { Button } from "@/ui/button";
-import { ColorDot } from "@/ui/color-dot";
-import { ColorPicker } from "@/ui/color-picker";
 import { IconButton } from "@/ui/icon-button";
 import { Input } from "@/ui/input";
 import { StatusPill, type StatusTone } from "@/ui/status-pill";
-import { useT, usePreferencesStore } from "@/app/preferences-store";
+import { useT } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
 import { runCanvasCommand } from "@/canvas/commands";
 import { getEditor } from "@/canvas/editor-context";
@@ -201,8 +199,6 @@ export function NodeShell({
   );
   const bodyRef = React.useRef<HTMLDivElement>(null);
   useNodeBodyGuards(bodyRef);
-  // §24.3-3：默认「色点 + 1px 顶描边」，想要更抢眼的旧样式就在设置里选「色条」。
-  const colorStyle = usePreferencesStore((state) => state.nodeColorStyle);
 
   return (
     <div
@@ -222,10 +218,6 @@ export function NodeShell({
           "shadow-[var(--shadow-node)]",
           selected && "ring-[1.5px] ring-[var(--brand)]",
         )}
-        // 顶边的节点色：默认 1px 描边（克制），选「色条」风格时是 3px（§24.3-3）
-        style={{
-          borderTop: `${colorStyle === "bar" ? 3 : 1}px solid ${node.color}`,
-        }}
       >
         <NodeHeader
           node={node}
@@ -252,7 +244,7 @@ export function NodeShell({
         </div>
       </div>
 
-      {meta.hasBridgeHandles && <ConnectionHandles color={node.color} />}
+      {meta.hasBridgeHandles && <ConnectionHandles />}
 
       {/* 标注面板（评论 / 标签）。Dialog 走 portal，开合都不动节点尺寸。 */}
       <NodeAnnotationHost node={node} />
@@ -303,17 +295,6 @@ export function NodeHeader({
       >
         {collapsed ? <ChevronRight /> : <ChevronDown />}
       </IconButton>
-
-      <ColorPicker
-        value={node.color}
-        onChange={(color) =>
-          useCanvasStore.getState().updateNode(node.id, { color })
-        }
-      >
-        <IconButton className="size-[20px]" label={t("node.color")}>
-          <ColorDot color={node.color} size={8} />
-        </IconButton>
-      </ColorPicker>
 
       <NodeTitle node={node} />
 

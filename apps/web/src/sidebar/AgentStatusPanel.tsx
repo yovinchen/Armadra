@@ -11,13 +11,11 @@
  */
 import { useEffect, useMemo } from "react";
 
-import { agentColorVar } from "../agent/launch";
 import { useSessions, type SessionRow } from "../agent/sessions";
 import { useT } from "../app/preferences-store";
 import { formatRelativeTime } from "../lib/format";
 import { useCanvasStore } from "../store/canvas-store";
 import { Button } from "@/ui/button";
-import { ColorDot } from "@/ui/color-dot";
 import { ScrollArea } from "@/ui/scroll-area";
 import { StatusPill, type StatusTone } from "@/ui/status-pill";
 import { agentSections, bucketTone } from "./agent-panel";
@@ -102,12 +100,6 @@ function AgentRow({
         onClick={onSelect}
       >
         <span className="flex w-full min-w-0 items-center gap-1.5">
-          <ColorDot
-            size={8}
-            color={
-              row.agentId ? agentColorVar(row.agentId) : "var(--status-idle)"
-            }
-          />
           <span className="min-w-0 flex-1 truncate text-left text-[length:var(--text-body)]">
             {row.title}
           </span>

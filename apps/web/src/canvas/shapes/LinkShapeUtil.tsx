@@ -10,14 +10,13 @@ import {
   type Editor,
   type Geometry2d,
   type RecordProps,
-  type TLFrameShape,
   type TLShapeId,
   type TLShapeUtilCanBindOpts,
 } from "tldraw";
 
 import { useT } from "@/app/preferences-store";
 import type { Box } from "../geometry";
-import { edgeArrowheads, edgeLabelKey, fromTldrawColor } from "../sync/project";
+import { edgeArrowheads, edgeLabelKey } from "../sync/project";
 import type { ArmadraShape } from "./armadra-shape";
 import { isDocumentShapeId } from "./armadra-shape";
 import type { LinkProps, LinkShape } from "./link-shape";
@@ -56,11 +55,9 @@ export interface LinkEndVisual {
   box: Box;
   /** 节点类型，决定箭头方向与标签。 */
   type: string;
-  /** 节点色（十六进制）。 */
-  color: string;
 }
 
-/** 一端节点的矩形 + 类型 + 颜色；不在画布上时返回 null。 */
+/** 一端节点的矩形与类型；不在画布上时返回 null。 */
 function endVisual(editor: Editor, id: string): LinkEndVisual | null {
   const shape = editor.getShape(id as TLShapeId);
   if (!shape) return null;
@@ -74,15 +71,12 @@ function endVisual(editor: Editor, id: string): LinkEndVisual | null {
   };
   if (shape.type === "armadra") {
     const props = (shape as ArmadraShape).props;
-    return { box, type: props.nodeType, color: props.color };
+    return { box, type: props.nodeType };
   }
   if (shape.type === "frame" && isDocumentShapeId(shape.id)) {
-    const frame = shape as TLFrameShape;
-    const meta = (frame.meta.armadra ?? {}) as { color?: string };
     return {
       box,
       type: "group",
-      color: meta.color ?? fromTldrawColor(frame.props.color, "#0a84ff"),
     };
   }
   return null;
@@ -111,8 +105,7 @@ export function linkView(
   const heads = edgeArrowheads(source.type, target.type);
   return {
     curve: linkCurve(source.box, target.box),
-    // 颜色取起点节点的色：用户从哪个节点拉出来，线就是那个节点的颜色。
-    color: source.color || "var(--brand)",
+    color: "var(--muted-foreground)",
     labelKey: edgeLabelKey(source.type, target.type),
     arrowStart: heads.start === "arrow",
     arrowEnd: heads.end === "arrow",
@@ -171,7 +164,8 @@ export function LinkShapeContent({
   );
 
   if (!view) return null;
-  const { curve, color } = view;
+  const { curve } = view;
+  const color = selected ? "var(--brand)" : view.color;
   const width = selected ? STROKE_WIDTH_SELECTED : STROKE_WIDTH;
   const label = showLabel ? t(view.labelKey) : "";
 

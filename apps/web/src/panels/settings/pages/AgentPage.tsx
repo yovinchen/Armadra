@@ -32,7 +32,6 @@ import {
   AlertDialogTitle,
 } from "@/ui/alert-dialog";
 import { Button } from "@/ui/button";
-import { ColorDot } from "@/ui/color-dot";
 import { Input } from "@/ui/input";
 import {
   Select,
@@ -121,10 +120,7 @@ export function AgentPage() {
           <SettingsRow
             key={agent.id}
             label={
-              <span className="flex items-center gap-2">
-                <ColorDot color={agent.color} size={8} />
-                {agent.label}
-              </span>
+              <span className="flex items-center gap-2">{agent.label}</span>
             }
             footnote={index === 0 ? t("settings.agentMode.note") : undefined}
           >
@@ -216,10 +212,7 @@ export function AgentPage() {
           <SettingsRow
             key={agent.id}
             label={
-              <span className="flex items-center gap-2">
-                <ColorDot color={agent.color} size={8} />
-                {agent.label}
-              </span>
+              <span className="flex items-center gap-2">{agent.label}</span>
             }
             onClick={() => subpage.open("agent", agent.id)}
           >

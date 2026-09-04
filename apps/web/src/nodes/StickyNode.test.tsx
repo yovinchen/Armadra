@@ -45,6 +45,16 @@ afterEach(() => {
 });
 
 describe("StickyNode", () => {
+  it("does not tint the surface with a historical node colour", () => {
+    const { container } = renderSticky();
+    const surface = container.querySelector(
+      '[data-slot="sticky-node"]',
+    ) as HTMLElement;
+    expect(surface.style.background).toBe("");
+    expect(surface.style.boxShadow).toBe("");
+    expect(surface.className).toContain("bg-[var(--card)]");
+  });
+
   it("renders the content as Markdown when idle", () => {
     const { container } = renderSticky();
     expect(container.querySelector("h1")?.textContent).toBe("标题");

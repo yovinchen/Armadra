@@ -1,7 +1,6 @@
 import * as React from "react";
 import type { CanvasNode } from "@armadra/shared";
 
-import { agentColorVar } from "@/agent/launch";
 import { useLaunchedAfter } from "@/agent/pending-launch";
 import {
   subagentNodeId,
@@ -48,13 +47,9 @@ export interface DeriveEdgesInput {
   cards: Readonly<Record<string, readonly SubagentCardModel[]>>;
 }
 
-/** 依赖节点的品牌色；依赖不是 Agent 终端时退回强调色。 */
-export function ropeColor(dependency: CanvasNode | undefined): string {
-  const agentId =
-    dependency?.data.kind === "terminal"
-      ? dependency.data.agent?.id
-      : undefined;
-  return agentId ? agentColorVar(agentId) : "var(--brand)";
+/** Dependency edges use the same neutral appearance for every provider. */
+export function ropeColor(_dependency: CanvasNode | undefined): string {
+  return "var(--muted-foreground)";
 }
 
 function ropeEdge(
@@ -113,7 +108,9 @@ export function deriveEdges(input: DeriveEdgesInput): DerivedEdge[] {
           node.id,
           subagentNodeId(card.id),
           card.state === "working",
-          "var(--agent-working)",
+          card.state === "working"
+            ? "var(--status-working)"
+            : "var(--muted-foreground)",
           "subagent",
         ),
       );

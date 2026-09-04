@@ -71,6 +71,28 @@ afterEach(() => {
 });
 
 describe("NodeShell", () => {
+  it("ignores historical custom colours and does not expose a colour picker", () => {
+    const node = makeNode({
+      type: "terminal",
+      color: "#ff453a",
+      data: { kind: "terminal" },
+    });
+    const { container } = renderShell({ node, selected: true });
+    expect(screen.queryByRole("button", { name: "颜色" })).toBeNull();
+    expect(container.querySelector('[data-slot="color-dot"]')).toBeNull();
+    expect(
+      container.querySelector('[style*="#ff453a"], [style*="255, 69, 58"]'),
+    ).toBeNull();
+    expect(
+      container
+        .querySelector('[data-slot="node-shell"]')
+        ?.getAttribute("data-selected"),
+    ).toBe("true");
+    expect(
+      container.querySelectorAll('[data-slot="connection-handle"]'),
+    ).toHaveLength(2);
+  });
+
   it("commits an edited title on Enter", () => {
     renderShell();
     fireEvent.click(screen.getByText("便签 1"));

@@ -10,7 +10,6 @@ import { SettingsRow } from "../SettingsRow";
 import { useRuntimeSettings } from "../use-runtime-settings";
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
-import { ColorDot } from "@/ui/color-dot";
 import { Switch } from "@/ui/switch";
 
 /**
@@ -82,12 +81,7 @@ function AgentHookRow({ agent }: { agent: AgentInfo }) {
 
   return (
     <SettingsRow
-      label={
-        <span className="flex items-center gap-2">
-          <ColorDot color={agent.color} size={8} />
-          {agent.label}
-        </span>
-      }
+      label={<span className="flex items-center gap-2">{agent.label}</span>}
     >
       <Badge variant={hooked ? "secondary" : "outline"}>
         {!supported
