@@ -6,7 +6,14 @@ import "@xterm/xterm/css/xterm.css";
 import "./styles/app.css";
 import "./styles/nodes.css";
 import { App } from "./app/App";
+import { mountSplash } from "./splash/mount";
 import { initRuntimeSockets } from "./api/client";
+
+/**
+ * 开屏动画先挂：它有自己的 root，不等下面那个 Promise，所以 Runtime 该连连、
+ * App 该挂挂，动画只是浮在上面的一层（`splash/mount.tsx`）。
+ */
+mountSplash();
 
 /**
  * 终端与事件流的 WebSocket 地址在桌面壳里不等于 HTTP 地址（roadmap §4.4），

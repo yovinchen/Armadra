@@ -13,6 +13,8 @@ export const shell: MessageModule = {
     "sidebar.nameRequired": "名称不能为空",
     "sidebar.renameFailed": "重命名失败，请重试",
     "app.brand": "Armadra",
+    "app.splash":
+      "Armadra 开屏动画：手写签名写完后下移，犰狳从左侧走出来，停稳成为品牌标识",
     "app.loadFailed": "画布加载失败",
     "app.retry": "重试",
     "app.runtimeUnreachable": "无法连接本地 Runtime（{endpoint}）",
@@ -111,6 +113,8 @@ export const shell: MessageModule = {
     "sidebar.nameRequired": "Name cannot be empty",
     "sidebar.renameFailed": "Could not rename. Try again.",
     "app.brand": "Armadra",
+    "app.splash":
+      "Armadra splash: the handwritten signature is drawn and settles, then the armadillo walks in from the left and rests as the brand mark",
     "app.loadFailed": "Failed to load board",
     "app.retry": "Retry",
     "app.runtimeUnreachable": "Cannot reach the local runtime ({endpoint})",
