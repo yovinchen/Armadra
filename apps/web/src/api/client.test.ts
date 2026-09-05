@@ -490,17 +490,18 @@ describe("git", () => {
 });
 
 describe("写文件", () => {
-  it("PUT 带 expectedSize 作乐观锁", async () => {
-    const fetchMock = stubJson({ path: "src/a.ts", size: 7 });
+  it("PUT 携带已读内容版本", async () => {
+    const fetchMock = stubJson({ path: "src/a.ts", size: 7, sha256:"b".repeat(64) });
 
     const result = await runtimeApi.writeFile(
       workspaceId,
       "src/a.ts",
       "content",
       3,
+      "a".repeat(64),
     );
 
-    expect(result).toEqual({ path: "src/a.ts", size: 7 });
+    expect(result).toEqual({ path: "src/a.ts", size: 7, sha256:"b".repeat(64) });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(
       `http://127.0.0.1:43120/api/workspaces/${workspaceId}/file`,
@@ -510,11 +511,12 @@ describe("写文件", () => {
       path: "src/a.ts",
       content: "content",
       expectedSize: 3,
+      expectedSha256:"a".repeat(64),
     });
   });
 
   it("不传 expectedSize 时不发这个键", async () => {
-    const fetchMock = stubJson({ path: "a.ts", size: 1 });
+    const fetchMock = stubJson({ path: "a.ts", size: 1, sha256:"b".repeat(64) });
 
     await runtimeApi.writeFile(workspaceId, "a.ts", "x");
 
