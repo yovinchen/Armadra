@@ -11,7 +11,7 @@ import {
   RollbackOwnershipRequestSchema,
   SwitchOwnershipRequestSchema,
   WriteOwnershipDomain,
-  type WriteOwnership,
+  WriteOwnershipSchema,
 } from "@armadra/protocol";
 import {
   HostOwnershipClient,
@@ -44,11 +44,17 @@ function client(reply: (call: Sent) => Uint8Array) {
   return { api: new HostOwnershipClient({ session, hostId }), calls };
 }
 
-function record(
-  domain: WriteOwnershipDomain,
-  overrides: Partial<WriteOwnership> = {},
-): Partial<WriteOwnership> {
-  return {
+/** Only the fields these tests vary; everything else is the settled default. */
+interface RecordOverrides {
+  owner?: CanvasOwnershipOwner;
+  epoch?: bigint;
+  phase?: CanvasOwnershipPhase;
+  reasonCode?: string;
+  revision?: bigint;
+}
+
+function record(domain: WriteOwnershipDomain, overrides: RecordOverrides = {}) {
+  return create(WriteOwnershipSchema, {
     domain,
     owner: CanvasOwnershipOwner.RUNTIME,
     epoch: 1n,
@@ -56,7 +62,7 @@ function record(
     reasonCode: "ownership.initial",
     revision: 1n,
     ...overrides,
-  };
+  });
 }
 
 function everyDomain(): Uint8Array {
@@ -86,9 +92,9 @@ describe("HostOwnershipClient", () => {
     expect(records.map((entry) => entry.domain)).toEqual([
       ...OWNERSHIP_DOMAINS,
     ]);
-    expect(records[0].owner).toBe("host");
+    expect(records.at(0)?.owner).toBe("host");
     // A Number would round this to an epoch one lower and compare equal.
-    expect(records[0].epoch).toBe(beyondDouble);
+    expect(records.at(0)?.epoch).toBe(beyondDouble);
     expect(records.every(isSettled)).toBe(true);
     expect(calls[0]).toMatchObject({
       service: "OwnershipService",
@@ -173,7 +179,10 @@ describe("HostOwnershipClient", () => {
       maintenanceToken: "token-from-the-machine",
     });
     expect(calls[0]).toMatchObject({ action: "Switch", mutation: true });
-    const sent = fromBinary(SwitchOwnershipRequestSchema, calls[0].body);
+    const sent = fromBinary(
+      SwitchOwnershipRequestSchema,
+      calls.at(0)?.body ?? new Uint8Array(),
+    );
     expect(sent.plan?.maintenanceToken).toBe("token-from-the-machine");
     expect(sent.plan?.domain).toBe(WriteOwnershipDomain.CANVAS);
     expect(sent.plan?.targetOwner).toBe(CanvasOwnershipOwner.HOST);
@@ -196,8 +205,12 @@ describe("HostOwnershipClient", () => {
       maintenanceToken: "token-from-the-machine",
       acceptExportOnly: true,
     });
-    expect(calls[0].action).toBe("Rollback");
-    const sent = fromBinary(RollbackOwnershipRequestSchema, calls[0].body);
+    const call = calls.at(0);
+    expect(call?.action).toBe("Rollback");
+    const sent = fromBinary(
+      RollbackOwnershipRequestSchema,
+      call?.body ?? new Uint8Array(),
+    );
     expect(sent.acceptExportOnly).toBe(true);
     expect(sent.plan?.targetOwner).toBe(CanvasOwnershipOwner.RUNTIME);
   });
