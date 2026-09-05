@@ -39,7 +39,10 @@ type authReply struct {
 	cookies []*http.Cookie
 }
 
-func newAuthFixture(t *testing.T) *authFixture {
+// newAuthFixture builds the authenticated surface. The variadic hooks let one
+// suite add a service — the GitHub one, say — without every other test having
+// to know it exists.
+func newAuthFixture(t *testing.T, configure ...func(*authFixture, *Options)) *authFixture {
 	t.Helper()
 	f := &authFixture{}
 	f.clock.Store(time.Now().UnixMilli())
@@ -55,7 +58,11 @@ func newAuthFixture(t *testing.T) *authFixture {
 	}
 	f.server = httptest.NewUnstartedServer(nil)
 	f.origin = "https://" + f.server.Listener.Addr().String()
-	f.handler, err = NewHandlerWithOptions(Identity{HostID: authHost, InstanceID: authInstance}, Options{Identity: f.identity, PublicOrigin: f.origin})
+	options := Options{Identity: f.identity, PublicOrigin: f.origin}
+	for _, hook := range configure {
+		hook(f, &options)
+	}
+	f.handler, err = NewHandlerWithOptions(Identity{HostID: authHost, InstanceID: authInstance}, options)
 	if err != nil {
 		f.server.Close()
 		t.Fatal(err)

@@ -2,6 +2,7 @@ package server
 
 import (
 	"armadra.local/host/internal/automationhost"
+	"armadra.local/host/internal/githubhost"
 	"armadra.local/host/internal/identity"
 	"errors"
 	"net"
@@ -21,6 +22,9 @@ type Options struct {
 	// Automation is nil when this Host was started without an execution
 	// Worker. Its methods then answer UNSUPPORTED instead of empty data.
 	Automation *automationhost.Service
+	// GitHub is nil when this Host has no credential service assembled. Its
+	// methods then answer UNSUPPORTED, never an empty Issue list.
+	GitHub *githubhost.Service
 }
 
 // ParseOrigin validates a serialized origin and returns its canonical spelling.

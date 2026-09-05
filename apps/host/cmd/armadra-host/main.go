@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -21,6 +23,8 @@ import (
 	"armadra.local/host/internal/automationhost"
 	"armadra.local/host/internal/daemon"
 	"armadra.local/host/internal/endpoints"
+	"armadra.local/host/internal/githubcred"
+	"armadra.local/host/internal/githubhost"
 	"armadra.local/host/internal/hoststate"
 	auth "armadra.local/host/internal/identity"
 	"armadra.local/host/internal/localipc"
@@ -307,6 +311,10 @@ func serveHost(parent context.Context, c config) (err error) {
 		return err
 	}
 	defer func() { err = errors.Join(err, plans.Close()) }()
+	repositories, err := startGithub(c, state.ID, database)
+	if err != nil {
+		return err
+	}
 	workers := 1
 	if listener != nil {
 		workers++
@@ -320,7 +328,7 @@ func serveHost(parent context.Context, c config) (err error) {
 	}
 	if listener != nil {
 		go func() {
-			finished <- server.ServeWithOptions(ctx, listener, identity, server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans})
+			finished <- server.ServeWithOptions(ctx, listener, identity, server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories})
 		}()
 	}
 	go func() {
@@ -373,6 +381,43 @@ func startAutomation(ctx context.Context, c config, hostID, instanceID string, d
 		return nil, err
 	}
 	return automationhost.New(ctx, options)
+}
+
+// startGithub assembles the GitHub credential service. It is always available
+// — a Host with no credential configured still answers, and says so — but the
+// operator can point it at a GitHub Enterprise API base and, where that base
+// uses an internal certificate authority, at the roots that sign it.
+//
+// GITHUB_API_BASE only supplies the default for a first configuration; once a
+// base has been configured through the settings page, the stored value wins.
+func startGithub(c config, hostID string, database *storage.Store) (*githubhost.Service, error) {
+	options := githubcred.Options{
+		Store:          database,
+		Secrets:        githubcred.OpenSecretStore(c.dataDir),
+		DefaultAPIBase: strings.TrimSpace(os.Getenv("GITHUB_API_BASE")),
+	}
+	if path := strings.TrimSpace(os.Getenv("GITHUB_CA_FILE")); path != "" {
+		roots, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(roots) {
+			return nil, errors.New("GITHUB_CA_FILE contains no usable certificate")
+		}
+		// Only the roots the operator named are trusted for this base. The
+		// system pool is deliberately not added: an enterprise base with a
+		// private CA should not also accept a publicly issued certificate.
+		options.Client.HTTP = &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}},
+		}
+	}
+	credentials, err := githubcred.New(options)
+	if err != nil {
+		return nil, err
+	}
+	return githubhost.New(githubhost.Options{Store: database, Credentials: credentials, HostID: hostID})
 }
 
 // Only an explicit local pair command emits one-time material to stdout.

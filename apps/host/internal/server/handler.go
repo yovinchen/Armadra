@@ -61,7 +61,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "Local request origin is not allowed")
 			return
 		}
-		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path)) {
+		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path) || githubMethod(r.URL.Path)) {
 			if origin != options.PublicOrigin {
 				writeError(w, 403, "PERMISSION_DENIED", "Authentication requires the Host HTTPS origin")
 				return
@@ -87,6 +87,16 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			if automationMethod(r.URL.Path) {
 				automationRequest(w, r, identity, options.Identity, options.Automation)
+				return
+			}
+			if githubMethod(r.URL.Path) {
+				// A Host with no GitHub service still authenticates, then says
+				// the surface is unavailable here. It never answers with data.
+				if options.GitHub == nil {
+					writeError(w, http.StatusNotImplemented, "UNSUPPORTED", "This Host has no GitHub credential service")
+					return
+				}
+				githubRequest(w, r, identity, options.Identity, options.GitHub)
 				return
 			}
 			identityRequest(w, r, identity, options.Identity)
@@ -134,11 +144,11 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			return
 		}
 		authentication := options.Identity != nil && options.PublicOrigin != "" && r.TLS != nil
-		hello(w, r, identity, authentication, authentication && options.Automation != nil)
+		hello(w, r, identity, authentication, authentication && options.Automation != nil, authentication && options.GitHub != nil)
 	}), nil
 }
 
-func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentication, scheduling bool) {
+func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentication, scheduling, github bool) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
 		writeError(w, http.StatusMethodNotAllowed, "INVALID_ARGUMENT", "POST required")
@@ -186,6 +196,11 @@ func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentica
 	// read this as "plans exist" on a Host that cannot run them.
 	if scheduling {
 		capabilities = append(capabilities, "automation.plans.v1")
+	}
+	// Advertised only when a credential service is actually assembled, so a
+	// client never opens a GitHub panel this Host cannot serve at all.
+	if github {
+		capabilities = append(capabilities, "github.issues.v1")
 	}
 	writeProto(w, http.StatusOK, &pb.HelloResponse{
 		Protocol:         &pb.ProtocolVersion{Major: ProtocolMajor, Minor: min(request.Protocol.GetMinor(), ProtocolMinor)},
