@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -19,6 +20,7 @@ import (
 	pb "armadra.local/host/gen/armadra/v1"
 	"armadra.local/host/internal/automationhost"
 	"armadra.local/host/internal/daemon"
+	"armadra.local/host/internal/endpoints"
 	"armadra.local/host/internal/hoststate"
 	auth "armadra.local/host/internal/identity"
 	"armadra.local/host/internal/localipc"
@@ -36,6 +38,10 @@ func main() {
 	}
 }
 
+// noListener is the --listen value that asks for no TCP surface at all: the
+// Host is then reachable only over the same-user control IPC (roadmap §4.4).
+const noListener = "none"
+
 type config struct {
 	certFile     string
 	keyFile      string
@@ -46,6 +52,7 @@ type config struct {
 	command      string
 	address      string
 	dataDir      string
+	endpointsDir string
 	origins      allowedOriginFlags
 	output       string
 	// Both must be given together to enable scheduling. Neither is inferred:
@@ -79,7 +86,8 @@ func parseConfig(args []string) (config, error) {
 		flags.StringVar(&c.certFile, "tls-cert", "", "TLS certificate PEM file (required for browser authentication)")
 		flags.StringVar(&c.keyFile, "tls-key", "", "TLS private key PEM file")
 		flags.StringVar(&c.publicOrigin, "public-origin", "", "Exact HTTPS origin clients use for this Host")
-		flags.StringVar(&c.address, "listen", "127.0.0.1:43121", "Local metadata listener (loopback IP only)")
+		flags.StringVar(&c.address, "listen", "127.0.0.1:43121", "Local metadata listener (loopback IP only); \"none\" serves control IPC only")
+		flags.StringVar(&c.endpointsDir, "endpoints-dir", "", "Absolute directory holding the shared endpoints.json (default: the data directory)")
 		flags.Var(&c.origins, "allow-origin", "Exact browser origin allowed to read metadata (repeatable)")
 		flags.StringVar(&c.workerBinary, "worker-binary", "", "Absolute path to the Rust Worker executable that runs scheduled commands")
 		flags.StringVar(&c.workerStateDir, "worker-state-dir", "", "Absolute private directory for the Worker's own execution journal")
@@ -106,7 +114,17 @@ func parseConfig(args []string) (config, error) {
 		return c, err
 	}
 	if c.command == "start" || c.command == "serve" {
-		if c.certFile != "" || c.keyFile != "" || c.publicOrigin != "" {
+		// "none" is the desktop shape: the shell reaches this Host over the
+		// same-user control IPC, and nothing on the machine can reach it over
+		// TCP. Serving the outside world stays an explicit act.
+		if c.address == noListener {
+			if c.certFile != "" || c.keyFile != "" || c.publicOrigin != "" {
+				return c, fmt.Errorf("TLS requires a --listen address")
+			}
+			if len(c.origins) != 0 {
+				return c, fmt.Errorf("--allow-origin has no effect without a --listen address")
+			}
+		} else if c.certFile != "" || c.keyFile != "" || c.publicOrigin != "" {
 			origin, err := server.ParseOrigin(c.publicOrigin)
 			if err != nil || origin != c.publicOrigin || !strings.HasPrefix(origin, "https://") {
 				return c, fmt.Errorf("TLS requires an exact --public-origin HTTPS_ORIGIN")
@@ -155,8 +173,20 @@ func parseConfig(args []string) (config, error) {
 		}
 	}
 	var err error
-	c.dataDir, err = filepath.Abs(c.dataDir)
-	return c, err
+	if c.dataDir, err = filepath.Abs(c.dataDir); err != nil {
+		return c, err
+	}
+	// The shared endpoints file normally lives beside the Host's own data. The
+	// desktop points it at the Runtime's data directory instead, so both
+	// services describe themselves in one document. A relative path is refused
+	// rather than resolved against whatever the working directory happens to be.
+	if c.endpointsDir == "" {
+		c.endpointsDir = c.dataDir
+	} else if !filepath.IsAbs(c.endpointsDir) {
+		return c, fmt.Errorf("--endpoints-dir must be an absolute directory")
+	}
+	c.endpointsDir = filepath.Clean(c.endpointsDir)
+	return c, nil
 }
 
 func run(args []string) error {
@@ -207,16 +237,21 @@ func serveHost(parent context.Context, c config) (err error) {
 		return err
 	}
 	defer func() { err = errors.Join(err, database.Close()) }()
+	// A Host with no --listen address answers only on the same-user control
+	// IPC below. That is the desktop shape: no port for anything on the machine
+	// to find, and no browser surface until the operator asks for one.
 	var listener net.Listener
-	if tlsConfig != nil {
-		listener, err = server.ListenTLS(c.address, tlsConfig)
-	} else {
-		listener, err = server.ListenLocal(c.address)
+	if c.address != noListener {
+		if tlsConfig != nil {
+			listener, err = server.ListenTLS(c.address, tlsConfig)
+		} else {
+			listener, err = server.ListenLocal(c.address)
+		}
+		if err != nil {
+			return err
+		}
+		defer listener.Close()
 	}
-	if err != nil {
-		return err
-	}
-	defer listener.Close()
 	control, err := localipc.Listen(c.dataDir)
 	if err != nil {
 		return err
@@ -231,9 +266,36 @@ func serveHost(parent context.Context, c config) (err error) {
 	if err != nil {
 		return err
 	}
-	status := &pb.HostStatus{HostId: state.ID, HostInstanceId: identity.InstanceID, HttpEndpoint: "http://" + listener.Addr().String(), StartedAtUnixMs: time.Now().UnixMilli(), ProcessId: uint32(os.Getpid())}
+	status := &pb.HostStatus{HostId: state.ID, HostInstanceId: identity.InstanceID, StartedAtUnixMs: time.Now().UnixMilli(), ProcessId: uint32(os.Getpid())}
+	if listener != nil {
+		status.HttpEndpoint = "http://" + listener.Addr().String()
+	}
 	if c.publicOrigin != "" {
 		status.HttpEndpoint = c.publicOrigin
+	}
+	// Publish the address we actually bound, never the one we were asked for:
+	// --listen :0 means the kernel chose it, and a reader has no other way to
+	// learn the number. An unwritable directory is logged, not fatal.
+	// parseConfig always fills this in; a config built by hand must still never
+	// resolve the file against whatever the working directory happens to be.
+	endpointsDir := c.endpointsDir
+	if endpointsDir == "" {
+		endpointsDir = c.dataDir
+	}
+	endpointsFile := endpoints.Path(endpointsDir)
+	record := endpoints.Now(identity.InstanceID)
+	record.HTTP = status.HttpEndpoint
+	if endpoint, ipcErr := localipc.Endpoint(c.dataDir); ipcErr == nil {
+		if runtime.GOOS == "windows" {
+			record.Pipe = endpoint
+		} else {
+			record.Socket = endpoint
+		}
+	}
+	if publishErr := endpoints.Publish(endpointsFile, endpoints.HostService, record); publishErr != nil {
+		fmt.Fprintln(os.Stderr, "Armadra: could not publish the Host endpoint:", publishErr)
+	} else {
+		defer func() { err = errors.Join(err, endpoints.Withdraw(endpointsFile, endpoints.HostService)) }()
 	}
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
@@ -245,17 +307,22 @@ func serveHost(parent context.Context, c config) (err error) {
 		return err
 	}
 	defer func() { err = errors.Join(err, plans.Close()) }()
-	workers := 2
+	workers := 1
+	if listener != nil {
+		workers++
+	}
 	if plans != nil {
-		workers = 3
+		workers++
 	}
 	finished := make(chan error, workers)
 	if plans != nil {
 		go func() { finished <- plans.Run(ctx) }()
 	}
-	go func() {
-		finished <- server.ServeWithOptions(ctx, listener, identity, server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans})
-	}()
+	if listener != nil {
+		go func() {
+			finished <- server.ServeWithOptions(ctx, listener, identity, server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans})
+		}()
+	}
 	go func() {
 		finished <- daemon.ServeWithBootstrap(ctx, control, status, cancel, func(ctx context.Context, request *pb.BootstrapTicketRequest) (*pb.BootstrapTicketResponse, error) {
 			if c.publicOrigin == "" || request.Origin != c.publicOrigin {
@@ -275,7 +342,11 @@ func serveHost(parent context.Context, c config) (err error) {
 			return &pb.BootstrapTicketResponse{HostId: identity.HostID, HostInstanceId: identity.InstanceID, Ticket: ticket.Ticket, Origin: request.Origin, ExpiresAtUnixMs: ticket.ExpiresAtMS}, nil
 		})
 	}()
-	fmt.Printf("Armadra listening on %s\n", status.HttpEndpoint)
+	if listener != nil {
+		fmt.Printf("Armadra listening on %s\n", status.HttpEndpoint)
+	} else {
+		fmt.Printf("Armadra serving control IPC only for host %s\n", state.ID)
+	}
 	if plans != nil {
 		fmt.Printf("Armadra scheduling commands on host %s\n", state.ID)
 	}

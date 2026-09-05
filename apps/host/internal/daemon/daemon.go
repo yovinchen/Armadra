@@ -180,6 +180,13 @@ func validStatus(status *pb.HostStatus) bool {
 	if status == nil || strings.TrimSpace(status.HostId) == "" || len(status.HostId) > 256 || strings.TrimSpace(status.HostInstanceId) == "" || len(status.HostInstanceId) > 256 || status.StartedAtUnixMs <= 0 {
 		return false
 	}
+	// A Host started without a --listen address serves only this control
+	// transport and has no HTTP surface to name. The empty string is how it
+	// says so; a client reads that as "no browser endpoint", never as a
+	// default one. Anything else must still be a credential-free http(s) URL.
+	if status.HttpEndpoint == "" {
+		return true
+	}
 	endpoint, err := url.Parse(status.HttpEndpoint)
 	return err == nil && (endpoint.Scheme == "http" || endpoint.Scheme == "https") && endpoint.Hostname() != "" && endpoint.User == nil && !endpoint.ForceQuery && endpoint.RawQuery == "" && endpoint.Fragment == ""
 }

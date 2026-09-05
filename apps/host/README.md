@@ -25,11 +25,15 @@ Windows 使用 `armadra-host.exe`。省略子命令等同 `serve`（前台）；
 | 参数                 | 作用                                                                       |
 | -------------------- | -------------------------------------------------------------------------- |
 | `--data-dir`         | 各命令共用的独立目录，默认每用户 Armadra/host，Windows 优先 LOCALAPPDATA   |
-| `--listen`           | start/serve 使用，默认 `127.0.0.1:43121`；`:0` 分配临时端口，仅显式回环 IP |
+| `--listen`           | start/serve 使用，默认 `127.0.0.1:43121`；`:0` 分配临时端口，仅显式回环 IP；`none` 只保留同用户控制 IPC |
+| `--endpoints-dir`    | start/serve 使用，共享 `endpoints.json` 所在绝对目录，默认数据目录          |
 | `--allow-origin`     | start/serve 使用，可重复的精确页面来源                                     |
 | `--worker-binary`    | start/serve 使用，执行计划命令的 Rust Worker 绝对路径；与下一项必须成对    |
 | `--worker-state-dir` | start/serve 使用，Worker 私有执行日志目录（0700），缺失时创建              |
 | `--output protobuf`  | 管理命令返回单个 `HostManagementResult`，无尾随换行；默认 JSON 供人阅读    |
+
+`--listen none` 时不建 TCP 监听，也不接受 `--allow-origin` 与 TLS 参数；`HostStatus.httpEndpoint` 为空串表示「没有 HTTP 面」。
+启动后把本次地址写入 `<endpoints-dir>/endpoints.json`（0600，只改 `host` 段），正常退出时撤回；写不进去只告警不中止。
 
 管理 IPC 始终传 Protobuf；PID 仅为诊断信息。停止没有可信 ACK 时报告结果不确定，不自动重发。
 启动诊断写入本次新建的 `startup-*.log`；并发启动会回收本次多余子进程，防止迟到启动。

@@ -606,7 +606,8 @@ func TestClientValidatesEachStatusField(t *testing.T) {
 	for name, mutate := range map[string]func(*pb.HostStatus){
 		"host ID":              func(status *pb.HostStatus) { status.HostId = "" },
 		"instance ID":          func(status *pb.HostStatus) { status.HostInstanceId = " " },
-		"endpoint":             func(status *pb.HostStatus) { status.HttpEndpoint = "" },
+		"endpoint scheme":      func(status *pb.HostStatus) { status.HttpEndpoint = "ftp://127.0.0.1" },
+		"endpoint host":        func(status *pb.HostStatus) { status.HttpEndpoint = "http://" },
 		"endpoint credentials": func(status *pb.HostStatus) { status.HttpEndpoint = "http://user:secret@127.0.0.1" },
 		"endpoint query":       func(status *pb.HostStatus) { status.HttpEndpoint = "http://127.0.0.1?token=secret" },
 		"start time":           func(status *pb.HostStatus) { status.StartedAtUnixMs = 0 },
@@ -623,6 +624,27 @@ func TestClientValidatesEachStatusField(t *testing.T) {
 				t.Fatalf("invalid field accepted: %v", err)
 			}
 		})
+	}
+}
+
+// A Host with no --listen address has no HTTP surface to report. The empty
+// endpoint is the one way to say that, and it must survive the status round
+// trip rather than being rejected as malformed or filled in with a default.
+func TestAControlOnlyHostReportsAnEmptyEndpoint(t *testing.T) {
+	status := testStatus()
+	status.HttpEndpoint = ""
+	dir := fakePeer(t, func(conn net.Conn, request *pb.HostControlRequest) {
+		_ = writeFrame(conn, &pb.HostControlResponse{RequestId: request.RequestId, Result: &pb.HostControlResponse_Status{Status: status}})
+	})
+	reported, err := Status(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("a control-only Host was rejected: %v", err)
+	}
+	if reported.HttpEndpoint != "" {
+		t.Fatalf("http endpoint = %q, want empty", reported.HttpEndpoint)
+	}
+	if reported.HostId != status.HostId || reported.HostInstanceId != status.HostInstanceId {
+		t.Fatalf("identity was not carried through: %+v", reported)
 	}
 }
 
