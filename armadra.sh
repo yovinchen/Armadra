@@ -108,9 +108,8 @@ port_in_use() {
   lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
 }
 
-# 开发模式下桌面壳**不会**自己拉起 Runtime（`RuntimeProcess::start` 只在
-# `custom-protocol`，也就是打包后的正式构建里生效），所以这里先把 debug
-# Runtime 起在后台，再开 tauri dev；⌃C 时一起结束。
+# 浏览器开发由本脚本持有 Runtime；桌面开发改由 Tauri 持有私有控制管道，
+# 使关闭前台与明确退出后台具有不同语义。
 start_runtime() {
   step "编译 Runtime（debug）"
   cargo build -p armadra-runtime -p armadra-hook
@@ -134,9 +133,11 @@ run_desktop() {
   step "准备 sidecar（tauri 的 externalBin 校验要求文件存在）"
   pnpm --filter @armadra/desktop prepare:sidecar
   pnpm --filter @armadra/shared build
-  start_runtime
-  step "启动桌面端（tauri dev，前端热更新，⌃C 同时结束 Runtime）"
-  VITE_RUNTIME_URL="http://127.0.0.1:${RUNTIME_PORT}" pnpm --filter @armadra/desktop dev
+  step "编译桌面持有的 Runtime（debug）"
+  cargo build -p armadra-runtime -p armadra-hook
+  step "启动桌面端（关闭窗口保留后台；菜单退出停止后台）"
+  ARMADRA_DESKTOP_OWNS_RUNTIME=1 ARMADRA_RUNTIME_PORT="${RUNTIME_PORT}" \
+    VITE_RUNTIME_URL="http://127.0.0.1:${RUNTIME_PORT}" pnpm --filter @armadra/desktop dev
 }
 
 run_web() {

@@ -1,16 +1,30 @@
 use std::{
+    io::Write,
     process::{Child, Command, Stdio},
-    sync::Mutex,
-    time::Duration,
+    sync::{
+        Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::{Duration, Instant},
 };
 
+use armadra_protocol::{Message, v1};
 use tauri::{
-    Manager, RunEvent, WebviewWindow,
+    Manager, RunEvent, WebviewWindow, WindowEvent,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
+use tauri_plugin_dialog::DialogExt;
 
 mod host;
+mod lifecycle;
+use lifecycle::DesktopLifecycle;
+
+fn trace_lifecycle(event: &str) {
+    if std::env::var("ARMADRA_DESKTOP_LIFECYCLE_TRACE").as_deref() == Ok("1") {
+        eprintln!("Desktop lifecycle {}: {event}", std::process::id());
+    }
+}
 
 fn runtime_health_url() -> String {
     let port = std::env::var("ARMADRA_RUNTIME_PORT")
@@ -21,11 +35,16 @@ fn runtime_health_url() -> String {
 }
 
 #[derive(Default)]
-struct RuntimeProcess(Mutex<Option<Child>>);
+struct RuntimeProcess(Mutex<Option<Child>>, AtomicBool);
 
 impl RuntimeProcess {
     fn start(&self) -> Result<(), String> {
-        if cfg!(not(feature = "custom-protocol")) {
+        if !owns_runtime(
+            cfg!(not(feature = "custom-protocol")),
+            std::env::var("ARMADRA_DESKTOP_OWNS_RUNTIME")
+                .ok()
+                .as_deref(),
+        ) {
             return Ok(());
         }
         let current = std::env::current_exe().map_err(|error| error.to_string())?;
@@ -34,7 +53,8 @@ impl RuntimeProcess {
             .ok_or_else(|| "Desktop executable has no parent directory".to_owned())?;
         let executable = directory.join(runtime_binary_name());
         let child = Command::new(&executable)
-            .stdin(Stdio::null())
+            .arg("--desktop-control-stdin")
+            .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
@@ -48,37 +68,92 @@ impl RuntimeProcess {
         Ok(())
     }
 
-    fn stop(&self) {
-        if let Ok(mut child) = self.0.lock()
-            && let Some(mut child) = child.take()
-        {
-            #[cfg(unix)]
-            {
-                let _ = Command::new("kill")
-                    .args(["-TERM", &child.id().to_string()])
-                    .status();
-                for _ in 0..20 {
-                    if child.try_wait().ok().flatten().is_some() {
-                        return;
-                    }
-                    std::thread::sleep(Duration::from_millis(100));
-                }
-            }
-            let _ = child.kill();
-            let _ = child.wait();
+    fn stop(&self) -> Result<(), String> {
+        let mut slot = self.0.lock().map_err(|_| "Runtime process lock failed")?;
+        let Some(mut child) = slot.take() else {
+            // Development Runtime processes are external and are not ours to kill.
+            return if self.1.load(Ordering::SeqCst) {
+                Err(
+                    "A previous Runtime shutdown failed; managed sessions require inspection"
+                        .into(),
+                )
+            } else {
+                Ok(())
+            };
+        };
+        let control = v1::DesktopRuntimeControl {
+            action: Some(v1::desktop_runtime_control::Action::Shutdown(
+                v1::DesktopShutdownRequest {},
+            )),
         }
+        .encode_to_vec();
+        let result = (|| {
+            if child
+                .try_wait()
+                .map_err(|_| "Could not inspect Runtime process")?
+                .is_some()
+            {
+                // An ordinary/earlier exit (even exit 0) may intentionally leave
+                // tmux alive. Only our explicit control request confirms cleanup.
+                return Err("Runtime already exited; managed-session shutdown was not confirmed");
+            }
+            let mut stdin = child
+                .stdin
+                .take()
+                .ok_or("Runtime control pipe unavailable")?;
+            stdin
+                .write_all(&(control.len() as u32).to_be_bytes())
+                .map_err(|_| "Could not send Runtime shutdown")?;
+            stdin
+                .write_all(&control)
+                .map_err(|_| "Could not send Runtime shutdown")?;
+            drop(stdin);
+            match wait_for_child(&mut child, Duration::from_secs(12))? {
+                Some(status) if status.success() => Ok(()),
+                Some(_) => Err("Runtime failed to stop all managed sessions"),
+                None => Err("Runtime shutdown timed out; managed sessions may still be running"),
+            }
+        })();
+        if result.is_err() {
+            self.1.store(true, Ordering::SeqCst);
+            // Fallback terminates only this owned child; it is not proof that
+            // persistent sessions stopped, so retain the failure for the user.
+            let _ = child.kill();
+            let _ = wait_for_child(&mut child, Duration::from_secs(2));
+        }
+        result.map_err(str::to_owned)
     }
 
     fn exited_early(&self) -> bool {
-        if cfg!(not(feature = "custom-protocol")) {
-            return false;
-        }
         self.0
             .lock()
             .ok()
             .and_then(|mut child| child.as_mut().and_then(|child| child.try_wait().ok()))
             .flatten()
             .is_some()
+    }
+}
+
+fn owns_runtime(development: bool, explicit_ownership: Option<&str>) -> bool {
+    !development || explicit_ownership == Some("1")
+}
+
+fn wait_for_child(
+    child: &mut Child,
+    timeout: Duration,
+) -> Result<Option<std::process::ExitStatus>, &'static str> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|_| "Could not inspect Runtime shutdown")?
+        {
+            return Ok(Some(status));
+        }
+        if Instant::now() >= deadline {
+            return Ok(None);
+        }
+        std::thread::sleep(Duration::from_millis(25));
     }
 }
 
@@ -160,21 +235,105 @@ fn mark_tauri_document(webview: &tauri::Webview) {
 
 /** 把窗口从隐藏 / 最小化里拉回前台。 */
 fn reveal(window: &WebviewWindow) {
+    if !window.state::<DesktopLifecycle>().reveal() {
+        return;
+    }
     let _ = window.show();
     let _ = window.unminimize();
     let _ = window.set_focus();
+}
+
+fn request_quit(app: &tauri::AppHandle) {
+    if !app.state::<DesktopLifecycle>().begin_quit() {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let host_result = app.state::<DesktopLifecycle>().stop_host().await;
+        let runtime_app = app.clone();
+        let runtime_result = tauri::async_runtime::spawn_blocking(move || {
+            runtime_app.state::<RuntimeProcess>().stop()
+        })
+        .await
+        .unwrap_or_else(|_| Err("Runtime shutdown task failed".into()));
+        let result = host_result.and(runtime_result);
+        if let Err(error) = result {
+            eprintln!("Application shutdown incomplete: {error}");
+            app.state::<DesktopLifecycle>().quit_failed();
+            if let Some(window) = app.get_webview_window("main") {
+                reveal(&window);
+            }
+            app.dialog()
+                .message(format!(
+                    "后台未能全部停止，应用尚未退出。请检查后台状态。\n{error}"
+                ))
+                .title("Armadra 退出未完成")
+                .show(|_| {});
+            return;
+        }
+        app.state::<DesktopLifecycle>().quit_completed();
+        app.exit(0);
+    });
+}
+
+fn build_app_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    #[cfg(target_os = "macos")]
+    {
+        // Explicitly install the native application/Edit/Window menus. Their
+        // predefined CloseWindow and Quit retain standard Command-W/Command-Q.
+        Menu::default(app)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        use tauri::menu::{PredefinedMenuItem, Submenu};
+        let file = Submenu::with_items(
+            app,
+            "文件",
+            true,
+            &[
+                &MenuItem::with_id(app, "desktop-show", "显示窗口", true, None::<&str>)?,
+                &MenuItem::with_id(app, "desktop-close", "关闭窗口", true, Some("Ctrl+W"))?,
+                &PredefinedMenuItem::separator(app)?,
+                // Ctrl-Q remains terminal XON; it is deliberately not an accelerator.
+                &MenuItem::with_id(app, "desktop-quit", "退出并停止后台", true, None::<&str>)?,
+            ],
+        )?;
+        let edit = Submenu::with_items(
+            app,
+            "编辑",
+            true,
+            &[
+                &PredefinedMenuItem::undo(app, None)?,
+                &PredefinedMenuItem::redo(app, None)?,
+                &PredefinedMenuItem::separator(app)?,
+                &PredefinedMenuItem::cut(app, None)?,
+                &PredefinedMenuItem::copy(app, None)?,
+                &PredefinedMenuItem::paste(app, None)?,
+                &PredefinedMenuItem::select_all(app, None)?,
+            ],
+        )?;
+        let window = Submenu::with_items(
+            app,
+            "窗口",
+            true,
+            &[
+                &PredefinedMenuItem::minimize(app, None)?,
+                &PredefinedMenuItem::maximize(app, None)?,
+            ],
+        )?;
+        Menu::with_items(app, &[&file, &edit, &window])
+    }
 }
 
 /**
  * 托盘图标（计划书 §17）。两项菜单：显示窗口 / 退出；左键单击等价于「显示窗口」。
  *
  * 图标复用 bundle 里那张——托盘不单独出一套资源，省得两边不同步。
- * 「退出」走 `app.exit(0)`，这条路径最后仍会触发 `RunEvent::Exit`，
- * Runtime sidecar 的关停逻辑（`RuntimeProcess::stop`）照常跑。
+ * 「退出」与 macOS Command-Q 共用完整后台关闭流程。
  */
 fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "tray-show", "显示窗口", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "tray-quit", "退出", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "tray-quit", "退出并停止后台", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &quit])?;
 
     let mut builder = TrayIconBuilder::with_id("main")
@@ -188,7 +347,7 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                     reveal(&window);
                 }
             }
-            "tray-quit" => app.exit(0),
+            "tray-quit" => request_quit(app),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
@@ -219,8 +378,37 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .manage(RuntimeProcess::default())
+        .manage(DesktopLifecycle::default())
+        .menu(build_app_menu)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "desktop-show" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    reveal(&window);
+                }
+            }
+            "desktop-close" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.close();
+                }
+            }
+            "desktop-quit" => request_quit(app),
+            _ => {}
+        })
+        .on_window_event(|window, event| {
+            if window.label() == "main"
+                && let WindowEvent::CloseRequested { api, .. } = event
+            {
+                trace_lifecycle("foreground close requested");
+                // Preserve unsaved editor state and frontend tasks until those
+                // lifecycles migrate to Host. Closing the foreground is not quit.
+                api.prevent_close();
+                window.state::<DesktopLifecycle>().hide();
+                let _ = window.hide();
+            }
+        })
         .on_page_load(|webview, _payload| mark_tauri_document(webview))
         .setup(|app| {
+            trace_lifecycle("setup");
             app.state::<RuntimeProcess>().start()?;
             let app_handle = app.handle().clone();
             let window = app
@@ -257,13 +445,16 @@ fn main() {
                 };
                 host::HostLaunchConfig::from_environment(development, origin)
             })();
-            // Host availability must not delay Runtime or UI startup. It has a
-            // separate lifecycle and is deliberately absent from the exit hook.
+            if let Ok(config) = host_config {
+                app.state::<DesktopLifecycle>().configure_host(config);
+            } else if let Err(error) = host_config {
+                eprintln!("Background {error}");
+            }
+            let host_app = app.handle().clone();
+            // Serialize startup with explicit quit, so a late startup cannot
+            // revive the Host after the user requested all services to stop.
             tauri::async_runtime::spawn(async move {
-                let result = match host_config {
-                    Ok(config) => host::ensure_host(&config).await,
-                    Err(error) => Err(error),
-                };
+                let result = host_app.state::<DesktopLifecycle>().start_host().await;
                 if let Err(error) = result {
                     eprintln!("Background {error}");
                 }
@@ -272,17 +463,100 @@ fn main() {
                 if let Err(error) = wait_for_runtime(&app_handle).await {
                     eprintln!("{error}");
                 }
-                let _ = window.show();
-                let _ = window.set_focus();
+                if app_handle.state::<DesktopLifecycle>().should_show() {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
             });
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("failed to build Armadra desktop application");
 
-    application.run(|app_handle, event| {
-        if matches!(event, RunEvent::Exit | RunEvent::ExitRequested { .. }) {
-            app_handle.state::<RuntimeProcess>().stop();
+    trace_lifecycle("enter event loop");
+    application.run(|app_handle, event| match event {
+        RunEvent::ExitRequested { api, .. }
+            if !app_handle.state::<DesktopLifecycle>().can_exit() =>
+        {
+            trace_lifecycle("exit requested; stopping services");
+            api.prevent_exit();
+            request_quit(app_handle);
         }
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen { .. } => {
+            trace_lifecycle("reopen");
+            if let Some(window) = app_handle.get_webview_window("main") {
+                reveal(&window);
+            }
+        }
+        RunEvent::Ready => trace_lifecycle("ready"),
+        RunEvent::Exit => trace_lifecycle("exit"),
+        _ => {}
     });
+    trace_lifecycle("event loop returned");
+}
+
+#[cfg(test)]
+mod lifecycle_process_tests {
+    use super::*;
+
+    #[test]
+    fn development_runtime_ownership_requires_explicit_launcher_opt_in() {
+        assert!(owns_runtime(false, None));
+        assert!(owns_runtime(true, Some("1")));
+        for flag in [None, Some("0"), Some("true"), Some("")] {
+            assert!(!owns_runtime(true, flag));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn owned_runtime_receives_shutdown_frame_and_must_exit_successfully() {
+        let path = std::env::temp_dir().join(format!(
+            "armadra-runtime-control-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let child = Command::new("/bin/sh")
+            .args([
+                "-c",
+                "dd bs=1 count=6 of=\"$1\" 2>/dev/null",
+                "runtime-test",
+            ])
+            .arg(&path)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let runtime = RuntimeProcess(Mutex::new(Some(child)), AtomicBool::new(false));
+        runtime.stop().unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), [0, 0, 0, 2, 10, 0]);
+        std::fs::remove_file(path).unwrap();
+        runtime.stop().unwrap();
+    }
+
+    #[test]
+    fn failed_shutdown_cannot_turn_into_success_on_a_second_quit() {
+        let runtime = RuntimeProcess(Mutex::new(None), AtomicBool::new(true));
+        assert!(runtime.stop().is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn prior_successful_exit_is_not_a_managed_session_shutdown_confirmation() {
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", "exit 0"])
+            .stdin(Stdio::piped())
+            .spawn()
+            .unwrap();
+        assert!(child.wait().unwrap().success());
+        let runtime = RuntimeProcess(Mutex::new(Some(child)), AtomicBool::new(false));
+        let error = runtime.stop().unwrap_err();
+        assert!(error.contains("already exited"));
+        assert!(runtime.stop().is_err());
+    }
 }

@@ -87,6 +87,9 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 | `f03c23a` | 原生管理结果Protobuf       | start/status/stop二进制输出、跨语言样例及CLI生命周期验证                                                        |
 | `7687ff5` | SQLite 一致性手动备份 | 4 项快照回归及实际 API；WAL、并发命名和失败保护 |
 | `64f1c1a` | 私有桌面退出协议 | Go/Rust/TS 共享帧样例与生成漂移检查 |
+| `598222e` | 数据库拒绝破坏式重建 | 26 项数据库专项，迁移/恢复同事务回滚 |
+| `0f3d913` | 快捷键录制与窗口键保护 | 76 项定向测试、类型检查与真实浏览器录制 |
+| `f3bb770` | Runtime 明确退出 | 全套 359 项、追加关停回归、真实进程 EOF/关停验证 |
 | `40dc141` | 桌面自动启动/发现Host      | 10项Rust测试、clippy、真实Rust启动器和macOS原生进程保活；窗口菜单退出未验收                                     |
 
 协议验收覆盖：中文/emoji、uint64 最大值、int64 最小值、超过 JS 安全整数的 generation、optional 未传/零值、oneof 三个分支、截断拒绝、未知字段行为。Go/TS 默认保留未知字段；prost 会丢弃，未来 Rust 透明中继必须转发原始载荷。尚未引入枚举，不将未知枚举检查记为已完成。
@@ -165,7 +168,18 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - 前端不再把窗口关闭组合默认绑定到节点关闭；macOS 的 Command W/Q 与其他平台的 Ctrl W/Alt F4 留给窗口系统。旧自定义覆盖也不会拦截，Windows Ctrl Q 仍可送入终端。
 - 快捷键录制会暂停应用原监听器，结束或卸载时恢复；IME 组词不保存为快捷键。跨 scope、修饰键别名和旧物理键别名按实际匹配规则提示冲突。
 - 修复逗号与加号等符号录制后无法匹配的问题：存储规范化按键名，非拉丁布局与 Shift 符号可通过物理键匹配。
-- 76 项 Web 定向测试通过；Web 类型检查/生产构建通过。原生生命周期与实际浏览器结果将在完成后追加，不以按键单测替代真正窗口关闭验收。
+- 76 项 Web 定向测试通过；Web 类型检查/生产构建通过。独立审查发现并补齐逗号、加号和旧物理键别名的录制/冲突边界。
+- 实际 headless Chrome 在独立 Vite 与 mock API 中验证：录制 Mod K 不误开命令面板，Mod Comma/Shift Equal 保存后显示和再次触发正确，旧 W/Q 覆盖的 DOM 事件不阻止默认动作。390px 下设置页和说明文字无横向溢出。
+- 实测 API 来源仅测试端口 1444；未向常用服务发送测试数据。异步保存/弹窗完成前连按的初次失败按真实状态等待后复测通过。独立浏览器及 Vite 已清理；截图为 `output/playwright/keymap-desktop.png`、`keymap-mobile-390.png`，不提交临时 profile。
+- 原生按键验收仍待完成：隔离 macOS bundle 的 System Events 定位及进程稳定性出现异常，未可靠完成 Cmd W/X/Q 实际操作；不以单测、DOM 事件或退出协议探针冒充原生快捷键验收。
+
+## 桌面关闭与明确退出
+
+- Command W/窗口叉号关闭到托盘，保留 WebView 草稿与后台；托盘菜单、菜单栏和 macOS Dock 可恢复前台。Command Q/“退出并停止后台”单次协调 Go Host 与桌面持有的 Runtime，只有确认退出后才退出桌面进程。
+- macOS 明确安装标准菜单，其他平台提供关闭窗口的 Ctrl W 与无 Ctrl Q 占用的退出菜单。关停与 Host 启动串行，防止迟到启动使服务复活；错误或超时不伪装为整体成功。
+- `./armadra.sh run desktop` 显式将 debug Runtime 交给桌面持有私有控制管道。独立 `pnpm ... dev` 保留外部 Runtime 模式，桌面不按 PID 猜测终止它。生产从包内启动受管 Runtime。
+- 主 Agent 实际执行桌面完整 18 项测试通过；开发/发布编译与 Clippy、`bash -n armadra.sh` 通过。可用 `ARMADRA_DESKTOP_LIFECYCLE_TRACE=1` 输出有限阶段诊断，默认关闭，不记录按键或文档内容。
+- macOS 原生按键验收未完成：仅观察到关闭请求和恢复窗口，未可靠派发 Cmd W/Q；隔离 bundle 后续退出的原因未确认。测试 App、注册、数据和独立服务已清理。默认服务后续状态也发生变化，来源未知，不能把“未向其发测试请求”当作其状态始终不变的证据。
 
 ## Runtime 明确退出控制
 

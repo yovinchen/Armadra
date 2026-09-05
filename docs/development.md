@@ -119,7 +119,7 @@ go -C apps/host run ./cmd/armadra-host --allow-origin http://127.0.0.1:1420
 
 地址仅在显式检查且校验通过时保存在本设备，不保存凭据；取消、编辑或离开页面会使旧检查失效。Host 未运行或来源不匹配时显示失败，不保留旧成功状态。服务命令及后端边界见 [Host 说明](../apps/host/README.md)。
 
-桌面开发的 predev 会准备 Go Host 二进制；发布使用包内 sidecar。已有服务端点或来源不兼容时不会自动重配/重启，错误不阻断原有 Runtime 界面。退出桌面进程不停止 Go Host，但原 Runtime 子进程的退出清理仍保留；业务迁移和后台执行器尚未完成。路径覆盖、协议和实际验证限制见 [桌面说明](../apps/desktop/README.md)。
+桌面开发的 predev 会准备 Go Host 二进制；发布使用包内 sidecar。已有服务端点或来源不兼容时不会自动重配/重启，错误不阻断原有 Runtime 界面。Command W/窗口关闭只隐藏前台；Command Q/托盘退出停止配置的 Go Host 和桌面持有的 Runtime 及受管会话。`./armadra.sh run desktop` 也使用桌面持有模式；独立启动的开发 Runtime 不会被误关。业务迁移和后台执行器尚未完成。路径覆盖、协议和实际验证限制见 [桌面说明](../apps/desktop/README.md)。
 
 ### Runtime 配置
 

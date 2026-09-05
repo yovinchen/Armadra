@@ -5,10 +5,9 @@ Tauri 2 薄桌面壳。
 负责启动/发现 Go Host、启动 Runtime、健康检查、加载同一套 Web 页面，以及标题栏覆盖、托盘、通知和
 系统权限入口。业务逻辑不写进 Tauri command，避免形成第二套后端。
 
-开发模式连接外部 Runtime；生产构建从包内 sidecar 启动 `armadra-runtime`，
-退出应用时清理该子进程。
+生产构建从包内 sidecar 启动 `armadra-runtime`。`./armadra.sh run desktop` 也由桌面持有 debug Runtime；独立 `pnpm --filter @armadra/desktop dev` 默认仍连接外部 Runtime。桌面只通过自己持有的子进程管道进行明确关停。
 
-Go Host 在启动时异步准备，使用独立后台进程；桌面退出不调用其 stop。当前 Runtime 业务仍未迁移到 Host，不能据 Host 保活推断定时任务或所有执行器已在后台可用。
+Go Host 在启动时异步准备，使用独立后台进程。Command W/窗口叉号关闭到托盘，保留后台及隐藏 WebView 中的编辑草稿；菜单、托盘或 macOS Dock 可恢复前台。Command Q/“退出并停止后台”停止配置目录的 Go Host，再请求桌面持有的 Runtime 结束受管会话并退出；任何未确认完成的关停都会显示失败，不能当作全部停止。当前 Runtime 业务仍未迁移到 Host，后台计划尚未实现。
 
 ```bash
 pnpm --filter @armadra/desktop dev     # 需要 cargo run -p armadra-runtime 已在跑
@@ -23,8 +22,9 @@ cargo check -p armadra-desktop
 
 Rust 启动器从开发构建目录或发布应用可执行文件同目录定位 `armadra-host`，以固定参数调用 `start --output protobuf`，有界读取结果并校验服务身份、默认地址及页面来源许可。命令参数、路径和管理动作不暴露为网页 invoke 接口。
 
-生产地址固定为 `http://127.0.0.1:43121`，与桌面 CSP 一致。已有服务的端点或来源许可不匹配时只报告错误，不替用户重启或重配服务。Host 失败不阻止现有 Runtime/UI 启动；退出仍只执行原 Runtime 清理。
+生产地址固定为 `http://127.0.0.1:43121`，与桌面 CSP 一致。已有服务的端点或来源许可不匹配时只报告错误，不替用户重启或重配服务。Host 失败不阻止现有 Runtime/UI 启动。Host 启动与明确退出串行协调，防止退出后迟到的启动任务重新创建服务。
 
+- `ARMADRA_DESKTOP_OWNS_RUNTIME=1` 让开发壳启动同目录 debug Runtime 并持有私有控制管道；脚本桌面启动默认设置此值。外部单独启动的 Runtime 不会被按 PID 猜测终止。
 - 开发可用 `ARMADRA_HOST_BINARY` 指定绝对路径；发布版本忽略该二进制覆盖，使用包内 sidecar。
 - `ARMADRA_HOST_DATA_DIR` 可指定绝对的独立 Host 数据目录，用于本机测试或用户部署。
 - 开发来源取实际 `devUrl`；发布按平台配置使用相应 Tauri origin。会实际验证 OPTIONS 与 Hello，固定回环探针禁用代理和重定向。
@@ -32,7 +32,7 @@ Rust 启动器从开发构建目录或发布应用可执行文件同目录定位
 
 `pnpm host:bootstrap-smoke` 使用同一 Rust 启动器，验证真实 Go 启动、发现、来源不兼容拒绝及启动器退出后的保活。首次运行需要本机 Rust sidecar 已准备好，可先执行 `pnpm --filter @armadra/desktop prepare:sidecar`；探针不伪造二进制来绕过 Tauri 构建检查。
 
-macOS 已运行真实原生进程并确认 Host 自动启动和进程退出后保活；本轮窗口控制工具超时，正常菜单/窗口关闭动作未由工具确认。Windows 原生窗口、安装包和正常退出仍待实机验收，不能用交叉编译替代。
+Host 启动器已有真实进程保活验证；本次窗口按键与整体退出的验证结果见[实施记录](../../docs/platform-implementation-status.md)。Windows 原生窗口、安装包和正常退出仍待实机验收，不能用交叉编译替代。
 
 ## Sidecar 构建
 
