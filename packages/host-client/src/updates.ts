@@ -49,11 +49,34 @@ export interface HostUpdatesClientOptions {
   hostId: string;
 }
 
+/**
+ * The programs one release publishes. A caller asks about exactly one: a
+ * release carries several for the same target, so a target alone does not name
+ * a download (`updates.proto`, `UpdateArtifact.component`).
+ */
+export const UPDATE_COMPONENTS = [
+  "desktop",
+  "host",
+  "worker",
+  "hook",
+  "session-host",
+  "web",
+  "manifest",
+] as const;
+
+export type UpdateComponent = (typeof UPDATE_COMPONENTS)[number];
+
 export interface CheckForUpdateInput {
   channel: ReleaseChannel;
   installedVersion: SemanticVersion;
   /** The caller's own build target, so the Host answers about one artifact. */
   target: string;
+  /**
+   * Which program is being asked about. Omitted means "desktop", which is what
+   * an older client meant when the field did not exist — so a Host answering an
+   * old caller keeps answering the same question.
+   */
+  component?: UpdateComponent;
 }
 
 let counter = 0;
@@ -130,7 +153,12 @@ export class HostUpdatesClient {
       !input.installedVersion ||
       typeof input.target !== "string" ||
       !targetPattern.test(input.target) ||
-      !Object.values(ReleaseChannel).includes(input.channel)
+      !Object.values(ReleaseChannel).includes(input.channel) ||
+      // A component this build has never heard of is refused rather than sent:
+      // the Host would match no artifact, and the answer would look like "this
+      // release publishes nothing for you".
+      (input.component !== undefined &&
+        !UPDATE_COMPONENTS.includes(input.component))
     )
       reject();
     const request = create(CheckForUpdateRequestSchema, {
@@ -138,6 +166,7 @@ export class HostUpdatesClient {
       channel: input.channel,
       installedVersion: input.installedVersion,
       target: input.target,
+      component: input.component ?? "",
     });
     let wire: Uint8Array;
     try {
