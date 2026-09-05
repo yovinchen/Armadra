@@ -33,6 +33,9 @@ tauri = { version = "2.10.2", features = ["tray-icon", "image-png", "macos-priva
 tauri-plugin-dialog = "2.7.3"
 tauri-plugin-notification = "2.4.0"
 tauri-plugin-opener = "2.5.5"
+# 自动更新契约（S03 / 路线图 §3.12）。插件只做「查一下」，安装仍是人的动作；
+# 没有 pubkey 时 `updates.rs` 直接报「未配置」，不会去问一个无法验证的来源。
+tauri-plugin-updater = "2.10.1"
 tokio = { version = "1.53.1", features = ["time", "process", "io-util", "macros", "rt", "sync", "net"] }
 
 # 侧栏毛玻璃（§24.2「源列表侧栏」/「一致的窗口 chrome」）。只有 macOS 用得上，

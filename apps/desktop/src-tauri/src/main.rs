@@ -19,6 +19,7 @@ use tauri_plugin_dialog::DialogExt;
 mod host;
 mod lifecycle;
 mod transport;
+mod updates;
 use lifecycle::DesktopLifecycle;
 use transport::{RuntimeAddress, RuntimeTransport, WebSocketForwarder};
 
@@ -448,6 +449,11 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
+        // Checking for a newer build is a read. Nothing here downloads or
+        // installs one, and with no signing key configured `check_for_update`
+        // reports "not configured" without contacting anything (§3 S03).
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![updates::check_for_update])
         .manage(RuntimeProcess::default())
         .manage(DesktopLifecycle::default())
         .manage(RuntimeTransport::new(RuntimeAddress::for_data_dir(

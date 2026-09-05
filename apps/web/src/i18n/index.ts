@@ -31,6 +31,7 @@ import { fileDrag } from "./file-drag";
 import { resources } from "./resources";
 import { fileWorkflow } from "./file-workflow";
 import { terminal } from "./terminal";
+import { updates } from "./updates";
 import { usage } from "./usage";
 
 export type Locale = "zh-CN" | "en";
@@ -84,6 +85,7 @@ export const MESSAGE_MODULES = {
   format,
   collab,
   meta,
+  updates,
   usage,
 } satisfies Record<string, MessageModule>;
 

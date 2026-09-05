@@ -6,6 +6,7 @@ import (
 	"armadra.local/host/internal/githubhost"
 	"armadra.local/host/internal/identity"
 	"armadra.local/host/internal/runtimelink"
+	"armadra.local/host/internal/updates"
 	"errors"
 	"net"
 	"net/http"
@@ -36,6 +37,9 @@ type Options struct {
 	Runtime *runtimelink.Resolver
 	// External is the "serve to my other devices" switch. Nil hides its route.
 	External *externalservice.Manager
+	// Updates is nil when no release source was configured. The update surface
+	// then reports UNSUPPORTED, which is never rendered as "up to date".
+	Updates *updates.Service
 }
 
 // ParseOrigin validates a serialized origin and returns its canonical spelling.

@@ -34,7 +34,7 @@
   },
   "plugins": {
     "updater": {
-      "$comment": "更新器骨架，默认关闭（§17 Tauri）。启用步骤：1) `pnpm tauri signer generate` 生成密钥对，公钥填进 pubkey，私钥只放 CI secret，绝不入库；2) endpoints 填发布清单地址（形如 https://…/latest.json，可用 {{target}}/{{arch}}/{{current_version}} 占位符）；3) Cargo.toml 加 tauri-plugin-updater，main.rs 里 .plugin(tauri_plugin_updater::Builder::new().build())，capabilities/default.json 加 updater:default；4) bundle.createUpdaterArtifacts 置 true。在这些都做完之前，本段只是占位，没有任何代码读它。",
+      "$comment": "更新器已接线但尚未可用（S03 / 路线图 §3.12）。已完成：Cargo.toml 依赖 tauri-plugin-updater、main.rs 注册插件、capabilities/default.json 授 updater:default、src/updates.rs 的 check_for_update 命令读取本段。仍缺两样东西，缺任何一样都只报「未配置」，绝不谎称已是最新：1) pubkey——`pnpm tauri signer generate` 生成密钥对，公钥填这里，私钥只放 CI secret，绝不入库；2) endpoints——发布清单地址（形如 https://…/latest.json，可用 {{target}}/{{arch}}/{{current_version}} 占位符）。两者齐备后再把 active 置 true，并把 bundle.createUpdaterArtifacts 置 true 让打包产出带签名的更新包；在那之前 updates.rs 不会去联系任何来源。",
       "active": false,
       "endpoints": [],
       "pubkey": "",

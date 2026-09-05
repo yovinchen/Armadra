@@ -112,5 +112,8 @@ var permissions = []string{
 	"files:read", "files:write", "git:read", "git:write", "github:read", "github:write",
 	"browser:read", "browser:control", "automation:read", "automation:manage",
 	"credential:use", "resources:read", "settings:read", "settings:write",
+	// Reading whether a newer release exists is host-wide: a release is not a
+	// property of one workspace, so this grant is never workspace-constrained.
+	"updates:read",
 	"identity:read", "identity:manage",
 }

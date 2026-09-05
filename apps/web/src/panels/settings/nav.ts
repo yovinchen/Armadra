@@ -6,6 +6,7 @@ import {
   Info,
   Keyboard,
   Presentation,
+  RefreshCw,
   Server,
   ServerCog,
   SlidersHorizontal,
@@ -116,6 +117,13 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     groupKey: "settings.group.advanced",
     labelKey: "settings.section.keybindings",
     icon: Keyboard,
+  },
+  {
+    // 更新是「有没有新版本」，跟数据、账户一样属于高级设置（S03 / §3.12）。
+    id: "updates",
+    groupKey: "settings.group.advanced",
+    labelKey: "updates.nav",
+    icon: RefreshCw,
   },
   {
     id: "about",

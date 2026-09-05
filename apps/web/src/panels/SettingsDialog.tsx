@@ -15,6 +15,7 @@ import { KeybindingsPage } from "./settings/pages/KeybindingsPage";
 import { NotificationsPage } from "./settings/pages/NotificationsPage";
 import { SshPage } from "./settings/pages/SshPage";
 import { TerminalPage } from "./settings/pages/TerminalPage";
+import { UpdatesPage } from "./settings/pages/UpdatesPage";
 import { WhiteboardPage } from "./settings/pages/WhiteboardPage";
 import { WorkspacePage } from "./settings/pages/WorkspacePage";
 import { subpageTitleKey } from "./settings/subpage";
@@ -45,6 +46,7 @@ const SECTION_PAGES: Record<string, () => React.ReactElement> = {
   data: DataPage,
   account: AccountPage,
   keybindings: KeybindingsPage,
+  updates: UpdatesPage,
   about: AboutPage,
 };
 

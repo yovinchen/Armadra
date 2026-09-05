@@ -61,7 +61,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "Local request origin is not allowed")
 			return
 		}
-		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path) || githubMethod(r.URL.Path)) {
+		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path) || githubMethod(r.URL.Path) || updatesMethod(r.URL.Path)) {
 			if origin != options.PublicOrigin {
 				writeError(w, 403, "PERMISSION_DENIED", "Authentication requires the Host HTTPS origin")
 				return
@@ -97,6 +97,12 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 					return
 				}
 				githubRequest(w, r, identity, options.Identity, options.GitHub)
+				return
+			}
+			// A nil Updates service is a Host with no configured release
+			// source; it answers UNSUPPORTED in the contract's own state.
+			if updatesMethod(r.URL.Path) {
+				updatesRequest(w, r, identity, options.Identity, options.Updates)
 				return
 			}
 			identityRequest(w, r, identity, options.Identity)
