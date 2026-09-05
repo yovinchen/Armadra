@@ -29,6 +29,21 @@ import (
 //go:embed legacy/*.sql
 var legacy embed.FS
 
+// The Runtime's own numbered migrations, byte for byte. An export is only
+// accepted when its ledger matches a prefix of this list, so the importer
+// recognises exactly the schemas it can read rather than trusting a version
+// number. Appending here is how support for a newer Runtime schema is added;
+// an existing entry must never change, because its checksum is what an
+// already-exported database was recorded against.
+var legacyMigrations = []string{
+	"legacy/0001_initial.sql",
+	"legacy/0002_agent_mailbox.sql",
+	"legacy/0003_retire_kanban.sql",
+	"legacy/0004_agent_handoffs.sql",
+	"legacy/0005_browser_sessions.sql",
+	"legacy/0006_write_ownership.sql",
+}
+
 const maxManifest = 64 << 20
 const maxDatabase = int64(16 << 30)
 const maxAsset = int64(256 << 20)
@@ -234,7 +249,7 @@ func validateDatabase(ctx context.Context, db *sql.DB, manifest *pb.MigrationExp
 	if err != nil {
 		return err
 	}
-	if len(migrations) < 1 || len(migrations) > 4 || len(migrations) != len(manifest.Migrations) {
+	if len(migrations) < 1 || len(migrations) > len(legacyMigrations) || len(migrations) != len(manifest.Migrations) {
 		return errors.New("unsupported source migration history")
 	}
 	expected, err := sql.Open("sqlite", ":memory:")
@@ -243,9 +258,8 @@ func validateDatabase(ctx context.Context, db *sql.DB, manifest *pb.MigrationExp
 	}
 	defer expected.Close()
 	expected.SetMaxOpenConns(1)
-	names := []string{"legacy/0001_initial.sql", "legacy/0002_agent_mailbox.sql", "legacy/0003_retire_kanban.sql", "legacy/0004_agent_handoffs.sql"}
 	for i, m := range migrations {
-		source, err := legacy.ReadFile(names[i])
+		source, err := legacy.ReadFile(legacyMigrations[i])
 		if err != nil {
 			return err
 		}

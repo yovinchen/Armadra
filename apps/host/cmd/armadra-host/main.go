@@ -21,6 +21,7 @@ import (
 
 	pb "armadra.local/host/gen/armadra/v1"
 	"armadra.local/host/internal/automationhost"
+	"armadra.local/host/internal/canvashost"
 	"armadra.local/host/internal/daemon"
 	"armadra.local/host/internal/endpoints"
 	"armadra.local/host/internal/externalservice"
@@ -83,6 +84,10 @@ type config struct {
 	// Server-mode flags (install / uninstall / logs / upgrade) live in
 	// service.go; only their registration and validation appear here.
 	service serviceFlags
+	// Write-ownership maintenance. Nothing here is inferred either: moving the
+	// canvas domain names the Runtime binary and database explicitly, so the
+	// command can never act on a Runtime the operator did not point it at.
+	ownership ownershipConfig
 }
 
 func parseConfig(args []string) (config, error) {
@@ -93,6 +98,22 @@ func parseConfig(args []string) (config, error) {
 		case "serve", "start", "status", "stop", "import", "pair", "install", "uninstall", "logs", "upgrade", "version":
 			c.command = args[0]
 			args = args[1:]
+		case "ownership":
+			c.command = args[0]
+			args = args[1:]
+			// The verb is positional so the command reads as an operator
+			// instruction, and an unknown one is refused before any flag is
+			// parsed rather than defaulting to something that changes state.
+			if len(args) == 0 {
+				return c, fmt.Errorf("ownership requires status, switch or rollback")
+			}
+			switch args[0] {
+			case "status", "switch", "rollback":
+				c.ownership.action = args[0]
+				args = args[1:]
+			default:
+				return c, fmt.Errorf("ownership requires status, switch or rollback")
+			}
 		}
 	}
 	flags := flag.NewFlagSet("armadra-host "+c.command, flag.ContinueOnError)
@@ -103,6 +124,9 @@ func parseConfig(args []string) (config, error) {
 	}
 	if c.command == "import" {
 		flags.StringVar(&c.bundle, "bundle", "", "Verified Runtime export package directory")
+	}
+	if c.command == "ownership" {
+		c.ownership.register(flags)
 	}
 	if c.command != "serve" {
 		// The server-mode commands print for people first, so logs defaults to
@@ -138,6 +162,11 @@ func parseConfig(args []string) (config, error) {
 	}
 	if c.command == "import" && c.bundle == "" {
 		return c, fmt.Errorf("import requires --bundle DIRECTORY")
+	}
+	if c.command == "ownership" {
+		if err := c.ownership.normalize(); err != nil {
+			return c, err
+		}
 	}
 	if c.command == "pair" {
 		normalized, err := server.ParseOrigin(c.pairOrigin)
@@ -298,6 +327,8 @@ func run(args []string) error {
 		return pairDevice(ctx, c)
 	case "import":
 		return importBundle(ctx, c)
+	case "ownership":
+		return runOwnership(ctx, c)
 	case "start":
 		return startBackground(ctx, c)
 	case "status":
@@ -427,6 +458,13 @@ func serveHost(parent context.Context, c config) (err error) {
 	if err != nil {
 		return err
 	}
+	// The canvas surface is always assembled: it answers reads whoever owns
+	// writes, and its GetOwnership is how a client learns which service it must
+	// save through. Serving it is not a claim that the Host owns canvas writes.
+	canvases, err := canvashost.New(canvashost.Options{Store: database, HostID: state.ID})
+	if err != nil {
+		return err
+	}
 	// The front end and the Runtime proxy are the "reach this Host from my
 	// phone" half of H02. Both exist only on the authenticated HTTPS origin;
 	// a mistyped bundle path fails here rather than as a 404 discovered later.
@@ -443,7 +481,7 @@ func serveHost(parent context.Context, c config) (err error) {
 	if c.publicOrigin != "" {
 		link = runtimelink.New(endpointsDir)
 	}
-	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link, Updates: releases}
+	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link, Updates: releases, Canvas: canvases}
 	// The switch binds its own listener with the same routes. `options` is
 	// captured by reference, so the manager it is about to be given is the one
 	// this closure serves with.
