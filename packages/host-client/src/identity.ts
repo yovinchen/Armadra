@@ -49,6 +49,8 @@ const media = "application/x-protobuf";
 const id = /^[0-9a-f]{32}$/;
 const secret = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
 const ticketPattern = /^[0-9a-f]{32}\.[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
+/** Service and method names only; nothing that could reshape the request path. */
+const servicePattern = /^[A-Za-z][A-Za-z0-9]{0,63}$/;
 const remoteCodes = new Set([
   "INVALID_ARGUMENT",
   "UNSUPPORTED",
@@ -192,6 +194,7 @@ export class HostIdentityClient {
     return result;
   }
   async #rpc<T>(
+    service: string,
     action: string,
     body: Uint8Array,
     decode: (wire: Uint8Array) => T,
@@ -223,7 +226,7 @@ export class HostIdentityClient {
           "UNAUTHENTICATED",
         );
       const url = new URL(this.#url);
-      url.pathname = `${url.pathname.replace(/\/+$/, "")}/rpc/armadra.v1.IdentityService/${action}`;
+      url.pathname = `${url.pathname.replace(/\/+$/, "")}/rpc/armadra.v1.${service}/${action}`;
       const headers: Record<string, string> = {
         "Content-Type": media,
         Accept: media,
@@ -342,6 +345,7 @@ export class HostIdentityClient {
   }
   #current(): Promise<HostIdentitySession> {
     return this.#rpc(
+      "IdentityService",
       "Current",
       toBinary(
         CurrentSessionRequestSchema,
@@ -353,6 +357,7 @@ export class HostIdentityClient {
   }
   async #renew(): Promise<void> {
     const value = await this.#rpc(
+      "IdentityService",
       "RenewCsrf",
       toBinary(RenewCsrfRequestSchema, create(RenewCsrfRequestSchema)),
       (wire) => fromBinary(RenewCsrfResponseSchema, wire),
@@ -365,6 +370,7 @@ export class HostIdentityClient {
   }
   #refresh(): Promise<HostIdentitySession> {
     return this.#rpc(
+      "IdentityService",
       "Refresh",
       toBinary(
         RefreshSessionRequestSchema,
@@ -408,6 +414,37 @@ export class HostIdentityClient {
   current(): Promise<HostIdentitySession> {
     return this.#serial(() => this.#current());
   }
+  /**
+   * Sends one request to another Host service over this signed-in session: the
+   * same cookies, the same serialization queue, and — for a mutation — the CSRF
+   * token this client renews and holds privately. The token never leaves the
+   * class, and the raw response body is returned so the caller owns decoding.
+   */
+  send(
+    service: string,
+    action: string,
+    body: Uint8Array,
+    mutation: boolean,
+  ): Promise<Uint8Array> {
+    return this.#serial(async () => {
+      if (
+        !servicePattern.test(service) ||
+        !servicePattern.test(action) ||
+        !(body instanceof Uint8Array) ||
+        body.byteLength > MAX_FRAME_BYTES
+      )
+        invalid();
+      if (mutation && !this.#csrf) await this.#renew();
+      return this.#rpc(
+        service,
+        action,
+        body,
+        (wire) => wire,
+        mutation,
+        mutation,
+      );
+    });
+  }
   pair(material: string): Promise<HostIdentitySession> {
     return this.#serial(async () => {
       let ticket = material.trim();
@@ -435,6 +472,7 @@ export class HostIdentityClient {
       }
       if (!ticketPattern.test(ticket)) invalid();
       return this.#rpc(
+        "IdentityService",
         "Pair",
         toBinary(
           PairDeviceRequestSchema,
@@ -465,6 +503,7 @@ export class HostIdentityClient {
       )
         invalid();
       const page = await this.#rpc(
+        "IdentityService",
         "ListDevices",
         toBinary(
           ListDevicesRequestSchema,
@@ -498,6 +537,7 @@ export class HostIdentityClient {
         invalid();
       if (!this.#csrf) await this.#renew();
       const value = await this.#rpc(
+        "IdentityService",
         "RevokeDevice",
         toBinary(
           RevokeDeviceRequestSchema,
@@ -519,6 +559,7 @@ export class HostIdentityClient {
     return this.#serial(async () => {
       if (!this.#csrf) await this.#renew();
       const value = await this.#rpc(
+        "IdentityService",
         "Logout",
         toBinary(
           LogoutSessionRequestSchema,

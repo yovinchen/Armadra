@@ -317,3 +317,4 @@ export class HostClient {
   }
 }
 export * from "./identity.js";
+export * from "./automation.js";
