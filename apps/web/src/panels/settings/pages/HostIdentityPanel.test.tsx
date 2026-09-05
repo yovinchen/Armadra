@@ -57,6 +57,7 @@ const hello: HelloResponse = {
   hostInstanceId,
   protocol: { $typeName: "armadra.v1.ProtocolVersion", major: 1, minor: 1 },
   capabilities: ["identity.browser-session.v1"],
+  capabilityStatus: [],
   maxFrameBytes: 1_048_576,
 };
 const session: HostIdentitySession = {

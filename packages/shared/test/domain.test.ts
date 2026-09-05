@@ -4,12 +4,14 @@ import {
   EDGE_KINDS,
   NODE_COLORS,
   NODE_TYPES,
+  accountRefSchema,
   agentStatusSchema,
   boardDocumentSchema,
   boardSchema,
   canvasEdgeSchema,
   canvasNodeSchema,
   editorNodeDataSchema,
+  terminalNodeDataSchema,
   workspaceSchema,
 } from "../src/index.js";
 
@@ -352,6 +354,37 @@ describe("retired board state, labels and notes", () => {
         path: "a.ts",
         languageService: { status: "ready" },
       }).success,
+    ).toBe(false);
+  });
+
+  it("reserves an account binding that defaults to absent and carries no secret", () => {
+    const agent = { id: "claude" };
+    expect(
+      terminalNodeDataSchema.parse({ kind: "terminal", agent }).agent?.account,
+    ).toBeUndefined();
+    const bound = terminalNodeDataSchema.parse({
+      kind: "terminal",
+      agent: {
+        ...agent,
+        account: {
+          accountId: "default",
+          providerId: "claude",
+          label: "Work",
+          credentialRef: "keychain://armadra/claude/default",
+          // A token has no field to land in; unknown keys are dropped.
+          token: "not-a-field",
+        },
+      },
+    }).agent?.account;
+    expect(bound).toEqual({
+      accountId: "default",
+      providerId: "claude",
+      label: "Work",
+      credentialRef: "keychain://armadra/claude/default",
+    });
+    expect(accountRefSchema.safeParse({ accountId: "" }).success).toBe(false);
+    expect(
+      accountRefSchema.safeParse({ credentialRef: "keychain://x" }).success,
     ).toBe(false);
   });
 });

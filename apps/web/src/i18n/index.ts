@@ -1,3 +1,4 @@
+import { account } from "./account";
 import { agent } from "./agent";
 import { automation } from "./automation";
 import { canvas } from "./canvas";
@@ -52,6 +53,7 @@ export const MESSAGE_MODULES = {
   nodes,
   agent,
   automation,
+  account,
   terminal,
   resources,
   sessions,

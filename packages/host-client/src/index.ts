@@ -11,7 +11,9 @@ import {
   type HelloResponse,
 } from "@armadra/protocol";
 
-export type { HelloResponse } from "@armadra/protocol";
+export type { HelloResponse, CapabilityStatus } from "@armadra/protocol";
+/** Explicitly unsupported surfaces a Host names in Hello (H04 / S02). */
+export { CapabilityState } from "@armadra/protocol";
 
 export type HostClientErrorCode =
   | "INVALID_OPTIONS"

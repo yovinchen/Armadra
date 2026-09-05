@@ -616,3 +616,74 @@ pub(crate) async fn execute_journal(
         .await?;
     Ok(())
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    fn private_dir() -> tempfile::TempDir {
+        let directory = tempfile::tempdir().unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        directory
+    }
+
+    async fn manager() -> (Manager, tempfile::TempDir, tempfile::TempDir) {
+        let state = private_dir();
+        let root = private_dir();
+        let manager = Manager::open(
+            state.path().canonicalize().unwrap(),
+            "0123456789abcdef0123456789abcdef".into(),
+        )
+        .await
+        .unwrap();
+        manager
+            .bind(BindCommandRootRequest {
+                root_id: "root-1".into(),
+                workspace_id: "workspace-1".into(),
+                path: root.path().canonicalize().unwrap().to_str().unwrap().into(),
+            })
+            .await
+            .unwrap();
+        (manager, state, root)
+    }
+
+    fn launch(account: &str) -> CommandLaunchSpec {
+        CommandLaunchSpec {
+            executable: "/bin/echo".into(),
+            args: vec!["ok".into()],
+            working_directory: ".".into(),
+            account_id: account.into(),
+            timeout_ms: 1_000,
+            ..Default::default()
+        }
+    }
+
+    fn create(session: &str, account: &str) -> CreateCommandSessionRequest {
+        CreateCommandSessionRequest {
+            session_id: session.into(),
+            root_id: "root-1".into(),
+            workspace_id: "workspace-1".into(),
+            kind: CommandSessionKind::NonInteractiveCommand as i32,
+            launch: Some(launch(account)),
+        }
+    }
+
+    /// Multi-account binding (S02) is reserved, not silently accepted: a launch
+    /// naming any account other than `default` is refused here rather than run
+    /// under whichever credentials the process happens to inherit.
+    #[tokio::test]
+    async fn non_default_accounts_are_refused_until_binding_exists() {
+        let (manager, _state, _root) = manager().await;
+        assert!(manager.create(create("session-1", "default")).await.is_ok());
+        for account in ["work", "default ", "DEFAULT", ""] {
+            let error = manager
+                .create(create("session-2", account))
+                .await
+                .expect_err("non-default account accepted");
+            assert!(error.to_string().contains("unsupported command launch"));
+        }
+        // Nothing was written for the refused account.
+        assert!(manager.store.session("session-2").await.is_err());
+    }
+}

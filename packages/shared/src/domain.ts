@@ -86,9 +86,32 @@ export const pendingLaunchSchema = z.object({
   after: z.array(z.string().uuid()).max(32).default([]),
 });
 
+/**
+ * Which account a node runs as — the domain mirror of `AccountRef` and
+ * `CredentialBinding` in `proto/armadra/v1/account.proto` (S02).
+ *
+ * Reserved: absent on every node today, and the runtime still refuses any
+ * `accountId` other than `default`. `credentialRef` is a **name** in the
+ * execution host's credential store — never a token, key or password. Nothing
+ * in this object may be treated as authorization: the Host re-checks the
+ * binding against the authenticated principal when it is eventually honoured.
+ */
+export const accountRefSchema = z.object({
+  accountId: z.string().min(1).max(120),
+  /** CLI/vendor namespace the account belongs to (`claude`, `codex`, …). */
+  providerId: z.string().max(120).optional(),
+  /** Display text only; a label never decides what a session may do. */
+  label: z.string().max(200).optional(),
+  credentialRef: z.string().max(200).optional(),
+});
+
+export type AccountRef = z.infer<typeof accountRefSchema>;
+
 export const terminalAgentSchema = z.object({
   id: agentIdSchema,
   accountId: z.string().max(120).optional(),
+  /** Reserved account binding (S02); absent until multi-account ships. */
+  account: accountRefSchema.optional(),
   permissionMode: permissionModeSchema.optional(),
   model: z.string().max(120).optional(),
   /** Session id reported by the CLI (via hooks) or pre-minted by us. */

@@ -18,6 +18,7 @@ function response(hostId = "host-1"): HelloResponse {
     hostInstanceId: "process-1",
     maxFrameBytes: 1_048_576,
     capabilities: ["protocol.hello.v1"],
+    capabilityStatus: [],
     protocol: { $typeName: "armadra.v1.ProtocolVersion", major: 1, minor: 1 },
   };
 }

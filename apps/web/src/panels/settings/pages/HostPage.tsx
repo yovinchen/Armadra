@@ -1,10 +1,48 @@
 import { useId } from "react";
+import { CapabilityState, type CapabilityStatus } from "@armadra/host-client";
+
 import { useT } from "../../../app/preferences-store";
 import { useHostConnection } from "../../../host/use-host-connection";
 import { SettingsGroup } from "../SettingsGroup";
+import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { HostIdentityPanel } from "./HostIdentityPanel";
+
+/**
+ * Hello 里显式报告为不支持的预留能力（H04 / S02）。
+ *
+ * 服务不报告时显示「未报告」而不是「支持」：旧版本的沉默不是承诺。
+ */
+const RESERVED_CAPABILITIES = ["presence", "accountBinding"] as const;
+
+/** 服务发来的 reason 只在是已知键时才当键用，否则退回通用说明。 */
+const KNOWN_REASONS = new Set(["host.capability.reserved"]);
+
+function ReservedCapabilityState({ status }: { status?: CapabilityStatus }) {
+  const t = useT();
+  if (status?.state !== CapabilityState.UNSUPPORTED) {
+    return (
+      <Badge variant="outline" className="h-5 px-1.5 text-[11px]">
+        {t("host.capability.unknown")}
+      </Badge>
+    );
+  }
+  return (
+    <>
+      <Badge variant="secondary" className="h-5 px-1.5 text-[11px]">
+        {t("host.capability.unsupported")}
+      </Badge>
+      <span className="text-muted-foreground">
+        {t(
+          KNOWN_REASONS.has(status.reason)
+            ? status.reason
+            : "host.capability.reserved",
+        )}
+      </span>
+    </>
+  );
+}
 
 export function HostPage() {
   const t = useT();
@@ -112,6 +150,27 @@ export function HostPage() {
                   </dd>
                 </div>
               )}
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">
+                  {t("host.capabilities")}
+                </dt>
+                {RESERVED_CAPABILITIES.map((name) => (
+                  <dd
+                    key={name}
+                    className="mt-1 flex flex-wrap items-center gap-2"
+                  >
+                    <span>{t(`host.capability.${name}`)}</span>
+                    <ReservedCapabilityState
+                      status={state.hello.capabilityStatus.find(
+                        (entry) => entry.name === name,
+                      )}
+                    />
+                  </dd>
+                ))}
+                <dd className="mt-2 text-muted-foreground">
+                  {t("host.capability.note")}
+                </dd>
+              </div>
             </dl>
           </details>
         )}

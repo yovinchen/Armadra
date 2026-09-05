@@ -5,6 +5,7 @@ import {
   agentColor,
   agentColorVar,
   agentLabel,
+  agentSessionRequest,
   buildAgentLaunch,
   customAgentFor,
   setAgentRegistry,
@@ -102,5 +103,46 @@ describe("启动行用探测到的绝对路径", () => {
   it("没探测到时仍用注册表里的命令名", () => {
     const launch = buildAgentLaunch({ id: "codex" });
     expect(launch.command.startsWith("codex")).toBe(true);
+  });
+});
+
+describe("建会话请求里的账号绑定（S02 预留）", () => {
+  it("没有绑定就不发 accountId，不凭空替用户选一个账号", () => {
+    expect(agentSessionRequest({ id: "claude" })).toEqual({ id: "claude" });
+    expect(
+      agentSessionRequest({ id: "claude", permissionMode: "plan" }),
+    ).toEqual({ id: "claude", permissionMode: "plan" });
+  });
+
+  it("字段存在时原样透传 accountId，前端不做放行判断", () => {
+    // 非 default 也照发：拒不拒绝是 Runtime 的事，前端假装拦住只会掩盖问题。
+    expect(
+      agentSessionRequest({
+        id: "claude",
+        account: { accountId: "work", providerId: "claude" },
+      }),
+    ).toEqual({ id: "claude", accountId: "work" });
+    expect(agentSessionRequest({ id: "claude", accountId: "default" })).toEqual(
+      { id: "claude", accountId: "default" },
+    );
+    // 新字段优先于旧的扁平 accountId。
+    expect(
+      agentSessionRequest({
+        id: "claude",
+        accountId: "old",
+        account: { accountId: "new" },
+      }).accountId,
+    ).toBe("new");
+  });
+
+  it("凭据引用不上行：Runtime 没有凭据接口，发过去也没人读", () => {
+    const request = agentSessionRequest({
+      id: "claude",
+      account: {
+        accountId: "default",
+        credentialRef: "keychain://armadra/claude/default",
+      },
+    });
+    expect(JSON.stringify(request)).not.toContain("keychain");
   });
 });

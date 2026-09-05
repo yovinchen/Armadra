@@ -1568,6 +1568,7 @@ export type FileChangedEvent = Extract<
   { type: "file.changed" }
 >;
 export type CreateTerminalRequest = z.infer<typeof createTerminalRequestSchema>;
+export type CreateTerminalAgent = z.infer<typeof createTerminalAgentSchema>;
 export type SshHost = z.infer<typeof sshHostSchema>;
 export type SshTestResult = z.infer<typeof sshTestResultSchema>;
 export type TerminalSession = z.infer<typeof terminalSessionSchema>;

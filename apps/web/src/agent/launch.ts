@@ -3,6 +3,7 @@ import {
   agentDefinition,
   assembleLaunchCommand,
   type AgentInfo,
+  type CreateTerminalAgent,
   type CustomAgent,
   type LaunchCommand,
   type PermissionMode,
@@ -89,6 +90,26 @@ export function customAgentFor(id: string): CustomAgent | undefined {
     disabledCapabilities: AGENT_REGISTRY[info.baseAgent].capabilities.filter(
       (capability) => !info.capabilities.includes(capability),
     ),
+  };
+}
+
+/**
+ * 节点上的 Agent 配置 → `POST /api/terminals` 的 `agent` 段。
+ *
+ * 账号绑定（S02）是预留字段：`agent.account` 缺省时请求里根本没有 `accountId`，
+ * 不会凭空发一个 `"default"` 让 Runtime 以为客户端在选账号。字段存在时原样透传，
+ * Runtime 侧对非 `default` 的账号仍然显式拒绝——这里不做任何本地放行判断。
+ * 只带 `accountId`，`credentialRef` 留在节点数据里不上行：Runtime 没有凭据接口，
+ * 发过去只会变成一个没人读的字符串。
+ */
+export function agentSessionRequest(agent: TerminalAgent): CreateTerminalAgent {
+  const accountId = agent.account?.accountId ?? agent.accountId;
+  return {
+    id: agent.id,
+    ...(accountId ? { accountId } : {}),
+    ...(agent.permissionMode ? { permissionMode: agent.permissionMode } : {}),
+    ...(agent.model ? { model: agent.model } : {}),
+    ...(agent.sessionId ? { sessionId: agent.sessionId } : {}),
   };
 }
 

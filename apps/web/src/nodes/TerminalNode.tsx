@@ -32,6 +32,7 @@ import { modelSuggestions } from "@armadra/shared";
 import { useT } from "@/app/preferences-store";
 import { useAgentsQuery } from "@/app/use-agents";
 import { useCanvasStore } from "@/store/canvas-store";
+import { AccountBindingBadge } from "@/agent/account/AccountBindingBadge";
 import { ContextUsageBadge } from "@/agent/context-usage/ContextUsageBadge";
 import { useContextUsage } from "@/agent/context-usage/use-context-usage";
 import { agentLabel } from "@/agent/launch";
@@ -245,6 +246,7 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
           visible={!collapsed}
         />
       )}
+      {agent && <AccountBindingBadge agent={agent} />}
       {agent && <HandoffBadge nodeId={id} />}
       {sshLabel !== null && (
         <Badge

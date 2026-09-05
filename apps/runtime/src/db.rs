@@ -1769,9 +1769,23 @@ fn valid_agent_block(agent: &Value) -> bool {
                     })
                 }))
     });
+    // `account` mirrors AccountRef / CredentialBinding (S02). It is reserved:
+    // stored when a client sends it, never interpreted here, and no secret may
+    // hide in it — `credentialRef` is a name in a credential store.
+    let valid_account = agent.get("account").is_none_or(|value| {
+        value.is_null()
+            || (value
+                .get("accountId")
+                .and_then(Value::as_str)
+                .is_some_and(|id| !id.is_empty() && id.len() <= 120)
+                && optional_bounded_string(value, "providerId", 120)
+                && optional_bounded_string(value, "label", 200)
+                && optional_bounded_string(value, "credentialRef", 200))
+    });
     valid_id
         && valid_permission
         && valid_pending
+        && valid_account
         && optional_bounded_string(agent, "accountId", 120)
         && optional_bounded_string(agent, "model", 120)
         && optional_bounded_string(agent, "sessionId", 200)
@@ -3213,6 +3227,40 @@ mod default_node_payload_tests {
         let mut unknown = automation;
         unknown["scheduleKind"] = serde_json::json!("whenever");
         assert!(!valid_node_data(&node("automation", unknown)));
+    }
+
+    /// The reserved account binding (S02) is optional and bounded. A node
+    /// without it stays valid, which is why nothing in the UI shows a binding
+    /// control today.
+    #[test]
+    fn reserved_account_binding_is_optional_and_bounded() {
+        let with = |account: serde_json::Value| {
+            node(
+                "terminal",
+                serde_json::json!({ "kind": "terminal", "agent": { "id": "claude", "account": account } }),
+            )
+        };
+        assert!(valid_node_data(&node(
+            "terminal",
+            serde_json::json!({ "kind": "terminal", "agent": { "id": "claude" } })
+        )));
+        assert!(valid_node_data(&with(serde_json::json!({
+            "accountId": "default",
+            "providerId": "claude",
+            "label": "工作账号",
+            "credentialRef": "keychain://armadra/claude/default",
+        }))));
+        assert!(valid_node_data(&with(
+            serde_json::json!({ "accountId": "default" })
+        )));
+        // An account without an id, or an oversized reference, is not storable.
+        assert!(!valid_node_data(&with(serde_json::json!({}))));
+        assert!(!valid_node_data(&with(
+            serde_json::json!({ "accountId": "" })
+        )));
+        assert!(!valid_node_data(&with(
+            serde_json::json!({ "accountId": "default", "credentialRef": "x".repeat(201) })
+        )));
     }
 }
 

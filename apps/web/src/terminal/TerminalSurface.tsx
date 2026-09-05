@@ -35,7 +35,11 @@ import {
 } from "@/ui/context-menu";
 import { useCanvasStore } from "@/store/canvas-store";
 import { useAgentStatusStore } from "@/agent/status-store";
-import { agentLabel, buildAgentLaunch } from "@/agent/launch";
+import {
+  agentLabel,
+  agentSessionRequest,
+  buildAgentLaunch,
+} from "@/agent/launch";
 import { isAutoTitled } from "@/meta/auto-title";
 import { TERMINAL_PADDING } from "@/nodes/geometry";
 import {
@@ -683,20 +687,7 @@ function TerminalSurfaceImpl({
           // SSH 终端（§21）：只发主机 id，Runtime 自己从设置里拼 `ssh …`。
           ...(nodeData.ssh ? { ssh: { hostId: nodeData.ssh.hostId } } : {}),
           ...(nodeData.agent
-            ? {
-                agent: {
-                  id: nodeData.agent.id,
-                  ...(nodeData.agent.permissionMode
-                    ? { permissionMode: nodeData.agent.permissionMode }
-                    : {}),
-                  ...(nodeData.agent.model
-                    ? { model: nodeData.agent.model }
-                    : {}),
-                  ...(nodeData.agent.sessionId
-                    ? { sessionId: nodeData.agent.sessionId }
-                    : {}),
-                },
-              }
+            ? { agent: agentSessionRequest(nodeData.agent) }
             : {}),
         });
         freshSessionRef.current = true;

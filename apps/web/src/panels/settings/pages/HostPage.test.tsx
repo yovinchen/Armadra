@@ -6,7 +6,11 @@ import {
   render,
   screen,
 } from "@testing-library/react";
-import { HostClientError, type HelloResponse } from "@armadra/host-client";
+import {
+  CapabilityState,
+  HostClientError,
+  type HelloResponse,
+} from "@armadra/host-client";
 
 const probe = vi.fn();
 vi.mock("../../../host/connection", async (importOriginal) => ({
@@ -28,8 +32,18 @@ const hello: HelloResponse = {
   hostInstanceId: "process-confirmed",
   maxFrameBytes: 1_048_576,
   capabilities: ["protocol.hello.v1"],
+  capabilityStatus: [],
   protocol: { $typeName: "armadra.v1.ProtocolVersion", major: 1, minor: 1 },
 };
+
+function unsupported(name: string) {
+  return {
+    $typeName: "armadra.v1.CapabilityStatus" as const,
+    name,
+    state: CapabilityState.UNSUPPORTED,
+    reason: "host.capability.reserved",
+  };
+}
 
 beforeEach(() => {
   const values = new Map<string, string>();
@@ -92,6 +106,34 @@ describe("HostPage", () => {
     expect(screen.queryByText("host-confirmed")).toBeNull();
     expect(screen.queryByText("连接详情")).toBeNull();
     expect(screen.getByRole("status").textContent).toBe("尚未检查连接");
+  });
+
+  it("shows reserved surfaces as unsupported, and silence as not reported", async () => {
+    probe.mockResolvedValue({
+      ...hello,
+      capabilityStatus: [
+        unsupported("presence"),
+        unsupported("accountBinding"),
+      ],
+    });
+    render(<HostPage />);
+    fireEvent.click(screen.getByRole("button", { name: "检查连接" }));
+    await screen.findByText("已确认服务响应");
+    fireEvent.click(screen.getByText("连接详情"));
+    expect(screen.getByText("协同在场与编辑租约")).toBeTruthy();
+    expect(screen.getByText("节点账号绑定")).toBeTruthy();
+    expect(screen.getAllByText("不支持")).toHaveLength(2);
+    expect(screen.queryByText("未报告")).toBeNull();
+
+    // A Host that says nothing is not claiming support either.
+    cleanup();
+    probe.mockResolvedValue(hello);
+    render(<HostPage />);
+    fireEvent.click(screen.getByRole("button", { name: "检查连接" }));
+    await screen.findByText("已确认服务响应");
+    fireEvent.click(screen.getByText("连接详情"));
+    expect(screen.getAllByText("未报告")).toHaveLength(2);
+    expect(screen.queryByText("不支持")).toBeNull();
   });
 
   it("reports unsupported persistent identity accurately for a legacy service", async () => {
