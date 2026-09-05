@@ -14,6 +14,8 @@ pub struct Worker {
     host: Option<String>,
     instance: String,
     roots: HashMap<String, PathBuf>,
+    command_path: Option<PathBuf>,
+    commands: Option<crate::command::Manager>,
 }
 impl Default for Worker {
     fn default() -> Self {
@@ -21,6 +23,8 @@ impl Default for Worker {
             host: None,
             instance: uuid::Uuid::new_v4().simple().to_string(),
             roots: HashMap::new(),
+            command_path: None,
+            commands: None,
         }
     }
 }
@@ -155,6 +159,16 @@ impl Worker {
                         message: "Worker protocol is incompatible".into(),
                     }));
                 }
+                if let Some(path) = self.command_path.clone() {
+                    self.commands = Some(
+                        crate::command::Manager::open(path, request.host_id.clone())
+                            .await
+                            .map_err(|_| {
+                                AppError::Internal("Command journal could not be opened".into())
+                            })?,
+                    );
+                }
+                self.command_path = None;
                 self.host = Some(request.host_id.clone());
                 Ok(Response::Hello(WorkerHelloResponse {
                     protocol: Some(ProtocolVersion { major: 1, minor: 0 }),
@@ -170,7 +184,22 @@ impl Worker {
                     max_frame_bytes: MAX_FRAME as u32,
                     max_file_chunk_bytes: MAX_CHUNK as u32,
                     max_text_file_bytes: 1 << 20,
+                    commands: self
+                        .commands
+                        .as_ref()
+                        .map(|_| crate::command::capabilities()),
                 }))
+            }
+            Action::Command(input) => {
+                match self.commands.as_ref() {
+                    Some(manager) => Ok(Response::Command(manager.handle(input).await.map_err(
+                        |_| AppError::Conflict("Command operation was rejected".into()),
+                    )?)),
+                    None => Ok(Response::Error(ErrorResponse {
+                        code: "UNSUPPORTED".into(),
+                        message: "Command execution is not configured".into(),
+                    })),
+                }
             }
             Action::RegisterRoot(input) => {
                 if !id(&input.root_id) || input.path.is_empty() || input.path.len() > 32_768 {
@@ -323,4 +352,66 @@ pub async fn serve<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
         output.write_all(&bytes).await?;
         output.flush().await?;
     }
+}
+
+/// Command mode reads EOF independently from in-flight journal work, ensuring
+/// a dead controller cannot leave an otherwise healthy Worker running jobs.
+pub async fn serve_commands<R: AsyncRead + Unpin + Send + 'static, W: AsyncWrite + Unpin>(
+    mut input: R,
+    mut output: W,
+    path: PathBuf,
+) -> anyhow::Result<()> {
+    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+    let (closed, mut close_rx) = tokio::sync::watch::channel(false);
+    let reader = tokio::spawn(async move {
+        let result: anyhow::Result<()> = async {
+            loop {
+                let mut prefix = [0u8; 4];
+                if input.read(&mut prefix[..1]).await? == 0 {
+                    return Ok(());
+                }
+                input.read_exact(&mut prefix[1..]).await?;
+                let length = u32::from_be_bytes(prefix) as usize;
+                anyhow::ensure!(
+                    length > 0 && length <= MAX_FRAME,
+                    "Invalid Worker frame length"
+                );
+                let mut bytes = vec![0; length];
+                input.read_exact(&mut bytes).await?;
+                let request = WorkerRequest::decode(bytes.as_slice())?;
+                anyhow::ensure!(
+                    request.encode_to_vec() == bytes,
+                    "Noncanonical Worker command frame"
+                );
+                if tx.send(request).await.is_err() {
+                    return Ok(());
+                }
+            }
+        }
+        .await;
+        let _ = closed.send(true);
+        result
+    });
+    let mut worker = Worker {
+        command_path: Some(path),
+        ..Default::default()
+    };
+    let result: anyhow::Result<()>=async {
+        loop {
+            let request=tokio::select!{_=close_rx.changed()=>break,request=rx.recv()=>match request{Some(r)=>r,None=>break}};
+            let response=tokio::select!{_=close_rx.changed()=>break,response=worker.handle(request)=>response};
+            let bytes=response.encode_to_vec();anyhow::ensure!(bytes.len()<=MAX_FRAME,"Worker response exceeds frame limit");
+            output.write_all(&(bytes.len() as u32).to_be_bytes()).await?;output.write_all(&bytes).await?;output.flush().await?;
+        }Ok(())
+    }.await;
+    reader.abort();
+    let _ = reader.await;
+    if let Some(manager) = worker.commands {
+        let result = manager.shutdown().await?;
+        anyhow::ensure!(
+            result.cleanup_confirmed,
+            "Worker command cleanup was not confirmed"
+        );
+    }
+    result
 }

@@ -28,6 +28,18 @@ func validHello(hello *pb.WorkerHelloResponse, host, instance string) bool {
 	if hello == nil || hello.Protocol == nil || hello.Protocol.Major != 1 || hello.Protocol.Minor != 0 || hello.HostId != host || hello.InstanceId != instance || !hostIDPattern.MatchString(instance) || hello.Platform != platform || (hello.Architecture != "x86_64" && hello.Architecture != "aarch64") || hello.MaxFrameBytes < 1024 || hello.MaxFrameBytes > MaxFrameBytes || hello.MaxFileChunkBytes == 0 || hello.MaxFileChunkBytes > MaxFileChunkBytes || hello.MaxFileChunkBytes+1024 > hello.MaxFrameBytes || hello.MaxTextFileBytes < hello.MaxFileChunkBytes || hello.MaxTextFileBytes > MaxTextFileBytes || len(hello.Capabilities) > 32 {
 		return false
 	}
+	if commands := hello.Commands; commands != nil {
+		expected := "unix-guardian-process-group"
+		if runtime.GOOS == "windows" {
+			expected = "windows-job"
+		}
+		if commands.Containment != expected {
+			return false
+		}
+		if commands.MaxStdinBytes == 0 || commands.MaxStdinBytes > 256<<10 || commands.MaxOutputBytesPerStream == 0 || commands.MaxOutputBytesPerStream > 256<<10 || commands.MaxParallelOperations == 0 || commands.MaxParallelOperations > 64 || commands.MaxTimeoutMs == 0 || commands.MaxTimeoutMs > 86400000 || (commands.Containment != "unix-guardian-process-group" && commands.Containment != "windows-job") {
+			return false
+		}
+	}
 	caps := map[string]bool{}
 	for _, capability := range hello.Capabilities {
 		if len(capability) == 0 || len(capability) > 128 || caps[capability] {
@@ -87,6 +99,7 @@ func validateWire(wire []byte, descriptor protoreflect.MessageDescriptor, depth 
 		return &Error{Code: CodeProtocol}
 	}
 	resultCount := 0
+	oneofs := map[protoreflect.FullName]bool{}
 	seen := map[protowire.Number]bool{}
 	for len(wire) > 0 {
 		number, kind, n := protowire.ConsumeTag(wire)
@@ -95,7 +108,14 @@ func validateWire(wire []byte, descriptor protoreflect.MessageDescriptor, depth 
 		}
 		wire = wire[n:]
 		field := descriptor.Fields().ByNumber(number)
-		if envelope && (number <= 3 || (number >= 10 && number <= 14)) {
+		if field != nil && field.ContainingOneof() != nil && !field.ContainingOneof().IsSynthetic() {
+			name := field.ContainingOneof().FullName()
+			if oneofs[name] {
+				return &Error{Code: CodeProtocol}
+			}
+			oneofs[name] = true
+		}
+		if envelope && (number <= 3 || (number >= 10 && number <= 14) || number == 20) {
 			if seen[number] || kind != protowire.BytesType {
 				return &Error{Code: CodeProtocol}
 			}
@@ -146,6 +166,8 @@ func resultMatches(response *pb.WorkerResponse, kind string) bool {
 		return true
 	}
 	switch kind {
+	case "command":
+		return response.GetCommand() != nil
 	case "hello":
 		return response.GetHello() != nil
 	case "root":

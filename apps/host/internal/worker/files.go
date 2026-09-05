@@ -84,6 +84,9 @@ func (c *Client) ReadFileChunk(ctx context.Context, options ReadOptions) (*pb.Wo
 }
 
 func (c *Client) validResult(request *pb.WorkerRequest, response *pb.WorkerResponse) bool {
+	if input := request.GetCommand(); input != nil {
+		return c.validCommand(input, response.GetCommand())
+	}
 	if request.GetHello() != nil {
 		return validHello(response.GetHello(), request.HostId, response.InstanceId)
 	}

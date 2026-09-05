@@ -1,23 +1,24 @@
 pub mod agent;
 pub mod api;
 pub mod collab;
-pub mod context_usage;
+pub mod command;
 pub mod context_api;
+pub mod context_usage;
 pub mod db;
 pub mod desktop_control;
 pub mod error;
 pub mod events;
 pub mod files;
 pub mod git;
+pub mod git_api;
 pub mod git_hunks;
 pub mod git_message;
 pub mod git_repository;
-pub mod git_api;
 pub mod hook;
 pub mod imports;
 pub mod index;
-pub mod migration_export;
 pub mod migration_cli;
+pub mod migration_export;
 pub mod model;
 pub mod paths;
 pub mod security;
@@ -100,21 +101,66 @@ pub fn router_with_state(state: AppState) -> Router {
         }));
 
     Router::new()
-        .route("/api/workspaces/{workspace_id}/nodes/{node_id}/context-usage", get(context_api::snapshot))
-        .route("/api/workspaces/{workspace_id}/git/hunks", get(git_api::hunks).post(git_api::apply_hunk))
-        .route("/api/workspaces/{workspace_id}/git/message/providers", get(git_api::message_providers))
-        .route("/api/workspaces/{workspace_id}/git/message/source", get(git_api::message_source))
-        .route("/api/workspaces/{workspace_id}/git/message/generate", post(git_api::message_generate))
-        .route("/api/workspaces/{workspace_id}/git/repository/branches", get(git_api::branches))
-        .route("/api/workspaces/{workspace_id}/git/repository/history", get(git_api::history))
-        .route("/api/workspaces/{workspace_id}/git/repository/worktrees", get(git_api::worktrees))
-        .route("/api/workspaces/{workspace_id}/git/repository/stashes", get(git_api::stashes))
-        .route("/api/workspaces/{workspace_id}/git/repository/integration", get(git_api::integration))
-        .route("/api/workspaces/{workspace_id}/git/repository/cherry-pick-preview", get(git_api::cherry_pick_preview))
-        .route("/api/workspaces/{workspace_id}/git/repository/stash-detail", get(git_api::stash_detail))
-        .route("/api/workspaces/{workspace_id}/git/repository/operations", get(git_api::operations).post(git_api::start))
-        .route("/api/workspaces/{workspace_id}/git/repository/operations/{operation_id}", get(git_api::operation))
-        .route("/api/workspaces/{workspace_id}/git/repository/operations/{operation_id}/cancel", post(git_api::cancel))
+        .route(
+            "/api/workspaces/{workspace_id}/nodes/{node_id}/context-usage",
+            get(context_api::snapshot),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/git/hunks",
+            get(git_api::hunks).post(git_api::apply_hunk),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/git/message/providers",
+            get(git_api::message_providers),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/git/message/source",
+            get(git_api::message_source),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/git/message/generate",
+            post(git_api::message_generate),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/git/repository/branches",
+            get(git_api::branches),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/git/repository/history",
+            get(git_api::history),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/git/repository/worktrees",
+            get(git_api::worktrees),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/git/repository/stashes",
+            get(git_api::stashes),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/git/repository/integration",
+            get(git_api::integration),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/git/repository/cherry-pick-preview",
+            get(git_api::cherry_pick_preview),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/git/repository/stash-detail",
+            get(git_api::stash_detail),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/git/repository/operations",
+            get(git_api::operations).post(git_api::start),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/git/repository/operations/{operation_id}",
+            get(git_api::operation),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/git/repository/operations/{operation_id}/cancel",
+            post(git_api::cancel),
+        )
         .route(
             "/api/workspaces/open-directory",
             post(api::open_directory_workspace),
@@ -313,9 +359,18 @@ pub fn router_with_state(state: AppState) -> Router {
         // and a one-click copy of the database next to itself.
         .route("/api/data/info", get(api::data_info))
         .route("/api/data/backup", post(api::data_backup))
-        .route("/api/data/legacy-kanban-archives", get(api::legacy_kanban_archives))
-        .route("/api/data/legacy-kanban-archives/{canvas_id}", get(api::legacy_kanban_archive))
-        .route("/api/data/legacy-kanban-archives/{canvas_id}/export", get(api::export_legacy_kanban_archive))
+        .route(
+            "/api/data/legacy-kanban-archives",
+            get(api::legacy_kanban_archives),
+        )
+        .route(
+            "/api/data/legacy-kanban-archives/{canvas_id}",
+            get(api::legacy_kanban_archive),
+        )
+        .route(
+            "/api/data/legacy-kanban-archives/{canvas_id}/export",
+            get(api::export_legacy_kanban_archive),
+        )
         // Cached snapshot; the fetches happen on the runtime's own schedule so
         // that polling clients never trigger an upstream request (plan §19).
         .route("/api/usage", get(api::get_usage))

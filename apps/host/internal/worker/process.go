@@ -13,9 +13,11 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	pb "armadra.local/host/gen/armadra/v1"
+	"armadra.local/host/internal/storage"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -63,7 +65,9 @@ func (e *Error) Is(target error) bool {
 
 type Options struct {
 	Executable, HostID string
-	RequestTimeout     time.Duration
+	// StateDir opts into durable NEW non-interactive command sessions. It must already exist and be private.
+	StateDir       string
+	RequestTimeout time.Duration
 }
 type Diagnostics struct {
 	BufferedBytes int
@@ -115,6 +119,12 @@ type Client struct {
 	hostID, instanceID string
 	timeout            time.Duration
 	hello              *pb.WorkerHelloResponse
+	containment        containment
+	commandMode        bool
+	cleanupConfirmed   atomic.Bool
+	containmentClosed  atomic.Bool
+	closeMu            sync.Mutex
+	reapMu             sync.Mutex
 }
 
 func (*Client) String() string   { return "WorkerClient{redacted}" }
@@ -188,7 +198,16 @@ func Start(ctx context.Context, options Options) (*Client, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, contextError(err)
 	}
-	c := &Client{hostID: options.HostID, timeout: timeout, gate: make(chan struct{}, 1), stopped: make(chan struct{}), reaped: make(chan struct{}), stderrDone: make(chan struct{})}
+	if options.StateDir != "" {
+		if !filepath.IsAbs(options.StateDir) || storage.ProtectArtifactDirectory(options.StateDir) != nil {
+			return nil, &Error{Code: CodeInvalid}
+		}
+		options.StateDir, err = filepath.EvalSymlinks(options.StateDir)
+		if err != nil {
+			return nil, &Error{Code: CodeInvalid}
+		}
+	}
+	c := &Client{commandMode: options.StateDir != "", hostID: options.HostID, timeout: timeout, gate: make(chan struct{}, 1), stopped: make(chan struct{}), reaped: make(chan struct{}), stderrDone: make(chan struct{})}
 	c.gate <- struct{}{}
 	// Own both ends explicitly: Cmd.Wait must not close a stdout reader before
 	// the framing reader has consumed buffered bytes. Only child ends are passed.
@@ -211,7 +230,21 @@ func Start(ctx context.Context, options Options) (*Client, error) {
 		return nil, &Error{Code: CodeStart}
 	}
 	c.input, c.output, c.stderr = inWrite, outRead, errRead
-	c.cmd = exec.Command(executable, "worker", "--stdio")
+	args := []string{"worker", "--stdio"}
+	if options.StateDir != "" {
+		args = append(args, "--state-dir", options.StateDir)
+	}
+	c.cmd = exec.Command(executable, args...)
+	c.containment, err = newContainment(c.commandMode)
+	if err != nil {
+		inRead.Close()
+		inWrite.Close()
+		outRead.Close()
+		outWrite.Close()
+		errRead.Close()
+		errWrite.Close()
+		return nil, &Error{Code: CodeStart}
+	}
 	configureProcess(c.cmd)
 	c.cmd.Stdin, c.cmd.Stdout, c.cmd.Stderr = inRead, outWrite, errWrite
 	err = c.cmd.Start()
@@ -219,10 +252,24 @@ func Start(ctx context.Context, options Options) (*Client, error) {
 	outWrite.Close()
 	errWrite.Close()
 	if err != nil {
+		if c.containment != nil {
+			_ = c.containment.Close()
+		}
 		c.input.Close()
 		c.output.Close()
 		c.stderr.Close()
 		return nil, &Error{Code: CodeStart}
+	}
+	if c.containment != nil {
+		if err = c.containment.Attach(c.cmd.Process); err != nil {
+			_ = c.cmd.Process.Kill()
+			_ = c.cmd.Wait()
+			_ = c.containment.Close()
+			c.input.Close()
+			c.output.Close()
+			c.stderr.Close()
+			return nil, &Error{Code: CodeStart}
+		}
 	}
 	go func() { defer close(c.stderrDone); _, _ = io.Copy(&c.diagnostic, c.stderr) }()
 	go func() { _ = c.cmd.Wait(); close(c.reaped); c.stop() }()
@@ -239,7 +286,7 @@ func Start(ctx context.Context, options Options) (*Client, error) {
 		return nil, err
 	}
 	hello := response.GetHello()
-	if !validHello(hello, options.HostID, response.InstanceId) {
+	if !validHello(hello, options.HostID, response.InstanceId) || (c.commandMode && hello.Commands == nil) || (!c.commandMode && hello.Commands != nil) {
 		err = c.fail(&Error{Code: CodeProtocol})
 		return nil, err
 	}
@@ -250,6 +297,10 @@ func Start(ctx context.Context, options Options) (*Client, error) {
 func (c *Client) stop() {
 	c.stopOnce.Do(func() {
 		close(c.stopped)
+		_ = c.input.Close()
+		if c.containment != nil {
+			_ = c.containment.Stop()
+		}
 		_ = c.cmd.Process.Kill()
 		_ = c.input.Close()
 		_ = c.output.Close()
@@ -260,28 +311,60 @@ func (c *Client) Close() error {
 	if c == nil {
 		return nil
 	}
+	c.closeMu.Lock()
+	defer c.closeMu.Unlock()
+	if c.commandMode && !c.cleanupConfirmed.Load() {
+		select {
+		case <-c.stopped:
+		default:
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			response, err := c.command(ctx, &pb.CommandRequest{Action: &pb.CommandRequest_Shutdown{Shutdown: &pb.ShutdownCommandsRequest{}}})
+			cancel()
+			if err == nil && response.GetShutdown() != nil && response.GetShutdown().CleanupConfirmed {
+				c.cleanupConfirmed.Store(true)
+			}
+		}
+	}
+	return c.closeOwned()
+}
+func (c *Client) closeOwned() error {
+	c.reapMu.Lock()
+	defer c.reapMu.Unlock()
 	c.stop()
-	timer := time.NewTimer(CloseTimeout)
-	defer timer.Stop()
+	ctx, cancel := context.WithTimeout(context.Background(), CloseTimeout)
+	defer cancel()
 	select {
 	case <-c.reaped:
-	case <-timer.C:
+	case <-ctx.Done():
 		return &Error{Code: CodeCleanup}
+	}
+	if c.containment != nil && !c.containmentClosed.Load() {
+		if c.containment.Wait(ctx) != nil {
+			return &Error{Code: CodeCleanup}
+		}
+		_ = c.containment.Close()
+		c.containmentClosed.Store(true)
 	}
 	select {
 	case <-c.stderrDone:
-		return nil
-	case <-timer.C:
+	case <-ctx.Done():
 		return &Error{Code: CodeCleanup}
 	}
+	if c.commandMode && !c.cleanupConfirmed.Load() {
+		return &Error{Code: CodeCleanup}
+	}
+	return nil
 }
 func (c *Client) Done() <-chan struct{}    { return c.stopped }
 func (c *Client) Diagnostics() Diagnostics { return c.diagnostic.summary() }
 func (c *Client) Hello() *pb.WorkerHelloResponse {
+	if c == nil || c.hello == nil {
+		return nil
+	}
 	return proto.Clone(c.hello).(*pb.WorkerHelloResponse)
 }
 func (c *Client) fail(problem *Error) error {
-	if c.Close() != nil {
+	if c.closeOwned() != nil {
 		problem.CleanupFailed = true
 	}
 	return problem

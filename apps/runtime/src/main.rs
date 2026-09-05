@@ -11,14 +11,45 @@ use tracing_subscriber::EnvFilter;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let arguments: Vec<String> = env::args().skip(1).collect();
-    if arguments.first().is_some_and(|argument| argument == "worker") {
-        if arguments.as_slice() != ["worker", "--stdio"] { anyhow::bail!("Usage: Armadra worker --stdio"); }
-        tracing_subscriber::fmt().with_writer(std::io::stderr).with_env_filter(EnvFilter::from_default_env()).init();
-        armadra_runtime::worker::serve(tokio::io::stdin(),tokio::io::stdout()).await?;
+    #[cfg(unix)]
+    if arguments
+        .first()
+        .is_some_and(|argument| argument == "worker-guardian")
+    {
+        return armadra_runtime::command::run_guardian(&arguments[1..]).await;
+    }
+    if arguments
+        .first()
+        .is_some_and(|argument| argument == "worker")
+    {
+        let command_path = if arguments.as_slice() == ["worker", "--stdio"] {
+            None
+        } else if arguments.len() == 4 && arguments[1] == "--stdio" && arguments[2] == "--state-dir"
+        {
+            Some(std::path::PathBuf::from(&arguments[3]))
+        } else {
+            anyhow::bail!("Usage: Armadra worker --stdio [--state-dir ABSOLUTE_PRIVATE_DIRECTORY]")
+        };
+        tracing_subscriber::fmt()
+            .with_writer(std::io::stderr)
+            .with_env_filter(EnvFilter::from_default_env())
+            .init();
+        if let Some(path) = command_path {
+            armadra_runtime::worker::serve_commands(tokio::io::stdin(), tokio::io::stdout(), path)
+                .await?;
+        } else {
+            armadra_runtime::worker::serve(tokio::io::stdin(), tokio::io::stdout()).await?;
+        }
         return Ok(());
     }
-    if arguments.first().is_some_and(|argument| argument == "export") {
-        tracing_subscriber::fmt().with_writer(std::io::stderr).with_env_filter(EnvFilter::from_default_env()).init();
+    if arguments
+        .first()
+        .is_some_and(|argument| argument == "export")
+    {
+        tracing_subscriber::fmt()
+            .with_writer(std::io::stderr)
+            .with_env_filter(EnvFilter::from_default_env())
+            .init();
         armadra_runtime::migration_cli::run(&arguments[1..]).await?;
         return Ok(());
     }
@@ -38,7 +69,9 @@ async fn main() -> anyhow::Result<()> {
         [] => false,
         [argument] if argument == "--desktop-control-stdin" => true,
         [argument] if argument == "--help" || argument == "-h" => {
-            println!("Usage: armadra-runtime [--desktop-control-stdin]\n       armadra-runtime export --help");
+            println!(
+                "Usage: armadra-runtime [--desktop-control-stdin]\n       armadra-runtime export --help"
+            );
             return Ok(());
         }
         _ => anyhow::bail!("unsupported Runtime arguments"),
@@ -154,8 +187,12 @@ async fn main() -> anyhow::Result<()> {
     if let Err(error) = &cleanup {
         tracing::error!(%error, "Runtime shutdown failed");
     }
-    if let Err(error) = &repository_cleanup { tracing::error!(%error, "Repository shutdown failed"); }
-    if let Err(error) = &legacy_cleanup { tracing::error!(%error, "Git child shutdown failed"); }
+    if let Err(error) = &repository_cleanup {
+        tracing::error!(%error, "Repository shutdown failed");
+    }
+    if let Err(error) = &legacy_cleanup {
+        tracing::error!(%error, "Git child shutdown failed");
+    }
     // WebSockets or an old keep-alive request cannot hold desktop Quit forever.
     // Admission has stopped and terminal creation is gated before this drain.
     match tokio::time::timeout(Duration::from_secs(2), &mut serving).await {
