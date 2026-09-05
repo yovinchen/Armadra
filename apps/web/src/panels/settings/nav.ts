@@ -10,6 +10,7 @@ import {
   ServerCog,
   SlidersHorizontal,
   SquareTerminal,
+  GitPullRequest,
   Webhook,
   LayoutGrid,
   type LucideIcon,
@@ -85,6 +86,12 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     groupKey: "settings.group.connection",
     labelKey: "host.nav",
     icon: ServerCog,
+  },
+  {
+    id: "github",
+    groupKey: "settings.group.connection",
+    labelKey: "github.nav",
+    icon: GitPullRequest,
   },
   {
     id: "ssh",

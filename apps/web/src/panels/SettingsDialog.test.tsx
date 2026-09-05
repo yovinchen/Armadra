@@ -136,6 +136,7 @@ describe("SettingsDialog", () => {
         resources: "closed",
         automation: "closed",
         usage: "closed",
+        github: "closed",
         settings: true,
         palette: false,
         quickOpen: false,
