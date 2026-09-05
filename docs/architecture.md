@@ -303,7 +303,7 @@ Tauri 2
     节点记录（`canvas/sync/snapshot.ts`），否则同一份数据会存两遍、加载时打架。
     上限 8 MiB，超了这一轮不保存并提示。
   - **图片资产不进快照**：字节走 `POST /api/workspaces/{id}/assets`（或按路径
-    `.../assets/import`），内容寻址落在工作区的 `.aicc/assets/<sha256 前 16 位>.<ext>`，
+    `.../assets/import`），内容寻址落在工作区的 `.armadra/assets/<sha256 前 16 位>.<ext>`，
     快照里只留 URL 与工作区相对路径。
 - 终端原始输出、密钥和 `.env` 默认不进入画板同步。
 - 后续替换画板引擎时，不迁移 Runtime 和领域数据模型。

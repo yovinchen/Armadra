@@ -1,10 +1,10 @@
-# AI Coding Canvas
+# Armadra
 
 一个 local-first 的 AI Coding 工作台：在无限工作区中组织终端、Agent、文件、任务、浏览器、日志和 Diff，通过语义连线传递上下文，并让执行结果回流为可审查节点。
 
 ## 品牌标识
 
-- 当前名称保持为 **AI Coding Canvas**。
+- 当前名称为 **Armadra**。
 - 默认 Logo 源文件为 [`design/logo-concepts/armadra-armadillo-primary.png`](./design/logo-concepts/armadra-armadillo-primary.png)。
 - 桌面端各平台图标由该源文件生成到 `apps/desktop/src-tauri/icons/`；Web favicon 同步为 `apps/web/public/icon.png`。
 - 如需更换默认 Logo，应先替换或确认源文件，再重新生成桌面端图标，避免各平台品牌资源不一致。
@@ -57,8 +57,8 @@ docs/
 
 ```bash
 pnpm install
-cargo run -p ai-coding-canvas-runtime
-pnpm --filter @ai-coding-canvas/web dev
+cargo run -p armadra-runtime
+pnpm --filter @armadra/web dev
 ```
 
 Runtime 默认监听 `127.0.0.1:43120`，Web 默认监听 `127.0.0.1:1420`。
@@ -68,7 +68,7 @@ Pi 通过固定版本 `pi-acp@0.0.33` 桥接 ACP；OMP 使用原生 `omp acp`。
 验证：
 
 ```bash
-cargo test -p ai-coding-canvas-runtime
+cargo test -p armadra-runtime
 pnpm check:rust
 pnpm typecheck
 pnpm test

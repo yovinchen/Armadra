@@ -1,8 +1,8 @@
-# Handoff: AI Coding Canvas 桌面端界面重构
+# Handoff: Armadra 桌面端界面重构
 
 ## Overview
 
-面向 Tauri 桌面应用 ai-coding-canvas 的整套界面重构：启动页、多工作空间/多看板、无限画布节点系统（Task / Agent(ACP) / Terminal / Diff / File / Context / Note / Browser / Image / Log）、语义连线、拖拽粘贴创建、手绘标注、一键整理、⌘K、设置、Diff 扫描抽屉、网关与外部端预留。
+面向 Tauri 桌面应用 armadra 的整套界面重构：启动页、多工作空间/多看板、无限画布节点系统（Task / Agent(ACP) / Terminal / Diff / File / Context / Note / Browser / Image / Log）、语义连线、拖拽粘贴创建、手绘标注、一键整理、⌘K、设置、Diff 扫描抽屉、网关与外部端预留。
 
 ## About the Design Files
 
@@ -14,7 +14,7 @@
 
 ## 文件
 
-- `AI Coding Canvas v2.dc.html` — 完整可运行原型（在浏览器中打开；顶部切换器可查看各画面与浅/深主题）。
+- `Armadra v2.dc.html` — 完整可运行原型（在浏览器中打开；顶部切换器可查看各画面与浅/深主题）。
 - `src/template.html` — 原型的视图模板（内联样式即为设计规格；`{{ }}` 为数据槽，`sc-for`/`sc-if` 为循环/条件）。
 - `src/logic.js` — 状态机与交互逻辑（节点/连线/笔迹数据结构、拖拽/粘贴规则、缩放三态、自动整理算法、ACP 时间线、Diff 状态、网关状态等）。
 - `SPEC.md` — 结构化规格说明（布局尺寸、枚举、规则、快捷键、设计令牌）。

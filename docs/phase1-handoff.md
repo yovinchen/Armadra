@@ -26,13 +26,13 @@
 
 - 节点 `<uuid>` ↔ shape `shape:<uuid>`，边同理；不查表。
 - 分组 = 原生 `frame`。`TLFrameShapeProps` 只有 `w/h/name/color`，装不下标签 /
-  批注 / 折叠 / `createdAt`，所以这些放 **`frame.meta.aicc`**；`color` 是有损映射
+  批注 / 折叠 / `createdAt`，所以这些放 **`frame.meta.armadra`**；`color` 是有损映射
   （十六进制 → tldraw 颜色名），原值同时写在 meta 里，派生时优先读 meta。
 - 组员的 `x/y` 相对父 frame，与文档一致，`parentId` = `shape:<组 uuid>`。
-- 边的时间戳与 `kind` 放在 **`arrow.meta.aicc`**（arrow 的 props 里没地方放）。
+- 边的时间戳与 `kind` 放在 **`arrow.meta.armadra`**（arrow 的 props 里没地方放）。
 - `arrowToEdge` 只在两端 binding 都指向 **uuid 形状的 shape id** 时才产出 edge，
   否则回 null（白板箭头）。
-- **退役类型 `draw` / `image`**（§4.5，Phase 3 才迁移）：`AiccProps.nodeType` 不接受
+- **退役类型 `draw` / `image`**（§4.5，Phase 3 才迁移）：`ArmadraProps.nodeType` 不接受
   它们，所以投影成一个 `nodeType: "sticky"` 的占位壳，**原节点整份 JSON 塞进
   `shape.meta.legacy`**，派生时原样取回，只让位置 / 尺寸 / 父级 / 标题 / 颜色 /
   折叠这几项覆盖回去。一个字节都不丢，也不会写脏 `data`。
@@ -128,16 +128,16 @@ rope 与子代理卡片迁到 `components.OnTheCanvas`（`.tl-html-layer` 里，
 2. **`packages/shared/src/index.ts`**：删掉 `export * from "./canvas-adapter.js"`。
 3. **`packages/shared/test/domain.test.ts`**：删掉 `describe("react flow projection")`
    整块与两个 import（`projectNode` / `projectEdge` 随 `canvas-adapter.ts` 一起没了）。
-   `pnpm --filter @ai-coding-canvas/shared build && test` 已重跑，63 个用例全绿。
+   `pnpm --filter @armadra/shared build && test` 已重跑，63 个用例全绿。
 4. **`src/canvas/tidy.test.ts` / `src/canvas/geometry.test.ts` / `src/save/autosave.test.ts`**
    （这三个本来就归我）的 `vi.mock("../nodes/registry")` 补了 `nodeMeta` 导出 ——
    nodes agent 把 `NODE_META[type]` 换成访问器之后必须的。
 
 ### 需要别人做的
 
-1. **nodes**：`AiccProps.nodeType` 不接受 `draw` / `image`，所以旧看板里这两种节点
+1. **nodes**：`ArmadraProps.nodeType` 不接受 `draw` / `image`，所以旧看板里这两种节点
    现在渲染成**只有标题的便签壳**（数据完整保存在 `meta.legacy`）。如果 Phase 3
-   之前想让它们还能看，需要 `AiccShapeUtil` 支持从 `meta.legacy` 读原 `data` 渲染；
+   之前想让它们还能看，需要 `ArmadraShapeUtil` 支持从 `meta.legacy` 读原 `data` 渲染；
    不想做也行，Phase 3 会把它们迁成原生 shape。
 2. **shell**：Dock 的「适应」现在可以直接 `runCanvasCommand("canvas.fitView")` ——
    我这边已经改成和你一样的 `zoomToBounds(..., { targetZoom: 1 })`，两处行为一致。
@@ -151,15 +151,15 @@ rope 与子代理卡片迁到 `components.OnTheCanvas`（`.tl-html-layer` 里，
 
 ### 验证记录（2026-09-04）
 
-- `pnpm --filter @ai-coding-canvas/web typecheck`：**整仓零错误**。
-- `pnpm --filter @ai-coding-canvas/web test`：**54 个文件 550 个用例全绿**
+- `pnpm --filter @armadra/web typecheck`：**整仓零错误**。
+- `pnpm --filter @armadra/web test`：**54 个文件 550 个用例全绿**
   （新增 `sync/project.test.ts` 10 个、`sync/snapshot.test.ts` 7 个；
   `canvas-store.test.ts` 47 个用例保留，撤销那一组改成断言「转调 editor」与
   「画布没挂载时是安全空操作」）。
-- `pnpm --filter @ai-coding-canvas/shared test`：63 个用例全绿。
+- `pnpm --filter @armadra/shared test`：63 个用例全绿。
 - 浏览器 `http://localhost:1422`（自己的 tab；Browser 面板大半时间是隐藏的，
   所以用 DOM + `await import('/src/canvas/editor-context.ts')` 拿到真 editor 来验）：
-  1. 右键空白 → 添加菜单 → 新建便签：`aicc` shape 出现在右键落点，`NodeShell` 正常渲染。
+  1. 右键空白 → 添加菜单 → 新建便签：`armadra` shape 出现在右键落点，`NodeShell` 正常渲染。
   2. 自动保存：PUT 200，Runtime 侧 `nodes` 多一行，`board.whiteboard` = 1137 B，
      里面**只有** `document:document` / `page:page` / `user:*`，**没有任何 shape / binding**。
   3. 刷新页面：5 个节点（含一个跑着 opencode 的真实终端，`.xterm` 挂载正常）全部回来，
@@ -184,12 +184,12 @@ rope 与子代理卡片迁到 `components.OnTheCanvas`（`.tl-html-layer` 里，
 
 已完成（2026-09-04）。`nodes/` 与 `canvas/shapes/` 里再没有一行 `@xyflow/react`。
 
-### 1. `AiccShapeUtil`（`canvas/shapes/AiccShapeUtil.tsx`）
+### 1. `ArmadraShapeUtil`（`canvas/shapes/ArmadraShapeUtil.tsx`）
 
 `component()` 现在渲染真节点：`NODE_SHELL_SELF` 里的类型（终端 / 编辑器 / 变更 /
-文件 / 浏览器）自己渲染 `NodeShell`，其余（便签）由 `AiccShapeUtil` 包壳。
+文件 / 浏览器）自己渲染 `NodeShell`，其余（便签）由 `ArmadraShapeUtil` 包壳。
 
-- `props` 校验器与 `aicc-shape.ts` 的签名一个字没动。
+- `props` 校验器与 `armadra-shape.ts` 的签名一个字没动。
 - 新增导出 `shapeToCanvasNode(shape, stored?)`：**以 shape 为准**组装
   `CanvasNode`，只有 `boardId` / `parentId` / `updatedAt` 从画布 store 的那份取
   （shape 里没有这三样）。canvas-core 的 `derive.ts` 要自己那份就照旧，两边不共用。
@@ -252,28 +252,28 @@ pointerdown：5.4 的 `useCanvasEvents` 把所有指针事件都挂在 `.tl-canv
    `CanvasNodeRenderer` 没了（React Flow 的 `nodeTypes` 入口不再存在）。
    `App.tsx` 已经切到 `TldrawWorkspace`，这两个文件按 §7 直接删掉即可。
 3. **canvas-core / 投影**：`TldrawWorkspace` 还没把 `nodes/edges` 投影成 shape，
-   所以画布上目前一个节点都没有。`AiccShapeUtil` 已经能吃 `AiccProps`——
-   `sync/project.ts` 的 `nodeToShape` 按 `aicc-shape.ts` 的 `AiccProps` 填就行
+   所以画布上目前一个节点都没有。`ArmadraShapeUtil` 已经能吃 `ArmadraProps`——
+   `sync/project.ts` 的 `nodeToShape` 按 `armadra-shape.ts` 的 `ArmadraProps` 填就行
    （`expandedHeight` 用 `0` 表示「没记过」，不要 undefined）。
 4. **canvas-core / `store/canvas-store.ts`**：`setCollapsed` / `maximizeNode` /
    `resizeNode` 还没驱动 editor，所以头部的折叠 / 最大化按钮点了没反应
    （store 变了，shape 没变）。我这边的按钮调用签名一个没改。
 5. **shell / `src/app/test-harness.tsx`**：`installDomPolyfills` 里建议补一条
    `window.matchMedia` 的 stub —— `tldraw` 在模块加载时就读它，任何 import 到
-   tldraw 的单测都会炸。我在 `AiccShapeUtil.test.ts` 里用 `vi.hoisted` 自己补了
+   tldraw 的单测都会炸。我在 `ArmadraShapeUtil.test.ts` 里用 `vi.hoisted` 自己补了
    一份，补进 harness 之后可以删掉。
 
 ### 验证记录（2026-09-04）
 
-`pnpm --filter @ai-coding-canvas/web test`：`nodes/` + `canvas/shapes/` 共 **50 个
-用例全绿**（registry 9、NodeShell 16、AiccShapeUtil 10、ConnectionHandles 3、
+`pnpm --filter @armadra/web test`：`nodes/` + `canvas/shapes/` 共 **50 个
+用例全绿**（registry 9、NodeShell 16、ArmadraShapeUtil 10、ConnectionHandles 3、
 FilesNode 8、StickyNode 4；DrawNode 的 3 个随文件删除）。typecheck 在我的文件里
 零错误。
 
 浏览器（`http://localhost:1422`，Browser 面板隐藏，所以和 Phase 0 一样用 DOM +
 `editor.dispatch` 代替截图）：
 
-- 便签 / 编辑器 / 浏览器 / 变更 / 文件五种 aicc shape 都渲染出
+- 便签 / 编辑器 / 浏览器 / 变更 / 文件五种 armadra shape 都渲染出
   `node-header + node-body` 两行、头部 32px 一行、左右各一个把手，控制台无报错。
 - shape 尺寸与 `props.w/h` 一致；`editor.dispatch` 的 pointer_down 能命中几何、
   正确选中。
@@ -326,13 +326,13 @@ wheel / pointer_move 分发与选择框叠加层都挂在 tick 上）：
   `image/svg+xml` `image/avif` `image/bmp`；其它一律 400。
 - 上限 8 MiB（`MAX_ASSET_BYTES`）；路由自带 12 MiB 的 body limit（axum 默认 2 MiB
   不够用，`export-png` 之前其实也被这条卡着，一并修了）。
-- 落盘 `<workspace>/.aicc/assets/<sha256 前 16 位 hex>.<ext>`，内容寻址，
+- 落盘 `<workspace>/.armadra/assets/<sha256 前 16 位 hex>.<ext>`，内容寻址，
   同一张图重复上传只写一份。
 - 响应：
   ```json
   {
     "id": "0a1b…f7.png",
-    "path": ".aicc/assets/0a1b…f7.png",
+    "path": ".armadra/assets/0a1b…f7.png",
     "url": "/api/workspaces/{id}/assets/0a1b…f7.png",
     "mimeType": "image/png",
     "bytes": 12345
@@ -350,14 +350,14 @@ wheel / pointer_move 分发与选择框叠加层都挂在 tick 上）：
 
 新：`POST /api/workspaces/{id}/exports/{exportId}/png`，body `{ dataUrl }`
 （只收 `data:image/png;base64,`）。`exportId` 只需是 uuid，**不要求存在节点、
-也不要求是 draw 类型**。落盘 `<workspace>/.aicc/exports/<exportId>.png`。
+也不要求是 draw 类型**。落盘 `<workspace>/.armadra/exports/<exportId>.png`。
 
 响应新增 `relativePath`：
 
 ```json
 {
-  "path": "/abs/path/.aicc/exports/<uuid>.png",
-  "relativePath": ".aicc/exports/<uuid>.png",
+  "path": "/abs/path/.armadra/exports/<uuid>.png",
+  "relativePath": ".armadra/exports/<uuid>.png",
   "bytes": 123
 }
 ```
@@ -365,7 +365,7 @@ wheel / pointer_move 分发与选择框叠加层都挂在 tick 上）：
 `relativePath` 就是 `ContextLink.content.pngPath` 该填的值。
 
 旧路由 `POST /api/workspaces/{id}/nodes/{nodeId}/export-png` 保留，内部走同一实现，
-**也写 `.aicc/exports/`**；`.aicc/drawings/` 不再新写，只在读旧看板时作为回退查找。
+**也写 `.armadra/exports/`**；`.armadra/drawings/` 不再新写，只在读旧看板时作为回退查找。
 
 ### 4. `ContextLink.content` 与 `kind: "shape"`
 
@@ -382,7 +382,7 @@ wheel / pointer_move 分发与选择框叠加层都挂在 tick 上）：
 - 两者都没有 → 「该白板内容暂无可读导出」。
 
 `context list` 里 `shape` 的说明是「白板内容（文字或导出的 PNG 路径）」，
-`draw` / `image` 的文案原样保留。`aicc-linked-context` skill 的表格加了 shape 一行。
+`draw` / `image` 的文案原样保留。`armadra-linked-context` skill 的表格加了 shape 一行。
 
 ### 5. 节点类型白名单
 
@@ -422,13 +422,13 @@ runtimeApi.exportPng(workspaceId, exportUuid, dataUrl)             // → Export
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `app/App.tsx`               | 删 `ReactFlowProvider`、删 `?poc=tldraw` 分支（`usePocCanvas` + `TldrawPoc` 的 lazy import），`CanvasWorkspace` → `TldrawWorkspace`；新增 `useTldrawTheme()` |
 | `app/commands.ts`           | `useReactFlow().screenToFlowPosition` → `editor-context` 的 `screenToPage`                                                                                   |
-| `app/notifications.ts`      | 自己那份 `aicc:center-node` 删掉，改调 `requestCenterOnNode`                                                                                                 |
+| `app/notifications.ts`      | 自己那份 `armadra:center-node` 删掉，改调 `requestCenterOnNode`                                                                                                 |
 | `app/test-harness.tsx`      | 去掉 `ReactFlowProvider`                                                                                                                                     |
 | `main.tsx`                  | 去掉 `@xyflow/react/dist/style.css`；新增「首次运行把 tldraw 的 `localStorage["minimap"]` 置成 `false`」（tldraw 默认收起缩略图，我们一直是展开的）          |
 | `shell/Dock.tsx`            | `useViewport`/`useReactFlow` → `useEditorHandle` + tldraw 的 `useValue`；`history.past/future` → `useCanUndo()/useCanRedo()`                                 |
 | `panels/CommandPalette.tsx` | 「跳转」组不再自己 `flow.setCenter`，改发 `requestCenterOnNode`（居中的算术归画布）                                                                          |
 | `panels/viewport.ts`        | `currentViewportCenter()` 优先问 `screenToPage`，画布没挂载时退回看板存的视口                                                                                |
-| `sessions/SessionRow.tsx`   | `CENTER_NODE_EVENT` / `centerNode` 改成 `editor-context` 的转出，事件名全应用只剩 `aicc:canvas:center-node` 一个                                             |
+| `sessions/SessionRow.tsx`   | `CENTER_NODE_EVENT` / `centerNode` 改成 `editor-context` 的转出，事件名全应用只剩 `armadra:canvas:center-node` 一个                                             |
 | `canvas/StatusMiniMap.tsx`  | **已删除**（改用 tldraw 的 Minimap）                                                                                                                         |
 
 Dock 的缩放：
@@ -509,13 +509,13 @@ Dock 的缩放：
 5. **nodes**：`window.matchMedia` 的 stub 我放进了新的
    `apps/web/src/app/test-setup.ts`（`vitest.config.ts` 的 `setupFiles`）——
    放在 `installDomPolyfills` 里来不及，import 会被提升到 tldraw 求值之前。
-   你在 `AiccShapeUtil.test.ts` 里那份 `vi.hoisted` 现在可以删了。
+   你在 `ArmadraShapeUtil.test.ts` 里那份 `vi.hoisted` 现在可以删了。
    （`vitest.config.ts` 是我唯一改过的非归属文件，只加了 `setupFiles` 一行。）
 
 ### 验证记录（2026-09-04）
 
-- `pnpm --filter @ai-coding-canvas/web typecheck`：**整仓零错误**（收尾时复跑）。
-- `pnpm --filter @ai-coding-canvas/web test`：**52 个文件 533 个用例全绿**；
+- `pnpm --filter @armadra/web typecheck`：**整仓零错误**（收尾时复跑）。
+- `pnpm --filter @armadra/web test`：**52 个文件 533 个用例全绿**；
   其中我的目录 17 个文件 138 个用例（Dock 4、SessionsSection 4、CommandPalette 3、
   LeftSidebar 4、SettingsDialog 9、tokens 51、keybindings 28、use-app-keybindings 5 …）。
 - 浏览器 `http://localhost:1422`（自己的 tab，深浅色各截一张）：
@@ -606,8 +606,8 @@ RUNNING 胶囊和计时，绳子上再挂一个沙漏是重复信息。启动后
 
 ### 验证记录（2026-09-04）
 
-- `pnpm --filter @ai-coding-canvas/web typecheck`：整仓零错误。
-- `pnpm --filter @ai-coding-canvas/web test`：**56 个文件 570 个用例全绿**
+- `pnpm --filter @armadra/web typecheck`：整仓零错误。
+- `pnpm --filter @armadra/web test`：**56 个文件 570 个用例全绿**
   （新增 `overlays/minimap.test.ts` 13 个、`SubagentLayer.test.ts` 5 个，
   `derived-edges.test.ts` 6 → 8 个）。
 - 浏览器 `http://localhost:1422`（自己的 tab，深浅色各截一张）：
@@ -624,7 +624,7 @@ RUNNING 胶囊和计时，绳子上再挂一个沙漏是重复信息。启动后
   5. 子代理卡片：用 `agent.subagent` 事件造 2 张卡（1 working / 1 done），
      位置在父节点底边下方、跟着相机缩放；45% 与 200% 两档都对。
   6. 光晕：`getComputedStyle(el, '::after')` 读到 `box-shadow` 与
-     `animation: aicc-glow` 生效，祖先链无裁剪（见上）。
+     `animation: armadra-glow` 生效，祖先链无裁剪（见上）。
   7. 测试节点与它们起的两个终端会话已删除并 `terminate`；看板文档用
      read-modify-write 的 PUT 清掉了两行残留（edges agent 的 `edge-A/B/C`
      原样保留），我的 tab 已重新加载到服务端的当前文档。
@@ -641,13 +641,13 @@ Phase 1 之后，**用把手或箭头工具拉出来的线一松手就消失**�
 `use-store-sync.push()` 又把「两端绑节点但不在 `document.edges` 里」的 arrow 当
 stale 删掉。另外完全没有绑定合法性守卫。
 
-### 2. 身份：边 id 记在 `arrow.meta.aicc.id`
+### 2. 身份：边 id 记在 `arrow.meta.armadra.id`
 
-- `sync/derive.ts` 新增 `arrowEdgeId(arrow)`：**先读 `meta.aicc.id`**（uuid 才算），
+- `sync/derive.ts` 新增 `arrowEdgeId(arrow)`：**先读 `meta.armadra.id`**（uuid 才算），
   没有再看 arrow 自身的 shape id 是不是 `shape:<uuid>`；两个都没有 ⇒ 返回 `null`，
-  这条 arrow 还不是边。同时新增 `arrowAiccMeta` / `arrowEnds` 两个小工具。
+  这条 arrow 还不是边。同时新增 `arrowArmadraMeta` / `arrowEnds` 两个小工具。
 - `sync/project.ts` 的 `edgeToArrow` 现在把 `id` 与 `styled: true` 也写进
-  `meta.aicc`。所以**投影出来的箭头与用户现拉的箭头是同一种记录**，往返恒等：
+  `meta.armadra`。所以**投影出来的箭头与用户现拉的箭头是同一种记录**，往返恒等：
   重新加载看板后，边 `<uuid>` → arrow `shape:<uuid>`（meta 里同一个 id）→ 边 `<uuid>`。
 - `use-store-sync.push()` 的 stale 判定改成按 `arrowEdgeId` 比对，并且
   **没有边 id 的 arrow 一律不动**（它要么是白板箭头，要么是 `LinkArrow` 还没在
@@ -676,7 +676,7 @@ A 的把手起笔时指针还在 A 身上，那一刻的「自连」只是中间
 
 `sync/project.ts` 新增 `edgeStyle(source, target)` = `edgeArrowheads` + 颜色
 （取**起点节点**的色，`toTldrawColor`）。`edgeToArrow` 与 `LinkArrow` 共用它，
-两种来源的线看起来一模一样。写过之后 `meta.aicc.styled = true`，用户之后手改
+两种来源的线看起来一模一样。写过之后 `meta.armadra.styled = true`，用户之后手改
 颜色 / 箭头不再被覆盖。
 
 ### 5. 把手起笔与级联
@@ -687,12 +687,12 @@ A 的把手起笔时指针还在 A 身上，那一刻的「自连」只是中间
 - **从把手起笔、松手时末端没绑到节点 ⇒ 删掉**（把手只用来连节点，§4.3）；
   从箭头工具起笔的没绑定箭头**保留**为白板箭头（Phase 3 才开放那个工具）。
 - 删节点 ⇒ tldraw 自动删 binding，但**箭头本身会留下**（`ArrowBindingUtil` 只把
-  终点解绑）。所以 `meta.aicc.id` 有值、又掉了一端绑定的箭头也一起删掉，
+  终点解绑）。所以 `meta.armadra.id` 有值、又掉了一端绑定的箭头也一起删掉，
   不留悬空的半绑定箭头。这一步是记进历史的，撤销删节点会把线一起带回来。
 
 ### 6. 我改过的非归属文件（都很小，请核对）
 
-1. **`canvas/shapes/aicc-shape.ts`**（nodes）：抽出 `isUuid()`，`isDocumentShapeId`
+1. **`canvas/shapes/armadra-shape.ts`**（nodes）：抽出 `isUuid()`，`isDocumentShapeId`
    转调它。`arrowEdgeId` 要校验 meta 里的裸 uuid。
 2. **`canvas/shapes/ConnectionHandles.tsx`**（nodes）：见上，两行标记。
 3. **`canvas/sync/derive.ts` / `project.ts` / `use-store-sync.ts`**（canvas-core）：
@@ -718,15 +718,15 @@ A 的把手起笔时指针还在 A 身上，那一刻的「自连」只是中间
 
 ### 8. 验证记录（2026-09-04）
 
-- `pnpm --filter @ai-coding-canvas/web typecheck`：整仓零错误。
-- `pnpm --filter @ai-coding-canvas/web test`：**57 个文件 581 个用例全绿**
+- `pnpm --filter @armadra/web typecheck`：整仓零错误。
+- `pnpm --filter @armadra/web test`：**57 个文件 581 个用例全绿**
   （新增 `shapes/LinkArrow.test.ts` 8 个：身份 / 方向 / 「手改样式不被覆盖」/
   自连 / 重复 / 「拖动中间态不判定」/ 把手空放删除 / 白板箭头保留 / 删节点级联；
   `sync/project.test.ts` +2；`canvas/context-links.test.ts` +1「随机 shape id 的
   箭头 → edges → 链接文档」全链路）。
 - 浏览器 `http://localhost:1422`（自己的 tab，**真实鼠标** `left_click_drag`；
   临时造了 `edge-A/B/C` 三个便签，测完连同箭头一起删干净了）：
-  1. 从 `edge-A` 右把手拖到 `edge-B` 体上松手 → **箭头留下**，`meta.aicc.id` 是
+  1. 从 `edge-A` 右把手拖到 `edge-B` 体上松手 → **箭头留下**，`meta.armadra.id` 是
      一个 uuid，`styled: true`，颜色 = 起点节点色（`#0a84ff` → `blue`），
      两个 sticky 之间没有箭头头（`edgeArrowheads` 的「内容 ↔ 内容」）。
   2. 同样的拖法连 `edge-A → edge-C`：1.5 s 后 Runtime 侧 `edges` 多一行
@@ -739,7 +739,7 @@ A 的把手起笔时指针还在 A 身上，那一刻的「自连」只是中间
      画布上一条 arrow 都没有，工具回到 `select`，文档 `edges` 仍是 0。
      不带把手标记的没绑定箭头则保留（走 `editor` 直接造，模拟 Phase 3 的箭头工具）。
   6. 刷新页面 → 那条边从库里投影回来：arrow id 是 `shape:4f9271fe-…`，
-     `meta.aicc.id` 是同一个 uuid，两端 binding 都在（**往返恒等**）。
+     `meta.armadra.id` 是同一个 uuid，两端 binding 都在（**往返恒等**）。
   7. 选中箭头按 `canvas.delete` → `document.edges` 1 → 0、画布上箭头消失；
      `editor.undo()` → 箭头连同两端 binding 一起回来（一次拖动 / 一次删除都只占
      一条撤销记录）。
@@ -762,15 +762,15 @@ A 的把手起笔时指针还在 A 身上，那一刻的「自连」只是中间
 ```ts
 createAssetStore(getWorkspaceId: () => string | null): TLAssetStore
 class AssetTooLargeError extends Error      // 超限的哨兵，调用方靠它区分「已经提示过了」
-assetPath(asset): string | null             // 读回 meta.aicc.path
+assetPath(asset): string | null             // 读回 meta.armadra.path
 MAX_UPLOAD_BYTES = MAX_ASSET_BYTES          // 8 MiB
 ```
 
 - `upload` → `runtimeApi.uploadAsset(workspaceId, file)` → 返回
-  `{ src: runtimeApi.assetUrl(workspaceId, id), meta: { aicc: { path } } }`。
-  `path` 是**工作区相对路径**（`.aicc/assets/<hash>.<ext>`）；tldraw 默认的 file
+  `{ src: runtimeApi.assetUrl(workspaceId, id), meta: { armadra: { path } } }`。
+  `path` 是**工作区相对路径**（`.armadra/assets/<hash>.<ext>`）；tldraw 默认的 file
   资产处理器会把 `result.meta` 合进资产记录，所以 **Phase 4 直接读
-  `asset.meta.aicc.path` 就能把文件路径交给 Agent**，不用再导出 PNG。
+  `asset.meta.armadra.path` 就能把文件路径交给 Agent**，不用再导出 PNG。
 - 超过 8 MiB：toast `canvas.assetTooLarge`，抛 `AssetTooLargeError`，**不发请求**。
 - `resolve` 原样返回 `asset.props.src`（上传时存的已经是绝对地址）。
 - **工作区 id 是 getter 不是值**：`<Tldraw>` 只在挂载时读一次 `assets`，
@@ -842,7 +842,7 @@ MAX_UPLOAD_BYTES = MAX_ASSET_BYTES          // 8 MiB
    bookmark 停用之后，`external-content.ts` 里的 `url` 分支要显式注册成
    「转成 text shape」，注释里标了位置。
 2. **Phase 4 / link-content**：白板图片的内容链接**不要导出 PNG**，直接
-   `assetPath(editor.getAsset(shape.props.assetId))` 拿 `.aicc/assets/<hash>.png`
+   `assetPath(editor.getAsset(shape.props.assetId))` 拿 `.armadra/assets/<hash>.png`
    填 `ContextLink.content.pngPath`（§6.3 原文就是「image shape 直接给资产文件路径」）。
 3. **未解决 / 需要 Runtime 或桌面端配合**：**桌面端拖入一张图片文件**（真实路径）
    现在开的是 `editor` 节点，不是 image shape。要把磁盘上的图变成资产得先读到字节，
@@ -861,16 +861,16 @@ MAX_UPLOAD_BYTES = MAX_ASSET_BYTES          // 8 MiB
   内容正确；输入框里粘贴 → 画布 shape 数不变（守卫生效），同一段打在画布上 → +1。
 - 合成 `DataTransfer` 拖入 1200×600 的 png → image shape `800×400`
   （最大边缩到 800）、位置 `(240,160)` 正好以落点 `(640,360)` 为中心；
-  `.aicc/assets/` 多出一个 `<hash>.png`；`<img>` 的 `src` 是
+  `.armadra/assets/` 多出一个 `<hash>.png`；`<img>` 的 `src` 是
   `http://127.0.0.1:43120/api/workspaces/…/assets/<hash>.png` 且 `complete=true`。
 - 保存后的 `board.whiteboard`（2531 B）里有 2 条 `asset:image` + 2 条 `shape:image`，
   `src` 是 Runtime URL、**`data:image` 出现 0 次**，`meta` 是
-  `{"aicc":{"path":".aicc/assets/<hash>.png"}}`。刷新后两张图仍然渲染出来。
+  `{"armadra":{"path":".armadra/assets/<hash>.png"}}`。刷新后两张图仍然渲染出来。
 - 拖入 `notes.md` → text shape，`# 标题` 原样是纯文本（没被当成 Markdown 标题）。
 - 拖入 9.48 MiB 的 png → **不创建 shape、不写文件**，只有一条 toast
   「图片超过 8 MB，没有添加」。
 - 文本 / 图片能选中、移动、`undo` 回到原位、删除、`undo` 恢复。
-- 测完删掉了 `.aicc/assets/` 下的两个测试文件与整块测试看板。
+- 测完删掉了 `.armadra/assets/` 下的两个测试文件与整块测试看板。
 - **没在浏览器里验的**：Tauri 的 `onFileDrop`（要跑桌面壳），以及上面第 3 条
   那个已知缺口。`typecheck` 剩的报错全在 `src/canvas/tools.test.ts`（tools agent 在改），
   与本节改动无关。
@@ -987,14 +987,14 @@ MAX_UPLOAD_BYTES = MAX_ASSET_BYTES          // 8 MiB
 
 ### 8. 验证记录（2026-09-04）
 
-- `pnpm --filter @ai-coding-canvas/web test`：**61 个文件 648 个用例全绿**。
+- `pnpm --filter @armadra/web test`：**61 个文件 648 个用例全绿**。
   `typecheck` 剩的报错全在 `src/canvas/tools.test.ts`（tools agent 在改）。
-- `cargo test -p ai-coding-canvas-runtime`：**314 全绿**；
+- `cargo test -p armadra-runtime`：**314 全绿**；
   `cargo clippy --all-targets -- -D warnings` 零告警；`cargo fmt --check` 干净。
   开发 Runtime 已用新二进制重启（`127.0.0.1:43120`，`/api/health` ok）。
 - 浏览器 `http://localhost:1422`（自己的 tab-9，**没有碰用户的 Default 看板**；
   临时开了 6 块 `phase3-migrate-test*`，测完全部 `DELETE`，
-  `.aicc/assets/` 下的测试文件也删了）：
+  `.armadra/assets/` 下的测试文件也删了）：
   1. 先用旧二进制 PUT 出一块带 `draw`（3 笔：红 2px / 绿 8px / 蓝 4px）+
      `image`（1×1 PNG 的 data URL）+ 便签的看板，再重启收紧后的 Runtime。
      `GET .../document` 照样读得出那两行；`PUT` 同一份 → **400**，
@@ -1003,10 +1003,10 @@ MAX_UPLOAD_BYTES = MAX_ASSET_BYTES          // 8 MiB
      这正是「没人打开过的旧看板」的真实形态。
   3. 前端打开这块板 → 画布上 3 条 `draw` shape（可选中）+ 1 个 `image` shape，
      退役节点的占位壳消失；`POST .../assets` 一次 200，
-     `.aicc/assets/b7a95783e8c945e9.png` 落盘 68 B。
+     `.armadra/assets/b7a95783e8c945e9.png` 落盘 68 B。
   4. `GET .../document`：`nodes` 只剩 `sticky`，`board.whiteboard` 3469 B，
      里面是 `3×draw + 1×image + 1×asset + page/document/user`，
-     **没有** `aicc` 记录。
+     **没有** `armadra` 记录。
   5. 坐标逐条对上：笔迹包围盒左上角 (20,20)/(40,150)/(260,60) + 节点位置
      (0,0) + 标题栏 40 ⇒ shape 落在 (20,60)/(40,190)/(260,100)；
      颜色 `red` / `light-green` / `blue`，粗细 `s` / `xl` / `m`；
@@ -1070,8 +1070,8 @@ Dock 不认识资产上传。所以它**没有命令、没有键位**，也没�
 
 `components.StylePanel` 换成一层包装：`shouldShowStylePanel(toolId, 选中项类型)`
 为真才渲染 `DefaultStylePanel`（换肤仍是 shell 在 `styles/canvas.css` 做的那份）。
-规则两条：**当前工具不是 `select`** 或 **选中项里有非 `aicc` 的 shape**。
-tldraw 默认只要选中了任何东西就把面板亮出来，而 `aicc` 一个 tldraw 样式都没有，
+规则两条：**当前工具不是 `select`** 或 **选中项里有非 `armadra` 的 shape**。
+tldraw 默认只要选中了任何东西就把面板亮出来，而 `armadra` 一个 tldraw 样式都没有，
 于是选中一个终端会得到一个只剩透明度滑块的空面板。判断是纯函数，有单测。
 
 **注意**：tldraw 自己还有一道 `breakpoint >= TABLET_SM` 的闸（`TldrawUi.tsx`），
@@ -1082,9 +1082,9 @@ tldraw 默认只要选中了任何东西就把面板亮出来，而 `aicc` 一�
 
 - `canvas.delete` 现在把选中拆成三堆（`splitSelectionForDelete`，纯函数 + 单测）：
   节点 → `store.removeNodes`（照旧可能弹会话确认框）、边 → `store.removeEdges`、
-  **其余一律 `editor.deleteShapes`**。认边看 `meta.aicc.id`，认节点看
+  **其余一律 `editor.deleteShapes`**。认边看 `meta.armadra.id`，认节点看
   「非 arrow + uuid 形状的 shape id」；认不出的箭头（没绑定 / 只绑一端）算白板内容。
-  文档里不存在的 `aicc` shape 一概不动。
+  文档里不存在的 `armadra` shape 一概不动。
 - `store.selectNodes` 投影回 editor 时**保留选中的边与白板 shape**：
   `kept = 选中项里「type === "arrow" 或 id 不是 uuid」的那些`。
   （边的 arrow 也有 uuid 形状的 id，所以「是不是节点」要连类型一起看。）
@@ -1155,8 +1155,8 @@ Dock 上除「选择」外的工具按钮全部 `disabled`、正在用的工具�
 
 ### 验证记录（2026-09-04）
 
-- `pnpm --filter @ai-coding-canvas/web typecheck`：整仓零错误。
-- `pnpm --filter @ai-coding-canvas/web test`：22:11 那一轮 **61 个文件 648 个
+- `pnpm --filter @armadra/web typecheck`：整仓零错误。
+- `pnpm --filter @armadra/web test`：22:11 那一轮 **61 个文件 648 个
   用例全绿**；其中新增 `canvas/tools.test.ts` 18 个（工具表 ↔ 命令表 ↔ i18n
   一致性、键位表、锁定、样式面板显隐 5 条、`splitSelectionForDelete` 6 条）
   与 `store/canvas-store.test.ts` +1（「投影回 editor 时保留边与白板 shape」）。
@@ -1192,11 +1192,11 @@ Dock 上除「选择」外的工具按钮全部 `disabled`、正在用的工具�
   9. 深浅色各一张截图：Dock 工具组、样式面板、缩略图、水印四者不重叠，
      两套主题下灰度与圆角同一套；`.tl-container` 与 Dock 子树里
      **font-size < 11px 的元素 0 个**，形状下拉的菜单项 14px。
-- **环境干扰说明**：`localStorage` 的 `aicc.board` / `aicc.theme` 是**全应用共享**的，
+- **环境干扰说明**：`localStorage` 的 `armadra.board` / `armadra.theme` 是**全应用共享**的，
   另外两个 agent 的 tab 会把它改到自己的看板上；中途还吃到过 Vite HMR 留下的
   **两个 editor 实例**（`getEditor()` 指向新的、fiber 里翻到的是旧的），
   以及别的 agent 改 `use-store-sync.ts` 时的整页白屏。上面每一条都是在
-  「整页刷新 + 重新确认 `aicc.board` 是我自己的板」之后重跑过的结果。
+  「整页刷新 + 重新确认 `armadra.board` 是我自己的板」之后重跑过的结果。
   后来者验证时建议每验一段就整页刷新一次，别信 HMR 之后的状态。
 
 ## Phase 3 · asset-import（按路径导入资产）
@@ -1212,14 +1212,14 @@ Dock 上除「选择」外的工具按钮全部 `disabled`、正在用的工具�
 ```json
 {
   "id": "a1779d1283ca03a1.png",
-  "path": ".aicc/assets/a1779d1283ca03a1.png",
+  "path": ".armadra/assets/a1779d1283ca03a1.png",
   "url": "/api/workspaces/{id}/assets/a1779d1283ca03a1.png",
   "mimeType": "image/png",
   "bytes": 1767823
 }
 ```
 
-- 落盘与去重和上传**共用** `api::store_asset`：同一个 `.aicc/assets/`、同一套
+- 落盘与去重和上传**共用** `api::store_asset`：同一个 `.armadra/assets/`、同一套
   `sha256` 前 16 位命名，所以「导入一次 + 上传同一张图」只会有一个文件。
 - 类型**按扩展名**判断（磁盘文件没有 MIME），白名单沿用 `ASSET_TYPES` 那 8 种；
   `.jpeg` 折成 `jpg`，扩展名大小写不敏感。
@@ -1243,7 +1243,7 @@ Dock 上除「选择」外的工具按钮全部 `disabled`、正在用的工具�
 ### 2. `packages/shared` 与 `api/client.ts`
 
 - `importAssetRequestSchema`（`{ path: string }`，1–4096 字节）+ `ImportAssetRequest`。
-  已 `pnpm --filter @ai-coding-canvas/shared build`。
+  已 `pnpm --filter @armadra/shared build`。
 - `runtimeApi.importAsset(workspaceId, path)` → `UploadAssetResponse`（与
   `uploadAsset` 同一个响应 schema）。
 
@@ -1252,7 +1252,7 @@ Dock 上除「选择」外的工具按钮全部 `disabled`、正在用的工具�
 `canvas/dnd/external-content.ts` 的 `addNodeForPath`：**桌面端拖进来的图片路径
 不再开 `editor` 节点**。`isImagePath(path)` 且画布已挂载时 → `importAsset` →
 `fetch(assetUrl)` 取回字节包成 `File` → 交给原来的 `createImageShapes`。
-借道 `File` 是为了和浏览器拖放**走完全同一条路**（尺寸、`meta.aicc.path`、
+借道 `File` 是为了和浏览器拖放**走完全同一条路**（尺寸、`meta.armadra.path`、
 资产仓库都不用复制一遍）；那次重传只在 loopback 上，重新上传的哈希相同，
 Runtime 认得出来不会再写盘。导入失败只 `toast(canvas.assetFailed)`，
 不退回去开节点。`os-drop.ts` 只改了文档表格里那一行。
@@ -1262,25 +1262,25 @@ Runtime 认得出来不会再写盘。导入失败只 `toast(canvas.assetFailed)
 - `canvas/sync/migrate-legacy.ts` 的 `MigrateDeps.readSourceFile` 现在可以补上了：
   `runtimeApi.importAsset(workspaceId, sourcePath)` 返回的 `id` / `path` 就是
   资产记录要的东西（`src` 用 `runtimeApi.assetUrl(workspaceId, id)`，
-  `meta.aicc.path` 用返回的 `path`），不必真的把字节读进前端。**这个文件本次
+  `meta.armadra.path` 用返回的 `path`），不必真的把字节读进前端。**这个文件本次
   没有碰**（link-shape agent 在 `sync/` 里干活）。
 - 桌面端的 Tauri `onFileDrop` 这条路**没有在桌面壳里实测**（要跑 Tauri），
   端点本身是用 curl 实测过的。
 
 ### 5. 验证（2026-09-04）
 
-- `cargo test -p ai-coding-canvas-runtime`：**317 全绿**（新增
+- `cargo test -p armadra-runtime`：**317 全绿**（新增
   `api::tests::assets_are_imported_from_a_path`、
   `security::tests::imports_files_from_anywhere_but_only_regular_files`、
   `security::tests::imports_follow_symlinks_only_to_regular_files`）；
-  `cargo clippy -p ai-coding-canvas-runtime --all-targets -- -D warnings` 零告警；
-  `cargo fmt -p ai-coding-canvas-runtime --check` 干净（`apps/desktop` 里原有的
+  `cargo clippy -p armadra-runtime --all-targets -- -D warnings` 零告警；
+  `cargo fmt -p armadra-runtime --check` 干净（`apps/desktop` 里原有的
   fmt 差异不是本次的）。
 - `vitest run src/api src/canvas/dnd`：**72 全绿**（新增
   `canvas/dnd/asset-import.test.ts` 4 例 + `api/client.test.ts` 2 例）。
   `typecheck` 剩的报错全在 `canvas/shapes/LinkArrow.test.ts` 与
   `canvas/sync/project.test.ts`（link-shape agent 在改）。
-- curl 实测（工作区 = 本仓库，测完把 `.aicc/assets/` 下两个文件删了）：
+- curl 实测（工作区 = 本仓库，测完把 `.armadra/assets/` 下两个文件删了）：
   `~/Desktop` 的 1.7 MB PNG → 200，落盘 `a1779d1283ca03a1.png`，
   `GET .../assets/<id>` 回 `image/png` 且字节与原文件 `cmp` 一致；
   仓库内相对路径 `apps/desktop/src-tauri/icons/32x32.png` → 200；
@@ -1311,10 +1311,10 @@ Runtime 认得出来不会再写盘。导入失败只 `toast(canvas.assetFailed)
 
 ### 2. 偏好（`app/preferences-store.ts`）
 
-- `collapsedWorkspaceIds` ← `aicc.collapsedWorkspaces`，**取代**了旧的
-  `expandedWorkspaceIds` / `aicc.expandedWorkspaces`。语义反过来了：项目组默认
+- `collapsedWorkspaceIds` ← `armadra.collapsedWorkspaces`，**取代**了旧的
+  `expandedWorkspaceIds` / `armadra.expandedWorkspaces`。语义反过来了：项目组默认
   展开，存的是「收起来的那些」。旧键不迁移（一次展开状态而已）。
-- `pinnedBoardIds` ← `aicc.pinnedBoards`，board id 数组，顺序即置顶顺序。
+- `pinnedBoardIds` ← `armadra.pinnedBoards`，board id 数组，顺序即置顶顺序。
   `setBoardPinned(boardId, pinned)`。
 - 读写走的还是同一套 `storedIds` / `writeStored`，与 `sidebarOpen` 一致。
 
@@ -1437,7 +1437,7 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 - `canvas/sync/derive.ts`：`arrowToEdge` 删除，换成 `linkToEdge`；
   `deriveEdges(links, boardId, previous)` 少了一个 bindings 参数；
   新增 **`edgeIdOfShape(shape)`**——「什么算边」只有这一处定义（见第 6 节）。
-  `arrowEdgeId` / `arrowAiccMeta` / `arrowEnds` 保留（`LinkArrow` 与
+  `arrowEdgeId` / `arrowArmadraMeta` / `arrowEnds` 保留（`LinkArrow` 与
   `TldrawWorkspace` 还在用）。
 - `canvas/sync/use-store-sync.ts`：`documentArrows` → `documentLinks`；
   `isDocumentRecord` 认 `link`；`push()` 按 `props.edgeId` 建 / 删线，
@@ -1453,7 +1453,7 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 - `store/canvas-store.ts`：`addEdge` 用 `edgeToLink` + `sendToBack`；
   `removeEdges` 用 `edgeIdOfShape` 找线。**`selectNodes` 一个字没动。**
 - `canvas/TldrawWorkspace.tsx`：只加了 import 与
-  `shapeUtils = [AiccShapeUtil, LinkShapeUtil]` / `bindingUtils = [LinkBindingUtil]`
+  `shapeUtils = [ArmadraShapeUtil, LinkShapeUtil]` / `bindingUtils = [LinkBindingUtil]`
   两行（外加 `<Tldraw bindingUtils={...}>`）。
 - 测试：`sync/project.test.ts`、`canvas/context-links.test.ts`、
   `shapes/LinkArrow.test.ts`、`sync/snapshot.test.ts` 跟着改；
@@ -1463,7 +1463,7 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 
 - 两个矩形相对边的中点之间的三次贝塞尔，`anchor: "horizontal"`——**上下摆放也只走
   左右两侧**，不从头部上面绕过去挡标题。
-- 线宽 2 / 选中 3.5；颜色取**起点节点**的色（frame 取 `meta.aicc.color`）。
+- 线宽 2 / 选中 3.5；颜色取**起点节点**的色（frame 取 `meta.armadra.color`）。
 - 箭头按 `edgeArrowheads`：内容 → 终端单向、终端 ↔ 终端双向、内容 ↔ 内容无箭头。
   箭头是沿切线画的两笔「V」，不用 SVG marker（marker id 会跨 shape 撞车）。
 - 中点标签走 i18n 键，缩放 < 0.5 不画。**文字用线自己的颜色（`currentColor`，
@@ -1490,8 +1490,8 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 
 ### 7. 验证记录（2026-09-04）
 
-- `pnpm --filter @ai-coding-canvas/web typecheck`：整仓零错误。
-- `pnpm --filter @ai-coding-canvas/web test`：**65 个文件 687 例全绿**
+- `pnpm --filter @armadra/web typecheck`：整仓零错误。
+- `pnpm --filter @armadra/web test`：**65 个文件 687 例全绿**
   （新增 `shapes/link-path.test.ts` 10 例；`sync/project.test.ts` 的边一节重写成
   `edgeToLink / linkToEdge / edgeIdOfShape / edgeLabelKey`；`LinkArrow.test.ts`
   的「身份」一节重写成「换形」，级联那条改成直接验 `LinkBindingUtil`）。
@@ -1542,7 +1542,7 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 ### 1. 偏好（`app/preferences-store.ts`）
 
 新增一整块 `whiteboard: WhiteboardPreferences`（写法照 `terminal`：整块存、
-一个 `setWhiteboardPreference(key, value)`、每项一个 `aicc.whiteboard.*` 键）：
+一个 `setWhiteboardPreference(key, value)`、每项一个 `armadra.whiteboard.*` 键）：
 
 | 字段 | 取值 | 默认 | 落到 tldraw 的哪里 |
 | --- | --- | --- | --- |
@@ -1624,7 +1624,7 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
   `isSnapMode` / `isDynamicSizeMode` / `animationSpeed` 跟着翻。
 - 语言：切 English 后该文件里 `locale` 从 `zh-cn` 变 `en`；样式面板的
   「形状」在中文下是中文。
-- `pnpm --filter @ai-coding-canvas/web typecheck` 干净；
+- `pnpm --filter @armadra/web typecheck` 干净；
   `vitest run src/app src/panels/settings src/i18n` 69 例全绿。
 
 ### 6. 已知问题 / 还没做
@@ -1701,7 +1701,7 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 
 - `node .claude/skills/impeccable/scripts/detect.mjs --json <7 个文件>` → `[]`，
   exit 0；编辑过程中的 PostToolUse hook 每次也是零告警。
-- `pnpm --filter @ai-coding-canvas/web typecheck` 干净。
+- `pnpm --filter @armadra/web typecheck` 干净。
 - `vitest run src/app src/panels src/ui` 102 例全绿；`src/i18n src/styles` 58 例全绿。
   `Launcher.test.tsx` 从 7 例加到 10 例，新增：空列表只有一行字且没有搜索框、
   第 9 个工作空间才长出搜索框且能筛、相对时间与 `⋯` 同时存在。
@@ -1715,7 +1715,7 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
   `activeId` 的签名和 `remove-workspace.tsx` 的导出**一个都没改**，
   `sidebar/WorkspaceTree.tsx`、`sidebar/SidebarHeader.tsx`、`app/use-board-sync.ts`
   不受影响。
-- 调试时清过 localStorage 的 `aicc.workspace`，并且**把 `aicc.theme` 覆盖成了
+- 调试时清过 localStorage 的 `armadra.workspace`，并且**把 `armadra.theme` 覆盖成了
   `system`**（原值在调试中被写坏了；`system` 就是这个键的默认值）。
 
 ### 5. 还没做
@@ -1744,7 +1744,7 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
    这条箭头 `meta` 是空的：两端都不是节点，`LinkArrow` 一个字都没碰它。
 2. **矩形 → 终端节点**：同样一次真实拖动 ⇒ 箭头**保留成 tldraw arrow**（不换成
    `link` shape），`props.color = "blue"`、`arrowheadEnd = "arrow"`（指向节点那一端）、
-   `meta.aicc = { contentId: <uuid>, styled: true }`。
+   `meta.armadra = { contentId: <uuid>, styled: true }`。
 
 结论：tldraw 5.4 的 `ArrowBindingUtil` 对**任意 shape** 都能绑（`canBind` 默认 true），
 连线能力从来不缺；v3 之前「连不上」的感觉来自我们自己的规则——Phase 2 的
@@ -1768,19 +1768,19 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 - 样式：颜色钉在 tldraw 的 `blue` 上。`--brand` 深色 `#0a84ff` / 浅色 `#007aff`
   都是调色板里那支蓝，而 tldraw 的 `blue` 自己就跟着明暗主题走——读 CSS 变量再走
   一次 `toTldrawColor` 反而会在浅色下掉进 `grey`（`COLOR_NAMES` 里没有 `#007aff`）。
-  箭头头指向节点那一端。`meta.aicc.styled` 与边共用同一个标记，写过一次之后
+  箭头头指向节点那一端。`meta.armadra.styled` 与边共用同一个标记，写过一次之后
   用户手改颜色 / 箭头不再被覆盖（已验）。
 - **把手兜底放宽**：从把手起笔、松手时 **`end` 这一端没绑到任何 shape** 才删
   （原来是「没绑到节点」就删）。所以「从把手拖到空白处 = 取消」这条 Phase 2 的
   行为保留，而「从把手拖到一个矩形上」现在会留下一条内容链接。
 
-### 2. 稳定 uuid：`arrow.meta.aicc.contentId`（**不是** uuid v5）
+### 2. 稳定 uuid：`arrow.meta.armadra.contentId`（**不是** uuid v5）
 
 两条理由，二选一时选了它：
 
-1. 前端没有 sha-1，uuid v5 得自己实现一份；而 arrow 本来就要写 `meta.aicc`
+1. 前端没有 sha-1，uuid v5 得自己实现一份；而 arrow 本来就要写 `meta.armadra`
    （`styled`），多一个字段是零成本。
-2. 导出路径是 `.aicc/exports/<uuid>.png`。id 跟着**这条连线**走时，用户把线改指
+2. 导出路径是 `.armadra/exports/<uuid>.png`。id 跟着**这条连线**走时，用户把线改指
    到另一个图形只是覆盖同一个文件；跟着 shape id 走（v5）则每换一次目标就在工作区
    里留下一个再也没人读的 PNG。
 
@@ -1800,7 +1800,7 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 | --- | --- |
 | `text` | `text`（`renderPlaintextFromRichText`），**不导出 PNG** |
 | `geo` 带文字 | `text` + `pngPath` |
-| `image` | `pngPath` = 资产的 `meta.aicc.path`（`.aicc/assets/<hash>.png`），**不导出** |
+| `image` | `pngPath` = 资产的 `meta.armadra.path`（`.armadra/assets/<hash>.png`），**不导出** |
 | `draw` / `line` / `highlight` / 无文字 `geo` | `pngPath` |
 | `frame` | `pngPath` + **框内所有子孙的文字**拼成的 `text` |
 
@@ -1842,7 +1842,7 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
   的三种回答、工作区内解析 `pngPath`）一个字没改。
 - `collab/skills.rs`：`instruction_block()`（codex / gemini / opencode 读的
   `AGENTS.md` / `GEMINI.md`）补了白板内容那一段，`SKILLS_REVISION` 2 → 3。
-  `linked_context_skill()`（Claude 的 `aicc-linked-context/SKILL.md`）里那一行
+  `linked_context_skill()`（Claude 的 `armadra-linked-context/SKILL.md`）里那一行
   「白板内容 shape」上一轮已经有了，没动。
 - `collab/tests.rs` 的 `a_linked_whiteboard_shape_reads_as_text_or_a_png_path`
   多一条断言：`list` 里出现 `类型=白板内容`。
@@ -1850,8 +1850,8 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 > **`.claude/skills/get-linked-context/SKILL.md` 没有改，也改不了**：仓库里没有
 > 这个文件（`grep -rn get-linked-context` 只命中 `docs/tldraw-canvas-plan.md`）。
 > `~/.claude/skills/get-linked-context/` 是**另一个应用**装的技能，它的 shim 指向
-> 那个应用自己的 Application Support 目录，与本仓库无关。本仓库对应的那份是 `aicc-linked-context`，由 `skills.rs` 生成，
-> 已按上面改好；用户机器上那份 `~/.claude/skills/aicc-linked-context/SKILL.md`
+> 那个应用自己的 Application Support 目录，与本仓库无关。本仓库对应的那份是 `armadra-linked-context`，由 `skills.rs` 生成，
+> 已按上面改好；用户机器上那份 `~/.claude/skills/armadra-linked-context/SKILL.md`
 > 还是 rev 2 的旧文案，**下次装技能时会自动刷新**（我没有去写用户的家目录）。
 
 ### 6. 我改过的非归属文件（都很小，请核对）
@@ -1861,7 +1861,7 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 2. **`canvas/sync/use-store-sync.ts`**（canvas-core）：只有 `load()` 的三步与
    `isDocumentRecord` 里 binding 那一行。**没碰** `pull` / `push` / 迁移那几段
    （包括另一位刚加的 `loadedEditor` 身份校验）。
-3. **`canvas/sync/derive.ts`**（canvas-core）：`ArrowAiccMeta` 多一个可选字段
+3. **`canvas/sync/derive.ts`**（canvas-core）：`ArrowArmadraMeta` 多一个可选字段
    `contentId`（只加类型与注释）。
 4. **`canvas/shapes/LinkArrow.ts`**（Phase 2 · edges）：第 1 节。
 5. **`i18n/canvas.ts`**：新增 `content.*` 8 个键（zh + en），只增不改。
@@ -1874,16 +1874,16 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 2. **已知的小毛刺（有意为之，需要的话再改）**：删掉一个被连着的白板 shape 之后，
    tldraw 会留下**那条只剩一端绑定的 arrow**（链接文档里的那条已经正确消失了）。
    没有跟着删，因为「一端悬空的箭头」本来就是白板上的合法画法；要改的话在
-   `LinkArrow` 的 `evaluate` 里补一条「`meta.aicc.contentId` 有值、又掉了一端
+   `LinkArrow` 的 `evaluate` 里补一条「`meta.armadra.contentId` 有值、又掉了一端
    绑定 ⇒ 删掉」，与 Phase 2 对边箭头的做法一致。
-3. **`.aicc/exports/` 的清理**：一条内容链接被删掉之后，它的
+3. **`.armadra/exports/` 的清理**：一条内容链接被删掉之后，它的
    `<contentId>.png` 会留在工作区里。Runtime 没有「删导出」的接口，也没有 GC。
    量不大（一条线一个文件、覆盖写），但收尾时值得记一笔。
 
 ### 8. 验证记录（2026-09-04）
 
-- `pnpm --filter @ai-coding-canvas/web typecheck`：**整仓零错误**。
-- `pnpm --filter @ai-coding-canvas/web test`：**67 个文件 739 个用例全绿**
+- `pnpm --filter @armadra/web typecheck`：**整仓零错误**。
+- `pnpm --filter @armadra/web test`：**67 个文件 739 个用例全绿**
   （新增 `canvas/content-links.test.ts` 30 个：判定 10（含 10 种 shape 类型的
   可读性表）、稳定 uuid 2、标题 3、字节截断 1、文字与签名 3、`resolveContent` 6、
   **防抖 1**（假定时器：1.5 s 不导、中途再改重排、停手 2 s 导一次、只挪位置不重导、
@@ -1891,27 +1891,27 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
   悬空 binding 丢掉、`splitPendingBindings` 两例）+ 200 个随机用例的属性测试跟着
   改判据；`shapes/LinkArrow.test.ts` 8 → 10（内容链接的样式与方向、手改样式不被
   覆盖、把手拖到白板 shape 留着）；`canvas/context-links.test.ts` 5 → 9）。
-- `cargo test -p ai-coding-canvas-runtime`：**317 全绿**；
-  `cargo clippy -p ai-coding-canvas-runtime --all-targets -- -D warnings` 零告警；
-  `cargo fmt --check -p ai-coding-canvas-runtime` 干净。开发 Runtime 已用新二进制
+- `cargo test -p armadra-runtime`：**317 全绿**；
+  `cargo clippy -p armadra-runtime --all-targets -- -D warnings` 零告警；
+  `cargo fmt --check -p armadra-runtime` 干净。开发 Runtime 已用新二进制
   重启（`127.0.0.1:43120`，`/api/health` ok）。
 - 浏览器 `http://localhost:1422`（**自己新建的看板 `phase4-link-content`**，
   没碰用户的 Default 也没碰 polish 的 `phase4-polish-test`；测完看板已 DELETE、
-  终端会话已 terminate、`.aicc/exports/` 与 `.aicc/assets/` 里的测试文件已删、
+  终端会话已 terminate、`.armadra/exports/` 与 `.armadra/assets/` 里的测试文件已删、
   `context_links` 那一行已清）：
   1. 见第 0 节：真实鼠标验的两条连线路径。
   2. 四种内容各连一条到终端节点，2 s 后库里的链接文档就是：
-     - 矩形（geo 无文字）→ `{pngPath: ".aicc/exports/e0b5….png"}`
+     - 矩形（geo 无文字）→ `{pngPath: ".armadra/exports/e0b5….png"}`
      - 文字 → `{text: "先修好构建再合并"}`，**没有** `pngPath`
      - 画框（内含一段文字 + 一个红矩形）→ `{text: "入口在 apps/runtime/src/main.rs",
-       pngPath: ".aicc/exports/4bd1….png"}`；PNG 打开看，文字与红框都在
-     - 图片 → `{pngPath: ".aicc/assets/bf04e51a8923ec18.png"}`，**没有导出**
-  3. Agent 侧（`POST /context-link/*`，走 hook socket + `x-aicc-hook-token`）：
+       pngPath: ".armadra/exports/4bd1….png"}`；PNG 打开看，文字与红框都在
+     - 图片 → `{pngPath: ".armadra/assets/bf04e51a8923ec18.png"}`，**没有导出**
+  3. Agent 侧（`POST /context-link/*`，走 hook socket + `x-armadra-hook-token`）：
      `list` 四行都是「类型=白板内容 … 可读：白板内容（文字或导出的 PNG 路径）」；
      `summary --node 架构图` 回「文字 + 已导出为 PNG：<绝对路径>」，
-     `--node 先修好构建再合并` 只回文字，`--node 图片` 回 `.aicc/assets/…` 的绝对路径。
+     `--node 先修好构建再合并` 只回文字，`--node 图片` 回 `.armadra/assets/…` 的绝对路径。
   4. 保存后的 `board.whiteboard`（10 019 B）里**有** 4 条内容箭头与它们指向
-     `shape:<终端 uuid>` 的 binding，**没有** `aicc` 节点 shape；刷新页面 →
+     `shape:<终端 uuid>` 的 binding，**没有** `armadra` 节点 shape；刷新页面 →
      5 条箭头（4 条内容链接 + 1 条纯白板箭头）连同两端 binding 原样回来，
      `contentId` 一个没变（**往返恒等**）。
   5. 删掉那个 text shape → 2 s 后链接文档从 4 条变 3 条（那条 `31424c88…` 消失）。
@@ -1970,7 +1970,7 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 无条件合回来（只有同名的才被替换）。所以：
 
 - `TldrawWorkspace.tsx` 的 `shapeUtils` 改成显式清单
-  （`...activeShapeUtils(defaultShapeUtils), AiccShapeUtil, LinkShapeUtil`）——
+  （`...activeShapeUtils(defaultShapeUtils), ArmadraShapeUtil, LinkShapeUtil`）——
   它是**意图声明**，注释里写清楚了；
 - 真正拦住创建的是 `onMount` 里的 `registerRetiredShapes(instance)`：
   `registerAfterCreateHandler("shape")` 命中这四种且 `source === "user"` 时，
@@ -2034,7 +2034,7 @@ util 缺席时 `loadSnapshot` 会整份失败。停用只发生在「创建」�
    `oscTitles` 是进程内 Map，而 `TerminalSurface` 的清理里调了
    `forgetOscTitle(nodeId)`。刷新 / 热重载 / StrictMode 二次挂载之后表就空了，
    而节点标题早被上一轮 OSC 写成了命令名 → `shouldApplyOscTitle` 判成「用户改过名」
-   → 这个终端从此不跟随标题。改成：记忆写进 `localStorage`（`aicc.oscTitles`，
+   → 这个终端从此不跟随标题。改成：记忆写进 `localStorage`（`armadra.oscTitles`，
    按节点 id，200 条上限，读写都带 try/catch），**卸载不再 forget**。
    `forgetOscTitle` 仍导出，语义收紧成「节点真的被删掉时才调」。
    单测 `compat.test.ts` +1（自带 localStorage stub，这个测试环境是 node）。
@@ -2079,14 +2079,14 @@ util 缺席时 `loadSnapshot` 会整份失败。停用只发生在「创建」�
 
 ### 验证记录（2026-09-04）
 
-- `pnpm --filter @ai-coding-canvas/web typecheck`：**整仓零错误**。
-- `pnpm --filter @ai-coding-canvas/web test`：**67 个文件 740 个用例全绿**。
-- `pnpm --filter @ai-coding-canvas/shared test`：63 全绿。
-- `cargo test -p ai-coding-canvas-runtime`：**317 全绿**；
+- `pnpm --filter @armadra/web typecheck`：**整仓零错误**。
+- `pnpm --filter @armadra/web test`：**67 个文件 740 个用例全绿**。
+- `pnpm --filter @armadra/shared test`：63 全绿。
+- `cargo test -p armadra-runtime`：**317 全绿**；
   `cargo clippy --all-targets -- -D warnings`：零告警（Rust 侧本轮一行没改）。
 - 浏览器 `http://localhost:1422`（自己的 tab，两块自建看板 `phase4-polish-test` /
   `phase4-shapes-test`，两个终端会话已 `terminate`、两块板已 `DELETE`，
-  `aicc.board` 已还原成用户的 Default）。
-- **环境干扰说明**：`localStorage` 的 `aicc.board` 是全应用共享的，验证途中被别的
+  `armadra.board` 已还原成用户的 Default）。
+- **环境干扰说明**：`localStorage` 的 `armadra.board` 是全应用共享的，验证途中被别的
   tab 改回过用户的 Default 一次（当时立刻切走，没有在用户的板上做任何写操作）。
   后来者验证时每次 reload 前都重新 `setItem` 一遍自己的看板 id。

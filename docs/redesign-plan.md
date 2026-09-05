@@ -336,6 +336,6 @@ apps/web/src/
 
 1. 只改自己归属的文件；需要别人文件的改动，在报告里写明"需要 X 在 Y 文件加 Z"，由集成阶段处理。i18n 只改自己的模块文件。
 2. 不引入新的 npm/cargo 依赖，除非本文列出：`@tauri-apps/api`、`@tauri-apps/plugin-dialog`、`@tauri-apps/plugin-opener`（B4）。
-3. 每个阶段结束必须 `pnpm --filter <pkg> typecheck` 与相关测试通过；A2 必须 `cargo test -p ai-coding-canvas-runtime` 通过。
+3. 每个阶段结束必须 `pnpm --filter <pkg> typecheck` 与相关测试通过；A2 必须 `cargo test -p armadra-runtime` 通过。
 4. 不做假数据：没有真实来源的字段（tokens、外部端设备）要么隐藏，要么标注「预留」。
 5. 中文文案放 i18n 模块，不硬编码在 JSX 中（简单符号除外）。

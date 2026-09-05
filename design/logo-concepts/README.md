@@ -1,10 +1,9 @@
-# AI Coding Canvas Logo
+# Armadra Logo
 
 ## 当前品牌决定
 
-- 产品名称保持为 **AI Coding Canvas**。
+- 产品名称为 **Armadra**。
 - 唯一 Logo 源文件为 [`armadra-armadillo-primary.png`](./armadra-armadillo-primary.png)。
-- `Armadra` 仅是犰狳视觉方向的内部代号，不作为当前产品名称。
 
 ## 使用位置
 

@@ -451,7 +451,7 @@ interface BrowserNode extends BaseNode {
 
 建议分三期。
 
-### Phase 1：本地 AI Coding Canvas
+### Phase 1：本地 Armadra
 
 目标：能跑起来，有核心爽点。
 
@@ -1211,7 +1211,7 @@ Rust permission sandbox
 ## 项目定位可以这样写
 
 ```
-一个 local-first 的 AI Coding Canvas。
+一个 local-first 的 Armadra。
 
 用户可以在无限画布上创建文件、目录、终端、浏览器、任务、截图和文档节点；
 通过连线把上下文传递给 Claude Code、Codex、Gemini、OpenCode 等 CLI Agent；
@@ -1307,7 +1307,7 @@ MVP：Electron + React Flow + xterm.js + node-pty + SQLite
 建议项目定位为：
 
 ```markdown
-Local-first AI Coding Canvas
+Local-first Armadra
 
 一个本地优先的 AI Coding 无限画布工作台。
 用户可以在画布中创建终端、Agent、文件、目录、浏览器、截图、Markdown、任务、Diff 等节点；
@@ -2844,7 +2844,7 @@ ContextGraph
 我更建议定位词用：
 
 ```markdown
-AI Coding Canvas
+Armadra
 ```
 
 因为比 Agent Canvas 更明确。
@@ -3848,7 +3848,7 @@ React UI + Go 控制面 + Rust 核心 Runtime。
 React + Go + xterm.js + React Flow
 ```
 
-这条路最适合你现在设想的 **AI Coding Canvas + Web + SSH + 跨服务执行**。
+这条路最适合你现在设想的 **Armadra + Web + SSH + 跨服务执行**。
 
 ---
 
@@ -4126,7 +4126,7 @@ Tauri 只做壳：
 # 目录结构建议
 
 ```markdown
-ai-coding-canvas/
+armadra/
   apps/
     web/
       src/
@@ -4429,7 +4429,7 @@ Tauri 官方支持任意前端框架，并用 Rust 做应用逻辑；它面向 W
 项目可以定义为：
 
 ```markdown
-AI Coding Canvas
+Armadra
 
 一个 local-first 的 AI 编程控制平面。
 
@@ -5891,7 +5891,7 @@ apps/web/
 # 19. Monorepo 结构
 
 ```markdown
-ai-coding-canvas/
+armadra/
   apps/
     web/
       package.json

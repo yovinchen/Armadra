@@ -21,7 +21,7 @@
 - **Hook**：CLI 在回合开始/结束、权限请求等时机回调 Runtime 的回报机制，是本方案里 Agent 状态的唯一来源。
 - **浮层壳**：除标签栏与画布外，其余界面（会话侧栏、抽屉、Dock、设置）都以浮层形式叠在画布上，不占固定分区。
 
-命名约定：环境变量统一 `AICC_*` 前缀，项目内产物统一放 `.aicc/` 目录。
+命名约定：环境变量统一 `ARMADRA_*` 前缀，项目内产物统一放 `.armadra/` 目录。
 
 ## 2. 现状差距（2026-09-04 实测）
 
@@ -209,37 +209,37 @@ Runtime 在现有 `127.0.0.1:43120` 之外**再监听一个 Unix socket**（`<da
 
 | 变量 | 含义 |
 | --- | --- |
-| `AICC_NODE_ID` | 节点 ID，所有 hook 的门槛 |
-| `AICC_AGENT_ID` | provider |
-| `AICC_ENDPOINT_FILE` | 0600 端点文件路径 |
-| `AICC_CANVAS_CONTROL=1` | 允许调用控制 API |
-| `AICC_PERM_WAIT_SECS` | >0 时启用 hook 直答权限（阶段三） |
+| `ARMADRA_NODE_ID` | 节点 ID，所有 hook 的门槛 |
+| `ARMADRA_AGENT_ID` | provider |
+| `ARMADRA_ENDPOINT_FILE` | 0600 端点文件路径 |
+| `ARMADRA_CANVAS_CONTROL=1` | 允许调用控制 API |
+| `ARMADRA_PERM_WAIT_SECS` | >0 时启用 hook 直答权限（阶段三） |
 
-端点文件 `<data>/hook-endpoint.env`（0600，每次 hook 调用重新读取，因为终端可能比 Runtime 活得久）：`AICC_HOOK_PORT`、`AICC_HOOK_SOCK`、`AICC_HOOK_TOKEN`（应用级 bearer）、`AICC_NODE_TOKEN_DIR`、`AICC_HOOK_VERSION`。
+端点文件 `<data>/hook-endpoint.env`（0600，每次 hook 调用重新读取，因为终端可能比 Runtime 活得久）：`ARMADRA_HOOK_PORT`、`ARMADRA_HOOK_SOCK`、`ARMADRA_HOOK_TOKEN`（应用级 bearer）、`ARMADRA_NODE_TOKEN_DIR`、`ARMADRA_HOOK_VERSION`。
 
-每节点令牌**派生而不存储**：`kid = b64url(HMAC(secret, "aicc-node-kid-v1"))[0..8]`，`mac = b64url(HMAC(secret, "aicc-node-v1|" + nodeId))`，令牌 `kid.mac`，写到 `<data>/node-tokens/<nodeId>`（0700/0600，原子写）。`secret` 32 字节，首次生成后存于 OS keyring（`keyring` crate），回退到 0600 文件。
+每节点令牌**派生而不存储**：`kid = b64url(HMAC(secret, "armadra-node-kid-v1"))[0..8]`，`mac = b64url(HMAC(secret, "armadra-node-v1|" + nodeId))`，令牌 `kid.mac`，写到 `<data>/node-tokens/<nodeId>`（0700/0600，原子写）。`secret` 32 字节，首次生成后存于 OS keyring（`keyring` crate），回退到 0600 文件。
 
 校验三分：`verified`（本实例 kid 且 mac 正确，常量时间比较）/ `legacy`（无令牌或外来 kid，允许，仅作标记）/ `forged`（本实例 kid 但 mac 错，403）。状态回报路由 `legacy` 也接受；控制/消息路由要求 `verified`。
 
 ### 5.3 Hook 客户端与安装器
 
-**客户端用 Rust 小二进制 `aicc-hook`**（随 Runtime 一起作为 sidecar 打包），而不是 `sh + curl`：Windows 无需 curl/sh，行为跨平台一致，也能做常量时间比较和原子文件写。行为：
+**客户端用 Rust 小二进制 `armadra-hook`**（随 Runtime 一起作为 sidecar 打包），而不是 `sh + curl`：Windows 无需 curl/sh，行为跨平台一致，也能做常量时间比较和原子文件写。行为：
 
-1. 无 `AICC_NODE_ID` → 读空 stdin 并 exit 0（在用户自己的终端里是零副作用）。
+1. 无 `ARMADRA_NODE_ID` → 读空 stdin 并 exit 0（在用户自己的终端里是零副作用）。
 2. 读端点文件；按名字读取 `<tokenDir>/<nodeId>` 令牌（查找，不扫描）。
-3. stdin 全量读入内存（上限 1 MiB），POST `/hook/<agentId>`，body 为 JSON `{nodeId, version, payload, pendingId?, answered?}`，头 `X-AICC-Hook-Token`、`X-AICC-Node-Token`、`X-AICC-Hook-Client: <rev>`。先 socket 后 TCP，连接超时 0.5s、总超时 1.5s，失败静默（fail-open）。
+3. stdin 全量读入内存（上限 1 MiB），POST `/hook/<agentId>`，body 为 JSON `{nodeId, version, payload, pendingId?, answered?}`，头 `X-Armadra-Hook-Token`、`X-Armadra-Node-Token`、`X-Armadra-Hook-Client: <rev>`。先 socket 后 TCP，连接超时 0.5s、总超时 1.5s，失败静默（fail-open）。
 4. 权限等待模式（§5.5）时前台轮询答案文件并把决定打印到 stdout。
 
 **安装器**（Runtime `agent/hooks/<provider>.rs`，设置页"安装 / 重新安装 / 卸载"）：
 
 | provider | 接缝 | 事件 |
 | --- | --- | --- |
-| claude | 合并到 `~/.claude/settings.json` 的 `hooks`，命令 `"<aicc-hook> claude"` | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Notification, PermissionRequest, Stop, StopFailure, SessionEnd, SubagentStart, SubagentStop |
+| claude | 合并到 `~/.claude/settings.json` 的 `hooks`，命令 `"<armadra-hook> claude"` | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Notification, PermissionRequest, Stop, StopFailure, SessionEnd, SubagentStart, SubagentStop |
 | codex | `~/.codex/hooks.json` + `config.toml` 的 `hooks.state.<key>.trusted_hash`（必须复现 codex 自己的哈希，否则 hook 静默不触发） | 同上子集 + SubagentStart/Stop |
 | gemini | `~/.gemini/settings.json` | BeforeAgent / AfterAgent / BeforeTool / AfterTool / Notification / SessionStart / SessionEnd（不订阅逐 chunk 的 AfterModel） |
-| opencode | `<config>/plugins/aicc-status.js` 插件（只能从 `event` 总线拿事件） | `session.idle`、`message.updated`、`permission.asked`、`tool.*` |
+| opencode | `<config>/plugins/armadra-status.js` 插件（只能从 `event` 总线拿事件） | `session.idle`、`message.updated`、`permission.asked`、`tool.*` |
 
-安装幂等：以命令里 `aicc-hook` 的路径尾作为"我们管理的条目"识别并重写；卸载只删这些条目。设置页显示每个 provider 的安装状态与脚本版本；版本落后时通知条提示。每个 provider 的事件列表放在 `packages/shared/src/agents/hook-events.ts` 单一来源。
+安装幂等：以命令里 `armadra-hook` 的路径尾作为"我们管理的条目"识别并重写；卸载只删这些条目。设置页显示每个 provider 的安装状态与脚本版本；版本落后时通知条提示。每个 provider 的事件列表放在 `packages/shared/src/agents/hook-events.ts` 单一来源。
 
 ### 5.4 状态归一与归约
 
@@ -272,12 +272,12 @@ AgentEvent {
 
 阶段二先做"**观察 + 快捷键**"：`blocked` 时头部显示 `✓ 允许 / ✕ 拒绝`，点击向 PTY 写入 CLI 对应按键（claude：`1`/`3`+Enter 或 `y`/`n`，按 provider 表）。它对所有 CLI 都可用，代价是依赖 CLI 提示行的形状。
 
-阶段三对 claude 启用 **hook 直答**（确定性）：`PermissionRequest` hook 且 `AICC_PERM_WAIT_SECS>0` 时，客户端铸 `pendingId = <nodeId>-<epochMs>-<pid>`，把请求 JSON 写到 `<data>/pending/<id>.json`（0600），前台 POST 事件（带 `pendingId`），然后每 0.5s 轮询 `<id>.answer`。UI 答复 → Runtime 原子写一行 `allow`/`deny` → 客户端删除两个文件、后台 POST `answered=<decision>`、把 `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}` 打到 stdout。超时不输出 → CLI 回到自己的交互提示（fail-open）。启动时与每小时清理 10 分钟以上的孤儿文件。`agent_approvals` 表记录 request/answer/resolver 以便审计。
+阶段三对 claude 启用 **hook 直答**（确定性）：`PermissionRequest` hook 且 `ARMADRA_PERM_WAIT_SECS>0` 时，客户端铸 `pendingId = <nodeId>-<epochMs>-<pid>`，把请求 JSON 写到 `<data>/pending/<id>.json`（0600），前台 POST 事件（带 `pendingId`），然后每 0.5s 轮询 `<id>.answer`。UI 答复 → Runtime 原子写一行 `allow`/`deny` → 客户端删除两个文件、后台 POST `answered=<decision>`、把 `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}` 打到 stdout。超时不输出 → CLI 回到自己的交互提示（fail-open）。启动时与每小时清理 10 分钟以上的孤儿文件。`agent_approvals` 表记录 request/answer/resolver 以便审计。
 
 ### 5.6 上下文链接（Agent 读对方）
 
 - `link` 边即"上下文链接"。前端每次连线变化把每个节点的链接文档 `{nodeId, links:[{id,title,kind}]}` PUT 到 Runtime；Runtime 存 `context_links` 表。
-- Skill：Runtime 把 `~/.claude/skills/aicc-linked-context/SKILL.md` 写入（内容自撰），非 claude 的 CLI 以标记块 `<!-- aicc:linked-context:start/end -->` 合并到 `~/.codex/AGENTS.md`、`~/.gemini/GEMINI.md`、opencode `AGENTS.md`。Skill 指示 Agent 运行 `aicc-hook context <verb> --node <id|title>`。
+- Skill：Runtime 把 `~/.claude/skills/armadra-linked-context/SKILL.md` 写入（内容自撰），非 claude 的 CLI 以标记块 `<!-- armadra:linked-context:start/end -->` 合并到 `~/.codex/AGENTS.md`、`~/.gemini/GEMINI.md`、opencode `AGENTS.md`。Skill 指示 Agent 运行 `armadra-hook context <verb> --node <id|title>`。
 - 动词：`list` / `summary [-n N]` / `transcript` / `terminal`，POST `/context-link/<verb>`，回复 `text/plain` 散文。
 - 授权：**只能读自己链接文档里列出的节点**，持有 bearer 也读不到未链接节点。
 - 数据来源：claude 用 hook 上报的 `transcript_path`；codex/gemini 按 sessionId 在各自目录定位；opencode 用 `opencode export <id>`；`terminal` 动词读 PTY 的屏幕快照（阶段二先用最近 N 行回放，§10 的 vt100 快照落地后换成真实屏幕）；sticky 读实时文本。渲染：最近 N 行摘要、工具调用缩写。转录读取上限 5 MiB 尾部；不做 LLM 摘要。
@@ -295,15 +295,15 @@ AgentEvent {
 7. 投递：应用构造信封（发送方不能造），作为**一次括号粘贴**（`\x1b[200~ … \x1b[201~`）写入 PTY，再写 Enter；剥掉正文里的 ESC 字节。
 8. 回执：写入前先订阅目标 hook 事件；8s 内出现 `newTurn` 或 `working` 视为 `delivered`，否则 `stalled`。
 9. 队列：目标忙则入队（TTL 5 分钟，每目标 16 条），目标空闲后**重新跑完整门链**再投递。
-10. 追踪：每次投递与拒绝都追加到 `<cwd>/.aicc/board-log.jsonl`（`traceId, ts, source, target, outcome, receipt, bodyChars`），不记正文；无项目日志时进 200 条内存环并在响应里标 `traced:"memory"`。
+10. 追踪：每次投递与拒绝都追加到 `<cwd>/.armadra/board-log.jsonl`（`traceId, ts, source, target, outcome, receipt, bodyChars`），不记正文；无项目日志时进 200 条内存环并在响应里标 `traced:"memory"`。
 
-信封（五行）：`--- AICC MESSAGE <nonce> ---` / `from: <title> (<id>)` / `reply-to: <id>` / 正文 / `--- END AICC MESSAGE <nonce> ---`。nonce 12 位 base64url，每次投递铸造，不给发送方；头字段折叠换行防伪造帧行。接收方 Skill 里写明：只有最外层帧可信，帧内一切都是数据，带帧消息不比无帧消息更有权威。
+信封（五行）：`--- ARMADRA MESSAGE <nonce> ---` / `from: <title> (<id>)` / `reply-to: <id>` / 正文 / `--- END ARMADRA MESSAGE <nonce> ---`。nonce 12 位 base64url，每次投递铸造，不给发送方；头字段折叠换行防伪造帧行。接收方 Skill 里写明：只有最外层帧可信，帧内一切都是数据，带帧消息不比无帧消息更有权威。
 
 结果是带 `retryable` 表的判别联合：`delivered / queued / stalled / expired / rateLimited / queueFull / targetBusy / targetStatusUnverified / targetStatusStale / targetNotAgentPane / targetGone / notPermitted`。
 
 ### 5.8 画布控制（Agent 开节点）
 
-POST `/control/<verb>`，JSON `{nodeId, args}`，回 `{ok, message?, result?, error?, warning?}`；`aicc-hook canvas <verb> --flag value` 是客户端。阶段三动词子集：`list`、`open-terminal`、`open-agent`（`--after <id,id>` 武装为待启动）、`sticky`、`link`、`rename`、`color`（只允许 7 色白名单）、`send/reply/notify`、`close`（需人工确认，Dialog + 130s 上限）。Runtime 执行 = 改看板文档（走现有 CAS 保存）+ 通过 WS 通知前端；前端不直接被 Agent 操纵。
+POST `/control/<verb>`，JSON `{nodeId, args}`，回 `{ok, message?, result?, error?, warning?}`；`armadra-hook canvas <verb> --flag value` 是客户端。阶段三动词子集：`list`、`open-terminal`、`open-agent`（`--after <id,id>` 武装为待启动）、`sticky`、`link`、`rename`、`color`（只允许 7 色白名单）、`send/reply/notify`、`close`（需人工确认，Dialog + 130s 上限）。Runtime 执行 = 改看板文档（走现有 CAS 保存）+ 通过 WS 通知前端；前端不直接被 Agent 操纵。
 
 待启动 DAG：`open-agent --after A,B` 创建的节点带 `pendingLaunch {command, after[]}` 且不起进程；前端（或 Runtime 定时器）判定：所有依赖 `done` 且无 `lastTurnError`；依赖已删除视为满足；未知状态视为不满足。满足后写入启动行；45s 无回执重试三次后转手动 ▶。等待中 rope 边虚线。
 
@@ -348,7 +348,7 @@ Runtime `db.rs` 的 `valid_node_data` 按新类型收紧；迁移前自动备份
 ```text
 GET    /api/workspaces/{id}/sessions                 会话侧栏数据（终端 + agent 状态 + 未读）
 WS     /api/workspaces/{id}/events                   agent.status / agent.subagent / agent.approval / agent.delivery / terminal.exit / board.changed
-POST   /api/terminals                                 增加 agent 字段（注入 AICC_* 环境变量）
+POST   /api/terminals                                 增加 agent 字段（注入 ARMADRA_* 环境变量）
 GET    /api/agents                                    注册表 + 可执行文件探测 + hook 安装状态
 POST   /api/agents/{id}/hooks/install | uninstall
 POST   /api/approvals/{pendingId}/answer              {decision}
@@ -417,7 +417,7 @@ apps/web/src
 | Agent | 归属 |
 | --- | --- |
 | runtime-hook | hook socket + bearer/节点令牌 + 端点文件 + `/hook` 路由 + 归一/归约 + `agent_status` + 工作空间事件 WS + 20 分钟 sweep |
-| runtime-install | `aicc-hook` 二进制（sidecar 打包进 Tauri）+ claude/codex/gemini/opencode 安装器 + 设置页安装状态 API |
+| runtime-install | `armadra-hook` 二进制（sidecar 打包进 Tauri）+ claude/codex/gemini/opencode 安装器 + 设置页安装状态 API |
 | web-agent | 创建 Agent 节点流程（`launch.ts`）、PTY 环境注入、节点头 Agent chip/状态胶囊/光晕、会话侧栏接真实状态、快捷键式允许/拒绝、系统通知与提示音 |
 
 验收：本机 claude 与 codex 各跑一个节点，状态 working → blocked → done 全部由 hook 驱动且 UI 正确；Runtime 重启后镜像标记 `restored`；伪造节点令牌被 403；在用户自己的终端里运行同一 CLI 无任何副作用。
@@ -428,7 +428,7 @@ apps/web/src
 | --- | --- |
 | runtime-collab | `context_links` + `/context-link` 四个动词 + 转录定位器 + `/control` 动词子集 + 消息管线/队列/追踪 + `agent_deliveries` |
 | runtime-approvals | claude hook 直答（pending 文件、答案文件、清理）+ `agent_approvals` |
-| web-collab | Skill/AGENTS.md 安装状态 UI、消息设置开关、投递结果通知、SubagentCard 接真实事件、`--after` 待启动 DAG 与 rope 边、`.aicc/board-log.jsonl` 查看器（简单列表） |
+| web-collab | Skill/AGENTS.md 安装状态 UI、消息设置开关、投递结果通知、SubagentCard 接真实事件、`--after` 待启动 DAG 与 rope 边、`.armadra/board-log.jsonl` 查看器（简单列表） |
 
 验收：A 链接 B 后 A 能读 B 的最近 20 行摘要且读不到未链接的 C；A 向空闲 B 发消息 8s 内 B 进入 working 并留下 trace；B 忙时入队并在空闲后投递；claude 权限直答 allow/deny/超时三条路径；子代理卡片随 claude Task 出现和结束。
 
@@ -442,7 +442,7 @@ apps/web/src
 | --- | --- |
 | codex `trusted_hash` 算法变化导致 hook 静默失效 | 安装后用一条探测会话验证 hook 是否回报；失败在设置页红字提示 |
 | CLI 权限提示行形状变化让"快捷键式允许/拒绝"失效 | 按 provider 表配置按键；claude 尽快切到 hook 直答 |
-| `aicc-hook` 在 Windows 下的命名管道与 0600 文件语义 | Windows 用 ACL 限定当前用户；先做 PoC |
+| `armadra-hook` 在 Windows 下的命名管道与 0600 文件语义 | Windows 用 ACL 限定当前用户；先做 PoC |
 | 终端里 Agent CLI 退出后消息被 shell 执行 | 投递前后双重校验前台进程 PID/argv；不匹配则 `targetNotAgentPane` |
 | Tailwind v4 在旧 macOS 上不渲染 | §4.2 明确最低版本；保留 v3.4 退路 |
 | React Flow 子节点（group）与 NodeResizer/最大化的几何冲突 | Phase 1 canvas agent 先做 group 的 PoC，再接入其他节点 |
@@ -584,13 +584,13 @@ Windows
 | --- | --- |
 | `session_key` | 稳定逻辑键 = 所属节点 ID；节点重建/回收后不变 |
 | `backend_kind` | `direct` / `tmux` |
-| `backend_ref` | tmux 会话名 `aicc-<workspace前8位>-<session_key前8位>-<generation>` |
+| `backend_ref` | tmux 会话名 `armadra-<workspace前8位>-<session_key前8位>-<generation>` |
 | `generation` | 每次 create/recycle 递增；WS 帧与事件都带它，旧代次一律拒绝 |
 | `attach_state` | `detached` / `live` / `exited` |
 | `last_output_at` | 回收策略与侧栏"多久没动" |
 | `termination_intent` | `none` / `process` / `session` / `recycle` |
 
-Runtime 启动时用 `list-sessions` 与数据库对账：tmux 里活着 → `detached`（可 attach）；不在 → `exited`；tmux 里有但数据库没有的 `aicc-*` 会话 → 记为孤儿，进入回收。
+Runtime 启动时用 `list-sessions` 与数据库对账：tmux 里活着 → `detached`（可 attach）；不在 → `exited`；tmux 里有但数据库没有的 `armadra-*` 会话 → 记为孤儿，进入回收。
 
 ### 15.3 tmux 隔离与配置
 
@@ -636,12 +636,12 @@ pub trait TerminalBackend: Send + Sync {
 
 | 动作 | tmux 实现 |
 | --- | --- |
-| create | `new-session -d -s <ref> -x <cols> -y <rows> -c <cwd> -e AICC_NODE_ID=… -e AICC_AGENT_ID=… -e AICC_ENDPOINT_FILE=… [-e …] <shell>`；随后 attach |
+| create | `new-session -d -s <ref> -x <cols> -y <rows> -c <cwd> -e ARMADRA_NODE_ID=… -e ARMADRA_AGENT_ID=… -e ARMADRA_ENDPOINT_FILE=… [-e …] <shell>`；随后 attach |
 | attach | 在 Runtime 持有的 `portable-pty`（rows×cols）里启动 `tmux … attach-session -t <ref>` client；client 重绘即得到当前屏幕；client 退出不影响 server |
 | write | 写 client 的 PTY（按键经 tmux 到 pane） |
 | resize | resize client PTY；`window-size latest` 让 pane 跟随 |
 | capture | `capture-pane -p [-e] -J -t <ref> -S -<lines>`；无转义版供 Agent 读，带转义版供快照 |
-| paste | 写临时文件 → `load-buffer -b aicc-<nonce> <file>` → `paste-buffer -p -d -b aicc-<nonce> -t <ref>` → 需要时 `send-keys -t <ref> Enter`；正文先剥 ESC |
+| paste | 写临时文件 → `load-buffer -b armadra-<nonce> <file>` → `paste-buffer -p -d -b armadra-<nonce> -t <ref>` → 需要时 `send-keys -t <ref> Enter`；正文先剥 ESC |
 | foreground | `display -p -t <ref> '#{pane_pid} #{pane_current_command}'` + 读子进程（`ps -o pid,args --ppid` / `/proc`） |
 | interrupt | `send-keys -t <ref> C-c` |
 | terminate_process | 取 pane_pid 子树，SIGTERM → 2s → SIGKILL |
@@ -723,7 +723,7 @@ REST 新增：`GET /api/terminals/{id}/capture?lines=&escapes=`、`POST /api/ter
 | 看板视图 | web-kanban | ⌘⇧B 切换；`fixed top-[var(--tabbar-h)] inset-x-0 bottom-0 z-[var(--z-kanban)]`；列 288px 横向滚动；默认列「未分组 / 待办 / 进行中 / 完成」；卡片 = terminal/sticky 节点（标题、Agent chip、状态胶囊、Label chips）；拖拽换列（dnd 用 `@dnd-kit/core`）；列底 `+ 新建会话`（AddMenu）；`+ 添加列`；点击卡片 → 回画布并居中 |
 | 头部补齐 | web-kanban | 节点头部 ✦ AI 命名（调 suggest-title → 写 title）、评论（Popover 内 Textarea，写 `note`）、`+ Label` chip（Popover 输入，写 `labels`） |
 | 代码分割 | desktop-packaging | CodeMirror 语言包、xterm addons、DiffNode/EditorNode/FilesNode、Settings/CommandPalette/Kanban/DeliveryLog 全部 `React.lazy` + `Suspense`；主 chunk < 700 kB |
-| Tauri | desktop-packaging | `titleBarStyle: Overlay` + `hiddenTitle`（TabBar 已留 86px）、托盘（显示/隐藏窗口、退出）、`minimumSystemVersion 13.3`、updater 配置骨架（无密钥，默认关闭）、`prepare-sidecar` 含 aicc-hook 的 release 构建、DMG 打包实测 |
+| Tauri | desktop-packaging | `titleBarStyle: Overlay` + `hiddenTitle`（TabBar 已留 86px）、托盘（显示/隐藏窗口、退出）、`minimumSystemVersion 13.3`、updater 配置骨架（无密钥，默认关闭）、`prepare-sidecar` 含 armadra-hook 的 release 构建、DMG 打包实测 |
 | Windows 守护进程 | desktop-packaging | 只写设计 `docs/windows-session-daemon.md`（协议、状态文件、ConPTY、generation、背压），不实现 |
 
 暂缓：用量胶囊（需读取 Claude OAuth 凭据）、语音、SSH、远程 Runtime、GitHub。
@@ -833,8 +833,8 @@ wheel（终端体，passive:false）
 | --- | --- |
 | 缩放手势 | 触控板捏合 → 缩放；⌘/Ctrl + 滚轮 → 以光标为中心缩放；普通滚轮 → 平移（Shift 横向）；空格 + 拖拽 → 平移；⌘0 = 100%、⌘1 = 适应（maxZoom 1）、⌘= / ⌘- 步进 ×1.2；范围 0.1–3；缩放动画 120ms；Dock 显示当前百分比 |
 | 任意互连 | 所有节点类型都有左 `link-in` / 右 `link-out` 把手（group 除外）；`isValidConnection` 只禁止自连与重复；`addEdge` 不再强制便签为源；渲染：源或目标之一为 terminal 且另一方为内容节点 → 单向箭头指向 terminal（内容 → Agent）；terminal↔terminal → 双向；内容↔内容 → 无箭头细线（仅分组语义）。标签按源类型：便签 / 图片 / 画图 / 文件 / 目录 / 网页 / 差异 / 上下文 |
-| 内容可读 | Runtime `collab/context_link.rs` 扩展来源：`editor` → 文件内容（≤ 200 KB，超出截断并说明）；`files` → 目录列表（≤ 500 项）；`image` → 若有 `sourcePath` 给路径，否则把 data URL 落盘到 `<workspace>/.aicc/images/<nodeId>.png` 并给路径；`draw` → 导出 PNG 到 `<workspace>/.aicc/drawings/<nodeId>.png` 并给路径；`browser` → URL；`diff` → 当前 diff 文本（≤ 200 KB）；`list` 动词返回每个链接节点的类型与可读方式；SKILL.md 同步说明 |
-| 画图节点 | 新类型 `draw`（默认 480×360，最小 240×180）：白板底（浅色 `#fffdf7` / 深色 `--surface-deep`），工具条 4 钮（笔 / 橡皮 / 颜色 7 色 / 撤销）放在节点头部右侧（不改 body 高度）；笔迹 `{points:[x,y,p?][], color, width}` 存于 `data.strokes`（上限 500 笔 / 20000 点，世界坐标为节点内像素）；渲染用 `<canvas>`，指针事件用 `nodrag`；`POST /api/workspaces/{id}/nodes/{nodeId}/export-png` 由前端把 canvas `toDataURL` 上传，Runtime 落盘到 `.aicc/drawings/` 供 Agent 读取；迁移 0009 无需（data 是 JSON） |
+| 内容可读 | Runtime `collab/context_link.rs` 扩展来源：`editor` → 文件内容（≤ 200 KB，超出截断并说明）；`files` → 目录列表（≤ 500 项）；`image` → 若有 `sourcePath` 给路径，否则把 data URL 落盘到 `<workspace>/.armadra/images/<nodeId>.png` 并给路径；`draw` → 导出 PNG 到 `<workspace>/.armadra/drawings/<nodeId>.png` 并给路径；`browser` → URL；`diff` → 当前 diff 文本（≤ 200 KB）；`list` 动词返回每个链接节点的类型与可读方式；SKILL.md 同步说明 |
+| 画图节点 | 新类型 `draw`（默认 480×360，最小 240×180）：白板底（浅色 `#fffdf7` / 深色 `--surface-deep`），工具条 4 钮（笔 / 橡皮 / 颜色 7 色 / 撤销）放在节点头部右侧（不改 body 高度）；笔迹 `{points:[x,y,p?][], color, width}` 存于 `data.strokes`（上限 500 笔 / 20000 点，世界坐标为节点内像素）；渲染用 `<canvas>`，指针事件用 `nodrag`；`POST /api/workspaces/{id}/nodes/{nodeId}/export-png` 由前端把 canvas `toDataURL` 上传，Runtime 落盘到 `.armadra/drawings/` 供 Agent 读取；迁移 0009 无需（data 是 JSON） |
 | SSH | 设置 → 新分组「SSH」：主机列表（名称、host、user、port、identity 文件路径、额外参数），存 `settings.json` `ssh.hosts[]`（Runtime `GET/PATCH /api/settings` 已支持）；添加菜单 / 命令面板出现「SSH 终端 → <主机>」；创建 terminal 节点 `data.ssh = {hostId}`，Runtime 创建会话时命令为 `ssh -t -o ServerAliveInterval=30 [-p port] [-i identity] user@host`（在本地 tmux 内运行，断线后节点显示已退出，可重新运行）；节点头部显示 `⇅ host` chip；不做远端文件与远端 hook（后续） |
 
 ## 22. 用户反馈第四轮（2026-09-04）：去掉顶栏，左侧管理工作空间 → 看板 → Agent
@@ -874,7 +874,7 @@ wheel（终端体，passive:false）
 | Notifications | 回复通知、任务通知（推送/邮件） | **通知** | 后台完成通知、需要你时通知、提示音 + 音量、试听 |
 | Personalization | 自定义指令（进入编辑页）、记忆开关 + 管理、模型建议 | **Agent** | 每个 Agent 启用/默认（Default/Enabled/Disabled 三态）、默认权限模式、自定义启动命令、自定义 Agent 列表（进入子页编辑） |
 | Apps & connectors / Connected apps | 已连接的第三方应用列表 + 连接/断开按钮 | **Hook 与 Skills** | 每个 CLI 的 hook 安装状态 + 安装/重装/卸载、Skill 安装状态、hook 直答开关 |
-| Data controls | 改进模型开关、共享链接管理、导出数据、删除账号 | **数据** | 数据目录路径 + 在访达中打开、备份数据库、清理历史会话/对话索引重建、`.aicc` 日志保留天数 |
+| Data controls | 改进模型开关、共享链接管理、导出数据、删除账号 | **数据** | 数据目录路径 + 在访达中打开、备份数据库、清理历史会话/对话索引重建、`.armadra` 日志保留天数 |
 | Security | 多因素、退出所有设备 | **SSH** | 主机列表（子页编辑）、测试连接 |
 | Subscription / Account | 套餐、账单 | **账号与用量** | Claude/Codex 用量窗口、凭据来源（钥匙串/文件）、刷新 |
 | About | 版本、更新、条款 | **关于** | 版本、检查更新（占位禁用）、开源许可 |
@@ -915,7 +915,7 @@ wheel（终端体，passive:false）
 
 1. **启动行用探测到的绝对路径**。`GET /api/agents.resolvedPath` 是 Runtime 在增强 PATH 上验证过的那一份；终端里的 shell 自有一套 PATH 顺序（`path_helper`、rc 文件），裸命令名可能解析到另一份（本机：Homebrew 下签名被吊销的旧 codex）。设置里的自定义启动命令仍然优先。
 2. **终端环境是构造的，不是继承的**（`child_environment()`）。Runtime 自己的环境来自启动者——Finder 几乎为空，编辑器 / 另一个 Agent 的终端则带着那个会话的变量——而 tmux 服务器会把启动者的环境保留到它退出为止。白名单：`HOME USER LOGNAME SHELL TMPDIR SSH_AUTH_SOCK LANG LC_* XDG_* DISPLAY`、`*_PROXY`；再加 `PATH=agent_path()`、`TERM=xterm-256color`、`COLORTERM=truecolor`、UTF-8 locale。交互式 shell 从 rc 文件重建其余部分。
-3. **tmux 服务器归属**。`@aicc-runtime` 服务器选项 = `<exe>@<version>`，首个 `new-session` 后盖章；启动对账时发现是别的 runtime 的服务器：空则 `kill-server`（下一次 `new-session` 重建），有会话则保留并 warn——会话是用户的。
+3. **tmux 服务器归属**。`@armadra-runtime` 服务器选项 = `<exe>@<version>`，首个 `new-session` 后盖章；启动对账时发现是别的 runtime 的服务器：空则 `kill-server`（下一次 `new-session` 重建），有会话则保留并 warn——会话是用户的。
 4. **Runtime 进程 PATH**：`main()` 第一件事就是 `set_var("PATH", agent_path())`，`tmux` / `ps` / `infocmp` / 探测都走同一条 PATH。
 5. **Codex `hooks.json`**：只允许 `description` / `hooks` 两个顶层键，其余丢弃（Codex `deny_unknown_fields`）。
 6. **看板视图已移除**（用户决定）。§17 里的看板视图、⌘⇧B、工作区设置「看板列」不再存在；标签 / 评论 / AI 命名与「历史对话」保留在 `apps/web/src/meta/`。`board.kanban` 仍在 schema 与数据库里，只是没有 UI 写它。

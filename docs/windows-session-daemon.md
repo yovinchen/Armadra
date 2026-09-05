@@ -11,7 +11,7 @@
 - **tmux (MSYS2)**：默认关。MSYS 的 pty 兼容层与原生 Win32 CLI（claude / codex / gemini 的 Node 与 Rust 二进制）之间要经过一次额外的字符与信号翻译，鼠标追踪、括号粘贴、窗口尺寸事件都会掉；而且它要求用户先装 MSYS2。
 - **DirectPtyBackend**：ConPTY 的伪控制台句柄归创建它的进程所有。Runtime 一退出（更新、崩溃、用户退出桌面壳），伪控制台连同里面的 CLI 一起没。这正是 §2 表格里"Runtime 重启即丢"的那一行。
 
-所以持久终端在 Windows 上只有一个办法：**把 ConPTY 的所有权从 Runtime 挪到一个活得比 Runtime 长的小进程里**。这个进程就是 `aicc-session-host.exe`，它在 Windows 上扮演 tmux server 的角色。
+所以持久终端在 Windows 上只有一个办法：**把 ConPTY 的所有权从 Runtime 挪到一个活得比 Runtime 长的小进程里**。这个进程就是 `armadra-session-host.exe`，它在 Windows 上扮演 tmux server 的角色。
 
 ### 目标
 
@@ -30,30 +30,30 @@
 
 ```text
 桌面壳 (Tauri)
-  └─ ai-coding-canvas-runtime.exe        ← 可以随时重启
+  └─ armadra-runtime.exe        ← 可以随时重启
        └─ 命名管道 client（每会话一条 attach 流）
-             ↕  \\.\pipe\aicc-session-<user-hash>
-aicc-session-host.exe                    ← 独立进程，DETACHED_PROCESS 启动
+             ↕  \\.\pipe\armadra-session-<user-hash>
+armadra-session-host.exe                    ← 独立进程，DETACHED_PROCESS 启动
   ├─ 会话 A：ConPTY + Job Object + 无头 VT 屏 + 订阅者表
   ├─ 会话 B：…
   └─ 状态文件 + token 文件（0700 等价 ACL）
 ```
 
 - **一个用户一个 host**。管道名里带用户 SID 的哈希，多用户会话（RDP、快速用户切换）各自一个 host，互相看不见。
-- **启动**：Runtime 起来时先读状态文件、试连管道；连不上就用 `CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS | CREATE_NO_WINDOW` 起一个，再退避重试连接（50 ms 起，最多 3 s）。host 与 Runtime 是同一个安装目录里的兄弟二进制，路径解析方式和 `aicc-hook` 一样（`current_exe().parent()`）。
-- **并发启动**：host 启动的第一件事是拿一个命名互斥体 `Global\aicc-session-host-<user-hash>`；抢不到就说明已经有一个在跑，直接退出。两个 Runtime 同时冷启动不会开出两个 host。
+- **启动**：Runtime 起来时先读状态文件、试连管道；连不上就用 `CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS | CREATE_NO_WINDOW` 起一个，再退避重试连接（50 ms 起，最多 3 s）。host 与 Runtime 是同一个安装目录里的兄弟二进制，路径解析方式和 `armadra-hook` 一样（`current_exe().parent()`）。
+- **并发启动**：host 启动的第一件事是拿一个命名互斥体 `Global\armadra-session-host-<user-hash>`；抢不到就说明已经有一个在跑，直接退出。两个 Runtime 同时冷启动不会开出两个 host。
 - **空闲退出**：没有任何会话、且最后一次会话结束已过 `idleExitMinutes`（默认 30）时 host 自行退出。只要还有会话活着就永不退出，哪怕没有任何 client attach。
 - **升级**：host 的协议版本写在 hello 里。Runtime 发现 host 版本低于自己要求的最小版本时，发 `shutdown {drain: true}`——host 停止接受新会话，等现有会话全部结束后退出，Runtime 期间继续用旧 host 服务旧会话，新会话开在新 host 上（新管道名带版本后缀）。
 
 ## 3. 状态文件
 
-`%LOCALAPPDATA%\aicc\session-host\state.json`，host 独占写，Runtime 只读：
+`%LOCALAPPDATA%\armadra\session-host\state.json`，host 独占写，Runtime 只读：
 
 ```json
 {
   "version": 1,
   "pid": 4312,
-  "pipe": "\\\\.\\pipe\\aicc-session-a1b2c3d4-v1",
+  "pipe": "\\\\.\\pipe\\armadra-session-a1b2c3d4-v1",
   "startedAt": "2026-09-04T09:00:00Z",
   "sessions": [
     {
@@ -80,7 +80,7 @@ aicc-session-host.exe                    ← 独立进程，DETACHED_PROCESS 启
 
 ### 4.1 传输
 
-`\\.\pipe\aicc-session-<user-hash>-v<major>`，`PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE`，双向，实例数 = 无限。管道的安全描述符只授予创建者 SID 与 SYSTEM（`FILE_ALL_ACCESS`），拒绝 `NULL` DACL——否则同机任意进程都能连上并读走 Agent 的终端内容。
+`\\.\pipe\armadra-session-<user-hash>-v<major>`，`PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE`，双向，实例数 = 无限。管道的安全描述符只授予创建者 SID 与 SYSTEM（`FILE_ALL_ACCESS`），拒绝 `NULL` DACL——否则同机任意进程都能连上并读走 Agent 的终端内容。
 
 一条管道连接 = 一个 socket = 一个订阅者。控制请求和 attach 流走**同一条连接**：Runtime 为每个 attach 开一条专属连接，另外保留一条常驻的控制连接。
 
@@ -198,7 +198,7 @@ ConPTY 读线程是唯一的生产者，订阅者是多个消费者。每个订�
 另外两条已知限制，写进设置页的说明文案：
 
 1. **Windows 上的 attach 快照是"重建"而不是"重绘"**。`vt100` 的状态重建覆盖不了 sixel / iTerm 图片协议这类带外内容，Runtime 对这类会话在 attach 后额外向 CLI 发一次 `Ctrl+L`（可在设置里关）。
-2. **ConPTY 会主动重排输出**（它自己就是个 VT 转换层），所以逐字节比对"CLI 写了什么"和"我们收到了什么"在 Windows 上不成立；hook 状态（§5）因此仍然由 `aicc-hook` 上报，绝不从终端输出里解析。
+2. **ConPTY 会主动重排输出**（它自己就是个 VT 转换层），所以逐字节比对"CLI 写了什么"和"我们收到了什么"在 Windows 上不成立；hook 状态（§5）因此仍然由 `armadra-hook` 上报，绝不从终端输出里解析。
 
 ## 9. 测试矩阵
 
@@ -224,7 +224,7 @@ ConPTY 读线程是唯一的生产者，订阅者是多个消费者。每个订�
 
 ## 10. 实施顺序（未排期）
 
-1. `aicc-session-host` crate（ConPTY + Job Object + `vt100` + 管道服务端），单元测试跑在 host 进程内，不经 Runtime。
+1. `armadra-session-host` crate（ConPTY + Job Object + `vt100` + 管道服务端），单元测试跑在 host 进程内，不经 Runtime。
 2. `SessionDaemonBackend` + `BackendKind::SessionDaemon` + 选择树分支 + 设置项文案。
 3. 打包：host 作为第三个 sidecar 进 `prepare-sidecar.mjs` 与 `bundle.externalBin`（macOS / Linux 构建时跳过）。
 4. 上表的测试矩阵，其中"Runtime 重启""慢消费者""recycle"三条进 CI（Windows runner）。
