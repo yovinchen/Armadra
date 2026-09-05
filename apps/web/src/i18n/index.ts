@@ -12,6 +12,7 @@ import { sessions } from "./sessions";
 import { shell } from "./shell";
 import { ssh } from "./ssh";
 import { host } from "./host";
+import { gitMessage } from "./git-message";
 import { gitHunks } from "./git-hunks";
 import { gitRepository } from "./git-repository";
 import { fileDrag } from "./file-drag";
@@ -47,6 +48,7 @@ export const MESSAGE_MODULES = {
   host,
   "git-repository": gitRepository,
   "git-hunks": gitHunks,
+  "git-message": gitMessage,
   "file-drag": fileDrag,
   explorer,
   modals,

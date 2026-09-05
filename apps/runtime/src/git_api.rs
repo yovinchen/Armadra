@@ -27,6 +27,20 @@ pub struct HunkQuery {
     scope: crate::git_hunks::GitHunkScope,
 }
 
+pub async fn message_providers(State(state): State<AppState>, AxumPath(id): AxumPath<String>) -> AppResult<Json<Vec<crate::git_message::GitMessageProvider>>> {
+    workspace(&state, &id, false).await?;
+    crate::git_message::providers().await.map(Json)
+}
+pub async fn message_source(State(state): State<AppState>, AxumPath(id): AxumPath<String>) -> AppResult<Json<crate::git_message::GitMessageSource>> {
+    let workspace = workspace(&state, &id, false).await?;
+    crate::git_message::source(Path::new(&workspace.root_path)).await.map(Json)
+}
+pub async fn message_generate(State(state): State<AppState>, AxumPath(id): AxumPath<String>, Json(request): Json<crate::git_message::GitMessageRequest>) -> AppResult<Json<crate::git_message::GitMessageDraft>> {
+    let workspace = workspace(&state, &id, false).await?;
+    if !workspace.permissions.execute { return Err(AppError::Forbidden("Workspace does not allow AI execution".into())); }
+    crate::git_message::generate(Path::new(&workspace.root_path), request).await.map(Json)
+}
+
 pub async fn hunks(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,

@@ -37,6 +37,11 @@ import {
   gitRevertResponseSchema,
   gitStageResponseSchema,
   gitStatusSchema,
+  gitMessageProvidersSchema,
+  gitMessageSourceSchema,
+  gitMessageRequestSchema,
+  gitMessageDraftSchema,
+  type GitMessageRequest,
   gitHunkDiffSchema,
   gitHunkMutationSchema,
   gitHunkResultSchema,
@@ -637,6 +642,24 @@ export const runtimeApi = {
     ),
 
   /* ------------------------------------ git ----------------------------- */
+  gitMessageProviders: (workspaceId: string, signal?: AbortSignal) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/message/providers`,
+      gitMessageProvidersSchema,
+      { signal },
+    ),
+  gitMessageSource: (workspaceId: string, signal?: AbortSignal) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/message/source`,
+      gitMessageSourceSchema,
+      { signal },
+    ),
+  gitMessageGenerate: (workspaceId: string, value: GitMessageRequest) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/message/generate`,
+      gitMessageDraftSchema,
+      { method: "POST", ...json(gitMessageRequestSchema.parse(value)) },
+    ),
   gitHunks: (
     workspaceId: string,
     file: string,

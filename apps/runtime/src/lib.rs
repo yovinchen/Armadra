@@ -8,6 +8,7 @@ pub mod events;
 pub mod files;
 pub mod git;
 pub mod git_hunks;
+pub mod git_message;
 pub mod git_repository;
 pub mod git_api;
 pub mod hook;
@@ -97,6 +98,9 @@ pub fn router_with_state(state: AppState) -> Router {
 
     Router::new()
         .route("/api/workspaces/{workspace_id}/git/hunks", get(git_api::hunks).post(git_api::apply_hunk))
+        .route("/api/workspaces/{workspace_id}/git/message/providers", get(git_api::message_providers))
+        .route("/api/workspaces/{workspace_id}/git/message/source", get(git_api::message_source))
+        .route("/api/workspaces/{workspace_id}/git/message/generate", post(git_api::message_generate))
         .route("/api/workspaces/{workspace_id}/git/repository/branches", get(git_api::branches))
         .route("/api/workspaces/{workspace_id}/git/repository/history", get(git_api::history))
         .route("/api/workspaces/{workspace_id}/git/repository/worktrees", get(git_api::worktrees))

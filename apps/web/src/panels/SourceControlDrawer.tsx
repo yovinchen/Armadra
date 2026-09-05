@@ -51,6 +51,7 @@ import {
 } from "./git/GitRepositoryPanel";
 import { currentViewportCenter } from "./viewport";
 import { ChangesHunks } from "./git/ChangesHunks";
+import { CommitMessageAssistant } from "./git/CommitMessageAssistant";
 
 const STATUS_COLOR: Record<DiffFileStatus, string> = {
   M: "var(--warn)",
@@ -319,6 +320,21 @@ export function SourceControlDrawer() {
               className="mt-0 flex min-h-0 flex-col data-[state=inactive]:hidden"
             >
               <ScrollArea className="min-h-0 flex-1">
+                {workspaceId && status.data?.repository && (
+                  <details className="m-3 rounded-md border border-border p-2 text-xs">
+                    <summary className="cursor-pointer">
+                      {t("gitMessage.title")}
+                    </summary>
+                    <CommitMessageAssistant
+                      workspaceId={workspaceId}
+                      message={message}
+                      onFill={setMessage}
+                      providers={runtimeApi.gitMessageProviders}
+                      source={runtimeApi.gitMessageSource}
+                      generate={runtimeApi.gitMessageGenerate}
+                    />
+                  </details>
+                )}
                 {hunk && hunk.workspaceId === workspaceId && (
                   <section className="border-b border-border p-3">
                     <Button
