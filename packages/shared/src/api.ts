@@ -1317,11 +1317,21 @@ export const usageWindowSchema = z.object({
   label: z.string(),
   group: z.string().optional(),
   usedPercent: z.number().min(0).max(100),
+  /**
+   * 没有上限的额度桶（Copilot 的 chat / completions）。此时 `usedPercent`
+   * 是 0 但不代表「没用」，界面显示「无限制」而不是空进度条。
+   */
+  unlimited: z.boolean().optional(),
   /** RFC 3339，`null` 表示 provider 没给重置时间。 */
   resetsAt: z.string().nullable(),
 });
 
-export const usageProviderIdSchema = z.enum(["claude", "codex", "gemini"]);
+export const usageProviderIdSchema = z.enum([
+  "claude",
+  "codex",
+  "gemini",
+  "copilot",
+]);
 
 /**
  * `unavailable` = 本机没有该 provider 的凭据；`error` = 有凭据但取不到
@@ -1337,17 +1347,137 @@ export const usageCredentialSourceSchema = z
   .enum(["keychain", "file", "none"])
   .optional();
 
+/** 预付余额（Codex credits）。只有数字，没有账户信息。 */
+export const usageCreditsSchema = z.object({ balance: z.number() });
+
 export const usageProviderSchema = z.object({
   id: usageProviderIdSchema,
   status: usageProviderStatusSchema,
   credentialSource: usageCredentialSourceSchema,
   windows: z.array(usageWindowSchema),
+  credits: usageCreditsSchema.optional(),
+  /** 数字来自本地 CLI 回退而不是 provider 自己的 OAuth 接口。 */
+  viaCli: z.boolean().optional(),
   fetchedAt: z.string().nullable(),
 });
 
 export const usageSchema = z.object({
   providers: z.array(usageProviderSchema),
   refreshAvailableAt: z.string().nullable().optional(),
+});
+
+/* ------------------------------ 托盘迷你条 -------------------------------- */
+
+/**
+ * `GET /api/usage/mini`（§4.2「托盘迷你条」）。会话（≤ 24h）与周（> 24h）
+ * 两条进度，取所有 provider 中占用最高的那条；没有可用窗口时是 `null`，
+ * 不是 0。
+ */
+export const usageMiniBarSchema = z.object({
+  provider: z.string(),
+  label: z.string(),
+  usedPercent: z.number(),
+  resetsAt: z.string().nullable(),
+});
+
+export const usageMiniSchema = z.object({
+  session: usageMiniBarSchema.nullable().optional(),
+  week: usageMiniBarSchema.nullable().optional(),
+  fetchedAt: z.string().nullable().optional(),
+});
+
+/* -------------------------------- 本地成本 -------------------------------- */
+
+/**
+ * 本地成本统计（§4.2）。Runtime 扫描本机 Claude / Codex 的 JSONL 转录，
+ * 只汇总 token 计数；转录正文、会话 id、项目路径都不会出现在这里。
+ */
+export const costTokensSchema = z.object({
+  input: z.number(),
+  output: z.number(),
+  cacheRead: z.number(),
+  cacheCreation: z.number(),
+});
+
+export const costModelSchema = z.object({
+  model: z.string(),
+  tokens: costTokensSchema,
+  /** `null` = 价格表里没有这个模型，只显示 token，不显示估算费用。 */
+  costUsd: z.number().nullable(),
+});
+
+export const costWindowSchema = z.object({
+  tokens: costTokensSchema,
+  costUsd: z.number(),
+  /** false = 窗口里至少有一个模型没有价格，总额偏低。 */
+  complete: z.boolean(),
+  models: z.array(costModelSchema),
+});
+
+export const costDaySchema = costWindowSchema.extend({
+  /** 本地日期 `YYYY-MM-DD`。 */
+  date: z.string(),
+});
+
+export const costSessionSchema = z.object({
+  provider: z.string(),
+  models: z.array(z.string()),
+  tokens: costTokensSchema,
+  costUsd: z.number(),
+  complete: z.boolean(),
+  updatedAt: z.string(),
+});
+
+/** `disabled` = 设置里关掉了扫描；`unavailable` = 本机没有可读的转录。 */
+export const costStatusSchema = z.enum(["ok", "disabled", "unavailable"]);
+
+export const costSummarySchema = z.object({
+  status: costStatusSchema,
+  today: costWindowSchema,
+  last30Days: costWindowSchema,
+  currentSession: costSessionSchema.optional(),
+  /** 由旧到新，含当天，固定 30 项；没有活动的那天也在，值为 0。 */
+  daily: z.array(costDaySchema),
+  unpricedModels: z.array(z.string()),
+  files: z.record(z.string(), z.number()),
+  truncated: z.boolean(),
+  scannedAt: z.string().nullable().optional(),
+  refreshAvailableAt: z.string().nullable().optional(),
+});
+
+/* ------------------------------ Copilot 登录 ------------------------------ */
+
+/**
+ * GitHub device flow（§4.2）。`deviceCode` 不在这里——它等价于凭据，
+ * 只留在 Runtime 内存里。
+ */
+export const copilotLoginPromptSchema = z.object({
+  userCode: z.string(),
+  verificationUri: z.string(),
+  intervalSeconds: z.number(),
+  expiresAt: z.string(),
+});
+
+/** token 存在哪：`keychain` 是 OS 钥匙串，`file` 是带 0600 的降级方案。 */
+export const copilotBackendSchema = z.enum(["keychain", "file"]);
+
+export const copilotAuthSchema = z.object({
+  signedIn: z.boolean(),
+  backend: copilotBackendSchema,
+  pending: copilotLoginPromptSchema.optional(),
+});
+
+/** `pending` 之外都是终态，前端停止轮询。 */
+export const copilotLoginProgressSchema = z.enum([
+  "pending",
+  "authorized",
+  "expired",
+  "denied",
+  "error",
+]);
+
+export const copilotPollSchema = copilotAuthSchema.extend({
+  progress: copilotLoginProgressSchema,
 });
 
 export type ApiError = z.infer<typeof apiErrorSchema>;
@@ -1467,3 +1597,18 @@ export type UsageProviderStatus = z.infer<typeof usageProviderStatusSchema>;
 export type UsageWindow = z.infer<typeof usageWindowSchema>;
 export type UsageWindowKey = z.infer<typeof usageWindowKeySchema>;
 export type UsageCredentialSource = z.infer<typeof usageCredentialSourceSchema>;
+export type UsageCredits = z.infer<typeof usageCreditsSchema>;
+export type UsageMini = z.infer<typeof usageMiniSchema>;
+export type UsageMiniBar = z.infer<typeof usageMiniBarSchema>;
+export type CostTokens = z.infer<typeof costTokensSchema>;
+export type CostModel = z.infer<typeof costModelSchema>;
+export type CostWindow = z.infer<typeof costWindowSchema>;
+export type CostDay = z.infer<typeof costDaySchema>;
+export type CostSession = z.infer<typeof costSessionSchema>;
+export type CostStatus = z.infer<typeof costStatusSchema>;
+export type CostSummary = z.infer<typeof costSummarySchema>;
+export type CopilotAuth = z.infer<typeof copilotAuthSchema>;
+export type CopilotBackend = z.infer<typeof copilotBackendSchema>;
+export type CopilotLoginPrompt = z.infer<typeof copilotLoginPromptSchema>;
+export type CopilotLoginProgress = z.infer<typeof copilotLoginProgressSchema>;
+export type CopilotPoll = z.infer<typeof copilotPollSchema>;

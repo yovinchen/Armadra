@@ -108,6 +108,10 @@ import {
   updateBoardRequestSchema,
   updateWorkspaceRequestSchema,
   usageSchema,
+  usageMiniSchema,
+  costSummarySchema,
+  copilotAuthSchema,
+  copilotPollSchema,
   handoffListSchema,
   handoffPrepareSchema,
   handoffViewSchema,
@@ -270,8 +274,20 @@ export const runtimeSettingsSchema = z.looseObject({
     .optional(),
   /** Hook 直答（§5.5）：权限请求直接由 Runtime 回，不弹节点头部按钮。 */
   hooks: z.looseObject({ replyApprovals: z.boolean().optional() }).optional(),
-  /** `usage.enabled`（§19）：关掉后 Runtime 不再向 Claude / Codex 取用量。 */
-  usage: z.looseObject({ enabled: z.boolean().optional() }).optional(),
+  /**
+   * `usage.*`（§19 + §4.2）。`enabled` 关掉后 Runtime 不再向任何 provider
+   * 取用量；`providers` 是逐个开关，`refreshMinutes` 的 `0` 表示只手动刷新，
+   * `cost.enabled` 控制本地转录扫描。
+   */
+  usage: z
+    .looseObject({
+      enabled: z.boolean().optional(),
+      refreshMinutes: z.number().int().nonnegative().optional(),
+      providers: z.record(z.string(), z.boolean()).optional(),
+      codexCliFallback: z.boolean().optional(),
+      cost: z.looseObject({ enabled: z.boolean().optional() }).optional(),
+    })
+    .optional(),
   /** `.armadra` 日志保留天数；`0` = 永久（§24.1 数据页）。 */
   logs: z
     .looseObject({ retentionDays: z.number().int().nonnegative().optional() })
@@ -310,7 +326,13 @@ export interface RuntimeSettingsPatch {
   ssh?: { hosts: SshHost[] };
   agents?: { custom: CustomAgent[] };
   hooks?: { replyApprovals?: boolean };
-  usage?: { enabled?: boolean };
+  usage?: {
+    enabled?: boolean;
+    refreshMinutes?: number;
+    providers?: Record<string, boolean>;
+    codexCliFallback?: boolean;
+    cost?: { enabled?: boolean };
+  };
   logs?: { retentionDays?: number };
   /** 防休眠策略（T02）。 */
   power?: { policy?: PowerPolicy };
@@ -1243,6 +1265,28 @@ export const runtimeApi = {
   /** 手动刷新；Runtime 侧 30s 内只真取一次，超频时直接回缓存。 */
   refreshUsage: () =>
     request("/api/usage/refresh", usageSchema, { method: "POST" }),
+
+  /** `GET /api/usage/mini`（§4.2）：托盘迷你条的两条进度。 */
+  usageMini: () => request("/api/usage/mini", usageMiniSchema),
+
+  /* --------------------------------- 本地成本 --------------------------- */
+  /** 缓存的成本汇总；不触碰文件系统。 */
+  usageCost: () => request("/api/usage/cost", costSummarySchema),
+  /** 立刻重扫，Runtime 侧 30s 内只真扫一次。 */
+  refreshUsageCost: () =>
+    request("/api/usage/cost/refresh", costSummarySchema, { method: "POST" }),
+
+  /* -------------------------------- Copilot ----------------------------- */
+  /** 是否已登录、token 存在哪、有没有进行中的 device flow。 */
+  copilotAuth: () => request("/api/usage/copilot", copilotAuthSchema),
+  /** 开始（或续用）device flow，拿到用户码与验证地址。 */
+  copilotLogin: () =>
+    request("/api/usage/copilot/login", copilotAuthSchema, { method: "POST" }),
+  /** 轮询一次；`progress` 不是 `pending` 就停止轮询。 */
+  copilotPoll: () =>
+    request("/api/usage/copilot/poll", copilotPollSchema, { method: "POST" }),
+  copilotLogout: () =>
+    request("/api/usage/copilot/logout", copilotAuthSchema, { method: "POST" }),
 
   /* ----------------------------------- 设置 ----------------------------- */
   settings: () => request("/api/settings", runtimeSettingsSchema),
