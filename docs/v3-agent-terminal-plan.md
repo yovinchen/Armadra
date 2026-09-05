@@ -411,7 +411,7 @@ apps/web/src
 
 删除：`inspector/`、`shell/Rail|Sidebar|StatusBar|Topbar|gateway`、`sidebar/BoardList|NodePalette`、`canvas/StrokeLayer|EdgePicker|edge-types|node-zoom|SemanticEdge|diff-scan`、`canvas/dnd/payload|useNodeDropTarget|hint`、`agent/AcpSurface|timeline`、`nodes/TaskNode|ContextNode|LogNode|FileNode|AgentNode|actions|useNodeCommand`、`modals/DiffScanDrawer`、`components/MobileNav`、`preferences/`（并入设置）。
 
-快捷键（`Cmd` 在 macOS 是 ⌘，其余平台 Ctrl）：⌘K 命令面板 · ⌘, 设置 · ⌘T 新终端 · ⌘⇧C 新 Agent · ⌘⇧L 会话侧栏 · ⌘⇧E 资源管理器 · ⌘⇧G 源码控制 · ⌘⇧F 焦点模式 · ⌘⇧Enter 最大化 · ⌘W 关闭节点 · ⌘Z/⌘⇧Z 撤销重做 · ⌘⇧A 整理 · ⌘方向键 按几何切换节点 · ⌦/⌫ 删除 · ⌘F 终端搜索。每条命令带 `allowInTerminal` 位：终端聚焦时只有 ⌘K/⌘,/⌘⇧L/⌘⇧E/⌘⇧G/⌘W/⌘F 放行，其余键进 xterm。
+快捷键（`Cmd` 在 macOS 是 ⌘，其余平台 Ctrl）：⌘K 命令面板 · ⌘, 设置 · ⌘T 新终端 · ⌘⇧C 新 Agent · ⌘⇧L 会话侧栏 · ⌘⇧E 资源管理器 · ⌘⇧G 源码控制 · ⌘⇧U 资源面板 · ⌘⇧F 焦点模式 · ⌘⇧Enter 最大化 · ⌘W 关闭节点 · ⌘Z/⌘⇧Z 撤销重做 · ⌘⇧A 整理 · ⌘方向键 按几何切换节点 · ⌦/⌫ 删除 · ⌘F 终端搜索。每条命令带 `allowInTerminal` 位：终端聚焦时只有 ⌘K/⌘,/⌘⇧L/⌘⇧E/⌘⇧G/⌘⇧U/⌘W/⌘F 放行，其余键进 xterm。
 
 ## 9. 实施阶段与并行分工
 

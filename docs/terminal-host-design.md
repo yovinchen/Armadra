@@ -119,6 +119,14 @@ RSS 树汇总标记为估计，多个进程共享页可能重复计算，不称�
 
 资源预算：终端屏幕/scrollback、Worker 收据/日志、浏览器进程、前端 LRU 分开配置。日志和转录有保留期与容量上限，清理前排除活跃会话及未完成交接引用。
 
+### 8.1 实现状态（T02，M7）
+
+已交付：`apps/runtime/src/resources/` 用锁定版本的 `sysinfo` 采集本机总览（CPU、内存、swap、负载、数据目录所在磁盘、uptime）与每个受管终端会话的进程树 CPU / RSS / 子进程数 / 状态；电源来源在 macOS 读 `pmset -g batt`、Linux 读 `/sys/class/power_supply`，其它平台 unknown。采样是订阅制：`POST …/resources/subscription` 拿带 TTL 的订阅，样本经既有工作空间事件流以 `resource.sample` 推送，最后一份订阅过期后采样循环自行停止；间隔取 `resources.intervalMs`（默认 2s，Runtime 侧夹在 500ms–60s）。所有指标是 `Option`，测不出来发 `null`，前端显示短横线。CPU 靠连续刷新求差，一次性 `GET` 会先垫一次基线再采，所以首屏和刚启动的进程都不会出现假 0。
+
+孤立会话按两类列出：有行无节点（可认领）与有 tmux 会话无行（只能终止）。认领由 Runtime 把行绑回并回传应使用的 `nodeId`——即会话自己的 key，前端用它建节点，恢复出来的节点拥有的仍是原进程。
+
+未实现：平台组件自身占用（Host / Worker / Session Host / Browser Worker 分项）、多执行主机筛选与远端一轮读取、按 PID + startTime 去重、内存 pressure、进程树展开视图。SSH 会话标为 `remote`、指标 unknown，不用控制机数据冒充远端。
+
 ## 9. Agent 工作时防休眠
 
 PowerService 在实际执行主机管理租约：reason、session/runId、expiresAt、lastHeartbeat、policy。Agent working、活跃自动化运行、重要下载/提交等可按用户偏好申请系统空闲睡眠抑制；完成/失败/取消后释放。
@@ -128,6 +136,14 @@ PowerService 在实际执行主机管理租约：reason、session/runId、expire
 失联租约有 TTL，Worker 恢复时重查进程和活动状态；Host 崩溃不能永久留下防休眠。长时间 blocked 默认在宽限后释放，用户可选择保持；“等待明天的计划”不默认保持整晚唤醒，可单独启用“激活计划期间保持唤醒”。
 
 设置显示生效的执行主机、原因、结束条件和手动停止入口。电池/低电量策略可覆盖自动申请；覆盖后计划页明确显示宿主可能休眠。手机 Screen Wake Lock 仅是前端体验，与执行主机 PowerService 无关。
+
+### 9.1 实现状态（T02，M7）
+
+已交付：`apps/runtime/src/resources/power.rs` 的租约表带 reason、source、可选 sessionId、TTL（默认 300s，夹在 10s–6h）与续期；`GET /api/power`、`POST /api/power/leases`、`…/renew`、`DELETE …`。策略 `power.policy` 有从不 / 有活跃 Agent 会话时 / 有自动化运行时 / 手动四档，默认「手动」；被策略或平台挡下的租约仍然列出，只是 `active: false` 并带 `blockedBy`。释放最后一份有效租约、租约过期（后台每秒检查）或 Runtime 退出时立即解除。
+
+平台机制：macOS 用 `caffeinate -i -w <runtime pid>` 子进程而非进程内 IOKit 断言——`-w` 让 Runtime 被 SIGKILL 时断言随之消失，且断言在 `pmset -g assertions` 里以可见进程出现，用户能自己查和结束；Linux 用 `systemd-inhibit --what=idle --mode=block`，缺失时报 unavailable；Windows 用独立线程上的 `SetThreadExecutionState(ES_CONTINUOUS|ES_SYSTEM_REQUIRED)`，仅交叉编译验证过，未在真实 Windows 上跑过。
+
+只阻止系统空闲睡眠；不常亮屏幕，不拦合盖与手动睡眠。未实现：电池 / 低电量策略覆盖、按活跃 Agent 会话与自动化运行自动申请（协议已就绪，调用方未接入）、计划期间保持唤醒的单独开关。
 
 ## 10. 快捷键配置
 
