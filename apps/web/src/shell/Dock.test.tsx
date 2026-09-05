@@ -9,6 +9,7 @@ vi.mock("../api/client", () => ({
 
 import { installDomPolyfills, TestProviders } from "../app/test-harness";
 import { usePreferencesStore } from "../app/preferences-store";
+import { useCanvasOwnership } from "../canvas-ownership";
 import { useCanvasStore } from "../store/canvas-store";
 import { Dock } from "./Dock";
 
@@ -45,7 +46,10 @@ describe("Dock", () => {
     fetchAgents.mockReset().mockResolvedValue([claude]);
     usePreferencesStore.setState({ agentModes: {} });
     useCanvasStore.setState({ workspace, saveState: "saved" });
+    useCanvasOwnership.setState({ status: "runtime", epoch: 1n });
   });
+
+  afterEach(() => useCanvasOwnership.getState().reset());
 
   it("没有工作空间时不渲染", () => {
     useCanvasStore.setState({ workspace: null });
@@ -87,5 +91,35 @@ describe("Dock", () => {
     const dot = container.querySelector("[data-slot='save-dot']");
     expect(dot?.getAttribute("data-state")).toBe("saved");
     expect(dot?.textContent).toBe("");
+  });
+
+  /**
+   * 维护窗口里画布写不进去。这盏灯必须说「只读」，说「已保存」就是
+   * 把没落盘的改动报成落盘了（H01 §4）。
+   */
+  it("画布只读时保存指示灯不再报「已保存」", () => {
+    useCanvasOwnership.setState({ status: "maintenance" });
+    const { container } = render(
+      <TestProviders>
+        <Dock />
+      </TestProviders>,
+    );
+    const dot = container.querySelector("[data-slot='save-dot']");
+    expect(dot?.getAttribute("data-state")).toBe("readonly");
+    expect(dot?.getAttribute("aria-label")).toBe("只读，未保存");
+  });
+
+  it("归属还没探到时同样不报「已保存」", () => {
+    useCanvasOwnership.getState().reset();
+    const { container } = render(
+      <TestProviders>
+        <Dock />
+      </TestProviders>,
+    );
+    expect(
+      container
+        .querySelector("[data-slot='save-dot']")
+        ?.getAttribute("data-state"),
+    ).toBe("readonly");
   });
 });

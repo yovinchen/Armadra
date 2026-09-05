@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { runtimeApi } from "../api/client";
+import { useCanvasOwnership, canvasGateway } from "../canvas-ownership";
 import { flushBoardSaves } from "../save/autosave";
 import { SAVE_RETRY_EVENT } from "../shell/Banners";
 import { useCanvasStore } from "../store/canvas-store";
@@ -60,6 +61,16 @@ export function useBoardSync() {
 
   const workspaces = useWorkspacesQuery();
 
+  /**
+   * 启动就探一次画布写归属（H01 §4）。
+   *
+   * 探到之前保存是停的：不知道该写给谁的时候写出去，等于赌一把。
+   * 探测失败也是一个真状态，不会被当成「Runtime 在写」蒙混过去。
+   */
+  useEffect(() => {
+    void useCanvasOwnership.getState().probe();
+  }, []);
+
   const boards = useQuery({
     queryKey: ["boards", workspace?.id],
     queryFn: () => runtimeApi.listBoards(workspace!.id),
@@ -68,7 +79,7 @@ export function useBoardSync() {
 
   const board = useQuery({
     queryKey: ["board", workspace?.id, boardId],
-    queryFn: () => runtimeApi.loadBoard(workspace!.id, boardId!),
+    queryFn: () => canvasGateway.loadBoard(workspace!.id, boardId!),
     enabled: Boolean(workspace && boardId),
   });
 

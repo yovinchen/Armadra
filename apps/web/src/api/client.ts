@@ -447,6 +447,32 @@ export const dataBackupSchema = z.object({
   bytes: z.number().int().nonnegative(),
 });
 
+/* ---------------------------------- 画布归属 ------------------------------ */
+
+/**
+ * `GET /api/ownership`（H01 §4）—— 画布域此刻由谁写。
+ *
+ * `epoch` 是十进制字符串而不是数字：它在协议里是 u64，放进 JS number 会被
+ * 舍入，相邻两个纪元读起来会一模一样，于是「旧纪元的写入要拒绝」这条规则
+ * 就失效了。这里解析成 `bigint`，从此不再经过 `Number`。
+ *
+ * `phase` 是旧 Runtime 没有的字段：缺省按 `settled` 读，只有它明确说
+ * 正在切换时前端才进入维护（只读）状态。
+ */
+export const canvasOwnershipSchema = z.object({
+  domain: z.literal("canvas"),
+  owner: z.enum(["runtime", "host"]),
+  epoch: z
+    .string()
+    .regex(/^\d+$/)
+    .transform((value) => BigInt(value)),
+  phase: z.enum(["settled", "switching", "rollingBack"]).default("settled"),
+  reasonCode: z.string(),
+  updatedAt: z.string(),
+});
+
+export type CanvasOwnershipRecord = z.infer<typeof canvasOwnershipSchema>;
+
 /* ------------------------------------ API --------------------------------- */
 
 export const runtimeApi = {
@@ -478,6 +504,8 @@ export const runtimeApi = {
    * Runtime。这条查询问的是 Runtime，所以走带前缀的那一条。
    */
   health: () => request("/api/health", healthSchema),
+  /** 画布域的写归属；读永远可用，写按它路由（H01 §4）。 */
+  canvasOwnership: () => request("/api/ownership", canvasOwnershipSchema),
 
   /* --------------------------------- 工作空间 --------------------------- */
   listWorkspaces: () => request("/api/workspaces", workspaceListSchema),

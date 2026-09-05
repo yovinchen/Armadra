@@ -12,6 +12,7 @@ import { launcher } from "./launcher";
 import { mobile } from "./mobile";
 import { modals } from "./modals";
 import { nodes } from "./nodes";
+import { ownership } from "./ownership";
 import { sessions } from "./sessions";
 import { shell } from "./shell";
 import { ssh } from "./ssh";
@@ -87,6 +88,7 @@ export const MESSAGE_MODULES = {
   meta,
   updates,
   usage,
+  ownership,
 } satisfies Record<string, MessageModule>;
 
 const modules: MessageModule[] = Object.values(MESSAGE_MODULES);

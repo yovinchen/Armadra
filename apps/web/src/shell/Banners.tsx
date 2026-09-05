@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, PlugZap, TerminalSquare, X } from "lucide-react";
+import { AlertTriangle, Lock, PlugZap, TerminalSquare, X } from "lucide-react";
 import { runtimeApi } from "../api/client";
+import { canEditCanvas, useCanvasOwnership } from "../canvas-ownership";
 import { useT } from "../app/preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
 import { Button } from "@/ui/button";
@@ -20,6 +21,8 @@ export function Banners() {
   const t = useT();
   const saveState = useCanvasStore((state) => state.saveState);
   const setPanel = useCanvasStore((state) => state.setPanel);
+  const ownership = useCanvasOwnership((state) => state.status);
+  const probeOwnership = useCanvasOwnership((state) => state.probe);
   const [dismissed, setDismissed] = useState<string[]>([]);
 
   const health = useQuery({
@@ -38,6 +41,27 @@ export function Banners() {
   });
 
   const items: ReactNode[] = [];
+
+  /**
+   * 画布只读（H01 §4）。不做成可关闭：关掉它之后画布看起来能编辑、
+   * 保存指示灯又不动，用户只会以为保存坏了。切换窗口结束后它自己消失。
+   */
+  if (ownership === "maintenance" || ownership === "error") {
+    items.push(
+      <Banner
+        key="ownership"
+        tone="warn"
+        icon={<Lock />}
+        text={t(
+          ownership === "maintenance"
+            ? "ownership.maintenance"
+            : "ownership.error",
+        )}
+        actionLabel={t("ownership.recheck")}
+        onAction={() => void probeOwnership()}
+      />,
+    );
+  }
 
   if (saveState === "error" && !dismissed.includes("save")) {
     items.push(
@@ -103,7 +127,8 @@ function Banner({
   text: string;
   actionLabel?: string;
   onAction?: () => void;
-  onDismiss: () => void;
+  /** 省略即不可关闭：状态自己会消失的横幅关掉只会让界面自相矛盾。 */
+  onDismiss?: () => void;
 }) {
   const t = useT();
   return (
@@ -119,9 +144,11 @@ function Banner({
           {actionLabel}
         </Button>
       )}
-      <IconButton label={t("banner.dismiss")} onClick={onDismiss}>
-        <X />
-      </IconButton>
+      {onDismiss && (
+        <IconButton label={t("banner.dismiss")} onClick={onDismiss}>
+          <X />
+        </IconButton>
+      )}
     </div>
   );
 }

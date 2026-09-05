@@ -41,7 +41,9 @@ var legacyMigrations = []string{
 	"legacy/0003_retire_kanban.sql",
 	"legacy/0004_agent_handoffs.sql",
 	"legacy/0005_browser_sessions.sql",
-	"legacy/0006_write_ownership.sql",
+	"legacy/0006_agent_prompt_deliveries.sql",
+	"legacy/0007_handoff_attempts.sql",
+	"legacy/0008_write_ownership.sql",
 }
 
 const maxManifest = 64 << 20

@@ -21,10 +21,24 @@ vi.mock("../nodes/registry", () => ({
 
 const saveBoard = vi.fn();
 const loadBoard = vi.fn();
+const canvasOwnership = vi.fn();
+/** 网关按 `code` 把 `ownership_moved` 从普通 409 里摘出来，所以要真类。 */
+class RuntimeRequestError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = "RuntimeRequestError";
+  }
+}
 vi.mock("../api/client", () => ({
+  RuntimeRequestError,
   runtimeApi: {
     saveBoard: (...args: unknown[]) => saveBoard(...args),
     loadBoard: (...args: unknown[]) => loadBoard(...args),
+    canvasOwnership: (...args: unknown[]) => canvasOwnership(...args),
   },
   isConflict: (error: unknown) =>
     (error as { status?: number } | null)?.status === 409,
@@ -41,6 +55,7 @@ vi.mock("../canvas/editor-context", async (importOriginal) => ({
 }));
 
 const { useCanvasStore } = await import("../store/canvas-store");
+const { useCanvasOwnership } = await import("../canvas-ownership");
 const {
   EDIT_DEBOUNCE_MS,
   VIEWPORT_THROTTLE_MS,
@@ -86,6 +101,18 @@ beforeEach(() => {
   );
   loadBoard.mockReset();
   resetAutosaveQueue();
+  // 归属探测在真应用里由壳发起；这里直接落在「Runtime 在写」上，
+  // 让这组用例只测防抖与冲突重放本身。
+  canvasOwnership.mockReset();
+  canvasOwnership.mockResolvedValue({
+    domain: "canvas",
+    owner: "runtime",
+    epoch: 1n,
+    phase: "settled",
+    reasonCode: "ownership.runtime.initial",
+    updatedAt: "2026-08-13T00:00:00.000Z",
+  });
+  useCanvasOwnership.setState({ status: "runtime", epoch: 1n });
   editorRef.current = null;
   useCanvasStore.getState().setWorkspace(workspace);
   useCanvasStore.getState().setDocument(document);
@@ -94,6 +121,7 @@ beforeEach(() => {
 
 afterEach(() => {
   stop();
+  useCanvasOwnership.getState().reset();
   vi.useRealTimers();
 });
 
@@ -207,9 +235,7 @@ describe("autosave", () => {
 
   /** Runtime 的 409：`isConflict` 只看 `status`。 */
   const conflict = () =>
-    Object.assign(new Error("Board changed since it was loaded"), {
-      status: 409,
-    });
+    new RuntimeRequestError(409, "Board changed since it was loaded");
 
   const remoteNode = {
     id: "019ff7d1-9999-7000-8000-000000000001",
@@ -277,5 +303,66 @@ describe("autosave", () => {
 
     await vi.advanceTimersByTimeAsync(EDIT_DEBOUNCE_MS * 4);
     expect(saveBoard).not.toHaveBeenCalled();
+  });
+});
+
+describe("画布写归属", () => {
+  /** 维护窗口里两侧都拒写，所以这一轮防抖不该发出任何 PUT。 */
+  it("维护中不写盘，保存态留在 dirty 而不是「已保存」", async () => {
+    useCanvasOwnership.setState({ status: "maintenance" });
+
+    useCanvasStore.getState().addNode("sticky");
+    await vi.advanceTimersByTimeAsync(EDIT_DEBOUNCE_MS * 4);
+
+    expect(saveBoard).not.toHaveBeenCalled();
+    expect(useCanvasStore.getState().saveState).toBe("dirty");
+    expect(useCanvasStore.getState().saveError).toBeNull();
+  });
+
+  it("归属还没探到时也不写", async () => {
+    useCanvasOwnership.getState().reset();
+
+    useCanvasStore.getState().addNode("sticky");
+    await vi.advanceTimersByTimeAsync(EDIT_DEBOUNCE_MS * 4);
+
+    expect(saveBoard).not.toHaveBeenCalled();
+    expect(useCanvasStore.getState().saveState).toBe("dirty");
+  });
+
+  it("视口节流也让开：只读时连视口都不 PUT", async () => {
+    useCanvasOwnership.setState({ status: "maintenance" });
+
+    useCanvasStore.getState().setViewport({ x: 30, y: 30, zoom: 1 });
+    await vi.advanceTimersByTimeAsync(VIEWPORT_THROTTLE_MS * 2);
+
+    expect(saveBoard).not.toHaveBeenCalled();
+  });
+
+  /**
+   * `ownership_moved` 之后不重试、不变基、不亮红灯：写方换人了，重放只会
+   * 再撞一次。重探把路由指向新的写方，文档留在 dirty 等下一轮。
+   */
+  it("Runtime 回 ownership_moved 时重探归属，不重试也不变基", async () => {
+    saveBoard.mockRejectedValue(
+      new RuntimeRequestError(409, "canvas moved", "ownership_moved"),
+    );
+    canvasOwnership.mockResolvedValue({
+      domain: "canvas",
+      owner: "runtime",
+      epoch: 2n,
+      phase: "switching",
+      reasonCode: "ownership.switch.started",
+      updatedAt: "2026-08-13T00:00:00.000Z",
+    });
+
+    useCanvasStore.getState().addNode("sticky");
+    await vi.advanceTimersByTimeAsync(EDIT_DEBOUNCE_MS * 6);
+
+    expect(saveBoard).toHaveBeenCalledTimes(1);
+    expect(loadBoard).not.toHaveBeenCalled();
+    expect(canvasOwnership).toHaveBeenCalledTimes(1);
+    expect(useCanvasOwnership.getState().status).toBe("maintenance");
+    expect(useCanvasStore.getState().saveState).toBe("dirty");
+    expect(useCanvasStore.getState().saveError).toBeNull();
   });
 });
