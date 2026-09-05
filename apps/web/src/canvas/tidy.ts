@@ -2,7 +2,7 @@ import type {
   CanvasEdge,
   CanvasNode,
   Position,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 import { COLLAPSED_HEIGHT, defaultNodeSize } from "../store/defaults";
 
 /**

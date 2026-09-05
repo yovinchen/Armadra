@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { GitFileStatus } from "@ai-coding-canvas/shared";
+import type { GitFileStatus } from "@armadra/shared";
 
 import { partitionChanges } from "./SourceControlDrawer";
 

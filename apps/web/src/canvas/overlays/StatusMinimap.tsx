@@ -7,7 +7,7 @@ import {
   useAgentStatusStore,
   type AgentGlow,
 } from "@/agent/status-store";
-import { isDocumentShapeId, toNodeId } from "../shapes/aicc-shape";
+import { isDocumentShapeId, toNodeId } from "../shapes/armadra-shape";
 import {
   fitPageBounds,
   itemAtPoint,
@@ -82,7 +82,7 @@ function collectItems(
     };
     const shape = editor.getShape(id);
     if (!shape) continue;
-    if (shape.type === "aicc" && isDocumentShapeId(id)) {
+    if (shape.type === "armadra" && isDocumentShapeId(id)) {
       const nodeId = toNodeId(id);
       const color = (shape.props as { color?: string }).color;
       const glow = glowOf(nodeId);
@@ -204,7 +204,7 @@ export function StatusMinimap() {
     };
 
     // `react()` 只跟 editor 的信号走；状态与主题各自订阅一次。
-    const stopReaction = react("aicc status minimap", paint);
+    const stopReaction = react("armadra status minimap", paint);
     const stopStatuses = useAgentStatusStore.subscribe(paint);
     const observer = new ResizeObserver(paint);
     observer.observe(canvas);

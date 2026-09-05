@@ -171,10 +171,10 @@ describe("白板偏好的默认值与持久化", () => {
     expect(whiteboard.style).toBe("clean");
     expect(whiteboard.defaultColor).toBe("blue");
 
-    expect(cells.get("aicc.whiteboard.background")).toBe("paper");
+    expect(cells.get("armadra.whiteboard.background")).toBe("paper");
     // 数字枚举存的是字符串，读回时要能还原成数字。
-    expect(cells.get("aicc.whiteboard.gridSize")).toBe("48");
-    expect(cells.get("aicc.whiteboard.grid")).toBe("false");
+    expect(cells.get("armadra.whiteboard.gridSize")).toBe("48");
+    expect(cells.get("armadra.whiteboard.grid")).toBe("false");
   });
 
   it("色板就是 tldraw 的 13 色", () => {

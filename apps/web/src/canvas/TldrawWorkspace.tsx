@@ -10,7 +10,7 @@ import {
 import { getAssetUrlsByImport } from "@tldraw/assets/imports.vite";
 import { Lock, LockOpen } from "lucide-react";
 import type { TLShape, TLShapeId } from "tldraw";
-import type { BoardDocument, CanvasNode } from "@ai-coding-canvas/shared";
+import type { BoardDocument, CanvasNode } from "@armadra/shared";
 import "tldraw/tldraw.css";
 import "../styles/canvas.css";
 
@@ -49,7 +49,7 @@ import { ShapeMenuContent } from "./menus/shape-menu";
 import { CanvasOverlays } from "./overlays/CanvasOverlays";
 import { StatusMinimap } from "./overlays/StatusMinimap";
 import { CanvasStylePanel } from "./StylePanel";
-import { AiccShapeUtil } from "./shapes/AiccShapeUtil";
+import { ArmadraShapeUtil } from "./shapes/ArmadraShapeUtil";
 import { registerLinkArrow } from "./shapes/LinkArrow";
 import { LinkBindingUtil } from "./shapes/LinkBindingUtil";
 import { LinkShapeUtil } from "./shapes/LinkShapeUtil";
@@ -58,7 +58,7 @@ import {
   activeShapeUtils,
   registerRetiredShapes,
 } from "./shapes/retired-shapes";
-import { isDocumentShapeId, toNodeId, toShapeId } from "./shapes/aicc-shape";
+import { isDocumentShapeId, toNodeId, toShapeId } from "./shapes/armadra-shape";
 import { edgeIdOfShape } from "./sync/derive";
 import {
   CANVAS_TOOLS,
@@ -148,7 +148,7 @@ const overrides: TLUiOverrides = {
  */
 const shapeUtils = [
   ...activeShapeUtils(defaultShapeUtils),
-  AiccShapeUtil,
+  ArmadraShapeUtil,
   LinkShapeUtil,
 ];
 /** 上下文链接的两端绑定（§4.3，Phase 3 link-shape）。 */

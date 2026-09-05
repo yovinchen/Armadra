@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { CanvasNode } from "@ai-coding-canvas/shared";
+import type { CanvasNode } from "@armadra/shared";
 
 import { canSuggestTitle, openNodeAnnotation } from "./annotations";
 // 副作用：注册终端的右键项（含「标签…」）。
@@ -32,9 +32,9 @@ describe("节点标注入口", () => {
     expect(labels!.label).toBe("标签…");
 
     const seen = vi.fn();
-    window.addEventListener("aicc:node-annotation", seen);
+    window.addEventListener("armadra:node-annotation", seen);
     labels!.run();
-    window.removeEventListener("aicc:node-annotation", seen);
+    window.removeEventListener("armadra:node-annotation", seen);
     expect(seen).toHaveBeenCalled();
   });
 
@@ -69,9 +69,9 @@ describe("节点标注入口", () => {
   it("事件带上节点 id 与类型", () => {
     const detail = vi.fn();
     const listener = (event: Event) => detail((event as CustomEvent).detail);
-    window.addEventListener("aicc:node-annotation", listener);
+    window.addEventListener("armadra:node-annotation", listener);
     openNodeAnnotation("n1", "note");
-    window.removeEventListener("aicc:node-annotation", listener);
+    window.removeEventListener("armadra:node-annotation", listener);
     expect(detail).toHaveBeenCalledWith({ nodeId: "n1", kind: "note" });
   });
 });

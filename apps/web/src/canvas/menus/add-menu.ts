@@ -19,7 +19,7 @@ import type {
   Position,
   SshHost,
   Workspace,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 import type { CommandId } from "../../keybindings";
 import type { CanvasActions } from "../../store/canvas-store";
 import { useCanvasStore } from "../../store/canvas-store";

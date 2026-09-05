@@ -3,7 +3,7 @@ import type {
   BoardDocument,
   CanvasEdge,
   CanvasNode,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 
 /**
  * 连续多少次 409 之后才放弃自动变基、给用户提示。

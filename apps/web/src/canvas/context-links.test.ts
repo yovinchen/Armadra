@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { BoardDocument, CanvasNode } from "@ai-coding-canvas/shared";
+import type { BoardDocument, CanvasNode } from "@armadra/shared";
 
 /** tldraw 在模块加载时就读 `matchMedia`（`derive.ts` 会把它拉进来）。 */
 vi.hoisted(() => {
@@ -187,7 +187,7 @@ describe("buildLinkDocuments · 内容链接", () => {
     id: SHAPE,
     title: "架构图",
     kind: "shape",
-    content: { text: "入口在 main.rs", pngPath: ".aicc/exports/x.png" },
+    content: { text: "入口在 main.rs", pngPath: ".armadra/exports/x.png" },
   };
 
   it("终端拿到节点链接 + 内容链接", () => {

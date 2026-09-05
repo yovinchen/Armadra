@@ -176,7 +176,7 @@ describe("OSC 标题（§18.3 标题行）", () => {
       forgetOscTitle("node-3");
       rememberOscTitle("node-3", "pnpm dev");
       const read = () =>
-        JSON.parse(store.get("aicc.oscTitles") ?? "{}") as Record<
+        JSON.parse(store.get("armadra.oscTitles") ?? "{}") as Record<
           string,
           string
         >;

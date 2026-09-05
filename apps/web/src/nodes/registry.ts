@@ -14,7 +14,7 @@ import {
   type CanvasNode,
   type CanvasNodeType,
   type Size,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 
 import { BrowserNode } from "./BrowserNode";
 import { DiffNode } from "./DiffNode";
@@ -146,7 +146,7 @@ export const NODE_BODY: Record<CanvasNodeType, ComponentType<NodeBodyProps>> = {
 };
 
 /**
- * 这些类型自己渲染 `NodeShell`，`AiccShapeUtil` 不再包一层。
+ * 这些类型自己渲染 `NodeShell`，`ArmadraShapeUtil` 不再包一层。
  *
  * 原因很实际：它们的头部按钮（中断 / 保存 / 刷新 / 面包屑 / 地址栏）
  * 的状态就住在节点体里，从外面包壳就得把状态再抬一层。便签没有头部插槽，

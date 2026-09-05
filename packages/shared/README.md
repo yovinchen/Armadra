@@ -5,6 +5,6 @@
 领域数据必须与 React Flow、Quickdraw 等具体画板引擎解耦。
 
 ```bash
-pnpm --filter @ai-coding-canvas/shared test
-pnpm --filter @ai-coding-canvas/shared build
+pnpm --filter @armadra/shared test
+pnpm --filter @armadra/shared build
 ```

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MoreHorizontal, Search } from "lucide-react";
-import type { WorkspaceSummary } from "@ai-coding-canvas/shared";
+import type { WorkspaceSummary } from "@armadra/shared";
 import { runtimeApi } from "../api/client";
 import { formatRelativeTime } from "../lib/format";
 import { Button } from "@/ui/button";

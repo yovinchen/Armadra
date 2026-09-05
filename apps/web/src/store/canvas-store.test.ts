@@ -6,7 +6,7 @@ import type {
   CanvasNode,
   CanvasNodeType,
   Workspace,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 
 /**
  * `store/defaults.ts` 从 `nodes/registry.ts` 取尺寸/颜色/标签（归属 nodes
@@ -200,7 +200,7 @@ describe("选择", () => {
     load([a]);
     const edgeId = "9f1c2b34-5d6e-4f70-8a9b-0c1d2e3f4a5b";
     const selected = [
-      { id: `shape:${a.id}`, type: "aicc" },
+      { id: `shape:${a.id}`, type: "armadra" },
       { id: `shape:${edgeId}`, type: "arrow" },
       { id: "shape:doodle", type: "draw" },
     ];

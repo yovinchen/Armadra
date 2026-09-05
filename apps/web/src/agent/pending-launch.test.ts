@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook } from "@testing-library/react";
-import type { AgentStatus, CanvasNode } from "@ai-coding-canvas/shared";
+import type { AgentStatus, CanvasNode } from "@armadra/shared";
 
 import { useAgentStatusStore } from "./status-store";
 import {

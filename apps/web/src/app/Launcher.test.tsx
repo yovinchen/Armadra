@@ -6,7 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { WorkspaceSummary } from "@ai-coding-canvas/shared";
+import type { WorkspaceSummary } from "@armadra/shared";
 
 const listWorkspaces = vi.fn();
 const openWorkspace = vi.fn((_id: string) => Promise.resolve());

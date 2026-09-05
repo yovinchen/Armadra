@@ -6,7 +6,7 @@
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { Workspace } from "@ai-coding-canvas/shared";
+import type { Workspace } from "@armadra/shared";
 
 import { runtimeApi } from "../api/client";
 

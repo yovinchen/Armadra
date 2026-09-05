@@ -12,7 +12,7 @@ import type {
   Size,
   Viewport,
   Workspace,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 import {
   COLLAPSED_HEIGHT,
   defaultNodeColor,
@@ -22,7 +22,7 @@ import {
 } from "./defaults";
 import { usePreferencesStore } from "../app/preferences-store";
 import { getEditor, useEditorHandle } from "../canvas/editor-context";
-import { isDocumentShapeId, toShapeId } from "../canvas/shapes/aicc-shape";
+import { isDocumentShapeId, toShapeId } from "../canvas/shapes/armadra-shape";
 import { edgeIdOfShape } from "../canvas/sync/derive";
 import { edgeToLink, nodeToShape, toTldrawColor } from "../canvas/sync/project";
 import { markPushed } from "../canvas/sync/pushed";
@@ -213,7 +213,7 @@ function shapeOf(editor: Editor, nodeId: string): TLShape | undefined {
   return editor.getShape(toShapeId(nodeId));
 }
 
-/** 节点的一次属性改动 → shape 的一次 `updateShapes`（frame 与 aicc 不同槽）。 */
+/** 节点的一次属性改动 → shape 的一次 `updateShapes`（frame 与 armadra 不同槽）。 */
 function updateNodeShape(
   editor: Editor,
   node: CanvasNode,
@@ -227,7 +227,7 @@ function updateNodeShape(
   };
 
   if (shape.type === "frame") {
-    const meta = (shape.meta.aicc ?? {}) as Record<string, unknown>;
+    const meta = (shape.meta.armadra ?? {}) as Record<string, unknown>;
     // `updateShapes` 的入参类型按 shape 类型收敛，而这里是按运行时分支写的，
     // 所以只能整条断言掉；字段名由上面的 `nodeToShape` 保证。
     editor.updateShapes([
@@ -243,7 +243,7 @@ function updateNodeShape(
           ...(patch.size ? { w: patch.size.width, h: patch.size.height } : {}),
         },
         meta: {
-          aicc: {
+          armadra: {
             ...meta,
             ...(patch.color !== undefined ? { color: patch.color } : {}),
             ...(patch.labels !== undefined ? { labels: patch.labels } : {}),
@@ -278,7 +278,7 @@ function updateNodeShape(
       : {}),
   };
   editor.updateShapes([
-    { id: shape.id, type: "aicc", ...geometry, props } as never,
+    { id: shape.id, type: "armadra", ...geometry, props } as never,
   ]);
 }
 

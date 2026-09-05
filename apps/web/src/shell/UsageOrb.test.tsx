@@ -6,7 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { Usage } from "@ai-coding-canvas/shared";
+import type { Usage } from "@armadra/shared";
 
 const fetchUsage = vi.fn();
 const refreshUsage = vi.fn();

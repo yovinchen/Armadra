@@ -15,7 +15,7 @@
  * 「未读」的生命周期）：选中节点即已读，以及过期权限请求的清扫。
  */
 import { useEffect } from "react";
-import type { AgentStatus } from "@ai-coding-canvas/shared";
+import type { AgentStatus } from "@armadra/shared";
 
 import { onWorkspaceEvent } from "../api/events";
 import {

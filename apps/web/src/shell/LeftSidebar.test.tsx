@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { Workspace } from "@ai-coding-canvas/shared";
+import type { Workspace } from "@armadra/shared";
 
 vi.mock("../api/client", () => ({
   runtimeApi: {

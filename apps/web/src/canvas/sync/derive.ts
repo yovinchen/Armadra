@@ -2,7 +2,7 @@ import type {
   CanvasEdge,
   CanvasNode,
   CanvasNodeType,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 import type {
   TLArrowBinding,
   TLArrowShape,
@@ -10,8 +10,8 @@ import type {
   TLShape,
 } from "tldraw";
 
-import type { AiccShape } from "../shapes/aicc-shape";
-import { isDocumentShapeId, isUuid, toNodeId } from "../shapes/aicc-shape";
+import type { ArmadraShape } from "../shapes/armadra-shape";
+import { isDocumentShapeId, isUuid, toNodeId } from "../shapes/armadra-shape";
 import type { LinkShape } from "../shapes/link-shape";
 import { isLinkShape, linkEnds } from "../shapes/link-shape";
 import { fromTldrawColor } from "./project";
@@ -19,7 +19,7 @@ import { fromTldrawColor } from "./project";
 /**
  * tldraw 记录 → 文档（tldraw 计划 §9.2，归属 canvas）。纯函数。
  *
- * 反向映射要和 `project.ts` 逐条对上：frame → `group` 节点、`aicc` → 其余
+ * 反向映射要和 `project.ts` 逐条对上：frame → `group` 节点、`armadra` → 其余
  * 类型、`link` shape → 一条 `edges` 行。
  *
  * 时间戳：`createdAt` 从 props / meta 取回；`updatedAt` 由调用方决定
@@ -34,7 +34,7 @@ function parentNodeId(shape: TLShape): string | undefined {
     : undefined;
 }
 
-interface FrameAiccMeta {
+interface FrameArmadraMeta {
   color?: string;
   labels?: string[];
   note?: string;
@@ -43,7 +43,7 @@ interface FrameAiccMeta {
 }
 
 export function shapeToNode(
-  shape: AiccShape | TLFrameShape,
+  shape: ArmadraShape | TLFrameShape,
   boardId: string,
   updatedAt: string,
 ): CanvasNode {
@@ -52,7 +52,7 @@ export function shapeToNode(
 
   if (shape.type === "frame") {
     const frame = shape as TLFrameShape;
-    const meta = (frame.meta.aicc ?? {}) as FrameAiccMeta;
+    const meta = (frame.meta.armadra ?? {}) as FrameArmadraMeta;
     return {
       id: toNodeId(frame.id),
       boardId,
@@ -71,30 +71,30 @@ export function shapeToNode(
     } as CanvasNode;
   }
 
-  const aicc = shape as AiccShape;
+  const armadra = shape as ArmadraShape;
 
   return {
-    id: toNodeId(aicc.id),
+    id: toNodeId(armadra.id),
     boardId,
-    type: aicc.props.nodeType as CanvasNodeType,
-    title: aicc.props.title,
-    color: aicc.props.color,
+    type: armadra.props.nodeType as CanvasNodeType,
+    title: armadra.props.title,
+    color: armadra.props.color,
     position,
-    size: { width: aicc.props.w, height: aicc.props.h },
-    ...(aicc.props.collapsed ? { collapsed: true } : {}),
-    ...(aicc.props.expandedHeight > 0
-      ? { expandedHeight: aicc.props.expandedHeight }
+    size: { width: armadra.props.w, height: armadra.props.h },
+    ...(armadra.props.collapsed ? { collapsed: true } : {}),
+    ...(armadra.props.expandedHeight > 0
+      ? { expandedHeight: armadra.props.expandedHeight }
       : {}),
     ...(parentId ? { parentId } : {}),
-    labels: [...aicc.props.labels],
-    note: aicc.props.note,
-    data: aicc.props.data,
-    createdAt: aicc.props.createdAt,
+    labels: [...armadra.props.labels],
+    note: armadra.props.note,
+    data: armadra.props.data,
+    createdAt: armadra.props.createdAt,
     updatedAt,
   } as CanvasNode;
 }
 
-export interface ArrowAiccMeta {
+export interface ArrowArmadraMeta {
   /** 边的 uuid（§Phase 2）。用户拉出来的 arrow 自身 id 是随机的，只能记在这里。 */
   id?: string;
   kind?: CanvasEdge["kind"];
@@ -106,22 +106,22 @@ export interface ArrowAiccMeta {
    * 内容链接的稳定 uuid（§6.3，`canvas/content-links.ts`）。
    *
    * 一端绑节点、一端绑白板 shape 的 arrow 不是一条 `edges` 行，但要在链接文档
-   * 里有个固定的 id，导出的 PNG 才能一直写同一个 `.aicc/exports/<uuid>.png`。
+   * 里有个固定的 id，导出的 PNG 才能一直写同一个 `.armadra/exports/<uuid>.png`。
    */
   contentId?: string;
 }
 
-/** 一条 arrow 的 `meta.aicc`（没有就是空对象）。 */
-export function arrowAiccMeta(arrow: {
+/** 一条 arrow 的 `meta.armadra`（没有就是空对象）。 */
+export function arrowArmadraMeta(arrow: {
   meta?: Record<string, unknown>;
-}): ArrowAiccMeta {
-  return (arrow.meta?.aicc ?? {}) as ArrowAiccMeta;
+}): ArrowArmadraMeta {
+  return (arrow.meta?.armadra ?? {}) as ArrowArmadraMeta;
 }
 
 /**
  * 这条 arrow 对应哪条 `edges` 行？
  *
- * **优先读 `meta.aicc.id`**：用户用把手或箭头工具拉出来的 arrow，tldraw 给的是
+ * **优先读 `meta.armadra.id`**：用户用把手或箭头工具拉出来的 arrow，tldraw 给的是
  * 随机 id（`shape:xxxx`），只有 meta 里记得住 uuid。文档投影出来的 arrow 两边
  * 都有（id 是 `shape:<uuid>`，meta 里也写同一个），所以两种来源往返恒等。
  *
@@ -131,7 +131,7 @@ export function arrowEdgeId(arrow: {
   id: string;
   meta?: Record<string, unknown>;
 }): string | null {
-  const meta = arrowAiccMeta(arrow);
+  const meta = arrowArmadraMeta(arrow);
   if (typeof meta.id === "string" && isUuid(meta.id)) return meta.id;
   return isDocumentShapeId(arrow.id) ? toNodeId(arrow.id) : null;
 }
@@ -184,7 +184,7 @@ export function linkToEdge(
  *
  * 「什么算边」只有这一处定义：`canvas.delete` 的分流、`store.removeEdges`
  * 都调它，别在调用方再写一遍 `shape.type === "link"`。旧看板里可能还留着
- * Phase 2 认领过的 arrow（`meta.aicc.id`），一并认出来。
+ * Phase 2 认领过的 arrow（`meta.armadra.id`），一并认出来。
  */
 export function edgeIdOfShape(shape: {
   id: string;
@@ -230,7 +230,7 @@ export interface DeriveResult<T> {
  * 被空改动置脏。
  */
 export function deriveNodes(
-  shapes: readonly (AiccShape | TLFrameShape)[],
+  shapes: readonly (ArmadraShape | TLFrameShape)[],
   boardId: string,
   previous: readonly CanvasNode[],
   stamp: string,

@@ -7,7 +7,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import type { AgentInfo } from "@ai-coding-canvas/shared";
+import type { AgentInfo } from "@armadra/shared";
 
 const fetchAgents = vi.fn();
 const fetchSettings = vi.fn();
@@ -109,7 +109,7 @@ describe("SettingsDialog", () => {
       .mockResolvedValue({ status: "ok", version: "0.1.0" });
     fetchUsage.mockReset().mockResolvedValue({ providers: [] });
     fetchDataInfo.mockReset().mockResolvedValue({
-      dataDir: "/tmp/aicc",
+      dataDir: "/tmp/armadra",
       dbBytes: 2048,
       conversations: 12,
       boardLogRetentionDays: 30,
@@ -290,7 +290,7 @@ describe("SettingsDialog", () => {
   it("数据页读 info 并按选项 PATCH 日志保留天数", async () => {
     open();
     fireEvent.click(navItem(zh("settings.section.data")));
-    expect(await screen.findByText("/tmp/aicc")).toBeTruthy();
+    expect(await screen.findByText("/tmp/armadra")).toBeTruthy();
     expect(screen.getByText("2.0 KB")).toBeTruthy();
     expect(
       screen.getByText(

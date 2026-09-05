@@ -1,4 +1,4 @@
-import type { Viewport } from "@ai-coding-canvas/shared";
+import type { Viewport } from "@armadra/shared";
 
 /**
  * 缩放（§21）。

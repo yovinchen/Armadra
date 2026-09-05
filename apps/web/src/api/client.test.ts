@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { BoardDocument } from "@ai-coding-canvas/shared";
+import type { BoardDocument } from "@armadra/shared";
 import {
   RuntimeConnectionError,
   RuntimeRequestError,
@@ -300,7 +300,7 @@ describe("白板资产与导出", () => {
   it("Blob 原样上传，Content-Type 就是它自己的 MIME", async () => {
     const fetchMock = stubJson({
       id: "0011223344556677.png",
-      path: ".aicc/assets/0011223344556677.png",
+      path: ".armadra/assets/0011223344556677.png",
       url: `/api/workspaces/${workspaceId}/assets/0011223344556677.png`,
       mimeType: "image/png",
       bytes: 12,
@@ -324,7 +324,7 @@ describe("白板资产与导出", () => {
   it("data URL 走 JSON 体", async () => {
     const fetchMock = stubJson({
       id: "0011223344556677.png",
-      path: ".aicc/assets/0011223344556677.png",
+      path: ".armadra/assets/0011223344556677.png",
       url: `/api/workspaces/${workspaceId}/assets/0011223344556677.png`,
       mimeType: "image/png",
       bytes: 12,
@@ -338,7 +338,7 @@ describe("白板资产与导出", () => {
   it("按路径导入把路径发给 import 端点", async () => {
     const fetchMock = stubJson({
       id: "0011223344556677.png",
-      path: ".aicc/assets/0011223344556677.png",
+      path: ".armadra/assets/0011223344556677.png",
       url: `/api/workspaces/${workspaceId}/assets/0011223344556677.png`,
       mimeType: "image/png",
       bytes: 12,
@@ -355,7 +355,7 @@ describe("白板资产与导出", () => {
     );
     expect(init.method).toBe("POST");
     expect(bodyOf(fetchMock)).toEqual({ path: "/Users/me/Downloads/shot.png" });
-    expect(asset.path).toBe(".aicc/assets/0011223344556677.png");
+    expect(asset.path).toBe(".armadra/assets/0011223344556677.png");
   });
 
   it("空路径在发请求前就被拦下", () => {
@@ -372,8 +372,8 @@ describe("白板资产与导出", () => {
 
   it("导出不再挂在节点下，返回工作区相对路径", async () => {
     const fetchMock = stubJson({
-      path: "/tmp/one/.aicc/exports/" + sessionId + ".png",
-      relativePath: `.aicc/exports/${sessionId}.png`,
+      path: "/tmp/one/.armadra/exports/" + sessionId + ".png",
+      relativePath: `.armadra/exports/${sessionId}.png`,
       bytes: 12,
     });
 
@@ -384,7 +384,7 @@ describe("白板资产与导出", () => {
       `http://127.0.0.1:43120/api/workspaces/${workspaceId}/exports/${sessionId}/png`,
     );
     expect(bodyOf(fetchMock)).toEqual({ dataUrl: png });
-    expect(exported.relativePath).toBe(`.aicc/exports/${sessionId}.png`);
+    expect(exported.relativePath).toBe(`.armadra/exports/${sessionId}.png`);
   });
 
   it("非 PNG 的 data URL 在发请求前就被拦下", () => {

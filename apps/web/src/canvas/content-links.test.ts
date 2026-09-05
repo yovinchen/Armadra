@@ -2,7 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Editor, TLShapeId } from "tldraw";
 
-/** tldraw 在模块加载时就读 `matchMedia`（见 `AiccShapeUtil.test.ts`）。 */
+/** tldraw 在模块加载时就读 `matchMedia`（见 `ArmadraShapeUtil.test.ts`）。 */
 vi.hoisted(() => {
   if (typeof window !== "undefined" && !window.matchMedia) {
     Object.defineProperty(window, "matchMedia", {
@@ -50,7 +50,7 @@ import {
   shapeText,
   useContentLinks,
 } from "./content-links";
-import { toShapeId } from "./shapes/aicc-shape";
+import { toShapeId } from "./shapes/armadra-shape";
 
 const NODE = "019ff7d1-0d12-7421-833d-2c5e8d64ed01";
 const NODE2 = "019ff7d1-0d12-7421-833d-2c5e8d64ed02";
@@ -151,7 +151,7 @@ class FakeEditor {
   addNode(id: string): void {
     this.shapes.set(toShapeId(id), {
       id: toShapeId(id),
-      type: "aicc",
+      type: "armadra",
       typeName: "shape",
       parentId: "page:page",
       meta: {},
@@ -165,7 +165,7 @@ class FakeEditor {
       type: "frame",
       typeName: "shape",
       parentId: "page:page",
-      meta: { aicc: {} },
+      meta: { armadra: {} },
       props: { name: "分组", w: 400, h: 300 },
     });
   }
@@ -215,7 +215,7 @@ beforeEach(() => {
 /* ------------------------------- 判定 ------------------------------------- */
 
 describe("内容链接的判定", () => {
-  it("节点 shape：`aicc` 与 uuid id 的 `frame`", () => {
+  it("节点 shape：`armadra` 与 uuid id 的 `frame`", () => {
     editor.addGroup(GROUP);
     editor.addShape("shape:plainframe", "frame", { name: "白板画框" });
     expect(isNodeShapeRecord(editor.get(toShapeId(NODE)) as never)).toBe(true);
@@ -303,7 +303,7 @@ describe("内容链接的判定", () => {
 
 /* ------------------------------ 稳定 uuid --------------------------------- */
 
-describe("稳定 uuid（`meta.aicc.contentId`）", () => {
+describe("稳定 uuid（`meta.armadra.contentId`）", () => {
   it("第一次生成、之后不再变，写在箭头的 meta 里", () => {
     editor.addArrow("shape:a1");
     expect(contentIdOf(editor.get("shape:a1") as never)).toBeNull();
@@ -426,7 +426,7 @@ describe("shapeText / shapeSignature", () => {
 describe("resolveContent", () => {
   const contentId = "019ff7d1-0d12-7421-833d-2c5e8d64edaa";
   const deps = () => {
-    const exportPng = vi.fn(async (id: string) => `.aicc/exports/${id}.png`);
+    const exportPng = vi.fn(async (id: string) => `.armadra/exports/${id}.png`);
     return { exportPng, label };
   };
 
@@ -445,10 +445,10 @@ describe("resolveContent", () => {
     expect(editor.exported).toHaveLength(0);
   });
 
-  it("图片：`pngPath` 取资产的 `meta.aicc.path`，不导出", async () => {
+  it("图片：`pngPath` 取资产的 `meta.armadra.path`，不导出", async () => {
     editor.assets.set("asset:1", {
       id: "asset:1",
-      meta: { aicc: { path: ".aicc/assets/0a1b2c3d4e5f6071.png" } },
+      meta: { armadra: { path: ".armadra/assets/0a1b2c3d4e5f6071.png" } },
       props: { src: "http://127.0.0.1:43120/x" },
     });
     editor.addShape("shape:img", "image", { assetId: "asset:1", w: 10, h: 10 });
@@ -460,7 +460,7 @@ describe("resolveContent", () => {
       d,
     );
     expect(resolved?.content).toEqual({
-      pngPath: ".aicc/assets/0a1b2c3d4e5f6071.png",
+      pngPath: ".armadra/assets/0a1b2c3d4e5f6071.png",
     });
     expect(d.exportPng).not.toHaveBeenCalled();
   });
@@ -475,7 +475,7 @@ describe("resolveContent", () => {
       d,
     );
     expect(resolved?.content).toEqual({
-      pngPath: `.aicc/exports/${contentId}.png`,
+      pngPath: `.armadra/exports/${contentId}.png`,
     });
     expect(d.exportPng).toHaveBeenCalledWith(
       contentId,
@@ -500,7 +500,7 @@ describe("resolveContent", () => {
     expect(resolved?.title).toBe("架构图");
     expect(resolved?.content).toEqual({
       text: "入口在 main.rs",
-      pngPath: `.aicc/exports/${contentId}.png`,
+      pngPath: `.armadra/exports/${contentId}.png`,
     });
   });
 
@@ -514,7 +514,7 @@ describe("resolveContent", () => {
       d,
     );
     expect(resolved?.content.text).toBe("缓存层");
-    expect(resolved?.content.pngPath).toBe(`.aicc/exports/${contentId}.png`);
+    expect(resolved?.content.pngPath).toBe(`.armadra/exports/${contentId}.png`);
   });
 
   it("不可读的类型返回 null", async () => {
@@ -538,8 +538,8 @@ describe("useContentLinks 的导出防抖", () => {
     const exportPng = vi
       .spyOn(runtimeApi, "exportPng")
       .mockResolvedValue({
-        path: "/abs/.aicc/exports/x.png",
-        relativePath: ".aicc/exports/x.png",
+        path: "/abs/.armadra/exports/x.png",
+        relativePath: ".armadra/exports/x.png",
         bytes: 3,
       } as never);
     useCanvasStore.setState({ workspace: { id: "ws-1" } as never });
@@ -577,7 +577,7 @@ describe("useContentLinks 的导出防抖", () => {
         // 标题走 i18n，语言由用户偏好决定，这里只关心它不是空的。
         title: expect.stringMatching(/.+/u) as unknown as string,
         kind: "shape",
-        content: { pngPath: ".aicc/exports/x.png" },
+        content: { pngPath: ".armadra/exports/x.png" },
       },
     ]);
 

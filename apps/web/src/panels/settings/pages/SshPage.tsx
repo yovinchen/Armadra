@@ -2,7 +2,7 @@ import * as React from "react";
 import { useMutation } from "@tanstack/react-query";
 import { PlugZap, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { sshHostSchema, type SshHost } from "@ai-coding-canvas/shared";
+import { sshHostSchema, type SshHost } from "@armadra/shared";
 
 import { runtimeApi } from "../../../api/client";
 import { useT } from "../../../app/preferences-store";

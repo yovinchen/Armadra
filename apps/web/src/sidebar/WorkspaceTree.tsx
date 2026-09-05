@@ -17,7 +17,7 @@ import {
   Plus,
   SquarePen,
 } from "lucide-react";
-import type { WorkspaceSummary } from "@ai-coding-canvas/shared";
+import type { WorkspaceSummary } from "@armadra/shared";
 
 import { isAttention } from "../agent/status-store";
 import { useSessions } from "../agent/sessions";

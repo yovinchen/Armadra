@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import type { FileEntry, Workspace } from "@ai-coding-canvas/shared";
+import type { FileEntry, Workspace } from "@armadra/shared";
 
 import { useCanvasStore } from "../store/canvas-store";
 import { FileTree } from "./FileTree";

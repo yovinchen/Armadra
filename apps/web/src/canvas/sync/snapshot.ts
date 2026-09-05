@@ -1,12 +1,12 @@
 import type { TLRecord, TLStoreSnapshot } from "tldraw";
 
-import { isDocumentShapeId } from "../shapes/aicc-shape";
+import { isDocumentShapeId } from "../shapes/armadra-shape";
 import { LINK_SHAPE_TYPE } from "../shapes/link-shape";
 
 /**
  * 白板快照的过滤与合并（tldraw 计划 §6.1，归属 canvas）。纯函数。
  *
- * 快照里**只留白板原生记录**：`aicc` shape、`frame` shape、上下文链接的
+ * 快照里**只留白板原生记录**：`armadra` shape、`frame` shape、上下文链接的
  * `link` shape 及其 binding 由 `nodes` / `edges` 表承载，序列化前必须剔掉；
  * 加载时先灌快照，再把文档投影成 shape 合并进去。
  *
@@ -42,9 +42,9 @@ function isBinding(record: unknown): record is BindingRecord {
   return (record as BindingRecord | null)?.typeName === "binding";
 }
 
-/** 由 `nodes` 表承载的 shape：`aicc` 与作为分组的 `frame`。 */
+/** 由 `nodes` 表承载的 shape：`armadra` 与作为分组的 `frame`。 */
 function isNodeShape(record: ShapeRecord): boolean {
-  if (record.type === "aicc") return true;
+  if (record.type === "armadra") return true;
   return record.type === "frame" && isDocumentShapeId(record.id);
 }
 

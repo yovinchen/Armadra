@@ -10,9 +10,9 @@ import type {
 import { t } from "@/app/preferences-store";
 import { isValidLink } from "../connection";
 import { contentArrowEnds, ensureContentId } from "../content-links";
-import { arrowAiccMeta, arrowEnds } from "../sync/derive";
+import { arrowArmadraMeta, arrowEnds } from "../sync/derive";
 import { linkRecords } from "../sync/project";
-import { isDocumentShapeId, toNodeId } from "./aicc-shape";
+import { isDocumentShapeId, toNodeId } from "./armadra-shape";
 import { isLinkShape, type LinkShape } from "./link-shape";
 
 /**
@@ -22,7 +22,7 @@ import { isLinkShape, type LinkShape } from "./link-shape";
  * 这里管四件事：
  *
  *  1. **换形**：拉线交互仍然走 tldraw 的箭头工具（把手按下 → 切工具 → 放行
- *     事件），但一条 arrow 两端都绑到节点 shape（`aicc` / `frame`）时，交互
+ *     事件），但一条 arrow 两端都绑到节点 shape（`armadra` / `frame`）时，交互
  *     结束那一刻把它**换成自定义的 `link` shape + 两条 `link` binding**
  *     （`shapes/LinkShapeUtil.tsx`）。原生箭头的两端锚在节点矩形内部，画出来
  *     是被边框裁掉的直线；`link` 从两个节点相对的边的中点起笔，画的是 v3 那条
@@ -33,7 +33,7 @@ import { isLinkShape, type LinkShape } from "./link-shape";
  *  3. **内容链接**：一端绑节点、另一端绑白板 shape（文字 / 形状 / 手绘 / 图片 /
  *     直线 / 高亮 / 画框）的箭头**保留成 tldraw 原生 arrow**，它不是一条
  *     `edges` 行，而是 §6.3 的内容链接：这里只给它写一次方向与颜色，并补上
- *     `meta.aicc.contentId`；读什么、导不导 PNG 归 `canvas/content-links.ts`。
+ *     `meta.armadra.contentId`；读什么、导不导 PNG 归 `canvas/content-links.ts`。
  *  4. **把手兜底**：从把手起笔、松手时**末端一个 shape 都没绑到**的线删掉
  *     （把手是用来连东西的，空放等于取消）；末端绑到任意 shape 都留着。
  *     箭头工具画的没绑定箭头也留着，那是白板内容。
@@ -84,7 +84,7 @@ export function isHandleLinkPending(): boolean {
 
 function isNodeShape(shape: TLShape | undefined): boolean {
   if (!shape) return false;
-  if (shape.type === "aicc") return true;
+  if (shape.type === "armadra") return true;
   return shape.type === "frame" && isDocumentShapeId(shape.id);
 }
 
@@ -207,7 +207,7 @@ export function registerLinkArrow(editor: Editor): () => void {
       discard(editor, arrowId);
       toast.error(
         t(ends.source === ends.target ? "edge.selfLink" : "edge.duplicate"),
-        { id: "aicc-edge-invalid" },
+        { id: "armadra-edge-invalid" },
       );
       return;
     }
@@ -218,7 +218,7 @@ export function registerLinkArrow(editor: Editor): () => void {
   /**
    * 内容链接的样式：箭头指向节点那一端，颜色取品牌色。
    *
-   * `meta.aicc.styled` 与边共用一个标记：写过一次之后用户手改颜色 / 箭头不再被
+   * `meta.armadra.styled` 与边共用一个标记：写过一次之后用户手改颜色 / 箭头不再被
    * 覆盖。`contentId` 无论如何都要有（`content-links.ts` 靠它定导出文件名）。
    */
   const styleContentArrow = (
@@ -228,7 +228,7 @@ export function registerLinkArrow(editor: Editor): () => void {
     ensureContentId(editor, arrow);
     // `ensureContentId` 刚写过 meta，手里这份已经旧了。
     const fresh = editor.getShape(arrow.id) ?? arrow;
-    const meta = arrowAiccMeta(fresh);
+    const meta = arrowArmadraMeta(fresh);
     if (meta.styled) return;
     editor.run(
       () => {
@@ -240,7 +240,7 @@ export function registerLinkArrow(editor: Editor): () => void {
             arrowheadStart: nodeEnd === "start" ? "arrow" : "none",
             arrowheadEnd: nodeEnd === "end" ? "arrow" : "none",
           },
-          meta: { ...fresh.meta, aicc: { ...meta, styled: true } },
+          meta: { ...fresh.meta, armadra: { ...meta, styled: true } },
         } as never);
       },
       { history: "ignore" },

@@ -10,7 +10,7 @@
  */
 import { useState } from "react";
 import { Bell, ChevronDown, Search } from "lucide-react";
-import type { WorkspaceSummary } from "@ai-coding-canvas/shared";
+import type { WorkspaceSummary } from "@armadra/shared";
 
 import { useStatusCounts } from "../agent/status-store";
 import { useT } from "../app/preferences-store";

@@ -3,7 +3,7 @@ import type {
   AgentEvent,
   AgentStatus,
   WorkspaceEvent,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 
 import {
   MAX_CARDS_PER_PARENT,

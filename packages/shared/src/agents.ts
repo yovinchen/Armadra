@@ -160,7 +160,7 @@ export function agentDefinition(id: string): AgentDefinition | undefined {
 
 /**
  * Environment variable name. The runtime enforces the same shape and drops
- * anything else (apps/runtime/src/settings.rs), including the `AICC_*` names
+ * anything else (apps/runtime/src/settings.rs), including the `ARMADRA_*` names
  * the hook client owns — a custom agent must not be able to redirect its own
  * hook reports.
  */
@@ -171,8 +171,8 @@ export const customAgentEnvSchema = z.record(
   z
     .string()
     .regex(ENV_KEY_PATTERN)
-    .refine((key) => !key.startsWith("AICC_"), {
-      message: "AICC_* is reserved for the hook client",
+    .refine((key) => !key.startsWith("ARMADRA_"), {
+      message: "ARMADRA_* is reserved for the hook client",
     }),
   z.string().max(MAX_ENV_VALUE),
 );

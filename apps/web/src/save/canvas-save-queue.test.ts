@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Board, BoardDocument } from "@ai-coding-canvas/shared";
+import type { Board, BoardDocument } from "@armadra/shared";
 import { CanvasSaveQueue, replayLocalEdits } from "./canvas-save-queue";
 
 function deferred<T>() {

@@ -57,27 +57,27 @@
 }
 
 .node-glow[data-glow="unread"]::after {
-  animation: aicc-glow 2s ease-in-out infinite;
+  animation: armadra-glow 2s ease-in-out infinite;
   box-shadow:
     0 0 0 2px var(--brand),
     0 0 18px 2px var(--brand);
 }
 
 .node-glow[data-glow="working"]::after {
-  animation: aicc-glow 2.6s ease-in-out infinite;
+  animation: armadra-glow 2.6s ease-in-out infinite;
   box-shadow:
     0 0 0 2px var(--agent-working),
     0 0 18px 2px var(--agent-working);
 }
 
 .node-glow[data-glow="attention"]::after {
-  animation: aicc-glow 1.8s ease-in-out infinite;
+  animation: armadra-glow 1.8s ease-in-out infinite;
   box-shadow:
     0 0 0 2px var(--danger),
     0 0 18px 2px var(--danger);
 }
 
-@keyframes aicc-glow {
+@keyframes armadra-glow {
   0%,
   100% {
     opacity: 0.25;
@@ -131,7 +131,7 @@
  * 头部任何一次尺寸变化都会经 flex 传到 body，再触发一轮 fit。
  */
 [data-bell="true"] [data-slot="icon-button"] {
-  animation: aicc-bell 0.6s ease-in-out;
+  animation: armadra-bell 0.6s ease-in-out;
 }
 
 /*
@@ -139,7 +139,7 @@
  * 而 IconButton 自己的 `text-muted-foreground` 是 Tailwind 的 utilities
  * 层，静态覆盖要么被它压住、要么得靠 `!important`。
  */
-@keyframes aicc-bell {
+@keyframes armadra-bell {
   0%,
   100% {
     color: var(--brand);

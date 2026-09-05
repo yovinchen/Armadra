@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { AgentInfo } from "@ai-coding-canvas/shared";
+import type { AgentInfo } from "@armadra/shared";
 
 import { runtimeApi } from "../../../api/client";
 import { useAgentsQuery } from "../../../app/use-agents";

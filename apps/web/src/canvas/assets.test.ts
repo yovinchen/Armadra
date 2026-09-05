@@ -41,10 +41,10 @@ describe("createAssetStore", () => {
     error.mockReset();
   });
 
-  it("上传后回 Runtime URL，并把工作区相对路径写进 meta.aicc.path", async () => {
+  it("上传后回 Runtime URL，并把工作区相对路径写进 meta.armadra.path", async () => {
     uploadAsset.mockResolvedValue({
       id: "0a1bf7.png",
-      path: ".aicc/assets/0a1bf7.png",
+      path: ".armadra/assets/0a1bf7.png",
       url: "/api/workspaces/w1/assets/0a1bf7.png",
       mimeType: "image/png",
       bytes: 12,
@@ -57,7 +57,7 @@ describe("createAssetStore", () => {
     expect(result.src).toBe(
       "http://127.0.0.1:43120/api/workspaces/w1/assets/0a1bf7.png",
     );
-    expect(result.meta).toEqual({ aicc: { path: ".aicc/assets/0a1bf7.png" } });
+    expect(result.meta).toEqual({ armadra: { path: ".armadra/assets/0a1bf7.png" } });
   });
 
   it("超过 8 MiB 时 toast 并拒绝，不发请求", async () => {

@@ -143,7 +143,7 @@ export const writeFileResponseSchema = z.object({
 
 /* ---------------------------------- terminals ---------------------------- */
 
-/** Agent block on `POST /api/terminals`; drives the injected `AICC_*` env. */
+/** Agent block on `POST /api/terminals`; drives the injected `ARMADRA_*` env. */
 export const createTerminalAgentSchema = z.object({
   id: agentIdSchema,
   accountId: z.string().max(120).optional(),
@@ -433,7 +433,7 @@ export const contextLinkSchema = z.object({
 
 /**
  * One row of `agent_deliveries` — `GET /api/workspaces/{id}/deliveries`.
- * The board log (`<workspace>/.aicc/board-log.jsonl`) carries the same fields;
+ * The board log (`<workspace>/.armadra/board-log.jsonl`) carries the same fields;
  * neither of them ever records the message body, only its length.
  */
 export const agentDeliverySchema = z.object({
@@ -469,7 +469,7 @@ export const controlConfirmResponseSchema = z.object({
  * Whatever is being exported — ink, a geo shape or a whole frame — only exists
  * as vectors inside the browser, so the web app is the only party that can
  * rasterise it. It uploads a `data:image/png;base64,…` URL and the runtime
- * drops the bytes into `<workspace>/.aicc/exports/<exportId>.png`, where a
+ * drops the bytes into `<workspace>/.armadra/exports/<exportId>.png`, where a
  * linked agent reads them with its own file tools. The id only has to be a
  * uuid: it is not looked up as a node, which is what lets a whiteboard shape
  * be exported at all.
@@ -530,7 +530,7 @@ export const uploadAssetRequestSchema = z.object({
 export const uploadAssetResponseSchema = z.object({
   /** `<sha256[..16]>.<ext>`; also the last segment of `url` and `path`. */
   id: z.string(),
-  /** Workspace-relative path (`.aicc/assets/<id>`) — what an agent is handed. */
+  /** Workspace-relative path (`.armadra/assets/<id>`) — what an agent is handed. */
   path: z.string(),
   /**
    * Runtime-**relative** URL path. The client prefixes its own runtime origin:

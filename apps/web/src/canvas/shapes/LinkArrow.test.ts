@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Editor, TLShapeId } from "tldraw";
 
-/** tldraw 在模块加载时就读 `matchMedia`（见 `AiccShapeUtil.test.ts`）。 */
+/** tldraw 在模块加载时就读 `matchMedia`（见 `ArmadraShapeUtil.test.ts`）。 */
 vi.hoisted(() => {
   if (typeof window !== "undefined" && !window.matchMedia) {
     Object.defineProperty(window, "matchMedia", {
@@ -42,7 +42,7 @@ vi.mock("../../nodes/registry", () => ({
 
 import { linkToEdge } from "../sync/derive";
 import { beginHandleLink, registerLinkArrow } from "./LinkArrow";
-import { toShapeId } from "./aicc-shape";
+import { toShapeId } from "./armadra-shape";
 import { LinkBindingUtil } from "./LinkBindingUtil";
 import { isLinkShape, type LinkShape } from "./link-shape";
 
@@ -148,7 +148,7 @@ class FakeEditor {
   addNode(id: string, nodeType: string, color = "#0a84ff"): void {
     this.shapes.set(toShapeId(id), {
       id: toShapeId(id),
-      type: "aicc",
+      type: "armadra",
       typeName: "shape",
       meta: {},
       props: { nodeType, color },
@@ -219,13 +219,13 @@ class FakeEditor {
     ) as unknown as LinkShape[];
   }
 
-  aicc(id: string): Rec {
+  armadra(id: string): Rec {
     return this.shapes.get(id) as Rec;
   }
 }
 
 function meta(shape: Rec | undefined): Rec {
-  return ((shape?.meta as Rec)?.aicc ?? {}) as Rec;
+  return ((shape?.meta as Rec)?.armadra ?? {}) as Rec;
 }
 
 /** 松手 = 一次交互结束；微任务 + 宏任务都跑完再断言。 */
@@ -302,7 +302,7 @@ describe("registerLinkArrow · 合法性", () => {
     expect(editor.links()).toHaveLength(0);
     expect(toast.error).toHaveBeenCalledTimes(1);
     expect(toast.error).toHaveBeenCalledWith("edge.selfLink", {
-      id: "aicc-edge-invalid",
+      id: "armadra-edge-invalid",
     });
     // 回滚而不是「删一次」：被拒的线不进撤销栈。
     expect(editor.bails).toBe(1);
@@ -326,7 +326,7 @@ describe("registerLinkArrow · 合法性", () => {
     // 重复的那条没有变成第二条线。
     expect(editor.links()).toHaveLength(1);
     expect(toast.error).toHaveBeenCalledWith("edge.duplicate", {
-      id: "aicc-edge-invalid",
+      id: "armadra-edge-invalid",
     });
   });
 
@@ -436,7 +436,7 @@ describe("registerLinkArrow · 把手与级联", () => {
     const util = new LinkBindingUtil(editor as unknown as Editor);
     util.onBeforeDeleteToShape({
       binding: editor.getBindingsFromShape(link.id)[1] as never,
-      shape: editor.aicc(toShapeId(B)) as never,
+      shape: editor.armadra(toShapeId(B)) as never,
     });
     expect(editor.links()).toHaveLength(0);
   });

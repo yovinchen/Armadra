@@ -5,7 +5,7 @@ import {
   WORKSPACE_COLORS,
   type WorkspacePermissions,
   type WorkspaceSummary,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 import { toast } from "sonner";
 import { runtimeApi } from "../api/client";
 import { pickDirectory } from "../platform";

@@ -13,10 +13,10 @@ vi.mock("../../nodes/registry", () => ({
   nodeMeta: () => nodeMetaStub,
 }));
 
-import type { CanvasEdge, CanvasNode } from "@ai-coding-canvas/shared";
+import type { CanvasEdge, CanvasNode } from "@armadra/shared";
 import type { TLFrameShape } from "tldraw";
 
-import type { AiccShape } from "../shapes/aicc-shape";
+import type { ArmadraShape } from "../shapes/armadra-shape";
 import type { LinkShape } from "../shapes/link-shape";
 import { edgeIdOfShape, linkToEdge, shapeToNode } from "./derive";
 import {
@@ -64,9 +64,9 @@ const edge: CanvasEdge = {
 describe("nodeToShape / shapeToNode", () => {
   it("普通节点往返恒等", () => {
     const before = node();
-    const shape = nodeToShape(before) as AiccShape;
+    const shape = nodeToShape(before) as ArmadraShape;
     expect(shape.id).toBe(`shape:${A}`);
-    expect(shape.type).toBe("aicc");
+    expect(shape.type).toBe("armadra");
     expect(shape.x).toBe(120);
     expect(shape.props.w).toBe(640);
     expect(shapeToNode(shape, BOARD, STAMP)).toEqual(before);
@@ -74,7 +74,7 @@ describe("nodeToShape / shapeToNode", () => {
 
   it("组员的父级是 frame 的 shape id，坐标保持相对", () => {
     const before = node({ parentId: GROUP, position: { x: 10, y: 20 } });
-    const shape = nodeToShape(before) as AiccShape;
+    const shape = nodeToShape(before) as ArmadraShape;
     expect(shape.parentId).toBe(`shape:${GROUP}`);
     expect(shape.x).toBe(10);
     expect(shapeToNode(shape, BOARD, STAMP)).toEqual(before);
@@ -86,7 +86,7 @@ describe("nodeToShape / shapeToNode", () => {
       expandedHeight: 440,
       size: { width: 640, height: 40 },
     });
-    const shape = nodeToShape(before) as AiccShape;
+    const shape = nodeToShape(before) as ArmadraShape;
     expect(shape.props.collapsed).toBe(true);
     expect(shapeToNode(shape, BOARD, STAMP)).toEqual(before);
   });
@@ -155,7 +155,7 @@ describe("edgeToLink / linkToEdge", () => {
       edgeIdOfShape({ id: "shape:kJ8dQ1", type: "arrow", meta: {} }),
     ).toBeNull();
     // 便签节点也不是边。
-    expect(edgeIdOfShape({ id: `shape:${A}`, type: "aicc" })).toBeNull();
+    expect(edgeIdOfShape({ id: `shape:${A}`, type: "armadra" })).toBeNull();
   });
 
   it("标签按内容那一端的类型走 i18n 键（§21）", () => {

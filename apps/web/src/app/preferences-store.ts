@@ -3,7 +3,7 @@ import { create } from "zustand";
 import {
   PERMISSION_MODES,
   type PermissionMode,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 import {
   DEFAULT_LOCALE,
   LOCALES,
@@ -30,58 +30,58 @@ export const THEME_PREFERENCES: readonly ThemePreference[] = [
   "system",
 ];
 
-const THEME_KEY = "aicc.theme";
-const LOCALE_KEY = "aicc.locale";
-const OPEN_WORKSPACES_KEY = "aicc.openWorkspaces";
+const THEME_KEY = "armadra.theme";
+const LOCALE_KEY = "armadra.locale";
+const OPEN_WORKSPACES_KEY = "armadra.openWorkspaces";
 /** 侧栏「项目」组里收起来的工作空间（§26；默认展开，所以存的是收起的那些）。 */
-const COLLAPSED_WORKSPACES_KEY = "aicc.collapsedWorkspaces";
+const COLLAPSED_WORKSPACES_KEY = "armadra.collapsedWorkspaces";
 /** 侧栏「置顶」组里的看板 id（§26）。 */
-const PINNED_BOARDS_KEY = "aicc.pinnedBoards";
-const DISABLED_AGENTS_KEY = "aicc.disabledAgents";
+const PINNED_BOARDS_KEY = "armadra.pinnedBoards";
+const DISABLED_AGENTS_KEY = "armadra.disabledAgents";
 /** 每个 Agent 的三态（默认 / 启用 / 禁用），§24.1 Agent 页。 */
-const AGENT_MODES_KEY = "aicc.agentModes";
+const AGENT_MODES_KEY = "armadra.agentModes";
 /** 内置 Agent 的自定义启动命令：`agentId → 程序路径`（§24.1 Agent 页）。 */
-const LAUNCH_OVERRIDES_KEY = "aicc.launchOverrides";
-const DEFAULT_AGENT_KEY = "aicc.defaultAgent";
-const PERMISSION_KEY = "aicc.permissionMode";
+const LAUNCH_OVERRIDES_KEY = "armadra.launchOverrides";
+const DEFAULT_AGENT_KEY = "armadra.defaultAgent";
+const PERMISSION_KEY = "armadra.permissionMode";
 /** v3 之前只有一个总开关；两个新键缺省时从它迁移。 */
-const NOTIFICATIONS_KEY = "aicc.notifications";
-const NOTIFY_DONE_KEY = "aicc.notifyDone";
-const NOTIFY_NEEDS_YOU_KEY = "aicc.notifyNeedsYou";
-const SIDEBAR_OPEN_KEY = "aicc.sidebarOpen";
-const SOUND_KEY = "aicc.sound";
-const SOUND_VOLUME_KEY = "aicc.soundVolume";
+const NOTIFICATIONS_KEY = "armadra.notifications";
+const NOTIFY_DONE_KEY = "armadra.notifyDone";
+const NOTIFY_NEEDS_YOU_KEY = "armadra.notifyNeedsYou";
+const SIDEBAR_OPEN_KEY = "armadra.sidebarOpen";
+const SOUND_KEY = "armadra.sound";
+const SOUND_VOLUME_KEY = "armadra.soundVolume";
 /** 打开时恢复上次的工作空间（§24.1 通用页）。 */
-const RESTORE_WORKSPACE_KEY = "aicc.restoreLastWorkspace";
+const RESTORE_WORKSPACE_KEY = "armadra.restoreLastWorkspace";
 /** 右下角用量胶囊（§19）。默认开；关掉后连轮询都不发。 */
-const SHOW_USAGE_KEY = "aicc.showUsage";
+const SHOW_USAGE_KEY = "armadra.showUsage";
 /** 节点颜色的表达方式（§24.3-3）：色点 + 1px 顶描边，或旧的 3px 色条。 */
-const NODE_COLOR_STYLE_KEY = "aicc.nodeColorStyle";
+const NODE_COLOR_STYLE_KEY = "armadra.nodeColorStyle";
 /** 终端外观（§18.3 最后一行「设置项」）。全部只存本地，Runtime 不关心。 */
-const TERM_FONT_FAMILY_KEY = "aicc.terminal.fontFamily";
-const TERM_FONT_SIZE_KEY = "aicc.terminal.fontSize";
-const TERM_LINE_HEIGHT_KEY = "aicc.terminal.lineHeight";
-const TERM_LETTER_SPACING_KEY = "aicc.terminal.letterSpacing";
-const TERM_CURSOR_STYLE_KEY = "aicc.terminal.cursorStyle";
-const TERM_CURSOR_BLINK_KEY = "aicc.terminal.cursorBlink";
-const TERM_OPTION_META_KEY = "aicc.terminal.macOptionIsMeta";
-const TERM_COPY_ON_SELECT_KEY = "aicc.terminal.copyOnSelect";
-const TERM_WEBGL_KEY = "aicc.terminal.webgl";
+const TERM_FONT_FAMILY_KEY = "armadra.terminal.fontFamily";
+const TERM_FONT_SIZE_KEY = "armadra.terminal.fontSize";
+const TERM_LINE_HEIGHT_KEY = "armadra.terminal.lineHeight";
+const TERM_LETTER_SPACING_KEY = "armadra.terminal.letterSpacing";
+const TERM_CURSOR_STYLE_KEY = "armadra.terminal.cursorStyle";
+const TERM_CURSOR_BLINK_KEY = "armadra.terminal.cursorBlink";
+const TERM_OPTION_META_KEY = "armadra.terminal.macOptionIsMeta";
+const TERM_COPY_ON_SELECT_KEY = "armadra.terminal.copyOnSelect";
+const TERM_WEBGL_KEY = "armadra.terminal.webgl";
 /** 白板（tldraw 原生配置）。全部只存本地，Runtime 不关心。 */
-const WB_BACKGROUND_KEY = "aicc.whiteboard.background";
-const WB_GRID_KEY = "aicc.whiteboard.grid";
-const WB_GRID_SIZE_KEY = "aicc.whiteboard.gridSize";
-const WB_SNAP_KEY = "aicc.whiteboard.snap";
-const WB_DYNAMIC_SIZE_KEY = "aicc.whiteboard.dynamicSize";
-const WB_ANIMATION_KEY = "aicc.whiteboard.animation";
-const WB_STYLE_KEY = "aicc.whiteboard.style";
-const WB_COLOR_KEY = "aicc.whiteboard.defaultColor";
-const WB_SIZE_KEY = "aicc.whiteboard.defaultSize";
+const WB_BACKGROUND_KEY = "armadra.whiteboard.background";
+const WB_GRID_KEY = "armadra.whiteboard.grid";
+const WB_GRID_SIZE_KEY = "armadra.whiteboard.gridSize";
+const WB_SNAP_KEY = "armadra.whiteboard.snap";
+const WB_DYNAMIC_SIZE_KEY = "armadra.whiteboard.dynamicSize";
+const WB_ANIMATION_KEY = "armadra.whiteboard.animation";
+const WB_STYLE_KEY = "armadra.whiteboard.style";
+const WB_COLOR_KEY = "armadra.whiteboard.defaultColor";
+const WB_SIZE_KEY = "armadra.whiteboard.defaultSize";
 /** 设置页上次停在的分区（§24.1）；⌘, 直接回到那一页。 */
-const LAST_SETTINGS_SECTION_KEY = "aicc.settingsSection";
+const LAST_SETTINGS_SECTION_KEY = "armadra.settingsSection";
 /** 上次打开的工作空间 / 看板；启动时用来跳过启动页。 */
-export const LAST_WORKSPACE_KEY = "aicc.workspace";
-export const LAST_BOARD_KEY = "aicc.board";
+export const LAST_WORKSPACE_KEY = "armadra.workspace";
+export const LAST_BOARD_KEY = "armadra.board";
 
 function readStored(key: string): string | null {
   try {

@@ -120,17 +120,17 @@ describe("shouldShowStylePanel", () => {
   });
 
   it("选中的全是节点 → 隐藏（节点没有 tldraw 样式）", () => {
-    expect(shouldShowStylePanel("select", ["aicc", "aicc"])).toBe(false);
+    expect(shouldShowStylePanel("select", ["armadra", "armadra"])).toBe(false);
   });
 
   it("选中项里有白板 shape → 显示，混合多选也显示", () => {
     expect(shouldShowStylePanel("select", ["geo"])).toBe(true);
-    expect(shouldShowStylePanel("select", ["aicc", "arrow"])).toBe(true);
+    expect(shouldShowStylePanel("select", ["armadra", "arrow"])).toBe(true);
     expect(shouldShowStylePanel("select", ["frame"])).toBe(true);
   });
 
-  it("isWhiteboardShapeType 只把 `aicc` 排除在外", () => {
-    expect(isWhiteboardShapeType("aicc")).toBe(false);
+  it("isWhiteboardShapeType 只把 `armadra` 排除在外", () => {
+    expect(isWhiteboardShapeType("armadra")).toBe(false);
     expect(isWhiteboardShapeType("draw")).toBe(true);
     expect(isWhiteboardShapeType("frame")).toBe(true);
   });
@@ -153,7 +153,7 @@ describe("splitSelectionForDelete", () => {
   it("节点 / 边 / 白板 shape 各归各的堆", () => {
     const split = splitSelectionForDelete(
       [
-        info({ id: `shape:${NODE}`, type: "aicc", nodeId: NODE }),
+        info({ id: `shape:${NODE}`, type: "armadra", nodeId: NODE }),
         info({ id: `shape:${EDGE}`, type: "arrow", edgeId: EDGE }),
         info({ id: "shape:abc123", type: "geo" }),
       ],
@@ -198,7 +198,7 @@ describe("splitSelectionForDelete", () => {
       [
         info({
           id: "shape:55555555-5555-4555-8555-555555555555",
-          type: "aicc",
+          type: "armadra",
           nodeId: "55555555-5555-4555-8555-555555555555",
         }),
       ],
@@ -211,7 +211,7 @@ describe("splitSelectionForDelete", () => {
   it("节点 + 白板 shape 混合多选时两边都删", () => {
     const split = splitSelectionForDelete(
       [
-        info({ id: `shape:${NODE}`, type: "aicc", nodeId: NODE }),
+        info({ id: `shape:${NODE}`, type: "armadra", nodeId: NODE }),
         info({ id: "shape:draw1", type: "draw" }),
         info({ id: "shape:frame1", type: "frame" }),
       ],

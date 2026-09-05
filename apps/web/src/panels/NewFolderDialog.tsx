@@ -4,7 +4,7 @@ import { FolderOpen } from "lucide-react";
 import {
   WORKSPACE_COLORS,
   type WorkspaceSummary,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 import { toast } from "sonner";
 import { runtimeApi } from "../api/client";
 import { isTauri, pickDirectory } from "../platform";

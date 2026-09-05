@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { ContextLink } from "@ai-coding-canvas/shared";
+import type { ContextLink } from "@armadra/shared";
 import {
   renderPlaintextFromRichText,
   type Editor,
@@ -13,13 +13,13 @@ import { t } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
 import { assetPath } from "./assets";
 import { useEditorHandle } from "./editor-context";
-import { isDocumentShapeId, isUuid, toNodeId } from "./shapes/aicc-shape";
-import { arrowAiccMeta } from "./sync/derive";
+import { isDocumentShapeId, isUuid, toNodeId } from "./shapes/armadra-shape";
+import { arrowArmadraMeta } from "./sync/derive";
 
 /**
  * 内容链接：白板上的图形连到节点（tldraw 计划 §6.3）。
  *
- * 一条 tldraw `arrow` 一端绑到节点 shape（`aicc` / 作为分组的 `frame`）、另一端
+ * 一条 tldraw `arrow` 一端绑到节点 shape（`armadra` / 作为分组的 `frame`）、另一端
  * 绑到白板 shape（文字 / 形状 / 手绘 / 图片 / 直线 / 高亮 / 另一个画框）时，它不是
  * 一条 `edges` 行（那种两端都是节点，`shapes/LinkArrow.ts` 会换成 `link` shape），
  * 而是**内容链接**：节点侧的 Agent 能把那个图形当资料读。
@@ -30,16 +30,16 @@ import { arrowAiccMeta } from "./sync/derive";
  * | --- | --- |
  * | `text` | `text`（富文本取纯文本），不导出 PNG |
  * | `geo` 带文字 | `text` + `pngPath` |
- * | `image` | `pngPath` = 资产的 `meta.aicc.path`（文件已经在工作区里，不重复导出） |
+ * | `image` | `pngPath` = 资产的 `meta.armadra.path`（文件已经在工作区里，不重复导出） |
  * | `draw` / `line` / `highlight` / 无文字的 `geo` | `pngPath`（栅格化后上传） |
  * | `frame` | `pngPath` + 框内所有文字拼成的 `text` |
  *
- * **稳定 uuid 记在 `arrow.meta.aicc.contentId`**，不是从 shape id 派生
+ * **稳定 uuid 记在 `arrow.meta.armadra.contentId`**，不是从 shape id 派生
  * （uuid v5）。两条理由：
  *
- *  1. 前端没有 sha-1，uuid v5 得自己实现一份；而 arrow 本来就要写 `meta.aicc`
+ *  1. 前端没有 sha-1，uuid v5 得自己实现一份；而 arrow 本来就要写 `meta.armadra`
  *     （方向与颜色的 `styled` 标记），多一个字段是零成本。
- *  2. 导出路径是 `.aicc/exports/<uuid>.png`。id 跟着**这条连线**走时，用户把线
+ *  2. 导出路径是 `.armadra/exports/<uuid>.png`。id 跟着**这条连线**走时，用户把线
  *     改指到另一个图形只会覆盖同一个文件；跟着 shape id 走则每换一次目标就在
  *     工作区里留下一个没人再读的 PNG。
  */
@@ -84,10 +84,10 @@ interface ShapeLike {
   meta?: Record<string, unknown>;
 }
 
-/** 这个 shape 是一个节点吗（`aicc`，或作为分组的 `frame`）？ */
+/** 这个 shape 是一个节点吗（`armadra`，或作为分组的 `frame`）？ */
 export function isNodeShapeRecord(shape: ShapeLike | undefined): boolean {
   if (!shape) return false;
-  if (shape.type === "aicc") return true;
+  if (shape.type === "armadra") return true;
   return shape.type === "frame" && isDocumentShapeId(shape.id);
 }
 
@@ -147,7 +147,7 @@ export function contentArrowEnds(
 export function contentIdOf(arrow: {
   meta?: Record<string, unknown>;
 }): string | null {
-  const id = arrowAiccMeta(arrow).contentId;
+  const id = arrowArmadraMeta(arrow).contentId;
   return typeof id === "string" && isUuid(id) ? id : null;
 }
 
@@ -155,7 +155,7 @@ export function contentIdOf(arrow: {
  * 取（必要时生成）这条箭头的内容 id。
  *
  * 生成只发生一次：之后它跟着 arrow 的 `meta` 一起进白板快照，刷新往返恒等，
- * `.aicc/exports/<id>.png` 也就一直是同一个文件。写 meta 不进撤销栈——它是
+ * `.armadra/exports/<id>.png` 也就一直是同一个文件。写 meta 不进撤销栈——它是
  * 记账，不是用户的一步操作。
  */
 export function ensureContentId(editor: Editor, arrow: ShapeLike): string {
@@ -167,7 +167,7 @@ export function ensureContentId(editor: Editor, arrow: ShapeLike): string {
       editor.updateShape({
         id: arrow.id as TLShapeId,
         type: arrow.type,
-        meta: { ...arrow.meta, aicc: { ...arrowAiccMeta(arrow), contentId } },
+        meta: { ...arrow.meta, armadra: { ...arrowArmadraMeta(arrow), contentId } },
       } as never);
     },
     { history: "ignore" },
@@ -295,7 +295,7 @@ export interface ResolvedContent {
  * 一个白板 shape → 链接文档里的那一条。
  *
  * 图片直接给资产文件的工作区相对路径（Phase 3 的 `TLAssetStore` 已经把字节落到
- * `.aicc/assets/<hash>.<ext>` 了），**不重复导出**；文字不需要图；其余栅格化。
+ * `.armadra/assets/<hash>.<ext>` 了），**不重复导出**；文字不需要图；其余栅格化。
  */
 export async function resolveContent(
   editor: Editor,

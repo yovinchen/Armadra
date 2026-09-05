@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentInfo, SshHost, Workspace } from "@ai-coding-canvas/shared";
+import type { AgentInfo, SshHost, Workspace } from "@armadra/shared";
 import { buildAddMenu, sshMenuItems, type AddMenuContext } from "./add-menu";
 import { clearCanvasCommands, registerCanvasCommand } from "../commands";
 import { useCanvasStore } from "../../store/canvas-store";

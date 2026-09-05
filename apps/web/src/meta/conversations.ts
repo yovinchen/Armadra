@@ -6,7 +6,7 @@ import {
   conversationsResponseSchema,
   suggestTitleResponseSchema,
   type Conversation,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 
 import { RUNTIME_URL, runtimeApi } from "../api/client";
 

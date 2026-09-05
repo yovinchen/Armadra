@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { FileEntry, GitFileStatus } from "@ai-coding-canvas/shared";
+import type { FileEntry, GitFileStatus } from "@armadra/shared";
 import { ChevronRight, File, Folder } from "lucide-react";
 
 import { Badge } from "@/ui/badge";

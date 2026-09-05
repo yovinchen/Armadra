@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { CanvasNode } from "@ai-coding-canvas/shared";
+import type { CanvasNode } from "@armadra/shared";
 
 const store = vi.hoisted(() => ({
   updateNodeData: vi.fn(),

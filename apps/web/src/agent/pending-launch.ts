@@ -5,7 +5,7 @@ import type {
   AgentStatus,
   CanvasNode,
   PendingLaunch,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 
 import { useCanvasStore } from "../store/canvas-store";
 import { useAgentStatusStore } from "./status-store";

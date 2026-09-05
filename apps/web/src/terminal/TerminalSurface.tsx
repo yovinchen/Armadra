@@ -3,7 +3,7 @@ import { Terminal, type ITerminalOptions } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import type { SearchAddon } from "@xterm/addon-search";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
-import type { TerminalNodeData, TerminateMode } from "@ai-coding-canvas/shared";
+import type { TerminalNodeData, TerminateMode } from "@armadra/shared";
 
 import { runtimeApi, terminalWebSocketUrl } from "@/api/client";
 import {

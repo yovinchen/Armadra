@@ -4,7 +4,7 @@
  * 抽屉和会话侧栏都在画布之外，没有鼠标位置可用，所以统一按当前视口
  * 换算画布坐标；画布自己的右键菜单则用鼠标点。
  */
-import type { Position, Viewport } from "@ai-coding-canvas/shared";
+import type { Position, Viewport } from "@armadra/shared";
 
 import { screenToPage } from "../canvas/editor-context";
 import { useCanvasStore } from "../store/canvas-store";

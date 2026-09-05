@@ -65,7 +65,7 @@ import {
   type TerminateMode,
   type UpdateBoardRequest,
   type UpdateWorkspaceRequest,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 import { z } from "zod";
 
 import { t } from "../app/preferences-store";
@@ -200,7 +200,7 @@ export const runtimeSettingsSchema = z.looseObject({
   hooks: z.looseObject({ replyApprovals: z.boolean().optional() }).optional(),
   /** `usage.enabled`（§19）：关掉后 Runtime 不再向 Claude / Codex 取用量。 */
   usage: z.looseObject({ enabled: z.boolean().optional() }).optional(),
-  /** `.aicc` 日志保留天数；`0` = 永久（§24.1 数据页）。 */
+  /** `.armadra` 日志保留天数；`0` = 永久（§24.1 数据页）。 */
   logs: z
     .looseObject({ retentionDays: z.number().int().nonnegative().optional() })
     .optional(),
@@ -495,7 +495,7 @@ export const runtimeApi = {
   /**
    * 白板导出（tldraw 计划 §6.3）。导出的可以是任意 tldraw 图形——墨迹、几何
    * 图形、整个 frame——它们只在浏览器的 store 里存在，所以由前端栅格化后上传，
-   * Runtime 落盘到 `.aicc/exports/<uuid>.png`。`uuid` 不必对应任何节点。
+   * Runtime 落盘到 `.armadra/exports/<uuid>.png`。`uuid` 不必对应任何节点。
    * 返回的 `relativePath` 就是 `ContextLink.content.pngPath` 要填的值。
    */
   exportPng: (workspaceId: string, exportId: string, dataUrl: string) =>

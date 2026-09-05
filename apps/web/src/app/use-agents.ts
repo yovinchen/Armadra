@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { AgentInfo } from "@ai-coding-canvas/shared";
+import type { AgentInfo } from "@armadra/shared";
 import { runtimeApi } from "../api/client";
 import { setAgentRegistry } from "../agent/launch";
 import { agentIsEnabled, usePreferencesStore } from "./preferences-store";

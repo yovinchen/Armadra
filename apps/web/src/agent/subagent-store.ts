@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
-import type { AgentEvent, WorkspaceEvent } from "@ai-coding-canvas/shared";
+import type { AgentEvent, WorkspaceEvent } from "@armadra/shared";
 
 import { t } from "../app/preferences-store";
 import { onWorkspaceEvent } from "../api/events";

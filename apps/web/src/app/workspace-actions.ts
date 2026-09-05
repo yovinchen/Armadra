@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Workspace } from "@ai-coding-canvas/shared";
+import type { Workspace } from "@armadra/shared";
 import { runtimeApi } from "../api/client";
 import { useCanvasStore } from "../store/canvas-store";
 import {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NODE_TYPES, DEFAULT_NODE_COLOR } from "@ai-coding-canvas/shared";
+import { NODE_TYPES, DEFAULT_NODE_COLOR } from "@armadra/shared";
 
 import { t } from "@/app/preferences-store";
 import {

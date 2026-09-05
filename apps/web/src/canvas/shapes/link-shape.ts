@@ -1,7 +1,7 @@
-import type { CanvasEdgeKind } from "@ai-coding-canvas/shared";
+import type { CanvasEdgeKind } from "@armadra/shared";
 import type { TLBinding, TLBindingId, TLShape, TLShapeId } from "tldraw";
 
-import { isUuid, toNodeId } from "./aicc-shape";
+import { isUuid, toNodeId } from "./armadra-shape";
 
 /**
  * 上下文链接的自定义 shape（tldraw 计划 §4.3，Phase 3 归属 link-shape）。

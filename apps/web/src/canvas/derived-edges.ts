@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { CanvasNode } from "@ai-coding-canvas/shared";
+import type { CanvasNode } from "@armadra/shared";
 
 import { agentColorVar } from "@/agent/launch";
 import { useLaunchedAfter } from "@/agent/pending-launch";

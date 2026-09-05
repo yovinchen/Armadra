@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentStatus } from "@ai-coding-canvas/shared";
+import type { AgentStatus } from "@armadra/shared";
 
 import {
   NOTIFY_THROTTLE_MS,

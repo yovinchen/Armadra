@@ -1,4 +1,4 @@
-import type { Position } from "@ai-coding-canvas/shared";
+import type { Position } from "@armadra/shared";
 import {
   Polyline2d,
   SVGContainer,
@@ -18,8 +18,8 @@ import {
 import { useT } from "@/app/preferences-store";
 import type { Box } from "../geometry";
 import { edgeArrowheads, edgeLabelKey, fromTldrawColor } from "../sync/project";
-import type { AiccShape } from "./aicc-shape";
-import { isDocumentShapeId } from "./aicc-shape";
+import type { ArmadraShape } from "./armadra-shape";
+import { isDocumentShapeId } from "./armadra-shape";
 import type { LinkProps, LinkShape } from "./link-shape";
 import { linkCurve, sampleCurve, type LinkCurve } from "./link-path";
 
@@ -72,13 +72,13 @@ function endVisual(editor: Editor, id: string): LinkEndVisual | null {
     width: bounds.width,
     height: bounds.height,
   };
-  if (shape.type === "aicc") {
-    const props = (shape as AiccShape).props;
+  if (shape.type === "armadra") {
+    const props = (shape as ArmadraShape).props;
     return { box, type: props.nodeType, color: props.color };
   }
   if (shape.type === "frame" && isDocumentShapeId(shape.id)) {
     const frame = shape as TLFrameShape;
-    const meta = (frame.meta.aicc ?? {}) as { color?: string };
+    const meta = (frame.meta.armadra ?? {}) as { color?: string };
     return {
       box,
       type: "group",
@@ -142,18 +142,18 @@ function LinkShapeContent({ shape }: { shape: LinkShape }) {
   const t = useT();
 
   const view = useValue(
-    "aicc link view",
+    "armadra link view",
     () => linkView(editor, shape),
     [editor, shape],
   );
   const selected = useValue(
-    "aicc link selected",
+    "armadra link selected",
     () => editor.getSelectedShapeIds().includes(shape.id),
     [editor, shape.id],
   );
   // 缩得太小时标签只剩糊成一团的墨点（§3.3）。
   const showLabel = useValue(
-    "aicc link zoom",
+    "armadra link zoom",
     () => editor.getZoomLevel() >= LABEL_MIN_ZOOM,
     [editor],
   );

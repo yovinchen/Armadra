@@ -1,4 +1,4 @@
-import { DEFAULT_VIEWPORT, type Viewport } from "@ai-coding-canvas/shared";
+import { DEFAULT_VIEWPORT, type Viewport } from "@armadra/shared";
 
 /**
  * 打开看板时的视口（§20「打开比例」）。

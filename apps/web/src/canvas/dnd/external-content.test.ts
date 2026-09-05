@@ -134,16 +134,16 @@ describe("资产 meta", () => {
     expect(megabytes(8 * 1024 * 1024)).toBe("8");
   });
 
-  it("assetPath 读 meta.aicc.path", () => {
-    expect(assetPath({ meta: { aicc: { path: ".aicc/assets/ab.png" } } })).toBe(
-      ".aicc/assets/ab.png",
+  it("assetPath 读 meta.armadra.path", () => {
+    expect(assetPath({ meta: { armadra: { path: ".armadra/assets/ab.png" } } })).toBe(
+      ".armadra/assets/ab.png",
     );
   });
 
-  it("旧资产（没有 meta.aicc）回 null", () => {
+  it("旧资产（没有 meta.armadra）回 null", () => {
     expect(assetPath({ meta: {} })).toBeNull();
-    expect(assetPath({ meta: { aicc: {} } })).toBeNull();
-    expect(assetPath({ meta: { aicc: "nope" } })).toBeNull();
+    expect(assetPath({ meta: { armadra: {} } })).toBeNull();
+    expect(assetPath({ meta: { armadra: "nope" } })).toBeNull();
     expect(assetPath(undefined)).toBeNull();
   });
 });

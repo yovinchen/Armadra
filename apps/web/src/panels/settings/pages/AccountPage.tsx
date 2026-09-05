@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
-import type { UsageProvider, UsageWindow } from "@ai-coding-canvas/shared";
+import type { UsageProvider, UsageWindow } from "@armadra/shared";
 
 import { runtimeApi } from "../../../api/client";
 import { useT, type Translate } from "../../../app/preferences-store";

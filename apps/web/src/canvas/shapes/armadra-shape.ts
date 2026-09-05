@@ -1,4 +1,4 @@
-import type { CanvasNode, CanvasNodeData } from "@ai-coding-canvas/shared";
+import type { CanvasNode, CanvasNodeData } from "@armadra/shared";
 import type { TLShape, TLShapeId } from "tldraw";
 
 /**
@@ -11,12 +11,12 @@ import type { TLShape, TLShapeId } from "tldraw";
  * 分组不在这里：分组是 tldraw 原生 `frame`（§4.2），所以 `nodeType` 是七种
  * 节点类型里除分组以外的六种。
  */
-export type AiccNodeType = Exclude<CanvasNode["type"], "group">;
+export type ArmadraNodeType = Exclude<CanvasNode["type"], "group">;
 
-export interface AiccProps {
+export interface ArmadraProps {
   w: number;
   h: number;
-  nodeType: AiccNodeType;
+  nodeType: ArmadraNodeType;
   title: string;
   color: string;
   collapsed: boolean;
@@ -32,11 +32,11 @@ export interface AiccProps {
 /** tldraw 5.4 的自定义 shape 走全局类型注册（Phase 0 结论 4）。 */
 declare module "@tldraw/tlschema" {
   interface TLGlobalShapePropsMap {
-    aicc: AiccProps;
+    armadra: ArmadraProps;
   }
 }
 
-export type AiccShape = TLShape<"aicc">;
+export type ArmadraShape = TLShape<"armadra">;
 
 /* ------------------------------- id 映射 ---------------------------------- */
 

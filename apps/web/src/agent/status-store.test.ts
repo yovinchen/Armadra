@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentStatus, SessionSummary } from "@ai-coding-canvas/shared";
+import type { AgentStatus, SessionSummary } from "@armadra/shared";
 
 import {
   APPROVAL_TTL_MS,

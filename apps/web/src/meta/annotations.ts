@@ -1,4 +1,4 @@
-import type { CanvasNode } from "@ai-coding-canvas/shared";
+import type { CanvasNode } from "@armadra/shared";
 import { toast } from "sonner";
 
 import { t } from "../app/preferences-store";
@@ -16,7 +16,7 @@ import { suggestTitle } from "./conversations";
 
 export type NodeAnnotationKind = "note" | "labels";
 
-export const NODE_ANNOTATION_EVENT = "aicc:node-annotation";
+export const NODE_ANNOTATION_EVENT = "armadra:node-annotation";
 
 export interface NodeAnnotationDetail {
   nodeId: string;

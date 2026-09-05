@@ -1,4 +1,4 @@
-import type { CanvasNode } from "@ai-coding-canvas/shared";
+import type { CanvasNode } from "@armadra/shared";
 
 /**
  * 节点元数据的纯数据层：标签与批注（计划书 §17 头部补齐）。

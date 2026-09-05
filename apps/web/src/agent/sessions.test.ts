@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AgentStatus, SessionSummary } from "@ai-coding-canvas/shared";
+import type { AgentStatus, SessionSummary } from "@armadra/shared";
 
 import {
   basename,

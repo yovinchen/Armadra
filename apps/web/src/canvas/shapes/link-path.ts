@@ -1,4 +1,4 @@
-import type { Position } from "@ai-coding-canvas/shared";
+import type { Position } from "@armadra/shared";
 
 import {
   bezierControls,

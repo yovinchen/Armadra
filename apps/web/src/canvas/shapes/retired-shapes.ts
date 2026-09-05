@@ -3,7 +3,7 @@ import type { Editor, TLShape, TLShapeId } from "tldraw";
 /**
  * 停用 tldraw 的四种原生 shape（计划 §4.5）。
  *
- * - `note`：便签是我们的 `aicc:sticky`——Agent 的控制动词 `sticky` 要写
+ * - `note`：便签是我们的 `armadra:sticky`——Agent 的控制动词 `sticky` 要写
  *   `nodes` 表，而 Runtime 不解析白板快照。两种便签并存只会让人分不清
  *   哪个 Agent 读得到。
  * - `bookmark` / `embed`：需要抓取远端网页的 og 信息，离线的桌面壳里只会

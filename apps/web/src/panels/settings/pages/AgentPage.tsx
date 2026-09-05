@@ -7,7 +7,7 @@ import {
   type BuiltinAgentId,
   type CustomAgent,
   type PermissionMode,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 import { toast } from "sonner";
 
 import { useAgentsQuery } from "../../../app/use-agents";

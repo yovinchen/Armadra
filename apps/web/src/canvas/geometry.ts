@@ -1,4 +1,4 @@
-import type { CanvasNode, Position } from "@ai-coding-canvas/shared";
+import type { CanvasNode, Position } from "@armadra/shared";
 import { absolutePosition } from "../store/canvas-store";
 import { defaultNodeSize } from "../store/defaults";
 

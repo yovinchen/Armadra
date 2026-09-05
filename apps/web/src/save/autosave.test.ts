@@ -4,7 +4,7 @@ import {
   type Board,
   type BoardDocument,
   type Workspace,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 
 /** store → defaults → nodes/registry 会把整棵渲染树拉进来，这里只要尺寸表。 */
 const nodeMetaStub = {

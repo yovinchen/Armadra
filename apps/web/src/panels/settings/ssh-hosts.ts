@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { SshHost } from "@ai-coding-canvas/shared";
+import type { SshHost } from "@armadra/shared";
 
 import { runtimeApi } from "../../api/client";
 

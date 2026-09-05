@@ -26,7 +26,7 @@ export interface MinimapPoint {
 
 /** 画布上要画的一块矩形；`glow` 只有节点有。 */
 export interface MinimapItem {
-  /** 节点 id（`aicc` shape）或 shape id（白板内容）。 */
+  /** 节点 id（`armadra` shape）或 shape id（白板内容）。 */
   id: string;
   rect: MinimapRect;
   /** 节点色（`CanvasNode.color`）；白板 shape 没有。 */

@@ -1,4 +1,4 @@
-import type { BoardDocument } from "@ai-coding-canvas/shared";
+import type { BoardDocument } from "@armadra/shared";
 
 /**
  * 「这份文档已经在 editor 里了」的标记（tldraw 计划 §3 规则 1）。

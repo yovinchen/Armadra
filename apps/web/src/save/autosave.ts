@@ -3,7 +3,7 @@ import {
   MAX_WHITEBOARD_BYTES,
   type BoardDocument,
   type Viewport,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 import { isConflict, runtimeApi } from "../api/client";
 import { t } from "../app/preferences-store";
 import { getEditor } from "../canvas/editor-context";

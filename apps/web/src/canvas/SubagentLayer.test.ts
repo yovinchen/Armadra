@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CanvasNode } from "@ai-coding-canvas/shared";
+import type { CanvasNode } from "@armadra/shared";
 
 import { subagentNodeId, type SubagentCardModel } from "@/agent/subagent-store";
 import {

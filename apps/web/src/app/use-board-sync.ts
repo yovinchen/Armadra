@@ -25,7 +25,7 @@ export function useBoardSync() {
    * 上次打开的 id，在**任何 effect 跑之前**先抓进 ref。
    *
    * 这是「刷新后回到启动页」那个 bug 的根：挂载时 store 里还没有工作空间，
-   * 「记住当前工作空间」的 effect 先跑一步，把 `aicc.workspace` 抹成空；
+   * 「记住当前工作空间」的 effect 先跑一步，把 `armadra.workspace` 抹成空；
    * 等工作空间列表请求回来，恢复用的 effect 已经读不到 id 了。
    * 渲染期取值天然早于所有 effect，顺序问题就没了。
    */

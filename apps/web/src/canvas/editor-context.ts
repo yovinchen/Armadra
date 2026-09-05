@@ -1,6 +1,6 @@
 import * as React from "react";
 import type { Editor } from "tldraw";
-import type { Position } from "@ai-coding-canvas/shared";
+import type { Position } from "@armadra/shared";
 
 /**
  * 全局 editor 句柄（tldraw 计划 §9.1，归属 canvas）。
@@ -44,7 +44,7 @@ export function screenToPage(point: Position): Position {
 }
 
 /** 会话侧栏 / 命令面板点一行 → 画布居中到那个节点。 */
-export const CENTER_NODE_EVENT = "aicc:canvas:center-node";
+export const CENTER_NODE_EVENT = "armadra:canvas:center-node";
 
 export function requestCenterOnNode(nodeId: string): void {
   window.dispatchEvent(

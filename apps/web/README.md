@@ -5,8 +5,8 @@
 目标技术栈：React、TypeScript、Vite、React Flow、xterm.js、Monaco Editor、Zustand 和 TanStack Query。
 
 ```bash
-pnpm --filter @ai-coding-canvas/web dev
-pnpm --filter @ai-coding-canvas/web build
+pnpm --filter @armadra/web dev
+pnpm --filter @armadra/web build
 ```
 
 Runtime 默认地址为 `http://127.0.0.1:43120`，可用 `VITE_RUNTIME_URL` 覆盖。

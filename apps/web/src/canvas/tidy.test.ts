@@ -13,7 +13,7 @@ vi.mock("../nodes/registry", () => ({
   nodeMeta: () => nodeMetaStub,
 }));
 
-import type { CanvasEdge, CanvasNode } from "@ai-coding-canvas/shared";
+import type { CanvasEdge, CanvasNode } from "@armadra/shared";
 import { COLUMN_GAP, ROW_GAP, tidy, tidyPositions } from "./tidy";
 import { COLLAPSED_HEIGHT } from "../store/defaults";
 

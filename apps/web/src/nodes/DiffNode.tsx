@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { DiffScope, GitFileDiff } from "@ai-coding-canvas/shared";
+import type { DiffScope, GitFileDiff } from "@armadra/shared";
 import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 
 import { cn } from "@/lib/cn";

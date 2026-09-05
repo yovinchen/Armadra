@@ -14,7 +14,7 @@ import type {
   BoardDocument,
   SessionSummary,
   Workspace,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 
 import { useAgentStatusStore } from "../agent/status-store";
 import { useCanvasStore } from "../store/canvas-store";

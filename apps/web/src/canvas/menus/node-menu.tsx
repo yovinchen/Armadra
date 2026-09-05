@@ -11,7 +11,7 @@ import {
   Ungroup,
 } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
-import type { CanvasNode, CanvasNodeType } from "@ai-coding-canvas/shared";
+import type { CanvasNode, CanvasNodeType } from "@armadra/shared";
 import {
   ContextMenuItem,
   ContextMenuSeparator,

@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { CanvasNode } from "@ai-coding-canvas/shared";
+import type { CanvasNode } from "@armadra/shared";
 import {
   Check,
   ChevronDown,
@@ -214,7 +214,7 @@ export function NodeShell({
       style={collapsed ? { height: COLLAPSED_HEIGHT } : undefined}
     >
       {/* resize 把手由 tldraw 的选择框提供（`hideResizeHandles=false`），
-          最小尺寸在 `AiccShapeUtil.onResize` 里按 `NODE_META.minSize` 夹住。 */}
+          最小尺寸在 `ArmadraShapeUtil.onResize` 里按 `NODE_META.minSize` 夹住。 */}
       <div
         className={cn(
           "flex h-full w-full flex-col overflow-hidden rounded-[var(--r-card)]",

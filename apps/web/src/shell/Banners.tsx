@@ -8,7 +8,7 @@ import { Button } from "@/ui/button";
 import { IconButton } from "@/ui/icon-button";
 
 /** 保存失败时 Dock 的重试钮与通知条走同一个事件（App 监听后重新入队）。 */
-export const SAVE_RETRY_EVENT = "aicc:save-retry";
+export const SAVE_RETRY_EVENT = "armadra:save-retry";
 
 /**
  * 通知条堆栈（§3.1，`top:46` 居中）。

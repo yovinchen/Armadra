@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { BoardDocument, CanvasNode } from "@ai-coding-canvas/shared";
+import type { BoardDocument, CanvasNode } from "@armadra/shared";
 import {
   react,
   type Editor,
@@ -10,8 +10,8 @@ import {
 } from "tldraw";
 
 import { useCanvasStore } from "@/store/canvas-store";
-import type { AiccShape } from "../shapes/aicc-shape";
-import { isDocumentShapeId, toNodeId, toShapeId } from "../shapes/aicc-shape";
+import type { ArmadraShape } from "../shapes/armadra-shape";
+import { isDocumentShapeId, toNodeId, toShapeId } from "../shapes/armadra-shape";
 import type { LinkShape } from "../shapes/link-shape";
 import { isLinkShape } from "../shapes/link-shape";
 import { deriveEdges, deriveNodes } from "./derive";
@@ -63,8 +63,8 @@ export function resetStoreSync(): void {
 
 /* ------------------------------ 记录归属判定 ------------------------------- */
 
-function isNodeShape(shape: TLShape): shape is AiccShape | TLFrameShape {
-  if (shape.type === "aicc") return true;
+function isNodeShape(shape: TLShape): shape is ArmadraShape | TLFrameShape {
+  if (shape.type === "armadra") return true;
   return shape.type === "frame" && isDocumentShapeId(shape.id);
 }
 
@@ -82,7 +82,7 @@ function isDocumentRecord(record: TLRecord): boolean {
   }
   if (record.typeName !== "shape") return false;
   const shape = record as TLShape;
-  if (shape.type === "aicc" || shape.type === "link") return true;
+  if (shape.type === "armadra" || shape.type === "link") return true;
   return shape.type === "frame" && isDocumentShapeId(shape.id);
 }
 
@@ -121,7 +121,7 @@ function pull(editor: Editor, dirty: boolean, whiteboardTouched: boolean): void 
 
   const shapes = editor
     .getCurrentPageShapesSorted()
-    .filter(isNodeShape) as (AiccShape | TLFrameShape)[];
+    .filter(isNodeShape) as (ArmadraShape | TLFrameShape)[];
   const nodes = deriveNodes(shapes, boardId, document.nodes, stamp);
   const edges = deriveEdges(documentLinks(editor), boardId, document.edges);
 
@@ -335,7 +335,7 @@ export function useStoreSync(
     );
 
     // 选中态：editor → store。反向由 `canvas-store.selectNodes` 负责。
-    const offSelection = react("aicc selection", () => {
+    const offSelection = react("armadra selection", () => {
       const ids = editor
         .getSelectedShapeIds()
         .filter((id) => isDocumentShapeId(id))
@@ -343,7 +343,7 @@ export function useStoreSync(
       useCanvasStore.getState().selectNodes(ids);
     });
 
-    const offCamera = react("aicc camera", () => {
+    const offCamera = react("armadra camera", () => {
       const camera = editor.getCamera();
       callbacks.current.onCameraChange?.({
         x: camera.x,

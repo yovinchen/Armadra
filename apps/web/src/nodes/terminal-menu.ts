@@ -2,7 +2,7 @@ import { KeyRound, Recycle, RotateCcw, Tag } from "lucide-react";
 import {
   PERMISSION_MODES,
   type PermissionMode,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 
 import {
   registerNodeMenuItems,

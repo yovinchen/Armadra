@@ -7,7 +7,7 @@ import {
   type LaunchCommand,
   type PermissionMode,
   type TerminalAgent,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 
 import { t, usePreferencesStore } from "@/app/preferences-store";
 

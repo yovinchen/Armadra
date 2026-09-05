@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { AgentInfo } from "@ai-coding-canvas/shared";
+import type { AgentInfo } from "@armadra/shared";
 
 import {
   agentColor,

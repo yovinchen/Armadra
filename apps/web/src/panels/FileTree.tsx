@@ -15,7 +15,7 @@ import {
   Image as ImageIcon,
   RotateCw,
 } from "lucide-react";
-import type { FileEntry, GitFileStatus } from "@ai-coding-canvas/shared";
+import type { FileEntry, GitFileStatus } from "@armadra/shared";
 
 type DiffFileStatus = GitFileStatus["status"];
 

@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import type { Position } from "@ai-coding-canvas/shared";
+import type { Position } from "@armadra/shared";
 import { buildAddMenu, type AddMenuItem } from "../canvas/menus/add-menu";
 import { runCanvasCommand } from "../canvas/commands";
 import { screenToPage } from "../canvas/editor-context";
@@ -9,7 +9,7 @@ import { useCanvasStore } from "../store/canvas-store";
 import { useEnabledAgents } from "./use-agents";
 
 /** 源码控制抽屉监听它来触发提交（⌘⏎，§13.5）。 */
-export const SCM_COMMIT_EVENT = "aicc:scm-commit";
+export const SCM_COMMIT_EVENT = "armadra:scm-commit";
 
 export interface CommandDispatch {
   /** 执行一条命令；快捷键、命令面板、菜单三处共用。 */

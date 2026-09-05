@@ -3,7 +3,7 @@ import {
   ASSET_MIME_TYPES,
   type Position,
   type CanvasNodeType,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 import {
   createShapeId,
   defaultHandleExternalTextContent,
@@ -147,8 +147,8 @@ export function offsetBy(position: Position, index: number): Position {
  *
  * `getAssetForExternalContent` 会走 tldraw 默认的 file 资产处理器，它调
  * `editor.uploadAsset`，也就是我们挂在 `<Tldraw assets>` 上的
- * `createAssetStore`——字节最终落到 Runtime 的 `.aicc/assets/`，
- * 记录里只留 URL 与 `meta.aicc.path`。
+ * `createAssetStore`——字节最终落到 Runtime 的 `.armadra/assets/`，
+ * 记录里只留 URL 与 `meta.armadra.path`。
  */
 export async function createImageShapes(
   editor: Editor,
@@ -258,8 +258,8 @@ export async function addNodesForPaths(
  * 磁盘上的图片 → image shape（桌面端 OS 拖放专用）。
  *
  * webview 收不到 `DataTransfer`，壳里也没有 fs 插件，所以字节只能由 Runtime
- * 读：`importAsset` 把文件复制进 `.aicc/assets/`（内容寻址，同一张图只落一
- * 份），再取回来包成 `File` 交给 `createImageShapes`——这样尺寸、`meta.aicc.path`
+ * 读：`importAsset` 把文件复制进 `.armadra/assets/`（内容寻址，同一张图只落一
+ * 份），再取回来包成 `File` 交给 `createImageShapes`——这样尺寸、`meta.armadra.path`
  * 和浏览器那条路完全同规则。取回时的那次重传只在 loopback 上发生，重新上传
  * 的哈希相同，Runtime 认得出来不会再写盘。
  */

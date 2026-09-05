@@ -2,7 +2,7 @@ import type {
   CanvasNodeData,
   CanvasNodeType,
   Size,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 import { t } from "../app/preferences-store";
 import { nodeMeta } from "../nodes/registry";
 

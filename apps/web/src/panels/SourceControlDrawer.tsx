@@ -2,7 +2,7 @@
  * 源码控制抽屉（§3.6，⌘⇧G）。
  *
  * 460px 右侧抽屉：分支 + 变更列表 + 逐文件 暂存 / 取消暂存 / 打开差异 /
- * 回滚，底部提交框（⌘⏎ 由壳发 `aicc:scm-commit` 事件触发）。
+ * 回滚，底部提交框（⌘⏎ 由壳发 `armadra:scm-commit` 事件触发）。
  *
  * 列表来自 `gitStatus().files`：一个文件既可能在「已暂存」也可能在
  * 「变更」里（`XY` 两列都非空，例如暂存后又改了一次），两边都渲染一行，
@@ -20,7 +20,7 @@ import {
   Undo2,
   X,
 } from "lucide-react";
-import type { DiffScope, GitFileStatus } from "@ai-coding-canvas/shared";
+import type { DiffScope, GitFileStatus } from "@armadra/shared";
 
 type DiffFileStatus = GitFileStatus["status"];
 
@@ -54,7 +54,7 @@ const STATUS_COLOR: Record<DiffFileStatus, string> = {
 };
 
 /** 提交框的 ⌘⏎：壳的快捷键处理器发这个窗口事件，抽屉自己听。 */
-export const SCM_COMMIT_EVENT = "aicc:scm-commit";
+export const SCM_COMMIT_EVENT = "armadra:scm-commit";
 
 /**
  * `X` 列非空 → 已暂存，`Y` 列非空 → 工作区还有改动。两者都真时文件同时

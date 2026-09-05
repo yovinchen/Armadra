@@ -19,7 +19,7 @@ import type {
   AgentStatus,
   SessionSummary,
   WorkspaceEvent,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 
 import type { StatusTone } from "../ui/status-pill";
 import { runtimeApi } from "../api/client";
@@ -31,7 +31,7 @@ export const DONE_HOLDOFF_MS = 3_000;
 /**
  * 权限请求的本地过期时间（§5.5）。
  *
- * Runtime 侧的 hook 客户端在 `AICC_PERM_WAIT_SECS` 之后自己 fail-open，
+ * Runtime 侧的 hook 客户端在 `ARMADRA_PERM_WAIT_SECS` 之后自己 fail-open，
  * 之后既不会再来 `agent.approval`，也未必会来新的 `agent.status`。
  * 没有这个兜底，节点头部的「允许 / 拒绝」会一直挂着，点下去只会 404。
  */

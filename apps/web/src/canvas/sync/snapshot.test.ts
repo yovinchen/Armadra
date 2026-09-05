@@ -39,8 +39,8 @@ function snapshot(): TLStoreSnapshot {
     store: {
       "document:document": { id: "document:document", typeName: "document" },
       "page:page": { id: "page:page", typeName: "page", name: "Page" },
-      [NODE_A]: shape(NODE_A, "aicc"),
-      [NODE_B]: shape(NODE_B, "aicc", GROUP),
+      [NODE_A]: shape(NODE_A, "armadra"),
+      [NODE_B]: shape(NODE_B, "armadra", GROUP),
       [GROUP]: shape(GROUP, "frame"),
       [EDGE]: shape(EDGE, "arrow"),
       "binding:a": binding("binding:a", NODE_A, "start"),
@@ -131,7 +131,7 @@ describe("内容链接的箭头（一端节点、一端白板 shape）", () => {
       x: 0,
       y: 0,
       props: {},
-      meta: { aicc: { contentId: "019ff7d1-0d12-7421-833d-2c5e8d64ed09" } },
+      meta: { armadra: { contentId: "019ff7d1-0d12-7421-833d-2c5e8d64ed09" } },
     };
     store["binding:content-start"] = {
       id: "binding:content-start",
@@ -173,9 +173,9 @@ describe("内容链接的箭头（一端节点、一端白板 shape）", () => {
     // 它的 meta（稳定 uuid）也一起带走。
     const store = stripped.store as unknown as Record<
       string,
-      { meta?: { aicc?: { contentId?: string } } }
+      { meta?: { armadra?: { contentId?: string } } }
     >;
-    expect(store[CONTENT_ARROW]?.meta?.aicc?.contentId).toBe(
+    expect(store[CONTENT_ARROW]?.meta?.armadra?.contentId).toBe(
       "019ff7d1-0d12-7421-833d-2c5e8d64ed09",
     );
   });
@@ -284,7 +284,7 @@ function generate(random: () => number): Generated {
   const kept = new Set(["document:document", "page:page"]);
   const dropped = new Set<string>();
 
-  // 节点：`aicc` 与作为分组的 `frame`（id 一定是 `shape:<uuid>`）。
+  // 节点：`armadra` 与作为分组的 `frame`（id 一定是 `shape:<uuid>`）。
   const nodeIds: string[] = [];
   const frameIds: string[] = [];
   const count = 1 + Math.floor(random() * 5);
@@ -294,7 +294,7 @@ function generate(random: () => number): Generated {
     store[id] = {
       id,
       typeName: "shape",
-      type: frame ? "frame" : "aicc",
+      type: frame ? "frame" : "armadra",
       parentId: "page:page",
       props: {},
       meta: {},

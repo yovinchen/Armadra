@@ -1,6 +1,6 @@
 import * as React from "react";
 import { MessageSquare, Sparkles, X } from "lucide-react";
-import type { CanvasNode } from "@ai-coding-canvas/shared";
+import type { CanvasNode } from "@armadra/shared";
 
 import { useT } from "@/app/preferences-store";
 import { cn } from "@/lib/cn";

@@ -11,7 +11,7 @@ import type {
   AgentState,
   AgentStatus,
   SessionSummary,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 
 import { runtimeApi } from "../api/client";
 import { isAttention, useAgentStatusStore } from "./status-store";

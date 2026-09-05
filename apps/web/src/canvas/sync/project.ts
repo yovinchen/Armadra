@@ -1,4 +1,4 @@
-import type { CanvasEdge, CanvasNode } from "@ai-coding-canvas/shared";
+import type { CanvasEdge, CanvasNode } from "@armadra/shared";
 import {
   type IndexKey,
   type TLDefaultColorStyle,
@@ -9,8 +9,8 @@ import {
 } from "tldraw";
 
 import { defaultNodeSize } from "../../store/defaults";
-import type { AiccNodeType, AiccProps, AiccShape } from "../shapes/aicc-shape";
-import { toNodeId, toShapeId } from "../shapes/aicc-shape";
+import type { ArmadraNodeType, ArmadraProps, ArmadraShape } from "../shapes/armadra-shape";
+import { toNodeId, toShapeId } from "../shapes/armadra-shape";
 import type { LinkBinding, LinkShape } from "../shapes/link-shape";
 import { toLinkBindingId, toLinkShapeId } from "../shapes/link-shape";
 
@@ -22,7 +22,7 @@ import { toLinkBindingId, toLinkShapeId } from "../shapes/link-shape";
  *
  *  1. id 不查表：节点 `<uuid>` ↔ shape `shape:<uuid>`，边同理。
  *  2. 分组是 tldraw 原生 `frame`；`frame` 的 props 只有 `w/h/name/color`，
- *     装不下标签、批注、时间戳，所以这些放进 `meta.aicc`。
+ *     装不下标签、批注、时间戳，所以这些放进 `meta.armadra`。
  *  3. 坐标与文档完全一致：组员的 `x/y` 相对父 frame，顶层节点相对页面。
  */
 
@@ -43,7 +43,7 @@ export interface LinkProjection {
  * 节点色（十六进制）→ tldraw 颜色名。
  *
  * frame 的 `color` 只认颜色名，所以映射是有损的；原始十六进制同时写进
- * `meta.aicc.color`，反向派生优先读它，用户手改 frame 颜色时才退回名字。
+ * `meta.armadra.color`，反向派生优先读它，用户手改 frame 颜色时才退回名字。
  */
 const COLOR_NAMES: Record<string, TLDefaultColorStyle> = {
   "#0a84ff": "blue",
@@ -76,12 +76,12 @@ function parentOf(node: CanvasNode, pageId: TLParentId): TLParentId {
   return node.parentId ? toShapeId(node.parentId) : pageId;
 }
 
-/** 分组 → `frame`，其余 → `aicc`。 */
+/** 分组 → `frame`，其余 → `armadra`。 */
 export function nodeToShape(
   node: CanvasNode,
   pageId: TLParentId = DEFAULT_PAGE_ID,
   index: IndexKey = "a1" as IndexKey,
-): AiccShape | TLFrameShape {
+): ArmadraShape | TLFrameShape {
   const size = node.size ?? defaultNodeSize(node.type);
   const base = {
     id: toShapeId(node.id),
@@ -106,7 +106,7 @@ export function nodeToShape(
         color: toTldrawColor(node.color),
       },
       meta: {
-        aicc: {
+        armadra: {
           color: node.color,
           labels: [...(node.labels ?? [])],
           note: node.note ?? "",
@@ -117,10 +117,10 @@ export function nodeToShape(
     } as TLFrameShape;
   }
 
-  const props: AiccProps = {
+  const props: ArmadraProps = {
     w: size.width,
     h: size.height,
-    nodeType: node.type as AiccNodeType,
+    nodeType: node.type as ArmadraNodeType,
     title: node.title,
     color: node.color,
     collapsed: node.collapsed ?? false,
@@ -133,10 +133,10 @@ export function nodeToShape(
 
   return {
     ...base,
-    type: "aicc",
+    type: "armadra",
     props,
     meta: {},
-  } as AiccShape;
+  } as ArmadraShape;
 }
 
 /* -------------------------------- 边投影 ----------------------------------- */

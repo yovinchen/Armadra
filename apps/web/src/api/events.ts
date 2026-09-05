@@ -12,7 +12,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   workspaceEventSchema,
   type WorkspaceEvent,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 
 import { workspaceEventsUrl } from "./client";
 import { useAgentStatusStore } from "../agent/status-store";

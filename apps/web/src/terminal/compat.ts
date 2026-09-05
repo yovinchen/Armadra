@@ -191,7 +191,7 @@ export function titleIsAuto(
  * 于是 `shouldApplyOscTitle` 判成「用户改过名」，这个终端**从此再也不跟随
  * 标题**。localStorage 正好：按节点 id 存，只是一份提示，丢了最多退回旧行为。
  */
-const OSC_TITLE_KEY = "aicc.oscTitles";
+const OSC_TITLE_KEY = "armadra.oscTitles";
 
 function readOscTitles(): Map<string, string> {
   try {

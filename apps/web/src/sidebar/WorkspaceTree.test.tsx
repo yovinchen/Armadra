@@ -6,7 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { Workspace } from "@ai-coding-canvas/shared";
+import type { Workspace } from "@armadra/shared";
 
 const listWorkspaces = vi.fn();
 const createBoard = vi.fn();

@@ -83,7 +83,7 @@ describe("addNodeForPath", () => {
     setEditor(editor as never);
     importAsset.mockResolvedValue({
       id: "0011223344556677.png",
-      path: ".aicc/assets/0011223344556677.png",
+      path: ".armadra/assets/0011223344556677.png",
       url: "/api/workspaces/w1/assets/0011223344556677.png",
       mimeType: "image/png",
       bytes: 3,

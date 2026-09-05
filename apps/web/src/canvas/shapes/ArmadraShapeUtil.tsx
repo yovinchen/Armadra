@@ -10,7 +10,7 @@ import {
   type RecordProps,
   type TLResizeInfo,
 } from "tldraw";
-import type { CanvasNode } from "@ai-coding-canvas/shared";
+import type { CanvasNode } from "@armadra/shared";
 
 import {
   COLLAPSED_HEIGHT,
@@ -22,7 +22,7 @@ import {
 import { NodeShell } from "@/nodes/NodeShell";
 import { useCanvasNode, useCanvasStore } from "@/store/canvas-store";
 
-import { toNodeId, type AiccProps, type AiccShape } from "./aicc-shape";
+import { toNodeId, type ArmadraProps, type ArmadraShape } from "./armadra-shape";
 
 /**
  * 节点 shape（tldraw 计划 §4.1，归属 nodes）。
@@ -35,7 +35,7 @@ import { toNodeId, type AiccProps, type AiccShape } from "./aicc-shape";
  *    0×0，回到视口时行列数就错了。
  *  - 不需要「DOM 寄养」：裁剪不卸载组件；`getAppOwnedElement` 留作备用。
  *  - 体内指针事件用 React 合成事件 `stopPropagation`，滚轮分两相——两者都在
- *    `NodeShell` 的节点体上，`AiccShapeUtil` 不重复一遍。
+ *    `NodeShell` 的节点体上，`ArmadraShapeUtil` 不重复一遍。
  */
 
 /** 选中框的圆角，和 `--r-card` 对齐。 */
@@ -49,7 +49,7 @@ const INDICATOR_RADIUS = 10;
  * updatedAt）才从画布 store 的那份取。
  */
 export function shapeToCanvasNode(
-  shape: AiccShape,
+  shape: ArmadraShape,
   stored?: CanvasNode,
 ): CanvasNode {
   const props = shape.props;
@@ -78,13 +78,13 @@ export function shapeToCanvasNode(
  * 节点内容。写成独立组件而不是内联，是为了能用 hook：选中态要从 editor 订阅
  * （tldraw 的选择是它自己的状态，画布 store 只是投影）。
  */
-function AiccShapeContent({ shape }: { shape: AiccShape }) {
+function ArmadraShapeContent({ shape }: { shape: ArmadraShape }) {
   const editor = useEditor();
   const id = toNodeId(shape.id);
   const nodeType = shape.props.nodeType;
 
   const selected = useValue(
-    "aicc selected",
+    "armadra selected",
     () => editor.getSelectedShapeIds().includes(shape.id),
     [editor, shape.id],
   );
@@ -115,10 +115,10 @@ function AiccShapeContent({ shape }: { shape: AiccShape }) {
   );
 }
 
-export class AiccShapeUtil extends ShapeUtil<AiccShape> {
-  static override type = "aicc" as const;
+export class ArmadraShapeUtil extends ShapeUtil<ArmadraShape> {
+  static override type = "armadra" as const;
 
-  static override props: RecordProps<AiccShape> = {
+  static override props: RecordProps<ArmadraShape> = {
     w: T.number,
     h: T.number,
     nodeType: T.literalEnum(
@@ -136,11 +136,11 @@ export class AiccShapeUtil extends ShapeUtil<AiccShape> {
     labels: T.arrayOf(T.string),
     note: T.string,
     // 与 shared 的 zod 校验重复一遍没有意义：文档进来前已经过 zod。
-    data: T.any as unknown as RecordProps<AiccShape>["data"],
+    data: T.any as unknown as RecordProps<ArmadraShape>["data"],
     createdAt: T.string,
   };
 
-  override getDefaultProps(): AiccProps {
+  override getDefaultProps(): ArmadraProps {
     return {
       w: NODE_META.terminal.defaultSize.width,
       h: NODE_META.terminal.defaultSize.height,
@@ -188,7 +188,7 @@ export class AiccShapeUtil extends ShapeUtil<AiccShape> {
     return true;
   }
 
-  override getGeometry(shape: AiccShape): Rectangle2d {
+  override getGeometry(shape: ArmadraShape): Rectangle2d {
     return new Rectangle2d({
       width: shape.props.w,
       height: shape.props.h,
@@ -201,7 +201,7 @@ export class AiccShapeUtil extends ShapeUtil<AiccShape> {
    * 折叠时高度钉死在 `COLLAPSED_HEIGHT`，且上下边不动——纵向 resize 被禁掉，
    * 拖上下把手只会原地不动，而不是把折叠起来的节点拉成一条长条。
    */
-  override onResize(shape: AiccShape, info: TLResizeInfo<AiccShape>) {
+  override onResize(shape: ArmadraShape, info: TLResizeInfo<ArmadraShape>) {
     const next = resizeBox(shape, info);
     const min = NODE_META[shape.props.nodeType].minSize;
     if (shape.props.collapsed) {
@@ -225,7 +225,7 @@ export class AiccShapeUtil extends ShapeUtil<AiccShape> {
     };
   }
 
-  override component(shape: AiccShape) {
+  override component(shape: ArmadraShape) {
     return (
       // `.tl-html-container` 默认 `pointer-events: none`，要交互必须自己开。
       <HTMLContainer
@@ -235,13 +235,13 @@ export class AiccShapeUtil extends ShapeUtil<AiccShape> {
           height: shape.props.h,
         }}
       >
-        <AiccShapeContent shape={shape} />
+        <ArmadraShapeContent shape={shape} />
       </HTMLContainer>
     );
   }
 
   /** 5.4 把 `indicator(): JSX` 换成了抽象的 `getIndicatorPath(): Path2D`。 */
-  override getIndicatorPath(shape: AiccShape): Path2D {
+  override getIndicatorPath(shape: ArmadraShape): Path2D {
     const path = new Path2D();
     path.roundRect(0, 0, shape.props.w, shape.props.h, INDICATOR_RADIUS);
     return path;

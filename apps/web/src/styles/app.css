@@ -193,7 +193,7 @@
 
   /* 页面/浮层出场：120ms 纯淡入，无位移无弹跳 */
   .motion-fade-in {
-    animation: aicc-fade-in var(--dur-fast) var(--ease-out);
+    animation: armadra-fade-in var(--dur-fast) var(--ease-out);
   }
 
   /* 拖拽把手：节点头部、组标签 */
@@ -213,13 +213,13 @@
  * （`data-open:animate-in` 等），这里只补它没有的这一条。
  * `prefers-reduced-motion` 由 tokens.css 统一压到 0.01ms。
  */
-@keyframes aicc-dot-pulse {
+@keyframes armadra-dot-pulse {
   50% {
     opacity: 0.3;
   }
 }
 
-@keyframes aicc-fade-in {
+@keyframes armadra-fade-in {
   from {
     opacity: 0;
   }
@@ -229,7 +229,7 @@
  * 等待中的 rope 边（§3.3）：虚线朝目标方向流动。
  * 只动 `stroke-dashoffset`，不重排也不重绘整条路径。
  */
-@keyframes aicc-rope-flow {
+@keyframes armadra-rope-flow {
   to {
     stroke-dashoffset: -20;
   }
@@ -237,10 +237,10 @@
 
 @layer utilities {
   .anim-dot-pulse {
-    animation: aicc-dot-pulse 1.6s ease-in-out infinite;
+    animation: armadra-dot-pulse 1.6s ease-in-out infinite;
   }
 
   .anim-rope-flow {
-    animation: aicc-rope-flow 1s linear infinite;
+    animation: armadra-rope-flow 1s linear infinite;
   }
 }

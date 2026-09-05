@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderOpen } from "lucide-react";
-import type { WorkspaceSummary } from "@ai-coding-canvas/shared";
+import type { WorkspaceSummary } from "@armadra/shared";
 import { toast } from "sonner";
 import { runtimeApi } from "../api/client";
 import { isTauri, pickDirectory } from "../platform";

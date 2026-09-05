@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { BoardDocument, ContextLink } from "@ai-coding-canvas/shared";
+import type { BoardDocument, ContextLink } from "@armadra/shared";
 
 import { runtimeApi } from "@/api/client";
 import { useCanvasStore } from "@/store/canvas-store";

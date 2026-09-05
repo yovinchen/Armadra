@@ -12,7 +12,7 @@ import type {
   BoardDocument,
   Conversation,
   Workspace,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 
 import { installDomPolyfills, TestProviders } from "../app/test-harness";
 import { useCanvasStore } from "../store/canvas-store";

@@ -5,7 +5,7 @@ import type {
   Usage,
   UsageProvider,
   UsageWindow,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 
 import { runtimeApi } from "../api/client";
 import {

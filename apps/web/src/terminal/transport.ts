@@ -3,7 +3,7 @@ import {
   type TerminalClientMessage,
   type TerminalServerMessage,
   type TerminateMode,
-} from "@ai-coding-canvas/shared";
+} from "@armadra/shared";
 
 /**
  * 终端 WebSocket 的状态机（计划书 §15.5 / §15.7）。

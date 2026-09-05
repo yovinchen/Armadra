@@ -8,7 +8,7 @@ import type { MessageModule } from "./index";
  */
 export const shell: MessageModule = {
   "zh-CN": {
-    "app.brand": "AI Coding Canvas",
+    "app.brand": "Armadra",
     "app.loadFailed": "看板加载失败",
     "app.retry": "重试",
     "app.runtimeUnreachable": "无法连接本地 Runtime（{endpoint}）",
@@ -81,7 +81,7 @@ export const shell: MessageModule = {
     "banner.dismiss": "忽略",
   },
   en: {
-    "app.brand": "AI Coding Canvas",
+    "app.brand": "Armadra",
     "app.loadFailed": "Failed to load board",
     "app.retry": "Retry",
     "app.runtimeUnreachable": "Cannot reach the local runtime ({endpoint})",

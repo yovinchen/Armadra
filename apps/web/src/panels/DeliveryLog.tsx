@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { create } from "zustand";
 import { ArrowRight, X } from "lucide-react";
-import type { AgentDelivery } from "@ai-coding-canvas/shared";
+import type { AgentDelivery } from "@armadra/shared";
 
 import { runtimeApi } from "../api/client";
 import { onWorkspaceEvent } from "../api/events";
@@ -18,7 +18,7 @@ import { Sheet, SheetContent, SheetTitle } from "../ui/sheet";
  * 投递记录（§5.7 第 10 条）。
  *
  * 数据来自 `GET /api/workspaces/{id}/deliveries`（Runtime 的 `agent_deliveries`
- * 表，与 `<workspace>/.aicc/board-log.jsonl` 同源），再用 `agent.delivery`
+ * 表，与 `<workspace>/.armadra/board-log.jsonl` 同源），再用 `agent.delivery`
  * 事件实时追加——这样刚投出去的一条不必等下一次轮询才出现。
  *
  * **正文从来不在这里**：Runtime 只记 `bodyChars`。这不是省事，是设计：

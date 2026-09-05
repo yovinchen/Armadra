@@ -165,7 +165,7 @@ export function isToolDisabledWhenLocked(id: string): boolean {
 /* ------------------------------ 样式面板 --------------------------------- */
 
 /** 我们自己的节点 shape 类型；它没有任何 tldraw 样式。 */
-export const NODE_SHAPE_TYPE = "aicc";
+export const NODE_SHAPE_TYPE = "armadra";
 
 /** 是不是「白板原生」shape（有 tldraw 样式、归样式面板管）。 */
 export function isWhiteboardShapeType(type: string): boolean {
@@ -179,7 +179,7 @@ export function isWhiteboardShapeType(type: string): boolean {
  *  1. 当前工具不是选择——马上要画的东西需要先挑颜色粗细；
  *  2. 选中项里有白板 shape——它们真的有样式可改。
  *
- * 选中的全是 `aicc` 节点时隐藏：节点的颜色走自己的右键菜单，
+ * 选中的全是 `armadra` 节点时隐藏：节点的颜色走自己的右键菜单，
  * tldraw 的面板对它们只会显示一个没用的透明度滑块。
  */
 export function shouldShowStylePanel(
@@ -197,7 +197,7 @@ export interface SelectedShapeInfo {
   /** tldraw 的 shape id。 */
   id: string;
   type: string;
-  /** 箭头的 `meta.aicc.id`（边 id）；不是边就是 null。 */
+  /** 箭头的 `meta.armadra.id`（边 id）；不是边就是 null。 */
   edgeId: string | null;
   /** shape id 能还原出的节点 id；不是节点 shape 就是 null。 */
   nodeId: string | null;
@@ -215,9 +215,9 @@ export interface DeleteSplit {
 /**
  * 把一次选中拆成「节点 / 边 / 白板 shape」三堆（Phase 2 遗留待办 1）。
  *
- * 认边看的是 `meta.aicc.id` 而不是 shape id——用户拖出来的箭头 id 是随机的。
+ * 认边看的是 `meta.armadra.id` 而不是 shape id——用户拖出来的箭头 id 是随机的。
  * 认不出的箭头（没绑定、或只绑了一端）是白板内容，直接删。
- * 认不出的 `aicc` shape 一概不动：文档里没有它，删了也同步不回去。
+ * 认不出的 `armadra` shape 一概不动：文档里没有它，删了也同步不回去。
  */
 export function splitSelectionForDelete(
   selected: readonly SelectedShapeInfo[],

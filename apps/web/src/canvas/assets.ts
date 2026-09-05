@@ -1,5 +1,5 @@
 import { toast } from "sonner";
-import { MAX_ASSET_BYTES } from "@ai-coding-canvas/shared";
+import { MAX_ASSET_BYTES } from "@armadra/shared";
 import type { TLAsset, TLAssetStore } from "tldraw";
 
 import { runtimeApi } from "../api/client";
@@ -10,15 +10,15 @@ import { t } from "../app/preferences-store";
  *
  * tldraw 默认把图片编成 data URL 塞进快照里，那条路会让 `boards.whiteboard_json`
  * 几张图就撞上 8 MiB 上限。这里把 `upload` 接到 Runtime 的资产接口上：字节落到
- * `<workspace>/.aicc/assets/<sha256 前 16 位>.<ext>`，快照里只留一个 Runtime URL。
+ * `<workspace>/.armadra/assets/<sha256 前 16 位>.<ext>`，快照里只留一个 Runtime URL。
  *
- * `meta.aicc.path` 存的是**工作区相对路径**，Phase 4 的内容链接直接把它交给
+ * `meta.armadra.path` 存的是**工作区相对路径**，Phase 4 的内容链接直接把它交给
  * Agent（Agent 读的是文件，不是 URL），所以这里不能省。
  */
 
-/** 每个资产写在 `meta.aicc` 下的东西。 */
-export interface AiccAssetMeta {
-  /** 工作区相对路径，形如 `.aicc/assets/0a1b….png`。 */
+/** 每个资产写在 `meta.armadra` 下的东西。 */
+export interface ArmadraAssetMeta {
+  /** 工作区相对路径，形如 `.armadra/assets/0a1b….png`。 */
   path: string;
 }
 
@@ -45,7 +45,7 @@ export function withinUploadLimit(bytes: number): boolean {
 
 /** 从资产记录里取回工作区相对路径；没有就是 null（旧的 data URL 资产）。 */
 export function assetPath(asset: Pick<TLAsset, "meta"> | undefined): string | null {
-  const scope = asset?.meta?.["aicc"];
+  const scope = asset?.meta?.["armadra"];
   if (!scope || typeof scope !== "object" || Array.isArray(scope)) return null;
   const path = (scope as Record<string, unknown>)["path"];
   return typeof path === "string" && path.length > 0 ? path : null;
@@ -75,7 +75,7 @@ export function createAssetStore(
       const uploaded = await runtimeApi.uploadAsset(workspaceId, file);
       return {
         src: runtimeApi.assetUrl(workspaceId, uploaded.id),
-        meta: { aicc: { path: uploaded.path } },
+        meta: { armadra: { path: uploaded.path } },
       };
     },
 

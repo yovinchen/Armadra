@@ -24,29 +24,29 @@ vi.hoisted(() => {
 });
 
 import { COLLAPSED_HEIGHT, NODE_META } from "@/nodes/registry";
-import { AiccShapeUtil, shapeToCanvasNode } from "./AiccShapeUtil";
+import { ArmadraShapeUtil, shapeToCanvasNode } from "./ArmadraShapeUtil";
 import {
   toNodeId,
   toShapeId,
-  type AiccProps,
-  type AiccShape,
-} from "./aicc-shape";
+  type ArmadraProps,
+  type ArmadraShape,
+} from "./armadra-shape";
 
 /**
  * `ShapeUtil` 的这几个方法都是纯函数（不碰 editor），所以直接在原型上调，
  * 不用把整个 `<Tldraw>` 挂起来。
  */
-const util = AiccShapeUtil.prototype;
+const util = ArmadraShapeUtil.prototype;
 
 const NODE_ID = "11111111-2222-4333-8444-555555555555";
 
-function makeShape(props: Partial<AiccProps> = {}): AiccShape {
-  const defaults = AiccShapeUtil.prototype.getDefaultProps.call(
+function makeShape(props: Partial<ArmadraProps> = {}): ArmadraShape {
+  const defaults = ArmadraShapeUtil.prototype.getDefaultProps.call(
     {},
-  ) as AiccProps;
+  ) as ArmadraProps;
   return {
     id: toShapeId(NODE_ID),
-    type: "aicc",
+    type: "armadra",
     typeName: "shape",
     x: 100,
     y: 200,
@@ -57,15 +57,15 @@ function makeShape(props: Partial<AiccProps> = {}): AiccShape {
     opacity: 1,
     meta: {},
     props: { ...defaults, ...props },
-  } as unknown as AiccShape;
+  } as unknown as ArmadraShape;
 }
 
 /** `resizeBox` 只用到 `scaleX/scaleY` 与初始尺寸，其余字段不参与。 */
 function resizeInfo(
-  shape: AiccShape,
+  shape: ArmadraShape,
   scaleX: number,
   scaleY: number,
-): TLResizeInfo<AiccShape> {
+): TLResizeInfo<ArmadraShape> {
   return {
     newPoint: { x: shape.x, y: shape.y },
     handle: "bottom_right",
@@ -79,13 +79,13 @@ function resizeInfo(
       h: shape.props.h,
     },
     initialShape: shape,
-  } as unknown as TLResizeInfo<AiccShape>;
+  } as unknown as TLResizeInfo<ArmadraShape>;
 }
 
-describe("AiccShapeUtil", () => {
+describe("ArmadraShapeUtil", () => {
   it("registers the shape type and default props", () => {
-    expect(AiccShapeUtil.type).toBe("aicc");
-    const defaults = util.getDefaultProps.call({}) as AiccProps;
+    expect(ArmadraShapeUtil.type).toBe("armadra");
+    const defaults = util.getDefaultProps.call({}) as ArmadraProps;
     expect(defaults.nodeType).toBe("terminal");
     expect(defaults.w).toBe(NODE_META.terminal.defaultSize.width);
     expect(defaults.collapsed).toBe(false);
