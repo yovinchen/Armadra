@@ -26,7 +26,13 @@ export function canEditCanvas(
   return status === "runtime" || status === "host";
 }
 
-export function statusOf(record: CanvasOwnershipRecord): CanvasOwnershipStatus {
+/**
+ * 归属记录 → 界面档位。只看 owner 与 phase，不看域：六个域的记录形状一样，
+ * 设置页里的其余五个域用的是同一条规则。
+ */
+export function statusOf(
+  record: Pick<CanvasOwnershipRecord, "owner" | "phase">,
+): CanvasOwnershipStatus {
   if (record.phase !== "settled") return "maintenance";
   return record.owner === "host" ? "host" : "runtime";
 }

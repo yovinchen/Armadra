@@ -322,5 +322,6 @@ export * from "./identity.js";
 export * from "./automation.js";
 export * from "./canvas.js";
 export * from "./events.js";
+export * from "./ownership.js";
 export * from "./github/index.js";
 export * from "./updates.js";

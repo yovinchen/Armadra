@@ -51,6 +51,29 @@ export const canvasOwnershipSchema = z.object({
 
 export type CanvasOwnershipRecord = z.infer<typeof canvasOwnershipSchema>;
 
+/**
+ * `GET /api/ownership/domains`（Go Host 业务所有权迁移 §2.2）—— 六个业务域
+ * 各自由谁写，按切换顺序返回。
+ *
+ * 域名是封闭集合：Runtime 不认识的名字它自己就会拒绝，这里也不接受，免得
+ * 界面把一个没人能执行的域画成正常状态。少一行不是「那个域不存在」，而是
+ * 数据损坏，所以整份读取失败，而不是显示一份短列表。
+ */
+export const ownershipDomainSchema = canvasOwnershipSchema.extend({
+  domain: z.enum([
+    "canvas",
+    "settings",
+    "filesystem",
+    "session",
+    "agent",
+    "git",
+  ]),
+});
+
+export const ownershipDomainsSchema = z.array(ownershipDomainSchema).length(6);
+
+export type OwnershipDomainRecord = z.infer<typeof ownershipDomainSchema>;
+
 export const systemApi = {
   /**
    * `/api/health`，不是裸的 `/health`：Host 托管这份前端时，`/health` 是
@@ -60,6 +83,9 @@ export const systemApi = {
   health: () => request("/api/health", healthSchema),
   /** 画布域的写归属；读永远可用，写按它路由（H01 §4）。 */
   canvasOwnership: () => request("/api/ownership", canvasOwnershipSchema),
+  /** 六个域各自的写归属，按切换顺序（Go Host 业务所有权迁移 §2.2）。 */
+  ownershipDomains: (signal?: AbortSignal) =>
+    request("/api/ownership/domains", ownershipDomainsSchema, { signal }),
   /* ----------------------------------- 数据 ----------------------------- */
   /** 数据目录、数据库大小、对话索引条数、日志保留天数（§24.1 数据页）。 */
   dataInfo: () => request("/api/data/info", dataInfoSchema),

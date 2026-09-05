@@ -40,8 +40,14 @@ export {
   canvasOwnershipSchema,
   dataBackupSchema,
   dataInfoSchema,
+  ownershipDomainSchema,
+  ownershipDomainsSchema,
 } from "./system";
-export type { CanvasOwnershipRecord, DataInfo } from "./system";
+export type {
+  CanvasOwnershipRecord,
+  DataInfo,
+  OwnershipDomainRecord,
+} from "./system";
 
 export const runtimeApi = {
   ...agentsApi,
