@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -111,7 +112,7 @@ func startRuntime(t *testing.T) string {
 		"ARMADRA_DATABASE_URL=sqlite://"+filepath.Join(dataDir, "canvas.db")+"?mode=rwc",
 		"RUST_LOG=warn",
 	)
-	logs := &bytes.Buffer{}
+	logs := &syncBuffer{}
 	child.Stdout, child.Stderr = logs, logs
 	if err = child.Start(); err != nil {
 		cancel()
@@ -570,4 +571,24 @@ func mustParse(t *testing.T, value string) *url.URL {
 		t.Fatal(err)
 	}
 	return parsed
+}
+
+// syncBuffer collects a child's output from the goroutine `exec` copies it on,
+// while the test reads it on failure. A plain bytes.Buffer races between the
+// two; this one takes a lock on both sides.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }

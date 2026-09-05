@@ -220,6 +220,7 @@ fn automation_host_surface() {
                     execution_host_id: "0123456789abcdef0123456789abcdef".into(),
                     session_id: "session-1".into(),
                     generation: 1,
+                    ..Default::default()
                 }),
                 schedule: Some(AutomationSchedule {
                     kind: Some(automation_schedule::Kind::Cron(AutomationCron {
@@ -1209,7 +1210,6 @@ fn github_issue_and_pull_contracts() {
         },
     );
 }
-                    ..Default::default()
 
 /// Prompt delivery evidence. `no_effect_proven` belongs to NOT_WRITTEN alone:
 /// an UNKNOWN receipt that gained it would authorize a second paste into a
