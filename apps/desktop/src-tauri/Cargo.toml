@@ -9,6 +9,7 @@ authors.workspace = true
 tauri-build = { version = "2.5.6", features = [] }
 
 [dependencies]
+armadra-protocol = { path = "../../../crates/protocol" }
 reqwest = { version = "0.13.1", default-features = false, features = ["rustls", "json"] }
 serde = { version = "1.0.228", features = ["derive"] }
 # `tauri::generate_context!` 会把 tauri.conf.json 的 `plugins` 段展开成
@@ -19,7 +20,7 @@ tauri = { version = "2.10.2", features = ["tray-icon", "image-png", "macos-priva
 tauri-plugin-dialog = "2.7.3"
 tauri-plugin-notification = "2.4.0"
 tauri-plugin-opener = "2.5.5"
-tokio = { version = "1.53.1", features = ["time"] }
+tokio = { version = "1.53.1", features = ["time", "process", "io-util", "macros", "rt", "sync"] }
 
 # 侧栏毛玻璃（§24.2「源列表侧栏」/「一致的窗口 chrome」）。只有 macOS 用得上，
 # 所以按目标平台挂依赖：Linux/Windows 上既不下载也不编译它。

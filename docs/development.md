@@ -105,9 +105,9 @@ docs/         文档（见 docs/README.md）
 
 ### 独立 Host 连接检查
 
-设置 → 连接 → 后台服务可以检查独立 Go Host，显示连接结果与可展开的服务身份。这不会改变当前终端、文件或 Git 使用的 Runtime，也不会自动启动 Host。
+设置 → 连接 → 后台服务可以检查独立 Go Host，显示连接结果与可展开的服务身份。检查按钮不会改变当前终端、文件或 Git 使用的 Runtime，也不会触发启动。桌面应用启动时会另行异步启动/发现 Host；纯 Web 模式仍需手工启动 Host。
 
-在另一个终端从仓库根启动 Host，显式允许开发页面来源：
+纯 Web 模式可在另一个终端从仓库根启动 Host，显式允许开发页面来源：
 
 ```sh
 go -C apps/host run ./cmd/armadra-host --allow-origin http://127.0.0.1:1420
@@ -118,6 +118,8 @@ go -C apps/host run ./cmd/armadra-host --allow-origin http://127.0.0.1:1420
 打包桌面端的来源按平台选择 `tauri://localhost`、`http://tauri.localhost` 或 `https://tauri.localhost`。桌面 CSP 当前只额外允许默认本地 Host 地址，未开放任意远程地址；浏览器也需满足服务端的来源许可。CORS 许可不代表已经实现设备登录或远程执行权限。
 
 地址仅在显式检查且校验通过时保存在本设备，不保存凭据；取消、编辑或离开页面会使旧检查失效。Host 未运行或来源不匹配时显示失败，不保留旧成功状态。服务命令及后端边界见 [Host 说明](../apps/host/README.md)。
+
+桌面开发的 predev 会准备 Go Host 二进制；发布使用包内 sidecar。已有服务端点或来源不兼容时不会自动重配/重启，错误不阻断原有 Runtime 界面。退出桌面进程不停止 Go Host，但原 Runtime 子进程的退出清理仍保留；业务迁移和后台执行器尚未完成。路径覆盖、协议和实际验证限制见 [桌面说明](../apps/desktop/README.md)。
 
 ### Runtime 配置
 

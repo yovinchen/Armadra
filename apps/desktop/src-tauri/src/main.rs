@@ -10,6 +10,8 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
+mod host;
+
 fn runtime_health_url() -> String {
     let port = std::env::var("ARMADRA_RUNTIME_PORT")
         .ok()
@@ -226,6 +228,46 @@ fn main() {
                 .ok_or_else(|| "Main window is unavailable".to_owned())?;
             apply_window_material(&window);
             build_tray(app.handle())?;
+            let host_config = (|| {
+                let development = cfg!(not(feature = "custom-protocol"));
+                let origin = if development {
+                    app.config()
+                        .build
+                        .dev_url
+                        .as_ref()
+                        .ok_or(host::HostLaunchError::InvalidConfiguration)?
+                        .origin()
+                        .ascii_serialization()
+                } else if cfg!(windows) {
+                    let https = app
+                        .config()
+                        .app
+                        .windows
+                        .iter()
+                        .find(|config| config.label == "main")
+                        .is_some_and(|config| config.use_https_scheme);
+                    if https {
+                        "https://tauri.localhost"
+                    } else {
+                        "http://tauri.localhost"
+                    }
+                    .to_owned()
+                } else {
+                    "tauri://localhost".to_owned()
+                };
+                host::HostLaunchConfig::from_environment(development, origin)
+            })();
+            // Host availability must not delay Runtime or UI startup. It has a
+            // separate lifecycle and is deliberately absent from the exit hook.
+            tauri::async_runtime::spawn(async move {
+                let result = match host_config {
+                    Ok(config) => host::ensure_host(&config).await,
+                    Err(error) => Err(error),
+                };
+                if let Err(error) = result {
+                    eprintln!("Background {error}");
+                }
+            });
             tauri::async_runtime::spawn(async move {
                 if let Err(error) = wait_for_runtime(&app_handle).await {
                     eprintln!("{error}");

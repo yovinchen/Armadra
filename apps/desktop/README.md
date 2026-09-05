@@ -2,11 +2,13 @@
 
 Tauri 2 薄桌面壳。
 
-只负责启动 Runtime、健康检查、加载同一套 Web 页面，以及标题栏覆盖、托盘、通知和
+负责启动/发现 Go Host、启动 Runtime、健康检查、加载同一套 Web 页面，以及标题栏覆盖、托盘、通知和
 系统权限入口。业务逻辑不写进 Tauri command，避免形成第二套后端。
 
 开发模式连接外部 Runtime；生产构建从包内 sidecar 启动 `armadra-runtime`，
 退出应用时清理该子进程。
+
+Go Host 在启动时异步准备，使用独立后台进程；桌面退出不调用其 stop。当前 Runtime 业务仍未迁移到 Host，不能据 Host 保活推断定时任务或所有执行器已在后台可用。
 
 ```bash
 pnpm --filter @armadra/desktop dev     # 需要 cargo run -p armadra-runtime 已在跑
@@ -17,7 +19,22 @@ pnpm --filter @armadra/desktop test
 cargo check -p armadra-desktop
 ```
 
-## Sidecar
+## Host 启动与发现
+
+Rust 启动器从开发构建目录或发布应用可执行文件同目录定位 `armadra-host`，以固定参数调用 `start --output protobuf`，有界读取结果并校验服务身份、默认地址及页面来源许可。命令参数、路径和管理动作不暴露为网页 invoke 接口。
+
+生产地址固定为 `http://127.0.0.1:43121`，与桌面 CSP 一致。已有服务的端点或来源许可不匹配时只报告错误，不替用户重启或重配服务。Host 失败不阻止现有 Runtime/UI 启动；退出仍只执行原 Runtime 清理。
+
+- 开发可用 `ARMADRA_HOST_BINARY` 指定绝对路径；发布版本忽略该二进制覆盖，使用包内 sidecar。
+- `ARMADRA_HOST_DATA_DIR` 可指定绝对的独立 Host 数据目录，用于本机测试或用户部署。
+- 开发来源取实际 `devUrl`；发布按平台配置使用相应 Tauri origin。会实际验证 OPTIONS 与 Hello，固定回环探针禁用代理和重定向。
+- CLI 最长运行 15 秒，失败/超时后的父进程清理另有 2 秒上限；不会终止已独立运行的 Host。stdout/stderr/HTTP 响应均有限额，不把子进程 stderr 回显为界面错误。
+
+`pnpm host:bootstrap-smoke` 使用同一 Rust 启动器，验证真实 Go 启动、发现、来源不兼容拒绝及启动器退出后的保活。首次运行需要本机 Rust sidecar 已准备好，可先执行 `pnpm --filter @armadra/desktop prepare:sidecar`；探针不伪造二进制来绕过 Tauri 构建检查。
+
+macOS 已运行真实原生进程并确认 Host 自动启动和进程退出后保活；本轮窗口控制工具超时，正常菜单/窗口关闭动作未由工具确认。Windows 原生窗口、安装包和正常退出仍待实机验收，不能用交叉编译替代。
+
+## Sidecar 构建
 
 `scripts/prepare-sidecar.mjs` 保留 `cargo build --release` 构建 `armadra-runtime` 与
 `armadra-hook`，再以 `CGO_ENABLED=0` 构建 Go `armadra-host`。三个真实二进制均按 Rust
@@ -90,7 +107,7 @@ x64/arm64 交叉构建只验证产生对应 PE 工件，不代表 Windows 安装
 
 ## CSP
 
-`tauri.conf.json` 里：`connect-src` 只留本机 Runtime 的 http/ws；
+`tauri.conf.json` 里：`connect-src` 保留本机 Runtime 的 http/ws 与默认 Go Host 的 HTTP；
 `frame-src http: https:` 供 Browser 节点的 iframe 使用；`img-src` 保留
 `data:` / `blob:` 供图片与截图使用。
 
