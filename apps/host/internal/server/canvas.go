@@ -53,6 +53,11 @@ func canvasFailure(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "Device session is invalid or expired")
 	case errors.Is(err, auth.ErrPermission), errors.Is(err, canvashost.ErrAuthorization):
 		writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "Canvas permission or CSRF check failed")
+	case errors.Is(err, canvashost.ErrTooManyChanges):
+		// Distinct from an invalid request: the request is well formed, it just
+		// needs more than one transaction may carry, and a caller repairs that
+		// by splitting its own edit rather than by fixing a field.
+		writeError(w, http.StatusRequestEntityTooLarge, "RESOURCE_EXHAUSTED", "Canvas request exceeds one transaction")
 	case errors.Is(err, canvashost.ErrInvalid), errors.Is(err, auth.ErrInvalid), errors.Is(err, storage.ErrInvalid):
 		writeError(w, http.StatusBadRequest, "INVALID_ARGUMENT", "Invalid canvas request")
 	case errors.Is(err, storage.ErrIdempotencyConflict):

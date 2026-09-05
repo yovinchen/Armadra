@@ -3,7 +3,6 @@ package canvashost
 import (
 	"context"
 	"errors"
-	"strings"
 
 	pb "armadra.local/host/gen/armadra/v1"
 	"armadra.local/host/internal/storage"
@@ -76,12 +75,6 @@ func envelope(event storage.Event) (*pb.CanvasEventEnvelope, error) {
 	if kind == pb.CanvasEntityKind_CANVAS_ENTITY_KIND_UNSPECIFIED {
 		return nil, nil
 	}
-	id := event.ID
-	if kind != pb.CanvasEntityKind_CANVAS_ENTITY_KIND_WORKSPACE && kind != pb.CanvasEntityKind_CANVAS_ENTITY_KIND_CANVAS {
-		if index := strings.IndexByte(id, '/'); index >= 0 {
-			id = id[index+1:]
-		}
-	}
 	result := &pb.CanvasEventEnvelope{
 		Sequence:         event.Sequence,
 		TransactionId:    event.TransactionID,
@@ -90,9 +83,10 @@ func envelope(event storage.Event) (*pb.CanvasEventEnvelope, error) {
 		TransactionSize:  uint32(event.TransactionSize),
 		WorkspaceId:      event.WorkspaceID,
 		Kind:             kind,
-		EntityId:         id,
-		Revision:         event.Revision,
-		Deleted:          event.Deleted,
+		// The identifier the client sent, not the composed storage key.
+		EntityId: objectID(event.ID),
+		Revision: event.Revision,
+		Deleted:  event.Deleted,
 	}
 	// A deletion carries no entity: the tombstone's revision and id are the
 	// whole statement, and an empty decoded object would read like a cleared

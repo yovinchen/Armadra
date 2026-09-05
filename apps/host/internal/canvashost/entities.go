@@ -50,6 +50,10 @@ var (
 	// ErrOwnershipMoved is the stable refusal a write gets when this process is
 	// not the current owner of the canvas domain, or while a switch is open.
 	ErrOwnershipMoved = errors.New("ownership_moved")
+	// ErrTooManyChanges means one request needs more changes than a single
+	// transaction may carry. It is refused rather than split, because a split
+	// save would publish half a canvas as if it were whole.
+	ErrTooManyChanges = errors.New("canvas request exceeds one transaction")
 )
 
 // Identifiers are the ones the client already uses, so a migration keeps them
@@ -64,12 +68,15 @@ func validID(value string) bool { return idPattern.MatchString(value) }
 // validated to exclude the separator, so the composition cannot be ambiguous.
 func scoped(canvasID, objectID string) string { return canvasID + "/" + objectID }
 
-func unscope(canvasID, entityID string) (string, bool) {
-	prefix := canvasID + "/"
-	if !strings.HasPrefix(entityID, prefix) {
-		return "", false
+// objectID recovers the client's own identifier from a scoped entity key. A
+// canvas identifier cannot contain the separator, so the first one always ends
+// the prefix; a key without one is returned unchanged, which is what the
+// workspace and canvas kinds store.
+func objectID(entityID string) string {
+	if index := strings.IndexByte(entityID, '/'); index >= 0 {
+		return entityID[index+1:]
 	}
-	return entityID[len(prefix):], true
+	return entityID
 }
 
 func workspaceKey(workspaceID string) storage.Key {

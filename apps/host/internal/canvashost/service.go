@@ -178,7 +178,7 @@ func (s *Service) DeleteWorkspace(ctx context.Context, caller Caller, operationI
 	}
 	changes = append(changes, storage.Change{Key: workspaceKey(workspaceID), ExpectedRevision: expected, Delete: true})
 	if len(changes) > MaxDocumentChanges {
-		return nil, storage.ErrInvalid
+		return nil, ErrTooManyChanges
 	}
 	result, err := s.apply(ctx, caller, operationID, changes)
 	if err != nil {
@@ -337,7 +337,7 @@ func (s *Service) SaveDocument(ctx context.Context, caller Caller, request *pb.S
 		return nil, err
 	}
 	if len(changes) > MaxDocumentChanges {
-		return nil, storage.ErrInvalid
+		return nil, ErrTooManyChanges
 	}
 	// A save whose content already matched storage leaves it untouched, and the
 	// receipt says so explicitly rather than inventing a transaction id.
@@ -496,7 +496,7 @@ func (s *Service) DeleteCanvas(ctx context.Context, caller Caller, operationID, 
 	}
 	changes = append(changes, storage.Change{Key: canvasKey(caller.WorkspaceID, canvasID), ExpectedRevision: expected, Delete: true})
 	if len(changes) > MaxDocumentChanges {
-		return nil, storage.ErrInvalid
+		return nil, ErrTooManyChanges
 	}
 	result, err := s.apply(ctx, caller, operationID, changes)
 	if err != nil {
@@ -537,13 +537,9 @@ func receipt(result storage.ApplyResult) *pb.CanvasOperationReceipt {
 		Replayed:      result.Replayed,
 	}
 	for _, revision := range result.Revisions {
-		id := revision.ID
-		if kind := entityKind(revision.Kind); kind == pb.CanvasEntityKind_CANVAS_ENTITY_KIND_NODE || kind == pb.CanvasEntityKind_CANVAS_ENTITY_KIND_EDGE || kind == pb.CanvasEntityKind_CANVAS_ENTITY_KIND_ANNOTATION {
-			if index := strings.IndexByte(id, '/'); index >= 0 {
-				id = id[index+1:]
-			}
-		}
-		value.Revisions = append(value.Revisions, &pb.CanvasRevision{Kind: entityKind(revision.Kind), EntityId: id, Revision: revision.Revision, Deleted: revision.Deleted})
+		// A receipt names the identifiers the client sent, not the composed
+		// storage keys: an id it does not recognise is no use for reconciling.
+		value.Revisions = append(value.Revisions, &pb.CanvasRevision{Kind: entityKind(revision.Kind), EntityId: objectID(revision.ID), Revision: revision.Revision, Deleted: revision.Deleted})
 	}
 	return value
 }
