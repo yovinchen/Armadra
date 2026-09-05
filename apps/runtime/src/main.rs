@@ -58,6 +58,20 @@ async fn main() -> anyhow::Result<()> {
         armadra_runtime::migration_cli::run(&arguments[1..]).await?;
         return Ok(());
     }
+    // The rollback direction of the ownership switch, taken offline. It opens
+    // one database, applies one package and exits; nothing else in this
+    // process starts.
+    if arguments
+        .first()
+        .is_some_and(|argument| argument == "import-host-export")
+    {
+        tracing_subscriber::fmt()
+            .with_writer(std::io::stderr)
+            .with_env_filter(EnvFilter::from_default_env())
+            .init();
+        armadra_runtime::ownership::import_cli::run(&arguments[1..]).await?;
+        return Ok(());
+    }
     // A Finder-launched runtime has the bare system PATH: no tmux, no mise, no
     // Homebrew. Every child (`tmux`, `ps`, `infocmp`, agent probes) is looked
     // up on the augmented one instead, and `child_environment` hands the same
@@ -302,7 +316,8 @@ const USAGE: &str = "Usage: armadra-runtime [--desktop-control-stdin] [--listen 
      With no --listen the Runtime falls back to ARMADRA_RUNTIME_HOST /\n\
      ARMADRA_RUNTIME_PORT, and then to 127.0.0.1:43120.\n\
      \n\
-     \x20 armadra-runtime export --help";
+     \x20 armadra-runtime export --help\n\
+     \x20 armadra-runtime import-host-export --help";
 
 const WORKER_USAGE: &str = "Usage: armadra-runtime worker --stdio \
      [--state-dir ABSOLUTE_PRIVATE_DIRECTORY] [--canvas-database ABSOLUTE_FILE]";

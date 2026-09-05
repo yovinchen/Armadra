@@ -26,6 +26,11 @@ pub const MAX_FRAME: usize = 1 << 20;
 pub const MAX_CHUNK: usize = 256 << 10;
 const MAX_ROOTS: usize = 1024;
 
+/// Advertised when this Worker can apply a Host reverse export package
+/// (Go Host 业务所有权迁移 §2.12), which is what lets a rollback be a rollback
+/// rather than an export the operator has to accept as one.
+pub const REVERSE_IMPORT_CAPABILITY: &str = "ownership.reverse-import.v1";
+
 pub struct Worker {
     host: Option<String>,
     instance: String,
@@ -312,6 +317,12 @@ impl Worker {
                         // would have to refuse.
                         if self.canvas.is_some() {
                             capabilities.push("canvas.ownership.v1".into());
+                            // The reverse import is a separate capability: a
+                            // first-phase controller that only moves epochs
+                            // must not conclude this Worker can apply a
+                            // package, and a controller that needs one must
+                            // not plan a rollback against a Worker that cannot.
+                            capabilities.push(REVERSE_IMPORT_CAPABILITY.into());
                         }
                         // Only a Worker with a durable outbox claims it can
                         // report upward. Claiming it without one would promise
@@ -384,6 +395,18 @@ impl Worker {
                 Ok(Response::WriteOwnership(write_ownership(
                     ownership::read(pool, &input.domain).await?,
                 )?))
+            }
+            // The rollback direction. Applying the Host's reverse export is a
+            // write to this database and nothing else: the epoch stays where
+            // it is until the controller has compared the report's digests
+            // with the package it produced.
+            Action::ApplyReverseExport(input) => {
+                let Some(pool) = self.canvas.as_ref() else {
+                    return Ok(unsupported_ownership());
+                };
+                Ok(Response::ReverseImport(
+                    ownership::import::apply(pool, &input).await?,
+                ))
             }
             Action::RegisterRoot(input) => {
                 if !id(&input.root_id) || input.path.is_empty() || input.path.len() > 32_768 {

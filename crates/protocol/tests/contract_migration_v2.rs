@@ -75,7 +75,10 @@ fn an_entity_record_names_exactly_one_entity_and_may_name_none() {
     // A record with no member is what a foreign or truncated package decodes
     // to. It has to stay distinguishable from "a workspace with empty fields",
     // because the importer refuses on it instead of writing a blank row.
-    check("reverse_export_record_absent", ReverseExportRecord::default());
+    check(
+        "reverse_export_record_absent",
+        ReverseExportRecord::default(),
+    );
     let absent = fixture("reverse_export_record_absent");
     assert!(absent.is_empty());
 }
@@ -106,33 +109,35 @@ fn the_worker_action_and_its_report_round_trip() {
             request_id: "reverse-1".into(),
             host_id: "0123456789abcdef0123456789abcdef".into(),
             instance_id: "abcdef0123456789abcdef0123456789".into(),
-            result: Some(worker_response::Result::ReverseImport(ReverseImportReport {
-                import_id: "reverse-import-1".into(),
-                domain: "canvas".into(),
-                epoch: 2,
-                index_sha256: vec![6; 32],
-                entity_count: 3,
-                replayed: true,
-                applied_at_unix_ms: 1_788_557_000_000,
-                reexported: vec![ReverseExportFile {
-                    workspace_id: "工作区-1".into(),
-                    content_sha256: vec![5; 32],
+            result: Some(worker_response::Result::ReverseImport(
+                ReverseImportReport {
+                    import_id: "reverse-import-1".into(),
+                    domain: "canvas".into(),
+                    epoch: 2,
+                    index_sha256: vec![6; 32],
                     entity_count: 3,
-                    ..Default::default()
-                }],
-                tables: vec![ExportTable {
-                    name: "nodes".into(),
-                    row_count: 1,
-                    readable: true,
-                    schema_sha256: Vec::new(),
-                }],
-                issues: vec![ExportIssue {
-                    code: "reverse.unsupported_entity".into(),
-                    severity: "error".into(),
-                    entity: "nodes/节点-2".into(),
-                    detail: "记录类型未知".into(),
-                }],
-            })),
+                    replayed: true,
+                    applied_at_unix_ms: 1_788_557_000_000,
+                    reexported: vec![ReverseExportFile {
+                        workspace_id: "工作区-1".into(),
+                        content_sha256: vec![5; 32],
+                        entity_count: 3,
+                        ..Default::default()
+                    }],
+                    tables: vec![ExportTable {
+                        name: "nodes".into(),
+                        row_count: 1,
+                        readable: true,
+                        schema_sha256: Vec::new(),
+                    }],
+                    issues: vec![ExportIssue {
+                        code: "reverse.unsupported_entity".into(),
+                        severity: "error".into(),
+                        entity: "nodes/节点-2".into(),
+                        detail: "记录类型未知".into(),
+                    }],
+                },
+            )),
         },
     );
 }

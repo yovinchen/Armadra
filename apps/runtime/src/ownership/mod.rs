@@ -9,6 +9,14 @@
 //!
 //! Terminals, files, Git and hooks are deliberately absent from this record.
 //! They stay with the Runtime whoever owns the canvas.
+//!
+//! [`import`] is the other half of that reversibility: handing the epoch back
+//! is only half a rollback, and the Host's reverse export has to be applied to
+//! this database before the epoch moves.
+
+pub mod import;
+pub mod import_cli;
+pub mod records;
 
 use armadra_protocol::v1::CanvasOwnershipOwner;
 use axum::{Json, extract::State};
@@ -145,6 +153,16 @@ where
 
 pub async fn read(pool: &SqlitePool, domain: &str) -> AppResult<WriteOwnership> {
     fetch(pool, domain).await
+}
+
+/// The same read against an open transaction. A reverse import decides on the
+/// record inside the transaction it is going to write in, so the owner it
+/// checked cannot change between the check and the write.
+pub async fn read_in<'e, E>(executor: E, domain: &str) -> AppResult<WriteOwnership>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
+    fetch(executor, domain).await
 }
 
 /// The write guard. Reads are never gated by it: a Runtime that handed the
