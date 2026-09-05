@@ -401,10 +401,15 @@ export const WorkerFileChunkSchema: GenMessage<WorkerFileChunk> =
 
 /**
  * Write-ownership handoff (host protocol design §4, step 5). The controlling
- * Host tells the Runtime which epoch now owns the canvas domain; the Runtime
- * persists it and refuses canvas writes from then on. `expected_epoch` is the
- * epoch the Host believes is stored, so a repeated request is idempotent and a
- * stale one is refused rather than applied out of order.
+ * Host tells the Runtime which epoch now owns one business domain; the Runtime
+ * persists it and refuses that domain's writes from then on. `expected_epoch`
+ * is the epoch the Host believes is stored, so a repeated request is
+ * idempotent and a stale one is refused rather than applied out of order.
+ *
+ * `domain` stays a string because these field numbers are already released: it
+ * carries the lowercase name of one `armadra.v1.WriteOwnershipDomain` value.
+ * A Runtime that does not recognise the name refuses the handoff rather than
+ * creating a domain it knows nothing about.
  *
  * @generated from message armadra.v1.SetWriteOwnershipRequest
  */

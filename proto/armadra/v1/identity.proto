@@ -25,6 +25,26 @@ message BootstrapTicketResponse {
   string origin = 4;
   int64 expires_at_unix_ms = 5;
 }
+// Issued exclusively over the same-user OS control channel, exactly like a
+// bootstrap ticket and for the same reason: opening a maintenance window is an
+// action taken at the machine, never one a remote device may request. One
+// token covers one domain, is single use, and expires two minutes after it was
+// issued.
+message MaintenanceTicketRequest {
+  string expected_host_id = 1;
+  string expected_instance_id = 2;
+  // Lowercase domain name ("canvas", "settings", ...). The enumeration lives
+  // in ownership.proto; this file stays free of that dependency so the control
+  // channel keeps its own, smaller contract.
+  string domain = 3;
+}
+message MaintenanceTicketResponse {
+  string host_id = 1;
+  string host_instance_id = 2;
+  string token = 3;
+  string domain = 4;
+  int64 expires_at_unix_ms = 5;
+}
 message DeviceIdentity {
   string device_id = 1;
   string principal_id = 2;

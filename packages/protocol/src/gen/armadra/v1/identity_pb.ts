@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_identity: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Chlhcm1hZHJhL3YxL2lkZW50aXR5LnByb3RvEgphcm1hZHJhLnYxIlkKEkF1dGhvcml6YXRpb25HcmFudBISCgpwZXJtaXNzaW9uGAEgASgJEhQKDHdvcmtzcGFjZV9pZBgCIAEoCRIZChFleGVjdXRpb25faG9zdF9pZBgDIAEoCSKlAQoWQm9vdHN0cmFwVGlja2V0UmVxdWVzdBIYChBleHBlY3RlZF9ob3N0X2lkGAEgASgJEhwKFGV4cGVjdGVkX2luc3RhbmNlX2lkGAIgASgJEg4KBm9yaWdpbhgDIAEoCRITCgtkZXZpY2VfbmFtZRgEIAEoCRIuCgZzY29wZXMYBSADKAsyHi5hcm1hZHJhLnYxLkF1dGhvcml6YXRpb25HcmFudCKAAQoXQm9vdHN0cmFwVGlja2V0UmVzcG9uc2USDwoHaG9zdF9pZBgBIAEoCRIYChBob3N0X2luc3RhbmNlX2lkGAIgASgJEg4KBnRpY2tldBgDIAEoCRIOCgZvcmlnaW4YBCABKAkSGgoSZXhwaXJlc19hdF91bml4X21zGAUgASgDIq0BCg5EZXZpY2VJZGVudGl0eRIRCglkZXZpY2VfaWQYASABKAkSFAoMcHJpbmNpcGFsX2lkGAIgASgJEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRIMCgRyb2xlGAQgASgJEhoKEmNyZWF0ZWRfYXRfdW5peF9tcxgGIAEoAxIaChJyZXZva2VkX2F0X3VuaXhfbXMYByABKAMSEAoIcmV2aXNpb24YCCABKARKBAgFEAYiWwoRUGFpckRldmljZVJlcXVlc3QSGAoQZXhwZWN0ZWRfaG9zdF9pZBgBIAEoCRIcChRleHBlY3RlZF9pbnN0YW5jZV9pZBgCIAEoCRIOCgZ0aWNrZXQYAyABKAkiswEKFEF1dGhlbnRpY2F0ZWRTZXNzaW9uEg8KB2hvc3RfaWQYASABKAkSKgoGZGV2aWNlGAIgASgLMhouYXJtYWRyYS52MS5EZXZpY2VJZGVudGl0eRISCgpjc3JmX3Rva2VuGAMgASgJEhoKEmV4cGlyZXNfYXRfdW5peF9tcxgEIAEoAxIuCgZzY29wZXMYBSADKAsyHi5hcm1hZHJhLnYxLkF1dGhvcml6YXRpb25HcmFudCIXChVDdXJyZW50U2Vzc2lvblJlcXVlc3QiFwoVUmVmcmVzaFNlc3Npb25SZXF1ZXN0IhIKEFJlbmV3Q3NyZlJlcXVlc3QiJwoRUmVuZXdDc3JmUmVzcG9uc2USEgoKY3NyZl90b2tlbhgBIAEoCSIWChRMb2dvdXRTZXNzaW9uUmVxdWVzdCInChVTZXNzaW9uQ2xvc2VkUmVzcG9uc2USDgoGY2xvc2VkGAEgASgIIjUKEkxpc3REZXZpY2VzUmVxdWVzdBIQCghhZnRlcl9pZBgBIAEoCRINCgVsaW1pdBgCIAEoDSJlChNMaXN0RGV2aWNlc1Jlc3BvbnNlEisKB2RldmljZXMYASADKAsyGi5hcm1hZHJhLnYxLkRldmljZUlkZW50aXR5Eg8KB25leHRfaWQYAiABKAkSEAoIaGFzX21vcmUYAyABKAgiQwoTUmV2b2tlRGV2aWNlUmVxdWVzdBIRCglkZXZpY2VfaWQYASABKAkSGQoRZXhwZWN0ZWRfcmV2aXNpb24YAiABKAQiOgoUUmV2b2tlRGV2aWNlUmVzcG9uc2USEQoJZGV2aWNlX2lkGAEgASgJEg8KB3Jldm9rZWQYAiABKAhCI1ohYXJtYWRyYS5sb2NhbC9ob3N0L2dlbi9hcm1hZHJhL3YxYgZwcm90bzM",
+    "Chlhcm1hZHJhL3YxL2lkZW50aXR5LnByb3RvEgphcm1hZHJhLnYxIlkKEkF1dGhvcml6YXRpb25HcmFudBISCgpwZXJtaXNzaW9uGAEgASgJEhQKDHdvcmtzcGFjZV9pZBgCIAEoCRIZChFleGVjdXRpb25faG9zdF9pZBgDIAEoCSKlAQoWQm9vdHN0cmFwVGlja2V0UmVxdWVzdBIYChBleHBlY3RlZF9ob3N0X2lkGAEgASgJEhwKFGV4cGVjdGVkX2luc3RhbmNlX2lkGAIgASgJEg4KBm9yaWdpbhgDIAEoCRITCgtkZXZpY2VfbmFtZRgEIAEoCRIuCgZzY29wZXMYBSADKAsyHi5hcm1hZHJhLnYxLkF1dGhvcml6YXRpb25HcmFudCKAAQoXQm9vdHN0cmFwVGlja2V0UmVzcG9uc2USDwoHaG9zdF9pZBgBIAEoCRIYChBob3N0X2luc3RhbmNlX2lkGAIgASgJEg4KBnRpY2tldBgDIAEoCRIOCgZvcmlnaW4YBCABKAkSGgoSZXhwaXJlc19hdF91bml4X21zGAUgASgDImIKGE1haW50ZW5hbmNlVGlja2V0UmVxdWVzdBIYChBleHBlY3RlZF9ob3N0X2lkGAEgASgJEhwKFGV4cGVjdGVkX2luc3RhbmNlX2lkGAIgASgJEg4KBmRvbWFpbhgDIAEoCSKBAQoZTWFpbnRlbmFuY2VUaWNrZXRSZXNwb25zZRIPCgdob3N0X2lkGAEgASgJEhgKEGhvc3RfaW5zdGFuY2VfaWQYAiABKAkSDQoFdG9rZW4YAyABKAkSDgoGZG9tYWluGAQgASgJEhoKEmV4cGlyZXNfYXRfdW5peF9tcxgFIAEoAyKtAQoORGV2aWNlSWRlbnRpdHkSEQoJZGV2aWNlX2lkGAEgASgJEhQKDHByaW5jaXBhbF9pZBgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSDAoEcm9sZRgEIAEoCRIaChJjcmVhdGVkX2F0X3VuaXhfbXMYBiABKAMSGgoScmV2b2tlZF9hdF91bml4X21zGAcgASgDEhAKCHJldmlzaW9uGAggASgESgQIBRAGIlsKEVBhaXJEZXZpY2VSZXF1ZXN0EhgKEGV4cGVjdGVkX2hvc3RfaWQYASABKAkSHAoUZXhwZWN0ZWRfaW5zdGFuY2VfaWQYAiABKAkSDgoGdGlja2V0GAMgASgJIrMBChRBdXRoZW50aWNhdGVkU2Vzc2lvbhIPCgdob3N0X2lkGAEgASgJEioKBmRldmljZRgCIAEoCzIaLmFybWFkcmEudjEuRGV2aWNlSWRlbnRpdHkSEgoKY3NyZl90b2tlbhgDIAEoCRIaChJleHBpcmVzX2F0X3VuaXhfbXMYBCABKAMSLgoGc2NvcGVzGAUgAygLMh4uYXJtYWRyYS52MS5BdXRob3JpemF0aW9uR3JhbnQiFwoVQ3VycmVudFNlc3Npb25SZXF1ZXN0IhcKFVJlZnJlc2hTZXNzaW9uUmVxdWVzdCISChBSZW5ld0NzcmZSZXF1ZXN0IicKEVJlbmV3Q3NyZlJlc3BvbnNlEhIKCmNzcmZfdG9rZW4YASABKAkiFgoUTG9nb3V0U2Vzc2lvblJlcXVlc3QiJwoVU2Vzc2lvbkNsb3NlZFJlc3BvbnNlEg4KBmNsb3NlZBgBIAEoCCI1ChJMaXN0RGV2aWNlc1JlcXVlc3QSEAoIYWZ0ZXJfaWQYASABKAkSDQoFbGltaXQYAiABKA0iZQoTTGlzdERldmljZXNSZXNwb25zZRIrCgdkZXZpY2VzGAEgAygLMhouYXJtYWRyYS52MS5EZXZpY2VJZGVudGl0eRIPCgduZXh0X2lkGAIgASgJEhAKCGhhc19tb3JlGAMgASgIIkMKE1Jldm9rZURldmljZVJlcXVlc3QSEQoJZGV2aWNlX2lkGAEgASgJEhkKEWV4cGVjdGVkX3JldmlzaW9uGAIgASgEIjoKFFJldm9rZURldmljZVJlc3BvbnNlEhEKCWRldmljZV9pZBgBIAEoCRIPCgdyZXZva2VkGAIgASgIQiNaIWFybWFkcmEubG9jYWwvaG9zdC9nZW4vYXJtYWRyYS92MWIGcHJvdG8z",
   );
 
 /**
@@ -127,6 +127,84 @@ export const BootstrapTicketResponseSchema: GenMessage<BootstrapTicketResponse> 
   messageDesc(file_armadra_v1_identity, 2);
 
 /**
+ * Issued exclusively over the same-user OS control channel, exactly like a
+ * bootstrap ticket and for the same reason: opening a maintenance window is an
+ * action taken at the machine, never one a remote device may request. One
+ * token covers one domain, is single use, and expires two minutes after it was
+ * issued.
+ *
+ * @generated from message armadra.v1.MaintenanceTicketRequest
+ */
+export type MaintenanceTicketRequest =
+  Message<"armadra.v1.MaintenanceTicketRequest"> & {
+    /**
+     * @generated from field: string expected_host_id = 1;
+     */
+    expectedHostId: string;
+
+    /**
+     * @generated from field: string expected_instance_id = 2;
+     */
+    expectedInstanceId: string;
+
+    /**
+     * Lowercase domain name ("canvas", "settings", ...). The enumeration lives
+     * in ownership.proto; this file stays free of that dependency so the control
+     * channel keeps its own, smaller contract.
+     *
+     * @generated from field: string domain = 3;
+     */
+    domain: string;
+  };
+
+/**
+ * Describes the message armadra.v1.MaintenanceTicketRequest.
+ * Use `create(MaintenanceTicketRequestSchema)` to create a new message.
+ */
+export const MaintenanceTicketRequestSchema: GenMessage<MaintenanceTicketRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_identity, 3);
+
+/**
+ * @generated from message armadra.v1.MaintenanceTicketResponse
+ */
+export type MaintenanceTicketResponse =
+  Message<"armadra.v1.MaintenanceTicketResponse"> & {
+    /**
+     * @generated from field: string host_id = 1;
+     */
+    hostId: string;
+
+    /**
+     * @generated from field: string host_instance_id = 2;
+     */
+    hostInstanceId: string;
+
+    /**
+     * @generated from field: string token = 3;
+     */
+    token: string;
+
+    /**
+     * @generated from field: string domain = 4;
+     */
+    domain: string;
+
+    /**
+     * @generated from field: int64 expires_at_unix_ms = 5;
+     */
+    expiresAtUnixMs: bigint;
+  };
+
+/**
+ * Describes the message armadra.v1.MaintenanceTicketResponse.
+ * Use `create(MaintenanceTicketResponseSchema)` to create a new message.
+ */
+export const MaintenanceTicketResponseSchema: GenMessage<MaintenanceTicketResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_identity, 4);
+
+/**
  * @generated from message armadra.v1.DeviceIdentity
  */
 export type DeviceIdentity = Message<"armadra.v1.DeviceIdentity"> & {
@@ -174,7 +252,7 @@ export type DeviceIdentity = Message<"armadra.v1.DeviceIdentity"> & {
  */
 export const DeviceIdentitySchema: GenMessage<DeviceIdentity> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 3);
+  messageDesc(file_armadra_v1_identity, 5);
 
 /**
  * @generated from message armadra.v1.PairDeviceRequest
@@ -202,7 +280,7 @@ export type PairDeviceRequest = Message<"armadra.v1.PairDeviceRequest"> & {
  */
 export const PairDeviceRequestSchema: GenMessage<PairDeviceRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 4);
+  messageDesc(file_armadra_v1_identity, 6);
 
 /**
  * Access/refresh secrets travel only in protected HttpOnly cookies on the
@@ -244,7 +322,7 @@ export type AuthenticatedSession =
  */
 export const AuthenticatedSessionSchema: GenMessage<AuthenticatedSession> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 5);
+  messageDesc(file_armadra_v1_identity, 7);
 
 /**
  * @generated from message armadra.v1.CurrentSessionRequest
@@ -258,7 +336,7 @@ export type CurrentSessionRequest =
  */
 export const CurrentSessionRequestSchema: GenMessage<CurrentSessionRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 6);
+  messageDesc(file_armadra_v1_identity, 8);
 
 /**
  * @generated from message armadra.v1.RefreshSessionRequest
@@ -272,7 +350,7 @@ export type RefreshSessionRequest =
  */
 export const RefreshSessionRequestSchema: GenMessage<RefreshSessionRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 7);
+  messageDesc(file_armadra_v1_identity, 9);
 
 /**
  * @generated from message armadra.v1.RenewCsrfRequest
@@ -285,7 +363,7 @@ export type RenewCsrfRequest = Message<"armadra.v1.RenewCsrfRequest"> & {};
  */
 export const RenewCsrfRequestSchema: GenMessage<RenewCsrfRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 8);
+  messageDesc(file_armadra_v1_identity, 10);
 
 /**
  * @generated from message armadra.v1.RenewCsrfResponse
@@ -303,7 +381,7 @@ export type RenewCsrfResponse = Message<"armadra.v1.RenewCsrfResponse"> & {
  */
 export const RenewCsrfResponseSchema: GenMessage<RenewCsrfResponse> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 9);
+  messageDesc(file_armadra_v1_identity, 11);
 
 /**
  * @generated from message armadra.v1.LogoutSessionRequest
@@ -317,7 +395,7 @@ export type LogoutSessionRequest =
  */
 export const LogoutSessionRequestSchema: GenMessage<LogoutSessionRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 10);
+  messageDesc(file_armadra_v1_identity, 12);
 
 /**
  * @generated from message armadra.v1.SessionClosedResponse
@@ -336,7 +414,7 @@ export type SessionClosedResponse =
  */
 export const SessionClosedResponseSchema: GenMessage<SessionClosedResponse> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 11);
+  messageDesc(file_armadra_v1_identity, 13);
 
 /**
  * @generated from message armadra.v1.ListDevicesRequest
@@ -359,7 +437,7 @@ export type ListDevicesRequest = Message<"armadra.v1.ListDevicesRequest"> & {
  */
 export const ListDevicesRequestSchema: GenMessage<ListDevicesRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 12);
+  messageDesc(file_armadra_v1_identity, 14);
 
 /**
  * @generated from message armadra.v1.ListDevicesResponse
@@ -387,7 +465,7 @@ export type ListDevicesResponse = Message<"armadra.v1.ListDevicesResponse"> & {
  */
 export const ListDevicesResponseSchema: GenMessage<ListDevicesResponse> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 13);
+  messageDesc(file_armadra_v1_identity, 15);
 
 /**
  * @generated from message armadra.v1.RevokeDeviceRequest
@@ -410,7 +488,7 @@ export type RevokeDeviceRequest = Message<"armadra.v1.RevokeDeviceRequest"> & {
  */
 export const RevokeDeviceRequestSchema: GenMessage<RevokeDeviceRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 14);
+  messageDesc(file_armadra_v1_identity, 16);
 
 /**
  * @generated from message armadra.v1.RevokeDeviceResponse
@@ -434,4 +512,4 @@ export type RevokeDeviceResponse =
  */
 export const RevokeDeviceResponseSchema: GenMessage<RevokeDeviceResponse> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 15);
+  messageDesc(file_armadra_v1_identity, 17);

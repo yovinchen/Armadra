@@ -109,6 +109,7 @@ message HostControlRequest {
     HostStatusRequest status = 10;
     HostStopRequest stop = 11;
     BootstrapTicketRequest bootstrap = 12;
+    MaintenanceTicketRequest maintenance = 13;
   }
 }
 message HostControlResponse {
@@ -118,6 +119,7 @@ message HostControlResponse {
     HostStopResponse stopped = 11;
     ErrorResponse error = 12;
     BootstrapTicketResponse bootstrap = 13;
+    MaintenanceTicketResponse maintenance = 14;
   }
 }
 

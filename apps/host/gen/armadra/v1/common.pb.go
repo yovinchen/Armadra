@@ -1015,6 +1015,7 @@ type HostControlRequest struct {
 	//	*HostControlRequest_Status
 	//	*HostControlRequest_Stop
 	//	*HostControlRequest_Bootstrap
+	//	*HostControlRequest_Maintenance
 	Action        isHostControlRequest_Action `protobuf_oneof:"action"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1091,6 +1092,15 @@ func (x *HostControlRequest) GetBootstrap() *BootstrapTicketRequest {
 	return nil
 }
 
+func (x *HostControlRequest) GetMaintenance() *MaintenanceTicketRequest {
+	if x != nil {
+		if x, ok := x.Action.(*HostControlRequest_Maintenance); ok {
+			return x.Maintenance
+		}
+	}
+	return nil
+}
+
 type isHostControlRequest_Action interface {
 	isHostControlRequest_Action()
 }
@@ -1107,11 +1117,17 @@ type HostControlRequest_Bootstrap struct {
 	Bootstrap *BootstrapTicketRequest `protobuf:"bytes,12,opt,name=bootstrap,proto3,oneof"`
 }
 
+type HostControlRequest_Maintenance struct {
+	Maintenance *MaintenanceTicketRequest `protobuf:"bytes,13,opt,name=maintenance,proto3,oneof"`
+}
+
 func (*HostControlRequest_Status) isHostControlRequest_Action() {}
 
 func (*HostControlRequest_Stop) isHostControlRequest_Action() {}
 
 func (*HostControlRequest_Bootstrap) isHostControlRequest_Action() {}
+
+func (*HostControlRequest_Maintenance) isHostControlRequest_Action() {}
 
 type HostControlResponse struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
@@ -1122,6 +1138,7 @@ type HostControlResponse struct {
 	//	*HostControlResponse_Stopped
 	//	*HostControlResponse_Error
 	//	*HostControlResponse_Bootstrap
+	//	*HostControlResponse_Maintenance
 	Result        isHostControlResponse_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1207,6 +1224,15 @@ func (x *HostControlResponse) GetBootstrap() *BootstrapTicketResponse {
 	return nil
 }
 
+func (x *HostControlResponse) GetMaintenance() *MaintenanceTicketResponse {
+	if x != nil {
+		if x, ok := x.Result.(*HostControlResponse_Maintenance); ok {
+			return x.Maintenance
+		}
+	}
+	return nil
+}
+
 type isHostControlResponse_Result interface {
 	isHostControlResponse_Result()
 }
@@ -1227,6 +1253,10 @@ type HostControlResponse_Bootstrap struct {
 	Bootstrap *BootstrapTicketResponse `protobuf:"bytes,13,opt,name=bootstrap,proto3,oneof"`
 }
 
+type HostControlResponse_Maintenance struct {
+	Maintenance *MaintenanceTicketResponse `protobuf:"bytes,14,opt,name=maintenance,proto3,oneof"`
+}
+
 func (*HostControlResponse_Status) isHostControlResponse_Result() {}
 
 func (*HostControlResponse_Stopped) isHostControlResponse_Result() {}
@@ -1234,6 +1264,8 @@ func (*HostControlResponse_Stopped) isHostControlResponse_Result() {}
 func (*HostControlResponse_Error) isHostControlResponse_Result() {}
 
 func (*HostControlResponse_Bootstrap) isHostControlResponse_Result() {}
+
+func (*HostControlResponse_Maintenance) isHostControlResponse_Result() {}
 
 // Binary CLI result used by native launchers. Distinct from a stop request ACK:
 // stopped means the CLI has observed that ownership/drain has completed.
@@ -1533,15 +1565,16 @@ const file_armadra_v1_common_proto_rawDesc = "" +
 	"\x0fHostStopRequest\x120\n" +
 	"\x14expected_instance_id\x18\x01 \x01(\tR\x12expectedInstanceId\".\n" +
 	"\x10HostStopResponse\x12\x1a\n" +
-	"\baccepted\x18\x01 \x01(\bR\baccepted\"\xed\x01\n" +
+	"\baccepted\x18\x01 \x01(\bR\baccepted\"\xb7\x02\n" +
 	"\x12HostControlRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x127\n" +
 	"\x06status\x18\n" +
 	" \x01(\v2\x1d.armadra.v1.HostStatusRequestH\x00R\x06status\x121\n" +
 	"\x04stop\x18\v \x01(\v2\x1b.armadra.v1.HostStopRequestH\x00R\x04stop\x12B\n" +
-	"\tbootstrap\x18\f \x01(\v2\".armadra.v1.BootstrapTicketRequestH\x00R\tbootstrapB\b\n" +
-	"\x06action\"\xa2\x02\n" +
+	"\tbootstrap\x18\f \x01(\v2\".armadra.v1.BootstrapTicketRequestH\x00R\tbootstrap\x12H\n" +
+	"\vmaintenance\x18\r \x01(\v2$.armadra.v1.MaintenanceTicketRequestH\x00R\vmaintenanceB\b\n" +
+	"\x06action\"\xed\x02\n" +
 	"\x13HostControlResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x120\n" +
@@ -1549,7 +1582,8 @@ const file_armadra_v1_common_proto_rawDesc = "" +
 	" \x01(\v2\x16.armadra.v1.HostStatusH\x00R\x06status\x128\n" +
 	"\astopped\x18\v \x01(\v2\x1c.armadra.v1.HostStopResponseH\x00R\astopped\x121\n" +
 	"\x05error\x18\f \x01(\v2\x19.armadra.v1.ErrorResponseH\x00R\x05error\x12C\n" +
-	"\tbootstrap\x18\r \x01(\v2#.armadra.v1.BootstrapTicketResponseH\x00R\tbootstrapB\b\n" +
+	"\tbootstrap\x18\r \x01(\v2#.armadra.v1.BootstrapTicketResponseH\x00R\tbootstrap\x12I\n" +
+	"\vmaintenance\x18\x0e \x01(\v2%.armadra.v1.MaintenanceTicketResponseH\x00R\vmaintenanceB\b\n" +
 	"\x06result\"\x12\n" +
 	"\x10HostStoppedState\"\x8d\x01\n" +
 	"\x14HostManagementResult\x122\n" +
@@ -1579,30 +1613,32 @@ func file_armadra_v1_common_proto_rawDescGZIP() []byte {
 var file_armadra_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_armadra_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_armadra_v1_common_proto_goTypes = []any{
-	(CapabilityState)(0),            // 0: armadra.v1.CapabilityState
-	(*ProtocolVersion)(nil),         // 1: armadra.v1.ProtocolVersion
-	(*HelloRequest)(nil),            // 2: armadra.v1.HelloRequest
-	(*CapabilityStatus)(nil),        // 3: armadra.v1.CapabilityStatus
-	(*HelloResponse)(nil),           // 4: armadra.v1.HelloResponse
-	(*ErrorResponse)(nil),           // 5: armadra.v1.ErrorResponse
-	(*Scope)(nil),                   // 6: armadra.v1.Scope
-	(*CommandMeta)(nil),             // 7: armadra.v1.CommandMeta
-	(*SessionAddress)(nil),          // 8: armadra.v1.SessionAddress
-	(*TerminalInput)(nil),           // 9: armadra.v1.TerminalInput
-	(*StreamAck)(nil),               // 10: armadra.v1.StreamAck
-	(*StreamFrame)(nil),             // 11: armadra.v1.StreamFrame
-	(*HostStatus)(nil),              // 12: armadra.v1.HostStatus
-	(*HostStatusRequest)(nil),       // 13: armadra.v1.HostStatusRequest
-	(*HostStopRequest)(nil),         // 14: armadra.v1.HostStopRequest
-	(*HostStopResponse)(nil),        // 15: armadra.v1.HostStopResponse
-	(*HostControlRequest)(nil),      // 16: armadra.v1.HostControlRequest
-	(*HostControlResponse)(nil),     // 17: armadra.v1.HostControlResponse
-	(*HostStoppedState)(nil),        // 18: armadra.v1.HostStoppedState
-	(*HostManagementResult)(nil),    // 19: armadra.v1.HostManagementResult
-	(*DesktopShutdownRequest)(nil),  // 20: armadra.v1.DesktopShutdownRequest
-	(*DesktopRuntimeControl)(nil),   // 21: armadra.v1.DesktopRuntimeControl
-	(*BootstrapTicketRequest)(nil),  // 22: armadra.v1.BootstrapTicketRequest
-	(*BootstrapTicketResponse)(nil), // 23: armadra.v1.BootstrapTicketResponse
+	(CapabilityState)(0),              // 0: armadra.v1.CapabilityState
+	(*ProtocolVersion)(nil),           // 1: armadra.v1.ProtocolVersion
+	(*HelloRequest)(nil),              // 2: armadra.v1.HelloRequest
+	(*CapabilityStatus)(nil),          // 3: armadra.v1.CapabilityStatus
+	(*HelloResponse)(nil),             // 4: armadra.v1.HelloResponse
+	(*ErrorResponse)(nil),             // 5: armadra.v1.ErrorResponse
+	(*Scope)(nil),                     // 6: armadra.v1.Scope
+	(*CommandMeta)(nil),               // 7: armadra.v1.CommandMeta
+	(*SessionAddress)(nil),            // 8: armadra.v1.SessionAddress
+	(*TerminalInput)(nil),             // 9: armadra.v1.TerminalInput
+	(*StreamAck)(nil),                 // 10: armadra.v1.StreamAck
+	(*StreamFrame)(nil),               // 11: armadra.v1.StreamFrame
+	(*HostStatus)(nil),                // 12: armadra.v1.HostStatus
+	(*HostStatusRequest)(nil),         // 13: armadra.v1.HostStatusRequest
+	(*HostStopRequest)(nil),           // 14: armadra.v1.HostStopRequest
+	(*HostStopResponse)(nil),          // 15: armadra.v1.HostStopResponse
+	(*HostControlRequest)(nil),        // 16: armadra.v1.HostControlRequest
+	(*HostControlResponse)(nil),       // 17: armadra.v1.HostControlResponse
+	(*HostStoppedState)(nil),          // 18: armadra.v1.HostStoppedState
+	(*HostManagementResult)(nil),      // 19: armadra.v1.HostManagementResult
+	(*DesktopShutdownRequest)(nil),    // 20: armadra.v1.DesktopShutdownRequest
+	(*DesktopRuntimeControl)(nil),     // 21: armadra.v1.DesktopRuntimeControl
+	(*BootstrapTicketRequest)(nil),    // 22: armadra.v1.BootstrapTicketRequest
+	(*MaintenanceTicketRequest)(nil),  // 23: armadra.v1.MaintenanceTicketRequest
+	(*BootstrapTicketResponse)(nil),   // 24: armadra.v1.BootstrapTicketResponse
+	(*MaintenanceTicketResponse)(nil), // 25: armadra.v1.MaintenanceTicketResponse
 }
 var file_armadra_v1_common_proto_depIdxs = []int32{
 	1,  // 0: armadra.v1.HelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
@@ -1616,18 +1652,20 @@ var file_armadra_v1_common_proto_depIdxs = []int32{
 	13, // 8: armadra.v1.HostControlRequest.status:type_name -> armadra.v1.HostStatusRequest
 	14, // 9: armadra.v1.HostControlRequest.stop:type_name -> armadra.v1.HostStopRequest
 	22, // 10: armadra.v1.HostControlRequest.bootstrap:type_name -> armadra.v1.BootstrapTicketRequest
-	12, // 11: armadra.v1.HostControlResponse.status:type_name -> armadra.v1.HostStatus
-	15, // 12: armadra.v1.HostControlResponse.stopped:type_name -> armadra.v1.HostStopResponse
-	5,  // 13: armadra.v1.HostControlResponse.error:type_name -> armadra.v1.ErrorResponse
-	23, // 14: armadra.v1.HostControlResponse.bootstrap:type_name -> armadra.v1.BootstrapTicketResponse
-	12, // 15: armadra.v1.HostManagementResult.running:type_name -> armadra.v1.HostStatus
-	18, // 16: armadra.v1.HostManagementResult.stopped:type_name -> armadra.v1.HostStoppedState
-	20, // 17: armadra.v1.DesktopRuntimeControl.shutdown:type_name -> armadra.v1.DesktopShutdownRequest
-	18, // [18:18] is the sub-list for method output_type
-	18, // [18:18] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	23, // 11: armadra.v1.HostControlRequest.maintenance:type_name -> armadra.v1.MaintenanceTicketRequest
+	12, // 12: armadra.v1.HostControlResponse.status:type_name -> armadra.v1.HostStatus
+	15, // 13: armadra.v1.HostControlResponse.stopped:type_name -> armadra.v1.HostStopResponse
+	5,  // 14: armadra.v1.HostControlResponse.error:type_name -> armadra.v1.ErrorResponse
+	24, // 15: armadra.v1.HostControlResponse.bootstrap:type_name -> armadra.v1.BootstrapTicketResponse
+	25, // 16: armadra.v1.HostControlResponse.maintenance:type_name -> armadra.v1.MaintenanceTicketResponse
+	12, // 17: armadra.v1.HostManagementResult.running:type_name -> armadra.v1.HostStatus
+	18, // 18: armadra.v1.HostManagementResult.stopped:type_name -> armadra.v1.HostStoppedState
+	20, // 19: armadra.v1.DesktopRuntimeControl.shutdown:type_name -> armadra.v1.DesktopShutdownRequest
+	20, // [20:20] is the sub-list for method output_type
+	20, // [20:20] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_common_proto_init() }
@@ -1646,12 +1684,14 @@ func file_armadra_v1_common_proto_init() {
 		(*HostControlRequest_Status)(nil),
 		(*HostControlRequest_Stop)(nil),
 		(*HostControlRequest_Bootstrap)(nil),
+		(*HostControlRequest_Maintenance)(nil),
 	}
 	file_armadra_v1_common_proto_msgTypes[16].OneofWrappers = []any{
 		(*HostControlResponse_Status)(nil),
 		(*HostControlResponse_Stopped)(nil),
 		(*HostControlResponse_Error)(nil),
 		(*HostControlResponse_Bootstrap)(nil),
+		(*HostControlResponse_Maintenance)(nil),
 	}
 	file_armadra_v1_common_proto_msgTypes[18].OneofWrappers = []any{
 		(*HostManagementResult_Running)(nil),

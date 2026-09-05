@@ -1,0 +1,140 @@
+syntax = "proto3";
+
+package armadra.v1;
+
+option go_package = "armadra.local/host/gen/armadra/v1";
+
+import "armadra/v1/canvas.proto";
+import "armadra/v1/common.proto";
+
+// Write ownership of one business domain (Go Host 业务所有权迁移 §2.2).
+//
+// The first phase moved a single domain — the canvas — and recorded it in
+// `CanvasOwnership`. This file is that record generalized: one row per domain,
+// each with its own epoch, its own phase and its own switch. Three things stay
+// exactly as they were, because they are what make a switch reversible:
+//
+//  1. **One writer per domain.** There is no dual-write mode. While a domain
+//     is owned by the Host the Runtime refuses its writes with the stable code
+//     `ownership_moved` and keeps answering reads, and the other way round.
+//  2. **Monotonic epochs.** A handoff carrying an epoch that is not greater
+//     than the stored one is refused rather than applied out of order.
+//  3. **Explicit maintenance phases.** `SWITCHING` and `ROLLING_BACK` mean
+//     both sides refuse writes. A crash in the middle is therefore visible,
+//     never a state where two processes both believe they own the domain.
+//
+// `owner` and `phase` deliberately reuse the canvas enums rather than
+// introducing parallel ones: they are the same values on the wire, the Worker
+// frames in worker.proto already carry them, and a second spelling of
+// "runtime or host" would be one more thing to keep in agreement.
+
+// The six domains, in the order they are switched (§1.2). The order is also
+// the dependency order: a domain may only move to the Host once every domain
+// before it has settled there, and may only be rolled back once every domain
+// after it has been rolled back. Zero is not a domain: an unspecified or
+// unknown value is refused at every boundary, never defaulted to the canvas.
+enum WriteOwnershipDomain {
+  WRITE_OWNERSHIP_DOMAIN_UNSPECIFIED = 0;
+  WRITE_OWNERSHIP_DOMAIN_CANVAS = 1;
+  WRITE_OWNERSHIP_DOMAIN_SETTINGS = 2;
+  WRITE_OWNERSHIP_DOMAIN_FILESYSTEM = 3;
+  WRITE_OWNERSHIP_DOMAIN_SESSION = 4;
+  WRITE_OWNERSHIP_DOMAIN_AGENT = 5;
+  WRITE_OWNERSHIP_DOMAIN_GIT = 6;
+}
+
+// One stored ownership record. Same shape as `CanvasOwnership`, with the
+// domain as an enum and the Host's event watermark added: a rollback compares
+// that watermark with the current one to tell whether the Host published
+// changes a reverse migration would have to carry back.
+message WriteOwnership {
+  WriteOwnershipDomain domain = 1;
+  CanvasOwnershipOwner owner = 2;
+  uint64 epoch = 3;
+  CanvasOwnershipPhase phase = 4;
+  // The verified import this ownership rests on; empty while the Runtime owns.
+  string import_id = 5;
+  uint64 event_sequence = 10;
+  // Stable, localizable key, e.g. "ownership.switch.verified". Never a path.
+  string reason_code = 39;
+  int64 updated_at_unix_ms = 41;
+  uint64 revision = 50;
+}
+
+// What one switch or rollback is asked to do, and what the Host checked before
+// doing it. `dependencies` is an output: the Host fills in the records it
+// verified, so a caller can see that the order in §1.2 was actually enforced
+// rather than trusting that it was.
+message OwnershipSwitchPlan {
+  WriteOwnershipDomain domain = 1;
+  CanvasOwnershipOwner target_owner = 2;
+  // The epoch the caller believes is current. A mismatch is a CONFLICT.
+  uint64 expected_epoch = 3;
+  string import_id = 4;
+  repeated WriteOwnership dependencies = 10;
+  // Single-use token from the local OS control channel (§2.11 step 0). A
+  // device that cannot reach that channel — which is every remote device —
+  // can never open a maintenance window.
+  string maintenance_token = 11;
+}
+
+// One comparison between what the losing side exported and what the winning
+// side holds. A difference is a failure: `matched` false blocks the switch.
+message ConsistencyCheck {
+  string check = 1;
+  uint64 expected_count = 2;
+  uint64 actual_count = 3;
+  bool matched = 4;
+  // Bounded list of differing identifiers; never full payloads.
+  repeated string differences = 5;
+}
+
+// The verification a switch rests on (§3.3). It is reported whether or not the
+// switch happened: an operator needs to see which check failed, not only that
+// something did.
+message OwnershipReport {
+  WriteOwnershipDomain domain = 1;
+  string import_id = 2;
+  string export_id = 3;
+  bytes manifest_sha256 = 4;
+  repeated ConsistencyCheck checks = 10;
+  uint64 entity_count = 11;
+  bool matched = 30;
+  int64 verified_at_unix_ms = 40;
+}
+
+// armadra.v1.OwnershipService/Get
+message GetOwnershipRequest {
+  CommandMeta meta = 1;
+  WriteOwnershipDomain domain = 10;
+}
+message GetOwnershipResponse { WriteOwnership ownership = 1; }
+
+// armadra.v1.OwnershipService/List — every domain, always all six rows, so a
+// client never has to infer that an absent domain is Runtime-owned.
+message ListOwnershipRequest { CommandMeta meta = 1; }
+message ListOwnershipResponse { repeated WriteOwnership ownership = 1; }
+
+// armadra.v1.OwnershipService/Switch and /Rollback.
+//
+// There is no `operation_id` here on purpose. Every other mutation is made
+// idempotent by an operation id; a switch is made idempotent by the epoch
+// itself: `expected_epoch` names the state the caller decided against, and
+// re-running the same switch after a lost reply converges on whatever the
+// Runtime actually stored (§2.11 step 5).
+message SwitchOwnershipRequest {
+  CommandMeta meta = 1;
+  OwnershipSwitchPlan plan = 10;
+}
+message RollbackOwnershipRequest {
+  CommandMeta meta = 1;
+  OwnershipSwitchPlan plan = 10;
+  // Acknowledges, in one explicit flag, that changes made while the Host owned
+  // the domain will exist only in the reverse export package.
+  bool accept_export_only = 11;
+}
+message OwnershipSwitchResponse {
+  WriteOwnership ownership = 1;
+  OwnershipReport report = 2;
+  OwnershipSwitchPlan plan = 3;
+}
