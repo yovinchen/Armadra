@@ -66,6 +66,8 @@ export const modals: MessageModule = {
     "settings.nodeColorStyle.bar": "色条",
     "settings.restoreWorkspace": "打开时恢复上次工作空间",
     "settings.restoreWorkspace.note": "关闭后每次都从启动页开始。",
+    "settings.splashAnimation": "启动动画",
+    "settings.splashAnimation.note": "关闭后打开应用直接进入界面。",
 
     "settings.notifyDone": "后台完成通知",
     "settings.notifyNeedsYou": "需要你时通知",
@@ -324,6 +326,8 @@ export const modals: MessageModule = {
     "settings.nodeColorStyle.bar": "Bar",
     "settings.restoreWorkspace": "Restore last workspace on open",
     "settings.restoreWorkspace.note": "Off starts on the launcher every time.",
+    "settings.splashAnimation": "Startup animation",
+    "settings.splashAnimation.note": "Off opens straight into the app.",
 
     "settings.notifyDone": "Notify when finished",
     "settings.notifyNeedsYou": "Notify when input is needed",

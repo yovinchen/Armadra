@@ -65,6 +65,8 @@ const SOUND_VOLUME_KEY = "armadra.soundVolume";
 const RESTORE_WORKSPACE_KEY = "armadra.restoreLastWorkspace";
 /** 右下角用量胶囊（§19）。默认开；关掉后连轮询都不发。 */
 const SHOW_USAGE_KEY = "armadra.showUsage";
+/** 开屏动画（§24.1 通用页）。默认开；关掉后每次打开都直接进壳。 */
+const SPLASH_KEY = "armadra.splashAnimation";
 /**
  * 单会话上下文的提醒阈值（Agent 自动化设计 §2.2「80%/95% 为初始提醒阈值，
  * 可设置」）。只改徽标与 Popover 的措辞，不会自动压缩、清空或打断 CLI。
@@ -488,6 +490,8 @@ export interface PreferencesState {
   soundVolume: number;
   /** 右下角用量胶囊（§19）。 */
   showUsage: boolean;
+  /** 打开时播放开屏动画（§24.1 通用页）。 */
+  splashAnimation: boolean;
   /** 上下文提醒阈值（设计 §2.2）；`dangerPercent` 不会低于 `warnPercent`。 */
   contextThresholds: ContextThresholds;
   /** 会话内存徽标的变色阈值，字节（路线图 §4.3）。默认 2 GiB。 */
@@ -529,6 +533,7 @@ export interface PreferencesState {
   setSound: (enabled: boolean) => void;
   setSoundVolume: (volume: number) => void;
   setShowUsage: (enabled: boolean) => void;
+  setSplashAnimation: (enabled: boolean) => void;
   setContextThresholds: (thresholds: Partial<ContextThresholds>) => void;
   setSessionMemoryWarnBytes: (bytes: number) => void;
   setRenderBudget: (limit: number) => void;
@@ -615,6 +620,7 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
   sound: storedBoolean(SOUND_KEY, true),
   soundVolume: storedNumber(SOUND_VOLUME_KEY, 60, ...SOUND_VOLUME_RANGE),
   showUsage: storedBoolean(SHOW_USAGE_KEY, true),
+  splashAnimation: storedBoolean(SPLASH_KEY, true),
   contextThresholds: normalizeContextThresholds({
     warnPercent: storedNumber(
       CONTEXT_WARN_KEY,
@@ -771,6 +777,10 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
   setShowUsage(showUsage) {
     writeStored(SHOW_USAGE_KEY, String(showUsage));
     set({ showUsage });
+  },
+  setSplashAnimation(splashAnimation) {
+    writeStored(SPLASH_KEY, String(splashAnimation));
+    set({ splashAnimation });
   },
   setContextThresholds(patch) {
     set((state) => {
