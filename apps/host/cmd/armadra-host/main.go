@@ -552,7 +552,7 @@ func serveHost(parent context.Context, c config) (err error) {
 	}
 	var openHandoff server.HandoffOpener
 	if c.runtimeBinary != "" {
-		openHandoff = func(ctx context.Context) (ownership.Handoff, io.Closer, error) {
+		openHandoff = func(ctx context.Context) (ownership.Channel, io.Closer, error) {
 			// One short-lived Worker per switch. It may move an epoch and
 			// nothing else: the scheduling Worker cannot, and this one cannot
 			// run commands.

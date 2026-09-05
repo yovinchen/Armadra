@@ -21,13 +21,20 @@ type Request struct {
 	ExpectedEpoch uint64
 	ImportID      string
 	Handoff       Handoff
+	// Importer carries the reverse export package to the Runtime when a domain
+	// is handed back. A caller holding a Channel passes it as both. Only
+	// AcceptExportOnly makes a rollback without one legal.
+	Importer ReverseImporter
 	// ExportDirectory is required when handing a domain back: the Host owes the
 	// Runtime its data before it stops being the writer. An HTTPS rollback
 	// leaves it empty and the service names a directory under its export root,
 	// because a browser must not choose paths on this machine.
 	ExportDirectory string
-	// AcceptExportOnly acknowledges, in one explicit flag, that changes made
-	// while the Host owned the domain will exist only in the export package.
+	// AcceptExportOnly is a danger switch, not a normal option. It skips the
+	// reverse import entirely: the operator states that they accept the Host's
+	// data existing only inside the export package, and that the Runtime will
+	// resume from whatever it held before the switch. Nothing else in a
+	// rollback silently drops data, and this is why it takes a flag.
 	AcceptExportOnly bool
 	// MaintenanceToken is required on a running Host. SwitchOffline is the only
 	// entry point that does without one.
@@ -127,7 +134,7 @@ func (s *Service) run(ctx context.Context, request Request, window bool) (*pb.Ow
 		return &pb.OwnershipSwitchResponse{Ownership: Message(settled), Plan: plan}, nil
 	}
 
-	report, err := s.move(ctx, request, current, projector)
+	report, err := s.move(ctx, request, remote.Epoch, projector)
 	if err != nil {
 		return &pb.OwnershipSwitchResponse{Ownership: Message(current), Report: report, Plan: plan}, err
 	}
@@ -189,10 +196,14 @@ func (s *Service) run(ctx context.Context, request Request, window bool) (*pb.Ow
 }
 
 // move is the data half: taking the domain over means adopting a verified
-// import, and handing it back means writing the export the Runtime is owed. It
-// runs before the ownership record is touched, so a refusal here leaves the
-// Host exactly as it was.
-func (s *Service) move(ctx context.Context, request Request, current storage.Ownership, projector Projector) (*pb.OwnershipReport, error) {
+// import, and handing it back means writing the export the Runtime is owed and
+// having the Runtime store it. It runs before the ownership record is touched,
+// so a refusal here leaves the Host exactly as it was.
+//
+// `epoch` is the epoch the Runtime just acknowledged. A handback names it in
+// the package, so a package written against a different one is refused rather
+// than applied to rows it does not describe.
+func (s *Service) move(ctx context.Context, request Request, epoch uint64, projector Projector) (*pb.OwnershipReport, error) {
 	switch OwnerName(request.Target) {
 	case storage.OwnerHost:
 		if !validImportID(request.ImportID) {
@@ -211,21 +222,18 @@ func (s *Service) move(ctx context.Context, request Request, current storage.Own
 		if directory == "" {
 			return nil, ErrExportRequired
 		}
-		report, err := projector.Release(ctx, directory)
-		if err != nil {
-			return report, err
+		// Asked before the package is written: a rollback that cannot be
+		// completed should refuse at the start, not after producing files the
+		// operator now has to reason about.
+		if !request.AcceptExportOnly && (request.Importer == nil || !request.Importer.SupportsReverseImport()) {
+			return nil, ErrReverseImportUnsupported
 		}
-		if request.AcceptExportOnly {
-			return report, nil
-		}
-		watermark, err := projector.Watermark(ctx)
-		if err != nil {
-			return report, err
-		}
-		if watermark > current.EventSequence {
-			return report, ErrUnmigratedChanges
-		}
-		return report, nil
+		return projector.Release(ctx, Handback{
+			Directory:        directory,
+			Epoch:            epoch,
+			Importer:         request.Importer,
+			AcceptExportOnly: request.AcceptExportOnly,
+		})
 	}
 }
 

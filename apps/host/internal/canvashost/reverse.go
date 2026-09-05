@@ -7,59 +7,39 @@ import (
 	"fmt"
 
 	pb "armadra.local/host/gen/armadra/v1"
+	"armadra.local/host/internal/ownership"
 )
 
-// The rollback's middle steps (Go Host 业务所有权迁移 §2.12).
+// The canvas half of steps 2 to 4 of a handback (Go Host 业务所有权迁移 §2.12).
 //
-// A rollback used to be "write the package and hand the epoch back", with the
-// operator asserting in one flag that the Host's changes only existed in the
-// package. It is now four steps, and the epoch only moves after the fourth:
+// The state machine writes nothing itself: it decides that the domain may be
+// handed back and calls the projector, which exports (export.go) and then runs
+// what is below. The Runtime applies the package, re-reads its own rows, and
+// reports their canonical digests; those digests are compared workspace by
+// workspace with the ones the package named, and a single difference blocks the
+// handover.
 //
-//  1. the Host exports what it holds (export.go)
-//  2. the Runtime applies that package to its own database
-//  3. the Runtime re-reads its rows and reports their canonical digests
-//  4. the Host compares those digests, workspace by workspace, with the ones
-//     it wrote — a single difference blocks the handover
-//
-// Step 3 is what makes step 4 worth doing. A report assembled from the request
-// would say what the Runtime was asked to store; the digest of a re-read says
-// what it actually holds.
-
-// ErrReverseImportUnsupported means the Runtime cannot apply a package at all.
-// The operator's remaining option is `--accept-export-only`, and the message
-// says so rather than leaving them to guess which flag it was.
-var ErrReverseImportUnsupported = errors.New("the Runtime cannot apply a reverse export package")
-
-// ErrReverseImportFailed means the package reached the Runtime but what it
-// stored is not what the package described. The epoch stays with the Host,
-// which is the safe direction: the Host still has every row.
-var ErrReverseImportFailed = errors.New("the Runtime did not store the reverse export package")
-
-// ReverseImporter is the half of the Worker channel a rollback needs. It is
-// separate from Handoff so a test can supply one without the other, and so a
-// Worker that cannot import is a compile-time distinct thing from one that can.
-type ReverseImporter interface {
-	SupportsReverseImport() bool
-	ApplyReverseExport(ctx context.Context, domain, packagePath string, indexSha256 []byte, expectedEpoch uint64, importID string) (*pb.ReverseImportReport, error)
-}
+// The re-read is what makes the comparison worth doing. A report assembled from
+// the request would say what the Runtime was asked to store; the digest of a
+// re-read says what it actually holds.
 
 // reverseImport applies a package this Host just wrote and appends the
 // comparison to `report`. It returns an error unless every workspace in the
 // package came back with the digest and entity count the package named.
-func (s *Service) reverseImport(ctx context.Context, importer ReverseImporter, directory string, epoch uint64, report *pb.CanvasConsistencyReport) error {
+func (s *Service) reverseImport(ctx context.Context, importer ownership.ReverseImporter, directory string, epoch uint64, report *pb.CanvasConsistencyReport) error {
 	index, indexDigest, err := readExportIndex(directory)
 	if err != nil {
 		return err
 	}
 	if index.Epoch != epoch {
-		return fmt.Errorf("%w: the package names epoch %d, not %d", ErrReverseImportFailed, index.Epoch, epoch)
+		return fmt.Errorf("%w: the package names epoch %d, not %d", ownership.ErrReverseImportFailed, index.Epoch, epoch)
 	}
 	// The identifier is the package's own index digest, so re-running an
 	// interrupted rollback replays the same import instead of starting another.
 	importID := hex.EncodeToString(indexDigest)
 	result, err := importer.ApplyReverseExport(ctx, ExportDomain, directory, indexDigest, epoch, importID)
 	if err != nil {
-		return errors.Join(ErrReverseImportFailed, err)
+		return errors.Join(ownership.ErrReverseImportFailed, err)
 	}
 
 	builder := &checkBuilder{}
@@ -118,7 +98,7 @@ func (s *Service) reverseImport(ctx context.Context, importer ReverseImporter, d
 	for _, check := range builder.checks {
 		if !check.Matched {
 			report.Matched = false
-			return ErrReverseImportFailed
+			return ownership.ErrReverseImportFailed
 		}
 	}
 	return nil

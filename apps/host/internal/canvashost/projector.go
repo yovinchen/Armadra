@@ -4,6 +4,7 @@ import (
 	"context"
 
 	pb "armadra.local/host/gen/armadra/v1"
+	"armadra.local/host/internal/ownership"
 	"armadra.local/host/internal/storage"
 )
 
@@ -39,10 +40,25 @@ func (p Projector) Adopt(ctx context.Context, importID string) (*pb.OwnershipRep
 	return ownershipReport(report), nil
 }
 
-// Release writes the reverse export the Host owes the Runtime and verifies what
-// actually reached the disk.
-func (p Projector) Release(ctx context.Context, directory string) (*pb.OwnershipReport, error) {
-	report, err := p.service.Export(ctx, directory)
+// Release hands the canvas back. The export is only the first of the four
+// steps: the package then goes to the Runtime, the Runtime re-reads its own
+// rows, and reverseImport compares those digests workspace by workspace. The
+// report carries that comparison, so a refusal names the workspace it failed on
+// rather than only that something did.
+//
+// AcceptExportOnly is the one path that stops after the export. It exists
+// because a Runtime too old to import at all would otherwise strand a Host that
+// has to give the domain back, and it is spelled out as a danger switch
+// everywhere it is reachable.
+func (p Projector) Release(ctx context.Context, handback ownership.Handback) (*pb.OwnershipReport, error) {
+	report, err := p.service.Export(ctx, handback.Directory)
+	if err != nil || handback.AcceptExportOnly {
+		return ownershipReport(report), err
+	}
+	// The epoch has not moved and the Host still holds every row, so a failed
+	// import is recoverable: fix the cause, use a new export directory, run the
+	// same rollback again.
+	err = p.service.reverseImport(ctx, handback.Importer, handback.Directory, handback.Epoch, report)
 	return ownershipReport(report), err
 }
 

@@ -266,6 +266,7 @@ func switchToHost(t *testing.T, f *fixture, importID string, runtime *fakeRuntim
 		Target:   pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_HOST,
 		ImportID: importID,
 		Handoff:  runtime,
+		Importer: runtime,
 	})
 	if err != nil {
 		t.Fatalf("the switch failed: %v", err)
@@ -450,48 +451,12 @@ func TestRollbackRequiresAReverseExport(t *testing.T) {
 	switchToHost(t, f, importID, runtime)
 	_, err := f.switches.SwitchOffline(fixtureContext, ownership.Request{
 		Domain:   Domain,
-		Target:  pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME,
-		Handoff: runtime,
+		Target:   pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME,
+		Handoff:  runtime,
+		Importer: runtime,
 	})
 	if !errors.Is(err, ownership.ErrExportRequired) {
 		t.Fatalf("a rollback without an export was accepted: %v", err)
-	}
-}
-
-// Handing the epoch back while the Host holds changes the Runtime never saw
-// requires the operator to say so explicitly.
-func TestRollbackRefusesUnmigratedHostChanges(t *testing.T) {
-	f, importID := migrated(t)
-	runtime := newFakeRuntime()
-	switchToHost(t, f, importID, runtime)
-	document := take(t, f)
-	document.Canvas.Name = "只在 Host 上改过"
-	if _, err := f.service.SaveDocument(fixtureContext, f.caller(ScopeRead, ScopeWrite), &pb.SaveCanvasDocumentRequest{
-		OperationId: "host-edit", Canvas: document.Canvas, ExpectedRevision: document.Canvas.Revision,
-		Nodes: document.Nodes, Edges: document.Edges, Annotations: document.Annotations,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	directory := filepath.Join(t.TempDir(), "reverse")
-	_, err := f.switches.SwitchOffline(fixtureContext, ownership.Request{
-		Domain:   Domain,
-		Target:          pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME,
-		Handoff:         runtime,
-		ExportDirectory: directory,
-	})
-	if !errors.Is(err, ownership.ErrUnmigratedChanges) {
-		t.Fatalf("a rollback stranded Host-only changes: %v", err)
-	}
-	// The export was still written, so the operator has the data in hand.
-	index, err := os.ReadFile(filepath.Join(directory, "export.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(index) == 0 {
-		t.Fatal("the reverse export is empty")
-	}
-	if runtime.owner != pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_HOST {
-		t.Fatal("the epoch moved despite the refusal")
 	}
 }
 
@@ -501,9 +466,10 @@ func TestRollbackReturnsWritesToTheRuntime(t *testing.T) {
 	switchToHost(t, f, importID, runtime)
 	directory := filepath.Join(t.TempDir(), "reverse")
 	result, err := f.switches.SwitchOffline(fixtureContext, ownership.Request{
-		Domain:   Domain,
+		Domain:          Domain,
 		Target:          pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME,
 		Handoff:         runtime,
+		Importer:        runtime,
 		ExportDirectory: directory,
 	})
 	if err != nil {
@@ -543,9 +509,10 @@ func TestSwitchRefusesAStaleRuntime(t *testing.T) {
 	runtime.epoch = 1
 	runtime.owner = pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME
 	_, err := f.switches.SwitchOffline(fixtureContext, ownership.Request{
-		Domain:   Domain,
+		Domain:          Domain,
 		Target:          pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME,
 		Handoff:         runtime,
+		Importer:        runtime,
 		ExportDirectory: filepath.Join(t.TempDir(), "reverse"),
 	})
 	if !errors.Is(err, ownership.ErrRuntimeStale) {

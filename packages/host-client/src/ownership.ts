@@ -158,8 +158,11 @@ export interface SwitchOwnershipInput {
   /** The verified import a move to the Host rests on. */
   importId?: string;
   /**
-   * Only for a rollback: accepts that changes made while the Host owned the
-   * domain will exist solely in the reverse export package.
+   * A danger switch, only for a rollback. An ordinary rollback has the Runtime
+   * import the reverse export package and re-read its own rows before the epoch
+   * moves; this skips that entirely, so everything written while the Host owned
+   * the domain stays only in the package and the Runtime resumes from what it
+   * held before the switch. Leave it unset unless the Runtime cannot import.
    */
   acceptExportOnly?: boolean;
 }

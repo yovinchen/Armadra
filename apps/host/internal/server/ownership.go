@@ -21,7 +21,12 @@ const OwnershipPrefix = "/rpc/armadra.v1.OwnershipService/"
 // an epoch, and one that outlived a switch would be a second writer waiting to
 // happen. A Host with no Runtime binary or database configured has no opener,
 // and its switch methods answer UNSUPPORTED.
-type HandoffOpener func(context.Context) (ownership.Handoff, io.Closer, error)
+//
+// It opens an ownership.Channel rather than a bare Handoff because an HTTPS
+// rollback has to carry the reverse export package back over the same link. A
+// channel that could only move an epoch would let a rollback start and then
+// discover, after the package was written, that nothing can apply it.
+type HandoffOpener func(context.Context) (ownership.Channel, io.Closer, error)
 
 // Who may write which business domain (Go Host 业务所有权迁移 §2.11).
 //
@@ -78,7 +83,12 @@ func ownershipFailure(w http.ResponseWriter, err error) {
 		// The window is still open and both sides still refuse writes. Re-run
 		// the same switch; do not treat this as either outcome.
 		writeError(w, http.StatusConflict, "CONFLICT", ownership.ReasonUnknown)
-	case errors.Is(err, ownership.ErrNotVerified), errors.Is(err, ownership.ErrUnmigratedChanges),
+	case errors.Is(err, ownership.ErrReverseImportUnsupported):
+		// The Runtime on the other end cannot apply a package at all, so no
+		// export was written. It is the Host's configuration that is short, not
+		// the caller's request.
+		writeError(w, http.StatusNotImplemented, "UNSUPPORTED", "This Host cannot hand that domain back")
+	case errors.Is(err, ownership.ErrNotVerified), errors.Is(err, ownership.ErrReverseImportFailed),
 		errors.Is(err, ownership.ErrRuntimeStale), errors.Is(err, ownership.ErrEpochMismatch),
 		errors.Is(err, ownership.ErrExportRequired), errors.Is(err, storage.ErrConflict):
 		writeError(w, http.StatusConflict, "CONFLICT", ownership.ReasonFailed)
@@ -221,7 +231,7 @@ func ownershipRequest(w http.ResponseWriter, r *http.Request, host Identity, ide
 			ownershipFailure(w, err)
 			return
 		}
-		handoff, closer, err := open(r.Context())
+		channel, closer, err := open(r.Context())
 		if err != nil {
 			// The Runtime could not be reached at all, so nothing was decided.
 			// That is not an unknown outcome: no epoch was touched.
@@ -229,7 +239,9 @@ func ownershipRequest(w http.ResponseWriter, r *http.Request, host Identity, ide
 			return
 		}
 		defer closer.Close()
-		request.Handoff = handoff
+		// One link, both halves: the epoch handoff and, for a rollback, the
+		// package that has to reach the Runtime before the epoch moves.
+		request.Handoff, request.Importer = channel, channel
 		request.AcceptExportOnly = acceptExportOnly
 		var result *pb.OwnershipSwitchResponse
 		if rollback {

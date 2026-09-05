@@ -27,6 +27,7 @@ type fakeProjector struct {
 	watermark uint64
 	adopted   int
 	released  int
+	handback  Handback
 	failWith  error
 }
 
@@ -38,10 +39,19 @@ func (p *fakeProjector) Adopt(context.Context, string) (*pb.OwnershipReport, err
 	return &pb.OwnershipReport{Matched: p.matched, Checks: []*pb.ConsistencyCheck{{Check: "test.rows", Matched: p.matched}}}, nil
 }
 
-func (p *fakeProjector) Release(context.Context, string) (*pb.OwnershipReport, error) {
+// Release records what the state machine handed it. Comparing the Runtime's
+// re-read with the package is each domain's own business, and is exercised
+// against the canvas projector and a real Runtime; what matters here is that a
+// domain is never asked to hand data back without a way to deliver it, or
+// against an epoch nobody confirmed.
+func (p *fakeProjector) Release(_ context.Context, handback Handback) (*pb.OwnershipReport, error) {
 	p.released++
+	p.handback = handback
 	if p.failWith != nil {
 		return nil, p.failWith
+	}
+	if !handback.AcceptExportOnly && (handback.Importer == nil || !handback.Importer.SupportsReverseImport()) {
+		return nil, ErrReverseImportUnsupported
 	}
 	return &pb.OwnershipReport{Matched: true}, nil
 }
@@ -57,6 +67,12 @@ type fakeRuntime struct {
 	setErr   error
 	getErr   error
 	getCalls int
+	// The reverse import half of the same channel. `noImport` is a Runtime too
+	// old to apply a package at all.
+	noImport     bool
+	importCalls  int
+	importDomain string
+	importEpoch  uint64
 }
 
 func newFakeRuntime() *fakeRuntime {
@@ -94,6 +110,14 @@ func (r *fakeRuntime) SetWriteOwnership(_ context.Context, domain string, owner 
 	r.epochs[domain] = epoch
 	r.owners[domain] = owner
 	return r.record(domain), nil
+}
+
+func (r *fakeRuntime) SupportsReverseImport() bool { return !r.noImport }
+
+func (r *fakeRuntime) ApplyReverseExport(_ context.Context, domain, _ string, _ []byte, epoch uint64, _ string) (*pb.ReverseImportReport, error) {
+	r.importCalls++
+	r.importDomain, r.importEpoch = domain, epoch
+	return &pb.ReverseImportReport{Domain: domain, Epoch: epoch}, nil
 }
 
 type harness struct {
@@ -154,6 +178,7 @@ func (h *harness) switchTo(t *testing.T, domain string, target pb.CanvasOwnershi
 		Target:           target,
 		ImportID:         "import-1",
 		Handoff:          h.runtime,
+		Importer:         h.runtime,
 		ExportDirectory:  t.TempDir(),
 		MaintenanceToken: h.token(t, domain),
 	})
@@ -234,6 +259,7 @@ func TestRollbackRefusesWhileALaterDomainIsStillOnTheHost(t *testing.T) {
 		Domain:           storage.OwnershipDomainCanvas,
 		Target:           toRuntime,
 		Handoff:          h.runtime,
+		Importer:         h.runtime,
 		ExportDirectory:  t.TempDir(),
 		MaintenanceToken: h.token(t, storage.OwnershipDomainCanvas),
 	})
@@ -369,7 +395,8 @@ func TestSwitchRefusesAnEpochTheCallerDidNotSee(t *testing.T) {
 	h.switchTo(t, storage.OwnershipDomainCanvas, toHost)
 	_, err := h.service.Switch(testContext, Request{
 		Domain: storage.OwnershipDomainCanvas, Target: toRuntime, ExpectedEpoch: 1,
-		Handoff: h.runtime, ExportDirectory: t.TempDir(), MaintenanceToken: h.token(t, storage.OwnershipDomainCanvas),
+		Handoff: h.runtime, Importer: h.runtime, ExportDirectory: t.TempDir(),
+		MaintenanceToken: h.token(t, storage.OwnershipDomainCanvas),
 	})
 	if !errors.Is(err, ErrEpochMismatch) {
 		t.Fatalf("a stale expected epoch was accepted: %v", err)
@@ -445,12 +472,12 @@ func TestHttpsRollbackAllocatesItsOwnExportDirectory(t *testing.T) {
 	h.switchTo(t, storage.OwnershipDomainCanvas, toHost)
 	if _, err := h.service.Rollback(testContext, Request{
 		Domain: storage.OwnershipDomainCanvas, ExportDirectory: "/tmp/anywhere",
-		Handoff: h.runtime, MaintenanceToken: h.token(t, storage.OwnershipDomainCanvas),
+		Handoff: h.runtime, Importer: h.runtime, MaintenanceToken: h.token(t, storage.OwnershipDomainCanvas),
 	}); !errors.Is(err, ErrInvalid) {
 		t.Fatal("an HTTPS caller named an export path")
 	}
 	result, err := h.service.Rollback(testContext, Request{
-		Domain: storage.OwnershipDomainCanvas, Handoff: h.runtime,
+		Domain: storage.OwnershipDomainCanvas, Handoff: h.runtime, Importer: h.runtime,
 		MaintenanceToken: h.token(t, storage.OwnershipDomainCanvas),
 	})
 	if err != nil {

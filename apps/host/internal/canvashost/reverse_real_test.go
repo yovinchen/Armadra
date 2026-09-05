@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	pb "armadra.local/host/gen/armadra/v1"
+	"armadra.local/host/internal/ownership"
 	"armadra.local/host/internal/worker"
 )
 
@@ -58,8 +59,9 @@ func TestRealRuntimeCompletesTheExportImportVerifyLoop(t *testing.T) {
 		t.Fatal("the real Runtime does not advertise the reverse import capability")
 	}
 
-	switched, err := f.service.Switch(fixtureContext, SwitchRequest{
-		Target: pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_HOST, ImportID: importID, Handoff: client,
+	switched, err := f.switches.SwitchOffline(fixtureContext, ownership.Request{
+		Domain: Domain, Target: pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_HOST,
+		ImportID: importID, Handoff: client, Importer: client,
 	})
 	if err != nil {
 		t.Fatalf("the switch to the real Runtime failed: %v", err)
@@ -72,8 +74,8 @@ func TestRealRuntimeCompletesTheExportImportVerifyLoop(t *testing.T) {
 	hostEdit(t, f, "回滚前在 Host 上改名")
 
 	directory := filepath.Join(t.TempDir(), "reverse")
-	result, err := f.service.Switch(fixtureContext, SwitchRequest{
-		Target:  pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME,
+	result, err := f.switches.SwitchOffline(fixtureContext, ownership.Request{
+		Domain: Domain, Target: pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME,
 		Handoff: client, Importer: client, ExportDirectory: directory,
 	})
 	if err != nil {

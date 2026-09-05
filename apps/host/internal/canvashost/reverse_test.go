@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	pb "armadra.local/host/gen/armadra/v1"
+	"armadra.local/host/internal/ownership"
 )
 
 // The rollback with a real reverse import (Go Host 业务所有权迁移 §2.12).
@@ -32,9 +33,13 @@ func hostEdit(t *testing.T, f *fixture, name string) {
 	}
 }
 
-func rollback(t *testing.T, f *fixture, runtime *fakeRuntime, directory string, acceptExportOnly bool) (*pb.CanvasOwnershipResponse, error) {
+// rollback runs the canvas back through the generic state machine, which is
+// the only implementation of the switch: the fake Runtime is both halves of the
+// channel, exactly as the real Worker client is.
+func rollback(t *testing.T, f *fixture, runtime *fakeRuntime, directory string, acceptExportOnly bool) (*pb.OwnershipSwitchResponse, error) {
 	t.Helper()
-	return f.service.Switch(fixtureContext, SwitchRequest{
+	return f.switches.SwitchOffline(fixtureContext, ownership.Request{
+		Domain:           Domain,
 		Target:           pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME,
 		Handoff:          runtime,
 		Importer:         runtime,
@@ -94,7 +99,7 @@ func TestRollbackRefusesWhenTheRuntimeReadsBackSomethingElse(t *testing.T) {
 
 	directory := filepath.Join(t.TempDir(), "reverse")
 	result, err := rollback(t, f, runtime, directory, false)
-	if !errors.Is(err, ErrReverseImportFailed) {
+	if !errors.Is(err, ownership.ErrReverseImportFailed) {
 		t.Fatalf("a rollback the Runtime did not store was accepted: %v", err)
 	}
 	if result == nil || result.Report == nil || result.Report.Matched {
@@ -124,7 +129,7 @@ func TestRollbackRefusesAnUnsupportedEntity(t *testing.T) {
 	runtime.reverseIssue = "reverse.unsupported_entity"
 
 	_, err := rollback(t, f, runtime, filepath.Join(t.TempDir(), "reverse"), false)
-	if !errors.Is(err, ErrReverseImportFailed) {
+	if !errors.Is(err, ownership.ErrReverseImportFailed) {
 		t.Fatalf("a package the Runtime could not fully apply was accepted: %v", err)
 	}
 	if runtime.owner != pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_HOST {
@@ -141,7 +146,7 @@ func TestRollbackRefusesAWorkerThatCannotImport(t *testing.T) {
 	runtime.reverseUnsupported = true
 
 	directory := filepath.Join(t.TempDir(), "reverse")
-	if _, err := rollback(t, f, runtime, directory, false); !errors.Is(err, ErrReverseImportUnsupported) {
+	if _, err := rollback(t, f, runtime, directory, false); !errors.Is(err, ownership.ErrReverseImportUnsupported) {
 		t.Fatalf("a rollback was planned against a Worker that cannot finish it: %v", err)
 	}
 	if _, err := os.Stat(directory); !errors.Is(err, os.ErrNotExist) {

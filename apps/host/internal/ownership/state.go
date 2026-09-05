@@ -15,7 +15,8 @@
 //  2. the losing side produced a consistent export, and the winning side
 //     staged and projected it
 //  3. the projection was compared item for item against the export, and a
-//     single difference blocks the switch
+//     single difference blocks the switch — on the way back that comparison is
+//     against the Runtime's own re-read of the package it applied (rollback.go)
 //  4. the epoch moves, and only then does either side change who may write
 //  5. the acknowledged epoch — read back from the Runtime, never assumed — is
 //     what the next transition is decided against
@@ -79,9 +80,6 @@ var (
 	// ErrExportRequired means a rollback was asked for without the reverse
 	// export the Host owes the Runtime.
 	ErrExportRequired = errors.New("a rollback requires a Host-side export back to the Runtime")
-	// ErrUnmigratedChanges means the Host published changes since it took the
-	// domain; handing the epoch back would strand them.
-	ErrUnmigratedChanges = errors.New("the Host holds changes the Runtime does not have")
 )
 
 // Handoff is the private channel to the Runtime. The production implementation
@@ -100,12 +98,14 @@ type Projector interface {
 	// Adopt stages, projects and verifies an import. A report that did not
 	// match is returned with ErrNotVerified rather than silently accepted.
 	Adopt(ctx context.Context, importID string) (*pb.OwnershipReport, error)
-	// Release writes the reverse export the Host owes the Runtime into an empty
-	// directory, and verifies what reached the disk.
-	Release(ctx context.Context, directory string) (*pb.OwnershipReport, error)
-	// Watermark is the Host's event sequence right now. A rollback compares it
-	// with the sequence the switch settled at to tell whether the Host
-	// published changes the reverse export would have to carry back.
+	// Release hands the domain back: it writes the reverse export into an empty
+	// directory, has the Runtime apply it, and compares the Runtime's re-read
+	// with what the package described. A report that did not match is returned
+	// with ErrReverseImportFailed, and the epoch does not move.
+	Release(ctx context.Context, handback Handback) (*pb.OwnershipReport, error)
+	// Watermark is the Host's event sequence right now. It is recorded with
+	// every settled switch, so an operator can see how far the Host's own
+	// stream had run when the domain moved.
 	Watermark(ctx context.Context) (uint64, error)
 }
 

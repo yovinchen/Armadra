@@ -44,8 +44,10 @@ func ownershipScopes() []auth.Scope {
 	return []auth.Scope{{Permission: ScopeOwnershipRead}, {Permission: ScopeOwnershipWrite}}
 }
 
-// stubRuntime is the other side of a handoff that never has to be reached in
-// these tests: every request here is refused before the epoch would move.
+// stubRuntime is the other side of a channel that never has to be reached in
+// these tests: every request here is refused before the epoch would move. It
+// implements both halves because a rollback needs both, and a Host that could
+// only move an epoch could not hand a domain back at all.
 type stubRuntime struct{}
 
 func (stubRuntime) GetWriteOwnership(context.Context, string) (*pb.WorkerWriteOwnership, error) {
@@ -53,6 +55,12 @@ func (stubRuntime) GetWriteOwnership(context.Context, string) (*pb.WorkerWriteOw
 }
 
 func (stubRuntime) SetWriteOwnership(context.Context, string, pb.CanvasOwnershipOwner, uint64, uint64, string) (*pb.WorkerWriteOwnership, error) {
+	return nil, errors.New("no Runtime in this test")
+}
+
+func (stubRuntime) SupportsReverseImport() bool { return true }
+
+func (stubRuntime) ApplyReverseExport(context.Context, string, string, []byte, uint64, string) (*pb.ReverseImportReport, error) {
 	return nil, errors.New("no Runtime in this test")
 }
 
@@ -74,7 +82,7 @@ func withOwnership(assembled ...**ownership.Service) func(*authFixture, *Options
 			panic(err)
 		}
 		options.Ownership = service
-		options.OpenHandoff = func(context.Context) (ownership.Handoff, io.Closer, error) {
+		options.OpenHandoff = func(context.Context) (ownership.Channel, io.Closer, error) {
 			return stubRuntime{}, io.NopCloser(bytes.NewReader(nil)), nil
 		}
 		for _, out := range assembled {
