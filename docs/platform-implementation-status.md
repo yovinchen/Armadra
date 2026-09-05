@@ -16,7 +16,7 @@
 | 阶段  | 状态     | 已完成 / 剩余                                                                                      |
 | ----- | -------- | -------------------------------------------------------------------------------------------------- |
 | M0    | 部分完成 | 三语言协议及真实 Host 握手完成；macOS CDP 核验通过，Windows 仅交叉检查，实机与完整 Worker 仍待完成 |
-| M1    | 进行中   | 身份、连接设置和本机后台启停 CLI 已完成；应用自动接入、设备认证和业务迁移未完成                    |
+| M1    | 进行中   | 身份、后台启停及桌面自动启动接线已完成；设备认证、业务迁移和剩余平台验收未完成                     |
 | M2–M7 | 待实施   | 后台调度及其他产品工作流仍按各阶段交付                                                             |
 | M8    | 预留范围 | 多人、多账号及发布更新只按设计交付前期契约                                                         |
 
@@ -51,6 +51,9 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 | `ac5c6b0` | 同用户本机 IPC             | Unix 私有短路径 socket、Windows 管道及服务端身份校验、长路径/别名/权限测试                                      |
 | `f3b3326` | 实例绑定控制协议           | Status/Stop Protobuf、22 项控制测试、帧/深度/丢 ACK/断连分类和跨语言样例                                        |
 | `3339a88` | 后台启停 CLI               | 独立 start/status/stop/serve、真实子进程保活、并发收敛、HTTP 排空与重启身份                                     |
+| `fd240f6` | Go Host sidecar准备        | 6 项目标/路径测试，本机构建与Windows PE交叉产物；保留Rust sidecar流程                                           |
+| `f03c23a` | 原生管理结果Protobuf       | start/status/stop二进制输出、跨语言样例及CLI生命周期验证                                                        |
+| `40dc141` | 桌面自动启动/发现Host      | 10项Rust测试、clippy、真实Rust启动器和macOS原生进程保活；窗口菜单退出未验收                                     |
 
 协议验收覆盖：中文/emoji、uint64 最大值、int64 最小值、超过 JS 安全整数的 generation、optional 未传/零值、oneof 三个分支、截断拒绝、未知字段行为。Go/TS 默认保留未知字段；prost 会丢弃，未来 Rust 透明中继必须转发原始载荷。尚未引入枚举，不将未知枚举检查记为已完成。
 
@@ -101,6 +104,18 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - `pnpm host:smoke` 的原有 Protobuf HTTP/CORS 链路仍通过。测试使用临时目录和私有端点，结束后停止服务并清理；本次未启动长期用户服务。
 - 不包含登录/开机自启动安装、Tauri 自动管理、远程设备认证、业务数据库切换或实际定时任务。Windows 身份/日志目录仍沿用目录 ACL，未保存账号凭据；控制管道的受保护 DACL 不等于整个数据目录隔离已验收。
 
+## M1 第四批验收
+
+- desktop predev 准备本机 Go Host，生产 sidecar 准备包含 Runtime/Hook/Host；支持明确的 macOS/Linux/Windows x64/arm64 目标，未知目标拒绝。构建来源尊重 CARGO_TARGET_DIR，Tauri 暂存按配置固定路径。
+- `start/status/stop --output protobuf` 返回单个 HostManagementResult，原生启动器不解析 JSON；默认 CLI JSON 展示不变。跨语言样例区分运行状态与已完成停止，协议生成漂移检查通过。
+- Tauri setup 异步调用 Rust 启动器，校验默认端点、两个身份、协议、OPTIONS/Hello来源许可。已有服务不兼容时不重配或重启，失败不阻断原 Runtime/UI；退出钩子没有 Go stop。
+- 生产仅使用包内 sidecar；开发支持绝对二进制覆盖和 CARGO_TARGET_DIR，空目标目录值与准备脚本默认行为一致。CLI输出/HTTP体有界，CLI15秒及清理2秒期限，丢弃私密stderr。
+- 10项Rust测试通过，包含实际CLI输出/退出/超时回收、流大小边界与实际HTTP探针；cargo check（发布默认feature）、cargo clippy（no-default-features/all-targets/-D warnings）通过。修正了测试跨await持有同步锁及脚本尚未写PID的时序依赖。
+- `pnpm host:bootstrap-smoke` 使用同一Rust代码实际启动Go，验证启动器进程结束后的Host保活、重复发现、来源不兼容时已有实例保持不变；`host:lifecycle-smoke`包含二进制start/status/stop结果，均通过。
+- macOS实际运行新桌面二进制及临时测试bundle，观察到Host自动启动；桌面进程退出后，临时目录的Host与实例ID保持一致，之后已明确停止并清理。测试中原Runtime使用未运行端口，未触及正常业务数据。
+- 原生窗口自动化工具返回timeoutReached，未由工具确认正常菜单/窗口关闭动作，不将其记为完整GUI退出验收。临时测试bundle、Host数据目录及Vite均已清理，未操作已有应用窗口。
+- Windows Go x64/arm64构建为对应PE；没有Windows/Linux原生Tauri、安装包或签名发布验收。Go Host保活不能替代尚未迁移的Rust执行器或实际定时任务。
+
 ## 执行器 PoC 结果（M0，历史记录）
 
 - 独立临时 Chrome profile，Chrome `152.0.7977.76` / CDP `1.3`，macOS arm64。
@@ -111,6 +126,6 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 
 ## 下一步
 
-1. M1 下一批：接入 Tauri 对 Host 的自动启动/发现及退出保活，准备设备认证与业务存储迁移；原 Rust Runtime 在切换完成前保持业务权威，禁止双写。CLI 启停、本机 IPC、连接设置页、身份和来源许可已完成，不重复实现；当前设置检查按钮仍不承担启动或切换服务的语义。
+1. M1 下一批：推进Host业务存储/迁移准备与设备认证，先保证未知数据库版本或校验失败不会触发破坏式重建，再建立可验证的迁移流程；原Rust Runtime在切换完成前保持业务权威，禁止双写。桌面启动器、CLI、本机IPC及连接设置已完成，不重复实现；任务调度、工作执行器接管和Kanban残留迁移仍按设计继续。
 2. 在具备 Windows runner 后补链接与会话重附着实测；macOS 可继续建设 Browser Worker，不让平台专属验证阻止其他模块推进。
 3. 后续继续使用子 Agent 分工，每个功能验证后独立提交。自动检查维持 15 分钟，全部当前范围完成前保持启用。
