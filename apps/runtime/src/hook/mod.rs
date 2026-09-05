@@ -251,6 +251,9 @@ pub fn routes() -> Router<AppState> {
         // Plan §5.6 / §5.8 — the collaboration surface.
         .route("/context-link/{verb}", post(ingest::context_link))
         .route("/control/{verb}", post(ingest::control))
+        // B01 — the controlled browser verbs. Same auth as `control`, plus a
+        // context link to the browser node being driven.
+        .route("/browser/{verb}", post(ingest::browser))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
 }
 

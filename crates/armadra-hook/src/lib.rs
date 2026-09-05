@@ -42,6 +42,7 @@ USAGE:
   armadra-hook context-usage                  report Claude status-line context metadata
   armadra-hook context <verb> [options]        read a linked node's context
   armadra-hook canvas <verb> [--flag value]    drive the canvas
+  armadra-hook browser <verb> [--flag value]   drive a linked browser node
   armadra-hook doctor                          diagnose the local hook endpoint
 
 CONTEXT VERBS:
@@ -62,6 +63,19 @@ CANVAS:
   armadra-hook canvas <verb> [--flag value | --flag=value | --flag]...
   Repeated flags become arrays; a bare flag is `true`. `--dry-run` is passed
   through to the runtime, which then validates without mutating the board.
+
+BROWSER VERBS (the browser node linked to this one):
+  navigate --url URL            open an address; --action back|forward|reload|stop
+  read [--mode text|elements|links|title|console|network] [-n N]
+  click --selector CSS | --ref REF | --x N --y N
+  type --selector CSS --text TEXT [--replace] [--submit]
+  wait --selector CSS | --url-contains TEXT | --title-contains TEXT [--timeout MS]
+  capture [--full-page] [--format png|jpeg]      save a screenshot into .armadra/
+
+BROWSER OPTIONS:
+  --node <id|title>         which linked browser node (defaults to the only one)
+  Element references from `read --mode elements` are only valid until the page
+  navigates; after that the runtime answers STALE_TARGET and you read again.
 
 ENVIRONMENT:
   ARMADRA_NODE_ID          canvas node id; when unset hook mode is a no-op

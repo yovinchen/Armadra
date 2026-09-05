@@ -25,6 +25,7 @@ fn main() -> ExitCode {
         "context" => control::run_context(&args[1..]),
         "context-usage" => context_usage::run(),
         "canvas" => control::run_canvas(&args[1..]),
+        "browser" => control::run_browser(&args[1..]),
         "doctor" => doctor::run(),
         agent_id if agent_id.starts_with('-') => {
             let _ = write!(std::io::stderr(), "{USAGE}");

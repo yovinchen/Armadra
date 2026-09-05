@@ -408,6 +408,32 @@ pub async fn control(
     }
 }
 
+/// `POST /browser/{verb}` — B01. Prose, like the context-link surface: the
+/// client prints the body verbatim into the calling agent's stdout, and the
+/// body of a `read` *is* the answer.
+pub async fn browser(
+    State(state): State<AppState>,
+    Path(verb): Path<String>,
+    headers: HeaderMap,
+    body: Option<Json<ControlRequest>>,
+) -> axum::response::Response {
+    if let Err(refusal) = require_bearer(&state, &headers) {
+        return collab::text_reply(StatusCode::FORBIDDEN, format!("{refusal}\n"));
+    }
+    let Json(request) = body.unwrap_or_default();
+    let caller = match collab::resolve_caller(&state, &headers, &request.node_id).await {
+        Ok(caller) => caller,
+        Err(refusal) => {
+            return collab::text_reply(refusal.status, format!("{}\n", refusal.message));
+        }
+    };
+    let args = collab::Args(&request.args);
+    match crate::browser::agent::run(&state, &caller, &verb, &args).await {
+        Ok(body) => collab::text_reply(StatusCode::OK, body),
+        Err(refusal) => collab::text_reply(refusal.status, format!("{}\n", refusal.message)),
+    }
+}
+
 fn control_error(text: bool, status: StatusCode, message: String) -> axum::response::Response {
     if text {
         return collab::text_reply(status, format!("{message}\n"));

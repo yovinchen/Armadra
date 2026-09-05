@@ -99,6 +99,36 @@ pub fn run_canvas(args: &[String]) -> i32 {
     request(&format!("/control/{}", percent_encode_segment(verb)), map)
 }
 
+/// The controlled-browser verbs the runtime exposes (B01).
+///
+/// The list is checked here as well as in the runtime so a typo costs a local
+/// error line instead of a round trip and a refusal in the model's context.
+pub const BROWSER_VERBS: [&str; 6] = ["navigate", "read", "click", "type", "wait", "capture"];
+
+/// `armadra-hook browser <verb> [--flag value]...`
+///
+/// Drives a browser node this node is linked to on the canvas. The same
+/// session a person is looking at — there is no separate agent browser.
+pub fn run_browser(args: &[String]) -> i32 {
+    let Some(verb) = args.first() else {
+        return fail(&format!(
+            "usage: armadra-hook browser <{}> [--flag value]...",
+            BROWSER_VERBS.join("|")
+        ));
+    };
+    if !BROWSER_VERBS.contains(&verb.as_str()) {
+        return fail(&format!(
+            "unknown browser verb `{verb}`; expected one of {}",
+            BROWSER_VERBS.join(", ")
+        ));
+    }
+    let map = match parse_flags(&args[1..]) {
+        Ok(map) => map,
+        Err(error) => return fail(&error),
+    };
+    request(&format!("/browser/{}", percent_encode_segment(verb)), map)
+}
+
 /// Turns `--flag value`, `--flag=value` and bare `--flag` into an args object.
 ///
 /// A flag repeated more than once collects into an array so verbs such as
