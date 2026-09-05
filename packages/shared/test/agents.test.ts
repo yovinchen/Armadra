@@ -51,12 +51,27 @@ describe("agent registry", () => {
     expect(
       customAgentSchema.safeParse({ ...custom, baseAgent: "invented" }).success,
     ).toBe(false);
+    // A base adapter that has the capability keeps it; disabling is the only
+    // direction a custom entry may move it.
     expect(
       inheritedAgentCapabilities({
         baseAgent: "gemini",
         disabledCapabilities: [],
       }),
+    ).toContain("contextUsage");
+    expect(
+      inheritedAgentCapabilities({
+        baseAgent: "gemini",
+        disabledCapabilities: ["contextUsage"],
+      }),
     ).not.toContain("contextUsage");
+    // …and one the base adapter never declared stays absent either way.
+    expect(
+      inheritedAgentCapabilities({
+        baseAgent: "gemini",
+        disabledCapabilities: [],
+      }),
+    ).not.toContain("usage");
   });
   it("covers the seven built-in CLIs with a full permission table", () => {
     expect(AGENT_IDS).toEqual([

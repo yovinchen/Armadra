@@ -38,6 +38,23 @@ export const PROMPT_MODES = [
 ] as const;
 export type PromptMode = (typeof PROMPT_MODES)[number];
 
+/**
+ * What an adapter can do, as a composed set rather than a per-CLI branch in
+ * every component (docs/agent-automation-design.md §1).
+ *
+ * The three later entries were added with the M2 capability work:
+ *
+ *   * `nativeRecurrence` — the CLI runs loops/cron of its own that we can
+ *     *observe*. No built-in adapter claims it yet: none of the seven exposes a
+ *     readable job list, and §1 forbids inferring a capability from a name. The
+ *     vocabulary exists so an adapter that gains one can declare it.
+ *   * `structuredInputAck` — a delivered prompt can be tied back to the turn it
+ *     produced, which is what §5 rule 5 needs before a dispatch may be called
+ *     delivered. Only the four hook adapters have that channel.
+ *   * `supportsModelSelection` — the CLI takes a model on its launch line, so
+ *     the node header may offer one. Every built-in has a `modelFlag`, but the
+ *     capability is still narrowed by version probing and the execution host.
+ */
 export const AGENT_CAPABILITIES = [
   "hooks",
   "resume",
@@ -45,6 +62,9 @@ export const AGENT_CAPABILITIES = [
   "contextLink",
   "usage",
   "contextUsage",
+  "nativeRecurrence",
+  "structuredInputAck",
+  "supportsModelSelection",
 ] as const;
 export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];
 
@@ -101,6 +121,8 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
         "contextLink",
         "usage",
         "contextUsage",
+        "structuredInputAck",
+        "supportsModelSelection",
       ],
       expectedProcess: ["claude"],
     },
@@ -118,7 +140,17 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "positional", verb: "resume" },
-      capabilities: ["hooks", "resume", "subagent", "contextLink"],
+      // `contextUsage` here is the *estimated* kind: codex writes a structured
+      // rollout we can read, but reports no live window of its own.
+      capabilities: [
+        "hooks",
+        "resume",
+        "subagent",
+        "contextLink",
+        "contextUsage",
+        "structuredInputAck",
+        "supportsModelSelection",
+      ],
       expectedProcess: ["codex"],
     },
     gemini: {
@@ -136,7 +168,14 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "flag", flag: "--resume" },
-      capabilities: ["hooks", "resume", "contextLink"],
+      capabilities: [
+        "hooks",
+        "resume",
+        "contextLink",
+        "contextUsage",
+        "structuredInputAck",
+        "supportsModelSelection",
+      ],
       expectedProcess: ["gemini"],
     },
     opencode: {
@@ -154,7 +193,13 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "flag", flag: "--session" },
-      capabilities: ["hooks", "resume", "contextLink"],
+      capabilities: [
+        "hooks",
+        "resume",
+        "contextLink",
+        "structuredInputAck",
+        "supportsModelSelection",
+      ],
       expectedProcess: ["opencode"],
     },
     pi: {
@@ -172,7 +217,7 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "flag", flag: "--session" },
-      capabilities: ["resume", "contextLink"],
+      capabilities: ["resume", "contextLink", "supportsModelSelection"],
       expectedProcess: ["pi"],
     },
     omp: {
@@ -191,7 +236,7 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "flag", flag: "--resume" },
-      capabilities: ["resume", "contextLink"],
+      capabilities: ["resume", "contextLink", "supportsModelSelection"],
       expectedProcess: ["omp"],
     },
     copilot: {
@@ -209,7 +254,7 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "flag", flag: "--resume" },
-      capabilities: ["resume", "contextLink"],
+      capabilities: ["resume", "contextLink", "supportsModelSelection"],
       expectedProcess: ["copilot"],
     },
   };

@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { agentProbeSchema } from "./agent-capabilities.js";
 import { AGENT_CAPABILITIES, AGENT_IDS, PROMPT_MODES } from "./agents.js";
 import {
   agentEventSchema,
@@ -440,6 +441,12 @@ export const agentInfoSchema = z.object({
   installed: z.boolean(),
   /** Revision of the installed hook client, absent when hooks are not installed. */
   clientRevision: z.number().int().nonnegative().nullish(),
+  /**
+   * Cached `--version` probe (`agent-capabilities.ts`). Absent means the CLI
+   * has not been probed yet, which resolves gated capabilities to `unknown` —
+   * never to supported.
+   */
+  probe: agentProbeSchema.nullish(),
 });
 
 export const agentListSchema = z.array(agentInfoSchema);
