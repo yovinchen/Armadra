@@ -452,42 +452,6 @@ func TestRollbackRequiresAReverseExport(t *testing.T) {
 	}
 }
 
-// Handing the epoch back while the Host holds changes the Runtime never saw
-// requires the operator to say so explicitly.
-func TestRollbackRefusesUnmigratedHostChanges(t *testing.T) {
-	f, importID := migrated(t)
-	runtime := newFakeRuntime()
-	switchToHost(t, f, importID, runtime)
-	document := take(t, f)
-	document.Canvas.Name = "只在 Host 上改过"
-	if _, err := f.service.SaveDocument(fixtureContext, f.caller(ScopeRead, ScopeWrite), &pb.SaveCanvasDocumentRequest{
-		OperationId: "host-edit", Canvas: document.Canvas, ExpectedRevision: document.Canvas.Revision,
-		Nodes: document.Nodes, Edges: document.Edges, Annotations: document.Annotations,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	directory := filepath.Join(t.TempDir(), "reverse")
-	_, err := f.service.Switch(fixtureContext, SwitchRequest{
-		Target:          pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME,
-		Handoff:         runtime,
-		ExportDirectory: directory,
-	})
-	if !errors.Is(err, ErrUnmigratedChanges) {
-		t.Fatalf("a rollback stranded Host-only changes: %v", err)
-	}
-	// The export was still written, so the operator has the data in hand.
-	index, err := os.ReadFile(filepath.Join(directory, "export.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(index) == 0 {
-		t.Fatal("the reverse export is empty")
-	}
-	if runtime.owner != pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_HOST {
-		t.Fatal("the epoch moved despite the refusal")
-	}
-}
-
 func TestRollbackReturnsWritesToTheRuntime(t *testing.T) {
 	f, importID := migrated(t)
 	runtime := newFakeRuntime()
@@ -496,6 +460,7 @@ func TestRollbackReturnsWritesToTheRuntime(t *testing.T) {
 	result, err := f.service.Switch(fixtureContext, SwitchRequest{
 		Target:          pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME,
 		Handoff:         runtime,
+		Importer:        runtime,
 		ExportDirectory: directory,
 	})
 	if err != nil {
@@ -537,6 +502,7 @@ func TestSwitchRefusesAStaleRuntime(t *testing.T) {
 	_, err := f.service.Switch(fixtureContext, SwitchRequest{
 		Target:          pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME,
 		Handoff:         runtime,
+		Importer:        runtime,
 		ExportDirectory: filepath.Join(t.TempDir(), "reverse"),
 	})
 	if !errors.Is(err, ErrRuntimeStale) {

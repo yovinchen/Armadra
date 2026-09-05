@@ -476,7 +476,7 @@ pub fn plan(records: WorkspaceRecords, node_types: &[&str]) -> AppResult<ApplyPl
             }
         }
     }
-    let mut node_ids = std::collections::BTreeSet::new();
+    let mut node_ids = BTreeMap::new();
     for node in &records.nodes {
         if !canvas_ids.contains(node.canvas_id.as_str()) {
             return Err(corrupt("a node names a canvas the package does not carry"));
@@ -493,12 +493,15 @@ pub fn plan(records: WorkspaceRecords, node_types: &[&str]) -> AppResult<ApplyPl
         if std::str::from_utf8(&node.data_json).is_err() {
             return Err(corrupt("a node payload is not text"));
         }
-        if !node_ids.insert(node.node_id.as_str()) {
+        if node_ids
+            .insert(node.node_id.as_str(), node.canvas_id.as_str())
+            .is_some()
+        {
             return Err(corrupt("a node identifier appears twice"));
         }
     }
     for node in &records.nodes {
-        if !node.parent_id.is_empty() && !node_ids.contains(node.parent_id.as_str()) {
+        if !node.parent_id.is_empty() && !node_ids.contains_key(node.parent_id.as_str()) {
             return Err(corrupt(
                 "a node is nested in a frame the package does not carry",
             ));
@@ -513,17 +516,36 @@ pub fn plan(records: WorkspaceRecords, node_types: &[&str]) -> AppResult<ApplyPl
                 "an edge names a kind this Runtime does not store",
             ));
         }
-        if !node_ids.contains(edge.source_node_id.as_str())
-            || !node_ids.contains(edge.target_node_id.as_str())
+        if !node_ids.contains_key(edge.source_node_id.as_str())
+            || !node_ids.contains_key(edge.target_node_id.as_str())
         {
             return Err(corrupt("an edge names a node the package does not carry"));
         }
     }
     let mut annotations = BTreeMap::new();
     for annotation in records.annotations {
-        if !node_ids.contains(annotation.node_id.as_str()) {
+        let Some(canvas) = node_ids.get(annotation.node_id.as_str()) else {
             return Err(corrupt(
                 "an annotation names a node the package does not carry",
+            ));
+        };
+        if *canvas != annotation.canvas_id {
+            return Err(corrupt("an annotation names another canvas than its node"));
+        }
+        // Labels and the note are columns on the node row here; there is no
+        // annotation table and therefore no identity of its own to keep. The
+        // Host's projection uses the node's identifier for exactly that reason,
+        // so an annotation that carries a different one, or one with nothing in
+        // it, would come back changed. Both are named rather than written and
+        // then found to differ by the digest comparison.
+        if annotation.annotation_id != annotation.node_id {
+            return Err(unsupported(
+                "an annotation carries an identity this Runtime cannot store",
+            ));
+        }
+        if annotation.labels.is_empty() && annotation.note.is_empty() {
+            return Err(unsupported(
+                "an empty annotation has no representation on a node row",
             ));
         }
         if annotations

@@ -1,10 +1,12 @@
 package canvashost
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/sha512"
 	"database/sql"
+	"encoding/binary"
 	"errors"
 	"net/url"
 	"os"
@@ -357,6 +359,97 @@ type fakeRuntime struct {
 	// applyBeforeError stores the request even when the reply is reported as
 	// lost, which is the case a resumed switch has to converge on.
 	applyBeforeError bool
+
+	// The reverse import half. `reverseUnsupported` is an older Worker;
+	// `reverseErr` is a channel failure; `reverseWrongDigest` is the case that
+	// matters most — an import that answered successfully while storing
+	// something else.
+	reverseUnsupported bool
+	reverseErr         error
+	reverseWrongDigest bool
+	reverseIssue       string
+	reverseCalls       int
+	reversePath        string
+	reverseImportID    string
+}
+
+func (f *fakeRuntime) SupportsReverseImport() bool { return !f.reverseUnsupported }
+
+// ApplyReverseExport reads the package the Host just wrote and reports the
+// digests back, the way a Runtime that applied it faithfully would. It decodes
+// the entity files itself rather than trusting the index, so a package whose
+// index does not describe its own bytes fails here as it would in the Runtime.
+func (f *fakeRuntime) ApplyReverseExport(_ context.Context, domain, path string, indexSha256 []byte, expectedEpoch uint64, importID string) (*pb.ReverseImportReport, error) {
+	f.reverseCalls++
+	f.reversePath, f.reverseImportID = path, importID
+	if f.reverseUnsupported {
+		return nil, errors.New("this Worker cannot apply a reverse export")
+	}
+	if f.reverseErr != nil {
+		return nil, f.reverseErr
+	}
+	if expectedEpoch != f.epoch {
+		return nil, errors.New("reverse.epoch_mismatch")
+	}
+	index, digest, err := readExportIndex(path)
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.Equal(digest, indexSha256) {
+		return nil, errors.New("reverse.index_mismatch")
+	}
+	report := &pb.ReverseImportReport{
+		ImportId: importID, Domain: domain, Epoch: index.Epoch,
+		IndexSha256: indexSha256, EntityCount: index.EntityCount,
+	}
+	for _, file := range index.Files {
+		payload, err := os.ReadFile(filepath.Join(path, file.Name))
+		if err != nil {
+			return nil, err
+		}
+		records, err := decodeFakeRecords(payload)
+		if err != nil {
+			return nil, err
+		}
+		content, err := canonicalDigest(records)
+		if err != nil {
+			return nil, err
+		}
+		if f.reverseWrongDigest {
+			content = append([]byte(nil), content...)
+			content[0] ^= 0xff
+		}
+		report.Reexported = append(report.Reexported, &pb.ReverseExportFile{
+			Name: file.Name, WorkspaceId: file.WorkspaceID,
+			ContentSha256: content, EntityCount: uint64(len(records)),
+		})
+	}
+	if f.reverseIssue != "" {
+		report.Issues = append(report.Issues, &pb.ExportIssue{Code: f.reverseIssue, Severity: "error"})
+	}
+	return report, nil
+}
+
+// decodeFakeRecords is the reader's half of encodeRecords, kept in the test so
+// the production side has no decoder it never uses.
+func decodeFakeRecords(payload []byte) ([]*pb.ReverseExportRecord, error) {
+	records := []*pb.ReverseExportRecord{}
+	for len(payload) > 0 {
+		if len(payload) < 4 {
+			return nil, errors.New("entity file ends inside a length prefix")
+		}
+		length := int(binary.BigEndian.Uint32(payload[:4]))
+		if length == 0 || len(payload) < 4+length {
+			return nil, errors.New("entity file ends inside a record")
+		}
+		record := new(pb.ReverseExportRecord)
+		if err := proto.Unmarshal(payload[4:4+length], record); err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+		payload = payload[4+length:]
+	}
+	return records, nil
 }
 
 func newFakeRuntime() *fakeRuntime {

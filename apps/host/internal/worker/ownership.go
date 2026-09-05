@@ -1,7 +1,11 @@
 package worker
 
 import (
+	"bytes"
 	"context"
+	"path/filepath"
+	"slices"
+	"strings"
 
 	pb "armadra.local/host/gen/armadra/v1"
 	"google.golang.org/protobuf/proto"
@@ -25,6 +29,12 @@ const ownershipCapability = "canvas.ownership.v1"
 // OwnershipCapability is what the Worker must advertise before this client
 // will move ownership through it.
 const OwnershipCapability = ownershipCapability
+
+// ReverseImportCapability is the second, separate statement a Worker makes:
+// that it can apply a reverse export package, not merely record an epoch. A
+// controller that assumed the two came together would plan a rollback an older
+// Worker cannot complete, and discover it after the export was already written.
+const ReverseImportCapability = "ownership.reverse-import.v1"
 
 func (c *Client) ownershipRequest(ctx context.Context, request *pb.WorkerRequest) (*pb.WorkerWriteOwnership, error) {
 	if c == nil || !c.ownershipMode {
@@ -83,4 +93,46 @@ func (c *Client) GetWriteOwnership(ctx context.Context, domain string) (*pb.Work
 		return nil, &Error{Code: CodeProtocol}
 	}
 	return result, nil
+}
+
+// SupportsReverseImport reports whether this Worker said it can apply a reverse
+// export package. It is asked before the package is written, so a rollback that
+// cannot finish is refused at the start rather than after producing files.
+func (c *Client) SupportsReverseImport() bool {
+	return c != nil && c.ownershipMode && c.hello != nil &&
+		slices.Contains(c.hello.Capabilities, ReverseImportCapability)
+}
+
+// ApplyReverseExport asks the Runtime to apply a package the Host wrote. The
+// answer is a report the caller compares with the package: applying it moves no
+// epoch, and a report that does not describe the package is a protocol failure
+// rather than a rollback that happened to look finished.
+func (c *Client) ApplyReverseExport(ctx context.Context, domain, packagePath string, indexSha256 []byte, expectedEpoch uint64, importID string) (*pb.ReverseImportReport, error) {
+	if c == nil || !c.ownershipMode {
+		return nil, &Error{Code: CodeUnsupported}
+	}
+	if !c.SupportsReverseImport() {
+		return nil, &Error{Code: CodeUnsupported}
+	}
+	if domain == "" || len(domain) > 64 || !filepath.IsAbs(packagePath) ||
+		strings.IndexByte(packagePath, 0) >= 0 || len(indexSha256) != 32 ||
+		importID == "" || len(importID) > 128 {
+		return nil, &Error{Code: CodeInvalid}
+	}
+	response, err := c.exchange(ctx, &pb.WorkerRequest{Action: &pb.WorkerRequest_ApplyReverseExport{ApplyReverseExport: &pb.ApplyReverseExportRequest{
+		Domain:        domain,
+		PackagePath:   packagePath,
+		IndexSha256:   indexSha256,
+		ExpectedEpoch: expectedEpoch,
+		ImportId:      importID,
+	}}}, "ownership")
+	if err != nil {
+		return nil, err
+	}
+	report := response.GetReverseImport()
+	if report == nil || report.Domain != domain || report.ImportId != importID ||
+		!bytes.Equal(report.IndexSha256, indexSha256) {
+		return nil, &Error{Code: CodeProtocol}
+	}
+	return proto.Clone(report).(*pb.ReverseImportReport), nil
 }

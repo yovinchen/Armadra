@@ -28,7 +28,8 @@ import (
 // Nothing here happens automatically. A switch is typed by an operator, names
 // the verified import it rests on, and names the Runtime binary and database it
 // is going to talk to. A rollback additionally writes the reverse export the
-// Host owes the Runtime before it gives the epoch back.
+// Host owes the Runtime, has the Runtime apply it, and compares the digests the
+// Runtime reads back before it gives the epoch away.
 
 type ownershipConfig struct {
 	action           string
@@ -49,7 +50,7 @@ func (o *ownershipConfig) register(flags *flag.FlagSet) {
 	}
 	if o.action == "rollback" {
 		flags.StringVar(&o.exportDirectory, "export", "", "New directory for the Host's reverse export back to the Runtime")
-		flags.BoolVar(&o.acceptExportOnly, "accept-export-only", false, "Give the epoch back even though canvas changes made on the Host are only in the export package")
+		flags.BoolVar(&o.acceptExportOnly, "accept-export-only", false, "DANGEROUS: skip applying the package to the Runtime and give the epoch back anyway, leaving the Host's canvas only in the export package")
 	}
 	flags.StringVar(&o.runtimeBinary, "runtime-binary", "", "Absolute path to the Rust Runtime executable that stores the epoch")
 	flags.StringVar(&o.runtimeDatabase, "runtime-database", "", "Absolute path to the Runtime's canvas database")
@@ -146,6 +147,7 @@ func runOwnership(ctx context.Context, c config) (err error) {
 		Target:           target,
 		ImportID:         c.ownership.importID,
 		Handoff:          client,
+		Importer:         client,
 		ExportDirectory:  c.ownership.exportDirectory,
 		AcceptExportOnly: c.ownership.acceptExportOnly,
 	})

@@ -26,6 +26,11 @@ import (
 // The epoch the Runtime acknowledged is the single source of truth for what
 // comes next: the Host reads it before every transition rather than trusting
 // its own copy, so an interrupted switch resumes instead of drifting.
+//
+// A rollback runs the same five steps in the other direction, and its middle
+// three are in reverse.go: the Host exports what it holds, the Runtime applies
+// that package to its own database, the Runtime re-reads its rows, and the
+// digests are compared before the epoch moves.
 
 const (
 	ReasonPending  = "ownership.switch.pending"
@@ -53,9 +58,6 @@ var (
 	// ErrExportRequired means a rollback was asked for without the reverse
 	// export the Host owes the Runtime.
 	ErrExportRequired = errors.New("a rollback requires a Host-side export back to the Runtime")
-	// ErrUnmigratedChanges means the Host published canvas changes since it
-	// took ownership; handing the epoch back would strand them.
-	ErrUnmigratedChanges = errors.New("the Host holds canvas changes the Runtime does not have")
 )
 
 // Handoff is the private channel to the Runtime. The production implementation
@@ -165,9 +167,15 @@ type SwitchRequest struct {
 	// ExportDirectory is required when handing the domain back to the Runtime:
 	// the Host owes the Runtime its canvas before it stops being the writer.
 	ExportDirectory string
-	// AcceptExportOnly acknowledges, in one explicit flag, that the reverse
-	// import into the Runtime's own database is not part of this phase: the
-	// package is written and verified, and applying it is a separate step.
+	// Importer applies that package to the Runtime's own database and reports
+	// what it then holds. A rollback needs one; without it the only remaining
+	// path is the explicit AcceptExportOnly below.
+	Importer ReverseImporter
+	// AcceptExportOnly is a danger switch, not a normal option. It skips the
+	// reverse import entirely: the operator states that they accept the Host's
+	// canvas existing only inside the export package, and that the Runtime will
+	// resume from whatever it held before the switch. Nothing else in a
+	// rollback silently drops data, and this is why it takes a flag.
 	AcceptExportOnly bool
 }
 
@@ -247,19 +255,28 @@ func (s *Service) Switch(ctx context.Context, request SwitchRequest) (*pb.Canvas
 		if request.ExportDirectory == "" {
 			return nil, ErrExportRequired
 		}
+		// Asked before the package is written: a rollback that cannot be
+		// completed should refuse at the start, not after producing files the
+		// operator now has to reason about.
+		if !request.AcceptExportOnly && (request.Importer == nil || !request.Importer.SupportsReverseImport()) {
+			return nil, ErrReverseImportUnsupported
+		}
 		export, err := s.Export(ctx, request.ExportDirectory)
 		if err != nil {
 			return nil, err
 		}
 		report = export
-		if !request.AcceptExportOnly {
-			_, watermark, err := s.store.Watermark(ctx)
-			if err != nil {
-				return nil, err
-			}
-			if watermark > current.EventSequence {
-				return &pb.CanvasOwnershipResponse{Report: report}, ErrUnmigratedChanges
-			}
+		if request.AcceptExportOnly {
+			// Nothing travels back. The operator accepted that, and this is
+			// the one path where the Host's own changes are allowed to stay
+			// only in the package.
+			break
+		}
+		if err = s.reverseImport(ctx, request.Importer, request.ExportDirectory, remote.Epoch, report); err != nil {
+			// The epoch has not moved and the Host still holds every row, so
+			// a failed import is recoverable: fix the cause, use a new export
+			// directory, run the same rollback again.
+			return &pb.CanvasOwnershipResponse{Report: report}, err
 		}
 	}
 

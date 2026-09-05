@@ -3,11 +3,13 @@ package canvashost
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 
 	pb "armadra.local/host/gen/armadra/v1"
 	"armadra.local/host/internal/storage"
@@ -15,7 +17,8 @@ import (
 )
 
 // The reverse export a rollback owes the Runtime (host protocol design §4,
-// step 6: "回滚需要反向迁移，不能直接用旧数据库覆盖新数据").
+// step 6: "回滚需要反向迁移，不能直接用旧数据库覆盖新数据"; Go Host 业务所有权
+// 迁移 §2.12 for the format).
 //
 // Handing the epoch back is not the whole of a rollback. Whatever the Host
 // stored while it owned the domain has to travel back, so `ownership rollback`
@@ -23,20 +26,39 @@ import (
 // package is written, then read back and re-hashed, so "the export succeeded"
 // means the bytes on disk are the bytes that were meant.
 //
-// Applying the package into the Runtime's own database is deliberately not part
-// of this phase, and the CLI says so: the rollback either finds that the Host
-// published nothing since it took ownership, or the operator states in one
-// explicit flag that they accept an export-only reversal.
+// Format version 2 is the one the Runtime reads. Three things changed from
+// version 1, and each of them is what a reader needed:
+//
+//   - an entity file is a length-prefixed sequence of ReverseExportRecord, so a
+//     reader takes one entity at a time and a truncated file is a short read
+//     rather than a half-decoded canvas;
+//   - the index names the domain, the epoch and the event watermark, so a
+//     package cannot be applied to the wrong database or the wrong epoch;
+//   - every file carries a second digest over its canonical content — records
+//     with `revision` cleared and `assets` dropped. Those two are Host-side
+//     facts the Runtime has nowhere to store, so excluding them is what lets
+//     the Runtime's own re-read be compared with this package byte for byte.
 
 // ExportFormatVersion is the package's own contract version. A reader that does
 // not recognise it must refuse the package rather than parse it optimistically.
-const ExportFormatVersion = 1
+const ExportFormatVersion = 2
+
+// ExportDomain is the only domain this package format carries so far. It is
+// written into the index so a reader refuses a package meant for another one
+// instead of applying it to the canvas.
+const ExportDomain = "canvas"
+
+// ExportIndexFile is the package's own description, JSON so that an operator
+// can read a rollback package without a decoder.
+const ExportIndexFile = "export.json"
 
 type exportFile struct {
-	Name        string `json:"name"`
-	WorkspaceID string `json:"workspaceId"`
-	Bytes       uint64 `json:"bytes"`
-	Sha256      string `json:"sha256"`
+	Name          string `json:"name"`
+	WorkspaceID   string `json:"workspaceId"`
+	Bytes         uint64 `json:"bytes"`
+	Sha256        string `json:"sha256"`
+	ContentSha256 string `json:"contentSha256"`
+	EntityCount   uint64 `json:"entityCount"`
 }
 
 type exportIndex struct {
@@ -44,6 +66,8 @@ type exportIndex struct {
 	HostID        string       `json:"hostId"`
 	Epoch         uint64       `json:"epoch"`
 	EventSequence uint64       `json:"eventSequence"`
+	Domain        string       `json:"domain"`
+	EntityCount   uint64       `json:"entityCount"`
 	Files         []exportFile `json:"files"`
 }
 
@@ -81,22 +105,31 @@ func (s *Service) Export(ctx context.Context, directory string) (*pb.CanvasConsi
 	if err != nil {
 		return nil, err
 	}
-	index := exportIndex{FormatVersion: ExportFormatVersion, HostID: s.options.HostID, Epoch: record.Epoch, EventSequence: watermark}
+	index := exportIndex{
+		FormatVersion: ExportFormatVersion,
+		HostID:        s.options.HostID,
+		Epoch:         record.Epoch,
+		EventSequence: watermark,
+		Domain:        ExportDomain,
+	}
 	workspaces, err := s.store.WorkspacesOfKind(ctx, KindWorkspace)
 	if err != nil {
 		return nil, err
 	}
-	var entities uint64
 	for _, workspaceID := range workspaces {
 		entity, err := s.store.Read(ctx, workspaceKey(workspaceID))
 		if err != nil || entity.Deleted {
 			continue
 		}
-		snapshot, err := s.workspaceSnapshot(ctx, workspaceID)
+		records, err := s.workspaceRecords(ctx, workspaceID)
 		if err != nil {
 			return nil, err
 		}
-		payload, err := (proto.MarshalOptions{Deterministic: true}).Marshal(snapshot)
+		payload, err := encodeRecords(records)
+		if err != nil {
+			return nil, err
+		}
+		content, err := canonicalDigest(records)
 		if err != nil {
 			return nil, err
 		}
@@ -104,14 +137,21 @@ func (s *Service) Export(ctx context.Context, directory string) (*pb.CanvasConsi
 		if err = writeExactly(filepath.Join(directory, name), payload); err != nil {
 			return nil, err
 		}
-		entities += uint64(len(snapshot.Workspaces) + len(snapshot.Canvases) + len(snapshot.Nodes) + len(snapshot.Edges) + len(snapshot.Annotations))
-		index.Files = append(index.Files, exportFile{Name: name, WorkspaceID: workspaceID, Bytes: uint64(len(payload)), Sha256: hex.EncodeToString(digest(payload))})
+		index.EntityCount += uint64(len(records))
+		index.Files = append(index.Files, exportFile{
+			Name:          name,
+			WorkspaceID:   workspaceID,
+			Bytes:         uint64(len(payload)),
+			Sha256:        hex.EncodeToString(digest(payload)),
+			ContentSha256: hex.EncodeToString(content),
+			EntityCount:   uint64(len(records)),
+		})
 	}
 	encoded, err := json.MarshalIndent(index, "", "  ")
 	if err != nil {
 		return nil, err
 	}
-	if err = writeExactly(filepath.Join(directory, "export.json"), append(encoded, '\n')); err != nil {
+	if err = writeExactly(filepath.Join(directory, ExportIndexFile), append(encoded, '\n')); err != nil {
 		return nil, err
 	}
 
@@ -129,11 +169,11 @@ func (s *Service) Export(ctx context.Context, directory string) (*pb.CanvasConsi
 	}
 	builder := &checkBuilder{}
 	builder.record("export_workspaces", uint64(len(index.Files)), uint64(len(index.Files)), differences)
-	builder.record("export_entities", entities, entities, nil)
+	builder.record("export_entities", index.EntityCount, index.EntityCount, nil)
 	report := &pb.CanvasConsistencyReport{
 		Checks:           builder.checks,
 		Matched:          len(differences) == 0,
-		EntityCount:      entities,
+		EntityCount:      index.EntityCount,
 		VerifiedAtUnixMs: s.now(),
 	}
 	if !report.Matched {
@@ -142,15 +182,35 @@ func (s *Service) Export(ctx context.Context, directory string) (*pb.CanvasConsi
 	return report, nil
 }
 
-// workspaceSnapshot reads a whole workspace with no paging: the reverse export
-// is a complete package, and a partial one would be a rollback that quietly
-// dropped canvases.
-func (s *Service) workspaceSnapshot(ctx context.Context, workspaceID string) (*pb.CanvasSnapshotResponse, error) {
-	_, sequence, err := s.store.Watermark(ctx)
+// readExportIndex reads back the index of a package this Host wrote, together
+// with the digest of the exact bytes on disk. That digest is what the Runtime
+// is told to expect, so a package edited between writing and applying is
+// refused by the reader rather than trusted because we wrote it.
+func readExportIndex(directory string) (*exportIndex, []byte, error) {
+	raw, err := os.ReadFile(filepath.Join(directory, ExportIndexFile))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	result := &pb.CanvasSnapshotResponse{Sequence: sequence}
+	index := new(exportIndex)
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err = decoder.Decode(index); err != nil {
+		return nil, nil, err
+	}
+	if index.FormatVersion != ExportFormatVersion || index.Domain != ExportDomain {
+		return nil, nil, ErrInvalid
+	}
+	return index, digest(raw), nil
+}
+
+// workspaceRecords reads a whole workspace with no paging, in the order both
+// sides serialize it: the workspace, then canvases, nodes, edges and
+// annotations, each group sorted by its own identifier. The order is part of
+// the format — the same records in another order hash differently.
+//
+// The read is complete on purpose: a partial package would be a rollback that
+// quietly dropped canvases.
+func (s *Service) workspaceRecords(ctx context.Context, workspaceID string) ([]*pb.ReverseExportRecord, error) {
 	entity, err := s.store.Read(ctx, workspaceKey(workspaceID))
 	if err != nil {
 		return nil, err
@@ -159,26 +219,109 @@ func (s *Service) workspaceSnapshot(ctx context.Context, workspaceID string) (*p
 	if err != nil {
 		return nil, err
 	}
-	result.Workspaces = append(result.Workspaces, workspace)
-	canvases, err := s.collect(ctx, workspaceID, KindCanvas, "")
+	records := []*pb.ReverseExportRecord{{Entity: &pb.ReverseExportRecord_Workspace{Workspace: workspace}}}
+	items, err := s.collect(ctx, workspaceID, KindCanvas, "")
 	if err != nil {
 		return nil, err
 	}
-	for _, item := range canvases {
+	canvases := make([]*pb.Canvas, 0, len(items))
+	var nodes []*pb.CanvasNode
+	var edges []*pb.CanvasEdge
+	var annotations []*pb.CanvasAnnotation
+	for _, item := range items {
 		canvas, err := decodeCanvas(item)
 		if err != nil {
 			return nil, err
 		}
-		result.Canvases = append(result.Canvases, canvas)
+		canvases = append(canvases, canvas)
 		document, err := s.document(ctx, workspaceID, canvas.CanvasId)
 		if err != nil {
 			return nil, err
 		}
-		result.Nodes = append(result.Nodes, document.Nodes...)
-		result.Edges = append(result.Edges, document.Edges...)
-		result.Annotations = append(result.Annotations, document.Annotations...)
+		nodes = append(nodes, document.Nodes...)
+		edges = append(edges, document.Edges...)
+		annotations = append(annotations, document.Annotations...)
 	}
-	return result, nil
+	sort.Slice(canvases, func(a, b int) bool { return canvases[a].CanvasId < canvases[b].CanvasId })
+	sort.Slice(nodes, func(a, b int) bool {
+		return less(nodes[a].CanvasId, nodes[a].NodeId, nodes[b].CanvasId, nodes[b].NodeId)
+	})
+	sort.Slice(edges, func(a, b int) bool {
+		return less(edges[a].CanvasId, edges[a].EdgeId, edges[b].CanvasId, edges[b].EdgeId)
+	})
+	sort.Slice(annotations, func(a, b int) bool {
+		return less(annotations[a].CanvasId, annotations[a].NodeId, annotations[b].CanvasId, annotations[b].NodeId)
+	})
+	for _, canvas := range canvases {
+		records = append(records, &pb.ReverseExportRecord{Entity: &pb.ReverseExportRecord_Canvas{Canvas: canvas}})
+	}
+	for _, node := range nodes {
+		records = append(records, &pb.ReverseExportRecord{Entity: &pb.ReverseExportRecord_Node{Node: node}})
+	}
+	for _, edge := range edges {
+		records = append(records, &pb.ReverseExportRecord{Entity: &pb.ReverseExportRecord_Edge{Edge: edge}})
+	}
+	for _, annotation := range annotations {
+		records = append(records, &pb.ReverseExportRecord{Entity: &pb.ReverseExportRecord_Annotation{Annotation: annotation}})
+	}
+	return records, nil
+}
+
+func less(leftGroup, leftID, rightGroup, rightID string) bool {
+	if leftGroup != rightGroup {
+		return leftGroup < rightGroup
+	}
+	return leftID < rightID
+}
+
+// encodeRecords writes the entity file: a four-byte big-endian length before
+// each record, matching the Worker frame convention.
+func encodeRecords(records []*pb.ReverseExportRecord) ([]byte, error) {
+	payload := []byte{}
+	for _, record := range records {
+		encoded, err := encode(record)
+		if err != nil {
+			return nil, err
+		}
+		if len(encoded) == 0 {
+			// An empty record decodes to "no entity", which a reader refuses.
+			// Producing one would write a package nobody can apply.
+			return nil, ErrInvalid
+		}
+		payload = binary.BigEndian.AppendUint32(payload, uint32(len(encoded)))
+		payload = append(payload, encoded...)
+	}
+	return payload, nil
+}
+
+// canonicalDigest hashes the same records with the two Host-side facts removed.
+// The Runtime cannot store either one, so a digest that included them could
+// never match the Runtime's re-read, and the comparison that decides whether a
+// rollback landed would be permanently false.
+func canonicalDigest(records []*pb.ReverseExportRecord) ([]byte, error) {
+	canonical := make([]*pb.ReverseExportRecord, 0, len(records))
+	for _, record := range records {
+		clone, _ := proto.Clone(record).(*pb.ReverseExportRecord)
+		switch entity := clone.Entity.(type) {
+		case *pb.ReverseExportRecord_Workspace:
+			entity.Workspace.Revision = 0
+		case *pb.ReverseExportRecord_Canvas:
+			entity.Canvas.Revision = 0
+		case *pb.ReverseExportRecord_Node:
+			entity.Node.Revision = 0
+			entity.Node.Assets = nil
+		case *pb.ReverseExportRecord_Edge:
+			entity.Edge.Revision = 0
+		case *pb.ReverseExportRecord_Annotation:
+			entity.Annotation.Revision = 0
+		}
+		canonical = append(canonical, clone)
+	}
+	payload, err := encodeRecords(canonical)
+	if err != nil {
+		return nil, err
+	}
+	return digest(payload), nil
 }
 
 // writeExactly refuses to replace an existing file. A rollback package is
