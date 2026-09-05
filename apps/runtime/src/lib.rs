@@ -263,6 +263,25 @@ pub fn router_with_state(state: AppState) -> Router {
             "/api/control/confirm/{request_id}",
             post(api::confirm_control),
         )
+        // Conversation handoff (design §7). Preparing freezes material and
+        // shows a preview; only `accept` authorizes delivery, and `cancel`
+        // withdraws a queued notification before the target is written to.
+        .route(
+            "/api/workspaces/{workspace_id}/handoffs",
+            post(handoff::routes::prepare).get(handoff::routes::list),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/handoffs/{handoff_id}",
+            get(handoff::routes::get),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/handoffs/{handoff_id}/accept",
+            post(handoff::routes::accept),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/handoffs/{handoff_id}/cancel",
+            post(handoff::routes::cancel),
+        )
         .route(
             "/api/workspaces/{workspace_id}/context-links/{node_id}",
             put(api::put_context_links),

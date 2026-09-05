@@ -141,6 +141,10 @@ async fn main() -> anyhow::Result<()> {
     state.usage.start();
     // Endpoint file, unix socket listener and the 60s stale-agent sweep.
     hook::start(state.clone(), bound_port);
+    // Accepted handoffs are delivered by this worker, never by the request that
+    // accepted them: the target has to be idle first, and a queued notification
+    // stays cancellable until it is actually written.
+    let mut handoffs = armadra_runtime::handoff::start_background(state.clone());
     // The transcript index scans thousands of files on the first pass, so it
     // starts *after* the listener is bound and runs in its own task: the
     // command palette gets its history a second late, nobody waits for it.
@@ -164,6 +168,13 @@ async fn main() -> anyhow::Result<()> {
         reason = reason => reason.context("shutdown controller disappeared")?,
         result = &mut serving => { result?; return Ok(()); },
     };
+    // Stop claiming queued handoffs before the terminals go away, so a paste is
+    // never attempted into a session that is already being torn down. A worker
+    // that is still draining is reported, not silently ignored: the outcome of
+    // an in-flight write is exactly what a user needs to know about.
+    if let Err(error) = handoffs.shutdown(Duration::from_secs(4)).await {
+        tracing::error!(%error, "Handoff delivery shutdown did not complete");
+    }
     let terminal_cleanup = tokio::time::timeout(Duration::from_secs(8), async {
         match reason {
             ShutdownReason::DesktopQuit => terminals.shutdown_owned_sessions().await,

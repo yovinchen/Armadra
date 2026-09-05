@@ -1,6 +1,7 @@
 //! Frozen, user-approved handoff material. Peer data never becomes a system
 //! message, and a terminal notification is not evidence of task completion.
 mod delivery;
+pub mod routes;
 mod snapshot;
 #[cfg(test)]
 mod tests;
