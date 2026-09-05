@@ -11,7 +11,7 @@ use std::{
 use armadra_protocol::{Message, v1};
 use tauri::{
     Manager, RunEvent, WebviewWindow, WindowEvent,
-    menu::{Menu, MenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 use tauri_plugin_dialog::DialogExt;
@@ -20,6 +20,7 @@ mod host;
 mod lifecycle;
 mod transport;
 mod updates;
+mod usage;
 use lifecycle::DesktopLifecycle;
 use transport::{RuntimeAddress, RuntimeTransport, WebSocketForwarder};
 
@@ -404,9 +405,22 @@ fn build_app_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
  * 「退出」与 macOS Command-Q 共用完整后台关闭流程。
  */
 fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "tray-show", "显示窗口", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "tray-quit", "退出并停止后台", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &quit])?;
+    let locale = usage::Locale::from_environment();
+    // The two usage rows are disabled items: a readout, not an action. They
+    // start as "unknown" rather than as empty bars, because nothing has been
+    // read yet and an empty bar would read as "0% used" (roadmap §3.9).
+    let [session_text, week_text] = usage::lines(locale, None);
+    let session = MenuItem::with_id(app, "tray-usage-session", session_text, false, None::<&str>)?;
+    let week = MenuItem::with_id(app, "tray-usage-week", week_text, false, None::<&str>)?;
+    let show = MenuItem::with_id(app, "tray-show", locale.show_window(), true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "tray-quit", locale.quit(), true, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(app)?;
+    let menu = Menu::with_items(app, &[&session, &week, &separator, &show, &quit])?;
+    app.manage(TrayUsage {
+        session: Mutex::new(session),
+        week: Mutex::new(week),
+        locale,
+    });
 
     let mut builder = TrayIconBuilder::with_id("main")
         .tooltip("Armadra")
@@ -438,6 +452,76 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     }
     builder.build(app)?;
     Ok(())
+}
+
+/// The two tray rows, kept so the poll can rewrite their labels in place.
+struct TrayUsage {
+    session: Mutex<MenuItem<tauri::Wry>>,
+    week: Mutex<MenuItem<tauri::Wry>>,
+    locale: usage::Locale,
+}
+
+/// Poll `GET /api/usage/mini` and keep the strip current (roadmap §3.9).
+///
+/// This uses the shell's existing Runtime channel — the same socket the
+/// WebView's `armadra://` requests are replayed on — so a packaged build still
+/// holds no port of its own. A read that fails leaves the previous numbers
+/// alone: a momentarily unreachable Runtime is not a change in quota, and
+/// blanking the strip would say something untrue.
+fn start_usage_strip(app: &tauri::AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let minutes = usage::refresh_minutes(&runtime_get(&app, "/api/settings").await);
+            if let Some(mini) = usage::parse(&runtime_get(&app, "/api/usage/mini").await) {
+                let state = app.state::<TrayUsage>();
+                let [session, week] = usage::lines(state.locale, Some(&mini));
+                if let Ok(item) = state.session.lock() {
+                    let _ = item.set_text(session);
+                }
+                if let Ok(item) = state.week.lock() {
+                    let _ = item.set_text(week);
+                }
+            }
+            tokio::time::sleep(usage::interval(minutes)).await;
+        }
+    });
+}
+
+/// One GET on whichever Runtime channel this shell has. An empty body means
+/// "no reading", which the caller treats as "leave the strip alone".
+async fn runtime_get(app: &tauri::AppHandle, path: &str) -> Vec<u8> {
+    if app.state::<RuntimeProcess>().owns() {
+        let transport = app.state::<RuntimeTransport>().inner().clone();
+        let Ok(request) = http::Request::builder()
+            .uri(format!("armadra://localhost{path}"))
+            .body(Vec::new())
+        else {
+            return Vec::new();
+        };
+        let response = transport::forward(&transport, request).await;
+        return if response.status().is_success() {
+            response.into_body()
+        } else {
+            Vec::new()
+        };
+    }
+    // A development Runtime the shell did not start is still on a loopback port.
+    let url = external_runtime_health_url().replace("/health", path);
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+    else {
+        return Vec::new();
+    };
+    match client.get(url).send().await {
+        Ok(response) if response.status().is_success() => response
+            .bytes()
+            .await
+            .map(|body| body.to_vec())
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
 }
 
 fn main() {
@@ -535,6 +619,7 @@ fn main() {
                 .ok_or_else(|| "Main window is unavailable".to_owned())?;
             apply_window_material(&window);
             build_tray(app.handle())?;
+            start_usage_strip(app.handle());
             let host_config = (|| {
                 let development = cfg!(not(feature = "custom-protocol"));
                 let origin = if development {
