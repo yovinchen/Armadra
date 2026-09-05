@@ -311,7 +311,7 @@ func (e *Engine) advance(ctx context.Context, workspace, runID string) error {
 	}
 	if !preDispatch(run.Run.State) {
 		lookup, cancel := context.WithTimeout(ctx, e.dispatchTimeout)
-		receipt, lookupErr := e.dispatcher.Lookup(lookup, run.Run.OperationId)
+		receipt, lookupErr := e.dispatcher.Lookup(lookup, proto.Clone(run.Run).(*pb.AutomationRun))
 		cancel()
 		if lookupErr != nil || receipt == nil {
 			return e.markUnknown(ctx, run, "LOOKUP_UNAVAILABLE")
@@ -359,7 +359,17 @@ func (e *Engine) advance(ctx context.Context, workspace, runID string) error {
 	if status.State == TargetUnsupported {
 		return e.finish(ctx, run, Skipped, "TARGET_UNSUPPORTED", now, nil)
 	}
-	if status.State != TargetReady || status.Generation != run.Run.FrozenConfig.Target.Generation {
+	// A command target is pinned to the exact generation the plan froze: a
+	// different one is a different process and must not be written to.
+	//
+	// An agent target cannot be, and pretending otherwise would be worse than
+	// useless. The Runtime owns that session's lifetime — a person restarting
+	// the Agent, or an authorized cold start, legitimately replaces it — so
+	// identity there is the node plus the frozen agent definition, both
+	// re-checked by the executor at the write itself, and the receipt records
+	// the generation actually written to. The frozen number stays in the run
+	// history as what the plan was defined against.
+	if status.State != TargetReady || (generationPinned(run.Run.FrozenConfig.Target) && status.Generation != run.Run.FrozenConfig.Target.Generation) {
 		return e.finish(ctx, run, Skipped, "STALE_GENERATION", now, nil)
 	}
 	// Re-read after the capability/authorization calls. Pause/update may have

@@ -34,6 +34,9 @@ func (d *Dispatcher) Supports(ctx context.Context, target *pb.AutomationTarget) 
 	if target == nil || target.ExecutionHostId != d.host {
 		return automation.TargetStatus{State: automation.TargetUnsupported}, nil
 	}
+	if AgentKind(target) {
+		return d.supportsAgent(ctx, target)
+	}
 	session, err := d.client.GetCommandSession(ctx, target.SessionId)
 	if err != nil {
 		return automation.TargetStatus{State: automation.TargetUnknown}, err
@@ -51,6 +54,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, run *pb.AutomationRun) (*pb.A
 		return nil, automation.ErrInvalid
 	}
 	config := run.FrozenConfig
+	if AgentKind(config.Target) {
+		return d.dispatchAgent(ctx, run)
+	}
 	session, err := d.client.GetCommandSession(ctx, config.Target.SessionId)
 	if err != nil {
 		return nil, err
@@ -83,8 +89,18 @@ func (d *Dispatcher) Dispatch(ctx context.Context, run *pb.AutomationRun) (*pb.A
 	}
 	return mapReceipt(receipt), nil
 }
-func (d *Dispatcher) Lookup(ctx context.Context, operation string) (*pb.AutomationReceipt, error) {
-	receipt, err := d.client.LookupCommand(ctx, operation)
+func (d *Dispatcher) Lookup(ctx context.Context, run *pb.AutomationRun) (*pb.AutomationReceipt, error) {
+	if run == nil || run.FrozenConfig == nil {
+		return nil, automation.ErrInvalid
+	}
+	if AgentKind(run.FrozenConfig.Target) {
+		receipt, err := d.client.AgentPromptLookup(ctx, run.OperationId)
+		if err != nil {
+			return nil, err
+		}
+		return mapPromptReceipt(receipt), nil
+	}
+	receipt, err := d.client.LookupCommand(ctx, run.OperationId)
 	if err != nil {
 		return nil, err
 	}

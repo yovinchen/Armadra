@@ -108,7 +108,7 @@ func TestRealWorkerSchedulesWithNoClientAndRebuildsAfterACrash(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- service.Run(loop) }()
 	run := awaitRun(t, service, caller, "plan", automation.Succeeded, 15*time.Second)
-	receipt, err := service.Lookup(ctx, run.Run.OperationId)
+	receipt, err := service.Lookup(ctx, run.Run)
 	if err != nil || receipt.Outcome != pb.AutomationOutcome_AUTOMATION_OUTCOME_SUCCEEDED {
 		t.Fatalf("Worker receipt: %+v %v", receipt, err)
 	}

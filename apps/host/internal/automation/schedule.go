@@ -82,13 +82,77 @@ func nextCronValue(schedule cron.Schedule, location *time.Location, after int64)
 	}
 	return 0, ErrInvalid
 }
+// normalizeTarget settles the target kind and refuses a configuration that
+// mixes the two. The default stays the command executor, and an agent target
+// that carries no node or no frozen definition is rejected here rather than
+// stored as a plan that could never name what it writes to.
+func normalizeTarget(t *pb.AutomationTarget) error {
+	if t.Kind == pb.AutomationTargetKind_AUTOMATION_TARGET_KIND_UNSPECIFIED {
+		t.Kind = pb.AutomationTargetKind_AUTOMATION_TARGET_KIND_NON_INTERACTIVE_COMMAND
+	}
+	switch t.Kind {
+	case pb.AutomationTargetKind_AUTOMATION_TARGET_KIND_NON_INTERACTIVE_COMMAND:
+		// A command target has no node and no launch definition: the executor
+		// creates a new process from a session it already froze, so there is
+		// nothing to cold start. Normalizing to SKIP keeps this idempotent —
+		// the stored configuration is normalized again to hash it.
+		if t.NodeId != "" || t.AgentLaunch != nil || t.ColdStartPolicy == pb.AutomationColdStartPolicy_AUTOMATION_COLD_START_POLICY_LAUNCH_FROZEN {
+			return ErrInvalid
+		}
+		// A command target is pinned to an exact generation of a session this
+		// Host froze, so it must name both.
+		if !validID(t.SessionId) || t.Generation == 0 {
+			return ErrInvalid
+		}
+		t.ColdStartPolicy = pb.AutomationColdStartPolicy_AUTOMATION_COLD_START_POLICY_SKIP
+		return nil
+	case pb.AutomationTargetKind_AUTOMATION_TARGET_KIND_AGENT_SESSION_PROMPT:
+		if !validID(t.NodeId) || t.AgentLaunch == nil || !validText(t.AgentLaunch.AgentId, 128, false) {
+			return ErrInvalid
+		}
+		// The session and generation are a record of what the plan was defined
+		// against, so both may be absent: a plan may legitimately be written
+		// for a node whose Agent is not running yet. Identity is the node plus
+		// the frozen definition, both re-checked at the write itself.
+		if t.SessionId != "" && !validID(t.SessionId) {
+			return ErrInvalid
+		}
+		// Only the default account, and never an argv large enough to be a
+		// payload in disguise.
+		if t.AgentLaunch.AccountId != "" && t.AgentLaunch.AccountId != "default" {
+			return ErrInvalid
+		}
+		if len(t.AgentLaunch.Args) > 64 || !validText(t.AgentLaunch.WorkingDirectory, 4096, true) || !validText(t.AgentLaunch.PermissionMode, 64, true) || !validText(t.AgentLaunch.ModelId, 128, true) {
+			return ErrInvalid
+		}
+		for _, arg := range t.AgentLaunch.Args {
+			if !validText(arg, 4096, true) {
+				return ErrInvalid
+			}
+		}
+		t.AgentLaunch.AccountId = "default"
+		if t.ColdStartPolicy == pb.AutomationColdStartPolicy_AUTOMATION_COLD_START_POLICY_UNSPECIFIED {
+			t.ColdStartPolicy = pb.AutomationColdStartPolicy_AUTOMATION_COLD_START_POLICY_SKIP
+		}
+		if t.ColdStartPolicy != pb.AutomationColdStartPolicy_AUTOMATION_COLD_START_POLICY_SKIP && t.ColdStartPolicy != pb.AutomationColdStartPolicy_AUTOMATION_COLD_START_POLICY_LAUNCH_FROZEN {
+			return ErrInvalid
+		}
+		return nil
+	default:
+		return ErrInvalid
+	}
+}
+
 func normalize(input *pb.AutomationPlanConfig) (*pb.AutomationPlanConfig, error) {
 	if input == nil {
 		return nil, ErrInvalid
 	}
 	c := proto.Clone(input).(*pb.AutomationPlanConfig)
-	if !validID(c.WorkspaceId) || !validText(c.Title, 256, false) || c.Target == nil || !validID(c.Target.ExecutionHostId) || !validID(c.Target.SessionId) || c.Target.Generation == 0 || c.Target.Generation > math.MaxInt64 || !validText(c.PayloadRef, 256, false) || len(c.PayloadSha256) != 32 || c.Schedule == nil || c.MaxRuns > math.MaxInt64 || c.ExpiresAtUnixMs < 0 || c.ExpiresAtUnixMs > maxTimestampMS || c.SafeRetryLimit > 3 {
+	if !validID(c.WorkspaceId) || !validText(c.Title, 256, false) || c.Target == nil || !validID(c.Target.ExecutionHostId) || c.Target.Generation > math.MaxInt64 || !validText(c.PayloadRef, 256, false) || len(c.PayloadSha256) != 32 || c.Schedule == nil || c.MaxRuns > math.MaxInt64 || c.ExpiresAtUnixMs < 0 || c.ExpiresAtUnixMs > maxTimestampMS || c.SafeRetryLimit > 3 {
 		return nil, ErrInvalid
+	}
+	if err := normalizeTarget(c.Target); err != nil {
+		return nil, err
 	}
 	if c.MisfirePolicy == 0 {
 		c.MisfirePolicy = Skip

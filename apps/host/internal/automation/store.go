@@ -56,8 +56,31 @@ func ConfigurationHash(config *pb.AutomationPlanConfig) ([]byte, error) {
 	}
 	return configHash(normalized)
 }
+// AgentTarget reports the one target kind that writes into a PTY that already
+// exists. An unspecified kind stays the command executor, so a plan frozen
+// before the field existed cannot silently become a terminal writer.
+func AgentTarget(target *pb.AutomationTarget) bool {
+	return target.GetKind() == pb.AutomationTargetKind_AUTOMATION_TARGET_KIND_AGENT_SESSION_PROMPT
+}
+
+// generationPinned reports whether a dispatch requires the exact generation
+// the plan froze. Only a command target does; see the note at its use site.
+func generationPinned(target *pb.AutomationTarget) bool { return !AgentTarget(target) }
+
+// What the delivery gate is keyed by. A command session is its own identity;
+// an agent target is keyed by its node, because a restart or an authorized
+// cold start legitimately replaces the session and a gate that followed the
+// session would stop serializing two plans aimed at the same terminal.
+func gateIdentity(target *pb.AutomationTarget) (session, node string) {
+	if AgentTarget(target) {
+		return "", target.NodeId
+	}
+	return target.SessionId, ""
+}
+
 func targetKey(target *pb.AutomationTarget) storage.Key {
-	return entityKey("", gateKind, hashText(target.ExecutionHostId, target.SessionId))
+	session, node := gateIdentity(target)
+	return entityKey("", gateKind, hashText(target.ExecutionHostId, session, node))
 }
 func (e *Engine) load(ctx context.Context, key storage.Key, message proto.Message) (uint64, error) {
 	entity, err := e.store.Read(ctx, key)
@@ -149,12 +172,14 @@ func (e *Engine) activation(ctx context.Context, workspace, id string) (*pb.Auto
 }
 func (e *Engine) gate(ctx context.Context, target *pb.AutomationTarget) (*pb.AutomationTargetGate, uint64, error) {
 	v := new(pb.AutomationTargetGate)
+	session, node := gateIdentity(target)
 	rev, err := e.optional(ctx, targetKey(target), v)
 	if rev == 0 {
 		v.ExecutionHostId = target.ExecutionHostId
-		v.SessionId = target.SessionId
+		v.SessionId = session
+		v.NodeId = node
 	}
-	if err == nil && (v.ExecutionHostId != target.ExecutionHostId || v.SessionId != target.SessionId) {
+	if err == nil && (v.ExecutionHostId != target.ExecutionHostId || v.SessionId != session || v.NodeId != node) {
 		err = storage.ErrCorrupt
 	}
 	return v, rev, err

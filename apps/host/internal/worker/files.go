@@ -87,6 +87,9 @@ func (c *Client) validResult(request *pb.WorkerRequest, response *pb.WorkerRespo
 	if input := request.GetCommand(); input != nil {
 		return c.validCommand(input, response.GetCommand())
 	}
+	if input := request.GetAgent(); input != nil {
+		return c.validAgent(input, response.GetAgent())
+	}
 	if request.GetHello() != nil {
 		return validHello(response.GetHello(), request.HostId, response.InstanceId)
 	}

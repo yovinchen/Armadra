@@ -71,7 +71,11 @@ type Authorizer interface {
 type Dispatcher interface {
 	Supports(context.Context, *pb.AutomationTarget) (TargetStatus, error)
 	Dispatch(context.Context, *pb.AutomationRun) (*pb.AutomationReceipt, error)
-	Lookup(context.Context, string) (*pb.AutomationReceipt, error)
+	// Lookup takes the whole run, not just its operation id: two executors
+	// keep two journals, and which one holds this receipt is a property of the
+	// run's target. Answering from the wrong journal would report a delivery
+	// that never happened as missing.
+	Lookup(context.Context, *pb.AutomationRun) (*pb.AutomationReceipt, error)
 }
 type Options struct {
 	Clock func() time.Time

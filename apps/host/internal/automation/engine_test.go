@@ -64,7 +64,8 @@ func (d *fakeDispatcher) Dispatch(ctx context.Context, run *pb.AutomationRun) (*
 	d.mu.Unlock()
 	return receipt, nil
 }
-func (d *fakeDispatcher) Lookup(ctx context.Context, operation string) (*pb.AutomationReceipt, error) {
+func (d *fakeDispatcher) Lookup(ctx context.Context, run *pb.AutomationRun) (*pb.AutomationReceipt, error) {
+	operation := run.GetOperationId()
 	d.mu.Lock()
 	hook := d.lookupHook
 	receipt := d.receipts[operation]

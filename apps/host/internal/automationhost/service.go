@@ -381,6 +381,16 @@ func (s *Service) Supports(ctx context.Context, target *pb.AutomationTarget) (au
 	if target == nil || target.ExecutionHostId != s.options.HostID {
 		return automation.TargetStatus{State: automation.TargetUnsupported}, nil
 	}
+	// An agent target names a canvas node, not a session this Host froze, so
+	// there is no stored definition to answer from: the Runtime that owns the
+	// terminal is the only thing that can say whether it is writable.
+	if automation.AgentTarget(target) {
+		_, inner, _ := s.current()
+		if inner == nil {
+			return automation.TargetStatus{State: automation.TargetUnknown}, ErrUnsupported
+		}
+		return inner.Supports(ctx, target)
+	}
 	record, err := s.store.CommandSession(ctx, target.SessionId)
 	if errors.Is(err, storage.ErrNotFound) {
 		return automation.TargetStatus{State: automation.TargetUnsupported}, nil
@@ -406,12 +416,12 @@ func (s *Service) Dispatch(ctx context.Context, run *pb.AutomationRun) (*pb.Auto
 	return inner.Dispatch(ctx, run)
 }
 
-func (s *Service) Lookup(ctx context.Context, operation string) (*pb.AutomationReceipt, error) {
+func (s *Service) Lookup(ctx context.Context, run *pb.AutomationRun) (*pb.AutomationReceipt, error) {
 	_, inner, _ := s.current()
 	if inner == nil {
 		return nil, ErrUnsupported
 	}
-	return inner.Lookup(ctx, operation)
+	return inner.Lookup(ctx, run)
 }
 
 var (

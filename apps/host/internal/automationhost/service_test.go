@@ -88,7 +88,7 @@ func TestTargetSupportAnswersFromStoredDefinitions(t *testing.T) {
 	if _, err = service.Dispatch(testContext, &pb.AutomationRun{}); !errors.Is(err, ErrUnsupported) {
 		t.Fatal("dispatch reached an absent Worker:", err)
 	}
-	if _, err = service.Lookup(testContext, "operation"); !errors.Is(err, ErrUnsupported) {
+	if _, err = service.Lookup(testContext, &pb.AutomationRun{OperationId: "operation"}); !errors.Is(err, ErrUnsupported) {
 		t.Fatal("lookup invented a receipt:", err)
 	}
 	// A definition the Host could not rebuild is explicitly unsupported, so a

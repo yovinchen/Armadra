@@ -169,26 +169,33 @@ func (s *Service) Define(ctx context.Context, caller Caller, planID string, conf
 	if prepared.Target.ExecutionHostId != s.options.HostID {
 		return nil, ErrUnsupported
 	}
-	record, err := s.store.CommandSession(ctx, prepared.Target.SessionId)
-	if err != nil {
-		return nil, err
-	}
-	if record.WorkspaceID != caller.WorkspaceID || record.State != storage.CommandSessionReady {
-		return nil, ErrUnsupported
-	}
-	if prepared.Target.Generation == 0 {
-		prepared.Target.Generation = record.Generation
-	}
-	if prepared.Target.Generation != record.Generation {
-		return nil, storage.ErrConflict
+	// A command target names a session this Host froze, so the definition is
+	// checked here. An agent target names a canvas node instead: that session
+	// belongs to the Runtime and legitimately comes and goes, so there is
+	// nothing to look up — the executor re-checks the node's identity at every
+	// probe and again at the write itself.
+	if !automation.AgentTarget(prepared.Target) {
+		record, err := s.store.CommandSession(ctx, prepared.Target.SessionId)
+		if err != nil {
+			return nil, err
+		}
+		if record.WorkspaceID != caller.WorkspaceID || record.State != storage.CommandSessionReady {
+			return nil, ErrUnsupported
+		}
+		if prepared.Target.Generation == 0 {
+			prepared.Target.Generation = record.Generation
+		}
+		if prepared.Target.Generation != record.Generation {
+			return nil, storage.ErrConflict
+		}
 	}
 	digest := sha256.Sum256(payload)
 	prepared.PayloadRef = hex.EncodeToString(digest[:])
 	prepared.PayloadSha256 = digest[:]
-	if err = s.store.PutAutomationPayload(ctx, storage.AutomationPayload{WorkspaceID: caller.WorkspaceID, Ref: prepared.PayloadRef, Payload: payload, SHA256: digest, CreatedAtMS: s.now()}); err != nil {
+	if err := s.store.PutAutomationPayload(ctx, storage.AutomationPayload{WorkspaceID: caller.WorkspaceID, Ref: prepared.PayloadRef, Payload: payload, SHA256: digest, CreatedAtMS: s.now()}); err != nil {
 		return nil, err
 	}
-	if err = s.recordGrant(ctx, caller); err != nil {
+	if err := s.recordGrant(ctx, caller); err != nil {
 		return nil, err
 	}
 	snapshot, err := s.engine.Define(ctx, s.authorization(caller), planID, prepared, expectedRevision)
