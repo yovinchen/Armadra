@@ -36,6 +36,15 @@ export const explorer: MessageModule = {
     "scm.message": "提交信息",
     "scm.commit": "提交",
     "scm.committed": "已提交 {commit}",
+    "scm.amend": "改写上一个提交（amend）",
+    "scm.amendCommit": "改写提交",
+    "scm.amendTarget": "将被改写的提交",
+    "scm.amendSafety":
+      "amend 用新提交替换上面这个提交，历史因此被改写。只提交索引里的内容，不会自动推送，也不会强制推送。",
+    "scm.amendPublished":
+      "该提交已存在于远端跟踪引用中；我确认要改写这段已发布历史",
+    "scm.amendUnavailable":
+      "上一个提交的信息超出可重新提交的长度，改写会丢内容，因此不提供 amend。",
     "scm.clean": "没有变更",
     "scm.noRepository": "不是 Git 仓库",
     "scm.init": "初始化 Git 仓库",
@@ -83,6 +92,15 @@ export const explorer: MessageModule = {
     "scm.message": "Commit message",
     "scm.commit": "Commit",
     "scm.committed": "Committed {commit}",
+    "scm.amend": "Amend the previous commit",
+    "scm.amendCommit": "Amend commit",
+    "scm.amendTarget": "Commit this rewrites",
+    "scm.amendSafety":
+      "Amend replaces the commit above with a new one, so it rewrites history. It commits only what is in the index, and it never pushes or force-pushes.",
+    "scm.amendPublished":
+      "A remote-tracking ref already contains this commit; I want to rewrite that published history",
+    "scm.amendUnavailable":
+      "The previous commit's message is longer than an amend may resend, so rewriting it would drop content. Amend is unavailable.",
     "scm.clean": "No changes",
     "scm.noRepository": "Not a Git repository",
     "scm.init": "Initialize Git repository",

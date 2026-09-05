@@ -8,6 +8,7 @@ export function invalidateGitQueries(
   if (!workspaceId) return;
   for (const name of [
     "git-status",
+    "git-head-commit",
     "git-diff",
     "git-hunks",
     "git-message-source",

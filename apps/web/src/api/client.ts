@@ -48,6 +48,7 @@ import {
   gitCommitResponseSchema,
   gitDiffRequestSchema,
   gitDiffSchema,
+  gitHeadCommitSchema,
   gitInitResponseSchema,
   gitPathsRequestSchema,
   gitRevertResponseSchema,
@@ -1129,7 +1130,19 @@ export const runtimeApi = {
       gitRevertResponseSchema,
       { method: "POST", ...json(gitPathsRequestSchema.parse({ paths })) },
     ),
-  gitCommit: (workspaceId: string, message: string, paths?: string[]) =>
+  /** The commit an amend would rewrite; null on an unborn branch. */
+  gitHeadCommit: (workspaceId: string, signal?: AbortSignal) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/head-commit`,
+      gitHeadCommitSchema,
+      { signal },
+    ),
+  gitCommit: (
+    workspaceId: string,
+    message: string,
+    paths?: string[],
+    amend?: { expectedHead: string; allowPublished: boolean },
+  ) =>
     request(
       `/api/workspaces/${workspaceId}/git/commit`,
       gitCommitResponseSchema,
@@ -1139,6 +1152,7 @@ export const runtimeApi = {
           gitCommitRequestSchema.parse({
             message,
             ...(paths && paths.length > 0 ? { paths } : {}),
+            ...(amend ? { amend } : {}),
           }),
         ),
       },

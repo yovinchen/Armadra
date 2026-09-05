@@ -1971,6 +1971,34 @@ pub async fn git_revert(
 pub struct CommitRequest {
     message: String,
     paths: Option<Vec<String>>,
+    /// Present only for an explicit amend; the composer sends the OID it showed.
+    amend: Option<AmendBody>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AmendBody {
+    expected_head: String,
+    #[serde(default)]
+    allow_published: bool,
+}
+
+/// `GET /api/workspaces/{id}/git/head-commit`: what an amend would rewrite.
+pub async fn git_head_commit(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+) -> AppResult<Json<Option<git::HeadCommit>>> {
+    let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
+    if !workspace.permissions.read {
+        return Err(AppError::Forbidden(
+            "Workspace does not allow Git reads".into(),
+        ));
+    }
+    git::access::require_execution(workspace.permissions.execute, "Git commit inspection")?;
+    let result =
+        tokio::task::spawn_blocking(move || git::head_commit(Path::new(&workspace.root_path)))
+            .await??;
+    Ok(Json(result))
 }
 
 pub async fn git_commit(
@@ -1993,10 +2021,15 @@ pub async fn git_commit(
         .await?;
     let result = tokio::task::spawn_blocking(move || {
         let _guard = guard;
+        let amend = request.amend.map(|amend| git::AmendRequest {
+            expected_head: amend.expected_head,
+            allow_published: amend.allow_published,
+        });
         git::commit(
             Path::new(&workspace.root_path),
             &request.message,
             request.paths.as_deref(),
+            amend.as_ref(),
         )
     })
     .await??;

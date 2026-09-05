@@ -678,28 +678,126 @@ pub struct CommitResult {
     pub summary: String,
 }
 
-/// `git commit -m <message> [-- <paths>]`.
+/// The commit `--amend` would rewrite, as the composer has to present it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeadCommit {
+    pub oid: String,
+    pub subject: String,
+    /// The full message, so an amend can start from it instead of silently
+    /// dropping the body. Empty when `truncated`.
+    pub message: String,
+    /// The stored message is larger than an amend may resend; the composer
+    /// must refuse rather than rewrite the commit with a shortened message.
+    pub truncated: bool,
+    /// At least one remote-tracking ref contains this commit, so rewriting it
+    /// rewrites history other checkouts may already have fetched.
+    pub published: bool,
+}
+
+/// `HEAD` as the amend controls describe it, or None on an unborn branch.
+pub fn head_commit(workspace_root: &Path) -> AppResult<Option<HeadCommit>> {
+    let context = require_repository(workspace_root)?;
+    let Ok(oid) = git(
+        &context.repository,
+        &["rev-parse", "--verify", "--quiet", "HEAD^{commit}"],
+    ) else {
+        return Ok(None);
+    };
+    let oid = oid.trim().to_owned();
+    if oid.is_empty() {
+        return Ok(None);
+    }
+    let message = git(
+        &context.repository,
+        &[
+            "log",
+            "-1",
+            "--no-show-signature",
+            "--format=%B",
+            &oid,
+            "--",
+        ],
+    )?;
+    // Trailing newlines are Git's own formatting, not part of the message.
+    let message = message.trim_end_matches('\n').to_owned();
+    let truncated = message.len() > 10_000;
+    let subject = message.lines().next().unwrap_or_default().to_owned();
+    let containing = git(
+        &context.repository,
+        &[
+            "for-each-ref",
+            "--format=%(refname)",
+            "--contains",
+            &oid,
+            "refs/remotes/",
+        ],
+    )?;
+    Ok(Some(HeadCommit {
+        oid,
+        subject,
+        message: if truncated { String::new() } else { message },
+        truncated,
+        published: !containing.trim().is_empty(),
+    }))
+}
+
+/// An explicit rewrite of the current HEAD commit.
+#[derive(Debug, Clone)]
+pub struct AmendRequest {
+    /// The commit the caller reviewed. A HEAD that moved since is refused
+    /// rather than rewritten into something nobody looked at.
+    pub expected_head: String,
+    /// Acknowledges rewriting a commit a remote-tracking ref already contains.
+    pub allow_published: bool,
+}
+
+/// `git commit [--amend] -m <message> [-- <paths>]`.
 ///
 /// With `paths` the listed files are staged first (through the same validation
 /// as `stage_paths`, so nothing outside the authorized workspace can be
 /// committed) and the commit is scoped to them. Without `paths` whatever is
 /// already staged is committed.
+///
+/// `amend` rewrites history and is therefore never implied: it needs the OID
+/// the caller reviewed, and a commit any remote-tracking ref already contains
+/// additionally needs an explicit acknowledgement. Nothing here force-pushes.
 pub fn commit(
     workspace_root: &Path,
     message: &str,
     paths: Option<&[String]>,
+    amend: Option<&AmendRequest>,
 ) -> AppResult<CommitResult> {
     let message = message.trim();
     if message.is_empty() || message.len() > 10_000 || message.contains('\0') {
         return Err(AppError::BadRequest("Commit message is invalid".into()));
     }
     let context = require_repository(workspace_root)?;
+    if let Some(amend) = amend {
+        let current = head_commit(workspace_root)?.ok_or_else(|| {
+            AppError::Conflict("There is no commit to amend on this branch".into())
+        })?;
+        if current.oid != amend.expected_head {
+            return Err(AppError::Conflict(
+                "HEAD moved since the commit was reviewed; refresh before amending".into(),
+            ));
+        }
+        if current.published && !amend.allow_published {
+            return Err(AppError::Conflict(
+                "This commit is already contained in a remote-tracking ref; amending rewrites published history and needs an explicit acknowledgement".into(),
+            ));
+        }
+    }
     let committed = match paths {
         Some(paths) => stage_paths(workspace_root, paths)?.staged,
         None => vec![],
     };
 
-    let mut args: Vec<&str> = vec!["commit", "-m", message];
+    let mut args: Vec<&str> = vec!["commit"];
+    if amend.is_some() {
+        args.push("--amend");
+    }
+    args.extend(["-m", message]);
     if !committed.is_empty() {
         args.push("--");
         args.extend(committed.iter().map(String::as_str));
@@ -725,6 +823,16 @@ pub fn commit(
     let commit = git(&context.repository, &["rev-parse", "--short", "HEAD"])?
         .trim()
         .to_owned();
+    if let Some(amend) = amend {
+        let current = git(&context.repository, &["rev-parse", "--verify", "HEAD"])?
+            .trim()
+            .to_owned();
+        if current == amend.expected_head {
+            return Err(AppError::Conflict(
+                "Git reported success but HEAD still points at the original commit; inspect the repository".into(),
+            ));
+        }
+    }
     Ok(CommitResult {
         commit,
         committed,
@@ -1276,16 +1384,22 @@ mod tests {
         fs::write(root.path().join("left.txt"), "two\n").unwrap();
 
         assert!(matches!(
-            commit(root.path(), "   ", None),
+            commit(root.path(), "   ", None, None),
             Err(AppError::BadRequest(_))
         ));
         // Nothing is staged yet, so an unscoped commit is refused.
         assert!(matches!(
-            commit(root.path(), "empty", None),
+            commit(root.path(), "empty", None, None),
             Err(AppError::BadRequest(_))
         ));
 
-        let result = commit(root.path(), "add kept", Some(&["kept.txt".to_owned()])).unwrap();
+        let result = commit(
+            root.path(),
+            "add kept",
+            Some(&["kept.txt".to_owned()]),
+            None,
+        )
+        .unwrap();
         assert_eq!(result.committed, vec!["kept.txt".to_owned()]);
         assert!(!result.commit.is_empty());
 
@@ -1293,7 +1407,15 @@ mod tests {
         assert_eq!(status.changed_count, 1, "left.txt must stay uncommitted");
 
         // Paths outside the workspace are refused before Git ever runs.
-        assert!(commit(root.path(), "escape", Some(&["../outside.txt".to_owned()])).is_err());
+        assert!(
+            commit(
+                root.path(),
+                "escape",
+                Some(&["../outside.txt".to_owned()]),
+                None
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -1475,6 +1597,129 @@ mod tests {
             .current_dir(root)
             .status()
             .unwrap();
+    }
+
+    #[test]
+    fn amend_rewrites_only_the_reviewed_head_and_guards_published_commits() {
+        let workspace = tempdir().unwrap();
+        let root = workspace.path().join("repo");
+        fs::create_dir(&root).unwrap();
+        fixture_repository(&root);
+        fs::write(root.join("a.txt"), "one\n").unwrap();
+        commit_all(&root, "first subject\n\nbody line\n");
+        let before = head_commit(&root).unwrap().unwrap();
+        assert_eq!(before.subject, "first subject");
+        assert!(before.message.contains("body line"));
+        assert!(!before.truncated);
+        assert!(!before.published, "no remote-tracking ref exists yet");
+
+        // A HEAD that moved since the composer read it is refused outright.
+        assert!(matches!(
+            commit(
+                &root,
+                "rewritten",
+                None,
+                Some(&AmendRequest {
+                    expected_head: "b".repeat(40),
+                    allow_published: false,
+                }),
+            ),
+            Err(AppError::Conflict(_))
+        ));
+        assert_eq!(head_commit(&root).unwrap().unwrap().oid, before.oid);
+
+        fs::write(root.join("a.txt"), "two\n").unwrap();
+        let amended = commit(
+            &root,
+            "rewritten subject",
+            Some(&["a.txt".to_owned()]),
+            Some(&AmendRequest {
+                expected_head: before.oid.clone(),
+                allow_published: false,
+            }),
+        )
+        .unwrap();
+        assert_eq!(amended.committed, vec!["a.txt".to_owned()]);
+        let after = head_commit(&root).unwrap().unwrap();
+        assert_ne!(after.oid, before.oid, "amend replaces the commit");
+        assert_eq!(after.subject, "rewritten subject");
+        // The rewrite kept a single root commit rather than adding one.
+        let count = Command::new("git")
+            .args(["rev-list", "--count", "HEAD"])
+            .current_dir(&root)
+            .output()
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&count.stdout).trim(), "1");
+
+        // Publishing the commit to a local bare remote makes the amend a
+        // rewrite of history someone else can already have.
+        let remote = workspace.path().join("remote.git");
+        Command::new("git")
+            .args([
+                "init",
+                "--bare",
+                "-q",
+                "-b",
+                "main",
+                remote.to_str().unwrap(),
+            ])
+            .current_dir(workspace.path())
+            .status()
+            .unwrap();
+        for args in [
+            vec!["remote", "add", "origin", remote.to_str().unwrap()],
+            vec!["push", "-q", "origin", "main"],
+        ] {
+            assert!(
+                Command::new("git")
+                    .args(&args)
+                    .current_dir(&root)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+        let published = head_commit(&root).unwrap().unwrap();
+        assert!(published.published);
+        assert!(matches!(
+            commit(
+                &root,
+                "sneaky rewrite",
+                None,
+                Some(&AmendRequest {
+                    expected_head: published.oid.clone(),
+                    allow_published: false,
+                }),
+            ),
+            Err(AppError::Conflict(_))
+        ));
+        assert_eq!(head_commit(&root).unwrap().unwrap().oid, published.oid);
+        // The same request with the explicit acknowledgement is accepted, and
+        // still touches nothing on the remote.
+        commit(
+            &root,
+            "acknowledged rewrite",
+            None,
+            Some(&AmendRequest {
+                expected_head: published.oid.clone(),
+                allow_published: true,
+            }),
+        )
+        .unwrap();
+        assert_eq!(
+            head_commit(&root).unwrap().unwrap().subject,
+            "acknowledged rewrite"
+        );
+        let remote_head = Command::new("git")
+            .args(["rev-parse", "refs/heads/main"])
+            .current_dir(&remote)
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&remote_head.stdout).trim(),
+            published.oid,
+            "amend never pushes"
+        );
     }
 
     #[test]

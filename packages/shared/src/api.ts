@@ -875,10 +875,39 @@ export const gitUnstageResponseSchema = z.object({
   unstaged: z.array(z.string()),
 });
 
+/**
+ * `GET /api/workspaces/{id}/git/head-commit` — the commit an amend would
+ * rewrite, or null on an unborn branch. `published` means a remote-tracking
+ * ref already contains it, so rewriting it rewrites shared history.
+ */
+export const gitHeadCommitSchema = z
+  .object({
+    oid: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i),
+    subject: z.string(),
+    /** Full message so an amend can start from it; empty when truncated. */
+    message: z.string(),
+    /** The stored message is too large to resend; amending is refused. */
+    truncated: z.boolean(),
+    published: z.boolean(),
+  })
+  .nullable();
+
 export const gitCommitRequestSchema = z.object({
   message: z.string().trim().min(1).max(10_000),
   /** When present only these paths are committed (they are staged first). */
   paths: z.array(z.string().min(1)).max(200).optional(),
+  /**
+   * Rewriting the current commit. Never implied: the composer sends the OID
+   * it displayed, and a published commit additionally needs the explicit
+   * acknowledgement. An amend never pushes anything.
+   */
+  amend: z
+    .object({
+      expectedHead: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i),
+      allowPublished: z.boolean(),
+    })
+    .strict()
+    .optional(),
 });
 
 export const gitCommitResponseSchema = z.object({
@@ -1365,6 +1394,7 @@ export type GitDiffRequest = z.infer<typeof gitDiffRequestSchema>;
 export type GitFileDiff = z.infer<typeof gitFileDiffSchema>;
 export type GitUnstageResponse = z.infer<typeof gitUnstageResponseSchema>;
 export type GitInitResponse = z.infer<typeof gitInitResponseSchema>;
+export type GitHeadCommit = z.infer<typeof gitHeadCommitSchema>;
 export type GitCommitRequest = z.infer<typeof gitCommitRequestSchema>;
 export type GitCommitResponse = z.infer<typeof gitCommitResponseSchema>;
 export type GitCloneRequest = z.infer<typeof gitCloneRequestSchema>;

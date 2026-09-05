@@ -90,6 +90,8 @@ export function SourceControlDrawer() {
   const [message, setMessage] = useState("");
   const [revertPath, setRevertPath] = useState<string | null>(null);
   const [confirmInit, setConfirmInit] = useState(false);
+  const [amend, setAmend] = useState(false);
+  const [acknowledgePublished, setAcknowledgePublished] = useState(false);
   const [tab, setTab] = useState<"changes" | RepositoryTab>("changes");
   const [hunk, setHunk] = useState<{
     workspaceId: string;
@@ -125,10 +127,27 @@ export function SourceControlDrawer() {
     onSuccess: invalidate,
     onError: fail,
   });
+  // The commit an amend would rewrite. Read separately from status so the
+  // composer can name the exact subject and OID it is about to replace.
+  const headCommit = useQuery({
+    queryKey: ["git-head-commit", workspaceId],
+    queryFn: ({ signal }) => runtimeApi.gitHeadCommit(workspaceId!, signal),
+    enabled: open && Boolean(workspaceId) && status.data?.repository === true,
+    retry: false,
+  });
+  const head = headCommit.data ?? null;
+  const amendable = Boolean(head) && !head!.truncated;
+  const amendPayload =
+    amend && head
+      ? { expectedHead: head.oid, allowPublished: acknowledgePublished }
+      : undefined;
   const commit = useMutation({
-    mutationFn: (text: string) => runtimeApi.gitCommit(workspaceId!, text),
+    mutationFn: (text: string) =>
+      runtimeApi.gitCommit(workspaceId!, text, undefined, amendPayload),
     onSuccess: (result) => {
       setMessage("");
+      setAmend(false);
+      setAcknowledgePublished(false);
       invalidate();
       toast.success(t("scm.committed", { commit: result.commit.slice(0, 7) }));
     },
@@ -153,17 +172,29 @@ export function SourceControlDrawer() {
   );
   const { staged, changes } = useMemo(() => partitionChanges(files), [files]);
 
-  const canCommit = message.trim().length > 0 && !commit.isPending;
+  // Rewriting a published commit needs its own acknowledgement, so it gates
+  // the button as well as the request body.
+  const amendBlocked =
+    amend &&
+    (!head || head.truncated || (head.published && !acknowledgePublished));
+  const canCommit =
+    message.trim().length > 0 && !commit.isPending && !amendBlocked;
   useEffect(() => {
     if (!open || tab !== "changes") return;
     const submit = () => {
-      if (message.trim().length > 0 && !commit.isPending) {
-        commit.mutate(message.trim());
-      }
+      if (canCommit) commit.mutate(message.trim());
     };
     window.addEventListener(SCM_COMMIT_EVENT, submit);
     return () => window.removeEventListener(SCM_COMMIT_EVENT, submit);
-  }, [open, tab, message, commit]);
+  }, [open, tab, message, commit, canCommit]);
+  // Starting from the stored message keeps an amend from silently dropping
+  // the body of the commit it replaces.
+  const toggleAmend = (next: boolean) => {
+    setAmend(next);
+    setAcknowledgePublished(false);
+    if (next && head && !head.truncated && message.trim().length === 0)
+      setMessage(head.message);
+  };
 
   const openDiff = (path: string, scope: DiffScope) => {
     if (!workspace) return;
@@ -413,13 +444,59 @@ export function SourceControlDrawer() {
                   aria-label={t("scm.message")}
                   className="min-h-[64px] resize-none"
                 />
+                {head && (
+                  <div className="space-y-1 text-xs">
+                    <label className="flex min-h-8 items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-[var(--brand)]"
+                        checked={amend}
+                        disabled={!amendable}
+                        onChange={(event) => toggleAmend(event.target.checked)}
+                      />
+                      {t("scm.amend")}
+                    </label>
+                    {amend && (
+                      <>
+                        <p className="break-words text-muted-foreground">
+                          {t("scm.amendTarget")}:{" "}
+                          <span className="font-mono">
+                            {head.oid.slice(0, 10)}
+                          </span>{" "}
+                          {head.subject}
+                        </p>
+                        <p className="text-muted-foreground">
+                          {t("scm.amendSafety")}
+                        </p>
+                      </>
+                    )}
+                    {!amendable && (
+                      <p className="text-muted-foreground">
+                        {t("scm.amendUnavailable")}
+                      </p>
+                    )}
+                    {amend && head.published && (
+                      <label className="flex min-h-8 items-center gap-2 rounded-md border border-destructive p-2">
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-[var(--brand)]"
+                          checked={acknowledgePublished}
+                          onChange={(event) =>
+                            setAcknowledgePublished(event.target.checked)
+                          }
+                        />
+                        {t("scm.amendPublished")}
+                      </label>
+                    )}
+                  </div>
+                )}
                 <Button
                   className="self-end"
                   size="sm"
                   disabled={!canCommit}
                   onClick={() => commit.mutate(message.trim())}
                 >
-                  {t("scm.commit")}
+                  {t(amend ? "scm.amendCommit" : "scm.commit")}
                 </Button>
               </div>
             </TabsContent>

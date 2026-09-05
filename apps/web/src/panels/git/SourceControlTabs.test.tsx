@@ -126,6 +126,61 @@ it("keeps Changes as the default and stops its commit shortcut outside that tab"
   expect(screen.getByRole("dialog").className).toContain("max-w-full");
 });
 
+it("amends only after acknowledging a published rewrite", async () => {
+  const oid = "c".repeat(40);
+  vi.spyOn(runtimeApi, "gitHeadCommit").mockResolvedValue({
+    oid,
+    subject: "published subject",
+    message: "published subject\n\nbody",
+    truncated: false,
+    published: true,
+  });
+  const commit = vi.spyOn(runtimeApi, "gitCommit").mockResolvedValue({
+    commit: "d".repeat(40),
+    committed: [],
+    summary: "fixture",
+  });
+  render(
+    <TestProviders>
+      <SourceControlDrawer />
+    </TestProviders>,
+  );
+  const amend = await screen.findByRole("checkbox", {
+    name: "Amend the previous commit",
+  });
+  fireEvent.click(amend);
+  // Checking amend starts from the stored message so the body is not dropped.
+  await waitFor(() =>
+    expect(
+      (
+        screen.getByRole("textbox", {
+          name: "Commit message",
+        }) as HTMLTextAreaElement
+      ).value,
+    ).toBe("published subject\n\nbody"),
+  );
+  // The composer names the commit it is about to replace.
+  const target = screen.getByText("Commit this rewrites", { exact: false });
+  expect(target.textContent).toContain(oid.slice(0, 10));
+  expect(target.textContent).toContain("published subject");
+  const button = screen.getByRole("button", { name: "Amend commit" });
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: /I want to rewrite that published history/,
+    }),
+  );
+  await waitFor(() =>
+    expect((button as HTMLButtonElement).disabled).toBe(false),
+  );
+  fireEvent.click(button);
+  await waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
+  expect(commit.mock.calls[0]?.[3]).toEqual({
+    expectedHead: oid,
+    allowPublished: true,
+  });
+});
+
 it("offers git init only outside a repository and asks before creating one", async () => {
   vi.mocked(runtimeApi.gitStatus).mockResolvedValue({
     repository: false,
