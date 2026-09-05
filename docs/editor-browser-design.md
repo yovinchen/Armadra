@@ -1,6 +1,6 @@
 # 文件编辑器与受控浏览器设计
 
-> 状态：目标设计，除 §3 的外部变更检测外待实施。面向桌面、浏览器客户端与移动端的同一执行服务。
+> 状态：目标设计。§2 的搜索替换、快速打开、项目搜索、文件信息、Markdown 预览、文件管理与 §3 的外部变更检测已实施（E01/M4），语言服务只有能力探测；浏览器部分待实施。面向桌面、浏览器客户端与移动端的同一执行服务。
 
 ## 1. 交互位置与通用模型
 
@@ -32,6 +32,24 @@ UI 使用现有 shadcn/Radix 原语组织工具栏、菜单、Sheet、Dialog、T
 语言服务按执行主机安装和探测，不把本机路径传给远端 LSP。无语言服务器时仍能完成文本编辑和语法高亮，显示缺失的具体能力；不弹出空补全列表假装已接入。
 
 建议组件：`DocumentController`、`EditorToolbar`、`CodeEditorSurface`、`MarkdownPreview`、`ProjectSearchPanel`、`ProblemsPanel`、`SaveConflictDialog`、`LanguageServiceStatus`。
+
+已实现（E01/M4）：
+
+| 功能     | 实现                                                                                                                                                                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 搜索替换 | CodeMirror `search({ top: true })`，面板自带大小写/正则/全字；替换那一行由 `EditorState.readOnly` 决定是否出现，面板文案经 `EditorState.phrases` 走 i18n                                                                                    |
+| 快速打开 | ⌘P → `GET …/file-index?query=&limit=`，Runtime 侧模糊匹配文件名（命中路径的排在后面），跳过 `.git`/`node_modules`/`target`/`dist` 等与 `.armadra`，扫描上限 40 000 项、默认返回 40 条，截断如实标注；同一路径复用已有编辑器                 |
+| 项目搜索 | ⌘⇧H → 资源管理器「搜索」页 → `POST …/file-search`。字面量或正则、大小写、全字、包含/排除 glob、每文件命中上限（默认 20）、5s 总时长上限；>1 MiB 与含 NUL 的文件只计入 `skipped` 不读取；按文件分页（`offset`/`nextOffset`），点命中打开到行 |
+| 文件信息 | 读取返回 `encoding`(`utf-8`/`unknown`)、`bom`、`eol`(`lf`/`crlf`/`mixed`/`none`)、`readonly`，编辑器状态栏显示；非 UTF-8 的文件 Runtime 不给内容版本，因此天然只读                                                                          |
+| Markdown | 头部按钮在 编辑 / 并排 / 预览 之间轮转。`react-markdown` 不接 `rehype-raw`，裸 HTML 与 `<script>` 只作为文本出现；相对路径图片经 `file-download` 读取，链接只放行 http/https 与文档内锚点                                                   |
+| 文件管理 | 文件树右键与顶部按钮：新建文件/文件夹、重命名、移动（改路径或拖到目录行）、删除到回收站；受工作区 write 权限约束，无权限时菜单项不出现                                                                                                      |
+| 语言服务 | 只有能力探测：`GET …/language-service` 恒为 `{ status: "unavailable", reason: "not_implemented" }`，设置 → 工作区显示「未启用」，编辑器状态栏显示「LSP 未启用」，不出现任何补全入口                                                         |
+
+`eol` 为 `crlf` 时编辑器声明 `EditorState.lineSeparator`，保存取 `state.sliceDoc()`，一次保存不会把 CRLF 悄悄改成 LF；BOM 读取时剥离、保存时按 `bom` 写回。`mixed` 无法原样还原，状态栏说明保存会统一成 LF。共享领域类型里预留了 `languageService: { status: "unavailable" }`（`editorNodeDataSchema`），除此之外没有任何 LSP 代码。
+
+删除只移动不删除：条目进入工作区 `.armadra/trash/<id>/`，旁边一份 `entry.json` 记着原路径，`POST …/file-entries/restore` 放回原处；原处被占用就是 409，不覆盖。`.armadra` 自身拒绝被这组接口创建、改名或删除，文件树也不展示它。
+
+尚未实现：最近文件与跳转行列输入、搜索结果的取消按钮、语言服务本身、问题面板、媒体预览的缩放与透明背景、Git 行边标记。
 
 ### 2.1 文件管理器拖拽
 
@@ -75,6 +93,8 @@ UI 使用现有 shadcn/Radix 原语组织工具栏、菜单、Sheet、Dialog、T
 编辑器撤销栈只包含文本操作，画布撤销栈只包含布局；Git 还原、语言服务多文件修改和重命名以操作预览及明确完成事件处理，不让普通 Ctrl+Z 跨进程撤销 Git。
 
 删除文件优先可恢复暂存；后台任务仍持有文件引用时提示范围。上传采用分块 hash 校验和临时目标，完成后一次性发布；重名覆盖先预览。大文件采用只读/分块模式，初始阈值 5 MiB、500k 行，可配置并实测，不能整文件直接卡住主线程。
+
+重命名已实现为「画布跟着走」（E01/M4）：`file-entries/rename` 成功后，打开该文件、或该目录下任一文件的编辑器与文件管理器节点一起改路径；节点标题只在它原本就是旧文件名时才跟着改，用户手改过的标题保留。删除不动节点：编辑器正监听这个文件，`removed` 那条既有路径会把它转成 create-only 草稿。
 
 ## 4. 语言服务与不受信任预览
 
