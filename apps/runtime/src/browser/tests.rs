@@ -138,7 +138,7 @@ async fn fixture(name: &str) -> Fixture {
         ),
         usage: crate::usage::UsageService::new(settings.clone()),
         settings,
-        hooks: HookService::new(data_dir, 0),
+        hooks: HookService::new(data_dir, None),
         events,
         pool,
     };
@@ -869,7 +869,7 @@ async fn a_kept_session_comes_back_after_a_runtime_restart() {
     assert!(profile.exists());
 
     let restarted = AppState {
-        hooks: HookService::new(fixture.directory.path().join("data-restarted"), 0),
+        hooks: HookService::new(fixture.directory.path().join("data-restarted"), None),
         ..fixture.state.clone()
     };
     assert_eq!(session::restore(&restarted).await.unwrap(), 1);
