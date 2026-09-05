@@ -2,8 +2,12 @@
 // @generated from file armadra/v1/worker.proto (package armadra.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv1";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv1";
+import type {
+  GenEnum,
+  GenFile,
+  GenMessage,
+} from "@bufbuild/protobuf/codegenv1";
+import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv1";
 import type { AgentRequest, AgentResponse } from "./agent_pb.js";
 import { file_armadra_v1_agent } from "./agent_pb.js";
 import type { ErrorResponse, ProtocolVersion } from "./common_pb.js";
@@ -24,7 +28,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_worker: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Chdhcm1hZHJhL3YxL3dvcmtlci5wcm90bxIKYXJtYWRyYS52MSJDChJXb3JrZXJIZWxsb1JlcXVlc3QSLQoIcHJvdG9jb2wYASABKAsyGy5hcm1hZHJhLnYxLlByb3RvY29sVmVyc2lvbiKvAgoTV29ya2VySGVsbG9SZXNwb25zZRItCghwcm90b2NvbBgBIAEoCzIbLmFybWFkcmEudjEuUHJvdG9jb2xWZXJzaW9uEg8KB2hvc3RfaWQYAiABKAkSEwoLaW5zdGFuY2VfaWQYAyABKAkSEAoIcGxhdGZvcm0YBCABKAkSFAoMYXJjaGl0ZWN0dXJlGAUgASgJEhQKDGNhcGFiaWxpdGllcxgGIAMoCRIXCg9tYXhfZnJhbWVfYnl0ZXMYByABKA0SHAoUbWF4X2ZpbGVfY2h1bmtfYnl0ZXMYCCABKA0SGwoTbWF4X3RleHRfZmlsZV9ieXRlcxgJIAEoDRIxCghjb21tYW5kcxgUIAEoCzIfLmFybWFkcmEudjEuQ29tbWFuZENhcGFiaWxpdGllcyI0ChNSZWdpc3RlclJvb3RSZXF1ZXN0Eg8KB3Jvb3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCSI5Cg5SZWdpc3RlcmVkUm9vdBIPCgdyb290X2lkGAEgASgJEhYKDmNhbm9uaWNhbF9wYXRoGAIgASgJIjsKGldvcmtlckxpc3REaXJlY3RvcnlSZXF1ZXN0Eg8KB3Jvb3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCSJbCg9Xb3JrZXJGaWxlRW50cnkSDAoEbmFtZRgBIAEoCRIMCgRwYXRoGAIgASgJEgwKBGtpbmQYAyABKAkSDAoEc2l6ZRgEIAEoBBIQCghyZWFkb25seRgFIAEoCCJxCg9Xb3JrZXJEaXJlY3RvcnkSDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEiwKB2VudHJpZXMYAyADKAsyGy5hcm1hZHJhLnYxLldvcmtlckZpbGVFbnRyeRIRCgl0cnVuY2F0ZWQYBCABKAgiiwEKFVdvcmtlclJlYWRGaWxlUmVxdWVzdBIPCgdyb290X2lkGAEgASgJEgwKBHBhdGgYAiABKAkSDgoGb2Zmc2V0GAMgASgEEhEKCW1heF9ieXRlcxgEIAEoDRIcCg9leHBlY3RlZF9zaGEyNTYYBSABKAxIAIgBAUISChBfZXhwZWN0ZWRfc2hhMjU2IpMBCg9Xb3JrZXJGaWxlQ2h1bmsSDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhEKCW1pbWVfdHlwZRgDIAEoCRIOCgZzaGEyNTYYBCABKAwSEwoLdG90YWxfYnl0ZXMYBSABKAQSDgoGb2Zmc2V0GAYgASgEEgwKBGRhdGEYByABKAwSCwoDZW9mGAggASgIIpcBChhTZXRXcml0ZU93bmVyc2hpcFJlcXVlc3QSDgoGZG9tYWluGAEgASgJEi8KBW93bmVyGAIgASgOMiAuYXJtYWRyYS52MS5DYW52YXNPd25lcnNoaXBPd25lchINCgVlcG9jaBgDIAEoBBIWCg5leHBlY3RlZF9lcG9jaBgEIAEoBBITCgtyZWFzb25fY29kZRgFIAEoCSIqChhHZXRXcml0ZU93bmVyc2hpcFJlcXVlc3QSDgoGZG9tYWluGAEgASgJIpcBChRXb3JrZXJXcml0ZU93bmVyc2hpcBIOCgZkb21haW4YASABKAkSLwoFb3duZXIYAiABKA4yIC5hcm1hZHJhLnYxLkNhbnZhc093bmVyc2hpcE93bmVyEg0KBWVwb2NoGAMgASgEEhoKEnVwZGF0ZWRfYXRfdW5peF9tcxgEIAEoAxITCgtyZWFzb25fY29kZRgFIAEoCSK/BAoNV29ya2VyUmVxdWVzdBISCgpyZXF1ZXN0X2lkGAEgASgJEg8KB2hvc3RfaWQYAiABKAkSHAoUZXhwZWN0ZWRfaW5zdGFuY2VfaWQYAyABKAkSGAoQZGVhZGxpbmVfdW5peF9tcxgEIAEoAxIvCgVoZWxsbxgKIAEoCzIeLmFybWFkcmEudjEuV29ya2VySGVsbG9SZXF1ZXN0SAASOAoNcmVnaXN0ZXJfcm9vdBgLIAEoCzIfLmFybWFkcmEudjEuUmVnaXN0ZXJSb290UmVxdWVzdEgAEkAKDmxpc3RfZGlyZWN0b3J5GAwgASgLMiYuYXJtYWRyYS52MS5Xb3JrZXJMaXN0RGlyZWN0b3J5UmVxdWVzdEgAEjYKCXJlYWRfZmlsZRgNIAEoCzIhLmFybWFkcmEudjEuV29ya2VyUmVhZEZpbGVSZXF1ZXN0SAASLQoHY29tbWFuZBgUIAEoCzIaLmFybWFkcmEudjEuQ29tbWFuZFJlcXVlc3RIABIpCgVhZ2VudBgVIAEoCzIYLmFybWFkcmEudjEuQWdlbnRSZXF1ZXN0SAASQwoTc2V0X3dyaXRlX293bmVyc2hpcBgWIAEoCzIkLmFybWFkcmEudjEuU2V0V3JpdGVPd25lcnNoaXBSZXF1ZXN0SAASQwoTZ2V0X3dyaXRlX293bmVyc2hpcBgXIAEoCzIkLmFybWFkcmEudjEuR2V0V3JpdGVPd25lcnNoaXBSZXF1ZXN0SABCCAoGYWN0aW9uIucDCg5Xb3JrZXJSZXNwb25zZRISCgpyZXF1ZXN0X2lkGAEgASgJEg8KB2hvc3RfaWQYAiABKAkSEwoLaW5zdGFuY2VfaWQYAyABKAkSMAoFaGVsbG8YCiABKAsyHy5hcm1hZHJhLnYxLldvcmtlckhlbGxvUmVzcG9uc2VIABI1Cg9yZWdpc3RlcmVkX3Jvb3QYCyABKAsyGi5hcm1hZHJhLnYxLlJlZ2lzdGVyZWRSb290SAASMAoJZGlyZWN0b3J5GAwgASgLMhsuYXJtYWRyYS52MS5Xb3JrZXJEaXJlY3RvcnlIABIxCgpmaWxlX2NodW5rGA0gASgLMhsuYXJtYWRyYS52MS5Xb3JrZXJGaWxlQ2h1bmtIABIqCgVlcnJvchgOIAEoCzIZLmFybWFkcmEudjEuRXJyb3JSZXNwb25zZUgAEi4KB2NvbW1hbmQYFCABKAsyGy5hcm1hZHJhLnYxLkNvbW1hbmRSZXNwb25zZUgAEioKBWFnZW50GBUgASgLMhkuYXJtYWRyYS52MS5BZ2VudFJlc3BvbnNlSAASOwoPd3JpdGVfb3duZXJzaGlwGBYgASgLMiAuYXJtYWRyYS52MS5Xb3JrZXJXcml0ZU93bmVyc2hpcEgAQggKBnJlc3VsdEIjWiFhcm1hZHJhLmxvY2FsL2hvc3QvZ2VuL2FybWFkcmEvdjFiBnByb3RvMw",
+    "Chdhcm1hZHJhL3YxL3dvcmtlci5wcm90bxIKYXJtYWRyYS52MSJDChJXb3JrZXJIZWxsb1JlcXVlc3QSLQoIcHJvdG9jb2wYASABKAsyGy5hcm1hZHJhLnYxLlByb3RvY29sVmVyc2lvbiLIAgoTV29ya2VySGVsbG9SZXNwb25zZRItCghwcm90b2NvbBgBIAEoCzIbLmFybWFkcmEudjEuUHJvdG9jb2xWZXJzaW9uEg8KB2hvc3RfaWQYAiABKAkSEwoLaW5zdGFuY2VfaWQYAyABKAkSEAoIcGxhdGZvcm0YBCABKAkSFAoMYXJjaGl0ZWN0dXJlGAUgASgJEhQKDGNhcGFiaWxpdGllcxgGIAMoCRIXCg9tYXhfZnJhbWVfYnl0ZXMYByABKA0SHAoUbWF4X2ZpbGVfY2h1bmtfYnl0ZXMYCCABKA0SGwoTbWF4X3RleHRfZmlsZV9ieXRlcxgJIAEoDRIXCg9ydW50aW1lX3ZlcnNpb24YCiABKAkSMQoIY29tbWFuZHMYFCABKAsyHy5hcm1hZHJhLnYxLkNvbW1hbmRDYXBhYmlsaXRpZXMiNAoTUmVnaXN0ZXJSb290UmVxdWVzdBIPCgdyb290X2lkGAEgASgJEgwKBHBhdGgYAiABKAkiOQoOUmVnaXN0ZXJlZFJvb3QSDwoHcm9vdF9pZBgBIAEoCRIWCg5jYW5vbmljYWxfcGF0aBgCIAEoCSI7ChpXb3JrZXJMaXN0RGlyZWN0b3J5UmVxdWVzdBIPCgdyb290X2lkGAEgASgJEgwKBHBhdGgYAiABKAkiWwoPV29ya2VyRmlsZUVudHJ5EgwKBG5hbWUYASABKAkSDAoEcGF0aBgCIAEoCRIMCgRraW5kGAMgASgJEgwKBHNpemUYBCABKAQSEAoIcmVhZG9ubHkYBSABKAgicQoPV29ya2VyRGlyZWN0b3J5Eg8KB3Jvb3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRIsCgdlbnRyaWVzGAMgAygLMhsuYXJtYWRyYS52MS5Xb3JrZXJGaWxlRW50cnkSEQoJdHJ1bmNhdGVkGAQgASgIIosBChVXb3JrZXJSZWFkRmlsZVJlcXVlc3QSDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEg4KBm9mZnNldBgDIAEoBBIRCgltYXhfYnl0ZXMYBCABKA0SHAoPZXhwZWN0ZWRfc2hhMjU2GAUgASgMSACIAQFCEgoQX2V4cGVjdGVkX3NoYTI1NiKTAQoPV29ya2VyRmlsZUNodW5rEg8KB3Jvb3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRIRCgltaW1lX3R5cGUYAyABKAkSDgoGc2hhMjU2GAQgASgMEhMKC3RvdGFsX2J5dGVzGAUgASgEEg4KBm9mZnNldBgGIAEoBBIMCgRkYXRhGAcgASgMEgsKA2VvZhgIIAEoCCKXAQoYU2V0V3JpdGVPd25lcnNoaXBSZXF1ZXN0Eg4KBmRvbWFpbhgBIAEoCRIvCgVvd25lchgCIAEoDjIgLmFybWFkcmEudjEuQ2FudmFzT3duZXJzaGlwT3duZXISDQoFZXBvY2gYAyABKAQSFgoOZXhwZWN0ZWRfZXBvY2gYBCABKAQSEwoLcmVhc29uX2NvZGUYBSABKAkiKgoYR2V0V3JpdGVPd25lcnNoaXBSZXF1ZXN0Eg4KBmRvbWFpbhgBIAEoCSKXAQoUV29ya2VyV3JpdGVPd25lcnNoaXASDgoGZG9tYWluGAEgASgJEi8KBW93bmVyGAIgASgOMiAuYXJtYWRyYS52MS5DYW52YXNPd25lcnNoaXBPd25lchINCgVlcG9jaBgDIAEoBBIaChJ1cGRhdGVkX2F0X3VuaXhfbXMYBCABKAMSEwoLcmVhc29uX2NvZGUYBSABKAkihwEKFldvcmtlcldyaXRlRmlsZVJlcXVlc3QSDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEg8KB2NvbnRlbnQYAyABKAkSHAoPZXhwZWN0ZWRfc2hhMjU2GAQgASgJSACIAQESCwoDYm9tGAUgASgIQhIKEF9leHBlY3RlZF9zaGEyNTYiUAoRV29ya2VyRmlsZVdyaXR0ZW4SDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEg4KBnNoYTI1NhgDIAEoCRIMCgRzaXplGAQgASgEIqABChRXb3JrZXJTZXJ2aWNlUmVxdWVzdBIPCgdyb290X2lkGAEgASgJEjUKCW9wZXJhdGlvbhgCIAEoDjIiLmFybWFkcmEudjEuV29ya2VyU2VydmljZU9wZXJhdGlvbhIUCgxyZXF1ZXN0X2pzb24YAyABKAwSEwoLYWxsb3dfd3JpdGUYBCABKAgSFQoNYWxsb3dfZXhlY3V0ZRgFIAEoCCJDChVXb3JrZXJTZXJ2aWNlUmVzcG9uc2USEwoLaHR0cF9zdGF0dXMYASABKA0SFQoNcmVzcG9uc2VfanNvbhgCIAEoDCKuBQoNV29ya2VyUmVxdWVzdBISCgpyZXF1ZXN0X2lkGAEgASgJEg8KB2hvc3RfaWQYAiABKAkSHAoUZXhwZWN0ZWRfaW5zdGFuY2VfaWQYAyABKAkSGAoQZGVhZGxpbmVfdW5peF9tcxgEIAEoAxIvCgVoZWxsbxgKIAEoCzIeLmFybWFkcmEudjEuV29ya2VySGVsbG9SZXF1ZXN0SAASOAoNcmVnaXN0ZXJfcm9vdBgLIAEoCzIfLmFybWFkcmEudjEuUmVnaXN0ZXJSb290UmVxdWVzdEgAEkAKDmxpc3RfZGlyZWN0b3J5GAwgASgLMiYuYXJtYWRyYS52MS5Xb3JrZXJMaXN0RGlyZWN0b3J5UmVxdWVzdEgAEjYKCXJlYWRfZmlsZRgNIAEoCzIhLmFybWFkcmEudjEuV29ya2VyUmVhZEZpbGVSZXF1ZXN0SAASOAoKd3JpdGVfZmlsZRgOIAEoCzIiLmFybWFkcmEudjEuV29ya2VyV3JpdGVGaWxlUmVxdWVzdEgAEjMKB3NlcnZpY2UYDyABKAsyIC5hcm1hZHJhLnYxLldvcmtlclNlcnZpY2VSZXF1ZXN0SAASLQoHY29tbWFuZBgUIAEoCzIaLmFybWFkcmEudjEuQ29tbWFuZFJlcXVlc3RIABIpCgVhZ2VudBgVIAEoCzIYLmFybWFkcmEudjEuQWdlbnRSZXF1ZXN0SAASQwoTc2V0X3dyaXRlX293bmVyc2hpcBgWIAEoCzIkLmFybWFkcmEudjEuU2V0V3JpdGVPd25lcnNoaXBSZXF1ZXN0SAASQwoTZ2V0X3dyaXRlX293bmVyc2hpcBgXIAEoCzIkLmFybWFkcmEudjEuR2V0V3JpdGVPd25lcnNoaXBSZXF1ZXN0SABCCAoGYWN0aW9uItQECg5Xb3JrZXJSZXNwb25zZRISCgpyZXF1ZXN0X2lkGAEgASgJEg8KB2hvc3RfaWQYAiABKAkSEwoLaW5zdGFuY2VfaWQYAyABKAkSMAoFaGVsbG8YCiABKAsyHy5hcm1hZHJhLnYxLldvcmtlckhlbGxvUmVzcG9uc2VIABI1Cg9yZWdpc3RlcmVkX3Jvb3QYCyABKAsyGi5hcm1hZHJhLnYxLlJlZ2lzdGVyZWRSb290SAASMAoJZGlyZWN0b3J5GAwgASgLMhsuYXJtYWRyYS52MS5Xb3JrZXJEaXJlY3RvcnlIABIxCgpmaWxlX2NodW5rGA0gASgLMhsuYXJtYWRyYS52MS5Xb3JrZXJGaWxlQ2h1bmtIABIqCgVlcnJvchgOIAEoCzIZLmFybWFkcmEudjEuRXJyb3JSZXNwb25zZUgAEjUKDGZpbGVfd3JpdHRlbhgPIAEoCzIdLmFybWFkcmEudjEuV29ya2VyRmlsZVdyaXR0ZW5IABI0CgdzZXJ2aWNlGBAgASgLMiEuYXJtYWRyYS52MS5Xb3JrZXJTZXJ2aWNlUmVzcG9uc2VIABIuCgdjb21tYW5kGBQgASgLMhsuYXJtYWRyYS52MS5Db21tYW5kUmVzcG9uc2VIABIqCgVhZ2VudBgVIAEoCzIZLmFybWFkcmEudjEuQWdlbnRSZXNwb25zZUgAEjsKD3dyaXRlX293bmVyc2hpcBgWIAEoCzIgLmFybWFkcmEudjEuV29ya2VyV3JpdGVPd25lcnNoaXBIAEIICgZyZXN1bHQqiQUKFldvcmtlclNlcnZpY2VPcGVyYXRpb24SKAokV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX1VOU1BFQ0lGSUVEEAASKQolV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0ZJTEVfVkVSU0lPThABEisKJ1dPUktFUl9TRVJWSUNFX09QRVJBVElPTl9TRUFSQ0hfQ09OVEVOVBACEikKJVdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9TRUFSQ0hfSU5ERVgQAxInCiNXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fV0FUQ0hfUE9MTBAEEiYKIldPUktFUl9TRVJWSUNFX09QRVJBVElPTl9GSUxFX1JFQUQQBRInCiNXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fR0lUX1NUQVRVUxAKEiwKKFdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9HSVRfSEVBRF9DT01NSVQQCxIlCiFXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fR0lUX0RJRkYQDBImCiJXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fR0lUX1NUQUdFEA0SKAokV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0dJVF9VTlNUQUdFEA4SJwojV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0dJVF9SRVZFUlQQDxIoCiRXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fR0lUX1JFU09MVkUQEBInCiNXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fR0lUX0NPTU1JVBAREiUKIVdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9HSVRfSU5JVBASQiNaIWFybWFkcmEubG9jYWwvaG9zdC9nZW4vYXJtYWRyYS92MWIGcHJvdG8z",
     [
       file_armadra_v1_agent,
       file_armadra_v1_common,
@@ -103,6 +107,15 @@ export type WorkerHelloResponse = Message<"armadra.v1.WorkerHelloResponse"> & {
    * @generated from field: uint32 max_text_file_bytes = 9;
    */
   maxTextFileBytes: number;
+
+  /**
+   * The Worker binary's own release version. A controller that proxies
+   * version-locked service payloads (WorkerServiceRequest) requires an exact
+   * match; an empty value means the Worker predates remote execution.
+   *
+   * @generated from field: string runtime_version = 10;
+   */
+  runtimeVersion: string;
 
   /**
    * Absent in the backward-compatible read-only mode.
@@ -459,6 +472,163 @@ export const WorkerWriteOwnershipSchema: GenMessage<WorkerWriteOwnership> =
   messageDesc(file_armadra_v1_worker, 11);
 
 /**
+ * Editor saves on a remote execution host. The content version is mandatory
+ * for an overwrite: an absent expected_sha256 means "create only", so a save
+ * can never silently replace a file the caller has not read.
+ *
+ * @generated from message armadra.v1.WorkerWriteFileRequest
+ */
+export type WorkerWriteFileRequest =
+  Message<"armadra.v1.WorkerWriteFileRequest"> & {
+    /**
+     * @generated from field: string root_id = 1;
+     */
+    rootId: string;
+
+    /**
+     * @generated from field: string path = 2;
+     */
+    path: string;
+
+    /**
+     * @generated from field: string content = 3;
+     */
+    content: string;
+
+    /**
+     * Lowercase hexadecimal SHA-256 of the bytes the caller last read. Absent
+     * means the file must not already exist.
+     *
+     * @generated from field: optional string expected_sha256 = 4;
+     */
+    expectedSha256?: string;
+
+    /**
+     * Re-emit the UTF-8 byte order mark the read stripped.
+     *
+     * @generated from field: bool bom = 5;
+     */
+    bom: boolean;
+  };
+
+/**
+ * Describes the message armadra.v1.WorkerWriteFileRequest.
+ * Use `create(WorkerWriteFileRequestSchema)` to create a new message.
+ */
+export const WorkerWriteFileRequestSchema: GenMessage<WorkerWriteFileRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker, 12);
+
+/**
+ * @generated from message armadra.v1.WorkerFileWritten
+ */
+export type WorkerFileWritten = Message<"armadra.v1.WorkerFileWritten"> & {
+  /**
+   * @generated from field: string root_id = 1;
+   */
+  rootId: string;
+
+  /**
+   * @generated from field: string path = 2;
+   */
+  path: string;
+
+  /**
+   * The content version to use for the next save.
+   *
+   * @generated from field: string sha256 = 3;
+   */
+  sha256: string;
+
+  /**
+   * @generated from field: uint64 size = 4;
+   */
+  size: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.WorkerFileWritten.
+ * Use `create(WorkerFileWrittenSchema)` to create a new message.
+ */
+export const WorkerFileWrittenSchema: GenMessage<WorkerFileWritten> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker, 13);
+
+/**
+ * A version-locked payload, not a cross-version wire contract: both ends are
+ * the same Armadra build, asserted by WorkerHelloResponse.runtime_version, and
+ * the bytes are the Runtime's own camelCase JSON for that operation. Field
+ * numbers stay reserved so a future typed replacement is additive.
+ *
+ * @generated from message armadra.v1.WorkerServiceRequest
+ */
+export type WorkerServiceRequest =
+  Message<"armadra.v1.WorkerServiceRequest"> & {
+    /**
+     * @generated from field: string root_id = 1;
+     */
+    rootId: string;
+
+    /**
+     * @generated from field: armadra.v1.WorkerServiceOperation operation = 2;
+     */
+    operation: WorkerServiceOperation;
+
+    /**
+     * @generated from field: bytes request_json = 3;
+     */
+    requestJson: Uint8Array;
+
+    /**
+     * Workspace grants resolved by the controller. The Worker re-checks them; a
+     * missing grant fails on the execution host, it is not merely not sent.
+     *
+     * @generated from field: bool allow_write = 4;
+     */
+    allowWrite: boolean;
+
+    /**
+     * @generated from field: bool allow_execute = 5;
+     */
+    allowExecute: boolean;
+  };
+
+/**
+ * Describes the message armadra.v1.WorkerServiceRequest.
+ * Use `create(WorkerServiceRequestSchema)` to create a new message.
+ */
+export const WorkerServiceRequestSchema: GenMessage<WorkerServiceRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker, 14);
+
+/**
+ * @generated from message armadra.v1.WorkerServiceResponse
+ */
+export type WorkerServiceResponse =
+  Message<"armadra.v1.WorkerServiceResponse"> & {
+    /**
+     * The status the same operation would have returned over the Runtime's HTTP
+     * surface, so a remote failure keeps its own code instead of becoming 500.
+     *
+     * @generated from field: uint32 http_status = 1;
+     */
+    httpStatus: number;
+
+    /**
+     * @generated from field: bytes response_json = 2;
+     */
+    responseJson: Uint8Array;
+  };
+
+/**
+ * Describes the message armadra.v1.WorkerServiceResponse.
+ * Use `create(WorkerServiceResponseSchema)` to create a new message.
+ */
+export const WorkerServiceResponseSchema: GenMessage<WorkerServiceResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker, 15);
+
+/**
  * @generated from message armadra.v1.WorkerRequest
  */
 export type WorkerRequest = Message<"armadra.v1.WorkerRequest"> & {
@@ -516,6 +686,20 @@ export type WorkerRequest = Message<"armadra.v1.WorkerRequest"> & {
       }
     | {
         /**
+         * @generated from field: armadra.v1.WorkerWriteFileRequest write_file = 14;
+         */
+        value: WorkerWriteFileRequest;
+        case: "writeFile";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.WorkerServiceRequest service = 15;
+         */
+        value: WorkerServiceRequest;
+        case: "service";
+      }
+    | {
+        /**
          * @generated from field: armadra.v1.CommandRequest command = 20;
          */
         value: CommandRequest;
@@ -554,7 +738,7 @@ export type WorkerRequest = Message<"armadra.v1.WorkerRequest"> & {
  */
 export const WorkerRequestSchema: GenMessage<WorkerRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_worker, 12);
+  messageDesc(file_armadra_v1_worker, 16);
 
 /**
  * @generated from message armadra.v1.WorkerResponse
@@ -616,6 +800,20 @@ export type WorkerResponse = Message<"armadra.v1.WorkerResponse"> & {
       }
     | {
         /**
+         * @generated from field: armadra.v1.WorkerFileWritten file_written = 15;
+         */
+        value: WorkerFileWritten;
+        case: "fileWritten";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.WorkerServiceResponse service = 16;
+         */
+        value: WorkerServiceResponse;
+        case: "service";
+      }
+    | {
+        /**
          * @generated from field: armadra.v1.CommandResponse command = 20;
          */
         value: CommandResponse;
@@ -644,4 +842,97 @@ export type WorkerResponse = Message<"armadra.v1.WorkerResponse"> & {
  */
 export const WorkerResponseSchema: GenMessage<WorkerResponse> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_worker, 13);
+  messageDesc(file_armadra_v1_worker, 17);
+
+/**
+ * Operations the controller proxies to the execution host unchanged. The list
+ * is closed: an unrecognized value is UNSUPPORTED, never a passthrough.
+ *
+ * @generated from enum armadra.v1.WorkerServiceOperation
+ */
+export enum WorkerServiceOperation {
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_FILE_VERSION = 1;
+   */
+  FILE_VERSION = 1,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_SEARCH_CONTENT = 2;
+   */
+  SEARCH_CONTENT = 2,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_SEARCH_INDEX = 3;
+   */
+  SEARCH_INDEX = 3,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_WATCH_POLL = 4;
+   */
+  WATCH_POLL = 4,
+
+  /**
+   * The editor's own read: encoding, BOM, line ending and read-only flag as
+   * well as the text. WorkerReadFileRequest stays the chunked byte reader.
+   *
+   * @generated from enum value: WORKER_SERVICE_OPERATION_FILE_READ = 5;
+   */
+  FILE_READ = 5,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_STATUS = 10;
+   */
+  GIT_STATUS = 10,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_HEAD_COMMIT = 11;
+   */
+  GIT_HEAD_COMMIT = 11,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_DIFF = 12;
+   */
+  GIT_DIFF = 12,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_STAGE = 13;
+   */
+  GIT_STAGE = 13,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_UNSTAGE = 14;
+   */
+  GIT_UNSTAGE = 14,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_REVERT = 15;
+   */
+  GIT_REVERT = 15,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_RESOLVE = 16;
+   */
+  GIT_RESOLVE = 16,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_COMMIT = 17;
+   */
+  GIT_COMMIT = 17,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_INIT = 18;
+   */
+  GIT_INIT = 18,
+}
+
+/**
+ * Describes the enum armadra.v1.WorkerServiceOperation.
+ */
+export const WorkerServiceOperationSchema: GenEnum<WorkerServiceOperation> =
+  /*@__PURE__*/
+  enumDesc(file_armadra_v1_worker, 0);

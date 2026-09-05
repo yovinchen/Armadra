@@ -20,6 +20,10 @@ message WorkerHelloResponse {
   uint32 max_frame_bytes = 7;
   uint32 max_file_chunk_bytes = 8;
   uint32 max_text_file_bytes = 9;
+  // The Worker binary's own release version. A controller that proxies
+  // version-locked service payloads (WorkerServiceRequest) requires an exact
+  // match; an empty value means the Worker predates remote execution.
+  string runtime_version = 10;
   // Absent in the backward-compatible read-only mode.
   CommandCapabilities commands = 20;
 }
@@ -77,6 +81,69 @@ message WorkerWriteOwnership {
   int64 updated_at_unix_ms = 4;
   string reason_code = 5;
 }
+
+// Editor saves on a remote execution host. The content version is mandatory
+// for an overwrite: an absent expected_sha256 means "create only", so a save
+// can never silently replace a file the caller has not read.
+message WorkerWriteFileRequest {
+  string root_id = 1;
+  string path = 2;
+  string content = 3;
+  // Lowercase hexadecimal SHA-256 of the bytes the caller last read. Absent
+  // means the file must not already exist.
+  optional string expected_sha256 = 4;
+  // Re-emit the UTF-8 byte order mark the read stripped.
+  bool bom = 5;
+}
+message WorkerFileWritten {
+  string root_id = 1;
+  string path = 2;
+  // The content version to use for the next save.
+  string sha256 = 3;
+  uint64 size = 4;
+}
+
+// Operations the controller proxies to the execution host unchanged. The list
+// is closed: an unrecognized value is UNSUPPORTED, never a passthrough.
+enum WorkerServiceOperation {
+  WORKER_SERVICE_OPERATION_UNSPECIFIED = 0;
+  WORKER_SERVICE_OPERATION_FILE_VERSION = 1;
+  WORKER_SERVICE_OPERATION_SEARCH_CONTENT = 2;
+  WORKER_SERVICE_OPERATION_SEARCH_INDEX = 3;
+  WORKER_SERVICE_OPERATION_WATCH_POLL = 4;
+  // The editor's own read: encoding, BOM, line ending and read-only flag as
+  // well as the text. WorkerReadFileRequest stays the chunked byte reader.
+  WORKER_SERVICE_OPERATION_FILE_READ = 5;
+  WORKER_SERVICE_OPERATION_GIT_STATUS = 10;
+  WORKER_SERVICE_OPERATION_GIT_HEAD_COMMIT = 11;
+  WORKER_SERVICE_OPERATION_GIT_DIFF = 12;
+  WORKER_SERVICE_OPERATION_GIT_STAGE = 13;
+  WORKER_SERVICE_OPERATION_GIT_UNSTAGE = 14;
+  WORKER_SERVICE_OPERATION_GIT_REVERT = 15;
+  WORKER_SERVICE_OPERATION_GIT_RESOLVE = 16;
+  WORKER_SERVICE_OPERATION_GIT_COMMIT = 17;
+  WORKER_SERVICE_OPERATION_GIT_INIT = 18;
+}
+// A version-locked payload, not a cross-version wire contract: both ends are
+// the same Armadra build, asserted by WorkerHelloResponse.runtime_version, and
+// the bytes are the Runtime's own camelCase JSON for that operation. Field
+// numbers stay reserved so a future typed replacement is additive.
+message WorkerServiceRequest {
+  string root_id = 1;
+  WorkerServiceOperation operation = 2;
+  bytes request_json = 3;
+  // Workspace grants resolved by the controller. The Worker re-checks them; a
+  // missing grant fails on the execution host, it is not merely not sent.
+  bool allow_write = 4;
+  bool allow_execute = 5;
+}
+message WorkerServiceResponse {
+  // The status the same operation would have returned over the Runtime's HTTP
+  // surface, so a remote failure keeps its own code instead of becoming 500.
+  uint32 http_status = 1;
+  bytes response_json = 2;
+}
+
 message WorkerRequest {
   string request_id = 1;
   string host_id = 2;
@@ -87,6 +154,8 @@ message WorkerRequest {
     RegisterRootRequest register_root = 11;
     WorkerListDirectoryRequest list_directory = 12;
     WorkerReadFileRequest read_file = 13;
+    WorkerWriteFileRequest write_file = 14;
+    WorkerServiceRequest service = 15;
     CommandRequest command = 20;
     // Proxied to the Runtime that owns the PTY. Only present when the Worker
     // was started with a state directory and found a live local Runtime.
@@ -105,6 +174,8 @@ message WorkerResponse {
     WorkerDirectory directory = 12;
     WorkerFileChunk file_chunk = 13;
     ErrorResponse error = 14;
+    WorkerFileWritten file_written = 15;
+    WorkerServiceResponse service = 16;
     CommandResponse command = 20;
     AgentResponse agent = 21;
     WorkerWriteOwnership write_ownership = 22;

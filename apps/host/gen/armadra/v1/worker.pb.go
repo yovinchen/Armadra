@@ -21,6 +21,95 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Operations the controller proxies to the execution host unchanged. The list
+// is closed: an unrecognized value is UNSUPPORTED, never a passthrough.
+type WorkerServiceOperation int32
+
+const (
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_UNSPECIFIED    WorkerServiceOperation = 0
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_FILE_VERSION   WorkerServiceOperation = 1
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_SEARCH_CONTENT WorkerServiceOperation = 2
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_SEARCH_INDEX   WorkerServiceOperation = 3
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_WATCH_POLL     WorkerServiceOperation = 4
+	// The editor's own read: encoding, BOM, line ending and read-only flag as
+	// well as the text. WorkerReadFileRequest stays the chunked byte reader.
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_FILE_READ       WorkerServiceOperation = 5
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_STATUS      WorkerServiceOperation = 10
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_HEAD_COMMIT WorkerServiceOperation = 11
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_DIFF        WorkerServiceOperation = 12
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_STAGE       WorkerServiceOperation = 13
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_UNSTAGE     WorkerServiceOperation = 14
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_REVERT      WorkerServiceOperation = 15
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_RESOLVE     WorkerServiceOperation = 16
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_COMMIT      WorkerServiceOperation = 17
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_INIT        WorkerServiceOperation = 18
+)
+
+// Enum value maps for WorkerServiceOperation.
+var (
+	WorkerServiceOperation_name = map[int32]string{
+		0:  "WORKER_SERVICE_OPERATION_UNSPECIFIED",
+		1:  "WORKER_SERVICE_OPERATION_FILE_VERSION",
+		2:  "WORKER_SERVICE_OPERATION_SEARCH_CONTENT",
+		3:  "WORKER_SERVICE_OPERATION_SEARCH_INDEX",
+		4:  "WORKER_SERVICE_OPERATION_WATCH_POLL",
+		5:  "WORKER_SERVICE_OPERATION_FILE_READ",
+		10: "WORKER_SERVICE_OPERATION_GIT_STATUS",
+		11: "WORKER_SERVICE_OPERATION_GIT_HEAD_COMMIT",
+		12: "WORKER_SERVICE_OPERATION_GIT_DIFF",
+		13: "WORKER_SERVICE_OPERATION_GIT_STAGE",
+		14: "WORKER_SERVICE_OPERATION_GIT_UNSTAGE",
+		15: "WORKER_SERVICE_OPERATION_GIT_REVERT",
+		16: "WORKER_SERVICE_OPERATION_GIT_RESOLVE",
+		17: "WORKER_SERVICE_OPERATION_GIT_COMMIT",
+		18: "WORKER_SERVICE_OPERATION_GIT_INIT",
+	}
+	WorkerServiceOperation_value = map[string]int32{
+		"WORKER_SERVICE_OPERATION_UNSPECIFIED":     0,
+		"WORKER_SERVICE_OPERATION_FILE_VERSION":    1,
+		"WORKER_SERVICE_OPERATION_SEARCH_CONTENT":  2,
+		"WORKER_SERVICE_OPERATION_SEARCH_INDEX":    3,
+		"WORKER_SERVICE_OPERATION_WATCH_POLL":      4,
+		"WORKER_SERVICE_OPERATION_FILE_READ":       5,
+		"WORKER_SERVICE_OPERATION_GIT_STATUS":      10,
+		"WORKER_SERVICE_OPERATION_GIT_HEAD_COMMIT": 11,
+		"WORKER_SERVICE_OPERATION_GIT_DIFF":        12,
+		"WORKER_SERVICE_OPERATION_GIT_STAGE":       13,
+		"WORKER_SERVICE_OPERATION_GIT_UNSTAGE":     14,
+		"WORKER_SERVICE_OPERATION_GIT_REVERT":      15,
+		"WORKER_SERVICE_OPERATION_GIT_RESOLVE":     16,
+		"WORKER_SERVICE_OPERATION_GIT_COMMIT":      17,
+		"WORKER_SERVICE_OPERATION_GIT_INIT":        18,
+	}
+)
+
+func (x WorkerServiceOperation) Enum() *WorkerServiceOperation {
+	p := new(WorkerServiceOperation)
+	*p = x
+	return p
+}
+
+func (x WorkerServiceOperation) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (WorkerServiceOperation) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_worker_proto_enumTypes[0].Descriptor()
+}
+
+func (WorkerServiceOperation) Type() protoreflect.EnumType {
+	return &file_armadra_v1_worker_proto_enumTypes[0]
+}
+
+func (x WorkerServiceOperation) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use WorkerServiceOperation.Descriptor instead.
+func (WorkerServiceOperation) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{0}
+}
+
 // The initial Worker transport is a parent-owned anonymous stdin/stdout pipe.
 // These messages are never accepted on an unauthenticated HTTP endpoint.
 // Frames have a four-byte big-endian length and a one-MiB ceiling.
@@ -79,6 +168,10 @@ type WorkerHelloResponse struct {
 	MaxFrameBytes     uint32                 `protobuf:"varint,7,opt,name=max_frame_bytes,json=maxFrameBytes,proto3" json:"max_frame_bytes,omitempty"`
 	MaxFileChunkBytes uint32                 `protobuf:"varint,8,opt,name=max_file_chunk_bytes,json=maxFileChunkBytes,proto3" json:"max_file_chunk_bytes,omitempty"`
 	MaxTextFileBytes  uint32                 `protobuf:"varint,9,opt,name=max_text_file_bytes,json=maxTextFileBytes,proto3" json:"max_text_file_bytes,omitempty"`
+	// The Worker binary's own release version. A controller that proxies
+	// version-locked service payloads (WorkerServiceRequest) requires an exact
+	// match; an empty value means the Worker predates remote execution.
+	RuntimeVersion string `protobuf:"bytes,10,opt,name=runtime_version,json=runtimeVersion,proto3" json:"runtime_version,omitempty"`
 	// Absent in the backward-compatible read-only mode.
 	Commands      *CommandCapabilities `protobuf:"bytes,20,opt,name=commands,proto3" json:"commands,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -176,6 +269,13 @@ func (x *WorkerHelloResponse) GetMaxTextFileBytes() uint32 {
 		return x.MaxTextFileBytes
 	}
 	return 0
+}
+
+func (x *WorkerHelloResponse) GetRuntimeVersion() string {
+	if x != nil {
+		return x.RuntimeVersion
+	}
+	return ""
 }
 
 func (x *WorkerHelloResponse) GetCommands() *CommandCapabilities {
@@ -863,6 +963,293 @@ func (x *WorkerWriteOwnership) GetReasonCode() string {
 	return ""
 }
 
+// Editor saves on a remote execution host. The content version is mandatory
+// for an overwrite: an absent expected_sha256 means "create only", so a save
+// can never silently replace a file the caller has not read.
+type WorkerWriteFileRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	RootId  string                 `protobuf:"bytes,1,opt,name=root_id,json=rootId,proto3" json:"root_id,omitempty"`
+	Path    string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	Content string                 `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
+	// Lowercase hexadecimal SHA-256 of the bytes the caller last read. Absent
+	// means the file must not already exist.
+	ExpectedSha256 *string `protobuf:"bytes,4,opt,name=expected_sha256,json=expectedSha256,proto3,oneof" json:"expected_sha256,omitempty"`
+	// Re-emit the UTF-8 byte order mark the read stripped.
+	Bom           bool `protobuf:"varint,5,opt,name=bom,proto3" json:"bom,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerWriteFileRequest) Reset() {
+	*x = WorkerWriteFileRequest{}
+	mi := &file_armadra_v1_worker_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerWriteFileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerWriteFileRequest) ProtoMessage() {}
+
+func (x *WorkerWriteFileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerWriteFileRequest.ProtoReflect.Descriptor instead.
+func (*WorkerWriteFileRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *WorkerWriteFileRequest) GetRootId() string {
+	if x != nil {
+		return x.RootId
+	}
+	return ""
+}
+
+func (x *WorkerWriteFileRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *WorkerWriteFileRequest) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *WorkerWriteFileRequest) GetExpectedSha256() string {
+	if x != nil && x.ExpectedSha256 != nil {
+		return *x.ExpectedSha256
+	}
+	return ""
+}
+
+func (x *WorkerWriteFileRequest) GetBom() bool {
+	if x != nil {
+		return x.Bom
+	}
+	return false
+}
+
+type WorkerFileWritten struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	RootId string                 `protobuf:"bytes,1,opt,name=root_id,json=rootId,proto3" json:"root_id,omitempty"`
+	Path   string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	// The content version to use for the next save.
+	Sha256        string `protobuf:"bytes,3,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	Size          uint64 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerFileWritten) Reset() {
+	*x = WorkerFileWritten{}
+	mi := &file_armadra_v1_worker_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerFileWritten) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerFileWritten) ProtoMessage() {}
+
+func (x *WorkerFileWritten) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerFileWritten.ProtoReflect.Descriptor instead.
+func (*WorkerFileWritten) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *WorkerFileWritten) GetRootId() string {
+	if x != nil {
+		return x.RootId
+	}
+	return ""
+}
+
+func (x *WorkerFileWritten) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *WorkerFileWritten) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *WorkerFileWritten) GetSize() uint64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+// A version-locked payload, not a cross-version wire contract: both ends are
+// the same Armadra build, asserted by WorkerHelloResponse.runtime_version, and
+// the bytes are the Runtime's own camelCase JSON for that operation. Field
+// numbers stay reserved so a future typed replacement is additive.
+type WorkerServiceRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	RootId      string                 `protobuf:"bytes,1,opt,name=root_id,json=rootId,proto3" json:"root_id,omitempty"`
+	Operation   WorkerServiceOperation `protobuf:"varint,2,opt,name=operation,proto3,enum=armadra.v1.WorkerServiceOperation" json:"operation,omitempty"`
+	RequestJson []byte                 `protobuf:"bytes,3,opt,name=request_json,json=requestJson,proto3" json:"request_json,omitempty"`
+	// Workspace grants resolved by the controller. The Worker re-checks them; a
+	// missing grant fails on the execution host, it is not merely not sent.
+	AllowWrite    bool `protobuf:"varint,4,opt,name=allow_write,json=allowWrite,proto3" json:"allow_write,omitempty"`
+	AllowExecute  bool `protobuf:"varint,5,opt,name=allow_execute,json=allowExecute,proto3" json:"allow_execute,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerServiceRequest) Reset() {
+	*x = WorkerServiceRequest{}
+	mi := &file_armadra_v1_worker_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerServiceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerServiceRequest) ProtoMessage() {}
+
+func (x *WorkerServiceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerServiceRequest.ProtoReflect.Descriptor instead.
+func (*WorkerServiceRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *WorkerServiceRequest) GetRootId() string {
+	if x != nil {
+		return x.RootId
+	}
+	return ""
+}
+
+func (x *WorkerServiceRequest) GetOperation() WorkerServiceOperation {
+	if x != nil {
+		return x.Operation
+	}
+	return WorkerServiceOperation_WORKER_SERVICE_OPERATION_UNSPECIFIED
+}
+
+func (x *WorkerServiceRequest) GetRequestJson() []byte {
+	if x != nil {
+		return x.RequestJson
+	}
+	return nil
+}
+
+func (x *WorkerServiceRequest) GetAllowWrite() bool {
+	if x != nil {
+		return x.AllowWrite
+	}
+	return false
+}
+
+func (x *WorkerServiceRequest) GetAllowExecute() bool {
+	if x != nil {
+		return x.AllowExecute
+	}
+	return false
+}
+
+type WorkerServiceResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The status the same operation would have returned over the Runtime's HTTP
+	// surface, so a remote failure keeps its own code instead of becoming 500.
+	HttpStatus    uint32 `protobuf:"varint,1,opt,name=http_status,json=httpStatus,proto3" json:"http_status,omitempty"`
+	ResponseJson  []byte `protobuf:"bytes,2,opt,name=response_json,json=responseJson,proto3" json:"response_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerServiceResponse) Reset() {
+	*x = WorkerServiceResponse{}
+	mi := &file_armadra_v1_worker_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerServiceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerServiceResponse) ProtoMessage() {}
+
+func (x *WorkerServiceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerServiceResponse.ProtoReflect.Descriptor instead.
+func (*WorkerServiceResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *WorkerServiceResponse) GetHttpStatus() uint32 {
+	if x != nil {
+		return x.HttpStatus
+	}
+	return 0
+}
+
+func (x *WorkerServiceResponse) GetResponseJson() []byte {
+	if x != nil {
+		return x.ResponseJson
+	}
+	return nil
+}
+
 type WorkerRequest struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	RequestId          string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -875,6 +1262,8 @@ type WorkerRequest struct {
 	//	*WorkerRequest_RegisterRoot
 	//	*WorkerRequest_ListDirectory
 	//	*WorkerRequest_ReadFile
+	//	*WorkerRequest_WriteFile
+	//	*WorkerRequest_Service
 	//	*WorkerRequest_Command
 	//	*WorkerRequest_Agent
 	//	*WorkerRequest_SetWriteOwnership
@@ -886,7 +1275,7 @@ type WorkerRequest struct {
 
 func (x *WorkerRequest) Reset() {
 	*x = WorkerRequest{}
-	mi := &file_armadra_v1_worker_proto_msgTypes[12]
+	mi := &file_armadra_v1_worker_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -898,7 +1287,7 @@ func (x *WorkerRequest) String() string {
 func (*WorkerRequest) ProtoMessage() {}
 
 func (x *WorkerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_worker_proto_msgTypes[12]
+	mi := &file_armadra_v1_worker_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -911,7 +1300,7 @@ func (x *WorkerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkerRequest.ProtoReflect.Descriptor instead.
 func (*WorkerRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{12}
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *WorkerRequest) GetRequestId() string {
@@ -985,6 +1374,24 @@ func (x *WorkerRequest) GetReadFile() *WorkerReadFileRequest {
 	return nil
 }
 
+func (x *WorkerRequest) GetWriteFile() *WorkerWriteFileRequest {
+	if x != nil {
+		if x, ok := x.Action.(*WorkerRequest_WriteFile); ok {
+			return x.WriteFile
+		}
+	}
+	return nil
+}
+
+func (x *WorkerRequest) GetService() *WorkerServiceRequest {
+	if x != nil {
+		if x, ok := x.Action.(*WorkerRequest_Service); ok {
+			return x.Service
+		}
+	}
+	return nil
+}
+
 func (x *WorkerRequest) GetCommand() *CommandRequest {
 	if x != nil {
 		if x, ok := x.Action.(*WorkerRequest_Command); ok {
@@ -1041,6 +1448,14 @@ type WorkerRequest_ReadFile struct {
 	ReadFile *WorkerReadFileRequest `protobuf:"bytes,13,opt,name=read_file,json=readFile,proto3,oneof"`
 }
 
+type WorkerRequest_WriteFile struct {
+	WriteFile *WorkerWriteFileRequest `protobuf:"bytes,14,opt,name=write_file,json=writeFile,proto3,oneof"`
+}
+
+type WorkerRequest_Service struct {
+	Service *WorkerServiceRequest `protobuf:"bytes,15,opt,name=service,proto3,oneof"`
+}
+
 type WorkerRequest_Command struct {
 	Command *CommandRequest `protobuf:"bytes,20,opt,name=command,proto3,oneof"`
 }
@@ -1067,6 +1482,10 @@ func (*WorkerRequest_ListDirectory) isWorkerRequest_Action() {}
 
 func (*WorkerRequest_ReadFile) isWorkerRequest_Action() {}
 
+func (*WorkerRequest_WriteFile) isWorkerRequest_Action() {}
+
+func (*WorkerRequest_Service) isWorkerRequest_Action() {}
+
 func (*WorkerRequest_Command) isWorkerRequest_Action() {}
 
 func (*WorkerRequest_Agent) isWorkerRequest_Action() {}
@@ -1087,6 +1506,8 @@ type WorkerResponse struct {
 	//	*WorkerResponse_Directory
 	//	*WorkerResponse_FileChunk
 	//	*WorkerResponse_Error
+	//	*WorkerResponse_FileWritten
+	//	*WorkerResponse_Service
 	//	*WorkerResponse_Command
 	//	*WorkerResponse_Agent
 	//	*WorkerResponse_WriteOwnership
@@ -1097,7 +1518,7 @@ type WorkerResponse struct {
 
 func (x *WorkerResponse) Reset() {
 	*x = WorkerResponse{}
-	mi := &file_armadra_v1_worker_proto_msgTypes[13]
+	mi := &file_armadra_v1_worker_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1109,7 +1530,7 @@ func (x *WorkerResponse) String() string {
 func (*WorkerResponse) ProtoMessage() {}
 
 func (x *WorkerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_worker_proto_msgTypes[13]
+	mi := &file_armadra_v1_worker_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1122,7 +1543,7 @@ func (x *WorkerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkerResponse.ProtoReflect.Descriptor instead.
 func (*WorkerResponse) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{13}
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *WorkerResponse) GetRequestId() string {
@@ -1198,6 +1619,24 @@ func (x *WorkerResponse) GetError() *ErrorResponse {
 	return nil
 }
 
+func (x *WorkerResponse) GetFileWritten() *WorkerFileWritten {
+	if x != nil {
+		if x, ok := x.Result.(*WorkerResponse_FileWritten); ok {
+			return x.FileWritten
+		}
+	}
+	return nil
+}
+
+func (x *WorkerResponse) GetService() *WorkerServiceResponse {
+	if x != nil {
+		if x, ok := x.Result.(*WorkerResponse_Service); ok {
+			return x.Service
+		}
+	}
+	return nil
+}
+
 func (x *WorkerResponse) GetCommand() *CommandResponse {
 	if x != nil {
 		if x, ok := x.Result.(*WorkerResponse_Command); ok {
@@ -1249,6 +1688,14 @@ type WorkerResponse_Error struct {
 	Error *ErrorResponse `protobuf:"bytes,14,opt,name=error,proto3,oneof"`
 }
 
+type WorkerResponse_FileWritten struct {
+	FileWritten *WorkerFileWritten `protobuf:"bytes,15,opt,name=file_written,json=fileWritten,proto3,oneof"`
+}
+
+type WorkerResponse_Service struct {
+	Service *WorkerServiceResponse `protobuf:"bytes,16,opt,name=service,proto3,oneof"`
+}
+
 type WorkerResponse_Command struct {
 	Command *CommandResponse `protobuf:"bytes,20,opt,name=command,proto3,oneof"`
 }
@@ -1271,6 +1718,10 @@ func (*WorkerResponse_FileChunk) isWorkerResponse_Result() {}
 
 func (*WorkerResponse_Error) isWorkerResponse_Result() {}
 
+func (*WorkerResponse_FileWritten) isWorkerResponse_Result() {}
+
+func (*WorkerResponse_Service) isWorkerResponse_Result() {}
+
 func (*WorkerResponse_Command) isWorkerResponse_Result() {}
 
 func (*WorkerResponse_Agent) isWorkerResponse_Result() {}
@@ -1284,7 +1735,7 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\x17armadra/v1/worker.proto\x12\n" +
 	"armadra.v1\x1a\x16armadra/v1/agent.proto\x1a\x17armadra/v1/common.proto\x1a\x18armadra/v1/command.proto\x1a\x17armadra/v1/canvas.proto\"M\n" +
 	"\x12WorkerHelloRequest\x127\n" +
-	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\"\xb1\x03\n" +
+	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\"\xda\x03\n" +
 	"\x13WorkerHelloResponse\x127\n" +
 	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\x12\x17\n" +
 	"\ahost_id\x18\x02 \x01(\tR\x06hostId\x12\x1f\n" +
@@ -1295,7 +1746,9 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\fcapabilities\x18\x06 \x03(\tR\fcapabilities\x12&\n" +
 	"\x0fmax_frame_bytes\x18\a \x01(\rR\rmaxFrameBytes\x12/\n" +
 	"\x14max_file_chunk_bytes\x18\b \x01(\rR\x11maxFileChunkBytes\x12-\n" +
-	"\x13max_text_file_bytes\x18\t \x01(\rR\x10maxTextFileBytes\x12;\n" +
+	"\x13max_text_file_bytes\x18\t \x01(\rR\x10maxTextFileBytes\x12'\n" +
+	"\x0fruntime_version\x18\n" +
+	" \x01(\tR\x0eruntimeVersion\x12;\n" +
 	"\bcommands\x18\x14 \x01(\v2\x1f.armadra.v1.CommandCapabilitiesR\bcommands\"B\n" +
 	"\x13RegisterRootRequest\x12\x17\n" +
 	"\aroot_id\x18\x01 \x01(\tR\x06rootId\x12\x12\n" +
@@ -1349,7 +1802,30 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\x05epoch\x18\x03 \x01(\x04R\x05epoch\x12+\n" +
 	"\x12updated_at_unix_ms\x18\x04 \x01(\x03R\x0fupdatedAtUnixMs\x12\x1f\n" +
 	"\vreason_code\x18\x05 \x01(\tR\n" +
-	"reasonCode\"\xda\x05\n" +
+	"reasonCode\"\xb3\x01\n" +
+	"\x16WorkerWriteFileRequest\x12\x17\n" +
+	"\aroot_id\x18\x01 \x01(\tR\x06rootId\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x18\n" +
+	"\acontent\x18\x03 \x01(\tR\acontent\x12,\n" +
+	"\x0fexpected_sha256\x18\x04 \x01(\tH\x00R\x0eexpectedSha256\x88\x01\x01\x12\x10\n" +
+	"\x03bom\x18\x05 \x01(\bR\x03bomB\x12\n" +
+	"\x10_expected_sha256\"l\n" +
+	"\x11WorkerFileWritten\x12\x17\n" +
+	"\aroot_id\x18\x01 \x01(\tR\x06rootId\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x16\n" +
+	"\x06sha256\x18\x03 \x01(\tR\x06sha256\x12\x12\n" +
+	"\x04size\x18\x04 \x01(\x04R\x04size\"\xda\x01\n" +
+	"\x14WorkerServiceRequest\x12\x17\n" +
+	"\aroot_id\x18\x01 \x01(\tR\x06rootId\x12@\n" +
+	"\toperation\x18\x02 \x01(\x0e2\".armadra.v1.WorkerServiceOperationR\toperation\x12!\n" +
+	"\frequest_json\x18\x03 \x01(\fR\vrequestJson\x12\x1f\n" +
+	"\vallow_write\x18\x04 \x01(\bR\n" +
+	"allowWrite\x12#\n" +
+	"\rallow_execute\x18\x05 \x01(\bR\fallowExecute\"]\n" +
+	"\x15WorkerServiceResponse\x12\x1f\n" +
+	"\vhttp_status\x18\x01 \x01(\rR\n" +
+	"httpStatus\x12#\n" +
+	"\rresponse_json\x18\x02 \x01(\fR\fresponseJson\"\xdd\x06\n" +
 	"\rWorkerRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -1360,12 +1836,15 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	" \x01(\v2\x1e.armadra.v1.WorkerHelloRequestH\x00R\x05hello\x12F\n" +
 	"\rregister_root\x18\v \x01(\v2\x1f.armadra.v1.RegisterRootRequestH\x00R\fregisterRoot\x12O\n" +
 	"\x0elist_directory\x18\f \x01(\v2&.armadra.v1.WorkerListDirectoryRequestH\x00R\rlistDirectory\x12@\n" +
-	"\tread_file\x18\r \x01(\v2!.armadra.v1.WorkerReadFileRequestH\x00R\breadFile\x126\n" +
+	"\tread_file\x18\r \x01(\v2!.armadra.v1.WorkerReadFileRequestH\x00R\breadFile\x12C\n" +
+	"\n" +
+	"write_file\x18\x0e \x01(\v2\".armadra.v1.WorkerWriteFileRequestH\x00R\twriteFile\x12<\n" +
+	"\aservice\x18\x0f \x01(\v2 .armadra.v1.WorkerServiceRequestH\x00R\aservice\x126\n" +
 	"\acommand\x18\x14 \x01(\v2\x1a.armadra.v1.CommandRequestH\x00R\acommand\x120\n" +
 	"\x05agent\x18\x15 \x01(\v2\x18.armadra.v1.AgentRequestH\x00R\x05agent\x12V\n" +
 	"\x13set_write_ownership\x18\x16 \x01(\v2$.armadra.v1.SetWriteOwnershipRequestH\x00R\x11setWriteOwnership\x12V\n" +
 	"\x13get_write_ownership\x18\x17 \x01(\v2$.armadra.v1.GetWriteOwnershipRequestH\x00R\x11getWriteOwnershipB\b\n" +
-	"\x06action\"\xda\x04\n" +
+	"\x06action\"\xdd\x05\n" +
 	"\x0eWorkerResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -1378,11 +1857,30 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\tdirectory\x18\f \x01(\v2\x1b.armadra.v1.WorkerDirectoryH\x00R\tdirectory\x12<\n" +
 	"\n" +
 	"file_chunk\x18\r \x01(\v2\x1b.armadra.v1.WorkerFileChunkH\x00R\tfileChunk\x121\n" +
-	"\x05error\x18\x0e \x01(\v2\x19.armadra.v1.ErrorResponseH\x00R\x05error\x127\n" +
+	"\x05error\x18\x0e \x01(\v2\x19.armadra.v1.ErrorResponseH\x00R\x05error\x12B\n" +
+	"\ffile_written\x18\x0f \x01(\v2\x1d.armadra.v1.WorkerFileWrittenH\x00R\vfileWritten\x12=\n" +
+	"\aservice\x18\x10 \x01(\v2!.armadra.v1.WorkerServiceResponseH\x00R\aservice\x127\n" +
 	"\acommand\x18\x14 \x01(\v2\x1b.armadra.v1.CommandResponseH\x00R\acommand\x121\n" +
 	"\x05agent\x18\x15 \x01(\v2\x19.armadra.v1.AgentResponseH\x00R\x05agent\x12K\n" +
 	"\x0fwrite_ownership\x18\x16 \x01(\v2 .armadra.v1.WorkerWriteOwnershipH\x00R\x0ewriteOwnershipB\b\n" +
-	"\x06resultB#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	"\x06result*\x89\x05\n" +
+	"\x16WorkerServiceOperation\x12(\n" +
+	"$WORKER_SERVICE_OPERATION_UNSPECIFIED\x10\x00\x12)\n" +
+	"%WORKER_SERVICE_OPERATION_FILE_VERSION\x10\x01\x12+\n" +
+	"'WORKER_SERVICE_OPERATION_SEARCH_CONTENT\x10\x02\x12)\n" +
+	"%WORKER_SERVICE_OPERATION_SEARCH_INDEX\x10\x03\x12'\n" +
+	"#WORKER_SERVICE_OPERATION_WATCH_POLL\x10\x04\x12&\n" +
+	"\"WORKER_SERVICE_OPERATION_FILE_READ\x10\x05\x12'\n" +
+	"#WORKER_SERVICE_OPERATION_GIT_STATUS\x10\n" +
+	"\x12,\n" +
+	"(WORKER_SERVICE_OPERATION_GIT_HEAD_COMMIT\x10\v\x12%\n" +
+	"!WORKER_SERVICE_OPERATION_GIT_DIFF\x10\f\x12&\n" +
+	"\"WORKER_SERVICE_OPERATION_GIT_STAGE\x10\r\x12(\n" +
+	"$WORKER_SERVICE_OPERATION_GIT_UNSTAGE\x10\x0e\x12'\n" +
+	"#WORKER_SERVICE_OPERATION_GIT_REVERT\x10\x0f\x12(\n" +
+	"$WORKER_SERVICE_OPERATION_GIT_RESOLVE\x10\x10\x12'\n" +
+	"#WORKER_SERVICE_OPERATION_GIT_COMMIT\x10\x11\x12%\n" +
+	"!WORKER_SERVICE_OPERATION_GIT_INIT\x10\x12B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_worker_proto_rawDescOnce sync.Once
@@ -1396,59 +1894,70 @@ func file_armadra_v1_worker_proto_rawDescGZIP() []byte {
 	return file_armadra_v1_worker_proto_rawDescData
 }
 
-var file_armadra_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_armadra_v1_worker_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_armadra_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_armadra_v1_worker_proto_goTypes = []any{
-	(*WorkerHelloRequest)(nil),         // 0: armadra.v1.WorkerHelloRequest
-	(*WorkerHelloResponse)(nil),        // 1: armadra.v1.WorkerHelloResponse
-	(*RegisterRootRequest)(nil),        // 2: armadra.v1.RegisterRootRequest
-	(*RegisteredRoot)(nil),             // 3: armadra.v1.RegisteredRoot
-	(*WorkerListDirectoryRequest)(nil), // 4: armadra.v1.WorkerListDirectoryRequest
-	(*WorkerFileEntry)(nil),            // 5: armadra.v1.WorkerFileEntry
-	(*WorkerDirectory)(nil),            // 6: armadra.v1.WorkerDirectory
-	(*WorkerReadFileRequest)(nil),      // 7: armadra.v1.WorkerReadFileRequest
-	(*WorkerFileChunk)(nil),            // 8: armadra.v1.WorkerFileChunk
-	(*SetWriteOwnershipRequest)(nil),   // 9: armadra.v1.SetWriteOwnershipRequest
-	(*GetWriteOwnershipRequest)(nil),   // 10: armadra.v1.GetWriteOwnershipRequest
-	(*WorkerWriteOwnership)(nil),       // 11: armadra.v1.WorkerWriteOwnership
-	(*WorkerRequest)(nil),              // 12: armadra.v1.WorkerRequest
-	(*WorkerResponse)(nil),             // 13: armadra.v1.WorkerResponse
-	(*ProtocolVersion)(nil),            // 14: armadra.v1.ProtocolVersion
-	(*CommandCapabilities)(nil),        // 15: armadra.v1.CommandCapabilities
-	(CanvasOwnershipOwner)(0),          // 16: armadra.v1.CanvasOwnershipOwner
-	(*CommandRequest)(nil),             // 17: armadra.v1.CommandRequest
-	(*AgentRequest)(nil),               // 18: armadra.v1.AgentRequest
-	(*ErrorResponse)(nil),              // 19: armadra.v1.ErrorResponse
-	(*CommandResponse)(nil),            // 20: armadra.v1.CommandResponse
-	(*AgentResponse)(nil),              // 21: armadra.v1.AgentResponse
+	(WorkerServiceOperation)(0),        // 0: armadra.v1.WorkerServiceOperation
+	(*WorkerHelloRequest)(nil),         // 1: armadra.v1.WorkerHelloRequest
+	(*WorkerHelloResponse)(nil),        // 2: armadra.v1.WorkerHelloResponse
+	(*RegisterRootRequest)(nil),        // 3: armadra.v1.RegisterRootRequest
+	(*RegisteredRoot)(nil),             // 4: armadra.v1.RegisteredRoot
+	(*WorkerListDirectoryRequest)(nil), // 5: armadra.v1.WorkerListDirectoryRequest
+	(*WorkerFileEntry)(nil),            // 6: armadra.v1.WorkerFileEntry
+	(*WorkerDirectory)(nil),            // 7: armadra.v1.WorkerDirectory
+	(*WorkerReadFileRequest)(nil),      // 8: armadra.v1.WorkerReadFileRequest
+	(*WorkerFileChunk)(nil),            // 9: armadra.v1.WorkerFileChunk
+	(*SetWriteOwnershipRequest)(nil),   // 10: armadra.v1.SetWriteOwnershipRequest
+	(*GetWriteOwnershipRequest)(nil),   // 11: armadra.v1.GetWriteOwnershipRequest
+	(*WorkerWriteOwnership)(nil),       // 12: armadra.v1.WorkerWriteOwnership
+	(*WorkerWriteFileRequest)(nil),     // 13: armadra.v1.WorkerWriteFileRequest
+	(*WorkerFileWritten)(nil),          // 14: armadra.v1.WorkerFileWritten
+	(*WorkerServiceRequest)(nil),       // 15: armadra.v1.WorkerServiceRequest
+	(*WorkerServiceResponse)(nil),      // 16: armadra.v1.WorkerServiceResponse
+	(*WorkerRequest)(nil),              // 17: armadra.v1.WorkerRequest
+	(*WorkerResponse)(nil),             // 18: armadra.v1.WorkerResponse
+	(*ProtocolVersion)(nil),            // 19: armadra.v1.ProtocolVersion
+	(*CommandCapabilities)(nil),        // 20: armadra.v1.CommandCapabilities
+	(CanvasOwnershipOwner)(0),          // 21: armadra.v1.CanvasOwnershipOwner
+	(*CommandRequest)(nil),             // 22: armadra.v1.CommandRequest
+	(*AgentRequest)(nil),               // 23: armadra.v1.AgentRequest
+	(*ErrorResponse)(nil),              // 24: armadra.v1.ErrorResponse
+	(*CommandResponse)(nil),            // 25: armadra.v1.CommandResponse
+	(*AgentResponse)(nil),              // 26: armadra.v1.AgentResponse
 }
 var file_armadra_v1_worker_proto_depIdxs = []int32{
-	14, // 0: armadra.v1.WorkerHelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
-	14, // 1: armadra.v1.WorkerHelloResponse.protocol:type_name -> armadra.v1.ProtocolVersion
-	15, // 2: armadra.v1.WorkerHelloResponse.commands:type_name -> armadra.v1.CommandCapabilities
-	5,  // 3: armadra.v1.WorkerDirectory.entries:type_name -> armadra.v1.WorkerFileEntry
-	16, // 4: armadra.v1.SetWriteOwnershipRequest.owner:type_name -> armadra.v1.CanvasOwnershipOwner
-	16, // 5: armadra.v1.WorkerWriteOwnership.owner:type_name -> armadra.v1.CanvasOwnershipOwner
-	0,  // 6: armadra.v1.WorkerRequest.hello:type_name -> armadra.v1.WorkerHelloRequest
-	2,  // 7: armadra.v1.WorkerRequest.register_root:type_name -> armadra.v1.RegisterRootRequest
-	4,  // 8: armadra.v1.WorkerRequest.list_directory:type_name -> armadra.v1.WorkerListDirectoryRequest
-	7,  // 9: armadra.v1.WorkerRequest.read_file:type_name -> armadra.v1.WorkerReadFileRequest
-	17, // 10: armadra.v1.WorkerRequest.command:type_name -> armadra.v1.CommandRequest
-	18, // 11: armadra.v1.WorkerRequest.agent:type_name -> armadra.v1.AgentRequest
-	9,  // 12: armadra.v1.WorkerRequest.set_write_ownership:type_name -> armadra.v1.SetWriteOwnershipRequest
-	10, // 13: armadra.v1.WorkerRequest.get_write_ownership:type_name -> armadra.v1.GetWriteOwnershipRequest
-	1,  // 14: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
-	3,  // 15: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
-	6,  // 16: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
-	8,  // 17: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
-	19, // 18: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
-	20, // 19: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
-	21, // 20: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
-	11, // 21: armadra.v1.WorkerResponse.write_ownership:type_name -> armadra.v1.WorkerWriteOwnership
-	22, // [22:22] is the sub-list for method output_type
-	22, // [22:22] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	19, // 0: armadra.v1.WorkerHelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
+	19, // 1: armadra.v1.WorkerHelloResponse.protocol:type_name -> armadra.v1.ProtocolVersion
+	20, // 2: armadra.v1.WorkerHelloResponse.commands:type_name -> armadra.v1.CommandCapabilities
+	6,  // 3: armadra.v1.WorkerDirectory.entries:type_name -> armadra.v1.WorkerFileEntry
+	21, // 4: armadra.v1.SetWriteOwnershipRequest.owner:type_name -> armadra.v1.CanvasOwnershipOwner
+	21, // 5: armadra.v1.WorkerWriteOwnership.owner:type_name -> armadra.v1.CanvasOwnershipOwner
+	0,  // 6: armadra.v1.WorkerServiceRequest.operation:type_name -> armadra.v1.WorkerServiceOperation
+	1,  // 7: armadra.v1.WorkerRequest.hello:type_name -> armadra.v1.WorkerHelloRequest
+	3,  // 8: armadra.v1.WorkerRequest.register_root:type_name -> armadra.v1.RegisterRootRequest
+	5,  // 9: armadra.v1.WorkerRequest.list_directory:type_name -> armadra.v1.WorkerListDirectoryRequest
+	8,  // 10: armadra.v1.WorkerRequest.read_file:type_name -> armadra.v1.WorkerReadFileRequest
+	13, // 11: armadra.v1.WorkerRequest.write_file:type_name -> armadra.v1.WorkerWriteFileRequest
+	15, // 12: armadra.v1.WorkerRequest.service:type_name -> armadra.v1.WorkerServiceRequest
+	22, // 13: armadra.v1.WorkerRequest.command:type_name -> armadra.v1.CommandRequest
+	23, // 14: armadra.v1.WorkerRequest.agent:type_name -> armadra.v1.AgentRequest
+	10, // 15: armadra.v1.WorkerRequest.set_write_ownership:type_name -> armadra.v1.SetWriteOwnershipRequest
+	11, // 16: armadra.v1.WorkerRequest.get_write_ownership:type_name -> armadra.v1.GetWriteOwnershipRequest
+	2,  // 17: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
+	4,  // 18: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
+	7,  // 19: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
+	9,  // 20: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
+	24, // 21: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
+	14, // 22: armadra.v1.WorkerResponse.file_written:type_name -> armadra.v1.WorkerFileWritten
+	16, // 23: armadra.v1.WorkerResponse.service:type_name -> armadra.v1.WorkerServiceResponse
+	25, // 24: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
+	26, // 25: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
+	12, // 26: armadra.v1.WorkerResponse.write_ownership:type_name -> armadra.v1.WorkerWriteOwnership
+	27, // [27:27] is the sub-list for method output_type
+	27, // [27:27] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_worker_proto_init() }
@@ -1461,22 +1970,27 @@ func file_armadra_v1_worker_proto_init() {
 	file_armadra_v1_command_proto_init()
 	file_armadra_v1_canvas_proto_init()
 	file_armadra_v1_worker_proto_msgTypes[7].OneofWrappers = []any{}
-	file_armadra_v1_worker_proto_msgTypes[12].OneofWrappers = []any{
+	file_armadra_v1_worker_proto_msgTypes[12].OneofWrappers = []any{}
+	file_armadra_v1_worker_proto_msgTypes[16].OneofWrappers = []any{
 		(*WorkerRequest_Hello)(nil),
 		(*WorkerRequest_RegisterRoot)(nil),
 		(*WorkerRequest_ListDirectory)(nil),
 		(*WorkerRequest_ReadFile)(nil),
+		(*WorkerRequest_WriteFile)(nil),
+		(*WorkerRequest_Service)(nil),
 		(*WorkerRequest_Command)(nil),
 		(*WorkerRequest_Agent)(nil),
 		(*WorkerRequest_SetWriteOwnership)(nil),
 		(*WorkerRequest_GetWriteOwnership)(nil),
 	}
-	file_armadra_v1_worker_proto_msgTypes[13].OneofWrappers = []any{
+	file_armadra_v1_worker_proto_msgTypes[17].OneofWrappers = []any{
 		(*WorkerResponse_Hello)(nil),
 		(*WorkerResponse_RegisteredRoot)(nil),
 		(*WorkerResponse_Directory)(nil),
 		(*WorkerResponse_FileChunk)(nil),
 		(*WorkerResponse_Error)(nil),
+		(*WorkerResponse_FileWritten)(nil),
+		(*WorkerResponse_Service)(nil),
 		(*WorkerResponse_Command)(nil),
 		(*WorkerResponse_Agent)(nil),
 		(*WorkerResponse_WriteOwnership)(nil),
@@ -1486,13 +2000,14 @@ func file_armadra_v1_worker_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_worker_proto_rawDesc), len(file_armadra_v1_worker_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   14,
+			NumEnums:      1,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_armadra_v1_worker_proto_goTypes,
 		DependencyIndexes: file_armadra_v1_worker_proto_depIdxs,
+		EnumInfos:         file_armadra_v1_worker_proto_enumTypes,
 		MessageInfos:      file_armadra_v1_worker_proto_msgTypes,
 	}.Build()
 	File_armadra_v1_worker_proto = out.File
