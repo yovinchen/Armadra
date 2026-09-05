@@ -6,6 +6,8 @@
 
 `SourceControlPanel` 使用 Changes / Branches / History / Worktrees 页签。顶部固定 RepoScopePicker：项目、执行主机、worktree、当前分支及 ahead/behind；所有操作旁都能识别目标仓库。
 
+**已实施（§4.1 多仓库）**：顶部为仓库切换器，Changes 页左侧是按父仓库分组的仓库列表（图标、名称、当前分支、脏文件数）。Changes 页可切到「全部仓库」聚合视图，逐仓库读取状态后合并展示，每一行标注来源仓库；该视图只读——暂存 / 还原仍打到行自己的仓库，提交按钮关闭。跨仓库一次提交刻意不做。
+
 `GitHubPanel` 使用 Issues / Pull requests 页签，共用仓库、状态、作者、标签、负责人筛选；详情可以展开为全屏。Issue/PR 与画布节点的关联仅显示小徽标和“定位关联会话”，不将会话转换成任务卡片。
 
 右侧面板位置不足时使用 Sheet，手机使用列表→详情→文件差异三级导航。危险动作和长操作使用现有 Dialog、AlertDialog、Progress、Toast；不为每个 Git 命令创建画布节点。
@@ -15,6 +17,12 @@
 Rust Worker 的 RepositoryService 是 Git 命令唯一执行入口。Host 负责操作身份、持久结果及事件。优先调用系统 Git，使用 argv 和结构化解析；不以拼接 Shell 字符串执行用户给的分支、路径或消息。
 
 `RepositoryScope`：executionHostId、workspaceId、repositoryId、worktreeId。`RepositoryState`：headOid、branch/detached、indexFingerprint、worktreeFingerprint、remotes、upstream、ahead/behind、operationState、observedAt、revision。
+
+**仓库发现（已实施）**：`GET /api/workspaces/{id}/git/repositories` 从工作空间根递归扫描，深度上限可配置（默认 4），只跳过 `node_modules`、`target`、`dist`、`.git` 内部与 `.armadra`。**gitignore 不作为跳过依据**：被忽略的目录常常正是独立检出所在。每个 `.git` 目录或 `.git` 文件解析为 `GitRepository { repositoryId, repositoryPath, name, kind: root | nested | submodule | worktree, parentRepositoryId, headBranch, dirtyCount }`。
+
+扫描本身只读文件系统，不为每个候选起子进程；`dirtyCount` 是唯一需要跑 `status` 的字段，因此没有执行授权时它是 `null`——「未统计」和「干净」是两件事，界面分开显示。`repositoryId` 沿用既有推导（规范 common dir 的 SHA-256），所以与各快照上的 `repositoryId` 对得上；链接 worktree 与主检出天然共用一个 id（本来就是同一个仓库），**`repositoryPath` 才是检出的身份**。结果按工作空间缓存，`file.changed` 命中 `.git` 时失效。
+
+既有请求（status、diff、stage、unstage、revert、resolve、head-commit、commit 与全部 `/git/repository/*`）都接受 `path`，缺省是工作空间根，所以单仓库工作空间行为不变。
 
 Git 仓库/索引/文件系统是代码状态真相，Host 里的状态是缓存。使用文件监听加节流复核，执行前重新读取。外部 CLI 修改同一仓库时可观察，但内部队列不能锁住外部 Git；版本检查发现变化后冲突返回，不盲目覆盖。
 
@@ -91,6 +99,10 @@ Diff 模型包含 old/new path、blob OID、mode、status、binary、hunks、行
 
 行操作：查看 diff、复制 OID、检出、创建分支/标签、cherry-pick、revert、reset；操作详情明确区分 commit 作者和当前操作者。
 
+**已实施（§4.1 提交图）**：多车道彩线，第一父提交沿用同一车道所以主线是笔直一列，其余父提交各占一条新车道并在合并处**回收**旧车道；合并提交画空心点；父提交不在本页时画虚线残桩，不猜位置。行内显示提交信息、作者与相对时间，右侧是 tag / 分支 / HEAD 徽标（来自 `refs` 装饰）。筛选：分支走服务端 `reference`，作者 / 日期范围 / 路径 / 文本在已加载的行上过滤。一次最多驻留 500 行，每页 100，滚动继续分页。
+
+选中行下方展开详情：哈希、父提交、作者、日期，以及 `GET /git/repository/commit` 返回的文件列表（状态、增删行数，二进制报 `null` 而不是 0）；点击文件用 `GET /git/repository/commit-file` 取该文件的 patch。「比较到当前」把比较基准从第一父提交换成当前 HEAD，两侧都由服务端解析成 OID 后再比较。文件列表与 patch 是两次请求：一个提交可能改动上千文件，而单个文件可能有若干 MB，合成一次读取会让「选中一行」变成无界操作。
+
 ### 4.3 冲突中心
 
 显示当前 merge/rebase/cherry-pick/revert 状态、冲突文件列表、base/ours/theirs/result 四份内容。保存结果不自动标记解决，用户执行“标记已解决”后暂存；继续前确认未解决项为零。提供继续、跳过（适用时）与中止；中止失败保留状态，不显示已恢复。
@@ -101,7 +113,11 @@ Git 操作日志可复制，经脱敏后保存至 operation；凭据提示或编
 
 ### 5.1 数据与 UI
 
-`WorktreeRecord`：repositoryId、worktreeId、path、branch、headOid、locked、prunable、isMain、status、setupState。`FrameBinding`：frameNodeId、worktreeId、defaultLaunchSettings。
+`WorktreeRecord`：repositoryId、worktreeId、path、branch、headOid、locked、prunable、isMain、status、setupState。
+
+**已实施（G03）**：`FrameBinding { worktreePath, branch, repositoryId, initScript, initScriptState, initScriptNodeId }` 落在 group 节点的 `data.binding` 上，并随 tldraw frame 形状的 `meta.armadra.binding` 往返持久化。绑定是**对已存在检出的一条记录**，不是检出本身。Frame 头部的 `WorktreeBindingBadge` 显示分支、路径、脏文件数与初始化脚本状态，脏文件数复用同一份仓库发现结果；检出不在发现结果里时显示 repair 提示，提供重新创建与解绑。
+
+路径继承分两种：终端 `cwd` 用绝对路径（Runtime 直接把它交给子进程，相对路径会相对 Runtime 自己的工作目录解析），编辑器 / 文件树的 `path` 与 Diff 的 `repoPath` 用工作空间相对路径，与 `defaultNodeData` 一致。初始化脚本只跑一次：只有 `pending` 状态会触发，且在写入终端之前先把状态持久化为 `running`。
 
 Frame 头部显示分支、路径和脏状态；点击打开 Worktrees 页。创建向导选择新/现有分支、base ref、目录、是否创建 Frame、是否执行初始化脚本。worktree 目录名由用途生成，不能用固定工具名。
 

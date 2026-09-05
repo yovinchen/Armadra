@@ -77,11 +77,11 @@ Armadra 是 local-first 的 AI Coding 画布：把真实 CLI Agent（Claude Code
 | owned rebase（continue/abort）、Sync 三步 CAS、`--force-with-lease` 二次确认           | ✅   |
 | worktree 列表、创建（预期 OID）、安全移除                                              | ✅   |
 | AI 提交信息草稿（隔离预览、不自动提交）                                                | ✅   |
-| **多仓库识别与切换**（本轮新增，详见 §4.1）                                            | ⬜   |
-| **提交图视图**：分支彩线、tag/分支徽标、作者、IDEA 式筛选与详情（本轮新增，详见 §4.1） | ⬜   |
+| **多仓库识别与切换**（本轮新增，详见 §4.1）                                            | ✅   |
+| **提交图视图**：分支彩线、tag/分支徽标、作者、IDEA 式筛选与详情（本轮新增，详见 §4.1） | ✅   |
 | `git init`、amend、还原来源区分、并排 diff、显式标记已解决（G01）                      | ⬜   |
 | 交互式 rebase、rebase skip、reset/revert/tag/remote、reflog、历史行操作（G02）         | ⬜   |
-| worktree 与 Frame 绑定、路径继承、解绑/删除区分、初始化脚本（G03）                     | ⬜   |
+| worktree 与 Frame 绑定、路径继承、解绑/删除区分、初始化脚本（G03）                     | ✅   |
 | 提交信息语言 / 规范选项（A05）                                                         | ⬜   |
 
 ### 3.5 编辑器与文件
