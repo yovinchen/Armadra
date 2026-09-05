@@ -1,9 +1,10 @@
-use std::{env, net::SocketAddr};
+use std::{env, future::IntoFuture, net::SocketAddr, time::Duration};
 
 use anyhow::Context;
 use armadra_runtime::{
-    AppState, DEFAULT_PORT, db, events::EventHub, hook, hook::HookService, index, paths::data_dir,
-    router_with_state, settings::SettingsStore, terminal::TerminalManager, usage::UsageService,
+    AppState, DEFAULT_PORT, db, desktop_control, events::EventHub, hook, hook::HookService, index,
+    paths::data_dir, router_with_state, settings::SettingsStore, terminal::TerminalManager,
+    usage::UsageService,
 };
 use tracing_subscriber::EnvFilter;
 
@@ -21,11 +22,30 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
+    let arguments: Vec<String> = env::args().skip(1).collect();
+    let desktop_stdin = match arguments.as_slice() {
+        [] => false,
+        [argument] if argument == "--desktop-control-stdin" => true,
+        [argument] if argument == "--help" || argument == "-h" => {
+            println!("Usage: armadra-runtime [--desktop-control-stdin]");
+            return Ok(());
+        }
+        _ => anyhow::bail!("unsupported Runtime arguments"),
+    };
+    let desktop = if desktop_stdin {
+        Some(desktop_control::listen_to_parent()?)
+    } else {
+        None
+    };
     let host = env::var("ARMADRA_RUNTIME_HOST").unwrap_or_else(|_| "127.0.0.1".into());
     let port = env::var("ARMADRA_RUNTIME_PORT")
         .unwrap_or_else(|_| DEFAULT_PORT.to_string())
         .parse::<u16>()
         .context("ARMADRA_RUNTIME_PORT must be a valid port")?;
+    // Reserve ownership before migrations, status restoration or tmux adoption.
+    // A second Runtime on the same endpoint must not mutate the active instance.
+    let address: SocketAddr = format!("{host}:{port}").parse()?;
+    let listener = tokio::net::TcpListener::bind(address).await?;
     let database_url = match env::var("ARMADRA_DATABASE_URL") {
         Ok(url) => url,
         Err(_) => {
@@ -62,8 +82,6 @@ async fn main() -> anyhow::Result<()> {
         _ => {}
     }
     tracing::info!(backend = ?terminals.backend_info().effective, "terminal backend selected");
-    let address: SocketAddr = format!("{host}:{port}").parse()?;
-    let listener = tokio::net::TcpListener::bind(address).await?;
     // Bind first, then publish: the endpoint file must never advertise a port
     // nothing is listening on.
     let bound_port = listener.local_addr().map(|address| address.port())?;
@@ -84,13 +102,63 @@ async fn main() -> anyhow::Result<()> {
     // command palette gets its history a second late, nobody waits for it.
     index::start(state.pool.clone());
     tracing::info!(%address, "Armadra Runtime is ready");
-    axum::serve(listener, router_with_state(state))
-        .with_graceful_shutdown(shutdown_signal(terminals.clone()))
-        .await?;
+    let router = router_with_state(state).layer(axum::middleware::from_fn_with_state(
+        terminals.clone(),
+        desktop_control::reject_during_shutdown,
+    ));
+    let (requested, reason) = tokio::sync::oneshot::channel();
+    let gate = terminals.clone();
+    let serving = axum::serve(listener, router)
+        .with_graceful_shutdown(async move {
+            let reason = shutdown_signal(desktop).await;
+            gate.begin_shutdown();
+            let _ = requested.send(reason);
+        })
+        .into_future();
+    tokio::pin!(serving);
+    let reason = tokio::select! {
+        reason = reason => reason.context("shutdown controller disappeared")?,
+        result = &mut serving => { result?; return Ok(()); },
+    };
+    let cleanup = tokio::time::timeout(Duration::from_secs(8), async {
+        match reason {
+            ShutdownReason::DesktopQuit => terminals.shutdown_owned_sessions().await,
+            ShutdownReason::RestartSignal => {
+                terminals.shutdown_all().await;
+                Ok(())
+            }
+        }
+    })
+    .await;
+    let cleanup = match cleanup {
+        Ok(result) => result.map_err(anyhow::Error::from),
+        Err(_) => Err(anyhow::anyhow!(
+            "Runtime terminal shutdown timed out; some sessions may still be running"
+        )),
+    };
+    if let Err(error) = &cleanup {
+        tracing::error!(%error, "Runtime shutdown failed");
+    }
+    // WebSockets or an old keep-alive request cannot hold desktop Quit forever.
+    // Admission has stopped and terminal creation is gated before this drain.
+    match tokio::time::timeout(Duration::from_secs(2), &mut serving).await {
+        Ok(result) => result?,
+        Err(_) => {
+            tracing::error!("Runtime HTTP drain timed out; closing remaining connections");
+            anyhow::bail!("Runtime HTTP drain timed out");
+        }
+    }
+    cleanup?;
     Ok(())
 }
 
-async fn shutdown_signal(terminals: TerminalManager) {
+#[derive(Clone, Copy)]
+enum ShutdownReason {
+    DesktopQuit,
+    RestartSignal,
+}
+
+async fn shutdown_signal(desktop: Option<tokio::sync::oneshot::Receiver<()>>) -> ShutdownReason {
     let ctrl_c = async {
         let _ = tokio::signal::ctrl_c().await;
     };
@@ -106,9 +174,18 @@ async fn shutdown_signal(terminals: TerminalManager) {
     };
     #[cfg(not(unix))]
     let terminate = std::future::pending::<()>();
+    let desktop = async move {
+        if let Some(receiver) = desktop
+            && receiver.await.is_ok()
+        {
+            return;
+        }
+        // EOF, malformed streams or disabled control do not become shutdown.
+        std::future::pending::<()>().await;
+    };
     tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
+        _ = ctrl_c => ShutdownReason::RestartSignal,
+        _ = terminate => ShutdownReason::RestartSignal,
+        _ = desktop => ShutdownReason::DesktopQuit,
     }
-    terminals.shutdown_all().await;
 }

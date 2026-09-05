@@ -268,7 +268,14 @@ fn spawn_unix_listener(state: AppState) {
         // The socket is a full grant of the hook surface: nobody else's.
         paths::harden_file(&path);
         tracing::info!(path = %path.display(), "hook socket is listening");
-        if let Err(error) = axum::serve(listener, routes().with_state(state)).await {
+        let gate = state.terminals.clone();
+        let router = routes()
+            .with_state(state)
+            .layer(axum::middleware::from_fn_with_state(
+                gate,
+                crate::desktop_control::reject_during_shutdown,
+            ));
+        if let Err(error) = axum::serve(listener, router).await {
             tracing::warn!(%error, "the hook socket listener stopped");
         }
     });

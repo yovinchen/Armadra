@@ -103,6 +103,105 @@ impl DirectBackend {
         let snapshot = session.snapshot();
         (!snapshot.is_empty()).then_some(snapshot)
     }
+    /// Explicit desktop Quit: report failures and observe real child exit before
+    /// removing owned sessions. Normal detach/restart keeps its existing behavior.
+    pub async fn shutdown_owned_checked(&self) -> AppResult<()> {
+        let sessions: Vec<_> = self
+            .sessions
+            .read()
+            .await
+            .iter()
+            .map(|(key, session)| (key.clone(), session.clone()))
+            .collect();
+        let outcomes =
+            futures_util::future::join_all(sessions.into_iter().map(|(key, session)| async move {
+                let already_exited = {
+                    let mut child = session
+                        .child
+                        .lock()
+                        .map_err(|_| AppError::Internal("terminal child lock poisoned".into()))?;
+                    match child.as_mut() {
+                        Some(child) => child
+                            .try_wait()
+                            .map_err(|error| AppError::Internal(error.to_string()))?
+                            .is_some(),
+                        None => true,
+                    }
+                };
+                if !already_exited {
+                    if let Some(pid) = session.pid {
+                        #[cfg(unix)]
+                        terminate_tree(pid).await;
+                        #[cfg(windows)]
+                        {
+                            let result = tokio::process::Command::new("taskkill")
+                                .args(["/PID", &pid.to_string(), "/T", "/F"])
+                                .kill_on_drop(true)
+                                .output()
+                                .await?;
+                            if !result.status.success() {
+                                return Err(AppError::Internal(format!(
+                                    "taskkill failed for owned terminal {key}"
+                                )));
+                            }
+                        }
+                    }
+                    {
+                        let mut child = session.child.lock().map_err(|_| {
+                            AppError::Internal("terminal child lock poisoned".into())
+                        })?;
+                        if let Some(child) = child.as_mut()
+                            && child
+                                .try_wait()
+                                .map_err(|error| AppError::Internal(error.to_string()))?
+                                .is_none()
+                        {
+                            child.kill().map_err(|error| {
+                                AppError::Internal(format!("could not terminate {key}: {error}"))
+                            })?;
+                        }
+                    }
+                    tokio::time::timeout(Duration::from_secs(3), async {
+                        loop {
+                            let exited = {
+                                let mut child = session.child.lock().map_err(|_| {
+                                    AppError::Internal("terminal child lock poisoned".into())
+                                })?;
+                                match child.as_mut() {
+                                    Some(child) => child
+                                        .try_wait()
+                                        .map_err(|error| AppError::Internal(error.to_string()))?
+                                        .is_some(),
+                                    None => true,
+                                }
+                            };
+                            if exited {
+                                return Ok::<(), AppError>(());
+                            }
+                            tokio::time::sleep(Duration::from_millis(25)).await;
+                        }
+                    })
+                    .await
+                    .map_err(|_| {
+                        AppError::Internal(format!("owned terminal {key} did not exit"))
+                    })??;
+                }
+                session.exited.store(true, Ordering::SeqCst);
+                self.sessions.write().await.remove(&key);
+                Ok::<(), AppError>(())
+            }))
+            .await;
+        let failures: Vec<String> = outcomes
+            .into_iter()
+            .filter_map(Result::err)
+            .map(|error| error.to_string())
+            .collect();
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(AppError::Internal(failures.join("; ")))
+        }
+    }
 }
 
 #[async_trait]

@@ -454,6 +454,100 @@ impl TmuxBackend {
         arguments.extend(bytes.iter().map(|byte| format!("{byte:02x}")));
         self.run(arguments).await.map(|_| ())
     }
+    /// Checked enumeration for explicit Quit. Existing list_alive intentionally
+    /// tolerates a vanished server; here all other command failures are fatal.
+    async fn shutdown_session_names(&self) -> AppResult<Vec<String>> {
+        let output = tokio::process::Command::new("tmux")
+            .args(self.base_args())
+            .args(["list-sessions", "-F", "#{session_name}"])
+            .env_clear()
+            .envs(child_environment())
+            .stdin(Stdio::null())
+            .kill_on_drop(true)
+            .output()
+            .await?;
+        if output.status.success() {
+            return Ok(String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .map(str::to_owned)
+                .collect());
+        }
+        let error = String::from_utf8_lossy(&output.stderr);
+        if error.contains("no server running on")
+            || (error.contains("No such file or directory") && !self.socket.exists())
+        {
+            return Ok(Vec::new());
+        }
+        Err(AppError::Internal(format!(
+            "could not verify owned tmux sessions: {}",
+            error.trim()
+        )))
+    }
+
+    pub async fn shutdown_owned_checked(&self) -> AppResult<()> {
+        let owned: Vec<_> = self
+            .sessions
+            .read()
+            .await
+            .iter()
+            .map(|(key, session)| (key.clone(), session.clone()))
+            .collect();
+        if owned.is_empty() {
+            return Ok(());
+        }
+        let running = self.shutdown_session_names().await?;
+        let outcomes = futures_util::future::join_all(owned.iter().map(|(key, session)| async {
+            if running.contains(&session.name) {
+                self.terminate_process(key).await?;
+                let output = tokio::process::Command::new("tmux")
+                    .args(self.base_args())
+                    .args(["kill-session", "-t", &session.name])
+                    .env_clear()
+                    .envs(child_environment())
+                    .stdin(Stdio::null())
+                    .kill_on_drop(true)
+                    .output()
+                    .await?;
+                if !output.status.success()
+                    && self.shutdown_session_names().await?.contains(&session.name)
+                {
+                    return Err(AppError::Internal(format!(
+                        "owned tmux session {} did not terminate",
+                        session.name
+                    )));
+                }
+            }
+            if let Ok(clients) = session.clients.lock() {
+                for client in clients.iter() {
+                    client.detach();
+                }
+            }
+            Ok::<(), AppError>(())
+        }))
+        .await;
+        let mut failures: Vec<String> = outcomes
+            .into_iter()
+            .filter_map(Result::err)
+            .map(|error| error.to_string())
+            .collect();
+        match self.shutdown_session_names().await {
+            Ok(remaining) => {
+                for (key, session) in owned {
+                    if remaining.contains(&session.name) {
+                        failures.push(format!("tmux session {} remains alive", session.name));
+                    } else {
+                        self.sessions.write().await.remove(&key);
+                    }
+                }
+            }
+            Err(error) => failures.push(error.to_string()),
+        }
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(AppError::Internal(failures.join("; ")))
+        }
+    }
 }
 
 #[async_trait]

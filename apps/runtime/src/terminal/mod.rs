@@ -15,7 +15,10 @@ pub mod tmux;
 use std::{
     collections::HashMap,
     path::PathBuf,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -299,6 +302,8 @@ struct SessionRecord {
 }
 
 struct Inner {
+    shutting_down: AtomicBool,
+    creation_gate: RwLock<()>,
     pool: SqlitePool,
     events: EventHub,
     settings: SettingsStore,
@@ -366,6 +371,8 @@ impl TerminalManager {
         };
 
         let inner = Arc::new(Inner {
+            shutting_down: AtomicBool::new(false),
+            creation_gate: RwLock::new(()),
             pool,
             events,
             settings,
@@ -441,6 +448,10 @@ impl TerminalManager {
     /* ------------------------------- lifecycle ---------------------------- */
 
     pub async fn spawn(&self, request: SpawnRequest) -> AppResult<TerminalSession> {
+        let _creation = self.inner.creation_gate.read().await;
+        if self.is_shutting_down() {
+            return Err(AppError::Conflict("Runtime is shutting down".into()));
+        }
         let id = Uuid::now_v7().to_string();
         let key = SessionKey::new(request.owner_node_id.clone().unwrap_or_else(|| id.clone()));
         let shell = request.shell.clone().unwrap_or_else(default_shell);
@@ -544,6 +555,10 @@ impl TerminalManager {
     /// Same `session_key`, next generation (plan §15.5). Sockets attached to
     /// the old generation are told to clear and reconnect.
     pub async fn recycle(&self, session_id: &str) -> AppResult<TerminalSession> {
+        let _creation = self.inner.creation_gate.read().await;
+        if self.is_shutting_down() {
+            return Err(AppError::Conflict("Runtime is shutting down".into()));
+        }
         let record = self.require(session_id).await?;
         let backend = self.backend(record.kind);
         let next_generation = record.generation + 1;
@@ -623,6 +638,10 @@ impl TerminalManager {
     /* -------------------------------- attach ------------------------------ */
 
     pub async fn attach(&self, session_id: &str, cols: u16, rows: u16) -> AppResult<AttachSession> {
+        let _creation = self.inner.creation_gate.read().await;
+        if self.is_shutting_down() {
+            return Err(AppError::Conflict("Runtime is shutting down".into()));
+        }
         let size = PtySize {
             rows: rows.max(2),
             cols: cols.max(2),
@@ -723,9 +742,10 @@ impl TerminalManager {
     }
 
     async fn set_attach_state(&self, session_id: &str, state: &str) {
-        let _ = sqlx::query("UPDATE terminal_sessions SET attach_state = ? WHERE id = ?")
+        let _ = sqlx::query("UPDATE terminal_sessions SET attach_state = ? WHERE id = ? AND (? = 'exited' OR status = 'running')")
             .bind(state)
             .bind(session_id)
+            .bind(state)
             .execute(&self.inner.pool)
             .await;
     }
@@ -913,15 +933,92 @@ impl TerminalManager {
     /// Runtime shutdown. tmux sessions are left running on purpose: that is the
     /// whole point of the backend. Direct sessions cannot survive us.
     pub async fn shutdown_all(&self) {
+        self.begin_shutdown();
+        let _quiescent = self.inner.creation_gate.write().await;
         self.inner.direct.detach_all().await;
         if let Some(tmux) = self.inner.tmux.as_ref() {
             tmux.detach_all().await;
             let _ = sqlx::query(
                 "UPDATE terminal_sessions SET attach_state = 'detached' \
-                 WHERE backend_kind = 'tmux' AND attach_state = 'live'",
+                 WHERE backend_kind = 'tmux' AND attach_state = 'live' AND status = 'running'",
             )
             .execute(&self.inner.pool)
             .await;
+        }
+    }
+
+    pub fn begin_shutdown(&self) {
+        self.inner.shutting_down.store(true, Ordering::SeqCst);
+    }
+
+    pub fn is_shutting_down(&self) -> bool {
+        self.inner.shutting_down.load(Ordering::SeqCst)
+    }
+
+    /// Explicit desktop Quit, unlike a Runtime restart: stop all owned sessions.
+    /// The caller bounds the entire operation and treats any error as failure.
+    pub async fn shutdown_owned_sessions(&self) -> AppResult<()> {
+        self.begin_shutdown();
+        let _quiescent = self.inner.creation_gate.write().await;
+        // Capture active history before teardown. Completed/failed sessions stay
+        // unchanged even though a backend may retain their ended screen state.
+        let mut failures = Vec::new();
+        let running: std::collections::HashSet<String> = match sqlx::query_scalar::<_, String>(
+            "SELECT id FROM terminal_sessions WHERE status = 'running'",
+        )
+        .fetch_all(&self.inner.pool)
+        .await
+        {
+            Ok(ids) => ids.into_iter().collect(),
+            Err(error) => {
+                // Losing metadata must not prevent the owned process handles
+                // from being stopped. Preserve the error as an incomplete quit.
+                failures.push(format!("read terminal shutdown metadata: {error}"));
+                Default::default()
+            }
+        };
+        let records: Vec<SessionRecord> = self
+            .inner
+            .records
+            .read()
+            .await
+            .values()
+            .filter(|record| !record.exited && running.contains(&record.id))
+            .cloned()
+            .collect();
+        // Both backends own sessions even if database insertion failed after
+        // process creation; cleanup must enumerate their own registries as well.
+        let direct = self.inner.direct.shutdown_owned_checked();
+        let tmux = async {
+            if let Some(tmux) = self.inner.tmux.as_ref() {
+                tmux.shutdown_owned_checked().await
+            } else {
+                Ok(())
+            }
+        };
+        let (direct, tmux) = tokio::join!(direct, tmux);
+        if let Err(error) = direct {
+            failures.push(format!("direct terminals: {error}"));
+        }
+        if let Err(error) = tmux {
+            failures.push(format!("tmux terminals: {error}"));
+        }
+        if failures.is_empty() {
+            for record in records {
+                if let Some(stored) = self.inner.records.write().await.get_mut(&record.id) {
+                    stored.exited = true;
+                }
+                match sqlx::query("UPDATE terminal_sessions SET status = 'terminated', attach_state = 'exited', termination_intent = 'session', ended_at = COALESCE(ended_at, ?) WHERE id = ? AND status IN ('running', 'exited')")
+                    .bind(Utc::now().to_rfc3339()).bind(&record.id).execute(&self.inner.pool).await {
+                    Ok(_) => self.publish_status(&record.id, "terminated", None).await,
+                    Err(error) => failures.push(format!("persist terminal {} shutdown: {error}", record.id)),
+                }
+            }
+        }
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(AppError::Internal(failures.join("; ")))
         }
     }
 
@@ -1380,5 +1477,206 @@ mod batch_tests {
         let seen = seen.lock().unwrap().clone();
         assert_eq!(seen.last().map(String::as_str), Some("eof"));
         assert_eq!(seen[..seen.len() - 1].concat(), "onetwo");
+    }
+}
+
+#[cfg(all(test, unix))]
+mod desktop_shutdown_tests {
+    use super::*;
+
+    async fn fixture(backend: &str) -> (TerminalManager, tempfile::TempDir, String) {
+        let directory = tempfile::tempdir().unwrap();
+        let pool = crate::db::connect(&format!(
+            "sqlite://{}?mode=rwc",
+            directory.path().join("quit.db").display()
+        ))
+        .await
+        .unwrap();
+        let workspace = crate::db::create_workspace(
+            &pool,
+            "keep project",
+            directory.path().to_str().unwrap(),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        let board: String = sqlx::query_scalar("SELECT id FROM boards WHERE workspace_id = ?")
+            .bind(&workspace.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO nodes(id, board_id, type, x, y, data_json, created_at, updated_at) VALUES ('keep-node', ?, 'sticky', 0, 0, '{}', 'now', 'now')").bind(board).execute(&pool).await.unwrap();
+        let settings =
+            SettingsStore::in_memory(serde_json::json!({"terminal":{"backend":backend}}));
+        let manager = TerminalManager::with_config(
+            pool,
+            EventHub::new(),
+            settings,
+            directory.path().to_owned(),
+        );
+        (manager, directory, workspace.id)
+    }
+
+    fn request(workspace: &str, directory: &std::path::Path) -> SpawnRequest {
+        let mut request =
+            SpawnRequest::plain(workspace.into(), directory.to_string_lossy().into_owned());
+        request.command = Some("/bin/sh".into());
+        request.args = vec!["-c".into(), "sleep 60".into()];
+        request
+    }
+
+    #[tokio::test]
+    async fn desktop_shutdown_direct_process_exit_and_creation_gate() {
+        let (manager, directory, workspace) = fixture("direct").await;
+        let mut histories = Vec::new();
+        for failed in [false, true] {
+            let mut done = request(&workspace, directory.path());
+            done.args = vec!["-c".into(), "exit 0".into()];
+            let finished = manager.spawn(done).await.unwrap();
+            tokio::time::timeout(Duration::from_secs(2), async {
+                while manager.session(&finished.id).await.unwrap().status == "running" {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            })
+            .await
+            .unwrap();
+            if failed {
+                sqlx::query("UPDATE terminal_sessions SET status = 'failed' WHERE id = ?")
+                    .bind(&finished.id)
+                    .execute(&manager.inner.pool)
+                    .await
+                    .unwrap();
+            }
+            let saved = manager.session(&finished.id).await.unwrap();
+            histories.push((saved.id, saved.status, saved.ended_at, saved.exit_code));
+        }
+        let session = manager
+            .spawn(request(&workspace, directory.path()))
+            .await
+            .unwrap();
+        let gate = manager.inner.creation_gate.read().await;
+        let worker = manager.clone();
+        let shutdown = tokio::spawn(async move { worker.shutdown_owned_sessions().await });
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while !manager.is_shutting_down() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        let worker = manager.clone();
+        let next = request(&workspace, directory.path());
+        let mut racing = tokio::spawn(async move { worker.spawn(next).await });
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), &mut racing)
+                .await
+                .is_err()
+        );
+        drop(gate);
+        tokio::time::timeout(Duration::from_secs(7), shutdown)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert!(matches!(racing.await.unwrap(), Err(AppError::Conflict(_))));
+        assert!(matches!(
+            manager.recycle(&session.id).await,
+            Err(AppError::Conflict(_))
+        ));
+        assert!(matches!(
+            manager.attach(&session.id, 80, 24).await,
+            Err(AppError::Conflict(_))
+        ));
+        // Simulate an old connection's delayed detach after explicit shutdown.
+        manager.set_attach_state(&session.id, "detached").await;
+        assert_eq!(
+            manager.session(&session.id).await.unwrap().attach_state,
+            "exited"
+        );
+        assert!(!manager.is_alive(&session.id).await);
+        assert_eq!(
+            manager.session(&session.id).await.unwrap().status,
+            "terminated"
+        );
+        let node: i64 = sqlx::query_scalar("SELECT count(*) FROM nodes WHERE id = 'keep-node'")
+            .fetch_one(&manager.inner.pool)
+            .await
+            .unwrap();
+        assert_eq!(node, 1);
+        assert!(
+            crate::db::get_workspace(&manager.inner.pool, &workspace)
+                .await
+                .is_ok()
+        );
+        for (id, status, ended_at, exit_code) in histories {
+            let saved = manager.session(&id).await.unwrap();
+            assert_eq!(
+                (saved.status, saved.ended_at, saved.exit_code),
+                (status, ended_at, exit_code),
+                "Quit must not rewrite completed session history"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn desktop_shutdown_still_stops_owned_children_when_metadata_is_unavailable() {
+        let (manager, directory, workspace) = fixture("direct").await;
+        let session = manager
+            .spawn(request(&workspace, directory.path()))
+            .await
+            .unwrap();
+        let pid = manager.pid(&session.id).await.unwrap();
+        manager.inner.pool.close().await;
+        let result =
+            tokio::time::timeout(Duration::from_secs(7), manager.shutdown_owned_sessions())
+                .await
+                .unwrap();
+        assert!(
+            result.is_err(),
+            "failed metadata must not be reported as complete shutdown"
+        );
+        assert_eq!(unsafe { libc::kill(pid as i32, 0) }, -1);
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::ESRCH)
+        );
+    }
+
+    #[tokio::test]
+    async fn desktop_shutdown_tmux_preserves_on_restart_then_quit_removes_owned_session() {
+        if !tmux::detect().usable {
+            eprintln!("tmux unavailable; real tmux shutdown test skipped");
+            return;
+        }
+        let (manager, directory, workspace) = fixture("tmux").await;
+        let session = manager
+            .spawn(request(&workspace, directory.path()))
+            .await
+            .unwrap();
+        assert_eq!(session.backend, "tmux");
+        let backend = manager.inner.tmux.as_ref().unwrap();
+        let before = backend.list_alive().await.unwrap();
+        assert_eq!(before.len(), 1);
+        manager.shutdown_all().await;
+        assert_eq!(
+            backend.list_alive().await.unwrap().len(),
+            1,
+            "ordinary Runtime restart preserves tmux"
+        );
+        tokio::time::timeout(Duration::from_secs(7), manager.shutdown_owned_sessions())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(backend.list_alive().await.unwrap().is_empty());
+        assert_eq!(
+            manager.session(&session.id).await.unwrap().status,
+            "terminated"
+        );
+        assert!(
+            crate::db::get_workspace(&manager.inner.pool, &workspace)
+                .await
+                .is_ok()
+        );
     }
 }

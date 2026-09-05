@@ -2,6 +2,7 @@ pub mod agent;
 pub mod api;
 pub mod collab;
 pub mod db;
+pub mod desktop_control;
 pub mod error;
 pub mod events;
 pub mod files;
