@@ -56,11 +56,22 @@ Git 仓库/索引/文件系统是代码状态真相，Host 里的状态是缓存
 
 Rebase、Sync 与强制推送已在 Runtime `RepositoryService` 与 `apps/web/src/panels/git/` 实现：
 
-- `StartRebase{onto, expectedStateToken}` 把当前分支重放到已核对的提交上。重放期间 HEAD 游离，所有权因此绑定 Git 自己的 `rebase-merge` 记录（`onto`、`orig-head`、`head-name`）与 `orig-head` 的文件身份，而不是不动的 HEAD。冲突复用现有 Continue/Abort：continue 要求冲突已解决并暂存，且允许在下一个被重放的提交上再次停下；abort 恢复记录的分支与 OID。外部或 Runtime 重启后的序列仍可读、不可驱动。`skip` 仍只属于空 cherry-pick，不用来丢弃整个被重放的提交；交互式 todo 编辑器尚未实现。
+- `StartRebase{onto, expectedStateToken}` 把当前分支重放到已核对的提交上。重放期间 HEAD 游离，所有权因此绑定 Git 自己的 `rebase-merge` 记录（`onto`、`orig-head`、`head-name`）与 `orig-head` 的文件身份，而不是不动的 HEAD。冲突复用现有 Continue/Abort：continue 要求冲突已解决并暂存，且允许在下一个被重放的提交上再次停下；abort 恢复记录的分支与 OID。外部或 Runtime 重启后的序列仍可读、不可驱动。`skip` 仍只属于空 cherry-pick，不用来丢弃整个被重放的提交。
 - `Sync{remote, branch, expectedRemoteOid}` 在同一个 owned 操作里依次执行 fetch、仅快进 pull、push。任一步失败即停止，并报告停在哪一步、当前 HEAD 与远端 OID；分叉分支不会被自动 merge 或 rebase。
 - 强制推送只有 `Push.forceWithLease{expectedRemoteOid}` 一条路径，映射到 `--force-with-lease=refs/heads/<branch>:<oid>`；`--no-force` 在所有推送上保留，所以不存在不带租约的强制推送，界面另外要求对被覆盖的远端 OID 做二次确认。
 
 Git push 的 lease 使用具体预期 ref 值，避免后台 fetch 改变远端跟踪分支后削弱保护。依据 [Git push 官方文档](https://git-scm.com/docs/git-push)。
+
+M4 补齐的其余部分同样落在 Runtime `RepositoryService` 与 `apps/web/src/panels/git/`：
+
+- `git init` 只对不属于任何仓库的工作区开放，界面先确认再执行；已在仓库内（含祖先仓库、裸仓库）一律拒绝，不嵌套第二个仓库。这是唯一没有 common git dir 队列可排的写路径，因为队列键要等仓库存在才有。
+- amend 需要带上界面展示过的 HEAD OID，HEAD 变过即拒绝；提交已存在于远端跟踪引用时还要再勾一次确认。amend 不推送，也不强推。
+- 还原分为两个动作：`source=index` 用 `git checkout --` 只丢暂存之后的改动，`source=head` 用 `git restore --source=HEAD --staged --worktree` 连暂存一起丢；未跟踪文件只有删除一种含义。首次提交前拒绝从 HEAD 还原。
+- 冲突文件有显式「标记已解决」：服务重读文件，仍含冲突标记时拒绝并给出行号，通过后才 `git add` 该路径。
+- Diff 增加并排视图、`--ignore-all-space` 与 diff 内搜索。忽略空白只影响补丁与行数统计，文件列表照旧列出仅空白变化的文件（标注「仅空白差异」），并排视图纯排版、不重算差异。
+- 历史行操作：复制 OID、游离检出、从该提交建分支、cherry-pick、`Revert{targetOid, mainline, expectedStateToken}`、`Reset{mode, targetOid, expectedStateToken, discardChanges}`。revert 与 cherry-pick 共用同一套 owned 序列与 Continue/Abort，没有 skip；hard reset 在工作区不干净时必须显式确认，并先用 stash 后端记录一份含未跟踪文件的快照作为可恢复点。
+- 标签与远端各有独立页签。标签的删除与推送按标签对象本身 CAS，创建不提供 force，推送保留 `--no-force`；远端 URL 走与克隆相同的白名单，其中的凭据在离开 Runtime 前脱敏，界面也不会把脱敏值回填后送回。
+- 交互式 rebase 提供可审阅的 todo：预览将被重放的提交（最旧在前），支持重排、squash、drop，随后用写入仓库 Git 目录的临时文件加 `GIT_SEQUENCE_EDITOR=cp -- '<path>'` 非交互执行。提交的 todo 必须覆盖区间内全部提交，丢弃只能显式写 drop。`reword`、`edit`、`exec`、`fixup` 未实现，含合并提交的区间不走 todo 编辑器。
 
 ## 4. Diff、历史图与冲突中心
 
