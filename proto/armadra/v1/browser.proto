@@ -1,0 +1,410 @@
+syntax = "proto3";
+
+package armadra.v1;
+
+option go_package = "armadra.local/host/gen/armadra/v1";
+
+import "armadra/v1/common.proto";
+
+// Controlled embedded browser — B01, docs/editor-browser-design.md §5-§9.
+//
+// The Rust Runtime speaks JSON on loopback today; these messages are the
+// cross-device and remote-Worker contract for the same surface, so every field
+// name here is the snake_case of the JSON key the Runtime already uses. There
+// is deliberately no generic `eval` and no raw CDP method: an action a caller
+// can name is an action this file defines (§7).
+
+enum BrowserSessionState {
+  BROWSER_SESSION_STATE_UNSPECIFIED = 0;
+  // The profile is being launched and CDP has not answered yet.
+  BROWSER_SESSION_STATE_STARTING = 1;
+  BROWSER_SESSION_STATE_READY = 2;
+  // The browser process went away while the session is still supposed to
+  // exist. The row and the profile survive so the URL can be restored.
+  BROWSER_SESSION_STATE_DISCONNECTED = 3;
+  // Ended on purpose. Never reached by closing a node (§9).
+  BROWSER_SESSION_STATE_TERMINATED = 4;
+  // No usable browser on this execution host. Carries a reason code and never
+  // a fake button (§5: "缺少浏览器时提供安装/选择流程及明确不可用状态").
+  BROWSER_SESSION_STATE_UNSUPPORTED = 5;
+}
+
+// CSS pixels, never canvas pixels: the client scales the frame inside its
+// tldraw shape rather than writing the zoom into the page viewport (§8).
+message BrowserViewport {
+  uint32 width = 1;
+  uint32 height = 2;
+  double device_scale_factor = 3;
+}
+
+message BrowserSession {
+  string session_id = 1;
+  // Bumped every time the underlying browser process is (re)launched for this
+  // session, so a client can tell a restored session from the one it saw.
+  uint64 generation = 2;
+  string workspace_id = 3;
+  string node_id = 4;
+  string url = 5;
+  string title = 6;
+  BrowserViewport viewport = 7;
+  BrowserSessionState state = 8;
+  // Stable machine code (`chrome_not_found`, `launch_failed`, `cdp_closed`,
+  // …). Never raw browser stderr.
+  string reason_code = 9;
+  // Incremented by every committed navigation. Element references and queued
+  // input carry it; a stale one is refused rather than replayed (§7/§8).
+  uint64 navigation_epoch = 10;
+  bool headful = 11;
+  // Closing the node only stops the picture; ending the session is explicit.
+  bool keep_alive = 12;
+  int64 created_at_unix_ms = 13;
+  int64 updated_at_unix_ms = 14;
+}
+
+message BrowserAvailability {
+  bool available = 1;
+  // Absolute path of the executable that would be launched.
+  string executable = 2;
+  // "settings" | "environment" | "detected"
+  string source = 3;
+  string reason_code = 4;
+  // Every candidate that was looked for, so the UI can say what it tried.
+  repeated string searched = 5;
+}
+
+// One screencast image. The payload is an encoded image rather than a video
+// frame in this round; a later video channel replaces `data` and keeps the
+// session and input contracts (§8).
+message BrowserFrame {
+  string session_id = 1;
+  uint64 generation = 2;
+  uint64 frame_seq = 3;
+  uint64 navigation_epoch = 4;
+  uint32 viewport_width = 5;
+  uint32 viewport_height = 6;
+  double device_scale_factor = 7;
+  // "jpeg"
+  string encoding = 8;
+  bytes data = 9;
+  int64 captured_at_unix_ms = 10;
+}
+
+// How much picture a subscriber is asking for. A session with no subscription
+// stops streaming but keeps running, so an Agent can go on driving it (§9).
+enum BrowserVisibility {
+  BROWSER_VISIBILITY_UNSPECIFIED = 0;
+  BROWSER_VISIBILITY_FOCUSED = 1;
+  BROWSER_VISIBILITY_VISIBLE = 2;
+  // Subscribed but occluded or off-screen: no frames at all.
+  BROWSER_VISIBILITY_HIDDEN = 3;
+}
+
+message BrowserSubscribeRequest {
+  CommandMeta meta = 1;
+  string session_id = 2;
+  string subscription_id = 3;
+  BrowserVisibility visibility = 4;
+}
+
+message BrowserSubscription {
+  string subscription_id = 1;
+  int64 expires_at_unix_ms = 2;
+  // What the Worker settled on for this visibility, so the client shows the
+  // degradation instead of guessing it did not happen.
+  uint32 quality = 3;
+  uint32 max_fps = 4;
+}
+
+/* -------------------------------- navigation ------------------------------ */
+
+enum BrowserNavigationAction {
+  BROWSER_NAVIGATION_ACTION_UNSPECIFIED = 0;
+  BROWSER_NAVIGATION_ACTION_GOTO = 1;
+  BROWSER_NAVIGATION_ACTION_BACK = 2;
+  BROWSER_NAVIGATION_ACTION_FORWARD = 3;
+  BROWSER_NAVIGATION_ACTION_RELOAD = 4;
+  BROWSER_NAVIGATION_ACTION_STOP = 5;
+}
+
+message BrowserNavigateRequest {
+  CommandMeta meta = 1;
+  string session_id = 2;
+  BrowserNavigationAction action = 3;
+  // http/https only, or a loopback address the project declared (§6).
+  string url = 4;
+}
+
+/* ---------------------------------- input --------------------------------- */
+
+enum BrowserInputKind {
+  BROWSER_INPUT_KIND_UNSPECIFIED = 0;
+  BROWSER_INPUT_KIND_MOUSE_MOVED = 1;
+  BROWSER_INPUT_KIND_MOUSE_PRESSED = 2;
+  BROWSER_INPUT_KIND_MOUSE_RELEASED = 3;
+  BROWSER_INPUT_KIND_WHEEL = 4;
+  BROWSER_INPUT_KIND_KEY_DOWN = 5;
+  BROWSER_INPUT_KIND_KEY_UP = 6;
+  // Committed composition text. IME goes through this and is never split into
+  // synthetic key events (§8).
+  BROWSER_INPUT_KIND_TEXT = 7;
+  BROWSER_INPUT_KIND_TOUCH_START = 8;
+  BROWSER_INPUT_KIND_TOUCH_MOVE = 9;
+  BROWSER_INPUT_KIND_TOUCH_END = 10;
+}
+
+message BrowserInputEvent {
+  BrowserInputKind kind = 1;
+  // CSS pixels inside the page viewport, already mapped back from the shape.
+  double x = 2;
+  double y = 3;
+  double delta_x = 4;
+  double delta_y = 5;
+  // "left" | "middle" | "right" | "none"
+  string button = 6;
+  uint32 click_count = 7;
+  // CDP modifier bitmask: 1 alt, 2 ctrl, 4 meta, 8 shift.
+  uint32 modifiers = 8;
+  string key = 9;
+  string code = 10;
+  string text = 11;
+}
+
+message BrowserInputRequest {
+  CommandMeta meta = 1;
+  string session_id = 2;
+  // Refused when it no longer matches the session: input aimed at a page that
+  // has already navigated is never replayed against the new one.
+  uint64 navigation_epoch = 3;
+  uint64 frame_seq = 4;
+  repeated BrowserInputEvent events = 5;
+}
+
+/* ---------------------------------- reads --------------------------------- */
+
+enum BrowserReadMode {
+  BROWSER_READ_MODE_UNSPECIFIED = 0;
+  BROWSER_READ_MODE_TEXT = 1;
+  BROWSER_READ_MODE_ELEMENTS = 2;
+  BROWSER_READ_MODE_LINKS = 3;
+  BROWSER_READ_MODE_TITLE = 4;
+  BROWSER_READ_MODE_CONSOLE = 5;
+  BROWSER_READ_MODE_NETWORK = 6;
+}
+
+// A reference bound to session/epoch. After a navigation the same string is
+// refused with STALE_TARGET rather than resolved against the new document.
+message BrowserElement {
+  string element_ref = 1;
+  string role = 2;
+  string name = 3;
+  string value = 4;
+  string selector = 5;
+  bool visible = 6;
+  double x = 7;
+  double y = 8;
+  double width = 9;
+  double height = 10;
+}
+
+message BrowserConsoleEntry {
+  int64 at_unix_ms = 1;
+  // "error" | "warning" | "info" | "log" | "debug" | "pageerror"
+  string level = 2;
+  string text = 3;
+  string url = 4;
+  uint32 line = 5;
+}
+
+// Summary only. Request and response bodies are never carried, and the header
+// set is deliberately absent rather than redacted (§6).
+message BrowserNetworkEntry {
+  int64 at_unix_ms = 1;
+  string method = 2;
+  string url = 3;
+  uint32 status = 4;
+  string mime_type = 5;
+  uint64 encoded_bytes = 6;
+  string failure_code = 7;
+  bool from_cache = 8;
+}
+
+message BrowserReadRequest {
+  CommandMeta meta = 1;
+  string session_id = 2;
+  BrowserReadMode mode = 3;
+  uint32 limit = 4;
+  uint32 max_bytes = 5;
+}
+
+message BrowserReadResponse {
+  string session_id = 1;
+  uint64 navigation_epoch = 2;
+  string url = 3;
+  string title = 4;
+  string text = 5;
+  repeated BrowserElement elements = 6;
+  repeated BrowserConsoleEntry console = 7;
+  repeated BrowserNetworkEntry network = 8;
+  // Set when a bound cut the answer; a silently halved page is worse than a
+  // short one that says so.
+  bool truncated = 9;
+}
+
+/* --------------------------------- actions -------------------------------- */
+
+message BrowserClickRequest {
+  CommandMeta meta = 1;
+  string session_id = 2;
+  uint64 navigation_epoch = 3;
+  // Exactly one of a CSS selector, an element reference from a read, or a
+  // viewport coordinate pair.
+  string selector = 4;
+  string element_ref = 5;
+  double x = 6;
+  double y = 7;
+  uint32 modifiers = 8;
+  uint32 click_count = 9;
+}
+
+message BrowserTypeRequest {
+  CommandMeta meta = 1;
+  string session_id = 2;
+  uint64 navigation_epoch = 3;
+  string selector = 4;
+  string element_ref = 5;
+  string text = 6;
+  // Clear the field before inserting instead of appending.
+  bool replace = 7;
+  // Press Enter afterwards. Never inferred from the text.
+  bool submit = 8;
+}
+
+message BrowserWaitRequest {
+  CommandMeta meta = 1;
+  string session_id = 2;
+  // At most one condition; "network idle" is not offered because it cannot be
+  // bounded honestly (§7).
+  string selector = 3;
+  string url_contains = 4;
+  string title_contains = 5;
+  uint32 timeout_ms = 6;
+}
+
+message BrowserWaitResponse {
+  bool matched = 1;
+  string reason_code = 2;
+  uint64 navigation_epoch = 3;
+  uint32 waited_ms = 4;
+}
+
+message BrowserCaptureRequest {
+  CommandMeta meta = 1;
+  string session_id = 2;
+  bool full_page = 3;
+  // "png" | "jpeg"
+  string format = 4;
+}
+
+message BrowserCaptureResponse {
+  // Workspace-relative path under `.armadra/`, never an absolute host path.
+  string path = 1;
+  uint32 width = 2;
+  uint32 height = 3;
+  bytes sha256 = 4;
+  uint64 bytes = 5;
+  uint64 navigation_epoch = 6;
+}
+
+/* -------------------------------- downloads ------------------------------- */
+
+enum BrowserDownloadState {
+  BROWSER_DOWNLOAD_STATE_UNSPECIFIED = 0;
+  // Held: nothing is written until a human accepts it (§6).
+  BROWSER_DOWNLOAD_STATE_PENDING = 1;
+  BROWSER_DOWNLOAD_STATE_IN_PROGRESS = 2;
+  BROWSER_DOWNLOAD_STATE_COMPLETED = 3;
+  BROWSER_DOWNLOAD_STATE_CANCELLED = 4;
+  BROWSER_DOWNLOAD_STATE_FAILED = 5;
+}
+
+message BrowserDownload {
+  string download_id = 1;
+  string session_id = 2;
+  string url = 3;
+  string suggested_filename = 4;
+  BrowserDownloadState state = 5;
+  // Workspace-relative, inside the project's download directory.
+  string path = 6;
+  uint64 total_bytes = 7;
+  uint64 received_bytes = 8;
+  int64 created_at_unix_ms = 9;
+  string reason_code = 10;
+}
+
+message BrowserDownloadDecisionRequest {
+  CommandMeta meta = 1;
+  string session_id = 2;
+  string download_id = 3;
+  bool accept = 4;
+}
+
+/* --------------------------------- envelope ------------------------------- */
+
+message CreateBrowserSessionRequest {
+  CommandMeta meta = 1;
+  string workspace_id = 2;
+  string node_id = 3;
+  string url = 4;
+  BrowserViewport viewport = 5;
+  bool headful = 6;
+}
+
+message CloseBrowserSessionRequest {
+  CommandMeta meta = 1;
+  string session_id = 2;
+  // False detaches the picture and leaves the page running (§9).
+  bool terminate = 3;
+}
+
+message ListBrowserSessionsRequest {
+  CommandMeta meta = 1;
+  string workspace_id = 2;
+}
+
+message ListBrowserSessionsResponse {
+  repeated BrowserSession sessions = 1;
+  BrowserAvailability availability = 2;
+}
+
+// The whole controlled-browser action surface, as one closed oneof. A caller
+// can only ask for what is named here.
+message BrowserAction {
+  oneof action {
+    CreateBrowserSessionRequest create = 1;
+    BrowserNavigateRequest navigate = 2;
+    BrowserInputRequest input = 3;
+    BrowserReadRequest read = 4;
+    BrowserClickRequest click = 5;
+    BrowserTypeRequest type = 6;
+    BrowserWaitRequest wait = 7;
+    BrowserCaptureRequest capture = 8;
+    BrowserSubscribeRequest subscribe = 9;
+    BrowserDownloadDecisionRequest download_decision = 10;
+    CloseBrowserSessionRequest close = 11;
+    ListBrowserSessionsRequest list = 12;
+  }
+}
+
+message BrowserActionResult {
+  string request_id = 1;
+  oneof result {
+    BrowserSession session = 10;
+    BrowserReadResponse read = 11;
+    BrowserWaitResponse wait = 12;
+    BrowserCaptureResponse capture = 13;
+    BrowserSubscription subscription = 14;
+    BrowserDownload download = 15;
+    ListBrowserSessionsResponse sessions = 16;
+    ErrorResponse error = 17;
+  }
+}
