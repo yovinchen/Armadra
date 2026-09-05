@@ -16,6 +16,13 @@
 //! each get a partial view of the upcall stream, and neither would be able to
 //! acknowledge on the other's behalf. A second connection is served requests
 //! and simply never owns the upward flow (see [`super::channel::serve`]).
+//!
+//! Binding can fail for a reason that is nobody's mistake: a Unix socket path
+//! is limited to roughly a hundred bytes, and a deep state directory exceeds
+//! it. That is why [`bind`] returns an error the caller degrades on rather than
+//! panicking — the Worker keeps stdio and the handshake simply publishes no
+//! address, which is an honest "you cannot reattach to me" instead of an
+//! address that would not connect.
 
 use std::{path::Path, sync::Arc};
 
