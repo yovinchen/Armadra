@@ -27,18 +27,37 @@ pub struct HunkQuery {
     scope: crate::git_hunks::GitHunkScope,
 }
 
-pub async fn message_providers(State(state): State<AppState>, AxumPath(id): AxumPath<String>) -> AppResult<Json<Vec<crate::git_message::GitMessageProvider>>> {
-    workspace(&state, &id, false).await?;
+pub async fn message_providers(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> AppResult<Json<Vec<crate::git_message::GitMessageProvider>>> {
+    let workspace = workspace(&state, &id, false).await?;
+    crate::git::access::require_execution(workspace.permissions.execute, "AI provider inspection")?;
     crate::git_message::providers().await.map(Json)
 }
-pub async fn message_source(State(state): State<AppState>, AxumPath(id): AxumPath<String>) -> AppResult<Json<crate::git_message::GitMessageSource>> {
+pub async fn message_source(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> AppResult<Json<crate::git_message::GitMessageSource>> {
     let workspace = workspace(&state, &id, false).await?;
-    crate::git_message::source(Path::new(&workspace.root_path)).await.map(Json)
+    crate::git::access::require_execution(
+        workspace.permissions.execute,
+        "AI staged-source inspection",
+    )?;
+    crate::git_message::source(Path::new(&workspace.root_path))
+        .await
+        .map(Json)
 }
-pub async fn message_generate(State(state): State<AppState>, AxumPath(id): AxumPath<String>, Json(request): Json<crate::git_message::GitMessageRequest>) -> AppResult<Json<crate::git_message::GitMessageDraft>> {
+pub async fn message_generate(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(request): Json<crate::git_message::GitMessageRequest>,
+) -> AppResult<Json<crate::git_message::GitMessageDraft>> {
     let workspace = workspace(&state, &id, false).await?;
-    if !workspace.permissions.execute { return Err(AppError::Forbidden("Workspace does not allow AI execution".into())); }
-    crate::git_message::generate(Path::new(&workspace.root_path), request).await.map(Json)
+    crate::git::access::require_execution(workspace.permissions.execute, "AI generation")?;
+    crate::git_message::generate(Path::new(&workspace.root_path), request)
+        .await
+        .map(Json)
 }
 
 pub async fn hunks(
@@ -47,7 +66,13 @@ pub async fn hunks(
     Query(query): Query<HunkQuery>,
 ) -> AppResult<Json<crate::git_hunks::GitHunkDiff>> {
     let workspace = workspace(&state, &id, false).await?;
-    crate::git_hunks::read_hunks(Path::new(&workspace.root_path), &query.file, query.scope).await.map(Json)
+    crate::git::access::require_execution(
+        workspace.permissions.execute,
+        "Git hunk worktree validation",
+    )?;
+    crate::git_hunks::read_hunks(Path::new(&workspace.root_path), &query.file, query.scope)
+        .await
+        .map(Json)
 }
 
 pub async fn apply_hunk(
@@ -56,7 +81,10 @@ pub async fn apply_hunk(
     Json(request): Json<crate::git_hunks::GitHunkMutation>,
 ) -> AppResult<Json<crate::git_hunks::GitHunkResult>> {
     let workspace = workspace(&state, &id, true).await?;
-    crate::git_hunks::apply_hunk(Path::new(&workspace.root_path), request).await.map(Json)
+    crate::git::access::require_execution(workspace.permissions.execute, "Git hunk writes")?;
+    crate::git_hunks::apply_hunk(Path::new(&workspace.root_path), request)
+        .await
+        .map(Json)
 }
 
 #[derive(Deserialize)]
@@ -80,27 +108,74 @@ pub struct CherryPickQuery {
     oid: String,
     mainline: Option<u32>,
 }
-pub async fn cherry_pick_preview(State(state):State<AppState>,AxumPath(id):AxumPath<String>,Query(query):Query<CherryPickQuery>) -> AppResult<Json<CherryPickPreview>> {
-    let workspace=workspace(&state,&id,false).await?;
-    REPOSITORIES.cherry_pick_preview(Path::new(&workspace.root_path),&query.path,&query.oid,query.mainline).await.map(Json)
+pub async fn cherry_pick_preview(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<CherryPickQuery>,
+) -> AppResult<Json<CherryPickPreview>> {
+    let workspace = workspace(&state, &id, false).await?;
+    REPOSITORIES
+        .with_execution(workspace.permissions.execute)
+        .cherry_pick_preview(
+            Path::new(&workspace.root_path),
+            &query.path,
+            &query.oid,
+            query.mainline,
+        )
+        .await
+        .map(Json)
 }
-pub async fn stashes(State(state):State<AppState>,AxumPath(id):AxumPath<String>,Query(query):Query<RepositoryQuery>) -> AppResult<Json<StashSnapshot>> {
-    let workspace=workspace(&state,&id,false).await?;
-    REPOSITORIES.stashes(Path::new(&workspace.root_path),&query.path).await.map(Json)
+pub async fn stashes(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<RepositoryQuery>,
+) -> AppResult<Json<StashSnapshot>> {
+    let workspace = workspace(&state, &id, false).await?;
+    REPOSITORIES
+        .with_execution(workspace.permissions.execute)
+        .stashes(Path::new(&workspace.root_path), &query.path)
+        .await
+        .map(Json)
 }
-pub async fn integration(State(state):State<AppState>,AxumPath(id):AxumPath<String>,Query(query):Query<RepositoryQuery>) -> AppResult<Json<IntegrationSnapshot>> {
-    let workspace=workspace(&state,&id,false).await?;
-    let mut result=REPOSITORIES.integration_status(Path::new(&workspace.root_path),&query.path).await?;
-    let owners=OWNERS.lock().map_err(|_|AppError::Internal("Git operation scope lock failed".into()))?;
-    if result.session_id.as_ref().and_then(|session| owners.get(session))!=Some(&id) {
-        result.owned=false;result.session_id=None;result.can_continue=false;result.can_skip=false;
-        result.mainline=None;result.original_head=None;
+pub async fn integration(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<RepositoryQuery>,
+) -> AppResult<Json<IntegrationSnapshot>> {
+    let workspace = workspace(&state, &id, false).await?;
+    let mut result = REPOSITORIES
+        .with_execution(workspace.permissions.execute)
+        .integration_status(Path::new(&workspace.root_path), &query.path)
+        .await?;
+    let owners = OWNERS
+        .lock()
+        .map_err(|_| AppError::Internal("Git operation scope lock failed".into()))?;
+    if result
+        .session_id
+        .as_ref()
+        .and_then(|session| owners.get(session))
+        != Some(&id)
+    {
+        result.owned = false;
+        result.session_id = None;
+        result.can_continue = false;
+        result.can_skip = false;
+        result.mainline = None;
+        result.original_head = None;
     }
     Ok(Json(result))
 }
-pub async fn stash_detail(State(state):State<AppState>,AxumPath(id):AxumPath<String>,Query(query):Query<StashQuery>) -> AppResult<Json<StashDetail>> {
-    let workspace=workspace(&state,&id,false).await?;
-    REPOSITORIES.stash_detail(Path::new(&workspace.root_path),&query.path,&query.oid).await.map(Json)
+pub async fn stash_detail(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<StashQuery>,
+) -> AppResult<Json<StashDetail>> {
+    let workspace = workspace(&state, &id, false).await?;
+    REPOSITORIES
+        .with_execution(workspace.permissions.execute)
+        .stash_detail(Path::new(&workspace.root_path), &query.path, &query.oid)
+        .await
+        .map(Json)
 }
 fn head_reference() -> String {
     "HEAD".into()
@@ -147,6 +222,7 @@ pub async fn branches(
 ) -> AppResult<Json<BranchSnapshot>> {
     let workspace = workspace(&state, &id, false).await?;
     REPOSITORIES
+        .with_execution(workspace.permissions.execute)
         .branches(Path::new(&workspace.root_path), &query.path)
         .await
         .map(Json)
@@ -158,6 +234,7 @@ pub async fn history(
 ) -> AppResult<Json<HistoryPage>> {
     let workspace = workspace(&state, &id, false).await?;
     REPOSITORIES
+        .with_execution(workspace.permissions.execute)
         .history(
             Path::new(&workspace.root_path),
             &query.path,
@@ -177,6 +254,7 @@ pub async fn worktrees(
 ) -> AppResult<Json<Vec<WorktreeRecord>>> {
     let workspace = workspace(&state, &id, false).await?;
     REPOSITORIES
+        .with_execution(workspace.permissions.execute)
         .worktrees(Path::new(&workspace.root_path), &query.path)
         .await
         .map(Json)
@@ -187,9 +265,15 @@ pub async fn start(
     Json(request): Json<StartOperation>,
 ) -> AppResult<Json<OperationSnapshot>> {
     let workspace = workspace(&state, &id, true).await?;
+    crate::git::access::require_execution(
+        workspace.permissions.execute,
+        "Git repository writes and synchronization",
+    )?;
     match &request.action {
-        RepositoryAction::ContinueIntegration { session_id, .. } | RepositoryAction::AbortIntegration { session_id, .. } | RepositoryAction::SkipIntegration { session_id, .. } => {
-            scoped_operation(&state,&id,session_id,true).await?;
+        RepositoryAction::ContinueIntegration { session_id, .. }
+        | RepositoryAction::AbortIntegration { session_id, .. }
+        | RepositoryAction::SkipIntegration { session_id, .. } => {
+            scoped_operation(&state, &id, session_id, true).await?;
         }
         _ => {}
     }
@@ -214,8 +298,13 @@ pub async fn operations(
     Query(query): Query<RepositoryQuery>,
 ) -> AppResult<Json<Vec<OperationSnapshot>>> {
     let workspace = workspace(&state, &id, false).await?;
-    let mut operations = REPOSITORIES.list_operations(Path::new(&workspace.root_path), &query.path).await?;
-    let owners = OWNERS.lock().map_err(|_| AppError::Internal("Git operation scope lock failed".into()))?;
+    let mut operations = REPOSITORIES
+        .with_execution(workspace.permissions.execute)
+        .list_operations(Path::new(&workspace.root_path), &query.path)
+        .await?;
+    let owners = OWNERS
+        .lock()
+        .map_err(|_| AppError::Internal("Git operation scope lock failed".into()))?;
     operations.retain(|operation| owners.get(&operation.id) == Some(&id));
     Ok(Json(operations))
 }

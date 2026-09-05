@@ -59,6 +59,7 @@ impl RepositoryService {
         workspace_root: &Path,
         requested: &str,
     ) -> AppResult<StashSnapshot> {
+        crate::git::access::require_execution(self.allow_helpers, "Git stash worktree state")?;
         let context = self.context(workspace_root, requested).await?;
         let (snapshot, _) = self
             .stash_snapshot(&context, &Cancellation::default())

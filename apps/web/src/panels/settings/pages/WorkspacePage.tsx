@@ -1,3 +1,4 @@
+import { WorkspaceExecution } from "./WorkspaceExecution";
 import { useAgentsQuery } from "../../../app/use-agents";
 import { useT } from "../../../app/preferences-store";
 import { useCanvasStore } from "../../../store/canvas-store";
@@ -46,6 +47,7 @@ export function WorkspacePage() {
 
   return (
     <>
+      <WorkspaceExecution />
       <SettingsGroup>
         <SettingsRow label={t("settings.agentMessaging")}>
           <Switch

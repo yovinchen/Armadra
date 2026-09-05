@@ -2,6 +2,10 @@ import type { MessageModule } from "./index";
 
 export const gitRepository: MessageModule = {
   "zh-CN": {
+    "gitRepo.executionRequired": "此 Git 操作需要工作区执行权限。请在设置 → 工作区开启后重试；Git 可能调用仓库钩子、过滤器或远程连接程序。",
+    "gitRepo.allowExecution": "允许工作区执行命令",
+    "gitRepo.executionDetail": "控制应用发起的新命令，包含 Git 钩子、过滤器和远程连接。关闭不会终止已经运行的进程。",
+    "gitRepo.permissionSaveFailed": "无法保存工作区执行权限",
     "gitRepo.recentOperations": "本次后台运行期间的操作",
     "gitRepo.submitting": "正在提交操作…",
     "gitRepo.chooseBranch": "选择已有分支",
@@ -88,6 +92,10 @@ export const gitRepository: MessageModule = {
     "gitRepo.stale": "仓库已变化，请重新读取后再操作。",
   },
   en: {
+    "gitRepo.executionRequired": "This Git operation requires workspace execution permission. Enable it in Settings → Workspace, then retry. Git may invoke hooks, filters, or remote connection programs.",
+    "gitRepo.allowExecution": "Allow workspace commands",
+    "gitRepo.executionDetail": "Controls new commands started by the app, including Git hooks, filters, and remote connections. Turning it off does not stop running processes.",
+    "gitRepo.permissionSaveFailed": "Could not save workspace execution permission",
     "gitRepo.recentOperations": "Operations in this Runtime session",
     "gitRepo.submitting": "Submitting operation…",
     "gitRepo.chooseBranch": "Choose an existing branch",

@@ -1961,7 +1961,7 @@ async fn a_browser_node_reads_as_its_url_and_a_diff_as_its_patch() {
         &fixture,
         "diff",
         "变更",
-        json!({ "kind": "diff", "repoPath": ".", "scope": "worktree" }),
+        json!({ "kind": "diff", "repoPath": ".", "scope": "staged" }),
     )
     .await;
 
@@ -1986,6 +1986,63 @@ async fn a_browser_node_reads_as_its_url_and_a_diff_as_its_patch() {
         .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert!(body.contains("Git"), "{body}");
+}
+
+#[tokio::test]
+async fn linked_git_diff_honors_execution_permission_and_keeps_staged_reads_available() {
+    let fixture = fixture("linked-git-permission").await;
+    let run = |arguments: &[&str]| {
+        let output = std::process::Command::new("git")
+            .args(arguments)
+            .current_dir(fixture.directory.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    };
+    run(&["init", "--quiet"]);
+    std::fs::write(fixture.directory.path().join("proof.txt"), "staged proof\n").unwrap();
+    run(&["add", "--", "proof.txt"]);
+    sqlx::query("UPDATE workspaces SET permissions_json=? WHERE id=?")
+        .bind(r#"{"read":true,"write":true,"execute":false}"#)
+        .bind(&fixture.workspace_id)
+        .execute(&fixture.state.pool)
+        .await
+        .unwrap();
+    let staged = add_linked_node(
+        &fixture,
+        "diff",
+        "staged",
+        json!({"kind":"diff","repoPath":".","scope":"staged"}),
+    )
+    .await;
+    let worktree = add_linked_node(
+        &fixture,
+        "diff",
+        "worktree",
+        json!({"kind":"diff","repoPath":".","scope":"worktree"}),
+    )
+    .await;
+    let (status, body) = fixture
+        .call(
+            "/context-link/summary",
+            &fixture.caller_id,
+            json!({"node":worktree}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    let (status, body) = fixture
+        .call(
+            "/context-link/summary",
+            &fixture.caller_id,
+            json!({"node":staged}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body.contains("+staged proof"), "{body}");
 }
 
 #[tokio::test]

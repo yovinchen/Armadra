@@ -395,6 +395,7 @@ impl Drop for RepositoryCommandLease {
 pub struct RepositoryService {
     inner: Arc<Inner>,
     command_timeout: Duration,
+    allow_helpers: bool,
 }
 impl Default for RepositoryService {
     fn default() -> Self {
@@ -432,6 +433,16 @@ impl RepositoryService {
         Self {
             inner: Arc::default(),
             command_timeout: Duration::from_secs(120),
+            allow_helpers: true,
+        }
+    }
+
+    /// This affects only this clone's typed Git commands, not other OS
+    /// processes or lifecycle leases. The API supplies the workspace grant.
+    pub fn with_execution(&self, execute: bool) -> Self {
+        Self {
+            allow_helpers: execute,
+            ..self.clone()
         }
     }
 
@@ -505,13 +516,23 @@ impl RepositoryService {
             return Err(AppError::BadRequest("Git path must be a directory".into()));
         }
         let inside = self
-            .read(
+            .output(
                 &directory,
                 args(&["rev-parse", "--is-inside-work-tree"]),
+                self.command_timeout.min(Duration::from_secs(15)),
                 token,
+                None,
             )
             .await?;
-        if one_line(&inside)? != "true" {
+        if inside.status != Some(0) {
+            if String::from_utf8_lossy(&inside.stderr).contains("not a git repository") {
+                return Err(AppError::BadRequest(
+                    "Path is not a Git working repository".into(),
+                ));
+            }
+            return Err(command_error(&inside));
+        }
+        if one_line(&inside.stdout)? != "true" {
             return Err(AppError::BadRequest(
                 "Path is not a working Git repository".into(),
             ));
@@ -732,6 +753,7 @@ impl RepositoryService {
         workspace_root: &Path,
         requested: &str,
     ) -> AppResult<Vec<WorktreeRecord>> {
+        crate::git::access::require_execution(self.allow_helpers, "Git worktree inspection")?;
         let context = self.context(workspace_root, requested).await?;
         self.worktree_records(&context, &Cancellation::default())
             .await
@@ -744,6 +766,10 @@ impl RepositoryService {
         action: RepositoryAction,
         expected: ExpectedState,
     ) -> AppResult<OperationSnapshot> {
+        crate::git::access::require_execution(
+            self.allow_helpers,
+            "Git repository writes and synchronization",
+        )?;
         let context = self.context(&workspace_root, &requested).await?;
         self.validate_action(&context, &action).await?;
         if expected
@@ -997,6 +1023,11 @@ impl RepositoryService {
         token: &Cancellation,
         mutation_started: Option<Arc<AtomicBool>>,
     ) -> AppResult<CommandOutput> {
+        let arguments = crate::git::access::arguments(arguments, self.allow_helpers)?;
+        let policy = GitRunPolicy {
+            timeout,
+            allow_helpers: self.allow_helpers,
+        };
         let lease = self.command_lease()?;
         let directory = directory.to_owned();
         let token = token.clone();
@@ -1008,7 +1039,7 @@ impl RepositoryService {
             run_git_status(
                 &directory,
                 arguments,
-                timeout,
+                policy,
                 &token,
                 mutation_started.as_deref(),
                 &lease,
@@ -2330,10 +2361,14 @@ async fn read_output(mut reader: impl AsyncRead + Unpin, limit: usize) -> AppRes
     }
 }
 
+struct GitRunPolicy {
+    timeout: Duration,
+    allow_helpers: bool,
+}
 async fn run_git_status(
     directory: &Path,
     arguments: Vec<String>,
-    timeout: Duration,
+    policy: GitRunPolicy,
     token: &Cancellation,
     mutation_started: Option<&AtomicBool>,
     lease: &RepositoryCommandLease,
@@ -2392,6 +2427,9 @@ async fn run_git_status(
             command.env_remove(name);
         }
     }
+    if !policy.allow_helpers {
+        crate::git::access::restrict_async(&mut command);
+    }
     let mut child = command
         .spawn()
         .map_err(|_| AppError::Internal("Could not start Git".into()))?;
@@ -2418,7 +2456,7 @@ async fn run_git_status(
         _ = token.cancelled() => Err(AppError::Conflict("Git process was cancelled; verify repository/remote state before retrying".into())),
         _ = caller.cancelled() => Err(AppError::Conflict("Git request cancelled".into())),
         _ = lease.inner.stopping.cancelled() => Err(shutting_down()),
-        _ = tokio::time::sleep(timeout) => Err(AppError::Internal("Git process timed out; verify repository/remote state before retrying".into())),
+        _ = tokio::time::sleep(policy.timeout) => Err(AppError::Internal("Git process timed out; verify repository/remote state before retrying".into())),
     };
     if result.is_err() {
         let _ = child.start_kill();

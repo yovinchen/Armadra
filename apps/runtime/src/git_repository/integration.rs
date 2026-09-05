@@ -89,6 +89,10 @@ impl RepositoryService {
         root: &Path,
         requested: &str,
     ) -> AppResult<IntegrationSnapshot> {
+        crate::git::access::require_execution(
+            self.allow_helpers,
+            "Git integration worktree state",
+        )?;
         // Read and reconcile only after queued mutations have fully finished;
         // a commit briefly removes MERGE_HEAD before its post-commit work ends.
         let guard = self.mutation_guard(root, requested).await?;

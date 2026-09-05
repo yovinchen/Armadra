@@ -687,3 +687,19 @@ describe("WebSocket 地址", () => {
     );
   });
 });
+
+describe("Git execution permission errors", () => {
+  it("uses the stable server code for actionable text and preserves unrelated errors", async () => {
+    stubJson({ code: "git_execution_required", message: "Internal Git stage label" }, false, 403);
+    try {
+      await runtimeApi.listWorkspaces();
+      throw new Error("Expected rejection");
+    } catch (error) {
+      expect(error).toBeInstanceOf(RuntimeRequestError);
+      expect((error as RuntimeRequestError).code).toBe("git_execution_required");
+      expect((error as Error).message).not.toBe("Internal Git stage label");
+      expect((error as Error).message).toMatch(/工作区|Workspace/);
+    }
+    expect(new RuntimeRequestError(403, "plain", "forbidden").message).toBe("plain");
+  });
+});

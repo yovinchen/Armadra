@@ -17,9 +17,9 @@
 | ----- | -------- | -------------------------------------------------------------------------------------------------- |
 | M0    | 部分完成 | 三语言协议及真实 Host 握手完成；macOS CDP 核验通过，Windows 仅交叉检查，实机与完整 Worker 仍待完成 |
 | M1    | 进行中   | 身份、HTTPS设备认证、持久存储、迁移核验和生命周期已完成；业务权威切换、Worker和剩余平台验收未完成 |
-| M2–M3 | 进行中 | 只读Worker桥接已完成；调度内核、上下文UI进行中，完整执行与Agent流程仍待完成 |
-| M4 | 进行中 | 分支/同步/历史/worktree、hunk、AI提交草稿和stash已落地；合并/冲突恢复、分组与其余进阶流程继续 |
-| M5–M7 | 待实施 | GitHub、受控浏览器、远程设备及系统能力仍按阶段交付 |
+| M2–M3 | 进行中 | 只读Worker、持久调度内核、单会话上下文UI及能力继承已提交；实际调度执行与Agent交接仍在接线 |
+| M4 | 进行中 | 分支/同步/历史/worktree、hunk、AI提交草稿、stash、merge与cherry-pick已落地；权限修复、rebase、worktree分组及持久恢复继续 |
+| M5–M7 | 进行中 | 编辑器内容版本保存已加强；GitHub、受控浏览器、远程业务接管及系统能力尚未完整交付 |
 | M8    | 预留范围 | 多人、多账号及发布更新只按设计交付前期契约                                                         |
 
 ## 按需求核对的接续清单
@@ -31,18 +31,18 @@
 | C01 | Canvas/API/保存链路已移除可写Kanban；SQLite v3保留不可变历史归档 | 原始旧列/卡片、标签/备注归档与写保护已完成；普通备注和绘图继续保留 |
 | C02 | 已有 tldraw 自由图形、图片、Frame 与上下文链接 | 迁移前后 ID、位置、资源、嵌套 Frame、白板摘要和链接一致 |
 | A01 | 原生 Agent 状态和子任务展示已有基础 | 原生循环活动与平台 Loop/Cron/Schedule 两套独立数据、节点与操作 |
-| A02 | Go Host 已可独立于桌面进程存活 | 持久计划、时区、执行收据、运行历史；零客户端与崩溃恢复实测 |
-| A03 | `agent.rs` 已支持自定义 Agent 继承基础定义 | CLI/主机能力协商；会话上下文准确/估计/未知状态，模型切换与分母校验 |
+| A02 | Go Host独立保活，持久调度内核与计划/收据Protobuf已提交 | 实际命令Worker与调度器接线、操作API/UI、零客户端执行及崩溃恢复端到端验收 |
+| A03 | Claude真实单会话上下文、unknown/stale UI、代次绑定及禁用能力继承已提交 | 其他Provider仍unknown；估算器未实现，CLI/远程主机完整能力协商随接管继续 |
 | A04 | `collab/mailbox.rs` 已有持久消息箱、幂等键与确认 | 带预算、来源、文件及提交指纹的交接预览/接受/失败恢复 |
 | A05 | `TerminalSurface.tsx` 已处理 OSC 标题与手工标题保护 | 持久命名来源与 AI 命名仍待；AI 提交草稿、过滤和独立填入/提交已交付 |
 | G01 | `git.rs` 已有状态、diff、文件暂存/取消暂存/还原、提交与克隆 | hunk和统一操作/关停状态已交付；冲突恢复与跨平台完整场景验收继续 |
-| G02 | 分支管理、fetch/ff-only pull/non-force push、操作队列、稳定历史分页和父关系图已实现 | 操作重载恢复、stash已交付；merge/rebase/cherry-pick及冲突继续/中止进行中 |
+| G02 | 分支管理、fetch/ff-only pull/non-force push、操作队列、稳定历史分页和父关系图已实现 | 本次Runtime内操作重载、stash、merge/cherry-pick及冲突继续/中止/空Skip已交付；rebase和跨Runtime持久恢复未完成 |
 | G03 | worktree 列表、创建、安全移除及私有目录排除已实现 | repair、Frame 分组绑定、路径继承与初始化脚本 |
 | G04 | 无目标 GitHub 面板交付记录 | Issues 状态映射与远端回写、PR 创建/评审/检查/合并及预期 SHA 校验 |
-| E01 | `EditorNode.tsx` 已有 CodeMirror、语法扩展、脏状态与保存冲突提示 | 文件工作流完整性、外部变更处理、远程版本保存与语言服务 |
+| E01 | CodeMirror语法、SHA内容版本保存、并发输入/切换文件/权限变更草稿保护已提交 | 外部变更比较/重载、搜索与文件工作流、远程Worker写入、语言服务 |
 | B01 | `BrowserNode.tsx` 为 iframe 预览；另有独立 CDP 探针 | Rust Browser Worker、持久浏览会话、输入/帧流、权限及人与 Agent 共用会话 |
 | H01 | Protobuf 握手/本机控制、Go Host 后台启停、Tauri 启动接线 | 持久存储与staging导入验证已交付；业务协议、写入所有权切换、Worker及事件恢复继续 |
-| H02 | `terminal/ssh.rs` 已有 SSH 配置、连接测试与命令启动 | TLS/设备认证内核与API已交付；前端/原生接线、远端Worker及统一执行位置继续 |
+| H02 | `terminal/ssh.rs` 已有 SSH 配置、连接测试与命令启动 | TLS/设备认证内核、API及HTTPS同源设置UI已交付；静态前端托管/原生认证桥、远端Worker及统一执行位置继续 |
 | H03 | 当前画布与设置已有窄屏适配验证 | 各新增工作流手机焦点页、触摸/软键盘操作、远程断线恢复与实机验收 |
 | H04 | 设计约定身份、权限、租约和 Presence | 将预留契约落实到协议与能力响应；暂不开放多人操作 |
 | T01 | 当前 direct PTY 与 Unix tmux；Windows ConPTY 仅编译探针 | 独立 Windows Session Host、无头 VT；UI/Host/Worker 分别退出后重附着 |
@@ -383,3 +383,10 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - 保存使用独占临时文件、同步与发布前重核，保留文件权限；拒绝只读文件和链接写入，文件名空白按原样处理。外部程序不共享应用锁，不能将最后一次检查描述为操作系统级原子内容CAS。
 - 编辑器保存期间的新输入继续保持未保存状态，迟到响应不能更新另一文件的版本；权限切换热更新只读状态，保留草稿、光标与撤销栈，恢复到已保存文本时清除dirty。旧服务未提供内容版本时仅预览。
 - Rust文件10项及真实API读取→同长度外改→拒绝覆盖→重读保存通过；真实CodeMirror组件保存竞态4项、附件3项、shared74项、前端类型检查与Runtime Clippy通过。完整外部变更比较/重载工作流、搜索/LSP等仍在E01后续范围，本批不标为完整编辑器交付。
+
+## 连续实施：Git 执行权限与可操作提示
+
+- 真实仓库配置验证了status/worktree diff也可能执行clean filter、fsmonitor；所有涉及工作区检查、写入和网络的入口都要求execute权限。无execute时仅保留受限的metadata/index/object读取，并关闭钩子、签名展示、外部diff/textconv、远程协议和隐式对象拉取；不在写入时偷偷去掉真实filter转换。
+- 克隆落在已有工作区内部时检查所有祖先的read/write/execute限制；工作区外的新项目仍属于用户明确发起的创建操作。权限撤销后仍可查看、取消原有受控操作。Context Link读取diff也传递目标工作区权限，避免从Agent引用入口绕过。
+- Runtime返回稳定git_execution_required/403，所有客户端错误展示转换为中英文处理说明。设置→工作区增加明确的执行开关，保持read/write值、等待保存确认，刷新Git视图；迟到响应不会切换当前工作区。此开关约束应用新发起操作，不声称是OS沙箱，也不自动终止已有进程。
+- 6项真实配置脚本/远程helper/本地凭据服务回归、6项Git API、旧接口403→授权后非仓库400及Context Link真实仓库回归通过；54项客户端/权限UI/i18n定向测试、最新Web全套1075项、类型检查与Runtime Clippy通过。没有访问真实用户远端或推送项目。

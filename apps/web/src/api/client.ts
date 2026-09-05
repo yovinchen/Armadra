@@ -138,7 +138,7 @@ export class RuntimeRequestError extends Error {
   readonly code?: string;
 
   constructor(status: number, message: string, code?: string) {
-    super(message);
+    super(code === "git_execution_required" ? t("gitRepo.executionRequired") : message);
     this.name = "RuntimeRequestError";
     this.status = status;
     this.code = code;

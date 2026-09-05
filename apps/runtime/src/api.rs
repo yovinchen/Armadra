@@ -1541,6 +1541,11 @@ pub async fn git_diff(
     Query(query): Query<GitDiffQuery>,
 ) -> AppResult<Json<git::GitDiff>> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
+    if !workspace.permissions.read {
+        return Err(AppError::Forbidden(
+            "Workspace does not allow Git reads".into(),
+        ));
+    }
     let paths = query
         .paths
         .as_deref()
@@ -1550,13 +1555,14 @@ pub async fn git_diff(
         .filter(|path| !path.is_empty())
         .map(str::to_owned)
         .collect();
-    Ok(Json(git::read_diff(
+    Ok(Json(git::read_diff_with_execution(
         Path::new(&workspace.root_path),
         &query.path,
         &git::DiffRequest {
             scope: query.scope,
             paths,
         },
+        workspace.permissions.execute,
     )?))
 }
 
@@ -1565,6 +1571,12 @@ pub async fn git_status(
     AxumPath(workspace_id): AxumPath<String>,
 ) -> AppResult<Json<git::GitStatus>> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
+    if !workspace.permissions.read {
+        return Err(AppError::Forbidden(
+            "Workspace does not allow Git reads".into(),
+        ));
+    }
+    git::access::require_execution(workspace.permissions.execute, "Git worktree status")?;
     Ok(Json(git::read_status(Path::new(&workspace.root_path))?))
 }
 
@@ -1585,6 +1597,10 @@ pub async fn git_stage(
             "Workspace does not allow Git writes".into(),
         ));
     }
+    git::access::require_execution(
+        workspace.permissions.execute,
+        "Git index, worktree, and commit writes",
+    )?;
     let guard = crate::git_api::REPOSITORIES
         .mutation_guard(Path::new(&workspace.root_path), ".")
         .await?;
@@ -1607,6 +1623,10 @@ pub async fn git_unstage(
             "Workspace does not allow Git writes".into(),
         ));
     }
+    git::access::require_execution(
+        workspace.permissions.execute,
+        "Git index, worktree, and commit writes",
+    )?;
     let guard = crate::git_api::REPOSITORIES
         .mutation_guard(Path::new(&workspace.root_path), ".")
         .await?;
@@ -1629,6 +1649,10 @@ pub async fn git_revert(
             "Workspace does not allow Git writes".into(),
         ));
     }
+    git::access::require_execution(
+        workspace.permissions.execute,
+        "Git index, worktree, and commit writes",
+    )?;
     let guard = crate::git_api::REPOSITORIES
         .mutation_guard(Path::new(&workspace.root_path), ".")
         .await?;
@@ -1658,6 +1682,10 @@ pub async fn git_commit(
             "Workspace does not allow Git writes".into(),
         ));
     }
+    git::access::require_execution(
+        workspace.permissions.execute,
+        "Git index, worktree, and commit writes",
+    )?;
     let guard = crate::git_api::REPOSITORIES
         .mutation_guard(Path::new(&workspace.root_path), ".")
         .await?;
@@ -1704,8 +1732,34 @@ pub struct CloneStatusResponse {
 /// Start `git clone --progress` in the background (plan §20). There is no
 /// workspace to publish events into yet, so the dialog polls
 /// `GET /api/git/clone/{job_id}` instead.
-pub async fn git_clone(Json(request): Json<CloneRequest>) -> AppResult<Json<CloneStartedResponse>> {
-    let started = git::start_clone(&request.url, &request.parent, request.name.as_deref())?;
+pub async fn git_clone(
+    State(state): State<AppState>,
+    Json(request): Json<CloneRequest>,
+) -> AppResult<Json<CloneStartedResponse>> {
+    // A new project has no grant yet. If its destination is inside existing
+    // workspaces, preserve every ancestor's restrictions instead of bypassing
+    // them through this global creation endpoint.
+    let parent = canonical_directory(&request.parent)?;
+    for summary in db::list_workspaces(&state.pool).await? {
+        let workspace = summary.workspace;
+        if let Ok(root) = canonical_directory(&workspace.root_path)
+            && parent.starts_with(&root)
+        {
+            if !workspace.permissions.read || !workspace.permissions.write {
+                return Err(AppError::Forbidden(
+                    "An ancestor workspace does not allow cloning into this destination".into(),
+                ));
+            }
+            git::access::require_execution(
+                workspace.permissions.execute,
+                "Cloning into an existing workspace",
+            )?;
+        }
+    }
+    let parent = parent
+        .to_str()
+        .ok_or_else(|| AppError::BadRequest("Clone destination must be a UTF-8 path".into()))?;
+    let started = git::start_clone(&request.url, parent, request.name.as_deref())?;
     Ok(Json(CloneStartedResponse {
         job_id: started.job_id,
     }))
@@ -3148,6 +3202,23 @@ mod tests {
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert_eq!(missing["code"], "not_found");
 
+        let (status, denied) = call(
+            &router,
+            "POST",
+            &format!("/api/workspaces/{workspace_id}/git/commit"),
+            Some(json!({ "message": "nothing here" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(denied["code"], "git_execution_required");
+        let (status, _) = call(
+            &router,
+            "PATCH",
+            &format!("/api/workspaces/{workspace_id}"),
+            Some(json!({"permissions":{"read":true,"write":true,"execute":true}})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
         let (status, commit) = call(
             &router,
             "POST",

@@ -488,8 +488,21 @@ async fn read_node_diff(state: &AppState, target: &NodeRef) -> Result<String, Re
         })
         .unwrap_or_default();
     let root = root_of(state, target).await?;
-    let diff = git::read_diff(&root, requested, &git::DiffRequest { scope, paths })
-        .map_err(|error| failed(target, error))?;
+    let workspace = db::get_workspace(&state.pool, &target.workspace_id)
+        .await
+        .map_err(internal)?;
+    if scope == git::DiffScope::Worktree && !workspace.permissions.execute {
+        return Err(Refusal::forbidden(
+            "Git worktree diff requires workspace execution permission",
+        ));
+    }
+    let diff = git::read_diff_with_execution(
+        &root,
+        requested,
+        &git::DiffRequest { scope, paths },
+        workspace.permissions.execute,
+    )
+    .map_err(|error| failed(target, error))?;
     if !diff.repository {
         return Ok(format!("「{}」不在一个 Git 仓库里。\n", target.title));
     }

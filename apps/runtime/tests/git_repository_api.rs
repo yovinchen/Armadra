@@ -72,6 +72,11 @@ async fn repository_routes_preserve_scope_permissions_and_real_operation_state()
     let other_workspace = db::create_workspace(&pool, "other", other.to_str().unwrap(), None, None)
         .await
         .unwrap();
+    // These happy-path scenarios explicitly authorize Git helpers; denial is
+    // covered independently with real sentinel scripts.
+    sqlx::query("UPDATE workspaces SET permissions_json = ?")
+        .bind(r#"{"read":true,"write":true,"execute":true}"#)
+        .execute(&pool).await.unwrap();
     let events = EventHub::new();
     let settings = SettingsStore::in_memory(json!({"terminal":{"backend":"direct"}}));
     let app = router_with_state(AppState {

@@ -9,6 +9,8 @@ pub enum AppError {
     #[error("{0}")]
     Forbidden(String),
     #[error("{0}")]
+    GitExecutionRequired(String),
+    #[error("{0}")]
     NotFound(String),
     #[error("{0}")]
     Conflict(String),
@@ -40,6 +42,7 @@ impl IntoResponse for AppError {
         let (status, code, message) = match self {
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, "bad_request", message),
             Self::Forbidden(message) => (StatusCode::FORBIDDEN, "forbidden", message),
+            Self::GitExecutionRequired(message) => (StatusCode::FORBIDDEN,"git_execution_required",message),
             Self::NotFound(message) => (StatusCode::NOT_FOUND, "not_found", message),
             Self::Conflict(message) => (StatusCode::CONFLICT, "conflict", message),
             Self::Io(error) => {

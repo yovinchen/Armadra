@@ -7,6 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+pub(crate) mod access;
 mod command;
 #[cfg(test)]
 use std::process::Command;
@@ -82,6 +83,13 @@ pub struct RepoContext {
 }
 
 fn repo_context(workspace_root: &Path, requested: &str) -> AppResult<Option<RepoContext>> {
+    repo_context_with_execution(workspace_root, requested, true)
+}
+fn repo_context_with_execution(
+    workspace_root: &Path,
+    requested: &str,
+    execute: bool,
+) -> AppResult<Option<RepoContext>> {
     let workspace_root = canonical_directory(workspace_root)?;
     let requested_directory = resolve_in_root(&workspace_root, requested)?;
     if !requested_directory.is_dir() {
@@ -89,8 +97,14 @@ fn repo_context(workspace_root: &Path, requested: &str) -> AppResult<Option<Repo
     }
     let mut process = command::git_command();
     process
-        .args(["rev-parse", "--is-inside-work-tree"])
+        .args(access::arguments(
+            vec!["rev-parse".into(), "--is-inside-work-tree".into()],
+            execute,
+        )?)
         .current_dir(&requested_directory);
+    if !execute {
+        access::restrict_sync(&mut process);
+    }
     let inside = command::run(process, Duration::from_secs(30))?;
     if !inside.status.success() {
         let error = String::from_utf8_lossy(&inside.stderr);
@@ -102,7 +116,11 @@ fn repo_context(workspace_root: &Path, requested: &str) -> AppResult<Option<Repo
     if String::from_utf8_lossy(&inside.stdout).trim() != "true" {
         return Ok(None);
     }
-    let repository = git(&requested_directory, &["rev-parse", "--show-toplevel"])?;
+    let repository = git_with_execution(
+        &requested_directory,
+        &["rev-parse", "--show-toplevel"],
+        execute,
+    )?;
     let repository = Path::new(repository.strip_suffix('\n').unwrap_or(&repository))
         .canonicalize()
         .map_err(|_| AppError::Internal("Git repository root cannot be resolved".into()))?;
@@ -146,12 +164,25 @@ pub fn normalize_file_status(raw: &str) -> String {
 /// `scope` picks the side of the index: `worktree` is `git diff` plus untracked
 /// files, `staged` is `git diff --cached` and never lists untracked files
 /// (there is nothing staged about them).
+/// Trusted internal entry point: configured helpers may run. Workspace-scoped
+/// callers must pass their grant to `read_diff_with_execution` instead.
 pub fn read_diff(
     workspace_root: &Path,
     requested: &str,
     request: &DiffRequest,
 ) -> AppResult<GitDiff> {
-    let Some(context) = repo_context(workspace_root, requested)? else {
+    read_diff_with_execution(workspace_root, requested, request, true)
+}
+pub fn read_diff_with_execution(
+    workspace_root: &Path,
+    requested: &str,
+    request: &DiffRequest,
+    execute: bool,
+) -> AppResult<GitDiff> {
+    if request.scope == DiffScope::Worktree {
+        access::require_execution(execute, "Git worktree diff")?;
+    }
+    let Some(context) = repo_context_with_execution(workspace_root, requested, execute)? else {
         return Ok(GitDiff {
             repository: false,
             clean: true,
@@ -185,7 +216,7 @@ pub fn read_diff(
 
     let cached = request.scope == DiffScope::Staged;
     let mut files = BTreeMap::<String, GitFileDiff>::new();
-    for (status, path) in diff_name_status(&repository, cached, &pathspecs)? {
+    for (status, path) in diff_name_status(&repository, cached, &pathspecs, execute)? {
         files.insert(
             path.clone(),
             GitFileDiff {
@@ -220,7 +251,7 @@ pub fn read_diff(
         }
     }
 
-    for (additions, deletions, path) in diff_numstat(&repository, cached, &pathspecs)? {
+    for (additions, deletions, path) in diff_numstat(&repository, cached, &pathspecs, execute)? {
         if let Some(file) = files.get_mut(&path) {
             file.additions += additions;
             file.deletions += deletions;
@@ -235,7 +266,9 @@ pub fn read_diff(
                 args.push("--cached");
             }
             args.extend(["--", path.as_str()]);
-            file.patch = git(&repository, &args)?.trim_end_matches('\n').to_owned();
+            file.patch = git_with_execution(&repository, &args, execute)?
+                .trim_end_matches('\n')
+                .to_owned();
         } else {
             // A single un-previewable untracked file (binary or oversized)
             // must not fail the whole scan; it is listed without a textual
@@ -279,8 +312,13 @@ fn diff_name_status(
     repository: &Path,
     cached: bool,
     pathspecs: &[String],
+    execute: bool,
 ) -> AppResult<Vec<(String, String)>> {
-    let output = git(repository, &diff_args("--name-status", cached, pathspecs))?;
+    let output = git_with_execution(
+        repository,
+        &diff_args("--name-status", cached, pathspecs),
+        execute,
+    )?;
     let mut fields = output.split('\0').filter(|field| !field.is_empty());
     let mut entries = Vec::new();
     while let Some(code) = fields.next() {
@@ -306,8 +344,13 @@ fn diff_numstat(
     repository: &Path,
     cached: bool,
     pathspecs: &[String],
+    execute: bool,
 ) -> AppResult<Vec<(u64, u64, String)>> {
-    let output = git(repository, &diff_args("--numstat", cached, pathspecs))?;
+    let output = git_with_execution(
+        repository,
+        &diff_args("--numstat", cached, pathspecs),
+        execute,
+    )?;
     let mut fields = output.split('\0').filter(|field| !field.is_empty());
     let mut entries = Vec::new();
     while let Some(record) = fields.next() {
@@ -455,6 +498,8 @@ pub struct GitStatus {
 
 /// `git status --porcelain=v2 --branch`, summarized for the top bar, plus the
 /// per-file rows from a `--porcelain=v1 -z` pass.
+/// Configured filters/fsmonitor can execute during this trusted inspection;
+/// workspace-scoped callers must require execution permission first.
 pub fn read_status(workspace_root: &Path) -> AppResult<GitStatus> {
     let Some(context) = repo_context(workspace_root, ".")? else {
         return Ok(GitStatus {
@@ -1047,8 +1092,19 @@ pub async fn shutdown_legacy_operations(timeout: Duration) -> AppResult<()> {
 }
 
 fn git(directory: &Path, args: &[&str]) -> AppResult<String> {
+    git_with_execution(directory, args, true)
+}
+fn git_with_execution(directory: &Path, args: &[&str], execute: bool) -> AppResult<String> {
     let mut process = command::git_command();
-    process.args(args).current_dir(directory);
+    process
+        .args(access::arguments(
+            args.iter().map(|arg| (*arg).to_owned()).collect(),
+            execute,
+        )?)
+        .current_dir(directory);
+    if !execute {
+        access::restrict_sync(&mut process);
+    }
     let output = command::run(process, Duration::from_secs(30))?;
     if !output.status.success() {
         return Err(AppError::Internal(command::sanitize(
