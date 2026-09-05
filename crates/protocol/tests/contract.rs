@@ -172,6 +172,81 @@ fn automation_unknown_outcome_and_delivery_evidence() {
 }
 
 #[test]
+fn automation_host_surface() {
+    check(
+        "automation_command_session",
+        AutomationCommandSession {
+            session_id: "session/夜间".into(),
+            workspace_id: "workspace-1".into(),
+            execution_host_id: "0123456789abcdef0123456789abcdef".into(),
+            root_path: "/项目/仓库".into(),
+            launch: Some(CommandLaunchSpec {
+                executable: "/bin/echo".into(),
+                args: vec!["--flag".into(), "值📦".into()],
+                working_directory: ".".into(),
+                account_id: "default".into(),
+                timeout_ms: 86_400_000,
+            }),
+            generation: u64::MAX,
+            launch_sha256: vec![9; 32],
+            state: AutomationCommandSessionState::Unrebuildable as i32,
+            reason_code: "GENERATION_CHANGED".into(),
+            revision: 9007199254740993,
+            created_at_unix_ms: 1788557000000,
+            updated_at_unix_ms: 1788557900000,
+        },
+    );
+    check(
+        "automation_define_request",
+        DefineAutomationRequest {
+            meta: Some(CommandMeta {
+                request_id: "define-1".into(),
+                scope: Some(Scope {
+                    host_id: "0123456789abcdef0123456789abcdef".into(),
+                    workspace_id: "workspace-1".into(),
+                    execution_host_id: "0123456789abcdef0123456789abcdef".into(),
+                }),
+                idempotency_key: String::new(),
+                expected_revision: None,
+                deadline_unix_ms: 0,
+            }),
+            plan_id: "plan-1".into(),
+            config: Some(AutomationPlanConfig {
+                workspace_id: "workspace-1".into(),
+                title: "每晚构建".into(),
+                target: Some(AutomationTarget {
+                    execution_host_id: "0123456789abcdef0123456789abcdef".into(),
+                    session_id: "session-1".into(),
+                    generation: 1,
+                }),
+                schedule: Some(AutomationSchedule {
+                    kind: Some(automation_schedule::Kind::Cron(AutomationCron {
+                        expression: "0 3 * * *".into(),
+                        timezone: "Asia/Shanghai".into(),
+                    })),
+                }),
+                ..Default::default()
+            }),
+            payload: vec![0x00, 0x9f, 0x99, 0x82],
+            expected_revision: 9007199254740993,
+        },
+    );
+    check(
+        "automation_plan_snapshot",
+        AutomationPlanSnapshot {
+            plan: Some(AutomationPlan {
+                id: "plan-1".into(),
+                config_version: 2,
+                state: AutomationPlanState::Active as i32,
+                ..Default::default()
+            }),
+            revision: u64::MAX,
+            config_sha256: vec![3; 32],
+        },
+    );
+}
+
+#[test]
 fn local_control_contracts() {
     check(
         "management_running",

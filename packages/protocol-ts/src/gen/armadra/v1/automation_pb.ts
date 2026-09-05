@@ -8,6 +8,8 @@ import type {
   GenMessage,
 } from "@bufbuild/protobuf/codegenv1";
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv1";
+import type { CommandLaunchSpec } from "./command_pb.js";
+import { file_armadra_v1_command } from "./command_pb.js";
 import type { CommandMeta } from "./common_pb.js";
 import { file_armadra_v1_common } from "./common_pb.js";
 import type { Message } from "@bufbuild/protobuf";
@@ -18,8 +20,8 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_automation: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Chthcm1hZHJhL3YxL2F1dG9tYXRpb24ucHJvdG8SCmFybWFkcmEudjEiJAoOQXV0b21hdGlvbk9uY2USEgoKYXRfdW5peF9tcxgBIAEoAyJBChJBdXRvbWF0aW9uSW50ZXJ2YWwSFgoOYW5jaG9yX3VuaXhfbXMYASABKAMSEwoLaW50ZXJ2YWxfbXMYAiABKAMiNgoOQXV0b21hdGlvbkNyb24SEgoKZXhwcmVzc2lvbhgBIAEoCRIQCgh0aW1lem9uZRgCIAEoCSIxCh1BdXRvbWF0aW9uTG9vcEFmdGVyQ29tcGxldGlvbhIQCghkZWxheV9tcxgBIAEoAyL0AQoSQXV0b21hdGlvblNjaGVkdWxlEioKBG9uY2UYASABKAsyGi5hcm1hZHJhLnYxLkF1dG9tYXRpb25PbmNlSAASMgoIaW50ZXJ2YWwYAiABKAsyHi5hcm1hZHJhLnYxLkF1dG9tYXRpb25JbnRlcnZhbEgAEioKBGNyb24YAyABKAsyGi5hcm1hZHJhLnYxLkF1dG9tYXRpb25Dcm9uSAASSgoVbG9vcF9hZnRlcl9jb21wbGV0aW9uGAQgASgLMikuYXJtYWRyYS52MS5BdXRvbWF0aW9uTG9vcEFmdGVyQ29tcGxldGlvbkgAQgYKBGtpbmQiVQoQQXV0b21hdGlvblRhcmdldBIZChFleGVjdXRpb25faG9zdF9pZBgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEhIKCmdlbmVyYXRpb24YAyABKAQi2wMKFEF1dG9tYXRpb25QbGFuQ29uZmlnEhQKDHdvcmtzcGFjZV9pZBgBIAEoCRINCgV0aXRsZRgCIAEoCRIwCghzY2hlZHVsZRgDIAEoCzIeLmFybWFkcmEudjEuQXV0b21hdGlvblNjaGVkdWxlEiwKBnRhcmdldBgEIAEoCzIcLmFybWFkcmEudjEuQXV0b21hdGlvblRhcmdldBITCgtwYXlsb2FkX3JlZhgFIAEoCRIWCg5wYXlsb2FkX3NoYTI1NhgGIAEoDBI7Cg5taXNmaXJlX3BvbGljeRgHIAEoDjIjLmFybWFkcmEudjEuQXV0b21hdGlvbk1pc2ZpcmVQb2xpY3kSQwoSY29uY3VycmVuY3lfcG9saWN5GAggASgOMicuYXJtYWRyYS52MS5BdXRvbWF0aW9uQ29uY3VycmVuY3lQb2xpY3kSGAoQbWlzZmlyZV9ncmFjZV9tcxgJIAEoAxITCgtidXN5X3R0bF9tcxgKIAEoAxIQCghtYXhfcnVucxgLIAEoBBIaChJleHBpcmVzX2F0X3VuaXhfbXMYDCABKAMSGAoQc2FmZV9yZXRyeV9saW1pdBgNIAEoDRIYChByZXRyeV9iYWNrb2ZmX21zGA4gASgDIuIBChRBdXRvbWF0aW9uQWN0aXZhdGlvbhIPCgdwbGFuX2lkGAEgASgJEhYKDmNvbmZpZ192ZXJzaW9uGAIgASgEEhUKDWNvbmZpZ19zaGEyNTYYAyABKAwSGQoRYWN0aXZhdGlvbl9zaGEyNTYYBCABKAwSDwoHaG9zdF9pZBgFIAEoCRIUCgxwcmluY2lwYWxfaWQYBiABKAkSGAoQYXV0aG9yaXphdGlvbl9pZBgHIAEoCRIdChVhdXRob3JpemVkX2F0X3VuaXhfbXMYCCABKAMSDwoHZW5hYmxlZBgJIAEoCCLnAgoOQXV0b21hdGlvblBsYW4SCgoCaWQYASABKAkSFgoOY29uZmlnX3ZlcnNpb24YAiABKAQSMAoGY29uZmlnGAMgASgLMiAuYXJtYWRyYS52MS5BdXRvbWF0aW9uUGxhbkNvbmZpZxIuCgVzdGF0ZRgEIAEoDjIfLmFybWFkcmEudjEuQXV0b21hdGlvblBsYW5TdGF0ZRIZChFhY3RpdmF0aW9uX3NoYTI1NhgFIAEoDBIYChBuZXh0X2R1ZV91bml4X21zGAYgASgDEiAKGG9ic2VydmVkX3Rocm91Z2hfdW5peF9tcxgHIAEoAxIRCglydW5fY291bnQYCCABKAQSFQoNYWN0aXZlX3J1bl9pZBgJIAEoCRIWCg5wZW5kaW5nX3J1bl9pZBgKIAEoCRIaChJjcmVhdGVkX2F0X3VuaXhfbXMYCyABKAMSGgoSdXBkYXRlZF9hdF91bml4X21zGAwgASgDIjoKEUF1dG9tYXRpb25QbGFuUmVmEg8KB3BsYW5faWQYASABKAkSFAoMd29ya3NwYWNlX2lkGAIgASgJIkkKEEF1dG9tYXRpb25SdW5SZWYSDgoGcnVuX2lkGAEgASgJEg8KB3BsYW5faWQYAiABKAkSFAoMd29ya3NwYWNlX2lkGAMgASgJInMKFEF1dG9tYXRpb25UYXJnZXRHYXRlEhkKEWV4ZWN1dGlvbl9ob3N0X2lkGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkSLAoGYWN0aXZlGAMgASgLMhwuYXJtYWRyYS52MS5BdXRvbWF0aW9uUnVuUmVmIuoFCg1BdXRvbWF0aW9uUnVuEgoKAmlkGAEgASgJEg8KB3BsYW5faWQYAiABKAkSFAoMd29ya3NwYWNlX2lkGAMgASgJEhYKDmNvbmZpZ192ZXJzaW9uGAQgASgEEhYKDnNjaGVkdWxlZF9zbG90GAUgASgJEhwKFHNjaGVkdWxlZF9hdF91bml4X21zGAYgASgDEg8KB21pc2ZpcmUYByABKAgSFAoMbWlzc2VkX3Nsb3RzGAggASgEEh4KFm1pc3NlZF9zbG90c190cnVuY2F0ZWQYCSABKAgSNwoNZnJvemVuX2NvbmZpZxgKIAEoCzIgLmFybWFkcmEudjEuQXV0b21hdGlvblBsYW5Db25maWcSNAoKYWN0aXZhdGlvbhgLIAEoCzIgLmFybWFkcmEudjEuQXV0b21hdGlvbkFjdGl2YXRpb24SFAoMb3BlcmF0aW9uX2lkGAwgASgJEhYKDnJlcXVlc3Rfc2hhMjU2GA0gASgMEi0KBXN0YXRlGA4gASgOMh4uYXJtYWRyYS52MS5BdXRvbWF0aW9uUnVuU3RhdGUSEwoLY2xhaW1fb3duZXIYDyABKAkSGwoTbGVhc2VfdW50aWxfdW5peF9tcxgQIAEoAxIZChFkaXNwYXRjaF9hdHRlbXB0cxgRIAEoDRIcChRuZXh0X2F0dGVtcHRfdW5peF9tcxgSIAEoAxIiChp3YWl0aW5nX2V4cGlyZXNfYXRfdW5peF9tcxgTIAEoAxIYChByZWNlaXB0X3NlcXVlbmNlGBQgASgEEhYKDnJlY2VpcHRfc2hhMjU2GBUgASgMEhoKEmNyZWF0ZWRfYXRfdW5peF9tcxgWIAEoAxIaChJ1cGRhdGVkX2F0X3VuaXhfbXMYFyABKAMSHAoUY29tcGxldGVkX2F0X3VuaXhfbXMYGCABKAMSEwoLcmVhc29uX2NvZGUYGSABKAkSGQoRZGVsaXZlcnlfb2JzZXJ2ZWQYGiABKAgitQEKEUF1dG9tYXRpb25SZWNlaXB0EhQKDG9wZXJhdGlvbl9pZBgBIAEoCRIWCg5yZXF1ZXN0X3NoYTI1NhgCIAEoDBIuCgdvdXRjb21lGAMgASgOMh0uYXJtYWRyYS52MS5BdXRvbWF0aW9uT3V0Y29tZRIQCghzZXF1ZW5jZRgEIAEoBBIbChNvYnNlcnZlZF9hdF91bml4X21zGAUgASgDEhMKC3JlYXNvbl9jb2RlGAYgASgJIoMBChdEZWZpbmVBdXRvbWF0aW9uUmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRIPCgdwbGFuX2lkGAIgASgJEjAKBmNvbmZpZxgDIAEoCzIgLmFybWFkcmEudjEuQXV0b21hdGlvblBsYW5Db25maWciggEKGUFjdGl2YXRlQXV0b21hdGlvblJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESDwoHcGxhbl9pZBgCIAEoCRIWCg5jb25maWdfdmVyc2lvbhgDIAEoBBIVCg1jb25maWdfc2hhMjU2GAQgASgMIlAKFlBhdXNlQXV0b21hdGlvblJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESDwoHcGxhbl9pZBgCIAEoCSJUChZBdXRvbWF0aW9uUGxhblNuYXBzaG90EigKBHBsYW4YASABKAsyGi5hcm1hZHJhLnYxLkF1dG9tYXRpb25QbGFuEhAKCHJldmlzaW9uGAIgASgEIlEKFUF1dG9tYXRpb25SdW5TbmFwc2hvdBImCgNydW4YASABKAsyGS5hcm1hZHJhLnYxLkF1dG9tYXRpb25SdW4SEAoIcmV2aXNpb24YAiABKAQq5wEKE0F1dG9tYXRpb25QbGFuU3RhdGUSJQohQVVUT01BVElPTl9QTEFOX1NUQVRFX1VOU1BFQ0lGSUVEEAASHwobQVVUT01BVElPTl9QTEFOX1NUQVRFX0RSQUZUEAESIAocQVVUT01BVElPTl9QTEFOX1NUQVRFX0FDVElWRRACEiAKHEFVVE9NQVRJT05fUExBTl9TVEFURV9QQVVTRUQQAxIhCh1BVVRPTUFUSU9OX1BMQU5fU1RBVEVfRVhQSVJFRBAEEiEKHUFVVE9NQVRJT05fUExBTl9TVEFURV9ERUxFVEVEEAUqlAEKF0F1dG9tYXRpb25NaXNmaXJlUG9saWN5EikKJUFVVE9NQVRJT05fTUlTRklSRV9QT0xJQ1lfVU5TUEVDSUZJRUQQABIiCh5BVVRPTUFUSU9OX01JU0ZJUkVfUE9MSUNZX1NLSVAQARIqCiZBVVRPTUFUSU9OX01JU0ZJUkVfUE9MSUNZX0NPQUxFU0NFX09ORRACKqMBChtBdXRvbWF0aW9uQ29uY3VycmVuY3lQb2xpY3kSLQopQVVUT01BVElPTl9DT05DVVJSRU5DWV9QT0xJQ1lfVU5TUEVDSUZJRUQQABIoCiRBVVRPTUFUSU9OX0NPTkNVUlJFTkNZX1BPTElDWV9GT1JCSUQQARIrCidBVVRPTUFUSU9OX0NPTkNVUlJFTkNZX1BPTElDWV9RVUVVRV9PTkUQAireAwoSQXV0b21hdGlvblJ1blN0YXRlEiQKIEFVVE9NQVRJT05fUlVOX1NUQVRFX1VOU1BFQ0lGSUVEEAASHAoYQVVUT01BVElPTl9SVU5fU1RBVEVfRFVFEAESIAocQVVUT01BVElPTl9SVU5fU1RBVEVfQ0xBSU1FRBACEicKI0FVVE9NQVRJT05fUlVOX1NUQVRFX1dBSVRJTkdfVEFSR0VUEAMSJAogQVVUT01BVElPTl9SVU5fU1RBVEVfRElTUEFUQ0hJTkcQBBIiCh5BVVRPTUFUSU9OX1JVTl9TVEFURV9ERUxJVkVSRUQQBRIgChxBVVRPTUFUSU9OX1JVTl9TVEFURV9SVU5OSU5HEAYSIgoeQVVUT01BVElPTl9SVU5fU1RBVEVfU1VDQ0VFREVEEAcSHwobQVVUT01BVElPTl9SVU5fU1RBVEVfRkFJTEVEEAgSIgoeQVVUT01BVElPTl9SVU5fU1RBVEVfQ0FOQ0VMTEVEEAkSIAocQVVUT01BVElPTl9SVU5fU1RBVEVfU0tJUFBFRBAKEiAKHEFVVE9NQVRJT05fUlVOX1NUQVRFX0VYUElSRUQQCxIgChxBVVRPTUFUSU9OX1JVTl9TVEFURV9VTktOT1dOEAwqowIKEUF1dG9tYXRpb25PdXRjb21lEiIKHkFVVE9NQVRJT05fT1VUQ09NRV9VTlNQRUNJRklFRBAAEh4KGkFVVE9NQVRJT05fT1VUQ09NRV9VTktOT1dOEAESJQohQVVUT01BVElPTl9PVVRDT01FX05PVF9ESVNQQVRDSEVEEAISIAocQVVUT01BVElPTl9PVVRDT01FX0RFTElWRVJFRBADEh4KGkFVVE9NQVRJT05fT1VUQ09NRV9SVU5OSU5HEAQSIAocQVVUT01BVElPTl9PVVRDT01FX1NVQ0NFRURFRBAFEh0KGUFVVE9NQVRJT05fT1VUQ09NRV9GQUlMRUQQBhIgChxBVVRPTUFUSU9OX09VVENPTUVfQ0FOQ0VMTEVEEAdCI1ohYXJtYWRyYS5sb2NhbC9ob3N0L2dlbi9hcm1hZHJhL3YxYgZwcm90bzM",
-    [file_armadra_v1_common],
+    "Chthcm1hZHJhL3YxL2F1dG9tYXRpb24ucHJvdG8SCmFybWFkcmEudjEiJAoOQXV0b21hdGlvbk9uY2USEgoKYXRfdW5peF9tcxgBIAEoAyJBChJBdXRvbWF0aW9uSW50ZXJ2YWwSFgoOYW5jaG9yX3VuaXhfbXMYASABKAMSEwoLaW50ZXJ2YWxfbXMYAiABKAMiNgoOQXV0b21hdGlvbkNyb24SEgoKZXhwcmVzc2lvbhgBIAEoCRIQCgh0aW1lem9uZRgCIAEoCSIxCh1BdXRvbWF0aW9uTG9vcEFmdGVyQ29tcGxldGlvbhIQCghkZWxheV9tcxgBIAEoAyL0AQoSQXV0b21hdGlvblNjaGVkdWxlEioKBG9uY2UYASABKAsyGi5hcm1hZHJhLnYxLkF1dG9tYXRpb25PbmNlSAASMgoIaW50ZXJ2YWwYAiABKAsyHi5hcm1hZHJhLnYxLkF1dG9tYXRpb25JbnRlcnZhbEgAEioKBGNyb24YAyABKAsyGi5hcm1hZHJhLnYxLkF1dG9tYXRpb25Dcm9uSAASSgoVbG9vcF9hZnRlcl9jb21wbGV0aW9uGAQgASgLMikuYXJtYWRyYS52MS5BdXRvbWF0aW9uTG9vcEFmdGVyQ29tcGxldGlvbkgAQgYKBGtpbmQiVQoQQXV0b21hdGlvblRhcmdldBIZChFleGVjdXRpb25faG9zdF9pZBgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEhIKCmdlbmVyYXRpb24YAyABKAQi2wMKFEF1dG9tYXRpb25QbGFuQ29uZmlnEhQKDHdvcmtzcGFjZV9pZBgBIAEoCRINCgV0aXRsZRgCIAEoCRIwCghzY2hlZHVsZRgDIAEoCzIeLmFybWFkcmEudjEuQXV0b21hdGlvblNjaGVkdWxlEiwKBnRhcmdldBgEIAEoCzIcLmFybWFkcmEudjEuQXV0b21hdGlvblRhcmdldBITCgtwYXlsb2FkX3JlZhgFIAEoCRIWCg5wYXlsb2FkX3NoYTI1NhgGIAEoDBI7Cg5taXNmaXJlX3BvbGljeRgHIAEoDjIjLmFybWFkcmEudjEuQXV0b21hdGlvbk1pc2ZpcmVQb2xpY3kSQwoSY29uY3VycmVuY3lfcG9saWN5GAggASgOMicuYXJtYWRyYS52MS5BdXRvbWF0aW9uQ29uY3VycmVuY3lQb2xpY3kSGAoQbWlzZmlyZV9ncmFjZV9tcxgJIAEoAxITCgtidXN5X3R0bF9tcxgKIAEoAxIQCghtYXhfcnVucxgLIAEoBBIaChJleHBpcmVzX2F0X3VuaXhfbXMYDCABKAMSGAoQc2FmZV9yZXRyeV9saW1pdBgNIAEoDRIYChByZXRyeV9iYWNrb2ZmX21zGA4gASgDIuIBChRBdXRvbWF0aW9uQWN0aXZhdGlvbhIPCgdwbGFuX2lkGAEgASgJEhYKDmNvbmZpZ192ZXJzaW9uGAIgASgEEhUKDWNvbmZpZ19zaGEyNTYYAyABKAwSGQoRYWN0aXZhdGlvbl9zaGEyNTYYBCABKAwSDwoHaG9zdF9pZBgFIAEoCRIUCgxwcmluY2lwYWxfaWQYBiABKAkSGAoQYXV0aG9yaXphdGlvbl9pZBgHIAEoCRIdChVhdXRob3JpemVkX2F0X3VuaXhfbXMYCCABKAMSDwoHZW5hYmxlZBgJIAEoCCLnAgoOQXV0b21hdGlvblBsYW4SCgoCaWQYASABKAkSFgoOY29uZmlnX3ZlcnNpb24YAiABKAQSMAoGY29uZmlnGAMgASgLMiAuYXJtYWRyYS52MS5BdXRvbWF0aW9uUGxhbkNvbmZpZxIuCgVzdGF0ZRgEIAEoDjIfLmFybWFkcmEudjEuQXV0b21hdGlvblBsYW5TdGF0ZRIZChFhY3RpdmF0aW9uX3NoYTI1NhgFIAEoDBIYChBuZXh0X2R1ZV91bml4X21zGAYgASgDEiAKGG9ic2VydmVkX3Rocm91Z2hfdW5peF9tcxgHIAEoAxIRCglydW5fY291bnQYCCABKAQSFQoNYWN0aXZlX3J1bl9pZBgJIAEoCRIWCg5wZW5kaW5nX3J1bl9pZBgKIAEoCRIaChJjcmVhdGVkX2F0X3VuaXhfbXMYCyABKAMSGgoSdXBkYXRlZF9hdF91bml4X21zGAwgASgDIjoKEUF1dG9tYXRpb25QbGFuUmVmEg8KB3BsYW5faWQYASABKAkSFAoMd29ya3NwYWNlX2lkGAIgASgJIkkKEEF1dG9tYXRpb25SdW5SZWYSDgoGcnVuX2lkGAEgASgJEg8KB3BsYW5faWQYAiABKAkSFAoMd29ya3NwYWNlX2lkGAMgASgJInMKFEF1dG9tYXRpb25UYXJnZXRHYXRlEhkKEWV4ZWN1dGlvbl9ob3N0X2lkGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkSLAoGYWN0aXZlGAMgASgLMhwuYXJtYWRyYS52MS5BdXRvbWF0aW9uUnVuUmVmIuoFCg1BdXRvbWF0aW9uUnVuEgoKAmlkGAEgASgJEg8KB3BsYW5faWQYAiABKAkSFAoMd29ya3NwYWNlX2lkGAMgASgJEhYKDmNvbmZpZ192ZXJzaW9uGAQgASgEEhYKDnNjaGVkdWxlZF9zbG90GAUgASgJEhwKFHNjaGVkdWxlZF9hdF91bml4X21zGAYgASgDEg8KB21pc2ZpcmUYByABKAgSFAoMbWlzc2VkX3Nsb3RzGAggASgEEh4KFm1pc3NlZF9zbG90c190cnVuY2F0ZWQYCSABKAgSNwoNZnJvemVuX2NvbmZpZxgKIAEoCzIgLmFybWFkcmEudjEuQXV0b21hdGlvblBsYW5Db25maWcSNAoKYWN0aXZhdGlvbhgLIAEoCzIgLmFybWFkcmEudjEuQXV0b21hdGlvbkFjdGl2YXRpb24SFAoMb3BlcmF0aW9uX2lkGAwgASgJEhYKDnJlcXVlc3Rfc2hhMjU2GA0gASgMEi0KBXN0YXRlGA4gASgOMh4uYXJtYWRyYS52MS5BdXRvbWF0aW9uUnVuU3RhdGUSEwoLY2xhaW1fb3duZXIYDyABKAkSGwoTbGVhc2VfdW50aWxfdW5peF9tcxgQIAEoAxIZChFkaXNwYXRjaF9hdHRlbXB0cxgRIAEoDRIcChRuZXh0X2F0dGVtcHRfdW5peF9tcxgSIAEoAxIiChp3YWl0aW5nX2V4cGlyZXNfYXRfdW5peF9tcxgTIAEoAxIYChByZWNlaXB0X3NlcXVlbmNlGBQgASgEEhYKDnJlY2VpcHRfc2hhMjU2GBUgASgMEhoKEmNyZWF0ZWRfYXRfdW5peF9tcxgWIAEoAxIaChJ1cGRhdGVkX2F0X3VuaXhfbXMYFyABKAMSHAoUY29tcGxldGVkX2F0X3VuaXhfbXMYGCABKAMSEwoLcmVhc29uX2NvZGUYGSABKAkSGQoRZGVsaXZlcnlfb2JzZXJ2ZWQYGiABKAgitQEKEUF1dG9tYXRpb25SZWNlaXB0EhQKDG9wZXJhdGlvbl9pZBgBIAEoCRIWCg5yZXF1ZXN0X3NoYTI1NhgCIAEoDBIuCgdvdXRjb21lGAMgASgOMh0uYXJtYWRyYS52MS5BdXRvbWF0aW9uT3V0Y29tZRIQCghzZXF1ZW5jZRgEIAEoBBIbChNvYnNlcnZlZF9hdF91bml4X21zGAUgASgDEhMKC3JlYXNvbl9jb2RlGAYgASgJIuUCChhBdXRvbWF0aW9uQ29tbWFuZFNlc3Npb24SEgoKc2Vzc2lvbl9pZBgBIAEoCRIUCgx3b3Jrc3BhY2VfaWQYAiABKAkSGQoRZXhlY3V0aW9uX2hvc3RfaWQYAyABKAkSEQoJcm9vdF9wYXRoGAQgASgJEi0KBmxhdW5jaBgFIAEoCzIdLmFybWFkcmEudjEuQ29tbWFuZExhdW5jaFNwZWMSEgoKZ2VuZXJhdGlvbhgGIAEoBBIVCg1sYXVuY2hfc2hhMjU2GAcgASgMEjgKBXN0YXRlGAggASgOMikuYXJtYWRyYS52MS5BdXRvbWF0aW9uQ29tbWFuZFNlc3Npb25TdGF0ZRITCgtyZWFzb25fY29kZRgJIAEoCRIQCghyZXZpc2lvbhgKIAEoBBIaChJjcmVhdGVkX2F0X3VuaXhfbXMYCyABKAMSGgoSdXBkYXRlZF9hdF91bml4X21zGAwgASgDIpoBChtEZWZpbmVDb21tYW5kU2Vzc2lvblJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIRCglyb290X3BhdGgYAyABKAkSLQoGbGF1bmNoGAQgASgLMh0uYXJtYWRyYS52MS5Db21tYW5kTGF1bmNoU3BlYyJkChpMaXN0Q29tbWFuZFNlc3Npb25zUmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRIQCghhZnRlcl9pZBgCIAEoCRINCgVsaW1pdBgDIAEoDSJ4ChtMaXN0Q29tbWFuZFNlc3Npb25zUmVzcG9uc2USNgoIc2Vzc2lvbnMYASADKAsyJC5hcm1hZHJhLnYxLkF1dG9tYXRpb25Db21tYW5kU2Vzc2lvbhIPCgduZXh0X2lkGAIgASgJEhAKCGhhc19tb3JlGAMgASgIIq8BChdEZWZpbmVBdXRvbWF0aW9uUmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRIPCgdwbGFuX2lkGAIgASgJEjAKBmNvbmZpZxgDIAEoCzIgLmFybWFkcmEudjEuQXV0b21hdGlvblBsYW5Db25maWcSDwoHcGF5bG9hZBgEIAEoDBIZChFleHBlY3RlZF9yZXZpc2lvbhgFIAEoBCKdAQoZQWN0aXZhdGVBdXRvbWF0aW9uUmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRIPCgdwbGFuX2lkGAIgASgJEhYKDmNvbmZpZ192ZXJzaW9uGAMgASgEEhUKDWNvbmZpZ19zaGEyNTYYBCABKAwSGQoRZXhwZWN0ZWRfcmV2aXNpb24YBSABKAQiawoWUGF1c2VBdXRvbWF0aW9uUmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRIPCgdwbGFuX2lkGAIgASgJEhkKEWV4cGVjdGVkX3JldmlzaW9uGAMgASgEImwKF1J1bkF1dG9tYXRpb25Ob3dSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEg8KB3BsYW5faWQYAiABKAkSGQoRZXhwZWN0ZWRfcmV2aXNpb24YAyABKAQiZAoaTGlzdEF1dG9tYXRpb25QbGFuc1JlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESEAoIYWZ0ZXJfaWQYAiABKAkSDQoFbGltaXQYAyABKA0icwobTGlzdEF1dG9tYXRpb25QbGFuc1Jlc3BvbnNlEjEKBXBsYW5zGAEgAygLMiIuYXJtYWRyYS52MS5BdXRvbWF0aW9uUGxhblNuYXBzaG90Eg8KB25leHRfaWQYAiABKAkSEAoIaGFzX21vcmUYAyABKAgidAoZTGlzdEF1dG9tYXRpb25SdW5zUmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRIPCgdwbGFuX2lkGAIgASgJEhAKCGFmdGVyX2lkGAMgASgJEg0KBWxpbWl0GAQgASgNInAKGkxpc3RBdXRvbWF0aW9uUnVuc1Jlc3BvbnNlEi8KBHJ1bnMYASADKAsyIS5hcm1hZHJhLnYxLkF1dG9tYXRpb25SdW5TbmFwc2hvdBIPCgduZXh0X2lkGAIgASgJEhAKCGhhc19tb3JlGAMgASgIImsKFkF1dG9tYXRpb25QbGFuU25hcHNob3QSKAoEcGxhbhgBIAEoCzIaLmFybWFkcmEudjEuQXV0b21hdGlvblBsYW4SEAoIcmV2aXNpb24YAiABKAQSFQoNY29uZmlnX3NoYTI1NhgDIAEoDCJRChVBdXRvbWF0aW9uUnVuU25hcHNob3QSJgoDcnVuGAEgASgLMhkuYXJtYWRyYS52MS5BdXRvbWF0aW9uUnVuEhAKCHJldmlzaW9uGAIgASgEKucBChNBdXRvbWF0aW9uUGxhblN0YXRlEiUKIUFVVE9NQVRJT05fUExBTl9TVEFURV9VTlNQRUNJRklFRBAAEh8KG0FVVE9NQVRJT05fUExBTl9TVEFURV9EUkFGVBABEiAKHEFVVE9NQVRJT05fUExBTl9TVEFURV9BQ1RJVkUQAhIgChxBVVRPTUFUSU9OX1BMQU5fU1RBVEVfUEFVU0VEEAMSIQodQVVUT01BVElPTl9QTEFOX1NUQVRFX0VYUElSRUQQBBIhCh1BVVRPTUFUSU9OX1BMQU5fU1RBVEVfREVMRVRFRBAFKpQBChdBdXRvbWF0aW9uTWlzZmlyZVBvbGljeRIpCiVBVVRPTUFUSU9OX01JU0ZJUkVfUE9MSUNZX1VOU1BFQ0lGSUVEEAASIgoeQVVUT01BVElPTl9NSVNGSVJFX1BPTElDWV9TS0lQEAESKgomQVVUT01BVElPTl9NSVNGSVJFX1BPTElDWV9DT0FMRVNDRV9PTkUQAiqjAQobQXV0b21hdGlvbkNvbmN1cnJlbmN5UG9saWN5Ei0KKUFVVE9NQVRJT05fQ09OQ1VSUkVOQ1lfUE9MSUNZX1VOU1BFQ0lGSUVEEAASKAokQVVUT01BVElPTl9DT05DVVJSRU5DWV9QT0xJQ1lfRk9SQklEEAESKwonQVVUT01BVElPTl9DT05DVVJSRU5DWV9QT0xJQ1lfUVVFVUVfT05FEAIq3gMKEkF1dG9tYXRpb25SdW5TdGF0ZRIkCiBBVVRPTUFUSU9OX1JVTl9TVEFURV9VTlNQRUNJRklFRBAAEhwKGEFVVE9NQVRJT05fUlVOX1NUQVRFX0RVRRABEiAKHEFVVE9NQVRJT05fUlVOX1NUQVRFX0NMQUlNRUQQAhInCiNBVVRPTUFUSU9OX1JVTl9TVEFURV9XQUlUSU5HX1RBUkdFVBADEiQKIEFVVE9NQVRJT05fUlVOX1NUQVRFX0RJU1BBVENISU5HEAQSIgoeQVVUT01BVElPTl9SVU5fU1RBVEVfREVMSVZFUkVEEAUSIAocQVVUT01BVElPTl9SVU5fU1RBVEVfUlVOTklORxAGEiIKHkFVVE9NQVRJT05fUlVOX1NUQVRFX1NVQ0NFRURFRBAHEh8KG0FVVE9NQVRJT05fUlVOX1NUQVRFX0ZBSUxFRBAIEiIKHkFVVE9NQVRJT05fUlVOX1NUQVRFX0NBTkNFTExFRBAJEiAKHEFVVE9NQVRJT05fUlVOX1NUQVRFX1NLSVBQRUQQChIgChxBVVRPTUFUSU9OX1JVTl9TVEFURV9FWFBJUkVEEAsSIAocQVVUT01BVElPTl9SVU5fU1RBVEVfVU5LTk9XThAMKqMCChFBdXRvbWF0aW9uT3V0Y29tZRIiCh5BVVRPTUFUSU9OX09VVENPTUVfVU5TUEVDSUZJRUQQABIeChpBVVRPTUFUSU9OX09VVENPTUVfVU5LTk9XThABEiUKIUFVVE9NQVRJT05fT1VUQ09NRV9OT1RfRElTUEFUQ0hFRBACEiAKHEFVVE9NQVRJT05fT1VUQ09NRV9ERUxJVkVSRUQQAxIeChpBVVRPTUFUSU9OX09VVENPTUVfUlVOTklORxAEEiAKHEFVVE9NQVRJT05fT1VUQ09NRV9TVUNDRUVERUQQBRIdChlBVVRPTUFUSU9OX09VVENPTUVfRkFJTEVEEAYSIAocQVVUT01BVElPTl9PVVRDT01FX0NBTkNFTExFRBAHKrEBCh1BdXRvbWF0aW9uQ29tbWFuZFNlc3Npb25TdGF0ZRIwCixBVVRPTUFUSU9OX0NPTU1BTkRfU0VTU0lPTl9TVEFURV9VTlNQRUNJRklFRBAAEioKJkFVVE9NQVRJT05fQ09NTUFORF9TRVNTSU9OX1NUQVRFX1JFQURZEAESMgouQVVUT01BVElPTl9DT01NQU5EX1NFU1NJT05fU1RBVEVfVU5SRUJVSUxEQUJMRRACQiNaIWFybWFkcmEubG9jYWwvaG9zdC9nZW4vYXJtYWRyYS92MWIGcHJvdG8z",
+    [file_armadra_v1_command, file_armadra_v1_common],
   );
 
 /**
@@ -673,9 +675,179 @@ export const AutomationReceiptSchema: GenMessage<AutomationReceipt> =
   messageDesc(file_armadra_v1_automation, 13);
 
 /**
- * Reserved transport shapes. Defining them does not expose an HTTP endpoint.
- * Authentication always comes from the verified connection, never client fields.
+ * @generated from message armadra.v1.AutomationCommandSession
+ */
+export type AutomationCommandSession =
+  Message<"armadra.v1.AutomationCommandSession"> & {
+    /**
+     * @generated from field: string session_id = 1;
+     */
+    sessionId: string;
+
+    /**
+     * @generated from field: string workspace_id = 2;
+     */
+    workspaceId: string;
+
+    /**
+     * @generated from field: string execution_host_id = 3;
+     */
+    executionHostId: string;
+
+    /**
+     * @generated from field: string root_path = 4;
+     */
+    rootPath: string;
+
+    /**
+     * @generated from field: armadra.v1.CommandLaunchSpec launch = 5;
+     */
+    launch?: CommandLaunchSpec;
+
+    /**
+     * @generated from field: uint64 generation = 6;
+     */
+    generation: bigint;
+
+    /**
+     * @generated from field: bytes launch_sha256 = 7;
+     */
+    launchSha256: Uint8Array;
+
+    /**
+     * @generated from field: armadra.v1.AutomationCommandSessionState state = 8;
+     */
+    state: AutomationCommandSessionState;
+
+    /**
+     * @generated from field: string reason_code = 9;
+     */
+    reasonCode: string;
+
+    /**
+     * @generated from field: uint64 revision = 10;
+     */
+    revision: bigint;
+
+    /**
+     * @generated from field: int64 created_at_unix_ms = 11;
+     */
+    createdAtUnixMs: bigint;
+
+    /**
+     * @generated from field: int64 updated_at_unix_ms = 12;
+     */
+    updatedAtUnixMs: bigint;
+  };
+
+/**
+ * Describes the message armadra.v1.AutomationCommandSession.
+ * Use `create(AutomationCommandSessionSchema)` to create a new message.
+ */
+export const AutomationCommandSessionSchema: GenMessage<AutomationCommandSession> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_automation, 14);
+
+/**
+ * Transport shapes for the authenticated Host surface. The verified session
+ * supplies principal, device and grants; client fields never carry identity.
+ * Every request scope is checked against automation:read / automation:manage
+ * narrowed to its workspace and execution host.
  *
+ * @generated from message armadra.v1.DefineCommandSessionRequest
+ */
+export type DefineCommandSessionRequest =
+  Message<"armadra.v1.DefineCommandSessionRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string session_id = 2;
+     */
+    sessionId: string;
+
+    /**
+     * Absolute directory on the execution host; the Worker canonicalizes it.
+     *
+     * @generated from field: string root_path = 3;
+     */
+    rootPath: string;
+
+    /**
+     * @generated from field: armadra.v1.CommandLaunchSpec launch = 4;
+     */
+    launch?: CommandLaunchSpec;
+  };
+
+/**
+ * Describes the message armadra.v1.DefineCommandSessionRequest.
+ * Use `create(DefineCommandSessionRequestSchema)` to create a new message.
+ */
+export const DefineCommandSessionRequestSchema: GenMessage<DefineCommandSessionRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_automation, 15);
+
+/**
+ * @generated from message armadra.v1.ListCommandSessionsRequest
+ */
+export type ListCommandSessionsRequest =
+  Message<"armadra.v1.ListCommandSessionsRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string after_id = 2;
+     */
+    afterId: string;
+
+    /**
+     * @generated from field: uint32 limit = 3;
+     */
+    limit: number;
+  };
+
+/**
+ * Describes the message armadra.v1.ListCommandSessionsRequest.
+ * Use `create(ListCommandSessionsRequestSchema)` to create a new message.
+ */
+export const ListCommandSessionsRequestSchema: GenMessage<ListCommandSessionsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_automation, 16);
+
+/**
+ * @generated from message armadra.v1.ListCommandSessionsResponse
+ */
+export type ListCommandSessionsResponse =
+  Message<"armadra.v1.ListCommandSessionsResponse"> & {
+    /**
+     * @generated from field: repeated armadra.v1.AutomationCommandSession sessions = 1;
+     */
+    sessions: AutomationCommandSession[];
+
+    /**
+     * @generated from field: string next_id = 2;
+     */
+    nextId: string;
+
+    /**
+     * @generated from field: bool has_more = 3;
+     */
+    hasMore: boolean;
+  };
+
+/**
+ * Describes the message armadra.v1.ListCommandSessionsResponse.
+ * Use `create(ListCommandSessionsResponseSchema)` to create a new message.
+ */
+export const ListCommandSessionsResponseSchema: GenMessage<ListCommandSessionsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_automation, 17);
+
+/**
  * @generated from message armadra.v1.DefineAutomationRequest
  */
 export type DefineAutomationRequest =
@@ -694,6 +866,21 @@ export type DefineAutomationRequest =
      * @generated from field: armadra.v1.AutomationPlanConfig config = 3;
      */
     config?: AutomationPlanConfig;
+
+    /**
+     * Immutable command stdin stored privately by the Host. The Host derives
+     * payload_ref/payload_sha256; values sent inside config are replaced.
+     *
+     * @generated from field: bytes payload = 4;
+     */
+    payload: Uint8Array;
+
+    /**
+     * Zero creates; any other value must equal the current plan revision.
+     *
+     * @generated from field: uint64 expected_revision = 5;
+     */
+    expectedRevision: bigint;
   };
 
 /**
@@ -702,7 +889,7 @@ export type DefineAutomationRequest =
  */
 export const DefineAutomationRequestSchema: GenMessage<DefineAutomationRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_automation, 14);
+  messageDesc(file_armadra_v1_automation, 18);
 
 /**
  * @generated from message armadra.v1.ActivateAutomationRequest
@@ -728,6 +915,11 @@ export type ActivateAutomationRequest =
      * @generated from field: bytes config_sha256 = 4;
      */
     configSha256: Uint8Array;
+
+    /**
+     * @generated from field: uint64 expected_revision = 5;
+     */
+    expectedRevision: bigint;
   };
 
 /**
@@ -736,7 +928,7 @@ export type ActivateAutomationRequest =
  */
 export const ActivateAutomationRequestSchema: GenMessage<ActivateAutomationRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_automation, 15);
+  messageDesc(file_armadra_v1_automation, 19);
 
 /**
  * @generated from message armadra.v1.PauseAutomationRequest
@@ -752,6 +944,11 @@ export type PauseAutomationRequest =
      * @generated from field: string plan_id = 2;
      */
     planId: string;
+
+    /**
+     * @generated from field: uint64 expected_revision = 3;
+     */
+    expectedRevision: bigint;
   };
 
 /**
@@ -760,7 +957,160 @@ export type PauseAutomationRequest =
  */
 export const PauseAutomationRequestSchema: GenMessage<PauseAutomationRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_automation, 16);
+  messageDesc(file_armadra_v1_automation, 20);
+
+/**
+ * RunNow materializes one extra manual slot. It never edits the schedule and
+ * never bypasses the target gate, activation check or concurrency policy.
+ *
+ * @generated from message armadra.v1.RunAutomationNowRequest
+ */
+export type RunAutomationNowRequest =
+  Message<"armadra.v1.RunAutomationNowRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string plan_id = 2;
+     */
+    planId: string;
+
+    /**
+     * @generated from field: uint64 expected_revision = 3;
+     */
+    expectedRevision: bigint;
+  };
+
+/**
+ * Describes the message armadra.v1.RunAutomationNowRequest.
+ * Use `create(RunAutomationNowRequestSchema)` to create a new message.
+ */
+export const RunAutomationNowRequestSchema: GenMessage<RunAutomationNowRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_automation, 21);
+
+/**
+ * @generated from message armadra.v1.ListAutomationPlansRequest
+ */
+export type ListAutomationPlansRequest =
+  Message<"armadra.v1.ListAutomationPlansRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string after_id = 2;
+     */
+    afterId: string;
+
+    /**
+     * @generated from field: uint32 limit = 3;
+     */
+    limit: number;
+  };
+
+/**
+ * Describes the message armadra.v1.ListAutomationPlansRequest.
+ * Use `create(ListAutomationPlansRequestSchema)` to create a new message.
+ */
+export const ListAutomationPlansRequestSchema: GenMessage<ListAutomationPlansRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_automation, 22);
+
+/**
+ * @generated from message armadra.v1.ListAutomationPlansResponse
+ */
+export type ListAutomationPlansResponse =
+  Message<"armadra.v1.ListAutomationPlansResponse"> & {
+    /**
+     * @generated from field: repeated armadra.v1.AutomationPlanSnapshot plans = 1;
+     */
+    plans: AutomationPlanSnapshot[];
+
+    /**
+     * @generated from field: string next_id = 2;
+     */
+    nextId: string;
+
+    /**
+     * @generated from field: bool has_more = 3;
+     */
+    hasMore: boolean;
+  };
+
+/**
+ * Describes the message armadra.v1.ListAutomationPlansResponse.
+ * Use `create(ListAutomationPlansResponseSchema)` to create a new message.
+ */
+export const ListAutomationPlansResponseSchema: GenMessage<ListAutomationPlansResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_automation, 23);
+
+/**
+ * @generated from message armadra.v1.ListAutomationRunsRequest
+ */
+export type ListAutomationRunsRequest =
+  Message<"armadra.v1.ListAutomationRunsRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string plan_id = 2;
+     */
+    planId: string;
+
+    /**
+     * @generated from field: string after_id = 3;
+     */
+    afterId: string;
+
+    /**
+     * @generated from field: uint32 limit = 4;
+     */
+    limit: number;
+  };
+
+/**
+ * Describes the message armadra.v1.ListAutomationRunsRequest.
+ * Use `create(ListAutomationRunsRequestSchema)` to create a new message.
+ */
+export const ListAutomationRunsRequestSchema: GenMessage<ListAutomationRunsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_automation, 24);
+
+/**
+ * @generated from message armadra.v1.ListAutomationRunsResponse
+ */
+export type ListAutomationRunsResponse =
+  Message<"armadra.v1.ListAutomationRunsResponse"> & {
+    /**
+     * @generated from field: repeated armadra.v1.AutomationRunSnapshot runs = 1;
+     */
+    runs: AutomationRunSnapshot[];
+
+    /**
+     * @generated from field: string next_id = 2;
+     */
+    nextId: string;
+
+    /**
+     * @generated from field: bool has_more = 3;
+     */
+    hasMore: boolean;
+  };
+
+/**
+ * Describes the message armadra.v1.ListAutomationRunsResponse.
+ * Use `create(ListAutomationRunsResponseSchema)` to create a new message.
+ */
+export const ListAutomationRunsResponseSchema: GenMessage<ListAutomationRunsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_automation, 25);
 
 /**
  * @generated from message armadra.v1.AutomationPlanSnapshot
@@ -776,6 +1126,13 @@ export type AutomationPlanSnapshot =
      * @generated from field: uint64 revision = 2;
      */
     revision: bigint;
+
+    /**
+     * Digest of the normalized stored configuration, required to activate it.
+     *
+     * @generated from field: bytes config_sha256 = 3;
+     */
+    configSha256: Uint8Array;
   };
 
 /**
@@ -784,7 +1141,7 @@ export type AutomationPlanSnapshot =
  */
 export const AutomationPlanSnapshotSchema: GenMessage<AutomationPlanSnapshot> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_automation, 17);
+  messageDesc(file_armadra_v1_automation, 26);
 
 /**
  * @generated from message armadra.v1.AutomationRunSnapshot
@@ -808,7 +1165,7 @@ export type AutomationRunSnapshot =
  */
 export const AutomationRunSnapshotSchema: GenMessage<AutomationRunSnapshot> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_automation, 18);
+  messageDesc(file_armadra_v1_automation, 27);
 
 /**
  * @generated from enum armadra.v1.AutomationPlanState
@@ -1040,3 +1397,36 @@ export enum AutomationOutcome {
 export const AutomationOutcomeSchema: GenEnum<AutomationOutcome> =
   /*@__PURE__*/
   enumDesc(file_armadra_v1_automation, 4);
+
+/**
+ * A Host-owned frozen command session definition. The Host rebuilds it on the
+ * Worker after a restart and records the generation the Worker reported.
+ *
+ * @generated from enum armadra.v1.AutomationCommandSessionState
+ */
+export enum AutomationCommandSessionState {
+  /**
+   * @generated from enum value: AUTOMATION_COMMAND_SESSION_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: AUTOMATION_COMMAND_SESSION_STATE_READY = 1;
+   */
+  READY = 1,
+
+  /**
+   * The stored definition could not be rebuilt or kept its recorded generation.
+   * Plans targeting it are refused; they are never silently left waiting.
+   *
+   * @generated from enum value: AUTOMATION_COMMAND_SESSION_STATE_UNREBUILDABLE = 2;
+   */
+  UNREBUILDABLE = 2,
+}
+
+/**
+ * Describes the enum armadra.v1.AutomationCommandSessionState.
+ */
+export const AutomationCommandSessionStateSchema: GenEnum<AutomationCommandSessionState> =
+  /*@__PURE__*/
+  enumDesc(file_armadra_v1_automation, 5);

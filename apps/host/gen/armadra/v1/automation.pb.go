@@ -324,6 +324,59 @@ func (AutomationOutcome) EnumDescriptor() ([]byte, []int) {
 	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{4}
 }
 
+// A Host-owned frozen command session definition. The Host rebuilds it on the
+// Worker after a restart and records the generation the Worker reported.
+type AutomationCommandSessionState int32
+
+const (
+	AutomationCommandSessionState_AUTOMATION_COMMAND_SESSION_STATE_UNSPECIFIED AutomationCommandSessionState = 0
+	AutomationCommandSessionState_AUTOMATION_COMMAND_SESSION_STATE_READY       AutomationCommandSessionState = 1
+	// The stored definition could not be rebuilt or kept its recorded generation.
+	// Plans targeting it are refused; they are never silently left waiting.
+	AutomationCommandSessionState_AUTOMATION_COMMAND_SESSION_STATE_UNREBUILDABLE AutomationCommandSessionState = 2
+)
+
+// Enum value maps for AutomationCommandSessionState.
+var (
+	AutomationCommandSessionState_name = map[int32]string{
+		0: "AUTOMATION_COMMAND_SESSION_STATE_UNSPECIFIED",
+		1: "AUTOMATION_COMMAND_SESSION_STATE_READY",
+		2: "AUTOMATION_COMMAND_SESSION_STATE_UNREBUILDABLE",
+	}
+	AutomationCommandSessionState_value = map[string]int32{
+		"AUTOMATION_COMMAND_SESSION_STATE_UNSPECIFIED":   0,
+		"AUTOMATION_COMMAND_SESSION_STATE_READY":         1,
+		"AUTOMATION_COMMAND_SESSION_STATE_UNREBUILDABLE": 2,
+	}
+)
+
+func (x AutomationCommandSessionState) Enum() *AutomationCommandSessionState {
+	p := new(AutomationCommandSessionState)
+	*p = x
+	return p
+}
+
+func (x AutomationCommandSessionState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AutomationCommandSessionState) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_automation_proto_enumTypes[5].Descriptor()
+}
+
+func (AutomationCommandSessionState) Type() protoreflect.EnumType {
+	return &file_armadra_v1_automation_proto_enumTypes[5]
+}
+
+func (x AutomationCommandSessionState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AutomationCommandSessionState.Descriptor instead.
+func (AutomationCommandSessionState) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{5}
+}
+
 type AutomationOnce struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AtUnixMs      int64                  `protobuf:"varint,1,opt,name=at_unix_ms,json=atUnixMs,proto3" json:"at_unix_ms,omitempty"`
@@ -1584,20 +1637,348 @@ func (x *AutomationReceipt) GetReasonCode() string {
 	return ""
 }
 
-// Reserved transport shapes. Defining them does not expose an HTTP endpoint.
-// Authentication always comes from the verified connection, never client fields.
-type DefineAutomationRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	PlanId        string                 `protobuf:"bytes,2,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
-	Config        *AutomationPlanConfig  `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`
+type AutomationCommandSession struct {
+	state           protoimpl.MessageState        `protogen:"open.v1"`
+	SessionId       string                        `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	WorkspaceId     string                        `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	ExecutionHostId string                        `protobuf:"bytes,3,opt,name=execution_host_id,json=executionHostId,proto3" json:"execution_host_id,omitempty"`
+	RootPath        string                        `protobuf:"bytes,4,opt,name=root_path,json=rootPath,proto3" json:"root_path,omitempty"`
+	Launch          *CommandLaunchSpec            `protobuf:"bytes,5,opt,name=launch,proto3" json:"launch,omitempty"`
+	Generation      uint64                        `protobuf:"varint,6,opt,name=generation,proto3" json:"generation,omitempty"`
+	LaunchSha256    []byte                        `protobuf:"bytes,7,opt,name=launch_sha256,json=launchSha256,proto3" json:"launch_sha256,omitempty"`
+	State           AutomationCommandSessionState `protobuf:"varint,8,opt,name=state,proto3,enum=armadra.v1.AutomationCommandSessionState" json:"state,omitempty"`
+	ReasonCode      string                        `protobuf:"bytes,9,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	Revision        uint64                        `protobuf:"varint,10,opt,name=revision,proto3" json:"revision,omitempty"`
+	CreatedAtUnixMs int64                         `protobuf:"varint,11,opt,name=created_at_unix_ms,json=createdAtUnixMs,proto3" json:"created_at_unix_ms,omitempty"`
+	UpdatedAtUnixMs int64                         `protobuf:"varint,12,opt,name=updated_at_unix_ms,json=updatedAtUnixMs,proto3" json:"updated_at_unix_ms,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *AutomationCommandSession) Reset() {
+	*x = AutomationCommandSession{}
+	mi := &file_armadra_v1_automation_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AutomationCommandSession) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AutomationCommandSession) ProtoMessage() {}
+
+func (x *AutomationCommandSession) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_automation_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AutomationCommandSession.ProtoReflect.Descriptor instead.
+func (*AutomationCommandSession) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *AutomationCommandSession) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *AutomationCommandSession) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *AutomationCommandSession) GetExecutionHostId() string {
+	if x != nil {
+		return x.ExecutionHostId
+	}
+	return ""
+}
+
+func (x *AutomationCommandSession) GetRootPath() string {
+	if x != nil {
+		return x.RootPath
+	}
+	return ""
+}
+
+func (x *AutomationCommandSession) GetLaunch() *CommandLaunchSpec {
+	if x != nil {
+		return x.Launch
+	}
+	return nil
+}
+
+func (x *AutomationCommandSession) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *AutomationCommandSession) GetLaunchSha256() []byte {
+	if x != nil {
+		return x.LaunchSha256
+	}
+	return nil
+}
+
+func (x *AutomationCommandSession) GetState() AutomationCommandSessionState {
+	if x != nil {
+		return x.State
+	}
+	return AutomationCommandSessionState_AUTOMATION_COMMAND_SESSION_STATE_UNSPECIFIED
+}
+
+func (x *AutomationCommandSession) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+func (x *AutomationCommandSession) GetRevision() uint64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *AutomationCommandSession) GetCreatedAtUnixMs() int64 {
+	if x != nil {
+		return x.CreatedAtUnixMs
+	}
+	return 0
+}
+
+func (x *AutomationCommandSession) GetUpdatedAtUnixMs() int64 {
+	if x != nil {
+		return x.UpdatedAtUnixMs
+	}
+	return 0
+}
+
+// Transport shapes for the authenticated Host surface. The verified session
+// supplies principal, device and grants; client fields never carry identity.
+// Every request scope is checked against automation:read / automation:manage
+// narrowed to its workspace and execution host.
+type DefineCommandSessionRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Meta      *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// Absolute directory on the execution host; the Worker canonicalizes it.
+	RootPath      string             `protobuf:"bytes,3,opt,name=root_path,json=rootPath,proto3" json:"root_path,omitempty"`
+	Launch        *CommandLaunchSpec `protobuf:"bytes,4,opt,name=launch,proto3" json:"launch,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
+func (x *DefineCommandSessionRequest) Reset() {
+	*x = DefineCommandSessionRequest{}
+	mi := &file_armadra_v1_automation_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DefineCommandSessionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DefineCommandSessionRequest) ProtoMessage() {}
+
+func (x *DefineCommandSessionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_automation_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DefineCommandSessionRequest.ProtoReflect.Descriptor instead.
+func (*DefineCommandSessionRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *DefineCommandSessionRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *DefineCommandSessionRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *DefineCommandSessionRequest) GetRootPath() string {
+	if x != nil {
+		return x.RootPath
+	}
+	return ""
+}
+
+func (x *DefineCommandSessionRequest) GetLaunch() *CommandLaunchSpec {
+	if x != nil {
+		return x.Launch
+	}
+	return nil
+}
+
+type ListCommandSessionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	AfterId       string                 `protobuf:"bytes,2,opt,name=after_id,json=afterId,proto3" json:"after_id,omitempty"`
+	Limit         uint32                 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCommandSessionsRequest) Reset() {
+	*x = ListCommandSessionsRequest{}
+	mi := &file_armadra_v1_automation_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCommandSessionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCommandSessionsRequest) ProtoMessage() {}
+
+func (x *ListCommandSessionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_automation_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCommandSessionsRequest.ProtoReflect.Descriptor instead.
+func (*ListCommandSessionsRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ListCommandSessionsRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *ListCommandSessionsRequest) GetAfterId() string {
+	if x != nil {
+		return x.AfterId
+	}
+	return ""
+}
+
+func (x *ListCommandSessionsRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListCommandSessionsResponse struct {
+	state         protoimpl.MessageState      `protogen:"open.v1"`
+	Sessions      []*AutomationCommandSession `protobuf:"bytes,1,rep,name=sessions,proto3" json:"sessions,omitempty"`
+	NextId        string                      `protobuf:"bytes,2,opt,name=next_id,json=nextId,proto3" json:"next_id,omitempty"`
+	HasMore       bool                        `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCommandSessionsResponse) Reset() {
+	*x = ListCommandSessionsResponse{}
+	mi := &file_armadra_v1_automation_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCommandSessionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCommandSessionsResponse) ProtoMessage() {}
+
+func (x *ListCommandSessionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_automation_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCommandSessionsResponse.ProtoReflect.Descriptor instead.
+func (*ListCommandSessionsResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ListCommandSessionsResponse) GetSessions() []*AutomationCommandSession {
+	if x != nil {
+		return x.Sessions
+	}
+	return nil
+}
+
+func (x *ListCommandSessionsResponse) GetNextId() string {
+	if x != nil {
+		return x.NextId
+	}
+	return ""
+}
+
+func (x *ListCommandSessionsResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
+}
+
+type DefineAutomationRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Meta   *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	PlanId string                 `protobuf:"bytes,2,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
+	Config *AutomationPlanConfig  `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`
+	// Immutable command stdin stored privately by the Host. The Host derives
+	// payload_ref/payload_sha256; values sent inside config are replaced.
+	Payload []byte `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"`
+	// Zero creates; any other value must equal the current plan revision.
+	ExpectedRevision uint64 `protobuf:"varint,5,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
 func (x *DefineAutomationRequest) Reset() {
 	*x = DefineAutomationRequest{}
-	mi := &file_armadra_v1_automation_proto_msgTypes[14]
+	mi := &file_armadra_v1_automation_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1609,7 +1990,7 @@ func (x *DefineAutomationRequest) String() string {
 func (*DefineAutomationRequest) ProtoMessage() {}
 
 func (x *DefineAutomationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_automation_proto_msgTypes[14]
+	mi := &file_armadra_v1_automation_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1622,7 +2003,7 @@ func (x *DefineAutomationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DefineAutomationRequest.ProtoReflect.Descriptor instead.
 func (*DefineAutomationRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{14}
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *DefineAutomationRequest) GetMeta() *CommandMeta {
@@ -1646,19 +2027,34 @@ func (x *DefineAutomationRequest) GetConfig() *AutomationPlanConfig {
 	return nil
 }
 
+func (x *DefineAutomationRequest) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *DefineAutomationRequest) GetExpectedRevision() uint64 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
 type ActivateAutomationRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	PlanId        string                 `protobuf:"bytes,2,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
-	ConfigVersion uint64                 `protobuf:"varint,3,opt,name=config_version,json=configVersion,proto3" json:"config_version,omitempty"`
-	ConfigSha256  []byte                 `protobuf:"bytes,4,opt,name=config_sha256,json=configSha256,proto3" json:"config_sha256,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Meta             *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	PlanId           string                 `protobuf:"bytes,2,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
+	ConfigVersion    uint64                 `protobuf:"varint,3,opt,name=config_version,json=configVersion,proto3" json:"config_version,omitempty"`
+	ConfigSha256     []byte                 `protobuf:"bytes,4,opt,name=config_sha256,json=configSha256,proto3" json:"config_sha256,omitempty"`
+	ExpectedRevision uint64                 `protobuf:"varint,5,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ActivateAutomationRequest) Reset() {
 	*x = ActivateAutomationRequest{}
-	mi := &file_armadra_v1_automation_proto_msgTypes[15]
+	mi := &file_armadra_v1_automation_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1670,7 +2066,7 @@ func (x *ActivateAutomationRequest) String() string {
 func (*ActivateAutomationRequest) ProtoMessage() {}
 
 func (x *ActivateAutomationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_automation_proto_msgTypes[15]
+	mi := &file_armadra_v1_automation_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1683,7 +2079,7 @@ func (x *ActivateAutomationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivateAutomationRequest.ProtoReflect.Descriptor instead.
 func (*ActivateAutomationRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{15}
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ActivateAutomationRequest) GetMeta() *CommandMeta {
@@ -1714,17 +2110,25 @@ func (x *ActivateAutomationRequest) GetConfigSha256() []byte {
 	return nil
 }
 
+func (x *ActivateAutomationRequest) GetExpectedRevision() uint64 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
 type PauseAutomationRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	PlanId        string                 `protobuf:"bytes,2,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Meta             *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	PlanId           string                 `protobuf:"bytes,2,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
+	ExpectedRevision uint64                 `protobuf:"varint,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *PauseAutomationRequest) Reset() {
 	*x = PauseAutomationRequest{}
-	mi := &file_armadra_v1_automation_proto_msgTypes[16]
+	mi := &file_armadra_v1_automation_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1736,7 +2140,7 @@ func (x *PauseAutomationRequest) String() string {
 func (*PauseAutomationRequest) ProtoMessage() {}
 
 func (x *PauseAutomationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_automation_proto_msgTypes[16]
+	mi := &file_armadra_v1_automation_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1749,7 +2153,7 @@ func (x *PauseAutomationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseAutomationRequest.ProtoReflect.Descriptor instead.
 func (*PauseAutomationRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{16}
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *PauseAutomationRequest) GetMeta() *CommandMeta {
@@ -1766,17 +2170,336 @@ func (x *PauseAutomationRequest) GetPlanId() string {
 	return ""
 }
 
-type AutomationPlanSnapshot struct {
+func (x *PauseAutomationRequest) GetExpectedRevision() uint64 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
+// RunNow materializes one extra manual slot. It never edits the schedule and
+// never bypasses the target gate, activation check or concurrency policy.
+type RunAutomationNowRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Meta             *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	PlanId           string                 `protobuf:"bytes,2,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
+	ExpectedRevision uint64                 `protobuf:"varint,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *RunAutomationNowRequest) Reset() {
+	*x = RunAutomationNowRequest{}
+	mi := &file_armadra_v1_automation_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunAutomationNowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunAutomationNowRequest) ProtoMessage() {}
+
+func (x *RunAutomationNowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_automation_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunAutomationNowRequest.ProtoReflect.Descriptor instead.
+func (*RunAutomationNowRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *RunAutomationNowRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *RunAutomationNowRequest) GetPlanId() string {
+	if x != nil {
+		return x.PlanId
+	}
+	return ""
+}
+
+func (x *RunAutomationNowRequest) GetExpectedRevision() uint64 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
+type ListAutomationPlansRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Plan          *AutomationPlan        `protobuf:"bytes,1,opt,name=plan,proto3" json:"plan,omitempty"`
-	Revision      uint64                 `protobuf:"varint,2,opt,name=revision,proto3" json:"revision,omitempty"`
+	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	AfterId       string                 `protobuf:"bytes,2,opt,name=after_id,json=afterId,proto3" json:"after_id,omitempty"`
+	Limit         uint32                 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAutomationPlansRequest) Reset() {
+	*x = ListAutomationPlansRequest{}
+	mi := &file_armadra_v1_automation_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAutomationPlansRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAutomationPlansRequest) ProtoMessage() {}
+
+func (x *ListAutomationPlansRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_automation_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAutomationPlansRequest.ProtoReflect.Descriptor instead.
+func (*ListAutomationPlansRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ListAutomationPlansRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *ListAutomationPlansRequest) GetAfterId() string {
+	if x != nil {
+		return x.AfterId
+	}
+	return ""
+}
+
+func (x *ListAutomationPlansRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListAutomationPlansResponse struct {
+	state         protoimpl.MessageState    `protogen:"open.v1"`
+	Plans         []*AutomationPlanSnapshot `protobuf:"bytes,1,rep,name=plans,proto3" json:"plans,omitempty"`
+	NextId        string                    `protobuf:"bytes,2,opt,name=next_id,json=nextId,proto3" json:"next_id,omitempty"`
+	HasMore       bool                      `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAutomationPlansResponse) Reset() {
+	*x = ListAutomationPlansResponse{}
+	mi := &file_armadra_v1_automation_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAutomationPlansResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAutomationPlansResponse) ProtoMessage() {}
+
+func (x *ListAutomationPlansResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_automation_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAutomationPlansResponse.ProtoReflect.Descriptor instead.
+func (*ListAutomationPlansResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ListAutomationPlansResponse) GetPlans() []*AutomationPlanSnapshot {
+	if x != nil {
+		return x.Plans
+	}
+	return nil
+}
+
+func (x *ListAutomationPlansResponse) GetNextId() string {
+	if x != nil {
+		return x.NextId
+	}
+	return ""
+}
+
+func (x *ListAutomationPlansResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
+}
+
+type ListAutomationRunsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	PlanId        string                 `protobuf:"bytes,2,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
+	AfterId       string                 `protobuf:"bytes,3,opt,name=after_id,json=afterId,proto3" json:"after_id,omitempty"`
+	Limit         uint32                 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAutomationRunsRequest) Reset() {
+	*x = ListAutomationRunsRequest{}
+	mi := &file_armadra_v1_automation_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAutomationRunsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAutomationRunsRequest) ProtoMessage() {}
+
+func (x *ListAutomationRunsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_automation_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAutomationRunsRequest.ProtoReflect.Descriptor instead.
+func (*ListAutomationRunsRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ListAutomationRunsRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *ListAutomationRunsRequest) GetPlanId() string {
+	if x != nil {
+		return x.PlanId
+	}
+	return ""
+}
+
+func (x *ListAutomationRunsRequest) GetAfterId() string {
+	if x != nil {
+		return x.AfterId
+	}
+	return ""
+}
+
+func (x *ListAutomationRunsRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListAutomationRunsResponse struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Runs          []*AutomationRunSnapshot `protobuf:"bytes,1,rep,name=runs,proto3" json:"runs,omitempty"`
+	NextId        string                   `protobuf:"bytes,2,opt,name=next_id,json=nextId,proto3" json:"next_id,omitempty"`
+	HasMore       bool                     `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAutomationRunsResponse) Reset() {
+	*x = ListAutomationRunsResponse{}
+	mi := &file_armadra_v1_automation_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAutomationRunsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAutomationRunsResponse) ProtoMessage() {}
+
+func (x *ListAutomationRunsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_automation_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAutomationRunsResponse.ProtoReflect.Descriptor instead.
+func (*ListAutomationRunsResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ListAutomationRunsResponse) GetRuns() []*AutomationRunSnapshot {
+	if x != nil {
+		return x.Runs
+	}
+	return nil
+}
+
+func (x *ListAutomationRunsResponse) GetNextId() string {
+	if x != nil {
+		return x.NextId
+	}
+	return ""
+}
+
+func (x *ListAutomationRunsResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
+}
+
+type AutomationPlanSnapshot struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Plan     *AutomationPlan        `protobuf:"bytes,1,opt,name=plan,proto3" json:"plan,omitempty"`
+	Revision uint64                 `protobuf:"varint,2,opt,name=revision,proto3" json:"revision,omitempty"`
+	// Digest of the normalized stored configuration, required to activate it.
+	ConfigSha256  []byte `protobuf:"bytes,3,opt,name=config_sha256,json=configSha256,proto3" json:"config_sha256,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AutomationPlanSnapshot) Reset() {
 	*x = AutomationPlanSnapshot{}
-	mi := &file_armadra_v1_automation_proto_msgTypes[17]
+	mi := &file_armadra_v1_automation_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1788,7 +2511,7 @@ func (x *AutomationPlanSnapshot) String() string {
 func (*AutomationPlanSnapshot) ProtoMessage() {}
 
 func (x *AutomationPlanSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_automation_proto_msgTypes[17]
+	mi := &file_armadra_v1_automation_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1801,7 +2524,7 @@ func (x *AutomationPlanSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AutomationPlanSnapshot.ProtoReflect.Descriptor instead.
 func (*AutomationPlanSnapshot) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{17}
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *AutomationPlanSnapshot) GetPlan() *AutomationPlan {
@@ -1818,6 +2541,13 @@ func (x *AutomationPlanSnapshot) GetRevision() uint64 {
 	return 0
 }
 
+func (x *AutomationPlanSnapshot) GetConfigSha256() []byte {
+	if x != nil {
+		return x.ConfigSha256
+	}
+	return nil
+}
+
 type AutomationRunSnapshot struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Run           *AutomationRun         `protobuf:"bytes,1,opt,name=run,proto3" json:"run,omitempty"`
@@ -1828,7 +2558,7 @@ type AutomationRunSnapshot struct {
 
 func (x *AutomationRunSnapshot) Reset() {
 	*x = AutomationRunSnapshot{}
-	mi := &file_armadra_v1_automation_proto_msgTypes[18]
+	mi := &file_armadra_v1_automation_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1840,7 +2570,7 @@ func (x *AutomationRunSnapshot) String() string {
 func (*AutomationRunSnapshot) ProtoMessage() {}
 
 func (x *AutomationRunSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_automation_proto_msgTypes[18]
+	mi := &file_armadra_v1_automation_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1853,7 +2583,7 @@ func (x *AutomationRunSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AutomationRunSnapshot.ProtoReflect.Descriptor instead.
 func (*AutomationRunSnapshot) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{18}
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *AutomationRunSnapshot) GetRun() *AutomationRun {
@@ -1875,7 +2605,7 @@ var File_armadra_v1_automation_proto protoreflect.FileDescriptor
 const file_armadra_v1_automation_proto_rawDesc = "" +
 	"\n" +
 	"\x1barmadra/v1/automation.proto\x12\n" +
-	"armadra.v1\x1a\x17armadra/v1/common.proto\".\n" +
+	"armadra.v1\x1a\x18armadra/v1/command.proto\x1a\x17armadra/v1/common.proto\".\n" +
 	"\x0eAutomationOnce\x12\x1c\n" +
 	"\n" +
 	"at_unix_ms\x18\x01 \x01(\x03R\batUnixMs\"[\n" +
@@ -1995,22 +2725,80 @@ const file_armadra_v1_automation_proto_rawDesc = "" +
 	"\bsequence\x18\x04 \x01(\x04R\bsequence\x12-\n" +
 	"\x13observed_at_unix_ms\x18\x05 \x01(\x03R\x10observedAtUnixMs\x12\x1f\n" +
 	"\vreason_code\x18\x06 \x01(\tR\n" +
-	"reasonCode\"\x99\x01\n" +
+	"reasonCode\"\xf9\x03\n" +
+	"\x18AutomationCommandSession\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12*\n" +
+	"\x11execution_host_id\x18\x03 \x01(\tR\x0fexecutionHostId\x12\x1b\n" +
+	"\troot_path\x18\x04 \x01(\tR\brootPath\x125\n" +
+	"\x06launch\x18\x05 \x01(\v2\x1d.armadra.v1.CommandLaunchSpecR\x06launch\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x06 \x01(\x04R\n" +
+	"generation\x12#\n" +
+	"\rlaunch_sha256\x18\a \x01(\fR\flaunchSha256\x12?\n" +
+	"\x05state\x18\b \x01(\x0e2).armadra.v1.AutomationCommandSessionStateR\x05state\x12\x1f\n" +
+	"\vreason_code\x18\t \x01(\tR\n" +
+	"reasonCode\x12\x1a\n" +
+	"\brevision\x18\n" +
+	" \x01(\x04R\brevision\x12+\n" +
+	"\x12created_at_unix_ms\x18\v \x01(\x03R\x0fcreatedAtUnixMs\x12+\n" +
+	"\x12updated_at_unix_ms\x18\f \x01(\x03R\x0fupdatedAtUnixMs\"\xbd\x01\n" +
+	"\x1bDefineCommandSessionRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x1b\n" +
+	"\troot_path\x18\x03 \x01(\tR\brootPath\x125\n" +
+	"\x06launch\x18\x04 \x01(\v2\x1d.armadra.v1.CommandLaunchSpecR\x06launch\"z\n" +
+	"\x1aListCommandSessionsRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x19\n" +
+	"\bafter_id\x18\x02 \x01(\tR\aafterId\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\rR\x05limit\"\x93\x01\n" +
+	"\x1bListCommandSessionsResponse\x12@\n" +
+	"\bsessions\x18\x01 \x03(\v2$.armadra.v1.AutomationCommandSessionR\bsessions\x12\x17\n" +
+	"\anext_id\x18\x02 \x01(\tR\x06nextId\x12\x19\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore\"\xe0\x01\n" +
 	"\x17DefineAutomationRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x17\n" +
 	"\aplan_id\x18\x02 \x01(\tR\x06planId\x128\n" +
-	"\x06config\x18\x03 \x01(\v2 .armadra.v1.AutomationPlanConfigR\x06config\"\xad\x01\n" +
+	"\x06config\x18\x03 \x01(\v2 .armadra.v1.AutomationPlanConfigR\x06config\x12\x18\n" +
+	"\apayload\x18\x04 \x01(\fR\apayload\x12+\n" +
+	"\x11expected_revision\x18\x05 \x01(\x04R\x10expectedRevision\"\xda\x01\n" +
 	"\x19ActivateAutomationRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x17\n" +
 	"\aplan_id\x18\x02 \x01(\tR\x06planId\x12%\n" +
 	"\x0econfig_version\x18\x03 \x01(\x04R\rconfigVersion\x12#\n" +
-	"\rconfig_sha256\x18\x04 \x01(\fR\fconfigSha256\"^\n" +
+	"\rconfig_sha256\x18\x04 \x01(\fR\fconfigSha256\x12+\n" +
+	"\x11expected_revision\x18\x05 \x01(\x04R\x10expectedRevision\"\x8b\x01\n" +
 	"\x16PauseAutomationRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x17\n" +
-	"\aplan_id\x18\x02 \x01(\tR\x06planId\"d\n" +
+	"\aplan_id\x18\x02 \x01(\tR\x06planId\x12+\n" +
+	"\x11expected_revision\x18\x03 \x01(\x04R\x10expectedRevision\"\x8c\x01\n" +
+	"\x17RunAutomationNowRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x17\n" +
+	"\aplan_id\x18\x02 \x01(\tR\x06planId\x12+\n" +
+	"\x11expected_revision\x18\x03 \x01(\x04R\x10expectedRevision\"z\n" +
+	"\x1aListAutomationPlansRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x19\n" +
+	"\bafter_id\x18\x02 \x01(\tR\aafterId\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\rR\x05limit\"\x8b\x01\n" +
+	"\x1bListAutomationPlansResponse\x128\n" +
+	"\x05plans\x18\x01 \x03(\v2\".armadra.v1.AutomationPlanSnapshotR\x05plans\x12\x17\n" +
+	"\anext_id\x18\x02 \x01(\tR\x06nextId\x12\x19\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore\"\x92\x01\n" +
+	"\x19ListAutomationRunsRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x17\n" +
+	"\aplan_id\x18\x02 \x01(\tR\x06planId\x12\x19\n" +
+	"\bafter_id\x18\x03 \x01(\tR\aafterId\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\rR\x05limit\"\x87\x01\n" +
+	"\x1aListAutomationRunsResponse\x125\n" +
+	"\x04runs\x18\x01 \x03(\v2!.armadra.v1.AutomationRunSnapshotR\x04runs\x12\x17\n" +
+	"\anext_id\x18\x02 \x01(\tR\x06nextId\x12\x19\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore\"\x89\x01\n" +
 	"\x16AutomationPlanSnapshot\x12.\n" +
 	"\x04plan\x18\x01 \x01(\v2\x1a.armadra.v1.AutomationPlanR\x04plan\x12\x1a\n" +
-	"\brevision\x18\x02 \x01(\x04R\brevision\"`\n" +
+	"\brevision\x18\x02 \x01(\x04R\brevision\x12#\n" +
+	"\rconfig_sha256\x18\x03 \x01(\fR\fconfigSha256\"`\n" +
 	"\x15AutomationRunSnapshot\x12+\n" +
 	"\x03run\x18\x01 \x01(\v2\x19.armadra.v1.AutomationRunR\x03run\x12\x1a\n" +
 	"\brevision\x18\x02 \x01(\x04R\brevision*\xe7\x01\n" +
@@ -2052,7 +2840,11 @@ const file_armadra_v1_automation_proto_rawDesc = "" +
 	"\x1aAUTOMATION_OUTCOME_RUNNING\x10\x04\x12 \n" +
 	"\x1cAUTOMATION_OUTCOME_SUCCEEDED\x10\x05\x12\x1d\n" +
 	"\x19AUTOMATION_OUTCOME_FAILED\x10\x06\x12 \n" +
-	"\x1cAUTOMATION_OUTCOME_CANCELLED\x10\aB#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	"\x1cAUTOMATION_OUTCOME_CANCELLED\x10\a*\xb1\x01\n" +
+	"\x1dAutomationCommandSessionState\x120\n" +
+	",AUTOMATION_COMMAND_SESSION_STATE_UNSPECIFIED\x10\x00\x12*\n" +
+	"&AUTOMATION_COMMAND_SESSION_STATE_READY\x10\x01\x122\n" +
+	".AUTOMATION_COMMAND_SESSION_STATE_UNREBUILDABLE\x10\x02B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_automation_proto_rawDescOnce sync.Once
@@ -2066,62 +2858,84 @@ func file_armadra_v1_automation_proto_rawDescGZIP() []byte {
 	return file_armadra_v1_automation_proto_rawDescData
 }
 
-var file_armadra_v1_automation_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_armadra_v1_automation_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_armadra_v1_automation_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_armadra_v1_automation_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_armadra_v1_automation_proto_goTypes = []any{
 	(AutomationPlanState)(0),              // 0: armadra.v1.AutomationPlanState
 	(AutomationMisfirePolicy)(0),          // 1: armadra.v1.AutomationMisfirePolicy
 	(AutomationConcurrencyPolicy)(0),      // 2: armadra.v1.AutomationConcurrencyPolicy
 	(AutomationRunState)(0),               // 3: armadra.v1.AutomationRunState
 	(AutomationOutcome)(0),                // 4: armadra.v1.AutomationOutcome
-	(*AutomationOnce)(nil),                // 5: armadra.v1.AutomationOnce
-	(*AutomationInterval)(nil),            // 6: armadra.v1.AutomationInterval
-	(*AutomationCron)(nil),                // 7: armadra.v1.AutomationCron
-	(*AutomationLoopAfterCompletion)(nil), // 8: armadra.v1.AutomationLoopAfterCompletion
-	(*AutomationSchedule)(nil),            // 9: armadra.v1.AutomationSchedule
-	(*AutomationTarget)(nil),              // 10: armadra.v1.AutomationTarget
-	(*AutomationPlanConfig)(nil),          // 11: armadra.v1.AutomationPlanConfig
-	(*AutomationActivation)(nil),          // 12: armadra.v1.AutomationActivation
-	(*AutomationPlan)(nil),                // 13: armadra.v1.AutomationPlan
-	(*AutomationPlanRef)(nil),             // 14: armadra.v1.AutomationPlanRef
-	(*AutomationRunRef)(nil),              // 15: armadra.v1.AutomationRunRef
-	(*AutomationTargetGate)(nil),          // 16: armadra.v1.AutomationTargetGate
-	(*AutomationRun)(nil),                 // 17: armadra.v1.AutomationRun
-	(*AutomationReceipt)(nil),             // 18: armadra.v1.AutomationReceipt
-	(*DefineAutomationRequest)(nil),       // 19: armadra.v1.DefineAutomationRequest
-	(*ActivateAutomationRequest)(nil),     // 20: armadra.v1.ActivateAutomationRequest
-	(*PauseAutomationRequest)(nil),        // 21: armadra.v1.PauseAutomationRequest
-	(*AutomationPlanSnapshot)(nil),        // 22: armadra.v1.AutomationPlanSnapshot
-	(*AutomationRunSnapshot)(nil),         // 23: armadra.v1.AutomationRunSnapshot
-	(*CommandMeta)(nil),                   // 24: armadra.v1.CommandMeta
+	(AutomationCommandSessionState)(0),    // 5: armadra.v1.AutomationCommandSessionState
+	(*AutomationOnce)(nil),                // 6: armadra.v1.AutomationOnce
+	(*AutomationInterval)(nil),            // 7: armadra.v1.AutomationInterval
+	(*AutomationCron)(nil),                // 8: armadra.v1.AutomationCron
+	(*AutomationLoopAfterCompletion)(nil), // 9: armadra.v1.AutomationLoopAfterCompletion
+	(*AutomationSchedule)(nil),            // 10: armadra.v1.AutomationSchedule
+	(*AutomationTarget)(nil),              // 11: armadra.v1.AutomationTarget
+	(*AutomationPlanConfig)(nil),          // 12: armadra.v1.AutomationPlanConfig
+	(*AutomationActivation)(nil),          // 13: armadra.v1.AutomationActivation
+	(*AutomationPlan)(nil),                // 14: armadra.v1.AutomationPlan
+	(*AutomationPlanRef)(nil),             // 15: armadra.v1.AutomationPlanRef
+	(*AutomationRunRef)(nil),              // 16: armadra.v1.AutomationRunRef
+	(*AutomationTargetGate)(nil),          // 17: armadra.v1.AutomationTargetGate
+	(*AutomationRun)(nil),                 // 18: armadra.v1.AutomationRun
+	(*AutomationReceipt)(nil),             // 19: armadra.v1.AutomationReceipt
+	(*AutomationCommandSession)(nil),      // 20: armadra.v1.AutomationCommandSession
+	(*DefineCommandSessionRequest)(nil),   // 21: armadra.v1.DefineCommandSessionRequest
+	(*ListCommandSessionsRequest)(nil),    // 22: armadra.v1.ListCommandSessionsRequest
+	(*ListCommandSessionsResponse)(nil),   // 23: armadra.v1.ListCommandSessionsResponse
+	(*DefineAutomationRequest)(nil),       // 24: armadra.v1.DefineAutomationRequest
+	(*ActivateAutomationRequest)(nil),     // 25: armadra.v1.ActivateAutomationRequest
+	(*PauseAutomationRequest)(nil),        // 26: armadra.v1.PauseAutomationRequest
+	(*RunAutomationNowRequest)(nil),       // 27: armadra.v1.RunAutomationNowRequest
+	(*ListAutomationPlansRequest)(nil),    // 28: armadra.v1.ListAutomationPlansRequest
+	(*ListAutomationPlansResponse)(nil),   // 29: armadra.v1.ListAutomationPlansResponse
+	(*ListAutomationRunsRequest)(nil),     // 30: armadra.v1.ListAutomationRunsRequest
+	(*ListAutomationRunsResponse)(nil),    // 31: armadra.v1.ListAutomationRunsResponse
+	(*AutomationPlanSnapshot)(nil),        // 32: armadra.v1.AutomationPlanSnapshot
+	(*AutomationRunSnapshot)(nil),         // 33: armadra.v1.AutomationRunSnapshot
+	(*CommandLaunchSpec)(nil),             // 34: armadra.v1.CommandLaunchSpec
+	(*CommandMeta)(nil),                   // 35: armadra.v1.CommandMeta
 }
 var file_armadra_v1_automation_proto_depIdxs = []int32{
-	5,  // 0: armadra.v1.AutomationSchedule.once:type_name -> armadra.v1.AutomationOnce
-	6,  // 1: armadra.v1.AutomationSchedule.interval:type_name -> armadra.v1.AutomationInterval
-	7,  // 2: armadra.v1.AutomationSchedule.cron:type_name -> armadra.v1.AutomationCron
-	8,  // 3: armadra.v1.AutomationSchedule.loop_after_completion:type_name -> armadra.v1.AutomationLoopAfterCompletion
-	9,  // 4: armadra.v1.AutomationPlanConfig.schedule:type_name -> armadra.v1.AutomationSchedule
-	10, // 5: armadra.v1.AutomationPlanConfig.target:type_name -> armadra.v1.AutomationTarget
+	6,  // 0: armadra.v1.AutomationSchedule.once:type_name -> armadra.v1.AutomationOnce
+	7,  // 1: armadra.v1.AutomationSchedule.interval:type_name -> armadra.v1.AutomationInterval
+	8,  // 2: armadra.v1.AutomationSchedule.cron:type_name -> armadra.v1.AutomationCron
+	9,  // 3: armadra.v1.AutomationSchedule.loop_after_completion:type_name -> armadra.v1.AutomationLoopAfterCompletion
+	10, // 4: armadra.v1.AutomationPlanConfig.schedule:type_name -> armadra.v1.AutomationSchedule
+	11, // 5: armadra.v1.AutomationPlanConfig.target:type_name -> armadra.v1.AutomationTarget
 	1,  // 6: armadra.v1.AutomationPlanConfig.misfire_policy:type_name -> armadra.v1.AutomationMisfirePolicy
 	2,  // 7: armadra.v1.AutomationPlanConfig.concurrency_policy:type_name -> armadra.v1.AutomationConcurrencyPolicy
-	11, // 8: armadra.v1.AutomationPlan.config:type_name -> armadra.v1.AutomationPlanConfig
+	12, // 8: armadra.v1.AutomationPlan.config:type_name -> armadra.v1.AutomationPlanConfig
 	0,  // 9: armadra.v1.AutomationPlan.state:type_name -> armadra.v1.AutomationPlanState
-	15, // 10: armadra.v1.AutomationTargetGate.active:type_name -> armadra.v1.AutomationRunRef
-	11, // 11: armadra.v1.AutomationRun.frozen_config:type_name -> armadra.v1.AutomationPlanConfig
-	12, // 12: armadra.v1.AutomationRun.activation:type_name -> armadra.v1.AutomationActivation
+	16, // 10: armadra.v1.AutomationTargetGate.active:type_name -> armadra.v1.AutomationRunRef
+	12, // 11: armadra.v1.AutomationRun.frozen_config:type_name -> armadra.v1.AutomationPlanConfig
+	13, // 12: armadra.v1.AutomationRun.activation:type_name -> armadra.v1.AutomationActivation
 	3,  // 13: armadra.v1.AutomationRun.state:type_name -> armadra.v1.AutomationRunState
 	4,  // 14: armadra.v1.AutomationReceipt.outcome:type_name -> armadra.v1.AutomationOutcome
-	24, // 15: armadra.v1.DefineAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
-	11, // 16: armadra.v1.DefineAutomationRequest.config:type_name -> armadra.v1.AutomationPlanConfig
-	24, // 17: armadra.v1.ActivateAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
-	24, // 18: armadra.v1.PauseAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
-	13, // 19: armadra.v1.AutomationPlanSnapshot.plan:type_name -> armadra.v1.AutomationPlan
-	17, // 20: armadra.v1.AutomationRunSnapshot.run:type_name -> armadra.v1.AutomationRun
-	21, // [21:21] is the sub-list for method output_type
-	21, // [21:21] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	34, // 15: armadra.v1.AutomationCommandSession.launch:type_name -> armadra.v1.CommandLaunchSpec
+	5,  // 16: armadra.v1.AutomationCommandSession.state:type_name -> armadra.v1.AutomationCommandSessionState
+	35, // 17: armadra.v1.DefineCommandSessionRequest.meta:type_name -> armadra.v1.CommandMeta
+	34, // 18: armadra.v1.DefineCommandSessionRequest.launch:type_name -> armadra.v1.CommandLaunchSpec
+	35, // 19: armadra.v1.ListCommandSessionsRequest.meta:type_name -> armadra.v1.CommandMeta
+	20, // 20: armadra.v1.ListCommandSessionsResponse.sessions:type_name -> armadra.v1.AutomationCommandSession
+	35, // 21: armadra.v1.DefineAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
+	12, // 22: armadra.v1.DefineAutomationRequest.config:type_name -> armadra.v1.AutomationPlanConfig
+	35, // 23: armadra.v1.ActivateAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
+	35, // 24: armadra.v1.PauseAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
+	35, // 25: armadra.v1.RunAutomationNowRequest.meta:type_name -> armadra.v1.CommandMeta
+	35, // 26: armadra.v1.ListAutomationPlansRequest.meta:type_name -> armadra.v1.CommandMeta
+	32, // 27: armadra.v1.ListAutomationPlansResponse.plans:type_name -> armadra.v1.AutomationPlanSnapshot
+	35, // 28: armadra.v1.ListAutomationRunsRequest.meta:type_name -> armadra.v1.CommandMeta
+	33, // 29: armadra.v1.ListAutomationRunsResponse.runs:type_name -> armadra.v1.AutomationRunSnapshot
+	14, // 30: armadra.v1.AutomationPlanSnapshot.plan:type_name -> armadra.v1.AutomationPlan
+	18, // 31: armadra.v1.AutomationRunSnapshot.run:type_name -> armadra.v1.AutomationRun
+	32, // [32:32] is the sub-list for method output_type
+	32, // [32:32] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_automation_proto_init() }
@@ -2129,6 +2943,7 @@ func file_armadra_v1_automation_proto_init() {
 	if File_armadra_v1_automation_proto != nil {
 		return
 	}
+	file_armadra_v1_command_proto_init()
 	file_armadra_v1_common_proto_init()
 	file_armadra_v1_automation_proto_msgTypes[4].OneofWrappers = []any{
 		(*AutomationSchedule_Once)(nil),
@@ -2141,8 +2956,8 @@ func file_armadra_v1_automation_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_automation_proto_rawDesc), len(file_armadra_v1_automation_proto_rawDesc)),
-			NumEnums:      5,
-			NumMessages:   19,
+			NumEnums:      6,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

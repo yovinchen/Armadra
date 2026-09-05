@@ -2,6 +2,7 @@ syntax = "proto3";
 package armadra.v1;
 option go_package = "armadra.local/host/gen/armadra/v1";
 
+import "armadra/v1/command.proto";
 import "armadra/v1/common.proto";
 
 enum AutomationPlanState {
@@ -159,19 +160,105 @@ message AutomationReceipt {
   string reason_code = 6;
 }
 
-// Reserved transport shapes. Defining them does not expose an HTTP endpoint.
-// Authentication always comes from the verified connection, never client fields.
+// A Host-owned frozen command session definition. The Host rebuilds it on the
+// Worker after a restart and records the generation the Worker reported.
+enum AutomationCommandSessionState {
+  AUTOMATION_COMMAND_SESSION_STATE_UNSPECIFIED = 0;
+  AUTOMATION_COMMAND_SESSION_STATE_READY = 1;
+  // The stored definition could not be rebuilt or kept its recorded generation.
+  // Plans targeting it are refused; they are never silently left waiting.
+  AUTOMATION_COMMAND_SESSION_STATE_UNREBUILDABLE = 2;
+}
+message AutomationCommandSession {
+  string session_id = 1;
+  string workspace_id = 2;
+  string execution_host_id = 3;
+  string root_path = 4;
+  CommandLaunchSpec launch = 5;
+  uint64 generation = 6;
+  bytes launch_sha256 = 7;
+  AutomationCommandSessionState state = 8;
+  string reason_code = 9;
+  uint64 revision = 10;
+  int64 created_at_unix_ms = 11;
+  int64 updated_at_unix_ms = 12;
+}
+
+// Transport shapes for the authenticated Host surface. The verified session
+// supplies principal, device and grants; client fields never carry identity.
+// Every request scope is checked against automation:read / automation:manage
+// narrowed to its workspace and execution host.
+message DefineCommandSessionRequest {
+  CommandMeta meta = 1;
+  string session_id = 2;
+  // Absolute directory on the execution host; the Worker canonicalizes it.
+  string root_path = 3;
+  CommandLaunchSpec launch = 4;
+}
+message ListCommandSessionsRequest {
+  CommandMeta meta = 1;
+  string after_id = 2;
+  uint32 limit = 3;
+}
+message ListCommandSessionsResponse {
+  repeated AutomationCommandSession sessions = 1;
+  string next_id = 2;
+  bool has_more = 3;
+}
 message DefineAutomationRequest {
   CommandMeta meta = 1;
   string plan_id = 2;
   AutomationPlanConfig config = 3;
+  // Immutable command stdin stored privately by the Host. The Host derives
+  // payload_ref/payload_sha256; values sent inside config are replaced.
+  bytes payload = 4;
+  // Zero creates; any other value must equal the current plan revision.
+  uint64 expected_revision = 5;
 }
 message ActivateAutomationRequest {
   CommandMeta meta = 1;
   string plan_id = 2;
   uint64 config_version = 3;
   bytes config_sha256 = 4;
+  uint64 expected_revision = 5;
 }
-message PauseAutomationRequest { CommandMeta meta = 1; string plan_id = 2; }
-message AutomationPlanSnapshot { AutomationPlan plan = 1; uint64 revision = 2; }
+message PauseAutomationRequest {
+  CommandMeta meta = 1;
+  string plan_id = 2;
+  uint64 expected_revision = 3;
+}
+// RunNow materializes one extra manual slot. It never edits the schedule and
+// never bypasses the target gate, activation check or concurrency policy.
+message RunAutomationNowRequest {
+  CommandMeta meta = 1;
+  string plan_id = 2;
+  uint64 expected_revision = 3;
+}
+message ListAutomationPlansRequest {
+  CommandMeta meta = 1;
+  string after_id = 2;
+  uint32 limit = 3;
+}
+message ListAutomationPlansResponse {
+  repeated AutomationPlanSnapshot plans = 1;
+  string next_id = 2;
+  bool has_more = 3;
+}
+message ListAutomationRunsRequest {
+  CommandMeta meta = 1;
+  string plan_id = 2;
+  string after_id = 3;
+  uint32 limit = 4;
+}
+message ListAutomationRunsResponse {
+  repeated AutomationRunSnapshot runs = 1;
+  string next_id = 2;
+  bool has_more = 3;
+}
+message AutomationPlanSnapshot {
+  AutomationPlan plan = 1;
+  uint64 revision = 2;
+  // Digest of the normalized stored configuration, required to activate it.
+  bytes config_sha256 = 3;
+}
 message AutomationRunSnapshot { AutomationRun run = 1; uint64 revision = 2; }
