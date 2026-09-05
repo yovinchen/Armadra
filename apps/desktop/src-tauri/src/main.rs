@@ -92,8 +92,8 @@ impl RuntimeProcess {
         // `armadra.sh run desktop` adds a loopback port on top of the socket, so
         // the Vite page on 1420 can still reach the Runtime it owns. A packaged
         // build never sets this and therefore never binds a port.
-        if let Some(extra) = std::env::var_os("ARMADRA_RUNTIME_LISTEN")
-            .filter(|value| !value.is_empty())
+        if let Some(extra) =
+            std::env::var_os("ARMADRA_RUNTIME_LISTEN").filter(|value| !value.is_empty())
         {
             command.arg("--listen").arg(extra);
         }
