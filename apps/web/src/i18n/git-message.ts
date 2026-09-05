@@ -3,6 +3,12 @@ export const gitMessage: MessageModule = {
   "zh-CN": {
     "gitMessage.title": "AI 提交信息草稿",
     "gitMessage.provider": "生成服务",
+    "gitMessage.language": "草稿语言",
+    "gitMessage.language.zh": "简体中文",
+    "gitMessage.language.en": "英文",
+    "gitMessage.conventional": "使用 Conventional Commits 主题",
+    "gitMessage.optionsNote":
+      "两项只影响写给生成服务的指令；读取范围、文件排除与敏感行处理不变。",
     "gitMessage.generate": "生成草稿",
     "gitMessage.generating": "正在生成草稿…",
     "gitMessage.fill": "填入提交框",
@@ -36,6 +42,12 @@ export const gitMessage: MessageModule = {
   en: {
     "gitMessage.title": "AI commit-message draft",
     "gitMessage.provider": "Provider",
+    "gitMessage.language": "Draft language",
+    "gitMessage.language.zh": "Simplified Chinese",
+    "gitMessage.language.en": "English",
+    "gitMessage.conventional": "Use a Conventional Commits subject",
+    "gitMessage.optionsNote":
+      "Both options only change the instruction sent to the provider. What is read, which files are excluded and how sensitive lines are handled stay the same.",
     "gitMessage.generate": "Generate draft",
     "gitMessage.generating": "Generating draft…",
     "gitMessage.fill": "Fill commit message",

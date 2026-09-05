@@ -27,6 +27,8 @@ const draft: GitMessageDraft = {
   ...source,
   provider: "claude-bare",
   message: "Improve workspace rendering",
+  language: "en",
+  conventional: false,
 };
 const clients: QueryClient[] = [];
 function view(overrides: Partial<CommitMessageAssistantProps> = {}) {
@@ -76,6 +78,10 @@ describe("AI commit-message preview", () => {
       provider: "claude-bare",
       expectedHead: source.expectedHead,
       indexDigest: source.indexDigest,
+      // Defaults, carried explicitly: the language follows the interface
+      // language (English here) and Conventional Commits is opt-in.
+      language: "en",
+      conventional: false,
     });
     fireEvent.click(
       screen.getByRole("button", { name: "Fill commit message" }),
@@ -86,6 +92,25 @@ describe("AI commit-message preview", () => {
     expect(props.source).toHaveBeenCalledTimes(3);
     expect(screen.getByText(/Input was truncated/)).toBeTruthy();
     expect(screen.getByText(/Detected sensitive lines/)).toBeTruthy();
+  });
+  it("passes the chosen language and Conventional Commits switch through", async () => {
+    const { props } = view();
+    await screen.findByText(/Included files/, { selector: "summary" });
+    fireEvent.change(screen.getByLabelText("Draft language"), {
+      target: { value: "zh" },
+    });
+    fireEvent.click(
+      screen.getByLabelText("Use a Conventional Commits subject"),
+    );
+    await generate();
+    await screen.findByRole("textbox", { name: "Draft preview" });
+    expect(props.generate).toHaveBeenCalledWith("workspace", {
+      provider: "claude-bare",
+      expectedHead: source.expectedHead,
+      indexDigest: source.indexDigest,
+      language: "zh",
+      conventional: true,
+    });
   });
   it("does not overwrite a manual edit made while the model response was pending", async () => {
     let finish!: (value: GitMessageDraft) => void;

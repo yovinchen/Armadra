@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type {
-  GitMessageProvider,
-  GitMessageSource,
-  GitMessageRequest,
-  GitMessageDraft,
+import {
+  GIT_MESSAGE_LANGUAGES,
+  type GitMessageProvider,
+  type GitMessageSource,
+  type GitMessageRequest,
+  type GitMessageDraft,
+  type GitMessageLanguage,
 } from "@armadra/shared";
-import { useT } from "../../app/preferences-store";
+import { usePreferencesStore, useT } from "../../app/preferences-store";
 import { Button } from "../../ui/button";
 import { Textarea } from "../../ui/textarea";
-import { Field, selectClass } from "./forms";
+import { Check, Field, selectClass } from "./forms";
 
 export interface CommitMessageAssistantProps {
   workspaceId: string;
@@ -66,6 +68,15 @@ function AssistantSession({
     value: GitMessageDraft;
     revision: number;
   } | null>(null);
+  /*
+   * 草稿选项（A05）。它们只改写给隔离提供方的那句指令：读哪些文件、排除哪些、
+   * 敏感行怎么处理、用哪几个 digest 复核，全都不受影响。默认语言跟界面语言
+   * 走——想要另一种的人会自己改，反过来则要每次都改。
+   */
+  const [language, setLanguage] = useState<GitMessageLanguage>(() =>
+    usePreferencesStore.getState().locale === "zh-CN" ? "zh" : "en",
+  );
+  const [conventional, setConventional] = useState(false);
   const [busy, setBusy] = useState<"generate" | "fill" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const active = useRef(true),
@@ -107,6 +118,8 @@ function AssistantSession({
         provider: "claude-bare",
         expectedHead: before.expectedHead,
         indexDigest: before.indexDigest,
+        language,
+        conventional,
       });
       if (!active.current) return;
       if (
@@ -180,6 +193,30 @@ function AssistantSession({
           ))}
         </select>
       </Field>
+      <Field label={t("gitMessage.language")}>
+        <select
+          className={selectClass}
+          value={language}
+          disabled={busy !== null}
+          onChange={(event) =>
+            setLanguage(event.target.value as GitMessageLanguage)
+          }
+        >
+          {GIT_MESSAGE_LANGUAGES.map((value) => (
+            <option key={value} value={value}>
+              {t(`gitMessage.language.${value}`)}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Check
+        label={t("gitMessage.conventional")}
+        checked={conventional}
+        onChange={setConventional}
+      />
+      <p className="break-words text-muted-foreground">
+        {t("gitMessage.optionsNote")}
+      </p>
       <p className="break-words text-muted-foreground">
         {t("gitMessage.credentials")}
       </p>
