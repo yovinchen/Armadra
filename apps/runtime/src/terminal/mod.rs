@@ -505,6 +505,15 @@ struct Inner {
     /// have been none. A plain `std::sync::Mutex` because the release side runs
     /// inside a `Drop`, which cannot await (design §7.2).
     attachments: std::sync::Mutex<HashMap<String, Attachment>>,
+    /// `session id -> writer id -> highest input id actually written`.
+    ///
+    /// A client that loses its socket cannot tell whether the keystrokes it had
+    /// sent reached the pty. This is the answer: on the next attach it asks
+    /// what its own writer already reached, and resends only what is above that
+    /// mark. Nothing here authorizes anything — a writer id is a client's own
+    /// label for its input stream, checked against nothing, and the worst a
+    /// forged one can do is make that client resend its own keystrokes.
+    input_acks: RwLock<HashMap<String, HashMap<String, u64>>>,
 }
 
 /// One session's attachment bookkeeping.
@@ -515,15 +524,6 @@ struct Attachment {
     /// When `sockets` last fell to zero. `None` while something is attached.
     idle_since: Option<Instant>,
     dormant: bool,
-    /// `session id -> writer id -> highest input id actually written`.
-    ///
-    /// A client that loses its socket cannot tell whether the keystrokes it had
-    /// sent reached the pty. This is the answer: on the next attach it asks
-    /// what its own writer already reached, and resends only what is above that
-    /// mark. Nothing here authorizes anything — a writer id is a client's own
-    /// label for its input stream, checked against nothing, and the worst a
-    /// forged one can do is make that client resend its own keystrokes.
-    input_acks: RwLock<HashMap<String, HashMap<String, u64>>>,
 }
 
 /// How many independent writers one session remembers. A terminal has one
