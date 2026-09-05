@@ -209,7 +209,46 @@ const schemaV5 = `CREATE TABLE write_ownership (
  updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0)
 )`
 
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5}
+// Write ownership for all six domains (Go Host 业务所有权迁移 §3.1). SQLite
+// cannot widen a CHECK in place, so the v5 table is renamed aside, the new one
+// is created, the rows are copied and the old name is dropped. The copy is the
+// point: an installation that already switched the canvas keeps its epoch,
+// phase and import id exactly as they were.
+//
+// The five new domains get no rows here. An absent row means "no switch has
+// ever been recorded on this Host", which the ownership service reports as the
+// Runtime owning writes -- inserting rows would make this Host claim a history
+// it does not have.
+//
+// A maintenance token is what lets an HTTPS caller open a window at all. Only
+// the hash is stored, exactly like a pairing ticket: a leaked database must not
+// hand anyone the ability to move a domain. One token covers one domain, is
+// consumed once, and dies with the Host instance that issued it.
+const schemaV6 = `ALTER TABLE write_ownership RENAME TO write_ownership_v5;
+CREATE TABLE write_ownership (
+ domain TEXT PRIMARY KEY CHECK(domain IN ('canvas','settings','filesystem','session','agent','git')),
+ owner TEXT NOT NULL CHECK(owner IN ('runtime','host')),
+ epoch INTEGER NOT NULL CHECK(epoch > 0),
+ phase TEXT NOT NULL CHECK(phase IN ('settled','switching','rolling_back')),
+ import_id TEXT NOT NULL CHECK(length(import_id) <= 128),
+ reason_code TEXT NOT NULL CHECK(length(reason_code) <= 64),
+ event_sequence INTEGER NOT NULL DEFAULT 0 CHECK(event_sequence >= 0),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0),
+ updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0)
+);
+INSERT INTO write_ownership(domain,owner,epoch,phase,import_id,reason_code,event_sequence,revision,created_at_ms,updated_at_ms) SELECT domain,owner,epoch,phase,import_id,reason_code,event_sequence,revision,created_at_ms,updated_at_ms FROM write_ownership_v5;
+DROP TABLE write_ownership_v5;
+CREATE TABLE maintenance_tokens (
+ token_hash BLOB PRIMARY KEY CHECK(length(token_hash) = 32),
+ domain TEXT NOT NULL CHECK(domain IN ('canvas','settings','filesystem','session','agent','git')),
+ instance_id TEXT NOT NULL CHECK(length(instance_id) BETWEEN 1 AND 256),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0),
+ expires_at_ms INTEGER NOT NULL CHECK(expires_at_ms > created_at_ms),
+ consumed_at_ms INTEGER NOT NULL DEFAULT 0 CHECK(consumed_at_ms >= 0)
+)`
+
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6}
 
 type sqlReader interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
@@ -220,7 +259,27 @@ func canonicalSQL(value string) string {
 	return strings.Join(strings.Fields(strings.TrimSuffix(strings.TrimSpace(value), ";")), " ")
 }
 
-func expectedObjects(version int) map[string]string {
+// objectName strips the punctuation a name can be written against, so
+// `CREATE TABLE staging_ids (staging_id ...` and a quoted name both resolve to
+// the identifier SQLite stores.
+func objectName(token string) string {
+	return strings.Trim(token, `"'()`)
+}
+
+// expectedObjects folds the migrations into the schema they must have produced,
+// so validateSchema compares a database against this build's own statements
+// rather than against a version number it would have to trust.
+//
+// Four statement forms are recognised, and an unrecognised one is an error
+// rather than a skip: a migration this function cannot model would leave the
+// validator silently blind to whatever that statement changed.
+//
+//	CREATE TABLE name (...)        defines an object
+//	ALTER TABLE old RENAME TO new  moves it, and SQLite quotes the new name in
+//	                               the schema text it stores
+//	DROP TABLE name                removes it
+//	INSERT INTO ...                changes rows, never the schema
+func expectedObjects(version int) (map[string]string, error) {
 	result := map[string]string{"schema_migrations": canonicalSQL(ledgerSQL)}
 	for _, migration := range migrations[:version] {
 		for _, statement := range strings.Split(migration, ";") {
@@ -229,10 +288,35 @@ func expectedObjects(version int) map[string]string {
 				continue
 			}
 			parts := strings.Fields(statement)
-			result[parts[2]] = statement
+			switch {
+			case len(parts) >= 4 && strings.EqualFold(parts[0], "CREATE") && strings.EqualFold(parts[1], "TABLE"):
+				result[objectName(parts[2])] = statement
+			case len(parts) == 5 && strings.EqualFold(parts[0], "ALTER") && strings.EqualFold(parts[1], "TABLE") && strings.EqualFold(parts[3], "RENAME"):
+				return nil, fmt.Errorf("%w: rename needs a target", ErrSchema)
+			case len(parts) == 6 && strings.EqualFold(parts[0], "ALTER") && strings.EqualFold(parts[1], "TABLE") &&
+				strings.EqualFold(parts[3], "RENAME") && strings.EqualFold(parts[4], "TO"):
+				from, to := objectName(parts[2]), objectName(parts[5])
+				existing, ok := result[from]
+				if !ok {
+					return nil, fmt.Errorf("%w: %s cannot be renamed before it exists", ErrSchema, from)
+				}
+				delete(result, from)
+				// SQLite rewrites the stored CREATE with the new name quoted,
+				// and leaves the rest of the text alone.
+				result[to] = strings.Replace(existing, " "+from+" ", ` "`+to+`" `, 1)
+			case len(parts) == 3 && strings.EqualFold(parts[0], "DROP") && strings.EqualFold(parts[1], "TABLE"):
+				name := objectName(parts[2])
+				if _, ok := result[name]; !ok {
+					return nil, fmt.Errorf("%w: %s cannot be dropped before it exists", ErrSchema, name)
+				}
+				delete(result, name)
+			case strings.EqualFold(parts[0], "INSERT"):
+			default:
+				return nil, fmt.Errorf("%w: unrecognised migration statement", ErrSchema)
+			}
 		}
 	}
-	return result
+	return result, nil
 }
 
 func validateSchema(ctx context.Context, db sqlReader, hostID string) (int, error) {
@@ -303,7 +387,10 @@ func validateSchema(ctx context.Context, db sqlReader, hostID string) (int, erro
 	if version == 0 || userVersion != version {
 		return 0, ErrSchema
 	}
-	expected := expectedObjects(version)
+	expected, err := expectedObjects(version)
+	if err != nil {
+		return 0, err
+	}
 	if len(objects) != len(expected) {
 		return 0, ErrSchema
 	}

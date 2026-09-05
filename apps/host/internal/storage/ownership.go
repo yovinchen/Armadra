@@ -4,22 +4,29 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 )
 
-// Write ownership of a business domain (host protocol design §4, step 5).
+// Write ownership of a business domain (host protocol design §4, step 5;
+// Go Host 业务所有权迁移 §2.2).
 //
-// There is one row per domain and only one domain in this version: "canvas".
-// The record answers a single question — which process may write workspaces and
-// canvases right now, and under which epoch — and it answers it explicitly.
-// Nothing here infers ownership from a missing row: an absent record is
-// ErrNotFound, never "the Runtime presumably still owns it".
+// There is one row per domain and six domains. Each record answers a single
+// question — which process may write that domain right now, and under which
+// epoch — and it answers it explicitly. Nothing here infers ownership from a
+// missing row: an absent record is ErrNotFound, never "the Runtime presumably
+// still owns it".
 //
-// The record deliberately lives outside entities/events. It is not canvas
+// The record deliberately lives outside entities/events. It is not business
 // content, so it must never be published to a client as a business change and
 // must never be replayed out of the event outbox.
 
 const (
-	OwnershipDomainCanvas = "canvas"
+	OwnershipDomainCanvas     = "canvas"
+	OwnershipDomainSettings   = "settings"
+	OwnershipDomainFilesystem = "filesystem"
+	OwnershipDomainSession    = "session"
+	OwnershipDomainAgent      = "agent"
+	OwnershipDomainGit        = "git"
 
 	OwnerRuntime = "runtime"
 	OwnerHost    = "host"
@@ -46,13 +53,31 @@ type Ownership struct {
 	CreatedAtMS, UpdatedAtMS int64
 }
 
+// OwnershipDomains lists every domain in switch order, which is also the order
+// dependencies are checked in. It is the only place the set is written down.
+var OwnershipDomains = []string{
+	OwnershipDomainCanvas,
+	OwnershipDomainSettings,
+	OwnershipDomainFilesystem,
+	OwnershipDomainSession,
+	OwnershipDomainAgent,
+	OwnershipDomainGit,
+}
+
+// ValidOwnershipDomain reports whether a name is one of the six. The migration
+// constrains the column the same way; refusing here keeps a caller's mistake a
+// request error instead of a database one.
+func ValidOwnershipDomain(value string) bool {
+	return slices.Contains(OwnershipDomains, value)
+}
+
 func validOwner(value string) bool { return value == OwnerRuntime || value == OwnerHost }
 func validPhase(value string) bool {
 	return value == OwnershipSettled || value == OwnershipSwitching || value == OwnershipRollingBack
 }
 
 func (o Ownership) validate() error {
-	if o.Domain != OwnershipDomainCanvas || !validOwner(o.Owner) || !validPhase(o.Phase) {
+	if !ValidOwnershipDomain(o.Domain) || !validOwner(o.Owner) || !validPhase(o.Phase) {
 		return ErrInvalid
 	}
 	if o.Epoch == 0 || !textValid(o.ImportID, 128, true) || !textValid(o.ReasonCode, 64, true) {
@@ -92,9 +117,9 @@ func scanOwnership(row scanner) (Ownership, error) {
 }
 
 // Ownership reads one domain's record. ErrNotFound means no switch has ever
-// been recorded on this Host, which the caller reports as such.
+// been recorded on this Host for that domain, which the caller reports as such.
 func (s *Store) Ownership(ctx context.Context, domain string) (Ownership, error) {
-	if domain != OwnershipDomainCanvas {
+	if !ValidOwnershipDomain(domain) {
 		return Ownership{}, ErrInvalid
 	}
 	return scanOwnership(s.db.QueryRowContext(ctx, ownershipColumns, domain))
@@ -153,4 +178,28 @@ func (s *Store) PutOwnership(ctx context.Context, record Ownership, expectedRevi
 		return Ownership{}, err
 	}
 	return record, tx.Commit()
+}
+
+// AllOwnership reads every recorded domain, keyed by domain name. Domains with
+// no record are simply absent: this is the store, and inventing a default here
+// would make an unrecorded domain indistinguishable from one this Host really
+// did take over. The caller decides what "never recorded" means, once.
+func (s *Store) AllOwnership(ctx context.Context) (map[string]Ownership, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT domain,owner,epoch,phase,import_id,reason_code,event_sequence,revision,created_at_ms,updated_at_ms FROM write_ownership")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	records := make(map[string]Ownership, len(OwnershipDomains))
+	for rows.Next() {
+		record, err := scanOwnership(rows)
+		if err != nil {
+			return nil, err
+		}
+		records[record.Domain] = record
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return records, nil
 }
