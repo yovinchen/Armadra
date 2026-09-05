@@ -26,6 +26,7 @@ vi.mock("@/api/client", () => ({
 }));
 
 import { ResourceDrawer } from "./ResourceDrawer";
+import { resetSampling } from "./resources/sampling";
 import { usePreferencesStore } from "../app/preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
 
@@ -164,6 +165,8 @@ const snapshot: ResourceSnapshot = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // 订阅是模块级共享的：上一个用例漏下来的房间会让这一个看到别人的调用。
+  resetSampling();
   resources.mockResolvedValue(snapshot);
   subscribeResources.mockResolvedValue({
     subscriptionId: "sub-1",
@@ -211,7 +214,12 @@ describe("ResourceDrawer", () => {
     await waitFor(() => expect(resources).toHaveBeenCalled());
     expect(resources.mock.calls[0]?.[0]).toBe("w-1");
     await waitFor(() =>
-      expect(subscribeResources).toHaveBeenCalledWith("w-1", undefined),
+      // 面板要的是设置里的那档，所以不带间隔；离屏的节点徽标才会传 30_000。
+      expect(subscribeResources).toHaveBeenCalledWith(
+        "w-1",
+        undefined,
+        undefined,
+      ),
     );
   });
 
@@ -240,6 +248,36 @@ describe("ResourceDrawer", () => {
     expect(screen.getByText("98.8%")).toBeTruthy();
     expect(screen.queryByText("0 B")).toBeNull();
     expect(screen.queryByText("0%")).toBeNull();
+  });
+
+  it("平台组件单独一组，Runtime 那行写明只算它自己", async () => {
+    useCanvasStore.getState().setPanel("resources", "drawer");
+    render(<ResourceDrawer />);
+
+    await waitFor(() => expect(screen.getByText("平台组件")).toBeTruthy());
+    expect(screen.getByText("Runtime")).toBeTruthy();
+    // 它的子进程就是用户的会话，已经各有各的行；算进来等于数两遍。
+    expect(
+      screen.getByText(/只算这个进程；它启动的会话在上面各有一行/),
+    ).toBeTruthy();
+    expect(screen.getByText("40 MB")).toBeTruthy();
+  });
+
+  it("会话可以展开进程树，超过阈值的行高亮", async () => {
+    usePreferencesStore.setState({ sessionMemoryWarnBytes: 1024 * 1024 });
+    useCanvasStore.getState().setPanel("resources", "drawer");
+    render(<ResourceDrawer />);
+
+    // 4.4 MB 的会话越过 1 MB 的阈值：只高亮，不做任何处置。
+    await waitFor(() => expect(screen.getByText("占用超过阈值")).toBeTruthy());
+
+    // 默认收起：进程树要点开才出现。
+    expect(screen.queryByText(/pid 101/)).toBeNull();
+    const expand = await screen.findByRole("button", { name: "展开进程树" });
+    expand.click();
+    await waitFor(() => expect(screen.getByText(/pid 101/)).toBeTruthy());
+    expect(screen.getByText("node", { exact: false })).toBeTruthy();
+    expect(screen.getByText("2 MB")).toBeTruthy();
   });
 
   it("孤立会话可以认领，并且用 Runtime 给的 nodeId 建节点", async () => {

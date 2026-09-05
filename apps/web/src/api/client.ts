@@ -721,13 +721,25 @@ export const runtimeApi = {
    * 订阅过期，采样循环自己停下，不占 CPU。带上上次的 `subscriptionId` 就是
    * 续约；已经过期的 id 不算错，Runtime 会发一个新的回来。
    */
-  subscribeResources: (workspaceId: string, subscriptionId?: string) =>
+  subscribeResources: (
+    workspaceId: string,
+    subscriptionId?: string,
+    /**
+     * 这份订阅自己要的节奏，毫秒。离屏的节点徽标要慢的（30s）；不传就是
+     * 设置里的那档。Runtime 把它夹在 `[resources.intervalMs, 60s]`：可以要
+     * 得更少，要不到更多。
+     */
+    intervalMs?: number,
+  ) =>
     request(
       `/api/workspaces/${workspaceId}/resources/subscription`,
       resourceSubscriptionSchema,
       {
         method: "POST",
-        ...json(subscriptionId ? { subscriptionId } : {}),
+        ...json({
+          ...(subscriptionId ? { subscriptionId } : {}),
+          ...(intervalMs ? { intervalMs } : {}),
+        }),
       },
     ),
   unsubscribeResources: (workspaceId: string, subscriptionId: string) =>

@@ -55,6 +55,7 @@ import {
   suggestNodeTitle,
 } from "@/meta/annotations";
 import { HandoffBadge } from "@/agent/handoff/HandoffBadge";
+import { MemoryBadge } from "@/panels/resources/MemoryBadge";
 import { openHandoff } from "@/agent/handoff/handoff-targets";
 import { useSshHosts } from "@/panels/settings/ssh-hosts";
 import { NodeShell } from "./NodeShell";
@@ -228,6 +229,20 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
           unavailableReason={
             exited ? "session_ended" : context.unavailableReason
           }
+        />
+      )}
+      {/*
+        内存徽标（路线图 §4.3）。Agent 和普通 shell 都有：一个跑 `cargo build`
+        的普通终端和一个 Agent 一样会吃掉几个 GB。SSH 会话的进程树在别的机器
+        上，本机测不到，所以不显示——那里的数字只可能是假的（设计 §8）。
+      */}
+      {!data?.ssh && !exited && (
+        <MemoryBadge
+          nodeId={id}
+          workspaceId={workspaceId}
+          sessionId={sessionId}
+          generation={generation}
+          visible={!collapsed}
         />
       )}
       {agent && <HandoffBadge nodeId={id} />}

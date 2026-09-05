@@ -57,6 +57,38 @@ export const resources: MessageModule = {
     "resources.unknown.not-found": "进程已经不在了",
     "resources.unknown.warming-up": "正在建立采样基线",
 
+    "resources.sort.hint": "点一次换排序；测不出来的排在最后，不当 0",
+    "resources.session.tree": "展开进程树",
+    "resources.session.treeCollapse": "收起进程树",
+    "resources.session.treeTruncated": "只列出占用最高的 {count} 个",
+    "resources.session.high": "占用超过阈值",
+
+    "resources.components": "平台组件",
+    "resources.noComponents": "没有可测到的平台组件",
+    "resources.component.runtime": "Runtime",
+    "resources.component.host": "Go Host",
+    "resources.component.commandWorker": "命令 Worker",
+    "resources.component.selfOnly": "只算这个进程；它启动的会话在上面各有一行",
+    "resources.component.tree": "含子进程",
+
+    "resources.memory.badge": "会话内存 {value}",
+    "resources.memory.title": "会话内存",
+    "resources.memory.value": "进程树占用",
+    "resources.memory.children": "子进程",
+    "resources.memory.threshold": "提醒阈值",
+    "resources.memory.unknown": "unknown",
+    "resources.memory.unknownNote":
+      "这一份样本没测到数字。显示 unknown 而不是 0——0 的意思是「量到了，是零」。",
+    "resources.memory.overNote":
+      "已超过阈值：只是变色并提醒一次，不会终止或休眠这个会话。",
+    "resources.memory.slowNote": "节点当前不可见，采样降到 30 秒一次。",
+    "resources.memory.alertTitle": "会话内存偏高",
+    "resources.memory.alertBody": "进程树已占用 {value}，超过阈值 {limit}。",
+    "resources.memory.thresholdLabel": "内存提醒阈值",
+    "resources.memory.thresholdHint":
+      "终端节点徽标超过它就变色，并按会话提醒一次；不会自动结束任何会话。",
+    "resources.memory.threshold.value": "{value} GB",
+
     "resources.orphans": "孤立会话",
     "resources.noOrphans": "没有孤立会话",
     "resources.orphan.no-node": "无对应节点",
@@ -143,6 +175,42 @@ export const resources: MessageModule = {
     "resources.unknown.no-pid": "No process id available",
     "resources.unknown.not-found": "The process is gone",
     "resources.unknown.warming-up": "Establishing a sampling baseline",
+
+    "resources.sort.hint":
+      "Click to re-sort. Anything unmeasured sorts last rather than as 0",
+    "resources.session.tree": "Show the process tree",
+    "resources.session.treeCollapse": "Hide the process tree",
+    "resources.session.treeTruncated": "Only the {count} heaviest are listed",
+    "resources.session.high": "Above the threshold",
+
+    "resources.components": "Armadra's own processes",
+    "resources.noComponents": "No platform process could be measured",
+    "resources.component.runtime": "Runtime",
+    "resources.component.host": "Go Host",
+    "resources.component.commandWorker": "Command worker",
+    "resources.component.selfOnly":
+      "This process only; the sessions it starts have their own rows above",
+    "resources.component.tree": "Includes child processes",
+
+    "resources.memory.badge": "Session memory {value}",
+    "resources.memory.title": "Session memory",
+    "resources.memory.value": "Process tree",
+    "resources.memory.children": "Children",
+    "resources.memory.threshold": "Reminder threshold",
+    "resources.memory.unknown": "unknown",
+    "resources.memory.unknownNote":
+      "This sample carries no figure. It reads unknown rather than 0, because 0 would mean “measured, and it is zero”.",
+    "resources.memory.overNote":
+      "Above the threshold. That colours the badge and reminds you once; it never ends or hibernates the session.",
+    "resources.memory.slowNote":
+      "This node is not visible, so it is sampled every 30 seconds.",
+    "resources.memory.alertTitle": "A session is using a lot of memory",
+    "resources.memory.alertBody":
+      "Its process tree is at {value}, above the {limit} threshold.",
+    "resources.memory.thresholdLabel": "Memory reminder threshold",
+    "resources.memory.thresholdHint":
+      "A terminal node's badge changes colour above this and reminds you once per session. Nothing is ended automatically.",
+    "resources.memory.threshold.value": "{value} GB",
 
     "resources.orphans": "Orphaned sessions",
     "resources.noOrphans": "No orphaned sessions",

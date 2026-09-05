@@ -41,6 +41,15 @@ type PowerPolicyChoice = (typeof POWER_POLICIES)[number];
 /** 采样间隔。设计 §8 的默认值是 2 秒；关掉面板就不采样，所以这里不给「关」。 */
 const SAMPLE_INTERVALS = [1_000, 2_000, 5_000, 15_000] as const;
 
+const GIB = 1024 * 1024 * 1024;
+/**
+ * 内存提醒阈值（路线图 §4.3「默认 2 GB，可设」）。
+ *
+ * 这条线是「值得看一眼」，不是「出问题了」：一个跑着构建的 Agent 越过 2 GB
+ * 完全正常。所以越线只有变色和一条按会话去重的提醒，没有任何自动处置。
+ */
+const MEMORY_THRESHOLDS = [1, 2, 4, 8, 16] as const;
+
 /** 断开保留时长（分钟）——§15.2 的 `detachedGraceMinutes`。 */
 const GRACE_CHOICES = [
   { minutes: 60, key: "settings.grace.1h" },
@@ -59,6 +68,13 @@ export function TerminalPage() {
   const t = useT();
   const terminal = usePreferencesStore((state) => state.terminal);
   const set = usePreferencesStore((state) => state.setTerminalPreference);
+  // 阈值只影响本机的徽标与提醒，所以和终端外观一样存在本地，不进 Runtime。
+  const memoryWarnBytes = usePreferencesStore(
+    (state) => state.sessionMemoryWarnBytes,
+  );
+  const setMemoryWarnBytes = usePreferencesStore(
+    (state) => state.setSessionMemoryWarnBytes,
+  );
   const { settings, save } = useRuntimeSettings();
   const runtimeTerminal = settings.data?.terminal;
 
@@ -151,6 +167,27 @@ export function TerminalPage() {
               {SAMPLE_INTERVALS.map((interval) => (
                 <SelectItem key={interval} value={String(interval)}>
                   {t("resources.interval.value", { value: interval / 1_000 })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingsRow>
+
+        <SettingsRow
+          label={t("resources.memory.thresholdLabel")}
+          footnote={t("resources.memory.thresholdHint")}
+        >
+          <Select
+            value={String(memoryWarnBytes)}
+            onValueChange={(value) => setMemoryWarnBytes(Number(value))}
+          >
+            <SelectTrigger size="sm" className={CONTROL_WIDTH}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="z-[var(--z-dialog)]">
+              {MEMORY_THRESHOLDS.map((gigabytes) => (
+                <SelectItem key={gigabytes} value={String(gigabytes * GIB)}>
+                  {t("resources.memory.threshold.value", { value: gigabytes })}
                 </SelectItem>
               ))}
             </SelectContent>

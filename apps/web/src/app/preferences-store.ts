@@ -65,6 +65,13 @@ const SHOW_USAGE_KEY = "armadra.showUsage";
  */
 const CONTEXT_WARN_KEY = "armadra.context.warnPercent";
 const CONTEXT_DANGER_KEY = "armadra.context.dangerPercent";
+/**
+ * 会话内存徽标变色的阈值（路线图 §4.3「默认 2 GB，可设」）。
+ *
+ * 只改颜色和提醒一次，不会终止、不会休眠、也不会替用户做任何处置——面板
+ * 里的「结束会话」始终是用户自己点的。
+ */
+const SESSION_MEMORY_WARN_KEY = "armadra.resources.sessionMemoryWarnBytes";
 /** 终端 / Agent 节点的自动命名（Agent 自动化设计 §8）。默认开。 */
 const AUTO_TITLE_KEY = "armadra.autoTitle";
 /** 节点颜色的表达方式（§24.3-3）：色点 + 1px 顶描边，或旧的 3px 色条。 */
@@ -423,6 +430,19 @@ function storedAgentModes(): Record<string, AgentMode> {
 
 export const SOUND_VOLUME_RANGE = [0, 100] as const;
 
+/**
+ * 会话内存徽标的默认阈值：2 GiB（路线图 §4.3）。
+ *
+ * 这是一个「值得看一眼」的线，不是「出问题了」的线——一个跑着构建的 Agent
+ * 越过它完全正常。所以越过之后只有变色和一条提醒，没有任何自动处置。
+ */
+export const DEFAULT_SESSION_MEMORY_WARN_BYTES = 2 * 1024 * 1024 * 1024;
+/** 128 MiB – 128 GiB。低于下限的阈值会让每个 shell 都在报警。 */
+export const SESSION_MEMORY_WARN_RANGE = [
+  128 * 1024 * 1024,
+  128 * 1024 * 1024 * 1024,
+] as const;
+
 export interface PreferencesState {
   theme: ThemePreference;
   locale: Locale;
@@ -457,6 +477,8 @@ export interface PreferencesState {
   showUsage: boolean;
   /** 上下文提醒阈值（设计 §2.2）；`dangerPercent` 不会低于 `warnPercent`。 */
   contextThresholds: ContextThresholds;
+  /** 会话内存徽标的变色阈值，字节（路线图 §4.3）。默认 2 GiB。 */
+  sessionMemoryWarnBytes: number;
   /** 占位标题的自动命名（设计 §8）；人工改过名的节点始终不受影响。 */
   autoTitle: boolean;
   /** 节点颜色风格（§24.3-3）：`dot` 色点 + 顶描边 / `bar` 顶部色条。 */
@@ -493,6 +515,7 @@ export interface PreferencesState {
   setSoundVolume: (volume: number) => void;
   setShowUsage: (enabled: boolean) => void;
   setContextThresholds: (thresholds: Partial<ContextThresholds>) => void;
+  setSessionMemoryWarnBytes: (bytes: number) => void;
   setAutoTitle: (enabled: boolean) => void;
   setNodeColorStyle: (style: NodeColorStyle) => void;
   setSidebarOpen: (open: boolean) => void;
@@ -590,6 +613,12 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
       100,
     ),
   }),
+  sessionMemoryWarnBytes: storedNumber(
+    SESSION_MEMORY_WARN_KEY,
+    DEFAULT_SESSION_MEMORY_WARN_BYTES,
+    SESSION_MEMORY_WARN_RANGE[0],
+    SESSION_MEMORY_WARN_RANGE[1],
+  ),
   autoTitle: storedBoolean(AUTO_TITLE_KEY, true),
   nodeColorStyle: storedEnum(NODE_COLOR_STYLE_KEY, NODE_COLOR_STYLES, "dot"),
   sidebarOpen: storedBoolean(SIDEBAR_OPEN_KEY, true),
@@ -731,6 +760,14 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
       writeStored(CONTEXT_DANGER_KEY, String(contextThresholds.dangerPercent));
       return { contextThresholds };
     });
+  },
+  setSessionMemoryWarnBytes(bytes) {
+    const sessionMemoryWarnBytes = Math.min(
+      SESSION_MEMORY_WARN_RANGE[1],
+      Math.max(SESSION_MEMORY_WARN_RANGE[0], Math.round(bytes)),
+    );
+    writeStored(SESSION_MEMORY_WARN_KEY, String(sessionMemoryWarnBytes));
+    set({ sessionMemoryWarnBytes });
   },
   setAutoTitle(autoTitle) {
     writeStored(AUTO_TITLE_KEY, String(autoTitle));

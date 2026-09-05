@@ -16,6 +16,7 @@ import { useCanvasStore } from "../store/canvas-store";
 import { ScrollArea } from "../ui/scroll-area";
 import { Sheet, SheetContent, SheetTitle } from "../ui/sheet";
 import { IconButton } from "../ui/icon-button";
+import { ComponentList } from "./resources/ComponentList";
 import { HostCard } from "./resources/HostCard";
 import { OrphanList } from "./resources/OrphanList";
 import { PowerSection } from "./resources/PowerSection";
@@ -86,6 +87,13 @@ export function ResourceDrawer() {
                     sort={sort}
                     onSorted={setSort}
                   />
+                </section>
+
+                <section>
+                  <h3 className="mb-1 text-[13px] font-semibold">
+                    {t("resources.components")}
+                  </h3>
+                  <ComponentList components={snapshot.components} />
                 </section>
 
                 <section>
