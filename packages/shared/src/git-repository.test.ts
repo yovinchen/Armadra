@@ -30,7 +30,25 @@ describe("Git repository wire contract", () => {
       { kind: "deleteBranch", name: "feature", expectedOid: oid },
       { kind: "fetch", remote: "origin", prune: false },
       { kind: "pull", remote: "origin", branch: "main" },
-      { kind: "push", remote: "origin", branch: "main", setUpstream: false },
+      {
+        kind: "push",
+        remote: "origin",
+        branch: "main",
+        setUpstream: false,
+        forceWithLease: null,
+      },
+      {
+        kind: "sync",
+        remote: "origin",
+        branch: "main",
+        expectedRemoteOid: oid,
+      },
+      {
+        kind: "sync",
+        remote: "origin",
+        branch: "main",
+        expectedRemoteOid: null,
+      },
       {
         kind: "createWorktree",
         expectedOid: null,
@@ -51,6 +69,38 @@ describe("Git repository wire contract", () => {
         gitRepositoryActionSchema.safeParse({ ...action, force: true }).success,
       ).toBe(false);
     }
+  });
+  it("overwrites remote history only through a lease naming the remote OID", () => {
+    const push = {
+      kind: "push",
+      remote: "origin",
+      branch: "main",
+      setUpstream: false,
+    };
+    expect(
+      gitRepositoryActionSchema.parse({
+        ...push,
+        forceWithLease: { expectedRemoteOid: oid },
+      }),
+    ).toEqual({ ...push, forceWithLease: { expectedRemoteOid: oid } });
+    for (const rejected of [
+      push,
+      { ...push, forceWithLease: {} },
+      { ...push, forceWithLease: { expectedRemoteOid: "HEAD" } },
+      { ...push, forceWithLease: { expectedRemoteOid: oid, force: true } },
+    ])
+      expect(gitRepositoryActionSchema.safeParse(rejected).success).toBe(false);
+  });
+  it("binds sync to the reviewed remote position and offers no strategy escape", () => {
+    const sync = { kind: "sync", remote: "origin", branch: "main" };
+    expect(gitRepositoryActionSchema.safeParse(sync).success).toBe(false);
+    expect(
+      gitRepositoryActionSchema.safeParse({
+        ...sync,
+        expectedRemoteOid: null,
+        strategy: "merge",
+      }).success,
+    ).toBe(false);
   });
   it("preserves unknown outcomes, missing dirty state and page boundary identity", () => {
     const value = gitRepositoryOperationSchema.parse({

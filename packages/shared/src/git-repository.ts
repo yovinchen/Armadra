@@ -112,6 +112,14 @@ export const gitRepositoryActionSchema = z.discriminatedUnion("kind", [
     .strict(),
   z
     .object({
+      kind: z.literal("startRebase"),
+      // A branch name or an object ID; the service resolves and confirms it.
+      onto: z.string().min(1).max(1024),
+      expectedStateToken: stashStateToken,
+    })
+    .strict(),
+  z
+    .object({
       kind: z.literal("continueIntegration"),
       sessionId: z.string().uuid(),
       expectedStateToken: stashStateToken,
@@ -197,6 +205,18 @@ export const gitRepositoryActionSchema = z.discriminatedUnion("kind", [
       remote: z.string().min(1),
       branch: z.string().min(1),
       setUpstream: z.boolean(),
+      // Rewriting remote history always names the remote OID the user
+      // reviewed; there is deliberately no lease-free force.
+      forceWithLease: z.object({ expectedRemoteOid: oid }).strict().nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("sync"),
+      remote: z.string().min(1),
+      branch: z.string().min(1),
+      // Null means the branch has no remote-tracking ref yet.
+      expectedRemoteOid: oid.nullable(),
     })
     .strict(),
   z
@@ -255,6 +275,9 @@ export type GitCommitRecord = z.infer<typeof gitCommitRecordSchema>;
 export type GitHistoryPage = z.infer<typeof gitHistoryPageSchema>;
 export type GitWorktreeRecord = z.infer<typeof gitWorktreeRecordSchema>;
 export type GitRepositoryAction = z.infer<typeof gitRepositoryActionSchema>;
+export type GitForceWithLease = NonNullable<
+  Extract<GitRepositoryAction, { kind: "push" }>["forceWithLease"]
+>;
 export type GitRepositoryOperation = z.infer<
   typeof gitRepositoryOperationSchema
 >;

@@ -73,6 +73,7 @@ describe("integration contracts", () => {
         owned: false,
         sessionId: null,
         originalHead: oid,
+        originalBranch: "main",
         targetOid: oid,
         message: "Merge",
         dirty: true,
@@ -97,6 +98,50 @@ describe("integration contracts", () => {
         ],
       }).success,
     ).toBe(true);
+  });
+  it("names the branch a detached rebase returns to and confirms its start", () => {
+    const paused = {
+      repositoryId: "r",
+      repositoryPath: "/p",
+      head: { headOid: oid, branch: null },
+      stateToken: token,
+      kind: "rebase",
+      owned: true,
+      sessionId: "11111111-1111-4111-8111-111111111111",
+      originalHead: oid,
+      originalBranch: "main",
+      targetOid: oid,
+      message: "replayed commit",
+      dirty: false,
+      canContinue: false,
+      mainline: null,
+      empty: false,
+      canSkip: false,
+      conflicts: [],
+    };
+    const state = gitIntegrationSnapshotSchema.parse(paused);
+    expect(state.head.branch).toBeNull();
+    expect(state.originalBranch).toBe("main");
+    const { originalBranch: _absent, ...without } = paused;
+    expect(gitIntegrationSnapshotSchema.safeParse(without).success).toBe(false);
+    expect(
+      gitRepositoryActionSchema.safeParse({
+        kind: "startRebase",
+        onto: "origin/main",
+        expectedStateToken: token,
+      }).success,
+    ).toBe(true);
+    for (const rejected of [
+      { kind: "startRebase", onto: "main" },
+      { kind: "startRebase", onto: "", expectedStateToken: token },
+      {
+        kind: "startRebase",
+        onto: "main",
+        expectedStateToken: token,
+        force: true,
+      },
+    ])
+      expect(gitRepositoryActionSchema.safeParse(rejected).success).toBe(false);
   });
   it("distinguishes awaiting resolution from completed success", () => {
     const op = {

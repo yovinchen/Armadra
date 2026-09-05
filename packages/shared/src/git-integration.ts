@@ -33,6 +33,8 @@ export const gitIntegrationSnapshotSchema = z.object({
   owned: z.boolean(),
   sessionId: z.string().uuid().nullable(),
   originalHead: oid.nullable(),
+  // A rebase detaches HEAD, so the branch it returns to is reported separately.
+  originalBranch: z.string().nullable(),
   targetOid: oid.nullable(),
   message: z.string().nullable(),
   dirty: z.boolean(),
