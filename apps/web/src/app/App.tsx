@@ -21,6 +21,8 @@ import { Banners } from "../shell/Banners";
 import { ControlsCluster } from "../shell/ControlsCluster";
 import { Dock } from "../shell/Dock";
 import { LeftSidebar } from "../shell/LeftSidebar";
+import { MobileBottomNav } from "../shell/MobileBottomNav";
+import { MobileFocusPage } from "../shell/MobileFocusPage";
 import { UsageOrb } from "../shell/UsageOrb";
 import { WindowDragLayer } from "../shell/WindowDragLayer";
 import { useCanvasStore } from "../store/canvas-store";
@@ -89,6 +91,10 @@ function AppShell() {
           </>
         )}
       </div>
+      {/* 手机布局的两块：底部导航与单节点焦点页。两者都在 <768px 才渲染，
+          桌面上是 null，不占位也不订阅任何东西（客户端平台设计）。 */}
+      <MobileBottomNav />
+      <MobileFocusPage />
       <Banners />
       <Suspense fallback={null}>
         <ExplorerDrawer />

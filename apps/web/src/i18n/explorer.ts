@@ -22,6 +22,8 @@ export const explorer: MessageModule = {
     "explorer.status.?": "未跟踪",
 
     "scm.title": "源码控制",
+    "scm.sections": "源码控制分区",
+    "scm.back": "返回",
     "scm.close": "关闭",
     "scm.refresh": "刷新",
     "scm.staged": "已暂存",
@@ -82,6 +84,8 @@ export const explorer: MessageModule = {
     "explorer.status.?": "Untracked",
 
     "scm.title": "Source control",
+    "scm.sections": "Source control sections",
+    "scm.back": "Back",
     "scm.close": "Close",
     "scm.refresh": "Refresh",
     "scm.staged": "Staged",

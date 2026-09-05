@@ -9,6 +9,7 @@ import { externalService } from "./external-service";
 import { format } from "./format";
 import { meta } from "./meta";
 import { launcher } from "./launcher";
+import { mobile } from "./mobile";
 import { modals } from "./modals";
 import { nodes } from "./nodes";
 import { sessions } from "./sessions";
@@ -77,6 +78,7 @@ export const MESSAGE_MODULES = {
   "file-drag": fileDrag,
   "file-workflow": fileWorkflow,
   explorer,
+  mobile,
   modals,
   commands,
   format,

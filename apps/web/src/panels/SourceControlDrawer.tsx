@@ -12,6 +12,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
+  ChevronLeft,
+  ChevronRight,
   FileDiff,
   ListFilter,
   GitBranch,
@@ -33,6 +35,8 @@ type DiffFileStatus = GitFileStatus["status"];
 import { runtimeApi } from "../api/client";
 import { useT } from "../app/preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
+import { useCompactLayout } from "../platform/layout";
+import { cn } from "../lib/cn";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -91,6 +95,21 @@ export function partitionChanges(files: readonly GitFileStatus[]): {
   };
 }
 
+/**
+ * 抽屉里的分区。桌面上是一排页签，手机上是第一级列表——同一批内容，
+ * 460px 的页签在 390px 宽里挤成一团，点不准。
+ */
+export const SCM_SECTIONS = [
+  "changes",
+  "branches",
+  "history",
+  "worktrees",
+  "stashes",
+  "tags",
+  "remotes",
+  "integration",
+] as const;
+
 export function SourceControlDrawer() {
   const mode = useCanvasStore((state) => state.panels.scm);
   const setPanel = useCanvasStore((state) => state.setPanel);
@@ -118,9 +137,23 @@ export function SourceControlDrawer() {
     file: string;
     scope: GitHunkScope;
   } | null>(null);
+  /**
+   * 手机上的三级导航：分区列表 → 分区详情 → 单个文件的差异。
+   * `drilled` 记的是有没有从第一级点进去；`hunk` 本身就是第三级。
+   */
+  const compact = useCompactLayout();
+  const [drilled, setDrilled] = useState(false);
 
   const workspaceId = workspace?.id ?? null;
   const open = mode === "drawer";
+  // Reopening starts at the list again: a phone drawer that reopens three
+  // levels deep is a drawer whose back button leads somewhere unexpected.
+  useEffect(() => {
+    if (!open) {
+      setDrilled(false);
+      setHunk(null);
+    }
+  }, [open]);
 
   const repositories = useRepositories(open ? workspaceId : null);
   const records = repositories.data?.repositories ?? [];
@@ -350,9 +383,12 @@ export function SourceControlDrawer() {
         <div className="flex items-center gap-0.5">
           <IconButton
             label={t("gitHunk.title")}
-            onClick={() =>
-              workspaceId && setHunk({ workspaceId, file: file.path, scope })
-            }
+            onClick={() => {
+              if (!workspaceId) return;
+              setTab("changes");
+              setDrilled(true);
+              setHunk({ workspaceId, file: file.path, scope });
+            }}
           >
             <ListFilter />
           </IconButton>
@@ -465,6 +501,51 @@ export function SourceControlDrawer() {
               />
             </div>
           )}
+          {compact && !drilled && (
+            <nav
+              aria-label={t("scm.sections")}
+              data-slot="scm-sections"
+              className="min-h-0 flex-1 overflow-y-auto"
+            >
+              {SCM_SECTIONS.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className="flex min-h-12 w-full items-center gap-2 border-b border-border/60 px-4 text-left text-[13px] hover:bg-muted"
+                  onClick={() => {
+                    setTab(value);
+                    setDrilled(true);
+                  }}
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    {t(`gitRepo.${value}`)}
+                  </span>
+                  {value === "changes" && files.length > 0 && (
+                    <Badge variant="ghost" className="tabular-nums">
+                      {files.length}
+                    </Badge>
+                  )}
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                </button>
+              ))}
+            </nav>
+          )}
+          {compact && drilled && (
+            <div className="flex min-h-12 shrink-0 items-center gap-1 border-b border-border px-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="min-h-10 shrink-0 px-2"
+                onClick={() => (hunk ? setHunk(null) : setDrilled(false))}
+              >
+                <ChevronLeft aria-hidden />
+                <span>{t("scm.back")}</span>
+              </Button>
+              <span className="min-w-0 flex-1 truncate text-[13px]">
+                {hunk ? hunk.file : t(`gitRepo.${tab}`)}
+              </span>
+            </div>
+          )}
           <Tabs
             value={tab}
             onValueChange={(value) => {
@@ -474,24 +555,19 @@ export function SourceControlDrawer() {
               if (next !== "changes" && selection === ALL_REPOSITORIES)
                 setSelection(".");
             }}
-            className="min-h-0 min-w-0 flex-1 gap-0"
+            className={cn(
+              "min-h-0 min-w-0 flex-1 gap-0",
+              compact && !drilled && "hidden",
+            )}
           >
             <TabsList
-              className="h-10 w-full shrink-0 rounded-none border-b border-border"
+              className={cn(
+                "h-10 w-full shrink-0 rounded-none border-b border-border",
+                compact && "hidden",
+              )}
               variant="line"
             >
-              {(
-                [
-                  "changes",
-                  "branches",
-                  "history",
-                  "worktrees",
-                  "stashes",
-                  "tags",
-                  "remotes",
-                  "integration",
-                ] as const
-              ).map((value) => (
+              {SCM_SECTIONS.map((value) => (
                 <TabsTrigger
                   key={value}
                   value={value}
@@ -523,13 +599,15 @@ export function SourceControlDrawer() {
                 )}
                 {hunk && hunk.workspaceId === workspaceId && (
                   <section className="border-b border-border p-3">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setHunk(null)}
-                    >
-                      {t("gitHunk.close")}
-                    </Button>
+                    {!compact && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setHunk(null)}
+                      >
+                        {t("gitHunk.close")}
+                      </Button>
+                    )}
                     <ChangesHunks
                       key={`${hunk.workspaceId}:${hunk.scope}:${hunk.file}`}
                       {...hunk}
@@ -577,7 +655,7 @@ export function SourceControlDrawer() {
                       {section(t("scm.changes"), changes, "worktree")}
                     </>
                   )
-                ) : status.isPending ? (
+                ) : compact && hunk ? null : status.isPending ? (
                   <p role="status" className="px-4 py-3 text-xs">
                     {t("gitRepo.loading")}
                   </p>
@@ -614,7 +692,12 @@ export function SourceControlDrawer() {
                 )}
               </ScrollArea>
 
-              <div className="flex shrink-0 flex-col gap-2 border-t border-border p-3">
+              <div
+                className={cn(
+                  "flex shrink-0 flex-col gap-2 border-t border-border p-3",
+                  compact && hunk && "hidden",
+                )}
+              >
                 <Textarea
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}

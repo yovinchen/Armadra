@@ -4,6 +4,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Expand,
   Maximize2,
   Minimize2,
   X,
@@ -16,6 +17,8 @@ import { Input } from "@/ui/input";
 import { StatusPill, type StatusTone } from "@/ui/status-pill";
 import { useT } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
+import { useCompactLayout } from "@/platform/layout";
+import { canFocusOnPhone } from "@/shell/mobile-focus";
 import { runCanvasCommand } from "@/canvas/commands";
 import { getEditor } from "@/canvas/editor-context";
 import { ConnectionHandles } from "@/canvas/shapes/ConnectionHandles";
@@ -276,6 +279,7 @@ export function NodeHeader({
   approval?: NodeShellProps["approval"];
 }) {
   const t = useT();
+  const compact = useCompactLayout();
   return (
     <div
       data-slot="node-header"
@@ -346,18 +350,33 @@ export function NodeHeader({
           头部必须保持一行 34px，多一个按钮也不能多一行。 */}
       {node.type !== "terminal" && <NodeMetaActions node={node} />}
 
-      <IconButton
-        className="node-secondary-action"
-        label={maximized ? t("node.restore") : t("node.maximize")}
-        onClick={() => {
-          focusNode(node.id);
-          const store = useCanvasStore.getState();
-          if (maximized) store.restoreNode(node.id);
-          else store.maximizeNode(node.id, maximizeRect());
-        }}
-      >
-        {maximized ? <Minimize2 /> : <Maximize2 />}
-      </IconButton>
+      {/* 手机上「最大化」没有意义——画布本身就只有一屏宽。这一格换成进入
+          单节点焦点页的入口，同一个 `focusNodeId`。 */}
+      {compact && canFocusOnPhone(node.type) ? (
+        <IconButton
+          className="node-secondary-action"
+          label={t("mobile.focus.open")}
+          onClick={() => {
+            focusNode(node.id);
+            useCanvasStore.getState().setFocusNode(node.id);
+          }}
+        >
+          <Expand />
+        </IconButton>
+      ) : (
+        <IconButton
+          className="node-secondary-action"
+          label={maximized ? t("node.restore") : t("node.maximize")}
+          onClick={() => {
+            focusNode(node.id);
+            const store = useCanvasStore.getState();
+            if (maximized) store.restoreNode(node.id);
+            else store.maximizeNode(node.id, maximizeRect());
+          }}
+        >
+          {maximized ? <Minimize2 /> : <Maximize2 />}
+        </IconButton>
+      )}
 
       <IconButton
         className="node-secondary-action hover:text-[var(--danger)]"

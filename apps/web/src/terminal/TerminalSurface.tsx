@@ -154,6 +154,11 @@ export interface TerminalSurfaceHandle {
   recycle: () => void;
   /** 直接写一行到 PTY（重启 Agent、投递消息用）。 */
   writeLine: (line: string) => void;
+  /**
+   * 原样写进 PTY，不补回车。手机软键盘工具条用它发 Esc / Tab / 方向键 /
+   * 控制码——那些键触摸键盘上根本没有。
+   */
+  sendKeys: (data: string) => void;
   /** 右键菜单「复制」。没有选区时是空操作。 */
   copySelection: () => void;
   /** 右键菜单「粘贴」。 */
@@ -1118,6 +1123,11 @@ function TerminalSurfaceImpl({
           });
       },
       writeLine: (line) => transportRef.current?.input(`${line}\r`),
+      sendKeys: (data) => {
+        if (!data) return;
+        transportRef.current?.input(data);
+        terminalRef.current?.focus();
+      },
       copySelection: () => writeClipboard(terminalRef.current?.getSelection()),
       paste: () => void pasteIntoTerminal(terminalRef.current),
     }),
