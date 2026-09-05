@@ -35,7 +35,7 @@ import {
   HostGithubClient,
   HostGithubError,
   classifyGithubFailure,
-} from "../src/github.js";
+} from "../src/github/index.js";
 import type { HostAuthenticatedTransport } from "../src/automation.js";
 import { HostIdentityError } from "../src/identity.js";
 
