@@ -52,7 +52,7 @@ Go Host 不替换现有 Rust 终端引擎；将 `apps/runtime` 渐进拆为执�
 
 ### 2.1 服务器模式命令（已实现）
 
-`armadra-host install | uninstall | status | logs | upgrade | version`，实现见 [Host README](../apps/host/README.md#服务器模式)。
+`armadra-host install | uninstall | status | logs | upgrade | version`，实现见 [Host README](../../apps/host/README.md#服务器模式)。
 
 - **只生成定义，不托管**：`install` 写出 launchd plist / systemd unit / Windows `sc.exe` 脚本，绝不调用 launchctl、systemctl、sc.exe，也不启用或启动任何东西；注册与否始终是运维的动作。`uninstall` 只删除本命令生成的那个文件，认不出来就拒绝，且不停止运行中的 Host。
 - **账号显式**：必须给出 `--service-dir` 与 `--run-as`，不从当前用户推断，拒绝特权账号。定义内容由输入唯一决定，便于评审与配置管理比对。

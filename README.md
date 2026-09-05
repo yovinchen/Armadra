@@ -12,7 +12,7 @@
 - **协作**：按连线读取上下文，使用 `post / inbox / ack` 消息箱；默认不向其他终端自动粘贴消息。
 - **开发工具**：Git 状态与提交、会话检索、用量、主题、语言、数据备份。
 
-会话索引目前覆盖 Claude / Codex / Gemini；各 Agent 的能力差异见 [协作说明](docs/agent-collaboration.md)。
+会话索引目前覆盖 Claude / Codex / Gemini；各 Agent 的能力差异见 [协作说明](docs/guides/agent-collaboration.md)。
 
 ## 快速开始
 
@@ -31,7 +31,7 @@ pnpm --filter @armadra/desktop build   # 桌面打包
 ./armadra.sh help                     # 脚本命令
 ```
 
-分步启动、检查、端口与数据位置见 [开发指南](docs/development.md)。
+分步启动、检查、端口与数据位置见 [开发指南](docs/guides/development.md)。
 
 ## 项目结构
 
@@ -47,11 +47,11 @@ pnpm --filter @armadra/desktop build   # 桌面打包
 | crates/hook                                            | Agent 终端中的 Hook / 画布命令客户端   |
 
 Go Host 已有身份、握手和启停基础；业务迁移、后台计划与跨设备执行的进度见
-[实施记录](docs/platform-implementation-status.md)。
+[实施记录](docs/status/platform-implementation-status.md)。
 
 ## 文档与品牌
 
-[文档索引](docs/README.md) · [架构](docs/architecture.md) · [开发约定](AGENTS.md)
+[文档索引](docs/README.md) · [架构](docs/guides/architecture.md) · [开发约定](AGENTS.md)
 
 Logo 使用[唯一源文件](assets/brand/armadra-armadillo-primary.png)，再生成桌面图标与 Web favicon。
 

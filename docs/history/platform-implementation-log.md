@@ -1,6 +1,6 @@
 # 画布工作平台实施批次记录（归档）
 
-> 本文件是 [平台实施记录](../platform-implementation-status.md) 在 2026-09-05 整理前的批次原文归档，按当时写入顺序保留，不再更新。
+> 本文件是 [平台实施记录](../status/platform-implementation-status.md) 在 2026-09-05 整理前的批次原文归档，按当时写入顺序保留，不再更新。
 > 其中「下一步」「当前连续实施批次」「已采用的分工」三节描述的是当时的计划，已被主记录取代；各批次的验证结论仍是对应提交的交接证据。
 > 主记录只保留阶段状态、需求核对、提交登记、工作树状态与下一步；查找某次提交的详细验证过程时读本文件。
 
@@ -256,7 +256,7 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - 本机 pair CLI 经私有 IPC 取得一次性票据，绑定服务实际 HTTPS 来源；HTTP 与未开放来源拒绝签发。HTTPS Protobuf接口完成Pair/Current/Refresh/RenewCsrf/Logout/设备分页/撤销CAS，Cookie为Secure/HttpOnly/Strict/\_\_Host前缀。
 - 独立审查修复回环 Cookie 跨端口泄露边界、access过期不能注销、会话权限与设备权限混淆、metadata allowlist扩大认证来源等问题。过期access仍可通过refresh+CSRF事务注销；协议错误隐藏内部详情与凭据。
 - Go Host CGO=0全套与vet通过；身份/服务器race通过。新增真实子进程pair CLI→证书验证HTTPS→安全Cookie恢复链路通过；另有真实HTTPS的期限/撤销/范围/CSRF/双cookie/编码/超限/深group回归。测试证书只加入私有客户端RootCAs，未修改系统信任。
-- 使用与限制见[设备认证](../host-device-auth.md)。客户端设置UI正在下一批接入；Host尚未完成业务权威切换、静态前端与Worker接管，不将本批记为完整远程工作平台。
+- 使用与限制见[设备认证](../guides/host-device-auth.md)。客户端设置UI正在下一批接入；Host尚未完成业务权威切换、静态前端与Worker接管，不将本批记为完整远程工作平台。
 
 ## 连续实施：Git 写入后的面板刷新
 

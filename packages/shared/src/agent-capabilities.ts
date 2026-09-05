@@ -9,7 +9,7 @@ import {
 } from "./agents.js";
 
 /**
- * Effective capabilities — docs/agent-automation-design.md §1.
+ * Effective capabilities — docs/design/agent-automation-design.md §1.
  *
  * "能力按内置基础适配器 → 自定义 Agent 配置 → CLI 版本探测 → 执行主机能力 →
  * 项目授权求交集。未知能力不由名称推断为支持" — so this module intersects, it
@@ -219,7 +219,7 @@ export function effectiveCapabilities(
  * Model ids the header menu may offer, per CLI.
  *
  * Suggestions, not an inventory: each CLI keeps its own account, entitlements
- * and default (docs/agent-collaboration.md), and we do not query any provider
+ * and default (docs/guides/agent-collaboration.md), and we do not query any provider
  * for a list. Only aliases the CLI itself documents are listed, and picking
  * none leaves the CLI's own default untouched — which is why `""` is a valid
  * selection everywhere rather than a fourth pseudo-model.

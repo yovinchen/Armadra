@@ -47,7 +47,7 @@ WebSocket 无法经自定义协议传输，由壳在 `127.0.0.1` 的随机端口
 桌面包与 `./armadra.sh run desktop` 会持有自己的 Runtime；后者额外用 `ARMADRA_RUNTIME_LISTEN`
 加一个回环端口，因为开发页面在 `http://127.0.0.1:1420`，那里用不了自定义协议。直接执行桌面 `dev` 默认连接外部 Runtime。
 Command W / 关闭窗口隐藏前台；Command Q / 托盘退出停止配置的 Host、桌面持有的 Runtime 及受管会话。
-独立启动的 Runtime 由启动它的终端管理。详见[桌面说明](../apps/desktop/README.md)。
+独立启动的 Runtime 由启动它的终端管理。详见[桌面说明](../../apps/desktop/README.md)。
 
 ## 检查与打包
 
@@ -77,7 +77,7 @@ Command W / 关闭窗口隐藏前台；Command Q / 托盘退出停止配置的 H
 它们不替代独立的 Go、协议与桌面脚本检查。`all` 执行 doctor → install → check → build → run。
 
 打包会构建 Runtime、Hook 和 Go Host，再按 target triple 暂存 sidecar。
-目标、缓存与交叉构建规则见[桌面构建说明](../apps/desktop/README.md)。
+目标、缓存与交叉构建规则见[桌面构建说明](../../apps/desktop/README.md)。
 
 ## Host 连接
 
@@ -95,7 +95,7 @@ Origin 不含路径或末尾 `/`，可多次传入。桌面按平台使用 `taur
 `http://tauri.localhost` 或 `https://tauri.localhost`。打包桌面用 `--listen none` 启动 Host，
 不监听端口也不接受 `--allow-origin`；CSP 只允许 `armadra:` 自定义协议与回环 WebSocket，
 不再默认放开 `http://127.0.0.1:43120` / `43121`，开发模式的放行写在 `devCsp`。
-CORS 只允许读取元数据，设备登录与远程执行另属未完成能力。详见[Host 说明](../apps/host/README.md)。
+CORS 只允许读取元数据，设备登录与远程执行另属未完成能力。详见[Host 说明](../../apps/host/README.md)。
 
 ## 环境变量与数据
 
@@ -120,4 +120,4 @@ Linux `$XDG_DATA_HOME/armadra`。包含 `canvas.db`、设置、`endpoints.json`�
 
 「设置 → 数据」使用当前连接的 SQLite 一致性快照备份，包含已提交 WAL 数据；完整性检查通过后写入数据库旁的唯一文件。
 内存数据库不提供旁路文件备份。数据库只允许空库初始化或完整已知迁移前缀升级，异常时拒绝启动，保留原数据。
-开发约定见[AGENTS.md](../AGENTS.md)。
+开发约定见[AGENTS.md](../../AGENTS.md)。

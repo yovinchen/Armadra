@@ -1,7 +1,7 @@
 # Armadra 功能预期总表
 
 > 状态：2026-09-05 依据源码、[实施记录](./platform-implementation-status.md)与本轮新增需求整理的完整功能预期。
-> 本文回答「产品最终要有什么」；实现进度以实施记录为准，架构现状以 [架构](./architecture.md) 为准。
+> 本文回答「产品最终要有什么」；实现进度以实施记录为准，架构现状以 [架构](../guides/architecture.md) 为准。
 > 各条目标注：✅ 已交付 · 🔶 部分交付 · ⬜ 未开始。「可实现」指依赖与方案已具备，只差实施。
 
 ## 1. 产品定位
@@ -68,7 +68,7 @@ Armadra 是 local-first 的 AI Coding 画布：把真实 CLI Agent（Claude Code
 | 会话休眠与恢复，不重复启动（T03）                                            | ✅   |
 | Agent 工作时防休眠租约，完成后释放（T02）                                    | ⬜   |
 
-T01 是 🔶：`crates/session-host` 与 Worker 侧后端已交付并通过交叉编译，但**没有在任何 Windows 真机上运行过**，无头 VT 屏幕仍待选型。范围与限制见[终端与主机生命周期设计 §3.1](./terminal-host-design.md)。
+T01 是 🔶：`crates/session-host` 与 Worker 侧后端已交付并通过交叉编译，但**没有在任何 Windows 真机上运行过**，无头 VT 屏幕仍待选型。范围与限制见[终端与主机生命周期设计 §3.1](../design/terminal-host-design.md)。
 
 ### 3.4 Git（含多仓库）
 
@@ -179,7 +179,7 @@ T01 是 🔶：`crates/session-host` 与 Worker 侧后端已交付并通过交�
 | 服务器模式：`install` 生成 launchd / systemd / sc.exe 定义（不注册不启动）、`status` 报告定义与漂移、`logs` 尾读、`upgrade` 校验协议后原地替换 | ✅   |
 
 Runtime 的 `--listen unix:/pipe:/tcp:`、`endpoints.json` 发布、Host 的 `--listen none`、
-桌面 `armadra://` 转发与 CSP 收紧已实现（启动与变量见[开发指南](./development.md)）。
+桌面 `armadra://` 转发与 CSP 收紧已实现（启动与变量见[开发指南](../guides/development.md)）。
 
 H02 已实现 `--serve-web` 静态托管、认证设备的 `/api` 与 WebSocket 反向代理（按设备授权、
 按工作空间与读 / 写 / 执行收窄）、以及「对外服务」开关；仍缺业务 Protobuf 表面与远端
@@ -260,7 +260,7 @@ Worker。H03 已实现手机底部导航、单节点焦点页、软键盘工具�
 - Runtime 已知每个 `sessionId + generation` 的 PTY 根进程；采样时枚举其进程树（macOS / Linux 用 `sysinfo` 或 `ps`，Windows 用 Job Object 统计），汇总 RSS、CPU、子进程数、启动时间。
 - 默认 5 秒采样；节点 offscreen 降到 30 秒；断连或进程结束停止采样并标记状态。
 - 同时采集 Host / Worker / Session Host 自身占用，与用户 CLI 分开。
-- 数据模型对齐 [终端宿主设计 §8](./terminal-host-design.md)：`SessionMetrics { sessionId, generation, pid, rssBytes, cpuPercent, childCount, cwd, agentId, sampledAt }`、`HostMetrics`。
+- 数据模型对齐 [终端宿主设计 §8](../design/terminal-host-design.md)：`SessionMetrics { sessionId, generation, pid, rssBytes, cpuPercent, childCount, cwd, agentId, sampledAt }`、`HostMetrics`。
 - 通过工作空间事件 WebSocket 推送；协议侧新增 `resources.proto`（Read / Subscribe）。
 
 界面：
@@ -283,7 +283,7 @@ Worker。H03 已实现手机底部导航、单节点焦点页、软键盘工具�
 
 ### 4.5 项目结构整理
 
-完整的目录规则、校验命令与调整顺序见[仓库结构与校验](./repository-structure.md)；本节只保留目标形状。
+完整的目录规则、校验命令与调整顺序见[仓库结构与校验](../design/repository-structure.md)；本节只保留目标形状。
 
 **目标结构**：
 
@@ -321,7 +321,7 @@ docs/            现行文档；history/ 与 research/ 只作追溯
 | 9    | 远端 Worker、手机焦点页；Windows 持久会话                  | M6–M7 / H02、H03、T01 |
 | 10   | 多人、多账号、自动更新                                     | M8 / H04、S02、S03    |
 
-项目结构整理（§4.5）单独标为**延后**，不占上表排序：待进行中的任务完成后按[仓库结构与校验](./repository-structure.md) §5 的顺序整体进行，期间不做零散目录移动。
+项目结构整理（§4.5）单独标为**延后**，不占上表排序：待进行中的任务完成后按[仓库结构与校验](../design/repository-structure.md) §5 的顺序整体进行，期间不做零散目录移动。
 
 ## 6. 验收原则
 

@@ -6,7 +6,7 @@ option go_package = "armadra.local/host/gen/armadra/v1";
 
 import "armadra/v1/common.proto";
 
-// Controlled embedded browser — B01, docs/editor-browser-design.md §5-§9.
+// Controlled embedded browser — B01, docs/design/editor-browser-design.md §5-§9.
 //
 // The Rust Runtime speaks JSON on loopback today; these messages are the
 // cross-device and remote-Worker contract for the same surface, so every field

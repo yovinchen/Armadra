@@ -4,7 +4,7 @@
 以及工作空间与画布的业务表面。公开 HTTP 为健康检查、Protobuf Hello 和已认证会话下的身份、自动化、
 GitHub 与画布方法；画布的写入方由 `write_ownership` 记录决定，默认仍是 Rust Runtime，
 终端、文件、Git 与 Hook 的执行始终在 Runtime。
-迁移进度见[实施记录](../../docs/platform-implementation-status.md)。
+迁移进度见[实施记录](../../docs/status/platform-implementation-status.md)。
 
 ## 运行与管理
 

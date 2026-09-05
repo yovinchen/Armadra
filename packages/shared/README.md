@@ -9,7 +9,7 @@
 | `api.ts`         | Runtime HTTP / WebSocket schema                   |
 | `hook-events.ts` | Hook 事件名与客户端版本                           |
 
-Runtime 的 `apps/runtime/src/agent.rs` 镜像 Agent ID 与启动程序；能力边界见[Agent 协作](../../docs/agent-collaboration.md)。
+Runtime 的 `apps/runtime/src/agent.rs` 镜像 Agent ID 与启动程序；能力边界见[Agent 协作](../../docs/guides/agent-collaboration.md)。
 
 ```sh
 pnpm --filter @armadra/shared build

@@ -24,7 +24,7 @@
 //! superseded session is dropped, never rendered.
 //!
 //! Deliberately **not** Protobuf, unlike the Worker↔Host protocol of
-//! `docs/host-protocol-design.md`. This wire has exactly two speakers, both
+//! `docs/design/host-protocol-design.md`. This wire has exactly two speakers, both
 //! Rust, both shipped in the same installer; putting it in `proto/` would
 //! generate Go and TypeScript for a conversation neither language will ever
 //! join. If a third speaker ever appears, that is the moment to move it.
@@ -279,7 +279,7 @@ pub enum ClientMessage {
     /// First message on every connection.
     ///
     /// There is no shared secret here, on purpose. The early design
-    /// (`docs/windows-session-daemon.md` §4.2) proposed a token file readable
+    /// (`docs/design/windows-session-daemon.md` §4.2) proposed a token file readable
     /// only by this user; but the pipe's own DACL already admits only this
     /// user and LocalSystem, and every accepted connection is checked against
     /// the client process' SID. A token stored in a file with the same ACL

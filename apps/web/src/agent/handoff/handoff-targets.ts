@@ -1,7 +1,7 @@
 import type { BoardDocument } from "@armadra/shared";
 
 /**
- * 交接入口的事件总线与目标推导（docs/agent-automation-design.md §7）。
+ * 交接入口的事件总线与目标推导（docs/design/agent-automation-design.md §7）。
  *
  * 和 `meta/annotations` 一样刻意不依赖任何 UI：入口在终端头部的「更多」下拉
  * 里，而对话框挂在壳上，中间只走一个 `CustomEvent`，免得把浮层拉进节点注册

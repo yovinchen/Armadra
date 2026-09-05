@@ -1,11 +1,11 @@
 # 实现状态与验证证据
 
 > 更新：2026-09-04  
-> 需求基线：[requirements.md](./requirements.md) · 实施契约：[v3-agent-terminal-plan.md](../v3-agent-terminal-plan.md)（画布层由 [tldraw-canvas-plan.md](../tldraw-canvas-plan.md) 取代）
+> 需求基线：[requirements.md](./requirements.md) · 实施契约：[v3-agent-terminal-plan.md](../contracts/v3-agent-terminal-plan.md)（画布层由 [tldraw-canvas-plan.md](../contracts/tldraw-canvas-plan.md) 取代）
 
 ## v4 tldraw 画布（2026-09-04，分支 `main`，未合并）
 
-按 [tldraw-canvas-plan.md](../tldraw-canvas-plan.md) 把画布层从 React Flow 换成
+按 [tldraw-canvas-plan.md](../contracts/tldraw-canvas-plan.md) 把画布层从 React Flow 换成
 tldraw 5.4，Phase 0–4 全部实施。跨 agent 的交接细节在
 [phase1-handoff.md](./phase1-handoff.md)。
 
@@ -90,7 +90,7 @@ tldraw 5.4，Phase 0–4 全部实施。跨 agent 的交接细节在
 
 ## v3 终端 + Hook 重构（2026-09-04，分支 `main`，未合并）
 
-按 [v3-agent-terminal-plan.md](../v3-agent-terminal-plan.md) 完成 Phase 0–4。
+按 [v3-agent-terminal-plan.md](../contracts/v3-agent-terminal-plan.md) 完成 Phase 0–4。
 
 ### Phase 4（2026-09-04 晚）
 
@@ -100,7 +100,7 @@ tldraw 5.4，Phase 0–4 全部实施。跨 agent 的交接细节在
 | 看板视图（已于当晚按用户要求移除，见 §25 条目） | 迁移 0008 `boards.kanban_json`；⌘⇧B 全屏看板（288px 列、拖拽换列、列管理、`+ 新建会话`），卡片 = terminal/sticky 节点，点击回画布居中                                                                                                                                                                                                                                                          |
 | 标签 / 评论 / AI 命名                           | 节点 `labels` / `note` 字段；终端节点头部保持单行 34px，标签在右键菜单编辑、看板卡片显示；AI 命名 / 评论在「更多」菜单的对话框中；`POST /api/agent-status/{id}/suggest-title`（转录首条用户消息，无模型调用）                                                                                                                                                                                  |
 | 终端完整兼容（§18）                             | 固定头部 + `absolute` xterm 容器、`proposeDimensions` 守卫的 fit、隐藏滚动条、`React.memo`；DOM 渲染器默认、WebGL 可选；unicode11 / clipboard(OSC 52) / web-links(OSC 8) / search 按需加载；OSC 0 标题自动跟随、铃声闪烁、`macOptionIsMeta`、键盘放行策略；tmux `terminfo` 探测、`RGB`、`aggressive-resize`、`set-titles`；直连 `TERM/COLORTERM`；Runtime 输出 16 ms / 64 KiB 合批；终端设置块 |
-| 代码分割与桌面                                  | 入口 chunk 2.2 MB → 69 kB（CodeMirror、xterm addons、看板、设置等懒加载）；Tauri 标题栏覆盖 + 托盘 + 最低 macOS 13.3 + updater 骨架；`.app` 与 DMG 已打包实测（包内 sidecar 与 hook 安装器解析正常）；`docs/windows-session-daemon.md` 设计                                                                                                                                                    |
+| 代码分割与桌面                                  | 入口 chunk 2.2 MB → 69 kB（CodeMirror、xterm addons、看板、设置等懒加载）；Tauri 标题栏覆盖 + 托盘 + 最低 macOS 13.3 + updater 骨架；`.app` 与 DMG 已打包实测（包内 sidecar 与 hook 安装器解析正常）；`docs/design/windows-session-daemon.md` 设计                                                                                                                                             |
 | 修复                                            | 最大化/折叠触发 React Flow 无限循环（投影选区快照落后一帧）已修并加回归测试；删除终端节点先销毁会话；`CommandDialog` 缺 cmdk 上下文导致 ⌘K 崩溃已修                                                                                                                                                                                                                                            |
 | 终端复制 / 点击 / 滚屏（§18.5）                 | tmux `mouse off`、`focus-events off`、外层 `smcup@:rmcup@`、`terminal-features clipboard`：单击/聚焦 0 字节进 PTY，xterm 原生拖选，⌘C 与右键 复制/粘贴，OSC 52 透传；滚轮桥接 `POST /api/terminals/{id}/scroll` → tmux copy-mode（输入即退出，程序自带鼠标追踪时不桥接）；`copyOnSelect` 设置                                                                                                  |
 | Dock                                            | 新增「一键整理」按钮（调用 `canvas.tidy`）                                                                                                                                                                                                                                                                                                                                                     |

@@ -1,5 +1,5 @@
 //! Host and session resources, and the leases that keep this machine awake
-//! (T02 — [terminal host design](../../../docs/terminal-host-design.md) §8/§9).
+//! (T02 — [terminal host design](../../../docs/design/terminal-host-design.md) §8/§9).
 //!
 //! ## Sampling is a subscription, not a timer
 //!

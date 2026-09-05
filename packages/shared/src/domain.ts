@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Domain model v3 — see docs/v3-agent-terminal-plan.md §3.4, §5 and §6.
+ * Domain model v3 — see docs/contracts/v3-agent-terminal-plan.md §3.4, §5 and §6.
  *
  * Nine node types, a single
  * persisted edge kind, no per-node `status` (agent

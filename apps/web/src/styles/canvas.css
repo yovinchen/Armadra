@@ -1,5 +1,5 @@
 /*
- * tldraw 换肤（docs/tldraw-canvas-plan.md §5「tldraw UI 槽位」）。
+ * tldraw 换肤（docs/contracts/tldraw-canvas-plan.md §5「tldraw UI 槽位」）。
  *
  * §12 第 2 条：样式面板与缩略图复用 tldraw 的默认实现，但外观必须和
  * Dock、设置页、侧栏是同一套。做法是把 tldraw 的 `--tl-*` 变量整体重定向到

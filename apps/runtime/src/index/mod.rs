@@ -1,4 +1,4 @@
-//! The conversations index — docs/v3-agent-terminal-plan.md §16 / §17.
+//! The conversations index — docs/contracts/v3-agent-terminal-plan.md §16 / §17.
 //!
 //! Every agent CLI leaves its history somewhere under the user's home
 //! directory. This module walks those three directories, reads the first user

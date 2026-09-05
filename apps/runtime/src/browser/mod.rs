@@ -1,5 +1,5 @@
 //! The controlled embedded browser — B01,
-//! [editor & browser design](../../../../docs/editor-browser-design.md) §5-§9.
+//! [editor & browser design](../../../../docs/design/editor-browser-design.md) §5-§9.
 //!
 //! ## What a session is
 //!

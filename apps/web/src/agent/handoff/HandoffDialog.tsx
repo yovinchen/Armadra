@@ -35,7 +35,7 @@ import {
 } from "./handoff-targets";
 
 /**
- * 交接预览与确认（docs/agent-automation-design.md §7.3）。
+ * 交接预览与确认（docs/design/agent-automation-design.md §7.3）。
  *
  * 三步走，界面上也是三步，因为它们的授权含义完全不同：
  *

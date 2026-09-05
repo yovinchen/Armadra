@@ -7,7 +7,7 @@ import {
 } from "./domain.js";
 
 /**
- * Agent registry — see docs/v3-agent-terminal-plan.md §5.1.
+ * Agent registry — see docs/contracts/v3-agent-terminal-plan.md §5.1.
  *
  * Pure data plus one pure function. An "agent" is a CLI that we start inside a
  * terminal node; nothing here spawns a process, and the runtime keeps only a
@@ -40,7 +40,7 @@ export type PromptMode = (typeof PROMPT_MODES)[number];
 
 /**
  * What an adapter can do, as a composed set rather than a per-CLI branch in
- * every component (docs/agent-automation-design.md §1).
+ * every component (docs/design/agent-automation-design.md §1).
  *
  * The three later entries were added with the M2 capability work:
  *
@@ -55,7 +55,7 @@ export type PromptMode = (typeof PROMPT_MODES)[number];
  *     the node header may offer one. Every built-in has a `modelFlag`, but the
  *     capability is still narrowed by version probing and the execution host.
  *   * `browser` — the adapter may drive a controlled browser session (B01,
- *     docs/editor-browser-design.md §7). The verb travels the same hook client
+ *     docs/design/editor-browser-design.md §7). The verb travels the same hook client
  *     channel as `contextLink`, so every adapter with a link has it too; the
  *     grant is still checked per action, the capability only says the channel
  *     exists.

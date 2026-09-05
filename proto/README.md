@@ -67,7 +67,7 @@ CLI `--output protobuf` 返回单个无换行的 HostManagementResult；stopped 
 共享样例覆盖 Unicode、二进制、整数边界、optional、oneof、未知字段和截断拒绝，
 以及自动化的未知 outcome、投递证据、命令会话不可重建状态与超出 JS 安全整数的 revision，
 和资源采样中「测得的 0」与「测不出来」必须编码成不同字节这一条。
-验证证据见[实施记录](../docs/platform-implementation-status.md)；交叉构建不代表目标平台实机通过。
+验证证据见[实施记录](../docs/status/platform-implementation-status.md)；交叉构建不代表目标平台实机通过。
 
 参考：[Go 生成代码](https://protobuf.dev/reference/go/go-generated/)、[Protobuf-ES](https://github.com/bufbuild/protobuf-es/blob/v2.2.5/MANUAL.md)、
 [prost-build](https://docs.rs/prost-build/0.14.1/prost_build/struct.Config.html)、[proto3 兼容规则](https://protobuf.dev/programming-guides/proto3/)。

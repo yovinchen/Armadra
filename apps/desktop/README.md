@@ -18,7 +18,7 @@ pnpm --filter @armadra/desktop test
 
 Command W / 关闭窗口隐藏到托盘，保留隐藏 WebView 的草稿；菜单、托盘或 Dock 可恢复。
 Command Q /「退出并停止后台」停止配置目录的 Host，再结束桌面持有的 Runtime 及受管会话。
-未确认完成的关停报告失败。业务迁移与后台计划进度见[实施记录](../../docs/platform-implementation-status.md)。
+未确认完成的关停报告失败。业务迁移与后台计划进度见[实施记录](../../docs/status/platform-implementation-status.md)。
 
 ## Host 启动
 

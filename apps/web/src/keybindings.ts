@@ -3,7 +3,7 @@ import * as React from "react";
 import { t } from "./app/preferences-store";
 
 /**
- * 快捷键注册表 —— docs/v3-agent-terminal-plan.md §8。
+ * 快捷键注册表 —— docs/contracts/v3-agent-terminal-plan.md §8。
  *
  * 这是 Phase 1 四个界面 agent 的跨模块接口：命令面板、Dock、右键菜单、
  * 设置页都从这里读 id 与默认键，谁都不许再各自 `addEventListener("keydown")`。

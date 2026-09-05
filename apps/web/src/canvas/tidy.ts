@@ -2,7 +2,7 @@ import type { CanvasEdge, CanvasNode, Position } from "@armadra/shared";
 import { COLLAPSED_HEIGHT, defaultNodeSize } from "../store/defaults";
 
 /**
- * 整理布局（docs/v3-agent-terminal-plan.md §23「整理布局」）。
+ * 整理布局（docs/contracts/v3-agent-terminal-plan.md §23「整理布局」）。
  *
  * 三步，全是纯函数：
  *   1. 按**连通分量**分组（连线当无向边看），分量内按拓扑深度排成

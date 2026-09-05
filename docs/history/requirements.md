@@ -1,7 +1,7 @@
 # Phase 1 需求拆解与验收矩阵
 
 > 状态：Phase 1 核心闭环已实现，发布级加固持续进行  
-> 需求基线：[architecture.md](../architecture.md)  
+> 需求基线：[architecture.md](../guides/architecture.md)  
 > 范围：Phase 1 MVP；远程执行、浏览器自动化、白板和多人协作不在本阶段内
 
 ## 1. 交付目标

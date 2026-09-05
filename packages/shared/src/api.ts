@@ -22,7 +22,7 @@ import {
 } from "./domain.js";
 
 /**
- * Runtime API v3 — see docs/v3-agent-terminal-plan.md §7.
+ * Runtime API v3 — see docs/contracts/v3-agent-terminal-plan.md §7.
  *
  * The ACP surface (`/api/agents/run`, `/api/agents/{id}/ws`,
  * `/api/agents/context-preview`) and `/api/gateway` are gone: agents are CLIs

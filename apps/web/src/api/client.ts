@@ -174,7 +174,7 @@ import { z } from "zod";
 import { t } from "../app/preferences-store";
 
 /**
- * Runtime HTTP 客户端 —— docs/v3-agent-terminal-plan.md §7 / §15。
+ * Runtime HTTP 客户端 —— docs/contracts/v3-agent-terminal-plan.md §7 / §15。
  *
  * 三条约束：
  *  1. 每个响应都过 zod：Runtime 是本地进程但版本可能比前端旧，

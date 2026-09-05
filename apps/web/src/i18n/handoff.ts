@@ -1,7 +1,7 @@
 import type { MessageModule } from "./index";
 
 /**
- * 对话交接文案（docs/agent-automation-design.md §7）。
+ * 对话交接文案（docs/design/agent-automation-design.md §7）。
  *
  * 措辞上有两条硬规矩，和 Runtime 那边的 `delivery::notice` 是一致的：
  *

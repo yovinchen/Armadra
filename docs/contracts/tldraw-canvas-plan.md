@@ -1,6 +1,6 @@
 # v4 方案：画布换成 tldraw，白板与 Agent 节点同一套模型
 
-> 状态：**Phase 0–4 已实施**（2026-09-04，分支 `main`，未合并）。实现与验证数字见 [implementation-status.md](./history/implementation-status.md) 的「v4 tldraw 画布」，跨 agent 交接见 [phase1-handoff.md](./history/phase1-handoff.md)  
+> 状态：**Phase 0–4 已实施**（2026-09-04，分支 `main`，未合并）。实现与验证数字见 [implementation-status.md](../history/implementation-status.md) 的「v4 tldraw 画布」，跨 agent 交接见 [phase1-handoff.md](../history/phase1-handoff.md)  
 > 基线：分支 `main`，[v3-agent-terminal-plan.md](./v3-agent-terminal-plan.md) 的 §5（Agent 运行时）、§13（接口契约）、§14（文案与组件原则）、§15（tmux 后端）、§18（终端兼容）继续有效；本文只替换画布层  
 > 输入：2026-09-04 代码盘点（`apps/web/src/canvas` 3.4k 行、`nodes` 2.4k 行、`store/canvas-store.ts` 810 行、13 个文件直接 import `@xyflow/react`、45 个文件消费 `canvas-store`）、tldraw 5.4.0（peer React `^19.2.1`，本项目 19.2.8）
 
@@ -287,7 +287,7 @@ apps/web/src/
 
 Phase 1 出口：`pnpm test`、`typecheck`、`cargo test`、clippy 零告警；§18.4 终端清单在 tldraw 里逐项通过；旧看板打开无丢失。
 
-**已完成（2026-09-04）**：四个 agent 并行交付，`apps/web/src` 全树 `@xyflow/react` = 0；交接记录见 [phase1-handoff.md](./history/phase1-handoff.md)。
+**已完成（2026-09-04）**：四个 agent 并行交付，`apps/web/src` 全树 `@xyflow/react` = 0；交接记录见 [phase1-handoff.md](../history/phase1-handoff.md)。
 
 ### Phase 2 · 连线语义与派生层（2 个 agent 并行，约 2 天）
 

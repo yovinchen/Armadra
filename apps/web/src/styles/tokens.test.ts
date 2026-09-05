@@ -16,7 +16,7 @@ const tokensCss = readFileSync(
  * 并且深浅两套主题都各自声明了一遍”——这才是会被悄悄改坏的部分。
  */
 
-/** docs/v3-agent-terminal-plan.md §4.3 里点名的 shadcn 别名。 */
+/** docs/contracts/v3-agent-terminal-plan.md §4.3 里点名的 shadcn 别名。 */
 const SHADCN_ALIASES = [
   "--background",
   "--foreground",

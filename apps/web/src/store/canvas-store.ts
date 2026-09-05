@@ -39,7 +39,7 @@ import { isCompactLayout } from "../platform/layout";
 import { normaliseLabels } from "../meta/model";
 
 /**
- * 画布状态 —— docs/tldraw-canvas-plan.md §3 / §9.3。
+ * 画布状态 —— docs/contracts/tldraw-canvas-plan.md §3 / §9.3。
  *
  * v4 的两条规则：
  *

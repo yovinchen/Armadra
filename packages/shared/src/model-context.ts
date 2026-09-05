@@ -1,7 +1,7 @@
 /**
  * Model context windows — the *denominator* of a context-usage reading.
  *
- * docs/agent-automation-design.md §2.1: "分母来自该会话实际模型与配置的上下文
+ * docs/design/agent-automation-design.md §2.1: "分母来自该会话实际模型与配置的上下文
  * 上限；无法确认模型或上限时显示未知." So this table only carries windows the
  * vendor documents, every entry is matched against the model id the session
  * actually reports, and an id nobody here recognises returns `null` rather than

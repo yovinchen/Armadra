@@ -49,7 +49,7 @@ Session Host 被杀时会话随之结束：每个会话的进程树在一个 `KI
 
 协议**没有**放进 `proto/`：这条线只有两个说话者、都是 Rust、同一个安装包里，生成 Go 与 TypeScript 只会为一场它们永远不会加入的对话产出代码。出现第三个说话者时再搬。
 
-未实现 / 未验证：§5 的无头 VT 屏幕仍待选型（[探针记录](./research/m0-executor-probes.md)），当前重附着回放的是最近 200 KiB 原始输出（截断点避开 UTF-8 与转义序列中间），与 direct 后端同一档契约，不是重绘；`capture` 因此也是回放而非读屏。升级 drain 只有协议与状态机、没有接线。**全部 Windows 行为未在真机运行过**：`cargo check --target x86_64-pc-windows-msvc` 对 `armadra-session-host` 通过，对 `armadra-runtime` 因 `aws-lc-sys` 缺 Windows SDK 头文件失败，所以 Worker 侧的 Windows 文件是借一个只含真实 `backend.rs` 的临时 crate 交叉类型检查过的。§12.1 的验收矩阵一条都还没跑。
+未实现 / 未验证：§5 的无头 VT 屏幕仍待选型（[探针记录](../research/m0-executor-probes.md)），当前重附着回放的是最近 200 KiB 原始输出（截断点避开 UTF-8 与转义序列中间），与 direct 后端同一档契约，不是重绘；`capture` 因此也是回放而非读屏。升级 drain 只有协议与状态机、没有接线。**全部 Windows 行为未在真机运行过**：`cargo check --target x86_64-pc-windows-msvc` 对 `armadra-session-host` 通过，对 `armadra-runtime` 因 `aws-lc-sys` 缺 Windows SDK 头文件失败，所以 Worker 侧的 Windows 文件是借一个只含真实 `backend.rs` 的临时 crate 交叉类型检查过的。§12.1 的验收矩阵一条都还没跑。
 
 Windows 下 Ctrl+C 作为终端输入/后端中断能力处理；Ctrl+Break、进程树终止另设操作。不套用 Unix kill(-pgid) 语义。PowerShell、cmd、Git Bash、原生 CLI 与 WSL 分别测试；WSL 会话在能力探测后走对应执行环境，不能混用 Linux 路径和 Win32 路径。
 

@@ -3,7 +3,7 @@
 > 状态：Phase 0–4 已实施（2026-09-04，分支 main）。验证结果见 implementation-status.md  
 > 日期：2026-09-04  
 > 输入：当前代码盘点（2026-09-04）  
-> 不变边界：[architecture.md](./architecture.md) 的三层结构（React Flow / Rust Runtime / Tauri 薄壳）与"SQLite 为真相"原则继续有效；本文取代 [redesign-plan.md](./history/redesign-plan.md) 成为新的实施契约。
+> 不变边界：[architecture.md](../guides/architecture.md) 的三层结构（React Flow / Rust Runtime / Tauri 薄壳）与"SQLite 为真相"原则继续有效；本文取代 [redesign-plan.md](../history/redesign-plan.md) 成为新的实施契约。
 
 ## 0. 一句话结论
 
@@ -482,7 +482,7 @@ apps/web/src
 
 ## 12. 与既有文档的关系
 
-本文取代 [redesign-plan.md](./history/redesign-plan.md) 成为实施契约，[architecture.md](./architecture.md) 的三层结构与"SQLite 为真相"原则不变；[interface-design.md](./history/interface-design.md) 描述的 v2 五区界面随本文作废。
+本文取代 [redesign-plan.md](../history/redesign-plan.md) 成为实施契约，[architecture.md](../guides/architecture.md) 的三层结构与"SQLite 为真相"原则不变；[interface-design.md](../history/interface-design.md) 描述的 v2 五区界面随本文作废。
 
 早先排在前面的四项能力里，"ACP 多轮会话"被本方案的"终端 + Hook"整体替代（§5.10）；持久终端、快照重连、终端背压与本方案正交，顺延到 Phase 4。Editor / Group / 文件 watcher / 设置分层并入 Phase 1；SSH、远程 Runtime、GitHub 集成、配对、语音仍排在更远处，不在本文范围。
 
@@ -786,7 +786,7 @@ REST 新增：`GET /api/terminals/{id}/capture?lines=&escapes=`、`POST /api/ter
 | 头部补齐          | web-kanban        | 节点头部 ✦ AI 命名（调 suggest-title → 写 title）、评论（Popover 内 Textarea，写 `note`）、`+ Label` chip（Popover 输入，写 `labels`）                                                                                                                                                                                                                                                                                               |
 | 代码分割          | desktop-packaging | CodeMirror 语言包、xterm addons、DiffNode/EditorNode/FilesNode、Settings/CommandPalette/Kanban/DeliveryLog 全部 `React.lazy` + `Suspense`；主 chunk < 700 kB                                                                                                                                                                                                                                                                         |
 | Tauri             | desktop-packaging | `titleBarStyle: Overlay` + `hiddenTitle`（TabBar 已留 86px）、托盘（显示/隐藏窗口、退出）、`minimumSystemVersion 13.3`、updater 配置骨架（无密钥，默认关闭）、`prepare-sidecar` 含 armadra-hook 的 release 构建、DMG 打包实测                                                                                                                                                                                                        |
-| Windows 守护进程  | desktop-packaging | 只写设计 `docs/windows-session-daemon.md`（协议、状态文件、ConPTY、generation、背压），不实现                                                                                                                                                                                                                                                                                                                                        |
+| Windows 守护进程  | desktop-packaging | 只写设计 `docs/design/windows-session-daemon.md`（协议、状态文件、ConPTY、generation、背压），不实现                                                                                                                                                                                                                                                                                                                                 |
 
 暂缓：用量胶囊（需读取 Claude OAuth 凭据）、语音、SSH、远程 Runtime、GitHub。
 

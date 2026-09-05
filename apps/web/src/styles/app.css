@@ -1,5 +1,5 @@
 /*
- * Tailwind v4 入口 —— docs/v3-agent-terminal-plan.md §4.1 / §4.3
+ * Tailwind v4 入口 —— docs/contracts/v3-agent-terminal-plan.md §4.1 / §4.3
  *
  * 顺序很重要：先 `tailwindcss`（含它自己的 theme 变量与 preflight），
  * 再 `tokens.css`，这样我们的 token 永远覆盖 Tailwind 的同名默认值。

@@ -10,7 +10,7 @@
 
 ## 按需阅读与验证
 
-- 启动、检查及环境变量见 [开发指南](docs/development.md)；架构变化同步更新 [架构](docs/architecture.md)。
+- 启动、检查及环境变量见 [开发指南](docs/guides/development.md)；架构变化同步更新 [架构](docs/guides/architecture.md)。
 - 任务涉及的专项文档从 [文档索引](docs/README.md) 查找；历史记录与研究资料只用于追溯。
 - `v3-agent-terminal-plan.md` 和 `tldraw-canvas-plan.md` 的 §N 被代码引用，保留章节编号。
 - 前端检查用 `pnpm --filter @armadra/web test` / `typecheck`，Runtime 用 `cargo test -p armadra-runtime`，Host 用 `go -C apps/host test ./...`。

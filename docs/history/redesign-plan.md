@@ -3,7 +3,7 @@
 > 状态：已实施（2026-09-02 集成完成；验证结果见 implementation-status.md）  
 > 日期：2026-09-02  
 > 设计来源：v2 高保真原型 `docs/design/handoff/`（已随 v3 界面重构删除，可在 git 历史中找回）  
-> 决策基线：[architecture.md](../architecture.md) 仍然有效；本文只描述在其边界内如何落地设计稿。
+> 决策基线：[architecture.md](../guides/architecture.md) 仍然有效；本文只描述在其边界内如何落地设计稿。
 
 本文是所有实施 Agent 的**唯一契约**。文件归属、数据模型、API 形状、Store 接口在此定义；实现时若发现契约有误，先修改本文再改代码，并在最终报告里说明。
 

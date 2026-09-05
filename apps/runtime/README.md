@@ -1,6 +1,6 @@
 # apps/runtime
 
-当前业务执行服务，负责终端、文件、Git、Hook 与协作；独立 Go Host 的迁移进度见[实施记录](../../docs/platform-implementation-status.md)。
+当前业务执行服务，负责终端、文件、Git、Hook 与协作；独立 Go Host 的迁移进度见[实施记录](../../docs/status/platform-implementation-status.md)。
 
 技术栈：Rust、Axum、Tokio、WebSocket、portable-pty、tmux、SQLx + SQLite、Git CLI wrapper。
 
@@ -30,20 +30,20 @@ CORS 只放行 `http://127.0.0.1:*`、`http://localhost:*`、`tauri://localhost`
 约定：JSON 字段一律 camelCase；错误统一 `{ "code": string, "message": string }`，
 `code` 取 `bad_request` (400) / `forbidden` (403) / `not_found` (404) /
 `conflict` (409) / `io_error` / `database_error` / `internal_error` (500)。
-完整契约见 `docs/v3-agent-terminal-plan.md` §13。
+完整契约见 `docs/contracts/v3-agent-terminal-plan.md` §13。
 
 路由注册见 `src/lib.rs`，覆盖工作空间/画板、文件/Git、终端、会话、Agent、设置、数据和用量。
 画板文档使用 CAS 写入，`expectedUpdatedAt` 冲突返回 409；`/api/gateway` 仍为未实现占位，不开监听。
 
 Hook 在 `src/hook/mod.rs` 使用独立鉴权与 body 上限，提供 `/verify`、`/hook/{agentId}`、
 `/context-link/{verb}`、`/control/{verb}`；同一 router 也经 Unix socket 提供。
-上下文与消息箱协议见[Agent 协作](../../docs/agent-collaboration.md)。
+上下文与消息箱协议见[Agent 协作](../../docs/guides/agent-collaboration.md)。
 
 ## 数据库
 
 `migrations/` 是 schema 的唯一来源。启动只接受空库或完整已知迁移前缀；未知版本、
 校验和不符、脏迁移、损坏账本和无账本的非空库均拒绝启动，不改名、清库或重建。
-新增 schema 使用编号迁移，禁止修改已发布文件。备份与数据位置见[开发指南](../../docs/development.md)。
+新增 schema 使用编号迁移，禁止修改已发布文件。备份与数据位置见[开发指南](../../docs/guides/development.md)。
 
 ## PATH
 

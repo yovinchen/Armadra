@@ -3,7 +3,7 @@ import { t } from "../app/preferences-store";
 import { nodeMeta } from "../nodes/registry";
 
 /**
- * 新建节点时的默认值 —— docs/v3-agent-terminal-plan.md §3.4。
+ * 新建节点时的默认值 —— docs/contracts/v3-agent-terminal-plan.md §3.4。
  *
  * 尺寸 / 颜色 / 标签的唯一真相是 `nodes/registry.ts` 的 `nodeMeta()`（归属
  * nodes agent），这里只做转发，绝不复制那张表——两处各写一份尺寸是上一版

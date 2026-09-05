@@ -1,14 +1,14 @@
 # 架构
 
-> 下一阶段目标见 [画布工作平台设计总纲](./canvas-platform-design.md)及其专项文档：Go 常驻 Host、Protobuf、后台调度和跨端能力均为待实施方案。本文件继续描述当前实现，不将目标能力提前计入现状。
+> 下一阶段目标见 [画布工作平台设计总纲](../design/canvas-platform-design.md)及其专项文档：Go 常驻 Host、Protobuf、后台调度和跨端能力均为待实施方案。本文件继续描述当前实现，不将目标能力提前计入现状。
 
-> 当前实现的架构。画布层细节见 [tldraw-canvas-plan.md](./tldraw-canvas-plan.md)，
-> Agent 运行时与接口契约见 [v3-agent-terminal-plan.md](./v3-agent-terminal-plan.md)。
-> 选型演进的原始讨论见 [ChatGPT 会话归档](./research/chatgpt-conversation-archive.md)。
+> 当前实现的架构。画布层细节见 [tldraw-canvas-plan.md](../contracts/tldraw-canvas-plan.md)，
+> Agent 运行时与接口契约见 [v3-agent-terminal-plan.md](../contracts/v3-agent-terminal-plan.md)。
+> 选型演进的原始讨论见 [ChatGPT 会话归档](../research/chatgpt-conversation-archive.md)。
 
 ## 1. 定位
 
-独立 Go Host 已有身份、单实例、后台启停和 Protobuf 基础。桌面启动时异步启动/发现 Host，设置页可显式检查连接；Go Host 的生命周期独立于界面。默认应用业务仍由下述 Rust Runtime 提供。关闭桌面窗口隐藏前台并保留服务；Command Q/托盘退出经私有控制结束受管会话和后台。普通 Runtime 重启信号保留 tmux 恢复语义；尚未切换业务数据库或接入 Host 调度。实际进度见 [平台实施记录](./platform-implementation-status.md)。
+独立 Go Host 已有身份、单实例、后台启停和 Protobuf 基础。桌面启动时异步启动/发现 Host，设置页可显式检查连接；Go Host 的生命周期独立于界面。默认应用业务仍由下述 Rust Runtime 提供。关闭桌面窗口隐藏前台并保留服务；Command Q/托盘退出经私有控制结束受管会话和后台。普通 Runtime 重启信号保留 tmux 恢复语义；尚未切换业务数据库或接入 Host 调度。实际进度见 [平台实施记录](../status/platform-implementation-status.md)。
 
 Armadra 是一个 local-first 的桌面画布：把 Claude Code、Codex、Gemini CLI、
 opencode 等 CLI Agent 作为终端节点放在一块 tldraw 白板上，节点之间连一条线即
@@ -100,7 +100,7 @@ Agent 之间的协作走 Runtime 的两个动词表面：
 所有 Agent 终端都能调用 `armadra-hook canvas help` 读取短帮助。默认协作采用
 `post` / `inbox` / `ack` 拉取消息箱，不自动注入终端输入或追加启动提示。显式安装
 Hook 时提供独立的按需技能，不再追加全局长指令。详见
-[Agent 适配与协作协议](agent-collaboration.md)。
+[Agent 适配与协作协议](./agent-collaboration.md)。
 
 ## 5. 数据模型与持久化
 
@@ -175,7 +175,7 @@ Runtime 启动时把 PATH 换成补齐过的版本（Homebrew、mise shims、mis
 
 终端后端三选一（`apps/runtime/src/terminal/`）：`tmux`（默认，会话跨 Runtime 重启存活）、
 `direct`（portable-pty 直连）、`ssh`（设置里配置的远程主机）。Windows 的持久化会话
-设计见 [windows-session-daemon.md](./windows-session-daemon.md)（只有设计，未实现）。
+设计见 [windows-session-daemon.md](../design/windows-session-daemon.md)（只有设计，未实现）。
 
 ## 7. 安全边界
 
