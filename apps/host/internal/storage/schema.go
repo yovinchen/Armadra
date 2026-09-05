@@ -190,7 +190,26 @@ CREATE TABLE github_references (
  updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0)
 )`
 
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4}
+// Write ownership per business domain (host protocol design §4, step 5). One
+// row per domain, outside entities/events because it is not canvas content and
+// must never be replayed to a client as a business change. `phase` exists so a
+// crash between "the Host recorded the switch" and "the Runtime acknowledged
+// it" is visible as an open maintenance window rather than resolving itself
+// into one side silently believing it owns the domain.
+const schemaV5 = `CREATE TABLE write_ownership (
+ domain TEXT PRIMARY KEY CHECK(domain = 'canvas'),
+ owner TEXT NOT NULL CHECK(owner IN ('runtime','host')),
+ epoch INTEGER NOT NULL CHECK(epoch > 0),
+ phase TEXT NOT NULL CHECK(phase IN ('settled','switching','rolling_back')),
+ import_id TEXT NOT NULL CHECK(length(import_id) <= 128),
+ reason_code TEXT NOT NULL CHECK(length(reason_code) <= 64),
+ event_sequence INTEGER NOT NULL DEFAULT 0 CHECK(event_sequence >= 0),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0),
+ updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0)
+)`
+
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5}
 
 type sqlReader interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)

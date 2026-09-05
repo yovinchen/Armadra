@@ -135,6 +135,30 @@ func (s *Store) Read(ctx context.Context, key Key) (Entity, error) {
 	return scanEntity(s.db.QueryRowContext(ctx, "SELECT workspace_id,kind,entity_id,revision,payload,deleted FROM entities WHERE workspace_id=? AND kind=? AND entity_id=?", key.WorkspaceID, key.Kind, key.ID))
 }
 
+// WorkspacesOfKind lists the distinct workspaces that hold at least one entity
+// of a kind, including workspaces whose only rows are tombstones. A migration
+// needs it because the workspace identifiers themselves arrive in the data:
+// there is no outer list to read them from before the first projection.
+func (s *Store) WorkspacesOfKind(ctx context.Context, kind string) ([]string, error) {
+	if !textValid(kind, 128, false) {
+		return nil, ErrInvalid
+	}
+	rows, err := s.db.QueryContext(ctx, "SELECT DISTINCT workspace_id FROM entities WHERE kind=? ORDER BY workspace_id", kind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []string{}
+	for rows.Next() {
+		var workspace string
+		if err = rows.Scan(&workspace); err != nil {
+			return nil, err
+		}
+		result = append(result, workspace)
+	}
+	return result, rows.Err()
+}
+
 func (s *Store) List(ctx context.Context, options ListOptions) (EntityPage, error) {
 	result := EntityPage{Entities: []Entity{}, NextID: options.AfterID}
 	if err := validateKey(Key{WorkspaceID: options.WorkspaceID, Kind: options.Kind, ID: "list"}); err != nil {

@@ -93,6 +93,21 @@ func (s *Store) GetEvents(ctx context.Context, query EventQuery) (EventPage, err
 	return result, nil
 }
 
+// Watermark reads the retained event floor and the last published sequence in
+// one read transaction. A snapshot taken alongside it is consistent with the
+// returned last sequence, which is what lets a client resume a subscription
+// from a snapshot instead of replaying history it already holds.
+func (s *Store) Watermark(ctx context.Context) (uint64, uint64, error) {
+	var floor, last int64
+	if err := s.db.QueryRowContext(ctx, "SELECT event_floor,last_sequence FROM store_meta WHERE singleton=1").Scan(&floor, &last); err != nil {
+		return 0, 0, err
+	}
+	if floor < 0 || last < floor {
+		return 0, 0, ErrCorrupt
+	}
+	return uint64(floor), uint64(last), nil
+}
+
 // PruneEvents advances the retention floor only at a complete transaction
 // boundary. It never removes idempotency receipts or entity tombstones.
 func (s *Store) PruneEvents(ctx context.Context, through uint64) error {
