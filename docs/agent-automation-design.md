@@ -78,6 +78,12 @@ interface AgentCapabilities {
 
 同一原生任务不会自动复制成平台计划，否则会双重触发。显式“转为平台计划”时必须先确认原生任务已取消；不支持确认时只创建停用草稿。
 
+### 3.1 实施状态（2026-09-05）
+
+`automation` 与 `agentActivity` 是两种独立节点类型，schema 与 Runtime 校验互不接受对方的 payload，不存在互相转换的路径。计划节点只存 `planId` / `planWorkspaceId` / `executionHostId`，外加仅供离线显示的计划类型与时区；状态、下次执行与最近收据每次从 Host 现读，读不到时显示原因而不是空计划。活动卡片绑定被观察的终端节点，数据取自现有 Hook 事件（agent status 与 subagent），只读，界面明说隐藏它不会取消 CLI 的循环。两者都没有上下文连线把手：内容不在画布上，连过去读不到东西。
+
+计划级“需处理”已进入协议：`AutomationPlan` 新增 `needs_attention` / `attention_reason_code` / `attention_streak`（字段号 13–15，既有字段号未动）。连续两次 `TARGET_UNSUPPORTED` 或 `STALE_GENERATION` 才置位，只有观察到投递或重新定义计划才清除；暂停或过期不清除，因为它们无法证明目标已修好。计划自身的状态不被这个标记改写。
+
 ## 4. 平台自动化模型
 
 `Automation` 至少包含：id、workspaceId、executionHostId、ownerId、revision、schedule、target、payloadRef、activationHash、enabled、timezone、misfirePolicy、concurrencyPolicy、busyPolicy、coldStartPolicy、retryPolicy、maxRuns、expiresAt、createdAt。
@@ -99,6 +105,14 @@ interface AgentCapabilities {
 Cron 正常触发、misfire 补发和一次性计划过期是三种记录，不混称成功。Interval 在运行中用单调时钟等待、用持久 UTC 锚点恢复；系统时钟回拨后仍按已记录时隙去重。
 
 编辑表达式、内容、目标、身份、执行目录、授权、重试或补跑策略都使 activationHash 失效，计划回到 draft/needs-activation。共享项目导入的计划默认停用，机器本地 activation 不随项目同步。激活保存用户看到的确切 revision；每次派发再次检查该 revision 与授权。
+
+### 4.1 实施状态（2026-09-05）
+
+右侧工作面板的“自动化”页有计划、运行历史、新建计划三个页签，全部走 Host 的 HTTPS 认证接口（`@armadra/host-client` 的 `HostAutomationClient`，复用设备会话的 Cookie、序列化队列与 CSRF）。创建向导把执行位置固定为当前 Host——计划只能派发到定义它的那台 Host，所以不提供一个必然失败的下拉；命令会话可选已有的或当场定义新的，五字段 cron、显式 IANA 时区、misfire/并发策略与“完成后循环必须有次数或截止时间”都在发出请求前校验。激活需要确认，确认框显示绑定的 revision、configVersion 与 config sha。运行历史逐条显示状态、收据阶段与派发次数：“已投递”与“已成功”分开，“结果未知”自成一行。“移除展示，保留计划”与“停用并移除”始终是两个按钮。
+
+Host 未连接、未配对、没有执行 Worker 或设备没有该工作空间的自动化权限时，整页只显示原因与“前往设置 → 连接”，不渲染任何点了会失败的按钮；只读设备能看列表但没有管理按钮。
+
+已知限制：Host 的运行记录按时隙 hash 存储，分页顺序不是时间序，面板取回后按计划时间在客户端排序（每个计划最多翻 20 页）；面板只能创建、激活、暂停和立即运行，尚不能编辑已有计划。
 
 ## 5. 调度执行、持久性与不确定结果
 

@@ -3,7 +3,7 @@ import { z } from "zod";
 /**
  * Domain model v3 — see docs/v3-agent-terminal-plan.md §3.4, §5 and §6.
  *
- * Seven node types, a single
+ * Nine node types, a single
  * persisted edge kind, no per-node `status` (agent
  * state lives in the `agent_status` table and is pushed over the workspace
  * event socket) and no `zoom` tri-state (collapse / resize / maximize replace
@@ -219,7 +219,12 @@ export const agentActivityNodeDataSchema = z.object({
    */
   sessionId: z.string().max(200).default(""),
   executionHostId: z.string().max(200).default(""),
-  generation: z.number().int().nonnegative().max(2 ** 53 - 1).default(0),
+  generation: z
+    .number()
+    .int()
+    .nonnegative()
+    .max(2 ** 53 - 1)
+    .default(0),
   nativeJobId: z.string().max(200).default(""),
 });
 
@@ -533,8 +538,7 @@ export type FilesNodeData = z.infer<typeof filesNodeDataSchema>;
 export type BrowserNodeData = z.infer<typeof browserNodeDataSchema>;
 export type AutomationNodeData = z.infer<typeof automationNodeDataSchema>;
 export type AgentActivityNodeData = z.infer<typeof agentActivityNodeDataSchema>;
-export type AutomationScheduleKind =
-  (typeof AUTOMATION_SCHEDULE_KINDS)[number];
+export type AutomationScheduleKind = (typeof AUTOMATION_SCHEDULE_KINDS)[number];
 export type AgentActivitySource = (typeof AGENT_ACTIVITY_SOURCES)[number];
 export type CanvasNode = z.infer<typeof canvasNodeSchema>;
 export type CanvasEdge = z.infer<typeof canvasEdgeSchema>;
