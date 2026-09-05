@@ -7,6 +7,7 @@ import {
   CommandPalette,
   ControlConfirmDialog,
   ExplorerDrawer,
+  HandoffDialog,
   SettingsDialog,
   SourceControlDrawer,
 } from "./lazy";
@@ -90,6 +91,7 @@ function AppShell() {
         <SettingsDialog />
         <CommandPalette />
         <ControlConfirmDialog />
+        <HandoffDialog />
       </Suspense>
       <Toaster position="bottom-right" />
     </div>

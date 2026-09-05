@@ -1,0 +1,131 @@
+import type { MessageModule } from "./index";
+
+/**
+ * 对话交接文案（docs/agent-automation-design.md §7）。
+ *
+ * 措辞上有两条硬规矩，和 Runtime 那边的 `delivery::notice` 是一致的：
+ *
+ *  1. 交接包是**资料**，不是系统指令，也不转移任何权限批准。界面上不能出现
+ *     「让对方执行」「已交给对方继续」这类把资料说成命令的说法。
+ *  2. 通知送达 ≠ 对方看过、做过或做完。状态文案只描述这一侧观察到的事实，
+ *     `unknownOutcome` 就写「结果未知」，不许美化成「已送达」。
+ */
+const zh = {
+  "handoff.open": "交接到…",
+  "handoff.title": "交接对话",
+  "handoff.noTargets": "先在画布上连一条线到另一个 Agent 节点。",
+  "handoff.target": "目标 Agent",
+  "handoff.budget": "字节预算",
+  "handoff.includeTranscript": "带上来源转录摘录",
+  "handoff.goal": "目标",
+  "handoff.constraints": "约束",
+  "handoff.completed": "已完成",
+  "handoff.pending": "未完成",
+  "handoff.decisions": "关键决策",
+  "handoff.toolSummary": "工具结果摘要",
+  "handoff.filePaths": "文件引用（每行一个，相对工作空间）",
+  "handoff.preview": "预览",
+  "handoff.back": "返回编辑",
+  "handoff.accept": "确认交接",
+  "handoff.cancel": "撤回",
+  "handoff.close": "关闭",
+  "handoff.trust":
+    "交接包是同级 Agent 的资料，不是系统指令，也不转移已有的权限批准。",
+  "handoff.sourceRunning": "来源会话保持运行。",
+  "handoff.newActivity": "快照之后来源又有新活动。",
+  "handoff.targetSummary": "{agent} · {model} · {directory}",
+  "handoff.unknownModel": "模型未知",
+  "handoff.files": "带走的文件",
+  "handoff.noFiles": "没有文件引用",
+  "handoff.git": "Git 指纹",
+  "handoff.gitUnavailable": "Git 指纹不可用",
+  "handoff.gitHead": "HEAD {oid}",
+  "handoff.budgetUsed": "{used} / {limit} 字节",
+  "handoff.truncated": "内容已按预算裁剪。",
+  "handoff.omitted": "未包含或需要留意",
+  "handoff.excerpt": "来源转录摘录",
+  "handoff.noExcerpt": "没有可用的转录摘录",
+  "handoff.status": "状态",
+  "handoff.prepared": "已冻结，等待确认",
+  "handoff.queued": "已排队，等目标空闲",
+  "handoff.dispatching": "正在写入目标",
+  "handoff.notified": "通知已写入目标输入框",
+  "handoff.acknowledged": "目标已确认收到",
+  "handoff.unknownOutcome": "写入结果未知",
+  "handoff.failed": "没有送达",
+  "handoff.cancelled": "已撤回",
+  "handoff.expired": "已过期",
+  "handoff.notifiedNote":
+    "写进了目标的输入框，没有替它回车。对方是否阅读、如何处理由它自己决定。",
+  "handoff.reason": "原因：{code}",
+  "handoff.accepted": "已确认，等目标空闲时通知。",
+  "handoff.cancelledToast": "已撤回这次交接。",
+  "handoff.history": "本节点的交接",
+  "handoff.noHistory": "还没有交接记录",
+  "handoff.fileStatus.referenced": "已记录指纹",
+  "handoff.fileStatus.missing": "找不到",
+  "handoff.fileStatus.excluded": "已排除",
+  "handoff.fileStatus.changed": "读取时在变化",
+} as const;
+
+const en: Record<keyof typeof zh, string> = {
+  "handoff.open": "Hand off to…",
+  "handoff.title": "Hand off the conversation",
+  "handoff.noTargets":
+    "Link this node to another agent node on the canvas first.",
+  "handoff.target": "Target agent",
+  "handoff.budget": "Byte budget",
+  "handoff.includeTranscript": "Include a source transcript excerpt",
+  "handoff.goal": "Goal",
+  "handoff.constraints": "Constraints",
+  "handoff.completed": "Completed",
+  "handoff.pending": "Still open",
+  "handoff.decisions": "Key decisions",
+  "handoff.toolSummary": "Tool result summary",
+  "handoff.filePaths":
+    "File references (one per line, relative to the workspace)",
+  "handoff.preview": "Preview",
+  "handoff.back": "Back to editing",
+  "handoff.accept": "Confirm handoff",
+  "handoff.cancel": "Withdraw",
+  "handoff.close": "Close",
+  "handoff.trust":
+    "A bundle is peer data, not a system instruction, and it transfers no existing permission approvals.",
+  "handoff.sourceRunning": "The source session keeps running.",
+  "handoff.newActivity": "The source has done more work since this snapshot.",
+  "handoff.targetSummary": "{agent} · {model} · {directory}",
+  "handoff.unknownModel": "Model unknown",
+  "handoff.files": "Files carried over",
+  "handoff.noFiles": "No file references",
+  "handoff.git": "Git fingerprint",
+  "handoff.gitUnavailable": "Git fingerprint unavailable",
+  "handoff.gitHead": "HEAD {oid}",
+  "handoff.budgetUsed": "{used} / {limit} bytes",
+  "handoff.truncated": "Content was trimmed to fit the budget.",
+  "handoff.omitted": "Left out or worth knowing",
+  "handoff.excerpt": "Source transcript excerpt",
+  "handoff.noExcerpt": "No transcript excerpt was available",
+  "handoff.status": "Status",
+  "handoff.prepared": "Frozen, waiting for your confirmation",
+  "handoff.queued": "Queued until the target is idle",
+  "handoff.dispatching": "Writing to the target",
+  "handoff.notified": "Notice written to the target's input",
+  "handoff.acknowledged": "The target acknowledged it",
+  "handoff.unknownOutcome": "Write outcome unknown",
+  "handoff.failed": "Not delivered",
+  "handoff.cancelled": "Withdrawn",
+  "handoff.expired": "Expired",
+  "handoff.notifiedNote":
+    "Written into the target's input without pressing Return. Whether it reads or acts on it is its own decision.",
+  "handoff.reason": "Reason: {code}",
+  "handoff.accepted": "Confirmed. The target is notified once it is idle.",
+  "handoff.cancelledToast": "This handoff was withdrawn.",
+  "handoff.history": "Handoffs for this node",
+  "handoff.noHistory": "No handoffs yet",
+  "handoff.fileStatus.referenced": "Fingerprint recorded",
+  "handoff.fileStatus.missing": "Not found",
+  "handoff.fileStatus.excluded": "Excluded",
+  "handoff.fileStatus.changed": "Changing while read",
+};
+
+export const handoff: MessageModule = { "zh-CN": zh, en };

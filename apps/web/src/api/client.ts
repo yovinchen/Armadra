@@ -77,11 +77,15 @@ import {
   updateBoardRequestSchema,
   updateWorkspaceRequestSchema,
   usageSchema,
+  handoffListSchema,
+  handoffPrepareSchema,
+  handoffViewSchema,
   workspaceListSchema,
   workspaceSchema,
   writeFileRequestSchema,
   writeFileResponseSchema,
   type BoardDocument,
+  type HandoffPrepare,
   type ContextLink,
   type CustomAgent,
   type CreateTerminalRequest,
@@ -540,6 +544,47 @@ export const runtimeApi = {
       `/api/workspaces/${workspaceId}/deliveries?limit=${limit}`,
       deliveriesResponseSchema,
     ),
+  /* --------------------------------- 对话交接 ---------------------------- */
+  /**
+   * 交接（design §7）。四个动词分得很开，是因为它们的授权含义不同：
+   *
+   *  - `prepareHandoff` 只冻结材料并生成预览，不通知任何人；
+   *  - `acceptHandoff` 是**唯一**的用户授权，`expectedDigest` 必须是预览里
+   *    那一份，Runtime 用它挡住「看到的和批准的不是同一份」；
+   *  - `cancelHandoff` 在真正写入目标之前撤回排队中的通知；
+   *  - `handoffs` / `handoff` 只读，来源和目标两边都能看到同一个包。
+   */
+  handoffs: (workspaceId: string, nodeId: string, signal?: AbortSignal) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/handoffs?sourceNodeId=${query(nodeId)}`,
+      handoffListSchema,
+      { signal },
+    ),
+  handoff: (workspaceId: string, handoffId: string, signal?: AbortSignal) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/handoffs/${query(handoffId)}`,
+      handoffViewSchema,
+      { signal },
+    ),
+  prepareHandoff: (workspaceId: string, value: HandoffPrepare) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/handoffs`,
+      handoffViewSchema,
+      { method: "POST", ...json(handoffPrepareSchema.parse(value)) },
+    ),
+  acceptHandoff: (workspaceId: string, handoffId: string, digest: string) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/handoffs/${query(handoffId)}/accept`,
+      handoffViewSchema,
+      { method: "POST", ...json({ expectedDigest: digest }) },
+    ),
+  cancelHandoff: (workspaceId: string, handoffId: string, digest: string) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/handoffs/${query(handoffId)}/cancel`,
+      handoffViewSchema,
+      { method: "POST", ...json({ expectedDigest: digest }) },
+    ),
+
   /** 关闭确认的人工答复（§5.8）。`accepted:false` = 那边已经等超时了。 */
   confirmControl: (requestId: string, approve: boolean) =>
     request(

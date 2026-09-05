@@ -29,6 +29,12 @@ export const ControlConfirmDialog = lazy(() =>
   })),
 );
 
+export const HandoffDialog = lazy(() =>
+  import("@/agent/handoff/HandoffDialog").then((module) => ({
+    default: module.HandoffDialog,
+  })),
+);
+
 export const ExplorerDrawer = lazy(() =>
   import("@/panels/ExplorerDrawer").then((module) => ({
     default: module.ExplorerDrawer,

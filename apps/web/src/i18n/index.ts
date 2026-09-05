@@ -16,6 +16,7 @@ import { hostIdentity } from "./host-identity";
 import { legacyArchives } from "./legacy-archives";
 import { contextUsage } from "./context-usage";
 import { gitHunks } from "./git-hunks";
+import { handoff } from "./handoff";
 import { gitMessage } from "./git-message";
 import { gitStashes } from "./git-stashes";
 import { gitIntegration } from "./git-integration";
@@ -59,6 +60,7 @@ export const MESSAGE_MODULES = {
   "git-message": gitMessage,
   "git-stashes": gitStashes,
   "git-integration": gitIntegration,
+  handoff,
   "file-drag": fileDrag,
   explorer,
   modals,

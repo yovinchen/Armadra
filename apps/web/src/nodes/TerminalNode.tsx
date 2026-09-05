@@ -7,6 +7,7 @@ import {
   MoreHorizontal,
   RotateCw,
   Search,
+  Share2,
   Sparkles,
   Square,
 } from "lucide-react";
@@ -49,6 +50,8 @@ import {
   openNodeAnnotation,
   suggestNodeTitle,
 } from "@/meta/annotations";
+import { HandoffBadge } from "@/agent/handoff/HandoffBadge";
+import { openHandoff } from "@/agent/handoff/handoff-targets";
 import { useSshHosts } from "@/panels/settings/ssh-hosts";
 import { NodeShell } from "./NodeShell";
 import type { NodeBodyProps } from "./registry";
@@ -145,6 +148,7 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
   const headerChips = (
     <>
       {agent && <ContextUsageBadge nodeId={id} sessionId={surface.binding?.sessionId??null} generation={surface.binding?.generation??null} usage={context.usage} unavailableReason={exited?"session_ended":context.unavailableReason} />}
+      {agent && <HandoffBadge nodeId={id} />}
       {sshLabel !== null && (
         <Badge
           variant="outline"
@@ -273,6 +277,23 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
                 <Copy />
                 {t("terminal.copyHelpCommand")}
               </DropdownMenuItem>
+              {/* 交接（design §7）：只有 Agent 终端、只有连上了这条 PTY 才
+                  给得出会话身份，Runtime 按 generation 校验，所以断开时不给
+                  入口，而不是让用户填完表再被拒。 */}
+              {agent && surface.binding && (
+                <DropdownMenuItem
+                  onSelect={() =>
+                    openHandoff({
+                      nodeId: id,
+                      sessionId: surface.binding!.sessionId,
+                      generation: surface.binding!.generation,
+                    })
+                  }
+                >
+                  <Share2 />
+                  {t("handoff.open")}
+                </DropdownMenuItem>
+              )}
             </DropdownMenuSubContent>
           </DropdownMenuSub>
           <DropdownMenuSeparator />
