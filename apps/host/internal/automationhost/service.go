@@ -183,7 +183,10 @@ func (s *Service) start(ctx context.Context) error {
 	if closed {
 		return ErrUnsupported
 	}
-	client, err := worker.Start(ctx, worker.Options{Executable: s.options.Executable, HostID: s.options.HostID, StateDir: s.options.StateDir, RequestTimeout: s.options.RequestTimeout})
+	// Every rebuilt Worker gets the upcall sink, so the supervisor's existing
+	// restart path is also the channel's reconnect path: a Worker that comes
+	// back replays what it owes over the new pipe with no extra machinery.
+	client, err := worker.Start(ctx, worker.Options{Executable: s.options.Executable, HostID: s.options.HostID, StateDir: s.options.StateDir, RequestTimeout: s.options.RequestTimeout, Upcalls: upcallRecorder{store: s.store, hostInstance: s.options.InstanceID}})
 	if err != nil {
 		s.disable("WORKER_START_FAILED")
 		return err

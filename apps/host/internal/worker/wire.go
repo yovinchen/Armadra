@@ -232,26 +232,55 @@ func (c *Client) exchange(parent context.Context, request *pb.WorkerRequest, kin
 	if len(wire) > int(limit) {
 		return nil, &Error{Code: CodeInvalid}
 	}
-	type received struct {
-		wire []byte
-		err  error
-	}
+	// `received` is declared in channel.go, so the reader pump and this
+	// goroutine hand back the same shape and either can answer a caller.
 	result := make(chan received, 1)
-	go func() {
-		if err := writeFrame(c.input, wire, limit); err != nil {
-			result <- received{err: err}
-			return
-		}
-		value, err := readFrame(c.output, limit)
-		result <- received{wire: value, err: err}
-	}()
+	// With upcalls enabled the pipe is owned by the reader pump, because an
+	// unsolicited frame may arrive between this write and its answer. Without
+	// them this goroutine reads its own reply, exactly as it did before the
+	// resident channel existed.
+	if c.pump != nil {
+		go func() {
+			c.pump.writeMu.Lock()
+			err := writeKindFrame(c.input, frameKindCall, wire, limit)
+			c.pump.writeMu.Unlock()
+			if err != nil {
+				result <- received{err: err}
+			}
+		}()
+	} else {
+		go func() {
+			if err := writeFrame(c.input, wire, limit); err != nil {
+				result <- received{err: err}
+				return
+			}
+			value, err := readFrame(c.output, limit)
+			result <- received{wire: value, err: err}
+		}()
+	}
 	var incoming received
-	select {
-	case <-ctx.Done():
-		return nil, c.fail(contextError(ctx.Err()))
-	case <-c.stopped:
-		return nil, &Error{Code: CodeClosed}
-	case incoming = <-result:
+	if c.pump != nil {
+		// `result` carries only a write failure here; the answer comes from the
+		// pump. `done` covers the case where the pump died with its error slot
+		// already full, so a caller is never left waiting on a dead reader.
+		select {
+		case <-ctx.Done():
+			return nil, c.fail(contextError(ctx.Err()))
+		case <-c.stopped:
+			return nil, &Error{Code: CodeClosed}
+		case incoming = <-result:
+		case incoming = <-c.pump.responses:
+		case <-c.pump.done:
+			return nil, c.fail(&Error{Code: CodeTransport})
+		}
+	} else {
+		select {
+		case <-ctx.Done():
+			return nil, c.fail(contextError(ctx.Err()))
+		case <-c.stopped:
+			return nil, &Error{Code: CodeClosed}
+		case incoming = <-result:
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, c.fail(contextError(err))

@@ -74,6 +74,11 @@ type Options struct {
 	// deliberately exclusive, so a scheduling Worker can never move ownership.
 	CanvasDatabase string
 	RequestTimeout time.Duration
+	// Upcalls opts into the resident bidirectional channel (business migration
+	// §2.9). A non-nil sink installs a reader pump after a handshake that
+	// reported UpcallCapability; a Worker that did not report it is used
+	// exactly as phase one used it, and Start does not fail for that.
+	Upcalls UpcallSink
 }
 type Diagnostics struct {
 	BufferedBytes int
@@ -128,10 +133,13 @@ type Client struct {
 	containment        containment
 	commandMode        bool
 	ownershipMode      bool
-	cleanupConfirmed   atomic.Bool
-	containmentClosed  atomic.Bool
-	closeMu            sync.Mutex
-	reapMu             sync.Mutex
+	// pump is nil until upcalls are enabled. While it is nil, exchange reads
+	// the pipe itself, exactly as it did before this batch.
+	pump              *pump
+	cleanupConfirmed  atomic.Bool
+	containmentClosed atomic.Bool
+	closeMu           sync.Mutex
+	reapMu            sync.Mutex
 }
 
 func (*Client) String() string   { return "WorkerClient{redacted}" }
@@ -321,6 +329,13 @@ func Start(ctx context.Context, options Options) (*Client, error) {
 	}
 	c.instanceID = hello.InstanceId
 	c.hello = proto.Clone(hello).(*pb.WorkerHelloResponse)
+	// Only a Worker that says it has a durable outbox gets a pump. Installing
+	// one for a Worker that reports nothing upward would leave a goroutine
+	// reading a pipe that never produces an unsolicited frame, and would change
+	// the read path for no gain.
+	if options.Upcalls != nil && slices.Contains(hello.Capabilities, UpcallCapability) {
+		c.startUpcalls(options.Upcalls)
+	}
 	return c, nil
 }
 func (c *Client) stop() {
