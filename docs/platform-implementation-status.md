@@ -260,3 +260,10 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - Runtime 新增离线 `export --database FILE --destination NEW_DIRECTORY`，只读连接源库，不启动终端、恢复会话或监听服务；支持 JSON 摘要与 Protobuf 清单输出。
 - 复用一致性快照，支持 WAL、内存源及跨目录目标；目标不得存在，清单最后发布。原始数据库完整保留，受管资产逐个核对路径、大小与 SHA-256；缺失资产输出明确问题，不声明迁移完成。
 - 12 项导出测试通过，覆盖原始数据、旧版本、未知/损坏 schema、符号链接、资产变化、重复目标与 WAL 快照；独立快照及原备份回归也已通过。真实离线 CLI → Go staging 冒烟验证成功且源会话状态不变。导入端正在独立完成验证与提交。
+
+## 连续实施：Go Host 迁移核验与 staging 导入
+
+- `armadra-host import --bundle DIRECTORY --data-dir DIRECTORY` 在持有 Host 单实例锁时离线导入，支持 Protobuf/JSON 报告；常驻 Host 启动时同步打开自己的私有数据库。
+- 校验数据库/资产哈希、账本结构与原始 success 类型、已知 SQL 校验和、完整 schema、实体 ID、画布摘要、备注、外键及路径；拒绝未知 journal companions、符号链接和越界。原始 SQLite 存储类型通过 Protobuf 原样保存，时间文本不被驱动转换。
+- 多批导入具有稳定操作 ID、幂等收据、归属和事件记录；故障后重放不重复写入。导入资产留在私有 staging，报告和历史兼容数据可核验；尚未激活任何工作空间或转移业务权威。
+- Go Host CGO=0 全套测试通过；真实 fixture 含 300 条日志，覆盖跨批失败恢复、原库字节不变、精确大整数/二进制/时间/NULL、资产缺失及篡改拒绝；迁移包 vet 通过。真实 Rust export → Go import 两次重放冒烟通过。Windows 原生 ACL/文件系统验收仍待独立 runner。

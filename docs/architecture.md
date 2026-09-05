@@ -144,6 +144,8 @@ SQLite 基础表由 `0001_initial.sql` 创建；`0002_agent_mailbox.sql` 增量�
 
 终端原始输出、密钥和 `.env` 不进入画板持久化。
 
+Go Host 现在独占私有 `host.db`，通用实体 revision、操作收据和事件在同一事务内提交。Runtime 的离线 `export` 生成一致性数据库与受管资产包；Host 的离线 `import` 校验 Protobuf 清单后写入不激活的 staging。该链路保留原始数据和类型，用于后续维护窗口切换；当前 `canvas.db` 的业务权威仍属于 Runtime，不进行双写。
+
 ## 6. 进程、端口与文件位置
 
 | 项                  | 值                                                | 覆盖方式                                        |

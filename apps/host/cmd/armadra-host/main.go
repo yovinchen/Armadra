@@ -18,7 +18,11 @@ import (
 	"armadra.local/host/internal/daemon"
 	"armadra.local/host/internal/hoststate"
 	"armadra.local/host/internal/localipc"
+	"armadra.local/host/internal/migration"
 	"armadra.local/host/internal/server"
+	"armadra.local/host/internal/storage"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 func main() {
@@ -29,6 +33,7 @@ func main() {
 }
 
 type config struct {
+	bundle  string
 	command string
 	address string
 	dataDir string
@@ -40,13 +45,16 @@ func parseConfig(args []string) (config, error) {
 	c := config{command: "serve", output: "json"}
 	if len(args) > 0 {
 		switch args[0] {
-		case "serve", "start", "status", "stop":
+		case "serve", "start", "status", "stop", "import":
 			c.command = args[0]
 			args = args[1:]
 		}
 	}
 	flags := flag.NewFlagSet("armadra-host "+c.command, flag.ContinueOnError)
 	flags.StringVar(&c.dataDir, "data-dir", "", "Host data directory (default: per-user Armadra/host)")
+	if c.command == "import" {
+		flags.StringVar(&c.bundle, "bundle", "", "Verified Runtime export package directory")
+	}
 	if c.command != "serve" {
 		flags.StringVar(&c.output, "output", "json", "Management result format: json or protobuf")
 	}
@@ -59,6 +67,9 @@ func parseConfig(args []string) (config, error) {
 	}
 	if flags.NArg() != 0 {
 		return c, fmt.Errorf("unexpected positional arguments")
+	}
+	if c.command == "import" && c.bundle == "" {
+		return c, fmt.Errorf("import requires --bundle DIRECTORY")
 	}
 	if c.output != "json" && c.output != "protobuf" {
 		return c, fmt.Errorf("unsupported output format")
@@ -91,6 +102,8 @@ func run(args []string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	switch c.command {
+	case "import":
+		return importBundle(ctx, c)
 	case "start":
 		return startBackground(ctx, c)
 	case "status":
@@ -112,6 +125,11 @@ func serveHost(parent context.Context, c config) (err error) {
 			err = closeErr
 		}
 	}()
+	database, err := storage.Open(c.dataDir, state.ID)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, database.Close()) }()
 	listener, err := server.ListenLocal(c.address)
 	if err != nil {
 		return err
@@ -180,4 +198,39 @@ func (values *allowedOriginFlags) normalize() error {
 		(*values)[index] = normalized
 	}
 	return nil
+}
+
+// Import is an offline maintenance command: a running Host keeps its directory
+// lock and prevents a second writer. Imported records remain in staging.
+func importBundle(ctx context.Context, c config) error {
+	bundle, err := migration.Inspect(ctx, c.bundle)
+	if err != nil {
+		return err
+	}
+	state, err := hoststate.Open(c.dataDir)
+	if err != nil {
+		return err
+	}
+	defer state.Close()
+	database, err := storage.Open(c.dataDir, state.ID)
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+	report, err := migration.Stage(ctx, database, bundle)
+	if err != nil {
+		return err
+	}
+	var data []byte
+	if c.output == "protobuf" {
+		data, err = proto.Marshal(report)
+	} else {
+		data, err = (protojson.MarshalOptions{Indent: "  "}).Marshal(report)
+		data = append(data, '\n')
+	}
+	if err != nil {
+		return err
+	}
+	_, err = os.Stdout.Write(data)
+	return err
 }
