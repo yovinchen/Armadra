@@ -1,6 +1,7 @@
 import * as React from "react";
 import {
   ArrowUpDown,
+  Boxes,
   Copy,
   Network,
   MessageSquare,
@@ -27,12 +28,14 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
+import { modelSuggestions } from "@armadra/shared";
 import { useT } from "@/app/preferences-store";
 import { useAgentsQuery } from "@/app/use-agents";
 import { useCanvasStore } from "@/store/canvas-store";
 import { ContextUsageBadge } from "@/agent/context-usage/ContextUsageBadge";
 import { useContextUsage } from "@/agent/context-usage/use-context-usage";
 import { agentLabel } from "@/agent/launch";
+import { useNodeCapabilities } from "@/agent/capabilities";
 import { PendingLaunchButton } from "@/agent/PendingLaunchButton";
 import {
   agentHeaderState,
@@ -46,6 +49,7 @@ import {
   type TerminalSurfaceStatus,
 } from "@/terminal/TerminalSurface";
 import {
+  autoNameNode,
   canSuggestTitle,
   openNodeAnnotation,
   suggestNodeTitle,
@@ -124,6 +128,61 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
 
   const onFind = React.useCallback(() => setFindOpen(true), []);
 
+  /*
+   * 模型选择（Agent 自动化设计 §1）。
+   *
+   * 能不能选由求交集的结果说了算：基础适配器声明 → 自定义配置 → CLI 版本
+   * 探测 → 执行主机。探测答不上来就是 unknown，unknown 不出现菜单——设计
+   * §10「版本降级后隐藏不可用动作」的另一半是：探测失败时也不要画伪按钮。
+   */
+  const executionHost = data?.ssh ? "ssh" : "local";
+  const capabilities = useNodeCapabilities(agent?.id, executionHost);
+  const modelSelectable = capabilities.includes("supportsModelSelection");
+  const models = React.useMemo(
+    () =>
+      modelSuggestions(
+        agents.data?.find((entry) => entry.id === agent?.id)?.baseAgent ??
+          agent?.id ??
+          "",
+      ),
+    [agents.data, agent?.id],
+  );
+  const selectModel = React.useCallback(
+    (model: string | undefined) => {
+      if (!agent) return;
+      const { model: _previous, ...rest } = agent;
+      useCanvasStore.getState().updateNodeData(id, {
+        agent: model ? { ...rest, model } : rest,
+      });
+      // 不重启：那会杀掉用户正在进行的对话。说清楚它什么时候生效。
+      toast.info(
+        t("agent.modelQueued", { model: model ?? t("agent.modelDefault") }),
+      );
+    },
+    [agent, id, t],
+  );
+
+  /*
+   * 自动命名（Agent 自动化设计 §8）。
+   *
+   * 触发点是「第一个 Hook 回合」而不是「第一段输出」：`suggest-title` 读的是
+   * 转录，而转录要等 CLI 真的应答过一轮才有内容——早于这一刻问，拿回来的只会
+   * 是 Agent 的品牌名，把占位标题换成另一个占位标题。
+   *
+   * 判「已经有回合」用的是 `sessionPhase`/`lastEventAt` 而不是 `state`：
+   * 一个刚建好的节点也会有 `state`，但没有 `lastEventAt`。
+   *
+   * 规则（占位标题才应用、人工改名即锁定、每代次一次）全在 `autoNameNode`
+   * 里；这里只负责在合适的时刻叫它一次。
+   */
+  const reported = Boolean(agentStatus?.lastEventAt);
+  const sessionId = surface.binding?.sessionId ?? null;
+  const generation = surface.binding?.generation ?? null;
+  React.useEffect(() => {
+    if (!agent || !reported) return;
+    void autoNameNode(id, { sessionId, generation });
+  }, [agent, id, reported, sessionId, generation]);
+
   React.useEffect(
     () => () => {
       if (bellTimerRef.current) clearTimeout(bellTimerRef.current);
@@ -163,8 +222,8 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
       {agent && (
         <ContextUsageBadge
           nodeId={id}
-          sessionId={surface.binding?.sessionId ?? null}
-          generation={surface.binding?.generation ?? null}
+          sessionId={sessionId}
+          generation={generation}
           usage={context.usage}
           unavailableReason={
             exited ? "session_ended" : context.unavailableReason
@@ -319,6 +378,40 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
               )}
             </DropdownMenuSubContent>
           </DropdownMenuSub>
+          {/* 模型选择（Agent 自动化设计 §1、§2.1）。
+              只在 CLI 真的支持、版本探测答得上来、执行主机也允许时出现——
+              `supportsModelSelection` 是求交集之后的结果，探测失败是 unknown，
+              unknown 不画按钮，免得点开一个用不了的菜单。
+              改模型不重启已经在跑的会话：那会杀掉用户正在进行的对话。写进
+              节点数据，下一次启动的启动行带上它，并如实说明这一点。 */}
+          {agent && modelSelectable && (
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <Boxes />
+                {t("agent.model")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-60 max-w-[calc(100vw-24px)]">
+                <p className="px-2 py-2 text-xs leading-relaxed text-muted-foreground">
+                  {t("agent.modelHint")}
+                </p>
+                <DropdownMenuItem
+                  disabled={!agent.model}
+                  onSelect={() => selectModel(undefined)}
+                >
+                  {t("agent.modelDefault")}
+                </DropdownMenuItem>
+                {models.map((model) => (
+                  <DropdownMenuItem
+                    key={model}
+                    disabled={agent.model === model}
+                    onSelect={() => selectModel(model)}
+                  >
+                    {model}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          )}
           <DropdownMenuSeparator />
           {/* AI 命名 / 评论（§17）。头部不再加按钮、也不加行：终端节点的头部
               永远是一行 34px，下面直接是 xterm，多一行就会触发 fit 抖动。 */}

@@ -12,6 +12,11 @@ const zh = {
   "agent.mode.full-auto": "全自动",
   "agent.mode.plan": "计划",
   "agent.recycle": "回收会话",
+  "agent.model": "模型",
+  "agent.modelDefault": "CLI 默认",
+  "agent.modelHint":
+    "仅对下一次启动的会话生效；当前会话保持不变，也不会被重启。",
+  "agent.modelQueued": "下一次启动使用 {model}；当前会话不受影响。",
   "agent.allow": "允许",
   "agent.deny": "拒绝",
   "agent.launchFailed": "Agent 启动失败",
@@ -33,6 +38,12 @@ const en: Record<keyof typeof zh, string> = {
   "agent.mode.full-auto": "Full auto",
   "agent.mode.plan": "Plan",
   "agent.recycle": "Recycle session",
+  "agent.model": "Model",
+  "agent.modelDefault": "CLI default",
+  "agent.modelHint":
+    "Applies to the next session this node starts. The running session is unchanged and is not restarted.",
+  "agent.modelQueued":
+    "The next session will use {model}. The running one is unaffected.",
   "agent.allow": "Allow",
   "agent.deny": "Deny",
   "agent.launchFailed": "Could not start the agent",

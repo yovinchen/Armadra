@@ -65,6 +65,10 @@ export const modals: MessageModule = {
     "settings.agentMode.disabled": "禁用",
     "settings.agentMode.note": "「默认」跟随本机检测结果。",
     "settings.launchCommand": "自定义启动命令",
+    "settings.autoTitle": "自动命名",
+    "settings.autoTitle.label": "为占位标题自动生成名称",
+    "settings.autoTitle.note":
+      "只在标题仍是默认名时应用；你改过名之后不再覆盖。每个会话代次只生成一次。",
     "settings.customAgents": "自定义 Agent", // i18n-exempt
     "settings.customAgent.add": "添加",
     "settings.customAgent.new": "新建自定义 Agent", // i18n-exempt
@@ -278,6 +282,11 @@ export const modals: MessageModule = {
     "settings.agentMode.disabled": "Disabled",
     "settings.agentMode.note": "Default follows local detection.",
     "settings.launchCommand": "Custom launch command",
+    "settings.autoTitle": "Automatic naming",
+    "settings.autoTitle.label":
+      "Name nodes that still carry a placeholder title",
+    "settings.autoTitle.note":
+      "Applies only while the title is still the default one, and never after you rename a node. Generated once per session generation.",
     "settings.customAgents": "Custom agents",
     "settings.customAgent.add": "Add",
     "settings.customAgent.new": "New custom agent",

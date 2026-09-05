@@ -35,6 +35,7 @@ import {
 } from "@/ui/alert-dialog";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
+import { Switch } from "@/ui/switch";
 import {
   Select,
   SelectContent,
@@ -70,6 +71,12 @@ export function AgentPage() {
   const permissionMode = usePreferencesStore(
     (state) => state.defaultPermissionMode,
   );
+  const thresholds = usePreferencesStore((state) => state.contextThresholds);
+  const setContextThresholds = usePreferencesStore(
+    (state) => state.setContextThresholds,
+  );
+  const autoTitle = usePreferencesStore((state) => state.autoTitle);
+  const setAutoTitle = usePreferencesStore((state) => state.setAutoTitle);
   const setPermissionMode = usePreferencesStore(
     (state) => state.setDefaultPermissionMode,
   );
@@ -209,6 +216,53 @@ export function AgentPage() {
         </SettingsRow>
       </SettingsGroup>
 
+      <SettingsGroup title={t("context.thresholds")}>
+        <SettingsRow
+          label={t("context.warnPercent")}
+          footnote={t("context.thresholdNote")}
+        >
+          <Input
+            type="number"
+            min={1}
+            max={100}
+            className="h-8 w-[100px] text-xs"
+            aria-label={t("context.warnPercent")}
+            value={thresholds.warnPercent}
+            onChange={(event) =>
+              setContextThresholds({ warnPercent: Number(event.target.value) })
+            }
+          />
+        </SettingsRow>
+        <SettingsRow label={t("context.dangerPercent")}>
+          <Input
+            type="number"
+            min={1}
+            max={100}
+            className="h-8 w-[100px] text-xs"
+            aria-label={t("context.dangerPercent")}
+            value={thresholds.dangerPercent}
+            onChange={(event) =>
+              setContextThresholds({
+                dangerPercent: Number(event.target.value),
+              })
+            }
+          />
+        </SettingsRow>
+      </SettingsGroup>
+
+      <SettingsGroup title={t("settings.autoTitle")}>
+        <SettingsRow
+          label={t("settings.autoTitle.label")}
+          footnote={t("settings.autoTitle.note")}
+        >
+          <Switch
+            checked={autoTitle}
+            aria-label={t("settings.autoTitle.label")}
+            onCheckedChange={setAutoTitle}
+          />
+        </SettingsRow>
+      </SettingsGroup>
+
       <SettingsGroup title={t("settings.customAgents")}>
         {custom.map((agent) => (
           <SettingsRow
@@ -330,9 +384,14 @@ function CustomAgentForm({
   onCancel: () => void;
 }) {
   const t = useT();
+  const agents = useAgentsQuery();
   const existing = custom.find((agent) => agent.id === reference);
   const [form, setForm] = React.useState<AgentForm>(() => toForm(existing));
   const [pendingDelete, setPendingDelete] = React.useState(false);
+  // 探测跟着基础适配器走：能力受限于它借用的那个 CLI 的版本，而不是这份
+  // 自定义配置自己填的启动程序名。
+  const probe =
+    agents.data?.find((entry) => entry.id === form.baseAgent)?.probe ?? null;
 
   const set = (key: keyof AgentForm) => (value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
@@ -395,6 +454,7 @@ function CustomAgentForm({
             baseAgent={form.baseAgent}
             disabledCapabilities={form.disabledCapabilities ?? []}
             disabled={disabled}
+            probe={probe}
             onChange={(disabledCapabilities) =>
               setForm((current) => ({ ...current, disabledCapabilities }))
             }
