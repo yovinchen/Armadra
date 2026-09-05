@@ -40,6 +40,15 @@
 | [Windows 早期方案](design/windows-session-daemon.md) | 早期设计，本轮目标以终端宿主方案为准       |
 | [仓库结构与校验](design/repository-structure.md)     | 目标目录、统一规则、repo-check 与 CI       |
 
+按域展开的实施方案：
+
+| 文档                                                            | 内容                                    |
+| --------------------------------------------------------------- | --------------------------------------- |
+| [Host 业务所有权迁移](design/host-business-migration.md)        | H01 第二阶段：其余五个业务域的六步切换  |
+| [语言服务](design/language-service.md)                          | 编辑器 LSP 集成的接口、文件与批次       |
+| [浏览器与远端执行补全](design/remote-and-browser-completion.md) | B01 / H02 首轮之外的剩余部分            |
+| [发布、更新与服务安装](design/updates-and-service-install.md)   | S03：下载、自动更新、签名发布与系统服务 |
+
 ## status/ 已验证进度
 
 | 文档                                                     | 内容                                                   |

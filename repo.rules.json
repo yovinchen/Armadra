@@ -61,7 +61,11 @@
       "manifest": "package.json",
       "prefix": "@armadra/"
     },
-    { "directory": "crates", "manifest": "Cargo.toml", "prefix": "armadra-" }
+    {
+      "directory": "crates",
+      "manifest": "Cargo.toml",
+      "prefix": "armadra-"
+    }
   ],
   "fileSize": {
     "max": 1500,
@@ -69,16 +73,6 @@
     "extensions": [".rs", ".ts", ".tsx", ".go", ".mjs", ".js"],
     "excludeSegments": ["/gen/", "/node_modules/"],
     "exemptions": [
-      {
-        "path": "apps/runtime/src/api.rs",
-        "lines": 5708,
-        "note": "§5 第 6 步：路由按 workspace / terminal / git / settings 拆模块，测试移到 tests/"
-      },
-      {
-        "path": "apps/runtime/src/db.rs",
-        "lines": 3550,
-        "note": "§5 第 6 步：按表族拆分"
-      },
       {
         "path": "apps/runtime/src/git_repository.rs",
         "lines": 3026,
@@ -110,16 +104,6 @@
         "note": "§5 第 6 步：随实现拆分同步拆测试"
       },
       {
-        "path": "packages/shared/src/api.ts",
-        "lines": 2055,
-        "note": "§5 第 6 步：按领域拆 schema 模块"
-      },
-      {
-        "path": "apps/web/src/api/client.ts",
-        "lines": 1825,
-        "note": "§5 第 6 步：按资源拆客户端"
-      },
-      {
         "path": "crates/protocol/tests/contract.rs",
         "lines": 1821,
         "note": "§5 第 6 步：按 proto 文件拆契约测试"
@@ -139,8 +123,14 @@
   "migrations": {
     "lock": "migrations.lock",
     "sources": [
-      { "path": "apps/runtime/migrations", "kind": "directory" },
-      { "path": "apps/host/internal/migration/legacy", "kind": "directory" },
+      {
+        "path": "apps/runtime/migrations",
+        "kind": "directory"
+      },
+      {
+        "path": "apps/host/internal/migration/legacy",
+        "kind": "directory"
+      },
       {
         "path": "apps/host/internal/storage/schema.go",
         "kind": "go-constants",

@@ -11,7 +11,7 @@
  * 要么天天报假警，要么把真的断线藏起来。
  */
 
-import type { TerminalConnection } from "./TerminalSurface";
+import type { TerminalConnection } from "./surface/types";
 
 /* -------------------------------- 视图状态 -------------------------------- */
 
