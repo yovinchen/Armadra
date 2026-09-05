@@ -25,3 +25,4 @@ export * from "./browser.js";
 export * from "./events.js";
 export * from "./usage.js";
 export * from "./copilot.js";
+export * from "./language.js";

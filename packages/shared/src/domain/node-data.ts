@@ -128,15 +128,27 @@ export const groupNodeDataSchema = z.object({
 });
 
 /**
- * Reserved shape for the editor's language tooling (editor design §2, §4).
+ * The editor's language tooling as the node last saw it (language service
+ * design §2.9).
  *
- * `unavailable` is the only status Armadra has: there is no LSP, so the field
- * exists to carry that fact — and to give a future server something to widen —
- * rather than to let the editor show completion affordances backed by nothing.
+ * Only the status summary is stored. Diagnostics, shadow documents and server
+ * capabilities are process state on the execution host: persisting them would
+ * let a reopened board show findings for a file that has since changed.
  */
 export const languageServiceSchema = z.object({
-  status: z.literal("unavailable").default("unavailable"),
-  /** Why, for the status line; free text, never shown as a capability. */
+  status: z
+    .enum([
+      "available",
+      "unavailable",
+      "starting",
+      "running",
+      "idleStopped",
+      "crashed",
+      "stopped",
+      "disconnected",
+    ])
+    .default("unavailable"),
+  /** Stable reason key for the status line; never shown as a capability. */
   reason: z.string().max(200).optional(),
 });
 
@@ -145,7 +157,7 @@ export const editorNodeDataSchema = z.object({
   path: z.string().min(1).max(4_000),
   language: z.string().max(40).optional(),
   readonly: z.boolean().optional(),
-  /** Reserved; absent on every node until a language server exists. */
+  /** Absent until a session has been opened for this node. */
   languageService: languageServiceSchema.optional(),
 });
 

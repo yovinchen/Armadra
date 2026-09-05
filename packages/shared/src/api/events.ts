@@ -4,6 +4,10 @@ import { agentEventSchema, agentStatusSchema } from "../domain/index.js";
 
 import { browserDownloadSchema, browserSessionSchema } from "./browser.js";
 import { fileChangeKindSchema } from "./files.js";
+import {
+  languageServerEventSchema,
+  languageSessionEventSchema,
+} from "./language.js";
 import { resourceSnapshotSchema } from "./resources.js";
 
 /** `WS /api/workspaces/{id}/events` — plan §5.4 / §7. */
@@ -91,6 +95,16 @@ export const workspaceEventSchema = z.discriminatedUnion("type", [
     type: z.literal("browser.download"),
     download: browserDownloadSchema,
   }),
+  /**
+   * A language session changed state (language service design §2.9). It rides
+   * the workspace event stream rather than the session socket, so the status
+   * line and the settings page can follow a server without opening one.
+   */
+  languageSessionEventSchema.extend({
+    type: z.literal("language.session"),
+  }),
+  /** A server was probed, started, stopped or crashed (design §2.9). */
+  languageServerEventSchema.extend({ type: z.literal("language.server") }),
   z.object({
     type: z.literal("file.changed"),
     workspaceId: z.string(),
@@ -110,6 +124,14 @@ export type FileChangedEvent = Extract<
   { type: "file.changed" }
 >;
 export type WorkspaceEvent = z.infer<typeof workspaceEventSchema>;
+export type LanguageSessionWorkspaceEvent = Extract<
+  WorkspaceEvent,
+  { type: "language.session" }
+>;
+export type LanguageServerWorkspaceEvent = Extract<
+  WorkspaceEvent,
+  { type: "language.server" }
+>;
 export type ResourceSampleEvent = Extract<
   WorkspaceEvent,
   { type: "resource.sample" }

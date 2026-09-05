@@ -97,17 +97,7 @@ export const trashEntrySchema = z.object({
 
 export const trashListSchema = z.array(trashEntrySchema);
 
-/**
- * `GET /api/workspaces/{id}/language-service` — capability probe.
- *
- * Armadra has no LSP yet, so `unavailable` is the only answer the runtime
- * gives. The editor shows no completion affordances rather than an empty list
- * pretending to be one (editor design §2, §4).
- */
-export const languageServiceStatusSchema = z.object({
-  status: z.literal("unavailable"),
-  reason: z.string().optional(),
-});
+/* `languageServiceStatusSchema` now lives in `./language.js` (design §2.9). */
 
 export type FileIndexEntry = z.infer<typeof fileIndexEntrySchema>;
 export type FileIndex = z.infer<typeof fileIndexSchema>;
@@ -118,4 +108,3 @@ export type FileSearchResult = z.infer<typeof fileSearchResultSchema>;
 export type FileEntryKind = z.infer<typeof fileEntryKindSchema>;
 export type FileEntryResult = z.infer<typeof fileEntryResultSchema>;
 export type TrashEntry = z.infer<typeof trashEntrySchema>;
-export type LanguageServiceStatus = z.infer<typeof languageServiceStatusSchema>;

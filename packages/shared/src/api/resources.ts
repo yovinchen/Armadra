@@ -122,7 +122,13 @@ export const sessionResourcesSchema = z.object({
  * would otherwise be counted twice.
  */
 export const platformComponentSchema = z.object({
-  kind: z.enum(["runtime", "host", "commandWorker"]),
+  /**
+   * `languageServer` is a server the editor started (language service design
+   * §3.3). It is a tree row: `rust-analyzer` runs `cargo check` and `gopls`
+   * runs the Go toolchain, and that helper is the work the server exists to
+   * do — leaving it out would make a busy server look idle.
+   */
+  kind: z.enum(["runtime", "host", "commandWorker", "languageServer"]),
   process: processSampleSchema,
   tree: z.boolean(),
   childCount: z.number().int().nonnegative().nullable(),

@@ -715,9 +715,12 @@ describe("conversations and AI naming (plan §17)", () => {
       }).originalPath,
     ).toBe("src/old.ts");
 
-    expect(
-      languageServiceStatusSchema.parse({ status: "unavailable" }).status,
-    ).toBe("unavailable");
+    // The probe answer widened (language service design §2.9), but it is still
+    // a closed set: a status nobody defined is refused rather than shown.
+    const probe = languageServiceStatusSchema.parse({ status: "unavailable" });
+    expect(probe.status).toBe("unavailable");
+    expect(probe.executionHostId).toBe("local");
+    expect(probe.servers).toEqual([]);
     expect(
       languageServiceStatusSchema.safeParse({ status: "ready" }).success,
     ).toBe(false);
