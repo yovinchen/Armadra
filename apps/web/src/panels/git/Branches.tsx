@@ -25,7 +25,16 @@ export function Branches({
     : (snapshot.remotes[0] ?? "");
   const [pullBranch, setPullBranch] = useState("");
   const [setUpstream, setSetUpstream] = useState(false);
+  const [leaseForce, setLeaseForce] = useState(false);
   const branch = snapshot.head.branch;
+  // The remote-tracking ref this view actually observed. Sync and any lease are
+  // bound to it, never to whatever a later background fetch happens to see.
+  const remoteOid =
+    snapshot.branches.find(
+      (record) => record.remote && record.name === `${remote}/${branch}`,
+    )?.oid ?? null;
+  const lease =
+    leaseForce && remoteOid ? { expectedRemoteOid: remoteOid } : null;
   return (
     <div className="space-y-4 p-3">
       <div className="space-y-1 break-all text-xs">
@@ -71,6 +80,18 @@ export function Branches({
           checked={setUpstream}
           onChange={setSetUpstream}
         />
+        <p className="break-all font-mono text-muted-foreground">
+          {t("gitRepo.remoteOid")}:{" "}
+          {remoteOid ?? t("gitRepo.remoteBranchMissing")}
+        </p>
+        <Check
+          label={t("gitRepo.forceWithLease")}
+          checked={leaseForce}
+          onChange={setLeaseForce}
+        />
+        <p className="text-muted-foreground">
+          {t(remoteOid ? "gitRepo.leaseSafety" : "gitRepo.leaseUnavailable")}
+        </p>
         <div className="flex flex-wrap gap-2">
           <Button
             size="sm"
@@ -96,15 +117,42 @@ export function Branches({
           </Button>
           <Button
             size="sm"
+            variant={lease ? "destructive" : "outline"}
+            disabled={
+              !remote ||
+              !branch ||
+              !snapshot.head.headOid ||
+              (leaseForce && !remoteOid)
+            }
+            onClick={() =>
+              request({
+                kind: "push",
+                remote,
+                branch: branch!,
+                setUpstream,
+                forceWithLease: lease,
+              })
+            }
+          >
+            {t(lease ? "gitRepo.forcePush" : "gitRepo.push")}
+          </Button>
+          <Button
+            size="sm"
             variant="outline"
             disabled={!remote || !branch || !snapshot.head.headOid}
             onClick={() =>
-              request({ kind: "push", remote, branch: branch!, setUpstream })
+              request({
+                kind: "sync",
+                remote,
+                branch: branch!,
+                expectedRemoteOid: remoteOid,
+              })
             }
           >
-            {t("gitRepo.push")}
+            {t("gitRepo.sync")}
           </Button>
         </div>
+        <p className="text-muted-foreground">{t("gitRepo.syncSafety")}</p>
       </fieldset>
       <form
         className="space-y-2 rounded-md border border-border p-3"

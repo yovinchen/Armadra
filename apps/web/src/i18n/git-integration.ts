@@ -27,6 +27,14 @@ export const gitIntegration: MessageModule = {
     "gitIntegration.abortPick": "中止择取",
 
     "gitRepo.startMerge": "开始合并",
+    "gitRepo.startRebase": "开始变基",
+    "gitIntegration.rebaseOnto": "变基到",
+    "gitIntegration.rebaseSafety":
+      "把当前分支上的提交依次重放到所选提交之上；期间 HEAD 处于游离状态，完成后回到原分支。开始前工作区和暂存区必须干净，不会自动 Stash；冲突停下后由你继续或中止。",
+    "gitIntegration.rebaseReady": "冲突结果已暂存，可继续重放剩余提交。",
+    "gitIntegration.continueRebase": "继续变基",
+    "gitIntegration.abortRebase": "中止变基",
+    "gitIntegration.originalBranch": "原分支",
     "gitRepo.continueIntegration": "继续 Git 操作",
     "gitRepo.abortIntegration": "中止 Git 操作",
     "gitRepo.state.awaitingResolution": "等待解决或确认提交",
@@ -91,6 +99,15 @@ export const gitIntegration: MessageModule = {
     "gitIntegration.abortPick": "Abort cherry-pick",
 
     "gitRepo.startMerge": "Start merge",
+    "gitRepo.startRebase": "Start rebase",
+    "gitIntegration.rebaseOnto": "Rebase onto",
+    "gitIntegration.rebaseSafety":
+      "Replay this branch's commits on top of the selected commit. HEAD is detached while the sequence runs and returns to the original branch when it finishes. Start from a clean index and worktree; nothing is stashed automatically, and a conflict stops for your explicit continue or abort.",
+    "gitIntegration.rebaseReady":
+      "The resolved changes are staged. Continue to replay the remaining commits.",
+    "gitIntegration.continueRebase": "Continue rebase",
+    "gitIntegration.abortRebase": "Abort rebase",
+    "gitIntegration.originalBranch": "Original branch",
     "gitRepo.continueIntegration": "Continue Git operation",
     "gitRepo.abortIntegration": "Abort Git operation",
     "gitRepo.state.awaitingResolution":

@@ -29,6 +29,7 @@ const state: GitIntegrationSnapshot = {
   owned: false,
   sessionId: null,
   originalHead: null,
+  originalBranch: null,
   targetOid: null,
   message: null,
   dirty: false,

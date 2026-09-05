@@ -28,6 +28,14 @@ export interface IntegrationsProps {
   request: (action: GitRepositoryAction, expected: GitExpectedState) => void;
   openFile: (path: string) => void;
 }
+// Only owned kinds reach the recovery buttons, so merge is the safe default.
+function recoveryLabel(kind: GitIntegrationSnapshot["kind"]) {
+  return kind === "cherryPick"
+    ? "Pick"
+    : kind === "rebase"
+      ? "Rebase"
+      : "Merge";
+}
 export function Integrations(props: IntegrationsProps) {
   return (
     <IntegrationSession
@@ -50,11 +58,13 @@ function IntegrationSession({
   const client = useQueryClient();
   const queryKey = ["git-repository-integration", workspaceId, repositoryKey];
   const [targetRef, setTargetRef] = useState("");
+  const [rebaseRef, setRebaseRef] = useState("");
   const [message, setMessage] = useState("");
   const targets = branches.filter(
     (branch) => !branch.current && !branch.symbolicTarget,
   );
   const target = targets.find((branch) => branch.fullRef === targetRef);
+  const onto = targets.find((branch) => branch.fullRef === rebaseRef);
   const status = useQuery({
     queryKey,
     queryFn: async ({ signal }) => {
@@ -182,6 +192,48 @@ function IntegrationSession({
             </fieldset>
             {state.dirty && <p>{t("gitIntegration.dirty")}</p>}
           </form>
+          <form
+            className="space-y-2 rounded-md border border-border p-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (canStart && !currentlyBlocked() && onto && state)
+                request(
+                  {
+                    kind: "startRebase",
+                    // Send the reviewed object ID, not a name that could move
+                    // between this render and the queued operation.
+                    onto: onto.oid,
+                    expectedStateToken: state.stateToken,
+                  },
+                  { ...state.head },
+                );
+            }}
+          >
+            <fieldset disabled={!canStart} className="min-w-0 space-y-2">
+              <Field label={t("gitIntegration.rebaseOnto")}>
+                <select
+                  className={selectClass}
+                  value={onto?.fullRef ?? ""}
+                  onChange={(event) => setRebaseRef(event.target.value)}
+                  required
+                >
+                  <option value="">{t("gitRepo.chooseBranch")}</option>
+                  {targets.map((branch) => (
+                    <option key={branch.fullRef} value={branch.fullRef}>
+                      {branch.name} · {branch.oid.slice(0, 12)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {onto && <p className="break-all font-mono">{onto.oid}</p>}
+              <p className="text-muted-foreground">
+                {t("gitIntegration.rebaseSafety")}
+              </p>
+              <Button type="submit" size="sm" disabled={!onto}>
+                {t("gitRepo.startRebase")}
+              </Button>
+            </fieldset>
+          </form>
           <CherryPick
             workspaceId={workspaceId}
             repositoryKey={repositoryKey}
@@ -201,6 +253,12 @@ function IntegrationSession({
           <p className="break-all font-mono">
             {state.head.branch ?? t("gitRepo.detached")} · {state.head.headOid}
           </p>
+          {state.originalBranch && (
+            <p className="break-all text-muted-foreground">
+              {t("gitIntegration.originalBranch")}:{" "}
+              <span className="font-mono">{state.originalBranch}</span>
+            </p>
+          )}
           {state.originalHead && (
             <p className="break-all font-mono text-muted-foreground">
               {state.originalHead} → {state.targetOid ?? "—"}
@@ -229,7 +287,9 @@ function IntegrationSession({
                     : state.canContinue
                       ? state.kind === "cherryPick"
                         ? "gitIntegration.pickReady"
-                        : "gitIntegration.pending"
+                        : state.kind === "rebase"
+                          ? "gitIntegration.rebaseReady"
+                          : "gitIntegration.pending"
                       : "gitIntegration.stageFirst",
                 )}
               </p>
@@ -242,11 +302,7 @@ function IntegrationSession({
                   disabled={blocked || !state.canContinue}
                   onClick={() => resume("continue")}
                 >
-                  {t(
-                    state.kind === "cherryPick"
-                      ? "gitIntegration.continuePick"
-                      : "gitIntegration.continueMerge",
-                  )}
+                  {t(`gitIntegration.continue${recoveryLabel(state.kind)}`)}
                 </Button>
                 <Button
                   size="sm"
@@ -254,11 +310,7 @@ function IntegrationSession({
                   disabled={blocked}
                   onClick={() => resume("abort")}
                 >
-                  {t(
-                    state.kind === "cherryPick"
-                      ? "gitIntegration.abortPick"
-                      : "gitIntegration.abortMerge",
-                  )}
+                  {t(`gitIntegration.abort${recoveryLabel(state.kind)}`)}
                 </Button>
                 {state.kind === "cherryPick" && state.empty && (
                   <Button

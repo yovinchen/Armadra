@@ -103,6 +103,8 @@ export function actionTarget(action: GitRepositoryAction): string {
       return `${action.targetOid}${action.mainline ? ` · parent ${action.mainline}` : ""}`;
     case "startMerge":
       return `${action.targetOid}${action.message ? ` · ${action.message}` : ""}`;
+    case "startRebase":
+      return action.onto;
     case "continueIntegration":
     case "abortIntegration":
     case "skipIntegration":
@@ -116,8 +118,11 @@ export function actionTarget(action: GitRepositoryAction): string {
     case "fetch":
       return action.remote;
     case "pull":
-    case "push":
       return `${action.remote} / ${action.branch}`;
+    case "push":
+      return `${action.remote} / ${action.branch}${action.forceWithLease ? ` ← ${action.forceWithLease.expectedRemoteOid}` : ""}`;
+    case "sync":
+      return `${action.remote} / ${action.branch} @ ${action.expectedRemoteOid ?? "—"}`;
     case "createBranch":
       return `${action.name} ← ${action.startPoint ?? "HEAD"}`;
     case "switchBranch":
@@ -325,6 +330,13 @@ function RepositorySession({
     expected: GitExpectedState;
     review?: { oid: string; mainline: number | null; parentOid: string | null };
   } | null>(null);
+  // Overwriting published history takes a second, separate acknowledgement of
+  // the exact remote commit the lease replaces.
+  const [acknowledged, setAcknowledged] = useState(false);
+  const lease =
+    confirmation?.action.kind === "push"
+      ? confirmation.action.forceWithLease
+      : null;
   const submit = useMutation({
     mutationFn: async (input: {
       action: GitRepositoryAction;
@@ -441,6 +453,7 @@ function RepositorySession({
           parentOid: null,
         };
     }
+    setAcknowledged(false);
     setConfirmation({
       action,
       expected: { ...(expected ?? snapshot.head) },
@@ -690,6 +703,45 @@ function RepositorySession({
                   <dd>{t("gitIntegration.startSafety")}</dd>
                 </div>
               )}
+              {confirmation.action.kind === "startRebase" && (
+                <div>
+                  <dd>{t("gitIntegration.rebaseSafety")}</dd>
+                </div>
+              )}
+              {confirmation.action.kind === "sync" && (
+                <div>
+                  <dt className="text-muted-foreground">
+                    {t("gitRepo.remoteOid")}
+                  </dt>
+                  <dd className="font-mono">
+                    {confirmation.action.expectedRemoteOid ??
+                      t("gitRepo.remoteBranchMissing")}
+                  </dd>
+                  <dd>{t("gitRepo.syncSafety")}</dd>
+                </div>
+              )}
+              {lease && (
+                <div className="space-y-1 rounded-md border border-destructive p-2">
+                  <dt className="text-muted-foreground">
+                    {t("gitRepo.leaseReplaces")}
+                  </dt>
+                  <dd className="font-mono">{lease.expectedRemoteOid}</dd>
+                  <dd>{t("gitRepo.leaseSafety")}</dd>
+                  <dd>
+                    <label className="flex min-h-9 items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-[var(--brand)]"
+                        checked={acknowledged}
+                        onChange={(event) =>
+                          setAcknowledged(event.target.checked)
+                        }
+                      />
+                      {t("gitRepo.leaseAcknowledge")}
+                    </label>
+                  </dd>
+                </div>
+              )}
               {confirmation.action.kind === "abortIntegration" && (
                 <div>
                   <dd>{t("gitIntegration.abortSafety")}</dd>
@@ -744,15 +796,20 @@ function RepositorySession({
           <AlertDialogFooter>
             <AlertDialogCancel>{t("gitRepo.cancel")}</AlertDialogCancel>
             <AlertDialogAction
-              disabled={busy || stale}
+              disabled={busy || stale || (Boolean(lease) && !acknowledged)}
               onClick={() => {
-                if (confirmation && !busy && !stale) {
+                if (
+                  confirmation &&
+                  !busy &&
+                  !stale &&
+                  (!lease || acknowledged)
+                ) {
                   submit.mutate(confirmation);
                   setConfirmation(null);
                 }
               }}
             >
-              {t("gitRepo.confirm")}
+              {t(lease ? "gitRepo.confirmForce" : "gitRepo.confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

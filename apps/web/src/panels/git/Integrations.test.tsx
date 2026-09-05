@@ -27,6 +27,7 @@ function snapshot(): GitIntegrationSnapshot {
     owned: false,
     sessionId: null,
     originalHead: null,
+    originalBranch: null,
     targetOid: null,
     message: null,
     dirty: false,
@@ -251,6 +252,68 @@ describe("integration recovery", () => {
     ).toBeNull();
     expect(loadSnapshot).toHaveBeenCalledTimes(1);
     expect(props.request).not.toHaveBeenCalled();
+  });
+  it("starts a rebase on the reviewed object ID of an explicitly selected branch", async () => {
+    const { props } = setup();
+    await screen.findByText("gitIntegration.none");
+    fireEvent.click(
+      screen.getByRole("button", { name: "gitRepo.startRebase" }),
+    );
+    expect(props.request).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("gitIntegration.rebaseOnto"), {
+      target: { value: branch.fullRef },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "gitRepo.startRebase" }),
+    );
+    expect(props.request).toHaveBeenCalledExactlyOnceWith(
+      {
+        kind: "startRebase",
+        onto: b,
+        expectedStateToken: snapshot().stateToken,
+      },
+      snapshot().head,
+    );
+  });
+  it("shows the branch a detached rebase returns to and gates continue on staging", async () => {
+    const paused = {
+      ...active(),
+      kind: "rebase" as const,
+      head: { headOid: b, branch: null },
+      originalBranch: "main",
+      dirty: false,
+      canContinue: false,
+    };
+    const { props, rerenderProps } = setup({
+      loadSnapshot: async () => paused,
+    });
+    await screen.findByText("gitIntegration.kind.rebase");
+    expect(screen.getByText("main")).toBeTruthy();
+    expect(screen.getByText("gitIntegration.originalBranch:")).toBeTruthy();
+    // Skip would drop a whole replayed commit, so it is never offered here.
+    expect(
+      screen.queryByRole("button", { name: "gitRepo.skipIntegration" }),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "gitIntegration.continueRebase" }),
+    );
+    expect(props.request).not.toHaveBeenCalled();
+    rerenderProps({
+      workspaceId: "staged",
+      loadSnapshot: async () => ({ ...paused, canContinue: true }),
+    });
+    await screen.findByText("gitIntegration.rebaseReady");
+    fireEvent.click(
+      screen.getByRole("button", { name: "gitIntegration.continueRebase" }),
+    );
+    expect(props.request).toHaveBeenCalledExactlyOnceWith(
+      {
+        kind: "continueIntegration",
+        sessionId,
+        expectedStateToken: paused.stateToken,
+      },
+      paused.head,
+    );
   });
   it("offers an explicit skip only for an owned empty cherry-pick and keeps nonempty conflicts gated", async () => {
     const current = {

@@ -39,6 +39,20 @@ export const gitRepository: MessageModule = {
     "gitRepo.push": "推送当前分支",
     "gitRepo.setUpstream": "设置上游跟踪",
     "gitRepo.remoteBranch": "拉取的远端分支",
+    "gitRepo.sync": "同步",
+    "gitRepo.syncSafety":
+      "同步按获取 → 仅快进拉取 → 推送依次执行。任一步失败即停止，并说明停在哪一步、当前 HEAD 与远端 OID；分叉时不会自动合并或变基。",
+    "gitRepo.remoteOid": "已观察到的远端 OID",
+    "gitRepo.remoteBranchMissing": "远端尚无此分支",
+    "gitRepo.forceWithLease": "改用带租约的强制推送",
+    "gitRepo.forcePush": "强制推送（带租约）",
+    "gitRepo.leaseReplaces": "将被覆盖的远端提交",
+    "gitRepo.leaseSafety":
+      "只在远端分支仍停在上面这个 OID 时才覆盖它；远端已被他人推进则拒绝。没有不带租约的强制推送。",
+    "gitRepo.leaseUnavailable":
+      "尚未观察到该分支的远端 OID，无法给出租约；请先获取远端更新。",
+    "gitRepo.leaseAcknowledge": "我确认要改写上面这个远端提交",
+    "gitRepo.confirmForce": "确认强制推送",
     "gitRepo.confirm": "确认执行",
     "gitRepo.cancel": "取消",
     "gitRepo.confirmTitle": "确认仓库操作",
@@ -129,6 +143,20 @@ export const gitRepository: MessageModule = {
     "gitRepo.push": "Push current branch",
     "gitRepo.setUpstream": "Set upstream tracking",
     "gitRepo.remoteBranch": "Remote branch to pull",
+    "gitRepo.sync": "Sync",
+    "gitRepo.syncSafety":
+      "Sync runs fetch, then a fast-forward-only pull, then push. A failing step stops there and reports which step, the current HEAD, and the remote OID. A diverged branch is never merged or rebased for you.",
+    "gitRepo.remoteOid": "Observed remote OID",
+    "gitRepo.remoteBranchMissing": "The remote has no such branch yet",
+    "gitRepo.forceWithLease": "Push with a force lease instead",
+    "gitRepo.forcePush": "Force push (with lease)",
+    "gitRepo.leaseReplaces": "Remote commit this replaces",
+    "gitRepo.leaseSafety":
+      "Overwrite the remote branch only while it still points at the object ID above; a remote someone else advanced is refused. There is no force push without a lease.",
+    "gitRepo.leaseUnavailable":
+      "No remote OID has been observed for this branch, so no lease can be offered. Fetch the remote first.",
+    "gitRepo.leaseAcknowledge": "I want to rewrite the remote commit above",
+    "gitRepo.confirmForce": "Confirm force push",
     "gitRepo.confirm": "Confirm operation",
     "gitRepo.cancel": "Cancel",
     "gitRepo.confirmTitle": "Confirm repository operation",
