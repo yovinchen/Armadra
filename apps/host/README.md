@@ -47,6 +47,8 @@ Windows 构建时将文件名设为 `armadra-host.exe`，随后使用 `target\ar
 
 状态以 JSON 展示 running/stopped、服务与实例标识、地址和诊断 PID；PID 不作为停止目标。进程间控制帧始终是 Protobuf。一次停止请求没有可信 ACK 时报告不确定结果，不自动重发副作用。
 
+原生启动器使用 `start/status/stop --output protobuf`，stdout 返回单个 `HostManagementResult` 二进制消息，区分 running 与已完成停止的 stopped；不解析 JSON，不输出尾随换行。错误仍使用非零退出码，stderr 不作为业务数据。默认 JSON 输出保留供命令行阅读。
+
 启动诊断保存在数据目录新建的 `startup-*.log`，只包含本次服务日志；不复用外部日志路径。多启动者竞争时会回收本次创建的多余子进程，避免在获胜服务停止后延迟启动。初始化失败不会重建损坏身份。
 
 本机权限依赖 [localipc](./internal/localipc/README.md)：Unix 私有 socket，Windows 私有命名管道及服务端身份核验。网页/CORS 没有这些管理权限。后台进程目前不由 launchd/systemd/Windows 服务管理器托管，不承诺跨注销、重启或断电持续运行。

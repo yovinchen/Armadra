@@ -99,3 +99,13 @@ message HostControlResponse {
     ErrorResponse error = 12;
   }
 }
+
+// Binary CLI result used by native launchers. Distinct from a stop request ACK:
+// stopped means the CLI has observed that ownership/drain has completed.
+message HostStoppedState {}
+message HostManagementResult {
+  oneof state {
+    HostStatus running = 1;
+    HostStoppedState stopped = 2;
+  }
+}

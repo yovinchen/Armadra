@@ -1084,6 +1084,126 @@ func (*HostControlResponse_Stopped) isHostControlResponse_Result() {}
 
 func (*HostControlResponse_Error) isHostControlResponse_Result() {}
 
+// Binary CLI result used by native launchers. Distinct from a stop request ACK:
+// stopped means the CLI has observed that ownership/drain has completed.
+type HostStoppedState struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HostStoppedState) Reset() {
+	*x = HostStoppedState{}
+	mi := &file_armadra_v1_common_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HostStoppedState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HostStoppedState) ProtoMessage() {}
+
+func (x *HostStoppedState) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_common_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HostStoppedState.ProtoReflect.Descriptor instead.
+func (*HostStoppedState) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{16}
+}
+
+type HostManagementResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to State:
+	//
+	//	*HostManagementResult_Running
+	//	*HostManagementResult_Stopped
+	State         isHostManagementResult_State `protobuf_oneof:"state"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HostManagementResult) Reset() {
+	*x = HostManagementResult{}
+	mi := &file_armadra_v1_common_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HostManagementResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HostManagementResult) ProtoMessage() {}
+
+func (x *HostManagementResult) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_common_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HostManagementResult.ProtoReflect.Descriptor instead.
+func (*HostManagementResult) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *HostManagementResult) GetState() isHostManagementResult_State {
+	if x != nil {
+		return x.State
+	}
+	return nil
+}
+
+func (x *HostManagementResult) GetRunning() *HostStatus {
+	if x != nil {
+		if x, ok := x.State.(*HostManagementResult_Running); ok {
+			return x.Running
+		}
+	}
+	return nil
+}
+
+func (x *HostManagementResult) GetStopped() *HostStoppedState {
+	if x != nil {
+		if x, ok := x.State.(*HostManagementResult_Stopped); ok {
+			return x.Stopped
+		}
+	}
+	return nil
+}
+
+type isHostManagementResult_State interface {
+	isHostManagementResult_State()
+}
+
+type HostManagementResult_Running struct {
+	Running *HostStatus `protobuf:"bytes,1,opt,name=running,proto3,oneof"`
+}
+
+type HostManagementResult_Stopped struct {
+	Stopped *HostStoppedState `protobuf:"bytes,2,opt,name=stopped,proto3,oneof"`
+}
+
+func (*HostManagementResult_Running) isHostManagementResult_State() {}
+
+func (*HostManagementResult_Stopped) isHostManagementResult_State() {}
+
 var File_armadra_v1_common_proto protoreflect.FileDescriptor
 
 const file_armadra_v1_common_proto_rawDesc = "" +
@@ -1167,7 +1287,12 @@ const file_armadra_v1_common_proto_rawDesc = "" +
 	" \x01(\v2\x16.armadra.v1.HostStatusH\x00R\x06status\x128\n" +
 	"\astopped\x18\v \x01(\v2\x1c.armadra.v1.HostStopResponseH\x00R\astopped\x121\n" +
 	"\x05error\x18\f \x01(\v2\x19.armadra.v1.ErrorResponseH\x00R\x05errorB\b\n" +
-	"\x06resultB#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	"\x06result\"\x12\n" +
+	"\x10HostStoppedState\"\x8d\x01\n" +
+	"\x14HostManagementResult\x122\n" +
+	"\arunning\x18\x01 \x01(\v2\x16.armadra.v1.HostStatusH\x00R\arunning\x128\n" +
+	"\astopped\x18\x02 \x01(\v2\x1c.armadra.v1.HostStoppedStateH\x00R\astoppedB\a\n" +
+	"\x05stateB#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_common_proto_rawDescOnce sync.Once
@@ -1181,24 +1306,26 @@ func file_armadra_v1_common_proto_rawDescGZIP() []byte {
 	return file_armadra_v1_common_proto_rawDescData
 }
 
-var file_armadra_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_armadra_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_armadra_v1_common_proto_goTypes = []any{
-	(*ProtocolVersion)(nil),     // 0: armadra.v1.ProtocolVersion
-	(*HelloRequest)(nil),        // 1: armadra.v1.HelloRequest
-	(*HelloResponse)(nil),       // 2: armadra.v1.HelloResponse
-	(*ErrorResponse)(nil),       // 3: armadra.v1.ErrorResponse
-	(*Scope)(nil),               // 4: armadra.v1.Scope
-	(*CommandMeta)(nil),         // 5: armadra.v1.CommandMeta
-	(*SessionAddress)(nil),      // 6: armadra.v1.SessionAddress
-	(*TerminalInput)(nil),       // 7: armadra.v1.TerminalInput
-	(*StreamAck)(nil),           // 8: armadra.v1.StreamAck
-	(*StreamFrame)(nil),         // 9: armadra.v1.StreamFrame
-	(*HostStatus)(nil),          // 10: armadra.v1.HostStatus
-	(*HostStatusRequest)(nil),   // 11: armadra.v1.HostStatusRequest
-	(*HostStopRequest)(nil),     // 12: armadra.v1.HostStopRequest
-	(*HostStopResponse)(nil),    // 13: armadra.v1.HostStopResponse
-	(*HostControlRequest)(nil),  // 14: armadra.v1.HostControlRequest
-	(*HostControlResponse)(nil), // 15: armadra.v1.HostControlResponse
+	(*ProtocolVersion)(nil),      // 0: armadra.v1.ProtocolVersion
+	(*HelloRequest)(nil),         // 1: armadra.v1.HelloRequest
+	(*HelloResponse)(nil),        // 2: armadra.v1.HelloResponse
+	(*ErrorResponse)(nil),        // 3: armadra.v1.ErrorResponse
+	(*Scope)(nil),                // 4: armadra.v1.Scope
+	(*CommandMeta)(nil),          // 5: armadra.v1.CommandMeta
+	(*SessionAddress)(nil),       // 6: armadra.v1.SessionAddress
+	(*TerminalInput)(nil),        // 7: armadra.v1.TerminalInput
+	(*StreamAck)(nil),            // 8: armadra.v1.StreamAck
+	(*StreamFrame)(nil),          // 9: armadra.v1.StreamFrame
+	(*HostStatus)(nil),           // 10: armadra.v1.HostStatus
+	(*HostStatusRequest)(nil),    // 11: armadra.v1.HostStatusRequest
+	(*HostStopRequest)(nil),      // 12: armadra.v1.HostStopRequest
+	(*HostStopResponse)(nil),     // 13: armadra.v1.HostStopResponse
+	(*HostControlRequest)(nil),   // 14: armadra.v1.HostControlRequest
+	(*HostControlResponse)(nil),  // 15: armadra.v1.HostControlResponse
+	(*HostStoppedState)(nil),     // 16: armadra.v1.HostStoppedState
+	(*HostManagementResult)(nil), // 17: armadra.v1.HostManagementResult
 }
 var file_armadra_v1_common_proto_depIdxs = []int32{
 	0,  // 0: armadra.v1.HelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
@@ -1212,11 +1339,13 @@ var file_armadra_v1_common_proto_depIdxs = []int32{
 	10, // 8: armadra.v1.HostControlResponse.status:type_name -> armadra.v1.HostStatus
 	13, // 9: armadra.v1.HostControlResponse.stopped:type_name -> armadra.v1.HostStopResponse
 	3,  // 10: armadra.v1.HostControlResponse.error:type_name -> armadra.v1.ErrorResponse
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	10, // 11: armadra.v1.HostManagementResult.running:type_name -> armadra.v1.HostStatus
+	16, // 12: armadra.v1.HostManagementResult.stopped:type_name -> armadra.v1.HostStoppedState
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_common_proto_init() }
@@ -1239,13 +1368,17 @@ func file_armadra_v1_common_proto_init() {
 		(*HostControlResponse_Stopped)(nil),
 		(*HostControlResponse_Error)(nil),
 	}
+	file_armadra_v1_common_proto_msgTypes[17].OneofWrappers = []any{
+		(*HostManagementResult_Running)(nil),
+		(*HostManagementResult_Stopped)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_common_proto_rawDesc), len(file_armadra_v1_common_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

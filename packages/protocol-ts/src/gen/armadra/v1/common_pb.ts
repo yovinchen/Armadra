@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_common: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Chdhcm1hZHJhL3YxL2NvbW1vbi5wcm90bxIKYXJtYWRyYS52MSIvCg9Qcm90b2NvbFZlcnNpb24SDQoFbWFqb3IYASABKA0SDQoFbWlub3IYAiABKA0iUAoMSGVsbG9SZXF1ZXN0EhEKCWNsaWVudF9pZBgBIAEoCRItCghwcm90b2NvbBgCIAEoCzIbLmFybWFkcmEudjEuUHJvdG9jb2xWZXJzaW9uIpgBCg1IZWxsb1Jlc3BvbnNlEi0KCHByb3RvY29sGAEgASgLMhsuYXJtYWRyYS52MS5Qcm90b2NvbFZlcnNpb24SGAoQaG9zdF9pbnN0YW5jZV9pZBgCIAEoCRIUCgxjYXBhYmlsaXRpZXMYAyADKAkSFwoPbWF4X2ZyYW1lX2J5dGVzGAQgASgNEg8KB2hvc3RfaWQYBSABKAkiLgoNRXJyb3JSZXNwb25zZRIMCgRjb2RlGAEgASgJEg8KB21lc3NhZ2UYAiABKAkiSQoFU2NvcGUSDwoHaG9zdF9pZBgBIAEoCRIUCgx3b3Jrc3BhY2VfaWQYAiABKAkSGQoRZXhlY3V0aW9uX2hvc3RfaWQYAyABKAkirAEKC0NvbW1hbmRNZXRhEhIKCnJlcXVlc3RfaWQYASABKAkSIAoFc2NvcGUYAiABKAsyES5hcm1hZHJhLnYxLlNjb3BlEhcKD2lkZW1wb3RlbmN5X2tleRgDIAEoCRIeChFleHBlY3RlZF9yZXZpc2lvbhgEIAEoBEgAiAEBEhgKEGRlYWRsaW5lX3VuaXhfbXMYBSABKANCFAoSX2V4cGVjdGVkX3JldmlzaW9uIjgKDlNlc3Npb25BZGRyZXNzEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBCJ1Cg1UZXJtaW5hbElucHV0EisKB3Nlc3Npb24YASABKAsyGi5hcm1hZHJhLnYxLlNlc3Npb25BZGRyZXNzEhAKCGlucHV0X2lkGAIgASgJEgwKBGRhdGEYAyABKAwSFwoPd3JpdGVyX2xlYXNlX2lkGAQgASgJIkUKCVN0cmVhbUFjaxIYChByZWNlaXZlZF90aHJvdWdoGAEgASgEEh4KFmF2YWlsYWJsZV9jcmVkaXRfYnl0ZXMYAiABKA0iwgEKC1N0cmVhbUZyYW1lEhEKCXN0cmVhbV9pZBgBIAEoCRIQCghzZXF1ZW5jZRgCIAEoBBINCgVlcG9jaBgDIAEoCRIzCg50ZXJtaW5hbF9pbnB1dBgKIAEoCzIZLmFybWFkcmEudjEuVGVybWluYWxJbnB1dEgAEhkKD3Rlcm1pbmFsX291dHB1dBgLIAEoDEgAEiQKA2FjaxgMIAEoCzIVLmFybWFkcmEudjEuU3RyZWFtQWNrSABCCQoHcGF5bG9hZCJ+CgpIb3N0U3RhdHVzEg8KB2hvc3RfaWQYASABKAkSGAoQaG9zdF9pbnN0YW5jZV9pZBgCIAEoCRIVCg1odHRwX2VuZHBvaW50GAMgASgJEhoKEnN0YXJ0ZWRfYXRfdW5peF9tcxgEIAEoAxISCgpwcm9jZXNzX2lkGAUgASgNIhMKEUhvc3RTdGF0dXNSZXF1ZXN0Ii8KD0hvc3RTdG9wUmVxdWVzdBIcChRleHBlY3RlZF9pbnN0YW5jZV9pZBgBIAEoCSIkChBIb3N0U3RvcFJlc3BvbnNlEhAKCGFjY2VwdGVkGAEgASgIIpABChJIb3N0Q29udHJvbFJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIvCgZzdGF0dXMYCiABKAsyHS5hcm1hZHJhLnYxLkhvc3RTdGF0dXNSZXF1ZXN0SAASKwoEc3RvcBgLIAEoCzIbLmFybWFkcmEudjEuSG9zdFN0b3BSZXF1ZXN0SABCCAoGYWN0aW9uIroBChNIb3N0Q29udHJvbFJlc3BvbnNlEhIKCnJlcXVlc3RfaWQYASABKAkSKAoGc3RhdHVzGAogASgLMhYuYXJtYWRyYS52MS5Ib3N0U3RhdHVzSAASLwoHc3RvcHBlZBgLIAEoCzIcLmFybWFkcmEudjEuSG9zdFN0b3BSZXNwb25zZUgAEioKBWVycm9yGAwgASgLMhkuYXJtYWRyYS52MS5FcnJvclJlc3BvbnNlSABCCAoGcmVzdWx0QiNaIWFybWFkcmEubG9jYWwvaG9zdC9nZW4vYXJtYWRyYS92MWIGcHJvdG8z",
+    "Chdhcm1hZHJhL3YxL2NvbW1vbi5wcm90bxIKYXJtYWRyYS52MSIvCg9Qcm90b2NvbFZlcnNpb24SDQoFbWFqb3IYASABKA0SDQoFbWlub3IYAiABKA0iUAoMSGVsbG9SZXF1ZXN0EhEKCWNsaWVudF9pZBgBIAEoCRItCghwcm90b2NvbBgCIAEoCzIbLmFybWFkcmEudjEuUHJvdG9jb2xWZXJzaW9uIpgBCg1IZWxsb1Jlc3BvbnNlEi0KCHByb3RvY29sGAEgASgLMhsuYXJtYWRyYS52MS5Qcm90b2NvbFZlcnNpb24SGAoQaG9zdF9pbnN0YW5jZV9pZBgCIAEoCRIUCgxjYXBhYmlsaXRpZXMYAyADKAkSFwoPbWF4X2ZyYW1lX2J5dGVzGAQgASgNEg8KB2hvc3RfaWQYBSABKAkiLgoNRXJyb3JSZXNwb25zZRIMCgRjb2RlGAEgASgJEg8KB21lc3NhZ2UYAiABKAkiSQoFU2NvcGUSDwoHaG9zdF9pZBgBIAEoCRIUCgx3b3Jrc3BhY2VfaWQYAiABKAkSGQoRZXhlY3V0aW9uX2hvc3RfaWQYAyABKAkirAEKC0NvbW1hbmRNZXRhEhIKCnJlcXVlc3RfaWQYASABKAkSIAoFc2NvcGUYAiABKAsyES5hcm1hZHJhLnYxLlNjb3BlEhcKD2lkZW1wb3RlbmN5X2tleRgDIAEoCRIeChFleHBlY3RlZF9yZXZpc2lvbhgEIAEoBEgAiAEBEhgKEGRlYWRsaW5lX3VuaXhfbXMYBSABKANCFAoSX2V4cGVjdGVkX3JldmlzaW9uIjgKDlNlc3Npb25BZGRyZXNzEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBCJ1Cg1UZXJtaW5hbElucHV0EisKB3Nlc3Npb24YASABKAsyGi5hcm1hZHJhLnYxLlNlc3Npb25BZGRyZXNzEhAKCGlucHV0X2lkGAIgASgJEgwKBGRhdGEYAyABKAwSFwoPd3JpdGVyX2xlYXNlX2lkGAQgASgJIkUKCVN0cmVhbUFjaxIYChByZWNlaXZlZF90aHJvdWdoGAEgASgEEh4KFmF2YWlsYWJsZV9jcmVkaXRfYnl0ZXMYAiABKA0iwgEKC1N0cmVhbUZyYW1lEhEKCXN0cmVhbV9pZBgBIAEoCRIQCghzZXF1ZW5jZRgCIAEoBBINCgVlcG9jaBgDIAEoCRIzCg50ZXJtaW5hbF9pbnB1dBgKIAEoCzIZLmFybWFkcmEudjEuVGVybWluYWxJbnB1dEgAEhkKD3Rlcm1pbmFsX291dHB1dBgLIAEoDEgAEiQKA2FjaxgMIAEoCzIVLmFybWFkcmEudjEuU3RyZWFtQWNrSABCCQoHcGF5bG9hZCJ+CgpIb3N0U3RhdHVzEg8KB2hvc3RfaWQYASABKAkSGAoQaG9zdF9pbnN0YW5jZV9pZBgCIAEoCRIVCg1odHRwX2VuZHBvaW50GAMgASgJEhoKEnN0YXJ0ZWRfYXRfdW5peF9tcxgEIAEoAxISCgpwcm9jZXNzX2lkGAUgASgNIhMKEUhvc3RTdGF0dXNSZXF1ZXN0Ii8KD0hvc3RTdG9wUmVxdWVzdBIcChRleHBlY3RlZF9pbnN0YW5jZV9pZBgBIAEoCSIkChBIb3N0U3RvcFJlc3BvbnNlEhAKCGFjY2VwdGVkGAEgASgIIpABChJIb3N0Q29udHJvbFJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIvCgZzdGF0dXMYCiABKAsyHS5hcm1hZHJhLnYxLkhvc3RTdGF0dXNSZXF1ZXN0SAASKwoEc3RvcBgLIAEoCzIbLmFybWFkcmEudjEuSG9zdFN0b3BSZXF1ZXN0SABCCAoGYWN0aW9uIroBChNIb3N0Q29udHJvbFJlc3BvbnNlEhIKCnJlcXVlc3RfaWQYASABKAkSKAoGc3RhdHVzGAogASgLMhYuYXJtYWRyYS52MS5Ib3N0U3RhdHVzSAASLwoHc3RvcHBlZBgLIAEoCzIcLmFybWFkcmEudjEuSG9zdFN0b3BSZXNwb25zZUgAEioKBWVycm9yGAwgASgLMhkuYXJtYWRyYS52MS5FcnJvclJlc3BvbnNlSABCCAoGcmVzdWx0IhIKEEhvc3RTdG9wcGVkU3RhdGUiewoUSG9zdE1hbmFnZW1lbnRSZXN1bHQSKQoHcnVubmluZxgBIAEoCzIWLmFybWFkcmEudjEuSG9zdFN0YXR1c0gAEi8KB3N0b3BwZWQYAiABKAsyHC5hcm1hZHJhLnYxLkhvc3RTdG9wcGVkU3RhdGVIAEIHCgVzdGF0ZUIjWiFhcm1hZHJhLmxvY2FsL2hvc3QvZ2VuL2FybWFkcmEvdjFiBnByb3RvMw",
   );
 
 /**
@@ -501,3 +501,53 @@ export type HostControlResponse = Message<"armadra.v1.HostControlResponse"> & {
 export const HostControlResponseSchema: GenMessage<HostControlResponse> =
   /*@__PURE__*/
   messageDesc(file_armadra_v1_common, 15);
+
+/**
+ * Binary CLI result used by native launchers. Distinct from a stop request ACK:
+ * stopped means the CLI has observed that ownership/drain has completed.
+ *
+ * @generated from message armadra.v1.HostStoppedState
+ */
+export type HostStoppedState = Message<"armadra.v1.HostStoppedState"> & {};
+
+/**
+ * Describes the message armadra.v1.HostStoppedState.
+ * Use `create(HostStoppedStateSchema)` to create a new message.
+ */
+export const HostStoppedStateSchema: GenMessage<HostStoppedState> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_common, 16);
+
+/**
+ * @generated from message armadra.v1.HostManagementResult
+ */
+export type HostManagementResult =
+  Message<"armadra.v1.HostManagementResult"> & {
+    /**
+     * @generated from oneof armadra.v1.HostManagementResult.state
+     */
+    state:
+      | {
+          /**
+           * @generated from field: armadra.v1.HostStatus running = 1;
+           */
+          value: HostStatus;
+          case: "running";
+        }
+      | {
+          /**
+           * @generated from field: armadra.v1.HostStoppedState stopped = 2;
+           */
+          value: HostStoppedState;
+          case: "stopped";
+        }
+      | { case: undefined; value?: undefined };
+  };
+
+/**
+ * Describes the message armadra.v1.HostManagementResult.
+ * Use `create(HostManagementResultSchema)` to create a new message.
+ */
+export const HostManagementResultSchema: GenMessage<HostManagementResult> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_common, 17);

@@ -15,6 +15,7 @@ import {
   StreamFrameSchema,
   HostControlRequestSchema,
   HostControlResponseSchema,
+  HostManagementResultSchema,
 } from "../src/index.js";
 
 function fixture(name: string): Uint8Array {
@@ -39,6 +40,23 @@ function check<T extends DescMessage>(
 const maxUint64 = 18_446_744_073_709_551_615n;
 
 describe("shared Go / Rust / TypeScript wire contracts", () => {
+  it("distinguishes running and completed-stop binary CLI results", () => {
+    check("management_running", HostManagementResultSchema, {
+      state: {
+        case: "running",
+        value: {
+          hostId: "host-1",
+          hostInstanceId: "instance-1",
+          httpEndpoint: "http://127.0.0.1:43121",
+          startedAtUnixMs: 1_788_556_300_000n,
+          processId: 321,
+        },
+      },
+    });
+    check("management_stopped", HostManagementResultSchema, {
+      state: { case: "stopped", value: {} },
+    });
+  });
   it("encodes local control requests and acknowledgements across runtimes", () => {
     check("control_status", HostControlRequestSchema, {
       requestId: "控制请求",

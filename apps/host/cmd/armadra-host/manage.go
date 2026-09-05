@@ -14,10 +14,23 @@ import (
 	pb "armadra.local/host/gen/armadra/v1"
 	"armadra.local/host/internal/daemon"
 	"armadra.local/host/internal/hoststate"
+	"google.golang.org/protobuf/proto"
 )
 
 // CLI output is for people/scripts; the local control wire remains Protobuf.
-func printStatus(status *pb.HostStatus) error {
+func printStatus(status *pb.HostStatus, format string) error {
+	if format == "protobuf" {
+		result := &pb.HostManagementResult{State: &pb.HostManagementResult_Stopped{Stopped: &pb.HostStoppedState{}}}
+		if status != nil {
+			result.State = &pb.HostManagementResult_Running{Running: status}
+		}
+		wire, err := proto.Marshal(result)
+		if err != nil {
+			return err
+		}
+		_, err = os.Stdout.Write(wire)
+		return err
+	}
 	result := struct {
 		State      string `json:"state"`
 		HostID     string `json:"hostId,omitempty"`
@@ -35,7 +48,7 @@ func printStatus(status *pb.HostStatus) error {
 	return json.NewEncoder(os.Stdout).Encode(result)
 }
 
-func showStatus(parent context.Context, dir string) error {
+func showStatus(parent context.Context, dir string, format string) error {
 	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
 	status, err := daemon.Status(ctx, dir)
@@ -45,12 +58,12 @@ func showStatus(parent context.Context, dir string) error {
 		} else if locked {
 			return fmt.Errorf("Host owns the data directory but its control endpoint is unavailable")
 		}
-		return printStatus(nil)
+		return printStatus(nil, format)
 	}
 	if err != nil {
 		return err
 	}
-	return printStatus(status)
+	return printStatus(status, format)
 }
 
 func startBackground(parent context.Context, c config) error {
@@ -72,7 +85,7 @@ func startBackground(parent context.Context, c config) error {
 	}
 	status, err := daemon.Status(ctx, c.dataDir)
 	if err == nil {
-		return printStatus(status)
+		return printStatus(status, c.output)
 	}
 	if !errors.Is(err, daemon.ErrNotRunning) {
 		return err
@@ -82,7 +95,7 @@ func startBackground(parent context.Context, c config) error {
 	} else if locked {
 		status, err := awaitReady(ctx, c.dataDir, nil)
 		if err == nil {
-			return printStatus(status)
+			return printStatus(status, c.output)
 		}
 		if !errors.Is(err, errNoOwner) {
 			return err
@@ -145,7 +158,7 @@ func startBackground(parent context.Context, c config) error {
 			return err
 		}
 	}
-	return printStatus(status)
+	return printStatus(status, c.output)
 }
 
 func transientRead(err error) bool {
@@ -197,7 +210,7 @@ func awaitReady(ctx context.Context, dir string, exited <-chan error) (*pb.HostS
 	}
 }
 
-func stopBackground(parent context.Context, dir string) error {
+func stopBackground(parent context.Context, dir string, format string) error {
 	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
 	status, err := daemon.Status(ctx, dir)
@@ -207,7 +220,7 @@ func stopBackground(parent context.Context, dir string) error {
 		} else if locked {
 			return fmt.Errorf("Host control endpoint is unavailable; no stop was sent")
 		}
-		return printStatus(nil)
+		return printStatus(nil, format)
 	}
 	if err != nil {
 		return err
@@ -225,7 +238,7 @@ func stopBackground(parent context.Context, dir string) error {
 				return lockErr
 			}
 			if !locked {
-				return printStatus(nil)
+				return printStatus(nil, format)
 			}
 		}
 		if err != nil && !errors.Is(err, daemon.ErrNotRunning) && !transientRead(err) {

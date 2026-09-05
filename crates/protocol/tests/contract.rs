@@ -63,6 +63,24 @@ fn handshake_and_unicode() {
 #[test]
 fn local_control_contracts() {
     check(
+        "management_running",
+        HostManagementResult {
+            state: Some(host_management_result::State::Running(HostStatus {
+                host_id: "host-1".into(),
+                host_instance_id: "instance-1".into(),
+                http_endpoint: "http://127.0.0.1:43121".into(),
+                started_at_unix_ms: 1_788_556_300_000,
+                process_id: 321,
+            })),
+        },
+    );
+    check(
+        "management_stopped",
+        HostManagementResult {
+            state: Some(host_management_result::State::Stopped(HostStoppedState {})),
+        },
+    );
+    check(
         "control_status",
         HostControlRequest {
             request_id: "控制请求".into(),

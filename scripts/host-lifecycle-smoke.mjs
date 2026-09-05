@@ -46,6 +46,40 @@ const status = (dir) => command(["status", "--data-dir", dir]);
 const stop = (dir) => command(["stop", "--data-dir", dir]);
 let cleanupFailed = false;
 try {
+  // Native launchers consume the generated binary result, while these CLI
+  // lifecycle checks also preserve the default human-readable JSON surface.
+  const pnpmCommand = /\.(?:c|m)?js$/i.test(process.env.npm_execpath ?? "")
+    ? process.execPath
+    : process.platform === "win32"
+      ? "pnpm.exe"
+      : "pnpm";
+  const pnpmArgs =
+    pnpmCommand === process.execPath
+      ? [process.env.npm_execpath, "--filter", "@armadra/protocol", "build"]
+      : ["--filter", "@armadra/protocol", "build"];
+  execFileSync(pnpmCommand, pnpmArgs, {
+    cwd: root,
+    env,
+    stdio: "inherit",
+    timeout: 180_000,
+  });
+  const { fromBinary, HostManagementResultSchema } = await import(
+    "../packages/protocol-ts/dist/index.js"
+  );
+  const binaryResult = async (args) => {
+    const { stdout } = await execute(
+      binary,
+      [...args, "--output", "protobuf"],
+      {
+        cwd: root,
+        env,
+        encoding: "buffer",
+        timeout: 15_000,
+        maxBuffer: 1_048_576,
+      },
+    );
+    return fromBinary(HostManagementResultSchema, stdout);
+  };
   execFileSync(
     "go",
     [
@@ -75,6 +109,16 @@ try {
     "ok\n",
   );
   assert.deepEqual(await status(dir), first);
+  const nativeRunning = await binaryResult([
+    "start",
+    "--data-dir",
+    dir,
+    "--listen",
+    "127.0.0.1:0",
+  ]);
+  assert.equal(nativeRunning.state.case, "running");
+  assert.equal(nativeRunning.state.value.hostId, first.hostId);
+  assert.equal(nativeRunning.state.value.hostInstanceId, first.hostInstanceId);
   assert.deepEqual(
     await start(dir),
     first,
@@ -132,6 +176,8 @@ try {
     slow.destroy();
   }
   assert.deepEqual(await status(dir), { state: "stopped" });
+  const nativeStopped = await binaryResult(["status", "--data-dir", dir]);
+  assert.equal(nativeStopped.state.case, "stopped");
   await assert.rejects(
     fetch(`${first.httpEndpoint}/health`, {
       signal: AbortSignal.timeout(1000),
@@ -141,7 +187,10 @@ try {
   const second = await start(dir);
   assert.equal(second.hostId, first.hostId);
   assert.notEqual(second.hostInstanceId, first.hostInstanceId);
-  await stop(dir);
+  assert.equal(
+    (await binaryResult(["stop", "--data-dir", dir])).state.case,
+    "stopped",
+  );
 
   const [left, right] = await Promise.all([
     start(directories[1]),
@@ -176,6 +225,10 @@ try {
   const invalid = join(temporary, "invalid-listener");
   await assert.rejects(
     command(["start", "--data-dir", invalid, "--listen", "0.0.0.0:0"]),
+  );
+  assert.equal(existsSync(invalid), false);
+  await assert.rejects(
+    command(["start", "--data-dir", invalid, "--output", "xml"]),
   );
   assert.equal(existsSync(invalid), false);
   console.log(

@@ -33,10 +33,11 @@ type config struct {
 	address string
 	dataDir string
 	origins allowedOriginFlags
+	output  string
 }
 
 func parseConfig(args []string) (config, error) {
-	c := config{command: "serve"}
+	c := config{command: "serve", output: "json"}
 	if len(args) > 0 {
 		switch args[0] {
 		case "serve", "start", "status", "stop":
@@ -46,6 +47,9 @@ func parseConfig(args []string) (config, error) {
 	}
 	flags := flag.NewFlagSet("armadra-host "+c.command, flag.ContinueOnError)
 	flags.StringVar(&c.dataDir, "data-dir", "", "Host data directory (default: per-user Armadra/host)")
+	if c.command != "serve" {
+		flags.StringVar(&c.output, "output", "json", "Management result format: json or protobuf")
+	}
 	if c.command == "serve" || c.command == "start" {
 		flags.StringVar(&c.address, "listen", "127.0.0.1:43121", "Local metadata listener (loopback IP only)")
 		flags.Var(&c.origins, "allow-origin", "Exact browser origin allowed to read metadata (repeatable)")
@@ -55,6 +59,9 @@ func parseConfig(args []string) (config, error) {
 	}
 	if flags.NArg() != 0 {
 		return c, fmt.Errorf("unexpected positional arguments")
+	}
+	if c.output != "json" && c.output != "protobuf" {
+		return c, fmt.Errorf("unsupported output format")
 	}
 	if err := c.origins.normalize(); err != nil {
 		return c, err
@@ -87,9 +94,9 @@ func run(args []string) error {
 	case "start":
 		return startBackground(ctx, c)
 	case "status":
-		return showStatus(ctx, c.dataDir)
+		return showStatus(ctx, c.dataDir, c.output)
 	case "stop":
-		return stopBackground(ctx, c.dataDir)
+		return stopBackground(ctx, c.dataDir, c.output)
 	default:
 		return serveHost(ctx, c)
 	}

@@ -6,6 +6,8 @@ M0 的唯一业务入口是 Hello 握手。`Scope`、`CommandMeta`、会话地�
 
 minor 1 为 HelloResponse 增加 `host_id = 5`，表示数据目录的持久身份；`host_instance_id` 仍为每次启动变化的进程标识。两者都不是认证 token。minor 0 客户端仍可协商，旧消息的 hostId 默认为空；共享样例同时覆盖新旧消息。
 
+原生启动器通过 CLI `--output protobuf` 接收 `HostManagementResult`，它区分 running 状态与已完成停止的 stopped。该结果不是停止请求的接受 ACK；stdout 是单个二进制消息，不加文本或换行。CLI 默认 JSON 展示不变，管理结果的新旧跨语言样例一并验证。
+
 ## 生成与验证
 
 在仓库根执行：
