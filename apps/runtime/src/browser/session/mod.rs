@@ -31,9 +31,10 @@ use crate::{
 };
 
 use super::{
-    BrowserSession, Capture, ConsoleEntry, Download, DownloadState, Element, MAX_ELEMENTS,
-    MAX_TEXT_BYTES, NetworkEntry, ProcessIdentity, RING_CAPACITY, ReadMode, ReadResponse,
-    SessionState, StoredSession, Subscription, Viewport, Visibility, WaitOutcome, cdp,
+    BrowserSession, Capture, ConsoleEntry, Download, DownloadState, Element,
+    MAX_ELEMENTS, MAX_TEXT_BYTES, NetworkEntry, ProcessIdentity, RING_CAPACITY, ReadMode,
+    ReadResponse, SessionState, StoredSession, Subscription, Viewport, Visibility, WaitOutcome,
+    cdp,
     cdp::{CdpClient, CdpError, CdpEvent},
     dom, launch, service,
 };
@@ -76,11 +77,19 @@ pub struct Live {
     pub profile: PathBuf,
     pub staging: PathBuf,
     client: Arc<CdpClient>,
+    /// Absent for a session that was re-attached after the Runtime was killed:
+    /// the browser is ours, but this process never spawned it, so there is no
+    /// child to wait on — only [`Live::pid`] and the identity behind it.
     child: tokio::sync::Mutex<Option<Child>>,
     /// The browser's process id, kept next to the child so a synchronous
     /// cleanup path (a `Drop`, a panicking process) can still reach the whole
     /// process group. Zero once the child has been terminated.
-    pid: AtomicU32,
+    pub(crate) pid: AtomicU32,
+    /// Windows Job Object, held for the life of the session: dropping it ends
+    /// every renderer and helper the browser spawned. A no-op elsewhere, where
+    /// the process group does the same job.
+    #[allow(dead_code)]
+    containment: launch::Containment,
     record: Mutex<BrowserSession>,
     rings: Mutex<Rings>,
     subscriptions: Mutex<HashMap<String, (Visibility, DateTime<Utc>)>>,

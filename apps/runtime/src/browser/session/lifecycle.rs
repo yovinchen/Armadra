@@ -30,10 +30,7 @@ pub async fn close(state: &AppState, session_id: &str, terminate: bool) -> AppRe
             .client
             .call_with_timeout("Browser.close", json!({}), Duration::from_secs(3))
             .await;
-        if let Some(mut child) = live.child.lock().await.take() {
-            launch::terminate(&mut child).await;
-        }
-        live.pid.store(0, Ordering::SeqCst);
+        end_process(&live).await;
         live.events.publish(
             &live.workspace_id,
             WorkspaceEvent::BrowserSession {
@@ -81,6 +78,50 @@ pub async fn restore(state: &AppState) -> AppResult<usize> {
             continue;
         }
         let id = session.id.clone();
+        let profile = PathBuf::from(&session.profile_dir);
+        match launch::recover(session.process, &profile) {
+            launch::Recovery::Reattach { cdp_port } => {
+                // The browser this Runtime started is still running, so the
+                // page, its JavaScript heap and its logins all survive.
+                match reattach(state, session.clone(), cdp_port).await {
+                    Ok(_) => {
+                        restored += 1;
+                        continue;
+                    }
+                    Err(error) => {
+                        // It answered the identity check but not CDP. Falling
+                        // through relaunches it, which loses the page but not
+                        // the profile.
+                        tracing::info!(session = %id, %error, "re-attach failed, relaunching");
+                        launch::clear_singleton_locks(&profile);
+                    }
+                }
+            }
+            launch::Recovery::ProfileLocked { pid } => {
+                // Alive, but not the process this row recorded: the pid was
+                // reused, or somebody else opened this profile. Killing a
+                // process this Runtime did not start is a decision for a
+                // person, so the node says who is holding it and stops.
+                tracing::warn!(session = %id, pid, "browser profile is held by another process");
+                let mut record = record_of(&session);
+                record.state = SessionState::Disconnected;
+                record.reason_code = "profile_locked".into();
+                let _ = crate::browser::persist(&state.pool, &record).await;
+                let workspace_id = record.workspace_id.clone();
+                state.events.publish(
+                    &workspace_id,
+                    WorkspaceEvent::BrowserSession {
+                        session: Box::new(record),
+                    },
+                );
+                continue;
+            }
+            launch::Recovery::Relaunch => {
+                // A `kill -9` leaves the profile's singleton files behind, and
+                // Chrome refuses to open a profile that still looks taken.
+                launch::clear_singleton_locks(&profile);
+            }
+        }
         match start(state, &availability.executable, session).await {
             Ok(_) => restored += 1,
             Err(error) => {
@@ -99,11 +140,34 @@ pub async fn shutdown(state: &AppState) {
             .client
             .call_with_timeout("Browser.close", json!({}), Duration::from_secs(2))
             .await;
-        if let Some(mut child) = live.child.lock().await.take() {
-            launch::terminate(&mut child).await;
-        }
-        live.pid.store(0, Ordering::SeqCst);
+        end_process(&live).await;
+        // An orderly exit clears the identity, so the next start does not go
+        // looking for a process that was asked to stop.
+        let _ = crate::browser::persist_process(
+            &live.pool,
+            &live.session_id,
+            crate::browser::ProcessIdentity::default(),
+            &live.snapshot().url,
+        )
+        .await;
     }
+}
+
+/// Ends the browser behind a session, whether this process spawned it or
+/// re-attached to it. A re-attached session has no child handle, so the
+/// process group (or the Job Object) is all there is to reach.
+async fn end_process(live: &Live) {
+    let child = live.child.lock().await.take();
+    match child {
+        Some(mut child) => launch::terminate(&mut child).await,
+        None => {
+            let pid = live.pid.load(Ordering::SeqCst);
+            if pid != 0 {
+                launch::kill_group_now(pid);
+            }
+        }
+    }
+    live.pid.store(0, Ordering::SeqCst);
 }
 
 /// Kills every live browser for this data directory without awaiting.

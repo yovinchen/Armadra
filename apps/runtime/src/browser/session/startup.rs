@@ -185,26 +185,21 @@ pub(super) async fn start(
     stored.generation += 1;
     stored.state = SessionState::Starting;
     stored.reason_code = String::new();
-    let live = Arc::new(Live {
-        session_id: stored.id.clone(),
-        workspace_id: stored.workspace_id.clone(),
-        node_id: stored.node_id.clone(),
-        profile,
-        staging: staging.clone(),
+    stored.process = launched.identity;
+    let live = adopt(
+        state,
+        &stored,
         client,
-        pid: AtomicU32::new(child.id().unwrap_or(0)),
-        child: tokio::sync::Mutex::new(Some(child)),
-        record: Mutex::new(record_of(&stored)),
-        rings: Mutex::new(Rings::default()),
-        subscriptions: Mutex::new(HashMap::new()),
-        elements: Mutex::new((0, 0)),
-        stream: Mutex::new(StreamState::default()),
-        frame_seq: AtomicU64::new(0),
-        pool: state.pool.clone(),
-        events: state.events.clone(),
-    });
-    service.insert(live.clone());
+        Some(child),
+        launched.identity.pid,
+        launched.containment,
+    );
     spawn_pump(live.clone(), receiver);
+    // Written before the page is even loaded: from here on a `kill -9` of the
+    // Runtime leaves behind a row that names this exact process (§2.10).
+    let _ =
+        crate::browser::persist_process(&state.pool, &stored.id, launched.identity, &stored.url)
+            .await;
 
     // A session whose domains could not be enabled is not usable, and saying
     // `ready` about it would make every later refusal look like a bug in the
@@ -235,6 +230,83 @@ pub(super) async fn start(
     live.publish().await;
     start_sweep(state);
     Ok(live)
+}
+
+/// Re-attaches to a browser this Runtime started before it was killed.
+///
+/// Nothing is launched and nothing is navigated: the page, its JavaScript heap
+/// and its logins are all still there, which is the whole point. The
+/// generation still moves, because a client's frames and element references
+/// are bound to the connection, not to the process (§2.10).
+pub(super) async fn reattach(
+    state: &AppState,
+    mut stored: StoredSession,
+    cdp_port: u16,
+) -> AppResult<Arc<Live>> {
+    let service = service(state);
+    let staging = crate::browser::staging_dir(&service.data_dir, &stored.id);
+    let (client, receiver) = attach(cdp_port)
+        .await
+        .map_err(|detail| AppError::Conflict(format!("The browser did not answer: {detail}")))?;
+    stored.generation += 1;
+    stored.state = SessionState::Starting;
+    stored.reason_code = String::new();
+    stored.process.cdp_port = cdp_port;
+    let pid = stored.process.pid;
+    let live = adopt(state, &stored, client, None, pid, launch::Containment);
+    spawn_pump(live.clone(), receiver);
+    let _ =
+        crate::browser::persist_process(&state.pool, &stored.id, stored.process, &stored.url).await;
+    if let Err(error) = prepare(&live, &staging).await {
+        tracing::warn!(session = %live.session_id, %error, "browser session re-attach failed");
+        live.edit(|record| {
+            record.state = SessionState::Disconnected;
+            record.reason_code = "cdp_setup_failed".into();
+        });
+        live.publish().await;
+        return Err(error);
+    }
+    // The page is whatever it navigated to while nobody was watching, so the
+    // record follows the browser rather than the other way round.
+    refresh_page_state(&live).await;
+    live.edit(|record| record.state = SessionState::Ready);
+    live.publish().await;
+    start_sweep(state);
+    Ok(live)
+}
+
+/// Builds the live session and puts it in the registry. Shared by the launch
+/// and the re-attach path so the two cannot drift apart.
+fn adopt(
+    state: &AppState,
+    stored: &StoredSession,
+    client: Arc<CdpClient>,
+    child: Option<Child>,
+    pid: u32,
+    containment: launch::Containment,
+) -> Arc<Live> {
+    let service = service(state);
+    let live = Arc::new(Live {
+        session_id: stored.id.clone(),
+        workspace_id: stored.workspace_id.clone(),
+        node_id: stored.node_id.clone(),
+        profile: PathBuf::from(&stored.profile_dir),
+        staging: crate::browser::staging_dir(&service.data_dir, &stored.id),
+        client,
+        pid: AtomicU32::new(pid),
+        child: tokio::sync::Mutex::new(child),
+        containment,
+        record: Mutex::new(record_of(stored)),
+        rings: Mutex::new(Rings::default()),
+        subscriptions: Mutex::new(HashMap::new()),
+        elements: Mutex::new((0, 0)),
+        stream: Mutex::new(StreamState::default()),
+        frame_seq: AtomicU64::new(0),
+        pool: state.pool.clone(),
+        events: state.events.clone(),
+    });
+    service.insert(live.clone());
+    live
 }
 
 /// Connects to a page target and proves the connection can drive it.
