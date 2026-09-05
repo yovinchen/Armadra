@@ -50,6 +50,7 @@ const workspace: Workspace = {
   rootPath: "/tmp/one",
   color: "#5B5BD6",
   permissions: { read: true, write: true, execute: true },
+  executionHostId: "",
   lastOpenedAt: timestamp,
   createdAt: timestamp,
   updatedAt: timestamp,

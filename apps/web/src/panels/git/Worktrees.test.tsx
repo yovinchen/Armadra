@@ -41,6 +41,7 @@ const workspace: Workspace = {
   rootPath: ROOT,
   color: "#5B5BD6",
   permissions: { read: true, write: true, execute: true },
+  executionHostId: "",
   lastOpenedAt: STAMP,
   createdAt: STAMP,
   updatedAt: STAMP,

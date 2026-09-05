@@ -52,6 +52,7 @@ import { Button } from "../ui/button";
 import { IconButton } from "../ui/icon-button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Sheet, SheetContent, SheetTitle } from "../ui/sheet";
+import { ExecutionHostBadge } from "./ExecutionHostBadge";
 import { Textarea } from "../ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import {
@@ -459,6 +460,7 @@ export function SourceControlDrawer() {
             <SheetTitle className="shrink-0 truncate text-[13px] font-semibold">
               {t("scm.title")}
             </SheetTitle>
+            <ExecutionHostBadge />
             {status.data?.branch && (
               <Badge
                 variant="outline"

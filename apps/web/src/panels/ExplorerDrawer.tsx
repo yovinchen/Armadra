@@ -17,6 +17,7 @@ import { ScrollArea } from "../ui/scroll-area";
 import { Sheet, SheetContent, SheetTitle } from "../ui/sheet";
 import { IconButton } from "../ui/icon-button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { ExecutionHostBadge } from "./ExecutionHostBadge";
 import { FileTree } from "./FileTree";
 import { ProjectSearchPanel } from "./ProjectSearchPanel";
 
@@ -46,6 +47,7 @@ export function ExplorerDrawer() {
       <Title className="flex-1 truncate text-[13px] font-semibold">
         {t("explorer.title")}
       </Title>
+      <ExecutionHostBadge />
       <IconButton
         label={mode === "pinned" ? t("explorer.unpin") : t("explorer.pin")}
         active={mode === "pinned"}

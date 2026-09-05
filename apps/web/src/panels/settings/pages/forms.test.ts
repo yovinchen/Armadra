@@ -15,6 +15,8 @@ describe("parseHostForm", () => {
     port: "",
     identityFile: "",
     extraArgs: "",
+    workerPath: "",
+    workerStateDir: "",
   };
 
   it("空字段整个省掉，额外参数按空白切成 argv", () => {
@@ -58,6 +60,41 @@ describe("parseHostForm", () => {
     // shell 元字符必须在这里就被挡下，否则 Runtime 会静默丢掉这条主机。
     expect(
       parseHostForm({ ...empty, name: "坏的", host: "a;rm -rf /" }, "id"),
+    ).toBeNull();
+  });
+
+  it("没填 Worker 路径的主机只跑终端，不是「路径为空的 Worker」", () => {
+    expect(
+      parseHostForm({ ...empty, name: "机器", host: "example.com" }, "id-1"),
+    ).not.toHaveProperty("worker");
+    expect(
+      parseHostForm(
+        {
+          ...empty,
+          name: "机器",
+          host: "example.com",
+          workerPath: "/opt/armadra/armadra-runtime",
+          workerStateDir: "/var/lib/armadra/worker",
+        },
+        "id-1",
+      ),
+    ).toMatchObject({
+      worker: {
+        path: "/opt/armadra/armadra-runtime",
+        stateDir: "/var/lib/armadra/worker",
+      },
+    });
+    // 远端登录 shell 会按空白再切一次，带空格或元字符的路径不能存。
+    expect(
+      parseHostForm(
+        {
+          ...empty,
+          name: "机器",
+          host: "example.com",
+          workerPath: "/opt/armadra runtime",
+        },
+        "id-1",
+      ),
     ).toBeNull();
   });
 });

@@ -99,6 +99,9 @@ import {
   sessionsResponseSchema,
   sshHostSchema,
   sshTestResultSchema,
+  remoteWorkerProbeSchema,
+  openRemoteWorkspaceRequestSchema,
+  type OpenRemoteWorkspaceRequest,
   adoptedSessionSchema,
   powerLeaseSchema,
   powerLeaseRequestSchema,
@@ -527,6 +530,18 @@ export const runtimeApi = {
   deleteWorkspace: (workspaceId: string) =>
     request(`/api/workspaces/${workspaceId}`, noContentSchema, {
       method: "DELETE",
+    }),
+
+  /**
+   * Open a project that lives on an SSH execution host (H02). The path is a
+   * path on that host and is proven there, not here: an unreachable host or a
+   * missing remote Worker fails instead of producing a workspace that quietly
+   * reads local files.
+   */
+  openRemoteWorkspace: (input: OpenRemoteWorkspaceRequest) =>
+    request("/api/workspaces/remote", workspaceSchema, {
+      method: "POST",
+      ...json(openRemoteWorkspaceRequestSchema.parse(input)),
     }),
 
   /* ----------------------------------- 工作区导入 ----------------------- */
@@ -1735,6 +1750,13 @@ export const runtimeApi = {
     request(`/api/ssh/hosts/${query(hostId)}/test`, sshTestResultSchema, {
       method: "POST",
     }),
+  /** Whether the remote Armadra Worker is installed and matches this build. */
+  testRemoteWorker: (hostId: string) =>
+    request(
+      `/api/ssh/hosts/${query(hostId)}/worker/test`,
+      remoteWorkerProbeSchema,
+      { method: "POST" },
+    ),
   updateSettings: (patch: RuntimeSettingsPatch) =>
     request("/api/settings", runtimeSettingsSchema, {
       method: "PATCH",

@@ -6,6 +6,8 @@ import {
   conversationRefreshResponseSchema,
   conversationsResponseSchema,
   createTerminalRequestSchema,
+  sshHostSchema,
+  openRemoteWorkspaceRequestSchema,
   gitCommitRequestSchema,
   gitDiffRequestSchema,
   gitFileDiffSchema,
@@ -719,5 +721,53 @@ describe("conversations and AI naming (plan §17)", () => {
     expect(
       languageServiceStatusSchema.safeParse({ status: "ready" }).success,
     ).toBe(false);
+  });
+  it("keeps an SSH execution host's remote paths out of the login shell's hands", () => {
+    const base = { id: "box", name: "Box", host: "example.invalid" };
+    // No `worker` at all is a host that runs terminals and nothing else.
+    expect(sshHostSchema.parse(base).worker).toBeUndefined();
+    expect(
+      sshHostSchema.parse({
+        ...base,
+        worker: { path: "/opt/armadra/armadra-runtime" },
+      }).worker?.path,
+    ).toBe("/opt/armadra/armadra-runtime");
+    // `ssh` joins the remote command with spaces and the login shell splits it
+    // again, so any of these would arrive as several arguments, not one path.
+    for (const path of [
+      "relative/armadra",
+      "/opt/armadra runtime",
+      "/opt/$(id)",
+      "/opt/a;rm",
+    ]) {
+      expect(
+        sshHostSchema.safeParse({ ...base, worker: { path } }).success,
+      ).toBe(false);
+    }
+    expect(
+      sshHostSchema.safeParse({
+        ...base,
+        worker: { path: "/opt/armadra", stateDir: "../state" },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("requires a remote workspace to name a host and an absolute remote path", () => {
+    expect(
+      openRemoteWorkspaceRequestSchema.parse({
+        name: "Remote project",
+        executionHostId: "box",
+        rootPath: "/srv/project",
+      }).rootPath,
+    ).toBe("/srv/project");
+    for (const request of [
+      { name: "x", executionHostId: "", rootPath: "/srv/project" },
+      { name: "x", executionHostId: "box", rootPath: "srv/project" },
+      { name: "", executionHostId: "box", rootPath: "/srv/project" },
+    ]) {
+      expect(openRemoteWorkspaceRequestSchema.safeParse(request).success).toBe(
+        false,
+      );
+    }
   });
 });

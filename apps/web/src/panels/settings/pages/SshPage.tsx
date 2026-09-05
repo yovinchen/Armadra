@@ -1,6 +1,6 @@
 import * as React from "react";
-import { useMutation } from "@tanstack/react-query";
-import { PlugZap, Plus } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { FolderInput, PlugZap, Plus, ServerCog } from "lucide-react";
 import { toast } from "sonner";
 import { sshHostSchema, type SshHost } from "@armadra/shared";
 
@@ -53,6 +53,22 @@ export function SshPage() {
       toast.error(t("ssh.test.failed"), { description: cause.message }),
   });
 
+  // Reachable over `ssh` and "the Armadra Worker is installed there and is
+  // this build" are different questions, so they are different buttons.
+  const probe = useMutation({
+    mutationFn: (hostId: string) => runtimeApi.testRemoteWorker(hostId),
+    onSuccess: (result) =>
+      toast.success(
+        t("ssh.worker.ok", {
+          version: result.runtimeVersion,
+          platform: result.platform,
+          architecture: result.architecture,
+        }),
+      ),
+    onError: (cause: Error) =>
+      toast.error(t("ssh.worker.failed"), { description: cause.message }),
+  });
+
   function write(next: SshHost[]) {
     save.mutate({ ssh: { hosts: next } });
     subpage.close();
@@ -100,8 +116,25 @@ export function SshPage() {
             <PlugZap />
             {t("ssh.test")}
           </Button>
+          {host.worker && (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={probe.isPending}
+              onClick={() => probe.mutate(host.id)}
+            >
+              <ServerCog />
+              {t("ssh.worker.test")}
+            </Button>
+          )}
         </SettingsRow>
       ))}
+
+      {hosts
+        .filter((host) => host.worker)
+        .map((host) => (
+          <OpenRemoteProject key={`open-${host.id}`} host={host} />
+        ))}
 
       {hosts.length === 0 && <SettingsRow label={t("ssh.empty")} />}
 
@@ -120,6 +153,54 @@ export function SshPage() {
   );
 }
 
+/**
+ * 在执行主机上打开一个项目（H02）。
+ *
+ * 路径是那台机器上的路径，本机不做任何解析：Runtime 通过远端 Worker 的根注册
+ * 把它规范化并冻结，主机不可达或 Worker 不匹配时这里失败，而不是悄悄打开一个
+ * 读本机文件的工作区。
+ */
+function OpenRemoteProject({ host }: { host: SshHost }) {
+  const t = useT();
+  const client = useQueryClient();
+  const [path, setPath] = React.useState("");
+  const open = useMutation({
+    mutationFn: (rootPath: string) =>
+      runtimeApi.openRemoteWorkspace({
+        name: rootPath.split("/").filter(Boolean).at(-1) ?? host.name,
+        executionHostId: host.id,
+        rootPath,
+      }),
+    onSuccess: (workspace) => {
+      setPath("");
+      void client.invalidateQueries({ queryKey: ["workspaces"] });
+      toast.success(t("ssh.remote.opened", { name: workspace.name }));
+    },
+    onError: (cause: Error) =>
+      toast.error(t("ssh.remote.failed"), { description: cause.message }),
+  });
+  return (
+    <SettingsRow label={`${host.name} · ${t("ssh.remote.path")}`}>
+      <Input
+        className="h-8 w-[280px] text-xs"
+        aria-label={t("ssh.remote.path")}
+        placeholder="/srv/project"
+        value={path}
+        onChange={(event) => setPath(event.target.value)}
+      />
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={open.isPending || path.trim().length === 0}
+        onClick={() => open.mutate(path.trim())}
+      >
+        <FolderInput />
+        {t("ssh.remote.open")}
+      </Button>
+    </SettingsRow>
+  );
+}
+
 /** `ssh` 什么都没说时不给 Toast 挂一个空的说明行。 */
 function describe(output: string): [{ description: string }] | [] {
   return output.length > 0 ? [{ description: output }] : [];
@@ -134,6 +215,9 @@ interface HostForm {
   port: string;
   identityFile: string;
   extraArgs: string;
+  /** Where the Armadra Worker is on the far end; empty = terminals only. */
+  workerPath: string;
+  workerStateDir: string;
 }
 
 const EMPTY: HostForm = {
@@ -143,6 +227,8 @@ const EMPTY: HostForm = {
   port: "",
   identityFile: "",
   extraArgs: "",
+  workerPath: "",
+  workerStateDir: "",
 };
 
 function toForm(host: SshHost | undefined): HostForm {
@@ -154,6 +240,8 @@ function toForm(host: SshHost | undefined): HostForm {
     port: host.port === undefined ? "" : String(host.port),
     identityFile: host.identityFile ?? "",
     extraArgs: (host.extraArgs ?? []).join(" "),
+    workerPath: host.worker?.path ?? "",
+    workerStateDir: host.worker?.stateDir ?? "",
   };
 }
 
@@ -173,6 +261,18 @@ export function parseHostForm(form: HostForm, id: string): SshHost | null {
       ? { identityFile: form.identityFile.trim() }
       : {}),
     ...(extraArgs.length > 0 ? { extraArgs } : {}),
+    // No Worker path means this host runs terminals and nothing else, which
+    // is a different thing from a Worker at an empty path.
+    ...(form.workerPath.trim()
+      ? {
+          worker: {
+            path: form.workerPath.trim(),
+            ...(form.workerStateDir.trim()
+              ? { stateDir: form.workerStateDir.trim() }
+              : {}),
+          },
+        }
+      : {}),
   };
   const parsed = sshHostSchema.safeParse(candidate);
   return parsed.success ? parsed.data : null;
@@ -202,6 +302,8 @@ function HostForm({
     { key: "port", label: t("ssh.field.port") },
     { key: "identityFile", label: t("ssh.field.identity") },
     { key: "extraArgs", label: t("ssh.field.extraArgs") },
+    { key: "workerPath", label: t("ssh.field.workerPath") },
+    { key: "workerStateDir", label: t("ssh.field.workerStateDir") },
   ];
 
   return (

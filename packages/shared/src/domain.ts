@@ -485,6 +485,13 @@ export const workspaceSchema = z.object({
   permissions: workspacePermissionsSchema.default(
     DEFAULT_WORKSPACE_PERMISSIONS,
   ),
+  /**
+   * Where this workspace's files, search and Git run (H02). Empty — and the
+   * runtime omits the field entirely for a local workspace — means the machine
+   * the Runtime is on. Anything else is an SSH execution host id, and then
+   * `rootPath` is a path on *that* host.
+   */
+  executionHostId: z.string().max(64).default(""),
   lastOpenedAt: timestampSchema,
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
