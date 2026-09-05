@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import type { FileEntry, Workspace } from "@armadra/shared";
@@ -9,12 +15,20 @@ import { FileTree } from "./FileTree";
 
 const listFiles = vi.fn();
 const gitStatus = vi.fn();
+const createFileEntry = vi.fn();
+const renameFileEntry = vi.fn();
+const trashFileEntry = vi.fn();
+const restoreTrash = vi.fn();
 
 vi.mock("../api/client", () => ({
   RUNTIME_URL: "http://runtime",
   runtimeApi: {
     listFiles: (...args: unknown[]) => listFiles(...args),
     gitStatus: (...args: unknown[]) => gitStatus(...args),
+    createFileEntry: (...args: unknown[]) => createFileEntry(...args),
+    renameFileEntry: (...args: unknown[]) => renameFileEntry(...args),
+    trashFileEntry: (...args: unknown[]) => trashFileEntry(...args),
+    restoreTrash: (...args: unknown[]) => restoreTrash(...args),
   },
 }));
 import { WORKSPACE_FILES_MIME } from "../files/workspace-drag";
@@ -56,6 +70,22 @@ afterEach(() => cleanup());
 beforeEach(() => {
   listFiles.mockReset();
   gitStatus.mockReset();
+  createFileEntry.mockReset().mockResolvedValue({
+    path: "src/new.ts",
+    kind: "file",
+  });
+  renameFileEntry.mockReset().mockResolvedValue({
+    path: "src/renamed.ts",
+    kind: "file",
+  });
+  trashFileEntry.mockReset().mockResolvedValue({
+    id: "0198f000-0000-7000-8000-000000000000",
+    originalPath: "logo.png",
+    name: "logo.png",
+    kind: "file",
+    deletedAt: timestamp,
+  });
+  restoreTrash.mockReset();
   useCanvasStore.setState({ workspace });
   gitStatus.mockResolvedValue({
     repository: true,
@@ -144,5 +174,99 @@ describe("FileTree", () => {
     folder.click();
     await screen.findByText("login.ts");
     expect(screen.queryByTitle("已修改")).toBeNull();
+  });
+
+  it("creates a file in the folder that was right-clicked", async () => {
+    renderTree();
+    const folder = await screen.findByRole("treeitem", { name: /src/ });
+    fireEvent.contextMenu(folder);
+    fireEvent.click(await screen.findByText("新建文件"));
+
+    const field = await screen.findByLabelText("名称");
+    fireEvent.change(field, { target: { value: "new.ts" } });
+    fireEvent.click(screen.getByRole("button", { name: "创建" }));
+    await waitFor(() =>
+      expect(createFileEntry).toHaveBeenCalledWith(
+        workspace.id,
+        "src/new.ts",
+        "file",
+      ),
+    );
+  });
+
+  it("renames through a full path, so the same box also moves the file", async () => {
+    renderTree();
+    const file = await screen.findByRole("treeitem", { name: /logo.png/ });
+    fireEvent.contextMenu(file);
+    fireEvent.click(await screen.findByText("重命名"));
+
+    const field = await screen.findByLabelText("工作区内路径");
+    expect((field as HTMLInputElement).value).toBe("logo.png");
+    fireEvent.change(field, { target: { value: "assets/logo.png" } });
+    fireEvent.click(screen.getByRole("button", { name: "确定" }));
+    await waitFor(() =>
+      expect(renameFileEntry).toHaveBeenCalledWith(
+        workspace.id,
+        "logo.png",
+        "assets/logo.png",
+      ),
+    );
+  });
+
+  it("deletes only to the trash, and only after confirmation", async () => {
+    renderTree();
+    const file = await screen.findByRole("treeitem", { name: /logo.png/ });
+    fireEvent.contextMenu(file);
+    fireEvent.click(await screen.findByText("删除到回收站"));
+    // The confirmation is a real gate: nothing has been asked of the runtime.
+    expect(trashFileEntry).not.toHaveBeenCalled();
+
+    const confirm = await screen.findByRole("button", {
+      name: "删除到回收站",
+    });
+    fireEvent.click(confirm);
+    await waitFor(() =>
+      expect(trashFileEntry).toHaveBeenCalledWith(workspace.id, "logo.png"),
+    );
+  });
+
+  it("dropping a file on a folder moves it there", async () => {
+    renderTree();
+    const folder = await screen.findByRole("treeitem", { name: /src/ });
+    const payload = JSON.stringify({
+      version: 1,
+      runtimeUrl: "http://runtime",
+      workspaceId: workspace.id,
+      entries: [{ path: "logo.png", name: "logo.png", kind: "file" }],
+    });
+    const dataTransfer = {
+      types: [WORKSPACE_FILES_MIME],
+      getData: () => payload,
+      dropEffect: "none",
+    };
+    fireEvent.dragOver(folder, { dataTransfer });
+    fireEvent.drop(folder, { dataTransfer });
+    await waitFor(() =>
+      expect(renameFileEntry).toHaveBeenCalledWith(
+        workspace.id,
+        "logo.png",
+        "src/logo.png",
+      ),
+    );
+  });
+
+  it("offers no file operations in a read-only workspace", async () => {
+    useCanvasStore.setState({
+      workspace: {
+        ...workspace,
+        permissions: { read: true, write: false, execute: false },
+      },
+    });
+    renderTree();
+    const file = await screen.findByRole("treeitem", { name: /logo.png/ });
+    fireEvent.contextMenu(file);
+    expect(screen.queryByText("重命名")).toBeNull();
+    expect(screen.queryByText("删除到回收站")).toBeNull();
+    expect(screen.queryByLabelText("新建文件")).toBeNull();
   });
 });
