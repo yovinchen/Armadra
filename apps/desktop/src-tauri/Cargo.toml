@@ -6,6 +6,13 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
+# The shell's own logic is a library so `tests/` can drive it without opening a
+# window (docs/design/updates-and-service-install.md §5.2); the binary is only
+# the Tauri builder around it.
+[lib]
+name = "armadra_desktop"
+path = "src/lib.rs"
+
 [[bin]]
 name = "Armadra"
 path = "src/main.rs"
@@ -15,6 +22,9 @@ tauri-build = { version = "2.5.6", features = [] }
 
 [dependencies]
 armadra-protocol = { path = "../../../crates/protocol" }
+# minisign 的公钥与签名都是 base64 包着的定长结构；壳只读密钥标识用来判断
+# 「这条清单是不是本机公钥签的」，真正的验签仍然由 Tauri updater 做。
+base64 = "0.22.1"
 bytes = "1.10.1"
 http = "1.5.0"
 http-body-util = "0.1.5"
@@ -28,6 +38,9 @@ serde = { version = "1.0.228", features = ["derive"] }
 # `tauri::generate_context!` 会把 tauri.conf.json 的 `plugins` 段展开成
 # `serde_json::from_str`，所以即使代码里不直接用也必须在依赖里。
 serde_json = "1.0.145"
+# 更新包的摘要复核（S03 §2.2「摘要谁验」）：Tauri 验签，壳按 Host 给的 sha256
+# 再算一次，两者都过才安装。
+sha2 = "0.10.9"
 # `tray-icon` 提供托盘（§17 Tauri）；`image-png` 让托盘直接吃 bundle 里的 PNG 图标。
 tauri = { version = "2.10.2", features = ["tray-icon", "image-png", "macos-private-api"] }
 tauri-plugin-dialog = "2.7.3"
@@ -37,6 +50,9 @@ tauri-plugin-opener = "2.5.5"
 # 没有 pubkey 时 `updates.rs` 直接报「未配置」，不会去问一个无法验证的来源。
 tauri-plugin-updater = "2.10.1"
 tokio = { version = "1.53.1", features = ["time", "process", "io-util", "macros", "rt", "sync", "net"] }
+# 更新清单地址必须和发布资产同源同一次发布（S03 §2.2），所以要真的解析 URL，
+# 而不是拿字符串前缀去比。
+url = "2.5.8"
 
 # 侧栏毛玻璃（§24.2「源列表侧栏」/「一致的窗口 chrome」）。只有 macOS 用得上，
 # 所以按目标平台挂依赖：Linux/Windows 上既不下载也不编译它。

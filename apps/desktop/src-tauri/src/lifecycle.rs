@@ -69,6 +69,14 @@ impl DesktopLifecycle {
             .clone()
     }
 
+    /// The Host this shell would launch, for callers that need to read its
+    /// data directory or ask the binary its version. The update coordinator
+    /// uses it to tell a Host it started from one somebody else installed
+    /// (docs/design/updates-and-service-install.md §3.4).
+    pub fn host_config(&self) -> Option<Arc<HostLaunchConfig>> {
+        self.config()
+    }
+
     pub async fn start_host(&self) -> Result<(), host::HostLaunchError> {
         let _operation = self.host_operation.lock().await;
         // Quit may have won before this startup task was first polled.

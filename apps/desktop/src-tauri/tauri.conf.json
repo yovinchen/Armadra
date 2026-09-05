@@ -34,7 +34,7 @@
   },
   "plugins": {
     "updater": {
-      "$comment": "更新器已接线但尚未可用（S03 / 路线图 §3.12）。已完成：Cargo.toml 依赖 tauri-plugin-updater、main.rs 注册插件、capabilities/default.json 授 updater:default、src/updates.rs 的 check_for_update 命令读取本段。仍缺两样东西，缺任何一样都只报「未配置」，绝不谎称已是最新：1) pubkey——`pnpm tauri signer generate` 生成密钥对，公钥填这里，私钥只放 CI secret，绝不入库；2) endpoints——发布清单地址（形如 https://…/latest.json，可用 {{target}}/{{arch}}/{{current_version}} 占位符）。两者齐备后再把 active 置 true，并把 bundle.createUpdaterArtifacts 置 true 让打包产出带签名的更新包；在那之前 updates.rs 不会去联系任何来源。",
+      "$comment": "更新器已接线，仍缺真实密钥（S03 §2.5）。bundle.createUpdaterArtifacts 已置 true：打包会产出 updater 包（macOS .app.tar.gz、Windows -setup.exe、Linux .AppImage）与各自的 .sig，这一步需要环境变量 TAURI_SIGNING_PRIVATE_KEY，缺它时 `tauri build` 会直接报错——本机打包请用 `pnpm release:dry-run` 的一次性密钥，CI 从 secret 注入。pubkey 为空时 src/updates/ 一律报「未配置」，绝不谎称已是最新，也不会去联系任何来源；因此 active 保持 false，等有了密钥再置 true。引入步骤：`pnpm tauri signer generate -w <私钥路径>` 生成密钥对，公钥（.pub 文件内容的 base64）填 pubkey 并入库，私钥与口令只进 GitHub secret TAURI_SIGNING_PRIVATE_KEY[_PASSWORD]。endpoints 故意留空且必须留空：运行时清单地址来自 Host 给出的同一次发布的 latest.json（§2.2），CI 打包时才用 `tauri build --config` 注入兜底地址，写死进仓库会让 beta 通道也去问 stable 清单。",
       "active": false,
       "endpoints": [],
       "pubkey": "",
@@ -44,6 +44,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

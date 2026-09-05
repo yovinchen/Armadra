@@ -140,11 +140,23 @@ impl HostLaunchConfig {
             // outside world on purpose.
             None => "none".to_owned(),
         };
-        let mut args: Vec<OsString> = ["start", "--output", "protobuf", "--listen"]
-            .into_iter()
-            .map(Into::into)
-            .chain(std::iter::once(OsString::from(listen)))
-            .collect();
+        // `--launcher desktop` is how the Host records that this shell started
+        // it. Two Hosts can share a machine, and only their own launcher may
+        // stop or replace them (design §3.4); without the record, a desktop
+        // update would either stop somebody's installed service or refuse to
+        // stop the Host it started itself.
+        let mut args: Vec<OsString> = [
+            "start",
+            "--output",
+            "protobuf",
+            "--launcher",
+            "desktop",
+            "--listen",
+        ]
+        .into_iter()
+        .map(Into::into)
+        .chain(std::iter::once(OsString::from(listen)))
+        .collect();
         // A Host with no listener has nothing to grant an origin *to*, and
         // rejects --allow-origin outright.
         if self.expected_http_endpoint.is_some() {
@@ -554,11 +566,15 @@ mod tests {
         config.validate().unwrap();
         let args = config.arguments();
         assert_eq!(
-            &args[..5],
+            &args[..7],
             [
                 "start",
                 "--output",
                 "protobuf",
+                // The Host records who started it, so a desktop update stops
+                // only the Host this shell owns (design §3.4).
+                "--launcher",
+                "desktop",
                 "--listen",
                 "127.0.0.1:43121"
             ]
@@ -606,6 +622,8 @@ mod tests {
                 OsString::from("start"),
                 "--output".into(),
                 "protobuf".into(),
+                "--launcher".into(),
+                "desktop".into(),
                 "--listen".into(),
                 "none".into(),
                 "--endpoints-dir".into(),
