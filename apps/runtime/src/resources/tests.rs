@@ -74,6 +74,7 @@ async fn fixture_with(settings: serde_json::Value) -> Fixture {
     let settings = SettingsStore::in_memory(settings);
     let state = AppState {
         remote: Default::default(),
+        language: Default::default(),
         terminals: crate::terminal::TerminalManager::with_config(
             pool.clone(),
             events.clone(),
@@ -240,11 +241,11 @@ async fn ssh_sessions_are_remote_and_carry_no_numbers() {
 #[test]
 fn the_first_sample_reports_unknown_cpu_instead_of_a_fake_zero() {
     let mut sampler = Sampler::new();
-    let host = sampler.sample(&[]).host;
+    let host = sampler.sample(&[], &[]).host;
     assert_eq!(host.cpu_percent, None);
     // Memory needs no baseline and is available immediately.
     assert!(host.memory.total_bytes.is_some());
-    let host = sampler.sample(&[]).host;
+    let host = sampler.sample(&[], &[]).host;
     assert!(host.cpu_percent.is_some());
 }
 

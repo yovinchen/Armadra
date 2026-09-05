@@ -52,6 +52,11 @@ pub enum ComponentKind {
     Runtime,
     Host,
     CommandWorker,
+    /// A language server the editor started. Not discovered by walking the
+    /// process table — the language manager knows the pids it spawned, which
+    /// is authoritative rather than a name match, and is the only way to tell
+    /// one apart from a compiler a user is running in a terminal.
+    LanguageServer,
 }
 
 impl ComponentKind {
@@ -60,8 +65,21 @@ impl ComponentKind {
             Self::Runtime => "runtime",
             Self::Host => "host",
             Self::CommandWorker => "commandWorker",
+            Self::LanguageServer => "languageServer",
         }
     }
+}
+
+/// A language server the manager started, as the sampler is told about it.
+///
+/// The start time travels with the pid because a pid alone does not identify a
+/// process: by the time a sample is taken, a server that exited may have had
+/// its pid reused, and claiming that process would put somebody else's memory
+/// in Armadra's own total.
+#[derive(Debug, Clone)]
+pub struct LanguageServerTarget {
+    pub pid: i64,
+    pub start_time_unix_ms: Option<i64>,
 }
 
 /// One of Armadra's own processes.
@@ -91,6 +109,7 @@ pub fn components(
     system: &System,
     children: &HashMap<Pid, Vec<Pid>>,
     baseline: bool,
+    language: &[LanguageServerTarget],
 ) -> Vec<PlatformComponent> {
     let me = Pid::from_u32(std::process::id());
     let mut found: Vec<PlatformComponent> = Vec::new();
@@ -134,6 +153,28 @@ pub fn components(
     let own_binary = own_binary_name();
     for pid in command_worker_pids(system, children, me, host, own_binary.as_deref()) {
         push(ComponentKind::CommandWorker, pid, true);
+    }
+    // Measured as trees: `rust-analyzer` runs `cargo check`, `gopls` runs the
+    // Go toolchain, and the helper is the work the server exists to do.
+    for target in language {
+        if target.pid <= 0 || target.pid > i64::from(u32::MAX) {
+            continue;
+        }
+        let pid = Pid::from_u32(target.pid as u32);
+        // Recorded start time against measured start time. A mismatch means
+        // the pid was reused, and the process there now is not ours.
+        let reused = match (
+            target.start_time_unix_ms,
+            system
+                .process(pid)
+                .and_then(super::sample::start_time_unix_ms),
+        ) {
+            (Some(recorded), Some(measured)) => (recorded - measured).abs() > 2_000,
+            _ => false,
+        };
+        if !reused {
+            push(ComponentKind::LanguageServer, pid, true);
+        }
     }
     found
 }
@@ -291,7 +332,7 @@ mod tests {
             }
         }
 
-        let found = components(&system, &children, true);
+        let found = components(&system, &children, true, &[]);
         let runtime = found
             .iter()
             .find(|component| component.kind == ComponentKind::Runtime)

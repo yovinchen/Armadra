@@ -318,6 +318,11 @@ impl ResourceService {
             })
             .collect();
 
+        // Language servers are ordinary child processes; only the manager
+        // knows which pids it started, so the sampler is told rather than
+        // asked to recognise them (design §3.3).
+        let language = state.language.running_processes();
+
         // `sysinfo` walks the whole process table and stats the mounted
         // filesystems, and priming sleeps for the platform's minimum CPU
         // window: blocking work that must not sit on an async worker.
@@ -329,9 +334,26 @@ impl ResourceService {
             if prime {
                 guard.prime();
             }
-            guard.sample(&targets)
+            guard.sample(&targets, &language)
         })
         .await?;
+
+        // One process-table walk serves both the panel and the RSS ceiling:
+        // walking it again just for the language servers would double the cost
+        // of the expensive part of sampling.
+        let ceiling = crate::language::settings::LanguageSettings::from_document(
+            &self.inner.settings.document(),
+        )
+        .max_rss_bytes;
+        let measured: std::collections::HashMap<i64, u64> = sample
+            .components
+            .iter()
+            .filter(|component| component.kind == platform::ComponentKind::LanguageServer)
+            .filter_map(|component| Some((component.process.pid, component.process.memory_bytes?)))
+            .collect();
+        if !measured.is_empty() {
+            state.language.note_memory(&measured, ceiling).await;
+        }
 
         Ok(ResourceSnapshot {
             workspace_id: workspace_id.to_owned(),

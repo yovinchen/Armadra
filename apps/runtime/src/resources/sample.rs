@@ -260,7 +260,11 @@ impl Sampler {
 
     /// One full sample: refresh the OS view once, then read the host, every
     /// requested session and Armadra's own processes out of that one snapshot.
-    pub fn sample(&mut self, targets: &[SessionTarget]) -> Sample {
+    pub fn sample(
+        &mut self,
+        targets: &[SessionTarget],
+        language: &[super::platform::LanguageServerTarget],
+    ) -> Sample {
         let baseline = self.has_cpu_baseline();
         self.refresh();
         let host = self.host(baseline);
@@ -269,7 +273,7 @@ impl Sampler {
             .iter()
             .map(|target| self.session(target, &children, baseline))
             .collect();
-        let components = super::platform::components(&self.system, &children, baseline);
+        let components = super::platform::components(&self.system, &children, baseline, language);
         Sample {
             host,
             sessions,
