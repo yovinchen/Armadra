@@ -128,11 +128,26 @@ export const groupNodeDataSchema = z.object({
   kind: z.literal("group"),
 });
 
+/**
+ * Reserved shape for the editor's language tooling (editor design §2, §4).
+ *
+ * `unavailable` is the only status Armadra has: there is no LSP, so the field
+ * exists to carry that fact — and to give a future server something to widen —
+ * rather than to let the editor show completion affordances backed by nothing.
+ */
+export const languageServiceSchema = z.object({
+  status: z.literal("unavailable").default("unavailable"),
+  /** Why, for the status line; free text, never shown as a capability. */
+  reason: z.string().max(200).optional(),
+});
+
 export const editorNodeDataSchema = z.object({
   kind: z.literal("editor"),
   path: z.string().min(1).max(4_000),
   language: z.string().max(40).optional(),
   readonly: z.boolean().optional(),
+  /** Reserved; absent on every node until a language server exists. */
+  languageService: languageServiceSchema.optional(),
 });
 
 export const DIFF_SCOPES = ["worktree", "staged"] as const;
@@ -457,6 +472,7 @@ export type TerminalNodeData = z.infer<typeof terminalNodeDataSchema>;
 export type StickyNodeData = z.infer<typeof stickyNodeDataSchema>;
 export type GroupNodeData = z.infer<typeof groupNodeDataSchema>;
 export type EditorNodeData = z.infer<typeof editorNodeDataSchema>;
+export type LanguageService = z.infer<typeof languageServiceSchema>;
 export type DiffNodeData = z.infer<typeof diffNodeDataSchema>;
 export type FilesNodeData = z.infer<typeof filesNodeDataSchema>;
 export type BrowserNodeData = z.infer<typeof browserNodeDataSchema>;

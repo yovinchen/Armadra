@@ -21,6 +21,14 @@ import {
   workspaceEventSchema,
   writeFileRequestSchema,
   writeFileResponseSchema,
+  fileContentSchema,
+  fileIndexSchema,
+  fileSearchRequestSchema,
+  fileSearchResultSchema,
+  createFileEntryRequestSchema,
+  fileEntryResultSchema,
+  trashEntrySchema,
+  languageServiceStatusSchema,
 } from "../src/index.js";
 
 const timestamp = "2026-08-13T00:00:00.000Z";
@@ -408,6 +416,177 @@ describe("conversations and AI naming (plan §17)", () => {
     ).toBe(false);
     expect(
       saveBoardRequestSchema.safeParse({ ...value, kanban: null }).success,
+    ).toBe(false);
+  });
+
+  it("carries encoding, BOM and EOL, and drops the version for non-UTF-8 files", () => {
+    const utf8 = fileContentSchema.parse({
+      path: "a.txt",
+      mimeType: "text/plain",
+      content: "hello\n",
+      size: 6,
+      sha256: "a".repeat(64),
+      encoding: "utf-8",
+      bom: true,
+      eol: "crlf",
+      readonly: false,
+    });
+    expect(utf8.bom).toBe(true);
+    expect(utf8.eol).toBe("crlf");
+
+    // No content version is exactly how a lossy read stays read-only.
+    const lossy = fileContentSchema.parse({
+      path: "a.txt",
+      mimeType: "text/plain",
+      content: "he\uFFFDlo",
+      size: 6,
+      encoding: "unknown",
+      bom: false,
+      eol: "lf",
+      readonly: false,
+    });
+    expect(lossy.sha256).toBeUndefined();
+
+    // An older runtime answers without any of the new fields.
+    expect(
+      fileContentSchema.safeParse({
+        path: "a.txt",
+        mimeType: "text/plain",
+        content: "hi",
+        size: 2,
+        sha256: "b".repeat(64),
+      }).success,
+    ).toBe(true);
+    expect(
+      fileContentSchema.safeParse({
+        path: "a.txt",
+        mimeType: "text/plain",
+        content: "hi",
+        size: 2,
+        eol: "cr",
+      }).success,
+    ).toBe(false);
+
+    // The BOM travels back on the save so the file keeps it.
+    expect(
+      writeFileRequestSchema.parse({ path: "a.txt", content: "x", bom: true })
+        .bom,
+    ).toBe(true);
+  });
+
+  it("keeps search answers honest about truncation and paging", () => {
+    const index = fileIndexSchema.parse({
+      entries: [{ path: "src/a.ts", name: "a.ts", size: 12 }],
+      truncated: true,
+      scanned: 40000,
+    });
+    expect(index.truncated).toBe(true);
+
+    expect(fileSearchRequestSchema.safeParse({ query: "" }).success).toBe(
+      false,
+    );
+    const request = fileSearchRequestSchema.parse({
+      query: "needle",
+      regex: true,
+      caseSensitive: true,
+      wholeWord: true,
+      include: "*.ts,src/**/*.tsx",
+      exclude: "**/*.d.ts",
+      limit: 20,
+      offset: 20,
+    });
+    expect(request.include).toBe("*.ts,src/**/*.tsx");
+
+    const page = fileSearchResultSchema.parse({
+      files: [
+        {
+          path: "src/a.ts",
+          matches: [
+            {
+              line: 3,
+              column: 7,
+              length: 6,
+              preview: "const needle = 1;",
+              previewTruncated: false,
+            },
+          ],
+          truncated: true,
+        },
+      ],
+      totalMatches: 1,
+      truncated: true,
+      timedOut: false,
+      skipped: 2,
+      scanned: 120,
+      nextOffset: 20,
+    });
+    expect(page.nextOffset).toBe(20);
+    // The last page says so with a null rather than an absent field.
+    expect(
+      fileSearchResultSchema.parse({
+        files: [],
+        totalMatches: 0,
+        truncated: false,
+        timedOut: false,
+        skipped: 0,
+        scanned: 3,
+        nextOffset: null,
+      }).nextOffset,
+    ).toBeNull();
+    // Lines and columns are 1-based; a zero would misplace every jump.
+    expect(
+      fileSearchResultSchema.safeParse({
+        files: [
+          {
+            path: "a",
+            matches: [
+              {
+                line: 0,
+                column: 1,
+                length: 1,
+                preview: "",
+                previewTruncated: false,
+              },
+            ],
+            truncated: false,
+          },
+        ],
+        totalMatches: 1,
+        truncated: false,
+        timedOut: false,
+        skipped: 0,
+        scanned: 1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("describes file work and refuses a language service that claims to work", () => {
+    expect(
+      createFileEntryRequestSchema.parse({ path: "src/new.ts", kind: "file" })
+        .kind,
+    ).toBe("file");
+    expect(
+      createFileEntryRequestSchema.safeParse({ path: "src", kind: "folder" })
+        .success,
+    ).toBe(false);
+    expect(
+      fileEntryResultSchema.parse({ path: "src/new.ts", kind: "file" }).path,
+    ).toBe("src/new.ts");
+    expect(
+      trashEntrySchema.parse({
+        id: "0198f000-0000-7000-8000-000000000000",
+        originalPath: "src/old.ts",
+        name: "old.ts",
+        kind: "file",
+        deletedAt: timestamp,
+      }).originalPath,
+    ).toBe("src/old.ts");
+
+    expect(
+      languageServiceStatusSchema.parse({ status: "unavailable" }).status,
+    ).toBe("unavailable");
+    expect(
+      languageServiceStatusSchema.safeParse({ status: "ready" }).success,
     ).toBe(false);
   });
 });

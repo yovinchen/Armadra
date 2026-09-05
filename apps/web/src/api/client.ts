@@ -26,6 +26,17 @@ import {
   fileContentSchema,
   fileInfoSchema,
   fileVersionSchema,
+  fileIndexSchema,
+  fileSearchRequestSchema,
+  fileSearchResultSchema,
+  createFileEntryRequestSchema,
+  renameFileEntryRequestSchema,
+  fileEntryResultSchema,
+  trashEntrySchema,
+  trashListSchema,
+  languageServiceStatusSchema,
+  type FileEntryKind,
+  type FileSearchRequest,
   watchFileRequestSchema,
   watchRegistrationSchema,
   importFilesResponseSchema,
@@ -502,6 +513,8 @@ export const runtimeApi = {
     content: string,
     expectedSize?: number,
     expectedSha256?: string,
+    /** Re-emit the BOM the read stripped, so a file that had one keeps it. */
+    bom?: boolean,
   ) =>
     request(`/api/workspaces/${workspaceId}/file`, writeFileResponseSchema, {
       method: "PUT",
@@ -511,9 +524,75 @@ export const runtimeApi = {
           content,
           ...(expectedSize === undefined ? {} : { expectedSize }),
           ...(expectedSha256 === undefined ? {} : { expectedSha256 }),
+          ...(bom ? { bom } : {}),
         }),
       ),
     }),
+  /**
+   * 快速打开（E01/M4）：按文件名模糊匹配，Runtime 侧跳过 .git/node_modules
+   * 等目录并给出上限。`truncated` 为真时结果不完整，界面要说出来。
+   */
+  fileIndex: (workspaceId: string, text: string, limit?: number) =>
+    request(
+      `/api/workspaces/${workspaceId}/file-index?query=${query(text)}${
+        limit === undefined ? "" : `&limit=${limit}`
+      }`,
+      fileIndexSchema,
+    ),
+  /** 项目搜索：Runtime 侧 grep，按文件分页（`offset` / `nextOffset`）。 */
+  searchFiles: (workspaceId: string, input: FileSearchRequest) =>
+    request(
+      `/api/workspaces/${workspaceId}/file-search`,
+      fileSearchResultSchema,
+      { method: "POST", ...json(fileSearchRequestSchema.parse(input)) },
+    ),
+  /** 新建文件 / 新建文件夹；同名一律 409，不覆盖。 */
+  createFileEntry: (workspaceId: string, path: string, kind: FileEntryKind) =>
+    request(
+      `/api/workspaces/${workspaceId}/file-entries`,
+      fileEntryResultSchema,
+      {
+        method: "POST",
+        ...json(createFileEntryRequestSchema.parse({ path, kind })),
+      },
+    ),
+  /** 重命名与移动是同一件事，只差目标路径。 */
+  renameFileEntry: (workspaceId: string, from: string, to: string) =>
+    request(
+      `/api/workspaces/${workspaceId}/file-entries/rename`,
+      fileEntryResultSchema,
+      {
+        method: "POST",
+        ...json(renameFileEntryRequestSchema.parse({ from, to })),
+      },
+    ),
+  /** 删除到工作区 `.armadra/trash/`，不做永久删除。 */
+  trashFileEntry: (workspaceId: string, path: string) =>
+    request(
+      `/api/workspaces/${workspaceId}/file-entries/trash`,
+      trashEntrySchema,
+      { method: "POST", ...json({ path }) },
+    ),
+  listTrash: (workspaceId: string) =>
+    request(
+      `/api/workspaces/${workspaceId}/file-entries/trash`,
+      trashListSchema,
+    ),
+  restoreTrash: (workspaceId: string, id: string) =>
+    request(
+      `/api/workspaces/${workspaceId}/file-entries/restore`,
+      fileEntryResultSchema,
+      { method: "POST", ...json({ id }) },
+    ),
+  /**
+   * 语言服务能力探测。目前唯一可能的回答是 `unavailable`：没有 LSP 就
+   * 明说，不摆一个空补全列表（编辑器设计 §2、§4）。
+   */
+  languageService: (workspaceId: string) =>
+    request(
+      `/api/workspaces/${workspaceId}/language-service`,
+      languageServiceStatusSchema,
+    ),
   /**
    * 声明某个编辑器节点正打开这个文件（E01/M4）。
    * `status: "unsupported"` 表示这台机器没有可用的监听后端，改用 `fileVersion`。

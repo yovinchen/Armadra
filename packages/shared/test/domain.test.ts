@@ -9,6 +9,7 @@ import {
   boardSchema,
   canvasEdgeSchema,
   canvasNodeSchema,
+  editorNodeDataSchema,
   workspaceSchema,
 } from "../src/index.js";
 
@@ -258,6 +259,29 @@ describe("retired board state, labels and notes", () => {
     ).toBe(true);
     expect(
       canvasNodeSchema.safeParse(node({ note: "n".repeat(4_001) })).success,
+    ).toBe(false);
+  });
+
+  it("reserves a language-service field that can only say it is unavailable", () => {
+    // Absent on every node today — there is no LSP to report.
+    expect(
+      editorNodeDataSchema.parse({ kind: "editor", path: "a.ts" })
+        .languageService,
+    ).toBeUndefined();
+    expect(
+      editorNodeDataSchema.parse({
+        kind: "editor",
+        path: "a.ts",
+        languageService: { status: "unavailable", reason: "not_implemented" },
+      }).languageService?.status,
+    ).toBe("unavailable");
+    // A node file cannot assert capabilities the product does not have.
+    expect(
+      editorNodeDataSchema.safeParse({
+        kind: "editor",
+        path: "a.ts",
+        languageService: { status: "ready" },
+      }).success,
     ).toBe(false);
   });
 });
