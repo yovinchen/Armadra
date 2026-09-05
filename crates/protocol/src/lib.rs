@@ -2,6 +2,11 @@
 //! original binary frames when acting as a relay, never decode/re-encode them.
 
 pub mod v1 {
+    // Generated oneofs carry whole messages by value. Boxing the big ones
+    // would change this crate's Rust surface without moving a single wire
+    // byte, and the schema is the thing that has to stay stable.
+    #![allow(clippy::large_enum_variant)]
+
     include!(concat!(env!("OUT_DIR"), "/armadra.v1.rs"));
 }
 

@@ -18,7 +18,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_browser: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Chhhcm1hZHJhL3YxL2Jyb3dzZXIucHJvdG8SCmFybWFkcmEudjEiTQoPQnJvd3NlclZpZXdwb3J0Eg0KBXdpZHRoGAEgASgNEg4KBmhlaWdodBgCIAEoDRIbChNkZXZpY2Vfc2NhbGVfZmFjdG9yGAMgASgBIuYCCg5Ccm93c2VyU2Vzc2lvbhISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQSFAoMd29ya3NwYWNlX2lkGAMgASgJEg8KB25vZGVfaWQYBCABKAkSCwoDdXJsGAUgASgJEg0KBXRpdGxlGAYgASgJEi0KCHZpZXdwb3J0GAcgASgLMhsuYXJtYWRyYS52MS5Ccm93c2VyVmlld3BvcnQSLgoFc3RhdGUYCCABKA4yHy5hcm1hZHJhLnYxLkJyb3dzZXJTZXNzaW9uU3RhdGUSEwoLcmVhc29uX2NvZGUYCSABKAkSGAoQbmF2aWdhdGlvbl9lcG9jaBgKIAEoBBIPCgdoZWFkZnVsGAsgASgIEhIKCmtlZXBfYWxpdmUYDCABKAgSGgoSY3JlYXRlZF9hdF91bml4X21zGA0gASgDEhoKEnVwZGF0ZWRfYXRfdW5peF9tcxgOIAEoAyJzChNCcm93c2VyQXZhaWxhYmlsaXR5EhEKCWF2YWlsYWJsZRgBIAEoCBISCgpleGVjdXRhYmxlGAIgASgJEg4KBnNvdXJjZRgDIAEoCRITCgtyZWFzb25fY29kZRgEIAEoCRIQCghzZWFyY2hlZBgFIAMoCSLuAQoMQnJvd3NlckZyYW1lEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBBIRCglmcmFtZV9zZXEYAyABKAQSGAoQbmF2aWdhdGlvbl9lcG9jaBgEIAEoBBIWCg52aWV3cG9ydF93aWR0aBgFIAEoDRIXCg92aWV3cG9ydF9oZWlnaHQYBiABKA0SGwoTZGV2aWNlX3NjYWxlX2ZhY3RvchgHIAEoARIQCghlbmNvZGluZxgIIAEoCRIMCgRkYXRhGAkgASgMEhsKE2NhcHR1cmVkX2F0X3VuaXhfbXMYCiABKAMioAEKF0Jyb3dzZXJTdWJzY3JpYmVSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSFwoPc3Vic2NyaXB0aW9uX2lkGAMgASgJEjEKCnZpc2liaWxpdHkYBCABKA4yHS5hcm1hZHJhLnYxLkJyb3dzZXJWaXNpYmlsaXR5ImwKE0Jyb3dzZXJTdWJzY3JpcHRpb24SFwoPc3Vic2NyaXB0aW9uX2lkGAEgASgJEhoKEmV4cGlyZXNfYXRfdW5peF9tcxgCIAEoAxIPCgdxdWFsaXR5GAMgASgNEg8KB21heF9mcHMYBCABKA0ilQEKFkJyb3dzZXJOYXZpZ2F0ZVJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIzCgZhY3Rpb24YAyABKA4yIy5hcm1hZHJhLnYxLkJyb3dzZXJOYXZpZ2F0aW9uQWN0aW9uEgsKA3VybBgEIAEoCSLYAQoRQnJvd3NlcklucHV0RXZlbnQSKgoEa2luZBgBIAEoDjIcLmFybWFkcmEudjEuQnJvd3NlcklucHV0S2luZBIJCgF4GAIgASgBEgkKAXkYAyABKAESDwoHZGVsdGFfeBgEIAEoARIPCgdkZWx0YV95GAUgASgBEg4KBmJ1dHRvbhgGIAEoCRITCgtjbGlja19jb3VudBgHIAEoDRIRCgltb2RpZmllcnMYCCABKA0SCwoDa2V5GAkgASgJEgwKBGNvZGUYCiABKAkSDAoEdGV4dBgLIAEoCSKsAQoTQnJvd3NlcklucHV0UmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRISCgpzZXNzaW9uX2lkGAIgASgJEhgKEG5hdmlnYXRpb25fZXBvY2gYAyABKAQSEQoJZnJhbWVfc2VxGAQgASgEEi0KBmV2ZW50cxgFIAMoCzIdLmFybWFkcmEudjEuQnJvd3NlcklucHV0RXZlbnQiqAEKDkJyb3dzZXJFbGVtZW50EhMKC2VsZW1lbnRfcmVmGAEgASgJEgwKBHJvbGUYAiABKAkSDAoEbmFtZRgDIAEoCRINCgV2YWx1ZRgEIAEoCRIQCghzZWxlY3RvchgFIAEoCRIPCgd2aXNpYmxlGAYgASgIEgkKAXgYByABKAESCQoBeRgIIAEoARINCgV3aWR0aBgJIAEoARIOCgZoZWlnaHQYCiABKAEiYQoTQnJvd3NlckNvbnNvbGVFbnRyeRISCgphdF91bml4X21zGAEgASgDEg0KBWxldmVsGAIgASgJEgwKBHRleHQYAyABKAkSCwoDdXJsGAQgASgJEgwKBGxpbmUYBSABKA0iqgEKE0Jyb3dzZXJOZXR3b3JrRW50cnkSEgoKYXRfdW5peF9tcxgBIAEoAxIOCgZtZXRob2QYAiABKAkSCwoDdXJsGAMgASgJEg4KBnN0YXR1cxgEIAEoDRIRCgltaW1lX3R5cGUYBSABKAkSFQoNZW5jb2RlZF9ieXRlcxgGIAEoBBIUCgxmYWlsdXJlX2NvZGUYByABKAkSEgoKZnJvbV9jYWNoZRgIIAEoCCKcAQoSQnJvd3NlclJlYWRSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSKQoEbW9kZRgDIAEoDjIbLmFybWFkcmEudjEuQnJvd3NlclJlYWRNb2RlEg0KBWxpbWl0GAQgASgNEhEKCW1heF9ieXRlcxgFIAEoDSKSAgoTQnJvd3NlclJlYWRSZXNwb25zZRISCgpzZXNzaW9uX2lkGAEgASgJEhgKEG5hdmlnYXRpb25fZXBvY2gYAiABKAQSCwoDdXJsGAMgASgJEg0KBXRpdGxlGAQgASgJEgwKBHRleHQYBSABKAkSLAoIZWxlbWVudHMYBiADKAsyGi5hcm1hZHJhLnYxLkJyb3dzZXJFbGVtZW50EjAKB2NvbnNvbGUYByADKAsyHy5hcm1hZHJhLnYxLkJyb3dzZXJDb25zb2xlRW50cnkSMAoHbmV0d29yaxgIIAMoCzIfLmFybWFkcmEudjEuQnJvd3Nlck5ldHdvcmtFbnRyeRIRCgl0cnVuY2F0ZWQYCSABKAgizwEKE0Jyb3dzZXJDbGlja1JlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIYChBuYXZpZ2F0aW9uX2Vwb2NoGAMgASgEEhAKCHNlbGVjdG9yGAQgASgJEhMKC2VsZW1lbnRfcmVmGAUgASgJEgkKAXgYBiABKAESCQoBeRgHIAEoARIRCgltb2RpZmllcnMYCCABKA0SEwoLY2xpY2tfY291bnQYCSABKA0ivwEKEkJyb3dzZXJUeXBlUmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRISCgpzZXNzaW9uX2lkGAIgASgJEhgKEG5hdmlnYXRpb25fZXBvY2gYAyABKAQSEAoIc2VsZWN0b3IYBCABKAkSEwoLZWxlbWVudF9yZWYYBSABKAkSDAoEdGV4dBgGIAEoCRIPCgdyZXBsYWNlGAcgASgIEg4KBnN1Ym1pdBgIIAEoCCKjAQoSQnJvd3NlcldhaXRSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSEAoIc2VsZWN0b3IYAyABKAkSFAoMdXJsX2NvbnRhaW5zGAQgASgJEhYKDnRpdGxlX2NvbnRhaW5zGAUgASgJEhIKCnRpbWVvdXRfbXMYBiABKA0iaAoTQnJvd3NlcldhaXRSZXNwb25zZRIPCgdtYXRjaGVkGAEgASgIEhMKC3JlYXNvbl9jb2RlGAIgASgJEhgKEG5hdmlnYXRpb25fZXBvY2gYAyABKAQSEQoJd2FpdGVkX21zGAQgASgNInUKFUJyb3dzZXJDYXB0dXJlUmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRISCgpzZXNzaW9uX2lkGAIgASgJEhEKCWZ1bGxfcGFnZRgDIAEoCBIOCgZmb3JtYXQYBCABKAkifgoWQnJvd3NlckNhcHR1cmVSZXNwb25zZRIMCgRwYXRoGAEgASgJEg0KBXdpZHRoGAIgASgNEg4KBmhlaWdodBgDIAEoDRIOCgZzaGEyNTYYBCABKAwSDQoFYnl0ZXMYBSABKAQSGAoQbmF2aWdhdGlvbl9lcG9jaBgGIAEoBCKAAgoPQnJvd3NlckRvd25sb2FkEhMKC2Rvd25sb2FkX2lkGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkSCwoDdXJsGAMgASgJEhoKEnN1Z2dlc3RlZF9maWxlbmFtZRgEIAEoCRIvCgVzdGF0ZRgFIAEoDjIgLmFybWFkcmEudjEuQnJvd3NlckRvd25sb2FkU3RhdGUSDAoEcGF0aBgGIAEoCRITCgt0b3RhbF9ieXRlcxgHIAEoBBIWCg5yZWNlaXZlZF9ieXRlcxgIIAEoBBIaChJjcmVhdGVkX2F0X3VuaXhfbXMYCSABKAMSEwoLcmVhc29uX2NvZGUYCiABKAkigAEKHkJyb3dzZXJEb3dubG9hZERlY2lzaW9uUmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRISCgpzZXNzaW9uX2lkGAIgASgJEhMKC2Rvd25sb2FkX2lkGAMgASgJEg4KBmFjY2VwdBgEIAEoCCK4AQobQ3JlYXRlQnJvd3NlclNlc3Npb25SZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEhQKDHdvcmtzcGFjZV9pZBgCIAEoCRIPCgdub2RlX2lkGAMgASgJEgsKA3VybBgEIAEoCRItCgh2aWV3cG9ydBgFIAEoCzIbLmFybWFkcmEudjEuQnJvd3NlclZpZXdwb3J0Eg8KB2hlYWRmdWwYBiABKAgiagoaQ2xvc2VCcm93c2VyU2Vzc2lvblJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIRCgl0ZXJtaW5hdGUYAyABKAgiWQoaTGlzdEJyb3dzZXJTZXNzaW9uc1JlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESFAoMd29ya3NwYWNlX2lkGAIgASgJIoIBChtMaXN0QnJvd3NlclNlc3Npb25zUmVzcG9uc2USLAoIc2Vzc2lvbnMYASADKAsyGi5hcm1hZHJhLnYxLkJyb3dzZXJTZXNzaW9uEjUKDGF2YWlsYWJpbGl0eRgCIAEoCzIfLmFybWFkcmEudjEuQnJvd3NlckF2YWlsYWJpbGl0eSKqBQoNQnJvd3NlckFjdGlvbhI5CgZjcmVhdGUYASABKAsyJy5hcm1hZHJhLnYxLkNyZWF0ZUJyb3dzZXJTZXNzaW9uUmVxdWVzdEgAEjYKCG5hdmlnYXRlGAIgASgLMiIuYXJtYWRyYS52MS5Ccm93c2VyTmF2aWdhdGVSZXF1ZXN0SAASMAoFaW5wdXQYAyABKAsyHy5hcm1hZHJhLnYxLkJyb3dzZXJJbnB1dFJlcXVlc3RIABIuCgRyZWFkGAQgASgLMh4uYXJtYWRyYS52MS5Ccm93c2VyUmVhZFJlcXVlc3RIABIwCgVjbGljaxgFIAEoCzIfLmFybWFkcmEudjEuQnJvd3NlckNsaWNrUmVxdWVzdEgAEi4KBHR5cGUYBiABKAsyHi5hcm1hZHJhLnYxLkJyb3dzZXJUeXBlUmVxdWVzdEgAEi4KBHdhaXQYByABKAsyHi5hcm1hZHJhLnYxLkJyb3dzZXJXYWl0UmVxdWVzdEgAEjQKB2NhcHR1cmUYCCABKAsyIS5hcm1hZHJhLnYxLkJyb3dzZXJDYXB0dXJlUmVxdWVzdEgAEjgKCXN1YnNjcmliZRgJIAEoCzIjLmFybWFkcmEudjEuQnJvd3NlclN1YnNjcmliZVJlcXVlc3RIABJHChFkb3dubG9hZF9kZWNpc2lvbhgKIAEoCzIqLmFybWFkcmEudjEuQnJvd3NlckRvd25sb2FkRGVjaXNpb25SZXF1ZXN0SAASNwoFY2xvc2UYCyABKAsyJi5hcm1hZHJhLnYxLkNsb3NlQnJvd3NlclNlc3Npb25SZXF1ZXN0SAASNgoEbGlzdBgMIAEoCzImLmFybWFkcmEudjEuTGlzdEJyb3dzZXJTZXNzaW9uc1JlcXVlc3RIAEIICgZhY3Rpb24izgMKE0Jyb3dzZXJBY3Rpb25SZXN1bHQSEgoKcmVxdWVzdF9pZBgBIAEoCRItCgdzZXNzaW9uGAogASgLMhouYXJtYWRyYS52MS5Ccm93c2VyU2Vzc2lvbkgAEi8KBHJlYWQYCyABKAsyHy5hcm1hZHJhLnYxLkJyb3dzZXJSZWFkUmVzcG9uc2VIABIvCgR3YWl0GAwgASgLMh8uYXJtYWRyYS52MS5Ccm93c2VyV2FpdFJlc3BvbnNlSAASNQoHY2FwdHVyZRgNIAEoCzIiLmFybWFkcmEudjEuQnJvd3NlckNhcHR1cmVSZXNwb25zZUgAEjcKDHN1YnNjcmlwdGlvbhgOIAEoCzIfLmFybWFkcmEudjEuQnJvd3NlclN1YnNjcmlwdGlvbkgAEi8KCGRvd25sb2FkGA8gASgLMhsuYXJtYWRyYS52MS5Ccm93c2VyRG93bmxvYWRIABI7CghzZXNzaW9ucxgQIAEoCzInLmFybWFkcmEudjEuTGlzdEJyb3dzZXJTZXNzaW9uc1Jlc3BvbnNlSAASKgoFZXJyb3IYESABKAsyGS5hcm1hZHJhLnYxLkVycm9yUmVzcG9uc2VIAEIICgZyZXN1bHQq9gEKE0Jyb3dzZXJTZXNzaW9uU3RhdGUSJQohQlJPV1NFUl9TRVNTSU9OX1NUQVRFX1VOU1BFQ0lGSUVEEAASIgoeQlJPV1NFUl9TRVNTSU9OX1NUQVRFX1NUQVJUSU5HEAESHwobQlJPV1NFUl9TRVNTSU9OX1NUQVRFX1JFQURZEAISJgoiQlJPV1NFUl9TRVNTSU9OX1NUQVRFX0RJU0NPTk5FQ1RFRBADEiQKIEJST1dTRVJfU0VTU0lPTl9TVEFURV9URVJNSU5BVEVEEAQSJQohQlJPV1NFUl9TRVNTSU9OX1NUQVRFX1VOU1VQUE9SVEVEEAUqlgEKEUJyb3dzZXJWaXNpYmlsaXR5EiIKHkJST1dTRVJfVklTSUJJTElUWV9VTlNQRUNJRklFRBAAEh4KGkJST1dTRVJfVklTSUJJTElUWV9GT0NVU0VEEAESHgoaQlJPV1NFUl9WSVNJQklMSVRZX1ZJU0lCTEUQAhIdChlCUk9XU0VSX1ZJU0lCSUxJVFlfSElEREVOEAMq/QEKF0Jyb3dzZXJOYXZpZ2F0aW9uQWN0aW9uEikKJUJST1dTRVJfTkFWSUdBVElPTl9BQ1RJT05fVU5TUEVDSUZJRUQQABIiCh5CUk9XU0VSX05BVklHQVRJT05fQUNUSU9OX0dPVE8QARIiCh5CUk9XU0VSX05BVklHQVRJT05fQUNUSU9OX0JBQ0sQAhIlCiFCUk9XU0VSX05BVklHQVRJT05fQUNUSU9OX0ZPUldBUkQQAxIkCiBCUk9XU0VSX05BVklHQVRJT05fQUNUSU9OX1JFTE9BRBAEEiIKHkJST1dTRVJfTkFWSUdBVElPTl9BQ1RJT05fU1RPUBAFKosDChBCcm93c2VySW5wdXRLaW5kEiIKHkJST1dTRVJfSU5QVVRfS0lORF9VTlNQRUNJRklFRBAAEiIKHkJST1dTRVJfSU5QVVRfS0lORF9NT1VTRV9NT1ZFRBABEiQKIEJST1dTRVJfSU5QVVRfS0lORF9NT1VTRV9QUkVTU0VEEAISJQohQlJPV1NFUl9JTlBVVF9LSU5EX01PVVNFX1JFTEVBU0VEEAMSHAoYQlJPV1NFUl9JTlBVVF9LSU5EX1dIRUVMEAQSHwobQlJPV1NFUl9JTlBVVF9LSU5EX0tFWV9ET1dOEAUSHQoZQlJPV1NFUl9JTlBVVF9LSU5EX0tFWV9VUBAGEhsKF0JST1dTRVJfSU5QVVRfS0lORF9URVhUEAcSIgoeQlJPV1NFUl9JTlBVVF9LSU5EX1RPVUNIX1NUQVJUEAgSIQodQlJPV1NFUl9JTlBVVF9LSU5EX1RPVUNIX01PVkUQCRIgChxCUk9XU0VSX0lOUFVUX0tJTkRfVE9VQ0hfRU5EEAoq6AEKD0Jyb3dzZXJSZWFkTW9kZRIhCh1CUk9XU0VSX1JFQURfTU9ERV9VTlNQRUNJRklFRBAAEhoKFkJST1dTRVJfUkVBRF9NT0RFX1RFWFQQARIeChpCUk9XU0VSX1JFQURfTU9ERV9FTEVNRU5UUxACEhsKF0JST1dTRVJfUkVBRF9NT0RFX0xJTktTEAMSGwoXQlJPV1NFUl9SRUFEX01PREVfVElUTEUQBBIdChlCUk9XU0VSX1JFQURfTU9ERV9DT05TT0xFEAUSHQoZQlJPV1NFUl9SRUFEX01PREVfTkVUV09SSxAGKvkBChRCcm93c2VyRG93bmxvYWRTdGF0ZRImCiJCUk9XU0VSX0RPV05MT0FEX1NUQVRFX1VOU1BFQ0lGSUVEEAASIgoeQlJPV1NFUl9ET1dOTE9BRF9TVEFURV9QRU5ESU5HEAESJgoiQlJPV1NFUl9ET1dOTE9BRF9TVEFURV9JTl9QUk9HUkVTUxACEiQKIEJST1dTRVJfRE9XTkxPQURfU1RBVEVfQ09NUExFVEVEEAMSJAogQlJPV1NFUl9ET1dOTE9BRF9TVEFURV9DQU5DRUxMRUQQBBIhCh1CUk9XU0VSX0RPV05MT0FEX1NUQVRFX0ZBSUxFRBAFQiNaIWFybWFkcmEubG9jYWwvaG9zdC9nZW4vYXJtYWRyYS92MWIGcHJvdG8z",
+    "Chhhcm1hZHJhL3YxL2Jyb3dzZXIucHJvdG8SCmFybWFkcmEudjEiTQoPQnJvd3NlclZpZXdwb3J0Eg0KBXdpZHRoGAEgASgNEg4KBmhlaWdodBgCIAEoDRIbChNkZXZpY2Vfc2NhbGVfZmFjdG9yGAMgASgBIsQECg5Ccm93c2VyU2Vzc2lvbhISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQSFAoMd29ya3NwYWNlX2lkGAMgASgJEg8KB25vZGVfaWQYBCABKAkSCwoDdXJsGAUgASgJEg0KBXRpdGxlGAYgASgJEi0KCHZpZXdwb3J0GAcgASgLMhsuYXJtYWRyYS52MS5Ccm93c2VyVmlld3BvcnQSLgoFc3RhdGUYCCABKA4yHy5hcm1hZHJhLnYxLkJyb3dzZXJTZXNzaW9uU3RhdGUSEwoLcmVhc29uX2NvZGUYCSABKAkSGAoQbmF2aWdhdGlvbl9lcG9jaBgKIAEoBBIPCgdoZWFkZnVsGAsgASgIEhIKCmtlZXBfYWxpdmUYDCABKAgSGgoSY3JlYXRlZF9hdF91bml4X21zGA0gASgDEhoKEnVwZGF0ZWRfYXRfdW5peF9tcxgOIAEoAxIVCg1hY3RpdmVfdGFiX2lkGA8gASgJEhEKCXRhYl9jb3VudBgQIAEoDRInCgVsZWFzZRgRIAEoCzIYLmFybWFkcmEudjEuQnJvd3NlckxlYXNlEjEKDnBlbmRpbmdfZGlhbG9nGBIgASgLMhkuYXJtYWRyYS52MS5Ccm93c2VyRGlhbG9nEjwKFHBlbmRpbmdfZmlsZV9jaG9vc2VyGBMgASgLMh4uYXJtYWRyYS52MS5Ccm93c2VyRmlsZUNob29zZXISGAoQbGVhc2VfZ2VuZXJhdGlvbhgUIAEoBCKlAQoTQnJvd3NlckF2YWlsYWJpbGl0eRIRCglhdmFpbGFibGUYASABKAgSEgoKZXhlY3V0YWJsZRgCIAEoCRIOCgZzb3VyY2UYAyABKAkSEwoLcmVhc29uX2NvZGUYBCABKAkSEAoIc2VhcmNoZWQYBSADKAkSMAoHbWFuYWdlZBgGIAEoCzIfLmFybWFkcmEudjEuQnJvd3Nlck1hbmFnZWRTdGF0ZSL+AQoMQnJvd3NlckZyYW1lEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBBIRCglmcmFtZV9zZXEYAyABKAQSGAoQbmF2aWdhdGlvbl9lcG9jaBgEIAEoBBIWCg52aWV3cG9ydF93aWR0aBgFIAEoDRIXCg92aWV3cG9ydF9oZWlnaHQYBiABKA0SGwoTZGV2aWNlX3NjYWxlX2ZhY3RvchgHIAEoARIQCghlbmNvZGluZxgIIAEoCRIMCgRkYXRhGAkgASgMEhsKE2NhcHR1cmVkX2F0X3VuaXhfbXMYCiABKAMSDgoGdGFiX2lkGAsgASgJIu8BChdCcm93c2VyU3Vic2NyaWJlUmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRISCgpzZXNzaW9uX2lkGAIgASgJEhcKD3N1YnNjcmlwdGlvbl9pZBgDIAEoCRIxCgp2aXNpYmlsaXR5GAQgASgOMh0uYXJtYWRyYS52MS5Ccm93c2VyVmlzaWJpbGl0eRI6Cg9iYW5kd2lkdGhfY2xhc3MYBSABKA4yIS5hcm1hZHJhLnYxLkJyb3dzZXJCYW5kd2lkdGhDbGFzcxIRCgltYXhfd2lkdGgYBiABKA0ifwoTQnJvd3NlclN1YnNjcmlwdGlvbhIXCg9zdWJzY3JpcHRpb25faWQYASABKAkSGgoSZXhwaXJlc19hdF91bml4X21zGAIgASgDEg8KB3F1YWxpdHkYAyABKA0SDwoHbWF4X2ZwcxgEIAEoDRIRCgltYXhfd2lkdGgYBSABKA0iwAEKFkJyb3dzZXJOYXZpZ2F0ZVJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIzCgZhY3Rpb24YAyABKA4yIy5hcm1hZHJhLnYxLkJyb3dzZXJOYXZpZ2F0aW9uQWN0aW9uEgsKA3VybBgEIAEoCRIpCgZ0YXJnZXQYBSABKAsyGS5hcm1hZHJhLnYxLkJyb3dzZXJUYXJnZXQi2AEKEUJyb3dzZXJJbnB1dEV2ZW50EioKBGtpbmQYASABKA4yHC5hcm1hZHJhLnYxLkJyb3dzZXJJbnB1dEtpbmQSCQoBeBgCIAEoARIJCgF5GAMgASgBEg8KB2RlbHRhX3gYBCABKAESDwoHZGVsdGFfeRgFIAEoARIOCgZidXR0b24YBiABKAkSEwoLY2xpY2tfY291bnQYByABKA0SEQoJbW9kaWZpZXJzGAggASgNEgsKA2tleRgJIAEoCRIMCgRjb2RlGAogASgJEgwKBHRleHQYCyABKAki8QEKE0Jyb3dzZXJJbnB1dFJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIYChBuYXZpZ2F0aW9uX2Vwb2NoGAMgASgEEhEKCWZyYW1lX3NlcRgEIAEoBBItCgZldmVudHMYBSADKAsyHS5hcm1hZHJhLnYxLkJyb3dzZXJJbnB1dEV2ZW50EikKBnRhcmdldBgGIAEoCzIZLmFybWFkcmEudjEuQnJvd3NlclRhcmdldBIYChBsZWFzZV9nZW5lcmF0aW9uGAcgASgEIsoBCg5Ccm93c2VyRWxlbWVudBITCgtlbGVtZW50X3JlZhgBIAEoCRIMCgRyb2xlGAIgASgJEgwKBG5hbWUYAyABKAkSDQoFdmFsdWUYBCABKAkSEAoIc2VsZWN0b3IYBSABKAkSDwoHdmlzaWJsZRgGIAEoCBIJCgF4GAcgASgBEgkKAXkYCCABKAESDQoFd2lkdGgYCSABKAESDgoGaGVpZ2h0GAogASgBEg4KBnRhYl9pZBgLIAEoCRIQCghmcmFtZV9pZBgMIAEoCSJhChNCcm93c2VyQ29uc29sZUVudHJ5EhIKCmF0X3VuaXhfbXMYASABKAMSDQoFbGV2ZWwYAiABKAkSDAoEdGV4dBgDIAEoCRILCgN1cmwYBCABKAkSDAoEbGluZRgFIAEoDSKqAQoTQnJvd3Nlck5ldHdvcmtFbnRyeRISCgphdF91bml4X21zGAEgASgDEg4KBm1ldGhvZBgCIAEoCRILCgN1cmwYAyABKAkSDgoGc3RhdHVzGAQgASgNEhEKCW1pbWVfdHlwZRgFIAEoCRIVCg1lbmNvZGVkX2J5dGVzGAYgASgEEhQKDGZhaWx1cmVfY29kZRgHIAEoCRISCgpmcm9tX2NhY2hlGAggASgIIscBChJCcm93c2VyUmVhZFJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIpCgRtb2RlGAMgASgOMhsuYXJtYWRyYS52MS5Ccm93c2VyUmVhZE1vZGUSDQoFbGltaXQYBCABKA0SEQoJbWF4X2J5dGVzGAUgASgNEikKBnRhcmdldBgGIAEoCzIZLmFybWFkcmEudjEuQnJvd3NlclRhcmdldCKSAgoTQnJvd3NlclJlYWRSZXNwb25zZRISCgpzZXNzaW9uX2lkGAEgASgJEhgKEG5hdmlnYXRpb25fZXBvY2gYAiABKAQSCwoDdXJsGAMgASgJEg0KBXRpdGxlGAQgASgJEgwKBHRleHQYBSABKAkSLAoIZWxlbWVudHMYBiADKAsyGi5hcm1hZHJhLnYxLkJyb3dzZXJFbGVtZW50EjAKB2NvbnNvbGUYByADKAsyHy5hcm1hZHJhLnYxLkJyb3dzZXJDb25zb2xlRW50cnkSMAoHbmV0d29yaxgIIAMoCzIfLmFybWFkcmEudjEuQnJvd3Nlck5ldHdvcmtFbnRyeRIRCgl0cnVuY2F0ZWQYCSABKAgi+gEKE0Jyb3dzZXJDbGlja1JlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIYChBuYXZpZ2F0aW9uX2Vwb2NoGAMgASgEEhAKCHNlbGVjdG9yGAQgASgJEhMKC2VsZW1lbnRfcmVmGAUgASgJEgkKAXgYBiABKAESCQoBeRgHIAEoARIRCgltb2RpZmllcnMYCCABKA0SEwoLY2xpY2tfY291bnQYCSABKA0SKQoGdGFyZ2V0GAogASgLMhkuYXJtYWRyYS52MS5Ccm93c2VyVGFyZ2V0IuoBChJCcm93c2VyVHlwZVJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIYChBuYXZpZ2F0aW9uX2Vwb2NoGAMgASgEEhAKCHNlbGVjdG9yGAQgASgJEhMKC2VsZW1lbnRfcmVmGAUgASgJEgwKBHRleHQYBiABKAkSDwoHcmVwbGFjZRgHIAEoCBIOCgZzdWJtaXQYCCABKAgSKQoGdGFyZ2V0GAkgASgLMhkuYXJtYWRyYS52MS5Ccm93c2VyVGFyZ2V0Is4BChJCcm93c2VyV2FpdFJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIQCghzZWxlY3RvchgDIAEoCRIUCgx1cmxfY29udGFpbnMYBCABKAkSFgoOdGl0bGVfY29udGFpbnMYBSABKAkSEgoKdGltZW91dF9tcxgGIAEoDRIpCgZ0YXJnZXQYByABKAsyGS5hcm1hZHJhLnYxLkJyb3dzZXJUYXJnZXQiaAoTQnJvd3NlcldhaXRSZXNwb25zZRIPCgdtYXRjaGVkGAEgASgIEhMKC3JlYXNvbl9jb2RlGAIgASgJEhgKEG5hdmlnYXRpb25fZXBvY2gYAyABKAQSEQoJd2FpdGVkX21zGAQgASgNIqABChVCcm93c2VyQ2FwdHVyZVJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIRCglmdWxsX3BhZ2UYAyABKAgSDgoGZm9ybWF0GAQgASgJEikKBnRhcmdldBgFIAEoCzIZLmFybWFkcmEudjEuQnJvd3NlclRhcmdldCJ+ChZCcm93c2VyQ2FwdHVyZVJlc3BvbnNlEgwKBHBhdGgYASABKAkSDQoFd2lkdGgYAiABKA0SDgoGaGVpZ2h0GAMgASgNEg4KBnNoYTI1NhgEIAEoDBINCgVieXRlcxgFIAEoBBIYChBuYXZpZ2F0aW9uX2Vwb2NoGAYgASgEIqACCg9Ccm93c2VyRG93bmxvYWQSEwoLZG93bmxvYWRfaWQYASABKAkSEgoKc2Vzc2lvbl9pZBgCIAEoCRILCgN1cmwYAyABKAkSGgoSc3VnZ2VzdGVkX2ZpbGVuYW1lGAQgASgJEi8KBXN0YXRlGAUgASgOMiAuYXJtYWRyYS52MS5Ccm93c2VyRG93bmxvYWRTdGF0ZRIMCgRwYXRoGAYgASgJEhMKC3RvdGFsX2J5dGVzGAcgASgEEhYKDnJlY2VpdmVkX2J5dGVzGAggASgEEhoKEmNyZWF0ZWRfYXRfdW5peF9tcxgJIAEoAxITCgtyZWFzb25fY29kZRgKIAEoCRIOCgZ0YWJfaWQYCyABKAkSDgoGc2hhMjU2GAwgASgMIoABCh5Ccm93c2VyRG93bmxvYWREZWNpc2lvblJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRITCgtkb3dubG9hZF9pZBgDIAEoCRIOCgZhY2NlcHQYBCABKAgiuAEKG0NyZWF0ZUJyb3dzZXJTZXNzaW9uUmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRIUCgx3b3Jrc3BhY2VfaWQYAiABKAkSDwoHbm9kZV9pZBgDIAEoCRILCgN1cmwYBCABKAkSLQoIdmlld3BvcnQYBSABKAsyGy5hcm1hZHJhLnYxLkJyb3dzZXJWaWV3cG9ydBIPCgdoZWFkZnVsGAYgASgIImoKGkNsb3NlQnJvd3NlclNlc3Npb25SZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSEQoJdGVybWluYXRlGAMgASgIIlkKGkxpc3RCcm93c2VyU2Vzc2lvbnNSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEhQKDHdvcmtzcGFjZV9pZBgCIAEoCSKCAQobTGlzdEJyb3dzZXJTZXNzaW9uc1Jlc3BvbnNlEiwKCHNlc3Npb25zGAEgAygLMhouYXJtYWRyYS52MS5Ccm93c2VyU2Vzc2lvbhI1CgxhdmFpbGFiaWxpdHkYAiABKAsyHy5hcm1hZHJhLnYxLkJyb3dzZXJBdmFpbGFiaWxpdHkiiwkKDUJyb3dzZXJBY3Rpb24SOQoGY3JlYXRlGAEgASgLMicuYXJtYWRyYS52MS5DcmVhdGVCcm93c2VyU2Vzc2lvblJlcXVlc3RIABI2CghuYXZpZ2F0ZRgCIAEoCzIiLmFybWFkcmEudjEuQnJvd3Nlck5hdmlnYXRlUmVxdWVzdEgAEjAKBWlucHV0GAMgASgLMh8uYXJtYWRyYS52MS5Ccm93c2VySW5wdXRSZXF1ZXN0SAASLgoEcmVhZBgEIAEoCzIeLmFybWFkcmEudjEuQnJvd3NlclJlYWRSZXF1ZXN0SAASMAoFY2xpY2sYBSABKAsyHy5hcm1hZHJhLnYxLkJyb3dzZXJDbGlja1JlcXVlc3RIABIuCgR0eXBlGAYgASgLMh4uYXJtYWRyYS52MS5Ccm93c2VyVHlwZVJlcXVlc3RIABIuCgR3YWl0GAcgASgLMh4uYXJtYWRyYS52MS5Ccm93c2VyV2FpdFJlcXVlc3RIABI0CgdjYXB0dXJlGAggASgLMiEuYXJtYWRyYS52MS5Ccm93c2VyQ2FwdHVyZVJlcXVlc3RIABI4CglzdWJzY3JpYmUYCSABKAsyIy5hcm1hZHJhLnYxLkJyb3dzZXJTdWJzY3JpYmVSZXF1ZXN0SAASRwoRZG93bmxvYWRfZGVjaXNpb24YCiABKAsyKi5hcm1hZHJhLnYxLkJyb3dzZXJEb3dubG9hZERlY2lzaW9uUmVxdWVzdEgAEjcKBWNsb3NlGAsgASgLMiYuYXJtYWRyYS52MS5DbG9zZUJyb3dzZXJTZXNzaW9uUmVxdWVzdEgAEjYKBGxpc3QYDCABKAsyJi5hcm1hZHJhLnYxLkxpc3RCcm93c2VyU2Vzc2lvbnNSZXF1ZXN0SAASMgoGc2VsZWN0GA0gASgLMiAuYXJtYWRyYS52MS5Ccm93c2VyU2VsZWN0UmVxdWVzdEgAEjAKBXByZXNzGA4gASgLMh8uYXJtYWRyYS52MS5Ccm93c2VyUHJlc3NSZXF1ZXN0SAASMgoGc2Nyb2xsGA8gASgLMiAuYXJtYWRyYS52MS5Ccm93c2VyU2Nyb2xsUmVxdWVzdEgAEjIKBnVwbG9hZBgQIAEoCzIgLmFybWFkcmEudjEuQnJvd3NlclVwbG9hZFJlcXVlc3RIABIyCgZkaWFsb2cYESABKAsyIC5hcm1hZHJhLnYxLkJyb3dzZXJEaWFsb2dSZXF1ZXN0SAASLQoEdGFicxgSIAEoCzIdLmFybWFkcmEudjEuQnJvd3NlclRhYlJlcXVlc3RIABIwCgVsZWFzZRgTIAEoCzIfLmFybWFkcmEudjEuQnJvd3NlckxlYXNlUmVxdWVzdEgAEjcKCWNsb3NlX3RhYhgUIAEoCzIiLmFybWFkcmEudjEuQnJvd3NlckNsb3NlVGFiUmVxdWVzdEgAEkMKD21hbmFnZWRfaW5zdGFsbBgVIAEoCzIoLmFybWFkcmEudjEuQnJvd3Nlck1hbmFnZWRJbnN0YWxsUmVxdWVzdEgAQggKBmFjdGlvbiKGBQoTQnJvd3NlckFjdGlvblJlc3VsdBISCgpyZXF1ZXN0X2lkGAEgASgJEi0KB3Nlc3Npb24YCiABKAsyGi5hcm1hZHJhLnYxLkJyb3dzZXJTZXNzaW9uSAASLwoEcmVhZBgLIAEoCzIfLmFybWFkcmEudjEuQnJvd3NlclJlYWRSZXNwb25zZUgAEi8KBHdhaXQYDCABKAsyHy5hcm1hZHJhLnYxLkJyb3dzZXJXYWl0UmVzcG9uc2VIABI1CgdjYXB0dXJlGA0gASgLMiIuYXJtYWRyYS52MS5Ccm93c2VyQ2FwdHVyZVJlc3BvbnNlSAASNwoMc3Vic2NyaXB0aW9uGA4gASgLMh8uYXJtYWRyYS52MS5Ccm93c2VyU3Vic2NyaXB0aW9uSAASLwoIZG93bmxvYWQYDyABKAsyGy5hcm1hZHJhLnYxLkJyb3dzZXJEb3dubG9hZEgAEjsKCHNlc3Npb25zGBAgASgLMicuYXJtYWRyYS52MS5MaXN0QnJvd3NlclNlc3Npb25zUmVzcG9uc2VIABIqCgVlcnJvchgRIAEoCzIZLmFybWFkcmEudjEuRXJyb3JSZXNwb25zZUgAEioKBHRhYnMYEiABKAsyGi5hcm1hZHJhLnYxLkJyb3dzZXJUYWJMaXN0SAASKQoFbGVhc2UYEyABKAsyGC5hcm1hZHJhLnYxLkJyb3dzZXJMZWFzZUgAEisKBmRpYWxvZxgUIAEoCzIZLmFybWFkcmEudjEuQnJvd3NlckRpYWxvZ0gAEjIKB21hbmFnZWQYFSABKAsyHy5hcm1hZHJhLnYxLkJyb3dzZXJNYW5hZ2VkU3RhdGVIAEIICgZyZXN1bHQixgEKE0Jyb3dzZXJNYW5hZ2VkU3RhdGUSNQoFc3RhdGUYASABKA4yJi5hcm1hZHJhLnYxLkJyb3dzZXJNYW5hZ2VkSW5zdGFsbFN0YXRlEg8KB3ZlcnNpb24YAiABKAkSFgoOcmVjZWl2ZWRfYnl0ZXMYAyABKAQSEwoLdG90YWxfYnl0ZXMYBCABKAQSEwoLcmVhc29uX2NvZGUYBSABKAkSEgoKZXhlY3V0YWJsZRgGIAEoCRIRCglzdXBwb3J0ZWQYByABKAgiVgocQnJvd3Nlck1hbmFnZWRJbnN0YWxsUmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRIPCgdpbnN0YWxsGAIgASgIIjEKDUJyb3dzZXJUYXJnZXQSDgoGdGFiX2lkGAEgASgJEhAKCGZyYW1lX2lkGAIgASgJIr0BCgpCcm93c2VyVGFiEg4KBnRhYl9pZBgBIAEoCRILCgN1cmwYAiABKAkSDQoFdGl0bGUYAyABKAkSDgoGYWN0aXZlGAQgASgIEhUKDW9wZW5lcl90YWJfaWQYBSABKAkSGAoQbmF2aWdhdGlvbl9lcG9jaBgGIAEoBBIPCgdsb2FkaW5nGAcgASgIEjEKDnBlbmRpbmdfZGlhbG9nGAggASgLMhkuYXJtYWRyYS52MS5Ccm93c2VyRGlhbG9nIlwKDkJyb3dzZXJUYWJMaXN0EiQKBHRhYnMYASADKAsyFi5hcm1hZHJhLnYxLkJyb3dzZXJUYWISFQoNYWN0aXZlX3RhYl9pZBgCIAEoCRINCgVsaW1pdBgDIAEoDSI8ChFCcm93c2VyTGVhc2VIdW1hbhIRCglkZXZpY2VfaWQYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJIk4KEUJyb3dzZXJMZWFzZUFnZW50Eg8KB25vZGVfaWQYASABKAkSEgoKc2Vzc2lvbl9pZBgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAki1gEKDEJyb3dzZXJMZWFzZRIsCgVzdGF0ZRgBIAEoDjIdLmFybWFkcmEudjEuQnJvd3NlckxlYXNlU3RhdGUSEgoKZ2VuZXJhdGlvbhgCIAEoBBIaChJleHBpcmVzX2F0X3VuaXhfbXMYAyABKAMSLgoFaHVtYW4YBCABKAsyHS5hcm1hZHJhLnYxLkJyb3dzZXJMZWFzZUh1bWFuSAASLgoFYWdlbnQYBSABKAsyHS5hcm1hZHJhLnYxLkJyb3dzZXJMZWFzZUFnZW50SABCCAoGaG9sZGVyIpoBChNCcm93c2VyTGVhc2VSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSLgoGYWN0aW9uGAMgASgOMh4uYXJtYWRyYS52MS5Ccm93c2VyTGVhc2VBY3Rpb24SGAoQbGVhc2VfZ2VuZXJhdGlvbhgEIAEoBCKwAQoNQnJvd3NlckRpYWxvZxIRCglkaWFsb2dfaWQYASABKAkSDgoGdGFiX2lkGAIgASgJEisKBGtpbmQYAyABKA4yHS5hcm1hZHJhLnYxLkJyb3dzZXJEaWFsb2dLaW5kEg8KB21lc3NhZ2UYBCABKAkSFgoOZGVmYXVsdF9wcm9tcHQYBSABKAkSCwoDdXJsGAYgASgJEhkKEW9wZW5lZF9hdF91bml4X21zGAcgASgDIrMBChRCcm93c2VyRGlhbG9nUmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRISCgpzZXNzaW9uX2lkGAIgASgJEg4KBnRhYl9pZBgDIAEoCRIRCglkaWFsb2dfaWQYBCABKAkSDgoGYWNjZXB0GAUgASgIEhMKC3Byb21wdF90ZXh0GAYgASgJEhgKEGxlYXNlX2dlbmVyYXRpb24YByABKAQihwEKEkJyb3dzZXJGaWxlQ2hvb3NlchISCgpjaG9vc2VyX2lkGAEgASgJEg4KBnRhYl9pZBgCIAEoCRIQCghmcmFtZV9pZBgDIAEoCRIQCghtdWx0aXBsZRgEIAEoCBIOCgZhY2NlcHQYBSABKAkSGQoRb3BlbmVkX2F0X3VuaXhfbXMYBiABKAMi9wEKFEJyb3dzZXJTZWxlY3RSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSGAoQbmF2aWdhdGlvbl9lcG9jaBgDIAEoBBIQCghzZWxlY3RvchgEIAEoCRITCgtlbGVtZW50X3JlZhgFIAEoCRIOCgZ2YWx1ZXMYBiADKAkSDgoGbGFiZWxzGAcgAygJEikKBnRhcmdldBgIIAEoCzIZLmFybWFkcmEudjEuQnJvd3NlclRhcmdldBIYChBsZWFzZV9nZW5lcmF0aW9uGAkgASgEIt8BChNCcm93c2VyUHJlc3NSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSGAoQbmF2aWdhdGlvbl9lcG9jaBgDIAEoBBILCgNrZXkYBCABKAkSEQoJbW9kaWZpZXJzGAUgASgNEg4KBnJlcGVhdBgGIAEoDRIpCgZ0YXJnZXQYByABKAsyGS5hcm1hZHJhLnYxLkJyb3dzZXJUYXJnZXQSGAoQbGVhc2VfZ2VuZXJhdGlvbhgIIAEoBCLoAQoUQnJvd3NlclNjcm9sbFJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIYChBuYXZpZ2F0aW9uX2Vwb2NoGAMgASgEEhEKCWRpcmVjdGlvbhgEIAEoCRIOCgZhbW91bnQYBSABKAESEwoLZWxlbWVudF9yZWYYBiABKAkSKQoGdGFyZ2V0GAcgASgLMhkuYXJtYWRyYS52MS5Ccm93c2VyVGFyZ2V0EhgKEGxlYXNlX2dlbmVyYXRpb24YCCABKAQi4AEKFEJyb3dzZXJVcGxvYWRSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSEgoKY2hvb3Nlcl9pZBgDIAEoCRIQCghzZWxlY3RvchgEIAEoCRITCgtlbGVtZW50X3JlZhgFIAEoCRINCgVwYXRocxgGIAMoCRIpCgZ0YXJnZXQYByABKAsyGS5hcm1hZHJhLnYxLkJyb3dzZXJUYXJnZXQSGAoQbGVhc2VfZ2VuZXJhdGlvbhgIIAEoBCKzAQoRQnJvd3NlclRhYlJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIsCgZhY3Rpb24YAyABKA4yHC5hcm1hZHJhLnYxLkJyb3dzZXJUYWJBY3Rpb24SDgoGdGFiX2lkGAQgASgJEgsKA3VybBgFIAEoCRIYChBsZWFzZV9nZW5lcmF0aW9uGAYgASgEIn0KFkJyb3dzZXJDbG9zZVRhYlJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIOCgZ0YWJfaWQYAyABKAkSGAoQbGVhc2VfZ2VuZXJhdGlvbhgEIAEoBCKEAgoSQnJvd3NlclN0cmVhbUZyYW1lEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBBIRCglmcmFtZV9zZXEYAyABKAQSGAoQbmF2aWdhdGlvbl9lcG9jaBgEIAEoBBIOCgZ0YWJfaWQYBSABKAkSFgoOdmlld3BvcnRfd2lkdGgYBiABKA0SFwoPdmlld3BvcnRfaGVpZ2h0GAcgASgNEhsKE2RldmljZV9zY2FsZV9mYWN0b3IYCCABKAESEAoIZW5jb2RpbmcYCSABKAkSDAoEZGF0YRgKIAEoDBIbChNjYXB0dXJlZF9hdF91bml4X21zGAsgASgDItIBChNCcm93c2VyU3RyZWFtQ2xpZW50EjQKBWhlbGxvGAEgASgLMiMuYXJtYWRyYS52MS5Ccm93c2VyU3Vic2NyaWJlUmVxdWVzdEgAEg0KA2FjaxgCIAEoBEgAEjAKBWlucHV0GAMgASgLMh8uYXJtYWRyYS52MS5Ccm93c2VySW5wdXRSZXF1ZXN0SAASOQoKdmlzaWJpbGl0eRgEIAEoCzIjLmFybWFkcmEudjEuQnJvd3NlclN1YnNjcmliZVJlcXVlc3RIAEIJCgdtZXNzYWdlIp4BCg9Ccm93c2VyQWN0aXZpdHkSEgoKc2Vzc2lvbl9pZBgBIAEoCRINCgVhY3RvchgCIAEoCRIQCghhY3Rvcl9pZBgDIAEoCRIMCgR2ZXJiGAQgASgJEg4KBnRhcmdldBgFIAEoCRIPCgdvdXRjb21lGAYgASgJEhMKC3JlYXNvbl9jb2RlGAcgASgJEhIKCmF0X3VuaXhfbXMYCCABKAMq9gEKE0Jyb3dzZXJTZXNzaW9uU3RhdGUSJQohQlJPV1NFUl9TRVNTSU9OX1NUQVRFX1VOU1BFQ0lGSUVEEAASIgoeQlJPV1NFUl9TRVNTSU9OX1NUQVRFX1NUQVJUSU5HEAESHwobQlJPV1NFUl9TRVNTSU9OX1NUQVRFX1JFQURZEAISJgoiQlJPV1NFUl9TRVNTSU9OX1NUQVRFX0RJU0NPTk5FQ1RFRBADEiQKIEJST1dTRVJfU0VTU0lPTl9TVEFURV9URVJNSU5BVEVEEAQSJQohQlJPV1NFUl9TRVNTSU9OX1NUQVRFX1VOU1VQUE9SVEVEEAUqlgEKEUJyb3dzZXJWaXNpYmlsaXR5EiIKHkJST1dTRVJfVklTSUJJTElUWV9VTlNQRUNJRklFRBAAEh4KGkJST1dTRVJfVklTSUJJTElUWV9GT0NVU0VEEAESHgoaQlJPV1NFUl9WSVNJQklMSVRZX1ZJU0lCTEUQAhIdChlCUk9XU0VSX1ZJU0lCSUxJVFlfSElEREVOEAMq/QEKF0Jyb3dzZXJOYXZpZ2F0aW9uQWN0aW9uEikKJUJST1dTRVJfTkFWSUdBVElPTl9BQ1RJT05fVU5TUEVDSUZJRUQQABIiCh5CUk9XU0VSX05BVklHQVRJT05fQUNUSU9OX0dPVE8QARIiCh5CUk9XU0VSX05BVklHQVRJT05fQUNUSU9OX0JBQ0sQAhIlCiFCUk9XU0VSX05BVklHQVRJT05fQUNUSU9OX0ZPUldBUkQQAxIkCiBCUk9XU0VSX05BVklHQVRJT05fQUNUSU9OX1JFTE9BRBAEEiIKHkJST1dTRVJfTkFWSUdBVElPTl9BQ1RJT05fU1RPUBAFKosDChBCcm93c2VySW5wdXRLaW5kEiIKHkJST1dTRVJfSU5QVVRfS0lORF9VTlNQRUNJRklFRBAAEiIKHkJST1dTRVJfSU5QVVRfS0lORF9NT1VTRV9NT1ZFRBABEiQKIEJST1dTRVJfSU5QVVRfS0lORF9NT1VTRV9QUkVTU0VEEAISJQohQlJPV1NFUl9JTlBVVF9LSU5EX01PVVNFX1JFTEVBU0VEEAMSHAoYQlJPV1NFUl9JTlBVVF9LSU5EX1dIRUVMEAQSHwobQlJPV1NFUl9JTlBVVF9LSU5EX0tFWV9ET1dOEAUSHQoZQlJPV1NFUl9JTlBVVF9LSU5EX0tFWV9VUBAGEhsKF0JST1dTRVJfSU5QVVRfS0lORF9URVhUEAcSIgoeQlJPV1NFUl9JTlBVVF9LSU5EX1RPVUNIX1NUQVJUEAgSIQodQlJPV1NFUl9JTlBVVF9LSU5EX1RPVUNIX01PVkUQCRIgChxCUk9XU0VSX0lOUFVUX0tJTkRfVE9VQ0hfRU5EEAoq6AEKD0Jyb3dzZXJSZWFkTW9kZRIhCh1CUk9XU0VSX1JFQURfTU9ERV9VTlNQRUNJRklFRBAAEhoKFkJST1dTRVJfUkVBRF9NT0RFX1RFWFQQARIeChpCUk9XU0VSX1JFQURfTU9ERV9FTEVNRU5UUxACEhsKF0JST1dTRVJfUkVBRF9NT0RFX0xJTktTEAMSGwoXQlJPV1NFUl9SRUFEX01PREVfVElUTEUQBBIdChlCUk9XU0VSX1JFQURfTU9ERV9DT05TT0xFEAUSHQoZQlJPV1NFUl9SRUFEX01PREVfTkVUV09SSxAGKvkBChRCcm93c2VyRG93bmxvYWRTdGF0ZRImCiJCUk9XU0VSX0RPV05MT0FEX1NUQVRFX1VOU1BFQ0lGSUVEEAASIgoeQlJPV1NFUl9ET1dOTE9BRF9TVEFURV9QRU5ESU5HEAESJgoiQlJPV1NFUl9ET1dOTE9BRF9TVEFURV9JTl9QUk9HUkVTUxACEiQKIEJST1dTRVJfRE9XTkxPQURfU1RBVEVfQ09NUExFVEVEEAMSJAogQlJPV1NFUl9ET1dOTE9BRF9TVEFURV9DQU5DRUxMRUQQBBIhCh1CUk9XU0VSX0RPV05MT0FEX1NUQVRFX0ZBSUxFRBAFKqgCChpCcm93c2VyTWFuYWdlZEluc3RhbGxTdGF0ZRItCilCUk9XU0VSX01BTkFHRURfSU5TVEFMTF9TVEFURV9VTlNQRUNJRklFRBAAEigKJEJST1dTRVJfTUFOQUdFRF9JTlNUQUxMX1NUQVRFX0FCU0VOVBABEi0KKUJST1dTRVJfTUFOQUdFRF9JTlNUQUxMX1NUQVRFX0RPV05MT0FESU5HEAISKwonQlJPV1NFUl9NQU5BR0VEX0lOU1RBTExfU1RBVEVfVkVSSUZZSU5HEAMSKwonQlJPV1NFUl9NQU5BR0VEX0lOU1RBTExfU1RBVEVfSU5TVEFMTEVEEAQSKAokQlJPV1NFUl9NQU5BR0VEX0lOU1RBTExfU1RBVEVfRkFJTEVEEAUqvAEKEUJyb3dzZXJMZWFzZVN0YXRlEiMKH0JST1dTRVJfTEVBU0VfU1RBVEVfVU5TUEVDSUZJRUQQABIcChhCUk9XU0VSX0xFQVNFX1NUQVRFX0ZSRUUQARIdChlCUk9XU0VSX0xFQVNFX1NUQVRFX0hVTUFOEAISJgoiQlJPV1NFUl9MRUFTRV9TVEFURV9IVU1BTl9UQUtFT1ZFUhADEh0KGUJST1dTRVJfTEVBU0VfU1RBVEVfQUdFTlQQBCqgAQoSQnJvd3NlckxlYXNlQWN0aW9uEiQKIEJST1dTRVJfTEVBU0VfQUNUSU9OX1VOU1BFQ0lGSUVEEAASHwobQlJPV1NFUl9MRUFTRV9BQ1RJT05fU1RBVFVTEAESIQodQlJPV1NFUl9MRUFTRV9BQ1RJT05fVEFLRU9WRVIQAhIgChxCUk9XU0VSX0xFQVNFX0FDVElPTl9SRUxFQVNFEAMqvwEKEUJyb3dzZXJEaWFsb2dLaW5kEiMKH0JST1dTRVJfRElBTE9HX0tJTkRfVU5TUEVDSUZJRUQQABIdChlCUk9XU0VSX0RJQUxPR19LSU5EX0FMRVJUEAESHwobQlJPV1NFUl9ESUFMT0dfS0lORF9DT05GSVJNEAISHgoaQlJPV1NFUl9ESUFMT0dfS0lORF9QUk9NUFQQAxIlCiFCUk9XU0VSX0RJQUxPR19LSU5EX0JFRk9SRV9VTkxPQUQQBCqOAQoQQnJvd3NlclRhYkFjdGlvbhIiCh5CUk9XU0VSX1RBQl9BQ1RJT05fVU5TUEVDSUZJRUQQABIbChdCUk9XU0VSX1RBQl9BQ1RJT05fTElTVBABEh0KGUJST1dTRVJfVEFCX0FDVElPTl9TV0lUQ0gQAhIaChZCUk9XU0VSX1RBQl9BQ1RJT05fTkVXEAMqpwEKFUJyb3dzZXJCYW5kd2lkdGhDbGFzcxInCiNCUk9XU0VSX0JBTkRXSURUSF9DTEFTU19VTlNQRUNJRklFRBAAEh8KG0JST1dTRVJfQkFORFdJRFRIX0NMQVNTX0xBThABEh8KG0JST1dTRVJfQkFORFdJRFRIX0NMQVNTX1dBThACEiMKH0JST1dTRVJfQkFORFdJRFRIX0NMQVNTX01FVEVSRUQQA0IjWiFhcm1hZHJhLmxvY2FsL2hvc3QvZ2VuL2FybWFkcmEvdjFiBnByb3RvMw",
     [file_armadra_v1_common],
   );
 
@@ -137,6 +137,45 @@ export type BrowserSession = Message<"armadra.v1.BrowserSession"> & {
    * @generated from field: int64 updated_at_unix_ms = 14;
    */
   updatedAtUnixMs: bigint;
+
+  /**
+   * The tab screencast, input and viewport apply to. One session is one
+   * browser process and one profile; tabs live inside it (§2.2).
+   *
+   * @generated from field: string active_tab_id = 15;
+   */
+  activeTabId: string;
+
+  /**
+   * @generated from field: uint32 tab_count = 16;
+   */
+  tabCount: number;
+
+  /**
+   * @generated from field: armadra.v1.BrowserLease lease = 17;
+   */
+  lease?: BrowserLease;
+
+  /**
+   * Set while a tab is blocked on a JS dialog. Input aimed at that tab is
+   * refused with DIALOG_PENDING rather than silently swallowed (§2.4).
+   *
+   * @generated from field: armadra.v1.BrowserDialog pending_dialog = 18;
+   */
+  pendingDialog?: BrowserDialog;
+
+  /**
+   * @generated from field: armadra.v1.BrowserFileChooser pending_file_chooser = 19;
+   */
+  pendingFileChooser?: BrowserFileChooser;
+
+  /**
+   * Survives a Runtime restart so an old client's generation cannot come back
+   * to life; the in-memory lease itself starts out free (§2.6).
+   *
+   * @generated from field: uint64 lease_generation = 20;
+   */
+  leaseGeneration: bigint;
 };
 
 /**
@@ -181,6 +220,14 @@ export type BrowserAvailability = Message<"armadra.v1.BrowserAvailability"> & {
    * @generated from field: repeated string searched = 5;
    */
   searched: string[];
+
+  /**
+   * The build-pinned Chrome for Testing install, which is preferred over a
+   * detected system browser because its CDP surface is the tested one (§2.1).
+   *
+   * @generated from field: armadra.v1.BrowserManagedState managed = 6;
+   */
+  managed?: BrowserManagedState;
 };
 
 /**
@@ -250,6 +297,11 @@ export type BrowserFrame = Message<"armadra.v1.BrowserFrame"> & {
    * @generated from field: int64 captured_at_unix_ms = 10;
    */
   capturedAtUnixMs: bigint;
+
+  /**
+   * @generated from field: string tab_id = 11;
+   */
+  tabId: string;
 };
 
 /**
@@ -284,6 +336,21 @@ export type BrowserSubscribeRequest =
      * @generated from field: armadra.v1.BrowserVisibility visibility = 4;
      */
     visibility: BrowserVisibility;
+
+    /**
+     * What the link between this subscriber and the session looks like. The
+     * Worker picks the budget; the subscriber only says what it can afford.
+     *
+     * @generated from field: armadra.v1.BrowserBandwidthClass bandwidth_class = 5;
+     */
+    bandwidthClass: BrowserBandwidthClass;
+
+    /**
+     * Downscale ceiling in CSS pixels. Zero means "no ceiling of my own".
+     *
+     * @generated from field: uint32 max_width = 6;
+     */
+    maxWidth: number;
   };
 
 /**
@@ -320,6 +387,11 @@ export type BrowserSubscription = Message<"armadra.v1.BrowserSubscription"> & {
    * @generated from field: uint32 max_fps = 4;
    */
   maxFps: number;
+
+  /**
+   * @generated from field: uint32 max_width = 5;
+   */
+  maxWidth: number;
 };
 
 /**
@@ -356,6 +428,14 @@ export type BrowserNavigateRequest =
      * @generated from field: string url = 4;
      */
     url: string;
+
+    /**
+     * Absent means the active tab's main frame, so existing callers are
+     * unchanged by the introduction of tabs (§2.2).
+     *
+     * @generated from field: armadra.v1.BrowserTarget target = 5;
+     */
+    target?: BrowserTarget;
   };
 
 /**
@@ -471,6 +551,19 @@ export type BrowserInputRequest = Message<"armadra.v1.BrowserInputRequest"> & {
    * @generated from field: repeated armadra.v1.BrowserInputEvent events = 5;
    */
   events: BrowserInputEvent[];
+
+  /**
+   * @generated from field: armadra.v1.BrowserTarget target = 6;
+   */
+  target?: BrowserTarget;
+
+  /**
+   * Refused when the lease changed hands since the caller last looked, so a
+   * revoked agent cannot land one more click (§2.6).
+   *
+   * @generated from field: uint64 lease_generation = 7;
+   */
+  leaseGeneration: bigint;
 };
 
 /**
@@ -537,6 +630,19 @@ export type BrowserElement = Message<"armadra.v1.BrowserElement"> & {
    * @generated from field: double height = 10;
    */
   height: number;
+
+  /**
+   * Empty for the active tab's main frame, which is what `e<epoch>-<idx>`
+   * alone addresses; a reference inside an iframe carries both (§2.2).
+   *
+   * @generated from field: string tab_id = 11;
+   */
+  tabId: string;
+
+  /**
+   * @generated from field: string frame_id = 12;
+   */
+  frameId: string;
 };
 
 /**
@@ -671,6 +777,11 @@ export type BrowserReadRequest = Message<"armadra.v1.BrowserReadRequest"> & {
    * @generated from field: uint32 max_bytes = 5;
    */
   maxBytes: number;
+
+  /**
+   * @generated from field: armadra.v1.BrowserTarget target = 6;
+   */
+  target?: BrowserTarget;
 };
 
 /**
@@ -793,6 +904,11 @@ export type BrowserClickRequest = Message<"armadra.v1.BrowserClickRequest"> & {
    * @generated from field: uint32 click_count = 9;
    */
   clickCount: number;
+
+  /**
+   * @generated from field: armadra.v1.BrowserTarget target = 10;
+   */
+  target?: BrowserTarget;
 };
 
 /**
@@ -850,6 +966,11 @@ export type BrowserTypeRequest = Message<"armadra.v1.BrowserTypeRequest"> & {
    * @generated from field: bool submit = 8;
    */
   submit: boolean;
+
+  /**
+   * @generated from field: armadra.v1.BrowserTarget target = 9;
+   */
+  target?: BrowserTarget;
 };
 
 /**
@@ -896,6 +1017,11 @@ export type BrowserWaitRequest = Message<"armadra.v1.BrowserWaitRequest"> & {
    * @generated from field: uint32 timeout_ms = 6;
    */
   timeoutMs: number;
+
+  /**
+   * @generated from field: armadra.v1.BrowserTarget target = 7;
+   */
+  target?: BrowserTarget;
 };
 
 /**
@@ -965,6 +1091,11 @@ export type BrowserCaptureRequest =
      * @generated from field: string format = 4;
      */
     format: string;
+
+    /**
+     * @generated from field: armadra.v1.BrowserTarget target = 5;
+     */
+    target?: BrowserTarget;
   };
 
 /**
@@ -1076,6 +1207,19 @@ export type BrowserDownload = Message<"armadra.v1.BrowserDownload"> & {
    * @generated from field: string reason_code = 10;
    */
   reasonCode: string;
+
+  /**
+   * @generated from field: string tab_id = 11;
+   */
+  tabId: string;
+
+  /**
+   * Computed once the bytes are complete, so an accepted download can be
+   * named by content rather than only by the page's suggested filename.
+   *
+   * @generated from field: bytes sha256 = 12;
+   */
+  sha256: Uint8Array;
 };
 
 /**
@@ -1338,6 +1482,69 @@ export type BrowserAction = Message<"armadra.v1.BrowserAction"> & {
         value: ListBrowserSessionsRequest;
         case: "list";
       }
+    | {
+        /**
+         * @generated from field: armadra.v1.BrowserSelectRequest select = 13;
+         */
+        value: BrowserSelectRequest;
+        case: "select";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.BrowserPressRequest press = 14;
+         */
+        value: BrowserPressRequest;
+        case: "press";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.BrowserScrollRequest scroll = 15;
+         */
+        value: BrowserScrollRequest;
+        case: "scroll";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.BrowserUploadRequest upload = 16;
+         */
+        value: BrowserUploadRequest;
+        case: "upload";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.BrowserDialogRequest dialog = 17;
+         */
+        value: BrowserDialogRequest;
+        case: "dialog";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.BrowserTabRequest tabs = 18;
+         */
+        value: BrowserTabRequest;
+        case: "tabs";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.BrowserLeaseRequest lease = 19;
+         */
+        value: BrowserLeaseRequest;
+        case: "lease";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.BrowserCloseTabRequest close_tab = 20;
+         */
+        value: BrowserCloseTabRequest;
+        case: "closeTab";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.BrowserManagedInstallRequest managed_install = 21;
+         */
+        value: BrowserManagedInstallRequest;
+        case: "managedInstall";
+      }
     | { case: undefined; value?: undefined };
 };
 
@@ -1418,6 +1625,34 @@ export type BrowserActionResult = Message<"armadra.v1.BrowserActionResult"> & {
         value: ErrorResponse;
         case: "error";
       }
+    | {
+        /**
+         * @generated from field: armadra.v1.BrowserTabList tabs = 18;
+         */
+        value: BrowserTabList;
+        case: "tabs";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.BrowserLease lease = 19;
+         */
+        value: BrowserLease;
+        case: "lease";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.BrowserDialog dialog = 20;
+         */
+        value: BrowserDialog;
+        case: "dialog";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.BrowserManagedState managed = 21;
+         */
+        value: BrowserManagedState;
+        case: "managed";
+      }
     | { case: undefined; value?: undefined };
 };
 
@@ -1428,6 +1663,991 @@ export type BrowserActionResult = Message<"armadra.v1.BrowserActionResult"> & {
 export const BrowserActionResultSchema: GenMessage<BrowserActionResult> =
   /*@__PURE__*/
   messageDesc(file_armadra_v1_browser, 27);
+
+/**
+ * @generated from message armadra.v1.BrowserManagedState
+ */
+export type BrowserManagedState = Message<"armadra.v1.BrowserManagedState"> & {
+  /**
+   * @generated from field: armadra.v1.BrowserManagedInstallState state = 1;
+   */
+  state: BrowserManagedInstallState;
+
+  /**
+   * @generated from field: string version = 2;
+   */
+  version: string;
+
+  /**
+   * @generated from field: uint64 received_bytes = 3;
+   */
+  receivedBytes: bigint;
+
+  /**
+   * @generated from field: uint64 total_bytes = 4;
+   */
+  totalBytes: bigint;
+
+  /**
+   * `manifest_missing_target`, `sha256_mismatch`, `signature_invalid`,
+   * `network`, `download_disabled`. Never a raw transport error.
+   *
+   * @generated from field: string reason_code = 5;
+   */
+  reasonCode: string;
+
+  /**
+   * Absolute path of the installed executable; empty until installed.
+   *
+   * @generated from field: string executable = 6;
+   */
+  executable: string;
+
+  /**
+   * False when the build's manifest has no entry for this OS and
+   * architecture, so the panel says so instead of offering a dead button.
+   *
+   * @generated from field: bool supported = 7;
+   */
+  supported: boolean;
+};
+
+/**
+ * Describes the message armadra.v1.BrowserManagedState.
+ * Use `create(BrowserManagedStateSchema)` to create a new message.
+ */
+export const BrowserManagedStateSchema: GenMessage<BrowserManagedState> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 28);
+
+/**
+ * @generated from message armadra.v1.BrowserManagedInstallRequest
+ */
+export type BrowserManagedInstallRequest =
+  Message<"armadra.v1.BrowserManagedInstallRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * False removes an installed managed browser instead of installing one.
+     *
+     * @generated from field: bool install = 2;
+     */
+    install: boolean;
+  };
+
+/**
+ * Describes the message armadra.v1.BrowserManagedInstallRequest.
+ * Use `create(BrowserManagedInstallRequestSchema)` to create a new message.
+ */
+export const BrowserManagedInstallRequestSchema: GenMessage<BrowserManagedInstallRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 29);
+
+/**
+ * Where an action lands. Both halves absent means the active tab's main
+ * frame, which is what every pre-tab caller meant (§2.2).
+ *
+ * @generated from message armadra.v1.BrowserTarget
+ */
+export type BrowserTarget = Message<"armadra.v1.BrowserTarget"> & {
+  /**
+   * Runtime's own stable ordinal (`t1`, `t2`, …).
+   *
+   * @generated from field: string tab_id = 1;
+   */
+  tabId: string;
+
+  /**
+   * @generated from field: string frame_id = 2;
+   */
+  frameId: string;
+};
+
+/**
+ * Describes the message armadra.v1.BrowserTarget.
+ * Use `create(BrowserTargetSchema)` to create a new message.
+ */
+export const BrowserTargetSchema: GenMessage<BrowserTarget> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 30);
+
+/**
+ * One CDP page target, named by Runtime. The CDP `targetId` is deliberately
+ * absent: a client that could name it could address targets this file does
+ * not define.
+ *
+ * @generated from message armadra.v1.BrowserTab
+ */
+export type BrowserTab = Message<"armadra.v1.BrowserTab"> & {
+  /**
+   * @generated from field: string tab_id = 1;
+   */
+  tabId: string;
+
+  /**
+   * @generated from field: string url = 2;
+   */
+  url: string;
+
+  /**
+   * @generated from field: string title = 3;
+   */
+  title: string;
+
+  /**
+   * @generated from field: bool active = 4;
+   */
+  active: boolean;
+
+  /**
+   * Set when the page opened this tab itself, so a popup can be shown as one.
+   *
+   * @generated from field: string opener_tab_id = 5;
+   */
+  openerTabId: string;
+
+  /**
+   * @generated from field: uint64 navigation_epoch = 6;
+   */
+  navigationEpoch: bigint;
+
+  /**
+   * @generated from field: bool loading = 7;
+   */
+  loading: boolean;
+
+  /**
+   * @generated from field: armadra.v1.BrowserDialog pending_dialog = 8;
+   */
+  pendingDialog?: BrowserDialog;
+};
+
+/**
+ * Describes the message armadra.v1.BrowserTab.
+ * Use `create(BrowserTabSchema)` to create a new message.
+ */
+export const BrowserTabSchema: GenMessage<BrowserTab> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 31);
+
+/**
+ * @generated from message armadra.v1.BrowserTabList
+ */
+export type BrowserTabList = Message<"armadra.v1.BrowserTabList"> & {
+  /**
+   * @generated from field: repeated armadra.v1.BrowserTab tabs = 1;
+   */
+  tabs: BrowserTab[];
+
+  /**
+   * @generated from field: string active_tab_id = 2;
+   */
+  activeTabId: string;
+
+  /**
+   * Per-session ceiling; a page that opens more gets `tab_limit` (§2.2).
+   *
+   * @generated from field: uint32 limit = 3;
+   */
+  limit: number;
+};
+
+/**
+ * Describes the message armadra.v1.BrowserTabList.
+ * Use `create(BrowserTabListSchema)` to create a new message.
+ */
+export const BrowserTabListSchema: GenMessage<BrowserTabList> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 32);
+
+/**
+ * @generated from message armadra.v1.BrowserLeaseHuman
+ */
+export type BrowserLeaseHuman = Message<"armadra.v1.BrowserLeaseHuman"> & {
+  /**
+   * @generated from field: string device_id = 1;
+   */
+  deviceId: string;
+
+  /**
+   * @generated from field: string display_name = 2;
+   */
+  displayName: string;
+};
+
+/**
+ * Describes the message armadra.v1.BrowserLeaseHuman.
+ * Use `create(BrowserLeaseHumanSchema)` to create a new message.
+ */
+export const BrowserLeaseHumanSchema: GenMessage<BrowserLeaseHuman> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 33);
+
+/**
+ * @generated from message armadra.v1.BrowserLeaseAgent
+ */
+export type BrowserLeaseAgent = Message<"armadra.v1.BrowserLeaseAgent"> & {
+  /**
+   * @generated from field: string node_id = 1;
+   */
+  nodeId: string;
+
+  /**
+   * @generated from field: string session_id = 2;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: string display_name = 3;
+   */
+  displayName: string;
+};
+
+/**
+ * Describes the message armadra.v1.BrowserLeaseAgent.
+ * Use `create(BrowserLeaseAgentSchema)` to create a new message.
+ */
+export const BrowserLeaseAgentSchema: GenMessage<BrowserLeaseAgent> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 34);
+
+/**
+ * One session, one holder. Reads never need it; input-shaped actions do.
+ *
+ * @generated from message armadra.v1.BrowserLease
+ */
+export type BrowserLease = Message<"armadra.v1.BrowserLease"> & {
+  /**
+   * @generated from field: armadra.v1.BrowserLeaseState state = 1;
+   */
+  state: BrowserLeaseState;
+
+  /**
+   * Bumped on every change of holder, so a request minted under the previous
+   * holder is refused rather than applied.
+   *
+   * @generated from field: uint64 generation = 2;
+   */
+  generation: bigint;
+
+  /**
+   * @generated from field: int64 expires_at_unix_ms = 3;
+   */
+  expiresAtUnixMs: bigint;
+
+  /**
+   * @generated from oneof armadra.v1.BrowserLease.holder
+   */
+  holder:
+    | {
+        /**
+         * @generated from field: armadra.v1.BrowserLeaseHuman human = 4;
+         */
+        value: BrowserLeaseHuman;
+        case: "human";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.BrowserLeaseAgent agent = 5;
+         */
+        value: BrowserLeaseAgent;
+        case: "agent";
+      }
+    | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message armadra.v1.BrowserLease.
+ * Use `create(BrowserLeaseSchema)` to create a new message.
+ */
+export const BrowserLeaseSchema: GenMessage<BrowserLease> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 35);
+
+/**
+ * @generated from message armadra.v1.BrowserLeaseRequest
+ */
+export type BrowserLeaseRequest = Message<"armadra.v1.BrowserLeaseRequest"> & {
+  /**
+   * @generated from field: armadra.v1.CommandMeta meta = 1;
+   */
+  meta?: CommandMeta;
+
+  /**
+   * @generated from field: string session_id = 2;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: armadra.v1.BrowserLeaseAction action = 3;
+   */
+  action: BrowserLeaseAction;
+
+  /**
+   * @generated from field: uint64 lease_generation = 4;
+   */
+  leaseGeneration: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.BrowserLeaseRequest.
+ * Use `create(BrowserLeaseRequestSchema)` to create a new message.
+ */
+export const BrowserLeaseRequestSchema: GenMessage<BrowserLeaseRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 36);
+
+/**
+ * @generated from message armadra.v1.BrowserDialog
+ */
+export type BrowserDialog = Message<"armadra.v1.BrowserDialog"> & {
+  /**
+   * @generated from field: string dialog_id = 1;
+   */
+  dialogId: string;
+
+  /**
+   * @generated from field: string tab_id = 2;
+   */
+  tabId: string;
+
+  /**
+   * @generated from field: armadra.v1.BrowserDialogKind kind = 3;
+   */
+  kind: BrowserDialogKind;
+
+  /**
+   * @generated from field: string message = 4;
+   */
+  message: string;
+
+  /**
+   * @generated from field: string default_prompt = 5;
+   */
+  defaultPrompt: string;
+
+  /**
+   * @generated from field: string url = 6;
+   */
+  url: string;
+
+  /**
+   * @generated from field: int64 opened_at_unix_ms = 7;
+   */
+  openedAtUnixMs: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.BrowserDialog.
+ * Use `create(BrowserDialogSchema)` to create a new message.
+ */
+export const BrowserDialogSchema: GenMessage<BrowserDialog> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 37);
+
+/**
+ * @generated from message armadra.v1.BrowserDialogRequest
+ */
+export type BrowserDialogRequest =
+  Message<"armadra.v1.BrowserDialogRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string session_id = 2;
+     */
+    sessionId: string;
+
+    /**
+     * @generated from field: string tab_id = 3;
+     */
+    tabId: string;
+
+    /**
+     * @generated from field: string dialog_id = 4;
+     */
+    dialogId: string;
+
+    /**
+     * @generated from field: bool accept = 5;
+     */
+    accept: boolean;
+
+    /**
+     * @generated from field: string prompt_text = 6;
+     */
+    promptText: string;
+
+    /**
+     * @generated from field: uint64 lease_generation = 7;
+     */
+    leaseGeneration: bigint;
+  };
+
+/**
+ * Describes the message armadra.v1.BrowserDialogRequest.
+ * Use `create(BrowserDialogRequestSchema)` to create a new message.
+ */
+export const BrowserDialogRequestSchema: GenMessage<BrowserDialogRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 38);
+
+/**
+ * @generated from message armadra.v1.BrowserFileChooser
+ */
+export type BrowserFileChooser = Message<"armadra.v1.BrowserFileChooser"> & {
+  /**
+   * @generated from field: string chooser_id = 1;
+   */
+  chooserId: string;
+
+  /**
+   * @generated from field: string tab_id = 2;
+   */
+  tabId: string;
+
+  /**
+   * @generated from field: string frame_id = 3;
+   */
+  frameId: string;
+
+  /**
+   * @generated from field: bool multiple = 4;
+   */
+  multiple: boolean;
+
+  /**
+   * The page's `accept` attribute, shown to the person picking. It is a hint
+   * for the picker, never a filter this side enforces.
+   *
+   * @generated from field: string accept = 5;
+   */
+  accept: string;
+
+  /**
+   * @generated from field: int64 opened_at_unix_ms = 6;
+   */
+  openedAtUnixMs: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.BrowserFileChooser.
+ * Use `create(BrowserFileChooserSchema)` to create a new message.
+ */
+export const BrowserFileChooserSchema: GenMessage<BrowserFileChooser> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 39);
+
+/**
+ * @generated from message armadra.v1.BrowserSelectRequest
+ */
+export type BrowserSelectRequest =
+  Message<"armadra.v1.BrowserSelectRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string session_id = 2;
+     */
+    sessionId: string;
+
+    /**
+     * @generated from field: uint64 navigation_epoch = 3;
+     */
+    navigationEpoch: bigint;
+
+    /**
+     * @generated from field: string selector = 4;
+     */
+    selector: string;
+
+    /**
+     * @generated from field: string element_ref = 5;
+     */
+    elementRef: string;
+
+    /**
+     * Repeated selects a multiple-choice list; a non-`<select>` target is
+     * refused with NOT_SELECTABLE rather than clicked at.
+     *
+     * @generated from field: repeated string values = 6;
+     */
+    values: string[];
+
+    /**
+     * @generated from field: repeated string labels = 7;
+     */
+    labels: string[];
+
+    /**
+     * @generated from field: armadra.v1.BrowserTarget target = 8;
+     */
+    target?: BrowserTarget;
+
+    /**
+     * @generated from field: uint64 lease_generation = 9;
+     */
+    leaseGeneration: bigint;
+  };
+
+/**
+ * Describes the message armadra.v1.BrowserSelectRequest.
+ * Use `create(BrowserSelectRequestSchema)` to create a new message.
+ */
+export const BrowserSelectRequestSchema: GenMessage<BrowserSelectRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 40);
+
+/**
+ * @generated from message armadra.v1.BrowserPressRequest
+ */
+export type BrowserPressRequest = Message<"armadra.v1.BrowserPressRequest"> & {
+  /**
+   * @generated from field: armadra.v1.CommandMeta meta = 1;
+   */
+  meta?: CommandMeta;
+
+  /**
+   * @generated from field: string session_id = 2;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: uint64 navigation_epoch = 3;
+   */
+  navigationEpoch: bigint;
+
+  /**
+   * From a fixed whitelist; a chord is dispatched as one keyDown/keyUp pair
+   * and text is never split into synthetic keys.
+   *
+   * @generated from field: string key = 4;
+   */
+  key: string;
+
+  /**
+   * @generated from field: uint32 modifiers = 5;
+   */
+  modifiers: number;
+
+  /**
+   * @generated from field: uint32 repeat = 6;
+   */
+  repeat: number;
+
+  /**
+   * @generated from field: armadra.v1.BrowserTarget target = 7;
+   */
+  target?: BrowserTarget;
+
+  /**
+   * @generated from field: uint64 lease_generation = 8;
+   */
+  leaseGeneration: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.BrowserPressRequest.
+ * Use `create(BrowserPressRequestSchema)` to create a new message.
+ */
+export const BrowserPressRequestSchema: GenMessage<BrowserPressRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 41);
+
+/**
+ * @generated from message armadra.v1.BrowserScrollRequest
+ */
+export type BrowserScrollRequest =
+  Message<"armadra.v1.BrowserScrollRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string session_id = 2;
+     */
+    sessionId: string;
+
+    /**
+     * @generated from field: uint64 navigation_epoch = 3;
+     */
+    navigationEpoch: bigint;
+
+    /**
+     * "up" | "down" | "left" | "right", with `amount` in CSS pixels; or an
+     * element reference to bring into view.
+     *
+     * @generated from field: string direction = 4;
+     */
+    direction: string;
+
+    /**
+     * @generated from field: double amount = 5;
+     */
+    amount: number;
+
+    /**
+     * @generated from field: string element_ref = 6;
+     */
+    elementRef: string;
+
+    /**
+     * @generated from field: armadra.v1.BrowserTarget target = 7;
+     */
+    target?: BrowserTarget;
+
+    /**
+     * @generated from field: uint64 lease_generation = 8;
+     */
+    leaseGeneration: bigint;
+  };
+
+/**
+ * Describes the message armadra.v1.BrowserScrollRequest.
+ * Use `create(BrowserScrollRequestSchema)` to create a new message.
+ */
+export const BrowserScrollRequestSchema: GenMessage<BrowserScrollRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 42);
+
+/**
+ * @generated from message armadra.v1.BrowserUploadRequest
+ */
+export type BrowserUploadRequest =
+  Message<"armadra.v1.BrowserUploadRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string session_id = 2;
+     */
+    sessionId: string;
+
+    /**
+     * Answers a chooser the page opened, or fills an `input[type=file]`
+     * directly when there is none.
+     *
+     * @generated from field: string chooser_id = 3;
+     */
+    chooserId: string;
+
+    /**
+     * @generated from field: string selector = 4;
+     */
+    selector: string;
+
+    /**
+     * @generated from field: string element_ref = 5;
+     */
+    elementRef: string;
+
+    /**
+     * Workspace-relative paths, resolved on the execution host. An absolute
+     * path or one that escapes the root is refused (§2.3).
+     *
+     * @generated from field: repeated string paths = 6;
+     */
+    paths: string[];
+
+    /**
+     * @generated from field: armadra.v1.BrowserTarget target = 7;
+     */
+    target?: BrowserTarget;
+
+    /**
+     * @generated from field: uint64 lease_generation = 8;
+     */
+    leaseGeneration: bigint;
+  };
+
+/**
+ * Describes the message armadra.v1.BrowserUploadRequest.
+ * Use `create(BrowserUploadRequestSchema)` to create a new message.
+ */
+export const BrowserUploadRequestSchema: GenMessage<BrowserUploadRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 43);
+
+/**
+ * @generated from message armadra.v1.BrowserTabRequest
+ */
+export type BrowserTabRequest = Message<"armadra.v1.BrowserTabRequest"> & {
+  /**
+   * @generated from field: armadra.v1.CommandMeta meta = 1;
+   */
+  meta?: CommandMeta;
+
+  /**
+   * @generated from field: string session_id = 2;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: armadra.v1.BrowserTabAction action = 3;
+   */
+  action: BrowserTabAction;
+
+  /**
+   * @generated from field: string tab_id = 4;
+   */
+  tabId: string;
+
+  /**
+   * @generated from field: string url = 5;
+   */
+  url: string;
+
+  /**
+   * @generated from field: uint64 lease_generation = 6;
+   */
+  leaseGeneration: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.BrowserTabRequest.
+ * Use `create(BrowserTabRequestSchema)` to create a new message.
+ */
+export const BrowserTabRequestSchema: GenMessage<BrowserTabRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 44);
+
+/**
+ * Closes one tab. The last tab is refused with LAST_TAB: ending a session is
+ * `CloseBrowserSessionRequest.terminate`, and nothing else (§2.2).
+ *
+ * @generated from message armadra.v1.BrowserCloseTabRequest
+ */
+export type BrowserCloseTabRequest =
+  Message<"armadra.v1.BrowserCloseTabRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string session_id = 2;
+     */
+    sessionId: string;
+
+    /**
+     * @generated from field: string tab_id = 3;
+     */
+    tabId: string;
+
+    /**
+     * @generated from field: uint64 lease_generation = 4;
+     */
+    leaseGeneration: bigint;
+  };
+
+/**
+ * Describes the message armadra.v1.BrowserCloseTabRequest.
+ * Use `create(BrowserCloseTabRequestSchema)` to create a new message.
+ */
+export const BrowserCloseTabRequestSchema: GenMessage<BrowserCloseTabRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 45);
+
+/**
+ * The dedicated per-session stream's downlink frame: `BrowserFrame` without
+ * the base64 the workspace event channel needs (§2.9).
+ *
+ * @generated from message armadra.v1.BrowserStreamFrame
+ */
+export type BrowserStreamFrame = Message<"armadra.v1.BrowserStreamFrame"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: uint64 generation = 2;
+   */
+  generation: bigint;
+
+  /**
+   * @generated from field: uint64 frame_seq = 3;
+   */
+  frameSeq: bigint;
+
+  /**
+   * @generated from field: uint64 navigation_epoch = 4;
+   */
+  navigationEpoch: bigint;
+
+  /**
+   * @generated from field: string tab_id = 5;
+   */
+  tabId: string;
+
+  /**
+   * @generated from field: uint32 viewport_width = 6;
+   */
+  viewportWidth: number;
+
+  /**
+   * @generated from field: uint32 viewport_height = 7;
+   */
+  viewportHeight: number;
+
+  /**
+   * @generated from field: double device_scale_factor = 8;
+   */
+  deviceScaleFactor: number;
+
+  /**
+   * "jpeg"
+   *
+   * @generated from field: string encoding = 9;
+   */
+  encoding: string;
+
+  /**
+   * @generated from field: bytes data = 10;
+   */
+  data: Uint8Array;
+
+  /**
+   * @generated from field: int64 captured_at_unix_ms = 11;
+   */
+  capturedAtUnixMs: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.BrowserStreamFrame.
+ * Use `create(BrowserStreamFrameSchema)` to create a new message.
+ */
+export const BrowserStreamFrameSchema: GenMessage<BrowserStreamFrame> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 46);
+
+/**
+ * Everything a subscriber may send up that stream. Input goes here to save a
+ * round trip; the HTTP route stays as the fallback.
+ *
+ * @generated from message armadra.v1.BrowserStreamClient
+ */
+export type BrowserStreamClient = Message<"armadra.v1.BrowserStreamClient"> & {
+  /**
+   * @generated from oneof armadra.v1.BrowserStreamClient.message
+   */
+  message:
+    | {
+        /**
+         * Subscribes on connect; the same message later re-states the budget.
+         *
+         * @generated from field: armadra.v1.BrowserSubscribeRequest hello = 1;
+         */
+        value: BrowserSubscribeRequest;
+        case: "hello";
+      }
+    | {
+        /**
+         * The highest frame this subscriber has drawn. More than two frames
+         * unacknowledged and it starts being skipped rather than queued (§2.9).
+         *
+         * @generated from field: uint64 ack = 2;
+         */
+        value: bigint;
+        case: "ack";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.BrowserInputRequest input = 3;
+         */
+        value: BrowserInputRequest;
+        case: "input";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.BrowserSubscribeRequest visibility = 4;
+         */
+        value: BrowserSubscribeRequest;
+        case: "visibility";
+      }
+    | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message armadra.v1.BrowserStreamClient.
+ * Use `create(BrowserStreamClientSchema)` to create a new message.
+ */
+export const BrowserStreamClientSchema: GenMessage<BrowserStreamClient> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 47);
+
+/**
+ * One line for the node header: who did what, and how it ended. Only the
+ * last few are kept in memory; the durable record is the board log (§2.8).
+ *
+ * @generated from message armadra.v1.BrowserActivity
+ */
+export type BrowserActivity = Message<"armadra.v1.BrowserActivity"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * "human" | "agent"
+   *
+   * @generated from field: string actor = 2;
+   */
+  actor: string;
+
+  /**
+   * Device id or agent node id, so a badge can name the other side.
+   *
+   * @generated from field: string actor_id = 3;
+   */
+  actorId: string;
+
+  /**
+   * @generated from field: string verb = 4;
+   */
+  verb: string;
+
+  /**
+   * @generated from field: string target = 5;
+   */
+  target: string;
+
+  /**
+   * "ok" | "refused" | "unknown". An action dispatched but never answered
+   * because a lease was revoked is `unknown` and is not retried (§2.6).
+   *
+   * @generated from field: string outcome = 6;
+   */
+  outcome: string;
+
+  /**
+   * @generated from field: string reason_code = 7;
+   */
+  reasonCode: string;
+
+  /**
+   * @generated from field: int64 at_unix_ms = 8;
+   */
+  atUnixMs: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.BrowserActivity.
+ * Use `create(BrowserActivitySchema)` to create a new message.
+ */
+export const BrowserActivitySchema: GenMessage<BrowserActivity> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_browser, 48);
 
 /**
  * @generated from enum armadra.v1.BrowserSessionState
@@ -1720,3 +2940,229 @@ export enum BrowserDownloadState {
 export const BrowserDownloadStateSchema: GenEnum<BrowserDownloadState> =
   /*@__PURE__*/
   enumDesc(file_armadra_v1_browser, 5);
+
+/**
+ * A build-pinned Chrome for Testing install under
+ * `<data_dir>/browser-managed/`. Nothing is ever downloaded on its own: the
+ * user asks once, and the manifest that says what to fetch and what its
+ * sha256 must be ships inside the build (§2.1).
+ *
+ * @generated from enum armadra.v1.BrowserManagedInstallState
+ */
+export enum BrowserManagedInstallState {
+  /**
+   * @generated from enum value: BROWSER_MANAGED_INSTALL_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: BROWSER_MANAGED_INSTALL_STATE_ABSENT = 1;
+   */
+  ABSENT = 1,
+
+  /**
+   * @generated from enum value: BROWSER_MANAGED_INSTALL_STATE_DOWNLOADING = 2;
+   */
+  DOWNLOADING = 2,
+
+  /**
+   * @generated from enum value: BROWSER_MANAGED_INSTALL_STATE_VERIFYING = 3;
+   */
+  VERIFYING = 3,
+
+  /**
+   * @generated from enum value: BROWSER_MANAGED_INSTALL_STATE_INSTALLED = 4;
+   */
+  INSTALLED = 4,
+
+  /**
+   * @generated from enum value: BROWSER_MANAGED_INSTALL_STATE_FAILED = 5;
+   */
+  FAILED = 5,
+}
+
+/**
+ * Describes the enum armadra.v1.BrowserManagedInstallState.
+ */
+export const BrowserManagedInstallStateSchema: GenEnum<BrowserManagedInstallState> =
+  /*@__PURE__*/
+  enumDesc(file_armadra_v1_browser, 6);
+
+/**
+ * @generated from enum armadra.v1.BrowserLeaseState
+ */
+export enum BrowserLeaseState {
+  /**
+   * @generated from enum value: BROWSER_LEASE_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: BROWSER_LEASE_STATE_FREE = 1;
+   */
+  FREE = 1,
+
+  /**
+   * @generated from enum value: BROWSER_LEASE_STATE_HUMAN = 2;
+   */
+  HUMAN = 2,
+
+  /**
+   * A human pressed "take over": the agent's lease is revoked rather than
+   * queued behind, and it is told so (§2.6).
+   *
+   * @generated from enum value: BROWSER_LEASE_STATE_HUMAN_TAKEOVER = 3;
+   */
+  HUMAN_TAKEOVER = 3,
+
+  /**
+   * @generated from enum value: BROWSER_LEASE_STATE_AGENT = 4;
+   */
+  AGENT = 4,
+}
+
+/**
+ * Describes the enum armadra.v1.BrowserLeaseState.
+ */
+export const BrowserLeaseStateSchema: GenEnum<BrowserLeaseState> =
+  /*@__PURE__*/
+  enumDesc(file_armadra_v1_browser, 7);
+
+/**
+ * @generated from enum armadra.v1.BrowserLeaseAction
+ */
+export enum BrowserLeaseAction {
+  /**
+   * @generated from enum value: BROWSER_LEASE_ACTION_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: BROWSER_LEASE_ACTION_STATUS = 1;
+   */
+  STATUS = 1,
+
+  /**
+   * @generated from enum value: BROWSER_LEASE_ACTION_TAKEOVER = 2;
+   */
+  TAKEOVER = 2,
+
+  /**
+   * @generated from enum value: BROWSER_LEASE_ACTION_RELEASE = 3;
+   */
+  RELEASE = 3,
+}
+
+/**
+ * Describes the enum armadra.v1.BrowserLeaseAction.
+ */
+export const BrowserLeaseActionSchema: GenEnum<BrowserLeaseAction> =
+  /*@__PURE__*/
+  enumDesc(file_armadra_v1_browser, 8);
+
+/**
+ * @generated from enum armadra.v1.BrowserDialogKind
+ */
+export enum BrowserDialogKind {
+  /**
+   * @generated from enum value: BROWSER_DIALOG_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: BROWSER_DIALOG_KIND_ALERT = 1;
+   */
+  ALERT = 1,
+
+  /**
+   * @generated from enum value: BROWSER_DIALOG_KIND_CONFIRM = 2;
+   */
+  CONFIRM = 2,
+
+  /**
+   * @generated from enum value: BROWSER_DIALOG_KIND_PROMPT = 3;
+   */
+  PROMPT = 3,
+
+  /**
+   * Never auto-accepted: whether leaving a page loses a form is a decision
+   * for a person (§2.4).
+   *
+   * @generated from enum value: BROWSER_DIALOG_KIND_BEFORE_UNLOAD = 4;
+   */
+  BEFORE_UNLOAD = 4,
+}
+
+/**
+ * Describes the enum armadra.v1.BrowserDialogKind.
+ */
+export const BrowserDialogKindSchema: GenEnum<BrowserDialogKind> =
+  /*@__PURE__*/
+  enumDesc(file_armadra_v1_browser, 9);
+
+/**
+ * @generated from enum armadra.v1.BrowserTabAction
+ */
+export enum BrowserTabAction {
+  /**
+   * @generated from enum value: BROWSER_TAB_ACTION_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: BROWSER_TAB_ACTION_LIST = 1;
+   */
+  LIST = 1,
+
+  /**
+   * @generated from enum value: BROWSER_TAB_ACTION_SWITCH = 2;
+   */
+  SWITCH = 2,
+
+  /**
+   * @generated from enum value: BROWSER_TAB_ACTION_NEW = 3;
+   */
+  NEW = 3,
+}
+
+/**
+ * Describes the enum armadra.v1.BrowserTabAction.
+ */
+export const BrowserTabActionSchema: GenEnum<BrowserTabAction> =
+  /*@__PURE__*/
+  enumDesc(file_armadra_v1_browser, 10);
+
+/**
+ * How much of a link there is between a subscriber and the session. The
+ * Worker turns this into a real budget and reports what it settled on.
+ *
+ * @generated from enum armadra.v1.BrowserBandwidthClass
+ */
+export enum BrowserBandwidthClass {
+  /**
+   * @generated from enum value: BROWSER_BANDWIDTH_CLASS_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: BROWSER_BANDWIDTH_CLASS_LAN = 1;
+   */
+  LAN = 1,
+
+  /**
+   * @generated from enum value: BROWSER_BANDWIDTH_CLASS_WAN = 2;
+   */
+  WAN = 2,
+
+  /**
+   * @generated from enum value: BROWSER_BANDWIDTH_CLASS_METERED = 3;
+   */
+  METERED = 3,
+}
+
+/**
+ * Describes the enum armadra.v1.BrowserBandwidthClass.
+ */
+export const BrowserBandwidthClassSchema: GenEnum<BrowserBandwidthClass> =
+  /*@__PURE__*/
+  enumDesc(file_armadra_v1_browser, 11);

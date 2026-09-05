@@ -393,6 +393,340 @@ func (BrowserDownloadState) EnumDescriptor() ([]byte, []int) {
 	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{5}
 }
 
+// A build-pinned Chrome for Testing install under
+// `<data_dir>/browser-managed/`. Nothing is ever downloaded on its own: the
+// user asks once, and the manifest that says what to fetch and what its
+// sha256 must be ships inside the build (§2.1).
+type BrowserManagedInstallState int32
+
+const (
+	BrowserManagedInstallState_BROWSER_MANAGED_INSTALL_STATE_UNSPECIFIED BrowserManagedInstallState = 0
+	BrowserManagedInstallState_BROWSER_MANAGED_INSTALL_STATE_ABSENT      BrowserManagedInstallState = 1
+	BrowserManagedInstallState_BROWSER_MANAGED_INSTALL_STATE_DOWNLOADING BrowserManagedInstallState = 2
+	BrowserManagedInstallState_BROWSER_MANAGED_INSTALL_STATE_VERIFYING   BrowserManagedInstallState = 3
+	BrowserManagedInstallState_BROWSER_MANAGED_INSTALL_STATE_INSTALLED   BrowserManagedInstallState = 4
+	BrowserManagedInstallState_BROWSER_MANAGED_INSTALL_STATE_FAILED      BrowserManagedInstallState = 5
+)
+
+// Enum value maps for BrowserManagedInstallState.
+var (
+	BrowserManagedInstallState_name = map[int32]string{
+		0: "BROWSER_MANAGED_INSTALL_STATE_UNSPECIFIED",
+		1: "BROWSER_MANAGED_INSTALL_STATE_ABSENT",
+		2: "BROWSER_MANAGED_INSTALL_STATE_DOWNLOADING",
+		3: "BROWSER_MANAGED_INSTALL_STATE_VERIFYING",
+		4: "BROWSER_MANAGED_INSTALL_STATE_INSTALLED",
+		5: "BROWSER_MANAGED_INSTALL_STATE_FAILED",
+	}
+	BrowserManagedInstallState_value = map[string]int32{
+		"BROWSER_MANAGED_INSTALL_STATE_UNSPECIFIED": 0,
+		"BROWSER_MANAGED_INSTALL_STATE_ABSENT":      1,
+		"BROWSER_MANAGED_INSTALL_STATE_DOWNLOADING": 2,
+		"BROWSER_MANAGED_INSTALL_STATE_VERIFYING":   3,
+		"BROWSER_MANAGED_INSTALL_STATE_INSTALLED":   4,
+		"BROWSER_MANAGED_INSTALL_STATE_FAILED":      5,
+	}
+)
+
+func (x BrowserManagedInstallState) Enum() *BrowserManagedInstallState {
+	p := new(BrowserManagedInstallState)
+	*p = x
+	return p
+}
+
+func (x BrowserManagedInstallState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BrowserManagedInstallState) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_browser_proto_enumTypes[6].Descriptor()
+}
+
+func (BrowserManagedInstallState) Type() protoreflect.EnumType {
+	return &file_armadra_v1_browser_proto_enumTypes[6]
+}
+
+func (x BrowserManagedInstallState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BrowserManagedInstallState.Descriptor instead.
+func (BrowserManagedInstallState) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{6}
+}
+
+type BrowserLeaseState int32
+
+const (
+	BrowserLeaseState_BROWSER_LEASE_STATE_UNSPECIFIED BrowserLeaseState = 0
+	BrowserLeaseState_BROWSER_LEASE_STATE_FREE        BrowserLeaseState = 1
+	BrowserLeaseState_BROWSER_LEASE_STATE_HUMAN       BrowserLeaseState = 2
+	// A human pressed "take over": the agent's lease is revoked rather than
+	// queued behind, and it is told so (§2.6).
+	BrowserLeaseState_BROWSER_LEASE_STATE_HUMAN_TAKEOVER BrowserLeaseState = 3
+	BrowserLeaseState_BROWSER_LEASE_STATE_AGENT          BrowserLeaseState = 4
+)
+
+// Enum value maps for BrowserLeaseState.
+var (
+	BrowserLeaseState_name = map[int32]string{
+		0: "BROWSER_LEASE_STATE_UNSPECIFIED",
+		1: "BROWSER_LEASE_STATE_FREE",
+		2: "BROWSER_LEASE_STATE_HUMAN",
+		3: "BROWSER_LEASE_STATE_HUMAN_TAKEOVER",
+		4: "BROWSER_LEASE_STATE_AGENT",
+	}
+	BrowserLeaseState_value = map[string]int32{
+		"BROWSER_LEASE_STATE_UNSPECIFIED":    0,
+		"BROWSER_LEASE_STATE_FREE":           1,
+		"BROWSER_LEASE_STATE_HUMAN":          2,
+		"BROWSER_LEASE_STATE_HUMAN_TAKEOVER": 3,
+		"BROWSER_LEASE_STATE_AGENT":          4,
+	}
+)
+
+func (x BrowserLeaseState) Enum() *BrowserLeaseState {
+	p := new(BrowserLeaseState)
+	*p = x
+	return p
+}
+
+func (x BrowserLeaseState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BrowserLeaseState) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_browser_proto_enumTypes[7].Descriptor()
+}
+
+func (BrowserLeaseState) Type() protoreflect.EnumType {
+	return &file_armadra_v1_browser_proto_enumTypes[7]
+}
+
+func (x BrowserLeaseState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BrowserLeaseState.Descriptor instead.
+func (BrowserLeaseState) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{7}
+}
+
+type BrowserLeaseAction int32
+
+const (
+	BrowserLeaseAction_BROWSER_LEASE_ACTION_UNSPECIFIED BrowserLeaseAction = 0
+	BrowserLeaseAction_BROWSER_LEASE_ACTION_STATUS      BrowserLeaseAction = 1
+	BrowserLeaseAction_BROWSER_LEASE_ACTION_TAKEOVER    BrowserLeaseAction = 2
+	BrowserLeaseAction_BROWSER_LEASE_ACTION_RELEASE     BrowserLeaseAction = 3
+)
+
+// Enum value maps for BrowserLeaseAction.
+var (
+	BrowserLeaseAction_name = map[int32]string{
+		0: "BROWSER_LEASE_ACTION_UNSPECIFIED",
+		1: "BROWSER_LEASE_ACTION_STATUS",
+		2: "BROWSER_LEASE_ACTION_TAKEOVER",
+		3: "BROWSER_LEASE_ACTION_RELEASE",
+	}
+	BrowserLeaseAction_value = map[string]int32{
+		"BROWSER_LEASE_ACTION_UNSPECIFIED": 0,
+		"BROWSER_LEASE_ACTION_STATUS":      1,
+		"BROWSER_LEASE_ACTION_TAKEOVER":    2,
+		"BROWSER_LEASE_ACTION_RELEASE":     3,
+	}
+)
+
+func (x BrowserLeaseAction) Enum() *BrowserLeaseAction {
+	p := new(BrowserLeaseAction)
+	*p = x
+	return p
+}
+
+func (x BrowserLeaseAction) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BrowserLeaseAction) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_browser_proto_enumTypes[8].Descriptor()
+}
+
+func (BrowserLeaseAction) Type() protoreflect.EnumType {
+	return &file_armadra_v1_browser_proto_enumTypes[8]
+}
+
+func (x BrowserLeaseAction) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BrowserLeaseAction.Descriptor instead.
+func (BrowserLeaseAction) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{8}
+}
+
+type BrowserDialogKind int32
+
+const (
+	BrowserDialogKind_BROWSER_DIALOG_KIND_UNSPECIFIED BrowserDialogKind = 0
+	BrowserDialogKind_BROWSER_DIALOG_KIND_ALERT       BrowserDialogKind = 1
+	BrowserDialogKind_BROWSER_DIALOG_KIND_CONFIRM     BrowserDialogKind = 2
+	BrowserDialogKind_BROWSER_DIALOG_KIND_PROMPT      BrowserDialogKind = 3
+	// Never auto-accepted: whether leaving a page loses a form is a decision
+	// for a person (§2.4).
+	BrowserDialogKind_BROWSER_DIALOG_KIND_BEFORE_UNLOAD BrowserDialogKind = 4
+)
+
+// Enum value maps for BrowserDialogKind.
+var (
+	BrowserDialogKind_name = map[int32]string{
+		0: "BROWSER_DIALOG_KIND_UNSPECIFIED",
+		1: "BROWSER_DIALOG_KIND_ALERT",
+		2: "BROWSER_DIALOG_KIND_CONFIRM",
+		3: "BROWSER_DIALOG_KIND_PROMPT",
+		4: "BROWSER_DIALOG_KIND_BEFORE_UNLOAD",
+	}
+	BrowserDialogKind_value = map[string]int32{
+		"BROWSER_DIALOG_KIND_UNSPECIFIED":   0,
+		"BROWSER_DIALOG_KIND_ALERT":         1,
+		"BROWSER_DIALOG_KIND_CONFIRM":       2,
+		"BROWSER_DIALOG_KIND_PROMPT":        3,
+		"BROWSER_DIALOG_KIND_BEFORE_UNLOAD": 4,
+	}
+)
+
+func (x BrowserDialogKind) Enum() *BrowserDialogKind {
+	p := new(BrowserDialogKind)
+	*p = x
+	return p
+}
+
+func (x BrowserDialogKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BrowserDialogKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_browser_proto_enumTypes[9].Descriptor()
+}
+
+func (BrowserDialogKind) Type() protoreflect.EnumType {
+	return &file_armadra_v1_browser_proto_enumTypes[9]
+}
+
+func (x BrowserDialogKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BrowserDialogKind.Descriptor instead.
+func (BrowserDialogKind) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{9}
+}
+
+type BrowserTabAction int32
+
+const (
+	BrowserTabAction_BROWSER_TAB_ACTION_UNSPECIFIED BrowserTabAction = 0
+	BrowserTabAction_BROWSER_TAB_ACTION_LIST        BrowserTabAction = 1
+	BrowserTabAction_BROWSER_TAB_ACTION_SWITCH      BrowserTabAction = 2
+	BrowserTabAction_BROWSER_TAB_ACTION_NEW         BrowserTabAction = 3
+)
+
+// Enum value maps for BrowserTabAction.
+var (
+	BrowserTabAction_name = map[int32]string{
+		0: "BROWSER_TAB_ACTION_UNSPECIFIED",
+		1: "BROWSER_TAB_ACTION_LIST",
+		2: "BROWSER_TAB_ACTION_SWITCH",
+		3: "BROWSER_TAB_ACTION_NEW",
+	}
+	BrowserTabAction_value = map[string]int32{
+		"BROWSER_TAB_ACTION_UNSPECIFIED": 0,
+		"BROWSER_TAB_ACTION_LIST":        1,
+		"BROWSER_TAB_ACTION_SWITCH":      2,
+		"BROWSER_TAB_ACTION_NEW":         3,
+	}
+)
+
+func (x BrowserTabAction) Enum() *BrowserTabAction {
+	p := new(BrowserTabAction)
+	*p = x
+	return p
+}
+
+func (x BrowserTabAction) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BrowserTabAction) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_browser_proto_enumTypes[10].Descriptor()
+}
+
+func (BrowserTabAction) Type() protoreflect.EnumType {
+	return &file_armadra_v1_browser_proto_enumTypes[10]
+}
+
+func (x BrowserTabAction) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BrowserTabAction.Descriptor instead.
+func (BrowserTabAction) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{10}
+}
+
+// How much of a link there is between a subscriber and the session. The
+// Worker turns this into a real budget and reports what it settled on.
+type BrowserBandwidthClass int32
+
+const (
+	BrowserBandwidthClass_BROWSER_BANDWIDTH_CLASS_UNSPECIFIED BrowserBandwidthClass = 0
+	BrowserBandwidthClass_BROWSER_BANDWIDTH_CLASS_LAN         BrowserBandwidthClass = 1
+	BrowserBandwidthClass_BROWSER_BANDWIDTH_CLASS_WAN         BrowserBandwidthClass = 2
+	BrowserBandwidthClass_BROWSER_BANDWIDTH_CLASS_METERED     BrowserBandwidthClass = 3
+)
+
+// Enum value maps for BrowserBandwidthClass.
+var (
+	BrowserBandwidthClass_name = map[int32]string{
+		0: "BROWSER_BANDWIDTH_CLASS_UNSPECIFIED",
+		1: "BROWSER_BANDWIDTH_CLASS_LAN",
+		2: "BROWSER_BANDWIDTH_CLASS_WAN",
+		3: "BROWSER_BANDWIDTH_CLASS_METERED",
+	}
+	BrowserBandwidthClass_value = map[string]int32{
+		"BROWSER_BANDWIDTH_CLASS_UNSPECIFIED": 0,
+		"BROWSER_BANDWIDTH_CLASS_LAN":         1,
+		"BROWSER_BANDWIDTH_CLASS_WAN":         2,
+		"BROWSER_BANDWIDTH_CLASS_METERED":     3,
+	}
+)
+
+func (x BrowserBandwidthClass) Enum() *BrowserBandwidthClass {
+	p := new(BrowserBandwidthClass)
+	*p = x
+	return p
+}
+
+func (x BrowserBandwidthClass) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BrowserBandwidthClass) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_browser_proto_enumTypes[11].Descriptor()
+}
+
+func (BrowserBandwidthClass) Type() protoreflect.EnumType {
+	return &file_armadra_v1_browser_proto_enumTypes[11]
+}
+
+func (x BrowserBandwidthClass) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BrowserBandwidthClass.Descriptor instead.
+func (BrowserBandwidthClass) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{11}
+}
+
 // CSS pixels, never canvas pixels: the client scales the frame inside its
 // tldraw shape rather than writing the zoom into the page viewport (§8).
 type BrowserViewport struct {
@@ -478,6 +812,18 @@ type BrowserSession struct {
 	KeepAlive       bool  `protobuf:"varint,12,opt,name=keep_alive,json=keepAlive,proto3" json:"keep_alive,omitempty"`
 	CreatedAtUnixMs int64 `protobuf:"varint,13,opt,name=created_at_unix_ms,json=createdAtUnixMs,proto3" json:"created_at_unix_ms,omitempty"`
 	UpdatedAtUnixMs int64 `protobuf:"varint,14,opt,name=updated_at_unix_ms,json=updatedAtUnixMs,proto3" json:"updated_at_unix_ms,omitempty"`
+	// The tab screencast, input and viewport apply to. One session is one
+	// browser process and one profile; tabs live inside it (§2.2).
+	ActiveTabId string        `protobuf:"bytes,15,opt,name=active_tab_id,json=activeTabId,proto3" json:"active_tab_id,omitempty"`
+	TabCount    uint32        `protobuf:"varint,16,opt,name=tab_count,json=tabCount,proto3" json:"tab_count,omitempty"`
+	Lease       *BrowserLease `protobuf:"bytes,17,opt,name=lease,proto3" json:"lease,omitempty"`
+	// Set while a tab is blocked on a JS dialog. Input aimed at that tab is
+	// refused with DIALOG_PENDING rather than silently swallowed (§2.4).
+	PendingDialog      *BrowserDialog      `protobuf:"bytes,18,opt,name=pending_dialog,json=pendingDialog,proto3" json:"pending_dialog,omitempty"`
+	PendingFileChooser *BrowserFileChooser `protobuf:"bytes,19,opt,name=pending_file_chooser,json=pendingFileChooser,proto3" json:"pending_file_chooser,omitempty"`
+	// Survives a Runtime restart so an old client's generation cannot come back
+	// to life; the in-memory lease itself starts out free (§2.6).
+	LeaseGeneration uint64 `protobuf:"varint,20,opt,name=lease_generation,json=leaseGeneration,proto3" json:"lease_generation,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -610,6 +956,48 @@ func (x *BrowserSession) GetUpdatedAtUnixMs() int64 {
 	return 0
 }
 
+func (x *BrowserSession) GetActiveTabId() string {
+	if x != nil {
+		return x.ActiveTabId
+	}
+	return ""
+}
+
+func (x *BrowserSession) GetTabCount() uint32 {
+	if x != nil {
+		return x.TabCount
+	}
+	return 0
+}
+
+func (x *BrowserSession) GetLease() *BrowserLease {
+	if x != nil {
+		return x.Lease
+	}
+	return nil
+}
+
+func (x *BrowserSession) GetPendingDialog() *BrowserDialog {
+	if x != nil {
+		return x.PendingDialog
+	}
+	return nil
+}
+
+func (x *BrowserSession) GetPendingFileChooser() *BrowserFileChooser {
+	if x != nil {
+		return x.PendingFileChooser
+	}
+	return nil
+}
+
+func (x *BrowserSession) GetLeaseGeneration() uint64 {
+	if x != nil {
+		return x.LeaseGeneration
+	}
+	return 0
+}
+
 type BrowserAvailability struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Available bool                   `protobuf:"varint,1,opt,name=available,proto3" json:"available,omitempty"`
@@ -619,7 +1007,10 @@ type BrowserAvailability struct {
 	Source     string `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
 	ReasonCode string `protobuf:"bytes,4,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
 	// Every candidate that was looked for, so the UI can say what it tried.
-	Searched      []string `protobuf:"bytes,5,rep,name=searched,proto3" json:"searched,omitempty"`
+	Searched []string `protobuf:"bytes,5,rep,name=searched,proto3" json:"searched,omitempty"`
+	// The build-pinned Chrome for Testing install, which is preferred over a
+	// detected system browser because its CDP surface is the tested one (§2.1).
+	Managed       *BrowserManagedState `protobuf:"bytes,6,opt,name=managed,proto3" json:"managed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -689,6 +1080,13 @@ func (x *BrowserAvailability) GetSearched() []string {
 	return nil
 }
 
+func (x *BrowserAvailability) GetManaged() *BrowserManagedState {
+	if x != nil {
+		return x.Managed
+	}
+	return nil
+}
+
 // One screencast image. The payload is an encoded image rather than a video
 // frame in this round; a later video channel replaces `data` and keeps the
 // session and input contracts (§8).
@@ -705,6 +1103,7 @@ type BrowserFrame struct {
 	Encoding         string `protobuf:"bytes,8,opt,name=encoding,proto3" json:"encoding,omitempty"`
 	Data             []byte `protobuf:"bytes,9,opt,name=data,proto3" json:"data,omitempty"`
 	CapturedAtUnixMs int64  `protobuf:"varint,10,opt,name=captured_at_unix_ms,json=capturedAtUnixMs,proto3" json:"captured_at_unix_ms,omitempty"`
+	TabId            string `protobuf:"bytes,11,opt,name=tab_id,json=tabId,proto3" json:"tab_id,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -809,14 +1208,26 @@ func (x *BrowserFrame) GetCapturedAtUnixMs() int64 {
 	return 0
 }
 
+func (x *BrowserFrame) GetTabId() string {
+	if x != nil {
+		return x.TabId
+	}
+	return ""
+}
+
 type BrowserSubscribeRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Meta           *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	SessionId      string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	SubscriptionId string                 `protobuf:"bytes,3,opt,name=subscription_id,json=subscriptionId,proto3" json:"subscription_id,omitempty"`
 	Visibility     BrowserVisibility      `protobuf:"varint,4,opt,name=visibility,proto3,enum=armadra.v1.BrowserVisibility" json:"visibility,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// What the link between this subscriber and the session looks like. The
+	// Worker picks the budget; the subscriber only says what it can afford.
+	BandwidthClass BrowserBandwidthClass `protobuf:"varint,5,opt,name=bandwidth_class,json=bandwidthClass,proto3,enum=armadra.v1.BrowserBandwidthClass" json:"bandwidth_class,omitempty"`
+	// Downscale ceiling in CSS pixels. Zero means "no ceiling of my own".
+	MaxWidth      uint32 `protobuf:"varint,6,opt,name=max_width,json=maxWidth,proto3" json:"max_width,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BrowserSubscribeRequest) Reset() {
@@ -877,6 +1288,20 @@ func (x *BrowserSubscribeRequest) GetVisibility() BrowserVisibility {
 	return BrowserVisibility_BROWSER_VISIBILITY_UNSPECIFIED
 }
 
+func (x *BrowserSubscribeRequest) GetBandwidthClass() BrowserBandwidthClass {
+	if x != nil {
+		return x.BandwidthClass
+	}
+	return BrowserBandwidthClass_BROWSER_BANDWIDTH_CLASS_UNSPECIFIED
+}
+
+func (x *BrowserSubscribeRequest) GetMaxWidth() uint32 {
+	if x != nil {
+		return x.MaxWidth
+	}
+	return 0
+}
+
 type BrowserSubscription struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	SubscriptionId  string                 `protobuf:"bytes,1,opt,name=subscription_id,json=subscriptionId,proto3" json:"subscription_id,omitempty"`
@@ -885,6 +1310,7 @@ type BrowserSubscription struct {
 	// degradation instead of guessing it did not happen.
 	Quality       uint32 `protobuf:"varint,3,opt,name=quality,proto3" json:"quality,omitempty"`
 	MaxFps        uint32 `protobuf:"varint,4,opt,name=max_fps,json=maxFps,proto3" json:"max_fps,omitempty"`
+	MaxWidth      uint32 `protobuf:"varint,5,opt,name=max_width,json=maxWidth,proto3" json:"max_width,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -947,13 +1373,23 @@ func (x *BrowserSubscription) GetMaxFps() uint32 {
 	return 0
 }
 
+func (x *BrowserSubscription) GetMaxWidth() uint32 {
+	if x != nil {
+		return x.MaxWidth
+	}
+	return 0
+}
+
 type BrowserNavigateRequest struct {
 	state     protoimpl.MessageState  `protogen:"open.v1"`
 	Meta      *CommandMeta            `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	SessionId string                  `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	Action    BrowserNavigationAction `protobuf:"varint,3,opt,name=action,proto3,enum=armadra.v1.BrowserNavigationAction" json:"action,omitempty"`
 	// http/https only, or a loopback address the project declared (§6).
-	Url           string `protobuf:"bytes,4,opt,name=url,proto3" json:"url,omitempty"`
+	Url string `protobuf:"bytes,4,opt,name=url,proto3" json:"url,omitempty"`
+	// Absent means the active tab's main frame, so existing callers are
+	// unchanged by the introduction of tabs (§2.2).
+	Target        *BrowserTarget `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1014,6 +1450,13 @@ func (x *BrowserNavigateRequest) GetUrl() string {
 		return x.Url
 	}
 	return ""
+}
+
+func (x *BrowserNavigateRequest) GetTarget() *BrowserTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
 }
 
 type BrowserInputEvent struct {
@@ -1152,6 +1595,10 @@ type BrowserInputRequest struct {
 	NavigationEpoch uint64               `protobuf:"varint,3,opt,name=navigation_epoch,json=navigationEpoch,proto3" json:"navigation_epoch,omitempty"`
 	FrameSeq        uint64               `protobuf:"varint,4,opt,name=frame_seq,json=frameSeq,proto3" json:"frame_seq,omitempty"`
 	Events          []*BrowserInputEvent `protobuf:"bytes,5,rep,name=events,proto3" json:"events,omitempty"`
+	Target          *BrowserTarget       `protobuf:"bytes,6,opt,name=target,proto3" json:"target,omitempty"`
+	// Refused when the lease changed hands since the caller last looked, so a
+	// revoked agent cannot land one more click (§2.6).
+	LeaseGeneration uint64 `protobuf:"varint,7,opt,name=lease_generation,json=leaseGeneration,proto3" json:"lease_generation,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1221,20 +1668,38 @@ func (x *BrowserInputRequest) GetEvents() []*BrowserInputEvent {
 	return nil
 }
 
+func (x *BrowserInputRequest) GetTarget() *BrowserTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *BrowserInputRequest) GetLeaseGeneration() uint64 {
+	if x != nil {
+		return x.LeaseGeneration
+	}
+	return 0
+}
+
 // A reference bound to session/epoch. After a navigation the same string is
 // refused with STALE_TARGET rather than resolved against the new document.
 type BrowserElement struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ElementRef    string                 `protobuf:"bytes,1,opt,name=element_ref,json=elementRef,proto3" json:"element_ref,omitempty"`
-	Role          string                 `protobuf:"bytes,2,opt,name=role,proto3" json:"role,omitempty"`
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Value         string                 `protobuf:"bytes,4,opt,name=value,proto3" json:"value,omitempty"`
-	Selector      string                 `protobuf:"bytes,5,opt,name=selector,proto3" json:"selector,omitempty"`
-	Visible       bool                   `protobuf:"varint,6,opt,name=visible,proto3" json:"visible,omitempty"`
-	X             float64                `protobuf:"fixed64,7,opt,name=x,proto3" json:"x,omitempty"`
-	Y             float64                `protobuf:"fixed64,8,opt,name=y,proto3" json:"y,omitempty"`
-	Width         float64                `protobuf:"fixed64,9,opt,name=width,proto3" json:"width,omitempty"`
-	Height        float64                `protobuf:"fixed64,10,opt,name=height,proto3" json:"height,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ElementRef string                 `protobuf:"bytes,1,opt,name=element_ref,json=elementRef,proto3" json:"element_ref,omitempty"`
+	Role       string                 `protobuf:"bytes,2,opt,name=role,proto3" json:"role,omitempty"`
+	Name       string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Value      string                 `protobuf:"bytes,4,opt,name=value,proto3" json:"value,omitempty"`
+	Selector   string                 `protobuf:"bytes,5,opt,name=selector,proto3" json:"selector,omitempty"`
+	Visible    bool                   `protobuf:"varint,6,opt,name=visible,proto3" json:"visible,omitempty"`
+	X          float64                `protobuf:"fixed64,7,opt,name=x,proto3" json:"x,omitempty"`
+	Y          float64                `protobuf:"fixed64,8,opt,name=y,proto3" json:"y,omitempty"`
+	Width      float64                `protobuf:"fixed64,9,opt,name=width,proto3" json:"width,omitempty"`
+	Height     float64                `protobuf:"fixed64,10,opt,name=height,proto3" json:"height,omitempty"`
+	// Empty for the active tab's main frame, which is what `e<epoch>-<idx>`
+	// alone addresses; a reference inside an iframe carries both (§2.2).
+	TabId         string `protobuf:"bytes,11,opt,name=tab_id,json=tabId,proto3" json:"tab_id,omitempty"`
+	FrameId       string `protobuf:"bytes,12,opt,name=frame_id,json=frameId,proto3" json:"frame_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1337,6 +1802,20 @@ func (x *BrowserElement) GetHeight() float64 {
 		return x.Height
 	}
 	return 0
+}
+
+func (x *BrowserElement) GetTabId() string {
+	if x != nil {
+		return x.TabId
+	}
+	return ""
+}
+
+func (x *BrowserElement) GetFrameId() string {
+	if x != nil {
+		return x.FrameId
+	}
+	return ""
 }
 
 type BrowserConsoleEntry struct {
@@ -1525,6 +2004,7 @@ type BrowserReadRequest struct {
 	Mode          BrowserReadMode        `protobuf:"varint,3,opt,name=mode,proto3,enum=armadra.v1.BrowserReadMode" json:"mode,omitempty"`
 	Limit         uint32                 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
 	MaxBytes      uint32                 `protobuf:"varint,5,opt,name=max_bytes,json=maxBytes,proto3" json:"max_bytes,omitempty"`
+	Target        *BrowserTarget         `protobuf:"bytes,6,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1592,6 +2072,13 @@ func (x *BrowserReadRequest) GetMaxBytes() uint32 {
 		return x.MaxBytes
 	}
 	return 0
+}
+
+func (x *BrowserReadRequest) GetTarget() *BrowserTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
 }
 
 type BrowserReadResponse struct {
@@ -1711,12 +2198,13 @@ type BrowserClickRequest struct {
 	NavigationEpoch uint64                 `protobuf:"varint,3,opt,name=navigation_epoch,json=navigationEpoch,proto3" json:"navigation_epoch,omitempty"`
 	// Exactly one of a CSS selector, an element reference from a read, or a
 	// viewport coordinate pair.
-	Selector      string  `protobuf:"bytes,4,opt,name=selector,proto3" json:"selector,omitempty"`
-	ElementRef    string  `protobuf:"bytes,5,opt,name=element_ref,json=elementRef,proto3" json:"element_ref,omitempty"`
-	X             float64 `protobuf:"fixed64,6,opt,name=x,proto3" json:"x,omitempty"`
-	Y             float64 `protobuf:"fixed64,7,opt,name=y,proto3" json:"y,omitempty"`
-	Modifiers     uint32  `protobuf:"varint,8,opt,name=modifiers,proto3" json:"modifiers,omitempty"`
-	ClickCount    uint32  `protobuf:"varint,9,opt,name=click_count,json=clickCount,proto3" json:"click_count,omitempty"`
+	Selector      string         `protobuf:"bytes,4,opt,name=selector,proto3" json:"selector,omitempty"`
+	ElementRef    string         `protobuf:"bytes,5,opt,name=element_ref,json=elementRef,proto3" json:"element_ref,omitempty"`
+	X             float64        `protobuf:"fixed64,6,opt,name=x,proto3" json:"x,omitempty"`
+	Y             float64        `protobuf:"fixed64,7,opt,name=y,proto3" json:"y,omitempty"`
+	Modifiers     uint32         `protobuf:"varint,8,opt,name=modifiers,proto3" json:"modifiers,omitempty"`
+	ClickCount    uint32         `protobuf:"varint,9,opt,name=click_count,json=clickCount,proto3" json:"click_count,omitempty"`
+	Target        *BrowserTarget `protobuf:"bytes,10,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1814,6 +2302,13 @@ func (x *BrowserClickRequest) GetClickCount() uint32 {
 	return 0
 }
 
+func (x *BrowserClickRequest) GetTarget() *BrowserTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
 type BrowserTypeRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Meta            *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
@@ -1825,7 +2320,8 @@ type BrowserTypeRequest struct {
 	// Clear the field before inserting instead of appending.
 	Replace bool `protobuf:"varint,7,opt,name=replace,proto3" json:"replace,omitempty"`
 	// Press Enter afterwards. Never inferred from the text.
-	Submit        bool `protobuf:"varint,8,opt,name=submit,proto3" json:"submit,omitempty"`
+	Submit        bool           `protobuf:"varint,8,opt,name=submit,proto3" json:"submit,omitempty"`
+	Target        *BrowserTarget `protobuf:"bytes,9,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1916,16 +2412,24 @@ func (x *BrowserTypeRequest) GetSubmit() bool {
 	return false
 }
 
+func (x *BrowserTypeRequest) GetTarget() *BrowserTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
 type BrowserWaitRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Meta      *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	SessionId string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	// At most one condition; "network idle" is not offered because it cannot be
 	// bounded honestly (§7).
-	Selector      string `protobuf:"bytes,3,opt,name=selector,proto3" json:"selector,omitempty"`
-	UrlContains   string `protobuf:"bytes,4,opt,name=url_contains,json=urlContains,proto3" json:"url_contains,omitempty"`
-	TitleContains string `protobuf:"bytes,5,opt,name=title_contains,json=titleContains,proto3" json:"title_contains,omitempty"`
-	TimeoutMs     uint32 `protobuf:"varint,6,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`
+	Selector      string         `protobuf:"bytes,3,opt,name=selector,proto3" json:"selector,omitempty"`
+	UrlContains   string         `protobuf:"bytes,4,opt,name=url_contains,json=urlContains,proto3" json:"url_contains,omitempty"`
+	TitleContains string         `protobuf:"bytes,5,opt,name=title_contains,json=titleContains,proto3" json:"title_contains,omitempty"`
+	TimeoutMs     uint32         `protobuf:"varint,6,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`
+	Target        *BrowserTarget `protobuf:"bytes,7,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2002,6 +2506,13 @@ func (x *BrowserWaitRequest) GetTimeoutMs() uint32 {
 	return 0
 }
 
+func (x *BrowserWaitRequest) GetTarget() *BrowserTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
 type BrowserWaitResponse struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Matched         bool                   `protobuf:"varint,1,opt,name=matched,proto3" json:"matched,omitempty"`
@@ -2076,7 +2587,8 @@ type BrowserCaptureRequest struct {
 	SessionId string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	FullPage  bool                   `protobuf:"varint,3,opt,name=full_page,json=fullPage,proto3" json:"full_page,omitempty"`
 	// "png" | "jpeg"
-	Format        string `protobuf:"bytes,4,opt,name=format,proto3" json:"format,omitempty"`
+	Format        string         `protobuf:"bytes,4,opt,name=format,proto3" json:"format,omitempty"`
+	Target        *BrowserTarget `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2137,6 +2649,13 @@ func (x *BrowserCaptureRequest) GetFormat() string {
 		return x.Format
 	}
 	return ""
+}
+
+func (x *BrowserCaptureRequest) GetTarget() *BrowserTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
 }
 
 type BrowserCaptureResponse struct {
@@ -2237,8 +2756,12 @@ type BrowserDownload struct {
 	ReceivedBytes   uint64 `protobuf:"varint,8,opt,name=received_bytes,json=receivedBytes,proto3" json:"received_bytes,omitempty"`
 	CreatedAtUnixMs int64  `protobuf:"varint,9,opt,name=created_at_unix_ms,json=createdAtUnixMs,proto3" json:"created_at_unix_ms,omitempty"`
 	ReasonCode      string `protobuf:"bytes,10,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	TabId           string `protobuf:"bytes,11,opt,name=tab_id,json=tabId,proto3" json:"tab_id,omitempty"`
+	// Computed once the bytes are complete, so an accepted download can be
+	// named by content rather than only by the page's suggested filename.
+	Sha256        []byte `protobuf:"bytes,12,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BrowserDownload) Reset() {
@@ -2339,6 +2862,20 @@ func (x *BrowserDownload) GetReasonCode() string {
 		return x.ReasonCode
 	}
 	return ""
+}
+
+func (x *BrowserDownload) GetTabId() string {
+	if x != nil {
+		return x.TabId
+	}
+	return ""
+}
+
+func (x *BrowserDownload) GetSha256() []byte {
+	if x != nil {
+		return x.Sha256
+	}
+	return nil
 }
 
 type BrowserDownloadDecisionRequest struct {
@@ -2676,6 +3213,15 @@ type BrowserAction struct {
 	//	*BrowserAction_DownloadDecision
 	//	*BrowserAction_Close
 	//	*BrowserAction_List
+	//	*BrowserAction_Select
+	//	*BrowserAction_Press
+	//	*BrowserAction_Scroll
+	//	*BrowserAction_Upload
+	//	*BrowserAction_Dialog
+	//	*BrowserAction_Tabs
+	//	*BrowserAction_Lease
+	//	*BrowserAction_CloseTab
+	//	*BrowserAction_ManagedInstall
 	Action        isBrowserAction_Action `protobuf_oneof:"action"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2826,6 +3372,87 @@ func (x *BrowserAction) GetList() *ListBrowserSessionsRequest {
 	return nil
 }
 
+func (x *BrowserAction) GetSelect() *BrowserSelectRequest {
+	if x != nil {
+		if x, ok := x.Action.(*BrowserAction_Select); ok {
+			return x.Select
+		}
+	}
+	return nil
+}
+
+func (x *BrowserAction) GetPress() *BrowserPressRequest {
+	if x != nil {
+		if x, ok := x.Action.(*BrowserAction_Press); ok {
+			return x.Press
+		}
+	}
+	return nil
+}
+
+func (x *BrowserAction) GetScroll() *BrowserScrollRequest {
+	if x != nil {
+		if x, ok := x.Action.(*BrowserAction_Scroll); ok {
+			return x.Scroll
+		}
+	}
+	return nil
+}
+
+func (x *BrowserAction) GetUpload() *BrowserUploadRequest {
+	if x != nil {
+		if x, ok := x.Action.(*BrowserAction_Upload); ok {
+			return x.Upload
+		}
+	}
+	return nil
+}
+
+func (x *BrowserAction) GetDialog() *BrowserDialogRequest {
+	if x != nil {
+		if x, ok := x.Action.(*BrowserAction_Dialog); ok {
+			return x.Dialog
+		}
+	}
+	return nil
+}
+
+func (x *BrowserAction) GetTabs() *BrowserTabRequest {
+	if x != nil {
+		if x, ok := x.Action.(*BrowserAction_Tabs); ok {
+			return x.Tabs
+		}
+	}
+	return nil
+}
+
+func (x *BrowserAction) GetLease() *BrowserLeaseRequest {
+	if x != nil {
+		if x, ok := x.Action.(*BrowserAction_Lease); ok {
+			return x.Lease
+		}
+	}
+	return nil
+}
+
+func (x *BrowserAction) GetCloseTab() *BrowserCloseTabRequest {
+	if x != nil {
+		if x, ok := x.Action.(*BrowserAction_CloseTab); ok {
+			return x.CloseTab
+		}
+	}
+	return nil
+}
+
+func (x *BrowserAction) GetManagedInstall() *BrowserManagedInstallRequest {
+	if x != nil {
+		if x, ok := x.Action.(*BrowserAction_ManagedInstall); ok {
+			return x.ManagedInstall
+		}
+	}
+	return nil
+}
+
 type isBrowserAction_Action interface {
 	isBrowserAction_Action()
 }
@@ -2878,6 +3505,42 @@ type BrowserAction_List struct {
 	List *ListBrowserSessionsRequest `protobuf:"bytes,12,opt,name=list,proto3,oneof"`
 }
 
+type BrowserAction_Select struct {
+	Select *BrowserSelectRequest `protobuf:"bytes,13,opt,name=select,proto3,oneof"`
+}
+
+type BrowserAction_Press struct {
+	Press *BrowserPressRequest `protobuf:"bytes,14,opt,name=press,proto3,oneof"`
+}
+
+type BrowserAction_Scroll struct {
+	Scroll *BrowserScrollRequest `protobuf:"bytes,15,opt,name=scroll,proto3,oneof"`
+}
+
+type BrowserAction_Upload struct {
+	Upload *BrowserUploadRequest `protobuf:"bytes,16,opt,name=upload,proto3,oneof"`
+}
+
+type BrowserAction_Dialog struct {
+	Dialog *BrowserDialogRequest `protobuf:"bytes,17,opt,name=dialog,proto3,oneof"`
+}
+
+type BrowserAction_Tabs struct {
+	Tabs *BrowserTabRequest `protobuf:"bytes,18,opt,name=tabs,proto3,oneof"`
+}
+
+type BrowserAction_Lease struct {
+	Lease *BrowserLeaseRequest `protobuf:"bytes,19,opt,name=lease,proto3,oneof"`
+}
+
+type BrowserAction_CloseTab struct {
+	CloseTab *BrowserCloseTabRequest `protobuf:"bytes,20,opt,name=close_tab,json=closeTab,proto3,oneof"`
+}
+
+type BrowserAction_ManagedInstall struct {
+	ManagedInstall *BrowserManagedInstallRequest `protobuf:"bytes,21,opt,name=managed_install,json=managedInstall,proto3,oneof"`
+}
+
 func (*BrowserAction_Create) isBrowserAction_Action() {}
 
 func (*BrowserAction_Navigate) isBrowserAction_Action() {}
@@ -2902,6 +3565,24 @@ func (*BrowserAction_Close) isBrowserAction_Action() {}
 
 func (*BrowserAction_List) isBrowserAction_Action() {}
 
+func (*BrowserAction_Select) isBrowserAction_Action() {}
+
+func (*BrowserAction_Press) isBrowserAction_Action() {}
+
+func (*BrowserAction_Scroll) isBrowserAction_Action() {}
+
+func (*BrowserAction_Upload) isBrowserAction_Action() {}
+
+func (*BrowserAction_Dialog) isBrowserAction_Action() {}
+
+func (*BrowserAction_Tabs) isBrowserAction_Action() {}
+
+func (*BrowserAction_Lease) isBrowserAction_Action() {}
+
+func (*BrowserAction_CloseTab) isBrowserAction_Action() {}
+
+func (*BrowserAction_ManagedInstall) isBrowserAction_Action() {}
+
 type BrowserActionResult struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	RequestId string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -2915,6 +3596,10 @@ type BrowserActionResult struct {
 	//	*BrowserActionResult_Download
 	//	*BrowserActionResult_Sessions
 	//	*BrowserActionResult_Error
+	//	*BrowserActionResult_Tabs
+	//	*BrowserActionResult_Lease
+	//	*BrowserActionResult_Dialog
+	//	*BrowserActionResult_Managed
 	Result        isBrowserActionResult_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3036,6 +3721,42 @@ func (x *BrowserActionResult) GetError() *ErrorResponse {
 	return nil
 }
 
+func (x *BrowserActionResult) GetTabs() *BrowserTabList {
+	if x != nil {
+		if x, ok := x.Result.(*BrowserActionResult_Tabs); ok {
+			return x.Tabs
+		}
+	}
+	return nil
+}
+
+func (x *BrowserActionResult) GetLease() *BrowserLease {
+	if x != nil {
+		if x, ok := x.Result.(*BrowserActionResult_Lease); ok {
+			return x.Lease
+		}
+	}
+	return nil
+}
+
+func (x *BrowserActionResult) GetDialog() *BrowserDialog {
+	if x != nil {
+		if x, ok := x.Result.(*BrowserActionResult_Dialog); ok {
+			return x.Dialog
+		}
+	}
+	return nil
+}
+
+func (x *BrowserActionResult) GetManaged() *BrowserManagedState {
+	if x != nil {
+		if x, ok := x.Result.(*BrowserActionResult_Managed); ok {
+			return x.Managed
+		}
+	}
+	return nil
+}
+
 type isBrowserActionResult_Result interface {
 	isBrowserActionResult_Result()
 }
@@ -3072,6 +3793,22 @@ type BrowserActionResult_Error struct {
 	Error *ErrorResponse `protobuf:"bytes,17,opt,name=error,proto3,oneof"`
 }
 
+type BrowserActionResult_Tabs struct {
+	Tabs *BrowserTabList `protobuf:"bytes,18,opt,name=tabs,proto3,oneof"`
+}
+
+type BrowserActionResult_Lease struct {
+	Lease *BrowserLease `protobuf:"bytes,19,opt,name=lease,proto3,oneof"`
+}
+
+type BrowserActionResult_Dialog struct {
+	Dialog *BrowserDialog `protobuf:"bytes,20,opt,name=dialog,proto3,oneof"`
+}
+
+type BrowserActionResult_Managed struct {
+	Managed *BrowserManagedState `protobuf:"bytes,21,opt,name=managed,proto3,oneof"`
+}
+
 func (*BrowserActionResult_Session) isBrowserActionResult_Result() {}
 
 func (*BrowserActionResult_Read) isBrowserActionResult_Result() {}
@@ -3088,6 +3825,1867 @@ func (*BrowserActionResult_Sessions) isBrowserActionResult_Result() {}
 
 func (*BrowserActionResult_Error) isBrowserActionResult_Result() {}
 
+func (*BrowserActionResult_Tabs) isBrowserActionResult_Result() {}
+
+func (*BrowserActionResult_Lease) isBrowserActionResult_Result() {}
+
+func (*BrowserActionResult_Dialog) isBrowserActionResult_Result() {}
+
+func (*BrowserActionResult_Managed) isBrowserActionResult_Result() {}
+
+type BrowserManagedState struct {
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	State         BrowserManagedInstallState `protobuf:"varint,1,opt,name=state,proto3,enum=armadra.v1.BrowserManagedInstallState" json:"state,omitempty"`
+	Version       string                     `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	ReceivedBytes uint64                     `protobuf:"varint,3,opt,name=received_bytes,json=receivedBytes,proto3" json:"received_bytes,omitempty"`
+	TotalBytes    uint64                     `protobuf:"varint,4,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`
+	// `manifest_missing_target`, `sha256_mismatch`, `signature_invalid`,
+	// `network`, `download_disabled`. Never a raw transport error.
+	ReasonCode string `protobuf:"bytes,5,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	// Absolute path of the installed executable; empty until installed.
+	Executable string `protobuf:"bytes,6,opt,name=executable,proto3" json:"executable,omitempty"`
+	// False when the build's manifest has no entry for this OS and
+	// architecture, so the panel says so instead of offering a dead button.
+	Supported     bool `protobuf:"varint,7,opt,name=supported,proto3" json:"supported,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowserManagedState) Reset() {
+	*x = BrowserManagedState{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserManagedState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserManagedState) ProtoMessage() {}
+
+func (x *BrowserManagedState) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserManagedState.ProtoReflect.Descriptor instead.
+func (*BrowserManagedState) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *BrowserManagedState) GetState() BrowserManagedInstallState {
+	if x != nil {
+		return x.State
+	}
+	return BrowserManagedInstallState_BROWSER_MANAGED_INSTALL_STATE_UNSPECIFIED
+}
+
+func (x *BrowserManagedState) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *BrowserManagedState) GetReceivedBytes() uint64 {
+	if x != nil {
+		return x.ReceivedBytes
+	}
+	return 0
+}
+
+func (x *BrowserManagedState) GetTotalBytes() uint64 {
+	if x != nil {
+		return x.TotalBytes
+	}
+	return 0
+}
+
+func (x *BrowserManagedState) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+func (x *BrowserManagedState) GetExecutable() string {
+	if x != nil {
+		return x.Executable
+	}
+	return ""
+}
+
+func (x *BrowserManagedState) GetSupported() bool {
+	if x != nil {
+		return x.Supported
+	}
+	return false
+}
+
+type BrowserManagedInstallRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Meta  *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	// False removes an installed managed browser instead of installing one.
+	Install       bool `protobuf:"varint,2,opt,name=install,proto3" json:"install,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowserManagedInstallRequest) Reset() {
+	*x = BrowserManagedInstallRequest{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserManagedInstallRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserManagedInstallRequest) ProtoMessage() {}
+
+func (x *BrowserManagedInstallRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserManagedInstallRequest.ProtoReflect.Descriptor instead.
+func (*BrowserManagedInstallRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *BrowserManagedInstallRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *BrowserManagedInstallRequest) GetInstall() bool {
+	if x != nil {
+		return x.Install
+	}
+	return false
+}
+
+// Where an action lands. Both halves absent means the active tab's main
+// frame, which is what every pre-tab caller meant (§2.2).
+type BrowserTarget struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Runtime's own stable ordinal (`t1`, `t2`, …).
+	TabId         string `protobuf:"bytes,1,opt,name=tab_id,json=tabId,proto3" json:"tab_id,omitempty"`
+	FrameId       string `protobuf:"bytes,2,opt,name=frame_id,json=frameId,proto3" json:"frame_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowserTarget) Reset() {
+	*x = BrowserTarget{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserTarget) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserTarget) ProtoMessage() {}
+
+func (x *BrowserTarget) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserTarget.ProtoReflect.Descriptor instead.
+func (*BrowserTarget) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *BrowserTarget) GetTabId() string {
+	if x != nil {
+		return x.TabId
+	}
+	return ""
+}
+
+func (x *BrowserTarget) GetFrameId() string {
+	if x != nil {
+		return x.FrameId
+	}
+	return ""
+}
+
+// One CDP page target, named by Runtime. The CDP `targetId` is deliberately
+// absent: a client that could name it could address targets this file does
+// not define.
+type BrowserTab struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	TabId  string                 `protobuf:"bytes,1,opt,name=tab_id,json=tabId,proto3" json:"tab_id,omitempty"`
+	Url    string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+	Title  string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	Active bool                   `protobuf:"varint,4,opt,name=active,proto3" json:"active,omitempty"`
+	// Set when the page opened this tab itself, so a popup can be shown as one.
+	OpenerTabId     string         `protobuf:"bytes,5,opt,name=opener_tab_id,json=openerTabId,proto3" json:"opener_tab_id,omitempty"`
+	NavigationEpoch uint64         `protobuf:"varint,6,opt,name=navigation_epoch,json=navigationEpoch,proto3" json:"navigation_epoch,omitempty"`
+	Loading         bool           `protobuf:"varint,7,opt,name=loading,proto3" json:"loading,omitempty"`
+	PendingDialog   *BrowserDialog `protobuf:"bytes,8,opt,name=pending_dialog,json=pendingDialog,proto3" json:"pending_dialog,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *BrowserTab) Reset() {
+	*x = BrowserTab{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserTab) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserTab) ProtoMessage() {}
+
+func (x *BrowserTab) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserTab.ProtoReflect.Descriptor instead.
+func (*BrowserTab) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *BrowserTab) GetTabId() string {
+	if x != nil {
+		return x.TabId
+	}
+	return ""
+}
+
+func (x *BrowserTab) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *BrowserTab) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *BrowserTab) GetActive() bool {
+	if x != nil {
+		return x.Active
+	}
+	return false
+}
+
+func (x *BrowserTab) GetOpenerTabId() string {
+	if x != nil {
+		return x.OpenerTabId
+	}
+	return ""
+}
+
+func (x *BrowserTab) GetNavigationEpoch() uint64 {
+	if x != nil {
+		return x.NavigationEpoch
+	}
+	return 0
+}
+
+func (x *BrowserTab) GetLoading() bool {
+	if x != nil {
+		return x.Loading
+	}
+	return false
+}
+
+func (x *BrowserTab) GetPendingDialog() *BrowserDialog {
+	if x != nil {
+		return x.PendingDialog
+	}
+	return nil
+}
+
+type BrowserTabList struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Tabs        []*BrowserTab          `protobuf:"bytes,1,rep,name=tabs,proto3" json:"tabs,omitempty"`
+	ActiveTabId string                 `protobuf:"bytes,2,opt,name=active_tab_id,json=activeTabId,proto3" json:"active_tab_id,omitempty"`
+	// Per-session ceiling; a page that opens more gets `tab_limit` (§2.2).
+	Limit         uint32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowserTabList) Reset() {
+	*x = BrowserTabList{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserTabList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserTabList) ProtoMessage() {}
+
+func (x *BrowserTabList) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserTabList.ProtoReflect.Descriptor instead.
+func (*BrowserTabList) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *BrowserTabList) GetTabs() []*BrowserTab {
+	if x != nil {
+		return x.Tabs
+	}
+	return nil
+}
+
+func (x *BrowserTabList) GetActiveTabId() string {
+	if x != nil {
+		return x.ActiveTabId
+	}
+	return ""
+}
+
+func (x *BrowserTabList) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type BrowserLeaseHuman struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeviceId      string                 `protobuf:"bytes,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowserLeaseHuman) Reset() {
+	*x = BrowserLeaseHuman{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserLeaseHuman) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserLeaseHuman) ProtoMessage() {}
+
+func (x *BrowserLeaseHuman) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserLeaseHuman.ProtoReflect.Descriptor instead.
+func (*BrowserLeaseHuman) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *BrowserLeaseHuman) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+func (x *BrowserLeaseHuman) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+type BrowserLeaseAgent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowserLeaseAgent) Reset() {
+	*x = BrowserLeaseAgent{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserLeaseAgent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserLeaseAgent) ProtoMessage() {}
+
+func (x *BrowserLeaseAgent) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserLeaseAgent.ProtoReflect.Descriptor instead.
+func (*BrowserLeaseAgent) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *BrowserLeaseAgent) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *BrowserLeaseAgent) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *BrowserLeaseAgent) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+// One session, one holder. Reads never need it; input-shaped actions do.
+type BrowserLease struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	State BrowserLeaseState      `protobuf:"varint,1,opt,name=state,proto3,enum=armadra.v1.BrowserLeaseState" json:"state,omitempty"`
+	// Bumped on every change of holder, so a request minted under the previous
+	// holder is refused rather than applied.
+	Generation      uint64 `protobuf:"varint,2,opt,name=generation,proto3" json:"generation,omitempty"`
+	ExpiresAtUnixMs int64  `protobuf:"varint,3,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
+	// Types that are valid to be assigned to Holder:
+	//
+	//	*BrowserLease_Human
+	//	*BrowserLease_Agent
+	Holder        isBrowserLease_Holder `protobuf_oneof:"holder"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowserLease) Reset() {
+	*x = BrowserLease{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserLease) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserLease) ProtoMessage() {}
+
+func (x *BrowserLease) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserLease.ProtoReflect.Descriptor instead.
+func (*BrowserLease) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *BrowserLease) GetState() BrowserLeaseState {
+	if x != nil {
+		return x.State
+	}
+	return BrowserLeaseState_BROWSER_LEASE_STATE_UNSPECIFIED
+}
+
+func (x *BrowserLease) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *BrowserLease) GetExpiresAtUnixMs() int64 {
+	if x != nil {
+		return x.ExpiresAtUnixMs
+	}
+	return 0
+}
+
+func (x *BrowserLease) GetHolder() isBrowserLease_Holder {
+	if x != nil {
+		return x.Holder
+	}
+	return nil
+}
+
+func (x *BrowserLease) GetHuman() *BrowserLeaseHuman {
+	if x != nil {
+		if x, ok := x.Holder.(*BrowserLease_Human); ok {
+			return x.Human
+		}
+	}
+	return nil
+}
+
+func (x *BrowserLease) GetAgent() *BrowserLeaseAgent {
+	if x != nil {
+		if x, ok := x.Holder.(*BrowserLease_Agent); ok {
+			return x.Agent
+		}
+	}
+	return nil
+}
+
+type isBrowserLease_Holder interface {
+	isBrowserLease_Holder()
+}
+
+type BrowserLease_Human struct {
+	Human *BrowserLeaseHuman `protobuf:"bytes,4,opt,name=human,proto3,oneof"`
+}
+
+type BrowserLease_Agent struct {
+	Agent *BrowserLeaseAgent `protobuf:"bytes,5,opt,name=agent,proto3,oneof"`
+}
+
+func (*BrowserLease_Human) isBrowserLease_Holder() {}
+
+func (*BrowserLease_Agent) isBrowserLease_Holder() {}
+
+type BrowserLeaseRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Meta            *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId       string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Action          BrowserLeaseAction     `protobuf:"varint,3,opt,name=action,proto3,enum=armadra.v1.BrowserLeaseAction" json:"action,omitempty"`
+	LeaseGeneration uint64                 `protobuf:"varint,4,opt,name=lease_generation,json=leaseGeneration,proto3" json:"lease_generation,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *BrowserLeaseRequest) Reset() {
+	*x = BrowserLeaseRequest{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserLeaseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserLeaseRequest) ProtoMessage() {}
+
+func (x *BrowserLeaseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserLeaseRequest.ProtoReflect.Descriptor instead.
+func (*BrowserLeaseRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *BrowserLeaseRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *BrowserLeaseRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *BrowserLeaseRequest) GetAction() BrowserLeaseAction {
+	if x != nil {
+		return x.Action
+	}
+	return BrowserLeaseAction_BROWSER_LEASE_ACTION_UNSPECIFIED
+}
+
+func (x *BrowserLeaseRequest) GetLeaseGeneration() uint64 {
+	if x != nil {
+		return x.LeaseGeneration
+	}
+	return 0
+}
+
+type BrowserDialog struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	DialogId       string                 `protobuf:"bytes,1,opt,name=dialog_id,json=dialogId,proto3" json:"dialog_id,omitempty"`
+	TabId          string                 `protobuf:"bytes,2,opt,name=tab_id,json=tabId,proto3" json:"tab_id,omitempty"`
+	Kind           BrowserDialogKind      `protobuf:"varint,3,opt,name=kind,proto3,enum=armadra.v1.BrowserDialogKind" json:"kind,omitempty"`
+	Message        string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	DefaultPrompt  string                 `protobuf:"bytes,5,opt,name=default_prompt,json=defaultPrompt,proto3" json:"default_prompt,omitempty"`
+	Url            string                 `protobuf:"bytes,6,opt,name=url,proto3" json:"url,omitempty"`
+	OpenedAtUnixMs int64                  `protobuf:"varint,7,opt,name=opened_at_unix_ms,json=openedAtUnixMs,proto3" json:"opened_at_unix_ms,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *BrowserDialog) Reset() {
+	*x = BrowserDialog{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserDialog) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserDialog) ProtoMessage() {}
+
+func (x *BrowserDialog) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserDialog.ProtoReflect.Descriptor instead.
+func (*BrowserDialog) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *BrowserDialog) GetDialogId() string {
+	if x != nil {
+		return x.DialogId
+	}
+	return ""
+}
+
+func (x *BrowserDialog) GetTabId() string {
+	if x != nil {
+		return x.TabId
+	}
+	return ""
+}
+
+func (x *BrowserDialog) GetKind() BrowserDialogKind {
+	if x != nil {
+		return x.Kind
+	}
+	return BrowserDialogKind_BROWSER_DIALOG_KIND_UNSPECIFIED
+}
+
+func (x *BrowserDialog) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *BrowserDialog) GetDefaultPrompt() string {
+	if x != nil {
+		return x.DefaultPrompt
+	}
+	return ""
+}
+
+func (x *BrowserDialog) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *BrowserDialog) GetOpenedAtUnixMs() int64 {
+	if x != nil {
+		return x.OpenedAtUnixMs
+	}
+	return 0
+}
+
+type BrowserDialogRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Meta            *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId       string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	TabId           string                 `protobuf:"bytes,3,opt,name=tab_id,json=tabId,proto3" json:"tab_id,omitempty"`
+	DialogId        string                 `protobuf:"bytes,4,opt,name=dialog_id,json=dialogId,proto3" json:"dialog_id,omitempty"`
+	Accept          bool                   `protobuf:"varint,5,opt,name=accept,proto3" json:"accept,omitempty"`
+	PromptText      string                 `protobuf:"bytes,6,opt,name=prompt_text,json=promptText,proto3" json:"prompt_text,omitempty"`
+	LeaseGeneration uint64                 `protobuf:"varint,7,opt,name=lease_generation,json=leaseGeneration,proto3" json:"lease_generation,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *BrowserDialogRequest) Reset() {
+	*x = BrowserDialogRequest{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserDialogRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserDialogRequest) ProtoMessage() {}
+
+func (x *BrowserDialogRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserDialogRequest.ProtoReflect.Descriptor instead.
+func (*BrowserDialogRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *BrowserDialogRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *BrowserDialogRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *BrowserDialogRequest) GetTabId() string {
+	if x != nil {
+		return x.TabId
+	}
+	return ""
+}
+
+func (x *BrowserDialogRequest) GetDialogId() string {
+	if x != nil {
+		return x.DialogId
+	}
+	return ""
+}
+
+func (x *BrowserDialogRequest) GetAccept() bool {
+	if x != nil {
+		return x.Accept
+	}
+	return false
+}
+
+func (x *BrowserDialogRequest) GetPromptText() string {
+	if x != nil {
+		return x.PromptText
+	}
+	return ""
+}
+
+func (x *BrowserDialogRequest) GetLeaseGeneration() uint64 {
+	if x != nil {
+		return x.LeaseGeneration
+	}
+	return 0
+}
+
+type BrowserFileChooser struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ChooserId string                 `protobuf:"bytes,1,opt,name=chooser_id,json=chooserId,proto3" json:"chooser_id,omitempty"`
+	TabId     string                 `protobuf:"bytes,2,opt,name=tab_id,json=tabId,proto3" json:"tab_id,omitempty"`
+	FrameId   string                 `protobuf:"bytes,3,opt,name=frame_id,json=frameId,proto3" json:"frame_id,omitempty"`
+	Multiple  bool                   `protobuf:"varint,4,opt,name=multiple,proto3" json:"multiple,omitempty"`
+	// The page's `accept` attribute, shown to the person picking. It is a hint
+	// for the picker, never a filter this side enforces.
+	Accept         string `protobuf:"bytes,5,opt,name=accept,proto3" json:"accept,omitempty"`
+	OpenedAtUnixMs int64  `protobuf:"varint,6,opt,name=opened_at_unix_ms,json=openedAtUnixMs,proto3" json:"opened_at_unix_ms,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *BrowserFileChooser) Reset() {
+	*x = BrowserFileChooser{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserFileChooser) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserFileChooser) ProtoMessage() {}
+
+func (x *BrowserFileChooser) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserFileChooser.ProtoReflect.Descriptor instead.
+func (*BrowserFileChooser) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *BrowserFileChooser) GetChooserId() string {
+	if x != nil {
+		return x.ChooserId
+	}
+	return ""
+}
+
+func (x *BrowserFileChooser) GetTabId() string {
+	if x != nil {
+		return x.TabId
+	}
+	return ""
+}
+
+func (x *BrowserFileChooser) GetFrameId() string {
+	if x != nil {
+		return x.FrameId
+	}
+	return ""
+}
+
+func (x *BrowserFileChooser) GetMultiple() bool {
+	if x != nil {
+		return x.Multiple
+	}
+	return false
+}
+
+func (x *BrowserFileChooser) GetAccept() string {
+	if x != nil {
+		return x.Accept
+	}
+	return ""
+}
+
+func (x *BrowserFileChooser) GetOpenedAtUnixMs() int64 {
+	if x != nil {
+		return x.OpenedAtUnixMs
+	}
+	return 0
+}
+
+type BrowserSelectRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Meta            *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId       string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	NavigationEpoch uint64                 `protobuf:"varint,3,opt,name=navigation_epoch,json=navigationEpoch,proto3" json:"navigation_epoch,omitempty"`
+	Selector        string                 `protobuf:"bytes,4,opt,name=selector,proto3" json:"selector,omitempty"`
+	ElementRef      string                 `protobuf:"bytes,5,opt,name=element_ref,json=elementRef,proto3" json:"element_ref,omitempty"`
+	// Repeated selects a multiple-choice list; a non-`<select>` target is
+	// refused with NOT_SELECTABLE rather than clicked at.
+	Values          []string       `protobuf:"bytes,6,rep,name=values,proto3" json:"values,omitempty"`
+	Labels          []string       `protobuf:"bytes,7,rep,name=labels,proto3" json:"labels,omitempty"`
+	Target          *BrowserTarget `protobuf:"bytes,8,opt,name=target,proto3" json:"target,omitempty"`
+	LeaseGeneration uint64         `protobuf:"varint,9,opt,name=lease_generation,json=leaseGeneration,proto3" json:"lease_generation,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *BrowserSelectRequest) Reset() {
+	*x = BrowserSelectRequest{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserSelectRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserSelectRequest) ProtoMessage() {}
+
+func (x *BrowserSelectRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserSelectRequest.ProtoReflect.Descriptor instead.
+func (*BrowserSelectRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *BrowserSelectRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *BrowserSelectRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *BrowserSelectRequest) GetNavigationEpoch() uint64 {
+	if x != nil {
+		return x.NavigationEpoch
+	}
+	return 0
+}
+
+func (x *BrowserSelectRequest) GetSelector() string {
+	if x != nil {
+		return x.Selector
+	}
+	return ""
+}
+
+func (x *BrowserSelectRequest) GetElementRef() string {
+	if x != nil {
+		return x.ElementRef
+	}
+	return ""
+}
+
+func (x *BrowserSelectRequest) GetValues() []string {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+func (x *BrowserSelectRequest) GetLabels() []string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *BrowserSelectRequest) GetTarget() *BrowserTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *BrowserSelectRequest) GetLeaseGeneration() uint64 {
+	if x != nil {
+		return x.LeaseGeneration
+	}
+	return 0
+}
+
+type BrowserPressRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Meta            *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId       string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	NavigationEpoch uint64                 `protobuf:"varint,3,opt,name=navigation_epoch,json=navigationEpoch,proto3" json:"navigation_epoch,omitempty"`
+	// From a fixed whitelist; a chord is dispatched as one keyDown/keyUp pair
+	// and text is never split into synthetic keys.
+	Key             string         `protobuf:"bytes,4,opt,name=key,proto3" json:"key,omitempty"`
+	Modifiers       uint32         `protobuf:"varint,5,opt,name=modifiers,proto3" json:"modifiers,omitempty"`
+	Repeat          uint32         `protobuf:"varint,6,opt,name=repeat,proto3" json:"repeat,omitempty"`
+	Target          *BrowserTarget `protobuf:"bytes,7,opt,name=target,proto3" json:"target,omitempty"`
+	LeaseGeneration uint64         `protobuf:"varint,8,opt,name=lease_generation,json=leaseGeneration,proto3" json:"lease_generation,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *BrowserPressRequest) Reset() {
+	*x = BrowserPressRequest{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserPressRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserPressRequest) ProtoMessage() {}
+
+func (x *BrowserPressRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserPressRequest.ProtoReflect.Descriptor instead.
+func (*BrowserPressRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *BrowserPressRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *BrowserPressRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *BrowserPressRequest) GetNavigationEpoch() uint64 {
+	if x != nil {
+		return x.NavigationEpoch
+	}
+	return 0
+}
+
+func (x *BrowserPressRequest) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *BrowserPressRequest) GetModifiers() uint32 {
+	if x != nil {
+		return x.Modifiers
+	}
+	return 0
+}
+
+func (x *BrowserPressRequest) GetRepeat() uint32 {
+	if x != nil {
+		return x.Repeat
+	}
+	return 0
+}
+
+func (x *BrowserPressRequest) GetTarget() *BrowserTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *BrowserPressRequest) GetLeaseGeneration() uint64 {
+	if x != nil {
+		return x.LeaseGeneration
+	}
+	return 0
+}
+
+type BrowserScrollRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Meta            *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId       string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	NavigationEpoch uint64                 `protobuf:"varint,3,opt,name=navigation_epoch,json=navigationEpoch,proto3" json:"navigation_epoch,omitempty"`
+	// "up" | "down" | "left" | "right", with `amount` in CSS pixels; or an
+	// element reference to bring into view.
+	Direction       string         `protobuf:"bytes,4,opt,name=direction,proto3" json:"direction,omitempty"`
+	Amount          float64        `protobuf:"fixed64,5,opt,name=amount,proto3" json:"amount,omitempty"`
+	ElementRef      string         `protobuf:"bytes,6,opt,name=element_ref,json=elementRef,proto3" json:"element_ref,omitempty"`
+	Target          *BrowserTarget `protobuf:"bytes,7,opt,name=target,proto3" json:"target,omitempty"`
+	LeaseGeneration uint64         `protobuf:"varint,8,opt,name=lease_generation,json=leaseGeneration,proto3" json:"lease_generation,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *BrowserScrollRequest) Reset() {
+	*x = BrowserScrollRequest{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserScrollRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserScrollRequest) ProtoMessage() {}
+
+func (x *BrowserScrollRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserScrollRequest.ProtoReflect.Descriptor instead.
+func (*BrowserScrollRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *BrowserScrollRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *BrowserScrollRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *BrowserScrollRequest) GetNavigationEpoch() uint64 {
+	if x != nil {
+		return x.NavigationEpoch
+	}
+	return 0
+}
+
+func (x *BrowserScrollRequest) GetDirection() string {
+	if x != nil {
+		return x.Direction
+	}
+	return ""
+}
+
+func (x *BrowserScrollRequest) GetAmount() float64 {
+	if x != nil {
+		return x.Amount
+	}
+	return 0
+}
+
+func (x *BrowserScrollRequest) GetElementRef() string {
+	if x != nil {
+		return x.ElementRef
+	}
+	return ""
+}
+
+func (x *BrowserScrollRequest) GetTarget() *BrowserTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *BrowserScrollRequest) GetLeaseGeneration() uint64 {
+	if x != nil {
+		return x.LeaseGeneration
+	}
+	return 0
+}
+
+type BrowserUploadRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Meta      *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// Answers a chooser the page opened, or fills an `input[type=file]`
+	// directly when there is none.
+	ChooserId  string `protobuf:"bytes,3,opt,name=chooser_id,json=chooserId,proto3" json:"chooser_id,omitempty"`
+	Selector   string `protobuf:"bytes,4,opt,name=selector,proto3" json:"selector,omitempty"`
+	ElementRef string `protobuf:"bytes,5,opt,name=element_ref,json=elementRef,proto3" json:"element_ref,omitempty"`
+	// Workspace-relative paths, resolved on the execution host. An absolute
+	// path or one that escapes the root is refused (§2.3).
+	Paths           []string       `protobuf:"bytes,6,rep,name=paths,proto3" json:"paths,omitempty"`
+	Target          *BrowserTarget `protobuf:"bytes,7,opt,name=target,proto3" json:"target,omitempty"`
+	LeaseGeneration uint64         `protobuf:"varint,8,opt,name=lease_generation,json=leaseGeneration,proto3" json:"lease_generation,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *BrowserUploadRequest) Reset() {
+	*x = BrowserUploadRequest{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserUploadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserUploadRequest) ProtoMessage() {}
+
+func (x *BrowserUploadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserUploadRequest.ProtoReflect.Descriptor instead.
+func (*BrowserUploadRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *BrowserUploadRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *BrowserUploadRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *BrowserUploadRequest) GetChooserId() string {
+	if x != nil {
+		return x.ChooserId
+	}
+	return ""
+}
+
+func (x *BrowserUploadRequest) GetSelector() string {
+	if x != nil {
+		return x.Selector
+	}
+	return ""
+}
+
+func (x *BrowserUploadRequest) GetElementRef() string {
+	if x != nil {
+		return x.ElementRef
+	}
+	return ""
+}
+
+func (x *BrowserUploadRequest) GetPaths() []string {
+	if x != nil {
+		return x.Paths
+	}
+	return nil
+}
+
+func (x *BrowserUploadRequest) GetTarget() *BrowserTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *BrowserUploadRequest) GetLeaseGeneration() uint64 {
+	if x != nil {
+		return x.LeaseGeneration
+	}
+	return 0
+}
+
+type BrowserTabRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Meta            *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId       string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Action          BrowserTabAction       `protobuf:"varint,3,opt,name=action,proto3,enum=armadra.v1.BrowserTabAction" json:"action,omitempty"`
+	TabId           string                 `protobuf:"bytes,4,opt,name=tab_id,json=tabId,proto3" json:"tab_id,omitempty"`
+	Url             string                 `protobuf:"bytes,5,opt,name=url,proto3" json:"url,omitempty"`
+	LeaseGeneration uint64                 `protobuf:"varint,6,opt,name=lease_generation,json=leaseGeneration,proto3" json:"lease_generation,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *BrowserTabRequest) Reset() {
+	*x = BrowserTabRequest{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserTabRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserTabRequest) ProtoMessage() {}
+
+func (x *BrowserTabRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserTabRequest.ProtoReflect.Descriptor instead.
+func (*BrowserTabRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *BrowserTabRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *BrowserTabRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *BrowserTabRequest) GetAction() BrowserTabAction {
+	if x != nil {
+		return x.Action
+	}
+	return BrowserTabAction_BROWSER_TAB_ACTION_UNSPECIFIED
+}
+
+func (x *BrowserTabRequest) GetTabId() string {
+	if x != nil {
+		return x.TabId
+	}
+	return ""
+}
+
+func (x *BrowserTabRequest) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *BrowserTabRequest) GetLeaseGeneration() uint64 {
+	if x != nil {
+		return x.LeaseGeneration
+	}
+	return 0
+}
+
+// Closes one tab. The last tab is refused with LAST_TAB: ending a session is
+// `CloseBrowserSessionRequest.terminate`, and nothing else (§2.2).
+type BrowserCloseTabRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Meta            *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId       string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	TabId           string                 `protobuf:"bytes,3,opt,name=tab_id,json=tabId,proto3" json:"tab_id,omitempty"`
+	LeaseGeneration uint64                 `protobuf:"varint,4,opt,name=lease_generation,json=leaseGeneration,proto3" json:"lease_generation,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *BrowserCloseTabRequest) Reset() {
+	*x = BrowserCloseTabRequest{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserCloseTabRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserCloseTabRequest) ProtoMessage() {}
+
+func (x *BrowserCloseTabRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserCloseTabRequest.ProtoReflect.Descriptor instead.
+func (*BrowserCloseTabRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *BrowserCloseTabRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *BrowserCloseTabRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *BrowserCloseTabRequest) GetTabId() string {
+	if x != nil {
+		return x.TabId
+	}
+	return ""
+}
+
+func (x *BrowserCloseTabRequest) GetLeaseGeneration() uint64 {
+	if x != nil {
+		return x.LeaseGeneration
+	}
+	return 0
+}
+
+// The dedicated per-session stream's downlink frame: `BrowserFrame` without
+// the base64 the workspace event channel needs (§2.9).
+type BrowserStreamFrame struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	SessionId         string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Generation        uint64                 `protobuf:"varint,2,opt,name=generation,proto3" json:"generation,omitempty"`
+	FrameSeq          uint64                 `protobuf:"varint,3,opt,name=frame_seq,json=frameSeq,proto3" json:"frame_seq,omitempty"`
+	NavigationEpoch   uint64                 `protobuf:"varint,4,opt,name=navigation_epoch,json=navigationEpoch,proto3" json:"navigation_epoch,omitempty"`
+	TabId             string                 `protobuf:"bytes,5,opt,name=tab_id,json=tabId,proto3" json:"tab_id,omitempty"`
+	ViewportWidth     uint32                 `protobuf:"varint,6,opt,name=viewport_width,json=viewportWidth,proto3" json:"viewport_width,omitempty"`
+	ViewportHeight    uint32                 `protobuf:"varint,7,opt,name=viewport_height,json=viewportHeight,proto3" json:"viewport_height,omitempty"`
+	DeviceScaleFactor float64                `protobuf:"fixed64,8,opt,name=device_scale_factor,json=deviceScaleFactor,proto3" json:"device_scale_factor,omitempty"`
+	// "jpeg"
+	Encoding         string `protobuf:"bytes,9,opt,name=encoding,proto3" json:"encoding,omitempty"`
+	Data             []byte `protobuf:"bytes,10,opt,name=data,proto3" json:"data,omitempty"`
+	CapturedAtUnixMs int64  `protobuf:"varint,11,opt,name=captured_at_unix_ms,json=capturedAtUnixMs,proto3" json:"captured_at_unix_ms,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *BrowserStreamFrame) Reset() {
+	*x = BrowserStreamFrame{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserStreamFrame) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserStreamFrame) ProtoMessage() {}
+
+func (x *BrowserStreamFrame) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserStreamFrame.ProtoReflect.Descriptor instead.
+func (*BrowserStreamFrame) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *BrowserStreamFrame) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *BrowserStreamFrame) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *BrowserStreamFrame) GetFrameSeq() uint64 {
+	if x != nil {
+		return x.FrameSeq
+	}
+	return 0
+}
+
+func (x *BrowserStreamFrame) GetNavigationEpoch() uint64 {
+	if x != nil {
+		return x.NavigationEpoch
+	}
+	return 0
+}
+
+func (x *BrowserStreamFrame) GetTabId() string {
+	if x != nil {
+		return x.TabId
+	}
+	return ""
+}
+
+func (x *BrowserStreamFrame) GetViewportWidth() uint32 {
+	if x != nil {
+		return x.ViewportWidth
+	}
+	return 0
+}
+
+func (x *BrowserStreamFrame) GetViewportHeight() uint32 {
+	if x != nil {
+		return x.ViewportHeight
+	}
+	return 0
+}
+
+func (x *BrowserStreamFrame) GetDeviceScaleFactor() float64 {
+	if x != nil {
+		return x.DeviceScaleFactor
+	}
+	return 0
+}
+
+func (x *BrowserStreamFrame) GetEncoding() string {
+	if x != nil {
+		return x.Encoding
+	}
+	return ""
+}
+
+func (x *BrowserStreamFrame) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *BrowserStreamFrame) GetCapturedAtUnixMs() int64 {
+	if x != nil {
+		return x.CapturedAtUnixMs
+	}
+	return 0
+}
+
+// Everything a subscriber may send up that stream. Input goes here to save a
+// round trip; the HTTP route stays as the fallback.
+type BrowserStreamClient struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Message:
+	//
+	//	*BrowserStreamClient_Hello
+	//	*BrowserStreamClient_Ack
+	//	*BrowserStreamClient_Input
+	//	*BrowserStreamClient_Visibility
+	Message       isBrowserStreamClient_Message `protobuf_oneof:"message"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowserStreamClient) Reset() {
+	*x = BrowserStreamClient{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserStreamClient) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserStreamClient) ProtoMessage() {}
+
+func (x *BrowserStreamClient) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserStreamClient.ProtoReflect.Descriptor instead.
+func (*BrowserStreamClient) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *BrowserStreamClient) GetMessage() isBrowserStreamClient_Message {
+	if x != nil {
+		return x.Message
+	}
+	return nil
+}
+
+func (x *BrowserStreamClient) GetHello() *BrowserSubscribeRequest {
+	if x != nil {
+		if x, ok := x.Message.(*BrowserStreamClient_Hello); ok {
+			return x.Hello
+		}
+	}
+	return nil
+}
+
+func (x *BrowserStreamClient) GetAck() uint64 {
+	if x != nil {
+		if x, ok := x.Message.(*BrowserStreamClient_Ack); ok {
+			return x.Ack
+		}
+	}
+	return 0
+}
+
+func (x *BrowserStreamClient) GetInput() *BrowserInputRequest {
+	if x != nil {
+		if x, ok := x.Message.(*BrowserStreamClient_Input); ok {
+			return x.Input
+		}
+	}
+	return nil
+}
+
+func (x *BrowserStreamClient) GetVisibility() *BrowserSubscribeRequest {
+	if x != nil {
+		if x, ok := x.Message.(*BrowserStreamClient_Visibility); ok {
+			return x.Visibility
+		}
+	}
+	return nil
+}
+
+type isBrowserStreamClient_Message interface {
+	isBrowserStreamClient_Message()
+}
+
+type BrowserStreamClient_Hello struct {
+	// Subscribes on connect; the same message later re-states the budget.
+	Hello *BrowserSubscribeRequest `protobuf:"bytes,1,opt,name=hello,proto3,oneof"`
+}
+
+type BrowserStreamClient_Ack struct {
+	// The highest frame this subscriber has drawn. More than two frames
+	// unacknowledged and it starts being skipped rather than queued (§2.9).
+	Ack uint64 `protobuf:"varint,2,opt,name=ack,proto3,oneof"`
+}
+
+type BrowserStreamClient_Input struct {
+	Input *BrowserInputRequest `protobuf:"bytes,3,opt,name=input,proto3,oneof"`
+}
+
+type BrowserStreamClient_Visibility struct {
+	Visibility *BrowserSubscribeRequest `protobuf:"bytes,4,opt,name=visibility,proto3,oneof"`
+}
+
+func (*BrowserStreamClient_Hello) isBrowserStreamClient_Message() {}
+
+func (*BrowserStreamClient_Ack) isBrowserStreamClient_Message() {}
+
+func (*BrowserStreamClient_Input) isBrowserStreamClient_Message() {}
+
+func (*BrowserStreamClient_Visibility) isBrowserStreamClient_Message() {}
+
+// One line for the node header: who did what, and how it ended. Only the
+// last few are kept in memory; the durable record is the board log (§2.8).
+type BrowserActivity struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// "human" | "agent"
+	Actor string `protobuf:"bytes,2,opt,name=actor,proto3" json:"actor,omitempty"`
+	// Device id or agent node id, so a badge can name the other side.
+	ActorId string `protobuf:"bytes,3,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	Verb    string `protobuf:"bytes,4,opt,name=verb,proto3" json:"verb,omitempty"`
+	Target  string `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`
+	// "ok" | "refused" | "unknown". An action dispatched but never answered
+	// because a lease was revoked is `unknown` and is not retried (§2.6).
+	Outcome       string `protobuf:"bytes,6,opt,name=outcome,proto3" json:"outcome,omitempty"`
+	ReasonCode    string `protobuf:"bytes,7,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	AtUnixMs      int64  `protobuf:"varint,8,opt,name=at_unix_ms,json=atUnixMs,proto3" json:"at_unix_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowserActivity) Reset() {
+	*x = BrowserActivity{}
+	mi := &file_armadra_v1_browser_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowserActivity) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowserActivity) ProtoMessage() {}
+
+func (x *BrowserActivity) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_browser_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowserActivity.ProtoReflect.Descriptor instead.
+func (*BrowserActivity) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_browser_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *BrowserActivity) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *BrowserActivity) GetActor() string {
+	if x != nil {
+		return x.Actor
+	}
+	return ""
+}
+
+func (x *BrowserActivity) GetActorId() string {
+	if x != nil {
+		return x.ActorId
+	}
+	return ""
+}
+
+func (x *BrowserActivity) GetVerb() string {
+	if x != nil {
+		return x.Verb
+	}
+	return ""
+}
+
+func (x *BrowserActivity) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *BrowserActivity) GetOutcome() string {
+	if x != nil {
+		return x.Outcome
+	}
+	return ""
+}
+
+func (x *BrowserActivity) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+func (x *BrowserActivity) GetAtUnixMs() int64 {
+	if x != nil {
+		return x.AtUnixMs
+	}
+	return 0
+}
+
 var File_armadra_v1_browser_proto protoreflect.FileDescriptor
 
 const file_armadra_v1_browser_proto_rawDesc = "" +
@@ -3097,7 +5695,7 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\x0fBrowserViewport\x12\x14\n" +
 	"\x05width\x18\x01 \x01(\rR\x05width\x12\x16\n" +
 	"\x06height\x18\x02 \x01(\rR\x06height\x12.\n" +
-	"\x13device_scale_factor\x18\x03 \x01(\x01R\x11deviceScaleFactor\"\x82\x04\n" +
+	"\x13device_scale_factor\x18\x03 \x01(\x01R\x11deviceScaleFactor\"\xb2\x06\n" +
 	"\x0eBrowserSession\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1e\n" +
@@ -3118,7 +5716,13 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\n" +
 	"keep_alive\x18\f \x01(\bR\tkeepAlive\x12+\n" +
 	"\x12created_at_unix_ms\x18\r \x01(\x03R\x0fcreatedAtUnixMs\x12+\n" +
-	"\x12updated_at_unix_ms\x18\x0e \x01(\x03R\x0fupdatedAtUnixMs\"\xa8\x01\n" +
+	"\x12updated_at_unix_ms\x18\x0e \x01(\x03R\x0fupdatedAtUnixMs\x12\"\n" +
+	"\ractive_tab_id\x18\x0f \x01(\tR\vactiveTabId\x12\x1b\n" +
+	"\ttab_count\x18\x10 \x01(\rR\btabCount\x12.\n" +
+	"\x05lease\x18\x11 \x01(\v2\x18.armadra.v1.BrowserLeaseR\x05lease\x12@\n" +
+	"\x0epending_dialog\x18\x12 \x01(\v2\x19.armadra.v1.BrowserDialogR\rpendingDialog\x12P\n" +
+	"\x14pending_file_chooser\x18\x13 \x01(\v2\x1e.armadra.v1.BrowserFileChooserR\x12pendingFileChooser\x12)\n" +
+	"\x10lease_generation\x18\x14 \x01(\x04R\x0fleaseGeneration\"\xe3\x01\n" +
 	"\x13BrowserAvailability\x12\x1c\n" +
 	"\tavailable\x18\x01 \x01(\bR\tavailable\x12\x1e\n" +
 	"\n" +
@@ -3127,7 +5731,8 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\x06source\x18\x03 \x01(\tR\x06source\x12\x1f\n" +
 	"\vreason_code\x18\x04 \x01(\tR\n" +
 	"reasonCode\x12\x1a\n" +
-	"\bsearched\x18\x05 \x03(\tR\bsearched\"\xf4\x02\n" +
+	"\bsearched\x18\x05 \x03(\tR\bsearched\x129\n" +
+	"\amanaged\x18\x06 \x01(\v2\x1f.armadra.v1.BrowserManagedStateR\amanaged\"\x8b\x03\n" +
 	"\fBrowserFrame\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1e\n" +
@@ -3142,7 +5747,8 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\bencoding\x18\b \x01(\tR\bencoding\x12\x12\n" +
 	"\x04data\x18\t \x01(\fR\x04data\x12-\n" +
 	"\x13captured_at_unix_ms\x18\n" +
-	" \x01(\x03R\x10capturedAtUnixMs\"\xcd\x01\n" +
+	" \x01(\x03R\x10capturedAtUnixMs\x12\x15\n" +
+	"\x06tab_id\x18\v \x01(\tR\x05tabId\"\xb6\x02\n" +
 	"\x17BrowserSubscribeRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
 	"\n" +
@@ -3150,18 +5756,22 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\x0fsubscription_id\x18\x03 \x01(\tR\x0esubscriptionId\x12=\n" +
 	"\n" +
 	"visibility\x18\x04 \x01(\x0e2\x1d.armadra.v1.BrowserVisibilityR\n" +
-	"visibility\"\x9e\x01\n" +
+	"visibility\x12J\n" +
+	"\x0fbandwidth_class\x18\x05 \x01(\x0e2!.armadra.v1.BrowserBandwidthClassR\x0ebandwidthClass\x12\x1b\n" +
+	"\tmax_width\x18\x06 \x01(\rR\bmaxWidth\"\xbb\x01\n" +
 	"\x13BrowserSubscription\x12'\n" +
 	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x12+\n" +
 	"\x12expires_at_unix_ms\x18\x02 \x01(\x03R\x0fexpiresAtUnixMs\x12\x18\n" +
 	"\aquality\x18\x03 \x01(\rR\aquality\x12\x17\n" +
-	"\amax_fps\x18\x04 \x01(\rR\x06maxFps\"\xb3\x01\n" +
+	"\amax_fps\x18\x04 \x01(\rR\x06maxFps\x12\x1b\n" +
+	"\tmax_width\x18\x05 \x01(\rR\bmaxWidth\"\xe6\x01\n" +
 	"\x16BrowserNavigateRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x12;\n" +
 	"\x06action\x18\x03 \x01(\x0e2#.armadra.v1.BrowserNavigationActionR\x06action\x12\x10\n" +
-	"\x03url\x18\x04 \x01(\tR\x03url\"\xa4\x02\n" +
+	"\x03url\x18\x04 \x01(\tR\x03url\x121\n" +
+	"\x06target\x18\x05 \x01(\v2\x19.armadra.v1.BrowserTargetR\x06target\"\xa4\x02\n" +
 	"\x11BrowserInputEvent\x120\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x1c.armadra.v1.BrowserInputKindR\x04kind\x12\f\n" +
 	"\x01x\x18\x02 \x01(\x01R\x01x\x12\f\n" +
@@ -3175,14 +5785,16 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\x03key\x18\t \x01(\tR\x03key\x12\x12\n" +
 	"\x04code\x18\n" +
 	" \x01(\tR\x04code\x12\x12\n" +
-	"\x04text\x18\v \x01(\tR\x04text\"\xe0\x01\n" +
+	"\x04text\x18\v \x01(\tR\x04text\"\xbe\x02\n" +
 	"\x13BrowserInputRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x12)\n" +
 	"\x10navigation_epoch\x18\x03 \x01(\x04R\x0fnavigationEpoch\x12\x1b\n" +
 	"\tframe_seq\x18\x04 \x01(\x04R\bframeSeq\x125\n" +
-	"\x06events\x18\x05 \x03(\v2\x1d.armadra.v1.BrowserInputEventR\x06events\"\xef\x01\n" +
+	"\x06events\x18\x05 \x03(\v2\x1d.armadra.v1.BrowserInputEventR\x06events\x121\n" +
+	"\x06target\x18\x06 \x01(\v2\x19.armadra.v1.BrowserTargetR\x06target\x12)\n" +
+	"\x10lease_generation\x18\a \x01(\x04R\x0fleaseGeneration\"\xa1\x02\n" +
 	"\x0eBrowserElement\x12\x1f\n" +
 	"\velement_ref\x18\x01 \x01(\tR\n" +
 	"elementRef\x12\x12\n" +
@@ -3195,7 +5807,9 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\x01y\x18\b \x01(\x01R\x01y\x12\x14\n" +
 	"\x05width\x18\t \x01(\x01R\x05width\x12\x16\n" +
 	"\x06height\x18\n" +
-	" \x01(\x01R\x06height\"\x83\x01\n" +
+	" \x01(\x01R\x06height\x12\x15\n" +
+	"\x06tab_id\x18\v \x01(\tR\x05tabId\x12\x19\n" +
+	"\bframe_id\x18\f \x01(\tR\aframeId\"\x83\x01\n" +
 	"\x13BrowserConsoleEntry\x12\x1c\n" +
 	"\n" +
 	"at_unix_ms\x18\x01 \x01(\x03R\batUnixMs\x12\x14\n" +
@@ -3213,14 +5827,15 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\rencoded_bytes\x18\x06 \x01(\x04R\fencodedBytes\x12!\n" +
 	"\ffailure_code\x18\a \x01(\tR\vfailureCode\x12\x1d\n" +
 	"\n" +
-	"from_cache\x18\b \x01(\bR\tfromCache\"\xc4\x01\n" +
+	"from_cache\x18\b \x01(\bR\tfromCache\"\xf7\x01\n" +
 	"\x12BrowserReadRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x12/\n" +
 	"\x04mode\x18\x03 \x01(\x0e2\x1b.armadra.v1.BrowserReadModeR\x04mode\x12\x14\n" +
 	"\x05limit\x18\x04 \x01(\rR\x05limit\x12\x1b\n" +
-	"\tmax_bytes\x18\x05 \x01(\rR\bmaxBytes\"\xe7\x02\n" +
+	"\tmax_bytes\x18\x05 \x01(\rR\bmaxBytes\x121\n" +
+	"\x06target\x18\x06 \x01(\v2\x19.armadra.v1.BrowserTargetR\x06target\"\xe7\x02\n" +
 	"\x13BrowserReadResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12)\n" +
@@ -3231,7 +5846,7 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\belements\x18\x06 \x03(\v2\x1a.armadra.v1.BrowserElementR\belements\x129\n" +
 	"\aconsole\x18\a \x03(\v2\x1f.armadra.v1.BrowserConsoleEntryR\aconsole\x129\n" +
 	"\anetwork\x18\b \x03(\v2\x1f.armadra.v1.BrowserNetworkEntryR\anetwork\x12\x1c\n" +
-	"\ttruncated\x18\t \x01(\bR\ttruncated\"\xa4\x02\n" +
+	"\ttruncated\x18\t \x01(\bR\ttruncated\"\xd7\x02\n" +
 	"\x13BrowserClickRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
 	"\n" +
@@ -3244,7 +5859,9 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\x01y\x18\a \x01(\x01R\x01y\x12\x1c\n" +
 	"\tmodifiers\x18\b \x01(\rR\tmodifiers\x12\x1f\n" +
 	"\vclick_count\x18\t \x01(\rR\n" +
-	"clickCount\"\x8e\x02\n" +
+	"clickCount\x121\n" +
+	"\x06target\x18\n" +
+	" \x01(\v2\x19.armadra.v1.BrowserTargetR\x06target\"\xc1\x02\n" +
 	"\x12BrowserTypeRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
 	"\n" +
@@ -3255,7 +5872,8 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"elementRef\x12\x12\n" +
 	"\x04text\x18\x06 \x01(\tR\x04text\x12\x18\n" +
 	"\areplace\x18\a \x01(\bR\areplace\x12\x16\n" +
-	"\x06submit\x18\b \x01(\bR\x06submit\"\xe5\x01\n" +
+	"\x06submit\x18\b \x01(\bR\x06submit\x121\n" +
+	"\x06target\x18\t \x01(\v2\x19.armadra.v1.BrowserTargetR\x06target\"\x98\x02\n" +
 	"\x12BrowserWaitRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
 	"\n" +
@@ -3264,26 +5882,28 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\furl_contains\x18\x04 \x01(\tR\vurlContains\x12%\n" +
 	"\x0etitle_contains\x18\x05 \x01(\tR\rtitleContains\x12\x1d\n" +
 	"\n" +
-	"timeout_ms\x18\x06 \x01(\rR\ttimeoutMs\"\x98\x01\n" +
+	"timeout_ms\x18\x06 \x01(\rR\ttimeoutMs\x121\n" +
+	"\x06target\x18\a \x01(\v2\x19.armadra.v1.BrowserTargetR\x06target\"\x98\x01\n" +
 	"\x13BrowserWaitResponse\x12\x18\n" +
 	"\amatched\x18\x01 \x01(\bR\amatched\x12\x1f\n" +
 	"\vreason_code\x18\x02 \x01(\tR\n" +
 	"reasonCode\x12)\n" +
 	"\x10navigation_epoch\x18\x03 \x01(\x04R\x0fnavigationEpoch\x12\x1b\n" +
-	"\twaited_ms\x18\x04 \x01(\rR\bwaitedMs\"\x98\x01\n" +
+	"\twaited_ms\x18\x04 \x01(\rR\bwaitedMs\"\xcb\x01\n" +
 	"\x15BrowserCaptureRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x1b\n" +
 	"\tfull_page\x18\x03 \x01(\bR\bfullPage\x12\x16\n" +
-	"\x06format\x18\x04 \x01(\tR\x06format\"\xb3\x01\n" +
+	"\x06format\x18\x04 \x01(\tR\x06format\x121\n" +
+	"\x06target\x18\x05 \x01(\v2\x19.armadra.v1.BrowserTargetR\x06target\"\xb3\x01\n" +
 	"\x16BrowserCaptureResponse\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x14\n" +
 	"\x05width\x18\x02 \x01(\rR\x05width\x12\x16\n" +
 	"\x06height\x18\x03 \x01(\rR\x06height\x12\x16\n" +
 	"\x06sha256\x18\x04 \x01(\fR\x06sha256\x12\x14\n" +
 	"\x05bytes\x18\x05 \x01(\x04R\x05bytes\x12)\n" +
-	"\x10navigation_epoch\x18\x06 \x01(\x04R\x0fnavigationEpoch\"\xf4\x02\n" +
+	"\x10navigation_epoch\x18\x06 \x01(\x04R\x0fnavigationEpoch\"\xa3\x03\n" +
 	"\x0fBrowserDownload\x12\x1f\n" +
 	"\vdownload_id\x18\x01 \x01(\tR\n" +
 	"downloadId\x12\x1d\n" +
@@ -3299,7 +5919,9 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\x12created_at_unix_ms\x18\t \x01(\x03R\x0fcreatedAtUnixMs\x12\x1f\n" +
 	"\vreason_code\x18\n" +
 	" \x01(\tR\n" +
-	"reasonCode\"\xa5\x01\n" +
+	"reasonCode\x12\x15\n" +
+	"\x06tab_id\x18\v \x01(\tR\x05tabId\x12\x16\n" +
+	"\x06sha256\x18\f \x01(\fR\x06sha256\"\xa5\x01\n" +
 	"\x1eBrowserDownloadDecisionRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
 	"\n" +
@@ -3324,7 +5946,8 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\"\x9a\x01\n" +
 	"\x1bListBrowserSessionsResponse\x126\n" +
 	"\bsessions\x18\x01 \x03(\v2\x1a.armadra.v1.BrowserSessionR\bsessions\x12C\n" +
-	"\favailability\x18\x02 \x01(\v2\x1f.armadra.v1.BrowserAvailabilityR\favailability\"\x8f\x06\n" +
+	"\favailability\x18\x02 \x01(\v2\x1f.armadra.v1.BrowserAvailabilityR\favailability\"\xbe\n" +
+	"\n" +
 	"\rBrowserAction\x12A\n" +
 	"\x06create\x18\x01 \x01(\v2'.armadra.v1.CreateBrowserSessionRequestH\x00R\x06create\x12@\n" +
 	"\bnavigate\x18\x02 \x01(\v2\".armadra.v1.BrowserNavigateRequestH\x00R\bnavigate\x127\n" +
@@ -3338,8 +5961,17 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\x11download_decision\x18\n" +
 	" \x01(\v2*.armadra.v1.BrowserDownloadDecisionRequestH\x00R\x10downloadDecision\x12>\n" +
 	"\x05close\x18\v \x01(\v2&.armadra.v1.CloseBrowserSessionRequestH\x00R\x05close\x12<\n" +
-	"\x04list\x18\f \x01(\v2&.armadra.v1.ListBrowserSessionsRequestH\x00R\x04listB\b\n" +
-	"\x06action\"\xa0\x04\n" +
+	"\x04list\x18\f \x01(\v2&.armadra.v1.ListBrowserSessionsRequestH\x00R\x04list\x12:\n" +
+	"\x06select\x18\r \x01(\v2 .armadra.v1.BrowserSelectRequestH\x00R\x06select\x127\n" +
+	"\x05press\x18\x0e \x01(\v2\x1f.armadra.v1.BrowserPressRequestH\x00R\x05press\x12:\n" +
+	"\x06scroll\x18\x0f \x01(\v2 .armadra.v1.BrowserScrollRequestH\x00R\x06scroll\x12:\n" +
+	"\x06upload\x18\x10 \x01(\v2 .armadra.v1.BrowserUploadRequestH\x00R\x06upload\x12:\n" +
+	"\x06dialog\x18\x11 \x01(\v2 .armadra.v1.BrowserDialogRequestH\x00R\x06dialog\x123\n" +
+	"\x04tabs\x18\x12 \x01(\v2\x1d.armadra.v1.BrowserTabRequestH\x00R\x04tabs\x127\n" +
+	"\x05lease\x18\x13 \x01(\v2\x1f.armadra.v1.BrowserLeaseRequestH\x00R\x05lease\x12A\n" +
+	"\tclose_tab\x18\x14 \x01(\v2\".armadra.v1.BrowserCloseTabRequestH\x00R\bcloseTab\x12S\n" +
+	"\x0fmanaged_install\x18\x15 \x01(\v2(.armadra.v1.BrowserManagedInstallRequestH\x00R\x0emanagedInstallB\b\n" +
+	"\x06action\"\xf6\x05\n" +
 	"\x13BrowserActionResult\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x126\n" +
@@ -3351,8 +5983,188 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\fsubscription\x18\x0e \x01(\v2\x1f.armadra.v1.BrowserSubscriptionH\x00R\fsubscription\x129\n" +
 	"\bdownload\x18\x0f \x01(\v2\x1b.armadra.v1.BrowserDownloadH\x00R\bdownload\x12E\n" +
 	"\bsessions\x18\x10 \x01(\v2'.armadra.v1.ListBrowserSessionsResponseH\x00R\bsessions\x121\n" +
-	"\x05error\x18\x11 \x01(\v2\x19.armadra.v1.ErrorResponseH\x00R\x05errorB\b\n" +
-	"\x06result*\xf6\x01\n" +
+	"\x05error\x18\x11 \x01(\v2\x19.armadra.v1.ErrorResponseH\x00R\x05error\x120\n" +
+	"\x04tabs\x18\x12 \x01(\v2\x1a.armadra.v1.BrowserTabListH\x00R\x04tabs\x120\n" +
+	"\x05lease\x18\x13 \x01(\v2\x18.armadra.v1.BrowserLeaseH\x00R\x05lease\x123\n" +
+	"\x06dialog\x18\x14 \x01(\v2\x19.armadra.v1.BrowserDialogH\x00R\x06dialog\x12;\n" +
+	"\amanaged\x18\x15 \x01(\v2\x1f.armadra.v1.BrowserManagedStateH\x00R\amanagedB\b\n" +
+	"\x06result\"\x94\x02\n" +
+	"\x13BrowserManagedState\x12<\n" +
+	"\x05state\x18\x01 \x01(\x0e2&.armadra.v1.BrowserManagedInstallStateR\x05state\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12%\n" +
+	"\x0ereceived_bytes\x18\x03 \x01(\x04R\rreceivedBytes\x12\x1f\n" +
+	"\vtotal_bytes\x18\x04 \x01(\x04R\n" +
+	"totalBytes\x12\x1f\n" +
+	"\vreason_code\x18\x05 \x01(\tR\n" +
+	"reasonCode\x12\x1e\n" +
+	"\n" +
+	"executable\x18\x06 \x01(\tR\n" +
+	"executable\x12\x1c\n" +
+	"\tsupported\x18\a \x01(\bR\tsupported\"e\n" +
+	"\x1cBrowserManagedInstallRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x18\n" +
+	"\ainstall\x18\x02 \x01(\bR\ainstall\"A\n" +
+	"\rBrowserTarget\x12\x15\n" +
+	"\x06tab_id\x18\x01 \x01(\tR\x05tabId\x12\x19\n" +
+	"\bframe_id\x18\x02 \x01(\tR\aframeId\"\x8e\x02\n" +
+	"\n" +
+	"BrowserTab\x12\x15\n" +
+	"\x06tab_id\x18\x01 \x01(\tR\x05tabId\x12\x10\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\x12\x14\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12\x16\n" +
+	"\x06active\x18\x04 \x01(\bR\x06active\x12\"\n" +
+	"\ropener_tab_id\x18\x05 \x01(\tR\vopenerTabId\x12)\n" +
+	"\x10navigation_epoch\x18\x06 \x01(\x04R\x0fnavigationEpoch\x12\x18\n" +
+	"\aloading\x18\a \x01(\bR\aloading\x12@\n" +
+	"\x0epending_dialog\x18\b \x01(\v2\x19.armadra.v1.BrowserDialogR\rpendingDialog\"v\n" +
+	"\x0eBrowserTabList\x12*\n" +
+	"\x04tabs\x18\x01 \x03(\v2\x16.armadra.v1.BrowserTabR\x04tabs\x12\"\n" +
+	"\ractive_tab_id\x18\x02 \x01(\tR\vactiveTabId\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\rR\x05limit\"S\n" +
+	"\x11BrowserLeaseHuman\x12\x1b\n" +
+	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x12!\n" +
+	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\"n\n" +
+	"\x11BrowserLeaseAgent\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\"\x88\x02\n" +
+	"\fBrowserLease\x123\n" +
+	"\x05state\x18\x01 \x01(\x0e2\x1d.armadra.v1.BrowserLeaseStateR\x05state\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x02 \x01(\x04R\n" +
+	"generation\x12+\n" +
+	"\x12expires_at_unix_ms\x18\x03 \x01(\x03R\x0fexpiresAtUnixMs\x125\n" +
+	"\x05human\x18\x04 \x01(\v2\x1d.armadra.v1.BrowserLeaseHumanH\x00R\x05human\x125\n" +
+	"\x05agent\x18\x05 \x01(\v2\x1d.armadra.v1.BrowserLeaseAgentH\x00R\x05agentB\b\n" +
+	"\x06holder\"\xc4\x01\n" +
+	"\x13BrowserLeaseRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x126\n" +
+	"\x06action\x18\x03 \x01(\x0e2\x1e.armadra.v1.BrowserLeaseActionR\x06action\x12)\n" +
+	"\x10lease_generation\x18\x04 \x01(\x04R\x0fleaseGeneration\"\xf4\x01\n" +
+	"\rBrowserDialog\x12\x1b\n" +
+	"\tdialog_id\x18\x01 \x01(\tR\bdialogId\x12\x15\n" +
+	"\x06tab_id\x18\x02 \x01(\tR\x05tabId\x121\n" +
+	"\x04kind\x18\x03 \x01(\x0e2\x1d.armadra.v1.BrowserDialogKindR\x04kind\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\x12%\n" +
+	"\x0edefault_prompt\x18\x05 \x01(\tR\rdefaultPrompt\x12\x10\n" +
+	"\x03url\x18\x06 \x01(\tR\x03url\x12)\n" +
+	"\x11opened_at_unix_ms\x18\a \x01(\x03R\x0eopenedAtUnixMs\"\xfa\x01\n" +
+	"\x14BrowserDialogRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x15\n" +
+	"\x06tab_id\x18\x03 \x01(\tR\x05tabId\x12\x1b\n" +
+	"\tdialog_id\x18\x04 \x01(\tR\bdialogId\x12\x16\n" +
+	"\x06accept\x18\x05 \x01(\bR\x06accept\x12\x1f\n" +
+	"\vprompt_text\x18\x06 \x01(\tR\n" +
+	"promptText\x12)\n" +
+	"\x10lease_generation\x18\a \x01(\x04R\x0fleaseGeneration\"\xc4\x01\n" +
+	"\x12BrowserFileChooser\x12\x1d\n" +
+	"\n" +
+	"chooser_id\x18\x01 \x01(\tR\tchooserId\x12\x15\n" +
+	"\x06tab_id\x18\x02 \x01(\tR\x05tabId\x12\x19\n" +
+	"\bframe_id\x18\x03 \x01(\tR\aframeId\x12\x1a\n" +
+	"\bmultiple\x18\x04 \x01(\bR\bmultiple\x12\x16\n" +
+	"\x06accept\x18\x05 \x01(\tR\x06accept\x12)\n" +
+	"\x11opened_at_unix_ms\x18\x06 \x01(\x03R\x0eopenedAtUnixMs\"\xd8\x02\n" +
+	"\x14BrowserSelectRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12)\n" +
+	"\x10navigation_epoch\x18\x03 \x01(\x04R\x0fnavigationEpoch\x12\x1a\n" +
+	"\bselector\x18\x04 \x01(\tR\bselector\x12\x1f\n" +
+	"\velement_ref\x18\x05 \x01(\tR\n" +
+	"elementRef\x12\x16\n" +
+	"\x06values\x18\x06 \x03(\tR\x06values\x12\x16\n" +
+	"\x06labels\x18\a \x03(\tR\x06labels\x121\n" +
+	"\x06target\x18\b \x01(\v2\x19.armadra.v1.BrowserTargetR\x06target\x12)\n" +
+	"\x10lease_generation\x18\t \x01(\x04R\x0fleaseGeneration\"\xb2\x02\n" +
+	"\x13BrowserPressRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12)\n" +
+	"\x10navigation_epoch\x18\x03 \x01(\x04R\x0fnavigationEpoch\x12\x10\n" +
+	"\x03key\x18\x04 \x01(\tR\x03key\x12\x1c\n" +
+	"\tmodifiers\x18\x05 \x01(\rR\tmodifiers\x12\x16\n" +
+	"\x06repeat\x18\x06 \x01(\rR\x06repeat\x121\n" +
+	"\x06target\x18\a \x01(\v2\x19.armadra.v1.BrowserTargetR\x06target\x12)\n" +
+	"\x10lease_generation\x18\b \x01(\x04R\x0fleaseGeneration\"\xc2\x02\n" +
+	"\x14BrowserScrollRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12)\n" +
+	"\x10navigation_epoch\x18\x03 \x01(\x04R\x0fnavigationEpoch\x12\x1c\n" +
+	"\tdirection\x18\x04 \x01(\tR\tdirection\x12\x16\n" +
+	"\x06amount\x18\x05 \x01(\x01R\x06amount\x12\x1f\n" +
+	"\velement_ref\x18\x06 \x01(\tR\n" +
+	"elementRef\x121\n" +
+	"\x06target\x18\a \x01(\v2\x19.armadra.v1.BrowserTargetR\x06target\x12)\n" +
+	"\x10lease_generation\x18\b \x01(\x04R\x0fleaseGeneration\"\xb2\x02\n" +
+	"\x14BrowserUploadRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x1d\n" +
+	"\n" +
+	"chooser_id\x18\x03 \x01(\tR\tchooserId\x12\x1a\n" +
+	"\bselector\x18\x04 \x01(\tR\bselector\x12\x1f\n" +
+	"\velement_ref\x18\x05 \x01(\tR\n" +
+	"elementRef\x12\x14\n" +
+	"\x05paths\x18\x06 \x03(\tR\x05paths\x121\n" +
+	"\x06target\x18\a \x01(\v2\x19.armadra.v1.BrowserTargetR\x06target\x12)\n" +
+	"\x10lease_generation\x18\b \x01(\x04R\x0fleaseGeneration\"\xe9\x01\n" +
+	"\x11BrowserTabRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x124\n" +
+	"\x06action\x18\x03 \x01(\x0e2\x1c.armadra.v1.BrowserTabActionR\x06action\x12\x15\n" +
+	"\x06tab_id\x18\x04 \x01(\tR\x05tabId\x12\x10\n" +
+	"\x03url\x18\x05 \x01(\tR\x03url\x12)\n" +
+	"\x10lease_generation\x18\x06 \x01(\x04R\x0fleaseGeneration\"\xa6\x01\n" +
+	"\x16BrowserCloseTabRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x15\n" +
+	"\x06tab_id\x18\x03 \x01(\tR\x05tabId\x12)\n" +
+	"\x10lease_generation\x18\x04 \x01(\x04R\x0fleaseGeneration\"\x91\x03\n" +
+	"\x12BrowserStreamFrame\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x02 \x01(\x04R\n" +
+	"generation\x12\x1b\n" +
+	"\tframe_seq\x18\x03 \x01(\x04R\bframeSeq\x12)\n" +
+	"\x10navigation_epoch\x18\x04 \x01(\x04R\x0fnavigationEpoch\x12\x15\n" +
+	"\x06tab_id\x18\x05 \x01(\tR\x05tabId\x12%\n" +
+	"\x0eviewport_width\x18\x06 \x01(\rR\rviewportWidth\x12'\n" +
+	"\x0fviewport_height\x18\a \x01(\rR\x0eviewportHeight\x12.\n" +
+	"\x13device_scale_factor\x18\b \x01(\x01R\x11deviceScaleFactor\x12\x1a\n" +
+	"\bencoding\x18\t \x01(\tR\bencoding\x12\x12\n" +
+	"\x04data\x18\n" +
+	" \x01(\fR\x04data\x12-\n" +
+	"\x13captured_at_unix_ms\x18\v \x01(\x03R\x10capturedAtUnixMs\"\xf1\x01\n" +
+	"\x13BrowserStreamClient\x12;\n" +
+	"\x05hello\x18\x01 \x01(\v2#.armadra.v1.BrowserSubscribeRequestH\x00R\x05hello\x12\x12\n" +
+	"\x03ack\x18\x02 \x01(\x04H\x00R\x03ack\x127\n" +
+	"\x05input\x18\x03 \x01(\v2\x1f.armadra.v1.BrowserInputRequestH\x00R\x05input\x12E\n" +
+	"\n" +
+	"visibility\x18\x04 \x01(\v2#.armadra.v1.BrowserSubscribeRequestH\x00R\n" +
+	"visibilityB\t\n" +
+	"\amessage\"\xe6\x01\n" +
+	"\x0fBrowserActivity\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x14\n" +
+	"\x05actor\x18\x02 \x01(\tR\x05actor\x12\x19\n" +
+	"\bactor_id\x18\x03 \x01(\tR\aactorId\x12\x12\n" +
+	"\x04verb\x18\x04 \x01(\tR\x04verb\x12\x16\n" +
+	"\x06target\x18\x05 \x01(\tR\x06target\x12\x18\n" +
+	"\aoutcome\x18\x06 \x01(\tR\aoutcome\x12\x1f\n" +
+	"\vreason_code\x18\a \x01(\tR\n" +
+	"reasonCode\x12\x1c\n" +
+	"\n" +
+	"at_unix_ms\x18\b \x01(\x03R\batUnixMs*\xf6\x01\n" +
 	"\x13BrowserSessionState\x12%\n" +
 	"!BROWSER_SESSION_STATE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eBROWSER_SESSION_STATE_STARTING\x10\x01\x12\x1f\n" +
@@ -3399,7 +6211,41 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\"BROWSER_DOWNLOAD_STATE_IN_PROGRESS\x10\x02\x12$\n" +
 	" BROWSER_DOWNLOAD_STATE_COMPLETED\x10\x03\x12$\n" +
 	" BROWSER_DOWNLOAD_STATE_CANCELLED\x10\x04\x12!\n" +
-	"\x1dBROWSER_DOWNLOAD_STATE_FAILED\x10\x05B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	"\x1dBROWSER_DOWNLOAD_STATE_FAILED\x10\x05*\xa8\x02\n" +
+	"\x1aBrowserManagedInstallState\x12-\n" +
+	")BROWSER_MANAGED_INSTALL_STATE_UNSPECIFIED\x10\x00\x12(\n" +
+	"$BROWSER_MANAGED_INSTALL_STATE_ABSENT\x10\x01\x12-\n" +
+	")BROWSER_MANAGED_INSTALL_STATE_DOWNLOADING\x10\x02\x12+\n" +
+	"'BROWSER_MANAGED_INSTALL_STATE_VERIFYING\x10\x03\x12+\n" +
+	"'BROWSER_MANAGED_INSTALL_STATE_INSTALLED\x10\x04\x12(\n" +
+	"$BROWSER_MANAGED_INSTALL_STATE_FAILED\x10\x05*\xbc\x01\n" +
+	"\x11BrowserLeaseState\x12#\n" +
+	"\x1fBROWSER_LEASE_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18BROWSER_LEASE_STATE_FREE\x10\x01\x12\x1d\n" +
+	"\x19BROWSER_LEASE_STATE_HUMAN\x10\x02\x12&\n" +
+	"\"BROWSER_LEASE_STATE_HUMAN_TAKEOVER\x10\x03\x12\x1d\n" +
+	"\x19BROWSER_LEASE_STATE_AGENT\x10\x04*\xa0\x01\n" +
+	"\x12BrowserLeaseAction\x12$\n" +
+	" BROWSER_LEASE_ACTION_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bBROWSER_LEASE_ACTION_STATUS\x10\x01\x12!\n" +
+	"\x1dBROWSER_LEASE_ACTION_TAKEOVER\x10\x02\x12 \n" +
+	"\x1cBROWSER_LEASE_ACTION_RELEASE\x10\x03*\xbf\x01\n" +
+	"\x11BrowserDialogKind\x12#\n" +
+	"\x1fBROWSER_DIALOG_KIND_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19BROWSER_DIALOG_KIND_ALERT\x10\x01\x12\x1f\n" +
+	"\x1bBROWSER_DIALOG_KIND_CONFIRM\x10\x02\x12\x1e\n" +
+	"\x1aBROWSER_DIALOG_KIND_PROMPT\x10\x03\x12%\n" +
+	"!BROWSER_DIALOG_KIND_BEFORE_UNLOAD\x10\x04*\x8e\x01\n" +
+	"\x10BrowserTabAction\x12\"\n" +
+	"\x1eBROWSER_TAB_ACTION_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17BROWSER_TAB_ACTION_LIST\x10\x01\x12\x1d\n" +
+	"\x19BROWSER_TAB_ACTION_SWITCH\x10\x02\x12\x1a\n" +
+	"\x16BROWSER_TAB_ACTION_NEW\x10\x03*\xa7\x01\n" +
+	"\x15BrowserBandwidthClass\x12'\n" +
+	"#BROWSER_BANDWIDTH_CLASS_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bBROWSER_BANDWIDTH_CLASS_LAN\x10\x01\x12\x1f\n" +
+	"\x1bBROWSER_BANDWIDTH_CLASS_WAN\x10\x02\x12#\n" +
+	"\x1fBROWSER_BANDWIDTH_CLASS_METERED\x10\x03B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_browser_proto_rawDescOnce sync.Once
@@ -3413,8 +6259,8 @@ func file_armadra_v1_browser_proto_rawDescGZIP() []byte {
 	return file_armadra_v1_browser_proto_rawDescData
 }
 
-var file_armadra_v1_browser_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_armadra_v1_browser_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_armadra_v1_browser_proto_enumTypes = make([]protoimpl.EnumInfo, 12)
+var file_armadra_v1_browser_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
 var file_armadra_v1_browser_proto_goTypes = []any{
 	(BrowserSessionState)(0),               // 0: armadra.v1.BrowserSessionState
 	(BrowserVisibility)(0),                 // 1: armadra.v1.BrowserVisibility
@@ -3422,89 +6268,166 @@ var file_armadra_v1_browser_proto_goTypes = []any{
 	(BrowserInputKind)(0),                  // 3: armadra.v1.BrowserInputKind
 	(BrowserReadMode)(0),                   // 4: armadra.v1.BrowserReadMode
 	(BrowserDownloadState)(0),              // 5: armadra.v1.BrowserDownloadState
-	(*BrowserViewport)(nil),                // 6: armadra.v1.BrowserViewport
-	(*BrowserSession)(nil),                 // 7: armadra.v1.BrowserSession
-	(*BrowserAvailability)(nil),            // 8: armadra.v1.BrowserAvailability
-	(*BrowserFrame)(nil),                   // 9: armadra.v1.BrowserFrame
-	(*BrowserSubscribeRequest)(nil),        // 10: armadra.v1.BrowserSubscribeRequest
-	(*BrowserSubscription)(nil),            // 11: armadra.v1.BrowserSubscription
-	(*BrowserNavigateRequest)(nil),         // 12: armadra.v1.BrowserNavigateRequest
-	(*BrowserInputEvent)(nil),              // 13: armadra.v1.BrowserInputEvent
-	(*BrowserInputRequest)(nil),            // 14: armadra.v1.BrowserInputRequest
-	(*BrowserElement)(nil),                 // 15: armadra.v1.BrowserElement
-	(*BrowserConsoleEntry)(nil),            // 16: armadra.v1.BrowserConsoleEntry
-	(*BrowserNetworkEntry)(nil),            // 17: armadra.v1.BrowserNetworkEntry
-	(*BrowserReadRequest)(nil),             // 18: armadra.v1.BrowserReadRequest
-	(*BrowserReadResponse)(nil),            // 19: armadra.v1.BrowserReadResponse
-	(*BrowserClickRequest)(nil),            // 20: armadra.v1.BrowserClickRequest
-	(*BrowserTypeRequest)(nil),             // 21: armadra.v1.BrowserTypeRequest
-	(*BrowserWaitRequest)(nil),             // 22: armadra.v1.BrowserWaitRequest
-	(*BrowserWaitResponse)(nil),            // 23: armadra.v1.BrowserWaitResponse
-	(*BrowserCaptureRequest)(nil),          // 24: armadra.v1.BrowserCaptureRequest
-	(*BrowserCaptureResponse)(nil),         // 25: armadra.v1.BrowserCaptureResponse
-	(*BrowserDownload)(nil),                // 26: armadra.v1.BrowserDownload
-	(*BrowserDownloadDecisionRequest)(nil), // 27: armadra.v1.BrowserDownloadDecisionRequest
-	(*CreateBrowserSessionRequest)(nil),    // 28: armadra.v1.CreateBrowserSessionRequest
-	(*CloseBrowserSessionRequest)(nil),     // 29: armadra.v1.CloseBrowserSessionRequest
-	(*ListBrowserSessionsRequest)(nil),     // 30: armadra.v1.ListBrowserSessionsRequest
-	(*ListBrowserSessionsResponse)(nil),    // 31: armadra.v1.ListBrowserSessionsResponse
-	(*BrowserAction)(nil),                  // 32: armadra.v1.BrowserAction
-	(*BrowserActionResult)(nil),            // 33: armadra.v1.BrowserActionResult
-	(*CommandMeta)(nil),                    // 34: armadra.v1.CommandMeta
-	(*ErrorResponse)(nil),                  // 35: armadra.v1.ErrorResponse
+	(BrowserManagedInstallState)(0),        // 6: armadra.v1.BrowserManagedInstallState
+	(BrowserLeaseState)(0),                 // 7: armadra.v1.BrowserLeaseState
+	(BrowserLeaseAction)(0),                // 8: armadra.v1.BrowserLeaseAction
+	(BrowserDialogKind)(0),                 // 9: armadra.v1.BrowserDialogKind
+	(BrowserTabAction)(0),                  // 10: armadra.v1.BrowserTabAction
+	(BrowserBandwidthClass)(0),             // 11: armadra.v1.BrowserBandwidthClass
+	(*BrowserViewport)(nil),                // 12: armadra.v1.BrowserViewport
+	(*BrowserSession)(nil),                 // 13: armadra.v1.BrowserSession
+	(*BrowserAvailability)(nil),            // 14: armadra.v1.BrowserAvailability
+	(*BrowserFrame)(nil),                   // 15: armadra.v1.BrowserFrame
+	(*BrowserSubscribeRequest)(nil),        // 16: armadra.v1.BrowserSubscribeRequest
+	(*BrowserSubscription)(nil),            // 17: armadra.v1.BrowserSubscription
+	(*BrowserNavigateRequest)(nil),         // 18: armadra.v1.BrowserNavigateRequest
+	(*BrowserInputEvent)(nil),              // 19: armadra.v1.BrowserInputEvent
+	(*BrowserInputRequest)(nil),            // 20: armadra.v1.BrowserInputRequest
+	(*BrowserElement)(nil),                 // 21: armadra.v1.BrowserElement
+	(*BrowserConsoleEntry)(nil),            // 22: armadra.v1.BrowserConsoleEntry
+	(*BrowserNetworkEntry)(nil),            // 23: armadra.v1.BrowserNetworkEntry
+	(*BrowserReadRequest)(nil),             // 24: armadra.v1.BrowserReadRequest
+	(*BrowserReadResponse)(nil),            // 25: armadra.v1.BrowserReadResponse
+	(*BrowserClickRequest)(nil),            // 26: armadra.v1.BrowserClickRequest
+	(*BrowserTypeRequest)(nil),             // 27: armadra.v1.BrowserTypeRequest
+	(*BrowserWaitRequest)(nil),             // 28: armadra.v1.BrowserWaitRequest
+	(*BrowserWaitResponse)(nil),            // 29: armadra.v1.BrowserWaitResponse
+	(*BrowserCaptureRequest)(nil),          // 30: armadra.v1.BrowserCaptureRequest
+	(*BrowserCaptureResponse)(nil),         // 31: armadra.v1.BrowserCaptureResponse
+	(*BrowserDownload)(nil),                // 32: armadra.v1.BrowserDownload
+	(*BrowserDownloadDecisionRequest)(nil), // 33: armadra.v1.BrowserDownloadDecisionRequest
+	(*CreateBrowserSessionRequest)(nil),    // 34: armadra.v1.CreateBrowserSessionRequest
+	(*CloseBrowserSessionRequest)(nil),     // 35: armadra.v1.CloseBrowserSessionRequest
+	(*ListBrowserSessionsRequest)(nil),     // 36: armadra.v1.ListBrowserSessionsRequest
+	(*ListBrowserSessionsResponse)(nil),    // 37: armadra.v1.ListBrowserSessionsResponse
+	(*BrowserAction)(nil),                  // 38: armadra.v1.BrowserAction
+	(*BrowserActionResult)(nil),            // 39: armadra.v1.BrowserActionResult
+	(*BrowserManagedState)(nil),            // 40: armadra.v1.BrowserManagedState
+	(*BrowserManagedInstallRequest)(nil),   // 41: armadra.v1.BrowserManagedInstallRequest
+	(*BrowserTarget)(nil),                  // 42: armadra.v1.BrowserTarget
+	(*BrowserTab)(nil),                     // 43: armadra.v1.BrowserTab
+	(*BrowserTabList)(nil),                 // 44: armadra.v1.BrowserTabList
+	(*BrowserLeaseHuman)(nil),              // 45: armadra.v1.BrowserLeaseHuman
+	(*BrowserLeaseAgent)(nil),              // 46: armadra.v1.BrowserLeaseAgent
+	(*BrowserLease)(nil),                   // 47: armadra.v1.BrowserLease
+	(*BrowserLeaseRequest)(nil),            // 48: armadra.v1.BrowserLeaseRequest
+	(*BrowserDialog)(nil),                  // 49: armadra.v1.BrowserDialog
+	(*BrowserDialogRequest)(nil),           // 50: armadra.v1.BrowserDialogRequest
+	(*BrowserFileChooser)(nil),             // 51: armadra.v1.BrowserFileChooser
+	(*BrowserSelectRequest)(nil),           // 52: armadra.v1.BrowserSelectRequest
+	(*BrowserPressRequest)(nil),            // 53: armadra.v1.BrowserPressRequest
+	(*BrowserScrollRequest)(nil),           // 54: armadra.v1.BrowserScrollRequest
+	(*BrowserUploadRequest)(nil),           // 55: armadra.v1.BrowserUploadRequest
+	(*BrowserTabRequest)(nil),              // 56: armadra.v1.BrowserTabRequest
+	(*BrowserCloseTabRequest)(nil),         // 57: armadra.v1.BrowserCloseTabRequest
+	(*BrowserStreamFrame)(nil),             // 58: armadra.v1.BrowserStreamFrame
+	(*BrowserStreamClient)(nil),            // 59: armadra.v1.BrowserStreamClient
+	(*BrowserActivity)(nil),                // 60: armadra.v1.BrowserActivity
+	(*CommandMeta)(nil),                    // 61: armadra.v1.CommandMeta
+	(*ErrorResponse)(nil),                  // 62: armadra.v1.ErrorResponse
 }
 var file_armadra_v1_browser_proto_depIdxs = []int32{
-	6,  // 0: armadra.v1.BrowserSession.viewport:type_name -> armadra.v1.BrowserViewport
+	12, // 0: armadra.v1.BrowserSession.viewport:type_name -> armadra.v1.BrowserViewport
 	0,  // 1: armadra.v1.BrowserSession.state:type_name -> armadra.v1.BrowserSessionState
-	34, // 2: armadra.v1.BrowserSubscribeRequest.meta:type_name -> armadra.v1.CommandMeta
-	1,  // 3: armadra.v1.BrowserSubscribeRequest.visibility:type_name -> armadra.v1.BrowserVisibility
-	34, // 4: armadra.v1.BrowserNavigateRequest.meta:type_name -> armadra.v1.CommandMeta
-	2,  // 5: armadra.v1.BrowserNavigateRequest.action:type_name -> armadra.v1.BrowserNavigationAction
-	3,  // 6: armadra.v1.BrowserInputEvent.kind:type_name -> armadra.v1.BrowserInputKind
-	34, // 7: armadra.v1.BrowserInputRequest.meta:type_name -> armadra.v1.CommandMeta
-	13, // 8: armadra.v1.BrowserInputRequest.events:type_name -> armadra.v1.BrowserInputEvent
-	34, // 9: armadra.v1.BrowserReadRequest.meta:type_name -> armadra.v1.CommandMeta
-	4,  // 10: armadra.v1.BrowserReadRequest.mode:type_name -> armadra.v1.BrowserReadMode
-	15, // 11: armadra.v1.BrowserReadResponse.elements:type_name -> armadra.v1.BrowserElement
-	16, // 12: armadra.v1.BrowserReadResponse.console:type_name -> armadra.v1.BrowserConsoleEntry
-	17, // 13: armadra.v1.BrowserReadResponse.network:type_name -> armadra.v1.BrowserNetworkEntry
-	34, // 14: armadra.v1.BrowserClickRequest.meta:type_name -> armadra.v1.CommandMeta
-	34, // 15: armadra.v1.BrowserTypeRequest.meta:type_name -> armadra.v1.CommandMeta
-	34, // 16: armadra.v1.BrowserWaitRequest.meta:type_name -> armadra.v1.CommandMeta
-	34, // 17: armadra.v1.BrowserCaptureRequest.meta:type_name -> armadra.v1.CommandMeta
-	5,  // 18: armadra.v1.BrowserDownload.state:type_name -> armadra.v1.BrowserDownloadState
-	34, // 19: armadra.v1.BrowserDownloadDecisionRequest.meta:type_name -> armadra.v1.CommandMeta
-	34, // 20: armadra.v1.CreateBrowserSessionRequest.meta:type_name -> armadra.v1.CommandMeta
-	6,  // 21: armadra.v1.CreateBrowserSessionRequest.viewport:type_name -> armadra.v1.BrowserViewport
-	34, // 22: armadra.v1.CloseBrowserSessionRequest.meta:type_name -> armadra.v1.CommandMeta
-	34, // 23: armadra.v1.ListBrowserSessionsRequest.meta:type_name -> armadra.v1.CommandMeta
-	7,  // 24: armadra.v1.ListBrowserSessionsResponse.sessions:type_name -> armadra.v1.BrowserSession
-	8,  // 25: armadra.v1.ListBrowserSessionsResponse.availability:type_name -> armadra.v1.BrowserAvailability
-	28, // 26: armadra.v1.BrowserAction.create:type_name -> armadra.v1.CreateBrowserSessionRequest
-	12, // 27: armadra.v1.BrowserAction.navigate:type_name -> armadra.v1.BrowserNavigateRequest
-	14, // 28: armadra.v1.BrowserAction.input:type_name -> armadra.v1.BrowserInputRequest
-	18, // 29: armadra.v1.BrowserAction.read:type_name -> armadra.v1.BrowserReadRequest
-	20, // 30: armadra.v1.BrowserAction.click:type_name -> armadra.v1.BrowserClickRequest
-	21, // 31: armadra.v1.BrowserAction.type:type_name -> armadra.v1.BrowserTypeRequest
-	22, // 32: armadra.v1.BrowserAction.wait:type_name -> armadra.v1.BrowserWaitRequest
-	24, // 33: armadra.v1.BrowserAction.capture:type_name -> armadra.v1.BrowserCaptureRequest
-	10, // 34: armadra.v1.BrowserAction.subscribe:type_name -> armadra.v1.BrowserSubscribeRequest
-	27, // 35: armadra.v1.BrowserAction.download_decision:type_name -> armadra.v1.BrowserDownloadDecisionRequest
-	29, // 36: armadra.v1.BrowserAction.close:type_name -> armadra.v1.CloseBrowserSessionRequest
-	30, // 37: armadra.v1.BrowserAction.list:type_name -> armadra.v1.ListBrowserSessionsRequest
-	7,  // 38: armadra.v1.BrowserActionResult.session:type_name -> armadra.v1.BrowserSession
-	19, // 39: armadra.v1.BrowserActionResult.read:type_name -> armadra.v1.BrowserReadResponse
-	23, // 40: armadra.v1.BrowserActionResult.wait:type_name -> armadra.v1.BrowserWaitResponse
-	25, // 41: armadra.v1.BrowserActionResult.capture:type_name -> armadra.v1.BrowserCaptureResponse
-	11, // 42: armadra.v1.BrowserActionResult.subscription:type_name -> armadra.v1.BrowserSubscription
-	26, // 43: armadra.v1.BrowserActionResult.download:type_name -> armadra.v1.BrowserDownload
-	31, // 44: armadra.v1.BrowserActionResult.sessions:type_name -> armadra.v1.ListBrowserSessionsResponse
-	35, // 45: armadra.v1.BrowserActionResult.error:type_name -> armadra.v1.ErrorResponse
-	46, // [46:46] is the sub-list for method output_type
-	46, // [46:46] is the sub-list for method input_type
-	46, // [46:46] is the sub-list for extension type_name
-	46, // [46:46] is the sub-list for extension extendee
-	0,  // [0:46] is the sub-list for field type_name
+	47, // 2: armadra.v1.BrowserSession.lease:type_name -> armadra.v1.BrowserLease
+	49, // 3: armadra.v1.BrowserSession.pending_dialog:type_name -> armadra.v1.BrowserDialog
+	51, // 4: armadra.v1.BrowserSession.pending_file_chooser:type_name -> armadra.v1.BrowserFileChooser
+	40, // 5: armadra.v1.BrowserAvailability.managed:type_name -> armadra.v1.BrowserManagedState
+	61, // 6: armadra.v1.BrowserSubscribeRequest.meta:type_name -> armadra.v1.CommandMeta
+	1,  // 7: armadra.v1.BrowserSubscribeRequest.visibility:type_name -> armadra.v1.BrowserVisibility
+	11, // 8: armadra.v1.BrowserSubscribeRequest.bandwidth_class:type_name -> armadra.v1.BrowserBandwidthClass
+	61, // 9: armadra.v1.BrowserNavigateRequest.meta:type_name -> armadra.v1.CommandMeta
+	2,  // 10: armadra.v1.BrowserNavigateRequest.action:type_name -> armadra.v1.BrowserNavigationAction
+	42, // 11: armadra.v1.BrowserNavigateRequest.target:type_name -> armadra.v1.BrowserTarget
+	3,  // 12: armadra.v1.BrowserInputEvent.kind:type_name -> armadra.v1.BrowserInputKind
+	61, // 13: armadra.v1.BrowserInputRequest.meta:type_name -> armadra.v1.CommandMeta
+	19, // 14: armadra.v1.BrowserInputRequest.events:type_name -> armadra.v1.BrowserInputEvent
+	42, // 15: armadra.v1.BrowserInputRequest.target:type_name -> armadra.v1.BrowserTarget
+	61, // 16: armadra.v1.BrowserReadRequest.meta:type_name -> armadra.v1.CommandMeta
+	4,  // 17: armadra.v1.BrowserReadRequest.mode:type_name -> armadra.v1.BrowserReadMode
+	42, // 18: armadra.v1.BrowserReadRequest.target:type_name -> armadra.v1.BrowserTarget
+	21, // 19: armadra.v1.BrowserReadResponse.elements:type_name -> armadra.v1.BrowserElement
+	22, // 20: armadra.v1.BrowserReadResponse.console:type_name -> armadra.v1.BrowserConsoleEntry
+	23, // 21: armadra.v1.BrowserReadResponse.network:type_name -> armadra.v1.BrowserNetworkEntry
+	61, // 22: armadra.v1.BrowserClickRequest.meta:type_name -> armadra.v1.CommandMeta
+	42, // 23: armadra.v1.BrowserClickRequest.target:type_name -> armadra.v1.BrowserTarget
+	61, // 24: armadra.v1.BrowserTypeRequest.meta:type_name -> armadra.v1.CommandMeta
+	42, // 25: armadra.v1.BrowserTypeRequest.target:type_name -> armadra.v1.BrowserTarget
+	61, // 26: armadra.v1.BrowserWaitRequest.meta:type_name -> armadra.v1.CommandMeta
+	42, // 27: armadra.v1.BrowserWaitRequest.target:type_name -> armadra.v1.BrowserTarget
+	61, // 28: armadra.v1.BrowserCaptureRequest.meta:type_name -> armadra.v1.CommandMeta
+	42, // 29: armadra.v1.BrowserCaptureRequest.target:type_name -> armadra.v1.BrowserTarget
+	5,  // 30: armadra.v1.BrowserDownload.state:type_name -> armadra.v1.BrowserDownloadState
+	61, // 31: armadra.v1.BrowserDownloadDecisionRequest.meta:type_name -> armadra.v1.CommandMeta
+	61, // 32: armadra.v1.CreateBrowserSessionRequest.meta:type_name -> armadra.v1.CommandMeta
+	12, // 33: armadra.v1.CreateBrowserSessionRequest.viewport:type_name -> armadra.v1.BrowserViewport
+	61, // 34: armadra.v1.CloseBrowserSessionRequest.meta:type_name -> armadra.v1.CommandMeta
+	61, // 35: armadra.v1.ListBrowserSessionsRequest.meta:type_name -> armadra.v1.CommandMeta
+	13, // 36: armadra.v1.ListBrowserSessionsResponse.sessions:type_name -> armadra.v1.BrowserSession
+	14, // 37: armadra.v1.ListBrowserSessionsResponse.availability:type_name -> armadra.v1.BrowserAvailability
+	34, // 38: armadra.v1.BrowserAction.create:type_name -> armadra.v1.CreateBrowserSessionRequest
+	18, // 39: armadra.v1.BrowserAction.navigate:type_name -> armadra.v1.BrowserNavigateRequest
+	20, // 40: armadra.v1.BrowserAction.input:type_name -> armadra.v1.BrowserInputRequest
+	24, // 41: armadra.v1.BrowserAction.read:type_name -> armadra.v1.BrowserReadRequest
+	26, // 42: armadra.v1.BrowserAction.click:type_name -> armadra.v1.BrowserClickRequest
+	27, // 43: armadra.v1.BrowserAction.type:type_name -> armadra.v1.BrowserTypeRequest
+	28, // 44: armadra.v1.BrowserAction.wait:type_name -> armadra.v1.BrowserWaitRequest
+	30, // 45: armadra.v1.BrowserAction.capture:type_name -> armadra.v1.BrowserCaptureRequest
+	16, // 46: armadra.v1.BrowserAction.subscribe:type_name -> armadra.v1.BrowserSubscribeRequest
+	33, // 47: armadra.v1.BrowserAction.download_decision:type_name -> armadra.v1.BrowserDownloadDecisionRequest
+	35, // 48: armadra.v1.BrowserAction.close:type_name -> armadra.v1.CloseBrowserSessionRequest
+	36, // 49: armadra.v1.BrowserAction.list:type_name -> armadra.v1.ListBrowserSessionsRequest
+	52, // 50: armadra.v1.BrowserAction.select:type_name -> armadra.v1.BrowserSelectRequest
+	53, // 51: armadra.v1.BrowserAction.press:type_name -> armadra.v1.BrowserPressRequest
+	54, // 52: armadra.v1.BrowserAction.scroll:type_name -> armadra.v1.BrowserScrollRequest
+	55, // 53: armadra.v1.BrowserAction.upload:type_name -> armadra.v1.BrowserUploadRequest
+	50, // 54: armadra.v1.BrowserAction.dialog:type_name -> armadra.v1.BrowserDialogRequest
+	56, // 55: armadra.v1.BrowserAction.tabs:type_name -> armadra.v1.BrowserTabRequest
+	48, // 56: armadra.v1.BrowserAction.lease:type_name -> armadra.v1.BrowserLeaseRequest
+	57, // 57: armadra.v1.BrowserAction.close_tab:type_name -> armadra.v1.BrowserCloseTabRequest
+	41, // 58: armadra.v1.BrowserAction.managed_install:type_name -> armadra.v1.BrowserManagedInstallRequest
+	13, // 59: armadra.v1.BrowserActionResult.session:type_name -> armadra.v1.BrowserSession
+	25, // 60: armadra.v1.BrowserActionResult.read:type_name -> armadra.v1.BrowserReadResponse
+	29, // 61: armadra.v1.BrowserActionResult.wait:type_name -> armadra.v1.BrowserWaitResponse
+	31, // 62: armadra.v1.BrowserActionResult.capture:type_name -> armadra.v1.BrowserCaptureResponse
+	17, // 63: armadra.v1.BrowserActionResult.subscription:type_name -> armadra.v1.BrowserSubscription
+	32, // 64: armadra.v1.BrowserActionResult.download:type_name -> armadra.v1.BrowserDownload
+	37, // 65: armadra.v1.BrowserActionResult.sessions:type_name -> armadra.v1.ListBrowserSessionsResponse
+	62, // 66: armadra.v1.BrowserActionResult.error:type_name -> armadra.v1.ErrorResponse
+	44, // 67: armadra.v1.BrowserActionResult.tabs:type_name -> armadra.v1.BrowserTabList
+	47, // 68: armadra.v1.BrowserActionResult.lease:type_name -> armadra.v1.BrowserLease
+	49, // 69: armadra.v1.BrowserActionResult.dialog:type_name -> armadra.v1.BrowserDialog
+	40, // 70: armadra.v1.BrowserActionResult.managed:type_name -> armadra.v1.BrowserManagedState
+	6,  // 71: armadra.v1.BrowserManagedState.state:type_name -> armadra.v1.BrowserManagedInstallState
+	61, // 72: armadra.v1.BrowserManagedInstallRequest.meta:type_name -> armadra.v1.CommandMeta
+	49, // 73: armadra.v1.BrowserTab.pending_dialog:type_name -> armadra.v1.BrowserDialog
+	43, // 74: armadra.v1.BrowserTabList.tabs:type_name -> armadra.v1.BrowserTab
+	7,  // 75: armadra.v1.BrowserLease.state:type_name -> armadra.v1.BrowserLeaseState
+	45, // 76: armadra.v1.BrowserLease.human:type_name -> armadra.v1.BrowserLeaseHuman
+	46, // 77: armadra.v1.BrowserLease.agent:type_name -> armadra.v1.BrowserLeaseAgent
+	61, // 78: armadra.v1.BrowserLeaseRequest.meta:type_name -> armadra.v1.CommandMeta
+	8,  // 79: armadra.v1.BrowserLeaseRequest.action:type_name -> armadra.v1.BrowserLeaseAction
+	9,  // 80: armadra.v1.BrowserDialog.kind:type_name -> armadra.v1.BrowserDialogKind
+	61, // 81: armadra.v1.BrowserDialogRequest.meta:type_name -> armadra.v1.CommandMeta
+	61, // 82: armadra.v1.BrowserSelectRequest.meta:type_name -> armadra.v1.CommandMeta
+	42, // 83: armadra.v1.BrowserSelectRequest.target:type_name -> armadra.v1.BrowserTarget
+	61, // 84: armadra.v1.BrowserPressRequest.meta:type_name -> armadra.v1.CommandMeta
+	42, // 85: armadra.v1.BrowserPressRequest.target:type_name -> armadra.v1.BrowserTarget
+	61, // 86: armadra.v1.BrowserScrollRequest.meta:type_name -> armadra.v1.CommandMeta
+	42, // 87: armadra.v1.BrowserScrollRequest.target:type_name -> armadra.v1.BrowserTarget
+	61, // 88: armadra.v1.BrowserUploadRequest.meta:type_name -> armadra.v1.CommandMeta
+	42, // 89: armadra.v1.BrowserUploadRequest.target:type_name -> armadra.v1.BrowserTarget
+	61, // 90: armadra.v1.BrowserTabRequest.meta:type_name -> armadra.v1.CommandMeta
+	10, // 91: armadra.v1.BrowserTabRequest.action:type_name -> armadra.v1.BrowserTabAction
+	61, // 92: armadra.v1.BrowserCloseTabRequest.meta:type_name -> armadra.v1.CommandMeta
+	16, // 93: armadra.v1.BrowserStreamClient.hello:type_name -> armadra.v1.BrowserSubscribeRequest
+	20, // 94: armadra.v1.BrowserStreamClient.input:type_name -> armadra.v1.BrowserInputRequest
+	16, // 95: armadra.v1.BrowserStreamClient.visibility:type_name -> armadra.v1.BrowserSubscribeRequest
+	96, // [96:96] is the sub-list for method output_type
+	96, // [96:96] is the sub-list for method input_type
+	96, // [96:96] is the sub-list for extension type_name
+	96, // [96:96] is the sub-list for extension extendee
+	0,  // [0:96] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_browser_proto_init() }
@@ -3526,6 +6449,15 @@ func file_armadra_v1_browser_proto_init() {
 		(*BrowserAction_DownloadDecision)(nil),
 		(*BrowserAction_Close)(nil),
 		(*BrowserAction_List)(nil),
+		(*BrowserAction_Select)(nil),
+		(*BrowserAction_Press)(nil),
+		(*BrowserAction_Scroll)(nil),
+		(*BrowserAction_Upload)(nil),
+		(*BrowserAction_Dialog)(nil),
+		(*BrowserAction_Tabs)(nil),
+		(*BrowserAction_Lease)(nil),
+		(*BrowserAction_CloseTab)(nil),
+		(*BrowserAction_ManagedInstall)(nil),
 	}
 	file_armadra_v1_browser_proto_msgTypes[27].OneofWrappers = []any{
 		(*BrowserActionResult_Session)(nil),
@@ -3536,14 +6468,28 @@ func file_armadra_v1_browser_proto_init() {
 		(*BrowserActionResult_Download)(nil),
 		(*BrowserActionResult_Sessions)(nil),
 		(*BrowserActionResult_Error)(nil),
+		(*BrowserActionResult_Tabs)(nil),
+		(*BrowserActionResult_Lease)(nil),
+		(*BrowserActionResult_Dialog)(nil),
+		(*BrowserActionResult_Managed)(nil),
+	}
+	file_armadra_v1_browser_proto_msgTypes[35].OneofWrappers = []any{
+		(*BrowserLease_Human)(nil),
+		(*BrowserLease_Agent)(nil),
+	}
+	file_armadra_v1_browser_proto_msgTypes[47].OneofWrappers = []any{
+		(*BrowserStreamClient_Hello)(nil),
+		(*BrowserStreamClient_Ack)(nil),
+		(*BrowserStreamClient_Input)(nil),
+		(*BrowserStreamClient_Visibility)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_browser_proto_rawDesc), len(file_armadra_v1_browser_proto_rawDesc)),
-			NumEnums:      6,
-			NumMessages:   28,
+			NumEnums:      12,
+			NumMessages:   49,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
