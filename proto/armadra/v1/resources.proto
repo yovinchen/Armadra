@@ -1,0 +1,178 @@
+syntax = "proto3";
+
+package armadra.v1;
+
+option go_package = "armadra.local/host/gen/armadra/v1";
+
+// Host, session and platform-component resource sampling
+// (terminal host design §8, feature roadmap §4.3).
+//
+// Two invariants the wire format exists to preserve:
+//
+//  1. **Unknown is not zero.** Every measurement is `optional`, so a metric
+//     this platform cannot answer is *absent* rather than `0` — a zero reads
+//     as "idle", which is a different and wrong statement. Enumerations
+//     therefore also reserve 0 for UNSPECIFIED and never for a real value.
+//  2. **A pid alone does not identify a process.** Operating systems reuse
+//     pids, so every measured process carries its start time as well; a
+//     consumer deduplicates on the pair, never on the pid.
+//
+// Sampling reads the process table only. No terminal content, no command
+// line arguments and no command history appear anywhere in this file.
+
+enum ResourceLocation {
+  RESOURCE_LOCATION_UNSPECIFIED = 0;
+  // Measured on the machine the sampling runtime runs on.
+  RESOURCE_LOCATION_LOCAL = 1;
+  // Runs on another execution host, so this runtime carries no numbers for
+  // it. The control machine's memory is not the SSH host's.
+  RESOURCE_LOCATION_REMOTE = 2;
+}
+
+// Why a session carries no numbers. UNSPECIFIED means "it does carry
+// numbers": an absent reason is not itself a reason.
+enum ResourceUnknownReason {
+  RESOURCE_UNKNOWN_REASON_UNSPECIFIED = 0;
+  RESOURCE_UNKNOWN_REASON_REMOTE = 1;
+  RESOURCE_UNKNOWN_REASON_EXITED = 2;
+  RESOURCE_UNKNOWN_REASON_NO_PID = 3;
+  RESOURCE_UNKNOWN_REASON_NOT_FOUND = 4;
+  // CPU is a delta between two refreshes; the first one has no predecessor.
+  RESOURCE_UNKNOWN_REASON_WARMING_UP = 5;
+}
+
+// Armadra's own processes, which are reported apart from the user's CLI
+// sessions so that "what is Armadra costing me" and "what is my agent
+// costing me" stay separate questions.
+enum PlatformComponentKind {
+  PLATFORM_COMPONENT_KIND_UNSPECIFIED = 0;
+  PLATFORM_COMPONENT_KIND_RUNTIME = 1;
+  PLATFORM_COMPONENT_KIND_HOST = 2;
+  PLATFORM_COMPONENT_KIND_COMMAND_WORKER = 3;
+  PLATFORM_COMPONENT_KIND_SESSION_HOST = 4;
+  PLATFORM_COMPONENT_KIND_BROWSER_WORKER = 5;
+}
+
+// A process, identified so that pid reuse cannot merge two of them. The start
+// time is optional because some platforms will not answer it; two identities
+// that differ only in an absent start time must not be assumed equal.
+message ProcessIdentity {
+  int64 pid = 1;
+  optional int64 start_time_unix_ms = 2;
+}
+
+// One process inside a tree. `name` is the executable's file name only —
+// never the command line, which would carry arguments and secrets.
+message ProcessSample {
+  ProcessIdentity identity = 1;
+  string name = 2;
+  optional uint64 rss_bytes = 3;
+  optional double cpu_percent = 4;
+  optional int64 parent_pid = 5;
+}
+
+// One managed terminal session's process tree.
+//
+// `rss_bytes` is a sum over the tree and is therefore an estimate: processes
+// that share pages have those pages counted once per process, so it must not
+// be presented as exclusive memory.
+message SessionMetrics {
+  string session_id = 1;
+  uint64 generation = 2;
+  optional int64 pid = 3;
+  optional uint64 rss_bytes = 4;
+  optional double cpu_percent = 5;
+  optional uint32 child_count = 6;
+  string cwd = 7;
+  // Empty for a plain shell; a session is not required to run an agent.
+  string agent_id = 8;
+  int64 sampled_at_unix_ms = 9;
+  ResourceLocation location = 10;
+  ResourceUnknownReason unknown_reason = 11;
+  optional int64 start_time_unix_ms = 12;
+  // The tree below the leader, for the panel's expandable process list.
+  // Bounded by the producer; an empty list with a non-zero `child_count`
+  // means the children were not enumerated, not that there are none.
+  repeated ProcessSample children = 13;
+}
+
+message MemoryMetrics {
+  optional uint64 total_bytes = 1;
+  optional uint64 used_bytes = 2;
+  optional uint64 available_bytes = 3;
+  optional uint64 swap_total_bytes = 4;
+  optional uint64 swap_used_bytes = 5;
+}
+
+message LoadAverage {
+  double one = 1;
+  double five = 2;
+  double fifteen = 3;
+}
+
+message DiskMetrics {
+  string mount_point = 1;
+  optional uint64 total_bytes = 2;
+  optional uint64 available_bytes = 3;
+}
+
+// The execution host itself. `host_id` names which machine was measured, so a
+// remote host's sample can never be mistaken for the control machine's.
+message HostMetrics {
+  string host_id = 1;
+  ResourceLocation location = 2;
+  string platform = 3;
+  optional double cpu_percent = 4;
+  optional uint32 cpu_cores = 5;
+  MemoryMetrics memory = 6;
+  // Absent on platforms that have no load average, rather than three zeros.
+  // Message fields already carry presence, so they need no `optional`.
+  LoadAverage load_average = 7;
+  DiskMetrics disk = 8;
+  optional uint64 uptime_seconds = 9;
+  int64 sampled_at_unix_ms = 10;
+}
+
+// One of Armadra's own processes. `tree` says whether the numbers cover the
+// descendants too: the runtime measures only itself, because the sessions it
+// starts are its children and would otherwise be counted twice.
+message PlatformComponentMetrics {
+  PlatformComponentKind kind = 1;
+  ProcessSample process = 2;
+  bool tree = 3;
+  optional uint32 child_count = 4;
+  ResourceUnknownReason unknown_reason = 5;
+}
+
+message ReadResourcesRequest { string workspace_id = 1; }
+
+message ResourceSample {
+  string workspace_id = 1;
+  HostMetrics host = 2;
+  repeated SessionMetrics sessions = 3;
+  repeated PlatformComponentMetrics components = 4;
+  int64 sampled_at_unix_ms = 5;
+  uint64 interval_ms = 6;
+}
+
+message ReadResourcesResponse { ResourceSample sample = 1; }
+
+// Sampling is a subscription, not a timer: nothing is measured while nobody
+// holds one. `interval_ms` is what this subscriber wants — an offscreen node
+// badge asks for a slow one — and the producer samples at the smallest
+// interval any live subscription asks for.
+message SubscribeResourcesRequest {
+  string workspace_id = 1;
+  // Renew this subscription instead of taking a new one.
+  optional string subscription_id = 2;
+  optional uint64 interval_ms = 3;
+}
+
+message SubscribeResourcesResponse {
+  string subscription_id = 1;
+  string workspace_id = 2;
+  // The interval actually granted, which may be shorter than the one asked
+  // for because another subscriber wants faster samples.
+  uint64 interval_ms = 3;
+  int64 expires_at_unix_ms = 4;
+}
