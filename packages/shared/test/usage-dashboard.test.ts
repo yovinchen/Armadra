@@ -41,9 +41,9 @@ describe("usage dashboard contracts", () => {
         },
       ],
     });
-    expect(parsed.providers[0].windows[0].unlimited).toBe(true);
-    expect(parsed.providers[1].credits?.balance).toBe(12.5);
-    expect(parsed.providers[1].viaCli).toBe(true);
+    expect(parsed.providers[0]!.windows[0]!.unlimited).toBe(true);
+    expect(parsed.providers[1]!.credits?.balance).toBe(12.5);
+    expect(parsed.providers[1]!.viaCli).toBe(true);
   });
 
   it("keeps a window from an older runtime that has no unlimited flag", () => {
@@ -60,7 +60,7 @@ describe("usage dashboard contracts", () => {
         },
       ],
     });
-    expect(parsed.providers[0].windows[0].unlimited).toBeUndefined();
+    expect(parsed.providers[0]!.windows[0]!.unlimited).toBeUndefined();
   });
 
   it("reads an unpriced model as null cost rather than zero", () => {
@@ -78,7 +78,7 @@ describe("usage dashboard contracts", () => {
       truncated: false,
       scannedAt: "2026-09-05T10:00:00Z",
     });
-    expect(parsed.today.models[0].costUsd).toBeNull();
+    expect(parsed.today.models[0]!.costUsd).toBeNull();
     expect(parsed.today.complete).toBe(false);
     expect(parsed.currentSession).toBeUndefined();
   });

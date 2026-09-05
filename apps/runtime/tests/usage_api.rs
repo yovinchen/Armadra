@@ -11,8 +11,8 @@
 //! the top of the single test in this binary, so no two tests can race on it.
 
 use armadra_runtime::{
-    AppState, db, events::EventHub, hook::HookService, router_with_state, settings::SettingsStore,
-    terminal::TerminalManager, usage::UsageService,
+    AppState, db, events::EventHub, hook::HookService, resources::ResourceService,
+    router_with_state, settings::SettingsStore, terminal::TerminalManager, usage::UsageService,
 };
 use axum::{
     body::{Body, to_bytes},
@@ -185,6 +185,7 @@ async fn copilot_signs_in_by_device_flow_and_the_dashboard_reports_quota_and_cos
         terminals: TerminalManager::new(pool.clone(), events.clone()),
         hooks: HookService::with_default_paths(None),
         usage: UsageService::new(settings.clone()),
+        resources: ResourceService::new(settings.clone()),
         events,
         pool,
         settings,
