@@ -14,6 +14,7 @@ import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
 import { Check, Field, ReadError, selectClass } from "./forms";
+import { createWorktreeAction, localBranch } from "./worktree";
 
 /** 绑定 Frame 的默认尺寸：装得下一个默认终端还留出边距。 */
 const FRAME_SIZE = { width: 720, height: 560 };
@@ -47,9 +48,7 @@ export function Worktrees({
   const [startPoint, setStartPoint] = useState("");
   const [createFrame, setCreateFrame] = useState(false);
   const [initScript, setInitScript] = useState("");
-  const selectedBranch = branches.find(
-    (record) => !record.remote && record.name === branch,
-  );
+  const selectedBranch = localBranch(branches, branch);
   const validBranch = createBranch
     ? Boolean(branch.trim())
     : Boolean(selectedBranch);
@@ -124,23 +123,23 @@ export function Worktrees({
         className="space-y-2 rounded-md border border-border p-3"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!busy && path.trim() && validBranch) {
-            intent.current = createFrame
-              ? {
-                  path: path.trim(),
-                  branch: branch.trim(),
-                  script: initScript,
-                }
-              : null;
-            request({
-              kind: "createWorktree",
-              path: path.trim(),
-              branch: branch.trim(),
-              createBranch,
-              expectedOid: createBranch ? null : selectedBranch!.oid,
-              startPoint: createBranch ? startPoint.trim() || null : null,
-            });
-          }
+          if (busy) return;
+          const action = createWorktreeAction({
+            path,
+            branch,
+            createBranch,
+            startPoint,
+            existing: selectedBranch,
+          });
+          if (!action) return;
+          intent.current = createFrame
+            ? {
+                path: path.trim(),
+                branch: branch.trim(),
+                script: initScript,
+              }
+            : null;
+          request(action);
         }}
       >
         <fieldset disabled={busy} className="min-w-0 space-y-2">
