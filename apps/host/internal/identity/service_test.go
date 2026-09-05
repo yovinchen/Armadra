@@ -634,3 +634,58 @@ func TestRevocationCASAndRestart(t *testing.T) {
 		t.Fatal("restart revoked unrelated owner session")
 	}
 }
+
+func TestLogoutRefreshWorksAfterAccessExpiryAndRevokesOnlyItsSession(t *testing.T) {
+	f := setup(t)
+	first := f.login(t, "browser", []Scope{{Permission: "canvas:read"}})
+	other := f.login(t, "other device", AllScopes())
+	f.now.Store(first.AccessExpiresAtMS)
+	_, err := f.service.Authenticate(testContext, access(first))
+	requireDenied(t, err)
+	if err = f.service.LogoutRefresh(testContext, refresh(first)); err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.service.Refresh(testContext, refresh(first))
+	requireDenied(t, err)
+	_, err = f.service.RenewCSRF(testContext, CSRFRequest{RefreshToken: first.RefreshToken, HostID: testHost, Origin: testOrigin})
+	requireDenied(t, err)
+	// An unrelated device's refresh remains live, including after the first
+	// device logs out without any identity:manage grant.
+	if _, err = f.service.Refresh(testContext, refresh(other)); err != nil {
+		t.Fatal("logout invalidated another device")
+	}
+	requireDenied(t, f.service.LogoutRefresh(testContext, refresh(first)))
+}
+
+func TestLogoutRefreshDenialsDoNotRevokeLiveSession(t *testing.T) {
+	f := setup(t)
+	credentials := f.login(t, "browser", AllScopes())
+	tests := map[string]func(*RefreshRequest){
+		"wrong host":   func(r *RefreshRequest) { r.HostID = strings.Repeat("f", 32) },
+		"wrong origin": func(r *RefreshRequest) { r.Origin = "https://evil.example.test" },
+		"no origin":    func(r *RefreshRequest) { r.Origin = "" },
+		"missing CSRF": func(r *RefreshRequest) { r.CSRFToken = "" },
+		"wrong CSRF":   func(r *RefreshRequest) { r.CSRFToken = strings.Repeat("A", 43) },
+		"access token": func(r *RefreshRequest) { r.RefreshToken = credentials.AccessToken },
+	}
+	for name, change := range tests {
+		t.Run(name, func(t *testing.T) {
+			request := refresh(credentials)
+			change(&request)
+			requireDenied(t, f.service.LogoutRefresh(testContext, request))
+			if _, err := f.service.Authenticate(testContext, access(credentials)); err != nil {
+				t.Fatal("denial revoked live session")
+			}
+		})
+	}
+	rotated, err := f.service.Refresh(testContext, refresh(credentials))
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireDenied(t, f.service.LogoutRefresh(testContext, refresh(credentials)))
+	if _, err = f.service.Authenticate(testContext, access(rotated)); err != nil {
+		t.Fatal("old refresh revoked rotated session")
+	}
+	f.now.Store(rotated.ExpiresAtMS)
+	requireDenied(t, f.service.LogoutRefresh(testContext, refresh(rotated)))
+}

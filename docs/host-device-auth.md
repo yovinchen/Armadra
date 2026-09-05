@@ -1,0 +1,46 @@
+# Host 设备认证
+
+当前实现单个 owner 的多个设备。认证接口使用 Protobuf；业务数据所有权、Worker 和终端转发仍按平台实施记录推进，认证成功本身不表示已经完成远程业务迁移。
+
+## 启动 HTTPS
+
+默认回环 HTTP 只提供本机元数据，不能签发浏览器配对材料或设置认证 Cookie。浏览器认证必须使用明确配置的 HTTPS 来源，客户端正常验证证书链与主机名。Host 不安装 CA、不修改系统信任，也不提供跳过证书验证选项。
+
+以下地址与文件为示例，替换为实际接口 IP、证书路径与客户端访问域名：
+
+```sh
+armadra-host start --data-dir /path/to/host-data \
+  --listen 192.168.1.20:43121 \
+  --tls-cert /path/to/certificate.pem \
+  --tls-key /path/to/private-key.pem \
+  --public-origin https://armadra.example:43121
+```
+
+必须同时提供证书、私钥和 HTTPS 来源。启动前检查证书与私钥匹配、证书有效期及主机名；不接受通配监听地址。私钥应由运行 Host 的系统用户私有保管。证书续期后重启 Host，重新读取证书。
+
+`--allow-origin` 仅扩展元数据读取来源，不授予认证权限。配对与会话接口要求浏览器页面与 `--public-origin` 同源；Tauri、自定义来源或明文开发页面不能因此自动登录。
+
+## 本机批准设备
+
+在 Host 所属系统账号下运行：
+
+```sh
+armadra-host pair --data-dir /path/to/host-data \
+  --origin https://armadra.example:43121 --device-name "我的手机"
+```
+
+此命令通过 OS 私有控制通道查询 Host，并签发绑定 Host、运行实例、来源和设备名称的一次性票据，输出 JSON；原生调用可使用 `--output protobuf`。票据两分钟有效，只能消费一次。命令显式批准该 owner 的完整权限；内部协议另支持按工作空间和执行主机收窄授权。
+
+将票据交给同源设备登录界面消费。输出不含长期 access/refresh 凭据，不将票据放进 URL、日志、画布或项目文件。更换来源或 Host 实例后需重新申请票据。当前默认 HTTP Host 会直接拒绝此命令，避免签发无法使用的材料。
+
+## 会话与撤销
+
+- HTTPS 响应使用 `Secure`、`HttpOnly`、`SameSite=Strict`、`__Host-` 前缀 Cookie；access 十五分钟有效，会话绝对期限三十天。
+- CSRF 只交给同源客户端并绑定会话；刷新原子轮转 access、refresh 和 CSRF，旧值立即失效。丢失内存 CSRF 时可凭仍有效的 refresh Cookie 重新取得 CSRF，不能延长绝对期限。
+- 注销验证 refresh 与 CSRF，因此 access 已过期也能撤销当前会话。设备撤销核对确认时的 revision，并使其所有会话在下一次认证时失效。
+- 每次认证从数据库核对撤销版本及实际权限；设备名、角色字符串或客户端请求中的 ID 不授予权限。operator/viewer 只预留定义，当前不开放多人授权。
+- 刷新或配对的响应丢失可能使凭据结果未知，不能盲目重发；必要时重新配对。实时 WebSocket 撤销断流在流式业务接线时继续实现。
+
+接口前缀为 `/rpc/armadra.v1.IdentityService/`，提供 `Pair`、`Current`、`RenewCsrf`、`Refresh`、`Logout`、`ListDevices`、`RevokeDevice`。全部为有界 Protobuf POST，拒绝错误 Origin、重复认证 Cookie、压缩编码与畸形消息。Hello 仅在 HTTPS 认证实际配置时报告 `identity.browser-session.v1`。
+
+真实 TLS、证书主机名、Cookie 属性、CLI 到 HTTPS 配对及数据库权限边界均有独立临时环境测试；未以这些测试代替移动浏览器、系统证书部署或 Windows 实机验收。

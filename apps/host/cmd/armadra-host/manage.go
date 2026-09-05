@@ -111,6 +111,9 @@ func startBackground(parent context.Context, c config) error {
 		return err
 	}
 	args := []string{"serve", "--data-dir", c.dataDir, "--listen", c.address}
+	if c.publicOrigin != "" {
+		args = append(args, "--tls-cert", c.certFile, "--tls-key", c.keyFile, "--public-origin", c.publicOrigin)
+	}
 	for _, origin := range c.origins {
 		args = append(args, "--allow-origin", origin)
 	}

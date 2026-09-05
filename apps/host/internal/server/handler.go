@@ -38,6 +38,12 @@ func NewHandler(identity Identity) http.Handler {
 
 // NewHandlerWithOptions validates the explicit origin allowlist once.
 func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, error) {
+	if options.PublicOrigin != "" {
+		origin, err := ParseOrigin(options.PublicOrigin)
+		if err != nil || origin != options.PublicOrigin || !strings.HasPrefix(origin, "https://") {
+			return nil, errors.New("public origin must be an exact HTTPS origin")
+		}
+	}
 	allowed, err := originSet(options)
 	if err != nil {
 		return nil, err
@@ -47,8 +53,39 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Add("Vary", "Origin")
 		origin, explicit, permitted := checkOrigin(r, allowed)
-		if !loopbackAuthority(r.Host) || !permitted {
+		authorityAllowed := loopbackAuthority(r.Host)
+		if options.PublicOrigin != "" {
+			authorityAllowed = r.TLS != nil && "https://"+r.Host == options.PublicOrigin
+		}
+		if !authorityAllowed || !permitted {
 			writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "Local request origin is not allowed")
+			return
+		}
+		if options.Identity != nil && authMethod(r.URL.Path) {
+			if origin != options.PublicOrigin {
+				writeError(w, 403, "PERMISSION_DENIED", "Authentication requires the Host HTTPS origin")
+				return
+			}
+			if r.TLS == nil || options.PublicOrigin == "" {
+				writeError(w, 403, "PERMISSION_DENIED", "Browser authentication requires configured HTTPS")
+				return
+			}
+			if origin == "" {
+				writeError(w, 403, "PERMISSION_DENIED", "An exact browser origin is required")
+				return
+			}
+			if r.Method == http.MethodOptions {
+				identityPreflight(w, r, origin)
+				return
+			}
+			if r.Method != http.MethodPost {
+				w.Header().Set("Allow", "POST")
+				writeError(w, 405, "INVALID_ARGUMENT", "POST required")
+				return
+			}
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			identityRequest(w, r, identity, options.Identity)
 			return
 		}
 		var method string
@@ -78,11 +115,11 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			_, _ = io.WriteString(w, "ok\n")
 			return
 		}
-		hello(w, r, identity)
+		hello(w, r, identity, options.Identity != nil && options.PublicOrigin != "" && r.TLS != nil)
 	}), nil
 }
 
-func hello(w http.ResponseWriter, r *http.Request, identity Identity) {
+func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentication bool) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
 		writeError(w, http.StatusMethodNotAllowed, "INVALID_ARGUMENT", "POST required")
@@ -122,11 +159,15 @@ func hello(w http.ResponseWriter, r *http.Request, identity Identity) {
 		writeError(w, http.StatusConflict, "UNSUPPORTED", "Protocol major version is incompatible")
 		return
 	}
+	capabilities := []string{"protocol.hello.v1", "host.identity.v1"}
+	if authentication {
+		capabilities = append(capabilities, "identity.browser-session.v1")
+	}
 	writeProto(w, http.StatusOK, &pb.HelloResponse{
 		Protocol:       &pb.ProtocolVersion{Major: ProtocolMajor, Minor: min(request.Protocol.GetMinor(), ProtocolMinor)},
 		HostInstanceId: identity.InstanceID,
 		HostId:         identity.HostID,
-		Capabilities:   []string{"protocol.hello.v1", "host.identity.v1"},
+		Capabilities:   capabilities,
 		MaxFrameBytes:  MaxFrameBytes,
 	})
 }
@@ -167,5 +208,9 @@ func sameOrigin(r *http.Request) bool {
 		return true
 	}
 	u, err := url.Parse(origin)
-	return err == nil && u.Scheme == "http" && u.Host == r.Host && u.User == nil && u.Path == "" && u.RawQuery == "" && u.Fragment == ""
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	return err == nil && u.Scheme == scheme && u.Host == r.Host && u.User == nil && u.Path == "" && u.RawQuery == "" && u.Fragment == ""
 }

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"armadra.local/host/internal/identity"
 	"errors"
 	"net"
 	"net/http"
@@ -12,7 +13,11 @@ import (
 
 // Options permits explicitly named browser origins to read local metadata.
 // This is not device authentication and never enables remote listening.
-type Options struct{ AllowedOrigins []string }
+type Options struct {
+	AllowedOrigins []string
+	Identity       *identity.Service
+	PublicOrigin   string
+}
 
 // ParseOrigin validates a serialized origin and returns its canonical spelling.
 // Paths (including /), credentials, opaque origins and wildcards are rejected.

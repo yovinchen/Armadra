@@ -307,3 +307,11 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - 操作确认绑定 HEAD/分支、index、工作区内容、未跟踪内容和 Stash 列表摘要。Pop 仅在应用成功且列表仍一致时移除；冲突/取消保留记录，ignored 文件或父路径碰撞拒绝应用。
 - Git reflog selector 不提供跨外部 Git 进程的原子 CAS；界面明确并发限制，当前应用内共用队列并在写入前重核 OID 和列表，不手工伪造 Git 元数据。
 - 29 项真实仓库回归（新增5）、Stash7及仓库面板10项组件、shared6项通过；新增实际路由验证创建→操作轮询→列表→未跟踪快照详情及权限拒绝，类型检查与Clippy通过。
+
+## 连续实施：HTTPS 设备配对与会话接口
+
+- Host 增加显式证书/私钥/public-origin 配置，检查证书主机名与有效期，只在具体接口 IP 上监听；默认 HTTP 保留元数据能力，拒绝浏览器配对与 Cookie 认证。不会自动安装证书或跳过客户端验证。
+- 本机 pair CLI 经私有 IPC 取得一次性票据，绑定服务实际 HTTPS 来源；HTTP 与未开放来源拒绝签发。HTTPS Protobuf接口完成Pair/Current/Refresh/RenewCsrf/Logout/设备分页/撤销CAS，Cookie为Secure/HttpOnly/Strict/__Host前缀。
+- 独立审查修复回环 Cookie 跨端口泄露边界、access过期不能注销、会话权限与设备权限混淆、metadata allowlist扩大认证来源等问题。过期access仍可通过refresh+CSRF事务注销；协议错误隐藏内部详情与凭据。
+- Go Host CGO=0全套与vet通过；身份/服务器race通过。新增真实子进程pair CLI→证书验证HTTPS→安全Cookie恢复链路通过；另有真实HTTPS的期限/撤销/范围/CSRF/双cookie/编码/超限/深group回归。测试证书只加入私有客户端RootCAs，未修改系统信任。
+- 使用与限制见[设备认证](./host-device-auth.md)。客户端设置UI正在下一批接入；Host尚未完成业务权威切换、静态前端与Worker接管，不将本批记为完整远程工作平台。

@@ -312,6 +312,31 @@ func (s *Service) RenewCSRF(ctx context.Context, request CSRFRequest) (string, e
 	return secret, nil
 }
 
+// LogoutRefresh revokes the credential's own session in the same transaction
+// that checks its refresh token, bound CSRF, origin and device epoch. An expired
+// access cookie does not prevent logout while the absolute session is live.
+// Unknown/expired credentials do not return a successful revocation receipt.
+func (s *Service) LogoutRefresh(ctx context.Context, request RefreshRequest) error {
+	id, valid := parseToken(request.RefreshToken)
+	if !valid || !s.audience(request.HostID, request.Origin) || !validSecret(request.CSRFToken) {
+		return ErrUnauthenticated
+	}
+	return s.store.IdentityTransaction(ctx, func(tx *storage.IdentityTx) error {
+		now, err := s.now()
+		if err != nil {
+			return err
+		}
+		session, _, _, err := s.liveSession(tx, id, request.Origin, now)
+		if err != nil {
+			return err
+		}
+		if !matches("refresh", request.RefreshToken, session.RefreshHash) || !matches("csrf", request.CSRFToken, session.CSRFHash) {
+			return ErrUnauthenticated
+		}
+		return tx.RevokeSession(id, now)
+	})
+}
+
 func (s *Service) RevokeDevice(ctx context.Context, actor AccessRequest, deviceID string, expectedEpoch uint64) error {
 	if !idPattern.MatchString(deviceID) || expectedEpoch == 0 {
 		return ErrInvalid
