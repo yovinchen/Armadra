@@ -63,10 +63,12 @@ Armadra 是 local-first 的 AI Coding 画布：把真实 CLI Agent（Claude Code
 | tmux（跨 Runtime 重启存活）、直连 PTY、SSH 三种后端                          | ✅   |
 | PATH 补齐、捕获 / 粘贴 / 回收 / 终止、IME、滚动回放                          | ✅   |
 | Command W 隐藏到托盘；Command Q 停止 Host/Runtime/受管会话                   | ✅   |
-| Windows ConPTY 独立 Session Host 持久会话（T01）                             | ⬜   |
-| 后台渲染预算：focused / visible / offscreen / detached / disconnected（T03） | ⬜   |
-| 会话休眠与恢复，不重复启动（T03）                                            | ⬜   |
+| Windows ConPTY 独立 Session Host 持久会话（T01）                             | 🔶   |
+| 后台渲染预算：focused / visible / offscreen / detached / disconnected（T03） | ✅   |
+| 会话休眠与恢复，不重复启动（T03）                                            | ✅   |
 | Agent 工作时防休眠租约，完成后释放（T02）                                    | ⬜   |
+
+T01 是 🔶：`crates/session-host` 与 Worker 侧后端已交付并通过交叉编译，但**没有在任何 Windows 真机上运行过**，无头 VT 屏幕仍待选型。范围与限制见[终端与主机生命周期设计 §3.1](./terminal-host-design.md)。
 
 ### 3.4 Git（含多仓库）
 

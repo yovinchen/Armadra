@@ -39,6 +39,18 @@ ConPTY 的创建、双向流和子进程必须由宿主维护；输入/输出分
 
 关闭 ConPTY 会结束附着的控制台进程，因此只有显式终止会话才走该路径；依据 [ClosePseudoConsole 文档](https://learn.microsoft.com/en-us/windows/console/closepseudoconsole)。
 
+### 3.1 实现状态（T01，M2）
+
+`crates/session-host` 交付 `armadra-session-host`（Windows）。平台无关的部分——线长前缀帧编解码 `protocol.rs`、会话表与 generation 栅栏 `session.rs`、有界回放缓冲与终端查询应答 `replay.rs`、管道名派生与 SID 判定 `pipe.rs`、客户端序号跟踪 `client.rs`——在任何平台都能跑单测；ConPTY（`conpty.rs`）、Job Object 与 SID（`winsec.rs`）、管道服务端（`host.rs`）与客户端（`link.rs`）在 `#[cfg(windows)]` 下。
+
+管道名由「用户 SID + 数据目录 + 协议 major」派生：`\\.\pipe\armadra-session-<sid>-<hash>-v<major>`，不用发现文件，两端各自算出来永远一致。安全描述符是受保护 DACL，只给本用户与 LocalSystem；`first_pipe_instance` 兼作并发闸——两个 Worker 同时冷启动只会有一个宿主，另一个连上它。**每条被接受的连接都按该句柄核对客户端进程 SID**，因为管道名可预测，连上本身不证明任何事。早期设计 §4.2 的 token 文件没有实现：它的 ACL 与管道 ACL 是同一个人，证明不了 SID 检查之外的东西，只多一份可泄漏的密钥。
+
+Session Host 被杀时会话随之结束：每个会话的进程树在一个 `KILL_ON_JOB_CLOSE` 的 Job Object 里（§3 规则 4 的选择——不可控的孤儿比诚实的「宿主没了，这些运行丢了」更糟）。Worker 侧 `apps/runtime/src/terminal/session_host.rs` 是 `BackendKind::SessionHost`，Windows 上 `auto` 即选它；宿主起不来时报错而不是悄悄退回 direct，因为 direct 的会话会随 Runtime 一起死，静默降级等于骗人。宿主的 `instanceId` 变了即说明它重启过，Worker 据此清掉记忆而不是从空列表反推。
+
+协议**没有**放进 `proto/`：这条线只有两个说话者、都是 Rust、同一个安装包里，生成 Go 与 TypeScript 只会为一场它们永远不会加入的对话产出代码。出现第三个说话者时再搬。
+
+未实现 / 未验证：§5 的无头 VT 屏幕仍待选型（[探针记录](./research/m0-executor-probes.md)），当前重附着回放的是最近 200 KiB 原始输出（截断点避开 UTF-8 与转义序列中间），与 direct 后端同一档契约，不是重绘；`capture` 因此也是回放而非读屏。升级 drain 只有协议与状态机、没有接线。**全部 Windows 行为未在真机运行过**：`cargo check --target x86_64-pc-windows-msvc` 对 `armadra-session-host` 通过，对 `armadra-runtime` 因 `aws-lc-sys` 缺 Windows SDK 头文件失败，所以 Worker 侧的 Windows 文件是借一个只含真实 `backend.rs` 的临时 crate 交叉类型检查过的。§12.1 的验收矩阵一条都还没跑。
+
 Windows 下 Ctrl+C 作为终端输入/后端中断能力处理；Ctrl+Break、进程树终止另设操作。不套用 Unix kill(-pgid) 语义。PowerShell、cmd、Git Bash、原生 CLI 与 WSL 分别测试；WSL 会话在能力探测后走对应执行环境，不能混用 Linux 路径和 Win32 路径。
 
 ## 4. 命名管道与会话协议
@@ -101,6 +113,18 @@ xterm 实例用有界 LRU；WebGL context 设设备预算（初始 4 个，可�
 普通 Shell 中运行的任意进程、无法确认状态的 Agent、带后台子进程的任务默认不自动休眠。Unix SIGSTOP/Windows suspend 不作为通用省内存策略，因为暂停进程不等于释放内存，也可能阻塞外部锁。
 
 计划目标为 hibernated 时，仅在计划 coldStartPolicy 明确允许且凭据可用时恢复；未启用则记录 skipped/target-unavailable。页面隐藏不触发上述策略。
+
+### 7.3 实现状态（T03，M7）
+
+前端视图状态机在 `apps/web/src/terminal/render-state.ts`（纯函数 + 单测），五个状态与 §7.1 的表一一对应；判可见复用 `apps/web/src/panels/resources/use-visibility.ts` 的 `useOnScreen` / `usePageVisible`，聚焦取自容器的 focusin/focusout。离屏时 WS 帧不再逐帧写进 xterm，而是攒起来每 500 ms 灌一次并跳过 `refit()`——字节不丢、不乱序，缓冲上限 2 MiB 且从头部丢弃（xterm 自己的 scrollback 本来也会丢最旧的那几行）。
+
+渲染预算在 `render-budget.ts`：同时全速渲染的终端数默认 4（§7.1 的 WebGL 上下文预算），可在设置 → 终端改（`armadra.terminal.renderBudget`，本机 localStorage，1–24）。聚焦的终端永远拿得到名额，其余按最近活跃 LRU 淘汰；丢名额只卸 WebGL addon 并退到批量刷新，`Terminal` 实例本身不重建。
+
+`detached` 有两条路：节点折叠满 5 秒（原有），或页面隐藏满 60 秒（新增）。两条都只关 WS，Runtime 会话照跑；重新可见时走原有的 reset + attach，`ensureSession` 不重入，因此不会新建会话。`disconnected`（连接意外断开、正在退避重连）与 `detached` 在节点头部用两个不同的 chip 分开显示，都不表示进程结束。
+
+执行端的会话休眠在 `apps/runtime/src/terminal/mod.rs`：每个会话记附着 socket 数（RAII 租约，socket 的每条退出路径都会释放，包括 `detached()` 到不了的提前返回），连续 `terminal.dormantAfterSeconds`（默认 120 秒，5s–24h，`0` = 关闭）没有任何附着即进入休眠。休眠只改投递节奏——direct 后端的输出批处理窗口从 16 ms 放宽到 500 ms，于是每秒约 60 次唤醒、广播与 `terminal_logs` 写入降到约 2 次；**字节一个不丢**，回放缓冲原样保留，进程完全不受影响。附着即唤醒，且唤醒只是把窗口调回去，永远不是 create。tmux 后端的 detach 本来就结束了 `tmux attach-session` 客户端进程，没有别的可释放，因此 `set_dormant` 对它是显式的空操作而不是假装做了什么。
+
+未实现：Eco 模式（对支持 resume 的 Agent 友好退出并保存恢复信息）、`running → idle → hibernate-requested → hibernated → resuming` 状态机与计划 coldStartPolicy 的联动。首版按 §7.2 的默认只回收视图与投递节奏，不自动结束任何 CLI。
 
 ## 8. 主机与会话资源面板
 
