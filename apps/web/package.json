@@ -1,18 +1,18 @@
 {
-  "name": "@ai-coding-canvas/web",
+  "name": "@armadra/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "pnpm --filter @ai-coding-canvas/shared build",
+    "predev": "pnpm --filter @armadra/shared build",
     "dev": "vite --port 1420",
-    "prebuild": "pnpm --filter @ai-coding-canvas/shared build",
+    "prebuild": "pnpm --filter @armadra/shared build",
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
-    "@ai-coding-canvas/shared": "workspace:*",
+    "@armadra/shared": "workspace:*",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.12",
     "@codemirror/lang-javascript": "^6.2.5",

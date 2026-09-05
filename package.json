@@ -1,5 +1,5 @@
 {
-  "name": "ai-coding-canvas",
+  "name": "armadra",
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@11.18.0",
@@ -8,13 +8,13 @@
   },
   "scripts": {
     "build": "pnpm -r --if-present build",
-    "dev": "pnpm --filter @ai-coding-canvas/web dev",
+    "dev": "pnpm --filter @armadra/web dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck",
-    "check:rust": "pnpm --filter @ai-coding-canvas/desktop prepare:sidecar && cargo check --workspace"
+    "check:rust": "pnpm --filter @armadra/desktop prepare:sidecar && cargo check --workspace"
   },
   "devDependencies": {
     "prettier": "3.6.2",

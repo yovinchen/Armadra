@@ -6,7 +6,7 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": [
         "--filter",
-        "@ai-coding-canvas/web",
+        "@armadra/web",
         "exec",
         "vite",
         "--port",
@@ -22,7 +22,7 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": [
         "--filter",
-        "@ai-coding-canvas/web",
+        "@armadra/web",
         "exec",
         "vite",
         "--port",

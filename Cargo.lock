@@ -18,65 +18,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ai-coding-canvas-desktop"
-version = "0.1.0"
-dependencies = [
- "reqwest",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-notification",
- "tauri-plugin-opener",
- "tokio",
- "window-vibrancy",
-]
-
-[[package]]
-name = "ai-coding-canvas-runtime"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum",
- "base64 0.22.1",
- "bytes",
- "chrono",
- "futures-util",
- "hmac 0.12.1",
- "libc",
- "mime_guess",
- "portable-pty",
- "rand 0.9.5",
- "regex",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "subtle",
- "tempfile",
- "thiserror 2.0.20",
- "tokio",
- "tokio-tungstenite",
- "toml_edit 0.25.13+spec-1.1.0",
- "tower",
- "tower-http 0.7.0",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "aicc-hook"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "tempfile",
-]
-
-[[package]]
 name = "alloc-no-stdlib"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -111,6 +52,65 @@ name = "anyhow"
 version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
+
+[[package]]
+name = "armadra-desktop"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-notification",
+ "tauri-plugin-opener",
+ "tokio",
+ "window-vibrancy",
+]
+
+[[package]]
+name = "armadra-hook"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "armadra-runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "base64 0.22.1",
+ "bytes",
+ "chrono",
+ "futures-util",
+ "hmac 0.12.1",
+ "libc",
+ "mime_guess",
+ "portable-pty",
+ "rand 0.9.5",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "subtle",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-tungstenite",
+ "toml_edit 0.25.13+spec-1.1.0",
+ "tower",
+ "tower-http 0.7.0",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
 
 [[package]]
 name = "async-broadcast"
