@@ -324,6 +324,112 @@ func (AutomationOutcome) EnumDescriptor() ([]byte, []int) {
 	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{4}
 }
 
+// What a plan writes to. The two kinds are deliberately separate executors:
+// a command target creates a NEW non-interactive process, an agent target
+// writes one framed prompt into a PTY that already exists.
+type AutomationTargetKind int32
+
+const (
+	// Read as NON_INTERACTIVE_COMMAND, so plans stored before this field exists
+	// keep their meaning instead of becoming a different kind of target.
+	AutomationTargetKind_AUTOMATION_TARGET_KIND_UNSPECIFIED             AutomationTargetKind = 0
+	AutomationTargetKind_AUTOMATION_TARGET_KIND_NON_INTERACTIVE_COMMAND AutomationTargetKind = 1
+	AutomationTargetKind_AUTOMATION_TARGET_KIND_AGENT_SESSION_PROMPT    AutomationTargetKind = 2
+)
+
+// Enum value maps for AutomationTargetKind.
+var (
+	AutomationTargetKind_name = map[int32]string{
+		0: "AUTOMATION_TARGET_KIND_UNSPECIFIED",
+		1: "AUTOMATION_TARGET_KIND_NON_INTERACTIVE_COMMAND",
+		2: "AUTOMATION_TARGET_KIND_AGENT_SESSION_PROMPT",
+	}
+	AutomationTargetKind_value = map[string]int32{
+		"AUTOMATION_TARGET_KIND_UNSPECIFIED":             0,
+		"AUTOMATION_TARGET_KIND_NON_INTERACTIVE_COMMAND": 1,
+		"AUTOMATION_TARGET_KIND_AGENT_SESSION_PROMPT":    2,
+	}
+)
+
+func (x AutomationTargetKind) Enum() *AutomationTargetKind {
+	p := new(AutomationTargetKind)
+	*p = x
+	return p
+}
+
+func (x AutomationTargetKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AutomationTargetKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_automation_proto_enumTypes[5].Descriptor()
+}
+
+func (AutomationTargetKind) Type() protoreflect.EnumType {
+	return &file_armadra_v1_automation_proto_enumTypes[5]
+}
+
+func (x AutomationTargetKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AutomationTargetKind.Descriptor instead.
+func (AutomationTargetKind) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{5}
+}
+
+// What to do when an agent target has no live session at dispatch time.
+type AutomationColdStartPolicy int32
+
+const (
+	// Read as SKIP. A plan never launches a process it was not told to launch.
+	AutomationColdStartPolicy_AUTOMATION_COLD_START_POLICY_UNSPECIFIED AutomationColdStartPolicy = 0
+	AutomationColdStartPolicy_AUTOMATION_COLD_START_POLICY_SKIP        AutomationColdStartPolicy = 1
+	// Start the frozen definition below and record the run as a cold start.
+	AutomationColdStartPolicy_AUTOMATION_COLD_START_POLICY_LAUNCH_FROZEN AutomationColdStartPolicy = 2
+)
+
+// Enum value maps for AutomationColdStartPolicy.
+var (
+	AutomationColdStartPolicy_name = map[int32]string{
+		0: "AUTOMATION_COLD_START_POLICY_UNSPECIFIED",
+		1: "AUTOMATION_COLD_START_POLICY_SKIP",
+		2: "AUTOMATION_COLD_START_POLICY_LAUNCH_FROZEN",
+	}
+	AutomationColdStartPolicy_value = map[string]int32{
+		"AUTOMATION_COLD_START_POLICY_UNSPECIFIED":   0,
+		"AUTOMATION_COLD_START_POLICY_SKIP":          1,
+		"AUTOMATION_COLD_START_POLICY_LAUNCH_FROZEN": 2,
+	}
+)
+
+func (x AutomationColdStartPolicy) Enum() *AutomationColdStartPolicy {
+	p := new(AutomationColdStartPolicy)
+	*p = x
+	return p
+}
+
+func (x AutomationColdStartPolicy) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AutomationColdStartPolicy) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_automation_proto_enumTypes[6].Descriptor()
+}
+
+func (AutomationColdStartPolicy) Type() protoreflect.EnumType {
+	return &file_armadra_v1_automation_proto_enumTypes[6]
+}
+
+func (x AutomationColdStartPolicy) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AutomationColdStartPolicy.Descriptor instead.
+func (AutomationColdStartPolicy) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{6}
+}
+
 // A Host-owned frozen command session definition. The Host rebuilds it on the
 // Worker after a restart and records the generation the Worker reported.
 type AutomationCommandSessionState int32
@@ -361,11 +467,11 @@ func (x AutomationCommandSessionState) String() string {
 }
 
 func (AutomationCommandSessionState) Descriptor() protoreflect.EnumDescriptor {
-	return file_armadra_v1_automation_proto_enumTypes[5].Descriptor()
+	return file_armadra_v1_automation_proto_enumTypes[7].Descriptor()
 }
 
 func (AutomationCommandSessionState) Type() protoreflect.EnumType {
-	return &file_armadra_v1_automation_proto_enumTypes[5]
+	return &file_armadra_v1_automation_proto_enumTypes[7]
 }
 
 func (x AutomationCommandSessionState) Number() protoreflect.EnumNumber {
@@ -374,7 +480,7 @@ func (x AutomationCommandSessionState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use AutomationCommandSessionState.Descriptor instead.
 func (AutomationCommandSessionState) EnumDescriptor() ([]byte, []int) {
-	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{5}
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{7}
 }
 
 type AutomationOnce struct {
@@ -687,9 +793,22 @@ type AutomationTarget struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ExecutionHostId string                 `protobuf:"bytes,1,opt,name=execution_host_id,json=executionHostId,proto3" json:"execution_host_id,omitempty"`
 	SessionId       string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Generation      uint64                 `protobuf:"varint,3,opt,name=generation,proto3" json:"generation,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// For a command target this is the exact generation a dispatch requires.
+	// For an agent target it is the generation observed when the plan was
+	// frozen: the session is owned by the Runtime and legitimately changes when
+	// a person restarts the Agent or a cold start runs, so identity is the node
+	// plus the frozen agent definition and the receipt records what was really
+	// written to. It is never treated as permission to write to an older run.
+	Generation uint64               `protobuf:"varint,3,opt,name=generation,proto3" json:"generation,omitempty"`
+	Kind       AutomationTargetKind `protobuf:"varint,4,opt,name=kind,proto3,enum=armadra.v1.AutomationTargetKind" json:"kind,omitempty"`
+	// Required for AGENT_SESSION_PROMPT; empty for a command target.
+	NodeId          string                    `protobuf:"bytes,5,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	ColdStartPolicy AutomationColdStartPolicy `protobuf:"varint,6,opt,name=cold_start_policy,json=coldStartPolicy,proto3,enum=armadra.v1.AutomationColdStartPolicy" json:"cold_start_policy,omitempty"`
+	// The frozen Agent definition: the identity an existing session must still
+	// match, and the definition a cold start launches. No credentials.
+	AgentLaunch   *AgentLaunchSpec `protobuf:"bytes,7,opt,name=agent_launch,json=agentLaunch,proto3" json:"agent_launch,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AutomationTarget) Reset() {
@@ -741,6 +860,34 @@ func (x *AutomationTarget) GetGeneration() uint64 {
 		return x.Generation
 	}
 	return 0
+}
+
+func (x *AutomationTarget) GetKind() AutomationTargetKind {
+	if x != nil {
+		return x.Kind
+	}
+	return AutomationTargetKind_AUTOMATION_TARGET_KIND_UNSPECIFIED
+}
+
+func (x *AutomationTarget) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *AutomationTarget) GetColdStartPolicy() AutomationColdStartPolicy {
+	if x != nil {
+		return x.ColdStartPolicy
+	}
+	return AutomationColdStartPolicy_AUTOMATION_COLD_START_POLICY_UNSPECIFIED
+}
+
+func (x *AutomationTarget) GetAgentLaunch() *AgentLaunchSpec {
+	if x != nil {
+		return x.AgentLaunch
+	}
+	return nil
 }
 
 type AutomationPlanConfig struct {
@@ -1278,13 +1425,21 @@ func (x *AutomationRunRef) GetWorkspaceId() string {
 	return ""
 }
 
+// The serialized delivery door for one target. Two plans aimed at the same
+// terminal share it, so their input can never interleave.
 type AutomationTargetGate struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ExecutionHostId string                 `protobuf:"bytes,1,opt,name=execution_host_id,json=executionHostId,proto3" json:"execution_host_id,omitempty"`
-	SessionId       string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Active          *AutomationRunRef      `protobuf:"bytes,3,opt,name=active,proto3" json:"active,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The command session this gate belongs to; empty for an agent target.
+	SessionId string            `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Active    *AutomationRunRef `protobuf:"bytes,3,opt,name=active,proto3" json:"active,omitempty"`
+	// The canvas node an agent target belongs to; empty for a command target.
+	// An agent gate is keyed by node rather than session because a restart or an
+	// authorized cold start legitimately replaces the session underneath it, and
+	// a gate that moved with the session would stop serializing anything.
+	NodeId        string `protobuf:"bytes,4,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AutomationTargetGate) Reset() {
@@ -1336,6 +1491,13 @@ func (x *AutomationTargetGate) GetActive() *AutomationRunRef {
 		return x.Active
 	}
 	return nil
+}
+
+func (x *AutomationTargetGate) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
 }
 
 type AutomationRun struct {
@@ -2636,7 +2798,7 @@ var File_armadra_v1_automation_proto protoreflect.FileDescriptor
 const file_armadra_v1_automation_proto_rawDesc = "" +
 	"\n" +
 	"\x1barmadra/v1/automation.proto\x12\n" +
-	"armadra.v1\x1a\x18armadra/v1/command.proto\x1a\x17armadra/v1/common.proto\".\n" +
+	"armadra.v1\x1a\x16armadra/v1/agent.proto\x1a\x18armadra/v1/command.proto\x1a\x17armadra/v1/common.proto\".\n" +
 	"\x0eAutomationOnce\x12\x1c\n" +
 	"\n" +
 	"at_unix_ms\x18\x01 \x01(\x03R\batUnixMs\"[\n" +
@@ -2656,14 +2818,18 @@ const file_armadra_v1_automation_proto_rawDesc = "" +
 	"\binterval\x18\x02 \x01(\v2\x1e.armadra.v1.AutomationIntervalH\x00R\binterval\x120\n" +
 	"\x04cron\x18\x03 \x01(\v2\x1a.armadra.v1.AutomationCronH\x00R\x04cron\x12_\n" +
 	"\x15loop_after_completion\x18\x04 \x01(\v2).armadra.v1.AutomationLoopAfterCompletionH\x00R\x13loopAfterCompletionB\x06\n" +
-	"\x04kind\"}\n" +
+	"\x04kind\"\xdf\x02\n" +
 	"\x10AutomationTarget\x12*\n" +
 	"\x11execution_host_id\x18\x01 \x01(\tR\x0fexecutionHostId\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x1e\n" +
 	"\n" +
 	"generation\x18\x03 \x01(\x04R\n" +
-	"generation\"\x93\x05\n" +
+	"generation\x124\n" +
+	"\x04kind\x18\x04 \x01(\x0e2 .armadra.v1.AutomationTargetKindR\x04kind\x12\x17\n" +
+	"\anode_id\x18\x05 \x01(\tR\x06nodeId\x12Q\n" +
+	"\x11cold_start_policy\x18\x06 \x01(\x0e2%.armadra.v1.AutomationColdStartPolicyR\x0fcoldStartPolicy\x12>\n" +
+	"\fagent_launch\x18\a \x01(\v2\x1b.armadra.v1.AgentLaunchSpecR\vagentLaunch\"\x93\x05\n" +
 	"\x14AutomationPlanConfig\x12!\n" +
 	"\fworkspace_id\x18\x01 \x01(\tR\vworkspaceId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12:\n" +
@@ -2714,12 +2880,13 @@ const file_armadra_v1_automation_proto_rawDesc = "" +
 	"\x10AutomationRunRef\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x17\n" +
 	"\aplan_id\x18\x02 \x01(\tR\x06planId\x12!\n" +
-	"\fworkspace_id\x18\x03 \x01(\tR\vworkspaceId\"\x97\x01\n" +
+	"\fworkspace_id\x18\x03 \x01(\tR\vworkspaceId\"\xb0\x01\n" +
 	"\x14AutomationTargetGate\x12*\n" +
 	"\x11execution_host_id\x18\x01 \x01(\tR\x0fexecutionHostId\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x124\n" +
-	"\x06active\x18\x03 \x01(\v2\x1c.armadra.v1.AutomationRunRefR\x06active\"\xeb\b\n" +
+	"\x06active\x18\x03 \x01(\v2\x1c.armadra.v1.AutomationRunRefR\x06active\x12\x17\n" +
+	"\anode_id\x18\x04 \x01(\tR\x06nodeId\"\xeb\b\n" +
 	"\rAutomationRun\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\aplan_id\x18\x02 \x01(\tR\x06planId\x12!\n" +
@@ -2874,7 +3041,15 @@ const file_armadra_v1_automation_proto_rawDesc = "" +
 	"\x1aAUTOMATION_OUTCOME_RUNNING\x10\x04\x12 \n" +
 	"\x1cAUTOMATION_OUTCOME_SUCCEEDED\x10\x05\x12\x1d\n" +
 	"\x19AUTOMATION_OUTCOME_FAILED\x10\x06\x12 \n" +
-	"\x1cAUTOMATION_OUTCOME_CANCELLED\x10\a*\xb1\x01\n" +
+	"\x1cAUTOMATION_OUTCOME_CANCELLED\x10\a*\xa3\x01\n" +
+	"\x14AutomationTargetKind\x12&\n" +
+	"\"AUTOMATION_TARGET_KIND_UNSPECIFIED\x10\x00\x122\n" +
+	".AUTOMATION_TARGET_KIND_NON_INTERACTIVE_COMMAND\x10\x01\x12/\n" +
+	"+AUTOMATION_TARGET_KIND_AGENT_SESSION_PROMPT\x10\x02*\xa0\x01\n" +
+	"\x19AutomationColdStartPolicy\x12,\n" +
+	"(AUTOMATION_COLD_START_POLICY_UNSPECIFIED\x10\x00\x12%\n" +
+	"!AUTOMATION_COLD_START_POLICY_SKIP\x10\x01\x12.\n" +
+	"*AUTOMATION_COLD_START_POLICY_LAUNCH_FROZEN\x10\x02*\xb1\x01\n" +
 	"\x1dAutomationCommandSessionState\x120\n" +
 	",AUTOMATION_COMMAND_SESSION_STATE_UNSPECIFIED\x10\x00\x12*\n" +
 	"&AUTOMATION_COMMAND_SESSION_STATE_READY\x10\x01\x122\n" +
@@ -2892,7 +3067,7 @@ func file_armadra_v1_automation_proto_rawDescGZIP() []byte {
 	return file_armadra_v1_automation_proto_rawDescData
 }
 
-var file_armadra_v1_automation_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_armadra_v1_automation_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
 var file_armadra_v1_automation_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_armadra_v1_automation_proto_goTypes = []any{
 	(AutomationPlanState)(0),              // 0: armadra.v1.AutomationPlanState
@@ -2900,76 +3075,82 @@ var file_armadra_v1_automation_proto_goTypes = []any{
 	(AutomationConcurrencyPolicy)(0),      // 2: armadra.v1.AutomationConcurrencyPolicy
 	(AutomationRunState)(0),               // 3: armadra.v1.AutomationRunState
 	(AutomationOutcome)(0),                // 4: armadra.v1.AutomationOutcome
-	(AutomationCommandSessionState)(0),    // 5: armadra.v1.AutomationCommandSessionState
-	(*AutomationOnce)(nil),                // 6: armadra.v1.AutomationOnce
-	(*AutomationInterval)(nil),            // 7: armadra.v1.AutomationInterval
-	(*AutomationCron)(nil),                // 8: armadra.v1.AutomationCron
-	(*AutomationLoopAfterCompletion)(nil), // 9: armadra.v1.AutomationLoopAfterCompletion
-	(*AutomationSchedule)(nil),            // 10: armadra.v1.AutomationSchedule
-	(*AutomationTarget)(nil),              // 11: armadra.v1.AutomationTarget
-	(*AutomationPlanConfig)(nil),          // 12: armadra.v1.AutomationPlanConfig
-	(*AutomationActivation)(nil),          // 13: armadra.v1.AutomationActivation
-	(*AutomationPlan)(nil),                // 14: armadra.v1.AutomationPlan
-	(*AutomationPlanRef)(nil),             // 15: armadra.v1.AutomationPlanRef
-	(*AutomationRunRef)(nil),              // 16: armadra.v1.AutomationRunRef
-	(*AutomationTargetGate)(nil),          // 17: armadra.v1.AutomationTargetGate
-	(*AutomationRun)(nil),                 // 18: armadra.v1.AutomationRun
-	(*AutomationReceipt)(nil),             // 19: armadra.v1.AutomationReceipt
-	(*AutomationCommandSession)(nil),      // 20: armadra.v1.AutomationCommandSession
-	(*DefineCommandSessionRequest)(nil),   // 21: armadra.v1.DefineCommandSessionRequest
-	(*ListCommandSessionsRequest)(nil),    // 22: armadra.v1.ListCommandSessionsRequest
-	(*ListCommandSessionsResponse)(nil),   // 23: armadra.v1.ListCommandSessionsResponse
-	(*DefineAutomationRequest)(nil),       // 24: armadra.v1.DefineAutomationRequest
-	(*ActivateAutomationRequest)(nil),     // 25: armadra.v1.ActivateAutomationRequest
-	(*PauseAutomationRequest)(nil),        // 26: armadra.v1.PauseAutomationRequest
-	(*RunAutomationNowRequest)(nil),       // 27: armadra.v1.RunAutomationNowRequest
-	(*ListAutomationPlansRequest)(nil),    // 28: armadra.v1.ListAutomationPlansRequest
-	(*ListAutomationPlansResponse)(nil),   // 29: armadra.v1.ListAutomationPlansResponse
-	(*ListAutomationRunsRequest)(nil),     // 30: armadra.v1.ListAutomationRunsRequest
-	(*ListAutomationRunsResponse)(nil),    // 31: armadra.v1.ListAutomationRunsResponse
-	(*AutomationPlanSnapshot)(nil),        // 32: armadra.v1.AutomationPlanSnapshot
-	(*AutomationRunSnapshot)(nil),         // 33: armadra.v1.AutomationRunSnapshot
-	(*CommandLaunchSpec)(nil),             // 34: armadra.v1.CommandLaunchSpec
-	(*CommandMeta)(nil),                   // 35: armadra.v1.CommandMeta
+	(AutomationTargetKind)(0),             // 5: armadra.v1.AutomationTargetKind
+	(AutomationColdStartPolicy)(0),        // 6: armadra.v1.AutomationColdStartPolicy
+	(AutomationCommandSessionState)(0),    // 7: armadra.v1.AutomationCommandSessionState
+	(*AutomationOnce)(nil),                // 8: armadra.v1.AutomationOnce
+	(*AutomationInterval)(nil),            // 9: armadra.v1.AutomationInterval
+	(*AutomationCron)(nil),                // 10: armadra.v1.AutomationCron
+	(*AutomationLoopAfterCompletion)(nil), // 11: armadra.v1.AutomationLoopAfterCompletion
+	(*AutomationSchedule)(nil),            // 12: armadra.v1.AutomationSchedule
+	(*AutomationTarget)(nil),              // 13: armadra.v1.AutomationTarget
+	(*AutomationPlanConfig)(nil),          // 14: armadra.v1.AutomationPlanConfig
+	(*AutomationActivation)(nil),          // 15: armadra.v1.AutomationActivation
+	(*AutomationPlan)(nil),                // 16: armadra.v1.AutomationPlan
+	(*AutomationPlanRef)(nil),             // 17: armadra.v1.AutomationPlanRef
+	(*AutomationRunRef)(nil),              // 18: armadra.v1.AutomationRunRef
+	(*AutomationTargetGate)(nil),          // 19: armadra.v1.AutomationTargetGate
+	(*AutomationRun)(nil),                 // 20: armadra.v1.AutomationRun
+	(*AutomationReceipt)(nil),             // 21: armadra.v1.AutomationReceipt
+	(*AutomationCommandSession)(nil),      // 22: armadra.v1.AutomationCommandSession
+	(*DefineCommandSessionRequest)(nil),   // 23: armadra.v1.DefineCommandSessionRequest
+	(*ListCommandSessionsRequest)(nil),    // 24: armadra.v1.ListCommandSessionsRequest
+	(*ListCommandSessionsResponse)(nil),   // 25: armadra.v1.ListCommandSessionsResponse
+	(*DefineAutomationRequest)(nil),       // 26: armadra.v1.DefineAutomationRequest
+	(*ActivateAutomationRequest)(nil),     // 27: armadra.v1.ActivateAutomationRequest
+	(*PauseAutomationRequest)(nil),        // 28: armadra.v1.PauseAutomationRequest
+	(*RunAutomationNowRequest)(nil),       // 29: armadra.v1.RunAutomationNowRequest
+	(*ListAutomationPlansRequest)(nil),    // 30: armadra.v1.ListAutomationPlansRequest
+	(*ListAutomationPlansResponse)(nil),   // 31: armadra.v1.ListAutomationPlansResponse
+	(*ListAutomationRunsRequest)(nil),     // 32: armadra.v1.ListAutomationRunsRequest
+	(*ListAutomationRunsResponse)(nil),    // 33: armadra.v1.ListAutomationRunsResponse
+	(*AutomationPlanSnapshot)(nil),        // 34: armadra.v1.AutomationPlanSnapshot
+	(*AutomationRunSnapshot)(nil),         // 35: armadra.v1.AutomationRunSnapshot
+	(*AgentLaunchSpec)(nil),               // 36: armadra.v1.AgentLaunchSpec
+	(*CommandLaunchSpec)(nil),             // 37: armadra.v1.CommandLaunchSpec
+	(*CommandMeta)(nil),                   // 38: armadra.v1.CommandMeta
 }
 var file_armadra_v1_automation_proto_depIdxs = []int32{
-	6,  // 0: armadra.v1.AutomationSchedule.once:type_name -> armadra.v1.AutomationOnce
-	7,  // 1: armadra.v1.AutomationSchedule.interval:type_name -> armadra.v1.AutomationInterval
-	8,  // 2: armadra.v1.AutomationSchedule.cron:type_name -> armadra.v1.AutomationCron
-	9,  // 3: armadra.v1.AutomationSchedule.loop_after_completion:type_name -> armadra.v1.AutomationLoopAfterCompletion
-	10, // 4: armadra.v1.AutomationPlanConfig.schedule:type_name -> armadra.v1.AutomationSchedule
-	11, // 5: armadra.v1.AutomationPlanConfig.target:type_name -> armadra.v1.AutomationTarget
-	1,  // 6: armadra.v1.AutomationPlanConfig.misfire_policy:type_name -> armadra.v1.AutomationMisfirePolicy
-	2,  // 7: armadra.v1.AutomationPlanConfig.concurrency_policy:type_name -> armadra.v1.AutomationConcurrencyPolicy
-	12, // 8: armadra.v1.AutomationPlan.config:type_name -> armadra.v1.AutomationPlanConfig
-	0,  // 9: armadra.v1.AutomationPlan.state:type_name -> armadra.v1.AutomationPlanState
-	16, // 10: armadra.v1.AutomationTargetGate.active:type_name -> armadra.v1.AutomationRunRef
-	12, // 11: armadra.v1.AutomationRun.frozen_config:type_name -> armadra.v1.AutomationPlanConfig
-	13, // 12: armadra.v1.AutomationRun.activation:type_name -> armadra.v1.AutomationActivation
-	3,  // 13: armadra.v1.AutomationRun.state:type_name -> armadra.v1.AutomationRunState
-	4,  // 14: armadra.v1.AutomationReceipt.outcome:type_name -> armadra.v1.AutomationOutcome
-	34, // 15: armadra.v1.AutomationCommandSession.launch:type_name -> armadra.v1.CommandLaunchSpec
-	5,  // 16: armadra.v1.AutomationCommandSession.state:type_name -> armadra.v1.AutomationCommandSessionState
-	35, // 17: armadra.v1.DefineCommandSessionRequest.meta:type_name -> armadra.v1.CommandMeta
-	34, // 18: armadra.v1.DefineCommandSessionRequest.launch:type_name -> armadra.v1.CommandLaunchSpec
-	35, // 19: armadra.v1.ListCommandSessionsRequest.meta:type_name -> armadra.v1.CommandMeta
-	20, // 20: armadra.v1.ListCommandSessionsResponse.sessions:type_name -> armadra.v1.AutomationCommandSession
-	35, // 21: armadra.v1.DefineAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
-	12, // 22: armadra.v1.DefineAutomationRequest.config:type_name -> armadra.v1.AutomationPlanConfig
-	35, // 23: armadra.v1.ActivateAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
-	35, // 24: armadra.v1.PauseAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
-	35, // 25: armadra.v1.RunAutomationNowRequest.meta:type_name -> armadra.v1.CommandMeta
-	35, // 26: armadra.v1.ListAutomationPlansRequest.meta:type_name -> armadra.v1.CommandMeta
-	32, // 27: armadra.v1.ListAutomationPlansResponse.plans:type_name -> armadra.v1.AutomationPlanSnapshot
-	35, // 28: armadra.v1.ListAutomationRunsRequest.meta:type_name -> armadra.v1.CommandMeta
-	33, // 29: armadra.v1.ListAutomationRunsResponse.runs:type_name -> armadra.v1.AutomationRunSnapshot
-	14, // 30: armadra.v1.AutomationPlanSnapshot.plan:type_name -> armadra.v1.AutomationPlan
-	18, // 31: armadra.v1.AutomationRunSnapshot.run:type_name -> armadra.v1.AutomationRun
-	32, // [32:32] is the sub-list for method output_type
-	32, // [32:32] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	8,  // 0: armadra.v1.AutomationSchedule.once:type_name -> armadra.v1.AutomationOnce
+	9,  // 1: armadra.v1.AutomationSchedule.interval:type_name -> armadra.v1.AutomationInterval
+	10, // 2: armadra.v1.AutomationSchedule.cron:type_name -> armadra.v1.AutomationCron
+	11, // 3: armadra.v1.AutomationSchedule.loop_after_completion:type_name -> armadra.v1.AutomationLoopAfterCompletion
+	5,  // 4: armadra.v1.AutomationTarget.kind:type_name -> armadra.v1.AutomationTargetKind
+	6,  // 5: armadra.v1.AutomationTarget.cold_start_policy:type_name -> armadra.v1.AutomationColdStartPolicy
+	36, // 6: armadra.v1.AutomationTarget.agent_launch:type_name -> armadra.v1.AgentLaunchSpec
+	12, // 7: armadra.v1.AutomationPlanConfig.schedule:type_name -> armadra.v1.AutomationSchedule
+	13, // 8: armadra.v1.AutomationPlanConfig.target:type_name -> armadra.v1.AutomationTarget
+	1,  // 9: armadra.v1.AutomationPlanConfig.misfire_policy:type_name -> armadra.v1.AutomationMisfirePolicy
+	2,  // 10: armadra.v1.AutomationPlanConfig.concurrency_policy:type_name -> armadra.v1.AutomationConcurrencyPolicy
+	14, // 11: armadra.v1.AutomationPlan.config:type_name -> armadra.v1.AutomationPlanConfig
+	0,  // 12: armadra.v1.AutomationPlan.state:type_name -> armadra.v1.AutomationPlanState
+	18, // 13: armadra.v1.AutomationTargetGate.active:type_name -> armadra.v1.AutomationRunRef
+	14, // 14: armadra.v1.AutomationRun.frozen_config:type_name -> armadra.v1.AutomationPlanConfig
+	15, // 15: armadra.v1.AutomationRun.activation:type_name -> armadra.v1.AutomationActivation
+	3,  // 16: armadra.v1.AutomationRun.state:type_name -> armadra.v1.AutomationRunState
+	4,  // 17: armadra.v1.AutomationReceipt.outcome:type_name -> armadra.v1.AutomationOutcome
+	37, // 18: armadra.v1.AutomationCommandSession.launch:type_name -> armadra.v1.CommandLaunchSpec
+	7,  // 19: armadra.v1.AutomationCommandSession.state:type_name -> armadra.v1.AutomationCommandSessionState
+	38, // 20: armadra.v1.DefineCommandSessionRequest.meta:type_name -> armadra.v1.CommandMeta
+	37, // 21: armadra.v1.DefineCommandSessionRequest.launch:type_name -> armadra.v1.CommandLaunchSpec
+	38, // 22: armadra.v1.ListCommandSessionsRequest.meta:type_name -> armadra.v1.CommandMeta
+	22, // 23: armadra.v1.ListCommandSessionsResponse.sessions:type_name -> armadra.v1.AutomationCommandSession
+	38, // 24: armadra.v1.DefineAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
+	14, // 25: armadra.v1.DefineAutomationRequest.config:type_name -> armadra.v1.AutomationPlanConfig
+	38, // 26: armadra.v1.ActivateAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
+	38, // 27: armadra.v1.PauseAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
+	38, // 28: armadra.v1.RunAutomationNowRequest.meta:type_name -> armadra.v1.CommandMeta
+	38, // 29: armadra.v1.ListAutomationPlansRequest.meta:type_name -> armadra.v1.CommandMeta
+	34, // 30: armadra.v1.ListAutomationPlansResponse.plans:type_name -> armadra.v1.AutomationPlanSnapshot
+	38, // 31: armadra.v1.ListAutomationRunsRequest.meta:type_name -> armadra.v1.CommandMeta
+	35, // 32: armadra.v1.ListAutomationRunsResponse.runs:type_name -> armadra.v1.AutomationRunSnapshot
+	16, // 33: armadra.v1.AutomationPlanSnapshot.plan:type_name -> armadra.v1.AutomationPlan
+	20, // 34: armadra.v1.AutomationRunSnapshot.run:type_name -> armadra.v1.AutomationRun
+	35, // [35:35] is the sub-list for method output_type
+	35, // [35:35] is the sub-list for method input_type
+	35, // [35:35] is the sub-list for extension type_name
+	35, // [35:35] is the sub-list for extension extendee
+	0,  // [0:35] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_automation_proto_init() }
@@ -2977,6 +3158,7 @@ func file_armadra_v1_automation_proto_init() {
 	if File_armadra_v1_automation_proto != nil {
 		return
 	}
+	file_armadra_v1_agent_proto_init()
 	file_armadra_v1_command_proto_init()
 	file_armadra_v1_common_proto_init()
 	file_armadra_v1_automation_proto_msgTypes[4].OneofWrappers = []any{
@@ -2990,7 +3172,7 @@ func file_armadra_v1_automation_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_automation_proto_rawDesc), len(file_armadra_v1_automation_proto_rawDesc)),
-			NumEnums:      6,
+			NumEnums:      8,
 			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   0,

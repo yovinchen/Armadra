@@ -2,6 +2,7 @@ syntax = "proto3";
 package armadra.v1;
 option go_package = "armadra.local/host/gen/armadra/v1";
 
+import "armadra/v1/agent.proto";
 import "armadra/v1/command.proto";
 import "armadra/v1/common.proto";
 
@@ -64,10 +65,41 @@ message AutomationSchedule {
     AutomationLoopAfterCompletion loop_after_completion = 4;
   }
 }
+// What a plan writes to. The two kinds are deliberately separate executors:
+// a command target creates a NEW non-interactive process, an agent target
+// writes one framed prompt into a PTY that already exists.
+enum AutomationTargetKind {
+  // Read as NON_INTERACTIVE_COMMAND, so plans stored before this field exists
+  // keep their meaning instead of becoming a different kind of target.
+  AUTOMATION_TARGET_KIND_UNSPECIFIED = 0;
+  AUTOMATION_TARGET_KIND_NON_INTERACTIVE_COMMAND = 1;
+  AUTOMATION_TARGET_KIND_AGENT_SESSION_PROMPT = 2;
+}
+// What to do when an agent target has no live session at dispatch time.
+enum AutomationColdStartPolicy {
+  // Read as SKIP. A plan never launches a process it was not told to launch.
+  AUTOMATION_COLD_START_POLICY_UNSPECIFIED = 0;
+  AUTOMATION_COLD_START_POLICY_SKIP = 1;
+  // Start the frozen definition below and record the run as a cold start.
+  AUTOMATION_COLD_START_POLICY_LAUNCH_FROZEN = 2;
+}
 message AutomationTarget {
   string execution_host_id = 1;
   string session_id = 2;
+  // For a command target this is the exact generation a dispatch requires.
+  // For an agent target it is the generation observed when the plan was
+  // frozen: the session is owned by the Runtime and legitimately changes when
+  // a person restarts the Agent or a cold start runs, so identity is the node
+  // plus the frozen agent definition and the receipt records what was really
+  // written to. It is never treated as permission to write to an older run.
   uint64 generation = 3;
+  AutomationTargetKind kind = 4;
+  // Required for AGENT_SESSION_PROMPT; empty for a command target.
+  string node_id = 5;
+  AutomationColdStartPolicy cold_start_policy = 6;
+  // The frozen Agent definition: the identity an existing session must still
+  // match, and the definition a cold start launches. No credentials.
+  AgentLaunchSpec agent_launch = 7;
 }
 message AutomationPlanConfig {
   string workspace_id = 1;
@@ -126,10 +158,18 @@ message AutomationPlan {
 }
 message AutomationPlanRef { string plan_id = 1; string workspace_id = 2; }
 message AutomationRunRef { string run_id = 1; string plan_id = 2; string workspace_id = 3; }
+// The serialized delivery door for one target. Two plans aimed at the same
+// terminal share it, so their input can never interleave.
 message AutomationTargetGate {
   string execution_host_id = 1;
+  // The command session this gate belongs to; empty for an agent target.
   string session_id = 2;
   AutomationRunRef active = 3;
+  // The canvas node an agent target belongs to; empty for a command target.
+  // An agent gate is keyed by node rather than session because a restart or an
+  // authorized cold start legitimately replaces the session underneath it, and
+  // a gate that moved with the session would stop serializing anything.
+  string node_id = 4;
 }
 message AutomationRun {
   string id = 1;

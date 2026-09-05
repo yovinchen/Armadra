@@ -1,0 +1,154 @@
+syntax = "proto3";
+package armadra.v1;
+option go_package = "armadra.local/host/gen/armadra/v1";
+
+// Writing a prompt into an Agent terminal that already exists. This is the one
+// executor surface that touches a live PTY, so every message here carries the
+// evidence needed to tell "nothing was written" apart from "we cannot tell".
+//
+// The Worker never owns the terminal: it proxies to the Runtime that does, over
+// that Runtime's private same-user control endpoint. The durable delivery
+// journal therefore lives with the Runtime, next to the write it describes.
+
+// A frozen Agent launch definition. It names configuration only: an agent id,
+// a directory and CLI arguments. Credentials, tokens and environment values
+// never appear here, and only the "default" account is supported.
+//
+// It deliberately cannot name an executable. The program is always resolved by
+// the Runtime from `agent_id` against its own registry and the operator's own
+// launch override, so a stored plan can never turn into "run this binary".
+message AgentLaunchSpec {
+  // Registry id of the CLI adapter, e.g. "claude" or "custom:<id>".
+  string agent_id = 1;
+  // Absolute directory on the execution host.
+  string working_directory = 2;
+  // The frozen argv that follows the resolved program: the permission-mode
+  // flags, the model flag and any custom-adapter arguments, exactly as they
+  // were assembled and reviewed when the plan was defined. The fields below
+  // describe that argv for display and for the identity check; they are never
+  // re-expanded into flags, so the two can never drift into a different
+  // command than the one that was approved.
+  repeated string args = 3;
+  // Adapter-defined permission mode; empty means the adapter's own default.
+  string permission_mode = 4;
+  string model_id = 5;
+  // Only "default" is supported. Other accounts explicitly fail UNSUPPORTED.
+  string account_id = 6;
+}
+
+// Why a target cannot be written to right now. Only ABSENT is a condition a
+// frozen cold start may repair, and only when the plan enabled one.
+enum AgentTargetState {
+  AGENT_TARGET_STATE_UNSPECIFIED = 0;
+  // Foreground pane runs the expected Agent, the last turn finished and no
+  // input has been queued since. This is the only writable state.
+  AGENT_TARGET_STATE_READY = 1;
+  // The session exists but is working, blocked, or has pending input.
+  AGENT_TARGET_STATE_BUSY = 2;
+  // No live session for this node. A cold start may create one.
+  AGENT_TARGET_STATE_ABSENT = 3;
+  // The node, agent identity or capability no longer matches the plan. Waiting
+  // cannot repair this; it is reported so the plan can be flagged, not retried.
+  AGENT_TARGET_STATE_UNSUPPORTED = 4;
+  // The Runtime could not be reached or answered unintelligibly.
+  AGENT_TARGET_STATE_UNKNOWN = 5;
+}
+
+// What happened to one prompt delivery. Phases are ordered evidence, not a
+// judgement of the work: SUBMITTED means bytes reached the input buffer, never
+// that the Agent finished anything.
+enum AgentPromptPhase {
+  AGENT_PROMPT_PHASE_UNSPECIFIED = 0;
+  // Affirmative proof that nothing was written: a preflight refusal, before
+  // the terminal backend was called. Safe to retry with the same operation id.
+  AGENT_PROMPT_PHASE_NOT_WRITTEN = 1;
+  // The framed paste and its submit key were accepted by the input gate.
+  AGENT_PROMPT_PHASE_SUBMITTED = 2;
+  // The Agent finished a turn that no other input could have produced.
+  AGENT_PROMPT_PHASE_COMPLETED = 3;
+  // The session ended or was replaced before any turn completed.
+  AGENT_PROMPT_PHASE_ABANDONED = 4;
+  // Written, but the outcome cannot be attributed: the write itself failed
+  // mid-flight, or someone else typed into the same session afterwards. Never
+  // retried automatically; a person or a structured event has to resolve it.
+  AGENT_PROMPT_PHASE_UNKNOWN = 5;
+}
+
+message AgentTargetRequest {
+  string workspace_id = 1;
+  string node_id = 2;
+  // The session the plan was frozen against. It is recorded for the answer,
+  // never required to still exist: a cold start replaces it with a new one.
+  string session_id = 3;
+  uint64 generation = 4;
+  // Identity gate: the node's current Agent must still be this one.
+  AgentLaunchSpec expected = 5;
+  // Present only when the plan authorized launching a frozen definition for an
+  // absent session. Launching happens here, while the run is claimed and its
+  // authorization has just been re-checked, and never at the write itself: a
+  // freshly started Agent is reported BUSY until it finishes booting, so the
+  // one operation that touches the PTY only ever runs against a ready target.
+  AgentLaunchSpec cold_start = 6;
+}
+
+message AgentTargetStatus {
+  AgentTargetState state = 1;
+  // The session and generation currently bound to the node, when there is one.
+  string session_id = 2;
+  uint64 generation = 3;
+  // Stable machine token, never raw terminal output or a path.
+  string reason_code = 4;
+}
+
+message AgentPromptRequest {
+  // Stable across retries. The Runtime journals it before touching the PTY, so
+  // a repeat can never paste the same prompt twice.
+  string operation_id = 1;
+  bytes request_sha256 = 2;
+  string workspace_id = 3;
+  string node_id = 4;
+  string session_id = 5;
+  uint64 generation = 6;
+  // The frozen prompt text. Delivered as one framed paste plus a submit key.
+  bytes prompt = 7;
+  // Cold start belongs to AgentTargetRequest, not here. A delivery never
+  // starts a process: an absent session is refused as NOT_WRITTEN.
+  reserved 8;
+  // Identity gate: the node's current Agent must still be this one.
+  AgentLaunchSpec expected = 9;
+}
+
+message AgentPromptLookupRequest { string operation_id = 1; }
+
+message AgentPromptReceipt {
+  string operation_id = 1;
+  bytes request_sha256 = 2;
+  AgentPromptPhase phase = 3;
+  // Monotonic per operation. A later receipt never lowers the recorded phase.
+  uint64 sequence = 4;
+  int64 observed_at_unix_ms = 5;
+  string reason_code = 6;
+  // The session actually written to, which a cold start may have created.
+  string session_id = 7;
+  uint64 generation = 8;
+  // True only when this operation itself launched the session from the frozen
+  // definition. Recorded so a run history can say why a new process exists.
+  bool cold_started = 9;
+  // Set by NOT_WRITTEN alone. It is proof of no effect, not an absence of one.
+  bool no_effect_proven = 10;
+}
+
+message AgentRequest {
+  oneof action {
+    AgentTargetRequest target = 10;
+    AgentPromptRequest prompt = 11;
+    AgentPromptLookupRequest lookup = 12;
+  }
+}
+
+message AgentResponse {
+  oneof result {
+    AgentTargetStatus target = 10;
+    AgentPromptReceipt receipt = 11;
+  }
+}

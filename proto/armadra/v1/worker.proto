@@ -1,6 +1,7 @@
 syntax = "proto3";
 package armadra.v1;
 option go_package = "armadra.local/host/gen/armadra/v1";
+import "armadra/v1/agent.proto";
 import "armadra/v1/common.proto";
 import "armadra/v1/command.proto";
 
@@ -66,6 +67,9 @@ message WorkerRequest {
     WorkerListDirectoryRequest list_directory = 12;
     WorkerReadFileRequest read_file = 13;
     CommandRequest command = 20;
+    // Proxied to the Runtime that owns the PTY. Only present when the Worker
+    // was started with a state directory and found a live local Runtime.
+    AgentRequest agent = 21;
   }
 }
 message WorkerResponse {
@@ -79,5 +83,6 @@ message WorkerResponse {
     WorkerFileChunk file_chunk = 13;
     ErrorResponse error = 14;
     CommandResponse command = 20;
+    AgentResponse agent = 21;
   }
 }

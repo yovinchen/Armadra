@@ -1209,3 +1209,220 @@ fn github_issue_and_pull_contracts() {
         },
     );
 }
+                    ..Default::default()
+
+/// Prompt delivery evidence. `no_effect_proven` belongs to NOT_WRITTEN alone:
+/// an UNKNOWN receipt that gained it would authorize a second paste into a
+/// terminal that may already have received the first one.
+#[test]
+fn agent_prompt_delivery_evidence() {
+    check(
+        "agent_target_status",
+        AgentTargetStatus {
+            state: AgentTargetState::Absent as i32,
+            session_id: "会话-1".into(),
+            generation: u64::MAX,
+            reason_code: "SESSION_ABSENT".into(),
+        },
+    );
+    check(
+        "agent_target_request",
+        AgentTargetRequest {
+            workspace_id: "workspace-1".into(),
+            node_id: "node-1".into(),
+            session_id: "session-1".into(),
+            generation: 9_007_199_254_740_993,
+            expected: Some(AgentLaunchSpec {
+                agent_id: "claude".into(),
+                working_directory: "/项目/仓库".into(),
+                account_id: "default".into(),
+                ..Default::default()
+            }),
+            cold_start: Some(AgentLaunchSpec {
+                agent_id: "claude".into(),
+                working_directory: "/项目/仓库".into(),
+                args: vec!["--flag".into(), "值📦".into()],
+                permission_mode: "acceptEdits".into(),
+                model_id: "sonnet".into(),
+                account_id: "default".into(),
+            }),
+        },
+    );
+    check(
+        "agent_prompt_request",
+        AgentPromptRequest {
+            operation_id:
+                "automation/principal-1/host-0123456789abcdef0123456789abcdef/workspace-1/dispatch/run-1"
+                    .into(),
+            request_sha256: vec![5; 32],
+            workspace_id: "workspace-1".into(),
+            node_id: "node-1".into(),
+            session_id: "session-1".into(),
+            generation: 9_007_199_254_740_993,
+            prompt: "每晚复盘：读取 diff 后写结论\n".as_bytes().to_vec(),
+            expected: Some(AgentLaunchSpec {
+                agent_id: "claude".into(),
+                working_directory: "/项目/仓库".into(),
+                args: vec!["--flag".into(), "值📦".into()],
+                permission_mode: "acceptEdits".into(),
+                model_id: "sonnet".into(),
+                account_id: "default".into(),
+            }),
+        },
+    );
+    check(
+        "agent_prompt_not_written",
+        AgentPromptReceipt {
+            operation_id: "operation-1".into(),
+            request_sha256: vec![6; 32],
+            phase: AgentPromptPhase::NotWritten as i32,
+            sequence: 1,
+            observed_at_unix_ms: 1788557000000,
+            reason_code: "TARGET_BUSY".into(),
+            session_id: "session-1".into(),
+            generation: 3,
+            cold_started: false,
+            no_effect_proven: true,
+        },
+    );
+    check(
+        "agent_prompt_unknown",
+        AgentPromptReceipt {
+            operation_id: "operation-1".into(),
+            request_sha256: vec![6; 32],
+            phase: 999,
+            sequence: u64::MAX,
+            observed_at_unix_ms: 1788557900000,
+            reason_code: "UNATTRIBUTED".into(),
+            session_id: "session-2".into(),
+            generation: u64::MAX,
+            cold_started: true,
+            no_effect_proven: false,
+        },
+    );
+    check(
+        "automation_agent_target",
+        AutomationTarget {
+            execution_host_id: "0123456789abcdef0123456789abcdef".into(),
+            session_id: "session-1".into(),
+            generation: 7,
+            kind: AutomationTargetKind::AgentSessionPrompt as i32,
+            node_id: "node-1".into(),
+            cold_start_policy: AutomationColdStartPolicy::LaunchFrozen as i32,
+            agent_launch: Some(AgentLaunchSpec {
+                agent_id: "codex".into(),
+                working_directory: "/项目/仓库".into(),
+                account_id: "default".into(),
+                ..Default::default()
+            }),
+        },
+    );
+}
+
+/// A plan frozen before the target kind existed must keep reading as the
+/// command executor rather than acquiring the right to write into a PTY.
+#[test]
+fn legacy_automation_target_is_not_an_agent_target() {
+    let decoded = AutomationTarget::decode(
+        AutomationTarget {
+            execution_host_id: "host-1".into(),
+            session_id: "session-1".into(),
+            generation: 1,
+            ..Default::default()
+        }
+        .encode_to_vec()
+        .as_slice(),
+    )
+    .unwrap();
+    assert_eq!(
+        decoded.kind,
+        AutomationTargetKind::Unspecified as i32,
+        "an old target grew an agent kind"
+    );
+    assert!(decoded.node_id.is_empty() && decoded.agent_launch.is_none());
+}
+
+/// "I did not look" must stay distinguishable from "there is nothing new", and
+/// an unsigned release from a device that holds no public key.
+#[test]
+fn update_contract_states() {
+    check(
+        "update_unsupported",
+        CheckForUpdateResponse {
+            state: UpdateCheckState::Unsupported as i32,
+            channel: ReleaseChannel::Stable as i32,
+            installed_version: Some(SemanticVersion {
+                major: 0,
+                minor: 1,
+                patch: 0,
+                prerelease: String::new(),
+            }),
+            reason_code: "UPDATES_NOT_CONFIGURED".into(),
+            checked_at_unix_ms: 1788557000000,
+            ..Default::default()
+        },
+    );
+    check(
+        "update_available",
+        CheckForUpdateResponse {
+            state: UpdateCheckState::Available as i32,
+            channel: ReleaseChannel::Beta as i32,
+            installed_version: Some(SemanticVersion {
+                major: 0,
+                minor: 1,
+                patch: 0,
+                prerelease: String::new(),
+            }),
+            release: Some(ReleaseInfo {
+                version: Some(SemanticVersion {
+                    major: 0,
+                    minor: 2,
+                    patch: 1,
+                    prerelease: "beta.1".into(),
+                }),
+                channel: ReleaseChannel::Beta as i32,
+                published_at_unix_ms: 1788557900000,
+                notes_url: "https://example.invalid/发布说明".into(),
+                compatibility: Some(UpdateCompatibility {
+                    minimum_installed: Some(SemanticVersion {
+                        minor: 1,
+                        ..Default::default()
+                    }),
+                    maximum_installed: Some(SemanticVersion {
+                        major: 1,
+                        ..Default::default()
+                    }),
+                    protocol_major: 1,
+                    minimum_protocol_minor: 1,
+                }),
+                artifacts: vec![UpdateArtifact {
+                    target: "darwin-aarch64".into(),
+                    url: "https://example.invalid/Armadra.tar.gz".into(),
+                    size_bytes: 9_007_199_254_740_993,
+                    sha256: vec![4; 32],
+                    signature: Some(UpdateSignature {
+                        state: UpdateSignatureState::Present as i32,
+                        value: "dW50cnVzdGVkIGNvbW1lbnQ".into(),
+                        key_id: "key-1".into(),
+                    }),
+                }],
+            }),
+            checked_at_unix_ms: 1788557900000,
+            retry_after_ms: 3600000,
+            ..Default::default()
+        },
+    );
+    check(
+        "update_unconfigured_signature",
+        UpdateArtifact {
+            target: "windows-x86_64".into(),
+            url: "https://example.invalid/Armadra.msi".into(),
+            size_bytes: 1,
+            sha256: vec![2; 32],
+            signature: Some(UpdateSignature {
+                state: UpdateSignatureState::Unconfigured as i32,
+                ..Default::default()
+            }),
+        },
+    );
+}

@@ -81,6 +81,20 @@ import {
   BrowserDownloadSchema,
   BrowserDownloadState,
   SubscribePresenceResponseSchema,
+  AgentPromptPhase,
+  AgentPromptReceiptSchema,
+  AgentPromptRequestSchema,
+  AgentTargetRequestSchema,
+  AgentTargetState,
+  AgentTargetStatusSchema,
+  AutomationColdStartPolicy,
+  AutomationTargetKind,
+  AutomationTargetSchema,
+  CheckForUpdateResponseSchema,
+  ReleaseChannel,
+  UpdateArtifactSchema,
+  UpdateCheckState,
+  UpdateSignatureState,
 } from "../src/index.js";
 
 function fixture(name: string): Uint8Array {
@@ -816,6 +830,151 @@ describe("reserved account and presence contracts", () => {
       fromBinary(HelloResponseSchema, fixture("hello_identity"))
         .capabilityStatus,
     ).toEqual([]);
+  });
+
+  it("keeps prompt delivery evidence separable from proven non-delivery", () => {
+    check("agent_target_status", AgentTargetStatusSchema, {
+      state: AgentTargetState.ABSENT,
+      sessionId: "会话-1",
+      generation: maxUint64,
+      reasonCode: "SESSION_ABSENT",
+    });
+    check("agent_target_request", AgentTargetRequestSchema, {
+      workspaceId: "workspace-1",
+      nodeId: "node-1",
+      sessionId: "session-1",
+      generation: 9007199254740993n,
+      expected: {
+        agentId: "claude",
+        workingDirectory: "/项目/仓库",
+        accountId: "default",
+      },
+      coldStart: {
+        agentId: "claude",
+        workingDirectory: "/项目/仓库",
+        args: ["--flag", "值📦"],
+        permissionMode: "acceptEdits",
+        modelId: "sonnet",
+        accountId: "default",
+      },
+    });
+    check("agent_prompt_request", AgentPromptRequestSchema, {
+      operationId:
+        "automation/principal-1/host-0123456789abcdef0123456789abcdef/workspace-1/dispatch/run-1",
+      requestSha256: new Uint8Array(32).fill(5),
+      workspaceId: "workspace-1",
+      nodeId: "node-1",
+      sessionId: "session-1",
+      generation: 9007199254740993n,
+      prompt: new TextEncoder().encode("每晚复盘：读取 diff 后写结论\n"),
+      expected: {
+        agentId: "claude",
+        workingDirectory: "/项目/仓库",
+        args: ["--flag", "值📦"],
+        permissionMode: "acceptEdits",
+        modelId: "sonnet",
+        accountId: "default",
+      },
+    });
+    check("agent_prompt_not_written", AgentPromptReceiptSchema, {
+      operationId: "operation-1",
+      requestSha256: new Uint8Array(32).fill(6),
+      phase: AgentPromptPhase.NOT_WRITTEN,
+      sequence: 1n,
+      observedAtUnixMs: 1788557000000n,
+      reasonCode: "TARGET_BUSY",
+      sessionId: "session-1",
+      generation: 3n,
+      noEffectProven: true,
+    });
+    check("agent_prompt_unknown", AgentPromptReceiptSchema, {
+      operationId: "operation-1",
+      requestSha256: new Uint8Array(32).fill(6),
+      phase: 999 as AgentPromptPhase,
+      sequence: maxUint64,
+      observedAtUnixMs: 1788557900000n,
+      reasonCode: "UNATTRIBUTED",
+      sessionId: "session-2",
+      generation: maxUint64,
+      coldStarted: true,
+    });
+    check("automation_agent_target", AutomationTargetSchema, {
+      executionHostId: "0123456789abcdef0123456789abcdef",
+      sessionId: "session-1",
+      generation: 7n,
+      kind: AutomationTargetKind.AGENT_SESSION_PROMPT,
+      nodeId: "node-1",
+      coldStartPolicy: AutomationColdStartPolicy.LAUNCH_FROZEN,
+      agentLaunch: {
+        agentId: "codex",
+        workingDirectory: "/项目/仓库",
+        accountId: "default",
+      },
+    });
+    // A plan frozen before the field existed stays a command target.
+    const legacy = fromBinary(
+      AutomationTargetSchema,
+      toBinary(
+        AutomationTargetSchema,
+        create(AutomationTargetSchema, {
+          executionHostId: "host-1",
+          sessionId: "session-1",
+          generation: 1n,
+        }),
+      ),
+    );
+    expect(legacy.kind).toBe(AutomationTargetKind.UNSPECIFIED);
+    expect(legacy.nodeId).toBe("");
+    expect(legacy.agentLaunch).toBeUndefined();
+  });
+
+  it("distinguishes an unchecked update from an up-to-date one", () => {
+    check("update_unsupported", CheckForUpdateResponseSchema, {
+      state: UpdateCheckState.UNSUPPORTED,
+      channel: ReleaseChannel.STABLE,
+      installedVersion: { major: 0, minor: 1, patch: 0 },
+      reasonCode: "UPDATES_NOT_CONFIGURED",
+      checkedAtUnixMs: 1788557000000n,
+    });
+    check("update_available", CheckForUpdateResponseSchema, {
+      state: UpdateCheckState.AVAILABLE,
+      channel: ReleaseChannel.BETA,
+      installedVersion: { major: 0, minor: 1, patch: 0 },
+      release: {
+        version: { major: 0, minor: 2, patch: 1, prerelease: "beta.1" },
+        channel: ReleaseChannel.BETA,
+        publishedAtUnixMs: 1788557900000n,
+        notesUrl: "https://example.invalid/发布说明",
+        compatibility: {
+          minimumInstalled: { minor: 1 },
+          maximumInstalled: { major: 1 },
+          protocolMajor: 1,
+          minimumProtocolMinor: 1,
+        },
+        artifacts: [
+          {
+            target: "darwin-aarch64",
+            url: "https://example.invalid/Armadra.tar.gz",
+            sizeBytes: 9007199254740993n,
+            sha256: new Uint8Array(32).fill(4),
+            signature: {
+              state: UpdateSignatureState.PRESENT,
+              value: "dW50cnVzdGVkIGNvbW1lbnQ",
+              keyId: "key-1",
+            },
+          },
+        ],
+      },
+      checkedAtUnixMs: 1788557900000n,
+      retryAfterMs: 3600000n,
+    });
+    check("update_unconfigured_signature", UpdateArtifactSchema, {
+      target: "windows-x86_64",
+      url: "https://example.invalid/Armadra.msi",
+      sizeBytes: 1n,
+      sha256: new Uint8Array(32).fill(2),
+      signature: { state: UpdateSignatureState.UNCONFIGURED },
+    });
   });
 });
 
