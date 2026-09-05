@@ -1,6 +1,15 @@
 //! Explicit integration state. Ownership is deliberately local to this service
 //! lifetime; a restarted Runtime never claims an external Git sequence.
 use super::*;
+mod cherry_pick;
+pub use cherry_pick::CherryPickPreview;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Recovery {
+    Continue,
+    Abort,
+    Skip,
+}
 
 const MAX_PREVIEW: u64 = 64 * 1024;
 
@@ -37,12 +46,17 @@ pub struct IntegrationSnapshot {
     pub message: Option<String>,
     pub dirty: bool,
     pub can_continue: bool,
+    pub mainline: Option<u32>,
+    pub empty: bool,
+    pub can_skip: bool,
     pub conflicts: Vec<ConflictFile>,
 }
 
 #[derive(Debug, Clone)]
 pub(super) struct IntegrationOwner {
     session_id: String,
+    kind: &'static str,
+    mainline: Option<u32>,
     original: ExpectedState,
     target_oid: String,
     marker: Option<MarkerIdentity>,
@@ -64,7 +78,7 @@ struct GitIntegration {
     kind: String,
     message: Option<String>,
     metadata_digest: Vec<u8>,
-    merge_head: Option<String>,
+    target_oid: Option<String>,
     original_head: Option<String>,
     marker: Option<MarkerIdentity>,
 }
@@ -164,6 +178,8 @@ impl RepositoryService {
                 context.repository.clone(),
                 IntegrationOwner {
                     session_id,
+                    kind: "merge",
+                    mainline: None,
                     original: expected.clone(),
                     target_oid: target_oid.into(),
                     marker: None,
@@ -205,12 +221,12 @@ impl RepositoryService {
             let mut owners = self.inner.integrations.lock().expect("Git integrations");
             if let Some(owner) = owners.get_mut(&context.repository) {
                 if actual.kind == "merge"
-                    && actual.merge_head.as_deref() == Some(target_oid)
+                    && actual.target_oid.as_deref() == Some(target_oid)
                     && actual.original_head == expected.head_oid
                     && head == expected
                 {
                     owner.marker = actual.marker.clone();
-                    owns = owns_merge(owner, actual, head);
+                    owns = owns_integration(owner, actual, head);
                 } else if actual.kind == "none" {
                     owners.remove(&context.repository);
                 }
@@ -252,13 +268,13 @@ impl RepositoryService {
         Ok(())
     }
 
-    pub(super) async fn resume_merge(
+    pub(super) async fn resume_integration(
         &self,
         context: &RepositoryContext,
         session_id: &str,
         expected_token: &str,
         expected: &ExpectedState,
-        abort: bool,
+        recovery: Recovery,
         operation: &Operation,
     ) -> AppResult<()> {
         let token = &operation.cancellation;
@@ -273,12 +289,15 @@ impl RepositoryService {
                     .into(),
             ));
         }
-        if !abort && !state.can_continue {
+        if recovery == Recovery::Continue && !state.can_continue {
             return Err(AppError::Conflict(
                 "Resolve all conflicts and stage the saved results before continuing".into(),
             ));
         }
-        if abort {
+        if recovery == Recovery::Skip && !state.can_skip {
+            return Err(AppError::Conflict("Only an owned empty cherry-pick can be skipped; nonempty work must be resolved or explicitly aborted".into()));
+        }
+        if recovery != Recovery::Continue {
             self.protect_abort_paths(
                 context,
                 state.original_head.as_deref().ok_or_else(malformed)?,
@@ -286,18 +305,42 @@ impl RepositoryService {
             )
             .await?;
         }
-        let command = if abort {
-            args(&["merge", "--abort"])
-        } else {
-            args(&["-c", "core.editor=:", "commit", "--no-edit"])
+        let command = match (state.kind.as_str(), recovery) {
+            ("merge", Recovery::Abort) => args(&["merge", "--abort"]),
+            ("merge", Recovery::Continue) => args(&["-c", "core.editor=:", "commit", "--no-edit"]),
+            ("cherryPick", mode) => args(&[
+                "-c",
+                "core.editor=:",
+                "cherry-pick",
+                match mode {
+                    Recovery::Continue => "--continue",
+                    Recovery::Abort => "--abort",
+                    Recovery::Skip => "--skip",
+                },
+            ]),
+            _ => {
+                return Err(AppError::Conflict(
+                    "This Git operation is not managed by the current service".into(),
+                ));
+            }
         };
         self.mutate(context, command, operation).await?;
         let after = self.git_integration(context, token).await?;
         let head = self.head(&context.repository, token).await?;
-        if after.kind != "none" || (abort && head != *expected) {
+        if after.kind != "none" || (recovery != Recovery::Continue && head != *expected) {
             return Err(AppError::Conflict("Git did not finish the requested recovery; inspect the current state before another action".into()));
         }
-        if !abort {
+        if recovery == Recovery::Continue && state.kind == "cherryPick" {
+            self.verify_cherry_pick(
+                context,
+                state.target_oid.as_deref().ok_or_else(malformed)?,
+                expected,
+                &head,
+                token,
+            )
+            .await?;
+        }
+        if recovery == Recovery::Continue && state.kind == "merge" {
             let commit = head.head_oid.as_deref().ok_or_else(malformed)?;
             let parents = self
                 .read(
@@ -326,15 +369,19 @@ impl RepositoryService {
         self.release_integration_owner(
             context,
             session_id,
-            if abort {
+            if recovery == Recovery::Abort {
                 OperationState::Cancelled
             } else {
                 OperationState::Succeeded
             },
-            if abort {
-                "Merge was explicitly aborted; its starting state was restored"
-            } else {
-                "Merge was completed by a confirmed continuation"
+            match recovery {
+                Recovery::Abort => {
+                    "Git integration was explicitly aborted; its starting state was restored"
+                }
+                Recovery::Continue => "Git integration was completed by a confirmed continuation",
+                Recovery::Skip => {
+                    "The empty cherry-pick was explicitly skipped; HEAD was preserved"
+                }
             },
         );
         Ok(())
@@ -470,13 +517,13 @@ impl RepositoryService {
             .cloned();
         let owned = owner
             .as_ref()
-            .is_some_and(|owner| owns_merge(owner, &actual, &state.head));
+            .is_some_and(|owner| owns_integration(owner, &actual, &state.head));
         if let Some(owner) = &owner
             && owner.marker.is_some()
             && !owned
         {
             self.release_integration_owner(context, &owner.session_id, OperationState::UnknownOutcome,
-                "Recorded merge state was completed or replaced outside this operation; ownership was released. Inspect current HEAD before another action");
+                "Recorded Git integration state was completed or replaced outside this operation; ownership was released. Inspect current HEAD before another action");
         }
         let mut digest = Sha256::new();
         digest.update(state.state_token.as_bytes());
@@ -500,6 +547,23 @@ impl RepositoryService {
         if !matches!(unstaged.status, Some(0 | 1)) {
             return Err(command_error(&unstaged));
         }
+        let staged = self
+            .output(
+                &context.repository,
+                args(&["diff", "--cached", "--no-ext-diff", "--quiet", "--"]),
+                Duration::from_secs(15),
+                token,
+                None,
+            )
+            .await?;
+        if !matches!(staged.status, Some(0 | 1)) {
+            return Err(command_error(&staged));
+        }
+        let empty = actual.kind == "cherryPick"
+            && conflicts.is_empty()
+            && staged.status == Some(0)
+            && unstaged.status == Some(0);
+        let can_skip = owned && empty;
         Ok(IntegrationSnapshot {
             repository_id: state.repository_id,
             repository_path: state.repository_path,
@@ -508,12 +572,22 @@ impl RepositoryService {
             kind: actual.kind,
             owned,
             session_id: owned.then(|| owner.as_ref().unwrap().session_id.clone()),
-            original_head: actual.original_head,
-            target_oid: actual.merge_head,
+            original_head: if owned {
+                owner
+                    .as_ref()
+                    .and_then(|owner| owner.original.head_oid.clone())
+            } else {
+                actual.original_head
+            },
+            target_oid: actual.target_oid,
             can_continue: owned
                 && conflicts.is_empty()
                 && unstaged.status == Some(0)
-                && actual.message.is_some(),
+                && actual.message.is_some()
+                && !empty,
+            mainline: owned.then(|| owner.as_ref().unwrap().mainline).flatten(),
+            empty,
+            can_skip,
             message: actual.message,
             dirty: state.dirty,
             conflicts,
@@ -550,8 +624,10 @@ impl RepositoryService {
                 Err(error) => return Err(error.into()),
             }
         }
-        if active.is_empty() && git_dir.join("sequencer").exists() {
-            active.push("unknown");
+        match git_dir.join("sequencer").symlink_metadata() {
+            Ok(_) => active.push("unknown"), // only single-commit picks are owned; never run an external sequence
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+            Err(error) => return Err(error.into()),
         }
         let kind = match active.as_slice() {
             [] => "none",
@@ -559,8 +635,12 @@ impl RepositoryService {
             _ => "unknown",
         }
         .to_string();
-        let (merge_head, marker) = if kind == "merge" {
-            let (bytes, marker) = read_marker(&git_dir.join("MERGE_HEAD"))?;
+        let (target_oid, marker) = if kind == "merge" || kind == "cherryPick" {
+            let (bytes, marker) = read_marker(&git_dir.join(if kind == "merge" {
+                "MERGE_HEAD"
+            } else {
+                "CHERRY_PICK_HEAD"
+            }))?;
             let ids = std::str::from_utf8(&bytes)
                 .map_err(|_| malformed())?
                 .split_whitespace()
@@ -573,7 +653,7 @@ impl RepositoryService {
         } else {
             (None, None)
         };
-        let original_head = if kind != "none" {
+        let original_head = if kind != "none" && kind != "cherryPick" {
             match read_marker(&git_dir.join("ORIG_HEAD")) {
                 Ok((bytes, _)) => {
                     let oid = one_line(&bytes)?;
@@ -587,14 +667,18 @@ impl RepositoryService {
         };
         let mut message = None;
         let mut metadata_digest = Sha256::new();
-        if kind == "merge" {
-            for name in ["MERGE_MSG", "MERGE_MODE"] {
+        if kind == "merge" || kind == "cherryPick" {
+            for name in if kind == "merge" {
+                &["MERGE_MSG", "MERGE_MODE"][..]
+            } else {
+                &["MERGE_MSG"][..]
+            } {
                 metadata_digest.update(name.as_bytes());
                 match read_marker(&git_dir.join(name)) {
                     Ok((bytes, _)) => {
                         metadata_digest.update((bytes.len() as u64).to_be_bytes());
                         metadata_digest.update(&bytes);
-                        if name == "MERGE_MSG" {
+                        if *name == "MERGE_MSG" {
                             message = Some(String::from_utf8_lossy(&bytes).into_owned());
                         }
                     }
@@ -609,7 +693,7 @@ impl RepositoryService {
             kind,
             message,
             metadata_digest: metadata_digest.finalize().to_vec(),
-            merge_head,
+            target_oid,
             original_head,
             marker,
         })
@@ -719,11 +803,15 @@ impl RepositoryService {
     }
 }
 
-fn owns_merge(owner: &IntegrationOwner, actual: &GitIntegration, head: &ExpectedState) -> bool {
-    actual.kind == "merge"
+fn owns_integration(
+    owner: &IntegrationOwner,
+    actual: &GitIntegration,
+    head: &ExpectedState,
+) -> bool {
+    actual.kind == owner.kind
         && owner.original == *head
-        && actual.merge_head.as_ref() == Some(&owner.target_oid)
-        && actual.original_head == owner.original.head_oid
+        && actual.target_oid.as_ref() == Some(&owner.target_oid)
+        && (owner.kind != "merge" || actual.original_head == owner.original.head_oid)
         && owner.marker.is_some()
         && owner.marker == actual.marker
 }

@@ -37,6 +37,9 @@ export const gitIntegrationSnapshotSchema = z.object({
   message: z.string().nullable(),
   dirty: z.boolean(),
   canContinue: z.boolean(),
+  mainline: z.number().int().min(1).max(4294967295).nullable(),
+  empty: z.boolean(),
+  canSkip: z.boolean(),
   conflicts: z.array(gitConflictFileSchema),
 });
 export type GitConflictSide = z.infer<typeof gitConflictSideSchema>;
@@ -44,3 +47,15 @@ export type GitConflictFile = z.infer<typeof gitConflictFileSchema>;
 export type GitIntegrationSnapshot = z.infer<
   typeof gitIntegrationSnapshotSchema
 >;
+
+export const gitCherryPickPreviewSchema = z.object({
+  targetOid: oid,
+  parents: z.array(oid),
+  subject: z.string(),
+  authorName: z.string(),
+  authorEmail: z.string(),
+  authorTime: z.string(),
+  mainline: z.number().int().min(1).max(4294967295).nullable(),
+  patch: z.string().nullable(),
+});
+export type GitCherryPickPreview = z.infer<typeof gitCherryPickPreviewSchema>;

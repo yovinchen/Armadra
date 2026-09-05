@@ -360,3 +360,10 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - 只有明确NOT_DISPATCHED且配置有限重试时复用同operation；Interval运行时使用单调投影，重启按UTC游标恢复，Cron重叠本地分钟只执行首个，长睡眠汇总一次且标注计数截断。
 - 26组真实临时DB/可控时间测试、race/vet及Windows双架构交叉编译通过；跨语言新增未知enum/最大sequence/已投递证据样例通过（Rust12、TS15与Go契约）。依赖锁定robfig/cron v3.0.1，仅用解析与Next，不使用内存调度器。
 - 执行只经过Dispatcher接口。生产main/HTTP/UI与实际Worker命令或PTY输入尚未接入，本批仅完成内核，不代表A02端到端可用；没有恢复任何已删除的Codex定时续跑任务。
+
+## 连续实施：Cherry-pick 与空结果处理
+
+- 支持固定提交OID的实际作者/父关系/差异预览，merge commit需明确主线父，执行时保存原作者并可记录来源OID。成功后验证新提交，冲突进入可核验的Continue/Abort流程。
+- 空结果提供独立Skip确认，仅允许owned且已证实为空的状态；非空冲突或后来未暂存的修改拒绝跳过。操作继续按workspace ID绑定，其他同路径workspace看不到可用控制/私有owner信息，也不能伪造Skip请求。
+- Rust基础/合并/Cherry-pick共43项、组件28项、shared4项及Clippy通过；主Agent新增实际API完整预览→正常应用→重复空结果→跨workspace拒绝→Skip验证通过，内容与HEAD保持预期。
+- Rebase与Git配置脚本的执行权限边界仍在继续，不把此批标为完整M4结束。

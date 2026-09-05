@@ -491,6 +491,9 @@ const integrationState = (): GitIntegrationSnapshot => ({
   message: "Review merge",
   dirty: true,
   canContinue: true,
+  mainline: null,
+  empty: false,
+  canSkip: false,
   conflicts: [],
 });
 const cachedOperationKey = (id: string) => [
@@ -526,6 +529,9 @@ describe("integration operation reconciliation", () => {
           owned: false,
           sessionId: null,
           canContinue: false,
+          mainline: null,
+          empty: false,
+          canSkip: false,
           dirty: false,
           message: null,
         };
@@ -585,6 +591,9 @@ describe("integration operation reconciliation", () => {
                 owned: false,
                 sessionId: null,
                 canContinue: false,
+                mainline: null,
+                empty: false,
+                canSkip: false,
                 dirty: false,
                 message: null,
               },

@@ -56,6 +56,7 @@ import {
   gitStashSnapshotSchema,
   gitStashDetailSchema,
   gitIntegrationSnapshotSchema,
+  gitCherryPickPreviewSchema,
   gitRepositoryActionSchema,
   gitRepositoryOperationSchema,
   gitExpectedStateSchema,
@@ -741,6 +742,8 @@ export const runtimeApi = {
     request(`/api/workspaces/${query(workspaceId)}/git/repository/stashes?path=.`,gitStashSnapshotSchema,{signal}),
   gitRepositoryIntegration: (workspaceId: string, signal?: AbortSignal) =>
     request(`/api/workspaces/${query(workspaceId)}/git/repository/integration?path=.`,gitIntegrationSnapshotSchema,{signal}),
+  gitRepositoryCherryPickPreview: (workspaceId:string,oid:string,mainline:number|null,signal?:AbortSignal) =>
+    request(`/api/workspaces/${query(workspaceId)}/git/repository/cherry-pick-preview?path=.&oid=${query(oid)}${mainline===null?"":`&mainline=${mainline}`}`,gitCherryPickPreviewSchema,{signal}),
   gitRepositoryStashDetail: (workspaceId:string,oid:string,signal?:AbortSignal) =>
     request(`/api/workspaces/${query(workspaceId)}/git/repository/stash-detail?path=.&oid=${query(oid)}`,gitStashDetailSchema,{signal}),
   gitRepositoryOperate: (

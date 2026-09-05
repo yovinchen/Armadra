@@ -77,6 +77,9 @@ describe("integration contracts", () => {
         message: "Merge",
         dirty: true,
         canContinue: false,
+        mainline: null,
+        empty: false,
+        canSkip: false,
         conflicts: [
           {
             path: "new file",
@@ -116,5 +119,47 @@ describe("integration contracts", () => {
     expect(gitRepositoryOperationSchema.parse(op).state).toBe(
       "awaitingResolution",
     );
+  });
+  it("requires explicit cherry-pick mainline/origin choices and an owner ID for Skip", () => {
+    expect(
+      gitRepositoryActionSchema.safeParse({
+        kind: "startCherryPick",
+        targetOid: oid,
+        mainline: null,
+        recordOrigin: false,
+        expectedStateToken: token,
+      }).success,
+    ).toBe(true);
+    for (const mainline of [0, -1, 1.5, 4294967296])
+      expect(
+        gitRepositoryActionSchema.safeParse({
+          kind: "startCherryPick",
+          targetOid: oid,
+          mainline,
+          recordOrigin: false,
+          expectedStateToken: token,
+        }).success,
+      ).toBe(false);
+    expect(
+      gitRepositoryActionSchema.safeParse({
+        kind: "startCherryPick",
+        targetOid: oid,
+        mainline: null,
+        expectedStateToken: token,
+      }).success,
+    ).toBe(false);
+    expect(
+      gitRepositoryActionSchema.safeParse({
+        kind: "skipIntegration",
+        expectedStateToken: token,
+      }).success,
+    ).toBe(false);
+    expect(
+      gitRepositoryActionSchema.safeParse({
+        kind: "skipIntegration",
+        sessionId: "11111111-1111-4111-8111-111111111111",
+        expectedStateToken: token,
+      }).success,
+    ).toBe(true);
   });
 });

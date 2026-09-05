@@ -35,7 +35,7 @@ use crate::{
 
 mod integration;
 mod stash;
-pub use integration::{ConflictFile, ConflictSide, IntegrationSnapshot};
+pub use integration::{CherryPickPreview, ConflictFile, ConflictSide, IntegrationSnapshot};
 pub use stash::{StashDetail, StashRecord, StashSnapshot};
 
 const MAX_OUTPUT: usize = 4 * 1024 * 1024;
@@ -179,6 +179,16 @@ pub struct WorktreeRecord {
     deny_unknown_fields
 )]
 pub enum RepositoryAction {
+    StartCherryPick {
+        target_oid: String,
+        mainline: Option<u32>,
+        record_origin: bool,
+        expected_state_token: String,
+    },
+    SkipIntegration {
+        session_id: String,
+        expected_state_token: String,
+    },
     StartMerge {
         target_oid: String,
         message: String,
@@ -778,7 +788,8 @@ impl RepositoryService {
                 let owners = self.inner.integrations.lock().expect("Git integrations");
                 let recovery = match &action {
                     RepositoryAction::ContinueIntegration { session_id, .. }
-                    | RepositoryAction::AbortIntegration { session_id, .. } => owners
+                    | RepositoryAction::AbortIntegration { session_id, .. }
+                    | RepositoryAction::SkipIntegration { session_id, .. } => owners
                         .get(&context.repository)
                         .is_some_and(|owner| owner.session_id() == session_id),
                     _ => false,
@@ -824,7 +835,7 @@ impl RepositoryService {
             match result {
                 Ok(()) => {
                     if operation.awaiting_resolution.load(Ordering::SeqCst) {
-                        finish(&operation, OperationState::AwaitingResolution, Some("Merge is paused; resolve and stage conflicts, then explicitly continue or abort".into()));
+                        finish(&operation, OperationState::AwaitingResolution, Some("Git integration is paused; inspect its state, then explicitly continue, abort, or skip an empty pick".into()));
                     } else {
                         finish(&operation, OperationState::Succeeded, None);
                     }
@@ -1287,6 +1298,29 @@ impl RepositoryService {
     ) -> AppResult<()> {
         let token = Cancellation::default();
         match action {
+            RepositoryAction::StartCherryPick {
+                target_oid,
+                mainline,
+                expected_state_token,
+                ..
+            } => {
+                require_oid(target_oid)?;
+                if *mainline == Some(0) {
+                    return Err(AppError::BadRequest(
+                        "Cherry-pick mainline starts at parent 1".into(),
+                    ));
+                }
+                stash::validate_state_token(expected_state_token)?;
+            }
+            RepositoryAction::SkipIntegration {
+                session_id,
+                expected_state_token,
+            } => {
+                Uuid::parse_str(session_id).map_err(|_| {
+                    AppError::BadRequest("Integration session ID is invalid".into())
+                })?;
+                stash::validate_state_token(expected_state_token)?;
+            }
             RepositoryAction::StartMerge {
                 target_oid,
                 message,
@@ -1411,12 +1445,32 @@ impl RepositoryService {
         if !matches!(
             action,
             RepositoryAction::StartMerge { .. }
+                | RepositoryAction::StartCherryPick { .. }
+                | RepositoryAction::SkipIntegration { .. }
                 | RepositoryAction::ContinueIntegration { .. }
                 | RepositoryAction::AbortIntegration { .. }
         ) {
             self.ensure_integration_idle(context, token).await?;
         }
         match action {
+            RepositoryAction::StartCherryPick { .. } => {
+                self.start_cherry_pick(context, action, expected, operation)
+                    .await
+            }
+            RepositoryAction::SkipIntegration {
+                session_id,
+                expected_state_token,
+            } => {
+                self.resume_integration(
+                    context,
+                    session_id,
+                    expected_state_token,
+                    expected,
+                    integration::Recovery::Skip,
+                    operation,
+                )
+                .await
+            }
             RepositoryAction::StartMerge {
                 target_oid,
                 message,
@@ -1436,12 +1490,12 @@ impl RepositoryService {
                 session_id,
                 expected_state_token,
             } => {
-                self.resume_merge(
+                self.resume_integration(
                     context,
                     session_id,
                     expected_state_token,
                     expected,
-                    false,
+                    integration::Recovery::Continue,
                     operation,
                 )
                 .await
@@ -1450,12 +1504,12 @@ impl RepositoryService {
                 session_id,
                 expected_state_token,
             } => {
-                self.resume_merge(
+                self.resume_integration(
                     context,
                     session_id,
                     expected_state_token,
                     expected,
-                    true,
+                    integration::Recovery::Abort,
                     operation,
                 )
                 .await

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   GitBranchRecord,
+  GitCherryPickPreview,
   GitConflictSide,
   GitExpectedState,
   GitIntegrationSnapshot,
@@ -11,6 +12,7 @@ import { useT } from "../../app/preferences-store";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Field, ReadError, selectClass } from "./forms";
+import { CherryPick } from "./CherryPick";
 
 export interface IntegrationsProps {
   workspaceId: string;
@@ -18,6 +20,11 @@ export interface IntegrationsProps {
   branches: GitBranchRecord[];
   busy: boolean;
   loadSnapshot: (signal: AbortSignal) => Promise<GitIntegrationSnapshot>;
+  loadCherryPick: (
+    oid: string,
+    mainline: number | null,
+    signal: AbortSignal,
+  ) => Promise<GitCherryPickPreview>;
   request: (action: GitRepositoryAction, expected: GitExpectedState) => void;
   openFile: (path: string) => void;
 }
@@ -35,6 +42,7 @@ function IntegrationSession({
   branches,
   busy,
   loadSnapshot,
+  loadCherryPick,
   request,
   openFile,
 }: IntegrationsProps) {
@@ -85,17 +93,23 @@ function IntegrationSession({
     !state.conflicts.length &&
     state.head.branch &&
     state.head.headOid;
-  const resume = (abort: boolean) => {
+  const resume = (mode: "continue" | "abort" | "skip") => {
     if (
       currentlyBlocked() ||
       !state?.owned ||
       !state.sessionId ||
-      (!abort && !state.canContinue)
+      (mode === "continue" && !state.canContinue) ||
+      (mode === "skip" && !state.canSkip)
     )
       return;
     request(
       {
-        kind: abort ? "abortIntegration" : "continueIntegration",
+        kind:
+          mode === "abort"
+            ? "abortIntegration"
+            : mode === "skip"
+              ? "skipIntegration"
+              : "continueIntegration",
         sessionId: state.sessionId,
         expectedStateToken: state.stateToken,
       },
@@ -168,6 +182,15 @@ function IntegrationSession({
             </fieldset>
             {state.dirty && <p>{t("gitIntegration.dirty")}</p>}
           </form>
+          <CherryPick
+            workspaceId={workspaceId}
+            repositoryKey={repositoryKey}
+            state={state}
+            disabled={!canStart}
+            canRequest={() => Boolean(canStart) && !currentlyBlocked()}
+            loadPreview={loadCherryPick}
+            request={request}
+          />
         </>
       )}
       {state && state.kind !== "none" && (
@@ -201,9 +224,13 @@ function IntegrationSession({
             <>
               <p role="status">
                 {t(
-                  state.canContinue
-                    ? "gitIntegration.pending"
-                    : "gitIntegration.stageFirst",
+                  state.empty
+                    ? "gitIntegration.emptyPick"
+                    : state.canContinue
+                      ? state.kind === "cherryPick"
+                        ? "gitIntegration.pickReady"
+                        : "gitIntegration.pending"
+                      : "gitIntegration.stageFirst",
                 )}
               </p>
               <p className="text-muted-foreground">
@@ -213,19 +240,47 @@ function IntegrationSession({
                 <Button
                   size="sm"
                   disabled={blocked || !state.canContinue}
-                  onClick={() => resume(false)}
+                  onClick={() => resume("continue")}
                 >
-                  {t("gitRepo.continueIntegration")}
+                  {t(
+                    state.kind === "cherryPick"
+                      ? "gitIntegration.continuePick"
+                      : "gitIntegration.continueMerge",
+                  )}
                 </Button>
                 <Button
                   size="sm"
                   variant="destructive"
                   disabled={blocked}
-                  onClick={() => resume(true)}
+                  onClick={() => resume("abort")}
                 >
-                  {t("gitRepo.abortIntegration")}
+                  {t(
+                    state.kind === "cherryPick"
+                      ? "gitIntegration.abortPick"
+                      : "gitIntegration.abortMerge",
+                  )}
                 </Button>
+                {state.kind === "cherryPick" && state.empty && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={blocked || !state.canSkip}
+                    onClick={() => resume("skip")}
+                  >
+                    {t("gitRepo.skipIntegration")}
+                  </Button>
+                )}
               </div>
+              {state.mainline && (
+                <p className="font-mono">
+                  {t("gitIntegration.mainline")}: {state.mainline}
+                </p>
+              )}
+              {state.empty && (
+                <p className="text-muted-foreground">
+                  {t("gitIntegration.skipSafety")}
+                </p>
+              )}
             </>
           )}
         </section>

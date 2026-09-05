@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   GitBranchSnapshot,
+  GitCherryPickPreview,
+  GitIntegrationSnapshot,
   GitExpectedState,
   GitRepositoryAction,
   GitRepositoryOperation,
@@ -97,10 +99,13 @@ const emptyTracking: Tracking = {
 
 export function actionTarget(action: GitRepositoryAction): string {
   switch (action.kind) {
+    case "startCherryPick":
+      return `${action.targetOid}${action.mainline ? ` · parent ${action.mainline}` : ""}`;
     case "startMerge":
       return `${action.targetOid}${action.message ? ` · ${action.message}` : ""}`;
     case "continueIntegration":
     case "abortIntegration":
+    case "skipIntegration":
       return action.sessionId;
     case "createStash":
       return action.message || "Stash";
@@ -318,6 +323,7 @@ function RepositorySession({
   const [confirmation, setConfirmation] = useState<{
     action: GitRepositoryAction;
     expected: GitExpectedState;
+    review?: { oid: string; mainline: number | null; parentOid: string | null };
   } | null>(null);
   const submit = useMutation({
     mutationFn: async (input: {
@@ -394,8 +400,52 @@ function RepositorySession({
     action: GitRepositoryAction,
     expected?: GitExpectedState,
   ) => {
-    if (!busy && !stale)
-      setConfirmation({ action, expected: { ...(expected ?? snapshot.head) } });
+    if (busy || stale) return;
+    let review:
+      | { oid: string; mainline: number | null; parentOid: string | null }
+      | undefined;
+    if (action.kind === "startCherryPick") {
+      const preview = client.getQueryData<GitCherryPickPreview>([
+        "git-cherry-pick-preview",
+        workspaceId,
+        `${snapshot.repositoryId}:${snapshot.repositoryPath}`,
+        action.targetOid,
+        action.mainline,
+      ]);
+      review = {
+        oid: action.targetOid,
+        mainline: action.mainline,
+        parentOid:
+          action.mainline && preview?.targetOid === action.targetOid
+            ? (preview.parents[action.mainline - 1] ?? null)
+            : null,
+      };
+    } else if (
+      action.kind === "continueIntegration" ||
+      action.kind === "abortIntegration" ||
+      action.kind === "skipIntegration"
+    ) {
+      const observed = client.getQueryData<GitIntegrationSnapshot>([
+        "git-repository-integration",
+        workspaceId,
+        `${snapshot.repositoryId}:${snapshot.repositoryPath}`,
+      ]);
+      if (
+        observed?.sessionId === action.sessionId &&
+        observed.stateToken === action.expectedStateToken &&
+        observed.targetOid
+      )
+        review = {
+          oid: observed.targetOid,
+          mainline: observed.mainline,
+          parentOid: null,
+        };
+    }
+    setConfirmation({
+      action,
+      expected: { ...(expected ?? snapshot.head) },
+      review,
+    });
   };
   return (
     <>
@@ -533,6 +583,14 @@ function RepositorySession({
             loadSnapshot={(signal) =>
               runtimeApi.gitRepositoryIntegration(workspaceId, signal)
             }
+            loadCherryPick={(oid, mainline, signal) =>
+              runtimeApi.gitRepositoryCherryPickPreview(
+                workspaceId,
+                oid,
+                mainline,
+                signal,
+              )
+            }
             openFile={(path) => {
               const store = useCanvasStore.getState();
               if (store.workspace?.id !== workspaceId || !store.document)
@@ -587,6 +645,46 @@ function RepositorySession({
           </AlertDialogHeader>
           {confirmation && (
             <dl className="space-y-2 break-all text-xs">
+              {confirmation.review && (
+                <div>
+                  <dt className="text-muted-foreground">
+                    {t("gitIntegration.commitOid")}
+                  </dt>
+                  <dd className="font-mono">{confirmation.review.oid}</dd>
+                  {confirmation.review.mainline && (
+                    <dd>
+                      {t("gitIntegration.mainline")}:{" "}
+                      {confirmation.review.mainline}
+                      {confirmation.review.parentOid && (
+                        <span className="font-mono">
+                          {" "}
+                          · {confirmation.review.parentOid}
+                        </span>
+                      )}
+                    </dd>
+                  )}
+                </div>
+              )}
+              {confirmation.action.kind === "startCherryPick" && (
+                <div>
+                  <dt>{t("gitIntegration.pickSafety")}</dt>
+                  <dd>
+                    {confirmation.action.recordOrigin ? "✓ " : "— "}
+                    {t("gitIntegration.recordOrigin")}
+                  </dd>
+                  {confirmation.action.mainline && (
+                    <dd>
+                      {t("gitIntegration.mainline")}:{" "}
+                      {confirmation.action.mainline}
+                    </dd>
+                  )}
+                </div>
+              )}
+              {confirmation.action.kind === "skipIntegration" && (
+                <div>
+                  <dd>{t("gitIntegration.skipSafety")}</dd>
+                </div>
+              )}
               {confirmation.action.kind === "startMerge" && (
                 <div>
                   <dd>{t("gitIntegration.startSafety")}</dd>

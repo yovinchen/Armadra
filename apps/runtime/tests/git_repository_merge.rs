@@ -405,3 +405,6 @@ async fn binary_and_large_conflict_sides_keep_oids_and_paths_without_unbounded_p
     assert_eq!(large.ours.as_ref().unwrap().size, 70_000);
     assert_eq!(large.ours.as_ref().unwrap().oid.len(), 40);
 }
+
+#[path = "git_repository_merge/cherry_pick.rs"]
+mod cherry_pick;

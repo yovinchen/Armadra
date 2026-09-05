@@ -31,6 +31,9 @@ function snapshot(): GitIntegrationSnapshot {
     message: null,
     dirty: false,
     canContinue: false,
+    mainline: null,
+    empty: false,
+    canSkip: false,
     conflicts: [],
   };
 }
@@ -69,6 +72,9 @@ function setup(overrides: Partial<IntegrationsProps> = {}) {
     branches: [branch],
     busy: false,
     loadSnapshot: vi.fn(async () => snapshot()),
+    loadCherryPick: vi.fn(async () => {
+      throw new Error("No commit selected");
+    }),
     request: vi.fn(),
     openFile: vi.fn(),
     ...overrides,
@@ -113,7 +119,7 @@ describe("integration recovery", () => {
     expect(screen.getByText("Explicit merge")).toBeTruthy();
     expect(props.request).not.toHaveBeenCalled();
     fireEvent.click(
-      screen.getByRole("button", { name: "gitRepo.continueIntegration" }),
+      screen.getByRole("button", { name: "gitIntegration.continueMerge" }),
     );
     expect(props.request).toHaveBeenCalledExactlyOnceWith(
       {
@@ -128,6 +134,9 @@ describe("integration recovery", () => {
     const state = {
       ...active(),
       canContinue: false,
+      mainline: null,
+      empty: false,
+      canSkip: false,
       conflicts: [
         {
           path: "src/冲突 file.ts",
@@ -157,11 +166,11 @@ describe("integration recovery", () => {
     );
     expect(props.openFile).toHaveBeenCalledExactlyOnceWith("src/冲突 file.ts");
     fireEvent.click(
-      screen.getByRole("button", { name: "gitRepo.continueIntegration" }),
+      screen.getByRole("button", { name: "gitIntegration.continueMerge" }),
     );
     expect(props.request).not.toHaveBeenCalled();
     fireEvent.click(
-      screen.getByRole("button", { name: "gitRepo.abortIntegration" }),
+      screen.getByRole("button", { name: "gitIntegration.abortMerge" }),
     );
     expect(props.request).toHaveBeenCalledExactlyOnceWith(
       {
@@ -179,14 +188,17 @@ describe("integration recovery", () => {
         owned: false,
         sessionId: null,
         canContinue: false,
+        mainline: null,
+        empty: false,
+        canSkip: false,
       }),
     });
     await screen.findByText("gitIntegration.external");
     expect(
-      screen.queryByRole("button", { name: "gitRepo.abortIntegration" }),
+      screen.queryByRole("button", { name: "gitIntegration.abortMerge" }),
     ).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "gitRepo.continueIntegration" }),
+      screen.queryByRole("button", { name: "gitIntegration.continueMerge" }),
     ).toBeNull();
     expect(props.request).not.toHaveBeenCalled();
   });
@@ -204,7 +216,7 @@ describe("integration recovery", () => {
     await screen.findByText("gitIntegration.pending");
     fireEvent.click(screen.getByRole("button", { name: "gitRepo.refresh" }));
     fireEvent.click(
-      screen.getByRole("button", { name: "gitRepo.abortIntegration" }),
+      screen.getByRole("button", { name: "gitIntegration.abortMerge" }),
     );
     expect(props.request).not.toHaveBeenCalled();
     const next = {
@@ -216,7 +228,7 @@ describe("integration recovery", () => {
     await act(async () => complete(next));
     await screen.findByText("Updated sequence");
     fireEvent.click(
-      screen.getByRole("button", { name: "gitRepo.abortIntegration" }),
+      screen.getByRole("button", { name: "gitIntegration.abortMerge" }),
     );
     expect(props.request).toHaveBeenCalledExactlyOnceWith(
       {
@@ -235,9 +247,43 @@ describe("integration recovery", () => {
     const { props } = setup({ loadSnapshot });
     await screen.findByText("gitIntegration.changed");
     expect(
-      screen.queryByRole("button", { name: "gitRepo.abortIntegration" }),
+      screen.queryByRole("button", { name: "gitIntegration.abortMerge" }),
     ).toBeNull();
     expect(loadSnapshot).toHaveBeenCalledTimes(1);
     expect(props.request).not.toHaveBeenCalled();
+  });
+  it("offers an explicit skip only for an owned empty cherry-pick and keeps nonempty conflicts gated", async () => {
+    const current = {
+      ...active(),
+      kind: "cherryPick" as const,
+      empty: true,
+      canSkip: true,
+      canContinue: false,
+      mainline: 1,
+    };
+    const { props, rerenderProps } = setup({
+      loadSnapshot: async () => current,
+    });
+    await screen.findByText("gitIntegration.emptyPick");
+    expect(props.request).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "gitRepo.skipIntegration" }),
+    );
+    expect(props.request).toHaveBeenCalledExactlyOnceWith(
+      {
+        kind: "skipIntegration",
+        sessionId,
+        expectedStateToken: current.stateToken,
+      },
+      current.head,
+    );
+    rerenderProps({
+      workspaceId: "other",
+      loadSnapshot: async () => ({ ...current, empty: false, canSkip: false }),
+    });
+    await screen.findByRole("button", { name: "gitIntegration.abortPick" });
+    expect(
+      screen.queryByRole("button", { name: "gitRepo.skipIntegration" }),
+    ).toBeNull();
   });
 });

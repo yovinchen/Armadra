@@ -88,6 +88,22 @@ const stashStateToken = z.string().regex(/^[a-f0-9]{64}$/);
 export const gitRepositoryActionSchema = z.discriminatedUnion("kind", [
   z
     .object({
+      kind: z.literal("startCherryPick"),
+      targetOid: oid,
+      mainline: z.number().int().min(1).max(4294967295).nullable(),
+      recordOrigin: z.boolean(),
+      expectedStateToken: stashStateToken,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("skipIntegration"),
+      sessionId: z.string().uuid(),
+      expectedStateToken: stashStateToken,
+    })
+    .strict(),
+  z
+    .object({
       kind: z.literal("startMerge"),
       targetOid: oid,
       message: z.string().max(4096),

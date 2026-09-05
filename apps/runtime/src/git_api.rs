@@ -72,6 +72,18 @@ pub struct StashQuery {
     path: String,
     oid: String,
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CherryPickQuery {
+    #[serde(default = "root_path")]
+    path: String,
+    oid: String,
+    mainline: Option<u32>,
+}
+pub async fn cherry_pick_preview(State(state):State<AppState>,AxumPath(id):AxumPath<String>,Query(query):Query<CherryPickQuery>) -> AppResult<Json<CherryPickPreview>> {
+    let workspace=workspace(&state,&id,false).await?;
+    REPOSITORIES.cherry_pick_preview(Path::new(&workspace.root_path),&query.path,&query.oid,query.mainline).await.map(Json)
+}
 pub async fn stashes(State(state):State<AppState>,AxumPath(id):AxumPath<String>,Query(query):Query<RepositoryQuery>) -> AppResult<Json<StashSnapshot>> {
     let workspace=workspace(&state,&id,false).await?;
     REPOSITORIES.stashes(Path::new(&workspace.root_path),&query.path).await.map(Json)
@@ -81,7 +93,8 @@ pub async fn integration(State(state):State<AppState>,AxumPath(id):AxumPath<Stri
     let mut result=REPOSITORIES.integration_status(Path::new(&workspace.root_path),&query.path).await?;
     let owners=OWNERS.lock().map_err(|_|AppError::Internal("Git operation scope lock failed".into()))?;
     if result.session_id.as_ref().and_then(|session| owners.get(session))!=Some(&id) {
-        result.owned=false;result.session_id=None;result.can_continue=false;
+        result.owned=false;result.session_id=None;result.can_continue=false;result.can_skip=false;
+        result.mainline=None;result.original_head=None;
     }
     Ok(Json(result))
 }
@@ -175,7 +188,7 @@ pub async fn start(
 ) -> AppResult<Json<OperationSnapshot>> {
     let workspace = workspace(&state, &id, true).await?;
     match &request.action {
-        RepositoryAction::ContinueIntegration { session_id, .. } | RepositoryAction::AbortIntegration { session_id, .. } => {
+        RepositoryAction::ContinueIntegration { session_id, .. } | RepositoryAction::AbortIntegration { session_id, .. } | RepositoryAction::SkipIntegration { session_id, .. } => {
             scoped_operation(&state,&id,session_id,true).await?;
         }
         _ => {}
