@@ -25,6 +25,7 @@ import { History } from "./History";
 import { Worktrees } from "./Worktrees";
 import { Stashes } from "./Stashes";
 import { ReadError } from "./forms";
+import { invalidateGitQueries } from "./queries";
 
 export type RepositoryTab = "branches" | "history" | "worktrees" | "stashes";
 const running = (operation: GitRepositoryOperation | null | undefined) =>
@@ -207,19 +208,7 @@ function RepositorySession({
     refetchInterval: (query) =>
       query.state.status !== "error" && running(query.state.data) ? 600 : false,
   });
-  const invalidate = () => {
-    for (const name of [
-      "git-status",
-      "git-diff",
-      "git-repository-branches",
-      "git-repository-history",
-      "git-repository-worktrees",
-      "git-repository-stashes",
-      "git-repository-stash-detail",
-      "git-repository-operations",
-    ])
-      void client.invalidateQueries({ queryKey: [name, workspaceId] });
-  };
+  const invalidate = () => invalidateGitQueries(client, workspaceId);
   const lastInvalidated = useRef("");
   useEffect(() => {
     const result = operation.data;

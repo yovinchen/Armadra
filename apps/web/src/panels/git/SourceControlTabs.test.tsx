@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { workspaceSchema } from "@armadra/shared";
 import { runtimeApi } from "../../api/client";
 import { useCanvasStore } from "../../store/canvas-store";
@@ -38,6 +44,54 @@ beforeEach(() => {
     observedAt: "now",
   });
 });
+
+it("refreshes AI source after staging the first file without generating automatically", async () => {
+  let staged = false;
+  vi.mocked(runtimeApi.gitStatus).mockImplementation(async () => ({
+    repository: true,
+    branch: "main",
+    files: [{ path: "feature.ts", status: "M", staged, unstaged: !staged }],
+    changedCount: 1,
+    ahead: 0,
+    behind: 0,
+  }));
+  vi.spyOn(runtimeApi, "gitMessageProviders").mockResolvedValue([
+    { id: "claude-bare", label: "Claude", available: true, reason: null },
+  ]);
+  const source = vi
+    .spyOn(runtimeApi, "gitMessageSource")
+    .mockImplementation(async () => ({
+      expectedHead: "a".repeat(40),
+      indexDigest: "b".repeat(64),
+      sourceDigest: "c".repeat(64),
+      includedFiles: staged ? ["feature.ts"] : [],
+      excludedFiles: [],
+      truncated: false,
+      redacted: false,
+    }));
+  const generate = vi.spyOn(runtimeApi, "gitMessageGenerate");
+  vi.spyOn(runtimeApi, "gitStage").mockImplementation(async () => {
+    staged = true;
+    return { staged: ["feature.ts"] };
+  });
+  render(
+    <TestProviders>
+      <SourceControlDrawer />
+    </TestProviders>,
+  );
+  const details = (await screen.findAllByText("AI commit-message draft")).find(
+    (element) => element.tagName === "SUMMARY",
+  )!;
+  fireEvent.click(details);
+  const button = await screen.findByRole("button", { name: "Generate draft" });
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(await screen.findByRole("button", { name: "Stage" }));
+  await waitFor(() =>
+    expect((button as HTMLButtonElement).disabled).toBe(false),
+  );
+  expect(source.mock.calls.length).toBeGreaterThan(1);
+  expect(generate).not.toHaveBeenCalled();
+});
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -45,13 +99,11 @@ afterEach(() => {
   useCanvasStore.setState({ workspace: null });
 });
 it("keeps Changes as the default and stops its commit shortcut outside that tab", async () => {
-  const commit = vi
-    .spyOn(runtimeApi, "gitCommit")
-    .mockResolvedValue({
-      commit: "a".repeat(40),
-      committed: [],
-      summary: "fixture",
-    });
+  const commit = vi.spyOn(runtimeApi, "gitCommit").mockResolvedValue({
+    commit: "a".repeat(40),
+    committed: [],
+    summary: "fixture",
+  });
   render(
     <TestProviders>
       <SourceControlDrawer />

@@ -51,6 +51,7 @@ import {
 } from "./git/GitRepositoryPanel";
 import { currentViewportCenter } from "./viewport";
 import { ChangesHunks } from "./git/ChangesHunks";
+import { invalidateGitQueries } from "./git/queries";
 import { CommitMessageAssistant } from "./git/CommitMessageAssistant";
 
 const STATUS_COLOR: Record<DiffFileStatus, string> = {
@@ -104,12 +105,7 @@ export function SourceControlDrawer() {
     enabled: open && Boolean(workspaceId),
     retry: false,
   });
-  const invalidate = () => {
-    void queryClient.invalidateQueries({
-      queryKey: ["git-status", workspaceId],
-    });
-    void queryClient.invalidateQueries({ queryKey: ["git-diff", workspaceId] });
-  };
+  const invalidate = () => invalidateGitQueries(queryClient, workspaceId);
   const fail = (error: unknown) =>
     toast.error(error instanceof Error ? error.message : t("scm.failed"));
 
@@ -278,10 +274,7 @@ export function SourceControlDrawer() {
               </Badge>
             )}
             <div className="flex-1" />
-            <IconButton
-              label={t("scm.refresh")}
-              onClick={() => void status.refetch()}
-            >
+            <IconButton label={t("scm.refresh")} onClick={invalidate}>
               <RotateCw />
             </IconButton>
             <IconButton
@@ -303,17 +296,23 @@ export function SourceControlDrawer() {
               className="h-10 w-full shrink-0 rounded-none border-b border-border"
               variant="line"
             >
-              {(["changes", "branches", "history", "worktrees", "stashes"] as const).map(
-                (value) => (
-                  <TabsTrigger
-                    key={value}
-                    value={value}
-                    className="min-w-0 text-xs"
-                  >
-                    {t(`gitRepo.${value}`)}
-                  </TabsTrigger>
-                ),
-              )}
+              {(
+                [
+                  "changes",
+                  "branches",
+                  "history",
+                  "worktrees",
+                  "stashes",
+                ] as const
+              ).map((value) => (
+                <TabsTrigger
+                  key={value}
+                  value={value}
+                  className="min-w-0 text-xs"
+                >
+                  {t(`gitRepo.${value}`)}
+                </TabsTrigger>
+              ))}
             </TabsList>
             <TabsContent
               value="changes"
@@ -350,12 +349,7 @@ export function SourceControlDrawer() {
                       load={runtimeApi.gitHunks}
                       apply={runtimeApi.gitApplyHunk}
                       onChanged={(id) => {
-                        void queryClient.invalidateQueries({
-                          queryKey: ["git-status", id],
-                        });
-                        void queryClient.invalidateQueries({
-                          queryKey: ["git-diff", id],
-                        });
+                        invalidateGitQueries(queryClient, id);
                       }}
                     />
                   </section>
@@ -405,21 +399,23 @@ export function SourceControlDrawer() {
                 </Button>
               </div>
             </TabsContent>
-            {(["branches", "history", "worktrees", "stashes"] as const).map((value) => (
-              <TabsContent
-                key={value}
-                value={value}
-                className="mt-0 flex min-h-0 min-w-0 flex-col data-[state=inactive]:hidden"
-              >
-                {workspaceId && tab === value && (
-                  <GitRepositoryPanel
-                    key={workspaceId}
-                    workspaceId={workspaceId}
-                    tab={value}
-                  />
-                )}
-              </TabsContent>
-            ))}
+            {(["branches", "history", "worktrees", "stashes"] as const).map(
+              (value) => (
+                <TabsContent
+                  key={value}
+                  value={value}
+                  className="mt-0 flex min-h-0 min-w-0 flex-col data-[state=inactive]:hidden"
+                >
+                  {workspaceId && tab === value && (
+                    <GitRepositoryPanel
+                      key={workspaceId}
+                      workspaceId={workspaceId}
+                      tab={value}
+                    />
+                  )}
+                </TabsContent>
+              ),
+            )}
           </Tabs>
         </SheetContent>
       </Sheet>
