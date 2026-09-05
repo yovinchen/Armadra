@@ -174,6 +174,15 @@ func parseConfig(args []string) (config, error) {
 		flags.StringVar(&releaseChannel, "release-channel", "", "Pin update checks to a channel: stable, beta or development; unset lets the caller ask")
 		flags.StringVar(&c.launcher, "launcher", "", "Who is starting this Host: desktop, service or cli (default: cli)")
 	}
+	// upgrade --from-release consults the same source a serving Host would, and
+	// replaces the Worker alongside the Host when this deployment runs one. It
+	// takes both from the command line rather than from the recorded definition
+	// so an operator can see exactly which source is about to be contacted.
+	if c.command == "upgrade" {
+		flags.StringVar(&c.updatesSource, "updates-source", "", "Releases API base to install from, e.g. https://api.github.com/repos/OWNER/REPO")
+		flags.StringVar(&c.workerBinary, "worker-binary", "", "Absolute path to the installed Worker executable, so it is replaced in the same transaction")
+		flags.StringVar(&c.workerStateDir, "worker-state-dir", "", "The Worker's private state directory, when --worker-binary is given")
+	}
 	if err := flags.Parse(args); err != nil {
 		return c, err
 	}

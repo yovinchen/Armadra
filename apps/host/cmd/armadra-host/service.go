@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -42,6 +41,19 @@ type serviceFlags struct {
 	lines       int
 	binary      string
 	confirm     bool
+	// Registering with the platform's service manager is its own switch. The
+	// commands do nothing to the machine without it, and nothing at all
+	// without --confirm as well.
+	registerService bool
+	scope           string
+	// upgrade's release modes. --from-release fetches from the configured
+	// update source; --rollback returns to the binaries the last successful
+	// upgrade displaced, and is the only way down from a release.
+	fromRelease bool
+	rollback    bool
+	channel     string
+	version     string
+	publicKey   string
 }
 
 type repeatedFlag []string
@@ -64,16 +76,27 @@ func (s *serviceFlags) register(flags *flag.FlagSet, command string) {
 		flags.StringVar(&s.logFile, "log-file", "", "Absolute diagnostics log path (default: <data-dir>/host.log)")
 		flags.StringVar(&s.workingDir, "working-dir", "", "Absolute working directory (default: the data directory)")
 		flags.Var(&s.environment, "env", "NAME=VALUE exported by the service; credential-looking names are refused (repeatable)")
+		flags.BoolVar(&s.registerService, "register", false, "Also register the definition with this platform's service manager (needs --confirm and elevation)")
+		flags.StringVar(&s.scope, "scope", servicedef.ScopeSystem, "Register for the whole machine (system) or this user (user)")
+		flags.BoolVar(&s.confirm, "confirm", false, "Actually run the service manager; without it --register only prints what it would run")
 	case "uninstall":
 		flags.StringVar(&s.dir, "service-dir", "", "Directory holding the generated definition (default: the one recorded at install)")
 		flags.StringVar(&s.identifier, "identifier", servicedef.DefaultIdentifier, "Identifier of the definition to remove")
 		flags.StringVar(&s.platform, "target-platform", runtime.GOOS, "Definition format that was generated")
+		flags.BoolVar(&s.registerService, "unregister", false, "Also stop and unregister the service before removing the definition (needs --confirm and elevation)")
+		flags.StringVar(&s.scope, "scope", servicedef.ScopeSystem, "Scope the service was registered in: system or user")
+		flags.BoolVar(&s.confirm, "confirm", false, "Actually run the service manager; without it --unregister only prints what it would run")
 	case "logs":
 		flags.IntVar(&s.lines, "lines", servicedef.DefaultLogLines, "Number of trailing lines to read")
 		flags.StringVar(&s.logFile, "log-file", "", "Absolute log file to read (default: the service log, else the newest startup log)")
 	case "upgrade":
-		flags.StringVar(&s.binary, "binary", "", "Absolute path to the candidate Host executable (required)")
-		flags.BoolVar(&s.confirm, "confirm", false, "Actually replace the installed binary; without it nothing changes")
+		flags.StringVar(&s.binary, "binary", "", "Absolute path to a candidate Host executable")
+		flags.BoolVar(&s.fromRelease, "from-release", false, "Download the newest accepted release from --updates-source instead")
+		flags.BoolVar(&s.rollback, "rollback", false, "Return to the binaries the last successful upgrade displaced")
+		flags.StringVar(&s.channel, "channel", "", "Release channel to consult with --from-release: stable or beta")
+		flags.StringVar(&s.version, "version", "", "Exact release version to install with --from-release; must still be within the accepted range")
+		flags.StringVar(&s.publicKey, "updates-pubkey", "", "Absolute path to the minisign public key release artifacts are verified with")
+		flags.BoolVar(&s.confirm, "confirm", false, "Actually replace the installed binaries; without it nothing changes")
 	}
 }
 
@@ -97,9 +120,15 @@ func (s *serviceFlags) normalize(command string) error {
 			}
 		}
 		s.dir = filepath.Clean(s.dir)
+		if err := s.normalizeScope(); err != nil {
+			return err
+		}
 	case "uninstall":
 		if s.dir != "" && !filepath.IsAbs(s.dir) {
 			return fmt.Errorf("--service-dir must be an absolute directory")
+		}
+		if err := s.normalizeScope(); err != nil {
+			return err
 		}
 	case "logs":
 		if s.lines < 0 {
@@ -109,9 +138,53 @@ func (s *serviceFlags) normalize(command string) error {
 			return fmt.Errorf("--log-file must be an absolute path")
 		}
 	case "upgrade":
-		if s.binary == "" || !filepath.IsAbs(s.binary) {
-			return fmt.Errorf("upgrade requires --binary ABSOLUTE_PATH")
+		return s.normalizeUpgrade()
+	}
+	return nil
+}
+
+func (s *serviceFlags) normalizeScope() error {
+	if !servicedef.ValidScope(s.scope) {
+		return fmt.Errorf("--scope accepts system or user")
+	}
+	return nil
+}
+
+// normalizeUpgrade refuses every combination of the three modes but one. They
+// name different sources for the binaries that will replace this process, and
+// a command that silently picked between them would be choosing which release
+// gets installed.
+func (s *serviceFlags) normalizeUpgrade() error {
+	chosen := 0
+	for _, mode := range []bool{s.binary != "", s.fromRelease, s.rollback} {
+		if mode {
+			chosen++
 		}
+	}
+	if chosen == 0 {
+		return fmt.Errorf("upgrade requires one of --binary ABSOLUTE_PATH, --from-release or --rollback")
+	}
+	if chosen > 1 {
+		return fmt.Errorf("--binary, --from-release and --rollback name different sources; pass exactly one")
+	}
+	if s.binary != "" && !filepath.IsAbs(s.binary) {
+		return fmt.Errorf("upgrade requires --binary ABSOLUTE_PATH")
+	}
+	if s.publicKey != "" && !filepath.IsAbs(s.publicKey) {
+		return fmt.Errorf("--updates-pubkey must be an absolute path")
+	}
+	if !s.fromRelease {
+		if s.channel != "" || s.version != "" {
+			return fmt.Errorf("--channel and --version only apply to --from-release")
+		}
+		return nil
+	}
+	switch s.channel {
+	case "", "stable", "beta":
+	default:
+		// The development channel never updates, so asking to upgrade from it
+		// is a request nothing could satisfy.
+		return fmt.Errorf("--channel accepts stable or beta")
 	}
 	return nil
 }
@@ -166,120 +239,6 @@ func specFromConfig(c config, executable string) servicedef.Spec {
 		WorkerStateDir: c.workerStateDir,
 		Environment:    c.service.environment,
 	}
-}
-
-type installResult struct {
-	Command    string `json:"command"`
-	Platform   string `json:"platform"`
-	Path       string `json:"path"`
-	Identifier string `json:"identifier"`
-	RunAs      string `json:"runAs"`
-	LogPath    string `json:"logPath"`
-	Registered bool   `json:"registered"`
-	Note       string `json:"note"`
-}
-
-// installService writes the definition and records it beside the Host's own
-// state. It registers nothing: the returned note says so in both formats,
-// because an operator who believes a service is running when it is not would
-// discover it at the worst moment.
-func installService(_ context.Context, c config) error {
-	// A release source may carry a credential in its URL, and the definition is
-	// a file the service manager and every operator can read. Refuse to copy it
-	// there rather than writing a secret into a world-readable unit.
-	if c.updatesSource != "" {
-		return fmt.Errorf("--updates-source is not written into a service definition: a release source can carry a credential; add it to the installed unit yourself")
-	}
-	executable, err := hostExecutable()
-	if err != nil {
-		return err
-	}
-	spec := specFromConfig(c, executable)
-	if err := spec.Normalize(); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(c.dataDir, 0o700); err != nil {
-		return err
-	}
-	path, _, err := servicedef.Generate(spec, c.service.dir)
-	if err != nil {
-		return err
-	}
-	if err := servicedef.WriteMarker(c.dataDir, servicedef.Marker{Spec: spec, Path: path}); err != nil {
-		return err
-	}
-	result := installResult{
-		Command: "install", Platform: spec.Platform, Path: path, Identifier: spec.Identifier,
-		RunAs: spec.RunAs, LogPath: spec.LogPath, Registered: false,
-		Note: "definition written only; nothing was registered, enabled or started",
-	}
-	if c.output == "json" {
-		return writeJSON(result)
-	}
-	fmt.Printf("Wrote %s service definition: %s\n", result.Platform, result.Path)
-	fmt.Printf("Runs %s as %s, logging to %s\n", executable, result.RunAs, result.LogPath)
-	fmt.Println("Nothing was registered, enabled or started. Review the file and install it yourself.")
-	return nil
-}
-
-type uninstallResult struct {
-	Command    string `json:"command"`
-	Path       string `json:"path"`
-	Identifier string `json:"identifier"`
-	Removed    bool   `json:"removed"`
-	Note       string `json:"note"`
-}
-
-// uninstallService deletes only the file this command generated. It reads the
-// file first and refuses anything that does not carry our generation marker,
-// our identifier and our program path, so an operator's own unit that happens
-// to share a name is never removed. It stops nothing.
-func uninstallService(_ context.Context, c config) error {
-	executable, err := hostExecutable()
-	if err != nil {
-		return err
-	}
-	spec := servicedef.Spec{Identifier: c.service.identifier, Platform: c.service.platform, Executable: executable}
-	path := ""
-	marker, markerErr := servicedef.ReadMarker(c.dataDir)
-	switch {
-	case c.service.dir != "":
-		path = filepath.Join(c.service.dir, spec.FileName())
-	case markerErr == nil:
-		path, spec = marker.Path, marker.Spec
-	case errors.Is(markerErr, os.ErrNotExist):
-		return fmt.Errorf("no service definition was generated for %s; pass --service-dir to point at one", c.dataDir)
-	default:
-		return markerErr
-	}
-	content, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("no service definition at %s", path)
-	}
-	if err != nil {
-		return err
-	}
-	if !servicedef.Owns(content, spec) {
-		return fmt.Errorf("refusing to remove %s: it was not generated by this command for %s", path, spec.Identifier)
-	}
-	if err := os.Remove(path); err != nil {
-		return err
-	}
-	if markerErr == nil && marker.Path == path {
-		if err := servicedef.RemoveMarker(c.dataDir); err != nil {
-			return err
-		}
-	}
-	result := uninstallResult{
-		Command: "uninstall", Path: path, Identifier: spec.Identifier, Removed: true,
-		Note: "definition file removed; no service was stopped or unregistered",
-	}
-	if c.output == "json" {
-		return writeJSON(result)
-	}
-	fmt.Printf("Removed %s\n", path)
-	fmt.Println("No service was stopped or unregistered; the running Host, if any, is untouched.")
-	return nil
 }
 
 type logsResult struct {
@@ -359,201 +318,6 @@ func ownVersion() versionReport {
 		ProtocolMajor: server.ProtocolMajor,
 		ProtocolMinor: server.ProtocolMinor,
 	}
-}
-
-type upgradeResult struct {
-	Command    string         `json:"command"`
-	Candidate  string         `json:"candidate"`
-	Target     string         `json:"target"`
-	Protocol   versionReport  `json:"candidateVersion"`
-	WasRunning bool           `json:"hostWasRunning"`
-	Applied    bool           `json:"applied"`
-	Restarted  bool           `json:"restarted"`
-	Status     *statusSummary `json:"status,omitempty"`
-	Note       string         `json:"note"`
-}
-
-// upgradeHost replaces this binary with a verified candidate. Every check runs
-// before anything on disk changes, and without --confirm the command only
-// reports what it would do. A running Host is stopped through the control
-// protocol first — never by signalling a PID from disk — because the file being
-// replaced is the image it is executing.
-func upgradeHost(parent context.Context, c config) error {
-	target, err := hostExecutable()
-	if err != nil {
-		return err
-	}
-	candidate := filepath.Clean(c.service.binary)
-	if candidate == target {
-		return fmt.Errorf("candidate and installed binary are the same file")
-	}
-	if _, err := servicedef.VerifyCandidate(candidate); err != nil {
-		return err
-	}
-	version, err := servicedef.Probe(parent, candidate)
-	if err != nil {
-		return err
-	}
-	if err := servicedef.CheckCompatible(version, server.ProtocolMajor); err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
-	defer cancel()
-	running, err := runningStatus(ctx, c.dataDir)
-	if err != nil {
-		return err
-	}
-	marker, markerErr := servicedef.ReadMarker(c.dataDir)
-	if running != nil && markerErr != nil {
-		// Restarting means choosing the listener, origins and Worker paths the
-		// Host had. Guessing them would silently change the service's exposure,
-		// so an unrecorded configuration is a refusal, not a default.
-		return fmt.Errorf("Host is running and no service definition records its configuration; run `armadra-host stop` first, then upgrade")
-	}
-	result := upgradeResult{
-		Command: "upgrade", Candidate: candidate, Target: target,
-		Protocol:   versionReport{Component: version.Component, Version: version.Version, Channel: version.Channel, ProtocolMajor: version.ProtocolMajor, ProtocolMinor: version.ProtocolMinor},
-		WasRunning: running != nil,
-	}
-	if !c.service.confirm {
-		result.Note = "no change was made; re-run with --confirm to replace the binary"
-		if c.output == "json" {
-			return writeJSON(result)
-		}
-		fmt.Printf("Would replace %s with %s (protocol %d.%d)\n", target, candidate, version.ProtocolMajor, version.ProtocolMinor)
-		if running != nil {
-			fmt.Println("The running Host would be stopped and started again from the recorded service definition.")
-		}
-		fmt.Println("Nothing changed. Re-run with --confirm to apply.")
-		return nil
-	}
-	if running != nil {
-		if err := stopForUpgrade(ctx, c.dataDir, running.HostInstanceId); err != nil {
-			return err
-		}
-	}
-	if err := servicedef.Replace(candidate, target); err != nil {
-		return err
-	}
-	result.Applied = true
-	result.Note = "binary replaced"
-	if running != nil {
-		status, restarted, err := restartAfterUpgrade(ctx, c.dataDir, target, marker.Spec)
-		if err != nil {
-			return err
-		}
-		result.Restarted = restarted
-		result.Status = summarize(status)
-		if !restarted {
-			result.Note = "binary replaced; the Host was restarted by its service manager"
-		}
-	}
-	if c.output == "json" {
-		return writeJSON(result)
-	}
-	fmt.Printf("Replaced %s with %s\n", target, candidate)
-	if result.Status != nil {
-		fmt.Printf("Host %s (instance %s, pid %d)\n", result.Status.State, result.Status.InstanceID, result.Status.ProcessID)
-	}
-	return nil
-}
-
-// runningStatus reports the Host that currently owns the data directory, or nil
-// when none does. A locked directory whose control endpoint is unreachable is
-// an error: an upgrade must never assume a Host it cannot talk to is absent.
-func runningStatus(ctx context.Context, dir string) (*pb.HostStatus, error) {
-	status, err := daemon.Status(ctx, dir)
-	if err == nil {
-		return status, nil
-	}
-	if !errors.Is(err, daemon.ErrNotRunning) {
-		return nil, err
-	}
-	locked, lockErr := hoststate.IsLocked(dir)
-	if lockErr != nil {
-		return nil, lockErr
-	}
-	if locked {
-		return nil, fmt.Errorf("Host owns the data directory but its control endpoint is unavailable")
-	}
-	return nil, nil
-}
-
-// stopForUpgrade stops the observed instance through the control protocol and
-// waits for the directory lock to be released. It never kills a PID.
-func stopForUpgrade(ctx context.Context, dir, instance string) error {
-	if err := daemon.Stop(ctx, dir, instance); err != nil {
-		return err
-	}
-	tick := time.NewTicker(50 * time.Millisecond)
-	defer tick.Stop()
-	for {
-		_, err := daemon.Status(ctx, dir)
-		if errors.Is(err, daemon.ErrNotRunning) {
-			locked, lockErr := hoststate.IsLocked(dir)
-			if lockErr != nil {
-				return lockErr
-			}
-			if !locked {
-				return nil
-			}
-		} else if err != nil && !transientRead(err) {
-			return err
-		}
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("Host did not stop before the deadline; the binary was not replaced")
-		case <-tick.C:
-		}
-	}
-}
-
-// restartAfterUpgrade starts the replaced binary with exactly the arguments the
-// recorded definition uses. A service manager with KeepAlive may have restarted
-// the Host already; that owner is reported instead of racing a second one.
-func restartAfterUpgrade(ctx context.Context, dir, executable string, spec servicedef.Spec) (*pb.HostStatus, bool, error) {
-	deadline := time.NewTimer(3 * time.Second)
-	defer deadline.Stop()
-	for {
-		if status, err := daemon.Status(ctx, dir); err == nil {
-			return status, false, nil
-		} else if !errors.Is(err, daemon.ErrNotRunning) && !transientRead(err) {
-			return nil, false, err
-		}
-		select {
-		case <-ctx.Done():
-			return nil, false, ctx.Err()
-		case <-deadline.C:
-			status, err := startReplacedHost(ctx, dir, executable, spec)
-			return status, true, err
-		case <-time.After(100 * time.Millisecond):
-		}
-	}
-}
-
-func startReplacedHost(ctx context.Context, dir, executable string, spec servicedef.Spec) (*pb.HostStatus, error) {
-	logFile, err := os.CreateTemp(dir, "startup-*.log")
-	if err != nil {
-		return nil, err
-	}
-	defer logFile.Close()
-	child := exec.Command(executable, spec.Arguments()...)
-	child.Stdout = logFile
-	child.Stderr = logFile
-	setDetached(child)
-	if err := child.Start(); err != nil {
-		return nil, err
-	}
-	exited := make(chan error, 1)
-	go func() { exited <- child.Wait(); close(exited) }()
-	status, err := awaitReady(ctx, dir, exited)
-	if err != nil {
-		if killErr := child.Process.Kill(); killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
-			err = errors.Join(err, killErr)
-		}
-		return nil, fmt.Errorf("%w; the new binary is installed, inspect %s", err, filepath.Base(logFile.Name()))
-	}
-	return status, nil
 }
 
 // statusSummary repeats the JSON shape printStatus already produces, so status
