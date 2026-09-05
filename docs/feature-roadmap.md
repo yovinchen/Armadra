@@ -141,6 +141,7 @@ T01 是 🔶：`crates/session-host` 与 Worker 侧后端已交付并通过交�
 | **Codex 额度**校对 OAuth 来源、credits 余额；CLI RPC 回退                           | ✅   |
 | **本地成本统计**：Claude / Codex 本地日志按日聚合 token 与费用，今日 / 30 天 / 会话 | ✅   |
 | **独立用量看板**：多 Provider 总览、日柱状图、模型分解、刷新节奏、隐私边界          | ✅   |
+| **桌面托盘迷你条**：会话 / 周窗口两条进度，读 `/api/usage/mini`，null 显示未知      | ✅   |
 | Provider 状态页 / 事故徽标（可选）                                                  | ⬜   |
 
 ### 3.10 资源监控（本轮新增，详见 §4.3）
@@ -155,17 +156,17 @@ T01 是 🔶：`crates/session-host` 与 Worker 侧后端已交付并通过交�
 
 ### 3.11 Host、远程与移动
 
-| 功能                                                                                                                 | 状态 |
-| -------------------------------------------------------------------------------------------------------------------- | ---- |
-| Protobuf 握手、本机控制、单实例、后台启停、私有 `host.db`、迁移导出 / staging 导入                                   | ✅   |
-| HTTPS 设备配对、`__Host-` 会话、CSRF 轮转、设备管理 UI                                                               | ✅   |
-| SSH 主机配置与连接测试                                                                                               | ✅   |
-| 业务 Protobuf 表面：canvas 已交付并可按 ownership epoch 切换写入方；session / agent / filesystem / git 未开始（H01） | 🔶   |
-| 事件 outbox、durable sequence、快照恢复（H01）                                                                       | ✅   |
-| 远端 Rust Worker、`WorkspacePath{executionHostId}` 统一执行位置（H02）                                               | ⬜   |
-| 认证后可用的业务 API、静态前端托管、对外服务开关（H02）                                                              | 🔶   |
-| 手机焦点页、底部导航、软键盘工具条、断线重连不重复输入（H03）                                                        | 🔶   |
-| Presence / Mutation / 租约契约与 UNSUPPORTED 响应（H04，预留）                                                       | ✅   |
+| 功能                                                                                                                                | 状态 |
+| ----------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| Protobuf 握手、本机控制、单实例、后台启停、私有 `host.db`、迁移导出 / staging 导入                                                  | ✅   |
+| HTTPS 设备配对、`__Host-` 会话、CSRF 轮转、设备管理 UI                                                                              | ✅   |
+| SSH 主机配置与连接测试                                                                                                              | ✅   |
+| 业务 Protobuf 表面：canvas 已交付并可按 ownership epoch 切换写入方；session / agent / filesystem / git 未开始（H01）                | 🔶   |
+| 事件 outbox、durable sequence、快照恢复（H01）                                                                                      | ✅   |
+| 远端 Rust Worker、`WorkspacePath{executionHostId}` 统一执行位置（H02）：文件 / 搜索 / 基础 Git 已远端执行，仓库面板与文件管理仍 501 | 🔶   |
+| 认证后可用的业务 API、静态前端托管、对外服务开关（H02）                                                                             | 🔶   |
+| 手机焦点页、底部导航、软键盘工具条、断线重连不重复输入（H03）                                                                       | 🔶   |
+| Presence / Mutation / 租约契约与 UNSUPPORTED 响应（H04，预留）                                                                      | ✅   |
 
 ### 3.12 桌面壳、服务集成与项目结构（本轮新增，详见 §4.4、§4.5）
 
@@ -245,7 +246,7 @@ Worker。H03 已实现手机底部导航、单节点焦点页、软键盘工具�
 
 看板界面：
 
-- 独立小看板：从用量球或 Dock 打开，也可作为独立窗口常驻；桌面可选托盘迷你条（会话 / 周窗口两条进度）。
+- 独立小看板：从用量球或 Dock 打开，也可作为独立窗口常驻；桌面托盘迷你条已实现：菜单顶部两行只读进度（会话 / 周窗口），经壳已有的 Runtime 通道读 `/api/usage/mini`，间隔跟随 `usage.refreshMinutes`（手动模式与缺省用 5 分钟下限，只读缓存不触发上游请求）；缺数据显示「未知」，不画空条。
 - 每个 Provider 一张卡：会话与周窗口进度条、重置倒计时、pace（按时间推算的预期用量）、credits；下方 30 天日柱状图与模型分解。
 - 采集时间、过期、错误状态明确显示；`unavailable / error / stale` 不显示为 0。
 - 设置页：Provider 开关、刷新节奏（手动 / 1 / 2 / 5 / 15 分钟）、Copilot 登录 / 登出、成本统计开关。

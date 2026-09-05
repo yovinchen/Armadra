@@ -214,6 +214,18 @@ SSH 接入流程：保存主机配置 → 验证 host key → 探测 OS/架构/�
 
 远端 Worker 不运行平台调度器；计划只在所属 Host 执行。若要求控制电脑关闭后远端仍调度，用户必须把项目和计划迁移到远端常驻 Host，不能仅靠 SSH Worker 宣称持续调度。
 
+### 5.1 远端 Worker 与统一执行位置实现状态（H02）
+
+工作空间带 `executionHostId`（迁移 0006，空串＝本机）。非空时指向配置了 `worker.path` 的 `settings.ssh.hosts[]`，Runtime 以 `ssh -o BatchMode=yes … <远端二进制> worker --stdio [--state-dir …]` 启动远端 Worker，复用现有 stdio 长度帧 Protobuf 协议。远端二进制路径与状态目录按 `identityFile` 同一规则校验：绝对路径、无空白与 shell 元字符，否则远端登录 shell 会把它切成多个参数。
+
+握手要求 `runtime_version` 与控制端完全一致并声明 `remote.execution.v1`；二进制缺失、版本不符或主机没配 Worker 一律 `UNSUPPORTED`，不回退本机。重连有界：3 次尝试、250ms/1s/4s 退避，随后停 30 秒；单连接互斥同时充当该主机的 Git 操作队列。已写出后失联的请求返回 `UNKNOWN_OUTCOME`，只有只读操作在重建连接（并重新注册 root）后重放。
+
+协议新增：`WorkerWriteFileRequest`（`expected_sha256` 为 optional，缺省＝仅新建，保证编辑器保存带内容版本）、`WorkerServiceRequest/Response`（封闭的 `WorkerServiceOperation` 枚举 + 本构建自身的 camelCase JSON 载荷 + 执行主机原样返回的 HTTP 状态）。JSON 载荷是**版本锁**而非跨版本契约：两端由握手固定为同一构建，字段号保留以便将来换成类型化消息。
+
+已经远端执行：文件列表/读/写/版本/监听、快速打开、项目搜索、`git status/diff/head-commit/stage/unstage/resolve/revert/commit/init`。远端监听是 2 秒轮询（`WATCH_POLL`），原地替换只能报 `modified`——本机用的 dev/inode 信号在远端没有对应物。`POST /api/workspaces/remote` 用远端 root 注册证明并冻结规范路径；`POST /api/ssh/hosts/{id}/worker/test` 回报远端 Worker 的平台、架构与版本。
+
+未做：Git 仓库面板（分支、历史、worktree、stash、操作队列）、下载/上传、文件新建改名删除、资产导入在远端工作空间返回 501 并写明功能名；工作空间的执行主机在打开时确定，之后不可更改；SSH 认证与 host key 仍由 `ssh` 自己处理，凭据不入库。
+
 SSH 断线：已有远端 tmux/Session Host 保持；重连先核对 Worker epoch、会话 generation、Hook outbox 与执行收据。连接中断期间不乐观显示命令成功，过期终端输入不回放。远程文件编辑可保留本机草稿，恢复时比较版本后保存。
 
 ## 6. 身份、安全与后续多人接口

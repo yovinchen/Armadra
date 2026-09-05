@@ -99,16 +99,17 @@ CORS 只允许读取元数据，设备登录与远程执行另属未完成能力
 
 ## 环境变量与数据
 
-| 变量                                            | 作用                                                                                                                 |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `ARMADRA_RUNTIME_HOST` / `ARMADRA_RUNTIME_PORT` | 没有 `--listen` 时的监听地址，默认 `127.0.0.1:43120`；设置后 `armadra.sh run web` 用固定端口而非随机端口             |
-| `ARMADRA_RUNTIME_LISTEN`                        | 桌面壳持有的 Runtime 在私有 socket 之外额外监听的一个 `--listen` spec（开发用）                                      |
-| `ARMADRA_WEB_PORT`                              | `armadra.sh run web` 的前端端口                                                                                      |
-| `VITE_RUNTIME_URL`                              | 前端连接地址；设置后 Vite 不装代理。不设时浏览器开发走 Vite 代理（地址取自 endpoints.json），打包桌面走 `armadra://` |
-| `ARMADRA_DATA_DIR`                              | Runtime 数据目录，`endpoints.json` 与 Runtime socket 都在这里                                                        |
-| `ARMADRA_DATABASE_URL`                          | SQLite 连接，例如 `sqlite://…?mode=rwc`                                                                              |
-| `RUST_LOG`                                      | 日志过滤，默认 `info,tower_http=info`                                                                                |
-| `ARMADRA_HOOK_DEBUG`                            | Hook 调试                                                                                                            |
+| 变量                                            | 作用                                                                                                                   |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `ARMADRA_RUNTIME_HOST` / `ARMADRA_RUNTIME_PORT` | 没有 `--listen` 时的监听地址，默认 `127.0.0.1:43120`；设置后 `armadra.sh run web` 用固定端口而非随机端口               |
+| `ARMADRA_RUNTIME_LISTEN`                        | 桌面壳持有的 Runtime 在私有 socket 之外额外监听的一个 `--listen` spec（开发用）                                        |
+| `ARMADRA_WEB_PORT`                              | `armadra.sh run web` 的前端端口                                                                                        |
+| `VITE_RUNTIME_URL`                              | 前端连接地址；设置后 Vite 不装代理。不设时浏览器开发走 Vite 代理（地址取自 endpoints.json），打包桌面走 `armadra://`   |
+| `ARMADRA_DATA_DIR`                              | Runtime 数据目录，`endpoints.json` 与 Runtime socket 都在这里                                                          |
+| `ARMADRA_DATABASE_URL`                          | SQLite 连接，例如 `sqlite://…?mode=rwc`                                                                                |
+| `RUST_LOG`                                      | 日志过滤，默认 `info,tower_http=info`                                                                                  |
+| `ARMADRA_HOOK_DEBUG`                            | Hook 调试                                                                                                              |
+| `ARMADRA_REMOTE_WORKER_LAUNCHER`                | 替换远端 Worker 启动行的 argv[0]（默认 `ssh`）。必须是绝对路径、不含空白；SSH 选项与远端命令原样保留。测试与自建隧道用 |
 
 脚本发现 Runtime 端口占用时直接报错。节点身份、Hook token、端点与权限等待变量由 Runtime 注入 Agent 终端，无需手工配置。
 Runtime 不监听 TCP 时 `hook-endpoint.env` 不写 `ARMADRA_HOOK_PORT`，Hook 客户端只走 `hook.sock`。
