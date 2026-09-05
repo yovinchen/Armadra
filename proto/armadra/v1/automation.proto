@@ -1,0 +1,177 @@
+syntax = "proto3";
+package armadra.v1;
+option go_package = "armadra.local/host/gen/armadra/v1";
+
+import "armadra/v1/common.proto";
+
+enum AutomationPlanState {
+  AUTOMATION_PLAN_STATE_UNSPECIFIED = 0;
+  AUTOMATION_PLAN_STATE_DRAFT = 1;
+  AUTOMATION_PLAN_STATE_ACTIVE = 2;
+  AUTOMATION_PLAN_STATE_PAUSED = 3;
+  AUTOMATION_PLAN_STATE_EXPIRED = 4;
+  AUTOMATION_PLAN_STATE_DELETED = 5;
+}
+enum AutomationMisfirePolicy {
+  AUTOMATION_MISFIRE_POLICY_UNSPECIFIED = 0;
+  AUTOMATION_MISFIRE_POLICY_SKIP = 1;
+  AUTOMATION_MISFIRE_POLICY_COALESCE_ONE = 2;
+}
+enum AutomationConcurrencyPolicy {
+  AUTOMATION_CONCURRENCY_POLICY_UNSPECIFIED = 0;
+  AUTOMATION_CONCURRENCY_POLICY_FORBID = 1;
+  AUTOMATION_CONCURRENCY_POLICY_QUEUE_ONE = 2;
+}
+enum AutomationRunState {
+  AUTOMATION_RUN_STATE_UNSPECIFIED = 0;
+  AUTOMATION_RUN_STATE_DUE = 1;
+  AUTOMATION_RUN_STATE_CLAIMED = 2;
+  AUTOMATION_RUN_STATE_WAITING_TARGET = 3;
+  // Persisted before crossing the external dispatch boundary. Recovery must
+  // Lookup the same operation; the absence of a receipt is not proof of safety.
+  AUTOMATION_RUN_STATE_DISPATCHING = 4;
+  AUTOMATION_RUN_STATE_DELIVERED = 5;
+  AUTOMATION_RUN_STATE_RUNNING = 6;
+  AUTOMATION_RUN_STATE_SUCCEEDED = 7;
+  AUTOMATION_RUN_STATE_FAILED = 8;
+  AUTOMATION_RUN_STATE_CANCELLED = 9;
+  AUTOMATION_RUN_STATE_SKIPPED = 10;
+  AUTOMATION_RUN_STATE_EXPIRED = 11;
+  AUTOMATION_RUN_STATE_UNKNOWN = 12;
+}
+enum AutomationOutcome {
+  AUTOMATION_OUTCOME_UNSPECIFIED = 0;
+  AUTOMATION_OUTCOME_UNKNOWN = 1;
+  // Authoritative executor proof that the operation produced no side effects.
+  // A transport error / missing journal / generic NOT_FOUND is never this value.
+  AUTOMATION_OUTCOME_NOT_DISPATCHED = 2;
+  AUTOMATION_OUTCOME_DELIVERED = 3;
+  AUTOMATION_OUTCOME_RUNNING = 4;
+  AUTOMATION_OUTCOME_SUCCEEDED = 5;
+  AUTOMATION_OUTCOME_FAILED = 6;
+  AUTOMATION_OUTCOME_CANCELLED = 7;
+}
+message AutomationOnce { int64 at_unix_ms = 1; }
+message AutomationInterval { int64 anchor_unix_ms = 1; int64 interval_ms = 2; }
+message AutomationCron { string expression = 1; string timezone = 2; }
+message AutomationLoopAfterCompletion { int64 delay_ms = 1; }
+message AutomationSchedule {
+  oneof kind {
+    AutomationOnce once = 1;
+    AutomationInterval interval = 2;
+    AutomationCron cron = 3;
+    AutomationLoopAfterCompletion loop_after_completion = 4;
+  }
+}
+message AutomationTarget {
+  string execution_host_id = 1;
+  string session_id = 2;
+  uint64 generation = 3;
+}
+message AutomationPlanConfig {
+  string workspace_id = 1;
+  string title = 2;
+  AutomationSchedule schedule = 3;
+  AutomationTarget target = 4;
+  // Frozen payload reference/hash, never an access token or plaintext key.
+  string payload_ref = 5;
+  bytes payload_sha256 = 6;
+  AutomationMisfirePolicy misfire_policy = 7;
+  AutomationConcurrencyPolicy concurrency_policy = 8;
+  int64 misfire_grace_ms = 9;
+  int64 busy_ttl_ms = 10;
+  uint64 max_runs = 11;
+  int64 expires_at_unix_ms = 12;
+  // Zero disables retries. Retries require NOT_DISPATCHED proof and reuse the
+  // same operation ID; UNKNOWN is never automatically resent.
+  uint32 safe_retry_limit = 13;
+  int64 retry_backoff_ms = 14;
+}
+message AutomationActivation {
+  string plan_id = 1;
+  uint64 config_version = 2;
+  bytes config_sha256 = 3;
+  bytes activation_sha256 = 4;
+  string host_id = 5;
+  string principal_id = 6;
+  string authorization_id = 7;
+  int64 authorized_at_unix_ms = 8;
+  bool enabled = 9;
+}
+message AutomationPlan {
+  string id = 1;
+  uint64 config_version = 2;
+  AutomationPlanConfig config = 3;
+  AutomationPlanState state = 4;
+  bytes activation_sha256 = 5;
+  int64 next_due_unix_ms = 6;
+  // This durable high-water mark never moves backwards with the wall clock.
+  int64 observed_through_unix_ms = 7;
+  uint64 run_count = 8;
+  string active_run_id = 9;
+  string pending_run_id = 10;
+  int64 created_at_unix_ms = 11;
+  int64 updated_at_unix_ms = 12;
+}
+message AutomationPlanRef { string plan_id = 1; string workspace_id = 2; }
+message AutomationRunRef { string run_id = 1; string plan_id = 2; string workspace_id = 3; }
+message AutomationTargetGate {
+  string execution_host_id = 1;
+  string session_id = 2;
+  AutomationRunRef active = 3;
+}
+message AutomationRun {
+  string id = 1;
+  string plan_id = 2;
+  string workspace_id = 3;
+  uint64 config_version = 4;
+  string scheduled_slot = 5;
+  int64 scheduled_at_unix_ms = 6;
+  bool misfire = 7;
+  uint64 missed_slots = 8;
+  bool missed_slots_truncated = 9;
+  AutomationPlanConfig frozen_config = 10;
+  AutomationActivation activation = 11;
+  string operation_id = 12;
+  bytes request_sha256 = 13;
+  AutomationRunState state = 14;
+  string claim_owner = 15;
+  int64 lease_until_unix_ms = 16;
+  uint32 dispatch_attempts = 17;
+  int64 next_attempt_unix_ms = 18;
+  int64 waiting_expires_at_unix_ms = 19;
+  uint64 receipt_sequence = 20;
+  bytes receipt_sha256 = 21;
+  int64 created_at_unix_ms = 22;
+  int64 updated_at_unix_ms = 23;
+  int64 completed_at_unix_ms = 24;
+  string reason_code = 25;
+  // Monotonic proof: a later UNKNOWN outcome cannot erase confirmed delivery
+  // or make a contradictory NOT_DISPATCHED receipt eligible for a retry.
+  bool delivery_observed = 26;
+}
+message AutomationReceipt {
+  string operation_id = 1;
+  bytes request_sha256 = 2;
+  AutomationOutcome outcome = 3;
+  uint64 sequence = 4;
+  int64 observed_at_unix_ms = 5;
+  string reason_code = 6;
+}
+
+// Reserved transport shapes. Defining them does not expose an HTTP endpoint.
+// Authentication always comes from the verified connection, never client fields.
+message DefineAutomationRequest {
+  CommandMeta meta = 1;
+  string plan_id = 2;
+  AutomationPlanConfig config = 3;
+}
+message ActivateAutomationRequest {
+  CommandMeta meta = 1;
+  string plan_id = 2;
+  uint64 config_version = 3;
+  bytes config_sha256 = 4;
+}
+message PauseAutomationRequest { CommandMeta meta = 1; string plan_id = 2; }
+message AutomationPlanSnapshot { AutomationPlan plan = 1; uint64 revision = 2; }
+message AutomationRunSnapshot { AutomationRun run = 1; uint64 revision = 2; }

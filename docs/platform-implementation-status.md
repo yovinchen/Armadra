@@ -352,3 +352,11 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - 同时修复目录列表跟随根外symlink时泄露目标metadata的问题，根内链接保持可读。Rust Worker5项、文件7项、Go11组子进程场景与race/vet通过；Go Windows x64/arm64交叉编译通过，未作Windows实机验证。
 - 实际Go→Rust进程验证60万字节中文/emoji分块与完整SHA、源变化冲突、无legacy数据库/无TCP监听、关闭后child回收。新协议Go/Rust/TS互通通过（Rust11、TS14），包括UTF-8字符跨块。
 - 此入口与客户端已可调用，但尚未自动接管生产Host业务或现有会话；下一步增加执行收据、命令/终端能力与Host接线，不把只读桥接等同完整Worker交付。
+
+## 连续实施：软件内部持久自动化内核
+
+- Go新增独立计划/运行/激活Protobuf与持久引擎，支持Once、锚定Interval、五字段IANA Cron及有界完成后Loop；配置变更回draft，激活绑定确切版本/hash及调用层验证的授权引用，不存浏览器凭据。
+- 唯一时隙、CAS认领、target门和事务事件共同防重；skip/coalesce-one、forbid/queue-one、忙时TTL、暂停/权限变化、租约和崩溃恢复均持久化。UNKNOWN保留target门与不可逆delivery_observed证据，不把缺失journal当作未执行。
+- 只有明确NOT_DISPATCHED且配置有限重试时复用同operation；Interval运行时使用单调投影，重启按UTC游标恢复，Cron重叠本地分钟只执行首个，长睡眠汇总一次且标注计数截断。
+- 26组真实临时DB/可控时间测试、race/vet及Windows双架构交叉编译通过；跨语言新增未知enum/最大sequence/已投递证据样例通过（Rust12、TS15与Go契约）。依赖锁定robfig/cron v3.0.1，仅用解析与Next，不使用内存调度器。
+- 执行只经过Dispatcher接口。生产main/HTTP/UI与实际Worker命令或PTY输入尚未接入，本批仅完成内核，不代表A02端到端可用；没有恢复任何已删除的Codex定时续跑任务。

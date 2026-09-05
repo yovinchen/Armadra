@@ -22,6 +22,10 @@ import {
   AuthenticatedSessionSchema,
   WorkerRequestSchema,
   WorkerResponseSchema,
+  AutomationReceiptSchema,
+  AutomationRunSchema,
+  AutomationRunState,
+  type AutomationOutcome,
 } from "../src/index.js";
 
 function fixture(name: string): Uint8Array {
@@ -46,6 +50,10 @@ function check<T extends DescMessage>(
 const maxUint64 = 18_446_744_073_709_551_615n;
 
 describe("shared Go / Rust / TypeScript wire contracts", () => {
+  it("preserves unknown executor outcomes and irreversible delivery evidence",()=>{
+    check("automation_unknown_receipt",AutomationReceiptSchema,{operationId:"operation-1",requestSha256:new Uint8Array(32).fill(7),outcome:999 as AutomationOutcome,sequence:maxUint64,observedAtUnixMs:1788557900000n});
+    check("automation_delivery_evidence",AutomationRunSchema,{id:"run-1",planId:"plan-1",workspaceId:"workspace-1",configVersion:9007199254740993n,state:AutomationRunState.UNKNOWN,deliveryObserved:true});
+  });
   it("preserves private Worker identity and partial UTF-8 byte chunks",()=>{
     check("worker_hello",WorkerRequestSchema,{requestId:"request-worker",hostId:"0123456789abcdef0123456789abcdef",deadlineUnixMs:1788557900000n,action:{case:"hello",value:{protocol:{major:1}}}});
     check("worker_chunk",WorkerResponseSchema,{requestId:"chunk-1",hostId:"0123456789abcdef0123456789abcdef",instanceId:"abcdef0123456789abcdef0123456789",result:{case:"fileChunk",value:{rootId:"root-1",path:"正文.txt",mimeType:"text/plain",sha256:new Uint8Array(32).fill(7),totalBytes:4n,offset:1n,data:new Uint8Array([0x9f,0x99,0x82]),eof:true}}});

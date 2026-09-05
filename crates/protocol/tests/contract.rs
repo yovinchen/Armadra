@@ -73,6 +73,12 @@ fn private_worker_identity_and_partial_utf8_chunks() {
 }
 
 #[test]
+fn automation_unknown_outcome_and_delivery_evidence() {
+    check("automation_unknown_receipt",AutomationReceipt{operation_id:"operation-1".into(),request_sha256:vec![7;32],outcome:999,sequence:u64::MAX,observed_at_unix_ms:1788557900000,reason_code:String::new()});
+    check("automation_delivery_evidence",AutomationRun{id:"run-1".into(),plan_id:"plan-1".into(),workspace_id:"workspace-1".into(),config_version:9007199254740993,state:AutomationRunState::Unknown as i32,delivery_observed:true,..Default::default()});
+}
+
+#[test]
 fn local_control_contracts() {
     check(
         "management_running",
