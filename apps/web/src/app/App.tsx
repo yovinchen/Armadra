@@ -4,6 +4,7 @@ import { useWorkspaceEvents } from "../api/events";
 import { TldrawWorkspace } from "../canvas/TldrawWorkspace";
 // 浮层都在 `./lazy` 里 `React.lazy` 包过，走各自的 chunk（§17 代码分割）。
 import {
+  AutomationDrawer,
   CommandPalette,
   ControlConfirmDialog,
   ExplorerDrawer,
@@ -91,6 +92,7 @@ function AppShell() {
         <ExplorerDrawer />
         <SourceControlDrawer />
         <ResourceDrawer />
+        <AutomationDrawer />
         <SettingsDialog />
         <CommandPalette />
         <QuickOpen />

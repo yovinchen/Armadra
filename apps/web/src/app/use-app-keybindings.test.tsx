@@ -41,6 +41,7 @@ describe("useAppKeybindings", () => {
         explorer: "closed",
         scm: "closed",
         resources: "closed",
+        automation: "closed",
         settings: false,
         palette: false,
         quickOpen: false,

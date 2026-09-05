@@ -1,6 +1,8 @@
 import type { ComponentType } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
+  Activity,
+  CalendarClock,
   FileCode2,
   FolderTree,
   GitCompare,
@@ -16,6 +18,8 @@ import {
   type Size,
 } from "@armadra/shared";
 
+import { AgentActivityNode } from "./AgentActivityNode";
+import { AutomationNode } from "./AutomationNode";
 import { BrowserNode } from "./BrowserNode";
 import { DiffNode } from "./DiffNode";
 import { EditorNode } from "./EditorNode";
@@ -129,6 +133,23 @@ export const NODE_META: Record<CanvasNodeType, NodeMeta> = {
     defaultColor: DEFAULT_NODE_COLOR,
     hasBridgeHandles: true,
   },
+  // 两张 Host 侧卡片：内容都从 Host 读，连线拿不到任何东西，所以不给把手。
+  automation: {
+    labelKey: "node.automation",
+    icon: CalendarClock,
+    defaultSize: { width: 360, height: 260 },
+    minSize: { width: 260, height: 180 },
+    defaultColor: DEFAULT_NODE_COLOR,
+    hasBridgeHandles: false,
+  },
+  agentActivity: {
+    labelKey: "node.agentActivity",
+    icon: Activity,
+    defaultSize: { width: 340, height: 240 },
+    minSize: { width: 240, height: 160 },
+    defaultColor: DEFAULT_NODE_COLOR,
+    hasBridgeHandles: false,
+  },
 };
 
 export const NODE_BODY: Record<CanvasNodeType, ComponentType<NodeBodyProps>> = {
@@ -139,6 +160,8 @@ export const NODE_BODY: Record<CanvasNodeType, ComponentType<NodeBodyProps>> = {
   diff: DiffNode,
   files: FilesNode,
   browser: BrowserNode,
+  automation: AutomationNode,
+  agentActivity: AgentActivityNode,
 };
 
 /**
@@ -149,7 +172,15 @@ export const NODE_BODY: Record<CanvasNodeType, ComponentType<NodeBodyProps>> = {
  * 走通用包壳。
  */
 export const NODE_SHELL_SELF: ReadonlySet<CanvasNodeType> =
-  new Set<CanvasNodeType>(["terminal", "editor", "diff", "files", "browser"]);
+  new Set<CanvasNodeType>([
+    "terminal",
+    "editor",
+    "diff",
+    "files",
+    "browser",
+    "automation",
+    "agentActivity",
+  ]);
 
 export function nodeMeta(type: CanvasNodeType): NodeMeta {
   return NODE_META[type];

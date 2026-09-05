@@ -20,6 +20,14 @@ import { nodeMeta } from "../nodes/registry";
  */
 export const DEFAULT_BROWSER_URL = "https://www.google.com/webhp?igu=1";
 
+/**
+ * 占位引用（自动化设计 §3）。计划卡片与活动卡片都必须指向真实的对象，
+ * 所以它们没有「空默认值」：调用方必须覆盖，这两个常量只是为了让
+ * `defaultNodeData` 对每种类型都有返回值，本身永远不该被保存下来。
+ */
+const PLACEHOLDER_REFERENCE = "unbound";
+const EMPTY_UUID = "00000000-0000-0000-0000-000000000000";
+
 export { COLLAPSED_HEIGHT } from "../nodes/geometry";
 
 export function defaultNodeSize(type: CanvasNodeType): Size {
@@ -74,5 +82,24 @@ export function defaultNodeData(
       return { kind: "files", path: root };
     case "browser":
       return { kind: "browser", url: DEFAULT_BROWSER_URL };
+    // 两张 Host 侧卡片没有「空可用值」：一张必须指向真实的 Host 计划，另一张
+    // 必须指向被观察的节点，所以这里给的占位一定会被调用方覆盖，绝不落库。
+    case "automation":
+      return {
+        kind: "automation",
+        planId: PLACEHOLDER_REFERENCE,
+        planWorkspaceId: PLACEHOLDER_REFERENCE,
+        executionHostId: PLACEHOLDER_REFERENCE,
+      };
+    case "agentActivity":
+      return {
+        kind: "agentActivity",
+        sourceNodeId: EMPTY_UUID,
+        source: "loop",
+        sessionId: "",
+        executionHostId: "",
+        generation: 0,
+        nativeJobId: "",
+      };
   }
 }

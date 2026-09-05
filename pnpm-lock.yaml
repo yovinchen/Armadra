@@ -29,6 +29,9 @@ importers:
       '@armadra/host-client':
         specifier: workspace:*
         version: link:../../packages/host-client
+      '@armadra/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol-ts
       '@armadra/shared':
         specifier: workspace:*
         version: link:../../packages/shared

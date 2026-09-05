@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@armadra/host-client": "workspace:*",
+    "@armadra/protocol": "workspace:*",
     "@armadra/shared": "workspace:*",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.12",

@@ -1,4 +1,5 @@
 import { agent } from "./agent";
+import { automation } from "./automation";
 import { canvas } from "./canvas";
 import { collab } from "./collab";
 import { commands } from "./commands";
@@ -50,6 +51,7 @@ export const MESSAGE_MODULES = {
   canvas,
   nodes,
   agent,
+  automation,
   terminal,
   resources,
   sessions,

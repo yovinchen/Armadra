@@ -22,6 +22,8 @@ const EXPECTED = {
   diff: { default: [860, 500], min: [420, 220] },
   files: { default: [340, 460], min: [220, 160] },
   browser: { default: [900, 620], min: [360, 240] },
+  automation: { default: [360, 260], min: [260, 180] },
+  agentActivity: { default: [340, 240], min: [240, 160] },
 } as const;
 
 describe("node registry", () => {
@@ -65,7 +67,8 @@ describe("node registry", () => {
     const withoutHandles = NODE_TYPES.filter(
       (type) => !NODE_META[type].hasBridgeHandles,
     );
-    expect(withoutHandles).toEqual(["group"]);
+    // 分组只是画框；两张 Host 侧卡片的内容都在 Host 上，连过去读不到东西。
+    expect(withoutHandles).toEqual(["group", "automation", "agentActivity"]);
   });
 
   it("defaults to the palette blue, sticky to the palette yellow", () => {

@@ -3,7 +3,9 @@ import { supportedPermissionModes } from "@armadra/shared";
 import { toast } from "sonner";
 import { usePreferencesStore } from "../../app/preferences-store";
 import {
+  Activity,
   Bot,
+  CalendarClock,
   FolderOpen,
   FolderTree,
   Frame,
@@ -26,6 +28,7 @@ import type { Translate } from "../../app/preferences-store";
 import { runCanvasCommand, type CanvasCommandId } from "../commands";
 import { getEditor } from "../editor-context";
 import { pickFilesForCanvas } from "../dnd/external-content";
+import { openAutomationPanel } from "../../panels/automation/open";
 
 /**
  * 新建菜单（§13.3）。
@@ -242,6 +245,39 @@ export function buildAddMenu(
       run: (context) => {
         context.addNode("browser", { position: context.position });
       },
+    },
+    {
+      id: "add.automation",
+      label: t("add.automation"),
+      icon: CalendarClock,
+      group: "content",
+      // 计划本身住在 Host 上，所以这一项开的是自动化页，而不是先造一张
+      // 指向不存在计划的空卡片。
+      run: () => openAutomationPanel(null),
+    },
+    {
+      id: "add.agentActivity",
+      label: t("add.agentActivity"),
+      icon: Activity,
+      group: "content",
+      run: (context) => {
+        const source = useCanvasStore
+          .getState()
+          .document?.nodes.find((node) => node.type === "terminal");
+        if (!source) return;
+        context.addNode("agentActivity", {
+          position: context.position,
+          title: source.title,
+          data: { kind: "agentActivity", sourceNodeId: source.id },
+        });
+      },
+      // 没有终端节点就没有可观察的对象；这时禁用而不是造一张空卡片。
+      disabledReason: () =>
+        useCanvasStore
+          .getState()
+          .document?.nodes.some((node) => node.type === "terminal")
+          ? null
+          : t("add.noTerminal"),
     },
     {
       id: "canvas.selectAll",

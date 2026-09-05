@@ -122,6 +122,8 @@ describe("buildAddMenu", () => {
       "add.text",
       "add.frame",
       "add.browser",
+      "add.automation",
+      "add.agentActivity",
       "canvas.selectAll",
       "canvas.fitView",
       "canvas.tidy",
@@ -131,13 +133,7 @@ describe("buildAddMenu", () => {
   it("没有 Agent 时依然给出全部通用项", () => {
     expect(buildAddMenu([], t).map((item) => item.group)).toEqual([
       "terminal",
-      "content",
-      "content",
-      "content",
-      "content",
-      "content",
-      "content",
-      "content",
+      ...Array<string>(9).fill("content"),
       "canvas",
       "canvas",
       "canvas",

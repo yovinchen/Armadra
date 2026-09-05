@@ -76,6 +76,8 @@ export interface PanelState {
   scm: "closed" | "drawer";
   /** 主机 / 会话资源面板（T02）。开着时 Runtime 才采样。 */
   resources: "closed" | "drawer";
+  /** 右侧工作面板的「自动化」页（自动化设计 §3 / 画布平台设计 §4）。 */
+  automation: "closed" | "drawer";
   settings: boolean;
   palette: boolean;
   /** 快速打开（⌘P，E01/M4）。 */
@@ -175,6 +177,7 @@ const initialPanels: PanelState = {
   explorer: "closed",
   scm: "closed",
   resources: "closed",
+  automation: "closed",
   settings: false,
   palette: false,
   quickOpen: false,

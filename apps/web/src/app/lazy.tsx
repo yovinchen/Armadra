@@ -58,3 +58,8 @@ export const ResourceDrawer = lazy(() =>
     default: module.ResourceDrawer,
   })),
 );
+export const AutomationDrawer = lazy(() =>
+  import("@/panels/automation/AutomationDrawer").then((module) => ({
+    default: module.AutomationDrawer,
+  })),
+);
