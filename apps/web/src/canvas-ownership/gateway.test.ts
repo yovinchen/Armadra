@@ -205,6 +205,25 @@ describe("画布网关按归属路由", () => {
   });
 
   /**
+   * 探测失败是一次请求丢了，不是一个判决。下一次保存要重新探，否则一次网络
+   * 抖动就把画布锁成只读，直到有人去点横幅上的按钮。
+   */
+  it("探测失败后下一次保存会重探并恢复", async () => {
+    canvasOwnership
+      .mockRejectedValueOnce(new Error("unreachable"))
+      .mockResolvedValue(ownership("runtime"));
+
+    await expect(
+      canvasGateway.saveBoard(workspaceId, boardId, document),
+    ).rejects.toBeInstanceOf(CanvasReadOnlyError);
+    expect(saveBoard).not.toHaveBeenCalled();
+
+    await canvasGateway.saveBoard(workspaceId, boardId, document);
+    expect(saveBoard).toHaveBeenCalledTimes(1);
+    expect(useCanvasOwnership.getState().status).toBe("runtime");
+  });
+
+  /**
    * `ownership_moved` 不是「再试一次」。重试只会撞上同一堵墙，而且写方
    * 已经换人了——正确动作是重新探归属，再由上层决定走哪边。
    */

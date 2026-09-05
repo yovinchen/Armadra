@@ -108,7 +108,14 @@ export function setCanvasHostResolver(next: HostResolver | null): void {
 
 async function settled(): Promise<CanvasOwnershipStatus> {
   const state = useCanvasOwnership.getState();
-  return state.status === "unknown" ? await state.probe() : state.status;
+  // `error` is retried on the next attempt as well as `unknown`: a probe that
+  // failed once is a lost request, not a verdict, and leaving the canvas
+  // read-only until someone clicks a banner would turn one blip into a stall.
+  // The retry is still bounded — `probe` folds concurrent callers into one
+  // request, so a window full of nodes hitting this at once asks once.
+  return state.status === "unknown" || state.status === "error"
+    ? await state.probe()
+    : state.status;
 }
 
 async function writeRoute(): Promise<"runtime" | "host"> {
