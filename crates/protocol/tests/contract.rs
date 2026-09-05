@@ -39,6 +39,7 @@ fn handshake_and_unicode() {
             capabilities: vec!["protocol.hello".into()],
             max_frame_bytes: 1_048_576,
             host_id: String::new(),
+            capability_status: Vec::new(),
         },
     );
     check(
@@ -49,6 +50,7 @@ fn handshake_and_unicode() {
             capabilities: vec!["protocol.hello.v1".into(), "host.identity.v1".into()],
             max_frame_bytes: 1_048_576,
             host_id: "0123456789abcdef0123456789abcdef".into(),
+            capability_status: Vec::new(),
         },
     );
     check(
@@ -656,5 +658,141 @@ fn resource_metrics_keep_unknown_apart_from_zero() {
             .unwrap()
             .cpu_percent,
         None
+    );
+/// Reserved account (S02) and presence (H04) envelopes. Prost must agree with
+/// Go and TypeScript byte for byte before anything is built on them.
+#[test]
+fn reserved_account_and_presence_envelopes() {
+    check(
+        "account_bind_request",
+        BindNodeAccountRequest {
+            meta: Some(CommandMeta {
+                request_id: "绑定-1".into(),
+                scope: Some(Scope {
+                    host_id: "host-1".into(),
+                    workspace_id: "workspace-1".into(),
+                    execution_host_id: String::new(),
+                }),
+                expected_revision: Some(0),
+                ..Default::default()
+            }),
+            node_id: "node-1".into(),
+            account: Some(AccountRef {
+                account_id: "default".into(),
+                provider_id: "claude".into(),
+                label: "工作账号📇".into(),
+            }),
+            // Only a reference: the schema cannot carry the secret itself.
+            credential: Some(CredentialBinding {
+                credential_ref: "keychain://armadra/claude/default".into(),
+                scope: CredentialScope::ExecutionHost as i32,
+                authorization_id: "grant-1".into(),
+            }),
+        },
+    );
+    check(
+        "account_binding",
+        NodeAccountBinding {
+            node_id: "node-1".into(),
+            account: Some(AccountRef {
+                account_id: "default".into(),
+                ..Default::default()
+            }),
+            credential: Some(CredentialBinding {
+                credential_ref: "keychain://armadra/claude/default".into(),
+                // An unknown scope stays unknown instead of decoding to 0.
+                scope: 999,
+                ..Default::default()
+            }),
+            revision: u64::MAX,
+            bound_at_unix_ms: 9_007_199_254_740_993,
+        },
+    );
+    check(
+        "presence_snapshot",
+        SubscribePresenceResponse {
+            participants: vec![
+                Presence {
+                    participant_id: "principal-1".into(),
+                    device_id: "device-1".into(),
+                    display_name: "手机📱".into(),
+                    canvas_id: "canvas-1".into(),
+                    focus_node_id: "node-1".into(),
+                    state: PresenceState::Active as i32,
+                    observed_at_unix_ms: 1_788_557_900_000,
+                    last_seen_unix_ms: None,
+                },
+                Presence {
+                    participant_id: "principal-2".into(),
+                    state: PresenceState::Disconnected as i32,
+                    // Present and zero, not absent.
+                    last_seen_unix_ms: Some(0),
+                    ..Default::default()
+                },
+            ],
+            lease: Some(WriterLease {
+                lease_id: "lease-1".into(),
+                canvas_id: "canvas-1".into(),
+                holder_participant_id: "principal-1".into(),
+                revision: 9_007_199_254_740_993,
+                expires_at_unix_ms: 1_788_557_900_000,
+            }),
+            revision: u64::MAX,
+        },
+    );
+    check(
+        "presence_mutation",
+        Mutation {
+            mutation_id: "mutation-1".into(),
+            canvas_id: "canvas-1".into(),
+            actor_id: "principal-1".into(),
+            lease_id: "lease-1".into(),
+            expected_revision: Some(0),
+            revision: 9_007_199_254_740_993,
+            kind: MutationKind::WhiteboardBlob as i32,
+            payload_type: "tldraw/snapshot".into(),
+            payload: vec![0, 255, 27, 10],
+            observed_at_unix_ms: i64::MIN,
+        },
+    );
+    check(
+        "presence_acquire",
+        AcquireWriterLeaseRequest {
+            meta: Some(CommandMeta {
+                request_id: "租约-1".into(),
+                ..Default::default()
+            }),
+            canvas_id: "canvas-1".into(),
+            expected_revision: None,
+            requested_ttl_ms: 300_000,
+        },
+    );
+}
+
+/// An explicitly unsupported surface must survive decoding: losing it would
+/// leave a client guessing that presence or account binding might work.
+#[test]
+fn hello_reports_unsupported_surfaces() {
+    check(
+        "hello_unsupported",
+        HelloResponse {
+            protocol: Some(ProtocolVersion { major: 1, minor: 1 }),
+            host_instance_id: "新进程".into(),
+            host_id: "0123456789abcdef0123456789abcdef".into(),
+            capabilities: vec!["protocol.hello.v1".into(), "host.identity.v1".into()],
+            max_frame_bytes: 1_048_576,
+            capability_status: vec![
+                CapabilityStatus {
+                    name: "presence".into(),
+                    state: CapabilityState::Unsupported as i32,
+                    reason: "host.capability.reserved".into(),
+                },
+                CapabilityStatus {
+                    name: "accountBinding".into(),
+                    state: CapabilityState::Unsupported as i32,
+                    reason: "host.capability.reserved".into(),
+                },
+            ],
+        },
     );
 }

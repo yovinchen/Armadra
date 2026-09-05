@@ -92,6 +92,20 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			identityRequest(w, r, identity, options.Identity)
 			return
 		}
+		// Defined but unimplemented surfaces answer UNSUPPORTED rather than
+		// falling through to NOT_FOUND, which a client cannot tell apart from
+		// an older Host that never heard of the method.
+		if capability, reserved := reservedMethod(r.URL.Path); reserved {
+			if r.Method == http.MethodOptions {
+				preflight(w, r, origin, http.MethodPost)
+				return
+			}
+			if explicit {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+			}
+			reservedRequest(w, r, capability)
+			return
+		}
 		var method string
 		switch r.URL.Path {
 		case "/health":
@@ -174,11 +188,12 @@ func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentica
 		capabilities = append(capabilities, "automation.plans.v1")
 	}
 	writeProto(w, http.StatusOK, &pb.HelloResponse{
-		Protocol:       &pb.ProtocolVersion{Major: ProtocolMajor, Minor: min(request.Protocol.GetMinor(), ProtocolMinor)},
-		HostInstanceId: identity.InstanceID,
-		HostId:         identity.HostID,
-		Capabilities:   capabilities,
-		MaxFrameBytes:  MaxFrameBytes,
+		Protocol:         &pb.ProtocolVersion{Major: ProtocolMajor, Minor: min(request.Protocol.GetMinor(), ProtocolMinor)},
+		HostInstanceId:   identity.InstanceID,
+		HostId:           identity.HostID,
+		Capabilities:     capabilities,
+		MaxFrameBytes:    MaxFrameBytes,
+		CapabilityStatus: reservedCapabilityStatus(),
 	})
 }
 

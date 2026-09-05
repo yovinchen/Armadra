@@ -2,8 +2,12 @@
 // @generated from file armadra/v1/common.proto (package armadra.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv1";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv1";
+import type {
+  GenEnum,
+  GenFile,
+  GenMessage,
+} from "@bufbuild/protobuf/codegenv1";
+import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv1";
 import type {
   BootstrapTicketRequest,
   BootstrapTicketResponse,
@@ -17,7 +21,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_common: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Chdhcm1hZHJhL3YxL2NvbW1vbi5wcm90bxIKYXJtYWRyYS52MSIvCg9Qcm90b2NvbFZlcnNpb24SDQoFbWFqb3IYASABKA0SDQoFbWlub3IYAiABKA0iUAoMSGVsbG9SZXF1ZXN0EhEKCWNsaWVudF9pZBgBIAEoCRItCghwcm90b2NvbBgCIAEoCzIbLmFybWFkcmEudjEuUHJvdG9jb2xWZXJzaW9uIpgBCg1IZWxsb1Jlc3BvbnNlEi0KCHByb3RvY29sGAEgASgLMhsuYXJtYWRyYS52MS5Qcm90b2NvbFZlcnNpb24SGAoQaG9zdF9pbnN0YW5jZV9pZBgCIAEoCRIUCgxjYXBhYmlsaXRpZXMYAyADKAkSFwoPbWF4X2ZyYW1lX2J5dGVzGAQgASgNEg8KB2hvc3RfaWQYBSABKAkiLgoNRXJyb3JSZXNwb25zZRIMCgRjb2RlGAEgASgJEg8KB21lc3NhZ2UYAiABKAkiSQoFU2NvcGUSDwoHaG9zdF9pZBgBIAEoCRIUCgx3b3Jrc3BhY2VfaWQYAiABKAkSGQoRZXhlY3V0aW9uX2hvc3RfaWQYAyABKAkirAEKC0NvbW1hbmRNZXRhEhIKCnJlcXVlc3RfaWQYASABKAkSIAoFc2NvcGUYAiABKAsyES5hcm1hZHJhLnYxLlNjb3BlEhcKD2lkZW1wb3RlbmN5X2tleRgDIAEoCRIeChFleHBlY3RlZF9yZXZpc2lvbhgEIAEoBEgAiAEBEhgKEGRlYWRsaW5lX3VuaXhfbXMYBSABKANCFAoSX2V4cGVjdGVkX3JldmlzaW9uIjgKDlNlc3Npb25BZGRyZXNzEhIKCnNlc3Npb25faWQYASABKAkSEgoKZ2VuZXJhdGlvbhgCIAEoBCJ1Cg1UZXJtaW5hbElucHV0EisKB3Nlc3Npb24YASABKAsyGi5hcm1hZHJhLnYxLlNlc3Npb25BZGRyZXNzEhAKCGlucHV0X2lkGAIgASgJEgwKBGRhdGEYAyABKAwSFwoPd3JpdGVyX2xlYXNlX2lkGAQgASgJIkUKCVN0cmVhbUFjaxIYChByZWNlaXZlZF90aHJvdWdoGAEgASgEEh4KFmF2YWlsYWJsZV9jcmVkaXRfYnl0ZXMYAiABKA0iwgEKC1N0cmVhbUZyYW1lEhEKCXN0cmVhbV9pZBgBIAEoCRIQCghzZXF1ZW5jZRgCIAEoBBINCgVlcG9jaBgDIAEoCRIzCg50ZXJtaW5hbF9pbnB1dBgKIAEoCzIZLmFybWFkcmEudjEuVGVybWluYWxJbnB1dEgAEhkKD3Rlcm1pbmFsX291dHB1dBgLIAEoDEgAEiQKA2FjaxgMIAEoCzIVLmFybWFkcmEudjEuU3RyZWFtQWNrSABCCQoHcGF5bG9hZCJ+CgpIb3N0U3RhdHVzEg8KB2hvc3RfaWQYASABKAkSGAoQaG9zdF9pbnN0YW5jZV9pZBgCIAEoCRIVCg1odHRwX2VuZHBvaW50GAMgASgJEhoKEnN0YXJ0ZWRfYXRfdW5peF9tcxgEIAEoAxISCgpwcm9jZXNzX2lkGAUgASgNIhMKEUhvc3RTdGF0dXNSZXF1ZXN0Ii8KD0hvc3RTdG9wUmVxdWVzdBIcChRleHBlY3RlZF9pbnN0YW5jZV9pZBgBIAEoCSIkChBIb3N0U3RvcFJlc3BvbnNlEhAKCGFjY2VwdGVkGAEgASgIIskBChJIb3N0Q29udHJvbFJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIvCgZzdGF0dXMYCiABKAsyHS5hcm1hZHJhLnYxLkhvc3RTdGF0dXNSZXF1ZXN0SAASKwoEc3RvcBgLIAEoCzIbLmFybWFkcmEudjEuSG9zdFN0b3BSZXF1ZXN0SAASNwoJYm9vdHN0cmFwGAwgASgLMiIuYXJtYWRyYS52MS5Cb290c3RyYXBUaWNrZXRSZXF1ZXN0SABCCAoGYWN0aW9uIvQBChNIb3N0Q29udHJvbFJlc3BvbnNlEhIKCnJlcXVlc3RfaWQYASABKAkSKAoGc3RhdHVzGAogASgLMhYuYXJtYWRyYS52MS5Ib3N0U3RhdHVzSAASLwoHc3RvcHBlZBgLIAEoCzIcLmFybWFkcmEudjEuSG9zdFN0b3BSZXNwb25zZUgAEioKBWVycm9yGAwgASgLMhkuYXJtYWRyYS52MS5FcnJvclJlc3BvbnNlSAASOAoJYm9vdHN0cmFwGA0gASgLMiMuYXJtYWRyYS52MS5Cb290c3RyYXBUaWNrZXRSZXNwb25zZUgAQggKBnJlc3VsdCISChBIb3N0U3RvcHBlZFN0YXRlInsKFEhvc3RNYW5hZ2VtZW50UmVzdWx0EikKB3J1bm5pbmcYASABKAsyFi5hcm1hZHJhLnYxLkhvc3RTdGF0dXNIABIvCgdzdG9wcGVkGAIgASgLMhwuYXJtYWRyYS52MS5Ib3N0U3RvcHBlZFN0YXRlSABCBwoFc3RhdGUiGAoWRGVza3RvcFNodXRkb3duUmVxdWVzdCJZChVEZXNrdG9wUnVudGltZUNvbnRyb2wSNgoIc2h1dGRvd24YASABKAsyIi5hcm1hZHJhLnYxLkRlc2t0b3BTaHV0ZG93blJlcXVlc3RIAEIICgZhY3Rpb25CI1ohYXJtYWRyYS5sb2NhbC9ob3N0L2dlbi9hcm1hZHJhL3YxYgZwcm90bzM",
+    "Chdhcm1hZHJhL3YxL2NvbW1vbi5wcm90bxIKYXJtYWRyYS52MSIvCg9Qcm90b2NvbFZlcnNpb24SDQoFbWFqb3IYASABKA0SDQoFbWlub3IYAiABKA0iUAoMSGVsbG9SZXF1ZXN0EhEKCWNsaWVudF9pZBgBIAEoCRItCghwcm90b2NvbBgCIAEoCzIbLmFybWFkcmEudjEuUHJvdG9jb2xWZXJzaW9uIlwKEENhcGFiaWxpdHlTdGF0dXMSDAoEbmFtZRgBIAEoCRIqCgVzdGF0ZRgCIAEoDjIbLmFybWFkcmEudjEuQ2FwYWJpbGl0eVN0YXRlEg4KBnJlYXNvbhgDIAEoCSLRAQoNSGVsbG9SZXNwb25zZRItCghwcm90b2NvbBgBIAEoCzIbLmFybWFkcmEudjEuUHJvdG9jb2xWZXJzaW9uEhgKEGhvc3RfaW5zdGFuY2VfaWQYAiABKAkSFAoMY2FwYWJpbGl0aWVzGAMgAygJEhcKD21heF9mcmFtZV9ieXRlcxgEIAEoDRIPCgdob3N0X2lkGAUgASgJEjcKEWNhcGFiaWxpdHlfc3RhdHVzGAYgAygLMhwuYXJtYWRyYS52MS5DYXBhYmlsaXR5U3RhdHVzIi4KDUVycm9yUmVzcG9uc2USDAoEY29kZRgBIAEoCRIPCgdtZXNzYWdlGAIgASgJIkkKBVNjb3BlEg8KB2hvc3RfaWQYASABKAkSFAoMd29ya3NwYWNlX2lkGAIgASgJEhkKEWV4ZWN1dGlvbl9ob3N0X2lkGAMgASgJIqwBCgtDb21tYW5kTWV0YRISCgpyZXF1ZXN0X2lkGAEgASgJEiAKBXNjb3BlGAIgASgLMhEuYXJtYWRyYS52MS5TY29wZRIXCg9pZGVtcG90ZW5jeV9rZXkYAyABKAkSHgoRZXhwZWN0ZWRfcmV2aXNpb24YBCABKARIAIgBARIYChBkZWFkbGluZV91bml4X21zGAUgASgDQhQKEl9leHBlY3RlZF9yZXZpc2lvbiI4Cg5TZXNzaW9uQWRkcmVzcxISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQidQoNVGVybWluYWxJbnB1dBIrCgdzZXNzaW9uGAEgASgLMhouYXJtYWRyYS52MS5TZXNzaW9uQWRkcmVzcxIQCghpbnB1dF9pZBgCIAEoCRIMCgRkYXRhGAMgASgMEhcKD3dyaXRlcl9sZWFzZV9pZBgEIAEoCSJFCglTdHJlYW1BY2sSGAoQcmVjZWl2ZWRfdGhyb3VnaBgBIAEoBBIeChZhdmFpbGFibGVfY3JlZGl0X2J5dGVzGAIgASgNIsIBCgtTdHJlYW1GcmFtZRIRCglzdHJlYW1faWQYASABKAkSEAoIc2VxdWVuY2UYAiABKAQSDQoFZXBvY2gYAyABKAkSMwoOdGVybWluYWxfaW5wdXQYCiABKAsyGS5hcm1hZHJhLnYxLlRlcm1pbmFsSW5wdXRIABIZCg90ZXJtaW5hbF9vdXRwdXQYCyABKAxIABIkCgNhY2sYDCABKAsyFS5hcm1hZHJhLnYxLlN0cmVhbUFja0gAQgkKB3BheWxvYWQifgoKSG9zdFN0YXR1cxIPCgdob3N0X2lkGAEgASgJEhgKEGhvc3RfaW5zdGFuY2VfaWQYAiABKAkSFQoNaHR0cF9lbmRwb2ludBgDIAEoCRIaChJzdGFydGVkX2F0X3VuaXhfbXMYBCABKAMSEgoKcHJvY2Vzc19pZBgFIAEoDSITChFIb3N0U3RhdHVzUmVxdWVzdCIvCg9Ib3N0U3RvcFJlcXVlc3QSHAoUZXhwZWN0ZWRfaW5zdGFuY2VfaWQYASABKAkiJAoQSG9zdFN0b3BSZXNwb25zZRIQCghhY2NlcHRlZBgBIAEoCCLJAQoSSG9zdENvbnRyb2xSZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkSLwoGc3RhdHVzGAogASgLMh0uYXJtYWRyYS52MS5Ib3N0U3RhdHVzUmVxdWVzdEgAEisKBHN0b3AYCyABKAsyGy5hcm1hZHJhLnYxLkhvc3RTdG9wUmVxdWVzdEgAEjcKCWJvb3RzdHJhcBgMIAEoCzIiLmFybWFkcmEudjEuQm9vdHN0cmFwVGlja2V0UmVxdWVzdEgAQggKBmFjdGlvbiL0AQoTSG9zdENvbnRyb2xSZXNwb25zZRISCgpyZXF1ZXN0X2lkGAEgASgJEigKBnN0YXR1cxgKIAEoCzIWLmFybWFkcmEudjEuSG9zdFN0YXR1c0gAEi8KB3N0b3BwZWQYCyABKAsyHC5hcm1hZHJhLnYxLkhvc3RTdG9wUmVzcG9uc2VIABIqCgVlcnJvchgMIAEoCzIZLmFybWFkcmEudjEuRXJyb3JSZXNwb25zZUgAEjgKCWJvb3RzdHJhcBgNIAEoCzIjLmFybWFkcmEudjEuQm9vdHN0cmFwVGlja2V0UmVzcG9uc2VIAEIICgZyZXN1bHQiEgoQSG9zdFN0b3BwZWRTdGF0ZSJ7ChRIb3N0TWFuYWdlbWVudFJlc3VsdBIpCgdydW5uaW5nGAEgASgLMhYuYXJtYWRyYS52MS5Ib3N0U3RhdHVzSAASLwoHc3RvcHBlZBgCIAEoCzIcLmFybWFkcmEudjEuSG9zdFN0b3BwZWRTdGF0ZUgAQgcKBXN0YXRlIhgKFkRlc2t0b3BTaHV0ZG93blJlcXVlc3QiWQoVRGVza3RvcFJ1bnRpbWVDb250cm9sEjYKCHNodXRkb3duGAEgASgLMiIuYXJtYWRyYS52MS5EZXNrdG9wU2h1dGRvd25SZXF1ZXN0SABCCAoGYWN0aW9uKlUKD0NhcGFiaWxpdHlTdGF0ZRIgChxDQVBBQklMSVRZX1NUQVRFX1VOU1BFQ0lGSUVEEAASIAocQ0FQQUJJTElUWV9TVEFURV9VTlNVUFBPUlRFRBABQiNaIWFybWFkcmEubG9jYWwvaG9zdC9nZW4vYXJtYWRyYS92MWIGcHJvdG8z",
     [file_armadra_v1_identity],
   );
 
@@ -70,6 +74,38 @@ export const HelloRequestSchema: GenMessage<HelloRequest> =
   messageDesc(file_armadra_v1_common, 1);
 
 /**
+ * @generated from message armadra.v1.CapabilityStatus
+ */
+export type CapabilityStatus = Message<"armadra.v1.CapabilityStatus"> & {
+  /**
+   * Stable identifier, e.g. "presence" or "accountBinding".
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: armadra.v1.CapabilityState state = 2;
+   */
+  state: CapabilityState;
+
+  /**
+   * Stable, localizable reason key. Never a secret or an address.
+   *
+   * @generated from field: string reason = 3;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message armadra.v1.CapabilityStatus.
+ * Use `create(CapabilityStatusSchema)` to create a new message.
+ */
+export const CapabilityStatusSchema: GenMessage<CapabilityStatus> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_common, 2);
+
+/**
  * @generated from message armadra.v1.HelloResponse
  */
 export type HelloResponse = Message<"armadra.v1.HelloResponse"> & {
@@ -99,6 +135,13 @@ export type HelloResponse = Message<"armadra.v1.HelloResponse"> & {
    * @generated from field: string host_id = 5;
    */
   hostId: string;
+
+  /**
+   * Explicitly unsupported surfaces. An absent entry is not a promise either.
+   *
+   * @generated from field: repeated armadra.v1.CapabilityStatus capability_status = 6;
+   */
+  capabilityStatus: CapabilityStatus[];
 };
 
 /**
@@ -107,7 +150,7 @@ export type HelloResponse = Message<"armadra.v1.HelloResponse"> & {
  */
 export const HelloResponseSchema: GenMessage<HelloResponse> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 2);
+  messageDesc(file_armadra_v1_common, 3);
 
 /**
  * @generated from message armadra.v1.ErrorResponse
@@ -130,7 +173,7 @@ export type ErrorResponse = Message<"armadra.v1.ErrorResponse"> & {
  */
 export const ErrorResponseSchema: GenMessage<ErrorResponse> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 3);
+  messageDesc(file_armadra_v1_common, 4);
 
 /**
  * Reserved execution contracts; their presence does not enable their operations.
@@ -160,7 +203,7 @@ export type Scope = Message<"armadra.v1.Scope"> & {
  */
 export const ScopeSchema: GenMessage<Scope> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 4);
+  messageDesc(file_armadra_v1_common, 5);
 
 /**
  * @generated from message armadra.v1.CommandMeta
@@ -198,7 +241,7 @@ export type CommandMeta = Message<"armadra.v1.CommandMeta"> & {
  */
 export const CommandMetaSchema: GenMessage<CommandMeta> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 5);
+  messageDesc(file_armadra_v1_common, 6);
 
 /**
  * @generated from message armadra.v1.SessionAddress
@@ -221,7 +264,7 @@ export type SessionAddress = Message<"armadra.v1.SessionAddress"> & {
  */
 export const SessionAddressSchema: GenMessage<SessionAddress> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 6);
+  messageDesc(file_armadra_v1_common, 7);
 
 /**
  * @generated from message armadra.v1.TerminalInput
@@ -254,7 +297,7 @@ export type TerminalInput = Message<"armadra.v1.TerminalInput"> & {
  */
 export const TerminalInputSchema: GenMessage<TerminalInput> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 7);
+  messageDesc(file_armadra_v1_common, 8);
 
 /**
  * @generated from message armadra.v1.StreamAck
@@ -277,7 +320,7 @@ export type StreamAck = Message<"armadra.v1.StreamAck"> & {
  */
 export const StreamAckSchema: GenMessage<StreamAck> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 8);
+  messageDesc(file_armadra_v1_common, 9);
 
 /**
  * @generated from message armadra.v1.StreamFrame
@@ -332,7 +375,7 @@ export type StreamFrame = Message<"armadra.v1.StreamFrame"> & {
  */
 export const StreamFrameSchema: GenMessage<StreamFrame> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 9);
+  messageDesc(file_armadra_v1_common, 10);
 
 /**
  * Local OS-protected control channel only. Never exposed by HTTP/CORS.
@@ -374,7 +417,7 @@ export type HostStatus = Message<"armadra.v1.HostStatus"> & {
  */
 export const HostStatusSchema: GenMessage<HostStatus> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 10);
+  messageDesc(file_armadra_v1_common, 11);
 
 /**
  * @generated from message armadra.v1.HostStatusRequest
@@ -387,7 +430,7 @@ export type HostStatusRequest = Message<"armadra.v1.HostStatusRequest"> & {};
  */
 export const HostStatusRequestSchema: GenMessage<HostStatusRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 11);
+  messageDesc(file_armadra_v1_common, 12);
 
 /**
  * @generated from message armadra.v1.HostStopRequest
@@ -405,7 +448,7 @@ export type HostStopRequest = Message<"armadra.v1.HostStopRequest"> & {
  */
 export const HostStopRequestSchema: GenMessage<HostStopRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 12);
+  messageDesc(file_armadra_v1_common, 13);
 
 /**
  * @generated from message armadra.v1.HostStopResponse
@@ -423,7 +466,7 @@ export type HostStopResponse = Message<"armadra.v1.HostStopResponse"> & {
  */
 export const HostStopResponseSchema: GenMessage<HostStopResponse> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 13);
+  messageDesc(file_armadra_v1_common, 14);
 
 /**
  * @generated from message armadra.v1.HostControlRequest
@@ -468,7 +511,7 @@ export type HostControlRequest = Message<"armadra.v1.HostControlRequest"> & {
  */
 export const HostControlRequestSchema: GenMessage<HostControlRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 14);
+  messageDesc(file_armadra_v1_common, 15);
 
 /**
  * @generated from message armadra.v1.HostControlResponse
@@ -520,7 +563,7 @@ export type HostControlResponse = Message<"armadra.v1.HostControlResponse"> & {
  */
 export const HostControlResponseSchema: GenMessage<HostControlResponse> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 15);
+  messageDesc(file_armadra_v1_common, 16);
 
 /**
  * Binary CLI result used by native launchers. Distinct from a stop request ACK:
@@ -536,7 +579,7 @@ export type HostStoppedState = Message<"armadra.v1.HostStoppedState"> & {};
  */
 export const HostStoppedStateSchema: GenMessage<HostStoppedState> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 16);
+  messageDesc(file_armadra_v1_common, 17);
 
 /**
  * @generated from message armadra.v1.HostManagementResult
@@ -570,7 +613,7 @@ export type HostManagementResult =
  */
 export const HostManagementResultSchema: GenMessage<HostManagementResult> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 17);
+  messageDesc(file_armadra_v1_common, 18);
 
 /**
  * Transitional desktop -> owned Rust Runtime child control. Only accepted on
@@ -588,7 +631,7 @@ export type DesktopShutdownRequest =
  */
 export const DesktopShutdownRequestSchema: GenMessage<DesktopShutdownRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 18);
+  messageDesc(file_armadra_v1_common, 19);
 
 /**
  * @generated from message armadra.v1.DesktopRuntimeControl
@@ -615,4 +658,29 @@ export type DesktopRuntimeControl =
  */
 export const DesktopRuntimeControlSchema: GenMessage<DesktopRuntimeControl> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_common, 19);
+  messageDesc(file_armadra_v1_common, 20);
+
+/**
+ * A reserved surface the Host names explicitly instead of staying silent.
+ * `capabilities` lists what works; this lists what a client must not draw.
+ *
+ * @generated from enum armadra.v1.CapabilityState
+ */
+export enum CapabilityState {
+  /**
+   * @generated from enum value: CAPABILITY_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: CAPABILITY_STATE_UNSUPPORTED = 1;
+   */
+  UNSUPPORTED = 1,
+}
+
+/**
+ * Describes the enum armadra.v1.CapabilityState.
+ */
+export const CapabilityStateSchema: GenEnum<CapabilityState> =
+  /*@__PURE__*/
+  enumDesc(file_armadra_v1_common, 0);

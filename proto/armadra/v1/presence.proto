@@ -1,0 +1,104 @@
+syntax = "proto3";
+
+package armadra.v1;
+
+option go_package = "armadra.local/host/gen/armadra/v1";
+
+import "armadra/v1/common.proto";
+
+// Reserved collaboration contract (H04). Declaring these messages does not
+// enable presence or shared editing: the Host answers every request below with
+// UNSUPPORTED until an implementation exists.
+//
+// A participant's display name is presentation only; the Host derives the real
+// principal from the authenticated connection. Cursors and focus are live
+// state, never part of the durable event log.
+
+enum PresenceState {
+  PRESENCE_STATE_UNSPECIFIED = 0;
+  PRESENCE_STATE_ACTIVE = 1;
+  PRESENCE_STATE_IDLE = 2;
+  PRESENCE_STATE_DISCONNECTED = 3;
+}
+
+message Presence {
+  string participant_id = 1;
+  string device_id = 2;
+  string display_name = 3;
+  string canvas_id = 4;
+  string focus_node_id = 5;
+  PresenceState state = 6;
+  int64 observed_at_unix_ms = 7;
+  // Absent while the participant is unreachable; not the same as position 0.
+  optional int64 last_seen_unix_ms = 8;
+}
+
+// Canvas-level edit lease. Terminal input leases are a separate contract:
+// holding this one never authorizes writing to a session.
+message WriterLease {
+  string lease_id = 1;
+  string canvas_id = 2;
+  string holder_participant_id = 3;
+  uint64 revision = 4;
+  int64 expires_at_unix_ms = 5;
+}
+
+enum MutationKind {
+  MUTATION_KIND_UNSPECIFIED = 0;
+  MUTATION_KIND_UPSERT_NODE = 1;
+  MUTATION_KIND_REMOVE_NODE = 2;
+  MUTATION_KIND_UPSERT_LINK = 3;
+  MUTATION_KIND_REMOVE_LINK = 4;
+  MUTATION_KIND_WHITEBOARD_BLOB = 5;
+}
+
+// Envelope only. `payload` stays an opaque typed body so a relay can forward a
+// mutation without decoding — and therefore without dropping unknown fields.
+message Mutation {
+  string mutation_id = 1;
+  string canvas_id = 2;
+  string actor_id = 3;
+  string lease_id = 4;
+  // Absent means "no CAS requested"; 0 is a real expected revision.
+  optional uint64 expected_revision = 5;
+  uint64 revision = 6;
+  MutationKind kind = 7;
+  string payload_type = 8;
+  bytes payload = 9;
+  int64 observed_at_unix_ms = 10;
+}
+
+message SubscribePresenceRequest {
+  CommandMeta meta = 1;
+  string canvas_id = 2;
+  // Resume point; the Host answers SNAPSHOT_REQUIRED when it is too old.
+  optional uint64 after_revision = 3;
+}
+message SubscribePresenceResponse {
+  repeated Presence participants = 1;
+  WriterLease lease = 2;
+  uint64 revision = 3;
+}
+
+message AcquireWriterLeaseRequest {
+  CommandMeta meta = 1;
+  string canvas_id = 2;
+  optional uint64 expected_revision = 3;
+  uint32 requested_ttl_ms = 4;
+}
+message AcquireWriterLeaseResponse { WriterLease lease = 1; }
+
+message ReleaseWriterLeaseRequest {
+  CommandMeta meta = 1;
+  string lease_id = 2;
+}
+message ReleaseWriterLeaseResponse { bool released = 1; }
+
+message ApplyMutationRequest {
+  CommandMeta meta = 1;
+  Mutation mutation = 2;
+}
+message ApplyMutationResponse {
+  uint64 revision = 1;
+  bool applied = 2;
+}

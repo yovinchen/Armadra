@@ -9,6 +9,12 @@
 minor 1 的 hostId 是数据目录持久身份，hostInstanceId 每次启动变化，均不是认证 token。
 minor 0 可协商且允许缺 hostId。传输控制帧上限 1 MiB，由宿主实施；编解码器不负责认证或授权。
 
+`presence.proto`（H04）与 `account.proto`（S02）是预留契约：消息可编解码，Host 对
+`armadra.v1.PresenceService/*` 与 `armadra.v1.AccountService/*` 一律返回 `UNSUPPORTED` 及原因，
+并在 Hello 的 `capabilityStatus` 里显式列出 `presence` / `accountBinding` 为 unsupported。
+`capabilityStatus` 为空不等于支持；`capabilities` 只列真正可用的能力。
+`CredentialBinding` 只有 `credentialRef`，密钥留在执行主机的凭据存储里，不进协议。
+
 ## 生成与检查
 
 需要 Node ≥ 22、项目锁定的 pnpm、Rust Cargo、Go ≥ 1.24；无需系统 protoc，首次生成需下载锁定依赖。

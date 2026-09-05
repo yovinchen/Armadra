@@ -21,6 +21,54 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// A reserved surface the Host names explicitly instead of staying silent.
+// `capabilities` lists what works; this lists what a client must not draw.
+type CapabilityState int32
+
+const (
+	CapabilityState_CAPABILITY_STATE_UNSPECIFIED CapabilityState = 0
+	CapabilityState_CAPABILITY_STATE_UNSUPPORTED CapabilityState = 1
+)
+
+// Enum value maps for CapabilityState.
+var (
+	CapabilityState_name = map[int32]string{
+		0: "CAPABILITY_STATE_UNSPECIFIED",
+		1: "CAPABILITY_STATE_UNSUPPORTED",
+	}
+	CapabilityState_value = map[string]int32{
+		"CAPABILITY_STATE_UNSPECIFIED": 0,
+		"CAPABILITY_STATE_UNSUPPORTED": 1,
+	}
+)
+
+func (x CapabilityState) Enum() *CapabilityState {
+	p := new(CapabilityState)
+	*p = x
+	return p
+}
+
+func (x CapabilityState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CapabilityState) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_common_proto_enumTypes[0].Descriptor()
+}
+
+func (CapabilityState) Type() protoreflect.EnumType {
+	return &file_armadra_v1_common_proto_enumTypes[0]
+}
+
+func (x CapabilityState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CapabilityState.Descriptor instead.
+func (CapabilityState) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{0}
+}
+
 // The Hello endpoint is the only implemented capability in the M0 contract.
 type ProtocolVersion struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -126,6 +174,68 @@ func (x *HelloRequest) GetProtocol() *ProtocolVersion {
 	return nil
 }
 
+type CapabilityStatus struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Stable identifier, e.g. "presence" or "accountBinding".
+	Name  string          `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	State CapabilityState `protobuf:"varint,2,opt,name=state,proto3,enum=armadra.v1.CapabilityState" json:"state,omitempty"`
+	// Stable, localizable reason key. Never a secret or an address.
+	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CapabilityStatus) Reset() {
+	*x = CapabilityStatus{}
+	mi := &file_armadra_v1_common_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CapabilityStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CapabilityStatus) ProtoMessage() {}
+
+func (x *CapabilityStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_common_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CapabilityStatus.ProtoReflect.Descriptor instead.
+func (*CapabilityStatus) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *CapabilityStatus) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CapabilityStatus) GetState() CapabilityState {
+	if x != nil {
+		return x.State
+	}
+	return CapabilityState_CAPABILITY_STATE_UNSPECIFIED
+}
+
+func (x *CapabilityStatus) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
 type HelloResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Protocol       *ProtocolVersion       `protobuf:"bytes,1,opt,name=protocol,proto3" json:"protocol,omitempty"`
@@ -133,14 +243,16 @@ type HelloResponse struct {
 	Capabilities   []string               `protobuf:"bytes,3,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
 	MaxFrameBytes  uint32                 `protobuf:"varint,4,opt,name=max_frame_bytes,json=maxFrameBytes,proto3" json:"max_frame_bytes,omitempty"`
 	// Stable for the local Host data directory; never an authentication token.
-	HostId        string `protobuf:"bytes,5,opt,name=host_id,json=hostId,proto3" json:"host_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	HostId string `protobuf:"bytes,5,opt,name=host_id,json=hostId,proto3" json:"host_id,omitempty"`
+	// Explicitly unsupported surfaces. An absent entry is not a promise either.
+	CapabilityStatus []*CapabilityStatus `protobuf:"bytes,6,rep,name=capability_status,json=capabilityStatus,proto3" json:"capability_status,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *HelloResponse) Reset() {
 	*x = HelloResponse{}
-	mi := &file_armadra_v1_common_proto_msgTypes[2]
+	mi := &file_armadra_v1_common_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -152,7 +264,7 @@ func (x *HelloResponse) String() string {
 func (*HelloResponse) ProtoMessage() {}
 
 func (x *HelloResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[2]
+	mi := &file_armadra_v1_common_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -165,7 +277,7 @@ func (x *HelloResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HelloResponse.ProtoReflect.Descriptor instead.
 func (*HelloResponse) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{2}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *HelloResponse) GetProtocol() *ProtocolVersion {
@@ -203,6 +315,13 @@ func (x *HelloResponse) GetHostId() string {
 	return ""
 }
 
+func (x *HelloResponse) GetCapabilityStatus() []*CapabilityStatus {
+	if x != nil {
+		return x.CapabilityStatus
+	}
+	return nil
+}
+
 type ErrorResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
@@ -213,7 +332,7 @@ type ErrorResponse struct {
 
 func (x *ErrorResponse) Reset() {
 	*x = ErrorResponse{}
-	mi := &file_armadra_v1_common_proto_msgTypes[3]
+	mi := &file_armadra_v1_common_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -225,7 +344,7 @@ func (x *ErrorResponse) String() string {
 func (*ErrorResponse) ProtoMessage() {}
 
 func (x *ErrorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[3]
+	mi := &file_armadra_v1_common_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -238,7 +357,7 @@ func (x *ErrorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorResponse.ProtoReflect.Descriptor instead.
 func (*ErrorResponse) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{3}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ErrorResponse) GetCode() string {
@@ -267,7 +386,7 @@ type Scope struct {
 
 func (x *Scope) Reset() {
 	*x = Scope{}
-	mi := &file_armadra_v1_common_proto_msgTypes[4]
+	mi := &file_armadra_v1_common_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -279,7 +398,7 @@ func (x *Scope) String() string {
 func (*Scope) ProtoMessage() {}
 
 func (x *Scope) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[4]
+	mi := &file_armadra_v1_common_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -292,7 +411,7 @@ func (x *Scope) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Scope.ProtoReflect.Descriptor instead.
 func (*Scope) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{4}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Scope) GetHostId() string {
@@ -329,7 +448,7 @@ type CommandMeta struct {
 
 func (x *CommandMeta) Reset() {
 	*x = CommandMeta{}
-	mi := &file_armadra_v1_common_proto_msgTypes[5]
+	mi := &file_armadra_v1_common_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -341,7 +460,7 @@ func (x *CommandMeta) String() string {
 func (*CommandMeta) ProtoMessage() {}
 
 func (x *CommandMeta) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[5]
+	mi := &file_armadra_v1_common_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -354,7 +473,7 @@ func (x *CommandMeta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandMeta.ProtoReflect.Descriptor instead.
 func (*CommandMeta) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{5}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CommandMeta) GetRequestId() string {
@@ -402,7 +521,7 @@ type SessionAddress struct {
 
 func (x *SessionAddress) Reset() {
 	*x = SessionAddress{}
-	mi := &file_armadra_v1_common_proto_msgTypes[6]
+	mi := &file_armadra_v1_common_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -414,7 +533,7 @@ func (x *SessionAddress) String() string {
 func (*SessionAddress) ProtoMessage() {}
 
 func (x *SessionAddress) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[6]
+	mi := &file_armadra_v1_common_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -427,7 +546,7 @@ func (x *SessionAddress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionAddress.ProtoReflect.Descriptor instead.
 func (*SessionAddress) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{6}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SessionAddress) GetSessionId() string {
@@ -456,7 +575,7 @@ type TerminalInput struct {
 
 func (x *TerminalInput) Reset() {
 	*x = TerminalInput{}
-	mi := &file_armadra_v1_common_proto_msgTypes[7]
+	mi := &file_armadra_v1_common_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -468,7 +587,7 @@ func (x *TerminalInput) String() string {
 func (*TerminalInput) ProtoMessage() {}
 
 func (x *TerminalInput) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[7]
+	mi := &file_armadra_v1_common_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -481,7 +600,7 @@ func (x *TerminalInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalInput.ProtoReflect.Descriptor instead.
 func (*TerminalInput) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{7}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *TerminalInput) GetSession() *SessionAddress {
@@ -522,7 +641,7 @@ type StreamAck struct {
 
 func (x *StreamAck) Reset() {
 	*x = StreamAck{}
-	mi := &file_armadra_v1_common_proto_msgTypes[8]
+	mi := &file_armadra_v1_common_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -534,7 +653,7 @@ func (x *StreamAck) String() string {
 func (*StreamAck) ProtoMessage() {}
 
 func (x *StreamAck) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[8]
+	mi := &file_armadra_v1_common_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -547,7 +666,7 @@ func (x *StreamAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamAck.ProtoReflect.Descriptor instead.
 func (*StreamAck) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{8}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *StreamAck) GetReceivedThrough() uint64 {
@@ -581,7 +700,7 @@ type StreamFrame struct {
 
 func (x *StreamFrame) Reset() {
 	*x = StreamFrame{}
-	mi := &file_armadra_v1_common_proto_msgTypes[9]
+	mi := &file_armadra_v1_common_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -593,7 +712,7 @@ func (x *StreamFrame) String() string {
 func (*StreamFrame) ProtoMessage() {}
 
 func (x *StreamFrame) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[9]
+	mi := &file_armadra_v1_common_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -606,7 +725,7 @@ func (x *StreamFrame) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamFrame.ProtoReflect.Descriptor instead.
 func (*StreamFrame) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{9}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *StreamFrame) GetStreamId() string {
@@ -701,7 +820,7 @@ type HostStatus struct {
 
 func (x *HostStatus) Reset() {
 	*x = HostStatus{}
-	mi := &file_armadra_v1_common_proto_msgTypes[10]
+	mi := &file_armadra_v1_common_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -713,7 +832,7 @@ func (x *HostStatus) String() string {
 func (*HostStatus) ProtoMessage() {}
 
 func (x *HostStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[10]
+	mi := &file_armadra_v1_common_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -726,7 +845,7 @@ func (x *HostStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HostStatus.ProtoReflect.Descriptor instead.
 func (*HostStatus) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{10}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *HostStatus) GetHostId() string {
@@ -772,7 +891,7 @@ type HostStatusRequest struct {
 
 func (x *HostStatusRequest) Reset() {
 	*x = HostStatusRequest{}
-	mi := &file_armadra_v1_common_proto_msgTypes[11]
+	mi := &file_armadra_v1_common_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -784,7 +903,7 @@ func (x *HostStatusRequest) String() string {
 func (*HostStatusRequest) ProtoMessage() {}
 
 func (x *HostStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[11]
+	mi := &file_armadra_v1_common_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -797,7 +916,7 @@ func (x *HostStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HostStatusRequest.ProtoReflect.Descriptor instead.
 func (*HostStatusRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{11}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{12}
 }
 
 type HostStopRequest struct {
@@ -809,7 +928,7 @@ type HostStopRequest struct {
 
 func (x *HostStopRequest) Reset() {
 	*x = HostStopRequest{}
-	mi := &file_armadra_v1_common_proto_msgTypes[12]
+	mi := &file_armadra_v1_common_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -821,7 +940,7 @@ func (x *HostStopRequest) String() string {
 func (*HostStopRequest) ProtoMessage() {}
 
 func (x *HostStopRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[12]
+	mi := &file_armadra_v1_common_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -834,7 +953,7 @@ func (x *HostStopRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HostStopRequest.ProtoReflect.Descriptor instead.
 func (*HostStopRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{12}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *HostStopRequest) GetExpectedInstanceId() string {
@@ -853,7 +972,7 @@ type HostStopResponse struct {
 
 func (x *HostStopResponse) Reset() {
 	*x = HostStopResponse{}
-	mi := &file_armadra_v1_common_proto_msgTypes[13]
+	mi := &file_armadra_v1_common_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -865,7 +984,7 @@ func (x *HostStopResponse) String() string {
 func (*HostStopResponse) ProtoMessage() {}
 
 func (x *HostStopResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[13]
+	mi := &file_armadra_v1_common_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -878,7 +997,7 @@ func (x *HostStopResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HostStopResponse.ProtoReflect.Descriptor instead.
 func (*HostStopResponse) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{13}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *HostStopResponse) GetAccepted() bool {
@@ -903,7 +1022,7 @@ type HostControlRequest struct {
 
 func (x *HostControlRequest) Reset() {
 	*x = HostControlRequest{}
-	mi := &file_armadra_v1_common_proto_msgTypes[14]
+	mi := &file_armadra_v1_common_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -915,7 +1034,7 @@ func (x *HostControlRequest) String() string {
 func (*HostControlRequest) ProtoMessage() {}
 
 func (x *HostControlRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[14]
+	mi := &file_armadra_v1_common_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -928,7 +1047,7 @@ func (x *HostControlRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HostControlRequest.ProtoReflect.Descriptor instead.
 func (*HostControlRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{14}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *HostControlRequest) GetRequestId() string {
@@ -1010,7 +1129,7 @@ type HostControlResponse struct {
 
 func (x *HostControlResponse) Reset() {
 	*x = HostControlResponse{}
-	mi := &file_armadra_v1_common_proto_msgTypes[15]
+	mi := &file_armadra_v1_common_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1022,7 +1141,7 @@ func (x *HostControlResponse) String() string {
 func (*HostControlResponse) ProtoMessage() {}
 
 func (x *HostControlResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[15]
+	mi := &file_armadra_v1_common_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1035,7 +1154,7 @@ func (x *HostControlResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HostControlResponse.ProtoReflect.Descriptor instead.
 func (*HostControlResponse) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{15}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *HostControlResponse) GetRequestId() string {
@@ -1126,7 +1245,7 @@ type HostStoppedState struct {
 
 func (x *HostStoppedState) Reset() {
 	*x = HostStoppedState{}
-	mi := &file_armadra_v1_common_proto_msgTypes[16]
+	mi := &file_armadra_v1_common_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1138,7 +1257,7 @@ func (x *HostStoppedState) String() string {
 func (*HostStoppedState) ProtoMessage() {}
 
 func (x *HostStoppedState) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[16]
+	mi := &file_armadra_v1_common_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1151,7 +1270,7 @@ func (x *HostStoppedState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HostStoppedState.ProtoReflect.Descriptor instead.
 func (*HostStoppedState) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{16}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{17}
 }
 
 type HostManagementResult struct {
@@ -1167,7 +1286,7 @@ type HostManagementResult struct {
 
 func (x *HostManagementResult) Reset() {
 	*x = HostManagementResult{}
-	mi := &file_armadra_v1_common_proto_msgTypes[17]
+	mi := &file_armadra_v1_common_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1179,7 +1298,7 @@ func (x *HostManagementResult) String() string {
 func (*HostManagementResult) ProtoMessage() {}
 
 func (x *HostManagementResult) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[17]
+	mi := &file_armadra_v1_common_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1192,7 +1311,7 @@ func (x *HostManagementResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HostManagementResult.ProtoReflect.Descriptor instead.
 func (*HostManagementResult) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{17}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *HostManagementResult) GetState() isHostManagementResult_State {
@@ -1247,7 +1366,7 @@ type DesktopShutdownRequest struct {
 
 func (x *DesktopShutdownRequest) Reset() {
 	*x = DesktopShutdownRequest{}
-	mi := &file_armadra_v1_common_proto_msgTypes[18]
+	mi := &file_armadra_v1_common_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1259,7 +1378,7 @@ func (x *DesktopShutdownRequest) String() string {
 func (*DesktopShutdownRequest) ProtoMessage() {}
 
 func (x *DesktopShutdownRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[18]
+	mi := &file_armadra_v1_common_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1272,7 +1391,7 @@ func (x *DesktopShutdownRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DesktopShutdownRequest.ProtoReflect.Descriptor instead.
 func (*DesktopShutdownRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{18}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{19}
 }
 
 type DesktopRuntimeControl struct {
@@ -1287,7 +1406,7 @@ type DesktopRuntimeControl struct {
 
 func (x *DesktopRuntimeControl) Reset() {
 	*x = DesktopRuntimeControl{}
-	mi := &file_armadra_v1_common_proto_msgTypes[19]
+	mi := &file_armadra_v1_common_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1299,7 +1418,7 @@ func (x *DesktopRuntimeControl) String() string {
 func (*DesktopRuntimeControl) ProtoMessage() {}
 
 func (x *DesktopRuntimeControl) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_common_proto_msgTypes[19]
+	mi := &file_armadra_v1_common_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1312,7 +1431,7 @@ func (x *DesktopRuntimeControl) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DesktopRuntimeControl.ProtoReflect.Descriptor instead.
 func (*DesktopRuntimeControl) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_common_proto_rawDescGZIP(), []int{19}
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *DesktopRuntimeControl) GetAction() isDesktopRuntimeControl_Action {
@@ -1352,13 +1471,18 @@ const file_armadra_v1_common_proto_rawDesc = "" +
 	"\x05minor\x18\x02 \x01(\rR\x05minor\"d\n" +
 	"\fHelloRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x127\n" +
-	"\bprotocol\x18\x02 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\"\xd7\x01\n" +
+	"\bprotocol\x18\x02 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\"q\n" +
+	"\x10CapabilityStatus\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x121\n" +
+	"\x05state\x18\x02 \x01(\x0e2\x1b.armadra.v1.CapabilityStateR\x05state\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xa2\x02\n" +
 	"\rHelloResponse\x127\n" +
 	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\x12(\n" +
 	"\x10host_instance_id\x18\x02 \x01(\tR\x0ehostInstanceId\x12\"\n" +
 	"\fcapabilities\x18\x03 \x03(\tR\fcapabilities\x12&\n" +
 	"\x0fmax_frame_bytes\x18\x04 \x01(\rR\rmaxFrameBytes\x12\x17\n" +
-	"\ahost_id\x18\x05 \x01(\tR\x06hostId\"=\n" +
+	"\ahost_id\x18\x05 \x01(\tR\x06hostId\x12I\n" +
+	"\x11capability_status\x18\x06 \x03(\v2\x1c.armadra.v1.CapabilityStatusR\x10capabilityStatus\"=\n" +
 	"\rErrorResponse\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"o\n" +
@@ -1435,7 +1559,10 @@ const file_armadra_v1_common_proto_rawDesc = "" +
 	"\x16DesktopShutdownRequest\"c\n" +
 	"\x15DesktopRuntimeControl\x12@\n" +
 	"\bshutdown\x18\x01 \x01(\v2\".armadra.v1.DesktopShutdownRequestH\x00R\bshutdownB\b\n" +
-	"\x06actionB#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	"\x06action*U\n" +
+	"\x0fCapabilityState\x12 \n" +
+	"\x1cCAPABILITY_STATE_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cCAPABILITY_STATE_UNSUPPORTED\x10\x01B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_common_proto_rawDescOnce sync.Once
@@ -1449,53 +1576,58 @@ func file_armadra_v1_common_proto_rawDescGZIP() []byte {
 	return file_armadra_v1_common_proto_rawDescData
 }
 
-var file_armadra_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_armadra_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_armadra_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_armadra_v1_common_proto_goTypes = []any{
-	(*ProtocolVersion)(nil),         // 0: armadra.v1.ProtocolVersion
-	(*HelloRequest)(nil),            // 1: armadra.v1.HelloRequest
-	(*HelloResponse)(nil),           // 2: armadra.v1.HelloResponse
-	(*ErrorResponse)(nil),           // 3: armadra.v1.ErrorResponse
-	(*Scope)(nil),                   // 4: armadra.v1.Scope
-	(*CommandMeta)(nil),             // 5: armadra.v1.CommandMeta
-	(*SessionAddress)(nil),          // 6: armadra.v1.SessionAddress
-	(*TerminalInput)(nil),           // 7: armadra.v1.TerminalInput
-	(*StreamAck)(nil),               // 8: armadra.v1.StreamAck
-	(*StreamFrame)(nil),             // 9: armadra.v1.StreamFrame
-	(*HostStatus)(nil),              // 10: armadra.v1.HostStatus
-	(*HostStatusRequest)(nil),       // 11: armadra.v1.HostStatusRequest
-	(*HostStopRequest)(nil),         // 12: armadra.v1.HostStopRequest
-	(*HostStopResponse)(nil),        // 13: armadra.v1.HostStopResponse
-	(*HostControlRequest)(nil),      // 14: armadra.v1.HostControlRequest
-	(*HostControlResponse)(nil),     // 15: armadra.v1.HostControlResponse
-	(*HostStoppedState)(nil),        // 16: armadra.v1.HostStoppedState
-	(*HostManagementResult)(nil),    // 17: armadra.v1.HostManagementResult
-	(*DesktopShutdownRequest)(nil),  // 18: armadra.v1.DesktopShutdownRequest
-	(*DesktopRuntimeControl)(nil),   // 19: armadra.v1.DesktopRuntimeControl
-	(*BootstrapTicketRequest)(nil),  // 20: armadra.v1.BootstrapTicketRequest
-	(*BootstrapTicketResponse)(nil), // 21: armadra.v1.BootstrapTicketResponse
+	(CapabilityState)(0),            // 0: armadra.v1.CapabilityState
+	(*ProtocolVersion)(nil),         // 1: armadra.v1.ProtocolVersion
+	(*HelloRequest)(nil),            // 2: armadra.v1.HelloRequest
+	(*CapabilityStatus)(nil),        // 3: armadra.v1.CapabilityStatus
+	(*HelloResponse)(nil),           // 4: armadra.v1.HelloResponse
+	(*ErrorResponse)(nil),           // 5: armadra.v1.ErrorResponse
+	(*Scope)(nil),                   // 6: armadra.v1.Scope
+	(*CommandMeta)(nil),             // 7: armadra.v1.CommandMeta
+	(*SessionAddress)(nil),          // 8: armadra.v1.SessionAddress
+	(*TerminalInput)(nil),           // 9: armadra.v1.TerminalInput
+	(*StreamAck)(nil),               // 10: armadra.v1.StreamAck
+	(*StreamFrame)(nil),             // 11: armadra.v1.StreamFrame
+	(*HostStatus)(nil),              // 12: armadra.v1.HostStatus
+	(*HostStatusRequest)(nil),       // 13: armadra.v1.HostStatusRequest
+	(*HostStopRequest)(nil),         // 14: armadra.v1.HostStopRequest
+	(*HostStopResponse)(nil),        // 15: armadra.v1.HostStopResponse
+	(*HostControlRequest)(nil),      // 16: armadra.v1.HostControlRequest
+	(*HostControlResponse)(nil),     // 17: armadra.v1.HostControlResponse
+	(*HostStoppedState)(nil),        // 18: armadra.v1.HostStoppedState
+	(*HostManagementResult)(nil),    // 19: armadra.v1.HostManagementResult
+	(*DesktopShutdownRequest)(nil),  // 20: armadra.v1.DesktopShutdownRequest
+	(*DesktopRuntimeControl)(nil),   // 21: armadra.v1.DesktopRuntimeControl
+	(*BootstrapTicketRequest)(nil),  // 22: armadra.v1.BootstrapTicketRequest
+	(*BootstrapTicketResponse)(nil), // 23: armadra.v1.BootstrapTicketResponse
 }
 var file_armadra_v1_common_proto_depIdxs = []int32{
-	0,  // 0: armadra.v1.HelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
-	0,  // 1: armadra.v1.HelloResponse.protocol:type_name -> armadra.v1.ProtocolVersion
-	4,  // 2: armadra.v1.CommandMeta.scope:type_name -> armadra.v1.Scope
-	6,  // 3: armadra.v1.TerminalInput.session:type_name -> armadra.v1.SessionAddress
-	7,  // 4: armadra.v1.StreamFrame.terminal_input:type_name -> armadra.v1.TerminalInput
-	8,  // 5: armadra.v1.StreamFrame.ack:type_name -> armadra.v1.StreamAck
-	11, // 6: armadra.v1.HostControlRequest.status:type_name -> armadra.v1.HostStatusRequest
-	12, // 7: armadra.v1.HostControlRequest.stop:type_name -> armadra.v1.HostStopRequest
-	20, // 8: armadra.v1.HostControlRequest.bootstrap:type_name -> armadra.v1.BootstrapTicketRequest
-	10, // 9: armadra.v1.HostControlResponse.status:type_name -> armadra.v1.HostStatus
-	13, // 10: armadra.v1.HostControlResponse.stopped:type_name -> armadra.v1.HostStopResponse
-	3,  // 11: armadra.v1.HostControlResponse.error:type_name -> armadra.v1.ErrorResponse
-	21, // 12: armadra.v1.HostControlResponse.bootstrap:type_name -> armadra.v1.BootstrapTicketResponse
-	10, // 13: armadra.v1.HostManagementResult.running:type_name -> armadra.v1.HostStatus
-	16, // 14: armadra.v1.HostManagementResult.stopped:type_name -> armadra.v1.HostStoppedState
-	18, // 15: armadra.v1.DesktopRuntimeControl.shutdown:type_name -> armadra.v1.DesktopShutdownRequest
-	16, // [16:16] is the sub-list for method output_type
-	16, // [16:16] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	1,  // 0: armadra.v1.HelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
+	0,  // 1: armadra.v1.CapabilityStatus.state:type_name -> armadra.v1.CapabilityState
+	1,  // 2: armadra.v1.HelloResponse.protocol:type_name -> armadra.v1.ProtocolVersion
+	3,  // 3: armadra.v1.HelloResponse.capability_status:type_name -> armadra.v1.CapabilityStatus
+	6,  // 4: armadra.v1.CommandMeta.scope:type_name -> armadra.v1.Scope
+	8,  // 5: armadra.v1.TerminalInput.session:type_name -> armadra.v1.SessionAddress
+	9,  // 6: armadra.v1.StreamFrame.terminal_input:type_name -> armadra.v1.TerminalInput
+	10, // 7: armadra.v1.StreamFrame.ack:type_name -> armadra.v1.StreamAck
+	13, // 8: armadra.v1.HostControlRequest.status:type_name -> armadra.v1.HostStatusRequest
+	14, // 9: armadra.v1.HostControlRequest.stop:type_name -> armadra.v1.HostStopRequest
+	22, // 10: armadra.v1.HostControlRequest.bootstrap:type_name -> armadra.v1.BootstrapTicketRequest
+	12, // 11: armadra.v1.HostControlResponse.status:type_name -> armadra.v1.HostStatus
+	15, // 12: armadra.v1.HostControlResponse.stopped:type_name -> armadra.v1.HostStopResponse
+	5,  // 13: armadra.v1.HostControlResponse.error:type_name -> armadra.v1.ErrorResponse
+	23, // 14: armadra.v1.HostControlResponse.bootstrap:type_name -> armadra.v1.BootstrapTicketResponse
+	12, // 15: armadra.v1.HostManagementResult.running:type_name -> armadra.v1.HostStatus
+	18, // 16: armadra.v1.HostManagementResult.stopped:type_name -> armadra.v1.HostStoppedState
+	20, // 17: armadra.v1.DesktopRuntimeControl.shutdown:type_name -> armadra.v1.DesktopShutdownRequest
+	18, // [18:18] is the sub-list for method output_type
+	18, // [18:18] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_common_proto_init() }
@@ -1504,28 +1636,28 @@ func file_armadra_v1_common_proto_init() {
 		return
 	}
 	file_armadra_v1_identity_proto_init()
-	file_armadra_v1_common_proto_msgTypes[5].OneofWrappers = []any{}
-	file_armadra_v1_common_proto_msgTypes[9].OneofWrappers = []any{
+	file_armadra_v1_common_proto_msgTypes[6].OneofWrappers = []any{}
+	file_armadra_v1_common_proto_msgTypes[10].OneofWrappers = []any{
 		(*StreamFrame_TerminalInput)(nil),
 		(*StreamFrame_TerminalOutput)(nil),
 		(*StreamFrame_Ack)(nil),
 	}
-	file_armadra_v1_common_proto_msgTypes[14].OneofWrappers = []any{
+	file_armadra_v1_common_proto_msgTypes[15].OneofWrappers = []any{
 		(*HostControlRequest_Status)(nil),
 		(*HostControlRequest_Stop)(nil),
 		(*HostControlRequest_Bootstrap)(nil),
 	}
-	file_armadra_v1_common_proto_msgTypes[15].OneofWrappers = []any{
+	file_armadra_v1_common_proto_msgTypes[16].OneofWrappers = []any{
 		(*HostControlResponse_Status)(nil),
 		(*HostControlResponse_Stopped)(nil),
 		(*HostControlResponse_Error)(nil),
 		(*HostControlResponse_Bootstrap)(nil),
 	}
-	file_armadra_v1_common_proto_msgTypes[17].OneofWrappers = []any{
+	file_armadra_v1_common_proto_msgTypes[18].OneofWrappers = []any{
 		(*HostManagementResult_Running)(nil),
 		(*HostManagementResult_Stopped)(nil),
 	}
-	file_armadra_v1_common_proto_msgTypes[19].OneofWrappers = []any{
+	file_armadra_v1_common_proto_msgTypes[20].OneofWrappers = []any{
 		(*DesktopRuntimeControl_Shutdown)(nil),
 	}
 	type x struct{}
@@ -1533,13 +1665,14 @@ func file_armadra_v1_common_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_common_proto_rawDesc), len(file_armadra_v1_common_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   20,
+			NumEnums:      1,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_armadra_v1_common_proto_goTypes,
 		DependencyIndexes: file_armadra_v1_common_proto_depIdxs,
+		EnumInfos:         file_armadra_v1_common_proto_enumTypes,
 		MessageInfos:      file_armadra_v1_common_proto_msgTypes,
 	}.Build()
 	File_armadra_v1_common_proto = out.File

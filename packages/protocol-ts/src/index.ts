@@ -5,6 +5,8 @@ export * from "./gen/armadra/v1/worker_pb.js";
 export * from "./gen/armadra/v1/automation_pb.js";
 export * from "./gen/armadra/v1/command_pb.js";
 export * from "./gen/armadra/v1/resources_pb.js";
+export * from "./gen/armadra/v1/account_pb.js";
+export * from "./gen/armadra/v1/presence_pb.js";
 export { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 
 export const PROTOCOL_MAJOR = 1;

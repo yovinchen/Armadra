@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package armadra.v1;
+
+option go_package = "armadra.local/host/gen/armadra/v1";
+
+import "armadra/v1/common.proto";
+
+// Reserved multi-account contract (S02). Declaring these messages does not
+// enable account binding: the Host answers every request below with
+// UNSUPPORTED until an implementation exists.
+//
+// Secrets never travel here. `AccountRef` identifies which account a node runs
+// as; `CredentialBinding.credential_ref` names an entry in the execution
+// host's own credential store, and the value behind that name stays there.
+
+message AccountRef {
+  // Stable per provider. "default" is the only value any Worker accepts today.
+  string account_id = 1;
+  // The CLI/vendor namespace the account belongs to ("claude", "codex", …).
+  string provider_id = 2;
+  // Display text only. A label is never an authorization decision.
+  string label = 3;
+}
+
+enum CredentialScope {
+  CREDENTIAL_SCOPE_UNSPECIFIED = 0;
+  CREDENTIAL_SCOPE_SESSION = 1;
+  CREDENTIAL_SCOPE_WORKSPACE = 2;
+  CREDENTIAL_SCOPE_EXECUTION_HOST = 3;
+}
+
+message CredentialBinding {
+  // A name in the execution host's credential store, never the secret itself.
+  string credential_ref = 1;
+  CredentialScope scope = 2;
+  // The grant that allowed this binding; checked again at use time.
+  string authorization_id = 3;
+}
+
+message NodeAccountBinding {
+  string node_id = 1;
+  AccountRef account = 2;
+  CredentialBinding credential = 3;
+  uint64 revision = 4;
+  int64 bound_at_unix_ms = 5;
+}
+
+message BindNodeAccountRequest {
+  CommandMeta meta = 1;
+  string node_id = 2;
+  AccountRef account = 3;
+  CredentialBinding credential = 4;
+}
+message BindNodeAccountResponse { NodeAccountBinding binding = 1; }
+
+message GetNodeAccountRequest {
+  CommandMeta meta = 1;
+  string node_id = 2;
+}
+message GetNodeAccountResponse { NodeAccountBinding binding = 1; }
+
+message ListAccountsRequest {
+  CommandMeta meta = 1;
+  string provider_id = 2;
+}
+message ListAccountsResponse { repeated AccountRef accounts = 1; }
