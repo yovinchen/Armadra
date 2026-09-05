@@ -115,9 +115,9 @@ describe("runtime API v3", () => {
   });
 
   it("validates approvals, context links and commits", () => {
-    expect(answerApprovalRequestSchema.parse({ decision: "deny" }).decision).toBe(
-      "deny",
-    );
+    expect(
+      answerApprovalRequestSchema.parse({ decision: "deny" }).decision,
+    ).toBe("deny");
     expect(
       answerApprovalRequestSchema.safeParse({ decision: "maybe" }).success,
     ).toBe(false);
@@ -195,7 +195,12 @@ describe("runtime API v3", () => {
         targetNodeId: otherUuid,
         outcome: "delivered",
       },
-      { type: "terminal.exit", sessionId: uuid, nodeId: otherUuid, exitCode: 0 },
+      {
+        type: "terminal.exit",
+        sessionId: uuid,
+        nodeId: otherUuid,
+        exitCode: 0,
+      },
       { type: "board.changed", boardId: otherUuid, updatedAt: timestamp },
     ];
     for (const event of events) {
@@ -219,9 +224,9 @@ describe("runtime API v3", () => {
       }).expectedSize,
     ).toBe(0);
     // An empty path or a negative size never reaches the runtime.
-    expect(writeFileRequestSchema.safeParse({ path: "  ", content: "" }).success).toBe(
-      false,
-    );
+    expect(
+      writeFileRequestSchema.safeParse({ path: "  ", content: "" }).success,
+    ).toBe(false);
     expect(
       writeFileRequestSchema.safeParse({
         path: "a",
@@ -263,7 +268,9 @@ describe("runtime API v3", () => {
     expect(
       gitDiffRequestSchema.parse({ scope: "staged", paths: ["a.ts"] }),
     ).toEqual({ scope: "staged", paths: ["a.ts"] });
-    expect(gitDiffRequestSchema.safeParse({ scope: "index" }).success).toBe(false);
+    expect(gitDiffRequestSchema.safeParse({ scope: "index" }).success).toBe(
+      false,
+    );
     // `staged` defaults to false so an older runtime's diff still parses.
     expect(
       gitFileDiffSchema.parse({
@@ -277,9 +284,9 @@ describe("runtime API v3", () => {
   });
 
   it("types the unstage response and the hook install report", () => {
-    expect(gitUnstageResponseSchema.parse({ unstaged: ["a.ts"] }).unstaged).toEqual([
-      "a.ts",
-    ]);
+    expect(
+      gitUnstageResponseSchema.parse({ unstaged: ["a.ts"] }).unstaged,
+    ).toEqual(["a.ts"]);
     const report = hookInstallReportSchema.parse({
       agentId: "claude",
       configPath: "/home/u/.claude/settings.json",
@@ -365,23 +372,22 @@ describe("conversations and AI naming (plan §17)", () => {
     ).toBe(false);
   });
 
-  it("lets a save omit the kanban to leave it untouched", () => {
-    const request = saveBoardRequestSchema.parse({
+  it("rejects retired board writes, including null, without silently stripping them", () => {
+    const value = {
       expectedUpdatedAt: "2026-09-04T02:06:15.000Z",
       nodes: [],
       edges: [],
       viewport: { x: 0, y: 0, zoom: 1 },
-    });
-    expect(request.kanban).toBeUndefined();
-
-    const withKanban = saveBoardRequestSchema.parse({
-      expectedUpdatedAt: "2026-09-04T02:06:15.000Z",
-      nodes: [],
-      edges: [],
-      viewport: { x: 0, y: 0, zoom: 1 },
-      kanban: { columns: [{ id: "todo", title: "待办" }] },
-    });
-    expect(withKanban.kanban?.columns[0]!.title).toBe("待办");
-    expect(withKanban.kanban?.cards).toEqual({});
+    };
+    expect(saveBoardRequestSchema.safeParse(value).success).toBe(true);
+    expect(
+      saveBoardRequestSchema.safeParse({
+        ...value,
+        kanban: { columns: [], cards: {} },
+      }).success,
+    ).toBe(false);
+    expect(
+      saveBoardRequestSchema.safeParse({ ...value, kanban: null }).success,
+    ).toBe(false);
   });
 });

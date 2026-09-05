@@ -123,7 +123,6 @@ async fn fixture(name: &str) -> Fixture {
             ],
             edges: &[],
             viewport: Viewport::default(),
-            kanban: None,
             whiteboard: None,
         },
     )
@@ -1684,7 +1683,6 @@ async fn add_linked_node(fixture: &Fixture, node_type: &str, title: &str, data: 
             nodes: &nodes,
             edges: &[],
             viewport: Viewport::default(),
-            kanban: None,
             whiteboard: None,
         },
     )

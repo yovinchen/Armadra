@@ -234,7 +234,7 @@ func validateDatabase(ctx context.Context, db *sql.DB, manifest *pb.MigrationExp
 	if err != nil {
 		return err
 	}
-	if len(migrations) < 1 || len(migrations) > 2 || len(migrations) != len(manifest.Migrations) {
+	if len(migrations) < 1 || len(migrations) > 3 || len(migrations) != len(manifest.Migrations) {
 		return errors.New("unsupported source migration history")
 	}
 	expected, err := sql.Open("sqlite", ":memory:")
@@ -243,7 +243,7 @@ func validateDatabase(ctx context.Context, db *sql.DB, manifest *pb.MigrationExp
 	}
 	defer expected.Close()
 	expected.SetMaxOpenConns(1)
-	names := []string{"legacy/0001_initial.sql", "legacy/0002_agent_mailbox.sql"}
+	names := []string{"legacy/0001_initial.sql", "legacy/0002_agent_mailbox.sql", "legacy/0003_retire_kanban.sql"}
 	for i, m := range migrations {
 		source, err := legacy.ReadFile(names[i])
 		if err != nil {

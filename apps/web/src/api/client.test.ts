@@ -36,7 +36,6 @@ const boardDocument: BoardDocument = {
     name: "Default",
     sortOrder: 0,
     viewport: { x: 12, y: -8, zoom: 0.75 },
-    kanban: { columns: [], cards: {} },
     whiteboard: "",
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -104,7 +103,6 @@ describe("看板文档", () => {
       nodes: [],
       edges: [],
       viewport: { x: 12, y: -8, zoom: 0.75 },
-      kanban: { columns: [], cards: {} },
       whiteboard: "",
     });
   });

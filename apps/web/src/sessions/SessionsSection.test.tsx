@@ -56,7 +56,6 @@ function document(nodeIds: string[]): BoardDocument {
       name: "Default",
       sortOrder: 0,
       viewport: { x: 0, y: 0, zoom: 1 },
-      kanban: { columns: [], cards: {} },
       whiteboard: "",
       createdAt: timestamp,
       updatedAt: timestamp,

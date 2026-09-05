@@ -9,8 +9,6 @@ import {
   boardSchema,
   canvasEdgeSchema,
   canvasNodeSchema,
-  emptyKanban,
-  kanbanSchema,
   workspaceSchema,
 } from "../src/index.js";
 
@@ -121,9 +119,9 @@ describe("canvas domain v3", () => {
   it("carries group membership through parentId", () => {
     const parsed = canvasNodeSchema.parse(node({ parentId: groupId }));
     expect(parsed.parentId).toBe(groupId);
-    expect(
-      canvasNodeSchema.safeParse(node({ parentId: nodeId })).success,
-    ).toBe(false);
+    expect(canvasNodeSchema.safeParse(node({ parentId: nodeId })).success).toBe(
+      false,
+    );
   });
 
   it("persists exactly one edge kind", () => {
@@ -208,12 +206,13 @@ describe("agent status", () => {
       agentStatusSchema.safeParse({ ...base, sessionPhase: "middle" }).success,
     ).toBe(false);
     expect(
-      agentStatusSchema.safeParse({ ...base, lastEventAt: "not a date" }).success,
+      agentStatusSchema.safeParse({ ...base, lastEventAt: "not a date" })
+        .success,
     ).toBe(false);
   });
 });
 
-describe("kanban, labels and notes (plan §17)", () => {
+describe("retired board state, labels and notes", () => {
   const board = {
     id: boardId,
     workspaceId: "019ff7d1-7419-74df-89e2-b1619d36ea99",
@@ -226,32 +225,19 @@ describe("kanban, labels and notes (plan §17)", () => {
     // A document written before migration 0008 has none of the three keys and
     // must still parse — that is what keeps the upgrade from rewriting rows.
     const parsedBoard = boardSchema.parse(board);
-    expect(parsedBoard.kanban).toEqual({ columns: [], cards: {} });
+    expect("kanban" in parsedBoard).toBe(false);
 
     const parsedNode = canvasNodeSchema.parse(node());
     expect(parsedNode.labels).toEqual([]);
     expect(parsedNode.note).toBe("");
   });
 
-  it("hands out a fresh kanban object each time", () => {
-    // Two boards must not share one columns array.
-    const first = boardSchema.parse(board).kanban;
-    const second = boardSchema.parse({ ...board, id: nodeId }).kanban;
-    first.columns.push({ id: "todo", title: "待办" });
-    expect(second.columns).toEqual([]);
-    expect(emptyKanban()).not.toBe(emptyKanban());
-  });
-
-  it("keeps columns and card placements", () => {
-    const parsed = kanbanSchema.parse({
-      columns: [
-        { id: "todo", title: "待办", color: "#32d74b" },
-        { id: "doing", title: "进行中" },
-      ],
-      cards: { [nodeId]: { columnId: "doing", order: 1.5 } },
+  it("reads older responses without retaining writable task-board state", () => {
+    const parsed = boardSchema.parse({
+      ...board,
+      kanban: { columns: [{ id: "old", title: "Old" }], cards: {} },
     });
-    expect(parsed.columns[1]!.color).toBeUndefined();
-    expect(parsed.cards[nodeId]).toEqual({ columnId: "doing", order: 1.5 });
+    expect("kanban" in parsed).toBe(false);
   });
 
   it("bounds labels at eight short chips and the note at 4000 characters", () => {
@@ -272,18 +258,6 @@ describe("kanban, labels and notes (plan §17)", () => {
     ).toBe(true);
     expect(
       canvasNodeSchema.safeParse(node({ note: "n".repeat(4_001) })).success,
-    ).toBe(false);
-  });
-
-  it("rejects a malformed column or a non-finite card order", () => {
-    expect(
-      kanbanSchema.safeParse({ columns: [{ id: "", title: "x" }] }).success,
-    ).toBe(false);
-    expect(
-      kanbanSchema.safeParse({
-        columns: [],
-        cards: { [nodeId]: { columnId: "todo", order: Number.NaN } },
-      }).success,
     ).toBe(false);
   });
 });

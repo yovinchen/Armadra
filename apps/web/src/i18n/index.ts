@@ -13,6 +13,7 @@ import { shell } from "./shell";
 import { ssh } from "./ssh";
 import { host } from "./host";
 import { hostIdentity } from "./host-identity";
+import { legacyArchives } from "./legacy-archives";
 import { gitHunks } from "./git-hunks";
 import { gitMessage } from "./git-message";
 import { gitStashes } from "./git-stashes";
@@ -50,6 +51,7 @@ export const MESSAGE_MODULES = {
   ssh,
   host,
   "host-identity": hostIdentity,
+  "legacy-archives": legacyArchives,
   "git-repository": gitRepository,
   "git-hunks": gitHunks,
   "git-message": gitMessage,

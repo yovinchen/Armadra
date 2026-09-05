@@ -877,7 +877,23 @@ mod tests {
         "{\"store\":{\"画笔\":{\"typeName\":\"shape\",\"props\":{\"text\":\"原始白板 🖌\"}}}}";
     const NOTE: &str = "原始备注\n保留空白  与 emoji 🐈";
 
+    async fn migrate_to(pool: &SqlitePool, version: i64) {
+        let all = sqlx::migrate!("./migrations");
+        let prefix = sqlx::migrate::Migrator {
+            migrations: std::borrow::Cow::Owned(
+                all.iter()
+                    .filter(|migration| migration.version <= version)
+                    .cloned()
+                    .collect(),
+            ),
+            ..sqlx::migrate::Migrator::DEFAULT
+        };
+        prefix.run(pool).await.unwrap();
+    }
     async fn fixture() -> (TempDir, SqlitePool) {
+        fixture_version(3).await
+    }
+    async fn fixture_version(version: i64) -> (TempDir, SqlitePool) {
         let dir = tempfile::tempdir().unwrap();
         let options = SqliteConnectOptions::new()
             .filename(dir.path().join("live.sqlite"))
@@ -888,8 +904,9 @@ mod tests {
             .connect_with(options)
             .await
             .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        migrate_to(&pool, version.min(2)).await;
         seed(&pool, dir.path()).await;
+        migrate_to(&pool, version).await;
         (dir, pool)
     }
 
@@ -930,7 +947,7 @@ mod tests {
         assert_eq!(manifest, package.manifest);
         assert!(!manifest.ownership_switch_allowed);
         assert!(manifest.assets_complete);
-        assert_eq!(manifest.migrations.len(), 2);
+        assert_eq!(manifest.migrations.len(), 3);
         assert_eq!(
             manifest.canvases[0].whiteboard_sha256,
             Sha256::digest(WHITEBOARD.as_bytes()).to_vec()
@@ -1036,15 +1053,7 @@ mod tests {
 
     #[tokio::test]
     async fn known_older_schema_is_preserved_without_implicit_upgrade() {
-        let (dir, pool) = fixture().await;
-        sqlx::query("DROP TABLE agent_mailbox")
-            .execute(&pool)
-            .await
-            .unwrap();
-        sqlx::query("DELETE FROM _sqlx_migrations WHERE version=2")
-            .execute(&pool)
-            .await
-            .unwrap();
+        let (dir, pool) = fixture_version(1).await;
         let package = export_package(&pool, &dir.path().join("v1"), ExportOptions::default())
             .await
             .unwrap();
@@ -1117,8 +1126,9 @@ mod tests {
             .connect("sqlite::memory:")
             .await
             .unwrap();
-        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        migrate_to(&pool, 2).await;
         seed(&pool, dir.path()).await;
+        migrate_to(&pool, 3).await;
         let destination = dir.path().join("memory-export");
         export_package(&pool, &destination, ExportOptions::default())
             .await

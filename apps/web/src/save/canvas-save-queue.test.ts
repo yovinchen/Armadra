@@ -192,7 +192,6 @@ function docOf(
       id: "board",
       updatedAt,
       viewport: { x: 0, y: 0, zoom: 1 },
-      kanban: { columns: [], cards: {} },
       whiteboard: "",
       ...board,
     },

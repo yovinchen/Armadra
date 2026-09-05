@@ -5,6 +5,7 @@ import { runtimeApi } from "../../../api/client";
 import { useT } from "../../../app/preferences-store";
 import { openExternal } from "../../../platform";
 import { SettingsGroup } from "../SettingsGroup";
+import { LegacyArchives } from "../LegacyArchives";
 import { SettingsRow } from "../SettingsRow";
 import { useRuntimeSettings } from "../use-runtime-settings";
 import { CONTROL_WIDTH } from "./GeneralPage";
@@ -116,6 +117,7 @@ export function DataPage() {
           </Button>
         </SettingsRow>
       </SettingsGroup>
+      <LegacyArchives />
 
       <SettingsGroup>
         <SettingsRow label={t("settings.logRetention")}>

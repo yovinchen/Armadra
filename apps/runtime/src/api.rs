@@ -27,8 +27,8 @@ use crate::{
     imports, index,
     model::{
         AgentStatus, Board, BoardDocument, CanvasEdge, CanvasNode, ContextLink,
-        ContextLinkDocument, Conversation, Kanban, SessionSummary, TerminalSession, Viewport,
-        Workspace, WorkspacePermissions, WorkspaceSummary,
+        ContextLinkDocument, Conversation, SessionSummary, TerminalSession, Viewport, Workspace,
+        WorkspacePermissions, WorkspaceSummary,
     },
     paths,
     security::{
@@ -304,13 +304,13 @@ pub struct SaveBoardDocumentRequest {
     nodes: Vec<CanvasNode>,
     edges: Vec<CanvasEdge>,
     viewport: Viewport,
-    /// Absent means "leave the kanban alone" — see `db::SaveBoardRequest`.
-    #[serde(default)]
-    kanban: Option<Kanban>,
-    /// Absent means "leave the whiteboard alone", same rule as `kanban`
-    /// (tldraw plan §6.1).
+    /// Omitting this field preserves the whiteboard snapshot.
     #[serde(default)]
     whiteboard: Option<String>,
+    // Preserve prior compatibility for other obsolete fields, but reject a
+    // retired board write explicitly instead of silently discarding its data.
+    #[serde(flatten)]
+    extra: HashMap<String, serde_json::Value>,
 }
 
 pub async fn save_board(
@@ -318,6 +318,12 @@ pub async fn save_board(
     AxumPath((workspace_id, board_id)): AxumPath<(String, String)>,
     Json(request): Json<SaveBoardDocumentRequest>,
 ) -> AppResult<Json<BoardDocument>> {
+    if request.extra.contains_key("kanban") {
+        return Err(AppError::BadRequest(
+            "Task-board writes are retired; historical records are available as read-only archives"
+                .into(),
+        ));
+    }
     let document = db::save_board(
         &state.pool,
         &workspace_id,
@@ -327,7 +333,6 @@ pub async fn save_board(
             nodes: &request.nodes,
             edges: &request.edges,
             viewport: request.viewport,
-            kanban: request.kanban.as_ref(),
             whiteboard: request.whiteboard.as_deref(),
         },
     )
@@ -1568,13 +1573,18 @@ pub async fn git_stage(
 ) -> AppResult<Json<git::StageResult>> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
     if !workspace.permissions.read || !workspace.permissions.write {
-        return Err(AppError::Forbidden("Workspace does not allow Git writes".into()));
+        return Err(AppError::Forbidden(
+            "Workspace does not allow Git writes".into(),
+        ));
     }
-    let guard = crate::git_api::REPOSITORIES.mutation_guard(Path::new(&workspace.root_path), ".").await?;
+    let guard = crate::git_api::REPOSITORIES
+        .mutation_guard(Path::new(&workspace.root_path), ".")
+        .await?;
     let result = tokio::task::spawn_blocking(move || {
         let _guard = guard;
         git::stage_paths(Path::new(&workspace.root_path), &request.paths)
-    }).await??;
+    })
+    .await??;
     Ok(Json(result))
 }
 
@@ -1585,13 +1595,18 @@ pub async fn git_unstage(
 ) -> AppResult<Json<git::UnstageResult>> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
     if !workspace.permissions.read || !workspace.permissions.write {
-        return Err(AppError::Forbidden("Workspace does not allow Git writes".into()));
+        return Err(AppError::Forbidden(
+            "Workspace does not allow Git writes".into(),
+        ));
     }
-    let guard = crate::git_api::REPOSITORIES.mutation_guard(Path::new(&workspace.root_path), ".").await?;
+    let guard = crate::git_api::REPOSITORIES
+        .mutation_guard(Path::new(&workspace.root_path), ".")
+        .await?;
     let result = tokio::task::spawn_blocking(move || {
         let _guard = guard;
         git::unstage_paths(Path::new(&workspace.root_path), &request.paths)
-    }).await??;
+    })
+    .await??;
     Ok(Json(result))
 }
 
@@ -1602,13 +1617,18 @@ pub async fn git_revert(
 ) -> AppResult<Json<git::RevertResult>> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
     if !workspace.permissions.read || !workspace.permissions.write {
-        return Err(AppError::Forbidden("Workspace does not allow Git writes".into()));
+        return Err(AppError::Forbidden(
+            "Workspace does not allow Git writes".into(),
+        ));
     }
-    let guard = crate::git_api::REPOSITORIES.mutation_guard(Path::new(&workspace.root_path), ".").await?;
+    let guard = crate::git_api::REPOSITORIES
+        .mutation_guard(Path::new(&workspace.root_path), ".")
+        .await?;
     let result = tokio::task::spawn_blocking(move || {
         let _guard = guard;
         git::revert_paths(Path::new(&workspace.root_path), &request.paths)
-    }).await??;
+    })
+    .await??;
     Ok(Json(result))
 }
 
@@ -1626,13 +1646,22 @@ pub async fn git_commit(
 ) -> AppResult<Json<git::CommitResult>> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
     if !workspace.permissions.read || !workspace.permissions.write {
-        return Err(AppError::Forbidden("Workspace does not allow Git writes".into()));
+        return Err(AppError::Forbidden(
+            "Workspace does not allow Git writes".into(),
+        ));
     }
-    let guard = crate::git_api::REPOSITORIES.mutation_guard(Path::new(&workspace.root_path), ".").await?;
+    let guard = crate::git_api::REPOSITORIES
+        .mutation_guard(Path::new(&workspace.root_path), ".")
+        .await?;
     let result = tokio::task::spawn_blocking(move || {
         let _guard = guard;
-        git::commit(Path::new(&workspace.root_path), &request.message, request.paths.as_deref())
-    }).await??;
+        git::commit(
+            Path::new(&workspace.root_path),
+            &request.message,
+            request.paths.as_deref(),
+        )
+    })
+    .await??;
     Ok(Json(result))
 }
 
@@ -1906,10 +1935,10 @@ pub async fn data_info(State(state): State<AppState>) -> AppResult<Json<DataInfo
     }))
 }
 
-pub use crate::sqlite_snapshot::{SnapshotInfo as DataBackup, backup_target};
 use crate::sqlite_snapshot::snapshot_database;
 #[cfg(test)]
 use crate::sqlite_snapshot::snapshot_to_target;
+pub use crate::sqlite_snapshot::{SnapshotInfo as DataBackup, backup_target};
 
 /// `POST /api/data/backup` — a consistent snapshot of the connected main DB.
 ///
@@ -1923,6 +1952,59 @@ pub async fn data_backup(State(state): State<AppState>) -> AppResult<Json<DataBa
     Ok(Json(
         tokio::spawn(async move { snapshot_database(&state.pool, &stamp).await }).await??,
     ))
+}
+
+#[derive(Deserialize)]
+pub struct LegacyArchiveQuery {
+    cursor: Option<String>,
+    limit: Option<u32>,
+}
+
+// These share the local Data-management boundary with data_backup, not an
+// individual workspace's read permission. A future Host bridge must require
+// separate data-management authority before exposing historical records.
+pub async fn legacy_kanban_archives(
+    State(state): State<AppState>,
+    Query(query): Query<LegacyArchiveQuery>,
+) -> AppResult<Json<crate::model::LegacyKanbanArchivePage>> {
+    Ok(Json(
+        db::list_legacy_kanban_archives(
+            &state.pool,
+            query.cursor.as_deref(),
+            query.limit.unwrap_or(50),
+        )
+        .await?,
+    ))
+}
+
+pub async fn legacy_kanban_archive(
+    State(state): State<AppState>,
+    AxumPath(canvas_id): AxumPath<String>,
+) -> AppResult<Json<crate::model::LegacyKanbanArchive>> {
+    Ok(Json(
+        db::get_legacy_kanban_archive(&state.pool, &canvas_id).await?,
+    ))
+}
+
+pub async fn export_legacy_kanban_archive(
+    State(state): State<AppState>,
+    AxumPath(canvas_id): AxumPath<String>,
+) -> AppResult<Response> {
+    let archive = db::get_legacy_kanban_archive(&state.pool, &canvas_id).await?;
+    let body = serde_json::to_vec(&crate::model::LegacyKanbanArchiveExport {
+        format_version: 1,
+        archive,
+    })
+    .map_err(|_| AppError::Internal("Could not encode historical archive".into()))?;
+    Response::builder()
+        .header("Content-Type", "application/json; charset=utf-8")
+        .header(
+            "Content-Disposition",
+            "attachment; filename=\"legacy-kanban-archive.json\"",
+        )
+        .header("Cache-Control", "no-store")
+        .body(axum::body::Body::from(body))
+        .map_err(|_| AppError::Internal("Could not export historical archive".into()))
 }
 
 /* ------------------------------------ 用量 -------------------------------- */
@@ -1973,6 +2055,51 @@ mod tests {
     /// secret, endpoint file or node tokens.
     fn test_hooks(directory: &std::path::Path) -> crate::hook::HookService {
         crate::hook::HookService::new(directory.join("hook-data"), 43199)
+    }
+
+    #[tokio::test]
+    async fn retired_kanban_payloads_are_rejected_before_any_database_write() {
+        let directory = tempdir().unwrap();
+        // No schema exists: this test also proves the retirement check runs
+        // before attempting any live document query or mutation.
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        let events = EventHub::new();
+        let settings = SettingsStore::in_memory(
+            serde_json::json!({"terminal":{"backend":"direct"},"usage":{"enabled":false}}),
+        );
+        let state = AppState {
+            pool: pool.clone(),
+            terminals: TerminalManager::with_config(
+                pool,
+                events.clone(),
+                settings.clone(),
+                directory.path().into(),
+            ),
+            events,
+            hooks: test_hooks(directory.path()),
+            usage: crate::usage::UsageService::new(settings.clone()),
+            settings,
+        };
+        for retired in [
+            serde_json::Value::Null,
+            serde_json::json!({"columns":[],"cards":{}}),
+        ] {
+            let request=serde_json::from_value::<SaveBoardDocumentRequest>(serde_json::json!({
+                "expectedUpdatedAt":"2026-09-05T00:00:00Z","nodes":[],"edges":[],"viewport":{"x":0,"y":0,"zoom":1},"kanban":retired,
+            })).unwrap();
+            let error = save_board(
+                State(state.clone()),
+                AxumPath(("workspace".into(), "canvas".into())),
+                Json(request),
+            )
+            .await
+            .unwrap_err();
+            assert!(matches!(error,AppError::BadRequest(message) if message.contains("retired")));
+        }
     }
 
     #[test]
@@ -3081,7 +3208,6 @@ mod tests {
                 }],
                 edges: &[],
                 viewport: crate::model::Viewport::default(),
-                kanban: None,
                 whiteboard: None,
             },
         )
@@ -3657,7 +3783,6 @@ mod tests {
                     updated_at: now.clone(),
                 }],
                 viewport: crate::model::Viewport::default(),
-                kanban: None,
                 whiteboard: None,
             },
         )
@@ -4017,11 +4142,7 @@ mod tests {
             .await
             .unwrap();
         let failed = backup_target(&source, "failed");
-        assert!(
-            snapshot_to_target(&mut connection, &failed)
-                .await
-                .is_err()
-        );
+        assert!(snapshot_to_target(&mut connection, &failed).await.is_err());
         sqlx::query("ROLLBACK")
             .execute(&mut *connection)
             .await

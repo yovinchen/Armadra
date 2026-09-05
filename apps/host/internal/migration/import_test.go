@@ -129,8 +129,17 @@ func newExportFixture(t *testing.T, version, logs int) *exportFixture {
 	if err = tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	if version == 2 {
+	if version >= 2 {
 		fixtureExec(t, db, "INSERT INTO agent_mailbox(id,workspace_id,source_node_id,target_node_id,message_key,body,created_at,expires_at) VALUES('mail-1',?,?,?,'key','message 原样',?,?)", workspaceA, nodeA, nodeB, largeInteger, largeInteger+100)
+	}
+	if version >= 3 {
+		source, err := legacy.ReadFile("legacy/0003_retire_kanban.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		fixtureExec(t, db, string(source))
+		checksum := sha512.Sum384(source)
+		fixtureExec(t, db, "INSERT INTO _sqlx_migrations(version,description,installed_on,success,checksum,execution_time) VALUES(3,'retire kanban',?,1,?,?)", timestampText, checksum[:], largeInteger+2)
 	}
 	snapshot := filepath.Join(directory, "source.sqlite")
 	fixtureExec(t, db, "VACUUM INTO ?", snapshot)
@@ -386,7 +395,7 @@ func assertRowSQLValues(t *testing.T, source *sql.DB, row *pb.ImportedSqlRow, wh
 }
 
 func TestInspectAndStagePreserveRawSQLValuesAndIsolation(t *testing.T) {
-	fixture := newExportFixture(t, 2, 300)
+	fixture := newExportFixture(t, 3, 300)
 	originalBefore, _ := os.ReadFile(fixture.original)
 	snapshotBefore, _ := os.ReadFile(fixture.snapshot)
 	bundle, err := Inspect(fixtureContext, fixture.directory)
@@ -438,6 +447,18 @@ func TestInspectAndStagePreserveRawSQLValuesAndIsolation(t *testing.T) {
 	assertRowSQLValues(t, source, b, "id=?", canvasA)
 	if column(b, "whiteboard_json").GetTextValue() != whiteboardText || column(b, "kanban_json").GetTextValue() != kanbanText {
 		t.Fatal("canvas archive changed")
+	}
+	if len(rows["legacy_kanban_archives"]) != 2 || len(rows["legacy_node_label_archives"]) != 3 {
+		t.Fatal("retirement archives were not imported")
+	}
+	for _, archived := range rows["legacy_kanban_archives"] {
+		if column(archived, "kanban_json").GetTextValue() != kanbanText {
+			t.Fatal("raw historical board changed")
+		}
+		assertRowSQLValues(t, source, archived, "canvas_id=?", column(archived, "canvas_id").GetTextValue())
+	}
+	for _, archived := range rows["legacy_node_label_archives"] {
+		assertRowSQLValues(t, source, archived, "node_id=?", column(archived, "node_id").GetTextValue())
 	}
 	for _, m := range rows["_sqlx_migrations"] {
 		version := column(m, "version").GetIntegerValue()

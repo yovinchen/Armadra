@@ -71,39 +71,6 @@ impl Default for Viewport {
     }
 }
 
-/// One kanban column. `color` is absent rather than defaulted so the UI can
-/// tell "no tint chosen" from "the default tint".
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KanbanColumn {
-    pub id: String,
-    pub title: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub color: Option<String>,
-}
-
-/// Where one node sits on the kanban board. `order` is a float so inserting
-/// between two cards never has to renumber the column.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KanbanCard {
-    pub column_id: String,
-    pub order: f64,
-}
-
-/// Kanban view state (plan §17), stored as one blob on the board. Both fields
-/// default so the `'{}'` a board starts life with reads back as an empty board
-/// rather than as a decode failure.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Kanban {
-    #[serde(default)]
-    pub columns: Vec<KanbanColumn>,
-    /// Keyed by node id; a node with no entry is in no column.
-    #[serde(default)]
-    pub cards: std::collections::BTreeMap<String, KanbanCard>,
-}
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Board {
@@ -112,7 +79,6 @@ pub struct Board {
     pub name: String,
     pub sort_order: i64,
     pub viewport: Viewport,
-    pub kanban: Kanban,
     /// Opaque tldraw snapshot of the whiteboard-native records only (tldraw
     /// plan §6.1). The runtime never looks inside it — node shapes, frames and
     /// node-to-node arrows are filtered out by the client because they are
@@ -120,6 +86,60 @@ pub struct Board {
     pub whiteboard: String,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// Retirement snapshots are independent of live workspace/canvas lifetimes.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyKanbanArchiveSummary {
+    pub canvas_id: String,
+    pub workspace_id: String,
+    pub workspace_name: String,
+    pub canvas_name: String,
+    pub archived_at: String,
+    pub kanban_bytes: u64,
+    pub label_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyNodeLabelArchive {
+    pub node_id: String,
+    pub canvas_id: String,
+    pub workspace_id: Option<String>,
+    pub node_title: String,
+    pub node_type: String,
+    pub labels_json: String,
+    pub note: String,
+    pub node_created_at: String,
+    pub node_updated_at: String,
+    pub archived_at: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyKanbanArchive {
+    #[serde(flatten)]
+    pub summary: LegacyKanbanArchiveSummary,
+    pub kanban_json: String,
+    pub kanban_sha256: String,
+    pub canvas_created_at: String,
+    pub canvas_updated_at: String,
+    pub labels: Vec<LegacyNodeLabelArchive>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyKanbanArchivePage {
+    pub archives: Vec<LegacyKanbanArchiveSummary>,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyKanbanArchiveExport {
+    pub format_version: u32,
+    pub archive: LegacyKanbanArchive,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

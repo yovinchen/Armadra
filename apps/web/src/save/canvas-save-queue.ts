@@ -78,7 +78,6 @@ export function replayLocalEdits(
     board: {
       ...remote.board,
       viewport: local.board.viewport,
-      kanban: local.board.kanban,
       whiteboard: local.board.whiteboard,
     },
     nodes: reparented,

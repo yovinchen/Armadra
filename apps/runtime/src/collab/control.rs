@@ -661,7 +661,6 @@ async fn save(state: &AppState, caller: &Caller, document: BoardDocument) -> Res
             viewport: document.board.viewport,
             // The control verbs add and move nodes; the kanban is not theirs to
             // touch, so it is carried through untouched.
-            kanban: None,
             whiteboard: None,
         },
     )

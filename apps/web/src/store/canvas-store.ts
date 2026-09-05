@@ -827,25 +827,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
             updatedAt: now(),
           };
         });
-        // 顺手扫掉被删节点的看板卡片条目，否则它们会一直躺在 board.kanban 里
-        const kanban = document.board.kanban;
-        const cleaned = Object.keys(kanban.cards).some((nodeId) =>
-          doomed.has(nodeId),
-        )
-          ? {
-              columns: kanban.columns,
-              cards: Object.fromEntries(
-                Object.entries(kanban.cards).filter(
-                  ([nodeId]) => !doomed.has(nodeId),
-                ),
-              ),
-            }
-          : kanban;
         return {
           ...document,
-          ...(cleaned === kanban
-            ? {}
-            : { board: { ...document.board, kanban: cleaned } }),
           nodes: orphaned.filter((node) => !doomed.has(node.id)),
           edges: document.edges.filter(
             (edge) => !doomed.has(edge.source) && !doomed.has(edge.target),

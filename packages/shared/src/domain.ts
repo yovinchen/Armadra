@@ -195,7 +195,7 @@ export const canvasNodeSchema = z
     /** Id of the `group` node this node belongs to. */
     parentId: z.string().uuid().optional(),
     /**
-     * `+ Label` chips shown under the node header and on the kanban card
+     * `+ Label` chips shown under the node header
      * (plan §17). Short and few on purpose: they are a filter, not a field.
      *
      * Defaulted, so a document written before migration 0008 still parses;
@@ -247,42 +247,53 @@ export const viewportSchema = z.object({
 
 export const DEFAULT_VIEWPORT = { x: 0, y: 0, zoom: 1 } as const;
 
-/* --------------------------------- kanban -------------------------------- */
-
-/**
- * Kanban view state — plan §17. It lives on the board rather than on the node
- * because a card's column is a property of the board's arrangement, not of the
- * session: deleting a column must not touch the terminals it held.
- */
-export const kanbanColumnSchema = z.object({
-  id: z.string().min(1).max(64),
-  title: z.string().min(1).max(80),
-  color: z.string().min(1).max(32).optional(),
+/** Opaque retirement records. No update request schema or canvas state owns them. */
+export const legacyKanbanArchiveSummarySchema = z.object({
+  canvasId: z.string(),
+  workspaceId: z.string(),
+  workspaceName: z.string(),
+  canvasName: z.string(),
+  archivedAt: z.string(),
+  kanbanBytes: z.number().int().nonnegative().safe(),
+  labelCount: z.number().int().nonnegative().safe(),
 });
-
-export const kanbanCardSchema = z.object({
-  columnId: z.string().min(1).max(64),
-  /** Sort key inside the column; fractional so an insert need not renumber. */
-  order: z.number().finite(),
+export const legacyNodeLabelArchiveSchema = z.object({
+  nodeId: z.string(),
+  canvasId: z.string(),
+  workspaceId: z.string().nullable(),
+  nodeTitle: z.string(),
+  nodeType: z.string(),
+  labelsJson: z.string(),
+  note: z.string(),
+  nodeCreatedAt: z.string(),
+  nodeUpdatedAt: z.string(),
+  archivedAt: z.string(),
 });
-
-export const kanbanSchema = z.object({
-  columns: z.array(kanbanColumnSchema).max(24).default([]),
-  /** Keyed by node id. A node with no entry belongs to no column. */
-  cards: z.record(z.string(), kanbanCardSchema).default({}),
+export const legacyKanbanArchiveSchema =
+  legacyKanbanArchiveSummarySchema.extend({
+    kanbanJson: z.string(),
+    kanbanSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    canvasCreatedAt: z.string(),
+    canvasUpdatedAt: z.string(),
+    labels: z.array(legacyNodeLabelArchiveSchema),
+  });
+export const legacyKanbanArchivePageSchema = z.object({
+  archives: z.array(legacyKanbanArchiveSummarySchema),
+  nextCursor: z.string().nullable(),
 });
-
-/**
- * An empty board.
- *
- * A factory rather than a shared constant: zod hands a value default straight
- * to every parse, and the kanban view mutates what it is given, so one shared
- * object would let two boards write into each other.
- */
-export const emptyKanban = (): Kanban => ({ columns: [], cards: {} });
-
-/** Convenience for callers that want a literal rather than a call. */
-export const DEFAULT_KANBAN: Kanban = emptyKanban();
+export const legacyKanbanArchiveExportSchema = z.object({
+  formatVersion: z.literal(1),
+  archive: legacyKanbanArchiveSchema,
+});
+export type LegacyKanbanArchiveSummary = Readonly<
+  z.infer<typeof legacyKanbanArchiveSummarySchema>
+>;
+export type LegacyNodeLabelArchive = Readonly<
+  z.infer<typeof legacyNodeLabelArchiveSchema>
+>;
+export type LegacyKanbanArchive = Readonly<
+  z.infer<typeof legacyKanbanArchiveSchema>
+>;
 
 /**
  * Whiteboard snapshot cap — tldraw plan §6.1. Images never live inside the
@@ -297,8 +308,6 @@ export const boardSchema = z.object({
   name: z.string().min(1).max(120),
   sortOrder: z.number().int().default(0),
   viewport: viewportSchema.default(DEFAULT_VIEWPORT),
-  /** Defaulted for the same reason as `labels`/`note` — see `canvasNodeSchema`. */
-  kanban: kanbanSchema.default(emptyKanban),
   /**
    * Opaque tldraw store snapshot (JSON string) holding the whiteboard-native
    * records only — tldraw plan §6.1. Empty string = no whiteboard content.
@@ -454,9 +463,6 @@ export type BrowserNodeData = z.infer<typeof browserNodeDataSchema>;
 export type CanvasNode = z.infer<typeof canvasNodeSchema>;
 export type CanvasEdge = z.infer<typeof canvasEdgeSchema>;
 export type Viewport = z.infer<typeof viewportSchema>;
-export type KanbanColumn = z.infer<typeof kanbanColumnSchema>;
-export type KanbanCard = z.infer<typeof kanbanCardSchema>;
-export type Kanban = z.infer<typeof kanbanSchema>;
 export type Board = z.infer<typeof boardSchema>;
 export type BoardSummary = z.infer<typeof boardSummarySchema>;
 export type BoardDocument = z.infer<typeof boardDocumentSchema>;

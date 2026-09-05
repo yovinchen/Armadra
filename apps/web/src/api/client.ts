@@ -37,6 +37,9 @@ import {
   gitRevertResponseSchema,
   gitStageResponseSchema,
   gitStatusSchema,
+  legacyKanbanArchivePageSchema,
+  legacyKanbanArchiveSchema,
+  legacyKanbanArchiveExportSchema,
   gitHunkDiffSchema,
   gitHunkMutationSchema,
   gitHunkResultSchema,
@@ -383,8 +386,6 @@ export const runtimeApi = {
             nodes: document.nodes,
             edges: document.edges,
             viewport: document.board.viewport,
-            // 看板数据（§17）：和节点、连线一样跟着这次 PUT 落库。
-            kanban: document.board.kanban,
             // 白板快照（tldraw 计划 §6.1）：同一次 PUT 带走，Runtime 原样存。
             whiteboard: document.board.whiteboard,
           }),
@@ -882,6 +883,12 @@ export const runtimeApi = {
   /** 把 `canvas.db` 原样复制到同目录的 `…backup-manual-<时间戳>`。 */
   backupData: () =>
     request("/api/data/backup", dataBackupSchema, { method: "POST" }),
+  legacyKanbanArchives: (cursor?:string,signal?:AbortSignal) =>
+    request(`/api/data/legacy-kanban-archives?limit=50${cursor !== undefined ? `&cursor=${query(cursor)}` : ""}`,legacyKanbanArchivePageSchema,{signal}),
+  legacyKanbanArchive: (canvasId:string,signal?:AbortSignal) =>
+    request(`/api/data/legacy-kanban-archives/${query(canvasId)}`,legacyKanbanArchiveSchema,{signal}),
+  exportLegacyKanbanArchive: (canvasId:string) =>
+    request(`/api/data/legacy-kanban-archives/${query(canvasId)}/export`,legacyKanbanArchiveExportSchema),
 };
 
 /* ------------------------------- WebSocket URL ---------------------------- */

@@ -308,6 +308,9 @@ pub fn router_with_state(state: AppState) -> Router {
         // and a one-click copy of the database next to itself.
         .route("/api/data/info", get(api::data_info))
         .route("/api/data/backup", post(api::data_backup))
+        .route("/api/data/legacy-kanban-archives", get(api::legacy_kanban_archives))
+        .route("/api/data/legacy-kanban-archives/{canvas_id}", get(api::legacy_kanban_archive))
+        .route("/api/data/legacy-kanban-archives/{canvas_id}/export", get(api::export_legacy_kanban_archive))
         // Cached snapshot; the fetches happen on the runtime's own schedule so
         // that polling clients never trigger an upstream request (plan §19).
         .route("/api/usage", get(api::get_usage))

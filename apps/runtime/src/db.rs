@@ -8,8 +8,8 @@ use crate::{
     model::{
         AgentApproval, AgentDelivery, AgentStatus, Board, BoardBrief, BoardDocument, CanvasEdge,
         CanvasNode, ContextLink, ContextLinkDocument, DEFAULT_BOARD_NAME, DEFAULT_WORKSPACE_COLOR,
-        HookInstall, Kanban, Position, SessionSummary, Size, Viewport, Workspace,
-        WorkspacePermissions, WorkspaceSummary,
+        HookInstall, Position, SessionSummary, Size, Viewport, Workspace, WorkspacePermissions,
+        WorkspaceSummary,
     },
 };
 
@@ -19,6 +19,82 @@ use crate::{
 pub const NODE_TYPES: &[&str] = &[
     "terminal", "sticky", "group", "editor", "diff", "files", "browser",
 ];
+
+fn legacy_archive_summary(
+    row: &sqlx::sqlite::SqliteRow,
+) -> AppResult<crate::model::LegacyKanbanArchiveSummary> {
+    Ok(crate::model::LegacyKanbanArchiveSummary {
+        canvas_id: row.try_get("canvas_id")?,
+        workspace_id: row.try_get("workspace_id")?,
+        workspace_name: row.try_get("workspace_name")?,
+        canvas_name: row.try_get("canvas_name")?,
+        archived_at: row.try_get("archived_at")?,
+        kanban_bytes: row
+            .try_get::<i64, _>("kanban_bytes")?
+            .try_into()
+            .map_err(|_| AppError::Internal("Invalid archive length".into()))?,
+        label_count: row
+            .try_get::<i64, _>("label_count")?
+            .try_into()
+            .map_err(|_| AppError::Internal("Invalid archive count".into()))?,
+    })
+}
+
+/// Global local-data management; callers must not infer this authority from a
+/// live project's read permission. Deleted projects retain their snapshots.
+pub async fn list_legacy_kanban_archives(
+    pool: &SqlitePool,
+    cursor: Option<&str>,
+    limit: u32,
+) -> AppResult<crate::model::LegacyKanbanArchivePage> {
+    if limit == 0 || limit > 200 {
+        return Err(AppError::BadRequest(
+            "Archive page size must be between 1 and 200".into(),
+        ));
+    }
+    let rows=sqlx::query("SELECT a.canvas_id,a.workspace_id,a.workspace_name,a.canvas_name,a.archived_at, \
+        length(CAST(a.kanban_json AS BLOB)) AS kanban_bytes, \
+        (SELECT count(*) FROM legacy_node_label_archives l WHERE l.canvas_id=a.canvas_id) AS label_count \
+        FROM legacy_kanban_archives a WHERE (? IS NULL OR a.canvas_id > ?) ORDER BY a.canvas_id LIMIT ?")
+        .bind(cursor).bind(cursor).bind(i64::from(limit)+1).fetch_all(pool).await?;
+    let more = rows.len() > limit as usize;
+    let archives = rows
+        .iter()
+        .take(limit as usize)
+        .map(legacy_archive_summary)
+        .collect::<AppResult<Vec<_>>>()?;
+    let next_cursor = if more {
+        archives.last().map(|record| record.canvas_id.clone())
+    } else {
+        None
+    };
+    Ok(crate::model::LegacyKanbanArchivePage {
+        archives,
+        next_cursor,
+    })
+}
+
+pub async fn get_legacy_kanban_archive(
+    pool: &SqlitePool,
+    canvas_id: &str,
+) -> AppResult<crate::model::LegacyKanbanArchive> {
+    use sha2::{Digest, Sha256};
+    let row=sqlx::query("SELECT a.*, length(CAST(a.kanban_json AS BLOB)) AS kanban_bytes, \
+        (SELECT count(*) FROM legacy_node_label_archives l WHERE l.canvas_id=a.canvas_id) AS label_count \
+        FROM legacy_kanban_archives a WHERE a.canvas_id=?")
+        .bind(canvas_id).fetch_optional(pool).await?.ok_or_else(||AppError::NotFound("Historical archive not found".into()))?;
+    let raw: String = row.try_get("kanban_json")?;
+    let labels=sqlx::query_as::<_,crate::model::LegacyNodeLabelArchive>("SELECT node_id,canvas_id,workspace_id,node_title,node_type,labels_json,note,node_created_at,node_updated_at,archived_at FROM legacy_node_label_archives WHERE canvas_id=? ORDER BY node_id")
+        .bind(canvas_id).fetch_all(pool).await?;
+    Ok(crate::model::LegacyKanbanArchive {
+        summary: legacy_archive_summary(&row)?,
+        kanban_sha256: format!("{:x}", Sha256::digest(raw.as_bytes())),
+        kanban_json: raw,
+        canvas_created_at: row.try_get("canvas_created_at")?,
+        canvas_updated_at: row.try_get("canvas_updated_at")?,
+        labels,
+    })
+}
 
 pub const EDGE_KINDS: &[&str] = &["link"];
 pub const AGENT_STATES: &[&str] = &["working", "waiting", "blocked", "done"];
@@ -32,13 +108,10 @@ const MAX_STICKY_CONTENT: usize = 20_000;
 /// through the asset endpoint rather than inside the snapshot, so this only has
 /// to hold ink, text and shape records.
 pub const MAX_WHITEBOARD_BYTES: usize = 8 * 1024 * 1024;
-/* Kanban / annotation bounds — plan §17, mirrored in packages/shared. */
+/* Node annotation bounds, mirrored in packages/shared. */
 const MAX_NODE_LABELS: usize = 8;
 const MAX_NODE_LABEL_CHARS: usize = 24;
 const MAX_NODE_NOTE_CHARS: usize = 4_000;
-const MAX_KANBAN_COLUMNS: usize = 24;
-const MAX_KANBAN_COLUMN_ID_CHARS: usize = 64;
-const MAX_KANBAN_COLUMN_TITLE_CHARS: usize = 80;
 pub async fn connect(database_url: &str) -> AppResult<SqlitePool> {
     let migrator = sqlx::migrate!("./migrations");
     // SQLx owns URL parsing, including percent-encoded filenames and all memory
@@ -444,17 +517,12 @@ fn is_hex_color(color: &str) -> bool {
 
 fn board_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Board, sqlx::Error> {
     let viewport_json: String = row.try_get("viewport_json")?;
-    // A board that has never had a kanban carries the literal `'{}'`, and a
-    // board written by a client that garbled the blob carries nonsense; both
-    // read back as an empty kanban rather than failing the whole load.
-    let kanban_json: String = row.try_get("kanban_json")?;
     Ok(Board {
         id: row.try_get("id")?,
         workspace_id: row.try_get("workspace_id")?,
         name: row.try_get("name")?,
         sort_order: row.try_get("sort_order")?,
         viewport: serde_json::from_str(&viewport_json).unwrap_or_default(),
-        kanban: serde_json::from_str(&kanban_json).unwrap_or_default(),
         // Opaque to the runtime (0009): whatever the client stored comes back
         // byte for byte, so there is nothing here to parse or repair.
         whiteboard: row.try_get("whiteboard_json")?,
@@ -466,7 +534,7 @@ fn board_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Board, sqlx::Error> {
 pub async fn list_boards(pool: &SqlitePool, workspace_id: &str) -> AppResult<Vec<Board>> {
     get_workspace(pool, workspace_id).await?;
     let rows = sqlx::query(
-        "SELECT id, workspace_id, name, sort_order, viewport_json, kanban_json, whiteboard_json, \
+        "SELECT id, workspace_id, name, sort_order, viewport_json, whiteboard_json, \
          created_at, updated_at \
          FROM boards WHERE workspace_id = ? ORDER BY sort_order, created_at",
     )
@@ -481,7 +549,7 @@ pub async fn list_boards(pool: &SqlitePool, workspace_id: &str) -> AppResult<Vec
 
 pub async fn get_board(pool: &SqlitePool, workspace_id: &str, board_id: &str) -> AppResult<Board> {
     let row = sqlx::query(
-        "SELECT id, workspace_id, name, sort_order, viewport_json, kanban_json, whiteboard_json, \
+        "SELECT id, workspace_id, name, sort_order, viewport_json, whiteboard_json, \
          created_at, updated_at FROM boards WHERE id = ? AND workspace_id = ?",
     )
     .bind(board_id)
@@ -663,13 +731,7 @@ pub struct SaveBoardRequest<'a> {
     pub nodes: &'a [CanvasNode],
     pub edges: &'a [CanvasEdge],
     pub viewport: Viewport,
-    /// `None` = "I did not touch the kanban", which is what a client that
-    /// predates the kanban view sends. Only `Some` overwrites the column, so an
-    /// old tab saving a node position cannot silently empty the board.
-    pub kanban: Option<&'a Kanban>,
-    /// Same rule as `kanban` (tldraw plan §6.1): `None` keeps the stored
-    /// snapshot, so a client that knows nothing about the whiteboard cannot
-    /// wipe a drawing by saving a node position.
+    /// Omitting the drawing snapshot preserves the stored whiteboard.
     pub whiteboard: Option<&'a str>,
 }
 
@@ -685,14 +747,6 @@ pub async fn save_board(
 
     let viewport_json = serde_json::to_string(&request.viewport)
         .map_err(|error| AppError::BadRequest(error.to_string()))?;
-    let kanban = request
-        .kanban
-        .cloned()
-        .unwrap_or_else(|| board.kanban.clone());
-    validate_kanban(&kanban)?;
-    let kanban = prune_kanban(kanban, request.nodes);
-    let kanban_json =
-        serde_json::to_string(&kanban).map_err(|error| AppError::BadRequest(error.to_string()))?;
     let whiteboard = match request.whiteboard {
         Some(snapshot) => {
             validate_whiteboard(snapshot)?;
@@ -704,12 +758,11 @@ pub async fn save_board(
     let mut transaction = pool.begin().await?;
     let next_updated_at = Utc::now().to_rfc3339();
     let updated = sqlx::query(
-        "UPDATE boards SET updated_at = ?, viewport_json = ?, kanban_json = ?, whiteboard_json = ? \
+        "UPDATE boards SET updated_at = ?, viewport_json = ?, whiteboard_json = ? \
          WHERE id = ? AND updated_at = ?",
     )
     .bind(&next_updated_at)
     .bind(&viewport_json)
-    .bind(&kanban_json)
     .bind(whiteboard)
     .bind(&board.id)
     .bind(request.expected_updated_at)
@@ -1590,13 +1643,6 @@ pub fn validate_document(
     Ok(())
 }
 
-/// Columns are validated, cards are *pruned*.
-///
-/// A column with a blank id is a client bug worth a 400. A card pointing at a
-/// node that this same save deleted is not: the canvas store deletes nodes and
-/// the kanban store owns the cards, and making every later save fail because
-/// the two disagree would be a worse outcome than quietly forgetting a card
-/// that has nothing left to point at.
 /// The snapshot is opaque, so the only thing worth checking is its size: an
 /// unbounded blob would be written straight into the row on every autosave.
 pub fn validate_whiteboard(snapshot: &str) -> AppResult<()> {
@@ -1606,51 +1652,6 @@ pub fn validate_whiteboard(snapshot: &str) -> AppResult<()> {
         ));
     }
     Ok(())
-}
-
-pub fn validate_kanban(kanban: &Kanban) -> AppResult<()> {
-    if kanban.columns.len() > MAX_KANBAN_COLUMNS {
-        return Err(AppError::BadRequest("Too many kanban columns".into()));
-    }
-    let mut ids = std::collections::HashSet::new();
-    for column in &kanban.columns {
-        let valid = !column.id.trim().is_empty()
-            && column.id.chars().count() <= MAX_KANBAN_COLUMN_ID_CHARS
-            && !column.title.trim().is_empty()
-            && column.title.chars().count() <= MAX_KANBAN_COLUMN_TITLE_CHARS
-            && column
-                .color
-                .as_deref()
-                .is_none_or(|color| !color.trim().is_empty() && color.chars().count() <= 32);
-        if !valid || !ids.insert(column.id.as_str()) {
-            return Err(AppError::BadRequest(
-                "Board contains an invalid kanban column".into(),
-            ));
-        }
-    }
-    if kanban.cards.values().any(|card| !card.order.is_finite()) {
-        return Err(AppError::BadRequest(
-            "Board contains an invalid kanban card".into(),
-        ));
-    }
-    Ok(())
-}
-
-/// Drops cards whose node or column is no longer part of the document.
-fn prune_kanban(mut kanban: Kanban, nodes: &[CanvasNode]) -> Kanban {
-    let node_ids = nodes
-        .iter()
-        .map(|node| node.id.as_str())
-        .collect::<std::collections::HashSet<_>>();
-    let column_ids = kanban
-        .columns
-        .iter()
-        .map(|column| column.id.clone())
-        .collect::<std::collections::HashSet<_>>();
-    kanban.cards.retain(|node_id, card| {
-        node_ids.contains(node_id.as_str()) && column_ids.contains(&card.column_id)
-    });
-    kanban
 }
 
 pub fn valid_node_data(node: &CanvasNode) -> bool {
@@ -1779,7 +1780,6 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
-    use crate::model::{KanbanCard, KanbanColumn};
 
     async fn fixture(name: &str) -> (SqlitePool, tempfile::TempDir, Workspace) {
         let directory = tempdir().unwrap();
@@ -2060,7 +2060,7 @@ mod tests {
                 .fetch_one(&upgraded)
                 .await
                 .unwrap(),
-            2
+            3
         );
         assert_eq!(
             sqlx::query_scalar::<_, Vec<u8>>(
@@ -2254,7 +2254,7 @@ mod tests {
                     .fetch_one(&pool)
                     .await
                     .unwrap(),
-                2
+                3
             );
             pool.close().await;
         }
@@ -2368,7 +2368,6 @@ mod tests {
                 nodes: &[],
                 edges: &[],
                 viewport: Viewport::default(),
-                kanban: None,
                 whiteboard: Some(snapshot),
             },
         )
@@ -2400,7 +2399,6 @@ mod tests {
                 nodes: &[sticky_node(&board.id)],
                 edges: &[],
                 viewport: Viewport::default(),
-                kanban: None,
                 whiteboard: None,
             },
         )
@@ -2418,7 +2416,6 @@ mod tests {
                 nodes: &[],
                 edges: &[],
                 viewport: Viewport::default(),
-                kanban: None,
                 whiteboard: Some(""),
             },
         )
@@ -2437,7 +2434,6 @@ mod tests {
                     nodes: &[],
                     edges: &[],
                     viewport: Viewport::default(),
-                    kanban: None,
                     whiteboard: Some(&oversized),
                 },
             )
@@ -2655,7 +2651,6 @@ mod tests {
                     y: -8.0,
                     zoom: 0.75,
                 },
-                kanban: None,
                 whiteboard: None,
             },
         )
@@ -2759,7 +2754,6 @@ mod tests {
                 nodes: &[],
                 edges: &[],
                 viewport: Viewport::default(),
-                kanban: None,
                 whiteboard: None,
             },
         )
@@ -2776,7 +2770,6 @@ mod tests {
                     nodes: &[],
                     edges: &[],
                     viewport: Viewport::default(),
-                    kanban: None,
                     whiteboard: None,
                 },
             )
@@ -2969,41 +2962,12 @@ mod tests {
     /* ------------------------ kanban / labels / note ---------------------- */
 
     #[tokio::test]
-    async fn kanban_labels_and_notes_round_trip_and_default() {
-        let (pool, _directory, workspace) = fixture("phase4").await;
+    async fn labels_and_notes_still_round_trip_after_board_retirement() {
+        let (pool, _directory, workspace) = fixture("annotations").await;
         let board = default_board(&pool, &workspace.id).await;
-        // A fresh board reads back as an empty kanban and its nodes as
-        // unlabelled — that is what the column defaults buy.
-        assert!(board.kanban.columns.is_empty());
-        assert!(board.kanban.cards.is_empty());
-
         let mut node = sticky_node(&board.id);
         node.labels = vec!["ship".into(), "P0".into()];
-        node.note = "遗留：等 Runtime 支持恢复会话".into();
-        let kanban = Kanban {
-            columns: vec![
-                KanbanColumn {
-                    id: "todo".into(),
-                    title: "待办".into(),
-                    color: Some("#32d74b".into()),
-                },
-                KanbanColumn {
-                    id: "doing".into(),
-                    title: "进行中".into(),
-                    color: None,
-                },
-            ],
-            cards: [(
-                node.id.clone(),
-                KanbanCard {
-                    column_id: "doing".into(),
-                    order: 1.5,
-                },
-            )]
-            .into_iter()
-            .collect(),
-        };
-
+        node.note = "保留节点备注".into();
         let saved = save_board(
             &pool,
             &workspace.id,
@@ -3013,100 +2977,23 @@ mod tests {
                 nodes: std::slice::from_ref(&node),
                 edges: &[],
                 viewport: Viewport::default(),
-                kanban: Some(&kanban),
                 whiteboard: None,
             },
         )
         .await
         .unwrap();
         assert_eq!(saved.nodes[0].labels, ["ship", "P0"]);
-        assert_eq!(saved.nodes[0].note, "遗留：等 Runtime 支持恢复会话");
-        assert_eq!(saved.board.kanban.columns.len(), 2);
-        assert_eq!(saved.board.kanban.columns[1].color, None);
-        assert_eq!(saved.board.kanban.cards[&node.id].column_id, "doing");
-        assert_eq!(saved.board.kanban.cards[&node.id].order, 1.5);
-
-        // A save that says nothing about the kanban leaves it alone: an old tab
-        // dragging a node must not empty the board.
-        let untouched = save_board(
-            &pool,
-            &workspace.id,
-            &board.id,
-            SaveBoardRequest {
-                expected_updated_at: &saved.board.updated_at,
-                nodes: std::slice::from_ref(&node),
-                edges: &[],
-                viewport: Viewport::default(),
-                kanban: None,
-                whiteboard: None,
-            },
-        )
-        .await
-        .unwrap();
-        assert_eq!(untouched.board.kanban.columns.len(), 2);
-        assert_eq!(untouched.board.kanban.cards.len(), 1);
-    }
-
-    #[tokio::test]
-    async fn a_card_without_its_node_or_column_is_dropped_not_rejected() {
-        let (pool, _directory, workspace) = fixture("phase4-prune").await;
-        let board = default_board(&pool, &workspace.id).await;
-        let node = sticky_node(&board.id);
-        let kanban = Kanban {
-            columns: vec![KanbanColumn {
-                id: "todo".into(),
-                title: "待办".into(),
-                color: None,
-            }],
-            cards: [
-                (
-                    node.id.clone(),
-                    KanbanCard {
-                        column_id: "todo".into(),
-                        order: 0.0,
-                    },
-                ),
-                // Node deleted by the canvas, card left behind by the kanban.
-                (
-                    Uuid::now_v7().to_string(),
-                    KanbanCard {
-                        column_id: "todo".into(),
-                        order: 1.0,
-                    },
-                ),
-                // Column deleted, card left pointing at it.
-                (
-                    node.id.clone() + "-x",
-                    KanbanCard {
-                        column_id: "gone".into(),
-                        order: 2.0,
-                    },
-                ),
-            ]
-            .into_iter()
-            .collect(),
-        };
-        let saved = save_board(
-            &pool,
-            &workspace.id,
-            &board.id,
-            SaveBoardRequest {
-                expected_updated_at: &board.updated_at,
-                nodes: std::slice::from_ref(&node),
-                edges: &[],
-                viewport: Viewport::default(),
-                kanban: Some(&kanban),
-                whiteboard: None,
-            },
-        )
-        .await
-        .unwrap();
-        assert_eq!(saved.board.kanban.cards.len(), 1);
-        assert!(saved.board.kanban.cards.contains_key(&node.id));
+        assert_eq!(saved.nodes[0].note, "保留节点备注");
+        assert!(
+            serde_json::to_value(saved.board)
+                .unwrap()
+                .get("kanban")
+                .is_none()
+        );
     }
 
     #[test]
-    fn labels_notes_and_columns_are_bounded() {
+    fn labels_and_notes_are_bounded() {
         let board_id = Uuid::now_v7().to_string();
         let mut node = sticky_node(&board_id);
 
@@ -3125,39 +3012,9 @@ mod tests {
 
         node.note = "n".repeat(4_000);
         assert!(validate_document(&board_id, std::slice::from_ref(&node), &[]).is_ok());
-
-        let duplicate = Kanban {
-            columns: vec![
-                KanbanColumn {
-                    id: "todo".into(),
-                    title: "A".into(),
-                    color: None,
-                },
-                KanbanColumn {
-                    id: "todo".into(),
-                    title: "B".into(),
-                    color: None,
-                },
-            ],
-            cards: Default::default(),
-        };
-        assert!(validate_kanban(&duplicate).is_err());
-
-        let blank = Kanban {
-            columns: vec![KanbanColumn {
-                id: " ".into(),
-                title: "A".into(),
-                color: None,
-            }],
-            cards: Default::default(),
-        };
-        assert!(validate_kanban(&blank).is_err());
-
-        assert!(validate_kanban(&Kanban::default()).is_ok());
     }
 
-    /// `'{}'` is the board's kanban default and `'[]'` the node's label
-    /// default; both must decode without anything ever writing them.
+    /// Existing node annotation defaults still decode without extra writes.
     #[tokio::test]
     async fn the_column_defaults_decode_as_empty() {
         let (pool, _directory, workspace) = fixture("phase4-defaults").await;
@@ -3172,7 +3029,6 @@ mod tests {
                 nodes: std::slice::from_ref(&node),
                 edges: &[],
                 viewport: Viewport::default(),
-                kanban: None,
                 whiteboard: None,
             },
         )
@@ -3190,8 +3046,12 @@ mod tests {
             .await
             .unwrap();
         let document = load_board(&pool, &workspace.id, &board.id).await.unwrap();
-        assert!(document.board.kanban.columns.is_empty());
-        assert!(document.board.kanban.cards.is_empty());
+        assert!(
+            serde_json::to_value(&document.board)
+                .unwrap()
+                .get("kanban")
+                .is_none()
+        );
         assert!(document.nodes[0].labels.is_empty());
         assert!(document.nodes[0].note.is_empty());
         // And the whole document still passes the v3 validator.
@@ -3256,5 +3116,201 @@ mod default_node_payload_tests {
                 "{node_type} default rejected"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod legacy_archive_tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+    use std::borrow::Cow;
+
+    const RAW: &str = " {\n \"columns\": [{\"id\":\"old\",\"title\":\"原始列\"}], \"cards\": {\"shape:orphan\":{\"columnId\":\"missing\",\"order\":1.25}}, \"unknown\":true }\n";
+    const LABELS: &str = "[ \"旧标签\", \"needs review\" ]";
+    const NOTE: &str = "原始备注\n  保留空白";
+    const DRAWING: &str = "{ \"records\": [{\"id\":\"shape:ink\",\"type\":\"draw\"}] }";
+
+    async fn before_retirement() -> (SqlitePool, String, String, String) {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        let all = sqlx::migrate!("./migrations");
+        let old = sqlx::migrate::Migrator {
+            migrations: Cow::Owned(
+                all.iter()
+                    .filter(|migration| migration.version <= 2)
+                    .cloned()
+                    .collect(),
+            ),
+            ..sqlx::migrate::Migrator::DEFAULT
+        };
+        old.run(&pool).await.unwrap();
+        let (workspace, canvas, node) = (
+            Uuid::now_v7().to_string(),
+            Uuid::now_v7().to_string(),
+            Uuid::now_v7().to_string(),
+        );
+        sqlx::query("INSERT INTO workspaces(id,name,root_path,created_at,updated_at) VALUES(?,'Original workspace','/archive-fixture','2026-09-05T01:02:03.004+08:00','2026-09-05T01:02:04.005+08:00')").bind(&workspace).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO boards(id,workspace_id,name,kanban_json,whiteboard_json,created_at,updated_at) VALUES(?,?,'Original canvas',?,?,'2026-09-05T01:02:03.004+08:00','2026-09-05T01:02:04.005+08:00')").bind(&canvas).bind(&workspace).bind(RAW).bind(DRAWING).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO nodes(id,board_id,type,x,y,title,labels_json,note,data_json,created_at,updated_at) VALUES(?,?,'sticky',1,2,'Original node',?,?, '{\"kind\":\"sticky\",\"content\":\"content\"}','2026-09-05T01:02:03.004+08:00','2026-09-05T01:02:04.005+08:00')").bind(&node).bind(&canvas).bind(LABELS).bind(NOTE).execute(&pool).await.unwrap();
+        (pool, workspace, canvas, node)
+    }
+
+    #[tokio::test]
+    async fn retirement_preserves_raw_data_and_survives_live_deletion() {
+        let (pool, workspace, canvas, node) = before_retirement().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let archive = get_legacy_kanban_archive(&pool, &canvas).await.unwrap();
+        assert_eq!(archive.kanban_json, RAW);
+        assert_eq!(archive.summary.workspace_name, "Original workspace");
+        assert_eq!(archive.summary.canvas_name, "Original canvas");
+        assert_eq!(archive.canvas_created_at, "2026-09-05T01:02:03.004+08:00");
+        assert_eq!(archive.labels[0].node_id, node);
+        assert_eq!(archive.labels[0].labels_json, LABELS);
+        assert_eq!(archive.labels[0].note, NOTE);
+        assert_eq!(archive.labels[0].archived_at, archive.summary.archived_at);
+        let board = get_board(&pool, &workspace, &canvas).await.unwrap();
+        assert_eq!(board.whiteboard, DRAWING);
+        // Deleting every live node must neither prune task-card references nor
+        // rewrite the old JSON into a newly normalized representation.
+        save_board(
+            &pool,
+            &workspace,
+            &canvas,
+            SaveBoardRequest {
+                expected_updated_at: &board.updated_at,
+                nodes: &[],
+                edges: &[],
+                viewport: Viewport::default(),
+                whiteboard: None,
+            },
+        )
+        .await
+        .unwrap();
+        let raw: String = sqlx::query_scalar("SELECT kanban_json FROM boards WHERE id=?")
+            .bind(&canvas)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(raw, RAW);
+        assert_eq!(
+            get_board(&pool, &workspace, &canvas)
+                .await
+                .unwrap()
+                .whiteboard,
+            DRAWING
+        );
+        sqlx::query("DELETE FROM workspaces WHERE id=?")
+            .bind(&workspace)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let archived = get_legacy_kanban_archive(&pool, &canvas).await.unwrap();
+        assert_eq!(archived.kanban_json, RAW);
+        assert_eq!(archived.labels[0].note, NOTE);
+        assert_eq!(
+            list_legacy_kanban_archives(&pool, None, 50)
+                .await
+                .unwrap()
+                .archives
+                .len(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn old_column_and_archive_rows_are_write_protected() {
+        let (pool, _, canvas, _) = before_retirement().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        assert!(
+            sqlx::query("UPDATE boards SET kanban_json='{}' WHERE id=?")
+                .bind(&canvas)
+                .execute(&pool)
+                .await
+                .is_err()
+        );
+        for query in [
+            "UPDATE legacy_kanban_archives SET canvas_name='changed'",
+            "DELETE FROM legacy_kanban_archives",
+            "INSERT INTO legacy_kanban_archives SELECT * FROM legacy_kanban_archives",
+            "UPDATE legacy_node_label_archives SET note='changed'",
+            "DELETE FROM legacy_node_label_archives",
+            "INSERT INTO legacy_node_label_archives SELECT * FROM legacy_node_label_archives",
+        ] {
+            assert!(
+                sqlx::query(sqlx::AssertSqlSafe(query))
+                    .execute(&pool)
+                    .await
+                    .is_err(),
+                "{query}"
+            );
+        }
+        assert_eq!(
+            get_legacy_kanban_archive(&pool, &canvas)
+                .await
+                .unwrap()
+                .kanban_json,
+            RAW
+        );
+    }
+
+    #[tokio::test]
+    async fn fresh_canvases_have_no_writable_board_state_and_notes_remain_editable() {
+        let (pool, workspace, canvas, _) = before_retirement().await;
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let before = get_legacy_kanban_archive(&pool, &canvas).await.unwrap();
+        let mut document = load_board(&pool, &workspace, &canvas).await.unwrap();
+        document.nodes[0].note = "Updated live note".into();
+        document.nodes[0].labels = vec!["current label".into()];
+        let saved = save_board(
+            &pool,
+            &workspace,
+            &canvas,
+            SaveBoardRequest {
+                expected_updated_at: &document.board.updated_at,
+                nodes: &document.nodes,
+                edges: &document.edges,
+                viewport: document.board.viewport,
+                whiteboard: Some("new drawing"),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(saved.nodes[0].note, "Updated live note");
+        assert_eq!(saved.board.whiteboard, "new drawing");
+        assert_eq!(
+            get_legacy_kanban_archive(&pool, &canvas)
+                .await
+                .unwrap()
+                .labels[0]
+                .note,
+            before.labels[0].note
+        );
+        let fresh = create_board(&pool, &workspace, "Fresh canvas")
+            .await
+            .unwrap();
+        assert!(
+            serde_json::to_value(&fresh)
+                .unwrap()
+                .get("kanban")
+                .is_none()
+        );
+        let inert: String = sqlx::query_scalar("SELECT kanban_json FROM boards WHERE id=?")
+            .bind(&fresh.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(inert, "{}");
+        assert_eq!(
+            list_legacy_kanban_archives(&pool, None, 50)
+                .await
+                .unwrap()
+                .archives
+                .len(),
+            1
+        );
+        assert!(sqlx::query("INSERT INTO boards(id,workspace_id,name,kanban_json,created_at,updated_at) VALUES('old-writer',?,'Old writer',?,'t','t')").bind(&workspace).bind(RAW).execute(&pool).await.is_err());
     }
 }

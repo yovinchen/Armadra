@@ -77,7 +77,6 @@ async fn fixture(name: &str) -> Fixture {
             }],
             edges: &[],
             viewport: crate::model::Viewport::default(),
-            kanban: None,
             whiteboard: None,
         },
     )

@@ -11,7 +11,6 @@ import {
   canvasEdgeSchema,
   canvasNodeSchema,
   diffScopeSchema,
-  kanbanSchema,
   permissionModeSchema,
   sshTargetSchema,
   viewportSchema,
@@ -75,24 +74,30 @@ export const updateBoardRequestSchema = z.object({
   sortOrder: z.number().int().optional(),
 });
 
-export const saveBoardRequestSchema = z.object({
-  expectedUpdatedAt: z.string().datetime({ offset: true }),
-  nodes: z.array(canvasNodeSchema),
-  edges: z.array(canvasEdgeSchema),
-  viewport: viewportSchema,
-  /**
-   * Kanban columns and card placements travel with the document, so moving a
-   * card and moving a node are the same optimistic write (plan §17). Defaulted
-   * so an older client that does not know about the kanban view cannot wipe it
-   * — it simply sends nothing and the runtime keeps what it has.
-   */
-  kanban: kanbanSchema.optional(),
-  /**
-   * Whiteboard snapshot (tldraw plan §6.1). Optional for the same reason as
-   * `kanban`: a client that sends nothing leaves the stored snapshot alone.
-   */
-  whiteboard: z.string().max(MAX_WHITEBOARD_BYTES).optional(),
-});
+export const saveBoardRequestSchema = z.preprocess(
+  (value, context) => {
+    if (
+      value !== null &&
+      typeof value === "object" &&
+      Object.prototype.hasOwnProperty.call(value, "kanban")
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Task-board writes are retired; use read-only archives",
+      });
+      return z.NEVER;
+    }
+    return value;
+  },
+  z.object({
+    expectedUpdatedAt: z.string().datetime({ offset: true }),
+    nodes: z.array(canvasNodeSchema),
+    edges: z.array(canvasEdgeSchema),
+    viewport: viewportSchema,
+    /** Omitting the drawing snapshot preserves the stored whiteboard. */
+    whiteboard: z.string().max(MAX_WHITEBOARD_BYTES).optional(),
+  }),
+);
 
 export const saveBoardResponseSchema = boardDocumentSchema;
 
