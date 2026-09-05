@@ -1,7 +1,7 @@
 /**
  * 侧栏搜索的纯逻辑（§27）。
  *
- * 搜索面板的范围是**当前工作空间的所有看板**：看板名、节点标题、便签正文。
+ * 搜索面板的范围是**当前工作空间的所有画布**：画布名、节点标题、便签正文。
  * 这里只做「文本 → 命中列表」，取数据（每块板的文档）与渲染都在
  * `SidebarSearch.tsx`，好让排序与摘取规则能被单测按数据覆盖。
  *
@@ -21,7 +21,7 @@ export type SearchHitKind = "board" | "node";
 
 export interface SearchHit {
   kind: SearchHitKind;
-  /** 看板命中给看板 id，节点命中给节点 id。 */
+  /** 画布命中给画布 id，节点命中给节点 id。 */
   id: string;
   boardId: string;
   boardName: string;
@@ -64,9 +64,9 @@ function includes(haystack: string, needle: string): boolean {
 }
 
 /**
- * 看板 + 节点 → 命中列表。
+ * 画布 + 节点 → 命中列表。
  *
- * 顺序即优先级：看板名 → 节点标题 → 便签正文。空查询时不筛，直接按同样的
+ * 顺序即优先级：画布名 → 节点标题 → 便签正文。空查询时不筛，直接按同样的
  * 顺序列出来（面板刚打开时不该是一片空白）。
  */
 export function searchBoards(

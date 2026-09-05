@@ -43,7 +43,7 @@ const workspace: Workspace = {
 
 const BOARD_ID = "019ff7d1-0d12-7421-833d-2c5e8d64ed30";
 
-/** selectNodes 只接受当前看板里存在的节点，所以测试要给一份最小文档。 */
+/** selectNodes 只接受当前画布里存在的节点，所以测试要给一份最小文档。 */
 function document(nodeIds: string[]): BoardDocument {
   return {
     board: {
@@ -199,7 +199,7 @@ describe("SessionsSection", () => {
     expect(await screen.findByText("接口重构")).toBeTruthy();
   });
 
-  it("只列当前看板上的会话", async () => {
+  it("只列当前画布上的会话", async () => {
     sessions.mockResolvedValue([
       session({ nodeId: "n1", title: "本板的" }),
       session({ nodeId: "n2", title: "别的板的", boardId: "other-board" }),

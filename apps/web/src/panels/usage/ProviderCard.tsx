@@ -11,7 +11,7 @@ import {
 } from "../../lib/usage";
 
 /**
- * 看板里的 Provider 卡（§4.2）。
+ * 用量看板里的 Provider 卡（§4.2）。
  *
  * 和用量球共用 `lib/usage` 的判定，但多三件事：pace（按时间推算的预期
  * 用量）、credits 余额、以及数字是否来自本地 CLI 回退。

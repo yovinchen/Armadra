@@ -14,7 +14,7 @@ import {
 import { useWorkspacesQuery } from "./workspaces-query";
 
 /**
- * 加载链：工作空间 → 看板列表 → 看板文档，外加“记住上次打开的东西”。
+ * 加载链：工作空间 → 画布列表 → 画布文档，外加“记住上次打开的东西”。
  *
  * 保存不在这里：`save/autosave.ts`（归属 canvas）订阅 store 自己做防抖，
  * 壳只负责在切板/关窗前 `flushBoardSaves()`，以及把通知条上的“重试”
@@ -38,7 +38,7 @@ export function useBoardSync() {
     // 这样重新打开开关时上次的位置还在（§24.1 通用页）。
     const restore = usePreferencesStore.getState().restoreLastWorkspace;
     // URL 参数优先（`?workspace=<id>&board=<id>`）：深链、多窗口与排查问题时
-    // 不必先改 localStorage 才能落到指定看板。
+    // 不必先改 localStorage 才能落到指定画布。
     const params = new URLSearchParams(window.location.search);
     bootWorkspaceRef.current =
       params.get("workspace") ?? (restore ? lastWorkspaceId() : null);
@@ -97,7 +97,7 @@ export function useBoardSync() {
     });
   }, [openWorkspaceTab, setWorkspace, workspace, workspaces.data]);
 
-  /* --------------------------- 看板列表与选中项 -------------------------- */
+  /* --------------------------- 画布列表与选中项 -------------------------- */
   const restoredBoardForRef = useRef<string | null>(null);
   useEffect(() => {
     if (!workspace || !boards.data) return;

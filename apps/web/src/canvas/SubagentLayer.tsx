@@ -37,7 +37,7 @@ export interface SubagentPlacement {
 }
 
 /**
- * 卡片 → 页面坐标。父节点不在画布上（刚被删掉、或在别的看板）时直接跳过：
+ * 卡片 → 页面坐标。父节点不在画布上（刚被删掉、或在别的画布）时直接跳过：
  * 一张飘在原点的卡片比没有卡片更糟。
  */
 export function buildSubagentPlacements(

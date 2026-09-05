@@ -20,7 +20,7 @@ import {
 } from "@/ui/select";
 import { Switch } from "@/ui/switch";
 
-/** 逐个 provider 的开关顺序，和看板里的卡片顺序一致。 */
+/** 逐个 provider 的开关顺序，和画布里的卡片顺序一致。 */
 const PROVIDERS: UsageProviderId[] = ["claude", "codex", "gemini", "copilot"];
 
 /**

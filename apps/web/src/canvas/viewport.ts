@@ -1,12 +1,12 @@
 import { DEFAULT_VIEWPORT, type Viewport } from "@armadra/shared";
 
 /**
- * 打开看板时的视口（§20「打开比例」）。
+ * 打开画布时的视口（§20「打开比例」）。
  *
  * 结论先行：**首次打开不缩放**。以前这里是 `fitView`，节点一多就落到 70%
  * 左右，浏览器节点里的网页被整体缩小、字号发虚——那是缩放画布，不是缩放
  * 网页。所以现在固定 `zoom: 1`，只把画布平移到内容包围盒的左上角，四周留
- * 40px 边距；空看板回到 `{0,0,1}`。
+ * 40px 边距；空画布回到 `{0,0,1}`。
  */
 
 /** 包围盒只需要位置和尺寸；用最小结构，测试不必造整个 `CanvasNode`。 */
@@ -38,7 +38,7 @@ export function isDefaultViewport(
  * 100% 缩放下把内容左上角对齐到 `margin`。
  *
  * 只看顶层节点：组员的 `position` 是相对父组框的，混进来会把包围盒拉歪。
- * 没有可用节点（空看板 / 全是组员）时返回默认视口。
+ * 没有可用节点（空画布 / 全是组员）时返回默认视口。
  */
 export function initialViewportFor(
   nodes: readonly ViewportBox[],

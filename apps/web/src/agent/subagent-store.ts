@@ -13,7 +13,7 @@ import { onWorkspaceEvent } from "../api/events";
  *
  *  - **不入库、不进撤销**：卡片只活在这个 store 里。Runtime 的 `hook/ingest`
  *    对 `subagent-*` 事件明确「published, never stored」，前端也就没有理由
- *    把它写进看板文档。刷新页面卡片消失是正确行为。
+ *    把它写进画布文档。刷新页面卡片消失是正确行为。
  *  - **父节点开新回合才清**：`agent.subagent` 只负责加卡片；清理挂在父节点
  *    自己的状态迁移上。Runtime 的 `AgentStatus` 没有 `newTurn` 字段，所以
  *    这里用「父节点从非 working 变成 working」当作新回合的边（父节点自己

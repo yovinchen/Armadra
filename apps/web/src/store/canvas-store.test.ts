@@ -129,7 +129,7 @@ beforeEach(() => {
   });
 });
 
-describe("工作空间与看板", () => {
+describe("工作空间与画布", () => {
   it("换工作空间会清掉旧文档", () => {
     load([makeNode("sticky")]);
     state().setWorkspace({ ...workspace, id: uuid(), name: "Two" });
@@ -143,7 +143,7 @@ describe("工作空间与看板", () => {
     expect(state().document?.nodes).toHaveLength(1);
   });
 
-  it("看板按 sortOrder 排序，当前看板还在就不重置", () => {
+  it("画布按 sortOrder 排序，当前画布还在就不重置", () => {
     load();
     state().setBoards([
       { id: "b", name: "B", sortOrder: 2 },
@@ -153,7 +153,7 @@ describe("工作空间与看板", () => {
     expect(state().document).not.toBeNull();
   });
 
-  it("切换看板会清空文档", () => {
+  it("切换画布会清空文档", () => {
     load([makeNode("sticky")]);
     state().selectBoard("other");
     expect(state().document).toBeNull();

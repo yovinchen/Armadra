@@ -75,7 +75,7 @@ describe("retired shapes", () => {
     off();
   });
 
-  it("远端/加载来的记录不碰（老看板里的便签照样读得出来）", async () => {
+  it("远端/加载来的记录不碰（老画布里的便签照样读得出来）", async () => {
     const { editor, shapes, deleted } = fakeEditor();
     const off = registerRetiredShapes(editor as never);
 

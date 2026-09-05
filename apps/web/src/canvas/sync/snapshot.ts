@@ -173,7 +173,7 @@ export function serializeWhiteboard(snapshot: TLStoreSnapshot): string {
   return JSON.stringify(stripDocumentRecords(snapshot));
 }
 
-/** 解析失败一律返回 null：一份坏快照不该让整个看板打不开。 */
+/** 解析失败一律返回 null：一份坏快照不该让整个画布打不开。 */
 export function parseWhiteboard(json: string): TLStoreSnapshot | null {
   if (!json.trim()) return null;
   try {

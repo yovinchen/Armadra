@@ -264,7 +264,7 @@ export function TldrawWorkspace() {
   }, []);
 
   /**
-   * 首次打开一个看板：从没存过视口（或还是默认的 `{0,0,1}`）就按 100%
+   * 首次打开一个画布：从没存过视口（或还是默认的 `{0,0,1}`）就按 100%
    * 对齐左上角；存过的视口原样恢复，用户上次停在哪就还在哪。
    */
   const onBoardLoaded = React.useCallback(
@@ -336,7 +336,7 @@ export function TldrawWorkspace() {
     }
   }, [editor, locked]);
 
-  // 画布卸载时把锁一起解开，换看板不会带着上一块的锁定状态。
+  // 画布卸载时把锁一起解开，换画布不会带着上一块的锁定状态。
   React.useEffect(() => () => setCanvasLocked(false), []);
 
   /* ------------------------------ 删除 ----------------------------------- */

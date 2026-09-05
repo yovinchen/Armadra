@@ -41,7 +41,7 @@ import {
 /** 描边与视口框的粗细（CSS 像素，画的时候按缩放换算回页面单位）。 */
 const VIEWPORT_STROKE = 1;
 
-/** 空看板时缩略图里留出的页面区域，免得除以 0。 */
+/** 空画布时缩略图里留出的页面区域，免得除以 0。 */
 const EMPTY_VIEW: MinimapRect = { x: 0, y: 0, width: 1000, height: 750 };
 
 function readPalette(element: HTMLElement): MinimapPalette {

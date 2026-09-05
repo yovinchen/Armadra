@@ -234,7 +234,7 @@ describe("serializeWhiteboard / parseWhiteboard", () => {
     expect(parseWhiteboard(json)).toEqual(stripDocumentRecords(snapshot()));
   });
 
-  it("空串、坏 JSON、缺字段一律返回 null，而不是让看板打不开", () => {
+  it("空串、坏 JSON、缺字段一律返回 null，而不是让画布打不开", () => {
     expect(parseWhiteboard("")).toBeNull();
     expect(parseWhiteboard("   ")).toBeNull();
     expect(parseWhiteboard("{oops")).toBeNull();

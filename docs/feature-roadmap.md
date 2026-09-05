@@ -39,22 +39,22 @@ Armadra 是 local-first 的 AI Coding 画布：把真实 CLI Agent（Claude Code
 
 ### 3.2 Agent 终端与协作
 
-| 功能                                                                               | 状态 |
-| ---------------------------------------------------------------------------------- | ---- |
-| 7 种 CLI 启动、resume、权限模式、模型选择；保留各 CLI 账户与配置                   | ✅   |
-| Hook 安装（Claude/Codex/Gemini/OpenCode）→ 归一化 → `working/waiting/blocked/done` | ✅   |
-| 权限请求在节点头部直答                                                             | ✅   |
-| `armadra.mailbox.v1`：`post/inbox/ack` 拉取消息箱；`send/reply/notify` 主动投递    | ✅   |
-| 按连线读取转录 / 摘要 / 终端画面                                                   | ✅   |
-| 对话交接：prepare → 预览 → accept/cancel → 后台投递，状态可追溯（A04）             | 🔶   |
-| Claude 单会话上下文占用 Badge；`disabledCapabilities` 能力继承（A03）              | 🔶   |
-| 其他 Provider 上下文来源、tokenizer 估算器、80%/95% 阈值设置（A03）                | ⬜   |
-| 交接历史面板、真实 Agent 端 `handoff-read` 端到端、跨执行主机拒绝（A04）           | ⬜   |
-| 自动命名：占位标题才应用、人工改名锁定、可预览（A05）                              | ⬜   |
-| 原生 Loop/Cron 观察卡片 AgentActivityNode（A01）                                   | ⬜   |
-| 子代理卡片                                                                         | ✅   |
-| 会话索引（Claude/Codex/Gemini 历史会话检索）                                       | ✅   |
-| 多账号与节点账号绑定 `credentialRef`/`AccountRef`（S02，预留）                     | ⬜   |
+| 功能                                                                                                                    | 状态 |
+| ----------------------------------------------------------------------------------------------------------------------- | ---- |
+| 7 种 CLI 启动、resume、权限模式、模型选择；保留各 CLI 账户与配置                                                        | ✅   |
+| Hook 安装（Claude/Codex/Gemini/OpenCode）→ 归一化 → `working/waiting/blocked/done`                                      | ✅   |
+| 权限请求在节点头部直答                                                                                                  | ✅   |
+| `armadra.mailbox.v1`：`post/inbox/ack` 拉取消息箱；`send/reply/notify` 主动投递                                         | ✅   |
+| 按连线读取转录 / 摘要 / 终端画面                                                                                        | ✅   |
+| 对话交接：prepare → 预览 → accept/cancel → 后台投递，状态可追溯（A04）                                                  | ✅   |
+| Claude 单会话上下文占用 Badge；`disabledCapabilities` 能力继承（A03）                                                   | 🔶   |
+| 其他 Provider 上下文来源、tokenizer 估算器、80%/95% 阈值设置（A03）                                                     | ⬜   |
+| 交接历史面板（按工作空间、含投递尝试次数）、真实 Agent 端 `handoff-read` 端到端（A04）；跨执行主机仍只在 prepare 处拒绝 | 🔶   |
+| 自动命名：占位标题才应用、人工改名锁定、可预览（A05）                                                                   | ⬜   |
+| 原生 Loop/Cron 观察卡片 AgentActivityNode（A01）                                                                        | ✅   |
+| 子代理卡片                                                                                                              | ✅   |
+| 会话索引（Claude/Codex/Gemini 历史会话检索）                                                                            | ✅   |
+| 多账号与节点账号绑定 `credentialRef`/`AccountRef`（S02，预留）                                                          | ⬜   |
 
 ### 3.3 终端与主机生命周期
 
@@ -117,9 +117,9 @@ T01 是 🔶：`crates/session-host` 与 Worker 侧后端已交付并通过交�
 | Go 持久调度内核：Cron / Interval / Once / LoopAfterCompletion，misfire、并发、重试策略 | ✅   |
 | Rust 非交互命令 Worker；零客户端到点执行；Worker 被杀后按 generation 重建              | ✅   |
 | HTTPS Define / Activate / Pause / RunNow / List（automation scope）                    | ✅   |
-| 画布 AutomationNode、自动化面板、运行历史、计划级「需处理」状态（A01/A02）             | ⬜   |
-| 目标为 Agent 终端时的投递门（idle-success、TTL）与冻结 LaunchSpec 冷启动（A02）        | ⬜   |
-| 原生任务「转为平台计划」的确认流程（A01）                                              | ⬜   |
+| 画布 AutomationNode、自动化面板、运行历史、计划级「需处理」状态（A01/A02）             | ✅   |
+| 目标为 Agent 终端时的投递门（idle-success、TTL）与冻结 LaunchSpec 冷启动（A02）        | ✅   |
+| 原生任务「转为平台计划」的确认流程（A01）：预填向导 → 人确认 → 草稿，不自动激活        | ✅   |
 
 ### 3.8 GitHub
 
@@ -130,7 +130,7 @@ T01 是 🔶：`crates/session-host` 与 Worker 侧后端已交付并通过交�
 | `ExternalReference` 关联 Issue/PR 与会话、分支、worktree                                   | ✅   |
 | GitHub API 凭据：`gh` 登录 / 粘贴 token（钥匙串，其他平台 0600 降级）、Enterprise API base | ✅   |
 | Projects v2 状态字段映射：单页最多 500 条目，超出部分显示未映射                            | 🔶   |
-| GitHub 发布与应用更新（S03，预留）                                                         | ⬜   |
+| GitHub 发布与应用更新（S03）：读 Releases 判断新版本与签名存在性；不下载、不安装           | 🔶   |
 
 ### 3.9 额度、用量与成本看板（本轮新增，详见 §4.2）
 
@@ -169,13 +169,13 @@ T01 是 🔶：`crates/session-host` 与 Worker 侧后端已交付并通过交�
 
 ### 3.12 桌面壳、服务集成与项目结构（本轮新增，详见 §4.4、§4.5）
 
-| 功能                                                                 | 状态 |
-| -------------------------------------------------------------------- | ---- |
-| Runtime / Host sidecar 构建与跨平台暂存                              | ✅   |
-| **服务内嵌：默认不占用固定系统端口**，Unix socket / 命名管道优先     | 🔶   |
-| **项目结构整理**：Desktop / Web / Go 中转服务 / Rust Worker 边界清晰 | ⬜   |
-| 自动更新契约、签名与兼容检查（S03）                                  | ⬜   |
-| 服务器模式：固定账号运行 Host/Worker，安装 / 状态 / 日志 / 升级命令  | ⬜   |
+| 功能                                                                                                                                           | 状态 |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| Runtime / Host sidecar 构建与跨平台暂存                                                                                                        | ✅   |
+| **服务内嵌：默认不占用固定系统端口**，Unix socket / 命名管道优先                                                                               | 🔶   |
+| **项目结构整理**：Desktop / Web / Go 中转服务 / Rust Worker 边界清晰                                                                           | ⬜   |
+| 自动更新契约、签名与兼容检查（S03）：Host 检查与桌面壳「未配置」状态已实现，下载与安装仍预留                                                   | 🔶   |
+| 服务器模式：`install` 生成 launchd / systemd / sc.exe 定义（不注册不启动）、`status` 报告定义与漂移、`logs` 尾读、`upgrade` 校验协议后原地替换 | ✅   |
 
 Runtime 的 `--listen unix:/pipe:/tcp:`、`endpoints.json` 发布、Host 的 `--listen none`、
 桌面 `armadra://` 转发与 CSP 收紧已实现（启动与变量见[开发指南](./development.md)）。
@@ -302,7 +302,7 @@ docs/            现行文档；history/ 与 research/ 只作追溯
 - `apps/runtime` 随 H01 写入所有权切换后改名为 Worker，HTTP 业务路由逐步移入 Host；改名前不做无意义的目录移动。
 - 清理 `output/`（Playwright 产物）、`design/logo-concepts` 之外的临时资源；`target/`、`node_modules/` 保持忽略。
 - `.gitignore` 此前因用户全局 `~/.gitignore_global` 忽略 `.gitignore` 而从未被跟踪；本轮已 `git add -f .gitignore` 纳入索引，下次提交生效。
-- 代码注释与侧栏中残留的「看板」旧称改为 Canvas（C01 尾项）。
+- 代码注释、侧栏与菜单中残留的「看板」旧称已改为「画布」（C01 尾项，i18n 中英同步）。仍写作「看板」的两处是别的东西：用量看板是 dashboard，`legacyArchive.*` 说的是已退役的任务看板本身。SQLite 表名与已发布迁移未动。
 - 顶层脚本统一到 `armadra.sh` 与 `scripts/`，每个 app 的 README 只描述自身。
 
 ## 5. 优先级与阶段映射

@@ -145,13 +145,13 @@ beforeEach(() => {
 });
 
 describe("LeftSidebar", () => {
-  it("自上而下是标题栏、Armadra、新建看板、项目、设置", () => {
+  it("自上而下是标题栏、Armadra、新建画布、项目、设置", () => {
     renderSidebar();
 
     // 顶行写的是系统名；工作空间名只出现在「项目」组里那一行
     expect(screen.getByText("Armadra")).toBeTruthy();
     expect(screen.getAllByText("repo")).toHaveLength(1);
-    expect(screen.getByText("新建看板")).toBeTruthy();
+    expect(screen.getByText("新建画布")).toBeTruthy();
     expect(screen.getByText("项目")).toBeTruthy();
     expect(screen.getByLabelText("添加项目")).toBeTruthy();
     expect(screen.getByText("设置")).toBeTruthy();

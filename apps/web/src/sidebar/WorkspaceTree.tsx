@@ -1,12 +1,12 @@
 /**
- * 侧栏主体（§26 →§28）：新建看板 → 置顶 → 项目。
+ * 侧栏主体（§26 →§28）：新建画布 → 置顶 → 项目。
  *
- * 「项目」= 已打开的工作空间，一行一个，展开后缩进列出它的看板；点看板 =
- * 需要时先切工作空间，再切板。「置顶」是跨工作空间的一组看板，偏好里存 id。
- * 当前工作空间的看板取 store（`setBoards` 已按 `sortOrder` 排好），其余
+ * 「项目」= 已打开的工作空间，一行一个，展开后缩进列出它的画布；点画布 =
+ * 需要时先切工作空间，再切板。「置顶」是跨工作空间的一组画布，偏好里存 id。
+ * 当前工作空间的画布取 store（`setBoards` 已按 `sortOrder` 排好），其余
  * 工作空间取列表接口里的 `boards[]`。
  *
- * 双击项目名或看板名可原位编辑。Agent 不在
+ * 双击项目名或画布名可原位编辑。Agent 不在
  * 树里——状态只在铃铛展开的 `AgentStatusPanel` 里看，树只负责「去哪块板」。
  */
 import {
@@ -91,7 +91,7 @@ export function WorkspaceTree() {
   const openWorkspace = useOpenWorkspace();
   const folderImport = useProjectFolderImport();
 
-  /** 跨工作空间切板：先换工作空间，等它的看板列表到位再选中目标。 */
+  /** 跨工作空间切板：先换工作空间，等它的画布列表到位再选中目标。 */
   const [pending, setPending] = useState<{
     workspaceId: string;
     boardId: string;
@@ -331,10 +331,10 @@ function AddProjectButton({
   );
 }
 
-/* ------------------------------- 新建看板 -------------------------------- */
+/* ------------------------------- 新建画布 -------------------------------- */
 
 /**
- * 「新建看板」（Codex 的「新对话」那一行）：在当前工作空间建一块板并切过去。
+ * 「新建画布」（Codex 的「新对话」那一行）：在当前工作空间建一块板并切过去。
  */
 function NewBoardRow() {
   const t = useT();
@@ -455,7 +455,7 @@ function WorkspaceRow({
   const deleteBoard = (id: string) => {
     remove.mutate(id, {
       onSuccess: () => {
-        // 删的是当前看板就先切到别的一块，免得画布对着一个不存在的 id
+        // 删的是当前画布就先切到别的一块，免得画布对着一个不存在的 id
         if (active && id === boardId) {
           const next = storeBoards.find((board) => board.id !== id);
           selectBoard(next?.id ?? null);

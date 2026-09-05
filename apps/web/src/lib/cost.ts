@@ -1,7 +1,7 @@
 import type { CostTokens, UsageWindow } from "@armadra/shared";
 
 /**
- * 看板里的纯计算（§4.2）。全部可注入 `now`，组件只负责渲染。
+ * 用量看板里的纯计算（§4.2）。全部可注入 `now`，组件只负责渲染。
  */
 
 /** `5h` → 18000，`7d` → 604800。认不出的标签没有时长，返回 `null`。 */

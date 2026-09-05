@@ -101,7 +101,7 @@ describe("dependency gate", () => {
 
 /**
  * 门与计时器都直接读两个 store；测试把它们置成需要的样子而不是去 mock
- * 模块，这样断言的是真实路径。看板文档只需要节点 id 与 `data.agent`。
+ * 模块，这样断言的是真实路径。画布文档只需要节点 id 与 `data.agent`。
  */
 async function setBoard(nodes: CanvasNode[]) {
   const { useCanvasStore } = await import("../store/canvas-store");

@@ -16,7 +16,7 @@ import type { Editor, TLShape, TLShapeId } from "tldraw";
  * 张便签过来是 `putExternalContent({ type: "tldraw" })`，那条路不经过我们
  * 覆盖的任何一个处理器。
  *
- * 反过来，**schema 里不能少了它们**：老看板的快照里可能真的存着一个
+ * 反过来，**schema 里不能少了它们**：老画布的快照里可能真的存着一个
  * `note`，shapeUtil 缺席时 `loadSnapshot` 会整份失败。所以停用只发生在
  * 「创建」这一刻，读旧数据照旧。
  */

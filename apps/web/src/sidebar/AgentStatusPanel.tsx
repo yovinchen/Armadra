@@ -7,7 +7,7 @@
  *
  * 数据是现成的：`GET /sessions` 给会话，`agent/status-store` 给实时状态，
  * `agent/sessions` 已经把两者合流并分好桶。一行 = 品牌色点 + 标题 + 所在
- * 看板 + 状态胶囊 + 相对时间；点一行就切到那块板并把画布居中过去。
+ * 画布 + 状态胶囊 + 相对时间；点一行就切到那块板并把画布居中过去。
  */
 import { useEffect, useMemo } from "react";
 

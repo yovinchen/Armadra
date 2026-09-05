@@ -35,7 +35,7 @@ import {
  *
  *  - **editor → 文档**：`store.listen`（document 作用域）一响就重新派生一份
  *    `nodes` / `edges` 灌回 store。内容没变就什么都不做，所以相机移动、
- *    选中变化不会把看板置脏。
+ *    选中变化不会把画布置脏。
  *  - **文档 → editor**：只有当 `state.document` 不是上一次由这里写出去的
  *    那个对象时（= `setDocument` 换了一整份文档），才把它投影回 editor。
  *    投影走 `mergeRemoteChanges`，不进撤销栈——Agent 开的节点不能被用户
@@ -45,7 +45,7 @@ import {
  * 记「白板记录动过了」，真正的字符串由 `save/autosave.ts` 在保存那一刻取。
  */
 
-/** 上一次投影进 editor 的看板 id；换板要整块重灌。 */
+/** 上一次投影进 editor 的画布 id；换板要整块重灌。 */
 let loadedBoardId: string | null = null;
 
 /**
@@ -54,7 +54,7 @@ let loadedBoardId: string | null = null;
  * 热重载会在组件不卸载的情况下换一个新 editor（`<Tldraw>` 内部重建，
  * `onMount` 再来一次）：新实例是空的，而 `loadedBoardId` 与「已推送」标记
  * 都还是旧的，文档效应就不会再灌一次；这时任何 store 事件都会把
- * 「零个 shape」派生成空文档并保存——2026-09-04 用户的看板就是这么被
+ * 「零个 shape」派生成空文档并保存——2026-09-04 用户的画布就是这么被
  * 存空的。所以派生与投影都要核对 editor 身份，换了实例一律重灌。
  */
 let loadedEditor: Editor | null = null;
@@ -122,7 +122,7 @@ function pull(
    * 热重载 / 换工作空间会重建 editor：新实例一挂上，`use-tldraw-preferences`
    * 就会 `updateDocumentSettings`（`document:document` 是 document 作用域、
    * `source: "user"`），这条事件比 `load()` 先到时，这里会把「零个 shape」
-   * 派生成一份空文档并置脏，自动保存随即把用户的看板存空
+   * 派生成一份空文档并置脏，自动保存随即把用户的画布存空
    * （2026-09-04 link-shape 验证时真的发生过一次）。
    */
   if (loadedBoardId !== boardId || loadedEditor !== editor) return;
@@ -231,7 +231,7 @@ function push(editor: Editor, document: BoardDocument): void {
 }
 
 /**
- * 换看板：灌白板快照（它会重置整个 store）→ 投影节点 → 补上跨两边的 binding。
+ * 换画布：灌白板快照（它会重置整个 store）→ 投影节点 → 补上跨两边的 binding。
  *
  * 第三步是内容链接要的（Phase 4 · §6.3）：白板上的箭头可以一端绑在节点 shape
  * 上，而节点 shape 不在快照里（`nodes` 表才是它的真相）。`loadSnapshot` 那一刻
@@ -265,7 +265,7 @@ function load(editor: Editor, document: BoardDocument): void {
     });
   }
 
-  // 打开看板不该是「可以撤销的一步」。
+  // 打开画布不该是「可以撤销的一步」。
   editor.clearHistory();
 }
 
@@ -285,7 +285,7 @@ export function captureWhiteboard(editor: Editor | null): string | null {
 export interface StoreSyncOptions {
   /** 相机变化时回调（画布负责节流写回 `setViewport`）。 */
   onCameraChange?: (camera: { x: number; y: number; z: number }) => void;
-  /** 看板首次投影完成（画布据此应用初始视口）。 */
+  /** 画布首次投影完成（画布据此应用初始视口）。 */
   onBoardLoaded?: (document: BoardDocument) => void;
 }
 

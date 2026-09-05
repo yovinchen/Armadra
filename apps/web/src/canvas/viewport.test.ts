@@ -7,7 +7,7 @@ import {
 } from "./viewport";
 
 describe("initialViewportFor", () => {
-  it("空看板回到默认视口", () => {
+  it("空画布回到默认视口", () => {
     expect(initialViewportFor([])).toEqual({ x: 0, y: 0, zoom: 1 });
   });
 

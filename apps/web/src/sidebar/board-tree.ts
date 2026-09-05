@@ -24,7 +24,7 @@ export interface BoardSignal {
 export const BOARD_PAGE_SIZE = 8;
 
 /**
- * 会话行 → 按看板汇总的信号。
+ * 会话行 → 按画布汇总的信号。
  *
  * `attention` 的判定与 `agent/status-store` 的 `isAttention` 同源，这里不
  * 重新定义状态语义，只做「板内任一 Agent 命中即算命中」的合并。
@@ -98,7 +98,7 @@ export function pinnedEntries(
     .filter((entry): entry is PinnedEntry => Boolean(entry));
 }
 
-/** 新建看板的默认名：`看板 3`。已有的名字里避开同名。 */
+/** 新建画布的默认名：`画布 3`。已有的名字里避开同名。 */
 export function nextBoardName(
   boards: readonly { name: string }[],
   template: (index: number) => string,

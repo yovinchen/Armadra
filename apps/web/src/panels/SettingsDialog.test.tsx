@@ -135,6 +135,7 @@ describe("SettingsDialog", () => {
         scm: "closed",
         resources: "closed",
         automation: "closed",
+        handoff: "closed",
         usage: "closed",
         github: "closed",
         settings: true,

@@ -72,13 +72,13 @@ describe("snippetAround", () => {
 });
 
 describe("searchBoards", () => {
-  it("空查询列出全部，看板在节点前面", () => {
+  it("空查询列出全部，画布在节点前面", () => {
     const hits = searchBoards(boards, "");
     expect(hits.slice(0, 2).map((hit) => hit.id)).toEqual(["b1", "b2"]);
     expect(hits.filter((hit) => hit.kind === "node")).toHaveLength(3);
   });
 
-  it("看板名、节点标题、便签正文三处都能命中", () => {
+  it("画布名、节点标题、便签正文三处都能命中", () => {
     expect(searchBoards(boards, "tmux").map((hit) => hit.id)).toEqual([
       "b2",
       "n2",
@@ -103,7 +103,7 @@ describe("searchBoards", () => {
     ]);
   });
 
-  it("便签命中带正文摘要，看板命中不带", () => {
+  it("便签命中带正文摘要，画布命中不带", () => {
     const [board, node] = searchBoards(boards, "tmux");
     expect(board!.snippet).toBeUndefined();
     expect(node!.snippet).toContain("tmux");

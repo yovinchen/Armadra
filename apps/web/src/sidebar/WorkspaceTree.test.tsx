@@ -115,7 +115,7 @@ beforeEach(() => {
 });
 
 describe("WorkspaceTree", () => {
-  it("「项目」组默认展开，缩进列出看板；行尾不带节点数", async () => {
+  it("「项目」组默认展开，缩进列出画布；行尾不带节点数", async () => {
     renderTree();
 
     expect(await screen.findByText("repo")).toBeTruthy();
@@ -127,7 +127,7 @@ describe("WorkspaceTree", () => {
     expect(screen.queryByText("置顶")).toBeNull();
   });
 
-  it("看板行不展开 Agent，Agent 也不出现在树里", async () => {
+  it("画布行不展开 Agent，Agent 也不出现在树里", async () => {
     sessions.mockResolvedValue([
       {
         nodeId: "node-1",
@@ -150,11 +150,11 @@ describe("WorkspaceTree", () => {
     expect(screen.queryByText("Codex")).toBeNull();
   });
 
-  it("双击看板在原位改名，Enter保存并同步当前列表", async () => {
+  it("双击画布在原位改名，Enter保存并同步当前列表", async () => {
     updateBoard.mockResolvedValue({ id: SECOND, name: "新实验", sortOrder: 1 });
     renderTree();
     fireEvent.doubleClick(await screen.findByText("实验"));
-    const input = await screen.findByRole("textbox", { name: "看板名称" });
+    const input = await screen.findByRole("textbox", { name: "画布名称" });
     fireEvent.change(input, { target: { value: "  新实验  " } });
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() =>
@@ -188,14 +188,14 @@ describe("WorkspaceTree", () => {
   it("Escape取消编辑，不因随后失焦保存；空名字留在输入框", async () => {
     renderTree();
     fireEvent.doubleClick(await screen.findByText("实验"));
-    let input = await screen.findByRole("textbox", { name: "看板名称" });
+    let input = await screen.findByRole("textbox", { name: "画布名称" });
     fireEvent.change(input, { target: { value: "取消的名字" } });
     fireEvent.keyDown(input, { key: "Escape" });
     fireEvent.blur(input);
     expect(updateBoard).not.toHaveBeenCalled();
     expect(screen.queryByRole("textbox")).toBeNull();
     fireEvent.doubleClick(screen.getByText("实验"));
-    input = await screen.findByRole("textbox", { name: "看板名称" });
+    input = await screen.findByRole("textbox", { name: "画布名称" });
     fireEvent.change(input, { target: { value: "  " } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(await screen.findByRole("alert")).toHaveProperty(
@@ -211,7 +211,7 @@ describe("WorkspaceTree", () => {
       .mockResolvedValueOnce({ id: SECOND, name: "草稿", sortOrder: 1 });
     renderTree();
     fireEvent.doubleClick(await screen.findByText("实验"));
-    const input = await screen.findByRole("textbox", { name: "看板名称" });
+    const input = await screen.findByRole("textbox", { name: "画布名称" });
     fireEvent.compositionStart(input);
     fireEvent.change(input, { target: { value: "草稿" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -227,11 +227,11 @@ describe("WorkspaceTree", () => {
     expect(await screen.findByText("草稿")).toBeTruthy();
   });
 
-  it("看板菜单提供重命名、置顶与删除", async () => {
+  it("画布菜单提供重命名、置顶与删除", async () => {
     renderTree();
     await screen.findByText("实验");
 
-    openMenu(screen.getAllByLabelText("看板操作")[1]!);
+    openMenu(screen.getAllByLabelText("画布操作")[1]!);
     const items = await screen.findAllByRole("menuitem");
     expect(items.map((item) => item.textContent)).toEqual([
       "重命名",
@@ -257,7 +257,7 @@ describe("WorkspaceTree", () => {
     ).toBeTruthy();
   });
 
-  it("点工作空间行收起它的看板，状态写进偏好", async () => {
+  it("点工作空间行收起它的画布，状态写进偏好", async () => {
     renderTree();
 
     fireEvent.click(await screen.findByText("repo"));
@@ -267,18 +267,18 @@ describe("WorkspaceTree", () => {
     ]);
   });
 
-  it("点看板切换当前看板", async () => {
+  it("点画布切换当前画布", async () => {
     renderTree();
 
     fireEvent.click(await screen.findByText("实验"));
     expect(useCanvasStore.getState().boardId).toBe(SECOND);
   });
 
-  it("看板菜单里的置顶把它放进置顶组", async () => {
+  it("画布菜单里的置顶把它放进置顶组", async () => {
     renderTree();
     await screen.findByText("实验");
 
-    openMenu(screen.getAllByLabelText("看板操作")[1]!);
+    openMenu(screen.getAllByLabelText("画布操作")[1]!);
     fireEvent.click(await screen.findByRole("menuitem", { name: "置顶" }));
 
     expect(usePreferencesStore.getState().pinnedBoardIds).toEqual([SECOND]);
@@ -292,7 +292,7 @@ describe("WorkspaceTree", () => {
     renderTree();
 
     await screen.findByText("Default");
-    openMenu(screen.getByLabelText("看板操作"));
+    openMenu(screen.getByLabelText("画布操作"));
     const item = await screen.findByRole("menuitem", { name: "删除" });
     expect(item.getAttribute("aria-disabled")).toBe("true");
     fireEvent.click(item);
@@ -305,7 +305,7 @@ describe("WorkspaceTree", () => {
     renderTree();
 
     await screen.findByText("实验");
-    openMenu(screen.getAllByLabelText("看板操作")[1]!);
+    openMenu(screen.getAllByLabelText("画布操作")[1]!);
     fireEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
     fireEvent.click(await screen.findByRole("button", { name: "删除" }));
 
@@ -314,16 +314,16 @@ describe("WorkspaceTree", () => {
     );
   });
 
-  it("「新建看板」在当前工作空间建一块并切过去", async () => {
+  it("「新建画布」在当前工作空间建一块并切过去", async () => {
     const third = "019ff7d1-0d12-7421-833d-2c5e8d64ed32";
-    createBoard.mockResolvedValue({ id: third, name: "看板 3", sortOrder: 2 });
+    createBoard.mockResolvedValue({ id: third, name: "画布 3", sortOrder: 2 });
     renderTree();
     await screen.findByText("repo");
 
-    fireEvent.click(screen.getByText("新建看板"));
+    fireEvent.click(screen.getByText("新建画布"));
 
     await waitFor(() =>
-      expect(createBoard).toHaveBeenCalledWith(workspace.id, "看板 3"),
+      expect(createBoard).toHaveBeenCalledWith(workspace.id, "画布 3"),
     );
     await waitFor(() => expect(useCanvasStore.getState().boardId).toBe(third));
   });

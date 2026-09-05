@@ -141,12 +141,12 @@ describe("autosave", () => {
   });
 
   it("保存失败时记下错误并停在 error", async () => {
-    saveBoard.mockRejectedValueOnce(new Error("看板已被其他窗口修改"));
+    saveBoard.mockRejectedValueOnce(new Error("画布已被其他窗口修改"));
     useCanvasStore.getState().addNode("sticky");
 
     await vi.advanceTimersByTimeAsync(EDIT_DEBOUNCE_MS);
     expect(useCanvasStore.getState().saveState).toBe("error");
-    expect(useCanvasStore.getState().saveError).toBe("看板已被其他窗口修改");
+    expect(useCanvasStore.getState().saveError).toBe("画布已被其他窗口修改");
   });
 
   it("白板快照超过 8 MiB：不发 PUT，停在 error 并给出提示", async () => {
@@ -271,7 +271,7 @@ describe("autosave", () => {
     );
   });
 
-  it("切看板时丢掉未触发的定时器", async () => {
+  it("切画布时丢掉未触发的定时器", async () => {
     useCanvasStore.getState().addNode("sticky");
     useCanvasStore.getState().selectBoard("other-board");
 

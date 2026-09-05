@@ -191,6 +191,7 @@ beforeEach(() => {
       scm: "closed",
       resources: "closed",
       automation: "closed",
+      handoff: "closed",
       usage: "closed",
       github: "closed",
       quickOpen: false,

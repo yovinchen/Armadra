@@ -44,7 +44,7 @@ const LOCALE_KEY = "armadra.locale";
 const OPEN_WORKSPACES_KEY = "armadra.openWorkspaces";
 /** 侧栏「项目」组里收起来的工作空间（§26；默认展开，所以存的是收起的那些）。 */
 const COLLAPSED_WORKSPACES_KEY = "armadra.collapsedWorkspaces";
-/** 侧栏「置顶」组里的看板 id（§26）。 */
+/** 侧栏「置顶」组里的画布 id（§26）。 */
 const PINNED_BOARDS_KEY = "armadra.pinnedBoards";
 const PINNED_WORKSPACES_KEY = "armadra.pinnedWorkspaces";
 const DISABLED_AGENTS_KEY = "armadra.disabledAgents";
@@ -120,7 +120,7 @@ const WB_COLOR_KEY = "armadra.whiteboard.defaultColor";
 const WB_SIZE_KEY = "armadra.whiteboard.defaultSize";
 /** 设置页上次停在的分区（§24.1）；⌘, 直接回到那一页。 */
 const LAST_SETTINGS_SECTION_KEY = "armadra.settingsSection";
-/** 上次打开的工作空间 / 看板；启动时用来跳过启动页。 */
+/** 上次打开的工作空间 / 画布；启动时用来跳过启动页。 */
 export const LAST_WORKSPACE_KEY = "armadra.workspace";
 export const LAST_BOARD_KEY = "armadra.board";
 
@@ -464,7 +464,7 @@ export interface PreferencesState {
   openWorkspaceIds: string[];
   /** 「项目」组里收起来的工作空间 id（§26）。默认全部展开。 */
   collapsedWorkspaceIds: string[];
-  /** 「置顶」组里的看板 id，顺序即置顶顺序（§26）。 */
+  /** 「置顶」组里的画布 id，顺序即置顶顺序（§26）。 */
   pinnedBoardIds: string[];
   /** 置顶的项目（工作空间）id：在「项目」组里排到最前面。 */
   pinnedWorkspaceIds: string[];

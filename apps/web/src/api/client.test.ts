@@ -79,15 +79,15 @@ describe("Runtime 连接失败", () => {
   });
 
   it("非 2xx 时抛 Runtime 给的消息而不是状态码", async () => {
-    stubJson({ code: "conflict", message: "看板已被其他窗口修改" }, false, 409);
+    stubJson({ code: "conflict", message: "画布已被其他窗口修改" }, false, 409);
 
     await expect(runtimeApi.loadBoard(workspaceId, boardId)).rejects.toThrow(
-      "看板已被其他窗口修改",
+      "画布已被其他窗口修改",
     );
   });
 });
 
-describe("看板文档", () => {
+describe("画布文档", () => {
   it("PUT 时带上 CAS 时间戳与视口，不再有 strokes", async () => {
     const fetchMock = stubJson(boardDocument);
 
@@ -107,14 +107,14 @@ describe("看板文档", () => {
     });
   });
 
-  it("读回看板时保留持久化的视口", async () => {
+  it("读回画布时保留持久化的视口", async () => {
     stubJson(boardDocument);
 
     const loaded = await runtimeApi.loadBoard(workspaceId, boardId);
     expect(loaded.board.viewport).toEqual({ x: 12, y: -8, zoom: 0.75 });
   });
 
-  it("删除看板允许空响应体", async () => {
+  it("删除画布允许空响应体", async () => {
     const fetchMock = stubJson(null);
 
     await expect(

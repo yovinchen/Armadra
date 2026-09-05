@@ -10,7 +10,7 @@ import { agentIsEnabled, usePreferencesStore } from "./preferences-store";
  * react-query 保证只发一次请求。
  *
  * 拿到结果后同步推给 `agent/launch`：自定义 Agent 的名字、颜色与启动程序
- * 只有这个接口知道，而查显示名的地方（节点头、看板卡、会话卡）都是同步的。
+ * 只有这个接口知道，而查显示名的地方（节点头、画布卡、会话卡）都是同步的。
  */
 export function useAgentsQuery() {
   const query = useQuery({

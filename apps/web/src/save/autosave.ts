@@ -24,7 +24,7 @@ import {
  *  - **视口**：平移/缩放不置 dirty（§3.2），单独 2s 节流静默 PUT；
  *    有编辑在排队时直接跳过——那次编辑保存本来就带着最新视口。
  *
- * 画布挂 `useBoardAutosave()`；壳在切看板/关窗口前调 `flushBoardSaves()`。
+ * 画布挂 `useBoardAutosave()`；壳在切画布/关窗口前调 `flushBoardSaves()`。
  */
 
 export const EDIT_DEBOUNCE_MS = 600;
@@ -32,7 +32,7 @@ export const VIEWPORT_THROTTLE_MS = 2_000;
 
 let queue: CanvasSaveQueue | null = null;
 
-/** 每块看板连续吃到几次 409 了；存一次就清零。 */
+/** 每块画布连续吃到几次 409 了；存一次就清零。 */
 const conflictStreak = new Map<string, number>();
 
 function messageOf(cause: unknown): string {
@@ -82,7 +82,7 @@ async function resolveConflict(
     return;
   }
   const state = useCanvasStore.getState();
-  // 拉的这段时间里用户已经切走了：那份文档不再是当前看板，丢掉即可。
+  // 拉的这段时间里用户已经切走了：那份文档不再是当前画布，丢掉即可。
   if (state.boardId !== boardId || !state.document) return;
   if (state.document.board.id !== boardId) return;
   useCanvasStore.setState({
@@ -134,7 +134,7 @@ function boardQueue(): CanvasSaveQueue {
   return queue;
 }
 
-/** 壳在切看板 / 关窗口前调用；等所有排队的 PUT 落地。 */
+/** 壳在切画布 / 关窗口前调用；等所有排队的 PUT 落地。 */
 export function flushBoardSaves(): Promise<void> {
   return queue ? queue.flush() : Promise.resolve();
 }

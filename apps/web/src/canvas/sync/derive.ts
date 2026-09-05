@@ -190,7 +190,7 @@ export function linkToEdge(
  * 一个 shape 对应哪条 `edges` 行？不是边就返回 null。
  *
  * 「什么算边」只有这一处定义：`canvas.delete` 的分流、`store.removeEdges`
- * 都调它，别在调用方再写一遍 `shape.type === "link"`。旧看板里可能还留着
+ * 都调它，别在调用方再写一遍 `shape.type === "link"`。旧画布里可能还留着
  * Phase 2 认领过的 arrow（`meta.armadra.id`），一并认出来。
  */
 export function edgeIdOfShape(shape: {

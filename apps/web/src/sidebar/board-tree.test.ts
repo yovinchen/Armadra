@@ -92,10 +92,10 @@ describe("pinnedEntries", () => {
 
 describe("nextBoardName", () => {
   it("接着编号，避开同名", () => {
-    const template = (index: number) => `看板 ${index}`;
-    expect(nextBoardName([board("a"), board("b")], template)).toBe("看板 3");
+    const template = (index: number) => `画布 ${index}`;
+    expect(nextBoardName([board("a"), board("b")], template)).toBe("画布 3");
     expect(
-      nextBoardName([board("a"), board("b", "看板 4"), board("c")], template),
-    ).toBe("看板 5");
+      nextBoardName([board("a"), board("b", "画布 4"), board("c")], template),
+    ).toBe("画布 5");
   });
 });

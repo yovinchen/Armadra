@@ -1,6 +1,6 @@
 import type { MessageModule } from "./index";
 
-/** 对话框与全屏浮层：新建工作空间、看板对话框、设置、命令面板。 */
+/** 对话框与全屏浮层：新建工作空间、画布对话框、设置、命令面板。 */
 export const modals: MessageModule = {
   "zh-CN": {
     "dialog.cancel": "取消",
@@ -10,8 +10,8 @@ export const modals: MessageModule = {
 
     "workspace.path": "路径",
 
-    "board.new": "新建看板",
-    "board.rename": "重命名看板",
+    "board.new": "新建画布",
+    "board.rename": "重命名画布",
     "board.name": "名称",
 
     "settings.title": "设置",
