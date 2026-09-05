@@ -1,6 +1,12 @@
 import { useEffect } from "react";
 
 import {
+  connectCanvasEventStream,
+  type CanvasEventSource,
+  type CanvasEventStreamHandle,
+} from "../host/event-stream";
+
+import {
   canvasEventCursor,
   resetCanvasEventCursor,
   resolveCanvasHostClient,
@@ -22,8 +28,12 @@ import { canvasOwnershipStatus } from "./store";
  *    把游标退回水位会把已经应用过的改动悄悄丢掉，所以这里**停止跟随**。
  *
  * Runtime 在写时这里什么都不做：那条路上有工作空间事件 WebSocket。
+ *
+ * 从 B0b 起这条轮询**是后备**，不是主路：Host 有事件流时由流推送，轮询只在
+ * 流不可用或正在重连时接手。间隔因此从 3 秒放宽到 10 秒——它要覆盖的是
+ * 「流断了这一段」，不再是每一次改动的可见延迟。
  */
-export const CANVAS_EVENT_POLL_MS = 3_000;
+export const CANVAS_EVENT_POLL_MS = 10_000;
 
 /**
  * 一轮最多追多少页。有上限是因为这是一个定时器里的循环：落后很多时先追一段，
@@ -93,8 +103,14 @@ export async function pollCanvasEvents(
 }
 
 /**
- * 挂上轮询。`onChanged` 在别处改过画布时触发一次，调用方通常用它让文档查询
- * 失效；`diverged` 之后停表，因为继续问只会一直得到同一个答案。
+ * 挂上跟随：优先接 Host 的事件流，流不可用时用轮询顶上。
+ *
+ * 两条路共用同一个游标，所以来回切换不会漏也不会重：流推过的那一段轮询不会
+ * 再扫一遍，轮询追过的那一段流也会从同一个位置往后订。同一时刻只有一条在
+ * 跑——流连通时**不发轮询请求**，这正是这一批要去掉的那 3 秒一次。
+ *
+ * `onChanged` 在别处改过画布时触发一次，调用方通常用它让文档查询失效；
+ * `diverged` 之后两条路一起停表，因为继续问只会一直得到同一个答案。
  */
 export function followCanvasEvents(
   workspaceId: string,
@@ -103,18 +119,64 @@ export function followCanvasEvents(
 ): () => void {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let stream: CanvasEventStreamHandle | null = null;
+  let source: CanvasEventSource = "polling";
+
+  const stopStream = () => {
+    stream?.stop();
+    stream = null;
+    source = "polling";
+  };
+
+  // 流要有个可续的位置才开得起来：游标为空表示这个工作空间还没读过文档，
+  // 从 0 订会把整段历史当成刚发生的改动重放一遍。所以先让轮询把游标建立
+  // 起来，之后每一轮再尝试接流。
+  const ensureStream = () => {
+    if (stopped || stream || canvasOwnershipStatus() !== "host") return;
+    const cursor = canvasEventCursor(workspaceId);
+    if (cursor === null) return;
+    stream = connectCanvasEventStream(workspaceId, cursor, {
+      onChanged: () => {
+        if (!stopped) onChanged("changed");
+      },
+      onDiverged: () => {
+        stopped = true;
+        stopStream();
+        if (timer) clearTimeout(timer);
+        timer = null;
+      },
+      onSource: (next) => {
+        source = next;
+      },
+    });
+  };
+
   const tick = async () => {
     timer = null;
-    const outcome = await pollCanvasEvents(workspaceId);
+    ensureStream();
+    // 流在推的时候不问：这一段它已经负责了，再轮询一次只是重复流量。
+    if (source !== "stream") {
+      const outcome = await pollCanvasEvents(workspaceId);
+      if (stopped) return;
+      if (outcome === "changed" || outcome === "resnapshot") onChanged(outcome);
+      if (outcome === "diverged") {
+        stopStream();
+        return;
+      }
+      // 轮询刚把游标建立起来，这一轮就可以接流，不必再等一个间隔。
+      ensureStream();
+    }
     if (stopped) return;
-    if (outcome === "changed" || outcome === "resnapshot") onChanged(outcome);
-    if (outcome === "diverged") return;
     timer = setTimeout(() => void tick(), intervalMs);
   };
+
+  ensureStream();
   timer = setTimeout(() => void tick(), intervalMs);
   return () => {
     stopped = true;
+    stopStream();
     if (timer) clearTimeout(timer);
+    timer = null;
   };
 }
 

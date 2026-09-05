@@ -16,6 +16,36 @@ const {
   setCanvasHostResolver,
 } = await import("./gateway");
 const { followCanvasEvents, pollCanvasEvents } = await import("./follow");
+const { setCanvasEventSocketFactory } = await import("../host/event-stream");
+
+/**
+ * 一个不连网的 WebSocket 替身。跟随器现在优先接 Host 的事件流，所以这些
+ * 用例必须自己控制那条路——否则测的是「流恰好没连上」，不是轮询本身。
+ */
+class FakeSocket {
+  binaryType = "blob";
+  readyState = 0;
+  closed = 0;
+  onopen: ((event: unknown) => void) | null = null;
+  onmessage: ((event: { data: unknown }) => void) | null = null;
+  onclose: ((event: unknown) => void) | null = null;
+  onerror: ((event: unknown) => void) | null = null;
+  constructor(readonly url: string) {}
+  send(): void {}
+  close(): void {
+    this.closed += 1;
+  }
+  open(): void {
+    this.readyState = 1;
+    this.onopen?.({});
+  }
+  drop(): void {
+    this.readyState = 3;
+    this.onclose?.({});
+  }
+}
+
+const sockets: FakeSocket[] = [];
 
 const workspaceId = "019ff7d1-0d12-7421-833d-2c5e8d64ed21";
 const timestamp = "2026-08-13T00:00:00.000Z";
@@ -44,9 +74,16 @@ beforeEach(() => {
   canvasOwnership.mockReset();
   canvasOwnership.mockResolvedValue(ownership("host"));
   resetCanvasRevisions();
+  sockets.length = 0;
+  setCanvasEventSocketFactory((url) => {
+    const socket = new FakeSocket(url);
+    sockets.push(socket);
+    return socket;
+  });
 });
 
 afterEach(() => {
+  setCanvasEventSocketFactory(null);
   setCanvasHostResolver(null);
   useCanvasOwnership.getState().reset();
   vi.useRealTimers();
@@ -212,5 +249,37 @@ describe("按 sequence 续订画布事件", () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(subscribe.mock.calls.length).toBe(calls);
     stop();
+  });
+
+  it("流连通时不轮询，流断了后备接手", async () => {
+    vi.useFakeTimers();
+    await useCanvasOwnership.getState().probe();
+    resetCanvasEventCursor(workspaceId, 1n);
+    const subscribe = vi.fn().mockResolvedValue({
+      status: "ok",
+      events: [],
+      nextCursor: 1n,
+      hasMore: false,
+      minCursor: 1n,
+      highWatermark: 1n,
+    });
+    setCanvasHostResolver(async () => client(subscribe).client);
+
+    const stop = followCanvasEvents(workspaceId, vi.fn(), 10);
+    // 流一连上，这条 3 秒（现在 10 秒）的轮询就该停：这一批要去掉的正是它。
+    sockets[0]?.open();
+    await vi.advanceTimersByTimeAsync(60);
+    expect(subscribe).not.toHaveBeenCalled();
+
+    // 流断了才轮询——后备存在的意义就是这一段。
+    sockets[0]?.drop();
+    await vi.advanceTimersByTimeAsync(30);
+    expect(subscribe).toHaveBeenCalled();
+    stop();
+  });
+
+  it("后备的间隔是 10 秒，不再是 3 秒", async () => {
+    const { CANVAS_EVENT_POLL_MS } = await import("./follow");
+    expect(CANVAS_EVENT_POLL_MS).toBe(10_000);
   });
 });
