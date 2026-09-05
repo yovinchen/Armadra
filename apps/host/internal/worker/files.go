@@ -111,6 +111,19 @@ func (c *Client) validResult(request *pb.WorkerRequest, response *pb.WorkerRespo
 		}
 		return true
 	}
+	// The ownership reply is compared against the request in ownership.go,
+	// which is where the epoch rules live. Here it only has to be a well-formed
+	// record for a domain this version knows.
+	if input := request.GetSetWriteOwnership(); input != nil {
+		record := response.GetWriteOwnership()
+		return record != nil && record.Domain == input.Domain && record.Epoch > 0 &&
+			(record.Owner == pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME || record.Owner == pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_HOST)
+	}
+	if input := request.GetGetWriteOwnership(); input != nil {
+		record := response.GetWriteOwnership()
+		return record != nil && record.Domain == input.Domain && record.Epoch > 0 &&
+			(record.Owner == pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME || record.Owner == pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_HOST)
+	}
 	if input := request.GetReadFile(); input != nil {
 		chunk := response.GetFileChunk()
 		if chunk == nil || chunk.RootId != input.RootId || !relativePath(chunk.Path, false) || chunk.MimeType == "" || len(chunk.MimeType) > 256 || len(chunk.Sha256) != sha256.Size || chunk.Offset != input.Offset || chunk.TotalBytes > uint64(c.hello.MaxTextFileBytes) || chunk.Offset > chunk.TotalBytes || len(chunk.Data) > int(input.MaxBytes) || uint64(len(chunk.Data)) > chunk.TotalBytes-chunk.Offset || chunk.Eof != (chunk.Offset+uint64(len(chunk.Data)) == chunk.TotalBytes) || (!chunk.Eof && len(chunk.Data) == 0) || (len(input.ExpectedSha256) > 0 && !bytes.Equal(input.ExpectedSha256, chunk.Sha256)) {

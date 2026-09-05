@@ -116,11 +116,12 @@ func validateWire(wire []byte, descriptor protoreflect.MessageDescriptor, depth 
 			oneofs[name] = true
 		}
 		// Envelope identity (1–3) and the result oneof: the file/hello members
-		// (10–14), the command result (20) and the agent result (21). A number
+		// (10–14), the command result (20), the agent result (21) and the write-ownership
+		// answer (22). A number
 		// outside this set leaves resultCount at zero and the frame is refused,
 		// which is the point — a Worker cannot answer with a shape this build
 		// has never been taught to check.
-		if envelope && (number <= 3 || (number >= 10 && number <= 14) || number == 20 || number == 21) {
+		if envelope && (number <= 3 || (number >= 10 && number <= 14) || number == 20 || number == 21 || number == 22) {
 			if seen[number] || kind != protowire.BytesType {
 				return &Error{Code: CodeProtocol}
 			}
@@ -183,6 +184,8 @@ func resultMatches(response *pb.WorkerResponse, kind string) bool {
 		return response.GetDirectory() != nil
 	case "chunk":
 		return response.GetFileChunk() != nil
+	case "ownership":
+		return response.GetWriteOwnership() != nil
 	}
 	return false
 }

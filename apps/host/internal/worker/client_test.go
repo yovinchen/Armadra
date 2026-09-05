@@ -33,12 +33,18 @@ var fixtureContent = []byte("ab中文🙂 'quoted'\nlast line 尾")
 // required by Start. The ordinary test runner never interprets this branch.
 func TestMain(m *testing.M) {
 	if len(os.Args) == 3 && os.Args[1] == "worker" && os.Args[2] == "--stdio" {
-		fixtureWorker()
+		fixtureWorker("")
+		os.Exit(0)
+	}
+	// The ownership handoff mode, which the real Runtime enters with the same
+	// flag. It advertises one extra capability and answers two extra actions.
+	if len(os.Args) == 5 && os.Args[1] == "worker" && os.Args[2] == "--stdio" && os.Args[3] == "--canvas-database" {
+		fixtureWorker(os.Args[4])
 		os.Exit(0)
 	}
 	os.Exit(m.Run())
 }
-func fixtureWorker() {
+func fixtureWorker(canvasDatabase string) {
 	mode := os.Getenv("ARMADRA_TEST_WORKER_MODE")
 	if file := os.Getenv("ARMADRA_TEST_WORKER_PID"); file != "" {
 		_ = os.WriteFile(file, []byte(strconv.Itoa(os.Getpid())), 0600)
@@ -80,6 +86,9 @@ func fixtureWorker() {
 				platform = "macos"
 			}
 			h := &pb.WorkerHelloResponse{Protocol: &pb.ProtocolVersion{Major: 1, Minor: 0}, HostId: request.HostId, InstanceId: instance, Platform: platform, Architecture: "aarch64", Capabilities: []string{"worker.roots.v1", "files.directory-read.v1", "files.text-read.v1"}, MaxFrameBytes: MaxFrameBytes, MaxFileChunkBytes: MaxFileChunkBytes, MaxTextFileBytes: MaxTextFileBytes}
+			if canvasDatabase != "" && mode != "ownership-silent" {
+				h.Capabilities = append(h.Capabilities, ownershipCapability)
+			}
 			if runtime.GOARCH == "amd64" {
 				h.Architecture = "x86_64"
 			}
@@ -139,6 +148,34 @@ func fixtureWorker() {
 						filePath = "actual.txt"
 					}
 					response.Result = &pb.WorkerResponse_FileChunk{FileChunk: &pb.WorkerFileChunk{RootId: read.RootId, Path: filePath, MimeType: "text/plain", Sha256: sum[:], TotalBytes: uint64(len(fixtureContent)), Offset: read.Offset, Data: fixtureContent[read.Offset:end], Eof: end == uint64(len(fixtureContent))}}
+				case *pb.WorkerRequest_GetWriteOwnership:
+					if canvasDatabase == "" {
+						reject("UNSUPPORTED")
+						break
+					}
+					record := readFixtureOwnership(canvasDatabase)
+					record.Domain = input.GetWriteOwnership.Domain
+					response.Result = &pb.WorkerResponse_WriteOwnership{WriteOwnership: record}
+				case *pb.WorkerRequest_SetWriteOwnership:
+					if canvasDatabase == "" {
+						reject("UNSUPPORTED")
+						break
+					}
+					set := input.SetWriteOwnership
+					record := readFixtureOwnership(canvasDatabase)
+					switch {
+					case set.Owner == record.Owner && set.Epoch == record.Epoch:
+						// An exact repeat is the stored state, not a new write.
+					case set.ExpectedEpoch != record.Epoch || set.Epoch <= record.Epoch:
+						reject("CONFLICT")
+					default:
+						record = &pb.WorkerWriteOwnership{Domain: set.Domain, Owner: set.Owner, Epoch: set.Epoch, ReasonCode: set.ReasonCode, UpdatedAtUnixMs: 1788560523004}
+						writeFixtureOwnership(canvasDatabase, record)
+					}
+					if response.Result == nil {
+						record.Domain = set.Domain
+						response.Result = &pb.WorkerResponse_WriteOwnership{WriteOwnership: record}
+					}
 				default:
 					reject("UNSUPPORTED")
 				}
@@ -668,5 +705,27 @@ func TestExplicitExecutablePathMayContainSpacesAndUnicode(t *testing.T) {
 	defer c.Close()
 	if _, err = c.ListDirectory(context.Background(), "root", "."); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The fake Runtime's stored ownership row. A file rather than memory, because
+// the handoff is only meaningful if it survives the process that wrote it.
+func readFixtureOwnership(path string) *pb.WorkerWriteOwnership {
+	record := &pb.WorkerWriteOwnership{Domain: "canvas", Owner: pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME, Epoch: 1, ReasonCode: "ownership.initial"}
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) == 0 {
+		return record
+	}
+	stored := new(pb.WorkerWriteOwnership)
+	if proto.Unmarshal(data, stored) != nil {
+		return record
+	}
+	return stored
+}
+
+func writeFixtureOwnership(path string, record *pb.WorkerWriteOwnership) {
+	data, err := proto.Marshal(record)
+	if err == nil {
+		_ = os.WriteFile(path, data, 0600)
 	}
 }

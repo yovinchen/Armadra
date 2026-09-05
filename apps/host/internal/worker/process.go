@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -66,7 +67,12 @@ func (e *Error) Is(target error) bool {
 type Options struct {
 	Executable, HostID string
 	// StateDir opts into durable NEW non-interactive command sessions. It must already exist and be private.
-	StateDir       string
+	StateDir string
+	// CanvasDatabase opts into the write-ownership handoff and nothing else:
+	// the Worker started this way may read and write one row of ownership in
+	// the Runtime's own database, and may not run commands. The two modes are
+	// deliberately exclusive, so a scheduling Worker can never move ownership.
+	CanvasDatabase string
 	RequestTimeout time.Duration
 }
 type Diagnostics struct {
@@ -121,6 +127,7 @@ type Client struct {
 	hello              *pb.WorkerHelloResponse
 	containment        containment
 	commandMode        bool
+	ownershipMode      bool
 	cleanupConfirmed   atomic.Bool
 	containmentClosed  atomic.Bool
 	closeMu            sync.Mutex
@@ -207,7 +214,19 @@ func Start(ctx context.Context, options Options) (*Client, error) {
 			return nil, &Error{Code: CodeInvalid}
 		}
 	}
-	c := &Client{commandMode: options.StateDir != "", hostID: options.HostID, timeout: timeout, gate: make(chan struct{}, 1), stopped: make(chan struct{}), reaped: make(chan struct{}), stderrDone: make(chan struct{})}
+	// One Worker never both schedules commands and moves write ownership: the
+	// ownership handoff runs in its own short-lived process during a
+	// maintenance window, so it cannot be reached through a running scheduler.
+	if options.CanvasDatabase != "" {
+		if options.StateDir != "" || !filepath.IsAbs(options.CanvasDatabase) || strings.IndexByte(options.CanvasDatabase, 0) >= 0 {
+			return nil, &Error{Code: CodeInvalid}
+		}
+		options.CanvasDatabase, err = filepath.EvalSymlinks(options.CanvasDatabase)
+		if err != nil {
+			return nil, &Error{Code: CodeInvalid}
+		}
+	}
+	c := &Client{commandMode: options.StateDir != "", ownershipMode: options.CanvasDatabase != "", hostID: options.HostID, timeout: timeout, gate: make(chan struct{}, 1), stopped: make(chan struct{}), reaped: make(chan struct{}), stderrDone: make(chan struct{})}
 	c.gate <- struct{}{}
 	// Own both ends explicitly: Cmd.Wait must not close a stdout reader before
 	// the framing reader has consumed buffered bytes. Only child ends are passed.
@@ -233,6 +252,9 @@ func Start(ctx context.Context, options Options) (*Client, error) {
 	args := []string{"worker", "--stdio"}
 	if options.StateDir != "" {
 		args = append(args, "--state-dir", options.StateDir)
+	}
+	if options.CanvasDatabase != "" {
+		args = append(args, "--canvas-database", options.CanvasDatabase)
 	}
 	c.cmd = exec.Command(executable, args...)
 	c.containment, err = newContainment(c.commandMode)
@@ -288,6 +310,13 @@ func Start(ctx context.Context, options Options) (*Client, error) {
 	hello := response.GetHello()
 	if !validHello(hello, options.HostID, response.InstanceId) || (c.commandMode && hello.Commands == nil) || (!c.commandMode && hello.Commands != nil) {
 		err = c.fail(&Error{Code: CodeProtocol})
+		return nil, err
+	}
+	// The Worker must say it can move ownership before this client is used to
+	// move any: an older binary that silently ignored the flag would otherwise
+	// look like a successful handoff.
+	if c.ownershipMode && !slices.Contains(hello.Capabilities, ownershipCapability) {
+		err = c.fail(&Error{Code: CodeUnsupported})
 		return nil, err
 	}
 	c.instanceID = hello.InstanceId
