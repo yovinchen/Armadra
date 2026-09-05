@@ -14,8 +14,9 @@
 // The switch is driven twice on purpose: once through the offline CLI, whose
 // maintenance window is the data directory lock, and once over HTTPS against a
 // serving Host, whose window is a token issued at this machine over the
-// same-user control channel. Both walk the same state machine, and the second
-// pass also proves a token cannot be spent twice.
+// same-user control channel. Both walk the same state machine — including the
+// reversal, which imports the package back into the Runtime either way — and
+// the second pass also proves a token cannot be spent twice.
 //
 // What this covers: a canvas that really contains the C02 shapes — a frame
 // nested in a frame, a terminal and a sticky inside the inner frame, labels, a
@@ -29,8 +30,8 @@
 // the reversal — the format version 2 package, the Runtime applying it to its
 // own database, the Runtime's re-read compared against the package, and the
 // edit the Host made during its tenure showing up in the Runtime's rows
-// afterwards, including the refusal to hand the epoch back while the Host
-// holds changes the Runtime never got.
+// afterwards, including the refusal to hand the epoch back to a Runtime that
+// cannot apply the package at all.
 // Every step is proved by a digest, a revision or a sequence rather than by the
 // absence of an exception: a check that only asserts "no error was thrown" would
 // still pass against a migration that silently dropped half the canvas.
@@ -66,6 +67,8 @@ import {
   stable,
   text,
 } from "./canvas-ownership-shapes.mjs";
+// The client layer: the one @armadra/host-client both halves drive.
+import { openDriver } from "./canvas-ownership-driver.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const skipApplication = process.env.CANVAS_E2E_SKIP_APP === "1";
@@ -900,172 +903,19 @@ try {
   // implying both did.
   if (!skipApplication) pnpm(["--filter", "@armadra/web", "build"]);
 
-  // One driver, two transports. The browser bundles it and the Node fallback
-  // imports it, so both halves drive the same @armadra/host-client the panel
-  // imports; reimplementing the wire format here would prove nothing about it.
-  const driverCore = join(workspace, "driver-core.mjs");
-  writeFileSync(
-    driverCore,
-    `const BYTES = "$bytes";
-const BIG = "$bigint";
-function base64(bytes) {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
-export function encodeValue(value) {
-  if (typeof value === "bigint") return { [BIG]: value.toString() };
-  if (value instanceof Uint8Array) return { [BYTES]: base64(value) };
-  if (Array.isArray(value)) return value.map(encodeValue);
-  if (value && typeof value === "object") {
-    const out = {};
-    for (const [key, item] of Object.entries(value)) out[key] = encodeValue(item);
-    return out;
-  }
-  return value;
-}
-export function decodeValue(value) {
-  if (Array.isArray(value)) return value.map(decodeValue);
-  if (value && typeof value === "object") {
-    if (typeof value[BIG] === "string") return BigInt(value[BIG]);
-    if (typeof value[BYTES] === "string") {
-      const binary = atob(value[BYTES]);
-      const bytes = new Uint8Array(binary.length);
-      for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-      return bytes;
-    }
-    const out = {};
-    for (const [key, item] of Object.entries(value)) out[key] = decodeValue(item);
-    return out;
-  }
-  return value;
-}
-export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, origin, transport, pageOrigin }) {
-  const state = {};
-  return {
-    async hello() {
-      state.hello = await new HostClient({ baseUrl: origin, clientId: "canvas-e2e", ...transport }).hello();
-      return encodeValue(state.hello);
-    },
-    async pair(material) {
-      state.identity = new HostIdentityClient({
-        baseUrl: origin,
-        hostId: state.hello.hostId,
-        hostInstanceId: state.hello.hostInstanceId,
-        ...(pageOrigin ? { pageOrigin } : {}),
-        ...transport,
-      });
-      return encodeValue(await state.identity.pair(material));
-    },
-    connect(workspaceId) {
-      state.canvas = new HostCanvasClient({
-        session: state.identity,
-        hostId: state.hello.hostId,
-        workspaceId,
-      });
-      // The ownership record is host-wide, so this client names no workspace.
-      state.ownership = new HostOwnershipClient({
-        session: state.identity,
-        hostId: state.hello.hostId,
-      });
-      return true;
-    },
-    async ownership(method, args) {
-      try {
-        return encodeValue(await state.ownership[method](...decodeValue(args)));
-      } catch (error) {
-        return {
-          error: {
-            failure: error.failure ?? error.code ?? "unknown",
-            hostCode: error.hostCode ?? "",
-            httpStatus: error.httpStatus ?? 0,
-            outcomeUnknown: error.outcomeUnknown === true,
-          },
-        };
-      }
-    },
-    async call(method, args) {
-      try {
-        return encodeValue(await state.canvas[method](...decodeValue(args)));
-      } catch (error) {
-        return {
-          error: {
-            failure: error.failure ?? error.code ?? "unknown",
-            hostCode: error.hostCode ?? "",
-            httpStatus: error.httpStatus ?? 0,
-            outcomeUnknown: error.outcomeUnknown === true,
-          },
-        };
-      }
-    },
-  };
-}
-`,
-  );
-
-  if (skipApplication) {
-    // No browser: the same client is driven from Node over the same TLS proxy,
-    // with a cookie jar standing in for the browser's own. The Host still sees
-    // its public origin and still enforces the origin, cookie and CSRF checks.
-    const { createDriver, encodeValue, decodeValue } = await import(
-      pathToFileURL(driverCore).href
-    );
-    const clients = await import(
-      pathToFileURL(join(root, "packages/host-client/dist/index.js")).href
-    );
-    const jar = new Map();
-    const transport = nodeTransport(jar);
-    const driver = createDriver({
-      HostClient: clients.HostClient,
-      HostIdentityClient: clients.HostIdentityClient,
-      HostCanvasClient: clients.HostCanvasClient,
-      HostOwnershipClient: clients.HostOwnershipClient,
-      origin: appOrigin,
-      transport: { fetch: transport },
-      pageOrigin: appOrigin,
-    });
-    canvasDriver = {
-      hello: () => driver.hello().then(decodeValue),
-      pair: (material) => driver.pair(material).then(decodeValue),
-      connect: (workspaceId) => driver.connect(workspaceId),
-      call: (method, args) =>
-        driver.call(method, encodeValue(args)).then(decodeValue),
-      ownership: (method, args) =>
-        driver.ownership(method, encodeValue(args)).then(decodeValue),
-    };
-  } else {
-    const driverSource = join(workspace, "driver-source.mjs");
-    writeFileSync(
-      driverSource,
-      `import { HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient } from "@armadra/host-client";
-import { createDriver } from "./driver-core.mjs";
-globalThis.armadra = createDriver({
-  HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient,
-  origin: ${JSON.stringify(appOrigin)}, transport: {},
-});
-globalThis.armadraReady = true;
-`,
-    );
-    run(
-      join(
-        root,
-        "node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/bin/esbuild",
-      ),
-      [
-        driverSource,
-        "--bundle",
-        "--format=esm",
-        "--platform=browser",
-        // The driver lives in a temporary directory, so the workspace packages
-        // are named explicitly rather than resolved through node_modules.
-        `--alias:@armadra/protocol=${join(root, "packages/protocol/dist/index.js")}`,
-        `--alias:@armadra/host-client=${join(root, "packages/host-client/dist/index.js")}`,
-        `--outfile=${driverFile}`,
-        "--log-level=error",
-      ],
-      { stdio: "inherit" },
-    );
-  }
+  // The driver the whole check talks through: one @armadra/host-client, driven
+  // from Chrome or, with the browser half skipped, from Node over the same TLS
+  // proxy.
+  const { driverCore, driver: nodeDriver } = await openDriver({
+    root,
+    workspace,
+    appOrigin,
+    driverFile,
+    skipApplication,
+    nodeTransport,
+    run,
+  });
+  canvasDriver = nodeDriver;
 
   appServer.listen(appPort, "127.0.0.1");
   await once(appServer, "listening");
@@ -2047,7 +1897,6 @@ globalThis.armadraReady = true;
       target: "runtime",
       expectedEpoch: 4n,
       maintenanceToken: window.token,
-      acceptExportOnly: true,
     },
   ]);
   step(
@@ -2080,8 +1929,32 @@ globalThis.armadraReady = true;
     `HTTP ${refusedOnline.status} ${refusedOnline.json?.code}`,
   );
 
+  // A change that exists only on the Host, so the reverse import below has
+  // something the Runtime cannot already have.
+  const onlineDocument = await canvasDriver.call("getDocument", [canvasId]);
+  const onlineEdit = await canvasDriver.call("saveDocument", [
+    {
+      operationId: `canvas/${workspaceId}/${canvasId}/https-1`,
+      canvas: { ...onlineDocument.canvas, name: "HTTPS 期间只在 Host 上改名" },
+      expectedRevision: onlineDocument.canvas.revision,
+      nodes: onlineDocument.nodes,
+      edges: onlineDocument.edges,
+      annotations: onlineDocument.annotations,
+    },
+  ]);
+  step(
+    "the Host accepted a write under the epoch it was handed over HTTPS",
+    onlineEdit.document?.canvas?.name === "HTTPS 期间只在 Host 上改名" &&
+      onlineEdit.document?.canvas?.revision ===
+        onlineDocument.canvas.revision + 1n,
+    `revision ${onlineDocument.canvas?.revision} → ${onlineEdit.document?.canvas?.revision}${refusal(onlineEdit)}`,
+  );
+
   // Rolling back over HTTPS names no directory: a browser must not choose paths
   // on this machine, so the Host allocates one under its own data directory.
+  // It is otherwise the same handback the CLI ran in section 7 — the package
+  // goes to the Runtime, the Runtime re-reads its rows, and the epoch moves
+  // only if the digests agree. No --accept-export-only anywhere.
   await stopRuntime();
   const rollbackWindow = JSON.parse(
     run(
@@ -2105,7 +1978,6 @@ globalThis.armadraReady = true;
       target: "runtime",
       expectedEpoch: 4n,
       maintenanceToken: rollbackWindow.token,
-      acceptExportOnly: true,
     },
   ]);
   step(
@@ -2113,6 +1985,19 @@ globalThis.armadraReady = true;
     rolledBackOnline.ownership?.owner === 1 &&
       rolledBackOnline.ownership?.epoch === 5n,
     `owner=${rolledBackOnline.ownership?.owner} epoch=${rolledBackOnline.ownership?.epoch}${refusal(rolledBackOnline)}`,
+  );
+  const onlineChecks = Object.fromEntries(
+    (rolledBackOnline.report?.checks ?? []).map((check) => [
+      check.check,
+      check.matched === true,
+    ]),
+  );
+  step(
+    "the HTTPS rollback moved the epoch on the Runtime's own re-read too",
+    onlineChecks["reverse.import"] === true &&
+      onlineChecks["reverse.workspaces"] === true &&
+      onlineChecks["reverse.unsupported_entity"] === true,
+    Object.keys(onlineChecks).join(", "),
   );
   const exportRoot = join(hostData, "ownership-exports");
   const packages = existsSync(exportRoot)
@@ -2127,15 +2012,27 @@ globalThis.armadraReady = true;
   step(
     "the Host wrote its reverse export where it chose, not where a client asked",
     packages.length === 1 &&
-      onlineIndex?.formatVersion === 1 &&
-      onlineIndex?.files?.length === 1,
-    packages.join(", "),
+      onlineIndex?.formatVersion === 2 &&
+      onlineIndex?.domain === "canvas" &&
+      onlineIndex?.epoch === 4 &&
+      onlineIndex?.files?.length === 1 &&
+      /^[0-9a-f]{64}$/.test(onlineIndex?.files?.[0]?.contentSha256 ?? ""),
+    `${packages.join(", ")} epoch=${onlineIndex?.epoch}`,
   );
 
   step(
     "the Runtime restarted after the HTTPS reversal",
     await startRuntime(),
     runtimeOrigin,
+  );
+  // The whole point of doing this over HTTPS rather than with a danger switch:
+  // what the Host wrote while it owned the canvas is in the Runtime's own rows.
+  const afterHttpsRollback = await runtimeCall("GET", documentPath);
+  step(
+    "the Runtime reads back the edit the Host made under the HTTPS epoch",
+    afterHttpsRollback.status === 200 &&
+      afterHttpsRollback.json?.board?.name === "HTTPS 期间只在 Host 上改名",
+    `name=${afterHttpsRollback.json?.board?.name} HTTP ${afterHttpsRollback.status}`,
   );
   const afterOnline = await runtimeCall(
     "POST",
