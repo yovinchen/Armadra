@@ -107,12 +107,7 @@ pub fn router_with_state(state: AppState) -> Router {
         ])
         .allow_headers([axum::http::header::CONTENT_TYPE])
         .allow_origin(AllowOrigin::predicate(|origin: &HeaderValue, _| {
-            origin.to_str().is_ok_and(|origin| {
-                origin.starts_with("http://127.0.0.1:")
-                    || origin.starts_with("http://localhost:")
-                    || origin == "tauri://localhost"
-                    || origin == "https://tauri.localhost"
-            })
+            origin.to_str().is_ok_and(api::loopback_origin)
         }));
 
     Router::new()

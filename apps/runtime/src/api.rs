@@ -1785,17 +1785,29 @@ fn validate_websocket_origin(headers: &HeaderMap) -> AppResult<()> {
         .get(axum::http::header::ORIGIN)
         .and_then(|value| value.to_str().ok())
         .ok_or_else(|| AppError::Forbidden("WebSocket Origin is required".into()))?;
-    if origin.starts_with("http://127.0.0.1:")
-        || origin.starts_with("http://localhost:")
-        || origin == "tauri://localhost"
-        || origin == "https://tauri.localhost"
-    {
+    if loopback_origin(origin) {
         Ok(())
     } else {
         Err(AppError::Forbidden(
             "WebSocket Origin is not allowed".into(),
         ))
     }
+}
+
+/// The origins a loopback Runtime accepts.
+///
+/// The portless forms matter for the Unix socket and named pipe transports: a
+/// caller that reached the Runtime over one of those has no port to name, and
+/// the Go Host rewrites the device's own browser Origin to exactly this before
+/// forwarding (host protocol design §5). It is still a loopback literal — this
+/// never widens the check to a hostname the network could resolve.
+pub fn loopback_origin(origin: &str) -> bool {
+    origin.starts_with("http://127.0.0.1:")
+        || origin.starts_with("http://localhost:")
+        || origin == "http://127.0.0.1"
+        || origin == "http://localhost"
+        || origin == "tauri://localhost"
+        || origin == "https://tauri.localhost"
 }
 
 /* ------------------------------------ git --------------------------------- */
