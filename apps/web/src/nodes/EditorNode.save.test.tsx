@@ -115,6 +115,7 @@ describe("editor save versions", () => {
       "one",
       3,
       version,
+      false,
     );
     replace(editor, "two");
     await act(async () => finish({ size: 3, sha256: savedVersion }));
@@ -130,6 +131,7 @@ describe("editor save versions", () => {
         "two",
         3,
         savedVersion,
+        false,
       ),
     );
     await waitFor(() =>
@@ -169,6 +171,7 @@ describe("editor save versions", () => {
         "next draft",
         4,
         "d".repeat(64),
+        false,
       ),
     );
   });

@@ -189,6 +189,7 @@ describe("editor external changes", () => {
         "mine\n",
         4,
         ON_DISK,
+        false,
       ),
     );
     // A late event carrying the hash we just wrote is our own write coming
@@ -265,6 +266,7 @@ describe("editor external changes", () => {
         "draft\n",
         4,
         CHANGED,
+        false,
       ),
     );
     // The draft is not re-read from disk: keeping it means keeping it.
@@ -296,6 +298,7 @@ describe("editor external changes", () => {
         "draft\n",
         4,
         undefined,
+        false,
       ),
     );
   });
