@@ -21,6 +21,7 @@ import { gitHunks } from "./git-hunks";
 import { handoff } from "./handoff";
 import { gitMessage } from "./git-message";
 import { gitStashes } from "./git-stashes";
+import { github } from "./github";
 import { gitIntegration } from "./git-integration";
 import { gitRepository } from "./git-repository";
 import { frameBinding } from "./frame-binding";
@@ -69,6 +70,7 @@ export const MESSAGE_MODULES = {
   "git-message": gitMessage,
   "git-stashes": gitStashes,
   "git-integration": gitIntegration,
+  github,
   handoff,
   "file-drag": fileDrag,
   "file-workflow": fileWorkflow,
