@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     AppState,
     agent::{self, AgentInfo},
-    collab,
+    agent_probe, collab,
     db::{self, SaveBoardRequest, WorkspacePatch},
     error::{AppError, AppResult},
     events::WorkspaceEvent,
@@ -1009,6 +1009,13 @@ pub async fn agents(State(state): State<AppState>) -> AppResult<Json<Vec<AgentIn
             .iter()
             .find(|install| install.agent_id == hook_provider)
             .map(|install| install.client_revision);
+        // Version probing is what decides whether a gated capability is
+        // `supported` or `unknown` on the client (design §1). A program that
+        // is not installed is not run: there is nothing to ask.
+        if info.installed {
+            info.probe =
+                Some(agent_probe::cached(&state.settings, &info.id, &info.launch_cmd).await);
+        }
     }
     Ok(Json(detected))
 }

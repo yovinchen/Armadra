@@ -19,6 +19,9 @@ pub const AGENT_CAPABILITIES: &[&str] = &[
     "contextLink",
     "usage",
     "contextUsage",
+    "nativeRecurrence",
+    "structuredInputAck",
+    "supportsModelSelection",
 ];
 
 #[derive(Debug, Clone, Copy)]
@@ -45,6 +48,8 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
             "contextLink",
             "usage",
             "contextUsage",
+            "structuredInputAck",
+            "supportsModelSelection",
         ],
     },
     AgentDefinition {
@@ -53,7 +58,17 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
         color: "#10a37f",
         launch_cmd: "codex",
         prompt_mode: "argv",
-        capabilities: &["hooks", "resume", "subagent", "contextLink"],
+        // `contextUsage` here is the *estimated* kind: codex writes a
+        // structured rollout we can read, but reports no live window.
+        capabilities: &[
+            "hooks",
+            "resume",
+            "subagent",
+            "contextLink",
+            "contextUsage",
+            "structuredInputAck",
+            "supportsModelSelection",
+        ],
     },
     AgentDefinition {
         id: "gemini",
@@ -61,7 +76,14 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
         color: "#4285f4",
         launch_cmd: "gemini",
         prompt_mode: "flag-prompt",
-        capabilities: &["hooks", "resume", "contextLink"],
+        capabilities: &[
+            "hooks",
+            "resume",
+            "contextLink",
+            "contextUsage",
+            "structuredInputAck",
+            "supportsModelSelection",
+        ],
     },
     AgentDefinition {
         id: "opencode",
@@ -69,7 +91,13 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
         color: "#a78bfa",
         launch_cmd: "opencode",
         prompt_mode: "flag-prompt",
-        capabilities: &["hooks", "resume", "contextLink"],
+        capabilities: &[
+            "hooks",
+            "resume",
+            "contextLink",
+            "structuredInputAck",
+            "supportsModelSelection",
+        ],
     },
     AgentDefinition {
         id: "pi",
@@ -77,7 +105,7 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
         color: "#e8b86d",
         launch_cmd: "pi",
         prompt_mode: "argv",
-        capabilities: &["resume", "contextLink"],
+        capabilities: &["resume", "contextLink", "supportsModelSelection"],
     },
     AgentDefinition {
         id: "omp",
@@ -85,7 +113,7 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
         color: "#d4a373",
         launch_cmd: "omp",
         prompt_mode: "argv",
-        capabilities: &["resume", "contextLink"],
+        capabilities: &["resume", "contextLink", "supportsModelSelection"],
     },
     AgentDefinition {
         id: "copilot",
@@ -93,7 +121,7 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
         color: "#a371f7",
         launch_cmd: "copilot",
         prompt_mode: "flag-prompt",
-        capabilities: &["resume", "contextLink"],
+        capabilities: &["resume", "contextLink", "supportsModelSelection"],
     },
 ];
 
@@ -125,6 +153,11 @@ pub struct AgentInfo {
     pub resolved_path: Option<String>,
     pub installed: bool,
     pub client_revision: Option<i64>,
+    /// Cached `--version` probe (`agent_probe.rs`), filled in by the API layer.
+    /// `None` means "not probed", which resolves gated capabilities to unknown
+    /// on the client — never to supported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub probe: Option<crate::agent_probe::AgentProbe>,
 }
 
 impl AgentInfo {
@@ -142,6 +175,7 @@ impl AgentInfo {
             installed: resolved.is_some(),
             resolved_path: resolved.map(|path| path.to_string_lossy().into_owned()),
             client_revision: None,
+            probe: None,
         }
     }
 }
@@ -181,6 +215,7 @@ pub fn custom_info(custom: &crate::settings::CustomAgent) -> AgentInfo {
         installed: resolved.is_some(),
         resolved_path: resolved.map(|path| path.to_string_lossy().into_owned()),
         client_revision: None,
+        probe: None,
     }
 }
 
