@@ -3,19 +3,23 @@ import * as React from "react";
 // 用得上，全部走动态 `import()`（§17 代码分割）。这里只留类型引用。
 import type { EditorView } from "codemirror";
 import type { Compartment, Extension } from "@codemirror/state";
-import { Download, File, Save } from "lucide-react";
-import type { ImportedFileInfo } from "@armadra/shared";
+import { Download, File, Save, X } from "lucide-react";
+import type { FileChangeKind, ImportedFileInfo } from "@armadra/shared";
 
 import { toast } from "sonner";
 
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
 import { IconButton } from "@/ui/icon-button";
+import { ScrollArea } from "@/ui/scroll-area";
 import { isConflict, runtimeApi } from "@/api/client";
+import { onWorkspaceEvent } from "@/api/events";
 import { useCanvasStore } from "@/store/canvas-store";
 import { useT } from "@/app/preferences-store";
 import { formatBytes } from "@/lib/format";
+import { unifiedLineDiff } from "@/lib/line-diff";
 import { isTauri, openExternal } from "@/platform";
+import { PatchBody } from "./DiffNode";
 import { NodeShell } from "./NodeShell";
 import type { NodeBodyProps } from "./registry";
 
@@ -160,12 +164,25 @@ type LoadState =
     };
 
 /**
+ * 磁盘上这个文件的最新状态（E01/M4）。
+ * `sha256` 为空表示文件已不在（`kind === "removed"`）。
+ */
+interface ExternalChange {
+  kind: FileChangeKind;
+  sha256?: string;
+}
+
+/**
  * 编辑器节点（§3.4）。阶段一用 CodeMirror 6：体积小、WebKit 兼容好。
  *
  * 保存携带已读取内容的SHA，保护同大小外部修改；旧服务无版本时只读。
  * `data.readonly` 为 true（Runtime 报告文件不可写）时降级为只读。
+ *
+ * 打开文本文件时向 Runtime 注册监听（E01/M4）：外部改动到达时，没有草稿就
+ * 直接重载，有草稿就挂一条非模态提示条，由用户选择比较 / 重载 / 保留。
+ * Runtime 说监听不可用时退回按需版本检查（窗口重新获得焦点时问一次）。
  */
-export function EditorNode({ node, selected }: NodeBodyProps) {
+export function EditorNode({ id, node, selected }: NodeBodyProps) {
   const t = useT();
   const data = node.data.kind === "editor" ? node.data : undefined;
   const path = data?.path ?? "";
@@ -179,9 +196,19 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
   const [state, setState] = React.useState<LoadState>({ kind: "loading" });
   const [dirty, setDirty] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  /** 外部改动提示条；`null` 表示没有待处理的外部改动。 */
+  const [external, setExternal] = React.useState<ExternalChange | null>(null);
+  /** 「比较」打开时磁盘上的正文；`null` 表示没在比较。 */
+  const [diskContent, setDiskContent] = React.useState<string | null>(null);
+  /** Runtime 说这台机器没有可用的监听后端，只能按需查版本。 */
+  const [degraded, setDegraded] = React.useState(false);
   /** 磁盘上这个文件的字节数，读到时记下、每次保存成功后更新（仅用于显示与旧接口兼容）。 */
   const sizeRef = React.useRef<number | undefined>(undefined);
   const versionRef = React.useRef<string | undefined>(undefined);
+  /** 磁盘上的文件已经没了，下一次保存按「新建」提交（不带内容版本）。 */
+  const recreateRef = React.useRef(false);
+  const dirtyRef = React.useRef(false);
+  dirtyRef.current = dirty;
   const identity = JSON.stringify([workspaceId, path]);
   const identityRef = React.useRef(identity);
   const viewIdentityRef = React.useRef<string | null>(null);
@@ -209,7 +236,11 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
     setState({ kind: "loading" });
     setSaving(false);
     setDirty(false);
+    setExternal(null);
+    setDiskContent(null);
+    setDegraded(false);
     versionRef.current = undefined;
+    recreateRef.current = false;
     void (async () => {
       const info = await runtimeApi.fileInfo(workspaceId, path);
       if (cancelled) return;
@@ -323,6 +354,133 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
     };
   }, [writable, identity]);
 
+  /* ------------------------------ 外部改动监听 ----------------------------- */
+
+  const watching = state.kind === "text" && state.identity === identity;
+
+  /** 用磁盘上的正文替换编辑器内容；不重建视图，撤销栈和滚动位置都保留。 */
+  const reload = React.useCallback(async () => {
+    if (!workspaceId || !path) return;
+    const file = await runtimeApi.readFile(workspaceId, path);
+    if (identityRef.current !== identity) return;
+    baselineRef.current = file.content;
+    sizeRef.current = file.size;
+    versionRef.current = file.sha256;
+    recreateRef.current = false;
+    const view = viewRef.current;
+    if (view && viewIdentityRef.current === identity)
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: file.content },
+      });
+    setDirty(false);
+    setExternal(null);
+    setDiskContent(null);
+  }, [identity, path, workspaceId]);
+
+  /** 一次外部改动：没有草稿就直接重载并提示，有草稿交给用户决定。 */
+  const applyExternal = React.useCallback(
+    (change: ExternalChange) => {
+      // 我们自己刚写下去的内容不是外部改动。Runtime 已经按写前登记的哈希
+      // 拦过一层，这里再按当前内容版本兜一次，节点绝不为自己的保存报警。
+      if (change.sha256 && change.sha256 === versionRef.current) return;
+      if (change.kind === "removed" || dirtyRef.current) {
+        setExternal(change);
+        return;
+      }
+      void reload().then(
+        () => toast(t("editor.reloaded")),
+        () => setExternal(change),
+      );
+    },
+    [reload, t],
+  );
+
+  React.useEffect(() => {
+    if (!workspaceId || !path || !watching) return;
+    let cancelled = false;
+    void runtimeApi
+      .watchFile(workspaceId, path, id)
+      .then((registration) => {
+        if (cancelled) return;
+        setDegraded(registration.status === "unsupported");
+        // 读取和注册之间也可能被改过，注册的回答就是那一刻的磁盘版本。
+        const version = registration.version;
+        if (
+          version.exists &&
+          version.sha256 &&
+          version.sha256 !== versionRef.current
+        )
+          applyExternal({ kind: "modified", sha256: version.sha256 });
+      })
+      .catch(() => {
+        // 旧 Runtime 没有这条路由：当作不可监听，退回按需检查。
+        if (!cancelled) setDegraded(true);
+      });
+    const off = onWorkspaceEvent("file.changed", (event) => {
+      if (event.workspaceId !== workspaceId || event.path !== path) return;
+      applyExternal({ kind: event.kind, sha256: event.sha256 ?? undefined });
+    });
+    return () => {
+      cancelled = true;
+      off();
+      void runtimeApi.unwatchFile(workspaceId, path, id).catch(() => undefined);
+    };
+  }, [applyExternal, id, path, watching, workspaceId]);
+
+  // 监听不可用时的退化路径：窗口重新获得焦点才问一次版本，不做轮询。
+  React.useEffect(() => {
+    if (!degraded || !watching || !workspaceId || !path) return;
+    const check = () => {
+      void runtimeApi
+        .fileVersion(workspaceId, path)
+        .then((version) => {
+          if (identityRef.current !== identity) return;
+          if (!version.exists) {
+            if (versionRef.current !== undefined)
+              applyExternal({ kind: "removed" });
+          } else if (version.sha256 && version.sha256 !== versionRef.current)
+            applyExternal({ kind: "modified", sha256: version.sha256 });
+        })
+        .catch(() => undefined);
+    };
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      window.removeEventListener("focus", check);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, [applyExternal, degraded, identity, path, watching, workspaceId]);
+
+  const compare = React.useCallback(() => {
+    if (!workspaceId || !path) return;
+    void runtimeApi
+      .readFile(workspaceId, path)
+      .then((file) => {
+        if (identityRef.current === identity) setDiskContent(file.content);
+      })
+      // 文件已经不在了：拿空正文比，整份草稿显示为新增。
+      .catch(() => {
+        if (identityRef.current === identity) setDiskContent("");
+      });
+  }, [identity, path, workspaceId]);
+
+  /**
+   * 保留草稿：把最新的磁盘版本当作保存令牌，下一次保存就覆盖这次外部改动；
+   * 文件已被删除时改成「新建」提交。之后磁盘再变，Runtime 仍会 409 再提示。
+   */
+  const keepDraft = React.useCallback(() => {
+    if (!external) return;
+    if (external.kind === "removed") {
+      versionRef.current = undefined;
+      recreateRef.current = true;
+    } else if (external.sha256) {
+      versionRef.current = external.sha256;
+      recreateRef.current = false;
+    }
+    setExternal(null);
+    setDiskContent(null);
+  }, [external]);
+
   /* --------------------------------- 保存 --------------------------------- */
 
   const save = React.useCallback(async () => {
@@ -333,7 +491,9 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
       !writable ||
       pendingSaveRef.current ||
       viewIdentityRef.current !== identity ||
-      !versionRef.current
+      // 没有内容版本只有一种情况可以保存：文件被外部删除后用户选了保留草稿，
+      // 这一次按「新建」提交，别的写者抢先建了同名文件仍然会 409。
+      (!versionRef.current && !recreateRef.current)
     )
       return;
     const submitted = view.state.doc.toString();
@@ -352,13 +512,27 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
       // 只更新基准大小，不重建编辑器：重建会丢光标和撤销栈。
       sizeRef.current = result.size;
       versionRef.current = result.sha256;
+      recreateRef.current = false;
       baselineRef.current = submitted;
       setDirty(view.state.doc.toString() !== submitted);
+      setExternal(null);
     } catch (error) {
-      if (identityRef.current === identity)
-        toast.error(
-          isConflict(error) ? t("editor.conflict") : t("editor.saveFailed"),
-        );
+      if (identityRef.current !== identity) return;
+      toast.error(
+        isConflict(error) ? t("editor.conflict") : t("editor.saveFailed"),
+      );
+      // 冲突就是「磁盘上又变了」：把当前版本取回来，重新挂提示条。
+      if (isConflict(error) && workspaceId)
+        void runtimeApi
+          .fileVersion(workspaceId, path)
+          .then((version) => {
+            if (identityRef.current !== identity) return;
+            setExternal({
+              kind: version.exists ? "modified" : "removed",
+              sha256: version.sha256 ?? undefined,
+            });
+          })
+          .catch(() => undefined);
     } finally {
       if (pendingSaveRef.current === token) {
         pendingSaveRef.current = null;
@@ -383,6 +557,9 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
     <>
       {state.kind === "text" && !state.sha256 && (
         <Badge variant="outline">{t("editor.versionRequired")}</Badge>
+      )}
+      {degraded && state.kind === "text" && (
+        <Badge variant="outline">{t("editor.watchUnsupported")}</Badge>
       )}
       {dirty && (
         <span
@@ -463,10 +640,105 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
           />
         )}
         {state.kind === "text" && (
-          <div ref={hostRef} className="h-full w-full overflow-hidden" />
+          <div className="flex h-full w-full flex-col overflow-hidden">
+            {external && (
+              <ExternalBar
+                change={external}
+                onCompare={compare}
+                onReload={() => void reload().catch(() => undefined)}
+                onKeep={keepDraft}
+              />
+            )}
+            <div className="relative min-h-0 flex-1">
+              <div ref={hostRef} className="h-full w-full overflow-hidden" />
+              {diskContent !== null && (
+                <ComparePanel
+                  patch={unifiedLineDiff(
+                    diskContent,
+                    viewRef.current?.state.doc.toString() ?? "",
+                  )}
+                  onClose={() => setDiskContent(null)}
+                />
+              )}
+            </div>
+          </div>
         )}
       </div>
     </NodeShell>
+  );
+}
+
+/**
+ * 外部改动提示条：非模态，不挡编辑区，三个选择都留给用户。
+ * 文件被删除时没有可比较也没有可重载的磁盘版本，只剩「保留草稿」。
+ */
+function ExternalBar({
+  change,
+  onCompare,
+  onReload,
+  onKeep,
+}: {
+  change: ExternalChange;
+  onCompare: () => void;
+  onReload: () => void;
+  onKeep: () => void;
+}) {
+  const t = useT();
+  const removed = change.kind === "removed";
+  return (
+    <div
+      role="status"
+      className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-[var(--border)] bg-[var(--warn-soft)] px-2 py-1"
+    >
+      <span className="min-w-0 flex-1 truncate text-[length:var(--text-caption)]">
+        {t(`editor.external.${change.kind}`)}
+      </span>
+      {!removed && (
+        <Button variant="ghost" size="sm" className="h-6" onClick={onCompare}>
+          {t("editor.compare")}
+        </Button>
+      )}
+      {!removed && (
+        <Button variant="ghost" size="sm" className="h-6" onClick={onReload}>
+          {t("editor.reloadDiscard")}
+        </Button>
+      )}
+      <Button variant="secondary" size="sm" className="h-6" onClick={onKeep}>
+        {t("editor.keepDraft")}
+      </Button>
+    </div>
+  );
+}
+
+/** 磁盘版 → 草稿的差异，着色复用变更节点的 `PatchBody`。 */
+function ComparePanel({
+  patch,
+  onClose,
+}: {
+  patch: string;
+  onClose: () => void;
+}) {
+  const t = useT();
+  return (
+    <div className="absolute inset-0 z-10 flex flex-col bg-[var(--surface-sunken)]">
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-[var(--border)] px-2 py-1">
+        <span className="min-w-0 flex-1 truncate text-[length:var(--text-caption)] text-muted-foreground">
+          {t("editor.compareTitle")}
+        </span>
+        <IconButton label={t("editor.compareClose")} onClick={onClose}>
+          <X />
+        </IconButton>
+      </div>
+      <ScrollArea className="min-h-0 flex-1">
+        {patch ? (
+          <PatchBody patch={patch} />
+        ) : (
+          <div className="p-2">
+            <Badge variant="outline">{t("editor.compareEmpty")}</Badge>
+          </div>
+        )}
+      </ScrollArea>
+    </div>
   );
 }
 

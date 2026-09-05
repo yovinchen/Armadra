@@ -26,6 +26,13 @@ vi.mock("@/api/client", () => ({
     fileInfo: async () => ({ preview: "text" }),
     readFile: mocks.read,
     writeFile: mocks.write,
+    // 监听不在这一组用例的范围内：注册成功但永不推送。
+    watchFile: async () => ({
+      status: "watching",
+      version: { path: "note.txt", exists: true },
+    }),
+    unwatchFile: async () => undefined,
+    fileVersion: async () => ({ path: "note.txt", exists: true }),
   },
 }));
 vi.mock("@/store/canvas-store", () => ({

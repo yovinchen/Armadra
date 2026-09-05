@@ -164,6 +164,49 @@ export const writeFileResponseSchema = z.object({
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
 });
 
+/* ------------------------------ file watching ---------------------------- */
+
+/**
+ * `GET /api/workspaces/{id}/file-version?path=` — what is on disk right now.
+ *
+ * A missing file answers `exists: false` rather than 404: the editor keeps the
+ * draft of a deleted file. `sha256` is absent for a file above the write
+ * limit, which the editor refuses to open anyway.
+ */
+export const fileVersionSchema = z.object({
+  path: z.string(),
+  exists: z.boolean(),
+  sha256: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .nullish(),
+  size: z.number().int().nonnegative().nullish(),
+  /** RFC 3339 when the platform reports one. */
+  mtime: z.string().nullish(),
+});
+
+/** `POST /api/workspaces/{id}/file-watch` — an editor node opens a file. */
+export const watchFileRequestSchema = z.object({
+  path: z.string().min(1).max(4_000),
+  nodeId: z.string().min(1).max(128),
+});
+
+/**
+ * `watching` = changes arrive as `file.changed`. `unsupported` = no platform
+ * watcher (backend missing, descriptor or queue limit); the client falls back
+ * to asking `file-version` on demand.
+ */
+export const watchStatusSchema = z.enum(["watching", "unsupported"]);
+
+export const watchRegistrationSchema = z.object({
+  status: watchStatusSchema,
+  reason: z.string().nullish(),
+  version: fileVersionSchema,
+});
+
+/** How the file on disk differs from what the editor last read. */
+export const fileChangeKindSchema = z.enum(["modified", "removed", "replaced"]);
+
 /* ---------------------------------- terminals ---------------------------- */
 
 /** Agent block on `POST /api/terminals`; drives the injected `ARMADRA_*` env. */
@@ -811,6 +854,22 @@ export const workspaceEventSchema = z.discriminatedUnion("type", [
     nodeId: z.string(),
     summary: z.string(),
   }),
+  /**
+   * A file an editor node registered through `POST …/file-watch` changed on
+   * disk outside the app. `sha256` / `size` / `mtime` are null for a removal.
+   */
+  z.object({
+    type: z.literal("file.changed"),
+    workspaceId: z.string(),
+    path: z.string(),
+    kind: fileChangeKindSchema,
+    sha256: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .nullish(),
+    size: z.number().int().nonnegative().nullish(),
+    mtime: z.string().nullish(),
+  }),
 ]);
 
 /* ------------------------------------ 用量 ------------------------------- */
@@ -881,6 +940,15 @@ export type FileList = z.infer<typeof fileListSchema>;
 export type FileContent = z.infer<typeof fileContentSchema>;
 export type WriteFileRequest = z.infer<typeof writeFileRequestSchema>;
 export type WriteFileResponse = z.infer<typeof writeFileResponseSchema>;
+export type FileVersion = z.infer<typeof fileVersionSchema>;
+export type WatchFileRequest = z.infer<typeof watchFileRequestSchema>;
+export type WatchStatus = z.infer<typeof watchStatusSchema>;
+export type WatchRegistration = z.infer<typeof watchRegistrationSchema>;
+export type FileChangeKind = z.infer<typeof fileChangeKindSchema>;
+export type FileChangedEvent = Extract<
+  WorkspaceEvent,
+  { type: "file.changed" }
+>;
 export type CreateTerminalRequest = z.infer<typeof createTerminalRequestSchema>;
 export type SshHost = z.infer<typeof sshHostSchema>;
 export type SshTestResult = z.infer<typeof sshTestResultSchema>;

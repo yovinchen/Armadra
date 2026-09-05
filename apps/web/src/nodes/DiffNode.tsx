@@ -158,8 +158,11 @@ function DiffFileRow({
   );
 }
 
-/** 逐行着色的 unified patch。行本身不可交互，所以用 `<div>` 而不是列表控件。 */
-function PatchBody({ patch }: { patch: string }) {
+/**
+ * 逐行着色的 unified patch。行本身不可交互，所以用 `<div>` 而不是列表控件。
+ * 编辑器的「比较」（E01/M4）复用同一套着色，磁盘版与草稿不另起一套样式。
+ */
+export function PatchBody({ patch }: { patch: string }) {
   const lines = React.useMemo(() => patch.split("\n"), [patch]);
   return (
     <pre className="overflow-x-auto font-mono text-[11px] leading-[1.45]">
