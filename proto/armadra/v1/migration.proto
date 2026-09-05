@@ -1,0 +1,96 @@
+syntax = "proto3";
+package armadra.v1;
+option go_package = "armadra.local/host/gen/armadra/v1";
+
+// Offline export manifest, maximum 64 MiB. Not a network control frame.
+// The referenced SQLite file is a consistent snapshot. Asset files have their
+// own integrity checks and are not claimed to share that database transaction.
+message MigrationExportManifest {
+  uint32 format_version = 1;
+  string export_id = 2;
+  int64 exported_at_unix_ms = 3;
+  string producer_version = 4;
+  string database_file = 5;
+  uint64 database_bytes = 6;
+  bytes database_sha256 = 7;
+  repeated ExportMigration migrations = 8;
+  repeated ExportTable tables = 9;
+  repeated ExportIdSet identities = 10;
+  repeated ExportCanvas canvases = 11;
+  repeated ExportNodeAnnotation annotations = 12;
+  repeated ExportAsset assets = 13;
+  repeated ExportIssue issues = 14;
+  bool assets_complete = 15;
+  // Export never grants write ownership. Always false in format version 1.
+  bool ownership_switch_allowed = 16;
+}
+message ExportMigration {
+  int64 version = 1;
+  bytes checksum = 2;
+  bool success = 3;
+  string description = 4;
+}
+message ExportTable {
+  string name = 1;
+  uint64 row_count = 2;
+  bool readable = 3;
+  bytes schema_sha256 = 4;
+}
+message ExportIdSet { string table = 1; repeated string ids = 2; }
+message ExportCanvas {
+  string canvas_id = 1;
+  string workspace_id = 2;
+  bytes whiteboard_sha256 = 3;
+  uint64 whiteboard_bytes = 4;
+  bytes kanban_json = 5;
+}
+message ExportNodeAnnotation {
+  string node_id = 1;
+  string canvas_id = 2;
+  bytes labels_json = 3;
+  bytes note_utf8 = 4;
+}
+message ExportAsset {
+  string workspace_id = 1;
+  string relative_path = 2;
+  string bundle_path = 3;
+  uint64 bytes = 4;
+  bytes sha256 = 5;
+  bool copied = 6;
+  repeated string referenced_by = 7;
+}
+message ExportIssue {
+  string code = 1;
+  string severity = 2; // error or warning; unknown severity cannot authorize activation.
+  string entity = 3;
+  string detail = 4;
+}
+
+// Lossless legacy row envelope used by the staged importer. Column names are
+// explicit; no SQL text is accepted by any network endpoint.
+message ImportedSqlRow {
+  string table = 1;
+  repeated ImportedSqlColumn columns = 2;
+}
+message ImportedSqlColumn {
+  string name = 1;
+  oneof value {
+    SqlNull null_value = 2;
+    string text_value = 3;
+    int64 integer_value = 4;
+    double real_value = 5;
+    bytes blob_value = 6;
+  }
+}
+message SqlNull {}
+message MigrationImportReport {
+  string import_id = 1;
+  string export_id = 2;
+  string host_id = 3;
+  bytes manifest_sha256 = 4;
+  repeated ExportTable tables = 5;
+  uint64 entity_count = 6;
+  uint64 last_event_sequence = 7;
+  repeated ExportIssue issues = 8;
+  string state = 9; // staged, never active from import alone.
+}

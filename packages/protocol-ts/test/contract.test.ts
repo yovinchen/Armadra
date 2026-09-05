@@ -8,6 +8,8 @@ import {
   type MessageInitShape,
 } from "@bufbuild/protobuf";
 import {
+  MigrationExportManifestSchema,
+  ImportedSqlRowSchema,
   HelloRequestSchema,
   HelloResponseSchema,
   ErrorResponseSchema,
@@ -41,6 +43,50 @@ function check<T extends DescMessage>(
 const maxUint64 = 18_446_744_073_709_551_615n;
 
 describe("shared Go / Rust / TypeScript wire contracts", () => {
+  it("preserves migration manifests and every SQLite value storage class", () => {
+    check("migration_manifest", MigrationExportManifestSchema, {
+      formatVersion: 1,
+      exportId: "导出-1",
+      exportedAtUnixMs: 1_788_557_000_000n,
+      producerVersion: "0.1.0",
+      databaseFile: "source.sqlite",
+      databaseBytes: 9_007_199_254_740_993n,
+      databaseSha256: new Uint8Array(32).fill(1),
+      migrations: [
+        {
+          version: 1n,
+          checksum: new Uint8Array(48).fill(2),
+          success: true,
+          description: "initial",
+        },
+      ],
+      tables: [
+        {
+          name: "boards",
+          rowCount: 2n,
+          readable: true,
+          schemaSha256: new Uint8Array(32).fill(3),
+        },
+      ],
+      assetsComplete: true,
+    });
+    check("imported_sql_row", ImportedSqlRowSchema, {
+      table: "测试",
+      columns: [
+        { name: "null", value: { case: "nullValue", value: {} } },
+        { name: "text", value: { case: "textValue", value: "会话😀" } },
+        {
+          name: "integer",
+          value: { case: "integerValue", value: -9_223_372_036_854_775_808n },
+        },
+        { name: "real", value: { case: "realValue", value: 1.5 } },
+        {
+          name: "blob",
+          value: { case: "blobValue", value: new Uint8Array([0, 255]) },
+        },
+      ],
+    });
+  });
   it("encodes explicit private desktop shutdown, separate from empty input", () => {
     check("desktop_shutdown", DesktopRuntimeControlSchema, {
       action: { case: "shutdown", value: {} },

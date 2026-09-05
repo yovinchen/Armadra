@@ -41,6 +41,14 @@ func fixture(t *testing.T, name string, data []byte) []byte {
 
 func cases() map[string]proto.Message {
 	return map[string]proto.Message{
+		"migration_manifest": &pb.MigrationExportManifest{FormatVersion: 1, ExportId: "导出-1", ExportedAtUnixMs: 1788557000000, ProducerVersion: "0.1.0", DatabaseFile: "source.sqlite", DatabaseBytes: 9007199254740993, DatabaseSha256: bytes.Repeat([]byte{1}, 32), Migrations: []*pb.ExportMigration{{Version: 1, Checksum: bytes.Repeat([]byte{2}, 48), Success: true, Description: "initial"}}, Tables: []*pb.ExportTable{{Name: "boards", RowCount: 2, Readable: true, SchemaSha256: bytes.Repeat([]byte{3}, 32)}}, AssetsComplete: true},
+		"imported_sql_row": &pb.ImportedSqlRow{Table: "测试", Columns: []*pb.ImportedSqlColumn{
+			{Name: "null", Value: &pb.ImportedSqlColumn_NullValue{NullValue: &pb.SqlNull{}}},
+			{Name: "text", Value: &pb.ImportedSqlColumn_TextValue{TextValue: "会话😀"}},
+			{Name: "integer", Value: &pb.ImportedSqlColumn_IntegerValue{IntegerValue: math.MinInt64}},
+			{Name: "real", Value: &pb.ImportedSqlColumn_RealValue{RealValue: 1.5}},
+			{Name: "blob", Value: &pb.ImportedSqlColumn_BlobValue{BlobValue: []byte{0, 255}}},
+		}},
 		"desktop_shutdown":     &pb.DesktopRuntimeControl{Action: &pb.DesktopRuntimeControl_Shutdown{Shutdown: &pb.DesktopShutdownRequest{}}},
 		"management_running":   &pb.HostManagementResult{State: &pb.HostManagementResult_Running{Running: &pb.HostStatus{HostId: "host-1", HostInstanceId: "instance-1", HttpEndpoint: "http://127.0.0.1:43121", StartedAtUnixMs: 1788556300000, ProcessId: 321}}},
 		"management_stopped":   &pb.HostManagementResult{State: &pb.HostManagementResult_Stopped{Stopped: &pb.HostStoppedState{}}},

@@ -13,6 +13,10 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const mode = process.argv[2];
+const protoNames = readdirSync(join(root, "proto/armadra/v1"))
+  .filter((name) => name.endsWith(".proto"))
+  .sort();
+if (protoNames.length === 0) throw new Error("No protocol schemas found");
 if (!["generate", "check", "test", "fixtures"].includes(mode)) {
   throw new Error(
     "usage: node scripts/protocol.mjs generate|check|test|fixtures",
@@ -99,7 +103,7 @@ if (mode === "test") {
         ...esPluginArgs,
         `--es_out=${tsOut}`,
         "--es_opt=target=ts,import_extension=js",
-        "proto/armadra/v1/common.proto",
+        ...protoNames.map((name) => `proto/armadra/v1/${name}`),
       ],
       root,
       { env: pluginEnv },
@@ -109,7 +113,9 @@ if (mode === "test") {
       "exec",
       "prettier",
       "--write",
-      join(tsOut, "armadra/v1/common_pb.ts"),
+      ...protoNames.map((name) =>
+        join(tsOut, "armadra/v1", name.replace(/\.proto$/, "_pb.ts")),
+      ),
     ]);
     for (const [generated, target] of [
       [goOut, "apps/host/gen"],
