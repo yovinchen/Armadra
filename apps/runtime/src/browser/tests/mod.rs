@@ -13,7 +13,7 @@
 mod live;
 mod managed;
 mod persistence;
-mod process;
 mod policy;
+mod process;
 mod streaming;
 mod support;
