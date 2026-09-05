@@ -2060,7 +2060,7 @@ mod tests {
                 .fetch_one(&upgraded)
                 .await
                 .unwrap(),
-            3
+            4
         );
         assert_eq!(
             sqlx::query_scalar::<_, Vec<u8>>(
@@ -2254,7 +2254,7 @@ mod tests {
                     .fetch_one(&pool)
                     .await
                     .unwrap(),
-                3
+                4
             );
             pool.close().await;
         }

@@ -51,7 +51,7 @@ pub fn run() -> i32 {
     0
 }
 
-fn load_binding() -> Option<(Session, String, u64, u64)> {
+pub(crate) fn load_binding() -> Option<(Session, String, u64, u64)> {
     let session = Session::load().ok()?;
     session.node_token.as_ref()?;
     let session_id = env_var("ARMADRA_SESSION_ID").filter(|id| is_valid_node_id(id))?;

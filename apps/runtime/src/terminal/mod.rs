@@ -299,6 +299,100 @@ struct SessionRecord {
     exited: bool,
     /// Kept so `recycle` can restart the same terminal, environment included.
     spec: TerminalSpec,
+    input_revision: u64,
+    input_safety: InputSafety,
+    last_input_source_revision: Option<u64>,
+    observation: Option<AgentObservation>,
+}
+
+#[derive(Clone, Default)]
+struct InputSafety {
+    pending: bool,
+    in_paste: bool,
+    escape: Vec<u8>,
+}
+impl InputSafety {
+    fn consume(&mut self, data: &[u8]) -> (bool, bool) {
+        let was_pending = self.pending;
+        let mut edited = false;
+        let mut submitted = false;
+        for &byte in data {
+            if !self.escape.is_empty() {
+                self.escape.push(byte);
+                if self.escape == b"\x1b[200~" {
+                    self.in_paste = true;
+                    self.pending = true;
+                    edited = true;
+                    self.escape.clear();
+                    continue;
+                }
+                if self.escape == b"\x1b[201~" {
+                    self.in_paste = false;
+                    self.escape.clear();
+                    continue;
+                }
+                if b"\x1b[200~".starts_with(&self.escape) || b"\x1b[201~".starts_with(&self.escape)
+                {
+                    continue;
+                }
+                if self.escape.len() >= 3 && self.escape[1] == b'[' && (0x40..=0x7e).contains(&byte)
+                {
+                    let response = matches!(byte, b'c' | b'R' | b'n')
+                        && self.escape[2..self.escape.len() - 1]
+                            .iter()
+                            .all(|byte| byte.is_ascii_digit() || b";?>".contains(byte));
+                    if !response {
+                        self.pending = true;
+                        edited = true;
+                    }
+                    self.escape.clear();
+                    continue;
+                }
+                if self.escape.len() > 64 || (self.escape.len() == 2 && byte != b'[') {
+                    self.pending = true;
+                    edited = true;
+                    self.escape.clear();
+                }
+                continue;
+            }
+            if byte == 0x1b {
+                self.escape.push(byte);
+                continue;
+            }
+            if !self.in_paste && matches!(byte, b'\r' | b'\n') {
+                self.pending = false;
+                submitted = true;
+                edited = true;
+            } else {
+                self.pending = true;
+                edited = true;
+            }
+        }
+        (edited, submitted || (!was_pending && self.pending))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct AgentObservation {
+    pub revision: u64,
+    pub provider_session_id: Option<String>,
+    pub transcript_path: Option<String>,
+    pub observed_at: String,
+    pub idle_input_revision: Option<u64>,
+}
+
+pub struct AgentReport {
+    pub revision: u64,
+    pub provider_session_id: Option<String>,
+    pub transcript_path: Option<String>,
+    pub idle: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuardedPasteOutcome {
+    Submitted,
+    NotWritten(&'static str),
+    Unknown,
 }
 
 struct Inner {
@@ -317,6 +411,7 @@ struct Inner {
     records: RwLock<HashMap<String, SessionRecord>>,
     /// `session_key -> session id`; a key has exactly one live session.
     by_key: RwLock<HashMap<SessionKey, String>>,
+    key_gates: std::sync::Mutex<HashMap<SessionKey, Arc<tokio::sync::Mutex<()>>>>,
     statuses: RwLock<HashMap<String, broadcast::Sender<StatusEvent>>>,
 }
 
@@ -386,6 +481,7 @@ impl TerminalManager {
             reason,
             records: RwLock::new(HashMap::new()),
             by_key: RwLock::new(HashMap::new()),
+            key_gates: std::sync::Mutex::new(HashMap::new()),
             statuses: RwLock::new(HashMap::new()),
         });
         let manager = Self { inner };
@@ -400,6 +496,16 @@ impl TerminalManager {
             (BackendKind::Tmux, Some(tmux)) => tmux.clone() as Arc<dyn TerminalBackend>,
             _ => self.inner.direct.clone() as Arc<dyn TerminalBackend>,
         }
+    }
+
+    fn key_gate(&self, key: &SessionKey) -> Arc<tokio::sync::Mutex<()>> {
+        self.inner
+            .key_gates
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entry(key.clone())
+            .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+            .clone()
     }
 
     pub fn backend_info(&self) -> BackendInfo {
@@ -480,6 +586,7 @@ impl TerminalManager {
         }
         let id = Uuid::now_v7().to_string();
         let key = SessionKey::new(request.owner_node_id.clone().unwrap_or_else(|| id.clone()));
+        let _key_guard = self.key_gate(&key).lock_owned().await;
         let shell = request.shell.clone().unwrap_or_else(default_shell);
         let spec = TerminalSpec {
             session_key: key.clone(),
@@ -539,6 +646,10 @@ impl TerminalManager {
             rows: DEFAULT_ROWS,
             cols: DEFAULT_COLS,
             exited: false,
+            input_revision: 0,
+            input_safety: InputSafety::default(),
+            last_input_source_revision: Some(0),
+            observation: None,
             spec,
         })
         .await;
@@ -590,6 +701,8 @@ impl TerminalManager {
         if self.is_shutting_down() {
             return Err(AppError::Conflict("Runtime is shutting down".into()));
         }
+        let first = self.require(session_id).await?;
+        let _key_guard = self.key_gate(&first.key).lock_owned().await;
         let record = self.require(session_id).await?;
         let backend = self.backend(record.kind);
         let next_generation = record.generation + 1;
@@ -655,6 +768,10 @@ impl TerminalManager {
         self.remember(SessionRecord {
             kind,
             generation: handle.generation,
+            input_revision: 0,
+            input_safety: InputSafety::default(),
+            last_input_source_revision: Some(0),
+            observation: None,
             pid: handle.pid,
             exited: false,
             spec,
@@ -791,7 +908,10 @@ impl TerminalManager {
 
     /// A write from a socket that still believes in `generation`.
     pub async fn write(&self, session_id: &str, generation: u64, data: &str) -> AppResult<()> {
+        let first = self.require(session_id).await?;
+        let _key_guard = self.key_gate(&first.key).lock_owned().await;
         let record = self.checked(session_id, generation).await?;
+        self.note_input(session_id, data.as_bytes()).await;
         self.backend(record.kind)
             .write(&record.key, data.as_bytes())
             .await
@@ -821,6 +941,20 @@ impl TerminalManager {
 
     async fn checked(&self, session_id: &str, generation: u64) -> AppResult<SessionRecord> {
         let record = self.require(session_id).await?;
+        if record.exited
+            || self
+                .inner
+                .by_key
+                .read()
+                .await
+                .get(&record.key)
+                .map(String::as_str)
+                != Some(session_id)
+        {
+            return Err(AppError::NotFound(
+                "Terminal session is no longer current".into(),
+            ));
+        }
         if record.generation != generation {
             return Err(AppError::Conflict(format!(
                 "Terminal generation {generation} is stale; the session is at {}",
@@ -853,10 +987,194 @@ impl TerminalManager {
     }
 
     pub async fn paste(&self, session_id: &str, text: &str, press_enter: bool) -> AppResult<()> {
+        let first = self.require(session_id).await?;
+        let _key_guard = self.key_gate(&first.key).lock_owned().await;
         let record = self.require(session_id).await?;
+        let frame = format!(
+            "{}{}{}{}",
+            backend::PASTE_START,
+            backend::sanitize_paste(text),
+            backend::PASTE_END,
+            if press_enter { "\r" } else { "" }
+        );
+        self.note_input(session_id, frame.as_bytes()).await;
         self.backend(record.kind)
             .paste(&record.key, text, press_enter)
             .await
+    }
+
+    async fn note_input(&self, session_id: &str, data: &[u8]) {
+        let generation = {
+            let mut records = self.inner.records.write().await;
+            let Some(record) = records.get_mut(session_id) else {
+                return;
+            };
+            let (edited, fence) = record.input_safety.consume(data);
+            if edited {
+                record.input_revision = record.input_revision.saturating_add(1);
+            }
+            if !fence {
+                return;
+            }
+            record.last_input_source_revision = None;
+            record.generation
+        };
+        let directory = self.inner.data_dir.clone();
+        let session = session_id.to_owned();
+        let operation = tokio::task::spawn_blocking(move || {
+            crate::context_usage::advance_sequence(&directory, &session, generation)
+        });
+        let revision = match tokio::time::timeout(Duration::from_millis(250), operation).await {
+            Ok(Ok(Ok(revision))) => Some(revision),
+            _ => None,
+        };
+        if let Some(record) = self.inner.records.write().await.get_mut(session_id) {
+            record.last_input_source_revision = revision;
+        }
+    }
+
+    pub async fn agent_observation(
+        &self,
+        session_id: &str,
+        generation: u64,
+    ) -> Option<AgentObservation> {
+        self.record(session_id)
+            .await
+            .filter(|record| record.generation == generation && !record.exited)
+            .and_then(|record| record.observation)
+    }
+
+    pub async fn observe_agent(
+        &self,
+        node_id: &str,
+        session_id: &str,
+        generation: u64,
+        report: AgentReport,
+    ) -> bool {
+        let AgentReport {
+            revision,
+            provider_session_id,
+            transcript_path,
+            idle,
+        } = report;
+        let Some(first) = self.record(session_id).await else {
+            return false;
+        };
+        let _key_guard = self.key_gate(&first.key).lock_owned().await;
+        if !self
+            .is_current_node_session(node_id, session_id, generation)
+            .await
+        {
+            return false;
+        }
+        let mut records = self.inner.records.write().await;
+        let Some(record) = records.get_mut(session_id) else {
+            return false;
+        };
+        if record
+            .observation
+            .as_ref()
+            .is_some_and(|old| old.revision >= revision)
+        {
+            return false;
+        }
+        let provider_session_id = provider_session_id.or_else(|| {
+            record
+                .observation
+                .as_ref()
+                .and_then(|old| old.provider_session_id.clone())
+        });
+        let same_provider = record
+            .observation
+            .as_ref()
+            .is_some_and(|old| old.provider_session_id == provider_session_id);
+        let transcript_path = transcript_path.or_else(|| {
+            same_provider
+                .then(|| {
+                    record
+                        .observation
+                        .as_ref()
+                        .and_then(|old| old.transcript_path.clone())
+                })
+                .flatten()
+        });
+        record.observation = Some(AgentObservation {
+            revision,
+            provider_session_id,
+            transcript_path,
+            observed_at: Utc::now().to_rfc3339(),
+            idle_input_revision: (idle
+                && !record.input_safety.pending
+                && record.input_safety.escape.is_empty()
+                && record
+                    .last_input_source_revision
+                    .is_some_and(|input| input < revision))
+            .then_some(record.input_revision),
+        });
+        true
+    }
+
+    pub async fn handoff_idle(&self, node_id: &str, session_id: &str, generation: u64) -> bool {
+        if !self
+            .is_current_node_session(node_id, session_id, generation)
+            .await
+        {
+            return false;
+        }
+        self.record(session_id).await.is_some_and(|record| {
+            !record.input_safety.pending
+                && record.input_safety.escape.is_empty()
+                && record.observation.as_ref().is_some_and(|observation| {
+                    observation.idle_input_revision == Some(record.input_revision)
+                })
+        })
+    }
+
+    /// Only preflight failures prove no input was submitted. Once the backend
+    /// is called, any failure is uncertain and must never trigger blind retry.
+    /// Key ownership stays locked across generation/idle checks and the frame.
+    pub async fn paste_handoff(
+        &self,
+        node_id: &str,
+        session_id: &str,
+        generation: u64,
+        expected_programs: &[String],
+        text: &str,
+    ) -> GuardedPasteOutcome {
+        if self.is_shutting_down() {
+            return GuardedPasteOutcome::NotWritten("runtimeStopping");
+        }
+        let Some(first) = self.record(session_id).await else {
+            return GuardedPasteOutcome::NotWritten("targetUnavailable");
+        };
+        let _key_guard = self.key_gate(&first.key).lock_owned().await;
+        if !self.handoff_idle(node_id, session_id, generation).await {
+            return GuardedPasteOutcome::NotWritten("targetBusy");
+        }
+        let Ok(record) = self.checked(session_id, generation).await else {
+            return GuardedPasteOutcome::NotWritten("targetChanged");
+        };
+        let foreground = self.backend(record.kind).foreground(&record.key).await;
+        if !foreground.is_ok_and(|foreground| {
+            crate::collab::messaging::pane_runs_agent(&foreground, expected_programs)
+        }) {
+            return GuardedPasteOutcome::NotWritten("targetNotAgentPane");
+        }
+        let frame = format!(
+            "{}{}{}\r",
+            backend::PASTE_START,
+            backend::sanitize_paste(text),
+            backend::PASTE_END
+        );
+        self.note_input(session_id, frame.as_bytes()).await;
+        match self
+            .backend(record.kind)
+            .paste(&record.key, &backend::sanitize_paste(text), true)
+            .await
+        {
+            Ok(()) => GuardedPasteOutcome::Submitted,
+            Err(_) => GuardedPasteOutcome::Unknown,
+        }
     }
 
     /// Wheel bridge (plan §18.5). Positive `lines` scrolls towards older
@@ -874,6 +1192,8 @@ impl TerminalManager {
     /* ------------------------------ termination --------------------------- */
 
     pub async fn terminate(&self, session_id: &str, mode: TerminateMode) -> AppResult<()> {
+        let first = self.require(session_id).await?;
+        let _key_guard = self.key_gate(&first.key).lock_owned().await;
         let record = self.require(session_id).await?;
         let backend = self.backend(record.kind);
         let _ = sqlx::query("UPDATE terminal_sessions SET termination_intent = ? WHERE id = ?")
@@ -948,6 +1268,7 @@ impl TerminalManager {
 
         for session_id in &ids {
             if let Some(record) = self.record(session_id).await {
+                let _key_guard = self.key_gate(&record.key).lock_owned().await;
                 // Marked before the kill so the exit watcher reports this
                 // teardown rather than an independent exit.
                 if let Some(record) = self.inner.records.write().await.get_mut(session_id) {
@@ -1095,6 +1416,10 @@ impl TerminalManager {
                     rows: DEFAULT_ROWS,
                     cols: DEFAULT_COLS,
                     exited: false,
+                    input_revision: 0,
+                    input_safety: InputSafety::default(),
+                    last_input_source_revision: Some(0),
+                    observation: None,
                     spec: TerminalSpec {
                         session_key: key.clone(),
                         workspace_id: session.workspace_id,

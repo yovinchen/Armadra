@@ -104,7 +104,7 @@ describe("agent registry", () => {
 
 describe("hook events", () => {
   it("lists every provider's event names exactly once", () => {
-    expect(HOOK_CLIENT_REVISION).toBe(2);
+    expect(HOOK_CLIENT_REVISION).toBe(3);
     for (const id of AGENT_IDS) {
       const events = hookEventsFor(id);
       expect(events.length > 0).toBe(

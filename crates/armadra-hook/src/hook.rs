@@ -38,22 +38,39 @@ pub fn run(agent_id: &str) -> i32 {
         return 0;
     };
 
+    let binding = crate::context_usage::load_binding();
     let (bytes, truncated) = read_stdin_capped();
     let payload = build_payload(&bytes, truncated);
 
-    let session = match Session::load() {
-        Ok(session) => session,
-        Err(error) => {
-            debug(&error);
-            return 0;
-        }
+    let (session, binding) = match binding {
+        Some((session, id, generation, revision)) => (
+            session,
+            Some(
+                json!({"sessionId":id,"generation":generation,"sourceRevision":revision.to_string()}),
+            ),
+        ),
+        None => match Session::load() {
+            Ok(session) => (session, None),
+            Err(error) => {
+                debug(&error);
+                return 0;
+            }
+        },
     };
 
     if let Some(seconds) = permission_wait_secs(agent_id, &payload) {
         return run_permission_wait(&session, agent_id, payload, seconds);
     }
 
-    let body = hook_body(&node_id, &payload, None, None);
+    let mut body = hook_body(&node_id, &payload, None, None);
+    if let Some(binding) = binding {
+        if let Ok(mut value) = serde_json::from_slice::<Value>(&body) {
+            value["terminalBinding"] = binding;
+            if let Ok(encoded) = serde_json::to_vec(&value) {
+                body = encoded;
+            }
+        }
+    }
     match post_hook(&session, agent_id, &body) {
         Ok(204) => {}
         Ok(status) => debug(&format!("hook endpoint answered {status}, expected 204")),

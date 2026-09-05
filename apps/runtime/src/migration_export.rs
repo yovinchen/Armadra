@@ -891,7 +891,7 @@ mod tests {
         prefix.run(pool).await.unwrap();
     }
     async fn fixture() -> (TempDir, SqlitePool) {
-        fixture_version(3).await
+        fixture_version(4).await
     }
     async fn fixture_version(version: i64) -> (TempDir, SqlitePool) {
         let dir = tempfile::tempdir().unwrap();
@@ -947,7 +947,7 @@ mod tests {
         assert_eq!(manifest, package.manifest);
         assert!(!manifest.ownership_switch_allowed);
         assert!(manifest.assets_complete);
-        assert_eq!(manifest.migrations.len(), 3);
+        assert_eq!(manifest.migrations.len(), 4);
         assert_eq!(
             manifest.canvases[0].whiteboard_sha256,
             Sha256::digest(WHITEBOARD.as_bytes()).to_vec()

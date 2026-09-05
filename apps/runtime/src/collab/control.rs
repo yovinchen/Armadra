@@ -29,6 +29,7 @@ pub const VERBS: &[&str] = &[
     "post",
     "inbox",
     "ack",
+    "handoff-read",
     "list",
     "open-terminal",
     "open-agent",
@@ -123,6 +124,23 @@ pub async fn run(
         caller.require_verified(verb)?;
     }
     match verb {
+        "handoff-read" => {
+            let id = args
+                .text("id")
+                .ok_or_else(|| Refusal::bad_request("handoff-read requires --id"))?;
+            let session = args
+                .text("sessionId")
+                .ok_or_else(|| Refusal::forbidden("Current session binding is required"))?;
+            let generation = args
+                .count(&["generation"])
+                .filter(|value| *value >= 0)
+                .ok_or_else(|| Refusal::forbidden("Current generation binding is required"))?
+                as u64;
+            let value = crate::handoff::read_for_caller(state, caller, id, session, generation)
+                .await
+                .map_err(|error| Refusal::forbidden(error.to_string()))?;
+            Ok(Outcome::raw(value, "Frozen peer context"))
+        }
         "help" => Ok(Outcome::with_result(
             mailbox::HELP,
             json!({ "protocol": "armadra.mailbox.v1" }),

@@ -62,6 +62,58 @@ pub fn initialize_sequence(
     file.sync_data()
 }
 
+/// Same counter format as the native hook bridge. Runtime input fences share
+/// the sequence so a delayed pre-input Done report cannot authorize a paste.
+pub fn advance_sequence(
+    data_dir: &std::path::Path,
+    session_id: &str,
+    generation: u64,
+) -> std::io::Result<u64> {
+    use std::io::{Read, Seek, SeekFrom, Write};
+    if !crate::hook::auth::valid_node_id(session_id) {
+        return Err(std::io::Error::other("invalid context session"));
+    }
+    let path = data_dir
+        .join("context-sequences")
+        .join(format!("{session_id}-{generation}.seq"));
+    let metadata = std::fs::symlink_metadata(&path)?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err(std::io::Error::other("invalid context sequence"));
+    }
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)?;
+    let until = Instant::now() + std::time::Duration::from_millis(150);
+    loop {
+        match file.try_lock() {
+            Ok(()) => break,
+            Err(std::fs::TryLockError::WouldBlock) if Instant::now() < until => {
+                std::thread::sleep(std::time::Duration::from_millis(5))
+            }
+            Err(error) => return Err(std::io::Error::other(error)),
+        }
+    }
+    if file.metadata()?.len() != 16 {
+        return Err(std::io::Error::other("corrupt context sequence"));
+    }
+    let mut bytes = [0u8; 16];
+    file.read_exact(&mut bytes)?;
+    let value = u64::from_be_bytes(bytes[..8].try_into().unwrap());
+    let inverse = u64::from_be_bytes(bytes[8..].try_into().unwrap());
+    if value != !inverse {
+        return Err(std::io::Error::other("corrupt context sequence"));
+    }
+    let next = value
+        .checked_add(1)
+        .ok_or_else(|| std::io::Error::other("context sequence exhausted"))?;
+    file.seek(SeekFrom::Start(0))?;
+    file.write_all(&next.to_be_bytes())?;
+    file.write_all(&(!next).to_be_bytes())?;
+    file.sync_data()?;
+    Ok(next)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ContextUsage {

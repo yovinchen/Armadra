@@ -36,6 +36,13 @@ pub async fn run(
             "Mailbox requires an agent terminal node.",
         ));
     }
+    if !caller.node.agent_id.as_deref().is_some_and(|agent| {
+        crate::context_usage::has_capability(&state.settings, agent, "contextLink")
+    }) {
+        return Err(Refusal::forbidden(
+            "Context links are disabled for this Agent.",
+        ));
+    }
     let now = Utc::now().timestamp();
     sqlx::query("DELETE FROM agent_mailbox WHERE expires_at <= ?")
         .bind(now)
@@ -67,6 +74,13 @@ async fn post(
     if target.id == caller.node.id || target.node_type != "terminal" || target.agent_id.is_none() {
         return Err(Refusal::bad_request(
             "Target must be another agent terminal.",
+        ));
+    }
+    if !target.agent_id.as_deref().is_some_and(|agent| {
+        crate::context_usage::has_capability(&state.settings, agent, "contextLink")
+    }) {
+        return Err(Refusal::forbidden(
+            "Context links are disabled for the target Agent.",
         ));
     }
     let links = db::get_context_links(&state.pool, &caller.node.id)
@@ -169,6 +183,24 @@ async fn ack(
     let id = args
         .text("id")
         .ok_or_else(|| Refusal::bad_request("ack requires --id <message-id>."))?;
+    let key:Option<String>=sqlx::query_scalar("SELECT message_key FROM agent_mailbox WHERE id=? AND target_node_id=? AND workspace_id=? AND expires_at>?")
+        .bind(id).bind(&caller.node.id).bind(&caller.node.workspace_id).bind(now).fetch_optional(&state.pool).await.map_err(internal)?;
+    if let Some(handoff) = key.as_deref().and_then(|key| key.strip_prefix("handoff:")) {
+        let session = args.text("sessionId").ok_or_else(|| {
+            Refusal::forbidden("Current session binding is required for this handoff receipt.")
+        })?;
+        let generation = args
+            .count(&["generation"])
+            .filter(|value| *value >= 0)
+            .ok_or_else(|| {
+                Refusal::forbidden("Current generation is required for this handoff receipt.")
+            })? as u64;
+        crate::handoff::authorize_mailbox_ack(state, caller, handoff, session, generation)
+            .await
+            .map_err(|_| {
+                Refusal::forbidden("Handoff receipt does not belong to the current Agent session.")
+            })?;
+    }
     let result = sqlx::query("UPDATE agent_mailbox SET acknowledged_at = COALESCE(acknowledged_at, ?) WHERE id = ? AND target_node_id = ? AND workspace_id = ? AND expires_at > ?")
         .bind(now).bind(id).bind(&caller.node.id).bind(&caller.node.workspace_id).bind(now)
         .execute(&state.pool).await.map_err(internal)?;

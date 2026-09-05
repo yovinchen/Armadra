@@ -76,10 +76,26 @@ pub fn run_canvas(args: &[String]) -> i32 {
     if verb.starts_with('-') {
         return fail(&format!("expected a canvas verb, got `{verb}`"));
     }
-    let map = match parse_flags(&args[1..]) {
+    let mut map = match parse_flags(&args[1..]) {
         Ok(map) => map,
         Err(error) => return fail(&error),
     };
+    if verb == "handoff-read" || verb == "ack" {
+        map.remove("sessionId");
+        map.remove("generation");
+        if let (Some(session), Some(generation)) = (
+            crate::endpoint::env_var("ARMADRA_SESSION_ID"),
+            crate::endpoint::env_var("ARMADRA_SESSION_GENERATION")
+                .and_then(|value| value.parse::<u64>().ok()),
+        ) {
+            map.insert("sessionId".into(), json!(session));
+            map.insert("generation".into(), json!(generation));
+        } else if verb == "handoff-read" {
+            return fail(
+                "A current terminal session binding is required; restart an older terminal.",
+            );
+        }
+    }
     request(&format!("/control/{}", percent_encode_segment(verb)), map)
 }
 

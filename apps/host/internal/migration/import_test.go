@@ -141,6 +141,17 @@ func newExportFixture(t *testing.T, version, logs int) *exportFixture {
 		checksum := sha512.Sum384(source)
 		fixtureExec(t, db, "INSERT INTO _sqlx_migrations(version,description,installed_on,success,checksum,execution_time) VALUES(3,'retire kanban',?,1,?,?)", timestampText, checksum[:], largeInteger+2)
 	}
+	if version >= 4 {
+		source, err := legacy.ReadFile("legacy/0004_agent_handoffs.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		fixtureExec(t, db, string(source))
+		checksum := sha512.Sum384(source)
+		fixtureExec(t, db, "INSERT INTO _sqlx_migrations(version,description,installed_on,success,checksum,execution_time) VALUES(4,'agent handoffs',?,1,?,?)", timestampText, checksum[:], largeInteger+3)
+		fixtureExec(t, db, "INSERT INTO agent_handoffs(id,workspace_id,source_node_id,source_session_id,source_generation,target_node_id,target_session_id,target_generation,bundle_json,bundle_digest,state,created_at,updated_at) VALUES('handoff-fixture',?,?,?,3,?,?,4,?,?,'unknownOutcome',?,?)", workspaceA, nodeA, terminalA, nodeB, terminalA, `{ "frozen": "原始交接资料" }`, "digest-fixture", timestampText, timestampText)
+		fixtureExec(t, db, "INSERT INTO agent_handoff_outbox(handoff_id,state,created_at) VALUES('handoff-fixture','unknown',?)", timestampText)
+	}
 	snapshot := filepath.Join(directory, "source.sqlite")
 	fixtureExec(t, db, "VACUUM INTO ?", snapshot)
 	if err = db.Close(); err != nil {
@@ -395,7 +406,7 @@ func assertRowSQLValues(t *testing.T, source *sql.DB, row *pb.ImportedSqlRow, wh
 }
 
 func TestInspectAndStagePreserveRawSQLValuesAndIsolation(t *testing.T) {
-	fixture := newExportFixture(t, 3, 300)
+	fixture := newExportFixture(t, 4, 300)
 	originalBefore, _ := os.ReadFile(fixture.original)
 	snapshotBefore, _ := os.ReadFile(fixture.snapshot)
 	bundle, err := Inspect(fixtureContext, fixture.directory)

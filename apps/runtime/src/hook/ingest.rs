@@ -57,6 +57,16 @@ pub struct HookRequest {
     /// already printed this decision back to the CLI (plan §5.5).
     #[serde(default)]
     pub answered: Option<String>,
+    #[serde(default)]
+    pub terminal_binding: Option<HookTerminalBinding>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct HookTerminalBinding {
+    pub session_id: String,
+    pub generation: u64,
+    pub source_revision: String,
 }
 
 /// `GET /verify` — the client's cheap "is this endpoint still mine?" probe.
@@ -114,6 +124,31 @@ pub async fn ingest(
         }
         _ => (provider.clone(), provider),
     };
+    let observation_binding = if let Some(binding) = request.terminal_binding.as_ref() {
+        let valid = verdict.is_verified()
+            && binding
+                .source_revision
+                .parse::<u64>()
+                .is_ok_and(|revision| revision > 0)
+            && state
+                .terminals
+                .is_current_node_session(&request.node_id, &binding.session_id, binding.generation)
+                .await;
+        let session = db::get_terminal_session(&state.pool, &binding.session_id)
+            .await
+            .ok();
+        if !valid
+            || !session.is_some_and(|session| {
+                session.agent_id.as_deref() == Some(agent_id.as_str())
+                    && session.owner_node_id.as_deref() == Some(&request.node_id)
+            })
+        {
+            return Ok(StatusCode::NO_CONTENT);
+        }
+        Some(binding)
+    } else {
+        None
+    };
 
     if let Some(report) = request.payload.get("armadraContextUsage") {
         if verdict.is_verified() {
@@ -144,7 +179,16 @@ pub async fn ingest(
         record_answer(&state, &event, decision).await;
     }
 
-    apply(
+    let observation = crate::terminal::AgentReport {
+        revision: observation_binding
+            .and_then(|binding| binding.source_revision.parse().ok())
+            .unwrap_or(0),
+        provider_session_id: event.session_id.clone(),
+        transcript_path: event.transcript_path.clone(),
+        idle: event.state == Some("done") && !event.kind.is_subagent(),
+    };
+    let parent_event = !event.kind.is_subagent();
+    let status = apply(
         &state,
         &owner.workspace_id,
         &agent_id,
@@ -152,6 +196,20 @@ pub async fn ingest(
         &request.payload,
     )
     .await?;
+    if parent_event
+        && status.is_some()
+        && let Some(binding) = observation_binding
+    {
+        state
+            .terminals
+            .observe_agent(
+                &request.node_id,
+                &binding.session_id,
+                binding.generation,
+                observation,
+            )
+            .await;
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

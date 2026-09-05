@@ -28,7 +28,7 @@ target.mkdir(); workspace=target/'workspace';workspace.mkdir(); db=target/'sourc
 connection=sqlite3.connect(db)
 connection.execute('PRAGMA foreign_keys=ON')
 connection.execute('CREATE TABLE _sqlx_migrations(version BIGINT PRIMARY KEY, description TEXT NOT NULL, installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, success BOOLEAN NOT NULL, checksum BLOB NOT NULL, execution_time BIGINT NOT NULL)')
-names=['0001_initial.sql','0002_agent_mailbox.sql','0003_retire_kanban.sql']
+names=['0001_initial.sql','0002_agent_mailbox.sql','0003_retire_kanban.sql','0004_agent_handoffs.sql']
 def apply(number):
     data=(root/'apps/runtime/migrations'/names[number-1]).read_bytes()
     connection.executescript(data.decode())
@@ -42,9 +42,9 @@ connection.execute('INSERT INTO workspaces(id,name,root_path,created_at,updated_
 connection.execute('INSERT INTO boards(id,workspace_id,name,kanban_json,whiteboard_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?)',(canvas_id,workspace_id,'原画布',raw,drawing,timestamp,timestamp))
 connection.execute('INSERT INTO nodes(id,board_id,type,x,y,title,labels_json,note,data_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',(node_id,canvas_id,'sticky',1,2,'原节点',labels,note,'{"kind":"sticky","content":"unchanged"}',timestamp,timestamp))
 connection.commit()
-if version==3:apply(3)
+for number in range(3,version+1):apply(number)
 connection.commit()
-if version==3:
+if version>=3:
     assert connection.execute('SELECT kanban_json FROM legacy_kanban_archives').fetchone()[0]==raw
     assert connection.execute('SELECT labels_json,note FROM legacy_node_label_archives').fetchone()==(labels,note)
     try:connection.execute("UPDATE boards SET kanban_json='{}'")
@@ -71,7 +71,7 @@ try {
       GOPATH: join(root, "target/protocol-go/path"),
     },
   });
-  for (const version of [1, 2, 3]) {
+  for (const version of [1, 2, 3, 4]) {
     const folder = join(temporary, `v${version}`);
     const database = run(process.env.PYTHON ?? "python3", [
       "-c",
@@ -100,7 +100,7 @@ try {
       throw new Error(`v${version} unexpectedly activated`);
     const tables = report.tables ?? [];
     if (
-      version === 3 &&
+      version >= 3 &&
       !tables.some(
         (table) =>
           table.name === "legacy_kanban_archives" &&

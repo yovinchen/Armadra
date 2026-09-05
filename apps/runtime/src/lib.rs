@@ -14,6 +14,7 @@ pub mod git_api;
 pub mod git_hunks;
 pub mod git_message;
 pub mod git_repository;
+pub mod handoff;
 pub mod hook;
 pub mod imports;
 pub mod index;

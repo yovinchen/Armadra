@@ -340,6 +340,17 @@ pub async fn deliver(
     body: &str,
     receipt_window: Duration,
 ) -> Report {
+    if [&caller.node.agent_id, &target.agent_id]
+        .into_iter()
+        .flatten()
+        .any(|agent| !crate::context_usage::has_capability(&state.settings, agent, "contextLink"))
+    {
+        return Report::refused(
+            Outcome::NotPermitted,
+            "capabilityDisabled",
+            "Context links are disabled for one of these Agents.",
+        );
+    }
     let collab = collab(state);
     let trace_id = nonce(16);
 
