@@ -54,6 +54,12 @@ Git 仓库/索引/文件系统是代码状态真相，Host 里的状态是缓存
 
 进阶能力是本设计的完整交付范围，不能只为它们放禁用按钮后标记完成；M4 可按基础、历史、进阶三个子里程碑交付。
 
+Rebase、Sync 与强制推送已在 Runtime `RepositoryService` 与 `apps/web/src/panels/git/` 实现：
+
+- `StartRebase{onto, expectedStateToken}` 把当前分支重放到已核对的提交上。重放期间 HEAD 游离，所有权因此绑定 Git 自己的 `rebase-merge` 记录（`onto`、`orig-head`、`head-name`）与 `orig-head` 的文件身份，而不是不动的 HEAD。冲突复用现有 Continue/Abort：continue 要求冲突已解决并暂存，且允许在下一个被重放的提交上再次停下；abort 恢复记录的分支与 OID。外部或 Runtime 重启后的序列仍可读、不可驱动。`skip` 仍只属于空 cherry-pick，不用来丢弃整个被重放的提交；交互式 todo 编辑器尚未实现。
+- `Sync{remote, branch, expectedRemoteOid}` 在同一个 owned 操作里依次执行 fetch、仅快进 pull、push。任一步失败即停止，并报告停在哪一步、当前 HEAD 与远端 OID；分叉分支不会被自动 merge 或 rebase。
+- 强制推送只有 `Push.forceWithLease{expectedRemoteOid}` 一条路径，映射到 `--force-with-lease=refs/heads/<branch>:<oid>`；`--no-force` 在所有推送上保留，所以不存在不带租约的强制推送，界面另外要求对被覆盖的远端 OID 做二次确认。
+
 Git push 的 lease 使用具体预期 ref 值，避免后台 fetch 改变远端跟踪分支后削弱保护。依据 [Git push 官方文档](https://git-scm.com/docs/git-push)。
 
 ## 4. Diff、历史图与冲突中心
