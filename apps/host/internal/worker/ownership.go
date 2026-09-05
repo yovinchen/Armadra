@@ -125,7 +125,7 @@ func (c *Client) ApplyReverseExport(ctx context.Context, domain, packagePath str
 		IndexSha256:   indexSha256,
 		ExpectedEpoch: expectedEpoch,
 		ImportId:      importID,
-	}}}, "ownership")
+	}}}, "reverse")
 	if err != nil {
 		return nil, err
 	}

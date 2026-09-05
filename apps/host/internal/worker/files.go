@@ -124,6 +124,26 @@ func (c *Client) validResult(request *pb.WorkerRequest, response *pb.WorkerRespo
 		return record != nil && record.Domain == input.Domain && record.Epoch > 0 &&
 			(record.Owner == pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME || record.Owner == pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_HOST)
 	}
+	// The reverse import report is compared against the package the Host wrote
+	// in canvashost/reverse.go, which is where the digests live. Here it only
+	// has to answer the request it was sent, with one entry per workspace and
+	// a canonical digest in each: a report that named a different package or
+	// carried none would be accepted by any comparison that never ran.
+	if input := request.GetApplyReverseExport(); input != nil {
+		report := response.GetReverseImport()
+		if report == nil || report.Domain != input.Domain || report.ImportId != input.ImportId ||
+			!bytes.Equal(report.IndexSha256, input.IndexSha256) || report.Epoch == 0 {
+			return false
+		}
+		seen := map[string]bool{}
+		for _, file := range report.Reexported {
+			if file == nil || file.WorkspaceId == "" || len(file.ContentSha256) != sha256.Size || seen[file.WorkspaceId] {
+				return false
+			}
+			seen[file.WorkspaceId] = true
+		}
+		return true
+	}
 	if input := request.GetReadFile(); input != nil {
 		chunk := response.GetFileChunk()
 		if chunk == nil || chunk.RootId != input.RootId || !relativePath(chunk.Path, false) || chunk.MimeType == "" || len(chunk.MimeType) > 256 || len(chunk.Sha256) != sha256.Size || chunk.Offset != input.Offset || chunk.TotalBytes > uint64(c.hello.MaxTextFileBytes) || chunk.Offset > chunk.TotalBytes || len(chunk.Data) > int(input.MaxBytes) || uint64(len(chunk.Data)) > chunk.TotalBytes-chunk.Offset || chunk.Eof != (chunk.Offset+uint64(len(chunk.Data)) == chunk.TotalBytes) || (!chunk.Eof && len(chunk.Data) == 0) || (len(input.ExpectedSha256) > 0 && !bytes.Equal(input.ExpectedSha256, chunk.Sha256)) {
