@@ -51,32 +51,36 @@ func digest(value []byte) []byte {
 // manifest reads the staged export manifest from the import directory the
 // staging record names. The bytes are re-hashed against the staging metadata,
 // so a manifest edited on disk after the import cannot authorize a switch.
-func (s *Service) manifest(ctx context.Context, importID string) (*pb.MigrationExportManifest, string, error) {
+func (s *Service) manifest(ctx context.Context, importID string) (*stagedManifest, error) {
 	stage, err := s.store.GetStaging(ctx, importID)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	if stage.Active || stage.Purpose != "migration.import" || len(stage.Metadata) != 32 {
-		return nil, "", storage.ErrOwnership
+		return nil, storage.ErrOwnership
 	}
 	root := filepath.Join(filepath.Dir(s.store.Path()), filepath.FromSlash(stage.RelativePath))
 	file, err := os.Open(filepath.Join(root, "manifest.pb"))
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	defer file.Close()
 	raw, err := io.ReadAll(io.LimitReader(file, maxManifestBytes+1))
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	if len(raw) > maxManifestBytes || !bytes.Equal(digest(raw), stage.Metadata) {
-		return nil, "", storage.ErrCorrupt
+		return nil, storage.ErrCorrupt
 	}
 	value := new(pb.MigrationExportManifest)
 	if err = (proto.UnmarshalOptions{RecursionLimit: 64}).Unmarshal(raw, value); err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return value, root, nil
+	// The digest reported to the operator is the one taken from the bytes on
+	// disk, not one re-derived from the decoded message: re-encoding could
+	// differ from what the Runtime actually produced, and the report is meant
+	// to name the exact manifest that was verified.
+	return &stagedManifest{value: value, root: root, digest: digest(raw)}, nil
 }
 
 // assetReferences maps a manifest entity name ("nodes/<id>/data_json") to the
@@ -84,19 +88,19 @@ func (s *Service) manifest(ctx context.Context, importID string) (*pb.MigrationE
 // asset the export could not copy produces no reference and is reported as a
 // difference during verification rather than attached with an empty digest.
 func (s *Service) assetReferences(ctx context.Context, importID string) (map[string][]*pb.CanvasAssetRef, error) {
-	value, root, err := s.manifest(ctx, importID)
+	staged, err := s.manifest(ctx, importID)
 	if err != nil {
 		return nil, err
 	}
 	result := map[string][]*pb.CanvasAssetRef{}
-	for _, asset := range value.Assets {
+	for _, asset := range staged.value.Assets {
 		if !asset.Copied {
 			continue
 		}
 		if !strings.HasPrefix(asset.BundlePath, "assets/") || strings.Contains(asset.BundlePath, "..") {
 			return nil, storage.ErrCorrupt
 		}
-		path := filepath.Join(root, filepath.FromSlash(asset.BundlePath))
+		path := filepath.Join(staged.root, filepath.FromSlash(asset.BundlePath))
 		file, err := os.Open(path)
 		if err != nil {
 			return nil, err
@@ -146,6 +150,14 @@ func entityOwner(entity string) string {
 	}
 }
 
+// stagedManifest is the verified export description plus where its files live
+// and the digest of the exact bytes that were read.
+type stagedManifest struct {
+	value  *pb.MigrationExportManifest
+	root   string
+	digest []byte
+}
+
 type checkBuilder struct{ checks []*pb.CanvasConsistencyCheck }
 
 func (b *checkBuilder) record(name string, expected, actual uint64, differences []string) {
@@ -169,14 +181,15 @@ func (s *Service) Verify(ctx context.Context, importID string) (*pb.CanvasConsis
 	if !validImportID(importID) {
 		return nil, ErrInvalid
 	}
-	value, _, err := s.manifest(ctx, importID)
+	staged, err := s.manifest(ctx, importID)
 	if err != nil {
 		return nil, err
 	}
+	value := staged.value
 	report := &pb.CanvasConsistencyReport{
 		ImportId:         importID,
 		ExportId:         value.ExportId,
-		ManifestSha256:   digest2(value),
+		ManifestSha256:   staged.digest,
 		VerifiedAtUnixMs: s.now(),
 	}
 	builder := &checkBuilder{}
@@ -406,14 +419,6 @@ func (s *Service) Verify(ctx context.Context, importID string) (*pb.CanvasConsis
 		report.Checks = append(report.Checks, &pb.CanvasConsistencyCheck{Check: "assets_complete", Matched: false, Differences: []string{"assets_incomplete"}})
 	}
 	return report, nil
-}
-
-func digest2(value *pb.MigrationExportManifest) []byte {
-	raw, err := (proto.MarshalOptions{Deterministic: true}).Marshal(value)
-	if err != nil {
-		return nil
-	}
-	return digest(raw)
 }
 
 func samePosition(node *pb.CanvasNode, row legacyRow) bool {
