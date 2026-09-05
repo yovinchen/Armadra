@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use tempfile::TempDir;
 
-use super::*;
+use super::super::*;
 use crate::{db, events::EventHub};
 
 /// A manager whose data directory is a temporary one, so a tmux run never
