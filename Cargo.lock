@@ -99,6 +99,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "armadra-protocol",
+ "armadra-session-host",
  "async-trait",
  "axum",
  "base64 0.22.1",
@@ -129,6 +130,21 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "armadra-session-host"
+version = "0.1.0"
+dependencies = [
+ "portable-pty",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
  "windows-sys 0.61.2",
 ]
 

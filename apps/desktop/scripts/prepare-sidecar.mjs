@@ -3,16 +3,17 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { prepareHost, repository, rustHost } from "./prepare-host.mjs";
-import { selectTarget, sidecarPaths } from "./sidecar-targets.mjs";
-
-// Rust sidecars retain their existing cargo release build and target behavior.
-const sidecars = [
-  { package: "armadra-runtime", binary: "armadra-runtime" },
-  { package: "armadra-hook", binary: "armadra-hook" },
-];
+import {
+  rustSidecars,
+  selectTarget,
+  sidecarPaths,
+} from "./sidecar-targets.mjs";
 
 export function main() {
   const target = selectTarget({ host: rustHost(), env: process.env });
+  // Which Rust binaries ship depends on the target: the session host only
+  // exists on Windows.
+  const sidecars = rustSidecars(target.triple);
   const buildArgs = ["build", "--release"];
   for (const sidecar of sidecars) buildArgs.push("-p", sidecar.package);
   if (target.explicitTarget) buildArgs.push("--target", target.triple);

@@ -9,6 +9,8 @@
 pub mod backend;
 pub mod direct;
 pub mod gc;
+#[cfg(windows)]
+pub mod session_host;
 pub mod ssh;
 pub mod tmux;
 
@@ -480,6 +482,12 @@ struct Inner {
     data_dir: PathBuf,
     direct: Arc<direct::DirectBackend>,
     tmux: Option<Arc<tmux::TmuxBackend>>,
+    /// Windows only (T01). `None` everywhere else, and also on Windows when
+    /// the host could not be reached — in which case `reason` says so and the
+    /// effective backend is honestly `direct`, not a session host that is not
+    /// there.
+    #[cfg(windows)]
+    session_host: Option<Arc<session_host::SessionHostBackend>>,
     detection: tmux::TmuxDetection,
     configured: BackendChoice,
     effective: BackendKind,
@@ -510,6 +518,41 @@ struct Attachment {
 #[derive(Clone)]
 pub struct TerminalManager {
     inner: Arc<Inner>,
+}
+
+/// A backend that can take a session it finds at startup back under
+/// management, and say what pid is behind it.
+///
+/// Not part of [`TerminalBackend`]: only a backend whose sessions outlive the
+/// runtime has anything to adopt, and a default implementation on the trait
+/// would invite the other two to pretend they do.
+#[async_trait::async_trait]
+trait Adoptable {
+    async fn adopt(&self, key: &SessionKey, reference: &str, generation: u64) -> Option<i64>;
+}
+
+#[async_trait::async_trait]
+impl Adoptable for tmux::TmuxBackend {
+    async fn adopt(&self, key: &SessionKey, reference: &str, generation: u64) -> Option<i64> {
+        tmux::TmuxBackend::adopt(self, key, reference, generation).await;
+        self.pane_pid(key).await
+    }
+}
+
+#[cfg(windows)]
+#[async_trait::async_trait]
+impl Adoptable for session_host::SessionHostBackend {
+    async fn adopt(&self, key: &SessionKey, reference: &str, generation: u64) -> Option<i64> {
+        session_host::SessionHostBackend::adopt(self, key, reference, generation).await
+    }
+}
+
+fn merge(left: gc::ReconcileReport, right: gc::ReconcileReport) -> gc::ReconcileReport {
+    gc::ReconcileReport {
+        detached: left.detached + right.detached,
+        exited: left.exited + right.exited,
+        orphans_destroyed: left.orphans_destroyed + right.orphans_destroyed,
+    }
 }
 
 /// One attached socket, counted for as long as this value lives.
@@ -565,6 +608,12 @@ impl TerminalManager {
                 reason = Some("terminal.backend is set to direct".into());
                 false
             }
+            BackendChoice::SessionHost => false,
+            // On Windows `auto` never means tmux: tmux there is an MSYS
+            // compatibility layer between Win32 CLIs and a Unix pty, and the
+            // session host is the native answer. Asking for it explicitly
+            // still works.
+            BackendChoice::Auto if cfg!(windows) => false,
             BackendChoice::Tmux | BackendChoice::Auto => detection.usable,
         };
         let tmux = if wanted_tmux {
@@ -579,6 +628,30 @@ impl TerminalManager {
             None
         };
 
+        // T01: Windows sessions belong to `armadra-session-host` unless the
+        // user explicitly asked for something else. The connection is lazy —
+        // see `SessionHostBackend::new` — so a host that cannot start becomes
+        // a visible error on the first terminal rather than a silent downgrade
+        // to sessions that die with this process.
+        #[cfg(windows)]
+        let session_host = match configured {
+            BackendChoice::Direct => None,
+            BackendChoice::Tmux if tmux.is_some() => None,
+            _ => Some(Arc::new(session_host::SessionHostBackend::new(
+                &data_dir,
+                notices.clone(),
+            ))),
+        };
+
+        #[cfg(windows)]
+        let effective = if session_host.is_some() {
+            BackendKind::SessionHost
+        } else if tmux.is_some() {
+            BackendKind::Tmux
+        } else {
+            BackendKind::Direct
+        };
+        #[cfg(not(windows))]
         let effective = if tmux.is_some() {
             BackendKind::Tmux
         } else {
@@ -594,6 +667,8 @@ impl TerminalManager {
             data_dir,
             direct,
             tmux,
+            #[cfg(windows)]
+            session_host,
             detection,
             configured,
             effective,
@@ -613,6 +688,12 @@ impl TerminalManager {
     }
 
     fn backend(&self, kind: BackendKind) -> Arc<dyn TerminalBackend> {
+        #[cfg(windows)]
+        if kind == BackendKind::SessionHost
+            && let Some(host) = self.inner.session_host.as_ref()
+        {
+            return host.clone() as Arc<dyn TerminalBackend>;
+        }
         match (kind, self.inner.tmux.as_ref()) {
             (BackendKind::Tmux, Some(tmux)) => tmux.clone() as Arc<dyn TerminalBackend>,
             _ => self.inner.direct.clone() as Arc<dyn TerminalBackend>,
@@ -946,11 +1027,7 @@ impl TerminalManager {
             return Ok(AttachSession {
                 session_id: session.id,
                 generation: session.generation.max(0) as u64,
-                backend: if session.backend == "tmux" {
-                    BackendKind::Tmux
-                } else {
-                    BackendKind::Direct
-                },
+                backend: BackendKind::parse(&session.backend).unwrap_or(BackendKind::Direct),
                 rows: size.rows,
                 cols: size.cols,
                 alive: false,
@@ -991,7 +1068,9 @@ impl TerminalManager {
         // replay buffer as one `snapshot` frame instead.
         let snapshot = match record.kind {
             BackendKind::Direct => self.inner.direct.snapshot(&record.key).await,
-            BackendKind::Tmux => None,
+            // tmux redraws the pane itself; the session host sends its own
+            // replay down the attach connection.
+            BackendKind::Tmux | BackendKind::SessionHost => None,
         };
         self.note_size(session_id, size.cols, size.rows).await;
         if !record.exited {
@@ -1646,21 +1725,35 @@ impl TerminalManager {
         ids
     }
 
-    /// Runtime shutdown. tmux sessions are left running on purpose: that is the
-    /// whole point of the backend. Direct sessions cannot survive us.
+    /// Runtime shutdown. Sessions of a persistent backend are left running on
+    /// purpose: that is the whole point of those backends. Direct sessions
+    /// cannot survive us.
     pub async fn shutdown_all(&self) {
         self.begin_shutdown();
         let _quiescent = self.inner.creation_gate.write().await;
         self.inner.direct.detach_all().await;
         if let Some(tmux) = self.inner.tmux.as_ref() {
             tmux.detach_all().await;
-            let _ = sqlx::query(
-                "UPDATE terminal_sessions SET attach_state = 'detached' \
-                 WHERE backend_kind = 'tmux' AND attach_state = 'live' AND status = 'running'",
-            )
-            .execute(&self.inner.pool)
-            .await;
+            self.mark_detached(BackendKind::Tmux).await;
         }
+        #[cfg(windows)]
+        if let Some(host) = self.inner.session_host.as_ref() {
+            // Closes this Worker's connections and nothing else. The host, its
+            // pseudo consoles and every CLI inside them keep running.
+            host.detach_all().await;
+            self.mark_detached(BackendKind::SessionHost).await;
+        }
+    }
+
+    /// Rows of a persistent backend are detached, not ended, when we leave.
+    async fn mark_detached(&self, kind: BackendKind) {
+        let _ = sqlx::query(
+            "UPDATE terminal_sessions SET attach_state = 'detached' \
+             WHERE backend_kind = ? AND attach_state = 'live' AND status = 'running'",
+        )
+        .bind(kind.as_str())
+        .execute(&self.inner.pool)
+        .await;
     }
 
     pub fn begin_shutdown(&self) {
@@ -1751,13 +1844,38 @@ impl TerminalManager {
 
     /// Plan §15.2. Run once at startup, before the first request is served.
     pub async fn reconcile(&self) -> AppResult<gc::ReconcileReport> {
-        let Some(tmux) = self.inner.tmux.clone() else {
-            return Ok(gc::ReconcileReport::default());
-        };
-        tmux.adopt_server().await;
-        let (report, adopted) = gc::reconcile(&self.inner.pool, tmux.as_ref()).await?;
+        let mut report = gc::ReconcileReport::default();
+        if let Some(tmux) = self.inner.tmux.clone() {
+            tmux.adopt_server().await;
+            report = merge(report, self.reconcile_backend(tmux).await?);
+        }
+        #[cfg(windows)]
+        if let Some(host) = self.inner.session_host.clone() {
+            // Reaching the host is what tells this Worker whether the sessions
+            // it remembers are still there. A host that cannot be started
+            // leaves its rows exactly as they are: they may be perfectly alive
+            // under a host this process merely failed to reach, and marking
+            // them exited would lose them for good.
+            match host.probe().await {
+                Ok(_) => report = merge(report, self.reconcile_backend(host).await?),
+                Err(error) => tracing::warn!(
+                    %error,
+                    "could not reach the session host; leaving its rows untouched"
+                ),
+            }
+        }
+        Ok(report)
+    }
+
+    /// One persistent backend's share of the reconciliation.
+    async fn reconcile_backend<B>(&self, backend: Arc<B>) -> AppResult<gc::ReconcileReport>
+    where
+        B: TerminalBackend + Adoptable + 'static,
+    {
+        let kind = backend.kind();
+        let (report, adopted) = gc::reconcile(&self.inner.pool, backend.as_ref()).await?;
         for (key, reference, generation) in adopted {
-            tmux.adopt(&key, &reference, generation).await;
+            let pid = backend.adopt(&key, &reference, generation).await;
             if let Ok(session) =
                 crate::db::get_terminal_session_by_key(&self.inner.pool, key.as_str()).await
             {
@@ -1768,9 +1886,9 @@ impl TerminalManager {
                     key: key.clone(),
                     workspace_id: session.workspace_id.clone(),
                     owner_node_id: owner.clone(),
-                    kind: BackendKind::Tmux,
+                    kind,
                     generation,
-                    pid: tmux.pane_pid(&key).await,
+                    pid,
                     rows: DEFAULT_ROWS,
                     cols: DEFAULT_COLS,
                     exited: false,
@@ -1806,7 +1924,7 @@ impl TerminalManager {
 
     /// One reclamation round (plan §15.6). Returns the sessions it destroyed.
     pub async fn sweep(&self) -> AppResult<Vec<String>> {
-        if self.inner.tmux.is_none() {
+        if !self.inner.effective.persistent() {
             return Ok(Vec::new());
         }
         let grace = self.inner.settings.terminal().detached_grace_minutes;

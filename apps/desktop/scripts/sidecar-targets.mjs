@@ -23,6 +23,28 @@ export function goTarget(triple) {
   };
 }
 
+/**
+ * The Rust sidecars a given target needs.
+ *
+ * `armadra-session-host` is Windows-only (T01): it owns the ConPTY sessions
+ * that have to outlive the Worker and the shell. On macOS and Linux tmux
+ * already does that job, and shipping a binary whose `main` refuses to run
+ * would only make the bundle bigger and the story less clear.
+ */
+export function rustSidecars(triple) {
+  const { GOOS } = goTarget(triple);
+  const sidecars = [
+    { package: "armadra-runtime", binary: "armadra-runtime" },
+    { package: "armadra-hook", binary: "armadra-hook" },
+  ];
+  if (GOOS === "windows")
+    sidecars.push({
+      package: "armadra-session-host",
+      binary: "armadra-session-host",
+    });
+  return sidecars;
+}
+
 export function selectTarget({ host, env = {}, target, native = false }) {
   if (!host) throw new Error("Could not determine the Rust host target triple");
   if (native && target)

@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import {
   goTarget,
   hostBuildPlan,
+  rustSidecars,
   selectTarget,
   sidecarPaths,
 } from "./sidecar-targets.mjs";
@@ -158,4 +159,59 @@ test("host CLI options reject unsupported combinations or incomplete values", ()
     ["--native", "--target", host],
   ])
     assert.throws(() => parseArguments(args));
+});
+
+test("the session host ships on Windows targets only", () => {
+  for (const triple of [
+    "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
+    "x86_64-pc-windows-gnu",
+  ]) {
+    const binaries = rustSidecars(triple).map((sidecar) => sidecar.binary);
+    assert.deepEqual(binaries, [
+      "armadra-runtime",
+      "armadra-hook",
+      "armadra-session-host",
+    ]);
+  }
+  // Elsewhere tmux already keeps sessions alive; a binary whose main refuses
+  // to run has no business in the bundle.
+  for (const triple of [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-musl",
+  ]) {
+    const binaries = rustSidecars(triple).map((sidecar) => sidecar.binary);
+    assert.deepEqual(binaries, ["armadra-runtime", "armadra-hook"]);
+  }
+  assert.throws(
+    () => rustSidecars("riscv64gc-unknown-linux-gnu"),
+    /Unsupported/,
+  );
+});
+
+test("the Windows session host is staged with the target triple in its name", () => {
+  const target = selectTarget({ host, target: "x86_64-pc-windows-msvc" });
+  const paths = sidecarPaths({
+    repository,
+    target,
+    binary: "armadra-session-host",
+  });
+  assert.equal(
+    paths.source,
+    resolve(
+      repository,
+      "target",
+      target.triple,
+      "release/armadra-session-host.exe",
+    ),
+  );
+  assert.equal(
+    paths.destination,
+    resolve(
+      repository,
+      `target/release/armadra-session-host-${target.triple}.exe`,
+    ),
+  );
 });

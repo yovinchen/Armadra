@@ -1,6 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["apps/runtime", "apps/desktop/src-tauri", "crates/armadra-hook", "crates/protocol"]
+members = [
+    "apps/runtime",
+    "apps/desktop/src-tauri",
+    "crates/armadra-hook",
+    "crates/protocol",
+    "crates/session-host",
+]
 
 [workspace.package]
 version = "0.1.0"

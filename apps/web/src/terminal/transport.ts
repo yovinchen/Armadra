@@ -1,5 +1,6 @@
 import {
   terminalServerMessageSchema,
+  type TerminalBackendKind,
   type TerminalClientMessage,
   type TerminalServerMessage,
   type TerminateMode,
@@ -29,7 +30,7 @@ export type TerminalTransportState =
 export interface TerminalHello {
   sessionId: string;
   generation: number;
-  backend: "direct" | "tmux";
+  backend: TerminalBackendKind;
   rows: number;
   cols: number;
   alive: boolean;

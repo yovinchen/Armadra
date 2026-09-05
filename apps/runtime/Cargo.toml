@@ -66,6 +66,11 @@ uuid = { version = "1.24.0", features = ["v4", "v7", "serde"] }
 libc = "0.2.176"
 
 [target.'cfg(windows)'.dependencies]
+# T01: the Windows terminal backend talks to `armadra-session-host`. The
+# protocol, session table and replay rules live in that crate and are unit
+# tested there on every platform; only this dependency is Windows-only,
+# because only Windows has a session host to talk to.
+armadra-session-host = { path = "../../crates/session-host" }
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Power", "Win32_System_Threading", "Win32_System_JobObjects", "Win32_System_Pipes", "Win32_Storage_FileSystem", "Win32_System_IO"] }
 
 [dev-dependencies]

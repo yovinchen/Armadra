@@ -1,0 +1,10 @@
+{
+  "bundle": {
+    "externalBin": [
+      "../../../target/release/armadra-runtime",
+      "../../../target/release/armadra-hook",
+      "../../../target/release/armadra-host",
+      "../../../target/release/armadra-session-host"
+    ]
+  }
+}

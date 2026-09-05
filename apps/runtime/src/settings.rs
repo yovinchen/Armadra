@@ -21,7 +21,7 @@ use crate::{
 };
 
 /// `terminal.backend` — the user's choice, not necessarily what is in effect.
-pub const BACKEND_CHOICES: &[&str] = &["auto", "tmux", "direct"];
+pub const BACKEND_CHOICES: &[&str] = &["auto", "tmux", "direct", "sessionHost"];
 const DEFAULT_BACKEND: &str = "auto";
 const DEFAULT_DETACHED_GRACE_MINUTES: u64 = 1440;
 /// How long a session with nothing attached keeps its interactive delivery
@@ -84,6 +84,10 @@ pub enum BackendChoice {
     Auto,
     Tmux,
     Direct,
+    /// Windows only. On `auto` this is already the Windows default; choosing
+    /// it explicitly means "and tell me when it is not available" rather than
+    /// falling through to a backend whose sessions die with the runtime.
+    SessionHost,
 }
 
 impl BackendChoice {
@@ -92,6 +96,7 @@ impl BackendChoice {
             Self::Auto => "auto",
             Self::Tmux => "tmux",
             Self::Direct => "direct",
+            Self::SessionHost => "sessionHost",
         }
     }
 }
@@ -629,6 +634,7 @@ impl SettingsStore {
         {
             Some("tmux") => BackendChoice::Tmux,
             Some("direct") => BackendChoice::Direct,
+            Some("sessionHost") => BackendChoice::SessionHost,
             _ => BackendChoice::Auto,
         };
         TerminalSettings {

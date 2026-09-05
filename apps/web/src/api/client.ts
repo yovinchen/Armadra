@@ -148,6 +148,7 @@ import {
   workspaceSchema,
   writeFileRequestSchema,
   writeFileResponseSchema,
+  TERMINAL_BACKEND_CHOICES,
   type BoardDocument,
   type HandoffPrepare,
   type ContextLink,
@@ -276,7 +277,7 @@ function json(body: unknown): RequestInit {
 export const runtimeSettingsSchema = z.looseObject({
   terminal: z
     .object({
-      backend: z.enum(["auto", "tmux", "direct"]).default("auto"),
+      backend: z.enum(TERMINAL_BACKEND_CHOICES).default("auto"),
       detachedGraceMinutes: z.number().int().positive().default(1440),
       /**
        * `terminal.dormantAfterSeconds`（T03，宿主设计 §7.2）。会话没有任何

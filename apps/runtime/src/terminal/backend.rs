@@ -39,10 +39,13 @@ impl std::fmt::Display for SessionKey {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 pub enum BackendKind {
     Direct,
     Tmux,
+    /// Windows only: the sessions belong to `armadra-session-host`, which
+    /// outlives this process the way a tmux server does (T01).
+    SessionHost,
 }
 
 impl BackendKind {
@@ -50,7 +53,25 @@ impl BackendKind {
         match self {
             Self::Direct => "direct",
             Self::Tmux => "tmux",
+            Self::SessionHost => "sessionHost",
         }
+    }
+
+    /// The value stored in `terminal_sessions.backend_kind`. Parsing anything
+    /// unknown as `Direct` would claim a session this build cannot reach is
+    /// reachable, so unknown rows stay unknown.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "direct" => Some(Self::Direct),
+            "tmux" => Some(Self::Tmux),
+            "sessionHost" => Some(Self::SessionHost),
+            _ => None,
+        }
+    }
+
+    /// Whether sessions of this backend survive the runtime process.
+    pub fn persistent(self) -> bool {
+        matches!(self, Self::Tmux | Self::SessionHost)
     }
 }
 

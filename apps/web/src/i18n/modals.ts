@@ -171,6 +171,7 @@ export const modals: MessageModule = {
     "settings.backend.auto": "自动",
     "settings.backend.tmux": "tmux", // i18n-exempt
     "settings.backend.direct": "直连",
+    "settings.backend.sessionHost": "会话宿主（Windows）",
     "settings.detachedGrace": "断开保留",
     "settings.grace.1h": "1 小时",
     "settings.grace.12h": "12 小时",
@@ -430,6 +431,7 @@ export const modals: MessageModule = {
     "settings.backend.auto": "Auto",
     "settings.backend.tmux": "tmux",
     "settings.backend.direct": "Direct",
+    "settings.backend.sessionHost": "Session host (Windows)",
     "settings.detachedGrace": "Detached grace",
     "settings.grace.1h": "1 hour",
     "settings.grace.12h": "12 hours",

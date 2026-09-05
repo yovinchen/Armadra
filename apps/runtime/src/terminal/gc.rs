@@ -18,6 +18,15 @@ use crate::{
 
 /// Plan §15.6: "every 10 minutes".
 pub const SWEEP_INTERVAL: Duration = Duration::from_secs(600);
+
+/// The backends whose sessions outlive the runtime, as
+/// `terminal_sessions.backend_kind` spells them. A row of any other kind
+/// describes a process that died with whoever wrote it, and is settled at
+/// startup rather than reconciled here.
+///
+/// Written out as a literal because it goes into SQL. Keep it in step with
+/// [`crate::terminal::backend::BackendKind::persistent`].
+pub const PERSISTENT_KINDS: &str = "('tmux', 'sessionHost')";
 /// Plan §15.6: "at most 8 per round" — a sweep must never look like a purge.
 pub const MAX_DESTROYS_PER_SWEEP: usize = 8;
 

@@ -154,11 +154,12 @@ async fn initialize_database(
         migrator.run(&mut *transaction).await.map_err(|error| {
             AppError::Internal(format!("Could not migrate the local database: {error}"))
         })?;
-        // A direct PTY died with the process that wrote the row. A tmux session did
-        // not: `terminal::gc::reconcile` decides what happened to those.
+        // A direct PTY died with the process that wrote the row. A tmux session
+        // and a Windows session host session did not: `terminal::gc::reconcile`
+        // decides what happened to those.
         sqlx::query(
             "UPDATE terminal_sessions SET status = 'failed', attach_state = 'exited', ended_at = ? \
-         WHERE status = 'running' AND backend_kind <> 'tmux'",
+         WHERE status = 'running' AND backend_kind NOT IN ('tmux', 'sessionHost')",
         )
         .bind(Utc::now().to_rfc3339())
         .execute(&mut *transaction)

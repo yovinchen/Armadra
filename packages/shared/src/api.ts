@@ -439,7 +439,14 @@ export const createTerminalRequestSchema = z.object({
 // The runtime also emits `kind` and `ownerNodeId` on this payload.
 // A non-strict z.object drops unknown keys silently. Do NOT add `.strict()`:
 // it would turn every terminal fetch into a parse error.
-export const TERMINAL_BACKENDS = ["direct", "tmux"] as const;
+/**
+ * `sessionHost` is the Windows backend of T01: the sessions belong to
+ * `armadra-session-host`, which outlives the Worker the way a tmux server
+ * does. It is a third value rather than a flavour of `direct`, because the
+ * two differ in the one way that matters — whether a terminal survives a
+ * restart — and the UI must not imply the wrong answer.
+ */
+export const TERMINAL_BACKENDS = ["direct", "tmux", "sessionHost"] as const;
 export const terminalBackendKindSchema = z.enum(TERMINAL_BACKENDS);
 export const TERMINAL_ATTACH_STATES = ["detached", "live", "exited"] as const;
 export const terminalAttachStateSchema = z.enum(TERMINAL_ATTACH_STATES);
@@ -465,9 +472,16 @@ export const terminalSessionSchema = z.object({
 });
 
 /** `GET /api/terminals/backend` — which backend is in effect (plan §15.1). */
+export const TERMINAL_BACKEND_CHOICES = [
+  "auto",
+  "tmux",
+  "direct",
+  "sessionHost",
+] as const;
+
 export const terminalBackendInfoSchema = z.object({
   effective: terminalBackendKindSchema,
-  configured: z.enum(["auto", "tmux", "direct"]),
+  configured: z.enum(TERMINAL_BACKEND_CHOICES),
   tmuxVersion: z.string().nullable(),
   tmuxSocket: z.string().nullable(),
   reason: z.string().nullable(),
@@ -1011,7 +1025,8 @@ export const terminalServerMessageSchema = z.discriminatedUnion("type", [
     cols: z.number().int().positive(),
     alive: z.boolean(),
   }),
-  /** Replay/screen snapshot; direct backend only (tmux client redraws). */
+  /** Replay/screen snapshot; direct backend only (a tmux client redraws the
+   * pane itself, and the session host sends its replay inside the attach). */
   z.object({ type: z.literal("snapshot"), data: z.string() }),
   /** The generation the client attached with is gone; clear and rebuild. */
   z.object({
