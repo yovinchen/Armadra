@@ -377,6 +377,8 @@ Worker 在任何域都不再做业务授权：请求到达 Worker 时已由 Host
 | B5  | git 域                  | 契约与 Host 队列可与 B3/B4 并行；集成在 B2 后 | B2、画布 Frame 绑定 | `git.proto`、`githost`、v10、`git_repository/operations.rs`、Web 网关、e2e                                  |
 | B6  | 改名                    | 串行，最后                                    | §4.4 全部条件       | §4.4 步骤 1–6                                                                                               |
 
+B0b 已实施：`events.proto` 与三端契约、Host `internal/eventstream` 与 `/ws/armadra.v1.EventStream`、host-client `events.ts`、shared `host-events.ts`、Web `host/event-stream.ts`；画布域接入，`follow.ts` 降级为 10 秒后备。
+
 一轮 4–6 个 Agent 的分配：第一轮 B0a/B0b/B0c/B0d（4 个）；第二轮 B1/B2 + B3/B4/B5 的「契约 + Host 存储 + 单元测试」部分（5 个）；第三轮 B3/B4/B5 的集成与 e2e（3 个）+ 文档与 repo-check 规则（1 个）。
 
 ### 5.2 每批详情
