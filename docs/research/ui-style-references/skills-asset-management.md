@@ -165,7 +165,7 @@ SkillsPage
 - 与已安装技能的覆盖、升级和冲突情况。
 - 可回滚方案。
 
-## 在 AI Coding Canvas 中的使用方式
+## 在 Armadra 中的使用方式
 
 - 作为工作空间级 `Skills` 主视图，而不是 React Flow 节点内部的小面板。
 - Skills 主区域应跨越当前 Canvas 与 Inspector 两列，确保表格宽度。

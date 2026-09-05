@@ -29,7 +29,7 @@
 ## 当前项目的推荐组合
 
 ```text
-结构基线：当前 AI Coding Canvas Shell
+结构基线：当前 Armadra Shell
     ├── Skills / MCP / Agent 管理：Skills 资产管理风格
     ├── Usage / Runtime / Cost：Analytics 仪表盘风格
     └── Workspace Rail / Launcher：轻度 Glass Sidebar 风格
