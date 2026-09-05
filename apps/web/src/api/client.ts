@@ -84,7 +84,10 @@ import {
   gitStashDetailSchema,
   gitIntegrationSnapshotSchema,
   gitCherryPickPreviewSchema,
+  gitCommitDetailSchema,
+  gitCommitFileDiffSchema,
   gitRepositoryActionSchema,
+  gitRepositoryListSchema,
   gitRepositoryOperationSchema,
   gitExpectedStateSchema,
   gitUnstageResponseSchema,
@@ -1040,8 +1043,11 @@ export const runtimeApi = {
         ...json(gitHunkMutationSchema.parse(mutation)),
       },
     ),
-  gitStatus: (workspaceId: string) =>
-    request(`/api/workspaces/${workspaceId}/git/status`, gitStatusSchema),
+  gitStatus: (workspaceId: string, path = ".") =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/status?path=${query(path)}`,
+      gitStatusSchema,
+    ),
   /** `git init`; only offered when a status read reported no repository. */
   gitInit: (workspaceId: string) =>
     request(
@@ -1050,32 +1056,72 @@ export const runtimeApi = {
       { method: "POST" },
     ),
 
-  gitRepositoryBranches: (workspaceId: string, signal?: AbortSignal) =>
+  /**
+   * Every repository read and write names the checkout it means. `path` is
+   * workspace-relative and defaults to the workspace root, so a single-repo
+   * workspace behaves exactly as before (roadmap §4.1).
+   */
+  gitRepositories: (
+    workspaceId: string,
+    options: { refresh?: boolean; maxDepth?: number } = {},
+    signal?: AbortSignal,
+  ) => {
+    const params = new URLSearchParams();
+    if (options.refresh) params.set("refresh", "true");
+    if (options.maxDepth !== undefined) {
+      params.set("maxDepth", String(options.maxDepth));
+    }
+    const search = params.toString();
+    return request(
+      `/api/workspaces/${query(workspaceId)}/git/repositories${search ? `?${search}` : ""}`,
+      gitRepositoryListSchema,
+      { signal },
+    );
+  },
+  gitRepositoryBranches: (
+    workspaceId: string,
+    path = ".",
+    signal?: AbortSignal,
+  ) =>
     request(
-      `/api/workspaces/${query(workspaceId)}/git/repository/branches?path=.`,
+      `/api/workspaces/${query(workspaceId)}/git/repository/branches?path=${query(path)}`,
       gitBranchSnapshotSchema,
       { signal },
     ),
-  gitRepositoryOperations: (workspaceId: string, signal?: AbortSignal) =>
+  gitRepositoryOperations: (
+    workspaceId: string,
+    path = ".",
+    signal?: AbortSignal,
+  ) =>
     request(
-      `/api/workspaces/${query(workspaceId)}/git/repository/operations?path=.`,
+      `/api/workspaces/${query(workspaceId)}/git/repository/operations?path=${query(path)}`,
       z.array(gitRepositoryOperationSchema),
       { signal },
     ),
+  /**
+   * `limit` is capped by the service; the commit graph asks for 100 a page and
+   * stops at 500 rows, so a long history stays a scroll rather than a stall.
+   */
   gitRepositoryHistory: (
     workspaceId: string,
     reference = "HEAD",
     cursor?: string,
     signal?: AbortSignal,
+    path = ".",
+    limit = 50,
   ) =>
     request(
-      `/api/workspaces/${query(workspaceId)}/git/repository/history?path=.&reference=${query(reference)}&limit=50${cursor ? `&cursor=${query(cursor)}` : ""}`,
+      `/api/workspaces/${query(workspaceId)}/git/repository/history?path=${query(path)}&reference=${query(reference)}&limit=${limit}${cursor ? `&cursor=${query(cursor)}` : ""}`,
       gitHistoryPageSchema,
       { signal },
     ),
-  gitRepositoryWorktrees: (workspaceId: string, signal?: AbortSignal) =>
+  gitRepositoryWorktrees: (
+    workspaceId: string,
+    signal?: AbortSignal,
+    path = ".",
+  ) =>
     request(
-      `/api/workspaces/${query(workspaceId)}/git/repository/worktrees?path=.`,
+      `/api/workspaces/${query(workspaceId)}/git/repository/worktrees?path=${query(path)}`,
       gitWorktreesSchema,
       { signal },
     ),
@@ -1084,35 +1130,77 @@ export const runtimeApi = {
     workspaceId: string,
     onto: string,
     signal?: AbortSignal,
+    path = ".",
   ) =>
     request(
-      `/api/workspaces/${query(workspaceId)}/git/repository/rebase-todo?path=.&onto=${query(onto)}`,
+      `/api/workspaces/${query(workspaceId)}/git/repository/rebase-todo?path=${query(path)}&onto=${query(onto)}`,
       gitRebaseTodoPreviewSchema,
       { signal },
     ),
-  gitRepositoryTags: (workspaceId: string, signal?: AbortSignal) =>
+  gitRepositoryTags: (workspaceId: string, signal?: AbortSignal, path = ".") =>
     request(
-      `/api/workspaces/${query(workspaceId)}/git/repository/tags?path=.`,
+      `/api/workspaces/${query(workspaceId)}/git/repository/tags?path=${query(path)}`,
       gitTagSnapshotSchema,
       { signal },
     ),
   /** URLs come back with any embedded credentials already replaced. */
-  gitRepositoryRemotes: (workspaceId: string, signal?: AbortSignal) =>
+  gitRepositoryRemotes: (
+    workspaceId: string,
+    signal?: AbortSignal,
+    path = ".",
+  ) =>
     request(
-      `/api/workspaces/${query(workspaceId)}/git/repository/remotes?path=.`,
+      `/api/workspaces/${query(workspaceId)}/git/repository/remotes?path=${query(path)}`,
       gitRemotesSchema,
       { signal },
     ),
-  gitRepositoryStashes: (workspaceId: string, signal?: AbortSignal) =>
+  gitRepositoryStashes: (
+    workspaceId: string,
+    signal?: AbortSignal,
+    path = ".",
+  ) =>
     request(
-      `/api/workspaces/${query(workspaceId)}/git/repository/stashes?path=.`,
+      `/api/workspaces/${query(workspaceId)}/git/repository/stashes?path=${query(path)}`,
       gitStashSnapshotSchema,
       { signal },
     ),
-  gitRepositoryIntegration: (workspaceId: string, signal?: AbortSignal) =>
+  gitRepositoryIntegration: (
+    workspaceId: string,
+    signal?: AbortSignal,
+    path = ".",
+  ) =>
     request(
-      `/api/workspaces/${query(workspaceId)}/git/repository/integration?path=.`,
+      `/api/workspaces/${query(workspaceId)}/git/repository/integration?path=${query(path)}`,
       gitIntegrationSnapshotSchema,
+      { signal },
+    ),
+  /**
+   * 一个提交改了哪些文件。`base` 传 `null` 表示对第一父提交比较（也就是
+   * 「这个提交本身改了什么」），传 `"HEAD"` 就是「比较到当前」。
+   */
+  gitRepositoryCommitDetail: (
+    workspaceId: string,
+    oid: string,
+    base: string | null,
+    signal?: AbortSignal,
+    path = ".",
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/commit?path=${query(path)}&oid=${query(oid)}${base === null ? "" : `&base=${query(base)}`}`,
+      gitCommitDetailSchema,
+      { signal },
+    ),
+  gitRepositoryCommitFile: (
+    workspaceId: string,
+    oid: string,
+    base: string | null,
+    file: string,
+    signal?: AbortSignal,
+    path = ".",
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/commit-file?path=${query(path)}&oid=${query(oid)}&file=${query(file)}${base === null ? "" : `&base=${query(base)}`}`,
+      gitCommitFileDiffSchema,
       { signal },
     ),
   gitRepositoryCherryPickPreview: (
@@ -1120,9 +1208,10 @@ export const runtimeApi = {
     oid: string,
     mainline: number | null,
     signal?: AbortSignal,
+    path = ".",
   ) =>
     request(
-      `/api/workspaces/${query(workspaceId)}/git/repository/cherry-pick-preview?path=.&oid=${query(oid)}${mainline === null ? "" : `&mainline=${mainline}`}`,
+      `/api/workspaces/${query(workspaceId)}/git/repository/cherry-pick-preview?path=${query(path)}&oid=${query(oid)}${mainline === null ? "" : `&mainline=${mainline}`}`,
       gitCherryPickPreviewSchema,
       { signal },
     ),
@@ -1130,9 +1219,10 @@ export const runtimeApi = {
     workspaceId: string,
     oid: string,
     signal?: AbortSignal,
+    path = ".",
   ) =>
     request(
-      `/api/workspaces/${query(workspaceId)}/git/repository/stash-detail?path=.&oid=${query(oid)}`,
+      `/api/workspaces/${query(workspaceId)}/git/repository/stash-detail?path=${query(path)}&oid=${query(oid)}`,
       gitStashDetailSchema,
       { signal },
     ),
@@ -1140,6 +1230,7 @@ export const runtimeApi = {
     workspaceId: string,
     action: GitRepositoryAction,
     expected: GitExpectedState,
+    path = ".",
   ) =>
     request(
       `/api/workspaces/${query(workspaceId)}/git/repository/operations`,
@@ -1147,7 +1238,7 @@ export const runtimeApi = {
       {
         method: "POST",
         ...json({
-          path: ".",
+          path,
           action: gitRepositoryActionSchema.parse(action),
           expected: gitExpectedStateSchema.parse(expected),
         }),
@@ -1197,28 +1288,37 @@ export const runtimeApi = {
       gitDiffSchema,
     );
   },
-  gitStage: (workspaceId: string, paths: string[]) =>
+  gitStage: (workspaceId: string, paths: string[], path = ".") =>
     request(
-      `/api/workspaces/${workspaceId}/git/stage`,
+      `/api/workspaces/${query(workspaceId)}/git/stage`,
       gitStageResponseSchema,
-      { method: "POST", ...json(gitPathsRequestSchema.parse({ paths })) },
+      {
+        method: "POST",
+        ...json({ ...gitPathsRequestSchema.parse({ paths }), path }),
+      },
     ),
   /** `git restore --staged`：只动索引，工作区改动一律保留。 */
-  gitUnstage: (workspaceId: string, paths: string[]) =>
+  gitUnstage: (workspaceId: string, paths: string[], path = ".") =>
     request(
-      `/api/workspaces/${workspaceId}/git/unstage`,
+      `/api/workspaces/${query(workspaceId)}/git/unstage`,
       gitUnstageResponseSchema,
-      { method: "POST", ...json(gitPathsRequestSchema.parse({ paths })) },
+      {
+        method: "POST",
+        ...json({ ...gitPathsRequestSchema.parse({ paths }), path }),
+      },
     ),
   /**
    * Stage a conflicted path. Refused — with the offending line numbers — while
    * the file on disk still contains Git conflict markers.
    */
-  gitMarkResolved: (workspaceId: string, paths: string[]) =>
+  gitMarkResolved: (workspaceId: string, paths: string[], path = ".") =>
     request(
       `/api/workspaces/${query(workspaceId)}/git/resolve`,
       gitResolveResponseSchema,
-      { method: "POST", ...json(gitPathsRequestSchema.parse({ paths })) },
+      {
+        method: "POST",
+        ...json({ ...gitPathsRequestSchema.parse({ paths }), path }),
+      },
     ),
   /**
    * `index` restores the working tree from what is staged; `head` restores
@@ -1229,19 +1329,20 @@ export const runtimeApi = {
     workspaceId: string,
     paths: string[],
     source: GitRestoreSource = "index",
+    path = ".",
   ) =>
     request(
-      `/api/workspaces/${workspaceId}/git/revert`,
+      `/api/workspaces/${query(workspaceId)}/git/revert`,
       gitRevertResponseSchema,
       {
         method: "POST",
-        ...json(gitRevertRequestSchema.parse({ paths, source })),
+        ...json({ ...gitRevertRequestSchema.parse({ paths, source }), path }),
       },
     ),
   /** The commit an amend would rewrite; null on an unborn branch. */
-  gitHeadCommit: (workspaceId: string, signal?: AbortSignal) =>
+  gitHeadCommit: (workspaceId: string, signal?: AbortSignal, path = ".") =>
     request(
-      `/api/workspaces/${query(workspaceId)}/git/head-commit`,
+      `/api/workspaces/${query(workspaceId)}/git/head-commit?path=${query(path)}`,
       gitHeadCommitSchema,
       { signal },
     ),
@@ -1250,19 +1351,23 @@ export const runtimeApi = {
     message: string,
     paths?: string[],
     amend?: { expectedHead: string; allowPublished: boolean },
+    path = ".",
   ) =>
     request(
-      `/api/workspaces/${workspaceId}/git/commit`,
+      `/api/workspaces/${query(workspaceId)}/git/commit`,
       gitCommitResponseSchema,
       {
         method: "POST",
-        ...json(
-          gitCommitRequestSchema.parse({
+        ...json({
+          ...gitCommitRequestSchema.parse({
             message,
             ...(paths && paths.length > 0 ? { paths } : {}),
             ...(amend ? { amend } : {}),
           }),
-        ),
+          // One request, one repository: there is deliberately no
+          // cross-repository commit (roadmap §4.1).
+          path,
+        }),
       },
     ),
 

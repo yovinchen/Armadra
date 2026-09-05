@@ -154,10 +154,13 @@ it("names both restore sources and sends the one that was chosen", async () => {
     screen.getByRole("button", { name: "Overwrite from HEAD (also unstages)" }),
   );
   await waitFor(() => expect(revert).toHaveBeenCalledTimes(1));
+  // The restore names the repository the row came from; a single-repository
+  // workspace is the workspace root.
   expect(revert.mock.calls[0]).toEqual([
     "019ff7d1-0d12-7421-833d-2c5e8d64ed21",
     ["feature.ts"],
     "head",
+    ".",
   ]);
 });
 

@@ -200,10 +200,12 @@ describe("repository operations", () => {
     expect(dialog.textContent).toContain(a);
     await confirm();
     await waitFor(() =>
-      expect(submit).toHaveBeenCalledWith("workspace-one", action, {
-        headOid: a,
-        branch: "main",
-      }),
+      expect(submit).toHaveBeenCalledWith(
+        "workspace-one",
+        action,
+        { headOid: a, branch: "main" },
+        ".",
+      ),
     );
     expect(
       await screen.findByRole("region", { name: "Operation status" }),
@@ -242,6 +244,7 @@ describe("repository operations", () => {
     await waitFor(() =>
       expect(vi.mocked(runtimeApi.gitRepositoryBranches)).toHaveBeenCalledWith(
         "workspace-two",
+        ".",
         expect.any(AbortSignal),
       ),
     );
@@ -371,6 +374,7 @@ describe("remote synchronization", () => {
           expectedRemoteOid: c,
         },
         { headOid: a, branch: "main" },
+        ".",
       ),
     );
   });
@@ -395,6 +399,7 @@ describe("remote synchronization", () => {
           forceWithLease: null,
         },
         { headOid: a, branch: "main" },
+        ".",
       ),
     );
     expect(screen.queryByRole("button", { name: /^Force push$/ })).toBeNull();
@@ -437,6 +442,7 @@ describe("remote synchronization", () => {
           forceWithLease: { expectedRemoteOid: c },
         },
         { headOid: a, branch: "main" },
+        ".",
       ),
     );
   });
@@ -486,6 +492,7 @@ describe("worktrees and history", () => {
           expectedOid: b,
         },
         { headOid: a, branch: "main" },
+        ".",
       ),
     );
   });
@@ -521,6 +528,7 @@ describe("worktrees and history", () => {
         allowUnpublished: false,
       },
       { headOid: a, branch: "main" },
+      ".",
     );
   });
 
@@ -560,11 +568,14 @@ describe("worktrees and history", () => {
       screen.getByRole("button", { name: "Load earlier commits" }),
     );
     await screen.findByRole("button", { name: /Root/ });
+    // The page carries the checkout it is reading and the graph's page size.
     expect(read).toHaveBeenCalledWith(
       "workspace-one",
       "HEAD",
       "opaque-cursor",
       expect.any(AbortSignal),
+      ".",
+      100,
     );
     expect(
       document
@@ -618,6 +629,7 @@ describe("worktrees and history", () => {
         "workspace-one",
         { kind: "checkoutCommit", targetOid: b },
         { headOid: a, branch: "main" },
+        ".",
       ),
     );
 
@@ -635,6 +647,7 @@ describe("worktrees and history", () => {
           expectedStateToken: "d".repeat(64),
         },
         { headOid: a, branch: "main" },
+        ".",
       ),
     );
 
@@ -655,6 +668,7 @@ describe("worktrees and history", () => {
           switch: false,
         },
         { headOid: a, branch: "main" },
+        ".",
       ),
     );
   });
@@ -755,6 +769,7 @@ describe("worktrees and history", () => {
           discardChanges: true,
         },
         { headOid: a, branch: "main" },
+        ".",
       ),
     );
   });

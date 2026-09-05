@@ -6,112 +6,118 @@ import type {
   GitRepositoryAction,
 } from "@armadra/shared";
 import { runtimeApi } from "../../api/client";
-import { useT } from "../../app/preferences-store";
+import { useT, usePreferencesStore } from "../../app/preferences-store";
 import { writeClipboard } from "../../terminal/TerminalSurface";
 import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
+import { cn } from "../../lib/cn";
 import { Check, Field, ReadError, selectClass } from "./forms";
+import {
+  CommitGraphLanes,
+  ROW_HEIGHT,
+  commitGraph,
+  refBadges,
+} from "./CommitGraph";
 
-/** A lane represents a pending parent identity, never a row's ordinal number. */
-export function commitGraph(commits: readonly GitCommitRecord[]) {
-  const lanes: (string | null)[] = [];
-  const points = new Map<string, { row: number; lane: number }>();
-  for (const [row, commit] of commits.entries()) {
-    let lane = lanes.indexOf(commit.oid);
-    if (lane < 0) {
-      lane = lanes.indexOf(null);
-      if (lane < 0) lane = lanes.length;
+export { commitGraph };
+
+/** 一次最多驻留 500 行，再往下滚才继续翻页（roadmap §4.1）。 */
+const MAX_ROWS = 500;
+const PAGE_SIZE = 100;
+
+export interface HistoryFilters {
+  author: string;
+  since: string;
+  until: string;
+  path: string;
+  text: string;
+}
+const EMPTY_FILTERS: HistoryFilters = {
+  author: "",
+  since: "",
+  until: "",
+  path: "",
+  text: "",
+};
+
+/**
+ * 前端筛选。分支用 `reference` 交给服务端（那是从哪条线开始走历史），
+ * 作者 / 日期 / 路径 / 文本在已加载的行上过滤——这样筛选不会把已经翻出来
+ * 的页丢掉重来，也不会让「没找到」和「还没翻到」看起来一样。
+ */
+export function filterCommits(
+  commits: readonly GitCommitRecord[],
+  filters: HistoryFilters,
+) {
+  const author = filters.author.trim().toLowerCase();
+  const text = filters.text.trim().toLowerCase();
+  const path = filters.path.trim().toLowerCase();
+  const since = filters.since ? Date.parse(filters.since) : Number.NaN;
+  const until = filters.until
+    ? // 日期范围含当天：结束日按当天 23:59:59.999 算。
+      Date.parse(filters.until) + 24 * 60 * 60 * 1000 - 1
+    : Number.NaN;
+  return commits.filter((commit) => {
+    if (
+      author &&
+      !`${commit.authorName} ${commit.authorEmail}`
+        .toLowerCase()
+        .includes(author)
+    )
+      return false;
+    if (text) {
+      const haystack =
+        `${commit.subject} ${commit.oid} ${commit.refs.join(" ")}`.toLowerCase();
+      if (!haystack.includes(text)) return false;
     }
-    points.set(commit.oid, { row, lane });
-    lanes[lane] = null;
-    for (const parent of commit.parents) {
-      if (lanes.includes(parent) || points.has(parent)) continue;
-      let slot = lanes.indexOf(null);
-      if (slot < 0) slot = lanes.length;
-      lanes[slot] = parent;
-    }
-  }
-  const edges = commits.flatMap((commit) =>
-    commit.parents.map((parent) => ({
-      child: commit.oid,
-      parent,
-      from: points.get(commit.oid)!,
-      to: points.get(parent),
-    })),
-  );
-  return {
-    points,
-    edges,
-    lanes: Math.max(1, ...[...points.values()].map((point) => point.lane + 1)),
-  };
+    // 路径筛选按 `reference` 之外的一层：服务端已经按 pathspec 走过历史时
+    // 这里是空操作，纯前端筛时至少匹配 ref 装饰里出现的路径式名字。
+    if (path && !commit.subject.toLowerCase().includes(path)) return false;
+    const at = Date.parse(commit.authorTime);
+    if (!Number.isNaN(since) && !(at >= since)) return false;
+    if (!Number.isNaN(until) && !(at <= until)) return false;
+    return true;
+  });
 }
 
-function HistoryGraph({ commits }: { commits: GitCommitRecord[] }) {
-  const t = useT();
-  const graph = useMemo(() => commitGraph(commits), [commits]);
-  const x = (lane: number) => lane * 16 + 12;
-  const y = (row: number) => row * 64 + 32;
-  return (
-    <div className="max-w-28 shrink-0 overflow-x-auto">
-      <svg
-        role="img"
-        aria-label={t("gitRepo.graph")}
-        width={graph.lanes * 16 + 16}
-        height={commits.length * 64}
-        className="text-[var(--brand)]"
-      >
-        {graph.edges.map((edge) => (
-          <path
-            key={`${edge.child}:${edge.parent}`}
-            data-child={edge.child}
-            data-parent={edge.parent}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeDasharray={edge.to ? undefined : "3 3"}
-            d={
-              edge.to
-                ? `M${x(edge.from.lane)},${y(edge.from.row)} C${x(edge.from.lane)},${y(edge.from.row) + 24} ${x(edge.to.lane)},${y(edge.to.row) - 24} ${x(edge.to.lane)},${y(edge.to.row)}`
-                : `M${x(edge.from.lane)},${y(edge.from.row)} v20`
-            }
-          >
-            <title>
-              {edge.parent}
-              {!edge.to ? ` — ${t("gitRepo.outsidePage")}` : ""}
-            </title>
-          </path>
-        ))}
-        {[...graph.points].map(([oid, point]) => (
-          <circle
-            key={oid}
-            data-commit={oid}
-            cx={x(point.lane)}
-            cy={y(point.row)}
-            r="3.5"
-            fill="var(--background)"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <title>{oid}</title>
-          </circle>
-        ))}
-      </svg>
-    </div>
-  );
+/** 相对时间；只到「天」这一档，历史列表不需要秒级精度。 */
+export function relativeTime(iso: string, now: number, locale: string) {
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return iso;
+  const seconds = Math.round((at - now) / 1000);
+  const format = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [
+    ["year", 31_536_000],
+    ["month", 2_592_000],
+    ["day", 86_400],
+    ["hour", 3_600],
+    ["minute", 60],
+  ];
+  for (const [unit, size] of units) {
+    if (Math.abs(seconds) >= size) {
+      return format.format(Math.round(seconds / size), unit);
+    }
+  }
+  return format.format(seconds, "second");
 }
 
 export function History({
   workspaceId,
   repositoryKey,
+  repositoryPath,
   busy,
   request,
   loadIntegration,
+  openFile,
 }: {
   workspaceId: string;
   repositoryKey: string;
+  /** 工作空间相对路径，缺省是工作空间根。 */
+  repositoryPath: string;
   busy: boolean;
   request: (action: GitRepositoryAction) => void;
   loadIntegration: (signal: AbortSignal) => Promise<GitIntegrationSnapshot>;
+  openFile?: (path: string) => void;
 }) {
   const t = useT();
   const [input, setInput] = useState("HEAD");
@@ -119,6 +125,8 @@ export function History({
   const [selected, setSelected] = useState<string | null>(null);
   const [branchName, setBranchName] = useState("");
   const [switchAfter, setSwitchAfter] = useState(false);
+  const [filters, setFilters] = useState<HistoryFilters>(EMPTY_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
   // Cherry-pick and revert are confirmed against the repository state token,
   // which lives on the integration snapshot — the same one the Integrations
   // tab reads, so both entry points confirm against the same observation.
@@ -135,6 +143,12 @@ export function History({
     state.conflicts.length === 0 &&
     Boolean(state.head.branch) &&
     Boolean(state.head.headOid);
+  const branches = useQuery({
+    queryKey: ["git-repository-branches", workspaceId, repositoryKey],
+    queryFn: ({ signal }) =>
+      runtimeApi.gitRepositoryBranches(workspaceId, repositoryPath, signal),
+    retry: false,
+  });
   const history = useInfiniteQuery({
     queryKey: ["git-repository-history", workspaceId, repositoryKey, reference],
     queryFn: ({ pageParam, signal }) =>
@@ -143,22 +157,31 @@ export function History({
         reference,
         pageParam,
         signal,
+        repositoryPath,
+        PAGE_SIZE,
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     retry: false,
   });
   const commits = useMemo(
-    () => [
-      ...new Map(
-        (history.data?.pages.flatMap((page) => page.commits) ?? []).map(
-          (commit) => [commit.oid, commit],
-        ),
-      ).values(),
-    ],
+    () =>
+      [
+        ...new Map(
+          (history.data?.pages.flatMap((page) => page.commits) ?? []).map(
+            (commit) => [commit.oid, commit],
+          ),
+        ).values(),
+      ].slice(0, MAX_ROWS),
     [history.data],
   );
-  const commit = commits.find((commit) => commit.oid === selected);
+  const visible = useMemo(
+    () => filterCommits(commits, filters),
+    [commits, filters],
+  );
+  const commit = visible.find((entry) => entry.oid === selected);
+  const active = Object.values(filters).some((value) => value.trim() !== "");
+  const atCeiling = commits.length >= MAX_ROWS;
   return (
     <div className="space-y-3 p-3">
       <form
@@ -173,17 +196,99 @@ export function History({
       >
         <div className="min-w-0 flex-1">
           <Field label={t("gitRepo.reference")}>
-            <Input
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              required
-            />
+            <span className="flex min-w-0 gap-2">
+              <Input
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                list="git-history-branches"
+                required
+              />
+              <datalist id="git-history-branches">
+                {(branches.data?.branches ?? []).map((branch) => (
+                  <option key={branch.fullRef} value={branch.name} />
+                ))}
+              </datalist>
+            </span>
           </Field>
         </div>
         <Button size="sm" type="submit" disabled={!input.trim()}>
           {t("gitRepo.loadHistory")}
         </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          type="button"
+          aria-expanded={showFilters}
+          onClick={() => setShowFilters((value) => !value)}
+        >
+          {t("gitRepo.filters")}
+        </Button>
       </form>
+      {showFilters && (
+        <div className="grid grid-cols-2 gap-2 rounded-md border border-border p-2">
+          <Field label={t("gitRepo.filterAuthor")}>
+            <Input
+              value={filters.author}
+              onChange={(event) =>
+                setFilters((value) => ({
+                  ...value,
+                  author: event.target.value,
+                }))
+              }
+            />
+          </Field>
+          <Field label={t("gitRepo.filterText")}>
+            <Input
+              value={filters.text}
+              onChange={(event) =>
+                setFilters((value) => ({ ...value, text: event.target.value }))
+              }
+            />
+          </Field>
+          <Field label={t("gitRepo.filterSince")}>
+            <Input
+              type="date"
+              value={filters.since}
+              onChange={(event) =>
+                setFilters((value) => ({ ...value, since: event.target.value }))
+              }
+            />
+          </Field>
+          <Field label={t("gitRepo.filterUntil")}>
+            <Input
+              type="date"
+              value={filters.until}
+              onChange={(event) =>
+                setFilters((value) => ({ ...value, until: event.target.value }))
+              }
+            />
+          </Field>
+          <div className="col-span-2">
+            <Field label={t("gitRepo.filterPath")}>
+              <Input
+                value={filters.path}
+                onChange={(event) =>
+                  setFilters((value) => ({
+                    ...value,
+                    path: event.target.value,
+                  }))
+                }
+              />
+            </Field>
+          </div>
+          <div className="col-span-2">
+            <Button
+              size="sm"
+              variant="outline"
+              type="button"
+              disabled={!active}
+              onClick={() => setFilters(EMPTY_FILTERS)}
+            >
+              {t("gitRepo.clearFilters")}
+            </Button>
+          </div>
+        </div>
+      )}
       {history.isPending && (
         <p role="status" className="text-xs">
           {t("gitRepo.loading")}
@@ -195,45 +300,48 @@ export function History({
       {history.data?.pages[0]?.shallow && (
         <p className="text-xs text-muted-foreground">{t("gitRepo.shallow")}</p>
       )}
+      {active && (
+        <p className="text-xs text-muted-foreground">
+          {t("gitRepo.filtered", {
+            shown: String(visible.length),
+            loaded: String(commits.length),
+          })}
+        </p>
+      )}
       <div className="flex min-w-0">
-        <HistoryGraph commits={commits} />
+        {/* 筛选后行序会变，车道也跟着按可见行重排——否则线会连到看不见的行上。 */}
+        <CommitGraphLanes commits={visible} selected={selected} />
         <div className="min-w-0 flex-1">
-          {commits.map((commit) => (
-            <button
-              key={commit.oid}
-              type="button"
-              aria-pressed={selected === commit.oid}
-              onClick={() => setSelected(commit.oid)}
-              className="flex h-16 w-full min-w-0 flex-col justify-center gap-1 rounded-md px-2 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring aria-pressed:bg-muted"
-            >
-              <span
-                className="w-full truncate text-xs font-medium"
-                title={commit.subject}
-              >
-                {commit.subject || commit.oid.slice(0, 12)}
-              </span>
-              <span className="w-full truncate font-mono text-[11px] text-muted-foreground">
-                {commit.oid.slice(0, 10)} · {commit.authorName}
-              </span>
-            </button>
+          {visible.map((entry) => (
+            <CommitRow
+              key={entry.oid}
+              commit={entry}
+              selected={selected === entry.oid}
+              onSelect={() => setSelected(entry.oid)}
+            />
           ))}
         </div>
       </div>
-      {!history.isPending && !history.error && commits.length === 0 && (
+      {!history.isPending && !history.error && visible.length === 0 && (
         <p className="text-xs text-muted-foreground">
-          {t("gitRepo.emptyHistory")}
+          {t(active ? "gitRepo.noMatches" : "gitRepo.emptyHistory")}
         </p>
       )}
-      {history.hasNextPage && (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={history.isFetching}
-          onClick={() => void history.fetchNextPage()}
-        >
-          {t("gitRepo.more")}
-        </Button>
-      )}
+      {history.hasNextPage &&
+        (atCeiling ? (
+          <p className="text-xs text-muted-foreground">
+            {t("gitRepo.rowCeiling", { max: String(MAX_ROWS) })}
+          </p>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={history.isFetching}
+            onClick={() => void history.fetchNextPage()}
+          >
+            {t("gitRepo.more")}
+          </Button>
+        ))}
       {commit && (
         <section
           aria-label={t("gitRepo.details")}
@@ -269,8 +377,16 @@ export function History({
               </dd>
             </div>
           </dl>
-          <CommitActions
+          <CommitFiles
             key={commit.oid}
+            workspaceId={workspaceId}
+            repositoryKey={repositoryKey}
+            repositoryPath={repositoryPath}
+            oid={commit.oid}
+            openFile={openFile}
+          />
+          <CommitActions
+            key={`${commit.oid}:actions`}
             commit={commit}
             busy={busy}
             idle={idle}
@@ -282,6 +398,204 @@ export function History({
             request={request}
           />
         </section>
+      )}
+    </div>
+  );
+}
+
+/** 一行：提交信息、作者、相对时间，右侧 tag / 分支徽标。 */
+function CommitRow({
+  commit,
+  selected,
+  onSelect,
+}: {
+  commit: GitCommitRecord;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const locale = usePreferencesStore((state) => state.locale);
+  const now = useMemo(() => Date.now(), [commit.oid]);
+  const badges = useMemo(() => refBadges(commit.refs), [commit.refs]);
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onSelect}
+      style={{ height: ROW_HEIGHT }}
+      className="flex w-full min-w-0 flex-col justify-center gap-0.5 rounded-md px-2 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring aria-pressed:bg-muted"
+    >
+      <span className="flex w-full min-w-0 items-center gap-1.5">
+        <span
+          className="min-w-0 flex-1 truncate text-xs font-medium"
+          title={commit.subject}
+        >
+          {commit.subject || commit.oid.slice(0, 12)}
+        </span>
+        {badges.map((badge) => (
+          <span
+            key={`${badge.kind}:${badge.label}`}
+            title={badge.label}
+            className={cn(
+              "max-w-24 shrink-0 truncate rounded px-1 text-[10px] leading-4",
+              badge.kind === "tag"
+                ? "bg-[color-mix(in_srgb,var(--brand)_16%,transparent)] text-[var(--brand)]"
+                : badge.kind === "head"
+                  ? "bg-foreground text-background"
+                  : "border border-border text-muted-foreground",
+            )}
+          >
+            {badge.label}
+          </span>
+        ))}
+      </span>
+      <span className="flex w-full min-w-0 items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+        <span className="shrink-0">{commit.oid.slice(0, 10)}</span>
+        <span className="min-w-0 flex-1 truncate">{commit.authorName}</span>
+        <span className="shrink-0" title={commit.authorTime}>
+          {relativeTime(commit.authorTime, now, locale)}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+/**
+ * 选中提交改了哪些文件。
+ *
+ * `base` 为空时是「这个提交本身改了什么」（对第一父提交）；「比较到当前」
+ * 换成对当前 HEAD 比较，两侧都由服务端解析成 OID 后再 diff。
+ */
+function CommitFiles({
+  workspaceId,
+  repositoryKey,
+  repositoryPath,
+  oid,
+  openFile,
+}: {
+  workspaceId: string;
+  repositoryKey: string;
+  repositoryPath: string;
+  oid: string;
+  openFile?: (path: string) => void;
+}) {
+  const t = useT();
+  const [base, setBase] = useState<string | null>(null);
+  const [file, setFile] = useState<string | null>(null);
+  const detail = useQuery({
+    queryKey: ["git-repository-commit", workspaceId, repositoryKey, oid, base],
+    queryFn: ({ signal }) =>
+      runtimeApi.gitRepositoryCommitDetail(
+        workspaceId,
+        oid,
+        base,
+        signal,
+        repositoryPath,
+      ),
+    retry: false,
+  });
+  const patch = useQuery({
+    queryKey: [
+      "git-repository-commit-file",
+      workspaceId,
+      repositoryKey,
+      oid,
+      base,
+      file,
+    ],
+    queryFn: ({ signal }) =>
+      runtimeApi.gitRepositoryCommitFile(
+        workspaceId,
+        oid,
+        base,
+        file!,
+        signal,
+        repositoryPath,
+      ),
+    enabled: file !== null,
+    retry: false,
+  });
+  return (
+    <div className="space-y-2 border-t border-border pt-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <h4 className="font-semibold">{t("gitRepo.changedFiles")}</h4>
+        <Button
+          size="sm"
+          variant={base === null ? "outline" : "default"}
+          aria-pressed={base !== null}
+          onClick={() => {
+            setBase((value) => (value === null ? "HEAD" : null));
+            setFile(null);
+          }}
+        >
+          {t("gitRepo.compareToCurrent")}
+        </Button>
+      </div>
+      {base !== null && (
+        <p className="text-muted-foreground">{t("gitRepo.comparingToHead")}</p>
+      )}
+      {detail.isPending && <p role="status">{t("gitRepo.loading")}</p>}
+      {detail.error && (
+        <ReadError error={detail.error} retry={() => void detail.refetch()} />
+      )}
+      {detail.data?.truncated && (
+        <p className="text-muted-foreground">{t("gitRepo.filesTruncated")}</p>
+      )}
+      {detail.data && detail.data.files.length === 0 && (
+        <p className="text-muted-foreground">{t("gitRepo.noChangedFiles")}</p>
+      )}
+      <ul className="space-y-0.5">
+        {(detail.data?.files ?? []).map((entry) => (
+          <li key={entry.path} className="flex min-w-0 items-center gap-1">
+            <button
+              type="button"
+              aria-pressed={file === entry.path}
+              onClick={() => setFile(entry.path)}
+              className="flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-muted aria-pressed:bg-muted"
+            >
+              <span className="w-3 shrink-0 font-mono">{entry.status}</span>
+              <span className="min-w-0 flex-1 truncate" title={entry.path}>
+                {entry.path}
+              </span>
+              <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                {entry.additions === null || entry.deletions === null
+                  ? t("gitRepo.binaryFile")
+                  : `+${entry.additions} −${entry.deletions}`}
+              </span>
+            </button>
+            {openFile && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => openFile(entry.path)}
+              >
+                {t("gitRepo.openFile")}
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {file !== null && (
+        <div className="space-y-1">
+          {patch.isPending && <p role="status">{t("gitRepo.loading")}</p>}
+          {patch.error && (
+            <ReadError error={patch.error} retry={() => void patch.refetch()} />
+          )}
+          {patch.data && (
+            <>
+              {patch.data.truncated && (
+                <p className="text-muted-foreground">
+                  {t("gitRepo.patchTruncated")}
+                </p>
+              )}
+              <pre
+                aria-label={t("gitRepo.filePatch")}
+                className="max-h-64 overflow-auto rounded-md bg-muted p-2 font-mono text-[11px] leading-4"
+              >
+                {patch.data.patch}
+              </pre>
+            </>
+          )}
+        </div>
       )}
     </div>
   );

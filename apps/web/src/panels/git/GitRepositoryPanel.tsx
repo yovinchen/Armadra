@@ -165,15 +165,21 @@ export function actionTarget(action: GitRepositoryAction): string {
 export function GitRepositoryPanel({
   workspaceId,
   tab,
+  repositoryPath = ".",
 }: {
   workspaceId: string;
   tab: RepositoryTab;
+  /**
+   * 工作空间下的哪个仓库（roadmap §4.1）。缺省是工作空间根，所以单仓库的
+   * 工作空间行为和以前完全一样。
+   */
+  repositoryPath?: string;
 }) {
   const t = useT();
   const branches = useQuery({
-    queryKey: ["git-repository-branches", workspaceId],
+    queryKey: ["git-repository-branches", workspaceId, repositoryPath],
     queryFn: ({ signal }) =>
-      runtimeApi.gitRepositoryBranches(workspaceId, signal),
+      runtimeApi.gitRepositoryBranches(workspaceId, repositoryPath, signal),
     retry: false,
   });
   return (
@@ -191,9 +197,10 @@ export function GitRepositoryPanel({
       )}
       {branches.data && (
         <RepositorySession
-          key={`${workspaceId}:${branches.data.repositoryId}:${branches.data.repositoryPath}`}
+          key={`${workspaceId}:${repositoryPath}:${branches.data.repositoryId}`}
           workspaceId={workspaceId}
           tab={tab}
+          repositoryPath={repositoryPath}
           snapshot={branches.data}
           stale={branches.isFetching || branches.isError}
         />
@@ -205,11 +212,13 @@ export function GitRepositoryPanel({
 function RepositorySession({
   workspaceId,
   tab,
+  repositoryPath,
   snapshot,
   stale,
 }: {
   workspaceId: string;
   tab: RepositoryTab;
+  repositoryPath: string;
   snapshot: GitBranchSnapshot;
   stale: boolean;
 }) {
@@ -255,6 +264,23 @@ function RepositorySession({
       tracked?.id === incoming.id ? mergeOperation(cached, tracked) : cached;
     return mergeOperation(previous, incoming);
   };
+  /**
+   * 打开仓库里的一个文件。路径是**相对被选中的那个仓库**的，所以要拼上这个
+   * 仓库自己的顶层路径——嵌套仓库里的 `src/main.rs` 和根仓库里的同名文件
+   * 不是同一个文件。
+   */
+  const openRepositoryFile = (path: string) => {
+    const store = useCanvasStore.getState();
+    if (store.workspace?.id !== workspaceId || !store.document) return;
+    store.addNode("editor", {
+      title: path,
+      data: {
+        path: `${snapshot.repositoryPath.replace(/[\\/]+$/, "")}/${path}`,
+      },
+      position: currentViewportCenter(),
+    });
+    store.setPanel("scm", "closed");
+  };
   const acceptOperation = (incoming: GitRepositoryOperation) => {
     const result = latestOperation(incoming);
     client.setQueryData(operationQueryKey(result.id), result);
@@ -265,6 +291,7 @@ function RepositorySession({
     queryFn: async ({ signal }) => {
       const items = await runtimeApi.gitRepositoryOperations(
         workspaceId,
+        repositoryPath,
         signal,
       );
       if (
@@ -373,6 +400,7 @@ function RepositorySession({
         workspaceId,
         input.action,
         input.expected,
+        repositoryPath,
       );
       if (
         result.repositoryId !== snapshot.repositoryId ||
@@ -611,10 +639,16 @@ function RepositorySession({
           <History
             workspaceId={workspaceId}
             repositoryKey={`${snapshot.repositoryId}:${snapshot.repositoryPath}`}
+            repositoryPath={repositoryPath}
             busy={busy || stale}
             request={request}
+            openFile={openRepositoryFile}
             loadIntegration={(signal) =>
-              runtimeApi.gitRepositoryIntegration(workspaceId, signal)
+              runtimeApi.gitRepositoryIntegration(
+                workspaceId,
+                signal,
+                repositoryPath,
+              )
             }
           />
         )}
@@ -626,7 +660,11 @@ function RepositorySession({
             busy={busy || stale}
             request={request}
             loadSnapshot={(signal) =>
-              runtimeApi.gitRepositoryIntegration(workspaceId, signal)
+              runtimeApi.gitRepositoryIntegration(
+                workspaceId,
+                signal,
+                repositoryPath,
+              )
             }
             loadCherryPick={(oid, mainline, signal) =>
               runtimeApi.gitRepositoryCherryPickPreview(
@@ -634,27 +672,21 @@ function RepositorySession({
                 oid,
                 mainline,
                 signal,
+                repositoryPath,
               )
             }
             loadRebaseTodo={(onto, signal) =>
-              runtimeApi.gitRepositoryRebaseTodo(workspaceId, onto, signal)
+              runtimeApi.gitRepositoryRebaseTodo(
+                workspaceId,
+                onto,
+                signal,
+                repositoryPath,
+              )
             }
             markResolved={(path) =>
-              runtimeApi.gitMarkResolved(workspaceId, [path])
+              runtimeApi.gitMarkResolved(workspaceId, [path], repositoryPath)
             }
-            openFile={(path) => {
-              const store = useCanvasStore.getState();
-              if (store.workspace?.id !== workspaceId || !store.document)
-                return;
-              store.addNode("editor", {
-                title: path,
-                data: {
-                  path: `${snapshot.repositoryPath.replace(/[\\/]+$/, "")}/${path}`,
-                },
-                position: currentViewportCenter(),
-              });
-              store.setPanel("scm", "closed");
-            }}
+            openFile={openRepositoryFile}
           />
         )}
         {tab === "stashes" && (
@@ -664,10 +696,19 @@ function RepositorySession({
             busy={busy || stale}
             request={request}
             loadSnapshot={(signal) =>
-              runtimeApi.gitRepositoryStashes(workspaceId, signal)
+              runtimeApi.gitRepositoryStashes(
+                workspaceId,
+                signal,
+                repositoryPath,
+              )
             }
             loadDetail={(oid, signal) =>
-              runtimeApi.gitRepositoryStashDetail(workspaceId, oid, signal)
+              runtimeApi.gitRepositoryStashDetail(
+                workspaceId,
+                oid,
+                signal,
+                repositoryPath,
+              )
             }
           />
         )}
@@ -679,7 +720,7 @@ function RepositorySession({
             busy={busy || stale}
             request={request}
             loadTags={(signal) =>
-              runtimeApi.gitRepositoryTags(workspaceId, signal)
+              runtimeApi.gitRepositoryTags(workspaceId, signal, repositoryPath)
             }
           />
         )}
@@ -690,7 +731,11 @@ function RepositorySession({
             busy={busy || stale}
             request={request}
             loadRemotes={(signal) =>
-              runtimeApi.gitRepositoryRemotes(workspaceId, signal)
+              runtimeApi.gitRepositoryRemotes(
+                workspaceId,
+                signal,
+                repositoryPath,
+              )
             }
           />
         )}

@@ -7,8 +7,14 @@ export function invalidateGitQueries(
 ) {
   if (!workspaceId) return;
   for (const name of [
+    // The repository set itself can change — a worktree added or removed — and
+    // the aggregate Changes view reads every repository's status (§4.1).
+    "git-repositories",
+    "git-status-all",
     "git-status",
     "git-head-commit",
+    "git-repository-commit",
+    "git-repository-commit-file",
     "git-diff",
     "git-hunks",
     "git-message-source",

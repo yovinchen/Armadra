@@ -400,7 +400,19 @@ describe("git", () => {
     const result = await runtimeApi.gitStage(workspaceId, ["src/App.tsx"]);
 
     expect(result.staged).toEqual(["src/App.tsx"]);
-    expect(bodyOf(fetchMock)).toEqual({ paths: ["src/App.tsx"] });
+    // 每个写请求都点名作用于哪个仓库；缺省是工作空间根（roadmap §4.1）。
+    expect(bodyOf(fetchMock)).toEqual({ paths: ["src/App.tsx"], path: "." });
+  });
+
+  it("暂存可以指向工作空间下的另一个仓库", async () => {
+    const fetchMock = stubJson({ staged: ["main.rs"] });
+
+    await runtimeApi.gitStage(workspaceId, ["main.rs"], "apps/inner");
+
+    expect(bodyOf(fetchMock)).toEqual({
+      paths: ["main.rs"],
+      path: "apps/inner",
+    });
   });
 
   it("空路径的回滚在发请求前就被拦下", async () => {
@@ -419,7 +431,7 @@ describe("git", () => {
 
     await runtimeApi.gitCommit(workspaceId, "feat: 画布");
 
-    expect(bodyOf(fetchMock)).toEqual({ message: "feat: 画布" });
+    expect(bodyOf(fetchMock)).toEqual({ message: "feat: 画布", path: "." });
   });
 
   it("空提交信息在发请求前就被拦下", async () => {
@@ -485,7 +497,7 @@ describe("git", () => {
       `http://127.0.0.1:43120/api/workspaces/${workspaceId}/git/unstage`,
     );
     expect(init.method).toBe("POST");
-    expect(bodyOf(fetchMock)).toEqual({ paths: ["src/a.ts"] });
+    expect(bodyOf(fetchMock)).toEqual({ paths: ["src/a.ts"], path: "." });
   });
 });
 

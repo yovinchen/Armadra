@@ -54,6 +54,13 @@ import {
   GitRepositoryPanel,
   type RepositoryTab,
 } from "./git/GitRepositoryPanel";
+import {
+  ALL_REPOSITORIES,
+  RepositoryList,
+  RepositorySwitcher,
+  useRepositories,
+  type RepositorySelection,
+} from "./git/Repositories";
 import { currentViewportCenter } from "./viewport";
 import { ChangesHunks } from "./git/ChangesHunks";
 import { invalidateGitQueries } from "./git/queries";
@@ -96,11 +103,16 @@ export function SourceControlDrawer() {
   const [restore, setRestore] = useState<{
     path: string;
     untracked: boolean;
+    /** 这个路径属于哪个仓库；聚合视图里每一行各自记住。 */
+    repository: string;
   } | null>(null);
   const [confirmInit, setConfirmInit] = useState(false);
   const [amend, setAmend] = useState(false);
   const [acknowledgePublished, setAcknowledgePublished] = useState(false);
   const [tab, setTab] = useState<"changes" | RepositoryTab>("changes");
+  // 选中的仓库（roadmap §4.1）。`"."` 是工作空间根，`ALL_REPOSITORIES` 只在
+  // Changes 页有效，而且是只读聚合——提交永远作用于一个明确的仓库。
+  const [selection, setSelection] = useState<RepositorySelection>(".");
   const [hunk, setHunk] = useState<{
     workspaceId: string;
     file: string;
@@ -110,10 +122,48 @@ export function SourceControlDrawer() {
   const workspaceId = workspace?.id ?? null;
   const open = mode === "drawer";
 
+  const repositories = useRepositories(open ? workspaceId : null);
+  const records = repositories.data?.repositories ?? [];
+  const aggregate = selection === ALL_REPOSITORIES;
+  // 聚合视图只在 Changes 页存在；切到别的页时落回一个明确仓库，否则那些页
+  // 会不知道自己在读哪个仓库。
+  const repositoryPath = aggregate ? "." : selection;
   const status = useQuery({
-    queryKey: ["git-status", workspaceId],
-    queryFn: () => runtimeApi.gitStatus(workspaceId!),
-    enabled: open && Boolean(workspaceId),
+    queryKey: ["git-status", workspaceId, repositoryPath],
+    queryFn: () => runtimeApi.gitStatus(workspaceId!, repositoryPath),
+    enabled: open && Boolean(workspaceId) && !aggregate,
+    retry: false,
+  });
+  /**
+   * 「全部仓库」：逐个仓库读状态再拼起来。这是只读视图——每一行都记住自己
+   * 来自哪个仓库，暂存 / 还原按钮因此仍然打到正确的仓库上，但提交按钮在这
+   * 个视图里是关掉的。
+   */
+  const everything = useQuery({
+    queryKey: [
+      "git-status-all",
+      workspaceId,
+      records.map((record) => record.repositoryPath).join(","),
+    ],
+    queryFn: async () => {
+      const results = await Promise.all(
+        records.map(async (record) => ({
+          record,
+          status: await runtimeApi.gitStatus(
+            workspaceId!,
+            record.repositoryPath,
+          ),
+        })),
+      );
+      return results.flatMap(({ record, status }) =>
+        status.files.map((file) => ({
+          ...file,
+          repositoryPath: record.repositoryPath,
+          repositoryName: record.name,
+        })),
+      );
+    },
+    enabled: open && Boolean(workspaceId) && aggregate && records.length > 0,
     retry: false,
   });
   const invalidate = () => invalidateGitQueries(queryClient, workspaceId);
@@ -121,27 +171,51 @@ export function SourceControlDrawer() {
     toast.error(error instanceof Error ? error.message : t("scm.failed"));
 
   const stage = useMutation({
-    mutationFn: (path: string) => runtimeApi.gitStage(workspaceId!, [path]),
+    mutationFn: (input: { path: string; repository?: string }) =>
+      runtimeApi.gitStage(
+        workspaceId!,
+        [input.path],
+        input.repository ?? repositoryPath,
+      ),
     onSuccess: invalidate,
     onError: fail,
   });
   const unstage = useMutation({
-    mutationFn: (path: string) => runtimeApi.gitUnstage(workspaceId!, [path]),
+    mutationFn: (input: { path: string; repository?: string }) =>
+      runtimeApi.gitUnstage(
+        workspaceId!,
+        [input.path],
+        input.repository ?? repositoryPath,
+      ),
     onSuccess: invalidate,
     onError: fail,
   });
   const revert = useMutation({
-    mutationFn: (input: { path: string; source: GitRestoreSource }) =>
-      runtimeApi.gitRevert(workspaceId!, [input.path], input.source),
+    mutationFn: (input: {
+      path: string;
+      source: GitRestoreSource;
+      repository?: string;
+    }) =>
+      runtimeApi.gitRevert(
+        workspaceId!,
+        [input.path],
+        input.source,
+        input.repository ?? repositoryPath,
+      ),
     onSuccess: invalidate,
     onError: fail,
   });
   // The commit an amend would rewrite. Read separately from status so the
   // composer can name the exact subject and OID it is about to replace.
   const headCommit = useQuery({
-    queryKey: ["git-head-commit", workspaceId],
-    queryFn: ({ signal }) => runtimeApi.gitHeadCommit(workspaceId!, signal),
-    enabled: open && Boolean(workspaceId) && status.data?.repository === true,
+    queryKey: ["git-head-commit", workspaceId, repositoryPath],
+    queryFn: ({ signal }) =>
+      runtimeApi.gitHeadCommit(workspaceId!, signal, repositoryPath),
+    enabled:
+      open &&
+      Boolean(workspaceId) &&
+      !aggregate &&
+      status.data?.repository === true,
     retry: false,
   });
   const head = headCommit.data ?? null;
@@ -152,7 +226,13 @@ export function SourceControlDrawer() {
       : undefined;
   const commit = useMutation({
     mutationFn: (text: string) =>
-      runtimeApi.gitCommit(workspaceId!, text, undefined, amendPayload),
+      runtimeApi.gitCommit(
+        workspaceId!,
+        text,
+        undefined,
+        amendPayload,
+        repositoryPath,
+      ),
     onSuccess: (result) => {
       setMessage("");
       setAmend(false);
@@ -175,9 +255,13 @@ export function SourceControlDrawer() {
     onError: fail,
   });
 
-  const files = useMemo<GitFileStatus[]>(
-    () => status.data?.files ?? [],
-    [status.data],
+  type Row = GitFileStatus & {
+    repositoryPath?: string;
+    repositoryName?: string;
+  };
+  const files = useMemo<Row[]>(
+    () => (aggregate ? (everything.data ?? []) : (status.data?.files ?? [])),
+    [aggregate, everything.data, status.data],
   );
   const { staged, changes } = useMemo(() => partitionChanges(files), [files]);
 
@@ -186,8 +270,13 @@ export function SourceControlDrawer() {
   const amendBlocked =
     amend &&
     (!head || head.truncated || (head.published && !acknowledgePublished));
+  // 聚合视图里没有「当前仓库」可言，所以那里不提交：一次请求只作用于一个
+  // 明确的仓库，跨仓库一次提交是刻意不做的。
   const canCommit =
-    message.trim().length > 0 && !commit.isPending && !amendBlocked;
+    message.trim().length > 0 &&
+    !commit.isPending &&
+    !amendBlocked &&
+    !aggregate;
   useEffect(() => {
     if (!open || tab !== "changes") return;
     const submit = () => {
@@ -205,14 +294,18 @@ export function SourceControlDrawer() {
       setMessage(head.message);
   };
 
-  const openDiff = (path: string, scope: DiffScope) => {
+  const openDiff = (path: string, scope: DiffScope, repository: string) => {
     if (!workspace) return;
     addNode("diff", {
       title: path,
       position: currentViewportCenter(),
       data: {
         kind: "diff",
-        repoPath: workspace.rootPath,
+        // 路径是相对被选中的仓库的，diff 节点也必须开在那个仓库上。
+        repoPath:
+          repository === "."
+            ? workspace.rootPath
+            : `${workspace.rootPath.replace(/[\\/]+$/, "")}/${repository}`,
         scope,
         paths: [path],
       },
@@ -220,65 +313,88 @@ export function SourceControlDrawer() {
     setPanel("scm", "closed");
   };
 
-  const row = (file: GitFileStatus, scope: DiffScope) => (
-    <div
-      key={`${scope}:${file.path}`}
-      className="group flex h-8 items-center gap-2 rounded-md px-2 hover:bg-muted"
-    >
-      <Badge
-        variant="ghost"
-        className="h-4 w-4 shrink-0 justify-center p-0 font-mono text-[length:var(--text-caption)]"
-        style={{ color: STATUS_COLOR[file.status] }}
-        title={t(`explorer.status.${file.status}`)}
+  const row = (
+    file: GitFileStatus & { repositoryPath?: string; repositoryName?: string },
+    scope: DiffScope,
+  ) => {
+    const repository = file.repositoryPath ?? repositoryPath;
+    return (
+      <div
+        key={`${repository}:${scope}:${file.path}`}
+        className="group flex h-8 items-center gap-2 rounded-md px-2 hover:bg-muted"
       >
-        {file.status}
-      </Badge>
-      <span className="flex-1 truncate text-[13px]" title={file.path}>
-        {file.path}
-      </span>
-      <div className="flex items-center gap-0.5">
-        <IconButton
-          label={t("gitHunk.title")}
-          onClick={() =>
-            workspaceId && setHunk({ workspaceId, file: file.path, scope })
-          }
+        <Badge
+          variant="ghost"
+          className="h-4 w-4 shrink-0 justify-center p-0 font-mono text-[length:var(--text-caption)]"
+          style={{ color: STATUS_COLOR[file.status] }}
+          title={t(`explorer.status.${file.status}`)}
         >
-          <ListFilter />
-        </IconButton>
-        <IconButton
-          label={t("scm.diff")}
-          onClick={() => openDiff(file.path, scope)}
-        >
-          <FileDiff />
-        </IconButton>
-        {scope === "staged" ? (
-          <IconButton
-            label={t("scm.unstage")}
-            onClick={() => unstage.mutate(file.path)}
+          {file.status}
+        </Badge>
+        {/* 聚合视图里同名文件可能来自不同仓库，行上必须写清是哪一个。 */}
+        {file.repositoryName && (
+          <Badge
+            variant="ghost"
+            className="h-4 shrink-0 px-1 text-[length:var(--text-caption)] text-muted-foreground"
+            title={repository}
           >
-            <Minus />
-          </IconButton>
-        ) : (
-          <IconButton
-            label={t("scm.stage")}
-            onClick={() => stage.mutate(file.path)}
-          >
-            <Plus />
-          </IconButton>
+            {file.repositoryName}
+          </Badge>
         )}
-        <IconButton
-          label={t("scm.restore")}
-          onClick={() =>
-            setRestore({ path: file.path, untracked: file.status === "?" })
-          }
+        <span
+          className="flex-1 truncate text-[13px]"
+          title={`${repository === "." ? "" : `${repository}/`}${file.path}`}
         >
-          <Undo2 />
-        </IconButton>
+          {file.path}
+        </span>
+        <div className="flex items-center gap-0.5">
+          <IconButton
+            label={t("gitHunk.title")}
+            onClick={() =>
+              workspaceId && setHunk({ workspaceId, file: file.path, scope })
+            }
+          >
+            <ListFilter />
+          </IconButton>
+          <IconButton
+            label={t("scm.diff")}
+            onClick={() => openDiff(file.path, scope, repository)}
+          >
+            <FileDiff />
+          </IconButton>
+          {scope === "staged" ? (
+            <IconButton
+              label={t("scm.unstage")}
+              onClick={() => unstage.mutate({ path: file.path, repository })}
+            >
+              <Minus />
+            </IconButton>
+          ) : (
+            <IconButton
+              label={t("scm.stage")}
+              onClick={() => stage.mutate({ path: file.path, repository })}
+            >
+              <Plus />
+            </IconButton>
+          )}
+          <IconButton
+            label={t("scm.restore")}
+            onClick={() =>
+              setRestore({
+                path: file.path,
+                untracked: file.status === "?",
+                repository,
+              })
+            }
+          >
+            <Undo2 />
+          </IconButton>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
-  const section = (label: string, rows: GitFileStatus[], scope: DiffScope) =>
+  const section = (label: string, rows: Row[], scope: DiffScope) =>
     rows.length === 0 ? null : (
       <section className="px-2 py-1">
         <h3 className="px-2 py-1 text-[11px] font-semibold tracking-wide text-muted-foreground">
@@ -338,11 +454,26 @@ export function SourceControlDrawer() {
             </IconButton>
           </div>
 
+          {records.length > 1 && (
+            <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5">
+              <RepositorySwitcher
+                repositories={records}
+                value={selection}
+                allowAll={tab === "changes"}
+                pending={repositories.isPending}
+                onChange={setSelection}
+              />
+            </div>
+          )}
           <Tabs
             value={tab}
-            onValueChange={(value) =>
-              setTab(value as "changes" | RepositoryTab)
-            }
+            onValueChange={(value) => {
+              const next = value as "changes" | RepositoryTab;
+              setTab(next);
+              // 只有 Changes 有聚合视图；离开时落回一个明确的仓库。
+              if (next !== "changes" && selection === ALL_REPOSITORIES)
+                setSelection(".");
+            }}
             className="min-h-0 min-w-0 flex-1 gap-0"
           >
             <TabsList
@@ -410,7 +541,43 @@ export function SourceControlDrawer() {
                     />
                   </section>
                 )}
-                {status.isPending ? (
+                {/* 多仓库时左侧按仓库分组，点一行就切换到那个仓库。 */}
+                {records.length > 1 && (
+                  <div className="border-b border-border p-2">
+                    <RepositoryList
+                      repositories={records}
+                      value={selection}
+                      allowAll
+                      onChange={setSelection}
+                    />
+                  </div>
+                )}
+                {aggregate ? (
+                  everything.isPending ? (
+                    <p role="status" className="px-4 py-3 text-xs">
+                      {t("gitRepo.loading")}
+                    </p>
+                  ) : everything.error ? (
+                    <p
+                      role="alert"
+                      className="break-words px-4 py-3 text-xs text-destructive"
+                    >
+                      {everything.error.message}
+                    </p>
+                  ) : files.length === 0 ? (
+                    <p className="px-4 py-3 text-xs text-muted-foreground">
+                      {t("scm.clean")}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="px-4 pt-3 text-xs text-muted-foreground">
+                        {t("gitRepo.aggregateReadOnly")}
+                      </p>
+                      {section(t("scm.staged"), staged, "staged")}
+                      {section(t("scm.changes"), changes, "worktree")}
+                    </>
+                  )
+                ) : status.isPending ? (
                   <p role="status" className="px-4 py-3 text-xs">
                     {t("gitRepo.loading")}
                   </p>
@@ -529,9 +696,10 @@ export function SourceControlDrawer() {
               >
                 {workspaceId && tab === value && (
                   <GitRepositoryPanel
-                    key={workspaceId}
+                    key={`${workspaceId}:${repositoryPath}`}
                     workspaceId={workspaceId}
                     tab={value}
+                    repositoryPath={repositoryPath}
                   />
                 )}
               </TabsContent>
@@ -597,7 +765,11 @@ export function SourceControlDrawer() {
               <AlertDialogAction
                 onClick={() => {
                   if (restore)
-                    revert.mutate({ path: restore.path, source: "index" });
+                    revert.mutate({
+                      path: restore.path,
+                      source: "index",
+                      repository: restore.repository,
+                    });
                   setRestore(null);
                 }}
               >
@@ -608,7 +780,12 @@ export function SourceControlDrawer() {
                 <AlertDialogAction
                   key={source}
                   onClick={() => {
-                    if (restore) revert.mutate({ path: restore.path, source });
+                    if (restore)
+                      revert.mutate({
+                        path: restore.path,
+                        source,
+                        repository: restore.repository,
+                      });
                     setRestore(null);
                   }}
                 >
