@@ -140,8 +140,9 @@ describe("UsageOrb", () => {
     fireEvent.click(button, { detail: 0 });
     await panel();
     expect(button.getAttribute("aria-expanded")).toBe("true");
-    const close = screen.getByRole("button", { name: "关闭用量详情" });
-    await waitFor(() => expect(document.activeElement).toBe(close));
+    // 面板头部的第一个控件是「打开用量看板」，自动聚焦落在它身上。
+    const first = screen.getByRole("button", { name: "打开用量看板" });
+    await waitFor(() => expect(document.activeElement).toBe(first));
     const refresh = screen.getByRole("button", { name: "刷新" });
     expect(refresh.tabIndex).toBe(0);
     act(() => refresh.focus());
@@ -164,7 +165,7 @@ describe("UsageOrb", () => {
     expect(button.getAttribute("aria-expanded")).toBe("true");
     await waitFor(() =>
       expect(document.activeElement).toBe(
-        screen.getByRole("button", { name: "关闭用量详情" }),
+        screen.getByRole("button", { name: "打开用量看板" }),
       ),
     );
     fireEvent.click(screen.getByRole("button", { name: "关闭用量详情" }));

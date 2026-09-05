@@ -135,6 +135,7 @@ describe("SettingsDialog", () => {
         scm: "closed",
         resources: "closed",
         automation: "closed",
+        usage: "closed",
         settings: true,
         palette: false,
         quickOpen: false,

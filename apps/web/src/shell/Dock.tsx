@@ -1,5 +1,5 @@
 import { useValue, type Editor } from "tldraw";
-import { LayoutGrid, Plus, Redo2, Undo2 } from "lucide-react";
+import { Gauge, LayoutGrid, Plus, Redo2, Undo2 } from "lucide-react";
 import { AddMenuContent } from "../canvas/menus/AddMenuContent";
 import { visiblePageBounds } from "../canvas/tidy-editor";
 import { DockTools } from "./DockTools";
@@ -83,6 +83,8 @@ export function Dock() {
   const canUndo = useCanUndo();
   const canRedo = useCanRedo();
   const agents = useEnabledAgents();
+  const usagePanel = useCanvasStore((state) => state.panels.usage);
+  const setPanel = useCanvasStore((state) => state.setPanel);
 
   if (!workspace) return null;
 
@@ -158,6 +160,22 @@ export function Dock() {
           </IconButton>
         </TooltipTrigger>
         <TooltipContent>{t("dock.tidy")}</TooltipContent>
+      </Tooltip>
+
+      <Tooltip delayDuration={500}>
+        <TooltipTrigger asChild>
+          <IconButton
+            size="dock"
+            label={t("usage.dashboard.open")}
+            active={usagePanel !== "closed"}
+            onClick={() =>
+              setPanel("usage", usagePanel === "closed" ? "drawer" : "closed")
+            }
+          >
+            <Gauge />
+          </IconButton>
+        </TooltipTrigger>
+        <TooltipContent>{t("usage.dashboard.open")}</TooltipContent>
       </Tooltip>
 
       {/* 白板工具组（§5）；画布没挂载时整组连同分隔线一起不渲染。 */}

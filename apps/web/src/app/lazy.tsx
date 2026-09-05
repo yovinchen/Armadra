@@ -63,3 +63,8 @@ export const AutomationDrawer = lazy(() =>
     default: module.AutomationDrawer,
   })),
 );
+export const UsageDashboard = lazy(() =>
+  import("@/panels/UsageDashboard").then((module) => ({
+    default: module.UsageDashboard,
+  })),
+);

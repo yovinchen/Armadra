@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { RefreshCw, X } from "lucide-react";
+import { PanelRight, RefreshCw, X } from "lucide-react";
 import { useUsage } from "../app/use-usage";
+import { useCanvasStore } from "../store/canvas-store";
 import { usagePercent, usageWindowLabel as windowLabel } from "../lib/usage";
 import type { Usage, UsageProvider } from "@armadra/shared";
 
@@ -107,6 +108,7 @@ export function UsageOrb() {
         if (!panelRef.current?.contains(document.activeElement)) setOpen(false);
       }, 180);
   };
+  const setPanel = useCanvasStore((state) => state.setPanel);
   const showUsage = usePreferencesStore((state) => state.showUsage);
   const { usage, refresh, refreshing, refreshFailed, now, cooldown } =
     useUsage(showUsage);
@@ -199,9 +201,20 @@ export function UsageOrb() {
       >
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-medium">{t("usage.label")}</h2>
-          <IconButton label={t("usage.close")} onClick={() => setOpen(false)}>
-            <X />
-          </IconButton>
+          <div className="flex items-center gap-1">
+            <IconButton
+              label={t("usage.dashboard.open")}
+              onClick={() => {
+                setPanel("usage", "drawer");
+                setOpen(false);
+              }}
+            >
+              <PanelRight />
+            </IconButton>
+            <IconButton label={t("usage.close")} onClick={() => setOpen(false)}>
+              <X />
+            </IconButton>
+          </div>
         </div>
         <div className="text-xs text-muted-foreground">
           {t("usage.summaryHint")}

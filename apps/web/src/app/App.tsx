@@ -13,6 +13,7 @@ import {
   QuickOpen,
   SettingsDialog,
   SourceControlDrawer,
+  UsageDashboard,
 } from "./lazy";
 import { useMinimapPreferences } from "./minimap-preferences";
 import { Banners } from "../shell/Banners";
@@ -93,6 +94,7 @@ function AppShell() {
         <SourceControlDrawer />
         <ResourceDrawer />
         <AutomationDrawer />
+        <UsageDashboard />
         <SettingsDialog />
         <CommandPalette />
         <QuickOpen />
