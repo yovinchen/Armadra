@@ -53,18 +53,20 @@ Command W / 关闭窗口隐藏前台；Command Q / 托盘退出停止配置的 H
 
 从仓库根执行，按改动涉及的模块选择：
 
-| 范围                | 命令                                                                      |
-| ------------------- | ------------------------------------------------------------------------- |
-| 前端                | `pnpm --filter @armadra/web test`、`pnpm --filter @armadra/web typecheck` |
-| 共享模型            | `pnpm --filter @armadra/shared test`                                      |
-| Runtime             | `cargo test -p armadra-runtime`                                           |
-| Go Host             | `go -C apps/host test ./...`、`go -C apps/host vet ./...`                 |
-| 桌面脚本            | `pnpm --filter @armadra/desktop test`                                     |
-| 协议                | `pnpm protocol:check`、`pnpm protocol:test`                               |
-| 全部 JS 包 / Rust   | `pnpm test`、`cargo test --workspace`                                     |
-| 格式 / 类型         | `pnpm format:check`、`pnpm typecheck`                                     |
-| Rust workspace 检查 | `pnpm check:rust`（先准备 sidecar）                                       |
-| 桌面打包            | `pnpm --filter @armadra/desktop build`                                    |
+| 范围                | 命令                                                                             |
+| ------------------- | -------------------------------------------------------------------------------- |
+| 仓库规则            | `pnpm repo:check`（秒级）、`pnpm repo:test`                                      |
+| 一次过静态检查      | `pnpm check`＝libs 构建 + format:check + typecheck + protocol:check + repo:check |
+| 前端                | `pnpm --filter @armadra/web test`、`pnpm --filter @armadra/web typecheck`        |
+| 共享模型            | `pnpm --filter @armadra/shared test`                                             |
+| Runtime             | `cargo test -p armadra-runtime`                                                  |
+| Go Host             | `go -C apps/host test ./...`、`go -C apps/host vet ./...`                        |
+| 桌面脚本            | `pnpm --filter @armadra/desktop test`                                            |
+| 协议                | `pnpm protocol:check`、`pnpm protocol:test`                                      |
+| 全部 JS 包 / Rust   | `pnpm test`、`cargo test --workspace`                                            |
+| 格式 / 类型         | `pnpm format:check`、`pnpm typecheck`                                            |
+| Rust workspace 检查 | `pnpm check:rust`（先准备 sidecar）                                              |
+| 桌面打包            | `pnpm --filter @armadra/desktop build`                                           |
 
 `pnpm canvas:e2e` 端到端验证画布写入所有权：在临时目录里跑真实 Runtime 与 Host，写入嵌套 Frame、终端与便签、
 标注、上下文连线和白板快照，再走导出 → 导入 → `ownership switch`，逐项断言迁移前后的 sha256、Runtime 的
@@ -75,6 +77,11 @@ Command W / 关闭窗口隐藏前台；Command Q / 托盘退出停止配置的 H
 
 `armadra.sh check` 执行 shared 构建、TS 检查、Rust fmt / clippy；`test` 执行 shared、web 与 Rust workspace 测试。
 它们不替代独立的 Go、协议与桌面脚本检查。`all` 执行 doctor → install → check → build → run。
+
+`pnpm repo:check` 读 `repo.rules.json` 校验仓库结构：文档登记与相对链接、黑名单文件、包名与目录名、
+根目录白名单、源码行数上限（超限文件登记在豁免表）、迁移编号与 `migrations.lock` 里的 sha256、
+每个 `.proto` 的 fixture 与三端契约测试引用。规则说明见[仓库结构与校验](../design/repository-structure.md)。
+仓库级脚本都在 `tools/`，各 app 自己的脚本仍在各自的 `scripts/`。
 
 打包会构建 Runtime、Hook 和 Go Host，再按 target triple 暂存 sidecar。
 目标、缓存与交叉构建规则见[桌面构建说明](../../apps/desktop/README.md)。

@@ -1,6 +1,7 @@
 # 仓库结构、规则与完整性校验
 
-> 状态：**延后实施：待进行中的任务完成后整体调整，期间不做零散目录移动。** 方案本身（目标结构、六类规则、校验入口、七步顺序）保持完整；现状描述以源码为准，调整顺序见 §5。
+> 状态：**部分实施**。方案本身（目标结构、六类规则、校验入口、七步顺序）保持完整；现状描述以源码为准，调整顺序见 §5。
+> 2026-09-06：§5 第 1–5 步已实施；第 6 步（大文件拆分）另行进行；第 7 步延后。
 > 目的：让 Desktop、Web、Go 中转服务、Rust 执行层各自打包在固定位置，文档与脚本有统一登记规则，并由一条命令校验仓库完整性。
 
 ## 1. 现状评估
@@ -28,14 +29,14 @@
 │   └── worker/                Rust 执行层（由 apps/runtime 演进）：终端、文件、Git、Hook、进程测量
 ├── crates/                    Rust 库，只被 apps 或其他 crate 依赖
 │   ├── protocol/              Protobuf 生成与契约测试
-│   ├── hook/                  armadra-hook 客户端（现 crates/armadra-hook）
+│   ├── hook/                  armadra-hook 客户端（第 3 步已改名）
 │   └── (session-host/ browser-worker/ 后续按需新增)
 ├── packages/                  TypeScript 库
 │   ├── shared/                领域模型、CLI 注册表、schema
-│   ├── protocol/              Protobuf 生成（现 protocol-ts，目录名与包名对齐）
+│   ├── protocol/              Protobuf 生成（第 3 步已与包名对齐）
 │   └── host-client/           Host 握手与身份客户端
 ├── proto/                     契约唯一来源 + fixtures
-├── tools/                     仓库级脚本（现 scripts/）：protocol、smoke、repo-check、release
+├── tools/                     仓库级脚本（第 4 步已迁入）：protocol、smoke、repo-check
 │   └── probes/                可行性探针，不进入发布
 ├── docs/
 │   ├── README.md              索引，唯一入口
@@ -45,7 +46,7 @@
 │   ├── contracts/             被代码 §N 引用的计划文档，只增不改编号
 │   ├── history/               被取代的文档
 │   └── research/              研究材料
-├── assets/brand/              Logo 源文件（现 design/logo-concepts）
+├── assets/brand/              Logo 源文件（第 2 步已迁入）
 ├── .github/workflows/         CI
 ├── AGENTS.md CLAUDE.md README.md LICENSE
 ├── armadra.sh                 开发者入口，内部只调用 tools/ 与包脚本
@@ -128,7 +129,7 @@
 ```sh
 pnpm repo:check          # tools/repo-check.mjs：§3 全部静态规则，秒级
 pnpm check               # format:check + typecheck + protocol:check + repo:check
-pnpm test                # web / shared / protocol-ts / desktop 脚本
+pnpm test                # web / shared / protocol / host-client / desktop 脚本
 cargo test --workspace   # worker、hook、protocol
 go -C apps/host test ./...
 ./armadra.sh check       # 本地一键：以上全部
