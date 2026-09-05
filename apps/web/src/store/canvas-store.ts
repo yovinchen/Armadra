@@ -85,6 +85,8 @@ export interface PanelState {
   resources: "closed" | "drawer";
   /** 右侧工作面板的「自动化」页（自动化设计 §3 / 画布平台设计 §4）。 */
   automation: "closed" | "drawer";
+  /** 工作空间的交接历史（自动化设计 §7）。只读，不发起交接。 */
+  handoff: "closed" | "drawer";
   /** 额度、用量与成本看板（§4.2）。抽屉或右侧常驻浮卡。 */
   usage: "closed" | "drawer" | "pinned";
   /** 右侧工作面板的「GitHub」页（Git/GitHub 设计 §1 / 画布平台设计 §4）。 */
@@ -144,7 +146,7 @@ export interface CanvasActions {
     patch: Partial<Omit<CanvasNode, "id" | "type" | "data">>,
   ) => void;
   updateNodeData: (id: string, patch: Partial<CanvasNodeData>) => void;
-  /** 节点标签（看板卡片上的 chip）。 */
+  /** 节点标签（画布卡片上的 chip）。 */
   setNodeLabels: (id: string, labels: string[]) => void;
   /** 节点批注（头部「评论」）。 */
   setNodeNote: (id: string, note: string) => void;
@@ -161,7 +163,7 @@ export interface CanvasActions {
   addEdge: (source: string, target: string) => string | null;
   removeEdges: (ids: string[]) => void;
   setViewport: (viewport: Viewport) => void;
-  /** 白板快照（tldraw 计划 §6.1）；跟着看板文档一起保存。 */
+  /** 白板快照（tldraw 计划 §6.1）；跟着画布文档一起保存。 */
   setWhiteboard: (snapshot: string) => void;
   undo: () => void;
   redo: () => void;
@@ -189,6 +191,7 @@ const initialPanels: PanelState = {
   scm: "closed",
   resources: "closed",
   automation: "closed",
+  handoff: "closed",
   usage: "closed",
   github: "closed",
   settings: false,
@@ -239,7 +242,7 @@ function withEditor(run: (editor: Editor) => void): boolean {
   if (!editor) return false;
   editor.run(() => run(editor));
   // 这份文档已经原样做到 editor 上了，`use-store-sync` 不必再整块投影回去
-  // （否则每敲一个字都要把整块看板重新映射一遍）。
+  // （否则每敲一个字都要把整块画布重新映射一遍）。
   markPushed(useCanvasStore.getState().document);
   return true;
 }
@@ -536,7 +539,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     }
   },
 
-  // 标签与批注不是画布的结构性改动，但要置 dirty，跟着看板文档一起保存。
+  // 标签与批注不是画布的结构性改动，但要置 dirty，跟着画布文档一起保存。
   setNodeLabels: (id, labels) => {
     const next = normaliseLabels(labels);
     let target: CanvasNode | undefined;

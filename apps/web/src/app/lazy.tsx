@@ -63,6 +63,11 @@ export const AutomationDrawer = lazy(() =>
     default: module.AutomationDrawer,
   })),
 );
+export const HandoffHistoryDrawer = lazy(() =>
+  import("@/panels/handoff/HandoffHistoryDrawer").then((module) => ({
+    default: module.HandoffHistoryDrawer,
+  })),
+);
 export const UsageDashboard = lazy(() =>
   import("@/panels/UsageDashboard").then((module) => ({
     default: module.UsageDashboard,

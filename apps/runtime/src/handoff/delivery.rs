@@ -278,7 +278,9 @@ pub(super) async fn process_once(
         if ack.is_some() {
             continue;
         }
-        let claim=sqlx::query("UPDATE agent_handoff_outbox SET state='dispatching',claimed_at=?,instance_id=? WHERE handoff_id=? AND state='pending'")
+        // The attempt is counted at the claim, before anything is written, so
+        // a history counts tries rather than successes.
+        let claim=sqlx::query("UPDATE agent_handoff_outbox SET state='dispatching',claimed_at=?,instance_id=?,attempts=attempts+1 WHERE handoff_id=? AND state='pending'")
             .bind(Utc::now().to_rfc3339()).bind(instance).bind(&view.bundle.handoff_id).execute(&mut *tx).await?;
         if claim.rows_affected() == 0 {
             continue;

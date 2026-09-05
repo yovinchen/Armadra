@@ -20,8 +20,10 @@ use serde::Deserialize;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ListQuery {
     /// The node whose handoffs are listed; both directions are returned, so a
-    /// target sees what was addressed to it.
-    pub source_node_id: String,
+    /// target sees what was addressed to it. Absent lists the whole workspace,
+    /// which is what the history panel reads.
+    #[serde(default)]
+    pub source_node_id: Option<String>,
 }
 
 pub async fn prepare(
@@ -39,9 +41,10 @@ pub async fn list(
     Path(workspace_id): Path<String>,
     Query(query): Query<ListQuery>,
 ) -> AppResult<Json<Vec<HandoffView>>> {
-    super::list(&state, &workspace_id, &query.source_node_id)
-        .await
-        .map(Json)
+    match query.source_node_id.as_deref() {
+        Some(node_id) => super::list(&state, &workspace_id, node_id).await.map(Json),
+        None => super::list_workspace(&state, &workspace_id).await.map(Json),
+    }
 }
 
 pub async fn get(

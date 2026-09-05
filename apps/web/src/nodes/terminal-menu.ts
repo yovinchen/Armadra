@@ -1,4 +1,4 @@
-import { KeyRound, Recycle, RotateCcw, Tag } from "lucide-react";
+import { History, KeyRound, Recycle, RotateCcw, Tag } from "lucide-react";
 import { supportedPermissionModes, type PermissionMode } from "@armadra/shared";
 
 import {
@@ -27,7 +27,7 @@ export function registerTerminalNodeMenu(): () => void {
   dispose = registerNodeMenuItems("terminal", ({ node }) => {
     if (node.data.kind !== "terminal") return [];
     // 「标签…」对所有终端都有（§17）：终端头部不许再多一行，标签只有这一个
-    // 编辑入口，编辑结果显示在看板卡片上。
+    // 编辑入口，编辑结果显示在画布卡片上。
     const labels: NodeMenuItem = {
       id: "node.labels",
       label: `${t("meta.labels")}…`,
@@ -40,6 +40,13 @@ export function registerTerminalNodeMenu(): () => void {
     const current: PermissionMode = agent.permissionMode ?? "default";
     const items: NodeMenuItem[] = [
       labels,
+      // 只读的历史面板：它不发起交接，所以和「交接到…」是两个入口。
+      {
+        id: "handoff.history",
+        label: t("handoff.historyTitle"),
+        icon: History,
+        run: () => useCanvasStore.getState().setPanel("handoff", "drawer"),
+      },
       {
         id: "agent.restart",
         label: t("agent.restart"),

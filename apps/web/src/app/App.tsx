@@ -14,6 +14,7 @@ import {
   ExplorerDrawer,
   GithubDrawer,
   HandoffDialog,
+  HandoffHistoryDrawer,
   ResourceDrawer,
   QuickOpen,
   SettingsDialog,
@@ -65,7 +66,7 @@ export function App() {
  *
  * 启动就是这一个壳，不再有启动页：还没有工作空间时侧栏照常在（顶行下拉里
  * 打开 / 新建 / 克隆都能用），只是画布那一半空着——画布与它的浮层都要一块
- * 看板才有意义，所以它们跟着工作空间一起出现，空屏上不写任何提示文案（§14）。
+ * 画布才有意义，所以它们跟着工作空间一起出现，空屏上不写任何提示文案（§14）。
  */
 function AppShell() {
   const workspace = useCanvasStore((state) => state.workspace);
@@ -122,6 +123,7 @@ function AppShell() {
         <QuickOpen />
         <ControlConfirmDialog />
         <HandoffDialog />
+        <HandoffHistoryDrawer />
       </Suspense>
       <Toaster position="bottom-right" />
     </div>

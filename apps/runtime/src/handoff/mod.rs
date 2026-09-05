@@ -145,6 +145,16 @@ pub struct HandoffView {
     pub accepted_at: Option<String>,
     pub updated_at: String,
     pub source_has_new_activity: bool,
+    /// How many times delivery has been claimed. A refusal the gate proved
+    /// returns the notification to the queue, so "queued" alone cannot say
+    /// whether this is the first try or the twentieth.
+    #[serde(default)]
+    pub attempts: u32,
+    /// `pending` / `dispatching` / `sent` / `unknown` / `cancelled`. Kept
+    /// beside `state` because the two answer different questions: what the
+    /// handoff is, and what the delivery queue did about it.
+    #[serde(default)]
+    pub outbox_state: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -390,6 +400,18 @@ fn decode(row: &sqlx::sqlite::SqliteRow) -> AppResult<HandoffView> {
         accepted_at: row.try_get("accepted_at")?,
         updated_at: row.try_get("updated_at")?,
         source_has_new_activity: false,
+        // Only the queries that join the outbox can answer these; the rest
+        // report no attempts rather than inventing a number.
+        attempts: row
+            .try_get::<Option<i64>, _>("attempts")
+            .ok()
+            .flatten()
+            .unwrap_or(0)
+            .max(0) as u32,
+        outbox_state: row
+            .try_get::<Option<String>, _>("outbox_state")
+            .ok()
+            .flatten(),
     })
 }
 async fn read(
@@ -420,14 +442,49 @@ pub async fn get(state: &AppState, workspace_id: &str, id: &str) -> AppResult<Ha
     }
     Ok(view)
 }
+/// One node's handoffs, in both directions, newest first.
 pub async fn list(
     state: &AppState,
     workspace_id: &str,
     source_node_id: &str,
 ) -> AppResult<Vec<HandoffView>> {
     workspace(state, workspace_id, false).await?;
-    sqlx::query("SELECT * FROM agent_handoffs WHERE workspace_id=? AND (source_node_id=? OR target_node_id=?) ORDER BY created_at DESC LIMIT 32")
-        .bind(workspace_id).bind(source_node_id).bind(source_node_id).fetch_all(&state.pool).await?.iter().map(decode).collect()
+    sqlx::query(
+        "SELECT h.*, o.attempts AS attempts, o.state AS outbox_state \
+         FROM agent_handoffs h LEFT JOIN agent_handoff_outbox o ON o.handoff_id=h.id \
+         WHERE h.workspace_id=? AND (h.source_node_id=? OR h.target_node_id=?) \
+         ORDER BY h.created_at DESC LIMIT 32",
+    )
+    .bind(workspace_id)
+    .bind(source_node_id)
+    .bind(source_node_id)
+    .fetch_all(&state.pool)
+    .await?
+    .iter()
+    .map(decode)
+    .collect()
+}
+
+/// The whole workspace's handoff history, newest first.
+///
+/// Rows outlive the nodes and sessions they name, on purpose: a receipt that
+/// disappeared with its terminal would stop being a record of what happened.
+/// The history panel shows the frozen identities from the bundle rather than
+/// re-resolving them, so a deleted node still reads honestly.
+pub async fn list_workspace(state: &AppState, workspace_id: &str) -> AppResult<Vec<HandoffView>> {
+    workspace(state, workspace_id, false).await?;
+    sqlx::query(
+        "SELECT h.*, o.attempts AS attempts, o.state AS outbox_state \
+         FROM agent_handoffs h LEFT JOIN agent_handoff_outbox o ON o.handoff_id=h.id \
+         WHERE h.workspace_id=? ORDER BY h.created_at DESC LIMIT ?",
+    )
+    .bind(workspace_id)
+    .bind(MAX_HANDOFFS)
+    .fetch_all(&state.pool)
+    .await?
+    .iter()
+    .map(decode)
+    .collect()
 }
 
 pub async fn accept(

@@ -530,7 +530,7 @@ export const runtimeApi = {
     );
   },
 
-  /* ----------------------------------- 看板 ----------------------------- */
+  /* ----------------------------------- 画布 ----------------------------- */
   listBoards: (workspaceId: string) =>
     request(`/api/workspaces/${workspaceId}/boards`, boardListSchema),
   createBoard: (workspaceId: string, name: string) =>
@@ -554,7 +554,7 @@ export const runtimeApi = {
       { method: "DELETE" },
     ),
 
-  /* --------------------------------- 看板文档 --------------------------- */
+  /* --------------------------------- 画布文档 --------------------------- */
   loadBoard: (workspaceId: string, boardId: string) =>
     request(
       `/api/workspaces/${workspaceId}/boards/${boardId}/document`,
@@ -839,7 +839,7 @@ export const runtimeApi = {
   /**
    * 认领孤立会话：Runtime 把行重新绑回去，并告诉前端**该用哪个 nodeId**
    * 建节点——那就是会话自己的 key，所以恢复出来的节点拥有的正是原来那个
-   * 会话。节点本身还是画布建、随看板保存。
+   * 会话。节点本身还是画布建、随画布保存。
    */
   adoptOrphanSession: (workspaceId: string, sessionId: string) =>
     request(
@@ -1109,6 +1109,18 @@ export const runtimeApi = {
   handoffs: (workspaceId: string, nodeId: string, signal?: AbortSignal) =>
     request(
       `/api/workspaces/${query(workspaceId)}/handoffs?sourceNodeId=${query(nodeId)}`,
+      handoffListSchema,
+      { signal },
+    ),
+  /**
+   * 整个工作空间的交接历史（自动化设计 §7）。
+   *
+   * 行里的来源/目标读的是冻结在包里的身份，不重新解析：节点被删掉之后，一条
+   * 记录仍然要说清当时发生了什么。
+   */
+  workspaceHandoffs: (workspaceId: string, signal?: AbortSignal) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/handoffs`,
       handoffListSchema,
       { signal },
     ),

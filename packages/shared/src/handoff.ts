@@ -105,6 +105,18 @@ export const handoffViewSchema = z.object({
   acceptedAt: z.string().nullable(),
   updatedAt: z.string(),
   sourceHasNewActivity: z.boolean(),
+  /**
+   * How many times delivery has been claimed. A refusal the gate proved
+   * returns the notification to the queue, so `state` alone cannot say whether
+   * this is the first try or the twentieth.
+   */
+  attempts: z.number().int().nonnegative().default(0),
+  /**
+   * What the delivery queue did, beside what the handoff is: `pending`,
+   * `dispatching`, `sent`, `unknown` or `cancelled`. Absent on a prepared
+   * handoff, which has not been queued at all.
+   */
+  outboxState: z.string().nullable().default(null),
 });
 export const handoffListSchema = z.array(handoffViewSchema);
 export type HandoffSections = z.infer<typeof handoffSectionsSchema>;
