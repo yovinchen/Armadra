@@ -732,6 +732,70 @@ pub fn commit(
     })
 }
 
+/* ---------------------------------- init ---------------------------------- */
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InitResult {
+    pub repository: bool,
+    /// The unborn branch `git init` selected; None if Git left HEAD detached.
+    pub branch: Option<String>,
+    pub path: String,
+}
+
+/// `git init` for a workspace that does not belong to any repository yet.
+///
+/// A directory that already resolves to a Git directory — its own, an
+/// ancestor's, or a bare one — is refused instead of nested: a second
+/// repository inside an existing checkout silently shadows the outer index.
+/// This is the one write path with no common Git directory to queue on,
+/// because that queue key only exists once the repository does.
+pub fn init_repository(workspace_root: &Path) -> AppResult<InitResult> {
+    let root = canonical_directory(workspace_root)?;
+    let mut probe = command::git_command();
+    probe
+        .args(["rev-parse", "--absolute-git-dir"])
+        .current_dir(&root);
+    let existing = command::run(probe, Duration::from_secs(30))?;
+    if existing.status.success() {
+        return Err(AppError::Conflict(
+            "The workspace already belongs to a Git repository".into(),
+        ));
+    }
+    let failure = String::from_utf8_lossy(&existing.stderr);
+    if !failure.contains("not a git repository") {
+        return Err(AppError::Internal(command::sanitize(&failure)));
+    }
+    git(&root, &["init"])?;
+    // Report the repository Git actually created, never the request's intent.
+    let context = repo_context(&root, ".")?
+        .ok_or_else(|| AppError::Internal("Git did not create a working repository here".into()))?;
+    if context.repository != root {
+        return Err(AppError::Internal(
+            "Git initialized a repository outside the workspace root".into(),
+        ));
+    }
+    let branch = git(
+        &context.repository,
+        &["symbolic-ref", "--quiet", "--short", "HEAD"],
+    )
+    .ok()
+    .map(|value| value.trim().to_owned())
+    .filter(|value| !value.is_empty());
+    Ok(InitResult {
+        repository: true,
+        branch,
+        path: workspace_relative_root(&context.repository)?,
+    })
+}
+
+fn workspace_relative_root(repository: &Path) -> AppResult<String> {
+    repository
+        .to_str()
+        .map(str::to_owned)
+        .ok_or_else(|| AppError::BadRequest("Git path is not valid UTF-8".into()))
+}
+
 fn require_repository(workspace_root: &Path) -> AppResult<RepoContext> {
     repo_context(workspace_root, ".")?
         .ok_or_else(|| AppError::BadRequest("The workspace is not a Git repository".into()))
@@ -1145,6 +1209,38 @@ mod tests {
     }
 
     #[test]
+    fn init_creates_one_repository_and_never_nests_a_second() {
+        let root = tempdir().unwrap();
+        assert!(
+            !read_status(root.path()).unwrap().repository,
+            "the fixture must start outside any repository"
+        );
+        let created = init_repository(root.path()).unwrap();
+        assert!(created.repository);
+        assert!(root.path().join(".git").is_dir());
+        assert_eq!(
+            Path::new(&created.path).canonicalize().unwrap(),
+            root.path().canonicalize().unwrap()
+        );
+        assert!(read_status(root.path()).unwrap().repository);
+        // A second call sees its own repository and refuses rather than
+        // reinitializing it.
+        assert!(matches!(
+            init_repository(root.path()),
+            Err(AppError::Conflict(_))
+        ));
+        // A directory inside the new repository already belongs to it, so it
+        // cannot get a nested repository that shadows the outer index.
+        let nested = root.path().join("nested");
+        fs::create_dir(&nested).unwrap();
+        assert!(matches!(
+            init_repository(&nested),
+            Err(AppError::Conflict(_))
+        ));
+        assert!(!nested.join(".git").exists());
+    }
+
+    #[test]
     fn rejects_repository_root_above_authorized_workspace() {
         let repository = tempdir().unwrap();
         Command::new("git")
@@ -1373,7 +1469,7 @@ mod tests {
             .unwrap();
     }
 
-    fn init_repository(root: &Path) {
+    fn fixture_repository(root: &Path) {
         Command::new("git")
             .args(["init", "-q", "-b", "main"])
             .current_dir(root)
@@ -1451,7 +1547,7 @@ mod tests {
     #[test]
     fn reports_per_file_status_from_the_status_endpoint() {
         let root = tempdir().unwrap();
-        init_repository(root.path());
+        fixture_repository(root.path());
         fs::write(root.path().join("kept.txt"), "one\n").unwrap();
         fs::write(root.path().join("edited.txt"), "one\n").unwrap();
         commit_all(root.path(), "initial");
@@ -1481,7 +1577,7 @@ mod tests {
     #[test]
     fn separates_worktree_and_staged_scopes() {
         let root = tempdir().unwrap();
-        init_repository(root.path());
+        fixture_repository(root.path());
         fs::write(root.path().join("tracked.txt"), "one\n").unwrap();
         commit_all(root.path(), "initial");
 
@@ -1529,7 +1625,7 @@ mod tests {
     #[test]
     fn narrows_a_diff_to_the_requested_paths() {
         let root = tempdir().unwrap();
-        init_repository(root.path());
+        fixture_repository(root.path());
         fs::write(root.path().join("one.txt"), "one\n").unwrap();
         fs::write(root.path().join("two.txt"), "two\n").unwrap();
         commit_all(root.path(), "initial");
@@ -1564,7 +1660,7 @@ mod tests {
     #[test]
     fn reports_renames_with_the_destination_path() {
         let root = tempdir().unwrap();
-        init_repository(root.path());
+        fixture_repository(root.path());
         fs::write(root.path().join("old name.txt"), "one\ntwo\nthree\n").unwrap();
         commit_all(root.path(), "initial");
         fs::rename(
@@ -1609,7 +1705,7 @@ mod tests {
     #[test]
     fn unstages_without_touching_the_working_tree() {
         let root = tempdir().unwrap();
-        init_repository(root.path());
+        fixture_repository(root.path());
         fs::write(root.path().join("tracked.txt"), "one\n").unwrap();
         commit_all(root.path(), "initial");
         fs::write(root.path().join("tracked.txt"), "two\n").unwrap();
@@ -1646,7 +1742,7 @@ mod tests {
     #[test]
     fn unstages_a_new_file_before_the_first_commit() {
         let root = tempdir().unwrap();
-        init_repository(root.path());
+        fixture_repository(root.path());
         fs::write(root.path().join("first.txt"), "one\n").unwrap();
         stage_paths(root.path(), &["first.txt".to_owned()]).unwrap();
 
@@ -1667,7 +1763,7 @@ mod tests {
         let root = tempdir().unwrap();
         assert!(!read_status(root.path()).unwrap().repository);
 
-        init_repository(root.path());
+        fixture_repository(root.path());
         fs::write(root.path().join("tracked.txt"), "one\n").unwrap();
         commit_all(root.path(), "initial");
         let clean = read_status(root.path()).unwrap();
@@ -1685,7 +1781,7 @@ mod tests {
     #[test]
     fn omits_divergence_keys_when_there_is_no_upstream() {
         let root = tempdir().unwrap();
-        init_repository(root.path());
+        fixture_repository(root.path());
         fs::write(root.path().join("tracked.txt"), "one\n").unwrap();
         commit_all(root.path(), "initial");
 
@@ -1699,7 +1795,7 @@ mod tests {
     #[test]
     fn stages_regular_files_and_refuses_traversal() {
         let root = tempdir().unwrap();
-        init_repository(root.path());
+        fixture_repository(root.path());
         fs::write(root.path().join("seed.txt"), "seed\n").unwrap();
         commit_all(root.path(), "initial");
         fs::create_dir(root.path().join("src")).unwrap();
@@ -1749,7 +1845,7 @@ mod tests {
     #[test]
     fn reverts_tracked_edits_and_deletes_untracked_files() {
         let root = tempdir().unwrap();
-        init_repository(root.path());
+        fixture_repository(root.path());
         fs::write(root.path().join("tracked.txt"), "original\n").unwrap();
         commit_all(root.path(), "initial");
         fs::write(root.path().join("tracked.txt"), "changed\n").unwrap();
@@ -1779,7 +1875,7 @@ mod tests {
 
         let root = tempdir().unwrap();
         let outside = tempdir().unwrap();
-        init_repository(root.path());
+        fixture_repository(root.path());
         fs::write(root.path().join("seed.txt"), "seed\n").unwrap();
         commit_all(root.path(), "initial");
         fs::create_dir(root.path().join("folder")).unwrap();

@@ -89,6 +89,7 @@ export function SourceControlDrawer() {
 
   const [message, setMessage] = useState("");
   const [revertPath, setRevertPath] = useState<string | null>(null);
+  const [confirmInit, setConfirmInit] = useState(false);
   const [tab, setTab] = useState<"changes" | RepositoryTab>("changes");
   const [hunk, setHunk] = useState<{
     workspaceId: string;
@@ -130,6 +131,18 @@ export function SourceControlDrawer() {
       setMessage("");
       invalidate();
       toast.success(t("scm.committed", { commit: result.commit.slice(0, 7) }));
+    },
+    onError: fail,
+  });
+  // Creating a repository is never implied by another action: the button only
+  // appears once a read reported no repository, and it still asks first.
+  const init = useMutation({
+    mutationFn: () => runtimeApi.gitInit(workspaceId!),
+    onSuccess: (result) => {
+      invalidate();
+      toast.success(
+        t("scm.initialized", { branch: result.branch ?? result.path }),
+      );
     },
     onError: fail,
   });
@@ -367,9 +380,19 @@ export function SourceControlDrawer() {
                     {status.error.message}
                   </p>
                 ) : status.data?.repository === false ? (
-                  <p className="px-4 py-3 text-xs text-muted-foreground">
-                    {t("scm.noRepository")}
-                  </p>
+                  <div className="space-y-2 px-4 py-3">
+                    <p className="text-xs text-muted-foreground">
+                      {t("scm.noRepository")}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={init.isPending}
+                      onClick={() => setConfirmInit(true)}
+                    >
+                      {t("scm.init")}
+                    </Button>
+                  </div>
                 ) : files.length === 0 ? (
                   <p className="px-4 py-3 text-xs text-muted-foreground">
                     {t("scm.clean")}
@@ -426,6 +449,33 @@ export function SourceControlDrawer() {
           </Tabs>
         </SheetContent>
       </Sheet>
+
+      <AlertDialog
+        open={confirmInit}
+        onOpenChange={(next) => {
+          if (!next) setConfirmInit(false);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("scm.initTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("scm.initDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("scm.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmInit(false);
+                init.mutate();
+              }}
+            >
+              {t("scm.initConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={revertPath !== null}

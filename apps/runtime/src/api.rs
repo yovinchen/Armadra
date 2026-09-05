@@ -1857,6 +1857,31 @@ pub async fn git_status(
     Ok(Json(git::read_status(Path::new(&workspace.root_path))?))
 }
 
+/// `POST /api/workspaces/{id}/git/init`.
+///
+/// Deliberately explicit: the drawer only offers it once a read has reported
+/// `repository: false`, and the service refuses a workspace that already
+/// belongs to any repository rather than nesting a second one inside it.
+pub async fn git_init(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+) -> AppResult<Json<git::InitResult>> {
+    let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
+    if !workspace.permissions.read || !workspace.permissions.write {
+        return Err(AppError::Forbidden(
+            "Workspace does not allow Git writes".into(),
+        ));
+    }
+    git::access::require_execution(
+        workspace.permissions.execute,
+        "Git repository initialization",
+    )?;
+    let result =
+        tokio::task::spawn_blocking(move || git::init_repository(Path::new(&workspace.root_path)))
+            .await??;
+    Ok(Json(result))
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PathsRequest {

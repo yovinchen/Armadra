@@ -48,6 +48,7 @@ import {
   gitCommitResponseSchema,
   gitDiffRequestSchema,
   gitDiffSchema,
+  gitInitResponseSchema,
   gitPathsRequestSchema,
   gitRevertResponseSchema,
   gitStageResponseSchema,
@@ -984,6 +985,13 @@ export const runtimeApi = {
     ),
   gitStatus: (workspaceId: string) =>
     request(`/api/workspaces/${workspaceId}/git/status`, gitStatusSchema),
+  /** `git init`; only offered when a status read reported no repository. */
+  gitInit: (workspaceId: string) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/init`,
+      gitInitResponseSchema,
+      { method: "POST" },
+    ),
 
   gitRepositoryBranches: (workspaceId: string, signal?: AbortSignal) =>
     request(

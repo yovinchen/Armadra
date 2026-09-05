@@ -285,6 +285,10 @@ pub fn router_with_state(state: AppState) -> Router {
             get(api::git_status),
         )
         .route(
+            "/api/workspaces/{workspace_id}/git/init",
+            post(api::git_init),
+        )
+        .route(
             "/api/workspaces/{workspace_id}/git/diff",
             get(api::git_diff),
         )

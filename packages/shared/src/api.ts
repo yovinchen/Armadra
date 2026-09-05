@@ -842,6 +842,18 @@ export const gitDiffSchema = z.object({
   files: z.array(gitFileDiffSchema),
 });
 
+/**
+ * `POST /api/workspaces/{id}/git/init` — only offered once a read reported
+ * `repository: false`. A workspace that already belongs to any repository is
+ * refused rather than nested, so this response always describes a new one.
+ */
+export const gitInitResponseSchema = z.object({
+  repository: z.literal(true),
+  /** The unborn branch Git selected; null when it left HEAD detached. */
+  branch: z.string().nullable(),
+  path: z.string(),
+});
+
 export const gitPathsRequestSchema = z.object({
   paths: z.array(z.string().min(1)).min(1),
 });
@@ -1352,6 +1364,7 @@ export type GitDiff = z.infer<typeof gitDiffSchema>;
 export type GitDiffRequest = z.infer<typeof gitDiffRequestSchema>;
 export type GitFileDiff = z.infer<typeof gitFileDiffSchema>;
 export type GitUnstageResponse = z.infer<typeof gitUnstageResponseSchema>;
+export type GitInitResponse = z.infer<typeof gitInitResponseSchema>;
 export type GitCommitRequest = z.infer<typeof gitCommitRequestSchema>;
 export type GitCommitResponse = z.infer<typeof gitCommitResponseSchema>;
 export type GitCloneRequest = z.infer<typeof gitCloneRequestSchema>;

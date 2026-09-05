@@ -125,3 +125,34 @@ it("keeps Changes as the default and stops its commit shortcut outside that tab"
   expect(screen.queryByRole("textbox", { name: "Commit message" })).toBeNull();
   expect(screen.getByRole("dialog").className).toContain("max-w-full");
 });
+
+it("offers git init only outside a repository and asks before creating one", async () => {
+  vi.mocked(runtimeApi.gitStatus).mockResolvedValue({
+    repository: false,
+    branch: null,
+    files: [],
+    changedCount: 0,
+    ahead: null,
+    behind: null,
+  });
+  const init = vi.spyOn(runtimeApi, "gitInit").mockResolvedValue({
+    repository: true,
+    branch: "main",
+    path: "/fixture",
+  });
+  render(
+    <TestProviders>
+      <SourceControlDrawer />
+    </TestProviders>,
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Initialize Git repository" }),
+  );
+  // The dialog names the effect; nothing runs until it is confirmed.
+  await screen.findByText("Initialize a Git repository in this workspace?");
+  expect(init).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Initialize repository" }),
+  );
+  await waitFor(() => expect(init).toHaveBeenCalledTimes(1));
+});
