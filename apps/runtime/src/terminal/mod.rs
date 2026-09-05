@@ -477,6 +477,20 @@ pub enum GuardedPasteOutcome {
     Unknown,
 }
 
+/// What a delivered prompt's turn can be said to have done. Deliberately not a
+/// success/failure pair: "we cannot tell whose turn that was" is its own answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PromptTurn {
+    /// The Agent has not finished a turn since the paste.
+    Pending,
+    /// A turn finished and no other input could have produced it.
+    Completed,
+    /// Input arrived after ours, so no later turn belongs to this delivery.
+    Unattributable,
+    /// The session ended or was replaced before any turn finished.
+    SessionGone,
+}
+
 struct Inner {
     shutting_down: AtomicBool,
     creation_gate: RwLock<()>,
@@ -1566,6 +1580,21 @@ impl TerminalManager {
         })
     }
 
+    /// The session currently bound to `node_id`, and its generation. `None`
+    /// while a node has no live session at all, which is the one condition a
+    /// scheduled cold start is allowed to repair.
+    pub async fn current_node_session(&self, node_id: &str) -> Option<(String, u64)> {
+        let session_id = self
+            .inner
+            .by_key
+            .read()
+            .await
+            .get(&SessionKey::new(node_id.to_owned()))
+            .cloned()?;
+        let record = self.record(&session_id).await?;
+        (!record.exited).then_some((session_id, record.generation))
+    }
+
     /// Only preflight failures prove no input was submitted. Once the backend
     /// is called, any failure is uncertain and must never trigger blind retry.
     /// Key ownership stays locked across generation/idle checks and the frame.
@@ -1577,24 +1606,41 @@ impl TerminalManager {
         expected_programs: &[String],
         text: &str,
     ) -> GuardedPasteOutcome {
+        self.guarded_paste(node_id, session_id, generation, expected_programs, text)
+            .await
+            .0
+    }
+
+    /// The same serialized delivery gate, additionally reporting the session's
+    /// input revision immediately after our own frame. A scheduled delivery
+    /// needs that number: a turn that finishes later is only attributable to
+    /// this paste while it is still the newest input on the session.
+    pub async fn guarded_paste(
+        &self,
+        node_id: &str,
+        session_id: &str,
+        generation: u64,
+        expected_programs: &[String],
+        text: &str,
+    ) -> (GuardedPasteOutcome, Option<u64>) {
         if self.is_shutting_down() {
-            return GuardedPasteOutcome::NotWritten("runtimeStopping");
+            return (GuardedPasteOutcome::NotWritten("runtimeStopping"), None);
         }
         let Some(first) = self.record(session_id).await else {
-            return GuardedPasteOutcome::NotWritten("targetUnavailable");
+            return (GuardedPasteOutcome::NotWritten("targetUnavailable"), None);
         };
         let _key_guard = self.key_gate(&first.key).lock_owned().await;
         if !self.handoff_idle(node_id, session_id, generation).await {
-            return GuardedPasteOutcome::NotWritten("targetBusy");
+            return (GuardedPasteOutcome::NotWritten("targetBusy"), None);
         }
         let Ok(record) = self.checked(session_id, generation).await else {
-            return GuardedPasteOutcome::NotWritten("targetChanged");
+            return (GuardedPasteOutcome::NotWritten("targetChanged"), None);
         };
         let foreground = self.backend(record.kind).foreground(&record.key).await;
         if !foreground.is_ok_and(|foreground| {
             crate::collab::messaging::pane_runs_agent(&foreground, expected_programs)
         }) {
-            return GuardedPasteOutcome::NotWritten("targetNotAgentPane");
+            return (GuardedPasteOutcome::NotWritten("targetNotAgentPane"), None);
         }
         let frame = format!(
             "{}{}{}\r",
@@ -1603,13 +1649,51 @@ impl TerminalManager {
             backend::PASTE_END
         );
         self.note_input(session_id, frame.as_bytes()).await;
+        // Read after `note_input`, still under the key gate, so the number
+        // belongs to our own frame and not to whatever arrives next.
+        let revision = self
+            .record(session_id)
+            .await
+            .map(|record| record.input_revision);
         match self
             .backend(record.kind)
             .paste(&record.key, &backend::sanitize_paste(text), true)
             .await
         {
-            Ok(()) => GuardedPasteOutcome::Submitted,
-            Err(_) => GuardedPasteOutcome::Unknown,
+            Ok(()) => (GuardedPasteOutcome::Submitted, revision),
+            Err(_) => (GuardedPasteOutcome::Unknown, revision),
+        }
+    }
+
+    /// Where a delivered prompt's turn stands, without asserting anything the
+    /// terminal cannot show: `Some(true)` only when the session has since
+    /// reported an idle turn whose input revision is still ours.
+    pub async fn prompt_turn_settled(
+        &self,
+        node_id: &str,
+        session_id: &str,
+        generation: u64,
+        input_revision: u64,
+    ) -> PromptTurn {
+        if !self
+            .is_current_node_session(node_id, session_id, generation)
+            .await
+        {
+            return PromptTurn::SessionGone;
+        }
+        let Some(record) = self.record(session_id).await else {
+            return PromptTurn::SessionGone;
+        };
+        if record.input_revision != input_revision {
+            // Someone typed after us. Nothing the Agent does now can be
+            // attributed to this delivery, and nothing may be resent either.
+            return PromptTurn::Unattributable;
+        }
+        match record.observation.as_ref() {
+            Some(observation) if observation.idle_input_revision == Some(input_revision) => {
+                PromptTurn::Completed
+            }
+            _ => PromptTurn::Pending,
         }
     }
 

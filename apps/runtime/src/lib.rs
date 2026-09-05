@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod agent_probe;
 pub mod api;
+pub mod automation;
 pub mod browser;
 pub mod collab;
 pub mod command;

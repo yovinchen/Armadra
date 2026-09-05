@@ -1,5 +1,11 @@
 //! Read-only execution bridge over a parent-owned anonymous pipe. This mode
 //! never starts the legacy HTTP server, migrates canvas.db or recovers PTYs.
+//!
+//! One action writes: scheduled prompt delivery is *proxied* to the live
+//! Runtime that owns the terminal (see [`agent_bridge`]). This process still
+//! opens no PTY of its own.
+pub mod agent_bridge;
+
 use crate::{error::AppError, files, security};
 use armadra_protocol::{Message, v1::*};
 use sha2::{Digest, Sha256};
@@ -16,6 +22,9 @@ pub struct Worker {
     roots: HashMap<String, PathBuf>,
     command_path: Option<PathBuf>,
     commands: Option<crate::command::Manager>,
+    /// Present only in command mode: the bridge to the Runtime that owns the
+    /// terminals. A read-only Worker answers UNSUPPORTED for agent actions.
+    agents: Option<agent_bridge::Bridge>,
 }
 impl Default for Worker {
     fn default() -> Self {
@@ -25,6 +34,7 @@ impl Default for Worker {
             roots: HashMap::new(),
             command_path: None,
             commands: None,
+            agents: None,
         }
     }
 }
@@ -167,6 +177,10 @@ impl Worker {
                                 AppError::Internal("Command journal could not be opened".into())
                             })?,
                     );
+                    // The bridge re-reads the live Runtime's own endpoint file
+                    // out of the shared data directory on every call, because
+                    // that Runtime may restart on a different address under us.
+                    self.agents = Some(agent_bridge::Bridge::new(crate::paths::data_dir()));
                 }
                 self.command_path = None;
                 self.host = Some(request.host_id.clone());
@@ -176,11 +190,17 @@ impl Worker {
                     instance_id: self.instance.clone(),
                     platform: std::env::consts::OS.into(),
                     architecture: std::env::consts::ARCH.into(),
-                    capabilities: vec![
-                        "worker.roots.v1".into(),
-                        "files.directory-read.v1".into(),
-                        "files.text-read.v1".into(),
-                    ],
+                    capabilities: {
+                        let mut capabilities: Vec<String> = vec![
+                            "worker.roots.v1".into(),
+                            "files.directory-read.v1".into(),
+                            "files.text-read.v1".into(),
+                        ];
+                        if self.agents.is_some() {
+                            capabilities.push(agent_bridge::CAPABILITY.into());
+                        }
+                        capabilities
+                    },
                     max_frame_bytes: MAX_FRAME as u32,
                     max_file_chunk_bytes: MAX_CHUNK as u32,
                     max_text_file_bytes: 1 << 20,
@@ -190,6 +210,16 @@ impl Worker {
                         .map(|_| crate::command::capabilities()),
                 }))
             }
+            // Proxied to the Runtime that owns the terminal. A read-only
+            // Worker has no bridge and says so, rather than answering as
+            // though a target were simply not ready.
+            Action::Agent(input) => match self.agents.as_ref() {
+                Some(bridge) => Ok(Response::Agent(bridge.handle(input).await?)),
+                None => Ok(Response::Error(ErrorResponse {
+                    code: "UNSUPPORTED".into(),
+                    message: "Scheduled prompt delivery is not configured".into(),
+                })),
+            },
             Action::Command(input) => {
                 match self.commands.as_ref() {
                     Some(manager) => Ok(Response::Command(manager.handle(input).await.map_err(

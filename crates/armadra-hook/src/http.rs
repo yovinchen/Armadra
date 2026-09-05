@@ -148,7 +148,19 @@ impl Write for Stream {
 /// The two attempts share one 1.5s budget so a hanging socket cannot make the
 /// hook take three seconds.
 pub fn send(endpoint: &Endpoint, request: &Request) -> Result<Response, String> {
-    let deadline = Instant::now() + TOTAL_TIMEOUT;
+    send_with_timeout(endpoint, request, TOTAL_TIMEOUT)
+}
+
+/// The same exchange with an explicit budget. Hook mode keeps the 1.5s default
+/// because it sits on the hot path of every CLI event; a caller that is already
+/// a background worker — the scheduled prompt bridge — may wait longer, because
+/// the runtime has to inspect a live pane before it can answer.
+pub fn send_with_timeout(
+    endpoint: &Endpoint,
+    request: &Request,
+    total: Duration,
+) -> Result<Response, String> {
+    let deadline = Instant::now() + total;
     let bytes = request.to_bytes();
     let mut last_error = "no transport configured".to_string();
 

@@ -345,7 +345,7 @@ async fn record_answer(state: &AppState, event: &AgentEvent, decision: &str) {
     }
 }
 
-fn require_bearer(state: &AppState, headers: &HeaderMap) -> AppResult<()> {
+pub(crate) fn require_bearer(state: &AppState, headers: &HeaderMap) -> AppResult<()> {
     if state
         .hooks
         .bearer_matches(header(headers, HOOK_TOKEN_HEADER))

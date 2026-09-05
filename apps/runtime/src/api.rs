@@ -836,7 +836,7 @@ pub struct CreateTerminalRequest {
 /// is what the canvas node, the session row and the status badge are keyed by
 /// (plan §24.1). Its own `env` is applied last and cannot shadow an `ARMADRA_*`
 /// name, because those keys are refused when the entry is stored.
-fn agent_session_environment(
+pub(crate) fn agent_session_environment(
     state: &AppState,
     node_id: &str,
     agent_id: &str,

@@ -1843,15 +1843,11 @@ mod tests {
 
     use super::*;
 
-    /// How many files `migrations/` holds. Counted rather than written out, so
-    /// adding a numbered migration does not silently break two unrelated
-    /// assertions about migration bookkeeping.
+    /// Every checked-in migration, counted from the embedded set rather than
+    /// written out: a literal here would have to be edited by hand on every
+    /// new migration, and the number is not what these tests are about.
     fn migration_count() -> i64 {
-        std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/migrations"))
-            .expect("the migrations directory ships with the crate")
-            .filter_map(Result::ok)
-            .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "sql"))
-            .count() as i64
+        sqlx::migrate!("./migrations").migrations.len() as i64
     }
 
     async fn fixture(name: &str) -> (SqlitePool, tempfile::TempDir, Workspace) {

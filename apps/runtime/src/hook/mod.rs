@@ -254,6 +254,21 @@ pub fn routes() -> Router<AppState> {
         // B01 — the controlled browser verbs. Same auth as `control`, plus a
         // context link to the browser node being driven.
         .route("/browser/{verb}", post(ingest::browser))
+        // Scheduled prompt delivery (automation design §4/§5). Same door, same
+        // app bearer: the Host's Worker reaches it over this socket, and a
+        // browser never can.
+        .route(
+            "/automation/agent-target",
+            post(crate::automation::target_route),
+        )
+        .route(
+            "/automation/agent-prompt",
+            post(crate::automation::deliver_route),
+        )
+        .route(
+            "/automation/agent-prompt/lookup",
+            post(crate::automation::lookup_route),
+        )
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
 }
 
