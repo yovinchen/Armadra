@@ -19,7 +19,7 @@ use crate::{
     db::{self, SaveBoardRequest, WorkspacePatch},
     error::{AppError, AppResult},
     events::WorkspaceEvent,
-    files, git,
+    file_watch, files, git,
     hook::{
         HookHealth,
         install::{self, InstallReport},
@@ -191,18 +191,22 @@ pub async fn update_workspace(
     AxumPath(workspace_id): AxumPath<String>,
     Json(request): Json<UpdateWorkspaceRequest>,
 ) -> AppResult<Json<Workspace>> {
-    Ok(Json(
-        db::update_workspace(
-            &state.pool,
-            &workspace_id,
-            WorkspacePatch {
-                name: request.name,
-                color: request.color,
-                permissions: request.permissions,
-            },
-        )
-        .await?,
-    ))
+    let workspace = db::update_workspace(
+        &state.pool,
+        &workspace_id,
+        WorkspacePatch {
+            name: request.name,
+            color: request.color,
+            permissions: request.permissions,
+        },
+    )
+    .await?;
+    // Losing read access releases the editor's filesystem watchers with it
+    // (E01/M4); nothing keeps pushing paths the canvas may not look at.
+    if !workspace.permissions.read {
+        file_watch::release_workspace(&workspace_id);
+    }
+    Ok(Json(workspace))
 }
 
 /// `DELETE /api/workspaces/{id}` — 从列表移除 (plan §20).
@@ -220,6 +224,7 @@ pub async fn delete_workspace(
     // 404 before anything is torn down, so an unknown id is a no-op.
     db::get_workspace(&state.pool, &workspace_id).await?;
     state.terminals.destroy_workspace(&workspace_id).await;
+    file_watch::release_workspace(&workspace_id);
     db::delete_workspace(&state.pool, &workspace_id).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
@@ -515,6 +520,83 @@ pub async fn write_file(
             request.expected_sha256.as_deref(),
         )
         .map(Json)
+    })
+    .await?
+}
+
+/* ------------------------------ file watching ----------------------------- */
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchFileRequest {
+    path: String,
+    /// The editor node showing the file. Two nodes on the same path each keep
+    /// their own registration, so closing one does not blind the other.
+    node_id: String,
+}
+
+/// `POST /api/workspaces/{id}/file-watch` — an editor node declares a file
+/// open (E01/M4). The answer carries the version on disk right now, and says
+/// whether changes will be pushed or the client has to ask.
+pub async fn watch_file(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+    Json(request): Json<WatchFileRequest>,
+) -> AppResult<Json<file_watch::WatchRegistration>> {
+    let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
+    if !workspace.permissions.read {
+        // A workspace that lost read access must not keep an OS watcher alive
+        // on a folder the canvas may no longer look at.
+        file_watch::release_workspace(&workspace_id);
+        return Err(AppError::Forbidden("This workspace is not readable".into()));
+    }
+    let events = state.events.clone();
+    tokio::task::spawn_blocking(move || {
+        file_watch::register(
+            &workspace_id,
+            Path::new(&workspace.root_path),
+            &request.path,
+            &request.node_id,
+            &events,
+        )
+        .map(Json)
+    })
+    .await?
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnwatchFileQuery {
+    path: String,
+    node_id: String,
+}
+
+/// `DELETE /api/workspaces/{id}/file-watch?path=&nodeId=` — the editor closed
+/// the file. Unknown registrations are a no-op, so a late close after a
+/// workspace switch is not an error.
+pub async fn unwatch_file(
+    AxumPath(workspace_id): AxumPath<String>,
+    Query(query): Query<UnwatchFileQuery>,
+) -> AppResult<axum::http::StatusCode> {
+    file_watch::unregister(&workspace_id, &query.path, &query.node_id)?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// `GET /api/workspaces/{id}/file-version?path=` — the current SHA-256, size
+/// and mtime of one file. This is the fallback the editor polls on demand when
+/// registration answered `unsupported`; a missing file is `exists: false`,
+/// not a 404.
+pub async fn file_version(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+    Query(query): Query<RequestedPath>,
+) -> AppResult<Json<file_watch::FileVersion>> {
+    let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
+    if !workspace.permissions.read {
+        return Err(AppError::Forbidden("This workspace is not readable".into()));
+    }
+    tokio::task::spawn_blocking(move || {
+        file_watch::file_version(Path::new(&workspace.root_path), &query.path).map(Json)
     })
     .await?
 }
@@ -2961,6 +3043,114 @@ mod tests {
         assert_eq!(saved["sha256"], latest["sha256"]);
         assert_eq!(latest["content"], "mine");
     }
+
+    /// E01/M4 over the wire: registration, the pushed change, the on-demand
+    /// fallback, and what revoking read access does to a live watcher.
+    #[tokio::test]
+    async fn watched_files_report_external_changes_until_read_access_is_revoked() {
+        let directory = tempdir().unwrap();
+        let database_url = format!(
+            "sqlite://{}?mode=rwc",
+            directory.path().join("api-file-watch.db").display()
+        );
+        let pool = db::connect(&database_url).await.unwrap();
+        let events = EventHub::new();
+        let (terminals, settings) = test_terminals(&pool, &events, directory.path());
+        let router = crate::router_with_state(AppState {
+            terminals,
+            usage: crate::usage::UsageService::new(settings.clone()),
+            settings,
+            hooks: test_hooks(directory.path()),
+            events: events.clone(),
+            pool,
+        });
+        let root = directory.path().join("project");
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(root.join("note.txt"), "old\n").unwrap();
+        let (status, workspace) = call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            Some(json!({ "name": "watch", "rootPath": root.to_string_lossy() })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let workspace_id = workspace["id"].as_str().unwrap().to_owned();
+        let mut stream = events.subscribe(&workspace_id);
+
+        let watch_uri = format!("/api/workspaces/{workspace_id}/file-watch");
+        let (status, registration) = call(
+            &router,
+            "POST",
+            &watch_uri,
+            Some(json!({ "path": "note.txt", "nodeId": "node-1" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(registration["status"], "watching");
+        assert_eq!(registration["version"]["exists"], true);
+        assert_eq!(
+            registration["version"]["sha256"].as_str().unwrap().len(),
+            64
+        );
+
+        std::fs::write(root.join("note.txt"), "changed outside\n").unwrap();
+        let pushed = tokio::time::timeout(std::time::Duration::from_secs(10), stream.recv())
+            .await
+            .expect("a file.changed event")
+            .unwrap();
+        let pushed = serde_json::to_value(&pushed).unwrap();
+        assert_eq!(pushed["type"], "file.changed");
+        assert_eq!(pushed["workspaceId"], workspace_id.as_str());
+        assert_eq!(pushed["path"], "note.txt");
+        assert_eq!(pushed["kind"], "modified");
+
+        // The on-demand fallback answers the same question without a watcher.
+        let (status, version) = call(
+            &router,
+            "GET",
+            &format!("/api/workspaces/{workspace_id}/file-version?path=note.txt"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(version["sha256"], pushed["sha256"]);
+        assert_eq!(version["size"], 16);
+
+        // Read access goes away → the watcher goes with it.
+        let (status, _) = call(
+            &router,
+            "PATCH",
+            &format!("/api/workspaces/{workspace_id}"),
+            Some(json!({ "permissions": { "read": false, "write": false, "execute": false } })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        std::fs::write(root.join("note.txt"), "after revocation\n").unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(900)).await;
+        assert!(
+            stream.try_recv().is_err(),
+            "a workspace without read access must not push file changes"
+        );
+        let (status, denied) = call(
+            &router,
+            "POST",
+            &watch_uri,
+            Some(json!({ "path": "note.txt", "nodeId": "node-1" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(denied["code"], "forbidden");
+        let (status, _) = call(
+            &router,
+            "DELETE",
+            &format!("{watch_uri}?path=note.txt&nodeId=node-1"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+    }
+
     #[tokio::test]
     async fn creates_the_workspace_folder_when_asked() {
         let (router, directory) = router_fixture("api-mkdir").await;

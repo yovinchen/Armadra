@@ -60,6 +60,32 @@ pub enum WorkspaceEvent {
         node_id: String,
         summary: String,
     },
+    /// A file an editor node has open changed outside the app (E01/M4).
+    /// `sha256` / `size` / `mtime` are `null` for a removal. Only files a node
+    /// registered through `POST /api/workspaces/{id}/file-watch` are reported,
+    /// and only while the workspace is readable.
+    #[serde(rename = "file.changed", rename_all = "camelCase")]
+    FileChanged {
+        workspace_id: String,
+        path: String,
+        kind: FileChangeKind,
+        sha256: Option<String>,
+        size: Option<u64>,
+        mtime: Option<String>,
+    },
+}
+
+/// How the file on disk differs from what the editor last read.
+///
+/// `replaced` means the path now holds a different file (a new inode, or a file
+/// that came back after being deleted) rather than an edit of the same one; on
+/// platforms without a cheap file id it collapses into `modified`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FileChangeKind {
+    Modified,
+    Removed,
+    Replaced,
 }
 
 const CHANNEL_CAPACITY: usize = 256;
@@ -186,5 +212,23 @@ mod tests {
         assert_eq!(json["type"], "terminal.exit");
         assert!(json.get("nodeId").is_none());
         assert!(json.get("exitCode").is_none());
+
+        let json = serde_json::to_value(WorkspaceEvent::FileChanged {
+            workspace_id: "w-1".into(),
+            path: "src/main.rs".into(),
+            kind: FileChangeKind::Removed,
+            sha256: None,
+            size: None,
+            mtime: None,
+        })
+        .unwrap();
+        assert_eq!(json["type"], "file.changed");
+        assert_eq!(json["workspaceId"], "w-1");
+        assert_eq!(json["kind"], "removed");
+        // A removal keeps the keys and nulls them, so a client never has to
+        // tell "absent" from "gone".
+        assert!(json["sha256"].is_null());
+        assert!(json["size"].is_null());
+        assert!(json["mtime"].is_null());
     }
 }

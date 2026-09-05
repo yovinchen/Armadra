@@ -175,6 +175,9 @@ async fn main() -> anyhow::Result<()> {
     if let Err(error) = handoffs.shutdown(Duration::from_secs(4)).await {
         tracing::error!(%error, "Handoff delivery shutdown did not complete");
     }
+    // Filesystem watchers hold OS handles and a drain thread each; they are
+    // released as soon as admission stops, before the slower cleanups run.
+    armadra_runtime::file_watch::shutdown();
     let terminal_cleanup = tokio::time::timeout(Duration::from_secs(8), async {
         match reason {
             ShutdownReason::DesktopQuit => terminals.shutdown_owned_sessions().await,

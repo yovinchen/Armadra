@@ -24,6 +24,10 @@ chrono = { version = "0.4.42", features = ["serde"] }
 futures-util = "0.3.31"
 hmac = "0.12.1"
 mime_guess = "2.0.5"
+# Editor external-change watching (E01/M4): FSEvents / inotify /
+# ReadDirectoryChanges behind one API. Pinned so a platform backend never
+# changes under us without a lockfile review.
+notify = "8.2.0"
 portable-pty = "0.9.0"
 rand = "0.9.5"
 regex = "1.11.2"

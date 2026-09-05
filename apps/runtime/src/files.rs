@@ -304,6 +304,11 @@ pub fn write_text_file(
             return Err(AppError::Conflict("File parent changed during save".into()));
         }
         verify_version(&path, expected.as_deref())?;
+        // Claim the hash *before* it is on disk: the filesystem event of our
+        // own save must never race ahead of the record that identifies it
+        // (E01/M4). A write that fails after this only leaves a hash nothing
+        // matches, which the next real change still differs from.
+        crate::file_watch::note_write(&path, &format!("{:x}", Sha256::digest(bytes)));
         if expected.is_none() {
             fs::hard_link(&temporary, &path).map_err(|error| {
                 if error.kind() == std::io::ErrorKind::AlreadyExists {

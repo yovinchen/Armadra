@@ -8,6 +8,7 @@ pub mod db;
 pub mod desktop_control;
 pub mod error;
 pub mod events;
+pub mod file_watch;
 pub mod files;
 pub mod git;
 pub mod git_api;
@@ -222,6 +223,17 @@ pub fn router_with_state(state: AppState) -> Router {
         .route(
             "/api/workspaces/{workspace_id}/file",
             get(api::read_file).put(api::write_file),
+        )
+        // External-change watching for open editor files (E01/M4). POST
+        // registers one node's view of one path, DELETE drops it, and
+        // `file-version` is the on-demand answer when no watcher is available.
+        .route(
+            "/api/workspaces/{workspace_id}/file-watch",
+            post(api::watch_file).delete(api::unwatch_file),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/file-version",
+            get(api::file_version),
         )
         .route(
             "/api/workspaces/{workspace_id}/git/status",
