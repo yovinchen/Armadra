@@ -97,6 +97,9 @@ pub async fn ensure(
                 reason_code: String::new(),
                 created_at: now.clone(),
                 updated_at: now,
+                process: ProcessIdentity::default(),
+                lease_generation: 0,
+                active_tab_url: String::new(),
             };
             crate::browser::insert_stored(&state.pool, &stored).await?;
             stored

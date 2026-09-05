@@ -32,8 +32,8 @@ use crate::{
 
 use super::{
     BrowserSession, Capture, ConsoleEntry, Download, DownloadState, Element, MAX_ELEMENTS,
-    MAX_TEXT_BYTES, NetworkEntry, RING_CAPACITY, ReadMode, ReadResponse, SessionState,
-    StoredSession, Subscription, Viewport, Visibility, WaitOutcome, cdp,
+    MAX_TEXT_BYTES, NetworkEntry, ProcessIdentity, RING_CAPACITY, ReadMode, ReadResponse,
+    SessionState, StoredSession, Subscription, Viewport, Visibility, WaitOutcome, cdp,
     cdp::{CdpClient, CdpError, CdpEvent},
     dom, launch, service,
 };
