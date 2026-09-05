@@ -3,6 +3,7 @@ import {
   ArrowUpDown,
   Boxes,
   Copy,
+  Moon,
   Network,
   MessageSquare,
   MoreHorizontal,
@@ -11,6 +12,7 @@ import {
   Share2,
   Sparkles,
   Square,
+  Unplug,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -95,6 +97,8 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
     connection: "idle",
     exitCode: data?.lastExitCode ?? null,
     error: null,
+    // 表面还没挂上，谈不上在渲染；第一次 `onStatusChange` 就会覆盖它。
+    render: "offscreen",
   });
   const [findOpen, setFindOpen] = React.useState(false);
   const workspaceId = useCanvasStore((state) => state.workspace?.id ?? null);
@@ -271,6 +275,33 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
         >
           {t("terminal.exited")}
           {surface.exitCode === null ? "" : ` ${surface.exitCode}`}
+        </Badge>
+      )}
+      {/*
+        视图状态（终端宿主设计 §7.1）。只有两个状态值得占头部的位置：
+        `disconnected` 是「socket 意外没了，正在退避重连」——必须说出来，
+        否则用户会把一个静止的画面当成还活着；`detached` 是我们自己为了省
+        资源关掉的，进程照跑，所以给一个安静得多的胶囊。
+        `visible` / `focused` / `offscreen` 一律不显示：那是正常状态，
+        把它画出来只是噪音。
+        已退出的会话不再报掉线：那时 socket 关掉本来就是收尾。
+      */}
+      {!exited && surface.render === "disconnected" && (
+        <Badge
+          variant="outline"
+          className="h-[18px] px-1.5 text-[length:var(--text-caption)] text-[var(--danger)]"
+        >
+          <Unplug className="size-2.5" />
+          {t("terminal.render.disconnected")}
+        </Badge>
+      )}
+      {!exited && surface.render === "detached" && (
+        <Badge
+          variant="outline"
+          className="h-[18px] px-1.5 text-[length:var(--text-caption)] text-muted-foreground"
+        >
+          <Moon className="size-2.5" />
+          {t("terminal.render.detached")}
         </Badge>
       )}
     </>

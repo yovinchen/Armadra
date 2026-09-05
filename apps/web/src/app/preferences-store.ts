@@ -14,6 +14,12 @@ import {
   type Locale,
   type TranslateValues,
 } from "../i18n";
+import {
+  clampRenderBudget,
+  DEFAULT_RENDER_BUDGET,
+  RENDER_BUDGET_RANGE,
+  setRenderBudget as applyRenderBudget,
+} from "../terminal/render-budget";
 
 /**
  * 应用级偏好（主题 / 语言 / 已打开的工作空间）。
@@ -72,6 +78,13 @@ const CONTEXT_DANGER_KEY = "armadra.context.dangerPercent";
  * 里的「结束会话」始终是用户自己点的。
  */
 const SESSION_MEMORY_WARN_KEY = "armadra.resources.sessionMemoryWarnBytes";
+/**
+ * 同时全速渲染的终端数量（终端宿主设计 §7.1）。
+ *
+ * 是设备属性而不是账号偏好——WebGL 上下文的数量由这台机器的浏览器和显卡说了
+ * 算，所以和终端外观一样只存本地。
+ */
+const RENDER_BUDGET_KEY = "armadra.terminal.renderBudget";
 /** 终端 / Agent 节点的自动命名（Agent 自动化设计 §8）。默认开。 */
 const AUTO_TITLE_KEY = "armadra.autoTitle";
 /** 节点颜色的表达方式（§24.3-3）：色点 + 1px 顶描边，或旧的 3px 色条。 */
@@ -479,6 +492,8 @@ export interface PreferencesState {
   contextThresholds: ContextThresholds;
   /** 会话内存徽标的变色阈值，字节（路线图 §4.3）。默认 2 GiB。 */
   sessionMemoryWarnBytes: number;
+  /** 同时全速渲染的终端数量（终端宿主设计 §7.1）。默认 4。 */
+  renderBudget: number;
   /** 占位标题的自动命名（设计 §8）；人工改过名的节点始终不受影响。 */
   autoTitle: boolean;
   /** 节点颜色风格（§24.3-3）：`dot` 色点 + 顶描边 / `bar` 顶部色条。 */
@@ -516,6 +531,7 @@ export interface PreferencesState {
   setShowUsage: (enabled: boolean) => void;
   setContextThresholds: (thresholds: Partial<ContextThresholds>) => void;
   setSessionMemoryWarnBytes: (bytes: number) => void;
+  setRenderBudget: (limit: number) => void;
   setAutoTitle: (enabled: boolean) => void;
   setNodeColorStyle: (style: NodeColorStyle) => void;
   setSidebarOpen: (open: boolean) => void;
@@ -618,6 +634,14 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
     DEFAULT_SESSION_MEMORY_WARN_BYTES,
     SESSION_MEMORY_WARN_RANGE[0],
     SESSION_MEMORY_WARN_RANGE[1],
+  ),
+  renderBudget: clampRenderBudget(
+    storedNumber(
+      RENDER_BUDGET_KEY,
+      DEFAULT_RENDER_BUDGET,
+      RENDER_BUDGET_RANGE[0],
+      RENDER_BUDGET_RANGE[1],
+    ),
   ),
   autoTitle: storedBoolean(AUTO_TITLE_KEY, true),
   nodeColorStyle: storedEnum(NODE_COLOR_STYLE_KEY, NODE_COLOR_STYLES, "dot"),
@@ -769,6 +793,11 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
     writeStored(SESSION_MEMORY_WARN_KEY, String(sessionMemoryWarnBytes));
     set({ sessionMemoryWarnBytes });
   },
+  setRenderBudget(limit) {
+    const renderBudget = clampRenderBudget(limit);
+    writeStored(RENDER_BUDGET_KEY, String(renderBudget));
+    set({ renderBudget });
+  },
   setAutoTitle(autoTitle) {
     writeStored(AUTO_TITLE_KEY, String(autoTitle));
     set({ autoTitle });
@@ -827,6 +856,9 @@ export function useResolvedTheme(): ResolvedTheme {
 /**
  * 把主题与语言写到 `<html>` 上，并跟随系统主题变化。
  * App 挂一次；`sonner` 与 tokens.css 都盯着 `data-theme`。
+ *
+ * 渲染名额也在这里推给登记处（终端宿主设计 §7.1）：那是个模块级的单例，
+ * 没有 React 状态，只能由这条「偏好 → 世界」的通路把当前值送过去。
  */
 export function syncDocumentPreferences(): () => void {
   const apply = () => {
@@ -836,6 +868,7 @@ export function syncDocumentPreferences(): () => void {
     root.dataset.theme = resolved;
     root.style.colorScheme = resolved;
     root.lang = state.locale;
+    applyRenderBudget(state.renderBudget);
   };
   apply();
   const unsubscribe = usePreferencesStore.subscribe(apply);

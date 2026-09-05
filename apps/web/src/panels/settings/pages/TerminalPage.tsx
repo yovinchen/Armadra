@@ -6,6 +6,7 @@ import {
   useT,
   type TerminalCursorStyle,
 } from "../../../app/preferences-store";
+import { RENDER_BUDGET_CHOICES } from "../../../terminal/render-budget";
 import { SettingsGroup } from "../SettingsGroup";
 import { SettingsRow } from "../SettingsRow";
 import { useRuntimeSettings } from "../use-runtime-settings";
@@ -20,9 +21,29 @@ import {
 } from "@/ui/select";
 import { Switch } from "@/ui/switch";
 
-/** `settings.terminal.backend` 的三个取值（§15.1）。 */
-const TERMINAL_BACKENDS = ["auto", "tmux", "direct"] as const;
+/**
+ * `settings.terminal.backend`（§15.1 + T01）。
+ *
+ * `sessionHost` 只有 Windows 有：会话归 `armadra-session-host` 持有，关掉
+ * 窗口甚至重启 Runtime 都不结束 CLI。选它的机器上 `auto` 已经是它，显式选
+ * 是为了「起不来时报错，而不是悄悄退回会随进程一起死的直连」。
+ */
+const TERMINAL_BACKENDS = ["auto", "tmux", "direct", "sessionHost"] as const;
 type TerminalBackend = (typeof TERMINAL_BACKENDS)[number];
+
+/**
+ * 会话休眠等待时长（T03，宿主设计 §7.2）。
+ *
+ * 过了这么久还没有任何客户端附着，Runtime 就把这个会话的输出投递放慢。
+ * **进程不受影响**，回放缓冲照留，一个字节都不丢——只是不再为没人看的画面
+ * 每 16 毫秒醒一次。「关闭」是真的关闭，不是「立刻休眠」。
+ */
+const DORMANT_CHOICES = [
+  { seconds: 0, key: "terminal.settings.dormant.off" },
+  { seconds: 30, key: "terminal.settings.dormant.30s" },
+  { seconds: 120, key: "terminal.settings.dormant.2m" },
+  { seconds: 600, key: "terminal.settings.dormant.10m" },
+] as const;
 
 /**
  * 防休眠策略（T02，终端宿主设计 §9）。
@@ -75,6 +96,9 @@ export function TerminalPage() {
   const setMemoryWarnBytes = usePreferencesStore(
     (state) => state.setSessionMemoryWarnBytes,
   );
+  // 同理：能同时开几个 WebGL 上下文是这台机器的属性，不是账号偏好。
+  const renderBudget = usePreferencesStore((state) => state.renderBudget);
+  const setRenderBudget = usePreferencesStore((state) => state.setRenderBudget);
   const { settings, save } = useRuntimeSettings();
   const runtimeTerminal = settings.data?.terminal;
 
@@ -96,6 +120,30 @@ export function TerminalPage() {
               {TERMINAL_BACKENDS.map((choice) => (
                 <SelectItem key={choice} value={choice}>
                   {t(`settings.backend.${choice}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingsRow>
+
+        <SettingsRow
+          label={t("terminal.settings.dormantAfter")}
+          footnote={t("terminal.settings.dormantAfterHint")}
+        >
+          <Select
+            value={String(runtimeTerminal?.dormantAfterSeconds ?? 120)}
+            disabled={!settings.data}
+            onValueChange={(value) =>
+              save.mutate({ terminal: { dormantAfterSeconds: Number(value) } })
+            }
+          >
+            <SelectTrigger size="sm" className={CONTROL_WIDTH}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="z-[var(--z-dialog)]">
+              {DORMANT_CHOICES.map((choice) => (
+                <SelectItem key={choice.seconds} value={String(choice.seconds)}>
+                  {t(choice.key)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -188,6 +236,27 @@ export function TerminalPage() {
               {MEMORY_THRESHOLDS.map((gigabytes) => (
                 <SelectItem key={gigabytes} value={String(gigabytes * GIB)}>
                   {t("resources.memory.threshold.value", { value: gigabytes })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingsRow>
+
+        <SettingsRow
+          label={t("terminal.settings.renderBudget")}
+          footnote={t("terminal.settings.renderBudgetHint")}
+        >
+          <Select
+            value={String(renderBudget)}
+            onValueChange={(value) => setRenderBudget(Number(value))}
+          >
+            <SelectTrigger size="sm" className={CONTROL_WIDTH}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="z-[var(--z-dialog)]">
+              {RENDER_BUDGET_CHOICES.map((slots) => (
+                <SelectItem key={slots} value={String(slots)}>
+                  {slots}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -3,7 +3,11 @@ import { Terminal, type ITerminalOptions } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import type { SearchAddon } from "@xterm/addon-search";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
-import type { TerminalNodeData, TerminateMode } from "@armadra/shared";
+import type {
+  TerminalBackendKind,
+  TerminalNodeData,
+  TerminateMode,
+} from "@armadra/shared";
 
 import { runtimeApi, terminalWebSocketUrl, RUNTIME_URL } from "@/api/client";
 import { toast } from "sonner";
@@ -60,6 +64,22 @@ import {
 import { loadRuntimePlatform, runtimePlatform } from "./platform";
 import { SCROLL_THROTTLE_MS, WheelAccumulator, postScroll } from "./scrollback";
 import { createTerminalTransport, type TerminalTransport } from "./transport";
+import { useOnScreen, usePageVisible } from "@/panels/resources/use-visibility";
+import {
+  bufferOffscreenChunk,
+  createOffscreenBuffer,
+  drainOffscreenBuffer,
+  HIDDEN_DETACH_MS,
+  OFFSCREEN_FLUSH_MS,
+  rendersActively,
+  resolveRenderState,
+  type TerminalRenderState,
+} from "./render-state";
+import {
+  claimRenderSlot,
+  RENDER_PRIORITY_FOCUSED,
+  RENDER_PRIORITY_VISIBLE,
+} from "./render-budget";
 
 /* ------------------------------- 时序常量 -------------------------------- */
 
@@ -105,7 +125,20 @@ export interface TerminalSurfaceStatus {
   error: string | null;
   /** Actual PTY identity from the current transport hello; never provider IDs. */
   binding?: { sessionId: string; generation: number } | null;
+  /**
+   * 视图状态（终端宿主设计 §7.1）。与 `connection` 正交：它只说这个终端此刻
+   * 以什么强度渲染，进程的死活仍然只看 `connection`。
+   */
+  render: TerminalRenderState;
 }
+
+/**
+ * 表面内部维护的那一半状态。
+ *
+ * `render` 不在里面：它是从折叠 / 视口 / 窗口前后台 / 焦点 / 渲染名额算出来的
+ * 派生值，放进 `patch()` 能改的状态里，迟早会有人用一次连接事件把它覆盖掉。
+ */
+type ConnectionStatus = Omit<TerminalSurfaceStatus, "render">;
 
 export interface TerminalSurfaceHandle {
   /** 搜索（⌘F 打开的输入框调它）。 */
@@ -164,15 +197,24 @@ function TerminalSurfaceImpl({
   const fitRef = React.useRef<FitAddon | null>(null);
   const searchRef = React.useRef<SearchAddon | null>(null);
   const transportRef = React.useRef<TerminalTransport | null>(null);
-  /** `refit()` 用；folded/隐藏时不 fit（§18.2 规则 3）。 */
-  const visibleRef = React.useRef(!collapsed);
-  visibleRef.current = !collapsed;
+  /**
+   * `refit()` 用（§18.2 规则 3）。
+   *
+   * 从 v4 起它的含义是「**正在全速渲染**」而不只是「没折叠」：设计 §7.1
+   * 要求「不能因 `display:none` 仍让几十个终端每帧 fit 和重绘」，滚出视口、
+   * 窗口在后台、以及没抢到渲染名额的终端一样不该 fit。
+   */
+  const visibleRef = React.useRef(false);
+  /** 离屏时攒下来的输出；见 `render-state.ts`。 */
+  const bufferRef = React.useRef(createOffscreenBuffer());
+  /** 是否每帧直接写进 xterm。离屏时改为按 `OFFSCREEN_FLUSH_MS` 批量灌。 */
+  const writeThroughRef = React.useRef(false);
   const onBellRef = React.useRef(onBell);
   onBellRef.current = onBell;
   const onFindRef = React.useRef(onFind);
   onFindRef.current = onFind;
   /** `hello` 报的后端；滚轮桥只对 tmux 有意义（§18.5）。 */
-  const backendRef = React.useRef<"direct" | "tmux" | null>(null);
+  const backendRef = React.useRef<TerminalBackendKind | null>(null);
   /** 滚轮桥要往哪个会话发；`sessionId` 是 state，effect 里读 ref 更省重挂。 */
   const sessionIdRef = React.useRef<string | undefined>(undefined);
   const fileDropQueue = React.useRef<Promise<void>>(Promise.resolve());
@@ -214,7 +256,7 @@ function TerminalSurfaceImpl({
   );
   const reconnectDelayRef = React.useRef(1000);
   const [detached, setDetached] = React.useState(false);
-  const [status, setStatus] = React.useState<TerminalSurfaceStatus>({
+  const [status, setStatus] = React.useState<ConnectionStatus>({
     connection: "idle",
     exitCode: data.lastExitCode ?? null,
     error: null,
@@ -222,15 +264,83 @@ function TerminalSurfaceImpl({
 
   const statusRef = React.useRef(status);
   statusRef.current = status;
-  const patch = React.useCallback((next: Partial<TerminalSurfaceStatus>) => {
+  const patch = React.useCallback((next: Partial<ConnectionStatus>) => {
     // Drop validation may finish before React commits a status event.
     statusRef.current = { ...statusRef.current, ...next };
     setStatus(statusRef.current);
   }, []);
 
+  /* ------------------------------ 视图状态 -------------------------------- */
+
+  /*
+   * 三个「有没有人在看」的输入（设计 §7.1）。前两个复用资源徽标那套观测器：
+   * 画布不裁剪节点（`canCull() => false`），离屏节点仍然挂在 DOM 上，只有
+   * `IntersectionObserver` 说得出它其实在屏幕外。
+   */
+  const onScreen = useOnScreen(bodyRef);
+  const pageVisible = usePageVisible();
+  const [focused, setFocused] = React.useState(false);
+  const [budgeted, setBudgeted] = React.useState(false);
+
+  const render = resolveRenderState({
+    connection: status.connection,
+    collapsed,
+    onScreen,
+    pageVisible,
+    focused,
+    detached,
+    budgeted,
+  });
+  const active = rendersActively(render);
+  visibleRef.current = active;
+  writeThroughRef.current = active;
+
   React.useEffect(() => {
-    onStatusChange?.(status);
-  }, [onStatusChange, status]);
+    onStatusChange?.({ ...status, render });
+  }, [onStatusChange, status, render]);
+
+  /*
+   * 渲染名额（设计 §7.1「WebGL context 设设备预算」）。
+   *
+   * 优先级变了就重登记一次——`claimRenderSlot` 没有改优先级的接口，重新申请
+   * 拿到更大的序号，正好表达「刚被聚焦的这个最该拿名额」。清理里补一次
+   * `setBudgeted(false)`：释放不会回调已经删掉的那条登记，不补的话新的一次
+   * 申请如果没抢到名额，状态就停在上一轮的 `true` 上。
+   */
+  const wantsSlot = !collapsed && onScreen && pageVisible && !detached;
+  const priority = focused ? RENDER_PRIORITY_FOCUSED : RENDER_PRIORITY_VISIBLE;
+  React.useEffect(() => {
+    if (!wantsSlot) {
+      setBudgeted(false);
+      return;
+    }
+    const release = claimRenderSlot(nodeId, priority, setBudgeted);
+    return () => {
+      release();
+      setBudgeted(false);
+    };
+  }, [nodeId, wantsSlot, priority]);
+
+  /** 把攒下的输出灌进 xterm。顺序即到达顺序，一个字节都不重排。 */
+  const flushOutput = React.useCallback(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    const text = drainOffscreenBuffer(bufferRef.current);
+    if (text) terminal.write(text);
+  }, []);
+
+  /*
+   * 离屏时按 `OFFSCREEN_FLUSH_MS` 灌一次，重新可见时立刻灌。
+   * 攒着的目的只是不每帧重绘，不是丢数据——所以节奏慢，但一定会灌。
+   */
+  React.useEffect(() => {
+    if (active) {
+      flushOutput();
+      return;
+    }
+    const timer = setInterval(flushOutput, OFFSCREEN_FLUSH_MS);
+    return () => clearInterval(timer);
+  }, [active, flushOutput]);
 
   const pasteDroppedFiles = React.useCallback(
     (drag: WorkspaceFileDrag) => {
@@ -617,10 +727,15 @@ function TerminalSurfaceImpl({
   /**
    * §18.2 规则 5：默认 DOM 渲染器（画布 CSS 缩放下文字始终清晰）。
    * WebGL 是设置项，按需异步装；丢上下文就卸掉退回 DOM，不重建终端。
+   *
+   * 还要看渲染名额（设计 §7.1）：WebGL 上下文是设备级的稀缺资源，浏览器给的
+   * 数量有限，超了之后最早的那个会被静默丢掉——表现是某个终端毫无征兆地黑屏。
+   * 所以丢名额就卸 addon、拿回名额再装回来；**`Terminal` 实例始终不动**，
+   * 「回收只释放渲染资源」，屏幕内容和 PTY 都不受影响。
    */
   React.useEffect(() => {
     const terminal = terminalRef.current;
-    if (!terminal || !preferences.webgl) return;
+    if (!terminal || !preferences.webgl || !active) return;
     let addon: { dispose: () => void } | null = null;
     let cancelled = false;
     void (async () => {
@@ -639,16 +754,17 @@ function TerminalSurfaceImpl({
       cancelled = true;
       addon?.dispose();
     };
-  }, [preferences.webgl]);
+  }, [preferences.webgl, active]);
 
-  /* ------------------------- 折叠 → 展开后补一次 fit ---------------------- */
+  /* ------------------------- 重新可见后补一次 fit ------------------------- */
 
   React.useEffect(() => {
-    if (collapsed) return;
-    // `display:none` 期间容器是 0×0，展开的那一帧才量得出来。
+    if (!active) return;
+    // 离屏期间 `refit()` 是空操作（`visibleRef`），而且 `display:none` 时
+    // 容器是 0×0，只有回到全速渲染的那一帧才量得出真实尺寸。
     const frame = requestAnimationFrame(refit);
     return () => cancelAnimationFrame(frame);
-  }, [collapsed, refit]);
+  }, [active, refit]);
 
   /* ----------------------------- 会话的建立 ------------------------------ */
 
@@ -793,7 +909,26 @@ function TerminalSurfaceImpl({
     // 清屏发生在**连接之前**：tmux 后端不发 snapshot，attach 后的第一波重绘
     // （?1049h、鼠标追踪、DA/OSC 查询）必须原样落到一块干净的屏上；
     // 在 hello 之后再清会把这波重绘抹掉。
+    // 上一条连接攒下、还没灌完的字节属于被清掉的那块屏，一起丢。
+    drainOffscreenBuffer(bufferRef.current);
     terminal.reset();
+
+    /**
+     * 写一段输出。
+     *
+     * 全速渲染时走原来的直写路径，一个字符都不多绕。离屏时攒起来（设计 §7.1：
+     * 「不能因 `display:none` 仍让几十个终端每帧 fit 和重绘」）。缓冲非空时
+     * 即使已经回到全速也要先入队再整体灌——PTY 的字节流里半个转义序列都不能
+     * 错位，插队会把画面弄坏。
+     */
+    const writeChunk = (chunk: string) => {
+      if (writeThroughRef.current && bufferRef.current.chunks.length === 0) {
+        terminal.write(chunk);
+        return;
+      }
+      bufferOffscreenChunk(bufferRef.current, chunk);
+      if (writeThroughRef.current) flushOutput();
+    };
     const transport = createTerminalTransport(terminalWebSocketUrl(sessionId), {
       onHello: (hello) => {
         if (disposed) return;
@@ -829,11 +964,13 @@ function TerminalSurfaceImpl({
         }
       },
       onSnapshot: (chunk) => {
-        if (!disposed) terminal.write(chunk);
+        if (!disposed) writeChunk(chunk);
       },
       onOutput: (chunk) => {
         if (disposed) return;
-        terminal.write(chunk);
+        writeChunk(chunk);
+        // 启动行的静默判定看的是「后端有没有在输出」，和渲染快慢无关：
+        // 离屏的终端一样要在提示符安静下来之后把启动行敲出去。
         noteOutput();
       },
       onStatus: (state, exitCode) => {
@@ -890,7 +1027,7 @@ function TerminalSurfaceImpl({
       if (transportRef.current === transport) transportRef.current = null;
     };
     // 节点数据只经 `dataRef` 读最新值，不进依赖数组：否则改个标题都要重连
-  }, [sessionId, detached, attempt, refit]);
+  }, [sessionId, detached, attempt, refit, flushOutput]);
 
   /* ------------------------------ 待启动 DAG ------------------------------ */
 
@@ -898,16 +1035,31 @@ function TerminalSurfaceImpl({
   usePendingLaunchWatcher(nodeId, Boolean(data.agent?.pendingLaunch));
   React.useEffect(() => () => disarmPendingLaunch(nodeId), [nodeId]);
 
-  /* ------------------------- 折叠 → 延迟 detach --------------------------- */
+  /* ---------------------------- 延迟 detach ------------------------------ */
 
+  /*
+   * 两条路都通向「主动关掉 socket」（设计 §7.1 的 detached 行）：
+   *
+   *  - 折叠 `DETACH_GRACE_MS`（§15.7），宽限是为了不让「折叠一下又展开」来回重连；
+   *  - 窗口在后台连续 `HIDDEN_DETACH_MS`。切出去回条消息就掉 socket 只会让人
+   *    觉得应用在抖，所以这一条比折叠宽松得多。
+   *
+   * 进程不受影响：执行端保留 VT/tmux 状态，条件一解除就重新 attach，
+   * 走的是原来那条「reset → attach → 快照/重绘」的路，**不会重建会话**。
+   */
   React.useEffect(() => {
-    if (!collapsed) {
+    const delay = collapsed
+      ? DETACH_GRACE_MS
+      : pageVisible
+        ? null
+        : HIDDEN_DETACH_MS;
+    if (delay === null) {
       setDetached(false);
       return;
     }
-    const timer = setTimeout(() => setDetached(true), DETACH_GRACE_MS);
+    const timer = setTimeout(() => setDetached(true), delay);
     return () => clearTimeout(timer);
-  }, [collapsed]);
+  }, [collapsed, pageVisible]);
 
   /* ------------------------------ 对外句柄 ------------------------------- */
 
@@ -977,6 +1129,10 @@ function TerminalSurfaceImpl({
         <div
           ref={bodyRef}
           data-slot="terminal-body"
+          // 视图状态放在 DOM 上（设计 §7.1）：性能问题的第一个问题永远是
+          // 「它当时以为自己是哪个状态」，而这个答案不该只有 React DevTools
+          // 知道。压力脚本与线上排查读的都是这一个属性。
+          data-render={render}
           className="nodrag nowheel relative h-full w-full overflow-hidden bg-[var(--term-bg)]"
           onDragOver={(event) => {
             if (
@@ -1007,9 +1163,19 @@ function TerminalSurfaceImpl({
           // 只聚焦，不写任何字节给 PTY（§18.3 鼠标行）。
           onPointerDown={() => terminalRef.current?.focus()}
           // 焦点进了终端（点进来、⌘F 之后跳回来、快捷键聚焦）即视为读过。
+          // 同时也是渲染优先级的来源：xterm 6 没有公开的 onFocus/onBlur，
+          // 焦点只能从容器的 focusin/focusout 看（§7.1「优先焦点实例」）。
           onFocusCapture={() => {
+            setFocused(true);
             const store = useAgentStatusStore.getState();
             if (store.statuses[nodeId]?.unread) store.markRead(nodeId);
+          }}
+          // 焦点在终端内部挪动（textarea ↔ helper 元素）不算失焦，
+          // 否则每次输入法起落都会把渲染优先级抖一遍。
+          onBlurCapture={(event) => {
+            const next = event.relatedTarget as Node | null;
+            if (next && bodyRef.current?.contains(next)) return;
+            setFocused(false);
           }}
         >
           <div
