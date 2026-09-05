@@ -12,6 +12,7 @@ import (
 
 	pb "armadra.local/host/gen/armadra/v1"
 	"armadra.local/host/internal/canvashost"
+	"armadra.local/host/internal/daemon"
 	"armadra.local/host/internal/hoststate"
 	"armadra.local/host/internal/ownership"
 	"armadra.local/host/internal/storage"
@@ -20,13 +21,17 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// `armadra-host ownership status | switch | rollback [--domain D]`.
+// `armadra-host ownership status | window | switch | rollback [--domain D]`.
 //
-// This is an offline maintenance command, like `import`: it takes the data
-// directory lock, so it cannot run while a Host is serving. That is the
-// maintenance window in its simplest form — no client is connected to either
-// side while write ownership moves. The running Host has the same commands over
-// HTTPS, where the window is a token issued at this machine instead.
+// `status`, `switch` and `rollback` are offline maintenance commands, like
+// `import`: they take the data directory lock, so they cannot run while a Host
+// is serving. That is the maintenance window in its simplest form — no client
+// is connected to either side while write ownership moves.
+//
+// `window` is the opposite case: the Host *is* serving, and an operator at the
+// machine asks it, over the same-user control channel, for the token an HTTPS
+// switch must carry. Everything else about the switch is identical; only the
+// proof that someone is at the machine changes shape.
 //
 // Nothing here happens automatically. A switch is typed by an operator, names
 // the domain and the verified import it rests on, and names the Runtime binary
@@ -50,7 +55,7 @@ type ownershipConfig struct {
 func (o *ownershipConfig) register(flags *flag.FlagSet) {
 	flags.StringVar(&o.domain, "domain", storage.OwnershipDomainCanvas,
 		"Business domain: "+strings.Join(storage.OwnershipDomains, ", "))
-	if o.action == "status" {
+	if o.action == "status" || o.action == "window" {
 		return
 	}
 	if o.action == "switch" {
@@ -71,7 +76,7 @@ func (o *ownershipConfig) normalize() error {
 	if !storage.ValidOwnershipDomain(o.domain) {
 		return fmt.Errorf("ownership --domain must be one of %s", strings.Join(storage.OwnershipDomains, ", "))
 	}
-	if o.action == "status" {
+	if o.action == "status" || o.action == "window" {
 		return nil
 	}
 	o.target = storage.OwnerHost
@@ -186,6 +191,42 @@ func runOwnership(ctx context.Context, c config) (err error) {
 		}
 	}
 	return switchErr
+}
+
+// runMaintenanceWindow opens a maintenance window on a Host that is serving.
+//
+// It is the counterpart of `pair`: the same-user control channel is the proof
+// that whoever asked is at the machine, and the token it hands back is what an
+// HTTPS switch must carry. The token is printed once, expires in two minutes
+// and is spent by exactly one switch; nothing stores it.
+//
+// This command does not take the data directory lock, because the Host serving
+// on the other end of the control channel already holds it.
+func runMaintenanceWindow(ctx context.Context, c config) error {
+	status, err := daemon.Status(ctx, c.dataDir)
+	if err != nil {
+		return err
+	}
+	ticket, err := daemon.Maintenance(ctx, c.dataDir, &pb.MaintenanceTicketRequest{
+		ExpectedHostId:     status.HostId,
+		ExpectedInstanceId: status.HostInstanceId,
+		Domain:             c.ownership.domain,
+	})
+	if err != nil {
+		return err
+	}
+	var data []byte
+	if c.output == "protobuf" {
+		data, err = proto.Marshal(ticket)
+	} else {
+		data, err = (protojson.MarshalOptions{Indent: "  "}).Marshal(ticket)
+		data = append(data, '\n')
+	}
+	if err != nil {
+		return err
+	}
+	_, err = os.Stdout.Write(data)
+	return err
 }
 
 func emitOwnership(c config, result *pb.OwnershipSwitchResponse) error {

@@ -80,7 +80,7 @@
       },
       {
         "path": "tools/canvas-ownership-e2e.mjs",
-        "lines": 1970,
+        "lines": 2212,
         "note": "§5 第 6 步：端到端脚本按阶段拆分"
       },
       {

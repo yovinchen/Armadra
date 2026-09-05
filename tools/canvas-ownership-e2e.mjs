@@ -11,6 +11,12 @@
 // The proxy exists because the browser session transport requires the page and
 // the Host to share an origin: cookies scoped to one origin are the point.
 //
+// The switch is driven twice on purpose: once through the offline CLI, whose
+// maintenance window is the data directory lock, and once over HTTPS against a
+// serving Host, whose window is a token issued at this machine over the
+// same-user control channel. Both walk the same state machine, and the second
+// pass also proves a token cannot be spent twice.
+//
 // What this covers: a canvas that really contains the C02 shapes — a frame
 // nested in a frame, a terminal and a sticky inside the inner frame, labels, a
 // multi-line non-ASCII note, a context link and a whiteboard snapshot — written
@@ -395,6 +401,13 @@ async function startHost() {
       keyFile,
       "--public-origin",
       appOrigin,
+      // Naming the Runtime executable and its database is what makes a switch
+      // over HTTPS possible at all: without them the Host answers the record
+      // and refuses to move it, because it has no way to tell the Runtime.
+      "--runtime-binary",
+      runtimeBinary,
+      "--runtime-database",
+      runtimeDatabase,
     ],
     { cwd: root, stdio: ["ignore", "pipe", "pipe"], env: hostEnv },
   );
@@ -927,7 +940,7 @@ export function decodeValue(value) {
   }
   return value;
 }
-export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient, origin, transport, pageOrigin }) {
+export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, origin, transport, pageOrigin }) {
   const state = {};
   return {
     async hello() {
@@ -950,7 +963,26 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
         hostId: state.hello.hostId,
         workspaceId,
       });
+      // The ownership record is host-wide, so this client names no workspace.
+      state.ownership = new HostOwnershipClient({
+        session: state.identity,
+        hostId: state.hello.hostId,
+      });
       return true;
+    },
+    async ownership(method, args) {
+      try {
+        return encodeValue(await state.ownership[method](...decodeValue(args)));
+      } catch (error) {
+        return {
+          error: {
+            failure: error.failure ?? error.code ?? "unknown",
+            hostCode: error.hostCode ?? "",
+            httpStatus: error.httpStatus ?? 0,
+            outcomeUnknown: error.outcomeUnknown === true,
+          },
+        };
+      }
     },
     async call(method, args) {
       try {
@@ -987,6 +1019,7 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
       HostClient: clients.HostClient,
       HostIdentityClient: clients.HostIdentityClient,
       HostCanvasClient: clients.HostCanvasClient,
+      HostOwnershipClient: clients.HostOwnershipClient,
       origin: appOrigin,
       transport: { fetch: transport },
       pageOrigin: appOrigin,
@@ -997,15 +1030,17 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
       connect: (workspaceId) => driver.connect(workspaceId),
       call: (method, args) =>
         driver.call(method, encodeValue(args)).then(decodeValue),
+      ownership: (method, args) =>
+        driver.ownership(method, encodeValue(args)).then(decodeValue),
     };
   } else {
     const driverSource = join(workspace, "driver-source.mjs");
     writeFileSync(
       driverSource,
-      `import { HostClient, HostIdentityClient, HostCanvasClient } from "@armadra/host-client";
+      `import { HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient } from "@armadra/host-client";
 import { createDriver } from "./driver-core.mjs";
 globalThis.armadra = createDriver({
-  HostClient, HostIdentityClient, HostCanvasClient,
+  HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient,
   origin: ${JSON.stringify(appOrigin)}, transport: {},
 });
 globalThis.armadraReady = true;
@@ -1393,6 +1428,12 @@ globalThis.armadraReady = true;
         decodeValue(
           await evaluate(
             `return armadra.call(${JSON.stringify(method)}, ${JSON.stringify(encodeValue(args))});`,
+          ),
+        ),
+      ownership: async (method, args) =>
+        decodeValue(
+          await evaluate(
+            `return armadra.ownership(${JSON.stringify(method)}, ${JSON.stringify(encodeValue(args))});`,
           ),
         ),
     };
@@ -1849,6 +1890,273 @@ globalThis.armadraReady = true;
       settled.ownership?.phase === "CANVAS_OWNERSHIP_PHASE_SETTLED" &&
       settled.ownership?.epoch === "3",
     `owner=${settled.ownership?.owner} epoch=${settled.ownership?.epoch} reason=${settled.ownership?.reasonCode}`,
+  );
+
+  /* ---------------------------------- 9. the same switch, over HTTPS */
+
+  // Everything above moved the epoch with the Host stopped: the data directory
+  // lock was the maintenance window. This section does it the other way round —
+  // the Host serving, the switch arriving over HTTPS, and the window made of a
+  // token issued at this machine over the same-user control channel. Only the
+  // proof that someone is at the machine changes; the state machine does not.
+  await stopRuntime();
+  const secondExport = join(workspace, "export-2");
+  const exportedAgain = JSON.parse(
+    run(
+      runtimeBinary,
+      [
+        "export",
+        "--database",
+        runtimeDatabase,
+        "--destination",
+        secondExport,
+        "--output",
+        "json",
+      ],
+      { env: runtimeEnv },
+    ),
+  );
+  const importedAgain = JSON.parse(
+    run(
+      hostBinary,
+      [
+        "import",
+        "--bundle",
+        secondExport,
+        "--data-dir",
+        hostData,
+        "--output",
+        "json",
+      ],
+      { env: hostEnv },
+    ),
+  );
+  step(
+    "the post-rollback canvas exports and stages again",
+    importedAgain.exportId === exportedAgain.exportId &&
+      importedAgain.state === "staged",
+    `importId=${importedAgain.importId?.slice(0, 8)} entities=${importedAgain.entityCount}`,
+  );
+
+  step(
+    "the Host restarted with the Runtime database it may hand the epoch to",
+    await startHost(),
+    hostDiagnostics,
+  );
+  const onlineTicket = JSON.parse(
+    run(
+      hostBinary,
+      [
+        "pair",
+        "--origin",
+        appOrigin,
+        "--device-name",
+        "canvas-e2e-https",
+        "--data-dir",
+        hostData,
+      ],
+      { env: hostEnv },
+    ),
+  );
+  const onlineHello = await canvasDriver.hello();
+  step(
+    "Hello advertises the ownership surface",
+    onlineHello.capabilities?.includes("ownership.domains.v1") === true,
+    onlineHello.capabilities?.join(", "),
+  );
+  await canvasDriver.pair(JSON.stringify(onlineTicket));
+  await canvasDriver.connect(workspaceId);
+
+  const listed = await canvasDriver.ownership("list", []);
+  step(
+    "the authenticated client is told which side writes each of the six domains",
+    Array.isArray(listed) &&
+      listed.length === 6 &&
+      listed[0].domain === "canvas" &&
+      listed[0].owner === "runtime" &&
+      listed[0].epoch === 3n &&
+      listed
+        .slice(1)
+        .every((entry) => entry.owner === "runtime" && entry.epoch === 1n),
+    Array.isArray(listed)
+      ? listed.map((entry) => `${entry.domain}=${entry.owner}`).join(" ")
+      : refusal(listed),
+  );
+
+  const refusedWithoutWindow = await canvasDriver.ownership("switchDomain", [
+    {
+      domain: "canvas",
+      target: "host",
+      expectedEpoch: 3n,
+      importId: importedAgain.importId,
+      maintenanceToken: "0123456789abcdef0123456789abcdef",
+    },
+  ]);
+  step(
+    "a switch carrying a token this Host never issued is refused",
+    refusedWithoutWindow.error?.failure === "permission",
+    `${refusedWithoutWindow.error?.failure ?? "accepted"} HTTP ${refusedWithoutWindow.error?.httpStatus ?? 200}`,
+  );
+
+  // The token comes from the control channel, which only a same-user process on
+  // this machine can reach. A browser cannot ask for one; an operator can.
+  const window = JSON.parse(
+    run(
+      hostBinary,
+      [
+        "ownership",
+        "window",
+        "--domain",
+        "canvas",
+        "--data-dir",
+        hostData,
+        "--output",
+        "json",
+      ],
+      { env: hostEnv },
+    ),
+  );
+  step(
+    "the control channel issued a maintenance window for the canvas domain",
+    typeof window.token === "string" &&
+      window.token.length === 64 &&
+      window.domain === "canvas" &&
+      Number(window.expiresAtUnixMs) > Date.now(),
+    `expires in ${Math.round((Number(window.expiresAtUnixMs) - Date.now()) / 1000)}s`,
+  );
+
+  const switchedOnline = await canvasDriver.ownership("switchDomain", [
+    {
+      domain: "canvas",
+      target: "host",
+      expectedEpoch: 3n,
+      importId: importedAgain.importId,
+      maintenanceToken: window.token,
+    },
+  ]);
+  step(
+    "the HTTPS switch moved the epoch to the Host",
+    switchedOnline.ownership?.owner === 2 &&
+      switchedOnline.ownership?.epoch === 4n &&
+      switchedOnline.report?.matched === true,
+    `owner=${switchedOnline.ownership?.owner} epoch=${switchedOnline.ownership?.epoch}${refusal(switchedOnline)}`,
+  );
+  const replayedWindow = await canvasDriver.ownership("switchDomain", [
+    {
+      domain: "canvas",
+      target: "runtime",
+      expectedEpoch: 4n,
+      maintenanceToken: window.token,
+      acceptExportOnly: true,
+    },
+  ]);
+  step(
+    "the same token cannot open a second window",
+    replayedWindow.error?.failure === "permission",
+    `${replayedWindow.error?.failure ?? "accepted"} HTTP ${replayedWindow.error?.httpStatus ?? 200}`,
+  );
+
+  step(
+    "the Runtime restarted under the Host-owned epoch",
+    await startRuntime(),
+    runtimeOrigin,
+  );
+  const movedOnline = await runtimeCall("GET", "/api/ownership");
+  step(
+    "the Runtime agrees the Host owns the canvas at the epoch it was handed",
+    movedOnline.json?.owner === "host" && movedOnline.json?.epoch === "4",
+    `owner=${movedOnline.json?.owner} epoch=${movedOnline.json?.epoch}`,
+  );
+  const refusedOnline = await runtimeCall(
+    "POST",
+    `/api/workspaces/${workspaceId}/boards`,
+    { name: "HTTPS 切换后不应创建" },
+  );
+  step(
+    "the Runtime refuses canvas writes after the HTTPS switch, and still reads",
+    refusedOnline.status === 409 &&
+      refusedOnline.json?.code === "ownership_moved" &&
+      (await runtimeCall("GET", documentPath)).status === 200,
+    `HTTP ${refusedOnline.status} ${refusedOnline.json?.code}`,
+  );
+
+  // Rolling back over HTTPS names no directory: a browser must not choose paths
+  // on this machine, so the Host allocates one under its own data directory.
+  await stopRuntime();
+  const rollbackWindow = JSON.parse(
+    run(
+      hostBinary,
+      [
+        "ownership",
+        "window",
+        "--domain",
+        "canvas",
+        "--data-dir",
+        hostData,
+        "--output",
+        "json",
+      ],
+      { env: hostEnv },
+    ),
+  );
+  const rolledBackOnline = await canvasDriver.ownership("switchDomain", [
+    {
+      domain: "canvas",
+      target: "runtime",
+      expectedEpoch: 4n,
+      maintenanceToken: rollbackWindow.token,
+      acceptExportOnly: true,
+    },
+  ]);
+  step(
+    "the HTTPS rollback handed the epoch back to the Runtime",
+    rolledBackOnline.ownership?.owner === 1 &&
+      rolledBackOnline.ownership?.epoch === 5n,
+    `owner=${rolledBackOnline.ownership?.owner} epoch=${rolledBackOnline.ownership?.epoch}${refusal(rolledBackOnline)}`,
+  );
+  const exportRoot = join(hostData, "ownership-exports");
+  const packages = existsSync(exportRoot)
+    ? readdirSync(exportRoot).filter((name) => name.startsWith("canvas-"))
+    : [];
+  const onlinePackage = packages.at(0);
+  const onlineIndex = onlinePackage
+    ? JSON.parse(
+        readFileSync(join(exportRoot, onlinePackage, "export.json"), "utf8"),
+      )
+    : null;
+  step(
+    "the Host wrote its reverse export where it chose, not where a client asked",
+    packages.length === 1 &&
+      onlineIndex?.formatVersion === 1 &&
+      onlineIndex?.files?.length === 1,
+    packages.join(", "),
+  );
+
+  step(
+    "the Runtime restarted after the HTTPS reversal",
+    await startRuntime(),
+    runtimeOrigin,
+  );
+  const afterOnline = await runtimeCall(
+    "POST",
+    `/api/workspaces/${workspaceId}/boards`,
+    { name: "HTTPS 回滚之后" },
+  );
+  step(
+    "a canvas write to the Runtime succeeds again after the HTTPS rollback",
+    afterOnline.status === 200,
+    `HTTP ${afterOnline.status}`,
+  );
+  const finalDomains = await canvasDriver.ownership("list", []);
+  step(
+    "every domain reads back as the Runtime's, each on its own epoch",
+    Array.isArray(finalDomains) &&
+      finalDomains.every((entry) => entry.owner === "runtime") &&
+      finalDomains[0].epoch === 5n &&
+      finalDomains.slice(1).every((entry) => entry.epoch === 1n),
+    Array.isArray(finalDomains)
+      ? finalDomains.map((entry) => `${entry.domain}@${entry.epoch}`).join(" ")
+      : refusal(finalDomains),
   );
 
   // The bundle the panel ships as still has to load on this origin. It is the

@@ -80,10 +80,14 @@ type config struct {
 	// a Host never guesses which binary is allowed to execute the owner's work.
 	workerBinary   string
 	workerStateDir string
-	// runtimeDatabase is the Runtime's own database file. It is what lets a
-	// serving Host move write ownership over HTTPS: without it the record can
-	// still be read, and every switch answers UNSUPPORTED rather than
-	// pretending to have told the Runtime something.
+	// The Runtime executable and its database. Given together, they let a
+	// serving Host move write ownership over HTTPS: the switch starts a
+	// short-lived Worker from that executable to hand the epoch over. Without
+	// them the record can still be read and every switch answers UNSUPPORTED,
+	// rather than pretending to have told the Runtime something. They are
+	// deliberately separate from the scheduling Worker: one process never both
+	// runs the owner's work and moves ownership.
+	runtimeBinary   string
 	runtimeDatabase string
 	// The release index this Host may consult, and the channel an operator
 	// pinned it to. An unset source means update checks answer UNSUPPORTED;
@@ -114,14 +118,14 @@ func parseConfig(args []string) (config, error) {
 			// instruction, and an unknown one is refused before any flag is
 			// parsed rather than defaulting to something that changes state.
 			if len(args) == 0 {
-				return c, fmt.Errorf("ownership requires status, switch or rollback")
+				return c, fmt.Errorf("ownership requires status, window, switch or rollback")
 			}
 			switch args[0] {
-			case "status", "switch", "rollback":
+			case "status", "window", "switch", "rollback":
 				c.ownership.action = args[0]
 				args = args[1:]
 			default:
-				return c, fmt.Errorf("ownership requires status, switch or rollback")
+				return c, fmt.Errorf("ownership requires status, window, switch or rollback")
 			}
 		}
 	}
@@ -160,6 +164,7 @@ func parseConfig(args []string) (config, error) {
 		flags.Var(&c.origins, "allow-origin", "Exact browser origin allowed to read metadata (repeatable)")
 		flags.StringVar(&c.workerBinary, "worker-binary", "", "Absolute path to the Rust Worker executable that runs scheduled commands")
 		flags.StringVar(&c.workerStateDir, "worker-state-dir", "", "Absolute private directory for the Worker's own execution journal")
+		flags.StringVar(&c.runtimeBinary, "runtime-binary", "", "Absolute path to the Rust Runtime executable, enabling write-ownership switches over HTTPS")
 		flags.StringVar(&c.runtimeDatabase, "runtime-database", "", "Absolute path to the Runtime's database, enabling write-ownership switches over HTTPS")
 		flags.StringVar(&c.updatesSource, "updates-source", "", "Releases API base this Host may consult, e.g. https://api.github.com/repos/OWNER/REPO; unset means update checks answer UNSUPPORTED")
 		flags.StringVar(&releaseChannel, "release-channel", "", "Pin update checks to a channel: stable, beta or development; unset lets the caller ask")
@@ -299,13 +304,16 @@ func parseConfig(args []string) (config, error) {
 		}
 	}
 	// Moving ownership needs a Worker to tell the Runtime about it, so naming
-	// the database without the executable that opens it is a configuration
-	// that could never switch anything.
-	if c.runtimeDatabase != "" {
-		if c.workerBinary == "" {
-			return c, fmt.Errorf("--runtime-database also requires --worker-binary")
-		}
+	// one half without the other is a configuration that could never switch
+	// anything.
+	if (c.runtimeBinary == "") != (c.runtimeDatabase == "") {
+		return c, fmt.Errorf("write-ownership switches require both --runtime-binary and --runtime-database")
+	}
+	if c.runtimeBinary != "" {
 		var err error
+		if c.runtimeBinary, err = filepath.Abs(c.runtimeBinary); err != nil {
+			return c, err
+		}
 		if c.runtimeDatabase, err = filepath.Abs(c.runtimeDatabase); err != nil {
 			return c, err
 		}
@@ -350,6 +358,9 @@ func run(args []string) error {
 	case "import":
 		return importBundle(ctx, c)
 	case "ownership":
+		if c.ownership.action == "window" {
+			return runMaintenanceWindow(ctx, c)
+		}
 		return runOwnership(ctx, c)
 	case "start":
 		return startBackground(ctx, c)
@@ -501,13 +512,13 @@ func serveHost(parent context.Context, c config) (err error) {
 		return err
 	}
 	var openHandoff server.HandoffOpener
-	if c.runtimeDatabase != "" {
+	if c.runtimeBinary != "" {
 		openHandoff = func(ctx context.Context) (ownership.Handoff, io.Closer, error) {
 			// One short-lived Worker per switch. It may move an epoch and
 			// nothing else: the scheduling Worker cannot, and this one cannot
 			// run commands.
 			client, err := worker.Start(ctx, worker.Options{
-				Executable:     c.workerBinary,
+				Executable:     c.runtimeBinary,
 				HostID:         state.ID,
 				CanvasDatabase: c.runtimeDatabase,
 				RequestTimeout: 30 * time.Second,
