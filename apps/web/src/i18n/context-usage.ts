@@ -40,7 +40,33 @@ export const contextUsage: MessageModule = {
       "已保留已有状态栏，上下文数据尚未连接。不会覆盖你的状态栏命令。",
     "context.setupNote":
       "Claude 通过安装 Hook 时添加的结构化状态栏上报；已有自定义状态栏会保留，此时上下文可能保持未知。",
-    "context.high": "上下文占用较高；请按需要检查会话。不会自动压缩或清空。",
+    "context.high":
+      "上下文占用已超过 {percent}%；请按需要检查会话。不会自动压缩或清空。",
+    "context.critical":
+      "上下文占用已超过 {percent}%；建议准备交接或使用适配器支持的压缩动作。应用不会替你执行。",
+    "context.estimator": "估算方式",
+    "context.estimateDetail":
+      "启发式 {heuristic}，置信 {confidence}，已统计 {messages} 条会话消息。",
+    "context.estimateFloor": "转录超出读取上限，结果为下限，实际占用可能更高。",
+    "context.confidence.low": "低",
+    "context.confidence.medium": "中",
+    "context.thresholds": "上下文提醒阈值",
+    "context.warnPercent": "提醒（%）",
+    "context.dangerPercent": "警告（%）",
+    "context.thresholdNote":
+      "达到阈值只改变徽标措辞，不会自动压缩上下文或打断 CLI。警告值不会低于提醒值。",
+    "context.capability.nativeRecurrence": "CLI 内置循环",
+    "context.capability.structuredInputAck": "结构化投递回执",
+    "context.capability.supportsModelSelection": "模型选择",
+    "context.capabilitySource.base": "基础适配器",
+    "context.capabilitySource.custom": "自定义配置",
+    "context.capabilitySource.version": "CLI 版本探测",
+    "context.capabilitySource.host": "执行主机",
+    "context.capabilityState.supported": "可用",
+    "context.capabilityState.unsupported": "不可用",
+    "context.capabilityState.unknown": "未知",
+    "context.probeUnknown": "未探测到 CLI 版本；未知能力不会显示对应操作。",
+
     "context.capabilities": "继承的能力",
     "context.capabilityNote":
       "仅继承基础适配器已有的能力，可关闭但不能额外授予。报告能力仍取决于实际 CLI 和已连接的数据来源。",
@@ -95,7 +121,34 @@ export const contextUsage: MessageModule = {
     "context.setupNote":
       "Claude reports through the structured status line added during hook installation. Existing custom status lines are preserved, so context may remain unknown.",
     "context.high":
-      "Context usage is high. Review the session when needed; nothing is compacted or cleared automatically.",
+      "Context usage is over {percent}%. Review the session when needed; nothing is compacted or cleared automatically.",
+    "context.critical":
+      "Context usage is over {percent}%. Consider preparing a handoff, or a compaction action the adapter explicitly supports. Neither happens on its own.",
+    "context.estimator": "Estimator",
+    "context.estimateDetail":
+      "Heuristic {heuristic}, {confidence} confidence, summed over {messages} transcript messages.",
+    "context.estimateFloor":
+      "The transcript exceeded the read budget, so this is a floor; actual usage may be higher.",
+    "context.confidence.low": "low",
+    "context.confidence.medium": "medium",
+    "context.thresholds": "Context reminder thresholds",
+    "context.warnPercent": "Remind at (%)",
+    "context.dangerPercent": "Warn at (%)",
+    "context.thresholdNote":
+      "Crossing a threshold only changes what the badge says. Nothing is compacted and no CLI is interrupted. The warn value never drops below the reminder value.",
+    "context.capability.nativeRecurrence": "CLI-native loops",
+    "context.capability.structuredInputAck": "Structured delivery receipts",
+    "context.capability.supportsModelSelection": "Model selection",
+    "context.capabilitySource.base": "Base adapter",
+    "context.capabilitySource.custom": "Custom configuration",
+    "context.capabilitySource.version": "CLI version probe",
+    "context.capabilitySource.host": "Execution host",
+    "context.capabilityState.supported": "Available",
+    "context.capabilityState.unsupported": "Unavailable",
+    "context.capabilityState.unknown": "Unknown",
+    "context.probeUnknown":
+      "The CLI version was not detected. Unknown capabilities show no controls.",
+
     "context.capabilities": "Inherited capabilities",
     "context.capabilityNote":
       "Inherits only existing base-adapter capabilities. You can disable them, not grant extra capabilities. Reporting also requires a compatible CLI and connected source.",

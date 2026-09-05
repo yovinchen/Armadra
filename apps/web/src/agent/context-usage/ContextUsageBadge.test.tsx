@@ -22,7 +22,12 @@ const usage = (): ContextUsage => ({
   compactionEpoch: 1,
   unknownReason: null,
 });
-beforeEach(() => usePreferencesStore.setState({ locale: "en" }));
+beforeEach(() =>
+  usePreferencesStore.setState({
+    locale: "en",
+    contextThresholds: { warnPercent: 80, dangerPercent: 95 },
+  }),
+);
 afterEach(cleanup);
 function view(snapshot: ContextUsage | null = usage()) {
   return render(
@@ -86,6 +91,46 @@ describe("context badge", () => {
     expect(screen.getByText(/No new observation/)).toBeTruthy();
     expect(screen.getByText(/Session context · Stale/)).toBeTruthy();
   });
+  it("colours and warns by the configured thresholds, not hardcoded ones", () => {
+    // 8 % is normal by default; with a 5 %/7 % pair it is already critical.
+    usePreferencesStore.setState({
+      contextThresholds: { warnPercent: 5, dangerPercent: 7 },
+    });
+    view();
+    fireEvent.click(screen.getByRole("button", { name: "Context 8%" }));
+    expect(screen.getByText(/over 7%/)).toBeTruthy();
+    expect(screen.queryByText(/over 5%/)).toBeNull();
+    cleanup();
+    usePreferencesStore.setState({
+      contextThresholds: { warnPercent: 5, dangerPercent: 50 },
+    });
+    view();
+    fireEvent.click(screen.getByRole("button", { name: "Context 8%" }));
+    expect(screen.getByText(/over 5%/)).toBeTruthy();
+  });
+
+  it("reports which heuristic produced an estimate and how far it reached", () => {
+    view({
+      ...usage(),
+      quality: "estimated",
+      source: "structured_transcript",
+      sourceRevision: null,
+      estimate: {
+        heuristic: "chars-v1",
+        confidence: "low",
+        sampledBytes: 8192,
+        truncated: true,
+        messages: 42,
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Context ~8%" }));
+    expect(screen.getByText(/Structured transcript/)).toBeTruthy();
+    expect(screen.getByText(/chars-v1, low confidence/)).toBeTruthy();
+    expect(screen.getByText(/42 transcript messages/)).toBeTruthy();
+    // A truncated read is a floor and says so, rather than reading as a total.
+    expect(screen.getByText(/this is a floor/)).toBeTruthy();
+  });
+
   it("resets the expanded details when the binding changes and constrains the popover", () => {
     const rendered = view();
     fireEvent.click(screen.getByRole("button", { name: "Context 8%" }));
@@ -113,7 +158,9 @@ describe("capability inheritance", () => {
         onChange={changed}
       />,
     );
-    fireEvent.click(screen.getByRole("checkbox", { name: "Session context" }));
+    // The accessible name now carries the resolved state and its source, so
+    // the label is matched rather than compared whole.
+    fireEvent.click(screen.getByRole("checkbox", { name: /Session context/ }));
     expect(changed).toHaveBeenCalledWith(["contextUsage"]);
     rendered.rerender(
       <CapabilityInheritance
@@ -122,10 +169,45 @@ describe("capability inheritance", () => {
         onChange={changed}
       />,
     );
+    // gemini reads its own transcript, so it does declare session context; it
+    // has no subagent adapter, so that one never appears.
     expect(
-      screen.queryByRole("checkbox", { name: "Session context" }),
-    ).toBeNull();
-    expect(screen.queryByRole("checkbox", { name: "Subagents" })).toBeNull();
-    expect(screen.getByRole("checkbox", { name: "Status hooks" })).toBeTruthy();
+      screen.getByRole("checkbox", { name: /Session context/ }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: /Subagents/ })).toBeNull();
+    expect(screen.getByRole("checkbox", { name: /Status hooks/ })).toBeTruthy();
+  });
+
+  it("names the stage that decided each capability", () => {
+    render(
+      <CapabilityInheritance
+        baseAgent="claude"
+        disabledCapabilities={["contextUsage"]}
+        onChange={vi.fn()}
+        probe={{
+          agentId: "claude",
+          launchCmd: "claude",
+          version: "2.0.31",
+          status: "ok",
+          probedAt: new Date().toISOString(),
+        }}
+      />,
+    );
+    // The one the user switched off says so, rather than only looking greyed.
+    expect(screen.getByText(/Unavailable · Custom configuration/)).toBeTruthy();
+    expect(
+      screen.getAllByText(/Available · Base adapter/).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("warns that an unprobed CLI leaves capabilities unknown", () => {
+    render(
+      <CapabilityInheritance
+        baseAgent="claude"
+        disabledCapabilities={[]}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/version was not detected/)).toBeTruthy();
   });
 });

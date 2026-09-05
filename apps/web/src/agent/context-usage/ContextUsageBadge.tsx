@@ -1,10 +1,13 @@
 import * as React from "react";
 import {
   ageContextUsage,
+  contextLevel,
   contextPercentage,
+  DEFAULT_CONTEXT_THRESHOLDS,
+  type ContextThresholds,
   type ContextUsage,
 } from "@armadra/shared";
-import { useT } from "@/app/preferences-store";
+import { usePreferencesStore, useT } from "@/app/preferences-store";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 
 export interface ContextUsageBadgeProps {
@@ -13,6 +16,8 @@ export interface ContextUsageBadgeProps {
   generation: number | null;
   usage: ContextUsage | null;
   unavailableReason?: ContextUsage["unknownReason"];
+  /** Settings → Agent; the defaults are only a fallback for tests. */
+  thresholds?: ContextThresholds;
 }
 
 /** Presentation only: callers supply the current session binding and snapshot. */
@@ -22,8 +27,11 @@ export function ContextUsageBadge({
   generation,
   usage,
   unavailableReason,
+  thresholds,
 }: ContextUsageBadgeProps) {
   const t = useT();
+  const stored = usePreferencesStore((state) => state.contextThresholds);
+  const limits = thresholds ?? stored ?? DEFAULT_CONTEXT_THRESHOLDS;
   const [now, setNow] = React.useState(() => performance.now());
   const received = React.useRef({ usage, at: performance.now() });
   if (received.current.usage !== usage)
@@ -39,6 +47,9 @@ export function ContextUsageBadge({
       ? ageContextUsage(usage, Math.max(0, now - received.current.at))
       : null;
   const percentage = current ? contextPercentage(current) : null;
+  // `null` for an unknown reading: an absent observation is not "normal", and
+  // it must not colour the bar or trip a reminder.
+  const level = contextLevel(percentage, limits);
   const quality = current?.quality ?? "unknown";
   const unknown = t("context.unknown");
   const value =
@@ -72,6 +83,12 @@ export function ContextUsageBadge({
     ],
     [t("context.revision"), current?.sourceRevision ?? unknown],
   ];
+  if (current?.estimate) {
+    details.push([
+      t("context.estimator"),
+      `${current.estimate.heuristic} · ${t(`context.confidence.${current.estimate.confidence}`)}`,
+    ]);
+  }
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -90,7 +107,7 @@ export function ContextUsageBadge({
               className="h-1 w-6 shrink-0 overflow-hidden rounded bg-muted"
             >
               <span
-                className={`block h-full ${percentage >= 95 ? "bg-destructive" : percentage >= 80 ? "bg-amber-500" : "bg-primary"}`}
+                className={`block h-full ${level === "danger" ? "bg-destructive" : level === "warn" ? "bg-amber-500" : "bg-primary"}`}
                 style={{ width: `${Math.min(100, percentage)}%` }}
               />
             </span>
@@ -122,9 +139,32 @@ export function ContextUsageBadge({
         {quality === "unknown" && reason === "awaiting_report" && (
           <p>{t("context.setupNote")}</p>
         )}
-        {quality === "estimated" && <p>{t("context.estimateNote")}</p>}
+        {quality === "estimated" && (
+          <>
+            <p>{t("context.estimateNote")}</p>
+            {current?.estimate && (
+              <p className="text-muted-foreground">
+                {t("context.estimateDetail", {
+                  heuristic: current.estimate.heuristic,
+                  confidence: t(
+                    `context.confidence.${current.estimate.confidence}`,
+                  ),
+                  messages: current.estimate.messages,
+                })}
+              </p>
+            )}
+            {current?.estimate?.truncated && (
+              <p>{t("context.estimateFloor")}</p>
+            )}
+          </>
+        )}
         {quality === "stale" && <p>{t("context.staleNote")}</p>}
-        {percentage !== null && percentage >= 80 && <p>{t("context.high")}</p>}
+        {level === "warn" && (
+          <p>{t("context.high", { percent: limits.warnPercent })}</p>
+        )}
+        {level === "danger" && (
+          <p>{t("context.critical", { percent: limits.dangerPercent })}</p>
+        )}
         <p className="text-muted-foreground">{t("context.explanation")}</p>
         <p className="text-muted-foreground">{t("context.restartNote")}</p>
       </PopoverContent>

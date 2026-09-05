@@ -1,6 +1,12 @@
 import { useMemo } from "react";
 import { create } from "zustand";
-import { PERMISSION_MODES, type PermissionMode } from "@armadra/shared";
+import {
+  DEFAULT_CONTEXT_THRESHOLDS,
+  normalizeContextThresholds,
+  PERMISSION_MODES,
+  type ContextThresholds,
+  type PermissionMode,
+} from "@armadra/shared";
 import {
   DEFAULT_LOCALE,
   LOCALES,
@@ -53,6 +59,14 @@ const SOUND_VOLUME_KEY = "armadra.soundVolume";
 const RESTORE_WORKSPACE_KEY = "armadra.restoreLastWorkspace";
 /** 右下角用量胶囊（§19）。默认开；关掉后连轮询都不发。 */
 const SHOW_USAGE_KEY = "armadra.showUsage";
+/**
+ * 单会话上下文的提醒阈值（Agent 自动化设计 §2.2「80%/95% 为初始提醒阈值，
+ * 可设置」）。只改徽标与 Popover 的措辞，不会自动压缩、清空或打断 CLI。
+ */
+const CONTEXT_WARN_KEY = "armadra.context.warnPercent";
+const CONTEXT_DANGER_KEY = "armadra.context.dangerPercent";
+/** 终端 / Agent 节点的自动命名（Agent 自动化设计 §8）。默认开。 */
+const AUTO_TITLE_KEY = "armadra.autoTitle";
 /** 节点颜色的表达方式（§24.3-3）：色点 + 1px 顶描边，或旧的 3px 色条。 */
 const NODE_COLOR_STYLE_KEY = "armadra.nodeColorStyle";
 /** 终端外观（§18.3 最后一行「设置项」）。全部只存本地，Runtime 不关心。 */
@@ -441,6 +455,10 @@ export interface PreferencesState {
   soundVolume: number;
   /** 右下角用量胶囊（§19）。 */
   showUsage: boolean;
+  /** 上下文提醒阈值（设计 §2.2）；`dangerPercent` 不会低于 `warnPercent`。 */
+  contextThresholds: ContextThresholds;
+  /** 占位标题的自动命名（设计 §8）；人工改过名的节点始终不受影响。 */
+  autoTitle: boolean;
   /** 节点颜色风格（§24.3-3）：`dot` 色点 + 顶描边 / `bar` 顶部色条。 */
   nodeColorStyle: NodeColorStyle;
   /** 左侧 docked 侧栏是否展开（§20「左侧栏」，⌘⇧L）。 */
@@ -474,6 +492,8 @@ export interface PreferencesState {
   setSound: (enabled: boolean) => void;
   setSoundVolume: (volume: number) => void;
   setShowUsage: (enabled: boolean) => void;
+  setContextThresholds: (thresholds: Partial<ContextThresholds>) => void;
+  setAutoTitle: (enabled: boolean) => void;
   setNodeColorStyle: (style: NodeColorStyle) => void;
   setSidebarOpen: (open: boolean) => void;
   setRestoreLastWorkspace: (restore: boolean) => void;
@@ -556,6 +576,21 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
   sound: storedBoolean(SOUND_KEY, true),
   soundVolume: storedNumber(SOUND_VOLUME_KEY, 60, ...SOUND_VOLUME_RANGE),
   showUsage: storedBoolean(SHOW_USAGE_KEY, true),
+  contextThresholds: normalizeContextThresholds({
+    warnPercent: storedNumber(
+      CONTEXT_WARN_KEY,
+      DEFAULT_CONTEXT_THRESHOLDS.warnPercent,
+      1,
+      100,
+    ),
+    dangerPercent: storedNumber(
+      CONTEXT_DANGER_KEY,
+      DEFAULT_CONTEXT_THRESHOLDS.dangerPercent,
+      1,
+      100,
+    ),
+  }),
+  autoTitle: storedBoolean(AUTO_TITLE_KEY, true),
   nodeColorStyle: storedEnum(NODE_COLOR_STYLE_KEY, NODE_COLOR_STYLES, "dot"),
   sidebarOpen: storedBoolean(SIDEBAR_OPEN_KEY, true),
   restoreLastWorkspace: storedBoolean(RESTORE_WORKSPACE_KEY, true),
@@ -683,6 +718,23 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
   setShowUsage(showUsage) {
     writeStored(SHOW_USAGE_KEY, String(showUsage));
     set({ showUsage });
+  },
+  setContextThresholds(patch) {
+    set((state) => {
+      // Normalising on write is what keeps "danger below warn" from ever
+      // reaching storage: the badge must not have to defend against it.
+      const contextThresholds = normalizeContextThresholds({
+        ...state.contextThresholds,
+        ...patch,
+      });
+      writeStored(CONTEXT_WARN_KEY, String(contextThresholds.warnPercent));
+      writeStored(CONTEXT_DANGER_KEY, String(contextThresholds.dangerPercent));
+      return { contextThresholds };
+    });
+  },
+  setAutoTitle(autoTitle) {
+    writeStored(AUTO_TITLE_KEY, String(autoTitle));
+    set({ autoTitle });
   },
   setNodeColorStyle(nodeColorStyle) {
     writeStored(NODE_COLOR_STYLE_KEY, nodeColorStyle);
