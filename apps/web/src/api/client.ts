@@ -306,11 +306,22 @@ export const runtimeApi = {
   contextUsage: (
     workspaceId: string,
     nodeId: string,
-    binding: { sessionId: string; generation: number },
+    binding: {
+      sessionId: string;
+      generation: number;
+      /**
+       * The node's model selection, forwarded only as the denominator's
+       * fallback: a transcript that names the model that actually answered
+       * wins over what the launch line asked for.
+       */
+      modelId?: string | null;
+    },
     signal?: AbortSignal,
   ) =>
     request(
-      `/api/workspaces/${query(workspaceId)}/nodes/${query(nodeId)}/context-usage?sessionId=${query(binding.sessionId)}&generation=${binding.generation}`,
+      `/api/workspaces/${query(workspaceId)}/nodes/${query(nodeId)}/context-usage?sessionId=${query(binding.sessionId)}&generation=${binding.generation}${
+        binding.modelId ? `&modelId=${query(binding.modelId)}` : ""
+      }`,
       contextUsageSchema,
       { signal },
     ),

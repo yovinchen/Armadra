@@ -77,7 +77,11 @@ export function useContextUsage(binding: ContextBinding) {
       runtimeApi.contextUsage(
         workspaceId!,
         nodeId,
-        { sessionId: sessionId!, generation: generation! },
+        {
+          sessionId: sessionId!,
+          generation: generation!,
+          modelId: modelSelection ?? null,
+        },
         signal,
       ),
     retry: false,
@@ -130,7 +134,13 @@ export function useContextUsage(binding: ContextBinding) {
     data.generation === generation
       ? data
       : null;
-  if (usage && previous.current.baselineNeeded) {
+  // An estimated reading carries no revision: it is recomputed from the
+  // transcript on every request, so there is no in-flight report from the old
+  // model to fence off and no baseline to establish.
+  if (usage && usage.sourceRevision === null) {
+    previous.current.baselineNeeded = false;
+    previous.current.floor = null;
+  } else if (usage && previous.current.baselineNeeded) {
     previous.current.floor = usage.sourceRevision;
     previous.current.baselineNeeded = false;
     usage = null;

@@ -82,6 +82,8 @@ async fn context_reports_require_verified_current_pty_and_publish_only_invalidat
     let query = ContextQuery {
         session_id: session.id.clone(),
         generation: session.generation as u64,
+        // Claude reports its own model; the hint is never consulted here.
+        model_id: None,
     };
     let data = json!({"session_id":"fixture-provider", "model":{"id":"fixture-model"},
         "context_window":{"context_window_size":200000,"current_usage":{

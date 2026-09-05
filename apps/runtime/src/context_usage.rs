@@ -134,6 +134,11 @@ pub struct ContextUsage {
     pub source_revision: Option<String>,
     pub compaction_epoch: u64,
     pub unknown_reason: Option<String>,
+    /// Only present on an estimated reading; see [`crate::context_estimate`].
+    /// A provider-reported reading leaves it out entirely, which is how the UI
+    /// tells a measurement from a sum.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estimate: Option<crate::context_estimate::ContextEstimate>,
 }
 
 impl ContextUsage {
@@ -154,6 +159,7 @@ impl ContextUsage {
             source_revision: None,
             compaction_epoch: 0,
             unknown_reason: Some(reason.into()),
+            estimate: None,
         }
     }
 }
@@ -353,6 +359,8 @@ pub fn parse_claude(node_id: &str, report: &ContextReport, now_ms: i64) -> Optio
             }
             .into()
         }),
+        // Claude reports a live window; there is nothing to estimate.
+        estimate: None,
     })
 }
 
@@ -439,6 +447,12 @@ pub async fn ingest(
 pub struct ContextQuery {
     pub session_id: String,
     pub generation: u64,
+    /// The model the node was launched with, used only as the denominator's
+    /// fallback when the transcript itself does not name one. A hint, never an
+    /// override: a transcript that says which model answered wins, which is
+    /// what keeps the ratio honest after a mid-session model switch.
+    #[serde(default)]
+    pub model_id: Option<String>,
 }
 
 pub async fn get_snapshot(
@@ -483,19 +497,90 @@ pub async fn get_snapshot(
     {
         return Ok(unknown("session_ended"));
     }
-    if !session
-        .agent_id
-        .as_deref()
-        .is_some_and(|agent| has_capability(&state.settings, agent, "contextUsage"))
-    {
+    let Some(agent_id) = session.agent_id.as_deref() else {
+        return Ok(unknown("unsupported"));
+    };
+    if !has_capability(&state.settings, agent_id, "contextUsage") {
         return Ok(unknown("unsupported"));
     }
-    Ok(state.hooks.context_usage().snapshot(
-        node_id,
-        &session.id,
-        query.generation,
-        Utc::now().timestamp_millis(),
-    ))
+    // Claude is the only provider that publishes a live window; everything else
+    // that declares the capability is read from its structured transcript.
+    if state.settings.base_agent(agent_id) == "claude" {
+        return Ok(state.hooks.context_usage().snapshot(
+            node_id,
+            &session.id,
+            query.generation,
+            Utc::now().timestamp_millis(),
+        ));
+    }
+    Ok(estimated_snapshot(state, node_id, &session, query).await)
+}
+
+/// A `structured_transcript` reading for codex / gemini — design §2.1.
+///
+/// Every step here can decline, and declining produces an explicit unknown
+/// rather than a zero: no status row, no locatable transcript, nothing readable
+/// inside it. The capacity is looked up from the model the transcript names (or
+/// the launch selection as a fallback) and stays `None` for a model the table
+/// does not recognise, so an unknown denominator shows as unknown rather than
+/// as a percentage of a guessed window.
+async fn estimated_snapshot(
+    state: &crate::AppState,
+    node_id: &str,
+    session: &crate::model::TerminalSession,
+    query: &ContextQuery,
+) -> ContextUsage {
+    let unknown =
+        |reason| ContextUsage::unknown(node_id, &query.session_id, query.generation, reason);
+    let Some(agent_id) = session.agent_id.as_deref() else {
+        return unknown("unsupported");
+    };
+    let base = state.settings.base_agent(agent_id);
+    let status = crate::db::get_agent_status(&state.pool, node_id)
+        .await
+        .ok()
+        .flatten();
+    let Some(located) = crate::collab::transcript::locate(
+        &base,
+        status
+            .as_ref()
+            .and_then(|row| row.transcript_path.as_deref()),
+        status.as_ref().and_then(|row| row.session_id.as_deref()),
+    ) else {
+        return unknown("source_unavailable");
+    };
+    let Some(estimated) = crate::context_estimate::cached_estimate(node_id, &base, &located.path)
+    else {
+        return unknown("source_unavailable");
+    };
+    let model_id = estimated
+        .model_id
+        .clone()
+        .or_else(|| query.model_id.clone().filter(|model| !model.is_empty()));
+    ContextUsage {
+        node_id: node_id.into(),
+        session_id: query.session_id.clone(),
+        generation: query.generation,
+        provider_session_id: estimated
+            .provider_session_id
+            .clone()
+            .or_else(|| status.as_ref().and_then(|row| row.session_id.clone())),
+        capacity_tokens: crate::context_models::context_capacity(model_id.as_deref()),
+        model_id,
+        used_tokens: Some(estimated.used_tokens),
+        reserved_output_tokens: None,
+        observed_at: Some(Utc::now().to_rfc3339()),
+        age_ms: 0,
+        source: "structured_transcript".into(),
+        quality: "estimated".into(),
+        // The file's own identity is the revision: a transcript that has not
+        // grown is the same observation, not a newer one.
+        source_revision: None,
+        // Compaction is not observable in a transcript that keeps every turn.
+        compaction_epoch: 0,
+        unknown_reason: None,
+        estimate: Some(estimated.estimate),
+    }
 }
 
 #[cfg(test)]

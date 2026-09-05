@@ -1,8 +1,11 @@
 pub mod agent;
+pub mod agent_probe;
 pub mod api;
 pub mod collab;
 pub mod command;
 pub mod context_api;
+pub mod context_estimate;
+pub mod context_models;
 pub mod context_usage;
 pub mod db;
 pub mod desktop_control;
