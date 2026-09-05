@@ -89,9 +89,40 @@ function revisionOf(workspaceId: string, boardId: string): bigint {
   return revisions.get(revisionKey(workspaceId, boardId)) ?? 0n;
 }
 
-/** 仅测试与切换归属时用：丢掉记住的 revision。 */
+/**
+ * 每个工作空间续订事件用的游标。
+ *
+ * 事件流是**一条**按工作空间划分的单调序号，不是每块画布一条，所以这张表
+ * 按工作空间存。只准前进：往回退等于把已经应用过的改动当成没发生。
+ */
+const cursors = new Map<string, bigint>();
+
+function rememberCursor(workspaceId: string, sequence: bigint) {
+  const current = cursors.get(workspaceId);
+  if (current === undefined || sequence > current)
+    cursors.set(workspaceId, sequence);
+}
+
+/**
+ * 当前续订游标；`null` 表示这个工作空间还没读到过任何文档——此时没有可续的
+ * 位置，从 0 开始订会把整段历史当成「刚发生的改动」重放一遍。
+ */
+export function canvasEventCursor(workspaceId: string): bigint | null {
+  return cursors.get(workspaceId) ?? null;
+}
+
+/** 只在快照重置游标时用：快照自带它一致的那个序号。 */
+export function resetCanvasEventCursor(
+  workspaceId: string,
+  sequence: bigint,
+): void {
+  cursors.set(workspaceId, sequence);
+}
+
+/** 仅测试与切换归属时用：丢掉记住的 revision 与游标。 */
 export function resetCanvasRevisions(): void {
   revisions.clear();
+  cursors.clear();
 }
 
 type HostResolver = (
@@ -104,6 +135,17 @@ let resolver: HostResolver = resolveHostCanvasClient;
 /** 测试注入 Host 客户端；传 `null` 恢复真实实现。 */
 export function setCanvasHostResolver(next: HostResolver | null): void {
   resolver = next ?? resolveHostCanvasClient;
+}
+
+/**
+ * 事件跟随器走的也是这一个客户端，所以注入的替身对两条路同时生效——
+ * 测试里不会出现「网关用假的、跟随器用真的」这种半真半假的状态。
+ */
+export function resolveCanvasHostClient(
+  workspaceId: string,
+  mutation: boolean,
+): Promise<HostCanvasClient> {
+  return resolver(workspaceId, mutation);
 }
 
 async function settled(): Promise<CanvasOwnershipStatus> {
@@ -164,6 +206,9 @@ async function hostDocument(
   const document = await client.getDocument(boardId);
   await assertWhiteboardDigest(document);
   remember(workspaceId, boardId, document.canvas!.revision);
+  // 这份文档读到的位置就是续订的起点：从这里往后订，只会拿到读完之后发生的
+  // 改动，而不是把已经在手里的内容再当成新事件收一遍。
+  rememberCursor(workspaceId, document.eventSequence);
   return fromCanvasDocument(document);
 }
 
@@ -208,6 +253,10 @@ export const canvasGateway = {
       boardId,
       nextRevision(response, saved.canvas!.revision, boardId),
     );
+    // 自己写出去的事件不必再收一遍：把游标推到本次收据的最后一个序号，
+    // 跟随器就不会把这次保存报成「别人改了」。
+    if (response.receipt && response.receipt.lastSequence > 0n)
+      rememberCursor(workspaceId, response.receipt.lastSequence);
     return fromCanvasDocument(saved);
   },
 

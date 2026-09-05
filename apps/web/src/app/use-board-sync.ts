@@ -1,7 +1,11 @@
-import { useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { runtimeApi } from "../api/client";
-import { useCanvasOwnership, canvasGateway } from "../canvas-ownership";
+import {
+  useCanvasEventFollower,
+  useCanvasOwnership,
+  canvasGateway,
+} from "../canvas-ownership";
 import { flushBoardSaves } from "../save/autosave";
 import { SAVE_RETRY_EVENT } from "../shell/Banners";
 import { useCanvasStore } from "../store/canvas-store";
@@ -82,6 +86,22 @@ export function useBoardSync() {
     queryFn: () => canvasGateway.loadBoard(workspace!.id, boardId!),
     enabled: Boolean(workspace && boardId),
   });
+
+  /**
+   * Host 在写时按 sequence 续订它的事件（H01 §3.3）。
+   *
+   * Runtime 那条路上有工作空间事件 WebSocket；Host 这条没有，所以这里保留
+   * 一个游标，只取读完之后发生的改动。这里**只让文档查询失效**，不直接改
+   * store：本地还没落盘的编辑不该被一次轮询盖掉，合并仍然走保存冲突那条路。
+   */
+  const queryClient = useQueryClient();
+  const workspaceId = workspace?.id ?? null;
+  const onCanvasChanged = useCallback(() => {
+    if (!workspaceId) return;
+    void queryClient.invalidateQueries({ queryKey: ["board", workspaceId] });
+    void queryClient.invalidateQueries({ queryKey: ["boards", workspaceId] });
+  }, [queryClient, workspaceId]);
+  useCanvasEventFollower(workspaceId, onCanvasChanged);
 
   /* ------------------------ 启动：恢复上次的工作空间 ---------------------- */
   /**

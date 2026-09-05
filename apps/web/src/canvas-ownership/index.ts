@@ -7,14 +7,24 @@ export {
   type CanvasOwnershipStatus,
 } from "./store";
 export {
+  canvasEventCursor,
   canvasGateway,
   isCanvasConflict,
   isOwnershipMoved,
+  resetCanvasEventCursor,
   resetCanvasRevisions,
+  resolveCanvasHostClient,
   setCanvasHostResolver,
   CanvasOwnershipMovedError,
   CanvasReadOnlyError,
 } from "./gateway";
+export {
+  followCanvasEvents,
+  pollCanvasEvents,
+  useCanvasEventFollower,
+  CANVAS_EVENT_POLL_MS,
+  type CanvasFollowOutcome,
+} from "./follow";
 export {
   assertWhiteboardDigest,
   fromCanvasDocument,
