@@ -69,14 +69,17 @@ async fn message_routes_read_staged_source_and_require_execution_authority() {
     let workspace = db::create_workspace(&pool, "project", repo.to_str().unwrap(), None, None)
         .await
         .unwrap();
-    let _other_workspace = db::create_workspace(&pool, "other", other.to_str().unwrap(), None, None)
-        .await
-        .unwrap();
+    let _other_workspace =
+        db::create_workspace(&pool, "other", other.to_str().unwrap(), None, None)
+            .await
+            .unwrap();
     // These happy-path scenarios explicitly authorize Git helpers; denial is
     // covered independently with real sentinel scripts.
     sqlx::query("UPDATE workspaces SET permissions_json = ?")
         .bind(r#"{"read":true,"write":true,"execute":true}"#)
-        .execute(&pool).await.unwrap();
+        .execute(&pool)
+        .await
+        .unwrap();
     let events = EventHub::new();
     let settings = SettingsStore::in_memory(json!({"terminal":{"backend":"direct"}}));
     let app = router_with_state(AppState {
@@ -93,19 +96,33 @@ async fn message_routes_read_staged_source_and_require_execution_authority() {
         usage: UsageService::new(settings),
     });
 
-
     std::fs::write(repo.join("feature.txt"), "new feature\n").unwrap();
     git(&repo, &["add", "feature.txt"]);
     let endpoint = format!("/api/workspaces/{}/git/message", workspace.id);
-    let (status,source)=request(&app,"GET",&format!("{endpoint}/source"),Value::Null).await;
-    assert_eq!(status,StatusCode::OK,"{source}");
-    assert_eq!(source["includedFiles"],json!(["feature.txt"]));
+    let (status, source) = request(&app, "GET", &format!("{endpoint}/source"), Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{source}");
+    assert_eq!(source["includedFiles"], json!(["feature.txt"]));
     sqlx::query("UPDATE workspaces SET permissions_json = ? WHERE id = ?")
-        .bind(r#"{"read":true,"write":true,"execute":false}"#).bind(&workspace.id).execute(&pool).await.unwrap();
+        .bind(r#"{"read":true,"write":true,"execute":false}"#)
+        .bind(&workspace.id)
+        .execute(&pool)
+        .await
+        .unwrap();
     let (status,_)=request(&app,"POST",&format!("{endpoint}/generate"),json!({"provider":"claude-bare","expectedHead":source["expectedHead"],"indexDigest":source["indexDigest"]})).await;
-    assert_eq!(status,StatusCode::FORBIDDEN);
+    assert_eq!(status, StatusCode::FORBIDDEN);
     sqlx::query("UPDATE workspaces SET permissions_json = ? WHERE id = ?")
-        .bind(r#"{"read":false,"write":false,"execute":false}"#).bind(&workspace.id).execute(&pool).await.unwrap();
-    for path in ["source","providers"] {assert_eq!(request(&app,"GET",&format!("{endpoint}/{path}"),Value::Null).await.0,StatusCode::FORBIDDEN);}
+        .bind(r#"{"read":false,"write":false,"execute":false}"#)
+        .bind(&workspace.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for path in ["source", "providers"] {
+        assert_eq!(
+            request(&app, "GET", &format!("{endpoint}/{path}"), Value::Null)
+                .await
+                .0,
+            StatusCode::FORBIDDEN
+        );
+    }
     pool.close().await;
 }

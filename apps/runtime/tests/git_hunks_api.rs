@@ -69,14 +69,17 @@ async fn hunk_routes_reject_stale_writes_and_enforce_workspace_permissions() {
     let workspace = db::create_workspace(&pool, "project", repo.to_str().unwrap(), None, None)
         .await
         .unwrap();
-    let _other_workspace = db::create_workspace(&pool, "other", other.to_str().unwrap(), None, None)
-        .await
-        .unwrap();
+    let _other_workspace =
+        db::create_workspace(&pool, "other", other.to_str().unwrap(), None, None)
+            .await
+            .unwrap();
     // These happy-path scenarios explicitly authorize Git helpers; denial is
     // covered independently with real sentinel scripts.
     sqlx::query("UPDATE workspaces SET permissions_json = ?")
         .bind(r#"{"read":true,"write":true,"execute":true}"#)
-        .execute(&pool).await.unwrap();
+        .execute(&pool)
+        .await
+        .unwrap();
     let events = EventHub::new();
     let settings = SettingsStore::in_memory(json!({"terminal":{"backend":"direct"}}));
     let app = router_with_state(AppState {
@@ -98,7 +101,13 @@ async fn hunk_routes_reject_stale_writes_and_enforce_workspace_permissions() {
     git(&repo, &["commit", "-m", "fixture"]);
     std::fs::write(repo.join("file.txt"), "first\nchanged\nthird\n").unwrap();
     let endpoint = format!("/api/workspaces/{}/git/hunks", workspace.id);
-    let (code, diff) = request(&app,"GET", &format!("{endpoint}?file=file.txt&scope=worktree"), Value::Null).await;
+    let (code, diff) = request(
+        &app,
+        "GET",
+        &format!("{endpoint}?file=file.txt&scope=worktree"),
+        Value::Null,
+    )
+    .await;
     assert_eq!(code, StatusCode::OK, "{diff}");
     assert_eq!(diff["hunks"].as_array().unwrap().len(), 1);
     let mutation = json!({"file":"file.txt","scope":"worktree","diffDigest":diff["diffDigest"],"hunkId":diff["hunks"][0]["id"],"action":"stage"});
@@ -111,11 +120,30 @@ async fn hunk_routes_reject_stale_writes_and_enforce_workspace_permissions() {
     assert_eq!(result["applied"], true);
     sqlx::query("UPDATE workspaces SET permissions_json = ? WHERE id = ?")
         .bind(r#"{"read":true,"write":false,"execute":false}"#)
-        .bind(&workspace.id).execute(&pool).await.unwrap();
-    assert_eq!(request(&app,"POST",&endpoint,mutation).await.0, StatusCode::FORBIDDEN);
+        .bind(&workspace.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        request(&app, "POST", &endpoint, mutation).await.0,
+        StatusCode::FORBIDDEN
+    );
     sqlx::query("UPDATE workspaces SET permissions_json = ? WHERE id = ?")
         .bind(r#"{"read":false,"write":false,"execute":false}"#)
-        .bind(&workspace.id).execute(&pool).await.unwrap();
-    assert_eq!(request(&app,"GET",&format!("{endpoint}?file=file.txt&scope=staged"),Value::Null).await.0, StatusCode::FORBIDDEN);
+        .bind(&workspace.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        request(
+            &app,
+            "GET",
+            &format!("{endpoint}?file=file.txt&scope=staged"),
+            Value::Null
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
     pool.close().await;
 }

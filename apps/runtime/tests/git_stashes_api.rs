@@ -69,14 +69,17 @@ async fn stash_routes_preserve_oid_and_require_workspace_permission() {
     let workspace = db::create_workspace(&pool, "project", repo.to_str().unwrap(), None, None)
         .await
         .unwrap();
-    let _other_workspace = db::create_workspace(&pool, "other", other.to_str().unwrap(), None, None)
-        .await
-        .unwrap();
+    let _other_workspace =
+        db::create_workspace(&pool, "other", other.to_str().unwrap(), None, None)
+            .await
+            .unwrap();
     // These happy-path scenarios explicitly authorize Git helpers; denial is
     // covered independently with real sentinel scripts.
     sqlx::query("UPDATE workspaces SET permissions_json = ?")
         .bind(r#"{"read":true,"write":true,"execute":true}"#)
-        .execute(&pool).await.unwrap();
+        .execute(&pool)
+        .await
+        .unwrap();
     let events = EventHub::new();
     let settings = SettingsStore::in_memory(json!({"terminal":{"backend":"direct"}}));
     let app = router_with_state(AppState {
@@ -93,30 +96,67 @@ async fn stash_routes_preserve_oid_and_require_workspace_permission() {
         usage: UsageService::new(settings),
     });
 
-
     std::fs::write(repo.join("pending.txt"), "untracked content\n").unwrap();
-    let base=format!("/api/workspaces/{}/git/repository",workspace.id);
-    let (status,before)=request(&app,"GET",&format!("{base}/stashes"),Value::Null).await;
-    assert_eq!(status,StatusCode::OK,"{before}");
+    let base = format!("/api/workspaces/{}/git/repository", workspace.id);
+    let (status, before) = request(&app, "GET", &format!("{base}/stashes"), Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{before}");
     let (status,operation)=request(&app,"POST",&format!("{base}/operations"),json!({"path":".","action":{"kind":"createStash","message":"fixture","includeUntracked":true,"expectedStateToken":before["stateToken"]},"expected":before["head"]})).await;
-    assert_eq!(status,StatusCode::OK,"{operation}");
-    let id=operation["id"].as_str().unwrap();
-    let completed=tokio::time::timeout(std::time::Duration::from_secs(5),async {
-        loop { let (_,result)=request(&app,"GET",&format!("{base}/operations/{id}"),Value::Null).await;
-        if !["queued","running"].contains(&result["state"].as_str().unwrap()) {break result;}
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await; }
-    }).await.unwrap();
-    assert_eq!(completed["state"],"succeeded","{completed}");
-    let (_,after)=request(&app,"GET",&format!("{base}/stashes"),Value::Null).await;
-    assert_eq!(after["stashes"].as_array().unwrap().len(),1);
-    let oid=after["stashes"][0]["oid"].as_str().unwrap();
-    let (status,detail)=request(&app,"GET",&format!("{base}/stash-detail?oid={oid}"),Value::Null).await;
-    assert_eq!(status,StatusCode::OK,"{detail}");
-    assert_eq!(detail["oid"],oid);
-    assert!(detail["untrackedPatch"].as_str().unwrap().contains("untracked content"));
+    assert_eq!(status, StatusCode::OK, "{operation}");
+    let id = operation["id"].as_str().unwrap();
+    let completed = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let (_, result) =
+                request(&app, "GET", &format!("{base}/operations/{id}"), Value::Null).await;
+            if !["queued", "running"].contains(&result["state"].as_str().unwrap()) {
+                break result;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(completed["state"], "succeeded", "{completed}");
+    let (_, after) = request(&app, "GET", &format!("{base}/stashes"), Value::Null).await;
+    assert_eq!(after["stashes"].as_array().unwrap().len(), 1);
+    let oid = after["stashes"][0]["oid"].as_str().unwrap();
+    let (status, detail) = request(
+        &app,
+        "GET",
+        &format!("{base}/stash-detail?oid={oid}"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{detail}");
+    assert_eq!(detail["oid"], oid);
+    assert!(
+        detail["untrackedPatch"]
+            .as_str()
+            .unwrap()
+            .contains("untracked content")
+    );
     assert!(!repo.join("pending.txt").exists());
-    sqlx::query("UPDATE workspaces SET permissions_json = ? WHERE id = ?").bind(r#"{"read":false,"write":false,"execute":false}"#).bind(&workspace.id).execute(&pool).await.unwrap();
-    assert_eq!(request(&app,"GET",&format!("{base}/stashes"),Value::Null).await.0,StatusCode::FORBIDDEN);
-    assert_eq!(request(&app,"GET",&format!("{base}/stash-detail?oid={oid}"),Value::Null).await.0,StatusCode::FORBIDDEN);
+    sqlx::query("UPDATE workspaces SET permissions_json = ? WHERE id = ?")
+        .bind(r#"{"read":false,"write":false,"execute":false}"#)
+        .bind(&workspace.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        request(&app, "GET", &format!("{base}/stashes"), Value::Null)
+            .await
+            .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        request(
+            &app,
+            "GET",
+            &format!("{base}/stash-detail?oid={oid}"),
+            Value::Null
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
     pool.close().await;
 }
