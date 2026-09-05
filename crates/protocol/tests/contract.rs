@@ -61,6 +61,12 @@ fn handshake_and_unicode() {
 }
 
 #[test]
+fn bootstrap_scope_and_authenticated_device_revision() {
+    check("identity_bootstrap", HostControlRequest { request_id:"pair-1".into(), action:Some(host_control_request::Action::Bootstrap(BootstrapTicketRequest { expected_host_id:"host-1".into(),expected_instance_id:"instance-1".into(),origin:"https://armadra.example".into(),device_name:"手机📱".into(),scopes:vec![AuthorizationGrant {permission:"canvas:read".into(),..Default::default()},AuthorizationGrant {permission:"terminal:write".into(),workspace_id:"workspace-1".into(),..Default::default()}] })) });
+    check("identity_session", AuthenticatedSession { host_id:"host-1".into(),device:Some(DeviceIdentity { device_id:"device-1".into(),principal_id:"owner-1".into(),display_name:"手机📱".into(),role:"owner".into(),created_at_unix_ms:1788557000000,revoked_at_unix_ms:0,revision:u64::MAX }),csrf_token:"fixture-not-a-secret".into(),scopes:vec![AuthorizationGrant {permission:"canvas:read".into(),..Default::default()}],expires_at_unix_ms:1788557900000 });
+}
+
+#[test]
 fn local_control_contracts() {
     check(
         "management_running",

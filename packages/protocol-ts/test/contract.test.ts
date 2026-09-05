@@ -19,6 +19,7 @@ import {
   HostControlResponseSchema,
   HostManagementResultSchema,
   DesktopRuntimeControlSchema,
+  AuthenticatedSessionSchema,
 } from "../src/index.js";
 
 function fixture(name: string): Uint8Array {
@@ -43,6 +44,38 @@ function check<T extends DescMessage>(
 const maxUint64 = 18_446_744_073_709_551_615n;
 
 describe("shared Go / Rust / TypeScript wire contracts", () => {
+  it("binds bootstrap to Host, instance and origin and preserves device revision", () => {
+    check("identity_bootstrap", HostControlRequestSchema, {
+      requestId: "pair-1",
+      action: {
+        case: "bootstrap",
+        value: {
+          expectedHostId: "host-1",
+          expectedInstanceId: "instance-1",
+          origin: "https://armadra.example",
+          deviceName: "手机📱",
+          scopes: [
+            { permission: "canvas:read" },
+            { permission: "terminal:write", workspaceId: "workspace-1" },
+          ],
+        },
+      },
+    });
+    check("identity_session", AuthenticatedSessionSchema, {
+      hostId: "host-1",
+      device: {
+        deviceId: "device-1",
+        principalId: "owner-1",
+        displayName: "手机📱",
+        role: "owner",
+        createdAtUnixMs: 1788557000000n,
+        revision: maxUint64,
+      },
+      scopes: [{ permission: "canvas:read" }],
+      csrfToken: "fixture-not-a-secret",
+      expiresAtUnixMs: 1788557900000n,
+    });
+  });
   it("preserves migration manifests and every SQLite value storage class", () => {
     check("migration_manifest", MigrationExportManifestSchema, {
       formatVersion: 1,

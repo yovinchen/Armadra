@@ -4,6 +4,8 @@ package armadra.v1;
 
 option go_package = "armadra.local/host/gen/armadra/v1";
 
+import "armadra/v1/identity.proto";
+
 // The Hello endpoint is the only implemented capability in the M0 contract.
 message ProtocolVersion {
   uint32 major = 1;
@@ -89,6 +91,7 @@ message HostControlRequest {
   oneof action {
     HostStatusRequest status = 10;
     HostStopRequest stop = 11;
+    BootstrapTicketRequest bootstrap = 12;
   }
 }
 message HostControlResponse {
@@ -97,6 +100,7 @@ message HostControlResponse {
     HostStatus status = 10;
     HostStopResponse stopped = 11;
     ErrorResponse error = 12;
+    BootstrapTicketResponse bootstrap = 13;
   }
 }
 

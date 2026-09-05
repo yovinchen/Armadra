@@ -41,6 +41,8 @@ func fixture(t *testing.T, name string, data []byte) []byte {
 
 func cases() map[string]proto.Message {
 	return map[string]proto.Message{
+		"identity_bootstrap": &pb.HostControlRequest{RequestId: "pair-1", Action: &pb.HostControlRequest_Bootstrap{Bootstrap: &pb.BootstrapTicketRequest{ExpectedHostId: "host-1", ExpectedInstanceId: "instance-1", Origin: "https://armadra.example", DeviceName: "手机📱", Scopes: []*pb.AuthorizationGrant{{Permission: "canvas:read"}, {Permission: "terminal:write", WorkspaceId: "workspace-1"}}}}},
+		"identity_session":   &pb.AuthenticatedSession{HostId: "host-1", Device: &pb.DeviceIdentity{DeviceId: "device-1", PrincipalId: "owner-1", DisplayName: "手机📱", Role: "owner", CreatedAtUnixMs: 1788557000000, Revision: math.MaxUint64}, CsrfToken: "fixture-not-a-secret", Scopes: []*pb.AuthorizationGrant{{Permission: "canvas:read"}}, ExpiresAtUnixMs: 1788557900000},
 		"migration_manifest": &pb.MigrationExportManifest{FormatVersion: 1, ExportId: "导出-1", ExportedAtUnixMs: 1788557000000, ProducerVersion: "0.1.0", DatabaseFile: "source.sqlite", DatabaseBytes: 9007199254740993, DatabaseSha256: bytes.Repeat([]byte{1}, 32), Migrations: []*pb.ExportMigration{{Version: 1, Checksum: bytes.Repeat([]byte{2}, 48), Success: true, Description: "initial"}}, Tables: []*pb.ExportTable{{Name: "boards", RowCount: 2, Readable: true, SchemaSha256: bytes.Repeat([]byte{3}, 32)}}, AssetsComplete: true},
 		"imported_sql_row": &pb.ImportedSqlRow{Table: "测试", Columns: []*pb.ImportedSqlColumn{
 			{Name: "null", Value: &pb.ImportedSqlColumn_NullValue{NullValue: &pb.SqlNull{}}},

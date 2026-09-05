@@ -294,3 +294,9 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - 首个适配器为已验证隔离参数的 Claude bare CLI：空工作目录、无工具/MCP/项目设置、无会话持久化、明确单次预算与超时；仅在 CLI 支持且配置 Runtime ANTHROPIC_API_KEY 时可用，不伪装支持订阅凭据或其他端点。
 - 生成与辅助命令使用统一生命周期 lease，退出时可取消并确认回收；模型等待期间不占仓库写锁。输出错误不回显私有 stderr，敏感文件/密钥材料不发送。
 - 最新11项 fake CLI/真实临时仓库回归、HTTP read/execute权限测试、前端6项与shared2项通过；未调用真实收费模型。真实浏览器面板交互继续独立核验。
+
+## 连续实施：设备认证 Protobuf 与私有引导通道
+
+- 新增身份/会话契约，权限明确带工作空间与执行主机范围，实际 grants 属于会话而非设备列表。浏览器响应只含已认证设备、权限、期限与 CSRF，access/refresh 不在业务载荷中返回。
+- OS 私有控制新增 Bootstrap 请求/响应，调用端绑定所观测 Host 与实例；未显式配置签发器则返回 unsupported，错误不暴露凭据或内部详情，未知结果不自动重试。
+- Go/Rust/TypeScript 二进制样例覆盖中文设备名、范围绑定及 uint64 最大 revision；Rust10、TS13与Go契约测试通过，生成漂移检查通过。私有通道回归验证错误Host/实例不调用签发器、签发不触发停止及默认拒绝。HTTPS/CLI使用该契约的接线另批提交。

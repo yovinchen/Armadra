@@ -189,6 +189,16 @@ func errorResponse(id, code string) *pb.HostControlResponse {
 }
 
 func handle(conn net.Conn, status *pb.HostStatus, shutdown func()) {
+	handleWithBootstrap(context.Background(), conn, status, shutdown, nil)
+}
+
+// BootstrapHandler runs only after localipc has authenticated the OS peer.
+// The callback must bind both expected Host identities and the exact origin.
+type BootstrapHandler func(context.Context, *pb.BootstrapTicketRequest) (*pb.BootstrapTicketResponse, error)
+
+func handleWithBootstrap(parent context.Context, conn net.Conn, status *pb.HostStatus, shutdown func(), bootstrap BootstrapHandler) {
+	ctx, cancel := context.WithTimeout(parent, RequestTimeout)
+	defer cancel()
 	if err := conn.SetDeadline(time.Now().Add(RequestTimeout)); err != nil {
 		return
 	}
@@ -224,6 +234,19 @@ func handle(conn net.Conn, status *pb.HostStatus, shutdown func()) {
 			response = &pb.HostControlResponse{RequestId: request.RequestId, Result: &pb.HostControlResponse_Stopped{Stopped: &pb.HostStopResponse{Accepted: true}}}
 			stop = true
 		}
+	case *pb.HostControlRequest_Bootstrap:
+		if bootstrap == nil {
+			response = errorResponse(request.RequestId, "UNSUPPORTED")
+		} else if action.Bootstrap == nil || action.Bootstrap.ExpectedHostId != status.HostId || action.Bootstrap.ExpectedInstanceId != status.HostInstanceId {
+			response = errorResponse(request.RequestId, "CONFLICT")
+		} else {
+			issued, issueErr := bootstrap(ctx, action.Bootstrap)
+			if issueErr != nil || issued == nil {
+				response = errorResponse(request.RequestId, "PERMISSION_DENIED")
+			} else {
+				response = &pb.HostControlResponse{RequestId: request.RequestId, Result: &pb.HostControlResponse_Bootstrap{Bootstrap: issued}}
+			}
+		}
 	default:
 		response = errorResponse(request.RequestId, "UNSUPPORTED")
 	}
@@ -239,6 +262,10 @@ func handle(conn net.Conn, status *pb.HostStatus, shutdown func()) {
 // context.CancelFunc); it is invoked at most once, after a successful stop ACK.
 // The caller must not mutate status while Serve is taking its initial snapshot.
 func Serve(ctx context.Context, listener net.Listener, status *pb.HostStatus, shutdown func()) error {
+	return ServeWithBootstrap(ctx, listener, status, shutdown, nil)
+}
+
+func ServeWithBootstrap(ctx context.Context, listener net.Listener, status *pb.HostStatus, shutdown func(), bootstrap BootstrapHandler) error {
 	if !validStatus(status) || listener == nil || shutdown == nil {
 		if listener != nil {
 			_ = listener.Close()
@@ -296,7 +323,7 @@ func Serve(ctx context.Context, listener net.Listener, status *pb.HostStatus, sh
 		go func() {
 			defer handlers.Done()
 			defer func() { _ = conn.Close(); mu.Lock(); delete(active, conn); mu.Unlock(); <-capacity }()
-			handle(conn, snapshot, func() { shutdownOnce.Do(shutdown) })
+			handleWithBootstrap(ctx, conn, snapshot, func() { shutdownOnce.Do(shutdown) }, bootstrap)
 		}()
 	}
 }
@@ -312,6 +339,8 @@ func exchange(ctx context.Context, dataDir string, action any, sideEffect bool) 
 		request.Action = &pb.HostControlRequest_Status{Status: value}
 	case *pb.HostStopRequest:
 		request.Action = &pb.HostControlRequest_Stop{Stop: value}
+	case *pb.BootstrapTicketRequest:
+		request.Action = &pb.HostControlRequest_Bootstrap{Bootstrap: value}
 	default:
 		return nil, &Error{Code: CodeInvalidArgument}
 	}
@@ -372,6 +401,23 @@ func exchange(ctx context.Context, dataDir string, action any, sideEffect bool) 
 		return nil, failure
 	}
 	return response, nil
+}
+
+// Bootstrap requests a short-lived ticket for exactly the observed Host and
+// client origin. It never retries an uncertain request and never logs secrets.
+func Bootstrap(ctx context.Context, dataDir string, request *pb.BootstrapTicketRequest) (*pb.BootstrapTicketResponse, error) {
+	if request == nil || request.ExpectedHostId == "" || request.ExpectedInstanceId == "" || request.Origin == "" || request.DeviceName == "" {
+		return nil, &Error{Code: CodeInvalidArgument}
+	}
+	response, err := exchange(ctx, dataDir, request, true)
+	if err != nil {
+		return nil, err
+	}
+	ticket := response.GetBootstrap()
+	if ticket == nil || ticket.HostId != request.ExpectedHostId || ticket.HostInstanceId != request.ExpectedInstanceId || ticket.Origin != request.Origin || ticket.Ticket == "" || ticket.ExpiresAtUnixMs <= time.Now().UnixMilli() {
+		return nil, &Error{Code: CodeMalformed, OutcomeUnknown: true}
+	}
+	return proto.Clone(ticket).(*pb.BootstrapTicketResponse), nil
 }
 
 // Status performs one local, read-only exchange and never retries.
