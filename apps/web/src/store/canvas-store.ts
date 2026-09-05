@@ -78,6 +78,8 @@ export interface PanelState {
   resources: "closed" | "drawer";
   settings: boolean;
   palette: boolean;
+  /** 快速打开（⌘P，E01/M4）。 */
+  quickOpen: boolean;
 }
 
 export interface AddNodeOptions {
@@ -175,6 +177,7 @@ const initialPanels: PanelState = {
   resources: "closed",
   settings: false,
   palette: false,
+  quickOpen: false,
 };
 
 function now(): string {

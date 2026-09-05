@@ -23,6 +23,7 @@ import { gitIntegration } from "./git-integration";
 import { gitRepository } from "./git-repository";
 import { fileDrag } from "./file-drag";
 import { resources } from "./resources";
+import { fileWorkflow } from "./file-workflow";
 import { terminal } from "./terminal";
 import { usage } from "./usage";
 
@@ -64,6 +65,7 @@ export const MESSAGE_MODULES = {
   "git-integration": gitIntegration,
   handoff,
   "file-drag": fileDrag,
+  "file-workflow": fileWorkflow,
   explorer,
   modals,
   commands,

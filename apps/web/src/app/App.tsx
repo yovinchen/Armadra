@@ -9,6 +9,7 @@ import {
   ExplorerDrawer,
   HandoffDialog,
   ResourceDrawer,
+  QuickOpen,
   SettingsDialog,
   SourceControlDrawer,
 } from "./lazy";
@@ -92,6 +93,7 @@ function AppShell() {
         <ResourceDrawer />
         <SettingsDialog />
         <CommandPalette />
+        <QuickOpen />
         <ControlConfirmDialog />
         <HandoffDialog />
       </Suspense>

@@ -34,12 +34,15 @@ function CommandDialog({
   children,
   className,
   showCloseButton = false,
+  shouldFilter,
   ...props
 }: React.ComponentProps<typeof Dialog> & {
   title?: string;
   description?: string;
   className?: string;
   showCloseButton?: boolean;
+  /** `false` when the list is already filtered by the runtime, not by cmdk. */
+  shouldFilter?: boolean;
 }) {
   return (
     <Dialog {...props}>
@@ -56,7 +59,9 @@ function CommandDialog({
       >
         {/* cmdk 的 Input/List/Item 都读 Command 根提供的 context，
             少了这一层它们会在渲染期就崩（读 undefined 的 store）。 */}
-        <Command className="p-0">{children}</Command>
+        <Command className="p-0" shouldFilter={shouldFilter}>
+          {children}
+        </Command>
       </DialogContent>
     </Dialog>
   );

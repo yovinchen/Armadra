@@ -106,6 +106,25 @@ export const COMMANDS = [
     allowInTerminal: true,
     allowWhileTyping: true,
   },
+  // 文件工作流（E01/M4）。⌘P 是快速打开的通用键位；项目搜索让给
+  // `canvas.focusMode` 占着的 ⌘⇧F，改用 ⌘⇧H——两条都在终端里也放行，
+  // 因为它们打开的是应用面板，不是终端里的东西。
+  {
+    id: "app.quickOpen",
+    labelKey: "cmd.app.quickOpen",
+    scope: "app",
+    defaultKeys: both("Mod+P"),
+    allowInTerminal: true,
+    allowWhileTyping: true,
+  },
+  {
+    id: "app.projectSearch",
+    labelKey: "cmd.app.projectSearch",
+    scope: "app",
+    defaultKeys: both("Mod+Shift+H"),
+    allowInTerminal: true,
+    allowWhileTyping: true,
+  },
 
   // ── canvas：画布与节点 ──────────────────────────────────────────
   {

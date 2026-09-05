@@ -3,20 +3,39 @@
  *
  * 两种形态共用同一份头部与同一棵树：非模态右侧 360px 抽屉，
  * 或 pin 成右侧 320px 浮卡。两者都允许文件拖向画布和终端。
+ *
+ * 两个页签（E01/M4）：「文件」是那棵树，「搜索」是项目内容搜索。⌘⇧H 走
+ * `PROJECT_SEARCH_EVENT` 直接切到第二页并把焦点放进输入框。
  */
+import { useEffect, useState } from "react";
 import { Pin, PinOff, X } from "lucide-react";
 
+import { PROJECT_SEARCH_EVENT } from "../app/commands";
 import { useT } from "../app/preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
 import { ScrollArea } from "../ui/scroll-area";
 import { Sheet, SheetContent, SheetTitle } from "../ui/sheet";
 import { IconButton } from "../ui/icon-button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { FileTree } from "./FileTree";
+import { ProjectSearchPanel } from "./ProjectSearchPanel";
 
 export function ExplorerDrawer() {
   const mode = useCanvasStore((state) => state.panels.explorer);
   const setPanel = useCanvasStore((state) => state.setPanel);
   const t = useT();
+  const [tab, setTab] = useState<"files" | "search">("files");
+  /** 每次经命令进入搜索页都换一个值，让面板把焦点放回输入框。 */
+  const [focusToken, setFocusToken] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    const open = () => {
+      setTab("search");
+      setFocusToken(Date.now());
+    };
+    window.addEventListener(PROJECT_SEARCH_EVENT, open);
+    return () => window.removeEventListener(PROJECT_SEARCH_EVENT, open);
+  }, []);
 
   if (mode === "closed") return null;
 
@@ -46,9 +65,28 @@ export function ExplorerDrawer() {
   );
 
   const body = (
-    <ScrollArea className="min-h-0 flex-1">
-      <FileTree />
-    </ScrollArea>
+    <Tabs
+      value={tab}
+      onValueChange={(value) => setTab(value as "files" | "search")}
+      className="min-h-0 flex-1 gap-0"
+    >
+      <TabsList variant="line" className="mx-2 mt-1 shrink-0">
+        <TabsTrigger value="files">{t("projectSearch.tab.files")}</TabsTrigger>
+        <TabsTrigger value="search">
+          {t("projectSearch.tab.search")}
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="files" className="min-h-0 flex-1">
+        <ScrollArea className="h-full">
+          <FileTree />
+        </ScrollArea>
+      </TabsContent>
+      <TabsContent value="search" className="min-h-0 flex-1">
+        <ScrollArea className="h-full">
+          <ProjectSearchPanel autoFocusToken={focusToken} />
+        </ScrollArea>
+      </TabsContent>
+    </Tabs>
   );
 
   if (mode === "pinned") {

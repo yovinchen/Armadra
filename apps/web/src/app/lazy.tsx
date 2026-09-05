@@ -23,6 +23,12 @@ export const CommandPalette = lazy(() =>
   })),
 );
 
+export const QuickOpen = lazy(() =>
+  import("@/panels/QuickOpen").then((module) => ({
+    default: module.QuickOpen,
+  })),
+);
+
 export const ControlConfirmDialog = lazy(() =>
   import("@/panels/ControlConfirmDialog").then((module) => ({
     default: module.ControlConfirmDialog,

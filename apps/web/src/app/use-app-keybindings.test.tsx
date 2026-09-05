@@ -43,6 +43,7 @@ describe("useAppKeybindings", () => {
         resources: "closed",
         settings: false,
         palette: false,
+        quickOpen: false,
       },
     });
     render(

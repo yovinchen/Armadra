@@ -11,6 +11,9 @@ import { useEnabledAgents } from "./use-agents";
 /** 源码控制抽屉监听它来触发提交（⌘⏎，§13.5）。 */
 export const SCM_COMMIT_EVENT = "armadra:scm-commit";
 
+/** 资源管理器抽屉监听它来切到「搜索」页签（E01/M4）。 */
+export const PROJECT_SEARCH_EVENT = "armadra:project-search";
+
 export interface CommandDispatch {
   /** 执行一条命令；快捷键、命令面板、菜单三处共用。 */
   run: (id: CommandId) => void;
@@ -72,6 +75,15 @@ export function useCommandDispatch(): CommandDispatch {
             "resources",
             panels.resources === "closed" ? "drawer" : "closed",
           );
+          return;
+        case "app.quickOpen":
+          setPanel("quickOpen", !panels.quickOpen);
+          return;
+        // 项目搜索住在资源管理器抽屉的第二个页签。面板自己不知道该切到
+        // 哪一页，所以这里开抽屉之后广播一次——和 `scm.commit` 同一套。
+        case "app.projectSearch":
+          if (panels.explorer === "closed") setPanel("explorer", "drawer");
+          window.dispatchEvent(new CustomEvent(PROJECT_SEARCH_EVENT));
           return;
         case "canvas.focusMode": {
           const next = state.focusNodeId

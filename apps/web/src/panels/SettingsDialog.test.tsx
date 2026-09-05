@@ -136,6 +136,7 @@ describe("SettingsDialog", () => {
         resources: "closed",
         settings: true,
         palette: false,
+        quickOpen: false,
       },
     });
   });

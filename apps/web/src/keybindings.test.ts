@@ -52,6 +52,8 @@ describe("命令表", () => {
         "app.commandPalette",
         "app.explorer",
         "app.resources",
+        "app.projectSearch",
+        "app.quickOpen",
         "app.sidebar",
         "app.settings",
         "app.sourceControl",

@@ -13,6 +13,8 @@ export const commands: MessageModule = {
     "cmd.app.sidebar": "侧栏",
     "cmd.app.explorer": "资源管理器",
     "cmd.app.sourceControl": "源码控制",
+    "cmd.app.quickOpen": "快速打开",
+    "cmd.app.projectSearch": "项目搜索",
 
     "cmd.canvas.newTerminal": "新建终端",
     "cmd.canvas.newAgent": "新建 Agent",
@@ -61,6 +63,8 @@ export const commands: MessageModule = {
     "cmd.app.sidebar": "Sidebar",
     "cmd.app.explorer": "Explorer",
     "cmd.app.sourceControl": "Source control",
+    "cmd.app.quickOpen": "Quick open",
+    "cmd.app.projectSearch": "Search in project",
 
     "cmd.canvas.newTerminal": "New terminal",
     "cmd.canvas.newAgent": "New agent",
