@@ -7,3 +7,4 @@ export * from "./git-hunks.js";
 export * from "./git-message.js";
 export * from "./git-integration.js";
 export * from "./context-usage.js";
+export * from "./handoff.js";
