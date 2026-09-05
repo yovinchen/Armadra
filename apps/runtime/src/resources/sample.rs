@@ -11,11 +11,15 @@
 //!    sampler tracks whether a usable previous refresh exists and reports
 //!    `None` until it does (design §8: "首次样本不显示假 0").
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use sysinfo::{Disks, MINIMUM_CPU_UPDATE_INTERVAL, Pid, ProcessRefreshKind, ProcessesToUpdate};
+use sysinfo::{
+    Disks, MINIMUM_CPU_UPDATE_INTERVAL, Pid, ProcessRefreshKind, ProcessesToUpdate, UpdateKind,
+};
+
+use super::platform::PlatformComponent;
 
 /// A refresh older than this is not a usable CPU baseline any more: the process
 /// table has moved on and the delta would be spread over an unknown window.
@@ -91,6 +95,39 @@ pub struct HostResources {
     pub sampled_at: String,
 }
 
+/// One process the runtime measured.
+///
+/// Identity is the **pair** `(pid, startTime)`: operating systems reuse pids,
+/// so a pid on its own would let a process that died merge with an unrelated
+/// one that inherited its number (design §8 "按 PID + startTime 去重").
+///
+/// `name` is the executable's file name and nothing else. No command line, no
+/// arguments, no terminal content — sampling reads the process table only.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessSample {
+    pub pid: i64,
+    pub start_time_unix_ms: Option<i64>,
+    pub name: String,
+    pub parent_pid: Option<i64>,
+    pub memory_bytes: Option<u64>,
+    pub cpu_percent: Option<f64>,
+}
+
+/// The identity a sample is deduplicated on.
+pub type ProcessKey = (i64, Option<i64>);
+
+impl ProcessSample {
+    pub fn key(&self) -> ProcessKey {
+        (self.pid, self.start_time_unix_ms)
+    }
+}
+
+/// At most this many children are listed per session. The panel's expandable
+/// tree is for finding the process that is eating the memory, not for
+/// mirroring a build system's entire fan-out into every sample.
+pub const MAX_LISTED_CHILDREN: usize = 32;
+
 /// One managed terminal session's process tree.
 ///
 /// `memoryBytes` is a sum of the tree's resident sizes and is therefore an
@@ -117,6 +154,13 @@ pub struct SessionResources {
     /// The leader process's state as the OS reports it (`running`, `sleeping`,
     /// …). `None` when the process could not be found.
     pub state: Option<String>,
+    /// The leader's start time, so a client can tell a restarted session from
+    /// one that merely reused a pid.
+    pub start_time_unix_ms: Option<i64>,
+    /// The tree under the leader, heaviest first and capped at
+    /// [`MAX_LISTED_CHILDREN`]. `childCount` stays the real total, so an empty
+    /// list next to a non-zero count means "not listed", not "none".
+    pub children: Vec<ProcessSample>,
     /// Why the numbers are missing, when they are: `remote`, `exited`,
     /// `no-pid`, `not-found` or `warming-up`.
     pub unknown_reason: Option<&'static str>,
@@ -203,14 +247,20 @@ impl Sampler {
         self.system.refresh_processes_specifics(
             ProcessesToUpdate::All,
             true,
-            ProcessRefreshKind::nothing().with_cpu().with_memory(),
+            // The executable path is how Armadra's own processes are told
+            // apart from everything else; `OnlyIfNotSet` reads it once per
+            // process rather than on every refresh.
+            ProcessRefreshKind::nothing()
+                .with_cpu()
+                .with_memory()
+                .with_exe(UpdateKind::OnlyIfNotSet),
         );
         self.last_refresh = Some(Instant::now());
     }
 
-    /// One full sample: refresh the OS view once, then read the host and every
-    /// requested session out of that single snapshot.
-    pub fn sample(&mut self, targets: &[SessionTarget]) -> (HostResources, Vec<SessionResources>) {
+    /// One full sample: refresh the OS view once, then read the host, every
+    /// requested session and Armadra's own processes out of that one snapshot.
+    pub fn sample(&mut self, targets: &[SessionTarget]) -> Sample {
         let baseline = self.has_cpu_baseline();
         self.refresh();
         let host = self.host(baseline);
@@ -219,7 +269,12 @@ impl Sampler {
             .iter()
             .map(|target| self.session(target, &children, baseline))
             .collect();
-        (host, sessions)
+        let components = super::platform::components(&self.system, &children, baseline);
+        Sample {
+            host,
+            sessions,
+            components,
+        }
     }
 
     fn host(&self, baseline: bool) -> HostResources {
@@ -285,6 +340,8 @@ impl Sampler {
             memory_estimated: false,
             child_count: None,
             state: None,
+            start_time_unix_ms: None,
+            children: Vec::new(),
             unknown_reason: Some(reason),
         };
 
@@ -309,25 +366,88 @@ impl Sampler {
         let mut memory = 0_u64;
         let mut cpu = 0.0_f64;
         let mut found = 0_u32;
+        // `(pid, startTime)` and not the pid alone: a table that changed under
+        // the walk can name a recycled pid twice, and counting its memory
+        // twice would inflate the session it was recycled into (design §8).
+        let mut seen: HashSet<ProcessKey> = HashSet::new();
+        let mut listed: Vec<ProcessSample> = Vec::new();
         for pid in &tree {
             let Some(process) = self.system.process(*pid) else {
                 continue;
             };
+            let sample = process_sample(*pid, process, baseline);
+            if !seen.insert(sample.key()) {
+                continue;
+            }
             found += 1;
             memory = memory.saturating_add(process.memory());
             cpu += f64::from(process.cpu_usage());
+            if *pid != root {
+                listed.push(sample);
+            }
         }
+        // Heaviest first, so the truncated tail is the part nobody was looking
+        // for. Ties keep a stable pid order rather than shuffling every sample.
+        listed.sort_by(|left, right| {
+            right
+                .memory_bytes
+                .cmp(&left.memory_bytes)
+                .then_with(|| left.pid.cmp(&right.pid))
+        });
+        listed.truncate(MAX_LISTED_CHILDREN);
 
         let mut sample = unknown("warming-up");
         sample.memory_bytes = Some(memory);
         sample.memory_estimated = true;
         sample.child_count = Some(found.saturating_sub(1));
         sample.state = Some(leader.status().to_string().to_ascii_lowercase());
+        sample.start_time_unix_ms = start_time_unix_ms(leader);
+        sample.children = listed;
         if baseline {
             sample.cpu_percent = Some(round(cpu));
             sample.unknown_reason = None;
         }
         sample
+    }
+}
+
+/// One refresh's view of the host, the requested sessions and Armadra's own
+/// processes. One struct so the three always come from the same refresh.
+pub struct Sample {
+    pub host: HostResources,
+    pub sessions: Vec<SessionResources>,
+    pub components: Vec<PlatformComponent>,
+}
+
+/// `sysinfo` reports the start time in whole seconds since the epoch, and `0`
+/// when it does not know — which is a missing measurement, not 1970.
+pub fn start_time_unix_ms(process: &sysinfo::Process) -> Option<i64> {
+    let seconds = process.start_time();
+    (seconds > 0).then(|| (seconds as i64).saturating_mul(1_000))
+}
+
+/// The executable's file name, without a Windows extension. Falls back to the
+/// process name when the platform will not hand over a path.
+pub fn executable_name(process: &sysinfo::Process) -> String {
+    process
+        .exe()
+        .and_then(|path| path.file_name())
+        .unwrap_or_else(|| process.name())
+        .to_string_lossy()
+        .trim_end_matches(".exe")
+        .to_owned()
+}
+
+pub fn process_sample(pid: Pid, process: &sysinfo::Process, baseline: bool) -> ProcessSample {
+    ProcessSample {
+        pid: i64::from(pid.as_u32()),
+        start_time_unix_ms: start_time_unix_ms(process),
+        name: executable_name(process),
+        parent_pid: process.parent().map(|pid| i64::from(pid.as_u32())),
+        memory_bytes: Some(process.memory()),
+        // The first refresh of a process has nothing to subtract from, so its
+        // CPU is unknown rather than an idle-looking zero.
+        cpu_percent: baseline.then(|| round(f64::from(process.cpu_usage()))),
     }
 }
 

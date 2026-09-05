@@ -79,6 +79,17 @@ const snapshot: ResourceSnapshot = {
       memoryEstimated: true,
       childCount: 1,
       state: "runnable",
+      startTimeUnixMs: 1_788_556_300_000,
+      children: [
+        {
+          pid: 101,
+          startTimeUnixMs: 1_788_556_301_000,
+          name: "node",
+          parentPid: 100,
+          memoryBytes: 2_097_152,
+          cpuPercent: 42.5,
+        },
+      ],
       unknownReason: null,
     },
     {
@@ -97,7 +108,26 @@ const snapshot: ResourceSnapshot = {
       memoryEstimated: false,
       childCount: null,
       state: null,
+      startTimeUnixMs: null,
+      children: [],
       unknownReason: "remote",
+    },
+  ],
+  components: [
+    {
+      kind: "runtime",
+      process: {
+        pid: 90,
+        startTimeUnixMs: 1_788_556_200_000,
+        name: "armadra-runtime",
+        parentPid: 1,
+        memoryBytes: 41_943_040,
+        cpuPercent: 1.2,
+      },
+      tree: false,
+      childCount: null,
+      children: [],
+      unknownReason: null,
     },
   ],
   orphans: [
@@ -139,6 +169,7 @@ beforeEach(() => {
     subscriptionId: "sub-1",
     workspaceId: "w-1",
     intervalMs: 2_000,
+    effectiveIntervalMs: 2_000,
     expiresAt: "2026-09-05T10:00:06+00:00",
   });
   unsubscribeResources.mockResolvedValue(undefined);

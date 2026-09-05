@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   orphanSessionSchema,
+  platformComponentSchema,
   powerLeaseRequestSchema,
   powerStateSchema,
   resourceSnapshotSchema,
@@ -58,8 +59,61 @@ const session = {
   memoryEstimated: true,
   childCount: 1,
   state: "runnable",
+  startTimeUnixMs: 1788556300000,
+  children: [
+    {
+      pid: 70923,
+      startTimeUnixMs: 1788556301000,
+      name: "node",
+      parentPid: 70922,
+      memoryBytes: 1048576,
+      cpuPercent: 12.5,
+    },
+  ],
   unknownReason: null,
 };
+
+const components = [
+  {
+    kind: "runtime" as const,
+    process: {
+      pid: 70900,
+      startTimeUnixMs: 1788556200000,
+      name: "armadra-runtime",
+      parentPid: 1,
+      memoryBytes: 41943040,
+      cpuPercent: 1.2,
+    },
+    tree: false,
+    childCount: null,
+    children: [],
+    unknownReason: null,
+  },
+  {
+    kind: "commandWorker" as const,
+    process: {
+      pid: 70901,
+      startTimeUnixMs: 1788556210000,
+      name: "armadra-runtime",
+      parentPid: 70890,
+      memoryBytes: 12582912,
+      cpuPercent: 0,
+    },
+    tree: true,
+    childCount: 1,
+    children: [
+      {
+        pid: 70902,
+        startTimeUnixMs: 1788556211000,
+        name: "rg",
+        parentPid: 70901,
+        memoryBytes: 2097152,
+        cpuPercent: null,
+      },
+    ],
+    unknownReason: null,
+  },
+];
 
 const power = {
   policy: "manual" as const,
@@ -91,6 +145,7 @@ const snapshot = {
   workspaceId: session.workspaceId,
   host,
   sessions: [session],
+  components,
   orphans: [],
   power,
   intervalMs: 2000,
@@ -166,6 +221,52 @@ describe("资源采样", () => {
     expect(parsed.memoryBytes).toBeNull();
   });
 
+  it("平台组件与用户会话分开，进程按 pid + startTime 认身份", () => {
+    const parsed = resourceSnapshotSchema.parse(snapshot);
+    const runtime = parsed.components.find((it) => it.kind === "runtime")!;
+    // Runtime 只算自己：它的子进程就是用户会话，已经各有各的行。
+    expect(runtime.tree).toBe(false);
+    expect(runtime.childCount).toBeNull();
+    expect(parsed.sessions.map((it) => it.pid)).not.toContain(
+      runtime.process.pid,
+    );
+
+    // 命令 Worker 反过来算整棵树，它跑的命令就是它存在的理由。
+    const worker = parsed.components.find((it) => it.kind === "commandWorker")!;
+    expect(worker.tree).toBe(true);
+    expect(worker.children[0]?.name).toBe("rg");
+    // 测得的 0 与测不出来是两句话，schema 两个都收。
+    expect(worker.process.cpuPercent).toBe(0);
+    expect(worker.children[0]?.cpuPercent).toBeNull();
+
+    // 每个进程的身份是 pid + startTime，光看 pid 会把回收的号码认混。
+    const keys = parsed.components.map(
+      (it) => `${it.process.pid}:${it.process.startTimeUnixMs}`,
+    );
+    expect(new Set(keys).size).toBe(keys.length);
+
+    expect(
+      platformComponentSchema.safeParse({ ...runtime, kind: "browser" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("会话带上进程树；列表被截断时 childCount 仍是真实总数", () => {
+    const parsed = sessionResourcesSchema.parse(session);
+    expect(parsed.children).toHaveLength(1);
+    expect(parsed.children[0]?.parentPid).toBe(parsed.pid);
+    expect(parsed.startTimeUnixMs).toBe(1788556300000);
+
+    const truncated = sessionResourcesSchema.parse({
+      ...session,
+      childCount: 400,
+      children: session.children,
+    });
+    // 空列表配非零 childCount 表示「没列出来」，不表示「没有子进程」。
+    expect(truncated.childCount).toBe(400);
+    expect(truncated.children.length).toBeLessThan(truncated.childCount!);
+  });
+
   it("采样通过工作空间事件流推送", () => {
     const event = workspaceEventSchema.parse({
       type: "resource.sample",
@@ -181,15 +282,19 @@ describe("资源采样", () => {
     const parsed = resourceSubscriptionSchema.parse({
       subscriptionId: "sub-1",
       workspaceId: session.workspaceId,
-      intervalMs: 2000,
+      intervalMs: 30000,
+      effectiveIntervalMs: 2000,
       expiresAt: "2026-09-05T10:00:06+00:00",
     });
-    expect(parsed.intervalMs).toBe(2000);
+    // 自己按 30s 续约，看到的却是别人要来的 2s 采样。
+    expect(parsed.intervalMs).toBe(30000);
+    expect(parsed.effectiveIntervalMs).toBe(2000);
     expect(
       resourceSubscriptionSchema.safeParse({
         subscriptionId: "sub-1",
         workspaceId: session.workspaceId,
         intervalMs: 0,
+        effectiveIntervalMs: 2000,
         expiresAt: sampledAt,
       }).success,
     ).toBe(false);

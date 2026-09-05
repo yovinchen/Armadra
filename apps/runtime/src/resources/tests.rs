@@ -239,11 +239,11 @@ async fn ssh_sessions_are_remote_and_carry_no_numbers() {
 #[test]
 fn the_first_sample_reports_unknown_cpu_instead_of_a_fake_zero() {
     let mut sampler = Sampler::new();
-    let (host, _) = sampler.sample(&[]);
+    let host = sampler.sample(&[]).host;
     assert_eq!(host.cpu_percent, None);
     // Memory needs no baseline and is available immediately.
     assert!(host.memory.total_bytes.is_some());
-    let (host, _) = sampler.sample(&[]);
+    let host = sampler.sample(&[]).host;
     assert!(host.cpu_percent.is_some());
 }
 
@@ -354,6 +354,7 @@ async fn a_subscription_is_renewed_in_place() {
         &fixture.workspace_id,
         &SubscribeRequest {
             subscription_id: Some(first.subscription_id.clone()),
+            interval_ms: None,
         },
     );
     assert_eq!(renewed.subscription_id, first.subscription_id);
@@ -364,11 +365,246 @@ async fn a_subscription_is_renewed_in_place() {
         &fixture.workspace_id,
         &SubscribeRequest {
             subscription_id: Some("long-gone".into()),
+            interval_ms: None,
         },
     );
     assert_ne!(replaced.subscription_id, "long-gone");
     fixture.resources().unsubscribe(&first.subscription_id);
     fixture.resources().unsubscribe(&replaced.subscription_id);
+}
+
+/// An offscreen node badge asks for a slow cadence and gets it; an open panel
+/// asking for the configured one brings everybody back to it (roadmap §4.3).
+/// A subscriber can always ask for *less* work and never for more.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_slow_subscriber_slows_sampling_and_a_fast_one_speeds_it_up_again() {
+    let fixture = fixture().await;
+    let slow = fixture.resources().subscribe(
+        &fixture.state,
+        &fixture.workspace_id,
+        &SubscribeRequest {
+            subscription_id: None,
+            interval_ms: Some(30_000),
+        },
+    );
+    assert_eq!(slow.interval_ms, 30_000, "an offscreen badge asked for 30s");
+    assert_eq!(
+        slow.effective_interval_ms, 30_000,
+        "nobody else is watching, so the loop runs at the slow cadence"
+    );
+
+    // The panel opens and asks for the configured interval.
+    let panel = fixture.resources().subscribe(
+        &fixture.state,
+        &fixture.workspace_id,
+        &SubscribeRequest::default(),
+    );
+    assert_eq!(panel.interval_ms, 500);
+    assert_eq!(
+        panel.effective_interval_ms, 500,
+        "one fast subscriber sets the cadence for everybody"
+    );
+    // …and the slow subscriber's own renewal cadence is unchanged: it renews
+    // every 30s, it just happens to see faster samples while the panel is up.
+    let renewed = fixture.resources().subscribe(
+        &fixture.state,
+        &fixture.workspace_id,
+        &SubscribeRequest {
+            subscription_id: Some(slow.subscription_id.clone()),
+            interval_ms: Some(30_000),
+        },
+    );
+    assert_eq!(renewed.interval_ms, 30_000);
+    assert_eq!(renewed.effective_interval_ms, 500);
+
+    // The setting is the budget: asking for 1ms does not buy a faster loop.
+    let greedy = fixture.resources().subscribe(
+        &fixture.state,
+        &fixture.workspace_id,
+        &SubscribeRequest {
+            subscription_id: None,
+            interval_ms: Some(1),
+        },
+    );
+    assert_eq!(greedy.interval_ms, 500);
+
+    // Nor does asking for an hour park a subscription that never samples.
+    let lazy = fixture.resources().subscribe(
+        &fixture.state,
+        &fixture.workspace_id,
+        &SubscribeRequest {
+            subscription_id: None,
+            interval_ms: Some(3_600_000),
+        },
+    );
+    assert_eq!(lazy.interval_ms, 60_000);
+
+    for id in [
+        slow.subscription_id,
+        panel.subscription_id,
+        greedy.subscription_id,
+        lazy.subscription_id,
+    ] {
+        fixture.resources().unsubscribe(&id);
+    }
+}
+
+/// A slow subscriber must not make an opening panel wait out the slow cadence
+/// it had already committed to: the loop is woken when somebody asks faster.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_opening_panel_does_not_wait_out_an_offscreen_badge_s_interval() {
+    let fixture = fixture().await;
+    let mut stream = fixture.events().subscribe(&fixture.workspace_id);
+    let slow = fixture.resources().subscribe(
+        &fixture.state,
+        &fixture.workspace_id,
+        &SubscribeRequest {
+            subscription_id: None,
+            interval_ms: Some(30_000),
+        },
+    );
+    // The loop is now asleep for 30 seconds.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(stream.try_recv().is_err());
+
+    let panel = fixture.resources().subscribe(
+        &fixture.state,
+        &fixture.workspace_id,
+        &SubscribeRequest::default(),
+    );
+    let sample = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Ok(WorkspaceEvent::ResourceSample { snapshot }) = stream.recv().await {
+                return snapshot;
+            }
+        }
+    })
+    .await
+    .expect("the panel must not wait 30 seconds for its first pushed sample");
+    assert_eq!(sample.interval_ms, 500);
+
+    fixture.resources().unsubscribe(&slow.subscription_id);
+    fixture.resources().unsubscribe(&panel.subscription_id);
+}
+
+/* --------------------------- platform components -------------------------- */
+
+/// Armadra's own processes are reported apart from the user's sessions, and
+/// the runtime row is this very process measured on its own — its children are
+/// the sessions, which have their own rows (design §8 "平台组件").
+#[tokio::test(flavor = "multi_thread")]
+async fn platform_components_are_listed_apart_from_user_sessions() {
+    let fixture = fixture().await;
+    let session = fixture
+        .terminals()
+        .spawn(SpawnRequest {
+            command: Some("/bin/sh".into()),
+            args: vec!["-c".into(), "sleep 30".into()],
+            ..SpawnRequest::plain(fixture.workspace_id.clone(), fixture.root.clone())
+        })
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let snapshot = fixture.snapshot(true).await;
+
+    let runtime = snapshot
+        .components
+        .iter()
+        .find(|component| component.kind == super::platform::ComponentKind::Runtime)
+        .expect("the runtime always reports itself");
+    assert_eq!(runtime.process.pid, i64::from(std::process::id()));
+    assert!(!runtime.tree, "the runtime is measured on its own");
+    assert!(runtime.process.memory_bytes.is_some_and(|rss| rss > 0));
+
+    // The spawned session is a child of this process, and it must be counted
+    // in its own row rather than folded into the platform's total.
+    let measured = snapshot
+        .sessions
+        .iter()
+        .find(|entry| entry.session_id == session.id)
+        .unwrap();
+    assert!(measured.memory_bytes.is_some());
+    assert!(
+        !snapshot
+            .components
+            .iter()
+            .any(|component| Some(component.process.pid) == measured.pid),
+        "a user session must never be listed as a platform component"
+    );
+
+    // Every component is a distinct process: pid *and* start time.
+    let mut keys: Vec<(i64, Option<i64>)> = snapshot
+        .components
+        .iter()
+        .map(|component| component.process.key())
+        .collect();
+    let listed = keys.len();
+    keys.sort();
+    keys.dedup();
+    assert_eq!(listed, keys.len(), "a process was reported twice");
+
+    let json = serde_json::to_value(runtime).unwrap();
+    assert_eq!(json["kind"], "runtime");
+    assert!(json["process"]["startTimeUnixMs"].is_i64());
+
+    fixture
+        .terminals()
+        .terminate(&session.id, TerminateMode::Session)
+        .await
+        .unwrap();
+}
+
+/// The panel's expandable tree needs the children themselves, not just a
+/// count — and the count stays the real total even when the list is capped.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_session_lists_the_processes_under_it() {
+    let fixture = fixture().await;
+    let session = fixture
+        .terminals()
+        .spawn(SpawnRequest {
+            command: Some("/bin/sh".into()),
+            args: vec!["-c".into(), "sleep 30".into()],
+            ..SpawnRequest::plain(fixture.workspace_id.clone(), fixture.root.clone())
+        })
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let snapshot = fixture.snapshot(true).await;
+    let measured = snapshot
+        .sessions
+        .iter()
+        .find(|entry| entry.session_id == session.id)
+        .unwrap();
+
+    assert_eq!(
+        measured.child_count,
+        Some(measured.children.len() as u32),
+        "nothing was truncated in a two-process tree: {measured:?}"
+    );
+    assert!(
+        measured.children.len() <= super::sample::MAX_LISTED_CHILDREN,
+        "the listed tree is bounded"
+    );
+    assert!(measured.start_time_unix_ms.is_some_and(|at| at > 0));
+    for child in &measured.children {
+        assert_ne!(
+            child.pid,
+            measured.pid.unwrap(),
+            "the leader is not a child"
+        );
+        assert!(!child.name.is_empty());
+        assert!(child.memory_bytes.is_some());
+    }
+
+    let json = serde_json::to_value(measured).unwrap();
+    assert!(json["children"].is_array());
+    assert!(json["startTimeUnixMs"].is_i64());
+
+    fixture
+        .terminals()
+        .terminate(&session.id, TerminateMode::Session)
+        .await
+        .unwrap();
 }
 
 /* -------------------------------- orphans --------------------------------- */

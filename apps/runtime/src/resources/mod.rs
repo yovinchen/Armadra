@@ -29,6 +29,7 @@
 
 pub mod inhibit;
 pub mod orphans;
+pub mod platform;
 pub mod platform_power;
 pub mod power;
 pub mod routes;
@@ -50,6 +51,7 @@ use uuid::Uuid;
 use crate::{AppState, error::AppResult, events::WorkspaceEvent, settings::SettingsStore};
 
 use orphans::OrphanSession;
+use platform::PlatformComponent;
 use power::{PowerService, PowerState};
 use sample::{HostResources, Sampler, SessionResources, SessionTarget};
 
@@ -60,6 +62,12 @@ const TTL_INTERVALS: u32 = 3;
 const MIN_SUBSCRIPTION_TTL: Duration = Duration::from_secs(10);
 const MAX_SUBSCRIPTIONS: usize = 32;
 
+/// The slowest cadence a subscriber may ask for. A node badge that scrolled
+/// off screen asks for 30s (roadmap §4.3); this is the ceiling on that, so a
+/// client cannot park a subscription that samples once an hour and then
+/// present the result as current.
+const MAX_REQUESTED_INTERVAL: Duration = Duration::from_secs(60);
+
 /// One resource sample, as `GET …/resources` answers it and as the
 /// `resource.sample` event carries it.
 #[derive(Debug, Clone, Serialize)]
@@ -68,8 +76,12 @@ pub struct ResourceSnapshot {
     pub workspace_id: String,
     pub host: HostResources,
     pub sessions: Vec<SessionResources>,
+    /// Armadra's own processes, listed apart from the user's sessions.
+    pub components: Vec<PlatformComponent>,
     pub orphans: Vec<OrphanSession>,
     pub power: PowerState,
+    /// The cadence the loop is actually running at right now: the fastest any
+    /// live subscription asked for.
     pub interval_ms: u64,
     pub sampled_at: String,
 }
@@ -81,7 +93,12 @@ pub struct ResourceSnapshot {
 pub struct Subscription {
     pub subscription_id: String,
     pub workspace_id: String,
+    /// This subscription's own cadence, which is what it should renew at. It
+    /// is not necessarily how often samples arrive: another subscriber may be
+    /// asking for faster ones, and everybody sees those.
     pub interval_ms: u64,
+    /// What the sampling loop is running at, given every live subscription.
+    pub effective_interval_ms: u64,
     pub expires_at: String,
 }
 
@@ -93,11 +110,19 @@ pub struct SubscribeRequest {
     /// client learns the new id from the response.
     #[serde(default)]
     pub subscription_id: Option<String>,
+    /// How often this subscriber needs a sample. A node badge that is off
+    /// screen asks for a slow one (roadmap §4.3); the open panel asks for the
+    /// configured interval. Clamped to `[resources.intervalMs, 60s]`, so a
+    /// client can ask for less work but never for more than the setting
+    /// allows.
+    #[serde(default)]
+    pub interval_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
 struct Watcher {
     workspace_id: String,
+    interval: Duration,
     expires_at: DateTime<Utc>,
 }
 
@@ -112,6 +137,9 @@ struct Inner {
     /// A sampling loop is running. Reset when it exits so that the next
     /// subscription starts a new one.
     pumping: Mutex<bool>,
+    /// Fired when a new subscription makes the cadence faster, so the running
+    /// loop stops waiting out the slower one it had already committed to.
+    wake: tokio::sync::Notify,
 }
 
 /// Cloning shares the subscriptions, the sampler and the power leases.
@@ -129,6 +157,7 @@ impl ResourceService {
                 watchers: Mutex::new(HashMap::new()),
                 sampler: Arc::new(Mutex::new(Sampler::new())),
                 pumping: Mutex::new(false),
+                wake: tokio::sync::Notify::new(),
             }),
         }
     }
@@ -137,8 +166,36 @@ impl ResourceService {
         &self.inner.power
     }
 
+    /// The configured cadence: the fastest any subscriber may ask for.
     fn interval(&self) -> Duration {
         Duration::from_millis(self.inner.settings.resource_interval_ms())
+    }
+
+    /// What one subscriber is granted. A request for something slower is
+    /// honoured; a request for something faster than the setting is not,
+    /// because the setting is the budget.
+    fn granted_interval(&self, requested: Option<u64>) -> Duration {
+        let configured = self.interval();
+        match requested {
+            Some(millis) => Duration::from_millis(millis)
+                .clamp(configured, MAX_REQUESTED_INTERVAL.max(configured)),
+            None => configured,
+        }
+    }
+
+    /// The cadence the loop runs at: the fastest any live subscription wants.
+    /// One visible node badge is therefore enough to bring everybody back to
+    /// the configured interval, and a board full of offscreen ones costs a
+    /// sample every 30 seconds.
+    fn effective_interval(&self) -> Duration {
+        let now = Utc::now();
+        let mut watchers = self.watchers();
+        watchers.retain(|_, watcher| watcher.expires_at > now);
+        watchers
+            .values()
+            .map(|watcher| watcher.interval)
+            .min()
+            .unwrap_or_else(|| self.interval())
     }
 
     fn watchers(&self) -> std::sync::MutexGuard<'_, HashMap<String, Watcher>> {
@@ -156,14 +213,15 @@ impl ResourceService {
         workspace_id: &str,
         request: &SubscribeRequest,
     ) -> Subscription {
-        let interval = self.interval();
+        let interval = self.granted_interval(request.interval_ms);
         let ttl = (interval * TTL_INTERVALS).max(MIN_SUBSCRIPTION_TTL);
         let expires_at = Utc::now() + chrono::Duration::from_std(ttl).unwrap_or_default();
 
-        let id = {
+        let (id, was) = {
             let mut watchers = self.watchers();
             let now = Utc::now();
             watchers.retain(|_, watcher| watcher.expires_at > now);
+            let was = watchers.values().map(|watcher| watcher.interval).min();
             let renewing = request
                 .subscription_id
                 .as_ref()
@@ -187,16 +245,25 @@ impl ResourceService {
                 id.clone(),
                 Watcher {
                     workspace_id: workspace_id.to_owned(),
+                    interval,
                     expires_at,
                 },
             );
-            id
+            (id, was)
         };
+        // Only a *faster* cadence has to interrupt a wait already in progress.
+        // A renewal at the current cadence must not, or a loop whose renewals
+        // arrive every interval would restart its wait forever and never
+        // sample at all.
+        if was.is_none_or(|previous| interval < previous) {
+            self.inner.wake.notify_waiters();
+        }
         self.ensure_pump(state);
         Subscription {
             subscription_id: id,
             workspace_id: workspace_id.to_owned(),
             interval_ms: interval.as_millis() as u64,
+            effective_interval_ms: self.effective_interval().as_millis() as u64,
             expires_at: expires_at.to_rfc3339(),
         }
     }
@@ -255,7 +322,7 @@ impl ResourceService {
         // filesystems, and priming sleeps for the platform's minimum CPU
         // window: blocking work that must not sit on an async worker.
         let sampler = self.inner.sampler.clone();
-        let (host, sessions) = tokio::task::spawn_blocking(move || {
+        let sample = tokio::task::spawn_blocking(move || {
             let mut guard = sampler
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -268,12 +335,13 @@ impl ResourceService {
 
         Ok(ResourceSnapshot {
             workspace_id: workspace_id.to_owned(),
-            sampled_at: host.sampled_at.clone(),
-            host,
-            sessions,
+            sampled_at: sample.host.sampled_at.clone(),
+            host: sample.host,
+            sessions: sample.sessions,
+            components: sample.components,
             orphans,
             power: self.inner.power.state(),
-            interval_ms: self.interval().as_millis() as u64,
+            interval_ms: self.effective_interval().as_millis() as u64,
         })
     }
 
@@ -297,8 +365,25 @@ impl ResourceService {
         let state = state.clone();
         tokio::spawn(async move {
             let service = state.resources.clone();
+            let mut last = tokio::time::Instant::now();
             loop {
-                tokio::time::sleep(service.interval()).await;
+                // The cadence is re-read every pass rather than captured once:
+                // a panel opening over a board of offscreen badges must not
+                // have to wait out the slow interval that was in force when
+                // this loop last went to sleep. `wake` is fired only when the
+                // cadence gets *faster*, so a renewal at the current cadence
+                // cannot starve sampling by restarting the wait forever.
+                let interval = service.effective_interval();
+                let elapsed = last.elapsed();
+                if elapsed < interval {
+                    let wake = service.inner.wake.notified();
+                    tokio::select! {
+                        _ = tokio::time::sleep(interval - elapsed) => {}
+                        _ = wake => {}
+                    }
+                    continue;
+                }
+                last = tokio::time::Instant::now();
                 let workspaces = service.subscribed_workspaces();
                 if workspaces.is_empty() {
                     *service

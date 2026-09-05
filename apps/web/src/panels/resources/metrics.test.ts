@@ -61,6 +61,8 @@ const session = (patch: Partial<SessionResources> = {}): SessionResources => ({
   memoryEstimated: true,
   childCount: 0,
   state: "runnable",
+  startTimeUnixMs: 1_788_556_300_000,
+  children: [],
   unknownReason: null,
   ...patch,
 });

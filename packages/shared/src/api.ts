@@ -1093,6 +1093,23 @@ export const resourceUnknownReasonSchema = z.enum([
   "warming-up",
 ]);
 
+/**
+ * One process the runtime measured.
+ *
+ * Identity is the pair `(pid, startTimeUnixMs)`: operating systems reuse pids,
+ * so a pid on its own would let a process that died merge with an unrelated
+ * one that inherited its number (design §8 "按 PID + startTime 去重").
+ * `name` is the executable's file name — never a command line.
+ */
+export const processSampleSchema = z.object({
+  pid: z.number().int(),
+  startTimeUnixMs: z.number().int().nullable(),
+  name: z.string(),
+  parentPid: z.number().int().nullable(),
+  memoryBytes: z.number().int().nonnegative().nullable(),
+  cpuPercent: z.number().nonnegative().nullable(),
+});
+
 export const sessionResourcesSchema = z.object({
   sessionId: z.string(),
   sessionKey: z.string(),
@@ -1115,6 +1132,28 @@ export const sessionResourcesSchema = z.object({
   memoryEstimated: z.boolean(),
   childCount: z.number().int().nonnegative().nullable(),
   state: z.string().nullable(),
+  /** The leader's start time, so a restarted session is not a reused pid. */
+  startTimeUnixMs: z.number().int().nullable(),
+  /**
+   * The tree under the leader, heaviest first and capped by the runtime. An
+   * empty list next to a non-zero `childCount` means "not listed", not "none".
+   */
+  children: z.array(processSampleSchema),
+  unknownReason: resourceUnknownReasonSchema.nullable(),
+});
+
+/**
+ * One of Armadra's own processes, reported apart from the user's sessions
+ * (design §8 "平台组件"). The runtime row is measured on its own — `tree` is
+ * false — because its children are the sessions, which have their own rows and
+ * would otherwise be counted twice.
+ */
+export const platformComponentSchema = z.object({
+  kind: z.enum(["runtime", "host", "commandWorker"]),
+  process: processSampleSchema,
+  tree: z.boolean(),
+  childCount: z.number().int().nonnegative().nullable(),
+  children: z.array(processSampleSchema),
   unknownReason: resourceUnknownReasonSchema.nullable(),
 });
 
@@ -1202,17 +1241,28 @@ export const resourceSnapshotSchema = z.object({
   workspaceId: z.string(),
   host: hostResourcesSchema,
   sessions: z.array(sessionResourcesSchema),
+  /** Armadra's own processes, never mixed into the session rows. */
+  components: z.array(platformComponentSchema),
   orphans: z.array(orphanSessionSchema),
   power: powerStateSchema,
+  /** The cadence the runtime is actually sampling at right now. */
   intervalMs: z.number().int().positive(),
   sampledAt: z.string(),
 });
 
-/** `POST …/resources/subscription` — sampling only runs while this is live. */
+/**
+ * `POST …/resources/subscription` — sampling only runs while this is live.
+ *
+ * `intervalMs` is this subscriber's own cadence and is what it should renew
+ * at; an offscreen node badge asks for a slow one. `effectiveIntervalMs` is
+ * what the runtime is running at given every live subscription, which may be
+ * faster because somebody else asked for it.
+ */
 export const resourceSubscriptionSchema = z.object({
   subscriptionId: z.string(),
   workspaceId: z.string(),
   intervalMs: z.number().int().positive(),
+  effectiveIntervalMs: z.number().int().positive(),
   expiresAt: z.string(),
 });
 
@@ -1575,6 +1625,9 @@ export type WorkspaceEvent = z.infer<typeof workspaceEventSchema>;
 export type ResourceLocation = z.infer<typeof resourceLocationSchema>;
 export type HostResources = z.infer<typeof hostResourcesSchema>;
 export type SessionResources = z.infer<typeof sessionResourcesSchema>;
+export type ProcessSample = z.infer<typeof processSampleSchema>;
+export type PlatformComponent = z.infer<typeof platformComponentSchema>;
+export type PlatformComponentKind = PlatformComponent["kind"];
 export type ResourceUnknownReason = z.infer<typeof resourceUnknownReasonSchema>;
 export type OrphanSession = z.infer<typeof orphanSessionSchema>;
 export type AdoptedSession = z.infer<typeof adoptedSessionSchema>;
