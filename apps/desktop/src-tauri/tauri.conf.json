@@ -51,7 +51,8 @@
     ],
     "externalBin": [
       "../../../target/release/armadra-runtime",
-      "../../../target/release/armadra-hook"
+      "../../../target/release/armadra-hook",
+      "../../../target/release/armadra-host"
     ],
     "macOS": {
       "minimumSystemVersion": "13.3"

@@ -11,18 +11,60 @@ Tauri 2 薄桌面壳。
 ```bash
 pnpm --filter @armadra/desktop dev     # 需要 cargo run -p armadra-runtime 已在跑
 pnpm --filter @armadra/desktop build
-pnpm --filter @armadra/desktop prepare:sidecar   # 只准备 sidecar 二进制
+pnpm --filter @armadra/desktop prepare:sidecar   # 准备 Runtime、Hook 和 Go Host
+pnpm --filter @armadra/desktop prepare:host --native   # 仅准备本机 Go Host
+pnpm --filter @armadra/desktop test
 cargo check -p armadra-desktop
 ```
 
 ## Sidecar
 
-`scripts/prepare-sidecar.mjs` 用 `cargo build --release` 编出 `armadra-runtime` 与
-`armadra-hook`，按 Rust host target triple 重命名复制到 `target/release/`，
-再由 `tauri.conf.json` 的 `bundle.externalBin` 打进包里。交叉编译时设
-`CARGO_BUILD_TARGET`，或让 Tauri 传 `TAURI_ENV_TARGET_TRIPLE`。
+`scripts/prepare-sidecar.mjs` 保留 `cargo build --release` 构建 `armadra-runtime` 与
+`armadra-hook`，再以 `CGO_ENABLED=0` 构建 Go `armadra-host`。三个真实二进制均按 Rust
+target triple 暂存到 `target/release/<binary>-<triple>[.exe]`，由
+`tauri.conf.json` 的 `bundle.externalBin` 打包。Hook 客户端用于注入 Agent 终端。
 
-`armadra-hook` 也随包分发：它是注入每个 Agent 终端的 hook 客户端。
+`pnpm --filter @armadra/desktop dev` 的 `predev` 会先准备本机 Go Host。独立运行：
+
+```sh
+pnpm --filter @armadra/desktop prepare:host --native
+pnpm --filter @armadra/desktop prepare:host --release --target x86_64-pc-windows-msvc
+```
+
+开发产物默认是仓库 `target/debug/armadra-host`，Windows 为 `armadra-host.exe`。
+`--native` 忽略交叉目标环境变量，确保本机开发不会误用 Windows/Linux 二进制。
+若指定 `CARGO_TARGET_DIR`，绝对路径直接使用，相对路径始终按仓库根目录解析；本机
+开发产物在该目录的 `debug/` 下。显式 `--target` 的产物放到该目录的
+`<triple>/debug/` 或 `<triple>/release/` 下。
+
+Tauri 的构建脚本在开发阶段也会检查 externalBin，因此本机开发准备会同时暂存真实
+Host 到固定的 `target/release/armadra-host-<triple>[.exe]`。生产
+`prepare:sidecar` 会重新构建 release Host，再覆盖该暂存文件；不能将开发暂存解释为
+生产安装包已经通过验证。`CARGO_TARGET_DIR` 只改变构建来源目录，Tauri 暂存目录保持
+与配置一致。脚本只构建与复制文件，不启动后台 Host 或安装系统工具。
+
+目标选择顺序为显式 `--target`（仅 prepare:host）→ `TAURI_ENV_TARGET_TRIPLE` →
+`CARGO_BUILD_TARGET` → Rust host triple。Rust Runtime/Hook 继续遵守原有 Cargo
+`--target` 与自定义 target-dir 行为。Go Host 仅接受以下明确映射，其他 triple 在构建前失败：
+
+| Rust target                                                | GOOS / GOARCH          |
+| ---------------------------------------------------------- | ---------------------- |
+| `aarch64-apple-darwin` / `x86_64-apple-darwin`             | darwin / arm64、amd64  |
+| `aarch64-unknown-linux-gnu` / `x86_64-unknown-linux-gnu`   | linux / arm64、amd64   |
+| `aarch64-unknown-linux-musl` / `x86_64-unknown-linux-musl` | linux / arm64、amd64   |
+| `aarch64-pc-windows-msvc` / `x86_64-pc-windows-msvc`       | windows / arm64、amd64 |
+| `x86_64-pc-windows-gnu`                                    | windows / amd64        |
+
+Go 构建使用项目锁定依赖、`-mod=readonly`、`-trimpath` 和本地工具链
+`GOTOOLCHAIN=local`；release 额外去掉调试符号。Go 缓存统一在仓库
+`target/protocol-go/`，默认使用 PATH 中的 `go`，也可通过 `ARMADRA_GO_BINARY` 指定
+已安装的可执行文件路径。缺失 Go/Rust 或不满足项目工具链版本会报错，不自动安装。
+路径和参数通过进程 argv 传递，支持包含空格的仓库与构建输出目录。
+
+2026-09-05 在 macOS arm64 实际构建本机 Host，并执行 `--help` 验证可运行；Windows
+x64/arm64 交叉构建只验证产生对应 PE 工件，不代表 Windows 安装包、签名或实机启动
+通过。纯目标/路径测试可通过 `pnpm --filter @armadra/desktop test` 重复运行，导入脚本
+不会触发编译或子进程。
 
 ## 插件与能力
 
