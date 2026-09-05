@@ -102,6 +102,40 @@ describe("按 sequence 续订画布事件", () => {
     expect(canvasEventCursor(workspaceId)).toBe(9007199254740994n);
   });
 
+  /**
+   * 同一台 Host 上别的工作空间在忙时，一页里可能一条本工作空间的事件都没有。
+   * 那一段确实已经看过了，游标必须跟上，否则跟随器会一直重扫同一段历史。
+   */
+  it("整页都被过滤掉时游标照样前进，并接着追下一页", async () => {
+    await useCanvasOwnership.getState().probe();
+    resetCanvasEventCursor(workspaceId, 10n);
+    const subscribe = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: "ok",
+        events: [],
+        nextCursor: 60n,
+        hasMore: true,
+        minCursor: 1n,
+        highWatermark: 90n,
+      })
+      .mockResolvedValueOnce({
+        status: "ok",
+        events: [],
+        nextCursor: 90n,
+        hasMore: false,
+        minCursor: 1n,
+        highWatermark: 90n,
+      });
+    const host = client(subscribe);
+    setCanvasHostResolver(async () => host.client);
+
+    expect(await pollCanvasEvents(workspaceId)).toBe("idle");
+    expect(subscribe).toHaveBeenNthCalledWith(1, 10n, 200);
+    expect(subscribe).toHaveBeenNthCalledWith(2, 60n, 200);
+    expect(canvasEventCursor(workspaceId)).toBe(90n);
+  });
+
   it("游标过旧时按快照重置，而不是从保留下限硬续", async () => {
     await useCanvasOwnership.getState().probe();
     resetCanvasEventCursor(workspaceId, 2n);

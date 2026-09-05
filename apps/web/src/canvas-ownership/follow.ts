@@ -25,6 +25,12 @@ import { canvasOwnershipStatus } from "./store";
  */
 export const CANVAS_EVENT_POLL_MS = 3_000;
 
+/**
+ * 一轮最多追多少页。有上限是因为这是一个定时器里的循环：落后很多时先追一段，
+ * 剩下的下一轮继续，而不是把界面卡在一次无界的追赶里。
+ */
+const MAX_CATCH_UP_PAGES = 10;
+
 /** 一轮跟随的结果。每一档都是真状态，没有「大概没事」。 */
 export type CanvasFollowOutcome =
   /** 不是 Host 在写，或这个工作空间还没读过文档：没有可续的位置。 */
@@ -57,22 +63,32 @@ export async function pollCanvasEvents(
   } catch {
     return "unreachable";
   }
+  let position = cursor;
+  let changed = false;
   try {
-    const feed = await client.subscribeEvents(cursor, limit);
-    if (feed.status === "cursorAhead") return "diverged";
-    if (feed.status === "snapshotRequired") {
-      // 只要那个一致的序号；快照的内容由调用方按正常读取路径重取，
-      // 免得同一份文档被两条路各解一遍。
-      const snapshot = await client.getSnapshot("", 1);
-      resetCanvasEventCursor(workspaceId, snapshot.sequence);
-      return "resnapshot";
+    // 一页里可能一条本工作空间的事件都没有——同一台 Host 上别的工作空间在
+    // 忙的时候就是这样。这种页仍然要把游标推到 `nextCursor`：那一段确实已经
+    // 看过了，停在原地会让游标永远追不上，跟随器一直重扫同一段历史。
+    for (let page = 0; page < MAX_CATCH_UP_PAGES; page += 1) {
+      const feed = await client.subscribeEvents(position, limit);
+      if (feed.status === "cursorAhead") return "diverged";
+      if (feed.status === "snapshotRequired") {
+        // 只要那个一致的序号；快照的内容由调用方按正常读取路径重取，
+        // 免得同一份文档被两条路各解一遍。
+        const snapshot = await client.getSnapshot("", 1);
+        resetCanvasEventCursor(workspaceId, snapshot.sequence);
+        return "resnapshot";
+      }
+      changed = changed || feed.events.length > 0;
+      position = feed.nextCursor;
+      resetCanvasEventCursor(workspaceId, position);
+      if (!feed.hasMore) break;
     }
-    if (feed.events.length === 0) return "idle";
-    resetCanvasEventCursor(workspaceId, feed.nextCursor);
-    return "changed";
+    return changed ? "changed" : "idle";
   } catch {
     // 问不到就不动游标：把它当成「没有新事件」会在恢复之后跳过这段。
-    return "unreachable";
+    // 已经推进过的页不回滚——那些确实看过了。
+    return changed ? "changed" : "unreachable";
   }
 }
 
