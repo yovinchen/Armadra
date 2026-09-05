@@ -61,7 +61,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "Local request origin is not allowed")
 			return
 		}
-		if options.Identity != nil && authMethod(r.URL.Path) {
+		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path)) {
 			if origin != options.PublicOrigin {
 				writeError(w, 403, "PERMISSION_DENIED", "Authentication requires the Host HTTPS origin")
 				return
@@ -85,6 +85,10 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			}
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			if automationMethod(r.URL.Path) {
+				automationRequest(w, r, identity, options.Identity, options.Automation)
+				return
+			}
 			identityRequest(w, r, identity, options.Identity)
 			return
 		}
@@ -115,11 +119,12 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			_, _ = io.WriteString(w, "ok\n")
 			return
 		}
-		hello(w, r, identity, options.Identity != nil && options.PublicOrigin != "" && r.TLS != nil)
+		authentication := options.Identity != nil && options.PublicOrigin != "" && r.TLS != nil
+		hello(w, r, identity, authentication, authentication && options.Automation != nil)
 	}), nil
 }
 
-func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentication bool) {
+func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentication, scheduling bool) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
 		writeError(w, http.StatusMethodNotAllowed, "INVALID_ARGUMENT", "POST required")
@@ -162,6 +167,11 @@ func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentica
 	capabilities := []string{"protocol.hello.v1", "host.identity.v1"}
 	if authentication {
 		capabilities = append(capabilities, "identity.browser-session.v1")
+	}
+	// Advertised only when a Worker is actually assembled: a client must never
+	// read this as "plans exist" on a Host that cannot run them.
+	if scheduling {
+		capabilities = append(capabilities, "automation.plans.v1")
 	}
 	writeProto(w, http.StatusOK, &pb.HelloResponse{
 		Protocol:       &pb.ProtocolVersion{Major: ProtocolMajor, Minor: min(request.Protocol.GetMinor(), ProtocolMinor)},

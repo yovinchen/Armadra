@@ -1,6 +1,7 @@
 package server
 
 import (
+	"armadra.local/host/internal/automationhost"
 	"armadra.local/host/internal/identity"
 	"errors"
 	"net"
@@ -17,6 +18,9 @@ type Options struct {
 	AllowedOrigins []string
 	Identity       *identity.Service
 	PublicOrigin   string
+	// Automation is nil when this Host was started without an execution
+	// Worker. Its methods then answer UNSUPPORTED instead of empty data.
+	Automation *automationhost.Service
 }
 
 // ParseOrigin validates a serialized origin and returns its canonical spelling.

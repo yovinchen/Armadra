@@ -131,6 +131,18 @@ func decodeScopes(wire []byte) ([]Scope, error) {
 	}
 	return result, nil
 }
+
+// EncodeScopes / DecodeScopes persist an authorization outside a live session,
+// for example the grant a scheduled dispatch is re-checked against. They store
+// grants only; no credential, cookie or CSRF value belongs in this record.
+func EncodeScopes(input []Scope) ([]byte, error) { return encodeScopes(input) }
+func DecodeScopes(wire []byte) ([]Scope, error)  { return decodeScopes(wire) }
+
+// Permits reports whether recorded grants still cover the required scopes.
+// Required scopes must be constructed explicitly; an empty required list is
+// not an authorization decision and is rejected by callers, not widened here.
+func Permits(grants, required []Scope) bool { return permits(grants, required) }
+
 func permits(grants, required []Scope) bool {
 	for _, request := range required {
 		found := false
