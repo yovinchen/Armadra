@@ -67,6 +67,12 @@ export function useCommandDispatch(): CommandDispatch {
         case "app.sourceControl":
           setPanel("scm", panels.scm === "closed" ? "drawer" : "closed");
           return;
+        case "app.resources":
+          setPanel(
+            "resources",
+            panels.resources === "closed" ? "drawer" : "closed",
+          );
+          return;
         case "canvas.focusMode": {
           const next = state.focusNodeId
             ? null

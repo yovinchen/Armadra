@@ -22,6 +22,7 @@ import { gitStashes } from "./git-stashes";
 import { gitIntegration } from "./git-integration";
 import { gitRepository } from "./git-repository";
 import { fileDrag } from "./file-drag";
+import { resources } from "./resources";
 import { terminal } from "./terminal";
 import { usage } from "./usage";
 
@@ -49,6 +50,7 @@ export const MESSAGE_MODULES = {
   nodes,
   agent,
   terminal,
+  resources,
   sessions,
   ssh,
   host,

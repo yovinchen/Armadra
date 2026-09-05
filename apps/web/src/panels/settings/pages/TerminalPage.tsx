@@ -24,6 +24,23 @@ import { Switch } from "@/ui/switch";
 const TERMINAL_BACKENDS = ["auto", "tmux", "direct"] as const;
 type TerminalBackend = (typeof TERMINAL_BACKENDS)[number];
 
+/**
+ * 防休眠策略（T02，终端宿主设计 §9）。
+ *
+ * 默认是 `manual`：不经用户明确要求，没有任何东西可以让这台机器不睡。
+ * 无论选哪一档，生效的都只有「阻止系统空闲睡眠」这一件事。
+ */
+const POWER_POLICIES = [
+  "never",
+  "agentSessions",
+  "automation",
+  "manual",
+] as const;
+type PowerPolicyChoice = (typeof POWER_POLICIES)[number];
+
+/** 采样间隔。设计 §8 的默认值是 2 秒；关掉面板就不采样，所以这里不给「关」。 */
+const SAMPLE_INTERVALS = [1_000, 2_000, 5_000, 15_000] as const;
+
 /** 断开保留时长（分钟）——§15.2 的 `detachedGraceMinutes`。 */
 const GRACE_CHOICES = [
   { minutes: 60, key: "settings.grace.1h" },
@@ -84,6 +101,56 @@ export function TerminalPage() {
               {GRACE_CHOICES.map((choice) => (
                 <SelectItem key={choice.minutes} value={String(choice.minutes)}>
                   {t(choice.key)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingsRow>
+      </SettingsGroup>
+
+      <SettingsGroup>
+        <SettingsRow
+          label={t("resources.power.policyLabel")}
+          footnote={t("resources.power.policyHint")}
+        >
+          <Select
+            value={settings.data?.power?.policy ?? "manual"}
+            disabled={!settings.data}
+            onValueChange={(value) =>
+              save.mutate({ power: { policy: value as PowerPolicyChoice } })
+            }
+          >
+            <SelectTrigger size="sm" className={CONTROL_WIDTH}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="z-[var(--z-dialog)]">
+              {POWER_POLICIES.map((policy) => (
+                <SelectItem key={policy} value={policy}>
+                  {t(`resources.power.policy.${policy}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingsRow>
+
+        <SettingsRow
+          label={t("resources.intervalLabel")}
+          footnote={t("resources.intervalHint")}
+        >
+          <Select
+            value={String(settings.data?.resources?.intervalMs ?? 2_000)}
+            disabled={!settings.data}
+            onValueChange={(value) =>
+              save.mutate({ resources: { intervalMs: Number(value) } })
+            }
+          >
+            <SelectTrigger size="sm" className={CONTROL_WIDTH}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="z-[var(--z-dialog)]">
+              {SAMPLE_INTERVALS.map((interval) => (
+                <SelectItem key={interval} value={String(interval)}>
+                  {t("resources.interval.value", { value: interval / 1_000 })}
                 </SelectItem>
               ))}
             </SelectContent>

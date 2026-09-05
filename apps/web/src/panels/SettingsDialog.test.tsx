@@ -133,6 +133,7 @@ describe("SettingsDialog", () => {
         sidebar: "open",
         explorer: "closed",
         scm: "closed",
+        resources: "closed",
         settings: true,
         palette: false,
       },

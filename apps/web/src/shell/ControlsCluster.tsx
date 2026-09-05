@@ -1,5 +1,6 @@
 import * as React from "react";
 import {
+  Activity,
   FolderTree,
   GitBranch,
   Search,
@@ -83,6 +84,20 @@ export function ControlsCluster() {
           }
         >
           <GitBranch />
+        </ClusterButton>
+
+        <ClusterButton
+          label={t("cluster.resources")}
+          command="app.resources"
+          active={panels.resources !== "closed"}
+          onClick={() =>
+            setPanel(
+              "resources",
+              panels.resources === "closed" ? "drawer" : "closed",
+            )
+          }
+        >
+          <Activity />
         </ClusterButton>
 
         {focusNodeId && (

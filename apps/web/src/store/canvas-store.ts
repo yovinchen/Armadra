@@ -74,11 +74,21 @@ export interface PanelState {
   sidebar: "open" | "collapsed";
   explorer: "closed" | "drawer" | "pinned";
   scm: "closed" | "drawer";
+  /** 主机 / 会话资源面板（T02）。开着时 Runtime 才采样。 */
+  resources: "closed" | "drawer";
   settings: boolean;
   palette: boolean;
 }
 
 export interface AddNodeOptions {
+  /**
+   * 指定节点 id，而不是随机生成一个。
+   *
+   * 只有认领孤立会话时用得上（T02）：那个会话的 key 就是它原来那个节点的
+   * id，用同一个 id 建节点，恢复出来的节点拥有的才是原来那个进程，而不是
+   * 一个新会话。id 已经在画布上时不新建，直接返回空串。
+   */
+  id?: string;
   position?: Position;
   title?: string;
   color?: string;
@@ -162,6 +172,7 @@ const initialPanels: PanelState = {
       : "collapsed",
   explorer: "closed",
   scm: "closed",
+  resources: "closed",
   settings: false,
   palette: false,
 };
@@ -400,7 +411,14 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   addNode: (type, options = {}) => {
     const state = get();
     if (!state.document) return "";
-    const id = crypto.randomUUID();
+    // 显式 id 撞上已有节点就什么都不做：静默覆盖会把另一个节点的内容顶掉。
+    if (
+      options.id &&
+      state.document.nodes.some((node) => node.id === options.id)
+    ) {
+      return "";
+    }
+    const id = options.id ?? crypto.randomUUID();
     const stamp = now();
     const index = state.document.nodes.length;
     const base = defaultNodeData(type, {

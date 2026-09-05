@@ -46,3 +46,9 @@ export const SourceControlDrawer = lazy(() =>
     default: module.SourceControlDrawer,
   })),
 );
+
+export const ResourceDrawer = lazy(() =>
+  import("@/panels/ResourceDrawer").then((module) => ({
+    default: module.ResourceDrawer,
+  })),
+);

@@ -98,6 +98,14 @@ export const COMMANDS = [
     allowInTerminal: true,
     allowWhileTyping: true,
   },
+  {
+    id: "app.resources",
+    labelKey: "cmd.app.resources",
+    scope: "app",
+    defaultKeys: both("Mod+Shift+U"),
+    allowInTerminal: true,
+    allowWhileTyping: true,
+  },
 
   // ── canvas：画布与节点 ──────────────────────────────────────────
   {

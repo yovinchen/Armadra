@@ -40,6 +40,7 @@ describe("useAppKeybindings", () => {
         sidebar: "open",
         explorer: "closed",
         scm: "closed",
+        resources: "closed",
         settings: false,
         palette: false,
       },

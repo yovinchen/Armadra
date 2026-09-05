@@ -2,12 +2,13 @@ import { Suspense, useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useWorkspaceEvents } from "../api/events";
 import { TldrawWorkspace } from "../canvas/TldrawWorkspace";
-// 六个浮层都在 `./lazy` 里 `React.lazy` 包过，走各自的 chunk（§17 代码分割）。
+// 浮层都在 `./lazy` 里 `React.lazy` 包过，走各自的 chunk（§17 代码分割）。
 import {
   CommandPalette,
   ControlConfirmDialog,
   ExplorerDrawer,
   HandoffDialog,
+  ResourceDrawer,
   SettingsDialog,
   SourceControlDrawer,
 } from "./lazy";
@@ -88,6 +89,7 @@ function AppShell() {
       <Suspense fallback={null}>
         <ExplorerDrawer />
         <SourceControlDrawer />
+        <ResourceDrawer />
         <SettingsDialog />
         <CommandPalette />
         <ControlConfirmDialog />
