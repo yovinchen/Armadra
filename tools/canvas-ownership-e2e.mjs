@@ -17,8 +17,11 @@
 // through the Runtime's HTTP API, exported, staged, verified, and then served
 // by the Host under a moved epoch; the Runtime refusing writes while the Host
 // holds the domain and still answering reads; a real edit through the Host with
-// its receipt, its event and its replay; and the reversal, including the refusal
-// to hand the epoch back while the Host holds changes the Runtime never got.
+// its receipt, its event and its replay; a second client following the Host's
+// WebSocket event stream, which must see that edit within 200 ms and, after a
+// disconnect, resume from its cursor without losing or repeating one event; and
+// the reversal, including the refusal to hand the epoch back while the Host
+// holds changes the Runtime never got.
 // Every step is proved by a digest, a revision or a sequence rather than by the
 // absence of an exception: a check that only asserts "no error was thrown" would
 // still pass against a migration that silently dropped half the canvas.
@@ -26,12 +29,13 @@
 // database, which the design states is not part of this phase.
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   createServer as createHttpServer,
   request as httpRequest,
 } from "node:http";
 import { createServer, request as httpsRequest } from "node:https";
+import { connect as tlsConnect } from "node:tls";
 import {
   existsSync,
   mkdirSync,
@@ -457,6 +461,235 @@ function ownership(action, extra = []) {
   );
 }
 
+/* ------------------------------------------------------- the event stream */
+
+/**
+ * A cookie jar and an HTTPS transport that behave like the browser's own: the
+ * Host still sees its public origin, still enforces the exact Origin, and still
+ * hands out `__Host-` cookies that only travel back to that origin.
+ */
+function nodeTransport(jar) {
+  return async (url, init = {}) => {
+    const target = new URL(url);
+    const headers = { ...(init.headers ?? {}), Origin: appOrigin };
+    if (jar.size)
+      headers.Cookie = [...jar]
+        .map(([name, value]) => `${name}=${value}`)
+        .join("; ");
+    return new Promise((resolve, reject) => {
+      const request = httpsRequest(
+        {
+          host: target.hostname,
+          port: target.port,
+          method: init.method ?? "GET",
+          path: target.pathname + target.search,
+          headers,
+          ca: credentials.cert,
+          servername: "localhost",
+        },
+        (response) => {
+          const chunks = [];
+          response.on("data", (chunk) => chunks.push(chunk));
+          response.on("end", () => {
+            for (const raw of response.headers["set-cookie"] ?? []) {
+              const pair = raw.split(";", 1)[0];
+              const split = pair.indexOf("=");
+              jar.set(
+                pair.slice(0, split).trim(),
+                pair.slice(split + 1).trim(),
+              );
+            }
+            resolve(
+              new Response(Buffer.concat(chunks), {
+                status: response.statusCode ?? 502,
+                headers: {
+                  "content-type":
+                    response.headers["content-type"] ??
+                    "application/octet-stream",
+                },
+              }),
+            );
+          });
+        },
+      );
+      request.on("error", reject);
+      if (init.body) request.write(Buffer.from(init.body));
+      request.end();
+    });
+  };
+}
+
+const streamGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+/** One masked client frame. Server frames are never masked; client ones must be. */
+function writeStreamFrame(socket, opcode, payload) {
+  const mask = randomBytes(4);
+  const header =
+    payload.length < 126
+      ? Buffer.from([0x80 | opcode, 0x80 | payload.length])
+      : Buffer.from([0x80 | opcode, 0x80 | 126, 0, 0]);
+  if (payload.length >= 126) header.writeUInt16BE(payload.length, 2);
+  const body = Buffer.from(payload);
+  for (let index = 0; index < body.length; index += 1)
+    body[index] ^= mask[index % 4];
+  socket.write(Buffer.concat([header, mask, body]));
+}
+
+/**
+ * The smallest RFC 6455 client that can prove the Host's stream works.
+ *
+ * It talks to the Host's own TLS port while presenting the public origin's Host
+ * header, exactly as the app proxy does, because a WebSocket handshake carries
+ * no CSRF header: what authorizes it is the exact Origin plus the
+ * SameSite=Strict session cookie, and both have to be real here.
+ */
+async function openHostStream(protocol, jar) {
+  const socket = tlsConnect({
+    host: "127.0.0.1",
+    port: hostPort,
+    ca: credentials.cert,
+    servername: "localhost",
+  });
+  await once(socket, "secureConnect");
+  socket.on("error", () => {});
+  const key = randomBytes(16).toString("base64");
+  const accept = createHash("sha1")
+    .update(key + streamGUID)
+    .digest("base64");
+  let buffer = Buffer.alloc(0);
+  let handshake = null;
+  const frames = [];
+  let waiter = null;
+  const wake = () => {
+    if (!waiter) return;
+    const resolve = waiter;
+    waiter = null;
+    resolve();
+  };
+  const pump = () => {
+    if (handshake === null) {
+      const end = buffer.indexOf("\r\n\r\n");
+      if (end < 0) return;
+      handshake = buffer.subarray(0, end).toString();
+      buffer = buffer.subarray(end + 4);
+      wake();
+    }
+    for (;;) {
+      if (buffer.length < 2) return;
+      const opcode = buffer[0] & 0x0f;
+      let length = buffer[1] & 0x7f;
+      let offset = 2;
+      if (length === 126) {
+        if (buffer.length < 4) return;
+        length = buffer.readUInt16BE(2);
+        offset = 4;
+      } else if (length === 127) {
+        if (buffer.length < 10) return;
+        length = Number(buffer.readBigUInt64BE(2));
+        offset = 10;
+      }
+      if (buffer.length < offset + length) return;
+      const payload = buffer.subarray(offset, offset + length);
+      buffer = buffer.subarray(offset + length);
+      if (opcode === 0x9) {
+        writeStreamFrame(socket, 0xa, payload);
+        continue;
+      }
+      if (opcode === 0x8)
+        frames.push({
+          close: payload.length >= 2 ? payload.readUInt16BE(0) : 0,
+          at: Date.now(),
+        });
+      else if (opcode === 0x2)
+        frames.push({
+          frame: protocol.fromBinary(
+            protocol.EventStreamFrameSchema,
+            new Uint8Array(payload),
+          ),
+          at: Date.now(),
+        });
+      wake();
+    }
+  };
+  socket.on("data", (chunk) => {
+    buffer = Buffer.concat([buffer, chunk]);
+    pump();
+  });
+  socket.write(
+    [
+      "GET /ws/armadra.v1.EventStream HTTP/1.1",
+      `Host: localhost:${appPort}`,
+      "Upgrade: websocket",
+      "Connection: Upgrade",
+      "Sec-WebSocket-Version: 13",
+      `Sec-WebSocket-Key: ${key}`,
+      `Origin: ${appOrigin}`,
+      "Sec-Fetch-Site: same-origin",
+      `Cookie: ${[...jar].map(([name, value]) => `${name}=${value}`).join("; ")}`,
+      "",
+      "",
+    ].join("\r\n"),
+  );
+  // The handshake is proved, never assumed: a proxy answering 200 with a body
+  // would otherwise look like a stream that simply never says anything.
+  for (let attempt = 0; attempt < 200 && handshake === null; attempt += 1)
+    await sleep(25);
+  return {
+    upgraded:
+      handshake !== null &&
+      handshake.startsWith("HTTP/1.1 101") &&
+      handshake.includes(accept),
+    handshake: (handshake ?? "").split("\r\n", 1)[0],
+    send(payload) {
+      writeStreamFrame(
+        socket,
+        0x2,
+        Buffer.from(
+          protocol.toBinary(
+            protocol.EventStreamFrameSchema,
+            protocol.create(protocol.EventStreamFrameSchema, payload),
+          ),
+        ),
+      );
+    },
+    /** The next frame, or null when nothing arrived inside the deadline. */
+    async next(timeoutMs = 5_000) {
+      const deadline = Date.now() + timeoutMs;
+      for (;;) {
+        const entry = frames.shift();
+        if (entry) return entry;
+        if (Date.now() >= deadline) return null;
+        await new Promise((resolve) => {
+          waiter = resolve;
+          setTimeout(() => {
+            if (waiter === resolve) {
+              waiter = null;
+              resolve();
+            }
+          }, 20);
+        });
+      }
+    },
+    /** Every event page frame that arrives inside the deadline. */
+    async pages(timeoutMs) {
+      const deadline = Date.now() + timeoutMs;
+      const collected = [];
+      for (;;) {
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) return collected;
+        const entry = await this.next(remaining);
+        if (!entry) return collected;
+        const page = entry.frame?.payload?.value;
+        if (entry.frame?.payload?.case === "page")
+          collected.push({ page, at: entry.at });
+      }
+    },
+    close() {
+      socket.destroy();
+    },
+  };
+}
+
 /* ------------------------------------------------------------------- Chrome */
 
 async function browserPath() {
@@ -867,55 +1100,7 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
       pathToFileURL(join(root, "packages/host-client/dist/index.js")).href
     );
     const jar = new Map();
-    const transport = async (url, init = {}) => {
-      const target = new URL(url);
-      const headers = { ...(init.headers ?? {}), Origin: appOrigin };
-      if (jar.size)
-        headers.Cookie = [...jar]
-          .map(([name, value]) => `${name}=${value}`)
-          .join("; ");
-      return new Promise((resolve, reject) => {
-        const request = httpsRequest(
-          {
-            host: target.hostname,
-            port: target.port,
-            method: init.method ?? "GET",
-            path: target.pathname + target.search,
-            headers,
-            ca: credentials.cert,
-            servername: "localhost",
-          },
-          (response) => {
-            const chunks = [];
-            response.on("data", (chunk) => chunks.push(chunk));
-            response.on("end", () => {
-              for (const raw of response.headers["set-cookie"] ?? []) {
-                const pair = raw.split(";", 1)[0];
-                const split = pair.indexOf("=");
-                jar.set(
-                  pair.slice(0, split).trim(),
-                  pair.slice(split + 1).trim(),
-                );
-              }
-              const status = response.statusCode ?? 502;
-              resolve(
-                new Response(Buffer.concat(chunks), {
-                  status,
-                  headers: {
-                    "content-type":
-                      response.headers["content-type"] ??
-                      "application/octet-stream",
-                  },
-                }),
-              );
-            });
-          },
-        );
-        request.on("error", reject);
-        if (init.body) request.write(Buffer.from(init.body));
-        request.end();
-      });
-    };
+    const transport = nodeTransport(jar);
     const driver = createDriver({
       HostClient: clients.HostClient,
       HostIdentityClient: clients.HostIdentityClient,
@@ -1438,6 +1623,176 @@ globalThis.armadraReady = true;
     event?.transactionIndex === 0 && event?.transactionSize === 1,
     `index=${event?.transactionIndex} size=${event?.transactionSize}`,
   );
+
+  /* ------------------------------------------- 6b. the pushed event stream */
+
+  // A second client, paired on its own device, following the Host's WebSocket
+  // stream instead of asking every few seconds. Everything below is measured
+  // against real frames on a real socket: the point of the stream is latency
+  // and resumability, and neither can be proved by "no error was thrown".
+  const streamProtocol = await import(
+    pathToFileURL(join(root, "packages/protocol/dist/index.js")).href
+  );
+  const streamTicket = JSON.parse(
+    run(
+      hostBinary,
+      [
+        "pair",
+        "--origin",
+        appOrigin,
+        "--device-name",
+        "canvas-e2e-stream",
+        "--data-dir",
+        hostData,
+      ],
+      { env: hostEnv },
+    ),
+  );
+  const streamClients = await import(
+    pathToFileURL(join(root, "packages/host-client/dist/index.js")).href
+  );
+  const streamJar = new Map();
+  const streamIdentity = new streamClients.HostIdentityClient({
+    baseUrl: appOrigin,
+    hostId: streamTicket.hostId,
+    hostInstanceId: streamTicket.hostInstanceId,
+    pageOrigin: appOrigin,
+    fetch: nodeTransport(streamJar),
+  });
+  const streamSession = await streamIdentity.pair(JSON.stringify(streamTicket));
+  step(
+    "a second device paired and holds a session cookie of its own",
+    streamSession?.device?.displayName === "canvas-e2e-stream" &&
+      streamJar.size > 0,
+    `cookies=${streamJar.size} device=${streamSession?.device?.displayName}`,
+  );
+
+  const stream = await openHostStream(streamProtocol, streamJar);
+  step(
+    "the Host upgraded the event stream for that session's cookie and origin",
+    stream.upgraded,
+    stream.handshake,
+  );
+  const cursorBeforeStream = (
+    await canvasDriver.call("getDocument", [canvasId])
+  ).eventSequence;
+  stream.send({
+    payload: {
+      case: "subscribe",
+      value: {
+        afterSequence: cursorBeforeStream,
+        workspaceIds: [workspaceId],
+      },
+    },
+  });
+
+  // The catch-up half: the subscription has to reach the watermark before the
+  // Host starts pushing, and it says so with `hasMore` rather than leaving the
+  // client to guess when it is current.
+  let streamCursor = cursorBeforeStream;
+  const caughtUp = await stream.pages(5_000);
+  for (const entry of caughtUp) streamCursor = entry.page.nextCursor;
+  step(
+    "the subscription caught up to the Host's watermark before pushing",
+    streamCursor >= cursorBeforeStream &&
+      caughtUp.every(
+        (entry) => entry.page.status === streamProtocol.EventCursorStatus.OK,
+      ),
+    `cursor ${cursorBeforeStream} → ${streamCursor} in ${caughtUp.length} page(s)`,
+  );
+
+  const pushedAt = Date.now();
+  const streamedEdit = await canvasDriver.call("saveDocument", [
+    {
+      operationId: `canvas/${workspaceId}/${canvasId}/stream-1`,
+      canvas: { ...afterEdit.canvas, name: "经事件流看到的改名" },
+      expectedRevision: afterEdit.canvas.revision,
+      nodes: afterEdit.nodes,
+      edges: afterEdit.edges,
+      annotations: afterEdit.annotations,
+    },
+  ]);
+  const pushedSequence = streamedEdit.receipt?.lastSequence;
+  const pushed = await stream.pages(3_000);
+  const pushedEvents = pushed.flatMap((entry) => entry.page.events);
+  const arrival = pushed.find((entry) =>
+    entry.page.events.some((event) => event.sequence === pushedSequence),
+  );
+  const latency = arrival ? arrival.at - pushedAt : -1;
+  step(
+    "a save reaches the second client through the stream in under 200 ms",
+    arrival !== undefined && latency >= 0 && latency < 200,
+    `sequence=${pushedSequence} latency=${latency}ms`,
+  );
+  step(
+    "the pushed envelope names the canvas that changed, in the canvas domain",
+    pushedEvents.length === 1 &&
+      pushedEvents[0].entityId === canvasId &&
+      pushedEvents[0].kind === "canvas" &&
+      pushedEvents[0].domain === streamProtocol.EventDomain.CANVAS &&
+      pushedEvents[0].entity?.case === "canvas" &&
+      pushedEvents[0].entity.value.name === "经事件流看到的改名",
+    `${pushedEvents.length} event(s) kind=${pushedEvents[0]?.kind} name=${pushedEvents[0]?.entity?.value?.name}`,
+  );
+  for (const entry of pushed) streamCursor = entry.page.nextCursor;
+
+  // The reconnect half. Two saves land while nobody is listening; resuming from
+  // the cursor has to deliver exactly those two — losing one would leave a
+  // client silently stale, and repeating one would re-apply a change it already
+  // has.
+  stream.close();
+  const offlineSequences = [];
+  let offlineBase = streamedEdit.document?.canvas ?? afterEdit.canvas;
+  for (const name of ["断线期间的第一次改动", "断线期间的第二次改动"]) {
+    const saved = await canvasDriver.call("saveDocument", [
+      {
+        operationId: `canvas/${workspaceId}/${canvasId}/offline-${offlineSequences.length}`,
+        canvas: { ...offlineBase, name },
+        expectedRevision: offlineBase.revision,
+        nodes: afterEdit.nodes,
+        edges: afterEdit.edges,
+        annotations: afterEdit.annotations,
+      },
+    ]);
+    offlineBase = saved.document?.canvas ?? offlineBase;
+    offlineSequences.push(saved.receipt?.lastSequence);
+  }
+  step(
+    "two more edits were written while the stream was disconnected",
+    offlineSequences.every((sequence) => typeof sequence === "bigint") &&
+      offlineSequences[1] > offlineSequences[0],
+    offlineSequences.join(", "),
+  );
+
+  const resumed = await openHostStream(streamProtocol, streamJar);
+  step(
+    "the second client reconnected with the cursor it already held",
+    resumed.upgraded,
+    resumed.handshake,
+  );
+  resumed.send({
+    payload: {
+      case: "subscribe",
+      value: { afterSequence: streamCursor, workspaceIds: [workspaceId] },
+    },
+  });
+  const replayed = await resumed.pages(5_000);
+  const replayedEvents = replayed.flatMap((entry) => entry.page.events);
+  const replayedSequences = replayedEvents.map((event) => event.sequence);
+  step(
+    "resuming delivered every missed event exactly once, in order",
+    replayedSequences.length === offlineSequences.length &&
+      replayedSequences.every(
+        (sequence, index) => sequence === offlineSequences[index],
+      ),
+    `expected ${offlineSequences.join(",")} got ${replayedSequences.join(",")}`,
+  );
+  step(
+    "resuming replayed nothing the client had already applied",
+    replayedSequences.every((sequence) => sequence > streamCursor),
+    `cursor=${streamCursor} first=${replayedSequences[0]}`,
+  );
+  resumed.close();
 
   /* ------------------------------------------------------------ 7. rollback */
 
