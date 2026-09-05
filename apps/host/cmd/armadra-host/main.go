@@ -94,6 +94,10 @@ type config struct {
 	// nothing is inferred from the build (roadmap §3.12).
 	updatesSource  string
 	releaseChannel pb.ReleaseChannel
+	// launcher records who started this Host — the desktop app, a service
+	// manager, or an operator at a shell. Only its own launcher may replace
+	// it, so the value is written down rather than inferred later.
+	launcher string
 	// Server-mode flags (install / uninstall / logs / upgrade) live in
 	// service.go; only their registration and validation appear here.
 	service serviceFlags
@@ -168,6 +172,7 @@ func parseConfig(args []string) (config, error) {
 		flags.StringVar(&c.runtimeDatabase, "runtime-database", "", "Absolute path to the Runtime's database, enabling write-ownership switches over HTTPS")
 		flags.StringVar(&c.updatesSource, "updates-source", "", "Releases API base this Host may consult, e.g. https://api.github.com/repos/OWNER/REPO; unset means update checks answer UNSUPPORTED")
 		flags.StringVar(&releaseChannel, "release-channel", "", "Pin update checks to a channel: stable, beta or development; unset lets the caller ask")
+		flags.StringVar(&c.launcher, "launcher", "", "Who is starting this Host: desktop, service or cli (default: cli)")
 	}
 	if err := flags.Parse(args); err != nil {
 		return c, err
@@ -290,6 +295,14 @@ func parseConfig(args []string) (config, error) {
 	}
 	if releaseChannel != "" && c.updatesSource == "" {
 		return c, fmt.Errorf("--release-channel has no effect without --updates-source")
+	}
+	// An unset launcher is "cli": a shell is what starts a Host nobody
+	// configured, and claiming otherwise would let `upgrade` refuse or proceed
+	// on a record nobody wrote.
+	if c.launcher == "" {
+		c.launcher = hoststate.LauncherCLI
+	} else if !hoststate.ValidLauncher(c.launcher) {
+		return c, fmt.Errorf("--launcher accepts desktop, service or cli")
 	}
 	if (c.workerBinary == "") != (c.workerStateDir == "") {
 		return c, fmt.Errorf("scheduled execution requires both --worker-binary and --worker-state-dir")
@@ -438,6 +451,23 @@ func serveHost(parent context.Context, c config) (err error) {
 		return err
 	}
 	status := &pb.HostStatus{HostId: state.ID, HostInstanceId: identity.InstanceID, StartedAtUnixMs: time.Now().UnixMilli(), ProcessId: uint32(os.Getpid())}
+	// Record who started this Host while it is serving, and drop the record on
+	// a clean exit. `upgrade` reads it to refuse a Host the desktop app owns:
+	// a stale record left by a crash refuses one upgrade too many, which is the
+	// direction that cannot replace a binary somebody else is holding.
+	if executable, execErr := os.Executable(); execErr == nil {
+		// A config assembled in-process may leave the flag unset; a shell is
+		// still the honest answer for a Host nobody claimed.
+		kind := c.launcher
+		if kind == "" {
+			kind = hoststate.LauncherCLI
+		}
+		launcher := hoststate.LauncherRecord{Launcher: kind, InstanceID: identity.InstanceID, Executable: executable}
+		if launcherErr := hoststate.WriteLauncher(c.dataDir, launcher); launcherErr != nil {
+			return launcherErr
+		}
+		defer func() { err = errors.Join(err, hoststate.RemoveLauncher(c.dataDir)) }()
+	}
 	if listener != nil {
 		status.HttpEndpoint = "http://" + listener.Addr().String()
 	}

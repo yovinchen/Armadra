@@ -15,6 +15,7 @@ import (
 	"time"
 
 	pb "armadra.local/host/gen/armadra/v1"
+	"armadra.local/host/internal/buildinfo"
 	"armadra.local/host/internal/daemon"
 	"armadra.local/host/internal/hoststate"
 	"armadra.local/host/internal/server"
@@ -323,7 +324,12 @@ func showLogs(_ context.Context, c config) error {
 }
 
 type versionReport struct {
-	Component     string `json:"component"`
+	Component string `json:"component"`
+	// The release this binary was built from, and the channel that produced
+	// it. An upgrade compares versions, so a candidate that cannot say which
+	// release it is cannot be installed over one that can.
+	Version       string `json:"version"`
+	Channel       string `json:"channel"`
 	ProtocolMajor uint32 `json:"protocolMajor"`
 	ProtocolMinor uint32 `json:"protocolMinor"`
 }
@@ -340,7 +346,19 @@ func showVersion(c config) error {
 		_, err = os.Stdout.Write(wire)
 		return err
 	}
-	return writeJSON(versionReport{Component: servicedef.ComponentName, ProtocolMajor: server.ProtocolMajor, ProtocolMinor: server.ProtocolMinor})
+	return writeJSON(ownVersion())
+}
+
+// ownVersion is what this binary reports about itself, in the same shape a
+// candidate is probed for.
+func ownVersion() versionReport {
+	return versionReport{
+		Component:     servicedef.ComponentName,
+		Version:       buildinfo.ReleaseVersion(),
+		Channel:       buildinfo.ReleaseChannel(),
+		ProtocolMajor: server.ProtocolMajor,
+		ProtocolMinor: server.ProtocolMinor,
+	}
 }
 
 type upgradeResult struct {
@@ -394,7 +412,7 @@ func upgradeHost(parent context.Context, c config) error {
 	}
 	result := upgradeResult{
 		Command: "upgrade", Candidate: candidate, Target: target,
-		Protocol:   versionReport{Component: version.Component, ProtocolMajor: version.ProtocolMajor, ProtocolMinor: version.ProtocolMinor},
+		Protocol:   versionReport{Component: version.Component, Version: version.Version, Channel: version.Channel, ProtocolMajor: version.ProtocolMajor, ProtocolMinor: version.ProtocolMinor},
 		WasRunning: running != nil,
 	}
 	if !c.service.confirm {
@@ -546,6 +564,10 @@ type statusSummary struct {
 	InstanceID string `json:"hostInstanceId,omitempty"`
 	Endpoint   string `json:"httpEndpoint,omitempty"`
 	ProcessID  uint32 `json:"processId,omitempty"`
+	// Launcher is who started the running Host: desktop, service or cli. It is
+	// absent when nothing is running, or when the record does not belong to the
+	// instance that answered — a stale file describes a Host that is gone.
+	Launcher string `json:"launcher,omitempty"`
 }
 
 type serviceSummary struct {
@@ -601,7 +623,23 @@ func showServiceStatus(ctx context.Context, c config) error {
 	} else if statusErr != nil {
 		return statusErr
 	}
-	return writeJSON(statusWithService{statusSummary: *summarize(status), Service: describeService(marker)})
+	summary := *summarize(status)
+	summary.Launcher = observedLauncher(c.dataDir, status)
+	return writeJSON(statusWithService{statusSummary: summary, Service: describeService(marker)})
+}
+
+// observedLauncher reports who started the Host that answered, or "" when the
+// record on disk describes a different process. A launcher file outlives a
+// crash, so it is only believed when the running instance wrote it.
+func observedLauncher(dataDir string, status *pb.HostStatus) string {
+	if status == nil {
+		return ""
+	}
+	record, err := hoststate.ReadLauncher(dataDir)
+	if err != nil || record.InstanceID != status.GetHostInstanceId() {
+		return ""
+	}
+	return record.Launcher
 }
 
 // describeService compares the file on disk with a fresh rendering of the

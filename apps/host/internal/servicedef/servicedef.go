@@ -261,7 +261,10 @@ func validateEnvironment(entry string) error {
 // It mirrors what `armadra-host start` hands its own child, so a definition and
 // a foreground run configure the same Host.
 func (s Spec) Arguments() []string {
-	args := []string{"serve", "--data-dir", s.DataDir, "--listen", s.Listen}
+	// A definition always names its launcher: the Host it starts is the one a
+	// service manager owns, and `upgrade` must be able to tell it apart from
+	// the Host the desktop app holds.
+	args := []string{"serve", "--data-dir", s.DataDir, "--listen", s.Listen, "--launcher", "service"}
 	if s.EndpointsDir != "" {
 		args = append(args, "--endpoints-dir", s.EndpointsDir)
 	}

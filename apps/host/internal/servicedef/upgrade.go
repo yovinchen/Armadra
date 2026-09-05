@@ -30,7 +30,12 @@ var ErrUpgradeRefused = errors.New("upgrade refused")
 // Version is what a Host binary reports about itself. It carries no build
 // secret and no credential: only what an upgrade has to compare.
 type Version struct {
-	Component     string `json:"component"`
+	Component string `json:"component"`
+	// Version is the release the candidate was built from. An unstamped local
+	// build reports the development placeholder, which sorts below every
+	// release, so an upgrade never mistakes one for something newer.
+	Version       string `json:"version"`
+	Channel       string `json:"channel"`
 	ProtocolMajor uint32 `json:"protocolMajor"`
 	ProtocolMinor uint32 `json:"protocolMinor"`
 }
