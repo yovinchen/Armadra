@@ -3,6 +3,7 @@ package server
 import (
 	"armadra.local/host/internal/automationhost"
 	"armadra.local/host/internal/canvashost"
+	"armadra.local/host/internal/eventstream"
 	"armadra.local/host/internal/externalservice"
 	"armadra.local/host/internal/githubhost"
 	"armadra.local/host/internal/identity"
@@ -45,6 +46,10 @@ type Options struct {
 	// methods then answer UNSUPPORTED rather than an empty canvas, which a
 	// client cannot tell from a workspace that really has nothing on it.
 	Canvas *canvashost.Service
+	// Events is the Host -> client business event stream. Nil means this Host
+	// pushes nothing and `/ws/armadra.v1.EventStream` answers NOT_FOUND, which
+	// is what tells a client to keep polling instead of waiting silently.
+	Events *eventstream.Hub
 }
 
 // ParseOrigin validates a serialized origin and returns its canonical spelling.

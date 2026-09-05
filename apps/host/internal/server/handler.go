@@ -132,6 +132,22 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			externalServiceHandler(w, r, identity, options.Identity, options.External, device)
 			return
 		}
+		// The event stream is answered before the Runtime proxy: it is the
+		// Host's own surface, and a path that looks like a stream must never
+		// fall through to a forwarded request or to the static bundle.
+		if r.URL.Path == EventStreamPath {
+			if !browser || options.Events == nil {
+				writeError(w, http.StatusNotFound, "NOT_FOUND", "Unknown endpoint")
+				return
+			}
+			device, ok := deviceOrigin(r, origin, options.PublicOrigin)
+			if !ok {
+				writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "An exact same-origin request is required")
+				return
+			}
+			eventStreamRequest(w, r, identity, options.Identity, options.Events, device)
+			return
+		}
 		if strings.HasPrefix(r.URL.Path, RuntimePrefix) {
 			if !browser || options.Runtime == nil {
 				writeError(w, http.StatusNotFound, "NOT_FOUND", "Unknown endpoint")
@@ -197,7 +213,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			return
 		}
 		authentication := options.Identity != nil && options.PublicOrigin != "" && r.TLS != nil
-		hello(w, r, identity, authentication, authentication && options.Automation != nil, authentication && options.GitHub != nil, authentication && options.Runtime != nil, authentication && options.Canvas != nil)
+		hello(w, r, identity, authentication, authentication && options.Automation != nil, authentication && options.GitHub != nil, authentication && options.Runtime != nil, authentication && options.Canvas != nil, authentication && options.Events != nil)
 	}), nil
 }
 
@@ -205,7 +221,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 // ever served from the static bundle.
 func protocolPath(path string) bool {
 	return strings.HasPrefix(path, "/rpc/") || strings.HasPrefix(path, RuntimePrefix) ||
-		strings.HasPrefix(path, "/host/") || path == "/health"
+		strings.HasPrefix(path, "/host/") || strings.HasPrefix(path, "/ws/") || path == "/health"
 }
 
 // deviceOrigin resolves the browser origin an authenticated request is bound
@@ -231,7 +247,7 @@ func deviceOrigin(r *http.Request, origin, public string) (string, bool) {
 	return public, true
 }
 
-func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentication, scheduling, github, proxying, canvas bool) {
+func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentication, scheduling, github, proxying, canvas, events bool) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
 		writeError(w, http.StatusMethodNotAllowed, "INVALID_ARGUMENT", "POST required")
@@ -297,6 +313,12 @@ func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentica
 	// it saves anything.
 	if canvas {
 		capabilities = append(capabilities, "canvas.documents.v1")
+	}
+	// Advertised only when the stream is actually assembled. A client that does
+	// not see it keeps its polling fallback rather than waiting on a socket
+	// this Host will never open.
+	if events {
+		capabilities = append(capabilities, "events.stream.v1")
 	}
 	writeProto(w, http.StatusOK, &pb.HelloResponse{
 		Protocol:         &pb.ProtocolVersion{Major: ProtocolMajor, Minor: min(request.Protocol.GetMinor(), ProtocolMinor)},

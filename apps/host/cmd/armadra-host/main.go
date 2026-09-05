@@ -24,6 +24,7 @@ import (
 	"armadra.local/host/internal/canvashost"
 	"armadra.local/host/internal/daemon"
 	"armadra.local/host/internal/endpoints"
+	"armadra.local/host/internal/eventstream"
 	"armadra.local/host/internal/externalservice"
 	"armadra.local/host/internal/githubcred"
 	"armadra.local/host/internal/githubhost"
@@ -481,7 +482,17 @@ func serveHost(parent context.Context, c config) (err error) {
 	if c.publicOrigin != "" {
 		link = runtimelink.New(endpointsDir)
 	}
-	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link, Updates: releases, Canvas: canvases}
+	// The event stream replaces the client's polling loop. It reads the same
+	// stored outbox the HTTPS event page reads, and it is woken by the storage
+	// kernel's own commit notification, so a saved change reaches a second
+	// client in the time one write takes rather than in one poll interval.
+	events, err := eventstream.New(eventstream.Options{Store: database, HostID: state.ID, Projectors: []eventstream.Projector{canvashost.EventProjector{}}})
+	if err != nil {
+		return err
+	}
+	defer events.Close()
+	database.SetCommitNotifier(events.Notify)
+	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link, Updates: releases, Canvas: canvases, Events: events}
 	// The switch binds its own listener with the same routes. `options` is
 	// captured by reference, so the manager it is about to be given is the one
 	// this closure serves with.

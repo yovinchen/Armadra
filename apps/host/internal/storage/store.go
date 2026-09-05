@@ -23,6 +23,8 @@ type Store struct {
 	path     string
 	once     sync.Once
 	closeErr error
+	// notify is called after a transaction commits; see notify.go.
+	notify func(sequence uint64)
 }
 
 var hostPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)

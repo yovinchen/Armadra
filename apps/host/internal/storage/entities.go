@@ -333,6 +333,9 @@ func (s *Store) Apply(ctx context.Context, operationID string, changes []Change)
 	if err = tx.Commit(); err != nil {
 		return ApplyResult{}, err
 	}
+	// Only after the commit: a subscriber woken earlier could read a sequence
+	// that a rollback would have taken back.
+	s.committed(result.LastSequence)
 	return result, nil
 }
 
