@@ -1,0 +1,234 @@
+import { z } from "zod";
+import {
+  gitBranchSnapshotSchema,
+  gitCherryPickPreviewSchema,
+  gitCommitDetailSchema,
+  gitCommitFileDiffSchema,
+  gitExpectedStateSchema,
+  gitHistoryPageSchema,
+  gitIntegrationSnapshotSchema,
+  gitRebaseTodoPreviewSchema,
+  gitRemotesSchema,
+  gitRepositoryActionSchema,
+  gitRepositoryListSchema,
+  gitRepositoryOperationSchema,
+  gitStashDetailSchema,
+  gitStashSnapshotSchema,
+  gitTagSnapshotSchema,
+  gitWorktreesSchema,
+  type GitExpectedState,
+  type GitRepositoryAction,
+} from "@armadra/shared";
+import { json, query, request } from "./request";
+
+export const gitRepositoryApi = {
+  /**
+   * Every repository read and write names the checkout it means. `path` is
+   * workspace-relative and defaults to the workspace root, so a single-repo
+   * workspace behaves exactly as before (roadmap §4.1).
+   */
+  gitRepositories: (
+    workspaceId: string,
+    options: { refresh?: boolean; maxDepth?: number } = {},
+    signal?: AbortSignal,
+  ) => {
+    const params = new URLSearchParams();
+    if (options.refresh) params.set("refresh", "true");
+    if (options.maxDepth !== undefined) {
+      params.set("maxDepth", String(options.maxDepth));
+    }
+    const search = params.toString();
+    return request(
+      `/api/workspaces/${query(workspaceId)}/git/repositories${search ? `?${search}` : ""}`,
+      gitRepositoryListSchema,
+      { signal },
+    );
+  },
+  gitRepositoryBranches: (
+    workspaceId: string,
+    path = ".",
+    signal?: AbortSignal,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/branches?path=${query(path)}`,
+      gitBranchSnapshotSchema,
+      { signal },
+    ),
+  gitRepositoryOperations: (
+    workspaceId: string,
+    path = ".",
+    signal?: AbortSignal,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/operations?path=${query(path)}`,
+      z.array(gitRepositoryOperationSchema),
+      { signal },
+    ),
+  /**
+   * `limit` is capped by the service; the commit graph asks for 100 a page and
+   * stops at 500 rows, so a long history stays a scroll rather than a stall.
+   */
+  gitRepositoryHistory: (
+    workspaceId: string,
+    reference = "HEAD",
+    cursor?: string,
+    signal?: AbortSignal,
+    path = ".",
+    limit = 50,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/history?path=${query(path)}&reference=${query(reference)}&limit=${limit}${cursor ? `&cursor=${query(cursor)}` : ""}`,
+      gitHistoryPageSchema,
+      { signal },
+    ),
+  gitRepositoryWorktrees: (
+    workspaceId: string,
+    signal?: AbortSignal,
+    path = ".",
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/worktrees?path=${query(path)}`,
+      gitWorktreesSchema,
+      { signal },
+    ),
+  /** The commits an interactive rebase onto `onto` would replay, in order. */
+  gitRepositoryRebaseTodo: (
+    workspaceId: string,
+    onto: string,
+    signal?: AbortSignal,
+    path = ".",
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/rebase-todo?path=${query(path)}&onto=${query(onto)}`,
+      gitRebaseTodoPreviewSchema,
+      { signal },
+    ),
+  gitRepositoryTags: (workspaceId: string, signal?: AbortSignal, path = ".") =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/tags?path=${query(path)}`,
+      gitTagSnapshotSchema,
+      { signal },
+    ),
+  /** URLs come back with any embedded credentials already replaced. */
+  gitRepositoryRemotes: (
+    workspaceId: string,
+    signal?: AbortSignal,
+    path = ".",
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/remotes?path=${query(path)}`,
+      gitRemotesSchema,
+      { signal },
+    ),
+  gitRepositoryStashes: (
+    workspaceId: string,
+    signal?: AbortSignal,
+    path = ".",
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/stashes?path=${query(path)}`,
+      gitStashSnapshotSchema,
+      { signal },
+    ),
+  gitRepositoryIntegration: (
+    workspaceId: string,
+    signal?: AbortSignal,
+    path = ".",
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/integration?path=${query(path)}`,
+      gitIntegrationSnapshotSchema,
+      { signal },
+    ),
+  /**
+   * 一个提交改了哪些文件。`base` 传 `null` 表示对第一父提交比较（也就是
+   * 「这个提交本身改了什么」），传 `"HEAD"` 就是「比较到当前」。
+   */
+  gitRepositoryCommitDetail: (
+    workspaceId: string,
+    oid: string,
+    base: string | null,
+    signal?: AbortSignal,
+    path = ".",
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/commit?path=${query(path)}&oid=${query(oid)}${base === null ? "" : `&base=${query(base)}`}`,
+      gitCommitDetailSchema,
+      { signal },
+    ),
+  gitRepositoryCommitFile: (
+    workspaceId: string,
+    oid: string,
+    base: string | null,
+    file: string,
+    signal?: AbortSignal,
+    path = ".",
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/commit-file?path=${query(path)}&oid=${query(oid)}&file=${query(file)}${base === null ? "" : `&base=${query(base)}`}`,
+      gitCommitFileDiffSchema,
+      { signal },
+    ),
+  gitRepositoryCherryPickPreview: (
+    workspaceId: string,
+    oid: string,
+    mainline: number | null,
+    signal?: AbortSignal,
+    path = ".",
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/cherry-pick-preview?path=${query(path)}&oid=${query(oid)}${mainline === null ? "" : `&mainline=${mainline}`}`,
+      gitCherryPickPreviewSchema,
+      { signal },
+    ),
+  gitRepositoryStashDetail: (
+    workspaceId: string,
+    oid: string,
+    signal?: AbortSignal,
+    path = ".",
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/stash-detail?path=${query(path)}&oid=${query(oid)}`,
+      gitStashDetailSchema,
+      { signal },
+    ),
+  gitRepositoryOperate: (
+    workspaceId: string,
+    action: GitRepositoryAction,
+    expected: GitExpectedState,
+    path = ".",
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/operations`,
+      gitRepositoryOperationSchema,
+      {
+        method: "POST",
+        ...json({
+          path,
+          action: gitRepositoryActionSchema.parse(action),
+          expected: gitExpectedStateSchema.parse(expected),
+        }),
+      },
+    ),
+  gitRepositoryOperation: (
+    workspaceId: string,
+    operationId: string,
+    signal?: AbortSignal,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/operations/${query(operationId)}`,
+      gitRepositoryOperationSchema,
+      { signal },
+    ),
+  gitRepositoryCancel: (workspaceId: string, operationId: string) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/operations/${query(operationId)}/cancel`,
+      gitRepositoryOperationSchema,
+      { method: "POST" },
+    ),
+  /**
+   * `scope` 决定取索引的哪一侧：`worktree` = `git diff` + 未跟踪文件，
+   * `staged` = `git diff --cached`（未跟踪文件不会出现）。给 `paths` 时
+   * 只 diff 这些文件，`path` 目录参数被忽略。
+   */
+};
