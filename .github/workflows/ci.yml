@@ -75,6 +75,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @armadra/shared build
       - run: pnpm repo:test
+      # 发布脚本与工作流校验：release.yml 只在推标签时跑，这里是它唯一会被
+      # 提前发现问题的地方。
+      - run: pnpm release:test
       - run: pnpm check
 
   web:

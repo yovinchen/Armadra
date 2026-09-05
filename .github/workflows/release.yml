@@ -1,0 +1,278 @@
+# 发布流水线，见 docs/design/updates-and-service-install.md §1。
+# 五个作业：verify 拦住版本不一致的标签，build 按目标矩阵打包，web 打前端产物，
+# assemble 汇总校验清单与签名并只创建 draft Release，notarize 在缺少 secret 时
+# 跳过并在说明里标注。发布是人的动作：本工作流永远不会把 Release 从 draft 转正。
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  # 手动触发用于演练：不带标签时 verify 仍会比对四处版本，assemble 不会创建 Release。
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 只构建与校验，不创建 draft Release
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PNPM_VERSION: "11.18.0"
+  NODE_VERSION: "22"
+  GO_VERSION: "1.24"
+  ARMADRA_RELEASE_CHANNEL: stable
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: apps/host/go.sum
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: pnpm install --frozen-lockfile
+      - name: 四处版本与标签一致，兼容范围包含本版本
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/release/version.mjs check
+          version="$(node tools/release/version.mjs print)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+      - run: node tools/ci/validate-workflows.mjs
+      - run: node --test tools/release/*.test.mjs
+      - run: pnpm --filter @armadra/shared build
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm protocol:check
+      - run: pnpm protocol:test
+      - run: cargo test --workspace
+      - run: go -C apps/host test ./...
+
+  web:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @armadra/shared build
+      - run: pnpm --filter @armadra/web build
+      - name: 打包前端产物
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          tar --numeric-owner -czf "artifacts/armadra-web_${{ needs.verify.outputs.version }}.tar.gz" \
+            -C apps/web/dist .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-web
+          path: artifacts
+          if-no-files-found: error
+
+  build:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            target: darwin-aarch64
+            triple: aarch64-apple-darwin
+          - runner: macos-13
+            target: darwin-x86_64
+            triple: x86_64-apple-darwin
+          - runner: ubuntu-24.04
+            target: linux-x86_64
+            triple: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            target: linux-aarch64
+            triple: aarch64-unknown-linux-gnu
+          - runner: windows-2022
+            target: windows-x86_64
+            triple: x86_64-pc-windows-msvc
+          - runner: windows-11-arm
+            target: windows-aarch64
+            triple: aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: apps/host/go.sum
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: 安装 Tauri 的 Linux 系统依赖
+        if: startsWith(matrix.target, 'linux-')
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libgtk-3-dev librsvg2-dev patchelf
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @armadra/shared build
+      # sidecar 构建同时产出组件二进制与 Tauri 需要的 externalBin。
+      - run: pnpm --filter @armadra/desktop prepare:sidecar
+      # 更新地址只在 CI 注入：仓库里的 tauri.conf.json 保持 endpoints 为空，
+      # 否则一个本地构建也会去联系发布来源。
+      - name: 打桌面包
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "::warning::没有 TAURI_SIGNING_PRIVATE_KEY，桌面更新包不会被签名，assemble 会把它排除在 latest.json 之外"
+          fi
+          pnpm --filter @armadra/desktop exec tauri build \
+            --config '{"plugins":{"updater":{"endpoints":["https://github.com/yovinchen/Armadra/releases/latest/download/latest.json"]}}}'
+      - name: 打组件包
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/release/package-components.mjs \
+            --target "${{ matrix.target }}" \
+            --triple "${{ matrix.triple }}" \
+            --from target/release \
+            --out artifacts \
+            --version "${{ needs.verify.outputs.version }}"
+      - name: 收集桌面产物
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          bundle="target/release/bundle"
+          if [ -d "$bundle" ]; then
+            find "$bundle" -type f \
+              \( -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.app.tar.gz.sig' \
+                 -o -name '*setup.exe' -o -name '*setup.exe.sig' -o -name '*.msi' \
+                 -o -name '*.AppImage' -o -name '*.AppImage.sig' -o -name '*.deb' -o -name '*.rpm' \) \
+              -exec cp {} artifacts/ \;
+          fi
+          ls -l artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: artifacts
+          if-no-files-found: error
+
+  # 公证与 Authenticode 都由 build 作业里的 Tauri 完成；本作业只报告哪些目标缺
+  # 少 secret，assemble 会把结论写进 Release 说明顶部。缺 secret 不阻断发布。
+  notarize:
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    outputs:
+      unnotarized: ${{ steps.report.outputs.unnotarized }}
+    steps:
+      - id: report
+        shell: bash
+        env:
+          HAS_APPLE: ${{ secrets.APPLE_ID != '' }}
+          HAS_WINDOWS: ${{ secrets.WINDOWS_CERT_BASE64 != '' }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ "$HAS_APPLE" = "true" ] || missing+=("macOS")
+          [ "$HAS_WINDOWS" = "true" ] || missing+=("Windows")
+          printf 'unnotarized=%s\n' "$(IFS=,; echo "${missing[*]:-}")" >> "$GITHUB_OUTPUT"
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::warning::未公证/未签名的平台：${missing[*]}；首次安装会有系统提示"
+          fi
+
+  assemble:
+    needs: [verify, build, web, notarize]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: artifacts
+      - name: 生成清单、校验列表与说明
+        shell: bash
+        env:
+          ARMADRA_RELEASE_SIGNING_KEY: ${{ secrets.ARMADRA_RELEASE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          version="${{ needs.verify.outputs.version }}"
+          node tools/release/assemble.mjs \
+            --dir artifacts \
+            --version "$version" \
+            --repo "${{ github.repository }}" \
+            --tag "v$version" \
+            --unnotarized "${{ needs.notarize.outputs.unnotarized }}" \
+            --note release-note.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-assembled
+          path: artifacts
+          if-no-files-found: error
+      # 只创建 draft：产物清单与说明由人审阅后再点击发布，Host 会跳过 draft，
+      # 所以未发布前任何客户端都看不到它。
+      - name: 创建 draft Release
+        if: needs.verify.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${{ needs.verify.outputs.version }}"
+          prerelease=""
+          case "$version" in
+            *-*) prerelease="--prerelease" ;;
+          esac
+          gh release create "v$version" \
+            --draft $prerelease \
+            --title "Armadra $version" \
+            --notes-file release-note.md \
+            artifacts/*
