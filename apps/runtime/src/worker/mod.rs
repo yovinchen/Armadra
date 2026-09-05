@@ -142,7 +142,7 @@ fn error_response(error: AppError) -> ErrorResponse {
 fn unsupported_ownership() -> worker_response::Result {
     worker_response::Result::Error(ErrorResponse {
         code: "UNSUPPORTED".into(),
-        message: "Canvas write ownership is not configured".into(),
+        message: "Write ownership is not configured".into(),
     })
 }
 
@@ -152,7 +152,7 @@ fn write_ownership(record: ownership::WriteOwnership) -> Result<WorkerWriteOwner
     let updated_at = chrono::DateTime::parse_from_rfc3339(&record.updated_at)
         .map_err(|_| AppError::Internal("Stored write ownership timestamp is invalid".into()))?;
     Ok(WorkerWriteOwnership {
-        domain: record.domain,
+        domain: record.domain.as_str().into(),
         owner: record.owner.to_wire(),
         epoch: record.epoch,
         updated_at_unix_ms: updated_at.timestamp_millis(),
@@ -378,7 +378,7 @@ impl Worker {
                 let record = ownership::apply(
                     pool,
                     ownership::OwnershipHandoff {
-                        domain: input.domain,
+                        domain: ownership::OwnershipDomain::parse(&input.domain)?,
                         owner: ownership::WriteOwner::from_wire(input.owner)?,
                         epoch: input.epoch,
                         expected_epoch: input.expected_epoch,
@@ -393,7 +393,8 @@ impl Worker {
                     return Ok(unsupported_ownership());
                 };
                 Ok(Response::WriteOwnership(write_ownership(
-                    ownership::read(pool, &input.domain).await?,
+                    ownership::read(pool, ownership::OwnershipDomain::parse(&input.domain)?)
+                        .await?,
                 )?))
             }
             // The rollback direction. Applying the Host's reverse export is a

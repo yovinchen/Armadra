@@ -1,11 +1,12 @@
-//! Canvas write ownership (host protocol design §4, step 5).
+//! Write ownership per business domain (host protocol design §4, step 5;
+//! Go Host 业务所有权迁移 §2.2).
 //!
-//! Exactly one process writes the canvas domain. The Runtime starts as the
-//! owner, and a handoff moves the domain to the Go Host under a monotonic
-//! epoch. From then on the Runtime refuses canvas writes with the stable code
-//! `ownership_moved` while every read keeps answering, which is what makes the
-//! switch reversible: handing the epoch back re-enables writes without a
-//! second migration or a database swap.
+//! Exactly one process writes each domain. The Runtime starts as the owner of
+//! all six, and a handoff moves one domain at a time to the Go Host under a
+//! monotonic epoch. From then on the Runtime refuses that domain's writes with
+//! the stable code `ownership_moved` while every read keeps answering, which is
+//! what makes the switch reversible: handing the epoch back re-enables writes
+//! without a second migration or a database swap.
 //!
 //! Terminals, files, Git and hooks are deliberately absent from this record.
 //! They stay with the Runtime whoever owns the canvas.
@@ -13,7 +14,15 @@
 //! [`import`] is the other half of that reversibility: handing the epoch back
 //! is only half a rollback, and the Host's reverse export has to be applied to
 //! this database before the epoch moves.
+//!
+//! The domains are independent. Handing the canvas over says nothing about
+//! terminals, files or Git; each has its own row, its own epoch and its own
+//! guard, and only the canvas guard is wired into routes today.
+//!
+//! Execution stays here whoever owns a domain: PTYs, the filesystem, Git
+//! commands and Hook endpoints are not ownership, they are the machine.
 
+pub mod domains;
 pub mod import;
 pub mod import_cli;
 pub mod records;
@@ -29,10 +38,7 @@ use crate::{
     error::{AppError, AppResult},
 };
 
-/// The only domain this version knows. A handoff naming anything else comes
-/// from a newer peer and is refused rather than stored, so a domain this
-/// Runtime does not understand can never be created behind its back.
-pub const CANVAS_DOMAIN: &str = "canvas";
+pub use domains::OwnershipDomain;
 
 /// Reason codes are stable localizable keys ("ownership.switch.verified"), not
 /// sentences and never paths; the bound and the alphabet keep an operator's
@@ -93,7 +99,7 @@ impl WriteOwner {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WriteOwnership {
-    pub domain: String,
+    pub domain: OwnershipDomain,
     pub owner: WriteOwner,
     /// A decimal **string** on the wire. The epoch is a u64 and a JSON number
     /// stops being exact above 2^53, so the web client parses this with
@@ -112,7 +118,7 @@ fn serialize_epoch<S: serde::Serializer>(epoch: &u64, serializer: S) -> Result<S
 /// stored, which is what makes a repeat harmless and a stale request visible.
 #[derive(Debug, Clone)]
 pub struct OwnershipHandoff {
-    pub domain: String,
+    pub domain: OwnershipDomain,
     pub owner: WriteOwner,
     pub epoch: u64,
     pub expected_epoch: u64,
@@ -127,22 +133,10 @@ fn storable_epoch(epoch: u64) -> AppResult<i64> {
     })
 }
 
-async fn fetch<'e, E>(executor: E, domain: &str) -> AppResult<WriteOwnership>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
-{
-    let row = sqlx::query(
-        "SELECT domain, owner, epoch, reason_code, updated_at FROM write_ownership WHERE domain = ?",
-    )
-    .bind(domain)
-    .fetch_optional(executor)
-    .await?
-    // The migration seeds the canvas row. A missing one is damage, and an
-    // absent record must never be read as "the Runtime still owns it".
-    .ok_or_else(|| AppError::NotFound("Write ownership record is missing".into()))?;
+fn row_to_record(row: sqlx::sqlite::SqliteRow) -> AppResult<WriteOwnership> {
     let epoch: i64 = row.try_get("epoch")?;
     Ok(WriteOwnership {
-        domain: row.try_get("domain")?,
+        domain: OwnershipDomain::parse_stored(row.try_get::<String, _>("domain")?.as_str())?,
         owner: WriteOwner::parse(row.try_get::<String, _>("owner")?.as_str())?,
         epoch: u64::try_from(epoch)
             .map_err(|_| AppError::Internal("Stored write ownership epoch is invalid".into()))?,
@@ -151,30 +145,63 @@ where
     })
 }
 
-pub async fn read(pool: &SqlitePool, domain: &str) -> AppResult<WriteOwnership> {
+async fn fetch<'e, E>(executor: E, domain: OwnershipDomain) -> AppResult<WriteOwnership>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
+    let row = sqlx::query(
+        "SELECT domain, owner, epoch, reason_code, updated_at FROM write_ownership WHERE domain = ?",
+    )
+    .bind(domain.as_str())
+    .fetch_optional(executor)
+    .await?
+    // The migrations seed one row per domain. A missing one is damage, and an
+    // absent record must never be read as "the Runtime still owns it".
+    .ok_or_else(|| AppError::NotFound("Write ownership record is missing".into()))?;
+    row_to_record(row)
+}
+
+pub async fn read(pool: &SqlitePool, domain: OwnershipDomain) -> AppResult<WriteOwnership> {
     fetch(pool, domain).await
 }
 
 /// The same read against an open transaction. A reverse import decides on the
 /// record inside the transaction it is going to write in, so the owner it
 /// checked cannot change between the check and the write.
-pub async fn read_in<'e, E>(executor: E, domain: &str) -> AppResult<WriteOwnership>
+pub async fn read_in<'e, E>(executor: E, domain: OwnershipDomain) -> AppResult<WriteOwnership>
 where
     E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
 {
     fetch(executor, domain).await
 }
 
+/// Every domain, in switch order. A domain whose row is missing is reported as
+/// damage for the whole read: a shorter list would look like a domain that
+/// simply does not exist here, which is the one thing this record must never
+/// be read as.
+pub async fn read_all(pool: &SqlitePool) -> AppResult<Vec<WriteOwnership>> {
+    let mut records = Vec::with_capacity(OwnershipDomain::ALL.len());
+    for domain in OwnershipDomain::ALL {
+        records.push(fetch(pool, domain).await?);
+    }
+    Ok(records)
+}
+
 /// The write guard. Reads are never gated by it: a Runtime that handed the
 /// canvas over still has to answer `load_board`, so the UI can show the board
 /// it no longer owns instead of an error page.
-pub async fn require_local_write(pool: &SqlitePool, domain: &str) -> AppResult<()> {
+///
+/// The guard is per domain. A route protected for one domain stays open when a
+/// different domain moves, because that is exactly what independent epochs
+/// mean.
+pub async fn require_local_write(pool: &SqlitePool, domain: OwnershipDomain) -> AppResult<()> {
     let record = read(pool, domain).await?;
     match record.owner {
         WriteOwner::Runtime => Ok(()),
         WriteOwner::Host => Err(AppError::OwnershipMoved(format!(
             "Write ownership of {} moved to the Host at epoch {}",
-            record.domain, record.epoch
+            record.domain.as_str(),
+            record.epoch
         ))),
     }
 }
@@ -187,11 +214,6 @@ pub async fn require_local_write(pool: &SqlitePool, domain: &str) -> AppResult<(
 /// handoff cannot slip between the read and the write and leave two processes
 /// believing they hold the same epoch.
 pub async fn apply(pool: &SqlitePool, request: OwnershipHandoff) -> AppResult<WriteOwnership> {
-    if request.domain != CANVAS_DOMAIN {
-        return Err(AppError::BadRequest(
-            "Write ownership only covers the canvas domain".into(),
-        ));
-    }
     // The migration's CHECK refuses it too; refusing here keeps the reason a
     // request error instead of a database error the caller cannot act on.
     if request.epoch == 0 {
@@ -212,7 +234,7 @@ pub async fn apply(pool: &SqlitePool, request: OwnershipHandoff) -> AppResult<Wr
     let epoch = storable_epoch(request.epoch)?;
     storable_epoch(request.expected_epoch)?;
     let mut transaction = pool.begin_with("BEGIN IMMEDIATE").await?;
-    let stored = fetch(&mut *transaction, &request.domain).await?;
+    let stored = fetch(&mut *transaction, request.domain).await?;
     // An exact replay is the Host retrying a request whose answer it lost.
     // Returning the stored row keeps the retry harmless; failing it would
     // strand a switch that already happened.
@@ -240,7 +262,7 @@ pub async fn apply(pool: &SqlitePool, request: OwnershipHandoff) -> AppResult<Wr
     .bind(epoch)
     .bind(&request.reason_code)
     .bind(&updated_at)
-    .bind(&request.domain)
+    .bind(request.domain.as_str())
     .bind(stored_epoch)
     .execute(&mut *transaction)
     .await?
@@ -250,170 +272,24 @@ pub async fn apply(pool: &SqlitePool, request: OwnershipHandoff) -> AppResult<Wr
             "Write ownership changed while it was being handed over".into(),
         ));
     }
-    let applied = fetch(&mut *transaction, &request.domain).await?;
+    let applied = fetch(&mut *transaction, request.domain).await?;
     transaction.commit().await?;
     Ok(applied)
 }
 
-/// `GET /api/ownership` — who may write the canvas domain right now.
+/// `GET /api/ownership` — who may write the canvas domain right now. The shape
+/// is unchanged from the single-domain phase; clients that only ever cared
+/// about the canvas keep reading exactly this.
 pub async fn current(State(state): State<AppState>) -> AppResult<Json<WriteOwnership>> {
-    Ok(Json(read(&state.pool, CANVAS_DOMAIN).await?))
+    Ok(Json(read(&state.pool, OwnershipDomain::Canvas).await?))
+}
+
+/// `GET /api/ownership/domains` — all six records, in switch order. This is
+/// what a client renders "who writes what" from; it is a list because there is
+/// no domain whose owner may be inferred from another's.
+pub async fn all(State(state): State<AppState>) -> AppResult<Json<Vec<WriteOwnership>>> {
+    Ok(Json(read_all(&state.pool).await?))
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::db;
-
-    async fn pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
-        let directory = tempfile::tempdir().unwrap();
-        let pool = db::connect(&format!(
-            "sqlite://{}?mode=rwc",
-            directory.path().join("ownership.db").display()
-        ))
-        .await
-        .unwrap();
-        (pool, directory)
-    }
-
-    fn handoff(owner: WriteOwner, epoch: u64, expected: u64) -> OwnershipHandoff {
-        OwnershipHandoff {
-            domain: CANVAS_DOMAIN.into(),
-            owner,
-            epoch,
-            expected_epoch: expected,
-            reason_code: "ownership.switch.verified".into(),
-        }
-    }
-
-    #[tokio::test]
-    async fn a_migrated_runtime_owns_the_canvas_and_may_write_it() {
-        let (pool, _directory) = pool().await;
-        let record = read(&pool, CANVAS_DOMAIN).await.unwrap();
-        assert_eq!(record.owner, WriteOwner::Runtime);
-        assert_eq!(record.epoch, 1);
-        assert_eq!(record.reason_code, "ownership.initial");
-        require_local_write(&pool, CANVAS_DOMAIN).await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn handoff_is_monotonic_cas_checked_and_idempotent_on_replay() {
-        let (pool, _directory) = pool().await;
-        let moved = apply(&pool, handoff(WriteOwner::Host, 2, 1)).await.unwrap();
-        assert_eq!(moved.owner, WriteOwner::Host);
-        assert_eq!(moved.epoch, 2);
-        assert!(matches!(
-            require_local_write(&pool, CANVAS_DOMAIN).await,
-            Err(AppError::OwnershipMoved(_))
-        ));
-        // The exact same handoff again is the Host retrying a lost answer.
-        let replay = apply(&pool, handoff(WriteOwner::Host, 2, 1)).await.unwrap();
-        assert_eq!(replay, moved);
-        // Even a replay that names the new epoch as expected stays harmless.
-        assert_eq!(
-            apply(&pool, handoff(WriteOwner::Host, 2, 2)).await.unwrap(),
-            moved
-        );
-        for stale in [
-            handoff(WriteOwner::Runtime, 2, 2),
-            handoff(WriteOwner::Runtime, 1, 1),
-            handoff(WriteOwner::Runtime, 3, 1),
-        ] {
-            assert!(matches!(
-                apply(&pool, stale).await,
-                Err(AppError::Conflict(_))
-            ));
-        }
-        // Nothing above touched the row it was refused against.
-        assert_eq!(read(&pool, CANVAS_DOMAIN).await.unwrap(), moved);
-    }
-
-    #[tokio::test]
-    async fn a_refused_handoff_leaves_the_stored_row_untouched() {
-        let (pool, _directory) = pool().await;
-        let before = read(&pool, CANVAS_DOMAIN).await.unwrap();
-        for refused in [
-            OwnershipHandoff {
-                domain: "terminal".into(),
-                ..handoff(WriteOwner::Host, 2, 1)
-            },
-            OwnershipHandoff {
-                epoch: 0,
-                ..handoff(WriteOwner::Host, 0, 1)
-            },
-            OwnershipHandoff {
-                reason_code: "/Users/someone/secret".into(),
-                ..handoff(WriteOwner::Host, 2, 1)
-            },
-            handoff(WriteOwner::Host, u64::MAX, 1),
-            handoff(WriteOwner::Host, 2, 7),
-        ] {
-            assert!(apply(&pool, refused).await.is_err());
-            assert_eq!(read(&pool, CANVAS_DOMAIN).await.unwrap(), before);
-        }
-        // An unspecified or newer-than-known owner never reaches the store.
-        for value in [0, 3, 999, -1] {
-            assert!(matches!(
-                WriteOwner::from_wire(value),
-                Err(AppError::BadRequest(_))
-            ));
-        }
-    }
-
-    #[tokio::test]
-    async fn ownership_can_be_handed_back_to_the_runtime() {
-        let (pool, _directory) = pool().await;
-        apply(&pool, handoff(WriteOwner::Host, 2, 1)).await.unwrap();
-        let back = apply(
-            &pool,
-            OwnershipHandoff {
-                reason_code: "ownership.rollback".into(),
-                ..handoff(WriteOwner::Runtime, 3, 2)
-            },
-        )
-        .await
-        .unwrap();
-        assert_eq!(back.owner, WriteOwner::Runtime);
-        assert_eq!(back.epoch, 3);
-        require_local_write(&pool, CANVAS_DOMAIN).await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn a_missing_row_is_damage_rather_than_an_assumed_runtime_owner() {
-        let (pool, _directory) = pool().await;
-        sqlx::query("DELETE FROM write_ownership")
-            .execute(&pool)
-            .await
-            .unwrap();
-        assert!(matches!(
-            read(&pool, CANVAS_DOMAIN).await,
-            Err(AppError::NotFound(_))
-        ));
-        assert!(matches!(
-            require_local_write(&pool, CANVAS_DOMAIN).await,
-            Err(AppError::NotFound(_))
-        ));
-    }
-
-    #[test]
-    fn the_epoch_is_reported_as_a_decimal_string() {
-        let body = serde_json::to_value(WriteOwnership {
-            domain: CANVAS_DOMAIN.into(),
-            owner: WriteOwner::Host,
-            epoch: 9_007_199_254_740_993,
-            reason_code: "ownership.switch.verified".into(),
-            updated_at: "2026-09-06T00:00:00Z".into(),
-        })
-        .unwrap();
-        assert_eq!(
-            body,
-            serde_json::json!({
-                "domain": "canvas",
-                "owner": "host",
-                "epoch": "9007199254740993",
-                "reasonCode": "ownership.switch.verified",
-                "updatedAt": "2026-09-06T00:00:00Z",
-            })
-        );
-    }
-}
+mod tests;

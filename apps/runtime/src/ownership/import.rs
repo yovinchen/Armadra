@@ -50,7 +50,7 @@ pub const PACKAGE_FORMAT_VERSION: u32 = 2;
 pub const INDEX_FILE: &str = "export.json";
 /// The reverse import is the rollback of the canvas domain. Other domains get
 /// their own record and their own reader; naming one here is refused.
-pub const CANVAS_DOMAIN: &str = super::CANVAS_DOMAIN;
+pub const CANVAS_DOMAIN: &str = super::domains::OwnershipDomain::Canvas.as_str();
 
 const MAX_INDEX_BYTES: u64 = 8 << 20;
 const MAX_FILE_BYTES: u64 = 512 << 20;
@@ -287,7 +287,7 @@ pub async fn apply(
     }
 
     let mut transaction = pool.begin_with("BEGIN IMMEDIATE").await?;
-    let stored = super::read_in(&mut *transaction, CANVAS_DOMAIN).await?;
+    let stored = super::read_in(&mut *transaction, super::domains::OwnershipDomain::Canvas).await?;
     if stored.owner != super::WriteOwner::Host {
         return Err(AppError::Conflict(
             "reverse.not_host_owned: a reverse export is only applied while the Host owns writes"

@@ -227,10 +227,13 @@ pub fn router_with_state(state: AppState) -> Router {
                 imports::MAX_BATCH_BYTES + 1024 * 1024,
             )),
         )
-        // Who may write the canvas domain (host protocol design §4, step 5).
-        // Not workspace-scoped: the record covers the whole local database, and
-        // the client reads it before it offers a canvas edit.
+        // Who may write each business domain (host protocol design §4, step 5).
+        // Not workspace-scoped: the records cover the whole local database, and
+        // the client reads them before it offers an edit. The bare path stays
+        // the canvas record it has always been; the list is how a client learns
+        // about the other five without inferring anything from the first.
         .route("/api/ownership", get(ownership::current))
+        .route("/api/ownership/domains", get(ownership::all))
         .route("/health", get(api::health))
         // The desktop shell and the web app both probe `/api/health`; the bare
         // path is the older one and stays for the launcher script.

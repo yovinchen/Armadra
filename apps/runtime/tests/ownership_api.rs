@@ -201,7 +201,7 @@ async fn a_moved_canvas_refuses_every_write_and_still_answers_every_read() {
     ownership::apply(
         &fixture.pool,
         OwnershipHandoff {
-            domain: ownership::CANVAS_DOMAIN.into(),
+            domain: ownership::OwnershipDomain::Canvas,
             owner: WriteOwner::Host,
             epoch: 9_007_199_254_740_993,
             expected_epoch: 1,
@@ -261,7 +261,7 @@ async fn handing_the_epoch_back_reopens_the_same_routes() {
         ownership::apply(
             &fixture.pool,
             OwnershipHandoff {
-                domain: ownership::CANVAS_DOMAIN.into(),
+                domain: ownership::OwnershipDomain::Canvas,
                 owner,
                 epoch,
                 expected_epoch: expected,
@@ -303,4 +303,64 @@ async fn handing_the_epoch_back_reopens_the_same_routes() {
     let (_, record) = json(&fixture.app, "GET", "/api/ownership", Value::Null).await;
     assert_eq!(record["owner"], "runtime");
     assert_eq!(record["epoch"], "3");
+}
+
+/// The five domains beyond the canvas are recorded, readable and untouched by
+/// a canvas switch. Nothing routes through their guards yet, which is exactly
+/// what the record has to say: the Runtime writes them.
+#[tokio::test]
+async fn every_domain_is_listed_and_only_the_switched_one_changes() {
+    let fixture = fixture().await;
+    let (status, body) = json(&fixture.app, "GET", "/api/ownership/domains", Value::Null).await;
+    assert_eq!(status, StatusCode::OK);
+    let domains = body.as_array().unwrap();
+    assert_eq!(
+        domains
+            .iter()
+            .map(|record| record["domain"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec![
+            "canvas",
+            "settings",
+            "filesystem",
+            "session",
+            "agent",
+            "git"
+        ]
+    );
+    for record in domains {
+        assert_eq!(record["owner"], "runtime");
+        assert_eq!(record["epoch"], "1");
+        assert_eq!(record["reasonCode"], "ownership.initial");
+    }
+
+    ownership::apply(
+        &fixture.pool,
+        OwnershipHandoff {
+            domain: ownership::OwnershipDomain::Canvas,
+            owner: WriteOwner::Host,
+            epoch: 2,
+            expected_epoch: 1,
+            reason_code: "ownership.switch.verified".into(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let (_, body) = json(&fixture.app, "GET", "/api/ownership/domains", Value::Null).await;
+    for record in body.as_array().unwrap() {
+        let moved = record["domain"] == "canvas";
+        assert_eq!(record["owner"], if moved { "host" } else { "runtime" });
+        assert_eq!(record["epoch"], if moved { "2" } else { "1" });
+    }
+    // A session read is not gated by the canvas epoch, and the session domain
+    // still says the Runtime owns it.
+    let (status, _) = json(
+        &fixture.app,
+        "GET",
+        &format!("/api/workspaces/{}/sessions", fixture.workspace_id),
+        Value::Null,
+    )
+    .await;
+    assert_ne!(status, StatusCode::CONFLICT);
 }

@@ -48,7 +48,7 @@ pub async fn create_workspace(
     let name = valid_workspace_name(&request.name)?;
     // Before `createDirectory` touches the disk: a refused canvas write must
     // not leave a folder behind that nothing then references.
-    ownership::require_local_write(&state.pool, ownership::CANVAS_DOMAIN).await?;
+    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Canvas).await?;
     if request.create_directory {
         create_root_directory(&request.root_path)?;
     }
@@ -70,7 +70,7 @@ pub async fn open_directory_workspace(
     Json(request): Json<CreateWorkspaceRequest>,
 ) -> AppResult<Json<Workspace>> {
     let name = valid_workspace_name(&request.name)?;
-    ownership::require_local_write(&state.pool, ownership::CANVAS_DOMAIN).await?;
+    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Canvas).await?;
     let root = imports::directory_source(&request.root_path)?;
     Ok(Json(
         db::create_workspace(
@@ -181,7 +181,7 @@ pub async fn import_workspace(
     let name = valid_workspace_name(&query.name)?;
     // Before any uploaded byte is written: the import ends in a workspace row,
     // and a Runtime that may not create one must not stage the files for it.
-    ownership::require_local_write(&state.pool, ownership::CANVAS_DOMAIN).await?;
+    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Canvas).await?;
     let manifest = imports::read_manifest(&mut multipart, true).await?;
     let mut batch =
         imports::ImportBatch::workspace(&paths::data_dir().join("imported-workspaces"))?;
@@ -242,7 +242,7 @@ pub async fn update_workspace(
     AxumPath(workspace_id): AxumPath<String>,
     Json(request): Json<UpdateWorkspaceRequest>,
 ) -> AppResult<Json<Workspace>> {
-    ownership::require_local_write(&state.pool, ownership::CANVAS_DOMAIN).await?;
+    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Canvas).await?;
     let workspace = db::update_workspace(
         &state.pool,
         &workspace_id,
@@ -276,7 +276,7 @@ pub async fn delete_workspace(
     // Before the 404 probe and long before any teardown: a Runtime that no
     // longer owns the canvas must not destroy sessions for a row it cannot
     // then delete.
-    ownership::require_local_write(&state.pool, ownership::CANVAS_DOMAIN).await?;
+    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Canvas).await?;
     // 404 before anything is torn down, so an unknown id is a no-op.
     db::get_workspace(&state.pool, &workspace_id).await?;
     state.terminals.destroy_workspace(&workspace_id).await;
@@ -292,7 +292,7 @@ pub async fn open_workspace(
     // Opening only stamps `last_opened_at`, but that is still a canvas-domain
     // write: two processes updating it would make the Host's exported row and
     // the Runtime's row disagree over which workspace was opened last.
-    ownership::require_local_write(&state.pool, ownership::CANVAS_DOMAIN).await?;
+    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Canvas).await?;
     Ok(Json(
         db::touch_workspace_opened(&state.pool, &workspace_id).await?,
     ))

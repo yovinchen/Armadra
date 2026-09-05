@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	pb "armadra.local/host/gen/armadra/v1"
@@ -35,6 +36,12 @@ var legacy embed.FS
 // number. Appending here is how support for a newer Runtime schema is added;
 // an existing entry must never change, because its checksum is what an
 // already-exported database was recorded against.
+//
+// The version each entry stands for is its own file name, not its position:
+// migration numbers are allocated ahead of time across parallel work, so the
+// series can have a hole while one of them is still unmerged. The order stays
+// the order they are applied in, and a source ledger must still be a prefix of
+// it.
 var legacyMigrations = []string{
 	"legacy/0001_initial.sql",
 	"legacy/0002_agent_mailbox.sql",
@@ -46,6 +53,22 @@ var legacyMigrations = []string{
 	"legacy/0008_write_ownership.sql",
 	"legacy/0009_workspace_execution_host.sql",
 	"legacy/0010_host_imports.sql",
+	"legacy/0011_domain_ownership.sql",
+}
+
+// legacyVersion reads the migration number out of an embedded file name. SQLx
+// derives the same number from the same prefix, so this is what the exported
+// ledger has to agree with.
+func legacyVersion(name string) (int64, error) {
+	digits, _, found := strings.Cut(strings.TrimPrefix(name, "legacy/"), "_")
+	if !found {
+		return 0, errors.New("unnamed legacy migration")
+	}
+	version, err := strconv.ParseInt(digits, 10, 64)
+	if err != nil || version < 1 {
+		return 0, errors.New("unnumbered legacy migration")
+	}
+	return version, nil
 }
 
 const maxManifest = 64 << 20
@@ -267,8 +290,12 @@ func validateDatabase(ctx context.Context, db *sql.DB, manifest *pb.MigrationExp
 		if err != nil {
 			return err
 		}
+		version, err := legacyVersion(legacyMigrations[i])
+		if err != nil {
+			return err
+		}
 		checksum := sha512.Sum384(source)
-		if m.Version != int64(i+1) || !m.Success || !bytes.Equal(m.Checksum, checksum[:]) || !proto.Equal(m, manifest.Migrations[i]) {
+		if m.Version != version || !m.Success || !bytes.Equal(m.Checksum, checksum[:]) || !proto.Equal(m, manifest.Migrations[i]) {
 			return errors.New("source migration checksum or manifest mismatch")
 		}
 		if _, err = expected.ExecContext(ctx, string(source)); err != nil {

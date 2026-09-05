@@ -36,7 +36,7 @@ pub async fn create_board(
     AxumPath(workspace_id): AxumPath<String>,
     Json(request): Json<CreateBoardRequest>,
 ) -> AppResult<Json<Board>> {
-    ownership::require_local_write(&state.pool, ownership::CANVAS_DOMAIN).await?;
+    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Canvas).await?;
     Ok(Json(
         db::create_board(&state.pool, &workspace_id, &request.name).await?,
     ))
@@ -54,7 +54,7 @@ pub async fn update_board(
     AxumPath((workspace_id, board_id)): AxumPath<(String, String)>,
     Json(request): Json<UpdateBoardRequest>,
 ) -> AppResult<Json<Board>> {
-    ownership::require_local_write(&state.pool, ownership::CANVAS_DOMAIN).await?;
+    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Canvas).await?;
     Ok(Json(
         db::update_board(
             &state.pool,
@@ -71,7 +71,7 @@ pub async fn delete_board(
     State(state): State<AppState>,
     AxumPath((workspace_id, board_id)): AxumPath<(String, String)>,
 ) -> AppResult<axum::http::StatusCode> {
-    ownership::require_local_write(&state.pool, ownership::CANVAS_DOMAIN).await?;
+    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Canvas).await?;
     db::delete_board(&state.pool, &workspace_id, &board_id).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
@@ -114,7 +114,7 @@ pub async fn save_board(
     }
     // After the retirement check, which is request validation and must answer
     // the same way whoever owns the canvas, and before the first stored byte.
-    ownership::require_local_write(&state.pool, ownership::CANVAS_DOMAIN).await?;
+    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Canvas).await?;
     let document = db::save_board(
         &state.pool,
         &workspace_id,

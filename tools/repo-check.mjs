@@ -287,6 +287,27 @@ function checkFileSize(context, problems) {
   }
 }
 
+/**
+ * 迁移编号必须从 1 起连续。并行批次会提前分配编号，尚未合入的那一个登记在
+ * `reserved` 里：它只占位参与连续性检查，对应文件必须还不存在——否则占位就
+ * 成了「谁都可以跳号」的口子。
+ */
+function checkMigrationNumbers(label, numbers, reserved, problems) {
+  const present = new Set(numbers);
+  for (const number of reserved) {
+    if (present.has(number)) {
+      problems.push(`预留的迁移编号已经被占用：${label} ${number}`);
+    }
+  }
+  [...numbers, ...reserved]
+    .sort((left, right) => left - right)
+    .forEach((value, index) => {
+      if (value !== index + 1) {
+        problems.push(`迁移编号不连续：${label} 第 ${index + 1} 个为 ${value}`);
+      }
+    });
+}
+
 /** Host 的 schema 是 Go 里的字符串常量，按常量名当作编号迁移读取。 */
 function goSchemaConstants(text, pattern) {
   const source = new RegExp(`${pattern}\\s*=\\s*\`([\\s\\S]*?)\``, "g");
@@ -318,17 +339,12 @@ function checkMigrations(context, problems) {
         if (!name.endsWith(".sql")) continue;
         actual.set(name, sha256(readFileSync(join(base, name))));
       }
-      const numbers = [...actual.keys()].map((name) =>
-        Number.parseInt(name.slice(0, 4), 10),
+      checkMigrationNumbers(
+        source.path,
+        [...actual.keys()].map((name) => Number.parseInt(name.slice(0, 4), 10)),
+        source.reserved ?? [],
+        problems,
       );
-      numbers.sort((left, right) => left - right);
-      numbers.forEach((value, index) => {
-        if (value !== index + 1) {
-          problems.push(
-            `迁移编号不连续：${source.path} 第 ${index + 1} 个为 ${value}`,
-          );
-        }
-      });
     } else {
       const text = readIfPresent(context.root, source.path);
       if (text === null) {
@@ -338,16 +354,14 @@ function checkMigrations(context, problems) {
       const constants = goSchemaConstants(text, source.pattern);
       for (const [key, body] of constants)
         actual.set(key, sha256(Buffer.from(body)));
-      const numbers = [...constants.keys()]
-        .map((key) => Number.parseInt(key.replace(/\D+/g, ""), 10))
-        .sort((left, right) => left - right);
-      numbers.forEach((value, index) => {
-        if (value !== index + 1) {
-          problems.push(
-            `迁移编号不连续：${source.path} 第 ${index + 1} 个为 ${value}`,
-          );
-        }
-      });
+      checkMigrationNumbers(
+        source.path,
+        [...constants.keys()].map((key) =>
+          Number.parseInt(key.replace(/\D+/g, ""), 10),
+        ),
+        source.reserved ?? [],
+        problems,
+      );
     }
     for (const [name, digest] of actual) {
       const expected = recorded[name];

@@ -292,6 +292,43 @@ test("migrations：编号连续、已发布文件 sha256 不变", () => {
   ]);
 });
 
+test("migrations：预留编号占位参与连续性，但不能已经有文件", () => {
+  const first = "create table a(id);\n";
+  const third = "create table c(id);\n";
+  const tree = {
+    "db/0001_a.sql": first,
+    "db/0003_c.sql": third,
+    "migrations.lock": JSON.stringify({
+      db: { "0001_a.sql": sha256(first), "0003_c.sql": sha256(third) },
+    }),
+  };
+  const rules = {
+    migrations: {
+      lock: "migrations.lock",
+      sources: [{ path: "db", kind: "directory", reserved: [2] }],
+    },
+  };
+  assert.deepEqual(run(repo(tree), rules, ["migrations"], []), []);
+
+  // 预留的编号一旦真的落了文件，占位就失效：它必须先从规则里删掉。
+  const claimed = repo({
+    ...tree,
+    "db/0002_b.sql": "create table b(id);\n",
+    "migrations.lock": JSON.stringify({
+      db: {
+        "0001_a.sql": sha256(first),
+        "0002_b.sql": sha256("create table b(id);\n"),
+        "0003_c.sql": sha256(third),
+      },
+    }),
+  });
+  assert.deepEqual(run(claimed, rules, ["migrations"], []), [
+    "预留的迁移编号已经被占用：db 2",
+    "迁移编号不连续：db 第 3 个为 2",
+    "迁移编号不连续：db 第 4 个为 3",
+  ]);
+});
+
 test("proto-coverage：每个 .proto 至少一个 fixture 与三端契约测试引用", () => {
   const tree = {
     "proto/v1/hello.proto":

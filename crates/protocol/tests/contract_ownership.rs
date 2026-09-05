@@ -125,8 +125,10 @@ fn the_maintenance_ticket_travels_on_the_control_channel() {
 #[test]
 fn an_unspecified_domain_is_never_read_as_the_canvas() {
     assert_eq!(WriteOwnershipDomain::Unspecified as i32, 0);
-    assert!(WriteOwnershipDomain::try_from(0).is_ok_and(|domain| domain
-        != WriteOwnershipDomain::Canvas));
+    assert!(
+        WriteOwnershipDomain::try_from(0)
+            .is_ok_and(|domain| domain != WriteOwnershipDomain::Canvas)
+    );
     // Every named domain keeps the number the design assigned it: the order is
     // also the switch order, and a renumbering would silently reorder it.
     for (domain, number) in [

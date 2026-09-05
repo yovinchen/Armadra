@@ -433,11 +433,14 @@ async fn a_configured_worker_persists_the_handoff_and_refuses_a_stale_epoch() {
             }),
             "INVALID_ARGUMENT",
         ),
+        // "terminal" is not a domain, which is a different answer from "that
+        // domain's record is missing": the six names are a closed set, so the
+        // request is refused before anything is looked up.
         (
             worker_request::Action::GetWriteOwnership(GetWriteOwnershipRequest {
                 domain: "terminal".into(),
             }),
-            "NOT_FOUND",
+            "INVALID_ARGUMENT",
         ),
     ] {
         assert_eq!(
@@ -449,6 +452,22 @@ async fn a_configured_worker_persists_the_handoff_and_refuses_a_stale_epoch() {
         ownership(worker.handle(request(&instance, get)).await),
         moved
     );
+    // The other five domains are readable over the same frame and were not
+    // moved along with the canvas: one switch is one domain.
+    for domain in ["settings", "filesystem", "session", "agent", "git"] {
+        let record = ownership(
+            worker
+                .handle(request(
+                    &instance,
+                    worker_request::Action::GetWriteOwnership(GetWriteOwnershipRequest {
+                        domain: domain.into(),
+                    }),
+                ))
+                .await,
+        );
+        assert_eq!(record.domain, domain);
+        assert_eq!((record.owner, record.epoch), (RUNTIME, 1));
+    }
 }
 
 /// The capability is what a controller plans against, so it may only appear
