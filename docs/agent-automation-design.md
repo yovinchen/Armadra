@@ -37,6 +37,8 @@ interface AgentCapabilities {
 
 账号切换默认创建新的 SessionRun，显式提示是否恢复旧对话；不在运行中的 CLI 下替换认证文件。账号失效时用量及计划状态转为需处理，不能自动切到另一个账号消费额度。
 
+预留部分已落地的：`proto/armadra/v1/account.proto` 的 `AccountRef { accountId, providerId, label }` 与 `CredentialBinding { credentialRef, scope, authorizationId }`；节点数据的 `agent.account`（`packages/shared/src/domain.ts`，可选、默认缺省，Runtime 侧逐字段限长）。`agentSessionRequest`（`apps/web/src/agent/launch.ts`）只在字段存在时透传 `accountId`，`credentialRef` 不上行；命令会话对非 `default` 账号仍然显式拒绝。节点头部的 `AccountBindingBadge` 只在字段存在时出现，设置页没有绑定入口，Host 把 `accountBinding` 报为 unsupported。账号的创建、列举与切换都未实现。
+
 ## 2. 单会话上下文占用
 
 ### 2.1 数据模型与来源

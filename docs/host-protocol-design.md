@@ -208,6 +208,14 @@ Presence 预留参加者列表、光标、焦点节点、正在输入、租约�
 
 敏感动作按真实目标做授权：终端输入/审批检查 generation，Git 检查仓库与 ref，文件检查规范化路径/符号链接，浏览器检查 session 和作用域。Hook per-node token 仅授予所属会话的报告和受限协作，不能当作 Host 管理凭据。
 
+### 6.1 预留契约实现状态（H04 / S02）
+
+`presence.proto` 有 `Presence`、`WriterLease` 与不透明载荷的 `Mutation` 信封，方法为 Subscribe / Acquire / Release / ApplyMutation；`account.proto` 有 `AccountRef`、`CredentialBinding`（只有 `credentialRef`，没有可放密钥的字段）与节点绑定读写。三语言产物、fixture 与契约测试就位，覆盖未知枚举、optional 与 64 位边界。
+
+Host 对 `armadra.v1.PresenceService/*` 与 `armadra.v1.AccountService/*` 一律返回 501 `UNSUPPORTED` 及稳定原因键 `host.capability.reserved`；本版本未定义的方法名仍是 `NOT_FOUND`。Hello 新增 `capability_status`，显式把 `presence` 与 `accountBinding` 报为 unsupported——`capabilities` 只列真正可用的能力，`capabilityStatus` 为空也不等于支持。前端「设置 → 后台服务」的连接详情展示这两条，未报告时显示「未报告」。
+
+未实现：以上任何操作的实际行为、账号列表与切换、光标/焦点同步、租约仲裁。协议 minor 仍为 1：可协商的表面没有变化，预留能力由 `capability_status` 发现。
+
 ## 7. 移动与桌面能力矩阵
 
 | 功能            | 桌面           | 浏览器               | 移动网页                                   |

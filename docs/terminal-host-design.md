@@ -170,6 +170,14 @@ PowerService 在实际执行主机管理租约：reason、session/runId、expire
 
 “手填快捷键”只绑定已注册命令，不把任意输入解释成 Shell 命令。如果后续支持用户脚本命令，应成为独立执行配置并遵守 Worker 授权。
 
+### 10.1 实现状态（S01，M7）
+
+已交付三层存储与继承：内置默认（`apps/web/src/keybindings.ts`，mac / other 各一套）→ 用户全局覆盖（Runtime `settings.keymap`，按平台分格）→ 本设备覆盖（`localStorage`，按设备 id，不上行）。合并、来源判定、冲突、导入导出在 `apps/web/src/panels/settings/keymap.ts`，本设备那一层在 `device-keymap-store.ts`。录制只写当前平台那一格；旧的扁平写法（两个平台共用一条）在首次加载时由 `use-app-keybindings.ts` 一次性迁移到两个平台，键位不变，PATCH 失败不影响读取。
+
+设置页每行显示来源（默认 / 全局 / 本设备），↺ 只重置最上面那一层并落到下一层，另有全部重置与导入/导出（JSON 文本框，不走文件选择器）。可切到另一个平台只读预览其默认与覆盖。冲突检测跑在三层合并后的结果上，跨 scope 与窗口保留键都算，且不自动改判谁赢。命令面板、Dock 与菜单通过 `setActiveKeymap` 读同一份合并结果，显示的键与实际派发一致。
+
+未实现：`profile`、`when` 条件、editor/browser scope、显式“清空绑定”（只能重置到上一层）、多组替代键的界面录制（存储支持逗号分隔）、OS 全局热键注册。
+
 ## 11. 更新与 GitHub 发布预留
 
 区分应用二进制更新与用户仓库 Git 同步：UpdatesService 管理 Armadra 发布，GitPanel 管理项目代码。
