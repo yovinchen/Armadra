@@ -53,16 +53,16 @@ pub fn list_directory(root: &Path, requested: &str) -> AppResult<FileList> {
             "Requested path is not a directory".into(),
         ));
     }
-    let mut paths = fs::read_dir(&directory)?.collect::<Result<Vec<_>, _>>()?;
-    paths.sort_by_key(|entry| (!entry.path().is_dir(), entry.file_name()));
-    let truncated = paths.len() > MAX_ENTRIES;
-    let entries = paths
+    let paths = fs::read_dir(&directory)?.collect::<Result<Vec<_>, _>>()?;
+    let mut entries: Vec<FileEntry> = paths
         .into_iter()
         .filter(|entry| !IGNORED_NAMES.contains(&entry.file_name().to_string_lossy().as_ref()))
-        .take(MAX_ENTRIES)
         .filter_map(|entry| {
             let path = entry.path();
-            let metadata = fs::metadata(&path).ok()?;
+            // Resolve scope before exposing target metadata. A symlink inside
+            // the workspace must not disclose the type or size of outside files.
+            let target = resolve_in_root(&root, path.to_str()?).ok()?;
+            let metadata = fs::metadata(&target).ok()?;
             if !metadata.is_file() && !metadata.is_dir() {
                 return None;
             }
@@ -79,6 +79,11 @@ pub fn list_directory(root: &Path, requested: &str) -> AppResult<FileList> {
             })
         })
         .collect();
+    entries.sort_by(|left, right| {
+        (left.kind != "directory", &left.name).cmp(&(right.kind != "directory", &right.name))
+    });
+    let truncated = entries.len() > MAX_ENTRIES;
+    entries.truncate(MAX_ENTRIES);
     Ok(FileList {
         path: relative_to_root(&root, &directory)?,
         entries,

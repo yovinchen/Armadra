@@ -1,0 +1,78 @@
+syntax = "proto3";
+package armadra.v1;
+option go_package = "armadra.local/host/gen/armadra/v1";
+import "armadra/v1/common.proto";
+
+// The initial Worker transport is a parent-owned anonymous stdin/stdout pipe.
+// These messages are never accepted on an unauthenticated HTTP endpoint.
+// Frames have a four-byte big-endian length and a one-MiB ceiling.
+message WorkerHelloRequest { ProtocolVersion protocol = 1; }
+message WorkerHelloResponse {
+  ProtocolVersion protocol = 1;
+  string host_id = 2;
+  string instance_id = 3;
+  string platform = 4;
+  string architecture = 5;
+  repeated string capabilities = 6;
+  uint32 max_frame_bytes = 7;
+  uint32 max_file_chunk_bytes = 8;
+  uint32 max_text_file_bytes = 9;
+}
+message RegisterRootRequest { string root_id = 1; string path = 2; }
+message RegisteredRoot { string root_id = 1; string canonical_path = 2; }
+message WorkerListDirectoryRequest { string root_id = 1; string path = 2; }
+message WorkerFileEntry {
+  string name = 1;
+  string path = 2;
+  string kind = 3;
+  uint64 size = 4;
+  bool readonly = 5;
+}
+message WorkerDirectory {
+  string root_id = 1;
+  string path = 2;
+  repeated WorkerFileEntry entries = 3;
+  bool truncated = 4;
+}
+message WorkerReadFileRequest {
+  string root_id = 1;
+  string path = 2;
+  uint64 offset = 3;
+  uint32 max_bytes = 4;
+  // Required after the first chunk to prevent mixing different file versions.
+  optional bytes expected_sha256 = 5;
+}
+message WorkerFileChunk {
+  string root_id = 1;
+  string path = 2;
+  string mime_type = 3;
+  bytes sha256 = 4;
+  uint64 total_bytes = 5;
+  uint64 offset = 6;
+  bytes data = 7;
+  bool eof = 8;
+}
+message WorkerRequest {
+  string request_id = 1;
+  string host_id = 2;
+  string expected_instance_id = 3;
+  int64 deadline_unix_ms = 4;
+  oneof action {
+    WorkerHelloRequest hello = 10;
+    RegisterRootRequest register_root = 11;
+    WorkerListDirectoryRequest list_directory = 12;
+    WorkerReadFileRequest read_file = 13;
+  }
+}
+message WorkerResponse {
+  string request_id = 1;
+  string host_id = 2;
+  string instance_id = 3;
+  oneof result {
+    WorkerHelloResponse hello = 10;
+    RegisteredRoot registered_root = 11;
+    WorkerDirectory directory = 12;
+    WorkerFileChunk file_chunk = 13;
+    ErrorResponse error = 14;
+  }
+}

@@ -23,6 +23,7 @@ pub mod settings;
 pub mod sqlite_snapshot;
 pub mod terminal;
 pub mod usage;
+pub mod worker;
 
 use axum::{
     Router,

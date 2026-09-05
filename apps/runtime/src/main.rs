@@ -11,6 +11,12 @@ use tracing_subscriber::EnvFilter;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let arguments: Vec<String> = env::args().skip(1).collect();
+    if arguments.first().is_some_and(|argument| argument == "worker") {
+        if arguments.as_slice() != ["worker", "--stdio"] { anyhow::bail!("Usage: Armadra worker --stdio"); }
+        tracing_subscriber::fmt().with_writer(std::io::stderr).with_env_filter(EnvFilter::from_default_env()).init();
+        armadra_runtime::worker::serve(tokio::io::stdin(),tokio::io::stdout()).await?;
+        return Ok(());
+    }
     if arguments.first().is_some_and(|argument| argument == "export") {
         tracing_subscriber::fmt().with_writer(std::io::stderr).with_env_filter(EnvFilter::from_default_env()).init();
         armadra_runtime::migration_cli::run(&arguments[1..]).await?;

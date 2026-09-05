@@ -193,3 +193,7 @@ Runtime 启动时把 PATH 换成补齐过的版本（Homebrew、mise shims、mis
 - **多人协同**：白板快照对 Runtime 是不透明字符串，跨端协议不会直接用画布引擎的
   内部数据结构；真要做实时协作时再引入 CRDT。
 - **自动更新**：`tauri.conf.json` 里是关闭的骨架，启用步骤写在该文件的注释里。
+
+## 9. Worker 只读桥接
+
+Rust可使用独立 `worker --stdio` 入口，通过父Go进程私有管道提供规范目录与文本分块读取。该入口不打开 `canvas.db`，不启动旧Runtime HTTP或PTY；Go客户端验证Host与进程实例并负责关闭回收。当前为执行层接管的第一批，只报告已实现的只读能力，尚未切换现有业务。传输帧1MiB、文本1MiB、单块256KiB，后续块以首块SHA绑定内容版本。

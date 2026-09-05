@@ -67,6 +67,12 @@ fn bootstrap_scope_and_authenticated_device_revision() {
 }
 
 #[test]
+fn private_worker_identity_and_partial_utf8_chunks() {
+    check("worker_hello",WorkerRequest {request_id:"request-worker".into(),host_id:"0123456789abcdef0123456789abcdef".into(),deadline_unix_ms:1788557900000,expected_instance_id:String::new(),action:Some(worker_request::Action::Hello(WorkerHelloRequest{protocol:Some(ProtocolVersion{major:1,minor:0})}))});
+    check("worker_chunk",WorkerResponse {request_id:"chunk-1".into(),host_id:"0123456789abcdef0123456789abcdef".into(),instance_id:"abcdef0123456789abcdef0123456789".into(),result:Some(worker_response::Result::FileChunk(WorkerFileChunk{root_id:"root-1".into(),path:"正文.txt".into(),mime_type:"text/plain".into(),sha256:vec![7;32],total_bytes:4,offset:1,data:vec![0x9f,0x99,0x82],eof:true}))});
+}
+
+#[test]
 fn local_control_contracts() {
     check(
         "management_running",
