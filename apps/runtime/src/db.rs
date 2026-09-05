@@ -17,8 +17,22 @@ use crate::{
 /// packages/shared/src/domain.ts. Ink, text and images are whiteboard-native
 /// tldraw shapes and live in `boards.whiteboard_json`, not here.
 pub const NODE_TYPES: &[&str] = &[
-    "terminal", "sticky", "group", "editor", "diff", "files", "browser",
+    "terminal",
+    "sticky",
+    "group",
+    "editor",
+    "diff",
+    "files",
+    "browser",
+    "automation",
+    "agentActivity",
 ];
+
+/// Schedule shapes an `automation` node may cache for display. The Host owns
+/// the real schedule; this is only what the card draws while it is offline.
+pub const AUTOMATION_SCHEDULE_KINDS: &[&str] = &["once", "interval", "cron", "loop"];
+/// Where an `agentActivity` card's observations come from.
+pub const AGENT_ACTIVITY_SOURCES: &[&str] = &["loop", "subagent"];
 
 fn legacy_archive_summary(
     row: &sqlx::sqlite::SqliteRow,
@@ -1694,6 +1708,39 @@ pub fn valid_node_data(node: &CanvasNode) -> bool {
         }
         "files" => string_field(data, "path"),
         "browser" => bounded_string_field(data, "url", 4_000),
+        // The node only references a Host-owned plan; the schedule, state and
+        // results are read from the Host, never persisted onto the board.
+        "automation" => {
+            string_field(data, "planId")
+                && string_field(data, "planWorkspaceId")
+                && string_field(data, "executionHostId")
+                && data.get("scheduleKind").is_none_or(|value| {
+                    value.is_null()
+                        || value
+                            .as_str()
+                            .is_some_and(|kind| AUTOMATION_SCHEDULE_KINDS.contains(&kind))
+                })
+                && optional_bounded_string(data, "timezone", 64)
+        }
+        // A read-only observation card. Identity is the observed session's, so
+        // a title collision can never merge two different native jobs.
+        "agentActivity" => {
+            data.get("sourceNodeId")
+                .and_then(Value::as_str)
+                .is_some_and(|value| Uuid::parse_str(value).is_ok())
+                && data.get("source").is_none_or(|value| {
+                    value.is_null()
+                        || value
+                            .as_str()
+                            .is_some_and(|source| AGENT_ACTIVITY_SOURCES.contains(&source))
+                })
+                && optional_bounded_string(data, "sessionId", 200)
+                && optional_bounded_string(data, "executionHostId", 200)
+                && optional_bounded_string(data, "nativeJobId", 200)
+                && data.get("generation").is_none_or(|value| {
+                    value.is_null() || value.as_u64().is_some_and(|v| v <= (1 << 53) - 1)
+                })
+        }
         _ => false,
     }
 }
@@ -2606,6 +2653,8 @@ mod tests {
             serde_json::json!({"kind":"diff","repoPath":".","scope":"staged","paths":["a.ts"]}),
             serde_json::json!({"kind":"files","path":"src"}),
             serde_json::json!({"kind":"browser","url":"https://example.com"}),
+            serde_json::json!({"kind":"automation","planId":"plan-1","planWorkspaceId":"workspace-1","executionHostId":"0123456789abcdef0123456789abcdef","scheduleKind":"interval"}),
+            serde_json::json!({"kind":"agentActivity","sourceNodeId":"3f0d6a4e-6f3d-4c9a-9f2b-1c0f5a7d8e21","source":"subagent"}),
         ];
         assert_eq!(payloads.len(), NODE_TYPES.len());
         let mut nodes = payloads
@@ -3108,6 +3157,25 @@ mod default_node_payload_tests {
                 "browser",
                 serde_json::json!({ "kind": "browser", "url": "" }),
             ),
+            (
+                "automation",
+                serde_json::json!({
+                    "kind": "automation",
+                    "planId": "plan-1",
+                    "planWorkspaceId": "workspace-1",
+                    "executionHostId": "0123456789abcdef0123456789abcdef",
+                    "scheduleKind": "cron",
+                    "timezone": "Asia/Shanghai"
+                }),
+            ),
+            (
+                "agentActivity",
+                serde_json::json!({
+                    "kind": "agentActivity",
+                    "sourceNodeId": "3f0d6a4e-6f3d-4c9a-9f2b-1c0f5a7d8e21",
+                    "source": "loop"
+                }),
+            ),
         ];
         assert_eq!(cases.len(), super::NODE_TYPES.len());
         for (node_type, data) in cases {
@@ -3116,6 +3184,35 @@ mod default_node_payload_tests {
                 "{node_type} default rejected"
             );
         }
+    }
+
+    /// The two Host-owned cards keep separate shapes on purpose: neither may be
+    /// saved with the other's payload, so one can never drift into the other.
+    #[test]
+    fn automation_and_activity_payloads_do_not_substitute_for_each_other() {
+        let automation = serde_json::json!({
+            "kind": "automation",
+            "planId": "plan-1",
+            "planWorkspaceId": "workspace-1",
+            "executionHostId": "0123456789abcdef0123456789abcdef"
+        });
+        let activity = serde_json::json!({
+            "kind": "agentActivity",
+            "sourceNodeId": "3f0d6a4e-6f3d-4c9a-9f2b-1c0f5a7d8e21"
+        });
+        assert!(!valid_node_data(&node("automation", activity.clone())));
+        assert!(!valid_node_data(&node("agentActivity", automation.clone())));
+        // A plan reference with no Host binding is not a plan reference.
+        let mut orphan = automation.clone();
+        orphan["executionHostId"] = serde_json::json!("");
+        assert!(!valid_node_data(&node("automation", orphan)));
+        // An observation card must name a real node, never a free-text title.
+        let mut untitled = activity.clone();
+        untitled["sourceNodeId"] = serde_json::json!("nightly build");
+        assert!(!valid_node_data(&node("agentActivity", untitled)));
+        let mut unknown = automation;
+        unknown["scheduleKind"] = serde_json::json!("whenever");
+        assert!(!valid_node_data(&node("automation", unknown)));
     }
 }
 

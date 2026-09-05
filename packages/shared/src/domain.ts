@@ -19,6 +19,8 @@ export const NODE_TYPES = [
   "diff",
   "files",
   "browser",
+  "automation",
+  "agentActivity",
 ] as const;
 
 /** Only one edge kind is persisted; rope/subagent edges are derived per frame. */
@@ -170,6 +172,57 @@ export const browserNodeDataSchema = z.object({
   url: z.string().max(4_000).default(""),
 });
 
+/**
+ * Platform automation (design §3 / §4). The Host owns the plan; the node only
+ * references it, so closing a board never cancels a schedule and a plan with no
+ * node is still reachable from the automation panel.
+ */
+export const AUTOMATION_SCHEDULE_KINDS = [
+  "once",
+  "interval",
+  "cron",
+  "loop",
+] as const;
+export const automationScheduleKindSchema = z.enum(AUTOMATION_SCHEDULE_KINDS);
+
+export const automationNodeDataSchema = z.object({
+  kind: z.literal("automation"),
+  /** `AutomationPlan.id` on the execution Host — the only durable binding. */
+  planId: z.string().min(1).max(200),
+  /** The Host workspace scope the plan lives in, not the local board id. */
+  planWorkspaceId: z.string().min(1).max(200),
+  executionHostId: z.string().min(1).max(200),
+  /**
+   * Cached for display only, so a card still reads as itself while the Host is
+   * unreachable. State, next run and results always come from the Host.
+   */
+  scheduleKind: automationScheduleKindSchema.optional(),
+  timezone: z.string().max(64).optional(),
+});
+
+/**
+ * A read-only observation of a CLI's own loop/subagent activity (design §3).
+ * A separate entity from `automation` on purpose: hiding this card never
+ * cancels the native job, and neither type converts into the other.
+ */
+export const AGENT_ACTIVITY_SOURCES = ["loop", "subagent"] as const;
+export const agentActivitySourceSchema = z.enum(AGENT_ACTIVITY_SOURCES);
+
+export const agentActivityNodeDataSchema = z.object({
+  kind: z.literal("agentActivity"),
+  /** The observed terminal node on this board. */
+  sourceNodeId: z.string().uuid(),
+  source: agentActivitySourceSchema.default("loop"),
+  /**
+   * Identity of the observed job is executionHost/session/generation/nativeJobId
+   * — never its title. Unknown parts stay empty rather than being guessed.
+   */
+  sessionId: z.string().max(200).default(""),
+  executionHostId: z.string().max(200).default(""),
+  generation: z.number().int().nonnegative().max(2 ** 53 - 1).default(0),
+  nativeJobId: z.string().max(200).default(""),
+});
+
 export const canvasNodeDataSchema = z.discriminatedUnion("kind", [
   terminalNodeDataSchema,
   stickyNodeDataSchema,
@@ -178,6 +231,8 @@ export const canvasNodeDataSchema = z.discriminatedUnion("kind", [
   diffNodeDataSchema,
   filesNodeDataSchema,
   browserNodeDataSchema,
+  automationNodeDataSchema,
+  agentActivityNodeDataSchema,
 ]);
 
 /* ---------------------------------- geometry ----------------------------- */
@@ -476,6 +531,11 @@ export type LanguageService = z.infer<typeof languageServiceSchema>;
 export type DiffNodeData = z.infer<typeof diffNodeDataSchema>;
 export type FilesNodeData = z.infer<typeof filesNodeDataSchema>;
 export type BrowserNodeData = z.infer<typeof browserNodeDataSchema>;
+export type AutomationNodeData = z.infer<typeof automationNodeDataSchema>;
+export type AgentActivityNodeData = z.infer<typeof agentActivityNodeDataSchema>;
+export type AutomationScheduleKind =
+  (typeof AUTOMATION_SCHEDULE_KINDS)[number];
+export type AgentActivitySource = (typeof AGENT_ACTIVITY_SOURCES)[number];
 export type CanvasNode = z.infer<typeof canvasNodeSchema>;
 export type CanvasEdge = z.infer<typeof canvasEdgeSchema>;
 export type Viewport = z.infer<typeof viewportSchema>;

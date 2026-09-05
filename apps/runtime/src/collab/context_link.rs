@@ -193,6 +193,10 @@ pub fn readable_as(kind: &str) -> &'static str {
         "browser" => "网页地址",
         "diff" => "当前差异文本",
         "group" => "不可读（分组只是画布上的框）",
+        // Both cards are Host-owned views: their state is read from the Host,
+        // not from the board, so linking to one hands an agent nothing.
+        "automation" => "不可读（计划状态由 Host 提供）",
+        "agentActivity" => "不可读（原生循环观察卡片）",
         _ => "不可读",
     }
 }

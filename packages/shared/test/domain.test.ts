@@ -43,6 +43,8 @@ describe("canvas domain v3", () => {
       "diff",
       "files",
       "browser",
+      "automation",
+      "agentActivity",
     ]);
     expect(NODE_TYPES).not.toContain("agent");
     expect(NODE_TYPES).not.toContain("log");
@@ -89,6 +91,20 @@ describe("canvas domain v3", () => {
       { kind: "diff", repoPath: ".", scope: "staged", paths: ["a.ts"] },
       { kind: "files", path: "src" },
       { kind: "browser", url: "https://example.com" },
+      {
+        kind: "automation",
+        planId: "plan-1",
+        planWorkspaceId: "workspace-1",
+        executionHostId: "0123456789abcdef0123456789abcdef",
+        scheduleKind: "cron",
+        timezone: "Asia/Shanghai",
+      },
+      {
+        kind: "agentActivity",
+        sourceNodeId: otherNodeId,
+        source: "subagent",
+        sessionId: "session-1",
+      },
     ];
     for (const data of payloads) {
       const parsed = canvasNodeSchema.safeParse(
@@ -97,6 +113,60 @@ describe("canvas domain v3", () => {
       expect(parsed.success, `${String(data.kind)} rejected`).toBe(true);
     }
     expect(payloads).toHaveLength(NODE_TYPES.length);
+  });
+
+  it("keeps the plan card and the activity card as separate entities", () => {
+    const plan = {
+      kind: "automation",
+      planId: "plan-1",
+      planWorkspaceId: "workspace-1",
+      executionHostId: "0123456789abcdef0123456789abcdef",
+    };
+    const activity = { kind: "agentActivity", sourceNodeId: otherNodeId };
+    // Neither payload can be saved under the other type, so a card can never
+    // be converted into a schedule (which would double-trigger the job).
+    expect(
+      canvasNodeSchema.safeParse(node({ type: "automation", data: activity }))
+        .success,
+    ).toBe(false);
+    expect(
+      canvasNodeSchema.safeParse(node({ type: "agentActivity", data: plan }))
+        .success,
+    ).toBe(false);
+    // A plan reference with no Host binding is not a plan reference.
+    expect(
+      canvasNodeSchema.safeParse(
+        node({
+          type: "automation",
+          data: { ...plan, executionHostId: "" },
+        }),
+      ).success,
+    ).toBe(false);
+    // An observation card names a node, never a free-text title.
+    expect(
+      canvasNodeSchema.safeParse(
+        node({
+          type: "agentActivity",
+          data: { kind: "agentActivity", sourceNodeId: "nightly build" },
+        }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it("defaults the activity card to an unattributed loop observation", () => {
+    const parsed = canvasNodeSchema.parse(
+      node({
+        type: "agentActivity",
+        data: { kind: "agentActivity", sourceNodeId: otherNodeId },
+      }),
+    );
+    expect(parsed.data).toMatchObject({
+      source: "loop",
+      sessionId: "",
+      executionHostId: "",
+      generation: 0,
+      nativeJobId: "",
+    });
   });
 
   it("rejects unknown agent ids but accepts custom ones", () => {

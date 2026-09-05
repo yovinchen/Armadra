@@ -2072,10 +2072,14 @@ async fn list_says_what_each_link_can_be_read_as() {
 fn every_node_type_says_how_it_can_be_read() {
     // `"shape"` is not a node type but reaches the same table, so it is checked
     // alongside them.
+    // A group is only a frame, and the two Host-owned cards hold no content of
+    // their own — their state is read from the Host, not from the board — so
+    // those three say so explicitly instead of pretending to be readable.
+    let opaque = ["group", "automation", "agentActivity"];
     for kind in crate::db::NODE_TYPES.iter().chain(["shape"].iter()) {
         let readable = context_link::readable_as(kind);
         assert!(!readable.is_empty(), "{kind}");
-        if *kind != "group" {
+        if !opaque.contains(kind) {
             assert!(!readable.starts_with("不可读"), "{kind}");
         }
     }

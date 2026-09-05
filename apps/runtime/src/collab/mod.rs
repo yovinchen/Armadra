@@ -63,6 +63,8 @@ pub fn default_size(node_type: &str) -> (f64, f64) {
         "diff" => (860.0, 500.0),
         "files" => (340.0, 460.0),
         "browser" => (800.0, 560.0),
+        "automation" => (360.0, 260.0),
+        "agentActivity" => (340.0, 240.0),
         _ => (260.0, 200.0),
     }
 }
