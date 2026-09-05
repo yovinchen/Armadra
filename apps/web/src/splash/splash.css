@@ -1,0 +1,96 @@
+/*
+ * 开屏动画的样式。
+ *
+ * 覆盖层比 App 先挂，那时 `<html data-theme>` 还是 index.html 里写死的值，
+ * 所以这里不继承 `:root` 的主题变量，而是自己按 `data-splash-theme` 挑一套。
+ * 取值与 styles/tokens.css 的同名 token 逐条对齐（`--bg` / `--text` /
+ * `--brand` / `--brand-text`），改 tokens 时这里要跟着改。
+ */
+
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-splash, 90);
+  display: grid;
+  place-items: center;
+  /* 覆盖层自己吃掉所有输入：底下的 App 已经在挂载，但这几秒不该被点到。 */
+  cursor: default;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 260ms ease;
+
+  /* 深色（tokens.css 的 :root 默认） */
+  --splash-bg: #1c1c1c;
+  --splash-text: rgb(255 255 255 / 85%);
+  --splash-brand: #0a84ff;
+  --splash-brand-text: #6cb0ff;
+  /* 以下四个是开屏专用，tokens.css 里没有对应项 */
+  --splash-ink: #ffffff;
+  --splash-ink-alpha: 0.85;
+  --splash-halo-opacity: 0.6;
+  --splash-tip-core: var(--splash-brand-text);
+  --splash-walker-rim: rgb(255 255 255 / 24%);
+
+  background: var(--splash-bg);
+}
+
+/* 浅色（tokens.css 的 :root[data-theme="light"]） */
+.splash[data-splash-theme="light"] {
+  --splash-bg: #f7f7f7;
+  --splash-text: rgb(32 32 32 / 90%);
+  --splash-brand: #007aff;
+  --splash-brand-text: #0a5fc4;
+  --splash-ink: #202020;
+  --splash-ink-alpha: 0.9;
+  --splash-halo-opacity: 0.2;
+  --splash-tip-core: var(--splash-brand);
+  --splash-walker-rim: rgb(32 32 32 / 10%);
+}
+
+.splash[data-splash-state="leaving"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/*
+ * 等比缩放 + 居中：viewBox 是 1920×1080，`preserveAspectRatio` 用默认的
+ * `xMidYMid meet`，窄窗口下整块画面缩小并留出上下留白，永远不会横向溢出。
+ */
+.splash svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.splash .splash-ink {
+  fill: var(--splash-ink);
+  opacity: var(--splash-ink-alpha);
+}
+
+.splash .splash-stage-bg {
+  fill: var(--splash-bg);
+}
+
+.splash .splash-tip-halo {
+  fill: var(--splash-brand);
+  opacity: var(--splash-halo-opacity);
+}
+
+.splash .splash-tip-light {
+  fill: var(--splash-brand);
+  opacity: 0.55;
+}
+
+.splash .splash-tip-core {
+  fill: var(--splash-tip-core);
+}
+
+.splash .splash-walker {
+  filter: drop-shadow(0 0 1px var(--splash-walker-rim));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash {
+    transition-duration: 1ms;
+  }
+}
