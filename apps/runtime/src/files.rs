@@ -39,6 +39,10 @@ pub struct FileList {
     pub truncated: bool,
 }
 
+/// UTF-8 byte order mark. Stripped from `content` and reported separately, so
+/// the editor never shows it as a stray character and a save can put it back.
+const UTF8_BOM: [u8; 3] = [0xEF, 0xBB, 0xBF];
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileContent {
@@ -46,7 +50,43 @@ pub struct FileContent {
     pub mime_type: String,
     pub content: String,
     pub size: u64,
-    pub sha256: String,
+    /// The content version for the next save. Absent when the file is not
+    /// valid UTF-8: what the editor shows is a lossy reading, and writing it
+    /// back would silently rewrite bytes it never saw (E01/M4).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+    /// `utf-8` or `unknown`; `unknown` means read-only.
+    pub encoding: &'static str,
+    /// The file starts with a UTF-8 BOM. Stripped from `content`; a save that
+    /// passes `bom: true` writes it again.
+    pub bom: bool,
+    /// `lf`, `crlf`, `mixed`, or `none` for a file without a line break.
+    pub eol: &'static str,
+    /// The file cannot be written where it is, whatever the workspace allows.
+    pub readonly: bool,
+}
+
+/// Which line ending the file uses. `mixed` is reported rather than guessed:
+/// the editor says so instead of quietly normalizing a file on the next save.
+fn detect_eol(bytes: &[u8]) -> &'static str {
+    let mut crlf = 0usize;
+    let mut lf = 0usize;
+    for (index, byte) in bytes.iter().enumerate() {
+        if *byte != b'\n' {
+            continue;
+        }
+        if index > 0 && bytes[index - 1] == b'\r' {
+            crlf += 1;
+        } else {
+            lf += 1;
+        }
+    }
+    match (crlf, lf) {
+        (0, 0) => "none",
+        (0, _) => "lf",
+        (_, 0) => "crlf",
+        _ => "mixed",
+    }
 }
 
 pub fn list_directory(root: &Path, requested: &str) -> AppResult<FileList> {
@@ -123,8 +163,20 @@ pub fn read_text_file(root: &Path, requested: &str) -> AppResult<FileContent> {
             "Binary files cannot be previewed as text".into(),
         ));
     }
-    let content = String::from_utf8(bytes)
-        .map_err(|_| AppError::BadRequest("File is not valid UTF-8 text".into()))?;
+    let eol = detect_eol(&bytes);
+    let bom = bytes.starts_with(&UTF8_BOM);
+    let body = if bom {
+        &bytes[UTF8_BOM.len()..]
+    } else {
+        &bytes[..]
+    };
+    // A file that is not valid UTF-8 is still worth showing. It comes back as
+    // a lossy reading with no content version, which is exactly what the
+    // editor already treats as read-only (E01/M4).
+    let (content, encoding) = match std::str::from_utf8(body) {
+        Ok(text) => (text.to_owned(), "utf-8"),
+        Err(_) => (String::from_utf8_lossy(body).into_owned(), "unknown"),
+    };
     Ok(FileContent {
         path: relative_to_root(&root, &path)?,
         mime_type: mime_guess::from_path(&path)
@@ -133,7 +185,11 @@ pub fn read_text_file(root: &Path, requested: &str) -> AppResult<FileContent> {
             .to_owned(),
         content,
         size,
-        sha256,
+        sha256: (encoding == "utf-8").then_some(sha256),
+        encoding,
+        bom,
+        eol,
+        readonly: metadata.permissions().readonly(),
     })
 }
 
@@ -252,14 +308,25 @@ fn verify_version(path: &Path, expected: Option<&str>) -> AppResult<Option<std::
 /// returned by read_text_file; size alone cannot detect same-length edits.
 /// A sibling temporary file is exclusive, fsynced and published atomically.
 /// The last verification detects observed external writes, not an OS-wide lock.
+///
+/// `bom` re-emits the byte order mark `read_text_file` stripped, so a file that
+/// arrived with one keeps it. Line endings are not rewritten: the editor holds
+/// whatever the file contained and hands it back unchanged (E01/M4).
 pub fn write_text_file(
     root: &Path,
     requested: &str,
     content: &str,
     expected_sha256: Option<&str>,
+    bom: bool,
 ) -> AppResult<FileWriteResult> {
     let root = canonical_directory(root)?;
-    let bytes = content.as_bytes();
+    let payload;
+    let bytes: &[u8] = if bom {
+        payload = [&UTF8_BOM[..], content.as_bytes()].concat();
+        &payload
+    } else {
+        content.as_bytes()
+    };
     if bytes.len() as u64 > MAX_WRITE_FILE_SIZE {
         return Err(AppError::BadRequest(
             "File is larger than the 2 MiB write limit".into(),
@@ -339,6 +406,12 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
+    /// The content version a previous write published, as the next write's CAS
+    /// token. A write always has one; only a read of a non-UTF-8 file does not.
+    fn version(result: &FileWriteResult) -> Option<&str> {
+        Some(result.sha256.as_str())
+    }
+
     #[test]
     fn lists_directories_before_files_and_ignores_build_folders() {
         let root = tempdir().unwrap();
@@ -369,7 +442,7 @@ mod tests {
         let root = tempdir().unwrap();
         fs::create_dir(root.path().join("src")).unwrap();
 
-        let created = write_text_file(root.path(), "src/new.txt", "一行\n", None).unwrap();
+        let created = write_text_file(root.path(), "src/new.txt", "一行\n", None, false).unwrap();
         assert_eq!(created.path, "src/new.txt");
         assert_eq!(created.size, "一行\n".len() as u64);
         assert_eq!(
@@ -377,8 +450,14 @@ mod tests {
             "一行\n"
         );
 
-        let updated =
-            write_text_file(root.path(), "src/new.txt", "two\n", Some(&created.sha256)).unwrap();
+        let updated = write_text_file(
+            root.path(),
+            "src/new.txt",
+            "two\n",
+            version(&created),
+            false,
+        )
+        .unwrap();
         assert_eq!(updated.size, 4);
         // No temp file is left behind.
         let leftovers = fs::read_dir(root.path().join("src"))
@@ -401,7 +480,7 @@ mod tests {
         fs::write(outside.path().join("secret.txt"), "keep\n").unwrap();
 
         assert!(matches!(
-            write_text_file(root.path(), "../secret.txt", "hacked", None),
+            write_text_file(root.path(), "../secret.txt", "hacked", None, false),
             Err(AppError::BadRequest(_))
         ));
         assert!(
@@ -410,6 +489,7 @@ mod tests {
                 outside.path().join("secret.txt").to_str().unwrap(),
                 "hacked",
                 None,
+                false,
             )
             .is_err()
         );
@@ -432,7 +512,7 @@ mod tests {
         .unwrap();
 
         assert!(matches!(
-            write_text_file(root.path(), "leak.txt", "hacked", None),
+            write_text_file(root.path(), "leak.txt", "hacked", None, false),
             Err(AppError::Forbidden(_))
         ));
         assert_eq!(
@@ -447,7 +527,13 @@ mod tests {
         fs::write(root.path().join("note.txt"), "one\n").unwrap();
 
         assert!(matches!(
-            write_text_file(root.path(), "note.txt", "two\n", Some(&"0".repeat(64))),
+            write_text_file(
+                root.path(),
+                "note.txt",
+                "two\n",
+                Some(&"0".repeat(64)),
+                false
+            ),
             Err(AppError::Conflict(_))
         ));
         assert_eq!(
@@ -459,14 +545,18 @@ mod tests {
             root.path(),
             "note.txt",
             "two\n",
-            Some(&read_text_file(root.path(), "note.txt").unwrap().sha256),
+            read_text_file(root.path(), "note.txt")
+                .unwrap()
+                .sha256
+                .as_deref(),
+            false,
         )
         .unwrap();
         assert_eq!(saved.size, 4);
 
         // A file that does not exist yet can never satisfy a CAS token.
         assert!(matches!(
-            write_text_file(root.path(), "fresh.txt", "x", Some(&"0".repeat(64))),
+            write_text_file(root.path(), "fresh.txt", "x", Some(&"0".repeat(64)), false),
             Err(AppError::Conflict(_))
         ));
     }
@@ -479,11 +569,17 @@ mod tests {
         let original = read_text_file(root.path(), "note.txt").unwrap();
         fs::write(&file, "new").unwrap();
         assert!(matches!(
-            write_text_file(root.path(), "note.txt", "mine", Some(&original.sha256)),
+            write_text_file(
+                root.path(),
+                "note.txt",
+                "mine",
+                original.sha256.as_deref(),
+                false
+            ),
             Err(AppError::Conflict(_))
         ));
         assert!(matches!(
-            write_text_file(root.path(), "note.txt", "mine", None),
+            write_text_file(root.path(), "note.txt", "mine", None, false),
             Err(AppError::Conflict(_))
         ));
         assert_eq!(fs::read_to_string(file).unwrap(), "new");
@@ -492,7 +588,7 @@ mod tests {
     #[test]
     fn simultaneous_writers_cannot_both_replace_the_same_version() {
         let root = tempdir().unwrap();
-        let first = write_text_file(root.path(), "note.txt", "start", None).unwrap();
+        let first = write_text_file(root.path(), "note.txt", "start", None, false).unwrap();
         let barrier = Arc::new(std::sync::Barrier::new(3));
         let workers: Vec<_> = ["first", "other"]
             .into_iter()
@@ -502,7 +598,7 @@ mod tests {
                 let hash = first.sha256.clone();
                 std::thread::spawn(move || {
                     barrier.wait();
-                    write_text_file(&root, "note.txt", text, Some(&hash))
+                    write_text_file(&root, "note.txt", text, Some(&hash), false)
                 })
             })
             .collect();
@@ -525,11 +621,11 @@ mod tests {
     #[test]
     fn literal_whitespace_names_remain_distinct_and_readonly_files_are_preserved() {
         let root = tempdir().unwrap();
-        write_text_file(root.path(), "note", "plain", None).unwrap();
-        let spaced = write_text_file(root.path(), " note ", "space", None).unwrap();
+        write_text_file(root.path(), "note", "plain", None, false).unwrap();
+        let spaced = write_text_file(root.path(), " note ", "space", None, false).unwrap();
         assert_eq!(
             read_text_file(root.path(), " note ").unwrap().sha256,
-            spaced.sha256
+            Some(spaced.sha256.clone())
         );
         assert_eq!(
             fs::read_to_string(root.path().join("note")).unwrap(),
@@ -540,10 +636,71 @@ mod tests {
         permissions.set_readonly(true);
         fs::set_permissions(&path, permissions).unwrap();
         assert!(matches!(
-            write_text_file(root.path(), " note ", "later", Some(&spaced.sha256)),
+            write_text_file(root.path(), " note ", "later", version(&spaced), false),
             Err(AppError::Forbidden(_))
         ));
         assert_eq!(fs::read_to_string(&path).unwrap(), "space");
+    }
+
+    #[test]
+    fn reports_line_endings_bom_and_encoding() {
+        let root = tempdir().unwrap();
+        fs::write(root.path().join("unix.txt"), "a\nb\n").unwrap();
+        fs::write(root.path().join("dos.txt"), "a\r\nb\r\n").unwrap();
+        fs::write(root.path().join("mixed.txt"), "a\r\nb\n").unwrap();
+        fs::write(root.path().join("one.txt"), "no break").unwrap();
+        fs::write(
+            root.path().join("bom.txt"),
+            [&UTF8_BOM[..], b"hello\n"].concat(),
+        )
+        .unwrap();
+        // 0xFF is not valid UTF-8 anywhere and is not a NUL, so this reaches
+        // the encoding check rather than the binary one.
+        fs::write(root.path().join("latin.txt"), [b'a', 0xFF, b'\n']).unwrap();
+
+        assert_eq!(read_text_file(root.path(), "unix.txt").unwrap().eol, "lf");
+        assert_eq!(read_text_file(root.path(), "dos.txt").unwrap().eol, "crlf");
+        assert_eq!(
+            read_text_file(root.path(), "mixed.txt").unwrap().eol,
+            "mixed"
+        );
+        assert_eq!(read_text_file(root.path(), "one.txt").unwrap().eol, "none");
+
+        let bom = read_text_file(root.path(), "bom.txt").unwrap();
+        assert!(bom.bom);
+        assert_eq!(bom.content, "hello\n");
+        assert_eq!(bom.encoding, "utf-8");
+        assert!(bom.sha256.is_some());
+
+        // Not UTF-8: shown, but with no content version, which is what makes
+        // the editor read-only.
+        let latin = read_text_file(root.path(), "latin.txt").unwrap();
+        assert_eq!(latin.encoding, "unknown");
+        assert!(latin.sha256.is_none());
+    }
+
+    #[test]
+    fn a_bom_survives_a_round_trip() {
+        let root = tempdir().unwrap();
+        fs::write(
+            root.path().join("bom.txt"),
+            [&UTF8_BOM[..], b"one\n"].concat(),
+        )
+        .unwrap();
+        let read = read_text_file(root.path(), "bom.txt").unwrap();
+        write_text_file(
+            root.path(),
+            "bom.txt",
+            "two\n",
+            read.sha256.as_deref(),
+            read.bom,
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read(root.path().join("bom.txt")).unwrap(),
+            [&UTF8_BOM[..], b"two\n"].concat()
+        );
+        assert!(read_text_file(root.path(), "bom.txt").unwrap().bom);
     }
 
     #[test]
@@ -551,7 +708,7 @@ mod tests {
         let root = tempdir().unwrap();
         let oversized = "a".repeat(MAX_WRITE_FILE_SIZE as usize + 1);
         assert!(matches!(
-            write_text_file(root.path(), "big.txt", &oversized, None),
+            write_text_file(root.path(), "big.txt", &oversized, None, false),
             Err(AppError::BadRequest(_))
         ));
         assert!(!root.path().join("big.txt").exists());

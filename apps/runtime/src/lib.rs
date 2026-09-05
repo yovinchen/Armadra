@@ -11,6 +11,8 @@ pub mod db;
 pub mod desktop_control;
 pub mod error;
 pub mod events;
+pub mod file_ops;
+pub mod file_search;
 pub mod file_watch;
 pub mod files;
 pub mod git;
@@ -241,6 +243,42 @@ pub fn router_with_state(state: AppState) -> Router {
         .route(
             "/api/workspaces/{workspace_id}/file-version",
             get(api::file_version),
+        )
+        // Search and file work (E01/M4). `file-index` is 快速打开's fuzzy
+        // filename match; `file-search` is the paged project-wide grep, a POST
+        // because the request carries a pattern and two glob lists.
+        .route(
+            "/api/workspaces/{workspace_id}/file-index",
+            get(api::file_index),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/file-search",
+            post(api::search_files),
+        )
+        // Create / rename / move / delete-to-trash, all behind the workspace's
+        // write permission. A delete moves bytes into `.armadra/trash/`, and
+        // `restore` is the undo; nothing here removes data permanently.
+        .route(
+            "/api/workspaces/{workspace_id}/file-entries",
+            post(api::create_file_entry),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/file-entries/rename",
+            post(api::rename_file_entry),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/file-entries/trash",
+            get(api::list_trash).post(api::trash_file_entry),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/file-entries/restore",
+            post(api::restore_file_entry),
+        )
+        // Capability probe only: Armadra has no LSP yet, and the editor shows
+        // nothing rather than an empty completion list (design §2, §4).
+        .route(
+            "/api/workspaces/{workspace_id}/language-service",
+            get(api::language_service),
         )
         .route(
             "/api/workspaces/{workspace_id}/git/status",

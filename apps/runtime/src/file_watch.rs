@@ -569,7 +569,7 @@ mod tests {
     fn a_save_through_the_runtime_is_not_an_external_change() {
         let mut fixture = open("one\n");
         let version = format!("{:x}", Sha256::digest(b"one\n"));
-        write_text_file(&fixture.root, "note.txt", "mine\n", Some(&version)).unwrap();
+        write_text_file(&fixture.root, "note.txt", "mine\n", Some(&version), false).unwrap();
         assert!(quiet(&mut fixture.receiver), "own save must stay silent");
         // …and the node still learns about a real edit afterwards.
         fs::write(&fixture.path, "theirs\n").unwrap();

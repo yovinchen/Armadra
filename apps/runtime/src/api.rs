@@ -19,7 +19,7 @@ use crate::{
     db::{self, SaveBoardRequest, WorkspacePatch},
     error::{AppError, AppResult},
     events::WorkspaceEvent,
-    file_watch, files, git,
+    file_ops, file_search, file_watch, files, git,
     hook::{
         HookHealth,
         install::{self, InstallReport},
@@ -493,6 +493,10 @@ pub struct WriteFileRequest {
     /// Legacy field retained to reject old size-only overwrites explicitly.
     expected_size: Option<u64>,
     expected_sha256: Option<String>,
+    /// Re-emit the UTF-8 BOM `read_file` stripped, so a file that had one
+    /// keeps it (E01/M4). Absent means no BOM, which is what a new file wants.
+    #[serde(default)]
+    bom: bool,
 }
 
 /// `PUT /api/workspaces/{id}/file` — the editor node's save (plan §3.4).
@@ -518,10 +522,194 @@ pub async fn write_file(
             &request.path,
             &request.content,
             request.expected_sha256.as_deref(),
+            request.bom,
         )
         .map(Json)
     })
     .await?
+}
+
+/* ---------------------------- search and file work ------------------------ */
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileIndexQuery {
+    #[serde(default)]
+    query: String,
+    limit: Option<usize>,
+}
+
+/// `GET /api/workspaces/{id}/file-index?query=&limit=` — 快速打开 (E01/M4).
+///
+/// A fuzzy filename match over the workspace with build folders skipped. The
+/// answer is capped and says when it was cut short; it is never the whole tree.
+pub async fn file_index(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+    Query(query): Query<FileIndexQuery>,
+) -> AppResult<Json<file_search::FileIndex>> {
+    let workspace = readable_workspace(&state, &workspace_id).await?;
+    tokio::task::spawn_blocking(move || {
+        file_search::index_files(Path::new(&workspace.root_path), &query.query, query.limit)
+            .map(Json)
+    })
+    .await?
+}
+
+/// `POST /api/workspaces/{id}/file-search` — 项目搜索 (E01/M4).
+///
+/// A POST because the request carries a pattern and two glob lists; nothing is
+/// mutated. Paging is by `offset`/`nextOffset` over matching files.
+pub async fn search_files(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+    Json(request): Json<file_search::SearchRequest>,
+) -> AppResult<Json<file_search::SearchResult>> {
+    let workspace = readable_workspace(&state, &workspace_id).await?;
+    tokio::task::spawn_blocking(move || {
+        file_search::search_content(Path::new(&workspace.root_path), &request).map(Json)
+    })
+    .await?
+}
+
+/// Read access is the gate for every listing and search surface.
+async fn readable_workspace(state: &AppState, workspace_id: &str) -> AppResult<Workspace> {
+    let workspace = db::get_workspace(&state.pool, workspace_id).await?;
+    if !workspace.permissions.read {
+        return Err(AppError::Forbidden("This workspace is not readable".into()));
+    }
+    Ok(workspace)
+}
+
+/// Write access is the gate for creating, renaming and deleting.
+async fn writable_workspace(state: &AppState, workspace_id: &str) -> AppResult<Workspace> {
+    let workspace = db::get_workspace(&state.pool, workspace_id).await?;
+    if !workspace.permissions.write {
+        return Err(AppError::Forbidden(
+            "This workspace is opened read-only".into(),
+        ));
+    }
+    Ok(workspace)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateEntryRequest {
+    path: String,
+    kind: file_ops::EntryKind,
+}
+
+/// `POST /api/workspaces/{id}/file-entries` — 新建文件 / 新建文件夹.
+pub async fn create_file_entry(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+    Json(request): Json<CreateEntryRequest>,
+) -> AppResult<Json<file_ops::EntryResult>> {
+    let workspace = writable_workspace(&state, &workspace_id).await?;
+    tokio::task::spawn_blocking(move || {
+        file_ops::create_entry(Path::new(&workspace.root_path), &request.path, request.kind)
+            .map(Json)
+    })
+    .await?
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameEntryRequest {
+    from: String,
+    to: String,
+}
+
+/// `POST /api/workspaces/{id}/file-entries/rename` — 重命名 / 移动.
+pub async fn rename_file_entry(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+    Json(request): Json<RenameEntryRequest>,
+) -> AppResult<Json<file_ops::EntryResult>> {
+    let workspace = writable_workspace(&state, &workspace_id).await?;
+    tokio::task::spawn_blocking(move || {
+        file_ops::rename_entry(Path::new(&workspace.root_path), &request.from, &request.to)
+            .map(Json)
+    })
+    .await?
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashEntryRequest {
+    path: String,
+}
+
+/// `POST /api/workspaces/{id}/file-entries/trash` — 删除到回收站.
+/// The bytes are moved under `.armadra/trash/`, never unlinked.
+pub async fn trash_file_entry(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+    Json(request): Json<TrashEntryRequest>,
+) -> AppResult<Json<file_ops::TrashEntry>> {
+    let workspace = writable_workspace(&state, &workspace_id).await?;
+    tokio::task::spawn_blocking(move || {
+        file_ops::trash_entry(Path::new(&workspace.root_path), &request.path).map(Json)
+    })
+    .await?
+}
+
+/// `GET /api/workspaces/{id}/file-entries/trash` — what can still be restored.
+pub async fn list_trash(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+) -> AppResult<Json<Vec<file_ops::TrashEntry>>> {
+    let workspace = readable_workspace(&state, &workspace_id).await?;
+    tokio::task::spawn_blocking(move || {
+        file_ops::list_trash(Path::new(&workspace.root_path)).map(Json)
+    })
+    .await?
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreEntryRequest {
+    id: String,
+}
+
+/// `POST /api/workspaces/{id}/file-entries/restore` — undo one deletion.
+pub async fn restore_file_entry(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+    Json(request): Json<RestoreEntryRequest>,
+) -> AppResult<Json<file_ops::EntryResult>> {
+    let workspace = writable_workspace(&state, &workspace_id).await?;
+    tokio::task::spawn_blocking(move || {
+        file_ops::restore_trash(Path::new(&workspace.root_path), &request.id).map(Json)
+    })
+    .await?
+}
+
+/* ------------------------------ language service -------------------------- */
+
+/// What the editor may rely on for this workspace's language tooling.
+///
+/// There is no LSP in Armadra yet, so the honest answer is the only one: the
+/// probe reports `unavailable` with a reason, and the editor shows no
+/// completion affordances rather than an empty list pretending to be one
+/// (design §2, §4).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LanguageServiceStatus {
+    status: &'static str,
+    reason: &'static str,
+}
+
+/// `GET /api/workspaces/{id}/language-service` — capability probe (E01/M4).
+pub async fn language_service(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+) -> AppResult<Json<LanguageServiceStatus>> {
+    readable_workspace(&state, &workspace_id).await?;
+    Ok(Json(LanguageServiceStatus {
+        status: "unavailable",
+        reason: "not_implemented",
+    }))
 }
 
 /* ------------------------------ file watching ----------------------------- */
@@ -3051,6 +3239,225 @@ mod tests {
         let (_, latest) = call(&router, "GET", &format!("{uri}?path=note.txt"), None).await;
         assert_eq!(saved["sha256"], latest["sha256"]);
         assert_eq!(latest["content"], "mine");
+    }
+
+    /// E01/M4 over the wire: 快速打开, 项目搜索 and the language-service probe.
+    /// All three are read surfaces, so a workspace without read access is a
+    /// 403 rather than an empty answer.
+    #[tokio::test]
+    async fn search_surfaces_are_paged_camel_cased_and_gated_on_read_access() {
+        let (router, directory) = router_fixture("api-file-search").await;
+        let root = directory.path().join("project");
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::create_dir_all(root.join("node_modules")).unwrap();
+        std::fs::write(root.join("src/client.ts"), "const needle = 1;\n").unwrap();
+        std::fs::write(root.join("README.md"), "needle\n").unwrap();
+        std::fs::write(root.join("node_modules/hidden.ts"), "needle\n").unwrap();
+        let (_, workspace) = call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            Some(json!({"name":"files", "rootPath":root.to_string_lossy()})),
+        )
+        .await;
+        let id = workspace["id"].as_str().unwrap().to_owned();
+
+        let (status, index) = call(
+            &router,
+            "GET",
+            &format!("/api/workspaces/{id}/file-index?query=client"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(index["entries"][0]["path"], "src/client.ts");
+        assert_eq!(index["truncated"], false);
+
+        let (status, page) = call(
+            &router,
+            "POST",
+            &format!("/api/workspaces/{id}/file-search"),
+            Some(json!({"query":"needle", "limit":1})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(page["files"].as_array().unwrap().len(), 1);
+        assert_eq!(page["files"][0]["path"], "README.md");
+        assert_eq!(page["nextOffset"], 1);
+        assert_eq!(page["totalMatches"], 1);
+
+        let (_, rest) = call(
+            &router,
+            "POST",
+            &format!("/api/workspaces/{id}/file-search"),
+            Some(json!({"query":"needle", "limit":10, "offset":1})),
+        )
+        .await;
+        let paths: Vec<&str> = rest["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|file| file["path"].as_str().unwrap())
+            .collect();
+        assert_eq!(paths, vec!["src/client.ts"]);
+        assert!(rest["nextOffset"].is_null());
+
+        let (status, invalid) = call(
+            &router,
+            "POST",
+            &format!("/api/workspaces/{id}/file-search"),
+            Some(json!({"query":"(unclosed", "regex":true})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(invalid["code"], "bad_request");
+
+        let (status, probe) = call(
+            &router,
+            "GET",
+            &format!("/api/workspaces/{id}/language-service"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(probe["status"], "unavailable");
+
+        let (status, _) = call(
+            &router,
+            "PATCH",
+            &format!("/api/workspaces/{id}"),
+            Some(json!({"permissions":{"read":false,"write":false,"execute":false}})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        for (method, uri, body) in [
+            (
+                "GET",
+                format!("/api/workspaces/{id}/file-index?query=client"),
+                None,
+            ),
+            (
+                "POST",
+                format!("/api/workspaces/{id}/file-search"),
+                Some(json!({"query":"needle"})),
+            ),
+            (
+                "GET",
+                format!("/api/workspaces/{id}/language-service"),
+                None,
+            ),
+        ] {
+            let (status, _) = call(&router, method, &uri, body).await;
+            assert_eq!(status, StatusCode::FORBIDDEN, "{uri} must require read");
+        }
+    }
+
+    /// Create / rename / delete over the wire: the write gate, the trash round
+    /// trip, and that a refused operation leaves the bytes exactly where they
+    /// were.
+    #[tokio::test]
+    async fn file_operations_require_write_access_and_delete_only_to_the_trash() {
+        let (router, directory) = router_fixture("api-file-entries").await;
+        let root = directory.path().join("project");
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("src/old.txt"), "content").unwrap();
+        let (_, workspace) = call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            Some(json!({"name":"files", "rootPath":root.to_string_lossy()})),
+        )
+        .await;
+        let id = workspace["id"].as_str().unwrap().to_owned();
+        let entries = format!("/api/workspaces/{id}/file-entries");
+
+        let (status, created) = call(
+            &router,
+            "POST",
+            &entries,
+            Some(json!({"path":"src/fresh.txt", "kind":"file"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(created["path"], "src/fresh.txt");
+        assert!(root.join("src/fresh.txt").is_file());
+
+        let (status, _) = call(
+            &router,
+            "POST",
+            &entries,
+            Some(json!({"path":"../escape.txt", "kind":"file"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+
+        let (status, renamed) = call(
+            &router,
+            "POST",
+            &format!("{entries}/rename"),
+            Some(json!({"from":"src/old.txt", "to":"src/new.txt"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(renamed["path"], "src/new.txt");
+        assert_eq!(
+            std::fs::read_to_string(root.join("src/new.txt")).unwrap(),
+            "content"
+        );
+
+        let (status, trashed) = call(
+            &router,
+            "POST",
+            &format!("{entries}/trash"),
+            Some(json!({"path":"src/new.txt"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(trashed["originalPath"], "src/new.txt");
+        assert!(!root.join("src/new.txt").exists());
+
+        let (_, listed) = call(&router, "GET", &format!("{entries}/trash"), None).await;
+        assert_eq!(listed.as_array().unwrap().len(), 1);
+
+        let (status, restored) = call(
+            &router,
+            "POST",
+            &format!("{entries}/restore"),
+            Some(json!({"id":trashed["id"]})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(restored["path"], "src/new.txt");
+        assert_eq!(
+            std::fs::read_to_string(root.join("src/new.txt")).unwrap(),
+            "content"
+        );
+
+        let (status, _) = call(
+            &router,
+            "PATCH",
+            &format!("/api/workspaces/{id}"),
+            Some(json!({"permissions":{"read":true,"write":false,"execute":false}})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        for (uri, body) in [
+            (
+                entries.clone(),
+                json!({"path":"blocked.txt", "kind":"file"}),
+            ),
+            (
+                format!("{entries}/rename"),
+                json!({"from":"src/new.txt", "to":"src/blocked.txt"}),
+            ),
+            (format!("{entries}/trash"), json!({"path":"src/new.txt"})),
+        ] {
+            let (status, error) = call(&router, "POST", &uri, Some(body)).await;
+            assert_eq!(status, StatusCode::FORBIDDEN, "{uri} must require write");
+            assert_eq!(error["code"], "forbidden");
+        }
+        assert!(root.join("src/new.txt").is_file());
+        assert!(!root.join("blocked.txt").exists());
     }
 
     /// E01/M4 over the wire: registration, the pushed change, the on-demand
