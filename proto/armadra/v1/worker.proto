@@ -7,6 +7,7 @@ import "armadra/v1/command.proto";
 import "armadra/v1/canvas.proto";
 import "armadra/v1/worker_channel.proto";
 import "armadra/v1/language.proto";
+import "armadra/v1/migration.proto";
 
 // The initial Worker transport is a parent-owned anonymous stdin/stdout pipe.
 // These messages are never accepted on an unauthenticated HTTP endpoint.
@@ -179,6 +180,11 @@ message WorkerRequest {
     CloseLanguageSessionRequest close_language_session = 32;
     LanguageFrame language_frame = 33;
     LanguageApplyEditRequest language_apply_edit = 34;
+    // The rollback direction of the switch: the Host's reverse export package
+    // is applied to the Runtime's own database before the epoch is handed
+    // back. Applying it does not move ownership, and refusing it is what stops
+    // a rollback that would lose whatever the Host wrote.
+    ApplyReverseExportRequest apply_reverse_export = 24;
   }
 }
 message WorkerResponse {
@@ -202,5 +208,6 @@ message WorkerResponse {
     LanguageSession language_session = 31;
     LanguageFrame language_frame = 32;
     LanguageApplyEditResult language_apply_edit = 33;
+    ReverseImportReport reverse_import = 23;
   }
 }

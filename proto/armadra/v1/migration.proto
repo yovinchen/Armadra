@@ -1,6 +1,7 @@
 syntax = "proto3";
 package armadra.v1;
 option go_package = "armadra.local/host/gen/armadra/v1";
+import "armadra/v1/canvas.proto";
 
 // Offline export manifest, maximum 64 MiB. Not a network control frame.
 // The referenced SQLite file is a consistent snapshot. Asset files have their
@@ -93,4 +94,89 @@ message MigrationImportReport {
   uint64 last_event_sequence = 7;
   repeated ExportIssue issues = 8;
   string state = 9; // staged, never active from import alone.
+}
+
+// ---------------------------------------------------------------------------
+// Reverse export package, format version 2 (Go Host 业务所有权迁移 §2.12)
+// ---------------------------------------------------------------------------
+//
+// Format version 1 wrote one CanvasSnapshotResponse per workspace and had no
+// reader at all. Version 2 writes a length-prefixed sequence of
+// ReverseExportRecord instead, so a reader takes one entity at a time and a
+// truncated file is a short read rather than a half-decoded canvas.
+//
+// The index itself stays JSON on disk (`export.json`), because an operator has
+// to be able to read a rollback package without a decoder. These messages
+// describe the same fields, so all three runtimes agree on what it means.
+message ReverseExportFile {
+  string name = 1;
+  string workspace_id = 2;
+  uint64 bytes = 3;
+  // Digest of the file exactly as it sits on disk.
+  bytes sha256 = 4;
+  // Digest of the same records re-serialized in canonical content form:
+  // `revision` cleared and `assets` dropped. Those two are Host-side facts the
+  // Runtime has nowhere to store, so they are excluded from the comparison
+  // that decides whether an import round-tripped.
+  bytes content_sha256 = 5;
+  uint64 entity_count = 6;
+}
+
+message ReverseExportIndex {
+  uint32 format_version = 1;
+  string host_id = 2;
+  // The epoch the Host held when it wrote the package.
+  uint64 epoch = 3;
+  // The Host event watermark the package was taken at. An importer compares it
+  // with the watermark the ownership record settled at: a higher one means the
+  // Host published changes this package would strand.
+  uint64 event_sequence = 4;
+  // "canvas" in this version. An unknown domain is refused, never guessed.
+  string domain = 5;
+  repeated ReverseExportFile files = 6;
+  uint64 entity_count = 7;
+}
+
+// One entity inside a version 2 entity file. An unrecognized member means a
+// package this reader cannot apply (`reverse.unsupported_entity`); it is never
+// a row that gets skipped.
+message ReverseExportRecord {
+  oneof entity {
+    CanvasWorkspace workspace = 1;
+    Canvas canvas = 2;
+    CanvasNode node = 3;
+    CanvasEdge edge = 4;
+    CanvasAnnotation annotation = 5;
+  }
+}
+
+// Apply a reverse export package to the Runtime's own database. The Runtime is
+// in the rolling_back phase when this arrives, and nothing here moves an epoch.
+message ApplyReverseExportRequest {
+  string domain = 1;
+  // Absolute directory holding `export.json` and the entity files.
+  string package_path = 2;
+  // Digest of the index bytes. A package whose index differs is refused.
+  bytes index_sha256 = 3;
+  uint64 expected_epoch = 4;
+  // Idempotency key. The same identifier with the same index digest replays the
+  // stored answer; the same identifier with a different digest is refused.
+  string import_id = 5;
+}
+
+// What the Runtime stored, and what it reads back afterwards. `reexported` is
+// the Runtime's own canonical serialization of the rows it now holds, which the
+// Host compares against the package it wrote: equal digests are what allow the
+// epoch to be handed back.
+message ReverseImportReport {
+  string import_id = 1;
+  string domain = 2;
+  uint64 epoch = 3;
+  bytes index_sha256 = 4;
+  uint64 entity_count = 5;
+  bool replayed = 6;
+  repeated ReverseExportFile reexported = 7;
+  repeated ExportTable tables = 8;
+  repeated ExportIssue issues = 9;
+  int64 applied_at_unix_ms = 10;
 }

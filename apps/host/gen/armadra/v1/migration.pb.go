@@ -1017,12 +1017,545 @@ func (x *MigrationImportReport) GetState() string {
 	return ""
 }
 
+// ---------------------------------------------------------------------------
+// Reverse export package, format version 2 (Go Host 业务所有权迁移 §2.12)
+// ---------------------------------------------------------------------------
+//
+// Format version 1 wrote one CanvasSnapshotResponse per workspace and had no
+// reader at all. Version 2 writes a length-prefixed sequence of
+// ReverseExportRecord instead, so a reader takes one entity at a time and a
+// truncated file is a short read rather than a half-decoded canvas.
+//
+// The index itself stays JSON on disk (`export.json`), because an operator has
+// to be able to read a rollback package without a decoder. These messages
+// describe the same fields, so all three runtimes agree on what it means.
+type ReverseExportFile struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	WorkspaceId string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	Bytes       uint64                 `protobuf:"varint,3,opt,name=bytes,proto3" json:"bytes,omitempty"`
+	// Digest of the file exactly as it sits on disk.
+	Sha256 []byte `protobuf:"bytes,4,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	// Digest of the same records re-serialized in canonical content form:
+	// `revision` cleared and `assets` dropped. Those two are Host-side facts the
+	// Runtime has nowhere to store, so they are excluded from the comparison
+	// that decides whether an import round-tripped.
+	ContentSha256 []byte `protobuf:"bytes,5,opt,name=content_sha256,json=contentSha256,proto3" json:"content_sha256,omitempty"`
+	EntityCount   uint64 `protobuf:"varint,6,opt,name=entity_count,json=entityCount,proto3" json:"entity_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReverseExportFile) Reset() {
+	*x = ReverseExportFile{}
+	mi := &file_armadra_v1_migration_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReverseExportFile) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReverseExportFile) ProtoMessage() {}
+
+func (x *ReverseExportFile) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_migration_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReverseExportFile.ProtoReflect.Descriptor instead.
+func (*ReverseExportFile) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_migration_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ReverseExportFile) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ReverseExportFile) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *ReverseExportFile) GetBytes() uint64 {
+	if x != nil {
+		return x.Bytes
+	}
+	return 0
+}
+
+func (x *ReverseExportFile) GetSha256() []byte {
+	if x != nil {
+		return x.Sha256
+	}
+	return nil
+}
+
+func (x *ReverseExportFile) GetContentSha256() []byte {
+	if x != nil {
+		return x.ContentSha256
+	}
+	return nil
+}
+
+func (x *ReverseExportFile) GetEntityCount() uint64 {
+	if x != nil {
+		return x.EntityCount
+	}
+	return 0
+}
+
+type ReverseExportIndex struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	FormatVersion uint32                 `protobuf:"varint,1,opt,name=format_version,json=formatVersion,proto3" json:"format_version,omitempty"`
+	HostId        string                 `protobuf:"bytes,2,opt,name=host_id,json=hostId,proto3" json:"host_id,omitempty"`
+	// The epoch the Host held when it wrote the package.
+	Epoch uint64 `protobuf:"varint,3,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	// The Host event watermark the package was taken at. An importer compares it
+	// with the watermark the ownership record settled at: a higher one means the
+	// Host published changes this package would strand.
+	EventSequence uint64 `protobuf:"varint,4,opt,name=event_sequence,json=eventSequence,proto3" json:"event_sequence,omitempty"`
+	// "canvas" in this version. An unknown domain is refused, never guessed.
+	Domain        string               `protobuf:"bytes,5,opt,name=domain,proto3" json:"domain,omitempty"`
+	Files         []*ReverseExportFile `protobuf:"bytes,6,rep,name=files,proto3" json:"files,omitempty"`
+	EntityCount   uint64               `protobuf:"varint,7,opt,name=entity_count,json=entityCount,proto3" json:"entity_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReverseExportIndex) Reset() {
+	*x = ReverseExportIndex{}
+	mi := &file_armadra_v1_migration_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReverseExportIndex) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReverseExportIndex) ProtoMessage() {}
+
+func (x *ReverseExportIndex) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_migration_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReverseExportIndex.ProtoReflect.Descriptor instead.
+func (*ReverseExportIndex) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_migration_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ReverseExportIndex) GetFormatVersion() uint32 {
+	if x != nil {
+		return x.FormatVersion
+	}
+	return 0
+}
+
+func (x *ReverseExportIndex) GetHostId() string {
+	if x != nil {
+		return x.HostId
+	}
+	return ""
+}
+
+func (x *ReverseExportIndex) GetEpoch() uint64 {
+	if x != nil {
+		return x.Epoch
+	}
+	return 0
+}
+
+func (x *ReverseExportIndex) GetEventSequence() uint64 {
+	if x != nil {
+		return x.EventSequence
+	}
+	return 0
+}
+
+func (x *ReverseExportIndex) GetDomain() string {
+	if x != nil {
+		return x.Domain
+	}
+	return ""
+}
+
+func (x *ReverseExportIndex) GetFiles() []*ReverseExportFile {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+func (x *ReverseExportIndex) GetEntityCount() uint64 {
+	if x != nil {
+		return x.EntityCount
+	}
+	return 0
+}
+
+// One entity inside a version 2 entity file. An unrecognized member means a
+// package this reader cannot apply (`reverse.unsupported_entity`); it is never
+// a row that gets skipped.
+type ReverseExportRecord struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Entity:
+	//
+	//	*ReverseExportRecord_Workspace
+	//	*ReverseExportRecord_Canvas
+	//	*ReverseExportRecord_Node
+	//	*ReverseExportRecord_Edge
+	//	*ReverseExportRecord_Annotation
+	Entity        isReverseExportRecord_Entity `protobuf_oneof:"entity"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReverseExportRecord) Reset() {
+	*x = ReverseExportRecord{}
+	mi := &file_armadra_v1_migration_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReverseExportRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReverseExportRecord) ProtoMessage() {}
+
+func (x *ReverseExportRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_migration_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReverseExportRecord.ProtoReflect.Descriptor instead.
+func (*ReverseExportRecord) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_migration_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ReverseExportRecord) GetEntity() isReverseExportRecord_Entity {
+	if x != nil {
+		return x.Entity
+	}
+	return nil
+}
+
+func (x *ReverseExportRecord) GetWorkspace() *CanvasWorkspace {
+	if x != nil {
+		if x, ok := x.Entity.(*ReverseExportRecord_Workspace); ok {
+			return x.Workspace
+		}
+	}
+	return nil
+}
+
+func (x *ReverseExportRecord) GetCanvas() *Canvas {
+	if x != nil {
+		if x, ok := x.Entity.(*ReverseExportRecord_Canvas); ok {
+			return x.Canvas
+		}
+	}
+	return nil
+}
+
+func (x *ReverseExportRecord) GetNode() *CanvasNode {
+	if x != nil {
+		if x, ok := x.Entity.(*ReverseExportRecord_Node); ok {
+			return x.Node
+		}
+	}
+	return nil
+}
+
+func (x *ReverseExportRecord) GetEdge() *CanvasEdge {
+	if x != nil {
+		if x, ok := x.Entity.(*ReverseExportRecord_Edge); ok {
+			return x.Edge
+		}
+	}
+	return nil
+}
+
+func (x *ReverseExportRecord) GetAnnotation() *CanvasAnnotation {
+	if x != nil {
+		if x, ok := x.Entity.(*ReverseExportRecord_Annotation); ok {
+			return x.Annotation
+		}
+	}
+	return nil
+}
+
+type isReverseExportRecord_Entity interface {
+	isReverseExportRecord_Entity()
+}
+
+type ReverseExportRecord_Workspace struct {
+	Workspace *CanvasWorkspace `protobuf:"bytes,1,opt,name=workspace,proto3,oneof"`
+}
+
+type ReverseExportRecord_Canvas struct {
+	Canvas *Canvas `protobuf:"bytes,2,opt,name=canvas,proto3,oneof"`
+}
+
+type ReverseExportRecord_Node struct {
+	Node *CanvasNode `protobuf:"bytes,3,opt,name=node,proto3,oneof"`
+}
+
+type ReverseExportRecord_Edge struct {
+	Edge *CanvasEdge `protobuf:"bytes,4,opt,name=edge,proto3,oneof"`
+}
+
+type ReverseExportRecord_Annotation struct {
+	Annotation *CanvasAnnotation `protobuf:"bytes,5,opt,name=annotation,proto3,oneof"`
+}
+
+func (*ReverseExportRecord_Workspace) isReverseExportRecord_Entity() {}
+
+func (*ReverseExportRecord_Canvas) isReverseExportRecord_Entity() {}
+
+func (*ReverseExportRecord_Node) isReverseExportRecord_Entity() {}
+
+func (*ReverseExportRecord_Edge) isReverseExportRecord_Entity() {}
+
+func (*ReverseExportRecord_Annotation) isReverseExportRecord_Entity() {}
+
+// Apply a reverse export package to the Runtime's own database. The Runtime is
+// in the rolling_back phase when this arrives, and nothing here moves an epoch.
+type ApplyReverseExportRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Domain string                 `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	// Absolute directory holding `export.json` and the entity files.
+	PackagePath string `protobuf:"bytes,2,opt,name=package_path,json=packagePath,proto3" json:"package_path,omitempty"`
+	// Digest of the index bytes. A package whose index differs is refused.
+	IndexSha256   []byte `protobuf:"bytes,3,opt,name=index_sha256,json=indexSha256,proto3" json:"index_sha256,omitempty"`
+	ExpectedEpoch uint64 `protobuf:"varint,4,opt,name=expected_epoch,json=expectedEpoch,proto3" json:"expected_epoch,omitempty"`
+	// Idempotency key. The same identifier with the same index digest replays the
+	// stored answer; the same identifier with a different digest is refused.
+	ImportId      string `protobuf:"bytes,5,opt,name=import_id,json=importId,proto3" json:"import_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApplyReverseExportRequest) Reset() {
+	*x = ApplyReverseExportRequest{}
+	mi := &file_armadra_v1_migration_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApplyReverseExportRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApplyReverseExportRequest) ProtoMessage() {}
+
+func (x *ApplyReverseExportRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_migration_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApplyReverseExportRequest.ProtoReflect.Descriptor instead.
+func (*ApplyReverseExportRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_migration_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ApplyReverseExportRequest) GetDomain() string {
+	if x != nil {
+		return x.Domain
+	}
+	return ""
+}
+
+func (x *ApplyReverseExportRequest) GetPackagePath() string {
+	if x != nil {
+		return x.PackagePath
+	}
+	return ""
+}
+
+func (x *ApplyReverseExportRequest) GetIndexSha256() []byte {
+	if x != nil {
+		return x.IndexSha256
+	}
+	return nil
+}
+
+func (x *ApplyReverseExportRequest) GetExpectedEpoch() uint64 {
+	if x != nil {
+		return x.ExpectedEpoch
+	}
+	return 0
+}
+
+func (x *ApplyReverseExportRequest) GetImportId() string {
+	if x != nil {
+		return x.ImportId
+	}
+	return ""
+}
+
+// What the Runtime stored, and what it reads back afterwards. `reexported` is
+// the Runtime's own canonical serialization of the rows it now holds, which the
+// Host compares against the package it wrote: equal digests are what allow the
+// epoch to be handed back.
+type ReverseImportReport struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ImportId        string                 `protobuf:"bytes,1,opt,name=import_id,json=importId,proto3" json:"import_id,omitempty"`
+	Domain          string                 `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
+	Epoch           uint64                 `protobuf:"varint,3,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	IndexSha256     []byte                 `protobuf:"bytes,4,opt,name=index_sha256,json=indexSha256,proto3" json:"index_sha256,omitempty"`
+	EntityCount     uint64                 `protobuf:"varint,5,opt,name=entity_count,json=entityCount,proto3" json:"entity_count,omitempty"`
+	Replayed        bool                   `protobuf:"varint,6,opt,name=replayed,proto3" json:"replayed,omitempty"`
+	Reexported      []*ReverseExportFile   `protobuf:"bytes,7,rep,name=reexported,proto3" json:"reexported,omitempty"`
+	Tables          []*ExportTable         `protobuf:"bytes,8,rep,name=tables,proto3" json:"tables,omitempty"`
+	Issues          []*ExportIssue         `protobuf:"bytes,9,rep,name=issues,proto3" json:"issues,omitempty"`
+	AppliedAtUnixMs int64                  `protobuf:"varint,10,opt,name=applied_at_unix_ms,json=appliedAtUnixMs,proto3" json:"applied_at_unix_ms,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ReverseImportReport) Reset() {
+	*x = ReverseImportReport{}
+	mi := &file_armadra_v1_migration_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReverseImportReport) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReverseImportReport) ProtoMessage() {}
+
+func (x *ReverseImportReport) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_migration_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReverseImportReport.ProtoReflect.Descriptor instead.
+func (*ReverseImportReport) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_migration_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ReverseImportReport) GetImportId() string {
+	if x != nil {
+		return x.ImportId
+	}
+	return ""
+}
+
+func (x *ReverseImportReport) GetDomain() string {
+	if x != nil {
+		return x.Domain
+	}
+	return ""
+}
+
+func (x *ReverseImportReport) GetEpoch() uint64 {
+	if x != nil {
+		return x.Epoch
+	}
+	return 0
+}
+
+func (x *ReverseImportReport) GetIndexSha256() []byte {
+	if x != nil {
+		return x.IndexSha256
+	}
+	return nil
+}
+
+func (x *ReverseImportReport) GetEntityCount() uint64 {
+	if x != nil {
+		return x.EntityCount
+	}
+	return 0
+}
+
+func (x *ReverseImportReport) GetReplayed() bool {
+	if x != nil {
+		return x.Replayed
+	}
+	return false
+}
+
+func (x *ReverseImportReport) GetReexported() []*ReverseExportFile {
+	if x != nil {
+		return x.Reexported
+	}
+	return nil
+}
+
+func (x *ReverseImportReport) GetTables() []*ExportTable {
+	if x != nil {
+		return x.Tables
+	}
+	return nil
+}
+
+func (x *ReverseImportReport) GetIssues() []*ExportIssue {
+	if x != nil {
+		return x.Issues
+	}
+	return nil
+}
+
+func (x *ReverseImportReport) GetAppliedAtUnixMs() int64 {
+	if x != nil {
+		return x.AppliedAtUnixMs
+	}
+	return 0
+}
+
 var File_armadra_v1_migration_proto protoreflect.FileDescriptor
 
 const file_armadra_v1_migration_proto_rawDesc = "" +
 	"\n" +
 	"\x1aarmadra/v1/migration.proto\x12\n" +
-	"armadra.v1\"\x92\x06\n" +
+	"armadra.v1\x1a\x17armadra/v1/canvas.proto\"\x92\x06\n" +
 	"\x17MigrationExportManifest\x12%\n" +
 	"\x0eformat_version\x18\x01 \x01(\rR\rformatVersion\x12\x1b\n" +
 	"\texport_id\x18\x02 \x01(\tR\bexportId\x12-\n" +
@@ -1110,7 +1643,51 @@ const file_armadra_v1_migration_proto_rawDesc = "" +
 	"\fentity_count\x18\x06 \x01(\x04R\ventityCount\x12.\n" +
 	"\x13last_event_sequence\x18\a \x01(\x04R\x11lastEventSequence\x12/\n" +
 	"\x06issues\x18\b \x03(\v2\x17.armadra.v1.ExportIssueR\x06issues\x12\x14\n" +
-	"\x05state\x18\t \x01(\tR\x05stateB#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	"\x05state\x18\t \x01(\tR\x05state\"\xc2\x01\n" +
+	"\x11ReverseExportFile\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12\x14\n" +
+	"\x05bytes\x18\x03 \x01(\x04R\x05bytes\x12\x16\n" +
+	"\x06sha256\x18\x04 \x01(\fR\x06sha256\x12%\n" +
+	"\x0econtent_sha256\x18\x05 \x01(\fR\rcontentSha256\x12!\n" +
+	"\fentity_count\x18\x06 \x01(\x04R\ventityCount\"\x81\x02\n" +
+	"\x12ReverseExportIndex\x12%\n" +
+	"\x0eformat_version\x18\x01 \x01(\rR\rformatVersion\x12\x17\n" +
+	"\ahost_id\x18\x02 \x01(\tR\x06hostId\x12\x14\n" +
+	"\x05epoch\x18\x03 \x01(\x04R\x05epoch\x12%\n" +
+	"\x0eevent_sequence\x18\x04 \x01(\x04R\reventSequence\x12\x16\n" +
+	"\x06domain\x18\x05 \x01(\tR\x06domain\x123\n" +
+	"\x05files\x18\x06 \x03(\v2\x1d.armadra.v1.ReverseExportFileR\x05files\x12!\n" +
+	"\fentity_count\x18\a \x01(\x04R\ventityCount\"\xa6\x02\n" +
+	"\x13ReverseExportRecord\x12;\n" +
+	"\tworkspace\x18\x01 \x01(\v2\x1b.armadra.v1.CanvasWorkspaceH\x00R\tworkspace\x12,\n" +
+	"\x06canvas\x18\x02 \x01(\v2\x12.armadra.v1.CanvasH\x00R\x06canvas\x12,\n" +
+	"\x04node\x18\x03 \x01(\v2\x16.armadra.v1.CanvasNodeH\x00R\x04node\x12,\n" +
+	"\x04edge\x18\x04 \x01(\v2\x16.armadra.v1.CanvasEdgeH\x00R\x04edge\x12>\n" +
+	"\n" +
+	"annotation\x18\x05 \x01(\v2\x1c.armadra.v1.CanvasAnnotationH\x00R\n" +
+	"annotationB\b\n" +
+	"\x06entity\"\xbd\x01\n" +
+	"\x19ApplyReverseExportRequest\x12\x16\n" +
+	"\x06domain\x18\x01 \x01(\tR\x06domain\x12!\n" +
+	"\fpackage_path\x18\x02 \x01(\tR\vpackagePath\x12!\n" +
+	"\findex_sha256\x18\x03 \x01(\fR\vindexSha256\x12%\n" +
+	"\x0eexpected_epoch\x18\x04 \x01(\x04R\rexpectedEpoch\x12\x1b\n" +
+	"\timport_id\x18\x05 \x01(\tR\bimportId\"\x90\x03\n" +
+	"\x13ReverseImportReport\x12\x1b\n" +
+	"\timport_id\x18\x01 \x01(\tR\bimportId\x12\x16\n" +
+	"\x06domain\x18\x02 \x01(\tR\x06domain\x12\x14\n" +
+	"\x05epoch\x18\x03 \x01(\x04R\x05epoch\x12!\n" +
+	"\findex_sha256\x18\x04 \x01(\fR\vindexSha256\x12!\n" +
+	"\fentity_count\x18\x05 \x01(\x04R\ventityCount\x12\x1a\n" +
+	"\breplayed\x18\x06 \x01(\bR\breplayed\x12=\n" +
+	"\n" +
+	"reexported\x18\a \x03(\v2\x1d.armadra.v1.ReverseExportFileR\n" +
+	"reexported\x12/\n" +
+	"\x06tables\x18\b \x03(\v2\x17.armadra.v1.ExportTableR\x06tables\x12/\n" +
+	"\x06issues\x18\t \x03(\v2\x17.armadra.v1.ExportIssueR\x06issues\x12+\n" +
+	"\x12applied_at_unix_ms\x18\n" +
+	" \x01(\x03R\x0fappliedAtUnixMsB#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_migration_proto_rawDescOnce sync.Once
@@ -1124,20 +1701,30 @@ func file_armadra_v1_migration_proto_rawDescGZIP() []byte {
 	return file_armadra_v1_migration_proto_rawDescData
 }
 
-var file_armadra_v1_migration_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_armadra_v1_migration_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_armadra_v1_migration_proto_goTypes = []any{
-	(*MigrationExportManifest)(nil), // 0: armadra.v1.MigrationExportManifest
-	(*ExportMigration)(nil),         // 1: armadra.v1.ExportMigration
-	(*ExportTable)(nil),             // 2: armadra.v1.ExportTable
-	(*ExportIdSet)(nil),             // 3: armadra.v1.ExportIdSet
-	(*ExportCanvas)(nil),            // 4: armadra.v1.ExportCanvas
-	(*ExportNodeAnnotation)(nil),    // 5: armadra.v1.ExportNodeAnnotation
-	(*ExportAsset)(nil),             // 6: armadra.v1.ExportAsset
-	(*ExportIssue)(nil),             // 7: armadra.v1.ExportIssue
-	(*ImportedSqlRow)(nil),          // 8: armadra.v1.ImportedSqlRow
-	(*ImportedSqlColumn)(nil),       // 9: armadra.v1.ImportedSqlColumn
-	(*SqlNull)(nil),                 // 10: armadra.v1.SqlNull
-	(*MigrationImportReport)(nil),   // 11: armadra.v1.MigrationImportReport
+	(*MigrationExportManifest)(nil),   // 0: armadra.v1.MigrationExportManifest
+	(*ExportMigration)(nil),           // 1: armadra.v1.ExportMigration
+	(*ExportTable)(nil),               // 2: armadra.v1.ExportTable
+	(*ExportIdSet)(nil),               // 3: armadra.v1.ExportIdSet
+	(*ExportCanvas)(nil),              // 4: armadra.v1.ExportCanvas
+	(*ExportNodeAnnotation)(nil),      // 5: armadra.v1.ExportNodeAnnotation
+	(*ExportAsset)(nil),               // 6: armadra.v1.ExportAsset
+	(*ExportIssue)(nil),               // 7: armadra.v1.ExportIssue
+	(*ImportedSqlRow)(nil),            // 8: armadra.v1.ImportedSqlRow
+	(*ImportedSqlColumn)(nil),         // 9: armadra.v1.ImportedSqlColumn
+	(*SqlNull)(nil),                   // 10: armadra.v1.SqlNull
+	(*MigrationImportReport)(nil),     // 11: armadra.v1.MigrationImportReport
+	(*ReverseExportFile)(nil),         // 12: armadra.v1.ReverseExportFile
+	(*ReverseExportIndex)(nil),        // 13: armadra.v1.ReverseExportIndex
+	(*ReverseExportRecord)(nil),       // 14: armadra.v1.ReverseExportRecord
+	(*ApplyReverseExportRequest)(nil), // 15: armadra.v1.ApplyReverseExportRequest
+	(*ReverseImportReport)(nil),       // 16: armadra.v1.ReverseImportReport
+	(*CanvasWorkspace)(nil),           // 17: armadra.v1.CanvasWorkspace
+	(*Canvas)(nil),                    // 18: armadra.v1.Canvas
+	(*CanvasNode)(nil),                // 19: armadra.v1.CanvasNode
+	(*CanvasEdge)(nil),                // 20: armadra.v1.CanvasEdge
+	(*CanvasAnnotation)(nil),          // 21: armadra.v1.CanvasAnnotation
 }
 var file_armadra_v1_migration_proto_depIdxs = []int32{
 	1,  // 0: armadra.v1.MigrationExportManifest.migrations:type_name -> armadra.v1.ExportMigration
@@ -1151,11 +1738,20 @@ var file_armadra_v1_migration_proto_depIdxs = []int32{
 	10, // 8: armadra.v1.ImportedSqlColumn.null_value:type_name -> armadra.v1.SqlNull
 	2,  // 9: armadra.v1.MigrationImportReport.tables:type_name -> armadra.v1.ExportTable
 	7,  // 10: armadra.v1.MigrationImportReport.issues:type_name -> armadra.v1.ExportIssue
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	12, // 11: armadra.v1.ReverseExportIndex.files:type_name -> armadra.v1.ReverseExportFile
+	17, // 12: armadra.v1.ReverseExportRecord.workspace:type_name -> armadra.v1.CanvasWorkspace
+	18, // 13: armadra.v1.ReverseExportRecord.canvas:type_name -> armadra.v1.Canvas
+	19, // 14: armadra.v1.ReverseExportRecord.node:type_name -> armadra.v1.CanvasNode
+	20, // 15: armadra.v1.ReverseExportRecord.edge:type_name -> armadra.v1.CanvasEdge
+	21, // 16: armadra.v1.ReverseExportRecord.annotation:type_name -> armadra.v1.CanvasAnnotation
+	12, // 17: armadra.v1.ReverseImportReport.reexported:type_name -> armadra.v1.ReverseExportFile
+	2,  // 18: armadra.v1.ReverseImportReport.tables:type_name -> armadra.v1.ExportTable
+	7,  // 19: armadra.v1.ReverseImportReport.issues:type_name -> armadra.v1.ExportIssue
+	20, // [20:20] is the sub-list for method output_type
+	20, // [20:20] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_migration_proto_init() }
@@ -1163,6 +1759,7 @@ func file_armadra_v1_migration_proto_init() {
 	if File_armadra_v1_migration_proto != nil {
 		return
 	}
+	file_armadra_v1_canvas_proto_init()
 	file_armadra_v1_migration_proto_msgTypes[9].OneofWrappers = []any{
 		(*ImportedSqlColumn_NullValue)(nil),
 		(*ImportedSqlColumn_TextValue)(nil),
@@ -1170,13 +1767,20 @@ func file_armadra_v1_migration_proto_init() {
 		(*ImportedSqlColumn_RealValue)(nil),
 		(*ImportedSqlColumn_BlobValue)(nil),
 	}
+	file_armadra_v1_migration_proto_msgTypes[14].OneofWrappers = []any{
+		(*ReverseExportRecord_Workspace)(nil),
+		(*ReverseExportRecord_Canvas)(nil),
+		(*ReverseExportRecord_Node)(nil),
+		(*ReverseExportRecord_Edge)(nil),
+		(*ReverseExportRecord_Annotation)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_migration_proto_rawDesc), len(file_armadra_v1_migration_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

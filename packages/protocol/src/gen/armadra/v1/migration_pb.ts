@@ -4,6 +4,14 @@
 
 import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv1";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv1";
+import type {
+  Canvas,
+  CanvasAnnotation,
+  CanvasEdge,
+  CanvasNode,
+  CanvasWorkspace,
+} from "./canvas_pb.js";
+import { file_armadra_v1_canvas } from "./canvas_pb.js";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -12,7 +20,8 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_migration: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Chphcm1hZHJhL3YxL21pZ3JhdGlvbi5wcm90bxIKYXJtYWRyYS52MSK6BAoXTWlncmF0aW9uRXhwb3J0TWFuaWZlc3QSFgoOZm9ybWF0X3ZlcnNpb24YASABKA0SEQoJZXhwb3J0X2lkGAIgASgJEhsKE2V4cG9ydGVkX2F0X3VuaXhfbXMYAyABKAMSGAoQcHJvZHVjZXJfdmVyc2lvbhgEIAEoCRIVCg1kYXRhYmFzZV9maWxlGAUgASgJEhYKDmRhdGFiYXNlX2J5dGVzGAYgASgEEhcKD2RhdGFiYXNlX3NoYTI1NhgHIAEoDBIvCgptaWdyYXRpb25zGAggAygLMhsuYXJtYWRyYS52MS5FeHBvcnRNaWdyYXRpb24SJwoGdGFibGVzGAkgAygLMhcuYXJtYWRyYS52MS5FeHBvcnRUYWJsZRIrCgppZGVudGl0aWVzGAogAygLMhcuYXJtYWRyYS52MS5FeHBvcnRJZFNldBIqCghjYW52YXNlcxgLIAMoCzIYLmFybWFkcmEudjEuRXhwb3J0Q2FudmFzEjUKC2Fubm90YXRpb25zGAwgAygLMiAuYXJtYWRyYS52MS5FeHBvcnROb2RlQW5ub3RhdGlvbhInCgZhc3NldHMYDSADKAsyFy5hcm1hZHJhLnYxLkV4cG9ydEFzc2V0EicKBmlzc3VlcxgOIAMoCzIXLmFybWFkcmEudjEuRXhwb3J0SXNzdWUSFwoPYXNzZXRzX2NvbXBsZXRlGA8gASgIEiAKGG93bmVyc2hpcF9zd2l0Y2hfYWxsb3dlZBgQIAEoCCJaCg9FeHBvcnRNaWdyYXRpb24SDwoHdmVyc2lvbhgBIAEoAxIQCghjaGVja3N1bRgCIAEoDBIPCgdzdWNjZXNzGAMgASgIEhMKC2Rlc2NyaXB0aW9uGAQgASgJIlcKC0V4cG9ydFRhYmxlEgwKBG5hbWUYASABKAkSEQoJcm93X2NvdW50GAIgASgEEhAKCHJlYWRhYmxlGAMgASgIEhUKDXNjaGVtYV9zaGEyNTYYBCABKAwiKQoLRXhwb3J0SWRTZXQSDQoFdGFibGUYASABKAkSCwoDaWRzGAIgAygJIoEBCgxFeHBvcnRDYW52YXMSEQoJY2FudmFzX2lkGAEgASgJEhQKDHdvcmtzcGFjZV9pZBgCIAEoCRIZChF3aGl0ZWJvYXJkX3NoYTI1NhgDIAEoDBIYChB3aGl0ZWJvYXJkX2J5dGVzGAQgASgEEhMKC2thbmJhbl9qc29uGAUgASgMImIKFEV4cG9ydE5vZGVBbm5vdGF0aW9uEg8KB25vZGVfaWQYASABKAkSEQoJY2FudmFzX2lkGAIgASgJEhMKC2xhYmVsc19qc29uGAMgASgMEhEKCW5vdGVfdXRmOBgEIAEoDCKVAQoLRXhwb3J0QXNzZXQSFAoMd29ya3NwYWNlX2lkGAEgASgJEhUKDXJlbGF0aXZlX3BhdGgYAiABKAkSEwoLYnVuZGxlX3BhdGgYAyABKAkSDQoFYnl0ZXMYBCABKAQSDgoGc2hhMjU2GAUgASgMEg4KBmNvcGllZBgGIAEoCBIVCg1yZWZlcmVuY2VkX2J5GAcgAygJIk0KC0V4cG9ydElzc3VlEgwKBGNvZGUYASABKAkSEAoIc2V2ZXJpdHkYAiABKAkSDgoGZW50aXR5GAMgASgJEg4KBmRldGFpbBgEIAEoCSJPCg5JbXBvcnRlZFNxbFJvdxINCgV0YWJsZRgBIAEoCRIuCgdjb2x1bW5zGAIgAygLMh0uYXJtYWRyYS52MS5JbXBvcnRlZFNxbENvbHVtbiKwAQoRSW1wb3J0ZWRTcWxDb2x1bW4SDAoEbmFtZRgBIAEoCRIpCgpudWxsX3ZhbHVlGAIgASgLMhMuYXJtYWRyYS52MS5TcWxOdWxsSAASFAoKdGV4dF92YWx1ZRgDIAEoCUgAEhcKDWludGVnZXJfdmFsdWUYBCABKANIABIUCgpyZWFsX3ZhbHVlGAUgASgBSAASFAoKYmxvYl92YWx1ZRgGIAEoDEgAQgcKBXZhbHVlIgkKB1NxbE51bGwi+wEKFU1pZ3JhdGlvbkltcG9ydFJlcG9ydBIRCglpbXBvcnRfaWQYASABKAkSEQoJZXhwb3J0X2lkGAIgASgJEg8KB2hvc3RfaWQYAyABKAkSFwoPbWFuaWZlc3Rfc2hhMjU2GAQgASgMEicKBnRhYmxlcxgFIAMoCzIXLmFybWFkcmEudjEuRXhwb3J0VGFibGUSFAoMZW50aXR5X2NvdW50GAYgASgEEhsKE2xhc3RfZXZlbnRfc2VxdWVuY2UYByABKAQSJwoGaXNzdWVzGAggAygLMhcuYXJtYWRyYS52MS5FeHBvcnRJc3N1ZRINCgVzdGF0ZRgJIAEoCUIjWiFhcm1hZHJhLmxvY2FsL2hvc3QvZ2VuL2FybWFkcmEvdjFiBnByb3RvMw",
+    "Chphcm1hZHJhL3YxL21pZ3JhdGlvbi5wcm90bxIKYXJtYWRyYS52MSK6BAoXTWlncmF0aW9uRXhwb3J0TWFuaWZlc3QSFgoOZm9ybWF0X3ZlcnNpb24YASABKA0SEQoJZXhwb3J0X2lkGAIgASgJEhsKE2V4cG9ydGVkX2F0X3VuaXhfbXMYAyABKAMSGAoQcHJvZHVjZXJfdmVyc2lvbhgEIAEoCRIVCg1kYXRhYmFzZV9maWxlGAUgASgJEhYKDmRhdGFiYXNlX2J5dGVzGAYgASgEEhcKD2RhdGFiYXNlX3NoYTI1NhgHIAEoDBIvCgptaWdyYXRpb25zGAggAygLMhsuYXJtYWRyYS52MS5FeHBvcnRNaWdyYXRpb24SJwoGdGFibGVzGAkgAygLMhcuYXJtYWRyYS52MS5FeHBvcnRUYWJsZRIrCgppZGVudGl0aWVzGAogAygLMhcuYXJtYWRyYS52MS5FeHBvcnRJZFNldBIqCghjYW52YXNlcxgLIAMoCzIYLmFybWFkcmEudjEuRXhwb3J0Q2FudmFzEjUKC2Fubm90YXRpb25zGAwgAygLMiAuYXJtYWRyYS52MS5FeHBvcnROb2RlQW5ub3RhdGlvbhInCgZhc3NldHMYDSADKAsyFy5hcm1hZHJhLnYxLkV4cG9ydEFzc2V0EicKBmlzc3VlcxgOIAMoCzIXLmFybWFkcmEudjEuRXhwb3J0SXNzdWUSFwoPYXNzZXRzX2NvbXBsZXRlGA8gASgIEiAKGG93bmVyc2hpcF9zd2l0Y2hfYWxsb3dlZBgQIAEoCCJaCg9FeHBvcnRNaWdyYXRpb24SDwoHdmVyc2lvbhgBIAEoAxIQCghjaGVja3N1bRgCIAEoDBIPCgdzdWNjZXNzGAMgASgIEhMKC2Rlc2NyaXB0aW9uGAQgASgJIlcKC0V4cG9ydFRhYmxlEgwKBG5hbWUYASABKAkSEQoJcm93X2NvdW50GAIgASgEEhAKCHJlYWRhYmxlGAMgASgIEhUKDXNjaGVtYV9zaGEyNTYYBCABKAwiKQoLRXhwb3J0SWRTZXQSDQoFdGFibGUYASABKAkSCwoDaWRzGAIgAygJIoEBCgxFeHBvcnRDYW52YXMSEQoJY2FudmFzX2lkGAEgASgJEhQKDHdvcmtzcGFjZV9pZBgCIAEoCRIZChF3aGl0ZWJvYXJkX3NoYTI1NhgDIAEoDBIYChB3aGl0ZWJvYXJkX2J5dGVzGAQgASgEEhMKC2thbmJhbl9qc29uGAUgASgMImIKFEV4cG9ydE5vZGVBbm5vdGF0aW9uEg8KB25vZGVfaWQYASABKAkSEQoJY2FudmFzX2lkGAIgASgJEhMKC2xhYmVsc19qc29uGAMgASgMEhEKCW5vdGVfdXRmOBgEIAEoDCKVAQoLRXhwb3J0QXNzZXQSFAoMd29ya3NwYWNlX2lkGAEgASgJEhUKDXJlbGF0aXZlX3BhdGgYAiABKAkSEwoLYnVuZGxlX3BhdGgYAyABKAkSDQoFYnl0ZXMYBCABKAQSDgoGc2hhMjU2GAUgASgMEg4KBmNvcGllZBgGIAEoCBIVCg1yZWZlcmVuY2VkX2J5GAcgAygJIk0KC0V4cG9ydElzc3VlEgwKBGNvZGUYASABKAkSEAoIc2V2ZXJpdHkYAiABKAkSDgoGZW50aXR5GAMgASgJEg4KBmRldGFpbBgEIAEoCSJPCg5JbXBvcnRlZFNxbFJvdxINCgV0YWJsZRgBIAEoCRIuCgdjb2x1bW5zGAIgAygLMh0uYXJtYWRyYS52MS5JbXBvcnRlZFNxbENvbHVtbiKwAQoRSW1wb3J0ZWRTcWxDb2x1bW4SDAoEbmFtZRgBIAEoCRIpCgpudWxsX3ZhbHVlGAIgASgLMhMuYXJtYWRyYS52MS5TcWxOdWxsSAASFAoKdGV4dF92YWx1ZRgDIAEoCUgAEhcKDWludGVnZXJfdmFsdWUYBCABKANIABIUCgpyZWFsX3ZhbHVlGAUgASgBSAASFAoKYmxvYl92YWx1ZRgGIAEoDEgAQgcKBXZhbHVlIgkKB1NxbE51bGwi+wEKFU1pZ3JhdGlvbkltcG9ydFJlcG9ydBIRCglpbXBvcnRfaWQYASABKAkSEQoJZXhwb3J0X2lkGAIgASgJEg8KB2hvc3RfaWQYAyABKAkSFwoPbWFuaWZlc3Rfc2hhMjU2GAQgASgMEicKBnRhYmxlcxgFIAMoCzIXLmFybWFkcmEudjEuRXhwb3J0VGFibGUSFAoMZW50aXR5X2NvdW50GAYgASgEEhsKE2xhc3RfZXZlbnRfc2VxdWVuY2UYByABKAQSJwoGaXNzdWVzGAggAygLMhcuYXJtYWRyYS52MS5FeHBvcnRJc3N1ZRINCgVzdGF0ZRgJIAEoCSKEAQoRUmV2ZXJzZUV4cG9ydEZpbGUSDAoEbmFtZRgBIAEoCRIUCgx3b3Jrc3BhY2VfaWQYAiABKAkSDQoFYnl0ZXMYAyABKAQSDgoGc2hhMjU2GAQgASgMEhYKDmNvbnRlbnRfc2hhMjU2GAUgASgMEhQKDGVudGl0eV9jb3VudBgGIAEoBCK4AQoSUmV2ZXJzZUV4cG9ydEluZGV4EhYKDmZvcm1hdF92ZXJzaW9uGAEgASgNEg8KB2hvc3RfaWQYAiABKAkSDQoFZXBvY2gYAyABKAQSFgoOZXZlbnRfc2VxdWVuY2UYBCABKAQSDgoGZG9tYWluGAUgASgJEiwKBWZpbGVzGAYgAygLMh0uYXJtYWRyYS52MS5SZXZlcnNlRXhwb3J0RmlsZRIUCgxlbnRpdHlfY291bnQYByABKAQi+wEKE1JldmVyc2VFeHBvcnRSZWNvcmQSMAoJd29ya3NwYWNlGAEgASgLMhsuYXJtYWRyYS52MS5DYW52YXNXb3Jrc3BhY2VIABIkCgZjYW52YXMYAiABKAsyEi5hcm1hZHJhLnYxLkNhbnZhc0gAEiYKBG5vZGUYAyABKAsyFi5hcm1hZHJhLnYxLkNhbnZhc05vZGVIABImCgRlZGdlGAQgASgLMhYuYXJtYWRyYS52MS5DYW52YXNFZGdlSAASMgoKYW5ub3RhdGlvbhgFIAEoCzIcLmFybWFkcmEudjEuQ2FudmFzQW5ub3RhdGlvbkgAQggKBmVudGl0eSKCAQoZQXBwbHlSZXZlcnNlRXhwb3J0UmVxdWVzdBIOCgZkb21haW4YASABKAkSFAoMcGFja2FnZV9wYXRoGAIgASgJEhQKDGluZGV4X3NoYTI1NhgDIAEoDBIWCg5leHBlY3RlZF9lcG9jaBgEIAEoBBIRCglpbXBvcnRfaWQYBSABKAkipgIKE1JldmVyc2VJbXBvcnRSZXBvcnQSEQoJaW1wb3J0X2lkGAEgASgJEg4KBmRvbWFpbhgCIAEoCRINCgVlcG9jaBgDIAEoBBIUCgxpbmRleF9zaGEyNTYYBCABKAwSFAoMZW50aXR5X2NvdW50GAUgASgEEhAKCHJlcGxheWVkGAYgASgIEjEKCnJlZXhwb3J0ZWQYByADKAsyHS5hcm1hZHJhLnYxLlJldmVyc2VFeHBvcnRGaWxlEicKBnRhYmxlcxgIIAMoCzIXLmFybWFkcmEudjEuRXhwb3J0VGFibGUSJwoGaXNzdWVzGAkgAygLMhcuYXJtYWRyYS52MS5FeHBvcnRJc3N1ZRIaChJhcHBsaWVkX2F0X3VuaXhfbXMYCiABKANCI1ohYXJtYWRyYS5sb2NhbC9ob3N0L2dlbi9hcm1hZHJhL3YxYgZwcm90bzM",
+    [file_armadra_v1_canvas],
   );
 
 /**
@@ -517,3 +526,297 @@ export type MigrationImportReport =
 export const MigrationImportReportSchema: GenMessage<MigrationImportReport> =
   /*@__PURE__*/
   messageDesc(file_armadra_v1_migration, 11);
+
+/**
+ * ---------------------------------------------------------------------------
+ * Reverse export package, format version 2 (Go Host 业务所有权迁移 §2.12)
+ * ---------------------------------------------------------------------------
+ *
+ * Format version 1 wrote one CanvasSnapshotResponse per workspace and had no
+ * reader at all. Version 2 writes a length-prefixed sequence of
+ * ReverseExportRecord instead, so a reader takes one entity at a time and a
+ * truncated file is a short read rather than a half-decoded canvas.
+ *
+ * The index itself stays JSON on disk (`export.json`), because an operator has
+ * to be able to read a rollback package without a decoder. These messages
+ * describe the same fields, so all three runtimes agree on what it means.
+ *
+ * @generated from message armadra.v1.ReverseExportFile
+ */
+export type ReverseExportFile = Message<"armadra.v1.ReverseExportFile"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string workspace_id = 2;
+   */
+  workspaceId: string;
+
+  /**
+   * @generated from field: uint64 bytes = 3;
+   */
+  bytes: bigint;
+
+  /**
+   * Digest of the file exactly as it sits on disk.
+   *
+   * @generated from field: bytes sha256 = 4;
+   */
+  sha256: Uint8Array;
+
+  /**
+   * Digest of the same records re-serialized in canonical content form:
+   * `revision` cleared and `assets` dropped. Those two are Host-side facts the
+   * Runtime has nowhere to store, so they are excluded from the comparison
+   * that decides whether an import round-tripped.
+   *
+   * @generated from field: bytes content_sha256 = 5;
+   */
+  contentSha256: Uint8Array;
+
+  /**
+   * @generated from field: uint64 entity_count = 6;
+   */
+  entityCount: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.ReverseExportFile.
+ * Use `create(ReverseExportFileSchema)` to create a new message.
+ */
+export const ReverseExportFileSchema: GenMessage<ReverseExportFile> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_migration, 12);
+
+/**
+ * @generated from message armadra.v1.ReverseExportIndex
+ */
+export type ReverseExportIndex = Message<"armadra.v1.ReverseExportIndex"> & {
+  /**
+   * @generated from field: uint32 format_version = 1;
+   */
+  formatVersion: number;
+
+  /**
+   * @generated from field: string host_id = 2;
+   */
+  hostId: string;
+
+  /**
+   * The epoch the Host held when it wrote the package.
+   *
+   * @generated from field: uint64 epoch = 3;
+   */
+  epoch: bigint;
+
+  /**
+   * The Host event watermark the package was taken at. An importer compares it
+   * with the watermark the ownership record settled at: a higher one means the
+   * Host published changes this package would strand.
+   *
+   * @generated from field: uint64 event_sequence = 4;
+   */
+  eventSequence: bigint;
+
+  /**
+   * "canvas" in this version. An unknown domain is refused, never guessed.
+   *
+   * @generated from field: string domain = 5;
+   */
+  domain: string;
+
+  /**
+   * @generated from field: repeated armadra.v1.ReverseExportFile files = 6;
+   */
+  files: ReverseExportFile[];
+
+  /**
+   * @generated from field: uint64 entity_count = 7;
+   */
+  entityCount: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.ReverseExportIndex.
+ * Use `create(ReverseExportIndexSchema)` to create a new message.
+ */
+export const ReverseExportIndexSchema: GenMessage<ReverseExportIndex> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_migration, 13);
+
+/**
+ * One entity inside a version 2 entity file. An unrecognized member means a
+ * package this reader cannot apply (`reverse.unsupported_entity`); it is never
+ * a row that gets skipped.
+ *
+ * @generated from message armadra.v1.ReverseExportRecord
+ */
+export type ReverseExportRecord = Message<"armadra.v1.ReverseExportRecord"> & {
+  /**
+   * @generated from oneof armadra.v1.ReverseExportRecord.entity
+   */
+  entity:
+    | {
+        /**
+         * @generated from field: armadra.v1.CanvasWorkspace workspace = 1;
+         */
+        value: CanvasWorkspace;
+        case: "workspace";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.Canvas canvas = 2;
+         */
+        value: Canvas;
+        case: "canvas";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.CanvasNode node = 3;
+         */
+        value: CanvasNode;
+        case: "node";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.CanvasEdge edge = 4;
+         */
+        value: CanvasEdge;
+        case: "edge";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.CanvasAnnotation annotation = 5;
+         */
+        value: CanvasAnnotation;
+        case: "annotation";
+      }
+    | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message armadra.v1.ReverseExportRecord.
+ * Use `create(ReverseExportRecordSchema)` to create a new message.
+ */
+export const ReverseExportRecordSchema: GenMessage<ReverseExportRecord> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_migration, 14);
+
+/**
+ * Apply a reverse export package to the Runtime's own database. The Runtime is
+ * in the rolling_back phase when this arrives, and nothing here moves an epoch.
+ *
+ * @generated from message armadra.v1.ApplyReverseExportRequest
+ */
+export type ApplyReverseExportRequest =
+  Message<"armadra.v1.ApplyReverseExportRequest"> & {
+    /**
+     * @generated from field: string domain = 1;
+     */
+    domain: string;
+
+    /**
+     * Absolute directory holding `export.json` and the entity files.
+     *
+     * @generated from field: string package_path = 2;
+     */
+    packagePath: string;
+
+    /**
+     * Digest of the index bytes. A package whose index differs is refused.
+     *
+     * @generated from field: bytes index_sha256 = 3;
+     */
+    indexSha256: Uint8Array;
+
+    /**
+     * @generated from field: uint64 expected_epoch = 4;
+     */
+    expectedEpoch: bigint;
+
+    /**
+     * Idempotency key. The same identifier with the same index digest replays the
+     * stored answer; the same identifier with a different digest is refused.
+     *
+     * @generated from field: string import_id = 5;
+     */
+    importId: string;
+  };
+
+/**
+ * Describes the message armadra.v1.ApplyReverseExportRequest.
+ * Use `create(ApplyReverseExportRequestSchema)` to create a new message.
+ */
+export const ApplyReverseExportRequestSchema: GenMessage<ApplyReverseExportRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_migration, 15);
+
+/**
+ * What the Runtime stored, and what it reads back afterwards. `reexported` is
+ * the Runtime's own canonical serialization of the rows it now holds, which the
+ * Host compares against the package it wrote: equal digests are what allow the
+ * epoch to be handed back.
+ *
+ * @generated from message armadra.v1.ReverseImportReport
+ */
+export type ReverseImportReport = Message<"armadra.v1.ReverseImportReport"> & {
+  /**
+   * @generated from field: string import_id = 1;
+   */
+  importId: string;
+
+  /**
+   * @generated from field: string domain = 2;
+   */
+  domain: string;
+
+  /**
+   * @generated from field: uint64 epoch = 3;
+   */
+  epoch: bigint;
+
+  /**
+   * @generated from field: bytes index_sha256 = 4;
+   */
+  indexSha256: Uint8Array;
+
+  /**
+   * @generated from field: uint64 entity_count = 5;
+   */
+  entityCount: bigint;
+
+  /**
+   * @generated from field: bool replayed = 6;
+   */
+  replayed: boolean;
+
+  /**
+   * @generated from field: repeated armadra.v1.ReverseExportFile reexported = 7;
+   */
+  reexported: ReverseExportFile[];
+
+  /**
+   * @generated from field: repeated armadra.v1.ExportTable tables = 8;
+   */
+  tables: ExportTable[];
+
+  /**
+   * @generated from field: repeated armadra.v1.ExportIssue issues = 9;
+   */
+  issues: ExportIssue[];
+
+  /**
+   * @generated from field: int64 applied_at_unix_ms = 10;
+   */
+  appliedAtUnixMs: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.ReverseImportReport.
+ * Use `create(ReverseImportReportSchema)` to create a new message.
+ */
+export const ReverseImportReportSchema: GenMessage<ReverseImportReport> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_migration, 16);
