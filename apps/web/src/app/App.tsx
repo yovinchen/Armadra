@@ -8,6 +8,7 @@ import {
   CommandPalette,
   ControlConfirmDialog,
   ExplorerDrawer,
+  GithubDrawer,
   HandoffDialog,
   ResourceDrawer,
   QuickOpen,
@@ -95,6 +96,7 @@ function AppShell() {
         <ResourceDrawer />
         <AutomationDrawer />
         <UsageDashboard />
+        <GithubDrawer />
         <SettingsDialog />
         <CommandPalette />
         <QuickOpen />

@@ -68,3 +68,9 @@ export const UsageDashboard = lazy(() =>
     default: module.UsageDashboard,
   })),
 );
+
+export const GithubDrawer = lazy(() =>
+  import("@/panels/github/GithubDrawer").then((module) => ({
+    default: module.GithubDrawer,
+  })),
+);

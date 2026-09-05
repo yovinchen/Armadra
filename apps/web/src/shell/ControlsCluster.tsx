@@ -3,6 +3,7 @@ import {
   Activity,
   FolderTree,
   GitBranch,
+  GitPullRequest,
   Search,
   Shrink,
   SlidersHorizontal,
@@ -84,6 +85,17 @@ export function ControlsCluster() {
           }
         >
           <GitBranch />
+        </ClusterButton>
+
+        <ClusterButton
+          label={t("cluster.github")}
+          command="app.github"
+          active={panels.github !== "closed"}
+          onClick={() =>
+            setPanel("github", panels.github === "closed" ? "drawer" : "closed")
+          }
+        >
+          <GitPullRequest />
         </ClusterButton>
 
         <ClusterButton

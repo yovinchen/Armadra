@@ -192,6 +192,7 @@ beforeEach(() => {
       resources: "closed",
       automation: "closed",
       usage: "closed",
+      github: "closed",
       quickOpen: false,
       settings: false,
       palette: false,

@@ -106,6 +106,16 @@ export const COMMANDS = [
     allowInTerminal: true,
     allowWhileTyping: true,
   },
+  // GitHub 页没有默认键位：剩下的 ⌘⇧ 组合都被终端里的东西用着，
+  // 而这一页的入口在右上工具簇与命令面板里，不靠快捷键。
+  {
+    id: "app.github",
+    labelKey: "cmd.app.github",
+    scope: "app",
+    defaultKeys: both(null),
+    allowInTerminal: false,
+    allowWhileTyping: false,
+  },
   // 文件工作流（E01/M4）。⌘P 是快速打开的通用键位；项目搜索让给
   // `canvas.focusMode` 占着的 ⌘⇧F，改用 ⌘⇧H——两条都在终端里也放行，
   // 因为它们打开的是应用面板，不是终端里的东西。

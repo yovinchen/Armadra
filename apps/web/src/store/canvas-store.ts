@@ -87,6 +87,8 @@ export interface PanelState {
   automation: "closed" | "drawer";
   /** 额度、用量与成本看板（§4.2）。抽屉或右侧常驻浮卡。 */
   usage: "closed" | "drawer" | "pinned";
+  /** 右侧工作面板的「GitHub」页（Git/GitHub 设计 §1 / 画布平台设计 §4）。 */
+  github: "closed" | "drawer";
   settings: boolean;
   palette: boolean;
   /** 快速打开（⌘P，E01/M4）。 */
@@ -188,6 +190,7 @@ const initialPanels: PanelState = {
   resources: "closed",
   automation: "closed",
   usage: "closed",
+  github: "closed",
   settings: false,
   palette: false,
   quickOpen: false,
