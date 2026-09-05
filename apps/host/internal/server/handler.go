@@ -20,7 +20,11 @@ const (
 	MediaType     = "application/x-protobuf"
 	MaxFrameBytes = 1 << 20
 	ProtocolMajor = 1
-	ProtocolMinor = 1
+	// Minor 2 adds UpdateArtifact.component and CheckForUpdateRequest.component
+	// (design docs/design/updates-and-service-install.md §1.5). A minor is
+	// additive: a peer that speaks 1 keeps working and simply never asks about
+	// a component other than the desktop bundle.
+	ProtocolMinor = 2
 )
 
 // Identity separates a persistent data-directory ID from a process incarnation.

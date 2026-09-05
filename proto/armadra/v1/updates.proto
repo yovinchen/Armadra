@@ -77,12 +77,19 @@ message UpdateSignature {
 }
 
 message UpdateArtifact {
-  // "darwin-aarch64", "linux-x86_64", "windows-x86_64".
+  // "darwin-aarch64", "linux-x86_64", "windows-x86_64". Empty for an artifact
+  // that is the same on every platform, such as the updater manifest.
   string target = 1;
   string url = 2;
   uint64 size_bytes = 3;
   bytes sha256 = 4;
   UpdateSignature signature = 5;
+  // Which program this artifact carries: "desktop", "host", "worker", "hook",
+  // "session-host", "web" or "manifest". One release publishes several
+  // programs for the same target, so a target alone does not name a download.
+  // Empty means the publisher did not say, and such an artifact is never
+  // matched by a caller that asked for a component.
+  string component = 6;
 }
 
 message ReleaseInfo {
@@ -101,6 +108,10 @@ message CheckForUpdateRequest {
   SemanticVersion installed_version = 3;
   // The caller's own build target, so the Host answers about one artifact.
   string target = 4;
+  // Which program the caller is asking about. Empty means "desktop": the
+  // shell was the only caller before this field existed, and an old client
+  // must keep receiving the answer it already understood.
+  string component = 5;
 }
 
 message CheckForUpdateResponse {

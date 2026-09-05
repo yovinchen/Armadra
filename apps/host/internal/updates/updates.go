@@ -137,7 +137,15 @@ func (s *Service) Check(ctx context.Context, request *pb.CheckForUpdateRequest) 
 	if target == "" {
 		target = LocalTarget()
 	}
-	if installed == nil || !ValidTarget(target) {
+	// An empty component means "desktop": the shell was the only caller before
+	// protocol minor 2, and an old client must keep getting the answer it
+	// already understood. A component this Host does not publish is a caller
+	// error, not an empty answer.
+	component := request.GetComponent()
+	if component == "" {
+		component = ComponentDesktop
+	}
+	if installed == nil || !ValidTarget(target) || !ValidComponent(component) {
 		return nil, ErrInvalid
 	}
 	channel := request.GetChannel()
@@ -186,7 +194,7 @@ func (s *Service) Check(ctx context.Context, request *pb.CheckForUpdateRequest) 
 	if !s.accepts(candidate.GetCompatibility(), installed) {
 		return answer(pb.UpdateCheckState_UPDATE_CHECK_STATE_UNAVAILABLE, ReasonIncompatible), nil
 	}
-	artifact := artifactFor(candidate, target)
+	artifact := artifactFor(candidate, target, component)
 	if artifact == nil {
 		return answer(pb.UpdateCheckState_UPDATE_CHECK_STATE_UNAVAILABLE, ReasonNoArtifact), nil
 	}
@@ -302,11 +310,27 @@ func (s *Service) accepts(compatibility *pb.UpdateCompatibility, installed *pb.S
 	return compatibility.GetMinimumProtocolMinor() <= s.minor
 }
 
-func artifactFor(info *pb.ReleaseInfo, target string) *pb.UpdateArtifact {
+// artifactFor picks the one download that answers a caller's target and
+// component. Two components are published once for every platform — the
+// updater manifest and the checksum list, and the built web bundle — and only
+// those may answer a request whose target they do not name. For every other
+// component an unreadable target is as good as a wrong one: an asset whose
+// name this Host cannot place is never offered to a machine it might not run
+// on. An artifact that declares no component answers nobody, because a
+// publisher who did not say which program a file carries has not offered it.
+func artifactFor(info *pb.ReleaseInfo, target, component string) *pb.UpdateArtifact {
 	for _, artifact := range info.GetArtifacts() {
-		if artifact.GetTarget() == target {
-			return artifact
+		if artifact.GetComponent() != component {
+			continue
 		}
+		if TargetlessComponent(component) {
+			if artifact.GetTarget() != "" {
+				continue
+			}
+		} else if artifact.GetTarget() != target {
+			continue
+		}
+		return artifact
 	}
 	return nil
 }

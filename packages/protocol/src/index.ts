@@ -19,5 +19,7 @@ export * from "./gen/armadra/v1/language_pb.js";
 export { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 
 export const PROTOCOL_MAJOR = 1;
-export const PROTOCOL_MINOR = 1;
+// Minor 2 adds the update artifact/request `component` field (design
+// docs/design/updates-and-service-install.md §1.5); minors stay additive.
+export const PROTOCOL_MINOR = 2;
 export const MAX_FRAME_BYTES = 1_048_576;

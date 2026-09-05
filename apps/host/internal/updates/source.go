@@ -165,6 +165,77 @@ func compatibility(body string) *pb.UpdateCompatibility {
 	return result
 }
 
+// Component names the program an artifact carries. One release publishes the
+// desktop bundle, the Host, the Worker, the Hook and the manifest for the same
+// target, so a target alone stopped naming a download (design
+// docs/design/updates-and-service-install.md §1.5).
+const (
+	ComponentDesktop     = "desktop"
+	ComponentHost        = "host"
+	ComponentWorker      = "worker"
+	ComponentHook        = "hook"
+	ComponentSessionHost = "session-host"
+	ComponentWeb         = "web"
+	// ComponentManifest covers the files that describe a release rather than
+	// carry a program: the Tauri updater manifest and the checksum list. They
+	// are one file for every platform, so they declare no target.
+	ComponentManifest = "manifest"
+)
+
+// assetComponents maps a published asset's name prefix — everything before the
+// first "_", which is where the version starts — onto the program it carries.
+// The mapping is exact: a prefix nobody published is an artifact with no
+// component, which no caller asking for one will ever match.
+var assetComponents = map[string]string{
+	"Armadra":              ComponentDesktop,
+	"armadra-host":         ComponentHost,
+	"armadra-runtime":      ComponentWorker,
+	"armadra-worker":       ComponentWorker,
+	"armadra-hook":         ComponentHook,
+	"armadra-session-host": ComponentSessionHost,
+	"armadra-web":          ComponentWeb,
+}
+
+// manifestAssets are published under a fixed name with no version in it, so
+// they have no prefix to read.
+var manifestAssets = map[string]bool{"latest.json": true, "SHA256SUMS": true}
+
+// ValidComponent reports whether a caller named a component this Host knows.
+// An unknown one is a caller error rather than an empty answer: silently
+// widening it to the desktop bundle would offer the wrong program.
+func ValidComponent(value string) bool {
+	if value == ComponentManifest {
+		return true
+	}
+	for _, known := range assetComponents {
+		if value == known {
+			return true
+		}
+	}
+	return false
+}
+
+// TargetlessComponent reports the components published once for every
+// platform. Everything else is built per target, so an artifact of that kind
+// with no readable target is a name this Host cannot place — never a file that
+// happens to run everywhere.
+func TargetlessComponent(value string) bool {
+	return value == ComponentManifest || value == ComponentWeb
+}
+
+// assetComponent is the component an asset name declares, or "" when the name
+// follows no published convention.
+func assetComponent(name string) string {
+	if manifestAssets[name] {
+		return ComponentManifest
+	}
+	prefix, _, found := strings.Cut(name, "_")
+	if !found {
+		return ""
+	}
+	return assetComponents[prefix]
+}
+
 // artifacts pairs each downloadable asset with its detached signature. The
 // Host reads names and digests only; it never fetches an asset's bytes.
 func artifacts(assets []assetDocument) []*pb.UpdateArtifact {
@@ -192,6 +263,7 @@ func artifacts(assets []assetDocument) []*pb.UpdateArtifact {
 			SizeBytes: asset.Size,
 			Sha256:    digest(asset.Digest),
 			Signature: &pb.UpdateSignature{State: pb.UpdateSignatureState_UPDATE_SIGNATURE_STATE_ABSENT},
+			Component: assetComponent(asset.Name),
 		}
 		// PRESENT means the release published a detached signature next to the
 		// artifact. The Host does not read it and never claims it verified one.

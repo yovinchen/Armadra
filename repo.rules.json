@@ -75,8 +75,8 @@
     "exemptions": [
       {
         "path": "crates/protocol/tests/contract.rs",
-        "lines": 1821,
-        "note": "§5 第 6 步：按 proto 文件拆契约测试"
+        "lines": 1736,
+        "note": "§5 第 6 步：按 proto 文件拆契约测试（updates 已拆出）"
       },
       {
         "path": "tools/canvas-ownership-e2e.mjs",

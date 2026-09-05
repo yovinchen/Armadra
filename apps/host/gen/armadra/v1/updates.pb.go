@@ -511,12 +511,19 @@ func (x *UpdateSignature) GetKeyId() string {
 
 type UpdateArtifact struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// "darwin-aarch64", "linux-x86_64", "windows-x86_64".
-	Target        string           `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
-	Url           string           `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
-	SizeBytes     uint64           `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
-	Sha256        []byte           `protobuf:"bytes,4,opt,name=sha256,proto3" json:"sha256,omitempty"`
-	Signature     *UpdateSignature `protobuf:"bytes,5,opt,name=signature,proto3" json:"signature,omitempty"`
+	// "darwin-aarch64", "linux-x86_64", "windows-x86_64". Empty for an artifact
+	// that is the same on every platform, such as the updater manifest.
+	Target    string           `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	Url       string           `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+	SizeBytes uint64           `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	Sha256    []byte           `protobuf:"bytes,4,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	Signature *UpdateSignature `protobuf:"bytes,5,opt,name=signature,proto3" json:"signature,omitempty"`
+	// Which program this artifact carries: "desktop", "host", "worker", "hook",
+	// "session-host", "web" or "manifest". One release publishes several
+	// programs for the same target, so a target alone does not name a download.
+	// Empty means the publisher did not say, and such an artifact is never
+	// matched by a caller that asked for a component.
+	Component     string `protobuf:"bytes,6,opt,name=component,proto3" json:"component,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -584,6 +591,13 @@ func (x *UpdateArtifact) GetSignature() *UpdateSignature {
 		return x.Signature
 	}
 	return nil
+}
+
+func (x *UpdateArtifact) GetComponent() string {
+	if x != nil {
+		return x.Component
+	}
+	return ""
 }
 
 type ReleaseInfo struct {
@@ -677,7 +691,11 @@ type CheckForUpdateRequest struct {
 	Channel          ReleaseChannel         `protobuf:"varint,2,opt,name=channel,proto3,enum=armadra.v1.ReleaseChannel" json:"channel,omitempty"`
 	InstalledVersion *SemanticVersion       `protobuf:"bytes,3,opt,name=installed_version,json=installedVersion,proto3" json:"installed_version,omitempty"`
 	// The caller's own build target, so the Host answers about one artifact.
-	Target        string `protobuf:"bytes,4,opt,name=target,proto3" json:"target,omitempty"`
+	Target string `protobuf:"bytes,4,opt,name=target,proto3" json:"target,omitempty"`
+	// Which program the caller is asking about. Empty means "desktop": the
+	// shell was the only caller before this field existed, and an old client
+	// must keep receiving the answer it already understood.
+	Component     string `protobuf:"bytes,5,opt,name=component,proto3" json:"component,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -736,6 +754,13 @@ func (x *CheckForUpdateRequest) GetInstalledVersion() *SemanticVersion {
 func (x *CheckForUpdateRequest) GetTarget() string {
 	if x != nil {
 		return x.Target
+	}
+	return ""
+}
+
+func (x *CheckForUpdateRequest) GetComponent() string {
+	if x != nil {
+		return x.Component
 	}
 	return ""
 }
@@ -1104,26 +1129,28 @@ const file_armadra_v1_updates_proto_rawDesc = "" +
 	"\x0fUpdateSignature\x126\n" +
 	"\x05state\x18\x01 \x01(\x0e2 .armadra.v1.UpdateSignatureStateR\x05state\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\x12\x15\n" +
-	"\x06key_id\x18\x03 \x01(\tR\x05keyId\"\xac\x01\n" +
+	"\x06key_id\x18\x03 \x01(\tR\x05keyId\"\xca\x01\n" +
 	"\x0eUpdateArtifact\x12\x16\n" +
 	"\x06target\x18\x01 \x01(\tR\x06target\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x12\x1d\n" +
 	"\n" +
 	"size_bytes\x18\x03 \x01(\x04R\tsizeBytes\x12\x16\n" +
 	"\x06sha256\x18\x04 \x01(\fR\x06sha256\x129\n" +
-	"\tsignature\x18\x05 \x01(\v2\x1b.armadra.v1.UpdateSignatureR\tsignature\"\xc9\x02\n" +
+	"\tsignature\x18\x05 \x01(\v2\x1b.armadra.v1.UpdateSignatureR\tsignature\x12\x1c\n" +
+	"\tcomponent\x18\x06 \x01(\tR\tcomponent\"\xc9\x02\n" +
 	"\vReleaseInfo\x125\n" +
 	"\aversion\x18\x01 \x01(\v2\x1b.armadra.v1.SemanticVersionR\aversion\x124\n" +
 	"\achannel\x18\x02 \x01(\x0e2\x1a.armadra.v1.ReleaseChannelR\achannel\x12/\n" +
 	"\x14published_at_unix_ms\x18\x03 \x01(\x03R\x11publishedAtUnixMs\x12\x1b\n" +
 	"\tnotes_url\x18\x04 \x01(\tR\bnotesUrl\x12E\n" +
 	"\rcompatibility\x18\x05 \x01(\v2\x1f.armadra.v1.UpdateCompatibilityR\rcompatibility\x128\n" +
-	"\tartifacts\x18\x06 \x03(\v2\x1a.armadra.v1.UpdateArtifactR\tartifacts\"\xdc\x01\n" +
+	"\tartifacts\x18\x06 \x03(\v2\x1a.armadra.v1.UpdateArtifactR\tartifacts\"\xfa\x01\n" +
 	"\x15CheckForUpdateRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x124\n" +
 	"\achannel\x18\x02 \x01(\x0e2\x1a.armadra.v1.ReleaseChannelR\achannel\x12H\n" +
 	"\x11installed_version\x18\x03 \x01(\v2\x1b.armadra.v1.SemanticVersionR\x10installedVersion\x12\x16\n" +
-	"\x06target\x18\x04 \x01(\tR\x06target\"\xf3\x02\n" +
+	"\x06target\x18\x04 \x01(\tR\x06target\x12\x1c\n" +
+	"\tcomponent\x18\x05 \x01(\tR\tcomponent\"\xf3\x02\n" +
 	"\x16CheckForUpdateResponse\x122\n" +
 	"\x05state\x18\x01 \x01(\x0e2\x1c.armadra.v1.UpdateCheckStateR\x05state\x124\n" +
 	"\achannel\x18\x02 \x01(\x0e2\x1a.armadra.v1.ReleaseChannelR\achannel\x12H\n" +
