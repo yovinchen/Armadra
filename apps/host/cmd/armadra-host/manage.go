@@ -117,6 +117,9 @@ func startBackground(parent context.Context, c config) error {
 	for _, origin := range c.origins {
 		args = append(args, "--allow-origin", origin)
 	}
+	if c.workerBinary != "" {
+		args = append(args, "--worker-binary", c.workerBinary, "--worker-state-dir", c.workerStateDir)
+	}
 	child := exec.Command(executable, args...)
 	child.Stdout = logFile
 	child.Stderr = logFile

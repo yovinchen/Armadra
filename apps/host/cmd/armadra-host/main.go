@@ -17,6 +17,7 @@ import (
 	"time"
 
 	pb "armadra.local/host/gen/armadra/v1"
+	"armadra.local/host/internal/automationhost"
 	"armadra.local/host/internal/daemon"
 	"armadra.local/host/internal/hoststate"
 	auth "armadra.local/host/internal/identity"
@@ -47,6 +48,10 @@ type config struct {
 	dataDir      string
 	origins      allowedOriginFlags
 	output       string
+	// Both must be given together to enable scheduling. Neither is inferred:
+	// a Host never guesses which binary is allowed to execute the owner's work.
+	workerBinary   string
+	workerStateDir string
 }
 
 func parseConfig(args []string) (config, error) {
@@ -76,6 +81,8 @@ func parseConfig(args []string) (config, error) {
 		flags.StringVar(&c.publicOrigin, "public-origin", "", "Exact HTTPS origin clients use for this Host")
 		flags.StringVar(&c.address, "listen", "127.0.0.1:43121", "Local metadata listener (loopback IP only)")
 		flags.Var(&c.origins, "allow-origin", "Exact browser origin allowed to read metadata (repeatable)")
+		flags.StringVar(&c.workerBinary, "worker-binary", "", "Absolute path to the Rust Worker executable that runs scheduled commands")
+		flags.StringVar(&c.workerStateDir, "worker-state-dir", "", "Absolute private directory for the Worker's own execution journal")
 	}
 	if err := flags.Parse(args); err != nil {
 		return c, err
@@ -125,6 +132,18 @@ func parseConfig(args []string) (config, error) {
 				return c, fmt.Errorf("TLS listener requires an explicit interface IP")
 			}
 		} else if err := server.ValidateListenAddress(c.address); err != nil {
+			return c, err
+		}
+	}
+	if (c.workerBinary == "") != (c.workerStateDir == "") {
+		return c, fmt.Errorf("scheduled execution requires both --worker-binary and --worker-state-dir")
+	}
+	if c.workerBinary != "" {
+		var err error
+		if c.workerBinary, err = filepath.Abs(c.workerBinary); err != nil {
+			return c, err
+		}
+		if c.workerStateDir, err = filepath.Abs(c.workerStateDir); err != nil {
 			return c, err
 		}
 	}
@@ -218,9 +237,24 @@ func serveHost(parent context.Context, c config) (err error) {
 	}
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
-	finished := make(chan error, 2)
+	// The schedule loop and its Worker are stopped before the database and the
+	// directory lock: cancelling ctx ends the loop, then this deferred Close
+	// shuts the Worker down and reports whether its children were reclaimed.
+	plans, err := startAutomation(ctx, c, state.ID, identity.InstanceID, database)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, plans.Close()) }()
+	workers := 2
+	if plans != nil {
+		workers = 3
+	}
+	finished := make(chan error, workers)
+	if plans != nil {
+		go func() { finished <- plans.Run(ctx) }()
+	}
 	go func() {
-		finished <- server.ServeWithOptions(ctx, listener, identity, server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin})
+		finished <- server.ServeWithOptions(ctx, listener, identity, server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans})
 	}()
 	go func() {
 		finished <- daemon.ServeWithBootstrap(ctx, control, status, cancel, func(ctx context.Context, request *pb.BootstrapTicketRequest) (*pb.BootstrapTicketResponse, error) {
@@ -242,10 +276,32 @@ func serveHost(parent context.Context, c config) (err error) {
 		})
 	}()
 	fmt.Printf("Armadra listening on %s\n", status.HttpEndpoint)
-	first := <-finished
+	if plans != nil {
+		fmt.Printf("Armadra scheduling commands on host %s\n", state.ID)
+	}
+	failures := []error{<-finished}
 	cancel()
-	second := <-finished
-	return errors.Join(first, second)
+	for range workers - 1 {
+		failures = append(failures, <-finished)
+	}
+	return errors.Join(failures...)
+}
+
+// startAutomation returns nil when the operator did not configure an execution
+// Worker. Scheduling is then unsupported and every other Host function keeps
+// working; a half-configured pair is rejected earlier, in parseConfig.
+func startAutomation(ctx context.Context, c config, hostID, instanceID string, database *storage.Store) (*automationhost.Service, error) {
+	options := automationhost.Options{Executable: c.workerBinary, StateDir: c.workerStateDir, HostID: hostID, InstanceID: instanceID, Store: database}
+	if !automationhost.Configured(options) {
+		return nil, nil
+	}
+	if err := os.MkdirAll(c.workerStateDir, 0700); err != nil {
+		return nil, err
+	}
+	if err := storage.ProtectArtifactDirectory(c.workerStateDir); err != nil {
+		return nil, err
+	}
+	return automationhost.New(ctx, options)
 }
 
 // Only an explicit local pair command emits one-time material to stdout.
