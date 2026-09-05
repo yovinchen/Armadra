@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   GitBranchRecord,
   GitCherryPickPreview,
@@ -13,6 +13,7 @@ import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Field, ReadError, selectClass } from "./forms";
 import { CherryPick } from "./CherryPick";
+import { invalidateGitQueries } from "./queries";
 
 export interface IntegrationsProps {
   workspaceId: string;
@@ -27,6 +28,11 @@ export interface IntegrationsProps {
   ) => Promise<GitCherryPickPreview>;
   request: (action: GitRepositoryAction, expected: GitExpectedState) => void;
   openFile: (path: string) => void;
+  /**
+   * Stage one resolved path. Rejected by the service while the file still
+   * holds conflict markers, so the failure text carries their line numbers.
+   */
+  markResolved: (path: string) => Promise<unknown>;
 }
 // Only owned kinds reach the recovery buttons, so merge is the safe default.
 function recoveryLabel(kind: GitIntegrationSnapshot["kind"]) {
@@ -53,10 +59,31 @@ function IntegrationSession({
   loadCherryPick,
   request,
   openFile,
+  markResolved,
 }: IntegrationsProps) {
   const t = useT();
   const client = useQueryClient();
   const queryKey = ["git-repository-integration", workspaceId, repositoryKey];
+  // Saving a merged file is not resolving it: this action stages the path and
+  // reports the exact lines the service refused it on.
+  const [resolveError, setResolveError] = useState<{
+    path: string;
+    message: string;
+  } | null>(null);
+  const resolve = useMutation({
+    mutationFn: (path: string) => markResolved(path),
+    onMutate: () => setResolveError(null),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey });
+      invalidateGitQueries(client, workspaceId);
+    },
+    onError: (error, path) =>
+      setResolveError({
+        path,
+        message:
+          error instanceof Error ? error.message : t("gitIntegration.failed"),
+      }),
+  });
   const [targetRef, setTargetRef] = useState("");
   const [rebaseRef, setRebaseRef] = useState("");
   const [message, setMessage] = useState("");
@@ -350,16 +377,36 @@ function IntegrationSession({
           <h3 className="whitespace-pre-wrap break-all font-mono font-medium">
             {file.path}
           </h3>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={blocked}
-            onClick={() => {
-              if (!currentlyBlocked()) openFile(file.path);
-            }}
-          >
-            {t("gitIntegration.open")}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={blocked}
+              onClick={() => {
+                if (!currentlyBlocked()) openFile(file.path);
+              }}
+            >
+              {t("gitIntegration.open")}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={blocked || resolve.isPending}
+              onClick={() => {
+                if (!currentlyBlocked()) resolve.mutate(file.path);
+              }}
+            >
+              {t("gitIntegration.markResolved")}
+            </Button>
+          </div>
+          <p className="text-muted-foreground">
+            {t("gitIntegration.markResolvedSafety")}
+          </p>
+          {resolveError?.path === file.path && (
+            <p role="alert" className="break-words text-destructive">
+              {resolveError.message}
+            </p>
+          )}
           {(["base", "ours", "theirs"] as const).map((name) => (
             <details key={name} open={name !== "base"}>
               <summary className="cursor-pointer">

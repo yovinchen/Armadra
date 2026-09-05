@@ -51,6 +51,7 @@ import {
   gitHeadCommitSchema,
   gitInitResponseSchema,
   gitPathsRequestSchema,
+  gitResolveResponseSchema,
   gitRevertRequestSchema,
   gitRevertResponseSchema,
   type GitRestoreSource,
@@ -1124,6 +1125,16 @@ export const runtimeApi = {
     request(
       `/api/workspaces/${workspaceId}/git/unstage`,
       gitUnstageResponseSchema,
+      { method: "POST", ...json(gitPathsRequestSchema.parse({ paths })) },
+    ),
+  /**
+   * Stage a conflicted path. Refused — with the offending line numbers — while
+   * the file on disk still contains Git conflict markers.
+   */
+  gitMarkResolved: (workspaceId: string, paths: string[]) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/resolve`,
+      gitResolveResponseSchema,
       { method: "POST", ...json(gitPathsRequestSchema.parse({ paths })) },
     ),
   /**

@@ -633,6 +633,101 @@ pub fn stage_paths(workspace_root: &Path, paths: &[String]) -> AppResult<StageRe
     Ok(StageResult { staged })
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolveResult {
+    pub resolved: Vec<String>,
+}
+
+/// The largest file this scan will read before refusing to judge it resolved.
+const MAX_RESOLVE_SCAN: u64 = 16 * 1024 * 1024;
+
+/// Explicitly mark conflicted paths resolved: `git add -- <paths>`, but only
+/// after each file has been read back and no longer contains a conflict marker
+/// (plan §4.3 — saving a file never marks it resolved on its own).
+///
+/// A file that still has markers is refused with the exact lines, so the caller
+/// can go back to them instead of staging a half-merged result.
+pub fn mark_resolved(workspace_root: &Path, paths: &[String]) -> AppResult<ResolveResult> {
+    let context = require_repository(workspace_root)?;
+    let requested = prepare_paths(&context, paths)?;
+    let mut resolved = Vec::with_capacity(requested.len());
+    for (relative, absolute) in &requested {
+        let unmerged = git(
+            &context.repository,
+            &["ls-files", "--unmerged", "-z", "--", relative],
+        )?;
+        if unmerged.is_empty() {
+            return Err(AppError::BadRequest(format!(
+                "{relative} is not a conflicted path in this index"
+            )));
+        }
+        let metadata = std::fs::symlink_metadata(absolute).map_err(|_| {
+            AppError::NotFound(format!(
+                "{relative} has no resolved content on disk; delete or restore it with Git first"
+            ))
+        })?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(AppError::Forbidden(
+                "Only regular files can be marked resolved".into(),
+            ));
+        }
+        if metadata.len() > MAX_RESOLVE_SCAN {
+            return Err(AppError::BadRequest(format!(
+                "{relative} is too large to check for conflict markers"
+            )));
+        }
+        let mut bytes = Vec::with_capacity(metadata.len() as usize);
+        File::open(absolute)?
+            .take(MAX_RESOLVE_SCAN)
+            .read_to_end(&mut bytes)?;
+        let markers = conflict_marker_lines(&bytes);
+        if !markers.is_empty() {
+            let shown = markers
+                .iter()
+                .take(20)
+                .map(u64::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            let more = if markers.len() > 20 {
+                format!(" (and {} more)", markers.len() - 20)
+            } else {
+                String::new()
+            };
+            return Err(AppError::Conflict(format!(
+                "{relative} still contains conflict markers on line(s) {shown}{more}; resolve them before marking it resolved"
+            )));
+        }
+        resolved.push(relative.clone());
+    }
+    let mut args = vec!["add", "--"];
+    args.extend(resolved.iter().map(String::as_str));
+    git(&context.repository, &args)?;
+    Ok(ResolveResult { resolved })
+}
+
+/// 1-based line numbers holding a Git conflict marker. Bytes are scanned
+/// directly so a binary or non-UTF-8 file is still checked rather than refused.
+pub fn conflict_marker_lines(bytes: &[u8]) -> Vec<u64> {
+    let mut lines = Vec::new();
+    for (index, line) in bytes.split(|byte| *byte == b'\n').enumerate() {
+        let line = line.strip_suffix(b"\r").unwrap_or(line);
+        if line.len() < 7 {
+            continue;
+        }
+        let marker = line[0];
+        // Git writes exactly seven of `<`, `|`, `=` or `>`, followed by end of
+        // line or a space and the side's label.
+        if matches!(marker, b'<' | b'|' | b'=' | b'>')
+            && line[..7].iter().all(|byte| *byte == marker)
+            && (line.len() == 7 || line[7] == b' ')
+        {
+            lines.push(index as u64 + 1);
+        }
+    }
+    lines
+}
+
 /// Which version a restore takes the file back to. The two are deliberately
 /// separate actions, because they lose different work (plan §3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
@@ -2191,6 +2286,94 @@ mod tests {
                 .all(|file| file.path != "a.txt"),
             "restoring from HEAD unstages as well"
         );
+    }
+
+    #[test]
+    fn marking_resolved_refuses_leftover_conflict_markers_and_names_their_lines() {
+        let root = tempdir().unwrap();
+        fixture_repository(root.path());
+        fs::write(root.path().join("a.txt"), "base\n").unwrap();
+        commit_all(root.path(), "base");
+        for args in [
+            vec!["checkout", "-q", "-b", "other"],
+            vec!["checkout", "-q", "main"],
+        ] {
+            Command::new("git")
+                .args(&args)
+                .current_dir(root.path())
+                .status()
+                .unwrap();
+        }
+        fs::write(root.path().join("a.txt"), "ours\n").unwrap();
+        commit_all(root.path(), "ours");
+        Command::new("git")
+            .args(["checkout", "-q", "other"])
+            .current_dir(root.path())
+            .status()
+            .unwrap();
+        fs::write(root.path().join("a.txt"), "theirs\n").unwrap();
+        commit_all(root.path(), "theirs");
+        // A real conflicted index, produced by Git itself.
+        let merge = Command::new("git")
+            .args(["merge", "--no-edit", "main"])
+            .current_dir(root.path())
+            .output()
+            .unwrap();
+        assert!(!merge.status.success(), "the merge must conflict");
+        let conflicted = fs::read_to_string(root.path().join("a.txt")).unwrap();
+        assert!(conflicted.contains("<<<<<<<"));
+
+        // Saving the file is not the same as resolving it: the leftover
+        // markers are refused, and their line numbers are named.
+        let refused = mark_resolved(root.path(), &["a.txt".to_owned()]).unwrap_err();
+        let AppError::Conflict(message) = &refused else {
+            panic!("{refused:?}");
+        };
+        assert!(message.contains("line(s) 1"), "{message}");
+        assert!(
+            !git(root.path(), &["ls-files", "--unmerged", "--", "a.txt"])
+                .unwrap()
+                .is_empty(),
+            "a refused path stays conflicted"
+        );
+
+        fs::write(root.path().join("a.txt"), "merged by hand\n").unwrap();
+        let result = mark_resolved(root.path(), &["a.txt".to_owned()]).unwrap();
+        assert_eq!(result.resolved, vec!["a.txt".to_owned()]);
+        assert!(
+            git(root.path(), &["ls-files", "--unmerged", "--", "a.txt"])
+                .unwrap()
+                .is_empty(),
+            "the path left the conflicted state"
+        );
+        // A path that is not conflicted cannot be laundered through this action.
+        assert!(matches!(
+            mark_resolved(root.path(), &["a.txt".to_owned()]),
+            Err(AppError::BadRequest(_))
+        ));
+    }
+
+    #[test]
+    fn conflict_markers_need_gits_exact_shape() {
+        let sample = concat!(
+            "keep\n",
+            "<<<<<<< HEAD\n",
+            "ours\n",
+            "||||||| base\n",
+            "=======\n",
+            "theirs\n",
+            ">>>>>>> other\n",
+            "======= not a marker, it has a trailing sentence\n",
+            "<<<<<< six is not a marker\n",
+        );
+        assert_eq!(
+            conflict_marker_lines(sample.as_bytes()),
+            vec![2, 4, 5, 7, 8]
+        );
+        // Non-UTF-8 content is scanned as bytes rather than refused.
+        let binary = b"\xff\xfe<<<<<<< HEAD\n\x00\x01\n";
+        assert!(conflict_marker_lines(binary).is_empty());
+        assert_eq!(conflict_marker_lines(b"<<<<<<< HEAD\n\x00"), vec![1]);
     }
 
     #[test]

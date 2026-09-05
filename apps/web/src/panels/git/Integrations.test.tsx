@@ -78,6 +78,7 @@ function setup(overrides: Partial<IntegrationsProps> = {}) {
     }),
     request: vi.fn(),
     openFile: vi.fn(),
+    markResolved: vi.fn(async () => ({ resolved: [] })),
     ...overrides,
   };
   const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -181,6 +182,45 @@ describe("integration recovery", () => {
       },
       state.head,
     );
+  });
+  it("marks a conflict resolved only on request and surfaces a refusal with its lines", async () => {
+    const state = {
+      ...active(),
+      canContinue: false,
+      conflicts: [
+        {
+          path: "src/conflict.ts",
+          base: null,
+          ours: null,
+          theirs: null,
+        },
+      ],
+    };
+    const markResolved = vi
+      .fn<IntegrationsProps["markResolved"]>()
+      .mockRejectedValueOnce(
+        new Error(
+          "src/conflict.ts still contains conflict markers on line(s) 3, 7",
+        ),
+      )
+      .mockResolvedValueOnce({ resolved: ["src/conflict.ts"] });
+    setup({ loadSnapshot: async () => state, markResolved });
+    const button = await screen.findByRole("button", {
+      name: "gitIntegration.markResolved",
+    });
+    // Opening the file must not stage anything on its own.
+    expect(markResolved).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    expect(markResolved).toHaveBeenCalledExactlyOnceWith("src/conflict.ts");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("line(s) 3, 7");
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    expect(markResolved).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).toBeNull();
   });
   it("never exposes continue or abort for external or unconfirmed ownership", async () => {
     const { props } = setup({

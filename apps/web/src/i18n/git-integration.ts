@@ -54,6 +54,10 @@ export const gitIntegration: MessageModule = {
       "中止会丢弃此次 Git 操作的解决结果，并尝试恢复开始时的状态。不会强制覆盖或清理文件；恢复失败时保留实际 Git 状态。",
     "gitIntegration.none": "没有正在进行的 Git 整合操作。",
     "gitIntegration.open": "在编辑器打开",
+    "gitIntegration.markResolved": "标记已解决",
+    "gitIntegration.markResolvedSafety":
+      "保存文件不等于解决冲突：标记已解决会把该文件加入索引，前提是文件里已经没有冲突标记；仍有标记时会被拒绝，并给出所在行号。",
+    "gitIntegration.failed": "标记已解决失败",
     "gitIntegration.base": "Base · 共同基础",
     "gitIntegration.ours": "Ours · 当前侧",
     "gitIntegration.theirs": "Theirs · 传入侧",
@@ -131,6 +135,10 @@ export const gitIntegration: MessageModule = {
       "Abort discards this Git operation's resolution work and attempts to restore its starting state. It does not force-overwrite or clean files; failed restoration leaves the actual Git state available for inspection.",
     "gitIntegration.none": "No Git integration is in progress.",
     "gitIntegration.open": "Open in editor",
+    "gitIntegration.markResolved": "Mark resolved",
+    "gitIntegration.markResolvedSafety":
+      "Saving the file is not the same as resolving it. Mark resolved adds the file to the index, and only once it no longer contains conflict markers; while any remain the request is refused and their line numbers are reported.",
+    "gitIntegration.failed": "Could not mark the file resolved",
     "gitIntegration.base": "Base · common ancestor",
     "gitIntegration.ours": "Ours · current side",
     "gitIntegration.theirs": "Theirs · incoming side",

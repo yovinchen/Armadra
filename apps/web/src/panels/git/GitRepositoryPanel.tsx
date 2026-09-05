@@ -604,6 +604,9 @@ function RepositorySession({
                 signal,
               )
             }
+            markResolved={(path) =>
+              runtimeApi.gitMarkResolved(workspaceId, [path])
+            }
             openFile={(path) => {
               const store = useCanvasStore.getState();
               if (store.workspace?.id !== workspaceId || !store.document)

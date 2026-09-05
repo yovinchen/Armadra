@@ -866,6 +866,15 @@ export const gitPathsRequestSchema = z.object({
  */
 export const gitRestoreSourceSchema = z.enum(["index", "head"]);
 
+/**
+ * `POST /api/workspaces/{id}/git/resolve` — stage a conflicted path. Saving a
+ * merged file never marks it resolved on its own; the service re-reads the
+ * file and refuses while any Git conflict marker is still in it.
+ */
+export const gitResolveResponseSchema = z.object({
+  resolved: z.array(z.string()),
+});
+
 export const gitRevertRequestSchema = z.object({
   paths: z.array(z.string().min(1)).min(1),
   source: gitRestoreSourceSchema.default("index"),
@@ -1409,6 +1418,7 @@ export type GitUnstageResponse = z.infer<typeof gitUnstageResponseSchema>;
 export type GitInitResponse = z.infer<typeof gitInitResponseSchema>;
 export type GitHeadCommit = z.infer<typeof gitHeadCommitSchema>;
 export type GitRestoreSource = z.infer<typeof gitRestoreSourceSchema>;
+export type GitResolveResponse = z.infer<typeof gitResolveResponseSchema>;
 export type GitCommitRequest = z.infer<typeof gitCommitRequestSchema>;
 export type GitCommitResponse = z.infer<typeof gitCommitResponseSchema>;
 export type GitCloneRequest = z.infer<typeof gitCloneRequestSchema>;

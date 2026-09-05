@@ -305,6 +305,10 @@ pub fn router_with_state(state: AppState) -> Router {
             post(api::git_revert),
         )
         .route(
+            "/api/workspaces/{workspace_id}/git/resolve",
+            post(api::git_resolve),
+        )
+        .route(
             "/api/workspaces/{workspace_id}/git/head-commit",
             get(api::git_head_commit),
         )

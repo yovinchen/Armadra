@@ -1940,6 +1940,34 @@ pub async fn git_unstage(
     Ok(Json(result))
 }
 
+/// `POST /api/workspaces/{id}/git/resolve`: stage a conflicted path only
+/// after its file no longer contains conflict markers (plan §4.3).
+pub async fn git_resolve(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+    Json(request): Json<PathsRequest>,
+) -> AppResult<Json<git::ResolveResult>> {
+    let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
+    if !workspace.permissions.read || !workspace.permissions.write {
+        return Err(AppError::Forbidden(
+            "Workspace does not allow Git writes".into(),
+        ));
+    }
+    git::access::require_execution(
+        workspace.permissions.execute,
+        "Git index, worktree, and commit writes",
+    )?;
+    let guard = crate::git_api::REPOSITORIES
+        .mutation_guard(Path::new(&workspace.root_path), ".")
+        .await?;
+    let result = tokio::task::spawn_blocking(move || {
+        let _guard = guard;
+        git::mark_resolved(Path::new(&workspace.root_path), &request.paths)
+    })
+    .await??;
+    Ok(Json(result))
+}
+
 /// `POST /api/workspaces/{id}/git/revert`: restoring from the index and
 /// restoring from HEAD lose different work, so the source is explicit.
 #[derive(Deserialize)]
