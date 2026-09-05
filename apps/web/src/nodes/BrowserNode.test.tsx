@@ -95,6 +95,9 @@ const session: BrowserSession = {
   canGoForward: false,
   createdAt: "2026-09-05T00:00:00.000Z",
   updatedAt: "2026-09-05T00:00:00.000Z",
+  activeTabId: "",
+  tabCount: 0,
+  leaseGeneration: 0,
 };
 
 function frame(overrides: Partial<Record<string, unknown>> = {}) {

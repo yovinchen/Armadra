@@ -26,6 +26,206 @@ export const browserViewportSchema = z.object({
   deviceScaleFactor: z.number().positive().default(1),
 });
 
+/* -------------------------- 受管浏览器二进制（§2.1） -------------------------- */
+
+/**
+ * 受管二进制永不自动下载：清单随构建内置，用户点一次才装。`supported: false`
+ * 表示这个构建的清单没有本机 OS/arch 的条目，界面说明情况而不是给一个按不动
+ * 的按钮。
+ */
+export const BROWSER_MANAGED_STATES = [
+  "absent",
+  "downloading",
+  "verifying",
+  "installed",
+  "failed",
+] as const;
+export const browserManagedStateSchema = z.object({
+  state: z.enum(BROWSER_MANAGED_STATES),
+  version: z.string(),
+  receivedBytes: z.number().int().nonnegative().default(0),
+  totalBytes: z.number().int().nonnegative().default(0),
+  /** `manifest_missing_target` / `sha256_mismatch` / `signature_invalid` / `network` / `download_disabled`。 */
+  reasonCode: z.string().default(""),
+  executable: z.string().default(""),
+  supported: z.boolean().default(false),
+});
+
+/* ---------------------------- 标签与 frame（§2.2） --------------------------- */
+
+/** 缺省是活动标签的主 frame，所以引入标签之前的调用方一个字都不用改。 */
+export const browserTargetSchema = z.object({
+  tabId: z.string().optional(),
+  frameId: z.string().optional(),
+});
+
+/** 每 session ≤ 16 个标签，超出的新开被拒并记 `tab_limit`。 */
+export const BROWSER_TAB_LIMIT = 16;
+
+/* ------------------------------ 对话框（§2.4） ------------------------------ */
+
+export const BROWSER_DIALOG_KINDS = [
+  "alert",
+  "confirm",
+  "prompt",
+  "beforeunload",
+] as const;
+export const browserDialogSchema = z.object({
+  dialogId: z.string(),
+  tabId: z.string(),
+  kind: z.enum(BROWSER_DIALOG_KINDS),
+  message: z.string(),
+  defaultPrompt: z.string().default(""),
+  url: z.string().default(""),
+  openedAt: z.string(),
+});
+
+export const browserDialogRequestSchema = z.object({
+  tabId: z.string().optional(),
+  dialogId: z.string().optional(),
+  accept: z.boolean(),
+  promptText: z.string().optional(),
+  leaseGeneration: z.number().int().nonnegative().optional(),
+});
+
+/** `accept` 是页面给挑选器的提示，不是这一侧执行的过滤条件。 */
+export const browserFileChooserSchema = z.object({
+  chooserId: z.string(),
+  tabId: z.string(),
+  frameId: z.string().default(""),
+  multiple: z.boolean().default(false),
+  accept: z.string().default(""),
+  openedAt: z.string(),
+});
+
+export const browserTabSchema = z.object({
+  tabId: z.string(),
+  url: z.string().default(""),
+  title: z.string().default(""),
+  active: z.boolean().default(false),
+  /** 页面自己 `window.open` 出来的标签带开启者，界面据此显示成弹窗。 */
+  openerTabId: z.string().default(""),
+  navigationEpoch: z.number().int().nonnegative().default(0),
+  loading: z.boolean().default(false),
+  pendingDialog: browserDialogSchema.optional(),
+});
+
+export const browserTabListSchema = z.object({
+  tabs: z.array(browserTabSchema).default([]),
+  activeTabId: z.string().default(""),
+  limit: z.number().int().positive().default(BROWSER_TAB_LIMIT),
+});
+
+export const BROWSER_TAB_ACTIONS = ["list", "switch", "new"] as const;
+export const browserTabRequestSchema = z.object({
+  action: z.enum(BROWSER_TAB_ACTIONS),
+  tabId: z.string().optional(),
+  url: z.string().optional(),
+  leaseGeneration: z.number().int().nonnegative().optional(),
+});
+
+export const browserCloseTabRequestSchema = z.object({
+  tabId: z.string(),
+  leaseGeneration: z.number().int().nonnegative().optional(),
+});
+
+/* ------------------------------ 控制租约（§2.6） ----------------------------- */
+
+/**
+ * 一个 session 一个持有者。读永远不需要租约，输入类动作需要。人点「接管」
+ * 立即撤销 Agent 租约，`generation` 随之 +1，旧世代的请求一律被拒。
+ */
+export const BROWSER_LEASE_STATES = [
+  "free",
+  "human",
+  "humanTakeover",
+  "agent",
+] as const;
+export const browserLeaseSchema = z.object({
+  state: z.enum(BROWSER_LEASE_STATES),
+  generation: z.number().int().nonnegative(),
+  expiresAt: z.string().default(""),
+  holder: z
+    .object({
+      kind: z.enum(["human", "agent"]),
+      /** 人是 deviceId，Agent 是节点 id。 */
+      id: z.string(),
+      displayName: z.string().default(""),
+    })
+    .optional(),
+});
+
+export const BROWSER_LEASE_ACTIONS = ["status", "takeover", "release"] as const;
+export const browserLeaseRequestSchema = z.object({
+  action: z.enum(BROWSER_LEASE_ACTIONS),
+  leaseGeneration: z.number().int().nonnegative().optional(),
+});
+
+/* ------------------------------- 新动词（§2.7） ------------------------------ */
+
+export const browserSelectRequestSchema = z.object({
+  navigationEpoch: z.number().int().nonnegative().optional(),
+  selector: z.string().optional(),
+  elementRef: z.string().optional(),
+  values: z.array(z.string()).default([]),
+  labels: z.array(z.string()).default([]),
+  target: browserTargetSchema.optional(),
+  leaseGeneration: z.number().int().nonnegative().optional(),
+});
+
+export const browserPressRequestSchema = z.object({
+  navigationEpoch: z.number().int().nonnegative().optional(),
+  key: z.string(),
+  modifiers: z.number().int().nonnegative().default(0),
+  repeat: z.number().int().nonnegative().default(0),
+  target: browserTargetSchema.optional(),
+  leaseGeneration: z.number().int().nonnegative().optional(),
+});
+
+export const BROWSER_SCROLL_DIRECTIONS = [
+  "up",
+  "down",
+  "left",
+  "right",
+] as const;
+export const browserScrollRequestSchema = z.object({
+  navigationEpoch: z.number().int().nonnegative().optional(),
+  direction: z.enum(BROWSER_SCROLL_DIRECTIONS).optional(),
+  amount: z.number().optional(),
+  elementRef: z.string().optional(),
+  target: browserTargetSchema.optional(),
+  leaseGeneration: z.number().int().nonnegative().optional(),
+});
+
+/** `paths` 只接受工作空间相对路径；绝对路径与逃逸出根目录的路径都被拒。 */
+export const browserUploadRequestSchema = z.object({
+  chooserId: z.string().optional(),
+  selector: z.string().optional(),
+  elementRef: z.string().optional(),
+  paths: z.array(z.string()).min(1),
+  target: browserTargetSchema.optional(),
+  leaseGeneration: z.number().int().nonnegative().optional(),
+});
+
+/* ------------------------------- 活动（§2.8） ------------------------------- */
+
+/** 只保留最近若干条在 session 内存里；持久记录仍是 `board-log.jsonl`。 */
+export const browserActivitySchema = z.object({
+  sessionId: z.string(),
+  actor: z.enum(["human", "agent"]),
+  actorId: z.string().default(""),
+  verb: z.string(),
+  target: z.string().default(""),
+  outcome: z.enum(["ok", "refused", "unknown"]),
+  reasonCode: z.string().default(""),
+  at: z.string(),
+});
+
+/* ------------------------------ 帧流带宽（§2.9） ----------------------------- */
+
+/** 客户端说自己这条链路是什么，Worker 决定预算并在订阅回执里如实报告。 */
+export const BROWSER_BANDWIDTH_CLASSES = ["lan", "wan", "metered"] as const;
+
 /**
  * `navigationEpoch` 是「这一页」的编号：导航一次就 +1，旧 epoch 的输入
  * 会被 Runtime 拒（409），客户端丢弃该批并等新帧，绝不重放（§8）。
@@ -47,6 +247,13 @@ export const browserSessionSchema = z.object({
   canGoForward: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  activeTabId: z.string().default(""),
+  tabCount: z.number().int().nonnegative().default(0),
+  lease: browserLeaseSchema.optional(),
+  pendingDialog: browserDialogSchema.optional(),
+  pendingFileChooser: browserFileChooserSchema.optional(),
+  /** 存库的世代号：Runtime 重启后租约回到 free，但世代继续往上走。 */
+  leaseGeneration: z.number().int().nonnegative().default(0),
 });
 
 /**
@@ -56,9 +263,10 @@ export const browserSessionSchema = z.object({
 export const browserAvailabilitySchema = z.object({
   available: z.boolean(),
   executable: z.string(),
-  source: z.enum(["settings", "environment", "detected", "none"]),
+  source: z.enum(["settings", "environment", "managed", "detected", "none"]),
   reasonCode: z.string(),
   searched: z.array(z.string()).default([]),
+  managed: browserManagedStateSchema.optional(),
 });
 
 export const browserSessionListSchema = z.object({
@@ -83,6 +291,7 @@ export const BROWSER_NAVIGATION_ACTIONS = [
 export const browserNavigateRequestSchema = z.object({
   action: z.enum(BROWSER_NAVIGATION_ACTIONS),
   url: z.string().optional(),
+  target: browserTargetSchema.optional(),
 });
 
 export const BROWSER_INPUT_KINDS = [
@@ -121,6 +330,8 @@ export const browserInputRequestSchema = z.object({
   navigationEpoch: z.number().int().nonnegative(),
   frameSeq: z.number().int().nonnegative().optional(),
   events: z.array(browserInputEventSchema).min(1).max(64),
+  target: browserTargetSchema.optional(),
+  leaseGeneration: z.number().int().nonnegative().optional(),
 });
 
 export const browserInputResultSchema = z.object({
@@ -133,12 +344,15 @@ export const BROWSER_VISIBILITIES = ["focused", "visible", "hidden"] as const;
 export const browserSubscribeRequestSchema = z.object({
   subscriptionId: z.string().optional(),
   visibility: z.enum(BROWSER_VISIBILITIES),
+  bandwidthClass: z.enum(BROWSER_BANDWIDTH_CLASSES).optional(),
+  maxWidth: z.number().int().nonnegative().optional(),
 });
 export const browserSubscriptionSchema = z.object({
   subscriptionId: z.string(),
   expiresAt: z.string(),
   quality: z.number().int(),
   maxFps: z.number().int(),
+  maxWidth: z.number().int().nonnegative().default(0),
 });
 
 /** 稳定元素引用绑定 session/frame/epoch；导航后失效（§7）。 */
@@ -153,6 +367,9 @@ export const browserElementSchema = z.object({
   y: z.number(),
   width: z.number(),
   height: z.number(),
+  /** 活动标签主 frame 内的引用两者都为空，跨 frame 的引用两者都带。 */
+  tabId: z.string().default(""),
+  frameId: z.string().default(""),
 });
 
 export const browserConsoleEntrySchema = z.object({
@@ -190,6 +407,7 @@ export const browserReadSchema = z.object({
 export const browserCaptureRequestSchema = z.object({
   fullPage: z.boolean().optional(),
   format: z.enum(["png", "jpeg"]).optional(),
+  target: browserTargetSchema.optional(),
 });
 
 /** 截图落在工作空间里，回的是工作空间相对路径与 hash，不是图片本身。 */
@@ -221,6 +439,9 @@ export const browserDownloadSchema = z.object({
   receivedBytes: z.number().int().nonnegative(),
   createdAt: z.string(),
   reasonCode: z.string(),
+  tabId: z.string().default(""),
+  /** 完成后才算得出来，所以未完成的下载这里是空串。 */
+  sha256: z.string().default(""),
 });
 
 export const browserDownloadListSchema = z.object({
@@ -265,3 +486,30 @@ export type BrowserDownloadList = z.infer<typeof browserDownloadListSchema>;
 export type BrowserDownloadDecisionRequest = z.infer<
   typeof browserDownloadDecisionRequestSchema
 >;
+
+export type BrowserManagedInstallState =
+  (typeof BROWSER_MANAGED_STATES)[number];
+export type BrowserManagedState = z.infer<typeof browserManagedStateSchema>;
+export type BrowserTarget = z.infer<typeof browserTargetSchema>;
+export type BrowserDialogKind = (typeof BROWSER_DIALOG_KINDS)[number];
+export type BrowserDialog = z.infer<typeof browserDialogSchema>;
+export type BrowserDialogRequest = z.infer<typeof browserDialogRequestSchema>;
+export type BrowserFileChooser = z.infer<typeof browserFileChooserSchema>;
+export type BrowserTab = z.infer<typeof browserTabSchema>;
+export type BrowserTabList = z.infer<typeof browserTabListSchema>;
+export type BrowserTabAction = (typeof BROWSER_TAB_ACTIONS)[number];
+export type BrowserTabRequest = z.infer<typeof browserTabRequestSchema>;
+export type BrowserCloseTabRequest = z.infer<
+  typeof browserCloseTabRequestSchema
+>;
+export type BrowserLeaseState = (typeof BROWSER_LEASE_STATES)[number];
+export type BrowserLease = z.infer<typeof browserLeaseSchema>;
+export type BrowserLeaseAction = (typeof BROWSER_LEASE_ACTIONS)[number];
+export type BrowserLeaseRequest = z.infer<typeof browserLeaseRequestSchema>;
+export type BrowserSelectRequest = z.infer<typeof browserSelectRequestSchema>;
+export type BrowserPressRequest = z.infer<typeof browserPressRequestSchema>;
+export type BrowserScrollDirection = (typeof BROWSER_SCROLL_DIRECTIONS)[number];
+export type BrowserScrollRequest = z.infer<typeof browserScrollRequestSchema>;
+export type BrowserUploadRequest = z.infer<typeof browserUploadRequestSchema>;
+export type BrowserActivity = z.infer<typeof browserActivitySchema>;
+export type BrowserBandwidthClass = (typeof BROWSER_BANDWIDTH_CLASSES)[number];
