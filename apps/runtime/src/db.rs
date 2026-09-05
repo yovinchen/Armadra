@@ -1071,7 +1071,7 @@ pub async fn agents_with_dead_terminals(
          FROM agent_status a \
          WHERE a.state IS NOT NULL AND a.state <> 'done' \
            -- A node with no session at all is not ours to close: the CLI may be
-           -- running in a terminal the user opened, exporting AICC_NODE_ID.
+           -- running in a terminal the user opened, exporting ARMADRA_NODE_ID.
            AND EXISTS (SELECT 1 FROM terminal_sessions t WHERE t.owner_node_id = a.node_id) \
            -- Same reason as the silence sweep: a deleted node is nobody's to close.
            AND EXISTS (SELECT 1 FROM nodes n WHERE n.id = a.node_id) \
@@ -1992,7 +1992,7 @@ mod tests {
             kind: "shape".into(),
             content: Some(crate::model::ContextLinkContent {
                 text: Some("runtime -> web".into()),
-                png_path: Some(".aicc/exports/diagram.png".into()),
+                png_path: Some(".armadra/exports/diagram.png".into()),
             }),
         }];
         put_context_links(&pool, &workspace.id, &node_id, &links)
@@ -2003,7 +2003,7 @@ mod tests {
         assert_eq!(content.text.as_deref(), Some("runtime -> web"));
         assert_eq!(
             content.png_path.as_deref(),
-            Some(".aicc/exports/diagram.png")
+            Some(".armadra/exports/diagram.png")
         );
 
         assert!(matches!(

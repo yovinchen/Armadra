@@ -4,7 +4,7 @@
 use std::io::Write;
 use std::process::ExitCode;
 
-use aicc_hook::{control, doctor, hook, USAGE};
+use armadra_hook::{control, doctor, hook, USAGE};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -19,7 +19,7 @@ fn main() -> ExitCode {
             0
         }
         "--version" | "-V" => {
-            println!("aicc-hook {}", env!("CARGO_PKG_VERSION"));
+            println!("armadra-hook {}", env!("CARGO_PKG_VERSION"));
             0
         }
         "context" => control::run_context(&args[1..]),

@@ -66,7 +66,7 @@ pub struct TerminalSpec {
     pub shell: String,
     pub command: Option<String>,
     pub args: Vec<String>,
-    /// `AICC_*` hook variables and anything else the caller injects. Addresses
+    /// `ARMADRA_*` hook variables and anything else the caller injects. Addresses
     /// only — never credentials; any process of the same user can read them.
     pub env: Vec<(String, String)>,
     pub size: PtySize,
@@ -250,18 +250,18 @@ pub fn tail_component(value: &str, width: usize) -> String {
         .collect()
 }
 
-/// `aicc-<workspace 8>-<key 8>-<generation>` (plan §15.2). The workspace part
+/// `armadra-<workspace 8>-<key 8>-<generation>` (plan §15.2). The workspace part
 /// is a label; the key part is what has to be unique.
 pub fn session_name(workspace_id: &str, key: &SessionKey, generation: u64) -> String {
     format!(
-        "aicc-{}-{}-{generation}",
+        "armadra-{}-{}-{generation}",
         name_component(workspace_id, 8),
         tail_component(key.as_str(), 8)
     )
 }
 
 /// Every session name the runtime owns starts with this.
-pub const SESSION_PREFIX: &str = "aicc-";
+pub const SESSION_PREFIX: &str = "armadra-";
 
 /// Strips ANSI/OSC escape sequences so a captured screen can be handed to an
 /// agent as plain text.
@@ -610,14 +610,17 @@ mod tests {
             &SessionKey::new("0199f3ff.weird:key/with$junk"),
             3,
         );
-        assert_eq!(name, "aicc-0199f3ab-withjunk-3");
+        assert_eq!(name, "armadra-0199f3ab-withjunk-3");
         assert!(name.starts_with(SESSION_PREFIX));
         assert!(
             name.chars()
                 .all(|character| character.is_ascii_alphanumeric() || character == '-')
         );
         // Empty or fully-illegal components still produce a usable name.
-        assert_eq!(session_name("...", &SessionKey::new(""), 1), "aicc-xx-xx-1");
+        assert_eq!(
+            session_name("...", &SessionKey::new(""), 1),
+            "armadra-xx-xx-1"
+        );
     }
 
     /// UUIDv7 keys minted in the same ~65 second window share their leading

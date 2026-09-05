@@ -334,7 +334,7 @@ async fn a_provider_that_is_not_installed_contributes_nothing() {
 fn a_command_is_read_back_out_of_a_terminal_capture() {
     let capture = "\
 ~/project $ cargo test
-   Compiling ai-coding-canvas-runtime
+   Compiling armadra-runtime
 test result: ok. 224 passed
 me@host ~/pro%ject ❯ git status --short
 ";

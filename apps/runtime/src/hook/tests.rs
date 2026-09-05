@@ -1,4 +1,4 @@
-//! End-to-end tests for the hook surface: the wire contract the `aicc-hook`
+//! End-to-end tests for the hook surface: the wire contract the `armadra-hook`
 //! client depends on, and the two API routes that close the loop (the unread
 //! receipt and the stale sweep).
 
@@ -89,7 +89,7 @@ async fn fixture(name: &str) -> Fixture {
     let hooks = HookService::new(directory.path().join("hook-data"), 43199);
     let bearer = {
         hooks.publish_endpoint(43199).unwrap();
-        super::endpoint::read(&hooks.endpoint_file())["AICC_HOOK_TOKEN"].clone()
+        super::endpoint::read(&hooks.endpoint_file())["ARMADRA_HOOK_TOKEN"].clone()
     };
     let state = AppState {
         terminals: TerminalManager::with_config(
@@ -143,9 +143,9 @@ impl Fixture {
             "claude",
             json!({ "nodeId": self.node_id, "version": 1, "payload": payload }),
             &[
-                ("x-aicc-hook-token", &self.bearer),
-                ("x-aicc-node-token", &token),
-                ("x-aicc-hook-client", "1"),
+                ("x-armadra-hook-token", &self.bearer),
+                ("x-armadra-node-token", &token),
+                ("x-armadra-hook-client", "1"),
             ],
         )
         .await
@@ -175,7 +175,7 @@ async fn the_bearer_gates_every_hook_route() {
             .post_hook(
                 "claude",
                 json!({ "nodeId": fixture.node_id }),
-                &[("x-aicc-hook-token", "")],
+                &[("x-armadra-hook-token", "")],
             )
             .await,
         StatusCode::FORBIDDEN
@@ -185,7 +185,7 @@ async fn the_bearer_gates_every_hook_route() {
             .post_hook(
                 "claude",
                 json!({ "nodeId": fixture.node_id }),
-                &[("x-aicc-hook-token", "not-the-token")],
+                &[("x-armadra-hook-token", "not-the-token")],
             )
             .await,
         StatusCode::FORBIDDEN
@@ -194,7 +194,7 @@ async fn the_bearer_gates_every_hook_route() {
     let verify = |token: Option<&str>| {
         let mut request = Request::builder().method("GET").uri("/verify");
         if let Some(token) = token {
-            request = request.header("x-aicc-hook-token", token);
+            request = request.header("x-armadra-hook-token", token);
         }
         fixture
             .router
@@ -225,8 +225,8 @@ async fn a_forged_node_token_is_refused_and_a_missing_one_is_merely_legacy() {
                 "claude",
                 json!({ "nodeId": fixture.node_id, "payload": { "hook_event_name": "Stop" } }),
                 &[
-                    ("x-aicc-hook-token", &fixture.bearer),
-                    ("x-aicc-node-token", &format!("{kid}.wrong")),
+                    ("x-armadra-hook-token", &fixture.bearer),
+                    ("x-armadra-node-token", &format!("{kid}.wrong")),
                 ],
             )
             .await,
@@ -243,7 +243,7 @@ async fn a_forged_node_token_is_refused_and_a_missing_one_is_merely_legacy() {
                     "nodeId": fixture.node_id,
                     "payload": { "hook_event_name": "UserPromptSubmit" }
                 }),
-                &[("x-aicc-hook-token", &fixture.bearer)],
+                &[("x-armadra-hook-token", &fixture.bearer)],
             )
             .await,
         StatusCode::NO_CONTENT
@@ -434,8 +434,8 @@ async fn a_permission_request_becomes_a_pending_approval() {
                 }
             }),
             &[
-                ("x-aicc-hook-token", &fixture.bearer),
-                ("x-aicc-node-token", &token),
+                ("x-armadra-hook-token", &fixture.bearer),
+                ("x-armadra-node-token", &token),
             ],
         )
         .await;
@@ -494,7 +494,7 @@ async fn subagent_events_are_broadcast_without_touching_the_row() {
 #[tokio::test]
 async fn reports_we_cannot_place_are_accepted_and_dropped() {
     let fixture = fixture("hook-drop").await;
-    let headers: &[(&str, &str)] = &[("x-aicc-hook-token", &fixture.bearer)];
+    let headers: &[(&str, &str)] = &[("x-armadra-hook-token", &fixture.bearer)];
 
     // Unknown node.
     assert_eq!(
@@ -572,8 +572,8 @@ async fn a_percent_encoded_custom_agent_id_reaches_the_handler() {
                     "payload": { "hook_event_name": "Stop" }
                 }),
                 &[
-                    ("x-aicc-hook-token", &fixture.bearer),
-                    ("x-aicc-node-token", &token),
+                    ("x-armadra-hook-token", &fixture.bearer),
+                    ("x-armadra-node-token", &token),
                 ],
             )
             .await,
@@ -617,7 +617,7 @@ async fn the_collaboration_routes_are_mounted_behind_the_bearer() {
                     .method("POST")
                     .uri(uri)
                     .header(header::CONTENT_TYPE, "application/json")
-                    .header("x-aicc-hook-token", &fixture.bearer)
+                    .header("x-armadra-hook-token", &fixture.bearer)
                     .body(Body::from(
                         r#"{"nodeId":"3a1b0d5e-1111-4111-8111-111111111111","args":{}}"#,
                     ))
@@ -642,8 +642,8 @@ async fn the_collaboration_routes_are_mounted_behind_the_bearer() {
                 .method("POST")
                 .uri("/control/list")
                 .header(header::CONTENT_TYPE, "application/json")
-                .header("x-aicc-hook-token", &fixture.bearer)
-                .header("x-aicc-node-token", &token)
+                .header("x-armadra-hook-token", &fixture.bearer)
+                .header("x-armadra-node-token", &token)
                 .body(Body::from(format!(
                     r#"{{"nodeId":"{}","args":{{}}}}"#,
                     fixture.node_id
@@ -822,7 +822,7 @@ async fn the_dead_terminal_sweep_leaves_other_nodes_alone() {
     let long_ago = (chrono::Utc::now() - chrono::Duration::minutes(5)).to_rfc3339();
 
     // 1. A node with no session at all: the CLI may be running in a terminal the
-    //    user opened themselves, having exported AICC_NODE_ID.
+    //    user opened themselves, having exported ARMADRA_NODE_ID.
     fixture
         .report(json!({ "hook_event_name": "UserPromptSubmit" }))
         .await;
@@ -983,8 +983,8 @@ async fn a_real_report_is_accepted_for_a_node_the_board_has_not_saved_yet() {
                 "payload": { "hook_event_name": "SessionStart", "session_id": "s-1" }
             }),
             &[
-                ("x-aicc-hook-token", &fixture.bearer),
-                ("x-aicc-node-token", &token),
+                ("x-armadra-hook-token", &fixture.bearer),
+                ("x-armadra-node-token", &token),
             ],
         )
         .await;
@@ -1102,7 +1102,7 @@ async fn creating_an_agent_terminal_mints_its_node_token() {
 async fn the_install_routes_record_what_they_wrote() {
     let fixture = fixture("hook-install").await;
     let home = fixture._directory.path().join("claude-home");
-    let client = fixture._directory.path().join("aicc-hook");
+    let client = fixture._directory.path().join("armadra-hook");
     std::fs::write(&client, "#!/bin/sh\n").unwrap();
 
     // The installer itself is exercised per provider in its own module; here we
@@ -1194,7 +1194,7 @@ async fn the_unix_socket_serves_the_hook_router() {
     };
 
     let response = send(format!(
-        "GET /verify HTTP/1.1\r\nHost: 127.0.0.1\r\nX-AICC-Hook-Token: {}\r\nConnection: close\r\n\r\n",
+        "GET /verify HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Armadra-Hook-Token: {}\r\nConnection: close\r\n\r\n",
         fixture.bearer
     ))
     .await;
@@ -1217,7 +1217,7 @@ async fn the_unix_socket_serves_the_hook_router() {
     .to_string();
     let response = send(format!(
         "POST /hook/claude HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\n\
-         X-AICC-Hook-Token: {}\r\nX-AICC-Node-Token: {token}\r\nX-AICC-Hook-Client: 1\r\n\
+         X-Armadra-Hook-Token: {}\r\nX-Armadra-Node-Token: {token}\r\nX-Armadra-Hook-Client: 1\r\n\
          Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
         fixture.bearer,
         body.len(),
@@ -1231,7 +1231,7 @@ async fn the_unix_socket_serves_the_hook_router() {
 }
 
 /// A custom agent has no hooks of its own: the hook line the installer wrote
-/// runs `aicc-hook <base>`, so the report arrives on the *base* provider's path
+/// runs `armadra-hook <base>`, so the report arrives on the *base* provider's path
 /// while the node is a `custom:` one. The node must keep its own id and the
 /// payload must be read with the base's vocabulary (plan §24.1).
 #[tokio::test]
@@ -1257,7 +1257,7 @@ async fn a_custom_agent_reports_through_its_base_provider() {
     .bind(&fixture.workspace_id)
     .bind(&fixture.node_id)
     .bind(chrono::Utc::now().to_rfc3339())
-    .bind(format!("aicc:{}", fixture.node_id))
+    .bind(format!("armadra:{}", fixture.node_id))
     .execute(&fixture.state.pool)
     .await
     .unwrap();
@@ -1278,8 +1278,8 @@ async fn a_custom_agent_reports_through_its_base_provider() {
                     "payload": { "hook_event_name": "AfterAgent" }
                 }),
                 &[
-                    ("x-aicc-hook-token", &fixture.bearer),
-                    ("x-aicc-node-token", &token),
+                    ("x-armadra-hook-token", &fixture.bearer),
+                    ("x-armadra-node-token", &token),
                 ],
             )
             .await,

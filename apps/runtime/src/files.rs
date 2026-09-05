@@ -192,7 +192,7 @@ pub fn write_text_file(
     })
 }
 
-/// `dir/.name.<pid>.<nanos>.aicc-tmp` — same directory, so the rename stays on
+/// `dir/.name.<pid>.<nanos>.armadra-tmp` — same directory, so the rename stays on
 /// one filesystem and therefore stays atomic.
 fn temporary_sibling(path: &Path) -> PathBuf {
     let name = path
@@ -204,7 +204,10 @@ fn temporary_sibling(path: &Path) -> PathBuf {
         .map(|elapsed| elapsed.as_nanos())
         .unwrap_or_default();
     let directory = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    directory.join(format!(".{name}.{}.{stamp}.aicc-tmp", std::process::id()))
+    directory.join(format!(
+        ".{name}.{}.{stamp}.armadra-tmp",
+        std::process::id()
+    ))
 }
 
 #[cfg(test)]
@@ -256,7 +259,12 @@ mod tests {
         let leftovers = fs::read_dir(root.path().join("src"))
             .unwrap()
             .filter_map(Result::ok)
-            .filter(|entry| entry.file_name().to_string_lossy().ends_with(".aicc-tmp"))
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .ends_with(".armadra-tmp")
+            })
             .count();
         assert_eq!(leftovers, 0);
     }

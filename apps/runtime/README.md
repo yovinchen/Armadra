@@ -7,9 +7,9 @@
 默认只监听 `127.0.0.1:43120`，负责 PTY、进程、文件访问、Git、Agent CLI、权限策略和日志脱敏。
 
 ```bash
-cargo run -p ai-coding-canvas-runtime
+cargo run -p armadra-runtime
 curl http://127.0.0.1:43120/health
-cargo test -p ai-coding-canvas-runtime
+cargo test -p armadra-runtime
 ```
 
 ## 路由（API v2，契约见 `docs/redesign-plan.md` §3）

@@ -9,9 +9,9 @@ const repository = resolve(scriptDirectory, "../../..");
 // Every Rust binary bundled next to the app. Keep in sync with
 // `bundle.externalBin` in tauri.conf.json.
 const sidecars = [
-  { package: "ai-coding-canvas-runtime", binary: "ai-coding-canvas-runtime" },
+  { package: "armadra-runtime", binary: "armadra-runtime" },
   // Hook client injected into agent terminals; see docs/v3-agent-terminal-plan.md 5.3.
-  { package: "aicc-hook", binary: "aicc-hook" },
+  { package: "armadra-hook", binary: "armadra-hook" },
 ];
 
 const verbose = execFileSync("rustc", ["-vV"], { encoding: "utf8" });

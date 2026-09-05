@@ -37,11 +37,11 @@ use crate::{
     model::AgentStatus,
 };
 
-pub const HOOK_TOKEN_HEADER: &str = "x-aicc-hook-token";
-pub const NODE_TOKEN_HEADER: &str = "x-aicc-node-token";
-pub const CLIENT_REVISION_HEADER: &str = "x-aicc-hook-client";
+pub const HOOK_TOKEN_HEADER: &str = "x-armadra-hook-token";
+pub const NODE_TOKEN_HEADER: &str = "x-armadra-node-token";
+pub const CLIENT_REVISION_HEADER: &str = "x-armadra-hook-client";
 
-/// The envelope the `aicc-hook` client posts. `payload` is whatever the CLI
+/// The envelope the `armadra-hook` client posts. `payload` is whatever the CLI
 /// wrote to the client's stdin, untouched.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -105,7 +105,7 @@ pub async fn ingest(
             .unwrap_or_else(|| "claude".to_owned())
     };
     // A custom agent has no hooks of its own: the installed hook line runs
-    // `aicc-hook <base>`, so the path says `claude` while the node is
+    // `armadra-hook <base>`, so the path says `claude` while the node is
     // `custom:…`. The node wins for attribution and its configured base picks
     // the parser (plan §24.1).
     let (agent_id, provider) = match owner.agent_id.as_deref() {
@@ -356,7 +356,7 @@ mod tests {
     #[test]
     fn headers_are_read_case_insensitively_and_tolerate_junk() {
         let mut headers = HeaderMap::new();
-        headers.insert("X-AICC-Hook-Client", HeaderValue::from_static("3"));
+        headers.insert("X-Armadra-Hook-Client", HeaderValue::from_static("3"));
         headers.insert(NODE_TOKEN_HEADER, HeaderValue::from_static("kid.mac"));
         assert_eq!(header(&headers, CLIENT_REVISION_HEADER), Some("3"));
         assert_eq!(header(&headers, NODE_TOKEN_HEADER), Some("kid.mac"));

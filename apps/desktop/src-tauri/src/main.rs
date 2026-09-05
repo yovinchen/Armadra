@@ -76,9 +76,9 @@ impl RuntimeProcess {
 
 fn runtime_binary_name() -> &'static str {
     if cfg!(windows) {
-        "ai-coding-canvas-runtime.exe"
+        "armadra-runtime.exe"
     } else {
-        "ai-coding-canvas-runtime"
+        "armadra-runtime"
     }
 }
 
@@ -165,7 +165,7 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let menu = Menu::with_items(app, &[&show, &quit])?;
 
     let mut builder = TrayIconBuilder::with_id("main")
-        .tooltip("AI Coding Canvas")
+        .tooltip("Armadra")
         .menu(&menu)
         // 左键留给「点一下把窗口叫回来」，菜单只从右键出。
         .show_menu_on_left_click(false)
@@ -225,7 +225,7 @@ fn main() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("failed to build AI Coding Canvas desktop application");
+        .expect("failed to build Armadra desktop application");
 
     application.run(|app_handle, event| {
         if matches!(event, RunEvent::Exit | RunEvent::ExitRequested { .. }) {

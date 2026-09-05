@@ -4,7 +4,7 @@ Tauri 2 薄桌面壳。
 
 只负责启动 Runtime、健康检查、打开同一套 Web 页面，以及托盘、通知、更新和系统权限入口。业务逻辑不写入 Tauri command。
 
-开发模式连接外部 Runtime；生产构建从同目录 sidecar 启动 `ai-coding-canvas-runtime`，退出应用时清理该子进程。
+开发模式连接外部 Runtime；生产构建从同目录 sidecar 启动 `armadra-runtime`，退出应用时清理该子进程。
 
 ## 插件与能力
 
@@ -30,6 +30,6 @@ CSP（`tauri.conf.json`）：`connect-src` 保留本机 Runtime 的 http/ws；
 ## 本地检查
 
 ```bash
-pnpm --filter @ai-coding-canvas/desktop prepare:sidecar   # 准备 sidecar 二进制
-cargo check -p ai-coding-canvas-desktop
+pnpm --filter @armadra/desktop prepare:sidecar   # 准备 sidecar 二进制
+cargo check -p armadra-desktop
 ```

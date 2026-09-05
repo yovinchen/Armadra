@@ -1,4 +1,4 @@
-//! Hook mode: `aicc-hook <agentId>` with the CLI's hook payload on stdin.
+//! Hook mode: `armadra-hook <agentId>` with the CLI's hook payload on stdin.
 //!
 //! Hook mode is on the hot path of every event an agent CLI emits, so it is
 //! written to be boring: it never fails loudly, never blocks longer than its
@@ -21,7 +21,7 @@ use crate::{Session, HOOK_PROTOCOL_VERSION, MAX_PAYLOAD_BYTES};
 /// Exactly the JSON Claude expects back when a hook answers a permission
 /// request. Emitted as literal text so key order is guaranteed.
 const ALLOW_DECISION: &str = r#"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}"#;
-const DENY_DECISION: &str = r#"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"由 AI Coding Canvas 拒绝"}}}"#;
+const DENY_DECISION: &str = r#"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"由 Armadra 拒绝"}}}"#;
 
 /// How often the permission answer file is checked.
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
@@ -33,7 +33,7 @@ const ANSWERED_REPORT_TIMEOUT: Duration = Duration::from_millis(1500);
 pub fn run(agent_id: &str) -> i32 {
     // Gate: outside a canvas node this binary is a no-op that still has to
     // consume stdin so the CLI's write side does not see a broken pipe.
-    let Some(node_id) = env_var("AICC_NODE_ID") else {
+    let Some(node_id) = env_var("ARMADRA_NODE_ID") else {
         drain_stdin();
         return 0;
     };
@@ -139,7 +139,10 @@ pub fn permission_wait_secs(agent_id: &str, payload: &Value) -> Option<u32> {
     if payload.get("hook_event_name").and_then(Value::as_str) != Some("PermissionRequest") {
         return None;
     }
-    let seconds = env_var("AICC_PERM_WAIT_SECS")?.trim().parse::<u32>().ok()?;
+    let seconds = env_var("ARMADRA_PERM_WAIT_SECS")?
+        .trim()
+        .parse::<u32>()
+        .ok()?;
     if seconds == 0 {
         None
     } else {
@@ -344,8 +347,8 @@ pub fn percent_encode_segment(segment: &str) -> String {
 /// Diagnostics go to stderr and only when explicitly asked for; hook stdout is
 /// reserved for the permission decision.
 pub fn debug(message: &str) {
-    if env_var("AICC_HOOK_DEBUG").is_some() {
-        let _ = writeln!(io::stderr(), "aicc-hook: {message}");
+    if env_var("ARMADRA_HOOK_DEBUG").is_some() {
+        let _ = writeln!(io::stderr(), "armadra-hook: {message}");
     }
 }
 
@@ -414,7 +417,7 @@ mod tests {
         assert_eq!(Decision::parse("deny"), Some(Decision::Deny));
         assert_eq!(Decision::parse("maybe"), None);
         assert!(Decision::Allow.output().contains(r#""behavior":"allow""#));
-        assert!(Decision::Deny.output().contains("由 AI Coding Canvas 拒绝"));
+        assert!(Decision::Deny.output().contains("由 Armadra 拒绝"));
         // Both outputs must be valid JSON for Claude to read them.
         serde_json::from_str::<Value>(Decision::Allow.output()).unwrap();
         serde_json::from_str::<Value>(Decision::Deny.output()).unwrap();

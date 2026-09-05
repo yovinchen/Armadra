@@ -1,4 +1,4 @@
-//! `aicc-hook` — the hook / context / canvas client that AI Coding Canvas injects
+//! `armadra-hook` — the hook / context / canvas client that Armadra injects
 //! into agent terminals.
 //!
 //! The binary is deliberately dependency light (only `serde_json`) so it stays
@@ -25,7 +25,7 @@ pub mod http;
 /// Protocol version carried in every hook body.
 pub const HOOK_PROTOCOL_VERSION: u64 = 1;
 
-/// Value of the `X-AICC-Hook-Client` header. Bumped when the wire behaviour of
+/// Value of the `X-Armadra-Hook-Client` header. Bumped when the wire behaviour of
 /// this binary changes so the runtime can flag stale installs.
 pub const HOOK_CLIENT_REVISION: &str = "1";
 
@@ -34,13 +34,13 @@ pub const MAX_PAYLOAD_BYTES: usize = 1024 * 1024;
 
 /// Text printed by `--help` and by any usage error.
 pub const USAGE: &str = "\
-aicc-hook — AI Coding Canvas hook client
+armadra-hook — Armadra hook client
 
 USAGE:
-  aicc-hook <agentId>                       report a hook event (payload on stdin)
-  aicc-hook context <verb> [options]        read a linked node's context
-  aicc-hook canvas <verb> [--flag value]    drive the canvas
-  aicc-hook doctor                          diagnose the local hook endpoint
+  armadra-hook <agentId>                       report a hook event (payload on stdin)
+  armadra-hook context <verb> [options]        read a linked node's context
+  armadra-hook canvas <verb> [--flag value]    drive the canvas
+  armadra-hook doctor                          diagnose the local hook endpoint
 
 CONTEXT VERBS:
   list                      list the nodes linked to this one
@@ -53,16 +53,16 @@ CONTEXT OPTIONS:
   -n, --lines <N>           how many entries/lines to return
 
 CANVAS:
-  aicc-hook canvas <verb> [--flag value | --flag=value | --flag]...
+  armadra-hook canvas <verb> [--flag value | --flag=value | --flag]...
   Repeated flags become arrays; a bare flag is `true`. `--dry-run` is passed
   through to the runtime, which then validates without mutating the board.
 
 ENVIRONMENT:
-  AICC_NODE_ID          canvas node id; when unset hook mode is a no-op
-  AICC_AGENT_ID         provider id of the CLI running in this terminal
-  AICC_ENDPOINT_FILE    path to the 0600 endpoint file
-  AICC_CANVAS_CONTROL   set to 1 when this node may drive the canvas
-  AICC_PERM_WAIT_SECS   >0 enables in-hook permission answering (claude only)
+  ARMADRA_NODE_ID          canvas node id; when unset hook mode is a no-op
+  ARMADRA_AGENT_ID         provider id of the CLI running in this terminal
+  ARMADRA_ENDPOINT_FILE    path to the 0600 endpoint file
+  ARMADRA_CANVAS_CONTROL   set to 1 when this node may drive the canvas
+  ARMADRA_PERM_WAIT_SECS   >0 enables in-hook permission answering (claude only)
 
 Hook mode always exits 0. `context`, `canvas` and `doctor` exit 1 on failure.
 ";
@@ -77,11 +77,11 @@ pub struct Session {
 impl Session {
     /// Loads the endpoint file and the per-node token from the environment.
     pub fn load() -> Result<Session, String> {
-        let node_id = endpoint::env_var("AICC_NODE_ID").ok_or_else(|| {
-            "AICC_NODE_ID is not set (not running inside a canvas node)".to_string()
+        let node_id = endpoint::env_var("ARMADRA_NODE_ID").ok_or_else(|| {
+            "ARMADRA_NODE_ID is not set (not running inside a canvas node)".to_string()
         })?;
         let path = endpoint::endpoint_file_path()
-            .ok_or_else(|| "AICC_ENDPOINT_FILE is not set".to_string())?;
+            .ok_or_else(|| "ARMADRA_ENDPOINT_FILE is not set".to_string())?;
         let endpoint = endpoint::Endpoint::load(&path)?;
         let node_token = endpoint.node_token(&node_id);
         Ok(Session {
@@ -96,16 +96,16 @@ impl Session {
     pub fn headers(&self) -> Vec<(String, String)> {
         let mut headers = vec![
             (
-                "X-AICC-Hook-Client".to_string(),
+                "X-Armadra-Hook-Client".to_string(),
                 HOOK_CLIENT_REVISION.to_string(),
             ),
             (
-                "X-AICC-Hook-Token".to_string(),
+                "X-Armadra-Hook-Token".to_string(),
                 self.endpoint.hook_token.clone().unwrap_or_default(),
             ),
         ];
         if let Some(token) = &self.node_token {
-            headers.push(("X-AICC-Node-Token".to_string(), token.clone()));
+            headers.push(("X-Armadra-Node-Token".to_string(), token.clone()));
         }
         headers
     }

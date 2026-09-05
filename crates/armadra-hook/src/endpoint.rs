@@ -9,11 +9,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Keys the client understands. Unknown keys are kept but ignored.
-pub const KEY_PORT: &str = "AICC_HOOK_PORT";
-pub const KEY_SOCK: &str = "AICC_HOOK_SOCK";
-pub const KEY_TOKEN: &str = "AICC_HOOK_TOKEN";
-pub const KEY_TOKEN_DIR: &str = "AICC_NODE_TOKEN_DIR";
-pub const KEY_VERSION: &str = "AICC_HOOK_VERSION";
+pub const KEY_PORT: &str = "ARMADRA_HOOK_PORT";
+pub const KEY_SOCK: &str = "ARMADRA_HOOK_SOCK";
+pub const KEY_TOKEN: &str = "ARMADRA_HOOK_TOKEN";
+pub const KEY_TOKEN_DIR: &str = "ARMADRA_NODE_TOKEN_DIR";
+pub const KEY_VERSION: &str = "ARMADRA_HOOK_VERSION";
 
 /// Reads an environment variable, treating an empty value as unset.
 pub fn env_var(name: &str) -> Option<String> {
@@ -25,7 +25,7 @@ pub fn env_var(name: &str) -> Option<String> {
 
 /// Path of the endpoint file for this invocation.
 pub fn endpoint_file_path() -> Option<PathBuf> {
-    env_var("AICC_ENDPOINT_FILE").map(PathBuf::from)
+    env_var("ARMADRA_ENDPOINT_FILE").map(PathBuf::from)
 }
 
 /// A node id is only used to build filesystem paths after it passes this gate.
@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn parses_single_quoted_values() {
         let map = parse_endpoint_file(
-            "AICC_HOOK_PORT='43120'\nAICC_HOOK_TOKEN='abc.def'\nAICC_HOOK_VERSION='3'\n",
+            "ARMADRA_HOOK_PORT='43120'\nARMADRA_HOOK_TOKEN='abc.def'\nARMADRA_HOOK_VERSION='3'\n",
         );
         assert_eq!(map[KEY_PORT], "43120");
         assert_eq!(map[KEY_TOKEN], "abc.def");
@@ -172,7 +172,7 @@ mod tests {
     fn unescapes_embedded_single_quotes() {
         // A path such as `/tmp/o'brien/hook.sock` round-trips through the
         // POSIX `'\''` escape.
-        let map = parse_endpoint_file("AICC_HOOK_SOCK='/tmp/o'\\''brien/hook.sock'\n");
+        let map = parse_endpoint_file("ARMADRA_HOOK_SOCK='/tmp/o'\\''brien/hook.sock'\n");
         assert_eq!(map[KEY_SOCK], "/tmp/o'brien/hook.sock");
     }
 
@@ -213,16 +213,19 @@ mod tests {
     fn load_requires_an_address() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("hook-endpoint.env");
-        std::fs::write(&path, "AICC_HOOK_TOKEN='t'\n").unwrap();
+        std::fs::write(&path, "ARMADRA_HOOK_TOKEN='t'\n").unwrap();
         assert!(Endpoint::load(&path).is_err());
     }
 
     #[test]
     fn pending_dir_sits_next_to_the_endpoint_file() {
         let endpoint = Endpoint {
-            path: PathBuf::from("/data/aicc/hook-endpoint.env"),
+            path: PathBuf::from("/data/armadra/hook-endpoint.env"),
             ..Endpoint::default()
         };
-        assert_eq!(endpoint.pending_dir(), PathBuf::from("/data/aicc/pending"));
+        assert_eq!(
+            endpoint.pending_dir(),
+            PathBuf::from("/data/armadra/pending")
+        );
     }
 }

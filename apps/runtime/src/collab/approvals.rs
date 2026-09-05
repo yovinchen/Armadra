@@ -1,6 +1,6 @@
 //! Hook-reply permission answers — plan §5.5.
 //!
-//! Two mechanisms, one route. When the `aicc-hook` client is waiting on a
+//! Two mechanisms, one route. When the `armadra-hook` client is waiting on a
 //! permission request it has written `<data>/pending/<id>.json` and is polling
 //! for `<id>.answer`; writing that file is deterministic — the CLI gets the
 //! decision through its own hook protocol and never sees a keystroke.
@@ -33,7 +33,7 @@ use super::collab;
 pub const ORPHAN_MINUTES: i64 = 10;
 /// How often the sweep runs after the one at start-up.
 const SWEEP_INTERVAL: Duration = Duration::from_secs(3600);
-/// `AICC_PERM_WAIT_SECS` for a CLI that supports hook replies.
+/// `ARMADRA_PERM_WAIT_SECS` for a CLI that supports hook replies.
 pub const PERM_WAIT_SECONDS: u32 = 45;
 
 /// Records the user's decision and gets it back to the waiting CLI.

@@ -2,7 +2,7 @@
 //!
 //! Two secrets, two very different lifetimes:
 //!
-//!   * the **app bearer** (`AICC_HOOK_TOKEN`) proves "this process may talk to
+//!   * the **app bearer** (`ARMADRA_HOOK_TOKEN`) proves "this process may talk to
 //!     the hook routes at all". It lives in the endpoint file and is
 //!     regenerated only when that file has none.
 //!   * the **per-node token** proves "this report is about *that* node". It is
@@ -31,8 +31,8 @@ type HmacSha256 = Hmac<Sha256>;
 
 /// Domain separators. Both are versioned so a future scheme can coexist with
 /// tokens minted today instead of silently changing their meaning.
-const KID_DOMAIN: &[u8] = b"aicc-node-kid-v1";
-const MAC_DOMAIN_PREFIX: &str = "aicc-node-v1|";
+const KID_DOMAIN: &[u8] = b"armadra-node-kid-v1";
+const MAC_DOMAIN_PREFIX: &str = "armadra-node-v1|";
 /// Characters of the base64url key id kept in a token. Eight is enough to tell
 /// installs apart and short enough to keep the file readable.
 const KID_LEN: usize = 8;
@@ -131,7 +131,7 @@ impl HookAuth {
         &self.kid
     }
 
-    /// `kid.mac` — what a hook client presents as `X-AICC-Node-Token`.
+    /// `kid.mac` — what a hook client presents as `X-Armadra-Node-Token`.
     pub fn node_token(&self, node_id: &str) -> String {
         format!("{}.{}", self.kid, derive_mac(&self.secret, node_id))
     }

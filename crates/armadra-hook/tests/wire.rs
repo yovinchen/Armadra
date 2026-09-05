@@ -90,7 +90,7 @@ fn write_endpoint_file(dir: &Path, port: u16) -> PathBuf {
     std::fs::write(
         &path,
         format!(
-            "AICC_HOOK_PORT='{port}'\nAICC_HOOK_TOKEN='app-token-abc'\nAICC_NODE_TOKEN_DIR='{}'\nAICC_HOOK_VERSION='1'\n",
+            "ARMADRA_HOOK_PORT='{port}'\nARMADRA_HOOK_TOKEN='app-token-abc'\nARMADRA_NODE_TOKEN_DIR='{}'\nARMADRA_HOOK_VERSION='1'\n",
             dir.join("node-tokens").display()
         ),
     )
@@ -101,17 +101,17 @@ fn write_endpoint_file(dir: &Path, port: u16) -> PathBuf {
     path
 }
 
-/// Runs the binary with a clean AICC environment plus `env`.
+/// Runs the binary with a clean ARMADRA environment plus `env`.
 fn run(args: &[&str], env: &[(&str, &str)], stdin: &str) -> Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_aicc-hook"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_armadra-hook"));
     command.args(args);
     for name in [
-        "AICC_NODE_ID",
-        "AICC_AGENT_ID",
-        "AICC_ENDPOINT_FILE",
-        "AICC_CANVAS_CONTROL",
-        "AICC_PERM_WAIT_SECS",
-        "AICC_HOOK_DEBUG",
+        "ARMADRA_NODE_ID",
+        "ARMADRA_AGENT_ID",
+        "ARMADRA_ENDPOINT_FILE",
+        "ARMADRA_CANVAS_CONTROL",
+        "ARMADRA_PERM_WAIT_SECS",
+        "ARMADRA_HOOK_DEBUG",
     ] {
         command.env_remove(name);
     }
@@ -123,14 +123,14 @@ fn run(args: &[&str], env: &[(&str, &str)], stdin: &str) -> Output {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("spawn aicc-hook");
+        .expect("spawn armadra-hook");
     child
         .stdin
         .take()
         .unwrap()
         .write_all(stdin.as_bytes())
         .unwrap();
-    child.wait_with_output().expect("aicc-hook exited")
+    child.wait_with_output().expect("armadra-hook exited")
 }
 
 #[test]
@@ -142,9 +142,9 @@ fn hook_mode_sends_the_expected_request() {
     let output = run(
         &["claude"],
         &[
-            ("AICC_NODE_ID", "node-7"),
-            ("AICC_AGENT_ID", "claude"),
-            ("AICC_ENDPOINT_FILE", endpoint.to_str().unwrap()),
+            ("ARMADRA_NODE_ID", "node-7"),
+            ("ARMADRA_AGENT_ID", "claude"),
+            ("ARMADRA_ENDPOINT_FILE", endpoint.to_str().unwrap()),
         ],
         r#"{"hook_event_name":"PreToolUse","tool_name":"Bash"}"#,
     );
@@ -161,21 +161,24 @@ fn hook_mode_sends_the_expected_request() {
         vec![
             "Host",
             "Connection",
-            "X-AICC-Hook-Client",
-            "X-AICC-Hook-Token",
-            "X-AICC-Node-Token",
+            "X-Armadra-Hook-Client",
+            "X-Armadra-Hook-Token",
+            "X-Armadra-Node-Token",
             "Content-Type",
             "Content-Length",
         ]
     );
     assert_eq!(captured.header("Host").as_deref(), Some("127.0.0.1"));
-    assert_eq!(captured.header("X-AICC-Hook-Client").as_deref(), Some("1"));
     assert_eq!(
-        captured.header("X-AICC-Hook-Token").as_deref(),
+        captured.header("X-Armadra-Hook-Client").as_deref(),
+        Some("1")
+    );
+    assert_eq!(
+        captured.header("X-Armadra-Hook-Token").as_deref(),
         Some("app-token-abc")
     );
     assert_eq!(
-        captured.header("X-AICC-Node-Token").as_deref(),
+        captured.header("X-Armadra-Node-Token").as_deref(),
         Some("kid1234.macvalue")
     );
     assert_eq!(
@@ -201,8 +204,8 @@ fn non_json_stdin_is_wrapped_on_the_wire() {
     let output = run(
         &["gemini"],
         &[
-            ("AICC_NODE_ID", "node-7"),
-            ("AICC_ENDPOINT_FILE", endpoint.to_str().unwrap()),
+            ("ARMADRA_NODE_ID", "node-7"),
+            ("ARMADRA_ENDPOINT_FILE", endpoint.to_str().unwrap()),
         ],
         "BeforeAgent\n",
     );
@@ -227,9 +230,9 @@ fn canvas_dry_run_sends_the_expected_request() {
     let output = run(
         &["canvas", "list", "--dry-run"],
         &[
-            ("AICC_NODE_ID", "node-7"),
-            ("AICC_CANVAS_CONTROL", "1"),
-            ("AICC_ENDPOINT_FILE", endpoint.to_str().unwrap()),
+            ("ARMADRA_NODE_ID", "node-7"),
+            ("ARMADRA_CANVAS_CONTROL", "1"),
+            ("ARMADRA_ENDPOINT_FILE", endpoint.to_str().unwrap()),
         ],
         "",
     );
@@ -242,7 +245,7 @@ fn canvas_dry_run_sends_the_expected_request() {
     let captured = requests.recv_timeout(Duration::from_secs(5)).unwrap();
     assert_eq!(captured.request_line(), "POST /control/list HTTP/1.1");
     assert_eq!(
-        captured.header("X-AICC-Node-Token").as_deref(),
+        captured.header("X-Armadra-Node-Token").as_deref(),
         Some("kid1234.macvalue")
     );
     assert_eq!(
@@ -261,8 +264,8 @@ fn context_summary_sends_node_and_line_count() {
     let output = run(
         &["context", "summary", "--node", "api", "-n", "20"],
         &[
-            ("AICC_NODE_ID", "node-7"),
-            ("AICC_ENDPOINT_FILE", endpoint.to_str().unwrap()),
+            ("ARMADRA_NODE_ID", "node-7"),
+            ("ARMADRA_ENDPOINT_FILE", endpoint.to_str().unwrap()),
         ],
         "",
     );
@@ -291,8 +294,8 @@ fn control_failures_exit_one_with_a_stderr_message() {
     let output = run(
         &["context", "transcript", "--node", "api"],
         &[
-            ("AICC_NODE_ID", "node-7"),
-            ("AICC_ENDPOINT_FILE", endpoint.to_str().unwrap()),
+            ("ARMADRA_NODE_ID", "node-7"),
+            ("ARMADRA_ENDPOINT_FILE", endpoint.to_str().unwrap()),
         ],
         "",
     );
@@ -309,8 +312,8 @@ fn hook_mode_fails_open_without_an_endpoint_file() {
     let output = run(
         &["claude"],
         &[
-            ("AICC_NODE_ID", "node-7"),
-            ("AICC_ENDPOINT_FILE", missing.to_str().unwrap()),
+            ("ARMADRA_NODE_ID", "node-7"),
+            ("ARMADRA_ENDPOINT_FILE", missing.to_str().unwrap()),
         ],
         r#"{"hook_event_name":"Stop"}"#,
     );
@@ -332,8 +335,8 @@ fn hook_mode_fails_open_when_nothing_is_listening() {
     let output = run(
         &["claude"],
         &[
-            ("AICC_NODE_ID", "node-7"),
-            ("AICC_ENDPOINT_FILE", endpoint.to_str().unwrap()),
+            ("ARMADRA_NODE_ID", "node-7"),
+            ("ARMADRA_ENDPOINT_FILE", endpoint.to_str().unwrap()),
         ],
         r#"{"hook_event_name":"Stop"}"#,
     );
@@ -362,8 +365,8 @@ fn oversize_stdin_is_capped_and_still_reported() {
     let output = run(
         &["claude"],
         &[
-            ("AICC_NODE_ID", "node-7"),
-            ("AICC_ENDPOINT_FILE", endpoint.to_str().unwrap()),
+            ("ARMADRA_NODE_ID", "node-7"),
+            ("ARMADRA_ENDPOINT_FILE", endpoint.to_str().unwrap()),
         ],
         &payload,
     );
@@ -413,9 +416,9 @@ fn permission_requests_wait_for_an_answer_file() {
     let output = run(
         &["claude"],
         &[
-            ("AICC_NODE_ID", "node-7"),
-            ("AICC_ENDPOINT_FILE", endpoint.to_str().unwrap()),
-            ("AICC_PERM_WAIT_SECS", "10"),
+            ("ARMADRA_NODE_ID", "node-7"),
+            ("ARMADRA_ENDPOINT_FILE", endpoint.to_str().unwrap()),
+            ("ARMADRA_PERM_WAIT_SECS", "10"),
         ],
         r#"{"hook_event_name":"PermissionRequest","tool_name":"Bash"}"#,
     );
@@ -453,9 +456,9 @@ fn permission_timeouts_print_nothing() {
     let output = run(
         &["claude"],
         &[
-            ("AICC_NODE_ID", "node-7"),
-            ("AICC_ENDPOINT_FILE", endpoint.to_str().unwrap()),
-            ("AICC_PERM_WAIT_SECS", "1"),
+            ("ARMADRA_NODE_ID", "node-7"),
+            ("ARMADRA_ENDPOINT_FILE", endpoint.to_str().unwrap()),
+            ("ARMADRA_PERM_WAIT_SECS", "1"),
         ],
         r#"{"hook_event_name":"PermissionRequest"}"#,
     );

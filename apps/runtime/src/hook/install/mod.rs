@@ -4,7 +4,7 @@
 //! hand, so every installer obeys the same three rules:
 //!
 //!   * **recognise, do not remember.** An entry is ours when its command
-//!     mentions the `aicc-hook` binary. Nothing is keyed on a marker we wrote
+//!     mentions the `armadra-hook` binary. Nothing is keyed on a marker we wrote
 //!     earlier, so a half-finished install, a restored backup or a hand-copied
 //!     entry all reconcile correctly.
 //!   * **rewrite only ours.** Foreign entries — including foreign entries for
@@ -35,7 +35,7 @@ use crate::error::{AppError, AppResult};
 pub const HOOK_CLIENT_REVISION: i64 = 1;
 
 /// The substring that identifies a command as ours.
-pub const CLIENT_NAME: &str = "aicc-hook";
+pub const CLIENT_NAME: &str = "armadra-hook";
 
 /// Event lists, mirroring packages/shared/src/hook-events.ts exactly.
 pub const CLAUDE_HOOK_EVENTS: &[&str] = &[
@@ -96,13 +96,13 @@ pub struct InstallReport {
 /// the configuration, because the CLIs run hooks through a shell whose PATH is
 /// not the runtime's.
 pub fn resolve_client_binary() -> AppResult<PathBuf> {
-    if let Some(override_path) = env::var_os("AICC_HOOK_BIN") {
+    if let Some(override_path) = env::var_os("ARMADRA_HOOK_BIN") {
         let path = PathBuf::from(override_path);
         if path.is_file() {
             return Ok(path);
         }
         return Err(AppError::BadRequest(format!(
-            "AICC_HOOK_BIN does not point at a file: {}",
+            "ARMADRA_HOOK_BIN does not point at a file: {}",
             path.display()
         )));
     }
@@ -266,7 +266,7 @@ pub fn write_atomically(path: &Path, contents: &[u8]) -> AppResult<()> {
     let directory = path.parent().unwrap_or(Path::new("."));
     fs::create_dir_all(directory)?;
     let temporary = directory.join(format!(
-        ".{}.aicc-tmp",
+        ".{}.armadra-tmp",
         path.file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("config")
@@ -342,8 +342,8 @@ mod tests {
 
     #[test]
     fn a_command_is_ours_when_it_names_the_client() {
-        assert!(is_managed_command("/opt/aicc/aicc-hook claude"));
-        assert!(is_managed_command("\"/a b/aicc-hook\" codex"));
+        assert!(is_managed_command("/opt/armadra/armadra-hook claude"));
+        assert!(is_managed_command("\"/a b/armadra-hook\" codex"));
         assert!(!is_managed_command("/usr/local/bin/other-hook claude"));
         assert!(!is_managed_command("echo hi"));
     }
@@ -351,12 +351,15 @@ mod tests {
     #[test]
     fn the_command_is_quoted_only_when_the_path_needs_it() {
         assert_eq!(
-            hook_command(Path::new("/opt/aicc/aicc-hook"), "claude"),
-            "/opt/aicc/aicc-hook claude"
+            hook_command(Path::new("/opt/armadra/armadra-hook"), "claude"),
+            "/opt/armadra/armadra-hook claude"
         );
         assert_eq!(
-            hook_command(Path::new("/Applications/AI Canvas/aicc-hook"), "codex"),
-            "\"/Applications/AI Canvas/aicc-hook\" codex"
+            hook_command(
+                Path::new("/Applications/Armadra Desktop/armadra-hook"),
+                "codex"
+            ),
+            "\"/Applications/Armadra Desktop/armadra-hook\" codex"
         );
     }
 
@@ -364,13 +367,13 @@ mod tests {
     fn stripping_removes_only_our_handlers_and_prunes_empty_groups() {
         let mut events: Map<String, Value> = serde_json::from_value(json!({
             "Stop": [
-                { "hooks": [{ "type": "command", "command": "/opt/aicc-hook claude" }] },
+                { "hooks": [{ "type": "command", "command": "/opt/armadra-hook claude" }] },
                 { "matcher": "Bash", "hooks": [{ "type": "command", "command": "mine.sh" }] }
             ],
             "PreToolUse": [
                 { "hooks": [
                     { "type": "command", "command": "theirs.sh" },
-                    { "type": "command", "command": "/opt/aicc-hook claude" }
+                    { "type": "command", "command": "/opt/armadra-hook claude" }
                 ] }
             ]
         }))
@@ -386,7 +389,7 @@ mod tests {
 
         // An event whose only group was ours disappears entirely.
         let mut only_ours: Map<String, Value> = serde_json::from_value(json!({
-            "Stop": [{ "hooks": [{ "type": "command", "command": "aicc-hook claude" }] }]
+            "Stop": [{ "hooks": [{ "type": "command", "command": "armadra-hook claude" }] }]
         }))
         .unwrap();
         assert_eq!(strip_managed_handlers(&mut only_ours), 1);
@@ -402,12 +405,12 @@ mod tests {
         append_managed_group(
             &mut events,
             &["Stop", "SessionEnd"],
-            &json!({ "type": "command", "command": "aicc-hook claude" }),
+            &json!({ "type": "command", "command": "armadra-hook claude" }),
         );
         let stop = events["Stop"].as_array().unwrap();
         assert_eq!(stop.len(), 2);
         assert_eq!(stop[0]["hooks"][0]["command"], "theirs.sh");
-        assert_eq!(stop[1]["hooks"][0]["command"], "aicc-hook claude");
+        assert_eq!(stop[1]["hooks"][0]["command"], "armadra-hook claude");
         assert_eq!(events["SessionEnd"].as_array().unwrap().len(), 1);
     }
 

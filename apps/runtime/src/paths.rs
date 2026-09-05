@@ -3,34 +3,34 @@ use std::{env, path::PathBuf};
 /// Per-user data directory: the SQLite database, the hook endpoint file, node
 /// tokens and pending approval files all live here.
 ///
-/// `AI_CANVAS_DATA_DIR` overrides it (tests and the desktop shell use this).
+/// `ARMADRA_DATA_DIR` overrides it (tests and the desktop shell use this).
 pub fn data_dir() -> PathBuf {
-    if let Some(path) = env::var_os("AI_CANVAS_DATA_DIR") {
+    if let Some(path) = env::var_os("ARMADRA_DATA_DIR") {
         return PathBuf::from(path);
     }
     #[cfg(target_os = "macos")]
     if let Some(home) = env::var_os("HOME") {
-        return PathBuf::from(home).join("Library/Application Support/AI Coding Canvas");
+        return PathBuf::from(home).join("Library/Application Support/Armadra");
     }
     #[cfg(target_os = "windows")]
     if let Some(path) = env::var_os("LOCALAPPDATA") {
-        return PathBuf::from(path).join("AI Coding Canvas");
+        return PathBuf::from(path).join("Armadra");
     }
     env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")))
         .unwrap_or_else(env::temp_dir)
-        .join("ai-coding-canvas")
+        .join("armadra")
 }
 
 /// The SQLite file the runtime opened, mirroring `main.rs`: the
-/// `AI_CANVAS_DATABASE_URL` override wins, otherwise `<data_dir>/canvas.db`.
+/// `ARMADRA_DATABASE_URL` override wins, otherwise `<data_dir>/canvas.db`.
 ///
 /// The settings page reports its size and copies it for the manual backup, so
 /// the resolution has to agree with the one `main.rs` does — hence one function
 /// both can be checked against instead of two literals.
 pub fn database_file() -> PathBuf {
-    if let Some(raw) = env::var_os("AI_CANVAS_DATABASE_URL") {
+    if let Some(raw) = env::var_os("ARMADRA_DATABASE_URL") {
         let url = raw.to_string_lossy().into_owned();
         let rest = url
             .strip_prefix("sqlite://")
@@ -45,10 +45,10 @@ pub fn database_file() -> PathBuf {
     data_dir().join("canvas.db")
 }
 
-/// 0600 file the `aicc-hook` client re-reads on every invocation to find the
+/// 0600 file the `armadra-hook` client re-reads on every invocation to find the
 /// runtime (port / socket / bearer token). Written in Phase 2; only the path is
 /// contractual today because it is injected into every agent PTY as
-/// `AICC_ENDPOINT_FILE`.
+/// `ARMADRA_ENDPOINT_FILE`.
 pub fn hook_endpoint_file() -> PathBuf {
     data_dir().join("hook-endpoint.env")
 }

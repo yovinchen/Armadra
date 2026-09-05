@@ -162,7 +162,7 @@ pub fn frame(nonce: &str, from_title: &str, from_id: &str, body: &str) -> String
     let id = collapse_newlines(from_id);
     let body = strip_control(body);
     format!(
-        "--- AICC MESSAGE {nonce} ---\nfrom: {title} ({id})\nreply-to: {id}\n{}\n--- END AICC MESSAGE {nonce} ---",
+        "--- ARMADRA MESSAGE {nonce} ---\nfrom: {title} ({id})\nreply-to: {id}\n{}\n--- END ARMADRA MESSAGE {nonce} ---",
         body.trim_end()
     )
 }

@@ -36,13 +36,13 @@ pub const MAX_DIRECTORY_ENTRIES: usize = 500;
 
 /// Where the web app is asked to drop a rasterised export. It lives under the
 /// workspace so an agent can open it with its own file tools.
-pub const EXPORTS_DIRECTORY: &str = ".aicc/exports";
+pub const EXPORTS_DIRECTORY: &str = ".armadra/exports";
 
 /// The thing being rasterised is a whiteboard shape rather than a node, so the
 /// file is keyed by an export uuid and every export shares one directory
 /// (tldraw plan §6.3).
 pub fn export_path(root: &Path, export_id: &str) -> PathBuf {
-    root.join(".aicc")
+    root.join(".armadra")
         .join("exports")
         .join(format!("{export_id}.png"))
 }
@@ -214,7 +214,7 @@ fn render_list(links: &[ContextLink]) -> String {
             readable_as(&link.kind)
         ));
     }
-    out.push_str("\n读取方式：aicc-hook context summary --node \"<标题或 id>\" [-n 行数]\n");
+    out.push_str("\n读取方式：armadra-hook context summary --node \"<标题或 id>\" [-n 行数]\n");
     out
 }
 
@@ -472,7 +472,7 @@ async fn read_node_diff(state: &AppState, target: &NodeRef) -> Result<String, Re
     ))
 }
 
-/// Creates `.aicc/<kind>/` on the way and writes the file whole.
+/// Creates `.armadra/<kind>/` on the way and writes the file whole.
 pub fn write_export(path: &Path, bytes: &[u8]) -> crate::error::AppResult<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;

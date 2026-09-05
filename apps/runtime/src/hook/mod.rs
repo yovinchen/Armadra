@@ -87,7 +87,7 @@ impl HookService {
     /// file simply never appears — which the client reads as "no runtime".
     pub fn new(data_dir: PathBuf, port: u16) -> Self {
         let existing = endpoint::read(&data_dir.join("hook-endpoint.env"));
-        let bearer = existing.get("AICC_HOOK_TOKEN").cloned();
+        let bearer = existing.get("ARMADRA_HOOK_TOKEN").cloned();
         let auth = HookAuth::load(&data_dir, bearer).unwrap_or_else(|error| {
             tracing::warn!(%error, "could not persist the hook secret; using an ephemeral one");
             HookAuth::ephemeral()
@@ -102,7 +102,7 @@ impl HookService {
         }
     }
 
-    /// Uses the process-wide data directory (`AI_CANVAS_DATA_DIR` or the
+    /// Uses the process-wide data directory (`ARMADRA_DATA_DIR` or the
     /// per-platform default).
     pub fn with_default_paths(port: u16) -> Self {
         Self::new(paths::data_dir(), port)
@@ -177,7 +177,7 @@ impl HookService {
     /// Extra PTY environment for an agent terminal, on top of
     /// [`crate::terminal::agent_environment`] — plan §5.5.
     ///
-    /// `AICC_PERM_WAIT_SECS` is what switches the hook client from "report and
+    /// `ARMADRA_PERM_WAIT_SECS` is what switches the hook client from "report and
     /// exit" to "write the request, wait for an answer file, print the
     /// decision". Only Claude implements a hook that can answer a permission
     /// request, and the user can turn it off with `hooks.replyApprovals`.
@@ -196,7 +196,7 @@ impl HookService {
             return Vec::new();
         }
         vec![(
-            "AICC_PERM_WAIT_SECS".to_owned(),
+            "ARMADRA_PERM_WAIT_SECS".to_owned(),
             crate::collab::approvals::PERM_WAIT_SECONDS.to_string(),
         )]
     }
@@ -210,7 +210,7 @@ impl HookService {
                 .socket_path()
                 .map(|path| path.to_string_lossy().into_owned()),
             port,
-            ok: published.get("AICC_HOOK_PORT").map(String::as_str) == Some(&port.to_string()),
+            ok: published.get("ARMADRA_HOOK_PORT").map(String::as_str) == Some(&port.to_string()),
         }
     }
 }
@@ -363,16 +363,16 @@ mod service_tests {
         service.publish_endpoint(43120).unwrap();
 
         let published = endpoint::read(&service.endpoint_file());
-        assert_eq!(published["AICC_HOOK_VERSION"], "1");
-        assert_eq!(published["AICC_HOOK_PORT"], "43120");
+        assert_eq!(published["ARMADRA_HOOK_VERSION"], "1");
+        assert_eq!(published["ARMADRA_HOOK_PORT"], "43120");
         assert_eq!(
-            published["AICC_NODE_TOKEN_DIR"],
+            published["ARMADRA_NODE_TOKEN_DIR"],
             service.node_token_dir().to_string_lossy()
         );
-        assert!(published["AICC_HOOK_TOKEN"].len() >= 32);
+        assert!(published["ARMADRA_HOOK_TOKEN"].len() >= 32);
         #[cfg(unix)]
         assert_eq!(
-            published["AICC_HOOK_SOCK"],
+            published["ARMADRA_HOOK_SOCK"],
             directory.path().join("hook.sock").to_string_lossy()
         );
         assert!(service.health().ok);
@@ -380,7 +380,7 @@ mod service_tests {
         // A second runtime over the same data directory keeps both secrets, so
         // terminals started by the first one keep reporting.
         let restarted = HookService::new(directory.path().to_path_buf(), 43121);
-        assert!(restarted.bearer_matches(Some(&published["AICC_HOOK_TOKEN"])));
+        assert!(restarted.bearer_matches(Some(&published["ARMADRA_HOOK_TOKEN"])));
         assert_eq!(
             restarted.verdict("node-a", Some(&service.issue_node_token("node-a").unwrap())),
             Verdict::Verified
@@ -391,7 +391,7 @@ mod service_tests {
         restarted.publish_endpoint(43121).unwrap();
         assert!(restarted.health().ok);
         assert_eq!(
-            endpoint::read(&service.endpoint_file())["AICC_HOOK_PORT"],
+            endpoint::read(&service.endpoint_file())["ARMADRA_HOOK_PORT"],
             "43121"
         );
     }

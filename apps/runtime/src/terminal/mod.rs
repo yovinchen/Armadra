@@ -166,7 +166,7 @@ pub struct SpawnRequest {
     pub kind: String,
     pub owner_node_id: Option<String>,
     pub agent_id: Option<String>,
-    /// Extra environment for the child, e.g. the `AICC_*` hook variables.
+    /// Extra environment for the child, e.g. the `ARMADRA_*` hook variables.
     pub env: Vec<(String, String)>,
 }
 
@@ -1245,13 +1245,13 @@ pub fn default_shell() -> String {
 /// any process of the same user can read another process' environment.
 pub fn agent_environment(node_id: &str, agent_id: &str) -> Vec<(String, String)> {
     vec![
-        ("AICC_NODE_ID".to_owned(), node_id.to_owned()),
-        ("AICC_AGENT_ID".to_owned(), agent_id.to_owned()),
+        ("ARMADRA_NODE_ID".to_owned(), node_id.to_owned()),
+        ("ARMADRA_AGENT_ID".to_owned(), agent_id.to_owned()),
         (
-            "AICC_ENDPOINT_FILE".to_owned(),
+            "ARMADRA_ENDPOINT_FILE".to_owned(),
             paths::hook_endpoint_file().to_string_lossy().into_owned(),
         ),
-        ("AICC_CANVAS_CONTROL".to_owned(), "1".to_owned()),
+        ("ARMADRA_CANVAS_CONTROL".to_owned(), "1".to_owned()),
     ]
 }
 

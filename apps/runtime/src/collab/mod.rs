@@ -1,6 +1,6 @@
 //! Agent collaboration — plan §5.5 to §5.9.
 //!
-//! Four capabilities sit behind the two hook routes the `aicc-hook` client
+//! Four capabilities sit behind the two hook routes the `armadra-hook` client
 //! calls (`POST /context-link/{verb}` and `POST /control/{verb}`):
 //!
 //!   * [`context_link`] — an agent reads a node it is linked to;

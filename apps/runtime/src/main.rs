@@ -1,10 +1,10 @@
 use std::{env, net::SocketAddr};
 
-use ai_coding_canvas_runtime::{
+use anyhow::Context;
+use armadra_runtime::{
     AppState, DEFAULT_PORT, db, events::EventHub, hook, hook::HookService, index, paths::data_dir,
     router_with_state, settings::SettingsStore, terminal::TerminalManager, usage::UsageService,
 };
-use anyhow::Context;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -14,19 +14,19 @@ async fn main() -> anyhow::Result<()> {
     // up on the augmented one instead, and `child_environment` hands the same
     // PATH to the terminals.
     // SAFETY: called before any other thread exists.
-    unsafe { std::env::set_var("PATH", ai_coding_canvas_runtime::agent::agent_path()) };
+    unsafe { std::env::set_var("PATH", armadra_runtime::agent::agent_path()) };
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,tower_http=info".into()),
         )
         .init();
 
-    let host = env::var("AI_CANVAS_RUNTIME_HOST").unwrap_or_else(|_| "127.0.0.1".into());
-    let port = env::var("AI_CANVAS_RUNTIME_PORT")
+    let host = env::var("ARMADRA_RUNTIME_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+    let port = env::var("ARMADRA_RUNTIME_PORT")
         .unwrap_or_else(|_| DEFAULT_PORT.to_string())
         .parse::<u16>()
-        .context("AI_CANVAS_RUNTIME_PORT must be a valid port")?;
-    let database_url = match env::var("AI_CANVAS_DATABASE_URL") {
+        .context("ARMADRA_RUNTIME_PORT must be a valid port")?;
+    let database_url = match env::var("ARMADRA_DATABASE_URL") {
         Ok(url) => url,
         Err(_) => {
             let data_directory = data_dir();
@@ -83,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
     // starts *after* the listener is bound and runs in its own task: the
     // command palette gets its history a second late, nobody waits for it.
     index::start(state.pool.clone());
-    tracing::info!(%address, "AI Coding Canvas Runtime is ready");
+    tracing::info!(%address, "Armadra Runtime is ready");
     axum::serve(listener, router_with_state(state))
         .with_graceful_shutdown(shutdown_signal(terminals.clone()))
         .await?;

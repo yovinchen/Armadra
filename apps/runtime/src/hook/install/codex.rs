@@ -364,7 +364,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn client() -> &'static Path {
-        Path::new("/opt/aicc/aicc-hook")
+        Path::new("/opt/armadra/armadra-hook")
     }
 
     /// Locks the trust algorithm. It was verified byte-for-byte against the
@@ -440,7 +440,7 @@ mod tests {
             serde_json::from_str(&fs::read_to_string(hooks_path(home.path())).unwrap()).unwrap();
         for event in CODEX_HOOK_EVENTS.iter().filter(|e| event_key(e).is_some()) {
             assert_eq!(
-                hooks["hooks"][event][0]["hooks"][0]["command"], "/opt/aicc/aicc-hook codex",
+                hooks["hooks"][event][0]["hooks"][0]["command"], "/opt/armadra/armadra-hook codex",
                 "{event}"
             );
         }
@@ -454,7 +454,7 @@ mod tests {
         let session_end = hook_hash(
             "session_end",
             None,
-            "/opt/aicc/aicc-hook codex",
+            "/opt/armadra/armadra-hook codex",
             SESSION_END_TIMEOUT_SEC,
         );
         assert!(config.contains(&session_end));
@@ -504,7 +504,7 @@ mod tests {
             "/usr/local/bin/theirs.sh"
         );
         assert_eq!(
-            hooks["hooks"]["Stop"][1]["hooks"][0]["command"], "/opt/aicc/aicc-hook codex",
+            hooks["hooks"]["Stop"][1]["hooks"][0]["command"], "/opt/armadra/armadra-hook codex",
             "ours is appended so their index 0 never moves"
         );
 
@@ -537,7 +537,7 @@ mod tests {
         assert!(
             !fs::read_to_string(hooks_path(home.path()))
                 .unwrap()
-                .contains("aicc-hook")
+                .contains("armadra-hook")
         );
     }
 
@@ -546,18 +546,18 @@ mod tests {
         let events: Map<String, Value> = serde_json::from_value(json!({
             "Stop": [
                 { "hooks": [{ "type": "command", "command": "/usr/local/bin/theirs.sh" }] },
-                { "hooks": [{ "type": "command", "command": "/opt/aicc/aicc-hook codex" }] }
+                { "hooks": [{ "type": "command", "command": "/opt/armadra/armadra-hook codex" }] }
             ]
         }))
         .unwrap();
         let entries = trust_entries(
             &events,
             "/home/dev/.codex/hooks.json",
-            "/opt/aicc/aicc-hook codex",
+            "/opt/armadra/armadra-hook codex",
         );
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].0, "/home/dev/.codex/hooks.json:stop:1:0");
-        assert!(is_managed_command("/opt/aicc/aicc-hook codex"));
+        assert!(is_managed_command("/opt/armadra/armadra-hook codex"));
     }
 
     #[test]

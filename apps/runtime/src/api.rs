@@ -400,9 +400,9 @@ pub struct CreateTerminalRequest {
 ///
 /// A custom agent runs somebody else's program but reports through its base
 /// agent's hooks, so everything provider-shaped — the approval wait, the hook
-/// adapter — follows the base, while `AICC_AGENT_ID` stays the custom id: that
+/// adapter — follows the base, while `ARMADRA_AGENT_ID` stays the custom id: that
 /// is what the canvas node, the session row and the status badge are keyed by
-/// (plan §24.1). Its own `env` is applied last and cannot shadow an `AICC_*`
+/// (plan §24.1). Its own `env` is applied last and cannot shadow an `ARMADRA_*`
 /// name, because those keys are refused when the entry is stored.
 fn agent_session_environment(
     state: &AppState,
@@ -410,7 +410,7 @@ fn agent_session_environment(
     agent_id: &str,
 ) -> Vec<(String, String)> {
     let mut env = agent_environment(node_id, agent_id);
-    // Arms hook-reply approvals (AICC_PERM_WAIT_SECS) when enabled in settings.
+    // Arms hook-reply approvals (ARMADRA_PERM_WAIT_SECS) when enabled in settings.
     env.extend(
         state
             .hooks
@@ -1039,7 +1039,7 @@ const PNG_DATA_URL_PREFIX: &str = "data:image/png;base64,";
 /// Whatever is on the whiteboard — ink, a geo shape, a whole frame — only
 /// exists as vectors inside the browser's tldraw store, so the one party that
 /// can rasterise it is the client. It uploads the PNG as a data URL and the
-/// runtime drops the bytes at `<workspace>/.aicc/exports/<exportId>.png`, which
+/// runtime drops the bytes at `<workspace>/.armadra/exports/<exportId>.png`, which
 /// is the path a linked agent is handed.
 ///
 /// The export id is *not* required to be a node: since the tldraw migration the
@@ -1197,7 +1197,7 @@ pub async fn upload_asset(
     store_asset(&root, &workspace.id, extension, &bytes).map(Json)
 }
 
-/// Copy already-validated bytes into `<workspace>/.aicc/assets/` under their
+/// Copy already-validated bytes into `<workspace>/.armadra/assets/` under their
 /// content hash and describe where they landed.
 ///
 /// Shared by the upload and the import route so the two dedupe against the same
@@ -1248,7 +1248,7 @@ pub struct ImportAssetRequest {
 /// hands Tauri the drop and keeps the bytes to itself, and the shell has no
 /// filesystem plugin. So the runtime does the reading, and the picture ends up
 /// in the same content-addressed store as an upload — identical response, same
-/// dedupe, same `.aicc/assets/` file.
+/// dedupe, same `.armadra/assets/` file.
 ///
 /// The type comes from the extension, because a file on disk carries no MIME.
 pub async fn import_asset(
@@ -1311,7 +1311,7 @@ pub async fn get_asset(
 }
 
 /// Where uploaded assets live, relative to the workspace root.
-pub const ASSETS_DIRECTORY: &str = ".aicc/assets";
+pub const ASSETS_DIRECTORY: &str = ".armadra/assets";
 
 fn hex16(digest: &[u8]) -> String {
     digest
@@ -1873,11 +1873,11 @@ mod tests {
                 .find(|(name, _)| name == key)
                 .map(|(_, value)| value.clone())
         };
-        assert_eq!(lookup("AICC_NODE_ID").as_deref(), Some("node-1"));
-        assert_eq!(lookup("AICC_AGENT_ID").as_deref(), Some("claude"));
-        assert_eq!(lookup("AICC_CANVAS_CONTROL").as_deref(), Some("1"));
+        assert_eq!(lookup("ARMADRA_NODE_ID").as_deref(), Some("node-1"));
+        assert_eq!(lookup("ARMADRA_AGENT_ID").as_deref(), Some("claude"));
+        assert_eq!(lookup("ARMADRA_CANVAS_CONTROL").as_deref(), Some("1"));
         assert!(
-            lookup("AICC_ENDPOINT_FILE").is_some_and(|path| path.ends_with("hook-endpoint.env"))
+            lookup("ARMADRA_ENDPOINT_FILE").is_some_and(|path| path.ends_with("hook-endpoint.env"))
         );
         // No credential is ever placed in the child environment.
         assert!(env.iter().all(|(name, _)| !name.contains("TOKEN")));
@@ -2004,14 +2004,14 @@ mod tests {
         let uploaded: Value = serde_json::from_slice(&body).unwrap();
         let id = uploaded["id"].as_str().unwrap().to_owned();
         assert!(id.ends_with(".png"));
-        assert_eq!(uploaded["path"], format!(".aicc/assets/{id}"));
+        assert_eq!(uploaded["path"], format!(".armadra/assets/{id}"));
         assert_eq!(
             uploaded["url"],
             format!("/api/workspaces/{workspace_id}/assets/{id}")
         );
         assert_eq!(uploaded["mimeType"], "image/png");
         assert_eq!(uploaded["bytes"], png.len());
-        assert!(directory.path().join(".aicc/assets").join(&id).is_file());
+        assert!(directory.path().join(".armadra/assets").join(&id).is_file());
 
         // The same bytes as a data URL land on the same file: the name is the
         // content hash, so nothing is stored twice.
@@ -2025,7 +2025,7 @@ mod tests {
         assert_eq!(status, StatusCode::OK, "{same}");
         assert_eq!(same["id"], id);
         assert_eq!(
-            std::fs::read_dir(directory.path().join(".aicc/assets"))
+            std::fs::read_dir(directory.path().join(".armadra/assets"))
                 .unwrap()
                 .count(),
             1
@@ -2121,14 +2121,14 @@ mod tests {
         assert_eq!(status, StatusCode::OK, "{imported}");
         let id = imported["id"].as_str().unwrap().to_owned();
         assert!(id.ends_with(".png"), "{id}");
-        assert_eq!(imported["path"], format!(".aicc/assets/{id}"));
+        assert_eq!(imported["path"], format!(".armadra/assets/{id}"));
         assert_eq!(
             imported["url"],
             format!("/api/workspaces/{workspace_id}/assets/{id}")
         );
         assert_eq!(imported["mimeType"], "image/png");
         assert_eq!(imported["bytes"], png.len());
-        assert!(directory.path().join(".aicc/assets").join(&id).is_file());
+        assert!(directory.path().join(".armadra/assets").join(&id).is_file());
 
         // The same bytes uploaded the normal way are the same file: import and
         // upload share one content-addressed store.
@@ -2142,7 +2142,7 @@ mod tests {
         assert_eq!(status, StatusCode::OK, "{uploaded}");
         assert_eq!(uploaded["id"], id);
         assert_eq!(
-            std::fs::read_dir(directory.path().join(".aicc/assets"))
+            std::fs::read_dir(directory.path().join(".armadra/assets"))
                 .unwrap()
                 .count(),
             1
@@ -2213,7 +2213,7 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(
-            std::fs::read_dir(directory.path().join(".aicc/assets"))
+            std::fs::read_dir(directory.path().join(".armadra/assets"))
                 .unwrap()
                 .count(),
             1
@@ -2241,12 +2241,12 @@ mod tests {
         assert_eq!(status, StatusCode::OK, "{exported}");
         assert_eq!(
             exported["relativePath"],
-            format!(".aicc/exports/{export_id}.png")
+            format!(".armadra/exports/{export_id}.png")
         );
         assert!(
             directory
                 .path()
-                .join(".aicc/exports")
+                .join(".armadra/exports")
                 .join(format!("{export_id}.png"))
                 .is_file()
         );
@@ -2547,16 +2547,16 @@ mod tests {
                 .map(|(_, value)| value.clone())
         };
         // The node is the custom agent, not the CLI it borrows.
-        assert_eq!(lookup("AICC_AGENT_ID").as_deref(), Some("custom:echo"));
-        assert_eq!(lookup("AICC_NODE_ID").as_deref(), Some("node-1"));
+        assert_eq!(lookup("ARMADRA_AGENT_ID").as_deref(), Some("custom:echo"));
+        assert_eq!(lookup("ARMADRA_NODE_ID").as_deref(), Some("node-1"));
         assert_eq!(lookup("GREETING").as_deref(), Some("hi"));
         assert_eq!(lookup("HOME_WAS").as_deref(), Some("none"));
         // Gemini has no reply-approval wait; a claude-based one would.
-        assert!(lookup("AICC_PERM_WAIT_SECS").is_none());
+        assert!(lookup("ARMADRA_PERM_WAIT_SECS").is_none());
         assert!(
             agent_session_environment(&state, "node-1", "claude")
                 .iter()
-                .any(|(name, _)| name == "AICC_PERM_WAIT_SECS")
+                .any(|(name, _)| name == "ARMADRA_PERM_WAIT_SECS")
         );
     }
 

@@ -35,7 +35,7 @@ pub const REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
 pub const MANUAL_REFRESH_COOLDOWN: Duration = Duration::from_secs(30);
 
 const HTTP_TIMEOUT: Duration = Duration::from_secs(10);
-const USER_AGENT: &str = concat!("ai-coding-canvas/", env!("CARGO_PKG_VERSION"));
+const USER_AGENT: &str = concat!("armadra/", env!("CARGO_PKG_VERSION"));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]

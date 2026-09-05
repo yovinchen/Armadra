@@ -125,7 +125,7 @@ pub fn resolve_in_root(root: impl AsRef<Path>, requested: &str) -> AppResult<Pat
 ///
 /// This is the one resolver that lets an **absolute** path point outside the
 /// workspace: the desktop shell drags pictures in from `~/Downloads`, and the
-/// bytes are copied into `.aicc/assets/` rather than exposed where they lie —
+/// bytes are copied into `.armadra/assets/` rather than exposed where they lie —
 /// so the workspace boundary buys nothing here that the copy does not. A
 /// **relative** path stays workspace-relative and goes through the usual
 /// traversal and symlink checks.

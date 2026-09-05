@@ -21,7 +21,7 @@ pub fn write_atomically(path: &Path, contents: &[u8]) -> AppResult<()> {
     let directory = path.parent().unwrap_or(Path::new("."));
     fs::create_dir_all(directory)?;
     let temporary = directory.join(format!(
-        ".{}.aicc-tmp",
+        ".{}.armadra-tmp",
         path.file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("file")

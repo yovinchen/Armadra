@@ -27,7 +27,7 @@ const DEFAULT_DETACHED_GRACE_MINUTES: u64 = 1440;
 /// `usage.enabled` — gates the usage pill's provider fetches (plan §19).
 /// On by default; turning it off stops every outbound request.
 const DEFAULT_USAGE_ENABLED: bool = true;
-/// `logs.retentionDays` — how long `.aicc` board logs are kept (plan §24.1,
+/// `logs.retentionDays` — how long `.armadra` board logs are kept (plan §24.1,
 /// 数据页). `0` means "keep forever"; the settings page offers 7 / 30 / 90 / 0.
 pub const LOG_RETENTION_CHOICES: &[u64] = &[0, 7, 30, 90];
 const DEFAULT_LOG_RETENTION_DAYS: u64 = 30;
@@ -105,9 +105,9 @@ const DEFAULT_CUSTOM_COLOR: &str = "#a78bfa";
 const DEFAULT_BASE_AGENT: &str = "claude";
 
 /// `^[A-Z_][A-Z0-9_]*$`, minus the names the hook client owns: a custom agent
-/// must not be able to redirect hook reports by shadowing `AICC_*`.
+/// must not be able to redirect hook reports by shadowing `ARMADRA_*`.
 pub fn valid_env_key(key: &str) -> bool {
-    if key.is_empty() || key.len() > 128 || key.starts_with("AICC_") {
+    if key.is_empty() || key.len() > 128 || key.starts_with("ARMADRA_") {
         return false;
     }
     let mut chars = key.chars();
@@ -635,14 +635,14 @@ mod tests {
         assert!(!valid_env_key("HAS-DASH"));
         assert!(!valid_env_key(""));
         // The hook client's own addressing is off limits (plan §5.3).
-        assert!(!valid_env_key("AICC_NODE_ID"));
+        assert!(!valid_env_key("ARMADRA_NODE_ID"));
 
         let long = "x".repeat(MAX_CUSTOM_ENV_VALUE + 1);
         let document = custom_document(serde_json::json!([{
             "id": "custom:echo", "label": "Echo", "launchCmd": "e",
             "env": {
                 "API_KEY": "k",
-                "AICC_NODE_ID": "spoofed",
+                "ARMADRA_NODE_ID": "spoofed",
                 "bad key": "x",
                 "TOO_LONG": long,
                 "NOT_A_STRING": 7,
@@ -652,7 +652,7 @@ mod tests {
         let env = &agents[0].env;
         assert_eq!(env.len(), 1);
         assert_eq!(env["API_KEY"], "k");
-        assert!(!env.contains_key("AICC_NODE_ID"));
+        assert!(!env.contains_key("ARMADRA_NODE_ID"));
     }
 
     #[test]

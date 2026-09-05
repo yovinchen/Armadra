@@ -1,4 +1,4 @@
-//! `<workspace>/.aicc/board-log.jsonl` — the delivery trace (plan §5.7 step 10).
+//! `<workspace>/.armadra/board-log.jsonl` — the delivery trace (plan §5.7 step 10).
 //!
 //! Every delivery *and* every refusal is traced, because the interesting
 //! question after the fact is almost always "why did nothing arrive?". The
@@ -79,7 +79,7 @@ fn log_path(root: &Path) -> Option<PathBuf> {
     if !root.is_dir() {
         return None;
     }
-    let directory = root.join(".aicc");
+    let directory = root.join(".armadra");
     std::fs::create_dir_all(&directory).ok()?;
     Some(directory.join("board-log.jsonl"))
 }

@@ -2,7 +2,7 @@
 //!
 //! A tmux session outlives the runtime, which means the database and the tmux
 //! server can disagree: rows for sessions that died while the app was closed,
-//! and `aicc-*` sessions whose row was deleted. [`reconcile`] settles that once
+//! and `armadra-*` sessions whose row was deleted. [`reconcile`] settles that once
 //! at startup; [`sweep`] runs every ten minutes and destroys the sessions that
 //! nothing will ever attach to again.
 
@@ -104,7 +104,7 @@ pub struct ReconcileReport {
     pub detached: usize,
     /// Rows whose tmux session is gone: the process died while we were away.
     pub exited: usize,
-    /// `aicc-*` sessions with no row at all.
+    /// `armadra-*` sessions with no row at all.
     pub orphans_destroyed: usize,
 }
 
@@ -180,7 +180,7 @@ mod tests {
         GcRow {
             session_id: id.into(),
             session_key: id.into(),
-            backend_ref: Some(format!("aicc-ws-{id}-1")),
+            backend_ref: Some(format!("armadra-ws-{id}-1")),
             attach_state: state.into(),
             last_activity: Utc::now() - chrono::Duration::minutes(minutes_idle),
             node_present: node,

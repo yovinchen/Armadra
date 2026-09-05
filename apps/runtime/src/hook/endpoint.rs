@@ -19,7 +19,7 @@ use std::{
 use super::auth::write_private_atomically;
 
 /// Bumped when the request shape changes in a way an older client cannot
-/// produce. Mirrors `AICC_HOOK_VERSION` in the endpoint file.
+/// produce. Mirrors `ARMADRA_HOOK_VERSION` in the endpoint file.
 pub const HOOK_PROTOCOL_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,22 +36,26 @@ pub struct Endpoint {
 impl Endpoint {
     pub fn render(&self) -> String {
         let mut rendered = String::new();
-        rendered.push_str("# AI Coding Canvas hook endpoint — rewritten by the runtime.\n");
+        rendered.push_str("# Armadra hook endpoint — rewritten by the runtime.\n");
         rendered.push_str("# Values are single-quoted POSIX strings; re-read this file on every\n");
         rendered.push_str("# hook invocation, the port changes when the runtime restarts.\n");
         push_line(
             &mut rendered,
-            "AICC_HOOK_VERSION",
+            "ARMADRA_HOOK_VERSION",
             &HOOK_PROTOCOL_VERSION.to_string(),
         );
-        push_line(&mut rendered, "AICC_HOOK_PORT", &self.port.to_string());
+        push_line(&mut rendered, "ARMADRA_HOOK_PORT", &self.port.to_string());
         if let Some(socket) = &self.socket {
-            push_line(&mut rendered, "AICC_HOOK_SOCK", &socket.to_string_lossy());
+            push_line(
+                &mut rendered,
+                "ARMADRA_HOOK_SOCK",
+                &socket.to_string_lossy(),
+            );
         }
-        push_line(&mut rendered, "AICC_HOOK_TOKEN", &self.token);
+        push_line(&mut rendered, "ARMADRA_HOOK_TOKEN", &self.token);
         push_line(
             &mut rendered,
-            "AICC_NODE_TOKEN_DIR",
+            "ARMADRA_NODE_TOKEN_DIR",
             &self.node_token_dir.to_string_lossy(),
         );
         rendered
@@ -119,20 +123,20 @@ mod tests {
     fn fixture() -> Endpoint {
         Endpoint {
             port: 43120,
-            socket: Some(PathBuf::from("/tmp/aicc/hook.sock")),
+            socket: Some(PathBuf::from("/tmp/armadra/hook.sock")),
             token: "V4uYb0Q".into(),
-            node_token_dir: PathBuf::from("/tmp/aicc/node-tokens"),
+            node_token_dir: PathBuf::from("/tmp/armadra/node-tokens"),
         }
     }
 
     #[test]
     fn the_rendered_file_is_the_documented_shape() {
         let rendered = fixture().render();
-        assert!(rendered.contains("AICC_HOOK_VERSION='1'\n"));
-        assert!(rendered.contains("AICC_HOOK_PORT='43120'\n"));
-        assert!(rendered.contains("AICC_HOOK_SOCK='/tmp/aicc/hook.sock'\n"));
-        assert!(rendered.contains("AICC_HOOK_TOKEN='V4uYb0Q'\n"));
-        assert!(rendered.contains("AICC_NODE_TOKEN_DIR='/tmp/aicc/node-tokens'\n"));
+        assert!(rendered.contains("ARMADRA_HOOK_VERSION='1'\n"));
+        assert!(rendered.contains("ARMADRA_HOOK_PORT='43120'\n"));
+        assert!(rendered.contains("ARMADRA_HOOK_SOCK='/tmp/armadra/hook.sock'\n"));
+        assert!(rendered.contains("ARMADRA_HOOK_TOKEN='V4uYb0Q'\n"));
+        assert!(rendered.contains("ARMADRA_NODE_TOKEN_DIR='/tmp/armadra/node-tokens'\n"));
         // Comments are prefixed so a `.`-sourcing shell ignores them.
         for line in rendered.lines() {
             assert!(line.starts_with('#') || line.contains("='"));
@@ -146,11 +150,11 @@ mod tests {
             ..fixture()
         };
         let parsed = parse(&awkward.render());
-        assert_eq!(parsed["AICC_HOOK_SOCK"], "/tmp/it's here/hook.sock");
-        assert_eq!(parsed["AICC_HOOK_TOKEN"], "V4uYb0Q");
+        assert_eq!(parsed["ARMADRA_HOOK_SOCK"], "/tmp/it's here/hook.sock");
+        assert_eq!(parsed["ARMADRA_HOOK_TOKEN"], "V4uYb0Q");
         // And a shell agrees with our parser.
         let rendered = awkward.render();
-        let script = format!("{rendered}\nprintf '%s' \"$AICC_HOOK_SOCK\"");
+        let script = format!("{rendered}\nprintf '%s' \"$ARMADRA_HOOK_SOCK\"");
         let output = std::process::Command::new("/bin/sh")
             .arg("-c")
             .arg(&script)
@@ -180,6 +184,6 @@ mod tests {
             std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
             0o600
         );
-        assert_eq!(read(&path)["AICC_HOOK_PORT"], "43120");
+        assert_eq!(read(&path)["ARMADRA_HOOK_PORT"], "43120");
     }
 }

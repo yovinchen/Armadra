@@ -15,10 +15,10 @@ use crate::Session;
 /// The context-link verbs the runtime exposes.
 const CONTEXT_VERBS: [&str; 4] = ["list", "summary", "transcript", "terminal"];
 
-/// `aicc-hook context <verb> [--node <id|title>] [-n N]`
+/// `armadra-hook context <verb> [--node <id|title>] [-n N]`
 pub fn run_context(args: &[String]) -> i32 {
     let Some(verb) = args.first() else {
-        return fail("usage: aicc-hook context <list|summary|transcript|terminal> [--node <id|title>] [-n N]");
+        return fail("usage: armadra-hook context <list|summary|transcript|terminal> [--node <id|title>] [-n N]");
     };
     if !CONTEXT_VERBS.contains(&verb.as_str()) {
         return fail(&format!(
@@ -66,10 +66,10 @@ pub fn run_context(args: &[String]) -> i32 {
     )
 }
 
-/// `aicc-hook canvas <verb> [--flag value | --flag=value | --flag]...`
+/// `armadra-hook canvas <verb> [--flag value | --flag=value | --flag]...`
 pub fn run_canvas(args: &[String]) -> i32 {
     let Some(verb) = args.first() else {
-        return fail("usage: aicc-hook canvas <verb> [--flag value]...");
+        return fail("usage: armadra-hook canvas <verb> [--flag value]...");
     };
     if verb.starts_with('-') {
         return fail(&format!("expected a canvas verb, got `{verb}`"));
@@ -230,7 +230,7 @@ fn is_json(response: &http::Response) -> bool {
 }
 
 fn fail(message: &str) -> i32 {
-    let _ = writeln!(std::io::stderr(), "aicc-hook: {message}");
+    let _ = writeln!(std::io::stderr(), "armadra-hook: {message}");
     1
 }
 

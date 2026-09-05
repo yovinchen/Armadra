@@ -18,7 +18,7 @@ use crate::error::AppResult;
 const AGENT_ID: &str = "gemini";
 /// Milliseconds. See the module note.
 const TIMEOUT_MILLISECONDS: u64 = 5_000;
-const HANDLER_NAME: &str = "aicc-status";
+const HANDLER_NAME: &str = "armadra-status";
 
 pub fn settings_path(config_home: &Path) -> std::path::PathBuf {
     config_home.join("settings.json")
@@ -88,7 +88,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn client() -> &'static Path {
-        Path::new("/opt/aicc/aicc-hook")
+        Path::new("/opt/armadra/armadra-hook")
     }
 
     #[test]
@@ -99,9 +99,12 @@ mod tests {
             serde_json::from_str(&fs::read_to_string(settings_path(home.path())).unwrap()).unwrap();
         for event in GEMINI_HOOK_EVENTS {
             let handler = &settings["hooks"][event][0]["hooks"][0];
-            assert_eq!(handler["command"], "/opt/aicc/aicc-hook gemini", "{event}");
+            assert_eq!(
+                handler["command"], "/opt/armadra/armadra-hook gemini",
+                "{event}"
+            );
             assert_eq!(handler["timeout"], 5_000, "{event}");
-            assert_eq!(handler["name"], "aicc-status", "{event}");
+            assert_eq!(handler["name"], "armadra-status", "{event}");
         }
         // AfterModel fires per streamed chunk; the plan says do not subscribe.
         assert!(settings["hooks"].get("AfterModel").is_none());
@@ -148,7 +151,7 @@ mod tests {
 
         uninstall(home.path()).unwrap();
         let rendered = fs::read_to_string(&path).unwrap();
-        assert!(!rendered.contains("aicc-hook"));
+        assert!(!rendered.contains("armadra-hook"));
         let settings: Value = serde_json::from_str(&rendered).unwrap();
         assert_eq!(settings["theme"], "GitHub");
         assert_eq!(settings["hooks"]["BeforeTool"].as_array().unwrap().len(), 1);

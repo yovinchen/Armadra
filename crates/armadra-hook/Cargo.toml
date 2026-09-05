@@ -1,17 +1,17 @@
 [package]
-name = "aicc-hook"
+name = "armadra-hook"
 version.workspace = true
 edition = "2021"
 license.workspace = true
 authors.workspace = true
-description = "Hook client for AI Coding Canvas agent terminals"
+description = "Hook client for Armadra agent terminals"
 
 [lib]
-name = "aicc_hook"
+name = "armadra_hook"
 path = "src/lib.rs"
 
 [[bin]]
-name = "aicc-hook"
+name = "armadra-hook"
 path = "src/main.rs"
 
 [dependencies]

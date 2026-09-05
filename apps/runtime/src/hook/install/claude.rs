@@ -94,7 +94,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn client() -> &'static Path {
-        Path::new("/opt/aicc/aicc-hook")
+        Path::new("/opt/armadra/armadra-hook")
     }
 
     #[test]
@@ -109,7 +109,10 @@ mod tests {
         for event in CLAUDE_HOOK_EVENTS {
             let handler = &settings["hooks"][event][0]["hooks"][0];
             assert_eq!(handler["type"], "command", "{event}");
-            assert_eq!(handler["command"], "/opt/aicc/aicc-hook claude", "{event}");
+            assert_eq!(
+                handler["command"], "/opt/armadra/armadra-hook claude",
+                "{event}"
+            );
             assert_eq!(handler["timeout"], 5, "{event}");
         }
         assert_eq!(
@@ -162,7 +165,7 @@ mod tests {
         );
         assert_eq!(
             settings["hooks"]["Stop"][1]["hooks"][0]["command"],
-            "/opt/aicc/aicc-hook claude"
+            "/opt/armadra/armadra-hook claude"
         );
         // An event we never subscribe to is left exactly as it was.
         assert_eq!(
@@ -184,7 +187,7 @@ mod tests {
         );
         // No trace of us is left in the events we did own outright.
         let rendered = fs::read_to_string(&path).unwrap();
-        assert!(!rendered.contains("aicc-hook"));
+        assert!(!rendered.contains("armadra-hook"));
     }
 
     #[test]

@@ -157,7 +157,7 @@ pub fn normalize(agent_id: &str, node_id: &str, payload: &Value) -> Option<Agent
 /// `provider` picks the parser, `agent_id` is what the event is attributed to.
 ///
 /// The two differ for a custom agent: its hooks are the base agent's — the
-/// installed hook line literally runs `aicc-hook <base>` — but the node, the
+/// installed hook line literally runs `armadra-hook <base>` — but the node, the
 /// session row and the status badge are keyed by the custom id.
 pub fn normalize_as(
     provider: &str,

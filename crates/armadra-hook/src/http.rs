@@ -340,7 +340,7 @@ mod tests {
     fn renders_a_post_verbatim() {
         let request = Request::post_json(
             "/hook/claude",
-            vec![("X-AICC-Hook-Client".to_string(), "1".to_string())],
+            vec![("X-Armadra-Hook-Client".to_string(), "1".to_string())],
             b"{\"a\":1}".to_vec(),
         );
         assert_eq!(
@@ -348,7 +348,7 @@ mod tests {
             "POST /hook/claude HTTP/1.1\r\n\
              Host: 127.0.0.1\r\n\
              Connection: close\r\n\
-             X-AICC-Hook-Client: 1\r\n\
+             X-Armadra-Hook-Client: 1\r\n\
              Content-Type: application/json\r\n\
              Content-Length: 7\r\n\
              \r\n\

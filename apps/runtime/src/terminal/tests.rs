@@ -258,7 +258,8 @@ async fn agent_terminals_carry_the_hook_environment_and_announce_their_exit() {
             command: Some("/bin/sh".into()),
             args: vec![
                 "-c".into(),
-                "printf %s \"$AICC_NODE_ID/$AICC_AGENT_ID/$AICC_CANVAS_CONTROL\"; exit 3".into(),
+                "printf %s \"$ARMADRA_NODE_ID/$ARMADRA_AGENT_ID/$ARMADRA_CANVAS_CONTROL\"; exit 3"
+                    .into(),
             ],
             kind: "terminal".into(),
             owner_node_id: Some(node_id.clone()),
@@ -455,7 +456,7 @@ async fn tmux_sessions_run_capture_paste_and_destroy() {
         .write(
             &session.id,
             session.generation as u64,
-            "echo hi-$AICC_AGENT_ID\r",
+            "echo hi-$ARMADRA_AGENT_ID\r",
         )
         .await
         .unwrap();
