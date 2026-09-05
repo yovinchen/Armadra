@@ -1,6 +1,6 @@
 # Git、Worktree 与 GitHub 工作流设计
 
-> 状态：目标设计，待实施。保留画布工作面，Git/GitHub 使用辅助面板。
+> 状态：Git 部分见 §3；§7–§10 的 GitHub 部分（G04）已实施，实现说明见 §11。保留画布工作面，Git/GitHub 使用辅助面板。
 
 ## 1. 界面组织
 
@@ -214,3 +214,17 @@ Host 重启后的 Git 操作按实际 Git 状态对账：commit 查 OID/index，
 必测 GitHub 场景：无权限/令牌过期/限流、Issue 与 PR 混合返回、Projects 字段删除、标签冲突、外部状态变化、webhook 重复/伪签名、合并前 SHA 改变、私有 fork、评论位置过期、组合写入部分失败。
 
 端到端门槛：克隆 → 建 worktree/分支 → 编辑 → hunk 暂存 → AI 草拟 → 提交 → push → 创建 PR → 查看检查/评审 → 合并 → 独立清理，全程不需要离开应用手动补齐缺失的产品入口。
+
+## 11. G04 实现说明
+
+§7–§10 由 Go Host 实现，前端经 `packages/host-client` 的 `HostGithubClient` 调用；契约在 `proto/armadra/v1/github.proto`（消息与枚举名拼作 `Github`，仅因 prost 与 protobuf-es 只在名称大小写匹配时才裁剪枚举前缀）。
+
+- **凭据**（§9）：`apps/host/internal/githubcred`。两种来源都要用户显式开启——复用本机 `gh` 登录只按需读取、不落库；粘贴的 token 写入 macOS Keychain，其他平台降级为 0600 文件并在状态里如实标注。写钥匙串走工具的交互提示（stdin），不走 `-w` 参数，否则 token 会出现在进程参数里；写完再读回校验。配置先验证再存储，被拒绝的 token 不留痕迹。内存副本最多存活一分钟，撤销即清空。Token 不进数据库、日志与任何返回的 Protobuf 消息。
+- **API base 与远端归属**：`githubapi.NormalizeAPIBase` 只接受 HTTPS；`BelongsTo` 在本地判定远端 URL 属于哪个服务，企业仓库不会被发到公共服务，反之亦然。`GITHUB_API_BASE` 只提供首次配置的默认值，`GITHUB_CA_FILE` 供内部 CA 签发的 Enterprise 使用。
+- **传输**（§7.3）：`githubapi` 统一处理 ETag 条件请求、Link 分页（只取页码，响应无法引导下一次请求）、限速头与退避。写操作永不重试：结果未读即报 `UNKNOWN_OUTCOME`，由调用方重新读取。重定向一律拒绝。
+- **状态映射**（§7.2）：`githubhost.ValidateMapping` 校验单一来源、组 ID/标签/选项唯一，并在两个方向的联动构成环时拒绝（组指向自身是不动点，允许）。同一 Issue 命中多个组显示 conflict，不擅自挑一个。`MoveIssue` 逐项返回 `GithubWriteOutcome`，标签移动只动映射管理的标签，关闭 Issue 只在显式配置联动时发生。
+- **PR 合并**（§8）：`MergePull` 重读 PR 与检查，`expected_head_sha` 或 `expected_check_rollup` 不符即停；仅提供仓库允许的合并策略；结果未读时重读而非重试。
+- **刷新**：本机 Host 无 webhook，Host 在每个列表/详情响应里给出 `poll_interval_ms`，由客户端按这个节奏轮询。
+- **`ExternalReference`**：迁移 v4 的 `github_references`，ID 由链接语义派生，因此重复关联是同一条记录而不是两个徽标。
+
+已知限制：Issue 全文过滤与 PR 的作者 / draft / review-requested 过滤在 Host 本地完成（search API 属另一套配额）；Projects v2 状态字段每个项目最多读 500 个条目，超出的 Issue 显示未映射；token scopes 只保留上次验证的结果，重启后为空。
