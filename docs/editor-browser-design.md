@@ -1,6 +1,6 @@
 # 文件编辑器与受控浏览器设计
 
-> 状态：目标设计。§2 的搜索替换、快速打开、项目搜索、文件信息、Markdown 预览、文件管理与 §3 的外部变更检测已实施（E01/M4），语言服务只有能力探测；浏览器部分待实施。面向桌面、浏览器客户端与移动端的同一执行服务。
+> 状态：目标设计。§2 的搜索替换、快速打开、项目搜索、文件信息、Markdown 预览、文件管理与 §3 的外部变更检测已实施（E01/M4），语言服务只有能力探测；§5–§9 的受控浏览器首轮已实施（B01/M5，macOS 实机验收），未做项逐条列在各节末尾。面向桌面、浏览器客户端与移动端的同一执行服务。
 
 ## 1. 交互位置与通用模型
 
@@ -132,6 +132,22 @@ URL 只允许 http/https；开发项目可以显式声明 loopback 服务。访�
 
 页面新窗口默认转受管新 tab 并提示；下载存入工作空间指定目录，状态包含来源、目标、大小及校验。上传由用户/已授权 Agent 选择项目内文件；不可通过页面 file chooser 读取整个执行主机。
 
+已实现（B01/M5，`apps/runtime/src/browser/`）：
+
+| 类别   | 实现                                                                                                                                                                                                                                                 |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 浏览器 | 按 `browser.executablePath` → `ARMADRA_BROWSER_PATH`/`CHROME_PATH` → 各平台标准安装位置查找 Chrome/Chromium/Edge/Brave；找不到时 `GET …/browser/availability` 回 `available:false`、`reasonCode:"chrome_not_found"` 并列出查过的路径，不下载、不假装 |
+| 会话   | 一个浏览器节点一个 `BrowserSession`，独立 0700 profile 在 `<数据目录>/browser-profiles/<sessionId>`；`browser_sessions` 表 + profile 就是重启后重新拉起的全部依据，登录状态随 profile 留在执行主机                                                   |
+| 导航   | `POST …/navigate` 的 goto/back/forward/reload/stop；只放行 http/https，拒绝实例元数据地址与 Armadra 自己的 43120/43121                                                                                                                               |
+| 画面   | CDP `Page.startScreencast` 的 JPEG 帧经现有工作空间 WS 推 `browser.frame`；订阅按 focused/visible/hidden 分级（65/1×/15fps、40/2×/5fps、不推流），订阅全部失效即停流、页面继续跑                                                                     |
+| 输入   | `POST …/input` 转发鼠标/滚轮/键盘/触摸，中文与 IME 走 `Input.insertText`；请求带 `navigationEpoch`，页面已导航时整批拒绝（409），客户端等新帧而不是重放                                                                                              |
+| 尺寸   | `POST …/viewport` 写 `Emulation.setDeviceMetricsOverride`，节点尺寸变化去抖后跟随，画布缩放不写进页面 viewport                                                                                                                                       |
+| 截图   | `POST …/capture` 存到工作区 `.armadra/browser/<sessionId>-<时间>.png`，返回工作区相对路径、尺寸、字节数与 sha256                                                                                                                                     |
+| 调试   | Console 与 Network 各 200 条有界环形缓冲，`GET …/read?mode=console` / `?mode=network` 读取；只有方法/URL/状态/MIME/字节数/失败码，不采集任何 header 与响应体                                                                                         |
+| 下载   | `Browser.setDownloadBehavior` 落在数据目录的暂存区，队列里是 `pending`；`POST …/downloads/{id}` 接受才移进工作区 `.armadra/downloads/`（重名加序号），拒绝就删掉暂存文件                                                                             |
+
+尚未实现：受管浏览器二进制的下载与校验、页面缩放、项目范围历史与固定起始页、清理浏览数据、JS Dialog 与 popup 处理、上传、重定向后的网络策略复检、Agent 操作徽标与人工接管租约。
+
 ## 7. Agent 浏览器接口
 
 `BrowserAction` 以明确 oneof 定义动作，不开放通用 `eval` 或任意 CDP method。浏览器 Worker 可内部执行固定的 DOM 辅助脚本，调用者不能注入代码。
@@ -153,6 +169,12 @@ DOM 元素引用绑定 session/tab/frame/navigationEpoch；页面导航或元素
 
 涉及账号、发布、购买、权限等动作仍受调用方授权范围约束；页面本身的文字不能提升 Agent 的 Host 权限。Cookie 密钥默认不向 Agent 返回，登录由浏览器会话维持；将来若提供凭据导出必须另设能力与审计。
 
+已实现（B01/M5）：`armadra-hook browser <navigate|read|click|type|wait|capture>` 经 `POST /browser/{verb}` 到达 Runtime，与 `context`/`canvas` 同一套凭据。授权是三重检查：目标必须出现在调用者自己的上下文链接文档里、必须是同工作空间的 `browser` 节点、且调用者持有本 Runtime 签发的节点令牌（`legacy` 一律拒绝）；`browser` 能力可在自定义 Agent 设置里关掉。人与 Agent 操作的是同一个 session，没有第二个只给 Agent 的浏览器。
+
+`read` 支持 text/elements/links/title/console/network，正文按字节上限截断并如实标注。元素引用是 `e<navigationEpoch>-<序号>`，页面导航后同一个引用返回 `STALE_TARGET`，必须重新 read；`links` 不发引用，因为链接要么走 elements 要么直接用它报出的 href。`wait` 只接受 selector / url-contains / title-contains 三选一，上限 30 秒，没有 network idle 这一项。每一次动作（含被拒绝的）都写进节点活动 `.armadra/board-log.jsonl`。
+
+尚未实现：Select/Press/Scroll/Upload/Download/Back/Forward/Close 动词、BrowserControlLease 与人工接管、多 tab 与 iframe 定位。
+
 ## 8. 画面传输与跨端输入
 
 浏览器 viewport 使用 CSS 像素，`BrowserFrame` 包含 frameSeq、navigationEpoch、viewportWidth/Height、deviceScaleFactor、编码、时间和资产/bytes。客户端在 tldraw shape 内缩放显示，不把画布缩放直接写成网页 viewport 尺寸。
@@ -165,6 +187,10 @@ DOM 元素引用绑定 session/tab/frame/navigationEpoch；页面导航或元素
 
 输入法使用 composition 生命周期，提交文本通过受控文本输入路径，不逐按键拆中文；快捷键中的浏览器 Back/Reload 只作用当前 browser session。辅助技术使用可读元素树和页面状态描述，不把纯图像当成无障碍完成。
 
+已实现（B01/M5）：`browser.frame` 事件携带 `sessionId`/`generation`/`frameSeq`/`navigationEpoch`/viewport 尺寸/`deviceScaleFactor`/base64 JPEG/时间戳。节点把位图画进 `<canvas>`，显示尺寸交给 CSS，点击坐标按显示框与位图的比例映射回 CSS viewport 再连同 `navigationEpoch` 发回。新订阅者会先收到一张用 `Page.captureScreenshot` 补的首帧——`startScreencast` 只在合成器有新内容时出帧，静止页面否则要等到有东西动才看得见。中文输入落在画布上方一块透明文本域，提交文本按 `text` 事件走，不拆成按键。
+
+尚未实现：延迟基线测量（§8 的 p95 目标仍是验收目标而非实测）、移动端文本元素列表、视频通道。
+
 ## 9. 后台与恢复
 
 BrowserSession 与节点生命周期分离：节点隐藏不关闭页面；Host 重启后尝试重新认领 Browser Worker。Browser Worker 崩溃后可恢复 profile、URL 和历史，但不能恢复任意网页 JS 堆/未提交表单，必须显示恢复方式与丢失范围。
@@ -172,6 +198,10 @@ BrowserSession 与节点生命周期分离：节点隐藏不关闭页面；Host 
 画布无订阅者时，截图暂停；有 Agent 控制或自动化正在等待页面时不销毁 session。空闲浏览器回收策略必须排除下载、权限请求、未完成上传和 active lease，回收前保存可恢复信息。
 
 “关闭浏览器节点”区分移除展示和结束 BrowserSession；结束需要检查其他设备订阅与任务引用。网页普通登录状态存于执行主机隔离 profile，不同步整个 profile 到其他设备。
+
+已实现（B01/M5）：关闭节点只退订画面，页面继续跑，重新打开同一节点接回同一 session（`DELETE …/sessions/{id}` 默认 `terminate=false`）；`terminate=true` 才结束进程组、删 profile、删行。Runtime 启动时后台重放所有 `keepAlive` 的行：按原 profile 重新拉起、回到记录的 URL，`generation` +1 好让客户端认出这是重启后的会话；页面 JS 堆与未提交的表单回不来，节点状态如实显示。Runtime 正常退出会关掉自己启动的全部浏览器。
+
+限制：Runtime 被 SIGKILL 时来不及关浏览器，残留进程会占住 profile，下次重启该会话报 `launch_failed` 并显示 disconnected，需要手动清理。Windows 上只能结束浏览器主进程，没有进程组语义。空闲回收策略、跨设备订阅检查与"结束前保存可恢复信息"尚未实现。
 
 ## 10. 测试与交付
 

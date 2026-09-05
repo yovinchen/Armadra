@@ -103,10 +103,10 @@ Armadra 是 local-first 的 AI Coding 画布：把真实 CLI Agent（Claude Code
 | 功能                                                                           | 状态 |
 | ------------------------------------------------------------------------------ | ---- |
 | iframe 兼容预览                                                                | ✅   |
-| Rust Browser Worker + CDP，持久 BrowserSession，人与 Agent 共用同一会话（B01） | ⬜   |
-| 导航、响应式尺寸、截图、Console/Network 摘要、下载队列、登录持久化（B01）      | ⬜   |
-| Agent 接口：Navigate/Read/Click/Type/Wait/Capture（B01）                       | ⬜   |
-| 画面流跨桌面 / 浏览器 / 手机查看（B01/H03）                                    | ⬜   |
+| Rust Browser Worker + CDP，持久 BrowserSession，人与 Agent 共用同一会话（B01） | ✅   |
+| 导航、响应式尺寸、截图、Console/Network 摘要、下载队列、登录持久化（B01）      | ✅   |
+| Agent 接口：Navigate/Read/Click/Type/Wait/Capture（B01）                       | ✅   |
+| 画面流跨桌面 / 浏览器 / 手机查看（B01/H03）                                    | 🔶   |
 
 ### 3.7 后台自动化
 
