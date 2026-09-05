@@ -133,10 +133,10 @@ Armadra 是 local-first 的 AI Coding 画布：把真实 CLI Agent（Claude Code
 | 功能                                                                                | 状态 |
 | ----------------------------------------------------------------------------------- | ---- |
 | Claude / Codex / Gemini 额度窗口（5h、7d、模型专属）与重置时间，用量球展示          | ✅   |
-| **Copilot 额度**：premium interactions / chat 百分比                                | ⬜   |
-| **Codex 额度**校对 OAuth 来源、credits 余额；CLI RPC 回退                           | ⬜   |
-| **本地成本统计**：Claude / Codex 本地日志按日聚合 token 与费用，今日 / 30 天 / 会话 | ⬜   |
-| **独立用量看板**：多 Provider 总览、日柱状图、模型分解、刷新节奏、隐私边界          | ⬜   |
+| **Copilot 额度**：premium interactions / chat 百分比                                | ✅   |
+| **Codex 额度**校对 OAuth 来源、credits 余额；CLI RPC 回退                           | ✅   |
+| **本地成本统计**：Claude / Codex 本地日志按日聚合 token 与费用，今日 / 30 天 / 会话 | ✅   |
+| **独立用量看板**：多 Provider 总览、日柱状图、模型分解、刷新节奏、隐私边界          | ✅   |
 | Provider 状态页 / 事故徽标（可选）                                                  | ⬜   |
 
 ### 3.10 资源监控（本轮新增，详见 §4.3）
