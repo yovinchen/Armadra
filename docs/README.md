@@ -26,6 +26,7 @@
 | [编辑器与浏览器](editor-browser-design.md) | 语言服务、远程文件与受控浏览器                         |
 | [终端宿主](terminal-host-design.md)        | 持久终端、ConPTY、资源与快捷键                         |
 | [客户端平台](client-platforms.md)          | 各平台职责与适配边界                                   |
+| [Host 设备认证](host-device-auth.md)       | owner 多设备认证接口与当前范围                         |
 
 ## 实施契约与参考
 

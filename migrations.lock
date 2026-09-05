@@ -1,0 +1,31 @@
+{
+  "apps/runtime/migrations": {
+    "0001_initial.sql": "a9c77bb975e4faab517fe8ec7a5179455ff6c22dc5585c17e6d5e405c7180f63",
+    "0002_agent_mailbox.sql": "f07f2561bd76d1de8a5d31599eee3480785388ddbaa4ac6a19b24c99a5d6d08d",
+    "0003_retire_kanban.sql": "f7d60789d8527baef77d827a52f9c426d3fd61187f440e378ab2b764167e1f8f",
+    "0004_agent_handoffs.sql": "a2926cbfb382648cb93bade36db701e135f48a13fae0764fe40635aca2d5179d",
+    "0005_browser_sessions.sql": "d2b63bf421a3a1c555bdd51097ccd0c7fa8e6f46fb02403d298b47b560fc2b16",
+    "0006_agent_prompt_deliveries.sql": "a187a525c70461cd2584c089832540dd62312f717a73d3c2dc5ac0c5f21ae763",
+    "0007_handoff_attempts.sql": "548efba8fbaff922e1f6b9782aba686fdb900d816bceb64edcd4d8acf3eeb6cb",
+    "0008_write_ownership.sql": "832ae104f8810758a17ca7867cd14de83cb2506c67f9346fe83d0eb38b6cc830",
+    "0009_workspace_execution_host.sql": "17e081c92f265e76296562df00827c27b0f4b0ec64f771e4dd78556cd70fafd5"
+  },
+  "apps/host/internal/migration/legacy": {
+    "0001_initial.sql": "a9c77bb975e4faab517fe8ec7a5179455ff6c22dc5585c17e6d5e405c7180f63",
+    "0002_agent_mailbox.sql": "f07f2561bd76d1de8a5d31599eee3480785388ddbaa4ac6a19b24c99a5d6d08d",
+    "0003_retire_kanban.sql": "f7d60789d8527baef77d827a52f9c426d3fd61187f440e378ab2b764167e1f8f",
+    "0004_agent_handoffs.sql": "a2926cbfb382648cb93bade36db701e135f48a13fae0764fe40635aca2d5179d",
+    "0005_browser_sessions.sql": "d2b63bf421a3a1c555bdd51097ccd0c7fa8e6f46fb02403d298b47b560fc2b16",
+    "0006_agent_prompt_deliveries.sql": "a187a525c70461cd2584c089832540dd62312f717a73d3c2dc5ac0c5f21ae763",
+    "0007_handoff_attempts.sql": "548efba8fbaff922e1f6b9782aba686fdb900d816bceb64edcd4d8acf3eeb6cb",
+    "0008_write_ownership.sql": "832ae104f8810758a17ca7867cd14de83cb2506c67f9346fe83d0eb38b6cc830",
+    "0009_workspace_execution_host.sql": "17e081c92f265e76296562df00827c27b0f4b0ec64f771e4dd78556cd70fafd5"
+  },
+  "apps/host/internal/storage/schema.go": {
+    "schemaV1": "4666c132f859310554606295c668ec0d6de7e7198bac9c774a54515bacac2d9e",
+    "schemaV2": "c0ea936da2aa3e75437f301907fcb5e37b39d182c0f7ee8f997c559e8b8dd02e",
+    "schemaV3": "c009f4186fe33cf654e7d0c05fdee8f0624c1112ad70bccf8660ba4b79f2bf50",
+    "schemaV4": "7ba294cdc1863f0948438971ee1b08c618f253b4dbe07a50fe8f1f913be4e3bd",
+    "schemaV5": "1cbefb5866f923003d42e125089062f3e8b2f8732948a81644e99bc2b0f46c29"
+  }
+}

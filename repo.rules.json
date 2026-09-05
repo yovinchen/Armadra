@@ -1,0 +1,175 @@
+{
+  "$comment": "docs/design/repository-structure.md §3 的机器可读版本，由 tools/repo-check.mjs 执行。",
+  "root": [
+    ".claude",
+    ".github",
+    ".gitignore",
+    ".prettierignore",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "Cargo.lock",
+    "Cargo.toml",
+    "LICENSE",
+    "README.md",
+    "apps",
+    "armadra.sh",
+    "crates",
+    "design",
+    "docs",
+    "migrations.lock",
+    "package.json",
+    "packages",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "proto",
+    "repo.rules.json",
+    "scripts",
+    "tools",
+    "tsconfig.base.json"
+  ],
+  "blacklist": [
+    "output/",
+    "dist/",
+    "target/",
+    ".idea/",
+    ".playwright-cli/",
+    "*.db",
+    "*.db-shm",
+    "*.db-wal"
+  ],
+  "docs": {
+    "root": "docs",
+    "index": "docs/README.md",
+    "directoryOnly": ["history", "research"]
+  },
+  "links": {
+    "include": [
+      "*.md",
+      "apps/",
+      "crates/",
+      "docs/",
+      "packages/",
+      "proto/",
+      "scripts/",
+      "tools/"
+    ],
+    "exclude": [".claude/"],
+    "ignoreTargets": []
+  },
+  "naming": [
+    {
+      "directory": "packages",
+      "manifest": "package.json",
+      "prefix": "@armadra/",
+      "exemptions": [
+        {
+          "directory": "packages/protocol-ts",
+          "note": "repository-structure §5 第 3 步改名为 packages/protocol"
+        }
+      ]
+    },
+    {
+      "directory": "crates",
+      "manifest": "Cargo.toml",
+      "prefix": "armadra-",
+      "exemptions": [
+        {
+          "directory": "crates/armadra-hook",
+          "note": "repository-structure §5 第 3 步改名为 crates/hook"
+        }
+      ]
+    }
+  ],
+  "fileSize": {
+    "max": 1500,
+    "roots": ["apps", "crates", "packages", "scripts", "tools"],
+    "extensions": [".rs", ".ts", ".tsx", ".go", ".mjs", ".js"],
+    "excludeSegments": ["/gen/", "/node_modules/"],
+    "exemptions": [
+      {
+        "path": "apps/runtime/src/api.rs",
+        "lines": 5708,
+        "note": "§5 第 6 步：路由按 workspace / terminal / git / settings 拆模块，测试移到 tests/"
+      },
+      {
+        "path": "apps/runtime/src/db.rs",
+        "lines": 3550,
+        "note": "§5 第 6 步：按表族拆分"
+      },
+      {
+        "path": "apps/runtime/src/git_repository.rs",
+        "lines": 3026,
+        "note": "§5 第 6 步：按 status / refs / history / operations 拆分"
+      },
+      {
+        "path": "apps/runtime/src/terminal/mod.rs",
+        "lines": 2861,
+        "note": "§5 第 6 步：会话、后端与转发分模块"
+      },
+      {
+        "path": "apps/runtime/src/git.rs",
+        "lines": 2721,
+        "note": "§5 第 6 步：与仓库操作一起拆分"
+      },
+      {
+        "path": "apps/runtime/src/collab/tests.rs",
+        "lines": 2426,
+        "note": "§5 第 6 步：按被测面拆分测试文件"
+      },
+      {
+        "path": "apps/runtime/src/browser/session.rs",
+        "lines": 2167,
+        "note": "§5 第 6 步：会话与 CDP 传输分离"
+      },
+      {
+        "path": "apps/runtime/tests/git_repository.rs",
+        "lines": 2145,
+        "note": "§5 第 6 步：随实现拆分同步拆测试"
+      },
+      {
+        "path": "packages/shared/src/api.ts",
+        "lines": 2055,
+        "note": "§5 第 6 步：按领域拆 schema 模块"
+      },
+      {
+        "path": "apps/web/src/api/client.ts",
+        "lines": 1825,
+        "note": "§5 第 6 步：按资源拆客户端"
+      },
+      {
+        "path": "crates/protocol/tests/contract.rs",
+        "lines": 1821,
+        "note": "§5 第 6 步：按 proto 文件拆契约测试"
+      },
+      {
+        "path": "scripts/canvas-ownership-e2e.mjs",
+        "lines": 1615,
+        "note": "§5 第 6 步：端到端脚本按阶段拆分"
+      },
+      {
+        "path": "packages/protocol-ts/test/contract.test.ts",
+        "lines": 1545,
+        "note": "§5 第 6 步：按 proto 文件拆契约测试"
+      }
+    ]
+  },
+  "migrations": {
+    "lock": "migrations.lock",
+    "sources": [
+      { "path": "apps/runtime/migrations", "kind": "directory" },
+      { "path": "apps/host/internal/migration/legacy", "kind": "directory" },
+      {
+        "path": "apps/host/internal/storage/schema.go",
+        "kind": "go-constants",
+        "pattern": "const (schemaV\\d+)"
+      }
+    ]
+  },
+  "proto": {
+    "schemas": "proto/armadra/v1",
+    "fixtures": "proto/fixtures",
+    "goTests": "apps/host/gen/armadra/v1",
+    "rustTests": "crates/protocol/tests",
+    "tsTests": "packages/protocol-ts/test"
+  }
+}
