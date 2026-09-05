@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"math"
 	"regexp"
 
 	pb "armadra.local/host/gen/armadra/v1"
@@ -130,6 +131,40 @@ func (e *Engine) markUnknown(ctx context.Context, snapshot RunSnapshot, reason s
 	return e.commit(ctx, "host", "unknown-outcome", update{entityKey(snapshot.Run.WorkspaceId, runKind, snapshot.Run.Id), snapshot.Revision, snapshot.Run})
 }
 
+// AttentionThreshold is how many consecutive unrepairable target refusals
+// raise a plan's needs-attention flag. One refusal can be a Worker restart in
+// progress; a second one means a person has to repair or redefine the target.
+const AttentionThreshold = 2
+
+// unrepairable reports refusals that no retry or wait can fix: the Host's own
+// definition says this target cannot be rebuilt, is not a command session, or
+// no longer carries the generation the plan was frozen against.
+func unrepairable(state pb.AutomationRunState, reason string) bool {
+	return state == Skipped && (reason == "TARGET_UNSUPPORTED" || reason == "STALE_GENERATION")
+}
+
+// noteAttention folds one finished run into the plan's needs-attention state.
+// Only observed delivery clears it: a cancelled, paused or expired run proves
+// nothing about the target, so it must not quietly retire a real warning.
+func noteAttention(plan *pb.AutomationPlan, run *pb.AutomationRun, state pb.AutomationRunState, reason string) {
+	if run.DeliveryObserved {
+		plan.NeedsAttention = false
+		plan.AttentionReasonCode = ""
+		plan.AttentionStreak = 0
+		return
+	}
+	if !unrepairable(state, reason) {
+		return
+	}
+	if plan.AttentionStreak < math.MaxUint32 {
+		plan.AttentionStreak++
+	}
+	if plan.AttentionStreak >= AttentionThreshold {
+		plan.NeedsAttention = true
+		plan.AttentionReasonCode = reason
+	}
+}
+
 func (e *Engine) finish(ctx context.Context, snapshot RunSnapshot, state pb.AutomationRunState, reason string, at int64, receipt *pb.AutomationReceipt) error {
 	run := snapshot.Run
 	if !terminal(state) {
@@ -170,6 +205,9 @@ func (e *Engine) finish(ctx context.Context, snapshot RunSnapshot, state pb.Auto
 		sum := sha256.Sum256(wire)
 		run.ReceiptSequence = receipt.Sequence
 		run.ReceiptSha256 = sum[:]
+	}
+	if run.ConfigVersion == plan.Plan.ConfigVersion {
+		noteAttention(plan.Plan, run, state, reason)
 	}
 	c := plan.Plan.Config
 	if plan.Plan.State == Active && run.ConfigVersion == plan.Plan.ConfigVersion {

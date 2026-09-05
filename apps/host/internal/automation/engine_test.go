@@ -384,6 +384,73 @@ func TestQueueOnePauseAndSharedTargetGate(t *testing.T) {
 	}
 }
 
+// A plan whose target the Host itself refuses keeps its real state; it gains a
+// needs-attention marker so a person can repair it, and a single refusal — a
+// Worker restart in progress, say — is never enough to raise one.
+func TestConsecutiveUnsupportedTargetRaisesPlanNeedsAttention(t *testing.T) {
+	f := setup(t)
+	f.activate(t, "plan", f.interval())
+	f.dispatcher.status = TargetStatus{State: TargetUnsupported}
+	f.tick(t)
+	first := f.plan(t, "plan")
+	if first.Plan.NeedsAttention || first.Plan.AttentionStreak != 1 || first.Plan.AttentionReasonCode != "" {
+		t.Fatal("a single refusal already asked for attention")
+	}
+	f.clock.Add(1000)
+	f.tick(t)
+	raised := f.plan(t, "plan")
+	if !raised.Plan.NeedsAttention || raised.Plan.AttentionReasonCode != "TARGET_UNSUPPORTED" || raised.Plan.AttentionStreak != 2 {
+		t.Fatal("consecutive refusals did not raise needs-attention")
+	}
+	if raised.Plan.State != Active {
+		t.Fatal("needs-attention silently changed the plan state")
+	}
+	for _, run := range f.allRuns(t, "plan") {
+		if run.Run.State != Skipped || run.Run.ReasonCode != "TARGET_UNSUPPORTED" {
+			t.Fatal("a refused run was not recorded as skipped")
+		}
+	}
+	// Repairing the target and observing one delivery retires the marker.
+	f.dispatcher.status = TargetStatus{State: TargetReady, Generation: 7}
+	f.clock.Add(1000)
+	f.tick(t)
+	repaired := f.plan(t, "plan")
+	if repaired.Plan.NeedsAttention || repaired.Plan.AttentionStreak != 0 || repaired.Plan.AttentionReasonCode != "" {
+		t.Fatal("a delivered run did not clear needs-attention")
+	}
+}
+
+// Pausing proves nothing about a target, so it must not retire a warning;
+// redefining the plan is the repair action and does clear it.
+func TestNeedsAttentionSurvivesPauseAndClearsOnEdit(t *testing.T) {
+	f := setup(t)
+	f.activate(t, "plan", f.interval())
+	f.dispatcher.status = TargetStatus{State: TargetUnsupported}
+	f.tick(t)
+	f.clock.Add(1000)
+	f.tick(t)
+	flagged := f.plan(t, "plan")
+	if !flagged.Plan.NeedsAttention {
+		t.Fatal("consecutive refusals did not raise needs-attention")
+	}
+	paused, err := f.engine.Pause(context.Background(), testAuth, "workspace", "plan", flagged.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !f.plan(t, "plan").Plan.NeedsAttention {
+		t.Fatal("pausing retired a warning it cannot disprove")
+	}
+	edited := proto.Clone(paused.Plan.Config).(*pb.AutomationPlanConfig)
+	edited.Target.SessionId = "replacement"
+	updated, err := f.engine.Define(context.Background(), testAuth, "plan", edited, f.plan(t, "plan").Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Plan.NeedsAttention || updated.Plan.AttentionStreak != 0 || updated.Plan.AttentionReasonCode != "" {
+		t.Fatal("redefining the target did not clear needs-attention")
+	}
+}
+
 func TestPauseRacingCapabilityProbePreventsLateDispatch(t *testing.T) {
 	f := setup(t)
 	f.activate(t, "race", f.once())

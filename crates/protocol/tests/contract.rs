@@ -244,6 +244,22 @@ fn automation_host_surface() {
             config_sha256: vec![3; 32],
         },
     );
+    check(
+        "automation_needs_attention",
+        AutomationPlanSnapshot {
+            plan: Some(AutomationPlan {
+                id: "plan-1".into(),
+                config_version: 2,
+                state: AutomationPlanState::Active as i32,
+                needs_attention: true,
+                attention_reason_code: "TARGET_UNSUPPORTED".into(),
+                attention_streak: u32::MAX,
+                ..Default::default()
+            }),
+            revision: u64::MAX,
+            config_sha256: vec![3; 32],
+        },
+    );
 }
 
 #[test]

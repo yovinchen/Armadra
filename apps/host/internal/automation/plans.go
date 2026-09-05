@@ -70,6 +70,11 @@ func (e *Engine) Define(ctx context.Context, auth Authorization, id string, conf
 	plan.State = Draft
 	plan.NextDueUnixMs = 0
 	plan.ActivationSha256 = nil
+	// An edit is the repair action for a refused target, so the old streak must
+	// not keep flagging a plan whose target the user just replaced.
+	plan.NeedsAttention = false
+	plan.AttentionReasonCode = ""
+	plan.AttentionStreak = 0
 	plan.UpdatedAtUnixMs = max(now, plan.UpdatedAtUnixMs)
 	activation.Enabled = false
 	activation.ConfigVersion = plan.ConfigVersion

@@ -133,6 +133,18 @@ describe("shared Go / Rust / TypeScript wire contracts", () => {
       revision: maxUint64,
       configSha256: new Uint8Array(32).fill(3),
     });
+    check("automation_needs_attention", AutomationPlanSnapshotSchema, {
+      plan: {
+        id: "plan-1",
+        configVersion: 2n,
+        state: AutomationPlanState.ACTIVE,
+        needsAttention: true,
+        attentionReasonCode: "TARGET_UNSUPPORTED",
+        attentionStreak: 4294967295,
+      },
+      revision: maxUint64,
+      configSha256: new Uint8Array(32).fill(3),
+    });
   });
   it("preserves private Worker identity and partial UTF-8 byte chunks", () => {
     check("worker_hello", WorkerRequestSchema, {

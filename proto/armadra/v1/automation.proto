@@ -113,6 +113,16 @@ message AutomationPlan {
   string pending_run_id = 10;
   int64 created_at_unix_ms = 11;
   int64 updated_at_unix_ms = 12;
+  // Set once the target has refused consecutively for a reason a retry cannot
+  // fix (an unrebuildable command session / TARGET_UNSUPPORTED). The plan is
+  // still reported with its real state; this never silently pauses or edits it,
+  // and a single transient refusal never raises it.
+  bool needs_attention = 13;
+  // Stable machine code for the condition above, never raw executor output.
+  string attention_reason_code = 14;
+  // Consecutive unrepairable refusals observed. Reset by any other outcome and
+  // by editing the plan, so an old streak cannot flag a repaired plan.
+  uint32 attention_streak = 15;
 }
 message AutomationPlanRef { string plan_id = 1; string workspace_id = 2; }
 message AutomationRunRef { string run_id = 1; string plan_id = 2; string workspace_id = 3; }

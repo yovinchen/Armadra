@@ -1017,8 +1017,18 @@ type AutomationPlan struct {
 	PendingRunId          string `protobuf:"bytes,10,opt,name=pending_run_id,json=pendingRunId,proto3" json:"pending_run_id,omitempty"`
 	CreatedAtUnixMs       int64  `protobuf:"varint,11,opt,name=created_at_unix_ms,json=createdAtUnixMs,proto3" json:"created_at_unix_ms,omitempty"`
 	UpdatedAtUnixMs       int64  `protobuf:"varint,12,opt,name=updated_at_unix_ms,json=updatedAtUnixMs,proto3" json:"updated_at_unix_ms,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Set once the target has refused consecutively for a reason a retry cannot
+	// fix (an unrebuildable command session / TARGET_UNSUPPORTED). The plan is
+	// still reported with its real state; this never silently pauses or edits it,
+	// and a single transient refusal never raises it.
+	NeedsAttention bool `protobuf:"varint,13,opt,name=needs_attention,json=needsAttention,proto3" json:"needs_attention,omitempty"`
+	// Stable machine code for the condition above, never raw executor output.
+	AttentionReasonCode string `protobuf:"bytes,14,opt,name=attention_reason_code,json=attentionReasonCode,proto3" json:"attention_reason_code,omitempty"`
+	// Consecutive unrepairable refusals observed. Reset by any other outcome and
+	// by editing the plan, so an old streak cannot flag a repaired plan.
+	AttentionStreak uint32 `protobuf:"varint,15,opt,name=attention_streak,json=attentionStreak,proto3" json:"attention_streak,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *AutomationPlan) Reset() {
@@ -1131,6 +1141,27 @@ func (x *AutomationPlan) GetCreatedAtUnixMs() int64 {
 func (x *AutomationPlan) GetUpdatedAtUnixMs() int64 {
 	if x != nil {
 		return x.UpdatedAtUnixMs
+	}
+	return 0
+}
+
+func (x *AutomationPlan) GetNeedsAttention() bool {
+	if x != nil {
+		return x.NeedsAttention
+	}
+	return false
+}
+
+func (x *AutomationPlan) GetAttentionReasonCode() string {
+	if x != nil {
+		return x.AttentionReasonCode
+	}
+	return ""
+}
+
+func (x *AutomationPlan) GetAttentionStreak() uint32 {
+	if x != nil {
+		return x.AttentionStreak
 	}
 	return 0
 }
@@ -2659,7 +2690,7 @@ const file_armadra_v1_automation_proto_rawDesc = "" +
 	"\fprincipal_id\x18\x06 \x01(\tR\vprincipalId\x12)\n" +
 	"\x10authorization_id\x18\a \x01(\tR\x0fauthorizationId\x121\n" +
 	"\x15authorized_at_unix_ms\x18\b \x01(\x03R\x12authorizedAtUnixMs\x12\x18\n" +
-	"\aenabled\x18\t \x01(\bR\aenabled\"\x88\x04\n" +
+	"\aenabled\x18\t \x01(\bR\aenabled\"\x90\x05\n" +
 	"\x0eAutomationPlan\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
 	"\x0econfig_version\x18\x02 \x01(\x04R\rconfigVersion\x128\n" +
@@ -2673,7 +2704,10 @@ const file_armadra_v1_automation_proto_rawDesc = "" +
 	"\x0epending_run_id\x18\n" +
 	" \x01(\tR\fpendingRunId\x12+\n" +
 	"\x12created_at_unix_ms\x18\v \x01(\x03R\x0fcreatedAtUnixMs\x12+\n" +
-	"\x12updated_at_unix_ms\x18\f \x01(\x03R\x0fupdatedAtUnixMs\"O\n" +
+	"\x12updated_at_unix_ms\x18\f \x01(\x03R\x0fupdatedAtUnixMs\x12'\n" +
+	"\x0fneeds_attention\x18\r \x01(\bR\x0eneedsAttention\x122\n" +
+	"\x15attention_reason_code\x18\x0e \x01(\tR\x13attentionReasonCode\x12)\n" +
+	"\x10attention_streak\x18\x0f \x01(\rR\x0fattentionStreak\"O\n" +
 	"\x11AutomationPlanRef\x12\x17\n" +
 	"\aplan_id\x18\x01 \x01(\tR\x06planId\x12!\n" +
 	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\"e\n" +
