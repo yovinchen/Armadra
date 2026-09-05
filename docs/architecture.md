@@ -140,8 +140,7 @@ SQLite 基础表由 `0001_initial.sql` 创建；`0002_agent_mailbox.sql` 增量�
 | `hook_installs`                       | 每个 CLI 的 hook 安装记录                           |
 | `conversations`                       | 会话索引（provider + session id → 标题）            |
 
-已知迁移按版本顺序执行。版本未知或校验和不匹配时：`db::connect` 会把 `canvas.db` 改名为
-`canvas.db.legacy-<时间戳>`，记一条 warn，然后按当前 schema 建新库。
+`db::connect` 在同一 `BEGIN IMMEDIATE` 事务内先检查迁移账本，再执行已知迁移与启动恢复。未知版本、校验和不符、脏记录、损坏账本、无账本的非空 schema 或迁移历史缺口均拒绝启动；失败回滚并关闭连接池，不改名、删除或重建原库。SQLx 的 SQLite 迁移锁本身为空操作，外层事务用于防止校验与迁移之间的并发写入。既有 SQL 迁移文件保持原字节，文件中旧的重建说明是历史注释，不能为了更新说明而改变其校验和。
 
 终端原始输出、密钥和 `.env` 不进入画板持久化。
 

@@ -85,6 +85,8 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 | `3339a88` | 后台启停 CLI               | 独立 start/status/stop/serve、真实子进程保活、并发收敛、HTTP 排空与重启身份                                     |
 | `fd240f6` | Go Host sidecar准备        | 6 项目标/路径测试，本机构建与Windows PE交叉产物；保留Rust sidecar流程                                           |
 | `f03c23a` | 原生管理结果Protobuf       | start/status/stop二进制输出、跨语言样例及CLI生命周期验证                                                        |
+| `7687ff5` | SQLite 一致性手动备份 | 4 项快照回归及实际 API；WAL、并发命名和失败保护 |
+| `64f1c1a` | 私有桌面退出协议 | Go/Rust/TS 共享帧样例与生成漂移检查 |
 | `40dc141` | 桌面自动启动/发现Host      | 10项Rust测试、clippy、真实Rust启动器和macOS原生进程保活；窗口菜单退出未验收                                     |
 
 协议验收覆盖：中文/emoji、uint64 最大值、int64 最小值、超过 JS 安全整数的 generation、optional 未传/零值、oneof 三个分支、截断拒绝、未知字段行为。Go/TS 默认保留未知字段；prost 会丢弃，未来 Rust 透明中继必须转发原始载荷。尚未引入枚举，不将未知枚举检查记为已完成。
@@ -149,6 +151,9 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - Windows Go x64/arm64构建为对应PE；没有Windows/Linux原生Tauri、安装包或签名发布验收。Go Host保活不能替代尚未迁移的Rust执行器或实际定时任务。
 
 ## M1 数据安全补齐
+
+- 数据库启动在同一 SQLite 写事务内先校验账本，再执行已知前缀迁移和恢复；未知/损坏/脏历史明确拒绝，失败回滚并关闭连接池，取消自动改名重建。
+- 子 Agent 实际通过 26 项 `db::tests`：合法旧版升级、后续失败回滚、WAL 已提交数据保留、拒绝时不改变运行会话、账本异常、编码文件路径及内存库。不修改既有迁移文件，不把 SQLite 自身日志维护描述为文件逐字节不变。
 
 - 手动数据库备份已改为当前连接的 SQLite 一致性快照；包含 WAL 已提交数据，不再直接复制主文件。SQL 绑定文件名，私有暂存文件验证完整性并同步后以不覆盖方式发布。
 - 备份源通过连接自身的 `PRAGMA database_list` 定位，内存库或已消失的源明确拒绝；同秒并发操作使用独立名字。HTTP 请求取消后任务继续负责完成和清理，避免 SQLite 仍写入时删除目标。

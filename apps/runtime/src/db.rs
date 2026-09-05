@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use chrono::Utc;
 use serde_json::Value;
 use sqlx::{Row, SqlitePool, sqlite::SqlitePoolOptions};
@@ -43,109 +41,159 @@ const MAX_KANBAN_COLUMN_ID_CHARS: usize = 64;
 const MAX_KANBAN_COLUMN_TITLE_CHARS: usize = 80;
 pub async fn connect(database_url: &str) -> AppResult<SqlitePool> {
     let migrator = sqlx::migrate!("./migrations");
-    discard_incompatible_database(database_url, &migrator).await?;
+    // SQLx owns URL parsing, including percent-encoded filenames and all memory
+    // modes. Never infer a filesystem path or rename a database from this URL.
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
         .connect(database_url)
         .await?;
-    migrator.run(&pool).await.map_err(|error| {
-        AppError::Internal(format!("Could not migrate the local database: {error}"))
-    })?;
-    // A direct PTY died with the process that wrote the row. A tmux session did
-    // not: `terminal::gc::reconcile` decides what happened to those.
-    sqlx::query(
-        "UPDATE terminal_sessions SET status = 'failed', attach_state = 'exited', ended_at = ? \
-         WHERE status = 'running' AND backend_kind <> 'tmux'",
-    )
-    .bind(Utc::now().to_rfc3339())
-    .execute(&pool)
-    .await?;
+    if let Err(error) = initialize_database(&pool, &migrator).await {
+        pool.close().await;
+        return Err(error);
+    }
     Ok(pool)
 }
 
-/// There is no upgrade path into the current schema: a database written by an
-/// older build is not data this product understands, and nothing tries to
-/// rescue it. It is renamed aside — `canvas.db.legacy-<timestamp>`, with its
-/// `-wal` / `-shm` companions — and a fresh database is created in its place.
-///
-/// "Older build" means: `_sqlx_migrations` records something this binary does
-/// not ship — a version it has no migration for, or a version whose checksum
-/// differs from the file embedded here. That is exactly the condition on which
-/// `Migrator::run` would otherwise abort at startup, so this turns a hard
-/// failure into a clean start on an empty board.
-async fn discard_incompatible_database(
-    database_url: &str,
+async fn initialize_database(
+    pool: &SqlitePool,
     migrator: &sqlx::migrate::Migrator,
 ) -> AppResult<()> {
-    let Some(path) = sqlite_file_path(database_url) else {
-        return Ok(());
-    };
-    if !path.exists() {
-        return Ok(());
-    }
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect(database_url)
+    // SQLx's SQLite migration lock is a no-op. One write transaction keeps the
+    // read-only preflight and all migration writes on the same schema snapshot.
+    // SQLx applies its individual migrations using nested savepoints here.
+    let mut transaction = pool.begin_with("BEGIN IMMEDIATE").await?;
+    let result: AppResult<()> = async {
+        preflight_database(&mut transaction, migrator).await?;
+        migrator.run(&mut *transaction).await.map_err(|error| {
+            AppError::Internal(format!("Could not migrate the local database: {error}"))
+        })?;
+        // A direct PTY died with the process that wrote the row. A tmux session did
+        // not: `terminal::gc::reconcile` decides what happened to those.
+        sqlx::query(
+            "UPDATE terminal_sessions SET status = 'failed', attach_state = 'exited', ended_at = ? \
+         WHERE status = 'running' AND backend_kind <> 'tmux'",
+        )
+        .bind(Utc::now().to_rfc3339())
+        .execute(&mut *transaction)
         .await?;
-    // A database with no ledger has never been migrated; the migrator will
-    // simply apply everything to it.
-    let applied: Vec<(i64, Vec<u8>)> =
-        sqlx::query_as("SELECT version, checksum FROM _sqlx_migrations WHERE success = TRUE")
-            .fetch_all(&pool)
-            .await
-            .unwrap_or_default();
-    pool.close().await;
-
-    let stale = applied.iter().find(|(version, checksum)| {
-        !migrator.iter().any(|known| {
-            known.version == *version && known.checksum.as_ref() == checksum.as_slice()
-        })
-    });
-    let Some((version, _)) = stale else {
-        return Ok(());
-    };
-
-    let suffix = format!(".legacy-{}", Utc::now().format("%Y%m%d%H%M%S"));
-    let retired = append_suffix(&path, &suffix);
-    std::fs::rename(&path, &retired).map_err(|error| {
-        AppError::Internal(format!(
-            "Could not set the incompatible database aside: {error}"
-        ))
-    })?;
-    // The journal companions belong to the file that just moved; leaving them
-    // behind would have SQLite recover them into the new database.
-    for extension in ["-wal", "-shm"] {
-        let companion = append_suffix(&path, extension);
-        if companion.exists() {
-            let _ = std::fs::rename(&companion, append_suffix(&retired, extension));
+        Ok(())
+    }
+    .await;
+    match result {
+        Ok(()) => transaction.commit().await?,
+        Err(error) => {
+            transaction.rollback().await?;
+            return Err(error);
         }
     }
-    tracing::warn!(
-        from = %path.display(),
-        to = %retired.display(),
-        version,
-        "the local database was written by an incompatible build; it was set aside and a new one created"
-    );
     Ok(())
 }
 
-fn append_suffix(path: &std::path::Path, suffix: &str) -> PathBuf {
-    let mut name = path.to_path_buf().into_os_string();
-    name.push(suffix);
-    PathBuf::from(name)
-}
-
-/// `sqlite://<path>?query` / `sqlite:<path>` → filesystem path. In-memory and
-/// unparsable URLs return `None` (nothing to back up).
-fn sqlite_file_path(database_url: &str) -> Option<PathBuf> {
-    let rest = database_url
-        .strip_prefix("sqlite://")
-        .or_else(|| database_url.strip_prefix("sqlite:"))?;
-    let rest = rest.split('?').next().unwrap_or(rest);
-    if rest.is_empty() || rest == ":memory:" {
-        return None;
+/// Unknown or damaged history requires an explicit recovery/upgrade decision.
+/// This check only reads schema and ledger data; it never creates or repairs the
+/// migration table. SQLite may maintain journals normally, but rejection must
+/// leave business data and the migration ledger unchanged.
+async fn preflight_database(
+    connection: &mut sqlx::SqliteConnection,
+    migrator: &sqlx::migrate::Migrator,
+) -> AppResult<()> {
+    let objects: Vec<(String, String)> = sqlx::query_as(
+        "SELECT name, type FROM sqlite_schema WHERE name NOT LIKE 'sqlite\\_%' ESCAPE '\\'",
+    )
+    .fetch_all(&mut *connection)
+    .await?;
+    let ledger = objects.iter().find(|(name, _)| name == "_sqlx_migrations");
+    match ledger {
+        None if objects.is_empty() => return Ok(()),
+        None => return Err(AppError::Internal("Database has an unrecognized schema without a migration ledger; startup refused without changing its data".into())),
+        Some((_, kind)) if kind != "table" => return Err(AppError::Internal("Database migration ledger is not a table; startup refused".into())),
+        _ => {}
     }
-    Some(PathBuf::from(rest))
+    let columns = sqlx::query("PRAGMA table_info('_sqlx_migrations')")
+        .fetch_all(&mut *connection)
+        .await?;
+    let expected = [
+        "version",
+        "description",
+        "installed_on",
+        "success",
+        "checksum",
+        "execution_time",
+    ];
+    if columns.len() != expected.len()
+        || expected.iter().any(|name| {
+            !columns.iter().any(|column| {
+                column
+                    .try_get::<String, _>("name")
+                    .is_ok_and(|actual| actual == *name)
+                    && column
+                        .try_get::<i64, _>("pk")
+                        .is_ok_and(|pk| pk == if *name == "version" { 1 } else { 0 })
+                    && (*name == "version"
+                        || column
+                            .try_get::<i64, _>("notnull")
+                            .is_ok_and(|required| required == 1))
+            })
+        })
+    {
+        return Err(AppError::Internal(
+            "Database migration ledger has an unrecognized structure; startup refused".into(),
+        ));
+    }
+    let applied = sqlx::query(
+        "SELECT version, checksum, success, typeof(version) AS version_type, \
+         typeof(checksum) AS checksum_type, typeof(success) AS success_type \
+         FROM _sqlx_migrations ORDER BY version",
+    )
+    .fetch_all(&mut *connection)
+    .await?;
+    if applied.is_empty() && objects.iter().any(|(name, _)| name != "_sqlx_migrations") {
+        return Err(AppError::Internal(
+            "Database schema has no recorded migrations; startup refused without changing its data"
+                .into(),
+        ));
+    }
+    let known = migrator
+        .iter()
+        .filter(|migration| !migration.migration_type.is_down_migration())
+        .collect::<Vec<_>>();
+    for (index, row) in applied.iter().enumerate() {
+        if row.try_get::<String, _>("version_type")? != "integer"
+            || row.try_get::<String, _>("checksum_type")? != "blob"
+            || row.try_get::<String, _>("success_type")? != "integer"
+        {
+            return Err(AppError::Internal(
+                "Database migration ledger contains invalid values; startup refused".into(),
+            ));
+        }
+        let version: i64 = row.try_get("version")?;
+        let success: i64 = row.try_get("success")?;
+        if success != 1 {
+            return Err(AppError::Internal(format!(
+                "Database migration {version} is dirty or invalid; startup refused without changing its data"
+            )));
+        }
+        let checksum: Vec<u8> = row.try_get("checksum")?;
+        let Some(migration) = known.iter().find(|migration| migration.version == version) else {
+            return Err(AppError::Internal(format!(
+                "Database migration {version} is unknown to this build; startup refused without changing its data"
+            )));
+        };
+        if migration.checksum.as_ref() != checksum.as_slice() {
+            return Err(AppError::Internal(format!(
+                "Database migration {version} checksum does not match this build; startup refused without changing its data"
+            )));
+        }
+        if known
+            .get(index)
+            .is_none_or(|migration| migration.version != version)
+        {
+            return Err(AppError::Internal(
+                "Database migration history is not a complete known prefix; startup refused".into(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -1727,6 +1775,7 @@ fn string_field(data: &Value, name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use sqlx::{ConnectOptions, sqlite::SqliteConnectOptions};
     use tempfile::tempdir;
 
     use super::*;
@@ -1785,56 +1834,456 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
+        sqlx::query("INSERT INTO canvases VALUES ('kept', '{\"strokes\":[1,2,3]}')")
+            .execute(&pool)
+            .await
+            .unwrap();
         pool.close().await;
     }
 
-    /// A database this build does not recognise is not migrated and not
-    /// repaired: it is renamed aside and a fresh one takes its place, so the
-    /// app starts on an empty board instead of refusing to start at all.
+    fn database_url(path: &std::path::Path) -> String {
+        SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(true)
+            .to_url_lossy()
+            .to_string()
+    }
+
+    fn assert_no_legacy(directory: &std::path::Path) {
+        assert!(
+            !std::fs::read_dir(directory)
+                .unwrap()
+                .filter_map(Result::ok)
+                .any(|entry| entry.file_name().to_string_lossy().contains(".legacy-"))
+        );
+    }
+
+    async fn assert_foreign_data_preserved(url: &str) {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(url)
+            .await
+            .unwrap();
+        let payload: String =
+            sqlx::query_scalar("SELECT strokes_json FROM canvases WHERE id = 'kept'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(payload, "{\"strokes\":[1,2,3]}");
+        pool.close().await;
+    }
+
+    /// Rejected histories are left in place, including their ledger and data.
     #[tokio::test]
-    async fn a_database_from_an_incompatible_build_is_set_aside() {
+    async fn incompatible_database_preflight_preserves_data_and_ledger() {
         for (version, checksum) in [
             (1_i64, b"not our checksum".to_vec()),
-            (9_i64, vec![0_u8; 48]),
+            (999_i64, vec![0_u8; 48]),
         ] {
             let directory = tempdir().unwrap();
             let path = directory.path().join("canvas.db");
-            let database_url = format!("sqlite://{}?mode=rwc", path.display());
-            seed_foreign_database(&database_url, version, &checksum).await;
-
-            let pool = connect(&database_url).await.unwrap();
-
-            // The retired file is next to the new one, under its own name…
-            let retired = std::fs::read_dir(directory.path())
-                .unwrap()
-                .filter_map(Result::ok)
-                .map(|entry| entry.file_name().to_string_lossy().into_owned())
-                .filter(|name| name.starts_with("canvas.db.legacy-"))
-                .collect::<Vec<_>>();
-            assert_eq!(retired.len(), 1, "{retired:?}");
-            assert!(!retired[0].ends_with("-wal") && !retired[0].ends_with("-shm"));
-
-            // …and it took its contents with it: the new database is this
-            // build's schema and nothing else.
-            let leftovers: Option<String> =
-                sqlx::query_scalar("SELECT name FROM sqlite_master WHERE name = 'canvases'")
-                    .fetch_optional(&pool)
+            let url = database_url(&path);
+            seed_foreign_database(&url, version, &checksum).await;
+            assert!(connect(&url).await.is_err());
+            assert!(path.exists());
+            assert_no_legacy(directory.path());
+            assert_foreign_data_preserved(&url).await;
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect(&url)
+                .await
+                .unwrap();
+            let ledger: Vec<(i64, Vec<u8>, i64)> =
+                sqlx::query_as("SELECT version, checksum, success FROM _sqlx_migrations")
+                    .fetch_all(&pool)
                     .await
                     .unwrap();
-            assert!(leftovers.is_none());
-
-            // The new database is usable, which is the whole point.
-            let workspace = create_workspace(
-                &pool,
-                "fresh",
-                directory.path().to_str().unwrap(),
-                None,
-                None,
+            assert_eq!(ledger, vec![(version, checksum, 1)]);
+            let new_tables: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM sqlite_schema WHERE name IN ('workspaces', 'agent_mailbox')",
             )
+            .fetch_one(&pool)
             .await
             .unwrap();
-            assert_eq!(list_boards(&pool, &workspace.id).await.unwrap().len(), 1);
+            assert_eq!(new_tables, 0);
+            pool.close().await;
         }
+    }
+
+    #[tokio::test]
+    async fn dirty_or_malformed_ledger_is_never_treated_as_empty() {
+        let migrator = sqlx::migrate!("./migrations");
+        for statement in [
+            "UPDATE _sqlx_migrations SET success = FALSE",
+            "UPDATE _sqlx_migrations SET success = 2",
+            "UPDATE _sqlx_migrations SET version = 'broken'",
+            "UPDATE _sqlx_migrations SET checksum = 'not a blob'",
+            "ALTER TABLE _sqlx_migrations DROP COLUMN checksum",
+            "DELETE FROM _sqlx_migrations",
+            "DROP TABLE _sqlx_migrations",
+        ] {
+            let directory = tempdir().unwrap();
+            let url = database_url(&directory.path().join("ledger.db"));
+            seed_foreign_database(&url, 1, migrator.iter().next().unwrap().checksum.as_ref()).await;
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect(&url)
+                .await
+                .unwrap();
+            sqlx::query(sqlx::AssertSqlSafe(statement))
+                .execute(&pool)
+                .await
+                .unwrap();
+            let schema_before: Vec<(String, String)> = sqlx::query_as(
+                "SELECT name, sql FROM sqlite_schema WHERE sql IS NOT NULL ORDER BY name",
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            pool.close().await;
+            let bytes_before = std::fs::read(directory.path().join("ledger.db")).unwrap();
+            assert!(connect(&url).await.is_err(), "accepted {statement}");
+            assert_foreign_data_preserved(&url).await;
+            assert_no_legacy(directory.path());
+            // This quiet DELETE-journal fixture should not change even at the
+            // byte level; live WAL recovery is not covered by this assertion.
+            assert_eq!(
+                std::fs::read(directory.path().join("ledger.db")).unwrap(),
+                bytes_before
+            );
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect(&url)
+                .await
+                .unwrap();
+            let schema_after: Vec<(String, String)> = sqlx::query_as(
+                "SELECT name, sql FROM sqlite_schema WHERE sql IS NOT NULL ORDER BY name",
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            assert_eq!(schema_after, schema_before);
+            pool.close().await;
+        }
+    }
+
+    #[tokio::test]
+    async fn unknown_schema_without_ledger_and_unreadable_ledger_are_preserved() {
+        for view_ledger in [false, true] {
+            let directory = tempdir().unwrap();
+            let url = database_url(&directory.path().join("unknown.db"));
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect(&url)
+                .await
+                .unwrap();
+            sqlx::query("CREATE TABLE foreign_data (value TEXT)")
+                .execute(&pool)
+                .await
+                .unwrap();
+            sqlx::query("INSERT INTO foreign_data VALUES ('keep me')")
+                .execute(&pool)
+                .await
+                .unwrap();
+            if view_ledger {
+                sqlx::query("CREATE VIEW _sqlx_migrations AS SELECT * FROM missing_table")
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+            }
+            pool.close().await;
+            assert!(connect(&url).await.is_err());
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect(&url)
+                .await
+                .unwrap();
+            assert_eq!(
+                sqlx::query_scalar::<_, String>("SELECT value FROM foreign_data")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap(),
+                "keep me"
+            );
+            assert_eq!(sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name='_sqlx_migrations'").fetch_one(&pool).await.unwrap(), 0);
+            pool.close().await;
+            assert_no_legacy(directory.path());
+        }
+    }
+
+    #[tokio::test]
+    async fn corrupt_database_is_not_replaced() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("corrupt.db");
+        let original = b"this file is not a SQLite database";
+        std::fs::write(&path, original).unwrap();
+        assert!(connect(&database_url(&path)).await.is_err());
+        assert_eq!(std::fs::read(path).unwrap(), original);
+        assert_no_legacy(directory.path());
+    }
+
+    #[tokio::test]
+    async fn compatible_old_migration_prefix_upgrades_without_resetting_data() {
+        let directory = tempdir().unwrap();
+        let url = database_url(&directory.path().join("old.db"));
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&url)
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations")
+            .run_to(1, &pool)
+            .await
+            .unwrap();
+        let workspace = create_workspace(
+            &pool,
+            "kept project",
+            directory.path().to_str().unwrap(),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        let first_checksum: Vec<u8> =
+            sqlx::query_scalar("SELECT checksum FROM _sqlx_migrations WHERE version=1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        pool.close().await;
+        let upgraded = connect(&url).await.unwrap();
+        assert_eq!(
+            get_workspace(&upgraded, &workspace.id).await.unwrap().name,
+            "kept project"
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM _sqlx_migrations")
+                .fetch_one(&upgraded)
+                .await
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, Vec<u8>>(
+                "SELECT checksum FROM _sqlx_migrations WHERE version=1"
+            )
+            .fetch_one(&upgraded)
+            .await
+            .unwrap(),
+            first_checksum
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM agent_mailbox")
+                .fetch_one(&upgraded)
+                .await
+                .unwrap(),
+            0
+        );
+        upgraded.close().await;
+        assert_no_legacy(directory.path());
+    }
+
+    #[tokio::test]
+    async fn migration_history_gaps_fail_before_missing_migrations_run() {
+        let directory = tempdir().unwrap();
+        let url = database_url(&directory.path().join("gap.db"));
+        let migrator = sqlx::migrate!("./migrations");
+        let second = migrator
+            .iter()
+            .find(|migration| migration.version == 2)
+            .unwrap();
+        seed_foreign_database(&url, second.version, second.checksum.as_ref()).await;
+        assert!(connect(&url).await.is_err());
+        assert_foreign_data_preserved(&url).await;
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&url)
+            .await
+            .unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM sqlite_schema WHERE name='workspaces'"
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+            0
+        );
+        pool.close().await;
+        assert_no_legacy(directory.path());
+    }
+
+    #[tokio::test]
+    async fn rejected_preflight_does_not_reconcile_running_sessions() {
+        let directory = tempdir().unwrap();
+        let url = database_url(&directory.path().join("sessions.db"));
+        let pool = connect(&url).await.unwrap();
+        let workspace = create_workspace(
+            &pool,
+            "keep running",
+            directory.path().to_str().unwrap(),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO terminal_sessions (id, workspace_id, cwd, shell, status, attach_state, created_at) VALUES ('session', ?, '/tmp', '/bin/sh', 'running', 'attached', '2026-09-05')")
+            .bind(&workspace.id).execute(&pool).await.unwrap();
+        sqlx::query("UPDATE _sqlx_migrations SET success = 0 WHERE version = 1")
+            .execute(&pool)
+            .await
+            .unwrap();
+        pool.close().await;
+        assert!(connect(&url).await.is_err());
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&url)
+            .await
+            .unwrap();
+        let session: (String, String, Option<String>) = sqlx::query_as(
+            "SELECT status, attach_state, ended_at FROM terminal_sessions WHERE id='session'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(session, ("running".into(), "attached".into(), None));
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT success FROM _sqlx_migrations WHERE version=1")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            0
+        );
+        pool.close().await;
+        assert_no_legacy(directory.path());
+    }
+
+    #[tokio::test]
+    async fn rejected_preflight_preserves_committed_wal_data_without_retiring_files() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("wal.db");
+        let url = database_url(&path);
+        seed_foreign_database(&url, 999, &[0; 48]).await;
+        let keeper = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&url)
+            .await
+            .unwrap();
+        sqlx::query("PRAGMA journal_mode = WAL")
+            .execute(&keeper)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE canvases SET strokes_json = 'committed in WAL' WHERE id='kept'")
+            .execute(&keeper)
+            .await
+            .unwrap();
+        assert!(directory.path().join("wal.db-wal").exists());
+        assert!(connect(&url).await.is_err());
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT strokes_json FROM canvases WHERE id='kept'")
+                .fetch_one(&keeper)
+                .await
+                .unwrap(),
+            "committed in WAL"
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT version FROM _sqlx_migrations")
+                .fetch_one(&keeper)
+                .await
+                .unwrap(),
+            999
+        );
+        assert!(path.exists());
+        assert!(directory.path().join("wal.db-wal").exists());
+        assert_no_legacy(directory.path());
+        keeper.close().await;
+    }
+
+    #[tokio::test]
+    async fn later_startup_failure_rolls_back_new_migrations_and_releases_lock() {
+        let directory = tempdir().unwrap();
+        let url = database_url(&directory.path().join("incomplete.db"));
+        let migrator = sqlx::migrate!("./migrations");
+        seed_foreign_database(&url, 1, migrator.iter().next().unwrap().checksum.as_ref()).await;
+        // Ledger itself is known, but its original business tables are missing.
+        // Migration 2 can run; subsequent session recovery must fail atomically.
+        assert!(connect(&url).await.is_err());
+        assert_foreign_data_preserved(&url).await;
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&url)
+            .await
+            .unwrap();
+        sqlx::query("PRAGMA busy_timeout = 100")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let mut lock = pool.begin_with("BEGIN EXCLUSIVE").await.unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM _sqlx_migrations")
+                .fetch_one(&mut *lock)
+                .await
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM sqlite_schema WHERE name='agent_mailbox'"
+            )
+            .fetch_one(&mut *lock)
+            .await
+            .unwrap(),
+            0
+        );
+        lock.rollback().await.unwrap();
+        pool.close().await;
+        assert_no_legacy(directory.path());
+    }
+
+    #[tokio::test]
+    async fn sqlx_encoded_filenames_and_memory_urls_use_the_same_preflight() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("canvas ?# 空间.db");
+        let url = database_url(&path);
+        let pool = connect(&url).await.unwrap();
+        pool.close().await;
+        assert!(path.is_file());
+        for url in ["sqlite::memory:", "sqlite://:memory:?cache=shared"] {
+            let pool = connect(url).await.unwrap();
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM _sqlx_migrations")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap(),
+                2
+            );
+            pool.close().await;
+        }
+        let memory_url = format!(
+            "sqlite://file:memory-{}?mode=memory&cache=shared",
+            Uuid::new_v4()
+        );
+        let keeper = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&memory_url)
+            .await
+            .unwrap();
+        sqlx::query("CREATE TABLE foreign_data (value TEXT)")
+            .execute(&keeper)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO foreign_data VALUES ('kept in memory')")
+            .execute(&keeper)
+            .await
+            .unwrap();
+        assert!(connect(&memory_url).await.is_err());
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT value FROM foreign_data")
+                .fetch_one(&keeper)
+                .await
+                .unwrap(),
+            "kept in memory"
+        );
+        keeper.close().await;
     }
 
     /// The complement: a database this build itself wrote is opened as it is.

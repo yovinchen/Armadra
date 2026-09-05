@@ -150,7 +150,6 @@ go -C apps/host run ./cmd/armadra-host --allow-origin http://127.0.0.1:1420
 ## 约定
 
 - JSON 字段一律 camelCase；错误统一 `{ "code": string, "message": string }`。
-- 数据库支持已知的增量迁移；版本不认识或校验和不匹配时把 `canvas.db` 改名为
-  `canvas.db.legacy-<时间戳>` 并新建。开发中换 schema 直接删库。
+- 数据库只接受空库初始化或完整已知迁移前缀的升级；未知版本、校验和不符、脏迁移、损坏账本或无账本的非空库均拒绝启动，不改名、清库或重建。schema 变更新增编号迁移，禁止修改已发布迁移文件（包括注释）；异常库需先备份并制定显式恢复方案。
 - 界面文案走 `apps/web/src/i18n/`，组件只用 shadcn CLI 装的组件。
 - 改架构先改 [architecture.md](./architecture.md)，再动代码。
