@@ -5,7 +5,7 @@
 node_modules/
 .pnpm-store/
 .playwright-cli/
-output/playwright/
+output/
 apps/desktop/src-tauri/gen/schemas/
 dist/
 coverage/

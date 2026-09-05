@@ -301,7 +301,7 @@ docs/            现行文档；history/ 与 research/ 只作追溯
 整理事项：
 
 - `apps/runtime` 随 H01 写入所有权切换后改名为 Worker，HTTP 业务路由逐步移入 Host；改名前不做无意义的目录移动。
-- 清理 `output/`（Playwright 产物）、`design/logo-concepts` 之外的临时资源；`target/`、`node_modules/` 保持忽略。
+- 清理 `output/`（Playwright 产物）、`assets/brand` 之外的临时资源；`target/`、`node_modules/` 保持忽略。
 - `.gitignore` 此前因用户全局 `~/.gitignore_global` 忽略 `.gitignore` 而从未被跟踪；本轮已 `git add -f .gitignore` 纳入索引，下次提交生效。
 - 代码注释、侧栏与菜单中残留的「看板」旧称已改为「画布」（C01 尾项，i18n 中英同步）。仍写作「看板」的两处是别的东西：用量看板是 dashboard，`legacyArchive.*` 说的是已退役的任务看板本身。SQLite 表名与已发布迁移未动。
 - 顶层脚本统一到 `armadra.sh` 与 `scripts/`，每个 app 的 README 只描述自身。

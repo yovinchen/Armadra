@@ -13,8 +13,8 @@
     "README.md",
     "apps",
     "armadra.sh",
+    "assets",
     "crates",
-    "design",
     "docs",
     "migrations.lock",
     "package.json",
@@ -46,6 +46,7 @@
     "include": [
       "*.md",
       "apps/",
+      "assets/",
       "crates/",
       "docs/",
       "packages/",

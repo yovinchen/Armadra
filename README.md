@@ -53,6 +53,6 @@ Go Host 已有身份、握手和启停基础；业务迁移、后台计划与跨
 
 [文档索引](docs/README.md) · [架构](docs/architecture.md) · [开发约定](AGENTS.md)
 
-Logo 使用[唯一源文件](design/logo-concepts/armadra-armadillo-primary.png)，再生成桌面图标与 Web favicon。
+Logo 使用[唯一源文件](assets/brand/armadra-armadillo-primary.png)，再生成桌面图标与 Web favicon。
 
 [MIT License](LICENSE)
