@@ -14,6 +14,8 @@ import type {
   CommandResponse,
 } from "./command_pb.js";
 import { file_armadra_v1_command } from "./command_pb.js";
+import type { CanvasOwnershipOwner } from "./canvas_pb.js";
+import { file_armadra_v1_canvas } from "./canvas_pb.js";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -22,8 +24,13 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_worker: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Chdhcm1hZHJhL3YxL3dvcmtlci5wcm90bxIKYXJtYWRyYS52MSJDChJXb3JrZXJIZWxsb1JlcXVlc3QSLQoIcHJvdG9jb2wYASABKAsyGy5hcm1hZHJhLnYxLlByb3RvY29sVmVyc2lvbiKvAgoTV29ya2VySGVsbG9SZXNwb25zZRItCghwcm90b2NvbBgBIAEoCzIbLmFybWFkcmEudjEuUHJvdG9jb2xWZXJzaW9uEg8KB2hvc3RfaWQYAiABKAkSEwoLaW5zdGFuY2VfaWQYAyABKAkSEAoIcGxhdGZvcm0YBCABKAkSFAoMYXJjaGl0ZWN0dXJlGAUgASgJEhQKDGNhcGFiaWxpdGllcxgGIAMoCRIXCg9tYXhfZnJhbWVfYnl0ZXMYByABKA0SHAoUbWF4X2ZpbGVfY2h1bmtfYnl0ZXMYCCABKA0SGwoTbWF4X3RleHRfZmlsZV9ieXRlcxgJIAEoDRIxCghjb21tYW5kcxgUIAEoCzIfLmFybWFkcmEudjEuQ29tbWFuZENhcGFiaWxpdGllcyI0ChNSZWdpc3RlclJvb3RSZXF1ZXN0Eg8KB3Jvb3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCSI5Cg5SZWdpc3RlcmVkUm9vdBIPCgdyb290X2lkGAEgASgJEhYKDmNhbm9uaWNhbF9wYXRoGAIgASgJIjsKGldvcmtlckxpc3REaXJlY3RvcnlSZXF1ZXN0Eg8KB3Jvb3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCSJbCg9Xb3JrZXJGaWxlRW50cnkSDAoEbmFtZRgBIAEoCRIMCgRwYXRoGAIgASgJEgwKBGtpbmQYAyABKAkSDAoEc2l6ZRgEIAEoBBIQCghyZWFkb25seRgFIAEoCCJxCg9Xb3JrZXJEaXJlY3RvcnkSDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEiwKB2VudHJpZXMYAyADKAsyGy5hcm1hZHJhLnYxLldvcmtlckZpbGVFbnRyeRIRCgl0cnVuY2F0ZWQYBCABKAgiiwEKFVdvcmtlclJlYWRGaWxlUmVxdWVzdBIPCgdyb290X2lkGAEgASgJEgwKBHBhdGgYAiABKAkSDgoGb2Zmc2V0GAMgASgEEhEKCW1heF9ieXRlcxgEIAEoDRIcCg9leHBlY3RlZF9zaGEyNTYYBSABKAxIAIgBAUISChBfZXhwZWN0ZWRfc2hhMjU2IpMBCg9Xb3JrZXJGaWxlQ2h1bmsSDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhEKCW1pbWVfdHlwZRgDIAEoCRIOCgZzaGEyNTYYBCABKAwSEwoLdG90YWxfYnl0ZXMYBSABKAQSDgoGb2Zmc2V0GAYgASgEEgwKBGRhdGEYByABKAwSCwoDZW9mGAggASgIIrUDCg1Xb3JrZXJSZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkSDwoHaG9zdF9pZBgCIAEoCRIcChRleHBlY3RlZF9pbnN0YW5jZV9pZBgDIAEoCRIYChBkZWFkbGluZV91bml4X21zGAQgASgDEi8KBWhlbGxvGAogASgLMh4uYXJtYWRyYS52MS5Xb3JrZXJIZWxsb1JlcXVlc3RIABI4Cg1yZWdpc3Rlcl9yb290GAsgASgLMh8uYXJtYWRyYS52MS5SZWdpc3RlclJvb3RSZXF1ZXN0SAASQAoObGlzdF9kaXJlY3RvcnkYDCABKAsyJi5hcm1hZHJhLnYxLldvcmtlckxpc3REaXJlY3RvcnlSZXF1ZXN0SAASNgoJcmVhZF9maWxlGA0gASgLMiEuYXJtYWRyYS52MS5Xb3JrZXJSZWFkRmlsZVJlcXVlc3RIABItCgdjb21tYW5kGBQgASgLMhouYXJtYWRyYS52MS5Db21tYW5kUmVxdWVzdEgAEikKBWFnZW50GBUgASgLMhguYXJtYWRyYS52MS5BZ2VudFJlcXVlc3RIAEIICgZhY3Rpb24iqgMKDldvcmtlclJlc3BvbnNlEhIKCnJlcXVlc3RfaWQYASABKAkSDwoHaG9zdF9pZBgCIAEoCRITCgtpbnN0YW5jZV9pZBgDIAEoCRIwCgVoZWxsbxgKIAEoCzIfLmFybWFkcmEudjEuV29ya2VySGVsbG9SZXNwb25zZUgAEjUKD3JlZ2lzdGVyZWRfcm9vdBgLIAEoCzIaLmFybWFkcmEudjEuUmVnaXN0ZXJlZFJvb3RIABIwCglkaXJlY3RvcnkYDCABKAsyGy5hcm1hZHJhLnYxLldvcmtlckRpcmVjdG9yeUgAEjEKCmZpbGVfY2h1bmsYDSABKAsyGy5hcm1hZHJhLnYxLldvcmtlckZpbGVDaHVua0gAEioKBWVycm9yGA4gASgLMhkuYXJtYWRyYS52MS5FcnJvclJlc3BvbnNlSAASLgoHY29tbWFuZBgUIAEoCzIbLmFybWFkcmEudjEuQ29tbWFuZFJlc3BvbnNlSAASKgoFYWdlbnQYFSABKAsyGS5hcm1hZHJhLnYxLkFnZW50UmVzcG9uc2VIAEIICgZyZXN1bHRCI1ohYXJtYWRyYS5sb2NhbC9ob3N0L2dlbi9hcm1hZHJhL3YxYgZwcm90bzM",
-    [file_armadra_v1_agent, file_armadra_v1_common, file_armadra_v1_command],
+    "Chdhcm1hZHJhL3YxL3dvcmtlci5wcm90bxIKYXJtYWRyYS52MSJDChJXb3JrZXJIZWxsb1JlcXVlc3QSLQoIcHJvdG9jb2wYASABKAsyGy5hcm1hZHJhLnYxLlByb3RvY29sVmVyc2lvbiKvAgoTV29ya2VySGVsbG9SZXNwb25zZRItCghwcm90b2NvbBgBIAEoCzIbLmFybWFkcmEudjEuUHJvdG9jb2xWZXJzaW9uEg8KB2hvc3RfaWQYAiABKAkSEwoLaW5zdGFuY2VfaWQYAyABKAkSEAoIcGxhdGZvcm0YBCABKAkSFAoMYXJjaGl0ZWN0dXJlGAUgASgJEhQKDGNhcGFiaWxpdGllcxgGIAMoCRIXCg9tYXhfZnJhbWVfYnl0ZXMYByABKA0SHAoUbWF4X2ZpbGVfY2h1bmtfYnl0ZXMYCCABKA0SGwoTbWF4X3RleHRfZmlsZV9ieXRlcxgJIAEoDRIxCghjb21tYW5kcxgUIAEoCzIfLmFybWFkcmEudjEuQ29tbWFuZENhcGFiaWxpdGllcyI0ChNSZWdpc3RlclJvb3RSZXF1ZXN0Eg8KB3Jvb3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCSI5Cg5SZWdpc3RlcmVkUm9vdBIPCgdyb290X2lkGAEgASgJEhYKDmNhbm9uaWNhbF9wYXRoGAIgASgJIjsKGldvcmtlckxpc3REaXJlY3RvcnlSZXF1ZXN0Eg8KB3Jvb3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCSJbCg9Xb3JrZXJGaWxlRW50cnkSDAoEbmFtZRgBIAEoCRIMCgRwYXRoGAIgASgJEgwKBGtpbmQYAyABKAkSDAoEc2l6ZRgEIAEoBBIQCghyZWFkb25seRgFIAEoCCJxCg9Xb3JrZXJEaXJlY3RvcnkSDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEiwKB2VudHJpZXMYAyADKAsyGy5hcm1hZHJhLnYxLldvcmtlckZpbGVFbnRyeRIRCgl0cnVuY2F0ZWQYBCABKAgiiwEKFVdvcmtlclJlYWRGaWxlUmVxdWVzdBIPCgdyb290X2lkGAEgASgJEgwKBHBhdGgYAiABKAkSDgoGb2Zmc2V0GAMgASgEEhEKCW1heF9ieXRlcxgEIAEoDRIcCg9leHBlY3RlZF9zaGEyNTYYBSABKAxIAIgBAUISChBfZXhwZWN0ZWRfc2hhMjU2IpMBCg9Xb3JrZXJGaWxlQ2h1bmsSDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhEKCW1pbWVfdHlwZRgDIAEoCRIOCgZzaGEyNTYYBCABKAwSEwoLdG90YWxfYnl0ZXMYBSABKAQSDgoGb2Zmc2V0GAYgASgEEgwKBGRhdGEYByABKAwSCwoDZW9mGAggASgIIpcBChhTZXRXcml0ZU93bmVyc2hpcFJlcXVlc3QSDgoGZG9tYWluGAEgASgJEi8KBW93bmVyGAIgASgOMiAuYXJtYWRyYS52MS5DYW52YXNPd25lcnNoaXBPd25lchINCgVlcG9jaBgDIAEoBBIWCg5leHBlY3RlZF9lcG9jaBgEIAEoBBITCgtyZWFzb25fY29kZRgFIAEoCSIqChhHZXRXcml0ZU93bmVyc2hpcFJlcXVlc3QSDgoGZG9tYWluGAEgASgJIpcBChRXb3JrZXJXcml0ZU93bmVyc2hpcBIOCgZkb21haW4YASABKAkSLwoFb3duZXIYAiABKA4yIC5hcm1hZHJhLnYxLkNhbnZhc093bmVyc2hpcE93bmVyEg0KBWVwb2NoGAMgASgEEhoKEnVwZGF0ZWRfYXRfdW5peF9tcxgEIAEoAxITCgtyZWFzb25fY29kZRgFIAEoCSK/BAoNV29ya2VyUmVxdWVzdBISCgpyZXF1ZXN0X2lkGAEgASgJEg8KB2hvc3RfaWQYAiABKAkSHAoUZXhwZWN0ZWRfaW5zdGFuY2VfaWQYAyABKAkSGAoQZGVhZGxpbmVfdW5peF9tcxgEIAEoAxIvCgVoZWxsbxgKIAEoCzIeLmFybWFkcmEudjEuV29ya2VySGVsbG9SZXF1ZXN0SAASOAoNcmVnaXN0ZXJfcm9vdBgLIAEoCzIfLmFybWFkcmEudjEuUmVnaXN0ZXJSb290UmVxdWVzdEgAEkAKDmxpc3RfZGlyZWN0b3J5GAwgASgLMiYuYXJtYWRyYS52MS5Xb3JrZXJMaXN0RGlyZWN0b3J5UmVxdWVzdEgAEjYKCXJlYWRfZmlsZRgNIAEoCzIhLmFybWFkcmEudjEuV29ya2VyUmVhZEZpbGVSZXF1ZXN0SAASLQoHY29tbWFuZBgUIAEoCzIaLmFybWFkcmEudjEuQ29tbWFuZFJlcXVlc3RIABIpCgVhZ2VudBgVIAEoCzIYLmFybWFkcmEudjEuQWdlbnRSZXF1ZXN0SAASQwoTc2V0X3dyaXRlX293bmVyc2hpcBgWIAEoCzIkLmFybWFkcmEudjEuU2V0V3JpdGVPd25lcnNoaXBSZXF1ZXN0SAASQwoTZ2V0X3dyaXRlX293bmVyc2hpcBgXIAEoCzIkLmFybWFkcmEudjEuR2V0V3JpdGVPd25lcnNoaXBSZXF1ZXN0SABCCAoGYWN0aW9uIucDCg5Xb3JrZXJSZXNwb25zZRISCgpyZXF1ZXN0X2lkGAEgASgJEg8KB2hvc3RfaWQYAiABKAkSEwoLaW5zdGFuY2VfaWQYAyABKAkSMAoFaGVsbG8YCiABKAsyHy5hcm1hZHJhLnYxLldvcmtlckhlbGxvUmVzcG9uc2VIABI1Cg9yZWdpc3RlcmVkX3Jvb3QYCyABKAsyGi5hcm1hZHJhLnYxLlJlZ2lzdGVyZWRSb290SAASMAoJZGlyZWN0b3J5GAwgASgLMhsuYXJtYWRyYS52MS5Xb3JrZXJEaXJlY3RvcnlIABIxCgpmaWxlX2NodW5rGA0gASgLMhsuYXJtYWRyYS52MS5Xb3JrZXJGaWxlQ2h1bmtIABIqCgVlcnJvchgOIAEoCzIZLmFybWFkcmEudjEuRXJyb3JSZXNwb25zZUgAEi4KB2NvbW1hbmQYFCABKAsyGy5hcm1hZHJhLnYxLkNvbW1hbmRSZXNwb25zZUgAEioKBWFnZW50GBUgASgLMhkuYXJtYWRyYS52MS5BZ2VudFJlc3BvbnNlSAASOwoPd3JpdGVfb3duZXJzaGlwGBYgASgLMiAuYXJtYWRyYS52MS5Xb3JrZXJXcml0ZU93bmVyc2hpcEgAQggKBnJlc3VsdEIjWiFhcm1hZHJhLmxvY2FsL2hvc3QvZ2VuL2FybWFkcmEvdjFiBnByb3RvMw",
+    [
+      file_armadra_v1_agent,
+      file_armadra_v1_common,
+      file_armadra_v1_command,
+      file_armadra_v1_canvas,
+    ],
   );
 
 /**
@@ -349,6 +356,109 @@ export const WorkerFileChunkSchema: GenMessage<WorkerFileChunk> =
   messageDesc(file_armadra_v1_worker, 8);
 
 /**
+ * Write-ownership handoff (host protocol design §4, step 5). The controlling
+ * Host tells the Runtime which epoch now owns the canvas domain; the Runtime
+ * persists it and refuses canvas writes from then on. `expected_epoch` is the
+ * epoch the Host believes is stored, so a repeated request is idempotent and a
+ * stale one is refused rather than applied out of order.
+ *
+ * @generated from message armadra.v1.SetWriteOwnershipRequest
+ */
+export type SetWriteOwnershipRequest =
+  Message<"armadra.v1.SetWriteOwnershipRequest"> & {
+    /**
+     * @generated from field: string domain = 1;
+     */
+    domain: string;
+
+    /**
+     * @generated from field: armadra.v1.CanvasOwnershipOwner owner = 2;
+     */
+    owner: CanvasOwnershipOwner;
+
+    /**
+     * @generated from field: uint64 epoch = 3;
+     */
+    epoch: bigint;
+
+    /**
+     * @generated from field: uint64 expected_epoch = 4;
+     */
+    expectedEpoch: bigint;
+
+    /**
+     * @generated from field: string reason_code = 5;
+     */
+    reasonCode: string;
+  };
+
+/**
+ * Describes the message armadra.v1.SetWriteOwnershipRequest.
+ * Use `create(SetWriteOwnershipRequestSchema)` to create a new message.
+ */
+export const SetWriteOwnershipRequestSchema: GenMessage<SetWriteOwnershipRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker, 9);
+
+/**
+ * @generated from message armadra.v1.GetWriteOwnershipRequest
+ */
+export type GetWriteOwnershipRequest =
+  Message<"armadra.v1.GetWriteOwnershipRequest"> & {
+    /**
+     * @generated from field: string domain = 1;
+     */
+    domain: string;
+  };
+
+/**
+ * Describes the message armadra.v1.GetWriteOwnershipRequest.
+ * Use `create(GetWriteOwnershipRequestSchema)` to create a new message.
+ */
+export const GetWriteOwnershipRequestSchema: GenMessage<GetWriteOwnershipRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker, 10);
+
+/**
+ * @generated from message armadra.v1.WorkerWriteOwnership
+ */
+export type WorkerWriteOwnership =
+  Message<"armadra.v1.WorkerWriteOwnership"> & {
+    /**
+     * @generated from field: string domain = 1;
+     */
+    domain: string;
+
+    /**
+     * @generated from field: armadra.v1.CanvasOwnershipOwner owner = 2;
+     */
+    owner: CanvasOwnershipOwner;
+
+    /**
+     * @generated from field: uint64 epoch = 3;
+     */
+    epoch: bigint;
+
+    /**
+     * @generated from field: int64 updated_at_unix_ms = 4;
+     */
+    updatedAtUnixMs: bigint;
+
+    /**
+     * @generated from field: string reason_code = 5;
+     */
+    reasonCode: string;
+  };
+
+/**
+ * Describes the message armadra.v1.WorkerWriteOwnership.
+ * Use `create(WorkerWriteOwnershipSchema)` to create a new message.
+ */
+export const WorkerWriteOwnershipSchema: GenMessage<WorkerWriteOwnership> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker, 11);
+
+/**
  * @generated from message armadra.v1.WorkerRequest
  */
 export type WorkerRequest = Message<"armadra.v1.WorkerRequest"> & {
@@ -421,6 +531,20 @@ export type WorkerRequest = Message<"armadra.v1.WorkerRequest"> & {
         value: AgentRequest;
         case: "agent";
       }
+    | {
+        /**
+         * @generated from field: armadra.v1.SetWriteOwnershipRequest set_write_ownership = 22;
+         */
+        value: SetWriteOwnershipRequest;
+        case: "setWriteOwnership";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.GetWriteOwnershipRequest get_write_ownership = 23;
+         */
+        value: GetWriteOwnershipRequest;
+        case: "getWriteOwnership";
+      }
     | { case: undefined; value?: undefined };
 };
 
@@ -430,7 +554,7 @@ export type WorkerRequest = Message<"armadra.v1.WorkerRequest"> & {
  */
 export const WorkerRequestSchema: GenMessage<WorkerRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_worker, 9);
+  messageDesc(file_armadra_v1_worker, 12);
 
 /**
  * @generated from message armadra.v1.WorkerResponse
@@ -504,6 +628,13 @@ export type WorkerResponse = Message<"armadra.v1.WorkerResponse"> & {
         value: AgentResponse;
         case: "agent";
       }
+    | {
+        /**
+         * @generated from field: armadra.v1.WorkerWriteOwnership write_ownership = 22;
+         */
+        value: WorkerWriteOwnership;
+        case: "writeOwnership";
+      }
     | { case: undefined; value?: undefined };
 };
 
@@ -513,4 +644,4 @@ export type WorkerResponse = Message<"armadra.v1.WorkerResponse"> & {
  */
 export const WorkerResponseSchema: GenMessage<WorkerResponse> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_worker, 10);
+  messageDesc(file_armadra_v1_worker, 13);

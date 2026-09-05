@@ -662,6 +662,207 @@ func (x *WorkerFileChunk) GetEof() bool {
 	return false
 }
 
+// Write-ownership handoff (host protocol design §4, step 5). The controlling
+// Host tells the Runtime which epoch now owns the canvas domain; the Runtime
+// persists it and refuses canvas writes from then on. `expected_epoch` is the
+// epoch the Host believes is stored, so a repeated request is idempotent and a
+// stale one is refused rather than applied out of order.
+type SetWriteOwnershipRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Domain        string                 `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	Owner         CanvasOwnershipOwner   `protobuf:"varint,2,opt,name=owner,proto3,enum=armadra.v1.CanvasOwnershipOwner" json:"owner,omitempty"`
+	Epoch         uint64                 `protobuf:"varint,3,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	ExpectedEpoch uint64                 `protobuf:"varint,4,opt,name=expected_epoch,json=expectedEpoch,proto3" json:"expected_epoch,omitempty"`
+	ReasonCode    string                 `protobuf:"bytes,5,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetWriteOwnershipRequest) Reset() {
+	*x = SetWriteOwnershipRequest{}
+	mi := &file_armadra_v1_worker_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetWriteOwnershipRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetWriteOwnershipRequest) ProtoMessage() {}
+
+func (x *SetWriteOwnershipRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetWriteOwnershipRequest.ProtoReflect.Descriptor instead.
+func (*SetWriteOwnershipRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *SetWriteOwnershipRequest) GetDomain() string {
+	if x != nil {
+		return x.Domain
+	}
+	return ""
+}
+
+func (x *SetWriteOwnershipRequest) GetOwner() CanvasOwnershipOwner {
+	if x != nil {
+		return x.Owner
+	}
+	return CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_UNSPECIFIED
+}
+
+func (x *SetWriteOwnershipRequest) GetEpoch() uint64 {
+	if x != nil {
+		return x.Epoch
+	}
+	return 0
+}
+
+func (x *SetWriteOwnershipRequest) GetExpectedEpoch() uint64 {
+	if x != nil {
+		return x.ExpectedEpoch
+	}
+	return 0
+}
+
+func (x *SetWriteOwnershipRequest) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+type GetWriteOwnershipRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Domain        string                 `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetWriteOwnershipRequest) Reset() {
+	*x = GetWriteOwnershipRequest{}
+	mi := &file_armadra_v1_worker_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetWriteOwnershipRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetWriteOwnershipRequest) ProtoMessage() {}
+
+func (x *GetWriteOwnershipRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetWriteOwnershipRequest.ProtoReflect.Descriptor instead.
+func (*GetWriteOwnershipRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *GetWriteOwnershipRequest) GetDomain() string {
+	if x != nil {
+		return x.Domain
+	}
+	return ""
+}
+
+type WorkerWriteOwnership struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Domain          string                 `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	Owner           CanvasOwnershipOwner   `protobuf:"varint,2,opt,name=owner,proto3,enum=armadra.v1.CanvasOwnershipOwner" json:"owner,omitempty"`
+	Epoch           uint64                 `protobuf:"varint,3,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	UpdatedAtUnixMs int64                  `protobuf:"varint,4,opt,name=updated_at_unix_ms,json=updatedAtUnixMs,proto3" json:"updated_at_unix_ms,omitempty"`
+	ReasonCode      string                 `protobuf:"bytes,5,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *WorkerWriteOwnership) Reset() {
+	*x = WorkerWriteOwnership{}
+	mi := &file_armadra_v1_worker_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerWriteOwnership) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerWriteOwnership) ProtoMessage() {}
+
+func (x *WorkerWriteOwnership) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerWriteOwnership.ProtoReflect.Descriptor instead.
+func (*WorkerWriteOwnership) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *WorkerWriteOwnership) GetDomain() string {
+	if x != nil {
+		return x.Domain
+	}
+	return ""
+}
+
+func (x *WorkerWriteOwnership) GetOwner() CanvasOwnershipOwner {
+	if x != nil {
+		return x.Owner
+	}
+	return CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_UNSPECIFIED
+}
+
+func (x *WorkerWriteOwnership) GetEpoch() uint64 {
+	if x != nil {
+		return x.Epoch
+	}
+	return 0
+}
+
+func (x *WorkerWriteOwnership) GetUpdatedAtUnixMs() int64 {
+	if x != nil {
+		return x.UpdatedAtUnixMs
+	}
+	return 0
+}
+
+func (x *WorkerWriteOwnership) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
 type WorkerRequest struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	RequestId          string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -676,6 +877,8 @@ type WorkerRequest struct {
 	//	*WorkerRequest_ReadFile
 	//	*WorkerRequest_Command
 	//	*WorkerRequest_Agent
+	//	*WorkerRequest_SetWriteOwnership
+	//	*WorkerRequest_GetWriteOwnership
 	Action        isWorkerRequest_Action `protobuf_oneof:"action"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -683,7 +886,7 @@ type WorkerRequest struct {
 
 func (x *WorkerRequest) Reset() {
 	*x = WorkerRequest{}
-	mi := &file_armadra_v1_worker_proto_msgTypes[9]
+	mi := &file_armadra_v1_worker_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -695,7 +898,7 @@ func (x *WorkerRequest) String() string {
 func (*WorkerRequest) ProtoMessage() {}
 
 func (x *WorkerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_worker_proto_msgTypes[9]
+	mi := &file_armadra_v1_worker_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -708,7 +911,7 @@ func (x *WorkerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkerRequest.ProtoReflect.Descriptor instead.
 func (*WorkerRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{9}
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *WorkerRequest) GetRequestId() string {
@@ -800,6 +1003,24 @@ func (x *WorkerRequest) GetAgent() *AgentRequest {
 	return nil
 }
 
+func (x *WorkerRequest) GetSetWriteOwnership() *SetWriteOwnershipRequest {
+	if x != nil {
+		if x, ok := x.Action.(*WorkerRequest_SetWriteOwnership); ok {
+			return x.SetWriteOwnership
+		}
+	}
+	return nil
+}
+
+func (x *WorkerRequest) GetGetWriteOwnership() *GetWriteOwnershipRequest {
+	if x != nil {
+		if x, ok := x.Action.(*WorkerRequest_GetWriteOwnership); ok {
+			return x.GetWriteOwnership
+		}
+	}
+	return nil
+}
+
 type isWorkerRequest_Action interface {
 	isWorkerRequest_Action()
 }
@@ -830,6 +1051,14 @@ type WorkerRequest_Agent struct {
 	Agent *AgentRequest `protobuf:"bytes,21,opt,name=agent,proto3,oneof"`
 }
 
+type WorkerRequest_SetWriteOwnership struct {
+	SetWriteOwnership *SetWriteOwnershipRequest `protobuf:"bytes,22,opt,name=set_write_ownership,json=setWriteOwnership,proto3,oneof"`
+}
+
+type WorkerRequest_GetWriteOwnership struct {
+	GetWriteOwnership *GetWriteOwnershipRequest `protobuf:"bytes,23,opt,name=get_write_ownership,json=getWriteOwnership,proto3,oneof"`
+}
+
 func (*WorkerRequest_Hello) isWorkerRequest_Action() {}
 
 func (*WorkerRequest_RegisterRoot) isWorkerRequest_Action() {}
@@ -841,6 +1070,10 @@ func (*WorkerRequest_ReadFile) isWorkerRequest_Action() {}
 func (*WorkerRequest_Command) isWorkerRequest_Action() {}
 
 func (*WorkerRequest_Agent) isWorkerRequest_Action() {}
+
+func (*WorkerRequest_SetWriteOwnership) isWorkerRequest_Action() {}
+
+func (*WorkerRequest_GetWriteOwnership) isWorkerRequest_Action() {}
 
 type WorkerResponse struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
@@ -856,6 +1089,7 @@ type WorkerResponse struct {
 	//	*WorkerResponse_Error
 	//	*WorkerResponse_Command
 	//	*WorkerResponse_Agent
+	//	*WorkerResponse_WriteOwnership
 	Result        isWorkerResponse_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -863,7 +1097,7 @@ type WorkerResponse struct {
 
 func (x *WorkerResponse) Reset() {
 	*x = WorkerResponse{}
-	mi := &file_armadra_v1_worker_proto_msgTypes[10]
+	mi := &file_armadra_v1_worker_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -875,7 +1109,7 @@ func (x *WorkerResponse) String() string {
 func (*WorkerResponse) ProtoMessage() {}
 
 func (x *WorkerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_worker_proto_msgTypes[10]
+	mi := &file_armadra_v1_worker_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -888,7 +1122,7 @@ func (x *WorkerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkerResponse.ProtoReflect.Descriptor instead.
 func (*WorkerResponse) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{10}
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *WorkerResponse) GetRequestId() string {
@@ -982,6 +1216,15 @@ func (x *WorkerResponse) GetAgent() *AgentResponse {
 	return nil
 }
 
+func (x *WorkerResponse) GetWriteOwnership() *WorkerWriteOwnership {
+	if x != nil {
+		if x, ok := x.Result.(*WorkerResponse_WriteOwnership); ok {
+			return x.WriteOwnership
+		}
+	}
+	return nil
+}
+
 type isWorkerResponse_Result interface {
 	isWorkerResponse_Result()
 }
@@ -1014,6 +1257,10 @@ type WorkerResponse_Agent struct {
 	Agent *AgentResponse `protobuf:"bytes,21,opt,name=agent,proto3,oneof"`
 }
 
+type WorkerResponse_WriteOwnership struct {
+	WriteOwnership *WorkerWriteOwnership `protobuf:"bytes,22,opt,name=write_ownership,json=writeOwnership,proto3,oneof"`
+}
+
 func (*WorkerResponse_Hello) isWorkerResponse_Result() {}
 
 func (*WorkerResponse_RegisteredRoot) isWorkerResponse_Result() {}
@@ -1028,12 +1275,14 @@ func (*WorkerResponse_Command) isWorkerResponse_Result() {}
 
 func (*WorkerResponse_Agent) isWorkerResponse_Result() {}
 
+func (*WorkerResponse_WriteOwnership) isWorkerResponse_Result() {}
+
 var File_armadra_v1_worker_proto protoreflect.FileDescriptor
 
 const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"\x17armadra/v1/worker.proto\x12\n" +
-	"armadra.v1\x1a\x16armadra/v1/agent.proto\x1a\x17armadra/v1/common.proto\x1a\x18armadra/v1/command.proto\"M\n" +
+	"armadra.v1\x1a\x16armadra/v1/agent.proto\x1a\x17armadra/v1/common.proto\x1a\x18armadra/v1/command.proto\x1a\x17armadra/v1/canvas.proto\"M\n" +
 	"\x12WorkerHelloRequest\x127\n" +
 	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\"\xb1\x03\n" +
 	"\x13WorkerHelloResponse\x127\n" +
@@ -1084,7 +1333,23 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"totalBytes\x12\x16\n" +
 	"\x06offset\x18\x06 \x01(\x04R\x06offset\x12\x12\n" +
 	"\x04data\x18\a \x01(\fR\x04data\x12\x10\n" +
-	"\x03eof\x18\b \x01(\bR\x03eof\"\xaa\x04\n" +
+	"\x03eof\x18\b \x01(\bR\x03eof\"\xc8\x01\n" +
+	"\x18SetWriteOwnershipRequest\x12\x16\n" +
+	"\x06domain\x18\x01 \x01(\tR\x06domain\x126\n" +
+	"\x05owner\x18\x02 \x01(\x0e2 .armadra.v1.CanvasOwnershipOwnerR\x05owner\x12\x14\n" +
+	"\x05epoch\x18\x03 \x01(\x04R\x05epoch\x12%\n" +
+	"\x0eexpected_epoch\x18\x04 \x01(\x04R\rexpectedEpoch\x12\x1f\n" +
+	"\vreason_code\x18\x05 \x01(\tR\n" +
+	"reasonCode\"2\n" +
+	"\x18GetWriteOwnershipRequest\x12\x16\n" +
+	"\x06domain\x18\x01 \x01(\tR\x06domain\"\xca\x01\n" +
+	"\x14WorkerWriteOwnership\x12\x16\n" +
+	"\x06domain\x18\x01 \x01(\tR\x06domain\x126\n" +
+	"\x05owner\x18\x02 \x01(\x0e2 .armadra.v1.CanvasOwnershipOwnerR\x05owner\x12\x14\n" +
+	"\x05epoch\x18\x03 \x01(\x04R\x05epoch\x12+\n" +
+	"\x12updated_at_unix_ms\x18\x04 \x01(\x03R\x0fupdatedAtUnixMs\x12\x1f\n" +
+	"\vreason_code\x18\x05 \x01(\tR\n" +
+	"reasonCode\"\xda\x05\n" +
 	"\rWorkerRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -1097,8 +1362,10 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\x0elist_directory\x18\f \x01(\v2&.armadra.v1.WorkerListDirectoryRequestH\x00R\rlistDirectory\x12@\n" +
 	"\tread_file\x18\r \x01(\v2!.armadra.v1.WorkerReadFileRequestH\x00R\breadFile\x126\n" +
 	"\acommand\x18\x14 \x01(\v2\x1a.armadra.v1.CommandRequestH\x00R\acommand\x120\n" +
-	"\x05agent\x18\x15 \x01(\v2\x18.armadra.v1.AgentRequestH\x00R\x05agentB\b\n" +
-	"\x06action\"\x8d\x04\n" +
+	"\x05agent\x18\x15 \x01(\v2\x18.armadra.v1.AgentRequestH\x00R\x05agent\x12V\n" +
+	"\x13set_write_ownership\x18\x16 \x01(\v2$.armadra.v1.SetWriteOwnershipRequestH\x00R\x11setWriteOwnership\x12V\n" +
+	"\x13get_write_ownership\x18\x17 \x01(\v2$.armadra.v1.GetWriteOwnershipRequestH\x00R\x11getWriteOwnershipB\b\n" +
+	"\x06action\"\xda\x04\n" +
 	"\x0eWorkerResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -1113,7 +1380,8 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"file_chunk\x18\r \x01(\v2\x1b.armadra.v1.WorkerFileChunkH\x00R\tfileChunk\x121\n" +
 	"\x05error\x18\x0e \x01(\v2\x19.armadra.v1.ErrorResponseH\x00R\x05error\x127\n" +
 	"\acommand\x18\x14 \x01(\v2\x1b.armadra.v1.CommandResponseH\x00R\acommand\x121\n" +
-	"\x05agent\x18\x15 \x01(\v2\x19.armadra.v1.AgentResponseH\x00R\x05agentB\b\n" +
+	"\x05agent\x18\x15 \x01(\v2\x19.armadra.v1.AgentResponseH\x00R\x05agent\x12K\n" +
+	"\x0fwrite_ownership\x18\x16 \x01(\v2 .armadra.v1.WorkerWriteOwnershipH\x00R\x0ewriteOwnershipB\b\n" +
 	"\x06resultB#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
@@ -1128,7 +1396,7 @@ func file_armadra_v1_worker_proto_rawDescGZIP() []byte {
 	return file_armadra_v1_worker_proto_rawDescData
 }
 
-var file_armadra_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_armadra_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_armadra_v1_worker_proto_goTypes = []any{
 	(*WorkerHelloRequest)(nil),         // 0: armadra.v1.WorkerHelloRequest
 	(*WorkerHelloResponse)(nil),        // 1: armadra.v1.WorkerHelloResponse
@@ -1139,39 +1407,48 @@ var file_armadra_v1_worker_proto_goTypes = []any{
 	(*WorkerDirectory)(nil),            // 6: armadra.v1.WorkerDirectory
 	(*WorkerReadFileRequest)(nil),      // 7: armadra.v1.WorkerReadFileRequest
 	(*WorkerFileChunk)(nil),            // 8: armadra.v1.WorkerFileChunk
-	(*WorkerRequest)(nil),              // 9: armadra.v1.WorkerRequest
-	(*WorkerResponse)(nil),             // 10: armadra.v1.WorkerResponse
-	(*ProtocolVersion)(nil),            // 11: armadra.v1.ProtocolVersion
-	(*CommandCapabilities)(nil),        // 12: armadra.v1.CommandCapabilities
-	(*CommandRequest)(nil),             // 13: armadra.v1.CommandRequest
-	(*AgentRequest)(nil),               // 14: armadra.v1.AgentRequest
-	(*ErrorResponse)(nil),              // 15: armadra.v1.ErrorResponse
-	(*CommandResponse)(nil),            // 16: armadra.v1.CommandResponse
-	(*AgentResponse)(nil),              // 17: armadra.v1.AgentResponse
+	(*SetWriteOwnershipRequest)(nil),   // 9: armadra.v1.SetWriteOwnershipRequest
+	(*GetWriteOwnershipRequest)(nil),   // 10: armadra.v1.GetWriteOwnershipRequest
+	(*WorkerWriteOwnership)(nil),       // 11: armadra.v1.WorkerWriteOwnership
+	(*WorkerRequest)(nil),              // 12: armadra.v1.WorkerRequest
+	(*WorkerResponse)(nil),             // 13: armadra.v1.WorkerResponse
+	(*ProtocolVersion)(nil),            // 14: armadra.v1.ProtocolVersion
+	(*CommandCapabilities)(nil),        // 15: armadra.v1.CommandCapabilities
+	(CanvasOwnershipOwner)(0),          // 16: armadra.v1.CanvasOwnershipOwner
+	(*CommandRequest)(nil),             // 17: armadra.v1.CommandRequest
+	(*AgentRequest)(nil),               // 18: armadra.v1.AgentRequest
+	(*ErrorResponse)(nil),              // 19: armadra.v1.ErrorResponse
+	(*CommandResponse)(nil),            // 20: armadra.v1.CommandResponse
+	(*AgentResponse)(nil),              // 21: armadra.v1.AgentResponse
 }
 var file_armadra_v1_worker_proto_depIdxs = []int32{
-	11, // 0: armadra.v1.WorkerHelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
-	11, // 1: armadra.v1.WorkerHelloResponse.protocol:type_name -> armadra.v1.ProtocolVersion
-	12, // 2: armadra.v1.WorkerHelloResponse.commands:type_name -> armadra.v1.CommandCapabilities
+	14, // 0: armadra.v1.WorkerHelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
+	14, // 1: armadra.v1.WorkerHelloResponse.protocol:type_name -> armadra.v1.ProtocolVersion
+	15, // 2: armadra.v1.WorkerHelloResponse.commands:type_name -> armadra.v1.CommandCapabilities
 	5,  // 3: armadra.v1.WorkerDirectory.entries:type_name -> armadra.v1.WorkerFileEntry
-	0,  // 4: armadra.v1.WorkerRequest.hello:type_name -> armadra.v1.WorkerHelloRequest
-	2,  // 5: armadra.v1.WorkerRequest.register_root:type_name -> armadra.v1.RegisterRootRequest
-	4,  // 6: armadra.v1.WorkerRequest.list_directory:type_name -> armadra.v1.WorkerListDirectoryRequest
-	7,  // 7: armadra.v1.WorkerRequest.read_file:type_name -> armadra.v1.WorkerReadFileRequest
-	13, // 8: armadra.v1.WorkerRequest.command:type_name -> armadra.v1.CommandRequest
-	14, // 9: armadra.v1.WorkerRequest.agent:type_name -> armadra.v1.AgentRequest
-	1,  // 10: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
-	3,  // 11: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
-	6,  // 12: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
-	8,  // 13: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
-	15, // 14: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
-	16, // 15: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
-	17, // 16: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
-	17, // [17:17] is the sub-list for method output_type
-	17, // [17:17] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	16, // 4: armadra.v1.SetWriteOwnershipRequest.owner:type_name -> armadra.v1.CanvasOwnershipOwner
+	16, // 5: armadra.v1.WorkerWriteOwnership.owner:type_name -> armadra.v1.CanvasOwnershipOwner
+	0,  // 6: armadra.v1.WorkerRequest.hello:type_name -> armadra.v1.WorkerHelloRequest
+	2,  // 7: armadra.v1.WorkerRequest.register_root:type_name -> armadra.v1.RegisterRootRequest
+	4,  // 8: armadra.v1.WorkerRequest.list_directory:type_name -> armadra.v1.WorkerListDirectoryRequest
+	7,  // 9: armadra.v1.WorkerRequest.read_file:type_name -> armadra.v1.WorkerReadFileRequest
+	17, // 10: armadra.v1.WorkerRequest.command:type_name -> armadra.v1.CommandRequest
+	18, // 11: armadra.v1.WorkerRequest.agent:type_name -> armadra.v1.AgentRequest
+	9,  // 12: armadra.v1.WorkerRequest.set_write_ownership:type_name -> armadra.v1.SetWriteOwnershipRequest
+	10, // 13: armadra.v1.WorkerRequest.get_write_ownership:type_name -> armadra.v1.GetWriteOwnershipRequest
+	1,  // 14: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
+	3,  // 15: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
+	6,  // 16: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
+	8,  // 17: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
+	19, // 18: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
+	20, // 19: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
+	21, // 20: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
+	11, // 21: armadra.v1.WorkerResponse.write_ownership:type_name -> armadra.v1.WorkerWriteOwnership
+	22, // [22:22] is the sub-list for method output_type
+	22, // [22:22] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_worker_proto_init() }
@@ -1182,16 +1459,19 @@ func file_armadra_v1_worker_proto_init() {
 	file_armadra_v1_agent_proto_init()
 	file_armadra_v1_common_proto_init()
 	file_armadra_v1_command_proto_init()
+	file_armadra_v1_canvas_proto_init()
 	file_armadra_v1_worker_proto_msgTypes[7].OneofWrappers = []any{}
-	file_armadra_v1_worker_proto_msgTypes[9].OneofWrappers = []any{
+	file_armadra_v1_worker_proto_msgTypes[12].OneofWrappers = []any{
 		(*WorkerRequest_Hello)(nil),
 		(*WorkerRequest_RegisterRoot)(nil),
 		(*WorkerRequest_ListDirectory)(nil),
 		(*WorkerRequest_ReadFile)(nil),
 		(*WorkerRequest_Command)(nil),
 		(*WorkerRequest_Agent)(nil),
+		(*WorkerRequest_SetWriteOwnership)(nil),
+		(*WorkerRequest_GetWriteOwnership)(nil),
 	}
-	file_armadra_v1_worker_proto_msgTypes[10].OneofWrappers = []any{
+	file_armadra_v1_worker_proto_msgTypes[13].OneofWrappers = []any{
 		(*WorkerResponse_Hello)(nil),
 		(*WorkerResponse_RegisteredRoot)(nil),
 		(*WorkerResponse_Directory)(nil),
@@ -1199,6 +1479,7 @@ func file_armadra_v1_worker_proto_init() {
 		(*WorkerResponse_Error)(nil),
 		(*WorkerResponse_Command)(nil),
 		(*WorkerResponse_Agent)(nil),
+		(*WorkerResponse_WriteOwnership)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1206,7 +1487,7 @@ func file_armadra_v1_worker_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_worker_proto_rawDesc), len(file_armadra_v1_worker_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

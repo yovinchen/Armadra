@@ -2,6 +2,7 @@ export * from "./gen/armadra/v1/common_pb.js";
 export * from "./gen/armadra/v1/migration_pb.js";
 export * from "./gen/armadra/v1/identity_pb.js";
 export * from "./gen/armadra/v1/agent_pb.js";
+export * from "./gen/armadra/v1/canvas_pb.js";
 export * from "./gen/armadra/v1/worker_pb.js";
 export * from "./gen/armadra/v1/automation_pb.js";
 export * from "./gen/armadra/v1/command_pb.js";

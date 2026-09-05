@@ -4,6 +4,7 @@ option go_package = "armadra.local/host/gen/armadra/v1";
 import "armadra/v1/agent.proto";
 import "armadra/v1/common.proto";
 import "armadra/v1/command.proto";
+import "armadra/v1/canvas.proto";
 
 // The initial Worker transport is a parent-owned anonymous stdin/stdout pipe.
 // These messages are never accepted on an unauthenticated HTTP endpoint.
@@ -56,6 +57,26 @@ message WorkerFileChunk {
   bytes data = 7;
   bool eof = 8;
 }
+// Write-ownership handoff (host protocol design §4, step 5). The controlling
+// Host tells the Runtime which epoch now owns the canvas domain; the Runtime
+// persists it and refuses canvas writes from then on. `expected_epoch` is the
+// epoch the Host believes is stored, so a repeated request is idempotent and a
+// stale one is refused rather than applied out of order.
+message SetWriteOwnershipRequest {
+  string domain = 1;
+  CanvasOwnershipOwner owner = 2;
+  uint64 epoch = 3;
+  uint64 expected_epoch = 4;
+  string reason_code = 5;
+}
+message GetWriteOwnershipRequest { string domain = 1; }
+message WorkerWriteOwnership {
+  string domain = 1;
+  CanvasOwnershipOwner owner = 2;
+  uint64 epoch = 3;
+  int64 updated_at_unix_ms = 4;
+  string reason_code = 5;
+}
 message WorkerRequest {
   string request_id = 1;
   string host_id = 2;
@@ -70,6 +91,8 @@ message WorkerRequest {
     // Proxied to the Runtime that owns the PTY. Only present when the Worker
     // was started with a state directory and found a live local Runtime.
     AgentRequest agent = 21;
+    SetWriteOwnershipRequest set_write_ownership = 22;
+    GetWriteOwnershipRequest get_write_ownership = 23;
   }
 }
 message WorkerResponse {
@@ -84,5 +107,6 @@ message WorkerResponse {
     ErrorResponse error = 14;
     CommandResponse command = 20;
     AgentResponse agent = 21;
+    WorkerWriteOwnership write_ownership = 22;
   }
 }
