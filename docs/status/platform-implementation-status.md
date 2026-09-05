@@ -57,13 +57,13 @@
 
 ### 路线图 §4 新增需求
 
-| 需求                     | 已交付                                                                                                             | 待交付                                                                    |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| §4.1 多仓库 Git 与提交图 | 见 G02/G03                                                                                                         | 服务端 pathspec 筛选、批量状态接口                                        |
-| §4.2 用量与成本看板      | Copilot/Codex/本地成本/看板/设置；托盘迷你条（会话/周窗口，`/api/usage/mini`，null 显示未知）                      | Codex 模型价格表、扫描缓存持久化、托盘视觉未自动化确认                    |
-| §4.3 CLI Agent 内存监控  | 见 T02                                                                                                             | 内存压力、远程主机                                                        |
-| §4.4 端口与服务集成      | Runtime socket 监听与 `endpoints.json`、桌面 `armadra://` 转发、Host `--listen none`、地址发现；服务器模式定义文件 | WebSocket 仍需一个回环端口、Windows 命名管道未编译、WebView 侧未 GUI 验收 |
-| §4.5 项目结构整理        | `.gitignore` 跟踪、`.prettierignore` 排除第三方技能与 worktree                                                     | 按 repository-structure.md 顺序延后到功能任务完成后                       |
+| 需求                     | 已交付                                                                                                                                                                                                                                                                                      | 待交付                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| §4.1 多仓库 Git 与提交图 | 见 G02/G03                                                                                                                                                                                                                                                                                  | 服务端 pathspec 筛选、批量状态接口                                              |
+| §4.2 用量与成本看板      | Copilot/Codex/本地成本/看板/设置；托盘迷你条（会话/周窗口，`/api/usage/mini`，null 显示未知）                                                                                                                                                                                               | Codex 模型价格表、扫描缓存持久化、托盘视觉未自动化确认                          |
+| §4.3 CLI Agent 内存监控  | 见 T02                                                                                                                                                                                                                                                                                      | 内存压力、远程主机                                                              |
+| §4.4 端口与服务集成      | Runtime socket 监听与 `endpoints.json`、桌面 `armadra://` 转发、Host `--listen none`、地址发现；服务器模式定义文件                                                                                                                                                                          | WebSocket 仍需一个回环端口、Windows 命名管道未编译、WebView 侧未 GUI 验收       |
+| §4.5 项目结构整理        | §5 第 1–5 步已实施（`tools/repo-check.mjs` 8 条规则 + `repo.rules.json` + `migrations.lock` + CI 六作业；`assets/brand`；`packages/protocol`、`crates/hook`；`tools/`；`docs/{guides,design,status,contracts}`）；第 6 步大文件拆分：Runtime api/db、Web/shared 已拆，Git/终端/浏览器进行中 | 第 7 步 `apps/runtime`→`apps/worker` 待 H01 全部域切换；CI 未在真实 runner 实跑 |
 
 ## 本轮实施（2026-09-05 晚）
 
@@ -103,6 +103,15 @@
 - **H01 画布所有权**（`0a693f33`…`c759ea42`）：Go 527 项、Runtime 720 项、端到端 44 项；端到端发现并修正收据回显存储键而非调用方 operation id 的缺陷。
 - **H02 远端 Worker + 托盘**（`0e7864e3`…`bf350063`）：真实子进程 Worker 端到端含 SIGKILL 重连；托盘迷你条以真实 `/api/usage/mini` 响应为断言。
 - **合并修正**（`27a6dbc0`、`e60c29e5`、`5685a9f2`、`1ea43254`、`6f0c5511`、`b643dcea`、`285e54ae`）：fixture、字段号、迁移编号、数据竞争与类型修正。
+
+## 第五轮：阶段收尾、结构整理与设计（2026-09-06 上午）
+
+- **阶段成果**：`main` 快进到功能分支并打标签 `milestone/2026-09-06-platform-m7`；22 个已合并的 Agent 分支与 worktree 全部删除（逐提交按主题核对均已在 `main`，唯一未入的是一个空的 rustfmt 提交）；`origin/main` 落后本地约 250 个提交，未推送。另一个会话的 `claude/hopeful-gauss-34e172` 有未提交改动，保留。
+- **开屏动画**（`66cb8dc1`…`1bd6e5af`）：v14 签名动画移植为 React 覆盖层（素材抽为独立 PNG），系统/用户主题、`sessionStorage` 单次、1 秒后可跳过、reduced-motion 终态、通用设置开关；深浅色真实浏览器验证，Web 1544 项。
+- **结构整理**（`09b987e8`…`03a055d8`）：按 [仓库结构与校验](../design/repository-structure.md) §5 第 1–5 步实施，`pnpm check` = libs:build + format:check + typecheck + protocol:check + repo:check；豁免表只剩待拆分的大文件并会自行过期报错。
+- **大文件拆分**：`api.rs` 5708→34 文件（最大 511）、`db.rs` 3550→22 文件（最大 456）；`shared/src/api.ts`、`domain.ts`、`host-client/github.ts`、Web `client.ts`、`canvas-store.ts`、`TerminalSurface.tsx`、`EditorNode.tsx`、Git 面板测试全部拆为 ≤ 350 行模块，导出集合与测试数逐项一致；Git/终端/浏览器/协作测试的拆分进行中。
+- **Fable 设计**（`docs/design/`）：[Host 业务迁移第二阶段](../design/host-business-migration.md)、[语言服务](../design/language-service.md)、[发布、更新与服务安装](../design/updates-and-service-install.md)、[浏览器与远端补全](../design/remote-and-browser-completion.md)，各含契约、布局、并行批次与验收。跨设计的编号预分配：Runtime 迁移 0010 浏览器 / 0011 多域所有权 / 0012 反向导入；`worker.proto` oneof 16–19 远端 watch/upload、24–28 业务域、30–34 语言服务。
+- **实施第一轮（进行中）**：B0a 多域所有权与 HTTPS 切换、B0b 事件流、B0c 反向导入、B0d Worker 双向通道、语言服务 A+B、发布/更新 0+A+C。
 
 ## 本轮验证（2026-09-06 上午，四轮全部合入后于主树重跑，私有目标目录）
 
@@ -225,7 +234,7 @@
 
 ## 下一步
 
-1. 开屏动画（用户 2026-09-06 新增需求，实施中）：按 `output/playwright/armadra-signature-v14` 签名动画，跟随系统深浅色，首次打开与完整退出后重开展示。
-2. 全部合入后把 `main` 快进到功能分支；结构整理按 repository-structure.md 顺序单独进行。
-3. 需要实机的验收保持未完成状态：Windows（Session Host、Job Object、命名管道、文件监听）、手机、真实 GitHub 远端回写、真实 SSH 主机、WebView 自定义协议 GUI。
-4. 剩余功能缺口：H01 的 session/agent/filesystem/git 业务表面与 HTTPS 切换；远端仓库面板与文件管理；rebase todo reword/skip；LSP；自动更新下载安装；受管浏览器下载与跨端画面；托盘视觉自动化确认。
+1. 合入 Runtime Git/终端/浏览器拆分与实施第一轮六批；随后按设计启动：Host 业务域 B1–B5、语言服务 C/D、更新 B/D、浏览器批次 0–3、远端批次 4–5。
+2. 每轮合入后：`pnpm check`、`cargo test --workspace`、`go -C apps/host test -race ./...`、`pnpm protocol:test`、真实进程端到端；`main` 快进。
+3. `apps/runtime`→`apps/worker` 改名（§5 第 7 步）在 B5 完成且 §4.4 条件满足后单独执行。
+4. 需要实机的验收保持未完成：Windows、手机、真实 GitHub 远端回写、真实 SSH 主机、CI 真实 runner、WebView 自定义协议 GUI。
