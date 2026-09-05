@@ -1848,9 +1848,20 @@ pub async fn git_diff(
     )?))
 }
 
+/// Which repository under the workspace a legacy Git request addresses.
+/// Absent means the workspace root, so every existing caller keeps working
+/// while a multi-repository workspace names the checkout it means (§4.1).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GitRepositoryPathQuery {
+    #[serde(default = "default_path")]
+    path: String,
+}
+
 pub async fn git_status(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
+    Query(query): Query<GitRepositoryPathQuery>,
 ) -> AppResult<Json<git::GitStatus>> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
     if !workspace.permissions.read {
@@ -1859,7 +1870,10 @@ pub async fn git_status(
         ));
     }
     git::access::require_execution(workspace.permissions.execute, "Git worktree status")?;
-    Ok(Json(git::read_status(Path::new(&workspace.root_path))?))
+    Ok(Json(git::read_status_at(
+        Path::new(&workspace.root_path),
+        &query.path,
+    )?))
 }
 
 /// `POST /api/workspaces/{id}/git/init`.
@@ -1891,6 +1905,9 @@ pub async fn git_init(
 #[serde(rename_all = "camelCase")]
 pub struct PathsRequest {
     paths: Vec<String>,
+    /// The repository the paths belong to; the workspace root by default.
+    #[serde(default = "default_path")]
+    path: String,
 }
 
 pub async fn git_stage(
@@ -1909,11 +1926,15 @@ pub async fn git_stage(
         "Git index, worktree, and commit writes",
     )?;
     let guard = crate::git_api::REPOSITORIES
-        .mutation_guard(Path::new(&workspace.root_path), ".")
+        .mutation_guard(Path::new(&workspace.root_path), &request.path)
         .await?;
     let result = tokio::task::spawn_blocking(move || {
         let _guard = guard;
-        git::stage_paths(Path::new(&workspace.root_path), &request.paths)
+        git::stage_paths(
+            Path::new(&workspace.root_path),
+            &request.path,
+            &request.paths,
+        )
     })
     .await??;
     Ok(Json(result))
@@ -1935,11 +1956,15 @@ pub async fn git_unstage(
         "Git index, worktree, and commit writes",
     )?;
     let guard = crate::git_api::REPOSITORIES
-        .mutation_guard(Path::new(&workspace.root_path), ".")
+        .mutation_guard(Path::new(&workspace.root_path), &request.path)
         .await?;
     let result = tokio::task::spawn_blocking(move || {
         let _guard = guard;
-        git::unstage_paths(Path::new(&workspace.root_path), &request.paths)
+        git::unstage_paths(
+            Path::new(&workspace.root_path),
+            &request.path,
+            &request.paths,
+        )
     })
     .await??;
     Ok(Json(result))
@@ -1963,11 +1988,15 @@ pub async fn git_resolve(
         "Git index, worktree, and commit writes",
     )?;
     let guard = crate::git_api::REPOSITORIES
-        .mutation_guard(Path::new(&workspace.root_path), ".")
+        .mutation_guard(Path::new(&workspace.root_path), &request.path)
         .await?;
     let result = tokio::task::spawn_blocking(move || {
         let _guard = guard;
-        git::mark_resolved(Path::new(&workspace.root_path), &request.paths)
+        git::mark_resolved(
+            Path::new(&workspace.root_path),
+            &request.path,
+            &request.paths,
+        )
     })
     .await??;
     Ok(Json(result))
@@ -1981,6 +2010,9 @@ pub struct RevertRequest {
     paths: Vec<String>,
     #[serde(default)]
     source: git::RestoreSource,
+    /// The repository the paths belong to; the workspace root by default.
+    #[serde(default = "default_path")]
+    path: String,
 }
 
 pub async fn git_revert(
@@ -1999,12 +2031,13 @@ pub async fn git_revert(
         "Git index, worktree, and commit writes",
     )?;
     let guard = crate::git_api::REPOSITORIES
-        .mutation_guard(Path::new(&workspace.root_path), ".")
+        .mutation_guard(Path::new(&workspace.root_path), &request.path)
         .await?;
     let result = tokio::task::spawn_blocking(move || {
         let _guard = guard;
         git::revert_paths(
             Path::new(&workspace.root_path),
+            &request.path,
             &request.paths,
             request.source,
         )
@@ -2018,6 +2051,10 @@ pub async fn git_revert(
 pub struct CommitRequest {
     message: String,
     paths: Option<Vec<String>>,
+    /// The repository the commit lands in. There is deliberately no
+    /// cross-repository commit: one request, one repository (§4.1).
+    #[serde(default = "default_path")]
+    path: String,
     /// Present only for an explicit amend; the composer sends the OID it showed.
     amend: Option<AmendBody>,
 }
@@ -2034,6 +2071,7 @@ pub struct AmendBody {
 pub async fn git_head_commit(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
+    Query(query): Query<GitRepositoryPathQuery>,
 ) -> AppResult<Json<Option<git::HeadCommit>>> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
     if !workspace.permissions.read {
@@ -2042,9 +2080,10 @@ pub async fn git_head_commit(
         ));
     }
     git::access::require_execution(workspace.permissions.execute, "Git commit inspection")?;
-    let result =
-        tokio::task::spawn_blocking(move || git::head_commit(Path::new(&workspace.root_path)))
-            .await??;
+    let result = tokio::task::spawn_blocking(move || {
+        git::head_commit(Path::new(&workspace.root_path), &query.path)
+    })
+    .await??;
     Ok(Json(result))
 }
 
@@ -2064,7 +2103,7 @@ pub async fn git_commit(
         "Git index, worktree, and commit writes",
     )?;
     let guard = crate::git_api::REPOSITORIES
-        .mutation_guard(Path::new(&workspace.root_path), ".")
+        .mutation_guard(Path::new(&workspace.root_path), &request.path)
         .await?;
     let result = tokio::task::spawn_blocking(move || {
         let _guard = guard;
@@ -2074,6 +2113,7 @@ pub async fn git_commit(
         });
         git::commit(
             Path::new(&workspace.root_path),
+            &request.path,
             &request.message,
             request.paths.as_deref(),
             amend.as_ref(),

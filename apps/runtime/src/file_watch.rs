@@ -464,6 +464,14 @@ fn publish(workspace_id: &str, touched: &HashSet<PathBuf>) {
     }
     drop(registry);
     for change in changes {
+        // A `.git` entry appearing or disappearing changes the set of
+        // repositories under the workspace, so the discovery cache drops its
+        // answer before the event reaches any client (roadmap §4.1).
+        if let WorkspaceEvent::FileChanged { path, .. } = &change
+            && crate::git_discovery::affects_repositories(path)
+        {
+            crate::git_discovery::invalidate(workspace_id);
+        }
         events.publish(workspace_id, change);
     }
 }

@@ -33,9 +33,11 @@ use crate::{
     security::{canonical_directory, redact_secrets, resolve_in_root, valid_directory_name},
 };
 
+mod commits;
 mod integration;
 mod refs;
 mod stash;
+pub use commits::{CommitDetail, CommitFile, CommitFileDiff};
 pub use integration::{CherryPickPreview, ConflictFile, ConflictSide, IntegrationSnapshot};
 pub use refs::{RemoteRecord, TagRecord, TagSnapshot};
 pub use stash::{StashDetail, StashRecord, StashSnapshot};

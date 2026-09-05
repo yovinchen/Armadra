@@ -148,9 +148,39 @@ export const stickyNodeDataSchema = z.object({
   content: z.string().max(MAX_STICKY_CONTENT).default(""),
 });
 
+/**
+ * A Frame bound to a worktree (G03). The binding is a *record of* a checkout
+ * that already exists, never the checkout itself: unbinding clears these fields
+ * and leaves the directory on disk untouched, and removing the checkout goes
+ * through the repository service's safe removal.
+ *
+ * `worktreePath` is workspace-relative — the same value every repository
+ * request takes as its `path` — so a bound Frame and the repository switcher
+ * name the same checkout. `repositoryId` is the discovery record's id.
+ */
+export const frameBindingSchema = z.object({
+  worktreePath: z.string().min(1).max(4096),
+  branch: z.string().min(1).max(1024),
+  repositoryId: z.string().min(1),
+  /**
+   * A one-shot setup command run inside the checkout when the binding is
+   * created. It is never re-run on its own: `pending` and `running` are states
+   * a user action moved through, and a `failed` script leaves the binding in
+   * place so the output stays readable.
+   */
+  initScript: z.string().max(4096).nullable().default(null),
+  initScriptState: z
+    .enum(["none", "pending", "running", "succeeded", "failed"])
+    .default("none"),
+  /** The terminal node the init script's output went to, when there is one. */
+  initScriptNodeId: z.string().nullable().default(null),
+});
+
 /** The group label is `node.title` and its tint is `node.color`. */
 export const groupNodeDataSchema = z.object({
   kind: z.literal("group"),
+  /** Absent for an ordinary Frame; present once one is bound to a checkout. */
+  binding: frameBindingSchema.nullish(),
 });
 
 /**
@@ -554,6 +584,7 @@ export type CanvasNodeData = z.infer<typeof canvasNodeDataSchema>;
 export type TerminalNodeData = z.infer<typeof terminalNodeDataSchema>;
 export type StickyNodeData = z.infer<typeof stickyNodeDataSchema>;
 export type GroupNodeData = z.infer<typeof groupNodeDataSchema>;
+export type FrameBinding = z.infer<typeof frameBindingSchema>;
 export type EditorNodeData = z.infer<typeof editorNodeDataSchema>;
 export type LanguageService = z.infer<typeof languageServiceSchema>;
 export type DiffNodeData = z.infer<typeof diffNodeDataSchema>;

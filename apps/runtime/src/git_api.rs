@@ -177,6 +177,101 @@ pub async fn stash_detail(
         .await
         .map(Json)
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct RepositoryListQuery {
+    /// How deep below the workspace root the scan looks. Defaults to
+    /// `git_discovery::DEFAULT_MAX_DEPTH`; the module caps it.
+    max_depth: Option<usize>,
+    /// Force a rescan instead of answering from the cache.
+    #[serde(default)]
+    refresh: bool,
+}
+
+/// `GET /api/workspaces/{id}/git/repositories` — every repository under the
+/// workspace root, roadmap §4.1. The scan itself is filesystem-only; only the
+/// dirty count needs Git, so it is omitted without an execution grant rather
+/// than failing the request.
+pub async fn repositories(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<RepositoryListQuery>,
+) -> AppResult<Json<crate::git_discovery::GitRepositoryList>> {
+    let workspace = workspace(&state, &id, false).await?;
+    if query.refresh {
+        crate::git_discovery::invalidate(&id);
+    }
+    let execute = workspace.permissions.execute;
+    let root = workspace.root_path.clone();
+    let depth = query.max_depth;
+    tokio::task::spawn_blocking(move || {
+        crate::git_discovery::repositories(&id, Path::new(&root), depth, execute)
+    })
+    .await
+    .map_err(|_| AppError::Internal("Repository discovery did not finish".into()))?
+    .map(Json)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CommitDetailQuery {
+    #[serde(default = "root_path")]
+    path: String,
+    oid: String,
+    /// What the commit is compared against. Absent means its first parent;
+    /// the graph's "compare to current" sends `HEAD`.
+    base: Option<String>,
+}
+
+/// The files one commit changed (§4.1). Separate from the patch read, because
+/// a commit can touch thousands of files.
+pub async fn commit_detail(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<CommitDetailQuery>,
+) -> AppResult<Json<CommitDetail>> {
+    let workspace = workspace(&state, &id, false).await?;
+    REPOSITORIES
+        .with_execution(workspace.permissions.execute)
+        .commit_detail(
+            Path::new(&workspace.root_path),
+            &query.path,
+            &query.oid,
+            query.base.as_deref(),
+        )
+        .await
+        .map(Json)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CommitFileQuery {
+    #[serde(default = "root_path")]
+    path: String,
+    oid: String,
+    base: Option<String>,
+    file: String,
+}
+
+pub async fn commit_file_diff(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<CommitFileQuery>,
+) -> AppResult<Json<CommitFileDiff>> {
+    let workspace = workspace(&state, &id, false).await?;
+    REPOSITORIES
+        .with_execution(workspace.permissions.execute)
+        .commit_file_diff(
+            Path::new(&workspace.root_path),
+            &query.path,
+            &query.oid,
+            query.base.as_deref(),
+            &query.file,
+        )
+        .await
+        .map(Json)
+}
+
 fn head_reference() -> String {
     "HEAD".into()
 }
@@ -323,6 +418,14 @@ pub async fn start(
         }
         _ => {}
     }
+    // Adding or removing a checkout changes the set of repositories under the
+    // workspace. The scan is cached, and nothing else observes a worktree
+    // appearing — `file.changed` only covers files an editor has open — so the
+    // cache is dropped here and the next list rescans (roadmap §4.1).
+    let rescans = matches!(
+        request.action,
+        RepositoryAction::CreateWorktree { .. } | RepositoryAction::RemoveWorktree { .. }
+    );
     let result = REPOSITORIES
         .start(
             workspace.root_path.into(),
@@ -331,6 +434,9 @@ pub async fn start(
             request.expected,
         )
         .await?;
+    if rescans {
+        crate::git_discovery::invalidate(&id);
+    }
     let mut owners = OWNERS
         .lock()
         .map_err(|_| AppError::Internal("Git operation scope lock failed".into()))?;
@@ -384,9 +490,20 @@ pub async fn operation(
     State(state): State<AppState>,
     AxumPath((workspace_id, id)): AxumPath<(String, String)>,
 ) -> AppResult<Json<OperationSnapshot>> {
-    scoped_operation(&state, &workspace_id, &id, false)
-        .await
-        .map(Json)
+    let snapshot = scoped_operation(&state, &workspace_id, &id, false).await?;
+    // A worktree operation only changes the set of checkouts once it actually
+    // finishes, and `start` fires before that. Dropping the cache here means
+    // the client's next repository list — the one it reads right after seeing
+    // this state — rescans rather than reporting the checkout as missing.
+    if snapshot.state.terminal()
+        && matches!(
+            snapshot.action,
+            RepositoryAction::CreateWorktree { .. } | RepositoryAction::RemoveWorktree { .. }
+        )
+    {
+        crate::git_discovery::invalidate(&workspace_id);
+    }
+    Ok(Json(snapshot))
 }
 pub async fn cancel(
     State(state): State<AppState>,

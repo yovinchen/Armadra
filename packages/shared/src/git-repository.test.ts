@@ -4,8 +4,11 @@ import {
   gitHistoryPageSchema,
   gitRepositoryActionSchema,
   gitRepositoryOperationSchema,
+  gitRepositoryListSchema,
+  gitRepositoryRecordSchema,
   gitWorktreeRecordSchema,
 } from "./git-repository";
+import { frameBindingSchema, groupNodeDataSchema } from "./domain";
 const oid = "a".repeat(40);
 describe("Git repository wire contract", () => {
   it("requires explicit unborn/detached state and rejects implicit CAS bypass", () => {
@@ -141,5 +144,72 @@ describe("Git repository wire contract", () => {
         shallow: true,
       }).nextCursor,
     ).toBe("opaque");
+  });
+  it("keeps an unknown dirty count distinct from a clean repository", () => {
+    const base = {
+      repositoryId: "a".repeat(64),
+      repositoryPath: "apps/inner",
+      name: "inner",
+      kind: "nested" as const,
+      parentRepositoryId: "b".repeat(64),
+      headBranch: "main",
+    };
+    // Null means "not counted" — no execution grant — and must never be read
+    // as "no changes"; the panel renders the two differently.
+    expect(
+      gitRepositoryRecordSchema.parse({ ...base, dirtyCount: null }).dirtyCount,
+    ).toBeNull();
+    expect(
+      gitRepositoryRecordSchema.parse({ ...base, dirtyCount: 0 }).dirtyCount,
+    ).toBe(0);
+    expect(
+      gitRepositoryRecordSchema.safeParse({ ...base, dirtyCount: -1 }).success,
+    ).toBe(false);
+    expect(
+      gitRepositoryRecordSchema.safeParse({ ...base, kind: "linked" }).success,
+    ).toBe(false);
+    // The workspace root is addressed as `.` and has no parent.
+    expect(
+      gitRepositoryListSchema.parse({
+        workspaceRoot: "/workspace",
+        maxDepth: 4,
+        repositories: [
+          {
+            ...base,
+            repositoryPath: ".",
+            kind: "root",
+            parentRepositoryId: null,
+            dirtyCount: 3,
+          },
+        ],
+        truncated: false,
+        observedAt: "2026-09-06T00:00:00Z",
+      }).repositories[0]!.repositoryPath,
+    ).toBe(".");
+  });
+  it("binds a Frame to a checkout without implying the script has run", () => {
+    const binding = frameBindingSchema.parse({
+      worktreePath: "checkouts/feature",
+      branch: "feature",
+      repositoryId: "c".repeat(64),
+    });
+    expect(binding.initScript).toBeNull();
+    expect(binding.initScriptState).toBe("none");
+    expect(binding.initScriptNodeId).toBeNull();
+    // A Frame with no binding is the ordinary case and must stay parseable:
+    // the key is simply absent, exactly as it is on every board saved so far.
+    expect(
+      groupNodeDataSchema.parse({ kind: "group" }).binding,
+    ).toBeUndefined();
+    expect(
+      groupNodeDataSchema.parse({ kind: "group", binding }).binding?.branch,
+    ).toBe("feature");
+    expect(
+      frameBindingSchema.safeParse({
+        worktreePath: "checkouts/feature",
+        branch: "",
+        repositoryId: "c".repeat(64),
+      }).success,
+    ).toBe(false);
   });
 });

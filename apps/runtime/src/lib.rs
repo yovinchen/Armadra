@@ -18,6 +18,7 @@ pub mod file_watch;
 pub mod files;
 pub mod git;
 pub mod git_api;
+pub mod git_discovery;
 pub mod git_hunks;
 pub mod git_message;
 pub mod git_repository;
@@ -135,12 +136,24 @@ pub fn router_with_state(state: AppState) -> Router {
             post(git_api::message_generate),
         )
         .route(
+            "/api/workspaces/{workspace_id}/git/repositories",
+            get(git_api::repositories),
+        )
+        .route(
             "/api/workspaces/{workspace_id}/git/repository/branches",
             get(git_api::branches),
         )
         .route(
             "/api/workspaces/{workspace_id}/git/repository/history",
             get(git_api::history),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/git/repository/commit",
+            get(git_api::commit_detail),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/git/repository/commit-file",
+            get(git_api::commit_file_diff),
         )
         .route(
             "/api/workspaces/{workspace_id}/git/repository/worktrees",

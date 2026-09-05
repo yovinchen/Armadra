@@ -58,6 +58,82 @@ export const gitWorktreeRecordSchema = z.object({
   dirty: z.boolean().nullable(),
 });
 export const gitWorktreesSchema = z.array(gitWorktreeRecordSchema);
+
+/**
+ * How a checkout under the workspace came to be a repository (roadmap §4.1).
+ * `root` is the workspace directory itself, `nested` an independent repository
+ * in a subdirectory, `submodule` a `.git` file pointing into a superproject's
+ * `.git/modules`, and `worktree` a linked checkout of another repository here.
+ */
+export const gitRepositoryKindSchema = z.enum([
+  "root",
+  "nested",
+  "submodule",
+  "worktree",
+]);
+export const gitRepositoryRecordSchema = z.object({
+  /**
+   * Derived from the canonical common directory, so it matches the
+   * `repositoryId` on every snapshot the repository service returns. Linked
+   * worktrees of one repository therefore share an id — they are the same
+   * repository — and `repositoryPath` is what identifies a checkout.
+   */
+  repositoryId: z.string().min(1),
+  /** Workspace-relative, `.` for the root; the `path` every Git request takes. */
+  repositoryPath: z.string().min(1),
+  name: z.string().min(1),
+  kind: gitRepositoryKindSchema,
+  /** The enclosing repository, or the main checkout of a linked worktree. */
+  parentRepositoryId: z.string().min(1).nullable(),
+  /** Null on a detached HEAD. */
+  headBranch: z.string().nullable(),
+  /**
+   * Null when the workspace has no execution grant: counting changes runs
+   * `git status`, which may invoke repository filters. Unknown, never zero.
+   */
+  dirtyCount: count.nullable(),
+});
+export const gitRepositoryListSchema = z.object({
+  workspaceRoot: z.string(),
+  maxDepth: count,
+  repositories: z.array(gitRepositoryRecordSchema),
+  /** The scan hit a ceiling, so the list may be incomplete. */
+  truncated: z.boolean(),
+  observedAt: z.string(),
+});
+/**
+ * What one commit changed. The file list and a file's patch are separate reads:
+ * a commit can touch thousands of files and one file can be megabytes, so
+ * selecting a row in the graph must not be an unbounded operation.
+ */
+export const gitCommitFileSchema = z.object({
+  status: z.string().min(1).max(4),
+  path: z.string().min(1),
+  /** Null for a binary file, which has no line counts — never a false zero. */
+  additions: count.nullable(),
+  deletions: count.nullable(),
+});
+export const gitCommitDetailSchema = z.object({
+  oid,
+  /** Null for a root commit compared with its first parent. */
+  baseOid: oid.nullable(),
+  commit: gitCommitRecordSchema,
+  files: z.array(gitCommitFileSchema),
+  truncated: z.boolean(),
+});
+export const gitCommitFileDiffSchema = z.object({
+  oid,
+  baseOid: oid.nullable(),
+  path: z.string().min(1),
+  patch: z.string(),
+  truncated: z.boolean(),
+});
+export type GitCommitFile = z.infer<typeof gitCommitFileSchema>;
+export type GitCommitDetail = z.infer<typeof gitCommitDetailSchema>;
+export type GitCommitFileDiff = z.infer<typeof gitCommitFileDiffSchema>;
+export type GitRepositoryKind = z.infer<typeof gitRepositoryKindSchema>;
+export type GitRepositoryRecord = z.infer<typeof gitRepositoryRecordSchema>;
+export type GitRepositoryList = z.infer<typeof gitRepositoryListSchema>;
 /**
  * What an interactive rebase does with one replayed commit. Deliberately small:
  * no `edit`, no `exec`, and no `reword` — each would need an interactive editor

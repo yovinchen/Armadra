@@ -147,6 +147,33 @@ fn repo_context_with_execution(
     }))
 }
 
+/// The number of changed entries in a checkout, for repository discovery
+/// (roadmap §4.1). `None` whenever Git cannot answer — a repository mid-rebase,
+/// a broken filter, a checkout that vanished — because an unknown count is a
+/// normal answer for a list of repositories and a wrong one is not.
+///
+/// This runs `git status`, which may invoke repository filters, so callers must
+/// already hold the workspace execution grant.
+pub fn dirty_entry_count(checkout: &Path) -> Option<u64> {
+    let output = git(
+        checkout,
+        &[
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            "--no-renames",
+        ],
+    )
+    .ok()?;
+    Some(
+        output
+            .split('\0')
+            .filter(|entry| !entry.trim().is_empty())
+            .count() as u64,
+    )
+}
+
 /// Normalize a porcelain status code to the `M/A/D/R/?` set the UI renders.
 pub fn normalize_file_status(raw: &str) -> String {
     let code = raw.trim();
@@ -523,7 +550,12 @@ pub struct GitStatus {
 /// Configured filters/fsmonitor can execute during this trusted inspection;
 /// workspace-scoped callers must require execution permission first.
 pub fn read_status(workspace_root: &Path) -> AppResult<GitStatus> {
-    let Some(context) = repo_context(workspace_root, ".")? else {
+    read_status_at(workspace_root, ".")
+}
+
+/// `read_status` scoped to one repository under the workspace (roadmap §4.1).
+pub fn read_status_at(workspace_root: &Path, requested: &str) -> AppResult<GitStatus> {
+    let Some(context) = repo_context(workspace_root, requested)? else {
         return Ok(GitStatus {
             repository: false,
             branch: None,
@@ -600,8 +632,12 @@ pub struct UnstageResult {
 /// Before the first commit there is no HEAD to restore from, so a freshly added
 /// file is removed from the index instead (`--ignore-unmatch` keeps a path that
 /// was never staged from turning into an error).
-pub fn unstage_paths(workspace_root: &Path, paths: &[String]) -> AppResult<UnstageResult> {
-    let context = require_repository(workspace_root)?;
+pub fn unstage_paths(
+    workspace_root: &Path,
+    requested: &str,
+    paths: &[String],
+) -> AppResult<UnstageResult> {
+    let context = require_repository(workspace_root, requested)?;
     let requested = prepare_paths(&context, paths)?;
     let unstaged: Vec<String> = requested
         .into_iter()
@@ -624,8 +660,12 @@ pub fn unstage_paths(workspace_root: &Path, paths: &[String]) -> AppResult<Unsta
 
 /// `git add -- <paths>`. Every path must be a workspace-relative regular file
 /// inside the authorized root (or a tracked path that was deleted on disk).
-pub fn stage_paths(workspace_root: &Path, paths: &[String]) -> AppResult<StageResult> {
-    let context = require_repository(workspace_root)?;
+pub fn stage_paths(
+    workspace_root: &Path,
+    requested: &str,
+    paths: &[String],
+) -> AppResult<StageResult> {
+    let context = require_repository(workspace_root, requested)?;
     let requested = prepare_paths(&context, paths)?;
     let mut staged = Vec::with_capacity(requested.len());
     for (relative, absolute) in &requested {
@@ -670,8 +710,12 @@ const MAX_RESOLVE_SCAN: u64 = 16 * 1024 * 1024;
 ///
 /// A file that still has markers is refused with the exact lines, so the caller
 /// can go back to them instead of staging a half-merged result.
-pub fn mark_resolved(workspace_root: &Path, paths: &[String]) -> AppResult<ResolveResult> {
-    let context = require_repository(workspace_root)?;
+pub fn mark_resolved(
+    workspace_root: &Path,
+    requested: &str,
+    paths: &[String],
+) -> AppResult<ResolveResult> {
+    let context = require_repository(workspace_root, requested)?;
     let requested = prepare_paths(&context, paths)?;
     let mut resolved = Vec::with_capacity(requested.len());
     for (relative, absolute) in &requested {
@@ -771,10 +815,11 @@ pub enum RestoreSource {
 /// index restore: the caller has to pick which of the two losses it wants.
 pub fn revert_paths(
     workspace_root: &Path,
+    requested: &str,
     paths: &[String],
     source: RestoreSource,
 ) -> AppResult<RevertResult> {
-    let context = require_repository(workspace_root)?;
+    let context = require_repository(workspace_root, requested)?;
     let requested = prepare_paths(&context, paths)?;
     let mut tracked = Vec::new();
     let mut untracked = Vec::new();
@@ -851,8 +896,8 @@ pub struct HeadCommit {
 }
 
 /// `HEAD` as the amend controls describe it, or None on an unborn branch.
-pub fn head_commit(workspace_root: &Path) -> AppResult<Option<HeadCommit>> {
-    let context = require_repository(workspace_root)?;
+pub fn head_commit(workspace_root: &Path, requested: &str) -> AppResult<Option<HeadCommit>> {
+    let context = require_repository(workspace_root, requested)?;
     let Ok(oid) = git(
         &context.repository,
         &["rev-parse", "--verify", "--quiet", "HEAD^{commit}"],
@@ -919,6 +964,7 @@ pub struct AmendRequest {
 /// additionally needs an explicit acknowledgement. Nothing here force-pushes.
 pub fn commit(
     workspace_root: &Path,
+    requested: &str,
     message: &str,
     paths: Option<&[String]>,
     amend: Option<&AmendRequest>,
@@ -927,9 +973,9 @@ pub fn commit(
     if message.is_empty() || message.len() > 10_000 || message.contains('\0') {
         return Err(AppError::BadRequest("Commit message is invalid".into()));
     }
-    let context = require_repository(workspace_root)?;
+    let context = require_repository(workspace_root, requested)?;
     if let Some(amend) = amend {
-        let current = head_commit(workspace_root)?.ok_or_else(|| {
+        let current = head_commit(workspace_root, requested)?.ok_or_else(|| {
             AppError::Conflict("There is no commit to amend on this branch".into())
         })?;
         if current.oid != amend.expected_head {
@@ -944,7 +990,7 @@ pub fn commit(
         }
     }
     let committed = match paths {
-        Some(paths) => stage_paths(workspace_root, paths)?.staged,
+        Some(paths) => stage_paths(workspace_root, requested, paths)?.staged,
         None => vec![],
     };
 
@@ -1059,8 +1105,12 @@ fn workspace_relative_root(repository: &Path) -> AppResult<String> {
         .ok_or_else(|| AppError::BadRequest("Git path is not valid UTF-8".into()))
 }
 
-fn require_repository(workspace_root: &Path) -> AppResult<RepoContext> {
-    repo_context(workspace_root, ".")?
+/// The repository that owns `requested` — a workspace-relative directory, `.`
+/// for the workspace root. A multi-repository workspace addresses one checkout
+/// this way (roadmap §4.1); every path in the request is then relative to
+/// *that* repository, which is what `read_status` already reports.
+fn require_repository(workspace_root: &Path, requested: &str) -> AppResult<RepoContext> {
+    repo_context(workspace_root, requested)?
         .ok_or_else(|| AppError::BadRequest("The workspace is not a Git repository".into()))
 }
 
@@ -1539,17 +1589,18 @@ mod tests {
         fs::write(root.path().join("left.txt"), "two\n").unwrap();
 
         assert!(matches!(
-            commit(root.path(), "   ", None, None),
+            commit(root.path(), ".", "   ", None, None),
             Err(AppError::BadRequest(_))
         ));
         // Nothing is staged yet, so an unscoped commit is refused.
         assert!(matches!(
-            commit(root.path(), "empty", None, None),
+            commit(root.path(), ".", "empty", None, None),
             Err(AppError::BadRequest(_))
         ));
 
         let result = commit(
             root.path(),
+            ".",
             "add kept",
             Some(&["kept.txt".to_owned()]),
             None,
@@ -1565,6 +1616,7 @@ mod tests {
         assert!(
             commit(
                 root.path(),
+                ".",
                 "escape",
                 Some(&["../outside.txt".to_owned()]),
                 None
@@ -1762,7 +1814,7 @@ mod tests {
         fixture_repository(&root);
         fs::write(root.join("a.txt"), "one\n").unwrap();
         commit_all(&root, "first subject\n\nbody line\n");
-        let before = head_commit(&root).unwrap().unwrap();
+        let before = head_commit(&root, ".").unwrap().unwrap();
         assert_eq!(before.subject, "first subject");
         assert!(before.message.contains("body line"));
         assert!(!before.truncated);
@@ -1772,6 +1824,7 @@ mod tests {
         assert!(matches!(
             commit(
                 &root,
+                ".",
                 "rewritten",
                 None,
                 Some(&AmendRequest {
@@ -1781,11 +1834,12 @@ mod tests {
             ),
             Err(AppError::Conflict(_))
         ));
-        assert_eq!(head_commit(&root).unwrap().unwrap().oid, before.oid);
+        assert_eq!(head_commit(&root, ".").unwrap().unwrap().oid, before.oid);
 
         fs::write(root.join("a.txt"), "two\n").unwrap();
         let amended = commit(
             &root,
+            ".",
             "rewritten subject",
             Some(&["a.txt".to_owned()]),
             Some(&AmendRequest {
@@ -1795,7 +1849,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(amended.committed, vec!["a.txt".to_owned()]);
-        let after = head_commit(&root).unwrap().unwrap();
+        let after = head_commit(&root, ".").unwrap().unwrap();
         assert_ne!(after.oid, before.oid, "amend replaces the commit");
         assert_eq!(after.subject, "rewritten subject");
         // The rewrite kept a single root commit rather than adding one.
@@ -1834,11 +1888,12 @@ mod tests {
                     .success()
             );
         }
-        let published = head_commit(&root).unwrap().unwrap();
+        let published = head_commit(&root, ".").unwrap().unwrap();
         assert!(published.published);
         assert!(matches!(
             commit(
                 &root,
+                ".",
                 "sneaky rewrite",
                 None,
                 Some(&AmendRequest {
@@ -1848,11 +1903,12 @@ mod tests {
             ),
             Err(AppError::Conflict(_))
         ));
-        assert_eq!(head_commit(&root).unwrap().unwrap().oid, published.oid);
+        assert_eq!(head_commit(&root, ".").unwrap().unwrap().oid, published.oid);
         // The same request with the explicit acknowledgement is accepted, and
         // still touches nothing on the remote.
         commit(
             &root,
+            ".",
             "acknowledged rewrite",
             None,
             Some(&AmendRequest {
@@ -1862,7 +1918,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            head_commit(&root).unwrap().unwrap().subject,
+            head_commit(&root, ".").unwrap().unwrap().subject,
             "acknowledged rewrite"
         );
         let remote_head = Command::new("git")
@@ -1954,7 +2010,7 @@ mod tests {
 
         fs::write(root.path().join("edited.txt"), "two\n").unwrap();
         fs::write(root.path().join("added.txt"), "three\n").unwrap();
-        stage_paths(root.path(), &["added.txt".to_owned()]).unwrap();
+        stage_paths(root.path(), ".", &["added.txt".to_owned()]).unwrap();
         fs::write(root.path().join("fresh.txt"), "four\n").unwrap();
 
         let status = read_status(root.path()).unwrap();
@@ -1982,7 +2038,7 @@ mod tests {
         commit_all(root.path(), "initial");
 
         fs::write(root.path().join("tracked.txt"), "two\n").unwrap();
-        stage_paths(root.path(), &["tracked.txt".to_owned()]).unwrap();
+        stage_paths(root.path(), ".", &["tracked.txt".to_owned()]).unwrap();
         fs::write(root.path().join("tracked.txt"), "three\n").unwrap();
         fs::write(root.path().join("untracked.txt"), "new\n").unwrap();
 
@@ -2071,7 +2127,7 @@ mod tests {
             root.path().join("new name.txt"),
         )
         .unwrap();
-        stage_paths(root.path(), &["new name.txt".to_owned()]).unwrap();
+        stage_paths(root.path(), ".", &["new name.txt".to_owned()]).unwrap();
         Command::new("git")
             .args(["add", "-A"])
             .current_dir(root.path())
@@ -2113,7 +2169,7 @@ mod tests {
         fs::write(root.path().join("tracked.txt"), "one\n").unwrap();
         commit_all(root.path(), "initial");
         fs::write(root.path().join("tracked.txt"), "two\n").unwrap();
-        stage_paths(root.path(), &["tracked.txt".to_owned()]).unwrap();
+        stage_paths(root.path(), ".", &["tracked.txt".to_owned()]).unwrap();
         assert!(
             read_status(root.path())
                 .unwrap()
@@ -2122,7 +2178,7 @@ mod tests {
                 .any(|entry| entry.path == "tracked.txt" && entry.staged)
         );
 
-        let result = unstage_paths(root.path(), &["tracked.txt".to_owned()]).unwrap();
+        let result = unstage_paths(root.path(), ".", &["tracked.txt".to_owned()]).unwrap();
         assert_eq!(result.unstaged, vec!["tracked.txt".to_owned()]);
         let status = read_status(root.path()).unwrap();
         let entry = status
@@ -2138,7 +2194,7 @@ mod tests {
         );
 
         assert!(matches!(
-            unstage_paths(root.path(), &["../escape.txt".to_owned()]),
+            unstage_paths(root.path(), ".", &["../escape.txt".to_owned()]),
             Err(AppError::BadRequest(_))
         ));
     }
@@ -2148,9 +2204,9 @@ mod tests {
         let root = tempdir().unwrap();
         fixture_repository(root.path());
         fs::write(root.path().join("first.txt"), "one\n").unwrap();
-        stage_paths(root.path(), &["first.txt".to_owned()]).unwrap();
+        stage_paths(root.path(), ".", &["first.txt".to_owned()]).unwrap();
 
-        unstage_paths(root.path(), &["first.txt".to_owned()]).unwrap();
+        unstage_paths(root.path(), ".", &["first.txt".to_owned()]).unwrap();
         let status = read_status(root.path()).unwrap();
         let entry = status
             .files
@@ -2205,7 +2261,7 @@ mod tests {
         fs::create_dir(root.path().join("src")).unwrap();
         fs::write(root.path().join("src/added.txt"), "added\n").unwrap();
 
-        let staged = stage_paths(root.path(), &["src/added.txt".to_owned()]).unwrap();
+        let staged = stage_paths(root.path(), ".", &["src/added.txt".to_owned()]).unwrap();
         assert_eq!(staged.staged, vec!["src/added.txt".to_owned()]);
         // Staged and matching the worktree: it belongs to the `staged` scope
         // only, which is what the drawer's two sections rely on.
@@ -2230,19 +2286,19 @@ mod tests {
         assert!(diff.files[0].staged);
 
         assert!(matches!(
-            stage_paths(root.path(), &["../escape.txt".to_owned()]),
+            stage_paths(root.path(), ".", &["../escape.txt".to_owned()]),
             Err(AppError::BadRequest(_))
         ));
         assert!(matches!(
-            stage_paths(root.path(), &["/etc/hosts".to_owned()]),
+            stage_paths(root.path(), ".", &["/etc/hosts".to_owned()]),
             Err(AppError::BadRequest(_))
         ));
         assert!(matches!(
-            stage_paths(root.path(), &["src".to_owned()]),
+            stage_paths(root.path(), ".", &["src".to_owned()]),
             Err(AppError::Forbidden(_))
         ));
         assert!(matches!(
-            stage_paths(root.path(), &[]),
+            stage_paths(root.path(), ".", &[]),
             Err(AppError::BadRequest(_))
         ));
     }
@@ -2258,6 +2314,7 @@ mod tests {
 
         let reverted = revert_paths(
             root.path(),
+            ".",
             &["tracked.txt".to_owned(), "untracked.txt".to_owned()],
             RestoreSource::Index,
         )
@@ -2282,10 +2339,16 @@ mod tests {
         commit_all(root.path(), "initial");
         // Stage one version, then edit again on top of it.
         fs::write(root.path().join("a.txt"), "staged\n").unwrap();
-        stage_paths(root.path(), &["a.txt".to_owned()]).unwrap();
+        stage_paths(root.path(), ".", &["a.txt".to_owned()]).unwrap();
         fs::write(root.path().join("a.txt"), "working\n").unwrap();
 
-        revert_paths(root.path(), &["a.txt".to_owned()], RestoreSource::Index).unwrap();
+        revert_paths(
+            root.path(),
+            ".",
+            &["a.txt".to_owned()],
+            RestoreSource::Index,
+        )
+        .unwrap();
         assert_eq!(
             fs::read_to_string(root.path().join("a.txt")).unwrap(),
             "staged\n",
@@ -2299,7 +2362,7 @@ mod tests {
             .expect("the staged change survives");
         assert!(staged_row.staged && !staged_row.unstaged);
 
-        revert_paths(root.path(), &["a.txt".to_owned()], RestoreSource::Head).unwrap();
+        revert_paths(root.path(), ".", &["a.txt".to_owned()], RestoreSource::Head).unwrap();
         assert_eq!(
             fs::read_to_string(root.path().join("a.txt")).unwrap(),
             "committed\n",
@@ -2387,7 +2450,7 @@ mod tests {
 
         // Saving the file is not the same as resolving it: the leftover
         // markers are refused, and their line numbers are named.
-        let refused = mark_resolved(root.path(), &["a.txt".to_owned()]).unwrap_err();
+        let refused = mark_resolved(root.path(), ".", &["a.txt".to_owned()]).unwrap_err();
         let AppError::Conflict(message) = &refused else {
             panic!("{refused:?}");
         };
@@ -2400,7 +2463,7 @@ mod tests {
         );
 
         fs::write(root.path().join("a.txt"), "merged by hand\n").unwrap();
-        let result = mark_resolved(root.path(), &["a.txt".to_owned()]).unwrap();
+        let result = mark_resolved(root.path(), ".", &["a.txt".to_owned()]).unwrap();
         assert_eq!(result.resolved, vec!["a.txt".to_owned()]);
         assert!(
             git(root.path(), &["ls-files", "--unmerged", "--", "a.txt"])
@@ -2410,7 +2473,7 @@ mod tests {
         );
         // A path that is not conflicted cannot be laundered through this action.
         assert!(matches!(
-            mark_resolved(root.path(), &["a.txt".to_owned()]),
+            mark_resolved(root.path(), ".", &["a.txt".to_owned()]),
             Err(AppError::BadRequest(_))
         ));
     }
@@ -2443,9 +2506,9 @@ mod tests {
         let root = tempdir().unwrap();
         fixture_repository(root.path());
         fs::write(root.path().join("a.txt"), "new\n").unwrap();
-        stage_paths(root.path(), &["a.txt".to_owned()]).unwrap();
+        stage_paths(root.path(), ".", &["a.txt".to_owned()]).unwrap();
         assert!(matches!(
-            revert_paths(root.path(), &["a.txt".to_owned()], RestoreSource::Head),
+            revert_paths(root.path(), ".", &["a.txt".to_owned()], RestoreSource::Head),
             Err(AppError::Conflict(_))
         ));
         // Nothing was touched: the staged content is still there.
@@ -2474,11 +2537,21 @@ mod tests {
         .unwrap();
 
         assert!(matches!(
-            revert_paths(root.path(), &["folder".to_owned()], RestoreSource::Index),
+            revert_paths(
+                root.path(),
+                ".",
+                &["folder".to_owned()],
+                RestoreSource::Index
+            ),
             Err(AppError::Forbidden(_))
         ));
         assert!(matches!(
-            revert_paths(root.path(), &["leak.txt".to_owned()], RestoreSource::Index),
+            revert_paths(
+                root.path(),
+                ".",
+                &["leak.txt".to_owned()],
+                RestoreSource::Index
+            ),
             Err(AppError::Forbidden(_))
         ));
         assert!(outside.path().join("secret.txt").exists());
