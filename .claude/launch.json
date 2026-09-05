@@ -2,11 +2,19 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "$comment": "This entry pins a port because a launch configuration cannot read endpoints.json before the process exists. It is declared with --listen rather than relying on the Runtime's compatibility default, and the web entries below reach the Runtime through the Vite proxy, which does read endpoints.json.",
       "name": "runtime",
       "runtimeExecutable": "cargo",
-      "runtimeArgs": ["run", "-p", "armadra-runtime"],
-      "port": 43120,
-      "url": "http://127.0.0.1:43120"
+      "runtimeArgs": [
+        "run",
+        "-p",
+        "armadra-runtime",
+        "--",
+        "--listen",
+        "tcp:127.0.0.1:43124"
+      ],
+      "port": 43124,
+      "url": "http://127.0.0.1:43124"
     },
     {
       "name": "web",

@@ -167,10 +167,14 @@ Armadra 是 local-first 的 AI Coding 画布：把真实 CLI Agent（Claude Code
 | 功能                                                                 | 状态 |
 | -------------------------------------------------------------------- | ---- |
 | Runtime / Host sidecar 构建与跨平台暂存                              | ✅   |
-| **服务内嵌：默认不占用固定系统端口**，Unix socket / 命名管道优先     | ⬜   |
+| **服务内嵌：默认不占用固定系统端口**，Unix socket / 命名管道优先     | 🔶   |
 | **项目结构整理**：Desktop / Web / Go 中转服务 / Rust Worker 边界清晰 | ⬜   |
 | 自动更新契约、签名与兼容检查（S03）                                  | ⬜   |
 | 服务器模式：固定账号运行 Host/Worker，安装 / 状态 / 日志 / 升级命令  | ⬜   |
+
+Runtime 的 `--listen unix:/pipe:/tcp:`、`endpoints.json` 发布、Host 的 `--listen none`、
+桌面 `armadra://` 转发与 CSP 收紧已实现（启动与变量见[开发指南](./development.md)）。
+仍缺：WebSocket 只能经壳的回环随机端口转发（自定义协议不支持 ws），Windows 命名管道未在实机验证。
 
 ### 3.13 设置与数据
 

@@ -1,4 +1,8 @@
-import { resolveRuntimeUrl, runtimeSocketUrl } from "./runtime-url";
+import {
+  resolveRuntimeUrl,
+  resolveSocketBase,
+  runtimeSocketUrl,
+} from "./runtime-url";
 import {
   agentListSchema,
   agentStatusSchema,
@@ -1332,8 +1336,21 @@ export const runtimeApi = {
 
 /* ------------------------------- WebSocket URL ---------------------------- */
 
+/**
+ * WebSocket 的基址不一定等于 HTTP 的基址：打包桌面壳里 HTTP 走 `armadra://`
+ * 自定义协议，而 ws 只能走壳开的回环转发端口（roadmap §4.4）。端口每次启动随机，
+ * 所以由 {@link initRuntimeSockets} 在建立任何 socket 之前问一次壳。
+ */
+let socketBase = RUNTIME_URL;
+
+/** 应用启动时调用一次；失败时保持 HTTP 基址，浏览器模式下二者本来就相同。 */
+export async function initRuntimeSockets(): Promise<string> {
+  socketBase = await resolveSocketBase(RUNTIME_URL);
+  return socketBase;
+}
+
 function socketUrl(pathname: string): string {
-  return runtimeSocketUrl(RUNTIME_URL, pathname);
+  return runtimeSocketUrl(socketBase, pathname);
 }
 
 export function terminalWebSocketUrl(sessionId: string): string {

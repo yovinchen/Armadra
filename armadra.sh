@@ -17,7 +17,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
-RUNTIME_PORT="${ARMADRA_RUNTIME_PORT:-43120}"
+# 不设 ARMADRA_RUNTIME_PORT 时浏览器模式让内核分配端口，地址从 endpoints.json 读
+# （roadmap §4.4）。桌面开发仍需要一个固定端口：Vite 页面在 1420，只能走 TCP。
+RUNTIME_PORT="${ARMADRA_RUNTIME_PORT:-}"
+DESKTOP_RUNTIME_PORT="${ARMADRA_RUNTIME_PORT:-43120}"
 WEB_PORT="${ARMADRA_WEB_PORT:-1420}"
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
@@ -108,25 +111,72 @@ port_in_use() {
   lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
 }
 
+# Runtime 数据目录，与 apps/runtime/src/paths.rs 的 data_dir 一致。
+armadra_data_dir() {
+  if [ -n "${ARMADRA_DATA_DIR:-}" ]; then
+    printf '%s' "${ARMADRA_DATA_DIR}"
+  elif [ "$(uname -s)" = "Darwin" ]; then
+    printf '%s' "${HOME}/Library/Application Support/Armadra"
+  else
+    printf '%s' "${XDG_DATA_HOME:-${HOME}/.local/share}/armadra"
+  fi
+}
+
+# endpoints.json 里 runtime 段的 http 地址；文件缺失、损坏或没有该段都输出空串。
+runtime_endpoint() {
+  node -e '
+    const fs = require("node:fs");
+    try {
+      const document = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+      const http = document?.runtime?.http;
+      if (typeof http === "string") process.stdout.write(http);
+    } catch {}
+  ' "$(armadra_data_dir)/endpoints.json" 2>/dev/null || true
+}
+
 # 浏览器开发由本脚本持有 Runtime；桌面开发改由 Tauri 持有私有控制管道，
 # 使关闭前台与明确退出后台具有不同语义。
+#
+# 不指定端口时按 `--listen tcp:127.0.0.1:0` 启动，实际端口由内核决定并写进
+# endpoints.json；本函数把它读回来放进 RUNTIME_URL（roadmap §4.4）。
+RUNTIME_URL=""
 start_runtime() {
   step "编译 Runtime（debug）"
   cargo build -p armadra-runtime -p armadra-hook
-  step "启动 Runtime（127.0.0.1:${RUNTIME_PORT}）"
-  ARMADRA_RUNTIME_PORT="${RUNTIME_PORT}" ./target/debug/armadra-runtime &
+  local listen expected=""
+  if [ -n "${RUNTIME_PORT}" ]; then
+    listen="tcp:127.0.0.1:${RUNTIME_PORT}"
+    expected="http://127.0.0.1:${RUNTIME_PORT}"
+    port_in_use "${RUNTIME_PORT}" && fail "端口 ${RUNTIME_PORT} 已被占用（Armadra.app 或上次的 Runtime 还在跑？pkill -f armadra-runtime）"
+    step "启动 Runtime（${expected}）"
+  else
+    listen="tcp:127.0.0.1:0"
+    step "启动 Runtime（回环端口由内核分配）"
+  fi
+  # 旧地址不能当成本次启动的结果：先清掉再等它自己写进来。
+  rm -f "$(armadra_data_dir)/endpoints.json" 2>/dev/null || true
+  ./target/debug/armadra-runtime --listen "${listen}" &
   RUNTIME_PID=$!
   trap 'kill "${RUNTIME_PID}" 2>/dev/null || true' EXIT INT TERM
   for _ in $(seq 1 40); do
-    curl -sf "http://127.0.0.1:${RUNTIME_PORT}/api/health" >/dev/null 2>&1 && break
+    RUNTIME_URL="$(runtime_endpoint)"
+    if [ -n "${RUNTIME_URL}" ] && curl -sf "${RUNTIME_URL}/api/health" >/dev/null 2>&1; then
+      break
+    fi
+    RUNTIME_URL=""
     sleep 0.3
   done
-  curl -sf "http://127.0.0.1:${RUNTIME_PORT}/api/health" >/dev/null 2>&1 || fail "Runtime 未在 ${RUNTIME_PORT} 就绪"
-  ok "Runtime 就绪"
+  [ -n "${RUNTIME_URL}" ] || fail "Runtime 未就绪（endpoints.json 没有可用地址）"
+  if [ -n "${expected}" ] && [ "${RUNTIME_URL}" != "${expected}" ]; then
+    fail "Runtime 报告的地址 ${RUNTIME_URL} 与要求的 ${expected} 不符"
+  fi
+  ok "Runtime 就绪（${RUNTIME_URL}）"
 }
 
 run_desktop() {
-  port_in_use "${RUNTIME_PORT}" && fail "端口 ${RUNTIME_PORT} 已被占用（Armadra.app 或上次的 Runtime 还在跑？pkill -f armadra-runtime）"
+  # 桌面壳自己在私有 socket 上持有 Runtime；开发时额外开一个回环端口，
+  # 因为 Vite 页面在 http://127.0.0.1:1420，自定义协议在那里不可用。
+  port_in_use "${DESKTOP_RUNTIME_PORT}" && fail "端口 ${DESKTOP_RUNTIME_PORT} 已被占用（Armadra.app 或上次的 Runtime 还在跑？pkill -f armadra-runtime）"
   # tauri.conf.json 的 devUrl 固定是 127.0.0.1:1420：被别的项目占住时 vite 会换端口，
   # 桌面壳却会一直等 1420，看起来像卡死。
   port_in_use 1420 && fail "端口 1420 已被占用，桌面开发模式的前端必须跑在 1420（先关掉占用它的进程）"
@@ -136,17 +186,18 @@ run_desktop() {
   step "编译桌面持有的 Runtime（debug）"
   cargo build -p armadra-runtime -p armadra-hook
   step "启动桌面端（关闭窗口保留后台；菜单退出停止后台）"
-  ARMADRA_DESKTOP_OWNS_RUNTIME=1 ARMADRA_RUNTIME_PORT="${RUNTIME_PORT}" \
-    VITE_RUNTIME_URL="http://127.0.0.1:${RUNTIME_PORT}" pnpm --filter @armadra/desktop dev
+  ARMADRA_DESKTOP_OWNS_RUNTIME=1 \
+    ARMADRA_RUNTIME_LISTEN="tcp:127.0.0.1:${DESKTOP_RUNTIME_PORT}" \
+    ARMADRA_RUNTIME_PORT="${DESKTOP_RUNTIME_PORT}" \
+    VITE_RUNTIME_URL="http://127.0.0.1:${DESKTOP_RUNTIME_PORT}" pnpm --filter @armadra/desktop dev
 }
 
 run_web() {
-  port_in_use "${RUNTIME_PORT}" && fail "端口 ${RUNTIME_PORT} 已被占用（Armadra.app 或上次的 Runtime 还在跑？pkill -f armadra-runtime）"
   port_in_use "${WEB_PORT}" && fail "端口 ${WEB_PORT} 已被占用（用 ARMADRA_WEB_PORT=xxxx 换一个）"
   pnpm --filter @armadra/shared build
   start_runtime
   step "启动前端（http://127.0.0.1:${WEB_PORT}，⌃C 同时结束 Runtime）"
-  VITE_RUNTIME_URL="http://127.0.0.1:${RUNTIME_PORT}" \
+  VITE_RUNTIME_URL="${RUNTIME_URL}" \
     pnpm --filter @armadra/web exec vite --port "${WEB_PORT}" --host 127.0.0.1
 }
 

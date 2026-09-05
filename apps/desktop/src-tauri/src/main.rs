@@ -84,10 +84,20 @@ impl RuntimeProcess {
             .parent()
             .ok_or_else(|| "Desktop executable has no parent directory".to_owned())?;
         let executable = directory.join(runtime_binary_name());
-        let child = Command::new(&executable)
+        let mut command = Command::new(&executable);
+        command
             .arg("--desktop-control-stdin")
             .arg("--listen")
-            .arg(address.listen_argument())
+            .arg(address.listen_argument());
+        // `armadra.sh run desktop` adds a loopback port on top of the socket, so
+        // the Vite page on 1420 can still reach the Runtime it owns. A packaged
+        // build never sets this and therefore never binds a port.
+        if let Some(extra) = std::env::var_os("ARMADRA_RUNTIME_LISTEN")
+            .filter(|value| !value.is_empty())
+        {
+            command.arg("--listen").arg(extra);
+        }
+        let child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

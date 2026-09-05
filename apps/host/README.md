@@ -22,15 +22,15 @@ Windows 使用 `armadra-host.exe`。省略子命令等同 `serve`（前台）；
 更改配置需先 stop 再 start。`status` 不创建目录或身份；锁被占用但 IPC 不可用时报告错误。
 `stop` 绑定已观察到的实例 ID，等待 HTTP 排空和目录锁释放，不强杀 PID、不停止独立 Runtime / tmux。
 
-| 参数                 | 作用                                                                       |
-| -------------------- | -------------------------------------------------------------------------- |
-| `--data-dir`         | 各命令共用的独立目录，默认每用户 Armadra/host，Windows 优先 LOCALAPPDATA   |
+| 参数                 | 作用                                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------------- |
+| `--data-dir`         | 各命令共用的独立目录，默认每用户 Armadra/host，Windows 优先 LOCALAPPDATA                                |
 | `--listen`           | start/serve 使用，默认 `127.0.0.1:43121`；`:0` 分配临时端口，仅显式回环 IP；`none` 只保留同用户控制 IPC |
-| `--endpoints-dir`    | start/serve 使用，共享 `endpoints.json` 所在绝对目录，默认数据目录          |
-| `--allow-origin`     | start/serve 使用，可重复的精确页面来源                                     |
-| `--worker-binary`    | start/serve 使用，执行计划命令的 Rust Worker 绝对路径；与下一项必须成对    |
-| `--worker-state-dir` | start/serve 使用，Worker 私有执行日志目录（0700），缺失时创建              |
-| `--output protobuf`  | 管理命令返回单个 `HostManagementResult`，无尾随换行；默认 JSON 供人阅读    |
+| `--endpoints-dir`    | start/serve 使用，共享 `endpoints.json` 所在绝对目录，默认数据目录                                      |
+| `--allow-origin`     | start/serve 使用，可重复的精确页面来源                                                                  |
+| `--worker-binary`    | start/serve 使用，执行计划命令的 Rust Worker 绝对路径；与下一项必须成对                                 |
+| `--worker-state-dir` | start/serve 使用，Worker 私有执行日志目录（0700），缺失时创建                                           |
+| `--output protobuf`  | 管理命令返回单个 `HostManagementResult`，无尾随换行；默认 JSON 供人阅读                                 |
 
 `--listen none` 时不建 TCP 监听，也不接受 `--allow-origin` 与 TLS 参数；`HostStatus.httpEndpoint` 为空串表示「没有 HTTP 面」。
 启动后把本次地址写入 `<endpoints-dir>/endpoints.json`（0600，只改 `host` 段），正常退出时撤回；写不进去只告警不中止。

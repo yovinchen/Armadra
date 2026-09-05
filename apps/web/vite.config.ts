@@ -1,7 +1,57 @@
+import { readFileSync } from "node:fs";
+import { homedir, platform } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+
+/**
+ * Runtime 数据目录，与 apps/runtime/src/paths.rs 的 `data_dir` 一致。
+ */
+function runtimeDataDir(): string {
+  const override = process.env.ARMADRA_DATA_DIR;
+  if (override) return override;
+  if (platform() === "darwin")
+    return join(homedir(), "Library/Application Support/Armadra");
+  if (platform() === "win32")
+    return join(process.env.LOCALAPPDATA ?? homedir(), "Armadra");
+  return join(
+    process.env.XDG_DATA_HOME ?? join(homedir(), ".local/share"),
+    "armadra",
+  );
+}
+
+/**
+ * 开发服务器把 Runtime 请求转发到它这次实际监听的地址（roadmap §4.4）：
+ * 端口默认由内核分配，只有 `<数据目录>/endpoints.json` 知道是哪个。
+ *
+ * 显式 `VITE_RUNTIME_URL` 优先——那时前端直连，不需要代理。文件缺失或损坏也
+ * 不装代理：前端退回它自己的默认地址，行为和以前一样。
+ */
+function runtimeProxyTarget(): string | null {
+  if (process.env.VITE_RUNTIME_URL !== undefined) return null;
+  try {
+    const document: unknown = JSON.parse(
+      readFileSync(join(runtimeDataDir(), "endpoints.json"), "utf8"),
+    );
+    const http = (document as { runtime?: { http?: unknown } })?.runtime?.http;
+    if (typeof http !== "string") return null;
+    const url = new URL(http);
+    // 只接受回环 HTTP：这里装的是本机开发代理，不是通用反向代理。
+    if (
+      url.protocol !== "http:" ||
+      (url.hostname !== "127.0.0.1" && url.hostname !== "localhost")
+    ) {
+      return null;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+const runtimeTarget = runtimeProxyTarget();
 
 /**
  * 手工分组（§17「代码分割」）。Vite 8 用 rolldown，Rollup 的
@@ -95,9 +145,20 @@ export default defineConfig({
       },
     },
   },
+  // 代理装上时前端用自己的源，请求由 Vite 转给 Runtime；没装就保持原来的默认。
+  define: runtimeTarget
+    ? { "import.meta.env.VITE_RUNTIME_URL": '""' }
+    : undefined,
   server: {
     host: "127.0.0.1",
     port: 1420,
     strictPort: true,
+    proxy: runtimeTarget
+      ? {
+          // `ws` 让终端与工作空间事件流也走同一条路。
+          "/api": { target: runtimeTarget, ws: true, changeOrigin: false },
+          "/health": { target: runtimeTarget, changeOrigin: false },
+        }
+      : undefined,
   },
 });

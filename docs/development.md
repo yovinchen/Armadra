@@ -20,13 +20,32 @@ pnpm install
 以下各进程在独立终端运行：
 
 ```sh
-cargo run -p armadra-runtime        # 127.0.0.1:43120
+cargo run -p armadra-runtime                          # 127.0.0.1:43120（兼容默认）
+cargo run -p armadra-runtime -- --listen tcp:127.0.0.1:0   # 端口由内核分配
 pnpm --filter @armadra/web dev      # 127.0.0.1:1420
 # 或用桌面壳替代 Web 命令（仍需上面的外部 Runtime）
 pnpm --filter @armadra/desktop dev
 ```
 
-桌面包与 `./armadra.sh run desktop` 会持有自己的 Runtime；直接执行桌面 `dev` 默认连接外部 Runtime。
+## 监听方式与地址发现
+
+Runtime 的 `--listen` 可重复，每次一个：`tcp:IP:PORT`（端口 `0` 由内核分配）、
+`unix:绝对路径`（0600）、`pipe:名字`（Windows 命名管道）。不给 `--listen` 时按
+`ARMADRA_RUNTIME_HOST` / `ARMADRA_RUNTIME_PORT`，再退回 `127.0.0.1:43120`。
+指定的 TCP 端口被占用直接报错，不换端口。
+
+绑定成功后地址写入 `<数据目录>/endpoints.json`（0600），`runtime` 与 `host` 各一段，
+含地址、instance id、pid 与写入时间；正常退出时撤回自己那段。
+`./armadra.sh run web` 与 Vite 开发代理都从这个文件读地址，`VITE_RUNTIME_URL` 显式覆盖时不装代理。
+
+打包后的桌面壳不监听端口：它以 `--listen unix:<数据目录>/runtime.sock`（Windows 为命名管道）
+启动 Runtime，以 `--listen none` 启动 Go Host。WebView 的 HTTP 走 `armadra://` 自定义协议转发到该 socket；
+WebSocket 无法经自定义协议传输，由壳在 `127.0.0.1` 的随机端口上做回环转发，端口登记在 `endpoints.json`，
+页面通过 `armadra://localhost/__armadra/transport` 取得。因此 `lsof -i -P | grep -i Armadra` 在
+「对外服务未开启」时只会看到这一个回环转发端口。
+
+桌面包与 `./armadra.sh run desktop` 会持有自己的 Runtime；后者额外用 `ARMADRA_RUNTIME_LISTEN`
+加一个回环端口，因为开发页面在 `http://127.0.0.1:1420`，那里用不了自定义协议。直接执行桌面 `dev` 默认连接外部 Runtime。
 Command W / 关闭窗口隐藏前台；Command Q / 托盘退出停止配置的 Host、桌面持有的 Runtime 及受管会话。
 独立启动的 Runtime 由启动它的终端管理。详见[桌面说明](../apps/desktop/README.md)。
 
@@ -66,25 +85,29 @@ go -C apps/host run ./cmd/armadra-host --allow-origin http://127.0.0.1:1420
 编辑、取消或离开检查页会使旧检查失效。已有服务配置不兼容时报告失败，不自动重配。
 
 Origin 不含路径或末尾 `/`，可多次传入。桌面按平台使用 `tauri://localhost`、
-`http://tauri.localhost` 或 `https://tauri.localhost`；CSP 目前允许默认本地 Host。
+`http://tauri.localhost` 或 `https://tauri.localhost`。打包桌面用 `--listen none` 启动 Host，
+不监听端口也不接受 `--allow-origin`；CSP 只允许 `armadra:` 自定义协议与回环 WebSocket，
+不再默认放开 `http://127.0.0.1:43120` / `43121`，开发模式的放行写在 `devCsp`。
 CORS 只允许读取元数据，设备登录与远程执行另属未完成能力。详见[Host 说明](../apps/host/README.md)。
 
 ## 环境变量与数据
 
-| 变量                                            | 作用                                        |
-| ----------------------------------------------- | ------------------------------------------- |
-| `ARMADRA_RUNTIME_HOST` / `ARMADRA_RUNTIME_PORT` | Runtime 监听地址，默认 `127.0.0.1:43120`    |
-| `ARMADRA_WEB_PORT`                              | `armadra.sh run web` 的前端端口             |
-| `VITE_RUNTIME_URL`                              | 前端连接地址，默认 `http://127.0.0.1:43120` |
-| `ARMADRA_DATA_DIR`                              | Runtime 数据目录                            |
-| `ARMADRA_DATABASE_URL`                          | SQLite 连接，例如 `sqlite://…?mode=rwc`     |
-| `RUST_LOG`                                      | 日志过滤，默认 `info,tower_http=info`       |
-| `ARMADRA_HOOK_DEBUG`                            | Hook 调试                                   |
+| 变量                                            | 作用                                                                                                                 |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `ARMADRA_RUNTIME_HOST` / `ARMADRA_RUNTIME_PORT` | 没有 `--listen` 时的监听地址，默认 `127.0.0.1:43120`；设置后 `armadra.sh run web` 用固定端口而非随机端口             |
+| `ARMADRA_RUNTIME_LISTEN`                        | 桌面壳持有的 Runtime 在私有 socket 之外额外监听的一个 `--listen` spec（开发用）                                      |
+| `ARMADRA_WEB_PORT`                              | `armadra.sh run web` 的前端端口                                                                                      |
+| `VITE_RUNTIME_URL`                              | 前端连接地址；设置后 Vite 不装代理。不设时浏览器开发走 Vite 代理（地址取自 endpoints.json），打包桌面走 `armadra://` |
+| `ARMADRA_DATA_DIR`                              | Runtime 数据目录，`endpoints.json` 与 Runtime socket 都在这里                                                        |
+| `ARMADRA_DATABASE_URL`                          | SQLite 连接，例如 `sqlite://…?mode=rwc`                                                                              |
+| `RUST_LOG`                                      | 日志过滤，默认 `info,tower_http=info`                                                                                |
+| `ARMADRA_HOOK_DEBUG`                            | Hook 调试                                                                                                            |
 
 脚本发现 Runtime 端口占用时直接报错。节点身份、Hook token、端点与权限等待变量由 Runtime 注入 Agent 终端，无需手工配置。
+Runtime 不监听 TCP 时 `hook-endpoint.env` 不写 `ARMADRA_HOOK_PORT`，Hook 客户端只走 `hook.sock`。
 
 默认数据目录：macOS `~/Library/Application Support/Armadra`，Windows `%LOCALAPPDATA%\Armadra`，
-Linux `$XDG_DATA_HOME/armadra`。包含 `canvas.db`、设置、Hook 端点、节点 token、审批文件和 tmux socket。
+Linux `$XDG_DATA_HOME/armadra`。包含 `canvas.db`、设置、`endpoints.json`、Runtime socket、Hook 端点、节点 token、审批文件和 tmux socket。
 工作区 `.armadra/` 保存图片、导出与板日志，已加入 `.gitignore`。
 
 「设置 → 数据」使用当前连接的 SQLite 一致性快照备份，包含已提交 WAL 数据；完整性检查通过后写入数据库旁的唯一文件。
