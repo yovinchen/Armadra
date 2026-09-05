@@ -17,6 +17,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@armadra/protocol": "workspace:*",
     "zod": "4.4.3"
   },
   "devDependencies": {

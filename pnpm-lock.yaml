@@ -236,6 +236,9 @@ importers:
 
   packages/shared:
     dependencies:
+      '@armadra/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       zod:
         specifier: 4.4.3
         version: 4.4.3
