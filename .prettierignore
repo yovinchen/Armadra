@@ -1,5 +1,6 @@
 node_modules
 dist
+.pnpm-store
 target
 coverage
 pnpm-lock.yaml
