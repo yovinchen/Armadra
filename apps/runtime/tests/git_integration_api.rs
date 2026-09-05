@@ -84,6 +84,7 @@ async fn integration_routes_require_the_creating_workspace_and_explicit_continue
     let settings = SettingsStore::in_memory(json!({"terminal":{"backend":"direct"}}));
     let app = router_with_state(AppState {
         remote: Default::default(),
+        language: Default::default(),
         resources: armadra_runtime::resources::ResourceService::new(settings.clone()),
         pool: pool.clone(),
         events: events.clone(),
@@ -208,6 +209,7 @@ async fn cherry_pick_preview_and_empty_skip_remain_workspace_scoped() {
     let settings = SettingsStore::in_memory(json!({"terminal":{"backend":"direct"}}));
     let app = router_with_state(AppState {
         remote: Default::default(),
+        language: Default::default(),
         resources: armadra_runtime::resources::ResourceService::new(settings.clone()),
         pool: pool.clone(),
         events: events.clone(),

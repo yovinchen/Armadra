@@ -84,6 +84,7 @@ async fn stash_routes_preserve_oid_and_require_workspace_permission() {
     let settings = SettingsStore::in_memory(json!({"terminal":{"backend":"direct"}}));
     let app = router_with_state(AppState {
         remote: Default::default(),
+        language: Default::default(),
         resources: armadra_runtime::resources::ResourceService::new(settings.clone()),
         pool: pool.clone(),
         events: events.clone(),

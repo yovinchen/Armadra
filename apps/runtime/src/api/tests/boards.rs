@@ -31,6 +31,7 @@ async fn retired_kanban_payloads_are_rejected_before_any_database_write() {
     );
     let state = AppState {
         remote: Default::default(),
+        language: Default::default(),
         resources: crate::resources::ResourceService::new(settings.clone()),
         pool: pool.clone(),
         terminals: TerminalManager::with_config(

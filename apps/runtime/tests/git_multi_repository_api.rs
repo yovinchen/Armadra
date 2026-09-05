@@ -140,6 +140,7 @@ async fn discovers_every_checkout_and_scopes_status_and_graph_data_per_repositor
     let settings = SettingsStore::in_memory(json!({"terminal":{"backend":"direct"}}));
     let app = router_with_state(AppState {
         remote: Default::default(),
+        language: Default::default(),
         resources: armadra_runtime::resources::ResourceService::new(settings.clone()),
         pool: pool.clone(),
         events: events.clone(),
@@ -362,6 +363,7 @@ async fn discovery_reports_an_unknown_dirty_count_without_an_execution_grant() {
     let settings = SettingsStore::in_memory(json!({"terminal":{"backend":"direct"}}));
     let app = router_with_state(AppState {
         remote: Default::default(),
+        language: Default::default(),
         resources: armadra_runtime::resources::ResourceService::new(settings.clone()),
         pool: pool.clone(),
         events: events.clone(),

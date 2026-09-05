@@ -134,6 +134,7 @@ async fn fixture(worker_path: &str) -> Fixture {
     let events = EventHub::new();
     let app = router_with_state(AppState {
         remote: Default::default(),
+        language: Default::default(),
         resources: armadra_runtime::resources::ResourceService::new(settings.clone()),
         pool: pool.clone(),
         events: events.clone(),
@@ -508,6 +509,7 @@ async fn an_ssh_host_without_a_worker_cannot_execute_a_workspace() {
     let events = EventHub::new();
     let app = router_with_state(AppState {
         remote: Default::default(),
+        language: Default::default(),
         resources: armadra_runtime::resources::ResourceService::new(settings.clone()),
         pool: pool.clone(),
         events: events.clone(),

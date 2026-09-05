@@ -107,6 +107,7 @@ pub(super) async fn router_fixture(name: &str) -> (Router, tempfile::TempDir) {
     (
         crate::router_with_state(AppState {
             remote: Default::default(),
+            language: Default::default(),
             resources: crate::resources::ResourceService::new(settings.clone()),
             terminals,
             usage: crate::usage::UsageService::new(settings.clone()),

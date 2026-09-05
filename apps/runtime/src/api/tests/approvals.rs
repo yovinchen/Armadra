@@ -32,6 +32,7 @@ async fn answering_an_approval_publishes_it_to_the_workspace() {
     let (terminals, settings) = test_terminals(&pool, &events, directory.path());
     let state = AppState {
         remote: Default::default(),
+        language: Default::default(),
         resources: crate::resources::ResourceService::new(settings.clone()),
         terminals,
         usage: crate::usage::UsageService::new(settings.clone()),
