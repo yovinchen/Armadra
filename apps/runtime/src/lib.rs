@@ -16,11 +16,11 @@ pub mod imports;
 pub mod index;
 pub mod migration_export;
 pub mod migration_cli;
-pub mod sqlite_snapshot;
 pub mod model;
 pub mod paths;
 pub mod security;
 pub mod settings;
+pub mod sqlite_snapshot;
 pub mod terminal;
 pub mod usage;
 
@@ -104,6 +104,8 @@ pub fn router_with_state(state: AppState) -> Router {
         .route("/api/workspaces/{workspace_id}/git/repository/branches", get(git_api::branches))
         .route("/api/workspaces/{workspace_id}/git/repository/history", get(git_api::history))
         .route("/api/workspaces/{workspace_id}/git/repository/worktrees", get(git_api::worktrees))
+        .route("/api/workspaces/{workspace_id}/git/repository/stashes", get(git_api::stashes))
+        .route("/api/workspaces/{workspace_id}/git/repository/stash-detail", get(git_api::stash_detail))
         .route("/api/workspaces/{workspace_id}/git/repository/operations", get(git_api::operations).post(git_api::start))
         .route("/api/workspaces/{workspace_id}/git/repository/operations/{operation_id}", get(git_api::operation))
         .route("/api/workspaces/{workspace_id}/git/repository/operations/{operation_id}/cancel", post(git_api::cancel))

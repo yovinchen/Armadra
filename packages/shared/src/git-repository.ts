@@ -58,7 +58,65 @@ export const gitWorktreeRecordSchema = z.object({
   dirty: z.boolean().nullable(),
 });
 export const gitWorktreesSchema = z.array(gitWorktreeRecordSchema);
+export const gitStashRecordSchema = z.object({
+  oid,
+  selector: z.string(),
+  subject: z.string(),
+  authorName: z.string(),
+  authorTime: z.string(),
+});
+export const gitStashSnapshotSchema = z.object({
+  repositoryId: z.string().min(1),
+  repositoryPath: z.string(),
+  head: gitExpectedStateSchema,
+  stateToken: z.string().regex(/^[a-f0-9]{64}$/),
+  dirty: z.boolean(),
+  hasConflicts: z.boolean(),
+  stashes: z.array(gitStashRecordSchema),
+});
+export const gitStashDetailSchema = z.object({
+  oid,
+  parents: z.array(oid).min(2).max(3),
+  patch: z.string(),
+  stagedPatch: z.string(),
+  untrackedPatch: z.string(),
+});
+export type GitStashRecord = z.infer<typeof gitStashRecordSchema>;
+export type GitStashSnapshot = z.infer<typeof gitStashSnapshotSchema>;
+export type GitStashDetail = z.infer<typeof gitStashDetailSchema>;
+const stashStateToken = z.string().regex(/^[a-f0-9]{64}$/);
 export const gitRepositoryActionSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("createStash"),
+      message: z.string().max(4096),
+      includeUntracked: z.boolean(),
+      expectedStateToken: stashStateToken,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("applyStash"),
+      oid,
+      reinstateIndex: z.boolean(),
+      expectedStateToken: stashStateToken,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("popStash"),
+      oid,
+      reinstateIndex: z.boolean(),
+      expectedStateToken: stashStateToken,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("dropStash"),
+      oid,
+      expectedStateToken: stashStateToken,
+    })
+    .strict(),
   z
     .object({
       kind: z.literal("createBranch"),

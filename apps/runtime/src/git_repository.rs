@@ -33,6 +33,9 @@ use crate::{
     security::{canonical_directory, redact_secrets, resolve_in_root, valid_directory_name},
 };
 
+mod stash;
+pub use stash::{StashDetail, StashRecord, StashSnapshot};
+
 const MAX_OUTPUT: usize = 4 * 1024 * 1024;
 const MAX_STDERR: usize = 64 * 1024;
 const MAX_OPERATIONS: usize = 256;
@@ -174,6 +177,25 @@ pub struct WorktreeRecord {
     deny_unknown_fields
 )]
 pub enum RepositoryAction {
+    CreateStash {
+        message: String,
+        include_untracked: bool,
+        expected_state_token: String,
+    },
+    ApplyStash {
+        oid: String,
+        reinstate_index: bool,
+        expected_state_token: String,
+    },
+    PopStash {
+        oid: String,
+        reinstate_index: bool,
+        expected_state_token: String,
+    },
+    DropStash {
+        oid: String,
+        expected_state_token: String,
+    },
     CreateBranch {
         name: String,
         start_point: Option<String>,
@@ -1240,6 +1262,31 @@ impl RepositoryService {
     ) -> AppResult<()> {
         let token = Cancellation::default();
         match action {
+            RepositoryAction::CreateStash {
+                message,
+                expected_state_token,
+                ..
+            } => {
+                stash::validate_message(message)?;
+                stash::validate_state_token(expected_state_token)?;
+            }
+            RepositoryAction::ApplyStash {
+                oid,
+                expected_state_token,
+                ..
+            }
+            | RepositoryAction::PopStash {
+                oid,
+                expected_state_token,
+                ..
+            }
+            | RepositoryAction::DropStash {
+                oid,
+                expected_state_token,
+            } => {
+                require_oid(oid)?;
+                stash::validate_state_token(expected_state_token)?;
+            }
             RepositoryAction::CreateBranch {
                 name, start_point, ..
             } => {
@@ -1315,6 +1362,13 @@ impl RepositoryService {
             ));
         }
         match action {
+            RepositoryAction::CreateStash { .. }
+            | RepositoryAction::ApplyStash { .. }
+            | RepositoryAction::PopStash { .. }
+            | RepositoryAction::DropStash { .. } => {
+                self.execute_stash(context, action, expected, operation)
+                    .await
+            }
             RepositoryAction::CreateBranch {
                 name,
                 start_point,

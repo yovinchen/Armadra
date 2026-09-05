@@ -37,19 +37,21 @@ import {
   gitRevertResponseSchema,
   gitStageResponseSchema,
   gitStatusSchema,
-  gitMessageProvidersSchema,
-  gitMessageSourceSchema,
-  gitMessageRequestSchema,
-  gitMessageDraftSchema,
-  type GitMessageRequest,
   gitHunkDiffSchema,
   gitHunkMutationSchema,
   gitHunkResultSchema,
   type GitHunkMutation,
   type GitHunkScope,
+  gitMessageProvidersSchema,
+  gitMessageSourceSchema,
+  gitMessageRequestSchema,
+  gitMessageDraftSchema,
+  type GitMessageRequest,
   gitBranchSnapshotSchema,
   gitHistoryPageSchema,
   gitWorktreesSchema,
+  gitStashSnapshotSchema,
+  gitStashDetailSchema,
   gitRepositoryActionSchema,
   gitRepositoryOperationSchema,
   gitExpectedStateSchema,
@@ -152,7 +154,9 @@ async function request<T>(
     response = await fetch(`${RUNTIME_URL}${path}`, {
       ...init,
       headers: {
-        ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+        ...(init?.body instanceof FormData
+          ? {}
+          : { "Content-Type": "application/json" }),
         ...init?.headers,
       },
     });
@@ -308,12 +312,31 @@ export const runtimeApi = {
 
   /* ----------------------------------- 工作区导入 ----------------------- */
   openDirectory: (input: CreateWorkspaceRequest) =>
-    request("/api/workspaces/open-directory", workspaceSchema, { method: "POST", ...json(createWorkspaceRequestSchema.parse(input)) }),
-  importWorkspace: (folder: { name: string; files: { file: File; path: string }[]; directories: string[] }) => {
+    request("/api/workspaces/open-directory", workspaceSchema, {
+      method: "POST",
+      ...json(createWorkspaceRequestSchema.parse(input)),
+    }),
+  importWorkspace: (folder: {
+    name: string;
+    files: { file: File; path: string }[];
+    directories: string[];
+  }) => {
     const body = new FormData();
-    body.append("manifest", JSON.stringify({ paths: folder.files.map((entry) => entry.path), directories: folder.directories }));
-    folder.files.forEach((entry, index) => body.append(String(index), entry.file, entry.file.name));
-    return request(`/api/workspaces/import?name=${query(Array.from(folder.name).slice(0, 120).join(""))}`, workspaceSchema, { method: "POST", body });
+    body.append(
+      "manifest",
+      JSON.stringify({
+        paths: folder.files.map((entry) => entry.path),
+        directories: folder.directories,
+      }),
+    );
+    folder.files.forEach((entry, index) =>
+      body.append(String(index), entry.file, entry.file.name),
+    );
+    return request(
+      `/api/workspaces/import?name=${query(Array.from(folder.name).slice(0, 120).join(""))}`,
+      workspaceSchema,
+      { method: "POST", body },
+    );
   },
 
   /* ----------------------------------- 看板 ----------------------------- */
@@ -712,6 +735,10 @@ export const runtimeApi = {
       gitWorktreesSchema,
       { signal },
     ),
+  gitRepositoryStashes: (workspaceId: string, signal?: AbortSignal) =>
+    request(`/api/workspaces/${query(workspaceId)}/git/repository/stashes?path=.`,gitStashSnapshotSchema,{signal}),
+  gitRepositoryStashDetail: (workspaceId:string,oid:string,signal?:AbortSignal) =>
+    request(`/api/workspaces/${query(workspaceId)}/git/repository/stash-detail?path=.&oid=${query(oid)}`,gitStashDetailSchema,{signal}),
   gitRepositoryOperate: (
     workspaceId: string,
     action: GitRepositoryAction,

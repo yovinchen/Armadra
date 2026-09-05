@@ -300,3 +300,10 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - 新增身份/会话契约，权限明确带工作空间与执行主机范围，实际 grants 属于会话而非设备列表。浏览器响应只含已认证设备、权限、期限与 CSRF，access/refresh 不在业务载荷中返回。
 - OS 私有控制新增 Bootstrap 请求/响应，调用端绑定所观测 Host 与实例；未显式配置签发器则返回 unsupported，错误不暴露凭据或内部详情，未知结果不自动重试。
 - Go/Rust/TypeScript 二进制样例覆盖中文设备名、范围绑定及 uint64 最大 revision；Rust10、TS13与Go契约测试通过，生成漂移检查通过。私有通道回归验证错误Host/实例不调用签发器、签发不触发停止及默认拒绝。HTTPS/CLI使用该契约的接线另批提交。
+
+## 连续实施：Stash 工作流
+
+- 源码控制新增 Stash 页签：读取固定 OID 列表、工作区/暂存区/未跟踪快照差异；显式创建、Apply、Pop 与 Drop，创建可选择未跟踪文件，ignored 文件不自动收纳。
+- 操作确认绑定 HEAD/分支、index、工作区内容、未跟踪内容和 Stash 列表摘要。Pop 仅在应用成功且列表仍一致时移除；冲突/取消保留记录，ignored 文件或父路径碰撞拒绝应用。
+- Git reflog selector 不提供跨外部 Git 进程的原子 CAS；界面明确并发限制，当前应用内共用队列并在写入前重核 OID 和列表，不手工伪造 Git 元数据。
+- 29 项真实仓库回归（新增5）、Stash7及仓库面板10项组件、shared6项通过；新增实际路由验证创建→操作轮询→列表→未跟踪快照详情及权限拒绝，类型检查与Clippy通过。

@@ -23,9 +23,10 @@ import {
 import { Branches } from "./Branches";
 import { History } from "./History";
 import { Worktrees } from "./Worktrees";
+import { Stashes } from "./Stashes";
 import { ReadError } from "./forms";
 
-export type RepositoryTab = "branches" | "history" | "worktrees";
+export type RepositoryTab = "branches" | "history" | "worktrees" | "stashes";
 const running = (operation: GitRepositoryOperation | null | undefined) =>
   operation?.state === "queued" || operation?.state === "running";
 type Tracking = {
@@ -43,6 +44,12 @@ const emptyTracking: Tracking = {
 
 export function actionTarget(action: GitRepositoryAction): string {
   switch (action.kind) {
+    case "createStash":
+      return action.message || "Stash";
+    case "applyStash":
+    case "popStash":
+    case "dropStash":
+      return action.oid;
     case "fetch":
       return action.remote;
     case "pull":
@@ -207,6 +214,8 @@ function RepositorySession({
       "git-repository-branches",
       "git-repository-history",
       "git-repository-worktrees",
+      "git-repository-stashes",
+      "git-repository-stash-detail",
       "git-repository-operations",
     ])
       void client.invalidateQueries({ queryKey: [name, workspaceId] });
@@ -320,9 +329,12 @@ function RepositorySession({
     tracking.uncertain ||
     running(current) ||
     Boolean(recent.data?.some(running));
-  const request = (action: GitRepositoryAction) => {
+  const request = (
+    action: GitRepositoryAction,
+    expected?: GitExpectedState,
+  ) => {
     if (!busy && !stale)
-      setConfirmation({ action, expected: { ...snapshot.head } });
+      setConfirmation({ action, expected: { ...(expected ?? snapshot.head) } });
   };
   return (
     <>
@@ -450,6 +462,20 @@ function RepositorySession({
             repositoryKey={`${snapshot.repositoryId}:${snapshot.repositoryPath}`}
           />
         )}
+        {tab === "stashes" && (
+          <Stashes
+            workspaceId={workspaceId}
+            repositoryKey={`${snapshot.repositoryId}:${snapshot.repositoryPath}`}
+            busy={busy || stale}
+            request={request}
+            loadSnapshot={(signal) =>
+              runtimeApi.gitRepositoryStashes(workspaceId, signal)
+            }
+            loadDetail={(oid, signal) =>
+              runtimeApi.gitRepositoryStashDetail(workspaceId, oid, signal)
+            }
+          />
+        )}
         {tab === "worktrees" && (
           <Worktrees
             workspaceId={workspaceId}
@@ -475,6 +501,31 @@ function RepositorySession({
           </AlertDialogHeader>
           {confirmation && (
             <dl className="space-y-2 break-all text-xs">
+              {confirmation.action.kind === "createStash" && (
+                <div>
+                  <dt>{t("gitStash.safety")}</dt>
+                  <dd>
+                    {confirmation.action.includeUntracked ? "✓ " : "— "}
+                    {t("gitStash.includeUntracked")}
+                  </dd>
+                </div>
+              )}
+              {(confirmation.action.kind === "applyStash" ||
+                confirmation.action.kind === "popStash") && (
+                <div>
+                  <dt>{t("gitStash.conflictSafety")}</dt>
+                  <dd>
+                    {confirmation.action.reinstateIndex ? "✓ " : "— "}
+                    {t("gitStash.reinstateIndex")}
+                  </dd>
+                </div>
+              )}
+              {(confirmation.action.kind === "popStash" ||
+                confirmation.action.kind === "dropStash") && (
+                <div>
+                  <dd>{t("gitStash.dropSafety")}</dd>
+                </div>
+              )}
               <div>
                 <dt className="text-muted-foreground">
                   {t("gitRepo.repository")}

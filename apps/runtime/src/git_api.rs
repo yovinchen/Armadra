@@ -64,6 +64,22 @@ pub struct RepositoryQuery {
     #[serde(default = "root_path")]
     path: String,
 }
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StashQuery {
+    #[serde(default = "root_path")]
+    path: String,
+    oid: String,
+}
+pub async fn stashes(State(state):State<AppState>,AxumPath(id):AxumPath<String>,Query(query):Query<RepositoryQuery>) -> AppResult<Json<StashSnapshot>> {
+    let workspace=workspace(&state,&id,false).await?;
+    REPOSITORIES.stashes(Path::new(&workspace.root_path),&query.path).await.map(Json)
+}
+pub async fn stash_detail(State(state):State<AppState>,AxumPath(id):AxumPath<String>,Query(query):Query<StashQuery>) -> AppResult<Json<StashDetail>> {
+    let workspace=workspace(&state,&id,false).await?;
+    REPOSITORIES.stash_detail(Path::new(&workspace.root_path),&query.path,&query.oid).await.map(Json)
+}
 fn head_reference() -> String {
     "HEAD".into()
 }
