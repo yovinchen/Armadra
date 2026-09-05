@@ -75,6 +75,7 @@ async fn fixture() -> Fixture {
     );
     let events = crate::events::EventHub::new();
     let state = AppState {
+        resources: crate::resources::ResourceService::new(settings.clone()),
         pool: pool.clone(),
         terminals: crate::terminal::TerminalManager::with_config(
             pool,

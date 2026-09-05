@@ -64,6 +64,16 @@ pub enum WorkspaceEvent {
     /// `sha256` / `size` / `mtime` are `null` for a removal. Only files a node
     /// registered through `POST /api/workspaces/{id}/file-watch` are reported,
     /// and only while the workspace is readable.
+    /// A host / session resource sample (T02, design §8).
+    ///
+    /// Only published while somebody holds a subscription for this workspace,
+    /// so a closed panel produces no traffic and no sampling. Boxed because it
+    /// is by far the largest variant and every other event would otherwise pay
+    /// for its size in the broadcast channel.
+    #[serde(rename = "resource.sample", rename_all = "camelCase")]
+    ResourceSample {
+        snapshot: Box<crate::resources::ResourceSnapshot>,
+    },
     #[serde(rename = "file.changed", rename_all = "camelCase")]
     FileChanged {
         workspace_id: String,

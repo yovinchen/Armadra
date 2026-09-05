@@ -31,6 +31,17 @@ const DEFAULT_USAGE_ENABLED: bool = true;
 /// 数据页). `0` means "keep forever"; the settings page offers 7 / 30 / 90 / 0.
 pub const LOG_RETENTION_CHOICES: &[u64] = &[0, 7, 30, 90];
 const DEFAULT_LOG_RETENTION_DAYS: u64 = 30;
+/// `power.policy` — which lease sources may hold off idle sleep (T02, design
+/// §9). The default is the most conservative one that still gives the user a
+/// switch: nothing keeps the machine awake unless a person asked for it.
+pub const POWER_POLICIES: &[&str] = &["never", "agentSessions", "automation", "manual"];
+const DEFAULT_POWER_POLICY: &str = "manual";
+/// `resources.intervalMs` — how often an open resource panel samples (design
+/// §8: "面板打开时每 2 秒"). Bounded so a hand-edited file cannot turn the
+/// sampler into a busy loop or into something that never updates.
+const DEFAULT_RESOURCE_INTERVAL_MS: u64 = 2_000;
+const MIN_RESOURCE_INTERVAL_MS: u64 = 500;
+const MAX_RESOURCE_INTERVAL_MS: u64 = 60_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -46,6 +57,44 @@ impl BackendChoice {
             Self::Auto => "auto",
             Self::Tmux => "tmux",
             Self::Direct => "direct",
+        }
+    }
+}
+
+/// Which lease sources are allowed to hold off idle sleep.
+///
+/// `Manual` is the user's own switch in the resource panel and is permitted by
+/// every policy except `Never` — a policy about agents and automation should
+/// not veto a person pressing the button. `Never` means never.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PowerPolicy {
+    Never,
+    /// While an agent or terminal session is working.
+    AgentSessions,
+    /// While a platform automation run is in flight.
+    Automation,
+    /// Only when the user asks.
+    Manual,
+}
+
+impl PowerPolicy {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Never => "never",
+            Self::AgentSessions => "agentSessions",
+            Self::Automation => "automation",
+            Self::Manual => "manual",
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "never" => Some(Self::Never),
+            "agentSessions" => Some(Self::AgentSessions),
+            "automation" => Some(Self::Automation),
+            "manual" => Some(Self::Manual),
+            _ => None,
         }
     }
 }
@@ -353,6 +402,38 @@ pub fn normalize(raw: &Value) -> Value {
     logs.insert("retentionDays".into(), Value::from(retention));
     document.insert("logs".into(), Value::Object(logs));
 
+    // `power.policy` (T02). An unknown value snaps back to the default rather
+    // than being rejected: the safest reading of a broken value is the
+    // conservative default, not a machine that refuses to sleep.
+    let mut power = document
+        .get("power")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let policy = power
+        .get("policy")
+        .and_then(Value::as_str)
+        .filter(|policy| POWER_POLICIES.contains(policy))
+        .unwrap_or(DEFAULT_POWER_POLICY)
+        .to_owned();
+    power.insert("policy".into(), Value::String(policy));
+    document.insert("power".into(), Value::Object(power));
+
+    // `resources.intervalMs` (T02): clamped, so the panel can offer a choice
+    // without the runtime having to trust it.
+    let mut resources = document
+        .get("resources")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let interval = resources
+        .get("intervalMs")
+        .and_then(Value::as_u64)
+        .map(|value| value.clamp(MIN_RESOURCE_INTERVAL_MS, MAX_RESOURCE_INTERVAL_MS))
+        .unwrap_or(DEFAULT_RESOURCE_INTERVAL_MS);
+    resources.insert("intervalMs".into(), Value::from(interval));
+    document.insert("resources".into(), Value::Object(resources));
+
     // `ssh.hosts[]` (plan §21). Entries that would not survive validation are
     // dropped here, so the document the API hands out is exactly the set of
     // hosts a terminal may actually be created for.
@@ -462,6 +543,26 @@ impl SettingsStore {
             .and_then(|section| section.get("retentionDays"))
             .and_then(Value::as_u64)
             .unwrap_or(DEFAULT_LOG_RETENTION_DAYS)
+    }
+
+    /// `power.policy`, already snapped to a valid choice by `normalize` (T02).
+    /// Read on every reconcile, so changing it takes effect without a restart.
+    pub fn power_policy(&self) -> PowerPolicy {
+        self.read()
+            .get("power")
+            .and_then(|section| section.get("policy"))
+            .and_then(Value::as_str)
+            .and_then(PowerPolicy::parse)
+            .unwrap_or(PowerPolicy::Manual)
+    }
+
+    /// `resources.intervalMs`, already clamped by `normalize` (T02).
+    pub fn resource_interval_ms(&self) -> u64 {
+        self.read()
+            .get("resources")
+            .and_then(|section| section.get("intervalMs"))
+            .and_then(Value::as_u64)
+            .unwrap_or(DEFAULT_RESOURCE_INTERVAL_MS)
     }
 
     /// `ssh.hosts[]`, already validated by `normalize` (plan §21).

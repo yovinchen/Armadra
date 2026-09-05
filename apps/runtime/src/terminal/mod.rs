@@ -40,8 +40,29 @@ use crate::{
 };
 
 pub use backend::{
-    AttachHandle, BackendKind, ForegroundInfo, SessionKey, TerminalBackend, TerminalSpec,
+    AttachHandle, BackendKind, BackendRef, ForegroundInfo, SessionKey, TerminalBackend,
+    TerminalSpec,
 };
+
+/// One managed session as [`TerminalManager::managed_sessions`] reports it.
+///
+/// Everything the resource sampler is allowed to look at, and nothing else: a
+/// pid this runtime started, plus the identity needed to point the panel back
+/// at the canvas node that owns it.
+#[derive(Debug, Clone)]
+pub struct ManagedSession {
+    pub session_id: String,
+    pub session_key: String,
+    pub workspace_id: String,
+    pub owner_node_id: Option<String>,
+    pub backend: BackendKind,
+    pub generation: u64,
+    pub pid: Option<i64>,
+    pub cwd: String,
+    /// The program the session runs — an explicit command, else the shell.
+    pub executable: String,
+    pub exited: bool,
+}
 
 /// The size a session starts at, before the first `resize` from a socket.
 pub const DEFAULT_ROWS: u16 = 24;
@@ -1187,6 +1208,60 @@ impl TerminalManager {
     pub async fn foreground(&self, session_id: &str) -> AppResult<ForegroundInfo> {
         let record = self.require(session_id).await?;
         self.backend(record.kind).foreground(&record.key).await
+    }
+
+    /* -------------------------------- resources --------------------------- */
+
+    /// Every session this runtime currently manages, for the resource panel
+    /// (T02, design §8).
+    ///
+    /// The list comes from the in-memory records rather than the database on
+    /// purpose: those are exactly the sessions whose process this runtime owns
+    /// and may therefore measure. A row for a session that some other runtime
+    /// started has no pid we are allowed to sample.
+    pub async fn managed_sessions(&self) -> Vec<ManagedSession> {
+        let mut sessions: Vec<ManagedSession> = self
+            .inner
+            .records
+            .read()
+            .await
+            .values()
+            .map(|record| ManagedSession {
+                session_id: record.id.clone(),
+                session_key: record.key.to_string(),
+                workspace_id: record.workspace_id.clone(),
+                owner_node_id: record.owner_node_id.clone(),
+                backend: record.kind,
+                generation: record.generation,
+                pid: record.pid,
+                cwd: record.spec.cwd.clone(),
+                executable: record.spec.executable(),
+                exited: record.exited,
+            })
+            .collect();
+        sessions.sort_by(|left, right| left.session_id.cmp(&right.session_id));
+        sessions
+    }
+
+    /// Persistent backend sessions that are alive right now, by the backend's
+    /// own handle. Empty when the effective backend has no such thing (a
+    /// direct PTY dies with the runtime, so it can never be an orphan).
+    pub async fn alive_backend_references(&self) -> Vec<BackendRef> {
+        let Some(tmux) = self.inner.tmux.clone() else {
+            return Vec::new();
+        };
+        tmux.list_alive().await.unwrap_or_default()
+    }
+
+    /// Destroy a persistent session by the backend's handle — the orphan case,
+    /// where no session record points at it any more.
+    pub async fn destroy_backend_reference(&self, reference: &str) -> AppResult<()> {
+        let Some(tmux) = self.inner.tmux.clone() else {
+            return Err(AppError::NotFound(
+                "This runtime has no persistent terminal sessions".into(),
+            ));
+        };
+        tmux.destroy_by_reference(reference).await
     }
 
     /* ------------------------------ termination --------------------------- */

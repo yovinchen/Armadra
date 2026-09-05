@@ -3,8 +3,8 @@ use std::{env, future::IntoFuture, net::SocketAddr, time::Duration};
 use anyhow::Context;
 use armadra_runtime::{
     AppState, DEFAULT_PORT, db, desktop_control, events::EventHub, hook, hook::HookService, index,
-    paths::data_dir, router_with_state, settings::SettingsStore, terminal::TerminalManager,
-    usage::UsageService,
+    paths::data_dir, resources::ResourceService, router_with_state, settings::SettingsStore,
+    terminal::TerminalManager, usage::UsageService,
 };
 use tracing_subscriber::EnvFilter;
 
@@ -129,16 +129,21 @@ async fn main() -> anyhow::Result<()> {
     // Bind first, then publish: the endpoint file must never advertise a port
     // nothing is listening on.
     let bound_port = listener.local_addr().map(|address| address.port())?;
+    let resources = ResourceService::new(settings.clone());
     let state = AppState {
         events,
         pool,
         usage: UsageService::new(settings.clone()),
+        resources: resources.clone(),
         settings,
         hooks: HookService::new(data_dir(), bound_port),
         terminals: terminals.clone(),
     };
     // First quota fetch 10s from now, then every 5 minutes (plan §19).
     state.usage.start();
+    // Expire wake leases whose holder stopped renewing (T02, design §9). No
+    // sampling starts here: that only happens while a panel is subscribed.
+    resources.power().start();
     // Endpoint file, unix socket listener and the 60s stale-agent sweep.
     hook::start(state.clone(), bound_port);
     // Accepted handoffs are delivered by this worker, never by the request that
@@ -178,6 +183,10 @@ async fn main() -> anyhow::Result<()> {
     // Filesystem watchers hold OS handles and a drain thread each; they are
     // released as soon as admission stops, before the slower cleanups run.
     armadra_runtime::file_watch::shutdown();
+    // Nothing may keep the machine awake once the runtime is going away, and
+    // this must not wait on the slower terminal / repository drains below
+    // (T02: "租约全部释放或 Runtime 退出时立即释放").
+    resources.power().release_all();
     let terminal_cleanup = tokio::time::timeout(Duration::from_secs(8), async {
         match reason {
             ShutdownReason::DesktopQuit => terminals.shutdown_owned_sessions().await,

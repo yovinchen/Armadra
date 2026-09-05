@@ -2223,6 +2223,7 @@ mod tests {
             serde_json::json!({"terminal":{"backend":"direct"},"usage":{"enabled":false}}),
         );
         let state = AppState {
+            resources: crate::resources::ResourceService::new(settings.clone()),
             pool: pool.clone(),
             terminals: TerminalManager::with_config(
                 pool,
@@ -2352,6 +2353,7 @@ mod tests {
         let (terminals, settings) = test_terminals(&pool, &events, directory.path());
         (
             crate::router_with_state(AppState {
+                resources: crate::resources::ResourceService::new(settings.clone()),
                 terminals,
                 usage: crate::usage::UsageService::new(settings.clone()),
                 settings,
@@ -3064,6 +3066,7 @@ mod tests {
         let events = EventHub::new();
         let (terminals, settings) = test_terminals(&pool, &events, directory.path());
         let router = crate::router_with_state(AppState {
+            resources: crate::resources::ResourceService::new(settings.clone()),
             terminals,
             usage: crate::usage::UsageService::new(settings.clone()),
             settings,
@@ -3300,6 +3303,7 @@ mod tests {
             }] },
         }));
         let state = AppState {
+            resources: crate::resources::ResourceService::new(settings.clone()),
             terminals,
             usage: crate::usage::UsageService::new(settings.clone()),
             settings,
@@ -3447,6 +3451,7 @@ mod tests {
         let events = EventHub::new();
         let (terminals, settings) = test_terminals(&pool, &events, directory.path());
         let state = AppState {
+            resources: crate::resources::ResourceService::new(settings.clone()),
             terminals,
             usage: crate::usage::UsageService::new(settings.clone()),
             settings,
@@ -3507,6 +3512,7 @@ mod tests {
         let events = EventHub::new();
         let (terminals, settings) = test_terminals(&pool, &events, directory.path());
         let router = crate::router_with_state(AppState {
+            resources: crate::resources::ResourceService::new(settings.clone()),
             terminals: terminals.clone(),
             usage: crate::usage::UsageService::new(settings.clone()),
             settings,
@@ -3639,6 +3645,7 @@ mod tests {
         let events = EventHub::new();
         let (terminals, settings) = test_terminals(&pool, &events, directory.path());
         let router = crate::router_with_state(AppState {
+            resources: crate::resources::ResourceService::new(settings.clone()),
             terminals,
             usage: crate::usage::UsageService::new(settings.clone()),
             settings,
@@ -4060,6 +4067,7 @@ mod tests {
         let events = EventHub::new();
         let (terminals, settings) = test_terminals(&pool, &events, directory.path());
         let router = crate::router_with_state(AppState {
+            resources: crate::resources::ResourceService::new(settings.clone()),
             terminals: terminals.clone(),
             usage: crate::usage::UsageService::new(settings.clone()),
             settings,
@@ -4537,6 +4545,7 @@ mod tests {
         let events = EventHub::new();
         let (terminals, settings) = test_terminals(pool, &events, directory);
         crate::router_with_state(AppState {
+            resources: crate::resources::ResourceService::new(settings.clone()),
             terminals,
             usage: crate::usage::UsageService::new(settings.clone()),
             settings,

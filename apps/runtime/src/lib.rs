@@ -26,6 +26,7 @@ pub mod migration_cli;
 pub mod migration_export;
 pub mod model;
 pub mod paths;
+pub mod resources;
 pub mod security;
 pub mod settings;
 pub mod sqlite_snapshot;
@@ -37,7 +38,7 @@ use axum::{
     Router,
     extract::DefaultBodyLimit,
     http::{HeaderValue, Method},
-    routing::{get, patch, post, put},
+    routing::{delete, get, patch, post, put},
 };
 use sqlx::SqlitePool;
 use tower_http::{
@@ -46,8 +47,8 @@ use tower_http::{
 };
 
 use crate::{
-    events::EventHub, hook::HookService, settings::SettingsStore, terminal::TerminalManager,
-    usage::UsageService,
+    events::EventHub, hook::HookService, resources::ResourceService, settings::SettingsStore,
+    terminal::TerminalManager, usage::UsageService,
 };
 
 /// Body ceiling for the asset and export routes: 8 MiB of image plus the
@@ -70,6 +71,8 @@ pub struct AppState {
     pub hooks: HookService,
     /// Cached Claude / Codex quota snapshot for the usage pill (plan §19).
     pub usage: UsageService,
+    /// Host / session sampling and the sleep-inhibition leases (T02).
+    pub resources: ResourceService,
 }
 
 pub fn router(pool: SqlitePool) -> Router {
@@ -79,6 +82,7 @@ pub fn router(pool: SqlitePool) -> Router {
         terminals: TerminalManager::new(pool.clone(), events.clone()),
         hooks: HookService::with_default_paths(DEFAULT_PORT),
         usage: UsageService::new(settings.clone()),
+        resources: ResourceService::new(settings.clone()),
         events,
         pool,
         settings,
@@ -273,6 +277,41 @@ pub fn router_with_state(state: AppState) -> Router {
         .route(
             "/api/workspaces/{workspace_id}/deliveries",
             get(api::list_deliveries),
+        )
+        // Host / session resources (T02). Sampling is a subscription: the
+        // panel renews while it is open and the sampler stops on its own once
+        // the last subscription lapses, so a closed panel costs nothing.
+        .route(
+            "/api/workspaces/{workspace_id}/resources",
+            get(resources::routes::snapshot),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/resources/subscription",
+            post(resources::routes::subscribe),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/resources/subscription/{subscription_id}",
+            delete(resources::routes::unsubscribe),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/resources/orphans/{session_id}/adopt",
+            post(resources::routes::adopt),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/resources/orphans/{orphan_id}/terminate",
+            post(resources::routes::terminate_orphan),
+        )
+        // Sleep-inhibition leases (T02, design §9). Not workspace-scoped: a
+        // lease belongs to the machine and outlives switching canvases.
+        .route("/api/power", get(resources::routes::power))
+        .route("/api/power/leases", post(resources::routes::acquire_lease))
+        .route(
+            "/api/power/leases/{lease_id}",
+            delete(resources::routes::release_lease),
+        )
+        .route(
+            "/api/power/leases/{lease_id}/renew",
+            post(resources::routes::renew_lease),
         )
         .route(
             "/api/control/confirm/{request_id}",

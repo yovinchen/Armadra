@@ -45,6 +45,10 @@ serde_json = "1.0.145"
 sha2 = "0.10.9"
 sqlx = { version = "0.9.0", features = ["runtime-tokio", "sqlite", "migrate"] }
 subtle = "2.6.1"
+# Host / session resource sampling (T02). Pinned: the per-platform metric
+# backends change between minor releases, and the panel promises "unknown"
+# rather than a number that quietly changed meaning.
+sysinfo = "=0.39.6"
 thiserror = "2.0.17"
 tokio = { version = "1.53.1", features = ["full"] }
 toml_edit = "0.25.13"
@@ -57,7 +61,7 @@ uuid = { version = "1.24.0", features = ["v4", "v7", "serde"] }
 libc = "0.2.176"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Threading", "Win32_System_JobObjects", "Win32_System_Pipes", "Win32_Storage_FileSystem", "Win32_System_IO"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Power", "Win32_System_Threading", "Win32_System_JobObjects", "Win32_System_Pipes", "Win32_Storage_FileSystem", "Win32_System_IO"] }
 
 [dev-dependencies]
 tempfile = "3.23.0"
