@@ -1,0 +1,27 @@
+.DS_Store
+.idea/
+.vscode/
+
+node_modules/
+.pnpm-store/
+.playwright-cli/
+output/playwright/
+apps/desktop/src-tauri/gen/schemas/
+dist/
+coverage/
+target/
+
+.env
+.env.*
+!.env.example
+
+*.log
+*.db
+*.db-shm
+*.db-wal
+
+# 工作空间里的应用私有目录（板日志、导出的画图 PNG、落盘的图片）
+.armadra/
+
+# Claude Code 本机私有设置（impeccable 安装器写入的 hook）
+.claude/settings.local.json

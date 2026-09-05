@@ -15,15 +15,17 @@
 
 以下是目标方案，不代表所有功能已实现；以实施记录和源码核对进度。
 
-| 文档                                       | 内容                                       |
-| ------------------------------------------ | ------------------------------------------ |
-| [平台总纲](canvas-platform-design.md)      | 需求、M0–M8 阶段与验收                     |
-| [Host 与协议](host-protocol-design.md)     | Go Host、Rust Worker、数据所有权与设备接入 |
-| [Agent 自动化](agent-automation-design.md) | 交接、循环卡片、计划与命名                 |
-| [Git / GitHub](git-github-design.md)       | worktree、提交、Issues 与 PR               |
-| [编辑器与浏览器](editor-browser-design.md) | 语言服务、远程文件与受控浏览器             |
-| [终端宿主](terminal-host-design.md)        | 持久终端、ConPTY、资源与快捷键             |
-| [客户端平台](client-platforms.md)          | 各平台职责与适配边界                       |
+| 文档                                       | 内容                                                   |
+| ------------------------------------------ | ------------------------------------------------------ |
+| [功能预期总表](feature-roadmap.md)         | 已交付与待实现功能全表、多仓库 Git、用量看板、资源监控 |
+| [仓库结构与校验](repository-structure.md)  | 目标目录、统一规则、repo-check 与 CI                   |
+| [平台总纲](canvas-platform-design.md)      | 需求、M0–M8 阶段与验收                                 |
+| [Host 与协议](host-protocol-design.md)     | Go Host、Rust Worker、数据所有权与设备接入             |
+| [Agent 自动化](agent-automation-design.md) | 交接、循环卡片、计划与命名                             |
+| [Git / GitHub](git-github-design.md)       | worktree、提交、Issues 与 PR                           |
+| [编辑器与浏览器](editor-browser-design.md) | 语言服务、远程文件与受控浏览器                         |
+| [终端宿主](terminal-host-design.md)        | 持久终端、ConPTY、资源与快捷键                         |
+| [客户端平台](client-platforms.md)          | 各平台职责与适配边界                                   |
 
 ## 实施契约与参考
 
