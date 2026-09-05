@@ -159,8 +159,8 @@ async fn fixture(name: &str) -> Fixture {
 
     let events = EventHub::new();
     let settings = SettingsStore::in_memory(json!({ "terminal": { "backend": "direct" } }));
-    let hooks = HookService::new(directory.path().join(format!("hook-{name}")), 43199);
-    hooks.publish_endpoint(43199).unwrap();
+    let hooks = HookService::new(directory.path().join(format!("hook-{name}")), Some(43199));
+    hooks.publish_endpoint(Some(43199)).unwrap();
     let bearer = crate::hook::endpoint::read(&hooks.endpoint_file())["ARMADRA_HOOK_TOKEN"].clone();
     let state = AppState {
         resources: crate::resources::ResourceService::new(settings.clone()),

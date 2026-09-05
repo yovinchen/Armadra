@@ -93,7 +93,7 @@ async fn stash_routes_preserve_oid_and_require_workspace_permission() {
             settings.clone(),
             directory.path().to_owned(),
         ),
-        hooks: HookService::new(directory.path().to_owned(), 0),
+        hooks: HookService::new(directory.path().to_owned(), None),
         usage: UsageService::new(settings),
     });
 

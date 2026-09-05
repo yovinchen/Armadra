@@ -92,7 +92,7 @@ async fn repository_routes_preserve_scope_permissions_and_real_operation_state()
             settings.clone(),
             directory.path().to_owned(),
         ),
-        hooks: HookService::new(directory.path().to_owned(), 0),
+        hooks: HookService::new(directory.path().to_owned(), None),
         usage: UsageService::new(settings),
     });
     let base = format!("/api/workspaces/{}/git/repository", workspace.id);

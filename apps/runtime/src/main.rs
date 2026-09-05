@@ -1,10 +1,10 @@
-use std::{env, future::IntoFuture, net::SocketAddr, time::Duration};
+use std::{env, net::SocketAddr, time::Duration};
 
 use anyhow::Context;
 use armadra_runtime::{
-    AppState, DEFAULT_PORT, db, desktop_control, events::EventHub, hook, hook::HookService, index,
-    paths::data_dir, resources::ResourceService, router_with_state, settings::SettingsStore,
-    terminal::TerminalManager, usage::UsageService,
+    AppState, DEFAULT_PORT, db, desktop_control, endpoints, events::EventHub, hook,
+    hook::HookService, index, listen, paths::data_dir, resources::ResourceService,
+    router_with_state, settings::SettingsStore, terminal::TerminalManager, usage::UsageService,
 };
 use tracing_subscriber::EnvFilter;
 
@@ -65,31 +65,25 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    let desktop_stdin = match arguments.as_slice() {
-        [] => false,
-        [argument] if argument == "--desktop-control-stdin" => true,
-        [argument] if argument == "--help" || argument == "-h" => {
-            println!(
-                "Usage: armadra-runtime [--desktop-control-stdin]\n       armadra-runtime export --help"
-            );
+    let serve = match ServeArguments::parse(&arguments)? {
+        Some(serve) => serve,
+        None => {
+            println!("{USAGE}");
             return Ok(());
         }
-        _ => anyhow::bail!("unsupported Runtime arguments"),
     };
-    let desktop = if desktop_stdin {
+    let desktop = if serve.desktop_control_stdin {
         Some(desktop_control::listen_to_parent()?)
     } else {
         None
     };
-    let host = env::var("ARMADRA_RUNTIME_HOST").unwrap_or_else(|_| "127.0.0.1".into());
-    let port = env::var("ARMADRA_RUNTIME_PORT")
-        .unwrap_or_else(|_| DEFAULT_PORT.to_string())
-        .parse::<u16>()
-        .context("ARMADRA_RUNTIME_PORT must be a valid port")?;
     // Reserve ownership before migrations, status restoration or tmux adoption.
-    // A second Runtime on the same endpoint must not mutate the active instance.
-    let address: SocketAddr = format!("{host}:{port}").parse()?;
-    let listener = tokio::net::TcpListener::bind(address).await?;
+    // A second Runtime on the same endpoint must not mutate the active
+    // instance, so every listener is bound before any of them is published.
+    let mut listeners = Vec::with_capacity(serve.listen.len());
+    for spec in &serve.listen {
+        listeners.push(listen::bind(spec).await?);
+    }
     let database_url = match env::var("ARMADRA_DATABASE_URL") {
         Ok(url) => url,
         Err(_) => {
@@ -126,9 +120,24 @@ async fn main() -> anyhow::Result<()> {
         _ => {}
     }
     tracing::info!(backend = ?terminals.backend_info().effective, "terminal backend selected");
-    // Bind first, then publish: the endpoint file must never advertise a port
-    // nothing is listening on.
-    let bound_port = listener.local_addr().map(|address| address.port())?;
+    // Bind first, then publish: the endpoint files must never advertise an
+    // address nothing is listening on.
+    let bound: Vec<listen::ListenSpec> = listeners
+        .iter()
+        .map(listen::BoundListener::resolved)
+        .collect();
+    let bound_port = listeners.iter().find_map(listen::BoundListener::tcp_port);
+    let endpoints_file = endpoints::default_file();
+    let instance_id = uuid::Uuid::new_v4().to_string();
+    if let Err(error) = endpoints::publish(
+        &endpoints_file,
+        endpoints::RUNTIME_SERVICE,
+        runtime_endpoint(&instance_id, &bound),
+    ) {
+        // Discovery is a convenience; an unwritable data directory must not stop
+        // a Runtime whose address the caller already knows.
+        tracing::warn!(%error, path = %endpoints_file.display(), "could not publish the Runtime endpoint");
+    }
     let resources = ResourceService::new(settings.clone());
     let state = AppState {
         events,
@@ -154,24 +163,43 @@ async fn main() -> anyhow::Result<()> {
     // starts *after* the listener is bound and runs in its own task: the
     // command palette gets its history a second late, nobody waits for it.
     index::start(state.pool.clone());
-    tracing::info!(%address, "Armadra Runtime is ready");
+    for spec in &bound {
+        tracing::info!(%spec, "Armadra Runtime is listening");
+    }
     let router = router_with_state(state).layer(axum::middleware::from_fn_with_state(
         terminals.clone(),
         desktop_control::reject_during_shutdown,
     ));
+    // One shutdown signal, every listener. The reason travels separately
+    // because the caller needs it after the drain, not during it.
+    let (stop, _) = tokio::sync::broadcast::channel::<()>(1);
     let (requested, reason) = tokio::sync::oneshot::channel();
     let gate = terminals.clone();
-    let serving = axum::serve(listener, router)
-        .with_graceful_shutdown(async move {
-            let reason = shutdown_signal(desktop).await;
-            gate.begin_shutdown();
-            let _ = requested.send(reason);
+    let signalled = stop.clone();
+    tokio::spawn(async move {
+        let reason = shutdown_signal(desktop).await;
+        gate.begin_shutdown();
+        let _ = signalled.send(());
+        let _ = requested.send(reason);
+    });
+    let servers: Vec<_> = listeners
+        .into_iter()
+        .map(|listener| {
+            let mut stop = stop.subscribe();
+            listen::serve(listener, router.clone(), async move {
+                let _ = stop.recv().await;
+            })
         })
-        .into_future();
+        .collect();
+    let serving = futures_util::future::try_join_all(servers);
     tokio::pin!(serving);
     let reason = tokio::select! {
         reason = reason => reason.context("shutdown controller disappeared")?,
-        result = &mut serving => { result?; return Ok(()); },
+        result = &mut serving => {
+            result?;
+            release_endpoints(&endpoints_file, &bound);
+            return Ok(());
+        },
     };
     // Stop claiming queued handoffs before the terminals go away, so a paste is
     // never attempted into a session that is already being torn down. A worker
@@ -218,8 +246,14 @@ async fn main() -> anyhow::Result<()> {
     }
     // WebSockets or an old keep-alive request cannot hold desktop Quit forever.
     // Admission has stopped and terminal creation is gated before this drain.
-    match tokio::time::timeout(Duration::from_secs(2), &mut serving).await {
-        Ok(result) => result?,
+    let drained = tokio::time::timeout(Duration::from_secs(2), &mut serving).await;
+    // Whether or not the drain finished, this process is on its way out: an
+    // address it no longer answers on must not stay in the discovery file.
+    release_endpoints(&endpoints_file, &bound);
+    match drained {
+        Ok(result) => {
+            result?;
+        }
         Err(_) => {
             tracing::error!("Runtime HTTP drain timed out; closing remaining connections");
             anyhow::bail!("Runtime HTTP drain timed out");
@@ -229,6 +263,106 @@ async fn main() -> anyhow::Result<()> {
     repository_cleanup?;
     legacy_cleanup?;
     Ok(())
+}
+
+const USAGE: &str = "Usage: armadra-runtime [--desktop-control-stdin] [--listen SPEC]...\n\
+     \n\
+     --listen may be repeated; each spec is one of\n\
+     \x20 tcp:ADDR:PORT   loopback TCP; port 0 asks the kernel for a free one\n\
+     \x20 unix:PATH       Unix domain socket, 0600 (macOS / Linux)\n\
+     \x20 pipe:NAME       named pipe \\\\.\\pipe\\NAME (Windows)\n\
+     \n\
+     With no --listen the Runtime falls back to ARMADRA_RUNTIME_HOST /\n\
+     ARMADRA_RUNTIME_PORT, and then to 127.0.0.1:43120.\n\
+     \n\
+     \x20 armadra-runtime export --help";
+
+/// The serving mode's arguments. `None` from [`Self::parse`] means the caller
+/// asked for `--help` and the process should print usage and exit 0.
+#[derive(Debug, PartialEq, Eq)]
+struct ServeArguments {
+    desktop_control_stdin: bool,
+    listen: Vec<listen::ListenSpec>,
+}
+
+impl ServeArguments {
+    fn parse(arguments: &[String]) -> anyhow::Result<Option<Self>> {
+        let mut parsed = Self {
+            desktop_control_stdin: false,
+            listen: Vec::new(),
+        };
+        let mut rest = arguments.iter();
+        while let Some(argument) = rest.next() {
+            match argument.as_str() {
+                "--help" | "-h" => return Ok(None),
+                "--desktop-control-stdin" => parsed.desktop_control_stdin = true,
+                "--listen" => {
+                    let spec = rest.next().context("--listen needs a SPEC")?;
+                    parsed
+                        .listen
+                        .push(listen::ListenSpec::parse(spec).map_err(anyhow::Error::msg)?);
+                }
+                other => match other.strip_prefix("--listen=") {
+                    Some(spec) => parsed
+                        .listen
+                        .push(listen::ListenSpec::parse(spec).map_err(anyhow::Error::msg)?),
+                    None => anyhow::bail!("unsupported Runtime argument {other:?}"),
+                },
+            }
+        }
+        if parsed.listen.is_empty() {
+            parsed.listen.push(default_listen()?);
+        }
+        Ok(Some(parsed))
+    }
+}
+
+/// What the Runtime listens on when nobody said. `ARMADRA_RUNTIME_HOST` /
+/// `ARMADRA_RUNTIME_PORT` stay the explicit override they always were, and the
+/// fallback stays `127.0.0.1:43120` so `cargo run -p armadra-runtime` keeps
+/// working exactly as it did.
+fn default_listen() -> anyhow::Result<listen::ListenSpec> {
+    let host = env::var("ARMADRA_RUNTIME_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+    let port = env::var("ARMADRA_RUNTIME_PORT")
+        .unwrap_or_else(|_| DEFAULT_PORT.to_string())
+        .parse::<u16>()
+        .context("ARMADRA_RUNTIME_PORT must be a valid port")?;
+    let address: SocketAddr = format!("{host}:{port}")
+        .parse()
+        .with_context(|| format!("ARMADRA_RUNTIME_HOST/PORT is not an address: {host}:{port}"))?;
+    Ok(listen::ListenSpec::Tcp(address))
+}
+
+/// Turns the addresses we actually bound into one `endpoints.json` record.
+fn runtime_endpoint(instance_id: &str, bound: &[listen::ListenSpec]) -> endpoints::ServiceEndpoint {
+    let mut endpoint = endpoints::ServiceEndpoint::now(instance_id);
+    for spec in bound {
+        match spec {
+            listen::ListenSpec::Tcp(address) => {
+                endpoint.http = Some(format!("http://{address}"));
+                endpoint.websocket = Some(format!("ws://{address}"));
+            }
+            listen::ListenSpec::Unix(path) => {
+                endpoint.socket = Some(path.to_string_lossy().into_owned());
+            }
+            listen::ListenSpec::Pipe(name) => {
+                endpoint.pipe = Some(format!("{}{name}", listen::PIPE_PREFIX));
+            }
+        }
+    }
+    endpoint
+}
+
+/// Withdraws our record and removes the socket files we created.
+fn release_endpoints(endpoints_file: &std::path::Path, bound: &[listen::ListenSpec]) {
+    if let Err(error) = endpoints::withdraw(endpoints_file, endpoints::RUNTIME_SERVICE) {
+        tracing::warn!(%error, "could not withdraw the Runtime endpoint");
+    }
+    for spec in bound {
+        if let listen::ListenSpec::Unix(path) = spec {
+            listen::release(path);
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -266,5 +400,108 @@ async fn shutdown_signal(desktop: Option<tokio::sync::oneshot::Receiver<()>>) ->
         _ = ctrl_c => ShutdownReason::RestartSignal,
         _ = terminate => ShutdownReason::RestartSignal,
         _ = desktop => ShutdownReason::DesktopQuit,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(arguments: &[&str]) -> anyhow::Result<Option<ServeArguments>> {
+        ServeArguments::parse(
+            &arguments
+                .iter()
+                .map(|a| (*a).to_string())
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    /// The one behaviour every existing workflow depends on: `cargo run -p
+    /// armadra-runtime` with nothing else keeps 127.0.0.1:43120.
+    #[test]
+    fn no_arguments_still_means_the_documented_loopback_port() {
+        // The environment is process-wide; only run this when nothing overrides.
+        if env::var_os("ARMADRA_RUNTIME_PORT").is_some()
+            || env::var_os("ARMADRA_RUNTIME_HOST").is_some()
+        {
+            return;
+        }
+        let parsed = parse(&[]).unwrap().unwrap();
+        assert!(!parsed.desktop_control_stdin);
+        assert_eq!(
+            parsed.listen,
+            vec![listen::ListenSpec::Tcp(
+                format!("127.0.0.1:{DEFAULT_PORT}").parse().unwrap()
+            )]
+        );
+    }
+
+    #[test]
+    fn listen_can_be_repeated_and_replaces_the_default() {
+        let parsed = parse(&[
+            "--desktop-control-stdin",
+            "--listen",
+            "unix:/tmp/armadra/runtime.sock",
+            "--listen=tcp:127.0.0.1:0",
+        ])
+        .unwrap()
+        .unwrap();
+        assert!(parsed.desktop_control_stdin);
+        assert_eq!(
+            parsed.listen,
+            vec![
+                listen::ListenSpec::Unix("/tmp/armadra/runtime.sock".into()),
+                listen::ListenSpec::Tcp("127.0.0.1:0".parse().unwrap()),
+            ]
+        );
+        // A socket-only Runtime is expressible, and that is the desktop default.
+        let desktop = parse(&["--listen", "unix:/tmp/armadra/runtime.sock"])
+            .unwrap()
+            .unwrap();
+        assert!(desktop.listen.iter().all(|spec| spec.kind() == "unix"));
+    }
+
+    #[test]
+    fn help_exits_and_unknown_or_incomplete_arguments_do_not() {
+        assert_eq!(parse(&["--help"]).unwrap(), None);
+        assert_eq!(parse(&["-h"]).unwrap(), None);
+        for arguments in [
+            vec!["--listen"],
+            vec!["--listen", "smtp:127.0.0.1:25"],
+            vec!["--listen=unix:relative.sock"],
+            vec!["--serve-everything"],
+            vec!["extra"],
+        ] {
+            assert!(
+                parse(&arguments).is_err(),
+                "{arguments:?} should have failed"
+            );
+        }
+    }
+
+    #[test]
+    fn the_published_record_names_every_transport_we_bound() {
+        let endpoint = runtime_endpoint(
+            "instance-1",
+            &[
+                listen::ListenSpec::Tcp("127.0.0.1:53211".parse().unwrap()),
+                listen::ListenSpec::Unix("/tmp/armadra/runtime.sock".into()),
+                listen::ListenSpec::Pipe("armadra-runtime".into()),
+            ],
+        );
+        assert_eq!(endpoint.instance_id, "instance-1");
+        assert_eq!(endpoint.http.as_deref(), Some("http://127.0.0.1:53211"));
+        assert_eq!(endpoint.websocket.as_deref(), Some("ws://127.0.0.1:53211"));
+        assert_eq!(
+            endpoint.socket.as_deref(),
+            Some("/tmp/armadra/runtime.sock")
+        );
+        assert_eq!(endpoint.pipe.as_deref(), Some(r"\\.\pipe\armadra-runtime"));
+        // A socket-only Runtime advertises no address a browser could reach.
+        let private = runtime_endpoint(
+            "instance-2",
+            &[listen::ListenSpec::Unix("/tmp/armadra/runtime.sock".into())],
+        );
+        assert!(private.http.is_none() && private.websocket.is_none());
     }
 }

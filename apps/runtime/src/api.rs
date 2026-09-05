@@ -2580,7 +2580,7 @@ mod tests {
     /// Never the real data directory: a test must not touch the user's hook
     /// secret, endpoint file or node tokens.
     fn test_hooks(directory: &std::path::Path) -> crate::hook::HookService {
-        crate::hook::HookService::new(directory.join("hook-data"), 43199)
+        crate::hook::HookService::new(directory.join("hook-data"), Some(43199))
     }
 
     #[tokio::test]

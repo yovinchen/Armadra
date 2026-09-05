@@ -85,7 +85,7 @@ async fn fixture() -> Fixture {
         ),
         events,
         settings: settings.clone(),
-        hooks: crate::hook::HookService::new(directory.path().to_path_buf(), 0),
+        hooks: crate::hook::HookService::new(directory.path().to_path_buf(), None),
         usage: crate::usage::UsageService::new(settings),
     };
     Fixture {

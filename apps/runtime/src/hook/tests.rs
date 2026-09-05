@@ -245,9 +245,9 @@ async fn fixture(name: &str) -> Fixture {
 
     let events = EventHub::new();
     let settings = SettingsStore::in_memory(json!({ "terminal": { "backend": "direct" } }));
-    let hooks = HookService::new(directory.path().join("hook-data"), 43199);
+    let hooks = HookService::new(directory.path().join("hook-data"), Some(43199));
     let bearer = {
-        hooks.publish_endpoint(43199).unwrap();
+        hooks.publish_endpoint(Some(43199)).unwrap();
         super::endpoint::read(&hooks.endpoint_file())["ARMADRA_HOOK_TOKEN"].clone()
     };
     let state = AppState {
@@ -1337,7 +1337,7 @@ async fn the_unix_socket_serves_the_hook_router() {
 
     let fixture = fixture("hook-socket").await;
     let socket = fixture.state.hooks.socket_path().unwrap();
-    super::start(fixture.state.clone(), 43199);
+    super::start(fixture.state.clone(), Some(43199));
 
     // The listener binds on a spawned task; give it a moment to appear.
     for _ in 0..100 {

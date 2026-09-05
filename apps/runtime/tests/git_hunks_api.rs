@@ -93,7 +93,7 @@ async fn hunk_routes_reject_stale_writes_and_enforce_workspace_permissions() {
             settings.clone(),
             directory.path().to_owned(),
         ),
-        hooks: HookService::new(directory.path().to_owned(), 0),
+        hooks: HookService::new(directory.path().to_owned(), None),
         usage: UsageService::new(settings),
     });
 

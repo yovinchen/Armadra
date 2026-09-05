@@ -58,8 +58,9 @@ const TERMINAL_GONE_GRACE_SECONDS: i64 = 30;
 struct Inner {
     auth: HookAuth,
     data_dir: PathBuf,
-    /// Rewritten whenever the runtime binds a different port.
-    port: RwLock<u16>,
+    /// Rewritten whenever the runtime binds a different port. `None` when the
+    /// runtime listens on sockets only (the desktop default, roadmap §4.4).
+    port: RwLock<Option<u16>>,
     /// Per-node reducer state that does not survive a restart.
     memory: Mutex<HashMap<String, Memory>>,
     context_usage: crate::context_usage::ContextUsageCache,
@@ -76,7 +77,8 @@ pub struct HookService {
 pub struct HookHealth {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sock: Option<String>,
-    pub port: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
     /// The endpoint file exists and names this runtime.
     pub ok: bool,
 }
@@ -89,7 +91,7 @@ impl HookService {
     /// cannot write is not fatal: the service falls back to in-memory
     /// credentials so the rest of the runtime still starts, and the endpoint
     /// file simply never appears — which the client reads as "no runtime".
-    pub fn new(data_dir: PathBuf, port: u16) -> Self {
+    pub fn new(data_dir: PathBuf, port: Option<u16>) -> Self {
         let existing = endpoint::read(&data_dir.join("hook-endpoint.env"));
         let bearer = existing.get("ARMADRA_HOOK_TOKEN").cloned();
         let auth = HookAuth::load(&data_dir, bearer).unwrap_or_else(|error| {
@@ -109,7 +111,7 @@ impl HookService {
 
     /// Uses the process-wide data directory (`ARMADRA_DATA_DIR` or the
     /// per-platform default).
-    pub fn with_default_paths(port: u16) -> Self {
+    pub fn with_default_paths(port: Option<u16>) -> Self {
         Self::new(paths::data_dir(), port)
     }
 
@@ -130,8 +132,8 @@ impl HookService {
         cfg!(unix).then(|| self.inner.data_dir.join("hook.sock"))
     }
 
-    pub fn port(&self) -> u16 {
-        self.inner.port.read().map(|port| *port).unwrap_or_default()
+    pub fn port(&self) -> Option<u16> {
+        self.inner.port.read().ok().and_then(|port| *port)
     }
 
     pub fn bearer_matches(&self, presented: Option<&str>) -> bool {
@@ -164,7 +166,7 @@ impl HookService {
     }
 
     /// Writes the endpoint file. Called at start-up and whenever the port moves.
-    pub fn publish_endpoint(&self, port: u16) -> AppResult<()> {
+    pub fn publish_endpoint(&self, port: Option<u16>) -> AppResult<()> {
         if let Ok(mut current) = self.inner.port.write() {
             *current = port;
         }
@@ -210,12 +212,30 @@ impl HookService {
         let file = self.endpoint_file();
         let port = self.port();
         let published = endpoint::read(&file);
+        // The file names this runtime when the transport it advertises is the
+        // one we are actually on: the port when we have one, the socket
+        // otherwise. A socket-only runtime whose file still carries a port is
+        // a leftover from a previous run and is reported as not ok.
+        let ok = match port {
+            Some(port) => {
+                published.get("ARMADRA_HOOK_PORT").map(String::as_str)
+                    == Some(port.to_string().as_str())
+            }
+            None => {
+                !published.contains_key("ARMADRA_HOOK_PORT")
+                    && published.get("ARMADRA_HOOK_SOCK").map(String::as_str)
+                        == self
+                            .socket_path()
+                            .map(|path| path.to_string_lossy().into_owned())
+                            .as_deref()
+            }
+        };
         HookHealth {
             sock: self
                 .socket_path()
                 .map(|path| path.to_string_lossy().into_owned()),
             port,
-            ok: published.get("ARMADRA_HOOK_PORT").map(String::as_str) == Some(&port.to_string()),
+            ok,
         }
     }
 }
@@ -238,7 +258,7 @@ pub fn routes() -> Router<AppState> {
 /// sweep. Every failure is logged rather than propagated: the runtime is still
 /// useful without a hook surface, and a hard failure here would mean no canvas
 /// at all.
-pub fn start(state: AppState, port: u16) {
+pub fn start(state: AppState, port: Option<u16>) {
     if let Err(error) = state.hooks.publish_endpoint(port) {
         tracing::warn!(%error, "hook clients will not find this runtime");
     }
@@ -371,12 +391,12 @@ mod service_tests {
     #[test]
     fn the_endpoint_file_is_written_and_the_bearer_survives_a_restart() {
         let directory = tempdir().unwrap();
-        let service = HookService::new(directory.path().to_path_buf(), 43120);
-        service.publish_endpoint(43120).unwrap();
+        let service = HookService::new(directory.path().to_path_buf(), Some(43119));
+        service.publish_endpoint(Some(43119)).unwrap();
 
         let published = endpoint::read(&service.endpoint_file());
         assert_eq!(published["ARMADRA_HOOK_VERSION"], "1");
-        assert_eq!(published["ARMADRA_HOOK_PORT"], "43120");
+        assert_eq!(published["ARMADRA_HOOK_PORT"], "43119");
         assert_eq!(
             published["ARMADRA_NODE_TOKEN_DIR"],
             service.node_token_dir().to_string_lossy()
@@ -391,7 +411,7 @@ mod service_tests {
 
         // A second runtime over the same data directory keeps both secrets, so
         // terminals started by the first one keep reporting.
-        let restarted = HookService::new(directory.path().to_path_buf(), 43121);
+        let restarted = HookService::new(directory.path().to_path_buf(), Some(43118));
         assert!(restarted.bearer_matches(Some(&published["ARMADRA_HOOK_TOKEN"])));
         assert_eq!(
             restarted.verdict("node-a", Some(&service.issue_node_token("node-a").unwrap())),
@@ -400,18 +420,47 @@ mod service_tests {
 
         // The health flag follows the port that is actually published.
         assert!(!restarted.health().ok);
-        restarted.publish_endpoint(43121).unwrap();
+        restarted.publish_endpoint(Some(43118)).unwrap();
         assert!(restarted.health().ok);
         assert_eq!(
             endpoint::read(&service.endpoint_file())["ARMADRA_HOOK_PORT"],
-            "43121"
+            "43118"
         );
+    }
+
+    /// A desktop Runtime binds no port. Its endpoint file must advertise the
+    /// socket alone: a port key left over from a TCP run would send hook
+    /// clients to whatever process now owns that number.
+    #[cfg(unix)]
+    #[test]
+    fn a_socket_only_runtime_publishes_no_port_and_clears_a_previous_one() {
+        let directory = tempdir().unwrap();
+        let with_port = HookService::new(directory.path().to_path_buf(), Some(43119));
+        with_port.publish_endpoint(Some(43119)).unwrap();
+        assert!(with_port.health().ok);
+
+        let socket_only = HookService::new(directory.path().to_path_buf(), None);
+        // The stale port file does not describe this runtime.
+        assert!(!socket_only.health().ok);
+        socket_only.publish_endpoint(None).unwrap();
+        let published = endpoint::read(&socket_only.endpoint_file());
+        assert!(!published.contains_key("ARMADRA_HOOK_PORT"));
+        assert_eq!(
+            published["ARMADRA_HOOK_SOCK"],
+            directory.path().join("hook.sock").to_string_lossy()
+        );
+        let health = socket_only.health();
+        assert_eq!(health.port, None);
+        assert!(health.ok);
+        assert!(health.sock.is_some());
+        // And the bearer is still the one earlier terminals were given.
+        assert!(socket_only.bearer_matches(Some(&published["ARMADRA_HOOK_TOKEN"])));
     }
 
     #[test]
     fn node_tokens_are_written_next_to_the_endpoint_file() {
         let directory = tempdir().unwrap();
-        let service = HookService::new(directory.path().to_path_buf(), 43120);
+        let service = HookService::new(directory.path().to_path_buf(), Some(43119));
         let token = service.issue_node_token("node-a").unwrap();
         assert_eq!(
             std::fs::read_to_string(service.node_token_dir().join("node-a")).unwrap(),
@@ -423,7 +472,7 @@ mod service_tests {
     #[test]
     fn reducer_memory_is_per_node_and_survives_between_events() {
         let directory = tempdir().unwrap();
-        let service = HookService::new(directory.path().to_path_buf(), 43120);
+        let service = HookService::new(directory.path().to_path_buf(), Some(43119));
         service.with_memory("node-a", |memory| memory.awaiting_input = true);
         assert!(service.with_memory("node-a", |memory| memory.awaiting_input));
         assert!(!service.with_memory("node-b", |memory| memory.awaiting_input));

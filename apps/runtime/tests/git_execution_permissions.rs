@@ -89,7 +89,7 @@ impl Fixture {
                 settings.clone(),
                 temp.path().to_owned(),
             ),
-            hooks: HookService::new(temp.path().to_owned(), 0),
+            hooks: HookService::new(temp.path().to_owned(), None),
             usage: UsageService::new(settings),
         });
         Self {

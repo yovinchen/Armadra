@@ -124,7 +124,7 @@ async fn fixture() -> Fixture {
             directory.path().to_path_buf(),
         ),
         events,
-        hooks: HookService::new(directory.path().to_path_buf(), 0),
+        hooks: HookService::new(directory.path().to_path_buf(), None),
         usage: UsageService::new(settings.clone()),
         settings,
         pool: pool.clone(),

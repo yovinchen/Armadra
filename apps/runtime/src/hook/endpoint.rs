@@ -26,7 +26,10 @@ pub const HOOK_PROTOCOL_VERSION: u32 = 1;
 pub struct Endpoint {
     /// The runtime's own TCP port. The client falls back to it when the socket
     /// is unavailable (Windows, or a socket left over from a dead runtime).
-    pub port: u16,
+    /// `None` on a desktop install, which listens on no port at all: the key is
+    /// then omitted, so a client that cannot reach the socket has nowhere to
+    /// fall back to rather than a wrong port to talk to.
+    pub port: Option<u16>,
     /// Unix socket path; `None` on Windows.
     pub socket: Option<PathBuf>,
     pub token: String,
@@ -44,7 +47,9 @@ impl Endpoint {
             "ARMADRA_HOOK_VERSION",
             &HOOK_PROTOCOL_VERSION.to_string(),
         );
-        push_line(&mut rendered, "ARMADRA_HOOK_PORT", &self.port.to_string());
+        if let Some(port) = self.port {
+            push_line(&mut rendered, "ARMADRA_HOOK_PORT", &port.to_string());
+        }
         if let Some(socket) = &self.socket {
             push_line(
                 &mut rendered,
@@ -122,7 +127,7 @@ mod tests {
 
     fn fixture() -> Endpoint {
         Endpoint {
-            port: 43120,
+            port: Some(43119),
             socket: Some(PathBuf::from("/tmp/armadra/hook.sock")),
             token: "V4uYb0Q".into(),
             node_token_dir: PathBuf::from("/tmp/armadra/node-tokens"),
@@ -133,7 +138,7 @@ mod tests {
     fn the_rendered_file_is_the_documented_shape() {
         let rendered = fixture().render();
         assert!(rendered.contains("ARMADRA_HOOK_VERSION='1'\n"));
-        assert!(rendered.contains("ARMADRA_HOOK_PORT='43120'\n"));
+        assert!(rendered.contains("ARMADRA_HOOK_PORT='43119'\n"));
         assert!(rendered.contains("ARMADRA_HOOK_SOCK='/tmp/armadra/hook.sock'\n"));
         assert!(rendered.contains("ARMADRA_HOOK_TOKEN='V4uYb0Q'\n"));
         assert!(rendered.contains("ARMADRA_NODE_TOKEN_DIR='/tmp/armadra/node-tokens'\n"));
@@ -184,6 +189,21 @@ mod tests {
             std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
             0o600
         );
-        assert_eq!(read(&path)["ARMADRA_HOOK_PORT"], "43120");
+        assert_eq!(read(&path)["ARMADRA_HOOK_PORT"], "43119");
+    }
+
+    /// A desktop Runtime listens on no port. The key must be absent, not zero:
+    /// a client that read `ARMADRA_HOOK_PORT='0'` would try to connect to it.
+    #[test]
+    fn a_runtime_without_a_port_omits_the_key_entirely() {
+        let rendered = Endpoint {
+            port: None,
+            ..fixture()
+        }
+        .render();
+        assert!(!rendered.contains("ARMADRA_HOOK_PORT"), "{rendered}");
+        let parsed = parse(&rendered);
+        assert!(!parsed.contains_key("ARMADRA_HOOK_PORT"));
+        assert_eq!(parsed["ARMADRA_HOOK_SOCK"], "/tmp/armadra/hook.sock");
     }
 }

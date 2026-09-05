@@ -9,6 +9,7 @@ pub mod context_models;
 pub mod context_usage;
 pub mod db;
 pub mod desktop_control;
+pub mod endpoints;
 pub mod error;
 pub mod events;
 pub mod file_ops;
@@ -24,6 +25,7 @@ pub mod handoff;
 pub mod hook;
 pub mod imports;
 pub mod index;
+pub mod listen;
 pub mod migration_cli;
 pub mod migration_export;
 pub mod model;
@@ -82,7 +84,7 @@ pub fn router(pool: SqlitePool) -> Router {
     let settings = SettingsStore::load();
     router_with_state(AppState {
         terminals: TerminalManager::new(pool.clone(), events.clone()),
-        hooks: HookService::with_default_paths(DEFAULT_PORT),
+        hooks: HookService::with_default_paths(Some(DEFAULT_PORT)),
         usage: UsageService::new(settings.clone()),
         resources: ResourceService::new(settings.clone()),
         events,

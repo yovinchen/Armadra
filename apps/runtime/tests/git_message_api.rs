@@ -93,7 +93,7 @@ async fn message_routes_read_staged_source_and_require_execution_authority() {
             settings.clone(),
             directory.path().to_owned(),
         ),
-        hooks: HookService::new(directory.path().to_owned(), 0),
+        hooks: HookService::new(directory.path().to_owned(), None),
         usage: UsageService::new(settings),
     });
 
