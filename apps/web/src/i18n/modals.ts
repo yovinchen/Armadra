@@ -214,7 +214,27 @@ export const modals: MessageModule = {
     "settings.shortcut.windowOther":
       "Ctrl+W 和 Alt+F4 用于关闭窗口；退出应用及后台服务请使用托盘菜单。窗口快捷键不能绑定为节点操作。",
     "settings.shortcut.unbound": "未绑定",
-    "settings.shortcut.note": "Esc 取消，Backspace 恢复默认。", // i18n-exempt
+    "settings.shortcut.note": "Esc 取消，Backspace 重置本层。", // i18n-exempt
+    "settings.shortcut.source.default": "默认",
+    "settings.shortcut.source.global": "全局",
+    "settings.shortcut.source.device": "本设备",
+    "settings.shortcut.layer": "保存到",
+    "settings.shortcut.layer.note":
+      "全局键位跟随设置同步到其它设备；本设备键位只留在这台机器上。",
+    "settings.shortcut.platform": "平台",
+    "settings.shortcut.platform.mac": "macOS",
+    "settings.shortcut.platform.other": "Windows / Linux",
+    "settings.shortcut.platform.preview":
+      "正在查看另一个平台的键位，只读；录制只写当前这台机器所在的平台。",
+    "settings.shortcut.reset": "重置「{command}」到上一层",
+    "settings.shortcut.resetAll": "全部重置",
+    "settings.shortcut.transfer": "导入 / 导出",
+    "settings.shortcut.transfer.note":
+      "导出的是两层覆盖，不含默认键位。粘贴一份配置后点导入会整体替换现有覆盖。",
+    "settings.shortcut.transfer.close": "关闭",
+    "settings.shortcut.import.apply": "导入",
+    "settings.shortcut.import.invalid": "无法识别这份快捷键配置。",
+    "settings.shortcut.import.done": "已导入快捷键配置。",
     "settings.scope.app": "应用",
     "settings.scope.canvas": "画布",
     "settings.scope.terminal": "终端",
@@ -453,7 +473,28 @@ export const modals: MessageModule = {
     "settings.shortcut.windowOther":
       "Ctrl+W and Alt+F4 close the window. Use the tray menu to quit the app and its background services. Window shortcuts cannot be assigned to node actions.",
     "settings.shortcut.unbound": "Unbound",
-    "settings.shortcut.note": "Esc cancels, Backspace restores the default.",
+    "settings.shortcut.note": "Esc cancels, Backspace resets this layer.",
+    "settings.shortcut.source.default": "Default",
+    "settings.shortcut.source.global": "Global",
+    "settings.shortcut.source.device": "This device",
+    "settings.shortcut.layer": "Save to",
+    "settings.shortcut.layer.note":
+      "Global shortcuts follow your settings to other devices; device shortcuts stay on this machine.",
+    "settings.shortcut.platform": "Platform",
+    "settings.shortcut.platform.mac": "macOS",
+    "settings.shortcut.platform.other": "Windows / Linux",
+    "settings.shortcut.platform.preview":
+      "Showing another platform's keys, read-only. Recording always writes the platform this machine runs.",
+    "settings.shortcut.reset": "Reset “{command}” to the layer below",
+    "settings.shortcut.resetAll": "Reset all",
+    "settings.shortcut.transfer": "Import / export",
+    "settings.shortcut.transfer.note":
+      "The export contains both override layers, not the defaults. Pasting a configuration and importing replaces the existing overrides.",
+    "settings.shortcut.transfer.close": "Close",
+    "settings.shortcut.import.apply": "Import",
+    "settings.shortcut.import.invalid":
+      "This shortcut configuration was not recognised.",
+    "settings.shortcut.import.done": "Shortcut configuration imported.",
     "settings.scope.app": "App",
     "settings.scope.canvas": "Canvas",
     "settings.scope.terminal": "Terminal",
