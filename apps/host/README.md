@@ -1,8 +1,9 @@
 # Go Host
 
-独立本机后台服务，已提供持久身份、单实例、握手、启停管理、常驻自动化调度与 GitHub Issues / PR。
-公开 HTTP 为健康检查、Protobuf Hello 和已认证会话下的身份、自动化与 GitHub 方法；
-其余业务仍由 Rust Runtime 执行。
+独立本机后台服务，已提供持久身份、单实例、握手、启停管理、常驻自动化调度、GitHub Issues / PR，
+以及工作空间与画布的业务表面。公开 HTTP 为健康检查、Protobuf Hello 和已认证会话下的身份、自动化、
+GitHub 与画布方法；画布的写入方由 `write_ownership` 记录决定，默认仍是 Rust Runtime，
+终端、文件、Git 与 Hook 的执行始终在 Runtime。
 迁移进度见[实施记录](../../docs/platform-implementation-status.md)。
 
 ## 运行与管理
@@ -66,7 +67,7 @@ CSRF 与浏览器 Origin 停在 Host，Runtime 只看到本机回环来源。未
 
 - `GET /health` 返回 `ok`；`POST /rpc/armadra.v1.HostService/Hello` 收发 `application/x-protobuf`。
 - Hello 需 clientId、major 1；当前 minor 1，兼容 0。返回持久 hostId、每次启动变化的 hostInstanceId、能力与 1 MiB 帧上限。
-- 已实现能力为 `protocol.hello.v1` / `host.identity.v1`，配置了 Worker 的 HTTPS Host 另有 `automation.plans.v1`，装配了凭据服务的另有 `github.issues.v1`。身份 ID 不是认证 token；畸形请求、超限、主版本不兼容及非回环 authority 均拒绝。
+- 已实现能力为 `protocol.hello.v1` / `host.identity.v1`，配置了 Worker 的 HTTPS Host 另有 `automation.plans.v1`，装配了凭据服务的另有 `github.issues.v1`，装配了画布服务的另有 `canvas.documents.v1`（只表示表面可用，不表示本 Host 当前持有画布写入权——那由 `CanvasService/GetOwnership` 回答）。身份 ID 不是认证 token；畸形请求、超限、主版本不兼容及非回环 authority 均拒绝。
 - 数据目录使用 OS 文件锁。身份损坏、未知版本或非普通文件时拒绝启动，不重建；不要在运行时删除锁或复制目录冒充新设备。
 - Unix 新目录/文件使用 0700/0600；Windows 沿用目录 ACL，自定义数据目录的凭据与业务数据隔离仍待实机验收。此阶段身份元数据不含凭据。
 
@@ -170,6 +171,39 @@ Host 自身诊断（配对材料仅由 `pair` 命令自己的 stdout 返回）�
 协议停止运行中的 Host（不杀 PID），再把候选写到目标旁边并改名替换（失败回滚），最后按记录的服务
 定义重新启动并报告状态；若服务管理器已自行拉起则报告该实例而不是再起一个。Host 正在运行但没有
 安装记录时直接拒绝，避免用猜出来的参数改变监听面——先 `stop` 再 `upgrade`。
+
+## 画布与写入所有权
+
+`/rpc/armadra.v1.CanvasService/` 提供工作空间与画布的读写：`ListWorkspaces` / `PutWorkspace` /
+`DeleteWorkspace`、`ListCanvases`、`GetDocument` / `SaveDocument` / `DeleteCanvas`、
+`SubscribeEvents` / `GetSnapshot`、`GetOwnership`。读取需 `canvas:read`，变更需 `canvas:write` 并带 CSRF；
+每个请求的工作空间取自会话本身的授权，请求里的 scope 只用来选，不用来声明身份。
+没有装配画布服务时先认证再返回 `UNSUPPORTED`，不返回空工作空间。
+
+一次 `SaveDocument` 就是整篇文档的一次事务：画布行、节点、连线、标注一起写，请求里没有的对象被删成
+带 revision 的墓碑。只有真正变化的对象进入事务，因此移动一个节点不会把整块画布重播一遍。每个对象携带
+客户端读到的 revision，冲突返回 CONFLICT 而不是覆盖；`operationId` 是幂等键，重放返回原收据，换了内容则拒绝。
+事件与实体同事务写出并按单调 sequence 编号；游标低于保留下限返回 `SNAPSHOT_REQUIRED`，高于水位返回
+`CURSOR_AHEAD`，两者都不用空页表示。
+
+写入方由 `write_ownership` 单行记录决定，默认是 Rust Runtime，此时本服务只读，所有变更返回稳定错误码
+`ownership_moved`。切换是操作者在维护窗口里的动作，只有 CLI 入口，而且要先停掉运行中的 Host（命令要拿同一把目录锁）：
+
+```sh
+target/armadra-host ownership status
+target/armadra-host ownership switch  --import-id ID \
+  --runtime-binary /abs/armadra-runtime --runtime-database /abs/canvas.db
+target/armadra-host ownership rollback --export /abs/new-directory \
+  --runtime-binary /abs/armadra-runtime --runtime-database /abs/canvas.db
+```
+
+`switch` 先把 `armadra-host import` staging 的行投影成画布实体，再与导出清单和原始行两侧逐项核验
+（ID、位置与尺寸、Frame 嵌套、上下文链接、白板摘要、标注、受管资产哈希）；有任何差异就打印报告并中止，
+此时尚未改动任何所有权状态。核验通过后经 Worker stdio 协议下发 epoch。应答丢失时会重新读取 Runtime
+实际存了什么并据此收敛；两次读取都失败时维护窗口保持打开（两侧继续拒绝写入），重跑同一条命令即可收敛。
+
+`rollback` 必须先写出反向导出包（`--export` 指向一个新目录），写完再读回校验摘要。把该包重新导入
+`canvas.db` 尚未实现，因此 Host 在持有期间产生过画布事件时回滚会被拒绝，除非显式加 `--accept-export-only`。
 
 ## 验证
 

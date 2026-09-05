@@ -34,7 +34,7 @@ Armadra 是 local-first 的 AI Coding 画布：把真实 CLI Agent（Claude Code
 | 文件拖入终端插入路径 / 拖到画布开预览                                              | ✅   |
 | 窄屏（<768px）抽屉布局                                                             | ✅   |
 | Kanban 退役为只读归档；节点备注保留                                                | ✅   |
-| 迁移到 Host 后 ID、位置、资源、嵌套 Frame 一致性验收（C02）                        | ⬜   |
+| 迁移到 Host 后 ID、位置、资源、嵌套 Frame 一致性验收（C02）                        | ✅   |
 | 多设备画布编辑租约与 revision CAS（H04 前置）                                      | ⬜   |
 
 ### 3.2 Agent 终端与协作
@@ -155,17 +155,17 @@ T01 是 🔶：`crates/session-host` 与 Worker 侧后端已交付并通过交�
 
 ### 3.11 Host、远程与移动
 
-| 功能                                                                                            | 状态 |
-| ----------------------------------------------------------------------------------------------- | ---- |
-| Protobuf 握手、本机控制、单实例、后台启停、私有 `host.db`、迁移导出 / staging 导入              | ✅   |
-| HTTPS 设备配对、`__Host-` 会话、CSRF 轮转、设备管理 UI                                          | ✅   |
-| SSH 主机配置与连接测试                                                                          | ✅   |
-| 业务 Protobuf 表面（canvas / session / agent / filesystem / git）、写入所有权 epoch 切换（H01） | ⬜   |
-| 事件 outbox、durable sequence、快照恢复（H01）                                                  | ⬜   |
-| 远端 Rust Worker、`WorkspacePath{executionHostId}` 统一执行位置（H02）                          | ⬜   |
-| 认证后可用的业务 API、静态前端托管、对外服务开关（H02）                                         | 🔶   |
-| 手机焦点页、底部导航、软键盘工具条、断线重连不重复输入（H03）                                   | 🔶   |
-| Presence / Mutation / 租约契约与 UNSUPPORTED 响应（H04，预留）                                  | ⬜   |
+| 功能                                                                                                                 | 状态 |
+| -------------------------------------------------------------------------------------------------------------------- | ---- |
+| Protobuf 握手、本机控制、单实例、后台启停、私有 `host.db`、迁移导出 / staging 导入                                   | ✅   |
+| HTTPS 设备配对、`__Host-` 会话、CSRF 轮转、设备管理 UI                                                               | ✅   |
+| SSH 主机配置与连接测试                                                                                               | ✅   |
+| 业务 Protobuf 表面：canvas 已交付并可按 ownership epoch 切换写入方；session / agent / filesystem / git 未开始（H01） | 🔶   |
+| 事件 outbox、durable sequence、快照恢复（H01）                                                                       | ✅   |
+| 远端 Rust Worker、`WorkspacePath{executionHostId}` 统一执行位置（H02）                                               | ⬜   |
+| 认证后可用的业务 API、静态前端托管、对外服务开关（H02）                                                              | 🔶   |
+| 手机焦点页、底部导航、软键盘工具条、断线重连不重复输入（H03）                                                        | 🔶   |
+| Presence / Mutation / 租约契约与 UNSUPPORTED 响应（H04，预留）                                                       | ✅   |
 
 ### 3.12 桌面壳、服务集成与项目结构（本轮新增，详见 §4.4、§4.5）
 

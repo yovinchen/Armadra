@@ -133,22 +133,22 @@ message StreamAck {
 
 ### 3.2 契约文件及完整表面
 
-| 文件/服务          | 关键对象                                             | 动作与流                                                     |
-| ------------------ | ---------------------------------------------------- | ------------------------------------------------------------ |
-| `common.proto`     | Scope、Revision、Error、Operation、Capabilities      | Hello、GetOperation、Cancel、Heartbeat                       |
-| `identity.proto`   | Device、Principal、Grant、CredentialRef              | Pair、Refresh、Revoke、ListDevices                           |
-| `canvas.proto`     | CanvasDocument、Node、Link、WhiteboardBlob           | Snapshot、ApplyMutation、Subscribe、UploadAsset              |
-| `session.proto`    | Session、Run、LaunchSpec、ContextUsage               | Create、Start、Attach、Input、Resize、Signal、Close、Resume  |
-| `agent.proto`      | AdapterCapabilities、HookEvent、Approval、Handoff    | Resolve、Report、Answer、Message、Prepare/AcceptHandoff      |
-| `automation.proto` | Schedule、Run、Activation、AgentActivity             | Create、Edit、Activate、Pause、RunNow、Observe、History      |
-| `filesystem.proto` | WorkspacePath、FileStat、FileVersion、Transfer       | List、Read、Write、Rename、Delete、Search、Watch、Upload     |
-| `git.proto`        | RepoState、Diff、Commit、Ref、Worktree、GitOperation | Status、Stage、Commit、Branch、Fetch、Pull、Push、History 等 |
-| `github.proto`     | Issue、PullRequest、Mapping、Check、Review           | Query、ChangeState、MapStatus、CreatePR、Review、Merge       |
-| `browser.proto`    | BrowserSession、ElementRef、Action、Frame            | Create、Navigate、Read、Act、Capture、Subscribe、Close       |
-| `resources.proto`  | HostMetrics、SessionMetrics、PowerLease              | Read、Subscribe、SetPolicy、ReleaseLease                     |
-| `presence.proto`   | Participant、Cursor、Focus、WriterLease              | Join、Leave、Update、Acquire/Release；先预留                 |
-| `settings.proto`   | Preferences、KeyBinding、AccountBinding              | Read、Patch、Validate、Export/Import                         |
-| `updates.proto`    | Release、Compatibility、UpdateJob                    | Check、Download、Verify、Apply；先预留                       |
+| 文件/服务          | 关键对象                                                             | 动作与流                                                                                                                                             |
+| ------------------ | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `common.proto`     | Scope、Revision、Error、Operation、Capabilities                      | Hello、GetOperation、Cancel、Heartbeat                                                                                                               |
+| `identity.proto`   | Device、Principal、Grant、CredentialRef                              | Pair、Refresh、Revoke、ListDevices                                                                                                                   |
+| `canvas.proto`     | CanvasWorkspace、Canvas、Node、Edge、Annotation、AssetRef、Ownership | ListWorkspaces / PutWorkspace / DeleteWorkspace、ListCanvases、GetDocument / SaveDocument / DeleteCanvas、SubscribeEvents、GetSnapshot、GetOwnership |
+| `session.proto`    | Session、Run、LaunchSpec、ContextUsage                               | Create、Start、Attach、Input、Resize、Signal、Close、Resume                                                                                          |
+| `agent.proto`      | AdapterCapabilities、HookEvent、Approval、Handoff                    | Resolve、Report、Answer、Message、Prepare/AcceptHandoff                                                                                              |
+| `automation.proto` | Schedule、Run、Activation、AgentActivity                             | Create、Edit、Activate、Pause、RunNow、Observe、History                                                                                              |
+| `filesystem.proto` | WorkspacePath、FileStat、FileVersion、Transfer                       | List、Read、Write、Rename、Delete、Search、Watch、Upload                                                                                             |
+| `git.proto`        | RepoState、Diff、Commit、Ref、Worktree、GitOperation                 | Status、Stage、Commit、Branch、Fetch、Pull、Push、History 等                                                                                         |
+| `github.proto`     | Issue、PullRequest、Mapping、Check、Review                           | Query、ChangeState、MapStatus、CreatePR、Review、Merge                                                                                               |
+| `browser.proto`    | BrowserSession、ElementRef、Action、Frame                            | Create、Navigate、Read、Act、Capture、Subscribe、Close                                                                                               |
+| `resources.proto`  | HostMetrics、SessionMetrics、PowerLease                              | Read、Subscribe、SetPolicy、ReleaseLease                                                                                                             |
+| `presence.proto`   | Participant、Cursor、Focus、WriterLease                              | Join、Leave、Update、Acquire/Release；先预留                                                                                                         |
+| `settings.proto`   | Preferences、KeyBinding、AccountBinding                              | Read、Patch、Validate、Export/Import                                                                                                                 |
+| `updates.proto`    | Release、Compatibility、UpdateJob                                    | Check、Download、Verify、Apply；先预留                                                                                                               |
 
 ### 3.3 版本、重放与流控
 
@@ -186,6 +186,16 @@ message StreamAck {
 4. 导入 `host.db`，保留原 ID 与时间；核对行数、引用、白板 hash、资产、审批和消息队列。生成可复核导入报告。
 5. 以 epoch 切换写入所有权，旧 Runtime 的业务写入拒绝；Worker 接管执行接口，Host 重认领存活会话。
 6. 新 Host 开放写入后，回滚需要反向迁移/维护窗口，不能直接用旧数据库覆盖新数据。旧库保留只读备份。
+
+### 4.1 画布写入所有权实现状态（H01 第一阶段）
+
+已实现：`canvas.proto` 三语言产物、fixture 与契约测试；Host 侧画布业务存储（复用 revision 实体 / 操作收据 / 事件 outbox，新增编号迁移 v5 的 `write_ownership` 单行记录）；HTTPS `armadra.v1.CanvasService/*` 按 `canvas:read` / `canvas:write` 与工作空间收窄，变更另需 CSRF；事件按 durable sequence 续订，游标低于保留下限返回 `SNAPSHOT_REQUIRED`、高于水位返回 `CURSOR_AHEAD`，快照带可续订的 sequence；保存以整篇文档为一次事务，仅写入真正变化的对象并返回幂等收据（重放同一 operationId 返回原收据，改内容则 CONFLICT）。
+
+切换按 §4 的五步执行，由 `armadra-host ownership switch|rollback|status` 触发，命令持有数据目录锁——运行中的 Host 必须先停止，这就是维护窗口。第 4 步把 staging 的 `legacy.*` 行投影成画布实体，并同时与导出清单和原始行两侧逐项比对（ID、位置与尺寸、Frame 嵌套、上下文链接、白板摘要、标注、受管资产哈希）；任一差异即中止，且此时尚未写入任何所有权状态。第 5 步经现有 Worker stdio 协议（`--canvas-database FILE`，能力位 `canvas.ownership.v1`）下发 epoch；请求同时带上「Host 认为对方存的 epoch」，因此重复请求幂等、过期请求被拒。
+
+失败处理：应答丢失时 Host 重新读取 Runtime 实际存了什么并据此收敛；Runtime 明确拒绝时恢复到切换前的 settled 记录；两次读取都失败时维护窗口保持打开（`switching` + `ownership.switch.unknown`），两侧继续拒绝写入，由操作者重跑同一条命令收敛——这是唯一不 settle 的结果，且被显式记录而不是猜测。
+
+未实现：HTTPS 上的切换/回滚入口（只有 CLI）；把 Host 的反向导出包重新导入 `canvas.db`——因此 Host 在持有期间产生过画布事件时回滚会被拒绝，除非操作者显式接受「只导出」。会话、Agent、文件系统、Git 的业务表面仍未迁移。
 
 画布普通节点是类型化对象；自由图形快照是 `schemaVersion + engineVersion + bytes + digest`。业务节点投影、绑定和白板 blob 同一次 mutation 原子保存，禁止互相覆盖。Node ID 可映射到 shape ID，但浏览器与移动端不解析内部结构也能读取节点列表。
 

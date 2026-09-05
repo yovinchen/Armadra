@@ -144,7 +144,11 @@ SQLite 基础表由 `0001_initial.sql` 创建；`0002_agent_mailbox.sql` 增量�
 
 终端原始输出、密钥和 `.env` 不进入画板持久化。
 
-Go Host 现在独占私有 `host.db`，通用实体 revision、操作收据和事件在同一事务内提交。Runtime 的离线 `export` 生成一致性数据库与受管资产包；Host 的离线 `import` 校验 Protobuf 清单后写入不激活的 staging。该链路保留原始数据和类型，用于后续维护窗口切换；当前 `canvas.db` 的业务权威仍属于 Runtime，不进行双写。
+Go Host 现在独占私有 `host.db`，通用实体 revision、操作收据和事件在同一事务内提交。Runtime 的离线 `export` 生成一致性数据库与受管资产包；Host 的离线 `import` 校验 Protobuf 清单后写入不激活的 staging。该链路保留原始数据和类型，用于维护窗口切换，任何阶段都不双写。
+
+**画布写入方随 ownership 记录变化。** 工作空间与画布（boards / nodes / edges / annotations / 资产引用）的写入所有权由 `write_ownership` 单行记录声明：`{ domain: canvas, owner: runtime | host, epoch }`，两侧各存一份，epoch 单调。默认 owner 是 Runtime，此时 Host 的 `armadra.v1.CanvasService` 只读、所有变更返回稳定错误码 `ownership_moved`；切换后反过来，Runtime 的画布/工作空间写入路由返回同一个 `ownership_moved`（HTTP 409），读取继续可用作只读后备。终端、文件、Git、Hook 的执行始终在 Runtime，不随该记录变化。
+
+切换只能由操作者在维护窗口内用 `armadra-host ownership switch|rollback|status` 触发，命令持有数据目录锁，因此运行中的 Host 必须先停止；没有自动切换，也没有双写。切换前必须依次完成 Runtime 一致性导出 → Host staging 导入 → 投影为画布实体 → 逐项核验（ID、位置、尺寸、Frame 嵌套、上下文链接、白板摘要、标注、资产哈希），出现任何差异即中止且不改任何所有权状态。epoch 经现有 Worker stdio 协议下发（`armadra-runtime worker --stdio --canvas-database FILE`，能力位 `canvas.ownership.v1`）。回滚方向相同，并要求 Host 先写出反向导出包；把该包重新导入 `canvas.db` 尚未实现，因此 Host 在持有期间产生过画布事件时回滚会被拒绝，除非操作者显式声明只要导出包。
 
 ## 6. 进程、端口与文件位置
 
@@ -196,7 +200,9 @@ Runtime 启动时把 PATH 换成补齐过的版本（Homebrew、mise shims、mis
 
 ## 9. Worker 只读桥接
 
-Rust可使用独立 `worker --stdio` 入口，通过父Go进程私有管道提供规范目录与文本分块读取。该入口不打开 `canvas.db`，不启动旧Runtime HTTP或PTY；Go客户端验证Host与进程实例并负责关闭回收。当前为执行层接管的第一批，只报告已实现的只读能力，尚未切换现有业务。传输帧1MiB、文本1MiB、单块256KiB，后续块以首块SHA绑定内容版本。
+Rust可使用独立 `worker --stdio` 入口，通过父Go进程私有管道提供规范目录与文本分块读取。该入口不启动旧Runtime HTTP或PTY；Go客户端验证Host与进程实例并负责关闭回收。当前为执行层接管的第一批，只报告已实现的只读能力，尚未切换现有业务。传输帧1MiB、文本1MiB、单块256KiB，后续块以首块SHA绑定内容版本。
+
+只有显式加 `--canvas-database FILE` 时该入口才打开 `canvas.db`，且仅为读写 `write_ownership` 一行；它不跑迁移，缺少该表直接拒绝，并只在真的打开了数据库时才报告能力 `canvas.ownership.v1`。该模式与命令调度模式互斥，因此常驻的调度 Worker 不可能被用来移动写入所有权。
 
 ## 10. 会话上下文来源
 

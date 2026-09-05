@@ -14,6 +14,13 @@
 minor 1 的 hostId 是数据目录持久身份，hostInstanceId 每次启动变化，均不是认证 token。
 minor 0 可协商且允许缺 hostId。传输控制帧上限 1 MiB，由宿主实施；编解码器不负责认证或授权。
 
+`canvas.proto` 是工作空间与画布的业务契约（H01 / C02）：类型化的 Workspace / Canvas / Node / Edge / Annotation /
+资产引用、按 revision CAS 的保存与幂等收据、带 durable sequence 的事件信封与快照请求，以及
+`CanvasOwnership`——声明「当前谁能写画布」的单行记录。白板快照不展开成字段，按
+`schemaVersion + engineVersion + bytes + digest` 原样传输；未设置的 `size` / `collapsed` / `expandedHeight`
+与显式的 0 在线上是不同字节。`worker.proto` 因此新增 `SetWriteOwnership` / `GetWriteOwnership`：
+epoch 经既有 Worker stdio 私有管道下发，不新增任何 HTTP 能力。
+
 `presence.proto`（H04）与 `account.proto`（S02）是预留契约：消息可编解码，Host 对
 `armadra.v1.PresenceService/*` 与 `armadra.v1.AccountService/*` 一律返回 `UNSUPPORTED` 及原因，
 并在 Hello 的 `capabilityStatus` 里显式列出 `presence` / `accountBinding` 为 unsupported。
