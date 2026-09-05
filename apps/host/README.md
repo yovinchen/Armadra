@@ -1,7 +1,8 @@
 # Go Host
 
-独立本机后台服务，已提供持久身份、单实例、握手、启停管理与常驻自动化调度。公开 HTTP 为健康检查、
-Protobuf Hello 和已认证会话下的身份与自动化方法；其余业务仍由 Rust Runtime 执行。
+独立本机后台服务，已提供持久身份、单实例、握手、启停管理、常驻自动化调度与 GitHub Issues / PR。
+公开 HTTP 为健康检查、Protobuf Hello 和已认证会话下的身份、自动化与 GitHub 方法；
+其余业务仍由 Rust Runtime 执行。
 迁移进度见[实施记录](../../docs/platform-implementation-status.md)。
 
 ## 运行与管理
@@ -43,7 +44,7 @@ Windows 使用 `armadra-host.exe`。省略子命令等同 `serve`（前台）；
 
 - `GET /health` 返回 `ok`；`POST /rpc/armadra.v1.HostService/Hello` 收发 `application/x-protobuf`。
 - Hello 需 clientId、major 1；当前 minor 1，兼容 0。返回持久 hostId、每次启动变化的 hostInstanceId、能力与 1 MiB 帧上限。
-- 已实现能力为 `protocol.hello.v1` / `host.identity.v1`，配置了 Worker 的 HTTPS Host 另有 `automation.plans.v1`。身份 ID 不是认证 token；畸形请求、超限、主版本不兼容及非回环 authority 均拒绝。
+- 已实现能力为 `protocol.hello.v1` / `host.identity.v1`，配置了 Worker 的 HTTPS Host 另有 `automation.plans.v1`，装配了凭据服务的另有 `github.issues.v1`。身份 ID 不是认证 token；畸形请求、超限、主版本不兼容及非回环 authority 均拒绝。
 - 数据目录使用 OS 文件锁。身份损坏、未知版本或非普通文件时拒绝启动，不重建；不要在运行时删除锁或复制目录冒充新设备。
 - Unix 新目录/文件使用 0700/0600；Windows 沿用目录 ACL，自定义数据目录的凭据与业务数据隔离仍待实机验收。此阶段身份元数据不含凭据。
 
@@ -79,6 +80,26 @@ HTTPS 会话：读取需 `automation:read`，改动需 `automation:manage` 并�
 均按请求 scope 的 workspace 与本机执行主机收窄。身份只来自会话，请求字段不提供身份；
 其他 hostId / executionHostId 直接拒绝。计划的 stdin 载荷由 Host 私有存储按内容散列保存，
 派发前重新校验散列，并按记录的设备授权（撤销或代次变化即失效）复核。
+
+## GitHub
+
+`/rpc/armadra.v1.GithubService/` 提供仓库解析、Issue 列表 / 详情 / 新建 / 编辑 / 开关 / 评论、
+状态映射读写与 `Move to…`、PR 列表 / 详情 / 新建 / 评审 / 检查 / 合并，以及关联 Issue/PR 与
+会话、分支、worktree 的 `ExternalReference`。读取需 `github:read`，改动需 `github:write` 并带 CSRF；
+更换凭据来源另需 `settings:write`。没有配置凭据时先认证再返回 `UNSUPPORTED`，不返回空列表。
+
+API 凭据由 Host 凭据服务持有，与 Worker 的 SSH key / git credential helper 无关。两种来源都要显式开启：
+复用本机 `gh` 登录只按需读取、不落库；粘贴的 token 存 macOS Keychain，其他平台降级为 0600 文件并如实标注。
+token 不写入数据库、日志与任何返回的消息。配置先验证再存储；撤销同时清掉密钥、内存副本与客户端。
+
+远端 URL 在本地判定归属，企业仓库不会被发到公共服务。列表响应不带正文——一百条正文放不进一帧，
+截断的正文比没有更糟——详情请求返回完整内容。本机 Host 没有 webhook，每个列表/详情响应给出
+`poll_interval_ms`，由客户端按此轮询。
+
+| 环境变量          | 作用                                                 |
+| ----------------- | ---------------------------------------------------- |
+| `GITHUB_API_BASE` | 首次配置的默认 API base；已配置后以存储值为准        |
+| `GITHUB_CA_FILE`  | Enterprise API base 的受信根 PEM，替代系统根而非叠加 |
 
 ## 验证
 

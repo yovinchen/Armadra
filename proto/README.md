@@ -1,10 +1,15 @@
 # 跨端协议
 
 `armadra/v1/*.proto` 是 Go / Rust / TypeScript 消息的唯一来源。
-当前 major 1 / minor 1；Host 公开的匿名入口仍仅 Hello，`automation.proto` 的计划与命令会话方法走已认证 HTTPS 会话。
-会话、Scope 与终端流契约不代表对应执行能力已完成；`automation.plans.v1` 能力位只在 Host 真的配置了执行 Worker 时出现。
+当前 major 1 / minor 1；Host 公开的匿名入口仍仅 Hello，`automation.proto` 与 `github.proto` 的方法走已认证 HTTPS 会话。
+会话、Scope 与终端流契约不代表对应执行能力已完成；`automation.plans.v1` 只在 Host 真的配置了执行 Worker 时出现，
+`github.issues.v1` 只在装配了凭据服务时出现。
 `resources.proto` 是资源采样的跨端契约（Read / Subscribe、`SessionMetrics`、`HostMetrics`、平台组件）：
 当前 Runtime 与 Web 之间仍走既有的 camelCase JSON 与工作空间事件流，Worker 协议尚未接线，两侧字段语义保持一一对应。
+
+`github.proto` 的消息与枚举名拼作 `Github` 而不是 `GitHub`：prost 与 protobuf-es 只在枚举名转成
+大写蛇形后与值前缀匹配时才裁剪前缀，否则每个运行时都会得到 `GithubIssueState::GithubIssueStateOpen`
+这样的名字。该 schema 里唯一可能携带密文的字段是 `ConfigureGithubCredentialRequest.token`，只入不出。
 
 minor 1 的 hostId 是数据目录持久身份，hostInstanceId 每次启动变化，均不是认证 token。
 minor 0 可协商且允许缺 hostId。传输控制帧上限 1 MiB，由宿主实施；编解码器不负责认证或授权。

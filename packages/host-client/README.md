@@ -1,7 +1,16 @@
 # TypeScript HostClient
 
-`@armadra/host-client` 是无框架依赖的 Protobuf 客户端，目前仅提供只读 `hello()`。
-消息 schema 来自 `@armadra/protocol`，不另写一套定义。
+`@armadra/host-client` 是无框架依赖的 Protobuf 客户端。`HostClient` 提供只读 `hello()`；
+`HostIdentityClient` 持有浏览器 Cookie 会话，`HostAutomationClient` 与 `HostGithubClient`
+搭在同一个会话上，共用它的串行队列与私有 CSRF token。消息 schema 来自 `@armadra/protocol`，
+不另写一套定义。
+
+`HostGithubClient` 覆盖仓库解析、Issue、状态映射与 `Move to…`、PR 与合并、`ExternalReference`。
+它从不接触 token：凭据由 Host 持有，客户端只指明要操作的仓库；唯一外发的密文是配置时粘贴的
+token，且只对存储它的来源发送。响应在到达界面前校验——答复其他仓库的列表、描述另一个提交的
+检查、没有任何 outcome 的移动、既非成功也没有原因的合并、以及来自别的工作空间的关联，都会被
+拒绝而不是显示。失败按修复方式分类：`rateLimited` 与 `network` 分开，因为前者的修复是等待；
+`unsupported` 与 `permission` 分开，因为前者是这台 Host 没有凭据，后者是这台设备无权使用。
 
 ```ts
 import { HostClient, HostClientError } from "@armadra/host-client";
