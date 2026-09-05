@@ -511,6 +511,13 @@ pub fn router_with_state(state: AppState) -> Router {
         // that polling clients never trigger an upstream request (plan §19).
         .route("/api/usage", get(api::get_usage))
         .route("/api/usage/refresh", post(api::refresh_usage))
+        .route("/api/usage/mini", get(api::usage_mini))
+        .route("/api/usage/cost", get(api::get_usage_cost))
+        .route("/api/usage/cost/refresh", post(api::refresh_usage_cost))
+        .route("/api/usage/copilot", get(api::copilot_state))
+        .route("/api/usage/copilot/login", post(api::copilot_login))
+        .route("/api/usage/copilot/poll", post(api::copilot_poll))
+        .route("/api/usage/copilot/logout", post(api::copilot_logout))
         .route(
             "/api/approvals/{pending_id}/answer",
             post(api::answer_approval),

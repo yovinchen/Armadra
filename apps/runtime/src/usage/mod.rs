@@ -15,7 +15,11 @@
 
 pub mod claude;
 pub mod codex;
+pub mod copilot;
+pub mod copilot_login;
+pub mod cost;
 pub mod gemini;
+pub mod secret_store;
 
 use std::{
     sync::{Arc, Mutex, RwLock},
@@ -29,8 +33,14 @@ use crate::settings::SettingsStore;
 /// First fetch runs this long after start — the runtime should be answering
 /// board loads before it spends anything on a network round trip.
 pub const FIRST_FETCH_DELAY: Duration = Duration::from_secs(10);
-/// Background refresh cadence.
+/// Background refresh cadence when the user has not chosen one, and the floor
+/// the settings page enforces: five minutes is the shortest automatic cadence
+/// (roadmap §4.2「最短刷新间隔 5 分钟」 for the cost scan).
 pub const REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
+/// How often the background loop wakes to *check* the configured cadence. A
+/// cadence change must take effect without a restart, so the loop cannot just
+/// sleep for the whole interval.
+const TICK_INTERVAL: Duration = Duration::from_secs(30);
 /// `POST /api/usage/refresh` is a user gesture; one every 30s is plenty and it
 /// keeps a stuck UI from hammering the providers.
 pub const MANUAL_REFRESH_COOLDOWN: Duration = Duration::from_secs(30);
@@ -60,6 +70,11 @@ pub struct UsageWindow {
     pub group: Option<String>,
     /// 0–100, already rounded to one decimal by the provider modules.
     pub used_percent: f64,
+    /// A bucket with no ceiling (Copilot's chat and completions on most
+    /// plans). `used_percent` is 0 and means nothing; the UI prints 无限制
+    /// rather than an empty bar.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub unlimited: bool,
     /// RFC 3339, or `null` when the provider does not say.
     pub resets_at: Option<String>,
 }
@@ -75,6 +90,36 @@ pub enum CredentialSource {
     None,
 }
 
+/// A prepaid balance the provider reports alongside its windows (Codex
+/// credits). A number and its unit — never the account it belongs to.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageCredits {
+    pub balance: f64,
+}
+
+/// What one provider module produces on success: the windows plus whatever
+/// extras that provider has. Splitting it from `Vec<UsageWindow>` keeps
+/// `finish` in charge of the status rules.
+#[derive(Debug, Clone, Default)]
+pub struct ProviderReport {
+    pub windows: Vec<UsageWindow>,
+    pub credits: Option<UsageCredits>,
+    /// Set when the value did not come from the provider's own OAuth route —
+    /// today only Codex's local CLI fallback. Surfaced so the dashboard can
+    /// say where a number came from.
+    pub via_cli: bool,
+}
+
+impl ProviderReport {
+    pub fn from_windows(windows: Vec<UsageWindow>) -> Self {
+        Self {
+            windows,
+            ..Self::default()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderUsage {
@@ -82,6 +127,10 @@ pub struct ProviderUsage {
     pub status: UsageStatus,
     pub credential_source: CredentialSource,
     pub windows: Vec<UsageWindow>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credits: Option<UsageCredits>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub via_cli: bool,
     pub fetched_at: Option<String>,
 }
 
@@ -92,6 +141,8 @@ impl ProviderUsage {
             status: UsageStatus::Unavailable,
             credential_source: CredentialSource::None,
             windows: Vec::new(),
+            credits: None,
+            via_cli: false,
             fetched_at: None,
         }
     }
@@ -115,14 +166,96 @@ impl UsageSnapshot {
                 ProviderUsage::unavailable(claude::ID),
                 ProviderUsage::unavailable(codex::ID),
                 ProviderUsage::unavailable(gemini::ID),
+                ProviderUsage::unavailable(copilot::ID),
             ],
         }
     }
 }
 
+/// One bar of the desktop tray strip (roadmap §4.2「托盘迷你条」).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MiniBar {
+    /// The provider the number came from, so the tray can label it.
+    pub provider: String,
+    pub label: String,
+    pub used_percent: f64,
+    pub resets_at: Option<String>,
+}
+
+/// The two bars a tray strip shows: the most pressed short (session) window and
+/// the most pressed long (week) window across every provider that answered.
+///
+/// Kept deliberately small and separate from [`UsageSnapshot`] so a desktop
+/// shell can render the strip without understanding the whole payload. The
+/// runtime provides this shape; wiring it into a Tauri tray is the shell's job.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MiniUsage {
+    /// Windows of a day or less.
+    pub session: Option<MiniBar>,
+    /// Windows longer than a day.
+    pub week: Option<MiniBar>,
+    pub fetched_at: Option<String>,
+}
+
+impl MiniUsage {
+    pub fn from_snapshot(snapshot: &UsageSnapshot) -> Self {
+        let mut mini = Self::default();
+        for provider in &snapshot.providers {
+            if provider.status != UsageStatus::Ok {
+                continue;
+            }
+            if provider.fetched_at.is_some() && mini.fetched_at.is_none() {
+                mini.fetched_at = provider.fetched_at.clone();
+            }
+            for window in &provider.windows {
+                // An unlimited bucket has no pressure to report, and a window
+                // with no readable size cannot be sorted into either bar.
+                if window.unlimited {
+                    continue;
+                }
+                let Some(hours) = label_hours(&window.label) else {
+                    continue;
+                };
+                let slot = if hours <= 24 {
+                    &mut mini.session
+                } else {
+                    &mut mini.week
+                };
+                if slot
+                    .as_ref()
+                    .is_none_or(|best| window.used_percent > best.used_percent)
+                {
+                    *slot = Some(MiniBar {
+                        provider: provider.id.to_owned(),
+                        label: window.label.clone(),
+                        used_percent: window.used_percent,
+                        resets_at: window.resets_at.clone(),
+                    });
+                }
+            }
+        }
+        mini
+    }
+}
+
+/// `"5h"` → 5, `"7d"` → 168. Anything else (`quota`, `primary`) has no
+/// duration and is left out of the strip rather than guessed at.
+fn label_hours(label: &str) -> Option<u32> {
+    let (value, unit) = label.split_at(label.len().checked_sub(1)?);
+    let value: u32 = value.parse().ok()?;
+    match unit {
+        "h" => Some(value),
+        "d" => Some(value * 24),
+        "m" => Some(1),
+        _ => None,
+    }
+}
+
 /// What one provider module returns: `None` = no credentials (→ unavailable),
-/// `Some(windows)` = parsed (→ ok), `Err` = anything else (→ error).
-pub type ProviderResult = anyhow::Result<Option<Vec<UsageWindow>>>;
+/// `Some(report)` = parsed (→ ok), `Err` = anything else (→ error).
+pub type ProviderResult = anyhow::Result<Option<ProviderReport>>;
 
 /// Cached snapshot plus the background refresher. Cloning shares the cache.
 #[derive(Clone)]
@@ -132,6 +265,10 @@ pub struct UsageService {
     last_fetch: Arc<Mutex<Option<Instant>>>,
     refresh_guard: Arc<tokio::sync::Mutex<()>>,
     settings: SettingsStore,
+    /// The in-flight Copilot device flow, if any (roadmap §4.2).
+    copilot: copilot_login::CopilotLogin,
+    /// Local transcript cost aggregation (roadmap §4.2「本地成本统计」).
+    pub cost: cost::CostService,
 }
 
 impl UsageService {
@@ -146,8 +283,15 @@ impl UsageService {
             snapshot: Arc::new(RwLock::new(UsageSnapshot::empty())),
             last_fetch: Arc::new(Mutex::new(None)),
             refresh_guard: Arc::new(tokio::sync::Mutex::new(())),
+            copilot: copilot_login::CopilotLogin::default(),
+            cost: cost::CostService::new(settings.clone()),
             settings,
         }
+    }
+
+    /// The Copilot sign-in surface (`/api/usage/copilot/*`).
+    pub fn copilot(&self) -> (&reqwest::Client, &copilot_login::CopilotLogin) {
+        (&self.client, &self.copilot)
     }
 
     /// The cached snapshot. Never blocks on the network.
@@ -192,19 +336,29 @@ impl UsageService {
             // data or perform a real fetch immediately.
             return UsageSnapshot::empty();
         }
-        let ((claude, claude_source), (codex, codex_source), (gemini, gemini_source)) = tokio::join!(
-            claude::fetch(&self.client),
-            codex::fetch(&self.client),
-            gemini::fetch(&self.client)
+        // A provider whose switch is off is skipped entirely: no credential
+        // read, no request, and it reports `unavailable` exactly like a CLI
+        // that was never installed.
+        let enabled = |id: &str| self.settings.usage_provider_enabled(id);
+        let codex_fallback = self.settings.codex_cli_fallback();
+        let (claude, codex, gemini, copilot) = tokio::join!(
+            optional(enabled(claude::ID), claude::fetch(&self.client)),
+            optional(
+                enabled(codex::ID),
+                codex::fetch(&self.client, codex_fallback)
+            ),
+            optional(enabled(gemini::ID), gemini::fetch(&self.client)),
+            optional(enabled(copilot::ID), copilot::fetch(&self.client)),
         );
         let snapshot = UsageSnapshot {
             refresh_available_at: Some(
                 (chrono::Utc::now() + chrono::Duration::seconds(30)).to_rfc3339(),
             ),
             providers: vec![
-                finish(claude::ID, claude, claude_source),
-                finish(codex::ID, codex, codex_source),
-                finish(gemini::ID, gemini, gemini_source),
+                finish(claude::ID, claude.0, claude.1),
+                finish(codex::ID, codex.0, codex.1),
+                finish(gemini::ID, gemini.0, gemini.1),
+                finish(copilot::ID, copilot.0, copilot.1),
             ],
         };
         self.store(snapshot.clone());
@@ -221,16 +375,38 @@ impl UsageService {
         self.refresh_locked().await
     }
 
-    /// 10s after start, then every 5 minutes (plan §19「刷新」).
+    /// 10s after start, then on the cadence `usage.refreshMinutes` names
+    /// (plan §19「刷新」, roadmap §4.2). The loop wakes every 30s so a cadence
+    /// change — including switching to 手动 — takes effect without a restart.
     pub fn start(&self) {
         let service = self.clone();
         tokio::spawn(async move {
             tokio::time::sleep(FIRST_FETCH_DELAY).await;
+            let mut last: Option<Instant> = None;
             loop {
-                service.refresh_throttled().await;
-                tokio::time::sleep(REFRESH_INTERVAL).await;
+                if let Some(interval) = service.settings.usage_refresh_interval()
+                    && last.is_none_or(|at| at.elapsed() >= interval)
+                {
+                    service.refresh_throttled().await;
+                    service.cost.refresh_throttled().await;
+                    last = Some(Instant::now());
+                }
+                tokio::time::sleep(TICK_INTERVAL).await;
             }
         });
+    }
+}
+
+/// Runs `future` only when the provider's switch is on; otherwise reports the
+/// same shape a machine without that CLI reports.
+async fn optional(
+    enabled: bool,
+    future: impl Future<Output = (ProviderResult, CredentialSource)>,
+) -> (ProviderResult, CredentialSource) {
+    if enabled {
+        future.await
+    } else {
+        (Ok(None), CredentialSource::None)
     }
 }
 
@@ -242,13 +418,19 @@ fn finish(
     credential_source: CredentialSource,
 ) -> ProviderUsage {
     match result {
-        Ok(Some(windows)) if !windows.is_empty() => ProviderUsage {
-            id,
-            status: UsageStatus::Ok,
-            credential_source,
-            windows,
-            fetched_at: Some(chrono::Utc::now().to_rfc3339()),
-        },
+        // Credits alone are enough to render a card: a Codex account with a
+        // balance but no active rate-limit window is `ok`, not `error`.
+        Ok(Some(report)) if !report.windows.is_empty() || report.credits.is_some() => {
+            ProviderUsage {
+                id,
+                status: UsageStatus::Ok,
+                credential_source,
+                windows: report.windows,
+                credits: report.credits,
+                via_cli: report.via_cli,
+                fetched_at: Some(chrono::Utc::now().to_rfc3339()),
+            }
+        }
         // No windows means no usable credential, so the source is reported as
         // it was found rather than forced to `None`: an expired keychain token
         // should still say 钥匙串.
@@ -269,8 +451,7 @@ fn finish(
                 id,
                 status: UsageStatus::Error,
                 credential_source,
-                windows: Vec::new(),
-                fetched_at: None,
+                ..ProviderUsage::unavailable(id)
             }
         }
     }
@@ -350,10 +531,106 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn a_provider_switched_off_is_skipped_without_being_contacted() {
+        // `optional` is what stands between a disabled provider and its
+        // credential read; if the future ran, the flag would flip.
+        let ran = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = ran.clone();
+        let (result, source) = optional(false, async move {
+            flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            (
+                Ok(Some(ProviderReport::default())) as ProviderResult,
+                CredentialSource::Keychain,
+            )
+        })
+        .await;
+        assert!(!ran.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(matches!(result, Ok(None)));
+        assert_eq!(source, CredentialSource::None);
+    }
+
+    #[test]
+    fn the_tray_strip_takes_the_worst_session_and_week_window() {
+        let window = |label: &str, percent: f64| UsageWindow {
+            key: label.to_owned(),
+            label: label.to_owned(),
+            group: None,
+            used_percent: percent,
+            unlimited: false,
+            resets_at: None,
+        };
+        let provider = |id: &'static str, windows: Vec<UsageWindow>| ProviderUsage {
+            status: UsageStatus::Ok,
+            windows,
+            fetched_at: Some("2026-09-05T10:00:00Z".to_owned()),
+            ..ProviderUsage::unavailable(id)
+        };
+        let snapshot = UsageSnapshot {
+            refresh_available_at: None,
+            providers: vec![
+                provider("claude", vec![window("5h", 20.0), window("7d", 90.0)]),
+                provider("codex", vec![window("5h", 65.0), window("7d", 10.0)]),
+                // `quota` has no duration and an unlimited bucket has no
+                // pressure; neither may win a bar.
+                provider(
+                    "gemini",
+                    vec![window("quota", 99.0), {
+                        let mut unlimited = window("5h", 100.0);
+                        unlimited.unlimited = true;
+                        unlimited
+                    }],
+                ),
+            ],
+        };
+        let mini = MiniUsage::from_snapshot(&snapshot);
+        let session = mini.session.unwrap();
+        assert_eq!(session.provider, "codex");
+        assert_eq!(session.used_percent, 65.0);
+        let week = mini.week.unwrap();
+        assert_eq!(week.provider, "claude");
+        assert_eq!(week.used_percent, 90.0);
+        assert_eq!(mini.fetched_at.as_deref(), Some("2026-09-05T10:00:00Z"));
+
+        // Nothing to show is empty, not zero.
+        let mini = MiniUsage::from_snapshot(&UsageSnapshot::empty());
+        assert!(mini.session.is_none() && mini.week.is_none());
+    }
+
+    #[test]
+    fn a_credits_only_report_still_renders_a_card() {
+        let provider = finish(
+            "codex",
+            Ok(Some(ProviderReport {
+                windows: Vec::new(),
+                credits: Some(UsageCredits { balance: 12.5 }),
+                via_cli: true,
+            })),
+            CredentialSource::File,
+        );
+        assert_eq!(provider.status, UsageStatus::Ok);
+        let json = serde_json::to_string(&provider).unwrap();
+        assert!(json.contains("\"balance\":12.5"), "{json}");
+        assert!(json.contains("\"viaCli\":true"), "{json}");
+    }
+
+    #[test]
+    fn manual_cadence_stops_the_background_loop() {
+        let settings =
+            SettingsStore::in_memory(serde_json::json!({"usage": {"refreshMinutes": 0}}));
+        assert!(settings.usage_refresh_interval().is_none());
+        let settings =
+            SettingsStore::in_memory(serde_json::json!({"usage": {"refreshMinutes": 15}}));
+        assert_eq!(
+            settings.usage_refresh_interval(),
+            Some(Duration::from_secs(900))
+        );
+    }
+
     #[test]
     fn an_empty_snapshot_hides_the_pill() {
         let snapshot = UsageSnapshot::empty();
-        assert_eq!(snapshot.providers.len(), 3);
+        assert_eq!(snapshot.providers.len(), 4);
         assert!(
             snapshot
                 .providers
@@ -396,7 +673,11 @@ mod tests {
 
     #[test]
     fn empty_windows_are_a_parse_error_not_missing_credentials() {
-        let provider = finish("codex", Ok(Some(Vec::new())), CredentialSource::None);
+        let provider = finish(
+            "codex",
+            Ok(Some(ProviderReport::default())),
+            CredentialSource::None,
+        );
         assert_eq!(provider.status, UsageStatus::Error);
         assert_eq!(provider.credential_source, CredentialSource::None);
         assert!(provider.fetched_at.is_none());

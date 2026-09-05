@@ -10,20 +10,30 @@
 //! The endpoint is the ChatGPT backend usage route the CLI reads its rate
 //! limits from: `GET /backend-api/wham/usage` with the bearer token and the
 //! `chatgpt-account-id` header. The response also carries the account id, the
-//! e-mail and the plan; only `rate_limit.primary_window` and
-//! `rate_limit.secondary_window` are mapped.
+//! e-mail and the plan; only `rate_limit.primary_window`,
+//! `rate_limit.secondary_window` and `credits.balance` are mapped.
+//!
+//! When that route yields nothing — no `auth.json`, an expired token, a shape
+//! we cannot read — and `usage.codexCliFallback` is on, the local `codex` CLI
+//! is asked instead over its app-server JSON-RPC (`account/rateLimits/read`).
+//! That path spawns a child process, so it is opt-in and only runs when the
+//! binary is actually on `PATH`.
 
 use anyhow::{Context, bail};
 use base64::Engine;
 use serde::Deserialize;
 
 use super::{
-    CredentialSource, ProviderResult, UsageWindow, clamp_percent, duration_label, home_dir,
+    CredentialSource, ProviderReport, ProviderResult, UsageCredits, UsageWindow, clamp_percent,
+    duration_label, home_dir,
 };
 
 pub const ID: &str = "codex";
 
 const USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
+/// The app-server handshake plus one RPC is a sub-second exchange; anything
+/// longer means the CLI is prompting or wedged and we drop the fallback.
+const CLI_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
 /// The CLI tags its own requests; keeping the same value avoids looking like an
 /// unknown client to the backend.
 const ORIGINATOR: &str = "codex_cli_rs";
@@ -60,6 +70,30 @@ struct RateLimit {
 struct UsageResponse {
     rate_limit: Option<RateLimit>,
     additional_rate_limits: Option<Vec<AdditionalRateLimit>>,
+    credits: Option<Credits>,
+}
+
+/// `credits.balance` arrives as a JSON string on some plans and a number on
+/// others, so it is read untyped and coerced.
+#[derive(Deserialize)]
+struct Credits {
+    balance: Option<serde_json::Value>,
+}
+
+fn credits(credits: Option<Credits>) -> Option<UsageCredits> {
+    let balance = match credits?.balance? {
+        serde_json::Value::Number(number) => number.as_f64()?,
+        serde_json::Value::String(text) => text.trim().parse::<f64>().ok()?,
+        _ => return None,
+    };
+    balance
+        .is_finite()
+        .then(|| UsageCredits {
+            // Two decimals: the balance is money, and the raw value carries a
+            // float tail that would render as 12.299999999999999.
+            balance: (balance * 100.0).round() / 100.0,
+        })
+        .filter(|credits| credits.balance >= 0.0)
 }
 
 #[derive(Deserialize)]
@@ -100,14 +134,45 @@ fn account_id_from_jwt(token: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
-pub async fn fetch(client: &reqwest::Client) -> (ProviderResult, CredentialSource) {
+/// `cli_fallback` is `usage.codexCliFallback`. It only ever *adds* a chance to
+/// answer: a successful OAuth read never spawns the CLI.
+pub async fn fetch(
+    client: &reqwest::Client,
+    cli_fallback: bool,
+) -> (ProviderResult, CredentialSource) {
     let Some((token, account_id)) = credentials() else {
-        return (Ok(None), CredentialSource::None);
+        return match cli_fallback {
+            true => (cli_result().await, CredentialSource::None),
+            false => (Ok(None), CredentialSource::None),
+        };
     };
-    (
-        fetch_token(client, token, account_id).await,
-        CredentialSource::File,
-    )
+    let result = fetch_token(client, token, account_id).await;
+    let usable = matches!(&result, Ok(Some(report)) if !report.windows.is_empty());
+    if usable || !cli_fallback {
+        return (result, CredentialSource::File);
+    }
+    // The OAuth route failed or answered nothing usable. Keep its outcome if
+    // the CLI cannot improve on it, so an unrelated CLI problem does not mask
+    // a real 401.
+    match cli_result().await {
+        Ok(Some(report)) => (Ok(Some(report)), CredentialSource::File),
+        _ => (result, CredentialSource::File),
+    }
+}
+
+async fn cli_result() -> ProviderResult {
+    match cli_rate_limits().await {
+        Ok(Some(windows)) if !windows.is_empty() => Ok(Some(ProviderReport {
+            windows,
+            credits: None,
+            via_cli: true,
+        })),
+        Ok(_) => Ok(None),
+        Err(error) => {
+            tracing::debug!(provider = ID, %error, "Codex CLI rate-limit fallback failed");
+            Ok(None)
+        }
+    }
 }
 
 async fn fetch_token(
@@ -132,7 +197,15 @@ async fn fetch_token(
         .json()
         .await
         .context("Codex usage response did not parse")?;
-    Ok(Some(windows(usage)))
+    Ok(Some(report(usage)))
+}
+
+fn report(mut usage: UsageResponse) -> ProviderReport {
+    ProviderReport {
+        credits: credits(usage.credits.take()),
+        windows: windows(usage),
+        via_cli: false,
+    }
 }
 
 fn windows(usage: UsageResponse) -> Vec<UsageWindow> {
@@ -178,7 +251,143 @@ fn rate_windows(rate_limit: RateLimit, id: Option<&str>, group: Option<&str>) ->
                 .and_then(duration_label)
                 .unwrap_or_else(|| key.to_owned()),
             used_percent: clamp_percent(window.used_percent?),
+            unlimited: false,
             resets_at: resets_at(&window),
+        })
+    })
+    .collect()
+}
+
+/* ------------------------------ CLI RPC fallback --------------------------- */
+
+/// The `codex` binary. `ARMADRA_CODEX_BIN` overrides it — the tests point it
+/// at a stub app-server so no test ever runs the real CLI.
+fn codex_binary() -> String {
+    std::env::var("ARMADRA_CODEX_BIN")
+        .ok()
+        .filter(|path| !path.trim().is_empty())
+        .unwrap_or_else(|| "codex".to_owned())
+}
+
+/// `codex app-server` speaks newline-delimited JSON-RPC 2.0 on stdio. The
+/// exchange is `initialize` → `initialized` → `account/rateLimits/read`; the
+/// process is killed as soon as the answer arrives.
+async fn cli_rate_limits() -> anyhow::Result<Option<Vec<UsageWindow>>> {
+    cli_rate_limits_with(&codex_binary()).await
+}
+
+async fn cli_rate_limits_with(binary: &str) -> anyhow::Result<Option<Vec<UsageWindow>>> {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    let mut child = match tokio::process::Command::new(binary)
+        .arg("app-server")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+    {
+        Ok(child) => child,
+        // Not installed is not a failure: the fallback simply has nothing to
+        // add, and the OAuth outcome stands.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let mut stdin = child
+        .stdin
+        .take()
+        .context("codex app-server has no stdin")?;
+    let stdout = child
+        .stdout
+        .take()
+        .context("codex app-server has no stdout")?;
+
+    let exchange = async {
+        for line in [
+            serde_json::json!({
+                "jsonrpc": "2.0", "id": 0, "method": "initialize",
+                "params": {"clientInfo": {"name": "armadra", "version": env!("CARGO_PKG_VERSION")}}
+            }),
+            serde_json::json!({"jsonrpc": "2.0", "method": "initialized"}),
+            serde_json::json!({
+                "jsonrpc": "2.0", "id": 1,
+                "method": "account/rateLimits/read", "params": {}
+            }),
+        ] {
+            stdin.write_all(format!("{line}\n").as_bytes()).await?;
+        }
+        stdin.flush().await?;
+        let mut lines = BufReader::new(stdout).lines();
+        while let Some(line) = lines.next_line().await? {
+            let Ok(message) = serde_json::from_str::<serde_json::Value>(&line) else {
+                continue;
+            };
+            if message.get("id").and_then(serde_json::Value::as_i64) != Some(1) {
+                continue;
+            }
+            if message.get("error").is_some() {
+                bail!("codex app-server rejected account/rateLimits/read");
+            }
+            let result = message.get("result").cloned().unwrap_or_default();
+            return Ok(Some(cli_windows(&result)));
+        }
+        Ok(None)
+    };
+
+    let outcome = tokio::time::timeout(CLI_TIMEOUT, exchange).await;
+    let _ = child.start_kill();
+    match outcome {
+        Ok(result) => result,
+        Err(_) => bail!("codex app-server did not answer in time"),
+    }
+}
+
+/// The RPC result nests the same primary / secondary windows the HTTP route
+/// returns, but the field names have varied across CLI versions. Both spellings
+/// of each key are accepted; anything unrecognised yields no window rather than
+/// a zero.
+fn cli_windows(result: &serde_json::Value) -> Vec<UsageWindow> {
+    let limits = ["rateLimits", "rate_limits", "rateLimit", "rate_limit"]
+        .into_iter()
+        .find_map(|key| result.get(key))
+        .unwrap_or(result);
+    [
+        ("primary", ["primary", "primary_window", "primaryWindow"]),
+        (
+            "secondary",
+            ["secondary", "secondary_window", "secondaryWindow"],
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(key, aliases)| {
+        let window = aliases.into_iter().find_map(|alias| limits.get(alias))?;
+        let percent = ["used_percent", "usedPercent"]
+            .into_iter()
+            .find_map(|field| window.get(field)?.as_f64())?;
+        let seconds = ["window_minutes", "windowMinutes"]
+            .into_iter()
+            .find_map(|field| window.get(field)?.as_i64())
+            .map(|minutes| minutes * 60)
+            .or_else(|| {
+                ["limit_window_seconds", "windowSeconds"]
+                    .into_iter()
+                    .find_map(|field| window.get(field)?.as_i64())
+            });
+        let resets = ["resets_in_seconds", "resetsInSeconds"]
+            .into_iter()
+            .find_map(|field| window.get(field)?.as_i64())
+            .and_then(|after| chrono::Duration::try_seconds(after.max(0)))
+            .and_then(|delta| chrono::Utc::now().checked_add_signed(delta))
+            .map(|at| at.to_rfc3339());
+        Some(UsageWindow {
+            key: key.to_owned(),
+            label: seconds
+                .and_then(duration_label)
+                .unwrap_or_else(|| key.to_owned()),
+            group: None,
+            used_percent: clamp_percent(percent),
+            unlimited: false,
+            resets_at: resets,
         })
     })
     .collect()
@@ -217,8 +426,63 @@ mod tests {
             "secondary_window": null
         },
         "additional_rate_limits": [],
-        "credits": {"balance": "0"}
+        "credits": {"balance": "12.3456"}
     }"#;
+
+    #[test]
+    fn credits_are_read_from_either_a_string_or_a_number() {
+        let usage: UsageResponse = serde_json::from_str(SAMPLE).unwrap();
+        assert_eq!(report(usage).credits.unwrap().balance, 12.35);
+        let usage: UsageResponse = serde_json::from_str(r#"{"credits": {"balance": 4}}"#).unwrap();
+        assert_eq!(report(usage).credits.unwrap().balance, 4.0);
+        // No credits block, an unusable value, or a negative balance means "we
+        // do not know" — not a zero balance on the card.
+        for raw in [
+            r#"{}"#,
+            r#"{"credits": {}}"#,
+            r#"{"credits": {"balance": "unknown"}}"#,
+            r#"{"credits": {"balance": -1}}"#,
+        ] {
+            let usage: UsageResponse = serde_json::from_str(raw).unwrap();
+            assert!(report(usage).credits.is_none(), "{raw}");
+        }
+    }
+
+    #[test]
+    fn the_cli_result_maps_both_field_spellings_and_skips_unknown_shapes() {
+        let windows = cli_windows(&serde_json::json!({
+            "rateLimits": {
+                "primary": {"used_percent": 41.55, "window_minutes": 300, "resets_in_seconds": 60},
+                "secondary": {"usedPercent": 8.0, "windowMinutes": 10080}
+            }
+        }));
+        assert_eq!(windows.len(), 2);
+        assert_eq!(windows[0].label, "5h");
+        assert_eq!(windows[0].used_percent, 41.6);
+        assert!(windows[0].resets_at.is_some());
+        assert_eq!(windows[1].label, "7d");
+        assert!(windows[1].resets_at.is_none());
+        // A window without a percentage is dropped rather than shown as 0.
+        assert!(
+            cli_windows(&serde_json::json!({"rateLimits": {"primary": {"window_minutes": 300}}}))
+                .is_empty()
+        );
+        assert!(cli_windows(&serde_json::json!({"unexpected": true})).is_empty());
+    }
+
+    /// The fallback must not disturb anything when `codex` is not installed.
+    #[tokio::test]
+    async fn a_missing_codex_binary_is_not_an_error() {
+        // The binary is passed in rather than set through the environment:
+        // `ARMADRA_CODEX_BIN` is process-wide and would leak into any test
+        // running beside this one.
+        assert!(
+            cli_rate_limits_with("armadra-codex-that-does-not-exist")
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
 
     #[test]
     fn maps_independent_model_buckets_even_without_a_base_limit() {
@@ -258,7 +522,7 @@ mod tests {
     }
 
     #[test]
-    fn nothing_but_percentages_and_times_survives_the_mapping() {
+    fn nothing_but_percentages_times_and_credits_survives_the_mapping() {
         let usage: UsageResponse = serde_json::from_str(SAMPLE).unwrap();
         let json = serde_json::to_string(&windows(usage)).unwrap();
         assert!(!json.contains("example.com"), "{json}");

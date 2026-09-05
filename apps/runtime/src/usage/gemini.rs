@@ -5,7 +5,9 @@
 use anyhow::{Context, bail};
 use serde::Deserialize;
 
-use super::{CredentialSource, ProviderResult, UsageWindow, clamp_percent, home_dir};
+use super::{
+    CredentialSource, ProviderReport, ProviderResult, UsageWindow, clamp_percent, home_dir,
+};
 
 pub const ID: &str = "gemini";
 const LOAD_URL: &str = "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist";
@@ -101,7 +103,7 @@ async fn fetch_token(client: &reqwest::Client, token: &str) -> ProviderResult {
         serde_json::json!({"project": project}),
     )
     .await?;
-    Ok(Some(windows(response)))
+    Ok(Some(ProviderReport::from_windows(windows(response))))
 }
 
 fn windows(response: serde_json::Value) -> Vec<UsageWindow> {
@@ -133,6 +135,7 @@ fn windows(response: serde_json::Value) -> Vec<UsageWindow> {
                 label: "quota".to_owned(),
                 group: Some(model.to_owned()),
                 used_percent: clamp_percent((1.0 - fraction) * 100.0),
+                unlimited: false,
                 resets_at,
             })
         })

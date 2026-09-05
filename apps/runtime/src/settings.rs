@@ -27,6 +27,22 @@ const DEFAULT_DETACHED_GRACE_MINUTES: u64 = 1440;
 /// `usage.enabled` — gates the usage pill's provider fetches (plan §19).
 /// On by default; turning it off stops every outbound request.
 const DEFAULT_USAGE_ENABLED: bool = true;
+/// `usage.refreshMinutes` — the dashboard's cadence control (roadmap §4.2).
+/// `0` means "manual only": the background loop never fires and the only
+/// fetches are the ones the user asks for.
+pub const USAGE_REFRESH_CHOICES: &[u64] = &[0, 1, 2, 5, 15];
+const DEFAULT_USAGE_REFRESH_MINUTES: u64 = 5;
+/// `usage.providers.<id>` — per-provider switches. A provider that is off is
+/// never contacted and reports `unavailable`, exactly like a missing CLI.
+pub const USAGE_PROVIDER_IDS: &[&str] = &["claude", "codex", "gemini", "copilot"];
+/// `usage.codexCliFallback` — opt-in: when the OAuth route yields nothing, ask
+/// the local `codex` CLI over its app-server RPC instead. Off by default
+/// because it spawns a child process on every refresh.
+const DEFAULT_CODEX_CLI_FALLBACK: bool = false;
+/// `usage.cost.enabled` — the local transcript scan (roadmap §4.2「本地成本
+/// 统计」). On by default; turning it off stops every filesystem read and
+/// empties the cached summary.
+const DEFAULT_COST_ENABLED: bool = true;
 /// `logs.retentionDays` — how long `.armadra` board logs are kept (plan §24.1,
 /// 数据页). `0` means "keep forever"; the settings page offers 7 / 30 / 90 / 0.
 pub const LOG_RETENTION_CHOICES: &[u64] = &[0, 7, 30, 90];
@@ -385,6 +401,43 @@ pub fn normalize(raw: &Value) -> Value {
         .and_then(Value::as_bool)
         .unwrap_or(DEFAULT_USAGE_ENABLED);
     usage.insert("enabled".into(), Value::Bool(enabled));
+    // A cadence outside the offered set snaps back to the default rather than
+    // being rejected, same rule as `logs.retentionDays`.
+    let refresh = usage
+        .get("refreshMinutes")
+        .and_then(Value::as_u64)
+        .filter(|minutes| USAGE_REFRESH_CHOICES.contains(minutes))
+        .unwrap_or(DEFAULT_USAGE_REFRESH_MINUTES);
+    usage.insert("refreshMinutes".into(), Value::from(refresh));
+    let mut providers = usage
+        .get("providers")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    for id in USAGE_PROVIDER_IDS {
+        let on = providers.get(*id).and_then(Value::as_bool).unwrap_or(true);
+        providers.insert((*id).to_owned(), Value::Bool(on));
+    }
+    // An id nobody knows about would make the settings page render a switch for
+    // a provider the runtime cannot query, so drop it.
+    providers.retain(|key, _| USAGE_PROVIDER_IDS.contains(&key.as_str()));
+    usage.insert("providers".into(), Value::Object(providers));
+    let fallback = usage
+        .get("codexCliFallback")
+        .and_then(Value::as_bool)
+        .unwrap_or(DEFAULT_CODEX_CLI_FALLBACK);
+    usage.insert("codexCliFallback".into(), Value::Bool(fallback));
+    let mut cost = usage
+        .get("cost")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let cost_enabled = cost
+        .get("enabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(DEFAULT_COST_ENABLED);
+    cost.insert("enabled".into(), Value::Bool(cost_enabled));
+    usage.insert("cost".into(), Value::Object(cost));
     document.insert("usage".into(), Value::Object(usage));
 
     // `logs.retentionDays`: a value outside the offered set is snapped back to
@@ -534,6 +587,52 @@ impl SettingsStore {
             .and_then(|section| section.get("enabled"))
             .and_then(Value::as_bool)
             .unwrap_or(DEFAULT_USAGE_ENABLED)
+    }
+
+    /// `usage.refreshMinutes`, already snapped to a valid choice. `None` means
+    /// the user picked 手动 and the background loop must stay idle.
+    pub fn usage_refresh_interval(&self) -> Option<std::time::Duration> {
+        let minutes = self
+            .read()
+            .get("usage")
+            .and_then(|section| section.get("refreshMinutes"))
+            .and_then(Value::as_u64)
+            .unwrap_or(DEFAULT_USAGE_REFRESH_MINUTES);
+        (minutes > 0).then(|| std::time::Duration::from_secs(minutes * 60))
+    }
+
+    /// `usage.providers.<id>`. An unknown id answers `false`: the runtime only
+    /// queries providers it has a module for.
+    pub fn usage_provider_enabled(&self, id: &str) -> bool {
+        if !USAGE_PROVIDER_IDS.contains(&id) {
+            return false;
+        }
+        self.read()
+            .get("usage")
+            .and_then(|section| section.get("providers"))
+            .and_then(|providers| providers.get(id))
+            .and_then(Value::as_bool)
+            .unwrap_or(true)
+    }
+
+    /// `usage.codexCliFallback` — spawn the local `codex` CLI when the OAuth
+    /// route gives nothing.
+    pub fn codex_cli_fallback(&self) -> bool {
+        self.read()
+            .get("usage")
+            .and_then(|section| section.get("codexCliFallback"))
+            .and_then(Value::as_bool)
+            .unwrap_or(DEFAULT_CODEX_CLI_FALLBACK)
+    }
+
+    /// `usage.cost.enabled` — the local transcript scan.
+    pub fn cost_enabled(&self) -> bool {
+        self.read()
+            .get("usage")
+            .and_then(|section| section.get("cost"))
+            .and_then(|cost| cost.get("enabled"))
+            .and_then(Value::as_bool)
+            .unwrap_or(DEFAULT_COST_ENABLED)
     }
 
     /// `logs.retentionDays`, already snapped to a valid choice by `normalize`.

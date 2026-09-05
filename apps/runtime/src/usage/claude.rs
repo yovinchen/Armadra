@@ -16,7 +16,9 @@
 use anyhow::{Context, bail};
 use serde::Deserialize;
 
-use super::{CredentialSource, ProviderResult, UsageWindow, clamp_percent, home_dir};
+use super::{
+    CredentialSource, ProviderReport, ProviderResult, UsageWindow, clamp_percent, home_dir,
+};
 
 pub const ID: &str = "claude";
 
@@ -157,7 +159,7 @@ async fn fetch_token(client: &reqwest::Client, token: String) -> ProviderResult 
         .json()
         .await
         .context("Claude usage response did not parse")?;
-    Ok(Some(windows(usage)))
+    Ok(Some(ProviderReport::from_windows(windows(usage))))
 }
 
 fn windows(usage: UsageResponse) -> Vec<UsageWindow> {
@@ -170,6 +172,7 @@ fn windows(usage: UsageResponse) -> Vec<UsageWindow> {
                 label: key.to_owned(),
                 group: None,
                 used_percent: clamp_percent(window.utilization?),
+                unlimited: false,
                 resets_at: window.resets_at,
             })
         })
@@ -194,6 +197,7 @@ fn windows(usage: UsageResponse) -> Vec<UsageWindow> {
             label: "7d".to_owned(),
             group: Some(group),
             used_percent: clamp_percent(percent),
+            unlimited: false,
             resets_at: window.resets_at,
         });
     }
