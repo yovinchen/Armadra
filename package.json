@@ -11,6 +11,7 @@
     "host:lifecycle-smoke": "node scripts/host-lifecycle-smoke.mjs",
     "handoff:read-smoke": "node scripts/handoff-read-smoke.mjs",
     "host:smoke": "node scripts/host-smoke.mjs",
+    "canvas:e2e": "node scripts/canvas-ownership-e2e.mjs",
     "github:e2e": "node scripts/github-e2e.mjs",
     "protocol:generate": "node scripts/protocol.mjs generate",
     "protocol:check": "node scripts/protocol.mjs check",
