@@ -7,6 +7,7 @@ import (
 	"armadra.local/host/internal/externalservice"
 	"armadra.local/host/internal/githubhost"
 	"armadra.local/host/internal/identity"
+	"armadra.local/host/internal/ownership"
 	"armadra.local/host/internal/runtimelink"
 	"armadra.local/host/internal/updates"
 	"errors"
@@ -50,6 +51,14 @@ type Options struct {
 	// pushes nothing and `/ws/armadra.v1.EventStream` answers NOT_FOUND, which
 	// is what tells a client to keep polling instead of waiting silently.
 	Events *eventstream.Hub
+	// Ownership moves a business domain between the Runtime and this Host.
+	// Nil means this Host reports no ownership surface at all; a non-nil
+	// service with no OpenHandoff can still answer reads, and refuses to move
+	// anything, which is the honest answer for a Host that has no way to tell
+	// the Runtime about a switch.
+	Ownership *ownership.Service
+	// OpenHandoff starts the private channel to the Runtime for one switch.
+	OpenHandoff HandoffOpener
 }
 
 // ParseOrigin validates a serialized origin and returns its canonical spelling.

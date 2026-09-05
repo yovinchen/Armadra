@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -32,10 +33,12 @@ import (
 	auth "armadra.local/host/internal/identity"
 	"armadra.local/host/internal/localipc"
 	"armadra.local/host/internal/migration"
+	"armadra.local/host/internal/ownership"
 	"armadra.local/host/internal/runtimelink"
 	"armadra.local/host/internal/server"
 	"armadra.local/host/internal/storage"
 	"armadra.local/host/internal/updates"
+	"armadra.local/host/internal/worker"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -77,6 +80,11 @@ type config struct {
 	// a Host never guesses which binary is allowed to execute the owner's work.
 	workerBinary   string
 	workerStateDir string
+	// runtimeDatabase is the Runtime's own database file. It is what lets a
+	// serving Host move write ownership over HTTPS: without it the record can
+	// still be read, and every switch answers UNSUPPORTED rather than
+	// pretending to have told the Runtime something.
+	runtimeDatabase string
 	// The release index this Host may consult, and the channel an operator
 	// pinned it to. An unset source means update checks answer UNSUPPORTED;
 	// nothing is inferred from the build (roadmap §3.12).
@@ -152,6 +160,7 @@ func parseConfig(args []string) (config, error) {
 		flags.Var(&c.origins, "allow-origin", "Exact browser origin allowed to read metadata (repeatable)")
 		flags.StringVar(&c.workerBinary, "worker-binary", "", "Absolute path to the Rust Worker executable that runs scheduled commands")
 		flags.StringVar(&c.workerStateDir, "worker-state-dir", "", "Absolute private directory for the Worker's own execution journal")
+		flags.StringVar(&c.runtimeDatabase, "runtime-database", "", "Absolute path to the Runtime's database, enabling write-ownership switches over HTTPS")
 		flags.StringVar(&c.updatesSource, "updates-source", "", "Releases API base this Host may consult, e.g. https://api.github.com/repos/OWNER/REPO; unset means update checks answer UNSUPPORTED")
 		flags.StringVar(&releaseChannel, "release-channel", "", "Pin update checks to a channel: stable, beta or development; unset lets the caller ask")
 	}
@@ -286,6 +295,18 @@ func parseConfig(args []string) (config, error) {
 			return c, err
 		}
 		if c.workerStateDir, err = filepath.Abs(c.workerStateDir); err != nil {
+			return c, err
+		}
+	}
+	// Moving ownership needs a Worker to tell the Runtime about it, so naming
+	// the database without the executable that opens it is a configuration
+	// that could never switch anything.
+	if c.runtimeDatabase != "" {
+		if c.workerBinary == "" {
+			return c, fmt.Errorf("--runtime-database also requires --worker-binary")
+		}
+		var err error
+		if c.runtimeDatabase, err = filepath.Abs(c.runtimeDatabase); err != nil {
 			return c, err
 		}
 	}
@@ -466,6 +487,37 @@ func serveHost(parent context.Context, c config) (err error) {
 	if err != nil {
 		return err
 	}
+	// The ownership record is always readable: a client has to know which side
+	// writes a domain before it saves anything, and that answer must not depend
+	// on this Host being able to move it. Moving it does depend on a Runtime to
+	// tell, which is what the handoff opener below is.
+	switches, err := ownership.New(ownership.Options{
+		Store:      database,
+		InstanceID: identity.InstanceID,
+		Projectors: map[string]ownership.Projector{canvashost.Domain: canvases.AsProjector()},
+		ExportRoot: filepath.Join(c.dataDir, "ownership-exports"),
+	})
+	if err != nil {
+		return err
+	}
+	var openHandoff server.HandoffOpener
+	if c.runtimeDatabase != "" {
+		openHandoff = func(ctx context.Context) (ownership.Handoff, io.Closer, error) {
+			// One short-lived Worker per switch. It may move an epoch and
+			// nothing else: the scheduling Worker cannot, and this one cannot
+			// run commands.
+			client, err := worker.Start(ctx, worker.Options{
+				Executable:     c.workerBinary,
+				HostID:         state.ID,
+				CanvasDatabase: c.runtimeDatabase,
+				RequestTimeout: 30 * time.Second,
+			})
+			if err != nil {
+				return nil, nil, err
+			}
+			return client, client, nil
+		}
+	}
 	// The front end and the Runtime proxy are the "reach this Host from my
 	// phone" half of H02. Both exist only on the authenticated HTTPS origin;
 	// a mistyped bundle path fails here rather than as a 404 discovered later.
@@ -492,7 +544,7 @@ func serveHost(parent context.Context, c config) (err error) {
 	}
 	defer events.Close()
 	database.SetCommitNotifier(events.Notify)
-	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link, Updates: releases, Canvas: canvases, Events: events}
+	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link, Updates: releases, Canvas: canvases, Events: events, Ownership: switches, OpenHandoff: openHandoff}
 	// The switch binds its own listener with the same routes. `options` is
 	// captured by reference, so the manager it is about to be given is the one
 	// this closure serves with.
@@ -526,22 +578,44 @@ func serveHost(parent context.Context, c config) (err error) {
 		}()
 	}
 	go func() {
-		finished <- daemon.ServeWithBootstrap(ctx, control, status, cancel, func(ctx context.Context, request *pb.BootstrapTicketRequest) (*pb.BootstrapTicketResponse, error) {
-			if c.publicOrigin == "" || request.Origin != c.publicOrigin {
-				return nil, auth.ErrPermission
-			}
-			scopes := make([]auth.Scope, 0, len(request.Scopes))
-			for _, scope := range request.Scopes {
-				if scope == nil {
-					return nil, auth.ErrInvalid
+		finished <- daemon.ServeWithHandlers(ctx, control, status, cancel, daemon.Handlers{
+			Maintenance: func(ctx context.Context, request *pb.MaintenanceTicketRequest) (*pb.MaintenanceTicketResponse, error) {
+				// The window is opened at the machine and nowhere else. This
+				// callback runs only after localipc authenticated the OS peer,
+				// which is the whole reason a remote device cannot start a
+				// switch however well it is authenticated over HTTPS.
+				if openHandoff == nil {
+					return nil, ownership.ErrUnsupportedDomain
 				}
-				scopes = append(scopes, auth.Scope{Permission: scope.Permission, WorkspaceID: scope.WorkspaceId, ExecutionHostID: scope.ExecutionHostId})
-			}
-			ticket, err := identities.IssueBootstrap(ctx, auth.BootstrapRequest{HostID: request.ExpectedHostId, InstanceID: request.ExpectedInstanceId, Origin: request.Origin, DeviceName: request.DeviceName, Scopes: scopes})
-			if err != nil {
-				return nil, err
-			}
-			return &pb.BootstrapTicketResponse{HostId: identity.HostID, HostInstanceId: identity.InstanceID, Ticket: ticket.Ticket, Origin: request.Origin, ExpiresAtUnixMs: ticket.ExpiresAtMS}, nil
+				issued, err := switches.IssueMaintenance(ctx, request.Domain)
+				if err != nil {
+					return nil, err
+				}
+				return &pb.MaintenanceTicketResponse{
+					HostId:          identity.HostID,
+					HostInstanceId:  identity.InstanceID,
+					Token:           issued.Token,
+					Domain:          issued.Domain,
+					ExpiresAtUnixMs: issued.ExpiresAtMS,
+				}, nil
+			},
+			Bootstrap: func(ctx context.Context, request *pb.BootstrapTicketRequest) (*pb.BootstrapTicketResponse, error) {
+				if c.publicOrigin == "" || request.Origin != c.publicOrigin {
+					return nil, auth.ErrPermission
+				}
+				scopes := make([]auth.Scope, 0, len(request.Scopes))
+				for _, scope := range request.Scopes {
+					if scope == nil {
+						return nil, auth.ErrInvalid
+					}
+					scopes = append(scopes, auth.Scope{Permission: scope.Permission, WorkspaceID: scope.WorkspaceId, ExecutionHostID: scope.ExecutionHostId})
+				}
+				ticket, err := identities.IssueBootstrap(ctx, auth.BootstrapRequest{HostID: request.ExpectedHostId, InstanceID: request.ExpectedInstanceId, Origin: request.Origin, DeviceName: request.DeviceName, Scopes: scopes})
+				if err != nil {
+					return nil, err
+				}
+				return &pb.BootstrapTicketResponse{HostId: identity.HostID, HostInstanceId: identity.InstanceID, Ticket: ticket.Ticket, Origin: request.Origin, ExpiresAtUnixMs: ticket.ExpiresAtMS}, nil
+			},
 		})
 	}()
 	if listener != nil {

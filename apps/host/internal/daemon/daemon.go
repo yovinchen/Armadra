@@ -196,14 +196,28 @@ func errorResponse(id, code string) *pb.HostControlResponse {
 }
 
 func handle(conn net.Conn, status *pb.HostStatus, shutdown func()) {
-	handleWithBootstrap(context.Background(), conn, status, shutdown, nil)
+	handleWithBootstrap(context.Background(), conn, status, shutdown, Handlers{})
 }
 
 // BootstrapHandler runs only after localipc has authenticated the OS peer.
 // The callback must bind both expected Host identities and the exact origin.
 type BootstrapHandler func(context.Context, *pb.BootstrapTicketRequest) (*pb.BootstrapTicketResponse, error)
 
-func handleWithBootstrap(parent context.Context, conn net.Conn, status *pb.HostStatus, shutdown func(), bootstrap BootstrapHandler) {
+// MaintenanceHandler issues the token that opens a write-ownership maintenance
+// window. It runs on the same authenticated OS channel and for the same reason:
+// moving a domain is an action taken at the machine, not one a remote device
+// may request.
+type MaintenanceHandler func(context.Context, *pb.MaintenanceTicketRequest) (*pb.MaintenanceTicketResponse, error)
+
+// Handlers are the privileged callbacks a serving Host installs. A nil one
+// answers UNSUPPORTED, which is what a Host that cannot do that thing should
+// say rather than failing in a way a caller might retry.
+type Handlers struct {
+	Bootstrap   BootstrapHandler
+	Maintenance MaintenanceHandler
+}
+
+func handleWithBootstrap(parent context.Context, conn net.Conn, status *pb.HostStatus, shutdown func(), handlers Handlers) {
 	ctx, cancel := context.WithTimeout(parent, RequestTimeout)
 	defer cancel()
 	if err := conn.SetDeadline(time.Now().Add(RequestTimeout)); err != nil {
@@ -242,16 +256,31 @@ func handleWithBootstrap(parent context.Context, conn net.Conn, status *pb.HostS
 			stop = true
 		}
 	case *pb.HostControlRequest_Bootstrap:
-		if bootstrap == nil {
+		if handlers.Bootstrap == nil {
 			response = errorResponse(request.RequestId, "UNSUPPORTED")
 		} else if action.Bootstrap == nil || action.Bootstrap.ExpectedHostId != status.HostId || action.Bootstrap.ExpectedInstanceId != status.HostInstanceId {
 			response = errorResponse(request.RequestId, "CONFLICT")
 		} else {
-			issued, issueErr := bootstrap(ctx, action.Bootstrap)
+			issued, issueErr := handlers.Bootstrap(ctx, action.Bootstrap)
 			if issueErr != nil || issued == nil {
 				response = errorResponse(request.RequestId, "PERMISSION_DENIED")
 			} else {
 				response = &pb.HostControlResponse{RequestId: request.RequestId, Result: &pb.HostControlResponse_Bootstrap{Bootstrap: issued}}
+			}
+		}
+	case *pb.HostControlRequest_Maintenance:
+		// Bound to the observed process, exactly like a pairing ticket: a token
+		// minted before a restart must not open a window afterwards.
+		if handlers.Maintenance == nil {
+			response = errorResponse(request.RequestId, "UNSUPPORTED")
+		} else if action.Maintenance == nil || action.Maintenance.ExpectedHostId != status.HostId || action.Maintenance.ExpectedInstanceId != status.HostInstanceId {
+			response = errorResponse(request.RequestId, "CONFLICT")
+		} else {
+			issued, issueErr := handlers.Maintenance(ctx, action.Maintenance)
+			if issueErr != nil || issued == nil {
+				response = errorResponse(request.RequestId, "PERMISSION_DENIED")
+			} else {
+				response = &pb.HostControlResponse{RequestId: request.RequestId, Result: &pb.HostControlResponse_Maintenance{Maintenance: issued}}
 			}
 		}
 	default:
@@ -269,10 +298,16 @@ func handleWithBootstrap(parent context.Context, conn net.Conn, status *pb.HostS
 // context.CancelFunc); it is invoked at most once, after a successful stop ACK.
 // The caller must not mutate status while Serve is taking its initial snapshot.
 func Serve(ctx context.Context, listener net.Listener, status *pb.HostStatus, shutdown func()) error {
-	return ServeWithBootstrap(ctx, listener, status, shutdown, nil)
+	return ServeWithHandlers(ctx, listener, status, shutdown, Handlers{})
 }
 
 func ServeWithBootstrap(ctx context.Context, listener net.Listener, status *pb.HostStatus, shutdown func(), bootstrap BootstrapHandler) error {
+	return ServeWithHandlers(ctx, listener, status, shutdown, Handlers{Bootstrap: bootstrap})
+}
+
+// ServeWithHandlers is the same listener with every privileged callback a
+// serving Host installs.
+func ServeWithHandlers(ctx context.Context, listener net.Listener, status *pb.HostStatus, shutdown func(), handlers Handlers) error {
 	if !validStatus(status) || listener == nil || shutdown == nil {
 		if listener != nil {
 			_ = listener.Close()
@@ -283,7 +318,7 @@ func ServeWithBootstrap(ctx context.Context, listener net.Listener, status *pb.H
 	ctx, cancel := context.WithCancel(ctx)
 	var mu sync.Mutex
 	active := make(map[net.Conn]struct{})
-	var handlers sync.WaitGroup
+	var running sync.WaitGroup
 	var shutdownOnce sync.Once
 	closed := make(chan struct{})
 	go func() {
@@ -300,7 +335,7 @@ func ServeWithBootstrap(ctx context.Context, listener net.Listener, status *pb.H
 			_ = conn.Close()
 		}
 	}()
-	defer func() { cancel(); <-closed; handlers.Wait() }()
+	defer func() { cancel(); <-closed; running.Wait() }()
 	capacity := make(chan struct{}, MaxConnections)
 	for {
 		// Acquire before Accept to bound both goroutines and accepted connections.
@@ -326,11 +361,11 @@ func ServeWithBootstrap(ctx context.Context, listener net.Listener, status *pb.H
 		}
 		active[conn] = struct{}{}
 		mu.Unlock()
-		handlers.Add(1)
+		running.Add(1)
 		go func() {
-			defer handlers.Done()
+			defer running.Done()
 			defer func() { _ = conn.Close(); mu.Lock(); delete(active, conn); mu.Unlock(); <-capacity }()
-			handleWithBootstrap(ctx, conn, snapshot, func() { shutdownOnce.Do(shutdown) }, bootstrap)
+			handleWithBootstrap(ctx, conn, snapshot, func() { shutdownOnce.Do(shutdown) }, handlers)
 		}()
 	}
 }
@@ -348,6 +383,8 @@ func exchange(ctx context.Context, dataDir string, action any, sideEffect bool) 
 		request.Action = &pb.HostControlRequest_Stop{Stop: value}
 	case *pb.BootstrapTicketRequest:
 		request.Action = &pb.HostControlRequest_Bootstrap{Bootstrap: value}
+	case *pb.MaintenanceTicketRequest:
+		request.Action = &pb.HostControlRequest_Maintenance{Maintenance: value}
 	default:
 		return nil, &Error{Code: CodeInvalidArgument}
 	}
@@ -425,6 +462,26 @@ func Bootstrap(ctx context.Context, dataDir string, request *pb.BootstrapTicketR
 		return nil, &Error{Code: CodeMalformed, OutcomeUnknown: true}
 	}
 	return proto.Clone(ticket).(*pb.BootstrapTicketResponse), nil
+}
+
+// Maintenance requests a token that opens a write-ownership window on exactly
+// the observed Host process, for exactly one domain. It never retries: a second
+// attempt would mint a second token, and the point of the token is that one
+// person asked for one window.
+func Maintenance(ctx context.Context, dataDir string, request *pb.MaintenanceTicketRequest) (*pb.MaintenanceTicketResponse, error) {
+	if request == nil || request.ExpectedHostId == "" || request.ExpectedInstanceId == "" || request.Domain == "" {
+		return nil, &Error{Code: CodeInvalidArgument}
+	}
+	response, err := exchange(ctx, dataDir, request, true)
+	if err != nil {
+		return nil, err
+	}
+	ticket := response.GetMaintenance()
+	if ticket == nil || ticket.HostId != request.ExpectedHostId || ticket.HostInstanceId != request.ExpectedInstanceId ||
+		ticket.Domain != request.Domain || ticket.Token == "" || ticket.ExpiresAtUnixMs <= time.Now().UnixMilli() {
+		return nil, &Error{Code: CodeMalformed, OutcomeUnknown: true}
+	}
+	return proto.Clone(ticket).(*pb.MaintenanceTicketResponse), nil
 }
 
 // Status performs one local, read-only exchange and never retries.

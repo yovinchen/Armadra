@@ -61,7 +61,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "Local request origin is not allowed")
 			return
 		}
-		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path) || githubMethod(r.URL.Path) || updatesMethod(r.URL.Path) || canvasMethod(r.URL.Path)) {
+		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path) || githubMethod(r.URL.Path) || updatesMethod(r.URL.Path) || canvasMethod(r.URL.Path) || ownershipMethod(r.URL.Path)) {
 			if origin != options.PublicOrigin {
 				writeError(w, 403, "PERMISSION_DENIED", "Authentication requires the Host HTTPS origin")
 				return
@@ -87,6 +87,14 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			if automationMethod(r.URL.Path) {
 				automationRequest(w, r, identity, options.Identity, options.Automation)
+				return
+			}
+			if ownershipMethod(r.URL.Path) {
+				// Who may write which domain is answered even by a Host that
+				// cannot move any of them: a client has to read it before it
+				// decides where to save, and "unknown" is not an answer it can
+				// act on.
+				ownershipRequest(w, r, identity, options.Identity, options.Ownership, options.OpenHandoff)
 				return
 			}
 			if canvasMethod(r.URL.Path) {
@@ -213,7 +221,15 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			return
 		}
 		authentication := options.Identity != nil && options.PublicOrigin != "" && r.TLS != nil
-		hello(w, r, identity, authentication, authentication && options.Automation != nil, authentication && options.GitHub != nil, authentication && options.Runtime != nil, authentication && options.Canvas != nil, authentication && options.Events != nil)
+		hello(w, r, identity, helloSurfaces{
+			authentication: authentication,
+			scheduling:     authentication && options.Automation != nil,
+			github:         authentication && options.GitHub != nil,
+			proxying:       authentication && options.Runtime != nil,
+			canvas:         authentication && options.Canvas != nil,
+			events:         authentication && options.Events != nil,
+			ownership:      authentication && options.Ownership != nil,
+		})
 	}), nil
 }
 
@@ -247,7 +263,14 @@ func deviceOrigin(r *http.Request, origin, public string) (string, bool) {
 	return public, true
 }
 
-func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentication, scheduling, github, proxying, canvas, events bool) {
+// helloSurfaces is what this Host actually assembled. Each flag is advertised
+// only when the surface really answers, so a client never plans against a
+// capability that would then refuse it.
+type helloSurfaces struct {
+	authentication, scheduling, github, proxying, canvas, events, ownership bool
+}
+
+func hello(w http.ResponseWriter, r *http.Request, identity Identity, surfaces helloSurfaces) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
 		writeError(w, http.StatusMethodNotAllowed, "INVALID_ARGUMENT", "POST required")
@@ -288,37 +311,44 @@ func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentica
 		return
 	}
 	capabilities := []string{"protocol.hello.v1", "host.identity.v1"}
-	if authentication {
+	if surfaces.authentication {
 		capabilities = append(capabilities, "identity.browser-session.v1")
 	}
 	// Advertised only when a Worker is actually assembled: a client must never
 	// read this as "plans exist" on a Host that cannot run them.
-	if scheduling {
+	if surfaces.scheduling {
 		capabilities = append(capabilities, "automation.plans.v1")
 	}
 	// Advertised only when a credential service is actually assembled, so a
 	// client never opens a GitHub panel this Host cannot serve at all.
-	if github {
+	if surfaces.github {
 		capabilities = append(capabilities, "github.issues.v1")
 	}
 	// Advertised only when a Runtime address is actually configured. A client
 	// must never read this as "the execution service is up": it means requests
 	// will be forwarded, and a Runtime that is down still answers DISCONNECTED.
-	if proxying {
+	if surfaces.proxying {
 		capabilities = append(capabilities, "runtime.proxy.v1")
 	}
 	// Advertised only when a canvas service is actually assembled. It says the
 	// surface answers, not that this Host currently owns canvas writes: that is
 	// what CanvasService/GetOwnership reports, and a client must read it before
 	// it saves anything.
-	if canvas {
+	if surfaces.canvas {
 		capabilities = append(capabilities, "canvas.documents.v1")
 	}
 	// Advertised only when the stream is actually assembled. A client that does
 	// not see it keeps its polling fallback rather than waiting on a socket
 	// this Host will never open.
-	if events {
+	if surfaces.events {
 		capabilities = append(capabilities, "events.stream.v1")
+	}
+	// Advertised only when the ownership surface is assembled. It says the
+	// record can be read here, not that this Host owns anything: which side
+	// writes which domain is what OwnershipService/List reports, and a client
+	// must read that before it decides where to save.
+	if surfaces.ownership {
+		capabilities = append(capabilities, "ownership.domains.v1")
 	}
 	writeProto(w, http.StatusOK, &pb.HelloResponse{
 		Protocol:         &pb.ProtocolVersion{Major: ProtocolMajor, Minor: min(request.Protocol.GetMinor(), ProtocolMinor)},
