@@ -98,7 +98,7 @@ pub fn router_with_state(state: AppState) -> Router {
         .route("/api/workspaces/{workspace_id}/git/repository/branches", get(git_api::branches))
         .route("/api/workspaces/{workspace_id}/git/repository/history", get(git_api::history))
         .route("/api/workspaces/{workspace_id}/git/repository/worktrees", get(git_api::worktrees))
-        .route("/api/workspaces/{workspace_id}/git/repository/operations", post(git_api::start))
+        .route("/api/workspaces/{workspace_id}/git/repository/operations", get(git_api::operations).post(git_api::start))
         .route("/api/workspaces/{workspace_id}/git/repository/operations/{operation_id}", get(git_api::operation))
         .route("/api/workspaces/{workspace_id}/git/repository/operations/{operation_id}/cancel", post(git_api::cancel))
         .route(

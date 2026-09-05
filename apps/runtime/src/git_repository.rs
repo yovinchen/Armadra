@@ -254,9 +254,23 @@ pub struct OperationSnapshot {
 }
 
 #[derive(Default)]
-struct Cancellation {
+struct CancellationState {
     requested: AtomicBool,
     notify: Notify,
+}
+#[derive(Clone, Default)]
+struct Cancellation(Arc<CancellationState>);
+impl std::ops::Deref for Cancellation {
+    type Target = CancellationState;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+struct CancelOnDrop(Cancellation);
+impl Drop for CancelOnDrop {
+    fn drop(&mut self) {
+        self.0.cancel();
+    }
 }
 impl Cancellation {
     fn cancel(&self) {
@@ -276,7 +290,7 @@ impl Cancellation {
 struct Operation {
     snapshot: Mutex<OperationSnapshot>,
     cancellation: Cancellation,
-    mutation_started: AtomicBool,
+    mutation_started: Arc<AtomicBool>,
 }
 
 #[derive(Default)]
@@ -284,6 +298,47 @@ struct Inner {
     locks: Mutex<HashMap<PathBuf, Weak<tokio::sync::Mutex<()>>>>,
     operations: Mutex<HashMap<String, Arc<Operation>>>,
     order: Mutex<VecDeque<String>>,
+    lifecycle: Mutex<ServiceLifecycle>,
+    stopping: Cancellation,
+}
+
+#[derive(Default)]
+struct ServiceLifecycle {
+    stopping: bool,
+    active_commands: usize,
+    active_guards: usize,
+    cleanup_failed: bool,
+}
+
+/// Lifecycle registration only: the caller still authorizes its Git/AI action.
+/// Keep this in the owned task until the actual child has been reaped.
+pub struct RepositoryCommandLease {
+    inner: Arc<Inner>,
+    started: AtomicBool,
+    reaped: AtomicBool,
+}
+impl RepositoryCommandLease {
+    pub fn mark_started(&self) {
+        self.started.store(true, Ordering::SeqCst);
+    }
+    pub fn mark_reaped(&self) {
+        self.reaped.store(true, Ordering::SeqCst);
+    }
+    pub fn cancellation_requested(&self) -> bool {
+        self.inner.stopping.requested.load(Ordering::SeqCst)
+    }
+    pub async fn cancelled(&self) {
+        self.inner.stopping.cancelled().await;
+    }
+}
+impl Drop for RepositoryCommandLease {
+    fn drop(&mut self) {
+        let mut lifecycle = self.inner.lifecycle.lock().expect("Git service lifecycle");
+        lifecycle.active_commands -= 1;
+        if self.started.load(Ordering::SeqCst) && !self.reaped.load(Ordering::SeqCst) {
+            lifecycle.cleanup_failed = true;
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -301,6 +356,25 @@ impl Default for RepositoryService {
 pub struct RepositoryGuard {
     pub context: RepositoryContext,
     _guard: OwnedMutexGuard<()>,
+    inner: Arc<Inner>,
+}
+
+impl RepositoryGuard {
+    pub fn cancellation_requested(&self) -> bool {
+        self.inner.stopping.requested.load(Ordering::SeqCst)
+    }
+    pub async fn cancelled(&self) {
+        self.inner.stopping.cancelled().await;
+    }
+}
+impl Drop for RepositoryGuard {
+    fn drop(&mut self) {
+        self.inner
+            .lifecycle
+            .lock()
+            .expect("Git service lifecycle")
+            .active_guards -= 1;
+    }
 }
 
 impl RepositoryService {
@@ -340,12 +414,23 @@ impl RepositoryService {
         requested: &str,
     ) -> AppResult<RepositoryGuard> {
         let context = self.context(workspace_root, requested).await?;
-        let guard = self.lock_for(&context.common_dir).lock_owned().await;
+        let guard = tokio::select! {
+            guard = self.lock_for(&context.common_dir).lock_owned() => guard,
+            _ = self.inner.stopping.cancelled() => return Err(shutting_down()),
+        };
         self.revalidate_context(&context, &Cancellation::default())
             .await?;
+        {
+            let mut lifecycle = self.inner.lifecycle.lock().expect("Git service lifecycle");
+            if lifecycle.stopping {
+                return Err(shutting_down());
+            }
+            lifecycle.active_guards += 1;
+        }
         Ok(RepositoryGuard {
             context,
             _guard: guard,
+            inner: self.inner.clone(),
         })
     }
 
@@ -639,9 +724,15 @@ impl RepositoryService {
         let operation = Arc::new(Operation {
             snapshot: Mutex::new(snapshot.clone()),
             cancellation: Cancellation::default(),
-            mutation_started: AtomicBool::new(false),
+            mutation_started: Arc::new(AtomicBool::new(false)),
         });
         {
+            // This gate also protects the insertion itself: a request that
+            // finished validation just before shutdown must not appear later.
+            let lifecycle = self.inner.lifecycle.lock().expect("Git service lifecycle");
+            if lifecycle.stopping {
+                return Err(shutting_down());
+            }
             let mut registry = self.inner.operations.lock().expect("Git operations");
             let mut order = self.inner.order.lock().expect("Git operation order");
             let mut scanned = 0;
@@ -732,20 +823,166 @@ impl RepositoryService {
         Ok(snapshot.clone())
     }
 
+    /// Recover this Runtime's operation history after a frontend reload. The
+    /// Host will persist these records after ownership migration; this service
+    /// intentionally does not claim persistence across Runtime restarts.
+    pub async fn list_operations(
+        &self,
+        workspace_root: &Path,
+        requested: &str,
+    ) -> AppResult<Vec<OperationSnapshot>> {
+        let context = self.context(workspace_root, requested).await?;
+        let repository_id = context.repository_id();
+        let workspace = path_string(&context.workspace_root)?;
+        let registry = self.inner.operations.lock().expect("Git operations");
+        let order = self.inner.order.lock().expect("Git operation order");
+        Ok(order
+            .iter()
+            .rev()
+            .filter_map(|id| registry.get(id))
+            .filter_map(|operation| {
+                let snapshot = operation.snapshot.lock().expect("Git operation");
+                (snapshot.repository_id == repository_id && snapshot.workspace_root == workspace)
+                    .then(|| snapshot.clone())
+            })
+            .collect())
+    }
+
+    pub fn is_shutting_down(&self) -> bool {
+        self.inner
+            .lifecycle
+            .lock()
+            .expect("Git service lifecycle")
+            .stopping
+    }
+
+    /// Reject new commands, cancel queued/running operations and even read-only
+    /// Git children, then wait for observed reaping and terminal operation state.
+    pub async fn shutdown(&self, timeout: Duration) -> AppResult<()> {
+        {
+            let mut lifecycle = self.inner.lifecycle.lock().expect("Git service lifecycle");
+            lifecycle.stopping = true;
+            self.inner.stopping.cancel();
+        }
+        let operations: Vec<_> = self
+            .inner
+            .operations
+            .lock()
+            .expect("Git operations")
+            .values()
+            .cloned()
+            .collect();
+        for operation in &operations {
+            let mut snapshot = operation.snapshot.lock().expect("Git operation");
+            if !snapshot.state.terminal() {
+                snapshot.cancellation_requested = true;
+                operation.cancellation.cancel();
+            }
+        }
+        tokio::time::timeout(timeout, async {
+            loop {
+                let commands_done = {
+                    let lifecycle = self.inner.lifecycle.lock().expect("Git service lifecycle");
+                    lifecycle.active_commands == 0 && lifecycle.active_guards == 0
+                };
+                if commands_done
+                    && operations.iter().all(|operation| {
+                        operation
+                            .snapshot
+                            .lock()
+                            .expect("Git operation")
+                            .state
+                            .terminal()
+                    })
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .map_err(|_| {
+            AppError::Internal("Git shutdown did not finish before the deadline".into())
+        })?;
+        if self
+            .inner
+            .lifecycle
+            .lock()
+            .expect("Git service lifecycle")
+            .cleanup_failed
+        {
+            return Err(AppError::Internal(
+                "A Git child could not be confirmed stopped".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn command_lease(&self) -> AppResult<RepositoryCommandLease> {
+        let mut lifecycle = self.inner.lifecycle.lock().expect("Git service lifecycle");
+        if lifecycle.stopping {
+            return Err(shutting_down());
+        }
+        lifecycle.active_commands += 1;
+        Ok(RepositoryCommandLease {
+            inner: self.inner.clone(),
+            started: AtomicBool::new(false),
+            reaped: AtomicBool::new(false),
+        })
+    }
+
+    async fn output(
+        &self,
+        directory: &Path,
+        arguments: Vec<String>,
+        timeout: Duration,
+        token: &Cancellation,
+        mutation_started: Option<Arc<AtomicBool>>,
+    ) -> AppResult<CommandOutput> {
+        let lease = self.command_lease()?;
+        let directory = directory.to_owned();
+        let token = token.clone();
+        let caller = Cancellation::default();
+        let _cancel_on_drop = CancelOnDrop(caller.clone());
+        // The monitor keeps ownership after an HTTP read is dropped. Its own
+        // cancellation path kills and reaps; shutdown can still wait for it.
+        tokio::spawn(async move {
+            run_git_status(
+                &directory,
+                arguments,
+                timeout,
+                &token,
+                mutation_started.as_deref(),
+                &lease,
+                &caller,
+            )
+            .await
+        })
+        .await
+        .map_err(|_| {
+            AppError::Internal("Git child monitor failed; outcome requires inspection".into())
+        })?
+    }
+
     async fn read(
         &self,
         directory: &Path,
         arguments: Vec<String>,
         token: &Cancellation,
     ) -> AppResult<Vec<u8>> {
-        run_git(
-            directory,
-            arguments,
-            self.command_timeout.min(Duration::from_secs(15)),
-            token,
-            None,
-        )
-        .await
+        let output = self
+            .output(
+                directory,
+                arguments,
+                self.command_timeout.min(Duration::from_secs(15)),
+                token,
+                None,
+            )
+            .await?;
+        if output.status != Some(0) {
+            return Err(command_error(&output));
+        }
+        Ok(output.stdout)
     }
 
     async fn mutate(
@@ -754,39 +991,45 @@ impl RepositoryService {
         arguments: Vec<String>,
         operation: &Operation,
     ) -> AppResult<()> {
-        run_git(
-            &context.repository,
-            arguments,
-            self.command_timeout,
-            &operation.cancellation,
-            Some(&operation.mutation_started),
-        )
-        .await
-        .map(|_| ())
+        let output = self
+            .output(
+                &context.repository,
+                arguments,
+                self.command_timeout,
+                &operation.cancellation,
+                Some(operation.mutation_started.clone()),
+            )
+            .await?;
+        if output.status != Some(0) {
+            return Err(command_error(&output));
+        }
+        Ok(())
     }
 
     async fn head(&self, directory: &Path, token: &Cancellation) -> AppResult<ExpectedState> {
-        let branch_output = run_git_status(
-            directory,
-            args(&["symbolic-ref", "--quiet", "--short", "HEAD"]),
-            self.command_timeout.min(Duration::from_secs(15)),
-            token,
-            None,
-        )
-        .await?;
+        let branch_output = self
+            .output(
+                directory,
+                args(&["symbolic-ref", "--quiet", "--short", "HEAD"]),
+                self.command_timeout.min(Duration::from_secs(15)),
+                token,
+                None,
+            )
+            .await?;
         let branch = match branch_output.status {
             Some(0) => Some(one_line(&branch_output.stdout)?.to_owned()),
             Some(1) => None,
             _ => return Err(command_error(&branch_output)),
         };
-        let output = run_git_status(
-            directory,
-            args(&["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]),
-            self.command_timeout.min(Duration::from_secs(15)),
-            token,
-            None,
-        )
-        .await?;
+        let output = self
+            .output(
+                directory,
+                args(&["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]),
+                self.command_timeout.min(Duration::from_secs(15)),
+                token,
+                None,
+            )
+            .await?;
         let head_oid = if output.status == Some(0) {
             let oid = one_line(&output.stdout)?;
             if !valid_oid(oid) {
@@ -1124,7 +1367,10 @@ impl RepositoryService {
                     args(&["fetch", "--atomic", "--progress", "--no-recurse-submodules"]);
                 if *prune {
                     arguments.push("--prune".into());
+                } else {
+                    arguments.push("--no-prune".into());
                 }
+                arguments.push("--no-prune-tags".into());
                 arguments.extend(["--".into(), remote.clone()]);
                 self.mutate(context, arguments, operation).await
             }
@@ -1136,21 +1382,8 @@ impl RepositoryService {
                         "Pull requires an attached local branch".into(),
                     ));
                 }
-                self.mutate(
-                    context,
-                    args(&[
-                        "pull",
-                        "--ff-only",
-                        "--no-rebase",
-                        "--no-autostash",
-                        "--no-recurse-submodules",
-                        "--",
-                        remote,
-                        branch,
-                    ]),
-                    operation,
-                )
-                .await
+                self.fast_forward_pull(context, remote, branch, expected, operation)
+                    .await
             }
             RepositoryAction::Push {
                 remote,
@@ -1312,6 +1545,81 @@ impl RepositoryService {
                 .await
             }
         }
+    }
+
+    async fn fast_forward_pull(
+        &self,
+        context: &RepositoryContext,
+        remote: &str,
+        branch: &str,
+        expected: &ExpectedState,
+        operation: &Operation,
+    ) -> AppResult<()> {
+        let token = &operation.cancellation;
+        let id = operation.snapshot.lock().expect("Git operation").id.clone();
+        let fetched_ref = format!("refs/armadra/pull/{id}");
+        let existing = self
+            .output(
+                &context.repository,
+                args(&["show-ref", "--verify", "--quiet", &fetched_ref]),
+                Duration::from_secs(15),
+                token,
+                None,
+            )
+            .await?;
+        if existing.status != Some(1) {
+            return Err(AppError::Conflict(
+                "Temporary pull reference is already in use".into(),
+            ));
+        }
+        self.mutate(
+            context,
+            vec![
+                "fetch".into(),
+                "--atomic".into(),
+                "--no-prune".into(),
+                "--no-prune-tags".into(),
+                "--no-tags".into(),
+                "--no-recurse-submodules".into(),
+                "--".into(),
+                remote.into(),
+                format!("refs/heads/{branch}:{fetched_ref}"),
+            ],
+            operation,
+        )
+        .await?;
+        let oid = self
+            .resolve(&context.repository, &fetched_ref, token)
+            .await?;
+        let merged = if self.head(&context.repository, token).await? != *expected {
+            Err(AppError::Conflict(
+                "HEAD changed during fetch; no fast-forward was attempted".into(),
+            ))
+        } else {
+            self.mutate(
+                context,
+                args(&[
+                    "merge",
+                    "--ff-only",
+                    "--no-autostash",
+                    "--no-overwrite-ignore",
+                    "--",
+                    &oid,
+                ]),
+                operation,
+            )
+            .await
+        };
+        // A cancelled/shutting-down operation may retain this uniquely named
+        // ref for inspection. Never retry the pull or force-delete a changed ref.
+        let cleanup = self
+            .mutate(
+                context,
+                args(&["update-ref", "-d", &fetched_ref, &oid]),
+                operation,
+            )
+            .await;
+        merged.and(cleanup)
     }
 }
 
@@ -1575,6 +1883,9 @@ fn malformed() -> AppError {
 fn invalid_cursor() -> AppError {
     AppError::BadRequest("History cursor does not match this repository/reference".into())
 }
+fn shutting_down() -> AppError {
+    AppError::Conflict("Git repository service is shutting down".into())
+}
 fn path_string(path: &Path) -> AppResult<String> {
     path.to_str()
         .map(str::to_owned)
@@ -1761,20 +2072,6 @@ fn command_error(output: &CommandOutput) -> AppError {
     ))
 }
 
-async fn run_git(
-    directory: &Path,
-    arguments: Vec<String>,
-    timeout: Duration,
-    token: &Cancellation,
-    mutation_started: Option<&AtomicBool>,
-) -> AppResult<Vec<u8>> {
-    let output = run_git_status(directory, arguments, timeout, token, mutation_started).await?;
-    if output.status != Some(0) {
-        return Err(command_error(&output));
-    }
-    Ok(output.stdout)
-}
-
 async fn read_output(mut reader: impl AsyncRead + Unpin, limit: usize) -> AppResult<Vec<u8>> {
     let mut output = Vec::new();
     let mut chunk = [0u8; 8192];
@@ -1798,8 +2095,13 @@ async fn run_git_status(
     timeout: Duration,
     token: &Cancellation,
     mutation_started: Option<&AtomicBool>,
+    lease: &RepositoryCommandLease,
+    caller: &Cancellation,
 ) -> AppResult<CommandOutput> {
-    if token.requested.load(Ordering::SeqCst) {
+    if token.requested.load(Ordering::SeqCst)
+        || lease.inner.stopping.requested.load(Ordering::SeqCst)
+        || caller.requested.load(Ordering::SeqCst)
+    {
         return Err(AppError::Conflict("Git operation cancelled".into()));
     }
     let mut command = Command::new("git");
@@ -1852,6 +2154,7 @@ async fn run_git_status(
     let mut child = command
         .spawn()
         .map_err(|_| AppError::Internal("Could not start Git".into()))?;
+    lease.started.store(true, Ordering::SeqCst);
     if let Some(started) = mutation_started {
         started.store(true, Ordering::SeqCst);
     }
@@ -1872,18 +2175,22 @@ async fn run_git_status(
     let result = tokio::select! {
         result = execution => result,
         _ = token.cancelled() => Err(AppError::Conflict("Git process was cancelled; verify repository/remote state before retrying".into())),
+        _ = caller.cancelled() => Err(AppError::Conflict("Git request cancelled".into())),
+        _ = lease.inner.stopping.cancelled() => Err(shutting_down()),
         _ = tokio::time::sleep(timeout) => Err(AppError::Internal("Git process timed out; verify repository/remote state before retrying".into())),
     };
     if result.is_err() {
         let _ = child.start_kill();
-        if tokio::time::timeout(Duration::from_secs(2), child.wait())
-            .await
-            .is_err()
-        {
-            return Err(AppError::Internal(
-                "Git child cleanup timed out; outcome requires verification".into(),
-            ));
+        match tokio::time::timeout(Duration::from_secs(2), child.wait()).await {
+            Ok(Ok(_)) => lease.reaped.store(true, Ordering::SeqCst),
+            _ => {
+                return Err(AppError::Internal(
+                    "Git child cleanup was not confirmed; outcome requires verification".into(),
+                ));
+            }
         }
+    } else {
+        lease.reaped.store(true, Ordering::SeqCst);
     }
     result
 }

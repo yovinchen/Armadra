@@ -125,7 +125,7 @@ async fn main() -> anyhow::Result<()> {
         reason = reason => reason.context("shutdown controller disappeared")?,
         result = &mut serving => { result?; return Ok(()); },
     };
-    let cleanup = tokio::time::timeout(Duration::from_secs(8), async {
+    let terminal_cleanup = tokio::time::timeout(Duration::from_secs(8), async {
         match reason {
             ShutdownReason::DesktopQuit => terminals.shutdown_owned_sessions().await,
             ShutdownReason::RestartSignal => {
@@ -133,8 +133,12 @@ async fn main() -> anyhow::Result<()> {
                 Ok(())
             }
         }
-    })
-    .await;
+    });
+    let (cleanup, repository_cleanup, legacy_cleanup) = tokio::join!(
+        terminal_cleanup,
+        armadra_runtime::git_api::REPOSITORIES.shutdown(Duration::from_secs(8)),
+        armadra_runtime::git::shutdown_legacy_operations(Duration::from_secs(8)),
+    );
     let cleanup = match cleanup {
         Ok(result) => result.map_err(anyhow::Error::from),
         Err(_) => Err(anyhow::anyhow!(
@@ -144,6 +148,8 @@ async fn main() -> anyhow::Result<()> {
     if let Err(error) = &cleanup {
         tracing::error!(%error, "Runtime shutdown failed");
     }
+    if let Err(error) = &repository_cleanup { tracing::error!(%error, "Repository shutdown failed"); }
+    if let Err(error) = &legacy_cleanup { tracing::error!(%error, "Git child shutdown failed"); }
     // WebSockets or an old keep-alive request cannot hold desktop Quit forever.
     // Admission has stopped and terminal creation is gated before this drain.
     match tokio::time::timeout(Duration::from_secs(2), &mut serving).await {
@@ -154,6 +160,8 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     cleanup?;
+    repository_cleanup?;
+    legacy_cleanup?;
     Ok(())
 }
 

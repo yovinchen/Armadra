@@ -129,6 +129,13 @@ async fn repository_routes_preserve_scope_permissions_and_real_operation_state()
     .await
     .unwrap();
     assert_eq!(completed["state"], "succeeded", "{completed}");
+    let (status, listed) = request(&app, "GET", &format!("{base}/operations"), Value::Null).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    assert_eq!(listed[0]["id"], id);
+    sqlx::query("UPDATE workspaces SET root_path = ? WHERE id = ?").bind(format!("{}/.", repo.display())).bind(&other_workspace.id).execute(&pool).await.unwrap();
+    let (_, hidden) = request(&app, "GET", &format!("/api/workspaces/{}/git/repository/operations", other_workspace.id), Value::Null).await;
+    assert_eq!(hidden, json!([]));
     let (_, current) = request(&app, "GET", &format!("{base}/branches"), Value::Null).await;
     assert_eq!(current["head"]["branch"], "feature/api");
     sqlx::query("UPDATE workspaces SET permissions_json = ? WHERE id = ?")

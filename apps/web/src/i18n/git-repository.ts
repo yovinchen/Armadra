@@ -2,6 +2,7 @@ import type { MessageModule } from "./index";
 
 export const gitRepository: MessageModule = {
   "zh-CN": {
+    "gitRepo.recentOperations": "本次后台运行期间的操作",
     "gitRepo.submitting": "正在提交操作…",
     "gitRepo.chooseBranch": "选择已有分支",
     "gitRepo.reviewed": "已检查状态，继续操作",
@@ -87,6 +88,7 @@ export const gitRepository: MessageModule = {
     "gitRepo.stale": "仓库已变化，请重新读取后再操作。",
   },
   en: {
+    "gitRepo.recentOperations": "Operations in this Runtime session",
     "gitRepo.submitting": "Submitting operation…",
     "gitRepo.chooseBranch": "Choose an existing branch",
     "gitRepo.reviewed": "I checked the state; enable operations",

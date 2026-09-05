@@ -125,6 +125,17 @@ pub async fn start(
     owners.insert(result.id.clone(), id);
     Ok(Json(result))
 }
+pub async fn operations(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<RepositoryQuery>,
+) -> AppResult<Json<Vec<OperationSnapshot>>> {
+    let workspace = workspace(&state, &id, false).await?;
+    let mut operations = REPOSITORIES.list_operations(Path::new(&workspace.root_path), &query.path).await?;
+    let owners = OWNERS.lock().map_err(|_| AppError::Internal("Git operation scope lock failed".into()))?;
+    operations.retain(|operation| owners.get(&operation.id) == Some(&id));
+    Ok(Json(operations))
+}
 async fn scoped_operation(
     state: &AppState,
     workspace_id: &str,

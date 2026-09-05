@@ -641,6 +641,12 @@ export const runtimeApi = {
       gitBranchSnapshotSchema,
       { signal },
     ),
+  gitRepositoryOperations: (workspaceId: string, signal?: AbortSignal) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/operations?path=.`,
+      z.array(gitRepositoryOperationSchema),
+      { signal },
+    ),
   gitRepositoryHistory: (
     workspaceId: string,
     reference = "HEAD",

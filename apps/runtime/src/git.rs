@@ -1,12 +1,15 @@
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     fs::File,
-    io::{BufReader, Read},
+    io::Read,
     path::{Path, PathBuf},
-    process::{Child, ChildStderr, Command, Stdio},
     sync::{Arc, LazyLock, Mutex},
     time::{Duration, Instant},
 };
+
+mod command;
+#[cfg(test)]
+use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -14,8 +17,8 @@ use uuid::Uuid;
 use crate::{
     error::{AppError, AppResult},
     security::{
-        canonical_directory, prepare_new_directory, redact_secrets, resolve_in_root,
-        valid_directory_name, workspace_relative_path,
+        canonical_directory, prepare_new_directory, resolve_in_root, valid_directory_name,
+        workspace_relative_path,
     },
 };
 
@@ -84,15 +87,23 @@ fn repo_context(workspace_root: &Path, requested: &str) -> AppResult<Option<Repo
     if !requested_directory.is_dir() {
         return Err(AppError::BadRequest("Git path must be a directory".into()));
     }
-    let inside = git(
-        &requested_directory,
-        &["rev-parse", "--is-inside-work-tree"],
-    );
-    if !inside.is_ok_and(|output| output.trim() == "true") {
+    let mut process = command::git_command();
+    process
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .current_dir(&requested_directory);
+    let inside = command::run(process, Duration::from_secs(30))?;
+    if !inside.status.success() {
+        let error = String::from_utf8_lossy(&inside.stderr);
+        if error.contains("not a git repository") {
+            return Ok(None);
+        }
+        return Err(AppError::Internal(command::sanitize(&error)));
+    }
+    if String::from_utf8_lossy(&inside.stdout).trim() != "true" {
         return Ok(None);
     }
     let repository = git(&requested_directory, &["rev-parse", "--show-toplevel"])?;
-    let repository = Path::new(repository.trim())
+    let repository = Path::new(repository.strip_suffix('\n').unwrap_or(&repository))
         .canonicalize()
         .map_err(|_| AppError::Internal("Git repository root cannot be resolved".into()))?;
     if repository != workspace_root && !repository.starts_with(&workspace_root) {
@@ -634,7 +645,7 @@ pub fn commit(
     paths: Option<&[String]>,
 ) -> AppResult<CommitResult> {
     let message = message.trim();
-    if message.is_empty() || message.len() > 10_000 {
+    if message.is_empty() || message.len() > 10_000 || message.contains('\0') {
         return Err(AppError::BadRequest("Commit message is invalid".into()));
     }
     let context = require_repository(workspace_root)?;
@@ -648,12 +659,9 @@ pub fn commit(
         args.push("--");
         args.extend(committed.iter().map(String::as_str));
     }
-    let output = Command::new("git")
-        .args(["-c", "core.quotepath=false"])
-        .args(&args)
-        .current_dir(&context.repository)
-        .output()
-        .map_err(|error| AppError::Internal(format!("Could not start Git: {error}")))?;
+    let mut process = command::git_command();
+    process.args(&args).current_dir(&context.repository);
+    let output = command::run(process, Duration::from_secs(120))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -664,7 +672,8 @@ pub fn commit(
         };
         // "nothing to commit" is a user error, not a runtime failure.
         return Err(AppError::BadRequest(format!(
-            "Git could not commit: {detail}"
+            "Git could not commit: {}",
+            command::sanitize(detail)
         )));
     }
     let summary = String::from_utf8_lossy(&output.stdout).trim().to_owned();
@@ -758,7 +767,7 @@ struct CloneJob {
     error: Option<String>,
     target: PathBuf,
     name: String,
-    child: Arc<Mutex<Child>>,
+    control: Arc<command::Control>,
     /// Set by `cancel_clone` so the reader thread reports a cancel, not a crash.
     cancelled: bool,
     finished_at: Option<Instant>,
@@ -848,31 +857,36 @@ pub fn start_clone(url: &str, parent: &str, name: Option<&str>) -> AppResult<Clo
 /// The half that actually runs Git, split out so tests can point it at a local
 /// bare repository without loosening [`validate_clone_url`].
 fn spawn_clone_job(url: &str, name: &str, target: PathBuf) -> AppResult<CloneStarted> {
-    let mut child = Command::new("git")
+    let mut process = command::git_command();
+    process
         .args(["clone", "--progress", "--"])
         .arg(url)
-        .arg(&target)
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_ASKPASS", "")
-        .env("SSH_ASKPASS", "")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| AppError::Internal(format!("Could not start Git: {error}")))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| AppError::Internal("Git produced no output stream".into()))?;
+        .arg(&target);
+    spawn_clone_process(process, name, target)
+}
 
+fn spawn_clone_process(
+    process: std::process::Command,
+    name: &str,
+    target: PathBuf,
+) -> AppResult<CloneStarted> {
+    let registration = command::register()?;
+    let control = registration.control.clone();
     let job_id = Uuid::now_v7().to_string();
-    let child = Arc::new(Mutex::new(child));
     {
         let mut registry = jobs();
-        registry.retain(|_, job| match job.finished_at {
-            Some(at) => at.elapsed() < CLONE_RETENTION,
-            None => true,
+        registry.retain(|_, job| {
+            job.finished_at
+                .is_none_or(|at| at.elapsed() < CLONE_RETENTION)
         });
+        if registry
+            .values()
+            .filter(|job| job.state == CloneState::Running)
+            .count()
+            >= 16
+        {
+            return Err(AppError::Conflict("Too many active clone jobs".into()));
+        }
         registry.insert(
             job_id.clone(),
             CloneJob {
@@ -881,100 +895,94 @@ fn spawn_clone_job(url: &str, name: &str, target: PathBuf) -> AppResult<CloneSta
                 error: None,
                 target: target.clone(),
                 name: name.to_owned(),
-                child: Arc::clone(&child),
+                control,
                 cancelled: false,
                 finished_at: None,
             },
         );
     }
-
-    spawn_clone_reader(job_id.clone(), stderr, Arc::clone(&child));
-    spawn_clone_watchdog(job_id.clone(), child);
-
+    let id = job_id.clone();
+    let spawned = std::thread::Builder::new()
+        .name("armadra-clone".into())
+        .spawn(move || {
+            let mut progress = CloneProgress {
+                job_id: id.clone(),
+                buffer: Vec::new(),
+            };
+            let output = command::run_registered(
+                process,
+                CLONE_TIMEOUT,
+                &registration,
+                Some(Box::new(move |chunk| progress.push(chunk))),
+            );
+            let mut registry = jobs();
+            let Some(job) = registry.get_mut(&id) else {
+                return;
+            };
+            job.finished_at = Some(Instant::now());
+            if job.cancelled || registration.control.is_cancelled() {
+                job.state = CloneState::Error;
+                job.error = Some(
+                    "Git clone cancelled; any partial destination was kept for inspection".into(),
+                );
+            } else {
+                match output {
+                    Ok(output) if output.status.success() => job.state = CloneState::Done,
+                    Ok(_) => {
+                        job.state = CloneState::Error;
+                        job.error = Some(
+                            job.lines
+                                .back()
+                                .cloned()
+                                .unwrap_or_else(|| "Git clone failed".into()),
+                        );
+                    }
+                    Err(error) => {
+                        job.state = CloneState::Error;
+                        job.error = Some(command::sanitize(&error.to_string()));
+                    }
+                }
+            }
+        });
+    if spawned.is_err() {
+        jobs().remove(&job_id);
+        return Err(AppError::Internal(
+            "Could not start the clone process monitor".into(),
+        ));
+    }
     Ok(CloneStarted { job_id, target })
 }
 
-/// `git clone --progress` separates progress updates with `\r` and finished
-/// phases with `\n`, so both count as line breaks here.
-fn spawn_clone_reader(job_id: String, stderr: ChildStderr, child: Arc<Mutex<Child>>) {
-    std::thread::spawn(move || {
-        let mut reader = BufReader::new(stderr);
-        let mut buffer = Vec::new();
-        let mut byte = [0_u8; 1];
-        loop {
-            match reader.read(&mut byte) {
-                Ok(0) => break,
-                Ok(_) => {
-                    if byte[0] == b'\r' || byte[0] == b'\n' {
-                        push_clone_line(&job_id, &mut buffer);
-                    } else if buffer.len() < 4_096 {
-                        buffer.push(byte[0]);
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-        push_clone_line(&job_id, &mut buffer);
-
-        let status = child
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .wait();
-        let mut registry = jobs();
-        let Some(job) = registry.get_mut(&job_id) else {
-            return;
-        };
-        if job.state != CloneState::Running {
-            return;
-        }
-        job.finished_at = Some(Instant::now());
-        match status {
-            Ok(status) if status.success() && !job.cancelled => job.state = CloneState::Done,
-            Ok(_) => {
-                job.state = CloneState::Error;
-                if job.error.is_none() {
-                    job.error = Some(
-                        job.lines
-                            .back()
-                            .cloned()
-                            .unwrap_or_else(|| "git clone failed".to_owned()),
-                    );
-                }
-            }
-            Err(error) => {
-                job.state = CloneState::Error;
-                job.error = Some(error.to_string());
-            }
-        }
-    });
+/// NUL-free display lines stay bounded even when a remote never writes a newline.
+/// Sanitizing at most 20 completed lines per chunk also bounds callback work.
+struct CloneProgress {
+    job_id: String,
+    buffer: Vec<u8>,
 }
-
-fn spawn_clone_watchdog(job_id: String, child: Arc<Mutex<Child>>) {
-    std::thread::spawn(move || {
-        let deadline = Instant::now() + CLONE_TIMEOUT;
-        loop {
-            std::thread::sleep(Duration::from_secs(1));
-            {
-                let registry = jobs();
-                match registry.get(&job_id) {
-                    Some(job) if job.state == CloneState::Running => {}
-                    _ => return,
+impl CloneProgress {
+    fn push(&mut self, bytes: &[u8]) {
+        let mut completed = VecDeque::new();
+        for byte in bytes {
+            if matches!(*byte, b'\r' | b'\n') {
+                if !self.buffer.is_empty() {
+                    if completed.len() == CLONE_MAX_LINES {
+                        completed.pop_front();
+                    }
+                    completed.push_back(std::mem::take(&mut self.buffer));
                 }
-            }
-            if Instant::now() >= deadline {
-                let _ = child
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner())
-                    .kill();
-                let mut registry = jobs();
-                if let Some(job) = registry.get_mut(&job_id) {
-                    job.cancelled = true;
-                    job.error = Some("git clone timed out".to_owned());
-                }
-                return;
+            } else if self.buffer.len() < 4096 {
+                self.buffer.push(*byte);
             }
         }
-    });
+        for mut line in completed {
+            push_clone_line(&self.job_id, &mut line);
+        }
+    }
+}
+impl Drop for CloneProgress {
+    fn drop(&mut self) {
+        push_clone_line(&self.job_id, &mut self.buffer);
+    }
 }
 
 fn push_clone_line(job_id: &str, buffer: &mut Vec<u8>) {
@@ -986,7 +994,7 @@ fn push_clone_line(job_id: &str, buffer: &mut Vec<u8>) {
     if line.is_empty() {
         return;
     }
-    let line = redact_secrets(&line);
+    let line = command::sanitize(&line);
     let mut registry = jobs();
     if let Some(job) = registry.get_mut(job_id) {
         if job.lines.len() == CLONE_MAX_LINES {
@@ -1010,10 +1018,11 @@ pub fn clone_status(job_id: &str) -> AppResult<CloneStatus> {
     })
 }
 
-/// Kill a running clone. The half-written directory is removed so the same
-/// target can be retried straight away.
+/// Request cancellation of exactly this clone's child. A final destination is
+/// user-visible and may have changed, so cancellation never recursively deletes
+/// it. The actor confirms process completion before changing the job state.
 pub fn cancel_clone(job_id: &str) -> AppResult<()> {
-    let (child, target) = {
+    let control = {
         let mut registry = jobs();
         let job = registry
             .get_mut(job_id)
@@ -1022,33 +1031,29 @@ pub fn cancel_clone(job_id: &str) -> AppResult<()> {
             return Ok(());
         }
         job.cancelled = true;
-        job.error = Some("git clone cancelled".to_owned());
-        (Arc::clone(&job.child), job.target.clone())
+        job.error = Some(
+            "Git clone cancellation requested; any partial destination will be preserved".into(),
+        );
+        job.control.clone()
     };
-    let _ = child
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .kill();
-    // The reader thread flips the state once the process is reaped; removing
-    // the partial checkout here is best effort.
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(200));
-        let _ = std::fs::remove_dir_all(&target);
-    });
+    control.cancel();
     Ok(())
 }
 
+/// Explicit Runtime shutdown: reject new legacy Git/clone commands and await
+/// owned child cleanup. Normal caller cancellation never releases process ownership.
+pub async fn shutdown_legacy_operations(timeout: Duration) -> AppResult<()> {
+    command::shutdown(timeout).await
+}
+
 fn git(directory: &Path, args: &[&str]) -> AppResult<String> {
-    let output = Command::new("git")
-        .args(["-c", "core.quotepath=false"])
-        .args(args)
-        .current_dir(directory)
-        .output()
-        .map_err(|error| AppError::Internal(format!("Could not start Git: {error}")))?;
+    let mut process = command::git_command();
+    process.args(args).current_dir(directory);
+    let output = command::run(process, Duration::from_secs(30))?;
     if !output.status.success() {
-        return Err(AppError::Internal(
-            String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-        ));
+        return Err(AppError::Internal(command::sanitize(
+            &String::from_utf8_lossy(&output.stderr),
+        )));
     }
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
@@ -1807,5 +1812,98 @@ mod untracked_binary_tests {
         assert_eq!(text.additions, 1);
         assert!(text.previewable);
         assert_eq!(text.patch, "+hello");
+    }
+}
+
+#[cfg(all(test, unix))]
+mod clone_cancellation_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    fn checked_git(directory: &Path, arguments: &[&str]) {
+        let mut process = command::git_command();
+        process
+            .args([
+                "-c",
+                "core.hooksPath=/dev/null",
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "protocol.allow=never",
+                "-c",
+                "protocol.file.allow=always",
+            ])
+            .args(arguments)
+            .current_dir(directory);
+        let result = command::run(process, Duration::from_secs(3)).unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+
+    #[test]
+    fn cancellation_reaps_its_clone_and_preserves_user_visible_destination() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        let target = root.path().join("target");
+        let hooks = root.path().join("hooks");
+        std::fs::create_dir(&source).unwrap();
+        std::fs::create_dir(&hooks).unwrap();
+        checked_git(&source, &["init", "--initial-branch=main"]);
+        checked_git(&source, &["config", "user.name", "Clone Test"]);
+        checked_git(&source, &["config", "user.email", "clone@example.invalid"]);
+        std::fs::write(source.join("tracked.txt"), "cloned data").unwrap();
+        checked_git(&source, &["add", "tracked.txt"]);
+        checked_git(&source, &["commit", "-m", "seed"]);
+        let hook = hooks.join("post-checkout");
+        std::fs::write(
+            &hook,
+            "#!/bin/sh\nprintf ready > \"$PWD/clone-hook-ready\"\nsleep 1\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let mut process = command::git_command();
+        process
+            .args([
+                "-c",
+                "protocol.allow=never",
+                "-c",
+                "protocol.file.allow=always",
+                "-c",
+            ])
+            .arg(format!("core.hooksPath={}", hooks.display()))
+            .args(["clone", "--progress", "--"])
+            .arg(&source)
+            .arg(&target);
+        let clone = spawn_clone_process(process, "target", target.clone()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !target.join("clone-hook-ready").exists() {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        std::fs::write(target.join("user-added.txt"), "keep this").unwrap();
+        cancel_clone(&clone.job_id).unwrap();
+        loop {
+            let status = clone_status(&clone.job_id).unwrap();
+            if status.state != CloneState::Running {
+                assert_eq!(status.state, CloneState::Error);
+                assert!(status.error.unwrap().contains("kept for inspection"));
+                break;
+            }
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(
+            std::fs::read_to_string(target.join("user-added.txt")).unwrap(),
+            "keep this"
+        );
+        assert_eq!(
+            std::fs::read_to_string(target.join("tracked.txt")).unwrap(),
+            "cloned data"
+        );
+        cancel_clone(&clone.job_id).unwrap();
+        assert!(target.is_dir());
     }
 }

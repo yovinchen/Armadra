@@ -130,6 +130,7 @@ function view(tab: "branches" | "history" | "worktrees" = "branches") {
 beforeEach(() => {
   usePreferencesStore.setState({ locale: "en" });
   vi.spyOn(runtimeApi, "gitRepositoryBranches").mockResolvedValue(snapshot());
+  vi.spyOn(runtimeApi, "gitRepositoryOperations").mockResolvedValue([]);
   vi.spyOn(runtimeApi, "gitRepositoryOperation").mockImplementation(
     () => new Promise(() => {}),
   );
@@ -148,6 +149,27 @@ async function confirm() {
 }
 
 describe("repository operations", () => {
+  it("restores a running operation from the Runtime after a fresh page query cache", async () => {
+    const restored = operation(
+      { kind: "fetch", remote: "origin", prune: false },
+      "running",
+    );
+    vi.mocked(runtimeApi.gitRepositoryOperations).mockResolvedValue([restored]);
+    const cancel = vi
+      .spyOn(runtimeApi, "gitRepositoryCancel")
+      .mockResolvedValue({ ...restored, state: "cancelled" });
+    view();
+    const region = await screen.findByRole("region", {
+      name: "Operation status",
+    });
+    expect(region.textContent).toContain("origin");
+    fireEvent.click(
+      within(region).getByRole("button", { name: "Request cancellation" }),
+    );
+    await waitFor(() =>
+      expect(cancel).toHaveBeenCalledWith("workspace-one", restored.id),
+    );
+  });
   it("confirms the branch and observed HEAD, then waits for the actual result and supports cancellation", async () => {
     const action: GitRepositoryAction = {
       kind: "createBranch",

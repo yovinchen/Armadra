@@ -267,3 +267,10 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - 校验数据库/资产哈希、账本结构与原始 success 类型、已知 SQL 校验和、完整 schema、实体 ID、画布摘要、备注、外键及路径；拒绝未知 journal companions、符号链接和越界。原始 SQLite 存储类型通过 Protobuf 原样保存，时间文本不被驱动转换。
 - 多批导入具有稳定操作 ID、幂等收据、归属和事件记录；故障后重放不重复写入。导入资产留在私有 staging，报告和历史兼容数据可核验；尚未激活任何工作空间或转移业务权威。
 - Go Host CGO=0 全套测试通过；真实 fixture 含 300 条日志，覆盖跨批失败恢复、原库字节不变、精确大整数/二进制/时间/NULL、资产缺失及篡改拒绝；迁移包 vet 通过。真实 Rust export → Go import 两次重放冒烟通过。Windows 原生 ACL/文件系统验收仍待独立 runner。
+
+## 连续实施：Git 操作恢复与进程清理
+
+- 后台新增受工作空间 ID、根目录与仓库共同约束的操作列表；新页面可恢复正在执行的任务，面板显示本次 Runtime 生命周期内的历史与取消入口。列表不声称跨 Runtime 重启持久化。
+- RepositoryService 统一登记读写命令、外部 AI/片段 runner 及仓库 guard；停止时拒绝新工作、取消并等待受管 child 回收。Runtime 将 Git 与终端清理并行执行，未确认清理明确报错并非零退出。旧 Git/clone runner 增加超时、输出上限和受管取消，克隆取消保留部分目录供用户处理。
+- ff-only pull 固定本次获取 OID，合并禁止自动 stash 与覆盖 ignored 文件，常规完成路径按预期 OID 清理自己的临时 ref；取消或停机可能保留诊断 ref，不自动重试未知结果。
+- 24 项真实 Git 仓库回归、路由权限/同路径不同工作空间隔离、前端 10 项含新 Query cache 恢复及类型检查通过。真实 child 测试覆盖排队、读取、写入、HTTP 取消、外部 lease、超时和未确认回收；旧 Git/clone 32 项回归已通过。

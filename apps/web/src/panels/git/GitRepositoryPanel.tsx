@@ -131,6 +131,44 @@ function RepositorySession({
       update(current ?? emptyTracking),
     );
   const operationId = tracking.operation?.id;
+  const recent = useQuery({
+    queryKey: [
+      "git-repository-operations",
+      workspaceId,
+      snapshot.repositoryId,
+      snapshot.repositoryPath,
+    ],
+    queryFn: async ({ signal }) => {
+      const items = await runtimeApi.gitRepositoryOperations(
+        workspaceId,
+        signal,
+      );
+      if (
+        items.some(
+          (item) =>
+            item.repositoryId !== snapshot.repositoryId ||
+            item.repositoryPath !== snapshot.repositoryPath,
+        )
+      )
+        throw new Error(t("gitRepo.stale"));
+      return items;
+    },
+    retry: false,
+    refetchInterval: (query) =>
+      query.state.data?.some(running) ? 1000 : false,
+  });
+  useEffect(() => {
+    if (!recent.data?.length) return;
+    const restored = recent.data.find(running) ?? recent.data[0];
+    if (!restored) return;
+    updateTracking((current) =>
+      current.operation || current.pending || current.uncertain
+        ? current
+        : { ...current, operation: restored },
+    );
+    // This keyed component fixes the workspace and repository scope.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recent.data]);
   const operationKey = [
     "git-repository-operation",
     workspaceId,
@@ -169,6 +207,7 @@ function RepositorySession({
       "git-repository-branches",
       "git-repository-history",
       "git-repository-worktrees",
+      "git-repository-operations",
     ])
       void client.invalidateQueries({ queryKey: [name, workspaceId] });
   };
@@ -276,7 +315,11 @@ function RepositorySession({
   });
   const current =
     operation.data?.id === operationId ? operation.data : tracking.operation;
-  const busy = tracking.pending || tracking.uncertain || running(current);
+  const busy =
+    tracking.pending ||
+    tracking.uncertain ||
+    running(current) ||
+    Boolean(recent.data?.some(running));
   const request = (action: GitRepositoryAction) => {
     if (!busy && !stale)
       setConfirmation({ action, expected: { ...snapshot.head } });
@@ -287,6 +330,37 @@ function RepositorySession({
         <Button size="sm" variant="outline" onClick={invalidate}>
           {t("gitRepo.refresh")}
         </Button>
+        {recent.error && (
+          <ReadError error={recent.error} retry={() => void recent.refetch()} />
+        )}
+        {Boolean(recent.data?.length) && (
+          <details>
+            <summary className="cursor-pointer">
+              {t("gitRepo.recentOperations")}
+            </summary>
+            <div className="max-h-36 space-y-1 overflow-y-auto py-2">
+              {recent.data?.map((item) => (
+                <Button
+                  key={item.id}
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto w-full justify-start whitespace-normal text-left"
+                  disabled={tracking.pending || tracking.uncertain}
+                  onClick={() =>
+                    updateTracking((current) => ({
+                      ...current,
+                      operation: item,
+                    }))
+                  }
+                >
+                  {t(`gitRepo.${item.action.kind}`)} ·{" "}
+                  {t(`gitRepo.state.${item.state}`)} ·{" "}
+                  {actionTarget(item.action)}
+                </Button>
+              ))}
+            </div>
+          </details>
+        )}
         {tracking.pending && <p role="status">{t("gitRepo.submitting")}</p>}
         {tracking.error && (
           <p role="alert" className="break-words text-destructive">
