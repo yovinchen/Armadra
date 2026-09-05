@@ -19,11 +19,6 @@ pub mod file_search;
 pub mod file_watch;
 pub mod files;
 pub mod git;
-pub mod git_api;
-pub mod git_discovery;
-pub mod git_hunks;
-pub mod git_message;
-pub mod git_repository;
 pub mod handoff;
 pub mod hook;
 pub mod imports;
@@ -42,6 +37,11 @@ pub mod sqlite_snapshot;
 pub mod terminal;
 pub mod usage;
 pub mod worker;
+
+pub use crate::git::{
+    api as git_api, discovery as git_discovery, hunks as git_hunks, message as git_message,
+    repository as git_repository,
+};
 
 use axum::{
     Router,
