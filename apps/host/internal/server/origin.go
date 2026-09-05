@@ -2,8 +2,10 @@ package server
 
 import (
 	"armadra.local/host/internal/automationhost"
+	"armadra.local/host/internal/externalservice"
 	"armadra.local/host/internal/githubhost"
 	"armadra.local/host/internal/identity"
+	"armadra.local/host/internal/runtimelink"
 	"errors"
 	"net"
 	"net/http"
@@ -25,6 +27,15 @@ type Options struct {
 	// GitHub is nil when this Host has no credential service assembled. Its
 	// methods then answer UNSUPPORTED, never an empty Issue list.
 	GitHub *githubhost.Service
+	// Web is the built front end this Host serves, or nil. It is the one
+	// surface an unpaired device may reach: the shell is also the pairing page.
+	Web *WebRoot
+	// Runtime forwards an authenticated device's /api requests and streams to
+	// the local execution service. Nil means this Host proxies nothing, and
+	// every /api path answers NOT_FOUND rather than an empty success.
+	Runtime *runtimelink.Resolver
+	// External is the "serve to my other devices" switch. Nil hides its route.
+	External *externalservice.Manager
 }
 
 // ParseOrigin validates a serialized origin and returns its canonical spelling.

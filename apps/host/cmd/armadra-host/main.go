@@ -23,12 +23,14 @@ import (
 	"armadra.local/host/internal/automationhost"
 	"armadra.local/host/internal/daemon"
 	"armadra.local/host/internal/endpoints"
+	"armadra.local/host/internal/externalservice"
 	"armadra.local/host/internal/githubcred"
 	"armadra.local/host/internal/githubhost"
 	"armadra.local/host/internal/hoststate"
 	auth "armadra.local/host/internal/identity"
 	"armadra.local/host/internal/localipc"
 	"armadra.local/host/internal/migration"
+	"armadra.local/host/internal/runtimelink"
 	"armadra.local/host/internal/server"
 	"armadra.local/host/internal/storage"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -57,8 +59,17 @@ type config struct {
 	address      string
 	dataDir      string
 	endpointsDir string
-	origins      allowedOriginFlags
-	output       string
+	// webDir is the built front end this Host serves over its HTTPS origin.
+	// Empty means the Host serves protocol routes only.
+	webDir string
+	// externalService is "on", "off", or empty to leave the persisted switch
+	// exactly as the operator last set it. externalAddress names the interface
+	// to serve; naming a non-loopback address on the command line is itself the
+	// acknowledgement that this Host becomes reachable from the local network.
+	externalService string
+	externalAddress string
+	origins         allowedOriginFlags
+	output          string
 	// Both must be given together to enable scheduling. Neither is inferred:
 	// a Host never guesses which binary is allowed to execute the owner's work.
 	workerBinary   string
@@ -92,6 +103,9 @@ func parseConfig(args []string) (config, error) {
 		flags.StringVar(&c.publicOrigin, "public-origin", "", "Exact HTTPS origin clients use for this Host")
 		flags.StringVar(&c.address, "listen", "127.0.0.1:43121", "Local metadata listener (loopback IP only); \"none\" serves control IPC only")
 		flags.StringVar(&c.endpointsDir, "endpoints-dir", "", "Absolute directory holding the shared endpoints.json (default: the data directory)")
+		flags.StringVar(&c.webDir, "serve-web", "", "Directory holding the built front end to serve on the HTTPS origin")
+		flags.StringVar(&c.externalService, "external-service", "", "Turn serving other devices \"on\" or \"off\" (default: keep the saved switch)")
+		flags.StringVar(&c.externalAddress, "external-address", "", "Interface IP the external service listens on (a non-loopback IP also allows the local network)")
 		flags.Var(&c.origins, "allow-origin", "Exact browser origin allowed to read metadata (repeatable)")
 		flags.StringVar(&c.workerBinary, "worker-binary", "", "Absolute path to the Rust Worker executable that runs scheduled commands")
 		flags.StringVar(&c.workerStateDir, "worker-state-dir", "", "Absolute private directory for the Worker's own execution journal")
@@ -121,10 +135,10 @@ func parseConfig(args []string) (config, error) {
 		// "none" is the desktop shape: the shell reaches this Host over the
 		// same-user control IPC, and nothing on the machine can reach it over
 		// TCP. Serving the outside world stays an explicit act.
-		if c.address == noListener {
-			if c.certFile != "" || c.keyFile != "" || c.publicOrigin != "" {
-				return c, fmt.Errorf("TLS requires a --listen address")
-			}
+		// "none" plus TLS is the phone-only shape: nothing is listening until
+		// the operator turns the external service on, and when they do, the
+		// switch owns the only listener.
+		if c.address == noListener && c.certFile == "" && c.keyFile == "" && c.publicOrigin == "" {
 			if len(c.origins) != 0 {
 				return c, fmt.Errorf("--allow-origin has no effect without a --listen address")
 			}
@@ -148,12 +162,41 @@ func parseConfig(args []string) (config, error) {
 			if err != nil {
 				return c, err
 			}
-			host, _, err := net.SplitHostPort(c.address)
-			ip := net.ParseIP(host)
-			if err != nil || ip == nil || ip.IsUnspecified() {
-				return c, fmt.Errorf("TLS listener requires an explicit interface IP")
+			if c.address != noListener {
+				host, _, err := net.SplitHostPort(c.address)
+				ip := net.ParseIP(host)
+				if err != nil || ip == nil || ip.IsUnspecified() {
+					return c, fmt.Errorf("TLS listener requires an explicit interface IP")
+				}
 			}
-		} else if err := server.ValidateListenAddress(c.address); err != nil {
+		} else if c.address != noListener {
+			if err := server.ValidateListenAddress(c.address); err != nil {
+				return c, err
+			}
+		}
+		switch c.externalService {
+		case "", "on", "off":
+		default:
+			return c, fmt.Errorf("--external-service accepts \"on\" or \"off\"")
+		}
+		if c.externalAddress != "" {
+			if ip := net.ParseIP(c.externalAddress); ip == nil || ip.IsUnspecified() {
+				return c, fmt.Errorf("--external-address must be an explicit interface IP")
+			}
+		}
+		if (c.externalService == "on" || c.externalAddress != "") && c.publicOrigin == "" {
+			return c, fmt.Errorf("the external service requires --tls-cert, --tls-key and --public-origin")
+		}
+	}
+	// A front end is only reachable over the authenticated HTTPS origin. Serving
+	// it from a plain loopback Host would put the pairing page somewhere no
+	// device can actually finish pairing from.
+	if c.webDir != "" {
+		if c.publicOrigin == "" {
+			return c, fmt.Errorf("--serve-web requires --tls-cert, --tls-key and --public-origin")
+		}
+		var err error
+		if c.webDir, err = filepath.Abs(c.webDir); err != nil {
 			return c, err
 		}
 	}
@@ -315,6 +358,39 @@ func serveHost(parent context.Context, c config) (err error) {
 	if err != nil {
 		return err
 	}
+	// The front end and the Runtime proxy are the "reach this Host from my
+	// phone" half of H02. Both exist only on the authenticated HTTPS origin;
+	// a mistyped bundle path fails here rather than as a 404 discovered later.
+	var web *server.WebRoot
+	if c.webDir != "" {
+		if web, err = server.OpenWebRoot(c.webDir); err != nil {
+			return err
+		}
+		defer func() { err = errors.Join(err, web.Close()) }()
+	}
+	// The Runtime publishes its own address into the same endpoints document
+	// this Host writes, so no port is ever assumed.
+	var link *runtimelink.Resolver
+	if c.publicOrigin != "" {
+		link = runtimelink.New(endpointsDir)
+	}
+	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link}
+	// The switch binds its own listener with the same routes. `options` is
+	// captured by reference, so the manager it is about to be given is the one
+	// this closure serves with.
+	external := externalservice.New(c.dataDir, c.publicOrigin, tlsConfig, func(ctx context.Context, listener net.Listener) error {
+		return server.ServeWithOptions(ctx, listener, identity, options)
+	})
+	options.External = external
+	defer func() { err = errors.Join(err, external.Close()) }()
+	if externalErr := applyExternalSwitch(ctx, c, external); externalErr != nil {
+		// A switch that cannot bind is reported and left off. The Host keeps
+		// serving whatever it already had rather than refusing to start.
+		fmt.Fprintln(os.Stderr, "Armadra: could not start the external service:", externalErr)
+	}
+	if status := external.Status(); status.Enabled && status.BoundAddress != "" {
+		fmt.Printf("Armadra serving devices on %s at %s\n", status.BoundAddress, status.PublicOrigin)
+	}
 	workers := 1
 	if listener != nil {
 		workers++
@@ -328,7 +404,7 @@ func serveHost(parent context.Context, c config) (err error) {
 	}
 	if listener != nil {
 		go func() {
-			finished <- server.ServeWithOptions(ctx, listener, identity, server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories})
+			finished <- server.ServeWithOptions(ctx, listener, identity, options)
 		}()
 	}
 	go func() {
@@ -364,6 +440,31 @@ func serveHost(parent context.Context, c config) (err error) {
 		failures = append(failures, <-finished)
 	}
 	return errors.Join(failures...)
+}
+
+// applyExternalSwitch reconciles the command line with the saved switch. With
+// neither --external-service nor --external-address given, the operator's own
+// last choice is restored untouched; the command line never silently widens it.
+func applyExternalSwitch(ctx context.Context, c config, external *externalservice.Manager) error {
+	if c.externalService == "" && c.externalAddress == "" {
+		return external.Restore(ctx)
+	}
+	status := external.Status()
+	next := externalservice.Config{Enabled: status.Enabled, Address: status.Address, Port: status.Port, AllowLAN: status.AllowLAN}
+	switch c.externalService {
+	case "on":
+		next.Enabled = true
+	case "off":
+		next.Enabled = false
+	}
+	if c.externalAddress != "" {
+		next.Address = c.externalAddress
+		// Naming an interface on the command line is the acknowledgement; a
+		// loopback address explicitly withdraws it again.
+		next.AllowLAN = !net.ParseIP(c.externalAddress).IsLoopback()
+	}
+	_, err := external.Apply(ctx, next)
+	return err
 }
 
 // startAutomation returns nil when the operator did not configure an execution

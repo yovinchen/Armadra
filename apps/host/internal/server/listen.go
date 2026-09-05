@@ -39,7 +39,7 @@ func localAddress(address string) (*net.TCPAddr, error) {
 
 // Serve ends only on host shutdown, not when a client disconnects.
 func Serve(ctx context.Context, listener net.Listener, identity Identity) error {
-	return serve(ctx, listener, NewHandler(identity), 5*time.Second)
+	return serve(ctx, listener, NewHandler(identity), 5*time.Second, false)
 }
 
 // ServeWithOptions serves the same metadata routes with explicit browser origins.
@@ -48,10 +48,14 @@ func ServeWithOptions(ctx context.Context, listener net.Listener, identity Ident
 	if err != nil {
 		return err
 	}
-	return serve(ctx, listener, handler, 5*time.Second)
+	return serve(ctx, listener, handler, 5*time.Second, options.Runtime != nil)
 }
 
-func serve(ctx context.Context, listener net.Listener, handler http.Handler, drainTimeout time.Duration) error {
+// streaming relaxes the whole-request deadlines. A terminal attached from a
+// phone lives for hours and a file import can take minutes, so a Host that
+// forwards to the Runtime bounds the header read and the idle connection
+// instead of the exchange. A metadata-only Host keeps the tighter limits.
+func serve(ctx context.Context, listener net.Listener, handler http.Handler, drainTimeout time.Duration, streaming bool) error {
 	s := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -59,6 +63,10 @@ func serve(ctx context.Context, listener net.Listener, handler http.Handler, dra
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       30 * time.Second,
 		MaxHeaderBytes:    8 << 10,
+	}
+	if streaming {
+		s.ReadTimeout, s.WriteTimeout = 0, 0
+		s.IdleTimeout = 120 * time.Second
 	}
 	stopped := make(chan struct{})
 	shutdownDone := make(chan struct{})

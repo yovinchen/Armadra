@@ -102,6 +102,36 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			identityRequest(w, r, identity, options.Identity)
 			return
 		}
+		// Everything below this line is reachable only once the Host actually
+		// has browser authentication configured: an HTTPS origin, a
+		// certificate, and an identity service to check devices against.
+		browser := options.Identity != nil && options.PublicOrigin != "" && r.TLS != nil
+		if options.External != nil && externalServiceRoute(r.URL.Path) {
+			if !browser {
+				writeJSONError(w, http.StatusNotImplemented, "UNSUPPORTED", "The external service switch requires configured HTTPS")
+				return
+			}
+			device, ok := deviceOrigin(r, origin, options.PublicOrigin)
+			if !ok {
+				writeJSONError(w, http.StatusForbidden, "PERMISSION_DENIED", "An exact same-origin request is required")
+				return
+			}
+			externalServiceHandler(w, r, identity, options.Identity, options.External, device)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, RuntimePrefix) {
+			if !browser || options.Runtime == nil {
+				writeError(w, http.StatusNotFound, "NOT_FOUND", "Unknown endpoint")
+				return
+			}
+			device, ok := deviceOrigin(r, origin, options.PublicOrigin)
+			if !ok {
+				writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "An exact same-origin request is required")
+				return
+			}
+			runtimeRequest(w, r, identity, options.Identity, options.Runtime, device)
+			return
+		}
 		// Defined but unimplemented surfaces answer UNSUPPORTED rather than
 		// falling through to NOT_FOUND, which a client cannot tell apart from
 		// an older Host that never heard of the method.
@@ -123,6 +153,16 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 		case HelloPath:
 			method = http.MethodPost
 		default:
+			// The built front end is the last resort, never a fallback for a
+			// protocol path: an unknown /rpc method must stay a protocol error
+			// instead of turning into an HTML page a client cannot parse.
+			if options.Web != nil && !protocolPath(r.URL.Path) {
+				if explicit {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+				}
+				options.Web.Serve(w, r)
+				return
+			}
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "Unknown endpoint")
 			return
 		}
@@ -144,11 +184,41 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			return
 		}
 		authentication := options.Identity != nil && options.PublicOrigin != "" && r.TLS != nil
-		hello(w, r, identity, authentication, authentication && options.Automation != nil, authentication && options.GitHub != nil)
+		hello(w, r, identity, authentication, authentication && options.Automation != nil, authentication && options.GitHub != nil, authentication && options.Runtime != nil)
 	}), nil
 }
 
-func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentication, scheduling, github bool) {
+// protocolPath marks the spaces the Host answers itself. Nothing under them is
+// ever served from the static bundle.
+func protocolPath(path string) bool {
+	return strings.HasPrefix(path, "/rpc/") || strings.HasPrefix(path, RuntimePrefix) ||
+		strings.HasPrefix(path, "/host/") || path == "/health"
+}
+
+// deviceOrigin resolves the browser origin an authenticated request is bound
+// to. Browsers omit Origin on same-origin GET and HEAD, so its absence is
+// accepted only for those methods and only when the fetch metadata still says
+// the request came from this origin. A WebSocket handshake always carries an
+// Origin, and is required to.
+func deviceOrigin(r *http.Request, origin, public string) (string, bool) {
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "", "same-origin", "none":
+	default:
+		return "", false
+	}
+	if origin != "" {
+		if origin != public {
+			return "", false
+		}
+		return origin, true
+	}
+	if isWebSocketUpgrade(r) || (r.Method != http.MethodGet && r.Method != http.MethodHead) {
+		return "", false
+	}
+	return public, true
+}
+
+func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentication, scheduling, github, proxying bool) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
 		writeError(w, http.StatusMethodNotAllowed, "INVALID_ARGUMENT", "POST required")
@@ -201,6 +271,12 @@ func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentica
 	// client never opens a GitHub panel this Host cannot serve at all.
 	if github {
 		capabilities = append(capabilities, "github.issues.v1")
+	}
+	// Advertised only when a Runtime address is actually configured. A client
+	// must never read this as "the execution service is up": it means requests
+	// will be forwarded, and a Runtime that is down still answers DISCONNECTED.
+	if proxying {
+		capabilities = append(capabilities, "runtime.proxy.v1")
 	}
 	writeProto(w, http.StatusOK, &pb.HelloResponse{
 		Protocol:         &pb.ProtocolVersion{Major: ProtocolMajor, Minor: min(request.Protocol.GetMinor(), ProtocolMinor)},

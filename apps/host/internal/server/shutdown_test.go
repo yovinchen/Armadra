@@ -29,7 +29,7 @@ func TestShutdownWaitsForActiveRequest(t *testing.T) {
 			close(entered)
 			<-release
 			_, _ = io.WriteString(w, "finished")
-		}), time.Second)
+		}), time.Second, false)
 	}()
 	response := make(chan string, 1)
 	go func() {
@@ -91,7 +91,7 @@ func TestShutdownClosesRequestAfterDeadline(t *testing.T) {
 			close(entered)
 			<-r.Context().Done()
 			close(requestCancelled)
-		}), 20*time.Millisecond)
+		}), 20*time.Millisecond, false)
 	}()
 	go func() {
 		client := &http.Client{Timeout: 2 * time.Second}
