@@ -2,6 +2,7 @@
 //! lifetime; a restarted Runtime never claims an external Git sequence.
 use super::*;
 mod cherry_pick;
+mod rebase;
 pub use cherry_pick::CherryPickPreview;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,6 +43,9 @@ pub struct IntegrationSnapshot {
     pub owned: bool,
     pub session_id: Option<String>,
     pub original_head: Option<String>,
+    /// The branch a paused sequence returns to. A rebase detaches HEAD, so the
+    /// current head alone cannot show where the work belongs.
+    pub original_branch: Option<String>,
     pub target_oid: Option<String>,
     pub message: Option<String>,
     pub dirty: bool,
@@ -80,6 +84,8 @@ struct GitIntegration {
     metadata_digest: Vec<u8>,
     target_oid: Option<String>,
     original_head: Option<String>,
+    /// `refs/heads/<branch>` recorded by an in-progress rebase; None otherwise.
+    head_name: Option<String>,
     marker: Option<MarkerIdentity>,
 }
 
@@ -322,6 +328,20 @@ impl RepositoryService {
                     Recovery::Skip => "--skip",
                 },
             ]),
+            // Skip would silently drop a whole replayed commit, so a rebase
+            // only offers the two decisions the caller can actually review.
+            ("rebase", mode @ (Recovery::Continue | Recovery::Abort)) => args(&[
+                "-c",
+                "core.editor=:",
+                "-c",
+                "rerere.enabled=false",
+                "rebase",
+                if mode == Recovery::Continue {
+                    "--continue"
+                } else {
+                    "--abort"
+                },
+            ]),
             _ => {
                 return Err(AppError::Conflict(
                     "This Git operation is not managed by the current service".into(),
@@ -331,7 +351,32 @@ impl RepositoryService {
         self.mutate(context, command, operation).await?;
         let after = self.git_integration(context, token).await?;
         let head = self.head(&context.repository, token).await?;
-        if after.kind != "none" || (recovery != Recovery::Continue && head != *expected) {
+        // Abort returns a rebase to its recorded branch, not to the detached
+        // head the caller confirmed; every other kind leaves HEAD where it was.
+        let restored = if state.kind == "rebase" {
+            ExpectedState {
+                head_oid: state.original_head.clone(),
+                branch: state.original_branch.clone(),
+            }
+        } else {
+            expected.clone()
+        };
+        if state.kind == "rebase" && recovery == Recovery::Continue && after.kind == "rebase" {
+            // A replay can stop again on the next commit. That is still the
+            // same owned sequence, not a failed recovery.
+            let still_owned = self
+                .inner
+                .integrations
+                .lock()
+                .expect("Git integrations")
+                .get(&context.repository)
+                .is_some_and(|owner| owns_integration(owner, &after, &head));
+            if still_owned {
+                operation.awaiting_resolution.store(true, Ordering::SeqCst);
+                return Ok(());
+            }
+        }
+        if after.kind != "none" || (recovery != Recovery::Continue && head != restored) {
             return Err(AppError::Conflict("Git did not finish the requested recovery; inspect the current state before another action".into()));
         }
         if recovery == Recovery::Continue && state.kind == "cherryPick" {
@@ -343,6 +388,9 @@ impl RepositoryService {
                 token,
             )
             .await?;
+        }
+        if recovery == Recovery::Continue && state.kind == "rebase" {
+            self.verify_rebase(context, &state, &head, token).await?;
         }
         if recovery == Recovery::Continue && state.kind == "merge" {
             let commit = head.head_oid.as_deref().ok_or_else(malformed)?;
@@ -568,6 +616,7 @@ impl RepositoryService {
             && staged.status == Some(0)
             && unstaged.status == Some(0);
         let can_skip = owned && empty;
+        let rebase = actual.kind == "rebase";
         Ok(IntegrationSnapshot {
             repository_id: state.repository_id,
             repository_path: state.repository_path,
@@ -583,11 +632,24 @@ impl RepositoryService {
             } else {
                 actual.original_head
             },
+            original_branch: if owned {
+                owner
+                    .as_ref()
+                    .and_then(|owner| owner.original.branch.clone())
+            } else {
+                actual
+                    .head_name
+                    .as_deref()
+                    .and_then(|name| name.strip_prefix("refs/heads/"))
+                    .map(str::to_owned)
+            },
             target_oid: actual.target_oid,
+            // A rebase writes its own step message; the gate that matters is
+            // that no conflict and no unstaged edit is left behind.
             can_continue: owned
                 && conflicts.is_empty()
                 && unstaged.status == Some(0)
-                && actual.message.is_some()
+                && (rebase || actual.message.is_some())
                 && !empty,
             mainline: owned.then(|| owner.as_ref().unwrap().mainline).flatten(),
             empty,
@@ -612,6 +674,7 @@ impl RepositoryService {
             .await?;
         let git_dir = PathBuf::from(one_line(&git_dir)?);
         let mut active = Vec::new();
+        let mut rebase_directory = None;
         for (name, kind) in [
             ("rebase-merge", "rebase"),
             ("rebase-apply", "rebase"),
@@ -623,7 +686,12 @@ impl RepositoryService {
         ] {
             match git_dir.join(name).symlink_metadata() {
                 Ok(metadata) if metadata.file_type().is_symlink() => return Err(AppError::Conflict("Git integration metadata is a symlink; inspect it with Git before continuing".into())),
-                Ok(_) => active.push(kind),
+                Ok(_) => {
+                    if kind == "rebase" {
+                        rebase_directory = Some(git_dir.join(name));
+                    }
+                    active.push(kind);
+                }
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
                 Err(error) => return Err(error.into()),
             }
@@ -639,58 +707,73 @@ impl RepositoryService {
             _ => "unknown",
         }
         .to_string();
-        let (target_oid, marker) = if kind == "merge" || kind == "cherryPick" {
-            let (bytes, marker) = read_marker(&git_dir.join(if kind == "merge" {
-                "MERGE_HEAD"
-            } else {
-                "CHERRY_PICK_HEAD"
-            }))?;
-            let ids = std::str::from_utf8(&bytes)
-                .map_err(|_| malformed())?
-                .split_whitespace()
-                .collect::<Vec<_>>();
-            let oid = match ids.as_slice() {
-                [oid] if valid_oid(oid) => Some((*oid).to_owned()),
-                _ => None,
-            };
-            (oid, Some(marker))
-        } else {
-            (None, None)
-        };
-        let original_head = if kind != "none" && kind != "cherryPick" {
-            match read_marker(&git_dir.join("ORIG_HEAD")) {
-                Ok((bytes, _)) => {
-                    let oid = one_line(&bytes)?;
-                    valid_oid(oid).then(|| oid.to_owned())
-                }
-                Err(AppError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => None,
-                Err(error) => return Err(error),
+        // A rebase moves HEAD while it runs, so its identity comes from the
+        // sequence directory Git itself writes, never from the current HEAD.
+        let rebase = rebase_directory.filter(|_| kind == "rebase");
+        let (target_oid, marker) = match (kind.as_str(), &rebase) {
+            ("merge" | "cherryPick", _) => {
+                let (bytes, marker) = read_marker(&git_dir.join(if kind == "merge" {
+                    "MERGE_HEAD"
+                } else {
+                    "CHERRY_PICK_HEAD"
+                }))?;
+                (marker_oid(&bytes), Some(marker))
             }
-        } else {
-            None
+            ("rebase", Some(directory)) => match optional_marker(&directory.join("onto"))? {
+                // The identity file is orig-head: it is written once when the
+                // sequence starts and survives every step of the replay.
+                Some((bytes, _)) => (
+                    marker_oid(&bytes),
+                    optional_marker(&directory.join("orig-head"))?.map(|(_, marker)| marker),
+                ),
+                None => (None, None),
+            },
+            _ => (None, None),
+        };
+        let original_head = match (kind.as_str(), &rebase) {
+            ("none" | "cherryPick", _) => None,
+            ("rebase", Some(directory)) => optional_marker(&directory.join("orig-head"))?
+                .and_then(|(bytes, _)| marker_oid(&bytes)),
+            _ => optional_marker(&git_dir.join("ORIG_HEAD"))?
+                .and_then(|(bytes, _)| marker_oid(&bytes)),
+        };
+        let head_name = match &rebase {
+            Some(directory) => {
+                optional_marker(&directory.join("head-name"))?.and_then(|(bytes, _)| {
+                    let name = one_line(&bytes).ok()?.to_owned();
+                    name.strip_prefix("refs/heads/")
+                        .is_some_and(|branch| !branch.is_empty())
+                        .then_some(name)
+                })
+            }
+            None => None,
         };
         let mut message = None;
         let mut metadata_digest = Sha256::new();
-        if kind == "merge" || kind == "cherryPick" {
-            for name in if kind == "merge" {
-                &["MERGE_MSG", "MERGE_MODE"][..]
-            } else {
-                &["MERGE_MSG"][..]
-            } {
-                metadata_digest.update(name.as_bytes());
-                match read_marker(&git_dir.join(name)) {
-                    Ok((bytes, _)) => {
-                        metadata_digest.update((bytes.len() as u64).to_be_bytes());
-                        metadata_digest.update(&bytes);
-                        if *name == "MERGE_MSG" {
-                            message = Some(String::from_utf8_lossy(&bytes).into_owned());
-                        }
+        let metadata: &[(&str, PathBuf)] = &match (kind.as_str(), &rebase) {
+            ("merge", _) => vec![
+                ("MERGE_MSG", git_dir.join("MERGE_MSG")),
+                ("MERGE_MODE", git_dir.join("MERGE_MODE")),
+            ],
+            ("cherryPick", _) => vec![("MERGE_MSG", git_dir.join("MERGE_MSG"))],
+            // msgnum/end make each replayed step its own confirmable state.
+            ("rebase", Some(directory)) => ["message", "msgnum", "end", "head-name", "onto"]
+                .iter()
+                .map(|name| (*name, directory.join(name)))
+                .collect(),
+            _ => Vec::new(),
+        };
+        for (name, path) in metadata {
+            metadata_digest.update(name.as_bytes());
+            match optional_marker(path)? {
+                Some((bytes, _)) => {
+                    metadata_digest.update((bytes.len() as u64).to_be_bytes());
+                    metadata_digest.update(&bytes);
+                    if matches!(*name, "MERGE_MSG" | "message") {
+                        message = Some(String::from_utf8_lossy(&bytes).into_owned());
                     }
-                    Err(AppError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
-                        metadata_digest.update(b"absent")
-                    }
-                    Err(error) => return Err(error),
                 }
+                None => metadata_digest.update(b"absent"),
             }
         }
         Ok(GitIntegration {
@@ -699,6 +782,7 @@ impl RepositoryService {
             metadata_digest: metadata_digest.finalize().to_vec(),
             target_oid,
             original_head,
+            head_name,
             marker,
         })
     }
@@ -807,17 +891,44 @@ impl RepositoryService {
     }
 }
 
+/// A rebase deliberately moves HEAD between steps, so ownership is bound to the
+/// recorded start point and branch instead of the live head. Every other kind
+/// keeps the stricter "HEAD has not moved at all" rule.
 fn owns_integration(
     owner: &IntegrationOwner,
     actual: &GitIntegration,
     head: &ExpectedState,
 ) -> bool {
+    let rebase = owner.kind == "rebase";
     actual.kind == owner.kind
-        && owner.original == *head
+        && (rebase || owner.original == *head)
         && actual.target_oid.as_ref() == Some(&owner.target_oid)
-        && (owner.kind != "merge" || actual.original_head == owner.original.head_oid)
+        && (!matches!(owner.kind, "merge" | "rebase")
+            || actual.original_head == owner.original.head_oid)
+        && (!rebase
+            || actual.head_name
+                == owner
+                    .original
+                    .branch
+                    .as_ref()
+                    .map(|branch| format!("refs/heads/{branch}")))
         && owner.marker.is_some()
         && owner.marker == actual.marker
+}
+
+fn optional_marker(path: &Path) -> AppResult<Option<(Vec<u8>, MarkerIdentity)>> {
+    match read_marker(path) {
+        Ok(value) => Ok(Some(value)),
+        Err(AppError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+fn marker_oid(bytes: &[u8]) -> Option<String> {
+    let ids = std::str::from_utf8(bytes).ok()?;
+    match ids.split_whitespace().collect::<Vec<_>>().as_slice() {
+        [oid] if valid_oid(oid) => Some((*oid).to_owned()),
+        _ => None,
+    }
 }
 
 fn read_marker(path: &Path) -> AppResult<(Vec<u8>, MarkerIdentity)> {

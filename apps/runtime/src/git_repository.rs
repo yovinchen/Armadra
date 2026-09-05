@@ -171,6 +171,15 @@ pub struct WorktreeRecord {
     pub dirty: Option<bool>,
 }
 
+/// The only way to overwrite remote history: `git push
+/// --force-with-lease=<ref>:<oid>`. There is deliberately no lease-free force,
+/// and no "lease against whatever the last background fetch happened to see".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ForceWithLease {
+    pub expected_remote_oid: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(
     tag = "kind",
@@ -192,6 +201,12 @@ pub enum RepositoryAction {
     StartMerge {
         target_oid: String,
         message: String,
+        expected_state_token: String,
+    },
+    /// Replay the current branch onto `onto`. A conflicted rebase becomes an
+    /// owned integration recovered through Continue/Abort, never an autostash.
+    StartRebase {
+        onto: String,
         expected_state_token: String,
     },
     ContinueIntegration {
@@ -245,12 +260,24 @@ pub enum RepositoryAction {
         remote: String,
         branch: String,
     },
-    /// Push only the observed current branch/OID, never a force or mirror push.
+    /// Push only the observed current branch/OID, never a mirror push and never
+    /// an unconditional force. Overwriting remote history requires an explicit
+    /// lease naming the remote OID the caller reviewed.
     Push {
         remote: String,
         branch: String,
         #[serde(default)]
         set_upstream: bool,
+        #[serde(default)]
+        force_with_lease: Option<ForceWithLease>,
+    },
+    /// Fetch, fast-forward pull, then push as one owned sequence. A failing step
+    /// stops the operation; nothing is merged or rebased on the caller's behalf.
+    Sync {
+        remote: String,
+        branch: String,
+        /// The reviewed remote-tracking OID; None means no tracking ref yet.
+        expected_remote_oid: Option<String>,
     },
     CreateWorktree {
         path: String,
@@ -1361,6 +1388,14 @@ impl RepositoryService {
                 stash::validate_message(message)?;
                 stash::validate_state_token(expected_state_token)?;
             }
+            RepositoryAction::StartRebase {
+                onto,
+                expected_state_token,
+            } => {
+                self.validate_reference(&context.repository, onto, &token)
+                    .await?;
+                stash::validate_state_token(expected_state_token)?;
+            }
             RepositoryAction::ContinueIntegration {
                 session_id,
                 expected_state_token,
@@ -1420,11 +1455,32 @@ impl RepositoryService {
                     .await?
             }
             RepositoryAction::Pull { remote, branch }
-            | RepositoryAction::Push { remote, branch, .. } => {
+            | RepositoryAction::Sync { remote, branch, .. } => {
                 self.validate_remote(&context.repository, remote, &token)
                     .await?;
                 self.validate_branch(&context.repository, branch, &token)
                     .await?;
+                if let RepositoryAction::Sync {
+                    expected_remote_oid: Some(oid),
+                    ..
+                } = action
+                {
+                    require_oid(oid)?;
+                }
+            }
+            RepositoryAction::Push {
+                remote,
+                branch,
+                force_with_lease,
+                ..
+            } => {
+                self.validate_remote(&context.repository, remote, &token)
+                    .await?;
+                self.validate_branch(&context.repository, branch, &token)
+                    .await?;
+                if let Some(lease) = force_with_lease {
+                    require_oid(&lease.expected_remote_oid)?;
+                }
             }
             RepositoryAction::CreateWorktree {
                 path,
@@ -1477,6 +1533,7 @@ impl RepositoryService {
             action,
             RepositoryAction::StartMerge { .. }
                 | RepositoryAction::StartCherryPick { .. }
+                | RepositoryAction::StartRebase { .. }
                 | RepositoryAction::SkipIntegration { .. }
                 | RepositoryAction::ContinueIntegration { .. }
                 | RepositoryAction::AbortIntegration { .. }
@@ -1486,6 +1543,13 @@ impl RepositoryService {
         match action {
             RepositoryAction::StartCherryPick { .. } => {
                 self.start_cherry_pick(context, action, expected, operation)
+                    .await
+            }
+            RepositoryAction::StartRebase {
+                onto,
+                expected_state_token,
+            } => {
+                self.start_rebase(context, onto, expected_state_token, expected, operation)
                     .await
             }
             RepositoryAction::SkipIntegration {
@@ -1622,10 +1686,26 @@ impl RepositoryService {
                 self.fast_forward_pull(context, remote, branch, expected, operation)
                     .await
             }
+            RepositoryAction::Sync {
+                remote,
+                branch,
+                expected_remote_oid,
+            } => {
+                self.sync(
+                    context,
+                    remote,
+                    branch,
+                    expected_remote_oid.as_deref(),
+                    expected,
+                    operation,
+                )
+                .await
+            }
             RepositoryAction::Push {
                 remote,
                 branch,
                 set_upstream,
+                force_with_lease,
             } => {
                 self.validate_remote(&context.repository, remote, token)
                     .await?;
@@ -1640,16 +1720,7 @@ impl RepositoryService {
                     .ok_or_else(|| AppError::Conflict("There are no commits to push".into()))?;
                 self.mutate(
                     context,
-                    vec![
-                        "push".into(),
-                        "--porcelain".into(),
-                        "--no-force".into(),
-                        "--no-mirror".into(),
-                        "--no-follow-tags".into(),
-                        "--".into(),
-                        remote.clone(),
-                        format!("{oid}:refs/heads/{branch}"),
-                    ],
+                    push_arguments(remote, branch, oid, force_with_lease.as_ref()),
                     operation,
                 )
                 .await?;
@@ -1784,6 +1855,160 @@ impl RepositoryService {
         }
     }
 
+    async fn remote_tracking_oid(
+        &self,
+        directory: &Path,
+        remote: &str,
+        branch: &str,
+        token: &Cancellation,
+    ) -> AppResult<Option<String>> {
+        let output = self
+            .output(
+                directory,
+                vec![
+                    "rev-parse".into(),
+                    "--verify".into(),
+                    "--quiet".into(),
+                    "--end-of-options".into(),
+                    format!("refs/remotes/{remote}/{branch}^{{commit}}"),
+                ],
+                self.command_timeout.min(Duration::from_secs(15)),
+                token,
+                None,
+            )
+            .await?;
+        match output.status {
+            Some(0) => {
+                let oid = one_line(&output.stdout)?;
+                if !valid_oid(oid) {
+                    return Err(malformed());
+                }
+                Ok(Some(oid.to_owned()))
+            }
+            Some(1) => Ok(None),
+            _ => Err(command_error(&output)),
+        }
+    }
+
+    /// Fetch, fast-forward pull, push — in that order, in one owned operation.
+    /// A diverged branch stops at the pull step and is reported; this never
+    /// merges, rebases, or force-pushes to make the three steps "succeed".
+    async fn sync(
+        &self,
+        context: &RepositoryContext,
+        remote: &str,
+        branch: &str,
+        expected_remote_oid: Option<&str>,
+        expected: &ExpectedState,
+        operation: &Operation,
+    ) -> AppResult<()> {
+        let token = &operation.cancellation;
+        self.validate_remote(&context.repository, remote, token)
+            .await?;
+        if expected.branch.as_deref() != Some(branch) {
+            return Err(AppError::Conflict(
+                "Sync must target the observed current local branch".into(),
+            ));
+        }
+        if expected.head_oid.is_none() {
+            return Err(AppError::Conflict(
+                "Sync requires at least one local commit".into(),
+            ));
+        }
+        let observed = self
+            .remote_tracking_oid(&context.repository, remote, branch, token)
+            .await?;
+        if observed.as_deref() != expected_remote_oid {
+            return Err(AppError::Conflict(format!(
+                "Remote tracking ref changed before Sync started: refs/remotes/{remote}/{branch} is {}, not the reviewed {}",
+                observed.as_deref().unwrap_or("absent"),
+                expected_remote_oid.unwrap_or("absent"),
+            )));
+        }
+        let mut fetch = args(&[
+            "fetch",
+            "--atomic",
+            "--progress",
+            "--no-recurse-submodules",
+            "--no-prune",
+            "--no-prune-tags",
+        ]);
+        fetch.extend(["--".into(), remote.to_owned()]);
+        if let Err(error) = self.mutate(context, fetch, operation).await {
+            return Err(self
+                .sync_stop(context, remote, branch, "fetch", &error)
+                .await);
+        }
+        if let Err(error) = self
+            .fast_forward_pull(context, remote, branch, expected, operation)
+            .await
+        {
+            return Err(self
+                .sync_stop(context, remote, branch, "pull", &error)
+                .await);
+        }
+        let head = self.head(&context.repository, token).await?;
+        if head.branch.as_deref() != Some(branch) {
+            return Err(AppError::Conflict(
+                "The local branch changed during Sync; nothing was pushed".into(),
+            ));
+        }
+        let oid = head
+            .head_oid
+            .as_deref()
+            .ok_or_else(|| AppError::Conflict("Sync found no commit to push".into()))?;
+        if let Err(error) = self
+            .mutate(
+                context,
+                push_arguments(remote, branch, oid, None),
+                operation,
+            )
+            .await
+        {
+            return Err(self
+                .sync_stop(context, remote, branch, "push", &error)
+                .await);
+        }
+        Ok(())
+    }
+
+    /// Name the step that stopped and the state the user has to act on. A read
+    /// that itself fails is reported as unknown rather than as a clean value.
+    async fn sync_stop(
+        &self,
+        context: &RepositoryContext,
+        remote: &str,
+        branch: &str,
+        step: &str,
+        error: &AppError,
+    ) -> AppError {
+        let token = Cancellation::default();
+        let head = self.head(&context.repository, &token).await;
+        let tracking = self
+            .remote_tracking_oid(&context.repository, remote, branch, &token)
+            .await;
+        let position = match &head {
+            Ok(state) => format!(
+                "{} on {}",
+                state.head_oid.as_deref().unwrap_or("no commit"),
+                state
+                    .branch
+                    .as_deref()
+                    .map(|name| format!("branch {name}"))
+                    .unwrap_or_else(|| "a detached HEAD".into())
+            ),
+            Err(_) => "unreadable".into(),
+        };
+        let remote_oid = match &tracking {
+            Ok(Some(oid)) => oid.clone(),
+            Ok(None) => "absent".into(),
+            Err(_) => "unreadable".into(),
+        };
+        AppError::Conflict(format!(
+            "Sync stopped at the {step} step and merged, rebased, or forced nothing: {error}. HEAD is {position}; refs/remotes/{remote}/{branch} is {remote_oid}"
+        ))
+    }
+
     async fn fast_forward_pull(
         &self,
         context: &RepositoryContext,
@@ -1893,6 +2118,36 @@ fn reserve_operation_slot(
         return Err(AppError::Conflict("Too many active Git operations".into()));
     }
     Ok(())
+}
+
+/// `--no-force` stays on every push; it disables the blanket force flag without
+/// cancelling an explicit lease, so a rewrite can only happen against the exact
+/// remote OID the caller reviewed. There is no code path that omits both.
+fn push_arguments(
+    remote: &str,
+    branch: &str,
+    oid: &str,
+    lease: Option<&ForceWithLease>,
+) -> Vec<String> {
+    let mut arguments = args(&[
+        "push",
+        "--porcelain",
+        "--no-force",
+        "--no-mirror",
+        "--no-follow-tags",
+    ]);
+    if let Some(lease) = lease {
+        arguments.push(format!(
+            "--force-with-lease=refs/heads/{branch}:{}",
+            lease.expected_remote_oid
+        ));
+    }
+    arguments.extend([
+        "--".into(),
+        remote.to_owned(),
+        format!("{oid}:refs/heads/{branch}"),
+    ]);
+    arguments
 }
 
 fn finish(operation: &Operation, state: OperationState, message: Option<String>) {

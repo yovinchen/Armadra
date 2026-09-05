@@ -408,3 +408,6 @@ async fn binary_and_large_conflict_sides_keep_oids_and_paths_without_unbounded_p
 
 #[path = "git_repository_merge/cherry_pick.rs"]
 mod cherry_pick;
+
+#[path = "git_repository_merge/rebase.rs"]
+mod rebase;
