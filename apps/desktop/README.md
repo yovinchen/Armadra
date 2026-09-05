@@ -2,6 +2,8 @@
 
 Tauri 2 薄桌面壳。
 
+产品名称、窗口/托盘名称与实际主可执行文件统一为 **Armadra**。Cargo 默认运行目标和 Tauri `mainBinaryName` 均为 `Armadra`；开发与发布构建在 macOS/Linux 生成 `Armadra`，Windows 生成 `Armadra.exe`。Dock 和进程名称需要启动新构建的程序后生效。
+
 负责启动/发现 Go Host、启动 Runtime、健康检查、加载同一套 Web 页面，以及标题栏覆盖、托盘、通知和
 系统权限入口。业务逻辑不写进 Tauri command，避免形成第二套后端。
 

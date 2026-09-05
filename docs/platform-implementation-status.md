@@ -90,6 +90,7 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 | `598222e` | 数据库拒绝破坏式重建 | 26 项数据库专项，迁移/恢复同事务回滚 |
 | `0f3d913` | 快捷键录制与窗口键保护 | 76 项定向测试、类型检查与真实浏览器录制 |
 | `f3bb770` | Runtime 明确退出 | 全套 359 项、追加关停回归、真实进程 EOF/关停验证 |
+| `23c249a` | 桌面关闭/退出分离 | 18 项桌面测试、开发/发布检查；原生按键待验收 |
 | `40dc141` | 桌面自动启动/发现Host      | 10项Rust测试、clippy、真实Rust启动器和macOS原生进程保活；窗口菜单退出未验收                                     |
 
 协议验收覆盖：中文/emoji、uint64 最大值、int64 最小值、超过 JS 安全整数的 generation、optional 未传/零值、oneof 三个分支、截断拒绝、未知字段行为。Go/TS 默认保留未知字段；prost 会丢弃，未来 Rust 透明中继必须转发原始载荷。尚未引入枚举，不将未知枚举检查记为已完成。
@@ -180,6 +181,12 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - `./armadra.sh run desktop` 显式将 debug Runtime 交给桌面持有私有控制管道。独立 `pnpm ... dev` 保留外部 Runtime 模式，桌面不按 PID 猜测终止它。生产从包内启动受管 Runtime。
 - 主 Agent 实际执行桌面完整 18 项测试通过；开发/发布编译与 Clippy、`bash -n armadra.sh` 通过。可用 `ARMADRA_DESKTOP_LIFECYCLE_TRACE=1` 输出有限阶段诊断，默认关闭，不记录按键或文档内容。
 - macOS 原生按键验收未完成：仅观察到关闭请求和恢复窗口，未可靠派发 Cmd W/Q；隔离 bundle 后续退出的原因未确认。测试 App、注册、数据和独立服务已清理。默认服务后续状态也发生变化，来源未知，不能把“未向其发测试请求”当作其状态始终不变的证据。
+
+## 应用名称统一
+
+- 主可执行目标、Cargo default-run 与 Tauri mainBinaryName 统一为 `Armadra`；产品、窗口和托盘展示沿用同一名称，避免开发模式按 `armadra-desktop` 可执行文件名显示在 Dock/进程信息中。
+- 实际构建产物为 `target/debug/Armadra`；Cargo metadata 验证唯一 bin target 与默认运行目标，编译及 Clippy 通过。Windows 文件名按系统规则为 `Armadra.exe`，Windows 实机显示尚未验收。
+- 旧进程不会因源码更新而原地改名，需从新构建重启应用。此处记录主应用身份，后台协议与内部 package ID 保持兼容。
 
 ## Runtime 明确退出控制
 
