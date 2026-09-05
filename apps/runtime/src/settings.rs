@@ -24,6 +24,17 @@ use crate::{
 pub const BACKEND_CHOICES: &[&str] = &["auto", "tmux", "direct"];
 const DEFAULT_BACKEND: &str = "auto";
 const DEFAULT_DETACHED_GRACE_MINUTES: u64 = 1440;
+/// How long a session with nothing attached keeps its interactive delivery
+/// cadence before it goes dormant (design §7.2). Long enough that a collapse
+/// and re-expand, or a page reload, never crosses it; short enough that a
+/// board left open overnight stops paying for thirty unwatched terminals.
+/// `0` turns dormancy off entirely.
+const DEFAULT_DORMANT_AFTER_SECONDS: u64 = 120;
+/// Anything above this is indistinguishable from "off" but keeps the timer
+/// alive; anything below it would make a slow reconnect look like an idle
+/// session.
+const MAX_DORMANT_AFTER_SECONDS: u64 = 86_400;
+const MIN_DORMANT_AFTER_SECONDS: u64 = 5;
 /// `usage.enabled` — gates the usage pill's provider fetches (plan §19).
 /// On by default; turning it off stops every outbound request.
 const DEFAULT_USAGE_ENABLED: bool = true;
@@ -127,6 +138,8 @@ impl PowerPolicy {
 pub struct TerminalSettings {
     pub backend: BackendChoice,
     pub detached_grace_minutes: u64,
+    /// `terminal.dormantAfterSeconds`; `0` means never go dormant.
+    pub dormant_after_seconds: u64,
 }
 
 impl Default for TerminalSettings {
@@ -134,6 +147,7 @@ impl Default for TerminalSettings {
         Self {
             backend: BackendChoice::Auto,
             detached_grace_minutes: DEFAULT_DETACHED_GRACE_MINUTES,
+            dormant_after_seconds: DEFAULT_DORMANT_AFTER_SECONDS,
         }
     }
 }
@@ -394,9 +408,20 @@ pub fn normalize(raw: &Value) -> Value {
         .and_then(Value::as_u64)
         .filter(|minutes| (1..=525_600).contains(minutes))
         .unwrap_or(DEFAULT_DETACHED_GRACE_MINUTES);
+    // `0` is a real choice (dormancy off), so it is kept rather than clamped
+    // up into the valid range.
+    let dormant = terminal
+        .get("dormantAfterSeconds")
+        .and_then(Value::as_u64)
+        .filter(|seconds| {
+            *seconds == 0
+                || (MIN_DORMANT_AFTER_SECONDS..=MAX_DORMANT_AFTER_SECONDS).contains(seconds)
+        })
+        .unwrap_or(DEFAULT_DORMANT_AFTER_SECONDS);
     let mut terminal = terminal;
     terminal.insert("backend".into(), Value::String(backend));
     terminal.insert("detachedGraceMinutes".into(), Value::from(grace));
+    terminal.insert("dormantAfterSeconds".into(), Value::from(dormant));
     document.insert("terminal".into(), Value::Object(terminal));
 
     let mut usage = document
@@ -612,6 +637,10 @@ impl SettingsStore {
                 .and_then(|section| section.get("detachedGraceMinutes"))
                 .and_then(Value::as_u64)
                 .unwrap_or(DEFAULT_DETACHED_GRACE_MINUTES),
+            dormant_after_seconds: terminal
+                .and_then(|section| section.get("dormantAfterSeconds"))
+                .and_then(Value::as_u64)
+                .unwrap_or(DEFAULT_DORMANT_AFTER_SECONDS),
         }
     }
 

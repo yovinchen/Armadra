@@ -41,6 +41,10 @@ struct DirectSession {
     output: broadcast::Sender<Bytes>,
     replay: Arc<Mutex<VecDeque<Bytes>>>,
     exited: AtomicBool,
+    /// The output batcher's deadline. Widened while the session is dormant so
+    /// an unwatched but chatty process stops costing a wakeup, a broadcast and
+    /// a log row every 16 ms — without losing a byte (design §7.2).
+    cadence: super::FlushCadence,
 }
 
 impl DirectSession {
@@ -256,6 +260,7 @@ impl TerminalBackend for DirectBackend {
             output: output.clone(),
             replay: Arc::new(Mutex::new(VecDeque::with_capacity(REPLAY_CHUNKS))),
             exited: AtomicBool::new(false),
+            cadence: super::interactive_cadence(),
         });
         self.sessions
             .write()
@@ -271,6 +276,7 @@ impl TerminalBackend for DirectBackend {
                 notices: self.notices.clone(),
                 key: spec.session_key.clone(),
                 generation: spec.generation,
+                cadence: session.cadence.clone(),
             },
             reader,
             || {},
@@ -407,6 +413,22 @@ impl TerminalBackend for DirectBackend {
                 attached: true,
             })
             .collect())
+    }
+
+    /// The process and its replay buffer stay exactly as they are; only the
+    /// delivery cadence changes (design §7.2). Waking is therefore free and can
+    /// never be mistaken for a create.
+    async fn set_dormant(&self, key: &SessionKey, dormant: bool) -> AppResult<()> {
+        let session = self.session(key).await?;
+        session.cadence.store(
+            if dormant {
+                super::DORMANT_FLUSH_INTERVAL.as_millis() as u64
+            } else {
+                super::OUTPUT_FLUSH_INTERVAL.as_millis() as u64
+            },
+            Ordering::Relaxed,
+        );
+        Ok(())
     }
 
     /// Direct sessions cannot survive the runtime, so "release" means "kill".

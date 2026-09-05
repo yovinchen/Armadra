@@ -71,6 +71,11 @@ pub const DEFAULT_COLS: u16 = 80;
 /// How often the tmux server is polled for sessions that ended while nothing
 /// was attached to them.
 const LIVENESS_INTERVAL: Duration = Duration::from_secs(3);
+/// How often unattached sessions are checked against
+/// `terminal.dormantAfterSeconds`. Coarse on purpose: the whole point of the
+/// mechanism is to stop doing work for sessions nobody is watching, so its own
+/// timer must not be one of the wakeups.
+const DORMANCY_INTERVAL: Duration = Duration::from_secs(5);
 /// `last_output_at` is a "how long has this been quiet" signal, not an audit
 /// trail: one write every few seconds of continuous output is enough.
 const ACTIVITY_THROTTLE: Duration = Duration::from_secs(5);
@@ -85,18 +90,48 @@ const ACTIVITY_THROTTLE: Duration = Duration::from_secs(5);
 pub const OUTPUT_FLUSH_INTERVAL: Duration = Duration::from_millis(16);
 pub const OUTPUT_FLUSH_BYTES: usize = 64 * 1024;
 
+/// The flush interval of a session nothing is attached to (design §7.2).
+///
+/// A dormant session still has to keep every byte — the process is running and
+/// its screen is what the next attach replays — but nobody is waiting for those
+/// bytes at display latency. Coalescing 16 ms batches into half-second ones
+/// costs nothing visible and removes ~30 wakeups, broadcast sends and
+/// `terminal_logs` inserts per second per session, which is what makes thirty
+/// idle-but-chatty terminals affordable.
+pub const DORMANT_FLUSH_INTERVAL: Duration = Duration::from_millis(500);
+
 /// The batching rule on its own, with no threads and no clock of its own, so
 /// the interesting part is unit-testable.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct OutputBatch {
     buffer: Vec<u8>,
     /// When the first still-unsent byte arrived.
     started: Option<Instant>,
+    /// How long a batch may wait before it has to go out. Not a constant: a
+    /// session with no attached client widens it (see [`DORMANT_FLUSH_INTERVAL`]).
+    flush_interval: Duration,
+}
+
+impl Default for OutputBatch {
+    fn default() -> Self {
+        Self {
+            buffer: Vec::new(),
+            started: None,
+            flush_interval: OUTPUT_FLUSH_INTERVAL,
+        }
+    }
 }
 
 impl OutputBatch {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Widens or narrows the deadline. A batch already in flight keeps its
+    /// start time, so narrowing takes effect immediately rather than at the
+    /// next batch.
+    pub fn set_flush_interval(&mut self, interval: Duration) {
+        self.flush_interval = interval;
     }
 
     pub fn is_empty(&self) -> bool {
@@ -130,16 +165,33 @@ impl OutputBatch {
     /// block forever.
     pub fn remaining(&self) -> Option<Duration> {
         let started = self.started?;
-        Some(OUTPUT_FLUSH_INTERVAL.saturating_sub(started.elapsed()))
+        Some(self.flush_interval.saturating_sub(started.elapsed()))
     }
+}
+
+/// The flush cadence of one session, in milliseconds, shared with whoever may
+/// change it. [`TerminalManager`] widens it when the last client detaches and
+/// narrows it again on the next attach.
+pub type FlushCadence = Arc<std::sync::atomic::AtomicU64>;
+
+/// A cadence handle starting at the interactive interval.
+pub fn interactive_cadence() -> FlushCadence {
+    Arc::new(std::sync::atomic::AtomicU64::new(
+        OUTPUT_FLUSH_INTERVAL.as_millis() as u64,
+    ))
 }
 
 /// Runs [`OutputBatch`] on its own thread. Returns the sender the PTY reader
 /// pushes raw chunks into; `sink` receives the coalesced batches, and `on_eof`
 /// runs once, **after** the final flush, so the last output always precedes the
 /// exit status.
+///
+/// `cadence` is read once per turn rather than captured, so making a session
+/// dormant changes the deadline of the batch already in flight instead of
+/// waiting for the next one.
 pub fn spawn_output_batcher(
     name: &str,
+    cadence: FlushCadence,
     sink: impl Fn(Bytes) + Send + 'static,
     on_eof: impl FnOnce() + Send + 'static,
 ) -> std::sync::mpsc::Sender<Bytes> {
@@ -151,6 +203,9 @@ pub fn spawn_output_batcher(
         .spawn(move || {
             let mut batch = OutputBatch::new();
             loop {
+                batch.set_flush_interval(Duration::from_millis(
+                    cadence.load(Ordering::Relaxed).max(1),
+                ));
                 let received = match batch.remaining() {
                     Some(wait) => receiver.recv_timeout(wait),
                     None => receiver.recv().map_err(|_| RecvTimeoutError::Disconnected),
@@ -434,6 +489,20 @@ struct Inner {
     by_key: RwLock<HashMap<SessionKey, String>>,
     key_gates: std::sync::Mutex<HashMap<SessionKey, Arc<tokio::sync::Mutex<()>>>>,
     statuses: RwLock<HashMap<String, broadcast::Sender<StatusEvent>>>,
+    /// How many sockets are attached to each session, and since when there
+    /// have been none. A plain `std::sync::Mutex` because the release side runs
+    /// inside a `Drop`, which cannot await (design §7.2).
+    attachments: std::sync::Mutex<HashMap<String, Attachment>>,
+}
+
+/// One session's attachment bookkeeping.
+#[derive(Debug, Default)]
+struct Attachment {
+    /// Live sockets. Not a flag: several devices may watch one terminal.
+    sockets: usize,
+    /// When `sockets` last fell to zero. `None` while something is attached.
+    idle_since: Option<Instant>,
+    dormant: bool,
 }
 
 /// Replaces the old `PtyManager`. Cheap to clone; the background tasks hold a
@@ -441,6 +510,34 @@ struct Inner {
 #[derive(Clone)]
 pub struct TerminalManager {
     inner: Arc<Inner>,
+}
+
+/// One attached socket, counted for as long as this value lives.
+///
+/// A weak reference, so a lease outliving the manager (a socket task still
+/// unwinding while the runtime shuts down) releases into nothing instead of
+/// keeping the whole manager alive.
+struct AttachLease {
+    inner: std::sync::Weak<Inner>,
+    session_id: String,
+}
+
+impl Drop for AttachLease {
+    fn drop(&mut self) {
+        let Some(inner) = self.inner.upgrade() else {
+            return;
+        };
+        let mut attachments = inner
+            .attachments
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(entry) = attachments.get_mut(&self.session_id) {
+            entry.sockets = entry.sockets.saturating_sub(1);
+            if entry.sockets == 0 {
+                entry.idle_since = Some(Instant::now());
+            }
+        }
+    }
 }
 
 impl TerminalManager {
@@ -481,6 +578,7 @@ impl TerminalManager {
         } else {
             None
         };
+
         let effective = if tmux.is_some() {
             BackendKind::Tmux
         } else {
@@ -504,10 +602,12 @@ impl TerminalManager {
             by_key: RwLock::new(HashMap::new()),
             key_gates: std::sync::Mutex::new(HashMap::new()),
             statuses: RwLock::new(HashMap::new()),
+            attachments: std::sync::Mutex::new(HashMap::new()),
         });
         let manager = Self { inner };
         manager.spawn_notice_loop(notice_receiver);
         manager.spawn_liveness_loop();
+        manager.spawn_dormancy_loop();
         manager.spawn_sweeper();
         manager
     }
@@ -708,6 +808,20 @@ impl TerminalManager {
             .entry(record.id.clone())
             .or_insert_with(|| broadcast::channel(16).0);
         drop(statuses);
+        // A session starts unwatched. Registering it here rather than on the
+        // first attach is what makes a terminal that is created and never
+        // opened — a scripted spawn, a node restored off-screen — eligible for
+        // dormancy at all.
+        self.inner
+            .attachments
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entry(record.id.clone())
+            .or_insert_with(|| Attachment {
+                sockets: 0,
+                idle_since: Some(Instant::now()),
+                dormant: false,
+            });
         self.inner
             .records
             .write()
@@ -862,6 +976,17 @@ impl TerminalManager {
             .backend(record.kind)
             .attach(&record.key, record.generation, size)
             .await?;
+        // Waking is deliberately *after* the backend attach and deliberately
+        // not a create: a dormant session is a running process whose delivery
+        // was slowed down, so all that has to be undone is the slowing down
+        // (design §7.2).
+        if self.take_dormant(session_id) {
+            let _ = self
+                .backend(record.kind)
+                .set_dormant(&record.key, false)
+                .await;
+        }
+        let lease = self.lease(session_id);
         // The direct backend has no screen to redraw, so the socket gets the
         // replay buffer as one `snapshot` frame instead.
         let snapshot = match record.kind {
@@ -898,7 +1023,13 @@ impl TerminalManager {
             output: handle.output,
             status: status.unwrap_or(fallback),
             current_status,
-            detach: handle.detach,
+            // The backend's own detach first (it ends a tmux client), then the
+            // lease. Both run on every path out of the socket handler,
+            // including the early returns where `detached()` is never reached.
+            detach: backend::DetachGuard::new(move || {
+                drop(handle.detach);
+                drop(lease);
+            }),
         })
     }
 
@@ -907,6 +1038,158 @@ impl TerminalManager {
         if self.is_alive(session_id).await {
             self.set_attach_state(session_id, "detached").await;
         }
+    }
+
+    /* ------------------------------- dormancy ----------------------------- */
+
+    /// Registers one attached socket. The returned lease releases it on drop,
+    /// which is the only reliable place: the socket handler has several early
+    /// returns and a panic path, and none of them may leave a session counted
+    /// as watched forever.
+    fn lease(&self, session_id: &str) -> AttachLease {
+        let mut attachments = self
+            .inner
+            .attachments
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let entry = attachments.entry(session_id.to_owned()).or_default();
+        entry.sockets += 1;
+        entry.idle_since = None;
+        AttachLease {
+            inner: Arc::downgrade(&self.inner),
+            session_id: session_id.to_owned(),
+        }
+    }
+
+    /// Clears the dormant flag, answering whether it had been set — so the
+    /// caller only pays for a backend round trip when there is something to
+    /// undo.
+    fn take_dormant(&self, session_id: &str) -> bool {
+        let mut attachments = self
+            .inner
+            .attachments
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let entry = attachments.entry(session_id.to_owned()).or_default();
+        std::mem::replace(&mut entry.dormant, false)
+    }
+
+    /// Whether this session has been put to sleep. The process is running
+    /// either way; this only says how its output is being delivered.
+    pub fn is_dormant(&self, session_id: &str) -> bool {
+        self.inner
+            .attachments
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(session_id)
+            .is_some_and(|entry| entry.dormant)
+    }
+
+    /// How many sockets are watching this session right now.
+    pub fn attached_sockets(&self, session_id: &str) -> usize {
+        self.inner
+            .attachments
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(session_id)
+            .map_or(0, |entry| entry.sockets)
+    }
+
+    /// The sessions that have been unwatched for longer than `after`.
+    fn dormancy_due(&self, after: Duration) -> Vec<String> {
+        self.inner
+            .attachments
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .iter()
+            .filter(|(_, entry)| {
+                !entry.dormant
+                    && entry.sockets == 0
+                    && entry
+                        .idle_since
+                        .is_some_and(|since| since.elapsed() >= after)
+            })
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    /// Marks one session dormant and tells its backend. Skipped for a session
+    /// that is already over — a dead process has nothing to slow down.
+    async fn make_dormant(&self, session_id: &str) {
+        let Some(record) = self.record(session_id).await else {
+            self.forget_attachment(session_id);
+            return;
+        };
+        if record.exited {
+            self.forget_attachment(session_id);
+            return;
+        }
+        if self
+            .backend(record.kind)
+            .set_dormant(&record.key, true)
+            .await
+            .is_err()
+        {
+            return;
+        }
+        let mut attachments = self
+            .inner
+            .attachments
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(entry) = attachments.get_mut(session_id)
+            && entry.sockets == 0
+        {
+            entry.dormant = true;
+            tracing::debug!(session_id, "terminal session is dormant");
+        }
+    }
+
+    fn forget_attachment(&self, session_id: &str) {
+        self.inner
+            .attachments
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(session_id);
+    }
+
+    /// Moves a session's idle clock back so a test can reach the dormancy
+    /// deadline without sleeping through it.
+    #[cfg(test)]
+    fn backdate_idle_for_test(&self, session_id: &str, by: Duration) {
+        let mut attachments = self
+            .inner
+            .attachments
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(entry) = attachments.get_mut(session_id)
+            && let Some(since) = entry.idle_since
+        {
+            entry.idle_since = since.checked_sub(by);
+        }
+    }
+
+    /// Runs the dormancy policy. Separate from the loop so a test can drive it
+    /// without waiting five seconds per turn.
+    pub async fn apply_dormancy(&self) {
+        let after = self.inner.settings.terminal().dormant_after_seconds;
+        if after == 0 {
+            return;
+        }
+        for session_id in self.dormancy_due(Duration::from_secs(after)) {
+            self.make_dormant(&session_id).await;
+        }
+    }
+
+    fn spawn_dormancy_loop(&self) {
+        let weak = Arc::downgrade(&self.inner);
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(DORMANCY_INTERVAL).await;
+                let Some(inner) = weak.upgrade() else { break };
+                TerminalManager { inner }.apply_dormancy().await;
+            }
+        });
     }
 
     async fn note_size(&self, session_id: &str, cols: u16, rows: u16) {
@@ -1567,6 +1850,7 @@ impl TerminalManager {
             self.inner.by_key.write().await.remove(&record.key);
         }
         self.inner.statuses.write().await.remove(session_id);
+        self.forget_attachment(session_id);
     }
 
     /* ------------------------------ background ---------------------------- */
@@ -1924,7 +2208,7 @@ mod batch_tests {
             }
         };
 
-        let sender = spawn_output_batcher("test", sink, eof);
+        let sender = spawn_output_batcher("test", interactive_cadence(), sink, eof);
         sender.send(Bytes::from_static(b"one")).unwrap();
         sender.send(Bytes::from_static(b"two")).unwrap();
         drop(sender);
@@ -1933,6 +2217,33 @@ mod batch_tests {
         let seen = seen.lock().unwrap().clone();
         assert_eq!(seen.last().map(String::as_str), Some("eof"));
         assert_eq!(seen[..seen.len() - 1].concat(), "onetwo");
+    }
+
+    /// Dormancy widens the deadline; it never drops or reorders bytes. The byte
+    /// budget still cuts a batch short, because a dormant session that suddenly
+    /// produces a megabyte should not hold it all in one buffer.
+    #[test]
+    fn a_dormant_cadence_only_makes_the_batch_wait_longer() {
+        let mut batch = OutputBatch::new();
+        batch.push(b"quiet");
+        let interactive = batch.remaining().expect("armed");
+        assert!(interactive <= OUTPUT_FLUSH_INTERVAL);
+
+        batch.set_flush_interval(DORMANT_FLUSH_INTERVAL);
+        let dormant = batch.remaining().expect("still armed");
+        assert!(
+            dormant > OUTPUT_FLUSH_INTERVAL,
+            "the deadline of the batch already in flight must move too"
+        );
+        assert!(dormant <= DORMANT_FLUSH_INTERVAL);
+
+        // Narrowing again takes effect at once rather than at the next batch.
+        batch.set_flush_interval(OUTPUT_FLUSH_INTERVAL);
+        assert!(batch.remaining().expect("armed") <= OUTPUT_FLUSH_INTERVAL);
+
+        let flooded = batch.push(&vec![b'x'; OUTPUT_FLUSH_BYTES]);
+        assert!(flooded.is_some(), "the byte budget still applies");
+        assert!(flooded.unwrap().starts_with(b"quiet"));
     }
 }
 
@@ -2134,5 +2445,159 @@ mod desktop_shutdown_tests {
                 .await
                 .is_ok()
         );
+    }
+}
+
+/// T03, design §7.2: a session nothing is attached to keeps its process and
+/// its replay buffer, and gives up only the delivery cadence.
+#[cfg(all(test, unix))]
+mod dormancy_tests {
+    use super::*;
+
+    async fn fixture(dormant_after: u64) -> (TerminalManager, tempfile::TempDir, String) {
+        let directory = tempfile::tempdir().unwrap();
+        let pool = crate::db::connect(&format!(
+            "sqlite://{}?mode=rwc",
+            directory.path().join("dormancy.db").display()
+        ))
+        .await
+        .unwrap();
+        let workspace = crate::db::create_workspace(
+            &pool,
+            "dormancy project",
+            directory.path().to_str().unwrap(),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        let settings = SettingsStore::in_memory(serde_json::json!({
+            "terminal": { "backend": "direct", "dormantAfterSeconds": dormant_after }
+        }));
+        let manager = TerminalManager::with_config(
+            pool,
+            EventHub::new(),
+            settings,
+            directory.path().to_owned(),
+        );
+        (manager, directory, workspace.id)
+    }
+
+    fn request(workspace: &str, directory: &std::path::Path) -> SpawnRequest {
+        let mut request =
+            SpawnRequest::plain(workspace.into(), directory.to_string_lossy().into_owned());
+        request.command = Some("/bin/sh".into());
+        request.args = vec!["-c".into(), "sleep 60".into()];
+        request
+    }
+
+    /// The whole promise in one test: a session goes dormant on its own, wakes
+    /// on attach, and is the *same process* on the other side.
+    #[tokio::test]
+    async fn an_unwatched_session_sleeps_and_wakes_without_restarting_its_process() {
+        let (manager, directory, workspace) = fixture(5).await;
+        let session = manager
+            .spawn(request(&workspace, directory.path()))
+            .await
+            .unwrap();
+        let pid = manager.pid(&session.id).await.expect("a running pid");
+
+        // Freshly created and never attached: eligible, but not yet due.
+        manager.apply_dormancy().await;
+        assert!(!manager.is_dormant(&session.id));
+
+        // Pretend the idle period has passed rather than sleeping through it.
+        manager.backdate_idle_for_test(&session.id, Duration::from_secs(30));
+        manager.apply_dormancy().await;
+        assert!(manager.is_dormant(&session.id));
+
+        let attach = manager.attach(&session.id, 80, 24).await.unwrap();
+        assert!(
+            !manager.is_dormant(&session.id),
+            "attaching wakes the session"
+        );
+        assert_eq!(manager.attached_sockets(&session.id), 1);
+        assert_eq!(
+            manager.pid(&session.id).await,
+            Some(pid),
+            "waking must never be a create"
+        );
+        assert!(attach.alive);
+
+        drop(attach);
+        assert_eq!(manager.attached_sockets(&session.id), 0);
+        // Still awake: the clock restarts from this detach, not from the last one.
+        manager.apply_dormancy().await;
+        assert!(!manager.is_dormant(&session.id));
+
+        let _ = manager.terminate(&session.id, TerminateMode::Session).await;
+    }
+
+    /// Two sockets on one terminal: the first to leave must not put a session
+    /// somebody else is still watching to sleep.
+    #[tokio::test]
+    async fn one_socket_leaving_does_not_sleep_a_session_another_is_watching() {
+        // Below MIN_DORMANT_AFTER_SECONDS the setting is rejected, so the
+        // shortest honest deadline is what the test drives.
+        let (manager, directory, workspace) = fixture(5).await;
+        let session = manager
+            .spawn(request(&workspace, directory.path()))
+            .await
+            .unwrap();
+        let first = manager.attach(&session.id, 80, 24).await.unwrap();
+        let second = manager.attach(&session.id, 80, 24).await.unwrap();
+        assert_eq!(manager.attached_sockets(&session.id), 2);
+
+        drop(first);
+        manager.backdate_idle_for_test(&session.id, Duration::from_secs(30));
+        manager.apply_dormancy().await;
+        assert!(
+            !manager.is_dormant(&session.id),
+            "one socket is still attached"
+        );
+
+        drop(second);
+        manager.backdate_idle_for_test(&session.id, Duration::from_secs(30));
+        manager.apply_dormancy().await;
+        assert!(manager.is_dormant(&session.id));
+
+        let _ = manager.terminate(&session.id, TerminateMode::Session).await;
+    }
+
+    /// `dormantAfterSeconds: 0` is off, not "immediately".
+    #[tokio::test]
+    async fn dormancy_can_be_turned_off() {
+        let (manager, directory, workspace) = fixture(0).await;
+        let session = manager
+            .spawn(request(&workspace, directory.path()))
+            .await
+            .unwrap();
+        manager.backdate_idle_for_test(&session.id, Duration::from_secs(86_400));
+        manager.apply_dormancy().await;
+        assert!(!manager.is_dormant(&session.id));
+        let _ = manager.terminate(&session.id, TerminateMode::Session).await;
+    }
+
+    /// A session that has already ended is not worth a backend round trip, and
+    /// must not linger in the attachment table.
+    #[tokio::test]
+    async fn an_exited_session_is_dropped_instead_of_slept() {
+        // Below MIN_DORMANT_AFTER_SECONDS the setting is rejected, so the
+        // shortest honest deadline is what the test drives.
+        let (manager, directory, workspace) = fixture(5).await;
+        let mut done = request(&workspace, directory.path());
+        done.args = vec!["-c".into(), "exit 0".into()];
+        let session = manager.spawn(done).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(3), async {
+            while manager.session(&session.id).await.unwrap().status == "running" {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap();
+        manager.backdate_idle_for_test(&session.id, Duration::from_secs(30));
+        manager.apply_dormancy().await;
+        assert!(!manager.is_dormant(&session.id));
+        assert_eq!(manager.attached_sockets(&session.id), 0);
     }
 }

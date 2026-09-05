@@ -197,6 +197,20 @@ pub trait TerminalBackend: Send + Sync {
     }
     /// Release runtime-local resources without ending persistent sessions.
     async fn detach_all(&self) {}
+    /// Nothing has been attached to this session for a while (design §7.2), or
+    /// something just attached again.
+    ///
+    /// Dormancy is about **resources, not execution**: the process keeps
+    /// running, the screen or replay buffer the next attach needs is kept, and
+    /// waking is never a create. What a backend may release is everything
+    /// downstream of that — output subscribers, per-frame delivery, the log
+    /// writes those frames drive.
+    ///
+    /// The default is a no-op because it is the honest answer for a backend
+    /// whose detach already released everything releasable.
+    async fn set_dormant(&self, _key: &SessionKey, _dormant: bool) -> AppResult<()> {
+        Ok(())
+    }
 }
 
 /* ------------------------------- shared helpers --------------------------- */
@@ -530,6 +544,9 @@ pub struct OutputPump {
     pub notices: NoticeSender,
     pub key: SessionKey,
     pub generation: u64,
+    /// How long a batch may wait. Widened while nothing is attached (design
+    /// §7.2); see [`super::FlushCadence`].
+    pub cadence: super::FlushCadence,
 }
 
 /// Shared between backends: a thread that fans PTY output out to subscribers,
@@ -552,10 +569,12 @@ pub fn spawn_output_pump(
         notices,
         key,
         generation,
+        cadence,
     } = pump;
 
     let batches = super::spawn_output_batcher(
         &name,
+        cadence,
         move |chunk: Bytes| {
             if let Some(replay) = replay.as_ref()
                 && let Ok(mut replay) = replay.lock()

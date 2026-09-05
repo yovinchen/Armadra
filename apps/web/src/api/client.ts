@@ -278,8 +278,18 @@ export const runtimeSettingsSchema = z.looseObject({
     .object({
       backend: z.enum(["auto", "tmux", "direct"]).default("auto"),
       detachedGraceMinutes: z.number().int().positive().default(1440),
+      /**
+       * `terminal.dormantAfterSeconds`（T03，宿主设计 §7.2）。会话没有任何
+       * 客户端附着这么久之后，Runtime 放慢它的输出投递——进程照跑，回放缓冲
+       * 照留，一个字节都不丢。`0` = 关闭。
+       */
+      dormantAfterSeconds: z.number().int().nonnegative().default(120),
     })
-    .default({ backend: "auto", detachedGraceMinutes: 1440 }),
+    .default({
+      backend: "auto",
+      detachedGraceMinutes: 1440,
+      dormantAfterSeconds: 120,
+    }),
   /**
    * 每个工作空间一段（`workspaces.<id>`）。`agentMessaging` 默认关：
    * Runtime 的 `collab/messaging.rs` 在门链第三步读的就是这个键（§5.7）。

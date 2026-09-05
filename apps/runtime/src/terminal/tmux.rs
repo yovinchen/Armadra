@@ -688,6 +688,11 @@ impl TerminalBackend for TmuxBackend {
                 notices: self.notices.clone(),
                 key: key.clone(),
                 generation: session.generation,
+                // A tmux pump exists only while a client does, and a client
+                // exists only while something is attached, so this pump is
+                // never the dormant case: the interactive cadence is correct
+                // for its whole life.
+                cadence: super::interactive_cadence(),
             },
             reader,
             move || {
