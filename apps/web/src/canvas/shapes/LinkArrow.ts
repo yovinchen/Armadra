@@ -68,15 +68,32 @@ const CONTENT_ARROW_COLOR = "grey";
  */
 let handleStartPending = false;
 let handleStartSide: "left" | "right" | undefined;
+let handleStartShape: TLShapeId | undefined;
+let handleGesture: symbol | undefined;
+let handleGestureOwner: Editor | undefined;
 
-export function beginHandleLink(side?: "left" | "right"): void {
+export function beginHandleLink(
+  side?: "left" | "right",
+  shapeId?: TLShapeId,
+  owner?: Editor,
+): symbol {
   handleStartPending = true;
   handleStartSide = side;
+  handleStartShape = shapeId;
+  handleGestureOwner = owner;
+  handleGesture = Symbol("handle-link");
+  return handleGesture;
 }
 
-export function endHandleLink(): void {
+/** Returns false when an older gesture tries to clear a newer gesture. */
+export function endHandleLink(gesture?: symbol): boolean {
+  if (gesture && gesture !== handleGesture) return false;
   handleStartPending = false;
   handleStartSide = undefined;
+  handleStartShape = undefined;
+  handleGesture = undefined;
+  handleGestureOwner = undefined;
+  return true;
 }
 
 /** 仅测试用。 */
@@ -198,6 +215,7 @@ export function registerLinkArrow(editor: Editor): () => void {
   /** 从节点把手起笔的 arrow（末端没绑到节点就删掉）。 */
   const fromHandle = new Set<TLShapeId>();
   const handleSides = new Map<TLShapeId, "left" | "right">();
+  const handleSources = new Map<TLShapeId, TLShapeId>();
   let retry: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
 
@@ -225,10 +243,38 @@ export function registerLinkArrow(editor: Editor): () => void {
 
   const evaluate = (arrowId: TLShapeId): void => {
     const wasHandle = fromHandle.delete(arrowId);
+    const sourceId = handleSources.get(arrowId);
+    const side = handleSides.get(arrowId);
+    handleSources.delete(arrowId);
     handleSides.delete(arrowId);
     const arrow = editor.getShape(arrowId) as TLArrowShape | undefined;
     if (!arrow || arrow.type !== "arrow") return;
 
+    if (wasHandle && sourceId) {
+      if (!isNodeShape(editor.getShape(sourceId))) {
+        discard(editor, arrowId);
+        return;
+      }
+      // A modifier or native hit-test can remove the start binding while moving.
+      // Restore only this handle gesture's source, before ordinary validation.
+      if (
+        !bindingsOf(editor, arrowId).some(
+          (binding) => binding.props.terminal === "start",
+        )
+      ) {
+        editor.createBinding({
+          type: "arrow",
+          fromId: arrowId,
+          toId: sourceId,
+          props: {
+            terminal: "start",
+            normalizedAnchor: { x: side === "left" ? 0 : 1, y: 0.5 },
+            isPrecise: true,
+            isExact: true,
+          },
+        });
+      }
+    }
     const bindings = bindingsOf(editor, arrowId);
     const ends = arrowEnds(arrow, bindings);
 
@@ -238,7 +284,12 @@ export function registerLinkArrow(editor: Editor): () => void {
         editor.getShape(id),
       );
       if (content) {
-        if (referenceCountForNode(editor, `shape:${content.nodeId}` as TLShapeId) > MAX_LINKS) {
+        if (
+          referenceCountForNode(
+            editor,
+            `shape:${content.nodeId}` as TLShapeId,
+          ) > MAX_LINKS
+        ) {
           discard(editor, arrowId);
           toast.error(t("shape.referenceLimit", { limit: MAX_LINKS }));
           return;
@@ -337,31 +388,99 @@ export function registerLinkArrow(editor: Editor): () => void {
     });
   };
 
+  const anchorHandleStart = (
+    shape: TLArrowShape,
+    sourceId: TLShapeId,
+    side?: "left" | "right",
+  ): TLArrowShape => {
+    if (!isNodeShape(editor.getShape(sourceId))) return shape;
+    const bounds = editor.getShapePageBounds(sourceId);
+    if (!bounds) return shape;
+    const point = {
+      x: bounds.x + (side === "left" ? 0 : bounds.width),
+      y: bounds.y + bounds.height / 2,
+    };
+    const parent = editor.getShape(shape.parentId as TLShapeId);
+    const local = parent ? editor.getPointInShapeSpace(parent, point) : point;
+    const start = { x: local.x - shape.x, y: local.y - shape.y };
+    if (shape.props.start?.x === start.x && shape.props.start?.y === start.y)
+      return shape;
+    // Keep the native arrow origin at the actual pointer press. Moving x/y
+    // changes tldraw's grab offset and would shift the target away from the cursor.
+    return { ...shape, props: { ...shape.props, start } };
+  };
+
+  const stabilizeHandleBinding = (binding: TLArrowBinding): TLArrowBinding => {
+    const sourceId = handleSources.get(binding.fromId);
+    const bound =
+      binding.props.terminal === "start" &&
+      sourceId &&
+      isNodeShape(editor.getShape(sourceId))
+        ? { ...binding, toId: sourceId }
+        : binding;
+    const stabilized = stabilizeNodeBinding(
+      editor,
+      bound,
+      handleSides.get(binding.fromId),
+    );
+    if (
+      binding.props.terminal === "end" &&
+      sourceId &&
+      sourceId !== binding.toId &&
+      isNodeShape(editor.getShape(binding.toId))
+    ) {
+      const source = editor.getShapePageBounds(sourceId);
+      const target = editor.getShapePageBounds(binding.toId);
+      if (source && target)
+        return {
+          ...stabilized,
+          props: {
+            ...stabilized.props,
+            normalizedAnchor: {
+              x: source.center.x >= target.center.x ? 1 : 0,
+              y: 0.5,
+            },
+          },
+        };
+    }
+    return stabilized;
+  };
+
   const offs = [
+    editor.sideEffects.registerBeforeCreateHandler("shape", (shape, source) => {
+      if (
+        source !== "user" ||
+        shape.type !== "arrow" ||
+        !handleStartPending ||
+        (handleGestureOwner && handleGestureOwner !== editor) ||
+        !handleStartShape ||
+        !isNodeShape(editor.getShape(handleStartShape))
+      )
+        return shape;
+      return anchorHandleStart(shape, handleStartShape, handleStartSide);
+    }),
     editor.sideEffects.registerBeforeCreateHandler("binding", (binding) =>
-      binding.type === "arrow"
-        ? stabilizeNodeBinding(editor, binding, handleSides.get(binding.fromId))
-        : binding,
+      binding.type === "arrow" ? stabilizeHandleBinding(binding) : binding,
     ),
     editor.sideEffects.registerBeforeChangeHandler(
       "binding",
       (_prev, binding) =>
-        binding.type === "arrow"
-          ? stabilizeNodeBinding(
-              editor,
-              binding,
-              handleSides.get(binding.fromId),
-            )
-          : binding,
+        binding.type === "arrow" ? stabilizeHandleBinding(binding) : binding,
     ),
     editor.sideEffects.registerAfterCreateHandler("shape", (shape, source) => {
       if (source !== "user" || shape.type !== "arrow") return;
-      if (handleStartPending) {
+      if (
+        handleStartPending &&
+        (!handleGestureOwner || handleGestureOwner === editor)
+      ) {
         handleStartPending = false;
         fromHandle.add(shape.id as TLShapeId);
         if (handleStartSide)
           handleSides.set(shape.id as TLShapeId, handleStartSide);
+        if (handleStartShape)
+          handleSources.set(shape.id as TLShapeId, handleStartShape);
         handleStartSide = undefined;
+        handleStartShape = undefined;
       }
       schedule(shape.id as TLShapeId);
     }),
@@ -392,6 +511,9 @@ export function registerLinkArrow(editor: Editor): () => void {
      * 这里一律钉回去——线的位置只由两端节点决定。
      */
     editor.sideEffects.registerBeforeChangeHandler("shape", (_prev, next) => {
+      const source = handleSources.get(next.id);
+      if (next.type === "arrow" && source)
+        return anchorHandleStart(next, source, handleSides.get(next.id));
       if (!isLinkShape(next) || (next.x === 0 && next.y === 0)) return next;
       return { ...next, x: 0, y: 0 };
     }),
@@ -414,7 +536,7 @@ export function registerLinkArrow(editor: Editor): () => void {
     pending.clear();
     fromHandle.clear();
     handleSides.clear();
-    handleStartPending = false;
-    handleStartSide = undefined;
+    handleSources.clear();
+    if (!handleGestureOwner || handleGestureOwner === editor) endHandleLink();
   };
 }

@@ -12,31 +12,53 @@
 
 /* ------------------------------ 上下文链接把手 ----------------------------- */
 
-/*
- * 节点左右两侧的 10px 圆点（§24.3-3），静默 .4、hover 1（tldraw 计划 §4.3）。
- * 从 `canvas.css` 的 `.react-flow__handle` 搬过来的：React Flow 生成的 DOM
- * 没了，把手现在是 `ConnectionHandles` 自己的 div，规则跟着节点走。
- */
+/* Visible ports stay on the node edge. Their larger hit regions extend
+   outward, leaving body text and terminal input unobstructed. */
 .node-connection-handle {
+  --connection-port-size: 14px;
+  --connection-hit-size: 34px;
   position: absolute;
   top: 50%;
   z-index: 1;
-  width: 10px;
-  height: 10px;
+  width: var(--connection-port-size);
+  height: var(--connection-port-size);
+  border: 2px solid var(--card);
   border-radius: 999px;
   background: var(--muted-foreground);
-  opacity: 0.4;
-  transform: translateY(-50%);
-  transition: opacity var(--dur-fast) var(--ease-out);
+  box-shadow: 0 0 0 1px var(--border-strong);
+  opacity: 0.85;
+  transform: translateY(-50%) scale(max(1, var(--tl-scale, 1)));
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
   cursor: crosshair;
   touch-action: none;
 }
 
-/* The visible port stays on the geometry midpoint; hit area does not resize it. */
+/* Keep the visible circle centred; only the transparent hit area is offset. */
 .node-connection-handle::before {
   position: absolute;
-  inset: -7px;
+  top: 50%;
+  width: var(--connection-hit-size);
+  height: var(--connection-hit-size);
+  border-radius: 999px;
+  transform: translateY(-50%);
   content: "";
+}
+
+.node-connection-handle[data-side="left"]::before {
+  right: -2px;
+}
+.node-connection-handle[data-side="right"]::before {
+  left: -2px;
+}
+
+@media (hover: none), (any-pointer: coarse) {
+  .node-connection-handle {
+    --connection-port-size: 16px;
+    --connection-hit-size: 36px;
+    opacity: 1;
+  }
 }
 
 [data-slot="node-shell"] {
@@ -102,7 +124,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .node-frame,
-  .node-secondary-action {
+  .node-secondary-action,
+  .node-connection-handle {
     transition: none;
   }
 }
@@ -153,17 +176,18 @@
 }
 
 .node-connection-handle[data-side="left"] {
-  left: -5px;
+  left: calc(var(--connection-port-size) * -0.5);
 }
 
 .node-connection-handle[data-side="right"] {
-  right: -5px;
+  right: calc(var(--connection-port-size) * -0.5);
 }
 
 .node-connection-handle:hover,
 [data-slot="node-shell"]:hover .node-connection-handle,
 [data-slot="node-shell"][data-selected="true"] .node-connection-handle {
   opacity: 1;
+  background: var(--foreground);
 }
 
 /* -------------------------------- 状态光晕 -------------------------------- */

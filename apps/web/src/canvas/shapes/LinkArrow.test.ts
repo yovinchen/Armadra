@@ -43,6 +43,7 @@ vi.mock("../../nodes/registry", () => ({
 import { linkToEdge } from "../sync/derive";
 import {
   beginHandleLink,
+  endHandleLink,
   registerLinkArrow,
   stabilizeNodeBinding,
 } from "./LinkArrow";
@@ -176,13 +177,19 @@ class FakeEditor {
   }
 
   createArrow(id: string): void {
-    const shape = {
+    let shape: Rec = {
       id,
+      x: 777,
+      y: 888,
+      parentId: "page:page",
       type: "arrow",
       typeName: "shape",
       meta: {},
       props: { arrowheadStart: "none", arrowheadEnd: "arrow", color: "black" },
     };
+    for (const fn of this.handlers["before-create:shape"] ?? []) {
+      shape = (fn(shape, "user") as unknown as Rec) ?? shape;
+    }
     this.shapes.set(id, shape);
     this.emit("create:shape", shape, "user");
   }
@@ -280,6 +287,69 @@ afterEach(() => {
 });
 
 describe("registerLinkArrow · 换形", () => {
+  it("starts an outward handle press at the source geometry midpoint", () => {
+    beginHandleLink("right", toShapeId(A));
+    editor.path = "select.dragging_handle";
+    editor.createArrow("shape:expanded-hit");
+    expect(editor.getShape("shape:expanded-hit")).toMatchObject({
+      x: 777,
+      y: 888,
+      props: { start: { x: -337, y: -658 } },
+    });
+    // Overlapping shapes must not steal this handle gesture's start binding.
+    editor.bind("shape:expanded-hit", "start", C);
+    expect(editor.getBindingsFromShape("shape:expanded-hit")[0]).toMatchObject({
+      toId: toShapeId(A),
+      props: { normalizedAnchor: { x: 1, y: 0.5 } },
+    });
+  });
+
+  it("restores only a handle gesture's missing source before validating the link", async () => {
+    beginHandleLink("right", toShapeId(A));
+    editor.path = "select.dragging_handle";
+    editor.createArrow("shape:expanded-release");
+    editor.bind("shape:expanded-release", "end", B);
+    expect(
+      editor.getBindingsFromShape("shape:expanded-release")[0],
+    ).toMatchObject({ props: { normalizedAnchor: { x: 0, y: 0.5 } } });
+    editor.path = "select.idle";
+    window.dispatchEvent(new Event("pointerup"));
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    const links = editor
+      .getCurrentPageShapes()
+      .filter((shape) => shape.type === "link");
+    expect(links).toHaveLength(1);
+    expect(links[0]?.props).toMatchObject({
+      from: toShapeId(A),
+      to: toShapeId(B),
+    });
+  });
+
+  it("cancels a handle link when its source disappears during dragging", async () => {
+    beginHandleLink("left", toShapeId(A));
+    editor.path = "select.dragging_handle";
+    editor.createArrow("shape:deleted-origin");
+    editor.bind("shape:deleted-origin", "end", B);
+    editor.deleteShape(toShapeId(A));
+    editor.path = "select.idle";
+    window.dispatchEvent(new Event("pointerup"));
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    expect(editor.getShape("shape:deleted-origin")).toBeUndefined();
+    expect(
+      editor.getCurrentPageShapes().some((shape) => shape.type === "link"),
+    ).toBe(false);
+  });
+
+  it("does not move a free arrow after a handle gesture is cancelled", () => {
+    beginHandleLink("left", toShapeId(A));
+    endHandleLink();
+    editor.createArrow("shape:free-after-cancel");
+    expect(editor.getShape("shape:free-after-cancel")).toMatchObject({
+      x: 777,
+      y: 888,
+    });
+  });
+
   it("preserves the chosen left port even when the native tool initially snaps to centre", () => {
     beginHandleLink("left");
     editor.path = "select.dragging_handle";
@@ -542,9 +612,13 @@ describe("registerLinkArrow · 把手与级联", () => {
   });
 });
 
-
 it("refuses a dragged native reference past the readable-object limit with feedback", async () => {
-  for (let i = 0; i < 64; i++) editor.shapes.set(`shape:peer-${i}`, { id: `shape:peer-${i}`, type: "link", props: { from: toShapeId(B), to: `shape:node-${i}` } });
+  for (let i = 0; i < 64; i++)
+    editor.shapes.set(`shape:peer-${i}`, {
+      id: `shape:peer-${i}`,
+      type: "link",
+      props: { from: toShapeId(B), to: `shape:node-${i}` },
+    });
   editor.addBoardShape("shape:overflow-note", "note");
   editor.path = "select.dragging_handle";
   editor.createArrow("shape:overflow-ref");

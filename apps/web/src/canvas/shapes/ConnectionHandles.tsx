@@ -1,4 +1,5 @@
 import * as React from "react";
+import type { TLShapeId } from "tldraw";
 
 import { useT } from "@/app/preferences-store";
 import { getEditor } from "@/canvas/editor-context";
@@ -19,28 +20,52 @@ import { beginHandleLink, endHandleLink } from "./LinkArrow";
 
 type HandleSide = "left" | "right";
 
-function startArrow(event: React.PointerEvent<HTMLDivElement>): void {
-  if (event.button !== 0) return;
+function canStart(event: React.PointerEvent<HTMLDivElement>): boolean {
+  return (
+    event.button === 0 &&
+    !(event.pointerType === "touch" && event.isPrimary === false)
+  );
+}
+
+function startArrow(
+  event: React.PointerEvent<HTMLDivElement>,
+): (() => void) | undefined {
   const editor = getEditor();
   if (!editor) return;
-
+  const pointerId = event.pointerId;
   editor.setCurrentTool("arrow");
-  // 「这一条线是从把手起笔的」——`LinkArrow` 在交互结束时读它：末端没绑到
-  // 节点就把线删掉（把手只用来连节点，§4.3）。
-  beginHandleLink(event.currentTarget.dataset.side as HandleSide);
-
-  // 松手回到选择工具。箭头工具自己在 `isToolLocked=false` 时也会回退，
-  // 这里再兜一层：拖到一半按 Esc / 拖成零长度都不会留在箭头工具上。
-  const back = () => {
-    const current = getEditor();
-    if (current) current.setCurrentTool("select");
-    // 只点了一下没拖出箭头：把标记收回来，免得留给下一条线。
-    endHandleLink();
+  const shapeId =
+    event.currentTarget.closest<HTMLElement>("[data-shape-id]")?.dataset
+      .shapeId;
+  const gesture = beginHandleLink(
+    event.currentTarget.dataset.side as HandleSide,
+    shapeId as TLShapeId | undefined,
+    editor,
+  );
+  let active = true;
+  const finish = (returnToSelect: boolean) => {
+    if (!active) return;
+    active = false;
     window.removeEventListener("pointerup", back);
     window.removeEventListener("pointercancel", back);
+    window.removeEventListener("keydown", clearOnEscape);
+    // Unmount / an old pointerup must not clear another handle's pending start.
+    const owned = endHandleLink(gesture);
+    if (returnToSelect && owned && getEditor() === editor)
+      editor.setCurrentTool("select");
   };
+  const back = (event: PointerEvent) => {
+    if (event.pointerId === pointerId) finish(true);
+  };
+  const clearOnEscape = (event: KeyboardEvent) => {
+    // Native canvas Escape owns cancellation / history rollback. Only retire
+    // this gesture's listeners here, without overriding another editor's tool.
+    if (event.key === "Escape") finish(false);
+  };
+  window.addEventListener("keydown", clearOnEscape);
   window.addEventListener("pointerup", back);
   window.addEventListener("pointercancel", back);
+  return () => finish(false);
 }
 
 function ConnectionHandle({
@@ -50,6 +75,13 @@ function ConnectionHandle({
   side: HandleSide;
   label: string;
 }) {
+  const cleanupGesture = React.useRef<(() => void) | undefined>(undefined);
+  React.useEffect(() => () => cleanupGesture.current?.(), []);
+  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!canStart(event)) return;
+    cleanupGesture.current?.();
+    cleanupGesture.current = startArrow(event);
+  };
   return (
     <div
       role="button"
@@ -58,7 +90,7 @@ function ConnectionHandle({
       data-slot="connection-handle"
       data-side={side}
       className="node-connection-handle"
-      onPointerDown={startArrow}
+      onPointerDown={onPointerDown}
     />
   );
 }

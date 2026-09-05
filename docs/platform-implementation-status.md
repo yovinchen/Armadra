@@ -188,6 +188,14 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - 实际构建产物为 `target/debug/Armadra`；Cargo metadata 验证唯一 bin target 与默认运行目标，编译及 Clippy 通过。Windows 文件名按系统规则为 `Armadra.exe`，Windows 实机显示尚未验收。
 - 旧进程不会因源码更新而原地改名，需从新构建重启应用。此处记录主应用身份，后台协议与内部 package ID 保持兼容。
 
+## 连接按钮易用性
+
+- 鼠标圆点由 10px 提升为 14px，命中区 34px；触屏 16px/36px，默认透明度 0.85。扩展区域朝外，保持节点边界几何中心；低缩放仍有 14px 屏幕圆点。
+- 外侧拖动明确绑定所属源节点，保留原生箭头位置和终点命中；转换后的链接保持同一步撤销。原生绘图、重复/自连校验及内容链接继续使用原规则。
+- 手势按 token、editor 与 pointerId 归属，Esc/卸载/取消清理监听。独立审查发现并修复旧 pointerup 可能污染新画布工具及新手势的问题。
+- 27 项定向测试与类型检查通过。真实 Chrome 在 100%/50% 缩放均可从外侧 22px 起线，中心偏移为 0，正文内侧 12px 不被遮挡；触屏模拟拖线及单次撤销通过。
+- 实际 Esc 与拖动中卸载源节点后均无残留箭头/孤立 binding，测试 pageerror 为空。独立浏览器/Vite 已清理；结果保存在 `output/playwright/connection-handles-result.json` 和 `connection-handles-cancel-result.json`。触屏模拟不等同于移动设备实机验收。
+
 ## Runtime 明确退出控制
 
 - 新增仅在 `--desktop-control-stdin` 启用的继承 stdin Protobuf 控制，4 字节长度前缀及 4096 字节限额。EOF、未知动作、截断、重复/非规范消息不视为退出许可；未开放 HTTP 管理接口。
