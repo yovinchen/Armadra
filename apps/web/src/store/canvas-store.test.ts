@@ -274,6 +274,53 @@ describe("addNode", () => {
     expect(state().addNode("sticky")).toBe("");
   });
 
+  it("绑定了 worktree 的分组里，新节点继承那个目录（G03）", () => {
+    const bound = makeNode("group", {
+      size: { width: 400, height: 300 },
+      position: { x: 100, y: 100 },
+      data: {
+        kind: "group",
+        binding: {
+          worktreePath: "wt/feature",
+          branch: "feature",
+          repositoryId: "repo",
+          initScript: null,
+          initScriptState: "none",
+          initScriptNodeId: null,
+        },
+      } as never,
+    });
+    load([bound]);
+    // 终端的 cwd 会被原样交给子进程，所以是绝对路径；其余是工作区相对。
+    expect(
+      byId(state().addNode("terminal", { parentId: bound.id }))?.data,
+    ).toEqual({ kind: "terminal", cwd: "/tmp/one/wt/feature" });
+    expect(
+      byId(state().addNode("files", { parentId: bound.id }))?.data,
+    ).toEqual({ kind: "files", path: "wt/feature" });
+    // 右键新建只给落点，也要认得自己落在哪个绑定分组里。
+    expect(
+      byId(state().addNode("editor", { position: { x: 200, y: 200 } }))?.data,
+    ).toEqual({ kind: "editor", path: "wt/feature" });
+    // 调用方显式给的 data 仍然压在最上面。
+    expect(
+      byId(
+        state().addNode("terminal", {
+          parentId: bound.id,
+          data: { kind: "terminal", cwd: "/tmp/elsewhere" },
+        }),
+      )?.data,
+    ).toEqual({ kind: "terminal", cwd: "/tmp/elsewhere" });
+  });
+
+  it("没绑定的分组不影响新节点的默认目录", () => {
+    const plain = makeNode("group", { size: { width: 400, height: 300 } });
+    load([plain]);
+    expect(
+      byId(state().addNode("terminal", { parentId: plain.id }))?.data,
+    ).toEqual({ kind: "terminal" });
+  });
+
   it("select:false 不改选择", () => {
     const a = makeNode("sticky");
     load([a]);

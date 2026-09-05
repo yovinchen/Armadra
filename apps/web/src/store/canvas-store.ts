@@ -8,6 +8,7 @@ import type {
   CanvasNode,
   CanvasNodeData,
   CanvasNodeType,
+  FrameBinding,
   Position,
   Size,
   Viewport,
@@ -22,6 +23,12 @@ import {
 } from "./defaults";
 import { usePreferencesStore } from "../app/preferences-store";
 import { getEditor, useEditorHandle } from "../canvas/editor-context";
+import {
+  boundFrameFor,
+  enclosingBoundFrame,
+  frameBindingOf,
+  inheritedNodeData,
+} from "../canvas/frame-binding";
 import { isDocumentShapeId, toShapeId } from "../canvas/shapes/armadra-shape";
 import { edgeIdOfShape } from "../canvas/sync/derive";
 import { edgeToLink, nodeToShape, toTldrawColor } from "../canvas/sync/project";
@@ -276,6 +283,14 @@ function updateNodeShape(
             ...(patch.collapsed !== undefined
               ? { collapsed: patch.collapsed }
               : {}),
+            // worktree 绑定（G03）也只有 meta 放得下；不写这一条，
+            // `updateNodeData` 改完绑定，下一轮反向派生就把它抹回去了。
+            ...(data && "binding" in data
+              ? {
+                  binding:
+                    (data as { binding?: FrameBinding | null }).binding ?? null,
+                }
+              : {}),
           },
         },
       } as never,
@@ -433,6 +448,19 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const base = defaultNodeData(type, {
       workspaceRoot: state.workspace?.rootPath,
     });
+    /**
+     * 在绑定了 worktree 的分组里新建的节点开在那个 checkout 里（G03）。
+     *
+     * 优先看 `parentId`；右键新建只给 `position`，那就看落点落在哪个绑定分组
+     * 里。调用方显式给的 `data` 仍然压在最上面——「打开这个文件」不该被
+     * 分组的目录顶掉。
+     */
+    const frame =
+      boundFrameFor(state.document.nodes, options.parentId) ??
+      enclosingBoundFrame(state.document.nodes, options.position);
+    const inherited = inheritedNodeData(type, frameBindingOf(frame), {
+      workspaceRoot: state.workspace?.rootPath,
+    });
     const node = {
       id,
       boardId: state.document.board.id,
@@ -444,7 +472,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       ...(options.parentId ? { parentId: options.parentId } : {}),
       labels: [],
       note: "",
-      data: { ...base, ...options.data, kind: type },
+      data: { ...base, ...inherited, ...options.data, kind: type },
       createdAt: stamp,
       updatedAt: stamp,
     } as CanvasNode;

@@ -9,6 +9,7 @@ import {
 } from "tldraw";
 
 import { defaultNodeSize } from "../../store/defaults";
+import { frameBindingOf } from "../frame-binding";
 import type {
   ArmadraNodeType,
   ArmadraProps,
@@ -116,6 +117,9 @@ export function nodeToShape(
           note: node.note ?? "",
           collapsed: node.collapsed ?? false,
           createdAt: node.createdAt,
+          // frame 的 props 装不下 worktree 绑定（G03），和标签一样走 meta；
+          // 少了这一条，绑定过一次 tldraw 反向派生就把它抹掉了。
+          binding: frameBindingOf(node),
         },
       },
     } as TLFrameShape;

@@ -23,6 +23,7 @@ import { gitMessage } from "./git-message";
 import { gitStashes } from "./git-stashes";
 import { gitIntegration } from "./git-integration";
 import { gitRepository } from "./git-repository";
+import { frameBinding } from "./frame-binding";
 import { fileDrag } from "./file-drag";
 import { resources } from "./resources";
 import { fileWorkflow } from "./file-workflow";
@@ -63,6 +64,7 @@ export const MESSAGE_MODULES = {
   "legacy-archives": legacyArchives,
   "context-usage": contextUsage,
   "git-repository": gitRepository,
+  "frame-binding": frameBinding,
   "git-hunks": gitHunks,
   "git-message": gitMessage,
   "git-stashes": gitStashes,

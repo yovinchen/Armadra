@@ -8,6 +8,7 @@ import {
   Minimize2,
   Trash2,
   Ungroup,
+  Unlink,
 } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import type { CanvasNode, CanvasNodeType } from "@armadra/shared";
@@ -20,6 +21,7 @@ import {
 } from "@/ui/context-menu";
 import { useT } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
+import { frameBindingOf } from "../frame-binding";
 import { runCanvasCommand } from "../commands";
 
 /**
@@ -168,6 +170,17 @@ export function NodeMenuContent({ node }: { node: CanvasNode }) {
         {node.collapsed ? <ChevronDown /> : <ChevronRight />}
         {node.collapsed ? t("node.expand") : t("node.collapse")}
       </ContextMenuItem>
+
+      {frameBindingOf(node) ? (
+        // 解绑只清 `data.binding`，磁盘上的 checkout 一个字节都不动；
+        // 删 checkout 只有仓库面板那条安全移除（G03）。
+        <ContextMenuItem
+          onSelect={() => store().updateNodeData(node.id, { binding: null })}
+        >
+          <Unlink />
+          {t("frameBinding.unbindFrame")}
+        </ContextMenuItem>
+      ) : null}
 
       <ContextMenuItem
         onSelect={onTargets(maximized ? "canvas.restore" : "canvas.maximize")}

@@ -9,6 +9,7 @@ import {
   useSubagentPlacements,
   type SubagentPlacement,
 } from "../SubagentLayer";
+import { WorktreeBindingLayer } from "./WorktreeBindingBadge";
 
 /**
  * 派生层（tldraw 计划 §4.4）：rope 等待关系 + 子代理卡片。
@@ -50,26 +51,28 @@ export function CanvasOverlays() {
     return map;
   }, [nodes, placements]);
 
-  if (edges.length === 0 && placements.length === 0) return null;
-
   return (
     <>
-      <svg
-        aria-hidden
-        className="pointer-events-none absolute overflow-visible"
-        style={{
-          left: -CANVAS_SPAN,
-          top: -CANVAS_SPAN,
-          width: CANVAS_SPAN * 2,
-          height: CANVAS_SPAN * 2,
-        }}
-      >
-        <g transform={`translate(${CANVAS_SPAN} ${CANVAS_SPAN})`}>
-          {edges.map((edge) => (
-            <RopeLine key={edge.id} edge={edge} boxes={boxes} />
-          ))}
-        </g>
-      </svg>
+      {/* 绑定徽章（G03）自己判断有没有要画的，和绳子 / 子代理各走各的。 */}
+      <WorktreeBindingLayer />
+      {edges.length > 0 ? (
+        <svg
+          aria-hidden
+          className="pointer-events-none absolute overflow-visible"
+          style={{
+            left: -CANVAS_SPAN,
+            top: -CANVAS_SPAN,
+            width: CANVAS_SPAN * 2,
+            height: CANVAS_SPAN * 2,
+          }}
+        >
+          <g transform={`translate(${CANVAS_SPAN} ${CANVAS_SPAN})`}>
+            {edges.map((edge) => (
+              <RopeLine key={edge.id} edge={edge} boxes={boxes} />
+            ))}
+          </g>
+        </svg>
+      ) : null}
       {placements.map((placement) => (
         <div
           key={placement.id}

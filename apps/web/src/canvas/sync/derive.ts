@@ -1,4 +1,9 @@
-import type { CanvasEdge, CanvasNode, CanvasNodeType } from "@armadra/shared";
+import type {
+  CanvasEdge,
+  CanvasNode,
+  CanvasNodeType,
+  FrameBinding,
+} from "@armadra/shared";
 import type {
   TLArrowBinding,
   TLArrowShape,
@@ -36,6 +41,8 @@ interface FrameArmadraMeta {
   note?: string;
   collapsed?: boolean;
   createdAt?: string;
+  /** worktree 绑定（G03）；`frame` 的 props 装不下，见 `project.ts`。 */
+  binding?: FrameBinding | null;
 }
 
 export function shapeToNode(
@@ -61,7 +68,11 @@ export function shapeToNode(
       ...(parentId ? { parentId } : {}),
       labels: [...(meta.labels ?? [])],
       note: meta.note ?? "",
-      data: { kind: "group" },
+      // 绑定跟着 frame 一起回来；没有就是一个普通分组。
+      data: {
+        kind: "group",
+        ...(meta.binding ? { binding: meta.binding } : {}),
+      },
       createdAt: meta.createdAt ?? updatedAt,
       updatedAt,
     } as CanvasNode;
