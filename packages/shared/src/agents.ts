@@ -4,7 +4,7 @@ import {
   PERMISSION_MODES,
   permissionModeSchema,
   type PermissionMode,
-} from "./domain.js";
+} from "./domain/index.js";
 
 /**
  * Agent registry — see docs/v3-agent-terminal-plan.md §5.1.
