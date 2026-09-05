@@ -289,7 +289,7 @@ async fn byte_chunks_preserve_unicode_and_require_a_stable_content_version() {
 async fn framed_handshake_flushes_and_clean_eof_terminates() {
     let (mut client, server) = tokio::io::duplex(4096);
     let (reader, writer) = tokio::io::split(server);
-    let task = tokio::spawn(serve(reader, writer));
+    let task = tokio::spawn(serve(reader, writer, None));
     let hello = request(
         "",
         worker_request::Action::Hello(WorkerHelloRequest {
@@ -323,7 +323,195 @@ async fn malformed_truncated_and_oversized_frames_fail_closed() {
         vec![0, 0, 0, 1, 255],
     ] {
         let mut output = vec![];
-        assert!(serve(bytes.as_slice(), &mut output).await.is_err());
+        assert!(serve(bytes.as_slice(), &mut output, None).await.is_err());
         assert!(output.is_empty());
     }
+}
+
+fn ownership(response: WorkerResponse) -> WorkerWriteOwnership {
+    let Some(worker_response::Result::WriteOwnership(record)) = response.result else {
+        panic!("expected a write ownership record")
+    };
+    record
+}
+
+fn set_ownership(owner: i32, epoch: u64, expected: u64) -> worker_request::Action {
+    worker_request::Action::SetWriteOwnership(SetWriteOwnershipRequest {
+        domain: "canvas".into(),
+        owner,
+        epoch,
+        expected_epoch: expected,
+        reason_code: "ownership.switch.verified".into(),
+    })
+}
+
+const RUNTIME: i32 = CanvasOwnershipOwner::Runtime as i32;
+const HOST_OWNER: i32 = CanvasOwnershipOwner::Host as i32;
+
+/// A Worker started without `--canvas-database` has no database to answer
+/// from, and inventing a record would let a controller believe a handoff it
+/// never made had been persisted.
+#[tokio::test]
+async fn ownership_actions_are_unsupported_without_a_canvas_database() {
+    let mut worker = Worker::default();
+    let instance = hello(&mut worker).await;
+    for action in [
+        set_ownership(HOST_OWNER, 2, 1),
+        worker_request::Action::GetWriteOwnership(GetWriteOwnershipRequest {
+            domain: "canvas".into(),
+        }),
+    ] {
+        assert_eq!(
+            code(worker.handle(request(&instance, action)).await),
+            "UNSUPPORTED"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_configured_worker_persists_the_handoff_and_refuses_a_stale_epoch() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("canvas.db");
+    let pool = armadra_runtime::db::connect(&format!("sqlite://{}?mode=rwc", path.display()))
+        .await
+        .unwrap();
+    pool.close().await;
+    let opened = armadra_runtime::worker::open_canvas_database(&path)
+        .await
+        .unwrap();
+    let mut worker = Worker::with_canvas(opened);
+    let instance = hello(&mut worker).await;
+    let get = worker_request::Action::GetWriteOwnership(GetWriteOwnershipRequest {
+        domain: "canvas".into(),
+    });
+    let before = ownership(worker.handle(request(&instance, get.clone())).await);
+    assert_eq!(before.owner, RUNTIME);
+    assert_eq!(before.epoch, 1);
+    // The seeded stamp is the epoch, so a Runtime that never handed anything
+    // over reports a record rather than a guess.
+    assert_eq!(before.updated_at_unix_ms, 0);
+    let moved = ownership(
+        worker
+            .handle(request(&instance, set_ownership(HOST_OWNER, 2, 1)))
+            .await,
+    );
+    assert_eq!((moved.owner, moved.epoch), (HOST_OWNER, 2));
+    // Read back through a second request, so the answer came from the file.
+    assert_eq!(
+        ownership(worker.handle(request(&instance, get.clone())).await).owner,
+        HOST_OWNER
+    );
+    // A repeat of the same handoff is the Host retrying a lost answer.
+    assert_eq!(
+        ownership(
+            worker
+                .handle(request(&instance, set_ownership(HOST_OWNER, 2, 1)))
+                .await
+        ),
+        moved
+    );
+    for (action, expected) in [
+        (set_ownership(RUNTIME, 2, 1), "CONFLICT"),
+        (set_ownership(RUNTIME, 1, 1), "CONFLICT"),
+        (set_ownership(RUNTIME, 3, 1), "CONFLICT"),
+        (set_ownership(0, 3, 2), "INVALID_ARGUMENT"),
+        (set_ownership(999, 3, 2), "INVALID_ARGUMENT"),
+        (
+            worker_request::Action::SetWriteOwnership(SetWriteOwnershipRequest {
+                domain: "terminal".into(),
+                owner: HOST_OWNER,
+                epoch: 3,
+                expected_epoch: 2,
+                reason_code: String::new(),
+            }),
+            "INVALID_ARGUMENT",
+        ),
+        (
+            worker_request::Action::GetWriteOwnership(GetWriteOwnershipRequest {
+                domain: "terminal".into(),
+            }),
+            "NOT_FOUND",
+        ),
+    ] {
+        assert_eq!(
+            code(worker.handle(request(&instance, action)).await),
+            expected
+        );
+    }
+    assert_eq!(
+        ownership(worker.handle(request(&instance, get)).await),
+        moved
+    );
+}
+
+/// The capability is what a controller plans against, so it may only appear
+/// when a database was actually opened.
+#[tokio::test]
+async fn the_ownership_capability_follows_the_configured_database() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("canvas.db");
+    armadra_runtime::db::connect(&format!("sqlite://{}?mode=rwc", path.display()))
+        .await
+        .unwrap()
+        .close()
+        .await;
+    let capabilities = |mut worker: Worker| async move {
+        let response = worker
+            .handle(request(
+                "",
+                worker_request::Action::Hello(WorkerHelloRequest {
+                    protocol: Some(ProtocolVersion { major: 1, minor: 0 }),
+                }),
+            ))
+            .await;
+        let Some(worker_response::Result::Hello(hello)) = response.result else {
+            panic!("handshake failed")
+        };
+        hello.capabilities
+    };
+    assert!(
+        !capabilities(Worker::default())
+            .await
+            .contains(&"canvas.ownership.v1".into())
+    );
+    let opened = armadra_runtime::worker::open_canvas_database(&path)
+        .await
+        .unwrap();
+    assert!(
+        capabilities(Worker::with_canvas(opened))
+            .await
+            .contains(&"canvas.ownership.v1".into())
+    );
+}
+
+/// A Runtime that has never migrated must not be upgraded, or created, by a
+/// Worker that was merely pointed at its file.
+#[tokio::test]
+async fn an_unmigrated_or_missing_database_is_refused_rather_than_created() {
+    let directory = tempfile::tempdir().unwrap();
+    let missing = directory.path().join("absent.db");
+    assert!(
+        armadra_runtime::worker::open_canvas_database(&missing)
+            .await
+            .is_err()
+    );
+    assert!(!missing.exists());
+    let empty = directory.path().join("empty.db");
+    sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(&format!("sqlite://{}?mode=rwc", empty.display()))
+        .await
+        .unwrap()
+        .close()
+        .await;
+    assert!(
+        armadra_runtime::worker::open_canvas_database(&empty)
+            .await
+            .is_err()
+    );
+    assert!(
+        armadra_runtime::worker::open_canvas_database(std::path::Path::new("canvas.db"))
+            .await
+            .is_err()
+    );
 }

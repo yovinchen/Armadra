@@ -32,6 +32,7 @@ pub mod listen;
 pub mod migration_cli;
 pub mod migration_export;
 pub mod model;
+pub mod ownership;
 pub mod paths;
 pub mod resources;
 pub mod security;
@@ -206,6 +207,10 @@ pub fn router_with_state(state: AppState) -> Router {
                 imports::MAX_BATCH_BYTES + 1024 * 1024,
             )),
         )
+        // Who may write the canvas domain (host protocol design §4, step 5).
+        // Not workspace-scoped: the record covers the whole local database, and
+        // the client reads it before it offers a canvas edit.
+        .route("/api/ownership", get(ownership::current))
         .route("/health", get(api::health))
         // The desktop shell and the web app both probe `/api/health`; the bare
         // path is the older one and stays for the launcher script.

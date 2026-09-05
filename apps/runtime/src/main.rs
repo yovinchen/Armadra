@@ -22,23 +22,28 @@ async fn main() -> anyhow::Result<()> {
         .first()
         .is_some_and(|argument| argument == "worker")
     {
-        let command_path = if arguments.as_slice() == ["worker", "--stdio"] {
-            None
-        } else if arguments.len() == 4 && arguments[1] == "--stdio" && arguments[2] == "--state-dir"
-        {
-            Some(std::path::PathBuf::from(&arguments[3]))
-        } else {
-            anyhow::bail!("Usage: Armadra worker --stdio [--state-dir ABSOLUTE_PRIVATE_DIRECTORY]")
-        };
+        let worker = WorkerArguments::parse(&arguments[1..])?;
         tracing_subscriber::fmt()
             .with_writer(std::io::stderr)
             .with_env_filter(EnvFilter::from_default_env())
             .init();
-        if let Some(path) = command_path {
-            armadra_runtime::worker::serve_commands(tokio::io::stdin(), tokio::io::stdout(), path)
-                .await?;
+        // Opened before the first frame is read: a database without the
+        // ownership table must stop the Worker, not surface as a per-request
+        // failure once a controller already believes it can hand over.
+        let canvas = match worker.canvas_database {
+            Some(path) => Some(armadra_runtime::worker::open_canvas_database(&path).await?),
+            None => None,
+        };
+        if let Some(path) = worker.state_dir {
+            armadra_runtime::worker::serve_commands(
+                tokio::io::stdin(),
+                tokio::io::stdout(),
+                path,
+                canvas,
+            )
+            .await?;
         } else {
-            armadra_runtime::worker::serve(tokio::io::stdin(), tokio::io::stdout()).await?;
+            armadra_runtime::worker::serve(tokio::io::stdin(), tokio::io::stdout(), canvas).await?;
         }
         return Ok(());
     }
@@ -297,6 +302,43 @@ const USAGE: &str = "Usage: armadra-runtime [--desktop-control-stdin] [--listen 
      \n\
      \x20 armadra-runtime export --help";
 
+const WORKER_USAGE: &str = "Usage: armadra-runtime worker --stdio \
+     [--state-dir ABSOLUTE_PRIVATE_DIRECTORY] [--canvas-database ABSOLUTE_FILE]";
+
+/// The Worker mode's arguments, everything after `worker`.
+///
+/// `--canvas-database` is the only way the read-only Worker reaches a
+/// database, and it reaches it for the ownership handoff alone: without the
+/// flag both ownership actions answer UNSUPPORTED.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct WorkerArguments {
+    state_dir: Option<std::path::PathBuf>,
+    canvas_database: Option<std::path::PathBuf>,
+}
+
+impl WorkerArguments {
+    fn parse(arguments: &[String]) -> anyhow::Result<Self> {
+        let mut parsed = Self::default();
+        let mut rest = arguments.iter();
+        anyhow::ensure!(
+            rest.next().is_some_and(|argument| argument == "--stdio"),
+            "{WORKER_USAGE}"
+        );
+        while let Some(argument) = rest.next() {
+            // Each flag takes its value as the next argument, and repeating one
+            // is an error rather than a last-one-wins surprise.
+            let slot = match argument.as_str() {
+                "--state-dir" => &mut parsed.state_dir,
+                "--canvas-database" => &mut parsed.canvas_database,
+                _ => anyhow::bail!("{WORKER_USAGE}"),
+            };
+            anyhow::ensure!(slot.is_none(), "{WORKER_USAGE}");
+            *slot = Some(std::path::PathBuf::from(rest.next().context(WORKER_USAGE)?));
+        }
+        Ok(parsed)
+    }
+}
+
 /// The serving mode's arguments. `None` from [`Self::parse`] means the caller
 /// asked for `--help` and the process should print usage and exit 0.
 #[derive(Debug, PartialEq, Eq)]
@@ -491,6 +533,53 @@ mod tests {
             vec!["--listen=unix:relative.sock"],
             vec!["--serve-everything"],
             vec!["extra"],
+        ] {
+            assert!(
+                parse(&arguments).is_err(),
+                "{arguments:?} should have failed"
+            );
+        }
+    }
+
+    /// The two shapes the Go Host already launches must keep working, and the
+    /// canvas database stays opt-in.
+    #[test]
+    fn worker_arguments_keep_the_existing_launches_and_add_the_canvas_database() {
+        let parse = |arguments: &[&str]| {
+            WorkerArguments::parse(
+                &arguments
+                    .iter()
+                    .map(|a| (*a).to_string())
+                    .collect::<Vec<_>>(),
+            )
+        };
+        assert_eq!(parse(&["--stdio"]).unwrap(), WorkerArguments::default());
+        assert_eq!(
+            parse(&["--stdio", "--state-dir", "/private/armadra"])
+                .unwrap()
+                .state_dir,
+            Some("/private/armadra".into())
+        );
+        assert_eq!(
+            parse(&[
+                "--stdio",
+                "--canvas-database",
+                "/data/canvas.db",
+                "--state-dir",
+                "/private/armadra",
+            ])
+            .unwrap(),
+            WorkerArguments {
+                state_dir: Some("/private/armadra".into()),
+                canvas_database: Some("/data/canvas.db".into()),
+            }
+        );
+        for arguments in [
+            vec![],
+            vec!["--canvas-database", "/data/canvas.db"],
+            vec!["--stdio", "--canvas-database"],
+            vec!["--stdio", "--state-dir", "/a", "--state-dir", "/b"],
+            vec!["--stdio", "--write-everything", "/data/canvas.db"],
         ] {
             assert!(
                 parse(&arguments).is_err(),

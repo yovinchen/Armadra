@@ -6,10 +6,17 @@
 //! opens no PTY of its own.
 pub mod agent_bridge;
 
-use crate::{error::AppError, files, security};
+use crate::{error::AppError, files, ownership, security};
 use armadra_protocol::{Message, v1::*};
 use sha2::{Digest, Sha256};
-use std::{collections::HashMap, path::PathBuf};
+use sqlx::{
+    SqlitePool,
+    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub const MAX_FRAME: usize = 1 << 20;
@@ -25,6 +32,11 @@ pub struct Worker {
     /// Present only in command mode: the bridge to the Runtime that owns the
     /// terminals. A read-only Worker answers UNSUPPORTED for agent actions.
     agents: Option<agent_bridge::Bridge>,
+    /// The Runtime's canvas database, opened only for the ownership handoff
+    /// (host protocol design §4, step 5). Absent unless `--canvas-database`
+    /// named one, and then every ownership action answers UNSUPPORTED rather
+    /// than inventing a record.
+    canvas: Option<SqlitePool>,
 }
 impl Default for Worker {
     fn default() -> Self {
@@ -35,8 +47,36 @@ impl Default for Worker {
             command_path: None,
             commands: None,
             agents: None,
+            canvas: None,
         }
     }
+}
+
+/// Opens the Runtime's database for ownership handoffs.
+///
+/// Migrations are deliberately not run and the file is never created: a Worker
+/// started against a Runtime that has never migrated must fail loudly instead
+/// of silently upgrading, or worse, creating, the database it was pointed at.
+pub async fn open_canvas_database(path: &Path) -> anyhow::Result<SqlitePool> {
+    anyhow::ensure!(path.is_absolute(), "--canvas-database must be absolute");
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(false),
+        )
+        .await?;
+    let known: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM sqlite_schema WHERE type='table' AND name=?")
+            .bind("write_ownership")
+            .fetch_one(&pool)
+            .await?;
+    if known != 1 {
+        pool.close().await;
+        anyhow::bail!("--canvas-database has no write ownership table");
+    }
+    Ok(pool)
 }
 fn invalid(message: &str) -> AppError {
     AppError::BadRequest(message.into())
@@ -59,7 +99,7 @@ fn error_response(error: AppError) -> ErrorResponse {
         AppError::BadRequest(_) => "INVALID_ARGUMENT",
         AppError::Forbidden(_) => "PERMISSION_DENIED",
         AppError::NotFound(_) => "NOT_FOUND",
-        AppError::Conflict(_) => "CONFLICT",
+        AppError::Conflict(_) | AppError::OwnershipMoved(_) => "CONFLICT",
         AppError::Io(error) if error.kind() == std::io::ErrorKind::NotFound => "NOT_FOUND",
         AppError::Io(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
             "PERMISSION_DENIED"
@@ -73,14 +113,44 @@ fn error_response(error: AppError) -> ErrorResponse {
             "INVALID_ARGUMENT" => "Invalid Worker request",
             "PERMISSION_DENIED" => "Worker path or permission denied",
             "NOT_FOUND" => "Worker resource was not found",
-            "CONFLICT" => "Worker root or file version changed",
+            "CONFLICT" => "Worker root, file version or write ownership changed",
             _ => "Worker request failed",
         }
         .into(),
     }
 }
 
+/// No database, no answer. A fabricated ownership record would let a
+/// controller believe a switch it never made had been persisted.
+fn unsupported_ownership() -> worker_response::Result {
+    worker_response::Result::Error(ErrorResponse {
+        code: "UNSUPPORTED".into(),
+        message: "Canvas write ownership is not configured".into(),
+    })
+}
+
+/// The stored row on the wire. `updated_at` is RFC 3339 in the database and
+/// milliseconds in the protocol; an unparsable stamp is damage, not a zero.
+fn write_ownership(record: ownership::WriteOwnership) -> Result<WorkerWriteOwnership, AppError> {
+    let updated_at = chrono::DateTime::parse_from_rfc3339(&record.updated_at)
+        .map_err(|_| AppError::Internal("Stored write ownership timestamp is invalid".into()))?;
+    Ok(WorkerWriteOwnership {
+        domain: record.domain,
+        owner: record.owner.to_wire(),
+        epoch: record.epoch,
+        updated_at_unix_ms: updated_at.timestamp_millis(),
+        reason_code: record.reason_code,
+    })
+}
+
 impl Worker {
+    /// A Worker that may also answer the ownership handoff.
+    pub fn with_canvas(canvas: SqlitePool) -> Self {
+        Self {
+            canvas: Some(canvas),
+            ..Self::default()
+        }
+    }
     fn root(&self, root_id: &str) -> Result<PathBuf, AppError> {
         if !id(root_id) {
             return Err(invalid("Invalid root identity"));
@@ -199,6 +269,12 @@ impl Worker {
                         if self.agents.is_some() {
                             capabilities.push(agent_bridge::CAPABILITY.into());
                         }
+                        // Advertised only when a database was actually opened,
+                        // so a controller never plans a handoff this Worker
+                        // would have to refuse.
+                        if self.canvas.is_some() {
+                            capabilities.push("canvas.ownership.v1".into());
+                        }
                         capabilities
                     },
                     max_frame_bytes: MAX_FRAME as u32,
@@ -230,6 +306,31 @@ impl Worker {
                         message: "Command execution is not configured".into(),
                     })),
                 }
+            }
+            Action::SetWriteOwnership(input) => {
+                let Some(pool) = self.canvas.as_ref() else {
+                    return Ok(unsupported_ownership());
+                };
+                let record = ownership::apply(
+                    pool,
+                    ownership::OwnershipHandoff {
+                        domain: input.domain,
+                        owner: ownership::WriteOwner::from_wire(input.owner)?,
+                        epoch: input.epoch,
+                        expected_epoch: input.expected_epoch,
+                        reason_code: input.reason_code,
+                    },
+                )
+                .await?;
+                Ok(Response::WriteOwnership(write_ownership(record)?))
+            }
+            Action::GetWriteOwnership(input) => {
+                let Some(pool) = self.canvas.as_ref() else {
+                    return Ok(unsupported_ownership());
+                };
+                Ok(Response::WriteOwnership(write_ownership(
+                    ownership::read(pool, &input.domain).await?,
+                )?))
             }
             Action::RegisterRoot(input) => {
                 if !id(&input.root_id) || input.path.is_empty() || input.path.len() > 32_768 {
@@ -354,8 +455,12 @@ impl Worker {
 pub async fn serve<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     mut input: R,
     mut output: W,
+    canvas: Option<SqlitePool>,
 ) -> anyhow::Result<()> {
-    let mut worker = Worker::default();
+    let mut worker = match canvas {
+        Some(pool) => Worker::with_canvas(pool),
+        None => Worker::default(),
+    };
     loop {
         let mut prefix = [0u8; 4];
         if input.read(&mut prefix[..1]).await? == 0 {
@@ -390,6 +495,7 @@ pub async fn serve_commands<R: AsyncRead + Unpin + Send + 'static, W: AsyncWrite
     mut input: R,
     mut output: W,
     path: PathBuf,
+    canvas: Option<SqlitePool>,
 ) -> anyhow::Result<()> {
     let (tx, mut rx) = tokio::sync::mpsc::channel(1);
     let (closed, mut close_rx) = tokio::sync::watch::channel(false);
@@ -424,6 +530,7 @@ pub async fn serve_commands<R: AsyncRead + Unpin + Send + 'static, W: AsyncWrite
     });
     let mut worker = Worker {
         command_path: Some(path),
+        canvas,
         ..Default::default()
     };
     let result: anyhow::Result<()>=async {

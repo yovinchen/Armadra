@@ -14,6 +14,12 @@ pub enum AppError {
     NotFound(String),
     #[error("{0}")]
     Conflict(String),
+    /// Canvas write ownership sits with the Host (host protocol design §4).
+    /// Kept apart from `Conflict` so a client can tell "retry with the current
+    /// revision" from "this process no longer writes here" without parsing a
+    /// message; reads keep working either way.
+    #[error("{0}")]
+    OwnershipMoved(String),
     #[error("{0}")]
     Io(#[from] std::io::Error),
     #[error("{0}")]
@@ -47,6 +53,7 @@ impl IntoResponse for AppError {
             }
             Self::NotFound(message) => (StatusCode::NOT_FOUND, "not_found", message),
             Self::Conflict(message) => (StatusCode::CONFLICT, "conflict", message),
+            Self::OwnershipMoved(message) => (StatusCode::CONFLICT, "ownership_moved", message),
             Self::Io(error) => {
                 tracing::warn!(%error, "filesystem operation failed");
                 (
