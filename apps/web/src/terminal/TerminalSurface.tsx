@@ -36,6 +36,7 @@ import {
 import { useCanvasStore } from "@/store/canvas-store";
 import { useAgentStatusStore } from "@/agent/status-store";
 import { agentLabel, buildAgentLaunch } from "@/agent/launch";
+import { isAutoTitled } from "@/meta/auto-title";
 import { TERMINAL_PADDING } from "@/nodes/geometry";
 import {
   armPendingLaunch,
@@ -1131,6 +1132,9 @@ function applyOscTitle(nodeId: string, next: string): void {
   const agentId =
     node.data.kind === "terminal" ? node.data.agent?.id : undefined;
   const defaults = [translate("node.terminal"), agentLabel(agentId)];
+  // 自动命名写的是「这个会话在做什么」，OSC 写的是「此刻在跑什么命令」。
+  // 让后者冲掉前者，标题会跟着每条命令抖动（Agent 自动化设计 §8 的优先级）。
+  if (isAutoTitled(nodeId, node.title)) return;
   if (!shouldApplyOscTitle(nodeId, node.title, defaults)) return;
   if (node.title === title) return;
   rememberOscTitle(nodeId, title);
