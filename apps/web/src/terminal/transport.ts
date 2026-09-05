@@ -5,6 +5,7 @@ import {
   type TerminalServerMessage,
   type TerminateMode,
 } from "@armadra/shared";
+import type { TerminalInputLog } from "./input-log";
 
 /**
  * 终端 WebSocket 的状态机（计划书 §15.5 / §15.7）。
@@ -34,6 +35,8 @@ export interface TerminalHello {
   rows: number;
   cols: number;
   alive: boolean;
+  /** 这个 writer 已经落地的最大输入序号；没带 writer 时是 `undefined`。 */
+  acknowledgedInput?: number;
 }
 
 export interface TerminalTransportHandlers {
@@ -86,6 +89,12 @@ export function createTerminalTransport(
   url: string,
   handlers: TerminalTransportHandlers,
   factory: SocketFactory = defaultFactory,
+  /**
+   * 跨重连存活的输入账。给了它，`input` 就带序号发、按 `ack` 划账，重连时按
+   * `hello.acknowledgedInput` 只重发没落地也没超时的那几条。不给就是原来的
+   * 行为：发出去就不管了。
+   */
+  log?: TerminalInputLog,
 ): TerminalTransport {
   const socket = factory(url);
 
@@ -167,12 +176,29 @@ export function createTerminalTransport(
         rows: message.rows,
         cols: message.cols,
         alive: message.alive,
+        acknowledgedInput: message.acknowledgedInput,
       });
       while (pendingIn.length > 0) {
         const buffered = pendingIn.shift();
         if (buffered) deliver(buffered);
       }
+      // 带账的时候，attach 之前的输入本来就攒在账上（没进 pendingOut），
+      // 所以这里一次把「没落地也没超时的」按序发出去；重发排在这次连接自己
+      // 排队的 resize 之前，因为它们是更早的按键。
+      //
+      // Runtime 没报告已落地位置时按 0 处理：那台服务不认序号，重发的仍然只是
+      // 这个客户端自己没收到确认的那几条，且照样受 TTL 约束。
+      if (log) {
+        for (const entry of log.resume(message.acknowledgedInput ?? 0)) {
+          rawSend({ type: "input", data: entry.data, inputId: entry.id });
+        }
+      }
       flushOut();
+      return;
+    }
+
+    if (message.type === "ack") {
+      log?.acknowledge(message.inputId);
       return;
     }
 
@@ -207,7 +233,16 @@ export function createTerminalTransport(
       return generation;
     },
     send,
-    input: (data) => send({ type: "input", data }),
+    input: (data) => {
+      if (!log) {
+        send({ type: "input", data });
+        return;
+      }
+      const entry = log.record(data);
+      // 账就是队列：attach 之前的输入不再进 pendingOut，否则 hello 之后会被
+      // 重发路径和 flush 各发一次。
+      if (state === "live") rawSend({ type: "input", data, inputId: entry.id });
+    },
     resize: (cols, rows) => send({ type: "resize", cols, rows }),
     terminate: (mode) => send({ type: "terminate", mode }),
     close: () => {

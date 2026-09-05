@@ -64,6 +64,7 @@ import {
 import { loadRuntimePlatform, runtimePlatform } from "./platform";
 import { SCROLL_THROTTLE_MS, WheelAccumulator, postScroll } from "./scrollback";
 import { createTerminalTransport, type TerminalTransport } from "./transport";
+import { TerminalInputLog } from "./input-log";
 import { useOnScreen, usePageVisible } from "@/panels/resources/use-visibility";
 import {
   bufferOffscreenChunk,
@@ -204,6 +205,12 @@ function TerminalSurfaceImpl({
    * 要求「不能因 `display:none` 仍让几十个终端每帧 fit 和重绘」，滚出视口、
    * 窗口在后台、以及没抢到渲染名额的终端一样不该 fit。
    */
+  /**
+   * 输入账跟着这个终端走，不跟着 socket 走：重连会换一个 transport，
+   * 但「哪几条按键还没落地」这件事必须跨过那次断线（客户端平台设计，移动端重连）。
+   */
+  const inputLogRef = React.useRef<TerminalInputLog | null>(null);
+  inputLogRef.current ??= new TerminalInputLog();
   const visibleRef = React.useRef(false);
   /** 离屏时攒下来的输出；见 `render-state.ts`。 */
   const bufferRef = React.useRef(createOffscreenBuffer());
@@ -929,90 +936,97 @@ function TerminalSurfaceImpl({
       bufferOffscreenChunk(bufferRef.current, chunk);
       if (writeThroughRef.current) flushOutput();
     };
-    const transport = createTerminalTransport(terminalWebSocketUrl(sessionId), {
-      onHello: (hello) => {
-        if (disposed) return;
-        backendRef.current = hello.backend;
-        sessionIdRef.current = hello.sessionId;
-        reconnectDelayRef.current = 1000;
-        patch({
-          connection: hello.alive ? "live" : "exited",
-          error: null,
-          binding: hello.alive
-            ? { sessionId: hello.sessionId, generation: hello.generation }
-            : null,
-        });
-        // attach 后必须至少发一次 resize：后端按 80×24 建的 pty，
-        // 之后 `refit()` 只在真的变了才发（§18.2 规则 2）。
-        refit();
-        transport.resize(terminal.cols, terminal.rows);
+    const log = inputLogRef.current!;
+    const transport = createTerminalTransport(
+      terminalWebSocketUrl(sessionId, log.writerId),
+      {
+        onHello: (hello) => {
+          if (disposed) return;
+          backendRef.current = hello.backend;
+          sessionIdRef.current = hello.sessionId;
+          reconnectDelayRef.current = 1000;
+          patch({
+            connection: hello.alive ? "live" : "exited",
+            error: null,
+            binding: hello.alive
+              ? { sessionId: hello.sessionId, generation: hello.generation }
+              : null,
+          });
+          // attach 后必须至少发一次 resize：后端按 80×24 建的 pty，
+          // 之后 `refit()` 只在真的变了才发（§18.2 规则 2）。
+          refit();
+          transport.resize(terminal.cols, terminal.rows);
 
-        const store = useCanvasStore.getState();
-        const node = store.document?.nodes.find((item) => item.id === nodeId);
-        const nodeData =
-          node && node.data.kind === "terminal" ? node.data : dataRef.current;
-        // 只有本次挂载新建的会话、带 agent、且 CLI 还没自报 sessionId 时才敲启动行。
-        // 待启动节点是例外：它的启动行本来就还没发过，重连之后仍然要接着等
-        // 依赖（否则关掉再打开应用，这条绳子就永远悬着了）。
-        if (
-          hello.alive &&
-          (freshSessionRef.current || Boolean(nodeData.agent?.pendingLaunch)) &&
-          nodeData.agent &&
-          !nodeData.agent.sessionId
-        ) {
-          armLaunch();
-        }
+          const store = useCanvasStore.getState();
+          const node = store.document?.nodes.find((item) => item.id === nodeId);
+          const nodeData =
+            node && node.data.kind === "terminal" ? node.data : dataRef.current;
+          // 只有本次挂载新建的会话、带 agent、且 CLI 还没自报 sessionId 时才敲启动行。
+          // 待启动节点是例外：它的启动行本来就还没发过，重连之后仍然要接着等
+          // 依赖（否则关掉再打开应用，这条绳子就永远悬着了）。
+          if (
+            hello.alive &&
+            (freshSessionRef.current ||
+              Boolean(nodeData.agent?.pendingLaunch)) &&
+            nodeData.agent &&
+            !nodeData.agent.sessionId
+          ) {
+            armLaunch();
+          }
+        },
+        onSnapshot: (chunk) => {
+          if (!disposed) writeChunk(chunk);
+        },
+        onOutput: (chunk) => {
+          if (disposed) return;
+          writeChunk(chunk);
+          // 启动行的静默判定看的是「后端有没有在输出」，和渲染快慢无关：
+          // 离屏的终端一样要在提示符安静下来之后把启动行敲出去。
+          noteOutput();
+        },
+        onStatus: (state, exitCode) => {
+          if (disposed) return;
+          if (state === "running") {
+            patch({ connection: "live", exitCode: null });
+            return;
+          }
+          patch({
+            connection: state === "failed" ? "failed" : "exited",
+            exitCode,
+            binding: null,
+          });
+          useCanvasStore.getState().updateNodeData(nodeId, {
+            lastExitCode: exitCode,
+          });
+        },
+        onWarning: (message) => {
+          if (!disposed) patch({ error: message });
+        },
+        onStale: () => {
+          if (disposed) return;
+          patch({ binding: null });
+          // 同一个 URL、同一个 session id，只是 generation 变了：
+          // 重新走一遍连接分支（它会在连接前清屏）。
+          setAttempt((value) => value + 1);
+        },
+        onClose: () => {
+          if (disposed) return;
+          const connection = statusRef.current.connection;
+          // 进程已退出/失败时的关闭是正常收尾；其余情况（Runtime 重启、网络抖动）
+          // 都按意外断线处理：标记 detached 并按退避自动重连，重连会先清屏再 attach。
+          if (connection === "exited" || connection === "failed") return;
+          patch({ connection: "detached", binding: null });
+          const delay = reconnectDelayRef.current;
+          reconnectDelayRef.current = Math.min(delay * 2, 10_000);
+          reconnectTimerRef.current = setTimeout(() => {
+            reconnectTimerRef.current = null;
+            if (!disposed) setAttempt((value) => value + 1);
+          }, delay);
+        },
       },
-      onSnapshot: (chunk) => {
-        if (!disposed) writeChunk(chunk);
-      },
-      onOutput: (chunk) => {
-        if (disposed) return;
-        writeChunk(chunk);
-        // 启动行的静默判定看的是「后端有没有在输出」，和渲染快慢无关：
-        // 离屏的终端一样要在提示符安静下来之后把启动行敲出去。
-        noteOutput();
-      },
-      onStatus: (state, exitCode) => {
-        if (disposed) return;
-        if (state === "running") {
-          patch({ connection: "live", exitCode: null });
-          return;
-        }
-        patch({
-          connection: state === "failed" ? "failed" : "exited",
-          exitCode,
-          binding: null,
-        });
-        useCanvasStore.getState().updateNodeData(nodeId, {
-          lastExitCode: exitCode,
-        });
-      },
-      onWarning: (message) => {
-        if (!disposed) patch({ error: message });
-      },
-      onStale: () => {
-        if (disposed) return;
-        patch({ binding: null });
-        // 同一个 URL、同一个 session id，只是 generation 变了：
-        // 重新走一遍连接分支（它会在连接前清屏）。
-        setAttempt((value) => value + 1);
-      },
-      onClose: () => {
-        if (disposed) return;
-        const connection = statusRef.current.connection;
-        // 进程已退出/失败时的关闭是正常收尾；其余情况（Runtime 重启、网络抖动）
-        // 都按意外断线处理：标记 detached 并按退避自动重连，重连会先清屏再 attach。
-        if (connection === "exited" || connection === "failed") return;
-        patch({ connection: "detached", binding: null });
-        const delay = reconnectDelayRef.current;
-        reconnectDelayRef.current = Math.min(delay * 2, 10_000);
-        reconnectTimerRef.current = setTimeout(() => {
-          reconnectTimerRef.current = null;
-          if (!disposed) setAttempt((value) => value + 1);
-        }, delay);
-      },
-    });
+      undefined,
+      log,
+    );
     transportRef.current = transport;
     patch({ connection: "connecting", binding: null });
 

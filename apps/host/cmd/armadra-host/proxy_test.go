@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -402,6 +403,87 @@ func TestHostServesTheShellAndProxiesAPairedDeviceToTheRuntime(t *testing.T) {
 	}
 	if !strings.Contains(seen, marker) {
 		t.Fatalf("the terminal never echoed the proxied input: %q", seen)
+	}
+}
+
+// A phone loses its socket constantly. What must not happen is a keystroke
+// running twice because the client could not tell whether it landed. This
+// drives the real Runtime over a real WebSocket and drops it mid-session.
+func TestATerminalRemembersAppliedInputAcrossADroppedSocket(t *testing.T) {
+	runtimeDir := startRuntime(t)
+	host := startProxyHost(t, runtimeDir, writeWebFixture(t))
+	host.pair(t, "手机", allGrants())
+	root := t.TempDir()
+	status, workspace := host.json(t, http.MethodPost, "/api/workspaces", map[string]any{"name": "reconnect", "rootPath": root})
+	if status != 200 {
+		t.Fatalf("workspace creation answered %d %v", status, workspace)
+	}
+	workspaceID, _ := workspace["id"].(string)
+	status, session := host.json(t, http.MethodPost, "/api/terminals", map[string]any{
+		"workspaceId": workspaceID, "cwd": root, "shell": "/bin/sh", "args": []string{},
+	})
+	if status != 200 {
+		t.Fatalf("terminal creation answered %d %v", status, session)
+	}
+	sessionID, _ := session["id"].(string)
+	cookies := host.jar.Cookies(mustParse(t, host.origin))
+	attach := func(writer string) (*testSocket, map[string]any) {
+		t.Helper()
+		path := "/api/terminals/" + sessionID + "/ws?writer=" + url.QueryEscape(writer)
+		socket, err := dialTestSocket(host.address, path, host.origin, host.tls, cookies)
+		if err != nil {
+			t.Fatalf("the terminal stream did not open: %v", err)
+		}
+		frame, err := socket.readText(time.Now().Add(30 * time.Second))
+		if err != nil {
+			socket.Close()
+			t.Fatalf("no hello frame: %v", err)
+		}
+		document := map[string]any{}
+		if json.Unmarshal([]byte(frame), &document) != nil || document["type"] != "hello" {
+			socket.Close()
+			t.Fatalf("the first frame was not a hello: %q", frame)
+		}
+		return socket, document
+	}
+
+	socket, hello := attach("phone-1")
+	if hello["acknowledgedInput"] != float64(0) {
+		t.Fatalf("a fresh writer started at %v instead of 0", hello["acknowledgedInput"])
+	}
+	// Wait for each acknowledgement, so the drop below happens at a point the
+	// client genuinely knows about rather than at a random moment.
+	deadline := time.Now().Add(30 * time.Second)
+	for id := 1; id <= 2; id++ {
+		if err := socket.writeText(fmt.Sprintf(`{"type":"input","data":"echo step-%d\r","inputId":%d}`, id, id)); err != nil {
+			t.Fatal(err)
+		}
+		acknowledged := false
+		for !acknowledged && time.Now().Before(deadline) {
+			frame, err := socket.readText(deadline)
+			if err != nil {
+				t.Fatalf("the stream ended before input %d was acknowledged: %v", id, err)
+			}
+			acknowledged = strings.Contains(frame, `"type":"ack"`) &&
+				strings.Contains(frame, fmt.Sprintf(`"inputId":%d`, id))
+		}
+		if !acknowledged {
+			t.Fatalf("input %d was never acknowledged", id)
+		}
+	}
+	// The drop: no close handshake, exactly what a phone losing its network does.
+	socket.Close()
+
+	resumed, hello := attach("phone-1")
+	defer resumed.Close()
+	if hello["acknowledgedInput"] != float64(2) {
+		t.Fatalf("the reconnect was told %v was applied instead of 2", hello["acknowledgedInput"])
+	}
+	// A different client has its own account and is told nothing about this one.
+	other, hello := attach("laptop-2")
+	defer other.Close()
+	if hello["acknowledgedInput"] != float64(0) {
+		t.Fatalf("another writer inherited the mark %v", hello["acknowledgedInput"])
 	}
 }
 

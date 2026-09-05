@@ -1740,8 +1740,16 @@ function socketUrl(pathname: string): string {
   return runtimeSocketUrl(socketBase, pathname);
 }
 
-export function terminalWebSocketUrl(sessionId: string): string {
-  return socketUrl(`/api/terminals/${sessionId}/ws`);
+/**
+ * `writerId` 让 Runtime 在 `hello` 里带回这个客户端已经落地的输入序号，
+ * 重连时只重发没落地的那几条（见 `terminal/input-log.ts`）。
+ */
+export function terminalWebSocketUrl(
+  sessionId: string,
+  writerId?: string,
+): string {
+  const base = socketUrl(`/api/terminals/${sessionId}/ws`);
+  return writerId ? `${base}?writer=${query(writerId)}` : base;
 }
 
 /** 工作空间事件流：agent.status / agent.approval / terminal.exit / board.changed。 */

@@ -298,6 +298,10 @@ impl TerminateMode {
 pub enum ClientMessage {
     Input {
         data: String,
+        /// Monotonic per writer, acknowledged once the bytes reach the pty.
+        /// Absent from a client that does not track its own input.
+        #[serde(default, rename = "inputId")]
+        input_id: Option<u64>,
     },
     Resize {
         cols: u16,
@@ -511,7 +515,22 @@ struct Attachment {
     /// When `sockets` last fell to zero. `None` while something is attached.
     idle_since: Option<Instant>,
     dormant: bool,
+    /// `session id -> writer id -> highest input id actually written`.
+    ///
+    /// A client that loses its socket cannot tell whether the keystrokes it had
+    /// sent reached the pty. This is the answer: on the next attach it asks
+    /// what its own writer already reached, and resends only what is above that
+    /// mark. Nothing here authorizes anything — a writer id is a client's own
+    /// label for its input stream, checked against nothing, and the worst a
+    /// forged one can do is make that client resend its own keystrokes.
+    input_acks: RwLock<HashMap<String, HashMap<String, u64>>>,
 }
+
+/// How many independent writers one session remembers. A terminal has one
+/// keyboard; the extra room is for a reconnect that overlaps its predecessor.
+/// Past it the session forgets them all, which costs a client at most one
+/// unnecessary resend of input it already knows was never acknowledged.
+const MAX_TRACKED_WRITERS: usize = 8;
 
 /// Replaces the old `PtyManager`. Cheap to clone; the background tasks hold a
 /// weak reference so dropping the last clone stops them.
@@ -678,6 +697,7 @@ impl TerminalManager {
             key_gates: std::sync::Mutex::new(HashMap::new()),
             statuses: RwLock::new(HashMap::new()),
             attachments: std::sync::Mutex::new(HashMap::new()),
+            input_acks: RwLock::new(HashMap::new()),
         });
         let manager = Self { inner };
         manager.spawn_notice_loop(notice_receiver);
@@ -1298,6 +1318,39 @@ impl TerminalManager {
         self.backend(record.kind)
             .write(&record.key, data.as_bytes())
             .await
+    }
+
+    /// Records that `input_id` from `writer_id` reached the pty. Only ever
+    /// moves forward: an out-of-order or repeated frame cannot lower the mark a
+    /// reconnecting client resends from.
+    pub async fn note_input_applied(&self, session_id: &str, writer_id: &str, input_id: u64) {
+        if writer_id.is_empty() || input_id == 0 {
+            return;
+        }
+        let mut acks = self.inner.input_acks.write().await;
+        let writers = acks.entry(session_id.to_owned()).or_default();
+        if writers.len() >= MAX_TRACKED_WRITERS && !writers.contains_key(writer_id) {
+            writers.clear();
+        }
+        let mark = writers.entry(writer_id.to_owned()).or_insert(0);
+        *mark = (*mark).max(input_id);
+    }
+
+    /// The highest input this session applied for `writer_id`; `0` when it has
+    /// never seen that writer, which is the safe answer — the client then
+    /// resends whatever it still holds unacknowledged.
+    pub async fn acknowledged_input(&self, session_id: &str, writer_id: &str) -> u64 {
+        if writer_id.is_empty() {
+            return 0;
+        }
+        self.inner
+            .input_acks
+            .read()
+            .await
+            .get(session_id)
+            .and_then(|writers| writers.get(writer_id))
+            .copied()
+            .unwrap_or(0)
     }
 
     pub async fn resize(
@@ -1969,6 +2022,9 @@ impl TerminalManager {
         }
         self.inner.statuses.write().await.remove(session_id);
         self.forget_attachment(session_id);
+        // The marks describe a pty that no longer exists. Keeping them would
+        // let a later session with the same id claim input it never wrote.
+        self.inner.input_acks.write().await.remove(session_id);
     }
 
     /* ------------------------------ background ---------------------------- */

@@ -719,3 +719,55 @@ async fn an_orphan_tmux_session_is_destroyed_on_reconcile() {
     assert_eq!(report.orphans_destroyed, 1);
     assert!(backend.list_alive().await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn input_marks_move_forward_per_writer_and_die_with_the_session() {
+    let (manager, directory, workspace_id, _events) = manager().await;
+    let session = manager
+        .spawn(SpawnRequest::plain(
+            workspace_id,
+            directory.path().to_string_lossy().into_owned(),
+        ))
+        .await
+        .unwrap();
+
+    // A writer nobody has heard of is at zero, which is the answer that makes a
+    // reconnecting client resend everything it still holds unacknowledged.
+    assert_eq!(manager.acknowledged_input(&session.id, "phone").await, 0);
+
+    manager.note_input_applied(&session.id, "phone", 3).await;
+    manager.note_input_applied(&session.id, "laptop", 9).await;
+    assert_eq!(manager.acknowledged_input(&session.id, "phone").await, 3);
+    assert_eq!(manager.acknowledged_input(&session.id, "laptop").await, 9);
+
+    // A late or repeated frame never lowers the mark: that would make a client
+    // resend input the pty already ran.
+    manager.note_input_applied(&session.id, "phone", 1).await;
+    manager.note_input_applied(&session.id, "phone", 3).await;
+    assert_eq!(manager.acknowledged_input(&session.id, "phone").await, 3);
+
+    // Ids and writers that carry no information are ignored rather than stored.
+    manager.note_input_applied(&session.id, "phone", 0).await;
+    manager.note_input_applied(&session.id, "", 12).await;
+    assert_eq!(manager.acknowledged_input(&session.id, "phone").await, 3);
+    assert_eq!(manager.acknowledged_input(&session.id, "").await, 0);
+
+    // Past the writer budget the session forgets, which costs a client one
+    // resend of input it already knows was never acknowledged.
+    for index in 0..MAX_TRACKED_WRITERS {
+        manager
+            .note_input_applied(&session.id, &format!("writer-{index}"), 5)
+            .await;
+    }
+    assert_eq!(manager.acknowledged_input(&session.id, "phone").await, 0);
+
+    // The marks describe a pty. Once it is gone they are too, so a later
+    // session cannot inherit an acknowledgement it never made.
+    manager.note_input_applied(&session.id, "phone", 4).await;
+    manager
+        .terminate(&session.id, TerminateMode::Session)
+        .await
+        .unwrap();
+    manager.forget(&session.id).await;
+    assert_eq!(manager.acknowledged_input(&session.id, "phone").await, 0);
+}

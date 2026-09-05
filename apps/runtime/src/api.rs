@@ -935,9 +935,20 @@ pub async fn list_sessions(
     Ok(Json(sessions))
 }
 
+/// `?writer=` names the client's own input stream so a reconnect can be told
+/// what it already applied. It is a label, not a credential: the socket is
+/// already authorized, and the only thing this id decides is whether *this*
+/// client resends *its own* unacknowledged keystrokes.
+#[derive(Debug, Default, Deserialize)]
+pub struct TerminalSocketQuery {
+    #[serde(default)]
+    writer: Option<String>,
+}
+
 pub async fn terminal_socket(
     State(state): State<AppState>,
     AxumPath(session_id): AxumPath<String>,
+    Query(query): Query<TerminalSocketQuery>,
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> AppResult<Response> {
@@ -945,13 +956,25 @@ pub async fn terminal_socket(
     // Reject an unknown session with a 404 rather than a socket that closes
     // immediately, and keep the owner / workspace check on the REST path.
     db::get_terminal_session(&state.pool, &session_id).await?;
-    Ok(ws.on_upgrade(move |socket| handle_terminal_socket(state, session_id, socket)))
+    let writer = match query.writer {
+        Some(value) if value.len() <= 64 && value.chars().all(|c| c.is_ascii_graphic()) => value,
+        Some(_) => {
+            return Err(AppError::BadRequest("Terminal writer id is invalid".into()));
+        }
+        None => String::new(),
+    };
+    Ok(ws.on_upgrade(move |socket| handle_terminal_socket(state, session_id, writer, socket)))
 }
 
 /// Plan §15.5. Connecting is attaching and closing is detaching: the process is
 /// never touched by the lifetime of a socket. Several sockets may attach to the
 /// same session at once.
-async fn handle_terminal_socket(state: AppState, session_id: String, socket: WebSocket) {
+async fn handle_terminal_socket(
+    state: AppState,
+    session_id: String,
+    writer: String,
+    socket: WebSocket,
+) {
     let Ok(attach) = state
         .terminals
         .attach(&session_id, DEFAULT_COLS, DEFAULT_ROWS)
@@ -976,7 +999,7 @@ async fn handle_terminal_socket(state: AppState, session_id: String, socket: Web
     let _detach = detach;
 
     let (mut sender, mut receiver) = socket.split();
-    let hello = serde_json::json!({
+    let mut hello = serde_json::json!({
         "type": "hello",
         "sessionId": session_id,
         "generation": generation,
@@ -984,8 +1007,17 @@ async fn handle_terminal_socket(state: AppState, session_id: String, socket: Web
         "rows": rows,
         "cols": cols,
         "alive": alive,
-    })
-    .to_string();
+    });
+    // A reconnecting client is told what its own writer already reached, so it
+    // resends only what never landed instead of replaying keystrokes.
+    if !writer.is_empty() {
+        let acknowledged = state
+            .terminals
+            .acknowledged_input(&session_id, &writer)
+            .await;
+        hello["acknowledgedInput"] = serde_json::json!(acknowledged);
+    }
+    let hello = hello.to_string();
     if sender.send(Message::Text(hello.into())).await.is_err() {
         return;
     }
@@ -1045,9 +1077,18 @@ async fn handle_terminal_socket(state: AppState, session_id: String, socket: Web
             message = receiver.next() => match message {
                 Some(Ok(Message::Text(text))) => {
                     let Ok(message) = serde_json::from_str::<ClientMessage>(&text) else { continue };
+                    let mut applied: Option<u64> = None;
                     let result = match message {
-                        ClientMessage::Input { data } => {
-                            state.terminals.write(&session_id, generation, &data).await
+                        ClientMessage::Input { data, input_id } => {
+                            let outcome = state.terminals.write(&session_id, generation, &data).await;
+                            // The mark moves only after the bytes reached the
+                            // pty: an acknowledged input is one this session
+                            // will never accept again from the same writer.
+                            if outcome.is_ok() && let Some(id) = input_id.filter(|id| *id > 0) {
+                                state.terminals.note_input_applied(&session_id, &writer, id).await;
+                                applied = Some(id);
+                            }
+                            outcome
                         }
                         ClientMessage::Resize { cols, rows } => {
                             state.terminals.resize(&session_id, generation, cols, rows).await
@@ -1060,7 +1101,12 @@ async fn handle_terminal_socket(state: AppState, session_id: String, socket: Web
                     // error: the client is simply behind a recycle, and is told
                     // so instead of having its socket dropped.
                     match result {
-                        Ok(()) => {}
+                        Ok(()) => {
+                            if let Some(id) = applied {
+                                let payload = serde_json::json!({ "type": "ack", "inputId": id }).to_string();
+                                if sender.send(Message::Text(payload.into())).await.is_err() { break; }
+                            }
+                        }
                         Err(AppError::Conflict(_)) => {
                             if announce_stale(&state, &session_id, generation, &mut sender).await {
                                 break;

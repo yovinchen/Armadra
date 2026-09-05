@@ -995,7 +995,17 @@ export const gitCloneStatusSchema = z.object({
 
 /** Client → runtime on `WS /api/terminals/{id}/ws` (mirrors pty.rs ClientMessage). */
 export const terminalClientMessageSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("input"), data: z.string() }),
+  z.object({
+    type: z.literal("input"),
+    data: z.string(),
+    /**
+     * Monotonic per writer. The runtime answers each applied input with an
+     * `ack`, and reports the highest it already applied in `hello`, so a
+     * reconnecting client resends only what never landed instead of replaying
+     * keystrokes into a live shell (client platforms, mobile reconnect).
+     */
+    inputId: z.number().int().positive().optional(),
+  }),
   z.object({
     type: z.literal("resize"),
     cols: z.number().int().positive(),
@@ -1024,6 +1034,17 @@ export const terminalServerMessageSchema = z.discriminatedUnion("type", [
     rows: z.number().int().positive(),
     cols: z.number().int().positive(),
     alive: z.boolean(),
+    /**
+     * The highest `inputId` this session already applied for the writer named
+     * in the socket's `writer` query. Absent when the client did not name one,
+     * and `0` when this session has never seen that writer.
+     */
+    acknowledgedInput: z.number().int().nonnegative().optional(),
+  }),
+  /** One applied input. Never sent for an input the session refused. */
+  z.object({
+    type: z.literal("ack"),
+    inputId: z.number().int().positive(),
   }),
   /** Replay/screen snapshot; direct backend only (a tmux client redraws the
    * pane itself, and the session host sends its replay inside the attach). */
