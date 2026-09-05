@@ -5,6 +5,7 @@ export * from "./gen/armadra/v1/agent_pb.js";
 export * from "./gen/armadra/v1/canvas_pb.js";
 export * from "./gen/armadra/v1/events_pb.js";
 export * from "./gen/armadra/v1/worker_pb.js";
+export * from "./gen/armadra/v1/worker_channel_pb.js";
 export * from "./gen/armadra/v1/automation_pb.js";
 export * from "./gen/armadra/v1/command_pb.js";
 export * from "./gen/armadra/v1/resources_pb.js";

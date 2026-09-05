@@ -5,6 +5,7 @@ import "armadra/v1/agent.proto";
 import "armadra/v1/common.proto";
 import "armadra/v1/command.proto";
 import "armadra/v1/canvas.proto";
+import "armadra/v1/worker_channel.proto";
 
 // The initial Worker transport is a parent-owned anonymous stdin/stdout pipe.
 // These messages are never accepted on an unauthenticated HTTP endpoint.
@@ -26,6 +27,11 @@ message WorkerHelloResponse {
   string runtime_version = 10;
   // Absent in the backward-compatible read-only mode.
   CommandCapabilities commands = 20;
+  // The resident bidirectional channel (business migration §2.9). Absent when
+  // this Worker has no durable outbox, which is the only honest way to say
+  // "I will never report anything upward"; `capabilities` also carries
+  // `worker.upcall.v1` so a controller can gate on one list.
+  WorkerChannelCapability channel = 21;
 }
 message RegisterRootRequest { string root_id = 1; string path = 2; }
 message RegisteredRoot { string root_id = 1; string canonical_path = 2; }

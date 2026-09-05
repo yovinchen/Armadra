@@ -173,7 +173,12 @@ type WorkerHelloResponse struct {
 	// match; an empty value means the Worker predates remote execution.
 	RuntimeVersion string `protobuf:"bytes,10,opt,name=runtime_version,json=runtimeVersion,proto3" json:"runtime_version,omitempty"`
 	// Absent in the backward-compatible read-only mode.
-	Commands      *CommandCapabilities `protobuf:"bytes,20,opt,name=commands,proto3" json:"commands,omitempty"`
+	Commands *CommandCapabilities `protobuf:"bytes,20,opt,name=commands,proto3" json:"commands,omitempty"`
+	// The resident bidirectional channel (business migration §2.9). Absent when
+	// this Worker has no durable outbox, which is the only honest way to say
+	// "I will never report anything upward"; `capabilities` also carries
+	// `worker.upcall.v1` so a controller can gate on one list.
+	Channel       *WorkerChannelCapability `protobuf:"bytes,21,opt,name=channel,proto3" json:"channel,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -281,6 +286,13 @@ func (x *WorkerHelloResponse) GetRuntimeVersion() string {
 func (x *WorkerHelloResponse) GetCommands() *CommandCapabilities {
 	if x != nil {
 		return x.Commands
+	}
+	return nil
+}
+
+func (x *WorkerHelloResponse) GetChannel() *WorkerChannelCapability {
+	if x != nil {
+		return x.Channel
 	}
 	return nil
 }
@@ -1733,9 +1745,9 @@ var File_armadra_v1_worker_proto protoreflect.FileDescriptor
 const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"\x17armadra/v1/worker.proto\x12\n" +
-	"armadra.v1\x1a\x16armadra/v1/agent.proto\x1a\x17armadra/v1/common.proto\x1a\x18armadra/v1/command.proto\x1a\x17armadra/v1/canvas.proto\"M\n" +
+	"armadra.v1\x1a\x16armadra/v1/agent.proto\x1a\x17armadra/v1/common.proto\x1a\x18armadra/v1/command.proto\x1a\x17armadra/v1/canvas.proto\x1a\x1farmadra/v1/worker_channel.proto\"M\n" +
 	"\x12WorkerHelloRequest\x127\n" +
-	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\"\xda\x03\n" +
+	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\"\x99\x04\n" +
 	"\x13WorkerHelloResponse\x127\n" +
 	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\x12\x17\n" +
 	"\ahost_id\x18\x02 \x01(\tR\x06hostId\x12\x1f\n" +
@@ -1749,7 +1761,8 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\x13max_text_file_bytes\x18\t \x01(\rR\x10maxTextFileBytes\x12'\n" +
 	"\x0fruntime_version\x18\n" +
 	" \x01(\tR\x0eruntimeVersion\x12;\n" +
-	"\bcommands\x18\x14 \x01(\v2\x1f.armadra.v1.CommandCapabilitiesR\bcommands\"B\n" +
+	"\bcommands\x18\x14 \x01(\v2\x1f.armadra.v1.CommandCapabilitiesR\bcommands\x12=\n" +
+	"\achannel\x18\x15 \x01(\v2#.armadra.v1.WorkerChannelCapabilityR\achannel\"B\n" +
 	"\x13RegisterRootRequest\x12\x17\n" +
 	"\aroot_id\x18\x01 \x01(\tR\x06rootId\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\"P\n" +
@@ -1918,46 +1931,48 @@ var file_armadra_v1_worker_proto_goTypes = []any{
 	(*WorkerResponse)(nil),             // 18: armadra.v1.WorkerResponse
 	(*ProtocolVersion)(nil),            // 19: armadra.v1.ProtocolVersion
 	(*CommandCapabilities)(nil),        // 20: armadra.v1.CommandCapabilities
-	(CanvasOwnershipOwner)(0),          // 21: armadra.v1.CanvasOwnershipOwner
-	(*CommandRequest)(nil),             // 22: armadra.v1.CommandRequest
-	(*AgentRequest)(nil),               // 23: armadra.v1.AgentRequest
-	(*ErrorResponse)(nil),              // 24: armadra.v1.ErrorResponse
-	(*CommandResponse)(nil),            // 25: armadra.v1.CommandResponse
-	(*AgentResponse)(nil),              // 26: armadra.v1.AgentResponse
+	(*WorkerChannelCapability)(nil),    // 21: armadra.v1.WorkerChannelCapability
+	(CanvasOwnershipOwner)(0),          // 22: armadra.v1.CanvasOwnershipOwner
+	(*CommandRequest)(nil),             // 23: armadra.v1.CommandRequest
+	(*AgentRequest)(nil),               // 24: armadra.v1.AgentRequest
+	(*ErrorResponse)(nil),              // 25: armadra.v1.ErrorResponse
+	(*CommandResponse)(nil),            // 26: armadra.v1.CommandResponse
+	(*AgentResponse)(nil),              // 27: armadra.v1.AgentResponse
 }
 var file_armadra_v1_worker_proto_depIdxs = []int32{
 	19, // 0: armadra.v1.WorkerHelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
 	19, // 1: armadra.v1.WorkerHelloResponse.protocol:type_name -> armadra.v1.ProtocolVersion
 	20, // 2: armadra.v1.WorkerHelloResponse.commands:type_name -> armadra.v1.CommandCapabilities
-	6,  // 3: armadra.v1.WorkerDirectory.entries:type_name -> armadra.v1.WorkerFileEntry
-	21, // 4: armadra.v1.SetWriteOwnershipRequest.owner:type_name -> armadra.v1.CanvasOwnershipOwner
-	21, // 5: armadra.v1.WorkerWriteOwnership.owner:type_name -> armadra.v1.CanvasOwnershipOwner
-	0,  // 6: armadra.v1.WorkerServiceRequest.operation:type_name -> armadra.v1.WorkerServiceOperation
-	1,  // 7: armadra.v1.WorkerRequest.hello:type_name -> armadra.v1.WorkerHelloRequest
-	3,  // 8: armadra.v1.WorkerRequest.register_root:type_name -> armadra.v1.RegisterRootRequest
-	5,  // 9: armadra.v1.WorkerRequest.list_directory:type_name -> armadra.v1.WorkerListDirectoryRequest
-	8,  // 10: armadra.v1.WorkerRequest.read_file:type_name -> armadra.v1.WorkerReadFileRequest
-	13, // 11: armadra.v1.WorkerRequest.write_file:type_name -> armadra.v1.WorkerWriteFileRequest
-	15, // 12: armadra.v1.WorkerRequest.service:type_name -> armadra.v1.WorkerServiceRequest
-	22, // 13: armadra.v1.WorkerRequest.command:type_name -> armadra.v1.CommandRequest
-	23, // 14: armadra.v1.WorkerRequest.agent:type_name -> armadra.v1.AgentRequest
-	10, // 15: armadra.v1.WorkerRequest.set_write_ownership:type_name -> armadra.v1.SetWriteOwnershipRequest
-	11, // 16: armadra.v1.WorkerRequest.get_write_ownership:type_name -> armadra.v1.GetWriteOwnershipRequest
-	2,  // 17: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
-	4,  // 18: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
-	7,  // 19: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
-	9,  // 20: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
-	24, // 21: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
-	14, // 22: armadra.v1.WorkerResponse.file_written:type_name -> armadra.v1.WorkerFileWritten
-	16, // 23: armadra.v1.WorkerResponse.service:type_name -> armadra.v1.WorkerServiceResponse
-	25, // 24: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
-	26, // 25: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
-	12, // 26: armadra.v1.WorkerResponse.write_ownership:type_name -> armadra.v1.WorkerWriteOwnership
-	27, // [27:27] is the sub-list for method output_type
-	27, // [27:27] is the sub-list for method input_type
-	27, // [27:27] is the sub-list for extension type_name
-	27, // [27:27] is the sub-list for extension extendee
-	0,  // [0:27] is the sub-list for field type_name
+	21, // 3: armadra.v1.WorkerHelloResponse.channel:type_name -> armadra.v1.WorkerChannelCapability
+	6,  // 4: armadra.v1.WorkerDirectory.entries:type_name -> armadra.v1.WorkerFileEntry
+	22, // 5: armadra.v1.SetWriteOwnershipRequest.owner:type_name -> armadra.v1.CanvasOwnershipOwner
+	22, // 6: armadra.v1.WorkerWriteOwnership.owner:type_name -> armadra.v1.CanvasOwnershipOwner
+	0,  // 7: armadra.v1.WorkerServiceRequest.operation:type_name -> armadra.v1.WorkerServiceOperation
+	1,  // 8: armadra.v1.WorkerRequest.hello:type_name -> armadra.v1.WorkerHelloRequest
+	3,  // 9: armadra.v1.WorkerRequest.register_root:type_name -> armadra.v1.RegisterRootRequest
+	5,  // 10: armadra.v1.WorkerRequest.list_directory:type_name -> armadra.v1.WorkerListDirectoryRequest
+	8,  // 11: armadra.v1.WorkerRequest.read_file:type_name -> armadra.v1.WorkerReadFileRequest
+	13, // 12: armadra.v1.WorkerRequest.write_file:type_name -> armadra.v1.WorkerWriteFileRequest
+	15, // 13: armadra.v1.WorkerRequest.service:type_name -> armadra.v1.WorkerServiceRequest
+	23, // 14: armadra.v1.WorkerRequest.command:type_name -> armadra.v1.CommandRequest
+	24, // 15: armadra.v1.WorkerRequest.agent:type_name -> armadra.v1.AgentRequest
+	10, // 16: armadra.v1.WorkerRequest.set_write_ownership:type_name -> armadra.v1.SetWriteOwnershipRequest
+	11, // 17: armadra.v1.WorkerRequest.get_write_ownership:type_name -> armadra.v1.GetWriteOwnershipRequest
+	2,  // 18: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
+	4,  // 19: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
+	7,  // 20: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
+	9,  // 21: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
+	25, // 22: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
+	14, // 23: armadra.v1.WorkerResponse.file_written:type_name -> armadra.v1.WorkerFileWritten
+	16, // 24: armadra.v1.WorkerResponse.service:type_name -> armadra.v1.WorkerServiceResponse
+	26, // 25: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
+	27, // 26: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
+	12, // 27: armadra.v1.WorkerResponse.write_ownership:type_name -> armadra.v1.WorkerWriteOwnership
+	28, // [28:28] is the sub-list for method output_type
+	28, // [28:28] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_worker_proto_init() }
@@ -1969,6 +1984,7 @@ func file_armadra_v1_worker_proto_init() {
 	file_armadra_v1_common_proto_init()
 	file_armadra_v1_command_proto_init()
 	file_armadra_v1_canvas_proto_init()
+	file_armadra_v1_worker_channel_proto_init()
 	file_armadra_v1_worker_proto_msgTypes[7].OneofWrappers = []any{}
 	file_armadra_v1_worker_proto_msgTypes[12].OneofWrappers = []any{}
 	file_armadra_v1_worker_proto_msgTypes[16].OneofWrappers = []any{
