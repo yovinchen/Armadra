@@ -291,3 +291,177 @@ async fn a_custom_agent_can_have_its_browser_capability_switched_off() {
     assert_eq!(refusal.status, axum::http::StatusCode::FORBIDDEN);
     assert!(refusal.message.contains("browser"));
 }
+
+/* --------------------------- per-request admission ------------------------- */
+
+/// The decision a paused document request gets. Pure: a URL, whatever the host
+/// resolved to, and the workspace's policy — no browser anywhere near it.
+#[test]
+fn a_document_request_is_judged_on_the_address_it_would_actually_reach() {
+    use std::net::IpAddr;
+
+    let policy = NetworkPolicy::default();
+    let resolve = |text: &str| -> Vec<IpAddr> { vec![text.parse().unwrap()] };
+
+    // The ordinary case: a name that resolves to a public address.
+    assert_eq!(
+        admit_document(
+            "https://example.test/page",
+            &resolve("93.184.216.34"),
+            &policy
+        ),
+        Admission::Admit
+    );
+    // The same name, resolving to the address that hands out cloud
+    // credentials. The URL says nothing about it, which is the point.
+    assert_eq!(
+        admit_document(
+            "https://redirect.test/",
+            &resolve("169.254.169.254"),
+            &policy
+        ),
+        Admission::Refuse("link_local_address")
+    );
+    // And when it is spelled out, it is refused by name before any lookup.
+    assert_eq!(
+        admit_document("http://169.254.169.254/latest/", &[], &policy),
+        Admission::Refuse("metadata_address")
+    );
+    assert_eq!(
+        admit_document("http://metadata.google.internal/", &[], &policy),
+        Admission::Refuse("metadata_address")
+    );
+    // Armadra's own ports are not a browsing target, under any name.
+    assert_eq!(
+        admit_document("http://127.0.0.1:43120/api", &[], &policy),
+        Admission::Refuse("reserved_port")
+    );
+    assert_eq!(
+        admit_document("http://dev.test:43121/", &resolve("127.0.0.1"), &policy),
+        Admission::Refuse("reserved_port")
+    );
+    // A name nobody can resolve is refused rather than admitted on the chance
+    // that the browser resolves it to something harmless.
+    assert_eq!(
+        admit_document("https://nowhere.test/", &[], &policy),
+        Admission::Refuse("unresolvable")
+    );
+    // Not http(s) at all.
+    assert_eq!(
+        admit_document("file:///etc/passwd", &[], &policy),
+        Admission::Refuse("scheme_not_allowed")
+    );
+    // The project's own dev server on loopback is the whole reason the node
+    // exists.
+    assert_eq!(
+        admit_document("http://127.0.0.1:5173/", &[], &policy),
+        Admission::Admit
+    );
+}
+
+/// The workspace can narrow the default, and the default is deliberately open:
+/// looking at a device on the LAN is an ordinary thing to want.
+#[test]
+fn a_workspace_can_narrow_which_networks_its_browser_may_reach() {
+    use std::net::IpAddr;
+
+    let resolve = |text: &str| -> Vec<IpAddr> { vec![text.parse().unwrap()] };
+    let open = NetworkPolicy::default();
+    assert!(open.allow_private_networks);
+    assert_eq!(
+        admit_document("http://printer.lan/", &resolve("192.168.1.4"), &open),
+        Admission::Admit
+    );
+
+    let closed = NetworkPolicy {
+        allow_private_networks: false,
+        ..NetworkPolicy::default()
+    };
+    assert_eq!(
+        admit_document("http://printer.lan/", &resolve("192.168.1.4"), &closed),
+        Admission::Refuse("private_network")
+    );
+    assert_eq!(
+        admit_document("http://internal.test/", &resolve("fd12::1"), &closed),
+        Admission::Refuse("private_network")
+    );
+    // Loopback is not "private network"; it is the dev server.
+    assert_eq!(
+        admit_document("http://127.0.0.1:5173/", &[], &closed),
+        Admission::Admit
+    );
+
+    let listed = NetworkPolicy {
+        loopback_ports: LoopbackPorts::Listed(vec![5173]),
+        ..NetworkPolicy::default()
+    };
+    assert_eq!(
+        admit_document("http://127.0.0.1:5173/", &[], &listed),
+        Admission::Admit
+    );
+    assert_eq!(
+        admit_document("http://127.0.0.1:9229/", &[], &listed),
+        Admission::Refuse("loopback_port_not_allowed")
+    );
+    // A listed port still cannot be one of Armadra's own.
+    assert_eq!(
+        admit_document("http://127.0.0.1:43120/", &[], &listed),
+        Admission::Refuse("reserved_port")
+    );
+}
+
+/// Sub-resources get the cheap check, because one page load is hundreds of
+/// them and a DNS lookup each would be its own denial of service.
+#[test]
+fn a_sub_resource_is_checked_without_a_lookup() {
+    assert_eq!(
+        admit_subresource("http://169.254.169.254/latest/"),
+        Admission::Refuse("metadata_address")
+    );
+    assert_eq!(
+        admit_subresource("http://127.0.0.1:43121/api"),
+        Admission::Refuse("reserved_port")
+    );
+    assert_eq!(
+        admit_subresource("https://cdn.example.test/app.js"),
+        Admission::Admit
+    );
+    // A scheme the browser handles by itself is not this policy's business.
+    assert_eq!(
+        admit_subresource("data:image/png;base64,AAA"),
+        Admission::Admit
+    );
+}
+
+/// The default port matters: `https://host` reaches 443, and a rule about
+/// ports has to know that without being told.
+#[test]
+fn a_target_knows_the_port_a_connection_would_use() {
+    assert_eq!(
+        parse_target("https://example.test/a?b#c").unwrap(),
+        UrlTarget {
+            scheme: "https".into(),
+            host: "example.test".into(),
+            port: None,
+        }
+    );
+    assert_eq!(
+        parse_target("https://example.test/")
+            .unwrap()
+            .effective_port(),
+        443
+    );
+    assert_eq!(
+        parse_target("http://example.test/")
+            .unwrap()
+            .effective_port(),
+        80
+    );
+    assert_eq!(parse_target("http://[::1]:43120/").unwrap().host, "::1");
+    assert_eq!(
+        parse_target("http://user:pw@example.test/").unwrap().host,
+        "example.test"
+    );
+    assert!(parse_target("file:///etc/passwd").is_none());
+    assert!(parse_target("not a url").is_none());
+}

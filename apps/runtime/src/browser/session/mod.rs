@@ -31,7 +31,7 @@ use crate::{
 };
 
 use super::{
-    BrowserSession, Capture, ConsoleEntry, Download, DownloadState, Element,
+    Admission, BrowserSession, Capture, ConsoleEntry, Download, DownloadState, Element,
     MAX_ELEMENTS, MAX_TEXT_BYTES, NetworkEntry, ProcessIdentity, RING_CAPACITY, ReadMode,
     ReadResponse, SessionState, StoredSession, Subscription, Viewport, Visibility, WaitOutcome,
     cdp,
@@ -90,6 +90,9 @@ pub struct Live {
     /// the process group does the same job.
     #[allow(dead_code)]
     containment: launch::Containment,
+    /// What this session's document requests are judged against. Read on every
+    /// `Fetch.requestPaused`, including each redirect hop (§2.5).
+    policy: Mutex<crate::browser::NetworkPolicy>,
     record: Mutex<BrowserSession>,
     rings: Mutex<Rings>,
     subscriptions: Mutex<HashMap<String, (Visibility, DateTime<Utc>)>>,

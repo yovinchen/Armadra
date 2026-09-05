@@ -296,6 +296,7 @@ fn adopt(
         pid: AtomicU32::new(pid),
         child: tokio::sync::Mutex::new(child),
         containment,
+        policy: Mutex::new(crate::browser::NetworkPolicy::default()),
         record: Mutex::new(record_of(stored)),
         rings: Mutex::new(Rings::default()),
         subscriptions: Mutex::new(HashMap::new()),
@@ -399,6 +400,18 @@ pub(super) async fn prepare(live: &Live, staging: &Path) -> AppResult<()> {
         }),
     )
     .await?;
+    // Every document request pauses here first — the top-level navigation, an
+    // iframe's document, a popup's first request, and each redirect hop, since
+    // a hop arrives as its own paused request. That is what makes the URL
+    // policy hold for a redirect the caller never saw (§2.5).
+    live.call(
+        "Fetch.enable",
+        json!({
+            "patterns": [{ "urlPattern": "*", "requestStage": "Request",
+                           "resourceType": "Document" }],
+        }),
+    )
+    .await?;
     Ok(())
 }
 
@@ -424,6 +437,16 @@ pub(super) fn spawn_pump(
 ) {
     tokio::spawn(async move {
         while let Some(event) = receiver.recv().await {
+            // A paused document request is answered on its own task. It has to
+            // be: the browser will not commit the navigation until it is
+            // answered, and the pump's other handlers ask the page questions
+            // that a committing navigation does not answer — waiting for one
+            // inside the other is a deadlock that ends in two timeouts (§2.5).
+            if event.method == "Fetch.requestPaused" {
+                let live = live.clone();
+                tokio::spawn(async move { on_document_request(&live, &event.params).await });
+                continue;
+            }
             handle_event(&live, event).await;
         }
         // The socket closed: the browser exited or crashed. The row and the

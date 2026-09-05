@@ -21,7 +21,8 @@ pub(super) use crate::{
 };
 
 pub(super) use super::super::{
-    ReadMode, SessionState, Viewport, Visibility, admit_url, launch, safe_filename,
+    Admission, LoopbackPorts, NetworkPolicy, ReadMode, SessionState, UrlTarget, Viewport,
+    Visibility, admit_document, admit_subresource, admit_url, launch, parse_target, safe_filename,
     session::{
         self, CreateRequest, InputEvent, InputRequest, NavigateRequest, Target, WaitRequest,
     },
@@ -192,6 +193,17 @@ pub(super) const PAGE: &str = r#"<!doctype html><html><head><meta charset="utf-8
 pub(super) const SECOND: &str = r#"<!doctype html><html><head><meta charset="utf-8">
 <title>第二页</title></head><body><h1 id="heading">第二页</h1></body></html>"#;
 
+/// A 302, which is what makes the browser ask again — and what makes the next
+/// hop arrive as its own paused request.
+fn redirect(location: &str) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    (
+        axum::http::StatusCode::FOUND,
+        [(axum::http::header::LOCATION, location.to_owned())],
+    )
+        .into_response()
+}
+
 pub(super) struct Page {
     address: SocketAddr,
     handle: tokio::task::JoinHandle<()>,
@@ -214,7 +226,17 @@ impl Drop for Page {
 pub(super) async fn serve_page() -> Page {
     let router = Router::new()
         .route("/", get(|| async { axum::response::Html(PAGE) }))
-        .route("/second", get(|| async { axum::response::Html(SECOND) }));
+        .route("/second", get(|| async { axum::response::Html(SECOND) }))
+        // One hop to somewhere allowed, so the redirect machinery itself is
+        // proved to let ordinary pages through.
+        .route("/allowed", get(|| async { redirect("/second") }))
+        // Two hops ending at cloud instance metadata: the address the caller
+        // typed is harmless, and only the last hop is not.
+        .route("/hops", get(|| async { redirect("/metadata") }))
+        .route(
+            "/metadata",
+            get(|| async { redirect("http://169.254.169.254/latest/meta-data/") }),
+        );
     let listener = loop {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();

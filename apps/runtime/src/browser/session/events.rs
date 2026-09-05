@@ -58,25 +58,43 @@ pub(super) async fn handle_event(live: &Live, event: CdpEvent) {
 }
 
 /// Title and history buttons after a navigation settles.
+///
+/// Both come out of the navigation history rather than out of the page. The
+/// pump must never wait on the renderer: a document that is mid-navigation
+/// does not answer `Runtime.evaluate`, and every later command on the same CDP
+/// session queues behind the one that is still outstanding — including the
+/// navigation the page is waiting to make. Asking the browser instead of the
+/// page keeps that from happening.
 pub(super) async fn refresh_page_state(live: &Live) {
-    if let Ok(Value::String(title)) = live.evaluate(dom::TITLE).await {
-        live.edit(|record| record.title = title);
-    }
-    if let Ok(history) = live.call("Page.getNavigationHistory", json!({})).await {
-        let index = history
-            .get("currentIndex")
-            .and_then(Value::as_i64)
-            .unwrap_or(0);
-        let count = history
-            .get("entries")
-            .and_then(Value::as_array)
-            .map(Vec::len)
-            .unwrap_or(0) as i64;
-        live.edit(|record| {
-            record.can_go_back = index > 0;
-            record.can_go_forward = index + 1 < count;
-        });
-    }
+    let Ok(history) = live.call("Page.getNavigationHistory", json!({})).await else {
+        return;
+    };
+    let index = history
+        .get("currentIndex")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    let entries = history
+        .get("entries")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let title = usize::try_from(index)
+        .ok()
+        .and_then(|at| entries.get(at))
+        .and_then(|entry| entry.get("title"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    let count = entries.len() as i64;
+    live.edit(|record| {
+        // An entry with no title yet leaves the last one alone rather than
+        // blanking the header while the next page parses.
+        if !title.is_empty() {
+            record.title = title;
+        }
+        record.can_go_back = index > 0;
+        record.can_go_forward = index + 1 < count;
+    });
 }
 
 pub(super) fn on_request(live: &Live, params: &Value) {
@@ -176,4 +194,88 @@ pub(super) fn on_loading_failed(live: &Live, params: &Value) {
         .unwrap_or("failed")
         .to_owned();
     amend_network(live, request_id, |entry| entry.failure_code = failure);
+}
+
+/* ----------------------------- document policy ---------------------------- */
+
+/// One paused document request. `Fetch` is enabled for `Document` only, so
+/// this runs for navigations, iframes, popups and — crucially — for every hop
+/// of a redirect chain, each of which arrives as its own paused request.
+///
+/// The request is never left paused: a decision this code cannot make is a
+/// page that hangs forever, so an internal failure continues the request
+/// rather than stranding it.
+pub(super) async fn on_document_request(live: &Live, params: &Value) {
+    let Some(request_id) = params.get("requestId").and_then(Value::as_str) else {
+        return;
+    };
+    let url = params
+        .get("request")
+        .and_then(|request| request.get("url"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    // A redirect is reported a second time once its response arrives, and a
+    // paused response is continued with a different command. It carries the
+    // URL that was already admitted at the request stage — the *next* hop
+    // arrives as its own request-stage pause — so there is nothing to re-judge
+    // here, only something to let through.
+    if params.get("responseStatusCode").is_some() || params.get("responseErrorReason").is_some() {
+        let _ = live
+            .call("Fetch.continueResponse", json!({ "requestId": request_id }))
+            .await;
+        return;
+    }
+    let policy = live
+        .policy
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    let admission = admit_document_now(&url, &policy).await;
+    if admission.is_admitted() {
+        let _ = live
+            .call("Fetch.continueRequest", json!({ "requestId": request_id }))
+            .await;
+        return;
+    }
+    // `BlockedByClient` is what Chrome shows as ERR_BLOCKED_BY_CLIENT, which
+    // is exactly what happened: this client blocked it.
+    let _ = live
+        .call(
+            "Fetch.failRequest",
+            json!({ "requestId": request_id, "errorReason": "BlockedByClient" }),
+        )
+        .await;
+    push_console(
+        live,
+        Some(ConsoleEntry {
+            at: Utc::now().to_rfc3339(),
+            level: "error".into(),
+            text: format!("navigation_blocked {}", admission.reason_code()),
+            url: truncate(&url, 2_000),
+            line: 0,
+        }),
+    );
+    live.edit(|record| record.reason_code = "navigation_blocked".into());
+    live.publish().await;
+}
+
+/// Resolves the host, then applies the policy. The lookup is bounded: a name
+/// that will not resolve inside a second is treated as unresolvable, which is
+/// a refusal — admitting an address nobody could resolve would mean admitting
+/// whatever the browser resolves it to a moment later.
+async fn admit_document_now(url: &str, policy: &crate::browser::NetworkPolicy) -> Admission {
+    let Some(target) = crate::browser::parse_target(url) else {
+        return Admission::Refuse("scheme_not_allowed");
+    };
+    let resolved = if target.host.parse::<std::net::IpAddr>().is_ok() {
+        Vec::new()
+    } else {
+        let lookup = tokio::net::lookup_host((target.host.as_str(), target.effective_port()));
+        match tokio::time::timeout(Duration::from_secs(1), lookup).await {
+            Ok(Ok(addresses)) => addresses.map(|address| address.ip()).collect(),
+            _ => Vec::new(),
+        }
+    };
+    crate::browser::admit_document(url, &resolved, policy)
 }
