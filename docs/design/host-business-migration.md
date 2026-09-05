@@ -369,7 +369,7 @@ Worker 在任何域都不再做业务授权：请求到达 Worker 时已由 Host
 | B0a | 多域所有权 + HTTPS 切换 | 与 B0b/B0c 并行                               | —                   | `ownership.proto`、Host `internal/ownership`、v6、Runtime 0010、`OwnershipService`、CLI `--domain`          |
 | B0b | 事件流                  | 与 B0a/B0c 并行                               | —                   | `events.proto`、`eventstream`、`/ws/armadra.v1.EventStream`、host-client `events.ts`、Web `event-stream.ts` |
 | B0c | 反向导入                | 与 B0a/B0b 并行                               | —                   | 包格式 v2、Runtime `ownership/import.rs`、0011、`ApplyReverseExport`、CLI `import-host-export`              |
-| B0d | Worker 常驻双向通道     | 与 B0a–c 并行                                 | —                   | `worker.proto` 上行帧、`channel.rs`/`socket.rs`、Go `channel.go`/`socket.go`、outbox 重放                   |
+| B0d | Worker 常驻双向通道     | 与 B0a–c 并行                                 | —                   | 已实现：`worker_channel.proto`、`worker/{channel,outbox,socket}.rs`、Go `channel.go`/`socket.go`、重放去重  |
 | B1  | settings 域             | B0 合入后；与 B2 并行                         | B0a、B0c、B0d       | `settings.proto`、`settingshost`、`worker_settings.rs`、Web 网关、e2e                                       |
 | B2  | filesystem 域           | 与 B1 并行                                    | B0b、B0d            | `filesystem.proto`、`fshost`、v7、Worker `filesystem.rs`、Web 网关、e2e                                     |
 | B3  | session 域              | 契约与 Host 存储可与 B1/B2 并行；集成在 B2 后 | B2、B0b             | `session.proto`、`sessionhost`、v8、Worker `session.rs`、pending-launch 迁移、e2e                           |
