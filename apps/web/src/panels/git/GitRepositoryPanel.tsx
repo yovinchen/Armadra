@@ -104,6 +104,8 @@ export function actionTarget(action: GitRepositoryAction): string {
       return `${action.targetOid}${action.mainline ? ` · parent ${action.mainline}` : ""}`;
     case "checkoutCommit":
       return action.targetOid;
+    case "reset":
+      return `${action.mode} → ${action.targetOid}`;
     case "startMerge":
       return `${action.targetOid}${action.message ? ` · ${action.message}` : ""}`;
     case "startRebase":
@@ -718,6 +720,16 @@ function RepositorySession({
               {confirmation.action.kind === "checkoutCommit" && (
                 <div>
                   <dd>{t("gitRepo.detachedSafety")}</dd>
+                </div>
+              )}
+              {confirmation.action.kind === "reset" && (
+                <div>
+                  <dd>
+                    {t(`gitRepo.resetSafety.${confirmation.action.mode}`)}
+                  </dd>
+                  {confirmation.action.discardChanges && (
+                    <dd>{t("gitRepo.resetRecovery")}</dd>
+                  )}
                 </div>
               )}
               {confirmation.action.kind === "skipIntegration" && (

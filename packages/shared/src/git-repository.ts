@@ -117,6 +117,20 @@ export const gitRepositoryActionSchema = z.discriminatedUnion("kind", [
     .strict(),
   z
     .object({
+      // Moves the current ref to a reviewed commit. `soft` keeps index and
+      // worktree, `mixed` also resets the index, `hard` replaces both — and
+      // `hard` is the only one that can lose uncommitted work, so it needs
+      // `discardChanges` whenever anything is uncommitted and always records
+      // a stash snapshot first as the way back.
+      kind: z.literal("reset"),
+      mode: z.enum(["soft", "mixed", "hard"]),
+      targetOid: oid,
+      expectedStateToken: stashStateToken,
+      discardChanges: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({
       kind: z.literal("skipIntegration"),
       sessionId: z.string().uuid(),
       expectedStateToken: stashStateToken,

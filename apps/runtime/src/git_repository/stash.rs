@@ -295,6 +295,91 @@ impl RepositoryService {
         ))
     }
 
+    /// Move the current ref to a reviewed commit.
+    ///
+    /// `Hard` is the only mode that can lose uncommitted work, so it needs an
+    /// explicit acknowledgement whenever anything is uncommitted, and it always
+    /// records a stash snapshot first — the same stash backend the Stashes tab
+    /// lists, so the discarded state has a named way back. A snapshot that Git
+    /// does not actually create stops the reset instead of proceeding without
+    /// the recovery point it promised.
+    pub(super) async fn reset(
+        &self,
+        context: &RepositoryContext,
+        action: &RepositoryAction,
+        expected: &ExpectedState,
+        operation: &Operation,
+    ) -> AppResult<()> {
+        let RepositoryAction::Reset {
+            mode,
+            target_oid,
+            expected_state_token: expected_token,
+            discard_changes,
+        } = action
+        else {
+            return Err(malformed());
+        };
+        let (mode, discard_changes) = (*mode, *discard_changes);
+        let token = &operation.cancellation;
+        let (snapshot, before_stashes) = self.stash_snapshot(context, token).await?;
+        if snapshot.head != *expected || snapshot.state_token != *expected_token {
+            return Err(AppError::Conflict(
+                "Repository state changed; refresh and confirm the reset again".into(),
+            ));
+        }
+        if snapshot.has_conflicts {
+            return Err(AppError::Conflict(
+                "Resolve the conflicted index before resetting".into(),
+            ));
+        }
+        if self.resolve(&context.repository, target_oid, token).await? != *target_oid {
+            return Err(AppError::BadRequest(
+                "Reset target must be a commit object ID".into(),
+            ));
+        }
+        if mode == ResetMode::Hard && snapshot.dirty && !discard_changes {
+            return Err(AppError::Conflict(
+                "A hard reset replaces uncommitted work; confirm discarding it explicitly".into(),
+            ));
+        }
+        if mode == ResetMode::Hard && snapshot.dirty {
+            let message = format!("armadra: before hard reset to {target_oid}");
+            self.mutate(
+                context,
+                vec![
+                    "stash".into(),
+                    "push".into(),
+                    "--include-untracked".into(),
+                    "--message".into(),
+                    message,
+                    "--".into(),
+                ],
+                operation,
+            )
+            .await?;
+            if self.stash_records(context, token).await?.0 == before_stashes {
+                return Err(AppError::Conflict(
+                    "No recovery stash was created; the hard reset was not started".into(),
+                ));
+            }
+            // The stash already restored the worktree to HEAD, so the reset
+            // that follows only has to move the ref.
+        }
+        self.mutate(
+            context,
+            args(&["reset", mode.flag(), target_oid]),
+            operation,
+        )
+        .await?;
+        let head = self.head(&context.repository, token).await?;
+        if head.head_oid.as_deref() != Some(target_oid) || head.branch != expected.branch {
+            return Err(AppError::Conflict(
+                "HEAD does not point at the confirmed commit after the reset; inspect the repository".into(),
+            ));
+        }
+        Ok(())
+    }
+
     pub(super) async fn execute_stash(
         &self,
         context: &RepositoryContext,

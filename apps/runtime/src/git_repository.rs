@@ -68,6 +68,28 @@ pub struct ExpectedState {
     pub branch: Option<String>,
 }
 
+/// How far back a reset takes the repository. Each mode loses strictly more
+/// than the one before it, so the caller names the one it means.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ResetMode {
+    /// Move the ref only; index and worktree keep everything.
+    Soft,
+    /// Move the ref and reset the index; the worktree keeps everything.
+    Mixed,
+    /// Move the ref and replace both index and worktree.
+    Hard,
+}
+impl ResetMode {
+    fn flag(self) -> &'static str {
+        match self {
+            Self::Soft => "--soft",
+            Self::Mixed => "--mixed",
+            Self::Hard => "--hard",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BranchRecord {
@@ -206,6 +228,17 @@ pub enum RepositoryAction {
     /// until one is created, which is why the UI has to say so.
     CheckoutCommit {
         target_oid: String,
+    },
+    /// Move the current ref to a reviewed commit. `Hard` also replaces the
+    /// worktree, so it needs an acknowledgement when anything is uncommitted
+    /// and always leaves a stash snapshot behind as the way back.
+    Reset {
+        mode: ResetMode,
+        target_oid: String,
+        expected_state_token: String,
+        /// Acknowledges that a hard reset discards uncommitted work.
+        #[serde(default)]
+        discard_changes: bool,
     },
     SkipIntegration {
         session_id: String,
@@ -1397,6 +1430,14 @@ impl RepositoryService {
                 stash::validate_state_token(expected_state_token)?;
             }
             RepositoryAction::CheckoutCommit { target_oid } => require_oid(target_oid)?,
+            RepositoryAction::Reset {
+                target_oid,
+                expected_state_token,
+                ..
+            } => {
+                require_oid(target_oid)?;
+                stash::validate_state_token(expected_state_token)?;
+            }
             RepositoryAction::SkipIntegration {
                 session_id,
                 expected_state_token,
@@ -1659,6 +1700,9 @@ impl RepositoryService {
             | RepositoryAction::DropStash { .. } => {
                 self.execute_stash(context, action, expected, operation)
                     .await
+            }
+            RepositoryAction::Reset { .. } => {
+                self.reset(context, action, expected, operation).await
             }
             RepositoryAction::CreateBranch {
                 name,

@@ -103,6 +103,20 @@ export const gitRepository: MessageModule = {
       "择取与回退要求没有进行中的 Git 操作，且工作区与暂存区干净。",
     "gitRepo.mergeMainline": "这是合并提交，将以第 1 个父提交为主线。",
     "gitRepo.branchFromCommit": "从该提交创建分支",
+    "gitRepo.reset": "重置到该提交",
+    "gitRepo.resetMode": "重置方式",
+    "gitRepo.reset.soft": "soft：只移动分支",
+    "gitRepo.reset.mixed": "mixed：移动分支并重置索引",
+    "gitRepo.reset.hard": "hard：移动分支并覆盖工作区",
+    "gitRepo.resetSafety.soft":
+      "只移动当前分支；索引和工作区原样保留，两者与新 HEAD 的差异会留在暂存区。",
+    "gitRepo.resetSafety.mixed":
+      "移动当前分支并重置索引；工作区文件内容不变，只是不再处于暂存状态。",
+    "gitRepo.resetSafety.hard":
+      "移动当前分支，并用该提交的内容覆盖索引和工作区。未提交的改动会被丢弃；执行前会自动创建一个 stash 快照作为可恢复点。",
+    "gitRepo.resetDiscard": "我确认丢弃当前未提交的改动",
+    "gitRepo.resetRecovery":
+      "被丢弃的内容会先保存为一条 stash（含未跟踪文件），可在 Stash 页找回。",
     "gitRepo.worktreePath": "Worktree 路径（工作区内）",
     "gitRepo.createWorktree": "创建 Worktree",
     "gitRepo.removeWorktree": "移除 Worktree",
@@ -226,6 +240,20 @@ export const gitRepository: MessageModule = {
     "gitRepo.mergeMainline":
       "This is a merge commit; parent 1 is used as the mainline.",
     "gitRepo.branchFromCommit": "Branch from this commit",
+    "gitRepo.reset": "Reset to this commit",
+    "gitRepo.resetMode": "Reset mode",
+    "gitRepo.reset.soft": "soft: move the branch only",
+    "gitRepo.reset.mixed": "mixed: move the branch and reset the index",
+    "gitRepo.reset.hard": "hard: move the branch and replace the worktree",
+    "gitRepo.resetSafety.soft":
+      "Moves the current branch only. The index and worktree keep everything, so the difference from the new HEAD stays staged.",
+    "gitRepo.resetSafety.mixed":
+      "Moves the current branch and resets the index. File contents in the worktree are unchanged; they are simply no longer staged.",
+    "gitRepo.resetSafety.hard":
+      "Moves the current branch and replaces the index and worktree with that commit's content. Uncommitted changes are discarded; a stash snapshot is recorded first as the way back.",
+    "gitRepo.resetDiscard": "I want to discard the uncommitted changes",
+    "gitRepo.resetRecovery":
+      "The discarded state is stashed first, including untracked files, and can be recovered from the Stashes tab.",
     "gitRepo.worktreePath": "Worktree path (inside workspace)",
     "gitRepo.createWorktree": "Create worktree",
     "gitRepo.removeWorktree": "Remove worktree",

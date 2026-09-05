@@ -691,6 +691,74 @@ describe("worktrees and history", () => {
     expect(operate).not.toHaveBeenCalled();
   });
 
+  it("gates a hard reset on discarding uncommitted work and names the recovery stash", async () => {
+    vi.spyOn(runtimeApi, "gitRepositoryHistory").mockResolvedValue({
+      reference: "HEAD",
+      anchorOid: a,
+      commits: [commit(b, [c], "Older")],
+      nextCursor: null,
+      shallow: false,
+    });
+    vi.spyOn(runtimeApi, "gitRepositoryIntegration").mockResolvedValue({
+      ...integrationState(),
+      kind: "none",
+      owned: false,
+      sessionId: null,
+      canContinue: false,
+      // Uncommitted work is present, which is exactly what hard would lose.
+      dirty: true,
+      message: null,
+      targetOid: null,
+      originalHead: null,
+      originalBranch: null,
+    });
+    const operate = vi
+      .spyOn(runtimeApi, "gitRepositoryOperate")
+      .mockImplementation(async (_workspace, action) =>
+        operation(action, "succeeded"),
+      );
+    view("history");
+    fireEvent.click(await screen.findByRole("button", { name: /Older/ }));
+
+    // Soft is available on a dirty worktree because it loses nothing.
+    const submit = await screen.findByRole("button", {
+      name: "Reset to this commit",
+    });
+    await waitFor(() =>
+      expect((submit as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.change(screen.getByLabelText("Reset mode"), {
+      target: { value: "hard" },
+    });
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "I want to discard the uncommitted changes",
+      }),
+    );
+    await waitFor(() =>
+      expect((submit as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(submit);
+    expect(screen.getByRole("alertdialog").textContent).toContain(
+      "stashed first",
+    );
+    await confirm();
+    await waitFor(() =>
+      expect(operate).toHaveBeenCalledWith(
+        "workspace-one",
+        {
+          kind: "reset",
+          mode: "hard",
+          targetOid: b,
+          expectedStateToken: "d".repeat(64),
+          discardChanges: true,
+        },
+        { headOid: a, branch: "main" },
+      ),
+    );
+  });
+
   it("builds merge edges from OIDs and never invents adjacency", () => {
     const graph = commitGraph([
       commit(a, [b, c], "merge"),

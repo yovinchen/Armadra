@@ -10,7 +10,7 @@ import { useT } from "../../app/preferences-store";
 import { writeClipboard } from "../../terminal/TerminalSurface";
 import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
-import { Check, Field, ReadError } from "./forms";
+import { Check, Field, ReadError, selectClass } from "./forms";
 
 /** A lane represents a pending parent identity, never a row's ordinal number. */
 export function commitGraph(commits: readonly GitCommitRecord[]) {
@@ -314,8 +314,16 @@ function CommitActions({
 }) {
   const t = useT();
   const [copied, setCopied] = useState(false);
+  const [resetMode, setResetMode] = useState<"soft" | "mixed" | "hard">("soft");
+  const [discardChanges, setDiscardChanges] = useState(false);
   // 合并提交的 cherry-pick / revert 必须先明确主线，这里不替用户猜。
   const mainline = commit.parents.length > 1 ? 1 : null;
+  // 只有 hard 会丢未提交的内容；工作区脏时必须先明确勾选确认。
+  const resetBlocked =
+    busy ||
+    !state ||
+    state.kind !== "none" ||
+    (resetMode === "hard" && state.dirty && !discardChanges);
   const sequence = (kind: "startCherryPick" | "revert") => {
     if (!idle || !state) return;
     request(
@@ -408,6 +416,57 @@ function CommitActions({
           />
           <Button size="sm" type="submit" disabled={!branchName.trim()}>
             {t("gitRepo.createBranch")}
+          </Button>
+        </fieldset>
+      </form>
+      <form
+        className="space-y-2 border-t border-border pt-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (resetBlocked || !state) return;
+          request({
+            kind: "reset",
+            mode: resetMode,
+            targetOid: commit.oid,
+            expectedStateToken: state.stateToken,
+            discardChanges,
+          });
+        }}
+      >
+        <fieldset disabled={busy} className="min-w-0 space-y-2">
+          <Field label={t("gitRepo.resetMode")}>
+            <select
+              className={selectClass}
+              value={resetMode}
+              onChange={(event) => {
+                setResetMode(event.target.value as "soft" | "mixed" | "hard");
+                setDiscardChanges(false);
+              }}
+            >
+              {(["soft", "mixed", "hard"] as const).map((mode) => (
+                <option key={mode} value={mode}>
+                  {t(`gitRepo.reset.${mode}`)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <p className="text-muted-foreground">
+            {t(`gitRepo.resetSafety.${resetMode}`)}
+          </p>
+          {resetMode === "hard" && state?.dirty && (
+            <Check
+              label={t("gitRepo.resetDiscard")}
+              checked={discardChanges}
+              onChange={setDiscardChanges}
+            />
+          )}
+          <Button
+            size="sm"
+            variant={resetMode === "hard" ? "destructive" : "outline"}
+            type="submit"
+            disabled={resetBlocked}
+          >
+            {t("gitRepo.reset")}
           </Button>
         </fieldset>
       </form>
