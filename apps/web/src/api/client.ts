@@ -37,6 +37,11 @@ import {
   gitRevertResponseSchema,
   gitStageResponseSchema,
   gitStatusSchema,
+  gitHunkDiffSchema,
+  gitHunkMutationSchema,
+  gitHunkResultSchema,
+  type GitHunkMutation,
+  type GitHunkScope,
   gitBranchSnapshotSchema,
   gitHistoryPageSchema,
   gitWorktreesSchema,
@@ -632,6 +637,26 @@ export const runtimeApi = {
     ),
 
   /* ------------------------------------ git ----------------------------- */
+  gitHunks: (
+    workspaceId: string,
+    file: string,
+    scope: GitHunkScope,
+    signal?: AbortSignal,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/hunks?file=${query(file)}&scope=${scope}`,
+      gitHunkDiffSchema,
+      { signal },
+    ),
+  gitApplyHunk: (workspaceId: string, mutation: GitHunkMutation) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/hunks`,
+      gitHunkResultSchema,
+      {
+        method: "POST",
+        ...json(gitHunkMutationSchema.parse(mutation)),
+      },
+    ),
   gitStatus: (workspaceId: string) =>
     request(`/api/workspaces/${workspaceId}/git/status`, gitStatusSchema),
 

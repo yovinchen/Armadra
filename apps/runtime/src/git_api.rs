@@ -21,6 +21,31 @@ static OWNERS: LazyLock<Mutex<HashMap<String, String>>> =
 pub static REPOSITORIES: LazyLock<RepositoryService> = LazyLock::new(RepositoryService::new);
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HunkQuery {
+    file: String,
+    scope: crate::git_hunks::GitHunkScope,
+}
+
+pub async fn hunks(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<HunkQuery>,
+) -> AppResult<Json<crate::git_hunks::GitHunkDiff>> {
+    let workspace = workspace(&state, &id, false).await?;
+    crate::git_hunks::read_hunks(Path::new(&workspace.root_path), &query.file, query.scope).await.map(Json)
+}
+
+pub async fn apply_hunk(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(request): Json<crate::git_hunks::GitHunkMutation>,
+) -> AppResult<Json<crate::git_hunks::GitHunkResult>> {
+    let workspace = workspace(&state, &id, true).await?;
+    crate::git_hunks::apply_hunk(Path::new(&workspace.root_path), request).await.map(Json)
+}
+
+#[derive(Deserialize)]
 pub struct RepositoryQuery {
     #[serde(default = "root_path")]
     path: String,

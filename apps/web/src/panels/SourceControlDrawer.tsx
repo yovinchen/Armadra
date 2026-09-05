@@ -13,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   FileDiff,
+  ListFilter,
   GitBranch,
   Minus,
   Plus,
@@ -20,7 +21,7 @@ import {
   Undo2,
   X,
 } from "lucide-react";
-import type { DiffScope, GitFileStatus } from "@armadra/shared";
+import type { DiffScope, GitFileStatus, GitHunkScope } from "@armadra/shared";
 
 type DiffFileStatus = GitFileStatus["status"];
 
@@ -49,6 +50,7 @@ import {
   type RepositoryTab,
 } from "./git/GitRepositoryPanel";
 import { currentViewportCenter } from "./viewport";
+import { ChangesHunks } from "./git/ChangesHunks";
 
 const STATUS_COLOR: Record<DiffFileStatus, string> = {
   M: "var(--warn)",
@@ -86,6 +88,11 @@ export function SourceControlDrawer() {
   const [message, setMessage] = useState("");
   const [revertPath, setRevertPath] = useState<string | null>(null);
   const [tab, setTab] = useState<"changes" | RepositoryTab>("changes");
+  const [hunk, setHunk] = useState<{
+    workspaceId: string;
+    file: string;
+    scope: GitHunkScope;
+  } | null>(null);
 
   const workspaceId = workspace?.id ?? null;
   const open = mode === "drawer";
@@ -179,7 +186,15 @@ export function SourceControlDrawer() {
       <span className="flex-1 truncate text-[13px]" title={file.path}>
         {file.path}
       </span>
-      <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+      <div className="flex items-center gap-0.5">
+        <IconButton
+          label={t("gitHunk.title")}
+          onClick={() =>
+            workspaceId && setHunk({ workspaceId, file: file.path, scope })
+          }
+        >
+          <ListFilter />
+        </IconButton>
         <IconButton
           label={t("scm.diff")}
           onClick={() => openDiff(file.path, scope)}
@@ -304,6 +319,31 @@ export function SourceControlDrawer() {
               className="mt-0 flex min-h-0 flex-col data-[state=inactive]:hidden"
             >
               <ScrollArea className="min-h-0 flex-1">
+                {hunk && hunk.workspaceId === workspaceId && (
+                  <section className="border-b border-border p-3">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setHunk(null)}
+                    >
+                      {t("gitHunk.close")}
+                    </Button>
+                    <ChangesHunks
+                      key={`${hunk.workspaceId}:${hunk.scope}:${hunk.file}`}
+                      {...hunk}
+                      load={runtimeApi.gitHunks}
+                      apply={runtimeApi.gitApplyHunk}
+                      onChanged={(id) => {
+                        void queryClient.invalidateQueries({
+                          queryKey: ["git-status", id],
+                        });
+                        void queryClient.invalidateQueries({
+                          queryKey: ["git-diff", id],
+                        });
+                      }}
+                    />
+                  </section>
+                )}
                 {status.isPending ? (
                   <p role="status" className="px-4 py-3 text-xs">
                     {t("gitRepo.loading")}
