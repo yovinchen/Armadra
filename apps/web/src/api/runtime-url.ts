@@ -26,7 +26,11 @@ export function resolveRuntimeUrl(
 ): string {
   // 显式配置永远优先：桌面开发模式靠它连外部 Runtime。
   if (configured === undefined)
-    return nativeShellRuntimeUrl(pageUrl) ?? LOCAL_RUNTIME;
+    return (
+      nativeShellRuntimeUrl(pageUrl) ??
+      hostServedOrigin(pageUrl) ??
+      LOCAL_RUNTIME
+    );
   const url = new URL(configured.trim() || "/", pageUrl);
   if (
     !/^https?:$/.test(url.protocol) ||
@@ -57,6 +61,41 @@ export function nativeShellRuntimeUrl(pageUrl: string): string | null {
   // origin is spelled out from the two parts that do survive.
   if (url.username || url.password) return null;
   return NATIVE_SHELL_ORIGINS[`${url.protocol}//${url.host}`] ?? null;
+}
+
+/**
+ * 「经 Host 访问」模式的 Runtime 基址：Go Host 用 HTTPS 托管这份前端，并把
+ * `/api/**` 与 WebSocket 代理到本机 Runtime（host-protocol-design §5，H02）。
+ * 此时同源就是唯一能用的地址，不需要 `VITE_RUNTIME_URL`。
+ *
+ * 判据是页面协议：开发服务器与 `armadra.sh run web` 都是回环 HTTP，Host 只在
+ * 明确配置的 HTTPS 来源上提供页面；而 HTTPS 页面本来也无法访问
+ * `http://127.0.0.1`（混合内容会被浏览器拦掉），所以这里不存在更好的猜测。
+ */
+export function hostServedOrigin(pageUrl: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(pageUrl);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" || url.username || url.password) return null;
+  if (nativeShellRuntimeUrl(pageUrl)) return null;
+  return url.origin;
+}
+
+/**
+ * 这份页面是不是由 Host 托管、`/api` 走它的认证代理。
+ *
+ * 只有这种模式下写请求才要带会话 CSRF 头，「对外服务」开关也才有对象可读写；
+ * 桌面壳与本机开发直连 Runtime，Runtime 自己没有会话。
+ */
+export function isHostServed(
+  configured: string | undefined,
+  pageUrl: string,
+): boolean {
+  const origin = hostServedOrigin(pageUrl);
+  return origin !== null && resolveRuntimeUrl(configured, pageUrl) === origin;
 }
 
 /** 这个基址是不是壳的自定义协议（而不是一个真实的 HTTP 端点）。 */

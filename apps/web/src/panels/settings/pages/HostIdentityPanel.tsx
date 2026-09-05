@@ -7,6 +7,7 @@ import {
   type HostIdentitySession,
 } from "@armadra/host-client";
 import { usePreferencesStore, useT } from "../../../app/preferences-store";
+import { rememberHostCsrf } from "../../../host/proxy-session";
 import { Button } from "@/ui/button";
 import {
   AlertDialog,
@@ -145,7 +146,13 @@ export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
   useEffect(() => {
     let client: HostIdentityClient | null = null;
     try {
-      if (config) client = new HostIdentityClient(config);
+      // The Runtime calls this Host proxies share this session, so its CSRF
+      // token has exactly one holder in the page (H02).
+      if (config)
+        client = new HostIdentityClient({
+          ...config,
+          onCsrfToken: rememberHostCsrf,
+        });
     } catch {
       /* Invalid configuration never starts a request. */
     }

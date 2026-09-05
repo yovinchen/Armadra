@@ -5,6 +5,7 @@ import { canvas } from "./canvas";
 import { collab } from "./collab";
 import { commands } from "./commands";
 import { explorer } from "./explorer";
+import { externalService } from "./external-service";
 import { format } from "./format";
 import { meta } from "./meta";
 import { launcher } from "./launcher";
@@ -62,6 +63,7 @@ export const MESSAGE_MODULES = {
   ssh,
   host,
   "host-identity": hostIdentity,
+  "external-service": externalService,
   "legacy-archives": legacyArchives,
   "context-usage": contextUsage,
   "git-repository": gitRepository,

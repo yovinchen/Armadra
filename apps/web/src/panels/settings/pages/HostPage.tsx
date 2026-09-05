@@ -7,6 +7,7 @@ import { SettingsGroup } from "../SettingsGroup";
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
+import { ExternalServicePanel } from "./ExternalServicePanel";
 import { HostIdentityPanel } from "./HostIdentityPanel";
 
 /**
@@ -179,6 +180,7 @@ export function HostPage() {
         address={address}
         hello={state.status === "connected" ? state.hello : undefined}
       />
+      <ExternalServicePanel />
     </>
   );
 }

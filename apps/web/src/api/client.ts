@@ -1,8 +1,10 @@
 import {
+  isHostServed,
   resolveRuntimeUrl,
   resolveSocketBase,
   runtimeSocketUrl,
 } from "./runtime-url";
+import { ensureHostCsrf, forgetHostCsrf } from "../host/proxy-session";
 import {
   agentListSchema,
   agentStatusSchema,
@@ -179,9 +181,18 @@ import { t } from "../app/preferences-store";
  *  3. 这里不做任何缓存 / 重试 / 状态；调用方自己决定。
  */
 
+const PAGE_URL =
+  typeof window === "undefined" ? "http://localhost/" : window.location.href;
+
 export const RUNTIME_URL = resolveRuntimeUrl(
   import.meta.env.VITE_RUNTIME_URL,
-  typeof window === "undefined" ? "http://localhost/" : window.location.href,
+  PAGE_URL,
+);
+
+/** 这份页面是不是由 Go Host 托管、`/api` 走它的认证代理（H02）。 */
+export const RUNTIME_VIA_HOST = isHostServed(
+  import.meta.env.VITE_RUNTIME_URL,
+  PAGE_URL,
 );
 
 /** 204 / 空响应体在进 schema 之前先变成 `undefined`。 */
@@ -223,22 +234,46 @@ export function isConflict(error: unknown): boolean {
   return error instanceof RuntimeRequestError && error.status === 409;
 }
 
+/** 只有会改状态的方法需要 CSRF；GET / HEAD 靠 SameSite Cookie 与精确 Origin。 */
+function unsafeMethod(method: string | undefined): boolean {
+  const value = (method ?? "GET").toUpperCase();
+  return value !== "GET" && value !== "HEAD";
+}
+
+async function send(path: string, init: RequestInit | undefined, csrf: string) {
+  return fetch(`${RUNTIME_URL}${path}`, {
+    ...init,
+    headers: {
+      ...(init?.body instanceof FormData
+        ? {}
+        : { "Content-Type": "application/json" }),
+      ...(csrf ? { "X-Armadra-CSRF": csrf } : {}),
+      ...init?.headers,
+    },
+  });
+}
+
 async function request<T>(
   path: string,
   schema: z.ZodType<T>,
   init?: RequestInit,
 ): Promise<T> {
+  const guarded = RUNTIME_VIA_HOST && unsafeMethod(init?.method);
   let response: Response;
   try {
-    response = await fetch(`${RUNTIME_URL}${path}`, {
-      ...init,
-      headers: {
-        ...(init?.body instanceof FormData
-          ? {}
-          : { "Content-Type": "application/json" }),
-        ...init?.headers,
-      },
-    });
+    response = await send(path, init, guarded ? await ensureHostCsrf() : "");
+    // A rotated token is the one failure worth retrying: the request never
+    // reached the Runtime, so nothing was executed twice. Any other 403 is the
+    // Host refusing this device, and repeating it would not change that.
+    if (
+      guarded &&
+      response.status === 403 &&
+      !(init?.body instanceof FormData)
+    ) {
+      forgetHostCsrf();
+      const renewed = await ensureHostCsrf();
+      if (renewed) response = await send(path, init, renewed);
+    }
   } catch (cause) {
     throw new RuntimeConnectionError(RUNTIME_URL, cause);
   }

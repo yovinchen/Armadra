@@ -31,6 +31,15 @@ export interface HostIdentityClientOptions {
   pageOrigin?: string;
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
+  /**
+   * Called whenever this client's CSRF token changes, including with `""` when
+   * it is dropped. It exists so the page that owns this client can authorize
+   * the *other* requests the same Host session covers — the Runtime calls the
+   * Host proxies for a paired device — without a second holder renewing the
+   * token behind this client's back. The value stays in memory: never store it,
+   * put it in a URL, or send it anywhere but this Host's own origin.
+   */
+  onCsrfToken?: (token: string) => void;
 }
 /** Contains only stable metadata. Never retain a response body, ticket or URL. */
 export class HostIdentityError extends Error {
@@ -153,10 +162,12 @@ export class HostIdentityClient {
   #fetch: typeof fetch;
   #timeout: number;
   #csrf = "";
+  #onCsrf?: (token: string) => void;
   #deviceId = "";
   #lifetime = new AbortController();
   #tail: Promise<unknown> = Promise.resolve();
   constructor(options: HostIdentityClientOptions) {
+    this.#onCsrf = options.onCsrfToken;
     this.#url = identityEndpoint(
       options.baseUrl,
       options.pageOrigin ?? globalThis.location?.origin,
@@ -175,8 +186,18 @@ export class HostIdentityClient {
     if (typeof fetcher !== "function") invalid();
     this.#fetch = fetcher.bind(globalThis);
   }
+  // One assignment point, so every rotation and every drop is observed. A
+  // listener that throws must not take the request down with it.
+  #setCsrf(token: string): void {
+    this.#csrf = token;
+    try {
+      this.#onCsrf?.(token);
+    } catch {
+      /* A page that mishandles its own token still gets its response. */
+    }
+  }
   dispose(): void {
-    this.#csrf = "";
+    this.#setCsrf("");
     this.#deviceId = "";
     this.#lifetime.abort(new HostIdentityError("CANCELLED"));
   }
@@ -338,7 +359,7 @@ export class HostIdentityClient {
       (needsCSRF && !secret.test(value.csrfToken))
     )
       throw new HostIdentityError("MALFORMED_RESPONSE");
-    if (needsCSRF) this.#csrf = value.csrfToken;
+    if (needsCSRF) this.#setCsrf(value.csrfToken);
     this.#deviceId = value.device.deviceId;
     const { csrfToken: _, ...visible } = value;
     return visible;
@@ -366,7 +387,7 @@ export class HostIdentityClient {
     if (this.#lifetime.signal.aborted) throw new HostIdentityError("CANCELLED");
     if (!secret.test(value.csrfToken))
       throw new HostIdentityError("MALFORMED_RESPONSE", true);
-    this.#csrf = value.csrfToken;
+    this.#setCsrf(value.csrfToken);
   }
   #refresh(): Promise<HostIdentitySession> {
     return this.#rpc(
@@ -385,7 +406,7 @@ export class HostIdentityClient {
    * Only an explicit UNAUTHENTICATED response permits trying refresh recovery. */
   resume(): Promise<HostIdentitySession | null> {
     return this.#serial(async () => {
-      this.#csrf = "";
+      this.#setCsrf("");
       try {
         await this.#current();
       } catch (error) {
@@ -399,7 +420,7 @@ export class HostIdentityClient {
         await this.#renew();
         return await this.#refresh();
       } catch (error) {
-        this.#csrf = "";
+        this.#setCsrf("");
         if (
           error instanceof HostIdentityError &&
           error.hostCode === "UNAUTHENTICATED"
@@ -550,7 +571,7 @@ export class HostIdentityClient {
       if (!value.revoked || value.deviceId !== deviceId)
         throw new HostIdentityError("MALFORMED_RESPONSE", true);
       if (deviceId === this.#deviceId) {
-        this.#csrf = "";
+        this.#setCsrf("");
         this.#deviceId = "";
       }
     });
@@ -571,7 +592,7 @@ export class HostIdentityClient {
       );
       if (!value.closed)
         throw new HostIdentityError("MALFORMED_RESPONSE", true);
-      this.#csrf = "";
+      this.#setCsrf("");
       this.#deviceId = "";
     });
   }

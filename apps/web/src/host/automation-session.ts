@@ -7,6 +7,7 @@ import {
 } from "@armadra/host-client";
 
 import { loadHostAddress, probeHost } from "./connection";
+import { rememberHostCsrf } from "./proxy-session";
 
 /** Advertised only when the Host actually assembled an execution Worker. */
 export const AUTOMATION_CAPABILITY = "automation.plans.v1";
@@ -138,6 +139,9 @@ export const useAutomationSession = create<AutomationSessionStore>(
             baseUrl: address,
             hostId: hello.hostId,
             hostInstanceId: hello.hostInstanceId,
+            // Same session, so the Runtime calls this Host proxies stay
+            // authorized when this client rotates the token (H02).
+            onCsrfToken: rememberHostCsrf,
           });
         } catch {
           set({ state: { status: "blocked", reason: "tlsRequired" } });

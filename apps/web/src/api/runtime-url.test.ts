@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  hostServedOrigin,
   isShellTransport,
   nativeShellRuntimeUrl,
   resolveRuntimeUrl,
@@ -9,13 +10,30 @@ import {
 } from "./runtime-url";
 
 describe("Runtime addresses across desktop and web", () => {
-  it("keeps the loopback default outside a native shell", () => {
+  it("keeps the loopback default for a local development page", () => {
     expect(resolveRuntimeUrl(undefined, "http://127.0.0.1:1420/")).toBe(
       "http://127.0.0.1:43120",
     );
-    expect(resolveRuntimeUrl(undefined, "https://canvas.example/app")).toBe(
+    expect(resolveRuntimeUrl(undefined, "http://localhost:5173/")).toBe(
       "http://127.0.0.1:43120",
     );
+  });
+  it("uses its own origin when the Host served this page over HTTPS", () => {
+    // H02: the Host proxies /api and the WebSockets on the same origin, and an
+    // HTTPS page could not reach a loopback HTTP port anyway.
+    expect(resolveRuntimeUrl(undefined, "https://192.168.1.20:8443/")).toBe(
+      "https://192.168.1.20:8443",
+    );
+    expect(
+      resolveRuntimeUrl(undefined, "https://canvas.example/workspace/one"),
+    ).toBe("https://canvas.example");
+    // The packaged desktop shell still wins: it has no port to talk to.
+    expect(resolveRuntimeUrl(undefined, "https://tauri.localhost/")).toBe(
+      "https://armadra.localhost",
+    );
+    expect(hostServedOrigin("http://127.0.0.1:1420/")).toBe(null);
+    expect(hostServedOrigin("https://tauri.localhost/")).toBe(null);
+    expect(hostServedOrigin("not a url")).toBe(null);
   });
   it("uses the shell's custom protocol when the page is a packaged desktop page", () => {
     // A packaged Runtime holds no port at all; this is the only way in.
