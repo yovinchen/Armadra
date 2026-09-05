@@ -18,7 +18,9 @@ use tauri_plugin_dialog::DialogExt;
 
 mod host;
 mod lifecycle;
+mod transport;
 use lifecycle::DesktopLifecycle;
+use transport::{RuntimeAddress, RuntimeTransport, WebSocketForwarder};
 
 fn trace_lifecycle(event: &str) {
     if std::env::var("ARMADRA_DESKTOP_LIFECYCLE_TRACE").as_deref() == Ok("1") {
@@ -26,7 +28,34 @@ fn trace_lifecycle(event: &str) {
     }
 }
 
-fn runtime_health_url() -> String {
+/// The Runtime's data directory as this shell resolves it, matching the Rust
+/// Runtime's own `paths::data_dir`. The socket and `endpoints.json` both live
+/// here, so the two processes have to agree on it without talking first.
+fn runtime_data_dir() -> std::path::PathBuf {
+    if let Some(path) = std::env::var_os("ARMADRA_DATA_DIR") {
+        return std::path::PathBuf::from(path);
+    }
+    #[cfg(target_os = "macos")]
+    if let Some(home) = std::env::var_os("HOME") {
+        return std::path::PathBuf::from(home).join("Library/Application Support/Armadra");
+    }
+    #[cfg(target_os = "windows")]
+    if let Some(path) = std::env::var_os("LOCALAPPDATA") {
+        return std::path::PathBuf::from(path).join("Armadra");
+    }
+    std::env::var_os("XDG_DATA_HOME")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(".local/share"))
+        })
+        .unwrap_or_else(std::env::temp_dir)
+        .join("armadra")
+}
+
+/// Where a *development* Runtime is: an external process the shell did not
+/// start, still on its loopback port. A shell that owns its Runtime never uses
+/// this — it has a socket, and no port exists to health-check.
+fn external_runtime_health_url() -> String {
     let port = std::env::var("ARMADRA_RUNTIME_PORT")
         .ok()
         .and_then(|value| value.parse::<u16>().ok())
@@ -38,7 +67,10 @@ fn runtime_health_url() -> String {
 struct RuntimeProcess(Mutex<Option<Child>>, AtomicBool);
 
 impl RuntimeProcess {
-    fn start(&self) -> Result<(), String> {
+    /// Starts the Runtime on `address` and nothing else: a shell-owned Runtime
+    /// holds no TCP port, so nothing on the machine can reach it and the
+    /// WebView goes through the `armadra://` protocol instead (roadmap §4.4).
+    fn start(&self, address: &RuntimeAddress) -> Result<(), String> {
         if !owns_runtime(
             cfg!(not(feature = "custom-protocol")),
             std::env::var("ARMADRA_DESKTOP_OWNS_RUNTIME")
@@ -54,6 +86,8 @@ impl RuntimeProcess {
         let executable = directory.join(runtime_binary_name());
         let child = Command::new(&executable)
             .arg("--desktop-control-stdin")
+            .arg("--listen")
+            .arg(address.listen_argument())
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -66,6 +100,12 @@ impl RuntimeProcess {
             })?;
         *self.0.lock().map_err(|_| "Runtime process lock failed")? = Some(child);
         Ok(())
+    }
+
+    /// True when this shell started the Runtime, and therefore reaches it over
+    /// the socket rather than a port.
+    fn owns(&self) -> bool {
+        self.0.lock().is_ok_and(|child| child.is_some())
     }
 
     fn stop(&self) -> Result<(), String> {
@@ -172,7 +212,11 @@ struct HealthResponse {
 }
 
 async fn wait_for_runtime(app: &tauri::AppHandle) -> Result<(), String> {
-    let health_url = runtime_health_url();
+    // A shell-owned Runtime is probed through its own socket; a development
+    // Runtime we did not start is still on a loopback port.
+    let owned = app.state::<RuntimeProcess>().owns();
+    let transport = app.state::<RuntimeTransport>().inner().clone();
+    let health_url = external_runtime_health_url();
     let client = reqwest::Client::builder()
         .timeout(Duration::from_millis(500))
         .build()
@@ -181,17 +225,34 @@ async fn wait_for_runtime(app: &tauri::AppHandle) -> Result<(), String> {
         if app.state::<RuntimeProcess>().exited_early() {
             return Err("Runtime process exited before becoming ready".into());
         }
-        if let Ok(response) = client.get(&health_url).send().await
-            && response.status().is_success()
-            && let Ok(health) = response.json::<HealthResponse>().await
-            && health.status == "ok"
-            && health.version == env!("CARGO_PKG_VERSION")
-        {
+        let health = if owned {
+            socket_health(&transport).await
+        } else {
+            match client.get(&health_url).send().await {
+                Ok(response) if response.status().is_success() => response.json().await.ok(),
+                _ => None,
+            }
+        };
+        if health.is_some_and(|health: HealthResponse| {
+            health.status == "ok" && health.version == env!("CARGO_PKG_VERSION")
+        }) {
             return Ok(());
         }
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
     Err("Runtime did not become healthy within 10 seconds".into())
+}
+
+async fn socket_health(transport: &RuntimeTransport) -> Option<HealthResponse> {
+    let request = http::Request::builder()
+        .uri("armadra://localhost/health")
+        .body(Vec::new())
+        .ok()?;
+    let response = transport::forward(transport, request).await;
+    if !response.status().is_success() {
+        return None;
+    }
+    serde_json::from_slice(response.body()).ok()
 }
 
 /* -------------------------------- 窗口材质 -------------------------------- */
@@ -379,6 +440,25 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .manage(RuntimeProcess::default())
         .manage(DesktopLifecycle::default())
+        .manage(RuntimeTransport::new(RuntimeAddress::for_data_dir(
+            &runtime_data_dir(),
+        )))
+        // The WebView's only door to a Runtime that holds no port. Every
+        // request is replayed on the socket and the Runtime's own answer is
+        // returned untouched, so it keeps deciding CORS and authorization.
+        .register_asynchronous_uri_scheme_protocol(
+            transport::SCHEME,
+            |context, request, responder| {
+                let transport = context
+                    .app_handle()
+                    .state::<RuntimeTransport>()
+                    .inner()
+                    .clone();
+                tauri::async_runtime::spawn(async move {
+                    responder.respond(transport::forward(&transport, request).await);
+                });
+            },
+        )
         .menu(build_app_menu)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "desktop-show" => {
@@ -409,7 +489,30 @@ fn main() {
         .on_page_load(|webview, _payload| mark_tauri_document(webview))
         .setup(|app| {
             trace_lifecycle("setup");
-            app.state::<RuntimeProcess>().start()?;
+            let transport = app.state::<RuntimeTransport>().inner().clone();
+            app.state::<RuntimeProcess>().start(transport.address())?;
+            // WebSockets cannot travel over a custom protocol, so the terminal
+            // and event streams get a loopback forwarder on a kernel-assigned
+            // port. It is started only when this shell owns the Runtime; a
+            // development Runtime already has a port of its own.
+            if app.state::<RuntimeProcess>().owns() {
+                let address = transport.address().clone();
+                let forwarder_transport = transport.clone();
+                let forwarder_app = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    match WebSocketForwarder::start(address).await {
+                        Ok(forwarder) => {
+                            forwarder_transport
+                                .set_websocket_base(Some(forwarder.base().to_owned()));
+                            // The forwarder lives as long as the application.
+                            forwarder_app.manage(forwarder);
+                        }
+                        Err(error) => {
+                            eprintln!("Could not start the WebSocket forwarder: {error}");
+                        }
+                    }
+                });
+            }
             let app_handle = app.handle().clone();
             let window = app
                 .get_webview_window("main")
@@ -443,7 +546,7 @@ fn main() {
                 } else {
                     "tauri://localhost".to_owned()
                 };
-                host::HostLaunchConfig::from_environment(development, origin)
+                host::HostLaunchConfig::from_environment(development, origin, runtime_data_dir())
             })();
             if let Ok(config) = host_config {
                 app.state::<DesktopLifecycle>().configure_host(config);

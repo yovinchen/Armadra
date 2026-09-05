@@ -58,6 +58,11 @@ name = "armadra-desktop"
 version = "0.1.0"
 dependencies = [
  "armadra-protocol",
+ "bytes",
+ "http",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "reqwest",
  "serde",
  "serde_json",
@@ -66,6 +71,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-notification",
  "tauri-plugin-opener",
+ "tempfile",
  "tokio",
  "window-vibrancy",
 ]

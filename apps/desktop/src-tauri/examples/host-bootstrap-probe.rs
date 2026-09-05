@@ -13,10 +13,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "usage: host-bootstrap-probe <binary> <data-dir> <http-endpoint> <page-origin>".into(),
         );
     }
+    // An empty endpoint asks the Host for no TCP surface at all (roadmap §4.4).
+    let endpoint = args[2].to_str().ok_or("endpoint must be UTF-8")?;
     let config = host::HostLaunchConfig {
         binary: PathBuf::from(&args[0]),
         data_dir: Some(PathBuf::from(&args[1])),
-        expected_http_endpoint: args[2].to_str().ok_or("endpoint must be UTF-8")?.into(),
+        endpoints_dir: Some(PathBuf::from(&args[1])),
+        expected_http_endpoint: (!endpoint.is_empty()).then(|| endpoint.to_owned()),
         browser_origin: args[3].to_str().ok_or("origin must be UTF-8")?.into(),
         cli_timeout: Duration::from_secs(15),
     };

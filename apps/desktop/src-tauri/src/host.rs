@@ -62,15 +62,24 @@ pub struct HostLaunchConfig {
     pub data_dir: Option<PathBuf>,
     pub browser_origin: String,
     pub cli_timeout: Duration,
-    // Rust-only injection for isolated lifecycle tests. Production discovery
-    // always uses HOST_ENDPOINT; this field is never exposed to web commands.
-    pub expected_http_endpoint: String,
+    /// The shared `endpoints.json` directory — the Runtime's data directory, so
+    /// both services describe themselves in one document (roadmap §4.4).
+    pub endpoints_dir: Option<PathBuf>,
+    /// `None` asks the Host for no TCP surface at all: it then answers only on
+    /// the same-user control IPC, and reports an empty `http_endpoint`. That is
+    /// the packaged shape. Development keeps a loopback endpoint so the browser
+    /// front end can still reach the Host directly.
+    //
+    // Rust-only injection for isolated lifecycle tests; never exposed to web
+    // commands.
+    pub expected_http_endpoint: Option<String>,
 }
 
 impl HostLaunchConfig {
     pub fn from_environment(
         development: bool,
         browser_origin: String,
+        endpoints_dir: PathBuf,
     ) -> Result<Self, HostLaunchError> {
         let executable =
             std::env::current_exe().map_err(|_| HostLaunchError::InvalidConfiguration)?;
@@ -87,7 +96,11 @@ impl HostLaunchConfig {
             data_dir: std::env::var_os("ARMADRA_HOST_DATA_DIR").map(PathBuf::from),
             browser_origin,
             cli_timeout: Duration::from_secs(15),
-            expected_http_endpoint: HOST_ENDPOINT.into(),
+            endpoints_dir: Some(endpoints_dir),
+            // A packaged desktop reaches the Host over its control IPC and asks
+            // it to hold no port; a development build keeps the loopback
+            // endpoint the browser front end and `armadra.sh` still use.
+            expected_http_endpoint: development.then(|| HOST_ENDPOINT.to_owned()),
         };
         config.validate()?;
         Ok(config)
@@ -99,10 +112,17 @@ impl HostLaunchConfig {
                 .data_dir
                 .as_ref()
                 .is_some_and(|path| !path.is_absolute())
+            || self
+                .endpoints_dir
+                .as_ref()
+                .is_some_and(|path| !path.is_absolute())
             || self.cli_timeout.is_zero()
             || self.cli_timeout > Duration::from_secs(15)
             || !valid_origin(&self.browser_origin)
-            || !valid_endpoint(&self.expected_http_endpoint)
+            || self
+                .expected_http_endpoint
+                .as_deref()
+                .is_some_and(|endpoint| !valid_endpoint(endpoint))
         {
             return Err(HostLaunchError::InvalidConfiguration);
         }
@@ -110,19 +130,33 @@ impl HostLaunchConfig {
     }
 
     fn arguments(&self) -> Vec<OsString> {
-        let listen = self
-            .expected_http_endpoint
-            .strip_prefix("http://")
-            .expect("validated endpoint");
-        let mut args: Vec<OsString> = ["start", "--output", "protobuf", "--listen", listen]
+        let listen = match &self.expected_http_endpoint {
+            Some(endpoint) => endpoint
+                .strip_prefix("http://")
+                .expect("validated endpoint")
+                .to_owned(),
+            // No listener at all: the Host answers only on its control IPC, so
+            // `lsof -i` shows nothing for it until the operator serves the
+            // outside world on purpose.
+            None => "none".to_owned(),
+        };
+        let mut args: Vec<OsString> = ["start", "--output", "protobuf", "--listen"]
             .into_iter()
             .map(Into::into)
+            .chain(std::iter::once(OsString::from(listen)))
             .collect();
-        for origin in NATIVE_ORIGINS {
-            args.extend(["--allow-origin".into(), origin.into()]);
+        // A Host with no listener has nothing to grant an origin *to*, and
+        // rejects --allow-origin outright.
+        if self.expected_http_endpoint.is_some() {
+            for origin in NATIVE_ORIGINS {
+                args.extend(["--allow-origin".into(), origin.into()]);
+            }
+            if !NATIVE_ORIGINS.contains(&self.browser_origin.as_str()) {
+                args.extend(["--allow-origin".into(), self.browser_origin.clone().into()]);
+            }
         }
-        if !NATIVE_ORIGINS.contains(&self.browser_origin.as_str()) {
-            args.extend(["--allow-origin".into(), self.browser_origin.clone().into()]);
+        if let Some(directory) = &self.endpoints_dir {
+            args.extend(["--endpoints-dir".into(), directory.as_os_str().to_owned()]);
         }
         if let Some(directory) = &self.data_dir {
             args.extend(["--data-dir".into(), directory.as_os_str().to_owned()]);
@@ -280,7 +314,10 @@ async fn run_start_observed(
     result
 }
 
-fn decode_running(wire: &[u8], expected_endpoint: &str) -> Result<v1::HostStatus, HostLaunchError> {
+fn decode_running(
+    wire: &[u8],
+    expected_endpoint: Option<&str>,
+) -> Result<v1::HostStatus, HostLaunchError> {
     let result =
         v1::HostManagementResult::decode(wire).map_err(|_| HostLaunchError::MalformedResult)?;
     let status = match result.state {
@@ -297,7 +334,10 @@ fn decode_running(wire: &[u8], expected_endpoint: &str) -> Result<v1::HostStatus
     {
         return Err(HostLaunchError::MalformedResult);
     }
-    if status.http_endpoint != expected_endpoint {
+    // A Host we asked to hold no port must report exactly that. An endpoint
+    // appearing where none was asked for means we are looking at a Host started
+    // with a different configuration, which is a mismatch, not a bonus.
+    if status.http_endpoint != expected_endpoint.unwrap_or_default() {
         return Err(HostLaunchError::EndpointMismatch);
     }
     Ok(status)
@@ -417,8 +457,12 @@ async fn verify_origin(status: &v1::HostStatus, origin: &str) -> Result<(), Host
 
 pub async fn ensure_host(config: &HostLaunchConfig) -> Result<v1::HostStatus, HostLaunchError> {
     let wire = run_start(config).await?;
-    let status = decode_running(&wire, &config.expected_http_endpoint)?;
-    verify_origin(&status, &config.browser_origin).await?;
+    let status = decode_running(&wire, config.expected_http_endpoint.as_deref())?;
+    // There is no browser surface to probe when the Host holds no port; its
+    // identity came back over the control IPC, which is already same-user only.
+    if config.expected_http_endpoint.is_some() {
+        verify_origin(&status, &config.browser_origin).await?;
+    }
     Ok(status)
 }
 
@@ -450,7 +494,8 @@ mod tests {
             data_dir: None,
             browser_origin: "tauri://localhost".into(),
             cli_timeout: Duration::from_secs(15),
-            expected_http_endpoint: HOST_ENDPOINT.into(),
+            endpoints_dir: None,
+            expected_http_endpoint: Some(HOST_ENDPOINT.into()),
         }
     }
 
@@ -522,30 +567,87 @@ mod tests {
             args.iter().filter(|arg| *arg == "--allow-origin").count(),
             4
         );
-        assert_eq!(args.last(), Some(&directory.into_os_string()));
+        assert_eq!(args.last(), Some(&directory.clone().into_os_string()));
         config.browser_origin = "https://host.test/path?secret=x".into();
         assert_eq!(
             config.validate(),
             Err(HostLaunchError::InvalidConfiguration)
         );
         config.browser_origin = "tauri://localhost".into();
-        config.expected_http_endpoint = "http://0.0.0.0:43121".into();
+        config.expected_http_endpoint = Some("http://0.0.0.0:43121".into());
+        assert_eq!(
+            config.validate(),
+            Err(HostLaunchError::InvalidConfiguration)
+        );
+        // A relative shared-endpoints directory would resolve against whatever
+        // the working directory happens to be.
+        config.expected_http_endpoint = Some(HOST_ENDPOINT.into());
+        config.endpoints_dir = Some(PathBuf::from("relative"));
         assert_eq!(
             config.validate(),
             Err(HostLaunchError::InvalidConfiguration)
         );
     }
 
+    /// The packaged shape: no listener, and therefore no origins to grant. The
+    /// shared endpoints directory still goes across so the Host's record lands
+    /// beside the Runtime's.
+    #[test]
+    fn a_host_without_a_listener_asks_for_none_and_grants_no_origin() {
+        let mut config = config(std::env::temp_dir().join(binary_name()));
+        let shared = std::env::temp_dir().join("armadra shared endpoints");
+        config.expected_http_endpoint = None;
+        config.endpoints_dir = Some(shared.clone());
+        config.validate().unwrap();
+        let args = config.arguments();
+        assert_eq!(
+            args,
+            [
+                OsString::from("start"),
+                "--output".into(),
+                "protobuf".into(),
+                "--listen".into(),
+                "none".into(),
+                "--endpoints-dir".into(),
+                shared.into_os_string(),
+            ]
+        );
+        assert!(!args.iter().any(|argument| argument == "--allow-origin"));
+    }
+
+    /// A packaged build asks for no port; a development build keeps the
+    /// loopback endpoint the browser front end still uses.
+    #[test]
+    fn only_a_development_shell_expects_a_host_port() {
+        let shared = std::env::temp_dir();
+        let packaged =
+            HostLaunchConfig::from_environment(false, "tauri://localhost".into(), shared.clone());
+        // Binary resolution depends on the running executable, so only the
+        // endpoint decision is asserted here.
+        if let Ok(config) = packaged {
+            assert_eq!(config.expected_http_endpoint, None);
+            assert_eq!(config.endpoints_dir.as_deref(), Some(shared.as_path()));
+        }
+        if let Ok(config) =
+            HostLaunchConfig::from_environment(true, "http://127.0.0.1:1420".into(), shared)
+        {
+            assert_eq!(
+                config.expected_http_endpoint.as_deref(),
+                Some(HOST_ENDPOINT)
+            );
+        }
+    }
+
     #[test]
     fn management_requires_running_identity_and_exact_endpoint() {
         let valid = status();
         assert_eq!(
-            decode_running(&management(valid.clone()), HOST_ENDPOINT).unwrap(),
+            decode_running(&management(valid.clone()), Some(HOST_ENDPOINT)).unwrap(),
             valid
         );
         for malformed in [Vec::new(), vec![0x0a, 0xff], b"{\"running\":true}".to_vec()] {
             assert_eq!(
-                decode_running(&malformed, HOST_ENDPOINT),
+                decode_running(&malformed, Some(HOST_ENDPOINT)),
                 Err(HostLaunchError::MalformedResult)
             );
         }
@@ -556,13 +658,13 @@ mod tests {
         }
         .encode_to_vec();
         assert_eq!(
-            decode_running(&stopped, HOST_ENDPOINT),
+            decode_running(&stopped, Some(HOST_ENDPOINT)),
             Err(HostLaunchError::NotRunning)
         );
         let mut wrong = status();
         wrong.http_endpoint = "http://127.0.0.1:12345".into();
         assert_eq!(
-            decode_running(&management(wrong), HOST_ENDPOINT),
+            decode_running(&management(wrong), Some(HOST_ENDPOINT)),
             Err(HostLaunchError::EndpointMismatch)
         );
         for field in 0..4 {
@@ -574,10 +676,33 @@ mod tests {
                 _ => missing.started_at_unix_ms = 0,
             }
             assert_eq!(
-                decode_running(&management(missing), HOST_ENDPOINT),
+                decode_running(&management(missing), Some(HOST_ENDPOINT)),
                 Err(HostLaunchError::MalformedResult)
             );
         }
+    }
+
+    /// A Host asked to hold no port must report exactly that. A port turning up
+    /// where none was requested means the running Host was configured by
+    /// someone else, which is a mismatch rather than a bonus.
+    #[test]
+    fn a_control_only_host_must_report_no_endpoint_at_all() {
+        let mut control_only = status();
+        control_only.http_endpoint.clear();
+        assert_eq!(
+            decode_running(&management(control_only.clone()), None).unwrap(),
+            control_only
+        );
+        assert_eq!(
+            decode_running(&management(status()), None),
+            Err(HostLaunchError::EndpointMismatch)
+        );
+        // And the reverse: a Host that dropped its port is not the one we asked
+        // a development shell to start.
+        assert_eq!(
+            decode_running(&management(control_only), Some(HOST_ENDPOINT)),
+            Err(HostLaunchError::EndpointMismatch)
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]

@@ -192,7 +192,8 @@ mod tests {
             data_dir: None,
             browser_origin: "tauri://localhost".into(),
             cli_timeout: Duration::from_secs(1),
-            expected_http_endpoint: host::HOST_ENDPOINT.into(),
+            endpoints_dir: None,
+            expected_http_endpoint: Some(host::HOST_ENDPOINT.into()),
         });
         assert!(state.begin_quit());
         state.start_host().await.unwrap();
@@ -217,7 +218,8 @@ mod tests {
             data_dir: Some(directory.clone()),
             browser_origin: "tauri://localhost".into(),
             cli_timeout: Duration::from_secs(1),
-            expected_http_endpoint: host::HOST_ENDPOINT.into(),
+            endpoints_dir: None,
+            expected_http_endpoint: Some(host::HOST_ENDPOINT.into()),
         };
         for (body, success) in [
             (
