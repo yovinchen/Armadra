@@ -54,12 +54,18 @@ export type PromptMode = (typeof PROMPT_MODES)[number];
  *   * `supportsModelSelection` — the CLI takes a model on its launch line, so
  *     the node header may offer one. Every built-in has a `modelFlag`, but the
  *     capability is still narrowed by version probing and the execution host.
+ *   * `browser` — the adapter may drive a controlled browser session (B01,
+ *     docs/editor-browser-design.md §7). The verb travels the same hook client
+ *     channel as `contextLink`, so every adapter with a link has it too; the
+ *     grant is still checked per action, the capability only says the channel
+ *     exists.
  */
 export const AGENT_CAPABILITIES = [
   "hooks",
   "resume",
   "subagent",
   "contextLink",
+  "browser",
   "usage",
   "contextUsage",
   "nativeRecurrence",
@@ -119,6 +125,7 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
         "resume",
         "subagent",
         "contextLink",
+        "browser",
         "usage",
         "contextUsage",
         "structuredInputAck",
@@ -147,6 +154,7 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
         "resume",
         "subagent",
         "contextLink",
+        "browser",
         "contextUsage",
         "structuredInputAck",
         "supportsModelSelection",
@@ -172,6 +180,7 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
         "hooks",
         "resume",
         "contextLink",
+        "browser",
         "contextUsage",
         "structuredInputAck",
         "supportsModelSelection",
@@ -197,6 +206,7 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
         "hooks",
         "resume",
         "contextLink",
+        "browser",
         "structuredInputAck",
         "supportsModelSelection",
       ],
@@ -217,7 +227,12 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "flag", flag: "--session" },
-      capabilities: ["resume", "contextLink", "supportsModelSelection"],
+      capabilities: [
+        "resume",
+        "contextLink",
+        "browser",
+        "supportsModelSelection",
+      ],
       expectedProcess: ["pi"],
     },
     omp: {
@@ -236,7 +251,12 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "flag", flag: "--resume" },
-      capabilities: ["resume", "contextLink", "supportsModelSelection"],
+      capabilities: [
+        "resume",
+        "contextLink",
+        "browser",
+        "supportsModelSelection",
+      ],
       expectedProcess: ["omp"],
     },
     copilot: {
@@ -254,7 +274,12 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "flag", flag: "--resume" },
-      capabilities: ["resume", "contextLink", "supportsModelSelection"],
+      capabilities: [
+        "resume",
+        "contextLink",
+        "browser",
+        "supportsModelSelection",
+      ],
       expectedProcess: ["copilot"],
     },
   };

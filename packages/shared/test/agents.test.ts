@@ -89,6 +89,9 @@ describe("agent registry", () => {
       expect(agent.color).toMatch(/^#[0-9a-f]{6}$/);
       expect(agent.expectedProcess.length).toBeGreaterThan(0);
       expect(agent.capabilities).toContain("contextLink");
+      // B01: the browser verb rides the same channel as the context link, so
+      // every adapter that has one declares both.
+      expect(agent.capabilities).toContain("browser");
       for (const mode of PERMISSION_MODES) {
         expect(Array.isArray(agent.permissionFlag[mode])).toBe(true);
       }
