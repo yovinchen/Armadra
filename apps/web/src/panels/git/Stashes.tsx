@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   GitExpectedState,
   GitRepositoryAction,
@@ -40,12 +40,14 @@ function StashSession({
   request,
 }: StashesProps) {
   const t = useT();
+  const client = useQueryClient();
+  const queryKey = ["git-repository-stashes", workspaceId, repositoryKey];
   const [message, setMessage] = useState("");
   const [includeUntracked, setIncludeUntracked] = useState(false);
   const [reinstateIndex, setReinstateIndex] = useState(false);
   const [selectedOid, setSelectedOid] = useState<string | null>(null);
   const snapshot = useQuery({
-    queryKey: ["git-repository-stashes", workspaceId, repositoryKey],
+    queryKey,
     queryFn: async ({ signal }) => {
       const result = await loadSnapshot(signal);
       if (`${result.repositoryId}:${result.repositoryPath}` !== repositoryKey)
@@ -73,8 +75,13 @@ function StashSession({
     enabled: Boolean(selected),
     retry: false,
   });
-  const blocked =
-    busy || snapshot.isFetching || snapshot.isError || !snapshot.data;
+  const currentlyBlocked = () =>
+    busy ||
+    snapshot.isError ||
+    !snapshot.data ||
+    client.getQueryState(queryKey)?.fetchStatus === "fetching" ||
+    client.getQueryData(queryKey) !== snapshot.data;
+  const blocked = currentlyBlocked();
   const state = snapshot.data;
   const confirmedDetail =
     selected &&
@@ -85,7 +92,14 @@ function StashSession({
     selected &&
     state?.stashes.filter((entry) => entry.oid === selected.oid).length === 1;
   const act = (kind: "applyStash" | "popStash" | "dropStash") => {
-    if (blocked || !state || !selected || !confirmedDetail || !unique) return;
+    if (
+      currentlyBlocked() ||
+      !state ||
+      !selected ||
+      !confirmedDetail ||
+      !unique
+    )
+      return;
     if (kind !== "dropStash" && state.hasConflicts) return;
     const common = { oid: selected.oid, expectedStateToken: state.stateToken };
     request(
@@ -117,7 +131,7 @@ function StashSession({
         onSubmit={(event) => {
           event.preventDefault();
           if (
-            !blocked &&
+            !currentlyBlocked() &&
             state?.dirty &&
             !state.hasConflicts &&
             state.head.headOid

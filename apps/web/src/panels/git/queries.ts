@@ -15,6 +15,7 @@ export function invalidateGitQueries(
     "git-repository-history",
     "git-repository-worktrees",
     "git-repository-operations",
+    "git-repository-integration",
     "git-repository-stashes",
     "git-repository-stash-detail",
   ])

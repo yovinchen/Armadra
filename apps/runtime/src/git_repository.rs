@@ -33,7 +33,9 @@ use crate::{
     security::{canonical_directory, redact_secrets, resolve_in_root, valid_directory_name},
 };
 
+mod integration;
 mod stash;
+pub use integration::{ConflictFile, ConflictSide, IntegrationSnapshot};
 pub use stash::{StashDetail, StashRecord, StashSnapshot};
 
 const MAX_OUTPUT: usize = 4 * 1024 * 1024;
@@ -177,6 +179,19 @@ pub struct WorktreeRecord {
     deny_unknown_fields
 )]
 pub enum RepositoryAction {
+    StartMerge {
+        target_oid: String,
+        message: String,
+        expected_state_token: String,
+    },
+    ContinueIntegration {
+        session_id: String,
+        expected_state_token: String,
+    },
+    AbortIntegration {
+        session_id: String,
+        expected_state_token: String,
+    },
     CreateStash {
         message: String,
         include_untracked: bool,
@@ -253,6 +268,7 @@ pub enum OperationState {
     Failed,
     Cancelled,
     UnknownOutcome,
+    AwaitingResolution,
 }
 impl OperationState {
     pub fn terminal(self) -> bool {
@@ -313,6 +329,7 @@ struct Operation {
     snapshot: Mutex<OperationSnapshot>,
     cancellation: Cancellation,
     mutation_started: Arc<AtomicBool>,
+    awaiting_resolution: AtomicBool,
 }
 
 #[derive(Default)]
@@ -320,6 +337,7 @@ struct Inner {
     locks: Mutex<HashMap<PathBuf, Weak<tokio::sync::Mutex<()>>>>,
     operations: Mutex<HashMap<String, Arc<Operation>>>,
     order: Mutex<VecDeque<String>>,
+    integrations: Mutex<HashMap<PathBuf, integration::IntegrationOwner>>,
     lifecycle: Mutex<ServiceLifecycle>,
     stopping: Cancellation,
 }
@@ -747,6 +765,7 @@ impl RepositoryService {
             snapshot: Mutex::new(snapshot.clone()),
             cancellation: Cancellation::default(),
             mutation_started: Arc::new(AtomicBool::new(false)),
+            awaiting_resolution: AtomicBool::new(false),
         });
         {
             // This gate also protects the insertion itself: a request that
@@ -755,26 +774,26 @@ impl RepositoryService {
             if lifecycle.stopping {
                 return Err(shutting_down());
             }
+            let (protected, recovery) = {
+                let owners = self.inner.integrations.lock().expect("Git integrations");
+                let recovery = match &action {
+                    RepositoryAction::ContinueIntegration { session_id, .. }
+                    | RepositoryAction::AbortIntegration { session_id, .. } => owners
+                        .get(&context.repository)
+                        .is_some_and(|owner| owner.session_id() == session_id),
+                    _ => false,
+                };
+                (
+                    owners
+                        .values()
+                        .map(|owner| owner.session_id().to_owned())
+                        .collect::<std::collections::HashSet<_>>(),
+                    recovery,
+                )
+            };
             let mut registry = self.inner.operations.lock().expect("Git operations");
             let mut order = self.inner.order.lock().expect("Git operation order");
-            let mut scanned = 0;
-            while registry.len() >= MAX_OPERATIONS && scanned < order.len() {
-                let Some(id) = order.pop_front() else {
-                    break;
-                };
-                if registry
-                    .get(&id)
-                    .is_some_and(|op| op.snapshot.lock().expect("Git operation").state.terminal())
-                {
-                    registry.remove(&id);
-                } else {
-                    order.push_back(id);
-                    scanned += 1;
-                }
-            }
-            if registry.len() >= MAX_OPERATIONS {
-                return Err(AppError::Conflict("Too many active Git operations".into()));
-            }
+            reserve_operation_slot(&mut registry, &mut order, &protected, recovery)?;
             order.push_back(snapshot.id.clone());
             registry.insert(snapshot.id.clone(), operation.clone());
         }
@@ -803,7 +822,13 @@ impl RepositoryService {
                 .execute(&context, &action, &expected, &operation)
                 .await;
             match result {
-                Ok(()) => finish(&operation, OperationState::Succeeded, None),
+                Ok(()) => {
+                    if operation.awaiting_resolution.load(Ordering::SeqCst) {
+                        finish(&operation, OperationState::AwaitingResolution, Some("Merge is paused; resolve and stage conflicts, then explicitly continue or abort".into()));
+                    } else {
+                        finish(&operation, OperationState::Succeeded, None);
+                    }
+                }
                 Err(error) => {
                     let state = if operation.mutation_started.load(Ordering::SeqCst) {
                         OperationState::UnknownOutcome
@@ -1262,6 +1287,28 @@ impl RepositoryService {
     ) -> AppResult<()> {
         let token = Cancellation::default();
         match action {
+            RepositoryAction::StartMerge {
+                target_oid,
+                message,
+                expected_state_token,
+            } => {
+                require_oid(target_oid)?;
+                stash::validate_message(message)?;
+                stash::validate_state_token(expected_state_token)?;
+            }
+            RepositoryAction::ContinueIntegration {
+                session_id,
+                expected_state_token,
+            }
+            | RepositoryAction::AbortIntegration {
+                session_id,
+                expected_state_token,
+            } => {
+                Uuid::parse_str(session_id).map_err(|_| {
+                    AppError::BadRequest("Integration session ID is invalid".into())
+                })?;
+                stash::validate_state_token(expected_state_token)?;
+            }
             RepositoryAction::CreateStash {
                 message,
                 expected_state_token,
@@ -1361,7 +1408,58 @@ impl RepositoryService {
                 "Repository HEAD changed; reload before retrying".into(),
             ));
         }
+        if !matches!(
+            action,
+            RepositoryAction::StartMerge { .. }
+                | RepositoryAction::ContinueIntegration { .. }
+                | RepositoryAction::AbortIntegration { .. }
+        ) {
+            self.ensure_integration_idle(context, token).await?;
+        }
         match action {
+            RepositoryAction::StartMerge {
+                target_oid,
+                message,
+                expected_state_token,
+            } => {
+                self.start_merge(
+                    context,
+                    target_oid,
+                    message,
+                    expected_state_token,
+                    expected,
+                    operation,
+                )
+                .await
+            }
+            RepositoryAction::ContinueIntegration {
+                session_id,
+                expected_state_token,
+            } => {
+                self.resume_merge(
+                    context,
+                    session_id,
+                    expected_state_token,
+                    expected,
+                    false,
+                    operation,
+                )
+                .await
+            }
+            RepositoryAction::AbortIntegration {
+                session_id,
+                expected_state_token,
+            } => {
+                self.resume_merge(
+                    context,
+                    session_id,
+                    expected_state_token,
+                    expected,
+                    true,
+                    operation,
+                )
+                .await
+            }
             RepositoryAction::CreateStash { .. }
             | RepositoryAction::ApplyStash { .. }
             | RepositoryAction::PopStash { .. }
@@ -1675,6 +1773,41 @@ impl RepositoryService {
             .await;
         merged.and(cleanup)
     }
+}
+
+/// Awaiting integration records are capabilities referenced by live owners.
+/// Keep them until reconciliation releases the owner. Recovery has a small
+/// bounded reserve so a fully occupied history can still be continued/aborted.
+fn reserve_operation_slot(
+    registry: &mut HashMap<String, Arc<Operation>>,
+    order: &mut VecDeque<String>,
+    protected: &std::collections::HashSet<String>,
+    recovery: bool,
+) -> AppResult<()> {
+    let mut index = 0;
+    while registry.len() >= MAX_OPERATIONS && index < order.len() {
+        let id = &order[index];
+        let removable = !protected.contains(id)
+            && registry.get(id).is_some_and(|operation| {
+                operation
+                    .snapshot
+                    .lock()
+                    .expect("Git operation")
+                    .state
+                    .terminal()
+            });
+        if removable {
+            let id = order.remove(index).expect("existing operation order index");
+            registry.remove(&id);
+        } else {
+            index += 1;
+        }
+    }
+    let limit = MAX_OPERATIONS + if recovery { 16 } else { 0 };
+    if registry.len() >= limit {
+        return Err(AppError::Conflict("Too many active Git operations".into()));
+    }
+    Ok(())
 }
 
 fn finish(operation: &Operation, state: OperationState, message: Option<String>) {

@@ -327,3 +327,11 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - Protobuf客户端仅在私有内存保留CSRF，轮转请求串行；取消/dispose后忽略旧结果，未知副作用不自动重试。票据提交后清空，不写localStorage或画布。撤销使用项目AlertDialog及默认取消焦点。
 - 客户端36、面板12、既有HostPage7、i18n7项与类型检查通过。真实Chrome完整设置窗口及390px检查通过，无横向溢出；Escape保留外层窗口并归还原按钮焦点，配对/撤销/注销各一次，JS storage写入为0。
 - 浏览器检查使用隔离二进制fixture；真实证书链和CLI→HTTPS由上一批Go测试覆盖，两者不混报为同一次浏览器网络验收。独立Vite与Chrome已清理；结果位于output/playwright/identity-result.json。静态前端托管与原生认证代理仍在后续服务接管范围。
+
+## 连续实施：合并与冲突恢复
+
+- 新增合并页签，固定目标OID、HEAD/分支与内容摘要后执行no-ff/no-commit；即使无冲突，也停在明确待确认提交状态。冲突展示base/ours/theirs三侧及二进制/截断提示，可打开现有文件编辑器，保存并暂存后显式继续，或确认中止。
+- Continue/Abort核对本Runtime所有权、真实Git marker、MERGE_MSG/MODE、原始HEAD、目标及新状态摘要；保护ignored碰撞，完成后核对实际合并父OID。Runtime重启或外部重建marker后只读显示，不接管无法证明归属的Git操作。
+- workspace ID在API层进一步绑定起始operation，其他同canonical路径的工作空间不能继承控制权。仍在等待的记录不会被历史淘汰；满容量保留有界恢复槽，完成/中止/失去所有权后更新历史并释放引用。
+- 合并真实仓库7项、既有仓库29项、容量2项及实际路由完整开始→等待→同路径越权拒绝→继续通过；UI状态对账22项、Stash旧状态回归及shared3项、类型检查/Clippy通过。迟到响应不覆盖确认终态，刷新不会造成循环请求。
+- Rebase、Cherry-pick与跨Runtime持久操作所有权继续实现，不能将本项等同全部Git进阶流程完成。

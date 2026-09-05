@@ -233,4 +233,30 @@ describe("stash actions", () => {
       head,
     );
   });
+  it("blocks stale confirmation during refresh and after a replacement snapshot until it renders", async () => {
+    let complete!: (value: GitStashSnapshot) => void;
+    let count = 0;
+    const { props } = setup({
+      loadSnapshot: () =>
+        ++count === 1
+          ? Promise.resolve(snapshot())
+          : new Promise((resolve) => {
+              complete = resolve;
+            }),
+    });
+    await viewDetail();
+    fireEvent.click(screen.getByRole("button", { name: "gitRepo.refresh" }));
+    fireEvent.click(screen.getByRole("button", { name: "gitRepo.dropStash" }));
+    expect(props.request).not.toHaveBeenCalled();
+    const next = snapshot();
+    next.stateToken = "e".repeat(64);
+    next.stashes[0]!.subject = "Refreshed stash";
+    await act(async () => complete(next));
+    await screen.findByText("Refreshed stash");
+    fireEvent.click(screen.getByRole("button", { name: "gitRepo.dropStash" }));
+    expect(props.request).toHaveBeenCalledExactlyOnceWith(
+      { kind: "dropStash", oid, expectedStateToken: next.stateToken },
+      next.head,
+    );
+  });
 });

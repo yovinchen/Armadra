@@ -200,7 +200,7 @@ impl RepositoryService {
         Ok((raw, records))
     }
 
-    async fn stash_snapshot(
+    pub(super) async fn stash_snapshot(
         &self,
         context: &RepositoryContext,
         token: &Cancellation,
@@ -459,13 +459,22 @@ impl RepositoryService {
                 );
             }
         }
+        self.protect_local_paths(context, &touched, token).await
+    }
+
+    pub(super) async fn protect_local_paths(
+        &self,
+        context: &RepositoryContext,
+        touched: &std::collections::BTreeSet<String>,
+        token: &Cancellation,
+    ) -> AppResult<()> {
         if touched.len() > 4096 {
             return Err(AppError::BadRequest(
-                "Stash touches too many paths for safe confirmation".into(),
+                "Operation touches too many paths for safe confirmation".into(),
             ));
         }
         let mut inspect = std::collections::BTreeSet::new();
-        for name in &touched {
+        for name in touched {
             let relative = Path::new(name);
             if relative.is_absolute()
                 || relative
@@ -480,7 +489,7 @@ impl RepositoryService {
                 match context.repository.join(&prefix).symlink_metadata() {
                     Ok(metadata) if !metadata.is_dir() => {
                         if prefix != relative {
-                            return Err(AppError::Conflict("A stash parent path is a local file or symlink; resolve the collision before applying".into()));
+                            return Err(AppError::Conflict("An incoming parent path is a local file or symlink; resolve the collision before applying".into()));
                         }
                         inspect.insert(path_string(&prefix)?);
                         // A symlink/regular parent cannot be traversed safely.
@@ -488,7 +497,7 @@ impl RepositoryService {
                     }
                     Ok(_) if prefix == relative => {
                         return Err(AppError::Conflict(
-                            "A stash file collides with a local directory; move it before applying"
+                            "An incoming file collides with a local directory; move it before applying"
                                 .into(),
                         ));
                     }
@@ -510,7 +519,7 @@ impl RepositoryService {
                     .filter(|part| !part.is_empty())
                     .collect::<std::collections::HashSet<_>>();
                 if chunk.iter().any(|name| !tracked.contains(name.as_bytes())) {
-                    return Err(AppError::Conflict("Stash would overwrite a local untracked or ignored path; preserve that file before applying".into()));
+                    return Err(AppError::Conflict("Operation would overwrite a local untracked or ignored path; preserve that file before applying".into()));
                 }
             }
         }

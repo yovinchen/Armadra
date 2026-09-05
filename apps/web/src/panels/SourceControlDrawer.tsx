@@ -302,7 +302,8 @@ export function SourceControlDrawer() {
                   "branches",
                   "history",
                   "worktrees",
-                  "stashes",
+              "stashes",
+              "integration",
                 ] as const
               ).map((value) => (
                 <TabsTrigger
@@ -399,7 +400,7 @@ export function SourceControlDrawer() {
                 </Button>
               </div>
             </TabsContent>
-            {(["branches", "history", "worktrees", "stashes"] as const).map(
+            {(["branches", "history", "worktrees", "stashes", "integration"] as const).map(
               (value) => (
                 <TabsContent
                   key={value}

@@ -76,6 +76,15 @@ pub async fn stashes(State(state):State<AppState>,AxumPath(id):AxumPath<String>,
     let workspace=workspace(&state,&id,false).await?;
     REPOSITORIES.stashes(Path::new(&workspace.root_path),&query.path).await.map(Json)
 }
+pub async fn integration(State(state):State<AppState>,AxumPath(id):AxumPath<String>,Query(query):Query<RepositoryQuery>) -> AppResult<Json<IntegrationSnapshot>> {
+    let workspace=workspace(&state,&id,false).await?;
+    let mut result=REPOSITORIES.integration_status(Path::new(&workspace.root_path),&query.path).await?;
+    let owners=OWNERS.lock().map_err(|_|AppError::Internal("Git operation scope lock failed".into()))?;
+    if result.session_id.as_ref().and_then(|session| owners.get(session))!=Some(&id) {
+        result.owned=false;result.session_id=None;result.can_continue=false;
+    }
+    Ok(Json(result))
+}
 pub async fn stash_detail(State(state):State<AppState>,AxumPath(id):AxumPath<String>,Query(query):Query<StashQuery>) -> AppResult<Json<StashDetail>> {
     let workspace=workspace(&state,&id,false).await?;
     REPOSITORIES.stash_detail(Path::new(&workspace.root_path),&query.path,&query.oid).await.map(Json)
@@ -165,6 +174,12 @@ pub async fn start(
     Json(request): Json<StartOperation>,
 ) -> AppResult<Json<OperationSnapshot>> {
     let workspace = workspace(&state, &id, true).await?;
+    match &request.action {
+        RepositoryAction::ContinueIntegration { session_id, .. } | RepositoryAction::AbortIntegration { session_id, .. } => {
+            scoped_operation(&state,&id,session_id,true).await?;
+        }
+        _ => {}
+    }
     let result = REPOSITORIES
         .start(
             workspace.root_path.into(),

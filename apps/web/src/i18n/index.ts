@@ -16,6 +16,7 @@ import { hostIdentity } from "./host-identity";
 import { gitHunks } from "./git-hunks";
 import { gitMessage } from "./git-message";
 import { gitStashes } from "./git-stashes";
+import { gitIntegration } from "./git-integration";
 import { gitRepository } from "./git-repository";
 import { fileDrag } from "./file-drag";
 import { terminal } from "./terminal";
@@ -53,6 +54,7 @@ export const MESSAGE_MODULES = {
   "git-hunks": gitHunks,
   "git-message": gitMessage,
   "git-stashes": gitStashes,
+  "git-integration": gitIntegration,
   "file-drag": fileDrag,
   explorer,
   modals,

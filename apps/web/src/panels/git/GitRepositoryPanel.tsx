@@ -24,12 +24,64 @@ import { Branches } from "./Branches";
 import { History } from "./History";
 import { Worktrees } from "./Worktrees";
 import { Stashes } from "./Stashes";
+import { Integrations } from "./Integrations";
+import { useCanvasStore } from "../../store/canvas-store";
+import { currentViewportCenter } from "../viewport";
 import { ReadError } from "./forms";
 import { invalidateGitQueries } from "./queries";
 
-export type RepositoryTab = "branches" | "history" | "worktrees" | "stashes";
+export type RepositoryTab =
+  | "branches"
+  | "history"
+  | "worktrees"
+  | "stashes"
+  | "integration";
 const running = (operation: GitRepositoryOperation | null | undefined) =>
   operation?.state === "queued" || operation?.state === "running";
+// Merge network snapshots monotonically. An integration's initial command can
+// progress from awaitingResolution/unknownOutcome to a reconciled final state;
+// delayed polling and list responses must not bring that command back to life.
+function mergeOperation(
+  current: GitRepositoryOperation | null | undefined,
+  incoming: GitRepositoryOperation,
+): GitRepositoryOperation {
+  if (!current || current.id !== incoming.id) return incoming;
+  const rank = {
+    queued: 0,
+    running: 1,
+    awaitingResolution: 2,
+    unknownOutcome: 3,
+    succeeded: 4,
+    failed: 4,
+    cancelled: 4,
+  };
+  let result = incoming;
+  if (
+    rank[incoming.state] < rank[current.state] ||
+    (rank[current.state] === 4 && incoming.state !== current.state)
+  )
+    result = current;
+  else if (
+    incoming.state === current.state &&
+    current.finishedAt &&
+    incoming.finishedAt &&
+    Date.parse(incoming.finishedAt) < Date.parse(current.finishedAt)
+  )
+    result = current;
+  const cancellationRequested =
+    current.cancellationRequested || result.cancellationRequested;
+  if (
+    result.state === current.state &&
+    result.finishedAt === current.finishedAt &&
+    result.message === current.message &&
+    cancellationRequested === current.cancellationRequested
+  )
+    return current;
+  return cancellationRequested === result.cancellationRequested
+    ? result
+    : { ...result, cancellationRequested };
+}
+
 type Tracking = {
   operation: GitRepositoryOperation | null;
   pending: boolean;
@@ -45,6 +97,11 @@ const emptyTracking: Tracking = {
 
 export function actionTarget(action: GitRepositoryAction): string {
   switch (action.kind) {
+    case "startMerge":
+      return `${action.targetOid}${action.message ? ` · ${action.message}` : ""}`;
+    case "continueIntegration":
+    case "abortIntegration":
+      return action.sessionId;
     case "createStash":
       return action.message || "Stash";
     case "applyStash":
@@ -139,13 +196,35 @@ function RepositorySession({
       update(current ?? emptyTracking),
     );
   const operationId = tracking.operation?.id;
+  const operationQueryKey = (id: string | undefined) => [
+    "git-repository-operation",
+    workspaceId,
+    snapshot.repositoryId,
+    snapshot.repositoryPath,
+    id,
+  ];
+  const recentKey = [
+    "git-repository-operations",
+    workspaceId,
+    snapshot.repositoryId,
+    snapshot.repositoryPath,
+  ];
+  const latestOperation = (incoming: GitRepositoryOperation) => {
+    const cached = client.getQueryData<GitRepositoryOperation>(
+      operationQueryKey(incoming.id),
+    );
+    const tracked = client.getQueryData<Tracking>(trackingKey)?.operation;
+    const previous =
+      tracked?.id === incoming.id ? mergeOperation(cached, tracked) : cached;
+    return mergeOperation(previous, incoming);
+  };
+  const acceptOperation = (incoming: GitRepositoryOperation) => {
+    const result = latestOperation(incoming);
+    client.setQueryData(operationQueryKey(result.id), result);
+    return result;
+  };
   const recent = useQuery({
-    queryKey: [
-      "git-repository-operations",
-      workspaceId,
-      snapshot.repositoryId,
-      snapshot.repositoryPath,
-    ],
+    queryKey: recentKey,
     queryFn: async ({ signal }) => {
       const items = await runtimeApi.gitRepositoryOperations(
         workspaceId,
@@ -159,7 +238,7 @@ function RepositorySession({
         )
       )
         throw new Error(t("gitRepo.stale"));
-      return items;
+      return items.map(latestOperation);
     },
     retry: false,
     refetchInterval: (query) =>
@@ -167,23 +246,29 @@ function RepositorySession({
   });
   useEffect(() => {
     if (!recent.data?.length) return;
-    const restored = recent.data.find(running) ?? recent.data[0];
+    const items = recent.data.map(acceptOperation);
+    if (items.some((item, index) => item !== recent.data![index]))
+      client.setQueryData(recentKey, items);
+    const restored = items.find(running) ?? items[0];
     if (!restored) return;
-    updateTracking((current) =>
-      current.operation || current.pending || current.uncertain
-        ? current
-        : { ...current, operation: restored },
-    );
+    updateTracking((current) => {
+      if (current.pending || current.uncertain) return current;
+      if (current.operation) {
+        const observed = items.find(
+          (item) => item.id === current.operation!.id,
+        );
+        if (!observed) return current;
+        const next = mergeOperation(current.operation, observed);
+        return next === current.operation
+          ? current
+          : { ...current, operation: next };
+      }
+      return { ...current, operation: restored };
+    });
     // This keyed component fixes the workspace and repository scope.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recent.data]);
-  const operationKey = [
-    "git-repository-operation",
-    workspaceId,
-    snapshot.repositoryId,
-    snapshot.repositoryPath,
-    operationId,
-  ];
+  const operationKey = operationQueryKey(operationId);
   const operation = useQuery({
     queryKey: operationKey,
     queryFn: async ({ signal }) => {
@@ -198,7 +283,7 @@ function RepositorySession({
         result.id !== operationId
       )
         throw new Error(t("gitRepo.stale"));
-      return result;
+      return latestOperation(result);
     },
     initialData: tracking.operation ?? undefined,
     enabled: Boolean(operationId) && running(tracking.operation),
@@ -211,18 +296,20 @@ function RepositorySession({
   const invalidate = () => invalidateGitQueries(client, workspaceId);
   const lastInvalidated = useRef("");
   useEffect(() => {
-    const result = operation.data;
-    if (!result || result.id !== operationId) return;
+    const incoming = operation.data;
+    if (!incoming || incoming.id !== operationId) return;
+    const result = acceptOperation(incoming);
     updateTracking((current) =>
       current.operation?.id === result.id
-        ? { ...current, operation: result }
+        ? { ...current, operation: mergeOperation(current.operation, result) }
         : current,
     );
     if (
       !running(result) &&
-      lastInvalidated.current !== `${result.id}:${result.state}`
+      lastInvalidated.current !==
+        `${result.id}:${result.state}:${result.finishedAt ?? ""}`
     ) {
-      lastInvalidated.current = `${result.id}:${result.state}`;
+      lastInvalidated.current = `${result.id}:${result.state}:${result.finishedAt ?? ""}`;
       invalidate();
     }
     // Scope and operation identity are captured by this keyed session.
@@ -257,17 +344,8 @@ function RepositorySession({
         uncertain: false,
         error: null,
       })),
-    onSuccess: (result) => {
-      client.setQueryData(
-        [
-          "git-repository-operation",
-          workspaceId,
-          snapshot.repositoryId,
-          snapshot.repositoryPath,
-          result.id,
-        ],
-        result,
-      );
+    onSuccess: (incoming) => {
+      const result = acceptOperation(incoming);
       updateTracking(() => ({
         operation: result,
         pending: false,
@@ -299,20 +377,14 @@ function RepositorySession({
       return result;
     },
     retry: false,
-    onSuccess: (result) =>
-      client.setQueryData(
-        [
-          "git-repository-operation",
-          workspaceId,
-          snapshot.repositoryId,
-          snapshot.repositoryPath,
-          result.id,
-        ],
-        result,
-      ),
+    onSuccess: (result) => {
+      acceptOperation(result);
+    },
   });
   const current =
-    operation.data?.id === operationId ? operation.data : tracking.operation;
+    operation.data && operation.data.id === operationId
+      ? mergeOperation(tracking.operation, operation.data)
+      : tracking.operation;
   const busy =
     tracking.pending ||
     tracking.uncertain ||
@@ -350,7 +422,7 @@ function RepositorySession({
                   onClick={() =>
                     updateTracking((current) => ({
                       ...current,
-                      operation: item,
+                      operation: acceptOperation(item),
                     }))
                   }
                 >
@@ -451,6 +523,31 @@ function RepositorySession({
             repositoryKey={`${snapshot.repositoryId}:${snapshot.repositoryPath}`}
           />
         )}
+        {tab === "integration" && (
+          <Integrations
+            workspaceId={workspaceId}
+            repositoryKey={`${snapshot.repositoryId}:${snapshot.repositoryPath}`}
+            branches={snapshot.branches}
+            busy={busy || stale}
+            request={request}
+            loadSnapshot={(signal) =>
+              runtimeApi.gitRepositoryIntegration(workspaceId, signal)
+            }
+            openFile={(path) => {
+              const store = useCanvasStore.getState();
+              if (store.workspace?.id !== workspaceId || !store.document)
+                return;
+              store.addNode("editor", {
+                title: path,
+                data: {
+                  path: `${snapshot.repositoryPath.replace(/[\\/]+$/, "")}/${path}`,
+                },
+                position: currentViewportCenter(),
+              });
+              store.setPanel("scm", "closed");
+            }}
+          />
+        )}
         {tab === "stashes" && (
           <Stashes
             workspaceId={workspaceId}
@@ -490,6 +587,16 @@ function RepositorySession({
           </AlertDialogHeader>
           {confirmation && (
             <dl className="space-y-2 break-all text-xs">
+              {confirmation.action.kind === "startMerge" && (
+                <div>
+                  <dd>{t("gitIntegration.startSafety")}</dd>
+                </div>
+              )}
+              {confirmation.action.kind === "abortIntegration" && (
+                <div>
+                  <dd>{t("gitIntegration.abortSafety")}</dd>
+                </div>
+              )}
               {confirmation.action.kind === "createStash" && (
                 <div>
                   <dt>{t("gitStash.safety")}</dt>

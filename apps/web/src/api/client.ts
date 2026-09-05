@@ -52,6 +52,7 @@ import {
   gitWorktreesSchema,
   gitStashSnapshotSchema,
   gitStashDetailSchema,
+  gitIntegrationSnapshotSchema,
   gitRepositoryActionSchema,
   gitRepositoryOperationSchema,
   gitExpectedStateSchema,
@@ -737,6 +738,8 @@ export const runtimeApi = {
     ),
   gitRepositoryStashes: (workspaceId: string, signal?: AbortSignal) =>
     request(`/api/workspaces/${query(workspaceId)}/git/repository/stashes?path=.`,gitStashSnapshotSchema,{signal}),
+  gitRepositoryIntegration: (workspaceId: string, signal?: AbortSignal) =>
+    request(`/api/workspaces/${query(workspaceId)}/git/repository/integration?path=.`,gitIntegrationSnapshotSchema,{signal}),
   gitRepositoryStashDetail: (workspaceId:string,oid:string,signal?:AbortSignal) =>
     request(`/api/workspaces/${query(workspaceId)}/git/repository/stash-detail?path=.&oid=${query(oid)}`,gitStashDetailSchema,{signal}),
   gitRepositoryOperate: (
