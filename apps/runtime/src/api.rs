@@ -1895,20 +1895,21 @@ pub struct DataBackup {
     pub bytes: u64,
 }
 
-/// `POST /api/data/backup` — copy `canvas.db` next to itself.
+/// `POST /api/data/backup` — a consistent snapshot of the connected main DB.
 ///
-/// A plain file copy rather than SQLite's backup API: the runtime is the only
-/// writer and WAL is checkpointed on every commit, so the copy is consistent,
-/// and a stray `-wal` would only cost the very last transaction. The timestamp
-/// in the name is UTC so the copies sort chronologically in Finder.
-pub async fn data_backup() -> AppResult<Json<DataBackup>> {
-    Ok(Json(copy_database(
-        &paths::database_file(),
-        &chrono::Utc::now().format("%Y%m%d-%H%M%S").to_string(),
-    )?))
+/// VACUUM INTO reads committed WAL data without copying/checkpointing the live
+/// file. It preserves logical content, not physical layout or implicit rowids.
+/// See https://www.sqlite.org/lang_vacuum.html#vacuum_with_an_into_clause.
+pub async fn data_backup(State(state): State<AppState>) -> AppResult<Json<DataBackup>> {
+    let stamp = chrono::Utc::now().format("%Y%m%d-%H%M%S").to_string();
+    // Dropping an HTTP request must not cancel SQLx's worker while removing its
+    // output underneath it. This task owns the connection and completes cleanup.
+    Ok(Json(
+        tokio::spawn(async move { snapshot_database(&state.pool, &stamp).await }).await??,
+    ))
 }
 
-/// `canvas.db` → `canvas.db.backup-manual-<stamp>`, in the same folder.
+/// The timestamp is supplemented with a random suffix by snapshot_database.
 pub fn backup_target(source: &Path, stamp: &str) -> std::path::PathBuf {
     let name = source
         .file_name()
@@ -1917,19 +1918,196 @@ pub fn backup_target(source: &Path, stamp: &str) -> std::path::PathBuf {
     source.with_file_name(format!("{name}.backup-manual-{stamp}"))
 }
 
-fn copy_database(source: &Path, stamp: &str) -> AppResult<DataBackup> {
-    if !source.exists() {
+async fn connected_database_file(
+    connection: &mut sqlx::SqliteConnection,
+) -> AppResult<std::path::PathBuf> {
+    let databases: Vec<(i64, String, String)> = sqlx::query_as("PRAGMA database_list")
+        .fetch_all(&mut *connection)
+        .await?;
+    let filename = databases
+        .into_iter()
+        .find(|(_, name, _)| name == "main")
+        .map(|(_, _, file)| file)
+        .filter(|file| !file.is_empty())
+        .ok_or_else(|| {
+            AppError::BadRequest(
+                "In-memory or temporary databases cannot be backed up to a sibling file".into(),
+            )
+        })?;
+    let source = std::fs::canonicalize(filename).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            AppError::BadRequest("The connected database file no longer exists".into())
+        } else {
+            AppError::Io(error)
+        }
+    })?;
+    if !std::fs::metadata(&source)?.is_file() {
         return Err(AppError::BadRequest(
-            "There is no database to back up".into(),
+            "The connected database is not a regular file".into(),
         ));
     }
-    let target = backup_target(source, stamp);
-    let bytes = std::fs::copy(source, &target)?;
-    paths::harden_file(&target);
-    Ok(DataBackup {
-        path: target.display().to_string(),
-        bytes,
+    Ok(source)
+}
+
+async fn snapshot_database(pool: &sqlx::SqlitePool, stamp: &str) -> AppResult<DataBackup> {
+    let mut connection = pool.acquire().await?;
+    let source = connected_database_file(&mut connection).await?;
+    let target = backup_target(
+        &source,
+        &format!("{stamp}-{}", uuid::Uuid::new_v4().simple()),
+    );
+    snapshot_to_target(&mut connection, &source, &target).await
+}
+
+/// All unpublished output is confined to a newly created private directory.
+/// Deliberately no Drop cleanup: runtime shutdown may cancel this future while
+/// SQLite's worker still owns the file. An interrupted partial directory is
+/// safer than unlinking a live SQLite output; it is never returned as a backup.
+struct BackupScratch {
+    directory: std::path::PathBuf,
+    database: std::path::PathBuf,
+    file: std::fs::File,
+}
+
+impl BackupScratch {
+    fn create(parent: &Path) -> AppResult<Self> {
+        let directory = parent.join(format!(
+            ".armadra-backup-{}.partial",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let mut builder = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(&directory)?;
+        let database = directory.join("snapshot.db");
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true).write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        match options.open(&database) {
+            Ok(file) => Ok(Self {
+                directory,
+                database,
+                file,
+            }),
+            Err(error) => {
+                // remove_dir refuses a nonempty/replaced directory. Never recurse.
+                let _ = std::fs::remove_dir(&directory);
+                Err(error.into())
+            }
+        }
+    }
+
+    fn cleanup(self) {
+        drop(self.file);
+        // Only paths inside this operation's exclusively created directory.
+        // Unknown files are left alone; remove_dir then refuses to remove them.
+        for suffix in ["", "-journal", "-wal", "-shm"] {
+            let path = self.directory.join(format!("snapshot.db{suffix}"));
+            if let Err(error) = std::fs::remove_file(&path)
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                tracing::warn!(%error, "Could not remove a completed backup scratch file");
+            }
+        }
+        if let Err(error) = std::fs::remove_dir(&self.directory) {
+            tracing::warn!(%error, "Could not remove the backup scratch directory");
+        }
+    }
+}
+
+async fn snapshot_to_target(
+    connection: &mut sqlx::SqliteConnection,
+    source: &Path,
+    target: &Path,
+) -> AppResult<DataBackup> {
+    match std::fs::symlink_metadata(target) {
+        Ok(_) => {
+            return Err(AppError::Conflict(
+                "Backup destination already exists".into(),
+            ));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    let parent = source
+        .parent()
+        .ok_or_else(|| AppError::BadRequest("Database has no backup directory".into()))?;
+    let scratch = BackupScratch::create(parent)?;
+    let result: AppResult<()> = async {
+        let filename = scratch
+            .database
+            .to_str()
+            .ok_or_else(|| AppError::BadRequest("Backup path must be valid UTF-8".into()))?;
+        // INTO accepts a scalar expression; binding avoids quoting path text as SQL.
+        // Do not change pooled connection pragmas or require a WAL checkpoint.
+        sqlx::query("VACUUM main INTO ?")
+            .bind(filename)
+            .execute(&mut *connection)
+            .await?;
+        use sqlx::Connection;
+        let options = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&scratch.database)
+            .read_only(true)
+            .create_if_missing(false);
+        let mut verification = sqlx::SqliteConnection::connect_with(&options).await?;
+        let checks: Result<Vec<String>, sqlx::Error> = sqlx::query_scalar("PRAGMA integrity_check")
+            .fetch_all(&mut verification)
+            .await;
+        let closed = verification.close().await;
+        let checks = checks?;
+        closed?;
+        if checks != ["ok"] {
+            return Err(AppError::Internal(
+                "The database backup did not pass SQLite integrity verification".into(),
+            ));
+        }
+        Ok(())
+    }
+    .await;
+    if let Err(error) = result {
+        // SQL and verification have finished before their output is removed.
+        scratch.cleanup();
+        return Err(error);
+    }
+    let target = target.to_owned();
+    tokio::task::spawn_blocking(move || {
+        let result = (|| -> AppResult<DataBackup> {
+            // Explicit flush is required even when the source connection uses
+            // synchronous=OFF; VACUUM INTO's own flush depends on that setting.
+            scratch.file.sync_all()?;
+            let bytes = scratch.file.metadata()?.len();
+            if bytes == 0 {
+                return Err(AppError::Internal("SQLite produced an empty backup".into()));
+            }
+            // Same-directory hard-link publication is atomic and never overwrites
+            // an existing path. Unsupported filesystems fail without destructive
+            // rename/copy fallbacks or publishing a partially written backup.
+            std::fs::hard_link(&scratch.database, &target).map_err(|error| {
+                if error.kind() == std::io::ErrorKind::AlreadyExists {
+                    AppError::Conflict("Backup destination already exists".into())
+                } else {
+                    AppError::Io(error)
+                }
+            })?;
+            #[cfg(unix)]
+            std::fs::File::open(target.parent().expect("sibling backup has a parent"))?
+                .sync_all()?;
+            Ok(DataBackup {
+                path: target.display().to_string(),
+                bytes,
+            })
+        })();
+        scratch.cleanup();
+        result
     })
+    .await?
 }
 
 /* ------------------------------------ 用量 -------------------------------- */
@@ -3855,28 +4033,228 @@ mod tests {
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(error["code"], "bad_request");
 
-        // The copy itself is exercised on the fixture's own database file so
-        // the test never touches the user's real data directory.
-        let source = directory.path().join("api-data.db");
-        let backup = copy_database(&source, "20260904-101500").unwrap();
+        // Exercise the real handler: it must use the fixture pool, regardless of
+        // global application data-directory configuration.
+        let (status, backup) = call(&router, "POST", "/api/data/backup", None).await;
+        assert_eq!(status, StatusCode::OK);
+        let path = std::path::Path::new(backup["path"].as_str().unwrap());
+        assert_eq!(
+            path.parent(),
+            Some(directory.path().canonicalize().unwrap().as_path())
+        );
         assert!(
-            backup
-                .path
-                .ends_with("api-data.db.backup-manual-20260904-101500")
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("api-data.db.backup-manual-")
+        );
+        assert!(backup["bytes"].as_u64().unwrap() > 0);
+        assert!(path.exists());
+    }
+
+    async fn backup_fixture(
+        name: &str,
+    ) -> (sqlx::SqlitePool, tempfile::TempDir, std::path::PathBuf) {
+        let directory = tempdir().unwrap();
+        let source = directory.path().join(name);
+        let options = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&source)
+            .create_if_missing(true)
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+            .pragma("wal_autocheckpoint", "0");
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(3)
+            .connect_with(options)
+            .await
+            .unwrap();
+        sqlx::query("CREATE TABLE snapshot_values (id INTEGER PRIMARY KEY, value TEXT NOT NULL)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        (pool, directory, source)
+    }
+
+    async fn snapshot_values(path: &Path) -> Vec<String> {
+        use sqlx::Connection;
+        let options = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(path)
+            .read_only(true);
+        let mut connection = sqlx::SqliteConnection::connect_with(&options)
+            .await
+            .unwrap();
+        let values = sqlx::query_scalar("SELECT value FROM snapshot_values ORDER BY id")
+            .fetch_all(&mut connection)
+            .await
+            .unwrap();
+        connection.close().await.unwrap();
+        values
+    }
+
+    #[tokio::test]
+    async fn data_backup_includes_uncheckpointed_wal_with_an_active_reader() {
+        let (pool, directory, source) = backup_fixture("custom path ' quoted.db").await;
+        let before = std::fs::read(&source).unwrap();
+        // Hold an older read snapshot while the committed insert stays in WAL.
+        let mut reader = pool.acquire().await.unwrap();
+        sqlx::query("BEGIN").execute(&mut *reader).await.unwrap();
+        let _: i64 = sqlx::query_scalar("SELECT count(*) FROM snapshot_values")
+            .fetch_one(&mut *reader)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO snapshot_values(value) VALUES ('committed in WAL 中文')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            std::fs::read(&source).unwrap(),
+            before,
+            "fixture must leave the committed row outside the main file"
+        );
+        assert!(
+            std::fs::metadata(source.with_file_name("custom path ' quoted.db-wal"))
+                .unwrap()
+                .len()
+                > 0
+        );
+        let backup = snapshot_database(&pool, "fixed-second").await.unwrap();
+        assert_eq!(
+            snapshot_values(Path::new(&backup.path)).await,
+            ["committed in WAL 中文"]
         );
         assert_eq!(
-            backup.bytes,
-            std::fs::metadata(&source).unwrap().len(),
-            "the backup is a byte-for-byte copy"
+            std::fs::read(&source).unwrap(),
+            before,
+            "VACUUM INTO must not rewrite the source"
         );
-        assert!(std::path::Path::new(&backup.path).exists());
+        assert_eq!(
+            Path::new(&backup.path).parent(),
+            Some(directory.path().canonicalize().unwrap().as_path())
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&backup.path)
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+        sqlx::query("ROLLBACK").execute(&mut *reader).await.unwrap();
+        drop(reader);
+        pool.close().await;
+    }
 
-        // A missing database is a 400, not a panic or an empty file.
-        let missing = directory.path().join("gone.db");
+    #[tokio::test]
+    async fn data_backup_same_second_is_unique_and_preserves_previous_snapshot() {
+        let (pool, _directory, _) = backup_fixture("same-second.db").await;
+        sqlx::query("INSERT INTO snapshot_values(value) VALUES ('first')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let first = snapshot_database(&pool, "20260905-101500").await.unwrap();
+        let first_bytes = std::fs::read(&first.path).unwrap();
+        sqlx::query("INSERT INTO snapshot_values(value) VALUES ('second')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let (second, third) = tokio::join!(
+            snapshot_database(&pool, "20260905-101500"),
+            snapshot_database(&pool, "20260905-101500")
+        );
+        let second = second.unwrap();
+        let third = third.unwrap();
+        assert_ne!(first.path, second.path);
+        assert_ne!(second.path, third.path);
+        assert_eq!(std::fs::read(&first.path).unwrap(), first_bytes);
+        assert_eq!(snapshot_values(Path::new(&first.path)).await, ["first"]);
+        assert_eq!(
+            snapshot_values(Path::new(&second.path)).await,
+            ["first", "second"]
+        );
+        pool.close().await;
+    }
+
+    #[tokio::test]
+    async fn data_backup_failure_cleans_only_its_scratch_and_keeps_source_and_existing_files() {
+        let (pool, directory, source) = backup_fixture("failure.db").await;
+        sqlx::query("INSERT INTO snapshot_values(value) VALUES ('keep source')")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let existing = backup_target(&source, "existing");
+        std::fs::write(&existing, b"existing backup must survive").unwrap();
+        let mut connection = pool.acquire().await.unwrap();
         assert!(matches!(
-            copy_database(&missing, "20260904-101500"),
+            snapshot_to_target(&mut connection, &source, &existing).await,
+            Err(AppError::Conflict(_))
+        ));
+        // VACUUM cannot run inside a transaction. This deterministic SQL error
+        // occurs after private output creation and must not leave partial output.
+        sqlx::query("BEGIN")
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+        let failed = backup_target(&source, "failed");
+        assert!(
+            snapshot_to_target(&mut connection, &source, &failed)
+                .await
+                .is_err()
+        );
+        sqlx::query("ROLLBACK")
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+        assert!(!failed.exists());
+        assert_eq!(
+            std::fs::read(&existing).unwrap(),
+            b"existing backup must survive"
+        );
+        assert!(!std::fs::read_dir(directory.path()).unwrap().any(|entry| {
+            entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains(".partial")
+        }));
+        let count: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM snapshot_values WHERE value = 'keep source'")
+                .fetch_one(&mut *connection)
+                .await
+                .unwrap();
+        assert_eq!(count, 1);
+        drop(connection);
+        pool.close().await;
+    }
+
+    #[tokio::test]
+    async fn data_backup_rejects_memory_and_a_missing_connected_file() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        assert!(matches!(
+            snapshot_database(&pool, "memory").await,
             Err(AppError::BadRequest(_))
         ));
+        pool.close().await;
+        #[cfg(unix)]
+        {
+            let (pool, _directory, source) = backup_fixture("removed.db").await;
+            std::fs::remove_file(&source).unwrap();
+            assert!(matches!(
+                snapshot_database(&pool, "missing").await,
+                Err(AppError::BadRequest(_))
+            ));
+            pool.close().await;
+        }
     }
 
     /* -------------------------- conversations / title ---------------------- */

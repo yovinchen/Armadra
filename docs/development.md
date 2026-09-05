@@ -145,7 +145,7 @@ go -C apps/host run ./cmd/armadra-host --allow-origin http://127.0.0.1:1420
 | `$XDG_DATA_HOME/armadra`（Linux）                | 同上                                                                                       |
 | `<工作区>/.armadra/`                             | 画布图片资产、导出的 PNG、板日志；已在 `.gitignore` 里                                     |
 
-设置里的「数据」页显示数据目录、数据库大小，并可在原地复制一份数据库做备份。
+设置里的「数据」页提供数据库备份。备份从 Runtime 当前连接读取 SQLite 一致性快照，包含已提交但尚未 checkpoint 的 WAL 数据；完成完整性检查后发布为原数据库旁带时间及唯一后缀的文件，不覆盖已有备份。备份路径遵循实际数据库连接，内存数据库不提供旁路文件备份。
 
 ## 约定
 
