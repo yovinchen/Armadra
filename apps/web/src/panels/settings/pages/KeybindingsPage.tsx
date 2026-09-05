@@ -4,6 +4,9 @@ import { useT } from "../../../app/preferences-store";
 import {
   COMMANDS,
   commandKeysLabel,
+  isMacPlatform,
+  isWindowShortcut,
+  suspendKeybindings,
   type CommandId,
   type CommandScope,
 } from "../../../keybindings";
@@ -14,6 +17,7 @@ import { useRuntimeSettings } from "../use-runtime-settings";
 import { Badge } from "@/ui/badge";
 import { Kbd } from "@/ui/kbd";
 import { cn } from "@/lib/cn";
+import { isTauri } from "@/platform";
 
 const SCOPES: readonly CommandScope[] = ["app", "canvas", "terminal", "scm"];
 
@@ -22,7 +26,7 @@ const SCOPES: readonly CommandScope[] = ["app", "canvas", "terminal", "scm"];
  *
  * 按 scope 分组的命令表。点键位进入录制态：下一个带修饰键的组合就是新键位，
  * Esc 取消，Backspace 恢复默认（发 `null` 让 Runtime 删掉这条覆盖）。
- * 同一 scope 里撞车的两条都挂一个 destructive Badge——不自动改判谁赢，
+ * 同一组合被多条命令占用时显示冲突——不自动改判谁赢，
  * 用户看得见才改得动。
  */
 export function KeybindingsPage() {
@@ -38,9 +42,12 @@ export function KeybindingsPage() {
   // 录制期间在捕获阶段独占键盘，否则按下的组合会先被应用自己的快捷键吃掉。
   React.useEffect(() => {
     if (!recording) return;
+    const resume = suspendKeybindings();
     const onKeyDown = (event: KeyboardEvent) => {
+      if (isWindowShortcut(event)) return;
       event.preventDefault();
-      event.stopPropagation();
+      event.stopImmediatePropagation();
+      if (event.isComposing || event.keyCode === 229) return;
       if (event.key === "Escape") {
         setRecording(null);
         return;
@@ -56,11 +63,23 @@ export function KeybindingsPage() {
       setRecording(null);
     };
     window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      resume();
+    };
   }, [recording, save]);
 
   return (
     <>
+      <p className="px-1 text-xs text-muted-foreground">
+        {t(
+          !isTauri()
+            ? "settings.shortcut.windowBrowser"
+            : isMacPlatform()
+              ? "settings.shortcut.windowMac"
+              : "settings.shortcut.windowOther",
+        )}
+      </p>
       {SCOPES.map((scope) => (
         <SettingsGroup key={scope} title={t(`settings.scope.${scope}`)}>
           {COMMANDS.filter((command) => command.scope === scope).map(

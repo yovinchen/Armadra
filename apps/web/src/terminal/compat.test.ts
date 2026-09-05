@@ -65,12 +65,23 @@ describe("按键策略（§18.3 键盘行）", () => {
       key({ key: "L", metaKey: true, shiftKey: true }), // ⌘⇧L 会话
       key({ key: "E", metaKey: true, shiftKey: true }), // ⌘⇧E 资源管理器
       key({ key: "G", metaKey: true, shiftKey: true }), // ⌘⇧G 源代码管理
-      key({ key: "w", metaKey: true }), // ⌘W 关闭节点
+      key({ key: "w", metaKey: true }), // ⌘W 原生关闭窗口
+      key({ key: "q", metaKey: true }), // ⌘Q 原生退出
       key({ key: "f", metaKey: true }), // ⌘F 终端搜索
     ];
     for (const event of app) {
       expect(keyDisposition(event, plain, chords)).toBe("app");
     }
+  });
+
+  it("Windows CtrlQ继续送往CLI", () => {
+    expect(
+      keyDisposition(
+        key({ key: "q", ctrlKey: true }),
+        { mac: false, hasSelection: false },
+        new Set(),
+      ),
+    ).toBe("terminal");
   });
 
   it("其余组合键一律进终端", () => {

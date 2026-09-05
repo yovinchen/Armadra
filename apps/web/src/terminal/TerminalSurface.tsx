@@ -299,7 +299,7 @@ function TerminalSurfaceImpl({
     /*
      * 键盘策略（§18.3 键盘行）。返回 `false` = 不交给终端。
      * 注册表里 `allowInTerminal` 的那几条归应用（⌘K / ⌘, / ⌘⇧L / ⌘⇧E /
-     * ⌘⇧G / ⌘⇧B / ⌘W），其余**一律**进终端：Ctrl+C/Z/D、方向键、
+     * ⌘⇧G），窗口的 ⌘W / ⌘Q 留给原生菜单；其余进终端：Ctrl+C/Z/D、方向键、
      * F1–F12、Home/End、Shift+方向 都归 CLI。
      */
     const mac = isMacPlatform();

@@ -136,7 +136,8 @@ export const COMMANDS = [
     id: "canvas.closeNode",
     labelKey: "cmd.canvas.closeNode",
     scope: "canvas",
-    defaultKeys: both("Mod+W"),
+    // Window close belongs to the native shell/browser.
+    defaultKeys: both(null),
     allowInTerminal: true,
     allowWhileTyping: false,
   },
@@ -435,7 +436,10 @@ const TOKEN_TO_KEY: Record<string, string> = {
 
 function normaliseKeyToken(token: string): string {
   const lower = token.toLowerCase();
-  return TOKEN_TO_KEY[lower] ?? lower;
+  const physical = /^(?:key([a-z])|digit([0-9]))$/.exec(lower);
+  return physical
+    ? (physical[1] ?? physical[2]!)
+    : (TOKEN_TO_KEY[lower] ?? lower);
 }
 
 function parseChord(chord: string, mac: boolean): Chord | null {
@@ -492,6 +496,72 @@ function parseChord(chord: string, mac: boolean): Chord | null {
   return result.key ? result : null;
 }
 
+/** Native window/application shortcuts cannot be rebound to canvas actions. */
+export function isWindowShortcut(
+  event: Pick<
+    KeyboardEvent,
+    "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey"
+  > & { code?: string },
+  mac = isMacPlatform(),
+): boolean {
+  const key = /^Key[WQ]$/.test(event.code ?? "")
+    ? event.code!.slice(3).toLowerCase()
+    : event.key.toLowerCase();
+  if (mac)
+    return (
+      event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.shiftKey &&
+      (key === "w" || key === "q")
+    );
+  return (
+    !event.metaKey &&
+    !event.shiftKey &&
+    ((event.ctrlKey && !event.altKey && key === "w") ||
+      (event.altKey && !event.ctrlKey && key === "f4"))
+  );
+}
+
+export function isReservedChord(chord: string, mac = isMacPlatform()): boolean {
+  const parsed = parseChord(chord, mac);
+  return (
+    !!parsed &&
+    isWindowShortcut(
+      {
+        key: parsed.key,
+        metaKey: parsed.meta,
+        ctrlKey: parsed.ctrl,
+        altKey: parsed.alt,
+        shiftKey: parsed.shift,
+      },
+      mac,
+    )
+  );
+}
+
+/** Shared with conflict detection so modifier aliases/order match dispatch. */
+export function chordSignature(
+  chord: string,
+  mac = isMacPlatform(),
+): string | null {
+  const parsed = parseChord(chord, mac);
+  return parsed ? JSON.stringify(parsed) : null;
+}
+
+let keybindingSuspensions = 0;
+
+/** Recording must suspend even handlers registered earlier on window. */
+export function suspendKeybindings(): () => void {
+  keybindingSuspensions += 1;
+  let active = true;
+  return () => {
+    if (!active) return;
+    active = false;
+    keybindingSuspensions -= 1;
+  };
+}
+
 /**
  * 事件的主键是否匹配 token。
  *
@@ -504,7 +574,7 @@ function keyMatches(event: KeyboardEvent, token: string): boolean {
   if (!code) return false;
   if (/^[a-z]$/.test(token)) return code === `Key${token.toUpperCase()}`;
   if (/^[0-9]$/.test(token)) return code === `Digit${token}`;
-  return code.toLowerCase() === token;
+  return normaliseKeyToken(code) === token;
 }
 
 function chordMatches(event: KeyboardEvent, chord: Chord): boolean {
@@ -727,6 +797,8 @@ export function useKeybindings(
 
       const current = optionsRef.current;
       const mac = current.mac ?? isMacPlatform();
+      if (keybindingSuspensions > 0 || isWindowShortcut(keyboardEvent, mac))
+        return;
       const scopes = current.scopes;
       const inTerminal = isTerminalTarget(keyboardEvent.target);
       const typing = !inTerminal && isTypingTarget(keyboardEvent.target);

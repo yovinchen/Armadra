@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { chordFromEvent, keymapConflicts, toKeymap } from "./keymap";
-import { commandKeys } from "../../keybindings";
+import { commandKeys, matchKeyboardEvent } from "../../keybindings";
 
 function press(init: KeyboardEventInit & { code?: string }): KeyboardEvent {
   return new KeyboardEvent("keydown", init);
@@ -39,6 +39,24 @@ describe("chordFromEvent", () => {
     expect(
       chordFromEvent(press({ key: "1", code: "Digit1", ctrlKey: true }), false),
     ).toBe("Mod+1");
+  });
+
+  it("录制逗号和加号后仍能匹配实际按键", () => {
+    for (const [event, expected] of [
+      [press({ key: ",", code: "Comma", metaKey: true }), "Mod+Comma"],
+      [
+        press({ key: "+", code: "Equal", shiftKey: true, metaKey: true }),
+        "Mod+Shift+Equal",
+      ],
+      [
+        press({ key: "<", code: "Comma", shiftKey: true, metaKey: true }),
+        "Mod+Shift+Comma",
+      ],
+    ] as const) {
+      const chord = chordFromEvent(event, true);
+      expect(chord).toBe(expected);
+      expect(matchKeyboardEvent(event, chord, { mac: true })).toBe(true);
+    }
   });
 
   it("命名键与空格用书写 token", () => {
@@ -85,9 +103,34 @@ describe("keymapConflicts", () => {
     expect(conflicts.size).toBe(2);
   });
 
-  it("跨 scope 的同一组合不算冲突", () => {
-    // ⌘F 在 terminal scope 里是搜索；画布命令用同一个键不会互相打架。
-    const keymap = toKeymap({ "canvas.tidy": "Mod+F" });
-    expect([...keymapConflicts(keymap, true)]).toEqual([]);
+  it("跨scope共享按键与修饰键别名也会冲突", () => {
+    const keymap = toKeymap({ "canvas.tidy": "Command+F" });
+    expect([...keymapConflicts(keymap, true)].sort()).toEqual([
+      "canvas.tidy",
+      "terminal.search",
+    ]);
+  });
+
+  it("旧物理键别名也参与冲突和系统键检查", () => {
+    expect(
+      [
+        ...keymapConflicts(toKeymap({ "canvas.tidy": "Meta+KeyF" }), true),
+      ].sort(),
+    ).toEqual(["canvas.tidy", "terminal.search"]);
+    expect([
+      ...keymapConflicts(toKeymap({ "canvas.closeNode": "Meta+KeyW" }), true),
+    ]).toEqual(["canvas.closeNode"]);
+  });
+
+  it("旧窗口键绑定标为冲突，不能录成新的节点快捷键", () => {
+    expect([
+      ...keymapConflicts(toKeymap({ "canvas.closeNode": "Meta+W" }), true),
+    ]).toEqual(["canvas.closeNode"]);
+    for (const key of ["w", "q"]) {
+      expect(chordFromEvent(press({ key, metaKey: true }), true)).toBeNull();
+    }
+    expect(chordFromEvent(press({ key: "q", ctrlKey: true }), false)).toBe(
+      "Mod+Q",
+    );
   });
 });

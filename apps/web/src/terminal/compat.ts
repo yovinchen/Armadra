@@ -13,7 +13,12 @@
  *     不再覆盖标题。
  */
 
-import { COMMANDS, isMacPlatform, type CommandSpec } from "@/keybindings";
+import {
+  COMMANDS,
+  isMacPlatform,
+  isWindowShortcut,
+  type CommandSpec,
+} from "@/keybindings";
 
 export { isMacPlatform };
 
@@ -149,6 +154,8 @@ export function keyDisposition(
   context: KeyContext,
   chords: Set<string>,
 ): KeyDisposition {
+  // xterm must leave native menu/browser shortcuts untouched.
+  if (isWindowShortcut(event, context.mac)) return "app";
   // 合成中的按键（IME）永远不归应用，也不该被 xterm 当普通键处理。
   if (event.key === "Process" || event.key === "Unidentified")
     return "terminal";
@@ -200,10 +207,9 @@ function readOscTitles(): Map<string, string> {
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return new Map();
     return new Map(
-      Object.entries(parsed as Record<string, unknown>)
-        .filter((entry): entry is [string, string] =>
-          typeof entry[1] === "string",
-        ),
+      Object.entries(parsed as Record<string, unknown>).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      ),
     );
   } catch {
     // 隐私模式 / 配额满 / 坏 JSON：退回进程内的那份，行为和以前一样。

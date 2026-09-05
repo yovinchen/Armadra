@@ -185,6 +185,12 @@ export const modals: MessageModule = {
     "settings.shortcuts": "快捷键",
     "settings.shortcut.recording": "按下组合键…",
     "settings.shortcut.conflict": "冲突",
+    "settings.shortcut.windowBrowser":
+      "窗口关闭与退出快捷键由浏览器管理，不能绑定为节点操作；关闭此页面不会停止后台服务。",
+    "settings.shortcut.windowMac":
+      "⌘W 关闭前台窗口，⌘Q 退出应用及其后台服务；这些按键由系统管理，不能录制为节点操作。",
+    "settings.shortcut.windowOther":
+      "Ctrl+W 和 Alt+F4 用于关闭窗口；退出应用及后台服务请使用托盘菜单。窗口快捷键不能绑定为节点操作。",
     "settings.shortcut.unbound": "未绑定",
     "settings.shortcut.note": "Esc 取消，Backspace 恢复默认。", // i18n-exempt
     "settings.scope.app": "应用",
@@ -393,6 +399,12 @@ export const modals: MessageModule = {
     "settings.shortcuts": "Shortcuts",
     "settings.shortcut.recording": "Press a combination…",
     "settings.shortcut.conflict": "Conflict",
+    "settings.shortcut.windowBrowser":
+      "Window close and quit shortcuts belong to your browser and cannot be assigned to node actions. Closing this page keeps the background service running.",
+    "settings.shortcut.windowMac":
+      "⌘W closes the window; ⌘Q quits the app and its background services. These system shortcuts cannot be recorded for node actions.",
+    "settings.shortcut.windowOther":
+      "Ctrl+W and Alt+F4 close the window. Use the tray menu to quit the app and its background services. Window shortcuts cannot be assigned to node actions.",
     "settings.shortcut.unbound": "Unbound",
     "settings.shortcut.note": "Esc cancels, Backspace restores the default.",
     "settings.scope.app": "App",

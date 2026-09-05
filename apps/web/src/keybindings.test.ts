@@ -11,6 +11,8 @@ import {
   formatKeys,
   isTerminalTarget,
   isTypingTarget,
+  isWindowShortcut,
+  suspendKeybindings,
   matchKeyboardEvent,
   useKeybindings,
   type CommandId,
@@ -321,6 +323,68 @@ describe("useKeybindings", () => {
     expect(onTidy).not.toHaveBeenCalled();
     fire({ key: "p", metaKey: true, shiftKey: true });
     expect(onTidy).toHaveBeenCalledTimes(1);
+  });
+
+  it("窗口快捷键不触发节点或旧自定义绑定，终端与输入框也放行", () => {
+    const onClose = vi.fn();
+    const onPalette = vi.fn();
+    mount(
+      { "canvas.closeNode": onClose, "app.commandPalette": onPalette },
+      {
+        keymap: {
+          "canvas.closeNode": { mac: "Mod+W", other: null },
+          "app.commandPalette": { mac: "Mod+Q", other: null },
+        },
+      },
+    );
+    const terminal = document.createElement("div");
+    terminal.className = "xterm";
+    const textarea = document.createElement("textarea");
+    terminal.append(textarea);
+    document.body.append(terminal);
+    for (const target of [window, textarea]) {
+      for (const key of ["w", "q"]) {
+        expect(fire({ key, metaKey: true }, target).defaultPrevented).toBe(
+          false,
+        );
+      }
+    }
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onPalette).not.toHaveBeenCalled();
+    expect(commandKeys("canvas.closeNode", MAC)).toBeNull();
+  });
+
+  it("录制暂停先注册的监听器，结束后恢复且清理可重复", () => {
+    const onPalette = vi.fn();
+    mount({ "app.commandPalette": onPalette });
+    const resume = suspendKeybindings();
+    try {
+      expect(fire({ key: "k", metaKey: true }).defaultPrevented).toBe(false);
+      expect(onPalette).not.toHaveBeenCalled();
+    } finally {
+      resume();
+      resume();
+    }
+    fire({ key: "k", metaKey: true });
+    expect(onPalette).toHaveBeenCalledOnce();
+  });
+
+  it("原生键支持物理布局回退且不占用CtrlQ", () => {
+    expect(
+      isWindowShortcut(
+        keydown({ key: "ц", code: "KeyW", metaKey: true }),
+        true,
+      ),
+    ).toBe(true);
+    expect(isWindowShortcut(keydown({ key: "q", ctrlKey: true }), false)).toBe(
+      false,
+    );
+    expect(
+      isWindowShortcut(
+        keydown({ key: "w", metaKey: true, shiftKey: true }),
+        true,
+      ),
+    ).toBe(false);
   });
 
   it("输入法组词中的按键不算命令", () => {

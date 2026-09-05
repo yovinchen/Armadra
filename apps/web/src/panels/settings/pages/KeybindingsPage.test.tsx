@@ -23,7 +23,7 @@ vi.mock("sonner", () => ({
 
 import { installDomPolyfills, TestProviders } from "../../../app/test-harness";
 import { translate } from "../../../i18n";
-import { isMacPlatform } from "../../../keybindings";
+import { isMacPlatform, useKeybindings } from "../../../keybindings";
 import { KeybindingsPage } from "./KeybindingsPage";
 
 installDomPolyfills();
@@ -45,9 +45,15 @@ function paletteChip() {
   return screen.getByRole("button", { name: zh("cmd.app.commandPalette") });
 }
 
+const runPalette = vi.fn();
+function ActiveShortcuts() {
+  useKeybindings({ "app.commandPalette": runPalette });
+  return null;
+}
 function view() {
   return render(
     <TestProviders>
+      <ActiveShortcuts />
       <KeybindingsPage />
     </TestProviders>,
   );
@@ -55,6 +61,7 @@ function view() {
 
 describe("KeybindingsPage", () => {
   beforeEach(() => {
+    runPalette.mockReset();
     fetchSettings.mockReset().mockResolvedValue(documentWith({}));
     patchSettings
       .mockReset()
@@ -85,6 +92,39 @@ describe("KeybindingsPage", () => {
       }),
     );
     expect(screen.queryByText(zh("settings.shortcut.recording"))).toBeNull();
+  });
+
+  it("录制现有命令组合时不先运行该命令，结束后恢复快捷键", async () => {
+    view();
+    fireEvent.click(
+      await screen.findByRole("button", { name: zh("cmd.app.commandPalette") }),
+    );
+    const mod = isMacPlatform() ? { metaKey: true } : { ctrlKey: true };
+    fireEvent.keyDown(window, { key: "k", code: "KeyK", ...mod });
+    expect(runPalette).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(patchSettings).toHaveBeenCalledWith({
+        keymap: { "app.commandPalette": "Mod+K" },
+      }),
+    );
+    fireEvent.keyDown(window, { key: "k", code: "KeyK", ...mod });
+    expect(runPalette).toHaveBeenCalledOnce();
+  });
+
+  it("录制不拦截关闭窗口且不写入窗口快捷键", async () => {
+    view();
+    fireEvent.click(
+      await screen.findByRole("button", { name: zh("cmd.app.commandPalette") }),
+    );
+    const event = new KeyboardEvent("keydown", {
+      key: "w",
+      code: "KeyW",
+      cancelable: true,
+      ...(isMacPlatform() ? { metaKey: true } : { ctrlKey: true }),
+    });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(patchSettings).not.toHaveBeenCalled();
   });
 
   it("Esc 取消录制，什么都不写", async () => {
