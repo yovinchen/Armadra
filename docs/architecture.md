@@ -1,7 +1,8 @@
 # AI Coding OS 最终方案与画板选型
 
-> 状态：已确认  
-> 日期：2026-08-13  
+> 状态：已确认；**画布层已于 2026-09-04 由 tldraw 取代 React Flow**，见
+> [tldraw-canvas-plan.md](./tldraw-canvas-plan.md) 与本文 §2.1 / §5 / §7  
+> 日期：2026-08-13（画布层 2026-09-04 更新）  
 > 完整讨论归档：[ChatGPT 会话归档](./research/chatgpt-conversation-archive.md)
 
 ## 1. 最终结论
@@ -14,7 +15,7 @@
 
 ```text
 唯一前端：React + TypeScript + Vite
-主画板：React Flow（@xyflow/react）
+主画板：tldraw 5（节点与白板同一套 store；原为 React Flow，见 §2.1）
 终端 UI：xterm.js
 本地/远程执行服务：Rust + Axum + Tokio
 本地存储：SQLite
@@ -23,15 +24,32 @@
 后续同步：领域事件 + Postgres / 对象存储；需要实时协作时再引入 CRDT
 ```
 
-画板最终裁决：
+画板最终裁决（2026-09-04 修订）：
 
-- **主画板使用 React Flow。**
-- **Quickdraw 不作为主画板。**
-- Quickdraw 可在第二阶段作为独立的 `WhiteboardNode`，提供手绘、便签、箭头、图片和标注。
-- 不在 MVP 中同时叠加两套画板引擎。
-- tldraw 不进入当前主方案。
+- **主画板使用 tldraw 5**：节点、分组、连线、手绘、几何、文字、图片全在同一个
+  store、同一套相机 / 选择 / 撤销里。
+- **不叠加第二个画板引擎**：Quickdraw 的 `WhiteboardNode` 方案作废——白板能力
+  由 tldraw 原生提供，不再需要「画布里再嵌一个画布」。
+- 下面 §2–§5 是 2026-08-13 那次选型的原文，保留作为决策脉络；结论已被 §2.1
+  取代。
 
-## 2. 为什么主画板必须是 React Flow
+## 2.1 为什么后来换成了 tldraw（2026-09-04）
+
+React Flow 版本跑了两个大版本之后暴露出三件事，都不是能靠加代码绕过去的：
+
+1. **白板是刚需，而不是「第三阶段的可选项」**。用户要在节点旁边随手画、贴图、
+   贴文字、画框分区。在 React Flow 上做这些等于自己写第二套图形编辑器；叠一个
+   Quickdraw 又会出现两套相机、两套选择、两套撤销。
+2. **「从任何东西拉一条线到 Agent，Agent 就能读它」**要求箭头能绑到**任意**图形，
+   而不只是节点。React Flow 的边只连节点句柄。
+3. tldraw 的 `ShapeUtil` 可以渲染任意 React 组件，所以终端节点原样搬过去就行；
+   `BindingUtil` 让箭头能绑任何 shape；`components` 槽位可以逐个置空换成我们
+   自己的 shadcn UI。
+
+代价与对策见 [tldraw-canvas-plan.md](./tldraw-canvas-plan.md) §10（视口裁剪、
+体内事件、快捷键冲突、字体自托管、快照体积、水印六条风险的实测结论）。
+
+## 2. 为什么主画板必须是 React Flow（2026-08-13 原文，已被 §2.1 取代）
 
 这个产品的核心不是传统白板，而是可执行的节点图：
 
@@ -143,7 +161,13 @@ Quickdraw 官方路线图仍明确列出以下缺失项：
 - [Quickdraw Shape 渲染实现](https://github.com/quickdrawjs/quickdraw/blob/main/packages/core/src/shapes.js)
 - [Quickdraw Editor Canvas 架构](https://github.com/quickdrawjs/quickdraw/blob/main/packages/core/src/editor.js)
 
-## 4. 画板对比
+## 4. 画板对比（2026-08-13 原文，结论已被 §2.1 取代）
+
+> 下表最后一行的「当前建议」是 2026-08-13 的判断。2026-09-04 改用 tldraw：
+> 「Terminal/Browser React 节点」与「语义连线」两行在 tldraw 上都已跑通
+> （`ShapeUtil` 渲染真 xterm、自定义 `link` shape + `BindingUtil`），而「手绘与
+> 便签」那一行正是换引擎的动因。许可一行仍然成立，用户决定带水印上线、
+> 不申请 license key（[tldraw-canvas-plan.md](./tldraw-canvas-plan.md) §12）。
 
 | 维度                        | React Flow        | Quickdraw                   | tldraw                  |
 | --------------------------- | ----------------- | --------------------------- | ----------------------- |
@@ -160,7 +184,11 @@ tldraw 的画板能力更完整，但当前 SDK 不是宽松开源许可，生�
 
 参考：[tldraw 许可说明](https://tldraw.dev/community/license)
 
-## 5. Quickdraw 最合适的接入方式
+## 5. Quickdraw 最合适的接入方式（作废，2026-09-04）
+
+> **本节整节作废**：白板能力由 tldraw 原生提供，没有也不会有 `WhiteboardNode`。
+> 保留原文只为说明「两套画板引擎会打架」这个判断——它是对的，所以最终的做法
+> 不是叠加，而是把节点搬进白板引擎里。
 
 不建议把 Quickdraw 覆盖在整个 React Flow 工作区上。两套相机、选择、键盘快捷键和撤销系统会发生冲突。
 
@@ -210,9 +238,9 @@ interface WhiteboardNodeData {
 
 ```text
 React + TypeScript + Vite
-React Flow
+tldraw 5（画布：节点 shape + 原生白板 shape + frame 分组）
 xterm.js
-Monaco Editor
+CodeMirror 6
 Zustand
 TanStack Query
 ```
@@ -255,14 +283,28 @@ Tauri 2
 画板库不是业务数据库。必须保持领域模型与渲染引擎解耦：
 
 ```text
-Workspace / Target / Node / Edge / Session
-                 ↓ adapter
-              React Flow
+                  ┌──────────────── 内存真相 ────────────────┐
+                  │  tldraw store（shape / binding / asset）   │
+                  └───┬───────────────────────┬──────────────┘
+       派生 nodes/edges │                       │ 其余记录整份序列化
+                        ▼                       ▼
+        Workspace / Target / Node / Edge     白板快照（不透明 JSON）
+        （SQLite 的 nodes / edges 表）        （boards.whiteboard_json）
 ```
 
-- SQLite 保存业务节点、连线、执行目标和会话索引。
-- React Flow JSON 只是 UI 投影，不作为唯一真相。
-- Quickdraw snapshot 只属于 `WhiteboardNode`。
+- **tldraw 的 store 是画布在内存里的唯一真相**，`canvas-store.document` 由它派生
+  （`apps/web/src/canvas/sync/`）。
+- 持久化分两条通道，`PUT .../boards/{id}/document` 一次带走：
+  - **节点与连线**仍是 Runtime 的 `nodes` / `edges` 表——Runtime、控制动词、
+    会话侧栏、上下文链接全都只认这张表，一行都没为画布换引擎而改。
+    节点 `<uuid>` ↔ shape `shape:<uuid>`，不查表；分组是原生 `frame`。
+  - **白板原生内容**（手绘、几何、文字、图片、高亮）序列化成一份 tldraw 快照，
+    原样存进 `boards.whiteboard_json`，**Runtime 不解析它**。写之前先剔掉所有
+    节点记录（`canvas/sync/snapshot.ts`），否则同一份数据会存两遍、加载时打架。
+    上限 8 MiB，超了这一轮不保存并提示。
+  - **图片资产不进快照**：字节走 `POST /api/workspaces/{id}/assets`（或按路径
+    `.../assets/import`），内容寻址落在工作区的 `.aicc/assets/<sha256 前 16 位>.<ext>`，
+    快照里只留 URL 与工作区相对路径。
 - 终端原始输出、密钥和 `.env` 默认不进入画板同步。
 - 后续替换画板引擎时，不迁移 Runtime 和领域数据模型。
 
@@ -270,7 +312,7 @@ Workspace / Target / Node / Edge / Session
 
 ### Phase 1：MVP
 
-只使用 React Flow：
+只使用 React Flow（2026-09-04 起画布是 tldraw，其余步骤不变）：
 
 1. Workspace 和授权目录。
 2. File / Folder Node。
@@ -290,26 +332,28 @@ Workspace / Target / Node / Edge / Session
 
 ### Phase 3：白板能力
 
-按真实使用反馈选择：
+**已实施（2026-09-04），结论与下面的原计划不同**：没有加白板节点，而是把整个
+画布换成了 tldraw，手绘 / 几何 / 文字 / 图片 / frame 全是原生 shape，与节点共用
+一套相机、选择与撤销。见 [tldraw-canvas-plan.md](./tldraw-canvas-plan.md)。
 
-- 只需要简单标注：在 React Flow 上实现轻量自由绘制层。
-- 需要完整白板：增加嵌入 Quickdraw 的 `WhiteboardNode`。
-- 不直接改造 Quickdraw 为整个系统的主画板。
+~~按真实使用反馈选择：只需要简单标注就在 React Flow 上实现轻量自由绘制层；
+需要完整白板就增加嵌入 Quickdraw 的 `WhiteboardNode`。~~
 
 ### Phase 4：协作
 
 1. 先同步领域事件和节点数据。
 2. 元数据与终端/代码内容分层。
 3. 确认多人实时编辑需求后再加入 Yjs 或其他 CRDT。
-4. 不直接把 Quickdraw 或 React Flow 的内部数据结构当跨端协议。
+4. 不直接把画布引擎（现在是 tldraw）的内部数据结构当跨端协议——白板快照对
+   Runtime 是一段不透明字符串，节点与连线走 §7 的领域表。
 
 ## 9. 最终确认
 
 最终方案不再摇摆：
 
 ```text
-主画板：React Flow
-自由白板：Quickdraw 作为可选 WhiteboardNode
+主画板：tldraw 5（节点 shape + 原生白板 shape，同一套 store / 相机 / 撤销）
+自由白板：tldraw 原生，不再有独立的 WhiteboardNode
 前端：React + TypeScript + Vite
 Runtime：Rust + Axum + Tokio
 终端：xterm.js + PTY + WebSocket
@@ -319,9 +363,8 @@ Runtime：Rust + Axum + Tokio
 协作：领域同步优先，CRDT 后置
 ```
 
-选择 React Flow 不是因为 Quickdraw 不好，而是两者解决的问题不同：
-
-- React Flow 解决“可执行节点和语义连线”。
-- Quickdraw 解决“自由绘制、标注和视觉表达”。
-
-这个产品的第一价值是执行与编排，因此 React Flow 必须是主画板。
+2026-08-13 选 React Flow 的理由是「可执行节点和语义连线」，那时把「自由绘制、
+标注和视觉表达」排在后面。2026-09-04 的修订不是推翻这个优先级，而是发现
+tldraw 两件事都能做：自定义 shape 渲染真终端、自定义 binding 承载语义连线，
+同时白板是原生的。所以画布层换成 tldraw，领域模型、Runtime、控制动词一行没改
+——这正是 §7「画板库不是业务数据库」当初就想留出的余地。
