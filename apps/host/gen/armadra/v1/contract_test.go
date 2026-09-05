@@ -41,6 +41,7 @@ func fixture(t *testing.T, name string, data []byte) []byte {
 
 func cases() map[string]proto.Message {
 	return map[string]proto.Message{
+		"desktop_shutdown":     &pb.DesktopRuntimeControl{Action: &pb.DesktopRuntimeControl_Shutdown{Shutdown: &pb.DesktopShutdownRequest{}}},
 		"management_running":   &pb.HostManagementResult{State: &pb.HostManagementResult_Running{Running: &pb.HostStatus{HostId: "host-1", HostInstanceId: "instance-1", HttpEndpoint: "http://127.0.0.1:43121", StartedAtUnixMs: 1788556300000, ProcessId: 321}}},
 		"management_stopped":   &pb.HostManagementResult{State: &pb.HostManagementResult_Stopped{Stopped: &pb.HostStoppedState{}}},
 		"control_status":       &pb.HostControlRequest{RequestId: "控制请求", Action: &pb.HostControlRequest_Status{Status: &pb.HostStatusRequest{}}},

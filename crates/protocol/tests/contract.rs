@@ -218,3 +218,16 @@ fn unknown_fields_are_accepted_but_prost_drops_them() {
 fn malformed_wire_is_rejected() {
     assert!(HelloRequest::decode(&[0x0a, 0xff][..]).is_err());
 }
+
+#[test]
+fn desktop_shutdown_requires_an_explicit_action() {
+    check(
+        "desktop_shutdown",
+        DesktopRuntimeControl {
+            action: Some(desktop_runtime_control::Action::Shutdown(
+                DesktopShutdownRequest {},
+            )),
+        },
+    );
+    assert_eq!(DesktopRuntimeControl::decode(&[][..]).unwrap().action, None);
+}

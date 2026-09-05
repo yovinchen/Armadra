@@ -16,6 +16,7 @@ import {
   HostControlRequestSchema,
   HostControlResponseSchema,
   HostManagementResultSchema,
+  DesktopRuntimeControlSchema,
 } from "../src/index.js";
 
 function fixture(name: string): Uint8Array {
@@ -40,6 +41,14 @@ function check<T extends DescMessage>(
 const maxUint64 = 18_446_744_073_709_551_615n;
 
 describe("shared Go / Rust / TypeScript wire contracts", () => {
+  it("encodes explicit private desktop shutdown, separate from empty input", () => {
+    check("desktop_shutdown", DesktopRuntimeControlSchema, {
+      action: { case: "shutdown", value: {} },
+    });
+    expect(
+      fromBinary(DesktopRuntimeControlSchema, new Uint8Array()).action.case,
+    ).toBeUndefined();
+  });
   it("distinguishes running and completed-stop binary CLI results", () => {
     check("management_running", HostManagementResultSchema, {
       state: {

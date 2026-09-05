@@ -1204,6 +1204,111 @@ func (*HostManagementResult_Running) isHostManagementResult_State() {}
 
 func (*HostManagementResult_Stopped) isHostManagementResult_State() {}
 
+// Transitional desktop -> owned Rust Runtime child control. Only accepted on
+// explicitly enabled inherited stdin, never HTTP. A 4-byte big-endian length
+// prefixes a message (maximum 4096 bytes). EOF alone must not stop the Runtime.
+type DesktopShutdownRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DesktopShutdownRequest) Reset() {
+	*x = DesktopShutdownRequest{}
+	mi := &file_armadra_v1_common_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DesktopShutdownRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DesktopShutdownRequest) ProtoMessage() {}
+
+func (x *DesktopShutdownRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_common_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DesktopShutdownRequest.ProtoReflect.Descriptor instead.
+func (*DesktopShutdownRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{18}
+}
+
+type DesktopRuntimeControl struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Action:
+	//
+	//	*DesktopRuntimeControl_Shutdown
+	Action        isDesktopRuntimeControl_Action `protobuf_oneof:"action"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DesktopRuntimeControl) Reset() {
+	*x = DesktopRuntimeControl{}
+	mi := &file_armadra_v1_common_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DesktopRuntimeControl) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DesktopRuntimeControl) ProtoMessage() {}
+
+func (x *DesktopRuntimeControl) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_common_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DesktopRuntimeControl.ProtoReflect.Descriptor instead.
+func (*DesktopRuntimeControl) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_common_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *DesktopRuntimeControl) GetAction() isDesktopRuntimeControl_Action {
+	if x != nil {
+		return x.Action
+	}
+	return nil
+}
+
+func (x *DesktopRuntimeControl) GetShutdown() *DesktopShutdownRequest {
+	if x != nil {
+		if x, ok := x.Action.(*DesktopRuntimeControl_Shutdown); ok {
+			return x.Shutdown
+		}
+	}
+	return nil
+}
+
+type isDesktopRuntimeControl_Action interface {
+	isDesktopRuntimeControl_Action()
+}
+
+type DesktopRuntimeControl_Shutdown struct {
+	Shutdown *DesktopShutdownRequest `protobuf:"bytes,1,opt,name=shutdown,proto3,oneof"`
+}
+
+func (*DesktopRuntimeControl_Shutdown) isDesktopRuntimeControl_Action() {}
+
 var File_armadra_v1_common_proto protoreflect.FileDescriptor
 
 const file_armadra_v1_common_proto_rawDesc = "" +
@@ -1292,7 +1397,11 @@ const file_armadra_v1_common_proto_rawDesc = "" +
 	"\x14HostManagementResult\x122\n" +
 	"\arunning\x18\x01 \x01(\v2\x16.armadra.v1.HostStatusH\x00R\arunning\x128\n" +
 	"\astopped\x18\x02 \x01(\v2\x1c.armadra.v1.HostStoppedStateH\x00R\astoppedB\a\n" +
-	"\x05stateB#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	"\x05state\"\x18\n" +
+	"\x16DesktopShutdownRequest\"c\n" +
+	"\x15DesktopRuntimeControl\x12@\n" +
+	"\bshutdown\x18\x01 \x01(\v2\".armadra.v1.DesktopShutdownRequestH\x00R\bshutdownB\b\n" +
+	"\x06actionB#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_common_proto_rawDescOnce sync.Once
@@ -1306,26 +1415,28 @@ func file_armadra_v1_common_proto_rawDescGZIP() []byte {
 	return file_armadra_v1_common_proto_rawDescData
 }
 
-var file_armadra_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_armadra_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_armadra_v1_common_proto_goTypes = []any{
-	(*ProtocolVersion)(nil),      // 0: armadra.v1.ProtocolVersion
-	(*HelloRequest)(nil),         // 1: armadra.v1.HelloRequest
-	(*HelloResponse)(nil),        // 2: armadra.v1.HelloResponse
-	(*ErrorResponse)(nil),        // 3: armadra.v1.ErrorResponse
-	(*Scope)(nil),                // 4: armadra.v1.Scope
-	(*CommandMeta)(nil),          // 5: armadra.v1.CommandMeta
-	(*SessionAddress)(nil),       // 6: armadra.v1.SessionAddress
-	(*TerminalInput)(nil),        // 7: armadra.v1.TerminalInput
-	(*StreamAck)(nil),            // 8: armadra.v1.StreamAck
-	(*StreamFrame)(nil),          // 9: armadra.v1.StreamFrame
-	(*HostStatus)(nil),           // 10: armadra.v1.HostStatus
-	(*HostStatusRequest)(nil),    // 11: armadra.v1.HostStatusRequest
-	(*HostStopRequest)(nil),      // 12: armadra.v1.HostStopRequest
-	(*HostStopResponse)(nil),     // 13: armadra.v1.HostStopResponse
-	(*HostControlRequest)(nil),   // 14: armadra.v1.HostControlRequest
-	(*HostControlResponse)(nil),  // 15: armadra.v1.HostControlResponse
-	(*HostStoppedState)(nil),     // 16: armadra.v1.HostStoppedState
-	(*HostManagementResult)(nil), // 17: armadra.v1.HostManagementResult
+	(*ProtocolVersion)(nil),        // 0: armadra.v1.ProtocolVersion
+	(*HelloRequest)(nil),           // 1: armadra.v1.HelloRequest
+	(*HelloResponse)(nil),          // 2: armadra.v1.HelloResponse
+	(*ErrorResponse)(nil),          // 3: armadra.v1.ErrorResponse
+	(*Scope)(nil),                  // 4: armadra.v1.Scope
+	(*CommandMeta)(nil),            // 5: armadra.v1.CommandMeta
+	(*SessionAddress)(nil),         // 6: armadra.v1.SessionAddress
+	(*TerminalInput)(nil),          // 7: armadra.v1.TerminalInput
+	(*StreamAck)(nil),              // 8: armadra.v1.StreamAck
+	(*StreamFrame)(nil),            // 9: armadra.v1.StreamFrame
+	(*HostStatus)(nil),             // 10: armadra.v1.HostStatus
+	(*HostStatusRequest)(nil),      // 11: armadra.v1.HostStatusRequest
+	(*HostStopRequest)(nil),        // 12: armadra.v1.HostStopRequest
+	(*HostStopResponse)(nil),       // 13: armadra.v1.HostStopResponse
+	(*HostControlRequest)(nil),     // 14: armadra.v1.HostControlRequest
+	(*HostControlResponse)(nil),    // 15: armadra.v1.HostControlResponse
+	(*HostStoppedState)(nil),       // 16: armadra.v1.HostStoppedState
+	(*HostManagementResult)(nil),   // 17: armadra.v1.HostManagementResult
+	(*DesktopShutdownRequest)(nil), // 18: armadra.v1.DesktopShutdownRequest
+	(*DesktopRuntimeControl)(nil),  // 19: armadra.v1.DesktopRuntimeControl
 }
 var file_armadra_v1_common_proto_depIdxs = []int32{
 	0,  // 0: armadra.v1.HelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
@@ -1341,11 +1452,12 @@ var file_armadra_v1_common_proto_depIdxs = []int32{
 	3,  // 10: armadra.v1.HostControlResponse.error:type_name -> armadra.v1.ErrorResponse
 	10, // 11: armadra.v1.HostManagementResult.running:type_name -> armadra.v1.HostStatus
 	16, // 12: armadra.v1.HostManagementResult.stopped:type_name -> armadra.v1.HostStoppedState
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	18, // 13: armadra.v1.DesktopRuntimeControl.shutdown:type_name -> armadra.v1.DesktopShutdownRequest
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_common_proto_init() }
@@ -1372,13 +1484,16 @@ func file_armadra_v1_common_proto_init() {
 		(*HostManagementResult_Running)(nil),
 		(*HostManagementResult_Stopped)(nil),
 	}
+	file_armadra_v1_common_proto_msgTypes[19].OneofWrappers = []any{
+		(*DesktopRuntimeControl_Shutdown)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_common_proto_rawDesc), len(file_armadra_v1_common_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   18,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

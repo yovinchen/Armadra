@@ -109,3 +109,13 @@ message HostManagementResult {
     HostStoppedState stopped = 2;
   }
 }
+
+// Transitional desktop -> owned Rust Runtime child control. Only accepted on
+// explicitly enabled inherited stdin, never HTTP. A 4-byte big-endian length
+// prefixes a message (maximum 4096 bytes). EOF alone must not stop the Runtime.
+message DesktopShutdownRequest {}
+message DesktopRuntimeControl {
+  oneof action {
+    DesktopShutdownRequest shutdown = 1;
+  }
+}
