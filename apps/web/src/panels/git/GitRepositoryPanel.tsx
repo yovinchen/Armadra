@@ -128,6 +128,10 @@ export function actionTarget(action: GitRepositoryAction): string {
       return `${action.targetOid}${action.message ? ` · ${action.message}` : ""}`;
     case "startRebase":
       return action.onto;
+    case "startInteractiveRebase":
+      return `${action.onto} · ${action.todo
+        .map((entry) => `${entry.command} ${entry.oid.slice(0, 8)}`)
+        .join(", ")}`;
     case "continueIntegration":
     case "abortIntegration":
     case "skipIntegration":
@@ -632,6 +636,9 @@ function RepositorySession({
                 signal,
               )
             }
+            loadRebaseTodo={(onto, signal) =>
+              runtimeApi.gitRepositoryRebaseTodo(workspaceId, onto, signal)
+            }
             markResolved={(path) =>
               runtimeApi.gitMarkResolved(workspaceId, [path])
             }
@@ -785,6 +792,12 @@ function RepositorySession({
               )}
               {confirmation.action.kind === "startRebase" && (
                 <div>
+                  <dd>{t("gitIntegration.rebaseSafety")}</dd>
+                </div>
+              )}
+              {confirmation.action.kind === "startInteractiveRebase" && (
+                <div>
+                  <dd>{t("gitRepo.rebaseTodoSafety")}</dd>
                   <dd>{t("gitIntegration.rebaseSafety")}</dd>
                 </div>
               )}

@@ -70,6 +70,50 @@ pub struct ExpectedState {
     pub branch: Option<String>,
 }
 
+/// What an interactive rebase does with one replayed commit. Deliberately a
+/// small set: no `edit`, no `exec`, and no `fixup` — each of those either stops
+/// for an interaction this service cannot drive or runs an arbitrary command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RebaseTodoCommand {
+    Pick,
+    /// Combine into the previous entry. Git's own prefilled combined message is
+    /// kept, because no editor runs.
+    Squash,
+    Drop,
+}
+impl RebaseTodoCommand {
+    fn keyword(self) -> &'static str {
+        match self {
+            Self::Pick => "pick",
+            Self::Squash => "squash",
+            Self::Drop => "drop",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RebaseTodoEntry {
+    pub oid: String,
+    pub command: RebaseTodoCommand,
+}
+
+/// The commits `StartInteractiveRebase` would replay, oldest first — the order
+/// the todo list itself uses.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RebaseTodoPreview {
+    pub onto: String,
+    /// The merge base the replay starts from.
+    pub base: String,
+    pub head: ExpectedState,
+    pub commits: Vec<CommitRecord>,
+    /// A merge commit in the range: `git rebase` would flatten or refuse it,
+    /// so the todo editor is not offered for this range at all.
+    pub has_merges: bool,
+}
+
 /// How far back a reset takes the repository. Each mode loses strictly more
 /// than the one before it, so the caller names the one it means.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -255,6 +299,14 @@ pub enum RepositoryAction {
     /// owned integration recovered through Continue/Abort, never an autostash.
     StartRebase {
         onto: String,
+        expected_state_token: String,
+    },
+    /// Replay the current branch onto `onto` following a reviewed todo list.
+    /// The list must name every commit that would be replayed, so a commit can
+    /// only be dropped by saying `drop`, never by leaving it out.
+    StartInteractiveRebase {
+        onto: String,
+        todo: Vec<RebaseTodoEntry>,
         expected_state_token: String,
     },
     ContinueIntegration {
@@ -1132,10 +1184,26 @@ impl RepositoryService {
         token: &Cancellation,
         mutation_started: Option<Arc<AtomicBool>>,
     ) -> AppResult<CommandOutput> {
+        self.output_with(directory, arguments, timeout, token, mutation_started, &[])
+            .await
+    }
+
+    /// `environment` exists only for the sequence editor an interactive rebase
+    /// needs; every other command runs with the fixed environment below.
+    async fn output_with(
+        &self,
+        directory: &Path,
+        arguments: Vec<String>,
+        timeout: Duration,
+        token: &Cancellation,
+        mutation_started: Option<Arc<AtomicBool>>,
+        environment: &[(String, String)],
+    ) -> AppResult<CommandOutput> {
         let arguments = crate::git::access::arguments(arguments, self.allow_helpers)?;
         let policy = GitRunPolicy {
             timeout,
             allow_helpers: self.allow_helpers,
+            environment: environment.to_vec(),
         };
         let lease = self.command_lease()?;
         let directory = directory.to_owned();
@@ -1500,6 +1568,28 @@ impl RepositoryService {
                     .await?;
                 stash::validate_state_token(expected_state_token)?;
             }
+            RepositoryAction::StartInteractiveRebase {
+                onto,
+                todo,
+                expected_state_token,
+            } => {
+                self.validate_reference(&context.repository, onto, &token)
+                    .await?;
+                stash::validate_state_token(expected_state_token)?;
+                if todo.is_empty() || todo.len() > 1_000 {
+                    return Err(AppError::BadRequest(
+                        "A rebase todo must list between one and 1000 commits".into(),
+                    ));
+                }
+                for entry in todo {
+                    require_oid(&entry.oid)?;
+                }
+                if todo.first().map(|entry| entry.command) == Some(RebaseTodoCommand::Squash) {
+                    return Err(AppError::BadRequest(
+                        "The first replayed commit has nothing to squash into".into(),
+                    ));
+                }
+            }
             RepositoryAction::ContinueIntegration {
                 session_id,
                 expected_state_token,
@@ -1695,6 +1785,7 @@ impl RepositoryService {
                 | RepositoryAction::StartCherryPick { .. }
                 | RepositoryAction::Revert { .. }
                 | RepositoryAction::StartRebase { .. }
+                | RepositoryAction::StartInteractiveRebase { .. }
                 | RepositoryAction::SkipIntegration { .. }
                 | RepositoryAction::ContinueIntegration { .. }
                 | RepositoryAction::AbortIntegration { .. }
@@ -1727,6 +1818,10 @@ impl RepositoryService {
                 expected_state_token,
             } => {
                 self.start_rebase(context, onto, expected_state_token, expected, operation)
+                    .await
+            }
+            RepositoryAction::StartInteractiveRebase { .. } => {
+                self.start_interactive_rebase(context, action, expected, operation)
                     .await
             }
             RepositoryAction::SkipIntegration {
@@ -2810,6 +2905,9 @@ async fn read_output(mut reader: impl AsyncRead + Unpin, limit: usize) -> AppRes
 struct GitRunPolicy {
     timeout: Duration,
     allow_helpers: bool,
+    /// Extra variables applied after the fixed environment below, so a caller
+    /// can never weaken the prompt/askpass/config lockdown.
+    environment: Vec<(String, String)>,
 }
 async fn run_git_status(
     directory: &Path,
@@ -2875,6 +2973,11 @@ async fn run_git_status(
     }
     if !policy.allow_helpers {
         crate::git::access::restrict_async(&mut command);
+    }
+    // Applied last so the lockdown above cannot be reintroduced by a caller,
+    // and only ever the sequence editor an interactive rebase supplies.
+    for (name, value) in &policy.environment {
+        command.env(name, value);
     }
     let mut child = command
         .spawn()

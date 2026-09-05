@@ -6,6 +6,7 @@ import type {
   GitConflictSide,
   GitExpectedState,
   GitIntegrationSnapshot,
+  GitRebaseTodoPreview,
   GitRepositoryAction,
 } from "@armadra/shared";
 import { useT } from "../../app/preferences-store";
@@ -13,6 +14,7 @@ import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Field, ReadError, selectClass } from "./forms";
 import { CherryPick } from "./CherryPick";
+import { RebaseTodo } from "./RebaseTodo";
 import { invalidateGitQueries } from "./queries";
 
 export interface IntegrationsProps {
@@ -26,6 +28,11 @@ export interface IntegrationsProps {
     mainline: number | null,
     signal: AbortSignal,
   ) => Promise<GitCherryPickPreview>;
+  /** The commits an interactive rebase onto that commit would replay. */
+  loadRebaseTodo: (
+    onto: string,
+    signal: AbortSignal,
+  ) => Promise<GitRebaseTodoPreview>;
   request: (action: GitRepositoryAction, expected: GitExpectedState) => void;
   openFile: (path: string) => void;
   /**
@@ -59,6 +66,7 @@ function IntegrationSession({
   busy,
   loadSnapshot,
   loadCherryPick,
+  loadRebaseTodo,
   request,
   openFile,
   markResolved,
@@ -263,6 +271,15 @@ function IntegrationSession({
               </Button>
             </fieldset>
           </form>
+          <RebaseTodo
+            workspaceId={workspaceId}
+            repositoryKey={repositoryKey}
+            onto={onto?.oid ?? ""}
+            state={state}
+            disabled={!canStart}
+            loadPreview={loadRebaseTodo}
+            request={request}
+          />
           <CherryPick
             workspaceId={workspaceId}
             repositoryKey={repositoryKey}

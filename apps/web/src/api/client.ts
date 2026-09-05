@@ -73,6 +73,7 @@ import {
   gitBranchSnapshotSchema,
   gitHistoryPageSchema,
   gitWorktreesSchema,
+  gitRebaseTodoPreviewSchema,
   gitTagSnapshotSchema,
   gitRemotesSchema,
   gitStashSnapshotSchema,
@@ -1026,6 +1027,17 @@ export const runtimeApi = {
     request(
       `/api/workspaces/${query(workspaceId)}/git/repository/worktrees?path=.`,
       gitWorktreesSchema,
+      { signal },
+    ),
+  /** The commits an interactive rebase onto `onto` would replay, in order. */
+  gitRepositoryRebaseTodo: (
+    workspaceId: string,
+    onto: string,
+    signal?: AbortSignal,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/rebase-todo?path=.&onto=${query(onto)}`,
+      gitRebaseTodoPreviewSchema,
       { signal },
     ),
   gitRepositoryTags: (workspaceId: string, signal?: AbortSignal) =>

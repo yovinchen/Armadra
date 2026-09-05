@@ -247,6 +247,26 @@ pub async fn history(
         .await
         .map(Json)
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RebaseTodoQuery {
+    #[serde(default = "root_path")]
+    path: String,
+    onto: String,
+}
+/// The commits an interactive rebase would replay, in todo order.
+pub async fn rebase_todo(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<RebaseTodoQuery>,
+) -> AppResult<Json<RebaseTodoPreview>> {
+    let workspace = workspace(&state, &id, false).await?;
+    REPOSITORIES
+        .with_execution(workspace.permissions.execute)
+        .rebase_todo_preview(Path::new(&workspace.root_path), &query.path, &query.onto)
+        .await
+        .map(Json)
+}
 pub async fn tags(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,

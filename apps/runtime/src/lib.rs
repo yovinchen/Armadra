@@ -145,6 +145,10 @@ pub fn router_with_state(state: AppState) -> Router {
             get(git_api::worktrees),
         )
         .route(
+            "/api/workspaces/{workspace_id}/git/repository/rebase-todo",
+            get(git_api::rebase_todo),
+        )
+        .route(
             "/api/workspaces/{workspace_id}/git/repository/tags",
             get(git_api::tags),
         )

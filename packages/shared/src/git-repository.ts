@@ -58,6 +58,27 @@ export const gitWorktreeRecordSchema = z.object({
   dirty: z.boolean().nullable(),
 });
 export const gitWorktreesSchema = z.array(gitWorktreeRecordSchema);
+/**
+ * What an interactive rebase does with one replayed commit. Deliberately small:
+ * no `edit`, no `exec`, and no `reword` — each would need an interactive editor
+ * this service cannot drive. A squash keeps Git's own prefilled combined
+ * message rather than one the app invents.
+ */
+export const gitRebaseTodoCommandSchema = z.enum(["pick", "squash", "drop"]);
+export const gitRebaseTodoEntrySchema = z
+  .object({ oid, command: gitRebaseTodoCommandSchema })
+  .strict();
+export const gitRebaseTodoPreviewSchema = z.object({
+  onto: oid,
+  /** The merge base the replay starts from. */
+  base: oid,
+  head: gitExpectedStateSchema,
+  /** Oldest first — the order the todo list itself uses. */
+  commits: z.array(gitCommitRecordSchema),
+  /** A merge commit in the range; the todo editor is not offered for it. */
+  hasMerges: z.boolean(),
+});
+
 export const gitTagRecordSchema = z.object({
   name: z.string(),
   fullRef: z.string(),
@@ -180,6 +201,16 @@ export const gitRepositoryActionSchema = z.discriminatedUnion("kind", [
       kind: z.literal("startRebase"),
       // A branch name or an object ID; the service resolves and confirms it.
       onto: z.string().min(1).max(1024),
+      expectedStateToken: stashStateToken,
+    })
+    .strict(),
+  z
+    .object({
+      // The todo must name every commit the rebase would replay: a commit can
+      // only be dropped by saying `drop`, never by being left out of the list.
+      kind: z.literal("startInteractiveRebase"),
+      onto: z.string().min(1).max(1024),
+      todo: z.array(gitRebaseTodoEntrySchema).min(1).max(1000),
       expectedStateToken: stashStateToken,
     })
     .strict(),
@@ -395,6 +426,9 @@ export type GitBranchRecord = z.infer<typeof gitBranchRecordSchema>;
 export type GitCommitRecord = z.infer<typeof gitCommitRecordSchema>;
 export type GitHistoryPage = z.infer<typeof gitHistoryPageSchema>;
 export type GitWorktreeRecord = z.infer<typeof gitWorktreeRecordSchema>;
+export type GitRebaseTodoCommand = z.infer<typeof gitRebaseTodoCommandSchema>;
+export type GitRebaseTodoEntry = z.infer<typeof gitRebaseTodoEntrySchema>;
+export type GitRebaseTodoPreview = z.infer<typeof gitRebaseTodoPreviewSchema>;
 export type GitTagRecord = z.infer<typeof gitTagRecordSchema>;
 export type GitTagSnapshot = z.infer<typeof gitTagSnapshotSchema>;
 export type GitRemoteRecord = z.infer<typeof gitRemoteRecordSchema>;

@@ -76,6 +76,9 @@ function setup(overrides: Partial<IntegrationsProps> = {}) {
     loadCherryPick: vi.fn(async () => {
       throw new Error("No commit selected");
     }),
+    loadRebaseTodo: vi.fn(async () => {
+      throw new Error("No rebase target selected");
+    }),
     request: vi.fn(),
     openFile: vi.fn(),
     markResolved: vi.fn(async () => ({ resolved: [] })),
