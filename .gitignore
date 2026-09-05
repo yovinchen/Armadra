@@ -25,3 +25,4 @@ target/
 
 # Claude Code 本机私有设置（impeccable 安装器写入的 hook）
 .claude/settings.local.json
+target-main/
