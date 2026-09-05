@@ -1,7 +1,8 @@
 # 跨端协议
 
 `armadra/v1/*.proto` 是 Go / Rust / TypeScript 消息的唯一来源。
-当前 major 1 / minor 1；Host 公开业务入口仍仅 Hello。会话、Scope、CommandMeta 与终端流契约不代表对应执行能力已完成。
+当前 major 1 / minor 1；Host 公开的匿名入口仍仅 Hello，`automation.proto` 的计划与命令会话方法走已认证 HTTPS 会话。
+会话、Scope 与终端流契约不代表对应执行能力已完成；`automation.plans.v1` 能力位只在 Host 真的配置了执行 Worker 时出现。
 
 minor 1 的 hostId 是数据目录持久身份，hostInstanceId 每次启动变化，均不是认证 token。
 minor 0 可协商且允许缺 hostId。传输控制帧上限 1 MiB，由宿主实施；编解码器不负责认证或授权。
@@ -43,7 +44,8 @@ Go 与 protobuf-es 保留未知字段，prost 接受但丢弃；Rust 若作透�
 CLI `--output protobuf` 返回单个无换行的 HostManagementResult；stopped 表示已完成停止，不能用接受请求的 ACK 替代。
 终端流 ACK 仅表示接收进度。
 
-共享样例覆盖 Unicode、二进制、整数边界、optional、oneof、未知字段和截断拒绝。
+共享样例覆盖 Unicode、二进制、整数边界、optional、oneof、未知字段和截断拒绝，
+以及自动化的未知 outcome、投递证据、命令会话不可重建状态与超出 JS 安全整数的 revision。
 验证证据见[实施记录](../docs/platform-implementation-status.md)；交叉构建不代表目标平台实机通过。
 
 参考：[Go 生成代码](https://protobuf.dev/reference/go/go-generated/)、[Protobuf-ES](https://github.com/bufbuild/protobuf-es/blob/v2.2.5/MANUAL.md)、
