@@ -1803,7 +1803,8 @@ globalThis.armadraReady = true;
     `owner=${returned.json?.owner} epoch=${returned.json?.epoch} reason=${returned.json?.reasonCode}`,
   );
   // The point of the reverse import: what the Host wrote while it owned the
-  // canvas is in the Runtime's own rows, not only in the package. The whole
+  // canvas is in the Runtime's own rows, not only in the package. The last Host
+  // write is the second offline rename from the stream section above. The whole
   // document is compared, not just the renamed field, so a rollback that
   // brought the name back while dropping a node would fail here.
   const current = await runtimeCall("GET", documentPath);
@@ -1811,11 +1812,11 @@ globalThis.armadraReady = true;
   step(
     "the Runtime reads back the edit the Host made while it owned the canvas",
     current.status === 200 &&
-      current.json?.board?.name === "迁移后的画布名" &&
+      current.json?.board?.name === "断线期间的第二次改动" &&
       restoredDigest ===
         digestOf({
           ...runtimeShape(reloaded.json ?? {}),
-          name: "迁移后的画布名",
+          name: "断线期间的第二次改动",
         }) &&
       restoredDigest !== runtimeDigest,
     `name=${current.json?.board?.name} sha256=${restoredDigest.slice(0, 16)} (pre-switch ${runtimeDigest.slice(0, 16)})`,
