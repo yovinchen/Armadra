@@ -633,9 +633,30 @@ pub fn stage_paths(workspace_root: &Path, paths: &[String]) -> AppResult<StageRe
     Ok(StageResult { staged })
 }
 
-/// Tracked paths are restored with `git checkout -- <path>`; untracked regular
-/// files are deleted. Directories and symlinks are refused.
-pub fn revert_paths(workspace_root: &Path, paths: &[String]) -> AppResult<RevertResult> {
+/// Which version a restore takes the file back to. The two are deliberately
+/// separate actions, because they lose different work (plan §3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RestoreSource {
+    /// `git checkout -- <path>`: the working tree returns to what is staged.
+    /// A staged change survives; only the unstaged edit on top of it is lost.
+    #[default]
+    Index,
+    /// `git restore --source=HEAD --staged --worktree -- <path>`: the file
+    /// returns to the committed version and its staged change is dropped too.
+    Head,
+}
+
+/// Tracked paths are restored from the requested source; untracked regular
+/// files are deleted either way. Directories and symlinks are refused.
+///
+/// Restoring from HEAD also unstages, which is the whole difference from the
+/// index restore: the caller has to pick which of the two losses it wants.
+pub fn revert_paths(
+    workspace_root: &Path,
+    paths: &[String],
+    source: RestoreSource,
+) -> AppResult<RevertResult> {
     let context = require_repository(workspace_root)?;
     let requested = prepare_paths(&context, paths)?;
     let mut tracked = Vec::new();
@@ -656,7 +677,24 @@ pub fn revert_paths(workspace_root: &Path, paths: &[String]) -> AppResult<Revert
     }
     let mut reverted = Vec::new();
     if !tracked.is_empty() {
-        let mut args = vec!["checkout", "--"];
+        let mut args = match source {
+            RestoreSource::Index => vec!["checkout", "--"],
+            RestoreSource::Head => {
+                // Before the first commit there is no HEAD to restore from,
+                // and refusing is better than pretending the index is HEAD.
+                if git(
+                    &context.repository,
+                    &["rev-parse", "--verify", "-q", "HEAD^{commit}"],
+                )
+                .is_err()
+                {
+                    return Err(AppError::Conflict(
+                        "This branch has no commit to restore these files from".into(),
+                    ));
+                }
+                vec!["restore", "--source=HEAD", "--staged", "--worktree", "--"]
+            }
+        };
         args.extend(tracked.iter().map(String::as_str));
         git(&context.repository, &args)?;
         reverted.extend(tracked);
@@ -2099,6 +2137,7 @@ mod tests {
         let reverted = revert_paths(
             root.path(),
             &["tracked.txt".to_owned(), "untracked.txt".to_owned()],
+            RestoreSource::Index,
         )
         .unwrap();
         assert_eq!(
@@ -2111,6 +2150,64 @@ mod tests {
         );
         assert!(!root.path().join("untracked.txt").exists());
         assert!(read_status(root.path()).unwrap().changed_count == 0);
+    }
+
+    #[test]
+    fn restoring_from_the_index_keeps_the_staged_version_that_head_discards() {
+        let root = tempdir().unwrap();
+        fixture_repository(root.path());
+        fs::write(root.path().join("a.txt"), "committed\n").unwrap();
+        commit_all(root.path(), "initial");
+        // Stage one version, then edit again on top of it.
+        fs::write(root.path().join("a.txt"), "staged\n").unwrap();
+        stage_paths(root.path(), &["a.txt".to_owned()]).unwrap();
+        fs::write(root.path().join("a.txt"), "working\n").unwrap();
+
+        revert_paths(root.path(), &["a.txt".to_owned()], RestoreSource::Index).unwrap();
+        assert_eq!(
+            fs::read_to_string(root.path().join("a.txt")).unwrap(),
+            "staged\n",
+            "the index restore drops only the unstaged edit"
+        );
+        let staged_row = read_status(root.path())
+            .unwrap()
+            .files
+            .into_iter()
+            .find(|file| file.path == "a.txt")
+            .expect("the staged change survives");
+        assert!(staged_row.staged && !staged_row.unstaged);
+
+        revert_paths(root.path(), &["a.txt".to_owned()], RestoreSource::Head).unwrap();
+        assert_eq!(
+            fs::read_to_string(root.path().join("a.txt")).unwrap(),
+            "committed\n",
+            "the HEAD restore also discards the staged version"
+        );
+        assert!(
+            read_status(root.path())
+                .unwrap()
+                .files
+                .iter()
+                .all(|file| file.path != "a.txt"),
+            "restoring from HEAD unstages as well"
+        );
+    }
+
+    #[test]
+    fn restoring_from_head_is_refused_before_the_first_commit() {
+        let root = tempdir().unwrap();
+        fixture_repository(root.path());
+        fs::write(root.path().join("a.txt"), "new\n").unwrap();
+        stage_paths(root.path(), &["a.txt".to_owned()]).unwrap();
+        assert!(matches!(
+            revert_paths(root.path(), &["a.txt".to_owned()], RestoreSource::Head),
+            Err(AppError::Conflict(_))
+        ));
+        // Nothing was touched: the staged content is still there.
+        assert_eq!(
+            fs::read_to_string(root.path().join("a.txt")).unwrap(),
+            "new\n"
+        );
     }
 
     #[cfg(unix)]
@@ -2132,11 +2229,11 @@ mod tests {
         .unwrap();
 
         assert!(matches!(
-            revert_paths(root.path(), &["folder".to_owned()]),
+            revert_paths(root.path(), &["folder".to_owned()], RestoreSource::Index),
             Err(AppError::Forbidden(_))
         ));
         assert!(matches!(
-            revert_paths(root.path(), &["leak.txt".to_owned()]),
+            revert_paths(root.path(), &["leak.txt".to_owned()], RestoreSource::Index),
             Err(AppError::Forbidden(_))
         ));
         assert!(outside.path().join("secret.txt").exists());

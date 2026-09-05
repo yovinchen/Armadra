@@ -1940,10 +1940,20 @@ pub async fn git_unstage(
     Ok(Json(result))
 }
 
+/// `POST /api/workspaces/{id}/git/revert`: restoring from the index and
+/// restoring from HEAD lose different work, so the source is explicit.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RevertRequest {
+    paths: Vec<String>,
+    #[serde(default)]
+    source: git::RestoreSource,
+}
+
 pub async fn git_revert(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
-    Json(request): Json<PathsRequest>,
+    Json(request): Json<RevertRequest>,
 ) -> AppResult<Json<git::RevertResult>> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
     if !workspace.permissions.read || !workspace.permissions.write {
@@ -1960,7 +1970,11 @@ pub async fn git_revert(
         .await?;
     let result = tokio::task::spawn_blocking(move || {
         let _guard = guard;
-        git::revert_paths(Path::new(&workspace.root_path), &request.paths)
+        git::revert_paths(
+            Path::new(&workspace.root_path),
+            &request.paths,
+            request.source,
+        )
     })
     .await??;
     Ok(Json(result))

@@ -21,7 +21,12 @@ import {
   Undo2,
   X,
 } from "lucide-react";
-import type { DiffScope, GitFileStatus, GitHunkScope } from "@armadra/shared";
+import type {
+  DiffScope,
+  GitFileStatus,
+  GitHunkScope,
+  GitRestoreSource,
+} from "@armadra/shared";
 
 type DiffFileStatus = GitFileStatus["status"];
 
@@ -88,7 +93,10 @@ export function SourceControlDrawer() {
   const t = useT();
 
   const [message, setMessage] = useState("");
-  const [revertPath, setRevertPath] = useState<string | null>(null);
+  const [restore, setRestore] = useState<{
+    path: string;
+    untracked: boolean;
+  } | null>(null);
   const [confirmInit, setConfirmInit] = useState(false);
   const [amend, setAmend] = useState(false);
   const [acknowledgePublished, setAcknowledgePublished] = useState(false);
@@ -123,7 +131,8 @@ export function SourceControlDrawer() {
     onError: fail,
   });
   const revert = useMutation({
-    mutationFn: (path: string) => runtimeApi.gitRevert(workspaceId!, [path]),
+    mutationFn: (input: { path: string; source: GitRestoreSource }) =>
+      runtimeApi.gitRevert(workspaceId!, [input.path], input.source),
     onSuccess: invalidate,
     onError: fail,
   });
@@ -250,21 +259,21 @@ export function SourceControlDrawer() {
             <Minus />
           </IconButton>
         ) : (
-          <>
-            <IconButton
-              label={t("scm.stage")}
-              onClick={() => stage.mutate(file.path)}
-            >
-              <Plus />
-            </IconButton>
-            <IconButton
-              label={t("scm.revert")}
-              onClick={() => setRevertPath(file.path)}
-            >
-              <Undo2 />
-            </IconButton>
-          </>
+          <IconButton
+            label={t("scm.stage")}
+            onClick={() => stage.mutate(file.path)}
+          >
+            <Plus />
+          </IconButton>
         )}
+        <IconButton
+          label={t("scm.restore")}
+          onClick={() =>
+            setRestore({ path: file.path, untracked: file.status === "?" })
+          }
+        >
+          <Undo2 />
+        </IconButton>
       </div>
     </div>
   );
@@ -554,31 +563,59 @@ export function SourceControlDrawer() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/*
+       * Restoring from the index and restoring from HEAD lose different work,
+       * so they are two labelled actions rather than one “revert” whose
+       * effect the user has to guess.
+       */}
       <AlertDialog
-        open={revertPath !== null}
+        open={restore !== null}
         onOpenChange={(next) => {
-          if (!next) setRevertPath(null);
+          if (!next) setRestore(null);
         }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {t("scm.revertTitle", { path: revertPath ?? "" })}
+              {t("scm.revertTitle", { path: restore?.path ?? "" })}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {t("scm.revertDescription")}
+              {t(
+                restore?.untracked
+                  ? "scm.restoreUntracked"
+                  : "scm.restoreDescription",
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t("scm.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (revertPath) revert.mutate(revertPath);
-                setRevertPath(null);
-              }}
-            >
-              {t("scm.revert")}
-            </AlertDialogAction>
+            {restore?.untracked ? (
+              <AlertDialogAction
+                onClick={() => {
+                  if (restore)
+                    revert.mutate({ path: restore.path, source: "index" });
+                  setRestore(null);
+                }}
+              >
+                {t("scm.restoreDelete")}
+              </AlertDialogAction>
+            ) : (
+              (["index", "head"] as const).map((source) => (
+                <AlertDialogAction
+                  key={source}
+                  onClick={() => {
+                    if (restore) revert.mutate({ path: restore.path, source });
+                    setRestore(null);
+                  }}
+                >
+                  {t(
+                    source === "index"
+                      ? "scm.restoreFromIndex"
+                      : "scm.restoreFromHead",
+                  )}
+                </AlertDialogAction>
+              ))
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

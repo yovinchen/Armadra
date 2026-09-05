@@ -858,6 +858,19 @@ export const gitPathsRequestSchema = z.object({
   paths: z.array(z.string().min(1)).min(1),
 });
 
+/**
+ * Which version a restore takes a tracked file back to. `index` keeps the
+ * staged change and drops only the unstaged edit on top of it; `head` also
+ * discards the staged change and unstages the file. They lose different work,
+ * so the UI offers them as two separate actions rather than one “revert”.
+ */
+export const gitRestoreSourceSchema = z.enum(["index", "head"]);
+
+export const gitRevertRequestSchema = z.object({
+  paths: z.array(z.string().min(1)).min(1),
+  source: gitRestoreSourceSchema.default("index"),
+});
+
 export const gitStageResponseSchema = z.object({
   staged: z.array(z.string()),
 });
@@ -1395,6 +1408,7 @@ export type GitFileDiff = z.infer<typeof gitFileDiffSchema>;
 export type GitUnstageResponse = z.infer<typeof gitUnstageResponseSchema>;
 export type GitInitResponse = z.infer<typeof gitInitResponseSchema>;
 export type GitHeadCommit = z.infer<typeof gitHeadCommitSchema>;
+export type GitRestoreSource = z.infer<typeof gitRestoreSourceSchema>;
 export type GitCommitRequest = z.infer<typeof gitCommitRequestSchema>;
 export type GitCommitResponse = z.infer<typeof gitCommitResponseSchema>;
 export type GitCloneRequest = z.infer<typeof gitCloneRequestSchema>;

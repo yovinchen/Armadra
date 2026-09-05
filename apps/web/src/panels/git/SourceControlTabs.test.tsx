@@ -126,6 +126,40 @@ it("keeps Changes as the default and stops its commit shortcut outside that tab"
   expect(screen.getByRole("dialog").className).toContain("max-w-full");
 });
 
+it("names both restore sources and sends the one that was chosen", async () => {
+  vi.mocked(runtimeApi.gitStatus).mockResolvedValue({
+    repository: true,
+    branch: "main",
+    files: [{ path: "feature.ts", status: "M", staged: true, unstaged: true }],
+    changedCount: 1,
+    ahead: 0,
+    behind: 0,
+  });
+  const revert = vi
+    .spyOn(runtimeApi, "gitRevert")
+    .mockResolvedValue({ reverted: ["feature.ts"] });
+  render(
+    <TestProviders>
+      <SourceControlDrawer />
+    </TestProviders>,
+  );
+  fireEvent.click(
+    (await screen.findAllByRole("button", { name: "Restore" }))[0]!,
+  );
+  // Both losses are spelled out, and neither happens until one is picked.
+  await screen.findByText(/Restore from the index/);
+  expect(revert).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Overwrite from HEAD (also unstages)" }),
+  );
+  await waitFor(() => expect(revert).toHaveBeenCalledTimes(1));
+  expect(revert.mock.calls[0]).toEqual([
+    "019ff7d1-0d12-7421-833d-2c5e8d64ed21",
+    ["feature.ts"],
+    "head",
+  ]);
+});
+
 it("amends only after acknowledging a published rewrite", async () => {
   const oid = "c".repeat(40);
   vi.spyOn(runtimeApi, "gitHeadCommit").mockResolvedValue({

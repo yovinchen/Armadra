@@ -51,7 +51,9 @@ import {
   gitHeadCommitSchema,
   gitInitResponseSchema,
   gitPathsRequestSchema,
+  gitRevertRequestSchema,
   gitRevertResponseSchema,
+  type GitRestoreSource,
   gitStageResponseSchema,
   gitStatusSchema,
   legacyKanbanArchivePageSchema,
@@ -1124,11 +1126,23 @@ export const runtimeApi = {
       gitUnstageResponseSchema,
       { method: "POST", ...json(gitPathsRequestSchema.parse({ paths })) },
     ),
-  gitRevert: (workspaceId: string, paths: string[]) =>
+  /**
+   * `index` restores the working tree from what is staged; `head` restores
+   * from the commit and unstages as well. They lose different work, so the
+   * caller always says which one it means.
+   */
+  gitRevert: (
+    workspaceId: string,
+    paths: string[],
+    source: GitRestoreSource = "index",
+  ) =>
     request(
       `/api/workspaces/${workspaceId}/git/revert`,
       gitRevertResponseSchema,
-      { method: "POST", ...json(gitPathsRequestSchema.parse({ paths })) },
+      {
+        method: "POST",
+        ...json(gitRevertRequestSchema.parse({ paths, source })),
+      },
     ),
   /** The commit an amend would rewrite; null on an unborn branch. */
   gitHeadCommit: (workspaceId: string, signal?: AbortSignal) =>
