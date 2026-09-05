@@ -40,11 +40,7 @@ const flush = () => new Promise<void>((resolve) => queueMicrotask(resolve));
 
 describe("retired shapes", () => {
   it("仅停用bookmark/embed/video，原生note可引用", () => {
-    expect([...RETIRED_SHAPE_TYPES]).toEqual([
-      "bookmark",
-      "embed",
-      "video",
-    ]);
+    expect([...RETIRED_SHAPE_TYPES]).toEqual(["bookmark", "embed", "video"]);
     expect(isRetiredShapeType("note")).toBe(false);
     expect(isRetiredShapeType("geo")).toBe(false);
   });

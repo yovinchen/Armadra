@@ -1,9 +1,6 @@
 import { useMemo } from "react";
 import { create } from "zustand";
-import {
-  PERMISSION_MODES,
-  type PermissionMode,
-} from "@armadra/shared";
+import { PERMISSION_MODES, type PermissionMode } from "@armadra/shared";
 import {
   DEFAULT_LOCALE,
   LOCALES,

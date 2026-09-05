@@ -491,7 +491,11 @@ describe("git", () => {
 
 describe("写文件", () => {
   it("PUT 携带已读内容版本", async () => {
-    const fetchMock = stubJson({ path: "src/a.ts", size: 7, sha256:"b".repeat(64) });
+    const fetchMock = stubJson({
+      path: "src/a.ts",
+      size: 7,
+      sha256: "b".repeat(64),
+    });
 
     const result = await runtimeApi.writeFile(
       workspaceId,
@@ -501,7 +505,11 @@ describe("写文件", () => {
       "a".repeat(64),
     );
 
-    expect(result).toEqual({ path: "src/a.ts", size: 7, sha256:"b".repeat(64) });
+    expect(result).toEqual({
+      path: "src/a.ts",
+      size: 7,
+      sha256: "b".repeat(64),
+    });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(
       `http://127.0.0.1:43120/api/workspaces/${workspaceId}/file`,
@@ -511,12 +519,16 @@ describe("写文件", () => {
       path: "src/a.ts",
       content: "content",
       expectedSize: 3,
-      expectedSha256:"a".repeat(64),
+      expectedSha256: "a".repeat(64),
     });
   });
 
   it("不传 expectedSize 时不发这个键", async () => {
-    const fetchMock = stubJson({ path: "a.ts", size: 1, sha256:"b".repeat(64) });
+    const fetchMock = stubJson({
+      path: "a.ts",
+      size: 1,
+      sha256: "b".repeat(64),
+    });
 
     await runtimeApi.writeFile(workspaceId, "a.ts", "x");
 
@@ -690,16 +702,24 @@ describe("WebSocket 地址", () => {
 
 describe("Git execution permission errors", () => {
   it("uses the stable server code for actionable text and preserves unrelated errors", async () => {
-    stubJson({ code: "git_execution_required", message: "Internal Git stage label" }, false, 403);
+    stubJson(
+      { code: "git_execution_required", message: "Internal Git stage label" },
+      false,
+      403,
+    );
     try {
       await runtimeApi.listWorkspaces();
       throw new Error("Expected rejection");
     } catch (error) {
       expect(error).toBeInstanceOf(RuntimeRequestError);
-      expect((error as RuntimeRequestError).code).toBe("git_execution_required");
+      expect((error as RuntimeRequestError).code).toBe(
+        "git_execution_required",
+      );
       expect((error as Error).message).not.toBe("Internal Git stage label");
       expect((error as Error).message).toMatch(/工作区|Workspace/);
     }
-    expect(new RuntimeRequestError(403, "plain", "forbidden").message).toBe("plain");
+    expect(new RuntimeRequestError(403, "plain", "forbidden").message).toBe(
+      "plain",
+    );
   });
 });

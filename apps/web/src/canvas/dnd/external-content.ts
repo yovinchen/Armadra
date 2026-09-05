@@ -2,7 +2,9 @@ import { toast } from "sonner";
 import {
   ASSET_MIME_TYPES,
   MAX_ASSET_BYTES,
-  MAX_IMPORT_FILES, MAX_IMPORT_FILE_BYTES, MAX_IMPORT_BATCH_BYTES,
+  MAX_IMPORT_FILES,
+  MAX_IMPORT_FILE_BYTES,
+  MAX_IMPORT_BATCH_BYTES,
   type ImportedFileInfo,
   type Position,
   type CanvasNodeType,
@@ -171,24 +173,46 @@ export async function createImageShapes(
     if (target && !importTargetIsActive(target)) return [];
     try {
       if (file.size > MAX_ASSET_BYTES) {
-        toast.error(t("canvas.assetTooLarge", { limit: Math.round(MAX_ASSET_BYTES / 1024 / 1024) }));
+        toast.error(
+          t("canvas.assetTooLarge", {
+            limit: Math.round(MAX_ASSET_BYTES / 1024 / 1024),
+          }),
+        );
         throw new AssetTooLargeError();
       }
       // Keep tldraw's dimensions/hash/animation metadata and SVG sanitation,
       // but bind uploads to the workspace captured at the start of the drop.
       // The global asset store otherwise follows workspace switches mid-decode.
-      const mimes: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif", bmp: "image/bmp", svg: "image/svg+xml" };
-      let safeFile = file.type ? file : new File([file], file.name, { type: mimes[extensionOf(file.name)] ?? "" });
+      const mimes: Record<string, string> = {
+        png: "image/png",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        gif: "image/gif",
+        webp: "image/webp",
+        avif: "image/avif",
+        bmp: "image/bmp",
+        svg: "image/svg+xml",
+      };
+      let safeFile = file.type
+        ? file
+        : new File([file], file.name, {
+            type: mimes[extensionOf(file.name)] ?? "",
+          });
       if (safeFile.type === "image/svg+xml") {
         const sanitized = sanitizeSvg(await safeFile.text());
         if (!sanitized) throw new Error("SVG contains no safe image content");
-        safeFile = new File([sanitized], safeFile.name, { type: safeFile.type });
+        safeFile = new File([sanitized], safeFile.name, {
+          type: safeFile.type,
+        });
       }
       const info = await getAssetInfo(editor, safeFile);
       if (!info) throw new Error("Unsupported image format");
       if (!target || !importTargetIsActive(target)) return [];
       const asset = AssetRecordType.create(info);
-      const uploaded = await createAssetStore(() => target.workspaceId).upload(asset, safeFile);
+      const uploaded = await createAssetStore(() => target.workspaceId).upload(
+        asset,
+        safeFile,
+      );
       asset.props.src = uploaded.src;
       if (uploaded.meta) asset.meta = { ...asset.meta, ...uploaded.meta };
       if (asset) assets.push(asset);
@@ -199,7 +223,8 @@ export async function createImageShapes(
       toast.error(t("canvas.assetFailed", { name: file.name }));
     }
   }
-  if (assets.length === 0 || (target && !importTargetIsActive(target))) return [];
+  if (assets.length === 0 || (target && !importTargetIsActive(target)))
+    return [];
 
   const sizes = assets.map((asset) =>
     imageShapeSize({
@@ -250,7 +275,11 @@ export interface ImportTarget {
 export function captureImportTarget(): ImportTarget | null {
   const state = useCanvasStore.getState();
   if (!state.workspace || !state.document) return null;
-  return { workspaceId: state.workspace.id, boardId: state.document.board.id, editor: getEditor() };
+  return {
+    workspaceId: state.workspace.id,
+    boardId: state.document.board.id,
+    editor: getEditor(),
+  };
 }
 
 export function importTargetIsActive(target: ImportTarget): boolean {
@@ -263,37 +292,61 @@ export function importTargetIsActive(target: ImportTarget): boolean {
   );
 }
 
-function addImportedNode(target: ImportTarget, file: ImportedFileInfo, position: Position) {
+function addImportedNode(
+  target: ImportTarget,
+  file: ImportedFileInfo,
+  position: Position,
+) {
   if (!importTargetIsActive(target)) return;
   useCanvasStore.getState().addNode("editor", {
-    position, title: file.name, data: { kind: "editor", path: file.path },
+    position,
+    title: file.name,
+    data: { kind: "editor", path: file.path },
   });
 }
 
-export async function addNodeForPath(path: string, position: Position): Promise<void> {
+export async function addNodeForPath(
+  path: string,
+  position: Position,
+): Promise<void> {
   await addNodesForPaths([path], position);
 }
 
 /** App file trees already identify the workspace and file kind. Keep those
  * references in-place; failures never fall back to copying some external path. */
 export async function addWorkspaceEntriesToCanvas(
-  entries: readonly WorkspaceDragEntry[], position: Position,
+  entries: readonly WorkspaceDragEntry[],
+  position: Position,
   target: ImportTarget | null = captureImportTarget(),
 ): Promise<void> {
-  if (!target || !importTargetIsActive(target)) throw new FileDragError("fileDrag.destinationChanged");
-  if (!entries.length || entries.length > MAX_IMPORT_FILES) throw new FileDragError("fileDrag.invalidPayload");
+  if (!target || !importTargetIsActive(target))
+    throw new FileDragError("fileDrag.destinationChanged");
+  if (!entries.length || entries.length > MAX_IMPORT_FILES)
+    throw new FileDragError("fileDrag.invalidPayload");
   for (const [index, entry] of entries.entries()) {
     if (!importTargetIsActive(target)) return;
     assertRelativeWorkspacePath(entry.path);
     const point = offsetBy(position, index);
     if (entry.kind === "directory") {
-      const directory = await runtimeApi.listFiles(target.workspaceId, entry.path);
+      const directory = await runtimeApi.listFiles(
+        target.workspaceId,
+        entry.path,
+      );
       assertRelativeWorkspacePath(directory.path, true);
-      if (importTargetIsActive(target)) useCanvasStore.getState().addNode("files", {
-        position: point, title: entry.name, data: { kind: "files", path: directory.path },
-      });
+      if (importTargetIsActive(target))
+        useCanvasStore.getState().addNode("files", {
+          position: point,
+          title: entry.name,
+          data: { kind: "files", path: directory.path },
+        });
     } else if (target.editor && isImagePath(entry.path)) {
-      await importImageShape(target.editor, target.workspaceId, entry.path, point, target);
+      await importImageShape(
+        target.editor,
+        target.workspaceId,
+        entry.path,
+        point,
+        target,
+      );
     } else {
       const info = await runtimeApi.fileInfo(target.workspaceId, entry.path);
       assertRelativeWorkspacePath(info.path);
@@ -302,16 +355,28 @@ export async function addWorkspaceEntriesToCanvas(
   }
 }
 
-export async function addNodesForPaths(paths: readonly string[], position: Position): Promise<void> {
+export async function addNodesForPaths(
+  paths: readonly string[],
+  position: Position,
+): Promise<void> {
   const target = captureImportTarget();
   if (!target) return;
-  if (paths.length > MAX_IMPORT_FILES) { toast.error(t("canvas.importLimit")); return; }
+  if (paths.length > MAX_IMPORT_FILES) {
+    toast.error(t("canvas.importLimit"));
+    return;
+  }
   const external: { path: string; position: Position }[] = [];
   for (const [index, path] of paths.entries()) {
     if (!importTargetIsActive(target)) return;
     const point = offsetBy(position, index);
     if (target.editor && isImagePath(path)) {
-      await importImageShape(target.editor, target.workspaceId, path, point, target);
+      await importImageShape(
+        target.editor,
+        target.workspaceId,
+        path,
+        point,
+        target,
+      );
       continue;
     }
     try {
@@ -320,33 +385,51 @@ export async function addNodesForPaths(paths: readonly string[], position: Posit
     } catch {
       // Only an actual successful directory listing makes this a files node.
       // Permission errors must never masquerade as a file-type test.
-      const directory = await runtimeApi.listFiles(target.workspaceId, path).catch(() => null);
+      const directory = await runtimeApi
+        .listFiles(target.workspaceId, path)
+        .catch(() => null);
       if (directory) {
-        if (importTargetIsActive(target)) useCanvasStore.getState().addNode("files", {
-          position: point, title: baseName(path), data: { kind: "files", path: directory.path },
-        });
+        if (importTargetIsActive(target))
+          useCanvasStore.getState().addNode("files", {
+            position: point,
+            title: baseName(path),
+            data: { kind: "files", path: directory.path },
+          });
       } else external.push({ path, position: point });
     }
   }
   if (!external.length || !importTargetIsActive(target)) return;
   try {
-    const result = await runtimeApi.importLocalFiles(target.workspaceId, external.map((entry) => entry.path));
-    result.files.forEach((file, index) => addImportedNode(target, file, external[index]!.position));
+    const result = await runtimeApi.importLocalFiles(
+      target.workspaceId,
+      external.map((entry) => entry.path),
+    );
+    result.files.forEach((file, index) =>
+      addImportedNode(target, file, external[index]!.position),
+    );
     if (!importTargetIsActive(target)) toast.info(t("canvas.importSaved"));
   } catch (cause) {
-    toast.error(t("canvas.importFailed"), { description: (cause as Error).message });
+    toast.error(t("canvas.importFailed"), {
+      description: (cause as Error).message,
+    });
   }
 }
 
 /** Browser paths are names relative to an imported copy, never local paths. */
 export async function addBrowserFiles(
-  editor: Editor, files: readonly File[], point: Position,
+  editor: Editor,
+  files: readonly File[],
+  point: Position,
   target: ImportTarget | null = captureImportTarget(),
 ): Promise<void> {
   if (!target || !importTargetIsActive(target)) return;
-  if (files.length > MAX_IMPORT_FILES || files.some((file) => file.size > MAX_IMPORT_FILE_BYTES)
-      || files.reduce((sum, file) => sum + file.size, 0) > MAX_IMPORT_BATCH_BYTES) {
-    toast.error(t("canvas.importLimit")); return;
+  if (
+    files.length > MAX_IMPORT_FILES ||
+    files.some((file) => file.size > MAX_IMPORT_FILE_BYTES) ||
+    files.reduce((sum, file) => sum + file.size, 0) > MAX_IMPORT_BATCH_BYTES
+  ) {
+    toast.error(t("canvas.importLimit"));
+    return;
   }
   const images = files.filter((file) => routeFile(file) === "image");
   const others = files.filter((file) => routeFile(file) === "file");
@@ -363,10 +446,14 @@ export async function addBrowserFiles(
   });
   try {
     const result = await runtimeApi.importFiles(target.workspaceId, entries);
-    result.files.forEach((file, index) => addImportedNode(target, file, offsetBy(point, index + images.length)));
+    result.files.forEach((file, index) =>
+      addImportedNode(target, file, offsetBy(point, index + images.length)),
+    );
     if (!importTargetIsActive(target)) toast.info(t("canvas.importSaved"));
   } catch (cause) {
-    toast.error(t("canvas.importFailed"), { description: (cause as Error).message });
+    toast.error(t("canvas.importFailed"), {
+      description: (cause as Error).message,
+    });
   }
 }
 
@@ -380,11 +467,15 @@ export function pickFilesForCanvas(point?: Position): void {
   input.multiple = true;
   input.hidden = true;
   const position = point ?? fallbackPoint(editor);
-  input.addEventListener("change", () => {
-    const files = Array.from(input.files ?? []);
-    input.remove();
-    void addBrowserFiles(editor, files, position, target);
-  }, { once: true });
+  input.addEventListener(
+    "change",
+    () => {
+      const files = Array.from(input.files ?? []);
+      input.remove();
+      void addBrowserFiles(editor, files, position, target);
+    },
+    { once: true },
+  );
   input.addEventListener("cancel", () => input.remove(), { once: true });
   document.body.append(input);
   input.click();
@@ -414,7 +505,8 @@ async function importImageShape(
     const file = new File([await response.blob()], name, {
       type: imported.mimeType,
     });
-    if (importTargetIsActive(target)) await createImageShapes(editor, [file], position, target);
+    if (importTargetIsActive(target))
+      await createImageShapes(editor, [file], position, target);
   } catch (cause) {
     console.error("asset import failed", cause);
     toast.error(t("canvas.assetFailed", { name }));

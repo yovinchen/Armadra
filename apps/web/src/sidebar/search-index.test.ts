@@ -111,7 +111,9 @@ describe("searchBoards", () => {
   });
 
   it("大小写不敏感，并且尊重上限", () => {
-    expect(searchBoards(boards, "DEFAULT").map((hit) => hit.id)).toEqual(["b1"]);
+    expect(searchBoards(boards, "DEFAULT").map((hit) => hit.id)).toEqual([
+      "b1",
+    ]);
     expect(searchBoards(boards, "", 2)).toHaveLength(2);
   });
 });

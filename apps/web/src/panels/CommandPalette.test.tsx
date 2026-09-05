@@ -8,11 +8,7 @@ import {
   vi,
 } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import type {
-  BoardDocument,
-  Conversation,
-  Workspace,
-} from "@armadra/shared";
+import type { BoardDocument, Conversation, Workspace } from "@armadra/shared";
 
 import { installDomPolyfills, TestProviders } from "../app/test-harness";
 import { useCanvasStore } from "../store/canvas-store";

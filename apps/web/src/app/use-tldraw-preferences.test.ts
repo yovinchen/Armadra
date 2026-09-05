@@ -286,10 +286,14 @@ describe("偏好 → tldraw", () => {
 
   it("布尔项走的是 1 / 0 而不是 true / false", () => {
     // tldraw 的这两位是数字：写成布尔会被它的校验器拒掉。
-    expect(tldrawUserPatch({ ...FLIPPED, animation: true }, "dark", "en")
-      .animationSpeed).toBe(1);
-    expect(tldrawUserPatch({ ...FLIPPED, edgeScroll: true }, "dark", "en")
-      .edgeScrollSpeed).toBe(1);
+    expect(
+      tldrawUserPatch({ ...FLIPPED, animation: true }, "dark", "en")
+        .animationSpeed,
+    ).toBe(1);
+    expect(
+      tldrawUserPatch({ ...FLIPPED, edgeScroll: true }, "dark", "en")
+        .edgeScrollSpeed,
+    ).toBe(1);
   });
 
   it("输入设备的 auto 就是 tldraw 的 null，来回都认", () => {
@@ -344,9 +348,7 @@ describe("tldraw → 偏好（反向通道）", () => {
     ]) {
       const back = roundTrip(whiteboard);
       for (const [key, value] of Object.entries(back)) {
-        expect(value, key).toBe(
-          whiteboard[key as keyof WhiteboardPreferences],
-        );
+        expect(value, key).toBe(whiteboard[key as keyof WhiteboardPreferences]);
       }
     }
   });
@@ -372,7 +374,13 @@ describe("tldraw → 偏好（反向通道）", () => {
   it("背景 / 风格 / 颜色不在反向映射里", () => {
     const back = roundTrip(FLIPPED);
     // 这几项 tldraw 那头没有对应物，回写它们会把用户的选择抹掉。
-    for (const key of ["background", "gridSize", "style", "defaultColor", "defaultSize"]) {
+    for (const key of [
+      "background",
+      "gridSize",
+      "style",
+      "defaultColor",
+      "defaultSize",
+    ]) {
       expect(back).not.toHaveProperty(key);
     }
   });

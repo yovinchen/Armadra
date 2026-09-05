@@ -17,7 +17,8 @@ function isCodeMirrorCore(id: string): boolean {
   const marker = id.lastIndexOf("node_modules");
   if (marker < 0) return false;
   const rest = id.slice(marker + "node_modules".length + 1).replace(/\\/g, "/");
-  if (rest.startsWith("@codemirror/")) return !rest.startsWith("@codemirror/lang-");
+  if (rest.startsWith("@codemirror/"))
+    return !rest.startsWith("@codemirror/lang-");
   if (rest.startsWith("@lezer/")) {
     const name = rest.split("/")[1];
     return name === "common" || name === "highlight" || name === "lr";

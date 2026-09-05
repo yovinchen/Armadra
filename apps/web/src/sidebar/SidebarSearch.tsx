@@ -89,7 +89,12 @@ export function SidebarSearch({ open, onOpenChange }: SidebarSearchProps) {
       })),
     // `documents` 每次渲染都是新数组，用它的数据长度做依赖足够稳。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [boardId, boards, document, documents.map((item) => item.dataUpdatedAt).join()],
+    [
+      boardId,
+      boards,
+      document,
+      documents.map((item) => item.dataUpdatedAt).join(),
+    ],
   );
 
   const hits = useMemo(() => searchBoards(indexed, query), [indexed, query]);

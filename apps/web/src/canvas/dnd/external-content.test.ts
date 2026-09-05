@@ -58,7 +58,16 @@ describe("路径小工具", () => {
   });
 
   it("isImagePath 覆盖八种扩展名", () => {
-    for (const ext of ["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "svg"]) {
+    for (const ext of [
+      "png",
+      "jpg",
+      "jpeg",
+      "gif",
+      "webp",
+      "avif",
+      "bmp",
+      "svg",
+    ]) {
       expect(isImagePath(`/tmp/a.${ext}`)).toBe(true);
     }
     expect(isImagePath("/tmp/a.txt")).toBe(false);
@@ -135,9 +144,9 @@ describe("资产 meta", () => {
   });
 
   it("assetPath 读 meta.armadra.path", () => {
-    expect(assetPath({ meta: { armadra: { path: ".armadra/assets/ab.png" } } })).toBe(
-      ".armadra/assets/ab.png",
-    );
+    expect(
+      assetPath({ meta: { armadra: { path: ".armadra/assets/ab.png" } } }),
+    ).toBe(".armadra/assets/ab.png");
   });
 
   it("旧资产（没有 meta.armadra）回 null", () => {

@@ -244,10 +244,17 @@ describe("WorkspaceTree", () => {
     renderTree();
     await screen.findByText("repo");
 
-    fireEvent.pointerDown(screen.getByLabelText("添加项目"), new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
-    expect(await screen.findByRole("menuitem", { name: "导入文件夹副本…" })).toBeTruthy();
+    fireEvent.pointerDown(
+      screen.getByLabelText("添加项目"),
+      new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
+    );
+    expect(
+      await screen.findByRole("menuitem", { name: "导入文件夹副本…" }),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("menuitem", { name: "新建文件夹" }));
-    expect(await screen.findByRole("dialog", { name: "新建文件夹" })).toBeTruthy();
+    expect(
+      await screen.findByRole("dialog", { name: "新建文件夹" }),
+    ).toBeTruthy();
   });
 
   it("点工作空间行收起它的看板，状态写进偏好", async () => {

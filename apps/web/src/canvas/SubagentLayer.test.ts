@@ -15,10 +15,7 @@ const BOARD = "019ff7d1-0d12-7421-833d-2c5e8d64ed00";
 const PARENT = "019ff7d1-0d12-7421-833d-2c5e8d64ed01";
 const OTHER = "019ff7d1-0d12-7421-833d-2c5e8d64ed02";
 
-function terminal(
-  id: string,
-  patch: Partial<CanvasNode> = {},
-): CanvasNode {
+function terminal(id: string, patch: Partial<CanvasNode> = {}): CanvasNode {
   const now = "2026-09-04T10:00:00.000Z";
   return {
     id,

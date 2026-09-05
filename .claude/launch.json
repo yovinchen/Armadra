@@ -4,11 +4,7 @@
     {
       "name": "runtime",
       "runtimeExecutable": "cargo",
-      "runtimeArgs": [
-        "run",
-        "-p",
-        "armadra-runtime"
-      ],
+      "runtimeArgs": ["run", "-p", "armadra-runtime"],
       "port": 43120,
       "url": "http://127.0.0.1:43120"
     },

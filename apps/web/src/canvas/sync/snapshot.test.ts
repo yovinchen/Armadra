@@ -278,7 +278,7 @@ interface Generated {
 
 /** 造一份「节点 + 白板」混在一起的随机快照，并预先算好答案。 */
 function generate(random: () => number): Generated {
-  const pick = <T,>(items: readonly T[]): T =>
+  const pick = <T>(items: readonly T[]): T =>
     items[Math.floor(random() * items.length)]!;
   const store: Record<string, unknown> = {
     "document:document": { id: "document:document", typeName: "document" },
@@ -413,7 +413,10 @@ function generate(random: () => number): Generated {
   }
 
   return {
-    snapshot: { store, schema: { schemaVersion: 2, sequences: {} } } as unknown as TLStoreSnapshot,
+    snapshot: {
+      store,
+      schema: { schemaVersion: 2, sequences: {} },
+    } as unknown as TLStoreSnapshot,
     kept,
     dropped,
   };
@@ -450,27 +453,72 @@ describe("白板快照的往返性质（200 个随机用例）", () => {
   });
 });
 
-
 it("round-trips nested native children of a document frame and restores bindings last", () => {
   const root = "shape:019ff7d1-0d12-7421-833d-2c5e8d64ed03";
   const records: Record<string, unknown> = {
-    [root]: { id: root, typeName: "shape", type: "frame", parentId: "page:page" },
-    "shape:child": { id: "shape:child", typeName: "shape", type: "group", parentId: root, x: 12, y: 34 },
-    "shape:grandchild": { id: "shape:grandchild", typeName: "shape", type: "note", parentId: "shape:child", x: 5, y: 9, props: { richText: "keep me" } },
-    "shape:ref": { id: "shape:ref", typeName: "shape", type: "arrow", parentId: "page:page" },
-    "binding:ref": { id: "binding:ref", typeName: "binding", type: "arrow", fromId: "shape:ref", toId: "shape:grandchild" },
+    [root]: {
+      id: root,
+      typeName: "shape",
+      type: "frame",
+      parentId: "page:page",
+    },
+    "shape:child": {
+      id: "shape:child",
+      typeName: "shape",
+      type: "group",
+      parentId: root,
+      x: 12,
+      y: 34,
+    },
+    "shape:grandchild": {
+      id: "shape:grandchild",
+      typeName: "shape",
+      type: "note",
+      parentId: "shape:child",
+      x: 5,
+      y: 9,
+      props: { richText: "keep me" },
+    },
+    "shape:ref": {
+      id: "shape:ref",
+      typeName: "shape",
+      type: "arrow",
+      parentId: "page:page",
+    },
+    "binding:ref": {
+      id: "binding:ref",
+      typeName: "binding",
+      type: "arrow",
+      fromId: "shape:ref",
+      toId: "shape:grandchild",
+    },
   };
-  const snapshot = { store: records, schema: { schemaVersion: 2, sequences: {} } } as unknown as TLStoreSnapshot;
+  const snapshot = {
+    store: records,
+    schema: { schemaVersion: 2, sequences: {} },
+  } as unknown as TLStoreSnapshot;
   const saved = parseWhiteboard(serializeWhiteboard(snapshot))!;
   const { base, pending } = splitPendingBindings(saved);
   const live = new Map<string, unknown>(Object.entries(base.store));
   // Document projection creates the parent before deferred native records.
   live.set(root, records[root]);
   const batches: string[][] = [];
-  restorePendingRecords({ getShape: (id: string) => live.get(id), store: { put: (batch: { id: string }[]) => {
-    batches.push(batch.map((record) => record.id));
-    for (const record of batch) live.set(record.id, record);
-  } } } as never, pending);
+  restorePendingRecords(
+    {
+      getShape: (id: string) => live.get(id),
+      store: {
+        put: (batch: { id: string }[]) => {
+          batches.push(batch.map((record) => record.id));
+          for (const record of batch) live.set(record.id, record);
+        },
+      },
+    } as never,
+    pending,
+  );
   expect(live.get("shape:grandchild")).toEqual(records["shape:grandchild"]);
-  expect(batches).toEqual([["shape:child"], ["shape:grandchild"], ["binding:ref"]]);
+  expect(batches).toEqual([
+    ["shape:child"],
+    ["shape:grandchild"],
+    ["binding:ref"],
+  ]);
 });

@@ -107,12 +107,10 @@ describe("file attachments", () => {
     });
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue({
-          ok: true,
-          blob: async () => new Blob(["unsupported-image-bytes"]),
-        }),
+      vi.fn().mockResolvedValue({
+        ok: true,
+        blob: async () => new Blob(["unsupported-image-bytes"]),
+      }),
     );
     fileInfo.mockResolvedValue({
       path: "photo.heic",

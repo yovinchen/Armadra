@@ -235,10 +235,26 @@ describe("runtime API v3", () => {
       }).success,
     ).toBe(false);
     const sha256 = "a".repeat(64);
-    expect(writeFileRequestSchema.parse({ path: "  ", content: "", expectedSha256: sha256 })).toEqual({ path: "  ", content: "", expectedSha256: sha256 });
-    expect(writeFileRequestSchema.safeParse({ path: "a", content: "", expectedSha256: "bad" }).success).toBe(false);
-    expect(writeFileResponseSchema.parse({ path: "a", size: 3, sha256 }).sha256).toBe(sha256);
-    expect(writeFileResponseSchema.safeParse({ path: "a", size: 3 }).success).toBe(false);
+    expect(
+      writeFileRequestSchema.parse({
+        path: "  ",
+        content: "",
+        expectedSha256: sha256,
+      }),
+    ).toEqual({ path: "  ", content: "", expectedSha256: sha256 });
+    expect(
+      writeFileRequestSchema.safeParse({
+        path: "a",
+        content: "",
+        expectedSha256: "bad",
+      }).success,
+    ).toBe(false);
+    expect(
+      writeFileResponseSchema.parse({ path: "a", size: 3, sha256 }).sha256,
+    ).toBe(sha256);
+    expect(
+      writeFileResponseSchema.safeParse({ path: "a", size: 3 }).success,
+    ).toBe(false);
   });
 
   it("reads per-file git status, and tolerates a runtime without it", () => {

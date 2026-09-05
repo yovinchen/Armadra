@@ -58,18 +58,107 @@ function check<T extends DescMessage>(
 const maxUint64 = 18_446_744_073_709_551_615n;
 
 describe("shared Go / Rust / TypeScript wire contracts", () => {
-  it("preserves unknown executor outcomes and irreversible delivery evidence",()=>{
-    check("automation_unknown_receipt",AutomationReceiptSchema,{operationId:"operation-1",requestSha256:new Uint8Array(32).fill(7),outcome:999 as AutomationOutcome,sequence:maxUint64,observedAtUnixMs:1788557900000n});
-    check("automation_delivery_evidence",AutomationRunSchema,{id:"run-1",planId:"plan-1",workspaceId:"workspace-1",configVersion:9007199254740993n,state:AutomationRunState.UNKNOWN,deliveryObserved:true});
+  it("preserves unknown executor outcomes and irreversible delivery evidence", () => {
+    check("automation_unknown_receipt", AutomationReceiptSchema, {
+      operationId: "operation-1",
+      requestSha256: new Uint8Array(32).fill(7),
+      outcome: 999 as AutomationOutcome,
+      sequence: maxUint64,
+      observedAtUnixMs: 1788557900000n,
+    });
+    check("automation_delivery_evidence", AutomationRunSchema, {
+      id: "run-1",
+      planId: "plan-1",
+      workspaceId: "workspace-1",
+      configVersion: 9007199254740993n,
+      state: AutomationRunState.UNKNOWN,
+      deliveryObserved: true,
+    });
   });
-  it("keeps the authenticated automation surface byte-identical across runtimes",()=>{
-    check("automation_command_session",AutomationCommandSessionSchema,{sessionId:"session/夜间",workspaceId:"workspace-1",executionHostId:"0123456789abcdef0123456789abcdef",rootPath:"/项目/仓库",launch:{executable:"/bin/echo",args:["--flag","值📦"],workingDirectory:".",accountId:"default",timeoutMs:86_400_000n},generation:maxUint64,launchSha256:new Uint8Array(32).fill(9),state:AutomationCommandSessionState.UNREBUILDABLE,reasonCode:"GENERATION_CHANGED",revision:9007199254740993n,createdAtUnixMs:1788557000000n,updatedAtUnixMs:1788557900000n});
-    check("automation_define_request",DefineAutomationRequestSchema,{meta:{requestId:"define-1",scope:{hostId:"0123456789abcdef0123456789abcdef",workspaceId:"workspace-1",executionHostId:"0123456789abcdef0123456789abcdef"}},planId:"plan-1",config:{workspaceId:"workspace-1",title:"每晚构建",target:{executionHostId:"0123456789abcdef0123456789abcdef",sessionId:"session-1",generation:1n},schedule:{kind:{case:"cron",value:{expression:"0 3 * * *",timezone:"Asia/Shanghai"}}}},payload:new Uint8Array([0x00,0x9f,0x99,0x82]),expectedRevision:9007199254740993n});
-    check("automation_plan_snapshot",AutomationPlanSnapshotSchema,{plan:{id:"plan-1",configVersion:2n,state:AutomationPlanState.ACTIVE},revision:maxUint64,configSha256:new Uint8Array(32).fill(3)});
+  it("keeps the authenticated automation surface byte-identical across runtimes", () => {
+    check("automation_command_session", AutomationCommandSessionSchema, {
+      sessionId: "session/夜间",
+      workspaceId: "workspace-1",
+      executionHostId: "0123456789abcdef0123456789abcdef",
+      rootPath: "/项目/仓库",
+      launch: {
+        executable: "/bin/echo",
+        args: ["--flag", "值📦"],
+        workingDirectory: ".",
+        accountId: "default",
+        timeoutMs: 86_400_000n,
+      },
+      generation: maxUint64,
+      launchSha256: new Uint8Array(32).fill(9),
+      state: AutomationCommandSessionState.UNREBUILDABLE,
+      reasonCode: "GENERATION_CHANGED",
+      revision: 9007199254740993n,
+      createdAtUnixMs: 1788557000000n,
+      updatedAtUnixMs: 1788557900000n,
+    });
+    check("automation_define_request", DefineAutomationRequestSchema, {
+      meta: {
+        requestId: "define-1",
+        scope: {
+          hostId: "0123456789abcdef0123456789abcdef",
+          workspaceId: "workspace-1",
+          executionHostId: "0123456789abcdef0123456789abcdef",
+        },
+      },
+      planId: "plan-1",
+      config: {
+        workspaceId: "workspace-1",
+        title: "每晚构建",
+        target: {
+          executionHostId: "0123456789abcdef0123456789abcdef",
+          sessionId: "session-1",
+          generation: 1n,
+        },
+        schedule: {
+          kind: {
+            case: "cron",
+            value: { expression: "0 3 * * *", timezone: "Asia/Shanghai" },
+          },
+        },
+      },
+      payload: new Uint8Array([0x00, 0x9f, 0x99, 0x82]),
+      expectedRevision: 9007199254740993n,
+    });
+    check("automation_plan_snapshot", AutomationPlanSnapshotSchema, {
+      plan: {
+        id: "plan-1",
+        configVersion: 2n,
+        state: AutomationPlanState.ACTIVE,
+      },
+      revision: maxUint64,
+      configSha256: new Uint8Array(32).fill(3),
+    });
   });
-  it("preserves private Worker identity and partial UTF-8 byte chunks",()=>{
-    check("worker_hello",WorkerRequestSchema,{requestId:"request-worker",hostId:"0123456789abcdef0123456789abcdef",deadlineUnixMs:1788557900000n,action:{case:"hello",value:{protocol:{major:1}}}});
-    check("worker_chunk",WorkerResponseSchema,{requestId:"chunk-1",hostId:"0123456789abcdef0123456789abcdef",instanceId:"abcdef0123456789abcdef0123456789",result:{case:"fileChunk",value:{rootId:"root-1",path:"正文.txt",mimeType:"text/plain",sha256:new Uint8Array(32).fill(7),totalBytes:4n,offset:1n,data:new Uint8Array([0x9f,0x99,0x82]),eof:true}}});
+  it("preserves private Worker identity and partial UTF-8 byte chunks", () => {
+    check("worker_hello", WorkerRequestSchema, {
+      requestId: "request-worker",
+      hostId: "0123456789abcdef0123456789abcdef",
+      deadlineUnixMs: 1788557900000n,
+      action: { case: "hello", value: { protocol: { major: 1 } } },
+    });
+    check("worker_chunk", WorkerResponseSchema, {
+      requestId: "chunk-1",
+      hostId: "0123456789abcdef0123456789abcdef",
+      instanceId: "abcdef0123456789abcdef0123456789",
+      result: {
+        case: "fileChunk",
+        value: {
+          rootId: "root-1",
+          path: "正文.txt",
+          mimeType: "text/plain",
+          sha256: new Uint8Array(32).fill(7),
+          totalBytes: 4n,
+          offset: 1n,
+          data: new Uint8Array([0x9f, 0x99, 0x82]),
+          eof: true,
+        },
+      },
+    });
   });
   it("binds bootstrap to Host, instance and origin and preserves device revision", () => {
     check("identity_bootstrap", HostControlRequestSchema, {
@@ -313,8 +402,36 @@ describe("shared Go / Rust / TypeScript wire contracts", () => {
 });
 
 it("preserves command input bytes, optional exit and unknown execution phases", () => {
-  check("command_run",CommandRequestSchema,{action:{case:"run",value:{operationId:"operation-1",sessionId:"会话-1",requestSha256:new Uint8Array(32).fill(8),expectedGeneration:maxUint64,stdin:new Uint8Array([0,255,27,10])}}});
-  check("command_receipt",CommandReceiptSchema,{operationId:"operation-1",sessionId:"会话-1",generation:9007199254740993n,phase:999 as CommandPhase,sequence:maxUint64,exitCode:0,stdout:new Uint8Array([0,255,10]),stdoutTotalBytes:9007199254740993n,stdoutTruncated:true});
-  check("command_absent_exit",CommandReceiptSchema,{operationId:"operation-2",phase:CommandPhase.NOT_DISPATCHED,noEffectProven:true,cleanupConfirmed:true});
-  expect(fromBinary(CommandReceiptSchema,fixture("command_absent_exit")).exitCode).toBeUndefined();
+  check("command_run", CommandRequestSchema, {
+    action: {
+      case: "run",
+      value: {
+        operationId: "operation-1",
+        sessionId: "会话-1",
+        requestSha256: new Uint8Array(32).fill(8),
+        expectedGeneration: maxUint64,
+        stdin: new Uint8Array([0, 255, 27, 10]),
+      },
+    },
+  });
+  check("command_receipt", CommandReceiptSchema, {
+    operationId: "operation-1",
+    sessionId: "会话-1",
+    generation: 9007199254740993n,
+    phase: 999 as CommandPhase,
+    sequence: maxUint64,
+    exitCode: 0,
+    stdout: new Uint8Array([0, 255, 10]),
+    stdoutTotalBytes: 9007199254740993n,
+    stdoutTruncated: true,
+  });
+  check("command_absent_exit", CommandReceiptSchema, {
+    operationId: "operation-2",
+    phase: CommandPhase.NOT_DISPATCHED,
+    noEffectProven: true,
+    cleanupConfirmed: true,
+  });
+  expect(
+    fromBinary(CommandReceiptSchema, fixture("command_absent_exit")).exitCode,
+  ).toBeUndefined();
 });

@@ -122,7 +122,10 @@ export const fileContentSchema = z.object({
   mimeType: z.string(),
   content: z.string(),
   size: z.number().int().nonnegative(),
-  sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  sha256: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
 });
 
 export const MAX_IMPORT_FILE_BYTES = 16 * 1024 * 1024;
@@ -155,7 +158,10 @@ export const writeFileRequestSchema = z.object({
   path: z.string().min(1).max(4_000),
   content: z.string().max(MAX_WRITE_FILE_BYTES),
   expectedSize: z.number().int().nonnegative().optional(),
-  expectedSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  expectedSha256: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
 });
 
 export const writeFileResponseSchema = z.object({
@@ -815,7 +821,12 @@ export const terminalServerMessageSchema = z.discriminatedUnion("type", [
 
 /** `WS /api/workspaces/{id}/events` — plan §5.4 / §7. */
 export const workspaceEventSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("agent.context"), nodeId: z.string(), sessionId: z.string(), generation: z.number().int().nonnegative() }),
+  z.object({
+    type: z.literal("agent.context"),
+    nodeId: z.string(),
+    sessionId: z.string(),
+    generation: z.number().int().nonnegative(),
+  }),
   z.object({ type: z.literal("agent.status"), status: agentStatusSchema }),
   z.object({ type: z.literal("agent.subagent"), event: agentEventSchema }),
   z.object({

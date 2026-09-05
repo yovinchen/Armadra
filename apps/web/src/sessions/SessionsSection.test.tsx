@@ -10,11 +10,7 @@ import {
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import type {
-  BoardDocument,
-  SessionSummary,
-  Workspace,
-} from "@armadra/shared";
+import type { BoardDocument, SessionSummary, Workspace } from "@armadra/shared";
 
 import { useAgentStatusStore } from "../agent/status-store";
 import { useCanvasStore } from "../store/canvas-store";

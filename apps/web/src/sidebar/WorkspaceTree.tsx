@@ -16,7 +16,15 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Folder, FolderOpen, LoaderCircle, MoreHorizontal, Plus, SquarePen, Upload } from "lucide-react";
+import {
+  Folder,
+  FolderOpen,
+  LoaderCircle,
+  MoreHorizontal,
+  Plus,
+  SquarePen,
+  Upload,
+} from "lucide-react";
 import type { WorkspaceSummary } from "@armadra/shared";
 
 import { isAttention } from "../agent/status-store";
@@ -199,13 +207,34 @@ export function WorkspaceTree() {
             className="min-h-36 rounded-lg transition-colors data-[dragging=true]:bg-accent/60"
             {...folderImport.events}
           >
-            <GroupTitle action={<AddProjectButton busy={folderImport.busy} choose={folderImport.choose} />}>
+            <GroupTitle
+              action={
+                <AddProjectButton
+                  busy={folderImport.busy}
+                  choose={folderImport.choose}
+                />
+              }
+            >
               {t("sidebar.projects")}
             </GroupTitle>
             {(folderImport.dragging || folderImport.busy) && (
-              <p role="status" className="flex items-center gap-2 px-2 py-2 text-xs leading-relaxed text-muted-foreground">
-                {folderImport.busy && <LoaderCircle aria-hidden className="size-3.5 shrink-0 animate-spin" />}
-                {t(folderImport.busy ? "folderImport.busy" : isTauri() ? "folderImport.dropOpen" : "folderImport.dropCopy")}
+              <p
+                role="status"
+                className="flex items-center gap-2 px-2 py-2 text-xs leading-relaxed text-muted-foreground"
+              >
+                {folderImport.busy && (
+                  <LoaderCircle
+                    aria-hidden
+                    className="size-3.5 shrink-0 animate-spin"
+                  />
+                )}
+                {t(
+                  folderImport.busy
+                    ? "folderImport.busy"
+                    : isTauri()
+                      ? "folderImport.dropOpen"
+                      : "folderImport.dropCopy",
+                )}
               </p>
             )}
             <ul>
@@ -257,7 +286,13 @@ function GroupTitle({
  * 「项目」组标题右边的 `+`：走系统目录选择器，选完即建即开；浏览器里没有
  * 选择器，退回手填路径的新建文件夹对话框（对已存在的目录就是「打开」）。
  */
-function AddProjectButton({ busy, choose }: { busy: boolean; choose: () => Promise<void> }) {
+function AddProjectButton({
+  busy,
+  choose,
+}: {
+  busy: boolean;
+  choose: () => Promise<void>;
+}) {
   const t = useT();
   const openWorkspace = useOpenWorkspace();
   const [dialog, setDialog] = useState(false);
@@ -266,14 +301,25 @@ function AddProjectButton({ busy, choose }: { busy: boolean; choose: () => Promi
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <IconButton label={t("sidebar.addProject")} className="shrink-0" disabled={busy}><Plus /></IconButton>
+          <IconButton
+            label={t("sidebar.addProject")}
+            className="shrink-0"
+            disabled={busy}
+          >
+            <Plus />
+          </IconButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={() => void choose()}>
             {isTauri() ? <FolderOpen /> : <Upload />}
-            {t(isTauri() ? "folderImport.chooseOpen" : "folderImport.chooseCopy")}
+            {t(
+              isTauri() ? "folderImport.chooseOpen" : "folderImport.chooseCopy",
+            )}
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setDialog(true)}><Folder />{t("launcher.newFolder")}</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setDialog(true)}>
+            <Folder />
+            {t("launcher.newFolder")}
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <NewFolderDialog

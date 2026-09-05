@@ -36,9 +36,7 @@ export function bucketTone(bucket: SessionBucket): StatusTone {
 }
 
 /** 当前工作空间里还活着的会话 → 按 `AGENT_BUCKET_ORDER` 排好的分区。 */
-export function agentSections(
-  rows: readonly SessionRow[],
-): SessionSection[] {
+export function agentSections(rows: readonly SessionRow[]): SessionSection[] {
   const alive = rows.filter((row) => row.alive);
   return groupSessionsByStatus(alive).sort(
     (a, b) =>

@@ -302,8 +302,8 @@ export function SourceControlDrawer() {
                   "branches",
                   "history",
                   "worktrees",
-              "stashes",
-              "integration",
+                  "stashes",
+                  "integration",
                 ] as const
               ).map((value) => (
                 <TabsTrigger
@@ -400,23 +400,29 @@ export function SourceControlDrawer() {
                 </Button>
               </div>
             </TabsContent>
-            {(["branches", "history", "worktrees", "stashes", "integration"] as const).map(
-              (value) => (
-                <TabsContent
-                  key={value}
-                  value={value}
-                  className="mt-0 flex min-h-0 min-w-0 flex-col data-[state=inactive]:hidden"
-                >
-                  {workspaceId && tab === value && (
-                    <GitRepositoryPanel
-                      key={workspaceId}
-                      workspaceId={workspaceId}
-                      tab={value}
-                    />
-                  )}
-                </TabsContent>
-              ),
-            )}
+            {(
+              [
+                "branches",
+                "history",
+                "worktrees",
+                "stashes",
+                "integration",
+              ] as const
+            ).map((value) => (
+              <TabsContent
+                key={value}
+                value={value}
+                className="mt-0 flex min-h-0 min-w-0 flex-col data-[state=inactive]:hidden"
+              >
+                {workspaceId && tab === value && (
+                  <GitRepositoryPanel
+                    key={workspaceId}
+                    workspaceId={workspaceId}
+                    tab={value}
+                  />
+                )}
+              </TabsContent>
+            ))}
           </Tabs>
         </SheetContent>
       </Sheet>

@@ -11,7 +11,11 @@ import {
 
 import { useCanvasStore } from "@/store/canvas-store";
 import type { ArmadraShape } from "../shapes/armadra-shape";
-import { isDocumentShapeId, toNodeId, toShapeId } from "../shapes/armadra-shape";
+import {
+  isDocumentShapeId,
+  toNodeId,
+  toShapeId,
+} from "../shapes/armadra-shape";
 import type { LinkShape } from "../shapes/link-shape";
 import { isLinkShape } from "../shapes/link-shape";
 import { deriveEdges, deriveNodes } from "./derive";
@@ -104,7 +108,11 @@ function documentLinks(editor: Editor): LinkShape[] {
  * `dirty` 决定这次派生要不要置脏：远端合并（Agent 开节点）与初次投影不置，
  * 用户自己的改动置。
  */
-function pull(editor: Editor, dirty: boolean, whiteboardTouched: boolean): void {
+function pull(
+  editor: Editor,
+  dirty: boolean,
+  whiteboardTouched: boolean,
+): void {
   const document = useCanvasStore.getState().document;
   if (!document) return;
   const boardId = document.board.id;
@@ -120,9 +128,10 @@ function pull(editor: Editor, dirty: boolean, whiteboardTouched: boolean): void 
   if (loadedBoardId !== boardId || loadedEditor !== editor) return;
   const stamp = new Date().toISOString();
 
-  const shapes = editor
-    .getCurrentPageShapesSorted()
-    .filter(isNodeShape) as (ArmadraShape | TLFrameShape)[];
+  const shapes = editor.getCurrentPageShapesSorted().filter(isNodeShape) as (
+    | ArmadraShape
+    | TLFrameShape
+  )[];
   const nodes = deriveNodes(shapes, boardId, document.nodes, stamp);
   const edges = deriveEdges(documentLinks(editor), boardId, document.edges);
 

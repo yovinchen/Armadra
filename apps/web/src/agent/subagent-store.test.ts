@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type {
-  AgentEvent,
-  AgentStatus,
-  WorkspaceEvent,
-} from "@armadra/shared";
+import type { AgentEvent, AgentStatus, WorkspaceEvent } from "@armadra/shared";
 
 import {
   MAX_CARDS_PER_PARENT,

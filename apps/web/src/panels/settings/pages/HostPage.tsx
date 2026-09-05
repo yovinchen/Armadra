@@ -116,7 +116,10 @@ export function HostPage() {
           </details>
         )}
       </SettingsGroup>
-      <HostIdentityPanel address={address} hello={state.status === "connected" ? state.hello : undefined} />
+      <HostIdentityPanel
+        address={address}
+        hello={state.status === "connected" ? state.hello : undefined}
+      />
     </>
   );
 }

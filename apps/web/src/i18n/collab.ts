@@ -50,7 +50,6 @@ const en: Record<keyof typeof zh, string> = {
   "launch.stalled": "Launch was not acknowledged",
   "launch.manual": "Run now",
 
-
   "confirm.title": "An agent wants to close a node",
   "confirm.allow": "Allow",
   "confirm.deny": "Deny",

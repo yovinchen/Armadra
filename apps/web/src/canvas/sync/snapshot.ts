@@ -1,4 +1,10 @@
-import type { Editor, TLRecord, TLShape, TLShapeId, TLStoreSnapshot } from "tldraw";
+import type {
+  Editor,
+  TLRecord,
+  TLShape,
+  TLShapeId,
+  TLStoreSnapshot,
+} from "tldraw";
 
 import { isDocumentShapeId } from "../shapes/armadra-shape";
 import { LINK_SHAPE_TYPE } from "../shapes/link-shape";
@@ -80,7 +86,11 @@ export function stripDocumentRecords(
   // Native descendants remain whiteboard data even when their frame is a
   // document node. Defer those records until the frame has been projected on
   // load; deleting them here permanently loses drawings/text on every save.
-  const dropped = new Set<string>([...nodeShapes, ...linkShapes, ...edgeArrows]);
+  const dropped = new Set<string>([
+    ...nodeShapes,
+    ...linkShapes,
+    ...edgeArrows,
+  ]);
 
   const kept: Record<string, TLRecord> = {};
   for (const [id, record] of Object.entries(store)) {
@@ -122,7 +132,10 @@ export function splitPendingBindings(snapshot: TLStoreSnapshot): {
     for (const record of Object.values(store)) {
       if (!isShape(record) || deferred.has(record.id)) continue;
       const parent = (record as unknown as { parentId?: string }).parentId;
-      if (parent?.startsWith("shape:") && (!present.has(parent) || deferred.has(parent))) {
+      if (
+        parent?.startsWith("shape:") &&
+        (!present.has(parent) || deferred.has(parent))
+      ) {
         deferred.add(record.id);
         changed = true;
       }
@@ -138,7 +151,11 @@ export function splitPendingBindings(snapshot: TLStoreSnapshot): {
     }
     if (isBinding(record)) {
       if (!present.has(record.fromId)) continue;
-      if (!present.has(record.toId) || deferred.has(record.fromId) || deferred.has(record.toId)) {
+      if (
+        !present.has(record.toId) ||
+        deferred.has(record.fromId) ||
+        deferred.has(record.toId)
+      ) {
         pending.push(record);
         continue;
       }
@@ -169,10 +186,12 @@ export function parseWhiteboard(json: string): TLStoreSnapshot | null {
   }
 }
 
-
 /** Restore records deferred because their document-owned parents/endpoints
  * were absent from the native snapshot. Caller runs this as remote changes. */
-export function restorePendingRecords(editor: Pick<Editor, "getShape" | "store">, pending: readonly TLRecord[]): void {
+export function restorePendingRecords(
+  editor: Pick<Editor, "getShape" | "store">,
+  pending: readonly TLRecord[],
+): void {
   let shapes = pending.filter((record) => record.typeName === "shape");
   while (shapes.length > 0) {
     const ready = shapes.filter((record) => {
@@ -187,7 +206,9 @@ export function restorePendingRecords(editor: Pick<Editor, "getShape" | "store">
   const bindings = pending.filter((record) => {
     if (record.typeName !== "binding") return false;
     const binding = record as unknown as { fromId: TLShapeId; toId: TLShapeId };
-    return Boolean(editor.getShape(binding.fromId) && editor.getShape(binding.toId));
+    return Boolean(
+      editor.getShape(binding.fromId) && editor.getShape(binding.toId),
+    );
   });
   if (bindings.length > 0) editor.store.put(bindings);
 }

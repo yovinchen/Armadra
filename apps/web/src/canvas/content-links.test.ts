@@ -51,7 +51,10 @@ import {
   useContentLinks,
 } from "./content-links";
 import { toShapeId } from "./shapes/armadra-shape";
-import { createContentReference, referenceCountForNode } from "./create-content-reference";
+import {
+  createContentReference,
+  referenceCountForNode,
+} from "./create-content-reference";
 
 const NODE = "019ff7d1-0d12-7421-833d-2c5e8d64ed01";
 const NODE2 = "019ff7d1-0d12-7421-833d-2c5e8d64ed02";
@@ -171,7 +174,12 @@ class FakeEditor {
     });
   }
 
-  addShape(id: string, type: string, props: Rec = {}, parentId = "page:page"): void {
+  addShape(
+    id: string,
+    type: string,
+    props: Rec = {},
+    parentId = "page:page",
+  ): void {
     this.shapes.set(id, {
       id,
       type,
@@ -186,7 +194,10 @@ class FakeEditor {
   }
 
   addArrow(id: string): void {
-    this.addShape(id, "arrow", { arrowheadStart: "none", arrowheadEnd: "arrow" });
+    this.addShape(id, "arrow", {
+      arrowheadStart: "none",
+      arrowheadEnd: "arrow",
+    });
   }
 
   bind(arrowId: string, terminal: "start" | "end", toId: string): void {
@@ -242,7 +253,9 @@ describe("内容链接的判定", () => {
     ["arrow", false],
   ])("%s 能不能当内容读 → %s", (type, expected) => {
     editor.addShape(`shape:${type}1`, type);
-    expect(isContentShape(editor.get(`shape:${type}1`) as never)).toBe(expected);
+    expect(isContentShape(editor.get(`shape:${type}1`) as never)).toBe(
+      expected,
+    );
   });
 
   it("一端节点、一端白板 shape ⇒ 内容链接", () => {
@@ -279,8 +292,10 @@ describe("内容链接的判定", () => {
     editor.bind("shape:half", "start", toShapeId(NODE));
 
     const ends = (id: string) =>
-      contentArrowEnds(id, editor.getBindingsFromShape(id) as never, (shapeId) =>
-        editor.getShape(shapeId) as never,
+      contentArrowEnds(
+        id,
+        editor.getBindingsFromShape(id) as never,
+        (shapeId) => editor.getShape(shapeId) as never,
       );
     expect(ends("shape:edge")).toBeNull();
     expect(ends("shape:board")).toBeNull();
@@ -337,7 +352,9 @@ describe("稳定 uuid（`meta.armadra.contentId`）", () => {
     expect(found).toHaveLength(1);
     expect(found[0]!.nodeId).toBe(NODE);
     expect(found[0]!.shapeId).toBe("shape:txt");
-    expect(found[0]!.contentId).toBe(contentIdOf(editor.get("shape:a1") as never));
+    expect(found[0]!.contentId).toBe(
+      contentIdOf(editor.get("shape:a1") as never),
+    );
   });
 });
 
@@ -346,7 +363,11 @@ describe("稳定 uuid（`meta.armadra.contentId`）", () => {
 describe("contentTitle", () => {
   it("文字取正文前 40 字，超了带省略号", () => {
     editor.addShape("shape:txt", "text", {});
-    const short = contentTitle(editor.get("shape:txt") as never, "两行\n结论", label);
+    const short = contentTitle(
+      editor.get("shape:txt") as never,
+      "两行\n结论",
+      label,
+    );
     expect(short).toBe("两行 结论");
     const long = contentTitle(
       editor.get("shape:txt") as never,
@@ -359,7 +380,9 @@ describe("contentTitle", () => {
   it("画框取框名，没名字时退回类型名", () => {
     editor.addShape("shape:f1", "frame", { name: "架构图" });
     editor.addShape("shape:f2", "frame", { name: "  " });
-    expect(contentTitle(editor.get("shape:f1") as never, "", label)).toBe("架构图");
+    expect(contentTitle(editor.get("shape:f1") as never, "", label)).toBe(
+      "架构图",
+    );
     expect(contentTitle(editor.get("shape:f2") as never, "", label)).toBe(
       "content.frame",
     );
@@ -393,18 +416,21 @@ describe("shapeText / shapeSignature", () => {
     editor.addShape("shape:f1", "frame", { name: "架构图" });
     editor.addShape("shape:t1", "text", { richText: rich("上") }, "shape:f1");
     editor.addShape("shape:g1", "geo", { richText: rich("下") }, "shape:f1");
-    expect(shapeText(editor as unknown as Editor, editor.get("shape:f1") as never)).toBe(
-      "上\n\n下",
-    );
+    expect(
+      shapeText(editor as unknown as Editor, editor.get("shape:f1") as never),
+    ).toBe("上\n\n下");
   });
 
   it("挪一下位置签名不变，改内容才变", () => {
     editor.addShape("shape:d1", "draw", { color: "red" });
-    const before = shapeSignature(editor as unknown as Editor, "shape:d1" as TLShapeId);
-    editor.updateShape({ id: "shape:d1", x: 500, y: 900 });
-    expect(shapeSignature(editor as unknown as Editor, "shape:d1" as TLShapeId)).toBe(
-      before,
+    const before = shapeSignature(
+      editor as unknown as Editor,
+      "shape:d1" as TLShapeId,
     );
+    editor.updateShape({ id: "shape:d1", x: 500, y: 900 });
+    expect(
+      shapeSignature(editor as unknown as Editor, "shape:d1" as TLShapeId),
+    ).toBe(before);
     editor.updateShape({ id: "shape:d1", props: { color: "blue" } });
     expect(
       shapeSignature(editor as unknown as Editor, "shape:d1" as TLShapeId),
@@ -414,7 +440,10 @@ describe("shapeText / shapeSignature", () => {
   it("画框的签名跟着框内的东西走", () => {
     editor.addShape("shape:f1", "frame", { name: "架构图" });
     editor.addShape("shape:t1", "text", { richText: rich("上") }, "shape:f1");
-    const before = shapeSignature(editor as unknown as Editor, "shape:f1" as TLShapeId);
+    const before = shapeSignature(
+      editor as unknown as Editor,
+      "shape:f1" as TLShapeId,
+    );
     editor.updateShape({ id: "shape:t1", props: { richText: rich("改了") } });
     expect(
       shapeSignature(editor as unknown as Editor, "shape:f1" as TLShapeId),
@@ -490,7 +519,12 @@ describe("resolveContent", () => {
 
   it("画框：PNG + 框内文字都有", async () => {
     editor.addShape("shape:f1", "frame", { name: "架构图" });
-    editor.addShape("shape:t1", "text", { richText: rich("入口在 main.rs") }, "shape:f1");
+    editor.addShape(
+      "shape:t1",
+      "text",
+      { richText: rich("入口在 main.rs") },
+      "shape:f1",
+    );
     const d = deps();
     const resolved = await resolveContent(
       editor as unknown as Editor,
@@ -506,7 +540,10 @@ describe("resolveContent", () => {
   });
 
   it("带文字的 geo：`text` + PNG", async () => {
-    editor.addShape("shape:g1", "geo", { richText: rich("缓存层"), geo: "rectangle" });
+    editor.addShape("shape:g1", "geo", {
+      richText: rich("缓存层"),
+      geo: "rectangle",
+    });
     const d = deps();
     const resolved = await resolveContent(
       editor as unknown as Editor,
@@ -536,13 +573,11 @@ describe("resolveContent", () => {
 describe("useContentLinks 的导出防抖", () => {
   it("持续文档变化也会在两秒内导出，签名没变不重复导出", async () => {
     vi.useFakeTimers();
-    const exportPng = vi
-      .spyOn(runtimeApi, "exportPng")
-      .mockResolvedValue({
-        path: "/abs/.armadra/exports/x.png",
-        relativePath: ".armadra/exports/x.png",
-        bytes: 3,
-      } as never);
+    const exportPng = vi.spyOn(runtimeApi, "exportPng").mockResolvedValue({
+      path: "/abs/.armadra/exports/x.png",
+      relativePath: ".armadra/exports/x.png",
+      bytes: 3,
+    } as never);
     useCanvasStore.setState({ workspace: { id: "ws-1" } as never });
 
     editor.addShape("shape:d1", "draw", { color: "red" });
@@ -561,7 +596,9 @@ describe("useContentLinks 的导出防抖", () => {
 
     // 中途改动不延后首个截止时间，避免繁忙画板永远不导出。
     act(() => editor.emitChange());
-    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600);
+    });
     expect(exportPng).toHaveBeenCalledTimes(1);
     expect(result.current[NODE]).toEqual([
       {
@@ -569,7 +606,12 @@ describe("useContentLinks 的导出防抖", () => {
         // 标题走 i18n，语言由用户偏好决定，这里只关心它不是空的。
         title: expect.stringMatching(/.+/u) as unknown as string,
         kind: "shape",
-        content: { pngPath: ".armadra/exports/x.png", sourceShapeId: "shape:d1", shapeType: "draw", status: "ready" },
+        content: {
+          pngPath: ".armadra/exports/x.png",
+          sourceShapeId: "shape:d1",
+          shapeType: "draw",
+          status: "ready",
+        },
       },
     ]);
 
@@ -601,23 +643,41 @@ describe("useContentLinks 的导出防抖", () => {
 });
 
 function referenceDeps() {
-  return { exportPng: vi.fn(async (id: string) => `.armadra/exports/${id}.png`), label };
+  return {
+    exportPng: vi.fn(async (id: string) => `.armadra/exports/${id}.png`),
+    label,
+  };
 }
 
 describe("native reference payload recovery", () => {
   it("preserves native note text and rasterizes its visual appearance", async () => {
-    editor.addShape("shape:note", "note", { richText: rich("Do not delete this note") });
+    editor.addShape("shape:note", "note", {
+      richText: rich("Do not delete this note"),
+    });
     expect(isContentShape(editor.get("shape:note") as never)).toBe(true);
-    const resolved = await resolveContent(editor as unknown as Editor, "shape:note" as TLShapeId, "note-export", referenceDeps());
+    const resolved = await resolveContent(
+      editor as unknown as Editor,
+      "shape:note" as TLShapeId,
+      "note-export",
+      referenceDeps(),
+    );
     expect(resolved?.content.text).toBe("Do not delete this note");
     expect(resolved?.content.pngPath).toBeTruthy();
   });
 
   it("exports legacy data URL images instead of caching an empty payload", async () => {
-    editor.assets.set("asset:legacy", { meta: {}, props: { src: "data:image/png;base64,AAA" } });
+    editor.assets.set("asset:legacy", {
+      meta: {},
+      props: { src: "data:image/png;base64,AAA" },
+    });
     editor.addShape("shape:legacy", "image", { assetId: "asset:legacy" });
     const d = referenceDeps();
-    const resolved = await resolveContent(editor as unknown as Editor, "shape:legacy" as TLShapeId, "legacy-export", d);
+    const resolved = await resolveContent(
+      editor as unknown as Editor,
+      "shape:legacy" as TLShapeId,
+      "legacy-export",
+      d,
+    );
     expect(resolved?.content.pngPath).toBeTruthy();
     expect(d.exportPng).toHaveBeenCalledOnce();
   });
@@ -625,82 +685,169 @@ describe("native reference payload recovery", () => {
   it("notices changes in asset data even when the shape record is unchanged", () => {
     editor.assets.set("asset:image", { props: { src: "one" } });
     editor.addShape("shape:image", "image", { assetId: "asset:image" });
-    const first = shapeSignature(editor as unknown as Editor, "shape:image" as TLShapeId);
+    const first = shapeSignature(
+      editor as unknown as Editor,
+      "shape:image" as TLShapeId,
+    );
     editor.assets.set("asset:image", { props: { src: "two" } });
-    expect(shapeSignature(editor as unknown as Editor, "shape:image" as TLShapeId)).not.toBe(first);
+    expect(
+      shapeSignature(editor as unknown as Editor, "shape:image" as TLShapeId),
+    ).not.toBe(first);
   });
 
   it("retains text and reports an export failure, then retries without another edit", async () => {
     vi.useFakeTimers();
-    const upload = vi.spyOn(runtimeApi, "exportPng")
+    const upload = vi
+      .spyOn(runtimeApi, "exportPng")
       .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValue({ relativePath: ".armadra/exports/recovered.png" } as never);
+      .mockResolvedValue({
+        relativePath: ".armadra/exports/recovered.png",
+      } as never);
     useCanvasStore.setState({ workspace: { id: "ws-retry" } as never });
-    editor.addShape("shape:geo", "geo", { richText: rich("Readable while PNG is pending") });
+    editor.addShape("shape:geo", "geo", {
+      richText: rich("Readable while PNG is pending"),
+    });
     editor.addArrow("shape:ref");
     editor.bind("shape:ref", "start", toShapeId(NODE));
     editor.bind("shape:ref", "end", "shape:geo");
     setEditor(editor as unknown as Editor);
     const { result, unmount } = renderHook(() => useContentLinks());
-    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
-    expect(result.current[NODE]?.[0]?.content).toMatchObject({ status: "pending", text: "Readable while PNG is pending" });
-    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+    expect(result.current[NODE]?.[0]?.content).toMatchObject({
+      status: "pending",
+      text: "Readable while PNG is pending",
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
     expect(result.current[NODE]?.[0]?.content?.status).toBe("error");
-    await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
-    expect(result.current[NODE]?.[0]?.content).toMatchObject({ status: "ready", pngPath: ".armadra/exports/recovered.png" });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+    expect(result.current[NODE]?.[0]?.content).toMatchObject({
+      status: "ready",
+      pngPath: ".armadra/exports/recovered.png",
+    });
     expect(upload).toHaveBeenCalledTimes(2);
-    unmount(); setEditor(null); upload.mockRestore(); vi.useRealTimers();
+    unmount();
+    setEditor(null);
+    upload.mockRestore();
+    vi.useRealTimers();
   });
 });
 
-
 it("the reference menu action creates persisted bindings readable by the content protocol", async () => {
-  editor.addShape("shape:native-note", "note", { richText: rich("A real reference") });
-  editor.updateShape({ id: toShapeId(NODE), props: { nodeType: "terminal", title: "Agent", data: { agent: { id: "pi" } } } });
+  editor.addShape("shape:native-note", "note", {
+    richText: rich("A real reference"),
+  });
+  editor.updateShape({
+    id: toShapeId(NODE),
+    props: {
+      nodeType: "terminal",
+      title: "Agent",
+      data: { agent: { id: "pi" } },
+    },
+  });
   Object.assign(editor, {
-    getShapePageBounds: () => ({ minX: 0, maxX: 200, center: { x: 100, y: 100 } }),
+    getShapePageBounds: () => ({
+      minX: 0,
+      maxX: 200,
+      center: { x: 100, y: 100 },
+    }),
     getCurrentPageId: () => "page:page",
     markHistoryStoppingPoint: vi.fn(),
     select: vi.fn(),
-    createShape: (shape: Rec) => editor.shapes.set(shape.id as string, { ...shape, typeName: "shape" }),
-    createBinding: (binding: Rec) => editor.bindings.push({ ...binding, typeName: "binding" }),
+    createShape: (shape: Rec) =>
+      editor.shapes.set(shape.id as string, { ...shape, typeName: "shape" }),
+    createBinding: (binding: Rec) =>
+      editor.bindings.push({ ...binding, typeName: "binding" }),
   });
-  const id = createContentReference(editor as unknown as Editor, "shape:native-note" as TLShapeId, toShapeId(NODE));
+  const id = createContentReference(
+    editor as unknown as Editor,
+    "shape:native-note" as TLShapeId,
+    toShapeId(NODE),
+  );
   expect(id).toBeTruthy();
-  expect(createContentReference(editor as unknown as Editor, "shape:native-note" as TLShapeId, toShapeId(NODE))).toBe(id);
+  expect(
+    createContentReference(
+      editor as unknown as Editor,
+      "shape:native-note" as TLShapeId,
+      toShapeId(NODE),
+    ),
+  ).toBe(id);
   expect(editor.bindings).toHaveLength(2);
   const descriptor = collectContentLinks(editor as unknown as Editor)[0]!;
   expect(descriptor.nodeId).toBe(NODE);
-  const content = await resolveContent(editor as unknown as Editor, descriptor.shapeId, descriptor.contentId, referenceDeps());
+  const content = await resolveContent(
+    editor as unknown as Editor,
+    descriptor.shapeId,
+    descriptor.contentId,
+    referenceDeps(),
+  );
   expect(content?.content.text).toBe("A real reference");
   expect(content?.content.pngPath).toBeTruthy();
 });
 
-
 it("reference limit counts unique node peers and prevents a visible but unreadable 65th link", () => {
-  editor.addShape("shape:capacity-source", "note", { richText: rich("capacity") });
-  editor.updateShape({ id: toShapeId(NODE), props: { nodeType: "terminal", data: { agent: { id: "pi" } } } });
-  for (let i = 0; i < 64; i++) editor.addShape(`shape:peer-link-${i}`, "link", { from: toShapeId(NODE), to: `shape:peer-${i}` });
+  editor.addShape("shape:capacity-source", "note", {
+    richText: rich("capacity"),
+  });
+  editor.updateShape({
+    id: toShapeId(NODE),
+    props: { nodeType: "terminal", data: { agent: { id: "pi" } } },
+  });
+  for (let i = 0; i < 64; i++)
+    editor.addShape(`shape:peer-link-${i}`, "link", {
+      from: toShapeId(NODE),
+      to: `shape:peer-${i}`,
+    });
   // A duplicate edge doesn't consume another readable-object slot.
-  editor.addShape("shape:duplicate-peer", "link", { from: toShapeId(NODE), to: "shape:peer-0" });
-  expect(referenceCountForNode(editor as unknown as Editor, toShapeId(NODE))).toBe(64);
-  expect(createContentReference(editor as unknown as Editor, "shape:capacity-source" as TLShapeId, toShapeId(NODE))).toBeNull();
+  editor.addShape("shape:duplicate-peer", "link", {
+    from: toShapeId(NODE),
+    to: "shape:peer-0",
+  });
+  expect(
+    referenceCountForNode(editor as unknown as Editor, toShapeId(NODE)),
+  ).toBe(64);
+  expect(
+    createContentReference(
+      editor as unknown as Editor,
+      "shape:capacity-source" as TLShapeId,
+      toShapeId(NODE),
+    ),
+  ).toBeNull();
   expect(editor.bindings).toHaveLength(0);
 });
 
 it("unrelated document edits do not discard a successful pending export", async () => {
   vi.useFakeTimers();
   let complete!: (result: never) => void;
-  const upload = vi.spyOn(runtimeApi, "exportPng").mockImplementation(() => new Promise((resolve) => { complete = resolve; }));
+  const upload = vi.spyOn(runtimeApi, "exportPng").mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        complete = resolve;
+      }),
+  );
   useCanvasStore.setState({ workspace: { id: "ws-unrelated" } as never });
   editor.addShape("shape:stable", "draw", {});
-  editor.addArrow("shape:stable-ref"); editor.bind("shape:stable-ref", "start", toShapeId(NODE)); editor.bind("shape:stable-ref", "end", "shape:stable");
+  editor.addArrow("shape:stable-ref");
+  editor.bind("shape:stable-ref", "start", toShapeId(NODE));
+  editor.bind("shape:stable-ref", "end", "shape:stable");
   setEditor(editor as unknown as Editor);
-  const {result,unmount} = renderHook(() => useContentLinks());
-  await act(async () => { await vi.advanceTimersByTimeAsync(2050); });
+  const { result, unmount } = renderHook(() => useContentLinks());
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2050);
+  });
   act(() => editor.emitChange());
-  await act(async () => { complete({relativePath: ".armadra/exports/stable.png"} as never); });
+  await act(async () => {
+    complete({ relativePath: ".armadra/exports/stable.png" } as never);
+  });
   expect(result.current[NODE]?.[0]?.content?.status).toBe("ready");
   expect(upload).toHaveBeenCalledOnce();
-  unmount();setEditor(null);upload.mockRestore();vi.useRealTimers();
+  unmount();
+  setEditor(null);
+  upload.mockRestore();
+  vi.useRealTimers();
 });

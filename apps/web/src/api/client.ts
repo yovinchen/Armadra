@@ -145,7 +145,11 @@ export class RuntimeRequestError extends Error {
   readonly code?: string;
 
   constructor(status: number, message: string, code?: string) {
-    super(code === "git_execution_required" ? t("gitRepo.executionRequired") : message);
+    super(
+      code === "git_execution_required"
+        ? t("gitRepo.executionRequired")
+        : message,
+    );
     this.name = "RuntimeRequestError";
     this.status = status;
     this.code = code;
@@ -299,8 +303,17 @@ export const dataBackupSchema = z.object({
 /* ------------------------------------ API --------------------------------- */
 
 export const runtimeApi = {
-  contextUsage: (workspaceId:string,nodeId:string,binding:{sessionId:string;generation:number},signal?:AbortSignal) =>
-    request(`/api/workspaces/${query(workspaceId)}/nodes/${query(nodeId)}/context-usage?sessionId=${query(binding.sessionId)}&generation=${binding.generation}`,contextUsageSchema,{signal}),
+  contextUsage: (
+    workspaceId: string,
+    nodeId: string,
+    binding: { sessionId: string; generation: number },
+    signal?: AbortSignal,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/nodes/${query(nodeId)}/context-usage?sessionId=${query(binding.sessionId)}&generation=${binding.generation}`,
+      contextUsageSchema,
+      { signal },
+    ),
   health: () => request("/health", healthSchema),
 
   /* --------------------------------- 工作空间 --------------------------- */
@@ -815,13 +828,38 @@ export const runtimeApi = {
       { signal },
     ),
   gitRepositoryStashes: (workspaceId: string, signal?: AbortSignal) =>
-    request(`/api/workspaces/${query(workspaceId)}/git/repository/stashes?path=.`,gitStashSnapshotSchema,{signal}),
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/stashes?path=.`,
+      gitStashSnapshotSchema,
+      { signal },
+    ),
   gitRepositoryIntegration: (workspaceId: string, signal?: AbortSignal) =>
-    request(`/api/workspaces/${query(workspaceId)}/git/repository/integration?path=.`,gitIntegrationSnapshotSchema,{signal}),
-  gitRepositoryCherryPickPreview: (workspaceId:string,oid:string,mainline:number|null,signal?:AbortSignal) =>
-    request(`/api/workspaces/${query(workspaceId)}/git/repository/cherry-pick-preview?path=.&oid=${query(oid)}${mainline===null?"":`&mainline=${mainline}`}`,gitCherryPickPreviewSchema,{signal}),
-  gitRepositoryStashDetail: (workspaceId:string,oid:string,signal?:AbortSignal) =>
-    request(`/api/workspaces/${query(workspaceId)}/git/repository/stash-detail?path=.&oid=${query(oid)}`,gitStashDetailSchema,{signal}),
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/integration?path=.`,
+      gitIntegrationSnapshotSchema,
+      { signal },
+    ),
+  gitRepositoryCherryPickPreview: (
+    workspaceId: string,
+    oid: string,
+    mainline: number | null,
+    signal?: AbortSignal,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/cherry-pick-preview?path=.&oid=${query(oid)}${mainline === null ? "" : `&mainline=${mainline}`}`,
+      gitCherryPickPreviewSchema,
+      { signal },
+    ),
+  gitRepositoryStashDetail: (
+    workspaceId: string,
+    oid: string,
+    signal?: AbortSignal,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/stash-detail?path=.&oid=${query(oid)}`,
+      gitStashDetailSchema,
+      { signal },
+    ),
   gitRepositoryOperate: (
     workspaceId: string,
     action: GitRepositoryAction,
@@ -962,12 +1000,23 @@ export const runtimeApi = {
   /** 把 `canvas.db` 原样复制到同目录的 `…backup-manual-<时间戳>`。 */
   backupData: () =>
     request("/api/data/backup", dataBackupSchema, { method: "POST" }),
-  legacyKanbanArchives: (cursor?:string,signal?:AbortSignal) =>
-    request(`/api/data/legacy-kanban-archives?limit=50${cursor !== undefined ? `&cursor=${query(cursor)}` : ""}`,legacyKanbanArchivePageSchema,{signal}),
-  legacyKanbanArchive: (canvasId:string,signal?:AbortSignal) =>
-    request(`/api/data/legacy-kanban-archives/${query(canvasId)}`,legacyKanbanArchiveSchema,{signal}),
-  exportLegacyKanbanArchive: (canvasId:string) =>
-    request(`/api/data/legacy-kanban-archives/${query(canvasId)}/export`,legacyKanbanArchiveExportSchema),
+  legacyKanbanArchives: (cursor?: string, signal?: AbortSignal) =>
+    request(
+      `/api/data/legacy-kanban-archives?limit=50${cursor !== undefined ? `&cursor=${query(cursor)}` : ""}`,
+      legacyKanbanArchivePageSchema,
+      { signal },
+    ),
+  legacyKanbanArchive: (canvasId: string, signal?: AbortSignal) =>
+    request(
+      `/api/data/legacy-kanban-archives/${query(canvasId)}`,
+      legacyKanbanArchiveSchema,
+      { signal },
+    ),
+  exportLegacyKanbanArchive: (canvasId: string) =>
+    request(
+      `/api/data/legacy-kanban-archives/${query(canvasId)}/export`,
+      legacyKanbanArchiveExportSchema,
+    ),
 };
 
 /* ------------------------------- WebSocket URL ---------------------------- */

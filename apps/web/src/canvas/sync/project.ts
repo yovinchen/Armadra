@@ -9,7 +9,11 @@ import {
 } from "tldraw";
 
 import { defaultNodeSize } from "../../store/defaults";
-import type { ArmadraNodeType, ArmadraProps, ArmadraShape } from "../shapes/armadra-shape";
+import type {
+  ArmadraNodeType,
+  ArmadraProps,
+  ArmadraShape,
+} from "../shapes/armadra-shape";
 import { toNodeId, toShapeId } from "../shapes/armadra-shape";
 import type { LinkBinding, LinkShape } from "../shapes/link-shape";
 import { toLinkBindingId, toLinkShapeId } from "../shapes/link-shape";

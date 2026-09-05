@@ -31,7 +31,8 @@ function board(id: string, name = id): BoardEntry {
 }
 
 const attention = (item: SessionRow) =>
-  item.state === "blocked" || item.state === "waiting" ||
+  item.state === "blocked" ||
+  item.state === "waiting" ||
   Boolean(item.pendingId);
 
 describe("boardSignals", () => {
@@ -94,10 +95,7 @@ describe("nextBoardName", () => {
     const template = (index: number) => `看板 ${index}`;
     expect(nextBoardName([board("a"), board("b")], template)).toBe("看板 3");
     expect(
-      nextBoardName(
-        [board("a"), board("b", "看板 4"), board("c")],
-        template,
-      ),
+      nextBoardName([board("a"), board("b", "看板 4"), board("c")], template),
     ).toBe("看板 5");
   });
 });

@@ -67,7 +67,9 @@ export function toLinkShapeId(edgeId: string): TLShapeId {
 }
 
 /** 这个 shape id 对应哪条边？不是 link 的 id 时返回 null。 */
-export function linkEdgeIdOfShapeId(shapeId: TLShapeId | string): string | null {
+export function linkEdgeIdOfShapeId(
+  shapeId: TLShapeId | string,
+): string | null {
   if (!shapeId.startsWith(LINK_PREFIX)) return null;
   const id = shapeId.slice(LINK_PREFIX.length);
   return isUuid(id) ? id : null;
@@ -83,9 +85,7 @@ export function toLinkBindingId(
 
 /* -------------------------------- 判定 ------------------------------------ */
 
-export function isLinkShape(shape: {
-  type: string;
-}): shape is LinkShape {
+export function isLinkShape(shape: { type: string }): shape is LinkShape {
   return shape.type === LINK_SHAPE_TYPE;
 }
 

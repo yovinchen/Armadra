@@ -20,11 +20,7 @@ import type { Editor, TLShape, TLShapeId } from "tldraw";
  * `note`，shapeUtil 缺席时 `loadSnapshot` 会整份失败。所以停用只发生在
  * 「创建」这一刻，读旧数据照旧。
  */
-export const RETIRED_SHAPE_TYPES = [
-  "bookmark",
-  "embed",
-  "video",
-] as const;
+export const RETIRED_SHAPE_TYPES = ["bookmark", "embed", "video"] as const;
 
 export type RetiredShapeType = (typeof RETIRED_SHAPE_TYPES)[number];
 

@@ -49,7 +49,9 @@ export function toShapeId(nodeId: string): TLShapeId {
 }
 
 export function toNodeId(shapeId: TLShapeId | string): string {
-  return shapeId.startsWith("shape:") ? shapeId.slice("shape:".length) : shapeId;
+  return shapeId.startsWith("shape:")
+    ? shapeId.slice("shape:".length)
+    : shapeId;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

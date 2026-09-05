@@ -58,7 +58,11 @@ type BooleanWhiteboardKey = {
  */
 export const CANVAS_PREFERENCE_TOGGLES: readonly ToggleSpec[] = [
   { key: "snap", labelKey: "wb.snap" },
-  { key: "toolLock", labelKey: "wb.toolLock", command: "canvas.toggleToolLock" },
+  {
+    key: "toolLock",
+    labelKey: "wb.toolLock",
+    command: "canvas.toggleToolLock",
+  },
   { key: "grid", labelKey: "wb.grid", command: "canvas.toggleGrid" },
   { key: "wrap", labelKey: "wb.wrap" },
   { key: "focus", labelKey: "wb.focus", command: "canvas.toggleFocus" },

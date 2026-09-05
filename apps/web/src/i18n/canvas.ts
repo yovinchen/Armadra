@@ -10,7 +10,8 @@ const zh = {
   "canvas.expandMinimap": "展开缩略图",
   "canvas.collapseMinimap": "收起缩略图",
   "canvas.label": "画布",
-  "canvas.importLimit": "每次最多 256 个文件，单个不超过 16 MB，总计不超过 64 MB",
+  "canvas.importLimit":
+    "每次最多 256 个文件，单个不超过 16 MB，总计不超过 64 MB",
   "canvas.importFailed": "文件导入失败",
   "canvas.importSaved": "文件已保存到原工作区；切换画板后未添加节点",
   "canvas.importFolderUnsupported": "请先拖入文件；文件夹导入尚未开放",
@@ -61,9 +62,11 @@ const zh = {
   "content.note": "便签",
   "content.group": "组合",
   "shape.referenceAgent": "引用到 Agent",
-  "shape.referenceLimit": "每个 Agent 最多引用 {limit} 个对象，请先移除一条引用。",
+  "shape.referenceLimit":
+    "每个 Agent 最多引用 {limit} 个对象，请先移除一条引用。",
   "shape.referenceSyncFailed": "引用尚未同步到 Agent",
-  "shape.referenceSyncFailureNote": "已停止自动重试。检查 Runtime 连接后重新同步。",
+  "shape.referenceSyncFailureNote":
+    "已停止自动重试。检查 Runtime 连接后重新同步。",
   "shape.noAgents": "先创建一个 Agent 终端",
   "shape.refreshReference": "重新同步引用",
   "content.geo": "图形",
@@ -147,8 +150,10 @@ const en: Record<keyof typeof zh, string> = {
   "canvas.label": "Canvas",
   "canvas.importLimit": "Import up to 256 files, 16 MB each and 64 MB total",
   "canvas.importFailed": "File import failed",
-  "canvas.importSaved": "Files saved in the original workspace; no nodes added after switching boards",
-  "canvas.importFolderUnsupported": "Drop files for now; folder import is not available yet",
+  "canvas.importSaved":
+    "Files saved in the original workspace; no nodes added after switching boards",
+  "canvas.importFolderUnsupported":
+    "Drop files for now; folder import is not available yet",
 
   "add.terminal": "New terminal",
   "add.agent": "New {agent}",
@@ -192,9 +197,11 @@ const en: Record<keyof typeof zh, string> = {
   "content.note": "Note",
   "content.group": "Group",
   "shape.referenceAgent": "Reference in agent",
-  "shape.referenceLimit": "An agent can reference at most {limit} objects. Remove a reference first.",
+  "shape.referenceLimit":
+    "An agent can reference at most {limit} objects. Remove a reference first.",
   "shape.referenceSyncFailed": "References have not synced to the agent",
-  "shape.referenceSyncFailureNote": "Automatic retries stopped. Check the runtime connection and sync again.",
+  "shape.referenceSyncFailureNote":
+    "Automatic retries stopped. Check the runtime connection and sync again.",
   "shape.noAgents": "Create an agent terminal first",
   "shape.refreshReference": "Sync references again",
   "content.geo": "Shape",

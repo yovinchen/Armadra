@@ -4,3 +4,6 @@ target
 coverage
 pnpm-lock.yaml
 docs/research
+.claude/worktrees
+.claude/skills
+.claude/agents

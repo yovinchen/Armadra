@@ -62,9 +62,11 @@ export const shell: MessageModule = {
     "folderImport.copied": "已导入「{name}」的副本，原文件夹保持不变",
     "folderImport.failed": "无法添加文件夹 {name}",
     "folderImport.onlyFolders": "请将文件夹拖到项目区；文件可拖到画板",
-    "folderImport.limit": "每个文件夹最多 256 个文件和 256 个目录；单文件 16 MB，总计 64 MB",
+    "folderImport.limit":
+      "每个文件夹最多 256 个文件和 256 个目录；单文件 16 MB，总计 64 MB",
     "folderImport.invalidPath": "文件夹包含不受支持的路径或符号链接",
-    "folderImport.unavailable": "浏览器未提供可读取的目录信息；空文件夹可尝试拖入",
+    "folderImport.unavailable":
+      "浏览器未提供可读取的目录信息；空文件夹可尝试拖入",
     "folderImport.tooManyFolders": "每次最多添加 16 个文件夹",
     "sidebar.boardPin": "置顶",
     "sidebar.boardUnpin": "取消置顶",
@@ -155,12 +157,17 @@ export const shell: MessageModule = {
     "folderImport.dropOpen": "Drop to open these folders",
     "folderImport.dropCopy": "Drop to import copies of these folders",
     "folderImport.busy": "Adding projects…",
-    "folderImport.copied": "Imported a copy of “{name}”; the original folder is unchanged",
+    "folderImport.copied":
+      "Imported a copy of “{name}”; the original folder is unchanged",
     "folderImport.failed": "Could not add folder {name}",
-    "folderImport.onlyFolders": "Drop folders in Projects; drop files onto the canvas",
-    "folderImport.limit": "Up to 256 files and 256 directories per folder; 16 MB per file, 64 MB total",
-    "folderImport.invalidPath": "The folder contains an unsupported path or symbolic link",
-    "folderImport.unavailable": "The browser did not provide readable directory information; try dropping an empty folder",
+    "folderImport.onlyFolders":
+      "Drop folders in Projects; drop files onto the canvas",
+    "folderImport.limit":
+      "Up to 256 files and 256 directories per folder; 16 MB per file, 64 MB total",
+    "folderImport.invalidPath":
+      "The folder contains an unsupported path or symbolic link",
+    "folderImport.unavailable":
+      "The browser did not provide readable directory information; try dropping an empty folder",
     "folderImport.tooManyFolders": "Add up to 16 folders at a time",
     "sidebar.boardPin": "Pin",
     "sidebar.boardUnpin": "Unpin",

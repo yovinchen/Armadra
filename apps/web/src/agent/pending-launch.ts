@@ -1,11 +1,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
-import type {
-  AgentStatus,
-  CanvasNode,
-  PendingLaunch,
-} from "@armadra/shared";
+import type { AgentStatus, CanvasNode, PendingLaunch } from "@armadra/shared";
 
 import { useCanvasStore } from "../store/canvas-store";
 import { useAgentStatusStore } from "./status-store";

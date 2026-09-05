@@ -169,7 +169,10 @@ export function ensureContentId(editor: Editor, arrow: ShapeLike): string {
       editor.updateShape({
         id: arrow.id as TLShapeId,
         type: arrow.type,
-        meta: { ...arrow.meta, armadra: { ...arrowArmadraMeta(arrow), contentId } },
+        meta: {
+          ...arrow.meta,
+          armadra: { ...arrowArmadraMeta(arrow), contentId },
+        },
       } as never);
     },
     { history: "ignore" },
@@ -181,7 +184,8 @@ export function ensureContentId(editor: Editor, arrow: ShapeLike): string {
 
 /** 富文本 → 纯文本；没有正文时是空串。 */
 export function plainText(editor: Editor, shape: ShapeLike): string {
-  const richText = (shape.props as { richText?: unknown } | undefined)?.richText;
+  const richText = (shape.props as { richText?: unknown } | undefined)
+    ?.richText;
   if (!richText) return "";
   try {
     return renderPlaintextFromRichText(
@@ -200,7 +204,8 @@ export function plainText(editor: Editor, shape: ShapeLike): string {
  * 的 PNG 加框内所有文字），其余取自己的富文本。
  */
 export function shapeText(editor: Editor, shape: TLShape): string {
-  if (shape.type !== "frame" && shape.type !== "group") return plainText(editor, shape);
+  if (shape.type !== "frame" && shape.type !== "group")
+    return plainText(editor, shape);
   const parts: string[] = [];
   for (const id of editor.getShapeAndDescendantIds([shape.id])) {
     if (id === shape.id) continue;
@@ -213,12 +218,17 @@ export function shapeText(editor: Editor, shape: TLShape): string {
 }
 
 /** 按字节截断（Runtime 校验的是字节数）。 */
-export function clampText(text: string, limit = MAX_CONTENT_TEXT_BYTES): string {
+export function clampText(
+  text: string,
+  limit = MAX_CONTENT_TEXT_BYTES,
+): string {
   const bytes = new TextEncoder().encode(text);
   if (bytes.length <= limit) return text;
   // Streaming decode holds an incomplete trailing codepoint instead of
   // producing an invalid surrogate or replacement character.
-  return new TextDecoder().decode(bytes.subarray(0, Math.max(0, limit)), { stream: true });
+  return new TextDecoder().decode(bytes.subarray(0, Math.max(0, limit)), {
+    stream: true,
+  });
 }
 
 /**
@@ -259,19 +269,27 @@ export function shapeSignature(editor: Editor, id: TLShapeId): string {
   const shape = editor.getShape(id);
   if (!shape) return "";
   const ids =
-    shape.type === "frame" || shape.type === "group" ? [...editor.getShapeAndDescendantIds([id])] : [id];
+    shape.type === "frame" || shape.type === "group"
+      ? [...editor.getShapeAndDescendantIds([id])]
+      : [id];
   const parts: string[] = [];
   for (const child of [...ids].sort()) {
     const record = editor.getShape(child);
     if (!record) continue;
     if (record.type === "image") {
       const assetId = (record.props as { assetId?: string | null }).assetId;
-      if (assetId) parts.push(JSON.stringify(editor.getAsset(assetId as never) ?? null));
+      if (assetId)
+        parts.push(JSON.stringify(editor.getAsset(assetId as never) ?? null));
     }
     parts.push(
       JSON.stringify(
         child === id
-          ? { t: record.type, r: record.rotation, p: record.props, m: record.meta }
+          ? {
+              t: record.type,
+              r: record.rotation,
+              p: record.props,
+              m: record.meta,
+            }
           : {
               t: record.type,
               x: record.x,
@@ -329,8 +347,18 @@ export async function resolveContent(
     }
     // Legacy data URL assets and pasted external records have no managed
     // path. Export their visible pixels instead of caching an empty success.
-    const imageProps = shape.props as { crop?: unknown; flipX?: boolean; flipY?: boolean };
-    if (path && !imageProps.crop && !imageProps.flipX && !imageProps.flipY && !shape.rotation) {
+    const imageProps = shape.props as {
+      crop?: unknown;
+      flipX?: boolean;
+      flipY?: boolean;
+    };
+    if (
+      path &&
+      !imageProps.crop &&
+      !imageProps.flipX &&
+      !imageProps.flipY &&
+      !shape.rotation
+    ) {
       content.pngPath = path;
       return { title, content };
     }
@@ -422,7 +450,11 @@ export function useContentLinks(): ContentLinkMap {
     const failures = new Map<string, { signature: string; attempts: number }>();
     const deps: ContentDeps = {
       exportPng: async (exportId, dataUrl) => {
-        const response = await runtimeApi.exportPng(workspaceId, exportId, dataUrl);
+        const response = await runtimeApi.exportPng(
+          workspaceId,
+          exportId,
+          dataUrl,
+        );
         return response.relativePath;
       },
     };
@@ -432,7 +464,13 @@ export function useContentLinks(): ContentLinkMap {
       return {
         sourceShapeId: item.shapeId,
         shapeType: shape?.type ?? "unknown",
-        ...(text ? { text: clampText(text), textTruncated: new TextEncoder().encode(text).length > MAX_CONTENT_TEXT_BYTES } : {}),
+        ...(text
+          ? {
+              text: clampText(text),
+              textTruncated:
+                new TextEncoder().encode(text).length > MAX_CONTENT_TEXT_BYTES,
+            }
+          : {}),
       };
     };
     const currentMap = (): ContentLinkMap => {
@@ -444,16 +482,23 @@ export function useContentLinks(): ContentLinkMap {
         const cached = cache.get(item.contentId);
         const source = sourceContent(item);
         const failed = failures.get(item.contentId);
-        const link = cached?.signature === signature ? cached.link : {
-          id: item.contentId,
-          title: contentTitle(shape, source.text ?? ""),
-          kind: SHAPE_KIND,
-          content: {
-            ...source,
-            status: shape.type === "text" ? "ready" as const
-              : failed?.signature === signature ? "error" as const : "pending" as const,
-          },
-        };
+        const link =
+          cached?.signature === signature
+            ? cached.link
+            : {
+                id: item.contentId,
+                title: contentTitle(shape, source.text ?? ""),
+                kind: SHAPE_KIND,
+                content: {
+                  ...source,
+                  status:
+                    shape.type === "text"
+                      ? ("ready" as const)
+                      : failed?.signature === signature
+                        ? ("error" as const)
+                        : ("pending" as const),
+                },
+              };
         (next[item.nodeId] ??= []).push(link);
       }
       return next;
@@ -461,18 +506,29 @@ export function useContentLinks(): ContentLinkMap {
     const publishPreview = () => {
       if (disposed) return;
       const next = currentMap();
-      setLinks((previous) => sameMap(previous, next) ? previous : next);
+      setLinks((previous) => (sameMap(previous, next) ? previous : next));
     };
     const stillCurrent = (item: ContentDescriptor, signature: string) => {
       const arrow = editor.getShape(item.arrowId);
       if (!arrow || arrow.type !== "arrow") return false;
-      const ends = contentArrowEnds(item.arrowId, editor.getBindingsFromShape(item.arrowId, "arrow"), (id) => editor.getShape(id));
-      return ends?.nodeId === item.nodeId && ends.shapeId === item.shapeId && shapeSignature(editor, item.shapeId) === signature;
+      const ends = contentArrowEnds(
+        item.arrowId,
+        editor.getBindingsFromShape(item.arrowId, "arrow"),
+        (id) => editor.getShape(id),
+      );
+      return (
+        ends?.nodeId === item.nodeId &&
+        ends.shapeId === item.shapeId &&
+        shapeSignature(editor, item.shapeId) === signature
+      );
     };
     const run = async () => {
       timer = null;
       if (disposed) return;
-      if (inFlight) { dirty = true; return; }
+      if (inFlight) {
+        dirty = true;
+        return;
+      }
       inFlight = true;
       dirty = false;
       const descriptors = collectContentLinks(editor);
@@ -480,25 +536,46 @@ export function useContentLinks(): ContentLinkMap {
       try {
         const alive = new Set(descriptors.map((item) => item.contentId));
         for (const key of cache.keys()) if (!alive.has(key)) cache.delete(key);
-        for (const key of failures.keys()) if (!alive.has(key)) failures.delete(key);
+        for (const key of failures.keys())
+          if (!alive.has(key)) failures.delete(key);
         for (const item of descriptors) {
           const signature = shapeSignature(editor, item.shapeId);
           if (cache.get(item.contentId)?.signature === signature) continue;
           const failure = failures.get(item.contentId);
-          const attempts = failure?.signature === signature ? failure.attempts : 0;
+          const attempts =
+            failure?.signature === signature ? failure.attempts : 0;
           if (attempts >= 3) continue;
           try {
-            const resolved = await resolveContent(editor, item.shapeId, item.contentId, deps);
-            if (disposed || !stillCurrent(item, signature)) { dirty = true; break; }
+            const resolved = await resolveContent(
+              editor,
+              item.shapeId,
+              item.contentId,
+              deps,
+            );
+            if (disposed || !stillCurrent(item, signature)) {
+              dirty = true;
+              break;
+            }
             if (!resolved) continue;
             cache.set(item.contentId, {
               signature,
-              link: { id: item.contentId, title: resolved.title, kind: SHAPE_KIND,
-                content: { ...sourceContent(item), ...resolved.content, status: "ready" } },
+              link: {
+                id: item.contentId,
+                title: resolved.title,
+                kind: SHAPE_KIND,
+                content: {
+                  ...sourceContent(item),
+                  ...resolved.content,
+                  status: "ready",
+                },
+              },
             });
             failures.delete(item.contentId);
           } catch {
-            if (disposed || !stillCurrent(item, signature)) { dirty = true; break; }
+            if (disposed || !stillCurrent(item, signature)) {
+              dirty = true;
+              break;
+            }
             failures.set(item.contentId, { signature, attempts: attempts + 1 });
             retry ||= attempts + 1 < 3;
           }
@@ -515,13 +592,23 @@ export function useContentLinks(): ContentLinkMap {
       if (disposed) return;
       dirty = true;
       // A leading deadline avoids starvation during unrelated document edits.
-      if (timer === null) timer = setTimeout(() => { void run(); }, EXPORT_DELAY_MS);
+      if (timer === null)
+        timer = setTimeout(() => {
+          void run();
+        }, EXPORT_DELAY_MS);
       if (!previewQueued) {
         previewQueued = true;
-        queueMicrotask(() => { previewQueued = false; publishPreview(); });
+        queueMicrotask(() => {
+          previewQueued = false;
+          publishPreview();
+        });
       }
     }
-    const refresh = () => { cache.clear(); failures.clear(); schedule(); };
+    const refresh = () => {
+      cache.clear();
+      failures.clear();
+      schedule();
+    };
     schedule();
     const off = editor.store.listen(schedule, { scope: "document" });
     window.addEventListener(REFRESH_CONTENT_EVENT, refresh);

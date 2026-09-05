@@ -294,7 +294,9 @@ export interface TldrawPreferenceSnapshot {
 }
 
 /** 从 editor 上取一份快照；`react()` 的依赖就是这里读到的那些 atom。 */
-export function readTldrawPreferences(editor: Editor): TldrawPreferenceSnapshot {
+export function readTldrawPreferences(
+  editor: Editor,
+): TldrawPreferenceSnapshot {
   const user = editor.user;
   const instance = editor.getInstanceState();
   return {
@@ -372,7 +374,9 @@ export function useTldrawPreferences(): void {
     if (!editor) return;
     // tldraw 自己按 `user.colorScheme` 给容器加 `tl-theme__dark` /
     // `tl-theme__light`，而应用主题是 `<html data-theme>`：两套开关必须一起动。
-    editor.user.updateUserPreferences(tldrawUserPatch(whiteboard, theme, locale));
+    editor.user.updateUserPreferences(
+      tldrawUserPatch(whiteboard, theme, locale),
+    );
   }, [editor, whiteboard, theme, locale]);
 
   useEffect(() => {

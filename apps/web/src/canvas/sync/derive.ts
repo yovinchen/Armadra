@@ -1,8 +1,4 @@
-import type {
-  CanvasEdge,
-  CanvasNode,
-  CanvasNodeType,
-} from "@armadra/shared";
+import type { CanvasEdge, CanvasNode, CanvasNodeType } from "@armadra/shared";
 import type {
   TLArrowBinding,
   TLArrowShape,
@@ -211,9 +207,7 @@ function sameNode(a: CanvasNode, b: CanvasNode): boolean {
 }
 
 function sameEdge(a: CanvasEdge, b: CanvasEdge): boolean {
-  return (
-    a.source === b.source && a.target === b.target && a.kind === b.kind
-  );
+  return a.source === b.source && a.target === b.target && a.kind === b.kind;
 }
 
 export interface DeriveResult<T> {

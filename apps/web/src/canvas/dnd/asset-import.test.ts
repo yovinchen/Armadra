@@ -9,7 +9,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("tldraw", async (original) => {
   const actual = await original<typeof import("tldraw")>();
-  return { ...actual, getAssetInfo: (editor: { getAssetForExternalContent: (content: unknown) => unknown }, file: File) => editor.getAssetForExternalContent({ type: "file", file }) };
+  return {
+    ...actual,
+    getAssetInfo: (
+      editor: { getAssetForExternalContent: (content: unknown) => unknown },
+      file: File,
+    ) => editor.getAssetForExternalContent({ type: "file", file }),
+  };
 });
 
 const importAsset = vi.fn();
@@ -22,7 +28,10 @@ const error = vi.fn();
 vi.mock("../../api/client", () => ({
   runtimeApi: {
     importAsset: (...args: unknown[]) => importAsset(...args),
-    uploadAsset: vi.fn(async () => ({ id: "0011223344556677.png", path: ".armadra/assets/0011223344556677.png" })),
+    uploadAsset: vi.fn(async () => ({
+      id: "0011223344556677.png",
+      path: ".armadra/assets/0011223344556677.png",
+    })),
     fileInfo: (...args: unknown[]) => fileInfo(...args),
     importLocalFiles: (...args: unknown[]) => importLocalFiles(...args),
     importFiles: (...args: unknown[]) => importFiles(...args),
@@ -80,7 +89,17 @@ describe("addNodeForPath", () => {
     importAsset.mockReset();
     listFiles.mockReset();
     fileInfo.mockReset().mockRejectedValue(new Error("outside workspace"));
-    importLocalFiles.mockReset().mockResolvedValue({ files: [{ path: ".armadra/imports/b/notes.md", name: "notes.md", size: 4, mimeType: "text/plain", preview: "text" }] });
+    importLocalFiles.mockReset().mockResolvedValue({
+      files: [
+        {
+          path: ".armadra/imports/b/notes.md",
+          name: "notes.md",
+          size: 4,
+          mimeType: "text/plain",
+          preview: "text",
+        },
+      ],
+    });
     importFiles.mockReset();
     state.document = { board: { id: "board" } };
     addNode.mockReset();
@@ -161,21 +180,39 @@ describe("addNodeForPath", () => {
   });
 });
 
-
 describe("browser file imports", () => {
   it("uploads PDF bytes as an attachment instead of decoding text", async () => {
     state.document = { board: { id: "board" } };
     addNode.mockClear();
     const editor = fakeEditor();
     setEditor(editor as never);
-    const file = new File(["%PDF-1.7"], "report.pdf", { type: "application/pdf" });
+    const file = new File(["%PDF-1.7"], "report.pdf", {
+      type: "application/pdf",
+    });
     const readText = vi.fn();
     Object.defineProperty(file, "text", { value: readText });
-    importFiles.mockResolvedValue({ files: [{ name: file.name, path: ".armadra/imports/b/report.pdf", size: file.size, mimeType: file.type, preview: "download" }] });
+    importFiles.mockResolvedValue({
+      files: [
+        {
+          name: file.name,
+          path: ".armadra/imports/b/report.pdf",
+          size: file.size,
+          mimeType: file.type,
+          preview: "download",
+        },
+      ],
+    });
     await addBrowserFiles(editor as never, [file], at);
     expect(readText).not.toHaveBeenCalled();
-    expect(importFiles).toHaveBeenLastCalledWith("w1", [{ file, path: "report.pdf" }]);
-    expect(addNode).toHaveBeenLastCalledWith("editor", expect.objectContaining({ data: { kind: "editor", path: ".armadra/imports/b/report.pdf" } }));
+    expect(importFiles).toHaveBeenLastCalledWith("w1", [
+      { file, path: "report.pdf" },
+    ]);
+    expect(addNode).toHaveBeenLastCalledWith(
+      "editor",
+      expect.objectContaining({
+        data: { kind: "editor", path: ".armadra/imports/b/report.pdf" },
+      }),
+    );
   });
 
   it("does not create nodes on a board switched during upload", async () => {
@@ -184,11 +221,26 @@ describe("browser file imports", () => {
     const editor = fakeEditor();
     setEditor(editor as never);
     let finish: (value: unknown) => void = () => {};
-    importFiles.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    importFiles.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
     const file = new File(["hello"], "a.txt", { type: "text/plain" });
     const pending = addBrowserFiles(editor as never, [file], at);
     state.document = { board: { id: "other-board" } };
-    finish({ files: [{ name: file.name, path: ".armadra/imports/b/a.txt", size: 5, mimeType: file.type, preview: "text" }] });
+    finish({
+      files: [
+        {
+          name: file.name,
+          path: ".armadra/imports/b/a.txt",
+          size: 5,
+          mimeType: file.type,
+          preview: "text",
+        },
+      ],
+    });
     await pending;
     expect(addNode).not.toHaveBeenCalled();
   });

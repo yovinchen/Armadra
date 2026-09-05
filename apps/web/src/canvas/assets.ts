@@ -44,7 +44,9 @@ export function withinUploadLimit(bytes: number): boolean {
 }
 
 /** 从资产记录里取回工作区相对路径；没有就是 null（旧的 data URL 资产）。 */
-export function assetPath(asset: Pick<TLAsset, "meta"> | undefined): string | null {
+export function assetPath(
+  asset: Pick<TLAsset, "meta"> | undefined,
+): string | null {
   const scope = asset?.meta?.["armadra"];
   if (!scope || typeof scope !== "object" || Array.isArray(scope)) return null;
   const path = (scope as Record<string, unknown>)["path"];
@@ -85,7 +87,9 @@ export function createAssetStore(
       // assets are resolved against this session's runtime in desktop and web.
       const workspaceId = getWorkspaceId();
       const path = assetPath(asset);
-      const id = path?.match(/^\.armadra\/assets\/([a-f0-9]{16}\.[a-z0-9]+)$/i)?.[1];
+      const id = path?.match(
+        /^\.armadra\/assets\/([a-f0-9]{16}\.[a-z0-9]+)$/i,
+      )?.[1];
       if (workspaceId && id) return runtimeApi.assetUrl(workspaceId, id);
       const src = (asset.props as { src?: string | null }).src;
       return src ?? null;

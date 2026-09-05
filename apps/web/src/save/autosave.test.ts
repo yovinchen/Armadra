@@ -172,7 +172,9 @@ describe("autosave", () => {
     await vi.advanceTimersByTimeAsync(EDIT_DEBOUNCE_MS);
     expect(saveBoard).not.toHaveBeenCalled();
     expect(useCanvasStore.getState().saveState).toBe("error");
-    expect(useCanvasStore.getState().saveError).toBe("白板内容超出上限，未保存");
+    expect(useCanvasStore.getState().saveError).toBe(
+      "白板内容超出上限，未保存",
+    );
     // 超限的那份快照绝不写进文档：下一轮保存不该把它带上。
     expect(useCanvasStore.getState().document?.board.whiteboard).toBe("");
   });

@@ -15,10 +15,12 @@ vi.mock("../api/client", () => ({
   },
 }));
 
-vi.mock("sonner", () => ({ toast: { error: (...args: unknown[]) => error(...args) } }));
+vi.mock("sonner", () => ({
+  toast: { error: (...args: unknown[]) => error(...args) },
+}));
 
 const { AssetTooLargeError, createAssetStore, MAX_UPLOAD_BYTES } = await import(
-  "./assets",
+  "./assets"
 );
 
 function fileOf(bytes: number): File {
@@ -57,7 +59,9 @@ describe("createAssetStore", () => {
     expect(result.src).toBe(
       "http://127.0.0.1:43120/api/workspaces/w1/assets/0a1bf7.png",
     );
-    expect(result.meta).toEqual({ armadra: { path: ".armadra/assets/0a1bf7.png" } });
+    expect(result.meta).toEqual({
+      armadra: { path: ".armadra/assets/0a1bf7.png" },
+    });
   });
 
   it("超过 8 MiB 时 toast 并拒绝，不发请求", async () => {
@@ -78,7 +82,10 @@ describe("createAssetStore", () => {
   it("resolve 原样返回 src", () => {
     const store = createAssetStore(() => "w1");
     expect(
-      store.resolve?.({ props: { src: "http://x/y.png" } } as never, {} as never),
+      store.resolve?.(
+        { props: { src: "http://x/y.png" } } as never,
+        {} as never,
+      ),
     ).toBe("http://x/y.png");
     expect(store.resolve?.({ props: {} } as never, {} as never)).toBeNull();
   });
@@ -86,6 +93,11 @@ describe("createAssetStore", () => {
 
 it("managed assets use the current runtime URL after reopening in desktop or web", () => {
   const store = createAssetStore(() => "current-workspace");
-  const managed = { props: { src: "http://127.0.0.1:9999/old.png" }, meta: { armadra: { path: ".armadra/assets/0123456789abcdef.png" } } };
-  expect(store.resolve?.(managed as never, {} as never)).toBe("http://127.0.0.1:43120/api/workspaces/current-workspace/assets/0123456789abcdef.png");
+  const managed = {
+    props: { src: "http://127.0.0.1:9999/old.png" },
+    meta: { armadra: { path: ".armadra/assets/0123456789abcdef.png" } },
+  };
+  expect(store.resolve?.(managed as never, {} as never)).toBe(
+    "http://127.0.0.1:43120/api/workspaces/current-workspace/assets/0123456789abcdef.png",
+  );
 });

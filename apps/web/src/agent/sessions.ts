@@ -7,11 +7,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type {
-  AgentState,
-  AgentStatus,
-  SessionSummary,
-} from "@armadra/shared";
+import type { AgentState, AgentStatus, SessionSummary } from "@armadra/shared";
 
 import { runtimeApi } from "../api/client";
 import { isAttention, useAgentStatusStore } from "./status-store";
