@@ -33,6 +33,7 @@ import (
 	"armadra.local/host/internal/runtimelink"
 	"armadra.local/host/internal/server"
 	"armadra.local/host/internal/storage"
+	"armadra.local/host/internal/updates"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -74,13 +75,22 @@ type config struct {
 	// a Host never guesses which binary is allowed to execute the owner's work.
 	workerBinary   string
 	workerStateDir string
+	// The release index this Host may consult, and the channel an operator
+	// pinned it to. An unset source means update checks answer UNSUPPORTED;
+	// nothing is inferred from the build (roadmap §3.12).
+	updatesSource  string
+	releaseChannel pb.ReleaseChannel
+	// Server-mode flags (install / uninstall / logs / upgrade) live in
+	// service.go; only their registration and validation appear here.
+	service serviceFlags
 }
 
 func parseConfig(args []string) (config, error) {
 	c := config{command: "serve", output: "json"}
+	releaseChannel := ""
 	if len(args) > 0 {
 		switch args[0] {
-		case "serve", "start", "status", "stop", "import", "pair":
+		case "serve", "start", "status", "stop", "import", "pair", "install", "uninstall", "logs", "upgrade", "version":
 			c.command = args[0]
 			args = args[1:]
 		}
@@ -95,9 +105,17 @@ func parseConfig(args []string) (config, error) {
 		flags.StringVar(&c.bundle, "bundle", "", "Verified Runtime export package directory")
 	}
 	if c.command != "serve" {
-		flags.StringVar(&c.output, "output", "json", "Management result format: json or protobuf")
+		// The server-mode commands print for people first, so logs defaults to
+		// plain text; every other command keeps its json default.
+		if c.command == "logs" {
+			c.output = "text"
+		}
+		flags.StringVar(&c.output, "output", c.output, "Management result format: json, protobuf or text (server-mode commands)")
 	}
-	if c.command == "serve" || c.command == "start" {
+	c.service.register(flags, c.command)
+	// install renders the same serve configuration into a service definition,
+	// so it accepts and validates exactly the flags serve does.
+	if c.command == "serve" || c.command == "start" || c.command == "install" {
 		flags.StringVar(&c.certFile, "tls-cert", "", "TLS certificate PEM file (required for browser authentication)")
 		flags.StringVar(&c.keyFile, "tls-key", "", "TLS private key PEM file")
 		flags.StringVar(&c.publicOrigin, "public-origin", "", "Exact HTTPS origin clients use for this Host")
@@ -109,6 +127,8 @@ func parseConfig(args []string) (config, error) {
 		flags.Var(&c.origins, "allow-origin", "Exact browser origin allowed to read metadata (repeatable)")
 		flags.StringVar(&c.workerBinary, "worker-binary", "", "Absolute path to the Rust Worker executable that runs scheduled commands")
 		flags.StringVar(&c.workerStateDir, "worker-state-dir", "", "Absolute private directory for the Worker's own execution journal")
+		flags.StringVar(&c.updatesSource, "updates-source", "", "Releases API base this Host may consult, e.g. https://api.github.com/repos/OWNER/REPO; unset means update checks answer UNSUPPORTED")
+		flags.StringVar(&releaseChannel, "release-channel", "", "Pin update checks to a channel: stable, beta or development; unset lets the caller ask")
 	}
 	if err := flags.Parse(args); err != nil {
 		return c, err
@@ -125,13 +145,16 @@ func parseConfig(args []string) (config, error) {
 			return c, fmt.Errorf("pair requires --origin EXACT_ORIGIN and --device-name NAME")
 		}
 	}
-	if c.output != "json" && c.output != "protobuf" {
+	if !supportedOutput(c.command, c.output) {
 		return c, fmt.Errorf("unsupported output format")
+	}
+	if err := c.service.normalize(c.command); err != nil {
+		return c, err
 	}
 	if err := c.origins.normalize(); err != nil {
 		return c, err
 	}
-	if c.command == "start" || c.command == "serve" {
+	if c.command == "start" || c.command == "serve" || c.command == "install" {
 		// "none" is the desktop shape: the shell reaches this Host over the
 		// same-user control IPC, and nothing on the machine can reach it over
 		// TCP. Serving the outside world stays an explicit act.
@@ -200,6 +223,30 @@ func parseConfig(args []string) (config, error) {
 			return c, err
 		}
 	}
+	// The source is validated here so a bad one is a refusal to start. Its
+	// error never repeats the value: an operator's release URL can carry a
+	// token, and a startup message is exactly where one would be kept.
+	if c.updatesSource != "" {
+		normalized, err := updates.ParseSource(c.updatesSource)
+		if err != nil {
+			return c, err
+		}
+		c.updatesSource = normalized
+	}
+	switch releaseChannel {
+	case "":
+	case "stable":
+		c.releaseChannel = pb.ReleaseChannel_RELEASE_CHANNEL_STABLE
+	case "beta":
+		c.releaseChannel = pb.ReleaseChannel_RELEASE_CHANNEL_BETA
+	case "development":
+		c.releaseChannel = pb.ReleaseChannel_RELEASE_CHANNEL_DEVELOPMENT
+	default:
+		return c, fmt.Errorf("--release-channel must be stable, beta or development")
+	}
+	if releaseChannel != "" && c.updatesSource == "" {
+		return c, fmt.Errorf("--release-channel has no effect without --updates-source")
+	}
 	if (c.workerBinary == "") != (c.workerStateDir == "") {
 		return c, fmt.Errorf("scheduled execution requires both --worker-binary and --worker-state-dir")
 	}
@@ -212,7 +259,10 @@ func parseConfig(args []string) (config, error) {
 			return c, err
 		}
 	}
-	if c.dataDir == "" {
+	// version reports what this binary is and touches no state, so it must not
+	// depend on a resolvable per-user directory: an upgrade probes a candidate
+	// in a stripped environment where no home directory is visible.
+	if c.dataDir == "" && c.command != "version" {
 		var err error
 		c.dataDir, err = hoststate.DefaultDir()
 		if err != nil {
@@ -251,7 +301,17 @@ func run(args []string) error {
 	case "start":
 		return startBackground(ctx, c)
 	case "status":
-		return showStatus(ctx, c.dataDir, c.output)
+		return showServiceStatus(ctx, c)
+	case "install":
+		return installService(ctx, c)
+	case "uninstall":
+		return uninstallService(ctx, c)
+	case "logs":
+		return showLogs(ctx, c)
+	case "upgrade":
+		return upgradeHost(ctx, c)
+	case "version":
+		return showVersion(c)
 	case "stop":
 		return stopBackground(ctx, c.dataDir, c.output)
 	default:
@@ -349,6 +409,15 @@ func serveHost(parent context.Context, c config) (err error) {
 	// The schedule loop and its Worker are stopped before the database and the
 	// directory lock: cancelling ctx ends the loop, then this deferred Close
 	// shuts the Worker down and reports whether its children were reclaimed.
+	// A nil release service is the Host the operator gave no source: update
+	// checks then report UNSUPPORTED instead of an answer nobody looked for.
+	var releases *updates.Service
+	if c.updatesSource != "" {
+		releases, err = updates.New(updates.Options{Source: c.updatesSource, Channel: c.releaseChannel, ProtocolMajor: server.ProtocolMajor, ProtocolMinor: server.ProtocolMinor})
+		if err != nil {
+			return err
+		}
+	}
 	plans, err := startAutomation(ctx, c, state.ID, identity.InstanceID, database)
 	if err != nil {
 		return err
@@ -374,7 +443,7 @@ func serveHost(parent context.Context, c config) (err error) {
 	if c.publicOrigin != "" {
 		link = runtimelink.New(endpointsDir)
 	}
-	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link}
+	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link, Updates: releases}
 	// The switch binds its own listener with the same routes. `options` is
 	// captured by reference, so the manager it is about to be given is the one
 	// this closure serves with.

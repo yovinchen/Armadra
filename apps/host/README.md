@@ -42,7 +42,8 @@ Windows 使用 `armadra-host.exe`。省略子命令等同 `serve`（前台）；
 
 管理 IPC 始终传 Protobuf；PID 仅为诊断信息。停止没有可信 ACK 时报告结果不确定，不自动重发。
 启动诊断写入本次新建的 `startup-*.log`；并发启动会回收本次多余子进程，防止迟到启动。
-此服务不由系统服务管理器托管，不承诺跨注销、重启或断电保活。前台 Ctrl+C/SIGTERM 有界退出并释放锁。
+`start` 起的进程不由系统服务管理器托管，不承诺跨注销、重启或断电保活；需要常驻见[服务器模式](#服务器模式)，
+其定义文件仍由运维自行注册。前台 Ctrl+C/SIGTERM 有界退出并释放锁。
 
 ## 前端托管与 Runtime 代理（H02）
 
@@ -121,6 +122,54 @@ token 不写入数据库、日志与任何返回的消息。配置先验证再�
 | ----------------- | ---------------------------------------------------- |
 | `GITHUB_API_BASE` | 首次配置的默认 API base；已配置后以存储值为准        |
 | `GITHUB_CA_FILE`  | Enterprise API base 的受信根 PEM，替代系统根而非叠加 |
+
+## 服务器模式
+
+以固定系统账号常驻运行时使用 `install` / `uninstall` / `status` / `logs` / `upgrade`（roadmap §3.12）。
+
+```sh
+target/armadra-host install --data-dir /srv/armadra --service-dir /etc/armadra \
+  --run-as armadra --listen 127.0.0.1:43121
+target/armadra-host status --data-dir /srv/armadra
+target/armadra-host logs --data-dir /srv/armadra --lines 200
+target/armadra-host upgrade --data-dir /srv/armadra --binary /opt/armadra/armadra-host.new
+target/armadra-host uninstall --data-dir /srv/armadra
+```
+
+| 子命令      | 行为                                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------------------ |
+| `install`   | 只生成定义文件：macOS launchd plist、Linux systemd unit、Windows `sc.exe` 脚本；不注册、不启用、不启动 |
+| `uninstall` | 只删除本命令生成的那一个文件；文件缺失或不是本命令生成即拒绝，不停止服务、不注销注册                   |
+| `status`    | 在原有输出上追加服务定义信息（见下）                                                                   |
+| `logs`      | 读取诊断日志尾部，`--lines` 默认 200、上限 5000，只读文件末尾                                          |
+| `upgrade`   | 校验候选二进制后原地替换，`--confirm` 才真正执行                                                       |
+| `version`   | 打印 `{component, protocolMajor, protocolMinor}`；不开数据目录、不加锁，供 `upgrade` 校验候选身份      |
+
+`install` 必须显式给出 `--service-dir`（绝对目录）与 `--run-as`（账号不从当前用户推断），
+拒绝 root / SYSTEM 等特权账号；`--target-platform` 可生成另一平台的格式。定义内容由输入唯一决定
+（相同输入字节一致），目录按 0700 创建、文件 0644 原子写入。ExecStart / ProgramArguments 与
+`start` 派生子进程使用同一组 `serve` 参数（含 `--worker-binary` / `--worker-state-dir`）。
+定义中不写任何 token、口令或配对材料：`--env` 只接受 NAME=VALUE，名字含 TOKEN / SECRET /
+PASSWORD / CREDENTIAL / API_KEY / SESSION 的一律拒绝而不是静默丢弃。systemd 侧启用
+`NoNewPrivileges`、`ProtectSystem=full`、内核与 cgroup 保护并按 `ReadWritePaths` 放行数据目录；
+不设 `ProtectHome` / `ProtectSystem=strict`，因为 Worker 要读写属主自己的工作空间。
+Windows 只产出脚本文件并在输出中明说没有安装任何东西，账号口令交由 `sc.exe` 自行索取。
+`--updates-source` 不写进定义文件（其 URL 可能带凭据），需要时自行加到已安装的单元里。
+
+install 把本次输入记录到数据目录的 `service-definition.json`（0600，不含凭据），供其余命令定位。
+`status` 在存在该记录时（仅 JSON）追加 `service` 段：定义路径、运行账号、文件是否仍与本二进制
+生成结果一致；不一致只报告不修复。没有记录时以及 `--output protobuf` 时输出形状完全不变。
+
+`logs` 默认读服务定义指向的日志，其次是最新的 `startup-*.log`，也可用 `--log-file` 指定；
+默认纯文本，`--output json` 返回 `{path, lines}`。**内容原样输出，不做启发式脱敏**：这些文件只有
+Host 自身诊断（配对材料仅由 `pair` 命令自己的 stdout 返回），指向其他文件时由运维自行确认。
+
+`upgrade` 先做只读校验：`--binary` 为绝对路径、普通文件、非符号链接、有执行位、非组/其他可写、
+属主为当前用户或 root；再在有界子进程里运行候选的 `version`，协议主版本与本二进制不同即拒绝。
+任一校验失败都不动现有文件。不带 `--confirm` 时只打印将要发生的事并以 0 退出。确认后先经控制
+协议停止运行中的 Host（不杀 PID），再把候选写到目标旁边并改名替换（失败回滚），最后按记录的服务
+定义重新启动并报告状态；若服务管理器已自行拉起则报告该实例而不是再起一个。Host 正在运行但没有
+安装记录时直接拒绝，避免用猜出来的参数改变监听面——先 `stop` 再 `upgrade`。
 
 ## 验证
 
