@@ -7,6 +7,8 @@ pub mod error;
 pub mod events;
 pub mod files;
 pub mod git;
+pub mod git_repository;
+pub mod git_api;
 pub mod hook;
 pub mod imports;
 pub mod index;
@@ -90,6 +92,12 @@ pub fn router_with_state(state: AppState) -> Router {
         }));
 
     Router::new()
+        .route("/api/workspaces/{workspace_id}/git/repository/branches", get(git_api::branches))
+        .route("/api/workspaces/{workspace_id}/git/repository/history", get(git_api::history))
+        .route("/api/workspaces/{workspace_id}/git/repository/worktrees", get(git_api::worktrees))
+        .route("/api/workspaces/{workspace_id}/git/repository/operations", post(git_api::start))
+        .route("/api/workspaces/{workspace_id}/git/repository/operations/{operation_id}", get(git_api::operation))
+        .route("/api/workspaces/{workspace_id}/git/repository/operations/{operation_id}/cancel", post(git_api::cancel))
         .route(
             "/api/workspaces/open-directory",
             post(api::open_directory_workspace),

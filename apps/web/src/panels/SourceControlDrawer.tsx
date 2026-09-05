@@ -43,6 +43,11 @@ import { IconButton } from "../ui/icon-button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Sheet, SheetContent, SheetTitle } from "../ui/sheet";
 import { Textarea } from "../ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import {
+  GitRepositoryPanel,
+  type RepositoryTab,
+} from "./git/GitRepositoryPanel";
 import { currentViewportCenter } from "./viewport";
 
 const STATUS_COLOR: Record<DiffFileStatus, string> = {
@@ -80,6 +85,7 @@ export function SourceControlDrawer() {
 
   const [message, setMessage] = useState("");
   const [revertPath, setRevertPath] = useState<string | null>(null);
+  const [tab, setTab] = useState<"changes" | RepositoryTab>("changes");
 
   const workspaceId = workspace?.id ?? null;
   const open = mode === "drawer";
@@ -132,7 +138,7 @@ export function SourceControlDrawer() {
 
   const canCommit = message.trim().length > 0 && !commit.isPending;
   useEffect(() => {
-    if (!open) return;
+    if (!open || tab !== "changes") return;
     const submit = () => {
       if (message.trim().length > 0 && !commit.isPending) {
         commit.mutate(message.trim());
@@ -140,7 +146,7 @@ export function SourceControlDrawer() {
     };
     window.addEventListener(SCM_COMMIT_EVENT, submit);
     return () => window.removeEventListener(SCM_COMMIT_EVENT, submit);
-  }, [open, message, commit]);
+  }, [open, tab, message, commit]);
 
   const openDiff = (path: string, scope: DiffScope) => {
     if (!workspace) return;
@@ -230,14 +236,17 @@ export function SourceControlDrawer() {
           side="right"
           showCloseButton={false}
           aria-describedby={undefined}
-          className="w-[var(--scm-w)] gap-0 p-0 sm:max-w-none"
+          className="max-w-full gap-0 p-0 data-[side=right]:w-[min(100vw,var(--scm-w))] data-[side=right]:sm:max-w-none"
         >
           <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-3">
-            <SheetTitle className="truncate text-[13px] font-semibold">
+            <SheetTitle className="shrink-0 truncate text-[13px] font-semibold">
               {t("scm.title")}
             </SheetTitle>
             {status.data?.branch && (
-              <Badge variant="outline" className="ml-2 gap-1 font-mono">
+              <Badge
+                variant="outline"
+                className="ml-2 max-w-[35%] gap-1 truncate font-mono"
+              >
                 <GitBranch />
                 {status.data.branch}
               </Badge>
@@ -267,40 +276,95 @@ export function SourceControlDrawer() {
             </IconButton>
           </div>
 
-          <ScrollArea className="min-h-0 flex-1">
-            {status.data?.repository === false ? (
-              <p className="px-4 py-3 text-xs text-muted-foreground">
-                {t("scm.noRepository")}
-              </p>
-            ) : files.length === 0 ? (
-              <p className="px-4 py-3 text-xs text-muted-foreground">
-                {t("scm.clean")}
-              </p>
-            ) : (
-              <>
-                {section(t("scm.staged"), staged, "staged")}
-                {section(t("scm.changes"), changes, "worktree")}
-              </>
-            )}
-          </ScrollArea>
-
-          <div className="flex shrink-0 flex-col gap-2 border-t border-border p-3">
-            <Textarea
-              value={message}
-              onChange={(event) => setMessage(event.target.value)}
-              placeholder={t("scm.message")}
-              aria-label={t("scm.message")}
-              className="min-h-[64px] resize-none"
-            />
-            <Button
-              className="self-end"
-              size="sm"
-              disabled={!canCommit}
-              onClick={() => commit.mutate(message.trim())}
+          <Tabs
+            value={tab}
+            onValueChange={(value) =>
+              setTab(value as "changes" | RepositoryTab)
+            }
+            className="min-h-0 min-w-0 flex-1 gap-0"
+          >
+            <TabsList
+              className="h-10 w-full shrink-0 rounded-none border-b border-border"
+              variant="line"
             >
-              {t("scm.commit")}
-            </Button>
-          </div>
+              {(["changes", "branches", "history", "worktrees"] as const).map(
+                (value) => (
+                  <TabsTrigger
+                    key={value}
+                    value={value}
+                    className="min-w-0 text-xs"
+                  >
+                    {t(`gitRepo.${value}`)}
+                  </TabsTrigger>
+                ),
+              )}
+            </TabsList>
+            <TabsContent
+              value="changes"
+              className="mt-0 flex min-h-0 flex-col data-[state=inactive]:hidden"
+            >
+              <ScrollArea className="min-h-0 flex-1">
+                {status.isPending ? (
+                  <p role="status" className="px-4 py-3 text-xs">
+                    {t("gitRepo.loading")}
+                  </p>
+                ) : status.error ? (
+                  <p
+                    role="alert"
+                    className="break-words px-4 py-3 text-xs text-destructive"
+                  >
+                    {status.error.message}
+                  </p>
+                ) : status.data?.repository === false ? (
+                  <p className="px-4 py-3 text-xs text-muted-foreground">
+                    {t("scm.noRepository")}
+                  </p>
+                ) : files.length === 0 ? (
+                  <p className="px-4 py-3 text-xs text-muted-foreground">
+                    {t("scm.clean")}
+                  </p>
+                ) : (
+                  <>
+                    {section(t("scm.staged"), staged, "staged")}
+                    {section(t("scm.changes"), changes, "worktree")}
+                  </>
+                )}
+              </ScrollArea>
+
+              <div className="flex shrink-0 flex-col gap-2 border-t border-border p-3">
+                <Textarea
+                  value={message}
+                  onChange={(event) => setMessage(event.target.value)}
+                  placeholder={t("scm.message")}
+                  aria-label={t("scm.message")}
+                  className="min-h-[64px] resize-none"
+                />
+                <Button
+                  className="self-end"
+                  size="sm"
+                  disabled={!canCommit}
+                  onClick={() => commit.mutate(message.trim())}
+                >
+                  {t("scm.commit")}
+                </Button>
+              </div>
+            </TabsContent>
+            {(["branches", "history", "worktrees"] as const).map((value) => (
+              <TabsContent
+                key={value}
+                value={value}
+                className="mt-0 flex min-h-0 min-w-0 flex-col data-[state=inactive]:hidden"
+              >
+                {workspaceId && tab === value && (
+                  <GitRepositoryPanel
+                    key={workspaceId}
+                    workspaceId={workspaceId}
+                    tab={value}
+                  />
+                )}
+              </TabsContent>
+            ))}
+          </Tabs>
         </SheetContent>
       </Sheet>
 

@@ -12,6 +12,7 @@ import { sessions } from "./sessions";
 import { shell } from "./shell";
 import { ssh } from "./ssh";
 import { host } from "./host";
+import { gitRepository } from "./git-repository";
 import { fileDrag } from "./file-drag";
 import { terminal } from "./terminal";
 import { usage } from "./usage";
@@ -43,6 +44,7 @@ export const MESSAGE_MODULES = {
   sessions,
   ssh,
   host,
+  "git-repository": gitRepository,
   "file-drag": fileDrag,
   explorer,
   modals,

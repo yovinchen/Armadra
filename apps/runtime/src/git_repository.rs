@@ -1,0 +1,1889 @@
+//! Repository operations for the existing Runtime and the future Worker.
+//!
+//! Git remains authoritative. The common-directory mutex coordinates this
+//! service (and callers holding `mutation_guard`), not external Git processes.
+//! An interrupted mutation is an unknown outcome, never an automatic retry.
+use std::{
+    collections::{HashMap, VecDeque},
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    process::Stdio,
+    sync::{
+        Arc, Mutex, Weak,
+        atomic::{AtomicBool, Ordering},
+    },
+    task::Poll,
+    time::Duration,
+};
+
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use chrono::Utc;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use tokio::{
+    io::{AsyncRead, AsyncReadExt},
+    process::Command,
+    sync::{Notify, OwnedMutexGuard},
+};
+use uuid::Uuid;
+
+use crate::{
+    error::{AppError, AppResult},
+    security::{canonical_directory, redact_secrets, resolve_in_root, valid_directory_name},
+};
+
+const MAX_OUTPUT: usize = 4 * 1024 * 1024;
+const MAX_STDERR: usize = 64 * 1024;
+const MAX_OPERATIONS: usize = 256;
+const MAX_HISTORY_PAGE: usize = 200;
+
+#[derive(Debug, Clone)]
+pub struct RepositoryContext {
+    pub workspace_root: PathBuf,
+    pub repository: PathBuf,
+    pub common_dir: PathBuf,
+}
+
+impl RepositoryContext {
+    pub fn repository_id(&self) -> String {
+        format!(
+            "{:x}",
+            Sha256::digest(self.common_dir.to_string_lossy().as_bytes())
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExpectedState {
+    /// None means an unborn HEAD, not "skip validation".
+    pub head_oid: Option<String>,
+    /// None means detached HEAD.
+    pub branch: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchRecord {
+    pub name: String,
+    pub full_ref: String,
+    pub oid: String,
+    pub remote: bool,
+    pub current: bool,
+    pub upstream: Option<String>,
+    pub ahead: Option<u64>,
+    pub behind: Option<u64>,
+    pub upstream_missing: bool,
+    pub symbolic_target: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchSnapshot {
+    pub repository_id: String,
+    pub repository_path: String,
+    pub head: ExpectedState,
+    pub branches: Vec<BranchRecord>,
+    pub remotes: Vec<String>,
+    pub observed_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryRequest {
+    #[serde(default = "head_ref")]
+    pub reference: String,
+    #[serde(default = "history_limit")]
+    pub limit: usize,
+    pub cursor: Option<String>,
+}
+fn head_ref() -> String {
+    "HEAD".into()
+}
+fn history_limit() -> usize {
+    50
+}
+impl Default for HistoryRequest {
+    fn default() -> Self {
+        Self {
+            reference: head_ref(),
+            limit: history_limit(),
+            cursor: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitRecord {
+    pub oid: String,
+    pub parents: Vec<String>,
+    pub subject: String,
+    pub author_name: String,
+    pub author_email: String,
+    pub author_time: String,
+    pub committer_time: String,
+    pub refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryPage {
+    pub reference: String,
+    pub anchor_oid: Option<String>,
+    pub commits: Vec<CommitRecord>,
+    pub next_cursor: Option<String>,
+    pub shallow: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HistoryCursor {
+    version: u8,
+    repository_id: String,
+    reference: String,
+    anchor_oid: String,
+    offset: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeRecord {
+    pub path: String,
+    pub head_oid: Option<String>,
+    pub branch: Option<String>,
+    pub detached: bool,
+    pub bare: bool,
+    pub is_main: bool,
+    pub locked: bool,
+    pub lock_reason: Option<String>,
+    pub prunable: bool,
+    pub prune_reason: Option<String>,
+    /// False for another checkout outside this request's workspace authority.
+    pub accessible: bool,
+    /// Missing/prunable/unauthorized worktrees have no trustworthy dirty state.
+    pub dirty: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum RepositoryAction {
+    CreateBranch {
+        name: String,
+        start_point: Option<String>,
+        #[serde(default)]
+        switch: bool,
+    },
+    SwitchBranch {
+        name: String,
+        expected_oid: String,
+    },
+    DeleteBranch {
+        name: String,
+        expected_oid: String,
+    },
+    Fetch {
+        remote: String,
+        #[serde(default)]
+        prune: bool,
+    },
+    /// Deliberately only fast-forward; merge/rebase require separate workflows.
+    Pull {
+        remote: String,
+        branch: String,
+    },
+    /// Push only the observed current branch/OID, never a force or mirror push.
+    Push {
+        remote: String,
+        branch: String,
+        #[serde(default)]
+        set_upstream: bool,
+    },
+    CreateWorktree {
+        path: String,
+        branch: String,
+        #[serde(default)]
+        create_branch: bool,
+        start_point: Option<String>,
+        /// Required when checking out an existing branch; None for a new one.
+        expected_oid: Option<String>,
+    },
+    RemoveWorktree {
+        path: String,
+        expected_oid: String,
+        #[serde(default)]
+        allow_unpublished: bool,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OperationState {
+    Queued,
+    Running,
+    Succeeded,
+    Failed,
+    Cancelled,
+    UnknownOutcome,
+}
+impl OperationState {
+    pub fn terminal(self) -> bool {
+        !matches!(self, Self::Queued | Self::Running)
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationSnapshot {
+    pub id: String,
+    pub repository_id: String,
+    pub workspace_root: String,
+    pub repository_path: String,
+    pub action: RepositoryAction,
+    pub state: OperationState,
+    pub cancellation_requested: bool,
+    pub created_at: String,
+    pub finished_at: Option<String>,
+    pub message: Option<String>,
+}
+
+#[derive(Default)]
+struct Cancellation {
+    requested: AtomicBool,
+    notify: Notify,
+}
+impl Cancellation {
+    fn cancel(&self) {
+        self.requested.store(true, Ordering::SeqCst);
+        self.notify.notify_waiters();
+    }
+    async fn cancelled(&self) {
+        let notified = self.notify.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
+        if !self.requested.load(Ordering::SeqCst) {
+            notified.await;
+        }
+    }
+}
+
+struct Operation {
+    snapshot: Mutex<OperationSnapshot>,
+    cancellation: Cancellation,
+    mutation_started: AtomicBool,
+}
+
+#[derive(Default)]
+struct Inner {
+    locks: Mutex<HashMap<PathBuf, Weak<tokio::sync::Mutex<()>>>>,
+    operations: Mutex<HashMap<String, Arc<Operation>>>,
+    order: Mutex<VecDeque<String>>,
+}
+
+#[derive(Clone)]
+pub struct RepositoryService {
+    inner: Arc<Inner>,
+    command_timeout: Duration,
+}
+impl Default for RepositoryService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Hold this across legacy index/worktree writes to share the same queue.
+pub struct RepositoryGuard {
+    pub context: RepositoryContext,
+    _guard: OwnedMutexGuard<()>,
+}
+
+impl RepositoryService {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::default(),
+            command_timeout: Duration::from_secs(120),
+        }
+    }
+
+    pub fn with_timeout(timeout: Duration) -> AppResult<Self> {
+        if timeout.is_zero() || timeout > Duration::from_secs(600) {
+            return Err(AppError::BadRequest(
+                "Git timeout must be between zero and ten minutes".into(),
+            ));
+        }
+        Ok(Self {
+            command_timeout: timeout,
+            ..Self::new()
+        })
+    }
+
+    fn lock_for(&self, directory: &Path) -> Arc<tokio::sync::Mutex<()>> {
+        let mut locks = self.inner.locks.lock().expect("repository locks");
+        locks.retain(|_, lock| lock.strong_count() > 0);
+        if let Some(lock) = locks.get(directory).and_then(Weak::upgrade) {
+            return lock;
+        }
+        let lock = Arc::new(tokio::sync::Mutex::new(()));
+        locks.insert(directory.to_owned(), Arc::downgrade(&lock));
+        lock
+    }
+
+    pub async fn mutation_guard(
+        &self,
+        workspace_root: &Path,
+        requested: &str,
+    ) -> AppResult<RepositoryGuard> {
+        let context = self.context(workspace_root, requested).await?;
+        let guard = self.lock_for(&context.common_dir).lock_owned().await;
+        self.revalidate_context(&context, &Cancellation::default())
+            .await?;
+        Ok(RepositoryGuard {
+            context,
+            _guard: guard,
+        })
+    }
+
+    pub async fn context(
+        &self,
+        workspace_root: &Path,
+        requested: &str,
+    ) -> AppResult<RepositoryContext> {
+        self.context_with_token(workspace_root, requested, &Cancellation::default())
+            .await
+    }
+
+    async fn context_with_token(
+        &self,
+        workspace_root: &Path,
+        requested: &str,
+        token: &Cancellation,
+    ) -> AppResult<RepositoryContext> {
+        let root = canonical_directory(workspace_root)?;
+        let directory = resolve_in_root(&root, requested)?;
+        if !directory.is_dir() {
+            return Err(AppError::BadRequest("Git path must be a directory".into()));
+        }
+        let inside = self
+            .read(
+                &directory,
+                args(&["rev-parse", "--is-inside-work-tree"]),
+                token,
+            )
+            .await?;
+        if one_line(&inside)? != "true" {
+            return Err(AppError::BadRequest(
+                "Path is not a working Git repository".into(),
+            ));
+        }
+        let path = self
+            .read(&directory, args(&["rev-parse", "--show-toplevel"]), token)
+            .await?;
+        let repository = canonical_directory(one_line(&path)?)?;
+        if !repository.starts_with(&root) {
+            return Err(AppError::Forbidden(
+                "Git repository is outside the authorized workspace".into(),
+            ));
+        }
+        let common = self
+            .read(
+                &repository,
+                args(&["rev-parse", "--path-format=absolute", "--git-common-dir"]),
+                token,
+            )
+            .await?;
+        let common_dir = canonical_directory(one_line(&common)?)?;
+        Ok(RepositoryContext {
+            workspace_root: root,
+            repository,
+            common_dir,
+        })
+    }
+
+    async fn revalidate_context(
+        &self,
+        context: &RepositoryContext,
+        token: &Cancellation,
+    ) -> AppResult<()> {
+        let current = self
+            .context_with_token(
+                &context.workspace_root,
+                &path_string(&context.repository)?,
+                token,
+            )
+            .await?;
+        if current.workspace_root != context.workspace_root
+            || current.repository != context.repository
+            || current.common_dir != context.common_dir
+        {
+            return Err(AppError::Conflict(
+                "Repository location changed while the operation was queued".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub async fn branches(
+        &self,
+        workspace_root: &Path,
+        requested: &str,
+    ) -> AppResult<BranchSnapshot> {
+        let context = self.context(workspace_root, requested).await?;
+        let token = Cancellation::default();
+        let head = self.head(&context.repository, &token).await?;
+        let output = self.read(&context.repository, args(&["for-each-ref", "--sort=refname", "--format=%(refname)%00%(objectname)%00%(upstream)%00%(upstream:track,nobracket)%00%(symref)%00", "refs/heads/", "refs/remotes/"]), &token).await?;
+        let mut branches = Vec::new();
+        for record in fields_with_lf(&output, 5)? {
+            let full_ref = record[0].clone();
+            let remote = full_ref.starts_with("refs/remotes/");
+            let name = full_ref
+                .strip_prefix(if remote {
+                    "refs/remotes/"
+                } else {
+                    "refs/heads/"
+                })
+                .ok_or_else(malformed)?
+                .to_owned();
+            if !valid_oid(&record[1]) {
+                return Err(malformed());
+            }
+            let (ahead, behind, missing) = parse_tracking(&record[3])?;
+            branches.push(BranchRecord {
+                current: !remote && head.branch.as_ref() == Some(&name),
+                name,
+                full_ref,
+                oid: record[1].clone(),
+                remote,
+                upstream: nonempty(&record[2]),
+                ahead: if record[2].is_empty() { None } else { ahead },
+                behind: if record[2].is_empty() { None } else { behind },
+                upstream_missing: missing,
+                symbolic_target: nonempty(&record[4]),
+            });
+        }
+        Ok(BranchSnapshot {
+            repository_id: context.repository_id(),
+            repository_path: path_string(&context.repository)?,
+            head,
+            branches,
+            remotes: self.remotes(&context.repository, &token).await?,
+            observed_at: now(),
+        })
+    }
+
+    pub async fn history(
+        &self,
+        workspace_root: &Path,
+        requested: &str,
+        request: HistoryRequest,
+    ) -> AppResult<HistoryPage> {
+        if request.limit == 0 || request.limit > MAX_HISTORY_PAGE {
+            return Err(AppError::BadRequest(
+                "History page size must be 1–200".into(),
+            ));
+        }
+        let context = self.context(workspace_root, requested).await?;
+        let token = Cancellation::default();
+        self.validate_reference(&context.repository, &request.reference, &token)
+            .await?;
+        let (anchor, offset) = if let Some(cursor) = request.cursor {
+            if cursor.len() > 4096 {
+                return Err(invalid_cursor());
+            }
+            let wire = URL_SAFE_NO_PAD
+                .decode(cursor)
+                .map_err(|_| invalid_cursor())?;
+            let cursor: HistoryCursor =
+                serde_json::from_slice(&wire).map_err(|_| invalid_cursor())?;
+            if cursor.version != 1
+                || cursor.repository_id != context.repository_id()
+                || cursor.reference != request.reference
+                || !valid_oid(&cursor.anchor_oid)
+                || cursor.offset > 1_000_000
+            {
+                return Err(invalid_cursor());
+            }
+            // Resolve the immutable anchor, not the ref's new value.
+            (
+                Some(
+                    self.resolve(&context.repository, &cursor.anchor_oid, &token)
+                        .await?,
+                ),
+                cursor.offset,
+            )
+        } else if request.reference == "HEAD" {
+            (self.head(&context.repository, &token).await?.head_oid, 0)
+        } else {
+            (
+                Some(
+                    self.resolve(&context.repository, &request.reference, &token)
+                        .await?,
+                ),
+                0,
+            )
+        };
+        let shallow = one_line(
+            &self
+                .read(
+                    &context.repository,
+                    args(&["rev-parse", "--is-shallow-repository"]),
+                    &token,
+                )
+                .await?,
+        )? == "true";
+        let Some(anchor_oid) = anchor else {
+            return Ok(HistoryPage {
+                reference: request.reference,
+                anchor_oid: None,
+                commits: vec![],
+                next_cursor: None,
+                shallow,
+            });
+        };
+        let output = self
+            .read(
+                &context.repository,
+                vec![
+                    "log".into(),
+                    "--topo-order".into(),
+                    "--no-show-signature".into(),
+                    "--no-decorate".into(),
+                    "-z".into(),
+                    "--format=%H%x00%P%x00%an%x00%ae%x00%aI%x00%cI%x00%s".into(),
+                    format!("--skip={offset}"),
+                    format!("--max-count={}", request.limit + 1),
+                    anchor_oid.clone(),
+                    "--".into(),
+                ],
+                &token,
+            )
+            .await?;
+        let refs = self.commit_refs(&context.repository, &token).await?;
+        let mut commits = parse_history(&output, &refs)?;
+        let more = commits.len() > request.limit;
+        commits.truncate(request.limit);
+        let next_cursor = if more {
+            Some(
+                URL_SAFE_NO_PAD.encode(
+                    serde_json::to_vec(&HistoryCursor {
+                        version: 1,
+                        repository_id: context.repository_id(),
+                        reference: request.reference.clone(),
+                        anchor_oid: anchor_oid.clone(),
+                        offset: offset + commits.len(),
+                    })
+                    .map_err(|_| malformed())?,
+                ),
+            )
+        } else {
+            None
+        };
+        Ok(HistoryPage {
+            reference: request.reference,
+            anchor_oid: Some(anchor_oid),
+            commits,
+            next_cursor,
+            shallow,
+        })
+    }
+
+    pub async fn worktrees(
+        &self,
+        workspace_root: &Path,
+        requested: &str,
+    ) -> AppResult<Vec<WorktreeRecord>> {
+        let context = self.context(workspace_root, requested).await?;
+        self.worktree_records(&context, &Cancellation::default())
+            .await
+    }
+
+    pub async fn start(
+        &self,
+        workspace_root: PathBuf,
+        requested: String,
+        action: RepositoryAction,
+        expected: ExpectedState,
+    ) -> AppResult<OperationSnapshot> {
+        let context = self.context(&workspace_root, &requested).await?;
+        self.validate_action(&context, &action).await?;
+        if expected
+            .head_oid
+            .as_deref()
+            .is_some_and(|oid| !valid_oid(oid))
+        {
+            return Err(AppError::BadRequest(
+                "Expected HEAD must be an object ID".into(),
+            ));
+        }
+        if let Some(branch) = &expected.branch {
+            self.validate_branch(&context.repository, branch, &Cancellation::default())
+                .await?;
+        }
+        let snapshot = OperationSnapshot {
+            id: Uuid::now_v7().to_string(),
+            repository_id: context.repository_id(),
+            workspace_root: path_string(&context.workspace_root)?,
+            repository_path: path_string(&context.repository)?,
+            action: action.clone(),
+            state: OperationState::Queued,
+            cancellation_requested: false,
+            created_at: now(),
+            finished_at: None,
+            message: None,
+        };
+        let operation = Arc::new(Operation {
+            snapshot: Mutex::new(snapshot.clone()),
+            cancellation: Cancellation::default(),
+            mutation_started: AtomicBool::new(false),
+        });
+        {
+            let mut registry = self.inner.operations.lock().expect("Git operations");
+            let mut order = self.inner.order.lock().expect("Git operation order");
+            let mut scanned = 0;
+            while registry.len() >= MAX_OPERATIONS && scanned < order.len() {
+                let Some(id) = order.pop_front() else {
+                    break;
+                };
+                if registry
+                    .get(&id)
+                    .is_some_and(|op| op.snapshot.lock().expect("Git operation").state.terminal())
+                {
+                    registry.remove(&id);
+                } else {
+                    order.push_back(id);
+                    scanned += 1;
+                }
+            }
+            if registry.len() >= MAX_OPERATIONS {
+                return Err(AppError::Conflict("Too many active Git operations".into()));
+            }
+            order.push_back(snapshot.id.clone());
+            registry.insert(snapshot.id.clone(), operation.clone());
+        }
+        // Poll once before returning to reserve the FIFO mutex position. Moving
+        // this pinned future into the task preserves its semaphore waiter.
+        let mut lock = Box::pin(self.lock_for(&context.common_dir).lock_owned());
+        let initial = futures_util::poll!(lock.as_mut());
+        let service = self.clone();
+        tokio::spawn(async move {
+            let guard = match initial {
+                Poll::Ready(guard) => Some(guard),
+                Poll::Pending => {
+                    tokio::select! { guard = lock => Some(guard), _ = operation.cancellation.cancelled() => None }
+                }
+            };
+            if guard.is_none() || operation.cancellation.requested.load(Ordering::SeqCst) {
+                finish(
+                    &operation,
+                    OperationState::Cancelled,
+                    Some("Cancelled before any repository mutation".into()),
+                );
+                return;
+            }
+            operation.snapshot.lock().expect("Git operation").state = OperationState::Running;
+            let result = service
+                .execute(&context, &action, &expected, &operation)
+                .await;
+            match result {
+                Ok(()) => finish(&operation, OperationState::Succeeded, None),
+                Err(error) => {
+                    let state = if operation.mutation_started.load(Ordering::SeqCst) {
+                        OperationState::UnknownOutcome
+                    } else if operation.cancellation.requested.load(Ordering::SeqCst) {
+                        OperationState::Cancelled
+                    } else {
+                        OperationState::Failed
+                    };
+                    finish(&operation, state, Some(sanitize(&error.to_string())));
+                }
+            }
+            drop(guard);
+        });
+        Ok(snapshot)
+    }
+
+    pub fn operation(&self, id: &str) -> AppResult<OperationSnapshot> {
+        let registry = self.inner.operations.lock().expect("Git operations");
+        let operation = registry
+            .get(id)
+            .ok_or_else(|| AppError::NotFound("Git operation is unavailable".into()))?;
+        Ok(operation.snapshot.lock().expect("Git operation").clone())
+    }
+
+    pub fn cancel(&self, id: &str) -> AppResult<OperationSnapshot> {
+        let operation = self
+            .inner
+            .operations
+            .lock()
+            .expect("Git operations")
+            .get(id)
+            .cloned()
+            .ok_or_else(|| AppError::NotFound("Git operation is unavailable".into()))?;
+        let mut snapshot = operation.snapshot.lock().expect("Git operation");
+        if !snapshot.state.terminal() {
+            snapshot.cancellation_requested = true;
+            operation.cancellation.cancel();
+        }
+        Ok(snapshot.clone())
+    }
+
+    async fn read(
+        &self,
+        directory: &Path,
+        arguments: Vec<String>,
+        token: &Cancellation,
+    ) -> AppResult<Vec<u8>> {
+        run_git(
+            directory,
+            arguments,
+            self.command_timeout.min(Duration::from_secs(15)),
+            token,
+            None,
+        )
+        .await
+    }
+
+    async fn mutate(
+        &self,
+        context: &RepositoryContext,
+        arguments: Vec<String>,
+        operation: &Operation,
+    ) -> AppResult<()> {
+        run_git(
+            &context.repository,
+            arguments,
+            self.command_timeout,
+            &operation.cancellation,
+            Some(&operation.mutation_started),
+        )
+        .await
+        .map(|_| ())
+    }
+
+    async fn head(&self, directory: &Path, token: &Cancellation) -> AppResult<ExpectedState> {
+        let branch_output = run_git_status(
+            directory,
+            args(&["symbolic-ref", "--quiet", "--short", "HEAD"]),
+            self.command_timeout.min(Duration::from_secs(15)),
+            token,
+            None,
+        )
+        .await?;
+        let branch = match branch_output.status {
+            Some(0) => Some(one_line(&branch_output.stdout)?.to_owned()),
+            Some(1) => None,
+            _ => return Err(command_error(&branch_output)),
+        };
+        let output = run_git_status(
+            directory,
+            args(&["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]),
+            self.command_timeout.min(Duration::from_secs(15)),
+            token,
+            None,
+        )
+        .await?;
+        let head_oid = if output.status == Some(0) {
+            let oid = one_line(&output.stdout)?;
+            if !valid_oid(oid) {
+                return Err(malformed());
+            }
+            Some(oid.to_owned())
+        } else if output.status == Some(1) && branch.is_some() {
+            None
+        } else {
+            return Err(command_error(&output));
+        };
+        Ok(ExpectedState { head_oid, branch })
+    }
+
+    async fn resolve(
+        &self,
+        directory: &Path,
+        reference: &str,
+        token: &Cancellation,
+    ) -> AppResult<String> {
+        self.validate_reference(directory, reference, token).await?;
+        let output = self
+            .read(
+                directory,
+                vec![
+                    "rev-parse".into(),
+                    "--verify".into(),
+                    "--end-of-options".into(),
+                    format!("{reference}^{{commit}}"),
+                ],
+                token,
+            )
+            .await?;
+        let oid = one_line(&output)?;
+        if !valid_oid(oid) {
+            return Err(malformed());
+        }
+        Ok(oid.to_owned())
+    }
+
+    async fn validate_branch(
+        &self,
+        directory: &Path,
+        name: &str,
+        token: &Cancellation,
+    ) -> AppResult<()> {
+        if name.is_empty()
+            || name.len() > 255
+            || name.starts_with('-')
+            || name.starts_with("refs/")
+            || name.contains("@{")
+            || name.chars().any(char::is_control)
+        {
+            return Err(AppError::BadRequest("Branch name is invalid".into()));
+        }
+        self.read(
+            directory,
+            vec!["check-ref-format".into(), "--branch".into(), name.into()],
+            token,
+        )
+        .await
+        .map(|_| ())
+        .map_err(|_| AppError::BadRequest("Branch name is invalid".into()))
+    }
+
+    async fn validate_reference(
+        &self,
+        directory: &Path,
+        reference: &str,
+        token: &Cancellation,
+    ) -> AppResult<()> {
+        if reference == "HEAD" || valid_oid(reference) {
+            return Ok(());
+        }
+        if reference.starts_with("refs/") {
+            if reference.len() > 1024 || reference.chars().any(char::is_control) {
+                return Err(AppError::BadRequest("Git reference is invalid".into()));
+            }
+            self.read(
+                directory,
+                vec!["check-ref-format".into(), reference.into()],
+                token,
+            )
+            .await
+            .map(|_| ())
+            .map_err(|_| AppError::BadRequest("Git reference is invalid".into()))
+        } else {
+            self.validate_branch(directory, reference, token).await
+        }
+    }
+
+    async fn remotes(&self, directory: &Path, token: &Cancellation) -> AppResult<Vec<String>> {
+        let output = self.read(directory, args(&["remote"]), token).await?;
+        let text = text(&output)?;
+        Ok(text.lines().map(str::to_owned).collect())
+    }
+
+    async fn validate_remote(
+        &self,
+        directory: &Path,
+        remote: &str,
+        token: &Cancellation,
+    ) -> AppResult<()> {
+        if remote.is_empty()
+            || remote.len() > 255
+            || remote.starts_with('-')
+            || remote.contains(':')
+            || remote.chars().any(char::is_control)
+            || !self
+                .remotes(directory, token)
+                .await?
+                .iter()
+                .any(|name| name == remote)
+        {
+            return Err(AppError::BadRequest(
+                "Select a configured Git remote".into(),
+            ));
+        }
+        self.read(
+            directory,
+            vec![
+                "check-ref-format".into(),
+                format!("refs/remotes/{remote}/probe"),
+            ],
+            token,
+        )
+        .await
+        .map_err(|_| AppError::BadRequest("Git remote name is invalid".into()))?;
+        self.read(directory, args(&["remote", "get-url", "--", remote]), token)
+            .await?;
+        Ok(())
+    }
+
+    async fn commit_refs(
+        &self,
+        directory: &Path,
+        token: &Cancellation,
+    ) -> AppResult<HashMap<String, Vec<String>>> {
+        let output = self
+            .read(
+                directory,
+                args(&[
+                    "for-each-ref",
+                    "--format=%(objectname)%00%(*objectname)%00%(refname)%00",
+                    "refs/heads/",
+                    "refs/remotes/",
+                    "refs/tags/",
+                ]),
+                token,
+            )
+            .await?;
+        let mut refs: HashMap<String, Vec<String>> = HashMap::new();
+        for record in fields_with_lf(&output, 3)? {
+            let oid = if record[1].is_empty() {
+                &record[0]
+            } else {
+                &record[1]
+            };
+            refs.entry(oid.clone()).or_default().push(record[2].clone());
+        }
+        Ok(refs)
+    }
+
+    async fn worktree_records(
+        &self,
+        context: &RepositoryContext,
+        token: &Cancellation,
+    ) -> AppResult<Vec<WorktreeRecord>> {
+        let output = self
+            .read(
+                &context.repository,
+                args(&["worktree", "list", "--porcelain", "-z"]),
+                token,
+            )
+            .await?;
+        let mut records = parse_worktrees(&output)?;
+        for record in &mut records {
+            let path = Path::new(&record.path);
+            if let Ok(canonical) = path.canonicalize() {
+                record.accessible = canonical.starts_with(&context.workspace_root);
+                if record.accessible && !record.bare {
+                    record.dirty = Some(
+                        !self
+                            .read(
+                                &canonical,
+                                args(&[
+                                    "status",
+                                    "--porcelain=v1",
+                                    "-z",
+                                    "--untracked-files=all",
+                                    "--ignored=matching",
+                                ]),
+                                token,
+                            )
+                            .await?
+                            .is_empty(),
+                    );
+                }
+            }
+        }
+        Ok(records)
+    }
+
+    async fn validate_action(
+        &self,
+        context: &RepositoryContext,
+        action: &RepositoryAction,
+    ) -> AppResult<()> {
+        let token = Cancellation::default();
+        match action {
+            RepositoryAction::CreateBranch {
+                name, start_point, ..
+            } => {
+                self.validate_branch(&context.repository, name, &token)
+                    .await?;
+                if let Some(reference) = start_point {
+                    self.validate_reference(&context.repository, reference, &token)
+                        .await?;
+                }
+            }
+            RepositoryAction::SwitchBranch { name, expected_oid }
+            | RepositoryAction::DeleteBranch { name, expected_oid } => {
+                self.validate_branch(&context.repository, name, &token)
+                    .await?;
+                require_oid(expected_oid)?;
+            }
+            RepositoryAction::Fetch { remote, .. } => {
+                self.validate_remote(&context.repository, remote, &token)
+                    .await?
+            }
+            RepositoryAction::Pull { remote, branch }
+            | RepositoryAction::Push { remote, branch, .. } => {
+                self.validate_remote(&context.repository, remote, &token)
+                    .await?;
+                self.validate_branch(&context.repository, branch, &token)
+                    .await?;
+            }
+            RepositoryAction::CreateWorktree {
+                path,
+                branch,
+                start_point,
+                create_branch,
+                expected_oid,
+                ..
+            } => {
+                new_worktree_path(context, path)?;
+                self.validate_branch(&context.repository, branch, &token)
+                    .await?;
+                if !create_branch {
+                    require_oid(expected_oid.as_deref().ok_or_else(|| {
+                        AppError::BadRequest(
+                            "Existing worktree branch requires its observed object ID".into(),
+                        )
+                    })?)?;
+                }
+                if let Some(reference) = start_point {
+                    self.validate_reference(&context.repository, reference, &token)
+                        .await?;
+                }
+            }
+            RepositoryAction::RemoveWorktree {
+                path, expected_oid, ..
+            } => {
+                resolve_in_root(&context.workspace_root, path)?;
+                require_oid(expected_oid)?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn execute(
+        &self,
+        context: &RepositoryContext,
+        action: &RepositoryAction,
+        expected: &ExpectedState,
+        operation: &Operation,
+    ) -> AppResult<()> {
+        let token = &operation.cancellation;
+        self.revalidate_context(context, token).await?;
+        if self.head(&context.repository, token).await? != *expected {
+            return Err(AppError::Conflict(
+                "Repository HEAD changed; reload before retrying".into(),
+            ));
+        }
+        match action {
+            RepositoryAction::CreateBranch {
+                name,
+                start_point,
+                switch,
+            } => {
+                let oid = self
+                    .resolve(
+                        &context.repository,
+                        start_point.as_deref().unwrap_or("HEAD"),
+                        token,
+                    )
+                    .await?;
+                let arguments = if *switch {
+                    vec![
+                        "switch",
+                        "--no-guess",
+                        "--no-overwrite-ignore",
+                        "--no-track",
+                        "-c",
+                        name,
+                        &oid,
+                    ]
+                } else {
+                    vec!["branch", "--no-track", "--", name, &oid]
+                };
+                self.mutate(context, args(&arguments), operation).await
+            }
+            RepositoryAction::SwitchBranch { name, expected_oid }
+            | RepositoryAction::DeleteBranch { name, expected_oid } => {
+                if self
+                    .resolve(&context.repository, &format!("refs/heads/{name}"), token)
+                    .await?
+                    != *expected_oid
+                {
+                    return Err(AppError::Conflict(
+                        "Selected branch changed; reload before retrying".into(),
+                    ));
+                }
+                let arguments = if matches!(action, RepositoryAction::SwitchBranch { .. }) {
+                    vec!["switch", "--no-guess", "--no-overwrite-ignore", "--", name]
+                } else {
+                    vec!["branch", "--delete", "--", name]
+                };
+                self.mutate(context, args(&arguments), operation).await
+            }
+            RepositoryAction::Fetch { remote, prune } => {
+                self.validate_remote(&context.repository, remote, token)
+                    .await?;
+                let mut arguments =
+                    args(&["fetch", "--atomic", "--progress", "--no-recurse-submodules"]);
+                if *prune {
+                    arguments.push("--prune".into());
+                }
+                arguments.extend(["--".into(), remote.clone()]);
+                self.mutate(context, arguments, operation).await
+            }
+            RepositoryAction::Pull { remote, branch } => {
+                self.validate_remote(&context.repository, remote, token)
+                    .await?;
+                if expected.branch.is_none() {
+                    return Err(AppError::Conflict(
+                        "Pull requires an attached local branch".into(),
+                    ));
+                }
+                self.mutate(
+                    context,
+                    args(&[
+                        "pull",
+                        "--ff-only",
+                        "--no-rebase",
+                        "--no-autostash",
+                        "--no-recurse-submodules",
+                        "--",
+                        remote,
+                        branch,
+                    ]),
+                    operation,
+                )
+                .await
+            }
+            RepositoryAction::Push {
+                remote,
+                branch,
+                set_upstream,
+            } => {
+                self.validate_remote(&context.repository, remote, token)
+                    .await?;
+                if expected.branch.as_ref() != Some(branch) {
+                    return Err(AppError::Conflict(
+                        "Push must target the observed current local branch".into(),
+                    ));
+                }
+                let oid = expected
+                    .head_oid
+                    .as_ref()
+                    .ok_or_else(|| AppError::Conflict("There are no commits to push".into()))?;
+                self.mutate(
+                    context,
+                    vec![
+                        "push".into(),
+                        "--porcelain".into(),
+                        "--no-force".into(),
+                        "--no-mirror".into(),
+                        "--no-follow-tags".into(),
+                        "--".into(),
+                        remote.clone(),
+                        format!("{oid}:refs/heads/{branch}"),
+                    ],
+                    operation,
+                )
+                .await?;
+                if *set_upstream {
+                    self.mutate(
+                        context,
+                        vec![
+                            "branch".into(),
+                            format!("--set-upstream-to={remote}/{branch}"),
+                            "--".into(),
+                            branch.clone(),
+                        ],
+                        operation,
+                    )
+                    .await?;
+                }
+                Ok(())
+            }
+            RepositoryAction::CreateWorktree {
+                path,
+                branch,
+                create_branch,
+                start_point,
+                expected_oid,
+            } => {
+                let target = new_worktree_path(context, path)?;
+                let mut arguments = args(&["worktree", "add"]);
+                if *create_branch {
+                    let oid = self
+                        .resolve(
+                            &context.repository,
+                            start_point.as_deref().unwrap_or("HEAD"),
+                            token,
+                        )
+                        .await?;
+                    arguments.extend([
+                        "--no-track".into(),
+                        "-b".into(),
+                        branch.clone(),
+                        "--".into(),
+                        path_string(&target)?,
+                        oid,
+                    ]);
+                } else {
+                    if start_point.is_some() {
+                        return Err(AppError::BadRequest(
+                            "An existing worktree branch cannot have a different start point"
+                                .into(),
+                        ));
+                    }
+                    let actual = self
+                        .resolve(&context.repository, &format!("refs/heads/{branch}"), token)
+                        .await?;
+                    if expected_oid.as_ref() != Some(&actual) {
+                        return Err(AppError::Conflict(
+                            "Worktree branch changed; reload before creating the checkout".into(),
+                        ));
+                    }
+                    arguments.extend(["--".into(), path_string(&target)?, branch.clone()]);
+                }
+                // Register the exact nested checkout in private Git excludes,
+                // so a later Stage All cannot stage a repository inside itself.
+                for worktree in self.worktree_records(context, token).await? {
+                    if !worktree.bare
+                        && let Ok(root) = Path::new(&worktree.path).canonicalize()
+                    {
+                        protect_nested_worktree(context, &root, &target, operation)?;
+                    }
+                }
+                let _parents = create_worktree_parents(context, &target, operation)?;
+                self.mutate(context, arguments, operation).await
+            }
+            RepositoryAction::RemoveWorktree {
+                path,
+                expected_oid,
+                allow_unpublished,
+            } => {
+                let target = resolve_in_root(&context.workspace_root, path)?;
+                if target.starts_with(&context.common_dir) {
+                    return Err(AppError::Forbidden(
+                        "Git administration directories cannot be removed as worktrees".into(),
+                    ));
+                }
+                let records = self.worktree_records(context, token).await?;
+                let record = records
+                    .iter()
+                    .find(|record| {
+                        Path::new(&record.path).canonicalize().ok().as_ref() == Some(&target)
+                    })
+                    .ok_or_else(|| {
+                        AppError::BadRequest("Path is not a registered worktree".into())
+                    })?;
+                if record.is_main
+                    || record.bare
+                    || record.locked
+                    || record.prunable
+                    || record.dirty != Some(false)
+                {
+                    return Err(AppError::Conflict(
+                        "Main, locked, missing, or dirty worktrees cannot be removed".into(),
+                    ));
+                }
+                if record.head_oid.as_ref() != Some(expected_oid) {
+                    return Err(AppError::Conflict(
+                        "Worktree HEAD changed; reload before removing".into(),
+                    ));
+                }
+                if !allow_unpublished {
+                    let output = self
+                        .read(
+                            &target,
+                            args(&["rev-list", "--count", "HEAD", "--not", "--remotes"]),
+                            token,
+                        )
+                        .await?;
+                    if one_line(&output)?.parse::<u64>().map_err(|_| malformed())? > 0 {
+                        return Err(AppError::Conflict("Worktree contains unpublished commits; review and explicitly acknowledge them first".into()));
+                    }
+                }
+                self.mutate(
+                    context,
+                    vec![
+                        "worktree".into(),
+                        "remove".into(),
+                        "--".into(),
+                        path_string(&target)?,
+                    ],
+                    operation,
+                )
+                .await
+            }
+        }
+    }
+}
+
+fn finish(operation: &Operation, state: OperationState, message: Option<String>) {
+    let mut snapshot = operation.snapshot.lock().expect("Git operation");
+    snapshot.state = state;
+    snapshot.message = message;
+    snapshot.finished_at = Some(now());
+}
+
+fn new_worktree_path(context: &RepositoryContext, requested: &str) -> AppResult<PathBuf> {
+    if requested.is_empty() || requested.len() > 4096 || requested.chars().any(|c| c == '\0') {
+        return Err(AppError::BadRequest("Worktree path is invalid".into()));
+    }
+    let candidate = if Path::new(requested).is_absolute() {
+        PathBuf::from(requested)
+    } else {
+        context.workspace_root.join(requested)
+    };
+    if candidate
+        .components()
+        .any(|part| matches!(part, std::path::Component::ParentDir))
+    {
+        return Err(AppError::BadRequest(
+            "Worktree path must not contain parent traversal".into(),
+        ));
+    }
+    match candidate.symlink_metadata() {
+        Ok(_) => {
+            return Err(AppError::Conflict(
+                "Worktree destination already exists".into(),
+            ));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    // Resolve the nearest existing ancestor, then validate every new segment.
+    // No directories are created during request validation.
+    let mut ancestor = candidate.as_path();
+    let mut missing = Vec::new();
+    loop {
+        match ancestor.symlink_metadata() {
+            Ok(_) => break,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let name = ancestor
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .ok_or_else(|| {
+                        AppError::BadRequest("Worktree directory name must be UTF-8".into())
+                    })?;
+                if valid_directory_name(name)? != name {
+                    return Err(AppError::BadRequest(
+                        "Worktree path must not have padded directory names".into(),
+                    ));
+                }
+                missing.push(name.to_owned());
+                ancestor = ancestor.parent().ok_or_else(|| {
+                    AppError::BadRequest("Worktree path has no existing ancestor".into())
+                })?;
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+    let mut target = canonical_directory(ancestor)?;
+    if !target.starts_with(&context.workspace_root) {
+        return Err(AppError::Forbidden(
+            "Worktree path is outside the workspace".into(),
+        ));
+    }
+    for segment in missing.into_iter().rev() {
+        target.push(segment);
+    }
+    if target.starts_with(&context.common_dir) {
+        return Err(AppError::Forbidden(
+            "Worktrees cannot be created inside Git administration directories".into(),
+        ));
+    }
+    Ok(target)
+}
+
+struct CreatedParents(Vec<PathBuf>);
+impl Drop for CreatedParents {
+    fn drop(&mut self) {
+        // Only empty directories this invocation created; never recurse/delete
+        // a partial checkout or anything another process has added.
+        for directory in self.0.iter().rev() {
+            let _ = std::fs::remove_dir(directory);
+        }
+    }
+}
+
+fn create_worktree_parents(
+    context: &RepositoryContext,
+    target: &Path,
+    operation: &Operation,
+) -> AppResult<CreatedParents> {
+    let parent = target
+        .parent()
+        .ok_or_else(|| AppError::BadRequest("Worktree needs a parent directory".into()))?;
+    let relative = parent
+        .strip_prefix(&context.workspace_root)
+        .map_err(|_| AppError::Forbidden("Worktree is outside the workspace".into()))?;
+    let mut cursor = context.workspace_root.clone();
+    let mut created = CreatedParents(vec![]);
+    for part in relative.components() {
+        if operation.cancellation.requested.load(Ordering::SeqCst) {
+            return Err(AppError::Conflict("Worktree creation cancelled".into()));
+        }
+        cursor.push(part);
+        match cursor.symlink_metadata() {
+            Ok(metadata) if metadata.is_dir() && !is_link(&metadata) => {}
+            Ok(_) => {
+                return Err(AppError::Forbidden(
+                    "Worktree parent changed to a link or non-directory".into(),
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                operation.mutation_started.store(true, Ordering::SeqCst);
+                let mut builder = std::fs::DirBuilder::new();
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::DirBuilderExt;
+                    builder.mode(0o700);
+                }
+                builder.create(&cursor)?;
+                created.0.push(cursor.clone());
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(created)
+}
+
+fn is_link(metadata: &std::fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if metadata.file_attributes() & 0x400 != 0 {
+            return true;
+        }
+    }
+    metadata.file_type().is_symlink()
+}
+
+fn protect_nested_worktree(
+    context: &RepositoryContext,
+    repository_root: &Path,
+    target: &Path,
+    operation: &Operation,
+) -> AppResult<()> {
+    let Ok(relative) = target.strip_prefix(repository_root) else {
+        return Ok(());
+    };
+    let mut pattern = String::from("/");
+    for (index, part) in relative.components().enumerate() {
+        if index > 0 {
+            pattern.push('/');
+        }
+        let value = part
+            .as_os_str()
+            .to_str()
+            .ok_or_else(|| AppError::BadRequest("Worktree path must be UTF-8".into()))?;
+        if value.chars().any(char::is_control) {
+            return Err(AppError::BadRequest(
+                "Nested worktree paths cannot contain control characters".into(),
+            ));
+        }
+        for character in value.chars() {
+            if "\\*?[]!# ".contains(character) {
+                pattern.push('\\');
+            }
+            pattern.push(character);
+        }
+    }
+    pattern.push('/');
+    if relative.starts_with(".armadra/worktrees") {
+        pattern = "/.armadra/worktrees/".into();
+    }
+    if operation.cancellation.requested.load(Ordering::SeqCst) {
+        return Err(AppError::Conflict("Worktree creation cancelled".into()));
+    }
+    let info = context.common_dir.join("info");
+    match info.symlink_metadata() {
+        Ok(metadata) if metadata.is_dir() && !is_link(&metadata) => {}
+        Ok(_) => {
+            return Err(AppError::Forbidden(
+                "Git info directory must not be a link".into(),
+            ));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            operation.mutation_started.store(true, Ordering::SeqCst);
+            std::fs::create_dir(&info)?;
+        }
+        Err(error) => return Err(error.into()),
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true).append(true).create(true);
+    let exclude = info.join("exclude");
+    match exclude.symlink_metadata() {
+        Ok(metadata) if metadata.is_file() && !is_link(&metadata) => {}
+        Ok(_) => {
+            return Err(AppError::Forbidden(
+                "Git exclude must be a regular file".into(),
+            ));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(0x0020_0000);
+    }
+    operation.mutation_started.store(true, Ordering::SeqCst);
+    let mut file = options.open(exclude)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || is_link(&metadata) {
+        return Err(AppError::Forbidden(
+            "Git exclude must be a regular file".into(),
+        ));
+    }
+    let mut previous = Vec::new();
+    (&mut file).take(1_048_577).read_to_end(&mut previous)?;
+    if previous.len() > 1_048_576 {
+        return Err(AppError::Conflict(
+            "Git exclude exceeds the editable size budget".into(),
+        ));
+    }
+    if previous
+        .split(|byte| *byte == b'\n')
+        .any(|line| line == pattern.as_bytes())
+    {
+        return Ok(());
+    }
+    // O_APPEND preserves other writers' existing content. The leading newline
+    // also keeps an unterminated original final line intact.
+    file.write_all(format!("\n{pattern}\n").as_bytes())?;
+    file.sync_all()?;
+    Ok(())
+}
+
+fn args(values: &[&str]) -> Vec<String> {
+    values.iter().map(|value| (*value).to_owned()).collect()
+}
+fn now() -> String {
+    Utc::now().to_rfc3339()
+}
+fn nonempty(value: &str) -> Option<String> {
+    (!value.is_empty()).then(|| value.to_owned())
+}
+fn malformed() -> AppError {
+    AppError::Internal("Git returned unsupported or malformed machine-readable output".into())
+}
+fn invalid_cursor() -> AppError {
+    AppError::BadRequest("History cursor does not match this repository/reference".into())
+}
+fn path_string(path: &Path) -> AppResult<String> {
+    path.to_str()
+        .map(str::to_owned)
+        .ok_or_else(|| AppError::BadRequest("Git path is not valid UTF-8".into()))
+}
+fn text(bytes: &[u8]) -> AppResult<&str> {
+    std::str::from_utf8(bytes).map_err(|_| malformed())
+}
+fn one_line(bytes: &[u8]) -> AppResult<&str> {
+    let value = text(bytes)?;
+    Ok(value.strip_suffix('\n').unwrap_or(value))
+}
+fn valid_oid(oid: &str) -> bool {
+    (oid.len() == 40 || oid.len() == 64) && oid.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+fn require_oid(oid: &str) -> AppResult<()> {
+    if valid_oid(oid) {
+        Ok(())
+    } else {
+        Err(AppError::BadRequest(
+            "Expected commit must be an object ID".into(),
+        ))
+    }
+}
+
+fn fields_with_lf(bytes: &[u8], width: usize) -> AppResult<Vec<Vec<String>>> {
+    let mut records = Vec::new();
+    let mut rest = bytes;
+    while !rest.is_empty() {
+        let mut fields = Vec::with_capacity(width);
+        for _ in 0..width {
+            let end = rest
+                .iter()
+                .position(|byte| *byte == 0)
+                .ok_or_else(malformed)?;
+            fields.push(text(&rest[..end])?.to_owned());
+            rest = &rest[end + 1..];
+        }
+        rest = rest.strip_prefix(b"\n").ok_or_else(malformed)?;
+        records.push(fields);
+    }
+    Ok(records)
+}
+
+fn parse_tracking(track: &str) -> AppResult<(Option<u64>, Option<u64>, bool)> {
+    if track == "gone" {
+        return Ok((None, None, true));
+    }
+    let mut ahead = 0;
+    let mut behind = 0;
+    for part in track.split(", ").filter(|part| !part.is_empty()) {
+        let (direction, count) = part.split_once(' ').ok_or_else(malformed)?;
+        let count = count.parse().map_err(|_| malformed())?;
+        match direction {
+            "ahead" => ahead = count,
+            "behind" => behind = count,
+            _ => return Err(malformed()),
+        }
+    }
+    Ok((Some(ahead), Some(behind), false))
+}
+
+fn parse_history(
+    bytes: &[u8],
+    refs: &HashMap<String, Vec<String>>,
+) -> AppResult<Vec<CommitRecord>> {
+    if bytes.is_empty() {
+        return Ok(vec![]);
+    }
+    let mut fields: Vec<_> = bytes.split(|byte| *byte == 0).collect();
+    if fields.last() == Some(&b"".as_slice()) {
+        fields.pop();
+    }
+    if fields.len() % 7 != 0 {
+        return Err(malformed());
+    }
+    fields
+        .chunks_exact(7)
+        .map(|row| {
+            let oid = text(row[0])?.to_owned();
+            let parents: Vec<String> = text(row[1])?
+                .split_whitespace()
+                .map(str::to_owned)
+                .collect();
+            if !valid_oid(&oid) || parents.iter().any(|oid| !valid_oid(oid)) {
+                return Err(malformed());
+            }
+            Ok(CommitRecord {
+                refs: refs.get(&oid).cloned().unwrap_or_default(),
+                oid,
+                parents,
+                subject: text(row[6])?.into(),
+                author_name: text(row[2])?.into(),
+                author_email: text(row[3])?.into(),
+                author_time: text(row[4])?.into(),
+                committer_time: text(row[5])?.into(),
+            })
+        })
+        .collect()
+}
+
+fn parse_worktrees(bytes: &[u8]) -> AppResult<Vec<WorktreeRecord>> {
+    let mut records = Vec::new();
+    let mut current: Option<WorktreeRecord> = None;
+    for field in bytes.split(|byte| *byte == 0) {
+        let line = text(field)?;
+        if line.is_empty() {
+            if let Some(record) = current.take() {
+                records.push(record);
+            }
+            continue;
+        }
+        if let Some(path) = line.strip_prefix("worktree ") {
+            if current.is_some() {
+                return Err(malformed());
+            }
+            current = Some(WorktreeRecord {
+                path: path.into(),
+                head_oid: None,
+                branch: None,
+                detached: false,
+                bare: false,
+                is_main: records.is_empty(),
+                locked: false,
+                lock_reason: None,
+                prunable: false,
+                prune_reason: None,
+                accessible: false,
+                dirty: None,
+            });
+        } else {
+            let record = current.as_mut().ok_or_else(malformed)?;
+            if let Some(oid) = line.strip_prefix("HEAD ") {
+                if !valid_oid(oid) {
+                    return Err(malformed());
+                }
+                record.head_oid = (!oid.bytes().all(|byte| byte == b'0')).then(|| oid.into());
+            } else if let Some(branch) = line.strip_prefix("branch ") {
+                record.branch = Some(branch.strip_prefix("refs/heads/").unwrap_or(branch).into());
+            } else if line == "detached" {
+                record.detached = true;
+            } else if line == "bare" {
+                record.bare = true;
+            } else if line == "locked" || line.starts_with("locked ") {
+                record.locked = true;
+                record.lock_reason = line.strip_prefix("locked ").map(str::to_owned);
+            } else if line == "prunable" || line.starts_with("prunable ") {
+                record.prunable = true;
+                record.prune_reason = line.strip_prefix("prunable ").map(str::to_owned);
+            } else {
+                return Err(malformed());
+            }
+        }
+    }
+    if let Some(record) = current {
+        records.push(record);
+    }
+    Ok(records)
+}
+
+fn sanitize(message: &str) -> String {
+    let redacted = redact_secrets(message);
+    let url = Regex::new(r"(?i)(https?|ssh)://[^/\s@]+@").expect("credential URL regex");
+    url.replace_all(&redacted, "$1://[redacted]@")
+        .chars()
+        .take(8192)
+        .collect()
+}
+
+struct CommandOutput {
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    status: Option<i32>,
+}
+fn command_error(output: &CommandOutput) -> AppError {
+    let message = if output.stderr.is_empty() {
+        &output.stdout
+    } else {
+        &output.stderr
+    };
+    AppError::Internal(format!(
+        "Git operation failed: {}",
+        sanitize(&String::from_utf8_lossy(message))
+    ))
+}
+
+async fn run_git(
+    directory: &Path,
+    arguments: Vec<String>,
+    timeout: Duration,
+    token: &Cancellation,
+    mutation_started: Option<&AtomicBool>,
+) -> AppResult<Vec<u8>> {
+    let output = run_git_status(directory, arguments, timeout, token, mutation_started).await?;
+    if output.status != Some(0) {
+        return Err(command_error(&output));
+    }
+    Ok(output.stdout)
+}
+
+async fn read_output(mut reader: impl AsyncRead + Unpin, limit: usize) -> AppResult<Vec<u8>> {
+    let mut output = Vec::new();
+    let mut chunk = [0u8; 8192];
+    loop {
+        let count = reader.read(&mut chunk).await?;
+        if count == 0 {
+            return Ok(output);
+        }
+        if count > limit - output.len() {
+            return Err(AppError::Internal(
+                "Git output exceeded its bounded budget".into(),
+            ));
+        }
+        output.extend_from_slice(&chunk[..count]);
+    }
+}
+
+async fn run_git_status(
+    directory: &Path,
+    arguments: Vec<String>,
+    timeout: Duration,
+    token: &Cancellation,
+    mutation_started: Option<&AtomicBool>,
+) -> AppResult<CommandOutput> {
+    if token.requested.load(Ordering::SeqCst) {
+        return Err(AppError::Conflict("Git operation cancelled".into()));
+    }
+    let mut command = Command::new("git");
+    command
+        .args([
+            "--no-pager",
+            "-c",
+            "core.quotepath=false",
+            "-c",
+            "color.ui=false",
+            "-c",
+            "i18n.logOutputEncoding=UTF-8",
+        ])
+        .args(arguments)
+        .current_dir(directory)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .env("LC_ALL", "C")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_ASKPASS", "")
+        .env("SSH_ASKPASS", "")
+        .env("GCM_INTERACTIVE", "never")
+        .env("GIT_OPTIONAL_LOCKS", "0");
+    for (name, _) in std::env::vars_os() {
+        let key = name.to_string_lossy();
+        if matches!(
+            key.as_ref(),
+            "GIT_DIR"
+                | "GIT_WORK_TREE"
+                | "GIT_COMMON_DIR"
+                | "GIT_INDEX_FILE"
+                | "GIT_OBJECT_DIRECTORY"
+                | "GIT_ALTERNATE_OBJECT_DIRECTORIES"
+                | "GIT_NAMESPACE"
+                | "GIT_CONFIG"
+                | "GIT_CONFIG_COUNT"
+                | "GIT_CONFIG_PARAMETERS"
+                | "GIT_EXTERNAL_DIFF"
+                | "GIT_DIFF_OPTS"
+                | "GIT_CURL_VERBOSE"
+        ) || key.starts_with("GIT_CONFIG_KEY_")
+            || key.starts_with("GIT_CONFIG_VALUE_")
+            || key.starts_with("GIT_TRACE")
+        {
+            command.env_remove(name);
+        }
+    }
+    let mut child = command
+        .spawn()
+        .map_err(|_| AppError::Internal("Could not start Git".into()))?;
+    if let Some(started) = mutation_started {
+        started.store(true, Ordering::SeqCst);
+    }
+    let stdout = child.stdout.take().ok_or_else(malformed)?;
+    let stderr = child.stderr.take().ok_or_else(malformed)?;
+    let execution = async {
+        let (stdout, stderr, status) = tokio::try_join!(
+            read_output(stdout, MAX_OUTPUT),
+            read_output(stderr, MAX_STDERR),
+            async { child.wait().await.map_err(AppError::from) }
+        )?;
+        Ok(CommandOutput {
+            stdout,
+            stderr,
+            status: status.code(),
+        })
+    };
+    let result = tokio::select! {
+        result = execution => result,
+        _ = token.cancelled() => Err(AppError::Conflict("Git process was cancelled; verify repository/remote state before retrying".into())),
+        _ = tokio::time::sleep(timeout) => Err(AppError::Internal("Git process timed out; verify repository/remote state before retrying".into())),
+    };
+    if result.is_err() {
+        let _ = child.start_kill();
+        if tokio::time::timeout(Duration::from_secs(2), child.wait())
+            .await
+            .is_err()
+        {
+            return Err(AppError::Internal(
+                "Git child cleanup timed out; outcome requires verification".into(),
+            ));
+        }
+    }
+    result
+}

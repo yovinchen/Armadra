@@ -37,6 +37,12 @@ import {
   gitRevertResponseSchema,
   gitStageResponseSchema,
   gitStatusSchema,
+  gitBranchSnapshotSchema,
+  gitHistoryPageSchema,
+  gitWorktreesSchema,
+  gitRepositoryActionSchema,
+  gitRepositoryOperationSchema,
+  gitExpectedStateSchema,
   gitUnstageResponseSchema,
   healthSchema,
   hookInstallReportSchema,
@@ -65,6 +71,8 @@ import {
   type CreateWorkspaceRequest,
   type DiffScope,
   type GitCloneRequest,
+  type GitRepositoryAction,
+  type GitExpectedState,
   type TerminateMode,
   type UpdateBoardRequest,
   type UpdateWorkspaceRequest,
@@ -352,17 +360,40 @@ export const runtimeApi = {
 
   /* ----------------------------------- 文件 ----------------------------- */
   fileInfo: (workspaceId: string, path: string) =>
-    request(`/api/workspaces/${workspaceId}/file-info?path=${query(path)}`, fileInfoSchema),
+    request(
+      `/api/workspaces/${workspaceId}/file-info?path=${query(path)}`,
+      fileInfoSchema,
+    ),
   fileDownloadUrl: (workspaceId: string, path: string) =>
     `${RUNTIME_URL}/api/workspaces/${workspaceId}/file-download?path=${query(path)}`,
-  importFiles: (workspaceId: string, entries: { file: File; path: string }[], directories: string[] = []) => {
+  importFiles: (
+    workspaceId: string,
+    entries: { file: File; path: string }[],
+    directories: string[] = [],
+  ) => {
     const body = new FormData();
-    body.append("manifest", JSON.stringify({ paths: entries.map((entry) => entry.path), directories }));
-    entries.forEach((entry, index) => body.append(String(index), entry.file, entry.file.name));
-    return request(`/api/workspaces/${workspaceId}/imports`, importFilesResponseSchema, { method: "POST", body });
+    body.append(
+      "manifest",
+      JSON.stringify({
+        paths: entries.map((entry) => entry.path),
+        directories,
+      }),
+    );
+    entries.forEach((entry, index) =>
+      body.append(String(index), entry.file, entry.file.name),
+    );
+    return request(
+      `/api/workspaces/${workspaceId}/imports`,
+      importFilesResponseSchema,
+      { method: "POST", body },
+    );
   },
   importLocalFiles: (workspaceId: string, paths: readonly string[]) =>
-    request(`/api/workspaces/${workspaceId}/imports/local`, importFilesResponseSchema, { method: "POST", ...json({ paths }) }),
+    request(
+      `/api/workspaces/${workspaceId}/imports/local`,
+      importFilesResponseSchema,
+      { method: "POST", ...json({ paths }) },
+    ),
   listFiles: (workspaceId: string, path = ".") =>
     request(
       `/api/workspaces/${workspaceId}/files?path=${query(path)}`,
@@ -603,6 +634,63 @@ export const runtimeApi = {
   /* ------------------------------------ git ----------------------------- */
   gitStatus: (workspaceId: string) =>
     request(`/api/workspaces/${workspaceId}/git/status`, gitStatusSchema),
+
+  gitRepositoryBranches: (workspaceId: string, signal?: AbortSignal) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/branches?path=.`,
+      gitBranchSnapshotSchema,
+      { signal },
+    ),
+  gitRepositoryHistory: (
+    workspaceId: string,
+    reference = "HEAD",
+    cursor?: string,
+    signal?: AbortSignal,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/history?path=.&reference=${query(reference)}&limit=50${cursor ? `&cursor=${query(cursor)}` : ""}`,
+      gitHistoryPageSchema,
+      { signal },
+    ),
+  gitRepositoryWorktrees: (workspaceId: string, signal?: AbortSignal) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/worktrees?path=.`,
+      gitWorktreesSchema,
+      { signal },
+    ),
+  gitRepositoryOperate: (
+    workspaceId: string,
+    action: GitRepositoryAction,
+    expected: GitExpectedState,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/operations`,
+      gitRepositoryOperationSchema,
+      {
+        method: "POST",
+        ...json({
+          path: ".",
+          action: gitRepositoryActionSchema.parse(action),
+          expected: gitExpectedStateSchema.parse(expected),
+        }),
+      },
+    ),
+  gitRepositoryOperation: (
+    workspaceId: string,
+    operationId: string,
+    signal?: AbortSignal,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/operations/${query(operationId)}`,
+      gitRepositoryOperationSchema,
+      { signal },
+    ),
+  gitRepositoryCancel: (workspaceId: string, operationId: string) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/operations/${query(operationId)}/cancel`,
+      gitRepositoryOperationSchema,
+      { method: "POST" },
+    ),
   /**
    * `scope` 决定取索引的哪一侧：`worktree` = `git diff` + 未跟踪文件，
    * `staged` = `git diff --cached`（未跟踪文件不会出现）。给 `paths` 时

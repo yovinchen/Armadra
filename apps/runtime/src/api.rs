@@ -1567,10 +1567,15 @@ pub async fn git_stage(
     Json(request): Json<PathsRequest>,
 ) -> AppResult<Json<git::StageResult>> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
-    Ok(Json(git::stage_paths(
-        Path::new(&workspace.root_path),
-        &request.paths,
-    )?))
+    if !workspace.permissions.read || !workspace.permissions.write {
+        return Err(AppError::Forbidden("Workspace does not allow Git writes".into()));
+    }
+    let guard = crate::git_api::REPOSITORIES.mutation_guard(Path::new(&workspace.root_path), ".").await?;
+    let result = tokio::task::spawn_blocking(move || {
+        let _guard = guard;
+        git::stage_paths(Path::new(&workspace.root_path), &request.paths)
+    }).await??;
+    Ok(Json(result))
 }
 
 pub async fn git_unstage(
@@ -1579,10 +1584,15 @@ pub async fn git_unstage(
     Json(request): Json<PathsRequest>,
 ) -> AppResult<Json<git::UnstageResult>> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
-    Ok(Json(git::unstage_paths(
-        Path::new(&workspace.root_path),
-        &request.paths,
-    )?))
+    if !workspace.permissions.read || !workspace.permissions.write {
+        return Err(AppError::Forbidden("Workspace does not allow Git writes".into()));
+    }
+    let guard = crate::git_api::REPOSITORIES.mutation_guard(Path::new(&workspace.root_path), ".").await?;
+    let result = tokio::task::spawn_blocking(move || {
+        let _guard = guard;
+        git::unstage_paths(Path::new(&workspace.root_path), &request.paths)
+    }).await??;
+    Ok(Json(result))
 }
 
 pub async fn git_revert(
@@ -1591,10 +1601,15 @@ pub async fn git_revert(
     Json(request): Json<PathsRequest>,
 ) -> AppResult<Json<git::RevertResult>> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
-    Ok(Json(git::revert_paths(
-        Path::new(&workspace.root_path),
-        &request.paths,
-    )?))
+    if !workspace.permissions.read || !workspace.permissions.write {
+        return Err(AppError::Forbidden("Workspace does not allow Git writes".into()));
+    }
+    let guard = crate::git_api::REPOSITORIES.mutation_guard(Path::new(&workspace.root_path), ".").await?;
+    let result = tokio::task::spawn_blocking(move || {
+        let _guard = guard;
+        git::revert_paths(Path::new(&workspace.root_path), &request.paths)
+    }).await??;
+    Ok(Json(result))
 }
 
 #[derive(Deserialize)]
@@ -1610,11 +1625,15 @@ pub async fn git_commit(
     Json(request): Json<CommitRequest>,
 ) -> AppResult<Json<git::CommitResult>> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
-    Ok(Json(git::commit(
-        Path::new(&workspace.root_path),
-        &request.message,
-        request.paths.as_deref(),
-    )?))
+    if !workspace.permissions.read || !workspace.permissions.write {
+        return Err(AppError::Forbidden("Workspace does not allow Git writes".into()));
+    }
+    let guard = crate::git_api::REPOSITORIES.mutation_guard(Path::new(&workspace.root_path), ".").await?;
+    let result = tokio::task::spawn_blocking(move || {
+        let _guard = guard;
+        git::commit(Path::new(&workspace.root_path), &request.message, request.paths.as_deref())
+    }).await??;
+    Ok(Json(result))
 }
 
 /* -------------------------------- git clone ------------------------------- */
