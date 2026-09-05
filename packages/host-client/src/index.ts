@@ -316,3 +316,4 @@ export class HostClient {
     }
   }
 }
+export * from "./identity.js";

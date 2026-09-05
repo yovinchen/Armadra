@@ -4,6 +4,7 @@ import { useHostConnection } from "../../../host/use-host-connection";
 import { SettingsGroup } from "../SettingsGroup";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
+import { HostIdentityPanel } from "./HostIdentityPanel";
 
 export function HostPage() {
   const t = useT();
@@ -115,6 +116,7 @@ export function HostPage() {
           </details>
         )}
       </SettingsGroup>
+      <HostIdentityPanel address={address} hello={state.status === "connected" ? state.hello : undefined} />
     </>
   );
 }

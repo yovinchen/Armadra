@@ -12,6 +12,7 @@ import { sessions } from "./sessions";
 import { shell } from "./shell";
 import { ssh } from "./ssh";
 import { host } from "./host";
+import { hostIdentity } from "./host-identity";
 import { gitHunks } from "./git-hunks";
 import { gitMessage } from "./git-message";
 import { gitStashes } from "./git-stashes";
@@ -47,6 +48,7 @@ export const MESSAGE_MODULES = {
   sessions,
   ssh,
   host,
+  "host-identity": hostIdentity,
   "git-repository": gitRepository,
   "git-hunks": gitHunks,
   "git-message": gitMessage,
