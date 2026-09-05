@@ -81,7 +81,8 @@ fn a_deletion_is_a_tombstone_not_an_empty_entity() {
 /// before without renaming it to "unspecified".
 #[test]
 fn an_unknown_domain_survives_a_relay() {
-    let decoded = EventEnvelope::decode(fixture("events_envelope_future_domain").as_slice()).unwrap();
+    let decoded =
+        EventEnvelope::decode(fixture("events_envelope_future_domain").as_slice()).unwrap();
     assert_eq!(decoded.domain, 99);
     assert!(EventDomain::try_from(decoded.domain).is_err());
     assert_eq!(decoded.priority, EventPriority::High as i32);
