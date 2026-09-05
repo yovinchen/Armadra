@@ -356,6 +356,8 @@ export function SourceControlDrawer() {
                   "history",
                   "worktrees",
                   "stashes",
+                  "tags",
+                  "remotes",
                   "integration",
                 ] as const
               ).map((value) => (
@@ -515,6 +517,8 @@ export function SourceControlDrawer() {
                 "history",
                 "worktrees",
                 "stashes",
+                "tags",
+                "remotes",
                 "integration",
               ] as const
             ).map((value) => (

@@ -73,6 +73,8 @@ import {
   gitBranchSnapshotSchema,
   gitHistoryPageSchema,
   gitWorktreesSchema,
+  gitTagSnapshotSchema,
+  gitRemotesSchema,
   gitStashSnapshotSchema,
   gitStashDetailSchema,
   gitIntegrationSnapshotSchema,
@@ -1024,6 +1026,19 @@ export const runtimeApi = {
     request(
       `/api/workspaces/${query(workspaceId)}/git/repository/worktrees?path=.`,
       gitWorktreesSchema,
+      { signal },
+    ),
+  gitRepositoryTags: (workspaceId: string, signal?: AbortSignal) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/tags?path=.`,
+      gitTagSnapshotSchema,
+      { signal },
+    ),
+  /** URLs come back with any embedded credentials already replaced. */
+  gitRepositoryRemotes: (workspaceId: string, signal?: AbortSignal) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/remotes?path=.`,
+      gitRemotesSchema,
       { signal },
     ),
   gitRepositoryStashes: (workspaceId: string, signal?: AbortSignal) =>

@@ -34,8 +34,10 @@ use crate::{
 };
 
 mod integration;
+mod refs;
 mod stash;
 pub use integration::{CherryPickPreview, ConflictFile, ConflictSide, IntegrationSnapshot};
+pub use refs::{RemoteRecord, TagRecord, TagSnapshot};
 pub use stash::{StashDetail, StashRecord, StashSnapshot};
 
 const MAX_OUTPUT: usize = 4 * 1024 * 1024;
@@ -324,6 +326,40 @@ pub enum RepositoryAction {
         branch: String,
         /// The reviewed remote-tracking OID; None means no tracking ref yet.
         expected_remote_oid: Option<String>,
+    },
+    /// Name a reviewed commit. `message` present makes it an annotated tag.
+    /// There is no force: replacing a tag is an explicit delete plus create.
+    CreateTag {
+        name: String,
+        target_oid: String,
+        message: Option<String>,
+    },
+    /// Delete a local tag, confirmed against the object it still names.
+    DeleteTag {
+        name: String,
+        expected_oid: String,
+    },
+    /// Publish one tag. Never forced, so a different object already published
+    /// under that name is refused rather than overwritten.
+    PushTag {
+        remote: String,
+        name: String,
+        expected_oid: String,
+    },
+    AddRemote {
+        name: String,
+        url: String,
+    },
+    RenameRemote {
+        name: String,
+        new_name: String,
+    },
+    SetRemoteUrl {
+        name: String,
+        url: String,
+    },
+    RemoveRemote {
+        name: String,
     },
     CreateWorktree {
         path: String,
@@ -1550,6 +1586,62 @@ impl RepositoryService {
                     require_oid(&lease.expected_remote_oid)?;
                 }
             }
+            RepositoryAction::CreateTag {
+                name,
+                target_oid,
+                message,
+            } => {
+                self.validate_tag_name(&context.repository, name, &token)
+                    .await?;
+                require_oid(target_oid)?;
+                if let Some(message) = message {
+                    stash::validate_message(message)?;
+                    if message.trim().is_empty() {
+                        return Err(AppError::BadRequest(
+                            "An annotated tag needs a message".into(),
+                        ));
+                    }
+                }
+            }
+            RepositoryAction::DeleteTag { name, expected_oid } => {
+                self.validate_tag_name(&context.repository, name, &token)
+                    .await?;
+                require_oid(expected_oid)?;
+            }
+            RepositoryAction::PushTag {
+                remote,
+                name,
+                expected_oid,
+            } => {
+                self.validate_remote(&context.repository, remote, &token)
+                    .await?;
+                self.validate_tag_name(&context.repository, name, &token)
+                    .await?;
+                require_oid(expected_oid)?;
+            }
+            RepositoryAction::AddRemote { name, url }
+            | RepositoryAction::SetRemoteUrl { name, url } => {
+                self.validate_remote_name(&context.repository, name, &token)
+                    .await?;
+                // The same allow-list clone uses: https, ssh, and scp-like
+                // only. A local path or a remote helper is refused.
+                crate::git::validate_clone_url(url)?;
+            }
+            RepositoryAction::RenameRemote { name, new_name } => {
+                self.validate_remote_name(&context.repository, name, &token)
+                    .await?;
+                self.validate_remote_name(&context.repository, new_name, &token)
+                    .await?;
+                if name == new_name {
+                    return Err(AppError::BadRequest(
+                        "The new remote name must differ".into(),
+                    ));
+                }
+            }
+            RepositoryAction::RemoveRemote { name } => {
+                self.validate_remote_name(&context.repository, name, &token)
+                    .await?
+            }
             RepositoryAction::CreateWorktree {
                 path,
                 branch,
@@ -1700,6 +1792,17 @@ impl RepositoryService {
             | RepositoryAction::DropStash { .. } => {
                 self.execute_stash(context, action, expected, operation)
                     .await
+            }
+            RepositoryAction::CreateTag { .. }
+            | RepositoryAction::DeleteTag { .. }
+            | RepositoryAction::PushTag { .. } => {
+                self.execute_tag(context, action, operation).await
+            }
+            RepositoryAction::AddRemote { .. }
+            | RepositoryAction::RenameRemote { .. }
+            | RepositoryAction::SetRemoteUrl { .. }
+            | RepositoryAction::RemoveRemote { .. } => {
+                self.execute_remote(context, action, operation).await
             }
             RepositoryAction::Reset { .. } => {
                 self.reset(context, action, expected, operation).await

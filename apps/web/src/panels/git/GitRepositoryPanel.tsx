@@ -24,6 +24,8 @@ import {
 } from "../../ui/alert-dialog";
 import { Branches } from "./Branches";
 import { History } from "./History";
+import { Tags } from "./Tags";
+import { Remotes, redactRemoteUrl } from "./Remotes";
 import { Worktrees } from "./Worktrees";
 import { Stashes } from "./Stashes";
 import { Integrations } from "./Integrations";
@@ -37,6 +39,8 @@ export type RepositoryTab =
   | "history"
   | "worktrees"
   | "stashes"
+  | "tags"
+  | "remotes"
   | "integration";
 const running = (operation: GitRepositoryOperation | null | undefined) =>
   operation?.state === "queued" || operation?.state === "running";
@@ -106,6 +110,20 @@ export function actionTarget(action: GitRepositoryAction): string {
       return action.targetOid;
     case "reset":
       return `${action.mode} → ${action.targetOid}`;
+    case "createTag":
+      return `${action.name} → ${action.targetOid}`;
+    case "deleteTag":
+      return `${action.name} (${action.expectedOid})`;
+    case "pushTag":
+      return `${action.remote} / ${action.name} (${action.expectedOid})`;
+    case "addRemote":
+    case "setRemoteUrl":
+      // Never echo a credential back, not even one just typed here.
+      return `${action.name} → ${redactRemoteUrl(action.url)}`;
+    case "renameRemote":
+      return `${action.name} → ${action.newName}`;
+    case "removeRemote":
+      return action.name;
     case "startMerge":
       return `${action.targetOid}${action.message ? ` · ${action.message}` : ""}`;
     case "startRebase":
@@ -643,6 +661,29 @@ function RepositorySession({
             }
             loadDetail={(oid, signal) =>
               runtimeApi.gitRepositoryStashDetail(workspaceId, oid, signal)
+            }
+          />
+        )}
+        {tab === "tags" && (
+          <Tags
+            workspaceId={workspaceId}
+            repositoryKey={`${snapshot.repositoryId}:${snapshot.repositoryPath}`}
+            remotes={snapshot.remotes}
+            busy={busy || stale}
+            request={request}
+            loadTags={(signal) =>
+              runtimeApi.gitRepositoryTags(workspaceId, signal)
+            }
+          />
+        )}
+        {tab === "remotes" && (
+          <Remotes
+            workspaceId={workspaceId}
+            repositoryKey={`${snapshot.repositoryId}:${snapshot.repositoryPath}`}
+            busy={busy || stale}
+            request={request}
+            loadRemotes={(signal) =>
+              runtimeApi.gitRepositoryRemotes(workspaceId, signal)
             }
           />
         )}

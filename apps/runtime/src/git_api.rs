@@ -247,6 +247,32 @@ pub async fn history(
         .await
         .map(Json)
 }
+pub async fn tags(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<RepositoryQuery>,
+) -> AppResult<Json<TagSnapshot>> {
+    let workspace = workspace(&state, &id, false).await?;
+    REPOSITORIES
+        .with_execution(workspace.permissions.execute)
+        .tags(Path::new(&workspace.root_path), &query.path)
+        .await
+        .map(Json)
+}
+/// Remote URLs are redacted before they leave the service; Armadra stores none
+/// of them, and a redacted value must not be sent back as an update.
+pub async fn remotes(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<RepositoryQuery>,
+) -> AppResult<Json<Vec<RemoteRecord>>> {
+    let workspace = workspace(&state, &id, false).await?;
+    REPOSITORIES
+        .with_execution(workspace.permissions.execute)
+        .remote_records(Path::new(&workspace.root_path), &query.path)
+        .await
+        .map(Json)
+}
 pub async fn worktrees(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,

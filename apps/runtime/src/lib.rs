@@ -145,6 +145,14 @@ pub fn router_with_state(state: AppState) -> Router {
             get(git_api::worktrees),
         )
         .route(
+            "/api/workspaces/{workspace_id}/git/repository/tags",
+            get(git_api::tags),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/git/repository/remotes",
+            get(git_api::remotes),
+        )
+        .route(
             "/api/workspaces/{workspace_id}/git/repository/stashes",
             get(git_api::stashes),
         )

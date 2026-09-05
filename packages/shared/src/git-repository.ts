@@ -58,6 +58,37 @@ export const gitWorktreeRecordSchema = z.object({
   dirty: z.boolean().nullable(),
 });
 export const gitWorktreesSchema = z.array(gitWorktreeRecordSchema);
+export const gitTagRecordSchema = z.object({
+  name: z.string(),
+  fullRef: z.string(),
+  /** The tag object for an annotated tag, the commit for a lightweight one. */
+  oid,
+  /** The commit the tag ultimately names. */
+  targetOid: oid,
+  annotated: z.boolean(),
+  subject: z.string().nullable(),
+  taggerName: z.string().nullable(),
+  taggerTime: z.string().nullable(),
+});
+export const gitTagSnapshotSchema = z.object({
+  repositoryId: z.string().min(1),
+  repositoryPath: z.string(),
+  head: gitExpectedStateSchema,
+  tags: z.array(gitTagRecordSchema),
+  observedAt: z.string(),
+});
+export const gitRemoteRecordSchema = z.object({
+  name: z.string(),
+  /**
+   * Credentials embedded in a stored URL are replaced before the value leaves
+   * the Runtime, so a redacted value is a display string and must never be
+   * sent back as an update.
+   */
+  fetchUrl: z.string(),
+  pushUrl: z.string(),
+  redacted: z.boolean(),
+});
+export const gitRemotesSchema = z.array(gitRemoteRecordSchema);
 export const gitStashRecordSchema = z.object({
   oid,
   selector: z.string(),
@@ -255,6 +286,62 @@ export const gitRepositoryActionSchema = z.discriminatedUnion("kind", [
     .strict(),
   z
     .object({
+      // `message` present makes it an annotated tag. There is no force:
+      // replacing a tag is an explicit delete followed by a create.
+      kind: z.literal("createTag"),
+      name: z.string().min(1).max(255),
+      targetOid: oid,
+      message: z.string().max(4096).nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("deleteTag"),
+      name: z.string().min(1).max(255),
+      // The tag object the caller reviewed, not the commit behind it.
+      expectedOid: oid,
+    })
+    .strict(),
+  z
+    .object({
+      // Publishing one tag, never forced: an object already published under
+      // that name is refused rather than overwritten.
+      kind: z.literal("pushTag"),
+      remote: z.string().min(1),
+      name: z.string().min(1).max(255),
+      expectedOid: oid,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("addRemote"),
+      name: z.string().min(1).max(255),
+      // Same allow-list as clone: https, ssh, or scp-like only.
+      url: z.string().min(1).max(2048),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("renameRemote"),
+      name: z.string().min(1).max(255),
+      newName: z.string().min(1).max(255),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("setRemoteUrl"),
+      name: z.string().min(1).max(255),
+      url: z.string().min(1).max(2048),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("removeRemote"),
+      name: z.string().min(1).max(255),
+    })
+    .strict(),
+  z
+    .object({
       kind: z.literal("createWorktree"),
       expectedOid: oid.nullable(),
       path: z.string().min(1),
@@ -308,6 +395,9 @@ export type GitBranchRecord = z.infer<typeof gitBranchRecordSchema>;
 export type GitCommitRecord = z.infer<typeof gitCommitRecordSchema>;
 export type GitHistoryPage = z.infer<typeof gitHistoryPageSchema>;
 export type GitWorktreeRecord = z.infer<typeof gitWorktreeRecordSchema>;
+export type GitTagRecord = z.infer<typeof gitTagRecordSchema>;
+export type GitTagSnapshot = z.infer<typeof gitTagSnapshotSchema>;
+export type GitRemoteRecord = z.infer<typeof gitRemoteRecordSchema>;
 export type GitRepositoryAction = z.infer<typeof gitRepositoryActionSchema>;
 export type GitForceWithLease = NonNullable<
   Extract<GitRepositoryAction, { kind: "push" }>["forceWithLease"]
