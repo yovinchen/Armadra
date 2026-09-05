@@ -22,6 +22,9 @@ import {
   AuthenticatedSessionSchema,
   WorkerRequestSchema,
   WorkerResponseSchema,
+  CommandRequestSchema,
+  CommandReceiptSchema,
+  CommandPhase,
   AutomationReceiptSchema,
   AutomationRunSchema,
   AutomationRunState,
@@ -297,4 +300,11 @@ describe("shared Go / Rust / TypeScript wire contracts", () => {
       fromBinary(HelloRequestSchema, new Uint8Array([0x0a, 0xff])),
     ).toThrow();
   });
+});
+
+it("preserves command input bytes, optional exit and unknown execution phases", () => {
+  check("command_run",CommandRequestSchema,{action:{case:"run",value:{operationId:"operation-1",sessionId:"会话-1",requestSha256:new Uint8Array(32).fill(8),expectedGeneration:maxUint64,stdin:new Uint8Array([0,255,27,10])}}});
+  check("command_receipt",CommandReceiptSchema,{operationId:"operation-1",sessionId:"会话-1",generation:9007199254740993n,phase:999 as CommandPhase,sequence:maxUint64,exitCode:0,stdout:new Uint8Array([0,255,10]),stdoutTotalBytes:9007199254740993n,stdoutTruncated:true});
+  check("command_absent_exit",CommandReceiptSchema,{operationId:"operation-2",phase:CommandPhase.NOT_DISPATCHED,noEffectProven:true,cleanupConfirmed:true});
+  expect(fromBinary(CommandReceiptSchema,fixture("command_absent_exit")).exitCode).toBeUndefined();
 });

@@ -79,8 +79,10 @@ type WorkerHelloResponse struct {
 	MaxFrameBytes     uint32                 `protobuf:"varint,7,opt,name=max_frame_bytes,json=maxFrameBytes,proto3" json:"max_frame_bytes,omitempty"`
 	MaxFileChunkBytes uint32                 `protobuf:"varint,8,opt,name=max_file_chunk_bytes,json=maxFileChunkBytes,proto3" json:"max_file_chunk_bytes,omitempty"`
 	MaxTextFileBytes  uint32                 `protobuf:"varint,9,opt,name=max_text_file_bytes,json=maxTextFileBytes,proto3" json:"max_text_file_bytes,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Absent in the backward-compatible read-only mode.
+	Commands      *CommandCapabilities `protobuf:"bytes,20,opt,name=commands,proto3" json:"commands,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WorkerHelloResponse) Reset() {
@@ -174,6 +176,13 @@ func (x *WorkerHelloResponse) GetMaxTextFileBytes() uint32 {
 		return x.MaxTextFileBytes
 	}
 	return 0
+}
+
+func (x *WorkerHelloResponse) GetCommands() *CommandCapabilities {
+	if x != nil {
+		return x.Commands
+	}
+	return nil
 }
 
 type RegisterRootRequest struct {
@@ -665,6 +674,7 @@ type WorkerRequest struct {
 	//	*WorkerRequest_RegisterRoot
 	//	*WorkerRequest_ListDirectory
 	//	*WorkerRequest_ReadFile
+	//	*WorkerRequest_Command
 	Action        isWorkerRequest_Action `protobuf_oneof:"action"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -771,6 +781,15 @@ func (x *WorkerRequest) GetReadFile() *WorkerReadFileRequest {
 	return nil
 }
 
+func (x *WorkerRequest) GetCommand() *CommandRequest {
+	if x != nil {
+		if x, ok := x.Action.(*WorkerRequest_Command); ok {
+			return x.Command
+		}
+	}
+	return nil
+}
+
 type isWorkerRequest_Action interface {
 	isWorkerRequest_Action()
 }
@@ -791,6 +810,10 @@ type WorkerRequest_ReadFile struct {
 	ReadFile *WorkerReadFileRequest `protobuf:"bytes,13,opt,name=read_file,json=readFile,proto3,oneof"`
 }
 
+type WorkerRequest_Command struct {
+	Command *CommandRequest `protobuf:"bytes,20,opt,name=command,proto3,oneof"`
+}
+
 func (*WorkerRequest_Hello) isWorkerRequest_Action() {}
 
 func (*WorkerRequest_RegisterRoot) isWorkerRequest_Action() {}
@@ -798,6 +821,8 @@ func (*WorkerRequest_RegisterRoot) isWorkerRequest_Action() {}
 func (*WorkerRequest_ListDirectory) isWorkerRequest_Action() {}
 
 func (*WorkerRequest_ReadFile) isWorkerRequest_Action() {}
+
+func (*WorkerRequest_Command) isWorkerRequest_Action() {}
 
 type WorkerResponse struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
@@ -811,6 +836,7 @@ type WorkerResponse struct {
 	//	*WorkerResponse_Directory
 	//	*WorkerResponse_FileChunk
 	//	*WorkerResponse_Error
+	//	*WorkerResponse_Command
 	Result        isWorkerResponse_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -919,6 +945,15 @@ func (x *WorkerResponse) GetError() *ErrorResponse {
 	return nil
 }
 
+func (x *WorkerResponse) GetCommand() *CommandResponse {
+	if x != nil {
+		if x, ok := x.Result.(*WorkerResponse_Command); ok {
+			return x.Command
+		}
+	}
+	return nil
+}
+
 type isWorkerResponse_Result interface {
 	isWorkerResponse_Result()
 }
@@ -943,6 +978,10 @@ type WorkerResponse_Error struct {
 	Error *ErrorResponse `protobuf:"bytes,14,opt,name=error,proto3,oneof"`
 }
 
+type WorkerResponse_Command struct {
+	Command *CommandResponse `protobuf:"bytes,20,opt,name=command,proto3,oneof"`
+}
+
 func (*WorkerResponse_Hello) isWorkerResponse_Result() {}
 
 func (*WorkerResponse_RegisteredRoot) isWorkerResponse_Result() {}
@@ -953,14 +992,16 @@ func (*WorkerResponse_FileChunk) isWorkerResponse_Result() {}
 
 func (*WorkerResponse_Error) isWorkerResponse_Result() {}
 
+func (*WorkerResponse_Command) isWorkerResponse_Result() {}
+
 var File_armadra_v1_worker_proto protoreflect.FileDescriptor
 
 const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"\x17armadra/v1/worker.proto\x12\n" +
-	"armadra.v1\x1a\x17armadra/v1/common.proto\"M\n" +
+	"armadra.v1\x1a\x17armadra/v1/common.proto\x1a\x18armadra/v1/command.proto\"M\n" +
 	"\x12WorkerHelloRequest\x127\n" +
-	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\"\xf4\x02\n" +
+	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\"\xb1\x03\n" +
 	"\x13WorkerHelloResponse\x127\n" +
 	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\x12\x17\n" +
 	"\ahost_id\x18\x02 \x01(\tR\x06hostId\x12\x1f\n" +
@@ -971,7 +1012,8 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\fcapabilities\x18\x06 \x03(\tR\fcapabilities\x12&\n" +
 	"\x0fmax_frame_bytes\x18\a \x01(\rR\rmaxFrameBytes\x12/\n" +
 	"\x14max_file_chunk_bytes\x18\b \x01(\rR\x11maxFileChunkBytes\x12-\n" +
-	"\x13max_text_file_bytes\x18\t \x01(\rR\x10maxTextFileBytes\"B\n" +
+	"\x13max_text_file_bytes\x18\t \x01(\rR\x10maxTextFileBytes\x12;\n" +
+	"\bcommands\x18\x14 \x01(\v2\x1f.armadra.v1.CommandCapabilitiesR\bcommands\"B\n" +
 	"\x13RegisterRootRequest\x12\x17\n" +
 	"\aroot_id\x18\x01 \x01(\tR\x06rootId\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\"P\n" +
@@ -1008,7 +1050,7 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"totalBytes\x12\x16\n" +
 	"\x06offset\x18\x06 \x01(\x04R\x06offset\x12\x12\n" +
 	"\x04data\x18\a \x01(\fR\x04data\x12\x10\n" +
-	"\x03eof\x18\b \x01(\bR\x03eof\"\xc0\x03\n" +
+	"\x03eof\x18\b \x01(\bR\x03eof\"\xf8\x03\n" +
 	"\rWorkerRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -1019,8 +1061,9 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	" \x01(\v2\x1e.armadra.v1.WorkerHelloRequestH\x00R\x05hello\x12F\n" +
 	"\rregister_root\x18\v \x01(\v2\x1f.armadra.v1.RegisterRootRequestH\x00R\fregisterRoot\x12O\n" +
 	"\x0elist_directory\x18\f \x01(\v2&.armadra.v1.WorkerListDirectoryRequestH\x00R\rlistDirectory\x12@\n" +
-	"\tread_file\x18\r \x01(\v2!.armadra.v1.WorkerReadFileRequestH\x00R\breadFileB\b\n" +
-	"\x06action\"\xa1\x03\n" +
+	"\tread_file\x18\r \x01(\v2!.armadra.v1.WorkerReadFileRequestH\x00R\breadFile\x126\n" +
+	"\acommand\x18\x14 \x01(\v2\x1a.armadra.v1.CommandRequestH\x00R\acommandB\b\n" +
+	"\x06action\"\xda\x03\n" +
 	"\x0eWorkerResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -1033,7 +1076,8 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\tdirectory\x18\f \x01(\v2\x1b.armadra.v1.WorkerDirectoryH\x00R\tdirectory\x12<\n" +
 	"\n" +
 	"file_chunk\x18\r \x01(\v2\x1b.armadra.v1.WorkerFileChunkH\x00R\tfileChunk\x121\n" +
-	"\x05error\x18\x0e \x01(\v2\x19.armadra.v1.ErrorResponseH\x00R\x05errorB\b\n" +
+	"\x05error\x18\x0e \x01(\v2\x19.armadra.v1.ErrorResponseH\x00R\x05error\x127\n" +
+	"\acommand\x18\x14 \x01(\v2\x1b.armadra.v1.CommandResponseH\x00R\acommandB\b\n" +
 	"\x06resultB#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
@@ -1062,26 +1106,32 @@ var file_armadra_v1_worker_proto_goTypes = []any{
 	(*WorkerRequest)(nil),              // 9: armadra.v1.WorkerRequest
 	(*WorkerResponse)(nil),             // 10: armadra.v1.WorkerResponse
 	(*ProtocolVersion)(nil),            // 11: armadra.v1.ProtocolVersion
-	(*ErrorResponse)(nil),              // 12: armadra.v1.ErrorResponse
+	(*CommandCapabilities)(nil),        // 12: armadra.v1.CommandCapabilities
+	(*CommandRequest)(nil),             // 13: armadra.v1.CommandRequest
+	(*ErrorResponse)(nil),              // 14: armadra.v1.ErrorResponse
+	(*CommandResponse)(nil),            // 15: armadra.v1.CommandResponse
 }
 var file_armadra_v1_worker_proto_depIdxs = []int32{
 	11, // 0: armadra.v1.WorkerHelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
 	11, // 1: armadra.v1.WorkerHelloResponse.protocol:type_name -> armadra.v1.ProtocolVersion
-	5,  // 2: armadra.v1.WorkerDirectory.entries:type_name -> armadra.v1.WorkerFileEntry
-	0,  // 3: armadra.v1.WorkerRequest.hello:type_name -> armadra.v1.WorkerHelloRequest
-	2,  // 4: armadra.v1.WorkerRequest.register_root:type_name -> armadra.v1.RegisterRootRequest
-	4,  // 5: armadra.v1.WorkerRequest.list_directory:type_name -> armadra.v1.WorkerListDirectoryRequest
-	7,  // 6: armadra.v1.WorkerRequest.read_file:type_name -> armadra.v1.WorkerReadFileRequest
-	1,  // 7: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
-	3,  // 8: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
-	6,  // 9: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
-	8,  // 10: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
-	12, // 11: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
-	12, // [12:12] is the sub-list for method output_type
-	12, // [12:12] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	12, // 2: armadra.v1.WorkerHelloResponse.commands:type_name -> armadra.v1.CommandCapabilities
+	5,  // 3: armadra.v1.WorkerDirectory.entries:type_name -> armadra.v1.WorkerFileEntry
+	0,  // 4: armadra.v1.WorkerRequest.hello:type_name -> armadra.v1.WorkerHelloRequest
+	2,  // 5: armadra.v1.WorkerRequest.register_root:type_name -> armadra.v1.RegisterRootRequest
+	4,  // 6: armadra.v1.WorkerRequest.list_directory:type_name -> armadra.v1.WorkerListDirectoryRequest
+	7,  // 7: armadra.v1.WorkerRequest.read_file:type_name -> armadra.v1.WorkerReadFileRequest
+	13, // 8: armadra.v1.WorkerRequest.command:type_name -> armadra.v1.CommandRequest
+	1,  // 9: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
+	3,  // 10: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
+	6,  // 11: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
+	8,  // 12: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
+	14, // 13: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
+	15, // 14: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
+	15, // [15:15] is the sub-list for method output_type
+	15, // [15:15] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_worker_proto_init() }
@@ -1090,12 +1140,14 @@ func file_armadra_v1_worker_proto_init() {
 		return
 	}
 	file_armadra_v1_common_proto_init()
+	file_armadra_v1_command_proto_init()
 	file_armadra_v1_worker_proto_msgTypes[7].OneofWrappers = []any{}
 	file_armadra_v1_worker_proto_msgTypes[9].OneofWrappers = []any{
 		(*WorkerRequest_Hello)(nil),
 		(*WorkerRequest_RegisterRoot)(nil),
 		(*WorkerRequest_ListDirectory)(nil),
 		(*WorkerRequest_ReadFile)(nil),
+		(*WorkerRequest_Command)(nil),
 	}
 	file_armadra_v1_worker_proto_msgTypes[10].OneofWrappers = []any{
 		(*WorkerResponse_Hello)(nil),
@@ -1103,6 +1155,7 @@ func file_armadra_v1_worker_proto_init() {
 		(*WorkerResponse_Directory)(nil),
 		(*WorkerResponse_FileChunk)(nil),
 		(*WorkerResponse_Error)(nil),
+		(*WorkerResponse_Command)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

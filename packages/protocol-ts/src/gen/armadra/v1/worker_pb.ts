@@ -6,6 +6,12 @@ import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv1";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv1";
 import type { ErrorResponse, ProtocolVersion } from "./common_pb.js";
 import { file_armadra_v1_common } from "./common_pb.js";
+import type {
+  CommandCapabilities,
+  CommandRequest,
+  CommandResponse,
+} from "./command_pb.js";
+import { file_armadra_v1_command } from "./command_pb.js";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -14,8 +20,8 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_worker: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Chdhcm1hZHJhL3YxL3dvcmtlci5wcm90bxIKYXJtYWRyYS52MSJDChJXb3JrZXJIZWxsb1JlcXVlc3QSLQoIcHJvdG9jb2wYASABKAsyGy5hcm1hZHJhLnYxLlByb3RvY29sVmVyc2lvbiL8AQoTV29ya2VySGVsbG9SZXNwb25zZRItCghwcm90b2NvbBgBIAEoCzIbLmFybWFkcmEudjEuUHJvdG9jb2xWZXJzaW9uEg8KB2hvc3RfaWQYAiABKAkSEwoLaW5zdGFuY2VfaWQYAyABKAkSEAoIcGxhdGZvcm0YBCABKAkSFAoMYXJjaGl0ZWN0dXJlGAUgASgJEhQKDGNhcGFiaWxpdGllcxgGIAMoCRIXCg9tYXhfZnJhbWVfYnl0ZXMYByABKA0SHAoUbWF4X2ZpbGVfY2h1bmtfYnl0ZXMYCCABKA0SGwoTbWF4X3RleHRfZmlsZV9ieXRlcxgJIAEoDSI0ChNSZWdpc3RlclJvb3RSZXF1ZXN0Eg8KB3Jvb3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCSI5Cg5SZWdpc3RlcmVkUm9vdBIPCgdyb290X2lkGAEgASgJEhYKDmNhbm9uaWNhbF9wYXRoGAIgASgJIjsKGldvcmtlckxpc3REaXJlY3RvcnlSZXF1ZXN0Eg8KB3Jvb3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCSJbCg9Xb3JrZXJGaWxlRW50cnkSDAoEbmFtZRgBIAEoCRIMCgRwYXRoGAIgASgJEgwKBGtpbmQYAyABKAkSDAoEc2l6ZRgEIAEoBBIQCghyZWFkb25seRgFIAEoCCJxCg9Xb3JrZXJEaXJlY3RvcnkSDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEiwKB2VudHJpZXMYAyADKAsyGy5hcm1hZHJhLnYxLldvcmtlckZpbGVFbnRyeRIRCgl0cnVuY2F0ZWQYBCABKAgiiwEKFVdvcmtlclJlYWRGaWxlUmVxdWVzdBIPCgdyb290X2lkGAEgASgJEgwKBHBhdGgYAiABKAkSDgoGb2Zmc2V0GAMgASgEEhEKCW1heF9ieXRlcxgEIAEoDRIcCg9leHBlY3RlZF9zaGEyNTYYBSABKAxIAIgBAUISChBfZXhwZWN0ZWRfc2hhMjU2IpMBCg9Xb3JrZXJGaWxlQ2h1bmsSDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhEKCW1pbWVfdHlwZRgDIAEoCRIOCgZzaGEyNTYYBCABKAwSEwoLdG90YWxfYnl0ZXMYBSABKAQSDgoGb2Zmc2V0GAYgASgEEgwKBGRhdGEYByABKAwSCwoDZW9mGAggASgIItsCCg1Xb3JrZXJSZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkSDwoHaG9zdF9pZBgCIAEoCRIcChRleHBlY3RlZF9pbnN0YW5jZV9pZBgDIAEoCRIYChBkZWFkbGluZV91bml4X21zGAQgASgDEi8KBWhlbGxvGAogASgLMh4uYXJtYWRyYS52MS5Xb3JrZXJIZWxsb1JlcXVlc3RIABI4Cg1yZWdpc3Rlcl9yb290GAsgASgLMh8uYXJtYWRyYS52MS5SZWdpc3RlclJvb3RSZXF1ZXN0SAASQAoObGlzdF9kaXJlY3RvcnkYDCABKAsyJi5hcm1hZHJhLnYxLldvcmtlckxpc3REaXJlY3RvcnlSZXF1ZXN0SAASNgoJcmVhZF9maWxlGA0gASgLMiEuYXJtYWRyYS52MS5Xb3JrZXJSZWFkRmlsZVJlcXVlc3RIAEIICgZhY3Rpb24izgIKDldvcmtlclJlc3BvbnNlEhIKCnJlcXVlc3RfaWQYASABKAkSDwoHaG9zdF9pZBgCIAEoCRITCgtpbnN0YW5jZV9pZBgDIAEoCRIwCgVoZWxsbxgKIAEoCzIfLmFybWFkcmEudjEuV29ya2VySGVsbG9SZXNwb25zZUgAEjUKD3JlZ2lzdGVyZWRfcm9vdBgLIAEoCzIaLmFybWFkcmEudjEuUmVnaXN0ZXJlZFJvb3RIABIwCglkaXJlY3RvcnkYDCABKAsyGy5hcm1hZHJhLnYxLldvcmtlckRpcmVjdG9yeUgAEjEKCmZpbGVfY2h1bmsYDSABKAsyGy5hcm1hZHJhLnYxLldvcmtlckZpbGVDaHVua0gAEioKBWVycm9yGA4gASgLMhkuYXJtYWRyYS52MS5FcnJvclJlc3BvbnNlSABCCAoGcmVzdWx0QiNaIWFybWFkcmEubG9jYWwvaG9zdC9nZW4vYXJtYWRyYS92MWIGcHJvdG8z",
-    [file_armadra_v1_common],
+    "Chdhcm1hZHJhL3YxL3dvcmtlci5wcm90bxIKYXJtYWRyYS52MSJDChJXb3JrZXJIZWxsb1JlcXVlc3QSLQoIcHJvdG9jb2wYASABKAsyGy5hcm1hZHJhLnYxLlByb3RvY29sVmVyc2lvbiKvAgoTV29ya2VySGVsbG9SZXNwb25zZRItCghwcm90b2NvbBgBIAEoCzIbLmFybWFkcmEudjEuUHJvdG9jb2xWZXJzaW9uEg8KB2hvc3RfaWQYAiABKAkSEwoLaW5zdGFuY2VfaWQYAyABKAkSEAoIcGxhdGZvcm0YBCABKAkSFAoMYXJjaGl0ZWN0dXJlGAUgASgJEhQKDGNhcGFiaWxpdGllcxgGIAMoCRIXCg9tYXhfZnJhbWVfYnl0ZXMYByABKA0SHAoUbWF4X2ZpbGVfY2h1bmtfYnl0ZXMYCCABKA0SGwoTbWF4X3RleHRfZmlsZV9ieXRlcxgJIAEoDRIxCghjb21tYW5kcxgUIAEoCzIfLmFybWFkcmEudjEuQ29tbWFuZENhcGFiaWxpdGllcyI0ChNSZWdpc3RlclJvb3RSZXF1ZXN0Eg8KB3Jvb3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCSI5Cg5SZWdpc3RlcmVkUm9vdBIPCgdyb290X2lkGAEgASgJEhYKDmNhbm9uaWNhbF9wYXRoGAIgASgJIjsKGldvcmtlckxpc3REaXJlY3RvcnlSZXF1ZXN0Eg8KB3Jvb3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCSJbCg9Xb3JrZXJGaWxlRW50cnkSDAoEbmFtZRgBIAEoCRIMCgRwYXRoGAIgASgJEgwKBGtpbmQYAyABKAkSDAoEc2l6ZRgEIAEoBBIQCghyZWFkb25seRgFIAEoCCJxCg9Xb3JrZXJEaXJlY3RvcnkSDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEiwKB2VudHJpZXMYAyADKAsyGy5hcm1hZHJhLnYxLldvcmtlckZpbGVFbnRyeRIRCgl0cnVuY2F0ZWQYBCABKAgiiwEKFVdvcmtlclJlYWRGaWxlUmVxdWVzdBIPCgdyb290X2lkGAEgASgJEgwKBHBhdGgYAiABKAkSDgoGb2Zmc2V0GAMgASgEEhEKCW1heF9ieXRlcxgEIAEoDRIcCg9leHBlY3RlZF9zaGEyNTYYBSABKAxIAIgBAUISChBfZXhwZWN0ZWRfc2hhMjU2IpMBCg9Xb3JrZXJGaWxlQ2h1bmsSDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhEKCW1pbWVfdHlwZRgDIAEoCRIOCgZzaGEyNTYYBCABKAwSEwoLdG90YWxfYnl0ZXMYBSABKAQSDgoGb2Zmc2V0GAYgASgEEgwKBGRhdGEYByABKAwSCwoDZW9mGAggASgIIooDCg1Xb3JrZXJSZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkSDwoHaG9zdF9pZBgCIAEoCRIcChRleHBlY3RlZF9pbnN0YW5jZV9pZBgDIAEoCRIYChBkZWFkbGluZV91bml4X21zGAQgASgDEi8KBWhlbGxvGAogASgLMh4uYXJtYWRyYS52MS5Xb3JrZXJIZWxsb1JlcXVlc3RIABI4Cg1yZWdpc3Rlcl9yb290GAsgASgLMh8uYXJtYWRyYS52MS5SZWdpc3RlclJvb3RSZXF1ZXN0SAASQAoObGlzdF9kaXJlY3RvcnkYDCABKAsyJi5hcm1hZHJhLnYxLldvcmtlckxpc3REaXJlY3RvcnlSZXF1ZXN0SAASNgoJcmVhZF9maWxlGA0gASgLMiEuYXJtYWRyYS52MS5Xb3JrZXJSZWFkRmlsZVJlcXVlc3RIABItCgdjb21tYW5kGBQgASgLMhouYXJtYWRyYS52MS5Db21tYW5kUmVxdWVzdEgAQggKBmFjdGlvbiL+AgoOV29ya2VyUmVzcG9uc2USEgoKcmVxdWVzdF9pZBgBIAEoCRIPCgdob3N0X2lkGAIgASgJEhMKC2luc3RhbmNlX2lkGAMgASgJEjAKBWhlbGxvGAogASgLMh8uYXJtYWRyYS52MS5Xb3JrZXJIZWxsb1Jlc3BvbnNlSAASNQoPcmVnaXN0ZXJlZF9yb290GAsgASgLMhouYXJtYWRyYS52MS5SZWdpc3RlcmVkUm9vdEgAEjAKCWRpcmVjdG9yeRgMIAEoCzIbLmFybWFkcmEudjEuV29ya2VyRGlyZWN0b3J5SAASMQoKZmlsZV9jaHVuaxgNIAEoCzIbLmFybWFkcmEudjEuV29ya2VyRmlsZUNodW5rSAASKgoFZXJyb3IYDiABKAsyGS5hcm1hZHJhLnYxLkVycm9yUmVzcG9uc2VIABIuCgdjb21tYW5kGBQgASgLMhsuYXJtYWRyYS52MS5Db21tYW5kUmVzcG9uc2VIAEIICgZyZXN1bHRCI1ohYXJtYWRyYS5sb2NhbC9ob3N0L2dlbi9hcm1hZHJhL3YxYgZwcm90bzM",
+    [file_armadra_v1_common, file_armadra_v1_command],
   );
 
 /**
@@ -88,6 +94,13 @@ export type WorkerHelloResponse = Message<"armadra.v1.WorkerHelloResponse"> & {
    * @generated from field: uint32 max_text_file_bytes = 9;
    */
   maxTextFileBytes: number;
+
+  /**
+   * Absent in the backward-compatible read-only mode.
+   *
+   * @generated from field: armadra.v1.CommandCapabilities commands = 20;
+   */
+  commands?: CommandCapabilities;
 };
 
 /**
@@ -389,6 +402,13 @@ export type WorkerRequest = Message<"armadra.v1.WorkerRequest"> & {
         value: WorkerReadFileRequest;
         case: "readFile";
       }
+    | {
+        /**
+         * @generated from field: armadra.v1.CommandRequest command = 20;
+         */
+        value: CommandRequest;
+        case: "command";
+      }
     | { case: undefined; value?: undefined };
 };
 
@@ -457,6 +477,13 @@ export type WorkerResponse = Message<"armadra.v1.WorkerResponse"> & {
          */
         value: ErrorResponse;
         case: "error";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.CommandResponse command = 20;
+         */
+        value: CommandResponse;
+        case: "command";
       }
     | { case: undefined; value?: undefined };
 };

@@ -62,20 +62,113 @@ fn handshake_and_unicode() {
 
 #[test]
 fn bootstrap_scope_and_authenticated_device_revision() {
-    check("identity_bootstrap", HostControlRequest { request_id:"pair-1".into(), action:Some(host_control_request::Action::Bootstrap(BootstrapTicketRequest { expected_host_id:"host-1".into(),expected_instance_id:"instance-1".into(),origin:"https://armadra.example".into(),device_name:"手机📱".into(),scopes:vec![AuthorizationGrant {permission:"canvas:read".into(),..Default::default()},AuthorizationGrant {permission:"terminal:write".into(),workspace_id:"workspace-1".into(),..Default::default()}] })) });
-    check("identity_session", AuthenticatedSession { host_id:"host-1".into(),device:Some(DeviceIdentity { device_id:"device-1".into(),principal_id:"owner-1".into(),display_name:"手机📱".into(),role:"owner".into(),created_at_unix_ms:1788557000000,revoked_at_unix_ms:0,revision:u64::MAX }),csrf_token:"fixture-not-a-secret".into(),scopes:vec![AuthorizationGrant {permission:"canvas:read".into(),..Default::default()}],expires_at_unix_ms:1788557900000 });
+    check(
+        "identity_bootstrap",
+        HostControlRequest {
+            request_id: "pair-1".into(),
+            action: Some(host_control_request::Action::Bootstrap(
+                BootstrapTicketRequest {
+                    expected_host_id: "host-1".into(),
+                    expected_instance_id: "instance-1".into(),
+                    origin: "https://armadra.example".into(),
+                    device_name: "手机📱".into(),
+                    scopes: vec![
+                        AuthorizationGrant {
+                            permission: "canvas:read".into(),
+                            ..Default::default()
+                        },
+                        AuthorizationGrant {
+                            permission: "terminal:write".into(),
+                            workspace_id: "workspace-1".into(),
+                            ..Default::default()
+                        },
+                    ],
+                },
+            )),
+        },
+    );
+    check(
+        "identity_session",
+        AuthenticatedSession {
+            host_id: "host-1".into(),
+            device: Some(DeviceIdentity {
+                device_id: "device-1".into(),
+                principal_id: "owner-1".into(),
+                display_name: "手机📱".into(),
+                role: "owner".into(),
+                created_at_unix_ms: 1788557000000,
+                revoked_at_unix_ms: 0,
+                revision: u64::MAX,
+            }),
+            csrf_token: "fixture-not-a-secret".into(),
+            scopes: vec![AuthorizationGrant {
+                permission: "canvas:read".into(),
+                ..Default::default()
+            }],
+            expires_at_unix_ms: 1788557900000,
+        },
+    );
 }
 
 #[test]
 fn private_worker_identity_and_partial_utf8_chunks() {
-    check("worker_hello",WorkerRequest {request_id:"request-worker".into(),host_id:"0123456789abcdef0123456789abcdef".into(),deadline_unix_ms:1788557900000,expected_instance_id:String::new(),action:Some(worker_request::Action::Hello(WorkerHelloRequest{protocol:Some(ProtocolVersion{major:1,minor:0})}))});
-    check("worker_chunk",WorkerResponse {request_id:"chunk-1".into(),host_id:"0123456789abcdef0123456789abcdef".into(),instance_id:"abcdef0123456789abcdef0123456789".into(),result:Some(worker_response::Result::FileChunk(WorkerFileChunk{root_id:"root-1".into(),path:"正文.txt".into(),mime_type:"text/plain".into(),sha256:vec![7;32],total_bytes:4,offset:1,data:vec![0x9f,0x99,0x82],eof:true}))});
+    check(
+        "worker_hello",
+        WorkerRequest {
+            request_id: "request-worker".into(),
+            host_id: "0123456789abcdef0123456789abcdef".into(),
+            deadline_unix_ms: 1788557900000,
+            expected_instance_id: String::new(),
+            action: Some(worker_request::Action::Hello(WorkerHelloRequest {
+                protocol: Some(ProtocolVersion { major: 1, minor: 0 }),
+            })),
+        },
+    );
+    check(
+        "worker_chunk",
+        WorkerResponse {
+            request_id: "chunk-1".into(),
+            host_id: "0123456789abcdef0123456789abcdef".into(),
+            instance_id: "abcdef0123456789abcdef0123456789".into(),
+            result: Some(worker_response::Result::FileChunk(WorkerFileChunk {
+                root_id: "root-1".into(),
+                path: "正文.txt".into(),
+                mime_type: "text/plain".into(),
+                sha256: vec![7; 32],
+                total_bytes: 4,
+                offset: 1,
+                data: vec![0x9f, 0x99, 0x82],
+                eof: true,
+            })),
+        },
+    );
 }
 
 #[test]
 fn automation_unknown_outcome_and_delivery_evidence() {
-    check("automation_unknown_receipt",AutomationReceipt{operation_id:"operation-1".into(),request_sha256:vec![7;32],outcome:999,sequence:u64::MAX,observed_at_unix_ms:1788557900000,reason_code:String::new()});
-    check("automation_delivery_evidence",AutomationRun{id:"run-1".into(),plan_id:"plan-1".into(),workspace_id:"workspace-1".into(),config_version:9007199254740993,state:AutomationRunState::Unknown as i32,delivery_observed:true,..Default::default()});
+    check(
+        "automation_unknown_receipt",
+        AutomationReceipt {
+            operation_id: "operation-1".into(),
+            request_sha256: vec![7; 32],
+            outcome: 999,
+            sequence: u64::MAX,
+            observed_at_unix_ms: 1788557900000,
+            reason_code: String::new(),
+        },
+    );
+    check(
+        "automation_delivery_evidence",
+        AutomationRun {
+            id: "run-1".into(),
+            plan_id: "plan-1".into(),
+            workspace_id: "workspace-1".into(),
+            config_version: 9007199254740993,
+            state: AutomationRunState::Unknown as i32,
+            delivery_observed: true,
+            ..Default::default()
+        },
+    );
 }
 
 #[test]
@@ -305,6 +398,48 @@ fn migration_manifest_and_sql_values_round_trip() {
                     value: Some(Value::BlobValue(vec![0, 255])),
                 },
             ],
+        },
+    );
+}
+
+#[test]
+fn command_binary_input_unknown_phase_and_optional_exit_evidence() {
+    check(
+        "command_run",
+        CommandRequest {
+            action: Some(command_request::Action::Run(RunCommandRequest {
+                operation_id: "operation-1".into(),
+                session_id: "会话-1".into(),
+                request_sha256: vec![8; 32],
+                expected_generation: u64::MAX,
+                stdin: vec![0, 255, 27, 10],
+                expected_not_dispatched_sequence: 0,
+            })),
+        },
+    );
+    check(
+        "command_receipt",
+        CommandReceipt {
+            operation_id: "operation-1".into(),
+            session_id: "会话-1".into(),
+            generation: 9_007_199_254_740_993,
+            phase: 999,
+            sequence: u64::MAX,
+            exit_code: Some(0),
+            stdout: vec![0, 255, 10],
+            stdout_total_bytes: 9_007_199_254_740_993,
+            stdout_truncated: true,
+            ..Default::default()
+        },
+    );
+    check(
+        "command_absent_exit",
+        CommandReceipt {
+            operation_id: "operation-2".into(),
+            phase: CommandPhase::NotDispatched as i32,
+            no_effect_proven: true,
+            cleanup_confirmed: true,
+            ..Default::default()
         },
     );
 }

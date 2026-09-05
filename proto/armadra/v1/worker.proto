@@ -2,6 +2,7 @@ syntax = "proto3";
 package armadra.v1;
 option go_package = "armadra.local/host/gen/armadra/v1";
 import "armadra/v1/common.proto";
+import "armadra/v1/command.proto";
 
 // The initial Worker transport is a parent-owned anonymous stdin/stdout pipe.
 // These messages are never accepted on an unauthenticated HTTP endpoint.
@@ -17,6 +18,8 @@ message WorkerHelloResponse {
   uint32 max_frame_bytes = 7;
   uint32 max_file_chunk_bytes = 8;
   uint32 max_text_file_bytes = 9;
+  // Absent in the backward-compatible read-only mode.
+  CommandCapabilities commands = 20;
 }
 message RegisterRootRequest { string root_id = 1; string path = 2; }
 message RegisteredRoot { string root_id = 1; string canonical_path = 2; }
@@ -62,6 +65,7 @@ message WorkerRequest {
     RegisterRootRequest register_root = 11;
     WorkerListDirectoryRequest list_directory = 12;
     WorkerReadFileRequest read_file = 13;
+    CommandRequest command = 20;
   }
 }
 message WorkerResponse {
@@ -74,5 +78,6 @@ message WorkerResponse {
     WorkerDirectory directory = 12;
     WorkerFileChunk file_chunk = 13;
     ErrorResponse error = 14;
+    CommandResponse command = 20;
   }
 }
