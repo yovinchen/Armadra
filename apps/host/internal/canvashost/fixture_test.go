@@ -117,9 +117,10 @@ func buildExport(t *testing.T, root string) (string, *pb.MigrationExportManifest
  success BOOLEAN NOT NULL, checksum BLOB NOT NULL, execution_time BIGINT NOT NULL)`)
 	names := []string{
 		"0001_initial.sql", "0002_agent_mailbox.sql", "0003_retire_kanban.sql",
-		"0004_agent_handoffs.sql", "0005_browser_sessions.sql", "0006_write_ownership.sql",
+		"0004_agent_handoffs.sql", "0005_browser_sessions.sql", "0006_agent_prompt_deliveries.sql",
+		"0007_handoff_attempts.sql", "0008_write_ownership.sql",
 	}
-	descriptions := []string{"initial", "agent mailbox", "retire kanban", "agent handoffs", "browser sessions", "write ownership"}
+	descriptions := []string{"initial", "agent mailbox", "retire kanban", "agent handoffs", "browser sessions", "agent prompt deliveries", "handoff attempts", "write ownership"}
 	for index, name := range names {
 		statements, err := os.ReadFile(filepath.Join("..", "migration", "legacy", name))
 		if err != nil {

@@ -28,7 +28,7 @@ target.mkdir(); workspace=target/'workspace';workspace.mkdir(); db=target/'sourc
 connection=sqlite3.connect(db)
 connection.execute('PRAGMA foreign_keys=ON')
 connection.execute('CREATE TABLE _sqlx_migrations(version BIGINT PRIMARY KEY, description TEXT NOT NULL, installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, success BOOLEAN NOT NULL, checksum BLOB NOT NULL, execution_time BIGINT NOT NULL)')
-names=['0001_initial.sql','0002_agent_mailbox.sql','0003_retire_kanban.sql','0004_agent_handoffs.sql']
+names=['0001_initial.sql','0002_agent_mailbox.sql','0003_retire_kanban.sql','0004_agent_handoffs.sql','0005_browser_sessions.sql','0006_agent_prompt_deliveries.sql','0007_handoff_attempts.sql','0008_write_ownership.sql']
 def apply(number):
     data=(root/'apps/runtime/migrations'/names[number-1]).read_bytes()
     connection.executescript(data.decode())
