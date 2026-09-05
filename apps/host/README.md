@@ -29,16 +29,37 @@ Windows 使用 `armadra-host.exe`。省略子命令等同 `serve`（前台）；
 | `--listen`           | start/serve 使用，默认 `127.0.0.1:43121`；`:0` 分配临时端口，仅显式回环 IP；`none` 只保留同用户控制 IPC |
 | `--endpoints-dir`    | start/serve 使用，共享 `endpoints.json` 所在绝对目录，默认数据目录                                      |
 | `--allow-origin`     | start/serve 使用，可重复的精确页面来源                                                                  |
+| `--serve-web`        | start/serve 使用，托管的前端构建目录；需要 TLS 与 `--public-origin`                                     |
+| `--external-service` | start/serve 使用，`on` / `off` 开关对外服务；省略则沿用已保存的设置                                     |
+| `--external-address` | start/serve 使用，对外服务监听的接口 IP；填非回环地址本身即为「允许局域网」的确认                       |
 | `--worker-binary`    | start/serve 使用，执行计划命令的 Rust Worker 绝对路径；与下一项必须成对                                 |
 | `--worker-state-dir` | start/serve 使用，Worker 私有执行日志目录（0700），缺失时创建                                           |
 | `--output protobuf`  | 管理命令返回单个 `HostManagementResult`，无尾随换行；默认 JSON 供人阅读                                 |
 
-`--listen none` 时不建 TCP 监听，也不接受 `--allow-origin` 与 TLS 参数；`HostStatus.httpEndpoint` 为空串表示「没有 HTTP 面」。
+`--listen none` 且没有 TLS 参数时不建 TCP 监听，也不接受 `--allow-origin`；`HostStatus.httpEndpoint` 为空串表示「没有 HTTP 面」。
+`--listen none` 配上 TLS 与 `--public-origin` 是「只服务其它设备」的形态：在对外服务打开之前不监听任何端口。
 启动后把本次地址写入 `<endpoints-dir>/endpoints.json`（0600，只改 `host` 段），正常退出时撤回；写不进去只告警不中止。
 
 管理 IPC 始终传 Protobuf；PID 仅为诊断信息。停止没有可信 ACK 时报告结果不确定，不自动重发。
 启动诊断写入本次新建的 `startup-*.log`；并发启动会回收本次多余子进程，防止迟到启动。
 此服务不由系统服务管理器托管，不承诺跨注销、重启或断电保活。前台 Ctrl+C/SIGTERM 有界退出并释放锁。
+
+## 前端托管与 Runtime 代理（H02）
+
+`--serve-web` 在 HTTPS 来源上提供前端构建产物：应用外壳同时就是配对页，因此它与 `assets/` 下的
+哈希产物是未配对设备唯一够得到的东西；深链接回落到 `index.html`，但**缺失的哈希资源仍是 404**，
+免得过期客户端把 HTML 当 JavaScript 执行。整棵目录通过 `os.Root` 打开，包内的符号链接跳不出去。
+
+`/api` 前缀下的请求与 WebSocket 转发给 `endpoints.json` 里 Runtime 自己发布的地址（socket、
+命名管道或回环 TCP；非回环的 TCP 地址一律拒绝）。每个请求先认证设备，再按它自己的授权检查：
+按路径里的工作空间收窄，并区分读 / 写 / 执行——执行类额外要求 `terminal:write`。设备的 Cookie、
+CSRF 与浏览器 Origin 停在 Host，Runtime 只看到本机回环来源。未认证时 `/api` 返回 401，
+路由表里没有的 `/api` 路径返回 404 而不是继承最近的前缀。
+
+对外服务开关持久化在数据目录的 `external-service.json`，由 `GET`/`PUT /host/external-service`
+读写（`settings:read` / `settings:write`，写需要会话 CSRF）。它是本机管理路由、不是跨端业务契约，
+所以是一份小 JSON 文档。通配地址一律拒绝，非回环地址需要显式的局域网确认，端口必须是
+`--public-origin` 里的那个——证书与 Cookie 都绑在它上面。
 
 ## HTTP 与身份
 

@@ -163,8 +163,8 @@ T01 是 🔶：`crates/session-host` 与 Worker 侧后端已交付并通过交�
 | 业务 Protobuf 表面（canvas / session / agent / filesystem / git）、写入所有权 epoch 切换（H01） | ⬜   |
 | 事件 outbox、durable sequence、快照恢复（H01）                                                  | ⬜   |
 | 远端 Rust Worker、`WorkspacePath{executionHostId}` 统一执行位置（H02）                          | ⬜   |
-| 认证后可用的业务 API、静态前端托管、对外服务开关（H02）                                         | ⬜   |
-| 手机焦点页、底部导航、软键盘工具条、断线重连不重复输入（H03）                                   | ⬜   |
+| 认证后可用的业务 API、静态前端托管、对外服务开关（H02）                                         | 🔶   |
+| 手机焦点页、底部导航、软键盘工具条、断线重连不重复输入（H03）                                   | 🔶   |
 | Presence / Mutation / 租约契约与 UNSUPPORTED 响应（H04，预留）                                  | ⬜   |
 
 ### 3.12 桌面壳、服务集成与项目结构（本轮新增，详见 §4.4、§4.5）
@@ -179,6 +179,11 @@ T01 是 🔶：`crates/session-host` 与 Worker 侧后端已交付并通过交�
 
 Runtime 的 `--listen unix:/pipe:/tcp:`、`endpoints.json` 发布、Host 的 `--listen none`、
 桌面 `armadra://` 转发与 CSP 收紧已实现（启动与变量见[开发指南](./development.md)）。
+
+H02 已实现 `--serve-web` 静态托管、认证设备的 `/api` 与 WebSocket 反向代理（按设备授权、
+按工作空间与读 / 写 / 执行收窄）、以及「对外服务」开关；仍缺业务 Protobuf 表面与远端
+Worker。H03 已实现手机底部导航、单节点焦点页、软键盘工具条与带序号确认的终端输入；
+仍缺原生打包与后台推送。
 仍缺：WebSocket 只能经壳的回环随机端口转发（自定义协议不支持 ws），Windows 命名管道未在实机验证。
 
 ### 3.13 设置与数据
