@@ -24,14 +24,20 @@ use armadra_hook::{
     endpoint::Endpoint,
     http::{Request, send_with_timeout},
 };
-use armadra_protocol::v1::*;
+use armadra_protocol::{Message, v1::*};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 use crate::error::AppError;
 
 /// The capability the Host checks before it routes an agent target to this
 /// Worker. Absent when no state directory was configured.
 pub const CAPABILITY: &str = "automation.agent-prompt.v1";
+
+/// The shape of an agent upcall's opaque payload: an encoded
+/// `AgentPromptReceipt`. Bumping it is how a later batch changes the body
+/// without a Host having to guess which one it is looking at.
+const AGENT_UPCALL_SCHEMA: u32 = 1;
 
 /// A live pane has to be inspected before the Runtime can answer, which can
 /// mean shelling out to `ps` or `tmux`. The hook's own 1.5s budget is for the
@@ -40,11 +46,61 @@ const BUDGET: Duration = Duration::from_secs(8);
 
 pub struct Bridge {
     data_dir: PathBuf,
+    /// The upward half of the resident channel (business migration §2.9), when
+    /// this Worker has a durable outbox. The bridge is the channel's first
+    /// consumer, and deliberately a passive one: an upcall is a *copy* of the
+    /// answer A02 already computed, emitted after it, and a failure to queue
+    /// one never changes what the Host is told about the delivery itself.
+    upcalls: Option<super::channel::Upcaller>,
 }
 
 impl Bridge {
     pub fn new(data_dir: PathBuf) -> Self {
-        Self { data_dir }
+        Self {
+            data_dir,
+            upcalls: None,
+        }
+    }
+
+    /// Attaches the upward flow. Without it the bridge behaves exactly as it
+    /// did before this batch.
+    pub fn with_upcalls(mut self, upcalls: Option<super::channel::Upcaller>) -> Self {
+        self.upcalls = upcalls;
+        self
+    }
+
+    /// Reports one already-observed agent event upward.
+    ///
+    /// The payload is the Protobuf the Host would have received anyway, kept
+    /// opaque with its own digest: the agent domain (B4) has no settled Host
+    /// shape yet, and guessing one here would freeze it.
+    async fn report(
+        &self,
+        kind: WorkerAgentUpcallKind,
+        node_id: &str,
+        session_id: &str,
+        payload: Vec<u8>,
+    ) {
+        let Some(upcalls) = self.upcalls.as_ref() else {
+            return;
+        };
+        let event = worker_upcall::Event::Agent(WorkerAgentUpcall {
+            workspace_id: String::new(),
+            node_id: node_id.to_owned(),
+            session_id: session_id.to_owned(),
+            payload_sha256: Sha256::digest(&payload).to_vec(),
+            payload,
+            schema_version: AGENT_UPCALL_SCHEMA,
+            kind: kind as i32,
+            reason_code: String::new(),
+            observed_at_unix_ms: chrono::Utc::now().timestamp_millis(),
+        });
+        if let Err(error) = upcalls.send(event).await {
+            // The delivery itself already succeeded and has been answered. A
+            // report that cannot be queued is a lost report, not a lost write,
+            // and saying so is more useful than failing the caller.
+            tracing::warn!(%error, "an agent upcall could not be queued");
+        }
     }
 
     fn endpoint(&self) -> Result<Endpoint, AppError> {
@@ -139,12 +195,26 @@ impl Bridge {
                     "expected": spec(expected),
                 });
                 let answer = self.call("/automation/agent-prompt", body).await?;
+                let receipt = receipt(&answer, &input.operation_id, &input.request_sha256);
+                // A turn was driven on that node, and the Host will want to
+                // know without polling. Only a receipt that reached the pane
+                // reports one: `notWritten` and `abandoned` describe a turn
+                // that never happened, and `unknown` describes one nobody can
+                // claim either way.
+                if matches!(
+                    AgentPromptPhase::try_from(receipt.phase),
+                    Ok(AgentPromptPhase::Submitted | AgentPromptPhase::Completed)
+                ) {
+                    self.report(
+                        WorkerAgentUpcallKind::HookTurn,
+                        &input.node_id,
+                        &receipt.session_id,
+                        receipt.encode_to_vec(),
+                    )
+                    .await;
+                }
                 Ok(AgentResponse {
-                    result: Some(Answer::Receipt(receipt(
-                        &answer,
-                        &input.operation_id,
-                        &input.request_sha256,
-                    ))),
+                    result: Some(Answer::Receipt(receipt)),
                 })
             }
             Action::Lookup(input) => {

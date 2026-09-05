@@ -32,11 +32,11 @@ pub fn private_directory(path: &Path) -> anyhow::Result<PathBuf> {
     Ok(std::fs::canonicalize(path)?)
 }
 #[cfg(windows)]
-fn private_file(path: &Path) -> anyhow::Result<File> {
+pub(crate) fn private_file(path: &Path) -> anyhow::Result<File> {
     Ok(super::platform_windows::open_private_file(path)?)
 }
 #[cfg(not(windows))]
-fn private_file(path: &Path) -> anyhow::Result<File> {
+pub(crate) fn private_file(path: &Path) -> anyhow::Result<File> {
     let mut options = std::fs::OpenOptions::new();
     options.read(true).write(true).create(true);
     #[cfg(unix)]

@@ -6,7 +6,9 @@ mod platform_unix;
 #[cfg(windows)]
 mod platform_windows;
 pub mod process_types;
-mod store;
+// `store::private_file` is shared with the Worker upcall outbox, which needs
+// the same 0600, no-symlink, no-hard-link discipline for its own database.
+pub(crate) mod store;
 use armadra_protocol::{Message, v1::*};
 #[cfg(unix)]
 pub use guardian::run_guardian;

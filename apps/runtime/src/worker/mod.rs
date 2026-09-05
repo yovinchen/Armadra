@@ -5,6 +5,9 @@
 //! Runtime that owns the terminal (see [`agent_bridge`]). This process still
 //! opens no PTY of its own.
 pub mod agent_bridge;
+pub mod channel;
+pub mod outbox;
+pub mod socket;
 
 use crate::{error::AppError, files, ownership, security};
 use armadra_protocol::{Message, v1::*};
@@ -37,6 +40,13 @@ pub struct Worker {
     /// named one, and then every ownership action answers UNSUPPORTED rather
     /// than inventing a record.
     canvas: Option<SqlitePool>,
+    /// The upward half of the resident channel. Present only when a durable
+    /// outbox was opened, because a Worker that cannot persist a report must
+    /// not advertise that it can deliver one.
+    upcalls: Option<channel::Upcaller>,
+    /// The socket bearer's published address, reported in the handshake so a
+    /// controller can reattach without respawning this process.
+    bearer: (Option<String>, Option<String>),
 }
 impl Default for Worker {
     fn default() -> Self {
@@ -48,6 +58,8 @@ impl Default for Worker {
             commands: None,
             agents: None,
             canvas: None,
+            upcalls: None,
+            bearer: (None, None),
         }
     }
 }
@@ -151,6 +163,25 @@ impl Worker {
             ..Self::default()
         }
     }
+    /// The instance id this Worker will report, needed before the handshake by
+    /// whatever opens the outbox: the deduplication key is
+    /// `(worker_instance_id, sequence)`, so the outbox has to be opened under
+    /// the same id the handshake will publish.
+    pub fn instance_id(&self) -> &str {
+        &self.instance
+    }
+    /// Attaches the resident channel's upward half and the bearer address the
+    /// handshake should publish. Without it the Worker answers exactly as it
+    /// did before this batch and advertises no upcall capability.
+    pub fn attach_channel(
+        &mut self,
+        upcalls: channel::Upcaller,
+        socket: Option<String>,
+        pipe: Option<String>,
+    ) {
+        self.upcalls = Some(upcalls);
+        self.bearer = (socket, pipe);
+    }
     fn root(&self, root_id: &str) -> Result<PathBuf, AppError> {
         if !id(root_id) {
             return Err(invalid("Invalid root identity"));
@@ -250,7 +281,11 @@ impl Worker {
                     // The bridge re-reads the live Runtime's own endpoint file
                     // out of the shared data directory on every call, because
                     // that Runtime may restart on a different address under us.
-                    self.agents = Some(agent_bridge::Bridge::new(crate::paths::data_dir()));
+                    // It is also the resident channel's first consumer.
+                    self.agents = Some(
+                        agent_bridge::Bridge::new(crate::paths::data_dir())
+                            .with_upcalls(self.upcalls.clone()),
+                    );
                 }
                 self.command_path = None;
                 self.host = Some(request.host_id.clone());
@@ -278,7 +313,22 @@ impl Worker {
                         if self.canvas.is_some() {
                             capabilities.push("canvas.ownership.v1".into());
                         }
+                        // Only a Worker with a durable outbox claims it can
+                        // report upward. Claiming it without one would promise
+                        // a delivery this process cannot survive a crash to
+                        // make good on.
+                        if self.upcalls.is_some() {
+                            capabilities.push(channel::CAPABILITY.into());
+                        }
                         capabilities
+                    },
+                    channel: match self.upcalls.as_ref() {
+                        Some(upcalls) => Some(
+                            upcalls
+                                .capability(self.bearer.0.clone(), self.bearer.1.clone())
+                                .await,
+                        ),
+                        None => None,
                     },
                     max_frame_bytes: MAX_FRAME as u32,
                     max_file_chunk_bytes: MAX_CHUNK as u32,
@@ -555,64 +605,96 @@ pub async fn serve<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     }
 }
 
-/// Command mode reads EOF independently from in-flight journal work, ensuring
-/// a dead controller cannot leave an otherwise healthy Worker running jobs.
-pub async fn serve_commands<R: AsyncRead + Unpin + Send + 'static, W: AsyncWrite + Unpin>(
-    mut input: R,
-    mut output: W,
+/// Command mode: the resident bidirectional channel over stdio, plus a private
+/// socket bearer for a controller that has to reattach (§2.9).
+///
+/// Reading runs in its own task, so end of input is noticed while a request is
+/// still being handled and a dead controller cannot leave an otherwise healthy
+/// Worker running jobs on its behalf. That property predates the upward flow
+/// and [`channel::serve`] keeps it for both bearers.
+///
+/// The outbox is opened before the handshake, because the handshake has to say
+/// truthfully whether this Worker can report upward *and* how much it already
+/// owes. A Worker whose outbox will not open still serves requests: losing the
+/// upward flow is visible to the Host, losing execution is not what was asked
+/// for.
+pub async fn serve_commands<R, W>(
+    input: R,
+    output: W,
     path: PathBuf,
     canvas: Option<SqlitePool>,
-) -> anyhow::Result<()> {
-    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-    let (closed, mut close_rx) = tokio::sync::watch::channel(false);
-    let reader = tokio::spawn(async move {
-        let result: anyhow::Result<()> = async {
-            loop {
-                let mut prefix = [0u8; 4];
-                if input.read(&mut prefix[..1]).await? == 0 {
-                    return Ok(());
-                }
-                input.read_exact(&mut prefix[1..]).await?;
-                let length = u32::from_be_bytes(prefix) as usize;
-                anyhow::ensure!(
-                    length > 0 && length <= MAX_FRAME,
-                    "Invalid Worker frame length"
-                );
-                let mut bytes = vec![0; length];
-                input.read_exact(&mut bytes).await?;
-                let request = WorkerRequest::decode(bytes.as_slice())?;
-                anyhow::ensure!(
-                    request.encode_to_vec() == bytes,
-                    "Noncanonical Worker command frame"
-                );
-                if tx.send(request).await.is_err() {
-                    return Ok(());
-                }
-            }
-        }
-        .await;
-        let _ = closed.send(true);
-        result
-    });
+) -> anyhow::Result<()>
+where
+    R: AsyncRead + Unpin + Send + 'static,
+    W: AsyncWrite + Unpin + Send + 'static,
+{
     let mut worker = Worker {
-        command_path: Some(path),
+        command_path: Some(path.clone()),
         canvas,
         ..Default::default()
     };
-    let result: anyhow::Result<()>=async {
-        loop {
-            let request=tokio::select!{_=close_rx.changed()=>break,request=rx.recv()=>match request{Some(r)=>r,None=>break}};
-            let response=tokio::select!{_=close_rx.changed()=>break,response=worker.handle(request)=>response};
-            let bytes=response.encode_to_vec();anyhow::ensure!(bytes.len()<=MAX_FRAME,"Worker response exceeds frame limit");
-            output.write_all(&(bytes.len() as u32).to_be_bytes()).await?;output.write_all(&bytes).await?;output.flush().await?;
-        }Ok(())
-    }.await;
-    reader.abort();
-    let _ = reader.await;
-    if let Some(manager) = worker.commands {
-        let result = manager.shutdown().await?;
+    // The state directory's privacy is proven here, once, exactly as the
+    // command journal proves it; the outbox and the bearer both live inside it.
+    let state_dir = crate::command::store::private_directory(&path)?;
+    let instance = worker.instance.clone();
+    let channel = match outbox::Outbox::open(&state_dir, &instance).await {
+        Ok(outbox) => Some(std::sync::Arc::new(channel::Channel::new(outbox))),
+        Err(error) => {
+            tracing::error!(%error, "the upcall outbox could not be opened; this Worker will not report upward");
+            None
+        }
+    };
+    let bearer = match channel.as_ref() {
+        Some(_) => match socket::bind(&state_dir, &instance) {
+            Ok(bearer) => Some(bearer),
+            Err(error) => {
+                // stdio still works; only the reattach path is lost, and the
+                // handshake will not claim an address that does not exist.
+                tracing::warn!(%error, "the upcall socket bearer could not be bound");
+                None
+            }
+        },
+        None => None,
+    };
+    if let Some(channel) = channel.as_ref() {
+        let (socket, pipe) = match bearer.as_ref() {
+            Some(bearer) => (bearer.socket.clone(), bearer.pipe.clone()),
+            None => (None, None),
+        };
+        worker.attach_channel(channel.upcaller(), socket, pipe);
+    }
+    let worker = std::sync::Arc::new(tokio::sync::Mutex::new(worker));
+    let (stop, stop_rx) = tokio::sync::watch::channel(false);
+    let bearer_task = match (bearer, channel.as_ref()) {
+        (Some(bearer), Some(channel)) => {
+            let worker = std::sync::Arc::clone(&worker);
+            let channel = std::sync::Arc::clone(channel);
+            Some(tokio::spawn(async move {
+                bearer.serve(worker, channel, stop_rx).await
+            }))
+        }
+        _ => None,
+    };
+    let result = channel::serve(
+        input,
+        output,
+        std::sync::Arc::clone(&worker),
+        channel.clone(),
+    )
+    .await;
+    let _ = stop.send(true);
+    if let Some(task) = bearer_task {
+        task.abort();
+        let _ = task.await;
+    }
+    if let Some(channel) = channel {
+        channel.outbox().close().await;
+    }
+    let manager = worker.lock().await.commands.take();
+    if let Some(manager) = manager {
+        let confirmation = manager.shutdown().await?;
         anyhow::ensure!(
-            result.cleanup_confirmed,
+            confirmation.cleanup_confirmed,
             "Worker command cleanup was not confirmed"
         );
     }
