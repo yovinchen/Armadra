@@ -13,12 +13,17 @@ import (
 )
 
 func TestV1UpgradePreservesPublishedSQLAndBusinessRecords(t *testing.T) {
-	// Digest of the published v1 migration, independent of the current ledger.
-	published := "4666c132f859310554606295c668ec0d6de7e7198bac9c774a54515bacac2d9e"
-	digest := sha256.Sum256([]byte(schemaV1))
-	if hex.EncodeToString(digest[:]) != published {
-		t.Fatal("published v1 SQL changed; append a migration instead")
+	// Digests of the published migrations, independent of the current ledger.
+	for version, published := range map[int]string{
+		1: "4666c132f859310554606295c668ec0d6de7e7198bac9c774a54515bacac2d9e",
+		2: "c0ea936da2aa3e75437f301907fcb5e37b39d182c0f7ee8f997c559e8b8dd02e",
+	} {
+		sum := sha256.Sum256([]byte(migrations[version-1]))
+		if hex.EncodeToString(sum[:]) != published {
+			t.Fatalf("published v%d SQL changed; append a migration instead", version)
+		}
 	}
+	digest := sha256.Sum256([]byte(schemaV1))
 	dir := t.TempDir()
 	path := filepath.Join(dir, "host.db")
 	if err := os.WriteFile(path, nil, 0600); err != nil {
@@ -62,8 +67,8 @@ func TestV1UpgradePreservesPublishedSQLAndBusinessRecords(t *testing.T) {
 		t.Fatal("upgrade rewrote historical migration receipt")
 	}
 	version, err := validateSchema(testContext, store.db, testHost)
-	if err != nil || version != 2 {
-		t.Fatalf("v1 -> v2 schema: %d %v", version, err)
+	if err != nil || version != SchemaVersion {
+		t.Fatalf("v1 -> v%d schema: %d %v", SchemaVersion, version, err)
 	}
 	events, err := store.GetEvents(testContext, EventQuery{})
 	if err != nil || events.HighWatermark != 0 {

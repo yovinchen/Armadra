@@ -102,7 +102,50 @@ CREATE TABLE identity_bootstrap_tickets (
  consumed_at_ms INTEGER NOT NULL DEFAULT 0 CHECK(consumed_at_ms >= 0)
 )`
 
-var migrations = []string{schemaV1, schemaV2}
+// Execution definitions the Host owns: the frozen command roots/sessions it
+// rebuilds on a replaced Worker, the private payload bytes a plan sends to a
+// new process, and the grant a dispatch is re-checked against. Payload bytes
+// and grants stay out of the entity/event sync surface; only hashes and
+// references reach clients.
+const schemaV3 = `CREATE TABLE command_roots (
+ root_id TEXT PRIMARY KEY,
+ workspace_id TEXT NOT NULL,
+ path TEXT NOT NULL,
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0)
+);
+CREATE TABLE command_sessions (
+ session_id TEXT PRIMARY KEY,
+ root_id TEXT NOT NULL REFERENCES command_roots(root_id),
+ workspace_id TEXT NOT NULL,
+ execution_host_id TEXT NOT NULL,
+ launch BLOB NOT NULL CHECK(length(launch) BETWEEN 1 AND 131072),
+ launch_sha256 BLOB NOT NULL CHECK(length(launch_sha256) = 32),
+ generation INTEGER NOT NULL CHECK(generation > 0),
+ state INTEGER NOT NULL CHECK(state IN (1,2)),
+ reason_code TEXT NOT NULL CHECK(length(reason_code) <= 64),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0),
+ updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0)
+);
+CREATE TABLE automation_payloads (
+ workspace_id TEXT NOT NULL,
+ payload_ref TEXT NOT NULL,
+ payload BLOB NOT NULL CHECK(length(payload) <= 262144),
+ payload_sha256 BLOB NOT NULL CHECK(length(payload_sha256) = 32),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0),
+ PRIMARY KEY(workspace_id, payload_ref)
+);
+CREATE TABLE automation_grants (
+ authorization_id TEXT PRIMARY KEY CHECK(length(authorization_id) = 32),
+ principal_id TEXT NOT NULL CHECK(length(principal_id) = 32),
+ device_id TEXT NOT NULL REFERENCES identity_devices(device_id),
+ device_epoch INTEGER NOT NULL CHECK(device_epoch > 0),
+ scopes BLOB NOT NULL CHECK(length(scopes) BETWEEN 1 AND 16384),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0),
+ updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0)
+)`
+
+var migrations = []string{schemaV1, schemaV2, schemaV3}
 
 type sqlReader interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
