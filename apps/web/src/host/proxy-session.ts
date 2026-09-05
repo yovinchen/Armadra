@@ -28,11 +28,34 @@ const SECRET = /^[A-Za-z0-9_-]{43}$/;
 
 let token = "";
 let pending: Promise<string> | null = null;
+const listeners = new Set<() => void>();
+
+/**
+ * 会话变了（配对成功、刷新、登出）时通知一次。
+ *
+ * 配对之前页面上的每一次 `/api` 请求都会被 Host 拒掉，那些失败会留在 React
+ * Query 的缓存里；配对成功之后不重新取一遍，用户看到的就是一个刚登录完却写着
+ * 「已断开」的界面。返回退订函数。
+ */
+export function onHostSessionChange(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
 
 /** 记住一枚由 Host 身份客户端刚拿到（或刚作废）的令牌。 */
 export function rememberHostCsrf(value: string): void {
-  token = SECRET.test(value) ? value : "";
+  const next = SECRET.test(value) ? value : "";
+  const changed = next !== token;
+  token = next;
   pending = null;
+  if (!changed) return;
+  for (const listener of [...listeners]) {
+    try {
+      listener();
+    } catch {
+      /* 一个订阅者出错不该拖垮其它订阅者。 */
+    }
+  }
 }
 
 /** 收到 403 后作废本地这枚，下一次写请求会重新取。 */

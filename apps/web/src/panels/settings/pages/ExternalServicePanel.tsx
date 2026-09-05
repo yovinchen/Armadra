@@ -8,6 +8,7 @@ import {
   saveExternalService,
   type ExternalService,
 } from "../../../host/external-service";
+import { onHostSessionChange } from "../../../host/proxy-session";
 import { encodeQr, qrPath } from "../../../host/qr";
 import { SettingsGroup } from "../SettingsGroup";
 import { SettingsRow } from "../SettingsRow";
@@ -81,18 +82,26 @@ export function ExternalServicePanel() {
   useEffect(() => {
     if (!hostServedPage()) return;
     let live = true;
-    void (async () => {
-      try {
-        const value = await readExternalService();
-        if (!live) return;
-        setService(value);
-        setDraft(value);
-      } catch (failure) {
-        if (live) setError(errorKey(failure));
-      }
-    })();
+    const read = () => {
+      void (async () => {
+        try {
+          const value = await readExternalService();
+          if (!live) return;
+          setService(value);
+          setDraft(value);
+          setError(null);
+        } catch (failure) {
+          if (live) setError(errorKey(failure));
+        }
+      })();
+    };
+    read();
+    // 这一页常常在配对之前就已经挂上了，那时读回来的是 401。会话一变就再读
+    // 一次，而不是让用户自己想到要刷新。
+    const stop = onHostSessionChange(read);
     return () => {
       live = false;
+      stop();
     };
   }, []);
 

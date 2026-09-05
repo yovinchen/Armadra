@@ -472,7 +472,12 @@ export const runtimeApi = {
       contextUsageSchema,
       { signal },
     ),
-  health: () => request("/health", healthSchema),
+  /**
+   * `/api/health`，不是裸的 `/health`：Host 托管这份前端时，`/health` 是
+   * Host **自己**的存活探针（纯文本），只有带 `/api` 前缀的路径才会被代理到
+   * Runtime。这条查询问的是 Runtime，所以走带前缀的那一条。
+   */
+  health: () => request("/api/health", healthSchema),
 
   /* --------------------------------- 工作空间 --------------------------- */
   listWorkspaces: () => request("/api/workspaces", workspaceListSchema),

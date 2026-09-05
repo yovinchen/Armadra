@@ -1,5 +1,9 @@
 import { Suspense, useEffect, useState } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useWorkspaceEvents } from "../api/events";
 import { TldrawWorkspace } from "../canvas/TldrawWorkspace";
 // 浮层都在 `./lazy` 里 `React.lazy` 包过，走各自的 chunk（§17 代码分割）。
@@ -26,6 +30,7 @@ import { MobileFocusPage } from "../shell/MobileFocusPage";
 import { UsageOrb } from "../shell/UsageOrb";
 import { WindowDragLayer } from "../shell/WindowDragLayer";
 import { useCanvasStore } from "../store/canvas-store";
+import { onHostSessionChange } from "../host/proxy-session";
 import { Toaster } from "@/ui/sonner";
 import { TooltipProvider } from "@/ui/tooltip";
 import { useCommandDispatch } from "./commands";
@@ -65,6 +70,15 @@ export function App() {
 function AppShell() {
   const workspace = useCanvasStore((state) => state.workspace);
   const minimapCollapsed = useMinimapPreferences((state) => state.collapsed);
+
+  const queryClient = useQueryClient();
+  // Every /api call made before this device paired was refused. Once the Host
+  // session appears, re-read rather than leaving the shell showing the
+  // failures from before the user signed in.
+  useEffect(
+    () => onHostSessionChange(() => void queryClient.invalidateQueries()),
+    [queryClient],
+  );
 
   useEffect(syncDocumentPreferences, []);
   useTldrawPreferences();
