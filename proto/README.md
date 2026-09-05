@@ -43,12 +43,12 @@ pnpm protocol:test
 - test 运行三语言契约测试与 TS 类型检查，不启动业务 Host / Worker。
 - `node scripts/protocol.mjs fixtures` 重建共享十六进制样例，仅在有意变更契约时运行并审查 diff。
 
-| 工具                        | 锁定版本             | 输出                                       |
-| --------------------------- | -------------------- | ------------------------------------------ |
-| protoc-bin-vendored         | 3.2.0（protoc 31.1） | 共用编译器                                 |
-| protoc-gen-go / Go protobuf | 1.36.6               | `apps/host/gen/armadra/v1/`                |
-| protoc-gen-es / protobuf-es | 2.2.5                | `packages/protocol-ts/src/gen/armadra/v1/` |
-| prost / prost-build         | 0.14.1               | `armadra_protocol::v1`                     |
+| 工具                        | 锁定版本             | 输出                                    |
+| --------------------------- | -------------------- | --------------------------------------- |
+| protoc-bin-vendored         | 3.2.0（protoc 31.1） | 共用编译器                              |
+| protoc-gen-go / Go protobuf | 1.36.6               | `apps/host/gen/armadra/v1/`             |
+| protoc-gen-es / protobuf-es | 2.2.5                | `packages/protocol/src/gen/armadra/v1/` |
+| prost / prost-build         | 0.14.1               | `armadra_protocol::v1`                  |
 
 提交相应 Cargo.lock、pnpm-lock.yaml 和 go.sum；生成文件不手改。
 

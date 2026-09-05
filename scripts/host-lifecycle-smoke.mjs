@@ -64,7 +64,7 @@ try {
     timeout: 180_000,
   });
   const { fromBinary, HostManagementResultSchema } = await import(
-    "../packages/protocol-ts/dist/index.js"
+    "../packages/protocol/dist/index.js"
   );
   const binaryResult = async (args) => {
     const { stdout } = await execute(

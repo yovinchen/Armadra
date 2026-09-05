@@ -78,7 +78,7 @@ if (mode === "test") {
     const exe = process.platform === "win32" ? ".exe" : "";
     const tsPlugin = join(
       root,
-      "packages/protocol-ts/node_modules/.bin",
+      "packages/protocol/node_modules/.bin",
       `protoc-gen-es${process.platform === "win32" ? ".cmd" : ""}`,
     );
     // Native protoc cannot CreateProcess a .cmd via an explicit --plugin path.
@@ -119,7 +119,7 @@ if (mode === "test") {
     ]);
     for (const [generated, target] of [
       [goOut, "apps/host/gen"],
-      [tsOut, "packages/protocol-ts/src/gen"],
+      [tsOut, "packages/protocol/src/gen"],
     ]) {
       for (const relative of readdirSync(generated, {
         recursive: true,

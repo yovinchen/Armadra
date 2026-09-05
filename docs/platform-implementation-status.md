@@ -112,7 +112,7 @@
 | Rust 检查                  | `cargo clippy --workspace --all-targets -- -D warnings`、`cargo fmt --all --check`                                            | 通过                                                                                               |
 | 协议                       | `pnpm protocol:check`、`pnpm protocol:test`                                                                                   | 无漂移；Go 契约、Rust、TS 42 通过                                                                  |
 | Go Host                    | `go -C apps/host test -race -count=1 ./...`、`vet`、Windows/Linux amd64 交叉构建、`node scripts/legacy-archive-smoke.mjs`     | 全部通过（含真实 Runtime 代理与所有权端到端）                                                      |
-| Web / shared / host-client | `pnpm --filter @armadra/web test`、`typecheck`、shared、host-client、protocol-ts、desktop 脚本                                | Web 155 文件 1519 项，shared 129，host-client 183，protocol-ts 42，desktop 脚本 8，类型检查通过    |
+| Web / shared / host-client | `pnpm --filter @armadra/web test`、`typecheck`、shared、host-client、protocol、desktop 脚本                                   | Web 155 文件 1519 项，shared 129，host-client 183，protocol 42，desktop 脚本 8，类型检查通过       |
 | 格式                       | `pnpm format:check`、`gofmt -l`、`bash -n armadra.sh`                                                                         | 通过                                                                                               |
 
 机器满载（负载均值 50+）时 `git_message`/`git_repository` 关停、资源采样与 `armadra-hook` wire 等时序测试偶发超时，单独重跑均通过。Windows/Linux 仅交叉编译；手机与 Windows 实机、真实 GitHub 远端与真实 SSH 主机未验收。

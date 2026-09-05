@@ -538,7 +538,7 @@ globalThis.armadraReady = true;
       "--platform=browser",
       // The driver lives in a temporary directory, so the workspace packages
       // are named explicitly rather than resolved through node_modules.
-      `--alias:@armadra/protocol=${join(root, "packages/protocol-ts/dist/index.js")}`,
+      `--alias:@armadra/protocol=${join(root, "packages/protocol/dist/index.js")}`,
       `--alias:@armadra/host-client=${join(root, "packages/host-client/dist/index.js")}`,
       `--outfile=${driverFile}`,
       "--log-level=error",

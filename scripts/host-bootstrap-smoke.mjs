@@ -82,7 +82,7 @@ try {
   const endpoint = `http://127.0.0.1:${reservation.address().port}`;
   await new Promise((resolve) => reservation.close(resolve));
   const { fromBinary, HostStatusSchema, HostManagementResultSchema } =
-    await import("../packages/protocol-ts/dist/index.js");
+    await import("../packages/protocol/dist/index.js");
   const launch = async (origin) => {
     const { stdout } = await execute(
       probe,

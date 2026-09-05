@@ -3,7 +3,7 @@ resolver = "2"
 members = [
     "apps/runtime",
     "apps/desktop/src-tauri",
-    "crates/armadra-hook",
+    "crates/hook",
     "crates/protocol",
     "crates/session-host",
 ]

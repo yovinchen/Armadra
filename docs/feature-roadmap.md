@@ -10,15 +10,15 @@ Armadra 是 local-first 的 AI Coding 画布：把真实 CLI Agent（Claude Code
 
 ## 2. 技术框架
 
-| 层          | 目录                                                                 | 技术                                                                                 | 说明                                                  |
-| ----------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| 前端        | `apps/web`                                                           | React 19、Vite、TypeScript、tldraw 5、xterm.js、CodeMirror 6、shadcn/ui、Tailwind v4 | 唯一页面，桌面与浏览器共用                            |
-| 桌面壳      | `apps/desktop`                                                       | Tauri 2（tray、dialog、notification、opener）                                        | 窗口、托盘、sidecar 生命周期；不写业务                |
-| 中转服务    | `apps/host`                                                          | Go 1.24、SQLite、cron、Protobuf                                                      | 身份、设备、调度、事件、业务状态；目标是唯一业务权威  |
-| 执行层      | `apps/runtime`（目标：归为 Worker）                                  | Rust、Axum、Tokio、SQLx、portable-pty、notify                                        | 终端、文件、Git、Hook、进程测量；当前仍持有业务数据库 |
-| 协议        | `proto/`、`crates/protocol`、`packages/protocol-ts`、`apps/host/gen` | Protobuf 3，三端生成                                                                 | 唯一跨进程契约，生成文件不手改                        |
-| 共享模型    | `packages/shared`                                                    | zod                                                                                  | 节点/边/工作空间、CLI 注册表、Git/交接 schema         |
-| Hook 客户端 | `crates/armadra-hook`                                                | Rust，最小依赖                                                                       | CLI hook 回调、`canvas post/inbox/ack`、上下文读取    |
+| 层          | 目录                                                              | 技术                                                                                 | 说明                                                  |
+| ----------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| 前端        | `apps/web`                                                        | React 19、Vite、TypeScript、tldraw 5、xterm.js、CodeMirror 6、shadcn/ui、Tailwind v4 | 唯一页面，桌面与浏览器共用                            |
+| 桌面壳      | `apps/desktop`                                                    | Tauri 2（tray、dialog、notification、opener）                                        | 窗口、托盘、sidecar 生命周期；不写业务                |
+| 中转服务    | `apps/host`                                                       | Go 1.24、SQLite、cron、Protobuf                                                      | 身份、设备、调度、事件、业务状态；目标是唯一业务权威  |
+| 执行层      | `apps/runtime`（目标：归为 Worker）                               | Rust、Axum、Tokio、SQLx、portable-pty、notify                                        | 终端、文件、Git、Hook、进程测量；当前仍持有业务数据库 |
+| 协议        | `proto/`、`crates/protocol`、`packages/protocol`、`apps/host/gen` | Protobuf 3，三端生成                                                                 | 唯一跨进程契约，生成文件不手改                        |
+| 共享模型    | `packages/shared`                                                 | zod                                                                                  | 节点/边/工作空间、CLI 注册表、Git/交接 schema         |
+| Hook 客户端 | `crates/hook`                                                     | Rust，最小依赖                                                                       | CLI hook 回调、`canvas post/inbox/ack`、上下文读取    |
 
 ## 3. 功能总表
 
@@ -293,7 +293,7 @@ apps/web         React / tldraw 前端
 apps/host        Go 中转服务（身份、调度、事件、业务状态、GitHub、Worker 管理）
 apps/worker      Rust 执行层（终端、文件、Git、Hook、进程测量；现 apps/runtime 演进）
 crates/          protocol、armadra-hook 等共享 crate
-packages/        shared、protocol-ts、host-client
+packages/        shared、protocol、host-client
 proto/           Protobuf 唯一来源
 docs/            现行文档；history/ 与 research/ 只作追溯
 ```

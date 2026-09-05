@@ -44,7 +44,7 @@ pnpm --filter @armadra/desktop build   # 桌面打包
 | [packages/shared](packages/shared/README.md)           | 领域模型、CLI 注册表与 JSON schema     |
 | [proto](proto/README.md)                               | Go / Rust / TS 共用的 Protobuf 契约    |
 | [packages/host-client](packages/host-client/README.md) | TypeScript Host 握手客户端             |
-| crates/armadra-hook                                    | Agent 终端中的 Hook / 画布命令客户端   |
+| crates/hook                                            | Agent 终端中的 Hook / 画布命令客户端   |
 
 Go Host 已有身份、握手和启停基础；业务迁移、后台计划与跨设备执行的进度见
 [实施记录](docs/platform-implementation-status.md)。

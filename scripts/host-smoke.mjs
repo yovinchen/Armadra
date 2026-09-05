@@ -178,7 +178,7 @@ try {
     HelloRequestSchema,
     HelloResponseSchema,
     ErrorResponseSchema,
-  } = await import("../packages/protocol-ts/dist/index.js");
+  } = await import("../packages/protocol/dist/index.js");
   const { HostClient } = await import("../packages/host-client/dist/index.js");
   const clientHello = await new HostClient({
     baseUrl: base,

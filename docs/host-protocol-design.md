@@ -30,7 +30,7 @@ flowchart TD
 
 Go Host 不替换现有 Rust 终端引擎；将 `apps/runtime` 渐进拆为执行服务。避免一次重写所有终端、Git、Hook 适配造成回归。
 
-建议目录：`apps/host/cmd/armadra-host`、`apps/host/internal/{identity,workspace,scheduler,events,github}`、`proto/armadra/v1/`、`packages/protocol-ts/`、`crates/protocol/`。Windows 和浏览器执行器分别使用独立 Rust crate。Go 生成代码位于 `apps/host/gen/`。
+建议目录：`apps/host/cmd/armadra-host`、`apps/host/internal/{identity,workspace,scheduler,events,github}`、`proto/armadra/v1/`、`packages/protocol/`、`crates/protocol/`。Windows 和浏览器执行器分别使用独立 Rust crate。Go 生成代码位于 `apps/host/gen/`。
 
 ## 2. 生命周期与部署
 
