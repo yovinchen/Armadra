@@ -2,6 +2,7 @@ package canvashost
 
 import (
 	"context"
+	"crypto/sha512"
 	"os"
 	"path/filepath"
 	"testing"
@@ -34,12 +35,14 @@ func TestRealRuntimeCompletesTheExportImportVerifyLoop(t *testing.T) {
 	// the Runtime's own numbered migrations; the reverse import ledger is the
 	// one migration this batch adds, applied from the authoritative file.
 	database := filepath.Join(filepath.Dir(f.dir), "canvas.db")
-	ledger, err := os.ReadFile(filepath.Join("..", "..", "..", "runtime", "migrations", "0012_host_imports.sql"))
+	ledger, err := os.ReadFile(filepath.Join("..", "..", "..", "runtime", "migrations", "0010_host_imports.sql"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	db := openFixtureSQL(t, database, "rw")
 	mustExec(t, db, string(ledger))
+	checksum := sha512.Sum384(ledger)
+	mustExec(t, db, "INSERT INTO _sqlx_migrations(version,description,installed_on,success,checksum,execution_time) VALUES(10,'host imports',?,1,?,10)", fixtureTime, checksum[:])
 	if err = db.Close(); err != nil {
 		t.Fatal(err)
 	}

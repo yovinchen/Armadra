@@ -9,7 +9,7 @@
     "0007_handoff_attempts.sql": "548efba8fbaff922e1f6b9782aba686fdb900d816bceb64edcd4d8acf3eeb6cb",
     "0008_write_ownership.sql": "832ae104f8810758a17ca7867cd14de83cb2506c67f9346fe83d0eb38b6cc830",
     "0009_workspace_execution_host.sql": "17e081c92f265e76296562df00827c27b0f4b0ec64f771e4dd78556cd70fafd5",
-    "0012_host_imports.sql": "428e7dc1f873036d7bb7acf5b050b588de2e2076fb0a285354c97999cfe8f770"
+    "0010_host_imports.sql": "428e7dc1f873036d7bb7acf5b050b588de2e2076fb0a285354c97999cfe8f770"
   },
   "apps/host/internal/migration/legacy": {
     "0001_initial.sql": "a9c77bb975e4faab517fe8ec7a5179455ff6c22dc5585c17e6d5e405c7180f63",
@@ -20,7 +20,8 @@
     "0006_agent_prompt_deliveries.sql": "a187a525c70461cd2584c089832540dd62312f717a73d3c2dc5ac0c5f21ae763",
     "0007_handoff_attempts.sql": "548efba8fbaff922e1f6b9782aba686fdb900d816bceb64edcd4d8acf3eeb6cb",
     "0008_write_ownership.sql": "832ae104f8810758a17ca7867cd14de83cb2506c67f9346fe83d0eb38b6cc830",
-    "0009_workspace_execution_host.sql": "17e081c92f265e76296562df00827c27b0f4b0ec64f771e4dd78556cd70fafd5"
+    "0009_workspace_execution_host.sql": "17e081c92f265e76296562df00827c27b0f4b0ec64f771e4dd78556cd70fafd5",
+    "0010_host_imports.sql": "428e7dc1f873036d7bb7acf5b050b588de2e2076fb0a285354c97999cfe8f770"
   },
   "apps/host/internal/storage/schema.go": {
     "schemaV1": "4666c132f859310554606295c668ec0d6de7e7198bac9c774a54515bacac2d9e",
