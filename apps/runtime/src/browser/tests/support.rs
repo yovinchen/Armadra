@@ -120,6 +120,7 @@ pub(super) async fn fixture(name: &str) -> Fixture {
     let data_dir = directory.path().join(format!("data-{name}"));
     std::fs::create_dir_all(&data_dir).unwrap();
     let state = AppState {
+        language: Default::default(),
         remote: Default::default(),
         resources: crate::resources::ResourceService::new(settings.clone()),
         terminals: TerminalManager::with_config(

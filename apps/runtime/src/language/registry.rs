@@ -196,10 +196,7 @@ pub fn language(language_id: &str) -> Option<&'static LanguageEntry> {
 /// covers it. `None` is an answer: the editor opens the file with no session
 /// rather than starting a server that would not understand it.
 pub fn language_id_for(path: &str) -> Option<LanguageId> {
-    let name = path
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or(path);
+    let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
     if let Some((_, language_id)) = FILE_NAMES.iter().find(|(file, _)| *file == name) {
         return Some(language_id);
     }
