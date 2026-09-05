@@ -7,6 +7,7 @@ import (
 
 	pb "armadra.local/host/gen/armadra/v1"
 	auth "armadra.local/host/internal/identity"
+	"armadra.local/host/internal/ownership"
 	"armadra.local/host/internal/storage"
 )
 
@@ -15,7 +16,8 @@ import (
 func owned(t *testing.T) *fixture {
 	t.Helper()
 	f, importID := migrated(t)
-	if _, err := f.service.Switch(fixtureContext, SwitchRequest{
+	if _, err := f.switches.SwitchOffline(fixtureContext, ownership.Request{
+		Domain:   Domain,
 		Target:   pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_HOST,
 		ImportID: importID,
 		Handoff:  newFakeRuntime(),

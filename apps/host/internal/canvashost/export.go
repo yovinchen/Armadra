@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	pb "armadra.local/host/gen/armadra/v1"
+	"armadra.local/host/internal/ownership"
 	"armadra.local/host/internal/storage"
 	"google.golang.org/protobuf/proto"
 )
@@ -177,7 +178,10 @@ func (s *Service) Export(ctx context.Context, directory string) (*pb.CanvasConsi
 		VerifiedAtUnixMs: s.now(),
 	}
 	if !report.Matched {
-		return report, ErrExportRequired
+		// What was read back is not what was written. The package is the only
+		// copy of a domain the Host is about to stop owning, so this is a
+		// failed verification, not a warning.
+		return report, ownership.ErrNotVerified
 	}
 	return report, nil
 }

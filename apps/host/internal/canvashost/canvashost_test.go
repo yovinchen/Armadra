@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	pb "armadra.local/host/gen/armadra/v1"
+	"armadra.local/host/internal/ownership"
 	"armadra.local/host/internal/storage"
 	"google.golang.org/protobuf/proto"
 )
@@ -258,9 +259,10 @@ func TestHostRefusesWritesUntilItOwnsTheDomain(t *testing.T) {
 	}
 }
 
-func switchToHost(t *testing.T, f *fixture, importID string, runtime *fakeRuntime) *pb.CanvasOwnershipResponse {
+func switchToHost(t *testing.T, f *fixture, importID string, runtime *fakeRuntime) *pb.OwnershipSwitchResponse {
 	t.Helper()
-	result, err := f.service.Switch(fixtureContext, SwitchRequest{
+	result, err := f.switches.SwitchOffline(fixtureContext, ownership.Request{
+		Domain:   Domain,
 		Target:   pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_HOST,
 		ImportID: importID,
 		Handoff:  runtime,
@@ -322,12 +324,13 @@ func TestSwitchRefusesAnUnverifiedImport(t *testing.T) {
 		t.Fatal(err)
 	}
 	runtime := newFakeRuntime()
-	result, err := f.service.Switch(fixtureContext, SwitchRequest{
+	result, err := f.switches.SwitchOffline(fixtureContext, ownership.Request{
+		Domain:   Domain,
 		Target:   pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_HOST,
 		ImportID: importID,
 		Handoff:  runtime,
 	})
-	if !errors.Is(err, ErrNotVerified) {
+	if !errors.Is(err, ownership.ErrNotVerified) {
 		t.Fatalf("an unverified import was allowed to switch: %v", err)
 	}
 	if result == nil || result.Report == nil || result.Report.Matched {
@@ -352,7 +355,8 @@ func TestSwitchResumesAfterALostReply(t *testing.T) {
 	runtime := newFakeRuntime()
 	runtime.setErr = errors.New("pipe closed")
 	runtime.applyBeforeError = true
-	result, err := f.service.Switch(fixtureContext, SwitchRequest{
+	result, err := f.switches.SwitchOffline(fixtureContext, ownership.Request{
+		Domain:   Domain,
 		Target:   pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_HOST,
 		ImportID: importID,
 		Handoff:  runtime,
@@ -371,7 +375,8 @@ func TestSwitchRestoresTheRecordWhenTheRuntimeRefused(t *testing.T) {
 	f, importID := migrated(t)
 	runtime := newFakeRuntime()
 	runtime.setErr = errors.New("refused")
-	_, err := f.service.Switch(fixtureContext, SwitchRequest{
+	_, err := f.switches.SwitchOffline(fixtureContext, ownership.Request{
+		Domain:   Domain,
 		Target:   pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_HOST,
 		ImportID: importID,
 		Handoff:  runtime,
@@ -386,7 +391,7 @@ func TestSwitchRestoresTheRecordWhenTheRuntimeRefused(t *testing.T) {
 	if status.Owner != pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME || status.Phase != pb.CanvasOwnershipPhase_CANVAS_OWNERSHIP_PHASE_SETTLED {
 		t.Fatalf("a refused switch left the record unsettled: %v", status)
 	}
-	if status.ReasonCode != ReasonFailed {
+	if status.ReasonCode != ownership.ReasonFailed {
 		t.Fatalf("the failure was not recorded: %s", status.ReasonCode)
 	}
 }
@@ -396,22 +401,22 @@ func TestSwitchRestoresTheRecordWhenTheRuntimeRefused(t *testing.T) {
 func TestSwitchLeavesTheWindowOpenOnAnUnknownOutcome(t *testing.T) {
 	f, importID := migrated(t)
 	runtime := newFakeRuntime()
-	request := SwitchRequest{Target: pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_HOST, ImportID: importID, Handoff: runtime}
+	request := ownership.Request{Domain: Domain, Target: pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_HOST, ImportID: importID, Handoff: runtime}
 	runtime.setErr = errors.New("pipe closed")
 	runtime.applyBeforeError = true
 	runtime.getErr = nil
 	// The first Get succeeds (to read the current epoch), the second fails.
 	failing := &failingSecondGet{fakeRuntime: runtime}
 	request.Handoff = failing
-	_, err := f.service.Switch(fixtureContext, request)
-	if !errors.Is(err, ErrUnknownOutcome) {
+	_, err := f.switches.SwitchOffline(fixtureContext, request)
+	if !errors.Is(err, ownership.ErrUnknownOutcome) {
 		t.Fatalf("an unreadable Runtime was treated as a definite answer: %v", err)
 	}
 	status, err := f.service.Status(fixtureContext)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.Phase != pb.CanvasOwnershipPhase_CANVAS_OWNERSHIP_PHASE_SWITCHING || status.ReasonCode != ReasonUnknown {
+	if status.Phase != pb.CanvasOwnershipPhase_CANVAS_OWNERSHIP_PHASE_SWITCHING || status.ReasonCode != ownership.ReasonUnknown {
 		t.Fatalf("the maintenance window was closed without an answer: %v", status)
 	}
 	// The Host still refuses writes while the window is open.
@@ -443,12 +448,50 @@ func TestRollbackRequiresAReverseExport(t *testing.T) {
 	f, importID := migrated(t)
 	runtime := newFakeRuntime()
 	switchToHost(t, f, importID, runtime)
-	_, err := f.service.Switch(fixtureContext, SwitchRequest{
+	_, err := f.switches.SwitchOffline(fixtureContext, ownership.Request{
+		Domain:   Domain,
 		Target:  pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME,
 		Handoff: runtime,
 	})
-	if !errors.Is(err, ErrExportRequired) {
+	if !errors.Is(err, ownership.ErrExportRequired) {
 		t.Fatalf("a rollback without an export was accepted: %v", err)
+	}
+}
+
+// Handing the epoch back while the Host holds changes the Runtime never saw
+// requires the operator to say so explicitly.
+func TestRollbackRefusesUnmigratedHostChanges(t *testing.T) {
+	f, importID := migrated(t)
+	runtime := newFakeRuntime()
+	switchToHost(t, f, importID, runtime)
+	document := take(t, f)
+	document.Canvas.Name = "只在 Host 上改过"
+	if _, err := f.service.SaveDocument(fixtureContext, f.caller(ScopeRead, ScopeWrite), &pb.SaveCanvasDocumentRequest{
+		OperationId: "host-edit", Canvas: document.Canvas, ExpectedRevision: document.Canvas.Revision,
+		Nodes: document.Nodes, Edges: document.Edges, Annotations: document.Annotations,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	directory := filepath.Join(t.TempDir(), "reverse")
+	_, err := f.switches.SwitchOffline(fixtureContext, ownership.Request{
+		Domain:   Domain,
+		Target:          pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME,
+		Handoff:         runtime,
+		ExportDirectory: directory,
+	})
+	if !errors.Is(err, ownership.ErrUnmigratedChanges) {
+		t.Fatalf("a rollback stranded Host-only changes: %v", err)
+	}
+	// The export was still written, so the operator has the data in hand.
+	index, err := os.ReadFile(filepath.Join(directory, "export.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(index) == 0 {
+		t.Fatal("the reverse export is empty")
+	}
+	if runtime.owner != pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_HOST {
+		t.Fatal("the epoch moved despite the refusal")
 	}
 }
 
@@ -457,10 +500,10 @@ func TestRollbackReturnsWritesToTheRuntime(t *testing.T) {
 	runtime := newFakeRuntime()
 	switchToHost(t, f, importID, runtime)
 	directory := filepath.Join(t.TempDir(), "reverse")
-	result, err := f.service.Switch(fixtureContext, SwitchRequest{
+	result, err := f.switches.SwitchOffline(fixtureContext, ownership.Request{
+		Domain:   Domain,
 		Target:          pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME,
 		Handoff:         runtime,
-		Importer:        runtime,
 		ExportDirectory: directory,
 	})
 	if err != nil {
@@ -499,13 +542,13 @@ func TestSwitchRefusesAStaleRuntime(t *testing.T) {
 	switchToHost(t, f, importID, runtime)
 	runtime.epoch = 1
 	runtime.owner = pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME
-	_, err := f.service.Switch(fixtureContext, SwitchRequest{
+	_, err := f.switches.SwitchOffline(fixtureContext, ownership.Request{
+		Domain:   Domain,
 		Target:          pb.CanvasOwnershipOwner_CANVAS_OWNERSHIP_OWNER_RUNTIME,
 		Handoff:         runtime,
-		Importer:        runtime,
 		ExportDirectory: filepath.Join(t.TempDir(), "reverse"),
 	})
-	if !errors.Is(err, ErrRuntimeStale) {
+	if !errors.Is(err, ownership.ErrRuntimeStale) {
 		t.Fatalf("a rewound Runtime was accepted: %v", err)
 	}
 }

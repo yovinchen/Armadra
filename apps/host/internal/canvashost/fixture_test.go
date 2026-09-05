@@ -18,6 +18,7 @@ import (
 	pb "armadra.local/host/gen/armadra/v1"
 	auth "armadra.local/host/internal/identity"
 	"armadra.local/host/internal/migration"
+	"armadra.local/host/internal/ownership"
 	"armadra.local/host/internal/storage"
 	"google.golang.org/protobuf/proto"
 
@@ -63,7 +64,10 @@ var fixtureContext = context.Background()
 var fixtureAsset = []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff}
 
 type fixture struct {
-	t         *testing.T
+	t *testing.T
+	// switches is the generic state machine driving the canvas projector. The
+	// tests exercise the same path the CLI does, not a canvas-only copy of it.
+	switches  *ownership.Service
 	dir       string
 	store     *storage.Store
 	service   *Service
@@ -317,7 +321,16 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := &fixture{t: t, dir: dataDir, store: store, service: service, bundle: bundle, manifest: manifest, clock: clock, assetPath: filepath.Join(bundle, "assets", "proof.png")}
+	switches, err := ownership.New(ownership.Options{
+		Store:      store,
+		InstanceID: fixtureHost,
+		Projectors: map[string]ownership.Projector{Domain: service.AsProjector()},
+		Now:        func() time.Time { return clock },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := &fixture{t: t, switches: switches, dir: dataDir, store: store, service: service, bundle: bundle, manifest: manifest, clock: clock, assetPath: filepath.Join(bundle, "assets", "proof.png")}
 	return result
 }
 
