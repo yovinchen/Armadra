@@ -14,7 +14,11 @@ type Repository struct {
 }
 
 var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
-var hostPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?)+$`)
+
+// A single-label host is accepted: an intranet GitHub Enterprise deployment is
+// often reachable as one name with no domain, and refusing that would make the
+// enterprise case impossible to configure.
+var hostPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?)*$`)
 
 // NormalizeAPIBase returns the exact base every request is resolved against.
 // Only HTTPS is accepted: an http base would put the bearer token on the wire

@@ -73,13 +73,23 @@ type SecretStore interface {
 // OpenSecretStore picks the strongest store this machine offers. macOS gets the
 // login keychain; everywhere else falls back to a 0600 file under the Host data
 // directory, and reports that it did.
+//
+// ARMADRA_GITHUB_SECRET_STORE=file forces the fallback. That exists for
+// unattended runs and verification, which must not write into the operator's
+// real keychain — and for anyone who would rather keep the value in the Host's
+// own directory. The weaker protection is still reported as such, so choosing
+// it never looks like a keychain.
 func OpenSecretStore(dataDir string) SecretStore {
+	fallback := &fileStore{directory: filepath.Join(dataDir, "github-credentials")}
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("ARMADRA_GITHUB_SECRET_STORE")), "file") {
+		return fallback
+	}
 	if runtime.GOOS == "darwin" {
 		if path, err := exec.LookPath("security"); err == nil {
 			return &keychainStore{tool: path}
 		}
 	}
-	return &fileStore{directory: filepath.Join(dataDir, "github-credentials")}
+	return fallback
 }
 
 type keychainStore struct{ tool string }

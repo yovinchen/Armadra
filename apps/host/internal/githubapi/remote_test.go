@@ -16,6 +16,8 @@ func TestRemoteParsingAndServiceOwnership(t *testing.T) {
 		// Some enterprise deployments prefix a path; the repository is always
 		// the last two segments.
 		"https://ghe.example.com/git/team/service.git": {Owner: "team", Name: "service", WebHost: "ghe.example.com"},
+		// An intranet deployment is often one label with no domain.
+		"https://ghe/team/service.git": {Owner: "team", Name: "service", WebHost: "ghe"},
 	} {
 		parsed, err := ParseRemote(name)
 		if err != nil || parsed != expected {
@@ -43,6 +45,8 @@ func TestAPIBaseNormalizationRefusesAnythingButAnHTTPSBase(t *testing.T) {
 		"https://ghe.example.com/api/v3":   "https://ghe.example.com/api/v3",
 		"https://ghe.example.com/api/v3/":  "https://ghe.example.com/api/v3",
 		"https://GHE.example.com:8443/api": "https://ghe.example.com:8443/api",
+		// An intranet host with no domain is a legitimate enterprise base.
+		"https://ghe:8443/api/v3": "https://ghe:8443/api/v3",
 	} {
 		normalized, err := NormalizeAPIBase(value)
 		if err != nil || normalized != expected {

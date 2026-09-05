@@ -10,6 +10,7 @@
     "host:bootstrap-smoke": "node scripts/host-bootstrap-smoke.mjs",
     "host:lifecycle-smoke": "node scripts/host-lifecycle-smoke.mjs",
     "host:smoke": "node scripts/host-smoke.mjs",
+    "github:e2e": "node scripts/github-e2e.mjs",
     "protocol:generate": "node scripts/protocol.mjs generate",
     "protocol:check": "node scripts/protocol.mjs check",
     "protocol:test": "node scripts/protocol.mjs test",
