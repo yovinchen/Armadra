@@ -145,7 +145,52 @@ CREATE TABLE automation_grants (
  updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0)
 )`
 
-var migrations = []string{schemaV1, schemaV2, schemaV3}
+// The GitHub surface the Host owns. The credential itself is never here: the
+// row records which source was chosen, which secret store holds it and under
+// what reference, so a token is only ever read back out of the OS store.
+// Status mappings and external references are Host state, not entities, because
+// they are configuration for a remote service rather than canvas content.
+const schemaV4 = `CREATE TABLE github_config (
+ singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+ source TEXT NOT NULL CHECK(source IN ('none','gh_cli','token_ref')),
+ api_base TEXT NOT NULL CHECK(length(api_base) BETWEEN 1 AND 2048),
+ secret_store TEXT NOT NULL CHECK(secret_store IN ('none','os_keychain','file_fallback')),
+ secret_ref TEXT NOT NULL CHECK(length(secret_ref) <= 256),
+ account_login TEXT NOT NULL CHECK(length(account_login) <= 256),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0),
+ updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0)
+);
+CREATE TABLE github_status_mappings (
+ workspace_id TEXT NOT NULL,
+ api_base TEXT NOT NULL,
+ owner TEXT NOT NULL,
+ name TEXT NOT NULL,
+ web_host TEXT NOT NULL,
+ mapping BLOB NOT NULL CHECK(length(mapping) <= 262144),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0),
+ updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0),
+ PRIMARY KEY(workspace_id, api_base, owner, name)
+);
+CREATE TABLE github_references (
+ reference_id TEXT PRIMARY KEY,
+ workspace_id TEXT NOT NULL,
+ api_base TEXT NOT NULL,
+ owner TEXT NOT NULL,
+ name TEXT NOT NULL,
+ web_host TEXT NOT NULL,
+ kind INTEGER NOT NULL CHECK(kind IN (1,2)),
+ number INTEGER NOT NULL CHECK(number > 0),
+ target_kind INTEGER NOT NULL CHECK(target_kind IN (1,2,3)),
+ target_id TEXT NOT NULL CHECK(length(target_id) BETWEEN 1 AND 512),
+ title TEXT NOT NULL CHECK(length(title) <= 1024),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0),
+ updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0)
+)`
+
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4}
 
 type sqlReader interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
