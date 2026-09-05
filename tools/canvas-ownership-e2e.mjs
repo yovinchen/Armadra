@@ -20,13 +20,14 @@
 // its receipt, its event and its replay; a second client following the Host's
 // WebSocket event stream, which must see that edit within 200 ms and, after a
 // disconnect, resume from its cursor without losing or repeating one event; and
-// the reversal, including the refusal to hand the epoch back while the Host
+// the reversal — the format version 2 package, the Runtime applying it to its
+// own database, the Runtime's re-read compared against the package, and the
+// edit the Host made during its tenure showing up in the Runtime's rows
+// afterwards, including the refusal to hand the epoch back while the Host
 // holds changes the Runtime never got.
 // Every step is proved by a digest, a revision or a sequence rather than by the
 // absence of an exception: a check that only asserts "no error was thrown" would
 // still pass against a migration that silently dropped half the canvas.
-// What it does not cover: applying the reverse export back into the Runtime's
-// database, which the design states is not part of this phase.
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import { createHash, randomBytes } from "node:crypto";
@@ -49,6 +50,16 @@ import { access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+// The comparison layer: how each side's document is reduced to one shape and
+// hashed. It talks to nothing, so it reads on its own.
+import {
+  digestOf,
+  hostShape,
+  refusal,
+  runtimeShape,
+  stable,
+  text,
+} from "./canvas-ownership-shapes.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const skipApplication = process.env.CANVAS_E2E_SKIP_APP === "1";
@@ -841,135 +852,6 @@ function documentFor(boardId, stickyContent) {
     },
   ];
   return { nodes, edges };
-}
-
-/** Object keys in one order, so two structurally equal payloads hash alike. */
-function stable(value) {
-  if (Array.isArray(value)) return value.map(stable);
-  if (value && typeof value === "object")
-    return Object.fromEntries(
-      Object.keys(value)
-        .sort()
-        .map((key) => [key, stable(value[key])]),
-    );
-  return value;
-}
-
-/**
- * Exactly the facts a migration has to preserve: identity, geometry, frame
- * nesting, annotations, the opaque per-type payload, the link endpoints and the
- * whiteboard's digest. Timestamps and sort order are deliberately absent — they
- * are represented differently on the two sides, and comparing their spelling
- * would fail on a migration that lost nothing.
- */
-function canonical(shape) {
-  return stable({
-    canvas: shape.name,
-    whiteboard: sha256(shape.whiteboard),
-    nodes: [...shape.nodes]
-      .sort((a, b) => (a.id < b.id ? -1 : 1))
-      .map((value) => ({
-        id: value.id,
-        type: value.type,
-        title: value.title,
-        color: value.color,
-        x: value.x,
-        y: value.y,
-        width: value.width,
-        height: value.height,
-        parentId: value.parentId,
-        labels: value.labels,
-        note: value.note,
-        data: value.data,
-      })),
-    edges: [...shape.edges]
-      .sort((a, b) => (a.id < b.id ? -1 : 1))
-      .map((value) => ({
-        id: value.id,
-        source: value.source,
-        target: value.target,
-        kind: value.kind,
-      })),
-  });
-}
-
-const digestOf = (shape) => sha256(JSON.stringify(canonical(shape)));
-
-/** A refusal the client mapped, spelled out so a failing step names the repair. */
-const refusal = (value) =>
-  value?.error
-    ? ` refused=${value.error.failure}/${value.error.hostCode || "-"} HTTP ${value.error.httpStatus}`
-    : "";
-
-/** The Runtime's camelCase board document, reduced to the canonical shape. */
-function runtimeShape(document) {
-  return {
-    name: document.board.name,
-    whiteboard: document.board.whiteboard ?? "",
-    nodes: document.nodes.map((value) => ({
-      id: value.id,
-      type: value.type,
-      title: value.title,
-      color: value.color,
-      x: value.position.x,
-      y: value.position.y,
-      width: value.size?.width ?? null,
-      height: value.size?.height ?? null,
-      parentId: value.parentId ?? "",
-      labels: value.labels ?? [],
-      note: value.note ?? "",
-      data: stable(value.data),
-    })),
-    edges: document.edges.map((value) => ({
-      id: value.id,
-      source: value.source,
-      target: value.target,
-      kind: value.kind,
-    })),
-  };
-}
-
-const text = (bytes) =>
-  new TextDecoder().decode(Uint8Array.from(bytes ?? new Uint8Array()));
-
-/**
- * The Host's typed document, reduced to the same shape. Labels and the note
- * live in their own annotation object there, and the payload travels as opaque
- * bytes, so both are folded back before the digest is taken; if the projection
- * dropped an annotation or re-encoded a payload the two digests stop matching.
- */
-function hostShape(document) {
-  const annotations = new Map(
-    document.annotations.map((value) => [value.nodeId, value]),
-  );
-  return {
-    name: document.canvas.name,
-    whiteboard: document.canvas.whiteboard
-      ? text(document.canvas.whiteboard.snapshot)
-      : "",
-    nodes: document.nodes.map((value) => ({
-      id: value.nodeId,
-      type: value.type,
-      title: value.title,
-      color: value.color,
-      x: value.position?.x ?? 0,
-      y: value.position?.y ?? 0,
-      width: value.size?.width ?? null,
-      height: value.size?.height ?? null,
-      parentId: value.parentId ?? "",
-      labels: annotations.get(value.nodeId)?.labels ?? [],
-      note: annotations.get(value.nodeId)?.note ?? "",
-      data: stable(JSON.parse(text(value.dataJson))),
-    })),
-    edges: document.edges.map((value) => ({
-      id: value.edgeId,
-      source: value.sourceNodeId,
-      target: value.targetNodeId,
-      // 1 is CANVAS_EDGE_KIND_LINK; spelled as the Runtime spells it so the
-      // two canonical documents can be compared byte for byte.
-      kind: value.kind === 1 ? "link" : `kind-${value.kind}`,
-    })),
-  };
 }
 
 /* --------------------------------------------------------------------- run */
@@ -1798,7 +1680,12 @@ globalThis.armadraReady = true;
 
   await stopHost();
   await stopRuntime();
+  // A rollback writes its package once. A directory that already holds one is
+  // refused rather than overwritten: the previous attempt may be the only copy
+  // of what the Host held.
   const refusedExport = join(workspace, "reverse-export-refused");
+  mkdirSync(refusedExport, { recursive: true });
+  writeFileSync(join(refusedExport, "occupied"), "not empty\n");
   const refusedRollback = tryRun(
     hostBinary,
     [
@@ -1818,11 +1705,9 @@ globalThis.armadraReady = true;
     { env: hostEnv },
   );
   step(
-    "a rollback that would strand the Host's edit is refused, and says why",
+    "a rollback refuses to write over a package that is already there",
     refusedRollback.status !== 0 &&
-      refusedRollback.stderr.includes(
-        "the Host holds canvas changes the Runtime does not have",
-      ),
+      readdirSync(refusedExport).join() === "occupied",
     refusedRollback.stderr.trim().split("\n").at(-1),
   );
   const stillHost = ownership("status");
@@ -1833,22 +1718,37 @@ globalThis.armadraReady = true;
     `owner=${stillHost.ownership?.owner} epoch=${stillHost.ownership?.epoch}`,
   );
 
+  // No --accept-export-only. The Host's edit has to travel back into the
+  // Runtime's own database, and the epoch only moves once the Runtime has read
+  // its rows back and the Host has compared the digests.
   const reverseExport = join(workspace, "reverse-export");
   const rolledBack = ownership("rollback", [
     "--export",
     reverseExport,
-    "--accept-export-only",
     "--runtime-binary",
     runtimeBinary,
     "--runtime-database",
     runtimeDatabase,
   ]);
   step(
-    "the acknowledged rollback handed the epoch back to the Runtime",
+    "the rollback handed the epoch back without accepting an export-only reversal",
     rolledBack.ownership?.owner === "CANVAS_OWNERSHIP_OWNER_RUNTIME" &&
       rolledBack.ownership?.phase === "CANVAS_OWNERSHIP_PHASE_SETTLED" &&
       rolledBack.ownership?.epoch === "3",
     `owner=${rolledBack.ownership?.owner} epoch=${rolledBack.ownership?.epoch}`,
+  );
+  const reverseChecks = Object.fromEntries(
+    (rolledBack.report?.checks ?? []).map((check) => [
+      check.check,
+      check.matched === true,
+    ]),
+  );
+  step(
+    "the epoch moved on the Runtime's own re-read, not on the Host's word",
+    reverseChecks["reverse.import"] === true &&
+      reverseChecks["reverse.workspaces"] === true &&
+      reverseChecks["reverse.unsupported_entity"] === true,
+    Object.keys(reverseChecks).join(", "),
   );
 
   const index = JSON.parse(
@@ -1856,12 +1756,15 @@ globalThis.armadraReady = true;
   );
   const entries = readdirSync(reverseExport).sort();
   step(
-    "the reverse export holds its index and one workspace file",
+    "the reverse export is a format version 2 package for the canvas domain",
     entries.length === 2 &&
       entries.includes("export.json") &&
-      index.formatVersion === 1 &&
+      index.formatVersion === 2 &&
+      index.domain === "canvas" &&
+      index.epoch === 2 &&
+      index.entityCount > 0 &&
       index.files?.length === 1,
-    entries.join(", "),
+    `${entries.join(", ")} epoch=${index.epoch} entities=${index.entityCount}`,
   );
   const mismatched = (index.files ?? []).filter((file) => {
     const payload = readFileSync(join(reverseExport, file.name));
@@ -1871,6 +1774,19 @@ globalThis.armadraReady = true;
     "every digest in export.json describes the bytes actually on disk",
     (index.files ?? []).length > 0 && mismatched.length === 0,
     `${index.files?.[0]?.bytes} bytes sha256=${index.files?.[0]?.sha256?.slice(0, 16)}`,
+  );
+  // The canonical digest describes the records with the Host's own revisions
+  // and asset references removed, which is why it cannot be the on-disk one.
+  step(
+    "each file also carries the canonical digest the Runtime is compared against",
+    (index.files ?? []).length > 0 &&
+      index.files.every(
+        (file) =>
+          /^[0-9a-f]{64}$/.test(file.contentSha256) &&
+          file.contentSha256 !== file.sha256 &&
+          file.entityCount === index.entityCount,
+      ),
+    `contentSha256=${index.files?.[0]?.contentSha256?.slice(0, 16)}`,
   );
 
   /* ------------------------------------------- 8. writes are the Runtime's */
@@ -1886,7 +1802,24 @@ globalThis.armadraReady = true;
     returned.json?.owner === "runtime" && returned.json?.epoch === "3",
     `owner=${returned.json?.owner} epoch=${returned.json?.epoch} reason=${returned.json?.reasonCode}`,
   );
+  // The point of the reverse import: what the Host wrote while it owned the
+  // canvas is in the Runtime's own rows, not only in the package. The whole
+  // document is compared, not just the renamed field, so a rollback that
+  // brought the name back while dropping a node would fail here.
   const current = await runtimeCall("GET", documentPath);
+  const restoredDigest = digestOf(runtimeShape(current.json ?? {}));
+  step(
+    "the Runtime reads back the edit the Host made while it owned the canvas",
+    current.status === 200 &&
+      current.json?.board?.name === "迁移后的画布名" &&
+      restoredDigest ===
+        digestOf({
+          ...runtimeShape(reloaded.json ?? {}),
+          name: "迁移后的画布名",
+        }) &&
+      restoredDigest !== runtimeDigest,
+    `name=${current.json?.board?.name} sha256=${restoredDigest.slice(0, 16)} (pre-switch ${runtimeDigest.slice(0, 16)})`,
+  );
   const rewritten = documentFor(canvasId, "回滚之后重新写入的正文");
   const rewrittenBoard = await runtimeCall("PUT", documentPath, {
     expectedUpdatedAt: current.json.board.updatedAt,
