@@ -2,13 +2,23 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "runtime",
+      "runtimeExecutable": "cargo",
+      "runtimeArgs": [
+        "run",
+        "-p",
+        "armadra-runtime"
+      ],
+      "port": 43120,
+      "url": "http://127.0.0.1:43120"
+    },
+    {
       "name": "web",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": [
         "--filter",
         "@armadra/web",
-        "exec",
-        "vite",
+        "dev",
         "--port",
         "1421",
         "--host",
@@ -23,8 +33,7 @@
       "runtimeArgs": [
         "--filter",
         "@armadra/web",
-        "exec",
-        "vite",
+        "dev",
         "--port",
         "1422",
         "--host",

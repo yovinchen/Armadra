@@ -2,137 +2,57 @@
 
 # Armadra
 
-本地优先的桌面画布：把 Claude Code、Codex、Gemini CLI、opencode 这些 CLI Agent
-作为终端节点放在一块 tldraw 白板上，节点之间连一条线就能把上下文传过去。
+本地优先的桌面画布：将真实 CLI Agent 放在 tldraw 白板上，通过连线共享上下文。
+支持 Claude Code、Codex、Gemini CLI、OpenCode、Pi、OMP 和 GitHub Copilot。
 
-> A local-first desktop canvas that puts Claude Code, Codex, Gemini CLI and
-> opencode on a tldraw whiteboard as live terminal nodes, and passes context
-> between them by drawing a link.
+## 能做什么
 
-## 功能
+- **终端与会话**：tmux、直连 PTY、SSH；按各 CLI 实际能力提供恢复、权限模式、Hook 状态和子代理卡片。
+- **画布**：白板绘图、便签、分组、编辑器、Git 差异、文件树和浏览器节点。
+- **协作**：按连线读取上下文，使用 `post / inbox / ack` 消息箱；默认不向其他终端自动粘贴消息。
+- **开发工具**：Git 状态与提交、会话检索、用量、主题、语言、数据备份。
 
-**Agent 终端节点**
-
-- 节点里跑的是真实 CLI，不经过中间协议；终端由 tmux 托管，Runtime 重启后会话还在。
-- 支持 Hook 的 CLI 可回报工作中 / 等待 / 阻塞 / 完成；其余 CLI 保留真实终端交互，不推断状态。
-- 权限请求在节点头部直接回答，不用切回终端敲键。
-- 权限模式与会话恢复按各 CLI 的实际能力提供，不支持的选项不会伪装生效。
-- 内置 Claude Code、Codex、Gemini CLI、OpenCode、Pi、OMP、Copilot，可用 `custom:<id>` 接自定义 CLI。
-
-**白板**
-
-- 手绘、高亮、几何图形、直线箭头、文字、图片、画框分区，都是 tldraw 原生 shape。
-- 白板内容与节点共用一套相机、选择和撤销栈。
-
-**连线即上下文**
-
-- 节点连节点：Agent 能读对方的转录、摘要或终端画面。
-- 白板内容连节点：便签、文字、图片、画框里的东西都能被 Agent 读到。
-
-**Agent 协作**
-
-- 默认使用主动读取的消息箱（post / inbox / ack），不向终端自动粘贴提示，也不追加全局指令。协议见 [协作设计](docs/agent-collaboration.md)。
-
-- 互相读取转录、互发消息、在画布上开新节点、建便签、连线、改名改色、关节点。
-- 子代理以卡片形式挂在父节点旁边。
-
-**其他节点**：便签、分组、代码编辑器（CodeMirror 6）、Git 差异、文件树、内嵌浏览器。
-
-**会话与检索**：Runtime 扫描各 CLI 的本地转录建索引，命令面板里可跨项目搜索并 resume。
-
-**终端后端**：tmux（默认）、直连 PTY、SSH 远程主机。
-
-**Git**：状态、diff、暂存 / 取消暂存 / 还原、提交、克隆仓库。
-
-**设置**：主题与语言（简体中文 / English）、白板偏好、快捷键、Agent 与 hook 安装、
-终端后端、SSH 主机、数据目录与备份、Claude / Codex / Gemini 用量配额。
-
-## 技术栈
-
-| 层      | 技术                                                                                                       |
-| ------- | ---------------------------------------------------------------------------------------------------------- |
-| 前端    | React 19、Vite、tldraw 5、shadcn/ui（Radix）、Tailwind v4、xterm.js、CodeMirror 6、Zustand、TanStack Query |
-| Runtime | Rust、Axum、Tokio、SQLx + SQLite、portable-pty、tmux                                                       |
-| 桌面    | Tauri 2                                                                                                    |
-| 工程    | pnpm workspace + Cargo workspace                                                                           |
+会话索引目前覆盖 Claude / Codex / Gemini；各 Agent 的能力差异见 [协作说明](docs/agent-collaboration.md)。
 
 ## 快速开始
 
-前置：Node.js ≥ 22、pnpm 11、Rust stable、tmux、macOS ≥ 13.3（桌面端）。
+需要 Node.js ≥ 22、项目锁定的 pnpm、Rust stable；桌面构建还需要 Go ≥ 1.24。
+建议安装 tmux，缺失时使用直连 PTY。macOS 桌面目标为 ≥ 13.3。
 
-一条命令从检查到运行：
-
-```bash
-./armadra.sh all        # doctor → install → check → build → run
-./armadra.sh run web    # 只起 Runtime 与浏览器里的前端
-./armadra.sh help       # 全部子命令
-```
-
-分步执行：
-
-```bash
+```sh
 pnpm install
-
-# Runtime，监听 127.0.0.1:43120（开发模式下桌面壳不会自己拉起它，必须单独跑）
-cargo run -p armadra-runtime
-
-# 前端，浏览器里跑
-pnpm --filter @armadra/web dev
-
-# 或者跑桌面壳
-pnpm --filter @armadra/desktop dev
+./armadra.sh run web       # Runtime + 浏览器前端
+# 或
+./armadra.sh run desktop   # 桌面持有 Runtime，并启动/发现 Go Host
 ```
 
-打包桌面端：
-
-```bash
-pnpm --filter @armadra/desktop build
+```sh
+pnpm --filter @armadra/desktop build   # 桌面打包
+./armadra.sh help                     # 脚本命令
 ```
 
-测试：
+分步启动、检查、端口与数据位置见 [开发指南](docs/development.md)。
 
-```bash
-pnpm --filter @armadra/web test
-pnpm --filter @armadra/shared test
-cargo test -p armadra-runtime
-```
+## 项目结构
 
-数据放在 `~/Library/Application Support/Armadra`（macOS），工作区内的图片资产、
-导出与板日志放在项目的 `.armadra/` 目录。更多命令与环境变量见
-[docs/development.md](./docs/development.md)。
+| 目录                                                   | 职责                                   |
+| ------------------------------------------------------ | -------------------------------------- |
+| [apps/web](apps/web/README.md)                         | React / Vite / tldraw 前端             |
+| [apps/runtime](apps/runtime/README.md)                 | Rust / Axum / SQLite，当前业务执行服务 |
+| [apps/desktop](apps/desktop/README.md)                 | Tauri 2 薄壳与 sidecar                 |
+| [apps/host](apps/host/README.md)                       | Go 后台服务，分阶段承接 Runtime 能力   |
+| [packages/shared](packages/shared/README.md)           | 领域模型、CLI 注册表与 JSON schema     |
+| [proto](proto/README.md)                               | Go / Rust / TS 共用的 Protobuf 契约    |
+| [packages/host-client](packages/host-client/README.md) | TypeScript Host 握手客户端             |
+| crates/armadra-hook                                    | Agent 终端中的 Hook / 画布命令客户端   |
 
-## Agent 侧
+Go Host 已有身份、握手和启停基础；业务迁移、后台计划与跨设备执行的进度见
+[实施记录](docs/platform-implementation-status.md)。
 
-所有 Agent 终端都能用 `armadra-hook canvas help` 查看短帮助，通过
-`post` / `inbox` / `ack` 主动发送和读取消息。上下文按画布连线授权，消息不会
-自动写进对方的输入框。
+## 文档与品牌
 
-设置的「Hook」页仅为支持 Hook 的 CLI 提供安装入口。显式安装时会配置状态回报
-并提供可按需加载的协作技能，不追加全局 AGENTS.md / GEMINI.md 长指令。
-完整能力表和协议见 [Agent 协作设计](docs/agent-collaboration.md)。
+[文档索引](docs/README.md) · [架构](docs/architecture.md) · [开发约定](AGENTS.md)
 
-## 目录
+Logo 使用[唯一源文件](design/logo-concepts/armadra-armadillo-primary.png)，再生成桌面图标与 Web favicon。
 
-```text
-apps/web/         React 前端，唯一页面
-apps/runtime/     Rust 执行服务（终端、文件、Git、hook、协作、会话索引）
-apps/desktop/     Tauri 2 薄壳
-crates/armadra-hook/   注入 Agent 终端的 hook 客户端
-packages/shared/  领域模型、Agent 注册表、API 与 hook 事件的 zod schema
-docs/             文档
-```
-
-## 品牌
-
-Logo 源文件是 [`design/logo-concepts/armadra-armadillo-primary.png`](./design/logo-concepts/armadra-armadillo-primary.png)；
-桌面端各平台图标由它生成到 `apps/desktop/src-tauri/icons/`，Web favicon 同步为
-`apps/web/public/icon.png`。换 Logo 先换源文件，再重新生成派生资源。
-
-## 文档
-
-[docs/README.md](./docs/README.md) 是文档索引。架构见
-[docs/architecture.md](./docs/architecture.md)。
-
-## 许可
-
-[MIT](./LICENSE)。
+[MIT License](LICENSE)

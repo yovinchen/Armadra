@@ -1,6 +1,6 @@
 # apps/runtime
 
-唯一执行服务。所有进程、文件、Git、权限判定都在这里。
+当前业务执行服务，负责终端、文件、Git、Hook 与协作；独立 Go Host 的迁移进度见[实施记录](../../docs/platform-implementation-status.md)。
 
 技术栈：Rust、Axum、Tokio、WebSocket、portable-pty、tmux、SQLx + SQLite、Git CLI wrapper。
 
@@ -32,48 +32,18 @@ CORS 只放行 `http://127.0.0.1:*`、`http://localhost:*`、`tauri://localhost`
 `conflict` (409) / `io_error` / `database_error` / `internal_error` (500)。
 完整契约见 `docs/v3-agent-terminal-plan.md` §13。
 
-主表面（`src/lib.rs` 的 router，按顺序）：
+路由注册见 `src/lib.rs`，覆盖工作空间/画板、文件/Git、终端、会话、Agent、设置、数据和用量。
+画板文档使用 CAS 写入，`expectedUpdatedAt` 冲突返回 409；`/api/gateway` 仍为未实现占位，不开监听。
 
-| 前缀                                                                    | 内容                                                                                 |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `/health`、`/api/health`                                                | 健康检查，含 hook 表面状态                                                           |
-| `/api/workspaces`                                                       | 工作空间增删改、打开                                                                 |
-| `/api/workspaces/{id}/boards`                                           | 看板增删改；`/document` 是 CAS 读写（`expectedUpdatedAt` 冲突返回 409）              |
-| `/api/workspaces/{id}/files`、`/file`                                   | 文件树与单文件读写                                                                   |
-| `/api/workspaces/{id}/git/*`                                            | `status` / `diff` / `stage` / `unstage` / `revert` / `commit`                        |
-| `/api/git/clone`、`/api/git/clone/{jobId}`                              | 克隆仓库（发生在工作空间存在之前，所以不带 workspace）                               |
-| `/api/workspaces/{id}/sessions`、`/deliveries`                          | 会话列表、消息投递记录                                                               |
-| `/api/workspaces/{id}/events`                                           | WebSocket：节点状态、审批、投递等事件                                                |
-| `/api/workspaces/{id}/context-links/{nodeId}`                           | 写入某节点的上下文链接                                                               |
-| `/api/workspaces/{id}/assets`、`/assets/import`、`/assets/{id}`         | 白板图片资产，内容寻址落在 `.armadra/assets/`                                        |
-| `/api/workspaces/{id}/exports/{exportId}/png`                           | 画布导出 PNG，落在 `.armadra/exports/`                                               |
-| `/api/terminals`                                                        | 创建 / 查询 / capture / paste / scroll / terminate / recycle；`/ws` 是终端 WebSocket |
-| `/api/terminals/backend`                                                | 当前生效的终端后端                                                                   |
-| `/api/ssh/hosts/{hostId}/test`                                          | 探测一个 SSH 主机是否可达                                                            |
-| `/api/conversations`、`/refresh`                                        | 会话索引查询与重扫                                                                   |
-| `/api/agents`、`/api/agents/{id}/hooks/install`、`/uninstall`           | Agent 探测与 hook / 技能安装                                                         |
-| `/api/agent-status/{nodeId}/read`、`/suggest-title`                     | 标记已读、生成节点标题                                                               |
-| `/api/settings`                                                         | Runtime 偏好读写                                                                     |
-| `/api/data/info`、`/api/data/backup`                                    | 数据目录信息与一键备份                                                               |
-| `/api/usage`、`/api/usage/refresh`                                      | 用量快照                                                                             |
-| `/api/approvals/{pendingId}/answer`、`/api/control/confirm/{requestId}` | 权限回答、控制动词确认                                                               |
-| `/api/gateway`                                                          | 预留：返回配置与 `implemented: false`，**不开任何监听端口**                          |
-
-Hook 表面（`src/hook/mod.rs`，独立鉴权与 body 上限，同一份 router 也由 Unix socket 提供）：
-
-| 路径                   | 内容                                                                                                                     |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `/verify`              | 校验 token                                                                                                               |
-| `/hook/{agentId}`      | CLI 的 hook 回报                                                                                                         |
-| `/context-link/{verb}` | 读取相连节点的转录 / 摘要 / 终端画面                                                                                     |
-| `/control/{verb}`      | `list` / `open-terminal` / `open-agent` / `sticky` / `link` / `rename` / `color` / `send` / `reply` / `notify` / `close` |
+Hook 在 `src/hook/mod.rs` 使用独立鉴权与 body 上限，提供 `/verify`、`/hook/{agentId}`、
+`/context-link/{verb}`、`/control/{verb}`；同一 router 也经 Unix socket 提供。
+上下文与消息箱协议见[Agent 协作](../../docs/agent-collaboration.md)。
 
 ## 数据库
 
-`migrations/0001_initial.sql` 保存基础 schema，`0002_agent_mailbox.sql` 增量添加
-协作消息箱；已知版本按 SQLx 迁移升级，保留工作空间与看板。`db::connect` 检查 `_sqlx_migrations`，只要有一条记录不在本二进制
-自带的迁移里（版本不认识，或校验和对不上），就把 `canvas.db`（连同 `-wal` / `-shm`）
-改名为 `canvas.db.legacy-<时间戳>`，记一条 warn 日志，然后按当前 schema 建一个新库。
+`migrations/` 是 schema 的唯一来源。启动只接受空库或完整已知迁移前缀；未知版本、
+校验和不符、脏迁移、损坏账本和无账本的非空库均拒绝启动，不改名、清库或重建。
+新增 schema 使用编号迁移，禁止修改已发布文件。备份与数据位置见[开发指南](../../docs/development.md)。
 
 ## PATH
 

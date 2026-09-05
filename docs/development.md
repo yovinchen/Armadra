@@ -1,155 +1,92 @@
-# 开发
+# 开发指南
 
-## 前置
+## 环境
 
-| 依赖    | 版本                 | 说明                                               |
-| ------- | -------------------- | -------------------------------------------------- |
-| Node.js | ≥ 22                 | `package.json` 的 `engines`                        |
-| pnpm    | 11.18.0              | `packageManager` 已锁定，用 `corepack enable` 即可 |
-| Rust    | stable，edition 2024 | Runtime、hook 客户端、Tauri 壳                     |
-| tmux    | 任意近版             | 默认终端后端；缺失时自动退回直连 PTY               |
-| macOS   | ≥ 13.3               | 桌面端打包目标；Web 端不限                         |
+Node.js ≥ 22、pnpm（版本锁定于根 `package.json`）、Rust stable / edition 2024。
+Go Host 与桌面构建需要 Go ≥ 1.24。tmux 是推荐终端后端，缺失时退回直连 PTY。
+macOS 桌面目标 ≥ 13.3，并需 Xcode Command Line Tools。
 
-## 一键脚本
-
-根目录的 `armadra.sh` 把下面各节串成子命令，任何一步失败即停止：
-
-| 命令                              | 做什么                                                                      |
-| --------------------------------- | --------------------------------------------------------------------------- |
-| `./armadra.sh doctor`             | 检查 node / pnpm / rust / tmux / Xcode CLT                                  |
-| `./armadra.sh install`            | `pnpm install` + `cargo fetch`                                              |
-| `./armadra.sh check`              | shared 构建、TypeScript 类型检查、`cargo fmt --check`、clippy（警告即失败） |
-| `./armadra.sh test`               | shared / web / Rust workspace 全部测试                                      |
-| `./armadra.sh build [--bundle]`   | release 二进制 + sidecar + 前端产物；`--bundle` 再打 .app / .dmg            |
-| `./armadra.sh run [desktop\|web]` | 桌面端 `tauri dev`，或 Runtime + 浏览器前端（⌃C 一起退出）                  |
-| `./armadra.sh all`                | install → check → build → run                                               |
-
-端口可用 `ARMADRA_RUNTIME_PORT` / `ARMADRA_WEB_PORT` 覆盖；43120 被占用（例如 Armadra.app 正在运行）时脚本会直接报错而不是抢端口。
-
-## 安装
-
-```bash
+```sh
 pnpm install
+./armadra.sh doctor
+./armadra.sh run web       # Runtime + Web，退出时一起关闭
+./armadra.sh run desktop   # 桌面持有 Runtime，另行准备 Go Host
 ```
 
-## 运行
+`doctor` 检查 Node / pnpm / Rust / tmux / Xcode CLT；Go 由 Host 构建脚本检查。
 
-Runtime 与前端是两个进程；生产桌面包自动启动 Runtime，开发模式由脚本统一启动。
+## 分步启动
 
-```bash
-# 1. Runtime（监听 127.0.0.1:43120）
-cargo run -p armadra-runtime   # 开发模式下桌面壳不会自己拉起 Runtime，必须单独跑
+以下各进程在独立终端运行：
 
-# 2a. 浏览器里跑前端（127.0.0.1:1420）
-pnpm --filter @armadra/web dev
-
-# 2b. 或者跑桌面壳（会自动执行上面的 web dev）
+```sh
+cargo run -p armadra-runtime        # 127.0.0.1:43120
+pnpm --filter @armadra/web dev      # 127.0.0.1:1420
+# 或用桌面壳替代 Web 命令（仍需上面的外部 Runtime）
 pnpm --filter @armadra/desktop dev
 ```
 
-桌面开发模式连接外部 Runtime，所以第 1 步不能省。
+桌面包与 `./armadra.sh run desktop` 会持有自己的 Runtime；直接执行桌面 `dev` 默认连接外部 Runtime。
+Command W / 关闭窗口隐藏前台；Command Q / 托盘退出停止配置的 Host、桌面持有的 Runtime 及受管会话。
+独立启动的 Runtime 由启动它的终端管理。详见[桌面说明](../apps/desktop/README.md)。
 
-## 测试与检查
+## 检查与打包
 
-```bash
-pnpm --filter @armadra/web test        # vitest
-pnpm --filter @armadra/shared test     # vitest
-pnpm test                              # 上面两个
-pnpm typecheck
-pnpm format:check
-cargo test -p armadra-runtime
-cargo test --workspace
-pnpm check:rust                        # 准备 sidecar 后 cargo check --workspace
-```
+从仓库根执行，按改动涉及的模块选择：
 
-## 打包
+| 范围                | 命令                                                                      |
+| ------------------- | ------------------------------------------------------------------------- |
+| 前端                | `pnpm --filter @armadra/web test`、`pnpm --filter @armadra/web typecheck` |
+| 共享模型            | `pnpm --filter @armadra/shared test`                                      |
+| Runtime             | `cargo test -p armadra-runtime`                                           |
+| Go Host             | `go -C apps/host test ./...`、`go -C apps/host vet ./...`                 |
+| 桌面脚本            | `pnpm --filter @armadra/desktop test`                                     |
+| 协议                | `pnpm protocol:check`、`pnpm protocol:test`                               |
+| 全部 JS 包 / Rust   | `pnpm test`、`cargo test --workspace`                                     |
+| 格式 / 类型         | `pnpm format:check`、`pnpm typecheck`                                     |
+| Rust workspace 检查 | `pnpm check:rust`（先准备 sidecar）                                       |
+| 桌面打包            | `pnpm --filter @armadra/desktop build`                                    |
 
-```bash
-pnpm --filter @armadra/desktop build
-```
+`armadra.sh check` 执行 shared 构建、TS 检查、Rust fmt / clippy；`test` 执行 shared、web 与 Rust workspace 测试。
+它们不替代独立的 Go、协议与桌面脚本检查。`all` 执行 doctor → install → check → build → run。
 
-`build` 先跑 `scripts/prepare-sidecar.mjs`：用 `cargo build --release` 编出
-`armadra-runtime` 与 `armadra-hook`，按 Rust host target triple 重命名复制到
-`target/release/`，`tauri.conf.json` 的 `bundle.externalBin` 再把它们打进包里。
-交叉编译时设 `CARGO_BUILD_TARGET` 或让 Tauri 传 `TAURI_ENV_TARGET_TRIPLE`。
+打包会构建 Runtime、Hook 和 Go Host，再按 target triple 暂存 sidecar。
+目标、缓存与交叉构建规则见[桌面构建说明](../apps/desktop/README.md)。
 
-## 目录
+## Host 连接
 
-```text
-apps/
-  web/        React 19 + Vite 前端，唯一页面
-    src/canvas/     tldraw 画布：自定义 shape、binding、同步、菜单、覆盖层
-    src/nodes/      七种节点的节点体
-    src/terminal/   xterm.js 终端
-    src/panels/     设置、命令面板、资源管理器、源代码管理
-    src/shell/      标签栏、Dock、侧栏、用量球
-    src/store/      canvas-store（画布动作的唯一入口）
-    src/api/        Runtime HTTP / WebSocket 客户端
-    src/i18n/       zh-CN / en 文案
-  runtime/    Rust 执行服务
-    src/terminal/   tmux / 直连 PTY / SSH 三种后端
-    src/hook/       hook 端点、鉴权、各 CLI 的安装与归一化、状态 reduce
-    src/collab/     上下文链接、控制动词、消息投递、技能安装
-    src/index/      各 CLI 转录的会话索引
-    src/usage/      用量快照
-    migrations/     唯一 schema
-  desktop/    Tauri 2 薄壳 + sidecar 准备脚本
-crates/
-  armadra-hook/   注入 Agent 终端的 hook 客户端二进制
-packages/
-  shared/     领域模型、Agent 注册表、API 与 hook 事件的 zod schema
-docs/         文档（见 docs/README.md）
-```
-
-## 环境变量
-
-### 独立 Host 连接检查
-
-设置 → 连接 → 后台服务可以检查独立 Go Host，显示连接结果与可展开的服务身份。检查按钮不会改变当前终端、文件或 Git 使用的 Runtime，也不会触发启动。桌面应用启动时会另行异步启动/发现 Host；纯 Web 模式仍需手工启动 Host。
-
-纯 Web 模式可在另一个终端从仓库根启动 Host，显式允许开发页面来源：
+桌面启动时异步启动/发现 Host；纯 Web 模式手工启动，并允许实际页面的精确来源：
 
 ```sh
 go -C apps/host run ./cmd/armadra-host --allow-origin http://127.0.0.1:1420
 ```
 
-然后在设置中检查默认地址 `http://127.0.0.1:43121`。开发页面改端口后，`--allow-origin` 也需要对应修改；来源不包含路径和末尾斜线。多次传入可允许多个明确来源。
+在「设置 → 连接 → 后台服务」检查 `http://127.0.0.1:43121`。
+检查只读服务身份，不切换 Runtime 或触发启动；通过后仅在本设备保存地址。
+编辑、取消或离开检查页会使旧检查失效。已有服务配置不兼容时报告失败，不自动重配。
 
-打包桌面端的来源按平台选择 `tauri://localhost`、`http://tauri.localhost` 或 `https://tauri.localhost`。桌面 CSP 当前只额外允许默认本地 Host 地址，未开放任意远程地址；浏览器也需满足服务端的来源许可。CORS 许可不代表已经实现设备登录或远程执行权限。
+Origin 不含路径或末尾 `/`，可多次传入。桌面按平台使用 `tauri://localhost`、
+`http://tauri.localhost` 或 `https://tauri.localhost`；CSP 目前允许默认本地 Host。
+CORS 只允许读取元数据，设备登录与远程执行另属未完成能力。详见[Host 说明](../apps/host/README.md)。
 
-地址仅在显式检查且校验通过时保存在本设备，不保存凭据；取消、编辑或离开页面会使旧检查失效。Host 未运行或来源不匹配时显示失败，不保留旧成功状态。服务命令及后端边界见 [Host 说明](../apps/host/README.md)。
+## 环境变量与数据
 
-桌面开发的 predev 会准备 Go Host 二进制；发布使用包内 sidecar。已有服务端点或来源不兼容时不会自动重配/重启，错误不阻断原有 Runtime 界面。Command W/窗口关闭只隐藏前台；Command Q/托盘退出停止配置的 Go Host 和桌面持有的 Runtime 及受管会话。`./armadra.sh run desktop` 也使用桌面持有模式；独立启动的开发 Runtime 不会被误关。业务迁移和后台执行器尚未完成。路径覆盖、协议和实际验证限制见 [桌面说明](../apps/desktop/README.md)。
+| 变量                                            | 作用                                        |
+| ----------------------------------------------- | ------------------------------------------- |
+| `ARMADRA_RUNTIME_HOST` / `ARMADRA_RUNTIME_PORT` | Runtime 监听地址，默认 `127.0.0.1:43120`    |
+| `ARMADRA_WEB_PORT`                              | `armadra.sh run web` 的前端端口             |
+| `VITE_RUNTIME_URL`                              | 前端连接地址，默认 `http://127.0.0.1:43120` |
+| `ARMADRA_DATA_DIR`                              | Runtime 数据目录                            |
+| `ARMADRA_DATABASE_URL`                          | SQLite 连接，例如 `sqlite://…?mode=rwc`     |
+| `RUST_LOG`                                      | 日志过滤，默认 `info,tower_http=info`       |
+| `ARMADRA_HOOK_DEBUG`                            | Hook 调试                                   |
 
-### Runtime 配置
+脚本发现 Runtime 端口占用时直接报错。节点身份、Hook token、端点与权限等待变量由 Runtime 注入 Agent 终端，无需手工配置。
 
-| 变量                                            | 作用                                                   |
-| ----------------------------------------------- | ------------------------------------------------------ |
-| `ARMADRA_RUNTIME_HOST` / `ARMADRA_RUNTIME_PORT` | Runtime 监听地址，默认 `127.0.0.1:43120`               |
-| `ARMADRA_DATA_DIR`                              | 覆盖数据目录                                           |
-| `ARMADRA_DATABASE_URL`                          | 覆盖数据库位置，形如 `sqlite://…?mode=rwc`             |
-| `VITE_RUNTIME_URL`                              | 前端连接的 Runtime 地址，默认 `http://127.0.0.1:43120` |
-| `RUST_LOG`                                      | 日志过滤，默认 `info,tower_http=info`                  |
+默认数据目录：macOS `~/Library/Application Support/Armadra`，Windows `%LOCALAPPDATA%\Armadra`，
+Linux `$XDG_DATA_HOME/armadra`。包含 `canvas.db`、设置、Hook 端点、节点 token、审批文件和 tmux socket。
+工作区 `.armadra/` 保存图片、导出与板日志，已加入 `.gitignore`。
 
-以下由 Runtime 注入 Agent 终端，不需要手工设置：`ARMADRA_NODE_ID`、
-`ARMADRA_AGENT_ID`、`ARMADRA_ENDPOINT_FILE`、`ARMADRA_HOOK_TOKEN`、
-`ARMADRA_HOOK_PORT`、`ARMADRA_HOOK_SOCK`、`ARMADRA_PERM_WAIT_SECS` 等。
-调试 hook 时可设 `ARMADRA_HOOK_DEBUG`。
-
-## 数据位置
-
-| 位置                                             | 内容                                                                                       |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `~/Library/Application Support/Armadra`（macOS） | `canvas.db`、`settings.json`、`hook-endpoint.env`、`node-tokens/`、`pending/`、`tmux.sock` |
-| `%LOCALAPPDATA%\Armadra`（Windows）              | 同上                                                                                       |
-| `$XDG_DATA_HOME/armadra`（Linux）                | 同上                                                                                       |
-| `<工作区>/.armadra/`                             | 画布图片资产、导出的 PNG、板日志；已在 `.gitignore` 里                                     |
-
-设置里的「数据」页提供数据库备份。备份从 Runtime 当前连接读取 SQLite 一致性快照，包含已提交但尚未 checkpoint 的 WAL 数据；完成完整性检查后发布为原数据库旁带时间及唯一后缀的文件，不覆盖已有备份。备份路径遵循实际数据库连接，内存数据库不提供旁路文件备份。
-
-## 约定
-
-- JSON 字段一律 camelCase；错误统一 `{ "code": string, "message": string }`。
-- 数据库只接受空库初始化或完整已知迁移前缀的升级；未知版本、校验和不符、脏迁移、损坏账本或无账本的非空库均拒绝启动，不改名、清库或重建。schema 变更新增编号迁移，禁止修改已发布迁移文件（包括注释）；异常库需先备份并制定显式恢复方案。
-- 界面文案走 `apps/web/src/i18n/`，组件只用 shadcn CLI 装的组件。
-- 改架构先改 [architecture.md](./architecture.md)，再动代码。
+「设置 → 数据」使用当前连接的 SQLite 一致性快照备份，包含已提交 WAL 数据；完整性检查通过后写入数据库旁的唯一文件。
+内存数据库不提供旁路文件备份。数据库只允许空库初始化或完整已知迁移前缀升级，异常时拒绝启动，保留原数据。
+开发约定见[AGENTS.md](../AGENTS.md)。
