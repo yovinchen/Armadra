@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { SubagentCard } from "@/nodes/SubagentCard";
+import { FrameReferenceBadges } from "@/panels/github/FrameReferenceBadges";
 import { useCanvasStore } from "@/store/canvas-store";
 import { ropeLabel, useDerivedEdges, type DerivedEdge } from "../derived-edges";
 import { bezierPath, edgeGeometry, nodeBox, type Box } from "../geometry";
@@ -55,6 +56,8 @@ export function CanvasOverlays() {
     <>
       {/* 绑定徽章（G03）自己判断有没有要画的，和绳子 / 子代理各走各的。 */}
       <WorktreeBindingLayer />
+      {/* 分组上的 GitHub 关联徽标：frame 没有节点体，只能挂在这一层。 */}
+      <FrameReferenceBadges />
       {edges.length > 0 ? (
         <svg
           aria-hidden

@@ -59,6 +59,7 @@ import { HandoffBadge } from "@/agent/handoff/HandoffBadge";
 import { MemoryBadge } from "@/panels/resources/MemoryBadge";
 import { openHandoff } from "@/agent/handoff/handoff-targets";
 import { useSshHosts } from "@/panels/settings/ssh-hosts";
+import { GithubReferenceBadge } from "@/panels/github/GithubReferenceBadge";
 import { NodeShell } from "./NodeShell";
 import type { NodeBodyProps } from "./registry";
 import { answerApproval } from "./runtime-extras";
@@ -248,6 +249,7 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
       )}
       {agent && <AccountBindingBadge agent={agent} />}
       {agent && <HandoffBadge nodeId={id} />}
+      <GithubReferenceBadge nodeId={id} />
       {sshLabel !== null && (
         <Badge
           variant="outline"
