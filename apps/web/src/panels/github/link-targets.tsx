@@ -81,7 +81,7 @@ export function useLinkTargets(workspaceId: string): LinkTargets {
   const branches = useQuery({
     queryKey: ["git-repository-branches", workspaceId],
     queryFn: ({ signal }) =>
-      runtimeApi.gitRepositoryBranches(workspaceId, signal),
+      runtimeApi.gitRepositoryBranches(workspaceId, ".", signal),
     enabled: workspaceId.length > 0,
     retry: false,
   });
