@@ -29,9 +29,14 @@ impl Default for WorkspacePermissions {
 pub struct Workspace {
     pub id: String,
     pub name: String,
+    /// A path on [`Self::execution_host_id`], not necessarily on this machine.
     pub root_path: String,
     pub color: String,
     pub permissions: WorkspacePermissions,
+    /// Where files, search and Git run for this workspace (H02). Empty means
+    /// this machine; anything else is a `settings.ssh.hosts[].id`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub execution_host_id: String,
     pub last_opened_at: String,
     pub created_at: String,
     pub updated_at: String,
@@ -478,6 +483,7 @@ mod tests {
             root_path: "/tmp".into(),
             color: DEFAULT_WORKSPACE_COLOR.into(),
             permissions: WorkspacePermissions::default(),
+            execution_host_id: String::new(),
             last_opened_at: now.clone(),
             created_at: now.clone(),
             updated_at: now,
@@ -489,6 +495,9 @@ mod tests {
         .unwrap();
         assert!(json["lastOpenedAt"].is_string());
         assert_eq!(json["permissions"]["execute"], false);
+        // A local workspace does not carry the field at all, so nothing that
+        // already reads this shape has to learn about execution hosts.
+        assert!(json.get("executionHostId").is_none());
         assert_eq!(json["boards"], serde_json::json!([]));
         // WorkspaceSummary flattens the workspace, it does not nest it.
         assert!(json.get("workspace").is_none());

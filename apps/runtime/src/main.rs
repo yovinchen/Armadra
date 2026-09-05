@@ -145,6 +145,7 @@ async fn main() -> anyhow::Result<()> {
     }
     let resources = ResourceService::new(settings.clone());
     let state = AppState {
+        remote: Default::default(),
         events,
         pool,
         usage: UsageService::new(settings.clone()),

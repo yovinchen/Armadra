@@ -27,12 +27,19 @@ async fn hello(worker: &mut Worker) -> String {
     assert_eq!(hello.host_id, HOST);
     assert_eq!(hello.instance_id, response.instance_id);
     assert!(hello.capabilities.contains(&"files.text-read.v1".into()));
+    // Editor saves and the proxied execution surface are advertised (H02);
+    // terminals and PTY attachment are still not part of this bridge.
+    assert!(hello.capabilities.contains(&"files.text-write.v1".into()));
+    assert!(hello.capabilities.contains(&"remote.execution.v1".into()));
     assert!(
         !hello
             .capabilities
             .iter()
-            .any(|cap| cap.contains("write") || cap.contains("terminal"))
+            .any(|cap| cap.contains("terminal"))
     );
+    // A controller proxying version-locked payloads has to be able to check
+    // that the Worker is the same build it is.
+    assert_eq!(hello.runtime_version, env!("CARGO_PKG_VERSION"));
     assert_eq!(hello.max_file_chunk_bytes, MAX_CHUNK as u32);
     response.instance_id
 }

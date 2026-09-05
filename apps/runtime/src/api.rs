@@ -1,5 +1,6 @@
 use std::{collections::HashMap, path::Path};
 
+use armadra_protocol::v1::WorkerServiceOperation;
 use axum::{
     Json,
     extract::{
@@ -31,6 +32,7 @@ use crate::{
         WorkspacePermissions, WorkspaceSummary,
     },
     ownership, paths,
+    remote::{self, JsonAnswer},
     security::{
         canonical_directory, prepare_new_directory, resolve_import_source, resolve_in_root,
     },
@@ -122,6 +124,90 @@ pub async fn open_directory_workspace(
         )
         .await?,
     ))
+}
+
+/* ---------------------------- remote execution ---------------------------- */
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenRemoteWorkspaceRequest {
+    name: String,
+    /// A `settings.ssh.hosts[].id` with a `worker` configuration.
+    execution_host_id: String,
+    /// An absolute path **on that host**. Nothing about it is resolved here.
+    root_path: String,
+    permissions: Option<WorkspacePermissions>,
+}
+
+/// `POST /api/workspaces/remote` — open a project that lives on an SSH
+/// execution host (H02).
+///
+/// The path is proven by the execution host, not by this machine: the Worker
+/// is started, the root is registered — which canonicalizes and freezes it —
+/// and only then is the workspace stored, with the canonical remote path. An
+/// unreachable host, a missing Worker binary or a version mismatch fails here
+/// instead of producing a workspace that silently reads local files.
+pub async fn open_remote_workspace(
+    State(state): State<AppState>,
+    Json(request): Json<OpenRemoteWorkspaceRequest>,
+) -> AppResult<Json<Workspace>> {
+    let name = valid_workspace_name(&request.name)?;
+    if !request.root_path.starts_with('/') || request.root_path.len() > 4_096 {
+        return Err(AppError::BadRequest(
+            "A remote workspace root must be an absolute path on the execution host".into(),
+        ));
+    }
+    let host = state.settings.ssh_host(&request.execution_host_id);
+    let worker = state.remote.get(host, &request.execution_host_id)?;
+    // A probe id, not the workspace id: the workspace does not exist yet, and
+    // the registration is what proves the directory does.
+    let canonical = worker
+        .register_root(
+            &format!("probe-{}", uuid::Uuid::new_v4().simple()),
+            &request.root_path,
+        )
+        .await?;
+    Ok(Json(
+        db::create_remote_workspace(
+            &state.pool,
+            name,
+            &request.execution_host_id,
+            &canonical,
+            request.permissions.as_ref(),
+        )
+        .await?,
+    ))
+}
+
+/// What a remote Worker reports about itself.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteWorkerProbe {
+    pub platform: String,
+    pub architecture: String,
+    pub runtime_version: String,
+    pub capabilities: Vec<String>,
+}
+
+/// `POST /api/ssh/hosts/{host_id}/worker/test` — start the configured remote
+/// Worker and read its handshake.
+///
+/// Separate from the terminal reachability probe: `ssh` may work perfectly
+/// while the Worker binary is missing or the wrong version, and the settings
+/// page has to be able to say which.
+pub async fn test_remote_worker(
+    State(state): State<AppState>,
+    AxumPath(host_id): AxumPath<String>,
+) -> AppResult<Json<RemoteWorkerProbe>> {
+    let host = state.settings.ssh_host(&host_id);
+    let worker = state.remote.get(host, &host_id)?;
+    let hello = worker.probe().await?;
+    Ok(Json(RemoteWorkerProbe {
+        platform: hello.platform,
+        architecture: hello.architecture,
+        runtime_version: hello.runtime_version,
+        capabilities: hello.capabilities,
+    }))
 }
 
 #[derive(Deserialize)]
@@ -388,24 +474,60 @@ pub async fn list_files(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Query(query): Query<RequestedPath>,
-) -> AppResult<Json<files::FileList>> {
+) -> AppResult<JsonAnswer> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
-    Ok(Json(files::list_directory(
+    // `WorkerDirectory` and `files::FileList` are the same shape, so a remote
+    // listing needs no second contract: the typed Worker message is mapped
+    // straight back into the answer the canvas already reads.
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        let directory = worker
+            .list_directory(&workspace.id, &workspace.root_path, &query.path)
+            .await?;
+        return JsonAnswer::local(&files::FileList {
+            path: directory.path,
+            entries: directory
+                .entries
+                .into_iter()
+                .map(|entry| files::FileEntry {
+                    name: entry.name,
+                    path: entry.path,
+                    kind: if entry.kind == "directory" {
+                        "directory"
+                    } else {
+                        "file"
+                    },
+                    size: entry.size,
+                    readonly: entry.readonly,
+                })
+                .collect(),
+            truncated: directory.truncated,
+        });
+    }
+    JsonAnswer::local(&files::list_directory(
         Path::new(&workspace.root_path),
         &query.path,
-    )?))
+    )?)
 }
 
 pub async fn read_file(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Query(query): Query<RequestedPath>,
-) -> AppResult<Json<files::FileContent>> {
+) -> AppResult<JsonAnswer> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
-    Ok(Json(files::read_text_file(
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            WorkerServiceOperation::FileRead,
+            &remote::service::PathPayload { path: query.path },
+        )
+        .await;
+    }
+    JsonAnswer::local(&files::read_text_file(
         Path::new(&workspace.root_path),
         &query.path,
-    )?))
+    )?)
 }
 
 pub async fn file_info(
@@ -414,6 +536,7 @@ pub async fn file_info(
     Query(query): Query<RequestedPath>,
 ) -> AppResult<Json<imports::FileInfo>> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
+    remote::refuse_remote(&workspace, "Reading local file metadata")?;
     Ok(Json(imports::file_info(
         Path::new(&workspace.root_path),
         &query.path,
@@ -429,6 +552,7 @@ pub async fn download_file(
 ) -> AppResult<Response> {
     use std::io::Read;
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
+    remote::refuse_remote(&workspace, "Downloading a file")?;
     let root = Path::new(&workspace.root_path);
     let path = resolve_in_root(root, &query.path)?;
     if !path.is_file() {
@@ -473,6 +597,7 @@ pub async fn upload_files(
             "This workspace is opened read-only".into(),
         ));
     }
+    remote::refuse_remote(&workspace, "Uploading files")?;
     let manifest = imports::read_manifest(&mut multipart, false).await?;
     let root = Path::new(&workspace.root_path);
     let mut batch = imports::ImportBatch::new(root)?;
@@ -496,6 +621,7 @@ pub async fn import_local_files(
             "This workspace is opened read-only".into(),
         ));
     }
+    remote::refuse_remote(&workspace, "Importing local files")?;
     if request.paths.is_empty() || request.paths.len() > imports::MAX_FILES {
         return Err(AppError::BadRequest("Import requires 1–256 files".into()));
     }
@@ -526,7 +652,7 @@ pub async fn write_file(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Json(request): Json<WriteFileRequest>,
-) -> AppResult<Json<files::FileWriteResult>> {
+) -> AppResult<JsonAnswer> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
     if !workspace.permissions.write {
         return Err(AppError::Forbidden(
@@ -538,7 +664,27 @@ pub async fn write_file(
             "Reload the file to obtain its content version before saving".into(),
         ));
     }
-    tokio::task::spawn_blocking(move || {
+    // The same content version travels to the execution host, so a remote save
+    // is protected by the file the editor actually read — not by a re-read on
+    // the way there, which would defeat the check (E01/H02).
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        let written = worker
+            .write_file(
+                &workspace.id,
+                &workspace.root_path,
+                &request.path,
+                request.content,
+                request.expected_sha256,
+                request.bom,
+            )
+            .await?;
+        return JsonAnswer::local(&files::FileWriteResult {
+            path: written.path,
+            size: written.size,
+            sha256: written.sha256,
+        });
+    }
+    let result = tokio::task::spawn_blocking(move || {
         files::write_text_file(
             Path::new(&workspace.root_path),
             &request.path,
@@ -546,9 +692,9 @@ pub async fn write_file(
             request.expected_sha256.as_deref(),
             request.bom,
         )
-        .map(Json)
     })
-    .await?
+    .await??;
+    JsonAnswer::local(&result)
 }
 
 /* ---------------------------- search and file work ------------------------ */
@@ -569,13 +715,25 @@ pub async fn file_index(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Query(query): Query<FileIndexQuery>,
-) -> AppResult<Json<file_search::FileIndex>> {
+) -> AppResult<JsonAnswer> {
     let workspace = readable_workspace(&state, &workspace_id).await?;
-    tokio::task::spawn_blocking(move || {
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            WorkerServiceOperation::SearchIndex,
+            &remote::service::IndexPayload {
+                query: query.query,
+                limit: query.limit,
+            },
+        )
+        .await;
+    }
+    let index = tokio::task::spawn_blocking(move || {
         file_search::index_files(Path::new(&workspace.root_path), &query.query, query.limit)
-            .map(Json)
     })
-    .await?
+    .await??;
+    JsonAnswer::local(&index)
 }
 
 /// `POST /api/workspaces/{id}/file-search` — 项目搜索 (E01/M4).
@@ -586,12 +744,22 @@ pub async fn search_files(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Json(request): Json<file_search::SearchRequest>,
-) -> AppResult<Json<file_search::SearchResult>> {
+) -> AppResult<JsonAnswer> {
     let workspace = readable_workspace(&state, &workspace_id).await?;
-    tokio::task::spawn_blocking(move || {
-        file_search::search_content(Path::new(&workspace.root_path), &request).map(Json)
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            WorkerServiceOperation::SearchContent,
+            &request,
+        )
+        .await;
+    }
+    let result = tokio::task::spawn_blocking(move || {
+        file_search::search_content(Path::new(&workspace.root_path), &request)
     })
-    .await?
+    .await??;
+    JsonAnswer::local(&result)
 }
 
 /// Read access is the gate for every listing and search surface.
@@ -628,6 +796,7 @@ pub async fn create_file_entry(
     Json(request): Json<CreateEntryRequest>,
 ) -> AppResult<Json<file_ops::EntryResult>> {
     let workspace = writable_workspace(&state, &workspace_id).await?;
+    remote::refuse_remote(&workspace, "Creating, renaming and deleting files")?;
     tokio::task::spawn_blocking(move || {
         file_ops::create_entry(Path::new(&workspace.root_path), &request.path, request.kind)
             .map(Json)
@@ -649,6 +818,7 @@ pub async fn rename_file_entry(
     Json(request): Json<RenameEntryRequest>,
 ) -> AppResult<Json<file_ops::EntryResult>> {
     let workspace = writable_workspace(&state, &workspace_id).await?;
+    remote::refuse_remote(&workspace, "Creating, renaming and deleting files")?;
     tokio::task::spawn_blocking(move || {
         file_ops::rename_entry(Path::new(&workspace.root_path), &request.from, &request.to)
             .map(Json)
@@ -670,6 +840,7 @@ pub async fn trash_file_entry(
     Json(request): Json<TrashEntryRequest>,
 ) -> AppResult<Json<file_ops::TrashEntry>> {
     let workspace = writable_workspace(&state, &workspace_id).await?;
+    remote::refuse_remote(&workspace, "Creating, renaming and deleting files")?;
     tokio::task::spawn_blocking(move || {
         file_ops::trash_entry(Path::new(&workspace.root_path), &request.path).map(Json)
     })
@@ -682,6 +853,7 @@ pub async fn list_trash(
     AxumPath(workspace_id): AxumPath<String>,
 ) -> AppResult<Json<Vec<file_ops::TrashEntry>>> {
     let workspace = readable_workspace(&state, &workspace_id).await?;
+    remote::refuse_remote(&workspace, "Creating, renaming and deleting files")?;
     tokio::task::spawn_blocking(move || {
         file_ops::list_trash(Path::new(&workspace.root_path)).map(Json)
     })
@@ -701,6 +873,7 @@ pub async fn restore_file_entry(
     Json(request): Json<RestoreEntryRequest>,
 ) -> AppResult<Json<file_ops::EntryResult>> {
     let workspace = writable_workspace(&state, &workspace_id).await?;
+    remote::refuse_remote(&workspace, "Creating, renaming and deleting files")?;
     tokio::task::spawn_blocking(move || {
         file_ops::restore_trash(Path::new(&workspace.root_path), &request.id).map(Json)
     })
@@ -758,9 +931,23 @@ pub async fn watch_file(
         // A workspace that lost read access must not keep an OS watcher alive
         // on a folder the canvas may no longer look at.
         file_watch::release_workspace(&workspace_id);
+        remote::watch::release_workspace(&workspace_id);
         return Err(AppError::Forbidden("This workspace is not readable".into()));
     }
     let events = state.events.clone();
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return Ok(Json(
+            remote::watch::register(
+                worker.clone(),
+                events,
+                &workspace.id,
+                &workspace.root_path,
+                &request.path,
+                &request.node_id,
+            )
+            .await?,
+        ));
+    }
     tokio::task::spawn_blocking(move || {
         file_watch::register(
             &workspace_id,
@@ -788,7 +975,11 @@ pub async fn unwatch_file(
     AxumPath(workspace_id): AxumPath<String>,
     Query(query): Query<UnwatchFileQuery>,
 ) -> AppResult<axum::http::StatusCode> {
+    // Which registry holds the file depends on where the workspace executes,
+    // and a workspace can be re-pointed; dropping the viewer from both is
+    // cheap and leaves no poller running for a node that closed.
     file_watch::unregister(&workspace_id, &query.path, &query.node_id)?;
+    remote::watch::unregister(&workspace_id, &query.path, &query.node_id)?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
@@ -804,6 +995,12 @@ pub async fn file_version(
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
     if !workspace.permissions.read {
         return Err(AppError::Forbidden("This workspace is not readable".into()));
+    }
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return Ok(Json(
+            remote::watch::version(worker, &workspace.id, &workspace.root_path, &query.path)
+                .await?,
+        ));
     }
     tokio::task::spawn_blocking(move || {
         file_watch::file_version(Path::new(&workspace.root_path), &query.path).map(Json)
@@ -1764,6 +1961,7 @@ pub async fn import_asset(
     Json(request): Json<ImportAssetRequest>,
 ) -> AppResult<Json<UploadAssetResponse>> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
+    remote::refuse_remote(&workspace, "Importing a whiteboard asset by path")?;
     let root = canonical_directory(&workspace.root_path)?;
     let source = resolve_import_source(&root, &request.path)?;
     let extension = asset_extension_of_file(&source)
@@ -1900,14 +2098,14 @@ pub async fn git_diff(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Query(query): Query<GitDiffQuery>,
-) -> AppResult<Json<git::GitDiff>> {
+) -> AppResult<JsonAnswer> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
     if !workspace.permissions.read {
         return Err(AppError::Forbidden(
             "Workspace does not allow Git reads".into(),
         ));
     }
-    let paths = query
+    let paths: Vec<String> = query
         .paths
         .as_deref()
         .unwrap_or_default()
@@ -1916,7 +2114,21 @@ pub async fn git_diff(
         .filter(|path| !path.is_empty())
         .map(str::to_owned)
         .collect();
-    Ok(Json(git::read_diff_with_execution(
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            WorkerServiceOperation::GitDiff,
+            &remote::service::DiffPayload {
+                path: query.path,
+                scope: query.scope,
+                paths,
+                ignore_whitespace: query.ignore_whitespace,
+            },
+        )
+        .await;
+    }
+    JsonAnswer::local(&git::read_diff_with_execution(
         Path::new(&workspace.root_path),
         &query.path,
         &git::DiffRequest {
@@ -1925,7 +2137,7 @@ pub async fn git_diff(
             ignore_whitespace: query.ignore_whitespace,
         },
         workspace.permissions.execute,
-    )?))
+    )?)
 }
 
 /// Which repository under the workspace a legacy Git request addresses.
@@ -1942,7 +2154,7 @@ pub async fn git_status(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Query(query): Query<GitRepositoryPathQuery>,
-) -> AppResult<Json<git::GitStatus>> {
+) -> AppResult<JsonAnswer> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
     if !workspace.permissions.read {
         return Err(AppError::Forbidden(
@@ -1950,10 +2162,19 @@ pub async fn git_status(
         ));
     }
     git::access::require_execution(workspace.permissions.execute, "Git worktree status")?;
-    Ok(Json(git::read_status_at(
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            WorkerServiceOperation::GitStatus,
+            &remote::service::PathPayload { path: query.path },
+        )
+        .await;
+    }
+    JsonAnswer::local(&git::read_status_at(
         Path::new(&workspace.root_path),
         &query.path,
-    )?))
+    )?)
 }
 
 /// `POST /api/workspaces/{id}/git/init`.
@@ -1964,7 +2185,7 @@ pub async fn git_status(
 pub async fn git_init(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
-) -> AppResult<Json<git::InitResult>> {
+) -> AppResult<JsonAnswer> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
     if !workspace.permissions.read || !workspace.permissions.write {
         return Err(AppError::Forbidden(
@@ -1975,10 +2196,19 @@ pub async fn git_init(
         workspace.permissions.execute,
         "Git repository initialization",
     )?;
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            WorkerServiceOperation::GitInit,
+            &serde_json::Map::new(),
+        )
+        .await;
+    }
     let result =
         tokio::task::spawn_blocking(move || git::init_repository(Path::new(&workspace.root_path)))
             .await??;
-    Ok(Json(result))
+    JsonAnswer::local(&result)
 }
 
 #[derive(Deserialize)]
@@ -1994,17 +2224,20 @@ pub async fn git_stage(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Json(request): Json<PathsRequest>,
-) -> AppResult<Json<git::StageResult>> {
-    let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
-    if !workspace.permissions.read || !workspace.permissions.write {
-        return Err(AppError::Forbidden(
-            "Workspace does not allow Git writes".into(),
-        ));
+) -> AppResult<JsonAnswer> {
+    let workspace = git_write_workspace(&state, &workspace_id).await?;
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            WorkerServiceOperation::GitStage,
+            &remote::service::PathsPayload {
+                path: request.path,
+                paths: request.paths,
+            },
+        )
+        .await;
     }
-    git::access::require_execution(
-        workspace.permissions.execute,
-        "Git index, worktree, and commit writes",
-    )?;
     let guard = crate::git_api::REPOSITORIES
         .mutation_guard(Path::new(&workspace.root_path), &request.path)
         .await?;
@@ -2017,15 +2250,14 @@ pub async fn git_stage(
         )
     })
     .await??;
-    Ok(Json(result))
+    JsonAnswer::local(&result)
 }
 
-pub async fn git_unstage(
-    State(state): State<AppState>,
-    AxumPath(workspace_id): AxumPath<String>,
-    Json(request): Json<PathsRequest>,
-) -> AppResult<Json<git::UnstageResult>> {
-    let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
+/// The permission gate every Git write shares: read, write and the execution
+/// grant, in that order. The remote path checks it here *and* again on the
+/// execution host, which is where the repository actually is.
+async fn git_write_workspace(state: &AppState, workspace_id: &str) -> AppResult<Workspace> {
+    let workspace = db::get_workspace(&state.pool, workspace_id).await?;
     if !workspace.permissions.read || !workspace.permissions.write {
         return Err(AppError::Forbidden(
             "Workspace does not allow Git writes".into(),
@@ -2035,6 +2267,27 @@ pub async fn git_unstage(
         workspace.permissions.execute,
         "Git index, worktree, and commit writes",
     )?;
+    Ok(workspace)
+}
+
+pub async fn git_unstage(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+    Json(request): Json<PathsRequest>,
+) -> AppResult<JsonAnswer> {
+    let workspace = git_write_workspace(&state, &workspace_id).await?;
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            WorkerServiceOperation::GitUnstage,
+            &remote::service::PathsPayload {
+                path: request.path,
+                paths: request.paths,
+            },
+        )
+        .await;
+    }
     let guard = crate::git_api::REPOSITORIES
         .mutation_guard(Path::new(&workspace.root_path), &request.path)
         .await?;
@@ -2047,7 +2300,7 @@ pub async fn git_unstage(
         )
     })
     .await??;
-    Ok(Json(result))
+    JsonAnswer::local(&result)
 }
 
 /// `POST /api/workspaces/{id}/git/resolve`: stage a conflicted path only
@@ -2056,17 +2309,20 @@ pub async fn git_resolve(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Json(request): Json<PathsRequest>,
-) -> AppResult<Json<git::ResolveResult>> {
-    let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
-    if !workspace.permissions.read || !workspace.permissions.write {
-        return Err(AppError::Forbidden(
-            "Workspace does not allow Git writes".into(),
-        ));
+) -> AppResult<JsonAnswer> {
+    let workspace = git_write_workspace(&state, &workspace_id).await?;
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            WorkerServiceOperation::GitResolve,
+            &remote::service::PathsPayload {
+                path: request.path,
+                paths: request.paths,
+            },
+        )
+        .await;
     }
-    git::access::require_execution(
-        workspace.permissions.execute,
-        "Git index, worktree, and commit writes",
-    )?;
     let guard = crate::git_api::REPOSITORIES
         .mutation_guard(Path::new(&workspace.root_path), &request.path)
         .await?;
@@ -2079,7 +2335,7 @@ pub async fn git_resolve(
         )
     })
     .await??;
-    Ok(Json(result))
+    JsonAnswer::local(&result)
 }
 
 /// `POST /api/workspaces/{id}/git/revert`: restoring from the index and
@@ -2099,17 +2355,21 @@ pub async fn git_revert(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Json(request): Json<RevertRequest>,
-) -> AppResult<Json<git::RevertResult>> {
-    let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
-    if !workspace.permissions.read || !workspace.permissions.write {
-        return Err(AppError::Forbidden(
-            "Workspace does not allow Git writes".into(),
-        ));
+) -> AppResult<JsonAnswer> {
+    let workspace = git_write_workspace(&state, &workspace_id).await?;
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            WorkerServiceOperation::GitRevert,
+            &remote::service::RevertPayload {
+                path: request.path,
+                paths: request.paths,
+                source: request.source,
+            },
+        )
+        .await;
     }
-    git::access::require_execution(
-        workspace.permissions.execute,
-        "Git index, worktree, and commit writes",
-    )?;
     let guard = crate::git_api::REPOSITORIES
         .mutation_guard(Path::new(&workspace.root_path), &request.path)
         .await?;
@@ -2123,7 +2383,7 @@ pub async fn git_revert(
         )
     })
     .await??;
-    Ok(Json(result))
+    JsonAnswer::local(&result)
 }
 
 #[derive(Deserialize)]
@@ -2152,7 +2412,7 @@ pub async fn git_head_commit(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Query(query): Query<GitRepositoryPathQuery>,
-) -> AppResult<Json<Option<git::HeadCommit>>> {
+) -> AppResult<JsonAnswer> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
     if !workspace.permissions.read {
         return Err(AppError::Forbidden(
@@ -2160,28 +2420,45 @@ pub async fn git_head_commit(
         ));
     }
     git::access::require_execution(workspace.permissions.execute, "Git commit inspection")?;
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            WorkerServiceOperation::GitHeadCommit,
+            &remote::service::PathPayload { path: query.path },
+        )
+        .await;
+    }
     let result = tokio::task::spawn_blocking(move || {
         git::head_commit(Path::new(&workspace.root_path), &query.path)
     })
     .await??;
-    Ok(Json(result))
+    JsonAnswer::local(&result)
 }
 
 pub async fn git_commit(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Json(request): Json<CommitRequest>,
-) -> AppResult<Json<git::CommitResult>> {
-    let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
-    if !workspace.permissions.read || !workspace.permissions.write {
-        return Err(AppError::Forbidden(
-            "Workspace does not allow Git writes".into(),
-        ));
+) -> AppResult<JsonAnswer> {
+    let workspace = git_write_workspace(&state, &workspace_id).await?;
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            WorkerServiceOperation::GitCommit,
+            &remote::service::CommitPayload {
+                path: request.path,
+                message: request.message,
+                paths: request.paths,
+                amend: request.amend.map(|amend| remote::service::AmendPayload {
+                    expected_head: amend.expected_head,
+                    allow_published: amend.allow_published,
+                }),
+            },
+        )
+        .await;
     }
-    git::access::require_execution(
-        workspace.permissions.execute,
-        "Git index, worktree, and commit writes",
-    )?;
     let guard = crate::git_api::REPOSITORIES
         .mutation_guard(Path::new(&workspace.root_path), &request.path)
         .await?;
@@ -2200,7 +2477,7 @@ pub async fn git_commit(
         )
     })
     .await??;
-    Ok(Json(result))
+    JsonAnswer::local(&result)
 }
 
 /* -------------------------------- git clone ------------------------------- */
@@ -2718,6 +2995,7 @@ mod tests {
             serde_json::json!({"terminal":{"backend":"direct"},"usage":{"enabled":false}}),
         );
         let state = AppState {
+            remote: Default::default(),
             resources: crate::resources::ResourceService::new(settings.clone()),
             pool: pool.clone(),
             terminals: TerminalManager::with_config(
@@ -2848,6 +3126,7 @@ mod tests {
         let (terminals, settings) = test_terminals(&pool, &events, directory.path());
         (
             crate::router_with_state(AppState {
+                remote: Default::default(),
                 resources: crate::resources::ResourceService::new(settings.clone()),
                 terminals,
                 usage: crate::usage::UsageService::new(settings.clone()),
@@ -3780,6 +4059,7 @@ mod tests {
         let events = EventHub::new();
         let (terminals, settings) = test_terminals(&pool, &events, directory.path());
         let router = crate::router_with_state(AppState {
+            remote: Default::default(),
             resources: crate::resources::ResourceService::new(settings.clone()),
             terminals,
             usage: crate::usage::UsageService::new(settings.clone()),
@@ -4017,6 +4297,7 @@ mod tests {
             }] },
         }));
         let state = AppState {
+            remote: Default::default(),
             resources: crate::resources::ResourceService::new(settings.clone()),
             terminals,
             usage: crate::usage::UsageService::new(settings.clone()),
@@ -4165,6 +4446,7 @@ mod tests {
         let events = EventHub::new();
         let (terminals, settings) = test_terminals(&pool, &events, directory.path());
         let state = AppState {
+            remote: Default::default(),
             resources: crate::resources::ResourceService::new(settings.clone()),
             terminals,
             usage: crate::usage::UsageService::new(settings.clone()),
@@ -4226,6 +4508,7 @@ mod tests {
         let events = EventHub::new();
         let (terminals, settings) = test_terminals(&pool, &events, directory.path());
         let router = crate::router_with_state(AppState {
+            remote: Default::default(),
             resources: crate::resources::ResourceService::new(settings.clone()),
             terminals: terminals.clone(),
             usage: crate::usage::UsageService::new(settings.clone()),
@@ -4359,6 +4642,7 @@ mod tests {
         let events = EventHub::new();
         let (terminals, settings) = test_terminals(&pool, &events, directory.path());
         let router = crate::router_with_state(AppState {
+            remote: Default::default(),
             resources: crate::resources::ResourceService::new(settings.clone()),
             terminals,
             usage: crate::usage::UsageService::new(settings.clone()),
@@ -4781,6 +5065,7 @@ mod tests {
         let events = EventHub::new();
         let (terminals, settings) = test_terminals(&pool, &events, directory.path());
         let router = crate::router_with_state(AppState {
+            remote: Default::default(),
             resources: crate::resources::ResourceService::new(settings.clone()),
             terminals: terminals.clone(),
             usage: crate::usage::UsageService::new(settings.clone()),
@@ -5259,6 +5544,7 @@ mod tests {
         let events = EventHub::new();
         let (terminals, settings) = test_terminals(pool, &events, directory);
         crate::router_with_state(AppState {
+            remote: Default::default(),
             resources: crate::resources::ResourceService::new(settings.clone()),
             terminals,
             usage: crate::usage::UsageService::new(settings.clone()),

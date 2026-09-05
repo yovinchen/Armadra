@@ -129,6 +129,7 @@ async fn fixture(name: &str) -> Fixture {
     let data_dir = directory.path().join(format!("data-{name}"));
     std::fs::create_dir_all(&data_dir).unwrap();
     let state = AppState {
+        remote: Default::default(),
         resources: crate::resources::ResourceService::new(settings.clone()),
         terminals: TerminalManager::with_config(
             pool.clone(),
@@ -869,6 +870,7 @@ async fn a_kept_session_comes_back_after_a_runtime_restart() {
     assert!(profile.exists());
 
     let restarted = AppState {
+        remote: Default::default(),
         hooks: HookService::new(fixture.directory.path().join("data-restarted"), None),
         ..fixture.state.clone()
     };

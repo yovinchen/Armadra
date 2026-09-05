@@ -181,6 +181,7 @@ async fn copilot_signs_in_by_device_flow_and_the_dashboard_reports_quota_and_cos
     let pool = db::connect("sqlite::memory:").await.unwrap();
     let events = EventHub::new();
     let app = router_with_state(AppState {
+        remote: Default::default(),
         terminals: TerminalManager::new(pool.clone(), events.clone()),
         hooks: HookService::with_default_paths(None),
         usage: UsageService::new(settings.clone()),

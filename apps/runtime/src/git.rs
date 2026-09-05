@@ -56,7 +56,7 @@ pub struct GitDiff {
 }
 
 /// Which side of the index a diff is taken from (plan §3.6).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DiffScope {
     /// Unstaged edits plus untracked files — what `git diff` shows.
@@ -796,7 +796,7 @@ pub fn conflict_marker_lines(bytes: &[u8]) -> Vec<u64> {
 
 /// Which version a restore takes the file back to. The two are deliberately
 /// separate actions, because they lose different work (plan §3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum RestoreSource {
     /// `git checkout -- <path>`: the working tree returns to what is staged.

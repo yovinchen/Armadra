@@ -73,6 +73,7 @@ async fn fixture_with(settings: serde_json::Value) -> Fixture {
     let events = EventHub::new();
     let settings = SettingsStore::in_memory(settings);
     let state = AppState {
+        remote: Default::default(),
         terminals: crate::terminal::TerminalManager::with_config(
             pool.clone(),
             events.clone(),

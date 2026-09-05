@@ -260,11 +260,14 @@ impl Worker {
                     instance_id: self.instance.clone(),
                     platform: std::env::consts::OS.into(),
                     architecture: std::env::consts::ARCH.into(),
+                    runtime_version: env!("CARGO_PKG_VERSION").into(),
                     capabilities: {
                         let mut capabilities: Vec<String> = vec![
                             "worker.roots.v1".into(),
                             "files.directory-read.v1".into(),
                             "files.text-read.v1".into(),
+                            "files.text-write.v1".into(),
+                            crate::remote::client::REMOTE_CAPABILITY.into(),
                         ];
                         if self.agents.is_some() {
                             capabilities.push(agent_bridge::CAPABILITY.into());
@@ -446,6 +449,69 @@ impl Worker {
                     offset: input.offset,
                     data: bytes[offset..end].to_vec(),
                     eof: end == bytes.len(),
+                }))
+            }
+            // An editor save on this machine (H02). The content version is
+            // mandatory for an overwrite: without `expected_sha256` the write
+            // is create-only, so a controller that never read the file cannot
+            // replace it.
+            Action::WriteFile(input) => {
+                if input.path.len() > 32_768
+                    || input.path.contains('\\')
+                    || input
+                        .expected_sha256
+                        .as_ref()
+                        .is_some_and(|digest| digest.len() != 64)
+                {
+                    return Err(invalid("Invalid file write request"));
+                }
+                let root = self.root(&input.root_id)?;
+                let root_id = input.root_id.clone();
+                let written = tokio::task::spawn_blocking(move || {
+                    files::write_text_file(
+                        &root,
+                        &input.path,
+                        &input.content,
+                        input.expected_sha256.as_deref(),
+                        input.bom,
+                    )
+                })
+                .await??;
+                Ok(Response::FileWritten(WorkerFileWritten {
+                    root_id,
+                    path: written.path,
+                    sha256: written.sha256,
+                    size: written.size,
+                }))
+            }
+            // Version-locked operations proxied from a controller. The list is
+            // closed and the payload is this build's own JSON; see
+            // `remote::service` for why that is safe here and nowhere else.
+            Action::Service(input) => {
+                let Ok(operation) = WorkerServiceOperation::try_from(input.operation) else {
+                    return Ok(Response::Error(ErrorResponse {
+                        code: "UNSUPPORTED".into(),
+                        message: "Worker service operation is not recognized".into(),
+                    }));
+                };
+                let root = self.root(&input.root_id)?;
+                let (http_status, response_json) = crate::remote::service::handle(
+                    root,
+                    operation,
+                    input.request_json,
+                    input.allow_write,
+                    input.allow_execute,
+                )
+                .await;
+                if response_json.len() > MAX_FRAME - 1024 {
+                    return Ok(Response::Error(ErrorResponse {
+                        code: "RESOURCE_EXHAUSTED".into(),
+                        message: "The answer is larger than one Worker frame".into(),
+                    }));
+                }
+                Ok(Response::Service(WorkerServiceResponse {
+                    http_status,
+                    response_json,
                 }))
             }
         }

@@ -34,6 +34,7 @@ pub mod migration_export;
 pub mod model;
 pub mod ownership;
 pub mod paths;
+pub mod remote;
 pub mod resources;
 pub mod security;
 pub mod settings;
@@ -81,6 +82,16 @@ pub struct AppState {
     pub usage: UsageService,
     /// Host / session sampling and the sleep-inhibition leases (T02).
     pub resources: ResourceService,
+    /// SSH execution hosts and their remote Workers (H02). Empty and idle
+    /// until a workspace names one.
+    pub remote: std::sync::Arc<remote::RemoteWorkers>,
+}
+
+/// The controller identity a remote Worker binds its session to. One per
+/// Runtime process, so a reconnect re-binds the same controller and a second
+/// Runtime cannot drive another one's Worker session.
+pub fn controller_id() -> String {
+    uuid::Uuid::new_v4().simple().to_string()
 }
 
 pub fn router(pool: SqlitePool) -> Router {
@@ -91,6 +102,7 @@ pub fn router(pool: SqlitePool) -> Router {
         hooks: HookService::with_default_paths(Some(DEFAULT_PORT)),
         usage: UsageService::new(settings.clone()),
         resources: ResourceService::new(settings.clone()),
+        remote: std::sync::Arc::new(remote::RemoteWorkers::new(controller_id())),
         events,
         pool,
         settings,
@@ -201,6 +213,9 @@ pub fn router_with_state(state: AppState) -> Router {
             "/api/workspaces/open-directory",
             post(api::open_directory_workspace),
         )
+        // A project on an SSH execution host (H02). A static segment, so it
+        // never collides with `/api/workspaces/{workspace_id}`.
+        .route("/api/workspaces/remote", post(api::open_remote_workspace))
         .route(
             "/api/workspaces/import",
             post(api::import_workspace).layer(DefaultBodyLimit::max(
@@ -532,6 +547,12 @@ pub fn router_with_state(state: AppState) -> Router {
         .route(
             "/api/ssh/hosts/{host_id}/test",
             post(terminal::ssh::test_ssh_host),
+        )
+        // `ssh` reachable is not the same question as "the Armadra Worker is
+        // installed there and matches this build" (H02).
+        .route(
+            "/api/ssh/hosts/{host_id}/worker/test",
+            post(api::test_remote_worker),
         )
         .route("/api/conversations", get(api::list_conversations))
         .route(

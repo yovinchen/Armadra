@@ -40,6 +40,21 @@ const MAX_EXTRA_ARG: usize = 128;
 /// choosing at connect time, so they stay out of the stored configuration.
 const FORBIDDEN_OPTIONS: &[&str] = &["proxycommand", "localcommand", "permitlocalcommand"];
 
+/// Where the Armadra Worker binary lives on an SSH host, and where it may keep
+/// its private state (H02). Absent means this host runs terminals only: a
+/// workspace cannot execute on it, and asking for one is `UNSUPPORTED` rather
+/// than a quiet fall back to the local machine.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SshWorker {
+    /// Absolute path to the remote `armadra-runtime` executable.
+    pub path: String,
+    /// Absolute path passed as `worker --stdio --state-dir`. Absent starts the
+    /// read-only Worker, which has no command journal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_dir: Option<String>,
+}
+
 /// One entry of `settings.ssh.hosts[]`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -55,6 +70,8 @@ pub struct SshHost {
     pub identity_file: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extra_args: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worker: Option<SshWorker>,
 }
 
 /* -------------------------------- validation ------------------------------ */
@@ -165,7 +182,57 @@ pub fn validate_host(host: &SshHost) -> Result<(), String> {
             return Err("extraArgs".into());
         }
     }
+    if let Some(worker) = host.worker.as_ref() {
+        // The remote command is words `ssh` joins with spaces and the login
+        // shell then splits, so these paths must survive that round trip
+        // untouched: absolute, no whitespace, no shell metacharacter.
+        if !worker.path.starts_with('/') || worker.path.len() > MAX_PATH || !is_clean(&worker.path)
+        {
+            return Err("worker.path".into());
+        }
+        if let Some(directory) = worker.state_dir.as_deref()
+            && (!directory.starts_with('/') || directory.len() > MAX_PATH || !is_clean(directory))
+        {
+            return Err("worker.stateDir".into());
+        }
+    }
     Ok(())
+}
+
+/// The argv that starts the Worker on `host` over SSH (H02):
+/// `ssh -o BatchMode=yes … destination <remote binary> worker --stdio …`.
+///
+/// No `-t`: stdin and stdout carry length-prefixed Protobuf frames, and a TTY
+/// would translate them. `BatchMode` keeps a password prompt from swallowing
+/// the stream — an unreachable host has to fail, not hang.
+pub fn worker_argv(host: &SshHost, worker: &SshWorker) -> Vec<String> {
+    let mut argv = vec![
+        "ssh".to_owned(),
+        "-o".to_owned(),
+        "BatchMode=yes".to_owned(),
+        "-o".to_owned(),
+        "ConnectTimeout=10".to_owned(),
+        "-o".to_owned(),
+        "ServerAliveInterval=30".to_owned(),
+    ];
+    if let Some(port) = host.port {
+        argv.push("-p".to_owned());
+        argv.push(port.to_string());
+    }
+    if let Some(identity) = host.identity_file.as_deref() {
+        argv.push("-i".to_owned());
+        argv.push(identity.to_owned());
+    }
+    argv.extend(host.extra_args.iter().cloned());
+    argv.push(destination(host));
+    argv.push(worker.path.clone());
+    argv.push("worker".to_owned());
+    argv.push("--stdio".to_owned());
+    if let Some(directory) = worker.state_dir.as_deref() {
+        argv.push("--state-dir".to_owned());
+        argv.push(directory.to_owned());
+    }
+    argv
 }
 
 /// `user@host`, with the brackets of an IPv6 literal removed — `ssh` takes a
@@ -344,6 +411,7 @@ mod tests {
             port: None,
             identity_file: None,
             extra_args: Vec::new(),
+            worker: None,
         }
     }
 
@@ -465,6 +533,70 @@ mod tests {
         assert_eq!(hosts.len(), 1);
         assert_eq!(hosts[0].id, "ok");
         assert_eq!(hosts[0].name, "Ok");
+    }
+
+    #[test]
+    fn the_worker_command_is_batch_mode_without_a_tty() {
+        let mut host = host();
+        host.port = Some(2222);
+        host.worker = Some(SshWorker {
+            path: "/opt/armadra/armadra-runtime".into(),
+            state_dir: Some("/var/lib/armadra/worker".into()),
+        });
+        let argv = worker_argv(&host, host.worker.as_ref().unwrap());
+        assert!(argv.windows(2).any(|pair| pair == ["-o", "BatchMode=yes"]));
+        assert!(!argv.iter().any(|argument| argument == "-t"));
+        assert_eq!(
+            argv[argv.len() - 8..],
+            [
+                "-p",
+                "2222",
+                "ada@example.com",
+                "/opt/armadra/armadra-runtime",
+                "worker",
+                "--stdio",
+                "--state-dir",
+                "/var/lib/armadra/worker",
+            ]
+        );
+    }
+
+    #[test]
+    fn the_state_directory_is_two_arguments_and_only_when_configured() {
+        let mut host = host();
+        host.worker = Some(SshWorker {
+            path: "/opt/armadra/armadra-runtime".into(),
+            state_dir: None,
+        });
+        let argv = worker_argv(&host, host.worker.as_ref().unwrap());
+        assert_eq!(argv.last().unwrap(), "--stdio");
+        host.worker = Some(SshWorker {
+            path: "/opt/armadra/armadra-runtime".into(),
+            state_dir: Some("/var/lib/armadra/worker".into()),
+        });
+        let argv = worker_argv(&host, host.worker.as_ref().unwrap());
+        assert_eq!(
+            &argv[argv.len() - 2..],
+            ["--state-dir", "/var/lib/armadra/worker"]
+        );
+    }
+
+    #[test]
+    fn a_worker_path_that_the_remote_shell_would_split_is_rejected() {
+        for bad in ["relative/armadra", "/opt/armadra runtime", "/opt/$(id)"] {
+            let mut host = host();
+            host.worker = Some(SshWorker {
+                path: bad.into(),
+                state_dir: None,
+            });
+            assert_eq!(validate_host(&host).unwrap_err(), "worker.path", "{bad}");
+        }
+        let mut host = host();
+        host.worker = Some(SshWorker {
+            path: "/opt/armadra/armadra-runtime".into(),
+            state_dir: Some("../state".into()),
+        });
+        assert_eq!(validate_host(&host).unwrap_err(), "worker.stateDir");
     }
 
     #[test]

@@ -116,6 +116,7 @@ async fn fixture() -> Fixture {
     );
     let events = EventHub::new();
     let app = router_with_state(AppState {
+        remote: Default::default(),
         resources: armadra_runtime::resources::ResourceService::new(settings.clone()),
         terminals: TerminalManager::with_config(
             pool.clone(),

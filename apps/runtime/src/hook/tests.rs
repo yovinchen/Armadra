@@ -251,6 +251,7 @@ async fn fixture(name: &str) -> Fixture {
         super::endpoint::read(&hooks.endpoint_file())["ARMADRA_HOOK_TOKEN"].clone()
     };
     let state = AppState {
+        remote: Default::default(),
         resources: crate::resources::ResourceService::new(settings.clone()),
         terminals: TerminalManager::with_config(
             pool.clone(),

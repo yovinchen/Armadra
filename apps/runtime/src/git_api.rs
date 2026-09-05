@@ -307,6 +307,11 @@ async fn workspace(state: &AppState, id: &str, write: bool) -> AppResult<crate::
             "Workspace does not allow this Git operation".into(),
         ));
     }
+    // Branches, history, worktrees, stashes and the operation queue all reach
+    // into the repository through a local path. A remote workspace gets an
+    // explicit 501 here rather than an answer about the controller's own disk
+    // (H02); the proxied subset lives in `api::git_*`.
+    crate::remote::refuse_remote(&workspace, "This Git panel")?;
     Ok(workspace)
 }
 

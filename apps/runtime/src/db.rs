@@ -298,6 +298,7 @@ fn workspace_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Workspace, sqlx::
         root_path: row.try_get("root_path")?,
         color: row.try_get("color")?,
         permissions,
+        execution_host_id: row.try_get("execution_host_id")?,
         // The column is nullable; every read coalesces it so the wire contract
         // keeps `lastOpenedAt` non-null.
         last_opened_at: row.try_get("last_opened_at")?,
@@ -360,6 +361,86 @@ pub async fn create_workspace(
         root_path: root_path.to_owned(),
         color,
         permissions,
+        execution_host_id: String::new(),
+        last_opened_at: now.clone(),
+        created_at: now.clone(),
+        updated_at: now,
+    })
+}
+
+/// A workspace whose files live on an SSH execution host (H02). The root is a
+/// path on *that* host: nothing here touches the local filesystem, and the
+/// canonical form is frozen by the remote Worker's own root registration.
+///
+/// `root_path` is globally unique, so a remote root that spells the same path
+/// as an existing row on another host is a conflict rather than a silent
+/// hand-back of that other workspace: they are different places.
+pub async fn create_remote_workspace(
+    pool: &SqlitePool,
+    name: &str,
+    execution_host_id: &str,
+    root_path: &str,
+    permissions: Option<&WorkspacePermissions>,
+) -> AppResult<Workspace> {
+    if execution_host_id.is_empty() {
+        return Err(AppError::BadRequest(
+            "A remote workspace requires an execution host".into(),
+        ));
+    }
+    let id = Uuid::now_v7().to_string();
+    let board_id = Uuid::now_v7().to_string();
+    let now = Utc::now().to_rfc3339();
+    let color = normalize_color(None)?;
+    let permissions = permissions.cloned().unwrap_or_default();
+    let permissions_json = serde_json::to_string(&permissions)
+        .map_err(|error| AppError::Internal(error.to_string()))?;
+    let mut transaction = pool.begin().await?;
+    let result = sqlx::query(
+        "INSERT INTO workspaces (id, name, root_path, color, permissions_json, execution_host_id, last_opened_at, created_at, updated_at) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(root_path) DO NOTHING",
+    )
+    .bind(&id)
+    .bind(name)
+    .bind(root_path)
+    .bind(&color)
+    .bind(&permissions_json)
+    .bind(execution_host_id)
+    .bind(&now)
+    .bind(&now)
+    .bind(&now)
+    .execute(&mut *transaction)
+    .await?;
+    if result.rows_affected() == 0 {
+        transaction.rollback().await?;
+        let existing = get_workspace_by_root(pool, root_path).await?;
+        return if existing.execution_host_id == execution_host_id {
+            Ok(existing)
+        } else {
+            Err(AppError::Conflict(
+                "Another workspace already uses this path on a different execution host".into(),
+            ))
+        };
+    }
+    sqlx::query(
+        "INSERT INTO boards (id, workspace_id, name, sort_order, viewport_json, created_at, updated_at) \
+         VALUES (?, ?, ?, 0, ?, ?, ?)",
+    )
+    .bind(&board_id)
+    .bind(&id)
+    .bind(DEFAULT_BOARD_NAME)
+    .bind(serde_json::to_string(&Viewport::default()).expect("viewport serializes"))
+    .bind(&now)
+    .bind(&now)
+    .execute(&mut *transaction)
+    .await?;
+    transaction.commit().await?;
+    Ok(Workspace {
+        id,
+        name: name.to_owned(),
+        root_path: root_path.to_owned(),
+        color,
+        permissions,
+        execution_host_id: execution_host_id.to_owned(),
         last_opened_at: now.clone(),
         created_at: now.clone(),
         updated_at: now,
@@ -368,7 +449,7 @@ pub async fn create_workspace(
 
 pub async fn list_workspaces(pool: &SqlitePool) -> AppResult<Vec<WorkspaceSummary>> {
     let rows = sqlx::query(
-        "SELECT id, name, root_path, color, permissions_json, \
+        "SELECT id, name, root_path, color, permissions_json, execution_host_id, \
           COALESCE(last_opened_at, updated_at) AS last_opened_at, created_at, updated_at \
          FROM workspaces ORDER BY COALESCE(last_opened_at, updated_at) DESC, created_at DESC",
     )
@@ -412,7 +493,7 @@ pub async fn list_workspaces(pool: &SqlitePool) -> AppResult<Vec<WorkspaceSummar
 
 pub async fn get_workspace(pool: &SqlitePool, id: &str) -> AppResult<Workspace> {
     let row = sqlx::query(
-        "SELECT id, name, root_path, color, permissions_json, \
+        "SELECT id, name, root_path, color, permissions_json, execution_host_id, \
           COALESCE(last_opened_at, updated_at) AS last_opened_at, created_at, updated_at \
          FROM workspaces WHERE id = ?",
     )
@@ -425,7 +506,7 @@ pub async fn get_workspace(pool: &SqlitePool, id: &str) -> AppResult<Workspace> 
 
 pub async fn get_workspace_by_root(pool: &SqlitePool, root_path: &str) -> AppResult<Workspace> {
     let row = sqlx::query(
-        "SELECT id, name, root_path, color, permissions_json, \
+        "SELECT id, name, root_path, color, permissions_json, execution_host_id, \
           COALESCE(last_opened_at, updated_at) AS last_opened_at, created_at, updated_at \
          FROM workspaces WHERE root_path = ?",
     )

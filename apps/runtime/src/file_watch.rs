@@ -30,7 +30,7 @@ use std::{
 };
 
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
@@ -52,7 +52,7 @@ const SETTLE: Duration = Duration::from_millis(120);
 /// `sha256` is `None` for a file above the write limit — the editor refuses to
 /// open those anyway, and hashing an arbitrarily large file on a watcher thread
 /// is not something a canvas node should be able to ask for.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileVersion {
     pub path: String,
@@ -64,7 +64,7 @@ pub struct FileVersion {
     /// Device + inode on unix. Only used to tell `modified` from `replaced`;
     /// never serialized, because it is a local implementation detail.
     #[serde(skip)]
-    identity: Option<(u64, u64)>,
+    pub(crate) identity: Option<(u64, u64)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

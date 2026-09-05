@@ -83,6 +83,7 @@ async fn hunk_routes_reject_stale_writes_and_enforce_workspace_permissions() {
     let events = EventHub::new();
     let settings = SettingsStore::in_memory(json!({"terminal":{"backend":"direct"}}));
     let app = router_with_state(AppState {
+        remote: Default::default(),
         resources: armadra_runtime::resources::ResourceService::new(settings.clone()),
         pool: pool.clone(),
         events: events.clone(),

@@ -177,7 +177,7 @@ const MAX_MATCHES_PER_FILE: usize = 200;
 /// Match previews are cut here so one minified line cannot dominate a response.
 const MAX_PREVIEW_CHARS: usize = 400;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchRequest {
     pub query: String,
