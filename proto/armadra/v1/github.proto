@@ -1,0 +1,725 @@
+syntax = "proto3";
+
+package armadra.v1;
+
+option go_package = "armadra.local/host/gen/armadra/v1";
+
+import "armadra/v1/common.proto";
+
+// GitHub Issues and Pull requests, served by the Host (Git/GitHub design §7-§10).
+//
+// Message and enum names spell it Github so every generated runtime keeps its
+// idiomatic short enum variants; the product name in prose stays GitHub.
+//
+// Git credentials belong to the Worker execution host; the GitHub API credential
+// belongs to the Host credential service and never appears in these messages.
+// Only a pasted token crosses this boundary once, in ConfigureGithubCredential;
+// nothing here ever returns a token, and no persisted message carries one.
+//
+// Issue bodies, comments and diffs are external content. They are transported as
+// data for a reader; they never carry authority.
+
+// ---------------------------------------------------------------------------
+// Credentials and API base
+// ---------------------------------------------------------------------------
+
+enum GithubCredentialSource {
+  GITHUB_CREDENTIAL_SOURCE_UNSPECIFIED = 0;
+  // Nothing configured. The panel is unavailable rather than silently empty.
+  GITHUB_CREDENTIAL_SOURCE_NONE = 1;
+  // The user explicitly enabled reuse of an existing `gh` login. The Host runs
+  // `gh auth token` on demand, keeps the value in memory and never stores it.
+  GITHUB_CREDENTIAL_SOURCE_GH_CLI = 2;
+  // A token the user pasted once, held by the OS secret store under a reference.
+  GITHUB_CREDENTIAL_SOURCE_TOKEN_REF = 3;
+}
+
+enum GithubSecretStore {
+  GITHUB_SECRET_STORE_UNSPECIFIED = 0;
+  // No secret at rest: the gh CLI source keeps the token in memory only.
+  GITHUB_SECRET_STORE_NONE = 1;
+  GITHUB_SECRET_STORE_OS_KEYCHAIN = 2;
+  // Degraded 0600 file fallback where no OS keychain is available. Reported so
+  // the user sees the weaker protection instead of assuming a keychain.
+  GITHUB_SECRET_STORE_FILE_FALLBACK = 3;
+}
+
+// Never contains a token. `account_login` and `token_scopes` come from a
+// verification request and describe what the stored credential can do.
+message GithubCredentialStatus {
+  GithubCredentialSource source = 1;
+  GithubSecretStore store = 2;
+  // True when the Host can produce a token for a request right now.
+  bool available = 3;
+  // The exact API base every request for this Host is sent to.
+  string api_base = 4;
+  // True when api_base is not the public service, so enterprise repositories
+  // are never resolved against api.github.com.
+  bool enterprise = 5;
+  string account_login = 6;
+  repeated string token_scopes = 7;
+  int64 checked_at_unix_ms = 8;
+  // Stable machine code when unavailable; never raw transport output.
+  string reason_code = 9;
+  uint64 revision = 10;
+}
+
+message GetGithubCredentialRequest { CommandMeta meta = 1; }
+
+message ConfigureGithubCredentialRequest {
+  CommandMeta meta = 1;
+  GithubCredentialSource source = 2;
+  // The only field in this schema that may carry a secret, and only inbound.
+  // Required for TOKEN_REF, rejected for every other source. It is written to
+  // the OS secret store and never echoed, logged or persisted in an entity.
+  string token = 3;
+  // Optional GitHub Enterprise API base, for example
+  // https://ghe.example.com/api/v3. Empty keeps the public service.
+  string api_base = 4;
+  // Zero configures for the first time; any other value must match.
+  uint64 expected_revision = 5;
+}
+
+message RevokeGithubCredentialRequest {
+  CommandMeta meta = 1;
+  uint64 expected_revision = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Repositories
+// ---------------------------------------------------------------------------
+
+// Identifies one repository on one API base. The base travels with the
+// reference so a request can never be retargeted at a different service.
+message GithubRepositoryRef {
+  string owner = 1;
+  string name = 2;
+  string api_base = 3;
+  // Web host the remote URL named, e.g. github.com or ghe.example.com.
+  string host = 4;
+}
+
+message GithubRepository {
+  GithubRepositoryRef ref = 1;
+  int64 id = 2;
+  string default_branch = 3;
+  bool private = 4;
+  bool fork = 5;
+  bool has_issues = 6;
+  // Exactly what this repository allows, from the remote. The panel offers no
+  // strategy the repository has not enabled.
+  repeated GithubMergeMethod allowed_merge_methods = 7;
+  // Viewer permission as the remote reports it: read/triage/write/maintain/admin.
+  string permission = 8;
+  int64 observed_at_unix_ms = 9;
+}
+
+message ResolveGithubRepositoryRequest {
+  CommandMeta meta = 1;
+  // A git remote URL (https, ssh or scp-like). Parsed locally first.
+  string remote_url = 2;
+}
+
+message ResolveGithubRepositoryResponse {
+  GithubRepository repository = 1;
+  // True when the remote URL's host does not belong to the configured API base.
+  // The Host answers this instead of asking the public service about an
+  // enterprise repository, or the reverse.
+  bool host_mismatch = 2;
+  string reason_code = 3;
+  GithubRateLimit rate_limit = 4;
+}
+
+// Secondary-rate-limit and quota headers as observed, so the panel can say why
+// a refresh is being held back rather than looking broken.
+message GithubRateLimit {
+  int64 limit = 1;
+  int64 remaining = 2;
+  int64 resets_at_unix_ms = 3;
+  // True when the Host is deliberately deferring requests after a 403/429.
+  bool throttled = 4;
+  int64 retry_after_unix_ms = 5;
+}
+
+// ---------------------------------------------------------------------------
+// Issues
+// ---------------------------------------------------------------------------
+
+enum GithubIssueState {
+  GITHUB_ISSUE_STATE_UNSPECIFIED = 0;
+  GITHUB_ISSUE_STATE_OPEN = 1;
+  GITHUB_ISSUE_STATE_CLOSED = 2;
+}
+
+enum GithubIssueStateReason {
+  GITHUB_ISSUE_STATE_REASON_UNSPECIFIED = 0;
+  GITHUB_ISSUE_STATE_REASON_COMPLETED = 1;
+  GITHUB_ISSUE_STATE_REASON_NOT_PLANNED = 2;
+  GITHUB_ISSUE_STATE_REASON_REOPENED = 3;
+  GITHUB_ISSUE_STATE_REASON_DUPLICATE = 4;
+}
+
+message GithubUser {
+  string login = 1;
+  int64 id = 2;
+}
+
+message GithubLabel {
+  string name = 1;
+  string color = 2;
+}
+
+message GithubMilestone {
+  int64 number = 1;
+  string title = 2;
+}
+
+message GithubIssue {
+  GithubRepositoryRef repository = 1;
+  int64 number = 2;
+  int64 id = 3;
+  string title = 4;
+  // External content. Rendered as material, never as an instruction.
+  string body = 5;
+  GithubIssueState state = 6;
+  GithubIssueStateReason state_reason = 7;
+  GithubUser author = 8;
+  repeated GithubUser assignees = 9;
+  repeated GithubLabel labels = 10;
+  GithubMilestone milestone = 11;
+  int64 comment_count = 12;
+  int64 created_at_unix_ms = 13;
+  int64 updated_at_unix_ms = 14;
+  int64 closed_at_unix_ms = 15;
+  string html_url = 16;
+  // Status group this issue currently maps to, empty when unmapped.
+  string status_group_id = 17;
+  // Set when more than one configured rule matched. The panel shows the
+  // conflict rather than picking a winner.
+  bool status_conflict = 18;
+  // When this record was actually read from the remote, so a cached list can
+  // say how old it is instead of pretending to be live.
+  int64 observed_at_unix_ms = 19;
+}
+
+message GithubComment {
+  int64 id = 1;
+  GithubUser author = 2;
+  string body = 3;
+  int64 created_at_unix_ms = 4;
+  int64 updated_at_unix_ms = 5;
+  string html_url = 6;
+}
+
+message GithubIssueFilter {
+  // UNSPECIFIED lists every state.
+  GithubIssueState state = 1;
+  repeated string labels = 2;
+  string assignee = 3;
+  string author = 4;
+  int64 milestone_number = 5;
+  string query = 6;
+}
+
+message ListGithubIssuesRequest {
+  CommandMeta meta = 1;
+  GithubRepositoryRef repository = 2;
+  GithubIssueFilter filter = 3;
+  // Opaque Host cursor. Never a raw remote URL.
+  string after_cursor = 4;
+  uint32 limit = 5;
+}
+
+message ListGithubIssuesResponse {
+  // Pull requests are filtered out; this list contains issues only.
+  repeated GithubIssue issues = 1;
+  string next_cursor = 2;
+  bool has_more = 3;
+  GithubRateLimit rate_limit = 4;
+  // True when a conditional request matched and the stored records were served.
+  bool from_cache = 5;
+  int64 observed_at_unix_ms = 6;
+  // How long the client should wait before polling again. This deployment has
+  // no webhook, so the interval is the Host's, not the panel's guess.
+  int64 poll_interval_ms = 7;
+}
+
+message GetGithubIssueRequest {
+  CommandMeta meta = 1;
+  GithubRepositoryRef repository = 2;
+  int64 number = 3;
+}
+
+message GetGithubIssueResponse {
+  GithubIssue issue = 1;
+  repeated GithubComment comments = 2;
+  repeated GithubExternalReference references = 3;
+  GithubRateLimit rate_limit = 4;
+  int64 poll_interval_ms = 5;
+}
+
+message CreateGithubIssueRequest {
+  CommandMeta meta = 1;
+  GithubRepositoryRef repository = 2;
+  string title = 3;
+  string body = 4;
+  repeated string labels = 5;
+  repeated string assignees = 6;
+  int64 milestone_number = 7;
+}
+
+// Only the present fields are written. Labels and assignees replace the whole
+// set when their replace flag is set; otherwise they are left untouched, so an
+// edit never silently drops what another tool added.
+message GithubIssuePatch {
+  optional string title = 1;
+  optional string body = 2;
+  bool replace_labels = 3;
+  repeated string labels = 4;
+  bool replace_assignees = 5;
+  repeated string assignees = 6;
+  optional int64 milestone_number = 7;
+}
+
+message UpdateGithubIssueRequest {
+  CommandMeta meta = 1;
+  GithubRepositoryRef repository = 2;
+  int64 number = 3;
+  GithubIssuePatch patch = 4;
+  // The updated_at the panel displayed. GitHub has no atomic version lock, so
+  // the Host re-reads before writing and refuses when the remote moved on.
+  int64 expected_updated_at_unix_ms = 5;
+}
+
+// Closing an Issue and moving it to a Done group are separate actions. This
+// one only changes the GitHub issue state.
+message SetGithubIssueStateRequest {
+  CommandMeta meta = 1;
+  GithubRepositoryRef repository = 2;
+  int64 number = 3;
+  GithubIssueState state = 4;
+  GithubIssueStateReason reason = 5;
+  int64 expected_updated_at_unix_ms = 6;
+}
+
+message CommentGithubIssueRequest {
+  CommandMeta meta = 1;
+  GithubRepositoryRef repository = 2;
+  int64 number = 3;
+  string body = 4;
+}
+
+// ---------------------------------------------------------------------------
+// Status mapping (design §7.2)
+// ---------------------------------------------------------------------------
+
+enum GithubStatusSource {
+  GITHUB_STATUS_SOURCE_UNSPECIFIED = 0;
+  GITHUB_STATUS_SOURCE_NONE = 1;
+  // Exact label names map to groups.
+  GITHUB_STATUS_SOURCE_LABEL = 2;
+  // A Projects v2 Status field's option IDs map to groups.
+  GITHUB_STATUS_SOURCE_PROJECT_FIELD = 3;
+}
+
+message GithubStatusGroup {
+  // Stable local identifier, used by MoveGithubIssue.
+  string id = 1;
+  string title = 2;
+  // Exact label name for LABEL mapping.
+  string label = 3;
+  // Projects v2 Status option ID for PROJECT_FIELD mapping.
+  string project_option_id = 4;
+  // Optional coupled Issue state, applied only because the user configured it.
+  GithubIssueState couples_issue_state = 5;
+}
+
+// The reverse coupling: an observed Issue state selects a group. Configuring
+// both directions can describe a loop, which the Host refuses.
+message GithubStateCoupling {
+  GithubIssueState state = 1;
+  string group_id = 2;
+}
+
+message GithubStatusMapping {
+  GithubRepositoryRef repository = 1;
+  // Exactly one primary source per repository.
+  GithubStatusSource source = 2;
+  // Projects v2 node IDs, required by PROJECT_FIELD.
+  string project_id = 3;
+  string project_field_id = 4;
+  repeated GithubStatusGroup groups = 5;
+  repeated GithubStateCoupling state_groups = 6;
+  uint64 revision = 7;
+  int64 updated_at_unix_ms = 8;
+}
+
+message GetGithubStatusMappingRequest {
+  CommandMeta meta = 1;
+  GithubRepositoryRef repository = 2;
+}
+
+message PutGithubStatusMappingRequest {
+  CommandMeta meta = 1;
+  GithubStatusMapping mapping = 2;
+  uint64 expected_revision = 3;
+}
+
+enum GithubWriteState {
+  GITHUB_WRITE_STATE_UNSPECIFIED = 0;
+  GITHUB_WRITE_STATE_APPLIED = 1;
+  // Sent, but the result was never read. Never displayed as success.
+  GITHUB_WRITE_STATE_PENDING = 2;
+  GITHUB_WRITE_STATE_FAILED = 3;
+  // The remote moved between the read and the write.
+  GITHUB_WRITE_STATE_CONFLICTED = 4;
+  GITHUB_WRITE_STATE_SKIPPED = 5;
+}
+
+// One write in a combined move, reported on its own so a partly applied
+// combination is visible and repairable instead of averaged into "failed".
+message GithubWriteOutcome {
+  string action_id = 1;
+  // Machine target name: "labels", "project_field" or "issue_state".
+  string target = 2;
+  GithubWriteState state = 3;
+  string reason_code = 4;
+  string previous_value = 5;
+  string requested_value = 6;
+}
+
+// Moves an Issue between status groups through the configured mapping. Label
+// moves only touch the labels this mapping manages; every other label is left
+// exactly as it was.
+message MoveGithubIssueRequest {
+  CommandMeta meta = 1;
+  GithubRepositoryRef repository = 2;
+  int64 number = 3;
+  string to_group_id = 4;
+  // The group the panel displayed, so a stale move is refused.
+  string from_group_id = 5;
+  int64 expected_updated_at_unix_ms = 6;
+  uint64 expected_mapping_revision = 7;
+}
+
+message MoveGithubIssueResponse {
+  GithubIssue issue = 1;
+  repeated GithubWriteOutcome outcomes = 2;
+  GithubRateLimit rate_limit = 3;
+}
+
+// ---------------------------------------------------------------------------
+// Pull requests (design §8)
+// ---------------------------------------------------------------------------
+
+enum GithubPullState {
+  GITHUB_PULL_STATE_UNSPECIFIED = 0;
+  GITHUB_PULL_STATE_OPEN = 1;
+  GITHUB_PULL_STATE_CLOSED = 2;
+  GITHUB_PULL_STATE_MERGED = 3;
+}
+
+enum GithubMergeMethod {
+  GITHUB_MERGE_METHOD_UNSPECIFIED = 0;
+  GITHUB_MERGE_METHOD_MERGE = 1;
+  GITHUB_MERGE_METHOD_SQUASH = 2;
+  GITHUB_MERGE_METHOD_REBASE = 3;
+}
+
+enum GithubMergeableState {
+  GITHUB_MERGEABLE_STATE_UNSPECIFIED = 0;
+  // The remote has not computed it yet. Never rendered as "ready".
+  GITHUB_MERGEABLE_STATE_UNKNOWN = 1;
+  GITHUB_MERGEABLE_STATE_MERGEABLE = 2;
+  GITHUB_MERGEABLE_STATE_CONFLICTING = 3;
+  // Protection rules, review requirements or a merge queue are holding it.
+  GITHUB_MERGEABLE_STATE_BLOCKED = 4;
+}
+
+enum GithubCheckConclusion {
+  GITHUB_CHECK_CONCLUSION_UNSPECIFIED = 0;
+  GITHUB_CHECK_CONCLUSION_PENDING = 1;
+  GITHUB_CHECK_CONCLUSION_SUCCESS = 2;
+  GITHUB_CHECK_CONCLUSION_FAILURE = 3;
+  GITHUB_CHECK_CONCLUSION_NEUTRAL = 4;
+  GITHUB_CHECK_CONCLUSION_CANCELLED = 5;
+  GITHUB_CHECK_CONCLUSION_SKIPPED = 6;
+  GITHUB_CHECK_CONCLUSION_TIMED_OUT = 7;
+  GITHUB_CHECK_CONCLUSION_ACTION_REQUIRED = 8;
+  GITHUB_CHECK_CONCLUSION_STALE = 9;
+}
+
+message GithubCheckRun {
+  string name = 1;
+  string app = 2;
+  GithubCheckConclusion conclusion = 3;
+  string details_url = 4;
+  int64 started_at_unix_ms = 5;
+  int64 completed_at_unix_ms = 6;
+  // Only set when the remote actually exposes a rerun for this run. Not every
+  // check can be restarted, and the panel must not pretend otherwise.
+  bool rerunnable = 7;
+  int64 workflow_run_id = 8;
+}
+
+message GithubCheckSummary {
+  // The commit these checks describe. A rollup for a different SHA is not an
+  // answer about this head.
+  string head_sha = 1;
+  repeated GithubCheckRun runs = 2;
+  GithubCheckConclusion rollup = 3;
+  int64 observed_at_unix_ms = 4;
+}
+
+enum GithubReviewState {
+  GITHUB_REVIEW_STATE_UNSPECIFIED = 0;
+  GITHUB_REVIEW_STATE_COMMENTED = 1;
+  GITHUB_REVIEW_STATE_APPROVED = 2;
+  GITHUB_REVIEW_STATE_CHANGES_REQUESTED = 3;
+  GITHUB_REVIEW_STATE_DISMISSED = 4;
+  GITHUB_REVIEW_STATE_PENDING = 5;
+}
+
+message GithubReview {
+  int64 id = 1;
+  GithubUser author = 2;
+  GithubReviewState state = 3;
+  string body = 4;
+  string commit_sha = 5;
+  int64 submitted_at_unix_ms = 6;
+}
+
+message GithubReviewComment {
+  int64 id = 1;
+  GithubUser author = 2;
+  string body = 3;
+  string path = 4;
+  // The commit the comment was anchored to, kept so an outdated position is
+  // recognisable instead of silently redrawn on the wrong line.
+  string commit_sha = 5;
+  int64 line = 6;
+  // "LEFT" or "RIGHT".
+  string side = 7;
+  bool outdated = 8;
+  int64 created_at_unix_ms = 9;
+}
+
+message GithubPullFile {
+  string path = 1;
+  string previous_path = 2;
+  // added / removed / modified / renamed / copied / changed / unchanged
+  string status = 3;
+  int64 additions = 4;
+  int64 deletions = 5;
+  bool binary = 6;
+}
+
+message GithubPullRequest {
+  GithubRepositoryRef repository = 1;
+  int64 number = 2;
+  int64 id = 3;
+  string title = 4;
+  // External content, as with Issue bodies.
+  string body = 5;
+  GithubPullState state = 6;
+  bool draft = 7;
+  GithubUser author = 8;
+  string base_ref = 9;
+  string head_ref = 10;
+  // The head the panel must show next to a merge button and send back with it.
+  string head_sha = 11;
+  string head_repo_full_name = 12;
+  bool from_fork = 13;
+  GithubMergeableState mergeable = 14;
+  repeated GithubMergeMethod allowed_merge_methods = 15;
+  int64 additions = 16;
+  int64 deletions = 17;
+  int64 changed_files = 18;
+  int64 commits = 19;
+  repeated GithubUser requested_reviewers = 20;
+  repeated GithubLabel labels = 21;
+  int64 created_at_unix_ms = 22;
+  int64 updated_at_unix_ms = 23;
+  int64 merged_at_unix_ms = 24;
+  int64 closed_at_unix_ms = 25;
+  string html_url = 26;
+  int64 observed_at_unix_ms = 27;
+}
+
+message GithubPullFilter {
+  GithubPullState state = 1;
+  string author = 2;
+  string base_ref = 3;
+  string review_requested = 4;
+  // Draft-only when set; UNSPECIFIED leaves drafts in the listing.
+  bool draft_only = 5;
+}
+
+message ListGithubPullsRequest {
+  CommandMeta meta = 1;
+  GithubRepositoryRef repository = 2;
+  GithubPullFilter filter = 3;
+  string after_cursor = 4;
+  uint32 limit = 5;
+}
+
+message ListGithubPullsResponse {
+  repeated GithubPullRequest pulls = 1;
+  string next_cursor = 2;
+  bool has_more = 3;
+  GithubRateLimit rate_limit = 4;
+  bool from_cache = 5;
+  int64 observed_at_unix_ms = 6;
+  int64 poll_interval_ms = 7;
+}
+
+message GetGithubPullRequest {
+  CommandMeta meta = 1;
+  GithubRepositoryRef repository = 2;
+  int64 number = 3;
+}
+
+message GetGithubPullResponse {
+  GithubPullRequest pull = 1;
+  repeated GithubPullFile files = 2;
+  repeated GithubReview reviews = 3;
+  repeated GithubReviewComment review_comments = 4;
+  repeated GithubComment comments = 5;
+  GithubCheckSummary checks = 6;
+  repeated GithubExternalReference references = 7;
+  GithubRateLimit rate_limit = 8;
+  int64 poll_interval_ms = 9;
+}
+
+message CreateGithubPullRequest {
+  CommandMeta meta = 1;
+  GithubRepositoryRef repository = 2;
+  string base_ref = 3;
+  string head_ref = 4;
+  string title = 5;
+  string body = 6;
+  bool draft = 7;
+  // Optional Issue this PR closes. Recorded as a reference as well as text.
+  int64 linked_issue_number = 8;
+  // The local head the user believes is pushed. The Host checks the remote ref
+  // first and refuses when the branch is missing or points elsewhere.
+  string expected_head_sha = 9;
+}
+
+message GithubReviewCommentDraft {
+  string path = 1;
+  int64 line = 2;
+  // "LEFT" or "RIGHT".
+  string side = 3;
+  string body = 4;
+}
+
+message SubmitGithubReviewRequest {
+  CommandMeta meta = 1;
+  GithubRepositoryRef repository = 2;
+  int64 number = 3;
+  // The commit the reviewer actually read. Inline comments are anchored here.
+  string commit_sha = 4;
+  GithubReviewState state = 5;
+  string body = 6;
+  repeated GithubReviewCommentDraft comments = 7;
+}
+
+message GetGithubChecksRequest {
+  CommandMeta meta = 1;
+  GithubRepositoryRef repository = 2;
+  int64 number = 3;
+}
+
+message MergeGithubPullRequest {
+  CommandMeta meta = 1;
+  GithubRepositoryRef repository = 2;
+  int64 number = 3;
+  // Required. The Host re-reads the pull request and refuses to merge when the
+  // head has moved since the panel displayed it.
+  string expected_head_sha = 4;
+  GithubMergeMethod method = 5;
+  string commit_title = 6;
+  string commit_message = 7;
+  // The check rollup the user saw. UNSPECIFIED means the user was not shown
+  // one; any other value is re-read and must still match.
+  GithubCheckConclusion expected_check_rollup = 8;
+}
+
+message MergeGithubPullResponse {
+  bool merged = 1;
+  string merge_sha = 2;
+  // Machine code when not merged: HEAD_MOVED, CHECKS_CHANGED, BLOCKED,
+  // METHOD_NOT_ALLOWED, NOT_MERGEABLE, UNKNOWN_OUTCOME.
+  string reason_code = 3;
+  GithubPullRequest pull = 4;
+  GithubCheckSummary checks = 5;
+}
+
+// ---------------------------------------------------------------------------
+// External references (design §7.1 / §10)
+// ---------------------------------------------------------------------------
+
+enum GithubReferenceKind {
+  GITHUB_REFERENCE_KIND_UNSPECIFIED = 0;
+  GITHUB_REFERENCE_KIND_ISSUE = 1;
+  GITHUB_REFERENCE_KIND_PULL_REQUEST = 2;
+}
+
+enum GithubReferenceTargetKind {
+  GITHUB_REFERENCE_TARGET_KIND_UNSPECIFIED = 0;
+  GITHUB_REFERENCE_TARGET_KIND_SESSION = 1;
+  GITHUB_REFERENCE_TARGET_KIND_BRANCH = 2;
+  GITHUB_REFERENCE_TARGET_KIND_WORKTREE = 3;
+}
+
+// Links one Issue or Pull request to one local session, branch or worktree.
+// A reference is a badge and a way back, not a task card: it never turns a
+// session into a GitHub object or the reverse.
+message GithubExternalReference {
+  string reference_id = 1;
+  string workspace_id = 2;
+  GithubRepositoryRef repository = 3;
+  GithubReferenceKind kind = 4;
+  int64 number = 5;
+  GithubReferenceTargetKind target_kind = 6;
+  // Session/node id, branch name or worktree id, by target_kind.
+  string target_id = 7;
+  // Last observed remote title, so a badge reads correctly offline.
+  string title = 8;
+  uint64 revision = 9;
+  int64 created_at_unix_ms = 10;
+  int64 updated_at_unix_ms = 11;
+}
+
+message LinkGithubReferenceRequest {
+  CommandMeta meta = 1;
+  GithubExternalReference reference = 2;
+  // Zero creates; any other value must equal the stored revision.
+  uint64 expected_revision = 3;
+}
+
+message UnlinkGithubReferenceRequest {
+  CommandMeta meta = 1;
+  string reference_id = 2;
+  uint64 expected_revision = 3;
+}
+
+message UnlinkGithubReferenceResponse {
+  string reference_id = 1;
+  bool unlinked = 2;
+}
+
+message ListGithubReferencesRequest {
+  CommandMeta meta = 1;
+  // Empty lists every reference in the workspace.
+  string target_id = 2;
+  string after_id = 3;
+  uint32 limit = 4;
+}
+
+message ListGithubReferencesResponse {
+  repeated GithubExternalReference references = 1;
+  string next_id = 2;
+  bool has_more = 3;
+}
