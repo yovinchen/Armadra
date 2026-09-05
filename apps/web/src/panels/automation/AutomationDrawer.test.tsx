@@ -134,7 +134,7 @@ beforeEach(() => {
   store.removeNodes.mockClear();
   session.connect.mockClear();
   session.state = { status: "idle" };
-  useAutomationFocus.getState().focus(null);
+  useAutomationFocus.setState({ planId: null, reveal: 0 });
 });
 afterEach(cleanup);
 
@@ -298,6 +298,28 @@ describe("card removal", () => {
           timezone: "Asia/Shanghai",
         }),
       }),
+    );
+  });
+});
+
+describe("run history navigation", () => {
+  it("keeps a freshly created plan on the plan list", async () => {
+    const api = client();
+    ready(api);
+    renderDrawer();
+    await screen.findByText("每晚构建");
+    // Creating selects the plan; it must not navigate away from the list.
+    useAutomationFocus.getState().focus("plan-1");
+    await waitFor(() => expect(screen.getByText("暂停")).toBeTruthy());
+  });
+
+  it("navigates when a card explicitly asks to see the runs", async () => {
+    const api = client();
+    ready(api);
+    renderDrawer();
+    fireEvent.click(await screen.findByText("查看运行历史"));
+    await waitFor(() =>
+      expect(screen.getByText("这个计划还没有运行记录")).toBeTruthy(),
     );
   });
 });

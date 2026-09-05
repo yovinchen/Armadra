@@ -48,7 +48,9 @@ export function AutomationDrawer() {
   const nodes = useCanvasStore((state) => state.document?.nodes);
   const removeNodes = useCanvasStore((state) => state.removeNodes);
   const focusPlanId = useAutomationFocus((store) => store.planId);
+  const reveal = useAutomationFocus((store) => store.reveal);
   const focus = useAutomationFocus((store) => store.focus);
+  const revealRuns = useAutomationFocus((store) => store.revealRuns);
   const state = useAutomationSession((store) => store.state);
   const connect = useAutomationSession((store) => store.connect);
   const queryClient = useQueryClient();
@@ -60,9 +62,11 @@ export function AutomationDrawer() {
   React.useEffect(() => {
     if (open) void connect(workspaceId);
   }, [connect, open, workspaceId]);
+  // Only an explicit "show me this plan's runs" navigates; selecting a plan
+  // (creating one, say) must leave the reader where they are.
   React.useEffect(() => {
-    if (open && focusPlanId) setTab("runs");
-  }, [focusPlanId, open]);
+    if (open && reveal > 0) setTab("runs");
+  }, [open, reveal]);
 
   const client = state.status === "ready" ? state.client : null;
   const canManage = state.status === "ready" && state.canManage;
@@ -280,10 +284,7 @@ export function AutomationDrawer() {
                       onActivate={() => activate.mutate(snapshot)}
                       onPause={() => pause.mutate(snapshot)}
                       onRunNow={() => runNow.mutate(snapshot)}
-                      onViewRuns={() => {
-                        focus(snapshot.plan?.id ?? null);
-                        setTab("runs");
-                      }}
+                      onViewRuns={() => revealRuns(snapshot.plan?.id ?? "")}
                       onShowOnCanvas={() => showOnCanvas(snapshot)}
                       onDetach={() => {
                         const card = cardFor(snapshot.plan?.id ?? "");
