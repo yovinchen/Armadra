@@ -125,7 +125,19 @@ RSS 树汇总标记为估计，多个进程共享页可能重复计算，不称�
 
 孤立会话按两类列出：有行无节点（可认领）与有 tmux 会话无行（只能终止）。认领由 Runtime 把行绑回并回传应使用的 `nodeId`——即会话自己的 key，前端用它建节点，恢复出来的节点拥有的仍是原进程。
 
-未实现：平台组件自身占用（Host / Worker / Session Host / Browser Worker 分项）、多执行主机筛选与远端一轮读取、按 PID + startTime 去重、内存 pressure、进程树展开视图。SSH 会话标为 `remote`、指标 unknown，不用控制机数据冒充远端。
+未实现：多执行主机筛选与远端一轮读取、内存 pressure。SSH 会话标为 `remote`、指标 unknown，不用控制机数据冒充远端。
+
+### 8.2 实现状态（§4.3 补齐，M7）
+
+平台组件在 `apps/runtime/src/resources/platform.rs`，与用户会话分开成一组：Runtime 是本进程，Go Host 是祖先或同一父进程下的兄弟进程，命令 Worker 是二者之中任一个用本可执行文件启动的子进程。发现只按相对本进程的位置，不扫描全机同名进程，所以另一份安装、另一个用户的 Armadra 都不会被认领；从 shell 直接起的 Runtime 就是没有 Host，如实报告而不猜一个。Runtime 那一行只算自己——它的子进程正是用户会话，加进来等于把 Agent 数两遍；命令 Worker 算整棵树，`tree` 字段写明是哪一种。Session Host 与 Browser Worker 尚不存在，因此没有对应行。
+
+每个被测进程带 `startTime`，会话行与组件行都按 `(pid, startTime)` 去重，PID 复用不会把两个进程并成一个。会话额外回占用最高的至多 32 个子进程供面板展开，`childCount` 仍是真实总数——空列表配非零计数表示「没列出来」，不是「没有」。进程只有可执行文件名、pid 和两个数字，不含命令行。
+
+采样节奏由订阅方提出：`POST …/resources/subscription` 接受 `intervalMs`，夹在 `[resources.intervalMs, 60s]`，采样循环按所有存活订阅里最快的一档跑。离屏（折叠、滚出视口或窗口在后台）的终端节点徽标要 30 秒，面板或任何一个可见徽标把大家拉回设置里的那档；订阅回执同时给自己的续约间隔与当前生效间隔。
+
+终端节点头部内存徽标见 `apps/web/src/panels/resources/MemoryBadge.tsx`：显示进程树 RSS 之和（标为估计），测不出来显示 `unknown` 而非 0，超过阈值（`armadra.resources.sessionMemoryWarnBytes`，默认 2 GiB，设置 → 终端可改）变色并按 `sessionId:generation` 提醒一次。提醒只是提醒：不终止、不休眠、不压缩，面板同样只高亮不自动处置。
+
+跨端契约在 `proto/armadra/v1/resources.proto`（`SessionMetrics`、`HostMetrics`、`PlatformComponentMetrics`、Read / Subscribe），三语言契约测试与共享样例已就位；Runtime 与 Web 之间当前仍走既有 camelCase JSON 与工作空间事件流，Worker 协议尚未接线。
 
 ## 9. Agent 工作时防休眠
 
