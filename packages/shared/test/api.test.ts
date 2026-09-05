@@ -17,6 +17,7 @@ import {
   suggestTitleResponseSchema,
   terminalClientMessageSchema,
   terminalServerMessageSchema,
+  terminalSessionSchema,
   workspaceEventSchema,
   writeFileRequestSchema,
   writeFileResponseSchema,
@@ -27,6 +28,27 @@ const uuid = "019ff7d1-5c48-7d75-a0ed-64b52f44e214";
 const otherUuid = "019ff7d1-7419-74df-89e2-b1619d36ea7d";
 
 describe("runtime API v3", () => {
+  it("preserves Agent identity while accepting older terminal responses", () => {
+    const session = {
+      id: uuid,
+      workspaceId: otherUuid,
+      cwd: "/repo",
+      shell: "/bin/sh",
+      command: null,
+      status: "running",
+      exitCode: null,
+      createdAt: timestamp,
+      endedAt: null,
+    };
+    expect(terminalSessionSchema.parse(session).agentId).toBeUndefined();
+    expect(
+      terminalSessionSchema.parse({ ...session, agentId: null }).agentId,
+    ).toBeNull();
+    expect(
+      terminalSessionSchema.parse({ ...session, agentId: "custom:helper" })
+        .agentId,
+    ).toBe("custom:helper");
+  });
   it("no longer accepts strokes on a board save", () => {
     const parsed = saveBoardRequestSchema.parse({
       expectedUpdatedAt: timestamp,

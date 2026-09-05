@@ -11,6 +11,7 @@ import { t as translate, useT } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
 import { NodeShell } from "./NodeShell";
 import { NODE_META, type NodeBodyProps } from "./registry";
+import { useWorkspaceFileDrag } from "../files/use-workspace-file-drag";
 
 /** 新开的编辑器节点放在文件节点右边这么远。 */
 const SPAWN_GAP = 24;
@@ -55,6 +56,7 @@ export function FilesNode({ id, node, selected }: NodeBodyProps) {
   const data = node.data.kind === "files" ? node.data : undefined;
   const path = data?.path ?? ".";
   const workspaceId = useCanvasStore((state) => state.workspace?.id);
+  const dragProps = useWorkspaceFileDrag(workspaceId);
 
   const [entries, setEntries] = React.useState<FileEntry[] | null>(null);
   const [failed, setFailed] = React.useState(false);
@@ -66,6 +68,7 @@ export function FilesNode({ id, node, selected }: NodeBodyProps) {
   React.useEffect(() => {
     if (!workspaceId) return;
     let cancelled = false;
+    setEntries(null);
     setFailed(false);
     runtimeApi
       .listFiles(workspaceId, path)
@@ -176,9 +179,10 @@ export function FilesNode({ id, node, selected }: NodeBodyProps) {
             return (
               <Button
                 key={entry.path}
+                {...dragProps(entry)}
                 variant="ghost"
                 size="sm"
-                className="h-6 w-full justify-start gap-1.5 rounded-none px-2 font-normal"
+                className="h-6 w-full cursor-grab justify-start gap-1.5 rounded-none px-2 font-normal active:cursor-grabbing"
                 onClick={() => {
                   if (entry.kind === "directory") navigate(entry.path);
                 }}

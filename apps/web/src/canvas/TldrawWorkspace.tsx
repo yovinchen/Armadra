@@ -614,7 +614,7 @@ export function TldrawWorkspace() {
           // 自己撑满（只写 flex-1 会塌成 0 高，画布整块看不见）。
           className="canvas-stage relative h-full w-full min-h-0 min-w-0 flex-1"
           style={{ background: "var(--canvas-bg)" }}
-          onDragOver={onDragOver}
+          onDragOverCapture={onDragOver}
           onDropCapture={onDrop}
           onContextMenu={onContextMenu}
           aria-label={t("canvas.label")}

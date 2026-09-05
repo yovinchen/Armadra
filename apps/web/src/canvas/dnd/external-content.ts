@@ -24,6 +24,11 @@ import { getEditor } from "../editor-context";
 import { AssetTooLargeError, createAssetStore } from "../assets";
 import { t } from "../../app/preferences-store";
 import { useCanvasStore } from "../../store/canvas-store";
+import {
+  assertRelativeWorkspacePath,
+  FileDragError,
+  type WorkspaceDragEntry,
+} from "../../files/workspace-drag";
 
 /**
  * 外部内容分流（tldraw 计划 §4.5、§8 Phase 3 / content）。
@@ -250,7 +255,12 @@ export function captureImportTarget(): ImportTarget | null {
 
 export function importTargetIsActive(target: ImportTarget): boolean {
   const state = useCanvasStore.getState();
-  return state.workspace?.id === target.workspaceId && state.document?.board.id === target.boardId && getEditor() === target.editor;
+  return (
+    state.workspace?.id === target.workspaceId &&
+    state.document?.board.id === target.boardId &&
+    getEditor() === target.editor &&
+    target.editor?.getIsReadonly?.() !== true
+  );
 }
 
 function addImportedNode(target: ImportTarget, file: ImportedFileInfo, position: Position) {
@@ -262,6 +272,34 @@ function addImportedNode(target: ImportTarget, file: ImportedFileInfo, position:
 
 export async function addNodeForPath(path: string, position: Position): Promise<void> {
   await addNodesForPaths([path], position);
+}
+
+/** App file trees already identify the workspace and file kind. Keep those
+ * references in-place; failures never fall back to copying some external path. */
+export async function addWorkspaceEntriesToCanvas(
+  entries: readonly WorkspaceDragEntry[], position: Position,
+  target: ImportTarget | null = captureImportTarget(),
+): Promise<void> {
+  if (!target || !importTargetIsActive(target)) throw new FileDragError("fileDrag.destinationChanged");
+  if (!entries.length || entries.length > MAX_IMPORT_FILES) throw new FileDragError("fileDrag.invalidPayload");
+  for (const [index, entry] of entries.entries()) {
+    if (!importTargetIsActive(target)) return;
+    assertRelativeWorkspacePath(entry.path);
+    const point = offsetBy(position, index);
+    if (entry.kind === "directory") {
+      const directory = await runtimeApi.listFiles(target.workspaceId, entry.path);
+      assertRelativeWorkspacePath(directory.path, true);
+      if (importTargetIsActive(target)) useCanvasStore.getState().addNode("files", {
+        position: point, title: entry.name, data: { kind: "files", path: directory.path },
+      });
+    } else if (target.editor && isImagePath(entry.path)) {
+      await importImageShape(target.editor, target.workspaceId, entry.path, point, target);
+    } else {
+      const info = await runtimeApi.fileInfo(target.workspaceId, entry.path);
+      assertRelativeWorkspacePath(info.path);
+      addImportedNode(target, info, point);
+    }
+  }
 }
 
 export async function addNodesForPaths(paths: readonly string[], position: Position): Promise<void> {

@@ -3,7 +3,22 @@ import { useCallback, useEffect, type DragEvent } from "react";
 import { onFileDrop } from "../../platform";
 import { useCanvasStore } from "../../store/canvas-store";
 import { getEditor, screenToPage } from "../editor-context";
-import { addBrowserFiles, addNodesForPaths, captureImportTarget } from "./external-content";
+import {
+  addBrowserFiles,
+  addNodesForPaths,
+  addWorkspaceEntriesToCanvas,
+  captureImportTarget,
+} from "./external-content";
+import { RUNTIME_URL } from "../../api/client";
+import { isCanvasLocked } from "../canvas-lock";
+import {
+  assertDragScope,
+  hasWorkspaceFileDrag,
+  readWorkspaceFileDrag,
+  fileDragMessage,
+  WORKSPACE_FILE_DROP_EVENT,
+  type WorkspaceFileDropDetail,
+} from "../../files/workspace-drag";
 import { toast } from "sonner";
 import { t } from "../../app/preferences-store";
 
@@ -34,14 +49,54 @@ export function useOsDrop(): OsDropHandlers {
     () =>
       onFileDrop((paths, point) => {
         if (!useCanvasStore.getState().document) return;
+        if (isTerminalDropTarget(document.elementFromPoint(point.x, point.y))) {
+          toast.error(t("fileDrag.externalPathUnavailable"));
+          return;
+        }
         if (!isCanvasDropPoint(point)) return;
         void addNodesForPaths(paths, screenToPage(point));
       }),
     [],
   );
 
+  // Windows Tauri's pointer fallback dispatches this after hit-testing. A
+  // terminal consumes it first; only an unconsumed canvas destination arrives.
+  useEffect(() => {
+    const dropped = (event: Event) => {
+      if (!(event instanceof CustomEvent) || isTerminalDropTarget(event.target))
+        return;
+      if (
+        !(event.target instanceof Element) ||
+        !event.target.closest(".canvas-stage") ||
+        isTextEntry(event.target)
+      )
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      const detail = event.detail as WorkspaceFileDropDetail;
+      if (
+        !detail?.point ||
+        !Number.isFinite(detail.point.x) ||
+        !Number.isFinite(detail.point.y)
+      )
+        return;
+      importWorkspaceDrop(
+        { getData: () => JSON.stringify(detail.drag) },
+        detail.point,
+      );
+    };
+    document.addEventListener(WORKSPACE_FILE_DROP_EVENT, dropped);
+    return () =>
+      document.removeEventListener(WORKSPACE_FILE_DROP_EVENT, dropped);
+  }, []);
+
   const onDragOver = useCallback((event: DragEvent<HTMLElement>) => {
-    if (!Array.from(event.dataTransfer.types ?? []).includes("Files")) return;
+    if (isTerminalDropTarget(event.target)) return;
+    if (
+      !hasWorkspaceFileDrag(event.dataTransfer) &&
+      !Array.from(event.dataTransfer.types ?? []).includes("Files")
+    )
+      return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
   }, []);
@@ -51,11 +106,26 @@ export function useOsDrop(): OsDropHandlers {
    * 所以这里只会收到落在画布容器**外面**的那些。
    */
   const onDrop = useCallback((event: DragEvent<HTMLElement>) => {
+    if (isTerminalDropTarget(event.target)) return;
+    if (hasWorkspaceFileDrag(event.dataTransfer)) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (isTextEntry(event.target)) return;
+      importWorkspaceDrop(event.dataTransfer, {
+        x: event.clientX,
+        y: event.clientY,
+      });
+      return;
+    }
     if (!Array.from(event.dataTransfer.types ?? []).includes("Files")) return;
     event.preventDefault();
     event.stopPropagation();
     if (isTextEntry(event.target)) return;
-    if (Array.from(event.dataTransfer.items ?? []).some((item) => item.webkitGetAsEntry?.()?.isDirectory)) {
+    if (
+      Array.from(event.dataTransfer.items ?? []).some(
+        (item) => item.webkitGetAsEntry?.()?.isDirectory,
+      )
+    ) {
       toast.error(t("canvas.importFolderUnsupported"));
       return;
     }
@@ -72,10 +142,45 @@ export function useOsDrop(): OsDropHandlers {
   return { onDragOver, onDrop };
 }
 
+function importWorkspaceDrop(
+  transfer: Pick<DataTransfer, "getData">,
+  point: { x: number; y: number },
+) {
+  try {
+    const drag = readWorkspaceFileDrag(transfer);
+    const target = captureImportTarget();
+    if (!target) return;
+    assertDragScope(drag, RUNTIME_URL, target.workspaceId);
+    if (isCanvasLocked()) {
+      toast.error(t("fileDrag.canvasLocked"));
+      return;
+    }
+    void addWorkspaceEntriesToCanvas(
+      drag.entries,
+      screenToPage(point),
+      target,
+    ).catch((error: unknown) => toast.error(t(fileDragMessage(error))));
+  } catch (error) {
+    toast.error(t(fileDragMessage(error)));
+  }
+}
+
+export function isTerminalDropTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    Boolean(target.closest("[data-slot='terminal-body'], .xterm"))
+  );
+}
+
 /** OS events are window-wide. Sidebar/dialog drops do not belong to a board. */
 export function isCanvasDropPoint(point: { x: number; y: number }): boolean {
   const target = document.elementFromPoint(point.x, point.y);
-  return Boolean(target?.closest(".canvas-stage")) && !target?.closest("[role='dialog'], [role='menu'], input, textarea, .xterm");
+  return (
+    Boolean(target?.closest(".canvas-stage")) &&
+    !target?.closest(
+      "[role='dialog'], [role='menu'], input, textarea, .xterm, [data-slot='terminal-body']",
+    )
+  );
 }
 
 /* --------------------------------- 粘贴 ----------------------------------- */

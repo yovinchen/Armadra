@@ -12,6 +12,7 @@ import { sessions } from "./sessions";
 import { shell } from "./shell";
 import { ssh } from "./ssh";
 import { host } from "./host";
+import { fileDrag } from "./file-drag";
 import { terminal } from "./terminal";
 import { usage } from "./usage";
 
@@ -42,6 +43,7 @@ export const MESSAGE_MODULES = {
   sessions,
   ssh,
   host,
+  "file-drag": fileDrag,
   explorer,
   modals,
   commands,

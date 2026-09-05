@@ -33,6 +33,23 @@ UI 使用现有 shadcn/Radix 原语组织工具栏、菜单、Sheet、Dialog、T
 
 建议组件：`DocumentController`、`EditorToolbar`、`CodeEditorSurface`、`MarkdownPreview`、`ProjectSearchPanel`、`ProblemsPanel`、`SaveConflictDialog`、`LanguageServiceStatus`。
 
+### 2.1 文件管理器拖拽
+
+左侧文件树和 Files 节点使用同一文件引用，包含协议版本、Runtime/Host 来源、工作空间和规范化相对路径。内部拖拽传递文件引用；打开预览复用项目中的文件，不把一次拖动变成重复导入。
+
+| 落点 | 行为 |
+| --- | --- |
+| 普通终端 | 核对当前会话、generation、工作空间及 shell，插入经过引用的文件路径；不附加回车 |
+| Agent 终端 | 插入供提示词引用的路径文本，保留会话身份检查；不自动运行文件或执行命令 |
+| 画布 | 在落点打开文本预览、图片或文件管理节点，复用现有预览/资产入口 |
+| 输入框、对话框、其他项目或不明执行位置 | 保持原输入语义或明确拒绝，不猜测远端路径、不创建错误画布节点 |
+
+终端拒绝含控制字符的路径；POSIX、PowerShell 和 CMD 使用各自规则，无法可靠表示的路径报告原因。拖动期间切换画布或重启会话后，过期的异步结果不再插入。
+
+浏览器的外部 File 对象不包含可信绝对路径，不能拿文件名或 fakepath 冒充终端位置。已有外部文件到画布的导入继续使用原流程。Tauri Windows 的原生拖放处理会替换 WebView2 的 HTML5 处理器，因此内部拖拽需要指针事件适配，同时保留系统文件导入；参见 [Tauri 拖放配置](https://v2.tauri.app/reference/config/#dragdropenabled)。
+
+指针适配有启动阈值、落点反馈及取消/失焦/卸载清理。一次拖动只能由一个落点消费；终端接收后不能再触发画布预览，取消拖动也不能触发文件点击动作。
+
 ## 3. 文档、保存与外部变更
 
 `DocumentId = executionHostId + workspaceId + normalizedRelativePath`。状态包含 baseVersion、baseHash、draftRevision、encoding、eol、dirty、externalVersion、readOnlyReason。编辑器视图 ID 与文档 ID 分开，两个节点打开同文件共享本设备草稿，避免互相覆盖。

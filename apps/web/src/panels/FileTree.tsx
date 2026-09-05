@@ -33,6 +33,7 @@ import {
 } from "../ui/context-menu";
 import { IconButton } from "../ui/icon-button";
 import { currentViewportCenter } from "./viewport";
+import { useWorkspaceFileDrag } from "../files/use-workspace-file-drag";
 
 /** 从不值得浏览的目录，Runtime 也已经隐藏了一部分。 */
 const IGNORED = new Set([".git", "node_modules", "target", "dist"]);
@@ -181,6 +182,7 @@ function Row({
   const t = useT();
   const addNode = useCanvasStore((state) => state.addNode);
   const [open, setOpen] = useState(false);
+  const dragProps = useWorkspaceFileDrag(workspaceId);
 
   const directory = entry.kind === "directory";
   const image = !directory && IMAGE_EXTENSIONS.test(entry.name);
@@ -200,6 +202,7 @@ function Row({
 
   const row = (
     <Button
+      {...dragProps(entry)}
       variant="ghost"
       size="sm"
       role="treeitem"
@@ -212,7 +215,7 @@ function Row({
       title={entry.path}
       style={indent(depth)}
       className={cn(
-        "h-7 w-full justify-start gap-1.5 rounded-md pr-2 font-normal",
+        "h-7 w-full cursor-grab justify-start gap-1.5 rounded-md pr-2 font-normal active:cursor-grabbing",
         badge && "text-foreground",
       )}
       onClick={activate}

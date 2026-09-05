@@ -34,11 +34,13 @@ vi.mock("@/store/canvas-store", () => {
 });
 
 vi.mock("@/api/client", () => ({
+  RUNTIME_URL: "http://runtime",
   runtimeApi: api,
   terminalWebSocketUrl: (id: string) => `ws://x/${id}`,
 }));
 
 import { breadcrumbs, FilesNode } from "./FilesNode";
+import { WORKSPACE_FILES_MIME } from "../files/workspace-drag";
 
 const node = {
   id: "f1",
@@ -95,6 +97,30 @@ describe("breadcrumbs", () => {
 });
 
 describe("FilesNode", () => {
+  it("starts an internal file drag without opening an editor", async () => {
+    api.listFiles.mockResolvedValue({
+      path: "src",
+      truncated: false,
+      entries: [
+        {
+          name: "a.ts",
+          path: "src/a.ts",
+          kind: "file",
+          size: 1,
+          readonly: false,
+        },
+      ],
+    });
+    renderFiles();
+    const file = await screen.findByRole("button", { name: "a.ts" });
+    const transfer = { effectAllowed: "none", setData: vi.fn() };
+    fireEvent.dragStart(file, { dataTransfer: transfer });
+    expect(transfer.setData).toHaveBeenCalledWith(
+      WORKSPACE_FILES_MIME,
+      expect.stringContaining('"workspaceId":"w1"'),
+    );
+    expect(store.addNode).not.toHaveBeenCalled();
+  });
   it("lists directories before files and navigates on click", async () => {
     api.listFiles.mockResolvedValue({
       path: "src",

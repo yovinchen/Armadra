@@ -47,7 +47,8 @@ vi.mock("../../store/canvas-store", () => ({
   useCanvasStore: { getState: () => state },
 }));
 
-const { addNodeForPath, addBrowserFiles } = await import("./external-content");
+const { addNodeForPath, addBrowserFiles, addWorkspaceEntriesToCanvas } =
+  await import("./external-content");
 const { setEditor } = await import("../editor-context");
 
 /** `createImageShapes` 只用到这几个方法，够它跑完一整趟。 */
@@ -190,5 +191,80 @@ describe("browser file imports", () => {
     finish({ files: [{ name: file.name, path: ".armadra/imports/b/a.txt", size: 5, mimeType: file.type, preview: "text" }] });
     await pending;
     expect(addNode).not.toHaveBeenCalled();
+  });
+});
+
+describe("workspace file references", () => {
+  beforeEach(() => {
+    state.document = { board: { id: "board" } };
+    addNode.mockClear();
+    importLocalFiles.mockClear();
+    importFiles.mockClear();
+    fileInfo.mockReset();
+    listFiles.mockReset();
+    setEditor(fakeEditor() as never);
+  });
+
+  it("previews an existing file without uploading or copying it", async () => {
+    fileInfo.mockResolvedValue({
+      path: "src/a.ts",
+      name: "a.ts",
+      size: 2,
+      mimeType: "text/plain",
+      preview: "text",
+    });
+    await addWorkspaceEntriesToCanvas(
+      [{ path: "src/a.ts", name: "a.ts", kind: "file" }],
+      at,
+    );
+    expect(addNode).toHaveBeenCalledWith(
+      "editor",
+      expect.objectContaining({ data: { kind: "editor", path: "src/a.ts" } }),
+    );
+    expect(importLocalFiles).not.toHaveBeenCalled();
+    expect(importFiles).not.toHaveBeenCalled();
+  });
+
+  it("treats a directory named .png as a directory", async () => {
+    listFiles.mockResolvedValue({ path: "images.png", entries: [] });
+    await addWorkspaceEntriesToCanvas(
+      [{ path: "images.png", name: "images.png", kind: "directory" }],
+      at,
+    );
+    expect(addNode).toHaveBeenCalledWith(
+      "files",
+      expect.objectContaining({ data: { kind: "files", path: "images.png" } }),
+    );
+  });
+
+  it("does not fall back to external importing on a read failure", async () => {
+    fileInfo.mockRejectedValue(new Error("permission denied"));
+    await expect(
+      addWorkspaceEntriesToCanvas(
+        [{ path: "secret.txt", name: "secret.txt", kind: "file" }],
+        at,
+      ),
+    ).rejects.toThrow();
+    expect(importLocalFiles).not.toHaveBeenCalled();
+    expect(addNode).not.toHaveBeenCalled();
+  });
+
+  it("does not add a preview after switching boards or locking the canvas", async () => {
+    fileInfo.mockImplementation(async () => {
+      state.document = { board: { id: "changed" } };
+      return { path: "a.ts", name: "a.ts" };
+    });
+    await addWorkspaceEntriesToCanvas(
+      [{ path: "a.ts", name: "a.ts", kind: "file" }],
+      at,
+    );
+    expect(addNode).not.toHaveBeenCalled();
+    setEditor({ ...fakeEditor(), getIsReadonly: () => true } as never);
+    await expect(
+      addWorkspaceEntriesToCanvas(
+        [{ path: "a.ts", name: "a.ts", kind: "file" }],
+        at,
+      ),
+    ).rejects.toThrow();
   });
 });

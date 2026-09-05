@@ -247,7 +247,7 @@ export const createTerminalRequestSchema = z.object({
   ssh: sshTargetSchema.optional(),
 });
 
-// The runtime also emits `kind`, `ownerNodeId` and `agentId` on this payload.
+// The runtime also emits `kind` and `ownerNodeId` on this payload.
 // A non-strict z.object drops unknown keys silently. Do NOT add `.strict()`:
 // it would turn every terminal fetch into a parse error.
 export const TERMINAL_BACKENDS = ["direct", "tmux"] as const;
@@ -260,6 +260,7 @@ export const terminalSessionSchema = z.object({
   workspaceId: z.string().uuid(),
   cwd: z.string(),
   shell: z.string(),
+  agentId: z.string().nullable().optional(),
   command: z.string().nullable(),
   status: z.enum(["running", "exited", "failed", "terminated"]),
   exitCode: z.number().int().nullable(),

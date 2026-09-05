@@ -5,7 +5,21 @@ import type { SearchAddon } from "@xterm/addon-search";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import type { TerminalNodeData, TerminateMode } from "@armadra/shared";
 
-import { runtimeApi, terminalWebSocketUrl } from "@/api/client";
+import { runtimeApi, terminalWebSocketUrl, RUNTIME_URL } from "@/api/client";
+import { toast } from "sonner";
+import {
+  FileDragError,
+  fileDragMessage,
+  hasWorkspaceFileDrag,
+  readWorkspaceFileDrag,
+  WORKSPACE_FILE_DROP_EVENT,
+  type WorkspaceFileDrag,
+  type WorkspaceFileDropDetail,
+} from "@/files/workspace-drag";
+import {
+  automaticInputBlocksFileDrop,
+  pasteWorkspaceFilePaths,
+} from "./file-drop";
 import {
   t as translate,
   useT,
@@ -27,6 +41,7 @@ import {
   armPendingLaunch,
   disarmPendingLaunch,
   usePendingLaunchWatcher,
+  usePendingLaunchStore,
 } from "@/agent/pending-launch";
 import { isolateTerminalInput } from "./ime";
 import {
@@ -153,6 +168,7 @@ function TerminalSurfaceImpl({
   const backendRef = React.useRef<"direct" | "tmux" | null>(null);
   /** 滚轮桥要往哪个会话发；`sessionId` 是 state，effect 里读 ref 更省重挂。 */
   const sessionIdRef = React.useRef<string | undefined>(undefined);
+  const fileDropQueue = React.useRef<Promise<void>>(Promise.resolve());
 
   /** 右键菜单打开那一刻有没有选区（决定「复制」是否可点）。 */
   const [hasSelection, setHasSelection] = React.useState(false);
@@ -200,12 +216,133 @@ function TerminalSurfaceImpl({
   const statusRef = React.useRef(status);
   statusRef.current = status;
   const patch = React.useCallback((next: Partial<TerminalSurfaceStatus>) => {
-    setStatus((current) => ({ ...current, ...next }));
+    // Drop validation may finish before React commits a status event.
+    statusRef.current = { ...statusRef.current, ...next };
+    setStatus(statusRef.current);
   }, []);
 
   React.useEffect(() => {
     onStatusChange?.(status);
   }, [onStatusChange, status]);
+
+  const pasteDroppedFiles = React.useCallback(
+    (drag: WorkspaceFileDrag) => {
+      const store = useCanvasStore.getState();
+      const workspace = store.workspace;
+      const boardId = store.document?.board.id;
+      const terminal = terminalRef.current;
+      const transport = transportRef.current;
+      const session = sessionIdRef.current;
+      if (
+        !workspace ||
+        !boardId ||
+        !terminal ||
+        !transport ||
+        transport.state !== "live" ||
+        statusRef.current.connection !== "live" ||
+        transport.generation === null ||
+        !session
+      ) {
+        toast.error(translate("fileDrag.destinationChanged"));
+        return;
+      }
+      const inputState = () => {
+        const node = useCanvasStore
+          .getState()
+          .document?.nodes.find((entry) => entry.id === nodeId);
+        const agent =
+          node?.data.kind === "terminal"
+            ? node.data.agent
+            : dataRef.current.agent;
+        return {
+          nodePending: Boolean(agent?.pendingLaunch),
+          launchArmed: launchPhaseRef.current === "armed",
+          launchTimer: launchTimerRef.current !== null,
+          promptTimer: promptTimerRef.current !== null,
+          creating: creatingRef.current,
+          pendingPhase: usePendingLaunchStore.getState().entries[nodeId]?.phase,
+          acknowledged: Boolean(
+            agent?.sessionId || useAgentStatusStore.getState().statuses[nodeId],
+          ),
+        };
+      };
+      if (automaticInputBlocksFileDrop(inputState())) {
+        toast.error(translate("fileDrag.launchPending"));
+        return;
+      }
+      const target = {
+        runtimeUrl: RUNTIME_URL,
+        workspaceId: workspace.id,
+        workspaceRoot: workspace.rootPath,
+        sessionId: session,
+        generation: transport.generation,
+        ssh: Boolean(dataRef.current.ssh),
+        agentId: dataRef.current.agent?.id,
+      };
+      const active = () => {
+        const current = useCanvasStore.getState();
+        const node = current.document?.nodes.find(
+          (entry) => entry.id === nodeId,
+        );
+        return (
+          current.workspace?.id === target.workspaceId &&
+          current.workspace.rootPath === target.workspaceRoot &&
+          current.document?.board.id === boardId &&
+          node?.data.kind === "terminal" &&
+          node.data.sessionId === session &&
+          !node.data.ssh &&
+          node.data.agent?.id === target.agentId &&
+          terminalRef.current === terminal &&
+          transportRef.current === transport &&
+          statusRef.current.connection === "live" &&
+          !automaticInputBlocksFileDrop(inputState()) &&
+          transport.state === "live" &&
+          transport.generation === target.generation &&
+          sessionIdRef.current === session
+        );
+      };
+      fileDropQueue.current = fileDropQueue.current
+        .catch(() => {})
+        .then(() =>
+          pasteWorkspaceFilePaths(drag, target, runtimeApi, active, (text) => {
+            // A confirmed DAG launch no longer needs its automatic retry. Only settle
+            // it after every file/session check succeeds, immediately before pasting.
+            const input = inputState();
+            if (input.pendingPhase === "sent" && input.acknowledged)
+              disarmPendingLaunch(nodeId);
+            // xterm adds bracketed-paste framing and onData uses the current WS
+            // generation. It does not append Enter or issue an unguarded HTTP write.
+            terminal.paste(text);
+            terminal.focus();
+          }),
+        )
+        .catch((error: unknown) => {
+          toast.error(translate(fileDragMessage(error)));
+        });
+    },
+    [nodeId],
+  );
+
+  React.useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const dropped = (event: Event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      try {
+        const detail = (event as CustomEvent<WorkspaceFileDropDetail>).detail;
+        pasteDroppedFiles(
+          readWorkspaceFileDrag({
+            getData: () => JSON.stringify(detail?.drag),
+          }),
+        );
+      } catch (error) {
+        toast.error(translate(fileDragMessage(error)));
+      }
+    };
+    body.addEventListener(WORKSPACE_FILE_DROP_EVENT, dropped);
+    return () => body.removeEventListener(WORKSPACE_FILE_DROP_EVENT, dropped);
+  }, [pasteDroppedFiles]);
 
   /* -------------------------------- fit 守卫 ------------------------------ */
 
@@ -594,6 +731,7 @@ function TerminalSurfaceImpl({
   }, []);
 
   const fireLaunch = React.useCallback(() => {
+    launchTimerRef.current = null;
     if (launchPhaseRef.current !== "armed") return;
     const store = useCanvasStore.getState();
     const node = store.document?.nodes.find((item) => item.id === nodeId);
@@ -612,12 +750,14 @@ function TerminalSurfaceImpl({
       const pending = agent.pendingLaunch;
       armPendingLaunch(nodeId, pending, (command) => {
         transportRef.current?.input(`${command}\r`);
+        freshSessionRef.current = false;
       });
       return;
     }
     try {
       const launch = buildAgentLaunch(agent);
       transportRef.current?.input(`${launch.command}\r`);
+      freshSessionRef.current = false;
       store.updateNodeData(nodeId, {
         agent: { ...agent, initialCommand: launch.command },
       });
@@ -625,6 +765,7 @@ function TerminalSurfaceImpl({
         const prompt = launch.stdinPrompt;
         promptTimerRef.current = setTimeout(() => {
           transportRef.current?.input(`${prompt}\r`);
+          promptTimerRef.current = null;
         }, LAUNCH_PROMPT_MS);
       }
     } catch (cause) {
@@ -835,6 +976,32 @@ function TerminalSurfaceImpl({
           ref={bodyRef}
           data-slot="terminal-body"
           className="nodrag nowheel relative h-full w-full overflow-hidden bg-[var(--term-bg)]"
+          onDragOver={(event) => {
+            if (
+              hasWorkspaceFileDrag(event.dataTransfer) ||
+              Array.from(event.dataTransfer.types).includes("Files")
+            ) {
+              event.preventDefault();
+              event.stopPropagation();
+              event.dataTransfer.dropEffect = "copy";
+            }
+          }}
+          onDrop={(event) => {
+            if (
+              !hasWorkspaceFileDrag(event.dataTransfer) &&
+              !Array.from(event.dataTransfer.types).includes("Files")
+            )
+              return;
+            event.preventDefault();
+            event.stopPropagation();
+            try {
+              if (!hasWorkspaceFileDrag(event.dataTransfer))
+                throw new FileDragError("fileDrag.externalPathUnavailable");
+              pasteDroppedFiles(readWorkspaceFileDrag(event.dataTransfer));
+            } catch (error) {
+              toast.error(translate(fileDragMessage(error)));
+            }
+          }}
           // 只聚焦，不写任何字节给 PTY（§18.3 鼠标行）。
           onPointerDown={() => terminalRef.current?.focus()}
           // 焦点进了终端（点进来、⌘F 之后跳回来、快捷键聚焦）即视为读过。

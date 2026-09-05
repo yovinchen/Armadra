@@ -16,7 +16,7 @@
 | 阶段  | 状态     | 已完成 / 剩余                                                                                      |
 | ----- | -------- | -------------------------------------------------------------------------------------------------- |
 | M0    | 部分完成 | 三语言协议及真实 Host 握手完成；macOS CDP 核验通过，Windows 仅交叉检查，实机与完整 Worker 仍待完成 |
-| M1    | 进行中   | 身份、后台启停及桌面自动启动接线已完成；设备认证、业务迁移和剩余平台验收未完成                     |
+| M1    | 进行中   | 身份、桌面生命周期和数据库安全已完成；设备认证、业务迁移和剩余平台验收未完成 |
 | M2–M7 | 待实施   | 后台调度及其他产品工作流仍按各阶段交付                                                             |
 | M8    | 预留范围 | 多人、多账号及发布更新只按设计交付前期契约                                                         |
 
@@ -91,6 +91,8 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 | `0f3d913` | 快捷键录制与窗口键保护 | 76 项定向测试、类型检查与真实浏览器录制 |
 | `f3bb770` | Runtime 明确退出 | 全套 359 项、追加关停回归、真实进程 EOF/关停验证 |
 | `23c249a` | 桌面关闭/退出分离 | 18 项桌面测试、开发/发布检查；原生按键待验收 |
+| `d2eff4f` | 应用主程序名称统一 | 实际 Armadra Mach-O、Cargo metadata、编译/Clippy |
+| `f37fa1e` | 放大连接按钮与手势清理 | 27 项定向、100%/50%/触屏模拟及取消实测 |
 | `40dc141` | 桌面自动启动/发现Host      | 10项Rust测试、clippy、真实Rust启动器和macOS原生进程保活；窗口菜单退出未验收                                     |
 
 协议验收覆盖：中文/emoji、uint64 最大值、int64 最小值、超过 JS 安全整数的 generation、optional 未传/零值、oneof 三个分支、截断拒绝、未知字段行为。Go/TS 默认保留未知字段；prost 会丢弃，未来 Rust 透明中继必须转发原始载荷。尚未引入枚举，不将未知枚举检查记为已完成。
@@ -196,6 +198,20 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - 27 项定向测试与类型检查通过。真实 Chrome 在 100%/50% 缩放均可从外侧 22px 起线，中心偏移为 0，正文内侧 12px 不被遮挡；触屏模拟拖线及单次撤销通过。
 - 实际 Esc 与拖动中卸载源节点后均无残留箭头/孤立 binding，测试 pageerror 为空。独立浏览器/Vite 已清理；结果保存在 `output/playwright/connection-handles-result.json` 和 `connection-handles-cancel-result.json`。触屏模拟不等同于移动设备实机验收。
 
+## 文件管理器拖拽
+
+- 左侧 FileTree 与画布 Files 节点传递同 Runtime/工作空间的版本化文件引用。终端落点只经 xterm paste 与当前 WS generation 插入路径；画布落点复用编辑器/图片/目录预览，内部引用不走外部文件复制。
+- 核对真实 session、Agent、shell、规范路径及异步结果的目的地；处理 POSIX/PowerShell/CMD 引用、Windows extended drive/UNC，拒绝控制字符和不能可靠表示的路径。已标识的 SSH/跨执行位置不猜本机路径，普通 shell 保持兼容旧端缺少 Agent 身份的响应。
+- 独立审查补齐自动启动/提示词/重试与文件路径冲突：这些状态阻止插入；已确认启动的剩余重试仅在所有校验成功后取消。同步连接状态阻止验证途中退出的会话接收路径。
+- Windows 桌面内部拖拽使用指针适配，保留 Tauri 原生 OS 文件导入。阈值、捕获、失焦/Esc/离窗/卸载、同工作空间切画布和拖后点击均有清理；一次 drop 由终端或画布单独消费。
+- 文件浏览面板改为 nonmodal，展开时可到达画布/终端，保留关闭与固定行为。此项来自实际交互核验，避免只有固定面板后才能拖放。
+- 主 Agent 完整执行 Web 90 个文件/982 项与 shared 58 项测试通过；后续 pointer/Explorer 11 项、Windows 根路径 3 项增量回归通过。纯路径与引用测试共 82 项，POSIX 引用还经过 `/bin/sh` 验证。最终类型检查与生产构建通过。
+- 最终执行 `cargo build --locked -p armadra-desktop -p armadra-runtime --bins` 通过，生成包含最新前端的本机 `target/debug/Armadra` 及最新 Runtime；这不是签名发布包或跨平台安装验收。
+- 实际 headless Chrome 使用独立 Vite 1458，REST/WS 全部映射到 1457 mock：真实 FileTree → xterm 仅 1 条输入（正确引用及 bracketed-paste，无 CR/LF），不增编辑器；FilesNode → 画布新增 1 个编辑器并显示正文，输入数不增加，无外部复制请求。未启动收费 Agent 或使用用户后台服务。
+- Chrome 中模拟 Win/Tauri 标识后验证实际 pointer 分支：禁用 HTML5 draggable、成功捕获、ghost 1→0、drop 仅新增一条输入；Esc 取消后输入/预览数不变。此结果不等于 Windows WebView2、PowerShell/CMD 或移动端实机验收。
+- 限制：Finder/系统文件到终端仍提示从应用内文件树拖拽；原 OS → 画布导入保留。会话元数据不能识别用户在 shell 里手动再进入 SSH/更换 shell 的所有前台状态，不作此保证。
+- 测试浏览器与 Vite 已清理；截图为 `output/playwright/file-drag-terminal.png`、`file-drag-canvas.png`、`file-drag-pointer-fallback.png`。初始 fixture 缺少 workspace/open 响应已修正，不把 mock 404 或构建引起的 HMR 重载误记为产品回归。
+
 ## Runtime 明确退出控制
 
 - 新增仅在 `--desktop-control-stdin` 启用的继承 stdin Protobuf 控制，4 字节长度前缀及 4096 字节限额。EOF、未知动作、截断、重复/非规范消息不视为退出许可；未开放 HTTP 管理接口。
@@ -215,6 +231,6 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 
 ## 下一步
 
-1. M1 下一批：推进Host业务存储/迁移准备与设备认证，先保证未知数据库版本或校验失败不会触发破坏式重建，再建立可验证的迁移流程；原Rust Runtime在切换完成前保持业务权威，禁止双写。桌面启动器、CLI、本机IPC及连接设置已完成，不重复实现；任务调度、工作执行器接管和Kanban残留迁移仍按设计继续。
+1. M1 下一批：建设 Go Host 持久业务存储、可复核导入报告与维护窗口/写入 epoch 切换，再接设备认证和 Worker。数据库拒绝重建、一致性备份、桌面关闭/退出、名称及本批交互已完成，不重复实现；原 Rust Runtime 在切换完成前保持业务权威，禁止双写。任务调度、执行器接管和 Kanban 残留迁移仍待继续。
 2. 在具备 Windows runner 后补链接与会话重附着实测；macOS 可继续建设 Browser Worker，不让平台专属验证阻止其他模块推进。
 3. 后续继续使用子 Agent 分工，每个功能验证后独立提交。自动检查维持 15 分钟，全部当前范围完成前保持启用。

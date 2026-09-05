@@ -1,8 +1,8 @@
 /**
  * 资源管理器抽屉（§3.6，⌘⇧E）。
  *
- * 两种形态共用同一份头部与同一棵树：右侧 360px 抽屉（带 scrim），
- * 或 pin 成右侧 320px 浮卡（不挡画布、无 scrim）。
+ * 两种形态共用同一份头部与同一棵树：非模态右侧 360px 抽屉，
+ * 或 pin 成右侧 320px 浮卡。两者都允许文件拖向画布和终端。
  */
 import { Pin, PinOff, X } from "lucide-react";
 
@@ -66,6 +66,7 @@ export function ExplorerDrawer() {
   return (
     <Sheet
       open
+      modal={false}
       onOpenChange={(open) => {
         if (!open) setPanel("explorer", "closed");
       }}

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import type { FileEntry, Workspace } from "@armadra/shared";
@@ -11,11 +11,13 @@ const listFiles = vi.fn();
 const gitStatus = vi.fn();
 
 vi.mock("../api/client", () => ({
+  RUNTIME_URL: "http://runtime",
   runtimeApi: {
     listFiles: (...args: unknown[]) => listFiles(...args),
     gitStatus: (...args: unknown[]) => gitStatus(...args),
   },
 }));
+import { WORKSPACE_FILES_MIME } from "../files/workspace-drag";
 
 const timestamp = "2026-09-04T00:00:00.000Z";
 const workspace: Workspace = {
@@ -89,6 +91,20 @@ beforeEach(() => {
 });
 
 describe("FileTree", () => {
+  it("starts scoped file dragging without opening a preview", async () => {
+    renderTree();
+    const file = await screen.findByRole("treeitem", { name: /logo.png/ });
+    const transfer = { effectAllowed: "none", setData: vi.fn() };
+    fireEvent.dragStart(file, { dataTransfer: transfer });
+    expect(file.draggable).toBe(true);
+    expect(transfer.setData).toHaveBeenCalledWith(
+      WORKSPACE_FILES_MIME,
+      expect.stringContaining(workspace.id),
+    );
+    expect(JSON.parse(transfer.setData.mock.calls[0]![1]).entries[0].path).toBe(
+      "logo.png",
+    );
+  });
   it("hides ignored folders and puts directories first", async () => {
     renderTree();
     await screen.findByText("src");
