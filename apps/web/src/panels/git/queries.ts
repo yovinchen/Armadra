@@ -19,6 +19,9 @@ export function invalidateGitQueries(
     "git-repository-integration",
     "git-repository-stashes",
     "git-repository-stash-detail",
+    "git-repository-tags",
+    "git-repository-remotes",
+    "git-repository-rebase-todo",
   ])
     void client.invalidateQueries({ queryKey: [name, workspaceId] });
 }
