@@ -373,6 +373,9 @@ export const canvasGateway = {
       name: saved.name,
       rootPath: saved.rootPath,
       color: saved.color,
+      // The Host canvas surface carries no execution host: a workspace it owns
+      // is one the local Runtime executes, which the empty id stands for.
+      executionHostId: "",
       permissions: saved.permissions ?? {
         read: true,
         write: true,

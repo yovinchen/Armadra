@@ -82,6 +82,7 @@ func nextCronValue(schedule cron.Schedule, location *time.Location, after int64)
 	}
 	return 0, ErrInvalid
 }
+
 // normalizeTarget settles the target kind and refuses a configuration that
 // mixes the two. The default stays the command executor, and an agent target
 // that carries no node or no frozen definition is rejected here rather than

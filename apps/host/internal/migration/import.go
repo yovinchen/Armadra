@@ -44,6 +44,7 @@ var legacyMigrations = []string{
 	"legacy/0006_agent_prompt_deliveries.sql",
 	"legacy/0007_handoff_attempts.sql",
 	"legacy/0008_write_ownership.sql",
+	"legacy/0009_workspace_execution_host.sql",
 }
 
 const maxManifest = 64 << 20

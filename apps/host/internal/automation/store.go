@@ -56,6 +56,7 @@ func ConfigurationHash(config *pb.AutomationPlanConfig) ([]byte, error) {
 	}
 	return configHash(normalized)
 }
+
 // AgentTarget reports the one target kind that writes into a PTY that already
 // exists. An unspecified kind stays the command executor, so a plan frozen
 // before the field existed cannot silently become a terminal writer.
