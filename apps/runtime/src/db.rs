@@ -1738,7 +1738,7 @@ pub fn valid_node_data(node: &CanvasNode) -> bool {
                 && optional_bounded_string(data, "executionHostId", 200)
                 && optional_bounded_string(data, "nativeJobId", 200)
                 && data.get("generation").is_none_or(|value| {
-                    value.is_null() || value.as_u64().is_some_and(|v| v <= (1 << 53) - 1)
+                    value.is_null() || value.as_u64().is_some_and(|v| v < (1 << 53))
                 })
         }
         _ => false,

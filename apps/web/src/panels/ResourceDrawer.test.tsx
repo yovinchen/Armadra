@@ -156,6 +156,7 @@ beforeEach(() => {
       explorer: "closed",
       scm: "closed",
       resources: "closed",
+      automation: "closed",
       quickOpen: false,
       settings: false,
       palette: false,
