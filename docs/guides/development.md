@@ -70,7 +70,8 @@ Command W / 关闭窗口隐藏前台；Command Q / 托盘退出停止配置的 H
 
 `pnpm canvas:e2e` 端到端验证画布写入所有权：在临时目录里跑真实 Runtime 与 Host，写入嵌套 Frame、终端与便签、
 标注、上下文连线和白板快照，再走导出 → 导入 → `ownership switch`，逐项断言迁移前后的 sha256、Runtime 的
-`ownership_moved` 拒绝与只读回退、Host 侧的 revision 与事件，最后回滚并校验反向导出包的摘要。
+`ownership_moved` 拒绝与只读回退、Host 侧的 revision 与事件，最后回滚：Host 写出格式 2 的反向导出包，
+Runtime 把它导入自己的 `canvas.db` 并回读逐项核验，再断言 Host 持有期间的那次写入出现在 Runtime 的行里。
 它构建 Host、Runtime、工作区包与 Web 产物，并用无头 Chrome 驱动 `@armadra/host-client`；没有 Chrome 时设
 `CANVAS_E2E_SKIP_APP=1` 跳过浏览器部分（改从 Node 走同一 TLS 代理），或用 `CHROME_PATH` 指定浏览器，脚本不下载任何东西。
 构建缓存命中时整轮约 20 秒，跳过浏览器部分约 15 秒；首次构建 Runtime 与 Web 产物另计。
