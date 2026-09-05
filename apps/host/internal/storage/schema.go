@@ -61,7 +61,48 @@ CREATE TABLE staging (
  metadata BLOB NOT NULL CHECK(length(metadata) <= 16777216), active INTEGER NOT NULL DEFAULT 0 CHECK(active = 0)
 )`
 
-var migrations = []string{schemaV1}
+// Identity is deliberately outside entities/events. Only hashes of credentials
+// belong here; these tables are never part of the public entity sync surface.
+const schemaV2 = `CREATE TABLE identity_owner (
+ singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+ principal_id TEXT NOT NULL UNIQUE CHECK(length(principal_id) = 32),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0)
+);
+CREATE TABLE identity_devices (
+ device_id TEXT PRIMARY KEY CHECK(length(device_id) = 32),
+ principal_id TEXT NOT NULL REFERENCES identity_owner(principal_id),
+ name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 256),
+ role TEXT NOT NULL CHECK(role = 'owner'),
+ epoch INTEGER NOT NULL CHECK(epoch > 0),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0),
+ revoked_at_ms INTEGER NOT NULL DEFAULT 0 CHECK(revoked_at_ms >= 0)
+);
+CREATE TABLE identity_sessions (
+ session_id TEXT PRIMARY KEY CHECK(length(session_id) = 32),
+ device_id TEXT NOT NULL REFERENCES identity_devices(device_id),
+ device_epoch INTEGER NOT NULL CHECK(device_epoch > 0),
+ origin TEXT NOT NULL, scopes BLOB NOT NULL CHECK(length(scopes) <= 16384),
+ access_hash BLOB NOT NULL CHECK(length(access_hash) = 32),
+ refresh_hash BLOB NOT NULL CHECK(length(refresh_hash) = 32),
+ csrf_hash BLOB NOT NULL CHECK(length(csrf_hash) = 32),
+ rotation INTEGER NOT NULL CHECK(rotation > 0),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0),
+ access_expires_at_ms INTEGER NOT NULL CHECK(access_expires_at_ms > created_at_ms),
+ expires_at_ms INTEGER NOT NULL CHECK(expires_at_ms >= access_expires_at_ms),
+ revoked_at_ms INTEGER NOT NULL DEFAULT 0 CHECK(revoked_at_ms >= 0)
+);
+CREATE TABLE identity_bootstrap_tickets (
+ ticket_id TEXT PRIMARY KEY CHECK(length(ticket_id) = 32),
+ ticket_hash BLOB NOT NULL CHECK(length(ticket_hash) = 32),
+ host_id TEXT NOT NULL, instance_id TEXT NOT NULL, origin TEXT NOT NULL,
+ device_name TEXT NOT NULL CHECK(length(device_name) BETWEEN 1 AND 256),
+ scopes BLOB NOT NULL CHECK(length(scopes) <= 16384),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0),
+ expires_at_ms INTEGER NOT NULL CHECK(expires_at_ms > created_at_ms),
+ consumed_at_ms INTEGER NOT NULL DEFAULT 0 CHECK(consumed_at_ms >= 0)
+)`
+
+var migrations = []string{schemaV1, schemaV2}
 
 type sqlReader interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)

@@ -364,7 +364,7 @@ func TestUnknownDirtyChangedAndForeignSchemaArePreserved(t *testing.T) {
 			var err error
 			switch scenario {
 			case "unknown-version":
-				_, err = store.db.Exec("INSERT INTO schema_migrations(version,checksum,dirty,applied_at_ms) VALUES(2,?,0,0)", make([]byte, 32))
+				_, err = store.db.Exec("INSERT INTO schema_migrations(version,checksum,dirty,applied_at_ms) VALUES(?,?,0,0)", SchemaVersion+1, make([]byte, 32))
 			case "dirty":
 				_, err = store.db.Exec("UPDATE schema_migrations SET dirty=1")
 			case "checksum":

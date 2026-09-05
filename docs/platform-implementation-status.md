@@ -274,3 +274,10 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - RepositoryService 统一登记读写命令、外部 AI/片段 runner 及仓库 guard；停止时拒绝新工作、取消并等待受管 child 回收。Runtime 将 Git 与终端清理并行执行，未确认清理明确报错并非零退出。旧 Git/clone runner 增加超时、输出上限和受管取消，克隆取消保留部分目录供用户处理。
 - ff-only pull 固定本次获取 OID，合并禁止自动 stash 与覆盖 ignored 文件，常规完成路径按预期 OID 清理自己的临时 ref；取消或停机可能保留诊断 ref，不自动重试未知结果。
 - 24 项真实 Git 仓库回归、路由权限/同路径不同工作空间隔离、前端 10 项含新 Query cache 恢复及类型检查通过。真实 child 测试覆盖排队、读取、写入、HTTP 取消、外部 lease、超时和未确认回收；旧 Git/clone 32 项回归已通过。
+
+## 连续实施：设备认证内核
+
+- Host 数据库新增 v2 私有身份表；保持已发布 v1 SQL 原始摘要与既有实体。ticket、session、设备撤销版本独立于普通实体/事件同步，凭据只存 SHA-256 摘要。
+- 单 owner 多设备：两分钟一次性配对材料绑定 Host/实例/精确 Origin/设备名及授权范围；access 有效十五分钟、会话绝对三十天，刷新同时轮转 access、refresh 和 CSRF。空授权不扩大为全权限，窄范围不能执行全 Host 操作。
+- 每次认证核对持久设备撤销版本；支持 CSRF 恢复、注销、设备分页与撤销 CAS。角色 operator/viewer 仅保留定义，当前不签发多人身份。
+- 12 组身份真实 DB 测试与 2 组新增存储测试、race/vet 通过；跨 DB 句柄 16 路 ticket 消费及 12 路 refresh 仅一次成功，故障回滚、重启、期限、范围、无 outbox/明文泄漏均验证。Windows amd64/arm64 CGO=0 交叉编译通过，实机与 WSS 撤销断流未验收。HTTP/CLI 接线另批提交。
