@@ -137,7 +137,7 @@ async fn give_to_host(pool: &sqlx::SqlitePool, epoch: u64) {
     ownership::apply(
         pool,
         OwnershipHandoff {
-            domain: ownership::CANVAS_DOMAIN.into(),
+            domain: ownership::domains::OwnershipDomain::Canvas,
             owner: WriteOwner::Host,
             epoch,
             expected_epoch: epoch - 1,
@@ -513,7 +513,7 @@ async fn facts_the_canvas_never_carried_survive_the_round_trip() {
     );
     // Applying a package is not a handoff: the Host still owns the domain
     // until the epoch comes back over the ownership command.
-    let record = ownership::read(&fixture.pool, ownership::CANVAS_DOMAIN)
+    let record = ownership::read(&fixture.pool, ownership::domains::OwnershipDomain::Canvas)
         .await
         .unwrap();
     assert_eq!(record.owner, WriteOwner::Host);
