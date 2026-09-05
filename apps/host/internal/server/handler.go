@@ -61,7 +61,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "Local request origin is not allowed")
 			return
 		}
-		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path) || githubMethod(r.URL.Path) || updatesMethod(r.URL.Path)) {
+		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path) || githubMethod(r.URL.Path) || updatesMethod(r.URL.Path) || canvasMethod(r.URL.Path)) {
 			if origin != options.PublicOrigin {
 				writeError(w, 403, "PERMISSION_DENIED", "Authentication requires the Host HTTPS origin")
 				return
@@ -87,6 +87,13 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			if automationMethod(r.URL.Path) {
 				automationRequest(w, r, identity, options.Identity, options.Automation)
+				return
+			}
+			if canvasMethod(r.URL.Path) {
+				// A Host with no canvas service authenticates first and then
+				// answers UNSUPPORTED from inside; it never returns an empty
+				// workspace, which a client would read as "nothing is there".
+				canvasRequest(w, r, identity, options.Identity, options.Canvas)
 				return
 			}
 			if githubMethod(r.URL.Path) {
@@ -190,7 +197,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			return
 		}
 		authentication := options.Identity != nil && options.PublicOrigin != "" && r.TLS != nil
-		hello(w, r, identity, authentication, authentication && options.Automation != nil, authentication && options.GitHub != nil, authentication && options.Runtime != nil)
+		hello(w, r, identity, authentication, authentication && options.Automation != nil, authentication && options.GitHub != nil, authentication && options.Runtime != nil, authentication && options.Canvas != nil)
 	}), nil
 }
 
@@ -224,7 +231,7 @@ func deviceOrigin(r *http.Request, origin, public string) (string, bool) {
 	return public, true
 }
 
-func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentication, scheduling, github, proxying bool) {
+func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentication, scheduling, github, proxying, canvas bool) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
 		writeError(w, http.StatusMethodNotAllowed, "INVALID_ARGUMENT", "POST required")
@@ -283,6 +290,13 @@ func hello(w http.ResponseWriter, r *http.Request, identity Identity, authentica
 	// will be forwarded, and a Runtime that is down still answers DISCONNECTED.
 	if proxying {
 		capabilities = append(capabilities, "runtime.proxy.v1")
+	}
+	// Advertised only when a canvas service is actually assembled. It says the
+	// surface answers, not that this Host currently owns canvas writes: that is
+	// what CanvasService/GetOwnership reports, and a client must read it before
+	// it saves anything.
+	if canvas {
+		capabilities = append(capabilities, "canvas.documents.v1")
 	}
 	writeProto(w, http.StatusOK, &pb.HelloResponse{
 		Protocol:         &pb.ProtocolVersion{Major: ProtocolMajor, Minor: min(request.Protocol.GetMinor(), ProtocolMinor)},

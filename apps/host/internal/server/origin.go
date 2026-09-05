@@ -2,6 +2,7 @@ package server
 
 import (
 	"armadra.local/host/internal/automationhost"
+	"armadra.local/host/internal/canvashost"
 	"armadra.local/host/internal/externalservice"
 	"armadra.local/host/internal/githubhost"
 	"armadra.local/host/internal/identity"
@@ -40,6 +41,10 @@ type Options struct {
 	// Updates is nil when no release source was configured. The update surface
 	// then reports UNSUPPORTED, which is never rendered as "up to date".
 	Updates *updates.Service
+	// Canvas is nil when this Host serves no business canvas surface. Its
+	// methods then answer UNSUPPORTED rather than an empty canvas, which a
+	// client cannot tell from a workspace that really has nothing on it.
+	Canvas *canvashost.Service
 }
 
 // ParseOrigin validates a serialized origin and returns its canonical spelling.
