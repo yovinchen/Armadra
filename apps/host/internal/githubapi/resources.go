@@ -548,6 +548,8 @@ func (c *Client) Merge(ctx context.Context, ref *pb.GithubRepositoryRef, number 
 	if err != nil {
 		return "", err
 	}
+	// A 200 that says merged:false is a refusal, not a success. It is reported
+	// as one so no caller can read the absent error as "merged".
 	if !value.Merged || !validSHA(value.SHA) {
 		return "", fail(CodeConflict, response.Status, "NOT_MERGED")
 	}

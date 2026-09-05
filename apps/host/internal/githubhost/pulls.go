@@ -347,8 +347,17 @@ func (s *Service) MergePull(ctx context.Context, caller Caller, request *pb.Merg
 				}
 			}
 			return refuse("UNKNOWN_OUTCOME", checks), nil
-		case errors.Is(translated, storage.ErrConflict):
-			return refuse("HEAD_MOVED", checks), nil
+		case errors.Is(translated, storage.ErrConflict), errors.Is(translated, ErrInvalid):
+			// The remote refused. Which refusal it was is decided by evidence:
+			// a head that still matches means the merge itself was rejected,
+			// not that the branch moved underneath the reader.
+			if latest, _, readErr := client.Pull(ctx, ref, pull.Number, allowed, s.now().UnixMilli()); readErr == nil {
+				pull = latest
+				if latest.HeadSha != request.GetExpectedHeadSha() {
+					return refuse("HEAD_MOVED", checks), nil
+				}
+			}
+			return refuse("NOT_MERGEABLE", checks), nil
 		case errors.Is(translated, ErrPermission):
 			return refuse("BLOCKED", checks), nil
 		}

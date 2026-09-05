@@ -455,6 +455,34 @@ func TestMergeSendsTheExactHeadTheCallerNamed(t *testing.T) {
 	}
 }
 
+// A remote refusal is not automatically "the head moved". Which refusal it was
+// is decided by re-reading: a head that still matches means the merge itself
+// was rejected, and telling the user to refresh would be useless advice.
+func TestARemoteMergeRefusalIsDistinguishedFromAMovedHead(t *testing.T) {
+	mock := newMock(t)
+	mock.mu.Lock()
+	mock.mergeOK = false
+	mock.mu.Unlock()
+	service, _ := newService(t, mock)
+	ref := repository(t, service)
+	result, err := service.MergePull(testContext, caller(ScopeRead, ScopeWrite), &pb.MergeGithubPullRequest{
+		Repository: ref, Number: 9, ExpectedHeadSha: headSHA,
+		Method: pb.GithubMergeMethod_GITHUB_MERGE_METHOD_SQUASH,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Merged || result.ReasonCode != "NOT_MERGEABLE" {
+		t.Fatalf("a refused merge on an unchanged head produced %+v", result)
+	}
+	mock.mu.Lock()
+	attempts := len(mock.merges)
+	mock.mu.Unlock()
+	if attempts != 1 {
+		t.Fatalf("the refused merge was attempted %d times", attempts)
+	}
+}
+
 // A detail response's checks must describe the head it reports, never another
 // commit sitting next to a merge button.
 func TestPullDetailChecksDescribeTheReportedHead(t *testing.T) {
