@@ -93,6 +93,12 @@ const zh = {
   "diff.staged": "已暂存",
   "diff.binary": "二进制",
   "diff.failed": "读取失败",
+  "diff.sideBySide": "并排显示",
+  "diff.unified": "统一显示",
+  "diff.ignoreWhitespace": "忽略空白",
+  "diff.whitespaceOnly": "仅空白差异",
+  "diff.search": "在差异中搜索",
+  "diff.matches": "命中 {count} 行",
 
   /* 文件 */
   "files.filter": "过滤",
@@ -222,6 +228,12 @@ const en: Record<keyof typeof zh, string> = {
   "diff.staged": "Staged",
   "diff.binary": "Binary",
   "diff.failed": "Read failed",
+  "diff.sideBySide": "Side by side",
+  "diff.unified": "Unified",
+  "diff.ignoreWhitespace": "Ignore whitespace",
+  "diff.whitespaceOnly": "Whitespace only",
+  "diff.search": "Search this diff",
+  "diff.matches": "{count} matching lines",
 
   "files.filter": "Filter",
   "files.root": "Root",

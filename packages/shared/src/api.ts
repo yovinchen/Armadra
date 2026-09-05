@@ -834,6 +834,13 @@ export const gitDiffRequestSchema = z.object({
   scope: diffScopeSchema.default("worktree"),
   /** When present only these files are diffed, `path` is ignored. */
   paths: z.array(z.string().min(1).max(4_000)).max(200).optional(),
+  /**
+   * Display option (`--ignore-all-space`): whitespace-only differences drop
+   * out of the patch and its line counts. The file list is unaffected, so a
+   * whitespace-only edit still shows up — with an empty patch and 0/0. Nothing
+   * is ever staged, applied, or committed from a whitespace-ignoring diff.
+   */
+  ignoreWhitespace: z.boolean().default(false),
 });
 
 export const gitDiffSchema = z.object({

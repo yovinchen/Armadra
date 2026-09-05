@@ -1810,6 +1810,10 @@ pub struct GitDiffQuery {
     /// Comma-separated workspace-relative paths. Absent = the whole `path`
     /// directory.
     paths: Option<String>,
+    /// Display option: hide whitespace-only differences from the patch and its
+    /// line counts. The file list is unaffected.
+    #[serde(default)]
+    ignore_whitespace: bool,
 }
 
 pub async fn git_diff(
@@ -1838,6 +1842,7 @@ pub async fn git_diff(
         &git::DiffRequest {
             scope: query.scope,
             paths,
+            ignore_whitespace: query.ignore_whitespace,
         },
         workspace.permissions.execute,
     )?))

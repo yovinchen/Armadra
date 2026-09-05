@@ -24,6 +24,8 @@ use crate::{
 };
 
 const MAX_PATHS_PER_REQUEST: usize = 200;
+/// Display-only diff option; never used on a path that gets staged or applied.
+const IGNORE_WHITESPACE: &str = "--ignore-all-space";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -71,6 +73,10 @@ pub struct DiffRequest {
     /// Restricts the diff to these workspace-relative paths. Empty means "use
     /// the requested directory as the pathspec".
     pub paths: Vec<String>,
+    /// `--ignore-all-space`: hides whitespace-only differences from the patch
+    /// and from the line counts. This is a display option — nothing is staged,
+    /// applied, or committed from a whitespace-ignoring diff.
+    pub ignore_whitespace: bool,
 }
 
 /// Repository context for one request: the authorized workspace root, the Git
@@ -251,7 +257,17 @@ pub fn read_diff_with_execution(
         }
     }
 
-    for (additions, deletions, path) in diff_numstat(&repository, cached, &pathspecs, execute)? {
+    // The file list itself never ignores whitespace: a whitespace-only edit is
+    // still a change, and hiding the row would contradict `git status`. Only
+    // the rendered patch and its line counts honour the option, so such a file
+    // shows up with an empty patch and 0/0 — which is exactly what it is.
+    for (additions, deletions, path) in diff_numstat(
+        &repository,
+        cached,
+        &pathspecs,
+        execute,
+        request.ignore_whitespace,
+    )? {
         if let Some(file) = files.get_mut(&path) {
             file.additions += additions;
             file.deletions += deletions;
@@ -264,6 +280,9 @@ pub fn read_diff_with_execution(
             let mut args = vec!["diff"];
             if cached {
                 args.push("--cached");
+            }
+            if request.ignore_whitespace {
+                args.push(IGNORE_WHITESPACE);
             }
             args.extend(["--", path.as_str()]);
             file.patch = git_with_execution(&repository, &args, execute)?
@@ -345,12 +364,15 @@ fn diff_numstat(
     cached: bool,
     pathspecs: &[String],
     execute: bool,
+    ignore_whitespace: bool,
 ) -> AppResult<Vec<(u64, u64, String)>> {
-    let output = git_with_execution(
-        repository,
-        &diff_args("--numstat", cached, pathspecs),
-        execute,
-    )?;
+    let mut args = diff_args("--numstat", cached, pathspecs);
+    if ignore_whitespace {
+        // Before the `--` separator, so it is read as an option and not as a
+        // pathspec.
+        args.insert(if cached { 2 } else { 1 }, IGNORE_WHITESPACE);
+    }
+    let output = git_with_execution(repository, &args, execute)?;
     let mut fields = output.split('\0').filter(|field| !field.is_empty());
     let mut entries = Vec::new();
     while let Some(record) = fields.next() {
@@ -1971,6 +1993,7 @@ mod tests {
             &DiffRequest {
                 scope: DiffScope::Staged,
                 paths: vec![],
+                ignore_whitespace: false,
             },
         )
         .unwrap();
@@ -2016,6 +2039,7 @@ mod tests {
             &DiffRequest {
                 scope: DiffScope::Worktree,
                 paths: vec!["one.txt".to_owned()],
+                ignore_whitespace: false,
             },
         )
         .unwrap();
@@ -2029,6 +2053,7 @@ mod tests {
                 &DiffRequest {
                     scope: DiffScope::Worktree,
                     paths: vec!["../escape.txt".to_owned()],
+                    ignore_whitespace: false,
                 },
             ),
             Err(AppError::BadRequest(_))
@@ -2059,6 +2084,7 @@ mod tests {
             &DiffRequest {
                 scope: DiffScope::Staged,
                 paths: vec![],
+                ignore_whitespace: false,
             },
         )
         .unwrap();
@@ -2195,6 +2221,7 @@ mod tests {
             &DiffRequest {
                 scope: DiffScope::Staged,
                 paths: vec![],
+                ignore_whitespace: false,
             },
         )
         .unwrap();
@@ -2286,6 +2313,41 @@ mod tests {
                 .all(|file| file.path != "a.txt"),
             "restoring from HEAD unstages as well"
         );
+    }
+
+    #[test]
+    fn ignoring_whitespace_empties_the_patch_but_still_lists_the_changed_file() {
+        let root = tempdir().unwrap();
+        fixture_repository(root.path());
+        fs::write(root.path().join("a.txt"), "one\ntwo\n").unwrap();
+        fs::write(root.path().join("b.txt"), "keep\n").unwrap();
+        commit_all(root.path(), "base");
+        // a.txt differs only by indentation; b.txt has a real edit.
+        fs::write(root.path().join("a.txt"), "  one  \n\ttwo\n").unwrap();
+        fs::write(root.path().join("b.txt"), "changed\n").unwrap();
+
+        let plain = read_diff(root.path(), ".", &DiffRequest::default()).unwrap();
+        let plain_a = plain.files.iter().find(|f| f.path == "a.txt").unwrap();
+        assert!(plain_a.additions > 0 && !plain_a.patch.is_empty());
+
+        let ignored = read_diff(
+            root.path(),
+            ".",
+            &DiffRequest {
+                ignore_whitespace: true,
+                ..DiffRequest::default()
+            },
+        )
+        .unwrap();
+        // The row survives — a whitespace-only edit is still a change — but
+        // the rendered patch and its counts are empty.
+        let ignored_a = ignored.files.iter().find(|f| f.path == "a.txt").unwrap();
+        assert_eq!((ignored_a.additions, ignored_a.deletions), (0, 0));
+        assert!(ignored_a.patch.is_empty());
+        // A real edit is unaffected by the option.
+        let ignored_b = ignored.files.iter().find(|f| f.path == "b.txt").unwrap();
+        assert!(ignored_b.patch.contains("+changed"));
+        assert_eq!(ignored_b.additions, 1);
     }
 
     #[test]

@@ -291,11 +291,19 @@ describe("runtime API v3", () => {
     ).toBe(false);
   });
 
-  it("defaults a diff request to the worktree scope", () => {
-    expect(gitDiffRequestSchema.parse({})).toEqual({ scope: "worktree" });
+  it("defaults a diff request to the worktree scope and a real diff", () => {
+    expect(gitDiffRequestSchema.parse({})).toEqual({
+      scope: "worktree",
+      // Whitespace is only ever ignored when the viewer asks for it.
+      ignoreWhitespace: false,
+    });
     expect(
       gitDiffRequestSchema.parse({ scope: "staged", paths: ["a.ts"] }),
-    ).toEqual({ scope: "staged", paths: ["a.ts"] });
+    ).toEqual({
+      scope: "staged",
+      paths: ["a.ts"],
+      ignoreWhitespace: false,
+    });
     expect(gitDiffRequestSchema.safeParse({ scope: "index" }).success).toBe(
       false,
     );

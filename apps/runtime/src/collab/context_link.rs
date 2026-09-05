@@ -503,7 +503,12 @@ async fn read_node_diff(state: &AppState, target: &NodeRef) -> Result<String, Re
     let diff = git::read_diff_with_execution(
         &root,
         requested,
-        &git::DiffRequest { scope, paths },
+        // Context reads always show the real diff; whitespace is a UI option.
+        &git::DiffRequest {
+            scope,
+            paths,
+            ignore_whitespace: false,
+        },
         workspace.permissions.execute,
     )
     .map_err(|error| failed(target, error))?;

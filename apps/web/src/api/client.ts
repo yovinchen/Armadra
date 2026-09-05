@@ -1099,7 +1099,12 @@ export const runtimeApi = {
    */
   gitDiff: (
     workspaceId: string,
-    options: { path?: string; scope?: DiffScope; paths?: string[] } = {},
+    options: {
+      path?: string;
+      scope?: DiffScope;
+      paths?: string[];
+      ignoreWhitespace?: boolean;
+    } = {},
   ) => {
     const parsed = gitDiffRequestSchema.parse(options);
     const params = new URLSearchParams({
@@ -1109,6 +1114,7 @@ export const runtimeApi = {
     if (parsed.paths && parsed.paths.length > 0) {
       params.set("paths", parsed.paths.join(","));
     }
+    if (parsed.ignoreWhitespace) params.set("ignoreWhitespace", "true");
     return request(
       `/api/workspaces/${workspaceId}/git/diff?${params.toString()}`,
       gitDiffSchema,
