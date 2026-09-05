@@ -11,6 +11,7 @@
 //! inside the test's own temporary data directory.
 
 mod live;
+mod managed;
 mod persistence;
 mod policy;
 mod streaming;

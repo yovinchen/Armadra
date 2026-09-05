@@ -133,7 +133,7 @@ pub fn service(state: &AppState) -> Arc<BrowserService> {
 }
 
 pub fn availability(state: &AppState) -> Availability {
-    launch::availability(&state.settings)
+    launch::availability(&state.settings, state.hooks.data_dir())
 }
 
 /* -------------------------------- workspace ------------------------------- */

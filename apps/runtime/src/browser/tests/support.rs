@@ -231,7 +231,7 @@ pub(super) async fn serve_page() -> Page {
 
 /// `None` plus a printed note when this machine has no browser to drive.
 pub(super) fn browser_or_skip(state: &AppState, test: &str) -> Option<String> {
-    let availability = launch::availability(&state.settings);
+    let availability = launch::availability(&state.settings, state.hooks.data_dir());
     if availability.available {
         return Some(availability.executable);
     }

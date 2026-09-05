@@ -1,0 +1,5 @@
+{
+  "$comment": "The pinned Chrome for Testing build the managed browser installs (docs/design/remote-and-browser-completion.md §2.1). Version, URL, byte count and sha256 are compiled into the Runtime; nothing here is ever fetched at runtime, and there is no 'latest'. `targets` is empty because no digest in this repository has been verified against a real download — an entry whose sha256 was guessed would fail every install with `sha256_mismatch`, which is worse than saying the managed browser is unavailable on this build. A packaging step that has network access fills `targets` in (or points ARMADRA_BROWSER_MANIFEST at a file that does) with one entry per `<os>-<arch>`: { url, sha256, bytes, executable }, where `executable` is the path inside the extracted archive.",
+  "version": "0.0.0-unpinned",
+  "targets": {}
+}

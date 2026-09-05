@@ -44,6 +44,9 @@ reqwest = { version = "0.13.4", default-features = false, features = [
     "http2",
     "charset",
     "system-proxy",
+    # The managed browser archive is hashed as it arrives rather than buffered
+    # whole (B01 §2.1).
+    "stream",
 ] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
@@ -64,6 +67,10 @@ tower-http = { version = "0.7.0", features = ["cors", "trace"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 uuid = { version = "1.24.0", features = ["v4", "v7", "serde"] }
+# Unpacking the pinned managed browser archive (B01 §2.1). Only what a Chrome
+# for Testing zip needs — no encryption backends, no other formats — so the
+# archive path stays small enough to reason about.
+zip = { version = "4.6.1", default-features = false, features = ["deflate"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.176"

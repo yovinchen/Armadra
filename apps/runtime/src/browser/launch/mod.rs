@@ -1,29 +1,35 @@
 //! Finding a browser, and starting one that is only ever ours.
 //!
-//! Two rules the rest of the module depends on:
+//! Three rules the rest of the module depends on:
 //!
 //!   * **Never the user's own profile.** Every session gets
 //!     `<data_dir>/browser-profiles/<sessionId>`, created 0700. Nothing here
 //!     reads or writes the default Chrome/Edge user data directory, so a login
 //!     Armadra performs cannot leak into the user's everyday browsing and a
 //!     crash here cannot corrupt it.
-//!   * **No download.** Design §5 wants managed per-OS binaries eventually;
-//!     until that exists a missing browser is reported as `unsupported` with
-//!     the list of paths that were looked at, and nothing is fetched.
+//!   * **Never a download nobody asked for.** [`managed`] can install one
+//!     pinned build when a person asks and the build allows it; discovery
+//!     itself never fetches anything, and a machine with no browser is
+//!     reported as `unsupported` with the list of paths that were tried.
+//!   * **Managed before detected.** A pinned Chrome for Testing is the build
+//!     whose CDP surface this module was written and tested against; the
+//!     system Chrome updates itself on its own schedule. An explicit choice
+//!     still wins over both.
 
-use std::{
-    path::{Path, PathBuf},
-    time::Duration,
-};
+pub mod managed;
+pub mod process;
+
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-use tokio::process::{Child, Command};
 
-use crate::{paths, settings::SettingsStore};
+use crate::settings::SettingsStore;
 
-/// How long we wait for Chrome to publish `DevToolsActivePort`.
-const STARTUP_TIMEOUT: Duration = Duration::from_secs(20);
-const STARTUP_POLL: Duration = Duration::from_millis(50);
+pub use managed::ManagedState;
+pub use process::{
+    Containment, Launched, Recovery, clear_singleton_locks, kill_group_now, launch, profile_dir,
+    recover, remove_profile, terminate,
+};
 
 /// What the API reports about this execution host's browser support.
 #[derive(Debug, Clone, Serialize)]
@@ -32,7 +38,8 @@ pub struct Availability {
     pub available: bool,
     pub executable: String,
     /// `settings` (the user chose it), `environment` (`ARMADRA_BROWSER_PATH` /
-    /// `CHROME_PATH`), `detected` (a standard install), or `none`.
+    /// `CHROME_PATH`), `managed` (the pinned install), `detected` (a standard
+    /// install), or `none`.
     pub source: &'static str,
     /// Stable code, so the UI can localize it: `""` when available,
     /// `chrome_not_found` otherwise.
@@ -40,14 +47,37 @@ pub struct Availability {
     /// Every path that was checked, so the unsupported panel can say what it
     /// looked for rather than only that it failed.
     pub searched: Vec<String>,
+    /// The pinned build's state, so the panel can offer to install it — or say
+    /// why it cannot.
+    pub managed: ManagedState,
 }
 
-/// Resolves the browser executable, preferring an explicit choice over a scan.
+/// Resolves the browser executable, preferring an explicit choice over the
+/// pinned build, and the pinned build over a scan.
 ///
 /// A configured path that does not exist is *not* silently replaced by a
 /// detected one: the user asked for that binary, and quietly using another
 /// would make "which browser is this?" unanswerable.
-pub fn availability(settings: &SettingsStore) -> Availability {
+pub fn availability(settings: &SettingsStore, data_dir: &Path) -> Availability {
+    availability_with(settings, data_dir, managed::Manifest::current())
+}
+
+/// The same, against a manifest the caller supplies. The seam exists so the
+/// managed source can be exercised without process-wide state; `availability`
+/// is what everything else calls.
+pub fn availability_with(
+    settings: &SettingsStore,
+    data_dir: &Path,
+    manifest: Result<managed::Manifest, &'static str>,
+) -> Availability {
+    let managed_state = match &manifest {
+        Ok(manifest) => managed::state(data_dir, manifest),
+        Err(reason) => ManagedState::failed_to_read(reason),
+    };
+    let installed = manifest
+        .as_ref()
+        .ok()
+        .and_then(|manifest| managed::installed(data_dir, manifest));
     if let Some(configured) = settings.browser_executable() {
         let exists = Path::new(&configured).is_file();
         return Availability {
@@ -60,6 +90,7 @@ pub fn availability(settings: &SettingsStore) -> Availability {
             source: if exists { "settings" } else { "none" },
             reason_code: if exists { "" } else { "chrome_not_found" },
             searched: vec![configured],
+            managed: managed_state,
         };
     }
     let mut searched = Vec::new();
@@ -74,9 +105,23 @@ pub fn availability(settings: &SettingsStore) -> Availability {
                     source: "environment",
                     reason_code: "",
                     searched,
+                    managed: managed_state,
                 };
             }
         }
+    }
+    // Before the scan: a pinned build is the one this module's CDP adaptation
+    // was written against, and it does not update itself between sessions.
+    if let Some(path) = installed {
+        searched.push(path.to_string_lossy().into_owned());
+        return Availability {
+            available: true,
+            executable: path.to_string_lossy().into_owned(),
+            source: "managed",
+            reason_code: "",
+            searched,
+            managed: managed_state,
+        };
     }
     for candidate in candidates() {
         searched.push(candidate.to_string_lossy().into_owned());
@@ -87,6 +132,7 @@ pub fn availability(settings: &SettingsStore) -> Availability {
                 source: "detected",
                 reason_code: "",
                 searched,
+                managed: managed_state,
             };
         }
     }
@@ -96,6 +142,7 @@ pub fn availability(settings: &SettingsStore) -> Availability {
         source: "none",
         reason_code: "chrome_not_found",
         searched,
+        managed: managed_state,
     }
 }
 
@@ -141,101 +188,6 @@ fn candidates() -> Vec<PathBuf> {
     }
 }
 
-/// `<data_dir>/browser-profiles/<sessionId>` — 0700, one per session.
-pub fn profile_dir(data_dir: &Path, session_id: &str) -> PathBuf {
-    data_dir.join("browser-profiles").join(session_id)
-}
-
-pub struct Launched {
-    pub child: Child,
-    /// The loopback DevTools HTTP port. The caller resolves a page target
-    /// through it and can resolve a fresh one if the first attach does not
-    /// take, which is what makes start-up robust under load.
-    pub port: u16,
-}
-
-/// Starts a browser against `profile` and returns the page target's debugger
-/// URL. The caller owns the child and is responsible for terminating it.
-pub async fn launch(
-    executable: &Path,
-    profile: &Path,
-    headful: bool,
-    width: u32,
-    height: u32,
-) -> Result<Launched, (&'static str, String)> {
-    std::fs::create_dir_all(profile).map_err(|error| {
-        (
-            "profile_unwritable",
-            format!("{}: {error}", profile.display()),
-        )
-    })?;
-    paths::harden_directory(profile);
-    // A port file from a previous generation would be read as this one's.
-    let port_file = profile.join("DevToolsActivePort");
-    let _ = std::fs::remove_file(&port_file);
-
-    let mut command = Command::new(executable);
-    if !headful {
-        command.arg("--headless=new");
-    }
-    command
-        .arg("--no-first-run")
-        .arg("--no-default-browser-check")
-        .arg("--disable-background-networking")
-        .arg("--disable-features=Translate,MediaRouter")
-        .arg("--remote-debugging-address=127.0.0.1")
-        .arg("--remote-debugging-port=0")
-        .arg(format!("--user-data-dir={}", profile.display()))
-        .arg(format!("--window-size={width},{height}"))
-        .arg("about:blank")
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null());
-    #[cfg(unix)]
-    {
-        // Its own process group, so terminating the session reaches every
-        // renderer and GPU helper rather than only the browser process.
-        command.process_group(0);
-    }
-    let mut child = command
-        .spawn()
-        .map_err(|error| ("launch_failed", error.to_string()))?;
-
-    let deadline = tokio::time::Instant::now() + STARTUP_TIMEOUT;
-    let port = loop {
-        if let Ok(Some(status)) = child.try_wait() {
-            return Err((
-                "launch_failed",
-                format!("the browser exited before DevTools was ready ({status})"),
-            ));
-        }
-        if let Ok(text) = std::fs::read_to_string(&port_file)
-            && let Some(port) = text
-                .lines()
-                .next()
-                .and_then(|line| line.trim().parse::<u16>().ok())
-        {
-            break port;
-        }
-        if tokio::time::Instant::now() >= deadline {
-            terminate(&mut child).await;
-            return Err((
-                "launch_timeout",
-                "the browser did not publish a DevTools port".to_owned(),
-            ));
-        }
-        tokio::time::sleep(STARTUP_POLL).await;
-    };
-
-    match page_target(port).await {
-        Ok(_) => Ok(Launched { child, port }),
-        Err(error) => {
-            terminate(&mut child).await;
-            Err(("cdp_unreachable", error))
-        }
-    }
-}
-
 /// Asks the DevTools HTTP endpoint for a page target's debugger URL.
 ///
 /// Public because attaching is retried: a page target can be replaced while
@@ -266,60 +218,7 @@ pub async fn page_target(port: u16) -> Result<String, String> {
             },
             Err(error) => last = error.to_string(),
         }
-        tokio::time::sleep(STARTUP_POLL).await;
+        tokio::time::sleep(process::STARTUP_POLL).await;
     }
     Err(last)
-}
-
-/// Ends a browser process and everything it spawned.
-///
-/// Unix gets the whole process group; Windows only gets the browser process,
-/// which is a known gap recorded in the design doc rather than papered over.
-pub async fn terminate(child: &mut Child) {
-    #[cfg(unix)]
-    if let Some(pid) = child.id() {
-        signal_group(pid, libc::SIGTERM);
-        for _ in 0..40 {
-            if matches!(child.try_wait(), Ok(Some(_))) {
-                return;
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-        signal_group(pid, libc::SIGKILL);
-    }
-    let _ = child.kill().await;
-    let _ = child.wait().await;
-}
-
-/// Synchronous, best-effort kill of a browser's whole process group.
-///
-/// The async path above is the normal one; this exists for `Drop` and for a
-/// panicking process, where nothing may await. A renderer helper that outlives
-/// its browser is a real leak — a failed test used to leave them behind — so
-/// there has to be a path that works without a runtime.
-#[cfg(unix)]
-pub fn kill_group_now(pid: u32) {
-    signal_group(pid, libc::SIGTERM);
-    std::thread::sleep(Duration::from_millis(200));
-    signal_group(pid, libc::SIGKILL);
-}
-
-#[cfg(not(unix))]
-pub fn kill_group_now(_pid: u32) {}
-
-#[cfg(unix)]
-fn signal_group(pid: u32, signal: libc::c_int) {
-    // SAFETY: `pid` came from a child we spawned into its own group, so the
-    // negated value addresses that group and nothing else.
-    unsafe { libc::kill(-(pid as libc::pid_t), signal) };
-}
-
-/// Removes a session's profile. Called only when a session is terminated on
-/// purpose — losing a profile means losing every login inside it.
-pub fn remove_profile(profile: &Path) {
-    if profile.file_name().is_none() || !profile.to_string_lossy().contains("browser-profiles") {
-        // Refuse to recurse into anything that is not one of ours.
-        return;
-    }
-    let _ = std::fs::remove_dir_all(profile);
 }
