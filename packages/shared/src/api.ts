@@ -824,6 +824,203 @@ export const terminalServerMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("warning"), message: z.string() }),
 ]);
 
+/* --------------------------------- 资源面板 ------------------------------- */
+
+/**
+ * Host / session resources and wake leases (T02, terminal host design §8/§9).
+ *
+ * Every metric is `.nullable()` on purpose. The runtime sends `null` for
+ * anything this machine cannot answer, and the panel renders that as an em
+ * dash — a `0` would read as "idle", which is a different and wrong statement.
+ * A schema that defaulted the nulls away would erase exactly that distinction.
+ */
+export const resourceLocationSchema = z.enum(["local", "remote"]);
+
+export const resourceMemorySchema = z.object({
+  totalBytes: z.number().int().nonnegative().nullable(),
+  usedBytes: z.number().int().nonnegative().nullable(),
+  availableBytes: z.number().int().nonnegative().nullable(),
+  swapTotalBytes: z.number().int().nonnegative().nullable(),
+  swapUsedBytes: z.number().int().nonnegative().nullable(),
+});
+
+export const resourceLoadAverageSchema = z.object({
+  one: z.number(),
+  five: z.number(),
+  fifteen: z.number(),
+});
+
+export const resourceDiskSchema = z.object({
+  mountPoint: z.string(),
+  totalBytes: z.number().int().nonnegative().nullable(),
+  availableBytes: z.number().int().nonnegative().nullable(),
+});
+
+/**
+ * Mains / battery. A desktop reports `source: "ac"` with a null percentage —
+ * "on mains, no battery" — which is not the same as `source: null`, "we could
+ * not tell".
+ */
+export const resourcePowerSourceSchema = z.object({
+  source: z.enum(["ac", "battery"]).nullable(),
+  batteryPercent: z.number().min(0).max(100).nullable(),
+  charging: z.boolean().nullable(),
+});
+
+export const hostResourcesSchema = z.object({
+  hostId: z.string(),
+  location: resourceLocationSchema,
+  platform: z.string(),
+  cpuPercent: z.number().nonnegative().nullable(),
+  cpuCores: z.number().int().positive().nullable(),
+  memory: resourceMemorySchema,
+  loadAverage: resourceLoadAverageSchema.nullable(),
+  disk: resourceDiskSchema.nullable(),
+  power: resourcePowerSourceSchema,
+  uptimeSeconds: z.number().int().nonnegative().nullable(),
+  sampledAt: z.string(),
+});
+
+/** Why a session carries no numbers. */
+export const resourceUnknownReasonSchema = z.enum([
+  "remote",
+  "exited",
+  "no-pid",
+  "not-found",
+  "warming-up",
+]);
+
+export const sessionResourcesSchema = z.object({
+  sessionId: z.string(),
+  sessionKey: z.string(),
+  workspaceId: z.string(),
+  nodeId: z.string().nullable(),
+  generation: z.number().int().nonnegative(),
+  backend: terminalBackendKindSchema,
+  location: resourceLocationSchema,
+  cwd: z.string(),
+  pid: z.number().int().nullable(),
+  alive: z.boolean(),
+  cpuPercent: z.number().nonnegative().nullable(),
+  /**
+   * An RSS sum over the process tree. `memoryEstimated` is always true when a
+   * figure is present: processes that share pages have those pages counted
+   * once per process, so this is not exclusive memory and must not be shown
+   * as such (design §8).
+   */
+  memoryBytes: z.number().int().nonnegative().nullable(),
+  memoryEstimated: z.boolean(),
+  childCount: z.number().int().nonnegative().nullable(),
+  state: z.string().nullable(),
+  unknownReason: resourceUnknownReasonSchema.nullable(),
+});
+
+/**
+ * A persistent session nothing on the canvas points at.
+ *
+ * `no-node` still has its row, so it can be given a node again (`adoptable`);
+ * `no-row` is a backend session with nothing on record and can only be ended.
+ */
+export const orphanSessionSchema = z.object({
+  id: z.string(),
+  reason: z.enum(["no-node", "no-row"]),
+  sessionId: z.string().nullable(),
+  backendRef: z.string().nullable(),
+  workspaceId: z.string().nullable(),
+  nodeId: z.string().nullable(),
+  sessionKey: z.string().nullable(),
+  cwd: z.string().nullable(),
+  agentId: z.string().nullable(),
+  createdAt: z.string().nullable(),
+  lastOutputAt: z.string().nullable(),
+  adoptable: z.boolean(),
+});
+
+/** `POST …/resources/orphans/{sessionId}/adopt`. */
+export const adoptedSessionSchema = z.object({
+  sessionId: z.string(),
+  /** The id the new canvas node must be created with. */
+  nodeId: z.string(),
+  workspaceId: z.string(),
+  cwd: z.string(),
+  shell: z.string(),
+  agentId: z.string().nullable(),
+  generation: z.number().int(),
+});
+
+export const powerPolicySchema = z.enum([
+  "never",
+  "agentSessions",
+  "automation",
+  "manual",
+]);
+export const powerLeaseSourceSchema = z.enum([
+  "session",
+  "automation",
+  "manual",
+]);
+
+/**
+ * One claim on the machine staying awake. `active` is whether it is holding
+ * anything; `blockedBy` says why not — `policy` (the setting forbids this
+ * source) or `unavailable` (this platform has no mechanism). A blocked claim
+ * is still listed, because "why did my machine sleep during a long run" is
+ * what the panel exists to answer.
+ */
+export const powerLeaseSchema = z.object({
+  id: z.string(),
+  source: powerLeaseSourceSchema,
+  reason: z.string(),
+  sessionId: z.string().nullable(),
+  workspaceId: z.string().nullable(),
+  createdAt: z.string(),
+  renewedAt: z.string(),
+  expiresAt: z.string(),
+  active: z.boolean(),
+  blockedBy: z.enum(["policy", "unavailable"]).nullable(),
+});
+
+export const powerInhibitorSchema = z.object({
+  platform: z.string(),
+  kind: z.string().nullable(),
+  available: z.boolean(),
+  detail: z.string().nullable(),
+});
+
+export const powerStateSchema = z.object({
+  policy: powerPolicySchema,
+  holding: z.boolean(),
+  mechanism: z.string().nullable(),
+  inhibitor: powerInhibitorSchema,
+  leases: z.array(powerLeaseSchema),
+});
+
+export const resourceSnapshotSchema = z.object({
+  workspaceId: z.string(),
+  host: hostResourcesSchema,
+  sessions: z.array(sessionResourcesSchema),
+  orphans: z.array(orphanSessionSchema),
+  power: powerStateSchema,
+  intervalMs: z.number().int().positive(),
+  sampledAt: z.string(),
+});
+
+/** `POST …/resources/subscription` — sampling only runs while this is live. */
+export const resourceSubscriptionSchema = z.object({
+  subscriptionId: z.string(),
+  workspaceId: z.string(),
+  intervalMs: z.number().int().positive(),
+  expiresAt: z.string(),
+});
+
+export const powerLeaseRequestSchema = z.object({
+  source: powerLeaseSourceSchema,
+  reason: z.string().min(1),
+  sessionId: z.string().optional(),
+  workspaceId: z.string().optional(),
+  ttlSeconds: z.number().int().positive().optional(),
+});
+
 /* ------------------------------ workspace WS ----------------------------- */
 
 /** `WS /api/workspaces/{id}/events` — plan §5.4 / §7. */
@@ -876,6 +1073,14 @@ export const workspaceEventSchema = z.discriminatedUnion("type", [
    * A file an editor node registered through `POST …/file-watch` changed on
    * disk outside the app. `sha256` / `size` / `mtime` are null for a removal.
    */
+  /**
+   * A host / session resource sample (T02). Only sent while a client holds a
+   * subscription for this workspace, so a closed panel produces no traffic.
+   */
+  z.object({
+    type: z.literal("resource.sample"),
+    snapshot: resourceSnapshotSchema,
+  }),
   z.object({
     type: z.literal("file.changed"),
     workspaceId: z.string(),
@@ -1018,6 +1223,24 @@ export type TerminalPasteRequest = z.infer<typeof terminalPasteRequestSchema>;
 export type TerminateMode = z.infer<typeof terminateModeSchema>;
 export type TerminalServerMessage = z.infer<typeof terminalServerMessageSchema>;
 export type WorkspaceEvent = z.infer<typeof workspaceEventSchema>;
+export type ResourceLocation = z.infer<typeof resourceLocationSchema>;
+export type HostResources = z.infer<typeof hostResourcesSchema>;
+export type SessionResources = z.infer<typeof sessionResourcesSchema>;
+export type ResourceUnknownReason = z.infer<typeof resourceUnknownReasonSchema>;
+export type OrphanSession = z.infer<typeof orphanSessionSchema>;
+export type AdoptedSession = z.infer<typeof adoptedSessionSchema>;
+export type ResourceSnapshot = z.infer<typeof resourceSnapshotSchema>;
+export type ResourceSubscription = z.infer<typeof resourceSubscriptionSchema>;
+export type ResourceSampleEvent = Extract<
+  WorkspaceEvent,
+  { type: "resource.sample" }
+>;
+export type PowerPolicy = z.infer<typeof powerPolicySchema>;
+export type PowerLease = z.infer<typeof powerLeaseSchema>;
+export type PowerLeaseSource = z.infer<typeof powerLeaseSourceSchema>;
+export type PowerLeaseRequest = z.infer<typeof powerLeaseRequestSchema>;
+export type PowerState = z.infer<typeof powerStateSchema>;
+export type PowerInhibitor = z.infer<typeof powerInhibitorSchema>;
 export type Usage = z.infer<typeof usageSchema>;
 export type UsageProvider = z.infer<typeof usageProviderSchema>;
 export type UsageProviderId = z.infer<typeof usageProviderIdSchema>;
