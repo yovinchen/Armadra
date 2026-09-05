@@ -65,9 +65,16 @@ describe("自定义 Agent 的启动行", () => {
     expect(launch.command).toBe("/bin/echo --permission-mode plan hello");
   });
 
-  it("列表还没到时退回基础 Agent，而不是抛错", () => {
+  it("列表尚未提供自定义 Agent 时不猜测基础程序", () => {
     expect(customAgentFor("custom:echo")).toBeUndefined();
-    expect(buildAgentLaunch({ id: "custom:echo" }).command).toBe("claude");
+    expect(() => buildAgentLaunch({ id: "custom:echo" })).toThrow(
+      /Unknown agent/,
+    );
+  });
+
+  it("运行时收窄的恢复能力不会在启动时重新授予", () => {
+    setAgentRegistry([echo]);
+    expect(customAgentFor(echo.id)?.disabledCapabilities).toContain("resume");
   });
 });
 

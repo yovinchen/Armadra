@@ -258,7 +258,7 @@ async fn agent_terminals_carry_the_hook_environment_and_announce_their_exit() {
             command: Some("/bin/sh".into()),
             args: vec![
                 "-c".into(),
-                "printf %s \"$ARMADRA_NODE_ID/$ARMADRA_AGENT_ID/$ARMADRA_CANVAS_CONTROL\"; exit 3"
+                "printf %s \"$ARMADRA_NODE_ID/$ARMADRA_AGENT_ID/$ARMADRA_CANVAS_CONTROL/$ARMADRA_SESSION_ID/$ARMADRA_SESSION_GENERATION\"; exit 3"
                     .into(),
             ],
             kind: "terminal".into(),
@@ -272,7 +272,7 @@ async fn agent_terminals_carry_the_hook_environment_and_announce_their_exit() {
     assert_eq!(session.session_key, node_id);
 
     let mut attach = manager.attach(&session.id, 80, 24).await.unwrap();
-    let expected = format!("{node_id}/claude/1");
+    let expected = format!("{node_id}/claude/1/{}/1", session.id);
     let received = wait_for(&mut attach, &expected, 2).await;
     assert!(received.contains(&expected), "got {received:?}");
 

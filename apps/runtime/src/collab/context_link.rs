@@ -54,6 +54,14 @@ pub async fn run(
     verb: &str,
     args: &Args<'_>,
 ) -> Result<String, Refusal> {
+    if caller.node.agent_id.as_deref().is_some_and(|agent| {
+        agent.starts_with("custom:")
+            && !crate::context_usage::has_capability(&state.settings, agent, "contextLink")
+    }) {
+        return Err(Refusal::forbidden(
+            "Node context links are disabled for this custom Agent",
+        ));
+    }
     if !VERBS.contains(&verb) {
         return Err(Refusal::bad_request(format!(
             "未知的上下文动词 `{verb}`，可用：{}。",

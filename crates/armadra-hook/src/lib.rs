@@ -16,6 +16,7 @@
 //!   every invocation because a terminal can outlive the runtime that spawned
 //!   it.
 
+pub mod context_usage;
 pub mod control;
 pub mod doctor;
 pub mod endpoint;
@@ -27,7 +28,7 @@ pub const HOOK_PROTOCOL_VERSION: u64 = 1;
 
 /// Value of the `X-Armadra-Hook-Client` header. Bumped when the wire behaviour of
 /// this binary changes so the runtime can flag stale installs.
-pub const HOOK_CLIENT_REVISION: &str = "1";
+pub const HOOK_CLIENT_REVISION: &str = "2";
 
 /// Upper bound on the hook payload we are willing to buffer, in bytes.
 pub const MAX_PAYLOAD_BYTES: usize = 1024 * 1024;
@@ -38,6 +39,7 @@ armadra-hook — Armadra hook client
 
 USAGE:
   armadra-hook <agentId>                       report a hook event (payload on stdin)
+  armadra-hook context-usage                  report Claude status-line context metadata
   armadra-hook context <verb> [options]        read a linked node's context
   armadra-hook canvas <verb> [--flag value]    drive the canvas
   armadra-hook doctor                          diagnose the local hook endpoint
@@ -64,6 +66,8 @@ CANVAS:
 ENVIRONMENT:
   ARMADRA_NODE_ID          canvas node id; when unset hook mode is a no-op
   ARMADRA_AGENT_ID         provider id of the CLI running in this terminal
+  ARMADRA_SESSION_ID       terminal session binding for context observations
+  ARMADRA_SESSION_GENERATION  terminal generation for context observations
   ARMADRA_ENDPOINT_FILE    path to the 0600 endpoint file
   ARMADRA_CANVAS_CONTROL   set to 1 when this node may drive the canvas
   ARMADRA_PERM_WAIT_SECS   >0 enables in-hook permission answering (claude only)

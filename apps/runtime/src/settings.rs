@@ -89,6 +89,9 @@ pub struct CustomAgent {
     #[serde(default, skip_serializing_if = "Map::is_empty")]
     pub env: Map<String, Value>,
     pub base_agent: String,
+    /// Custom entries may only narrow the base adapter's existing abilities.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_capabilities: Vec<String>,
 }
 
 /// How many custom agents a settings file may hold. Every entry costs a row in
@@ -134,10 +137,9 @@ fn sanitize_custom_agent(raw: &Value) -> Option<CustomAgent> {
     if launch_cmd.len() > MAX_CUSTOM_COMMAND || launch_cmd.contains(['\n', '\r', '\0']) {
         return None;
     }
-    let base_agent = text("baseAgent")
-        .filter(|base| crate::agent::definition(base).is_some())
-        .unwrap_or(DEFAULT_BASE_AGENT)
-        .to_owned();
+    let base_agent = text("baseAgent").unwrap_or(DEFAULT_BASE_AGENT);
+    crate::agent::definition(base_agent)?;
+    let base_agent = base_agent.to_owned();
     let color = text("color")
         .filter(|color| !color.is_empty() && color.len() <= 32)
         .unwrap_or(DEFAULT_CUSTOM_COLOR)
@@ -181,6 +183,19 @@ fn sanitize_custom_agent(raw: &Value) -> Option<CustomAgent> {
         args,
         env,
         base_agent,
+        disabled_capabilities: entry
+            .get("disabledCapabilities")
+            .and_then(Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .filter(|value| crate::agent::AGENT_CAPABILITIES.contains(value))
+                    .map(str::to_owned)
+                    .take(crate::agent::AGENT_CAPABILITIES.len())
+                    .collect()
+            })
+            .unwrap_or_default(),
     })
 }
 

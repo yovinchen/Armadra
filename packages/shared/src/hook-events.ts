@@ -8,7 +8,7 @@ import type { BuiltinAgentId } from "./agents.js";
  * Bumping `HOOK_CLIENT_REVISION` marks every installed configuration as stale:
  * the settings page shows "reinstall" and the notification bar warns once.
  */
-export const HOOK_CLIENT_REVISION = 1;
+export const HOOK_CLIENT_REVISION = 2;
 
 /** Claude Code — merged into `~/.claude/settings.json` under `hooks`. */
 export const CLAUDE_HOOK_EVENTS = [

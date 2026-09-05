@@ -1,6 +1,8 @@
 pub mod agent;
 pub mod api;
 pub mod collab;
+pub mod context_usage;
+pub mod context_api;
 pub mod db;
 pub mod desktop_control;
 pub mod error;
@@ -98,6 +100,7 @@ pub fn router_with_state(state: AppState) -> Router {
         }));
 
     Router::new()
+        .route("/api/workspaces/{workspace_id}/nodes/{node_id}/context-usage", get(context_api::snapshot))
         .route("/api/workspaces/{workspace_id}/git/hunks", get(git_api::hunks).post(git_api::apply_hunk))
         .route("/api/workspaces/{workspace_id}/git/message/providers", get(git_api::message_providers))
         .route("/api/workspaces/{workspace_id}/git/message/source", get(git_api::message_source))

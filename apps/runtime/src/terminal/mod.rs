@@ -307,6 +307,7 @@ struct Inner {
     pool: SqlitePool,
     events: EventHub,
     settings: SettingsStore,
+    data_dir: PathBuf,
     direct: Arc<direct::DirectBackend>,
     tmux: Option<Arc<tmux::TmuxBackend>>,
     detection: tmux::TmuxDetection,
@@ -376,6 +377,7 @@ impl TerminalManager {
             pool,
             events,
             settings,
+            data_dir,
             direct,
             tmux,
             detection,
@@ -445,6 +447,30 @@ impl TerminalManager {
             .is_some_and(|record| !record.exited)
     }
 
+    /// Context reports must target the currently selected PTY for this node,
+    /// including when an older session record still awaits its exit notice.
+    pub async fn is_current_node_session(
+        &self,
+        node_id: &str,
+        session_id: &str,
+        generation: u64,
+    ) -> bool {
+        if self
+            .inner
+            .by_key
+            .read()
+            .await
+            .get(&SessionKey::new(node_id.to_owned()))
+            .map(String::as_str)
+            != Some(session_id)
+        {
+            return false;
+        }
+        self.record(session_id)
+            .await
+            .is_some_and(|record| !record.exited && record.generation == generation)
+    }
+
     /* ------------------------------- lifecycle ---------------------------- */
 
     pub async fn spawn(&self, request: SpawnRequest) -> AppResult<TerminalSession> {
@@ -463,7 +489,12 @@ impl TerminalManager {
             shell: shell.clone(),
             command: request.command.clone(),
             args: request.args.clone(),
-            env: with_utf8_locale(request.env.clone()),
+            env: context_session_environment(
+                with_utf8_locale(request.env.clone()),
+                &self.inner.data_dir,
+                &id,
+                1,
+            ),
             size: PtySize {
                 rows: DEFAULT_ROWS,
                 cols: DEFAULT_COLS,
@@ -577,6 +608,12 @@ impl TerminalManager {
 
         let mut spec = record.spec.clone();
         spec.generation = next_generation;
+        spec.env = context_session_environment(
+            spec.env,
+            &self.inner.data_dir,
+            session_id,
+            next_generation,
+        );
         spec.size = PtySize {
             rows: record.rows,
             cols: record.cols,
@@ -1350,6 +1387,25 @@ pub fn agent_environment(node_id: &str, agent_id: &str) -> Vec<(String, String)>
         ),
         ("ARMADRA_CANVAS_CONTROL".to_owned(), "1".to_owned()),
     ]
+}
+
+fn context_session_environment(
+    mut env: Vec<(String, String)>,
+    data_dir: &std::path::Path,
+    session_id: &str,
+    generation: u64,
+) -> Vec<(String, String)> {
+    env.retain(|(key, _)| key != "ARMADRA_SESSION_ID" && key != "ARMADRA_SESSION_GENERATION");
+    if !env.iter().any(|(key, _)| key == "ARMADRA_NODE_ID") {
+        return env;
+    }
+    if crate::context_usage::initialize_sequence(data_dir, session_id, generation).is_err() {
+        // Telemetry failure never prevents a user's terminal from starting.
+        return env;
+    }
+    env.push(("ARMADRA_SESSION_ID".into(), session_id.into()));
+    env.push(("ARMADRA_SESSION_GENERATION".into(), generation.to_string()));
+    env
 }
 
 /// Chunk-by-chunk UTF-8 decoding: a PTY read can end in the middle of a

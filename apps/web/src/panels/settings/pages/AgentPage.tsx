@@ -5,10 +5,12 @@ import {
   supportedPermissionModes,
   customAgentSchema,
   type BuiltinAgentId,
+  type AgentCapability,
   type CustomAgent,
   type PermissionMode,
 } from "@armadra/shared";
 import { toast } from "sonner";
+import { CapabilityInheritance } from "@/agent/context-usage/CapabilityInheritance";
 
 import { useAgentsQuery } from "../../../app/use-agents";
 import {
@@ -248,6 +250,7 @@ interface AgentForm {
   args: string;
   env: string;
   baseAgent: BuiltinAgentId;
+  disabledCapabilities?: AgentCapability[];
 }
 
 const EMPTY_FORM: AgentForm = {
@@ -266,6 +269,7 @@ function toForm(agent: CustomAgent | undefined): AgentForm {
     args: agent.args.join(" "),
     env: envToText(agent),
     baseAgent: agent.baseAgent,
+    disabledCapabilities: agent.disabledCapabilities,
   };
 }
 
@@ -304,6 +308,9 @@ export function parseAgentForm(
     launchCmd: form.launchCmd.trim(),
     args,
     baseAgent: form.baseAgent,
+    ...(form.disabledCapabilities
+      ? { disabledCapabilities: form.disabledCapabilities }
+      : {}),
     ...(Object.keys(env).length > 0 ? { env } : {}),
   });
   return parsed.success ? parsed.data : null;
@@ -383,6 +390,16 @@ function CustomAgentForm({
             </SelectContent>
           </Select>
         </SettingsRow>
+        <div className="px-3 py-2">
+          <CapabilityInheritance
+            baseAgent={form.baseAgent}
+            disabledCapabilities={form.disabledCapabilities ?? []}
+            disabled={disabled}
+            onChange={(disabledCapabilities) =>
+              setForm((current) => ({ ...current, disabledCapabilities }))
+            }
+          />
+        </div>
       </SettingsGroup>
 
       <div className="flex items-center justify-between gap-2">

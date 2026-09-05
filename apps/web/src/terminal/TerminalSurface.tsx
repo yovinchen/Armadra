@@ -98,6 +98,8 @@ export interface TerminalSurfaceStatus {
   connection: TerminalConnection;
   exitCode: number | null;
   error: string | null;
+  /** Actual PTY identity from the current transport hello; never provider IDs. */
+  binding?: { sessionId: string; generation: number } | null;
 }
 
 export interface TerminalSurfaceHandle {
@@ -806,7 +808,8 @@ function TerminalSurfaceImpl({
         backendRef.current = hello.backend;
         sessionIdRef.current = hello.sessionId;
         reconnectDelayRef.current = 1000;
-        patch({ connection: hello.alive ? "live" : "exited", error: null });
+        patch({ connection: hello.alive ? "live" : "exited", error: null,
+          binding: hello.alive ? {sessionId:hello.sessionId,generation:hello.generation} : null });
         // attach 后必须至少发一次 resize：后端按 80×24 建的 pty，
         // 之后 `refit()` 只在真的变了才发（§18.2 规则 2）。
         refit();
@@ -845,6 +848,7 @@ function TerminalSurfaceImpl({
         patch({
           connection: state === "failed" ? "failed" : "exited",
           exitCode,
+          binding: null,
         });
         useCanvasStore.getState().updateNodeData(nodeId, {
           lastExitCode: exitCode,
@@ -855,6 +859,7 @@ function TerminalSurfaceImpl({
       },
       onStale: () => {
         if (disposed) return;
+        patch({binding:null});
         // 同一个 URL、同一个 session id，只是 generation 变了：
         // 重新走一遍连接分支（它会在连接前清屏）。
         setAttempt((value) => value + 1);
@@ -865,7 +870,7 @@ function TerminalSurfaceImpl({
         // 进程已退出/失败时的关闭是正常收尾；其余情况（Runtime 重启、网络抖动）
         // 都按意外断线处理：标记 detached 并按退避自动重连，重连会先清屏再 attach。
         if (connection === "exited" || connection === "failed") return;
-        patch({ connection: "detached" });
+        patch({ connection: "detached", binding:null });
         const delay = reconnectDelayRef.current;
         reconnectDelayRef.current = Math.min(delay * 2, 10_000);
         reconnectTimerRef.current = setTimeout(() => {
@@ -875,7 +880,7 @@ function TerminalSurfaceImpl({
       },
     });
     transportRef.current = transport;
-    patch({ connection: "connecting" });
+    patch({ connection: "connecting", binding:null });
 
     return () => {
       disposed = true;

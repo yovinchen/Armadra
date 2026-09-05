@@ -40,6 +40,34 @@ struct Fixture {
     directory: TempDir,
 }
 
+#[tokio::test]
+async fn custom_context_link_narrowing_is_enforced_by_application_consumers() {
+    let fixture = fixture("context-capability").await;
+    fixture.state.settings.patch(&json!({"agents":{"custom":[{
+        "id":"custom:narrow","label":"Narrow","launchCmd":"wrapper","baseAgent":"claude","disabledCapabilities":["contextLink"]
+    }]}})).unwrap();
+    let mut node = fixture.node_ref(&fixture.caller_id).await;
+    node.agent_id = Some("custom:narrow".into());
+    let caller = fixture.caller(node);
+    let args = serde_json::Map::new();
+    assert!(
+        context_link::run(&fixture.state, &caller, "list", &Args(&args))
+            .await
+            .is_err()
+    );
+    assert!(
+        control::run(&fixture.state, &caller, "link", &Args(&args))
+            .await
+            .is_err()
+    );
+    // Generic canvas discovery remains separate from the disabled link feature.
+    assert!(
+        control::run(&fixture.state, &caller, "help", &Args(&args))
+            .await
+            .is_ok()
+    );
+}
+
 fn node(board_id: &str, id: &str, node_type: &str, title: &str, x: f64, data: Value) -> CanvasNode {
     let now = chrono::Utc::now().to_rfc3339();
     CanvasNode {

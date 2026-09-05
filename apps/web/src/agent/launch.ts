@@ -86,6 +86,9 @@ export function customAgentFor(id: string): CustomAgent | undefined {
     launchCmd: info.launchCmd,
     args: info.args,
     baseAgent: info.baseAgent,
+    disabledCapabilities: AGENT_REGISTRY[info.baseAgent].capabilities.filter(
+      (capability) => !info.capabilities.includes(capability),
+    ),
   };
 }
 

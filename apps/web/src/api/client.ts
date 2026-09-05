@@ -2,6 +2,7 @@ import { resolveRuntimeUrl, runtimeSocketUrl } from "./runtime-url";
 import {
   agentListSchema,
   agentStatusSchema,
+  contextUsageSchema,
   answerApprovalResponseSchema,
   boardDocumentSchema,
   boardListSchema,
@@ -291,6 +292,8 @@ export const dataBackupSchema = z.object({
 /* ------------------------------------ API --------------------------------- */
 
 export const runtimeApi = {
+  contextUsage: (workspaceId:string,nodeId:string,binding:{sessionId:string;generation:number},signal?:AbortSignal) =>
+    request(`/api/workspaces/${query(workspaceId)}/nodes/${query(nodeId)}/context-usage?sessionId=${query(binding.sessionId)}&generation=${binding.generation}`,contextUsageSchema,{signal}),
   health: () => request("/health", healthSchema),
 
   /* --------------------------------- 工作空间 --------------------------- */

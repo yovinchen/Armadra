@@ -175,6 +175,53 @@ async function mounted() {
     "[data-slot=terminal-body]",
   )!;
 }
+
+describe("TerminalSurface context identity reporting", () => {
+  it("clears a stale generation before hello and ignores old callbacks after reconnect", async () => {
+    const changed = vi.fn();
+    render(
+      <TerminalSurface
+        nodeId="node"
+        data={fixture.data}
+        collapsed={false}
+        onStatusChange={changed}
+      />,
+    );
+    await waitFor(() => expect(fixture.handlers).not.toBeNull());
+    const old = fixture.handlers!;
+    const hello = {
+      sessionId: "session",
+      generation: 3,
+      backend: "direct" as const,
+      rows: 24,
+      cols: 80,
+      alive: true,
+    };
+    act(() => old.onHello?.(hello));
+    await waitFor(() =>
+      expect(changed.mock.lastCall?.[0].binding).toEqual({
+        sessionId: "session",
+        generation: 3,
+      }),
+    );
+    act(() => old.onStale?.(4));
+    await waitFor(() => expect(fixture.handlers).not.toBe(old));
+    expect(changed.mock.lastCall?.[0].binding).toBeNull();
+    act(() => old.onHello?.({ ...hello, generation: 99 }));
+    expect(changed.mock.lastCall?.[0].binding).toBeNull();
+    act(() => fixture.handlers?.onHello?.({ ...hello, generation: 4 }));
+    await waitFor(() =>
+      expect(changed.mock.lastCall?.[0].binding).toEqual({
+        sessionId: "session",
+        generation: 4,
+      }),
+    );
+    act(() => fixture.handlers?.onClose?.());
+    await waitFor(() => expect(changed.mock.lastCall?.[0].binding).toBeNull());
+    expect(fixture.input).not.toHaveBeenCalled();
+    expect(fixture.paste).not.toHaveBeenCalled();
+  });
+});
 function drop(target: HTMLElement, pointer = false) {
   const drag = createWorkspaceFileDrag("http://runtime", "workspace", [
     {

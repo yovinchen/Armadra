@@ -9,10 +9,7 @@
  */
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  workspaceEventSchema,
-  type WorkspaceEvent,
-} from "@armadra/shared";
+import { workspaceEventSchema, type WorkspaceEvent } from "@armadra/shared";
 
 import { workspaceEventsUrl } from "./client";
 import { useAgentStatusStore } from "../agent/status-store";
@@ -22,6 +19,15 @@ type EventOf<T extends EventType> = Extract<WorkspaceEvent, { type: T }>;
 type AnyHandler = (event: WorkspaceEvent) => void;
 
 const handlers = new Map<EventType, Set<AnyHandler>>();
+type ConnectionHandler = (workspaceId: string, connected: boolean) => void;
+const connectionHandlers = new Set<ConnectionHandler>();
+/** Transport lifecycle lets volatile read models discard a previous runtime's cache. */
+export function onWorkspaceConnection(handler: ConnectionHandler): () => void {
+  connectionHandlers.add(handler);
+  return () => {
+    connectionHandlers.delete(handler);
+  };
+}
 
 /** 订阅一种事件；返回退订函数。 */
 export function onWorkspaceEvent<T extends EventType>(
@@ -98,14 +104,20 @@ function open(connection: Connection): void {
   connection.socket = socket;
 
   socket.onopen = () => {
+    if (connection.socket !== socket || connection.stopped) return;
     connection.delay = null;
+    for (const handler of connectionHandlers)
+      handler(connection.workspaceId, true);
   };
   socket.onmessage = (event: MessageEvent) => {
     const parsed = parseFrame(event.data);
     if (parsed) dispatchWorkspaceEvent(parsed);
   };
   socket.onclose = () => {
-    if (connection.socket === socket) connection.socket = null;
+    if (connection.socket !== socket || connection.stopped) return;
+    for (const handler of connectionHandlers)
+      handler(connection.workspaceId, false);
+    connection.socket = null;
     schedule(connection);
   };
   // `onerror` 之后浏览器一定会再发 `onclose`，重连只挂在 close 上，避免排两次。
@@ -123,6 +135,8 @@ function schedule(connection: Connection): void {
 }
 
 function teardown(connection: Connection): void {
+  for (const handler of connectionHandlers)
+    handler(connection.workspaceId, false);
   connection.stopped = true;
   if (connection.timer) clearTimeout(connection.timer);
   connection.timer = null;
@@ -171,6 +185,7 @@ export function connectWorkspaceEvents(workspaceId: string): () => void {
 export function resetWorkspaceEvents(): void {
   if (current) teardown(current);
   handlers.clear();
+  connectionHandlers.clear();
 }
 
 /* --------------------------------- Hook ---------------------------------- */

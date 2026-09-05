@@ -771,6 +771,7 @@ export const terminalServerMessageSchema = z.discriminatedUnion("type", [
 
 /** `WS /api/workspaces/{id}/events` — plan §5.4 / §7. */
 export const workspaceEventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("agent.context"), nodeId: z.string(), sessionId: z.string(), generation: z.number().int().nonnegative() }),
   z.object({ type: z.literal("agent.status"), status: agentStatusSchema }),
   z.object({ type: z.literal("agent.subagent"), event: agentEventSchema }),
   z.object({

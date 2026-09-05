@@ -32,7 +32,7 @@ use crate::error::{AppError, AppResult};
 
 /// Mirrors `HOOK_CLIENT_REVISION` in packages/shared/src/hook-events.ts.
 /// Bumping it marks every installed configuration as stale.
-pub const HOOK_CLIENT_REVISION: i64 = 1;
+pub const HOOK_CLIENT_REVISION: i64 = 2;
 
 /// The substring that identifies a command as ours.
 pub const CLIENT_NAME: &str = "armadra-hook";

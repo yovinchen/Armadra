@@ -44,6 +44,7 @@ export const AGENT_CAPABILITIES = [
   "subagent",
   "contextLink",
   "usage",
+  "contextUsage",
 ] as const;
 export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];
 
@@ -93,7 +94,14 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       modelFlag: "--model",
       sessionIdFlag: "--session-id",
       resume: { style: "flag", flag: "--resume" },
-      capabilities: ["hooks", "resume", "subagent", "contextLink", "usage"],
+      capabilities: [
+        "hooks",
+        "resume",
+        "subagent",
+        "contextLink",
+        "usage",
+        "contextUsage",
+      ],
       expectedProcess: ["claude"],
     },
     codex: {
@@ -267,11 +275,26 @@ export const customAgentSchema = z.object({
   env: customAgentEnvSchema.optional(),
   /** Which built-in agent's hook/prompt behaviour this custom entry reuses. */
   baseAgent: z.enum(AGENT_IDS).default("claude"),
+  disabledCapabilities: z
+    .array(z.enum(AGENT_CAPABILITIES))
+    .max(AGENT_CAPABILITIES.length)
+    .optional(),
   promptMode: z.enum(PROMPT_MODES).optional(),
   permissionMode: permissionModeSchema.optional(),
 });
 
 export type CustomAgent = z.infer<typeof customAgentSchema>;
+
+export function inheritedAgentCapabilities(
+  custom: Pick<CustomAgent, "baseAgent" | "disabledCapabilities">,
+): readonly AgentCapability[] {
+  const base = agentDefinition(custom.baseAgent);
+  return (
+    base?.capabilities.filter(
+      (capability) => !custom.disabledCapabilities?.includes(capability),
+    ) ?? []
+  );
+}
 
 /* ------------------------------ launch line ------------------------------ */
 
@@ -346,7 +369,9 @@ export function assembleLaunchCommand(
 ): LaunchCommand {
   const custom = input.custom;
   const base = input.agentId.startsWith("custom:")
-    ? AGENT_REGISTRY[custom?.baseAgent ?? input.baseAgent ?? "claude"]
+    ? custom?.baseAgent || input.baseAgent
+      ? AGENT_REGISTRY[custom?.baseAgent ?? input.baseAgent!]
+      : undefined
     : agentDefinition(input.agentId);
   if (!base) {
     throw new Error(`Unknown agent id: ${input.agentId}`);
@@ -367,6 +392,9 @@ export function assembleLaunchCommand(
   // a subcommand that follows a flag is a parse error; the flag-style CLIs do
   // not care where it sits, so one position serves all three.
   const resumeId = input.resume?.trim();
+  if (resumeId && custom?.disabledCapabilities?.includes("resume")) {
+    throw new Error("Session resume is disabled for this custom agent");
+  }
   const resume = resumeId ? base.resume : undefined;
   if (resumeId && resume) {
     if (resume.style === "positional") {

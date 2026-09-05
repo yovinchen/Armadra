@@ -27,6 +27,10 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { useT } from "@/app/preferences-store";
+import { useAgentsQuery } from "@/app/use-agents";
+import { useCanvasStore } from "@/store/canvas-store";
+import { ContextUsageBadge } from "@/agent/context-usage/ContextUsageBadge";
+import { useContextUsage } from "@/agent/context-usage/use-context-usage";
 import { agentLabel } from "@/agent/launch";
 import { PendingLaunchButton } from "@/agent/PendingLaunchButton";
 import {
@@ -83,6 +87,10 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
     error: null,
   });
   const [findOpen, setFindOpen] = React.useState(false);
+  const workspaceId=useCanvasStore(state=>state.workspace?.id??null);
+  const agents=useAgentsQuery();
+  const contextEnabled=Boolean(agent && !data?.ssh && agents.data?.find(entry=>entry.id===agent.id)?.capabilities.includes("contextUsage"));
+  const context=useContextUsage({workspaceId,nodeId:id,sessionId:surface.binding?.sessionId??null,generation:surface.binding?.generation??null,modelSelection:agent?.model||null,enabled:contextEnabled});
   const [query, setQuery] = React.useState("");
   /** BEL：头部图标闪 600ms（§18.3 铃声行）。只换颜色，不改任何尺寸。 */
   const [bell, setBell] = React.useState(false);
@@ -136,6 +144,7 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
 
   const headerChips = (
     <>
+      {agent && <ContextUsageBadge nodeId={id} sessionId={surface.binding?.sessionId??null} generation={surface.binding?.generation??null} usage={context.usage} unavailableReason={exited?"session_ended":context.unavailableReason} />}
       {sshLabel !== null && (
         <Badge
           variant="outline"

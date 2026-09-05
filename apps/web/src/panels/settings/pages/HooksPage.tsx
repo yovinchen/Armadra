@@ -60,7 +60,7 @@ function AgentHookRow({ agent }: { agent: AgentInfo }) {
       action === "install"
         ? runtimeApi.installAgentHooks(agent.id)
         : runtimeApi.uninstallAgentHooks(agent.id),
-    onSuccess: (_report, action) => {
+    onSuccess: (report, action) => {
       void queryClient.invalidateQueries({ queryKey: ["agents"] });
       toast.success(
         t(
@@ -68,6 +68,9 @@ function AgentHookRow({ agent }: { agent: AgentInfo }) {
             ? "settings.hooks.done"
             : "settings.hooks.removed",
         ),
+        report.warning === "context_statusline_preserved"
+          ? { description: t("context.statusLinePreserved") }
+          : undefined,
       );
     },
     onError: (cause: Error) =>

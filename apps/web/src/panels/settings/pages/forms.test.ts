@@ -72,6 +72,20 @@ describe("parseEnvText", () => {
 });
 
 describe("parseAgentForm", () => {
+  it("preserves explicit capability narrowing in the saved custom agent", () => {
+    const parsed = parseAgentForm(
+      {
+        label: "Narrow",
+        launchCmd: "wrapper",
+        args: "",
+        env: "",
+        baseAgent: "claude",
+        disabledCapabilities: ["contextUsage", "resume"],
+      },
+      "custom:narrow",
+    );
+    expect(parsed?.disabledCapabilities).toEqual(["contextUsage", "resume"]);
+  });
   const empty = {
     label: "",
     launchCmd: "",

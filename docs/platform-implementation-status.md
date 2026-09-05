@@ -367,3 +367,12 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - 空结果提供独立Skip确认，仅允许owned且已证实为空的状态；非空冲突或后来未暂存的修改拒绝跳过。操作继续按workspace ID绑定，其他同路径workspace看不到可用控制/私有owner信息，也不能伪造Skip请求。
 - Rust基础/合并/Cherry-pick共43项、组件28项、shared4项及Clippy通过；主Agent新增实际API完整预览→正常应用→重复空结果→跨workspace拒绝→Skip验证通过，内容与HEAD保持预期。
 - Rebase与Git配置脚本的执行权限边界仍在继续，不把此批标为完整M4结束。
+
+## 连续实施：单会话上下文与能力继承
+
+- 接入可证实的Claude状态栏current_usage输入统计与模型窗口；头部Badge/Popover分别展示数值、容量、来源、年龄及unknown/stale。首次/compact空用量清旧值，未提供的输出预留保持未知，不使用累计账单或伪造token估算。
+- 真实PTY sessionId/generation由Runtime注入并由transport hello绑定前端；单调序号文件带反码校验，损坏/缺失不为活跃generation重建。Runtime验证会话、node、workspace/Agent与序号后只发invalidation。年龄用服务端Instant和客户端performance计算，远端时间戳只展示。
+- 自定义Agent的disabledCapabilities与基础能力求差集，落实到应用启动、Hook、子Agent、上下文链接等消费者；功能开关不替代workspace权限或OS沙箱。未知自定义Agent不再静默当Claude启动，PTY重附着保持独立。
+- 仅在状态栏为空或由Armadra管理时安装，不覆盖用户自定义状态栏；HooksPage识别稳定提示码说明保留结果。新revision与环境绑定需新建/重启会话生效，旧tmux无绑定继续unknown，其他提供方本批未启用来源。
+- Runtime Hook101、context7、Agent7、settings10、真实PTY绑定/旧代次拒绝及消费者回归通过；Hook客户端lib41/wire12，shared74、Web Badge/query/启动/forms/events/Surface绑定与DND回归、类型及Clippy通过。
+- 实际Chrome头部8%→compact Unknown、generation3→4与断线重连先清旧值后恢复，390px无横向溢出，终端输入为0。使用隔离fixture，不调用真实模型；浏览器/Vite已清理。图片与结果位于output/playwright/context-*.png。

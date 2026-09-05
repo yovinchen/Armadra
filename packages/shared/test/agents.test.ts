@@ -11,11 +11,53 @@ import {
   collapsePrompt,
   customAgentSchema,
   hookEventsFor,
+  inheritedAgentCapabilities,
   isAgentId,
   shellQuote,
 } from "../src/index.js";
 
 describe("agent registry", () => {
+  it("custom capabilities can only narrow a real base adapter", () => {
+    expect(() => assembleLaunchCommand({ agentId: "custom:missing" })).toThrow(
+      /Unknown agent/,
+    );
+    const custom = customAgentSchema.parse({
+      id: "custom:narrow",
+      label: "Narrow",
+      launchCmd: "wrapper",
+      baseAgent: "claude",
+      disabledCapabilities: ["resume", "contextUsage"],
+    });
+    expect(inheritedAgentCapabilities(custom)).not.toContain("resume");
+    expect(inheritedAgentCapabilities(custom)).not.toContain("contextUsage");
+    expect(inheritedAgentCapabilities(custom)).toContain("hooks");
+    expect(() =>
+      assembleLaunchCommand({
+        agentId: custom.id,
+        custom,
+        resume: "provider-session",
+      }),
+    ).toThrow(/resume is disabled/);
+    expect(
+      assembleLaunchCommand({ agentId: custom.id, custom, prompt: "hello" })
+        .command,
+    ).toContain("hello");
+    expect(
+      customAgentSchema.safeParse({
+        ...custom,
+        disabledCapabilities: ["invented"],
+      }).success,
+    ).toBe(false);
+    expect(
+      customAgentSchema.safeParse({ ...custom, baseAgent: "invented" }).success,
+    ).toBe(false);
+    expect(
+      inheritedAgentCapabilities({
+        baseAgent: "gemini",
+        disabledCapabilities: [],
+      }),
+    ).not.toContain("contextUsage");
+  });
   it("covers the seven built-in CLIs with a full permission table", () => {
     expect(AGENT_IDS).toEqual([
       "claude",
@@ -62,7 +104,7 @@ describe("agent registry", () => {
 
 describe("hook events", () => {
   it("lists every provider's event names exactly once", () => {
-    expect(HOOK_CLIENT_REVISION).toBe(1);
+    expect(HOOK_CLIENT_REVISION).toBe(2);
     for (const id of AGENT_IDS) {
       const events = hookEventsFor(id);
       expect(events.length > 0).toBe(

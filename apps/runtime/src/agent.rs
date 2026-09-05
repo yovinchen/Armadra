@@ -12,6 +12,14 @@ use serde::Serialize;
 pub const AGENT_IDS: &[&str] = &[
     "claude", "codex", "gemini", "opencode", "pi", "omp", "copilot",
 ];
+pub const AGENT_CAPABILITIES: &[&str] = &[
+    "hooks",
+    "resume",
+    "subagent",
+    "contextLink",
+    "usage",
+    "contextUsage",
+];
 
 #[derive(Debug, Clone, Copy)]
 pub struct AgentDefinition {
@@ -30,7 +38,14 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
         color: "#d97757",
         launch_cmd: "claude",
         prompt_mode: "argv",
-        capabilities: &["hooks", "resume", "subagent", "contextLink", "usage"],
+        capabilities: &[
+            "hooks",
+            "resume",
+            "subagent",
+            "contextLink",
+            "usage",
+            "contextUsage",
+        ],
     },
     AgentDefinition {
         id: "codex",
@@ -98,7 +113,7 @@ pub struct AgentInfo {
     pub color: String,
     pub launch_cmd: String,
     pub prompt_mode: &'static str,
-    pub capabilities: &'static [&'static str],
+    pub capabilities: Vec<&'static str>,
     /// Extra argv the launch line appends after the flags. Always empty for a
     /// built-in agent; a custom one carries whatever the settings page stored.
     pub args: Vec<String>,
@@ -121,7 +136,7 @@ impl AgentInfo {
             color: agent.color.to_owned(),
             launch_cmd: agent.launch_cmd.to_owned(),
             prompt_mode: agent.prompt_mode,
-            capabilities: agent.capabilities,
+            capabilities: agent.capabilities.to_vec(),
             args: Vec::new(),
             base_agent: None,
             installed: resolved.is_some(),
@@ -133,9 +148,9 @@ impl AgentInfo {
 
 /// A `settings.agents.custom[]` entry as a `GET /api/agents` row (plan §24.1).
 ///
-/// Everything but the name, colour and program comes from the base agent: a
-/// custom entry is a different way to start the same CLI, so it must report the
-/// same prompt mode and capabilities or the launch line would be built wrong.
+/// The base supplies prompt behavior and available capabilities. A custom
+/// entry may disable those capabilities; it cannot grant another adapter's
+/// abilities merely by changing its label or launch program.
 pub fn custom_info(custom: &crate::settings::CustomAgent) -> AgentInfo {
     let base = definition(&custom.base_agent).unwrap_or(&AGENT_REGISTRY[0]);
     let resolved = resolve_command(&custom.launch_cmd);
@@ -147,9 +162,22 @@ pub fn custom_info(custom: &crate::settings::CustomAgent) -> AgentInfo {
         color: base.color.to_owned(),
         launch_cmd: custom.launch_cmd.clone(),
         prompt_mode: base.prompt_mode,
-        capabilities: base.capabilities,
+        capabilities: definition(&custom.base_agent)
+            .map(|base| {
+                base.capabilities
+                    .iter()
+                    .copied()
+                    .filter(|capability| {
+                        !custom
+                            .disabled_capabilities
+                            .iter()
+                            .any(|disabled| disabled == capability)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
         args: custom.args.clone(),
-        base_agent: Some(base.id),
+        base_agent: definition(&custom.base_agent).map(|base| base.id),
         installed: resolved.is_some(),
         resolved_path: resolved.map(|path| path.to_string_lossy().into_owned()),
         client_revision: None,
@@ -314,6 +342,7 @@ mod tests {
             args: vec!["hello".into()],
             env: serde_json::Map::new(),
             base_agent: "gemini".into(),
+            disabled_capabilities: vec![],
         };
         let info = custom_info(&custom);
         assert_eq!(info.id, "custom:echo");
@@ -329,12 +358,33 @@ mod tests {
         assert!(info.installed);
         assert_eq!(info.resolved_path.as_deref(), Some("/bin/echo"));
 
-        // An unknown base falls back to the first built-in rather than vanishing.
+        // A malformed direct caller never gains another adapter's abilities.
         let orphan = custom_info(&crate::settings::CustomAgent {
             base_agent: "nope".into(),
             ..custom
         });
-        assert_eq!(orphan.base_agent, Some("claude"));
+        assert_eq!(orphan.base_agent, None);
+        assert!(orphan.capabilities.is_empty());
+    }
+
+    #[test]
+    fn custom_capabilities_are_a_subset_and_unknown_settings_bases_are_rejected() {
+        let entries = crate::settings::parse_custom_agents(
+            &serde_json::json!({"agents":{"custom":[
+                {"id":"custom:narrow","label":"Narrow","launchCmd":"wrapper","baseAgent":"claude","disabledCapabilities":["resume","contextUsage","invented"]},
+                {"id":"custom:unknown","label":"Unknown","launchCmd":"wrapper","baseAgent":"invented"}
+            ]}}),
+        );
+        assert_eq!(entries.len(), 1);
+        let info = custom_info(&entries[0]);
+        assert!(!info.capabilities.contains(&"resume"));
+        assert!(!info.capabilities.contains(&"contextUsage"));
+        assert!(info.capabilities.contains(&"hooks"));
+        assert!(
+            info.capabilities
+                .iter()
+                .all(|value| definition("claude").unwrap().capabilities.contains(value))
+        );
     }
 
     #[cfg(unix)]

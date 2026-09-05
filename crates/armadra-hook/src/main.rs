@@ -4,7 +4,7 @@
 use std::io::Write;
 use std::process::ExitCode;
 
-use armadra_hook::{control, doctor, hook, USAGE};
+use armadra_hook::{context_usage, control, doctor, hook, USAGE};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -23,6 +23,7 @@ fn main() -> ExitCode {
             0
         }
         "context" => control::run_context(&args[1..]),
+        "context-usage" => context_usage::run(),
         "canvas" => control::run_canvas(&args[1..]),
         "doctor" => doctor::run(),
         agent_id if agent_id.starts_with('-') => {

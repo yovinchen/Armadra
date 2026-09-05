@@ -62,6 +62,7 @@ struct Inner {
     port: RwLock<u16>,
     /// Per-node reducer state that does not survive a restart.
     memory: Mutex<HashMap<String, Memory>>,
+    context_usage: crate::context_usage::ContextUsageCache,
 }
 
 #[derive(Clone)]
@@ -81,6 +82,9 @@ pub struct HookHealth {
 }
 
 impl HookService {
+    pub fn context_usage(&self) -> &crate::context_usage::ContextUsageCache {
+        &self.inner.context_usage
+    }
     /// Loads (or creates) the credentials for `data_dir`. A data directory we
     /// cannot write is not fatal: the service falls back to in-memory
     /// credentials so the rest of the runtime still starts, and the endpoint
@@ -98,6 +102,7 @@ impl HookService {
                 data_dir,
                 port: RwLock::new(port),
                 memory: Mutex::new(HashMap::new()),
+                context_usage: crate::context_usage::ContextUsageCache::default(),
             }),
         }
     }

@@ -5,6 +5,7 @@ import {
   connectWorkspaceEvents,
   nextReconnectDelay,
   onWorkspaceEvent,
+  onWorkspaceConnection,
   resetWorkspaceEvents,
 } from "./events";
 
@@ -68,6 +69,24 @@ function statusFrame(state: "working" | "done") {
 }
 
 describe("workspace events", () => {
+  it("reports connection generations without a late closed socket hiding the replacement", () => {
+    const seen = vi.fn();
+    const off = onWorkspaceConnection(seen);
+    const release = connectWorkspaceEvents(WORKSPACE);
+    const originalSocket = FakeSocket.instances[0]!;
+    originalSocket.onopen?.();
+    originalSocket.drop();
+    vi.advanceTimersByTime(1000);
+    FakeSocket.instances[1]!.onopen?.();
+    originalSocket.drop();
+    expect(seen.mock.calls).toEqual([
+      [WORKSPACE, true],
+      [WORKSPACE, false],
+      [WORKSPACE, true],
+    ]);
+    off();
+    release();
+  });
   it("opens one socket per workspace and parses frames", () => {
     const seen = vi.fn();
     const off = onWorkspaceEvent("agent.status", seen);

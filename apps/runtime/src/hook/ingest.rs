@@ -115,6 +115,17 @@ pub async fn ingest(
         _ => (provider.clone(), provider),
     };
 
+    if let Some(report) = request.payload.get("armadraContextUsage") {
+        if verdict.is_verified() {
+            let _ =
+                crate::context_usage::ingest(&state, &request.node_id, &provider, report).await?;
+        }
+        return Ok(StatusCode::NO_CONTENT);
+    }
+    if !crate::context_usage::has_capability(&state.settings, &agent_id, "hooks") {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
     let Some(mut event) =
         normalize::normalize_as(&provider, &agent_id, &request.node_id, &request.payload)
     else {
@@ -153,6 +164,9 @@ pub async fn apply(
     raw_payload: &Value,
 ) -> AppResult<Option<AgentStatus>> {
     if event.kind.is_subagent() {
+        if !crate::context_usage::has_capability(&state.settings, agent_id, "subagent") {
+            return Ok(None);
+        }
         // A subagent card is transient canvas state: published, never stored.
         state.events.publish(
             workspace_id,

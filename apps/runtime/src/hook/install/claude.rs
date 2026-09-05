@@ -1,9 +1,9 @@
 //! Claude Code — merges into `<config home>/settings.json` under `hooks`.
 //!
 //! `settings.json` is the user's own file: it holds their model, their
-//! permissions and their MCP servers. Everything outside `hooks` is read and
-//! written back untouched, and inside `hooks` only entries whose command names
-//! the client are ours to rewrite.
+//! permissions and their MCP servers. Only our hook entries and an unclaimed
+//! or previously managed `statusLine` are changed. A foreign status line is
+//! preserved and reported as not connected to context telemetry.
 //!
 //! Claude's hook timeouts are **seconds**. The client is a fire-and-forget POST
 //! with its own 1.5s deadline, so a short timeout here only bounds the damage
@@ -42,6 +42,21 @@ pub fn install(config_home: &Path, client_bin: &Path) -> AppResult<InstallReport
         }),
     );
     settings.insert("hooks".to_owned(), Value::Object(events));
+    // A foreign status line is user-owned. Never wrap or replace it: its
+    // command may have side effects and chaining would alter its lifecycle.
+    let context_command = hook_command(client_bin, "context-usage");
+    let owns_status_line = settings
+        .get("statusLine")
+        .and_then(|value| value.get("command"))
+        .and_then(Value::as_str)
+        .is_some_and(managed_context_command);
+    let context_installed = !settings.contains_key("statusLine") || owns_status_line;
+    if context_installed {
+        settings.insert(
+            "statusLine".into(),
+            json!({ "type": "command", "command": context_command }),
+        );
+    }
     write_json_object(&path, &settings)?;
     Ok(InstallReport {
         agent_id: AGENT_ID.to_owned(),
@@ -49,13 +64,21 @@ pub fn install(config_home: &Path, client_bin: &Path) -> AppResult<InstallReport
         client_bin: Some(client_bin.to_string_lossy().into_owned()),
         client_revision: HOOK_CLIENT_REVISION,
         installed: true,
-        warning: None,
+        warning: (!context_installed).then(|| "context_statusline_preserved".into()),
     })
 }
 
 pub fn uninstall(config_home: &Path) -> AppResult<InstallReport> {
     let path = settings_path(config_home);
     let mut settings = read_json_object(&path)?;
+    if settings
+        .get("statusLine")
+        .and_then(|value| value.get("command"))
+        .and_then(Value::as_str)
+        .is_some_and(managed_context_command)
+    {
+        settings.remove("statusLine");
+    }
     let mut events = take_events(&mut settings);
     strip_managed_handlers(&mut events);
     if events.is_empty() {
@@ -77,6 +100,33 @@ pub fn uninstall(config_home: &Path) -> AppResult<InstallReport> {
     })
 }
 
+fn managed_context_command(command: &str) -> bool {
+    let Some(program) = command.strip_suffix(" context-usage") else {
+        return false;
+    };
+    // Generated paths are one shell-quoted argument. Be conservative about
+    // unfamiliar shell syntax; preserving a foreign command is always safe.
+    let program = if program.len() >= 2
+        && program.starts_with('"')
+        && program.ends_with('"')
+        && !program[1..program.len() - 1].contains('"')
+    {
+        program[1..program.len() - 1].to_owned()
+    } else if program.len() >= 2 && program.starts_with('\'') && program.ends_with('\'') {
+        program[1..program.len() - 1].replace("'\\''", "'")
+    } else if !program.chars().any(char::is_whitespace) {
+        program.to_owned()
+    } else {
+        return false;
+    };
+    let normalized = program.replace('\\', "/");
+    let filename = normalized.rsplit('/').next().unwrap_or("");
+    matches!(filename, "armadra-hook" | "armadra-hook.exe")
+        && !program
+            .chars()
+            .any(|character| matches!(character, ';' | '|' | '&' | '`' | '$' | '\n' | '\r'))
+}
+
 /// Lifts `hooks` out of the settings so it can be edited as a map. A `hooks`
 /// key that is not an object is replaced rather than merged: Claude could not
 /// read it either.
@@ -95,6 +145,44 @@ mod tests {
 
     fn client() -> &'static Path {
         Path::new("/opt/armadra/armadra-hook")
+    }
+
+    #[test]
+    fn context_status_line_is_added_only_when_unclaimed_and_removed_only_when_managed() {
+        let home = tempdir().unwrap();
+        install(home.path(), client()).unwrap();
+        let path = settings_path(home.path());
+        let settings: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            settings["statusLine"]["command"],
+            "/opt/armadra/armadra-hook context-usage"
+        );
+        uninstall(home.path()).unwrap();
+        let settings: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(settings.get("statusLine").is_none());
+
+        let foreign = json!({"type":"command", "command":"/my/statusline", "padding":3});
+        fs::write(
+            &path,
+            serde_json::to_vec(&json!({"statusLine":foreign})).unwrap(),
+        )
+        .unwrap();
+        assert!(install(home.path(), client()).unwrap().warning.is_some());
+        uninstall(home.path()).unwrap();
+        let settings: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(settings["statusLine"], foreign);
+        assert!(!managed_context_command(
+            "echo /opt/armadra/armadra-hook context-usage"
+        ));
+        assert!(!managed_context_command(
+            "/tmp/armadra-hook context-usage; echo other"
+        ));
+        assert!(managed_context_command(
+            "\"C:/Program Files/Armadra/armadra-hook.exe\" context-usage"
+        ));
+        assert!(managed_context_command(
+            "\"/Applications/Armadra App/armadra-hook\" context-usage"
+        ));
     }
 
     #[test]

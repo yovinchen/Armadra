@@ -112,6 +112,8 @@ fn run(args: &[&str], env: &[(&str, &str)], stdin: &str) -> Output {
         "ARMADRA_CANVAS_CONTROL",
         "ARMADRA_PERM_WAIT_SECS",
         "ARMADRA_HOOK_DEBUG",
+        "ARMADRA_SESSION_ID",
+        "ARMADRA_SESSION_GENERATION",
     ] {
         command.env_remove(name);
     }
@@ -171,7 +173,7 @@ fn hook_mode_sends_the_expected_request() {
     assert_eq!(captured.header("Host").as_deref(), Some("127.0.0.1"));
     assert_eq!(
         captured.header("X-Armadra-Hook-Client").as_deref(),
-        Some("1")
+        Some("2")
     );
     assert_eq!(
         captured.header("X-Armadra-Hook-Token").as_deref(),
@@ -193,6 +195,48 @@ fn hook_mode_sends_the_expected_request() {
         captured.header("Content-Length").unwrap(),
         captured.body.len().to_string()
     );
+}
+
+#[test]
+fn context_status_line_sends_only_bound_metadata_with_monotonic_revision() {
+    let dir = tempfile::tempdir().unwrap();
+    let (port, requests) = serve_once("HTTP/1.1 204 No Content\r\n\r\n");
+    let endpoint = write_endpoint_file(dir.path(), port);
+    let sequences = dir.path().join("context-sequences");
+    std::fs::create_dir(&sequences).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&sequences, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    std::fs::write(
+        sequences.join("session-1-2.seq"),
+        [4u64.to_be_bytes(), (!4u64).to_be_bytes()].concat(),
+    )
+    .unwrap();
+    let output = run(
+        &["context-usage"],
+        &[
+            ("ARMADRA_NODE_ID", "node-7"),
+            ("ARMADRA_ENDPOINT_FILE", endpoint.to_str().unwrap()),
+            ("ARMADRA_SESSION_ID", "session-1"),
+            ("ARMADRA_SESSION_GENERATION", "2"),
+        ],
+        r#"{"session_id":"provider-1","model":{"id":"fixture"},"transcript_path":"private-content","context_window":{"context_window_size":200000,"current_usage":{"input_tokens":100,"cache_creation_input_tokens":20,"cache_read_input_tokens":30,"output_tokens":99}}}"#,
+    );
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
+    let captured = requests
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .unwrap();
+    let body: serde_json::Value = serde_json::from_str(&captured.body).unwrap();
+    let report = &body["payload"]["armadraContextUsage"];
+    assert_eq!(report["sessionId"], "session-1");
+    assert_eq!(report["generation"], 2);
+    assert_eq!(report["sourceRevision"], "5");
+    assert!(!body.to_string().contains("private-content"));
+    assert!(!body.to_string().contains("output_tokens"));
 }
 
 #[test]

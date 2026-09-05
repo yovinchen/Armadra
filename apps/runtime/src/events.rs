@@ -15,6 +15,12 @@ use crate::model::AgentStatus;
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type")]
 pub enum WorkspaceEvent {
+    #[serde(rename = "agent.context", rename_all = "camelCase")]
+    AgentContext {
+        node_id: String,
+        session_id: String,
+        generation: u64,
+    },
     #[serde(rename = "agent.status")]
     AgentStatus { status: AgentStatus },
     #[serde(rename = "agent.subagent")]

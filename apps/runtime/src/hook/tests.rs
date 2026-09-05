@@ -29,6 +29,164 @@ struct Fixture {
     _directory: TempDir,
 }
 
+#[tokio::test]
+async fn disabled_custom_hooks_are_not_processed() {
+    let fixture = fixture("disabled-hook-capability").await;
+    fixture.state.settings.patch(&json!({"agents":{"custom":[{"id":"custom:narrow","label":"Narrow","launchCmd":"wrapper","baseAgent":"claude","disabledCapabilities":["hooks"]}]}})).unwrap();
+    let token = fixture
+        .state
+        .hooks
+        .issue_node_token(&fixture.node_id)
+        .unwrap();
+    assert_eq!(
+        fixture
+            .post_hook(
+                "custom%3Anarrow",
+                json!({"nodeId":fixture.node_id,"payload":{"hook_event_name":"Stop"}}),
+                &[
+                    ("x-armadra-hook-token", &fixture.bearer),
+                    ("x-armadra-node-token", &token)
+                ]
+            )
+            .await,
+        StatusCode::NO_CONTENT
+    );
+    assert!(fixture.status().await.is_none());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn context_reports_require_verified_current_pty_and_publish_only_invalidation() {
+    use crate::{
+        context_usage::{ContextQuery, get_snapshot},
+        terminal::{SpawnRequest, TerminateMode},
+    };
+    let fixture = fixture("context-observation").await;
+    let session = fixture
+        .state
+        .terminals
+        .spawn(SpawnRequest {
+            workspace_id: fixture.workspace_id.clone(),
+            cwd: fixture._directory.path().to_string_lossy().into_owned(),
+            command: Some("/bin/cat".into()),
+            owner_node_id: Some(fixture.node_id.clone()),
+            agent_id: Some("claude".into()),
+            env: crate::terminal::agent_environment(&fixture.node_id, "claude"),
+            ..SpawnRequest::plain(
+                fixture.workspace_id.clone(),
+                fixture._directory.path().to_string_lossy().into_owned(),
+            )
+        })
+        .await
+        .unwrap();
+    let query = ContextQuery {
+        session_id: session.id.clone(),
+        generation: session.generation as u64,
+    };
+    let data = json!({"session_id":"fixture-provider", "model":{"id":"fixture-model"},
+        "context_window":{"context_window_size":200000,"current_usage":{
+            "input_tokens":100,"cache_creation_input_tokens":200,"cache_read_input_tokens":300}}});
+    let report = |generation, revision| {
+        json!({"armadraContextUsage":{
+        "sessionId":session.id,"generation":generation,"sourceRevision":revision,"data":data}})
+    };
+    fixture
+        .post_hook(
+            "claude",
+            json!({"nodeId":fixture.node_id,"payload":report(session.generation,"1")}),
+            &[("x-armadra-hook-token", &fixture.bearer)],
+        )
+        .await;
+    assert_eq!(
+        get_snapshot(
+            &fixture.state,
+            &fixture.workspace_id,
+            &fixture.node_id,
+            &query
+        )
+        .await
+        .unwrap()
+        .quality,
+        "unknown"
+    );
+    let mut events = fixture.state.events.subscribe(&fixture.workspace_id);
+    assert_eq!(
+        fixture.report(report(session.generation, "2")).await,
+        StatusCode::NO_CONTENT
+    );
+    let snapshot = get_snapshot(
+        &fixture.state,
+        &fixture.workspace_id,
+        &fixture.node_id,
+        &query,
+    )
+    .await
+    .unwrap();
+    assert_eq!(snapshot.used_tokens, Some(600));
+    assert!(matches!(
+        events.try_recv().unwrap(),
+        crate::events::WorkspaceEvent::AgentContext { generation: 1, .. }
+    ));
+    fixture.report(report(session.generation + 1, "3")).await;
+    assert_eq!(
+        get_snapshot(
+            &fixture.state,
+            &fixture.workspace_id,
+            &fixture.node_id,
+            &query
+        )
+        .await
+        .unwrap()
+        .source_revision
+        .as_deref(),
+        Some("2")
+    );
+    assert!(
+        get_snapshot(
+            &fixture.state,
+            &fixture.workspace_id,
+            "another-node",
+            &query
+        )
+        .await
+        .is_err()
+    );
+    fixture
+        .state
+        .terminals
+        .terminate(&session.id, TerminateMode::Session)
+        .await
+        .unwrap();
+    assert_eq!(
+        get_snapshot(
+            &fixture.state,
+            &fixture.workspace_id,
+            &fixture.node_id,
+            &query
+        )
+        .await
+        .unwrap()
+        .quality,
+        "unknown"
+    );
+    fixture.report(report(session.generation, "4")).await;
+    assert_eq!(
+        fixture
+            .state
+            .hooks
+            .context_usage()
+            .snapshot(
+                &fixture.node_id,
+                &session.id,
+                query.generation,
+                chrono::Utc::now().timestamp_millis()
+            )
+            .source_revision
+            .as_deref(),
+        Some("2")
+    );
+}
+
 async fn fixture(name: &str) -> Fixture {
     let directory = tempfile::tempdir().unwrap();
     let pool = db::connect(&format!(
@@ -557,6 +715,7 @@ async fn reports_we_cannot_place_are_accepted_and_dropped() {
 #[tokio::test]
 async fn a_percent_encoded_custom_agent_id_reaches_the_handler() {
     let fixture = fixture("hook-custom").await;
+    fixture.state.settings.patch(&json!({"agents":{"custom":[{"id":"custom:wrapper","label":"Wrapper","launchCmd":"wrapper","baseAgent":"claude"}]}})).unwrap();
     let token = fixture
         .state
         .hooks
@@ -1139,7 +1298,10 @@ async fn the_install_routes_record_what_they_wrote() {
         .iter()
         .find(|agent| agent["id"] == "claude")
         .unwrap();
-    assert_eq!(claude["clientRevision"], 1);
+    assert_eq!(
+        claude["clientRevision"],
+        super::install::HOOK_CLIENT_REVISION
+    );
     let others = agents
         .as_array()
         .unwrap()
