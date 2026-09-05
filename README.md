@@ -2,6 +2,13 @@
 
 一个 local-first 的 AI Coding 工作台：在无限工作区中组织终端、Agent、文件、任务、浏览器、日志和 Diff，通过语义连线传递上下文，并让执行结果回流为可审查节点。
 
+## 品牌标识
+
+- 当前名称保持为 **AI Coding Canvas**。
+- 默认 Logo 源文件为 [`design/logo-concepts/armadra-armadillo-primary.png`](./design/logo-concepts/armadra-armadillo-primary.png)。
+- 桌面端各平台图标由该源文件生成到 `apps/desktop/src-tauri/icons/`；Web favicon 同步为 `apps/web/public/icon.png`。
+- 如需更换默认 Logo，应先替换或确认源文件，再重新生成桌面端图标，避免各平台品牌资源不一致。
+
 ## 当前状态
 
 Phase 1 MVP 已实现，并于 2026-09-02 按设计稿完成 v2 桌面端界面重构：启动页与多工作空间/多看板、10 类节点与三态缩放、6 种语义连线、拖拽/粘贴创建、手绘标注、一键整理、⌘K、设置与 Diff 扫描抽屉。网关与外部端为预留。
