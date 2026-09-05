@@ -149,7 +149,7 @@ async fn discovers_every_checkout_and_scopes_status_and_graph_data_per_repositor
             settings.clone(),
             directory.path().to_owned(),
         ),
-        hooks: HookService::new(directory.path().to_owned(), 0),
+        hooks: HookService::new(directory.path().to_owned(), None),
         usage: UsageService::new(settings),
     });
     let base = format!("/api/workspaces/{}/git", workspace.id);
@@ -370,7 +370,7 @@ async fn discovery_reports_an_unknown_dirty_count_without_an_execution_grant() {
             settings.clone(),
             directory.path().to_owned(),
         ),
-        hooks: HookService::new(directory.path().to_owned(), 0),
+        hooks: HookService::new(directory.path().to_owned(), None),
         usage: UsageService::new(settings),
     });
 
