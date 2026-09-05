@@ -444,15 +444,14 @@ export const runtimeApi = {
       fileContentSchema,
     ),
   /**
-   * 原子写入（tmp + rename）。给 `expectedSize`（上次读到的字节数）就是
-   * 乐观锁：文件在这期间被 Agent 改过时 Runtime 返 409，调用方提示重载而
-   * 不是把别人的修改盖掉。
+   * 原子写入；已有文件必须携带内容SHA，缺省仅创建新文件。
    */
   writeFile: (
     workspaceId: string,
     path: string,
     content: string,
     expectedSize?: number,
+    expectedSha256?: string,
   ) =>
     request(`/api/workspaces/${workspaceId}/file`, writeFileResponseSchema, {
       method: "PUT",
@@ -461,6 +460,7 @@ export const runtimeApi = {
           path,
           content,
           ...(expectedSize === undefined ? {} : { expectedSize }),
+          ...(expectedSha256 === undefined ? {} : { expectedSha256 }),
         }),
       ),
     }),

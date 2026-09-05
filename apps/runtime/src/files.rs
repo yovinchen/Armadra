@@ -1,14 +1,17 @@
 use std::{
     fs::{self, File},
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 
 use serde::Serialize;
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
+use std::sync::{Arc, LazyLock, Mutex, Weak};
 
 use crate::{
     error::{AppError, AppResult},
-    security::{canonical_directory, relative_to_root, resolve_in_root, resolve_writable_in_root},
+    security::{canonical_directory, relative_to_root, resolve_in_root},
 };
 
 const MAX_ENTRIES: usize = 500;
@@ -43,6 +46,7 @@ pub struct FileContent {
     pub mime_type: String,
     pub content: String,
     pub size: u64,
+    pub sha256: String,
 }
 
 pub fn list_directory(root: &Path, requested: &str) -> AppResult<FileList> {
@@ -103,7 +107,17 @@ pub fn read_text_file(root: &Path, requested: &str) -> AppResult<FileContent> {
             "File is larger than the 1 MiB preview limit".into(),
         ));
     }
-    let bytes = fs::read(&path)?;
+    let mut bytes = Vec::new();
+    File::open(&path)?
+        .take(MAX_TEXT_FILE_SIZE + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_TEXT_FILE_SIZE {
+        return Err(AppError::BadRequest(
+            "File exceeds the preview limit".into(),
+        ));
+    }
+    let size = bytes.len() as u64;
+    let sha256 = format!("{:x}", Sha256::digest(&bytes));
     if bytes.iter().take(8_192).any(|byte| *byte == 0) {
         return Err(AppError::BadRequest(
             "Binary files cannot be previewed as text".into(),
@@ -118,7 +132,8 @@ pub fn read_text_file(root: &Path, requested: &str) -> AppResult<FileContent> {
             .essence_str()
             .to_owned(),
         content,
-        size: metadata.len(),
+        size,
+        sha256,
     })
 }
 
@@ -127,24 +142,121 @@ pub fn read_text_file(root: &Path, requested: &str) -> AppResult<FileContent> {
 pub struct FileWriteResult {
     pub path: String,
     pub size: u64,
+    pub sha256: String,
 }
 
-/// `PUT /api/workspaces/{id}/file`.
-///
-/// The body is JSON, so `content` is already valid UTF-8 by construction — no
-/// binary payload can reach this function. The write is atomic: the bytes go to
-/// a sibling temp file that is fsync'd and then renamed over the target, so a
-/// crash mid-write leaves the previous contents intact rather than a truncated
-/// file.
-///
-/// `expected_size` is an optimistic-concurrency token: when present the file
-/// must exist with exactly that many bytes, otherwise the write is refused with
-/// a conflict and the caller re-reads.
+// Application writers share a gate; external editors are still checked just
+// before publication. Filesystems do not provide a cross-process content CAS.
+static FILE_WRITERS: LazyLock<Mutex<HashMap<PathBuf, Weak<Mutex<()>>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+fn file_gate(path: &Path) -> AppResult<Arc<Mutex<()>>> {
+    let mut gates = FILE_WRITERS
+        .lock()
+        .map_err(|_| AppError::Internal("File gate unavailable".into()))?;
+    gates.retain(|_, gate| gate.strong_count() > 0);
+    Ok(gates
+        .entry(path.to_owned())
+        .or_default()
+        .upgrade()
+        .unwrap_or_else(|| {
+            let gate = Arc::new(Mutex::new(()));
+            gates.insert(path.to_owned(), Arc::downgrade(&gate));
+            gate
+        }))
+}
+fn writable_path(root: &Path, requested: &str) -> AppResult<PathBuf> {
+    let relative = Path::new(requested);
+    if requested.is_empty()
+        || requested.len() > 32768
+        || relative.is_absolute()
+        || !relative
+            .components()
+            .all(|part| matches!(part, std::path::Component::Normal(_)))
+    {
+        return Err(AppError::BadRequest(
+            "A literal workspace-relative file path is required".into(),
+        ));
+    }
+    let name = relative
+        .file_name()
+        .ok_or_else(|| AppError::BadRequest("File name is missing".into()))?;
+    let parent = relative
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let parent = resolve_in_root(
+        root,
+        parent
+            .to_str()
+            .ok_or_else(|| AppError::BadRequest("Path must be Unicode".into()))?,
+    )?;
+    if !parent.is_dir() {
+        return Err(AppError::BadRequest(
+            "File parent is not a directory".into(),
+        ));
+    }
+    Ok(parent.join(name))
+}
+fn current_version(path: &Path) -> AppResult<Option<(String, std::fs::Permissions)>> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(value) => value,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    if metadata.file_type().is_symlink() {
+        return Err(AppError::Forbidden(
+            "Writing through a symbolic link is not allowed".into(),
+        ));
+    }
+    if !metadata.is_file() {
+        return Err(AppError::BadRequest(
+            "Only regular files can be replaced".into(),
+        ));
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let file = options.open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(AppError::BadRequest(
+            "Only regular files can be replaced".into(),
+        ));
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_WRITE_FILE_SIZE + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_WRITE_FILE_SIZE {
+        return Err(AppError::BadRequest(
+            "Existing file exceeds the write limit".into(),
+        ));
+    }
+    Ok(Some((
+        format!("{:x}", Sha256::digest(&bytes)),
+        metadata.permissions(),
+    )))
+}
+fn verify_version(path: &Path, expected: Option<&str>) -> AppResult<Option<std::fs::Permissions>> {
+    let current = current_version(path)?;
+    if current.as_ref().map(|(hash, _)| hash.as_str()) != expected {
+        return Err(AppError::Conflict(
+            "File content changed; reload or compare the disk version before saving".into(),
+        ));
+    }
+    Ok(current.map(|(_, permissions)| permissions))
+}
+
+/// A missing version means create-only. Existing files require the SHA-256
+/// returned by read_text_file; size alone cannot detect same-length edits.
+/// A sibling temporary file is exclusive, fsynced and published atomically.
+/// The last verification detects observed external writes, not an OS-wide lock.
 pub fn write_text_file(
     root: &Path,
     requested: &str,
     content: &str,
-    expected_size: Option<u64>,
+    expected_sha256: Option<&str>,
 ) -> AppResult<FileWriteResult> {
     let root = canonical_directory(root)?;
     let bytes = content.as_bytes();
@@ -153,66 +265,68 @@ pub fn write_text_file(
             "File is larger than the 2 MiB write limit".into(),
         ));
     }
-    let path = resolve_writable_in_root(&root, requested)?;
-
-    if let Some(expected) = expected_size {
-        let current = fs::symlink_metadata(&path).ok().map(|meta| meta.len());
-        if current != Some(expected) {
-            return Err(AppError::Conflict(
-                "The file changed on disk since it was read".into(),
-            ));
-        }
+    if expected_sha256
+        .is_some_and(|hash| hash.len() != 64 || !hash.bytes().all(|byte| byte.is_ascii_hexdigit()))
+    {
+        return Err(AppError::BadRequest(
+            "A valid content version is required".into(),
+        ));
     }
-
-    let directory = path
+    let expected = expected_sha256.map(str::to_ascii_lowercase);
+    let path = writable_path(&root, requested)?;
+    let gate = file_gate(&path)?;
+    let _guard = gate
+        .lock()
+        .map_err(|_| AppError::Internal("File writer unavailable".into()))?;
+    let permissions = verify_version(&path, expected.as_deref())?;
+    if permissions.as_ref().is_some_and(|value| value.readonly()) {
+        return Err(AppError::Forbidden("File is read-only".into()));
+    }
+    let parent = path
         .parent()
-        .ok_or_else(|| AppError::BadRequest("Requested path is invalid".into()))?;
-    let temporary = temporary_sibling(&path);
-    let write = (|| -> std::io::Result<()> {
-        let mut file = File::create(&temporary)?;
+        .ok_or_else(|| AppError::BadRequest("File parent is missing".into()))?;
+    let temporary = parent.join(format!(".{}.armadra-tmp", uuid::Uuid::new_v4()));
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(&temporary)?;
+    let result = (|| -> AppResult<FileWriteResult> {
         file.write_all(bytes)?;
         file.sync_all()?;
-        drop(file);
-        // Keep the mode of the file we are replacing; `File::create` would
-        // otherwise reset an executable script to 0644.
-        if let Ok(existing) = fs::metadata(&path) {
-            let _ = fs::set_permissions(&temporary, existing.permissions());
+        if let Some(permissions) = permissions {
+            fs::set_permissions(&temporary, permissions)?;
         }
-        fs::rename(&temporary, &path)
+        if writable_path(&root, requested)? != path {
+            return Err(AppError::Conflict("File parent changed during save".into()));
+        }
+        verify_version(&path, expected.as_deref())?;
+        if expected.is_none() {
+            fs::hard_link(&temporary, &path).map_err(|error| {
+                if error.kind() == std::io::ErrorKind::AlreadyExists {
+                    AppError::Conflict("File was created by another writer".into())
+                } else {
+                    error.into()
+                }
+            })?;
+        } else {
+            fs::rename(&temporary, &path)?;
+        }
+        if let Ok(directory) = File::open(parent) {
+            let _ = directory.sync_all();
+        }
+        Ok(FileWriteResult {
+            path: relative_to_root(&root, &path)?,
+            size: bytes.len() as u64,
+            sha256: format!("{:x}", Sha256::digest(bytes)),
+        })
     })();
-    if let Err(error) = write {
-        let _ = fs::remove_file(&temporary);
-        return Err(AppError::Io(error));
-    }
-    // Best effort: on most filesystems the rename is only durable once the
-    // directory entry is flushed too. A failure here does not invalidate the
-    // write, so it is not reported.
-    if let Ok(handle) = File::open(directory) {
-        let _ = handle.sync_all();
-    }
-
-    Ok(FileWriteResult {
-        path: relative_to_root(&root, &path)?,
-        size: bytes.len() as u64,
-    })
-}
-
-/// `dir/.name.<pid>.<nanos>.armadra-tmp` — same directory, so the rename stays on
-/// one filesystem and therefore stays atomic.
-fn temporary_sibling(path: &Path) -> PathBuf {
-    let name = path
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "file".to_owned());
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_nanos())
-        .unwrap_or_default();
-    let directory = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    directory.join(format!(
-        ".{name}.{}.{stamp}.armadra-tmp",
-        std::process::id()
-    ))
+    drop(file);
+    let _ = fs::remove_file(&temporary);
+    result
 }
 
 #[cfg(test)]
@@ -258,7 +372,8 @@ mod tests {
             "一行\n"
         );
 
-        let updated = write_text_file(root.path(), "src/new.txt", "two\n", None).unwrap();
+        let updated =
+            write_text_file(root.path(), "src/new.txt", "two\n", Some(&created.sha256)).unwrap();
         assert_eq!(updated.size, 4);
         // No temp file is left behind.
         let leftovers = fs::read_dir(root.path().join("src"))
@@ -322,12 +437,12 @@ mod tests {
     }
 
     #[test]
-    fn compare_and_swap_rejects_a_stale_expected_size() {
+    fn content_version_rejects_stale_and_missing_files() {
         let root = tempdir().unwrap();
         fs::write(root.path().join("note.txt"), "one\n").unwrap();
 
         assert!(matches!(
-            write_text_file(root.path(), "note.txt", "two\n", Some(99)),
+            write_text_file(root.path(), "note.txt", "two\n", Some(&"0".repeat(64))),
             Err(AppError::Conflict(_))
         ));
         assert_eq!(
@@ -335,14 +450,95 @@ mod tests {
             "one\n"
         );
 
-        let saved = write_text_file(root.path(), "note.txt", "two\n", Some(4)).unwrap();
+        let saved = write_text_file(
+            root.path(),
+            "note.txt",
+            "two\n",
+            Some(&read_text_file(root.path(), "note.txt").unwrap().sha256),
+        )
+        .unwrap();
         assert_eq!(saved.size, 4);
 
         // A file that does not exist yet can never satisfy a CAS token.
         assert!(matches!(
-            write_text_file(root.path(), "fresh.txt", "x", Some(0)),
+            write_text_file(root.path(), "fresh.txt", "x", Some(&"0".repeat(64))),
             Err(AppError::Conflict(_))
         ));
+    }
+
+    #[test]
+    fn detects_same_length_external_changes_and_requires_a_version() {
+        let root = tempdir().unwrap();
+        let file = root.path().join("note.txt");
+        fs::write(&file, "old").unwrap();
+        let original = read_text_file(root.path(), "note.txt").unwrap();
+        fs::write(&file, "new").unwrap();
+        assert!(matches!(
+            write_text_file(root.path(), "note.txt", "mine", Some(&original.sha256)),
+            Err(AppError::Conflict(_))
+        ));
+        assert!(matches!(
+            write_text_file(root.path(), "note.txt", "mine", None),
+            Err(AppError::Conflict(_))
+        ));
+        assert_eq!(fs::read_to_string(file).unwrap(), "new");
+    }
+
+    #[test]
+    fn simultaneous_writers_cannot_both_replace_the_same_version() {
+        let root = tempdir().unwrap();
+        let first = write_text_file(root.path(), "note.txt", "start", None).unwrap();
+        let barrier = Arc::new(std::sync::Barrier::new(3));
+        let workers: Vec<_> = ["first", "other"]
+            .into_iter()
+            .map(|text| {
+                let root = root.path().to_owned();
+                let barrier = barrier.clone();
+                let hash = first.sha256.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    write_text_file(&root, "note.txt", text, Some(&hash))
+                })
+            })
+            .collect();
+        barrier.wait();
+        let results: Vec<_> = workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .collect();
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert_eq!(
+            results
+                .iter()
+                .filter(|result| matches!(result, Err(AppError::Conflict(_))))
+                .count(),
+            1
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn literal_whitespace_names_remain_distinct_and_readonly_files_are_preserved() {
+        let root = tempdir().unwrap();
+        write_text_file(root.path(), "note", "plain", None).unwrap();
+        let spaced = write_text_file(root.path(), " note ", "space", None).unwrap();
+        assert_eq!(
+            read_text_file(root.path(), " note ").unwrap().sha256,
+            spaced.sha256
+        );
+        assert_eq!(
+            fs::read_to_string(root.path().join("note")).unwrap(),
+            "plain"
+        );
+        let path = root.path().join(" note ");
+        let mut permissions = fs::metadata(&path).unwrap().permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&path, permissions).unwrap();
+        assert!(matches!(
+            write_text_file(root.path(), " note ", "later", Some(&spaced.sha256)),
+            Err(AppError::Forbidden(_))
+        ));
+        assert_eq!(fs::read_to_string(&path).unwrap(), "space");
     }
 
     #[test]

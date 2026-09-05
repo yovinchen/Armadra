@@ -122,6 +122,7 @@ export const fileContentSchema = z.object({
   mimeType: z.string(),
   content: z.string(),
   size: z.number().int().nonnegative(),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 });
 
 export const MAX_IMPORT_FILE_BYTES = 16 * 1024 * 1024;
@@ -147,20 +148,20 @@ export const MAX_WRITE_FILE_BYTES = 2 * 1024 * 1024;
 /**
  * `PUT /api/workspaces/{id}/file` — the editor node's save.
  *
- * `expectedSize` is the byte size the client last read. When present the
- * runtime refuses the write with `409` unless the file still has exactly that
- * size, so an agent that rewrote the file underneath the editor cannot be
- * silently clobbered.
+ * Existing files require their observed SHA-256. Omitting it creates only a
+ * new file; the legacy size field alone cannot authorize an overwrite.
  */
 export const writeFileRequestSchema = z.object({
-  path: z.string().trim().min(1).max(4_000),
+  path: z.string().min(1).max(4_000),
   content: z.string().max(MAX_WRITE_FILE_BYTES),
   expectedSize: z.number().int().nonnegative().optional(),
+  expectedSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 });
 
 export const writeFileResponseSchema = z.object({
   path: z.string(),
   size: z.number().int().nonnegative(),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/),
 });
 
 /* ---------------------------------- terminals ---------------------------- */

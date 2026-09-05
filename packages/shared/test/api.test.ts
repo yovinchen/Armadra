@@ -212,7 +212,7 @@ describe("runtime API v3", () => {
     );
   });
 
-  it("writes a file with an optional CAS token", () => {
+  it("writes files with content versions and literal paths", () => {
     expect(
       writeFileRequestSchema.parse({ path: "src/a.ts", content: "x" }),
     ).toEqual({ path: "src/a.ts", content: "x" });
@@ -225,7 +225,7 @@ describe("runtime API v3", () => {
     ).toBe(0);
     // An empty path or a negative size never reaches the runtime.
     expect(
-      writeFileRequestSchema.safeParse({ path: "  ", content: "" }).success,
+      writeFileRequestSchema.safeParse({ path: "", content: "" }).success,
     ).toBe(false);
     expect(
       writeFileRequestSchema.safeParse({
@@ -234,7 +234,11 @@ describe("runtime API v3", () => {
         expectedSize: -1,
       }).success,
     ).toBe(false);
-    expect(writeFileResponseSchema.parse({ path: "a", size: 3 }).size).toBe(3);
+    const sha256 = "a".repeat(64);
+    expect(writeFileRequestSchema.parse({ path: "  ", content: "", expectedSha256: sha256 })).toEqual({ path: "  ", content: "", expectedSha256: sha256 });
+    expect(writeFileRequestSchema.safeParse({ path: "a", content: "", expectedSha256: "bad" }).success).toBe(false);
+    expect(writeFileResponseSchema.parse({ path: "a", size: 3, sha256 }).sha256).toBe(sha256);
+    expect(writeFileResponseSchema.safeParse({ path: "a", size: 3 }).success).toBe(false);
   });
 
   it("reads per-file git status, and tolerates a runtime without it", () => {

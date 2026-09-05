@@ -40,6 +40,7 @@ const zh = {
   "editor.download": "下载文件",
   "editor.dirty": "未保存",
   "editor.saveFailed": "保存失败",
+  "editor.versionRequired": "服务未提供内容版本，仅可预览",
   "editor.conflict": "文件已被修改",
 
   /* 变更 */
@@ -126,6 +127,7 @@ const en: Record<keyof typeof zh, string> = {
   "editor.download": "Download file",
   "editor.dirty": "Unsaved",
   "editor.saveFailed": "Save failed",
+  "editor.versionRequired": "Preview only: content version unavailable",
   "editor.conflict": "The file changed on disk",
 
   "diff.refresh": "Refresh",

@@ -485,10 +485,9 @@ pub async fn import_local_files(
 pub struct WriteFileRequest {
     path: String,
     content: String,
-    /// Optimistic concurrency: the size the client last read. A mismatch means
-    /// somebody else (an agent, an external editor) wrote the file in between,
-    /// and the save is refused with `409` instead of overwriting them.
+    /// Legacy field retained to reject old size-only overwrites explicitly.
     expected_size: Option<u64>,
+    expected_sha256: Option<String>,
 }
 
 /// `PUT /api/workspaces/{id}/file` — the editor node's save (plan §3.4).
@@ -503,12 +502,21 @@ pub async fn write_file(
             "This workspace is opened read-only".into(),
         ));
     }
-    Ok(Json(files::write_text_file(
-        Path::new(&workspace.root_path),
-        &request.path,
-        &request.content,
-        request.expected_size,
-    )?))
+    if request.expected_size.is_some() && request.expected_sha256.is_none() {
+        return Err(AppError::BadRequest(
+            "Reload the file to obtain its content version before saving".into(),
+        ));
+    }
+    tokio::task::spawn_blocking(move || {
+        files::write_text_file(
+            Path::new(&workspace.root_path),
+            &request.path,
+            &request.content,
+            request.expected_sha256.as_deref(),
+        )
+        .map(Json)
+    })
+    .await?
 }
 
 /* --------------------------------- terminals ----------------------------- */
@@ -2837,6 +2845,68 @@ mod tests {
         assert_eq!(conflict["code"], "conflict");
     }
 
+    #[tokio::test]
+    async fn file_saves_require_content_versions_and_preserve_external_edits() {
+        let (router, directory) = router_fixture("api-file-version").await;
+        let root = directory.path().join("project");
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(root.join("note.txt"), "old").unwrap();
+        let (status, workspace) = call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            Some(json!({
+                "name":"files", "rootPath":root.to_string_lossy()
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let uri = format!("/api/workspaces/{}/file", workspace["id"].as_str().unwrap());
+        let (status, read) = call(&router, "GET", &format!("{uri}?path=note.txt"), None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(read["sha256"].as_str().unwrap().len(), 64);
+        std::fs::write(root.join("note.txt"), "new").unwrap();
+        let (status, _) = call(&router, "PUT", &uri, Some(json!({
+            "path":"note.txt", "content":"mine", "expectedSize":3, "expectedSha256":read["sha256"]
+        }))).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        let (status, _) = call(
+            &router,
+            "PUT",
+            &uri,
+            Some(json!({
+                "path":"note.txt", "content":"mine", "expectedSize":3
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let (status, _) = call(
+            &router,
+            "PUT",
+            &uri,
+            Some(json!({"path":"note.txt", "content":"mine"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(
+            std::fs::read_to_string(root.join("note.txt")).unwrap(),
+            "new"
+        );
+        let (_, fresh) = call(&router, "GET", &format!("{uri}?path=note.txt"), None).await;
+        let (status, saved) = call(
+            &router,
+            "PUT",
+            &uri,
+            Some(json!({
+                "path":"note.txt", "content":"mine", "expectedSha256":fresh["sha256"]
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (_, latest) = call(&router, "GET", &format!("{uri}?path=note.txt"), None).await;
+        assert_eq!(saved["sha256"], latest["sha256"]);
+        assert_eq!(latest["content"], "mine");
+    }
     #[tokio::test]
     async fn creates_the_workspace_folder_when_asked() {
         let (router, directory) = router_fixture("api-mkdir").await;

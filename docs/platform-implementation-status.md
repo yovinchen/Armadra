@@ -376,3 +376,10 @@ M1 第一批继续复用子 Agent：windows_browser_probe 实现跨平台 hostst
 - 仅在状态栏为空或由Armadra管理时安装，不覆盖用户自定义状态栏；HooksPage识别稳定提示码说明保留结果。新revision与环境绑定需新建/重启会话生效，旧tmux无绑定继续unknown，其他提供方本批未启用来源。
 - Runtime Hook101、context7、Agent7、settings10、真实PTY绑定/旧代次拒绝及消费者回归通过；Hook客户端lib41/wire12，shared74、Web Badge/query/启动/forms/events/Surface绑定与DND回归、类型及Clippy通过。
 - 实际Chrome头部8%→compact Unknown、generation3→4与断线重连先清旧值后恢复，390px无横向溢出，终端输入为0。使用隔离fixture，不调用真实模型；浏览器/Vite已清理。图片与结果位于output/playwright/context-*.png。
+
+## 连续实施：编辑器内容版本与保存竞态
+
+- 文件读取返回实际字节的SHA-256；已有文件保存必须携带已读取版本，缺省仅允许创建。旧大小字段单独请求明确拒绝，同长度的外部修改返回409，应用内同路径并发写入只有一个可基于同版本成功。
+- 保存使用独占临时文件、同步与发布前重核，保留文件权限；拒绝只读文件和链接写入，文件名空白按原样处理。外部程序不共享应用锁，不能将最后一次检查描述为操作系统级原子内容CAS。
+- 编辑器保存期间的新输入继续保持未保存状态，迟到响应不能更新另一文件的版本；权限切换热更新只读状态，保留草稿、光标与撤销栈，恢复到已保存文本时清除dirty。旧服务未提供内容版本时仅预览。
+- Rust文件10项及真实API读取→同长度外改→拒绝覆盖→重读保存通过；真实CodeMirror组件保存竞态4项、附件3项、shared74项、前端类型检查与Runtime Clippy通过。完整外部变更比较/重载工作流、搜索/LSP等仍在E01后续范围，本批不标为完整编辑器交付。

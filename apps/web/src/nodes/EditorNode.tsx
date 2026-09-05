@@ -75,13 +75,14 @@ interface CreateEditorOptions {
   parent: HTMLElement;
   doc: string;
   readonly: boolean;
-  onDocChanged: () => void;
+  onDocChanged: (content: string) => void;
 }
 
 interface EditorCore {
   create(options: CreateEditorOptions): {
     view: EditorView;
     language: Compartment;
+    access: Compartment;
   };
 }
 
@@ -97,6 +98,7 @@ function loadEditorCore(): Promise<EditorCore> {
     return {
       create({ parent, doc, readonly, onDocChanged }: CreateEditorOptions) {
         const language = new Compartment();
+        const access = new Compartment();
         const view = new EditorView({
           parent,
           state: EditorState.create({
@@ -105,14 +107,15 @@ function loadEditorCore(): Promise<EditorCore> {
               basicSetup,
               theme,
               language.of([]),
-              EditorState.readOnly.of(readonly),
+              access.of(EditorState.readOnly.of(readonly)),
               EditorView.updateListener.of((update) => {
-                if (update.docChanged) onDocChanged();
+                if (update.docChanged)
+                  onDocChanged(update.state.doc.toString());
               }),
             ],
           }),
         });
-        return { view, language };
+        return { view, language, access };
       },
     };
   });
@@ -148,13 +151,18 @@ type LoadState =
   | { kind: "too-large" }
   | { kind: "image"; src: string; info: ImportedFileInfo }
   | { kind: "attachment"; info: ImportedFileInfo }
-  | { kind: "text"; content: string; size: number };
+  | {
+      kind: "text";
+      content: string;
+      size: number;
+      sha256?: string;
+      identity: string;
+    };
 
 /**
  * 编辑器节点（§3.4）。阶段一用 CodeMirror 6：体积小、WebKit 兼容好。
  *
- * 保存走 `PUT /file`，带上读到时的字节数作乐观锁：文件在编辑期间被 Agent
- * 改过，Runtime 返 409，这里提示"文件已被修改"而不是把对方的改动盖掉。
+ * 保存携带已读取内容的SHA，保护同大小外部修改；旧服务无版本时只读。
  * `data.readonly` 为 true（Runtime 报告文件不可写）时降级为只读。
  */
 export function EditorNode({ node, selected }: NodeBodyProps) {
@@ -166,13 +174,30 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
   const hostRef = React.useRef<HTMLDivElement>(null);
   const viewRef = React.useRef<EditorView | null>(null);
   const languageRef = React.useRef<Compartment | null>(null);
+  const accessRef = React.useRef<Compartment | null>(null);
+  const baselineRef = React.useRef("");
   const [state, setState] = React.useState<LoadState>({ kind: "loading" });
   const [dirty, setDirty] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
-  /** 磁盘上这个文件的字节数，读到时记下、每次保存成功后更新（CAS 令牌）。 */
+  /** 磁盘上这个文件的字节数，读到时记下、每次保存成功后更新（仅用于显示与旧接口兼容）。 */
   const sizeRef = React.useRef<number | undefined>(undefined);
+  const versionRef = React.useRef<string | undefined>(undefined);
+  const identity = JSON.stringify([workspaceId, path]);
+  const identityRef = React.useRef(identity);
+  const viewIdentityRef = React.useRef<string | null>(null);
+  const pendingSaveRef = React.useRef<object | null>(null);
+  if (identityRef.current !== identity) {
+    identityRef.current = identity;
+    pendingSaveRef.current = null;
+  }
 
-  const writable = data?.readonly !== true;
+  const writable =
+    data?.readonly !== true &&
+    state.kind === "text" &&
+    state.identity === identity &&
+    Boolean(state.sha256);
+  const writableRef = React.useRef(writable);
+  writableRef.current = writable;
 
   /* --------------------------------- 读取 --------------------------------- */
 
@@ -182,6 +207,9 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
     let imageUrl: string | null = null;
     const controller = new AbortController();
     setState({ kind: "loading" });
+    setSaving(false);
+    setDirty(false);
+    versionRef.current = undefined;
     void (async () => {
       const info = await runtimeApi.fileInfo(workspaceId, path);
       if (cancelled) return;
@@ -210,7 +238,15 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
         return;
       }
       sizeRef.current = file.size;
-      setState({ kind: "text", content: file.content, size: file.size });
+      versionRef.current = file.sha256;
+      baselineRef.current = file.content;
+      setState({
+        kind: "text",
+        content: file.content,
+        size: file.size,
+        sha256: file.sha256,
+        identity,
+      });
     })().catch(() => {
       if (!cancelled) setState({ kind: "error" });
     });
@@ -224,7 +260,7 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
   /* ------------------------------ CodeMirror ------------------------------ */
 
   React.useEffect(() => {
-    if (state.kind !== "text") return;
+    if (state.kind !== "text" || state.identity !== identity) return;
     const host = hostRef.current;
     if (!host) return;
 
@@ -234,15 +270,17 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
 
     void loadEditorCore().then((core) => {
       if (cancelled) return;
-      const { view, language } = core.create({
+      const { view, language, access } = core.create({
         parent: host,
         doc: content,
-        readonly: !writable,
-        onDocChanged: () => setDirty(true),
+        readonly: !writableRef.current,
+        onDocChanged: (content) => setDirty(content !== baselineRef.current),
       });
       created = view;
       viewRef.current = view;
+      viewIdentityRef.current = identity;
       languageRef.current = language;
+      accessRef.current = access;
       setDirty(false);
 
       // 语言包异步到货后热替换语法；编辑器本身不重建，光标和撤销栈都不受影响。
@@ -255,35 +293,79 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
     return () => {
       cancelled = true;
       created?.destroy();
-      if (viewRef.current === created) viewRef.current = null;
+      if (viewRef.current === created) {
+        viewRef.current = null;
+        viewIdentityRef.current = null;
+      }
       languageRef.current = null;
+      accessRef.current = null;
     };
-  }, [path, state, writable]);
+  }, [path, state, identity]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void import("@codemirror/state").then(({ EditorState }) => {
+      if (
+        !cancelled &&
+        viewRef.current &&
+        accessRef.current &&
+        viewIdentityRef.current === identity
+      ) {
+        viewRef.current.dispatch({
+          effects: accessRef.current.reconfigure(
+            EditorState.readOnly.of(!writable),
+          ),
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [writable, identity]);
 
   /* --------------------------------- 保存 --------------------------------- */
 
   const save = React.useCallback(async () => {
     const view = viewRef.current;
-    if (!view || !workspaceId || !writable || saving) return;
+    if (
+      !view ||
+      !workspaceId ||
+      !writable ||
+      pendingSaveRef.current ||
+      viewIdentityRef.current !== identity ||
+      !versionRef.current
+    )
+      return;
+    const submitted = view.state.doc.toString();
+    const token = {};
+    pendingSaveRef.current = token;
     setSaving(true);
     try {
       const result = await runtimeApi.writeFile(
         workspaceId,
         path,
-        view.state.doc.toString(),
+        submitted,
         sizeRef.current,
+        versionRef.current,
       );
+      if (identityRef.current !== identity || viewRef.current !== view) return;
       // 只更新基准大小，不重建编辑器：重建会丢光标和撤销栈。
       sizeRef.current = result.size;
-      setDirty(false);
+      versionRef.current = result.sha256;
+      baselineRef.current = submitted;
+      setDirty(view.state.doc.toString() !== submitted);
     } catch (error) {
-      toast.error(
-        isConflict(error) ? t("editor.conflict") : t("editor.saveFailed"),
-      );
+      if (identityRef.current === identity)
+        toast.error(
+          isConflict(error) ? t("editor.conflict") : t("editor.saveFailed"),
+        );
     } finally {
-      setSaving(false);
+      if (pendingSaveRef.current === token) {
+        pendingSaveRef.current = null;
+        if (identityRef.current === identity) setSaving(false);
+      }
     }
-  }, [path, saving, workspaceId, writable]);
+  }, [path, identity, workspaceId, writable]);
 
   const onKeyDown = React.useCallback(
     (event: React.KeyboardEvent) => {
@@ -299,6 +381,9 @@ export function EditorNode({ node, selected }: NodeBodyProps) {
 
   const headerActions = (
     <>
+      {state.kind === "text" && !state.sha256 && (
+        <Badge variant="outline">{t("editor.versionRequired")}</Badge>
+      )}
       {dirty && (
         <span
           aria-label={t("editor.dirty")}
