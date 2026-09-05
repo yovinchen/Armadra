@@ -91,6 +91,18 @@ export const gitRepository: MessageModule = {
     "gitRepo.rootCommit": "根提交",
     "gitRepo.outsidePage": "此页之外的父提交",
     "gitRepo.details": "提交详情",
+    "gitRepo.copyOid": "复制 OID",
+    "gitRepo.copiedOid": "已复制 OID",
+    "gitRepo.checkoutCommit": "检出此提交（游离 HEAD）",
+    "gitRepo.revert": "回退此提交",
+    "gitRepo.revertSafety":
+      "回退会新建一个提交，把所选提交的改动反向应用；原提交仍留在历史中，不会被改写。冲突时进入冲突中心，由你继续或中止；回退没有跳过。",
+    "gitRepo.detachedSafety":
+      "检出提交后 HEAD 处于游离状态：分支不会移动，之后新建的提交不属于任何分支，需要先从该提交创建分支才能保留。",
+    "gitRepo.notIdle":
+      "择取与回退要求没有进行中的 Git 操作，且工作区与暂存区干净。",
+    "gitRepo.mergeMainline": "这是合并提交，将以第 1 个父提交为主线。",
+    "gitRepo.branchFromCommit": "从该提交创建分支",
     "gitRepo.worktreePath": "Worktree 路径（工作区内）",
     "gitRepo.createWorktree": "创建 Worktree",
     "gitRepo.removeWorktree": "移除 Worktree",
@@ -201,6 +213,19 @@ export const gitRepository: MessageModule = {
     "gitRepo.rootCommit": "Root commit",
     "gitRepo.outsidePage": "Parent outside this page",
     "gitRepo.details": "Commit details",
+    "gitRepo.copyOid": "Copy OID",
+    "gitRepo.copiedOid": "OID copied",
+    "gitRepo.checkoutCommit": "Check out this commit (detached HEAD)",
+    "gitRepo.revert": "Revert this commit",
+    "gitRepo.revertSafety":
+      "Revert creates a new commit that applies the selected commit's changes backwards. The original commit stays in history and is never rewritten. A conflict goes to the conflict centre for you to continue or abort; a revert has no skip.",
+    "gitRepo.detachedSafety":
+      "Checking out a commit detaches HEAD: the branch does not move, and commits made afterwards belong to no branch until you create one from that commit.",
+    "gitRepo.notIdle":
+      "Cherry-pick and revert require no Git operation in progress and a clean worktree and index.",
+    "gitRepo.mergeMainline":
+      "This is a merge commit; parent 1 is used as the mainline.",
+    "gitRepo.branchFromCommit": "Branch from this commit",
     "gitRepo.worktreePath": "Worktree path (inside workspace)",
     "gitRepo.createWorktree": "Create worktree",
     "gitRepo.removeWorktree": "Remove worktree",

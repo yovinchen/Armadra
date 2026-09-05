@@ -97,6 +97,26 @@ export const gitRepositoryActionSchema = z.discriminatedUnion("kind", [
     .strict(),
   z
     .object({
+      // Applies the inverse of a reviewed commit. The original commit stays in
+      // history; a conflict becomes the same owned integration a cherry-pick
+      // does, recovered through continue/abort. There is no skip: dropping a
+      // revert would silently leave the change it was meant to undo in place.
+      kind: z.literal("revert"),
+      targetOid: oid,
+      mainline: z.number().int().min(1).max(4294967295).nullable(),
+      expectedStateToken: stashStateToken,
+    })
+    .strict(),
+  z
+    .object({
+      // Detaches HEAD at a reviewed commit. The branch does not move, and
+      // later commits belong to no branch until one is created.
+      kind: z.literal("checkoutCommit"),
+      targetOid: oid,
+    })
+    .strict(),
+  z
+    .object({
       kind: z.literal("skipIntegration"),
       sessionId: z.string().uuid(),
       expectedStateToken: stashStateToken,

@@ -100,7 +100,10 @@ const emptyTracking: Tracking = {
 export function actionTarget(action: GitRepositoryAction): string {
   switch (action.kind) {
     case "startCherryPick":
+    case "revert":
       return `${action.targetOid}${action.mainline ? ` · parent ${action.mainline}` : ""}`;
+    case "checkoutCommit":
+      return action.targetOid;
     case "startMerge":
       return `${action.targetOid}${action.message ? ` · ${action.message}` : ""}`;
     case "startRebase":
@@ -584,6 +587,11 @@ function RepositorySession({
           <History
             workspaceId={workspaceId}
             repositoryKey={`${snapshot.repositoryId}:${snapshot.repositoryPath}`}
+            busy={busy || stale}
+            request={request}
+            loadIntegration={(signal) =>
+              runtimeApi.gitRepositoryIntegration(workspaceId, signal)
+            }
           />
         )}
         {tab === "integration" && (
@@ -694,6 +702,22 @@ function RepositorySession({
                       {confirmation.action.mainline}
                     </dd>
                   )}
+                </div>
+              )}
+              {confirmation.action.kind === "revert" && (
+                <div>
+                  <dd>{t("gitRepo.revertSafety")}</dd>
+                  {confirmation.action.mainline && (
+                    <dd>
+                      {t("gitIntegration.mainline")}:{" "}
+                      {confirmation.action.mainline}
+                    </dd>
+                  )}
+                </div>
+              )}
+              {confirmation.action.kind === "checkoutCommit" && (
+                <div>
+                  <dd>{t("gitRepo.detachedSafety")}</dd>
                 </div>
               )}
               {confirmation.action.kind === "skipIntegration" && (

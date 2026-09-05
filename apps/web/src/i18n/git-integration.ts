@@ -25,6 +25,8 @@ export const gitIntegration: MessageModule = {
     "gitIntegration.abortMerge": "中止合并",
     "gitIntegration.continuePick": "继续择取提交",
     "gitIntegration.abortPick": "中止择取",
+    "gitIntegration.continueRevert": "继续并提交回退",
+    "gitIntegration.abortRevert": "中止回退",
 
     "gitRepo.startMerge": "开始合并",
     "gitRepo.startRebase": "开始变基",
@@ -101,6 +103,8 @@ export const gitIntegration: MessageModule = {
     "gitIntegration.abortMerge": "Abort merge",
     "gitIntegration.continuePick": "Continue cherry-pick",
     "gitIntegration.abortPick": "Abort cherry-pick",
+    "gitIntegration.continueRevert": "Continue and commit revert",
+    "gitIntegration.abortRevert": "Abort revert",
 
     "gitRepo.startMerge": "Start merge",
     "gitRepo.startRebase": "Start rebase",

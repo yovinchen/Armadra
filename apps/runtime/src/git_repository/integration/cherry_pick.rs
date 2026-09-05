@@ -68,14 +68,28 @@ impl RepositoryService {
         expected: &ExpectedState,
         operation: &Operation,
     ) -> AppResult<()> {
-        let RepositoryAction::StartCherryPick {
-            target_oid,
-            mainline,
-            record_origin,
-            expected_state_token,
-        } = action
-        else {
-            return Err(malformed());
+        // Cherry-pick and revert are the same owned single-commit sequence with
+        // the patch applied in opposite directions, so they share every
+        // precondition, ownership binding and recovery path.
+        let (target_oid, mainline, record_origin, expected_state_token, reverting) = match action {
+            RepositoryAction::StartCherryPick {
+                target_oid,
+                mainline,
+                record_origin,
+                expected_state_token,
+            } => (
+                target_oid,
+                mainline,
+                *record_origin,
+                expected_state_token,
+                false,
+            ),
+            RepositoryAction::Revert {
+                target_oid,
+                mainline,
+                expected_state_token,
+            } => (target_oid, mainline, false, expected_state_token, true),
+            _ => return Err(malformed()),
         };
         let normalized_oid = target_oid.to_ascii_lowercase();
         let target_oid = &normalized_oid;
@@ -95,10 +109,12 @@ impl RepositoryService {
             || state.head.head_oid.is_none()
             || state.head.branch.is_none()
         {
-            return Err(AppError::Conflict(
+            return Err(AppError::Conflict(if reverting {
+                "Revert requires a clean index and worktree on a committed local branch".into()
+            } else {
                 "Cherry-pick requires a clean index and worktree on a committed local branch"
-                    .into(),
-            ));
+                    .to_owned()
+            }));
         }
         let commit = self.pick_commit(context, target_oid, token).await?;
         let parent = pick_parent(&commit.parents, *mainline, true)?;
@@ -128,25 +144,30 @@ impl RepositoryService {
                 context.repository.clone(),
                 IntegrationOwner {
                     session_id,
-                    kind: "cherryPick",
+                    kind: if reverting { "revert" } else { "cherryPick" },
                     mainline: *mainline,
                     original: expected.clone(),
                     target_oid: target_oid.clone(),
                     marker: None,
                 },
             );
+        let kind = if reverting { "revert" } else { "cherryPick" };
         let mut command = args(&[
             "-c",
             "core.editor=:",
             "-c",
             "rerere.enabled=false",
-            "cherry-pick",
+            if reverting { "revert" } else { "cherry-pick" },
             "--no-rerere-autoupdate",
         ]);
+        if reverting {
+            // The recorded message is Git's own; nothing here opens an editor.
+            command.push("--no-edit".into());
+        }
         if let Some(mainline) = mainline {
             command.extend(["--mainline".into(), mainline.to_string()]);
         }
-        if *record_origin {
+        if record_origin {
             command.push("-x".into());
         }
         command.extend(["--".into(), target_oid.clone()]);
@@ -169,7 +190,7 @@ impl RepositoryService {
         if let (Ok(actual), Ok(head)) = (&actual, &head) {
             let mut owners = self.inner.integrations.lock().expect("Git integrations");
             if let Some(owner) = owners.get_mut(&context.repository) {
-                if actual.kind == "cherryPick"
+                if actual.kind == kind
                     && actual.target_oid.as_deref() == Some(target_oid)
                     && head == expected
                 {
@@ -191,13 +212,54 @@ impl RepositoryService {
             return Err(command_error(&output));
         }
         if actual.kind != "none" {
+            return Err(AppError::Conflict(format!(
+                "{kind} left an unverified Git sequence; inspect it before another action"
+            )));
+        }
+        if reverting {
+            self.verify_revert(context, target_oid, expected, &head, token)
+                .await
+        } else {
+            self.verify_cherry_pick(context, target_oid, expected, &head, token)
+                .await
+        }
+    }
+
+    /// A finished revert is one new commit on the same branch whose parent is
+    /// the confirmed original head, and whose tree undoes the target's patch.
+    /// The author is the current user, so nothing is checked against the source.
+    pub(super) async fn verify_revert(
+        &self,
+        context: &RepositoryContext,
+        target: &str,
+        expected: &ExpectedState,
+        head: &ExpectedState,
+        token: &Cancellation,
+    ) -> AppResult<()> {
+        let original = expected.head_oid.as_deref().ok_or_else(malformed)?;
+        let current = head.head_oid.as_deref().ok_or_else(malformed)?;
+        let produced = self.pick_commit(context, current, token).await?;
+        if head.branch != expected.branch || current == original || produced.parents != [original] {
+            return Err(AppError::Conflict("The resulting revert commit does not sit on the confirmed parent and branch; inspect HEAD before another action".into()));
+        }
+        // The target must still be an ancestor: a revert that no longer relates
+        // to the commit it claims to undo is not a result we accept.
+        let reachable = self
+            .output(
+                &context.repository,
+                args(&["merge-base", "--is-ancestor", target, current]),
+                Duration::from_secs(15),
+                token,
+                None,
+            )
+            .await?;
+        if reachable.status != Some(0) {
             return Err(AppError::Conflict(
-                "Cherry-pick left an unverified Git sequence; inspect it before another action"
+                "The reverted commit is not reachable from the new HEAD; inspect the repository"
                     .into(),
             ));
         }
-        self.verify_cherry_pick(context, target_oid, expected, &head, token)
-            .await
+        Ok(())
     }
 
     pub(super) async fn verify_cherry_pick(

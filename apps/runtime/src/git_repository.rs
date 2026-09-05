@@ -194,6 +194,19 @@ pub enum RepositoryAction {
         record_origin: bool,
         expected_state_token: String,
     },
+    /// Apply the inverse of a reviewed commit. Like a cherry-pick it becomes an
+    /// owned integration when it conflicts, recovered through Continue/Abort;
+    /// `skip` stays a cherry-pick-only decision.
+    Revert {
+        target_oid: String,
+        mainline: Option<u32>,
+        expected_state_token: String,
+    },
+    /// Detach HEAD at a reviewed commit. Later commits belong to no branch
+    /// until one is created, which is why the UI has to say so.
+    CheckoutCommit {
+        target_oid: String,
+    },
     SkipIntegration {
         session_id: String,
         expected_state_token: String,
@@ -1370,6 +1383,20 @@ impl RepositoryService {
                 }
                 stash::validate_state_token(expected_state_token)?;
             }
+            RepositoryAction::Revert {
+                target_oid,
+                mainline,
+                expected_state_token,
+            } => {
+                require_oid(target_oid)?;
+                if *mainline == Some(0) {
+                    return Err(AppError::BadRequest(
+                        "Revert mainline starts at parent 1".into(),
+                    ));
+                }
+                stash::validate_state_token(expected_state_token)?;
+            }
+            RepositoryAction::CheckoutCommit { target_oid } => require_oid(target_oid)?,
             RepositoryAction::SkipIntegration {
                 session_id,
                 expected_state_token,
@@ -1533,6 +1560,7 @@ impl RepositoryService {
             action,
             RepositoryAction::StartMerge { .. }
                 | RepositoryAction::StartCherryPick { .. }
+                | RepositoryAction::Revert { .. }
                 | RepositoryAction::StartRebase { .. }
                 | RepositoryAction::SkipIntegration { .. }
                 | RepositoryAction::ContinueIntegration { .. }
@@ -1541,9 +1569,25 @@ impl RepositoryService {
             self.ensure_integration_idle(context, token).await?;
         }
         match action {
-            RepositoryAction::StartCherryPick { .. } => {
+            RepositoryAction::StartCherryPick { .. } | RepositoryAction::Revert { .. } => {
                 self.start_cherry_pick(context, action, expected, operation)
                     .await
+            }
+            RepositoryAction::CheckoutCommit { target_oid } => {
+                // The OID is immutable, so confirming it resolves to a commit
+                // here is the whole precondition; HEAD itself was already
+                // compared against the reviewed state above.
+                if self.resolve(&context.repository, target_oid, token).await? != *target_oid {
+                    return Err(AppError::BadRequest(
+                        "Checkout target must be a commit object ID".into(),
+                    ));
+                }
+                self.mutate(
+                    context,
+                    args(&["switch", "--detach", "--no-overwrite-ignore", target_oid]),
+                    operation,
+                )
+                .await
             }
             RepositoryAction::StartRebase {
                 onto,

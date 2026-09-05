@@ -40,7 +40,9 @@ function recoveryLabel(kind: GitIntegrationSnapshot["kind"]) {
     ? "Pick"
     : kind === "rebase"
       ? "Rebase"
-      : "Merge";
+      : kind === "revert"
+        ? "Revert"
+        : "Merge";
 }
 export function Integrations(props: IntegrationsProps) {
   return (

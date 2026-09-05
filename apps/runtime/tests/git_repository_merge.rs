@@ -411,3 +411,6 @@ mod cherry_pick;
 
 #[path = "git_repository_merge/rebase.rs"]
 mod rebase;
+
+#[path = "git_repository_merge/revert.rs"]
+mod revert;

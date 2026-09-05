@@ -573,6 +573,124 @@ describe("worktrees and history", () => {
     ).toBeNull();
   });
 
+  it("acts on a history row with that row's own object ID", async () => {
+    vi.spyOn(runtimeApi, "gitRepositoryHistory").mockResolvedValue({
+      reference: "HEAD",
+      anchorOid: a,
+      commits: [commit(b, [c], "Older")],
+      nextCursor: null,
+      shallow: false,
+    });
+    vi.spyOn(runtimeApi, "gitRepositoryIntegration").mockResolvedValue({
+      ...integrationState(),
+      kind: "none",
+      owned: false,
+      sessionId: null,
+      canContinue: false,
+      dirty: false,
+      message: null,
+      targetOid: null,
+      originalHead: null,
+      originalBranch: null,
+    });
+    // Each request settles immediately so the next row action is not blocked
+    // by a still-running operation.
+    const operate = vi
+      .spyOn(runtimeApi, "gitRepositoryOperate")
+      .mockImplementation(async (_workspace, action) =>
+        operation(action, "succeeded"),
+      );
+    view("history");
+    fireEvent.click(await screen.findByRole("button", { name: /Older/ }));
+
+    // A detached checkout says so before it runs, and names the row's OID.
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Check out this commit (detached HEAD)",
+      }),
+    );
+    expect(screen.getByRole("alertdialog").textContent).toContain(
+      "detaches HEAD",
+    );
+    await confirm();
+    await waitFor(() =>
+      expect(operate).toHaveBeenCalledWith(
+        "workspace-one",
+        { kind: "checkoutCommit", targetOid: b },
+        { headOid: a, branch: "main" },
+      ),
+    );
+
+    // Revert carries the observed state token from the integration read.
+    operate.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Revert this commit" }));
+    await confirm();
+    await waitFor(() =>
+      expect(operate).toHaveBeenCalledWith(
+        "workspace-one",
+        {
+          kind: "revert",
+          targetOid: b,
+          mainline: null,
+          expectedStateToken: "d".repeat(64),
+        },
+        { headOid: a, branch: "main" },
+      ),
+    );
+
+    // Branching from the row pins the start point to that commit.
+    operate.mockClear();
+    fireEvent.change(screen.getByLabelText("Branch from this commit"), {
+      target: { value: "rescue" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create branch" }));
+    await confirm();
+    await waitFor(() =>
+      expect(operate).toHaveBeenCalledWith(
+        "workspace-one",
+        {
+          kind: "createBranch",
+          name: "rescue",
+          startPoint: b,
+          switch: false,
+        },
+        { headOid: a, branch: "main" },
+      ),
+    );
+  });
+
+  it("refuses cherry-pick and revert while another integration is in progress", async () => {
+    vi.spyOn(runtimeApi, "gitRepositoryHistory").mockResolvedValue({
+      reference: "HEAD",
+      anchorOid: a,
+      commits: [commit(b, [c], "Older")],
+      nextCursor: null,
+      shallow: false,
+    });
+    // A merge is already paused, so the sequence actions must stay disabled.
+    vi.spyOn(runtimeApi, "gitRepositoryIntegration").mockResolvedValue(
+      integrationState(),
+    );
+    const operate = vi.spyOn(runtimeApi, "gitRepositoryOperate");
+    view("history");
+    fireEvent.click(await screen.findByRole("button", { name: /Older/ }));
+    const revert = await screen.findByRole("button", {
+      name: "Revert this commit",
+    });
+    await waitFor(() =>
+      expect((revert as HTMLButtonElement).disabled).toBe(true),
+    );
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Cherry-pick commit",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    fireEvent.click(revert);
+    expect(operate).not.toHaveBeenCalled();
+  });
+
   it("builds merge edges from OIDs and never invents adjacency", () => {
     const graph = commitGraph([
       commit(a, [b, c], "merge"),

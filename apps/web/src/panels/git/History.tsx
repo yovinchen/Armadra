@@ -1,11 +1,16 @@
 import { useMemo, useState } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
-import type { GitCommitRecord } from "@armadra/shared";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import type {
+  GitCommitRecord,
+  GitIntegrationSnapshot,
+  GitRepositoryAction,
+} from "@armadra/shared";
 import { runtimeApi } from "../../api/client";
 import { useT } from "../../app/preferences-store";
+import { writeClipboard } from "../../terminal/TerminalSurface";
 import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
-import { Field, ReadError } from "./forms";
+import { Check, Field, ReadError } from "./forms";
 
 /** A lane represents a pending parent identity, never a row's ordinal number. */
 export function commitGraph(commits: readonly GitCommitRecord[]) {
@@ -98,14 +103,38 @@ function HistoryGraph({ commits }: { commits: GitCommitRecord[] }) {
 export function History({
   workspaceId,
   repositoryKey,
+  busy,
+  request,
+  loadIntegration,
 }: {
   workspaceId: string;
   repositoryKey: string;
+  busy: boolean;
+  request: (action: GitRepositoryAction) => void;
+  loadIntegration: (signal: AbortSignal) => Promise<GitIntegrationSnapshot>;
 }) {
   const t = useT();
   const [input, setInput] = useState("HEAD");
   const [reference, setReference] = useState("HEAD");
   const [selected, setSelected] = useState<string | null>(null);
+  const [branchName, setBranchName] = useState("");
+  const [switchAfter, setSwitchAfter] = useState(false);
+  // Cherry-pick and revert are confirmed against the repository state token,
+  // which lives on the integration snapshot — the same one the Integrations
+  // tab reads, so both entry points confirm against the same observation.
+  const integration = useQuery({
+    queryKey: ["git-repository-integration", workspaceId, repositoryKey],
+    queryFn: ({ signal }) => loadIntegration(signal),
+    retry: false,
+  });
+  const state = integration.data;
+  const idle =
+    !busy &&
+    state?.kind === "none" &&
+    !state.dirty &&
+    state.conflicts.length === 0 &&
+    Boolean(state.head.branch) &&
+    Boolean(state.head.headOid);
   const history = useInfiniteQuery({
     queryKey: ["git-repository-history", workspaceId, repositoryKey, reference],
     queryFn: ({ pageParam, signal }) =>
@@ -240,8 +269,148 @@ export function History({
               </dd>
             </div>
           </dl>
+          <CommitActions
+            key={commit.oid}
+            commit={commit}
+            busy={busy}
+            idle={idle}
+            state={state}
+            branchName={branchName}
+            setBranchName={setBranchName}
+            switchAfter={switchAfter}
+            setSwitchAfter={setSwitchAfter}
+            request={request}
+          />
         </section>
       )}
+    </div>
+  );
+}
+
+/**
+ * 历史行操作。每个动作都带上这一行的不可变 OID：界面上看到哪个提交，
+ * 请求里就是哪个提交，服务再按 HEAD / state token 复核一次。
+ */
+function CommitActions({
+  commit,
+  busy,
+  idle,
+  state,
+  branchName,
+  setBranchName,
+  switchAfter,
+  setSwitchAfter,
+  request,
+}: {
+  commit: GitCommitRecord;
+  busy: boolean;
+  idle: boolean;
+  state: GitIntegrationSnapshot | undefined;
+  branchName: string;
+  setBranchName: (value: string) => void;
+  switchAfter: boolean;
+  setSwitchAfter: (value: boolean) => void;
+  request: (action: GitRepositoryAction) => void;
+}) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  // 合并提交的 cherry-pick / revert 必须先明确主线，这里不替用户猜。
+  const mainline = commit.parents.length > 1 ? 1 : null;
+  const sequence = (kind: "startCherryPick" | "revert") => {
+    if (!idle || !state) return;
+    request(
+      kind === "revert"
+        ? {
+            kind: "revert",
+            targetOid: commit.oid,
+            mainline,
+            expectedStateToken: state.stateToken,
+          }
+        : {
+            kind: "startCherryPick",
+            targetOid: commit.oid,
+            mainline,
+            recordOrigin: true,
+            expectedStateToken: state.stateToken,
+          },
+    );
+  };
+  return (
+    <div className="space-y-2 border-t border-border pt-2">
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            writeClipboard(commit.oid);
+            setCopied(true);
+          }}
+        >
+          {t(copied ? "gitRepo.copiedOid" : "gitRepo.copyOid")}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy}
+          onClick={() =>
+            request({ kind: "checkoutCommit", targetOid: commit.oid })
+          }
+        >
+          {t("gitRepo.checkoutCommit")}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!idle}
+          onClick={() => sequence("startCherryPick")}
+        >
+          {t("gitRepo.startCherryPick")}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!idle}
+          onClick={() => sequence("revert")}
+        >
+          {t("gitRepo.revert")}
+        </Button>
+      </div>
+      <p className="text-muted-foreground">{t("gitRepo.detachedSafety")}</p>
+      {!idle && <p className="text-muted-foreground">{t("gitRepo.notIdle")}</p>}
+      {mainline !== null && (
+        <p className="text-muted-foreground">{t("gitRepo.mergeMainline")}</p>
+      )}
+      <form
+        className="space-y-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!busy && branchName.trim())
+            request({
+              kind: "createBranch",
+              name: branchName.trim(),
+              startPoint: commit.oid,
+              switch: switchAfter,
+            });
+        }}
+      >
+        <fieldset disabled={busy} className="min-w-0 space-y-2">
+          <Field label={t("gitRepo.branchFromCommit")}>
+            <Input
+              value={branchName}
+              onChange={(event) => setBranchName(event.target.value)}
+              autoComplete="off"
+            />
+          </Field>
+          <Check
+            label={t("gitRepo.switchAfterCreate")}
+            checked={switchAfter}
+            onChange={setSwitchAfter}
+          />
+          <Button size="sm" type="submit" disabled={!branchName.trim()}>
+            {t("gitRepo.createBranch")}
+          </Button>
+        </fieldset>
+      </form>
     </div>
   );
 }

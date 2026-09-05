@@ -328,6 +328,18 @@ impl RepositoryService {
                     Recovery::Skip => "--skip",
                 },
             ]),
+            // Skip belongs to an empty cherry-pick only; dropping a revert
+            // silently would leave the change it was meant to undo in place.
+            ("revert", mode @ (Recovery::Continue | Recovery::Abort)) => args(&[
+                "-c",
+                "core.editor=:",
+                "revert",
+                if mode == Recovery::Continue {
+                    "--continue"
+                } else {
+                    "--abort"
+                },
+            ]),
             // Skip would silently drop a whole replayed commit, so a rebase
             // only offers the two decisions the caller can actually review.
             ("rebase", mode @ (Recovery::Continue | Recovery::Abort)) => args(&[
@@ -381,6 +393,16 @@ impl RepositoryService {
         }
         if recovery == Recovery::Continue && state.kind == "cherryPick" {
             self.verify_cherry_pick(
+                context,
+                state.target_oid.as_deref().ok_or_else(malformed)?,
+                expected,
+                &head,
+                token,
+            )
+            .await?;
+        }
+        if recovery == Recovery::Continue && state.kind == "revert" {
+            self.verify_revert(
                 context,
                 state.target_oid.as_deref().ok_or_else(malformed)?,
                 expected,
@@ -611,11 +633,16 @@ impl RepositoryService {
         if !matches!(staged.status, Some(0 | 1)) {
             return Err(command_error(&staged));
         }
-        let empty = actual.kind == "cherryPick"
+        // A paused single-commit sequence with nothing left to commit produced
+        // no change at all. Continuing it can only fail, so the state is
+        // reported instead of being offered as a continuation.
+        let empty = matches!(actual.kind.as_str(), "cherryPick" | "revert")
             && conflicts.is_empty()
             && staged.status == Some(0)
             && unstaged.status == Some(0);
-        let can_skip = owned && empty;
+        // Skip drops the pick outright; for a revert that would silently leave
+        // the change it was meant to undo in place, so only Abort is offered.
+        let can_skip = owned && empty && actual.kind == "cherryPick";
         let rebase = actual.kind == "rebase";
         Ok(IntegrationSnapshot {
             repository_id: state.repository_id,
@@ -711,11 +738,11 @@ impl RepositoryService {
         // sequence directory Git itself writes, never from the current HEAD.
         let rebase = rebase_directory.filter(|_| kind == "rebase");
         let (target_oid, marker) = match (kind.as_str(), &rebase) {
-            ("merge" | "cherryPick", _) => {
-                let (bytes, marker) = read_marker(&git_dir.join(if kind == "merge" {
-                    "MERGE_HEAD"
-                } else {
-                    "CHERRY_PICK_HEAD"
+            ("merge" | "cherryPick" | "revert", _) => {
+                let (bytes, marker) = read_marker(&git_dir.join(match kind.as_str() {
+                    "merge" => "MERGE_HEAD",
+                    "revert" => "REVERT_HEAD",
+                    _ => "CHERRY_PICK_HEAD",
                 }))?;
                 (marker_oid(&bytes), Some(marker))
             }
@@ -731,7 +758,9 @@ impl RepositoryService {
             _ => (None, None),
         };
         let original_head = match (kind.as_str(), &rebase) {
-            ("none" | "cherryPick", _) => None,
+            // Neither cherry-pick nor revert writes ORIG_HEAD, so reading one
+            // would attribute an unrelated operation's start point to them.
+            ("none" | "cherryPick" | "revert", _) => None,
             ("rebase", Some(directory)) => optional_marker(&directory.join("orig-head"))?
                 .and_then(|(bytes, _)| marker_oid(&bytes)),
             _ => optional_marker(&git_dir.join("ORIG_HEAD"))?
@@ -755,7 +784,7 @@ impl RepositoryService {
                 ("MERGE_MSG", git_dir.join("MERGE_MSG")),
                 ("MERGE_MODE", git_dir.join("MERGE_MODE")),
             ],
-            ("cherryPick", _) => vec![("MERGE_MSG", git_dir.join("MERGE_MSG"))],
+            ("cherryPick" | "revert", _) => vec![("MERGE_MSG", git_dir.join("MERGE_MSG"))],
             // msgnum/end make each replayed step its own confirmable state.
             ("rebase", Some(directory)) => ["message", "msgnum", "end", "head-name", "onto"]
                 .iter()
