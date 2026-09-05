@@ -6,6 +6,7 @@ import { useT } from "../../../app/preferences-store";
 import {
   COMMANDS,
   commandKeysLabel,
+  formatKeys,
   isMacPlatform,
   isWindowShortcut,
   suspendKeybindings,
@@ -310,15 +311,15 @@ export function KeybindingsPage() {
                       type="button"
                       aria-label={t("settings.shortcut.reset", {
                         command: t(command.labelKey),
-                      })}
-                      title={t("settings.shortcut.reset", {
-                        command: t(command.labelKey),
+                        // 说清会落到哪个键位，不然「上一层」只是个说法。
+                        keys:
+                          formatKeys(below, { mac: platform === "mac" }) ||
+                          t("settings.shortcut.unbound"),
                       })}
                       className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
                       onClick={() => resetOne(command.id)}
                     >
                       <RotateCcw className="size-3.5" />
-                      <span className="sr-only">{below ?? ""}</span>
                     </button>
                   )}
                 </SettingsRow>

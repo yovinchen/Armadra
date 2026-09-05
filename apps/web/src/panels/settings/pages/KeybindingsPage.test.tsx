@@ -50,6 +50,15 @@ function paletteChip() {
   return screen.getByRole("button", { name: zh("cmd.app.commandPalette") });
 }
 
+/** 命令面板那一行的重置按钮名（含它会落到的键位）。 */
+function resetLabel() {
+  return new RegExp(
+    zh("settings.shortcut.reset")
+      .replace("{command}", zh("cmd.app.commandPalette"))
+      .replace("{keys}", ".*"),
+  );
+}
+
 /** 那一行里显示的来源（默认 / 全局 / 本设备）。 */
 function paletteSource() {
   return paletteChip().closest(".settings-row")!.textContent ?? "";
@@ -152,10 +161,7 @@ describe("KeybindingsPage", () => {
     );
     const reset = () =>
       screen.getByRole("button", {
-        name: zh("settings.shortcut.reset").replace(
-          "{command}",
-          zh("cmd.app.commandPalette"),
-        ),
+        name: resetLabel(),
       });
 
     fireEvent.click(reset());
@@ -222,10 +228,7 @@ describe("KeybindingsPage", () => {
     expect((paletteChip() as HTMLButtonElement).disabled).toBe(true);
     expect(
       screen.queryByRole("button", {
-        name: zh("settings.shortcut.reset").replace(
-          "{command}",
-          zh("cmd.app.commandPalette"),
-        ),
+        name: resetLabel(),
       }),
     ).toBeNull();
   });

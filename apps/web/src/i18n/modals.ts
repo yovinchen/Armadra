@@ -226,7 +226,7 @@ export const modals: MessageModule = {
     "settings.shortcut.platform.other": "Windows / Linux",
     "settings.shortcut.platform.preview":
       "正在查看另一个平台的键位，只读；录制只写当前这台机器所在的平台。",
-    "settings.shortcut.reset": "重置「{command}」到上一层",
+    "settings.shortcut.reset": "重置「{command}」到上一层：{keys}",
     "settings.shortcut.resetAll": "全部重置",
     "settings.shortcut.transfer": "导入 / 导出",
     "settings.shortcut.transfer.note":
@@ -485,7 +485,7 @@ export const modals: MessageModule = {
     "settings.shortcut.platform.other": "Windows / Linux",
     "settings.shortcut.platform.preview":
       "Showing another platform's keys, read-only. Recording always writes the platform this machine runs.",
-    "settings.shortcut.reset": "Reset “{command}” to the layer below",
+    "settings.shortcut.reset": "Reset “{command}” to the layer below: {keys}",
     "settings.shortcut.resetAll": "Reset all",
     "settings.shortcut.transfer": "Import / export",
     "settings.shortcut.transfer.note":
