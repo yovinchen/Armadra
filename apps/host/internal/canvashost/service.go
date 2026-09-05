@@ -152,7 +152,7 @@ func (s *Service) PutWorkspace(ctx context.Context, caller Caller, operationID s
 	if err != nil {
 		return nil, err
 	}
-	return &pb.PutCanvasWorkspaceResponse{Workspace: saved, Receipt: receipt(result)}, nil
+	return &pb.PutCanvasWorkspaceResponse{Workspace: saved, Receipt: receipt(operationID, result)}, nil
 }
 
 // DeleteCanvasWorkspace removes the workspace record and every canvas, node,
@@ -184,7 +184,7 @@ func (s *Service) DeleteWorkspace(ctx context.Context, caller Caller, operationI
 	if err != nil {
 		return nil, err
 	}
-	return &pb.DeleteCanvasWorkspaceResponse{WorkspaceId: workspaceID, Receipt: receipt(result)}, nil
+	return &pb.DeleteCanvasWorkspaceResponse{WorkspaceId: workspaceID, Receipt: receipt(operationID, result)}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -347,7 +347,7 @@ func (s *Service) SaveDocument(ctx context.Context, caller Caller, request *pb.S
 		if err != nil {
 			return nil, err
 		}
-		stored = receipt(result)
+		stored = receipt(request.OperationId, result)
 	}
 	document, err := s.document(ctx, caller.WorkspaceID, canvas.CanvasId)
 	if err != nil {
@@ -502,7 +502,7 @@ func (s *Service) DeleteCanvas(ctx context.Context, caller Caller, operationID, 
 	if err != nil {
 		return nil, err
 	}
-	return &pb.DeleteCanvasResponse{CanvasId: canvasID, Receipt: receipt(result)}, nil
+	return &pb.DeleteCanvasResponse{CanvasId: canvasID, Receipt: receipt(operationID, result)}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -528,9 +528,13 @@ func (s *Service) apply(ctx context.Context, caller Caller, operationID string, 
 	return s.store.Apply(ctx, key, changes)
 }
 
-func receipt(result storage.ApplyResult) *pb.CanvasOperationReceipt {
+// receipt echoes the operation id the caller sent, not the storage key it was
+// namespaced into. A client matches the receipt against its own request, so a
+// composed key reads as a receipt for something else — and it would put this
+// device's principal id in a response that never needs to carry one.
+func receipt(operationID string, result storage.ApplyResult) *pb.CanvasOperationReceipt {
 	value := &pb.CanvasOperationReceipt{
-		OperationId:   result.OperationID,
+		OperationId:   operationID,
 		TransactionId: result.TransactionID,
 		FirstSequence: result.FirstSequence,
 		LastSequence:  result.LastSequence,

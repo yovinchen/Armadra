@@ -2,6 +2,7 @@ package canvashost
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	pb "armadra.local/host/gen/armadra/v1"
@@ -137,6 +138,39 @@ func TestOperationIdIsAnIdempotencyKey(t *testing.T) {
 	})
 	if !errors.Is(err, storage.ErrIdempotencyConflict) {
 		t.Fatalf("an operation id was reused for different content: %v", err)
+	}
+}
+
+// A receipt is matched against the request that produced it, so it has to name
+// the caller's own operation id — not the key the Host namespaced it into, which
+// would also put this device's principal id in a response that needs no identity.
+func TestReceiptEchoesTheCallerOperationId(t *testing.T) {
+	f := owned(t)
+	caller := f.caller(ScopeRead, ScopeWrite)
+	changed := save(t, f, "edit-1", func(document *pb.CanvasDocument) {
+		document.Canvas.Name = "改过的名字"
+	})
+	// Both paths through SaveDocument have to agree: the one that wrote a
+	// transaction and the one that found nothing to change.
+	unchanged := save(t, f, "edit-2", func(*pb.CanvasDocument) {})
+	for expected, actual := range map[string]string{
+		"edit-1": changed.Receipt.OperationId,
+		"edit-2": unchanged.Receipt.OperationId,
+	} {
+		if actual != expected {
+			t.Fatalf("expected operation id %q, got %q", expected, actual)
+		}
+		if strings.Contains(actual, caller.PrincipalID) || strings.Contains(actual, "canvas/") {
+			t.Fatalf("the receipt leaked the composed storage key: %q", actual)
+		}
+	}
+	document := take(t, f)
+	deleted, err := f.service.DeleteCanvas(fixtureContext, caller, "drop-1", canvasID, document.Canvas.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted.Receipt.OperationId != "drop-1" {
+		t.Fatalf("a delete reported operation id %q", deleted.Receipt.OperationId)
 	}
 }
 
