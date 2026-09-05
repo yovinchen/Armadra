@@ -159,6 +159,21 @@ async fn main() -> anyhow::Result<()> {
     // accepted them: the target has to be idle first, and a queued notification
     // stays cancellable until it is actually written.
     let mut handoffs = armadra_runtime::handoff::start_background(state.clone());
+    // Controlled browser sessions outlive the Runtime (B01, design §9): every
+    // kept session is relaunched from its own profile and re-navigated to the
+    // URL it was on. Its page state does not come back, and the design says so
+    // rather than pretending it does. Off the request path, because launching
+    // browsers must not delay the first canvas load.
+    {
+        let state = state.clone();
+        tokio::spawn(async move {
+            match armadra_runtime::browser::session::restore(&state).await {
+                Ok(0) => {}
+                Ok(count) => tracing::info!(count, "restored browser sessions"),
+                Err(error) => tracing::warn!(%error, "could not restore browser sessions"),
+            }
+        });
+    }
     // The transcript index scans thousands of files on the first pass, so it
     // starts *after* the listener is bound and runs in its own task: the
     // command palette gets its history a second late, nobody waits for it.
@@ -166,6 +181,8 @@ async fn main() -> anyhow::Result<()> {
     for spec in &bound {
         tracing::info!(%spec, "Armadra Runtime is listening");
     }
+    // Kept for the shutdown path below; `router_with_state` consumes the state.
+    let shutdown_state = state.clone();
     let router = router_with_state(state).layer(axum::middleware::from_fn_with_state(
         terminals.clone(),
         desktop_control::reject_during_shutdown,
@@ -211,6 +228,9 @@ async fn main() -> anyhow::Result<()> {
     // Filesystem watchers hold OS handles and a drain thread each; they are
     // released as soon as admission stops, before the slower cleanups run.
     armadra_runtime::file_watch::shutdown();
+    // No browser may outlive the Runtime that started it: the profile stays on
+    // disk (that is how a login survives a restart), the process does not.
+    armadra_runtime::browser::session::shutdown(&shutdown_state).await;
     // Nothing may keep the machine awake once the runtime is going away, and
     // this must not wait on the slower terminal / repository drains below
     // (T02: "租约全部释放或 Runtime 退出时立即释放").

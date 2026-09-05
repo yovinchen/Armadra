@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod agent_probe;
 pub mod api;
+pub mod browser;
 pub mod collab;
 pub mod command;
 pub mod context_api;
@@ -354,6 +355,61 @@ pub fn router_with_state(state: AppState) -> Router {
         .route(
             "/api/workspaces/{workspace_id}/deliveries",
             get(api::list_deliveries),
+        )
+        // Controlled embedded browser (B01). A session belongs to a node and
+        // outlives the node's picture, so `DELETE …/sessions/{id}` only stops
+        // the stream unless it is asked to terminate.
+        .route(
+            "/api/workspaces/{workspace_id}/browser/availability",
+            get(browser::routes::availability),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions",
+            get(browser::routes::list).post(browser::routes::create),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}",
+            get(browser::routes::get).delete(browser::routes::close),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/navigate",
+            post(browser::routes::navigate),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/viewport",
+            post(browser::routes::viewport),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/input",
+            post(browser::routes::input),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/subscription",
+            post(browser::routes::subscribe),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/subscription/{subscription_id}",
+            delete(browser::routes::unsubscribe),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/read",
+            get(browser::routes::read),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/wait",
+            post(browser::routes::wait),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/capture",
+            post(browser::routes::capture),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/downloads",
+            get(browser::routes::downloads),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/downloads/{download_id}",
+            post(browser::routes::decide_download),
         )
         // Host / session resources (T02). Sampling is a subscription: the
         // panel renews while it is open and the sampler stops on its own once

@@ -14,6 +14,10 @@ pub const AGENT_IDS: &[&str] = &[
 ];
 pub const AGENT_CAPABILITIES: &[&str] = &[
     "hooks",
+    // B01: may drive a linked browser node's session through `armadra-hook
+    // browser`. A custom Agent can switch it off; nothing can switch it on for
+    // a base adapter that does not declare it.
+    "browser",
     "resume",
     "subagent",
     "contextLink",
@@ -46,6 +50,7 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
             "resume",
             "subagent",
             "contextLink",
+            "browser",
             "usage",
             "contextUsage",
             "structuredInputAck",
@@ -65,6 +70,7 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
             "resume",
             "subagent",
             "contextLink",
+            "browser",
             "contextUsage",
             "structuredInputAck",
             "supportsModelSelection",
@@ -80,6 +86,7 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
             "hooks",
             "resume",
             "contextLink",
+            "browser",
             "contextUsage",
             "structuredInputAck",
             "supportsModelSelection",
@@ -95,6 +102,7 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
             "hooks",
             "resume",
             "contextLink",
+            "browser",
             "structuredInputAck",
             "supportsModelSelection",
         ],
@@ -105,7 +113,7 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
         color: "#e8b86d",
         launch_cmd: "pi",
         prompt_mode: "argv",
-        capabilities: &["resume", "contextLink", "supportsModelSelection"],
+        capabilities: &["resume", "browser", "contextLink", "supportsModelSelection"],
     },
     AgentDefinition {
         id: "omp",
@@ -113,7 +121,7 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
         color: "#d4a373",
         launch_cmd: "omp",
         prompt_mode: "argv",
-        capabilities: &["resume", "contextLink", "supportsModelSelection"],
+        capabilities: &["resume", "browser", "contextLink", "supportsModelSelection"],
     },
     AgentDefinition {
         id: "copilot",
@@ -121,7 +129,7 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
         color: "#a371f7",
         launch_cmd: "copilot",
         prompt_mode: "flag-prompt",
-        capabilities: &["resume", "contextLink", "supportsModelSelection"],
+        capabilities: &["resume", "browser", "contextLink", "supportsModelSelection"],
     },
 ];
 

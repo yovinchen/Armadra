@@ -56,6 +56,14 @@ const DEFAULT_POWER_POLICY: &str = "manual";
 /// §8: "面板打开时每 2 秒"). Bounded so a hand-edited file cannot turn the
 /// sampler into a busy loop or into something that never updates.
 const DEFAULT_RESOURCE_INTERVAL_MS: u64 = 2_000;
+
+/// Controlled browser (B01). Closing a node stops the picture, not the page,
+/// so keeping the session alive is the default; a user who wants the opposite
+/// sets `browser.keepAlive` to false.
+const DEFAULT_BROWSER_KEEP_ALIVE: bool = true;
+/// Headless by default: the point of the node is the frame stream, and a
+/// visible window on the execution host would surprise a remote user.
+const DEFAULT_BROWSER_HEADFUL: bool = false;
 const MIN_RESOURCE_INTERVAL_MS: u64 = 500;
 const MAX_RESOURCE_INTERVAL_MS: u64 = 60_000;
 
@@ -487,6 +495,34 @@ pub fn normalize(raw: &Value) -> Value {
     resources.insert("intervalMs".into(), Value::from(interval));
     document.insert("resources".into(), Value::Object(resources));
 
+    // `browser.*` (B01). `executablePath` is stored exactly as written — an
+    // empty string means "detect", and a path that does not exist is reported
+    // as unavailable rather than silently replaced by a detected browser.
+    let mut browser = document
+        .get("browser")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let executable = browser
+        .get("executablePath")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|path| !path.is_empty() && path.len() <= 4_096)
+        .unwrap_or_default()
+        .to_owned();
+    browser.insert("executablePath".into(), Value::String(executable));
+    let keep_alive = browser
+        .get("keepAlive")
+        .and_then(Value::as_bool)
+        .unwrap_or(DEFAULT_BROWSER_KEEP_ALIVE);
+    browser.insert("keepAlive".into(), Value::Bool(keep_alive));
+    let headful = browser
+        .get("headful")
+        .and_then(Value::as_bool)
+        .unwrap_or(DEFAULT_BROWSER_HEADFUL);
+    browser.insert("headful".into(), Value::Bool(headful));
+    document.insert("browser".into(), Value::Object(browser));
+
     // `ssh.hosts[]` (plan §21). Entries that would not survive validation are
     // dropped here, so the document the API hands out is exactly the set of
     // hosts a terminal may actually be created for.
@@ -662,6 +698,38 @@ impl SettingsStore {
             .and_then(|section| section.get("intervalMs"))
             .and_then(Value::as_u64)
             .unwrap_or(DEFAULT_RESOURCE_INTERVAL_MS)
+    }
+
+    /// `browser.executablePath` (B01). `None` means "detect a browser"; a
+    /// value is used verbatim and never falls back to a detected install.
+    pub fn browser_executable(&self) -> Option<String> {
+        self.read()
+            .get("browser")
+            .and_then(|section| section.get("executablePath"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|path| !path.is_empty())
+            .map(str::to_owned)
+    }
+
+    /// `browser.keepAlive` — whether closing a browser node leaves its session
+    /// running (design §9).
+    pub fn browser_keep_alive(&self) -> bool {
+        self.read()
+            .get("browser")
+            .and_then(|section| section.get("keepAlive"))
+            .and_then(Value::as_bool)
+            .unwrap_or(DEFAULT_BROWSER_KEEP_ALIVE)
+    }
+
+    /// `browser.headful` — show a real window on the execution host instead of
+    /// running headless.
+    pub fn browser_headful(&self) -> bool {
+        self.read()
+            .get("browser")
+            .and_then(|section| section.get("headful"))
+            .and_then(Value::as_bool)
+            .unwrap_or(DEFAULT_BROWSER_HEADFUL)
     }
 
     /// `ssh.hosts[]`, already validated by `normalize` (plan §21).

@@ -53,6 +53,9 @@ subtle = "2.6.1"
 sysinfo = "=0.39.6"
 thiserror = "2.0.17"
 tokio = { version = "1.53.1", features = ["full"] }
+# CDP transport for the controlled browser (B01). Loopback `ws://` only — the
+# DevTools endpoint is never TLS — so no TLS feature is enabled here.
+tokio-tungstenite = "0.29.0"
 toml_edit = "0.25.13"
 tower-http = { version = "0.7.0", features = ["cors", "trace"] }
 tracing = "0.1.41"
@@ -67,5 +70,4 @@ windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Secur
 
 [dev-dependencies]
 tempfile = "3.23.0"
-tokio-tungstenite = "0.29.0"
 tower = { version = "0.5.2", features = ["util"] }

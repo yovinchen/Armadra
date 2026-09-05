@@ -74,6 +74,32 @@ pub enum WorkspaceEvent {
     ResourceSample {
         snapshot: Box<crate::resources::ResourceSnapshot>,
     },
+    /// One controlled-browser screencast image (B01, design §8).
+    ///
+    /// Boxed for the same reason `resource.sample` is: the payload is a base64
+    /// JPEG and every other variant would otherwise pay for its size in the
+    /// broadcast channel. Only sessions with a live subscription produce these,
+    /// and the Worker enforces the frame ceiling before publishing — a hidden
+    /// or unsubscribed node costs nothing.
+    #[serde(rename = "browser.frame")]
+    BrowserFrame {
+        /// Flattened: the client reads `sessionId` / `frameSeq` / `data` off
+        /// the frame itself, exactly as `browserFrameEvent` in shared declares.
+        #[serde(flatten)]
+        frame: Box<BrowserFramePayload>,
+    },
+    /// A browser session's state changed: navigation, title, viewport, or the
+    /// browser going away. Boxed to keep the enum small.
+    #[serde(rename = "browser.session")]
+    BrowserSession {
+        session: Box<crate::browser::BrowserSession>,
+    },
+    /// A download appeared in, or moved through, a session's queue. Nothing is
+    /// written into the project until it is accepted (design §6).
+    #[serde(rename = "browser.download")]
+    BrowserDownload {
+        download: Box<crate::browser::Download>,
+    },
     #[serde(rename = "file.changed", rename_all = "camelCase")]
     FileChanged {
         workspace_id: String,
@@ -83,6 +109,26 @@ pub enum WorkspaceEvent {
         size: Option<u64>,
         mtime: Option<String>,
     },
+}
+
+/// The body of a `browser.frame` event, flattened into the frame by serde so
+/// the wire shape stays flat for the client.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserFramePayload {
+    pub session_id: String,
+    pub generation: u64,
+    /// Monotonic per session. The client sends the newest one it painted back
+    /// with its input, so the Worker can tell input aimed at a stale picture.
+    pub frame_seq: u64,
+    pub navigation_epoch: u64,
+    pub viewport_width: u32,
+    pub viewport_height: u32,
+    pub device_scale_factor: f64,
+    pub encoding: &'static str,
+    /// Base64 JPEG bytes.
+    pub data: String,
+    pub captured_at: String,
 }
 
 /// How the file on disk differs from what the editor last read.

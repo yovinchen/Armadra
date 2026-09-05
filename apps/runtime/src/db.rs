@@ -1842,6 +1842,17 @@ mod tests {
 
     use super::*;
 
+    /// How many files `migrations/` holds. Counted rather than written out, so
+    /// adding a numbered migration does not silently break two unrelated
+    /// assertions about migration bookkeeping.
+    fn migration_count() -> i64 {
+        std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/migrations"))
+            .expect("the migrations directory ships with the crate")
+            .filter_map(Result::ok)
+            .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "sql"))
+            .count() as i64
+    }
+
     async fn fixture(name: &str) -> (SqlitePool, tempfile::TempDir, Workspace) {
         let directory = tempdir().unwrap();
         let database_url = format!(
@@ -2121,7 +2132,7 @@ mod tests {
                 .fetch_one(&upgraded)
                 .await
                 .unwrap(),
-            4
+            migration_count()
         );
         assert_eq!(
             sqlx::query_scalar::<_, Vec<u8>>(
@@ -2315,7 +2326,7 @@ mod tests {
                     .fetch_one(&pool)
                     .await
                     .unwrap(),
-                4
+                migration_count()
             );
             pool.close().await;
         }
