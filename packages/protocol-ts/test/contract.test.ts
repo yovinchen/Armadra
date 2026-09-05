@@ -542,6 +542,8 @@ it("keeps unmeasured resource metrics apart from measured zeros", () => {
   );
   expect(measured).not.toEqual(absent);
   expect(fromBinary(ProcessSampleSchema, absent).cpuPercent).toBeUndefined();
+});
+
 describe("reserved account and presence contracts", () => {
   it("carries an account reference and a credential name, never a secret", () => {
     check("account_bind_request", BindNodeAccountRequestSchema, {

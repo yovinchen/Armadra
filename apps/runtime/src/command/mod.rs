@@ -655,7 +655,6 @@ mod tests {
             working_directory: ".".into(),
             account_id: account.into(),
             timeout_ms: 1_000,
-            ..Default::default()
         }
     }
 

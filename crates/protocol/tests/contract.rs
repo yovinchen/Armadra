@@ -659,6 +659,8 @@ fn resource_metrics_keep_unknown_apart_from_zero() {
             .cpu_percent,
         None
     );
+}
+
 /// Reserved account (S02) and presence (H04) envelopes. Prost must agree with
 /// Go and TypeScript byte for byte before anything is built on them.
 #[test]

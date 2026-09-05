@@ -887,6 +887,7 @@ mod tests {
             host_instance_id: "instance-1".into(),
             max_frame_bytes: 1_048_576,
             capabilities: vec!["protocol.hello.v1".into()],
+            capability_status: Vec::new(),
         }
         .encode_to_vec();
         let mut response = format!("HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: {origin}\r\nContent-Type: application/x-protobuf\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", wire.len()).into_bytes();

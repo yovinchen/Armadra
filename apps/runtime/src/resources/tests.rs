@@ -80,7 +80,7 @@ async fn fixture_with(settings: serde_json::Value) -> Fixture {
             directory.path().to_path_buf(),
         ),
         resources: ResourceService::new(settings.clone()),
-        hooks: HookService::new(directory.path().to_path_buf(), 0),
+        hooks: HookService::new(directory.path().to_path_buf(), None),
         usage: UsageService::new(settings.clone()),
         events,
         settings,

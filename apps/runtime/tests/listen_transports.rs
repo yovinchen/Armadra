@@ -53,6 +53,7 @@ async fn serve_on_socket() -> Fixture {
     let events = EventHub::new();
     let settings = SettingsStore::load();
     let state = AppState {
+        resources: armadra_runtime::resources::ResourceService::new(settings.clone()),
         terminals: TerminalManager::new(pool.clone(), events.clone()),
         hooks: HookService::new(directory.path().to_path_buf(), None),
         usage: UsageService::new(settings.clone()),
