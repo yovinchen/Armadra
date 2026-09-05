@@ -23,6 +23,7 @@ pub mod handoff;
 pub mod hook;
 pub mod imports;
 pub mod index;
+pub mod language;
 pub mod listen;
 pub mod migration_cli;
 pub mod migration_export;
@@ -85,6 +86,9 @@ pub struct AppState {
     /// SSH execution hosts and their remote Workers (H02). Empty and idle
     /// until a workspace names one.
     pub remote: std::sync::Arc<remote::RemoteWorkers>,
+    /// Language servers for the editor (E01/LSP). Holds no process and starts
+    /// no sweep until an editor opens a session.
+    pub language: language::Manager,
 }
 
 /// The controller identity a remote Worker binds its session to. One per
@@ -103,6 +107,7 @@ pub fn router(pool: SqlitePool) -> Router {
         usage: UsageService::new(settings.clone()),
         resources: ResourceService::new(settings.clone()),
         remote: std::sync::Arc::new(remote::RemoteWorkers::new(controller_id())),
+        language: language::Manager::new(),
         events,
         pool,
         settings,
@@ -318,11 +323,39 @@ pub fn router_with_state(state: AppState) -> Router {
             "/api/workspaces/{workspace_id}/file-entries/restore",
             post(api::restore_file_entry),
         )
-        // Capability probe only: Armadra has no LSP yet, and the editor shows
-        // nothing rather than an empty completion list (design §2, §4).
+        // Editor language services (E01/LSP, language service design §2.9).
+        // The probe lists one row per language whatever the answer is, so the
+        // settings page can say what is missing rather than showing nothing.
+        // `?refresh=1` re-runs `--version` instead of reading the 24 h cache.
         .route(
             "/api/workspaces/{workspace_id}/language-service",
-            get(api::language_service),
+            get(language::routes::language_service),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/language/sessions",
+            post(language::routes::open_session),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/language/sessions/{session_id}",
+            delete(language::routes::close_session),
+        )
+        // One text frame is one JSON-RPC message. Its own socket, because the
+        // workspace event stream is one-directional and a session must send.
+        .route(
+            "/api/workspaces/{workspace_id}/language/sessions/{session_id}/stream",
+            get(language::routes::session_stream),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/language/sessions/{session_id}/edits",
+            post(language::routes::apply_edit),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/language/servers/{server_id}/restart",
+            post(language::routes::restart_server),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/language/servers/{server_id}/stop",
+            post(language::routes::stop_server),
         )
         .route(
             "/api/workspaces/{workspace_id}/git/status",

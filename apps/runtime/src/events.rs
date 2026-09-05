@@ -100,6 +100,39 @@ pub enum WorkspaceEvent {
     BrowserDownload {
         download: Box<crate::browser::Download>,
     },
+    /// One language session's state (language service design §2.9).
+    ///
+    /// It rides the workspace stream rather than the session socket so the
+    /// status line and the settings page can follow a server without opening
+    /// one — and so a session that has *not* connected its socket yet still
+    /// learns that its server crashed.
+    #[serde(rename = "language.session", rename_all = "camelCase")]
+    LanguageSession {
+        workspace_id: String,
+        session_id: String,
+        server_id: String,
+        generation: u64,
+        state: crate::language::ServerState,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+        restart_count: u32,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        progress: Option<LanguageProgress>,
+    },
+    /// A server was probed, started, stopped or crashed.
+    ///
+    /// Boxed because the descriptor is large and every other variant would
+    /// otherwise pay for its size in the broadcast channel. `stderr_tail` is
+    /// present only for a crash, is redacted, and exists only in memory — it
+    /// is not written to a log or to the database (design §3.4).
+    #[serde(rename = "language.server", rename_all = "camelCase")]
+    LanguageServer {
+        workspace_id: String,
+        execution_host_id: String,
+        server: Box<crate::language::ServerDescriptor>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        stderr_tail: Option<String>,
+    },
     #[serde(rename = "file.changed", rename_all = "camelCase")]
     FileChanged {
         workspace_id: String,
@@ -129,6 +162,19 @@ pub struct BrowserFramePayload {
     /// Base64 JPEG bytes.
     pub data: String,
     pub captured_at: String,
+}
+
+/// A language server's `$/progress`, reduced to what a status line can show.
+///
+/// `percent` is absent when the server reports progress without a percentage,
+/// which is not the same as 0 %: one means "working", the other means "just
+/// started".
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LanguageProgress {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub percent: Option<u32>,
+    pub title: String,
 }
 
 /// How the file on disk differs from what the editor last read.

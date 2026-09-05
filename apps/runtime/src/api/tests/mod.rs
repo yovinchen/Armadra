@@ -10,6 +10,7 @@ mod clone;
 mod data;
 mod exports;
 mod files;
+mod language;
 mod search;
 mod settings;
 mod terminals;

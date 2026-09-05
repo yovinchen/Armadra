@@ -564,6 +564,20 @@ impl Worker {
                     response_json,
                 }))
             }
+            // Editor language services are defined on the wire (language
+            // service design §2.8) but not served here yet: the remote half is
+            // batch D. UNSUPPORTED is the honest answer — a controller that
+            // gets it falls back to no language support rather than waiting
+            // for a session that will never open. The Hello capabilities do
+            // not list `language.v1`, so a current controller never asks.
+            Action::LanguageCapabilities(_)
+            | Action::OpenLanguageSession(_)
+            | Action::CloseLanguageSession(_)
+            | Action::LanguageFrame(_)
+            | Action::LanguageApplyEdit(_) => Ok(Response::Error(ErrorResponse {
+                code: "UNSUPPORTED".into(),
+                message: "Language services are not available on this Worker".into(),
+            })),
         }
     }
 }

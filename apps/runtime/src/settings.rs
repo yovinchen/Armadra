@@ -553,6 +553,11 @@ pub fn normalize(raw: &Value) -> Value {
     browser.insert("headful".into(), Value::Bool(headful));
     document.insert("browser".into(), Value::Object(browser));
 
+    // `language.*` (E01/LSP). Only the scalars are normalised; `servers` and
+    // `probes` are the user's map and the probe cache, and both may hold ids
+    // this build has never heard of.
+    crate::language::settings::normalize(&mut document);
+
     // `ssh.hosts[]` (plan §21). Entries that would not survive validation are
     // dropped here, so the document the API hands out is exactly the set of
     // hosts a terminal may actually be created for.

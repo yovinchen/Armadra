@@ -76,6 +76,9 @@ async fn search_surfaces_are_paged_camel_cased_and_gated_on_read_access() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(invalid["code"], "bad_request");
 
+    // The language probe answers with one row per language whatever this
+    // machine has installed, so the assertion is about the shape and not about
+    // whether some server happens to exist here (see `tests/language.rs`).
     let (status, probe) = call(
         &router,
         "GET",
@@ -84,7 +87,9 @@ async fn search_surfaces_are_paged_camel_cased_and_gated_on_read_access() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(probe["status"], "unavailable");
+    assert!(probe["status"] == "available" || probe["status"] == "unavailable");
+    assert_eq!(probe["executionHostId"], "local");
+    assert!(!probe["servers"].as_array().unwrap().is_empty());
 
     let (status, _) = call(
         &router,

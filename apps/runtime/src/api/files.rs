@@ -9,7 +9,7 @@ use axum::{
     extract::{Path as AxumPath, Query, State},
     response::Response,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use super::support::{default_path, readable_workspace, writable_workspace};
 use crate::{
@@ -349,33 +349,6 @@ pub async fn restore_file_entry(
         file_ops::restore_trash(Path::new(&workspace.root_path), &request.id).map(Json)
     })
     .await?
-}
-
-/* ------------------------------ language service -------------------------- */
-
-/// What the editor may rely on for this workspace's language tooling.
-///
-/// There is no LSP in Armadra yet, so the honest answer is the only one: the
-/// probe reports `unavailable` with a reason, and the editor shows no
-/// completion affordances rather than an empty list pretending to be one
-/// (design §2, §4).
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LanguageServiceStatus {
-    status: &'static str,
-    reason: &'static str,
-}
-
-/// `GET /api/workspaces/{id}/language-service` — capability probe (E01/M4).
-pub async fn language_service(
-    State(state): State<AppState>,
-    AxumPath(workspace_id): AxumPath<String>,
-) -> AppResult<Json<LanguageServiceStatus>> {
-    readable_workspace(&state, &workspace_id).await?;
-    Ok(Json(LanguageServiceStatus {
-        status: "unavailable",
-        reason: "not_implemented",
-    }))
 }
 
 /* ------------------------------ file watching ----------------------------- */

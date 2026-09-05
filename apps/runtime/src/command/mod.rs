@@ -17,6 +17,24 @@ use sqlx::Row;
 use std::{collections::HashMap, fs::File, path::PathBuf, sync::Arc, time::Duration};
 use store::Store;
 use tokio::sync::Mutex;
+/// Whether this process can contain the children it starts.
+///
+/// On Windows that means being inside a Job Object, which children inherit, so
+/// a killed parent takes its tree with it. On unix a session of our own
+/// (`setsid`) plus `killpg` does the same job and is always available. Callers
+/// that cannot contain what they start — the command Worker, and the language
+/// servers of the editor — refuse to start it rather than leaking a process
+/// tree nobody can reach.
+pub fn containment_ready() -> bool {
+    #[cfg(windows)]
+    {
+        platform_windows::containment_ready()
+    }
+    #[cfg(not(windows))]
+    {
+        true
+    }
+}
 pub const STDIN_LIMIT: usize = 256 << 10;
 pub const OUTPUT_LIMIT: usize = 256 << 10;
 pub const MAX_TIMEOUT_MS: u64 = 24 * 60 * 60 * 1000;

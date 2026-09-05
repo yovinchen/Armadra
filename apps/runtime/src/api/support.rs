@@ -37,7 +37,7 @@ pub(super) async fn writable_workspace(
     Ok(workspace)
 }
 
-pub(super) fn validate_websocket_origin(headers: &HeaderMap) -> AppResult<()> {
+pub fn validate_websocket_origin(headers: &HeaderMap) -> AppResult<()> {
     let origin = headers
         .get(axum::http::header::ORIGIN)
         .and_then(|value| value.to_str().ok())
