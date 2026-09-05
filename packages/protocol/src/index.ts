@@ -14,6 +14,7 @@ export * from "./gen/armadra/v1/presence_pb.js";
 export * from "./gen/armadra/v1/browser_pb.js";
 export * from "./gen/armadra/v1/github_pb.js";
 export * from "./gen/armadra/v1/updates_pb.js";
+export * from "./gen/armadra/v1/language_pb.js";
 export { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 
 export const PROTOCOL_MAJOR = 1;

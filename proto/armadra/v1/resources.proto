@@ -51,6 +51,9 @@ enum PlatformComponentKind {
   PLATFORM_COMPONENT_KIND_COMMAND_WORKER = 3;
   PLATFORM_COMPONENT_KIND_SESSION_HOST = 4;
   PLATFORM_COMPONENT_KIND_BROWSER_WORKER = 5;
+  // A language server the editor started. `name` is the executable's file
+  // name (`ruff`, `gopls`), never the command line.
+  PLATFORM_COMPONENT_KIND_LANGUAGE_SERVER = 6;
 }
 
 // A process, identified so that pid reuse cannot merge two of them. The start

@@ -1280,6 +1280,11 @@ type WorkerRequest struct {
 	//	*WorkerRequest_Agent
 	//	*WorkerRequest_SetWriteOwnership
 	//	*WorkerRequest_GetWriteOwnership
+	//	*WorkerRequest_LanguageCapabilities
+	//	*WorkerRequest_OpenLanguageSession
+	//	*WorkerRequest_CloseLanguageSession
+	//	*WorkerRequest_LanguageFrame
+	//	*WorkerRequest_LanguageApplyEdit
 	Action        isWorkerRequest_Action `protobuf_oneof:"action"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1440,6 +1445,51 @@ func (x *WorkerRequest) GetGetWriteOwnership() *GetWriteOwnershipRequest {
 	return nil
 }
 
+func (x *WorkerRequest) GetLanguageCapabilities() *LanguageCapabilitiesRequest {
+	if x != nil {
+		if x, ok := x.Action.(*WorkerRequest_LanguageCapabilities); ok {
+			return x.LanguageCapabilities
+		}
+	}
+	return nil
+}
+
+func (x *WorkerRequest) GetOpenLanguageSession() *OpenLanguageSessionRequest {
+	if x != nil {
+		if x, ok := x.Action.(*WorkerRequest_OpenLanguageSession); ok {
+			return x.OpenLanguageSession
+		}
+	}
+	return nil
+}
+
+func (x *WorkerRequest) GetCloseLanguageSession() *CloseLanguageSessionRequest {
+	if x != nil {
+		if x, ok := x.Action.(*WorkerRequest_CloseLanguageSession); ok {
+			return x.CloseLanguageSession
+		}
+	}
+	return nil
+}
+
+func (x *WorkerRequest) GetLanguageFrame() *LanguageFrame {
+	if x != nil {
+		if x, ok := x.Action.(*WorkerRequest_LanguageFrame); ok {
+			return x.LanguageFrame
+		}
+	}
+	return nil
+}
+
+func (x *WorkerRequest) GetLanguageApplyEdit() *LanguageApplyEditRequest {
+	if x != nil {
+		if x, ok := x.Action.(*WorkerRequest_LanguageApplyEdit); ok {
+			return x.LanguageApplyEdit
+		}
+	}
+	return nil
+}
+
 type isWorkerRequest_Action interface {
 	isWorkerRequest_Action()
 }
@@ -1486,6 +1536,31 @@ type WorkerRequest_GetWriteOwnership struct {
 	GetWriteOwnership *GetWriteOwnershipRequest `protobuf:"bytes,23,opt,name=get_write_ownership,json=getWriteOwnership,proto3,oneof"`
 }
 
+type WorkerRequest_LanguageCapabilities struct {
+	// Editor language services (language service design §2.8). Discovery,
+	// session open/close and edit application are request-response and stay on
+	// this serial connection; `language_frame` only ever travels on the
+	// separate `worker --stdio --language-link` connection, which abandons
+	// one-question-one-answer so a server can push diagnostics.
+	LanguageCapabilities *LanguageCapabilitiesRequest `protobuf:"bytes,30,opt,name=language_capabilities,json=languageCapabilities,proto3,oneof"`
+}
+
+type WorkerRequest_OpenLanguageSession struct {
+	OpenLanguageSession *OpenLanguageSessionRequest `protobuf:"bytes,31,opt,name=open_language_session,json=openLanguageSession,proto3,oneof"`
+}
+
+type WorkerRequest_CloseLanguageSession struct {
+	CloseLanguageSession *CloseLanguageSessionRequest `protobuf:"bytes,32,opt,name=close_language_session,json=closeLanguageSession,proto3,oneof"`
+}
+
+type WorkerRequest_LanguageFrame struct {
+	LanguageFrame *LanguageFrame `protobuf:"bytes,33,opt,name=language_frame,json=languageFrame,proto3,oneof"`
+}
+
+type WorkerRequest_LanguageApplyEdit struct {
+	LanguageApplyEdit *LanguageApplyEditRequest `protobuf:"bytes,34,opt,name=language_apply_edit,json=languageApplyEdit,proto3,oneof"`
+}
+
 func (*WorkerRequest_Hello) isWorkerRequest_Action() {}
 
 func (*WorkerRequest_RegisterRoot) isWorkerRequest_Action() {}
@@ -1506,6 +1581,16 @@ func (*WorkerRequest_SetWriteOwnership) isWorkerRequest_Action() {}
 
 func (*WorkerRequest_GetWriteOwnership) isWorkerRequest_Action() {}
 
+func (*WorkerRequest_LanguageCapabilities) isWorkerRequest_Action() {}
+
+func (*WorkerRequest_OpenLanguageSession) isWorkerRequest_Action() {}
+
+func (*WorkerRequest_CloseLanguageSession) isWorkerRequest_Action() {}
+
+func (*WorkerRequest_LanguageFrame) isWorkerRequest_Action() {}
+
+func (*WorkerRequest_LanguageApplyEdit) isWorkerRequest_Action() {}
+
 type WorkerResponse struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	RequestId  string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -1523,6 +1608,10 @@ type WorkerResponse struct {
 	//	*WorkerResponse_Command
 	//	*WorkerResponse_Agent
 	//	*WorkerResponse_WriteOwnership
+	//	*WorkerResponse_LanguageCapabilities
+	//	*WorkerResponse_LanguageSession
+	//	*WorkerResponse_LanguageFrame
+	//	*WorkerResponse_LanguageApplyEdit
 	Result        isWorkerResponse_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1676,6 +1765,42 @@ func (x *WorkerResponse) GetWriteOwnership() *WorkerWriteOwnership {
 	return nil
 }
 
+func (x *WorkerResponse) GetLanguageCapabilities() *LanguageCapabilities {
+	if x != nil {
+		if x, ok := x.Result.(*WorkerResponse_LanguageCapabilities); ok {
+			return x.LanguageCapabilities
+		}
+	}
+	return nil
+}
+
+func (x *WorkerResponse) GetLanguageSession() *LanguageSession {
+	if x != nil {
+		if x, ok := x.Result.(*WorkerResponse_LanguageSession); ok {
+			return x.LanguageSession
+		}
+	}
+	return nil
+}
+
+func (x *WorkerResponse) GetLanguageFrame() *LanguageFrame {
+	if x != nil {
+		if x, ok := x.Result.(*WorkerResponse_LanguageFrame); ok {
+			return x.LanguageFrame
+		}
+	}
+	return nil
+}
+
+func (x *WorkerResponse) GetLanguageApplyEdit() *LanguageApplyEditResult {
+	if x != nil {
+		if x, ok := x.Result.(*WorkerResponse_LanguageApplyEdit); ok {
+			return x.LanguageApplyEdit
+		}
+	}
+	return nil
+}
+
 type isWorkerResponse_Result interface {
 	isWorkerResponse_Result()
 }
@@ -1720,6 +1845,24 @@ type WorkerResponse_WriteOwnership struct {
 	WriteOwnership *WorkerWriteOwnership `protobuf:"bytes,22,opt,name=write_ownership,json=writeOwnership,proto3,oneof"`
 }
 
+type WorkerResponse_LanguageCapabilities struct {
+	// Closing a session answers `language_session` too, with state STOPPED:
+	// the client learns the final state rather than an empty acknowledgement.
+	LanguageCapabilities *LanguageCapabilities `protobuf:"bytes,30,opt,name=language_capabilities,json=languageCapabilities,proto3,oneof"`
+}
+
+type WorkerResponse_LanguageSession struct {
+	LanguageSession *LanguageSession `protobuf:"bytes,31,opt,name=language_session,json=languageSession,proto3,oneof"`
+}
+
+type WorkerResponse_LanguageFrame struct {
+	LanguageFrame *LanguageFrame `protobuf:"bytes,32,opt,name=language_frame,json=languageFrame,proto3,oneof"`
+}
+
+type WorkerResponse_LanguageApplyEdit struct {
+	LanguageApplyEdit *LanguageApplyEditResult `protobuf:"bytes,33,opt,name=language_apply_edit,json=languageApplyEdit,proto3,oneof"`
+}
+
 func (*WorkerResponse_Hello) isWorkerResponse_Result() {}
 
 func (*WorkerResponse_RegisteredRoot) isWorkerResponse_Result() {}
@@ -1740,12 +1883,20 @@ func (*WorkerResponse_Agent) isWorkerResponse_Result() {}
 
 func (*WorkerResponse_WriteOwnership) isWorkerResponse_Result() {}
 
+func (*WorkerResponse_LanguageCapabilities) isWorkerResponse_Result() {}
+
+func (*WorkerResponse_LanguageSession) isWorkerResponse_Result() {}
+
+func (*WorkerResponse_LanguageFrame) isWorkerResponse_Result() {}
+
+func (*WorkerResponse_LanguageApplyEdit) isWorkerResponse_Result() {}
+
 var File_armadra_v1_worker_proto protoreflect.FileDescriptor
 
 const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"\x17armadra/v1/worker.proto\x12\n" +
-	"armadra.v1\x1a\x16armadra/v1/agent.proto\x1a\x17armadra/v1/common.proto\x1a\x18armadra/v1/command.proto\x1a\x17armadra/v1/canvas.proto\x1a\x1farmadra/v1/worker_channel.proto\"M\n" +
+	"armadra.v1\x1a\x16armadra/v1/agent.proto\x1a\x17armadra/v1/common.proto\x1a\x18armadra/v1/command.proto\x1a\x17armadra/v1/canvas.proto\x1a\x1farmadra/v1/worker_channel.proto\x1a\x19armadra/v1/language.proto\"M\n" +
 	"\x12WorkerHelloRequest\x127\n" +
 	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\"\x99\x04\n" +
 	"\x13WorkerHelloResponse\x127\n" +
@@ -1838,7 +1989,8 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\x15WorkerServiceResponse\x12\x1f\n" +
 	"\vhttp_status\x18\x01 \x01(\rR\n" +
 	"httpStatus\x12#\n" +
-	"\rresponse_json\x18\x02 \x01(\fR\fresponseJson\"\xdd\x06\n" +
+	"\rresponse_json\x18\x02 \x01(\fR\fresponseJson\"\x98\n" +
+	"\n" +
 	"\rWorkerRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -1856,8 +2008,13 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\acommand\x18\x14 \x01(\v2\x1a.armadra.v1.CommandRequestH\x00R\acommand\x120\n" +
 	"\x05agent\x18\x15 \x01(\v2\x18.armadra.v1.AgentRequestH\x00R\x05agent\x12V\n" +
 	"\x13set_write_ownership\x18\x16 \x01(\v2$.armadra.v1.SetWriteOwnershipRequestH\x00R\x11setWriteOwnership\x12V\n" +
-	"\x13get_write_ownership\x18\x17 \x01(\v2$.armadra.v1.GetWriteOwnershipRequestH\x00R\x11getWriteOwnershipB\b\n" +
-	"\x06action\"\xdd\x05\n" +
+	"\x13get_write_ownership\x18\x17 \x01(\v2$.armadra.v1.GetWriteOwnershipRequestH\x00R\x11getWriteOwnership\x12^\n" +
+	"\x15language_capabilities\x18\x1e \x01(\v2'.armadra.v1.LanguageCapabilitiesRequestH\x00R\x14languageCapabilities\x12\\\n" +
+	"\x15open_language_session\x18\x1f \x01(\v2&.armadra.v1.OpenLanguageSessionRequestH\x00R\x13openLanguageSession\x12_\n" +
+	"\x16close_language_session\x18  \x01(\v2'.armadra.v1.CloseLanguageSessionRequestH\x00R\x14closeLanguageSession\x12B\n" +
+	"\x0elanguage_frame\x18! \x01(\v2\x19.armadra.v1.LanguageFrameH\x00R\rlanguageFrame\x12V\n" +
+	"\x13language_apply_edit\x18\" \x01(\v2$.armadra.v1.LanguageApplyEditRequestH\x00R\x11languageApplyEditB\b\n" +
+	"\x06action\"\x9b\b\n" +
 	"\x0eWorkerResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -1875,7 +2032,11 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\aservice\x18\x10 \x01(\v2!.armadra.v1.WorkerServiceResponseH\x00R\aservice\x127\n" +
 	"\acommand\x18\x14 \x01(\v2\x1b.armadra.v1.CommandResponseH\x00R\acommand\x121\n" +
 	"\x05agent\x18\x15 \x01(\v2\x19.armadra.v1.AgentResponseH\x00R\x05agent\x12K\n" +
-	"\x0fwrite_ownership\x18\x16 \x01(\v2 .armadra.v1.WorkerWriteOwnershipH\x00R\x0ewriteOwnershipB\b\n" +
+	"\x0fwrite_ownership\x18\x16 \x01(\v2 .armadra.v1.WorkerWriteOwnershipH\x00R\x0ewriteOwnership\x12W\n" +
+	"\x15language_capabilities\x18\x1e \x01(\v2 .armadra.v1.LanguageCapabilitiesH\x00R\x14languageCapabilities\x12H\n" +
+	"\x10language_session\x18\x1f \x01(\v2\x1b.armadra.v1.LanguageSessionH\x00R\x0flanguageSession\x12B\n" +
+	"\x0elanguage_frame\x18  \x01(\v2\x19.armadra.v1.LanguageFrameH\x00R\rlanguageFrame\x12U\n" +
+	"\x13language_apply_edit\x18! \x01(\v2#.armadra.v1.LanguageApplyEditResultH\x00R\x11languageApplyEditB\b\n" +
 	"\x06result*\x89\x05\n" +
 	"\x16WorkerServiceOperation\x12(\n" +
 	"$WORKER_SERVICE_OPERATION_UNSPECIFIED\x10\x00\x12)\n" +
@@ -1910,34 +2071,42 @@ func file_armadra_v1_worker_proto_rawDescGZIP() []byte {
 var file_armadra_v1_worker_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_armadra_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_armadra_v1_worker_proto_goTypes = []any{
-	(WorkerServiceOperation)(0),        // 0: armadra.v1.WorkerServiceOperation
-	(*WorkerHelloRequest)(nil),         // 1: armadra.v1.WorkerHelloRequest
-	(*WorkerHelloResponse)(nil),        // 2: armadra.v1.WorkerHelloResponse
-	(*RegisterRootRequest)(nil),        // 3: armadra.v1.RegisterRootRequest
-	(*RegisteredRoot)(nil),             // 4: armadra.v1.RegisteredRoot
-	(*WorkerListDirectoryRequest)(nil), // 5: armadra.v1.WorkerListDirectoryRequest
-	(*WorkerFileEntry)(nil),            // 6: armadra.v1.WorkerFileEntry
-	(*WorkerDirectory)(nil),            // 7: armadra.v1.WorkerDirectory
-	(*WorkerReadFileRequest)(nil),      // 8: armadra.v1.WorkerReadFileRequest
-	(*WorkerFileChunk)(nil),            // 9: armadra.v1.WorkerFileChunk
-	(*SetWriteOwnershipRequest)(nil),   // 10: armadra.v1.SetWriteOwnershipRequest
-	(*GetWriteOwnershipRequest)(nil),   // 11: armadra.v1.GetWriteOwnershipRequest
-	(*WorkerWriteOwnership)(nil),       // 12: armadra.v1.WorkerWriteOwnership
-	(*WorkerWriteFileRequest)(nil),     // 13: armadra.v1.WorkerWriteFileRequest
-	(*WorkerFileWritten)(nil),          // 14: armadra.v1.WorkerFileWritten
-	(*WorkerServiceRequest)(nil),       // 15: armadra.v1.WorkerServiceRequest
-	(*WorkerServiceResponse)(nil),      // 16: armadra.v1.WorkerServiceResponse
-	(*WorkerRequest)(nil),              // 17: armadra.v1.WorkerRequest
-	(*WorkerResponse)(nil),             // 18: armadra.v1.WorkerResponse
-	(*ProtocolVersion)(nil),            // 19: armadra.v1.ProtocolVersion
-	(*CommandCapabilities)(nil),        // 20: armadra.v1.CommandCapabilities
-	(*WorkerChannelCapability)(nil),    // 21: armadra.v1.WorkerChannelCapability
-	(CanvasOwnershipOwner)(0),          // 22: armadra.v1.CanvasOwnershipOwner
-	(*CommandRequest)(nil),             // 23: armadra.v1.CommandRequest
-	(*AgentRequest)(nil),               // 24: armadra.v1.AgentRequest
-	(*ErrorResponse)(nil),              // 25: armadra.v1.ErrorResponse
-	(*CommandResponse)(nil),            // 26: armadra.v1.CommandResponse
-	(*AgentResponse)(nil),              // 27: armadra.v1.AgentResponse
+	(WorkerServiceOperation)(0),         // 0: armadra.v1.WorkerServiceOperation
+	(*WorkerHelloRequest)(nil),          // 1: armadra.v1.WorkerHelloRequest
+	(*WorkerHelloResponse)(nil),         // 2: armadra.v1.WorkerHelloResponse
+	(*RegisterRootRequest)(nil),         // 3: armadra.v1.RegisterRootRequest
+	(*RegisteredRoot)(nil),              // 4: armadra.v1.RegisteredRoot
+	(*WorkerListDirectoryRequest)(nil),  // 5: armadra.v1.WorkerListDirectoryRequest
+	(*WorkerFileEntry)(nil),             // 6: armadra.v1.WorkerFileEntry
+	(*WorkerDirectory)(nil),             // 7: armadra.v1.WorkerDirectory
+	(*WorkerReadFileRequest)(nil),       // 8: armadra.v1.WorkerReadFileRequest
+	(*WorkerFileChunk)(nil),             // 9: armadra.v1.WorkerFileChunk
+	(*SetWriteOwnershipRequest)(nil),    // 10: armadra.v1.SetWriteOwnershipRequest
+	(*GetWriteOwnershipRequest)(nil),    // 11: armadra.v1.GetWriteOwnershipRequest
+	(*WorkerWriteOwnership)(nil),        // 12: armadra.v1.WorkerWriteOwnership
+	(*WorkerWriteFileRequest)(nil),      // 13: armadra.v1.WorkerWriteFileRequest
+	(*WorkerFileWritten)(nil),           // 14: armadra.v1.WorkerFileWritten
+	(*WorkerServiceRequest)(nil),        // 15: armadra.v1.WorkerServiceRequest
+	(*WorkerServiceResponse)(nil),       // 16: armadra.v1.WorkerServiceResponse
+	(*WorkerRequest)(nil),               // 17: armadra.v1.WorkerRequest
+	(*WorkerResponse)(nil),              // 18: armadra.v1.WorkerResponse
+	(*ProtocolVersion)(nil),             // 19: armadra.v1.ProtocolVersion
+	(*CommandCapabilities)(nil),         // 20: armadra.v1.CommandCapabilities
+	(*WorkerChannelCapability)(nil),     // 21: armadra.v1.WorkerChannelCapability
+	(CanvasOwnershipOwner)(0),           // 22: armadra.v1.CanvasOwnershipOwner
+	(*CommandRequest)(nil),              // 23: armadra.v1.CommandRequest
+	(*AgentRequest)(nil),                // 24: armadra.v1.AgentRequest
+	(*LanguageCapabilitiesRequest)(nil), // 25: armadra.v1.LanguageCapabilitiesRequest
+	(*OpenLanguageSessionRequest)(nil),  // 26: armadra.v1.OpenLanguageSessionRequest
+	(*CloseLanguageSessionRequest)(nil), // 27: armadra.v1.CloseLanguageSessionRequest
+	(*LanguageFrame)(nil),               // 28: armadra.v1.LanguageFrame
+	(*LanguageApplyEditRequest)(nil),    // 29: armadra.v1.LanguageApplyEditRequest
+	(*ErrorResponse)(nil),               // 30: armadra.v1.ErrorResponse
+	(*CommandResponse)(nil),             // 31: armadra.v1.CommandResponse
+	(*AgentResponse)(nil),               // 32: armadra.v1.AgentResponse
+	(*LanguageCapabilities)(nil),        // 33: armadra.v1.LanguageCapabilities
+	(*LanguageSession)(nil),             // 34: armadra.v1.LanguageSession
+	(*LanguageApplyEditResult)(nil),     // 35: armadra.v1.LanguageApplyEditResult
 }
 var file_armadra_v1_worker_proto_depIdxs = []int32{
 	19, // 0: armadra.v1.WorkerHelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
@@ -1958,21 +2127,30 @@ var file_armadra_v1_worker_proto_depIdxs = []int32{
 	24, // 15: armadra.v1.WorkerRequest.agent:type_name -> armadra.v1.AgentRequest
 	10, // 16: armadra.v1.WorkerRequest.set_write_ownership:type_name -> armadra.v1.SetWriteOwnershipRequest
 	11, // 17: armadra.v1.WorkerRequest.get_write_ownership:type_name -> armadra.v1.GetWriteOwnershipRequest
-	2,  // 18: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
-	4,  // 19: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
-	7,  // 20: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
-	9,  // 21: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
-	25, // 22: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
-	14, // 23: armadra.v1.WorkerResponse.file_written:type_name -> armadra.v1.WorkerFileWritten
-	16, // 24: armadra.v1.WorkerResponse.service:type_name -> armadra.v1.WorkerServiceResponse
-	26, // 25: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
-	27, // 26: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
-	12, // 27: armadra.v1.WorkerResponse.write_ownership:type_name -> armadra.v1.WorkerWriteOwnership
-	28, // [28:28] is the sub-list for method output_type
-	28, // [28:28] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	25, // 18: armadra.v1.WorkerRequest.language_capabilities:type_name -> armadra.v1.LanguageCapabilitiesRequest
+	26, // 19: armadra.v1.WorkerRequest.open_language_session:type_name -> armadra.v1.OpenLanguageSessionRequest
+	27, // 20: armadra.v1.WorkerRequest.close_language_session:type_name -> armadra.v1.CloseLanguageSessionRequest
+	28, // 21: armadra.v1.WorkerRequest.language_frame:type_name -> armadra.v1.LanguageFrame
+	29, // 22: armadra.v1.WorkerRequest.language_apply_edit:type_name -> armadra.v1.LanguageApplyEditRequest
+	2,  // 23: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
+	4,  // 24: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
+	7,  // 25: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
+	9,  // 26: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
+	30, // 27: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
+	14, // 28: armadra.v1.WorkerResponse.file_written:type_name -> armadra.v1.WorkerFileWritten
+	16, // 29: armadra.v1.WorkerResponse.service:type_name -> armadra.v1.WorkerServiceResponse
+	31, // 30: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
+	32, // 31: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
+	12, // 32: armadra.v1.WorkerResponse.write_ownership:type_name -> armadra.v1.WorkerWriteOwnership
+	33, // 33: armadra.v1.WorkerResponse.language_capabilities:type_name -> armadra.v1.LanguageCapabilities
+	34, // 34: armadra.v1.WorkerResponse.language_session:type_name -> armadra.v1.LanguageSession
+	28, // 35: armadra.v1.WorkerResponse.language_frame:type_name -> armadra.v1.LanguageFrame
+	35, // 36: armadra.v1.WorkerResponse.language_apply_edit:type_name -> armadra.v1.LanguageApplyEditResult
+	37, // [37:37] is the sub-list for method output_type
+	37, // [37:37] is the sub-list for method input_type
+	37, // [37:37] is the sub-list for extension type_name
+	37, // [37:37] is the sub-list for extension extendee
+	0,  // [0:37] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_worker_proto_init() }
@@ -1985,6 +2163,7 @@ func file_armadra_v1_worker_proto_init() {
 	file_armadra_v1_command_proto_init()
 	file_armadra_v1_canvas_proto_init()
 	file_armadra_v1_worker_channel_proto_init()
+	file_armadra_v1_language_proto_init()
 	file_armadra_v1_worker_proto_msgTypes[7].OneofWrappers = []any{}
 	file_armadra_v1_worker_proto_msgTypes[12].OneofWrappers = []any{}
 	file_armadra_v1_worker_proto_msgTypes[16].OneofWrappers = []any{
@@ -1998,6 +2177,11 @@ func file_armadra_v1_worker_proto_init() {
 		(*WorkerRequest_Agent)(nil),
 		(*WorkerRequest_SetWriteOwnership)(nil),
 		(*WorkerRequest_GetWriteOwnership)(nil),
+		(*WorkerRequest_LanguageCapabilities)(nil),
+		(*WorkerRequest_OpenLanguageSession)(nil),
+		(*WorkerRequest_CloseLanguageSession)(nil),
+		(*WorkerRequest_LanguageFrame)(nil),
+		(*WorkerRequest_LanguageApplyEdit)(nil),
 	}
 	file_armadra_v1_worker_proto_msgTypes[17].OneofWrappers = []any{
 		(*WorkerResponse_Hello)(nil),
@@ -2010,6 +2194,10 @@ func file_armadra_v1_worker_proto_init() {
 		(*WorkerResponse_Command)(nil),
 		(*WorkerResponse_Agent)(nil),
 		(*WorkerResponse_WriteOwnership)(nil),
+		(*WorkerResponse_LanguageCapabilities)(nil),
+		(*WorkerResponse_LanguageSession)(nil),
+		(*WorkerResponse_LanguageFrame)(nil),
+		(*WorkerResponse_LanguageApplyEdit)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

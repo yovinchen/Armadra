@@ -6,6 +6,7 @@ import "armadra/v1/common.proto";
 import "armadra/v1/command.proto";
 import "armadra/v1/canvas.proto";
 import "armadra/v1/worker_channel.proto";
+import "armadra/v1/language.proto";
 
 // The initial Worker transport is a parent-owned anonymous stdin/stdout pipe.
 // These messages are never accepted on an unauthenticated HTTP endpoint.
@@ -168,6 +169,16 @@ message WorkerRequest {
     AgentRequest agent = 21;
     SetWriteOwnershipRequest set_write_ownership = 22;
     GetWriteOwnershipRequest get_write_ownership = 23;
+    // Editor language services (language service design §2.8). Discovery,
+    // session open/close and edit application are request-response and stay on
+    // this serial connection; `language_frame` only ever travels on the
+    // separate `worker --stdio --language-link` connection, which abandons
+    // one-question-one-answer so a server can push diagnostics.
+    LanguageCapabilitiesRequest language_capabilities = 30;
+    OpenLanguageSessionRequest open_language_session = 31;
+    CloseLanguageSessionRequest close_language_session = 32;
+    LanguageFrame language_frame = 33;
+    LanguageApplyEditRequest language_apply_edit = 34;
   }
 }
 message WorkerResponse {
@@ -185,5 +196,11 @@ message WorkerResponse {
     CommandResponse command = 20;
     AgentResponse agent = 21;
     WorkerWriteOwnership write_ownership = 22;
+    // Closing a session answers `language_session` too, with state STOPPED:
+    // the client learns the final state rather than an empty acknowledgement.
+    LanguageCapabilities language_capabilities = 30;
+    LanguageSession language_session = 31;
+    LanguageFrame language_frame = 32;
+    LanguageApplyEditResult language_apply_edit = 33;
   }
 }
