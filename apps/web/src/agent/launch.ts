@@ -1,10 +1,12 @@
 import {
   AGENT_REGISTRY,
   agentDefinition,
+  assembleLaunchArgv,
   assembleLaunchCommand,
   type AgentInfo,
   type CreateTerminalAgent,
   type CustomAgent,
+  type LaunchArgv,
   type LaunchCommand,
   type PermissionMode,
   type TerminalAgent,
@@ -27,7 +29,7 @@ const FALLBACK_COLOR_VAR = "var(--agent-opencode)";
  * `GET /api/agents` 的最新一份答案（§24.1）。
  *
  * 自定义 Agent 只存在于 Runtime 的设置里，内置注册表查不到；名字、颜色、
- * 启动程序都得从这份列表来。查显示名/颜色的地方分散在节点、看板、会话卡
+ * 启动程序都得从这份列表来。查显示名/颜色的地方分散在节点、画布、会话卡
  * 里，全都是同步调用，所以这里留一份模块级快照，由 `use-agents.ts` 在查询
  * 成功时推进来，而不是让每个调用点自己拿 react-query。
  */
@@ -128,17 +130,39 @@ export function buildAgentLaunch(
   agent: TerminalAgent,
   prompt?: string,
 ): LaunchCommand {
-  // 设置 → Agent 的「自定义启动命令」：CLI 装在 PATH 之外时用它替换程序名。
-  // 没有它时用 Runtime 探测到的绝对路径：终端里的 shell 会按自己的 PATH
-  // 顺序再找一次 `codex`，找到的可能是另一份（比如 Homebrew 下签名已吊销的
-  // 旧版本，一启动就被系统 SIGKILL）。探测过能用的那一份，就要原样启动它。
+  return assembleLaunchCommand(launchInput(agent, prompt));
+}
+
+/**
+ * 冻结进后台计划的那份启动定义（自动化设计 §4）。
+ *
+ * 只带 argv：程序名由执行侧按 `agentId` 从自己的注册表解析，所以一份存下来的
+ * 计划永远变不成「运行这个二进制」。这里也不带 `programOverride`——那是本机
+ * 设置，不该被写进一份跨重启存活的计划里。
+ */
+export function buildAgentLaunchArgv(agent: TerminalAgent): LaunchArgv {
+  const custom = customAgentFor(agent.id);
+  return assembleLaunchArgv({
+    agentId: agent.id,
+    ...(custom ? { custom } : {}),
+    ...(agent.permissionMode ? { permissionMode: agent.permissionMode } : {}),
+    ...(agent.model ? { model: agent.model } : {}),
+  });
+}
+
+/**
+ * 设置 → Agent 的「自定义启动命令」：CLI 装在 PATH 之外时用它替换程序名。
+ * 没有它时用 Runtime 探测到的绝对路径：终端里的 shell 会按自己的 PATH 顺序
+ * 再找一次 `codex`，找到的可能是另一份（比如 Homebrew 下签名已吊销的旧版本，
+ * 一启动就被系统 SIGKILL）。探测过能用的那一份，就要原样启动它。
+ */
+function launchInput(agent: TerminalAgent, prompt?: string) {
   const programOverride =
     usePreferencesStore.getState().launchOverrides[agent.id] ||
     registryEntry(agent.id)?.resolvedPath ||
     undefined;
-  // 自定义 Agent 的程序、附加参数与借用的内置 Agent 都在这份定义里。
   const custom = customAgentFor(agent.id);
-  return assembleLaunchCommand({
+  return {
     agentId: agent.id,
     ...(custom ? { custom } : {}),
     ...(programOverride ? { programOverride } : {}),
@@ -146,5 +170,5 @@ export function buildAgentLaunch(
     ...(agent.model ? { model: agent.model } : {}),
     ...(agent.sessionId ? { sessionId: agent.sessionId } : {}),
     ...(prompt ? { prompt } : {}),
-  });
+  };
 }

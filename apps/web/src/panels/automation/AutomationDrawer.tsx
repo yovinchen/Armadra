@@ -51,6 +51,9 @@ export function AutomationDrawer() {
   const reveal = useAutomationFocus((store) => store.reveal);
   const focus = useAutomationFocus((store) => store.focus);
   const revealRuns = useAutomationFocus((store) => store.revealRuns);
+  const prefill = useAutomationFocus((store) => store.prefill);
+  const compose = useAutomationFocus((store) => store.compose);
+  const clearPrefill = useAutomationFocus((store) => store.clearPrefill);
   const state = useAutomationSession((store) => store.state);
   const connect = useAutomationSession((store) => store.connect);
   const queryClient = useQueryClient();
@@ -67,6 +70,10 @@ export function AutomationDrawer() {
   React.useEffect(() => {
     if (open && reveal > 0) setTab("runs");
   }, [open, reveal]);
+  // "Turn into a platform plan" opens the create form on its prefilled draft.
+  React.useEffect(() => {
+    if (open && compose > 0) setTab("create");
+  }, [open, compose]);
 
   const client = state.status === "ready" ? state.client : null;
   const canManage = state.status === "ready" && state.canManage;
@@ -324,11 +331,19 @@ export function AutomationDrawer() {
               <ScrollArea className="min-h-0 flex-1">
                 {canManage && workspaceId ? (
                   <CreatePlanForm
+                    // A prefilled draft is one request, not a mode: remounting
+                    // on `compose` is what makes a second request start over
+                    // instead of quietly reusing the first one's state.
+                    key={`create-${compose}`}
                     client={client}
                     hostId={hostId}
                     workspaceId={workspaceId}
                     busy={busy}
-                    onCreate={(request) => createPlan.mutate(request)}
+                    prefill={prefill}
+                    onCreate={(request) => {
+                      clearPrefill();
+                      createPlan.mutate(request);
+                    }}
                   />
                 ) : (
                   <p className="p-3 text-[12px] text-muted-foreground">

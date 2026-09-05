@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { CanvasNode } from "@armadra/shared";
 
 const terminal = {
@@ -48,6 +48,10 @@ vi.mock("@/agent/status-store", () => ({
 }));
 vi.mock("@/agent/subagent-store", () => ({
   useSubagentCards: () => agent.cards,
+}));
+const propose = vi.hoisted(() => vi.fn());
+vi.mock("@/panels/automation/open", () => ({
+  proposePlanFromNative: propose,
 }));
 
 import { AgentActivityNode } from "./AgentActivityNode";
@@ -137,6 +141,42 @@ describe("agent activity card", () => {
     ).toBeTruthy();
     for (const label of ["暂停", "立即运行", "启用"])
       expect(screen.queryByText(label)).toBeNull();
+  });
+
+  it("proposes a platform plan without creating or activating one", () => {
+    store.document.nodes = [
+      {
+        ...terminal,
+        data: {
+          kind: "terminal",
+          sessionId: "01a072aa-0000-7000-8000-000000000001",
+          agent: { id: "claude" },
+        },
+      } as unknown as CanvasNode,
+    ];
+    renderCard();
+    const button = screen.getByRole("button", { name: "转为平台计划" });
+    fireEvent.click(button);
+    // A draft the person still confirms: nothing is created here, and the
+    // native card and its CLI loop are untouched.
+    expect(propose).toHaveBeenCalledWith({
+      targetKind: "agent",
+      nodeId: terminal.id,
+      title: "Claude",
+      origin: "native",
+    });
+    expect(store.addNode).not.toHaveBeenCalled();
+    expect(store.removeNodes).not.toHaveBeenCalled();
+  });
+
+  it("says so rather than offering a plan with nothing to target", () => {
+    // The observed node has no Agent session, so no plan could name a target.
+    renderCard();
+    const button = screen.getByRole("button", { name: "转为平台计划" });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByText("被观察的节点上没有可作为目标的 Agent 会话"),
+    ).toBeTruthy();
   });
 
   it("shows the job identity it was given and hides what it was not", () => {

@@ -19,6 +19,9 @@ import {
 } from "@/ui/select";
 import { Textarea } from "@/ui/textarea";
 import { useT } from "@/app/preferences-store";
+import { runtimeApi } from "@/api/client";
+import { useCanvasStore } from "@/store/canvas-store";
+import { agentTargets, frozenLaunch } from "./agent-targets";
 import { timezoneOptions, validCron, validTimezone } from "./model";
 import { allCommandSessions, automationKeys } from "./queries";
 import {
@@ -42,12 +45,26 @@ export interface CreatePlanRequest {
   session?: NewSessionRequest;
 }
 
+/**
+ * What the form should start from. Used by "turn into a platform plan" on a
+ * native activity card: the card fills in the target and the origin, the person
+ * still reviews and confirms, and the plan is created as a draft.
+ */
+export interface CreatePlanPrefill {
+  targetKind: "agent";
+  nodeId: string;
+  title: string;
+  /** `native` when this came from an observed CLI loop rather than the wizard. */
+  origin: "native";
+}
+
 export interface CreatePlanFormProps {
   client: HostAutomationClient;
   /** This Host's own id; a plan may only target the Host it is defined on. */
   hostId: string;
   workspaceId: string;
   busy: boolean;
+  prefill?: CreatePlanPrefill | null;
   onCreate: (input: CreatePlanRequest) => void;
 }
 
@@ -87,12 +104,22 @@ export function CreatePlanForm({
   hostId,
   workspaceId,
   busy,
+  prefill,
   onCreate,
 }: CreatePlanFormProps) {
   const t = useT();
   const [state, setState] = React.useState<WizardState>(() =>
     defaultWizardState(),
   );
+  const [targetKind, setTargetKind] = React.useState<"command" | "agent">(
+    prefill?.targetKind ?? "command",
+  );
+  const [agentNodeId, setAgentNodeId] = React.useState(prefill?.nodeId ?? "");
+  const [coldStart, setColdStart] = React.useState(false);
+  const nodes = useCanvasStore((store) => store.document?.nodes);
+  const agents = React.useMemo(() => agentTargets(nodes), [nodes]);
+  const agentNode = nodes?.find((node) => node.id === agentNodeId);
+  const agentOption = agents.find((option) => option.nodeId === agentNodeId);
   const [mode, setMode] = React.useState<"existing" | "new">("existing");
   const [sessionId, setSessionId] = React.useState("");
   const [draft, setDraft] = React.useState({
@@ -129,9 +156,60 @@ export function CreatePlanForm({
   const problem = (name: string) =>
     error?.field === name ? t(error.messageKey) : undefined;
 
-  function submit(event: React.FormEvent) {
+  /**
+   * An agent plan writes into a terminal the Runtime owns, so the wizard reads
+   * the live generation once and records it. It is a note of what the plan was
+   * defined against, not a lock: the executor re-checks the node's identity and
+   * the frozen definition at the write itself, and reports what it wrote to.
+   */
+  async function agentTarget() {
+    if (!agentOption) return null;
+    let generation = 0n;
+    try {
+      const session = await runtimeApi.getTerminal(agentOption.sessionId);
+      if (session.status === "running")
+        generation = BigInt(session.generation ?? 0);
+    } catch {
+      // No live session is a legitimate state for a plan that cold starts.
+    }
+    return {
+      kind: "agent" as const,
+      sessionId: agentOption.sessionId,
+      generation,
+      nodeId: agentOption.nodeId,
+      agentLaunch: frozenLaunch(agentOption, agentNode),
+      coldStart,
+    };
+  }
+
+  async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
+    if (targetKind === "agent") {
+      const target = await agentTarget();
+      if (!target) {
+        setError({
+          field: "session",
+          messageKey: "automation.wizard.agentTargetRequired",
+        });
+        return;
+      }
+      const config = buildPlanConfig(state, {
+        workspaceId,
+        executionHostId: hostId,
+        ...target,
+      });
+      if (!config.ok) {
+        setError({ field: config.field, messageKey: config.messageKey });
+        return;
+      }
+      onCreate({
+        planId: randomId("plan"),
+        config: config.config,
+        payload: new TextEncoder().encode(state.payload),
+      });
+      return;
+    }
     let target = {
       sessionId: selected?.sessionId ?? "",
       generation: selected?.generation ?? 0n,
@@ -160,6 +238,7 @@ export function CreatePlanForm({
       target = { sessionId: draft.sessionId, generation: 0n };
     }
     const config = buildPlanConfig(state, {
+      kind: "command",
       workspaceId,
       executionHostId: hostId,
       sessionId: target.sessionId,
@@ -187,28 +266,100 @@ export function CreatePlanForm({
           </p>,
         )}
 
+        {prefill?.origin === "native" ? (
+          <p
+            role="status"
+            className="rounded-md border border-border px-3 py-2 text-[11px] text-muted-foreground"
+          >
+            {t("automation.wizard.fromNative")}
+          </p>
+        ) : null}
+
         {field(
-          t("automation.wizard.session"),
+          t("automation.wizard.targetKind"),
           <Select
-            value={mode}
-            onValueChange={(value) => setMode(value as "existing" | "new")}
+            value={targetKind}
+            onValueChange={(value) =>
+              setTargetKind(value as "command" | "agent")
+            }
           >
             <SelectTrigger size="sm" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="z-[var(--z-dialog)]">
-              <SelectItem value="existing" disabled={ready.length === 0}>
-                {t("automation.wizard.existingSession")}
+              <SelectItem value="command">
+                {t("automation.wizard.targetKind.command")}
               </SelectItem>
-              <SelectItem value="new">
-                {t("automation.wizard.newSession")}
+              <SelectItem value="agent" disabled={agents.length === 0}>
+                {t("automation.wizard.targetKind.agent")}
               </SelectItem>
             </SelectContent>
           </Select>,
-          problem("session"),
         )}
 
-        {mode === "existing" ? (
+        {targetKind === "agent" ? (
+          <>
+            {field(
+              t("automation.wizard.agentNode"),
+              <Select value={agentNodeId} onValueChange={setAgentNodeId}>
+                <SelectTrigger size="sm" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="z-[var(--z-dialog)]">
+                  {agents.map((option) => (
+                    <SelectItem key={option.nodeId} value={option.nodeId}>
+                      {option.title} · {option.agentId}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>,
+              problem("session"),
+            )}
+            <label className="flex min-w-0 items-start gap-2 text-[12px]">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={coldStart}
+                onChange={(event) => setColdStart(event.target.checked)}
+              />
+              <span className="min-w-0">
+                <span className="block font-medium">
+                  {t("automation.wizard.coldStart")}
+                </span>
+                <span className="block text-[11px] text-muted-foreground">
+                  {t("automation.wizard.coldStartNote")}
+                </span>
+              </span>
+            </label>
+            <p className="text-[11px] text-muted-foreground">
+              {t("automation.wizard.agentDeliveryNote")}
+            </p>
+          </>
+        ) : null}
+
+        {targetKind === "command" &&
+          field(
+            t("automation.wizard.session"),
+            <Select
+              value={mode}
+              onValueChange={(value) => setMode(value as "existing" | "new")}
+            >
+              <SelectTrigger size="sm" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="z-[var(--z-dialog)]">
+                <SelectItem value="existing" disabled={ready.length === 0}>
+                  {t("automation.wizard.existingSession")}
+                </SelectItem>
+                <SelectItem value="new">
+                  {t("automation.wizard.newSession")}
+                </SelectItem>
+              </SelectContent>
+            </Select>,
+            problem("session"),
+          )}
+
+        {targetKind === "agent" ? null : mode === "existing" ? (
           field(
             t("automation.wizard.sessionId"),
             <Select value={sessionId} onValueChange={setSessionId}>
@@ -290,12 +441,15 @@ export function CreatePlanForm({
         )}
 
         {field(
-          t("automation.wizard.payload"),
+          targetKind === "agent"
+            ? t("automation.wizard.prompt")
+            : t("automation.wizard.payload"),
           <Textarea
             rows={3}
             value={state.payload}
             onChange={(event) => set("payload", event.target.value)}
           />,
+          problem("payload"),
         )}
 
         {field(

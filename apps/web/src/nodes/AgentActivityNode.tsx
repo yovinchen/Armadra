@@ -1,7 +1,9 @@
 import * as React from "react";
 
 import { Badge } from "@/ui/badge";
+import { Button } from "@/ui/button";
 import { StatusPill } from "@/ui/status-pill";
+import { proposePlanFromNative } from "@/panels/automation/open";
 import { useAgentStatus } from "@/agent/status-store";
 import { useSubagentCards } from "@/agent/subagent-store";
 import { useCanvasStore } from "@/store/canvas-store";
@@ -26,6 +28,14 @@ export function AgentActivityNode({ id, node, selected }: NodeBodyProps) {
   );
   const status = useAgentStatus(sourceId);
   const cards = useSubagentCards(sourceId);
+  // A platform plan needs a live Agent terminal to name as its target. A card
+  // whose source has no session yet cannot produce one, and saying so beats a
+  // button that opens a form nothing can be selected in.
+  const canConvert =
+    source?.data.kind === "terminal" &&
+    Boolean(source.data.agent?.id) &&
+    Boolean(source.data.sessionId) &&
+    !source.data.ssh;
 
   // Both sources read the same Hook stream; the label says which lens it is.
   // Nothing is synthesised here — a CLI whose loop we cannot observe shows zero.
@@ -106,6 +116,33 @@ export function AgentActivityNode({ id, node, selected }: NodeBodyProps) {
             </dl>
             <p className="text-[11px] text-muted-foreground">
               {t("activity.hideOnly")}
+            </p>
+            {/*
+              「转为平台计划」不是转换：这张卡片和它观察的 CLI 循环都留在原处，
+              点它只是把创建向导预填好打开，由人确认后建一份**草稿**。自动复制
+              成一份已启用的平台计划会让同一件事被触发两次。
+            */}
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="min-h-8 w-full"
+              disabled={!canConvert}
+              onClick={() =>
+                proposePlanFromNative({
+                  targetKind: "agent",
+                  nodeId: sourceId,
+                  title: source.title,
+                  origin: "native",
+                })
+              }
+            >
+              {t("activity.convert")}
+            </Button>
+            <p className="text-[11px] text-muted-foreground">
+              {canConvert
+                ? t("activity.convertNote")
+                : t("activity.convertUnavailable")}
             </p>
           </>
         )}

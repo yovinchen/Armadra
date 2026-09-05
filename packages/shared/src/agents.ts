@@ -431,12 +431,27 @@ export function collapsePrompt(prompt: string): string {
 }
 
 /**
- * Build the launch line for an agent node. Order: program → permission mode →
+ * The launch line before it is turned into shell text: the program and the
+ * argv that follows it, each value exactly as the CLI should receive it.
+ *
+ * This is the shape a background scheduler freezes into a plan. It stores the
+ * argv and nothing else, so the executor resolves the program from the agent
+ * id against its own registry and a stored plan can never become "run this
+ * binary". Quoting is a property of writing into a shell, not of the launch.
+ */
+export interface LaunchArgv {
+  program: string;
+  args: string[];
+  stdinPrompt?: string;
+}
+
+/**
+ * Build the launch argv for an agent node. Order: program → permission mode →
  * model → pre-minted session id → extra args → prompt (plan §5.1).
  */
-export function assembleLaunchCommand(
+export function assembleLaunchArgv(
   input: AssembleLaunchCommandInput,
-): LaunchCommand {
+): LaunchArgv {
   const custom = input.custom;
   const base = input.agentId.startsWith("custom:")
     ? custom?.baseAgent || input.baseAgent
@@ -456,7 +471,7 @@ export function assembleLaunchCommand(
     throw new Error(`Agent ${input.agentId} has no launch program`);
   }
 
-  const parts: string[] = [shellQuote(program)];
+  const args: string[] = [];
 
   // Resume comes before everything else. Codex's `resume` is a subcommand, and
   // a subcommand that follows a flag is a parse error; the flag-style CLIs do
@@ -467,11 +482,8 @@ export function assembleLaunchCommand(
   }
   const resume = resumeId ? base.resume : undefined;
   if (resumeId && resume) {
-    if (resume.style === "positional") {
-      parts.push(resume.verb, shellQuote(resumeId));
-    } else {
-      parts.push(resume.flag, shellQuote(resumeId));
-    }
+    args.push(resume.style === "positional" ? resume.verb : resume.flag);
+    args.push(resumeId);
   }
 
   const permissionMode = input.permissionMode ?? "default";
@@ -483,35 +495,31 @@ export function assembleLaunchCommand(
       `${base.label} does not support permission mode: ${permissionMode}`,
     );
   }
-  for (const flag of base.permissionFlag[permissionMode]) {
-    parts.push(shellQuote(flag));
-  }
+  args.push(...base.permissionFlag[permissionMode]);
 
   if (input.model && base.modelFlag) {
-    parts.push(base.modelFlag, shellQuote(input.model));
+    args.push(base.modelFlag, input.model);
   }
 
   // `--session-id` mints a new session; asking for both is a contradiction and
   // claude rejects the pair outright, so resume silently wins.
   if (input.sessionId && base.sessionIdFlag && !(resumeId && resume)) {
-    parts.push(base.sessionIdFlag, shellQuote(input.sessionId));
+    args.push(base.sessionIdFlag, input.sessionId);
   }
 
   // The custom entry's own argv comes first: it is part of how that program is
   // invoked (`npx -y my-cli`), while `extraArgs` is a per-launch addition.
-  for (const arg of [...(custom?.args ?? []), ...(input.extraArgs ?? [])]) {
-    parts.push(shellQuote(arg));
-  }
+  args.push(...(custom?.args ?? []), ...(input.extraArgs ?? []));
 
   const prompt = input.prompt ? collapsePrompt(input.prompt) : "";
   let stdinPrompt: string | undefined;
   if (prompt) {
     switch (custom?.promptMode ?? base.promptMode) {
       case "argv":
-        parts.push(shellQuote(prompt));
+        args.push(prompt);
         break;
       case "flag-prompt":
-        parts.push(base.promptFlag ?? "--prompt", shellQuote(prompt));
+        args.push(base.promptFlag ?? "--prompt", prompt);
         break;
       case "stdin-after-start":
         stdinPrompt = prompt;
@@ -519,8 +527,19 @@ export function assembleLaunchCommand(
     }
   }
 
+  return { program, args, ...(stdinPrompt ? { stdinPrompt } : {}) };
+}
+
+/**
+ * The same launch as one line of shell text. Quoting happens here and only
+ * here, so the argv above stays the values the CLI actually receives.
+ */
+export function assembleLaunchCommand(
+  input: AssembleLaunchCommandInput,
+): LaunchCommand {
+  const { program, args, stdinPrompt } = assembleLaunchArgv(input);
   return {
-    command: parts.join(" "),
+    command: [program, ...args].map(shellQuote).join(" "),
     ...(stdinPrompt ? { stdinPrompt } : {}),
   };
 }

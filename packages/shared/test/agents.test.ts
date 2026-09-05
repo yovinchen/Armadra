@@ -7,6 +7,7 @@ import {
   HOOK_CLIENT_REVISION,
   HOOK_EVENTS,
   PERMISSION_MODES,
+  assembleLaunchArgv,
   assembleLaunchCommand,
   collapsePrompt,
   customAgentSchema,
@@ -434,5 +435,53 @@ describe("unsupported permission modes", () => {
         assembleLaunchCommand({ agentId, permissionMode: "plan" }),
       ).toThrow(/does not support permission mode/);
     }
+  });
+});
+
+describe("assembleLaunchArgv", () => {
+  it("returns the values a CLI receives, not the shell text around them", () => {
+    const argv = assembleLaunchArgv({
+      agentId: "claude",
+      permissionMode: "plan",
+      model: "sonnet",
+    });
+    expect(argv.program).toBe("claude");
+    // Nothing here is quoted: quoting belongs to writing into a shell, and a
+    // frozen plan that stored quotes would pass them to the CLI verbatim.
+    expect(argv.args.some((arg) => arg.includes("'"))).toBe(false);
+    expect(argv.args).toContain("sonnet");
+  });
+
+  it("agrees with the shell line it is quoted into", () => {
+    const input = {
+      agentId: "claude",
+      permissionMode: "auto-edit" as const,
+      model: "a model",
+    };
+    const argv = assembleLaunchArgv(input);
+    expect(assembleLaunchCommand(input).command).toBe(
+      [argv.program, ...argv.args]
+        .map((part) =>
+          /^[A-Za-z0-9_@%+=:,./-]+$/.test(part) ? part : `'${part}'`,
+        )
+        .join(" "),
+    );
+  });
+
+  it("keeps a stdin prompt out of the argv, exactly as the shell line does", () => {
+    const custom = customAgentSchema.parse({
+      id: "custom:local",
+      label: "Local",
+      launchCmd: "local-cli",
+      baseAgent: "pi",
+      promptMode: "stdin-after-start",
+    });
+    const argv = assembleLaunchArgv({
+      agentId: custom.id,
+      custom,
+      prompt: "hello",
+    });
+    expect(argv.args).toEqual([]);
+    expect(argv.stdinPrompt).toBe("hello");
   });
 });

@@ -1,9 +1,12 @@
 import { create } from "@armadra/protocol";
 import {
+  AutomationColdStartPolicy,
   AutomationConcurrencyPolicy,
   AutomationMisfirePolicy,
   AutomationPlanConfigSchema,
+  AutomationTargetKind,
   CommandLaunchSpecSchema,
+  type AgentLaunchSpec,
   type AutomationPlanConfig,
   type CommandLaunchSpec,
 } from "@armadra/protocol";
@@ -41,12 +44,27 @@ export interface WizardState {
   payload: string;
 }
 
-export interface WizardTarget {
+/**
+ * Where a plan writes. The two shapes stay separate on purpose: a command
+ * target creates a new non-interactive process, an agent target writes one
+ * framed prompt into a terminal that already exists, and nothing converts one
+ * into the other. An agent target additionally freezes the launch definition,
+ * so an authorized cold start relaunches exactly what was reviewed here.
+ */
+export type WizardTarget = {
   workspaceId: string;
   executionHostId: string;
   sessionId: string;
   generation: bigint;
-}
+} & (
+  | { kind: "command" }
+  | {
+      kind: "agent";
+      nodeId: string;
+      agentLaunch: AgentLaunchSpec;
+      coldStart: boolean;
+    }
+);
 
 export type WizardResult =
   | { ok: true; config: AutomationPlanConfig }
@@ -126,6 +144,32 @@ export function buildLaunchSpec(input: {
   });
 }
 
+/** The frozen target exactly as the Host will store and re-check it. */
+function planTarget(target: WizardTarget): AutomationPlanConfig["target"] {
+  const base = {
+    $typeName: "armadra.v1.AutomationTarget" as const,
+    executionHostId: target.executionHostId,
+    sessionId: target.sessionId,
+    generation: target.generation,
+    nodeId: "",
+    coldStartPolicy: AutomationColdStartPolicy.SKIP,
+  };
+  if (target.kind === "command") {
+    return { ...base, kind: AutomationTargetKind.NON_INTERACTIVE_COMMAND };
+  }
+  return {
+    ...base,
+    kind: AutomationTargetKind.AGENT_SESSION_PROMPT,
+    nodeId: target.nodeId,
+    // Launching a process is its own permission, so the plan only carries it
+    // when the person creating it said so.
+    coldStartPolicy: target.coldStart
+      ? AutomationColdStartPolicy.LAUNCH_FROZEN
+      : AutomationColdStartPolicy.SKIP,
+    agentLaunch: target.agentLaunch,
+  };
+}
+
 export function buildPlanConfig(
   state: WizardState,
   target: WizardTarget,
@@ -138,6 +182,14 @@ export function buildPlanConfig(
       ok: false,
       field: "session",
       messageKey: "automation.wizard.session",
+    };
+  // An agent plan carries the prompt it will type. Saving an empty one would
+  // create a plan that can only ever write nothing into somebody's terminal.
+  if (target.kind === "agent" && !state.payload.trim())
+    return {
+      ok: false,
+      field: "payload",
+      messageKey: "automation.wizard.promptRequired",
     };
   const busyTtl = bounded(state.busyTtlMs, MIN_PERIOD_MS, MAX_BUSY_TTL_MS);
   if (busyTtl === null)
@@ -270,11 +322,7 @@ export function buildPlanConfig(
       workspaceId: target.workspaceId,
       title,
       schedule,
-      target: {
-        executionHostId: target.executionHostId,
-        sessionId: target.sessionId,
-        generation: target.generation,
-      },
+      target: planTarget(target),
       misfirePolicy:
         state.misfire === "skip"
           ? AutomationMisfirePolicy.SKIP

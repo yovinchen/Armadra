@@ -6,9 +6,11 @@ import {
   defaultWizardState,
   localInput,
   type WizardState,
+  type WizardTarget,
 } from "./wizard";
 
-const target = {
+const target: WizardTarget = {
+  kind: "command",
   workspaceId: "workspace-1",
   executionHostId: "0123456789abcdef0123456789abcdef",
   sessionId: "session-1",
@@ -189,5 +191,71 @@ describe("datetime inputs", () => {
   it("starts a once plan in the future, not at the current instant", () => {
     const now = Date.parse("2026-09-05T12:00:00Z");
     expect(Date.parse(defaultWizardState(now).at)).toBeGreaterThan(now);
+  });
+});
+
+describe("agent terminal targets", () => {
+  const agentTarget: WizardTarget = {
+    kind: "agent",
+    workspaceId: "workspace-1",
+    executionHostId: "0123456789abcdef0123456789abcdef",
+    sessionId: "session-1",
+    generation: 3n,
+    nodeId: "9f1d0f66-0f7b-7c1f-9a2c-2f7b0f7c1f9a",
+    agentLaunch: {
+      $typeName: "armadra.v1.AgentLaunchSpec",
+      agentId: "claude",
+      workingDirectory: ".",
+      args: ["--permission-mode", "plan"],
+      permissionMode: "plan",
+      modelId: "",
+      accountId: "default",
+    },
+    coldStart: false,
+  };
+
+  function agentConfig(overrides: Partial<WizardState> = {}) {
+    const result = buildPlanConfig(
+      form({ payload: "每晚复盘", ...overrides }),
+      agentTarget,
+    );
+    if (!result.ok) throw new Error(`unexpected refusal: ${result.messageKey}`);
+    return result.config;
+  }
+
+  it("freezes the node and the launch definition the executor re-checks", () => {
+    const target = agentConfig().target!;
+    expect(target.kind).toBe(2);
+    expect(target.nodeId).toBe(agentTarget.nodeId);
+    expect(target.agentLaunch?.args).toEqual(["--permission-mode", "plan"]);
+    // The definition names no executable: the program is resolved from the
+    // agent id by whatever runs it, so a stored plan cannot become "run this".
+    expect(Object.keys(target.agentLaunch ?? {})).not.toContain("executable");
+  });
+
+  it("only carries the permission to launch when it was asked for", () => {
+    expect(agentConfig().target?.coldStartPolicy).toBe(1);
+    const warm = buildPlanConfig(form({ payload: "每晚复盘" }), {
+      ...agentTarget,
+      coldStart: true,
+    });
+    expect(warm.ok && warm.config.target?.coldStartPolicy).toBe(2);
+  });
+
+  it("refuses a plan that would type nothing into somebody's terminal", () => {
+    const result = buildPlanConfig(form({ payload: "  \n " }), agentTarget);
+    expect(result).toMatchObject({
+      ok: false,
+      field: "payload",
+      messageKey: "automation.wizard.promptRequired",
+    });
+  });
+
+  it("leaves a command plan free of any agent identity", () => {
+    const config = built();
+    expect(config.target?.kind).toBe(1);
+    expect(config.target?.nodeId).toBe("");
+    expect(config.target?.agentLaunch).toBeUndefined();
+    expect(config.target?.coldStartPolicy).toBe(1);
   });
 });

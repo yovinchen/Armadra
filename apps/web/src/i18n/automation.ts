@@ -90,6 +90,20 @@ const zh = {
   "automation.wizard.timeout": "超时（毫秒）",
   "automation.wizard.title": "计划名称",
   "automation.wizard.payload": "命令输入（stdin）",
+  "automation.wizard.targetKind": "目标类型",
+  "automation.wizard.targetKind.command": "非交互命令",
+  "automation.wizard.targetKind.agent": "Agent 终端（写入提示词）",
+  "automation.wizard.agentNode": "Agent 节点",
+  "automation.wizard.prompt": "提示词",
+  "automation.wizard.promptRequired": "写入 Agent 的计划必须填提示词",
+  "automation.wizard.agentTargetRequired": "先选择一个 Agent 节点",
+  "automation.wizard.coldStart": "会话不在时按冻结定义启动",
+  "automation.wizard.coldStartNote":
+    "不勾选时，节点上没有运行中的会话就跳过这次执行，不启动任何进程。",
+  "automation.wizard.agentDeliveryNote":
+    "只在前台是该 Agent、上一回合已结束且期间没有别的输入时投递；写入成功只表示已投递，不代表任务完成。",
+  "automation.wizard.fromNative":
+    "来源：原生活动卡片。确认后创建为草稿，原生循环不受影响，也不会自动启用。",
   "automation.wizard.scheduleKind": "计划类型",
   "automation.wizard.at": "执行时间",
   "automation.wizard.interval": "间隔（毫秒）",
@@ -160,6 +174,10 @@ const zh = {
   "activity.latest": "最近一次",
   "activity.none": "还没有观察到活动",
   "activity.hideOnly": "隐藏这张卡片不会取消 CLI 自己的循环",
+  "activity.convert": "转为平台计划",
+  "activity.convertNote":
+    "会打开预填好的新建向导；确认后创建为草稿，需要再手动启用。原生循环不受影响，也不会被取消。",
+  "activity.convertUnavailable": "被观察的节点上没有可作为目标的 Agent 会话",
   "activity.session": "会话",
   "activity.job": "任务标识",
   "activity.generation": "代次",
@@ -249,6 +267,22 @@ const en: Record<keyof typeof zh, string> = {
   "automation.wizard.timeout": "Timeout (ms)",
   "automation.wizard.title": "Plan name",
   "automation.wizard.payload": "Command input (stdin)",
+  "automation.wizard.targetKind": "Target",
+  "automation.wizard.targetKind.command": "Non-interactive command",
+  "automation.wizard.targetKind.agent": "Agent terminal (write a prompt)",
+  "automation.wizard.agentNode": "Agent node",
+  "automation.wizard.prompt": "Prompt",
+  "automation.wizard.promptRequired":
+    "A plan that writes to an Agent needs a prompt",
+  "automation.wizard.agentTargetRequired": "Choose an Agent node first",
+  "automation.wizard.coldStart":
+    "Start the frozen definition when no session is running",
+  "automation.wizard.coldStartNote":
+    "Left off, a run is skipped when the node has no running session; no process is ever started.",
+  "automation.wizard.agentDeliveryNote":
+    "Delivered only while that Agent is in the foreground, its last turn has finished and nothing else has been typed since. A written prompt means delivered, never finished.",
+  "automation.wizard.fromNative":
+    "From a native activity card. Confirming creates a draft; the CLI's own loop is untouched and nothing is enabled automatically.",
   "automation.wizard.scheduleKind": "Schedule",
   "automation.wizard.at": "Run at",
   "automation.wizard.interval": "Interval (ms)",
@@ -320,6 +354,11 @@ const en: Record<keyof typeof zh, string> = {
   "activity.latest": "Latest",
   "activity.none": "No activity observed yet",
   "activity.hideOnly": "Hiding this card does not cancel the CLI's own loop",
+  "activity.convert": "Turn into a platform plan",
+  "activity.convertNote":
+    "Opens the create form pre-filled. Confirming saves a draft you still have to enable; the CLI's own loop is untouched and never cancelled.",
+  "activity.convertUnavailable":
+    "The observed node has no Agent session to target",
   "activity.session": "Session",
   "activity.job": "Job id",
   "activity.generation": "Generation",
