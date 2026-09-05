@@ -4,7 +4,7 @@
 //! path: what a repeat of the same operation is answered with, what a target
 //! whose identity moved reports, and which phases may claim that nothing was
 //! typed. Actually writing into a PTY needs a real Agent, which is what the
-//! end-to-end fixture under `scripts/` exercises.
+//! end-to-end fixture under `tools/` exercises.
 
 use crate::{
     AppState,

@@ -41,7 +41,7 @@ pnpm protocol:test
 - generate 生成 Go / TS，TS 用锁定 Prettier 格式化；Rust 在 build.rs 生成到 OUT_DIR。
 - check 在临时目录重新生成并逐字节比较，不改仓库。
 - test 运行三语言契约测试与 TS 类型检查，不启动业务 Host / Worker。
-- `node scripts/protocol.mjs fixtures` 重建共享十六进制样例，仅在有意变更契约时运行并审查 diff。
+- `node tools/protocol.mjs fixtures` 重建共享十六进制样例，仅在有意变更契约时运行并审查 diff。
 
 | 工具                        | 锁定版本             | 输出                                    |
 | --------------------------- | -------------------- | --------------------------------------- |

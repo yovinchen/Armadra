@@ -203,7 +203,7 @@ Agent 目标冻结的是**节点** + 一份 `AgentLaunchSpec`（agentId、目录
 
 投递尝试次数来自 `agent_handoff_outbox.attempts`（迁移 0006），在**认领**时自增，因此数的是尝试而不是成功：投递门证明的拒绝（目标忙、前台不是那个 Agent）会把通知退回队列，只看 `state` 分不出第一次和第二十次。
 
-`armadra-hook canvas handoff-read` 的真实端到端在 `scripts/handoff-read-smoke.mjs`（`node scripts/handoff-read-smoke.mjs <armadra-runtime> <armadra-hook>`）：真的 Runtime 进程、真的 PTY、真的节点令牌，用真的 hook 客户端读包并 ack。它断言三件事——目标读得到并且拿到的是标了 peer data 的资料；**读不等于确认**，读完状态仍不是 acknowledged；`canvas ack` 才是确认，且只有被寻址的那个会话能做（来源自己去读会被 403 拒绝）。
+`armadra-hook canvas handoff-read` 的真实端到端在 `tools/handoff-read-smoke.mjs`（`node tools/handoff-read-smoke.mjs <armadra-runtime> <armadra-hook>`）：真的 Runtime 进程、真的 PTY、真的节点令牌，用真的 hook 客户端读包并 ack。它断言三件事——目标读得到并且拿到的是标了 peer data 的资料；**读不等于确认**，读完状态仍不是 acknowledged；`canvas ack` 才是确认，且只有被寻址的那个会话能做（来源自己去读会被 403 拒绝）。
 
 ## 8. 自动命名与 AI 文本生成
 

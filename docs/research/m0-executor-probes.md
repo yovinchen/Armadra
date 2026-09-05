@@ -4,7 +4,7 @@
 
 ## 可重复入口
 
-代码与命令见 [探针说明](../../scripts/probes/README.md)。探针与主应用 workspace 独立，不修改根依赖；运行产物默认进入被忽略的 `target/m0-probes/`，不提交浏览器 profile、日志或截图。
+代码与命令见 [探针说明](../../tools/probes/README.md)。探针与主应用 workspace 独立，不修改根依赖；运行产物默认进入被忽略的 `target/m0-probes/`，不提交浏览器 profile、日志或截图。
 
 ## macOS Chromium 实测
 

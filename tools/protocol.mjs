@@ -19,7 +19,7 @@ const protoNames = readdirSync(join(root, "proto/armadra/v1"))
 if (protoNames.length === 0) throw new Error("No protocol schemas found");
 if (!["generate", "check", "test", "fixtures"].includes(mode)) {
   throw new Error(
-    "usage: node scripts/protocol.mjs generate|check|test|fixtures",
+    "usage: node tools/protocol.mjs generate|check|test|fixtures",
   );
 }
 function run(command, args, cwd = root, options = {}) {

@@ -23,7 +23,6 @@
     "pnpm-workspace.yaml",
     "proto",
     "repo.rules.json",
-    "scripts",
     "tools",
     "tsconfig.base.json"
   ],
@@ -51,7 +50,6 @@
       "docs/",
       "packages/",
       "proto/",
-      "scripts/",
       "tools/"
     ],
     "exclude": [".claude/"],
@@ -67,7 +65,7 @@
   ],
   "fileSize": {
     "max": 1500,
-    "roots": ["apps", "crates", "packages", "scripts", "tools"],
+    "roots": ["apps", "crates", "packages", "tools"],
     "extensions": [".rs", ".ts", ".tsx", ".go", ".mjs", ".js"],
     "excludeSegments": ["/gen/", "/node_modules/"],
     "exemptions": [
@@ -127,7 +125,7 @@
         "note": "§5 第 6 步：按 proto 文件拆契约测试"
       },
       {
-        "path": "scripts/canvas-ownership-e2e.mjs",
+        "path": "tools/canvas-ownership-e2e.mjs",
         "lines": 1615,
         "note": "§5 第 6 步：端到端脚本按阶段拆分"
       },

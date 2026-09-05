@@ -111,7 +111,7 @@
 | Rust                       | `cargo test --no-fail-fast -p armadra-runtime -p armadra-hook -p armadra-protocol -p armadra-desktop -p armadra-session-host` | 全部通过：runtime lib 649 项与 18 个集成套件、session-host 43、hook 41+12、desktop 35、protocol 25 |
 | Rust 检查                  | `cargo clippy --workspace --all-targets -- -D warnings`、`cargo fmt --all --check`                                            | 通过                                                                                               |
 | 协议                       | `pnpm protocol:check`、`pnpm protocol:test`                                                                                   | 无漂移；Go 契约、Rust、TS 42 通过                                                                  |
-| Go Host                    | `go -C apps/host test -race -count=1 ./...`、`vet`、Windows/Linux amd64 交叉构建、`node scripts/legacy-archive-smoke.mjs`     | 全部通过（含真实 Runtime 代理与所有权端到端）                                                      |
+| Go Host                    | `go -C apps/host test -race -count=1 ./...`、`vet`、Windows/Linux amd64 交叉构建、`node tools/legacy-archive-smoke.mjs`       | 全部通过（含真实 Runtime 代理与所有权端到端）                                                      |
 | Web / shared / host-client | `pnpm --filter @armadra/web test`、`typecheck`、shared、host-client、protocol、desktop 脚本                                   | Web 155 文件 1519 项，shared 129，host-client 183，protocol 42，desktop 脚本 8，类型检查通过       |
 | 格式                       | `pnpm format:check`、`gofmt -l`、`bash -n armadra.sh`                                                                         | 通过                                                                                               |
 

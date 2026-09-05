@@ -32,7 +32,7 @@
 
 - [v3 Agent 终端](v3-agent-terminal-plan.md)、[tldraw 画布](tldraw-canvas-plan.md)：章节 §N 被代码引用，保留编号。
 - [Windows 早期方案](windows-session-daemon.md)：设计参考，本轮目标以终端宿主方案为准。
-- [M0 探针记录](research/m0-executor-probes.md)与[运行入口](../scripts/probes/README.md)：可行性证据及未验证项。
+- [M0 探针记录](research/m0-executor-probes.md)与[运行入口](../tools/probes/README.md)：可行性证据及未验证项。
 - [原生白板参考](native-whiteboard-references.md)、[UI 风格参考](research/ui-style-references/README.md)：选型资料。
 - [立项会话归档](research/chatgpt-conversation-archive.md)：仅供追溯。
 

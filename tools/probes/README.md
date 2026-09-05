@@ -7,15 +7,15 @@
 需要 Node.js 22+（内置 WebSocket/fetch）和已安装的 Chrome/Chromium；脚本不下载浏览器。默认探测系统常见安装路径，也可显式选择可执行文件：
 
 ```sh
-node scripts/probes/browser-cdp.mjs
-CHROME_PATH='/path/to/chrome' node scripts/probes/browser-cdp.mjs /path/to/output-directory
+node tools/probes/browser-cdp.mjs
+CHROME_PATH='/path/to/chrome' node tools/probes/browser-cdp.mjs /path/to/output-directory
 ```
 
 Windows PowerShell：
 
 ```powershell
 $env:CHROME_PATH = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
-node scripts/probes/browser-cdp.mjs
+node tools/probes/browser-cdp.mjs
 ```
 
 每次创建独立输出子目录，默认位于已忽略的 `target/m0-probes/`。产物包括 `result.json`、`browser.png`（截图步骤通过后）和 `chrome-stderr.log`。结果包含实际浏览器版本、系统和能力；失败返回非零退出码。
@@ -32,15 +32,15 @@ node scripts/probes/browser-cdp.mjs
 
 ```sh
 rustup target list --installed
-cargo check --locked --offline --manifest-path scripts/probes/conpty-smoke/Cargo.toml --target x86_64-pc-windows-msvc --target-dir target/m0-probes/conpty
+cargo check --locked --offline --manifest-path tools/probes/conpty-smoke/Cargo.toml --target x86_64-pc-windows-msvc --target-dir target/m0-probes/conpty
 ```
 
-`--offline` 要求依赖已缓存。新环境可先运行 `cargo fetch --locked --manifest-path scripts/probes/conpty-smoke/Cargo.toml`。
+`--offline` 要求依赖已缓存。新环境可先运行 `cargo fetch --locked --manifest-path tools/probes/conpty-smoke/Cargo.toml`。
 
 有 MSVC 链接器与 Windows SDK 的环境才可继续链接：
 
 ```sh
-cargo build --locked --manifest-path scripts/probes/conpty-smoke/Cargo.toml --target x86_64-pc-windows-msvc --target-dir target/m0-probes/conpty
+cargo build --locked --manifest-path tools/probes/conpty-smoke/Cargo.toml --target x86_64-pc-windows-msvc --target-dir target/m0-probes/conpty
 ```
 
 **cargo check 成功不等于链接成功，更不等于 Windows 实机验收。** 此源码是 API 编译探针，不能拿来验证并发 I/O、CLI 行为或句柄生命周期；实机阶段应增加独立输入/输出线程和持续输出排空后再扩展运行测试。

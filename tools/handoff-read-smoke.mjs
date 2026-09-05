@@ -15,7 +15,7 @@
  *   3. `canvas ack` is what acknowledges it, and only from the session the
  *      handoff was addressed to.
  *
- * Usage: node scripts/handoff-read-smoke.mjs <armadra-runtime> <armadra-hook>
+ * Usage: node tools/handoff-read-smoke.mjs <armadra-runtime> <armadra-hook>
  */
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
@@ -32,7 +32,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 const [runtimeBinary, hookBinary] = process.argv.slice(2);
 if (!runtimeBinary || !hookBinary) {
   console.error(
-    "usage: node scripts/handoff-read-smoke.mjs <armadra-runtime> <armadra-hook>",
+    "usage: node tools/handoff-read-smoke.mjs <armadra-runtime> <armadra-hook>",
   );
   process.exit(2);
 }
