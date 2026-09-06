@@ -217,9 +217,17 @@ export function useWorkspaceEvents(workspaceId: string | null): void {
     };
     const offExit = onWorkspaceEvent("terminal.exit", invalidate);
     const offBoard = onWorkspaceEvent("board.changed", invalidate);
+    // 改绑执行主机之后，工作空间的每一条路径都指向另一台机器了。事件本身
+    // 不带任何字段，就是要求整份重取，而不是往手里这份上打补丁。
+    const offUpdated = onWorkspaceEvent("workspace.updated", (event) => {
+      if (event.workspaceId !== workspaceId) return;
+      void queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      invalidate();
+    });
     return () => {
       offExit();
       offBoard();
+      offUpdated();
       release();
     };
   }, [workspaceId, queryClient]);

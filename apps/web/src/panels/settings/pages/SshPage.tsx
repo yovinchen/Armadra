@@ -11,6 +11,7 @@ import { SettingsRow } from "../SettingsRow";
 import { sshHostTarget } from "../ssh-hosts";
 import { useSubpage } from "../subpage";
 import { useRuntimeSettings } from "../use-runtime-settings";
+import { HostKeyDialog } from "./ssh/HostKeyDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -116,6 +117,7 @@ export function SshPage() {
             <PlugZap />
             {t("ssh.test")}
           </Button>
+          <HostKeyDialog host={host} />
           {host.worker && (
             <Button
               variant="secondary"

@@ -35,6 +35,16 @@ export const ControlConfirmDialog = lazy(() =>
   })),
 );
 
+/**
+ * SSH 认证输入框。文件放在设置的 SSH 那一组下（它属于那块功能），但挂载点
+ * 在这里：`ssh` 什么时候要密码不取决于设置页开没开。
+ */
+export const SshPromptDialog = lazy(() =>
+  import("@/panels/settings/pages/ssh/SshPromptDialog").then((module) => ({
+    default: module.SshPromptDialog,
+  })),
+);
+
 export const HandoffDialog = lazy(() =>
   import("@/agent/handoff/HandoffDialog").then((module) => ({
     default: module.HandoffDialog,

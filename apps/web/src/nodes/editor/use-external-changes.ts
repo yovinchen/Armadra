@@ -1,5 +1,6 @@
 import * as React from "react";
 import { toast } from "sonner";
+import type { WatchMode } from "@armadra/shared";
 
 import { runtimeApi } from "@/api/client";
 import { onWorkspaceEvent } from "@/api/events";
@@ -31,6 +32,12 @@ export function useExternalChanges(
     setExternal: React.Dispatch<React.SetStateAction<ExternalChange | null>>;
     setDiskContent: React.Dispatch<React.SetStateAction<string | null>>;
     setDegraded: React.Dispatch<React.SetStateAction<boolean>>;
+    /**
+     * 注册回答里的 `mode`：远程执行主机可能是两秒一轮的轮询，而不是文件系统
+     * 事件。两者对延迟的承诺不一样，值得在节点上说一句。
+     */
+    setWatchMode: React.Dispatch<React.SetStateAction<WatchMode>>;
+    setWatchReason: React.Dispatch<React.SetStateAction<string | null>>;
   },
 ): ExternalChangeActions {
   const {
@@ -45,6 +52,8 @@ export function useExternalChanges(
     setExternal,
     setDiskContent,
     setDegraded,
+    setWatchMode,
+    setWatchReason,
   } = options;
   const t = useT();
 
@@ -94,6 +103,8 @@ export function useExternalChanges(
       .then((registration) => {
         if (cancelled) return;
         setDegraded(registration.status === "unsupported");
+        setWatchMode(registration.mode);
+        setWatchReason(registration.reason ?? null);
         // 读取和注册之间也可能被改过，注册的回答就是那一刻的磁盘版本。
         const version = registration.version;
         if (

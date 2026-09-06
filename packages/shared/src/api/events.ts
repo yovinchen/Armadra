@@ -14,6 +14,7 @@ import {
   languageSessionEventSchema,
 } from "./language.js";
 import { resourceSnapshotSchema } from "./resources.js";
+import { sshPromptSchema } from "./ssh.js";
 
 /** `WS /api/workspaces/{id}/events` — plan §5.4 / §7. */
 export const workspaceEventSchema = z.discriminatedUnion("type", [
@@ -49,6 +50,20 @@ export const workspaceEventSchema = z.discriminatedUnion("type", [
     boardId: z.string(),
     updatedAt: z.string(),
   }),
+  /**
+   * `ssh` needs a password or a key passphrase and has no TTY to ask on
+   * (remote completion design §3.6). Broadcast rather than answered by the
+   * runtime: the secret belongs to a person, and the prompt text has already
+   * been redacted by the time it reaches the wire.
+   */
+  z.object({ type: z.literal("ssh.prompt"), prompt: sshPromptSchema }),
+  /**
+   * The workspace changed in a way that invalidates everything the client
+   * holds about it — today only an execution-host switch, which re-points
+   * every path at a different machine (design §3.3). Carries no detail on
+   * purpose: a partial patch is exactly what must not happen here.
+   */
+  z.object({ type: z.literal("workspace.updated"), workspaceId: z.string() }),
   /**
    * A control verb that must not run without a human (plan §5.8: `close`).
    * The runtime is blocked on `POST /api/control/confirm/{requestId}` while
@@ -163,4 +178,9 @@ export type BrowserLeaseEvent = Extract<
 export type BrowserActivityEvent = Extract<
   WorkspaceEvent,
   { type: "browser.activity" }
+>;
+export type SshPromptEvent = Extract<WorkspaceEvent, { type: "ssh.prompt" }>;
+export type WorkspaceUpdatedEvent = Extract<
+  WorkspaceEvent,
+  { type: "workspace.updated" }
 >;

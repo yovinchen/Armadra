@@ -21,6 +21,7 @@ import {
   QuickOpen,
   SettingsDialog,
   SourceControlDrawer,
+  SshPromptDialog,
   UsageDashboard,
 } from "./lazy";
 import { useMinimapPreferences } from "./minimap-preferences";
@@ -126,6 +127,7 @@ function AppShell() {
         <CommandPalette />
         <QuickOpen />
         <ControlConfirmDialog />
+        <SshPromptDialog />
         <HandoffDialog />
         <HandoffHistoryDrawer />
       </Suspense>

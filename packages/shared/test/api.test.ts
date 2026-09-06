@@ -36,6 +36,12 @@ import {
   fileEntryResultSchema,
   trashEntrySchema,
   languageServiceStatusSchema,
+  executionHostRefusalSchema,
+  sshHostKeyScanSchema,
+  sshPromptListSchema,
+  switchExecutionHostRequestSchema,
+  trustSshHostKeyRequestSchema,
+  watchRegistrationSchema,
 } from "../src/index.js";
 
 const timestamp = "2026-08-13T00:00:00.000Z";
@@ -250,6 +256,16 @@ describe("runtime API v3", () => {
         capturedAt: timestamp,
       },
       { type: "browser.session", session: browserSession },
+      {
+        type: "ssh.prompt",
+        prompt: {
+          promptId: "p-1",
+          hostId: "box",
+          kind: "passphrase",
+          prompt: "Enter passphrase for key '/home/me/.ssh/id_ed25519':",
+        },
+      },
+      { type: "workspace.updated", workspaceId: uuid },
       {
         type: "browser.download",
         download: {
@@ -772,5 +788,103 @@ describe("conversations and AI naming (plan §17)", () => {
         false,
       );
     }
+  });
+
+  it("keeps a host key scan comparable and never trusts one by default", () => {
+    const scan = sshHostKeyScanSchema.parse({
+      keys: [
+        {
+          keyType: "ssh-ed25519",
+          fingerprint: "SHA256:abc",
+          line: "box ssh-ed25519 AAAA",
+          trusted: false,
+        },
+      ],
+      changed: true,
+    });
+    // The old fingerprints are what the new one has to be compared against;
+    // an absent list is empty, not "nothing was on record".
+    expect(scan.known).toEqual([]);
+    expect(scan.keys[0]?.trusted).toBe(false);
+    // A first trust must not carry `replace`: the field is a decision.
+    expect(
+      trustSshHostKeyRequestSchema.parse({ line: "box ssh-ed25519 AAAA" })
+        .replace,
+    ).toBeUndefined();
+    expect(
+      trustSshHostKeyRequestSchema.parse({ line: "x", replace: true }).replace,
+    ).toBe(true);
+  });
+
+  it("carries a waiting prompt outward without a field for its answer", () => {
+    const [prompt] = sshPromptListSchema.parse([
+      {
+        promptId: "p-1",
+        hostId: "box",
+        kind: "password",
+        prompt: "me@box's password:",
+        answer: "hunter2",
+      },
+    ]);
+    expect(prompt).toEqual({
+      promptId: "p-1",
+      hostId: "box",
+      kind: "password",
+      prompt: "me@box's password:",
+    });
+    expect(
+      sshPromptListSchema.safeParse([{ ...prompt, kind: "otp" }]).success,
+    ).toBe(false);
+  });
+
+  it("models an execution-host switch and the structured refusal it can get", () => {
+    // An empty host id means this machine, whose paths may contain spaces.
+    expect(
+      switchExecutionHostRequestSchema.parse({
+        executionHostId: "",
+        rootPath: "/Users/me/My Project",
+      }).force,
+    ).toBeUndefined();
+    expect(
+      switchExecutionHostRequestSchema.safeParse({
+        executionHostId: "box",
+        rootPath: "srv/project",
+      }).success,
+    ).toBe(false);
+    const refusal = executionHostRefusalSchema.parse({
+      code: "root_mismatch",
+      message:
+        "The directory on the new execution host is not the same project",
+      from: { head: "abc", entries: "d1", entryCount: 12 },
+      to: { head: "", entries: "d2", entryCount: 3 },
+    });
+    expect(refusal.blockers).toEqual([]);
+    expect(refusal.to?.entryCount).toBe(3);
+    expect(
+      executionHostRefusalSchema.parse({
+        code: "switch_blocked",
+        message: "Close what is still using this execution host",
+        blockers: [{ kind: "editorDraft", detail: "src/main.rs" }],
+      }).blockers[0]?.kind,
+    ).toBe("editorDraft");
+    expect(
+      executionHostRefusalSchema.safeParse({ code: "nope", message: "" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("says how a watch delivers changes, defaulting to events", () => {
+    const version = { path: "a.txt", exists: true };
+    expect(
+      watchRegistrationSchema.parse({ status: "watching", version }).mode,
+    ).toBe("events");
+    expect(
+      watchRegistrationSchema.parse({
+        status: "watching",
+        mode: "poll",
+        reason: "This execution host polls for changes every 2s",
+        version,
+      }).mode,
+    ).toBe("poll");
   });
 });

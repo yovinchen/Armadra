@@ -326,6 +326,31 @@ describe("editor external changes", () => {
     expect(await screen.findByRole("status")).toBeTruthy();
   });
 
+  it("says when a remote execution host polls instead of watching", async () => {
+    mocks.watch.mockResolvedValue({
+      status: "watching",
+      mode: "poll",
+      reason: "This execution host polls for changes every 2s",
+      version: { path: "note.txt", exists: true, sha256: ON_DISK, size: 4 },
+    });
+    render(<EditorNode {...props()} />);
+    await view();
+    // A poll and a filesystem event are different promises about latency, and
+    // the node says which one this file got rather than implying the faster.
+    const badge = await screen.findByText("Polled");
+    expect(badge.getAttribute("title")).toBe(
+      "This execution host polls for changes every 2s",
+    );
+    expect(screen.queryByText("File watching unavailable")).toBeNull();
+  });
+
+  it("shows no delivery badge for an ordinary local watch", async () => {
+    render(<EditorNode {...props()} />);
+    await view();
+    await waitFor(() => expect(mocks.watch).toHaveBeenCalled());
+    expect(screen.queryByText("Polled")).toBeNull();
+  });
+
   it("re-prompts when a save loses the version race", async () => {
     mocks.write.mockRejectedValue(new Error("conflict"));
     render(<EditorNode {...props()} />);

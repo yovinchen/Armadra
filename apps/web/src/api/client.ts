@@ -36,7 +36,7 @@ export {
   terminalWebSocketUrl,
   workspaceEventsUrl,
 } from "./sockets";
-export { runtimeSettingsSchema } from "./settings";
+export { executionHostRefusal, runtimeSettingsSchema } from "./settings";
 export type { RuntimeSettings, RuntimeSettingsPatch } from "./settings";
 export {
   canvasOwnershipSchema,

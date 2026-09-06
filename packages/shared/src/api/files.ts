@@ -123,9 +123,21 @@ export const watchFileRequestSchema = z.object({
  */
 export const watchStatusSchema = z.enum(["watching", "unsupported"]);
 
+/**
+ * How changes reach the client. A local workspace only has one way; a remote
+ * one has two, and a two-second poll and a filesystem event are different
+ * promises about latency, so the editor says which one this file got.
+ */
+export const watchModeSchema = z.enum(["events", "poll"]);
+
 export const watchRegistrationSchema = z.object({
   status: watchStatusSchema,
   reason: z.string().nullish(),
+  /**
+   * Defaulted rather than required: a runtime older than the remote poller
+   * omits the field, and its watch is an event watch by construction.
+   */
+  mode: watchModeSchema.default("events"),
   version: fileVersionSchema,
 });
 
@@ -140,6 +152,7 @@ export type WriteFileResponse = z.infer<typeof writeFileResponseSchema>;
 export type FileVersion = z.infer<typeof fileVersionSchema>;
 export type WatchFileRequest = z.infer<typeof watchFileRequestSchema>;
 export type WatchStatus = z.infer<typeof watchStatusSchema>;
+export type WatchMode = z.infer<typeof watchModeSchema>;
 export type WatchRegistration = z.infer<typeof watchRegistrationSchema>;
 export type FileChangeKind = z.infer<typeof fileChangeKindSchema>;
 export type FileEol = z.infer<typeof fileEolSchema>;

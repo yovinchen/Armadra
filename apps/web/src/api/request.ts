@@ -49,8 +49,14 @@ export class RuntimeConnectionError extends Error {
 export class RuntimeRequestError extends Error {
   readonly status: number;
   readonly code?: string;
+  /**
+   * 原样的错误 body。有些拒绝不是一句话能表达的——执行主机改绑的 409 里带着
+   * 两边的指纹或者还占着旧主机的东西，调用方要拿这些才说得出人能做什么。
+   * 未解析：认得出这个形状的是调用方，不是传输层。
+   */
+  readonly body?: unknown;
 
-  constructor(status: number, message: string, code?: string) {
+  constructor(status: number, message: string, code?: string, body?: unknown) {
     super(
       code === "git_execution_required"
         ? t("gitRepo.executionRequired")
@@ -59,6 +65,7 @@ export class RuntimeRequestError extends Error {
     this.name = "RuntimeRequestError";
     this.status = status;
     this.code = code;
+    this.body = body;
   }
 }
 
@@ -122,6 +129,7 @@ export async function request<T>(
         ? String(body.message)
         : t("app.runtimeFailed", { status: response.status }),
       body?.code !== undefined ? String(body.code) : undefined,
+      payload,
     );
   }
   return schema.parse(payload);

@@ -109,9 +109,138 @@ export const openRemoteWorkspaceRequestSchema = z.object({
   rootPath: sshRemotePathSchema,
 });
 
+/* ------------------------------- host keys -------------------------------- */
+
+/**
+ * One key `ssh-keyscan` offered for a host (remote completion design §3.6).
+ *
+ * `line` travels back to the runtime verbatim on a trust, so what is written
+ * to `known_hosts` is the same bytes whose fingerprint the person compared.
+ */
+export const sshHostKeySchema = z.object({
+  keyType: z.string().min(1).max(64),
+  /** `SHA256:…`, exactly as OpenSSH prints it. */
+  fingerprint: z.string().min(1).max(128),
+  line: z.string().min(1).max(8_192),
+  trusted: z.boolean(),
+});
+
+/**
+ * `POST /api/ssh/hosts/{id}/host-keys/scan`, and the answer to a trust.
+ *
+ * `changed` means a key is already on record and none of the scanned keys
+ * match it: either the host was reinstalled or somebody is in the middle. The
+ * client shows `known` beside the new fingerprints so a person decides.
+ */
+export const sshHostKeyScanSchema = z.object({
+  keys: z.array(sshHostKeySchema),
+  changed: z.boolean(),
+  known: z.array(z.string()).default([]),
+});
+
+/** `POST /api/ssh/hosts/{id}/host-keys` — record one scanned key as trusted. */
+export const trustSshHostKeyRequestSchema = z.object({
+  line: z.string().min(1).max(8_192),
+  /**
+   * Overwrite the entry already on record. A first trust must never set this:
+   * replacing a known key is a decision only the person can make.
+   */
+  replace: z.boolean().optional(),
+});
+
+/* -------------------------------- prompts --------------------------------- */
+
+/** `ssh` phrases the two differently, and the dialog must not have to guess. */
+export const sshPromptKindSchema = z.enum(["password", "passphrase"]);
+
+/**
+ * One authentication prompt waiting for a person. There is no answer field:
+ * this shape only ever travels outward.
+ */
+export const sshPromptSchema = z.object({
+  promptId: z.string().min(1).max(64),
+  hostId: z.string().min(1).max(64),
+  kind: sshPromptKindSchema,
+  /** The server's own text, redacted by the runtime before it is sent. */
+  prompt: z.string().max(1_024),
+});
+
+/** `GET /api/ssh/prompts` — what is waiting right now, for a fresh client. */
+export const sshPromptListSchema = z.array(sshPromptSchema);
+
+/** `POST /api/ssh/hosts/{hostId}/prompts/{promptId}` — a person answers. */
+export const answerSshPromptRequestSchema = z.object({ answer: z.string() });
+
+/* --------------------------- execution host switch ------------------------ */
+
+/**
+ * A root path on whichever machine will execute. Deliberately not
+ * `sshRemotePathSchema`: an empty `executionHostId` means this machine, whose
+ * paths may legitimately contain spaces — the runtime only requires absolute
+ * and under 4 KiB.
+ */
+const executionRootPathSchema = z
+  .string()
+  .min(1)
+  .max(4_096)
+  .refine((value) => value.startsWith("/"), { message: "Must be absolute" });
+
+/** `PATCH /api/workspaces/{id}/execution-host` — rebind, never a file move. */
+export const switchExecutionHostRequestSchema = z.object({
+  /** A `settings.ssh.hosts[].id`, or empty for this machine. */
+  executionHostId: z.string().max(64),
+  rootPath: executionRootPathSchema,
+  /** Rebind even when the two roots do not look like the same project. */
+  force: z.boolean().optional(),
+  /**
+   * Always refused by the runtime. Modelled so the refusal can name what was
+   * asked instead of the request being silently reinterpreted.
+   */
+  migrateFiles: z.boolean().optional(),
+});
+
+/** What a root looks like, cheaply enough to compare across machines. */
+export const rootFingerprintSchema = z.object({
+  head: z.string(),
+  entries: z.string(),
+  entryCount: z.number().int().nonnegative(),
+});
+
+/** One thing still bound to the old host. `kind` is a key the UI translates. */
+export const executionHostBlockerSchema = z.object({
+  kind: z.string(),
+  detail: z.string(),
+});
+
+/**
+ * The 409 body of a refused switch. Structured rather than a sentence: a
+ * person can only act on *which* directories differ, or on *what* is still
+ * open.
+ */
+export const executionHostRefusalSchema = z.object({
+  code: z.enum(["root_mismatch", "switch_blocked"]),
+  message: z.string(),
+  from: rootFingerprintSchema.optional(),
+  to: rootFingerprintSchema.optional(),
+  blockers: z.array(executionHostBlockerSchema).default([]),
+});
+
 export type SshHost = z.infer<typeof sshHostSchema>;
 export type RemoteWorkerProbe = z.infer<typeof remoteWorkerProbeSchema>;
 export type OpenRemoteWorkspaceRequest = z.infer<
   typeof openRemoteWorkspaceRequestSchema
 >;
 export type SshTestResult = z.infer<typeof sshTestResultSchema>;
+export type SshHostKey = z.infer<typeof sshHostKeySchema>;
+export type SshHostKeyScan = z.infer<typeof sshHostKeyScanSchema>;
+export type TrustSshHostKeyRequest = z.infer<
+  typeof trustSshHostKeyRequestSchema
+>;
+export type SshPromptKind = z.infer<typeof sshPromptKindSchema>;
+export type SshPrompt = z.infer<typeof sshPromptSchema>;
+export type SwitchExecutionHostRequest = z.infer<
+  typeof switchExecutionHostRequestSchema
+>;
+export type RootFingerprint = z.infer<typeof rootFingerprintSchema>;
+export type ExecutionHostBlocker = z.infer<typeof executionHostBlockerSchema>;
+export type ExecutionHostRefusal = z.infer<typeof executionHostRefusalSchema>;

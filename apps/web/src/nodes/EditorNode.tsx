@@ -9,6 +9,7 @@ import {
   Save,
   Search,
 } from "lucide-react";
+import type { WatchMode } from "@armadra/shared";
 
 import { runtimeApi } from "@/api/client";
 import { useT } from "@/app/preferences-store";
@@ -65,6 +66,12 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
   const [diskContent, setDiskContent] = React.useState<string | null>(null);
   /** Runtime 说这台机器没有可用的监听后端，只能按需查版本。 */
   const [degraded, setDegraded] = React.useState(false);
+  /**
+   * 改动怎么送过来。远程执行主机上可能是轮询而不是文件系统事件，延迟不是一
+   * 回事，所以在头部标出来，而不是让人以为远端和本地一样快。
+   */
+  const [watchMode, setWatchMode] = React.useState<WatchMode>("events");
+  const [watchReason, setWatchReason] = React.useState<string | null>(null);
   /** Markdown 才有的编辑/并排/预览；其它文件永远是 `edit`。 */
   const [viewMode, setViewMode] = React.useState<ViewMode>("edit");
   /** 每重建一次 CodeMirror 就自增：语言扩展要重新插一遍。 */
@@ -260,6 +267,8 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     setExternal,
     setDiskContent,
     setDegraded,
+    setWatchMode,
+    setWatchReason,
   });
 
   /* ------------------------------- 语言服务 ------------------------------- */
@@ -324,6 +333,11 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
       )}
       {degraded && state.kind === "text" && (
         <Badge variant="outline">{t("editor.watchUnsupported")}</Badge>
+      )}
+      {!degraded && watchMode === "poll" && state.kind === "text" && (
+        <Badge variant="outline" title={watchReason ?? undefined}>
+          {t("ssh.execution.poll")}
+        </Badge>
       )}
       {dirty && (
         <span

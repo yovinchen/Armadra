@@ -1,16 +1,31 @@
 import { z } from "zod";
 import {
   TERMINAL_BACKEND_CHOICES,
+  answerSshPromptRequestSchema,
   customAgentSchema,
+  executionHostRefusalSchema,
   powerPolicySchema,
   remoteWorkerProbeSchema,
+  sshHostKeyScanSchema,
   sshHostSchema,
+  sshPromptListSchema,
   sshTestResultSchema,
+  switchExecutionHostRequestSchema,
+  trustSshHostKeyRequestSchema,
+  workspaceSchema,
   type CustomAgent,
+  type ExecutionHostRefusal,
   type PowerPolicy,
   type SshHost,
+  type SwitchExecutionHostRequest,
 } from "@armadra/shared";
-import { json, query, request } from "./request";
+import {
+  RuntimeRequestError,
+  json,
+  noContentSchema,
+  query,
+  request,
+} from "./request";
 
 /* ------------------------------------ 设置 -------------------------------- */
 
@@ -223,4 +238,99 @@ export const settingsApi = {
       method: "PATCH",
       ...json(patch),
     }),
+
+  /* --------------------------------- 主机密钥 --------------------------- */
+
+  /**
+   * 扫描主机公布的密钥（远端补完设计 §3.6）。
+   *
+   * 只读：不写文件，也不代替任何人做判断。回答里的 `known` 是当前已记录的
+   * 指纹，界面把新旧摆在一起，由人来比对服务器自己打印的那一串。
+   */
+  scanSshHostKeys: (hostId: string) =>
+    request(
+      `/api/ssh/hosts/${query(hostId)}/host-keys/scan`,
+      sshHostKeyScanSchema,
+      { method: "POST" },
+    ),
+  /**
+   * 记录一条扫描到的密钥。`line` 原样回传，写进 `known_hosts` 的就是刚才
+   * 显示指纹的那几个字节；`replace` 只有替换已记录的密钥时才带。
+   */
+  trustSshHostKey: (hostId: string, line: string, replace = false) =>
+    request(`/api/ssh/hosts/${query(hostId)}/host-keys`, sshHostKeyScanSchema, {
+      method: "POST",
+      ...json(
+        trustSshHostKeyRequestSchema.parse(
+          replace ? { line, replace: true } : { line },
+        ),
+      ),
+    }),
+  /** 清掉 Armadra 为这台主机记下的信任；用户自己的 known_hosts 不动。 */
+  forgetSshHostKeys: (hostId: string) =>
+    request(`/api/ssh/hosts/${query(hostId)}/host-keys`, noContentSchema, {
+      method: "DELETE",
+    }),
+
+  /* ---------------------------------- 认证提示 -------------------------- */
+
+  /** 刚连上的客户端补齐当前还等着人回答的提示。 */
+  sshPrompts: () => request("/api/ssh/prompts", sshPromptListSchema),
+  /**
+   * 回答一条提示。答案只在 Runtime 内存里停留到 askpass 取走那一次，
+   * 不落盘也不进日志——所以这里也不缓存、不重试。
+   */
+  answerSshPrompt: (hostId: string, promptId: string, answer: string) =>
+    request(
+      `/api/ssh/hosts/${query(hostId)}/prompts/${query(promptId)}`,
+      noContentSchema,
+      {
+        method: "POST",
+        ...json(answerSshPromptRequestSchema.parse({ answer })),
+      },
+    ),
+  /** 取消：`ssh` 那边干净地失败，好过挂着等一个不会来的答案。 */
+  cancelSshPrompt: (hostId: string, promptId: string) =>
+    request(
+      `/api/ssh/hosts/${query(hostId)}/prompts/${query(promptId)}`,
+      noContentSchema,
+      { method: "DELETE" },
+    ),
+
+  /* --------------------------------- 执行主机 --------------------------- */
+
+  /**
+   * 把工作空间改绑到另一台执行主机（设计 §3.3）。
+   *
+   * 这是重新绑定，不是搬文件：新根必须看起来是同一个项目，旧主机上也不能
+   * 还挂着东西。被拒绝时是 409，body 里是结构化的理由——用
+   * `executionHostRefusal()` 读出来，光一个「冲突」没人能据此行动。
+   */
+  switchExecutionHost: (
+    workspaceId: string,
+    input: SwitchExecutionHostRequest,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/execution-host`,
+      workspaceSchema,
+      {
+        method: "PATCH",
+        ...json(switchExecutionHostRequestSchema.parse(input)),
+      },
+    ),
 };
+
+/**
+ * 从一次失败的改绑里读出结构化拒绝；不是拒绝就返回 `null`。
+ *
+ * 分开一个函数是为了不让调用方把「连不上 / 权限不够」当成 Runtime 做出的
+ * 判断——只有 409 且 body 认得出来，才是「它看过了，然后不同意」。
+ */
+export function executionHostRefusal(
+  error: unknown,
+): ExecutionHostRefusal | null {
+  if (!(error instanceof RuntimeRequestError) || error.status !== 409)
+    return null;
+  const parsed = executionHostRefusalSchema.safeParse(error.body);
+  return parsed.success ? parsed.data : null;
+}
