@@ -228,3 +228,22 @@ Host 重启后的 Git 操作按实际 Git 状态对账：commit 查 OID/index，
 - **`ExternalReference`**：迁移 v4 的 `github_references`，ID 由链接语义派生，因此重复关联是同一条记录而不是两个徽标。
 
 已知限制：Issue 全文过滤与 PR 的作者 / draft / review-requested 过滤在 Host 本地完成（search API 属另一套配额）；Projects v2 状态字段每个项目最多读 500 个条目，超出的 Issue 显示未映射；token scopes 只保留上次验证的结果，重启后为空。
+
+## 12. B5 实现说明（写入所有权）
+
+§2 的「Rust Worker 的 RepositoryService 是 Git 命令唯一执行入口。Host 负责操作身份、持久结果及事件」已由
+[业务所有权迁移](./host-business-migration.md) 的 B5 批落地，契约在 `proto/armadra/v1/git.proto`。
+
+- **队列在 Host，命令在执行主机**：`apps/host/internal/githost` 记操作身份、排序、前置版本与结论；
+  `apps/runtime/src/worker/git.rs` 走的是 HTTP 路由用的同一批代码，所以经 Host 下的提交与经 Runtime 下的
+  提交是同一个提交、同一套校验。
+- **锁序**（§2「锁排序固定」）：改 refs、worktree 管理与网络操作先取 common git dir 的锁，再取 worktree 的锁；
+  只动索引与工作树的操作只取后者。方向只有一个，所以共用 common dir 的多个检出不会死锁。
+- **前置版本**：写入携带界面读到的 HEAD / 索引 / ref，执行前由执行主机重读比对；外部命令改过就是拒绝，不是覆盖。
+- **结果未知**：被打断的操作停在 `UNKNOWN_OUTCOME`，不自动重跑也不折叠成失败——重跑一次已经送达的推送会让远端
+  ref 前进两次。Host 重启后的对账按种类判定：网络类一律未知，提交读 HEAD 判定，其余未知。
+- **读不入库**：除 `RepositoryState` 这一份带 `observedAt` 的快照外，转发的读一律不缓存，状态码原样带回。
+
+已知限制：克隆未接线（一次克隆比启动它的帧活得久，而当前每个操作起一个短命 Worker）；上行帧已定契约未接线，
+进度与外部改动靠写后的一次观察刷新；一次操作的帧上限是一分钟，超时报 `UNKNOWN_OUTCOME`；
+Host 侧的 worktree 必须落在工作空间根内。
