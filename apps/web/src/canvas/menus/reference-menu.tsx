@@ -1,5 +1,5 @@
+import * as React from "react";
 import { Link2, Link2Off, RefreshCw } from "lucide-react";
-import { useShallow } from "zustand/react/shallow";
 
 import {
   ContextMenuItem,
@@ -37,25 +37,33 @@ export interface ReferenceSubmenuProps {
   itemId: string;
 }
 
-/** 白板对象右键菜单里的「引用到 Agent」子菜单。 */
+/**
+ * 白板对象右键菜单里的「引用到 Agent」子菜单。
+ *
+ * 选择器只取 store 里**已经存在的数组**，派生放进 `useMemo`：选择器里
+ * `map` 出新对象会让 `useSyncExternalStore` 每次比对都判成变了，React 直接
+ * 报 "getSnapshot should be cached" 然后死循环（这一条是真机上撞出来的）。
+ */
 export function ReferenceSubmenu({ itemId }: ReferenceSubmenuProps) {
   const t = useT();
-  const targets = useCanvasStore(
-    useShallow((state) =>
-      referenceTargets(state.document).map((node) => ({
+  const document = useCanvasStore((state) => state.document);
+  const rows = useCanvasStore((state) => state.whiteboard.references);
+  const targets = React.useMemo(
+    () =>
+      referenceTargets(document).map((node) => ({
         id: node.id,
         title: node.title,
       })),
-    ),
+    [document],
   );
-  const linked = useCanvasStore(
-    useShallow((state) => {
-      const bare = fromItemId(itemId);
-      return state.whiteboard.references
+  const linked = React.useMemo(() => {
+    const bare = fromItemId(itemId);
+    return new Set(
+      rows
         .filter((reference) => reference.itemId === bare)
-        .map((reference) => reference.nodeId);
-    }),
-  );
+        .map((reference) => reference.nodeId),
+    );
+  }, [itemId, rows]);
 
   if (targets.length === 0) {
     return (
@@ -66,7 +74,6 @@ export function ReferenceSubmenu({ itemId }: ReferenceSubmenuProps) {
     );
   }
 
-  const already = new Set(linked);
   return (
     <ContextMenuSub>
       <ContextMenuSubTrigger>
@@ -79,7 +86,7 @@ export function ReferenceSubmenu({ itemId }: ReferenceSubmenuProps) {
             key={node.id}
             onSelect={() => createContentReference(itemId, node.id)}
           >
-            {already.has(node.id) ? <Link2Off /> : <Link2 />}
+            {linked.has(node.id) ? <Link2Off /> : <Link2 />}
             {node.title}
           </ContextMenuItem>
         ))}
