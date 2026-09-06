@@ -658,6 +658,36 @@ canvas/
 | A09  | ✅   | 见 §6.3 下方的引用端到端记录。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | A10  | ✅   | 链接在 `(1366, 791)`，`document.elementFromPoint` 在它的中心返回的就是这个 `<a>`（`href="https://reactflow.dev/attribution"`，`pointer-events: auto`），没有被缩略图 / 锁按钮 / Dock 盖住。                                                                                                                                                                                                                                                                                                                                                                                    |
 
+**A01 与 A04 的后续修复**（2026-09-07，上面那张表是 09-06 那一轮的记录，原样保留）：
+
+- **A01**：⌘滚轮不再转发给 `.react-flow__pane`。React Flow 判定缩放看的是
+  `useKeyPress(zoomActivationKeyCode)`，而那份状态由 keydown 落在谁身上决定，
+  焦点在 xterm 的隐藏 textarea 里时并不可靠。现在 `NodeShell` 在捕获相位自己
+  把这一下算成一次缩放（`canvas/interaction/wheel-zoom.ts`，复用
+  `canvas/zoom.ts` 的倍率与定点公式），与键盘焦点无关；普通滚轮仍归节点体
+  （`nowheel` + `stopPropagation` 只挡带修饰键的那一路）。
+- **A04**：两处都补上了。`app/use-board-sync.ts` 订阅 `board.changed`，按事件
+  带的 `updatedAt` 认出「自己刚存的那一次」而跳过，其余让 `["board", …]` 失效；
+  重取回来的同一块板不再被丢掉，改走 `canvas/sync/merge.ts`：视口留本地的、
+  本地这一轮动过的实体（`store/canvas/pending.ts`）留本地的、其余照收远端的，
+  内容没变的实体连对象身份一起复用（投影缓存不失效）。远端灌入既不进撤销栈
+  也不清空它；手势进行中（`flow/drafts.ts` 非空）先不合，松手那一刻补上。
+  同一份账也接到 409 变基上，于是两个窗口同时改**不同**的节点时谁的都不丢。
+  验证：`canvas/sync/two-windows.test.ts` 用两份真的 store（`vi.resetModules()`
+  各 import 一次）跑完整链路；传输那半边用一台真 Runtime 加两个 `/events`
+  WebSocket 客户端另跑一遍（事件到达两端、版本号一致、过期 CAS 写 409）。
+- **引用来源扩到 Frame**：引用一个 Frame = 引用它圈住的那一片
+  （`canvas/frame-reference.ts`）。成员按几何算（白板对象从来没有 `parentId`），
+  `content.text` 是成员清单、`pngPath` 是框里所有白板对象一起栅格化的一张；
+  `sourceShapeId` 填 Frame 的节点 id、`shapeType` 填 `group`。上限与去重规则
+  一个字没改，Runtime 也没有改动——它从不按来源类型分支，`collab/tests/content.rs`
+  里新加的一条把这件事钉住了。
+- **引用边首帧**：`EdgeWrapper` 在 `getEdgePosition` 返回 null 时整条边不画，
+  而起点侧的把手包围盒要等一轮测量。白板对象与 Frame 的把手是 `inset: 0` 的
+  整块覆盖层，几何算得出来，所以 `sync/project.ts` 直接把它写进投影
+  （`dropOnlyHandles`），第一帧就有位置。带圆点把手的普通节点不给：那两个点的
+  包围盒由 CSS 决定，写死一份近似值会让连线起点和吸附判定偏掉。
+
 A09 的端到端（同一次会话，抓的是真实请求）：
 
 1. 文字对象 → `PUT …/context-links/{nodeId}`，`{"kind":"shape","content":{"status":"ready","sourceShapeId":"wb:cf3b246c-…","shapeType":"text","textTruncated":false,"text":"引用验证 B6"}}`，Runtime 的 `context_links` 里落成同一份。

@@ -73,9 +73,14 @@ opencode 等 CLI Agent 作为终端节点放在一块无限画布上，节点之
 - **上下文链接**是 `link` 类型的边（`canvas/flow/edges/LinkEdge.tsx`）：
   两端节点相对边的中点之间的贝塞尔曲线，方向与标签由两端的节点类型算出来。
 - **白板内容**（手绘、几何、文字、图片、直线）是 `wb.*` 节点，与节点共用
-  同一套相机、选择和撤销栈；内容引用是 `reference` 边。
+  同一套相机、选择和撤销栈；内容引用是 `reference` 边。引用的来源可以是一个
+  白板对象，也可以是一个 Frame——引用 Frame 等于引用它圈住的那一片（成员清单
+  加上成员一起栅格化的图，`canvas/frame-reference.ts`）。
 - **撤销 / 重做**是自写的逐实体差异栈（`store/canvas/history.ts`），
   远端在撤销期间新增的实体不受影响。
+- **⌘/Ctrl + 滚轮缩放**由画布自己算（`canvas/interaction/wheel-zoom.ts`），
+  不依赖 React Flow 的按键状态：那份状态由 keydown 落在谁身上决定，终端拿到
+  焦点时并不可靠。
 
 节点类型共 7 种（`packages/shared/src/domain.ts`）：
 `terminal`（含 Agent）、`sticky`、`group`、`editor`、`diff`、`files`、`browser`。
@@ -138,7 +143,14 @@ Hook 时提供独立的按需技能，不再追加全局长指令。详见
 - **图片资产不进快照**：字节走 `POST /api/workspaces/{id}/assets`（或按路径
   `.../assets/import`），内容寻址落在工作区的
   `.armadra/assets/<sha256 前 16 位>.<ext>`，快照里只留 URL 与工作区相对路径。
-- 保存是 CAS：请求带 `expectedUpdatedAt`，冲突返回 `409`。
+- 保存是 CAS：请求带 `expectedUpdatedAt`，冲突返回 `409`。请求体仍是整份文档
+  （服务端按 id 做 upsert + 删掉请求里没有的行），所以「谁的改动算数」由
+  CAS 加客户端变基决定，不是按字段合并。
+- 保存成功后 Runtime 广播 `board.changed{boardId, updatedAt}`。同一块板的另一个
+  窗口按这个 `updatedAt` 判断这条事件是不是自己刚存的那一次：不是就重取文档，
+  经 `canvas/sync/merge.ts` 合进 `canvas-store`——视口留本地的，本地这一轮动过的
+  实体（`store/canvas/pending.ts` 记账）留本地的，其余照收远端的。远端灌入
+  **不进也不清**撤销栈，手势进行中先不合，等松手。
 
 SQLite 基础表由 `0001_initial.sql` 创建；`0002_agent_mailbox.sql` 增量添加消息箱：
 
