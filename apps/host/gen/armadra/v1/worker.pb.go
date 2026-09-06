@@ -1552,11 +1552,14 @@ type WorkerRequest_GetWriteOwnership struct {
 }
 
 type WorkerRequest_LanguageCapabilities struct {
-	// Editor language services (language service design §2.8). Discovery,
-	// session open/close and edit application are request-response and stay on
-	// this serial connection; `language_frame` only ever travels on the
-	// separate `worker --stdio --language-link` connection, which abandons
-	// one-question-one-answer so a server can push diagnostics.
+	// Editor language services (language service design §2.8). Discovery
+	// starts nothing and is answered on either connection. Everything else —
+	// session open/close, edit application and `language_frame` — belongs to
+	// the separate `worker --stdio --language-link` connection, because the
+	// two connections are two processes and only that one holds the servers.
+	// That connection abandons one-question-one-answer so a server can push
+	// diagnostics; a `language_frame` carries no request id and is answered by
+	// nothing.
 	LanguageCapabilities *LanguageCapabilitiesRequest `protobuf:"bytes,30,opt,name=language_capabilities,json=languageCapabilities,proto3,oneof"`
 }
 

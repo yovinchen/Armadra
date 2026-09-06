@@ -6,6 +6,7 @@
 //! opens no PTY of its own.
 pub mod agent_bridge;
 pub mod channel;
+pub mod language_link;
 pub mod outbox;
 pub mod socket;
 
@@ -52,6 +53,11 @@ pub struct Worker {
     /// The socket bearer's published address, reported in the handshake so a
     /// controller can reattach without respawning this process.
     bearer: (Option<String>, Option<String>),
+    /// The language link's state, present only on a `--language-link`
+    /// connection. Without it every session action answers UNSUPPORTED, which
+    /// is what a serial connection must say: the servers live in the process
+    /// that holds the link, not in this one.
+    language: Option<std::sync::Arc<language_link::Host>>,
 }
 impl Default for Worker {
     fn default() -> Self {
@@ -65,6 +71,7 @@ impl Default for Worker {
             canvas: None,
             upcalls: None,
             bearer: (None, None),
+            language: None,
         }
     }
 }
@@ -146,6 +153,16 @@ fn unsupported_ownership() -> worker_response::Result {
     })
 }
 
+/// No link, no session. A serial connection cannot hold a language server:
+/// the second `ssh` connection is a different process, and answering as though
+/// it could would open a session against a server nobody can reach.
+fn unsupported_language() -> worker_response::Result {
+    worker_response::Result::Error(ErrorResponse {
+        code: "UNSUPPORTED".into(),
+        message: "Language sessions need the Worker's language link".into(),
+    })
+}
+
 /// The stored row on the wire. `updated_at` is RFC 3339 in the database and
 /// milliseconds in the protocol; an unparsable stamp is damage, not a zero.
 fn write_ownership(record: ownership::WriteOwnership) -> Result<WorkerWriteOwnership, AppError> {
@@ -186,6 +203,11 @@ impl Worker {
     ) {
         self.upcalls = Some(upcalls);
         self.bearer = (socket, pipe);
+    }
+    /// Attaches the language link's state. Only `--language-link` does this,
+    /// and only then does the handshake claim [`language_link::CAPABILITY`].
+    pub fn attach_language(&mut self, host: std::sync::Arc<language_link::Host>) {
+        self.language = Some(host);
     }
     fn root(&self, root_id: &str) -> Result<PathBuf, AppError> {
         if !id(root_id) {
@@ -308,7 +330,14 @@ impl Worker {
                             "files.text-read.v1".into(),
                             "files.text-write.v1".into(),
                             crate::remote::client::REMOTE_CAPABILITY.into(),
+                            // Discovery needs nothing but this process: it
+                            // runs `--version` and starts no server. Sessions
+                            // need the link, which is claimed separately.
+                            language_link::CAPABILITY_V1.into(),
                         ];
+                        if self.language.is_some() {
+                            capabilities.push(language_link::CAPABILITY.into());
+                        }
                         if self.agents.is_some() {
                             capabilities.push(agent_bridge::CAPABILITY.into());
                         }
@@ -588,20 +617,42 @@ impl Worker {
                     response_json,
                 }))
             }
-            // Editor language services are defined on the wire (language
-            // service design §2.8) but not served here yet: the remote half is
-            // batch D. UNSUPPORTED is the honest answer — a controller that
-            // gets it falls back to no language support rather than waiting
-            // for a session that will never open. The Hello capabilities do
-            // not list `language.v1`, so a current controller never asks.
-            Action::LanguageCapabilities(_)
-            | Action::OpenLanguageSession(_)
-            | Action::CloseLanguageSession(_)
-            | Action::LanguageFrame(_)
-            | Action::LanguageApplyEdit(_) => Ok(Response::Error(ErrorResponse {
-                code: "UNSUPPORTED".into(),
-                message: "Language services are not available on this Worker".into(),
-            })),
+            // Editor language services (language service design §2.7, §2.8).
+            // Discovery answers on any connection — it runs `--version` and
+            // starts nothing. Everything that holds state needs the link,
+            // because the servers live in the process that holds it.
+            Action::LanguageCapabilities(input) => Ok(Response::LanguageCapabilities(
+                match self.language.as_ref() {
+                    Some(host) => host.capabilities(input.refresh).await,
+                    None => language_link::discovery(input.refresh).await,
+                },
+            )),
+            Action::OpenLanguageSession(input) => {
+                let Some(host) = self.language.clone() else {
+                    return Ok(unsupported_language());
+                };
+                let root = self.root(&input.root_id)?;
+                Ok(Response::LanguageSession(host.open(root, input).await?))
+            }
+            Action::CloseLanguageSession(input) => match self.language.as_ref() {
+                Some(host) => Ok(Response::LanguageSession(
+                    host.close(&input.session_id, &input.reason).await,
+                )),
+                None => Ok(unsupported_language()),
+            },
+            Action::LanguageApplyEdit(input) => {
+                let Some(host) = self.language.clone() else {
+                    return Ok(unsupported_language());
+                };
+                let root = self.root(&input.root_id)?;
+                Ok(Response::LanguageApplyEdit(
+                    host.apply_edit(root, input).await?,
+                ))
+            }
+            // A pushed frame carries no request id and expects no answer, so
+            // the link takes it off the request path before it reaches here.
+            // Arriving on the serial connection is a controller mistake.
+            Action::LanguageFrame(_) => Ok(unsupported_language()),
         }
     }
 }

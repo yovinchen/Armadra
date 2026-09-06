@@ -34,6 +34,14 @@ async fn main() -> anyhow::Result<()> {
             Some(path) => Some(armadra_runtime::worker::open_canvas_database(&path).await?),
             None => None,
         };
+        // The language link never takes turns, so it runs its own loop rather
+        // than the request/answer one; the state directory it may be launched
+        // with belongs to the serial connection's command journal.
+        if worker.language_link {
+            armadra_runtime::worker::language_link::serve(tokio::io::stdin(), tokio::io::stdout())
+                .await?;
+            return Ok(());
+        }
         if let Some(path) = worker.state_dir {
             armadra_runtime::worker::serve_commands(
                 tokio::io::stdin(),
@@ -319,7 +327,7 @@ const USAGE: &str = "Usage: armadra-runtime [--desktop-control-stdin] [--listen 
      \x20 armadra-runtime export --help\n\
      \x20 armadra-runtime import-host-export --help";
 
-const WORKER_USAGE: &str = "Usage: armadra-runtime worker --stdio \
+const WORKER_USAGE: &str = "Usage: armadra-runtime worker --stdio [--language-link] \
      [--state-dir ABSOLUTE_PRIVATE_DIRECTORY] [--canvas-database ABSOLUTE_FILE]";
 
 /// The Worker mode's arguments, everything after `worker`.
@@ -327,10 +335,15 @@ const WORKER_USAGE: &str = "Usage: armadra-runtime worker --stdio \
 /// `--canvas-database` is the only way the read-only Worker reaches a
 /// database, and it reaches it for the ownership handoff alone: without the
 /// flag both ownership actions answer UNSUPPORTED.
+///
+/// `--language-link` is the second connection an execution host gets when an
+/// editor opens a language session on it (language service design §2.7). It
+/// changes the whole connection: after the handshake neither side takes turns.
 #[derive(Debug, Default, PartialEq, Eq)]
 struct WorkerArguments {
     state_dir: Option<std::path::PathBuf>,
     canvas_database: Option<std::path::PathBuf>,
+    language_link: bool,
 }
 
 impl WorkerArguments {
@@ -342,8 +355,13 @@ impl WorkerArguments {
             "{WORKER_USAGE}"
         );
         while let Some(argument) = rest.next() {
-            // Each flag takes its value as the next argument, and repeating one
-            // is an error rather than a last-one-wins surprise.
+            if argument == "--language-link" {
+                anyhow::ensure!(!parsed.language_link, "{WORKER_USAGE}");
+                parsed.language_link = true;
+                continue;
+            }
+            // Every other flag takes its value as the next argument, and
+            // repeating one is an error rather than a last-one-wins surprise.
             let slot = match argument.as_str() {
                 "--state-dir" => &mut parsed.state_dir,
                 "--canvas-database" => &mut parsed.canvas_database,
@@ -352,6 +370,12 @@ impl WorkerArguments {
             anyhow::ensure!(slot.is_none(), "{WORKER_USAGE}");
             *slot = Some(std::path::PathBuf::from(rest.next().context(WORKER_USAGE)?));
         }
+        // A language link holds language servers and nothing else. Opening the
+        // canvas database on it would put two processes behind one handoff.
+        anyhow::ensure!(
+            !parsed.language_link || parsed.canvas_database.is_none(),
+            "{WORKER_USAGE}"
+        );
         Ok(parsed)
     }
 }
@@ -589,6 +613,23 @@ mod tests {
             WorkerArguments {
                 state_dir: Some("/private/armadra".into()),
                 canvas_database: Some("/data/canvas.db".into()),
+                language_link: false,
+            }
+        );
+        // The language link is a flag, not a flag with a value, and it may
+        // still carry the state directory the launch line already had.
+        assert_eq!(
+            parse(&[
+                "--stdio",
+                "--language-link",
+                "--state-dir",
+                "/private/armadra"
+            ])
+            .unwrap(),
+            WorkerArguments {
+                state_dir: Some("/private/armadra".into()),
+                canvas_database: None,
+                language_link: true,
             }
         );
         for arguments in [
@@ -597,6 +638,14 @@ mod tests {
             vec!["--stdio", "--canvas-database"],
             vec!["--stdio", "--state-dir", "/a", "--state-dir", "/b"],
             vec!["--stdio", "--write-everything", "/data/canvas.db"],
+            vec!["--stdio", "--language-link", "--language-link"],
+            // Two processes behind one ownership handoff is not a handoff.
+            vec![
+                "--stdio",
+                "--language-link",
+                "--canvas-database",
+                "/data/canvas.db",
+            ],
         ] {
             assert!(
                 parse(&arguments).is_err(),

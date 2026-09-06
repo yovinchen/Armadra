@@ -175,11 +175,14 @@ message WorkerRequest {
     AgentRequest agent = 21;
     SetWriteOwnershipRequest set_write_ownership = 22;
     GetWriteOwnershipRequest get_write_ownership = 23;
-    // Editor language services (language service design §2.8). Discovery,
-    // session open/close and edit application are request-response and stay on
-    // this serial connection; `language_frame` only ever travels on the
-    // separate `worker --stdio --language-link` connection, which abandons
-    // one-question-one-answer so a server can push diagnostics.
+    // Editor language services (language service design §2.8). Discovery
+    // starts nothing and is answered on either connection. Everything else —
+    // session open/close, edit application and `language_frame` — belongs to
+    // the separate `worker --stdio --language-link` connection, because the
+    // two connections are two processes and only that one holds the servers.
+    // That connection abandons one-question-one-answer so a server can push
+    // diagnostics; a `language_frame` carries no request id and is answered by
+    // nothing.
     LanguageCapabilitiesRequest language_capabilities = 30;
     OpenLanguageSessionRequest open_language_session = 31;
     CloseLanguageSessionRequest close_language_session = 32;

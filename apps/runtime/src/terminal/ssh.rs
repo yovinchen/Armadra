@@ -206,6 +206,21 @@ pub fn validate_host(host: &SshHost) -> Result<(), String> {
 /// would translate them. `BatchMode` keeps a password prompt from swallowing
 /// the stream — an unreachable host has to fail, not hang.
 pub fn worker_argv(host: &SshHost, worker: &SshWorker) -> Vec<String> {
+    argv_for(host, worker, false)
+}
+
+/// The same launch line with `--language-link`, for the second connection an
+/// execution host gets while an editor has a language session on it (language
+/// service design §2.7).
+///
+/// Everything about it — the options, the destination, the remote binary, the
+/// state directory — is the first connection's line. Only the one flag differs,
+/// so a host that can run a Worker at all can run this without further setup.
+pub fn language_link_argv(host: &SshHost, worker: &SshWorker) -> Vec<String> {
+    argv_for(host, worker, true)
+}
+
+fn argv_for(host: &SshHost, worker: &SshWorker, language_link: bool) -> Vec<String> {
     let mut argv = vec![
         "ssh".to_owned(),
         "-o".to_owned(),
@@ -228,6 +243,9 @@ pub fn worker_argv(host: &SshHost, worker: &SshWorker) -> Vec<String> {
     argv.push(worker.path.clone());
     argv.push("worker".to_owned());
     argv.push("--stdio".to_owned());
+    if language_link {
+        argv.push("--language-link".to_owned());
+    }
     if let Some(directory) = worker.state_dir.as_deref() {
         argv.push("--state-dir".to_owned());
         argv.push(directory.to_owned());
