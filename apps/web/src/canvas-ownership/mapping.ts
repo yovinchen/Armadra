@@ -37,7 +37,11 @@ import {
 
 /** 白板快照的协议版本；只有它变了才需要迁移已存的快照。 */
 export const WHITEBOARD_SCHEMA_VERSION = 1;
-export const WHITEBOARD_ENGINE = "tldraw";
+/**
+ * 白板引擎的标签。三端都不比较它（Host 与 Runtime 的常量另有一份，见
+ * React Flow 计划 §3.5 的核实表），所以换引擎时只改这一处。
+ */
+export const WHITEBOARD_ENGINE = "armadra-flow";
 
 export interface CanvasDocumentParts {
   canvas: Canvas;

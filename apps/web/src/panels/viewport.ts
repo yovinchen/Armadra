@@ -6,7 +6,7 @@
  */
 import type { Position, Viewport } from "@armadra/shared";
 
-import { screenToPage } from "../canvas/editor-context";
+import { screenToPage } from "../canvas/flow/flow-context";
 import { useCanvasStore } from "../store/canvas-store";
 
 export function viewportCenter(
@@ -23,7 +23,7 @@ export function viewportCenter(
 /**
  * 当前视口中心的画布坐标。
  *
- * 画布挂着就问 tldraw（§9.1 的 `screenToPage`，它自己知道容器的位置与
+ * 画布挂着就问画布（`flow/flow-context.screenToPage`，它知道容器的位置与
  * 相机）；没挂时退回画布存的视口，再没有就是原点。
  */
 export function currentViewportCenter(): Position {

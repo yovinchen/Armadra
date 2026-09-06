@@ -13,7 +13,7 @@ import { useCommandDispatch } from "../app/commands";
 import { useEnabledAgents } from "../app/use-agents";
 import { useT } from "../app/preferences-store";
 import { sshMenuItems } from "../canvas/menus/add-menu";
-import { requestCenterOnNode } from "../canvas/editor-context";
+import { requestCenterOnNode } from "../canvas/flow/flow-context";
 import { useSshHosts } from "./settings/ssh-hosts";
 import {
   CommandDialog,

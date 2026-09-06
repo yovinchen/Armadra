@@ -16,7 +16,7 @@ import { sessionGateway } from "../session";
 import {
   CENTER_NODE_EVENT,
   requestCenterOnNode,
-} from "../canvas/editor-context";
+} from "../canvas/flow/flow-context";
 import { formatDuration } from "../lib/format";
 import { useT } from "../app/preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
@@ -36,7 +36,7 @@ import { IconButton } from "../ui/icon-button";
 import { Input } from "../ui/input";
 
 /**
- * 居中事件的定义搬到了 `canvas/editor-context.ts`（§9.1），这里只转出去，
+ * 居中事件的定义搬到了 `canvas/flow/flow-context.ts`，这里只转出去，
  * 免得侧栏与画布各存一份事件名。画布还没挂载时事件没人接，也不会报错。
  */
 export { CENTER_NODE_EVENT };

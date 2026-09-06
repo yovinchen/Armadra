@@ -34,12 +34,12 @@ export const commands: MessageModule = {
     "cmd.canvas.focusDown": "选中下方节点",
     "cmd.canvas.delete": "删除所选",
 
-    /* tldraw 偏好（2026-09-05） */
+    /* 画布偏好（2026-09-05） */
     "cmd.canvas.toggleToolLock": "工具锁定",
     "cmd.canvas.toggleGrid": "显示网格",
     "cmd.canvas.toggleFocus": "专注模式",
 
-    /* 白板工具（tldraw 计划 §5） */
+    /* 白板工具（旧画布契约 §5） */
     "cmd.canvas.tool.select": "选择工具",
     "cmd.canvas.tool.hand": "手形工具",
     "cmd.canvas.tool.draw": "画笔工具",

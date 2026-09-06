@@ -99,7 +99,7 @@ export const agentsApi = {
     ),
 
   /**
-   * 白板导出（tldraw 计划 §6.3）。导出的可以是任意 tldraw 图形——墨迹、几何
+   * 白板导出（旧画布契约 §6.3）。导出的可以是任意 白板对象——墨迹、几何
    * 图形、整个 frame——它们只在浏览器的 store 里存在，所以由前端栅格化后上传，
    * Runtime 落盘到 `.armadra/exports/<uuid>.png`。`uuid` 不必对应任何节点。
    * 返回的 `relativePath` 就是 `ContextLink.content.pngPath` 要填的值。
@@ -115,7 +115,7 @@ export const agentsApi = {
     ),
 
   /**
-   * 白板资产上传（tldraw 计划 §6.2），`TLAssetStore.upload` 的后端。
+   * 白板资产上传（旧画布契约 §6.2），白板图片上传的后端。
    *
    * 两种来源两种发法：`Blob` / `File` 直接以自身 MIME 原样 POST，已解码的
    * data URL 以 `{ dataUrl }` JSON POST。文件名是内容哈希，同一张图重复上传
@@ -144,7 +144,7 @@ export const agentsApi = {
         ),
 
   /**
-   * 按路径导入资产（tldraw 计划 §8 Phase 3）。
+   * 按路径导入资产（旧画布契约 §8 Phase 3）。
    *
    * 桌面版的 OS 拖放只给得到真实路径（webview 收不到 `DataTransfer`，壳里也没
    * 装 fs 插件），所以由 Runtime 去读盘，落进和 `uploadAsset` 同一个内容寻址

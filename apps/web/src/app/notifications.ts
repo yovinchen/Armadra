@@ -23,7 +23,7 @@ import {
   isFreshDone,
   useAgentStatusStore,
 } from "../agent/status-store";
-import { requestCenterOnNode } from "../canvas/editor-context";
+import { requestCenterOnNode } from "../canvas/flow/flow-context";
 import { notify } from "../platform";
 import { useCanvasStore } from "../store/canvas-store";
 import { t, usePreferencesStore } from "./preferences-store";

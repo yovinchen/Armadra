@@ -10,7 +10,7 @@
  * 居中请求。居中是幂等的，多发几次的代价只是多算几次包围盒；反过来，
  * 只发一次的代价是用户点了一行却什么都没发生。
  */
-import { requestCenterOnNode } from "../canvas/editor-context";
+import { requestCenterOnNode } from "../canvas/flow/flow-context";
 import { useCanvasStore } from "../store/canvas-store";
 
 /** 文档到位之后重发居中的时间表（毫秒）。 */

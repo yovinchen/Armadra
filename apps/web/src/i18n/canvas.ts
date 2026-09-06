@@ -34,7 +34,7 @@ const zh = {
   "add.group.content": "内容",
   "add.group.canvas": "画布操作",
 
-  /* 白板工具（tldraw 计划 §5 的 Dock 工具组） */
+  /* 白板工具（React Flow 计划 F21 的 Dock 工具组） */
   "tool.select": "选择",
   "tool.hand": "手形",
   "tool.draw": "画笔",
@@ -110,16 +110,16 @@ const zh = {
   "edge.selfLink": "不能连到自己",
   "edge.duplicate": "这两个节点已经连过了",
 
-  /* 白板快照超过上限时的保存失败提示（tldraw 计划 §6.1） */
+  /* 白板超过上限时的保存失败提示（React Flow 计划 F34） */
   "canvas.whiteboardTooLarge": "白板内容超出上限，未保存",
 
-  /* 资产上传（tldraw 计划 §6.2，Phase 3 content） */
+  /* 资产上传（React Flow 计划 F26） */
   "canvas.assetTooLarge": "图片超过 {limit} MB，没有添加",
   "canvas.assetFailed": "{name} 上传失败",
 
   /* 画布偏好菜单（右上工具簇的滑块钮，2026-09-05 用户反馈）。
-     这一组对齐 tldraw 原生「偏好」子菜单，值全部存在 `preferences-store`
-     的 `whiteboard` 段里，与设置 → 白板是同一份。 */
+     值全部存在 `preferences-store` 的 `whiteboard` 段里，
+     与设置 → 白板是同一份。 */
   "wb.menu": "画布偏好",
   "wb.snap": "始终吸附",
   "wb.toolLock": "工具锁定",
@@ -275,8 +275,3 @@ const en: Record<keyof typeof zh, string> = {
 };
 
 export const canvas: MessageModule = { "zh-CN": zh, en };
-
-/** 补齐当前 tldraw 中文词典缺失的键。 */
-export const canvasEditorTranslations = {
-  "zh-cn": { "comments.link-copied": "链接已复制" },
-};

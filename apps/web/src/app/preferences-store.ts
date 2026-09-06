@@ -114,7 +114,7 @@ const AUTO_TITLE_KEY = "armadra.autoTitle";
 /** 节点颜色的表达方式（§24.3-3）：色点 + 1px 顶描边，或旧的 3px 色条。 */
 const NODE_COLOR_STYLE_KEY = "armadra.nodeColorStyle";
 /** 终端外观（§18.3 最后一行「设置项」）。全部只存本地，Runtime 不关心。 */
-/** 白板（tldraw 原生配置）。全部只存本地，Runtime 不关心。 */
+/** 白板配置。全部只存本地，Runtime 不关心。 */
 /** 设置页上次停在的分区（§24.1）；⌘, 直接回到那一页。 */
 const LAST_SETTINGS_SECTION_KEY = "armadra.settingsSection";
 /** 上次打开的工作空间 / 画布；启动时用来跳过启动页。 */
@@ -249,7 +249,7 @@ export interface PreferencesState {
    */
   settingsSubpage: string | null;
   terminal: TerminalPreferences;
-  /** 白板（tldraw 原生配置）；`use-tldraw-preferences.ts` 负责推给 editor。 */
+  /** 白板配置；`use-canvas-preferences.ts` 与 `flow-options.ts` 负责消费。 */
   whiteboard: WhiteboardPreferences;
   setTheme: (theme: ThemePreference) => void;
   setLocale: (locale: Locale) => void;
@@ -532,7 +532,7 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
     set((state) => ({ terminal: { ...state.terminal, [key]: value } }));
   },
   setWhiteboardPreference(key, value) {
-    // 值没变就整块不动：反向同步（tldraw → store）每帧都可能调进来，
+    // 值没变就整块不动：偏好菜单与设置页可能连着写同一个值，
     // 换一个新的 `whiteboard` 对象会让所有订阅者白重渲染一遍。
     if (get().whiteboard[key] === value) return;
     writeStored(WHITEBOARD_KEYS[key], String(value));

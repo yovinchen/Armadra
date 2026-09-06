@@ -29,7 +29,7 @@ import {
 import { Switch } from "@/ui/switch";
 
 /**
- * tldraw 13 色在浅色主题下的 `solid` 值（`DEFAULT_THEME.colors[*].solid`）。
+ * 白板 13 色在浅色底上的十六进制值（B2 抽到 `whiteboard/palette.ts`）。
  *
  * 色点只是设置页里的预览，不参与画布渲染，所以固定用浅色主题那一套：
  * 深色主题的同名色是同一个语义，换一套只会让色点和用户记住的颜色对不上。
@@ -52,7 +52,7 @@ const SWATCHES: Record<WhiteboardColor, string> = {
 };
 
 /**
- * 设置 → 白板（2026-09-04 用户反馈：把 tldraw 原生配置引入我们的设置；
+ * 设置 → 白板（2026-09-04 用户反馈：把 白板配置要能在系统里自主配置；
  * 2026-09-05：偏好里所有的设置都要能在系统里自主配置）。
  *
  * 四张卡：外观（背景、网格）、行为（吸附、工具锁定、选择换行、动态尺寸、
@@ -285,10 +285,10 @@ export function WhiteboardPage() {
 }
 
 /**
- * tldraw 13 色的色板。
+ * 白板 13 色的色板。
  *
  * 没有复用 `ui/color-picker` 的 `ColorSwatches`：那一个的色值白名单是节点
- * 调色板的 7 色（`NODE_COLORS`），是画布控制 API 的契约，掺进 tldraw 的
+ * 调色板的 7 色（`NODE_COLORS`），是画布控制 API 的契约，掺进白板的
  * 颜色名会把两套色板搅在一起。这里只复用 `ColorDot` 与 `Button`。
  */
 function WhiteboardSwatches({

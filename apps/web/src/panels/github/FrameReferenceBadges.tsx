@@ -3,7 +3,7 @@ import { nodeBox } from "@/canvas/geometry";
 import { GithubReferenceBadge } from "./GithubReferenceBadge";
 
 /**
- * GitHub 关联徽标在分组（tldraw 原生 frame）上的位置。
+ * GitHub 关联徽标在分组（`group` 节点）上的位置。
  *
  * frame 没有节点体，也就没有 `headerChips` 槽，所以徽标挂在派生层上，
  * 贴着 frame 左上角的标签行。这一层的坐标就是页面坐标（相机已经变换过），

@@ -54,7 +54,7 @@ export const boardsApi = {
             nodes: document.nodes,
             edges: document.edges,
             viewport: document.board.viewport,
-            // 白板快照（tldraw 计划 §6.1）：同一次 PUT 带走，Runtime 原样存。
+            // 白板快照（旧画布契约 §6.1）：同一次 PUT 带走，Runtime 原样存。
             whiteboard: document.board.whiteboard,
           }),
         ),

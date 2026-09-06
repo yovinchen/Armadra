@@ -11,7 +11,7 @@ import { RUNTIME_URL } from "../api/client";
 import { t } from "../app/preferences-store";
 import { isTauri } from "../platform";
 import { useCanvasStore } from "../store/canvas-store";
-import { getEditor } from "../canvas/editor-context";
+import { getFlow } from "../canvas/flow/flow-context";
 import {
   createWorkspaceFileDrag,
   fileDragMessage,
@@ -80,7 +80,7 @@ export function useWorkspaceFileDrag(
       const origin = { x: event.clientX, y: event.clientY };
       const pointerId = event.pointerId;
       const source = event.currentTarget;
-      const editor = getEditor();
+      const flow = getFlow();
       let active = false;
       let ghost: HTMLDivElement | null = null;
       const dispose = () => {
@@ -124,7 +124,7 @@ export function useWorkspaceFileDrag(
         if (
           useCanvasStore.getState().document?.board?.id !==
             (boardId ?? undefined) ||
-          getEditor() !== editor
+          getFlow() !== flow
         ) {
           cancel();
           return;
@@ -154,7 +154,7 @@ export function useWorkspaceFileDrag(
         if (
           useCanvasStore.getState().document?.board?.id !==
             (boardId ?? undefined) ||
-          getEditor() !== editor
+          getFlow() !== flow
         ) {
           cancel();
           return;

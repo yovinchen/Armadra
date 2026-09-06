@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import type { Position } from "@armadra/shared";
 import { buildAddMenu, type AddMenuItem } from "../canvas/menus/add-menu";
 import { runCanvasCommand } from "../canvas/commands";
-import { screenToPage } from "../canvas/editor-context";
+import { screenToPage } from "../canvas/flow/flow-context";
 import { COMMAND_BY_ID, type CommandId } from "../keybindings";
 import { usePreferencesStore, useT } from "./preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
@@ -35,7 +35,7 @@ export function useCommandDispatch(): CommandDispatch {
   const t = useT();
   const addMenuItems = useMemo(() => buildAddMenu(agents, t), [agents, t]);
 
-  // 画布外的模块只经 `editor-context` 拿 editor（§9.1）；画布没挂载时
+  // 画布外的模块只经 `flow/flow-context` 拿画布实例；画布没挂载时
   // `screenToPage` 原样返回屏幕坐标，节点仍然落在一个合理的位置。
   const centerPosition = useCallback(
     () =>
@@ -101,9 +101,9 @@ export function useCommandDispatch(): CommandDispatch {
           state.setFocusNode(next);
           return;
         }
-        // tldraw 偏好的三条快捷键（§偏好菜单）。写的是 `preferences-store`，
-        // 不是 editor：`use-tldraw-preferences` 会把新值推下去，而反向通道
-        // 保证 tldraw 自己改了也能回到同一个值。
+        // 画布偏好的三条快捷键（§偏好菜单）。写的是 `preferences-store`，
+        // 那里是唯一真相：`use-canvas-preferences` 与 `flow-options` 单向
+        // 读它，所以菜单、设置页、画布三处永远是同一个值。
         case "canvas.toggleToolLock":
         case "canvas.toggleGrid":
         case "canvas.toggleFocus": {

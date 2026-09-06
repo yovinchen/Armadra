@@ -1,13 +1,9 @@
-import { useValue, type Editor } from "tldraw";
+import { useViewport } from "@xyflow/react";
 import { Gauge, LayoutGrid, Plus, Redo2, Undo2 } from "lucide-react";
 import { AddMenuContent } from "../canvas/menus/AddMenuContent";
-import { visiblePageBounds } from "../canvas/tidy-editor";
 import { DockTools } from "./DockTools";
-import {
-  getEditor,
-  screenToPage,
-  useEditorHandle,
-} from "../canvas/editor-context";
+import { screenToPage } from "../canvas/flow/flow-context";
+import { fitView, zoomToLevel } from "../canvas/flow/use-flow-viewport";
 import { canEditCanvas, useCanvasOwnership } from "../canvas-ownership";
 import { useCanUndo, useCanRedo, useCanvasStore } from "../store/canvas-store";
 import { useEnabledAgents } from "../app/use-agents";
@@ -28,55 +24,15 @@ import { cn } from "@/lib/cn";
 /** 缩放预设（§20）：50 / 100 / 150 + 适应。以视口中心为锚点。 */
 const ZOOM_STEPS = [0.5, 1, 1.5] as const;
 
-const ZOOM_DURATION = 120;
-const FIT_DURATION = 160;
-
-/**
- * 缩放到某一档，锚点是视口中心。
- *
- * tldraw 只有 `zoomIn` / `zoomOut`（沿 `zoomSteps` 走一格）和 `resetZoom`，
- * 没有「缩放到任意倍率」，所以这里照抄 `Editor.zoomIn` 的相机换算：
- * 屏幕点 `p` 下的页面坐标在缩放前后不变 ⇒ `c' = c + p/z' - p/z`。
- */
-function zoomToLevel(editor: Editor, zoom: number): void {
-  const point = editor.getViewportScreenCenter();
-  const { x, y, z } = editor.getCamera();
-  editor.setCamera(
-    {
-      x: x + point.x / zoom - point.x / z,
-      y: y + point.y / zoom - point.y / z,
-      z: zoom,
-    },
-    { animation: { duration: ZOOM_DURATION } },
-  );
-}
-
-/** 适应视图，只缩小不放大（§20：最多到 100%）。 */
-function zoomToFit(editor: Editor): void {
-  const bounds = visiblePageBounds(editor);
-  if (!bounds) return;
-  editor.zoomToBounds(
-    { x: bounds.x, y: bounds.y, w: bounds.width, h: bounds.height },
-    {
-      targetZoom: 1,
-      animation: { duration: FIT_DURATION },
-    },
-  );
-}
-
-/** 当前缩放百分比；画布没挂载时是 100%。 */
-function useZoomLevel(editor: Editor | null): number {
-  return useValue("canvas zoom", () => editor?.getZoomLevel() ?? 1, [editor]);
-}
-
 /**
  * 底部 Dock（§3.1）：`+` / 撤销 / 重做 / 保存点 / 缩放。
  * 保存状态只用一个点表示，不写文字（§14 第 4 条）。
  */
 export function Dock() {
   const t = useT();
-  const editor = useEditorHandle();
-  const zoom = useZoomLevel(editor);
+  // `useViewport` 要在 `<ReactFlowProvider>` 之下：Dock 挂在 `App` 里，
+  // provider 包着整棵树（§2.9），所以这里读得到。
+  const { zoom } = useViewport();
   const workspace = useCanvasStore((state) => state.workspace);
   const addNode = useCanvasStore((state) => state.addNode);
   const undo = useCanvasStore((state) => state.undo);
@@ -205,21 +161,13 @@ export function Dock() {
             <DropdownMenuItem
               key={step}
               data-checked={Math.abs(zoom - step) < 0.005 ? "true" : undefined}
-              onSelect={() => {
-                const target = getEditor();
-                if (target) zoomToLevel(target, step);
-              }}
+              onSelect={() => zoomToLevel(step)}
             >
               {Math.round(step * 100)}%
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onSelect={() => {
-              const target = getEditor();
-              if (target) zoomToFit(target);
-            }}
-          >
+          <DropdownMenuItem onSelect={fitView}>
             {t("dock.zoomFit")}
           </DropdownMenuItem>
         </DropdownMenuContent>

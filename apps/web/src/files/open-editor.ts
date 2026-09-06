@@ -5,7 +5,7 @@
  * 设计 §1），只把它选中并居中；没有才新建一个。带行号时顺手请求滚动，
  * 新建的节点挂载后自己去取（见 `nodes/editor-reveal`）。
  */
-import { requestCenterOnNode } from "@/canvas/editor-context";
+import { requestCenterOnNode } from "@/canvas/flow/flow-context";
 import { revealInEditor } from "@/nodes/editor-reveal";
 import { currentViewportCenter } from "@/panels/viewport";
 import { useCanvasStore } from "@/store/canvas-store";

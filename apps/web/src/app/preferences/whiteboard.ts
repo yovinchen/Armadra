@@ -20,11 +20,11 @@ const WB_COLOR_KEY = "armadra.whiteboard.defaultColor";
 const WB_SIZE_KEY = "armadra.whiteboard.defaultSize";
 
 /**
- * 白板背景（用户反馈 2026-09-04：把 tldraw 原生配置引进设置）。
+ * 白板背景（用户反馈 2026-09-04：白板配置要能在系统里自主配置）。
  *
  * `theme` = 跟随应用主题（`tokens.css` 里的 `--canvas-bg`）；其余四档是固定
  * 底色，深浅色下都用同一个值——「纯黑」在浅色主题下也该是纯黑。
- * 色值与点阵色的换算在 `use-tldraw-preferences.ts`（纯函数，有单测）。
+ * 色值与点阵色的换算在 `use-canvas-preferences.ts`（纯函数，有单测）。
  */
 export const WHITEBOARD_BACKGROUNDS = [
   "theme",
@@ -35,7 +35,7 @@ export const WHITEBOARD_BACKGROUNDS = [
 ] as const;
 export type WhiteboardBackground = (typeof WHITEBOARD_BACKGROUNDS)[number];
 
-/** 点阵间距（px）。tldraw 的 `gridSize` 是这个值的 1/4，见 §「网格换算」。 */
+/** 点阵间距（px）。`<Background gap>` 直接吃这个值，不再有换算。 */
 export const WHITEBOARD_GRID_SIZES = [12, 24, 48] as const;
 export type WhiteboardGridSize = (typeof WHITEBOARD_GRID_SIZES)[number];
 
@@ -43,7 +43,7 @@ export type WhiteboardGridSize = (typeof WHITEBOARD_GRID_SIZES)[number];
 export const WHITEBOARD_STYLES = ["sketch", "clean"] as const;
 export type WhiteboardStyle = (typeof WHITEBOARD_STYLES)[number];
 
-/** tldraw 的 13 个颜色名（`TLDefaultColorStyle`），顺序即色板顺序。 */
+/** 白板的 13 个颜色名，顺序即色板顺序；十六进制表在 `whiteboard/palette.ts`。 */
 export const WHITEBOARD_COLORS = [
   "black",
   "grey",
@@ -61,15 +61,15 @@ export const WHITEBOARD_COLORS = [
 ] as const;
 export type WhiteboardColor = (typeof WHITEBOARD_COLORS)[number];
 
-/** tldraw 的 `TLDefaultSizeStyle`。 */
+/** 线宽档位：s/m/l/xl → 2 / 3.5 / 5 / 10。 */
 export const WHITEBOARD_SIZES = ["s", "m", "l", "xl"] as const;
 export type WhiteboardSize = (typeof WHITEBOARD_SIZES)[number];
 
 /**
- * 输入设备（tldraw 的 `inputMode`）。
+ * 输入设备。
  *
- * `auto` 就是 tldraw 的 `null`：由它自己按滚轮事件的形状判断鼠标还是触控板。
- * 三档与 tldraw 原生菜单一致，少一档就没法退回自动。
+ * `mouse` 时滚轮缩放、拖动平移；`trackpad` / `auto` 反过来（滚轮平移、
+ * ⌘滚轮与捏合缩放）。三档都要留着，少一档就没法退回自动。
  */
 export const WHITEBOARD_INPUT_MODES = ["auto", "mouse", "trackpad"] as const;
 export type WhiteboardInputMode = (typeof WHITEBOARD_INPUT_MODES)[number];
@@ -77,9 +77,9 @@ export type WhiteboardInputMode = (typeof WHITEBOARD_INPUT_MODES)[number];
 /**
  * 白板偏好。
  *
- * 和终端外观一样整块存：`use-tldraw-preferences.ts` 挂载和变化时把它推给
- * tldraw（`updateUserPreferences` / `updateInstanceState` /
- * `updateDocumentSettings` / `setStyleForNextShapes`），这里是唯一真相。
+ * 和终端外观一样整块存：`use-canvas-preferences.ts` 写背景变量与工具默认
+ * 样式，`canvas/flow/flow-options.ts` 把其余各项算成 `<ReactFlow>` 的
+ * props，这里是唯一真相。
  */
 export interface WhiteboardPreferences {
   background: WhiteboardBackground;
@@ -96,13 +96,13 @@ export interface WhiteboardPreferences {
   toolLock: boolean;
   /** 框选时整体包住才算选中，映射 `isWrapMode`。 */
   wrap: boolean;
-  /** 专注模式：tldraw 自己的面板全部收起，映射 instance 的 `isFocusMode`。 */
+  /** 专注模式：缩略图、样式面板、锁按钮全部收起。 */
   focus: boolean;
   /** 拖到视口边缘时自动平移，映射 `edgeScrollSpeed` 1 / 0。 */
   edgeScroll: boolean;
   /** 粘贴到光标处而不是视口中心，映射 `isPasteAtCursorMode`。 */
   pasteAtCursor: boolean;
-  /** tldraw 的调试面板，映射 instance 的 `isDebugMode`。 */
+  /** 调试面板。React Flow 没有对应物，B4 连同这一项一起删。 */
   debug: boolean;
   /** 增强辅助模式，映射 `enhancedA11yMode`。 */
   enhancedA11y: boolean;

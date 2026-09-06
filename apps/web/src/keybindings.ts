@@ -288,9 +288,9 @@ export const COMMANDS = [
     allowWhileTyping: false,
   },
 
-  // ── canvas：tldraw 偏好（2026-09-05 用户反馈：偏好要能在系统里配） ──
+  // ── canvas：画布偏好（2026-09-05 用户反馈：偏好要能在系统里配） ──
   //
-  // 键位照抄 tldraw 原生偏好菜单（Q / ⌘\' / ⌘.），这样从 tldraw 过来的人
+  // 键位沿用 v3 / 旧引擎的那一组（Q / ⌘\' / ⌘.），换引擎不改肌肉记忆，
   // 按下去是同一件事。三条都写 `preferences-store` 的 `whiteboard` 段，
   // 偏好菜单与设置页读的是同一个值。
   {
@@ -318,9 +318,9 @@ export const COMMANDS = [
     allowWhileTyping: false,
   },
 
-  // ── canvas：白板工具（tldraw 计划 §5 的工具键表） ────────────────
+  // ── canvas：白板工具（React Flow 计划 F21 的工具键表） ───────────
   //
-  // 键位照抄 tldraw 默认（V / H / D / ⇧D / R / L / A / T / F），这样从
+  // 键位沿用 V / H / D / ⇧D / R / L / A / T / F，与其它白板一致，这样从
   // 别的白板过来的人不用重学；`allowInTerminal` 与 `allowWhileTyping`
   // 全是 false —— 单字母键在终端里就是普通输入，绝不能被应用截走。
   {

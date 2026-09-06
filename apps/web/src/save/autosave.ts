@@ -13,9 +13,7 @@ import {
   CanvasOwnershipMovedError,
   CanvasReadOnlyError,
 } from "../canvas-ownership";
-import { getEditor } from "../canvas/editor-context";
-import { markPushed } from "../canvas/sync/pushed";
-import { captureWhiteboard } from "../canvas/sync/use-store-sync";
+import { serializeWhiteboard } from "../canvas/whiteboard/serialize";
 import { useCanvasStore } from "../store/canvas-store";
 import {
   CanvasSaveQueue,
@@ -181,27 +179,24 @@ function target(): Target | null {
 }
 
 /**
- * 保存那一刻才把白板快照序列化出来（tldraw 计划 §6.1），并**就地写回
+ * 保存那一刻才把白板文档序列化出来（React Flow 计划 F34），并**就地写回
  * store**：保存队列的成功回调按文档对象身份判断「保存途中有没有又改过」，
  * 换一个新对象再交出去会被永远判成「改过了」，于是保存永不收敛。
  *
  * 不在每次改动时算：一次拖拽会产生几十条 store 事件，每条都全量
- * `JSON.stringify` 整个 store 太贵。画布没挂载时沿用文档里已有的那份。
- * 超过上限返回 false，调用方置 `saveError` 并放弃这一轮。
+ * `JSON.stringify` 整份白板太贵。超过上限返回 false，调用方置 `saveError`
+ * 并放弃这一轮。
  */
 function syncWhiteboard(): boolean {
   const state = useCanvasStore.getState();
   const document = state.document;
   if (!document) return true;
-  const whiteboard = captureWhiteboard(getEditor());
-  if (whiteboard === null) return true;
+  const whiteboard = serializeWhiteboard(state.whiteboard);
   if (whiteboard.length > MAX_WHITEBOARD_BYTES) return false;
   if (whiteboard === document.board.whiteboard) return true;
-  const next = { ...document, board: { ...document.board, whiteboard } };
-  // 只换了 board 上的一个字符串，节点与连线一个没动：登记一下，
-  // 免得 `use-store-sync` 把这当成外来文档再整块投影一遍。
-  markPushed(next);
-  useCanvasStore.setState({ document: next });
+  useCanvasStore.setState({
+    document: { ...document, board: { ...document.board, whiteboard } },
+  });
   return true;
 }
 

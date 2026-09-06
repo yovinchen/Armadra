@@ -19,7 +19,7 @@ import { Bot, LayoutGrid } from "lucide-react";
 import { basename } from "../agent/sessions";
 import { useT } from "../app/preferences-store";
 import { runtimeApi } from "../api/client";
-import { screenToPage } from "../canvas/editor-context";
+import { screenToPage } from "../canvas/flow/flow-context";
 import { formatRelativeTime } from "../lib/format";
 import {
   resumeLaunchCommand,

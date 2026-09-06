@@ -1,7 +1,5 @@
 import * as React from "react";
 import { Shapes } from "lucide-react";
-import { useValue } from "tldraw";
-import { GeoShapeGeoStyle } from "@tldraw/tlschema";
 
 import {
   DropdownMenu,
@@ -16,11 +14,18 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
 import { useT } from "@/app/preferences-store";
 import { useCanvasLocked } from "@/canvas/canvas-lock";
 import { runCanvasCommand } from "@/canvas/commands";
-import { getEditor, useEditorHandle } from "@/canvas/editor-context";
+import { useFlowHandle } from "@/canvas/flow/flow-context";
+import {
+  getNextStyle,
+  setNextStyle,
+  useNextStyle,
+  useTool,
+} from "@/canvas/interaction/tool-store";
 import {
   CANVAS_TOOLS,
   GEO_OPTIONS,
   IMAGE_TOOL,
+  TOOLS_ENABLED_IN_B0,
   geoIcon,
   isToolDisabledWhenLocked,
   type CanvasToolSpec,
@@ -28,25 +33,29 @@ import {
 import { commandKeysLabel, type CommandId } from "@/keybindings";
 
 /**
- * Dock 的白板工具组（tldraw 计划 §5）。
+ * Dock 的白板工具组（React Flow 计划 F21）。
  *
- * 高亮跟着 `editor.getCurrentToolId()` 走，点击只发画布命令——真正的
- * `editor.setCurrentTool` 在 `TldrawWorkspace` 里注册，所以快捷键、命令
- * 面板、这一排按钮走的是同一条路径。
+ * 高亮跟着 `interaction/tool-store` 走，点击只发画布命令——真正的
+ * `setTool` 在 `FlowWorkspace` 里注册，所以快捷键、命令面板、这一排按钮
+ * 走的是同一条路径。
  *
- * 画布没挂载（启动页）时整组不渲染：没有 editor 就没有工具可切。
+ * 画布没挂载（启动页）时整组不渲染：没有画布就没有工具可切。
+ *
+ * **B2 之前只开放选择与手**：白板层还没落地，画笔 / 形状 / 直线 / 箭头 /
+ * 文字 / 画框 / 图片点了不会有任何反应，所以先按 `TOOLS_ENABLED_IN_B0`
+ * 置灰。B2 把那张表连同这里的判断一起删掉。
  */
 export function DockTools() {
   const t = useT();
-  const editor = useEditorHandle();
+  const flow = useFlowHandle();
   const locked = useCanvasLocked();
-  const currentTool = useValue(
-    "canvas tool",
-    () => editor?.getCurrentToolId() ?? "select",
-    [editor],
-  );
+  const currentTool = useTool();
 
-  if (!editor) return null;
+  if (!flow) return null;
+
+  const disabled = (id: string) =>
+    (locked && isToolDisabledWhenLocked(id)) ||
+    !TOOLS_ENABLED_IN_B0.has(id as CanvasToolSpec["id"]);
 
   const buttons = (
     <>
@@ -56,18 +65,18 @@ export function DockTools() {
             key={tool.id}
             tool={tool}
             active={currentTool === "geo"}
-            disabled={locked}
+            disabled={disabled(tool.id)}
           />
         ) : (
           <ToolButton
             key={tool.id}
             tool={tool}
             active={currentTool === tool.id}
-            disabled={locked && isToolDisabledWhenLocked(tool.id)}
+            disabled={disabled(tool.id)}
           />
         ),
       )}
-      <ImageToolButton disabled={locked} />
+      <ImageToolButton disabled />
     </>
   );
 
@@ -137,17 +146,12 @@ function ToolButton({ tool, active, disabled }: ToolButtonProps) {
 }
 
 /**
- * 形状按钮：点开就切到形状工具，菜单里挑的是 tldraw 的 `geo` 样式，
- * 所以按钮图标、样式面板里的形状选择器、下一个画出来的 shape 永远一致。
+ * 形状按钮：点开就切到形状工具，菜单里挑的是「下一个对象」的几何形，
+ * 所以按钮图标、样式面板里的形状选择器、下一个画出来的对象永远一致。
  */
 function GeoToolButton({ tool, active, disabled }: ToolButtonProps) {
   const t = useT();
-  const editor = useEditorHandle();
-  const geo = useValue(
-    "canvas geo",
-    () => editor?.getStyleForNextShape(GeoShapeGeoStyle) ?? "rectangle",
-    [editor],
-  );
+  const geo = useNextStyle().geo;
   const Icon = geoIcon(geo);
 
   return (
@@ -185,10 +189,10 @@ function GeoToolButton({ tool, active, disabled }: ToolButtonProps) {
               key={option.geo}
               data-checked={geo === option.geo ? "true" : undefined}
               onSelect={() => {
-                const target = editor;
-                if (!target) return;
-                target.setStyleForNextShapes(GeoShapeGeoStyle, option.geo);
-                target.setCurrentTool("geo");
+                if (getNextStyle().geo !== option.geo) {
+                  setNextStyle({ geo: option.geo });
+                }
+                runCanvasCommand(tool.command);
               }}
             >
               <OptionIcon />
@@ -202,55 +206,25 @@ function GeoToolButton({ tool, active, disabled }: ToolButtonProps) {
 }
 
 /**
- * 图片：5.4 没有 image 工具，所以这里开一次文件选择，把文件交给
- * `putExternalContent`——落点、上传、建 image shape 全归 content agent
- * 注册的外部内容处理器，Dock 只负责把文件递过去。
+ * 图片：不是工具，所以这里开一次文件选择，把文件交给外部内容处理器
+ * （`dnd/external-content.pickFilesForCanvas`）。**B2 接上**：现在按下去
+ * 只会上传，还没有白板对象可以承载它。
  */
 function ImageToolButton({ disabled }: { disabled: boolean }) {
   const t = useT();
-  const input = React.useRef<HTMLInputElement>(null);
   const Icon = IMAGE_TOOL.icon;
-
   return (
-    <>
-      <Tooltip delayDuration={500}>
-        <TooltipTrigger asChild>
-          <IconButton
-            size="dock"
-            label={t(IMAGE_TOOL.labelKey)}
-            disabled={disabled}
-            onClick={() => input.current?.click()}
-          >
-            <Icon />
-          </IconButton>
-        </TooltipTrigger>
-        <TooltipContent>{t(IMAGE_TOOL.labelKey)}</TooltipContent>
-      </Tooltip>
-      <input
-        ref={input}
-        type="file"
-        accept="image/*"
-        multiple
-        hidden
-        onChange={(event) => {
-          const files = [...(event.target.files ?? [])];
-          event.target.value = "";
-          if (files.length === 0) return;
-          void insertFiles(files);
-        }}
-      />
-    </>
+    <Tooltip delayDuration={500}>
+      <TooltipTrigger asChild>
+        <IconButton
+          size="dock"
+          label={t(IMAGE_TOOL.labelKey)}
+          disabled={disabled}
+        >
+          <Icon />
+        </IconButton>
+      </TooltipTrigger>
+      <TooltipContent>{t(IMAGE_TOOL.labelKey)}</TooltipContent>
+    </Tooltip>
   );
-}
-
-/** 把文件塞进画布中心；`putExternalContent` 走的是与拖放、粘贴同一条路。 */
-async function insertFiles(files: File[]): Promise<void> {
-  const editor = getEditor();
-  if (!editor) return;
-  const center = editor.getViewportPageBounds().center;
-  await editor.putExternalContent({
-    type: "files",
-    files,
-    point: { x: center.x, y: center.y },
-  });
 }
