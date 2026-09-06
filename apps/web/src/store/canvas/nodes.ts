@@ -1,4 +1,3 @@
-import { type TLShapeId } from "tldraw";
 import { type CanvasNode } from "@armadra/shared";
 import {
   defaultNodeColor,
@@ -12,17 +11,8 @@ import {
   frameBindingOf,
   inheritedNodeData,
 } from "../../canvas/frame-binding";
-import { toShapeId } from "../../canvas/shapes/armadra-shape";
 import { normaliseLabels } from "../../meta/model";
-import {
-  absolutePosition,
-  commit,
-  createNodeShapes,
-  now,
-  shapeOf,
-  updateNodeShape,
-  withEditor,
-} from "./internal";
+import { absolutePosition, commit, now } from "./internal";
 import { type CanvasGet, type CanvasSet, type CanvasStore } from "./types";
 
 export function createNodesSlice(
@@ -95,106 +85,83 @@ export function createNodesSlice(
       if (!patch) return "";
       const select = options.select ?? true;
       set({ ...patch, ...(select ? { selectedNodeIds: [id] } : {}) });
-      withEditor((editor) => {
-        createNodeShapes(editor, [node]);
-        if (select) editor.select(toShapeId(id));
-      });
       return id;
     },
 
     updateNode: (id, patch) => {
-      let target: CanvasNode | undefined;
       set((state) => {
-        if (!state.document) return state;
-        let changed = false;
-        const nodes = state.document.nodes.map((node) => {
-          if (node.id !== id) return node;
-          changed = true;
-          target = node;
-          return { ...node, ...patch, updatedAt: now() } as CanvasNode;
+        const next = commit(state, (document) => {
+          let changed = false;
+          const nodes = document.nodes.map((node) => {
+            if (node.id !== id) return node;
+            changed = true;
+            return { ...node, ...patch, updatedAt: now() } as CanvasNode;
+          });
+          return changed ? { ...document, nodes } : null;
         });
-        if (!changed) return state;
-        return { document: { ...state.document, nodes }, saveState: "dirty" };
+        return next ?? state;
       });
-      if (target) {
-        withEditor((editor) => updateNodeShape(editor, target!, patch));
-      }
     },
 
     updateNodeData: (id, patch) => {
-      let target: CanvasNode | undefined;
       set((state) => {
-        if (!state.document) return state;
-        let changed = false;
-        const nodes = state.document.nodes.map((node) => {
-          if (node.id !== id) return node;
-          changed = true;
-          target = node;
-          return {
-            ...node,
-            data: { ...node.data, ...patch, kind: node.data.kind },
-            updatedAt: now(),
-          } as CanvasNode;
+        const next = commit(state, (document) => {
+          let changed = false;
+          const nodes = document.nodes.map((node) => {
+            if (node.id !== id) return node;
+            changed = true;
+            return {
+              ...node,
+              data: { ...node.data, ...patch, kind: node.data.kind },
+              updatedAt: now(),
+            } as CanvasNode;
+          });
+          return changed ? { ...document, nodes } : null;
         });
-        if (!changed) return state;
-        return { document: { ...state.document, nodes }, saveState: "dirty" };
+        return next ?? state;
       });
-      if (target) {
-        withEditor((editor) => updateNodeShape(editor, target!, {}, patch));
-      }
     },
 
     // 标签与批注不是画布的结构性改动，但要置 dirty，跟着画布文档一起保存。
     setNodeLabels: (id, labels) => {
       const next = normaliseLabels(labels);
-      let target: CanvasNode | undefined;
       set((state) => {
-        if (!state.document) return state;
-        let changed = false;
-        const nodes = state.document.nodes.map((node) => {
-          if (node.id !== id) return node;
-          const current = node.labels ?? [];
-          if (
-            current.length === next.length &&
-            current.every((label, index) => label === next[index])
-          ) {
-            return node;
-          }
-          changed = true;
-          target = node;
-          return { ...node, labels: next, updatedAt: now() } as CanvasNode;
+        const patch = commit(state, (document) => {
+          let changed = false;
+          const nodes = document.nodes.map((node) => {
+            if (node.id !== id) return node;
+            const current = node.labels ?? [];
+            if (
+              current.length === next.length &&
+              current.every((label, index) => label === next[index])
+            ) {
+              return node;
+            }
+            changed = true;
+            return { ...node, labels: next, updatedAt: now() } as CanvasNode;
+          });
+          return changed ? { ...document, nodes } : null;
         });
-        if (!changed) return state;
-        return { document: { ...state.document, nodes }, saveState: "dirty" };
+        return patch ?? state;
       });
-      if (target) {
-        withEditor((editor) =>
-          updateNodeShape(editor, target!, { labels: next }),
-        );
-      }
     },
 
     setNodeNote: (id, note) => {
-      let target: CanvasNode | undefined;
       set((state) => {
-        if (!state.document) return state;
-        let changed = false;
-        const nodes = state.document.nodes.map((node) => {
-          if (node.id !== id) return node;
-          if ((node.note ?? "") === note) return node;
-          changed = true;
-          target = node;
-          return { ...node, note, updatedAt: now() } as CanvasNode;
+        const patch = commit(state, (document) => {
+          let changed = false;
+          const nodes = document.nodes.map((node) => {
+            if (node.id !== id) return node;
+            if ((node.note ?? "") === note) return node;
+            changed = true;
+            return { ...node, note, updatedAt: now() } as CanvasNode;
+          });
+          return changed ? { ...document, nodes } : null;
         });
-        if (!changed) return state;
-        return { document: { ...state.document, nodes }, saveState: "dirty" };
+        return patch ?? state;
       });
-      if (target) {
-        withEditor((editor) => updateNodeShape(editor, target!, { note }));
-      }
     },
     setParent: (ids, parentId) => {
-      let moved: string[] = [];
       set((state) => {
         const targets = new Set(ids);
         targets.delete(parentId ?? "");
@@ -215,7 +182,6 @@ export function createNodesSlice(
             if ((node.parentId ?? null) === parentId) return node;
             const absolute = absolutePosition(document.nodes, node);
             changed = true;
-            moved.push(node.id);
             return {
               ...node,
               parentId: parentId ?? undefined,
@@ -230,23 +196,11 @@ export function createNodesSlice(
           });
           return changed ? { ...document, nodes } : null;
         });
-        if (!patch) moved = [];
         return patch ?? state;
-      });
-      if (moved.length === 0) return;
-      withEditor((editor) => {
-        const shapes = moved
-          .map((id) => shapeOf(editor, id)?.id)
-          .filter((id): id is TLShapeId => Boolean(id));
-        if (shapes.length === 0) return;
-        const parent = parentId ? shapeOf(editor, parentId)?.id : undefined;
-        // tldraw 自己会把坐标换算成新父级的相对坐标，所以只交 id。
-        editor.reparentShapes(shapes, parent ?? editor.getCurrentPageId());
       });
     },
 
     removeNodes: (ids) => {
-      let applied = false;
       set((state) => {
         const doomed = new Set(ids);
         if (doomed.size === 0) return state;
@@ -272,7 +226,6 @@ export function createNodesSlice(
           };
         });
         if (!patch) return state;
-        applied = true;
         const maximized = Object.fromEntries(
           Object.entries(state.maximized).filter(([id]) => !doomed.has(id)),
         );
@@ -287,27 +240,6 @@ export function createNodesSlice(
               ? null
               : state.focusNodeId,
         };
-      });
-      if (!applied) return;
-      withEditor((editor) => {
-        const doomed = ids
-          .map((id) => shapeOf(editor, id)?.id)
-          .filter((id): id is TLShapeId => Boolean(id));
-        if (doomed.length === 0) return;
-        // frame 一删连子级一起删，但「删组不删组员」是画布的既定语义，
-        // 所以先把孩子提到页面上（坐标由 tldraw 换算），再删 frame。
-        const orphans = editor
-          .getCurrentPageShapes()
-          .filter(
-            (shape) =>
-              doomed.includes(shape.parentId as TLShapeId) &&
-              !doomed.includes(shape.id),
-          )
-          .map((shape) => shape.id);
-        if (orphans.length > 0) {
-          editor.reparentShapes(orphans, editor.getCurrentPageId());
-        }
-        editor.deleteShapes(doomed);
       });
     },
 
@@ -344,10 +276,6 @@ export function createNodesSlice(
       }));
       if (!patch) return [];
       set({ ...patch, selectedNodeIds: copies.map((copy) => copy.id) });
-      withEditor((editor) => {
-        createNodeShapes(editor, copies);
-        editor.select(...copies.map((copy) => toShapeId(copy.id)));
-      });
       return copies.map((copy) => copy.id);
     },
   };

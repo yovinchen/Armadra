@@ -1,52 +1,65 @@
-import { getEditor } from "../../canvas/editor-context";
-import {
-  isDocumentShapeId,
-  toShapeId,
-} from "../../canvas/shapes/armadra-shape";
 import { type CanvasGet, type CanvasSet, type CanvasStore } from "./types";
+
+/**
+ * 选区（React Flow 计划 §2.8）。
+ *
+ * store 是唯一真相：投影时把 `selected` 写到 React Flow 的节点 / 边上
+ * （`sync/project.ts`），用户在画布上改选区时 `onSelectionChange` 调
+ * `setSelection` 一次写三项。旧引擎那条「编辑器 ⇄ store 双向」的
+ * 环路整个消失了。
+ */
+
+function same(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((id, index) => b[index] === id);
+}
 
 export function createSelectionSlice(
   set: CanvasSet,
-  get: CanvasGet,
-): Pick<CanvasStore, "selectNodes" | "setFocusNode"> {
+  _get: CanvasGet,
+): Pick<CanvasStore, "selectNodes" | "setSelection" | "setFocusNode"> {
   return {
-    selectNodes: (ids) => {
-      let next: string[] | null = null;
+    /**
+     * 只改节点那一半。边与白板对象原样留着——「一个终端 + 一条边 + 一个
+     * 矩形」的混合多选不该被侧栏点一行挤掉。
+     */
+    selectNodes: (ids) =>
       set((state) => {
         const known = new Set(
           state.document?.nodes.map((node) => node.id) ?? [],
         );
         const deduped = [...new Set(ids)].filter((id) => known.has(id));
-        const same =
-          deduped.length === state.selectedNodeIds.length &&
-          deduped.every((id, index) => state.selectedNodeIds[index] === id);
-        if (same) return state;
-        next = deduped;
+        if (same(deduped, state.selectedNodeIds)) return state;
         return { selectedNodeIds: deduped };
-      });
-      if (!next) return;
-      const editor = getEditor();
-      if (!editor) return;
-      /*
-       * 只投影「节点」那一半（Phase 2 待办 3）。选中项里的边与白板 shape
-       * 原样留着——`selectedNodeIds` 仍然只装节点，但画布上「一个终端 +
-       * 一条边 + 一个矩形」的混合多选不会被这一步挤掉。
-       */
-      const current = editor.getSelectedShapeIds();
-      // 边的 arrow 也有 uuid 形状的 id，所以「是不是节点」要连类型一起看。
-      const kept = editor
-        .getSelectedShapes()
-        .filter(
-          (shape) => shape.type === "arrow" || !isDocumentShapeId(shape.id),
-        )
-        .map((shape) => shape.id);
-      const wanted = [...(next as string[]).map(toShapeId), ...kept];
-      const same =
-        current.length === wanted.length &&
-        wanted.every((id) => current.includes(id));
-      if (same) return;
-      editor.run(() => editor.select(...wanted), { history: "ignore" });
-    },
+      }),
+
+    setSelection: (selection) =>
+      set((state) => {
+        const known = new Set(
+          state.document?.nodes.map((node) => node.id) ?? [],
+        );
+        const nodes = selection.nodes
+          ? [...new Set(selection.nodes)].filter((id) => known.has(id))
+          : state.selectedNodeIds;
+        const edges = selection.edges
+          ? [...new Set(selection.edges)]
+          : state.selectedEdgeIds;
+        const items = selection.items
+          ? [...new Set(selection.items)]
+          : state.selectedItemIds;
+        if (
+          same(nodes, state.selectedNodeIds) &&
+          same(edges, state.selectedEdgeIds) &&
+          same(items, state.selectedItemIds)
+        ) {
+          return state;
+        }
+        return {
+          selectedNodeIds: nodes,
+          selectedEdgeIds: edges,
+          selectedItemIds: items,
+        };
+      }),
+
     setFocusNode: (focusNodeId) => set({ focusNodeId }),
   };
 }

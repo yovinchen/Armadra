@@ -1,11 +1,12 @@
-import * as React from "react";
 import { usePreferencesStore } from "../../app/preferences-store";
+import { parseWhiteboard } from "../../canvas/whiteboard/serialize";
+import { resetHistory } from "./history";
 import { emptyBoardState, initialPanels } from "./internal";
 import { type CanvasGet, type CanvasSet, type CanvasStore } from "./types";
 
 export function createBoardSlice(
   set: CanvasSet,
-  get: CanvasGet,
+  _get: CanvasGet,
 ): Pick<
   CanvasStore,
   | "boardId"
@@ -17,6 +18,8 @@ export function createBoardSlice(
   | "saveError"
   | "saveState"
   | "selectBoard"
+  | "selectedEdgeIds"
+  | "selectedItemIds"
   | "selectedNodeIds"
   | "setBoards"
   | "setDocument"
@@ -24,6 +27,7 @@ export function createBoardSlice(
   | "setSaveError"
   | "setSaveState"
   | "setWorkspace"
+  | "whiteboard"
   | "workspace"
 > {
   return {
@@ -34,11 +38,11 @@ export function createBoardSlice(
     ...emptyBoardState,
 
     setWorkspace: (workspace) =>
-      set((state) =>
-        state.workspace?.id === workspace?.id
-          ? { workspace }
-          : { workspace, boards: [], boardId: null, ...emptyBoardState },
-      ),
+      set((state) => {
+        if (state.workspace?.id === workspace?.id) return { workspace };
+        resetHistory();
+        return { workspace, boards: [], boardId: null, ...emptyBoardState };
+      }),
 
     setBoards: (boards) =>
       set((state) => {
@@ -48,6 +52,7 @@ export function createBoardSlice(
         if (sorted.some((board) => board.id === state.boardId)) {
           return { boards: sorted };
         }
+        resetHistory();
         return {
           boards: sorted,
           boardId: sorted[0]?.id ?? null,
@@ -56,19 +61,29 @@ export function createBoardSlice(
       }),
 
     selectBoard: (boardId) =>
-      set((state) =>
-        state.boardId === boardId
-          ? { boardId }
-          : { boardId, ...emptyBoardState },
-      ),
+      set((state) => {
+        if (state.boardId === boardId) return { boardId };
+        resetHistory();
+        return { boardId, ...emptyBoardState };
+      }),
 
-    setDocument: (document) =>
+    /**
+     * 打开一块画布（也用于 WS 事件重载与保存 409 变基后的写回）。
+     *
+     * 白板在这里解析一次（§3.3）：只认 v2，认不出的一律按空白板处理，
+     * 下一次保存直接覆盖。远端灌入不进撤销栈，所以顺手清空历史——上一块
+     * 板的反向补丁在这一块上没有意义。
+     */
+    setDocument: (document) => {
+      resetHistory();
       set({
         ...emptyBoardState,
         document,
+        whiteboard: parseWhiteboard(document.board.whiteboard).doc,
         boardId: document.board.id,
         saveState: "saved",
-      }),
+      });
+    },
 
     setSaveState: (saveState) => set({ saveState }),
     setSaveError: (saveError) => set({ saveError }),
@@ -83,13 +98,5 @@ export function createBoardSlice(
       }
       set((state) => ({ panels: { ...state.panels, [key]: value } }));
     },
-
-    /**
-     * 选中态与 editor 双向同步。
-     *
-     * 只在「真的不一样」时才回写 editor：`use-store-sync` 会把 editor 的选中
-     * 变化推回这里，两边只要有一次内容相同但数组身份不同，就会互相触发到
-     * React 抛「Maximum update depth exceeded」（React Flow 时代踩过一次）。
-     */
   };
 }

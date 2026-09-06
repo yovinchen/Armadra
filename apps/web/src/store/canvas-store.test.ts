@@ -40,7 +40,10 @@ vi.mock("../nodes/registry", () => {
 });
 
 const { COLLAPSED_HEIGHT } = await import("./defaults");
-const { absolutePosition, useCanvasStore } = await import("./canvas-store");
+const { absolutePosition, resetHistory, useCanvasStore } = await import(
+  "./canvas-store"
+);
+const { emptyWhiteboard } = await import("../canvas/whiteboard/model");
 
 const timestamp = "2026-08-13T00:00:00.000Z";
 
@@ -117,12 +120,16 @@ const byId = (id: string) => nodes().find((node) => node.id === id);
 
 beforeEach(() => {
   counter = 0;
+  resetHistory();
   useCanvasStore.setState({
     workspace: null,
     boards: [],
     boardId: null,
     document: null,
+    whiteboard: emptyWhiteboard(),
     selectedNodeIds: [],
+    selectedEdgeIds: [],
+    selectedItemIds: [],
     focusNodeId: null,
     maximized: {},
     saveState: "idle",
@@ -191,39 +198,45 @@ describe("选择", () => {
   });
 
   /**
-   * Phase 2 待办 3：边与白板 shape 可以和节点一起多选。
-   * `selectedNodeIds` 仍然只装节点，但投影回 editor 时不能把别的挤掉。
+   * 边与白板对象可以和节点一起多选（§2.8）。`selectedNodeIds` 仍然只装
+   * 节点，`selectNodes` 不该把另外两格挤掉。
    */
-  it("投影回 editor 时保留选中的边与白板 shape", async () => {
-    const { setEditor } = await import("../canvas/editor-context");
+  it("`selectNodes` 只改节点那一格，边与白板对象原样留着", () => {
     const a = makeNode("sticky");
     load([a]);
     const edgeId = "9f1c2b34-5d6e-4f70-8a9b-0c1d2e3f4a5b";
-    const selected = [
-      { id: `shape:${a.id}`, type: "armadra" },
-      { id: `shape:${edgeId}`, type: "arrow" },
-      { id: "shape:doodle", type: "draw" },
-    ];
-    const select = vi.fn();
-    setEditor({
-      getSelectedShapeIds: () => selected.map((shape) => shape.id),
-      getSelectedShapes: () => selected,
-      select,
-      run: (fn: () => void) => fn(),
-    } as never);
-    try {
-      // editor → store 的那条回路只会报节点 id。
-      state().selectNodes([a.id]);
-      expect(state().selectedNodeIds).toEqual([a.id]);
-      // 三项都还在：节点被重新选中，箭头与手绘原样留着。
-      expect(select).not.toHaveBeenCalled();
+    state().setSelection({ edges: [edgeId], items: ["wb:doodle"] });
 
-      select.mockClear();
-      state().selectNodes([]);
-      expect(select).toHaveBeenCalledWith(`shape:${edgeId}`, "shape:doodle");
-    } finally {
-      setEditor(null);
-    }
+    state().selectNodes([a.id]);
+    expect(state().selectedNodeIds).toEqual([a.id]);
+    expect(state().selectedEdgeIds).toEqual([edgeId]);
+    expect(state().selectedItemIds).toEqual(["wb:doodle"]);
+
+    state().selectNodes([]);
+    expect(state().selectedNodeIds).toEqual([]);
+    expect(state().selectedEdgeIds).toEqual([edgeId]);
+  });
+
+  it("`setSelection` 一次写三项，节点仍然按文档过滤", () => {
+    const a = makeNode("sticky");
+    load([a]);
+    state().setSelection({
+      nodes: [a.id, "ghost"],
+      edges: ["e1"],
+      items: ["wb:1", "wb:1"],
+    });
+    expect(state().selectedNodeIds).toEqual([a.id]);
+    expect(state().selectedEdgeIds).toEqual(["e1"]);
+    expect(state().selectedItemIds).toEqual(["wb:1"]);
+  });
+
+  it("内容相同就返回同一份 state，不触发订阅者重渲", () => {
+    const a = makeNode("sticky");
+    load([a]);
+    state().selectNodes([a.id]);
+    const before = state().selectedNodeIds;
+    state().selectNodes([a.id]);
+    expect(state().selectedNodeIds).toBe(before);
   });
 });
 
@@ -675,41 +688,110 @@ describe("setViewport", () => {
   });
 });
 
+/**
+ * 撤销 / 重做（React Flow 计划 §2.7）。
+ *
+ * 换成 React Flow 之后撤销栈是自写的：一条记录只装这次改动碰过的实体，
+ * 撤销只回放 `before` 里出现的那些。四条语义逐条钉在这里。
+ */
 describe("撤销 / 重做", () => {
-  /**
-   * 撤销栈已经归 tldraw editor（tldraw 计划 §9.3），store 只是转调。
-   * 画布没挂载时（启动页、这里的单测）必须是**安全的空操作**——
-   * 以前它会把文档退回上一份快照，现在什么都不该发生。
-   */
-  it("画布没挂载时是安全的空操作", () => {
+  it("一次动作一条历史：新建 → 撤销 → 重做", () => {
     load([]);
-    state().addNode("sticky");
-    state().undo();
-    state().redo();
+    const id = state().addNode("sticky");
     expect(nodes()).toHaveLength(1);
+    state().undo();
+    expect(nodes()).toHaveLength(0);
+    state().redo();
+    expect(byId(id)).toBeDefined();
   });
 
-  it("转调 editor 的 undo / redo", async () => {
-    const { setEditor } = await import("../canvas/editor-context");
-    const undo = vi.fn();
-    const redo = vi.fn();
-    setEditor({ undo, redo } as never);
-    try {
-      state().undo();
-      state().redo();
-      expect(undo).toHaveBeenCalledOnce();
-      expect(redo).toHaveBeenCalledOnce();
-    } finally {
-      setEditor(null);
-    }
+  it("拖动一次一条：连着两次移动要按两下才回到原位", () => {
+    const a = makeNode("sticky", { position: { x: 0, y: 0 } });
+    load([a]);
+    state().moveNodes([{ id: a.id, position: { x: 100, y: 0 } }]);
+    state().moveNodes([{ id: a.id, position: { x: 200, y: 0 } }]);
+    state().undo();
+    expect(byId(a.id)?.position).toEqual({ x: 100, y: 0 });
+    state().undo();
+    expect(byId(a.id)?.position).toEqual({ x: 0, y: 0 });
   });
 
-  it("视口不进撤销栈", () => {
-    load([]);
-    state().addNode("sticky");
+  it("删除可以撤销，节点与它的连线一起回来", () => {
+    const a = makeNode("terminal");
+    const b = makeNode("sticky");
+    load([a, b], [edge(a.id, b.id)]);
+    state().removeNodes([b.id]);
+    expect(nodes()).toHaveLength(1);
+    expect(edges()).toHaveLength(0);
+    state().undo();
+    expect(nodes()).toHaveLength(2);
+    expect(edges()).toHaveLength(1);
+  });
+
+  it("远端灌入（`setDocument`）不进栈：⌘Z 撤不掉别人的画布", () => {
+    const a = makeNode("sticky");
+    load([a]);
+    expect(state().undo).toBeTypeOf("function");
+    // 刚 `setDocument` 过，栈是空的：撤销什么都不该发生。
+    const before = state().document;
+    state().undo();
+    expect(state().document).toBe(before);
+  });
+
+  it("撤销不删远端在这期间新增的节点", () => {
+    const a = makeNode("sticky");
+    load([a]);
+    state().moveNodes([{ id: a.id, position: { x: 60, y: 60 } }]);
+    // 另一个窗口 / Agent 建了一个节点：直接灌进文档，不走动作。
+    const remote = makeNode("terminal");
+    useCanvasStore.setState({
+      document: { ...state().document!, nodes: [...nodes(), remote] },
+    });
+    state().undo();
+    expect(byId(a.id)?.position).toEqual({ x: 0, y: 0 });
+    expect(byId(remote.id)).toBeDefined();
+  });
+
+  it("被远端删掉的实体撤销时复活为本地新建", () => {
+    const a = makeNode("sticky");
+    load([a]);
+    state().updateNode(a.id, { title: "改过" });
+    useCanvasStore.setState({
+      document: { ...state().document!, nodes: [] },
+    });
+    state().undo();
+    expect(byId(a.id)?.title).toBe("sticky");
+  });
+
+  it("合并会话：一段文字编辑只形成一条历史", async () => {
+    const { beginCoalesce, endCoalesce } = await import("./canvas-store");
+    const a = makeNode("sticky");
+    load([a]);
+    beginCoalesce("edit text");
+    state().updateNode(a.id, { title: "一" });
+    state().updateNode(a.id, { title: "一二" });
+    state().updateNode(a.id, { title: "一二三" });
+    endCoalesce();
+    state().undo();
+    expect(byId(a.id)?.title).toBe("sticky");
+  });
+
+  it("视口、最大化的 premaxRect 不进历史", () => {
+    const a = makeNode("sticky");
+    load([a]);
     state().setViewport({ x: 5, y: 5, zoom: 2 });
     state().undo();
     expect(state().document?.board.viewport).toEqual({ x: 5, y: 5, zoom: 2 });
+  });
+
+  it("换画布清栈：上一块板的补丁在这一块上没有意义", () => {
+    const a = makeNode("sticky");
+    load([a]);
+    state().removeNodes([a.id]);
+    load([makeNode("terminal")]);
+    const before = state().document;
+    state().undo();
+    expect(state().document).toBe(before);
   });
 });
 

@@ -21,6 +21,12 @@ export type {
 } from "./canvas/types";
 export { absolutePosition } from "./canvas/internal";
 export {
+  beginCoalesce,
+  endCoalesce,
+  resetHistory,
+  type CommitOptions,
+} from "./canvas/history";
+export {
   useCanRedo,
   useCanUndo,
   useCanvasNode,
@@ -29,18 +35,19 @@ export {
 } from "./canvas/selectors";
 
 /**
- * 画布状态 —— docs/contracts/tldraw-canvas-plan.md §3 / §9.3。
+ * 画布状态 —— docs/design/canvas-react-flow.md §2.1。
  *
- * v4 的两条规则：
+ * 两条规则：
  *
- *  1. **tldraw store 是内存真相。** 每个动作都写两处：先照旧改 `document`
- *     （45 个消费方要求「调完就能读到」，异步派生做不到），再把同一件事做到
- *     editor 上。随后 `sync/use-store-sync.ts` 从 editor 反向派生出文档；
- *     内容一致时它什么也不做，所以不会来回抖。
- *  2. **撤销栈归 editor。** `history` 字段已删除，`undo/redo` 转调
- *     `editor.undo()/redo()`；画布没挂载（启动页、单测）时是安全的空操作。
+ *  1. **这里是唯一的内存真相。** React Flow 是受控视图：`nodes` / `edges`
+ *     由 `document` 与 `whiteboard` 投影出来（`canvas/sync/project.ts`），
+ *     用户手势经回调翻译成这里的动作。旧引擎「编辑器是真相、文档
+ *     反向派生」的双轨整个删除了。
+ *  2. **撤销栈自己维护。** `store/canvas/history.ts` 记按实体的反向补丁；
+ *     远端灌入（`setDocument`、WS 事件、保存 409 变基）走
+ *     `history: "ignore"`，所以 ⌘Z 撤不掉别人建的节点。
  *
- * `setViewport` 仍然既不置 dirty 也不进历史，由 `save/autosave.ts` 单独节流。
+ * `setViewport` 既不置 dirty 也不进历史，由 `save/autosave.ts` 单独节流。
  */
 export const useCanvasStore = create<CanvasStore>((set, get) => ({
   ...createBoardSlice(set, get),

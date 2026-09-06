@@ -1,8 +1,5 @@
-import * as React from "react";
 import { type CanvasEdge } from "@armadra/shared";
-import { edgeIdOfShape } from "../../canvas/sync/derive";
-import { edgeToLink } from "../../canvas/sync/project";
-import { commit, now, withEditor } from "./internal";
+import { commit, now } from "./internal";
 import { type CanvasGet, type CanvasSet, type CanvasStore } from "./types";
 
 export function createEdgesSlice(
@@ -42,20 +39,10 @@ export function createEdgesSlice(
       }));
       if (!patch) return null;
       set(patch);
-      withEditor((editor) => {
-        const projection = edgeToLink(edge, nodes, editor.getCurrentPageId());
-        if (!projection) return;
-        editor.createShape(projection.shape);
-        for (const binding of projection.bindings)
-          editor.createBinding(binding);
-        // 线走在节点下面（与 `shapes/LinkArrow.ts` 的换形一致）。
-        editor.sendToBack([projection.shape.id]);
-      });
       return edge.id;
     },
 
     removeEdges: (ids) => {
-      let applied = false;
       set((state) => {
         const doomed = new Set(ids);
         if (doomed.size === 0) return state;
@@ -67,29 +54,8 @@ export function createEdgesSlice(
               }
             : null,
         );
-        applied = patch !== null;
         return patch ?? state;
       });
-      if (!applied) return;
-      withEditor((editor) => {
-        // 「什么算边」只有 `sync/derive.edgeIdOfShape` 一处定义。
-        const wanted = new Set(ids);
-        const doomed = editor
-          .getCurrentPageShapes()
-          .filter((shape) => {
-            const id = edgeIdOfShape(shape);
-            return id !== null && wanted.has(id);
-          })
-          .map((shape) => shape.id);
-        if (doomed.length > 0) editor.deleteShapes(doomed);
-      });
     },
-
-    /**
-     * 平移/缩放不是编辑：既不进历史也不置 dirty，由 save/autosave.ts 节流保存。
-     *
-     * React Flow 的 `{x,y,zoom}` 与 tldraw 的相机 `{x,y,z}` 差一个缩放因子：
-     * 前者是「屏幕像素的平移量」，后者是「页面坐标的平移量」。
-     */
   };
 }

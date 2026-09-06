@@ -10,6 +10,9 @@ import {
 } from "@armadra/shared";
 import type { StoreApi } from "zustand";
 
+import type { WhiteboardDoc } from "../../canvas/whiteboard/model";
+import type { CommitOptions } from "./history";
+
 export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
 export interface BoardBrief {
@@ -80,7 +83,16 @@ export interface CanvasState {
   boards: BoardBrief[];
   boardId: string | null;
   document: BoardDocument | null;
+  /**
+   * 白板文档（§3.1 v2）。节点与连线在 `document` 里，墨迹 / 文字 / 几何形 /
+   * 图片 / 直线与内容引用在这里；保存时序列化进 `board.whiteboard`。
+   */
+  whiteboard: WhiteboardDoc;
   selectedNodeIds: string[];
+  /** 选中的连线（`edges` 行）。 */
+  selectedEdgeIds: string[];
+  /** 选中的白板对象（`wb:<uuid>`）。 */
+  selectedItemIds: string[];
   focusNodeId: string | null;
   /** 最大化之前的矩形，按节点 id 记；`restoreNode` 用它还原。 */
   maximized: Record<string, PremaxRect>;
@@ -99,6 +111,12 @@ export interface CanvasActions {
   setPanel: <K extends keyof PanelState>(key: K, value: PanelState[K]) => void;
 
   selectNodes: (ids: string[]) => void;
+  /** 一次写三项选区；React Flow 的 `onSelectionChange` 只调这一个动作。 */
+  setSelection: (selection: {
+    nodes?: string[];
+    edges?: string[];
+    items?: string[];
+  }) => void;
   addNode: (type: CanvasNodeType, options?: AddNodeOptions) => string;
   updateNode: (
     id: string,
@@ -122,8 +140,8 @@ export interface CanvasActions {
   addEdge: (source: string, target: string) => string | null;
   removeEdges: (ids: string[]) => void;
   setViewport: (viewport: Viewport) => void;
-  /** 白板快照（tldraw 计划 §6.1）；跟着画布文档一起保存。 */
-  setWhiteboard: (snapshot: string) => void;
+  /** 白板文档（React Flow 计划 §3.1）；跟着画布文档一起保存。 */
+  setWhiteboard: (doc: WhiteboardDoc, options?: CommitOptions) => void;
   undo: () => void;
   redo: () => void;
   /** `options.aspect` 是当前视口宽高比（§23）；缺省时按 16:9 裹。 */
