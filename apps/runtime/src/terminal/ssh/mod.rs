@@ -307,7 +307,23 @@ pub async fn test_ssh_host(
         .settings
         .ssh_host(&host_id)
         .ok_or_else(|| AppError::BadRequest("Unknown SSH host".into()))?;
-    let argv = probe_argv(&host);
+    Ok(Json(probe_host(&host).await?))
+}
+
+/// Run the reachability probe once. Separate from the route so the execution
+/// host validation (`/api/execution-hosts/{id}/validate`) asks the same
+/// question the settings page's own button asks, rather than a second one that
+/// could answer differently.
+pub async fn probe_host(host: &SshHost) -> AppResult<SshTestResult> {
+    let mut argv = probe_argv(host);
+    // The same argv[0] substitution the Worker launch applies
+    // (`ARMADRA_REMOTE_WORKER_LAUNCHER`). Without it, a person who reaches
+    // their host through a wrapper would be told it is unreachable by the very
+    // button meant to tell them whether it is — and the remote tests would be
+    // probing the developer's own `ssh`.
+    if let Some(launcher) = crate::remote::client::launcher_override() {
+        argv[0] = launcher;
+    }
     let output = tokio::process::Command::new(&argv[0])
         .args(&argv[1..])
         .stdin(Stdio::null())
@@ -318,10 +334,10 @@ pub async fn test_ssh_host(
     if text.trim().is_empty() {
         text = String::from_utf8_lossy(&output.stdout).into_owned();
     }
-    Ok(Json(SshTestResult {
+    Ok(SshTestResult {
         ok: output.status.success(),
         output: tail(&text),
-    }))
+    })
 }
 
 #[cfg(test)]

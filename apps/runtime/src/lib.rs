@@ -725,6 +725,31 @@ pub fn router_with_state(state: AppState) -> Router {
             "/api/settings",
             get(api::get_settings).patch(api::patch_settings),
         )
+        // Which settings belong to this execution host (migration §1.4). Not
+        // gated on settings ownership: the local half never moves.
+        .route("/api/settings/local", get(api::get_local_settings))
+        // The execution host registry as addressable objects (migration §2.4).
+        // A projection of `settings.ssh.hosts[]`, never a second store: every
+        // write here goes through the settings document.
+        .route("/api/execution-hosts", get(api::list_execution_hosts))
+        .route(
+            "/api/execution-hosts/export",
+            get(api::export_execution_hosts),
+        )
+        .route(
+            "/api/execution-hosts/import",
+            post(api::import_execution_hosts),
+        )
+        .route(
+            "/api/execution-hosts/{host_id}",
+            put(api::put_execution_host).delete(api::delete_execution_host),
+        )
+        // Reachability and the Worker handshake in one answer; runs a command
+        // and stores nothing, so it is not gated on settings ownership.
+        .route(
+            "/api/execution-hosts/{host_id}/validate",
+            post(api::validate_execution_host),
+        )
         // 数据 settings page (plan §24.1): where the data lives, how big it is
         // and a one-click copy of the database next to itself.
         .route("/api/data/info", get(api::data_info))

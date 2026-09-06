@@ -8,6 +8,7 @@ mod assets;
 mod boards;
 mod clone;
 mod data;
+mod execution_hosts;
 mod exports;
 mod files;
 mod language;

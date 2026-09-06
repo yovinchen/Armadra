@@ -14,6 +14,33 @@ pub async fn get_settings(State(state): State<AppState>) -> Json<serde_json::Val
     Json(state.settings.document())
 }
 
+/// What the settings page shows as "this machine" rather than "your account".
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalSettings {
+    /// Dotted paths stored in `worker-settings.json`, in the order the split
+    /// declares them.
+    pub paths: Vec<String>,
+    /// Where that file is, so the page can say it rather than imply it.
+    pub file: String,
+}
+
+/// `GET /api/settings/local` — which keys belong to this execution host.
+///
+/// The list lives in the Runtime because the Runtime is what enforces it; a
+/// second copy in the front end would be a second answer to "does this key
+/// travel", and the two would drift. It is deliberately **not** gated on
+/// settings ownership: local keys never move to the Host, so the page has to
+/// be able to group them by source whoever owns the shared document.
+pub async fn get_local_settings() -> Json<LocalSettings> {
+    Json(LocalSettings {
+        paths: settings::local_paths(),
+        file: crate::paths::worker_settings_file()
+            .to_string_lossy()
+            .into_owned(),
+    })
+}
+
 /// `PATCH /api/settings` — a merge, so a key this build does not know about is
 /// preserved rather than dropped.
 ///

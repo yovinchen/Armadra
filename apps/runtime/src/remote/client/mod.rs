@@ -377,7 +377,7 @@ fn substitute(mut argv: Vec<String>) -> Vec<String> {
     argv
 }
 
-pub(crate) fn launcher_override() -> Option<String> {
+pub fn launcher_override() -> Option<String> {
     let value = std::env::var(LAUNCHER_OVERRIDE).ok()?;
     // Only an absolute path: a bare name would resolve through PATH, which is
     // not something a launch line should depend on.

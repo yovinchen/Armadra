@@ -11,6 +11,7 @@ mod clone;
 mod context_links;
 mod data;
 mod events;
+mod execution_hosts;
 mod exports;
 mod files;
 mod git;
@@ -30,6 +31,6 @@ mod tests;
 
 pub use self::{
     agents::*, approvals::*, assets::*, boards::*, clone::*, context_links::*, data::*, events::*,
-    exports::*, files::*, git::*, health::*, search::*, settings::*, ssh::*, support::*,
+    execution_hosts::*, exports::*, files::*, git::*, health::*, search::*, settings::*, ssh::*, support::*,
     terminals::*, usage::*, workspaces::*,
 };
