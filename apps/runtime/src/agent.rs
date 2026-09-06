@@ -49,16 +49,16 @@ pub const OBSERVED: &str = "observed";
 /// headers, so trusting a client's own claim would let any of them name the
 /// strongest source. `None` is a provider with no adapter, whose state is only
 /// ever whatever §3.4 observes.
-///
-/// Extension point for B3: opencode moves from the first arm to the second
-/// when its plugin stops forking the client.
 pub fn state_source_for(provider: &str) -> Option<&'static str> {
     match provider {
-        "claude" | "codex" | "gemini" | "opencode" | "copilot" => Some(STATE_SOURCE_HOOK),
-        // Pi and Oh My Pi report from a TS extension inside the CLI's own
-        // process (协作通道 §3.1 channel B). Same socket, same bearer, same
-        // node token — a different transport, not a different authority.
-        "pi" | "omp" => Some(STATE_SOURCE_EXTENSION),
+        "claude" | "codex" | "gemini" | "copilot" => Some(STATE_SOURCE_HOOK),
+        // Pi, Oh My Pi and — since B3 — opencode report from a module inside
+        // the CLI's own process (协作通道 §3.1 channel B). Same socket, same
+        // bearer, same node token: a different transport, not a different
+        // authority. opencode's plugin keeps a spawn fallback for an
+        // environment where the socket is gone, which is a degraded instance
+        // of the same channel and does not change how it is installed.
+        "pi" | "omp" | "opencode" => Some(STATE_SOURCE_EXTENSION),
         _ => None,
     }
 }
@@ -461,12 +461,13 @@ mod tests {
         // this is ever asked.
         assert_eq!(state_source_for("custom:wrapper"), None);
         assert_eq!(state_source_for(""), None);
-        // Copilot reports through a forked command Hook; Pi and Oh My Pi from
-        // inside the CLI process, which is the one distinction the column
-        // exists to draw.
+        // Copilot reports through a forked command Hook; Pi, Oh My Pi and
+        // opencode from inside the CLI process, which is the one distinction
+        // the column exists to draw.
         assert_eq!(state_source_for("copilot"), Some(STATE_SOURCE_HOOK));
         assert_eq!(state_source_for("pi"), Some(STATE_SOURCE_EXTENSION));
         assert_eq!(state_source_for("omp"), Some(STATE_SOURCE_EXTENSION));
+        assert_eq!(state_source_for("opencode"), Some(STATE_SOURCE_EXTENSION));
     }
 
     #[test]

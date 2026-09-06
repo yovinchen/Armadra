@@ -88,6 +88,7 @@ beforeEach(() => {
     agent({ id: "pi", label: "Pi" }),
     agent({ id: "omp", label: "Oh My Pi" }),
     agent({ id: "copilot", label: "GitHub Copilot" }),
+    agent({ id: "opencode", label: "opencode", clientRevision: 4 }),
     agent({ id: "claude", label: "Claude Code", clientRevision: 4 }),
   ];
 });
@@ -113,7 +114,8 @@ describe("Hook 页的三种新适配器", () => {
 
   it("装的是扩展就说扩展，装的是 hooks 就不多话", () => {
     open();
-    for (const label of ["Pi", "Oh My Pi"]) {
+    // opencode 在 B3 之后也装扩展：插件自己连 socket，不再每个事件 fork。
+    for (const label of ["Pi", "Oh My Pi", "opencode"]) {
       expect(
         within(row(label)).getByText(en("settings.hooks.extension")),
       ).toBeTruthy();

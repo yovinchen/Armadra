@@ -21,14 +21,14 @@ import { Switch } from "@/ui/switch";
  * 「安装」这个动作落在不同的文件上：一个是配置文件里的 hooks 键，一个是
  * `~/.pi/agent/extensions/` 下的一份 TS。
  *
- * 与 Runtime 的 `agent.rs::state_source_for` 是同一张表。B3 之后 opencode
- * 也会挪到 `extension` 这一列。
+ * 与 Runtime 的 `agent.rs::state_source_for` 是同一张表。opencode 在 B3 挪进
+ * `extension`：它的插件自己连 `hook.sock`，只在连不上时才回落去 spawn 客户端。
  */
 const HOOK_CHANNELS: Record<string, "hook" | "extension"> = {
   claude: "hook",
   codex: "hook",
   gemini: "hook",
-  opencode: "hook",
+  opencode: "extension",
   copilot: "hook",
   pi: "extension",
   omp: "extension",
