@@ -104,7 +104,8 @@ func buildRuntimeDatabase(t *testing.T, path string) {
 		"0001_initial.sql", "0002_agent_mailbox.sql", "0003_retire_kanban.sql",
 		"0004_agent_handoffs.sql", "0005_browser_sessions.sql", "0006_agent_prompt_deliveries.sql",
 		"0007_handoff_attempts.sql", "0008_write_ownership.sql", "0009_workspace_execution_host.sql",
-		"0010_host_imports.sql", "0011_domain_ownership.sql",
+		"0010_host_imports.sql", "0011_domain_ownership.sql", "0012_browser_process.sql",
+		"0013_agent_status_source.sql",
 	}
 	for index, name := range names {
 		statements, err := os.ReadFile(filepath.Join("..", "migration", "legacy", name))
