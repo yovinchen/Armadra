@@ -14,13 +14,13 @@
 四个纯函数模块 + 一个 hook。**tldraw store 是内存真相**，`canvas-store.document`
 由它派生。
 
-| 文件               | 内容                                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------------------- |
-| `project.ts`       | `nodeToShape` / `edgeToArrow` / `toBindingId` / `edgeArrowheads` / `toTldrawColor` / `DEFAULT_PAGE_ID` |
-| `derive.ts`        | `shapeToNode` / `arrowToEdge` / `deriveNodes` / `deriveEdges`                                      |
-| `snapshot.ts`      | `stripDocumentRecords` / `serializeWhiteboard` / `parseWhiteboard`                                 |
-| `pushed.ts`        | 「这份文档已经在 editor 里了」的标记，见第 2 节                                                     |
-| `use-store-sync.ts`| `useStoreSync(editor, { onCameraChange, onBoardLoaded })` + `captureWhiteboard(editor)`            |
+| 文件                | 内容                                                                                                   |
+| ------------------- | ------------------------------------------------------------------------------------------------------ |
+| `project.ts`        | `nodeToShape` / `edgeToArrow` / `toBindingId` / `edgeArrowheads` / `toTldrawColor` / `DEFAULT_PAGE_ID` |
+| `derive.ts`         | `shapeToNode` / `arrowToEdge` / `deriveNodes` / `deriveEdges`                                          |
+| `snapshot.ts`       | `stripDocumentRecords` / `serializeWhiteboard` / `parseWhiteboard`                                     |
+| `pushed.ts`         | 「这份文档已经在 editor 里了」的标记，见第 2 节                                                        |
+| `use-store-sync.ts` | `useStoreSync(editor, { onCameraChange, onBoardLoaded })` + `captureWhiteboard(editor)`                |
 
 约定（反向映射逐条对上）：
 
@@ -422,13 +422,13 @@ runtimeApi.exportPng(workspaceId, exportUuid, dataUrl)             // → Export
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `app/App.tsx`               | 删 `ReactFlowProvider`、删 `?poc=tldraw` 分支（`usePocCanvas` + `TldrawPoc` 的 lazy import），`CanvasWorkspace` → `TldrawWorkspace`；新增 `useTldrawTheme()` |
 | `app/commands.ts`           | `useReactFlow().screenToFlowPosition` → `editor-context` 的 `screenToPage`                                                                                   |
-| `app/notifications.ts`      | 自己那份 `armadra:center-node` 删掉，改调 `requestCenterOnNode`                                                                                                 |
+| `app/notifications.ts`      | 自己那份 `armadra:center-node` 删掉，改调 `requestCenterOnNode`                                                                                              |
 | `app/test-harness.tsx`      | 去掉 `ReactFlowProvider`                                                                                                                                     |
 | `main.tsx`                  | 去掉 `@xyflow/react/dist/style.css`；新增「首次运行把 tldraw 的 `localStorage["minimap"]` 置成 `false`」（tldraw 默认收起缩略图，我们一直是展开的）          |
 | `shell/Dock.tsx`            | `useViewport`/`useReactFlow` → `useEditorHandle` + tldraw 的 `useValue`；`history.past/future` → `useCanUndo()/useCanRedo()`                                 |
 | `panels/CommandPalette.tsx` | 「跳转」组不再自己 `flow.setCenter`，改发 `requestCenterOnNode`（居中的算术归画布）                                                                          |
 | `panels/viewport.ts`        | `currentViewportCenter()` 优先问 `screenToPage`，画布没挂载时退回看板存的视口                                                                                |
-| `sessions/SessionRow.tsx`   | `CENTER_NODE_EVENT` / `centerNode` 改成 `editor-context` 的转出，事件名全应用只剩 `armadra:canvas:center-node` 一个                                             |
+| `sessions/SessionRow.tsx`   | `CENTER_NODE_EVENT` / `centerNode` 改成 `editor-context` 的转出，事件名全应用只剩 `armadra:canvas:center-node` 一个                                          |
 | `canvas/StatusMiniMap.tsx`  | **已删除**（改用 tldraw 的 Minimap）                                                                                                                         |
 
 Dock 的缩放：
@@ -559,9 +559,9 @@ Dock 的缩放：
 - 点击：命中节点矩形就 `centerOnPoint(节点中心)`（§3.2「点缩略图定位到节点」），
   点空白处就把相机搬到那个点；按住拖动 = 连续平移。
 - 渲染不走 React：`react()` 订阅 editor 信号 + `useAgentStatusStore.subscribe`
-  + `ResizeObserver`，相机每帧变化只重画 canvas。主题切换由
-  `MutationObserver`（`<html data-theme>`）触发重读颜色——canvas 的
-  `fillStyle` 拿的是解析后的字符串，主题变了必须重读。
+  - `ResizeObserver`，相机每帧变化只重画 canvas。主题切换由
+    `MutationObserver`（`<html data-theme>`）触发重读颜色——canvas 的
+    `fillStyle` 拿的是解析后的字符串，主题变了必须重读。
 - **`tokens.css` 的这 6 个变量必须保持 canvas 能解析**（`--agent-working` /
   `--danger` / `--brand` / `--muted-foreground` / `--active` / `--surface-deep`）：
   `rgb(… / 55%)` 可以，`color-mix()` 不行。和 shell 小节记的
@@ -662,7 +662,7 @@ Phase 0 结论 3 说 before-create 不能否决，所以走 after-create/change/
 A 的把手起笔时指针还在 A 身上，那一刻的「自连」只是中间态。所以：
 
 - 判定推迟到**交互结束**：`editor.getPath()` 命中 `.pointing|.dragging|.translating|
-  .resizing|.rotating|.brushing` 就先挂起，`window` 的 `pointerup` / `pointercancel`
+.resizing|.rotating|.brushing` 就先挂起，`window` 的 `pointerup` / `pointercancel`
   再触发一次（微任务 + 宏任务各一遍，另有 60ms 的兜底重试）。
 - 规则复用 `canvas/connection.ts` 的 `isValidLink`（自连、同一对无向重复），
   节点与已有边都**从 editor 现读**，不读 `canvas-store`（它慢一拍）。
@@ -785,10 +785,10 @@ MAX_UPLOAD_BYTES = MAX_ASSET_BYTES          // 8 MiB
 
 只覆盖两个：
 
-| 类型 | 行为 |
-| --- | --- |
+| 类型    | 行为                                                                                                                                                |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `files` | 图片（MIME 在 `ASSET_MIME_TYPES` 内，或没有 MIME 但扩展名是那 8 种）→ **tldraw 原生 image shape**，走上面的资产仓库；其余文件读成文本 → 转交 `text` |
-| `text` | 丢掉 `html` 再交给 `defaultHandleExternalTextContent` → **一律纯文本 text shape**（Markdown 也是纯文本，§12.3） |
+| `text`  | 丢掉 `html` 再交给 `defaultHandleExternalTextContent` → **一律纯文本 text shape**（Markdown 也是纯文本，§12.3）                                     |
 
 `svg-text` / `url` / `embed` / `file-replace` **保持 tldraw 默认**：前者本来就走
 资产仓库（`getAssetForExternalContent`），后者的 bookmark shape 还没停用（§4.5
@@ -851,9 +851,9 @@ MAX_UPLOAD_BYTES = MAX_ASSET_BYTES          // 8 MiB
    - Runtime 加 `POST /api/workspaces/{id}/assets/import { path }`（在工作区内解析
      路径、走同一套哈希落盘），前端在 `routePath` 里给图片加一条分支；或
    - 桌面端加 `fs:allow-read-file` 并把路径读成 `File` 再走现有 `upload`。
-   浏览器版不受影响（`File` 里有字节，走的是 image shape 那条路）。
-   **已解决**（2026-09-04，走的第一条路）：见「Phase 3 · asset-import」，
-   `addNodeForPath` 里图片路径改成 `importAsset` → image shape。
+     浏览器版不受影响（`File` 里有字节，走的是 image shape 那条路）。
+     **已解决**（2026-09-04，走的第一条路）：见「Phase 3 · asset-import」，
+     `addNodeForPath` 里图片路径改成 `importAsset` → image shape。
 
 ### 验证（浏览器 `http://localhost:1422`，自建看板 `phase3-content-test`，测完已 DELETE）
 
@@ -883,22 +883,22 @@ MAX_UPLOAD_BYTES = MAX_ASSET_BYTES          // 8 MiB
 
 ### 1. `canvas/sync/migrate-legacy.ts`（纯函数 + 一个执行器）
 
-| 导出 | 内容 |
-| --- | --- |
+| 导出                              | 内容                                                                                                                    |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `parseCssColor` / `toStrokeColor` | 任意 CSS 颜色 → 最近的 tldraw 颜色名（RGB 欧氏距离，基准是 `DEFAULT_THEME` 浅色主题的 13 个 `solid`），认不出回 `black` |
-| `toStrokeSize` | 像素笔宽 → `s/m/l/xl`（2 / 3.5 / 5 / 10 = `strokeWidth` 2 × `STROKE_SIZES`） |
-| `strokeToShape` | 一笔 → 一个 `draw` shape（`compressLegacySegments`） |
-| `drawNodeToShapes` | 一个 `draw` 节点 → 若干 shape |
-| `imagePlan` | `image` 节点 + 一次已完成的上传 → 资产记录 + `image` shape |
-| `legacyNodes` | 文档里还剩几个退役节点（0 = 迁过了） |
-| `migrateLegacyNodes` | 执行器；`MigrateDeps` 注入上传 / 取 URL / 读文件 / 中止判定 / 告警 |
+| `toStrokeSize`                    | 像素笔宽 → `s/m/l/xl`（2 / 3.5 / 5 / 10 = `strokeWidth` 2 × `STROKE_SIZES`）                                            |
+| `strokeToShape`                   | 一笔 → 一个 `draw` shape（`compressLegacySegments`）                                                                    |
+| `drawNodeToShapes`                | 一个 `draw` 节点 → 若干 shape                                                                                           |
+| `imagePlan`                       | `image` 节点 + 一次已完成的上传 → 资产记录 + `image` shape                                                              |
+| `legacyNodes`                     | 文档里还剩几个退役节点（0 = 迁过了）                                                                                    |
+| `migrateLegacyNodes`              | 执行器；`MigrateDeps` 注入上传 / 取 URL / 读文件 / 中止判定 / 告警                                                      |
 
 要点：
 
 - **一笔一个 shape**。tldraw 的 `draw` shape 只有一组 `color` / `size`，而旧的
   `strokes` 每笔各带颜色与粗细，合成一个就会丢颜色。
 - **shape id 由「节点 id + 笔序」派生**（`createShapeId(\`${nodeId}-ink-${i}\`)`，
-  图片是 `${nodeId}-image`，资产是内容哈希），所以重跑迁移命中同一批 id，
+图片是 `${nodeId}-image`，资产是内容哈希），所以重跑迁移命中同一批 id，
   不会画出两份。
 - **坐标**：`nodeBox()` 的页面绝对坐标 + `LEGACY_DRAW_BODY_OFFSET_Y = 40`
   （旧笔迹画在节点**正文**的 `<canvas>` 上，正文比节点顶部低一个标题栏，
@@ -941,7 +941,7 @@ MAX_UPLOAD_BYTES = MAX_ASSET_BYTES          // 8 MiB
   读得出来；`collab/context_link.rs` 的两个分支一行没动。
 - `validate_document` 对这两种类型给**专门的 400**：
   `Node type 'draw' was retired; open the board once so the client migrates it
-  into a whiteboard shape before saving`。
+into a whiteboard shape before saving`。
 - 测试：新增 `retired_whiteboard_types_load_but_never_save`（拒写 + 直接 SQL
   插行后仍读得出来）；`accepts_every_v3_node_kind` 去掉两种；
   `migrates_a_real_v2_database_to_v3` 改成「先按迁移的做法滤掉两种，其余仍然
@@ -1164,7 +1164,7 @@ Dock 上除「选择」外的工具按钮全部 `disabled`、正在用的工具�
   共 5 个用例红了（`setExpanded is not a function`），那是别的 agent 正在改
   `sidebar/*` 与 `app/preferences-store.ts` 的中间态，与本节改动无关；
   只跑 `src/canvas src/store src/shell/Dock.test.tsx src/keybindings.test.ts
-  src/panels/settings` 是 **26 个文件 304 个用例全绿**。
+src/panels/settings` 是 **26 个文件 304 个用例全绿**。
 - 浏览器 `http://localhost:1422`（自己的 tab，自建看板 `phase3-tools-test`，
   测完 `DELETE` 掉了）：
   1. Dock 上 10 个工具按钮齐全（选择 / 手形 / 画笔 / 高亮 / 形状 / 直线 / 箭头 /
@@ -1172,7 +1172,7 @@ Dock 上除「选择」外的工具按钮全部 `disabled`、正在用的工具�
      形状按钮点开是 6 项下拉，选「椭圆」后 `getStyleForNextShape(GeoShapeGeoStyle)`
      变成 `ellipse`、按钮图标跟着换、工具切到 `geo`。
   2. **真实鼠标**逐个画出来：`geo(ellipse) / draw / highlight / line / arrow /
-     frame / text` 七种 shape 都能画，画完自动回 `select`。
+frame / text` 七种 shape 都能画，画完自动回 `select`。
   3. **真实键盘** V/H/D/⇧D/R/L/A/T/F 九个键逐个命中对应工具；
      `Esc` 从 `draw` 回到 `select`（修好之前是空操作，见第 2 节）。
   4. 样式面板：`select` + 空选 → 隐藏；`select` + 选中几何 → 显示；
@@ -1227,16 +1227,16 @@ Dock 上除「选择」外的工具按钮全部 `disabled`、正在用的工具�
 - 路径规则（`security::resolve_import_source`，是唯一允许指到工作区外的解析器
   ——Finder 拖进来的图多半在 `~/Downloads`，而且字节是**复制**进工作区的）：
 
-| 输入 | 结果 |
-| --- | --- |
-| 绝对路径，普通文件 | 200（可以在工作区外） |
-| 相对路径 | 按工作区根解析，走 `workspace_relative_path` + `resolve_in_root` |
-| 不存在 | 404 `Requested path does not exist` |
-| 目录 / 设备 / FIFO（符号链接先解析再判） | 400 `Only regular files can be imported` |
-| 解析后落在 `/dev` `/proc` `/etc` `/usr` … | 403 `That location is protected by the system` |
-| 相对路径穿越（`../…`）、工作区内符号链接指向外面 | 400 / 403 |
-| 扩展名不在白名单 | 400 `Asset type is not an accepted image type` |
-| 超过 8 MiB | 400 `Asset is too large` |
+| 输入                                             | 结果                                                             |
+| ------------------------------------------------ | ---------------------------------------------------------------- |
+| 绝对路径，普通文件                               | 200（可以在工作区外）                                            |
+| 相对路径                                         | 按工作区根解析，走 `workspace_relative_path` + `resolve_in_root` |
+| 不存在                                           | 404 `Requested path does not exist`                              |
+| 目录 / 设备 / FIFO（符号链接先解析再判）         | 400 `Only regular files can be imported`                         |
+| 解析后落在 `/dev` `/proc` `/etc` `/usr` …        | 403 `That location is protected by the system`                   |
+| 相对路径穿越（`../…`）、工作区内符号链接指向外面 | 400 / 403                                                        |
+| 扩展名不在白名单                                 | 400 `Asset type is not an accepted image type`                   |
+| 超过 8 MiB                                       | 400 `Asset is too large`                                         |
 
 路由是静态段 `assets/import`，和 `GET assets/{assetId}` 不冲突（方法也不同）。
 
@@ -1296,16 +1296,16 @@ Runtime 认得出来不会再写盘。导入失败只 `toast(canvas.assetFailed)
 
 ### 1. 结构（自上而下）
 
-| 位置 | 内容 | 文件 |
-| --- | --- | --- |
-| 标题栏 44px | 窗口拖拽区；**折叠钮画在侧栏外面**（`fixed`，`left = trafficLightInset() + 8`，`top 9`），侧栏收到 0 宽之后按钮留在原位；图标 `PanelLeft`，右上角蓝/红点 = 有未读 / 有 Agent 在等你 | `shell/LeftSidebar.tsx` |
-| 顶行 36px | 当前工作空间名 + `⌄`（切换工作空间 / 打开文件夹 / 新建文件夹 / 克隆仓库 / 从列表移除）；右侧 🔍 打开命令面板、🔔 打开投递记录（铃铛右上角同一颗点） | `sidebar/SidebarHeader.tsx` |
-| 新建看板 | `✎ 新建看板` + 行尾 `+`，两者同一个动作：在当前工作空间建一块板（名字 `看板 N`，避开同名）并切过去 | `sidebar/WorkspaceTree.tsx` 的 `NewBoardRow` |
-| 「置顶」组 | 跨工作空间的置顶看板；组内为空时整组不渲染 | `WorkspaceTree` 的 `PinnedRow` |
-| 「项目」组 | 已打开的工作空间一行（chevron + 📁 + 色点 + 名字，点行 = 展开/收起，双击改名，`⋯` = 新建看板 / 重命名 / 投递记录 / 关闭 / 从列表移除）；展开后缩进列出看板 | `WorkspaceTree` 的 `WorkspaceRow` |
-| 看板行 | 图标（置顶的画 `Pin`）+ 名字 + 节点数 + 信号点 + `⋯`；右键与 `⋯` 同一组动作（置顶/取消置顶、重命名、删除）；当前看板高亮 | `sidebar/BoardRow.tsx` |
-| Agent 折叠 | 只在**当前看板**行下面出现一行「N 个 Agent」，默认收起；展开才渲染会话列表 | `BoardRow` 的 `AgentsFold` + `sessions/SessionsSection.tsx` |
-| 底部 | `⚙ 设置`（Codex 那行的头像 / 语音 / 帮助不做） | `LeftSidebar` 的 `SidebarFooter` |
+| 位置        | 内容                                                                                                                                                                                | 文件                                                        |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| 标题栏 44px | 窗口拖拽区；**折叠钮画在侧栏外面**（`fixed`，`left = trafficLightInset() + 8`，`top 9`），侧栏收到 0 宽之后按钮留在原位；图标 `PanelLeft`，右上角蓝/红点 = 有未读 / 有 Agent 在等你 | `shell/LeftSidebar.tsx`                                     |
+| 顶行 36px   | 当前工作空间名 + `⌄`（切换工作空间 / 打开文件夹 / 新建文件夹 / 克隆仓库 / 从列表移除）；右侧 🔍 打开命令面板、🔔 打开投递记录（铃铛右上角同一颗点）                                 | `sidebar/SidebarHeader.tsx`                                 |
+| 新建看板    | `✎ 新建看板` + 行尾 `+`，两者同一个动作：在当前工作空间建一块板（名字 `看板 N`，避开同名）并切过去                                                                                  | `sidebar/WorkspaceTree.tsx` 的 `NewBoardRow`                |
+| 「置顶」组  | 跨工作空间的置顶看板；组内为空时整组不渲染                                                                                                                                          | `WorkspaceTree` 的 `PinnedRow`                              |
+| 「项目」组  | 已打开的工作空间一行（chevron + 📁 + 色点 + 名字，点行 = 展开/收起，双击改名，`⋯` = 新建看板 / 重命名 / 投递记录 / 关闭 / 从列表移除）；展开后缩进列出看板                          | `WorkspaceTree` 的 `WorkspaceRow`                           |
+| 看板行      | 图标（置顶的画 `Pin`）+ 名字 + 节点数 + 信号点 + `⋯`；右键与 `⋯` 同一组动作（置顶/取消置顶、重命名、删除）；当前看板高亮                                                            | `sidebar/BoardRow.tsx`                                      |
+| Agent 折叠  | 只在**当前看板**行下面出现一行「N 个 Agent」，默认收起；展开才渲染会话列表                                                                                                          | `BoardRow` 的 `AgentsFold` + `sessions/SessionsSection.tsx` |
+| 底部        | `⚙ 设置`（Codex 那行的头像 / 语音 / 帮助不做）                                                                                                                                     | `LeftSidebar` 的 `SidebarFooter`                            |
 
 宽度沿用 `--sidebar-w: 240px`，⌘⇧L（`app.sidebar`）不变。
 
@@ -1399,13 +1399,13 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 
 ### 2. 新文件
 
-| 文件 | 内容 |
-| --- | --- |
-| `canvas/shapes/link-shape.ts` | `LinkProps` / `LinkBindingProps` 与全局类型注册、id 映射、`isLinkShape` / `linkEnds` |
-| `canvas/shapes/link-path.ts` | `linkCurve` / `pointOnCurve` / `sampleCurve`（纯函数，复用 `geometry.ts`） |
-| `canvas/shapes/LinkShapeUtil.tsx` | 几何、命中、指示器、SVG 渲染（线 / 箭头 / 标签） |
-| `canvas/shapes/LinkBindingUtil.ts` | 只管生命周期：节点删了 / 被拆开就删线 |
-| `canvas/shapes/link-path.test.ts` | 相对边、锚点、水平切线、采样（10 例） |
+| 文件                               | 内容                                                                                 |
+| ---------------------------------- | ------------------------------------------------------------------------------------ |
+| `canvas/shapes/link-shape.ts`      | `LinkProps` / `LinkBindingProps` 与全局类型注册、id 映射、`isLinkShape` / `linkEnds` |
+| `canvas/shapes/link-path.ts`       | `linkCurve` / `pointOnCurve` / `sampleCurve`（纯函数，复用 `geometry.ts`）           |
+| `canvas/shapes/LinkShapeUtil.tsx`  | 几何、命中、指示器、SVG 渲染（线 / 箭头 / 标签）                                     |
+| `canvas/shapes/LinkBindingUtil.ts` | 只管生命周期：节点删了 / 被拆开就删线                                                |
+| `canvas/shapes/link-path.test.ts`  | 相对边、锚点、水平切线、采样（10 例）                                                |
 
 ### 3. 三个必须记住的约定
 
@@ -1544,17 +1544,17 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 新增一整块 `whiteboard: WhiteboardPreferences`（写法照 `terminal`：整块存、
 一个 `setWhiteboardPreference(key, value)`、每项一个 `armadra.whiteboard.*` 键）：
 
-| 字段 | 取值 | 默认 | 落到 tldraw 的哪里 |
-| --- | --- | --- | --- |
-| `background` | `theme` / `black` / `white` / `paper` / `slate` | `theme` | `--canvas-bg` + `--canvas-dot`（写 `<html>` 内联样式） |
-| `grid` | bool | `true` | `updateInstanceState({ isGridMode })` |
-| `gridSize` | `12` / `24` / `48`（**看到的**间距 px） | `24` | `updateDocumentSettings({ gridSize: 间距 / 4 })` |
-| `snap` | bool | `false` | `isSnapMode` |
-| `dynamicSize` | bool | `false` | `isDynamicSizeMode` |
-| `animation` | bool | `true` | `animationSpeed` 1 / 0 |
-| `style` | `sketch` / `clean` | `sketch` | `DefaultDashStyle` + `DefaultFontStyle` |
-| `defaultColor` | tldraw 13 色名 | `black` | `DefaultColorStyle` |
-| `defaultSize` | `s` / `m` / `l` / `xl` | `m` | `DefaultSizeStyle` |
+| 字段           | 取值                                            | 默认     | 落到 tldraw 的哪里                                     |
+| -------------- | ----------------------------------------------- | -------- | ------------------------------------------------------ |
+| `background`   | `theme` / `black` / `white` / `paper` / `slate` | `theme`  | `--canvas-bg` + `--canvas-dot`（写 `<html>` 内联样式） |
+| `grid`         | bool                                            | `true`   | `updateInstanceState({ isGridMode })`                  |
+| `gridSize`     | `12` / `24` / `48`（**看到的**间距 px）         | `24`     | `updateDocumentSettings({ gridSize: 间距 / 4 })`       |
+| `snap`         | bool                                            | `false`  | `isSnapMode`                                           |
+| `dynamicSize`  | bool                                            | `false`  | `isDynamicSizeMode`                                    |
+| `animation`    | bool                                            | `true`   | `animationSpeed` 1 / 0                                 |
+| `style`        | `sketch` / `clean`                              | `sketch` | `DefaultDashStyle` + `DefaultFontStyle`                |
+| `defaultColor` | tldraw 13 色名                                  | `black`  | `DefaultColorStyle`                                    |
+| `defaultSize`  | `s` / `m` / `l` / `xl`                          | `m`      | `DefaultSizeStyle`                                     |
 
 导出常量 `WHITEBOARD_BACKGROUNDS` / `WHITEBOARD_GRID_SIZES` /
 `WHITEBOARD_STYLES` / `WHITEBOARD_COLORS` / `WHITEBOARD_SIZES` 与
@@ -1614,7 +1614,7 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 
 - 设置页出现「白板」，导航是 通用 / 通知 / **白板** / Agent / …。
 - 5 档背景即时生效：`纸色` → `<html>` 上是 `--canvas-bg:#f6f2ea;
-  --canvas-dot:#c5c2bb`，`.canvas-stage` 背景与 `.tl-grid-dot` 的 fill 都跟着变；
+--canvas-dot:#c5c2bb`，`.canvas-stage` 背景与 `.tl-grid-dot` 的 fill 都跟着变；
   `跟随主题` → 两个变量被摘掉，回到 token 的 `#000000` / `#4a4a4a`。刷新后保留。
 - 网格：关掉后 `.tl-grid` 整个不渲染、间距 Select 变灰；选 48 后
   pattern 宽度从 `384/96/24/6` 变成 `768/192/48/12`（可见档 = 48px）。
@@ -1738,10 +1738,10 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 浏览器里用**真实鼠标**（`left_click_drag`）验的两条路径：
 
 1. **箭头工具连两个矩形**：从矩形 A 内部拖到矩形 B 内部松手 ⇒ 一条 `arrow` shape
-   + **两条 `arrow` binding**（`toId` 分别是 `shape:rectA` / `shape:rectB`，
-   `normalizedAnchor {0.5,0.5}`）。把 B 从 (290,250) 挪到 (330,120)，箭头的
-   `getShapePageBounds` 从 `(187.5,160,104×82)` 变成 `(200,128,117×22)`——**跟随生效**。
-   这条箭头 `meta` 是空的：两端都不是节点，`LinkArrow` 一个字都没碰它。
+   - **两条 `arrow` binding**（`toId` 分别是 `shape:rectA` / `shape:rectB`，
+     `normalizedAnchor {0.5,0.5}`）。把 B 从 (290,250) 挪到 (330,120)，箭头的
+     `getShapePageBounds` 从 `(187.5,160,104×82)` 变成 `(200,128,117×22)`——**跟随生效**。
+     这条箭头 `meta` 是空的：两端都不是节点，`LinkArrow` 一个字都没碰它。
 2. **矩形 → 终端节点**：同样一次真实拖动 ⇒ 箭头**保留成 tldraw arrow**（不换成
    `link` shape），`props.color = "blue"`、`arrowheadEnd = "arrow"`（指向节点那一端）、
    `meta.armadra = { contentId: <uuid>, styled: true }`。
@@ -1755,11 +1755,11 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 
 一条 arrow 两端各自是什么，决定它是什么：
 
-| start / end | 结果 |
-| --- | --- |
-| 节点 ↔ 节点 | 一条 `edges` 行 ⇒ 换成 `link` shape（Phase 3 的行为，一个字没改） |
-| 节点 ↔ 白板 shape | **内容链接**（§6.3）⇒ 保留成 tldraw arrow，写一次方向与颜色 |
-| 白板 ↔ 白板 / 只绑一端 / 完全没绑 | 普通白板箭头，不管 |
+| start / end                        | 结果                                                              |
+| ---------------------------------- | ----------------------------------------------------------------- |
+| 节点 ↔ 节点                       | 一条 `edges` 行 ⇒ 换成 `link` shape（Phase 3 的行为，一个字没改） |
+| 节点 ↔ 白板 shape                 | **内容链接**（§6.3）⇒ 保留成 tldraw arrow，写一次方向与颜色       |
+| 白板 ↔ 白板 / 只绑一端 / 完全没绑 | 普通白板箭头，不管                                                |
 
 - 「白板 shape」= `text` / `geo` / `draw` / `image` / `line` / `highlight` /
   **不是分组的** `frame`（`CONTENT_TYPE_KEYS` 那张表）。表外的类型
@@ -1796,16 +1796,16 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 
 `resolveContent()` 按类型分流（`ContextLink.content`）：
 
-| shape | `content` |
-| --- | --- |
-| `text` | `text`（`renderPlaintextFromRichText`），**不导出 PNG** |
-| `geo` 带文字 | `text` + `pngPath` |
-| `image` | `pngPath` = 资产的 `meta.armadra.path`（`.armadra/assets/<hash>.png`），**不导出** |
-| `draw` / `line` / `highlight` / 无文字 `geo` | `pngPath` |
-| `frame` | `pngPath` + **框内所有子孙的文字**拼成的 `text` |
+| shape                                        | `content`                                                                          |
+| -------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `text`                                       | `text`（`renderPlaintextFromRichText`），**不导出 PNG**                            |
+| `geo` 带文字                                 | `text` + `pngPath`                                                                 |
+| `image`                                      | `pngPath` = 资产的 `meta.armadra.path`（`.armadra/assets/<hash>.png`），**不导出** |
+| `draw` / `line` / `highlight` / 无文字 `geo` | `pngPath`                                                                          |
+| `frame`                                      | `pngPath` + **框内所有子孙的文字**拼成的 `text`                                    |
 
 - 导出 = `editor.toImageDataUrl([id], { background: true, padding: 16, scale: 2,
-  format: "png" })` → `runtimeApi.exportPng(workspaceId, contentId, dataUrl)` →
+format: "png" })` → `runtimeApi.exportPng(workspaceId, contentId, dataUrl)` →
   拿返回的 **`relativePath`** 当 `pngPath`（runtime 交接里点名的那条）。
 - 标题：`text` 取正文前 40 字（多行压成一行，超了带 `…`），`frame` 取框名，
   其余取 i18n 的类型名（新增 `content.*` 8 个键，zh + en）。
@@ -1900,12 +1900,8 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
   终端会话已 terminate、`.armadra/exports/` 与 `.armadra/assets/` 里的测试文件已删、
   `context_links` 那一行已清）：
   1. 见第 0 节：真实鼠标验的两条连线路径。
-  2. 四种内容各连一条到终端节点，2 s 后库里的链接文档就是：
-     - 矩形（geo 无文字）→ `{pngPath: ".armadra/exports/e0b5….png"}`
-     - 文字 → `{text: "先修好构建再合并"}`，**没有** `pngPath`
-     - 画框（内含一段文字 + 一个红矩形）→ `{text: "入口在 apps/runtime/src/main.rs",
-       pngPath: ".armadra/exports/4bd1….png"}`；PNG 打开看，文字与红框都在
-     - 图片 → `{pngPath: ".armadra/assets/bf04e51a8923ec18.png"}`，**没有导出**
+  2. 四种内容各连一条到终端节点，2 s 后库里的链接文档就是：- 矩形（geo 无文字）→ `{pngPath: ".armadra/exports/e0b5….png"}` - 文字 → `{text: "先修好构建再合并"}`，**没有** `pngPath` - 画框（内含一段文字 + 一个红矩形）→ `{text: "入口在 apps/runtime/src/main.rs",
+pngPath: ".armadra/exports/4bd1….png"}`；PNG 打开看，文字与红框都在 - 图片 → `{pngPath: ".armadra/assets/bf04e51a8923ec18.png"}`，**没有导出**
   3. Agent 侧（`POST /context-link/*`，走 hook socket + `x-armadra-hook-token`）：
      `list` 四行都是「类型=白板内容 … 可读：白板内容（文字或导出的 PNG 路径）」；
      `summary --node 架构图` 回「文字 + 已导出为 PNG：<绝对路径>」，
@@ -1931,21 +1927,21 @@ Phase 1 把 `edges` 行投影成 tldraw 原生 `arrow`（`edgeToArrow`），两�
 以前多个窗口同开一块板时，后一个的 CAS 一定失败，`saveState` 直接变 `error`、
 弹「看板保存失败」，用户点「重试」还会再撞一次。现在：
 
-| 文件 | 改动 |
-| --- | --- |
-| `save/canvas-save-queue.ts` | 新增纯函数 `replayLocalEdits(remote, local)` 与 `MAX_CONFLICT_REPLAYS = 3` |
-| `save/autosave.ts` | `onError` 里 `isConflict(cause)` → `resolveConflict()`：`GET` 最新文档 → 重放 → 写回 store（`saveState: "dirty"`）→ 下一轮防抖重新 PUT。成功保存时清零连击计数 |
-| `api/client.ts` | **一个字没改**，`isConflict()` 本来就在（`RuntimeRequestError.status === 409`） |
+| 文件                        | 改动                                                                                                                                                           |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `save/canvas-save-queue.ts` | 新增纯函数 `replayLocalEdits(remote, local)` 与 `MAX_CONFLICT_REPLAYS = 3`                                                                                     |
+| `save/autosave.ts`          | `onError` 里 `isConflict(cause)` → `resolveConflict()`：`GET` 最新文档 → 重放 → 写回 store（`saveState: "dirty"`）→ 下一轮防抖重新 PUT。成功保存时清零连击计数 |
+| `api/client.ts`             | **一个字没改**，`isConflict()` 本来就在（`RuntimeRequestError.status === 409`）                                                                                |
 
 重放规则（没有三方合并的基线，只有一个可靠分界点：`local.board.updatedAt`，
 也就是本地这份文档最后一次与 Runtime 对齐时的 CAS 戳）：
 
-| 情况 | 结果 |
-| --- | --- |
-| 两边都有的节点 | **本地为准**（位置 / 尺寸 / 数据 / 标题都是用户刚拖出来的） |
-| 只有远端有 | 保留（别的窗口或 Agent 新开的） |
-| 只有本地有，`createdAt` 晚于本地 CAS 戳 | 保留（本地新建，还没存上） |
-| 只有本地有，`createdAt` 早于本地 CAS 戳 | 丢弃（远端删掉了，不复活） |
+| 情况                                    | 结果                                                        |
+| --------------------------------------- | ----------------------------------------------------------- |
+| 两边都有的节点                          | **本地为准**（位置 / 尺寸 / 数据 / 标题都是用户刚拖出来的） |
+| 只有远端有                              | 保留（别的窗口或 Agent 新开的）                             |
+| 只有本地有，`createdAt` 晚于本地 CAS 戳 | 保留（本地新建，还没存上）                                  |
+| 只有本地有，`createdAt` 早于本地 CAS 戳 | 丢弃（远端删掉了，不复活）                                  |
 
 边同理，另外剔掉两端不齐的悬空边（Runtime 拒收），并解开指向已被远端删掉的
 分组的 `parentId`。看板行取远端的（`updatedAt` 就是下一次 PUT 的 CAS 戳），

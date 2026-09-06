@@ -1,6 +1,6 @@
 # v4 方案：画布换成 tldraw，白板与 Agent 节点同一套模型
 
-> 状态：**Phase 0–4 已实施**（2026-09-04，分支 `main`，未合并）。实现与验证数字见 [implementation-status.md](./implementation-status.md) 的「v4 tldraw 画布」，跨 agent 交接见 [phase1-handoff.md](./phase1-handoff.md)  
+> 状态：**Phase 0–4 已实施**（2026-09-04，分支 `main`，未合并）。实现与验证数字见 [implementation-status.md](./history/implementation-status.md) 的「v4 tldraw 画布」，跨 agent 交接见 [phase1-handoff.md](./history/phase1-handoff.md)  
 > 基线：分支 `main`，[v3-agent-terminal-plan.md](./v3-agent-terminal-plan.md) 的 §5（Agent 运行时）、§13（接口契约）、§14（文案与组件原则）、§15（tmux 后端）、§18（终端兼容）继续有效；本文只替换画布层  
 > 输入：2026-09-04 代码盘点（`apps/web/src/canvas` 3.4k 行、`nodes` 2.4k 行、`store/canvas-store.ts` 810 行、13 个文件直接 import `@xyflow/react`、45 个文件消费 `canvas-store`）、tldraw 5.4.0（peer React `^19.2.1`，本项目 19.2.8）
 
@@ -12,15 +12,15 @@
 
 ## 1. 选型依据
 
-| 维度 | Excalidraw | tldraw 5.4 | 决定 |
-| --- | --- | --- | --- |
-| 自定义元素 | 无。元素类型固定，终端只能叠在另一层 | `ShapeUtil` 渲染任意 React 组件 | tldraw |
-| 箭头绑定 | 只绑自己的元素 | 箭头可绑任何 shape，且有自定义 `BindingUtil` | tldraw |
-| 视口 / 选择 / 撤销 | 与 React Flow 双轨 | 一套 | tldraw |
-| UI 可替换 | 整套自带 UI，难融入 shadcn | `components` 逐槽位替换或置空 | tldraw |
-| 风格 | 手绘固定 | 几何为主，手绘笔刷可选；与终端、编辑器同框协调 | tldraw |
-| 许可 | MIT | 免费使用带「Made with tldraw」水印，去水印需许可 key | 先带水印，见 §12 |
-| React 19 | 支持 | peer `^19.2.1`，本项目 19.2.8 | 通过 |
+| 维度               | Excalidraw                           | tldraw 5.4                                           | 决定             |
+| ------------------ | ------------------------------------ | ---------------------------------------------------- | ---------------- |
+| 自定义元素         | 无。元素类型固定，终端只能叠在另一层 | `ShapeUtil` 渲染任意 React 组件                      | tldraw           |
+| 箭头绑定           | 只绑自己的元素                       | 箭头可绑任何 shape，且有自定义 `BindingUtil`         | tldraw           |
+| 视口 / 选择 / 撤销 | 与 React Flow 双轨                   | 一套                                                 | tldraw           |
+| UI 可替换          | 整套自带 UI，难融入 shadcn           | `components` 逐槽位替换或置空                        | tldraw           |
+| 风格               | 手绘固定                             | 几何为主，手绘笔刷可选；与终端、编辑器同框协调       | tldraw           |
+| 许可               | MIT                                  | 免费使用带「Made with tldraw」水印，去水印需许可 key | 先带水印，见 §12 |
+| React 19           | 支持                                 | peer `^19.2.1`，本项目 19.2.8                        | 通过             |
 
 ## 2. 目标与非目标
 
@@ -60,14 +60,21 @@
 一种自定义 shape 类型，`props` 直接镜像 `CanvasNode`（去掉 `position` / `size`，它们对应 shape 的 `x / y / w / h`）：
 
 ```ts
-type ArmadraShape = TLBaseShape<"armadra", {
-  w: number; h: number;
-  nodeType: "terminal" | "sticky" | "editor" | "diff" | "files" | "browser";
-  title: string; color: string;
-  collapsed: boolean; expandedHeight?: number;
-  labels: string[]; note: string;
-  data: CanvasNodeData;     // 与 shared 的 discriminatedUnion 完全一致
-}>
+type ArmadraShape = TLBaseShape<
+  "armadra",
+  {
+    w: number;
+    h: number;
+    nodeType: "terminal" | "sticky" | "editor" | "diff" | "files" | "browser";
+    title: string;
+    color: string;
+    collapsed: boolean;
+    expandedHeight?: number;
+    labels: string[];
+    note: string;
+    data: CanvasNodeData; // 与 shared 的 discriminatedUnion 完全一致
+  }
+>;
 ```
 
 - id 约定：`shape:<节点 uuid>`，双向映射不用查表。
@@ -103,17 +110,17 @@ rope（`--after` 等待关系）与 subagent 卡片**不是 shape**，不入库�
 
 ## 5. 交互规范
 
-| 手势 / 键 | 归属 | 实现 |
-| --- | --- | --- |
-| 滚轮 | 平移（Shift 横向） | `cameraOptions.wheelBehavior: "pan"` |
-| ⌘/Ctrl + 滚轮、捏合 | 以光标为中心缩放 0.1–3 | tldraw 内置，`zoomSteps` 与 `constraints` 按 §21 设 |
-| 空格 + 拖、中键拖 | 平移 | tldraw 内置 |
-| 左键空白拖 | 框选 | select 工具 |
-| ⌘0 / ⌘1 / ⌘= / ⌘- | 100% / 适应 / 放大 / 缩小 | `keybindings.ts` → `canvas.*` 命令 → `editor.setCamera / zoomToFit` |
-| 工具键 V / D / R / A / T / H / F | 选择 / 笔 / 矩形 / 箭头 / 文字 / 高亮 / frame | 新增到 `keybindings.ts`，`allowInTerminal=false`，`allowWhileTyping=false` |
-| Delete / ⌘Z / ⌘A / ⌘D | 现有 `canvas.*` 命令 | 调 `editor.deleteShapes / undo / selectAll / duplicateShapes` |
-| 右键 | 我们自己的 ContextMenu | 空白处 = 添加菜单；shape 上 = 节点菜单或 shape 菜单（样式、置顶置底、转成便签） |
-| 双击文字 / geo | tldraw 内置文字编辑 | 保留 |
+| 手势 / 键                        | 归属                                          | 实现                                                                            |
+| -------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------- |
+| 滚轮                             | 平移（Shift 横向）                            | `cameraOptions.wheelBehavior: "pan"`                                            |
+| ⌘/Ctrl + 滚轮、捏合              | 以光标为中心缩放 0.1–3                        | tldraw 内置，`zoomSteps` 与 `constraints` 按 §21 设                             |
+| 空格 + 拖、中键拖                | 平移                                          | tldraw 内置                                                                     |
+| 左键空白拖                       | 框选                                          | select 工具                                                                     |
+| ⌘0 / ⌘1 / ⌘= / ⌘-                | 100% / 适应 / 放大 / 缩小                     | `keybindings.ts` → `canvas.*` 命令 → `editor.setCamera / zoomToFit`             |
+| 工具键 V / D / R / A / T / H / F | 选择 / 笔 / 矩形 / 箭头 / 文字 / 高亮 / frame | 新增到 `keybindings.ts`，`allowInTerminal=false`，`allowWhileTyping=false`      |
+| Delete / ⌘Z / ⌘A / ⌘D            | 现有 `canvas.*` 命令                          | 调 `editor.deleteShapes / undo / selectAll / duplicateShapes`                   |
+| 右键                             | 我们自己的 ContextMenu                        | 空白处 = 添加菜单；shape 上 = 节点菜单或 shape 菜单（样式、置顶置底、转成便签） |
+| 双击文字 / geo                   | tldraw 内置文字编辑                           | 保留                                                                            |
 
 **只有一个键盘监听器**的规则（§8）不变：tldraw 的 UI 快捷键通过 `overrides` 清空全部 `kbd`，避免它和 `useKeybindings` 抢键。终端聚焦时除 §8 列的 7 条之外一律进 xterm。
 
@@ -141,14 +148,17 @@ rope（`--after` 等待关系）与 subagent 卡片**不是 shape**，不入库�
 
 ```ts
 contextLinkSchema = z.object({
-  id: z.string().uuid(),          // 节点 id，或为 shape 生成的稳定 uuid（shape:<uuid>）
+  id: z.string().uuid(), // 节点 id，或为 shape 生成的稳定 uuid（shape:<uuid>）
   title: z.string().max(160),
-  kind: z.string().max(40),       // 新增 "shape"
-  content: z.object({             // 仅 kind === "shape"
-    text: z.string().max(20_000).optional(),   // text / geo 里的文字
-    pngPath: z.string().max(4_000).optional(), // 导出的 PNG，工作区相对路径
-  }).optional(),
-})
+  kind: z.string().max(40), // 新增 "shape"
+  content: z
+    .object({
+      // 仅 kind === "shape"
+      text: z.string().max(20_000).optional(), // text / geo 里的文字
+      pngPath: z.string().max(4_000).optional(), // 导出的 PNG，工作区相对路径
+    })
+    .optional(),
+});
 ```
 
 - 客户端在 `context-links.ts` 的 `buildLinkDocuments` 里，把绑到白板 shape / frame 的 arrow 也算成链接：文字类直接带 `text`；image shape 直接给资产文件路径（不再导出）；frame、draw、geo 用 `editor.toImage([id])` 导出 PNG，走泛化后的 `POST /api/workspaces/{id}/exports/{shapeUuid}/png`（现有 `export_node_png` 改成不再要求 `draw` 节点，路径改为 `.armadra/exports/<uuid>.png`），链接文档里带 `pngPath`。导出防抖沿用 `EXPORT_DELAY_MS`。
@@ -225,35 +235,35 @@ apps/web/src/
 
 **tldraw 5.4 的确切 API 名（Phase 1 四个 agent 直接引用）**
 
-| 用途 | API |
-| --- | --- |
-| 包 | `tldraw@5.4.0`、`@tldraw/assets@5.4.0`、`@tldraw/tlschema@5.4.0`（`tldraw` 自身 `export * from "@tldraw/editor"`，编辑器 / store / tlschema / validate 的全部符号都能从 `"tldraw"` 导入） |
-| 自定义 shape 注册 | `declare module "@tldraw/tlschema" { interface TLGlobalShapePropsMap { armadra: ArmadraProps } }`，之后 `type ArmadraShape = TLShape<"armadra">`；同理 `TLGlobalBindingPropsMap`、`TLGlobalRecordPropsMap` |
-| ShapeUtil 必写 | `static type`、`static props: RecordProps<S>`（校验器用 `T.number` / `T.string` / `T.boolean`，来自 `@tldraw/validate`）、`getDefaultProps()`、`getGeometry()`、`component()`、**`getIndicatorPath(shape): TLIndicatorPath`**（5.4 的抽象方法，返回 `Path2D`，取代 4.x 的 `indicator(): JSX`） |
-| ShapeUtil 可选 | `canCull` / `canBind(opts: TLShapeUtilCanBindOpts)` / `canEdit` / `canResize` / `canScroll` / `canBeLaidOut` / `hideRotateHandle` / `hideResizeHandles` / `hideSelectionBoundsFg` / `hideSelectionBoundsBg` / `onResize`（配 `resizeBox(shape, info)`）/ `onClick` / `getClipPath` / `getAppOwnedElement` / `onReleaseAppOwnedElement` |
-| 组件槽位 | `TLComponents = TLEditorComponents & TLUiComponents`。编辑器侧：`Background / Canvas / CollaboratorCursor / Grid / InFrontOfTheCanvas / LoadingScreen / OnTheCanvas / ShapeWrapper / Spinner / SvgDefs / ErrorFallback / ShapeErrorFallback`。UI 侧：`ContextMenu / ActionsMenu / HelpMenu / ZoomMenu / MainMenu / Minimap / StylePanel / PageMenu / NavigationPanel / Toolbar / RichTextToolbar / ImageToolbar / VideoToolbar / KeyboardShortcutsDialog / QuickActions / HelperButtons / DebugPanel / DebugMenu / MenuPanel / TopPanel / SharePanel / CursorChatBubble / Dialogs / Toasts / A11y / FollowingIndicator / PeopleMenu*`。**`Minimap` 的宿主是 `NavigationPanel`**，把 `NavigationPanel` 置空缩略图就没人渲染了——要么保留它，要么自己挂 `DefaultMinimap`；样式面板默认实现是 `DefaultStylePanel` / `DefaultStylePanelContent` |
-| 清快捷键 | `TLUiOverrides.actions(editor, actions, helpers)` / `.tools(...)`，遍历返回的 `Record<string, TLUiActionItem \| TLUiToolItem>` 删掉 `kbd` |
-| 相机 | `<Tldraw options={{ camera: TLCameraOptions }}>`——顶层 `cameraOptions` prop 已 deprecated，且 `TldrawOptions` 上的字段名是 **`camera`** 而不是文档里写的 `cameraOptions`。`TLCameraOptions { isLocked, panSpeed, zoomSpeed, zoomSteps, wheelBehavior: "none"\|"pan"\|"zoom", constraints? }`；运行时改用 `editor.setCameraOptions()`，移动用 `editor.setCamera(point, { immediate })` / `centerOnPoint` / `zoomToFit` |
-| frame | `TLFrameShapeProps { w, h, name, color: TLDefaultColorStyle }`（**有 `color`**）；子级裁剪读 `editor.getShapeClipPath(id)`（返回 `polygon(...)` 字符串）；拖进拖出自动换父，`parentId` 在 `page:page` 与 `shape:<frame>` 之间切换，坐标自动转成父级相对 |
-| 绑定 | `editor.createBinding({ type:"arrow", fromId, toId, props:{ terminal:"start"\|"end", normalizedAnchor, isExact, isPrecise } })`、`editor.getBindingsFromShape(id, "arrow")`、`editor.deleteBinding`、`editor.canBindShapes({ fromShape, toShape, binding })`；副作用 `editor.sideEffects.registerBeforeCreateHandler / registerAfterCreateHandler / registerAfterChangeHandler / registerBeforeDeleteHandler`（只有 before-delete 能返回 `false` 否决） |
-| 远端合并 | `editor.store.mergeRemoteChanges(fn)`（side effect 的 `source` 为 `"remote"`，不进撤销栈） |
-| 历史 | `editor.undo() / redo() / markHistoryStoppingPoint()`、`editor.run(fn, { history: "ignore" })` |
-| 快照 | `editor.getSnapshot(): { document: TLStoreSnapshot, session }`、`editor.loadSnapshot(snapshot, opts)`；纯函数版 `getSnapshot(store)` / `loadSnapshot(store, snapshot, opts)` |
-| 资产 | `<Tldraw assets={TLAssetStore}>`；`TLAssetStore { upload(asset, file, abortSignal) => { src, meta? }, resolve?(asset, ctx), remove?(assetIds) }`；内置 `inlineBase64AssetStore` 可做对照 |
-| 导出 | `editor.toImage(shapes, opts) => { blob, width, height }`、`editor.toImageDataUrl(...)`、`exportAs(editor, ids, opts)`。**5.4 没有 `exportToBlob`**，§6.3 写的 `editor.toImage([id])` 是对的 |
-| 其他 | `createShapeId(name?)`、`editor.getCulledShapes()`、`editor.getRenderingShapes()`（整页，不按视口筛）、`compressLegacySegments(segments)`（构造 draw shape 用）、`defaultShapeUtils` / `defaultBindingUtils`、`HTMLContainer`（内容要交互必须自己写 `pointerEvents: "all"`，`.tl-html-container` 默认 `pointer-events: none`） |
+| 用途              | API                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 包                | `tldraw@5.4.0`、`@tldraw/assets@5.4.0`、`@tldraw/tlschema@5.4.0`（`tldraw` 自身 `export * from "@tldraw/editor"`，编辑器 / store / tlschema / validate 的全部符号都能从 `"tldraw"` 导入）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| 自定义 shape 注册 | `declare module "@tldraw/tlschema" { interface TLGlobalShapePropsMap { armadra: ArmadraProps } }`，之后 `type ArmadraShape = TLShape<"armadra">`；同理 `TLGlobalBindingPropsMap`、`TLGlobalRecordPropsMap`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ShapeUtil 必写    | `static type`、`static props: RecordProps<S>`（校验器用 `T.number` / `T.string` / `T.boolean`，来自 `@tldraw/validate`）、`getDefaultProps()`、`getGeometry()`、`component()`、**`getIndicatorPath(shape): TLIndicatorPath`**（5.4 的抽象方法，返回 `Path2D`，取代 4.x 的 `indicator(): JSX`）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ShapeUtil 可选    | `canCull` / `canBind(opts: TLShapeUtilCanBindOpts)` / `canEdit` / `canResize` / `canScroll` / `canBeLaidOut` / `hideRotateHandle` / `hideResizeHandles` / `hideSelectionBoundsFg` / `hideSelectionBoundsBg` / `onResize`（配 `resizeBox(shape, info)`）/ `onClick` / `getClipPath` / `getAppOwnedElement` / `onReleaseAppOwnedElement`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 组件槽位          | `TLComponents = TLEditorComponents & TLUiComponents`。编辑器侧：`Background / Canvas / CollaboratorCursor / Grid / InFrontOfTheCanvas / LoadingScreen / OnTheCanvas / ShapeWrapper / Spinner / SvgDefs / ErrorFallback / ShapeErrorFallback`。UI 侧：`ContextMenu / ActionsMenu / HelpMenu / ZoomMenu / MainMenu / Minimap / StylePanel / PageMenu / NavigationPanel / Toolbar / RichTextToolbar / ImageToolbar / VideoToolbar / KeyboardShortcutsDialog / QuickActions / HelperButtons / DebugPanel / DebugMenu / MenuPanel / TopPanel / SharePanel / CursorChatBubble / Dialogs / Toasts / A11y / FollowingIndicator / PeopleMenu*`。**`Minimap` 的宿主是 `NavigationPanel`**，把 `NavigationPanel` 置空缩略图就没人渲染了——要么保留它，要么自己挂 `DefaultMinimap`；样式面板默认实现是 `DefaultStylePanel` / `DefaultStylePanelContent` |
+| 清快捷键          | `TLUiOverrides.actions(editor, actions, helpers)` / `.tools(...)`，遍历返回的 `Record<string, TLUiActionItem \| TLUiToolItem>` 删掉 `kbd`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| 相机              | `<Tldraw options={{ camera: TLCameraOptions }}>`——顶层 `cameraOptions` prop 已 deprecated，且 `TldrawOptions` 上的字段名是 **`camera`** 而不是文档里写的 `cameraOptions`。`TLCameraOptions { isLocked, panSpeed, zoomSpeed, zoomSteps, wheelBehavior: "none"\|"pan"\|"zoom", constraints? }`；运行时改用 `editor.setCameraOptions()`，移动用 `editor.setCamera(point, { immediate })` / `centerOnPoint` / `zoomToFit`                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| frame             | `TLFrameShapeProps { w, h, name, color: TLDefaultColorStyle }`（**有 `color`**）；子级裁剪读 `editor.getShapeClipPath(id)`（返回 `polygon(...)` 字符串）；拖进拖出自动换父，`parentId` 在 `page:page` 与 `shape:<frame>` 之间切换，坐标自动转成父级相对                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| 绑定              | `editor.createBinding({ type:"arrow", fromId, toId, props:{ terminal:"start"\|"end", normalizedAnchor, isExact, isPrecise } })`、`editor.getBindingsFromShape(id, "arrow")`、`editor.deleteBinding`、`editor.canBindShapes({ fromShape, toShape, binding })`；副作用 `editor.sideEffects.registerBeforeCreateHandler / registerAfterCreateHandler / registerAfterChangeHandler / registerBeforeDeleteHandler`（只有 before-delete 能返回 `false` 否决）                                                                                                                                                                                                                                                                                                                                                                                    |
+| 远端合并          | `editor.store.mergeRemoteChanges(fn)`（side effect 的 `source` 为 `"remote"`，不进撤销栈）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 历史              | `editor.undo() / redo() / markHistoryStoppingPoint()`、`editor.run(fn, { history: "ignore" })`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| 快照              | `editor.getSnapshot(): { document: TLStoreSnapshot, session }`、`editor.loadSnapshot(snapshot, opts)`；纯函数版 `getSnapshot(store)` / `loadSnapshot(store, snapshot, opts)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| 资产              | `<Tldraw assets={TLAssetStore}>`；`TLAssetStore { upload(asset, file, abortSignal) => { src, meta? }, resolve?(asset, ctx), remove?(assetIds) }`；内置 `inlineBase64AssetStore` 可做对照                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| 导出              | `editor.toImage(shapes, opts) => { blob, width, height }`、`editor.toImageDataUrl(...)`、`exportAs(editor, ids, opts)`。**5.4 没有 `exportToBlob`**，§6.3 写的 `editor.toImage([id])` 是对的                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| 其他              | `createShapeId(name?)`、`editor.getCulledShapes()`、`editor.getRenderingShapes()`（整页，不按视口筛）、`compressLegacySegments(segments)`（构造 draw shape 用）、`defaultShapeUtils` / `defaultBindingUtils`、`HTMLContainer`（内容要交互必须自己写 `pointerEvents: "all"`，`.tl-html-container` 默认 `pointer-events: none`）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 **性能（粗略对比，同一台机器、同一个 WebKit 面板）**
 
-| | tldraw（PoC） | React Flow（现状） |
-| --- | --- | --- |
-| 内容 | 21 个 `armadra` 节点外壳（1 个连真实 tmux 终端）+ 200 条 draw + 1 个 frame = 222 shape | 220 个便签节点（临时看板，测完已删） |
-| 脚本建全部内容 | 51 ms | — |
-| 画布容器下的 DOM 节点 | 967（222 shape 里 184 个被裁剪成 `display:none`） | 7264（220 个节点全渲染，无裁剪） |
-| JS 堆 | 89.6 MB（3 shape）→ 102.9 MB（222 shape），+13.3 MB | 109.6 MB |
-| 连续相机推进（含库自身的响应式重算 + 强制布局），120 次 | 0.148 ms/次（3 shape）→ 0.47 ms/次（222 shape） | — |
-| 只改容器 transform + 强制布局，120 次 | 0.015 ms/次 | 0.009 ms/次 |
-| 生产构建 chunk | `tldraw` 1749 kB / gzip 534 kB（`xyflow` 现在是 179 kB / gzip 58 kB） | — |
+|                                                         | tldraw（PoC）                                                                          | React Flow（现状）                   |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------ |
+| 内容                                                    | 21 个 `armadra` 节点外壳（1 个连真实 tmux 终端）+ 200 条 draw + 1 个 frame = 222 shape | 220 个便签节点（临时看板，测完已删） |
+| 脚本建全部内容                                          | 51 ms                                                                                  | —                                    |
+| 画布容器下的 DOM 节点                                   | 967（222 shape 里 184 个被裁剪成 `display:none`）                                      | 7264（220 个节点全渲染，无裁剪）     |
+| JS 堆                                                   | 89.6 MB（3 shape）→ 102.9 MB（222 shape），+13.3 MB                                    | 109.6 MB                             |
+| 连续相机推进（含库自身的响应式重算 + 强制布局），120 次 | 0.148 ms/次（3 shape）→ 0.47 ms/次（222 shape）                                        | —                                    |
+| 只改容器 transform + 强制布局，120 次                   | 0.015 ms/次                                                                            | 0.009 ms/次                          |
+| 生产构建 chunk                                          | `tldraw` 1749 kB / gzip 534 kB（`xyflow` 现在是 179 kB / gzip 58 kB）                  | —                                    |
 
 数字的读法：两者「纯平移」的合成代价都可以忽略，真正的差别是 **DOM 规模**——tldraw 把视口外的 shape 裁成 `display:none`，React Flow 全量渲染；222 个 shape 下 tldraw 的相机推进也只要 0.47 ms，离 16.7 ms 的帧预算很远。代价是包体大了约 10 倍。**真实帧率没有测到**：这次的浏览器面板是隐藏的，`requestAnimationFrame` 完全不回调，只能用「相机推进 + 强制同步布局」的耗时代理。§11 的「手工」一行仍需在真机上重跑 20 终端 + 手绘的拖动帧率。
 
@@ -268,42 +278,42 @@ apps/web/src/
 
 目标：tldraw 上跑通全部 7 种节点 + frame 分组 + 节点间连线，白板工具暂不开放，行为与 v3 等价。
 
-| agent | 归属 | 交付 |
-| --- | --- | --- |
-| canvas | `canvas/TldrawWorkspace.tsx`、`editor-context.ts`、`sync/*`、`overlays/*`、`commands.ts`、`context-links.ts`（节点部分） | 装配、投影与派生、远端合并、命令表、100% 打开、整理后 fitView、居中事件 |
-| nodes | `canvas/shapes/*`、`nodes/NodeShell.tsx`、`nodes/*Node.tsx` 的 React Flow 依赖清理 | `ArmadraShapeUtil`、把手、resize、折叠、最大化、`FrameGroup`、`LinkArrow` |
-| store+shared+runtime | `store/canvas-store.ts`、`packages/shared`、`apps/runtime`（迁移 0009、save/load、assets、export 泛化、`db.rs` 类型白名单、`context_link.rs`） | 动作改为驱动 editor；schema 与接口按 §6 落地并有测试 |
-| shell | `shell/Dock.tsx`、`shell/ControlsCluster.tsx`、`panels/CommandPalette.tsx`、`app/commands.ts`、`app/App.tsx`、`main.tsx`、`sessions/*`、`styles/canvas.css` | 去掉 `useReactFlow`，改用 `editor-context`；Minimap 换肤与状态描边；tldraw token 映射 |
+| agent                | 归属                                                                                                                                                        | 交付                                                                                  |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| canvas               | `canvas/TldrawWorkspace.tsx`、`editor-context.ts`、`sync/*`、`overlays/*`、`commands.ts`、`context-links.ts`（节点部分）                                    | 装配、投影与派生、远端合并、命令表、100% 打开、整理后 fitView、居中事件               |
+| nodes                | `canvas/shapes/*`、`nodes/NodeShell.tsx`、`nodes/*Node.tsx` 的 React Flow 依赖清理                                                                          | `ArmadraShapeUtil`、把手、resize、折叠、最大化、`FrameGroup`、`LinkArrow`             |
+| store+shared+runtime | `store/canvas-store.ts`、`packages/shared`、`apps/runtime`（迁移 0009、save/load、assets、export 泛化、`db.rs` 类型白名单、`context_link.rs`）              | 动作改为驱动 editor；schema 与接口按 §6 落地并有测试                                  |
+| shell                | `shell/Dock.tsx`、`shell/ControlsCluster.tsx`、`panels/CommandPalette.tsx`、`app/commands.ts`、`app/App.tsx`、`main.tsx`、`sessions/*`、`styles/canvas.css` | 去掉 `useReactFlow`，改用 `editor-context`；Minimap 换肤与状态描边；tldraw token 映射 |
 
 Phase 1 出口：`pnpm test`、`typecheck`、`cargo test`、clippy 零告警；§18.4 终端清单在 tldraw 里逐项通过；旧看板打开无丢失。
 
-**已完成（2026-09-04）**：四个 agent 并行交付，`apps/web/src` 全树 `@xyflow/react` = 0；交接记录见 [phase1-handoff.md](./phase1-handoff.md)。
+**已完成（2026-09-04）**：四个 agent 并行交付，`apps/web/src` 全树 `@xyflow/react` = 0；交接记录见 [phase1-handoff.md](./history/phase1-handoff.md)。
 
 ### Phase 2 · 连线语义与派生层（2 个 agent 并行，约 2 天）
 
-| agent | 交付 |
-| --- | --- |
-| edges | 箭头 ↔ edge 双向：创建、删除、方向与样式、合法性、撤销一致；把手起笔工具；节点删除级联 |
+| agent    | 交付                                                                                                                 |
+| -------- | -------------------------------------------------------------------------------------------------------------------- |
+| edges    | 箭头 ↔ edge 双向：创建、删除、方向与样式、合法性、撤销一致；把手起笔工具；节点删除级联                              |
 | overlays | rope / subagent 卡片迁到 `OnTheCanvas`；`derived-edges` 测试复用；`StatusMiniMap` 的状态描边在 tldraw Minimap 上复现 |
 
 **已完成（2026-09-04）**：边的身份改记在 shape 上、合法性推迟到交互结束再判；rope 与子代理卡片迁到 `OnTheCanvas`，缩略图按 Agent 状态描边。
 
 ### Phase 3 · 白板能力开放（3 个 agent 并行，约 2 天）
 
-| agent | 交付 |
-| --- | --- |
-| tools | Dock 工具组、工具键、样式面板换肤、右键 shape 菜单、`Esc` 回选择、锁定画布 |
+| agent   | 交付                                                                                                                                                                           |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| tools   | Dock 工具组、工具键、样式面板换肤、右键 shape 菜单、`Esc` 回选择、锁定画布                                                                                                     |
 | content | `registerExternalContentHandler`：图片 → image shape（资产上传）、OS 文件 / 文件夹 → editor / files 节点、文本一律 → tldraw text shape（用户定）；粘贴同规则；`image` 节点迁移 |
-| migrate | `draw` / `image` 节点 → 原生 shape 的迁移与回归测试；白板快照过滤 / 合并的属性测试；8 MiB 上限与超限提示 |
+| migrate | `draw` / `image` 节点 → 原生 shape 的迁移与回归测试；白板快照过滤 / 合并的属性测试；8 MiB 上限与超限提示                                                                       |
 
 **已完成（2026-09-04）**：另加两个计划外的 agent —— asset-import（按路径导入资产）与 link-shape（上下文链接改成自定义 shape 的贴边贝塞尔）。
 
 ### Phase 4 · 白板内容接入 Agent（2 个 agent 并行，约 2 天）
 
-| agent | 交付 |
-| --- | --- |
+| agent        | 交付                                                                                                                                                        |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | link-content | §6.3 全链路：arrow 绑到 shape / frame → 链接文档带 `text` / `pngPath` → Runtime 回内容；导出防抖；`get-linked-context` 与 `armadra-linked-context` 技能文案 |
-| polish | 20 终端 + 大量手绘的性能复测；深浅色；tldraw 水印位置；`docs/implementation-status.md` 更新 |
+| polish       | 20 终端 + 大量手绘的性能复测；深浅色；tldraw 水印位置；`docs/implementation-status.md` 更新                                                                 |
 
 **已完成（2026-09-04）**：polish 这一半还顺带修了两处终端回归（滚轮桥被 xterm 6 的 `ScrollableElement` 吞掉、OSC 标题记忆刷新即丢），并给保存冲突加了自动变基。
 
@@ -318,20 +328,30 @@ Phase 1 出口：`pnpm test`、`typecheck`、`cargo test`、clippy 零告警；�
 ### 9.1 `canvas/editor-context.ts`（归属 canvas）
 
 ```ts
-export function getEditor(): Editor | null;            // 画布未挂载时 null
-export function useEditor(): Editor | null;            // 订阅挂载 / 卸载
-export function screenToPage(point: {x: number; y: number}): Position;
+export function getEditor(): Editor | null; // 画布未挂载时 null
+export function useEditor(): Editor | null; // 订阅挂载 / 卸载
+export function screenToPage(point: { x: number; y: number }): Position;
 export function centerOnNode(nodeId: string, zoomFloor?: number): void;
-export const CENTER_NODE_EVENT: string;                // 不变
+export const CENTER_NODE_EVENT: string; // 不变
 ```
 
 ### 9.2 `canvas/sync/project.ts` 与 `derive.ts`（归属 canvas）
 
 ```ts
 export function nodeToShape(node: CanvasNode): ArmadraShape | TLFrameShape;
-export function edgeToArrow(edge: CanvasEdge, nodes: readonly CanvasNode[]): { arrow: TLArrowShape; bindings: TLArrowBinding[] };
-export function shapeToNode(shape: ArmadraShape | TLFrameShape, boardId: string): CanvasNode;
-export function arrowToEdge(arrow: TLArrowShape, bindings: readonly TLArrowBinding[], boardId: string): CanvasEdge | null; // 非两端节点绑定时 null
+export function edgeToArrow(
+  edge: CanvasEdge,
+  nodes: readonly CanvasNode[],
+): { arrow: TLArrowShape; bindings: TLArrowBinding[] };
+export function shapeToNode(
+  shape: ArmadraShape | TLFrameShape,
+  boardId: string,
+): CanvasNode;
+export function arrowToEdge(
+  arrow: TLArrowShape,
+  bindings: readonly TLArrowBinding[],
+  boardId: string,
+): CanvasEdge | null; // 非两端节点绑定时 null
 export const shapeId: (nodeId: string) => TLShapeId;
 export const nodeId: (shapeId: TLShapeId) => string;
 ```
@@ -354,27 +374,27 @@ export const nodeId: (shapeId: TLShapeId) => string;
 
 ## 10. 风险与 PoC 结论
 
-| 风险 | 影响 | 对策 | PoC 结论 |
-| --- | --- | --- | --- |
-| tldraw 视口裁剪卸载 shape 组件 | 终端出视口即断开、回来要重连重绘 | §8 Phase 0-3 的「DOM 寄养」；或 `OnTheCanvas` 宿主渲染节点体 | **风险不成立，不需要寄养。** 5.4 的裁剪只把容器设成 `display:none`（`ShapeUtil.canCull` 的 doc comment 原文、`Shape.tsx` 的 `useShapeCulling` 实现），组件不卸载；`getRenderingShapes()` 也是整页渲染，不按视口。实测把相机推到 −20000 再回来，`mount/unmount` 计数不变、xterm DOM 是同一个元素、无重连。仍然给 `armadra` 设 `canCull() => false`，因为 `display:none` 会让 `FitAddon` 量到 0×0。真要寄养也有官方 API：`ShapeUtil.getAppOwnedElement()` + `onReleaseAppOwnedElement()`（承诺挂载期间不卸载 / 不重建 / 不搬家，搬动用 `Node.moveBefore`），PoC 里已跑通 adopt / release |
-| 体内指针与 tldraw 抢事件 | 终端点击变成选中 / 拖动 | 体 `onPointerDown` 停止冒泡；只在头部拖 | **通过。** 指针：tldraw 的 canvas 事件是挂在 `.tl-canvas` 上的 React props，体上 `onPointerDown` 的合成 `stopPropagation` 就够——实测体内单击选区仍为空、只把焦点给 `xterm-helper-textarea`、终端缓冲区 0 变化；体内拖 150×100 shape 不动、相机不动；头部拖 120×84 shape 精确位移 120/84。滚轮：tldraw 的 wheel 是**原生**监听且挂在 `.tl-canvas` 上，React 19 的委托在 React 根（更外层），合成事件的 stopPropagation 来不及，必须用原生监听器。而且要分两相：**冒泡相位**挡普通滚轮（终端自己的 wheel 监听在更深的 `[data-slot="terminal-body"]`，捕获相位会把 §18.5 的 tmux 桥饿死），**捕获相位**只拦 ⌘/Ctrl+滚轮并转发一份到 `.tl-canvas`。实测普通滚轮：相机不动 + `POST /api/terminals/{id}/scroll` 照发；⌘+滚轮：缩放 1→3 且桥 0 次请求 |
-| tldraw 键盘快捷键与 `useKeybindings` 冲突 | ⌘Z、Delete 双触发 | `overrides` 清空 kbd；单元测试断言 tldraw 不再注册 | **通过。** `TLUiOverrides.actions/tools` 里把每个 item 的 `kbd` 删掉之后，画布里按 Delete / Backspace 不删 shape、⌘Z 不撤销、⌘A 不全选。终端聚焦时 `keybindings.ts` 的放行键照常：⌘K 开命令面板（`[cmdk-root]` 出现），⌘T（`allowInTerminal:false`）被挡住、节点数不变。注意 `Escape`、方向键这类走 tldraw 的 `useDocumentEvents`，不由 `kbd` 表控制，Phase 3 开工具时要单独确认 |
-| WebGL xterm 在 CSS transform 下 | 模糊或上下文丢失 | 默认 DOM 渲染器不变；寄养模式禁 WebGL | **通过，无需禁用。** 打开 `armadra.terminal.webgl` 后终端起 3 个 canvas 层，在 tldraw 的 CSS transform 下 zoom 1.7 文字清晰、zoom 0.3 仍正常绘制，控制台无错、无 context lost。默认仍保持 DOM 渲染器（§18 不变），WebGL 继续是可选项 |
-| 字体与图标资源 | WKWebView 离线时手绘字体缺失 | `@tldraw/assets` 自托管；CJK 回退系统字体 | **通过，但要改 vite 配置。** `getAssetUrlsByImport()` 来自 `@tldraw/assets/imports.vite`，dev / build 全部走 `localhost`，没有一条 `tldraw.com` 请求。**必须加 `optimizeDeps.exclude: ["@tldraw/assets"]`**：该入口全是 `./fonts/x.woff2?url` 形式的导入，vite 8 的 rolldown 依赖预打包不认 `?url`，否则 dev server 直接以 53 条 `UNLOADABLE_DEPENDENCY` 启动失败。生产构建产出 16 个 woff2（合计 1.3 MB）+ 52 个 svg/json，全部落在 `dist/assets` |
-| 快照体积 | 大量手绘 + 内嵌图片撑爆 save | 图片走资产接口；8 MiB 上限；超限提示 | **结构确认。** `editor.getSnapshot()` 返回 `{ document, session }`，`document.store` 是 `id → record` 的扁平表、`document.schema.schemaVersion = 2`；3 个 shape 时 `JSON.stringify(document)` = 1933 B。按 §6.1 过滤掉 `armadra` / `frame` / 两端绑节点的 arrow 只是删 key，成本可忽略。draw shape 的 `segments` 在 5.4 已经是 **base64 delta 编码的 `path` 字符串**（`TLDrawShapeSegment { type, path, dim }`），不再是点数组，体积本身就比 v2 的 `strokes_json` 小；构造时用 `compressLegacySegments([{ type, points }])`。8 MiB 上限继续按计划做 |
-| 水印 | 右下角「Made with tldraw」 | 先接受；申请许可 key 后 `licenseKey` 传入 | 用户决定（PoC 里确认水印固定在右下角，文案「Get a license for production」，不挡 Dock） |
-| 远端合并与撤销 | Agent 开的节点被用户 ⌘Z 撤掉 | `mergeRemoteChanges` 不进历史 | **通过。** `editor.store.mergeRemoteChanges(fn)` 里建的 shape 在随后的 `editor.undo()` 中原样保留，同一次撤销把用户自己那步位移回退了（x 740 → 700）。配套 API：`editor.markHistoryStoppingPoint()` 标记撤销点，`editor.run(fn, { history: "ignore" })` 让一段改动完全不进栈 |
+| 风险                                      | 影响                             | 对策                                                         | PoC 结论                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------------------------------- | -------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| tldraw 视口裁剪卸载 shape 组件            | 终端出视口即断开、回来要重连重绘 | §8 Phase 0-3 的「DOM 寄养」；或 `OnTheCanvas` 宿主渲染节点体 | **风险不成立，不需要寄养。** 5.4 的裁剪只把容器设成 `display:none`（`ShapeUtil.canCull` 的 doc comment 原文、`Shape.tsx` 的 `useShapeCulling` 实现），组件不卸载；`getRenderingShapes()` 也是整页渲染，不按视口。实测把相机推到 −20000 再回来，`mount/unmount` 计数不变、xterm DOM 是同一个元素、无重连。仍然给 `armadra` 设 `canCull() => false`，因为 `display:none` 会让 `FitAddon` 量到 0×0。真要寄养也有官方 API：`ShapeUtil.getAppOwnedElement()` + `onReleaseAppOwnedElement()`（承诺挂载期间不卸载 / 不重建 / 不搬家，搬动用 `Node.moveBefore`），PoC 里已跑通 adopt / release                                                                                                                                                         |
+| 体内指针与 tldraw 抢事件                  | 终端点击变成选中 / 拖动          | 体 `onPointerDown` 停止冒泡；只在头部拖                      | **通过。** 指针：tldraw 的 canvas 事件是挂在 `.tl-canvas` 上的 React props，体上 `onPointerDown` 的合成 `stopPropagation` 就够——实测体内单击选区仍为空、只把焦点给 `xterm-helper-textarea`、终端缓冲区 0 变化；体内拖 150×100 shape 不动、相机不动；头部拖 120×84 shape 精确位移 120/84。滚轮：tldraw 的 wheel 是**原生**监听且挂在 `.tl-canvas` 上，React 19 的委托在 React 根（更外层），合成事件的 stopPropagation 来不及，必须用原生监听器。而且要分两相：**冒泡相位**挡普通滚轮（终端自己的 wheel 监听在更深的 `[data-slot="terminal-body"]`，捕获相位会把 §18.5 的 tmux 桥饿死），**捕获相位**只拦 ⌘/Ctrl+滚轮并转发一份到 `.tl-canvas`。实测普通滚轮：相机不动 + `POST /api/terminals/{id}/scroll` 照发；⌘+滚轮：缩放 1→3 且桥 0 次请求 |
+| tldraw 键盘快捷键与 `useKeybindings` 冲突 | ⌘Z、Delete 双触发                | `overrides` 清空 kbd；单元测试断言 tldraw 不再注册           | **通过。** `TLUiOverrides.actions/tools` 里把每个 item 的 `kbd` 删掉之后，画布里按 Delete / Backspace 不删 shape、⌘Z 不撤销、⌘A 不全选。终端聚焦时 `keybindings.ts` 的放行键照常：⌘K 开命令面板（`[cmdk-root]` 出现），⌘T（`allowInTerminal:false`）被挡住、节点数不变。注意 `Escape`、方向键这类走 tldraw 的 `useDocumentEvents`，不由 `kbd` 表控制，Phase 3 开工具时要单独确认                                                                                                                                                                                                                                                                                                                                                               |
+| WebGL xterm 在 CSS transform 下           | 模糊或上下文丢失                 | 默认 DOM 渲染器不变；寄养模式禁 WebGL                        | **通过，无需禁用。** 打开 `armadra.terminal.webgl` 后终端起 3 个 canvas 层，在 tldraw 的 CSS transform 下 zoom 1.7 文字清晰、zoom 0.3 仍正常绘制，控制台无错、无 context lost。默认仍保持 DOM 渲染器（§18 不变），WebGL 继续是可选项                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| 字体与图标资源                            | WKWebView 离线时手绘字体缺失     | `@tldraw/assets` 自托管；CJK 回退系统字体                    | **通过，但要改 vite 配置。** `getAssetUrlsByImport()` 来自 `@tldraw/assets/imports.vite`，dev / build 全部走 `localhost`，没有一条 `tldraw.com` 请求。**必须加 `optimizeDeps.exclude: ["@tldraw/assets"]`**：该入口全是 `./fonts/x.woff2?url` 形式的导入，vite 8 的 rolldown 依赖预打包不认 `?url`，否则 dev server 直接以 53 条 `UNLOADABLE_DEPENDENCY` 启动失败。生产构建产出 16 个 woff2（合计 1.3 MB）+ 52 个 svg/json，全部落在 `dist/assets`                                                                                                                                                                                                                                                                                             |
+| 快照体积                                  | 大量手绘 + 内嵌图片撑爆 save     | 图片走资产接口；8 MiB 上限；超限提示                         | **结构确认。** `editor.getSnapshot()` 返回 `{ document, session }`，`document.store` 是 `id → record` 的扁平表、`document.schema.schemaVersion = 2`；3 个 shape 时 `JSON.stringify(document)` = 1933 B。按 §6.1 过滤掉 `armadra` / `frame` / 两端绑节点的 arrow 只是删 key，成本可忽略。draw shape 的 `segments` 在 5.4 已经是 **base64 delta 编码的 `path` 字符串**（`TLDrawShapeSegment { type, path, dim }`），不再是点数组，体积本身就比 v2 的 `strokes_json` 小；构造时用 `compressLegacySegments([{ type, points }])`。8 MiB 上限继续按计划做                                                                                                                                                                                            |
+| 水印                                      | 右下角「Made with tldraw」       | 先接受；申请许可 key 后 `licenseKey` 传入                    | 用户决定（PoC 里确认水印固定在右下角，文案「Get a license for production」，不挡 Dock）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| 远端合并与撤销                            | Agent 开的节点被用户 ⌘Z 撤掉     | `mergeRemoteChanges` 不进历史                                | **通过。** `editor.store.mergeRemoteChanges(fn)` 里建的 shape 在随后的 `editor.undo()` 中原样保留，同一次撤销把用户自己那步位移回退了（x 740 → 700）。配套 API：`editor.markHistoryStoppingPoint()` 标记撤销点，`editor.run(fn, { history: "ignore" })` 让一段改动完全不进栈                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 ## 11. 测试矩阵（新增部分）
 
-| 层 | 用例 |
-| --- | --- |
-| shared | `whiteboard` 上限；`contextLink.content` 校验；`draw` / `image` 只读不写 |
+| 层         | 用例                                                                                                                   |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------- |
+| shared     | `whiteboard` 上限；`contextLink.content` 校验；`draw` / `image` 只读不写                                               |
 | web 纯函数 | `project / derive` 往返恒等；`snapshot` 过滤后不含节点记录；`arrowToEdge` 对单端绑定返回 null；`migrate-draw` 坐标平移 |
-| web 组件 | `ArmadraShapeUtil` 折叠高度、最大化矩形；把手起箭头；体内 pointerdown 不改选区 |
-| web 集成 | 打开旧看板 → 节点、连线、分组一个不少；撤销拖动；删节点级联删边；远端新增节点不进撤销 |
-| runtime | 0009 迁移；save 带 `whiteboard` 往返；assets 上传路径白名单与哈希去重；export 泛化；`context_link` 的 `shape` 分支 |
-| 手工 | §18.4 终端清单；20 终端 + 手绘性能；深浅色；捏合 / ⌘滚轮 / 空格拖 |
+| web 组件   | `ArmadraShapeUtil` 折叠高度、最大化矩形；把手起箭头；体内 pointerdown 不改选区                                         |
+| web 集成   | 打开旧看板 → 节点、连线、分组一个不少；撤销拖动；删节点级联删边；远端新增节点不进撤销                                  |
+| runtime    | 0009 迁移；save 带 `whiteboard` 往返；assets 上传路径白名单与哈希去重；export 泛化；`context_link` 的 `shape` 分支     |
+| 手工       | §18.4 终端清单；20 终端 + 手绘性能；深浅色；捏合 / ⌘滚轮 / 空格拖                                                      |
 
 ## 12. 用户决定（2026-09-04）
 

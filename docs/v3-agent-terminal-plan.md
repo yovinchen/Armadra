@@ -3,7 +3,7 @@
 > 状态：Phase 0–4 已实施（2026-09-04，分支 main）。验证结果见 implementation-status.md  
 > 日期：2026-09-04  
 > 输入：当前代码盘点（2026-09-04）  
-> 不变边界：[architecture.md](./architecture.md) 的三层结构（React Flow / Rust Runtime / Tauri 薄壳）与"SQLite 为真相"原则继续有效；本文取代 [redesign-plan.md](./redesign-plan.md) 成为新的实施契约。
+> 不变边界：[architecture.md](./architecture.md) 的三层结构（React Flow / Rust Runtime / Tauri 薄壳）与"SQLite 为真相"原则继续有效；本文取代 [redesign-plan.md](./history/redesign-plan.md) 成为新的实施契约。
 
 ## 0. 一句话结论
 
@@ -25,18 +25,18 @@
 
 ## 2. 现状差距（2026-09-04 实测）
 
-| 维度 | 当前 | 目标设计 | 决定 |
-| --- | --- | --- | --- |
-| 壳 | 顶栏 36 + 轨 52 + 侧栏 236 + Inspector 272 + 状态栏 24，五区固定 | 标签栏 44 + 画布；其余全部浮层 | 改为浮层壳 |
-| 组件 | 手写 CSS 4.7k 行，无组件库；密度高、字号小、对比弱 | Tailwind v4 + shadcn/ui（Radix 原语） | 引入 Tailwind v4 + shadcn/ui |
-| Agent | ACP 子进程，一次 prompt 一个 session，不能追问；时间线自渲染 | CLI 在 PTY 里跑，hook 回报状态，权限 hook 直答 | 换成终端 + Hook |
-| Agent 协作 | 无 | 上下文链接、消息投递、画布控制、子代理卡片、`--after` DAG | 分两阶段实现 |
-| 节点 | task/agent/terminal/diff/file/context/note/browser/image/log | terminal(含 agent)/sticky/group/editor/diff/files/browser/image | 收敛为 8 种 |
-| 连线 | 6 种语义 + 1–6 热键选择层 + 推荐矩阵 | 1 种入库的 context link；rope/ephemeral 派生 | 只保留 link |
-| 节点显示 | mini/normal/focus 三态 + 缩放阈值强制 mini + portal 聚焦 | resize / collapse(40px) / maximize / focus 层 | 换成这四个动作 |
-| 画布装饰 | 手绘笔迹层（5 色，入库） | 无 | 删除 |
-| 会话管理 | 无 | 会话侧栏（按项目/状态分组、三色信号徽标） | 新增 |
-| 终端 | portable-pty，128 chunk 回放，Runtime 重启即丢 | tmux 持久 + 快照重连 + 背压 | 本方案不改（见 §10 后续） |
+| 维度       | 当前                                                             | 目标设计                                                        | 决定                         |
+| ---------- | ---------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------- |
+| 壳         | 顶栏 36 + 轨 52 + 侧栏 236 + Inspector 272 + 状态栏 24，五区固定 | 标签栏 44 + 画布；其余全部浮层                                  | 改为浮层壳                   |
+| 组件       | 手写 CSS 4.7k 行，无组件库；密度高、字号小、对比弱               | Tailwind v4 + shadcn/ui（Radix 原语）                           | 引入 Tailwind v4 + shadcn/ui |
+| Agent      | ACP 子进程，一次 prompt 一个 session，不能追问；时间线自渲染     | CLI 在 PTY 里跑，hook 回报状态，权限 hook 直答                  | 换成终端 + Hook              |
+| Agent 协作 | 无                                                               | 上下文链接、消息投递、画布控制、子代理卡片、`--after` DAG       | 分两阶段实现                 |
+| 节点       | task/agent/terminal/diff/file/context/note/browser/image/log     | terminal(含 agent)/sticky/group/editor/diff/files/browser/image | 收敛为 8 种                  |
+| 连线       | 6 种语义 + 1–6 热键选择层 + 推荐矩阵                             | 1 种入库的 context link；rope/ephemeral 派生                    | 只保留 link                  |
+| 节点显示   | mini/normal/focus 三态 + 缩放阈值强制 mini + portal 聚焦         | resize / collapse(40px) / maximize / focus 层                   | 换成这四个动作               |
+| 画布装饰   | 手绘笔迹层（5 色，入库）                                         | 无                                                              | 删除                         |
+| 会话管理   | 无                                                               | 会话侧栏（按项目/状态分组、三色信号徽标）                       | 新增                         |
+| 终端       | portable-pty，128 chunk 回放，Runtime 重启即丢                   | tmux 持久 + 快照重连 + 背压                                     | 本方案不改（见 §10 后续）    |
 
 当前可删代码量（前端约 4500 行 TS/TSX + `acp.rs` 830 行 + `nodes.css`/`canvas.css` 大部分）已在盘点中逐文件列出，见 §9。
 
@@ -82,6 +82,7 @@ z-index 栈固定为：画布内容 0 → pills 5 → sessions 12 → dock 20 �
 入库只有一种 `link`（上下文链接）。渲染为 `FloatingEdge`：读两端节点绝对矩形，在相对边中点之间画贝塞尔（`data.anchor:"horizontal"` 时只走左右两侧）；强调色宽 2，选中 3.5。终端↔终端为双向箭头、标签 `⇄ 上下文`；源节点是便签时为单向箭头、标签 `🗒 便签`（便签只被读取，不回写）。判断依据是 `sourceNode.type === "sticky"`，与是否带 `agent` 无关。
 
 派生边（每帧从状态计算、不入库）：
+
 - **rope**：节点 A 通过控制 API 打开了 B，或 B 用 `--after A` 等待 A。颜色取 A 的 Agent 品牌色，1.5px；等待中虚线 `6 4` + 流动 + `⏳`。
 - **subagent 边**：父 Agent → 临时子代理卡片。
 
@@ -97,16 +98,16 @@ z-index 栈固定为：画布内容 0 → pills 5 → sessions 12 → dock 20 �
 
 Agent 品牌色：Claude `#d97757`、Codex `#10a37f`、Gemini `#4285f4`、OpenCode `#a78bfa`。节点调色板 7 色：`#0a84ff #32d74b #ffd60a #ff453a #bf5af2 #6ac4dc #ff9f0a`。
 
-| 节点 | 默认尺寸 | 最小尺寸 | 内容 |
-| --- | --- | --- | --- |
-| terminal（含 Agent） | 640×440 | 260×160 | xterm + fit + web-links + unicode11 |
-| sticky | 240×200 | 160×120 | 底 `${color}22`、边 `color`；平时渲染 Markdown，点击切 textarea；底部相对时间 |
-| group | 520×360 | 200×140 | 1.5px 虚线 + 圆角 14 + `${color}0f`；框体 `pointer-events:none`，只有顶边浮动标签胶囊（色点 + 可编辑名，也是拖拽把手）可交互；用 React Flow parent/子节点 |
-| editor | 700×480 | 320×200 | 阶段一用 CodeMirror 6 只读/可编辑 + 保存；Monaco 留待后续 |
-| diff | 860×500 | 420×220 | 只读 diff 视图（工作区 / 暂存区），接受/回滚动作迁到源码控制抽屉 |
-| files | 340×460 | 220×160 | 面包屑 + 过滤框 + 列表；双击文件 → 新 editor 节点 |
-| browser | 900×620 | 360×240 | 沙箱 iframe 预览（不变），标注"预览" |
-| image | 260×200 | 160×120 | `<img>` |
+| 节点                 | 默认尺寸 | 最小尺寸 | 内容                                                                                                                                                      |
+| -------------------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| terminal（含 Agent） | 640×440  | 260×160  | xterm + fit + web-links + unicode11                                                                                                                       |
+| sticky               | 240×200  | 160×120  | 底 `${color}22`、边 `color`；平时渲染 Markdown，点击切 textarea；底部相对时间                                                                             |
+| group                | 520×360  | 200×140  | 1.5px 虚线 + 圆角 14 + `${color}0f`；框体 `pointer-events:none`，只有顶边浮动标签胶囊（色点 + 可编辑名，也是拖拽把手）可交互；用 React Flow parent/子节点 |
+| editor               | 700×480  | 320×200  | 阶段一用 CodeMirror 6 只读/可编辑 + 保存；Monaco 留待后续                                                                                                 |
+| diff                 | 860×500  | 420×220  | 只读 diff 视图（工作区 / 暂存区），接受/回滚动作迁到源码控制抽屉                                                                                          |
+| files                | 340×460  | 220×160  | 面包屑 + 过滤框 + 列表；双击文件 → 新 editor 节点                                                                                                         |
+| browser              | 900×620  | 360×240  | 沙箱 iframe 预览（不变），标注"预览"                                                                                                                      |
+| image                | 260×200  | 160×120  | `<img>`                                                                                                                                                   |
 
 临时卡片（不入库、不进撤销）：**subagent**（父 Agent 下方，左侧 3px 陶土竖条，任务名 + 计时 + tokens/工具数，展开看转录）。
 
@@ -131,16 +132,16 @@ Agent 品牌色：Claude `#d97757`、Codex `#10a37f`、Gemini `#4285f4`、OpenCo
 
 ### 4.1 选型
 
-| 层 | 选择 | 理由 |
-| --- | --- | --- |
-| 原子样式 | Tailwind v4（`@tailwindcss/vite`） | 零运行时；与 shadcn/ui 配套；CSS 变量主题天然契合 |
-| 组件 | shadcn/ui（Radix Primitives，源码拷入 `apps/web/src/ui/`） | 可完全定制、无黑盒样式；键盘/无障碍/焦点管理由 Radix 保证；拷入源码不受升级破坏 |
-| 命令面板 | cmdk | shadcn Command 即基于它 |
-| Toast | sonner | 轻、可堆叠 |
-| 图标 | lucide-react（已用） | 不变 |
-| 动效 | motion（已用）仅 opacity/transform | 不变 |
-| 编辑器 | @codemirror/* | 体积小、WebKit 兼容好；Monaco 后置 |
-| 终端 | @xterm/xterm 6 + fit + web-links + unicode11 | WebGL addon 在 WKWebView 上易丢上下文，默认不启用 |
+| 层       | 选择                                                       | 理由                                                                            |
+| -------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 原子样式 | Tailwind v4（`@tailwindcss/vite`）                         | 零运行时；与 shadcn/ui 配套；CSS 变量主题天然契合                               |
+| 组件     | shadcn/ui（Radix Primitives，源码拷入 `apps/web/src/ui/`） | 可完全定制、无黑盒样式；键盘/无障碍/焦点管理由 Radix 保证；拷入源码不受升级破坏 |
+| 命令面板 | cmdk                                                       | shadcn Command 即基于它                                                         |
+| Toast    | sonner                                                     | 轻、可堆叠                                                                      |
+| 图标     | lucide-react（已用）                                       | 不变                                                                            |
+| 动效     | motion（已用）仅 opacity/transform                         | 不变                                                                            |
+| 编辑器   | @codemirror/\*                                             | 体积小、WebKit 兼容好；Monaco 后置                                              |
+| 终端     | @xterm/xterm 6 + fit + web-links + unicode11               | WebGL addon 在 WKWebView 上易丢上下文，默认不启用                               |
 
 需要拷入的 shadcn 组件：Button、Input、Textarea、Switch、Select、Tabs、Tooltip、Popover、DropdownMenu、ContextMenu、Dialog、AlertDialog、Sheet（抽屉）、Command、ScrollArea、Badge、Separator、Kbd（自写）。
 
@@ -153,27 +154,50 @@ Tailwind v4 依赖 `@property`、`color-mix()`、cascade layers，运行时最�
 `tokens.css` 改为"表面高度"命名并映射到 shadcn 变量名，深色优先，浅色暖白：
 
 ```css
-:root {                     /* dark */
+:root {
+  /* dark */
   --tint-rgb: 255 255 255;
-  --bg: #1e1e1e;  --panel: #282828;  --panel-header: #323232;
-  --canvas-bg: #000;  --canvas-dot: #4a4a4a;
-  --surface-sunken: #161616; --surface-deep: #202020; --surface-raised: #2e2e2e; --surface-overlay: #343434;
-  --border: rgb(var(--tint-rgb) / .10);
-  --text: rgb(var(--tint-rgb) / .85);  --muted: rgb(var(--tint-rgb) / .55);
-  --accent: #0a84ff; --accent-text: #6cb0ff;
-  --danger: #ff453a; --warn: #ff9f0a; --caution: #ffd60a; --success: #32d74b;
+  --bg: #1e1e1e;
+  --panel: #282828;
+  --panel-header: #323232;
+  --canvas-bg: #000;
+  --canvas-dot: #4a4a4a;
+  --surface-sunken: #161616;
+  --surface-deep: #202020;
+  --surface-raised: #2e2e2e;
+  --surface-overlay: #343434;
+  --border: rgb(var(--tint-rgb) / 0.1);
+  --text: rgb(var(--tint-rgb) / 0.85);
+  --muted: rgb(var(--tint-rgb) / 0.55);
+  --accent: #0a84ff;
+  --accent-text: #6cb0ff;
+  --danger: #ff453a;
+  --warn: #ff9f0a;
+  --caution: #ffd60a;
+  --success: #32d74b;
   --agent-working: #d97757;
-  --radius: 8px; --radius-sm: 6px; --radius-lg: 12px;
+  --radius: 8px;
+  --radius-sm: 6px;
+  --radius-lg: 12px;
   --term-bg: #0a0a0a;
   /* shadcn aliases */
-  --background: var(--bg); --foreground: var(--text); --card: var(--panel);
-  --popover: var(--surface-overlay); --primary: var(--accent); --destructive: var(--danger);
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--panel);
+  --popover: var(--surface-overlay);
+  --primary: var(--accent);
+  --destructive: var(--danger);
   --ring: var(--accent);
 }
 :root[data-theme="light"] {
   --tint-rgb: 58 48 38;
-  --bg: #fdfbf7; --panel: #ffffff; --panel-header: #f3efe8; --canvas-bg: #f6f2ea; --canvas-dot: #cfc8bc;
-  --text: rgb(var(--tint-rgb) / .9); --muted: rgb(var(--tint-rgb) / .7);
+  --bg: #fdfbf7;
+  --panel: #ffffff;
+  --panel-header: #f3efe8;
+  --canvas-bg: #f6f2ea;
+  --canvas-dot: #cfc8bc;
+  --text: rgb(var(--tint-rgb) / 0.9);
+  --muted: rgb(var(--tint-rgb) / 0.7);
   --accent: #007aff; /* 其余同名覆盖 */
 }
 ```
@@ -187,16 +211,16 @@ Tailwind v4 依赖 `@property`、`color-mix()`、cascade layers，运行时最�
 - 没有独立的 Agent 节点类型。`terminal` 节点数据增加 `agent?: { id, accountId?, permissionMode?, model?, sessionId?, initialCommand }`。
 - Agent 注册表 `packages/shared/src/agents.ts`（纯数据）：
 
-| 字段 | 说明 |
-| --- | --- |
-| `id` | `claude` / `codex` / `gemini` / `opencode` / `custom:<uuid>` |
-| `label` / `color` | 显示名与品牌色 |
-| `launchCmd` | 程序名 |
-| `promptMode` | `argv` / `flag-prompt` / `stdin-after-start` |
-| `permissionFlag` | 权限模式如何映射到命令行参数 |
-| `sessionIdFlag?` | 可由我们预铸会话 ID 的 CLI |
-| `capabilities` | `hooks` / `resume` / `subagent` / `contextLink` / `usage` 集合 |
-| `hookAdapter` | 见 §5.3 |
+| 字段              | 说明                                                           |
+| ----------------- | -------------------------------------------------------------- |
+| `id`              | `claude` / `codex` / `gemini` / `opencode` / `custom:<uuid>`   |
+| `label` / `color` | 显示名与品牌色                                                 |
+| `launchCmd`       | 程序名                                                         |
+| `promptMode`      | `argv` / `flag-prompt` / `stdin-after-start`                   |
+| `permissionFlag`  | 权限模式如何映射到命令行参数                                   |
+| `sessionIdFlag?`  | 可由我们预铸会话 ID 的 CLI                                     |
+| `capabilities`    | `hooks` / `resume` / `subagent` / `contextLink` / `usage` 集合 |
+| `hookAdapter`     | 见 §5.3                                                        |
 
 - 启动行由纯函数 `assembleLaunchCommand(spec)` 生成，按顺序拼：程序（含设置里的覆盖）→ 权限模式参数 → 模型参数 → 预铸 `--session-id` → prompt。prompt 压成一行，因为它是被**敲进 shell** 的，不是 exec。
 - 创建 Agent 节点 = 创建终端节点（PTY 环境里注入 §5.2 的变量）→ shell 就绪后写入启动行 + Enter。
@@ -207,13 +231,13 @@ Runtime 在现有 `127.0.0.1:43120` 之外**再监听一个 Unix socket**（`<da
 
 注入 PTY 的环境变量（只放"地址"，不放凭据，因为进程环境可被同用户读到）：
 
-| 变量 | 含义 |
-| --- | --- |
-| `ARMADRA_NODE_ID` | 节点 ID，所有 hook 的门槛 |
-| `ARMADRA_AGENT_ID` | provider |
-| `ARMADRA_ENDPOINT_FILE` | 0600 端点文件路径 |
-| `ARMADRA_CANVAS_CONTROL=1` | 允许调用控制 API |
-| `ARMADRA_PERM_WAIT_SECS` | >0 时启用 hook 直答权限（阶段三） |
+| 变量                       | 含义                              |
+| -------------------------- | --------------------------------- |
+| `ARMADRA_NODE_ID`          | 节点 ID，所有 hook 的门槛         |
+| `ARMADRA_AGENT_ID`         | provider                          |
+| `ARMADRA_ENDPOINT_FILE`    | 0600 端点文件路径                 |
+| `ARMADRA_CANVAS_CONTROL=1` | 允许调用控制 API                  |
+| `ARMADRA_PERM_WAIT_SECS`   | >0 时启用 hook 直答权限（阶段三） |
 
 端点文件 `<data>/hook-endpoint.env`（0600，每次 hook 调用重新读取，因为终端可能比 Runtime 活得久）：`ARMADRA_HOOK_PORT`、`ARMADRA_HOOK_SOCK`、`ARMADRA_HOOK_TOKEN`（应用级 bearer）、`ARMADRA_NODE_TOKEN_DIR`、`ARMADRA_HOOK_VERSION`。
 
@@ -232,12 +256,12 @@ Runtime 在现有 `127.0.0.1:43120` 之外**再监听一个 Unix socket**（`<da
 
 **安装器**（Runtime `agent/hooks/<provider>.rs`，设置页"安装 / 重新安装 / 卸载"）：
 
-| provider | 接缝 | 事件 |
-| --- | --- | --- |
-| claude | 合并到 `~/.claude/settings.json` 的 `hooks`，命令 `"<armadra-hook> claude"` | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Notification, PermissionRequest, Stop, StopFailure, SessionEnd, SubagentStart, SubagentStop |
-| codex | `~/.codex/hooks.json` + `config.toml` 的 `hooks.state.<key>.trusted_hash`（必须复现 codex 自己的哈希，否则 hook 静默不触发） | 同上子集 + SubagentStart/Stop |
-| gemini | `~/.gemini/settings.json` | BeforeAgent / AfterAgent / BeforeTool / AfterTool / Notification / SessionStart / SessionEnd（不订阅逐 chunk 的 AfterModel） |
-| opencode | `<config>/plugins/armadra-status.js` 插件（只能从 `event` 总线拿事件） | `session.idle`、`message.updated`、`permission.asked`、`tool.*` |
+| provider | 接缝                                                                                                                         | 事件                                                                                                                                                 |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| claude   | 合并到 `~/.claude/settings.json` 的 `hooks`，命令 `"<armadra-hook> claude"`                                                  | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Notification, PermissionRequest, Stop, StopFailure, SessionEnd, SubagentStart, SubagentStop |
+| codex    | `~/.codex/hooks.json` + `config.toml` 的 `hooks.state.<key>.trusted_hash`（必须复现 codex 自己的哈希，否则 hook 静默不触发） | 同上子集 + SubagentStart/Stop                                                                                                                        |
+| gemini   | `~/.gemini/settings.json`                                                                                                    | BeforeAgent / AfterAgent / BeforeTool / AfterTool / Notification / SessionStart / SessionEnd（不订阅逐 chunk 的 AfterModel）                         |
+| opencode | `<config>/plugins/armadra-status.js` 插件（只能从 `event` 总线拿事件）                                                       | `session.idle`、`message.updated`、`permission.asked`、`tool.*`                                                                                      |
 
 安装幂等：以命令里 `armadra-hook` 的路径尾作为"我们管理的条目"识别并重写；卸载只删这些条目。设置页显示每个 provider 的安装状态与脚本版本；版本落后时通知条提示。每个 provider 的事件列表放在 `packages/shared/src/agents/hook-events.ts` 单一来源。
 
@@ -259,6 +283,7 @@ AgentEvent {
 映射：UserPromptSubmit / BeforeAgent / user message → `working + newTurn`；Pre/PostToolUse → `working`；PermissionRequest / 权限型 Notification → `blocked (+pendingId)`；AskUserQuestion / `request_user_input` → `waiting (+awaitingInput)`；Stop / AfterAgent / `session.idle` → `done`；StopFailure → `done + errored`；claude 的空闲提示 Notification → `done + idle`（仅作"救援"）；SessionStart/End → `session`。
 
 归约器（Runtime `agent/status.rs`，前端 store 用同一套规则做本地镜像）：
+
 - **done 保持 3s**：迟到的非 `newTurn` 的 `working` 不能复活刚结束的回合（claude hook 并行执行）。
 - **idle 救援**只能把 `working` 变为 `done`，不能动 blocked/waiting。
 - **awaitingInput 保持**：未回答的问题，其回合结束的 `done` 改写为 `waiting`。
@@ -319,15 +344,15 @@ ACP 通道整体移除（`acp.rs`、`AcpSurface.tsx`、`timeline.ts`、`/api/age
 
 节点类型：`terminal | sticky | group | editor | diff | files | browser | image`。
 
-| 旧类型 | 迁移 |
-| --- | --- |
-| agent | `terminal`，`data.agent = {id: adapter 映射, initialCommand: 由 command/args 拼}`，`sessionId` 清空 |
-| task | `sticky`，`content = "# 标题\n描述\n- [ ] 子项"` |
-| note | `sticky` |
-| file | `editor {path}` |
-| context | `files {path}` |
-| log | 删除（无持久价值） |
-| terminal / diff / browser / image | 原样，去掉多余字段 |
+| 旧类型                            | 迁移                                                                                                |
+| --------------------------------- | --------------------------------------------------------------------------------------------------- |
+| agent                             | `terminal`，`data.agent = {id: adapter 映射, initialCommand: 由 command/args 拼}`，`sessionId` 清空 |
+| task                              | `sticky`，`content = "# 标题\n描述\n- [ ] 子项"`                                                    |
+| note                              | `sticky`                                                                                            |
+| file                              | `editor {path}`                                                                                     |
+| context                           | `files {path}`                                                                                      |
+| log                               | 删除（无持久价值）                                                                                  |
+| terminal / diff / browser / image | 原样，去掉多余字段                                                                                  |
 
 边：所有 kind → `link`；删除 `strokes_json`、`zoom` 列；状态列改为 `agent_status` 表（不再存 node.status）。新表：
 
@@ -403,32 +428,32 @@ apps/web/src
 
 ### Phase 1 · 壳与画布（4 个 agent 并行，约 3 天）
 
-| Agent | 归属 |
-| --- | --- |
-| shell | TabBar、Dock、ControlsCluster、Banners、Launcher 重做、SettingsOverlay（外观/工作区组）、CommandPalette |
+| Agent  | 归属                                                                                                                  |
+| ------ | --------------------------------------------------------------------------------------------------------------------- |
+| shell  | TabBar、Dock、ControlsCluster、Banners、Launcher 重做、SettingsOverlay（外观/工作区组）、CommandPalette               |
 | canvas | CanvasWorkspace 精简、FloatingEdge、StatusMiniMap、右键菜单、NodeResizer/折叠/最大化/焦点层、撤销重做、Tidy、拖放三件 |
-| nodes | 8 个节点体 + SubagentCard 外观（数据先用桩）、TerminalSurface 迁入新外壳、EditorNode（CodeMirror）、DiffNode 只读 |
-| panels | SessionsSidebar（先用终端会话 + 桩状态）、ExplorerDrawer、SourceControlDrawer（含 Runtime `git/commit`） |
+| nodes  | 8 个节点体 + SubagentCard 外观（数据先用桩）、TerminalSurface 迁入新外壳、EditorNode（CodeMirror）、DiffNode 只读     |
+| panels | SessionsSidebar（先用终端会话 + 桩状态）、ExplorerDrawer、SourceControlDrawer（含 Runtime `git/commit`）              |
 
 验收：1440×900 真实浏览器走查；所有浮层 z 栈正确；终端在节点 resize/折叠/最大化后 fit 正确；深浅主题；`prefers-reduced-motion`。
 
 ### Phase 2 · Agent 运行时（3 个 agent 并行，约 4 天）
 
-| Agent | 归属 |
-| --- | --- |
-| runtime-hook | hook socket + bearer/节点令牌 + 端点文件 + `/hook` 路由 + 归一/归约 + `agent_status` + 工作空间事件 WS + 20 分钟 sweep |
-| runtime-install | `armadra-hook` 二进制（sidecar 打包进 Tauri）+ claude/codex/gemini/opencode 安装器 + 设置页安装状态 API |
-| web-agent | 创建 Agent 节点流程（`launch.ts`）、PTY 环境注入、节点头 Agent chip/状态胶囊/光晕、会话侧栏接真实状态、快捷键式允许/拒绝、系统通知与提示音 |
+| Agent           | 归属                                                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| runtime-hook    | hook socket + bearer/节点令牌 + 端点文件 + `/hook` 路由 + 归一/归约 + `agent_status` + 工作空间事件 WS + 20 分钟 sweep                     |
+| runtime-install | `armadra-hook` 二进制（sidecar 打包进 Tauri）+ claude/codex/gemini/opencode 安装器 + 设置页安装状态 API                                    |
+| web-agent       | 创建 Agent 节点流程（`launch.ts`）、PTY 环境注入、节点头 Agent chip/状态胶囊/光晕、会话侧栏接真实状态、快捷键式允许/拒绝、系统通知与提示音 |
 
 验收：本机 claude 与 codex 各跑一个节点，状态 working → blocked → done 全部由 hook 驱动且 UI 正确；Runtime 重启后镜像标记 `restored`；伪造节点令牌被 403；在用户自己的终端里运行同一 CLI 无任何副作用。
 
 ### Phase 3 · Agent 协作（3 个 agent 并行，约 4 天）
 
-| Agent | 归属 |
-| --- | --- |
-| runtime-collab | `context_links` + `/context-link` 四个动词 + 转录定位器 + `/control` 动词子集 + 消息管线/队列/追踪 + `agent_deliveries` |
-| runtime-approvals | claude hook 直答（pending 文件、答案文件、清理）+ `agent_approvals` |
-| web-collab | Skill/AGENTS.md 安装状态 UI、消息设置开关、投递结果通知、SubagentCard 接真实事件、`--after` 待启动 DAG 与 rope 边、`.armadra/board-log.jsonl` 查看器（简单列表） |
+| Agent             | 归属                                                                                                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| runtime-collab    | `context_links` + `/context-link` 四个动词 + 转录定位器 + `/control` 动词子集 + 消息管线/队列/追踪 + `agent_deliveries`                                          |
+| runtime-approvals | claude hook 直答（pending 文件、答案文件、清理）+ `agent_approvals`                                                                                              |
+| web-collab        | Skill/AGENTS.md 安装状态 UI、消息设置开关、投递结果通知、SubagentCard 接真实事件、`--after` 待启动 DAG 与 rope 边、`.armadra/board-log.jsonl` 查看器（简单列表） |
 
 验收：A 链接 B 后 A 能读 B 的最近 20 行摘要且读不到未链接的 C；A 向空闲 B 发消息 8s 内 B 进入 working 并留下 trace；B 忙时入队并在空闲后投递；claude 权限直答 allow/deny/超时三条路径；子代理卡片随 claude Task 出现和结束。
 
@@ -438,15 +463,15 @@ apps/web/src
 
 ## 10. 风险与需要 PoC 的点
 
-| 风险 | 处理 |
-| --- | --- |
-| codex `trusted_hash` 算法变化导致 hook 静默失效 | 安装后用一条探测会话验证 hook 是否回报；失败在设置页红字提示 |
-| CLI 权限提示行形状变化让"快捷键式允许/拒绝"失效 | 按 provider 表配置按键；claude 尽快切到 hook 直答 |
-| `armadra-hook` 在 Windows 下的命名管道与 0600 文件语义 | Windows 用 ACL 限定当前用户；先做 PoC |
-| 终端里 Agent CLI 退出后消息被 shell 执行 | 投递前后双重校验前台进程 PID/argv；不匹配则 `targetNotAgentPane` |
-| Tailwind v4 在旧 macOS 上不渲染 | §4.2 明确最低版本；保留 v3.4 退路 |
-| React Flow 子节点（group）与 NodeResizer/最大化的几何冲突 | Phase 1 canvas agent 先做 group 的 PoC，再接入其他节点 |
-| xterm 在节点频繁 resize 时的性能 | resize 去抖 80ms；折叠/离屏节点暂停 fit |
+| 风险                                                      | 处理                                                             |
+| --------------------------------------------------------- | ---------------------------------------------------------------- |
+| codex `trusted_hash` 算法变化导致 hook 静默失效           | 安装后用一条探测会话验证 hook 是否回报；失败在设置页红字提示     |
+| CLI 权限提示行形状变化让"快捷键式允许/拒绝"失效           | 按 provider 表配置按键；claude 尽快切到 hook 直答                |
+| `armadra-hook` 在 Windows 下的命名管道与 0600 文件语义    | Windows 用 ACL 限定当前用户；先做 PoC                            |
+| 终端里 Agent CLI 退出后消息被 shell 执行                  | 投递前后双重校验前台进程 PID/argv；不匹配则 `targetNotAgentPane` |
+| Tailwind v4 在旧 macOS 上不渲染                           | §4.2 明确最低版本；保留 v3.4 退路                                |
+| React Flow 子节点（group）与 NodeResizer/最大化的几何冲突 | Phase 1 canvas agent 先做 group 的 PoC，再接入其他节点           |
+| xterm 在节点频繁 resize 时的性能                          | resize 去抖 80ms；折叠/离屏节点暂停 fit                          |
 
 ## 11. 测试矩阵（新增部分）
 
@@ -457,7 +482,7 @@ apps/web/src
 
 ## 12. 与既有文档的关系
 
-本文取代 [redesign-plan.md](./redesign-plan.md) 成为实施契约，[architecture.md](./architecture.md) 的三层结构与"SQLite 为真相"原则不变；[interface-design.md](./interface-design.md) 描述的 v2 五区界面随本文作废。
+本文取代 [redesign-plan.md](./history/redesign-plan.md) 成为实施契约，[architecture.md](./architecture.md) 的三层结构与"SQLite 为真相"原则不变；[interface-design.md](./history/interface-design.md) 描述的 v2 五区界面随本文作废。
 
 早先排在前面的四项能力里，"ACP 多轮会话"被本方案的"终端 + Hook"整体替代（§5.10）；持久终端、快照重连、终端背压与本方案正交，顺延到 Phase 4。Editor / Group / 文件 watcher / 设置分层并入 Phase 1；SSH、远程 Runtime、GitHub 集成、配对、语音仍排在更远处，不在本文范围。
 
@@ -506,17 +531,34 @@ export const useSelectedNodes = () => CanvasNode[];
 ### 13.2 `nodes/registry.ts` 与 `nodes/NodeShell.tsx`（归属 nodes）
 
 ```ts
-export interface NodeBodyProps { id: string; node: CanvasNode; selected: boolean; collapsed: boolean; focused: boolean }
-export const NODE_META: Record<NodeType, { label: string; icon: LucideIcon; defaultSize: Size; minSize: Size; defaultColor: string; hasBridgeHandles: boolean }>;
+export interface NodeBodyProps {
+  id: string;
+  node: CanvasNode;
+  selected: boolean;
+  collapsed: boolean;
+  focused: boolean;
+}
+export const NODE_META: Record<
+  NodeType,
+  {
+    label: string;
+    icon: LucideIcon;
+    defaultSize: Size;
+    minSize: Size;
+    defaultColor: string;
+    hasBridgeHandles: boolean;
+  }
+>;
 export const NODE_BODY: Record<NodeType, ComponentType<NodeBodyProps>>;
 
 export interface NodeShellProps {
-  node: CanvasNode; selected: boolean;
+  node: CanvasNode;
+  selected: boolean;
   status?: { tone: StatusTone; label: string; pulse?: boolean };
   glow?: "working" | "attention" | "unread";
-  headerChips?: ReactNode;          // 会话名 / Agent chip / 上下文占用
-  headerActions?: ReactNode;        // 右侧图标钮，在"最大化 / 关闭"之前
-  approval?: { pendingId: string; onAnswer: (d: "allow"|"deny") => void };
+  headerChips?: ReactNode; // 会话名 / Agent chip / 上下文占用
+  headerActions?: ReactNode; // 右侧图标钮，在"最大化 / 关闭"之前
+  approval?: { pendingId: string; onAnswer: (d: "allow" | "deny") => void };
   children: ReactNode;
 }
 export function NodeShell(props: NodeShellProps): JSX.Element;
@@ -528,11 +570,26 @@ export function CanvasNodeRenderer(props: NodeProps<RFNode>): JSX.Element; // Re
 ### 13.3 `canvas/menus/add-menu.ts`（归属 canvas；shell 与 panels 只消费）
 
 ```ts
-export interface AddMenuContext { addNode: CanvasActions["addNode"]; position: Position; workspace: Workspace; agents: AgentInfo[] }
-export interface AddMenuItem { id: string; label: string; icon: LucideIcon; group: "terminal"|"agent"|"content"|"canvas"; shortcut?: CommandId;
-  run: (ctx: AddMenuContext) => void; disabledReason?: (ctx: AddMenuContext) => string | null }
-export function buildAddMenu(agents: AgentInfo[]): AddMenuItem[];   // 新建终端 → 各 Agent → 便签 → 文件管理器 → 打开文件… → 浏览器 → ─ → 全选/适应视图/整理
-export function AddMenuContent(props: { ctx: AddMenuContext; kind: "context"|"dropdown" }): JSX.Element; // 渲染成 ContextMenu 或 DropdownMenu 子项
+export interface AddMenuContext {
+  addNode: CanvasActions["addNode"];
+  position: Position;
+  workspace: Workspace;
+  agents: AgentInfo[];
+}
+export interface AddMenuItem {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  group: "terminal" | "agent" | "content" | "canvas";
+  shortcut?: CommandId;
+  run: (ctx: AddMenuContext) => void;
+  disabledReason?: (ctx: AddMenuContext) => string | null;
+}
+export function buildAddMenu(agents: AgentInfo[]): AddMenuItem[]; // 新建终端 → 各 Agent → 便签 → 文件管理器 → 打开文件… → 浏览器 → ─ → 全选/适应视图/整理
+export function AddMenuContent(props: {
+  ctx: AddMenuContext;
+  kind: "context" | "dropdown";
+}): JSX.Element; // 渲染成 ContextMenu 或 DropdownMenu 子项
 ```
 
 ### 13.4 `api/events.ts` 与 `agent/status-store.ts`（Phase 1 由 panels 建骨架，Phase 2 web-agent 填充）
@@ -580,15 +637,15 @@ Windows
 
 `terminal_sessions` 新增：
 
-| 列 | 含义 |
-| --- | --- |
-| `session_key` | 稳定逻辑键 = 所属节点 ID；节点重建/回收后不变 |
-| `backend_kind` | `direct` / `tmux` |
-| `backend_ref` | tmux 会话名 `armadra-<workspace前8位>-<session_key前8位>-<generation>` |
-| `generation` | 每次 create/recycle 递增；WS 帧与事件都带它，旧代次一律拒绝 |
-| `attach_state` | `detached` / `live` / `exited` |
-| `last_output_at` | 回收策略与侧栏"多久没动" |
-| `termination_intent` | `none` / `process` / `session` / `recycle` |
+| 列                   | 含义                                                                   |
+| -------------------- | ---------------------------------------------------------------------- |
+| `session_key`        | 稳定逻辑键 = 所属节点 ID；节点重建/回收后不变                          |
+| `backend_kind`       | `direct` / `tmux`                                                      |
+| `backend_ref`        | tmux 会话名 `armadra-<workspace前8位>-<session_key前8位>-<generation>` |
+| `generation`         | 每次 create/recycle 递增；WS 帧与事件都带它，旧代次一律拒绝            |
+| `attach_state`       | `detached` / `live` / `exited`                                         |
+| `last_output_at`     | 回收策略与侧栏"多久没动"                                               |
+| `termination_intent` | `none` / `process` / `session` / `recycle`                             |
 
 Runtime 启动时用 `list-sessions` 与数据库对账：tmux 里活着 → `detached`（可 attach）；不在 → `exited`；tmux 里有但数据库没有的 `armadra-*` 会话 → 记为孤儿，进入回收。
 
@@ -634,31 +691,33 @@ pub trait TerminalBackend: Send + Sync {
 }
 ```
 
-| 动作 | tmux 实现 |
-| --- | --- |
-| create | `new-session -d -s <ref> -x <cols> -y <rows> -c <cwd> -e ARMADRA_NODE_ID=… -e ARMADRA_AGENT_ID=… -e ARMADRA_ENDPOINT_FILE=… [-e …] <shell>`；随后 attach |
-| attach | 在 Runtime 持有的 `portable-pty`（rows×cols）里启动 `tmux … attach-session -t <ref>` client；client 重绘即得到当前屏幕；client 退出不影响 server |
-| write | 写 client 的 PTY（按键经 tmux 到 pane） |
-| resize | resize client PTY；`window-size latest` 让 pane 跟随 |
-| capture | `capture-pane -p [-e] -J -t <ref> -S -<lines>`；无转义版供 Agent 读，带转义版供快照 |
-| paste | 写临时文件 → `load-buffer -b armadra-<nonce> <file>` → `paste-buffer -p -d -b armadra-<nonce> -t <ref>` → 需要时 `send-keys -t <ref> Enter`；正文先剥 ESC |
-| foreground | `display -p -t <ref> '#{pane_pid} #{pane_current_command}'` + 读子进程（`ps -o pid,args --ppid` / `/proc`） |
-| interrupt | `send-keys -t <ref> C-c` |
-| terminate_process | 取 pane_pid 子树，SIGTERM → 2s → SIGKILL |
-| destroy | `kill-session -t <ref>` |
-| list_alive | `list-sessions -F '#{session_name} #{session_attached} #{session_activity}'` |
+| 动作              | tmux 实现                                                                                                                                                 |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| create            | `new-session -d -s <ref> -x <cols> -y <rows> -c <cwd> -e ARMADRA_NODE_ID=… -e ARMADRA_AGENT_ID=… -e ARMADRA_ENDPOINT_FILE=… [-e …] <shell>`；随后 attach  |
+| attach            | 在 Runtime 持有的 `portable-pty`（rows×cols）里启动 `tmux … attach-session -t <ref>` client；client 重绘即得到当前屏幕；client 退出不影响 server          |
+| write             | 写 client 的 PTY（按键经 tmux 到 pane）                                                                                                                   |
+| resize            | resize client PTY；`window-size latest` 让 pane 跟随                                                                                                      |
+| capture           | `capture-pane -p [-e] -J -t <ref> -S -<lines>`；无转义版供 Agent 读，带转义版供快照                                                                       |
+| paste             | 写临时文件 → `load-buffer -b armadra-<nonce> <file>` → `paste-buffer -p -d -b armadra-<nonce> -t <ref>` → 需要时 `send-keys -t <ref> Enter`；正文先剥 ESC |
+| foreground        | `display -p -t <ref> '#{pane_pid} #{pane_current_command}'` + 读子进程（`ps -o pid,args --ppid` / `/proc`）                                               |
+| interrupt         | `send-keys -t <ref> C-c`                                                                                                                                  |
+| terminate_process | 取 pane_pid 子树，SIGTERM → 2s → SIGKILL                                                                                                                  |
+| destroy           | `kill-session -t <ref>`                                                                                                                                   |
+| list_alive        | `list-sessions -F '#{session_name} #{session_attached} #{session_activity}'`                                                                              |
 
 DirectPtyBackend 保持现有实现，`capture` 用最近 chunk 回放拼接，`paste` 直接写括号粘贴序列，`list_alive` 返回内存表。
 
 ### 15.5 WebSocket 协议（`/api/terminals/{id}/ws`）
 
 服务端 → 客户端：
+
 - `hello {sessionId, generation, backend, rows, cols, alive}`：连接即 attach，第一帧。
 - `snapshot {data}`：仅 direct 后端发送（回放拼接）；tmux 后端由 client 重绘，不发。
 - `output {data}`、`status {status, exitCode?}`、`warning {message}`（不变）。
 - `stale {generation}`：客户端携带的 generation 已过期，客户端应清屏并按新的 hello 重建。
 
 客户端 → 服务端：
+
 - `input {data}`、`resize {cols, rows}`（不变）。
 - `terminate {mode: "interrupt" | "process" | "session"}`：三级语义，替代原来的无参 terminate。
 - 连接关闭 = detach，进程不动。
@@ -685,6 +744,7 @@ REST 新增：`GET /api/terminals/{id}/capture?lines=&escapes=`、`POST /api/ter
 把 §3 的壳与 §4 的组件展开到可验收的粒度：以下每条都是实现时逐项对照的规格，之前只在 §3 里写了骨架。
 
 **壳与画布**
+
 - 标签栏：品牌 mark + 项目 tab（色点 + 名称 + 看板切换图标）+ `+`；macOS 红绿灯内嵌在同一条栏里。
 - Sessions 浮卡默认 pin 在左上（标题 `Sessions <计数>`、工作空间 / 状态两个 tab、过滤框、项目头 + 会话行）。
 - 右上工具簇：`⌘K` 搜索胶囊 + Explorer / 源码控制 / 设置 / 帮助，每个 34px 方钮。
@@ -696,6 +756,7 @@ REST 新增：`GET /api/terminals/{id}/capture?lines=&escapes=`、`POST /api/ter
 **命令面板（⌘K）分组**：新建（新建终端 / Claude Code / Codex / Gemini / OpenCode / 便签 / 打开文件… / 打开网页… / 新建浏览器 / 新建 worktree…）→ 已打开的终端（跳转到某节点，命中输出内容时标注来源）→ 历史对话（跨项目的转录索引：标题 + 项目名 + 相对时间，可恢复）→ 视图（聚焦节点）。**历史对话分组需要新建能力**：Runtime 扫描各 provider 的转录目录建立标题索引（Phase 3 的 `collab/transcript.rs` 已读转录，可顺势加索引 + `resume` 启动行）。
 
 **设置项（SettingsOverlay 的目标清单）**
+
 - Agents：每个 Agent `默认 / 启用 / 禁用` 三态；"启动命令"允许为每个内置 Agent 填自定义包装命令（需以 `exec claude "$@"` 结尾，flags 会追加）。
 - 账号：隔离的 Claude 登录（各自 config dir、凭据、转录），节点终身绑定账号；Codex 账号按机器分组。
 - 自定义 Agent：自带 CLI 或包装内置 harness；env 支持 `${env:VAR}` / `${env:VAR:fallback}`。
@@ -707,6 +768,7 @@ REST 新增：`GET /api/terminals/{id}/capture?lines=&escapes=`、`POST /api/ter
 - 通知：后台完成通知开关、提示音（音量滑杆 + Finished / Needs you 试听）、手机推送（Needs you / Task completed / Live Activities / 在电脑前时暂缓）。
 
 **并入 Phase 3/4 的条目**
+
 1. 对话索引与 `resume`：Runtime 扫描转录目录建索引（标题 = 首条用户消息，200 KB/会话上限），命令面板新增"历史对话"分组，选中后以 `--resume <id>` 启动新终端节点。
 2. 设置页补齐：Agent 三态与自定义启动命令、终端字体/字号/光标、tmux 滚屏行数与离屏释放分钟数、行为项（网格、默认尺寸、吸附、双击聚焦）、通知音量与试听。
 3. 终端头部补 "AI 命名"（用转录首条消息生成标题）与 "评论"（便签式批注，入库为节点 `note` 字段）；`+ Label` 对应看板标签。
@@ -714,17 +776,17 @@ REST 新增：`GET /api/terminals/{id}/capture?lines=&escapes=`、`POST /api/ter
 
 ## 17. Phase 4 范围（2026-09-04 启动）
 
-| 项 | 归属 | 内容 |
-| --- | --- | --- |
-| 对话索引与 resume | runtime-index | 扫描 claude `~/.claude/projects/**/*.jsonl`、codex `CODEX_HOME/sessions/**/rollout-*.jsonl`、gemini `~/.gemini/tmp/**/chats/*.json`；表 `conversations(provider, session_id, title, cwd, path, updated_at, bytes)`；启动全量 + 每 60s 增量（mtime）；`GET /api/conversations?q=&limit=`；shared `assembleLaunchCommand({resume: sessionId})`（claude `--resume <id>`、codex `resume <id>`、gemini `--resume <id>`，能力位 `resume`） |
-| 看板数据 | runtime-index | 迁移 0008：`boards.kanban_json {columns:[{id,title,color}], cards:{nodeId: {columnId, order}}}`；节点新增 `labels: string[]`、`note: string`（评论）；shared schema + 校验 |
-| AI 命名 | runtime-index | `POST /api/agent-status/{nodeId}/suggest-title`：取转录首条用户消息前 40 字（去命令前缀、折叠空白）；无转录时用终端 capture 最后一条命令 |
-| 历史对话入口 | web-kanban | 命令面板新增分组「历史对话」（provider 图标、标题、目录名、相对时间）；选中 → 新建 terminal 节点，`agent.initialCommand` 为 resume 启动行 |
-| 看板视图 | web-kanban | ⌘⇧B 切换；`fixed top-[var(--tabbar-h)] inset-x-0 bottom-0 z-[var(--z-kanban)]`；列 288px 横向滚动；默认列「未分组 / 待办 / 进行中 / 完成」；卡片 = terminal/sticky 节点（标题、Agent chip、状态胶囊、Label chips）；拖拽换列（dnd 用 `@dnd-kit/core`）；列底 `+ 新建会话`（AddMenu）；`+ 添加列`；点击卡片 → 回画布并居中 |
-| 头部补齐 | web-kanban | 节点头部 ✦ AI 命名（调 suggest-title → 写 title）、评论（Popover 内 Textarea，写 `note`）、`+ Label` chip（Popover 输入，写 `labels`） |
-| 代码分割 | desktop-packaging | CodeMirror 语言包、xterm addons、DiffNode/EditorNode/FilesNode、Settings/CommandPalette/Kanban/DeliveryLog 全部 `React.lazy` + `Suspense`；主 chunk < 700 kB |
-| Tauri | desktop-packaging | `titleBarStyle: Overlay` + `hiddenTitle`（TabBar 已留 86px）、托盘（显示/隐藏窗口、退出）、`minimumSystemVersion 13.3`、updater 配置骨架（无密钥，默认关闭）、`prepare-sidecar` 含 armadra-hook 的 release 构建、DMG 打包实测 |
-| Windows 守护进程 | desktop-packaging | 只写设计 `docs/windows-session-daemon.md`（协议、状态文件、ConPTY、generation、背压），不实现 |
+| 项                | 归属              | 内容                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ----------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 对话索引与 resume | runtime-index     | 扫描 claude `~/.claude/projects/**/*.jsonl`、codex `CODEX_HOME/sessions/**/rollout-*.jsonl`、gemini `~/.gemini/tmp/**/chats/*.json`；表 `conversations(provider, session_id, title, cwd, path, updated_at, bytes)`；启动全量 + 每 60s 增量（mtime）；`GET /api/conversations?q=&limit=`；shared `assembleLaunchCommand({resume: sessionId})`（claude `--resume <id>`、codex `resume <id>`、gemini `--resume <id>`，能力位 `resume`） |
+| 看板数据          | runtime-index     | 迁移 0008：`boards.kanban_json {columns:[{id,title,color}], cards:{nodeId: {columnId, order}}}`；节点新增 `labels: string[]`、`note: string`（评论）；shared schema + 校验                                                                                                                                                                                                                                                           |
+| AI 命名           | runtime-index     | `POST /api/agent-status/{nodeId}/suggest-title`：取转录首条用户消息前 40 字（去命令前缀、折叠空白）；无转录时用终端 capture 最后一条命令                                                                                                                                                                                                                                                                                             |
+| 历史对话入口      | web-kanban        | 命令面板新增分组「历史对话」（provider 图标、标题、目录名、相对时间）；选中 → 新建 terminal 节点，`agent.initialCommand` 为 resume 启动行                                                                                                                                                                                                                                                                                            |
+| 看板视图          | web-kanban        | ⌘⇧B 切换；`fixed top-[var(--tabbar-h)] inset-x-0 bottom-0 z-[var(--z-kanban)]`；列 288px 横向滚动；默认列「未分组 / 待办 / 进行中 / 完成」；卡片 = terminal/sticky 节点（标题、Agent chip、状态胶囊、Label chips）；拖拽换列（dnd 用 `@dnd-kit/core`）；列底 `+ 新建会话`（AddMenu）；`+ 添加列`；点击卡片 → 回画布并居中                                                                                                            |
+| 头部补齐          | web-kanban        | 节点头部 ✦ AI 命名（调 suggest-title → 写 title）、评论（Popover 内 Textarea，写 `note`）、`+ Label` chip（Popover 输入，写 `labels`）                                                                                                                                                                                                                                                                                               |
+| 代码分割          | desktop-packaging | CodeMirror 语言包、xterm addons、DiffNode/EditorNode/FilesNode、Settings/CommandPalette/Kanban/DeliveryLog 全部 `React.lazy` + `Suspense`；主 chunk < 700 kB                                                                                                                                                                                                                                                                         |
+| Tauri             | desktop-packaging | `titleBarStyle: Overlay` + `hiddenTitle`（TabBar 已留 86px）、托盘（显示/隐藏窗口、退出）、`minimumSystemVersion 13.3`、updater 配置骨架（无密钥，默认关闭）、`prepare-sidecar` 含 armadra-hook 的 release 构建、DMG 打包实测                                                                                                                                                                                                        |
+| Windows 守护进程  | desktop-packaging | 只写设计 `docs/windows-session-daemon.md`（协议、状态文件、ConPTY、generation、背压），不实现                                                                                                                                                                                                                                                                                                                                        |
 
 暂缓：用量胶囊（需读取 Claude OAuth 凭据）、语音、SSH、远程 Runtime、GitHub。
 
@@ -744,25 +806,25 @@ REST 新增：`GET /api/terminals/{id}/capture?lines=&escapes=`、`POST /api/ter
 
 ### 18.3 终端语义兼容矩阵
 
-| 能力 | 决定 |
-| --- | --- |
-| TERM / terminfo | tmux 内 `default-terminal`：启动时 `infocmp tmux-256color` 探测，无则退回 `screen-256color`；`terminal-overrides ",*:Tc"` + `terminal-features ",xterm-256color:RGB"`；tmux client 侧 `TERM=xterm-256color`；直连后端 `TERM=xterm-256color`、`COLORTERM=truecolor` |
-| 256 色 / 真彩 | xterm 原生；tmux 通过上表透传 |
-| Unicode / CJK / emoji 宽度 | `Unicode11Addon` 在 `open()` 前激活；`tmux -u`；`LANG/LC_CTYPE` UTF-8 兜底；字体栈 Latin 等宽在前、CJK 回退在后 |
-| 中文输入法 | 依赖 xterm 的 composition 处理；`ime.ts` 保证合成期间不发送半成品；测试 `compositionstart/update/end` |
-| 键盘 | `macOptionIsMeta` 设置项（默认关，避免 Option 组合字符失效）；⌘C 有选区时复制，否则不发送；⌘V 走 xterm paste（应用开启 2004 时自动括号粘贴）；`attachCustomKeyEventHandler` 放行注册表里 `allowInTerminal=false` 的全局快捷键，其余全部进终端（含 Ctrl+C/Z/D、方向键、F1–F12、Home/End、Shift+方向） |
-| 鼠标 | **tmux `mouse off` + `focus-events off`**（2026-09-04 修订，见 §18.5）：tmux 不再替客户端开鼠标/焦点上报，点击与拖拽完全归 xterm——单击只聚焦、**零字节进 PTY**，拖拽是 xterm 原生选区。CLI 自己请求鼠标追踪时（`vim` `set mouse=a`、`htop`）tmux 仍把请求转给客户端，xterm 照常发 SGR 1006，退出后自动关闭 |
-| 剪贴板 | 选区由 xterm 自己持有：⌘C 有选区时 `navigator.clipboard.writeText`，失败回退隐藏 textarea + `execCommand('copy')`（WKWebView 里必须在手势内调用）；终端体上右键菜单「复制 / 粘贴」；`copyOnSelect` 设置项（默认关）。内层 CLI 的 OSC 52 由 `@xterm/addon-clipboard` 落地，透传链是 tmux `set-clipboard on` + **`set -as terminal-features ",xterm*:clipboard"`**——只有 `set-clipboard on` 时 tmux 不会把 OSC 52 转给客户端 |
-| 备用屏 / 光标 / 铃声 | 原生；`bell` 事件 → 头部图标闪一次，不出声 |
-| 标题 | OSC 0/2 → `onTitleChange` → 仅当用户未手动改名（`titleAuto` 标记）时更新节点标题 |
-| 超链接 | `WebLinksAddon` + 原生 OSC 8（`linkHandler` 走 `platform.openExternal`） |
-| 括号粘贴 | xterm 与 tmux 均原生；投递消息用 `paste-buffer -p` |
-| DA / 查询 | xterm 自动应答 tmux 的 DA/DSR/OSC 查询 |
-| 多视图尺寸 | tmux `window-size latest` + `aggressive-resize on` |
-| Windows 直连 | 后端上报 `platform:"windows"` 时设置 xterm `windowsPty {backend:"conpty"}` |
-| 输出吞吐 | Runtime 输出泵按 16ms 或 64 KiB 合批后发 WS；xterm `write` 串行 |
-| 设置项 | 字体、字号（13）、行高（1.2）、字距（0）、光标形状/闪烁、Option 作 Meta、WebGL；改动后重新 fit 一次 |
-| 搜索 | 搜索框放在头部 Popover，不改变 body 尺寸 |
+| 能力                       | 决定                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TERM / terminfo            | tmux 内 `default-terminal`：启动时 `infocmp tmux-256color` 探测，无则退回 `screen-256color`；`terminal-overrides ",*:Tc"` + `terminal-features ",xterm-256color:RGB"`；tmux client 侧 `TERM=xterm-256color`；直连后端 `TERM=xterm-256color`、`COLORTERM=truecolor`                                                                                                                                                         |
+| 256 色 / 真彩              | xterm 原生；tmux 通过上表透传                                                                                                                                                                                                                                                                                                                                                                                              |
+| Unicode / CJK / emoji 宽度 | `Unicode11Addon` 在 `open()` 前激活；`tmux -u`；`LANG/LC_CTYPE` UTF-8 兜底；字体栈 Latin 等宽在前、CJK 回退在后                                                                                                                                                                                                                                                                                                            |
+| 中文输入法                 | 依赖 xterm 的 composition 处理；`ime.ts` 保证合成期间不发送半成品；测试 `compositionstart/update/end`                                                                                                                                                                                                                                                                                                                      |
+| 键盘                       | `macOptionIsMeta` 设置项（默认关，避免 Option 组合字符失效）；⌘C 有选区时复制，否则不发送；⌘V 走 xterm paste（应用开启 2004 时自动括号粘贴）；`attachCustomKeyEventHandler` 放行注册表里 `allowInTerminal=false` 的全局快捷键，其余全部进终端（含 Ctrl+C/Z/D、方向键、F1–F12、Home/End、Shift+方向）                                                                                                                       |
+| 鼠标                       | **tmux `mouse off` + `focus-events off`**（2026-09-04 修订，见 §18.5）：tmux 不再替客户端开鼠标/焦点上报，点击与拖拽完全归 xterm——单击只聚焦、**零字节进 PTY**，拖拽是 xterm 原生选区。CLI 自己请求鼠标追踪时（`vim` `set mouse=a`、`htop`）tmux 仍把请求转给客户端，xterm 照常发 SGR 1006，退出后自动关闭                                                                                                                 |
+| 剪贴板                     | 选区由 xterm 自己持有：⌘C 有选区时 `navigator.clipboard.writeText`，失败回退隐藏 textarea + `execCommand('copy')`（WKWebView 里必须在手势内调用）；终端体上右键菜单「复制 / 粘贴」；`copyOnSelect` 设置项（默认关）。内层 CLI 的 OSC 52 由 `@xterm/addon-clipboard` 落地，透传链是 tmux `set-clipboard on` + **`set -as terminal-features ",xterm*:clipboard"`**——只有 `set-clipboard on` 时 tmux 不会把 OSC 52 转给客户端 |
+| 备用屏 / 光标 / 铃声       | 原生；`bell` 事件 → 头部图标闪一次，不出声                                                                                                                                                                                                                                                                                                                                                                                 |
+| 标题                       | OSC 0/2 → `onTitleChange` → 仅当用户未手动改名（`titleAuto` 标记）时更新节点标题                                                                                                                                                                                                                                                                                                                                           |
+| 超链接                     | `WebLinksAddon` + 原生 OSC 8（`linkHandler` 走 `platform.openExternal`）                                                                                                                                                                                                                                                                                                                                                   |
+| 括号粘贴                   | xterm 与 tmux 均原生；投递消息用 `paste-buffer -p`                                                                                                                                                                                                                                                                                                                                                                         |
+| DA / 查询                  | xterm 自动应答 tmux 的 DA/DSR/OSC 查询                                                                                                                                                                                                                                                                                                                                                                                     |
+| 多视图尺寸                 | tmux `window-size latest` + `aggressive-resize on`                                                                                                                                                                                                                                                                                                                                                                         |
+| Windows 直连               | 后端上报 `platform:"windows"` 时设置 xterm `windowsPty {backend:"conpty"}`                                                                                                                                                                                                                                                                                                                                                 |
+| 输出吞吐                   | Runtime 输出泵按 16ms 或 64 KiB 合批后发 WS；xterm `write` 串行                                                                                                                                                                                                                                                                                                                                                            |
+| 设置项                     | 字体、字号（13）、行高（1.2）、字距（0）、光标形状/闪烁、Option 作 Meta、WebGL；改动后重新 fit 一次                                                                                                                                                                                                                                                                                                                        |
+| 搜索                       | 搜索框放在头部 Popover，不改变 body 尺寸                                                                                                                                                                                                                                                                                                                                                                                   |
 
 ### 18.5 选择与点击的修订（2026-09-04 用户反馈：「终端不能复制，并且点击也会输入无用内容」）
 
@@ -772,14 +834,14 @@ REST 新增：`GET /api/terminals/{id}/capture?lines=&escapes=`、`POST /api/ter
 
 **决定**（已实现）：
 
-| 选项 | 值 | 理由 |
-| --- | --- | --- |
-| `mouse` | `off` | 选区还给 xterm；内层 app 自己要鼠标时 tmux 仍转发请求，`vim`/`htop` 不受影响 |
-| `focus-events` | `off` | 避免 `[I` / `[O` 漏进不消费它们的 pane |
-| `terminal-overrides` | 追加 `,*:smcup@:rmcup@` | 客户端不进备用屏（实测原始字节流中 `\e[?1049h` 计数为 0） |
-| `set-clipboard` | `on`（保持） | 内层 OSC 52 的前半条链 |
-| `terminal-features` | 追加 `set -as ",xterm*:clipboard"` | 后半条链；缺它 tmux 不会把 OSC 52 转给客户端 |
-| `allow-passthrough` | `on`（保持） | — |
+| 选项                 | 值                                 | 理由                                                                         |
+| -------------------- | ---------------------------------- | ---------------------------------------------------------------------------- |
+| `mouse`              | `off`                              | 选区还给 xterm；内层 app 自己要鼠标时 tmux 仍转发请求，`vim`/`htop` 不受影响 |
+| `focus-events`       | `off`                              | 避免 `[I` / `[O` 漏进不消费它们的 pane                                       |
+| `terminal-overrides` | 追加 `,*:smcup@:rmcup@`            | 客户端不进备用屏（实测原始字节流中 `\e[?1049h` 计数为 0）                    |
+| `set-clipboard`      | `on`（保持）                       | 内层 OSC 52 的前半条链                                                       |
+| `terminal-features`  | 追加 `set -as ",xterm*:clipboard"` | 后半条链；缺它 tmux 不会把 OSC 52 转给客户端                                 |
+| `allow-passthrough`  | `on`（保持）                       | —                                                                            |
 
 前端：⌘C 走 `navigator.clipboard.writeText`，失败回退隐藏 textarea + `execCommand('copy')`；终端体加右键 ContextMenu「复制 / 粘贴」（走 portal，不改 body 尺寸）；新增设置项「选中即复制」（默认关）；单击只 `focus()`，不写任何字节。
 
@@ -808,44 +870,44 @@ wheel（终端体，passive:false）
 
 ## 19. 用量胶囊（2026-09-04 用户确认）
 
-| 项 | 决定 |
-| --- | --- |
-| 位置 | 右下角、MiniMap 上方 14px 的浮动胶囊（`z-[var(--z-pills)]`）；无任何 provider 凭据时整体不渲染 |
-| 数据 | Runtime `src/usage/`：Claude 读 macOS 钥匙串 `Claude Code-credentials`（`security find-generic-password -s ... -w`）或 `~/.claude/.credentials.json` 的 OAuth access token → 官方 OAuth usage 接口（5h / 7d 窗口利用率、重置时间）；Codex 读 `~/.codex/auth.json` 的 access token + account id → ChatGPT 后端用量接口（主/次窗口 `used_percent`、`reset_at`）。接口形状以本机 CLI 实际请求为准（抓包/源码核对），字段不符时该 provider 返回 `unavailable` |
-| 安全 | token 只在 Runtime 内存中使用，绝不写日志、不进 SQLite、不发给前端；`GET /api/usage` 只返回百分比与时间；仅 loopback |
-| 刷新 | 启动后 10s 首查，之后每 5 分钟；`POST /api/usage/refresh`；401/网络错误 → 该 provider `status:"error"` 静默，胶囊显示灰色横线，不弹提示 |
-| UI | `Claude 5h 67% · 7d 72% │ Codex 5h 9%`：provider 名 + 迷你进度条（≥80% 警告色，≥95% 危险色）+ 百分比；点击 Popover：每个窗口一行（名称、进度、重置倒计时）、刷新按钮；设置 → 界面「显示用量」开关（默认开） |
-| shared | `usageSchema {providers: [{id, status:"ok"|"unavailable"|"error", windows:[{key:"5h"|"7d"|"primary"|"secondary", label, usedPercent, resetsAt}], fetchedAt}]}` |
+| 项     | 决定                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | --------------------------- | ---- | --------- | ---------------------------------------------------------- |
+| 位置   | 右下角、MiniMap 上方 14px 的浮动胶囊（`z-[var(--z-pills)]`）；无任何 provider 凭据时整体不渲染                                                                                                                                                                                                                                                                                                                                                            |
+| 数据   | Runtime `src/usage/`：Claude 读 macOS 钥匙串 `Claude Code-credentials`（`security find-generic-password -s ... -w`）或 `~/.claude/.credentials.json` 的 OAuth access token → 官方 OAuth usage 接口（5h / 7d 窗口利用率、重置时间）；Codex 读 `~/.codex/auth.json` 的 access token + account id → ChatGPT 后端用量接口（主/次窗口 `used_percent`、`reset_at`）。接口形状以本机 CLI 实际请求为准（抓包/源码核对），字段不符时该 provider 返回 `unavailable` |
+| 安全   | token 只在 Runtime 内存中使用，绝不写日志、不进 SQLite、不发给前端；`GET /api/usage` 只返回百分比与时间；仅 loopback                                                                                                                                                                                                                                                                                                                                      |
+| 刷新   | 启动后 10s 首查，之后每 5 分钟；`POST /api/usage/refresh`；401/网络错误 → 该 provider `status:"error"` 静默，胶囊显示灰色横线，不弹提示                                                                                                                                                                                                                                                                                                                   |
+| UI     | `Claude 5h 67% · 7d 72% │ Codex 5h 9%`：provider 名 + 迷你进度条（≥80% 警告色，≥95% 危险色）+ 百分比；点击 Popover：每个窗口一行（名称、进度、重置倒计时）、刷新按钮；设置 → 界面「显示用量」开关（默认开）                                                                                                                                                                                                                                               |
+| shared | `usageSchema {providers: [{id, status:"ok"                                                                                                                                                                                                                                                                                                                                                                                                                | "unavailable" | "error", windows:[{key:"5h" | "7d" | "primary" | "secondary", label, usedPercent, resetsAt}], fetchedAt}]}` |
 
 ## 20. 用户反馈第二轮（2026-09-04）：比例、左侧栏、首页
 
-| 项 | 决定 |
-| --- | --- |
-| 打开比例 | 首次打开看板不再 fitView 缩放；视口 zoom 固定 1（100%），只平移到节点包围盒左上角（留 40px 边距）；已有持久化视口且 zoom ≠ 1 的旧看板保持原样。Dock 缩放菜单保留 50/100/150/适应。浏览器节点默认 900×620、编辑器 700×480，均按 100% 设计 |
-| 左侧栏 | 固定 docked 侧栏（宽 260px，`--sidebar-w`），位于 TabBar 之下、画布左侧，画布 flex-1；⌘⇧L 折叠/展开（折叠为 0 宽，画布自动填满，终端 fit 一次）；上半「看板」：列表行（名称、节点数）、新建/重命名（双击）/删除（确认），当前看板高亮；下半「会话」：沿用 SessionsSidebar 的分组/过滤/信号徽标/历史，去掉浮动卡片、peek 与 pin 逻辑；左上角的会话图标改为侧栏折叠按钮 |
-| 首页 | 居中布局：顶部品牌 mark；三张大圆角（`rounded-2xl`）操作卡：新建文件夹 / 打开文件夹 / 克隆仓库；下方「最近」列表为圆角卡片（名称、路径、时间、颜色点，hover 抬起）；无说明文字；设置入口右上角 |
-| 新建文件夹 | 对话框：父目录（Tauri 选目录）+ 名称 → `POST /api/workspaces` 新增 `createDirectory:true`（Runtime `mkdir`，已存在则 409） |
-| 克隆仓库 | 对话框：仓库 URL（https/ssh/git@）、父目录、可选目录名 → `POST /api/git/clone {url, parent, name?}`；Runtime 用系统 `git clone --progress`，进度行通过工作空间事件 `git.clone {jobId, line|done|error}` 推送，前端对话框内显示进度条/最近一行；完成后自动创建工作空间并打开；URL 只允许 `https://`、`ssh://`、`git@host:path`；目标目录不得已存在 |
+| 项         | 决定                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 打开比例   | 首次打开看板不再 fitView 缩放；视口 zoom 固定 1（100%），只平移到节点包围盒左上角（留 40px 边距）；已有持久化视口且 zoom ≠ 1 的旧看板保持原样。Dock 缩放菜单保留 50/100/150/适应。浏览器节点默认 900×620、编辑器 700×480，均按 100% 设计                                                                                                                              |
+| 左侧栏     | 固定 docked 侧栏（宽 260px，`--sidebar-w`），位于 TabBar 之下、画布左侧，画布 flex-1；⌘⇧L 折叠/展开（折叠为 0 宽，画布自动填满，终端 fit 一次）；上半「看板」：列表行（名称、节点数）、新建/重命名（双击）/删除（确认），当前看板高亮；下半「会话」：沿用 SessionsSidebar 的分组/过滤/信号徽标/历史，去掉浮动卡片、peek 与 pin 逻辑；左上角的会话图标改为侧栏折叠按钮 |
+| 首页       | 居中布局：顶部品牌 mark；三张大圆角（`rounded-2xl`）操作卡：新建文件夹 / 打开文件夹 / 克隆仓库；下方「最近」列表为圆角卡片（名称、路径、时间、颜色点，hover 抬起）；无说明文字；设置入口右上角                                                                                                                                                                        |
+| 新建文件夹 | 对话框：父目录（Tauri 选目录）+ 名称 → `POST /api/workspaces` 新增 `createDirectory:true`（Runtime `mkdir`，已存在则 409）                                                                                                                                                                                                                                            |
+| 克隆仓库   | 对话框：仓库 URL（https/ssh/git@）、父目录、可选目录名 → `POST /api/git/clone {url, parent, name?}`；Runtime 用系统 `git clone --progress`，进度行通过工作空间事件 `git.clone {jobId, line                                                                                                                                                                            | done | error}`推送，前端对话框内显示进度条/最近一行；完成后自动创建工作空间并打开；URL 只允许`https://`、`ssh://`、`git@host:path`；目标目录不得已存在 |
 
 ## 21. 用户反馈第三轮（2026-09-04）：缩放、任意互连、画图、SSH
 
-| 项 | 决定 |
-| --- | --- |
-| 缩放手势 | 触控板捏合 → 缩放；⌘/Ctrl + 滚轮 → 以光标为中心缩放；普通滚轮 → 平移（Shift 横向）；空格 + 拖拽 → 平移；⌘0 = 100%、⌘1 = 适应（maxZoom 1）、⌘= / ⌘- 步进 ×1.2；范围 0.1–3；缩放动画 120ms；Dock 显示当前百分比 |
-| 任意互连 | 所有节点类型都有左 `link-in` / 右 `link-out` 把手（group 除外）；`isValidConnection` 只禁止自连与重复；`addEdge` 不再强制便签为源；渲染：源或目标之一为 terminal 且另一方为内容节点 → 单向箭头指向 terminal（内容 → Agent）；terminal↔terminal → 双向；内容↔内容 → 无箭头细线（仅分组语义）。标签按源类型：便签 / 图片 / 画图 / 文件 / 目录 / 网页 / 差异 / 上下文 |
-| 内容可读 | Runtime `collab/context_link.rs` 扩展来源：`editor` → 文件内容（≤ 200 KB，超出截断并说明）；`files` → 目录列表（≤ 500 项）；`image` → 若有 `sourcePath` 给路径，否则把 data URL 落盘到 `<workspace>/.armadra/images/<nodeId>.png` 并给路径；`draw` → 导出 PNG 到 `<workspace>/.armadra/drawings/<nodeId>.png` 并给路径；`browser` → URL；`diff` → 当前 diff 文本（≤ 200 KB）；`list` 动词返回每个链接节点的类型与可读方式；SKILL.md 同步说明 |
+| 项       | 决定                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 缩放手势 | 触控板捏合 → 缩放；⌘/Ctrl + 滚轮 → 以光标为中心缩放；普通滚轮 → 平移（Shift 横向）；空格 + 拖拽 → 平移；⌘0 = 100%、⌘1 = 适应（maxZoom 1）、⌘= / ⌘- 步进 ×1.2；范围 0.1–3；缩放动画 120ms；Dock 显示当前百分比                                                                                                                                                                                                                                                                                                 |
+| 任意互连 | 所有节点类型都有左 `link-in` / 右 `link-out` 把手（group 除外）；`isValidConnection` 只禁止自连与重复；`addEdge` 不再强制便签为源；渲染：源或目标之一为 terminal 且另一方为内容节点 → 单向箭头指向 terminal（内容 → Agent）；terminal↔terminal → 双向；内容↔内容 → 无箭头细线（仅分组语义）。标签按源类型：便签 / 图片 / 画图 / 文件 / 目录 / 网页 / 差异 / 上下文                                                                                                                                          |
+| 内容可读 | Runtime `collab/context_link.rs` 扩展来源：`editor` → 文件内容（≤ 200 KB，超出截断并说明）；`files` → 目录列表（≤ 500 项）；`image` → 若有 `sourcePath` 给路径，否则把 data URL 落盘到 `<workspace>/.armadra/images/<nodeId>.png` 并给路径；`draw` → 导出 PNG 到 `<workspace>/.armadra/drawings/<nodeId>.png` 并给路径；`browser` → URL；`diff` → 当前 diff 文本（≤ 200 KB）；`list` 动词返回每个链接节点的类型与可读方式；SKILL.md 同步说明                                                                  |
 | 画图节点 | 新类型 `draw`（默认 480×360，最小 240×180）：白板底（浅色 `#fffdf7` / 深色 `--surface-deep`），工具条 4 钮（笔 / 橡皮 / 颜色 7 色 / 撤销）放在节点头部右侧（不改 body 高度）；笔迹 `{points:[x,y,p?][], color, width}` 存于 `data.strokes`（上限 500 笔 / 20000 点，世界坐标为节点内像素）；渲染用 `<canvas>`，指针事件用 `nodrag`；`POST /api/workspaces/{id}/nodes/{nodeId}/export-png` 由前端把 canvas `toDataURL` 上传，Runtime 落盘到 `.armadra/drawings/` 供 Agent 读取；迁移 0009 无需（data 是 JSON） |
-| SSH | 设置 → 新分组「SSH」：主机列表（名称、host、user、port、identity 文件路径、额外参数），存 `settings.json` `ssh.hosts[]`（Runtime `GET/PATCH /api/settings` 已支持）；添加菜单 / 命令面板出现「SSH 终端 → <主机>」；创建 terminal 节点 `data.ssh = {hostId}`，Runtime 创建会话时命令为 `ssh -t -o ServerAliveInterval=30 [-p port] [-i identity] user@host`（在本地 tmux 内运行，断线后节点显示已退出，可重新运行）；节点头部显示 `⇅ host` chip；不做远端文件与远端 hook（后续） |
+| SSH      | 设置 → 新分组「SSH」：主机列表（名称、host、user、port、identity 文件路径、额外参数），存 `settings.json` `ssh.hosts[]`（Runtime `GET/PATCH /api/settings` 已支持）；添加菜单 / 命令面板出现「SSH 终端 → <主机>」；创建 terminal 节点 `data.ssh = {hostId}`，Runtime 创建会话时命令为 `ssh -t -o ServerAliveInterval=30 [-p port] [-i identity] user@host`（在本地 tmux 内运行，断线后节点显示已退出，可重新运行）；节点头部显示 `⇅ host` chip；不做远端文件与远端 hook（后续）                               |
 
 ## 22. 用户反馈第四轮（2026-09-04）：去掉顶栏，左侧管理工作空间 → 看板 → Agent
 
-| 项 | 决定 |
-| --- | --- |
-| 顶栏 | 删除 TabBar。macOS 红绿灯所在的 44px 拖拽区放在左侧栏顶部（`-webkit-app-region: drag`，内含品牌 mark；折叠时保留一条 44px 拖拽条） |
+| 项                 | 决定                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 顶栏               | 删除 TabBar。macOS 红绿灯所在的 44px 拖拽区放在左侧栏顶部（`-webkit-app-region: drag`，内含品牌 mark；折叠时保留一条 44px 拖拽条）                                                                                                                                                                                                                               |
 | 第一栏「工作空间」 | 树形列表：每个已打开的工作空间一行（颜色点、名称、chevron、未读数 Badge、`⋯`：新建看板 / 重命名 / 关闭），展开后缩进显示其看板（名称、节点数；当前看板高亮；双击重命名；`⋯` 删除）；点击看板 = 切换工作空间 + 看板；行尾 `+` = 新建看板；栏头 `+` DropdownMenu：打开文件夹 / 新建文件夹 / 克隆仓库（复用首页对话框）；最近未打开的工作空间不在树里（回首页打开） |
-| 第二栏「Agent」 | 当前工作空间的会话按状态分组（需要你 / 运行中 / 未读 / 空闲 / 历史），行内保留 Agent chip、状态标记、× 结束、点击居中；顶部过滤框；不再有"工作空间/状态"两个 tab（工作空间维度已由第一栏承担） |
-| 迁移的入口 | 看板视图切换（⌘⇧B）→ 右上工具簇；投递记录 → 工作空间行 `⋯` 菜单；打开工作空间 → 栏头 `+` |
-| 尺寸 | 侧栏 260px，可折叠；第一栏最多占 45% 高度并可滚动，第二栏占剩余 |
+| 第二栏「Agent」    | 当前工作空间的会话按状态分组（需要你 / 运行中 / 未读 / 空闲 / 历史），行内保留 Agent chip、状态标记、× 结束、点击居中；顶部过滤框；不再有"工作空间/状态"两个 tab（工作空间维度已由第一栏承担）                                                                                                                                                                   |
+| 迁移的入口         | 看板视图切换（⌘⇧B）→ 右上工具簇；投递记录 → 工作空间行 `⋯` 菜单；打开工作空间 → 栏头 `+`                                                                                                                                                                                                                                                                         |
+| 尺寸               | 侧栏 260px，可折叠；第一栏最多占 45% 高度并可滚动，第二栏占剩余                                                                                                                                                                                                                                                                                                  |
 
 ### 19.1 修订（2026-09-04）：用量显示改为球形
 
@@ -855,10 +917,10 @@ wheel（终端体，passive:false）
 
 ## 23. 用户反馈第五轮（2026-09-04）：设置页重写、整理布局
 
-| 项 | 决定 |
-| --- | --- |
-| 设置页 | 全屏层内两栏：左 220px 固定导航（分组标题 + 分区项，顶部搜索框按分区名/设置项名过滤），右侧 `overflow-y:auto` 独立滚动内容列（`max-w-[880px]`），每个分区是一张 `rounded-2xl` 卡片，`id` 锚点；点击导航 → `scrollIntoView({behavior:"smooth", block:"start"})`；右侧滚动用 IntersectionObserver 做 scroll-spy 更新导航高亮；URL hash/内存记住上次分区；分区顺序：Agent、账号与 Hook、SSH、终端、工作区（后端、看板、消息）、界面（主题、语言、通知、用量、侧栏）、快捷键、应用（版本、更新）；每行只有标签 + 控件，无说明文字 |
-| 整理布局 | `tidy(nodes, edges, viewport)`：1) 按连通分量分组，分量内按拓扑深度排列成"行内从左到右、深度递增"；2) 目标区域宽高比 = 当前视口宽高比；行宽上限 = `sqrt(总面积 × 宽高比) × 1.15`，节点按分量依次放入当前行，放不下则换行（行高 = 行内最高节点），行间距 48、列间距 60；3) 分组框整体作为一个节点参与，成员随之平移；4) 完成后 `fitView({padding:0.08, maxZoom:1, duration:200})` 容纳全部 |
+| 项       | 决定                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 设置页   | 全屏层内两栏：左 220px 固定导航（分组标题 + 分区项，顶部搜索框按分区名/设置项名过滤），右侧 `overflow-y:auto` 独立滚动内容列（`max-w-[880px]`），每个分区是一张 `rounded-2xl` 卡片，`id` 锚点；点击导航 → `scrollIntoView({behavior:"smooth", block:"start"})`；右侧滚动用 IntersectionObserver 做 scroll-spy 更新导航高亮；URL hash/内存记住上次分区；分区顺序：Agent、账号与 Hook、SSH、终端、工作区（后端、看板、消息）、界面（主题、语言、通知、用量、侧栏）、快捷键、应用（版本、更新）；每行只有标签 + 控件，无说明文字 |
+| 整理布局 | `tidy(nodes, edges, viewport)`：1) 按连通分量分组，分量内按拓扑深度排列成"行内从左到右、深度递增"；2) 目标区域宽高比 = 当前视口宽高比；行宽上限 = `sqrt(总面积 × 宽高比) × 1.15`，节点按分量依次放入当前行，放不下则换行（行高 = 行内最高节点），行间距 48、列间距 60；3) 分组框整体作为一个节点参与，成员随之平移；4) 完成后 `fitView({padding:0.08, maxZoom:1, duration:200})` 容纳全部                                                                                                                                     |
 
 ## 24. 设置页按 ChatGPT 模式重做 + 全局视觉按 Apple HIG 重做（2026-09-04）
 
@@ -868,36 +930,36 @@ wheel（终端体，passive:false）
 
 **分区与配置项**（对照我们的映射）：
 
-| ChatGPT 分区 | 主要配置 | 我们的分区 | 我们的配置项 |
-| --- | --- | --- | --- |
-| General | 主题（系统/深/浅）、强调色、语言、口语语言、语音、显示后续建议、代码块始终显示、归档/删除全部对话 | **通用** | 主题、语言、侧栏默认展开、显示用量、打开时恢复上次工作空间 |
-| Notifications | 回复通知、任务通知（推送/邮件） | **通知** | 后台完成通知、需要你时通知、提示音 + 音量、试听 |
-| Personalization | 自定义指令（进入编辑页）、记忆开关 + 管理、模型建议 | **Agent** | 每个 Agent 启用/默认（Default/Enabled/Disabled 三态）、默认权限模式、自定义启动命令、自定义 Agent 列表（进入子页编辑） |
-| Apps & connectors / Connected apps | 已连接的第三方应用列表 + 连接/断开按钮 | **Hook 与 Skills** | 每个 CLI 的 hook 安装状态 + 安装/重装/卸载、Skill 安装状态、hook 直答开关 |
-| Data controls | 改进模型开关、共享链接管理、导出数据、删除账号 | **数据** | 数据目录路径 + 在访达中打开、备份数据库、清理历史会话/对话索引重建、`.armadra` 日志保留天数 |
-| Security | 多因素、退出所有设备 | **SSH** | 主机列表（子页编辑）、测试连接 |
-| Subscription / Account | 套餐、账单 | **账号与用量** | Claude/Codex 用量窗口、凭据来源（钥匙串/文件）、刷新 |
-| About | 版本、更新、条款 | **关于** | 版本、检查更新（占位禁用）、开源许可 |
-| — | — | **终端** | 后端（自动/tmux/直连）、断开保留、字体、字号、行高、光标、闪烁、Option 作 Meta、WebGL、选中即复制 |
-| — | — | **快捷键** | 命令表（分组、可重绑定：点击键位 → 录制新组合，冲突提示） |
-| — | — | **工作区** | 当前工作空间：Agent 互发消息开关、看板列、默认 Agent 覆盖 |
+| ChatGPT 分区                       | 主要配置                                                                                          | 我们的分区         | 我们的配置项                                                                                                           |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| General                            | 主题（系统/深/浅）、强调色、语言、口语语言、语音、显示后续建议、代码块始终显示、归档/删除全部对话 | **通用**           | 主题、语言、侧栏默认展开、显示用量、打开时恢复上次工作空间                                                             |
+| Notifications                      | 回复通知、任务通知（推送/邮件）                                                                   | **通知**           | 后台完成通知、需要你时通知、提示音 + 音量、试听                                                                        |
+| Personalization                    | 自定义指令（进入编辑页）、记忆开关 + 管理、模型建议                                               | **Agent**          | 每个 Agent 启用/默认（Default/Enabled/Disabled 三态）、默认权限模式、自定义启动命令、自定义 Agent 列表（进入子页编辑） |
+| Apps & connectors / Connected apps | 已连接的第三方应用列表 + 连接/断开按钮                                                            | **Hook 与 Skills** | 每个 CLI 的 hook 安装状态 + 安装/重装/卸载、Skill 安装状态、hook 直答开关                                              |
+| Data controls                      | 改进模型开关、共享链接管理、导出数据、删除账号                                                    | **数据**           | 数据目录路径 + 在访达中打开、备份数据库、清理历史会话/对话索引重建、`.armadra` 日志保留天数                            |
+| Security                           | 多因素、退出所有设备                                                                              | **SSH**            | 主机列表（子页编辑）、测试连接                                                                                         |
+| Subscription / Account             | 套餐、账单                                                                                        | **账号与用量**     | Claude/Codex 用量窗口、凭据来源（钥匙串/文件）、刷新                                                                   |
+| About                              | 版本、更新、条款                                                                                  | **关于**           | 版本、检查更新（占位禁用）、开源许可                                                                                   |
+| —                                  | —                                                                                                 | **终端**           | 后端（自动/tmux/直连）、断开保留、字体、字号、行高、光标、闪烁、Option 作 Meta、WebGL、选中即复制                      |
+| —                                  | —                                                                                                 | **快捷键**         | 命令表（分组、可重绑定：点击键位 → 录制新组合，冲突提示）                                                              |
+| —                                  | —                                                                                                 | **工作区**         | 当前工作空间：Agent 互发消息开关、看板列、默认 Agent 覆盖                                                              |
 
 **实现方式**：`SettingsDialog`（`Dialog` 居中，`w-[820px] h-[600px] max-w-[92vw] max-h-[88vh]`）；左栏 `nav` 200px：分组标题（11px uppercase muted）+ 项（`Button variant=ghost` 高 32、圆角 8、选中 `bg-[var(--surface-raised)]`）；右栏 `main`：标题栏 56px（标题 + 可选右侧动作）+ 页体 `overflow-y-auto px-8 py-4`；页体内容 = 若干 `SettingsGroup`（`rounded-xl border bg-[var(--card)]`，内含 `SettingsRow`，行间 `divide-y`）；子页（自定义 Agent 编辑、SSH 主机编辑）在同一右栏内推入（`←` 返回，标题变为子页名），不用叠对话框。路由状态 `settings.section` / `settings.subpage` 存 store；⌘, 打开上次分区；Esc 关闭。移除 scroll-spy 与搜索。
 
 ### 24.2 Apple 页面设计原则（HIG）→ 我们的 token 与规则
 
-| 原则 | 落地 |
-| --- | --- |
-| **层级用材质与灰度表达，不用线框** | 三级表面：窗口底 `--bg`、侧栏/面板 `--panel`（比底浅 4%）、卡片/分组 `--card`（再浅 3%）；边框只用 1px `rgba(tint, .08)`，浮层加 `shadow-lg` 一处即可 |
-| **8pt 网格** | 所有间距取 4/8/12/16/24/32；行高 44（设置行）/ 32（列表行）/ 28（工具栏钮）；圆角：控件 6、卡片 10、面板 12、对话框 14、球 9999 |
-| **字体层级（SF Pro）** | 标题 17 semibold、分区标题 15 semibold、正文 13 regular、辅助 11 regular；数字用 tabular-nums；不再出现 9.5px/10px 文字（状态胶囊改 11px medium、字距 0.02em） |
-| **系统强调色** | 强调色 `#0A84FF`（浅色 `#007AFF`）只用于选中态、主要按钮、进度；其余按钮为 `secondary`（灰底）或 `ghost` |
-| **源列表侧栏** | 侧栏用半透明材质：`bg-[color-mix(in srgb, var(--panel) 85%, transparent)] backdrop-blur-xl`（Tauri 窗口设为透明背景 + `window-vibrancy` sidebar 材质，网页回退纯色）；分组标题 11px uppercase muted、项高 28、圆角 6、选中项 `bg-[var(--accent)]/15`；图标 16px 线性、与文字间距 8 |
-| **分组表单** | 设置与对话框统一用"标签左 / 控件右"的分组卡片，卡片内行 1px 分隔，卡片外无边框重叠 |
-| **克制的图标与文字** | 工具簇按钮 28×28、图标 16px、`stroke 1.5`；Tooltip 延迟 500ms；图标按钮没有文字，文字按钮没有图标（主要操作除外） |
-| **一致的窗口 chrome** | 红绿灯区 44px 与侧栏同材质；无顶栏；画布纯黑/暖白 |
-| **动效** | 只用 opacity/transform，120–180ms `ease-out`；页面切换淡入 120ms；无弹跳 |
-| **深浅色对等** | 每个组件在两套主题下都用同一套语义 token，浅色下阴影减半、边框加深到 `.10` |
+| 原则                               | 落地                                                                                                                                                                                                                                                                               |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **层级用材质与灰度表达，不用线框** | 三级表面：窗口底 `--bg`、侧栏/面板 `--panel`（比底浅 4%）、卡片/分组 `--card`（再浅 3%）；边框只用 1px `rgba(tint, .08)`，浮层加 `shadow-lg` 一处即可                                                                                                                              |
+| **8pt 网格**                       | 所有间距取 4/8/12/16/24/32；行高 44（设置行）/ 32（列表行）/ 28（工具栏钮）；圆角：控件 6、卡片 10、面板 12、对话框 14、球 9999                                                                                                                                                    |
+| **字体层级（SF Pro）**             | 标题 17 semibold、分区标题 15 semibold、正文 13 regular、辅助 11 regular；数字用 tabular-nums；不再出现 9.5px/10px 文字（状态胶囊改 11px medium、字距 0.02em）                                                                                                                     |
+| **系统强调色**                     | 强调色 `#0A84FF`（浅色 `#007AFF`）只用于选中态、主要按钮、进度；其余按钮为 `secondary`（灰底）或 `ghost`                                                                                                                                                                           |
+| **源列表侧栏**                     | 侧栏用半透明材质：`bg-[color-mix(in srgb, var(--panel) 85%, transparent)] backdrop-blur-xl`（Tauri 窗口设为透明背景 + `window-vibrancy` sidebar 材质，网页回退纯色）；分组标题 11px uppercase muted、项高 28、圆角 6、选中项 `bg-[var(--accent)]/15`；图标 16px 线性、与文字间距 8 |
+| **分组表单**                       | 设置与对话框统一用"标签左 / 控件右"的分组卡片，卡片内行 1px 分隔，卡片外无边框重叠                                                                                                                                                                                                 |
+| **克制的图标与文字**               | 工具簇按钮 28×28、图标 16px、`stroke 1.5`；Tooltip 延迟 500ms；图标按钮没有文字，文字按钮没有图标（主要操作除外）                                                                                                                                                                  |
+| **一致的窗口 chrome**              | 红绿灯区 44px 与侧栏同材质；无顶栏；画布纯黑/暖白                                                                                                                                                                                                                                  |
+| **动效**                           | 只用 opacity/transform，120–180ms `ease-out`；页面切换淡入 120ms；无弹跳                                                                                                                                                                                                           |
+| **深浅色对等**                     | 每个组件在两套主题下都用同一套语义 token，浅色下阴影减半、边框加深到 `.10`                                                                                                                                                                                                         |
 
 ### 24.3 页面逐一设计
 

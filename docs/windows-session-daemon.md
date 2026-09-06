@@ -95,19 +95,19 @@ token 逐字节常量时间比较，不匹配则回 `error {code: "unauthorized"
 
 ### 4.3 请求 / 响应（JSON，UTF-8，每消息一帧）
 
-| 请求 | 语义 | 对应 trait 方法 |
-| --- | --- | --- |
-| `create {sessionKey, generation, cwd, shell, command, args, env, cols, rows}` | 新建 ConPTY 会话 | `create` |
-| `attach {sessionKey, generation, cols, rows}` | 把**本连接**变成输出流订阅者 | `attach` |
-| `write {sessionKey, data(base64)}` | 写入 PTY | `write` |
-| `resize {sessionKey, cols, rows}` | `ResizePseudoConsole` | `resize` |
-| `capture {sessionKey, lines, escapes}` | 从无头 VT 屏取文本 | `capture` |
-| `paste {sessionKey, text, enter}` | 括号粘贴序列 + 可选 `\r` | `paste` |
-| `foreground {sessionKey}` | 前台进程信息 | `foreground` |
-| `signal {sessionKey, kind: "interrupt"｜"process"}` | Ctrl+C / 结束进程树 | `interrupt` / `terminate_process` |
-| `destroy {sessionKey}` | 结束会话并删表项 | `destroy` |
-| `list {}` | 活跃会话表 | `list_alive` |
-| `flow {sessionKey, action: "pause"｜"resume"}` | 本连接的背压控制 | 见 §6 |
+| 请求                                                                          | 语义                         | 对应 trait 方法                   |
+| ----------------------------------------------------------------------------- | ---------------------------- | --------------------------------- |
+| `create {sessionKey, generation, cwd, shell, command, args, env, cols, rows}` | 新建 ConPTY 会话             | `create`                          |
+| `attach {sessionKey, generation, cols, rows}`                                 | 把**本连接**变成输出流订阅者 | `attach`                          |
+| `write {sessionKey, data(base64)}`                                            | 写入 PTY                     | `write`                           |
+| `resize {sessionKey, cols, rows}`                                             | `ResizePseudoConsole`        | `resize`                          |
+| `capture {sessionKey, lines, escapes}`                                        | 从无头 VT 屏取文本           | `capture`                         |
+| `paste {sessionKey, text, enter}`                                             | 括号粘贴序列 + 可选 `\r`     | `paste`                           |
+| `foreground {sessionKey}`                                                     | 前台进程信息                 | `foreground`                      |
+| `signal {sessionKey, kind: "interrupt"｜"process"}`                           | Ctrl+C / 结束进程树          | `interrupt` / `terminate_process` |
+| `destroy {sessionKey}`                                                        | 结束会话并删表项             | `destroy`                         |
+| `list {}`                                                                     | 活跃会话表                   | `list_alive`                      |
+| `flow {sessionKey, action: "pause"｜"resume"}`                                | 本连接的背压控制             | 见 §6                             |
 
 响应一律 `ok {id, ...}` / `error {id, code, message}`，`id` 由请求方生成、单调递增。
 
@@ -167,17 +167,17 @@ ConPTY 读线程是唯一的生产者，订阅者是多个消费者。每个订�
 
 `SessionDaemonBackend`（`apps/runtime/src/terminal/session_daemon.rs`，`#[cfg(windows)]`）实现 §15.4 的 trait，`BackendKind` 新增 `SessionDaemon`（`GET /api/terminals/backend` 报 `"session-daemon"`）。
 
-| 动作 | 实现 |
-| --- | --- |
-| create | 保证 host 在跑 → `create` 请求 → 返回 `TerminalHandle { backend_ref: Some("<sessionKey>#<generation>"), pid }` |
-| attach | 新开一条管道连接 → `hello` → `attach` → 把 snapshot/output 帧转成 `broadcast::Sender<Bytes>`；`DetachGuard` 关闭这条连接（**detach，不结束会话**） |
-| write / resize / paste / capture / foreground | 走常驻控制连接的同名请求 |
-| interrupt | `signal {kind: "interrupt"}`；host 侧 `GenerateConsoleCtrlEvent(CTRL_C_EVENT, <会话进程组>)`，失败则回退到向 PTY 写 `\x03` |
-| terminate_process | `signal {kind: "process"}`；host 侧关闭会话的 Job Object（`TerminateJobObject`），整棵进程树一起走 |
-| destroy | `destroy` 请求；host `ClosePseudoConsole` + 关 Job + 删表项 |
-| list_alive | `list` 请求；host 不在时读状态文件返回空表并触发对账 |
-| destroy_by_reference | 用 `backend_ref` 里的 sessionKey 调 `destroy`（孤儿回收） |
-| detach_all | 关掉所有 attach 连接与控制连接，**不动 host** |
+| 动作                                          | 实现                                                                                                                                               |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| create                                        | 保证 host 在跑 → `create` 请求 → 返回 `TerminalHandle { backend_ref: Some("<sessionKey>#<generation>"), pid }`                                     |
+| attach                                        | 新开一条管道连接 → `hello` → `attach` → 把 snapshot/output 帧转成 `broadcast::Sender<Bytes>`；`DetachGuard` 关闭这条连接（**detach，不结束会话**） |
+| write / resize / paste / capture / foreground | 走常驻控制连接的同名请求                                                                                                                           |
+| interrupt                                     | `signal {kind: "interrupt"}`；host 侧 `GenerateConsoleCtrlEvent(CTRL_C_EVENT, <会话进程组>)`，失败则回退到向 PTY 写 `\x03`                         |
+| terminate_process                             | `signal {kind: "process"}`；host 侧关闭会话的 Job Object（`TerminateJobObject`），整棵进程树一起走                                                 |
+| destroy                                       | `destroy` 请求；host `ClosePseudoConsole` + 关 Job + 删表项                                                                                        |
+| list_alive                                    | `list` 请求；host 不在时读状态文件返回空表并触发对账                                                                                               |
+| destroy_by_reference                          | 用 `backend_ref` 里的 sessionKey 调 `destroy`（孤儿回收）                                                                                          |
+| detach_all                                    | 关掉所有 attach 连接与控制连接，**不动 host**                                                                                                      |
 
 `BackendSelector` 在 Windows 上的顺序变成：设置强制 `direct` → direct；设置强制 `tmux` 且探测到 tmux → tmux；否则 → `SessionDaemon`（host 起不来时降级 direct 并发一条通知条，与 §15.6 的 tmux 缺失处理同形）。
 
@@ -185,15 +185,15 @@ ConPTY 读线程是唯一的生产者，订阅者是多个消费者。每个订�
 
 ## 8. Windows 上做不到 / 必须换做法的
 
-| tmux 做法 | Windows | 替代 |
-| --- | --- | --- |
-| `load-buffer` + `paste-buffer -p` | ConPTY 没有 paste buffer 的概念，也没有"由服务端代打"的通道 | host 直接向 PTY 写 `ESC[200~` + 清洗后的正文 + `ESC[201~`（复用 `backend.rs` 里的 `PASTE_START` / `PASTE_END` / `sanitize_paste`），需要回车时再写 `\r`。**差别是真实的**：目标 CLI 没开括号粘贴时，多行文本会被逐行当成回车提交；host 因此对超过 1 行且未探测到括号粘贴模式的 paste 回 `warning`，前端提示"目标程序不支持粘贴块" |
-| `send-keys C-c` | 没有 SIGINT | `GenerateConsoleCtrlEvent`；进程不在同一控制台进程组时回退写 `\x03` |
-| SIGTERM → 2 s → SIGKILL | 没有 SIGTERM | Job Object 直接 `TerminateJobObject`（等价 SIGKILL）。想给 CLI 一个体面的收尾窗口，只能先写 `\x03` 等 2 s 再终止 Job |
-| `#{pane_current_command}` + `ps --ppid` | 没有 `/proc` | `CreateToolhelp32Snapshot` 遍历进程表按 `th32ParentProcessID` 建树；命令行用 `NtQueryInformationProcess` + 读 PEB（同用户进程可读）。拿不到时 `ForegroundInfo.children` 留空，不阻塞调用方 |
-| tmux 自带 `exit-empty` / `exit-unattached` | —— | host 的空闲退出计时器（§2） |
-| tmux socket 文件权限 0700 | 文件权限模型不同 | 管道安全描述符 + token 文件 ACL（§4.1、§4.2） |
-| 会话在 Runtime 崩溃后仍被 tmux server 持有 | 同理 | host 持有；但 **host 自己崩溃 = 会话全丢**，没有第二层。缓解只能是 host 保持极小的代码面（无 HTTP、无数据库、无插件） |
+| tmux 做法                                  | Windows                                                     | 替代                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------ | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `load-buffer` + `paste-buffer -p`          | ConPTY 没有 paste buffer 的概念，也没有"由服务端代打"的通道 | host 直接向 PTY 写 `ESC[200~` + 清洗后的正文 + `ESC[201~`（复用 `backend.rs` 里的 `PASTE_START` / `PASTE_END` / `sanitize_paste`），需要回车时再写 `\r`。**差别是真实的**：目标 CLI 没开括号粘贴时，多行文本会被逐行当成回车提交；host 因此对超过 1 行且未探测到括号粘贴模式的 paste 回 `warning`，前端提示"目标程序不支持粘贴块" |
+| `send-keys C-c`                            | 没有 SIGINT                                                 | `GenerateConsoleCtrlEvent`；进程不在同一控制台进程组时回退写 `\x03`                                                                                                                                                                                                                                                               |
+| SIGTERM → 2 s → SIGKILL                    | 没有 SIGTERM                                                | Job Object 直接 `TerminateJobObject`（等价 SIGKILL）。想给 CLI 一个体面的收尾窗口，只能先写 `\x03` 等 2 s 再终止 Job                                                                                                                                                                                                              |
+| `#{pane_current_command}` + `ps --ppid`    | 没有 `/proc`                                                | `CreateToolhelp32Snapshot` 遍历进程表按 `th32ParentProcessID` 建树；命令行用 `NtQueryInformationProcess` + 读 PEB（同用户进程可读）。拿不到时 `ForegroundInfo.children` 留空，不阻塞调用方                                                                                                                                        |
+| tmux 自带 `exit-empty` / `exit-unattached` | ——                                                          | host 的空闲退出计时器（§2）                                                                                                                                                                                                                                                                                                       |
+| tmux socket 文件权限 0700                  | 文件权限模型不同                                            | 管道安全描述符 + token 文件 ACL（§4.1、§4.2）                                                                                                                                                                                                                                                                                     |
+| 会话在 Runtime 崩溃后仍被 tmux server 持有 | 同理                                                        | host 持有；但 **host 自己崩溃 = 会话全丢**，没有第二层。缓解只能是 host 保持极小的代码面（无 HTTP、无数据库、无插件）                                                                                                                                                                                                             |
 
 另外两条已知限制，写进设置页的说明文案：
 
@@ -202,25 +202,25 @@ ConPTY 读线程是唯一的生产者，订阅者是多个消费者。每个订�
 
 ## 9. 测试矩阵
 
-| 场景 | 期望 |
-| --- | --- |
-| Runtime 重启 | 节点重新 attach，屏幕内容与重启前一致，CLI 未收到任何信号 |
-| 桌面壳退出后重开 | 同上；host 全程存活 |
-| host 版本升级（drain） | 旧会话继续可用，新会话开在新 host，旧 host 在最后一个会话结束后退出 |
-| 两个 Runtime 冷启动竞争 | 只有一个 host（互斥体），另一个连上现有 host |
-| 同一会话两个 socket | 两边都看到输出；关掉其中一个不影响另一个 |
-| 慢消费者 | 慢的那条连接收到 `warning`，快的那条不掉帧；慢连接断开后 CLI 立即恢复输出（`pause_owners` 清空） |
-| 慢消费者进程被强杀 | 同上，且 5 s 内恢复（管道断开检测） |
-| recycle | 旧连接收到 `stale`，新 attach 拿到新 generation 的快照，旧帧不混入 |
-| 输出洪水（`type bigfile`） | 无 OOM，sequence 断裂时前端重取快照而不是渲染错位内容 |
-| Ctrl+C | claude / codex 的 TUI 收到中断并回到提示符 |
-| terminate_process | 进程树（node → 子进程）全部消失，会话仍在，可重新跑 |
-| destroy | 会话消失，状态文件更新，`list` 不再返回 |
-| 空闲退出 | 最后一个会话结束 30 min 后 host 自行退出，状态文件清空 |
-| token 不匹配 | 连接被拒，限流生效，日志里有一条 `unauthorized` |
-| 非当前用户连接管道 | `ERROR_ACCESS_DENIED` |
-| 多行粘贴到不支持括号粘贴的程序 | 前端出现"目标程序不支持粘贴块"提示 |
-| 中文 / emoji / 组合字宽度 | 快照与实时输出的光标位置一致（`vt100` 与 xterm 的宽度表对齐） |
+| 场景                           | 期望                                                                                             |
+| ------------------------------ | ------------------------------------------------------------------------------------------------ |
+| Runtime 重启                   | 节点重新 attach，屏幕内容与重启前一致，CLI 未收到任何信号                                        |
+| 桌面壳退出后重开               | 同上；host 全程存活                                                                              |
+| host 版本升级（drain）         | 旧会话继续可用，新会话开在新 host，旧 host 在最后一个会话结束后退出                              |
+| 两个 Runtime 冷启动竞争        | 只有一个 host（互斥体），另一个连上现有 host                                                     |
+| 同一会话两个 socket            | 两边都看到输出；关掉其中一个不影响另一个                                                         |
+| 慢消费者                       | 慢的那条连接收到 `warning`，快的那条不掉帧；慢连接断开后 CLI 立即恢复输出（`pause_owners` 清空） |
+| 慢消费者进程被强杀             | 同上，且 5 s 内恢复（管道断开检测）                                                              |
+| recycle                        | 旧连接收到 `stale`，新 attach 拿到新 generation 的快照，旧帧不混入                               |
+| 输出洪水（`type bigfile`）     | 无 OOM，sequence 断裂时前端重取快照而不是渲染错位内容                                            |
+| Ctrl+C                         | claude / codex 的 TUI 收到中断并回到提示符                                                       |
+| terminate_process              | 进程树（node → 子进程）全部消失，会话仍在，可重新跑                                              |
+| destroy                        | 会话消失，状态文件更新，`list` 不再返回                                                          |
+| 空闲退出                       | 最后一个会话结束 30 min 后 host 自行退出，状态文件清空                                           |
+| token 不匹配                   | 连接被拒，限流生效，日志里有一条 `unauthorized`                                                  |
+| 非当前用户连接管道             | `ERROR_ACCESS_DENIED`                                                                            |
+| 多行粘贴到不支持括号粘贴的程序 | 前端出现"目标程序不支持粘贴块"提示                                                               |
+| 中文 / emoji / 组合字宽度      | 快照与实时输出的光标位置一致（`vt100` 与 xterm 的宽度表对齐）                                    |
 
 ## 10. 实施顺序（未排期）
 

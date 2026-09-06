@@ -1,7 +1,7 @@
 # 界面设计基线（v2 · 桌面端重构）
 
 > 更新：2026-09-02  
-> 设计来源：[docs/design/handoff](./design/handoff/README.md)（高保真原型 + SPEC）  
+> 设计来源：v2 高保真原型 `docs/design/handoff/`（已随 v3 界面重构删除，可在 git 历史中找回）  
 > 实施契约：[redesign-plan.md](./redesign-plan.md)
 
 本文描述当前已实现的界面基线。上一版（GPT 风格浅灰/绿色）已被本版替代。
