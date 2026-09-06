@@ -1,6 +1,6 @@
 import * as React from "react";
 import type { FileEntry, GitFileStatus } from "@armadra/shared";
-import { ChevronRight, File, Folder } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
@@ -12,6 +12,7 @@ import { useCanvasStore } from "@/store/canvas-store";
 import { NodeShell } from "./NodeShell";
 import { NODE_META, type NodeBodyProps } from "./registry";
 import { useWorkspaceFileDrag } from "../files/use-workspace-file-drag";
+import { FileTypeIcon } from "./files/file-icons";
 
 /** 新开的编辑器节点放在文件节点右边这么远。 */
 const SPAWN_GAP = 24;
@@ -190,7 +191,7 @@ export function FilesNode({ id, node, selected }: NodeBodyProps) {
                   if (entry.kind === "file") openEditor(entry);
                 }}
               >
-                {entry.kind === "directory" ? <Folder /> : <File />}
+                <FileTypeIcon path={entry.name} kind={entry.kind} />
                 <span className="truncate text-[11px]">{entry.name}</span>
                 {badge && (
                   <span

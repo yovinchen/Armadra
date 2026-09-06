@@ -5,6 +5,7 @@ import { useT } from "../../app/preferences-store";
 import { Badge } from "../../ui/badge";
 import { IconButton } from "../../ui/icon-button";
 import { FileDiff, ListFilter, Minus, Plus, Undo2 } from "lucide-react";
+import { FileTypeIcon } from "../../nodes/files/file-icons";
 
 type DiffFileStatus = GitFileStatus["status"];
 
@@ -50,14 +51,15 @@ function ChangeRow({
   const repository = file.repositoryPath ?? actions.repositoryPath;
   return (
     <div className="group flex h-8 items-center gap-2 rounded-md px-2 hover:bg-muted">
-      <Badge
-        variant="ghost"
-        className="h-4 w-4 shrink-0 justify-center p-0 font-mono text-[length:var(--text-caption)]"
-        style={{ color: STATUS_COLOR[file.status] }}
-        title={t(`explorer.status.${file.status}`)}
-      >
-        {file.status}
-      </Badge>
+      {/*
+        图标位放文件类型，不放 Git 状态字母：未跟踪文件的状态字母是 `?`，
+        坐在行首的图标位上读起来就是「图标没加载出来」。状态挪到文件名后面，
+        和 `explorer.status.*` 的说明一起。
+      */}
+      <FileTypeIcon
+        path={file.path}
+        className="size-4 shrink-0 text-muted-foreground"
+      />
       {/* 聚合视图里同名文件可能来自不同仓库，行上必须写清是哪一个。 */}
       {file.repositoryName && (
         <Badge
@@ -74,6 +76,14 @@ function ChangeRow({
       >
         {file.path}
       </span>
+      <Badge
+        variant="ghost"
+        className="h-4 w-4 shrink-0 justify-center p-0 font-mono text-[length:var(--text-caption)] font-bold"
+        style={{ color: STATUS_COLOR[file.status] }}
+        title={t(`explorer.status.${file.status}`)}
+      >
+        {file.status}
+      </Badge>
       <div className="flex items-center gap-0.5">
         <IconButton
           label={t("gitHunk.title")}
