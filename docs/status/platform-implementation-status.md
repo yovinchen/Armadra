@@ -123,6 +123,19 @@
 - **浏览器 0+1**：浏览器测试 17→27，修正 Fetch 拦截下的 CDP 死锁与重定向 continueResponse。
 - 主树复核：Rust 725 lib 全绿、Go 25 包 race（含真实 Worker）、Web 1556、host-client 207、shared 140、协议 Rust/TS 全过、`pnpm check` 通过。
 
+## 第七轮：设计实施第二轮（2026-09-06 下午至晚上）
+
+第二轮按四份设计文档并行实施，主 Agent 逐批 cherry-pick 到 `feature/host-protocol-foundation` 并在主树重跑全部回归后快进 `main`。合并时的编号处理：`worker.proto` request/response oneof 25 settings、26 filesystem（27 session、28 agent、29 git 预留给 B3–B5）；`events.proto` 实体 120/121 settings、140 filesystem；Host 存储 v7 workspace_roots；Runtime 无新增迁移（切换前表结构不变）。
+
+- **语言服务 C+D**（`4a64f694`…`cea6cbb3`）：编辑器经会话 socket 接入语言服务器（诊断、补全、格式化、代码动作），设置页列出每种语言的服务器与缺失项；远端工作区的语言服务在文件所在主机运行（Worker `--language-link` 第二条 stdio 连接、带确认信用窗口的链路、资源面板不臆造数字），真实 Worker 进程驱动的远端链路测试。socket 关闭即结束会话（本地/远端两种执行）。
+- **发布/更新 B+D**（`9efd40cc`…`2009319c`）：桌面更新状态机（检查→下载→验签→暂存，只报告它核验过的状态）、mock release 闭环测试、更新频道与开关入设置、Web 更新区块覆盖每一种真实状态、host-client 按程序查询。
+- **浏览器 2+3**（`241d4cb6`…`27a8ca3b`、`b3763fab`…`81ed33f9`）：批次 3 先合入：一个会话的画面与控制交给多个观看者（租约记名设备、Host 按终端类授权、浏览器节点拆分并挂到帧流）；批次 2 由合并 Agent 在批次 3 之上语义调和后合入：标签/frame/对话框/上传在同一会话内寻址，Hook 侧十个浏览器动词，`lease --status/--release` 补为第 17 个动词，`POST …/input` 先查对话框再取租约；浏览器测试 60 项，点击→新帧 p95 70 ms（§8 目标 350 ms）。
+- **B1 settings 域**（`43913a3e`…`1e2dbfaa`）：`settings.proto`（文档为不透明字节 + sha256）、Host `settingshost`（文档与执行主机注册、Adopt 经 Worker 帧 25 读取、Release 反向导出 + Runtime 重读核验）、`ownership.Adoption` 把实时链路交给每个域、事件流按域授权放行 host-wide 变更、Runtime 在 Host 拥有 settings 后拒写（语言探测缓存也按归属决定是否持久化）、Web `settingsGateway` 按归属路由读写且 `maintenance/error` 显示只读原因；`pnpm ownership:e2e --domain settings` 33 项（含依赖顺序拒绝、HTTPS 保存/冲突/事件、回滚后 Runtime 读到 Host 期间改动）。
+- **B2 filesystem 域**（`2acbb55d`…`d2894307`）：`filesystem.proto`（根注册、权限、Register/Update/Unregister/List、Worker 帧 26）、Host v7 `workspace_roots` 与 `fshost`（决定文件在哪、谁能碰；文件 I/O 仍在 Worker）、`permissions_json` 归 filesystem 域独有（画布摘要不再含权限，两种语言的规范摘要同步）、Host 代理按自己的记录收窄转发的文件请求、Web 工作区注册经 filesystem 网关、复用 `files:read/write` scope；`pnpm ownership:e2e --domain filesystem` 30 项。两个域合入后依赖顺序完整生效：filesystem 场景改为 canvas→settings→filesystem 切换、逆序回滚，两个场景收进 `tools/ownership/` 由 `tools/ownership-e2e.mjs --domain` 分发。
+- **进行中**：远端 4+5（整个工作区在执行主机上运行、主机密钥确认与 SSH 提示、上传/监听推送）由合并 Agent 调和到当前主线；B3 session 与 B5 git 域并行实施（预分配 Worker 帧 27/29、事件实体 160/180、Host v8/v9）；B4 agent 在 B3 后。
+
+主树复核（B2 与浏览器合入后）：Rust 全 workspace 通过（runtime lib 759 项 + 30 余个集成套件）、`clippy -D warnings` 与 `fmt --check` 通过、Web 177 文件 1664 项、shared 140、host-client 238、协议 TS 97 与 Rust 全过、Go 全部包 race（含真实 Worker）、`pnpm check` 通过、canvas e2e 73 项。
+
 ## 本轮验证（2026-09-06 上午，四轮全部合入后于主树重跑，私有目标目录）
 
 | 范围                       | 命令                                                                                                                          | 结果                                                                                               |
@@ -239,12 +252,12 @@
 
 - Go `1.26.5`（`go.mod` 要求 ≥ 1.24），macOS arm64；生成流程使用 vendored protoc `31.1`，不依赖系统 protoc `35.1`。
 - Rust 已安装 macOS arm64、Windows x64 MSVC、Linux x64 目标；安装 target 不代表能在本机运行 Windows/Linux 实机测试。
-- Rust Runtime 仍是唯一业务权威。Go Host 已具备身份、认证、存储、调度与 Worker 客户端，但没有业务 Protobuf 表面，也没有拒绝旧 Runtime 写入的 epoch 机制。
+- 业务写入所有权按域切换：画布、settings、filesystem 三个域可经 CLI/HTTPS 切到 Go Host 并回滚（Runtime 在切换后拒写、仍答读）；session、agent、git 域仍由 Rust Runtime 拥有，Host 对应表面在实施中。
 - 真实 Worker 测试与桌面 `src-tauri` Rust 测试不在默认命令内，验收时需单独运行。
 
 ## 下一步
 
-1. 第二轮实施进行中：语言服务 C/D、更新 B/D、浏览器 2/3、远端 4/5、业务域 B1 settings 与 B2 filesystem；之后 B3 session、B4 agent、B5 git、B6 改名。
-2. 每轮合入后重跑 `pnpm check`、`cargo test --workspace`、`go -C apps/host test -race ./...`、`pnpm protocol:test`、`pnpm canvas:e2e`；`main` 快进。
+1. 合入远端 4+5、B3 session、B5 git；之后 B4 agent、B6 `apps/runtime`→`apps/worker` 改名（§4.4 条件满足后）。
+2. 每轮合入后重跑 `pnpm check`、`cargo test --workspace`、`go -C apps/host test -race ./...`（含真实 Worker）、`pnpm protocol:test`、`pnpm ownership:e2e --domain settings|filesystem`、`pnpm canvas:e2e`；`main` 快进。
 3. 剩余 800–1500 行文件的收尾拆分（`migration_export.rs`、`settings.rs`、`GitRepositoryPanel.tsx`、`SourceControlDrawer.tsx`、`keybindings.ts` 等）在实施轮之间进行，避免与在飞批次冲突。
 4. 需要实机的验收保持未完成：Windows、手机、真实 GitHub/SSH、CI 真实 runner、签名密钥。
