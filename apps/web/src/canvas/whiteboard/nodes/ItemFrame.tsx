@@ -1,18 +1,29 @@
 import * as React from "react";
 import { NodeResizer } from "@xyflow/react";
 
+import { ConnectionHandles } from "../../flow/nodes/ConnectionHandles";
 import { beginGesture, endGesture, resizeItem } from "../store";
 import type { Item } from "../model";
 
 /**
  * 白板对象的公共外壳（React Flow 计划 §2.4，归属 whiteboard）。
  *
- * 五种对象共用的三件事：选中框、`NodeResizer`、以及「编辑区不许被画布
- * 抢走指针」的 `nodrag` / `nowheel` 约定。
+ * 五种对象共用的四件事：选中框、`NodeResizer`、连线把手，以及「编辑区不许
+ * 被画布抢走指针」的 `nodrag` / `nowheel` 约定。
  *
  * 白板对象没有 `flow/drafts.ts` 那条草稿通道（投影 `wb.*` 时不读草稿），
  * 所以 resize 的每一帧都真的写文档；`beginGesture` / `endGesture` 把这一串
  * 合并成一条历史，松手按一下 ⌘Z 回到原来的大小。
+ *
+ * 把手直接复用节点的 `flow/nodes/ConnectionHandles`（`dropOnly`）：白板对象
+ * 与分组的需求逐字相同——不能起笔（对象之间连线是直线 / 箭头工具的活，
+ * §2.3 第三行），但必须能当落点（从 Agent 的把手拖过来建一条内容引用），
+ * 而且必须有一个 source 锚点，否则 `getEdgePosition` 报 `error008`、整条
+ * 引用边一条都画不出来（`source` 恒为白板对象，§2.5）。
+ *
+ * 两个把手都铺满对象且 `opacity: 0`；落点只在 `useConnection().inProgress`
+ * 时接指针事件，锚点永远 `pointer-events: none`。所以平时画一笔、拖一个
+ * 形状、双击进文字编辑全都照旧。
  */
 
 /** 白板对象的最小尺寸：再小就点不中，也没法把把手拖回来。 */
@@ -128,6 +139,7 @@ export function ItemFrame({
           }}
         />
       ) : null}
+      <ConnectionHandles dropOnly />
       <div
         className={className}
         data-item-kind={item.kind}

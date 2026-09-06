@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent } from "@testing-library/react";
 import type { NodeProps } from "@xyflow/react";
 
+import type { Item } from "../model";
+
 /**
  * 五种白板节点的渲染（React Flow 计划 §2.2 / F22–F26）。
  *
@@ -156,5 +158,70 @@ describe("LineNode", () => {
     expect(active.container.querySelectorAll("circle").length).toBeGreaterThan(
       0,
     );
+  });
+});
+
+/**
+ * 连线把手（React Flow 计划 §2.5）。
+ *
+ * 白板对象是内容引用的 `source` 一端，而 `getEdgePosition` 找不到起点侧的
+ * 把手就整条边不画（`error008`）——所以这两个把手是「引用边存不存在」的
+ * 前提，不是锦上添花。落点则必须平时不接指针事件，否则画笔的第一笔会被
+ * 上一个对象铺满自己的那块落点吃掉。
+ */
+describe("ItemFrame 的把手", () => {
+  const rendered: [Item["kind"], () => HTMLElement][] = [
+    ["ink", () => renderFlow(<InkNode {...props(makeItem("ink"))} />).container],
+    [
+      "text",
+      () => renderFlow(<TextNode {...props(makeItem("text"))} />).container,
+    ],
+    [
+      "shape",
+      () => renderFlow(<ShapeNode {...props(makeItem("shape"))} />).container,
+    ],
+    [
+      "image",
+      () => renderFlow(<ImageNode {...props(makeItem("image"))} />).container,
+    ],
+    [
+      "line",
+      () => renderFlow(<LineNode {...props(makeItem("line"))} />).container,
+    ],
+  ];
+
+  it.each(rendered)("%s 有落点也有 source 锚点", (_kind, mount) => {
+    const container = mount();
+    expect(
+      container
+        .querySelector('[data-slot="connection-drop"]')
+        ?.classList.contains("target"),
+    ).toBe(true);
+    expect(
+      container
+        .querySelector('[data-slot="connection-anchor"]')
+        ?.classList.contains("source"),
+    ).toBe(true);
+  });
+
+  it("一个都不能起笔：对象之间连线是直线 / 箭头工具的活", () => {
+    const { container } = renderFlow(
+      <ShapeNode {...props(makeItem("shape"))} />,
+    );
+    const all = [...container.querySelectorAll(".react-flow__handle")];
+    expect(all.length).toBeGreaterThan(0);
+    for (const handle of all) {
+      expect(handle.classList.contains("connectablestart")).toBe(false);
+    }
+  });
+
+  it("没有连线在进行时两个把手都不接指针事件", () => {
+    const { container } = renderFlow(<InkNode {...props(makeItem("ink"))} />);
+    for (const slot of ["connection-drop", "connection-anchor"]) {
+      const handle = container.querySelector<HTMLElement>(
+        `[data-slot="${slot}"]`,
+      );
+      expect(handle!.style.pointerEvents).toBe("none");
+    }
   });
 });

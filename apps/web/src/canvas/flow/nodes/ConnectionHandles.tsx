@@ -47,8 +47,9 @@ const BODY_HANDLE: CSSProperties = {
 
 export interface ConnectionHandlesProps {
   /**
-   * 只给落点，不给起笔的把手（分组用）。分组自己有标题与色带，
-   * 左右挂两个圆点既没地方放也没意义，但它仍然可以是一条连线的一端。
+   * 只给落点，不给起笔的把手（分组与白板对象用）。分组自己有标题与色带，
+   * 白板对象是一笔墨迹或一个形状，左右挂两个圆点既没地方放也没意义，但它们
+   * 仍然可以是一条连线 / 一条内容引用的一端。
    */
   dropOnly?: boolean;
 }
@@ -105,8 +106,10 @@ export function ConnectionHandles({
       {/*
        * 只有落点的节点还需要一个**从不参与交互**的 source 锚点：
        * `getEdgePosition` 找不到起点侧的把手就整条边不画（`error008`），
-       * 而分组身上一个 source 把手都没有。它永远 `pointer-events: none`，
-       * 所以 `elementFromPoint` 不会选中它，也起不了笔。
+       * 而分组与白板对象身上一个 source 把手都没有。内容引用的 `source`
+       * 恒为白板对象（`sync/project.projectReference`），少了这个锚点整条
+       * 引用边就不存在。它永远 `pointer-events: none`，所以
+       * `elementFromPoint` 不会选中它，也起不了笔。
        */}
       {dropOnly ? (
         <Handle
