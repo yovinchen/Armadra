@@ -414,3 +414,97 @@ async fn a_session_gets_its_initialize_answered_from_cache() {
     let _ = harness.expect("a", is_response("99")).await.unwrap();
     assert_eq!(harness.hub.lock().state, ServerState::Running);
 }
+
+/* ---------------------------- workspace/applyEdit -------------------------- */
+
+/// Matches the diagnostic the mock publishes to report what the client did
+/// with its `workspace/applyEdit`. Diagnostics are the only thing a server
+/// says about itself that the proxy forwards, so they are the channel the
+/// outcome can be read on without inventing a private protocol.
+fn apply_report(value: &Value) -> bool {
+    value.get("method").and_then(Value::as_str) == Some("textDocument/publishDiagnostics")
+        && value["params"]["diagnostics"]
+            .as_array()
+            .is_some_and(|diagnostics| {
+                diagnostics
+                    .iter()
+                    .any(|entry| entry["source"] == "mock-lsp-apply")
+            })
+}
+
+fn report_message(value: &Value) -> String {
+    value["params"]["diagnostics"][0]["message"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned()
+}
+
+#[tokio::test]
+async fn a_server_may_ask_for_an_edit_and_it_is_really_written() {
+    let Some(mut harness) = Harness::start(&["--apply-edit"]).await else {
+        return;
+    };
+    std::fs::write(harness.root.path().join("notes.md"), "keep this\nsecond\n")
+        .expect("the file the server will edit");
+    harness.join("a", true);
+    harness.hub.ensure_started().await.expect("mock-lsp starts");
+    harness.send("a", &did_open("armadra:///notes.md", "keep this\nsecond\n"));
+
+    let report = harness
+        .expect("a", apply_report)
+        .await
+        .expect("the server hears an answer");
+    assert_eq!(report_message(&report), "applied=true reason=");
+    assert_eq!(
+        std::fs::read_to_string(harness.root.path().join("notes.md")).unwrap(),
+        "DONE this\nsecond\n",
+        "the edit reached the file, not only the answer",
+    );
+}
+
+#[tokio::test]
+async fn a_read_only_workspace_refuses_the_edit_a_server_asks_for() {
+    let Some(mut harness) = Harness::start(&["--apply-edit"]).await else {
+        return;
+    };
+    std::fs::write(harness.root.path().join("notes.md"), "keep this\n").expect("a fixture file");
+    // The same gate a client-initiated rename passes. A server asking for the
+    // write itself is not a way around the workspace's grants.
+    harness.join("reader", false);
+    harness.hub.ensure_started().await.expect("mock-lsp starts");
+    harness.send("reader", &did_open("armadra:///notes.md", "keep this\n"));
+
+    let report = harness
+        .expect("reader", apply_report)
+        .await
+        .expect("the server is told why");
+    assert_eq!(report_message(&report), "applied=false reason=read_only");
+    assert_eq!(
+        std::fs::read_to_string(harness.root.path().join("notes.md")).unwrap(),
+        "keep this\n",
+    );
+}
+
+#[tokio::test]
+async fn an_edit_reaching_outside_the_workspace_is_refused_whole() {
+    let Some(mut harness) = Harness::start(&["--apply-outside"]).await else {
+        return;
+    };
+    std::fs::write(harness.root.path().join("notes.md"), "keep this\n").expect("a fixture file");
+    harness.join("a", true);
+    harness.hub.ensure_started().await.expect("mock-lsp starts");
+    harness.send("a", &did_open("armadra:///notes.md", "keep this\n"));
+
+    let report = harness
+        .expect("a", apply_report)
+        .await
+        .expect("the server is told why");
+    assert_eq!(
+        report_message(&report),
+        "applied=false reason=edit_not_applicable",
+    );
+    assert_eq!(
+        std::fs::read_to_string(harness.root.path().join("notes.md")).unwrap(),
+        "keep this\n",
+    );
+}

@@ -137,3 +137,16 @@ pub const SERVER_REQUESTS: &[&str] = &[
 pub fn code_action_is_offered(action: &serde_json::Value) -> bool {
     action.get("command").is_none() || action.get("edit").is_some()
 }
+
+/// The gate a server's own `workspace/applyEdit` passes.
+///
+/// It is the same gate a client-initiated rename passes, and it is spelled
+/// through the same table so the two cannot drift: whatever
+/// `textDocument/rename` requires is what an edit the server asks for
+/// requires. `workspace/applyEdit` also appears in [`NEVER_METHODS`], and that
+/// is not a contradiction: a *session* may not send one — a browser must not
+/// be able to forge an edit in the server's name — while a server may ask for
+/// one and be answered honestly. Direction, not rule.
+pub fn server_edit_allowed(allow_write: bool) -> Result<(), Denial> {
+    check("textDocument/rename", allow_write)
+}

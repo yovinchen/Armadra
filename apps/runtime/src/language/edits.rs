@@ -203,6 +203,35 @@ pub fn apply_to_text(original: &str, edits: &[TextEdit]) -> Option<String> {
     Some(text)
 }
 
+/// The versions a **server-initiated** edit is written against.
+///
+/// A client-driven apply carries the digests the user previewed; a server's
+/// `workspace/applyEdit` carries none, because nobody previewed anything. So
+/// they are read here, immediately before the write, and every file has to
+/// produce one: a file the runtime cannot version (not UTF-8, or gone) is a
+/// file it would have to write blind, and the whole edit is refused rather
+/// than half of it applied.
+pub fn current_versions(
+    root: &Path,
+    files: &[FileEdits],
+) -> Result<std::collections::HashMap<String, String>, FailedFile> {
+    let mut versions = std::collections::HashMap::with_capacity(files.len());
+    for file in files {
+        let current = files::read_text_file(root, &file.path).map_err(|error| FailedFile {
+            path: file.path.clone(),
+            code: "not_readable".into(),
+            message: error.to_string(),
+        })?;
+        let sha = current.sha256.ok_or_else(|| FailedFile {
+            path: file.path.clone(),
+            code: "no_version".into(),
+            message: "This file has no content version, so it cannot be written safely".into(),
+        })?;
+        versions.insert(file.path.clone(), sha);
+    }
+    Ok(versions)
+}
+
 /// The files an edit touches that have unsaved changes in an open editor.
 ///
 /// Returned rather than silently skipped: the dialog lists them and asks the

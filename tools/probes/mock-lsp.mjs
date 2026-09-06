@@ -13,6 +13,12 @@
 //   --crash-after=N     exit(9) after handling N messages
 //   --hang              accept `textDocument/hover` and never answer it
 //   --big-response      answer `textDocument/hover` with ~1 MiB of text
+//   --apply-edit        after a didOpen, ask the client to apply a
+//                       `WorkspaceEdit` of its own accord, and republish the
+//                       answer as a diagnostic so a test can read it — the
+//                       proxy forwards diagnostics and forwards nothing else
+//                       a server says about itself
+//   --apply-outside     the same, but naming a file outside the workspace
 //
 // It reads `Content-Length` frames on stdin and writes them on stdout, and it
 // prints nothing else to stdout — a stray line there would desynchronise the
@@ -39,6 +45,11 @@ if (flags.has("--version")) {
 const crashAfter = Number(options.get("--crash-after") ?? 0);
 const hang = flags.has("--hang");
 const bigResponse = flags.has("--big-response");
+const applyEdit = flags.has("--apply-edit") || flags.has("--apply-outside");
+const applyOutside = flags.has("--apply-outside");
+
+/** The id of the one edit this server ever asks for. */
+const APPLY_ID = "mock-apply";
 
 let handled = 0;
 let buffer = Buffer.alloc(0);
@@ -73,6 +84,71 @@ function diagnosticsFor(uri, text) {
     jsonrpc: "2.0",
     method: "textDocument/publishDiagnostics",
     params: { uri, diagnostics },
+  });
+}
+
+/**
+ * The server asking the client to write files (`workspace/applyEdit`).
+ *
+ * Nothing prompted it: that is the point. A code action can produce one, and
+ * so can a server that simply decides the buffer should look different, and
+ * the proxy has to answer the same way in both cases.
+ */
+let appliedTo = null;
+function requestApplyEdit(uri) {
+  appliedTo = uri;
+  const target = applyOutside ? "file:///etc/elsewhere.txt" : uri;
+  send({
+    jsonrpc: "2.0",
+    id: APPLY_ID,
+    method: "workspace/applyEdit",
+    params: {
+      label: "mock rewrite",
+      edit: {
+        changes: {
+          [target]: [
+            {
+              range: {
+                start: { line: 0, character: 0 },
+                end: { line: 0, character: 4 },
+              },
+              newText: "DONE",
+            },
+          ],
+        },
+      },
+    },
+  });
+}
+
+/**
+ * The client's answer, republished as a diagnostic.
+ *
+ * The proxy forwards `publishDiagnostics` and drops everything else a server
+ * says about itself, so this is the one channel a test can read the outcome
+ * on without the mock inventing a private protocol.
+ */
+function reportApplyEdit(result) {
+  if (!appliedTo) return;
+  const applied = result?.applied === true;
+  const reason = result?.failureReason ?? "";
+  send({
+    jsonrpc: "2.0",
+    method: "textDocument/publishDiagnostics",
+    params: {
+      uri: appliedTo,
+      diagnostics: [
+        {
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 1 },
+          },
+          severity: 3,
+          source: "mock-lsp-apply",
+          message: `applied=${applied} reason=${reason}`,
+        },
+      ],
+    },
   });
 }
 
@@ -124,6 +200,7 @@ function handle(message) {
       const text = params?.textDocument?.text ?? "";
       documents.set(uri, text);
       diagnosticsFor(uri, text);
+      if (applyEdit) requestApplyEdit(uri);
       return;
     }
     case "textDocument/didChange": {
@@ -271,7 +348,10 @@ stdin.on("data", (chunk) => {
     // it is enough that the proxy answered it at all. It is also not counted,
     // so `--crash-after` counts something a test can predict: the client's own
     // requests and notifications, in order.
-    if (message.method === undefined) continue;
+    if (message.method === undefined) {
+      if (message.id === APPLY_ID) reportApplyEdit(message.result);
+      continue;
+    }
     handled += 1;
     if (crashAfter > 0 && handled > crashAfter) {
       stderr.write("mock-lsp: crashing on purpose\n");

@@ -609,13 +609,24 @@ fn on_server_request(hub: &Arc<Hub>, message: &jsonrpc::Message) {
                 "name": hub.root.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default(),
             }]),
         ),
-        // A server asking to write files goes through the same preview and
-        // sha-checked apply a rename does; until that flow exists for
-        // server-initiated edits, the honest answer is "not applied".
-        "workspace/applyEdit" => jsonrpc::result_response(
-            Some(&id),
-            serde_json::json!({ "applied": false, "failureReason": "unsupported" }),
-        ),
+        // A server asking to write files goes through the same write grant and
+        // the same sha-checked apply a rename does. It is answered from a task
+        // of its own because the write touches the filesystem, and the reader
+        // that got us here must keep draining the server's stdout.
+        "workspace/applyEdit" => {
+            let hub = hub.clone();
+            let mut params = message.value.get("params").cloned().unwrap_or(Value::Null);
+            // The server names files the way it knows them. Rewriting first
+            // means the edit is validated by exactly the code a browser's own
+            // edit passes through — including the part that turns a path
+            // outside the root into an opaque external id the parser refuses.
+            hub.rewriter.rewrite(&mut params, uri::Direction::ToWeb);
+            tokio::spawn(async move {
+                let answer = apply_server_edit(&hub, &params).await;
+                hub.write(&jsonrpc::result_response(Some(&id), answer));
+            });
+            return;
+        }
         _ => jsonrpc::error_response(
             Some(&id),
             jsonrpc::METHOD_NOT_FOUND,
@@ -623,6 +634,77 @@ fn on_server_request(hub: &Arc<Hub>, message: &jsonrpc::Message) {
         ),
     };
     hub.write(&answer);
+}
+
+/// Answers one `workspace/applyEdit` for real (design §2.6 step 5).
+///
+/// The shape is deliberately the same as the client-initiated apply: the write
+/// grant, the same parser, the same refusal to touch a file with an unsaved
+/// draft, the same per-file digest check, the same `file.changed` events that
+/// make the open editors reload. What is different is where the digests come
+/// from — nobody previewed this edit, so they are read here, immediately
+/// before the write.
+///
+/// The answer is `ApplyWorkspaceEditResult`: `applied` is only true when every
+/// file landed, and a partial application says so with the index of the change
+/// that stopped it rather than claiming success.
+async fn apply_server_edit(hub: &Arc<Hub>, params: &Value) -> Value {
+    let allow_write = hub.lock().sessions.values().any(|sink| sink.allow_write);
+    if policy::server_edit_allowed(allow_write).is_err() {
+        return refused(reason::READ_ONLY);
+    }
+    let edit = params.get("edit").unwrap_or(&Value::Null);
+    let files = match super::edits::parse(edit, &hub.rewriter) {
+        Ok(files) => files,
+        // The parser's refusals are all the same class of answer: this edit
+        // names something the workspace will not write.
+        Err(_) => return refused(reason::EDIT_NOT_APPLICABLE),
+    };
+    let dirty = {
+        let state = hub.lock();
+        super::edits::dirty_files(&files, &state.documents, &hub.rewriter)
+    };
+    if !dirty.is_empty() {
+        return refused(reason::UNSAVED_CHANGES);
+    }
+    let root = hub.root.clone();
+    let workspace_id = hub.workspace_id.clone();
+    let events = hub.events.clone();
+    let outcome = tokio::task::spawn_blocking(move || {
+        let expected = super::edits::current_versions(&root, &files)?;
+        super::edits::apply(&root, &workspace_id, &files, &expected, &events)
+            .map_err(|error| super::edits::FailedFile {
+                path: String::new(),
+                code: "write_failed".into(),
+                message: error.to_string(),
+            })
+    })
+    .await;
+    let result = match outcome {
+        Ok(Ok(result)) => result,
+        Ok(Err(failure)) => return refused(&failure.code),
+        Err(_) => return refused("write_failed"),
+    };
+    tracing::info!(
+        server = %hub.server_id,
+        applied = result.applied.len(),
+        failed = result.failed.len(),
+        "applied an edit the language server asked for",
+    );
+    match result.failed.first() {
+        None => serde_json::json!({ "applied": true }),
+        Some(failure) => serde_json::json!({
+            "applied": false,
+            "failureReason": failure.code,
+            // The spec's index into `documentChanges`: how far the write got
+            // before it stopped.
+            "failedChange": result.applied.len(),
+        }),
+    }
+}
+
+fn refused(why: &str) -> Value {
+    serde_json::json!({ "applied": false, "failureReason": why })
 }
 
 fn configuration_for(hub: &Arc<Hub>) -> Value {
