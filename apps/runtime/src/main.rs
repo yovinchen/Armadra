@@ -40,6 +40,17 @@ async fn main() -> anyhow::Result<()> {
         // Opened before the first frame is read: a database without the
         // ownership table must stop the Worker, not surface as a per-request
         // failure once a controller already believes it can hand over.
+        // Where the session bridge finds the resident Runtime's endpoint file.
+        // It is the directory the canvas database lives in, because that is the
+        // Runtime's own layout: `canvas.db` and `hook-endpoint.env` sit side by
+        // side, so a controller that named the database has already named this.
+        // A second flag could drift from it and leave this Worker talking to a
+        // different Runtime than the one whose rows it reads.
+        let session_data_dir = worker
+            .canvas_database
+            .as_deref()
+            .and_then(std::path::Path::parent)
+            .map(std::path::Path::to_path_buf);
         let canvas = match worker.canvas_database {
             Some(path) => Some(armadra_runtime::worker::open_canvas_database(&path).await?),
             None => None,
@@ -60,6 +71,7 @@ async fn main() -> anyhow::Result<()> {
                 path,
                 canvas,
                 settings_file,
+                session_data_dir,
             )
             .await?;
         } else {
@@ -68,6 +80,7 @@ async fn main() -> anyhow::Result<()> {
                 tokio::io::stdout(),
                 canvas,
                 settings_file,
+                session_data_dir,
             )
             .await?;
         }

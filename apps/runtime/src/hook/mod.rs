@@ -269,6 +269,33 @@ pub fn routes() -> Router<AppState> {
             "/automation/agent-prompt/lookup",
             post(crate::automation::lookup_route),
         )
+        // The session domain's execution door (business migration §2.6).
+        // Once the Host decides whether a terminal should exist, this is how
+        // its Worker reaches the process that actually runs one.
+        .route(
+            "/automation/session-start",
+            post(crate::terminal::bridge::start_route),
+        )
+        .route(
+            "/automation/session-signal",
+            post(crate::terminal::bridge::signal_route),
+        )
+        .route(
+            "/automation/session-reclaim",
+            post(crate::terminal::bridge::reclaim_route),
+        )
+        .route(
+            "/automation/session-capture",
+            post(crate::terminal::bridge::capture_route),
+        )
+        .route(
+            "/automation/session-title",
+            post(crate::terminal::bridge::title_route),
+        )
+        .route(
+            "/automation/session-context-usage",
+            post(crate::terminal::bridge::context_usage_route),
+        )
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
 }
 

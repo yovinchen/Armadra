@@ -191,6 +191,9 @@ impl WorkspaceRecords {
                 Some(Entity::WorkspaceRoot(_)) => {
                     return Err(unsupported("a canvas package carries a workspace root"));
                 }
+                Some(Entity::Session(_) | Entity::SessionRun(_)) => {
+                    return Err(unsupported("a canvas package carries a session record"));
+                }
                 None => return Err(unsupported("an entity record names no known entity")),
             }
         }

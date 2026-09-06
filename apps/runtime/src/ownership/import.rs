@@ -293,6 +293,7 @@ pub async fn apply(
     match request.domain.as_str() {
         CANVAS_DOMAIN => apply_canvas(pool, request).await,
         super::filesystem::DOMAIN => super::filesystem_import::apply(pool, request).await,
+        super::session::DOMAIN => super::session_import::apply(pool, request).await,
         _ => Err(invalid("that domain has no reverse importer")),
     }
 }

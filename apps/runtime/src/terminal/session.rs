@@ -6,13 +6,39 @@ use super::*;
 impl TerminalManager {
     /* ------------------------------- lifecycle ---------------------------- */
 
+    /// Starts a session this Runtime names itself. It is what `POST
+    /// /api/terminals` has always done, and it stays for as long as the Runtime
+    /// still owns the session domain.
     pub async fn spawn(&self, request: SpawnRequest) -> AppResult<TerminalSession> {
+        let id = Uuid::now_v7().to_string();
+        let key = request.owner_node_id.clone().unwrap_or_else(|| id.clone());
+        self.spawn_as(&id, &key, request).await
+    }
+
+    /// Starts a session the *Host* named (Go Host 业务所有权迁移 §2.6).
+    ///
+    /// Once the domain has moved, the identifier and the logical key are the
+    /// Host's record rather than this process's invention: the record exists
+    /// before any process does, and a Runtime that generated its own id would
+    /// leave the Host holding a session nobody can attach to. Everything else —
+    /// the generation, the backend, the handle — is still this side's, because
+    /// this side is the one that creates the pane.
+    pub async fn spawn_as(
+        &self,
+        session_id: &str,
+        session_key: &str,
+        request: SpawnRequest,
+    ) -> AppResult<TerminalSession> {
         let _creation = self.inner.creation_gate.read().await;
         if self.is_shutting_down() {
             return Err(AppError::Conflict("Runtime is shutting down".into()));
         }
-        let id = Uuid::now_v7().to_string();
-        let key = SessionKey::new(request.owner_node_id.clone().unwrap_or_else(|| id.clone()));
+        let id = session_id.to_owned();
+        let key = SessionKey::new(if session_key.is_empty() {
+            id.clone()
+        } else {
+            session_key.to_owned()
+        });
         let _key_guard = self.key_gate(&key).lock_owned().await;
         let shell = request.shell.clone().unwrap_or_else(default_shell);
         let spec = TerminalSpec {

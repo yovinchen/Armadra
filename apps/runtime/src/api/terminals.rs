@@ -18,6 +18,7 @@ use crate::{
     AppState, db,
     error::{AppError, AppResult},
     model::{SessionSummary, TerminalSession},
+    ownership,
     security::resolve_in_root,
     terminal::{
         BackendInfo, CaptureResponse, ClientMessage, DEFAULT_COLS, DEFAULT_ROWS, SpawnRequest,
@@ -90,10 +91,20 @@ pub(crate) fn agent_session_environment(
     env
 }
 
+/// `POST /api/terminals` — create and start in one step.
+///
+/// The gate is the session domain's (business migration §2.6). Once the Host
+/// owns it, *whether* a terminal should exist is the Host's decision and this
+/// route answers `ownership_moved`; the Host then calls back through the
+/// private session door, which starts the same process by the same code. What
+/// is deliberately not gated is attaching: the WebSocket, the capture, the
+/// paste and the scroll are execution, they stay here, and gating them would
+/// break every open terminal the moment the record moved.
 pub async fn create_terminal(
     State(state): State<AppState>,
     Json(request): Json<CreateTerminalRequest>,
 ) -> AppResult<Json<TerminalSession>> {
+    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Session).await?;
     let workspace = db::get_workspace(&state.pool, &request.workspace_id).await?;
     let cwd = resolve_in_root(&workspace.root_path, &request.cwd)?;
 
@@ -487,6 +498,10 @@ pub async fn terminate_terminal(
     AxumPath(session_id): AxumPath<String>,
     body: Option<Json<TerminateRequest>>,
 ) -> AppResult<Json<TerminalSession>> {
+    // Ending a session is a lifecycle decision, so it moves with the record.
+    // The `Terminate` frame on the WebSocket is not gated: it is the user
+    // pressing Ctrl+C in a pane they are looking at, which is execution.
+    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Session).await?;
     let session = db::get_terminal_session(&state.pool, &session_id).await?;
     let mode = body
         .map(|Json(request)| request.mode.unwrap_or_default())
@@ -505,6 +520,7 @@ pub async fn recycle_terminal(
     State(state): State<AppState>,
     AxumPath(session_id): AxumPath<String>,
 ) -> AppResult<Json<TerminalSession>> {
+    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Session).await?;
     db::get_terminal_session(&state.pool, &session_id).await?;
     Ok(Json(state.terminals.recycle(&session_id).await?))
 }

@@ -153,10 +153,10 @@ pub async fn mark_agent_status_read(
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SuggestedTitle {
-    title: String,
+    pub title: String,
     /// Where the sentence came from, so the UI can be honest when the answer is
     /// only the agent's name: `transcript` / `terminal` / `agent`.
-    source: &'static str,
+    pub source: &'static str,
 }
 
 /// `POST /api/agent-status/{nodeId}/suggest-title` — the header's ✦ button

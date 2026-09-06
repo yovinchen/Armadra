@@ -9,6 +9,7 @@
 mod attachments;
 pub mod backend;
 mod batch;
+pub mod bridge;
 pub mod direct;
 pub mod gc;
 mod input;

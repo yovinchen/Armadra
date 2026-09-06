@@ -14,7 +14,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use armadra_protocol::{Message, v1::*};
 
-use super::{MAX_FRAME, Worker, channel, outbox, socket, watch};
+use super::{MAX_FRAME, Worker, channel, outbox, session, socket, watch};
 
 /// The remote-execution transport.
 ///
@@ -29,6 +29,7 @@ pub async fn serve<R, W>(
     mut output: W,
     canvas: Option<SqlitePool>,
     settings_file: Option<PathBuf>,
+    session_data_dir: Option<PathBuf>,
 ) -> anyhow::Result<()>
 where
     R: AsyncRead + Unpin + Send + 'static,
@@ -40,6 +41,9 @@ where
     };
     if let Some(file) = settings_file {
         worker = worker.with_settings_file(file);
+    }
+    if let Some(directory) = session_data_dir {
+        worker = worker.with_session_bridge(directory);
     }
     let (watches, mut events) = watch::Watches::new();
     worker.watches = Some(watches);
@@ -146,6 +150,7 @@ pub async fn serve_commands<R, W>(
     path: PathBuf,
     canvas: Option<SqlitePool>,
     settings_file: Option<PathBuf>,
+    session_data_dir: Option<PathBuf>,
 ) -> anyhow::Result<()>
 where
     R: AsyncRead + Unpin + Send + 'static,
@@ -155,6 +160,7 @@ where
         command_path: Some(path.clone()),
         canvas,
         settings_file,
+        sessions: session_data_dir.map(session::Bridge::new),
         ..Default::default()
     };
     // The state directory's privacy is proven here, once, exactly as the

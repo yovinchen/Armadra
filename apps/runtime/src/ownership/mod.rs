@@ -28,6 +28,8 @@ pub mod filesystem_import;
 pub mod import;
 pub mod import_cli;
 pub mod records;
+pub mod session;
+pub mod session_import;
 
 use armadra_protocol::v1::CanvasOwnershipOwner;
 use axum::{Json, extract::State};
@@ -317,5 +319,7 @@ pub async fn all(State(state): State<AppState>) -> AppResult<Json<Vec<WriteOwner
 
 #[cfg(test)]
 mod filesystem_tests;
+#[cfg(test)]
+mod session_tests;
 #[cfg(test)]
 mod tests;

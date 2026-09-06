@@ -298,7 +298,7 @@ async fn byte_chunks_preserve_unicode_and_require_a_stable_content_version() {
 async fn framed_handshake_flushes_and_clean_eof_terminates() {
     let (mut client, server) = tokio::io::duplex(4096);
     let (reader, writer) = tokio::io::split(server);
-    let task = tokio::spawn(serve(reader, writer, None, None));
+    let task = tokio::spawn(serve(reader, writer, None, None, None));
     let hello = request(
         "",
         worker_request::Action::Hello(WorkerHelloRequest {
@@ -335,7 +335,7 @@ async fn malformed_truncated_and_oversized_frames_fail_closed() {
         // Owned rather than borrowed: the reader half runs in its own task now,
         // so what is handed to `serve` has to outlive this call.
         assert!(
-            serve(std::io::Cursor::new(bytes), &mut output, None, None)
+            serve(std::io::Cursor::new(bytes), &mut output, None, None, None)
                 .await
                 .is_err()
         );

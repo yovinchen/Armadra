@@ -11,6 +11,7 @@ pub mod git;
 pub mod language_link;
 pub mod outbox;
 pub mod service;
+pub mod session;
 pub mod settings;
 pub mod socket;
 pub mod transport;
@@ -57,6 +58,14 @@ pub struct Worker {
     /// named one, and then every ownership action answers UNSUPPORTED rather
     /// than inventing a record.
     canvas: Option<SqlitePool>,
+    /// The door to the resident Runtime the session frames need
+    /// (Go Host 业务所有权迁移 §2.6). This process holds no PTY: starting,
+    /// signalling and accounting for runs all go to the Runtime that does, over
+    /// the same private endpoint the hook client uses. Absent when this Worker
+    /// has no data directory to find that endpoint in, and then every
+    /// execution-shaped session action answers UNSUPPORTED rather than
+    /// pretending it started something.
+    sessions: Option<session::Bridge>,
     /// The Runtime's `settings.json`, the file frame 25 reads and writes
     /// (Go Host 业务所有权迁移 §2.4). Absent unless `--settings-file` named
     /// one, and then the settings action answers UNSUPPORTED rather than
@@ -93,6 +102,7 @@ impl Default for Worker {
             commands: None,
             agents: None,
             canvas: None,
+            sessions: None,
             settings_file: None,
             upcalls: None,
             bearer: (None, None),
@@ -219,6 +229,14 @@ impl Worker {
         self.settings_file = Some(file);
         self
     }
+    /// The data directory the session bridge finds the resident Runtime's
+    /// endpoint file in. It is the Runtime's own layout — `canvas.db` and
+    /// `hook-endpoint.env` sit side by side — so a controller that named the
+    /// database has already named this, and no second flag can drift from it.
+    pub fn with_session_bridge(mut self, data_dir: PathBuf) -> Self {
+        self.sessions = Some(session::Bridge::new(data_dir));
+        self
+    }
     /// The instance id this Worker will report, needed before the handshake by
     /// whatever opens the outbox: the deduplication key is
     /// `(worker_instance_id, sequence)`, so the outbox has to be opened under
@@ -235,6 +253,9 @@ impl Worker {
         socket: Option<String>,
         pipe: Option<String>,
     ) {
+        if let Some(bridge) = self.sessions.take() {
+            self.sessions = Some(bridge.with_upcalls(Some(upcalls.clone())));
+        }
         self.upcalls = Some(upcalls);
         self.bearer = (socket, pipe);
     }
@@ -416,6 +437,11 @@ impl Worker {
                             // needs a handback verified must not plan one
                             // against a Worker that cannot answer it.
                             capabilities.push(filesystem::CAPABILITY.into());
+                            // And the session domain's read, which is a fourth
+                            // separate statement for the same reason: a
+                            // controller that needs a handback verified must
+                            // not plan one against a Worker that cannot answer.
+                            capabilities.push(session::CAPABILITY.into());
                         }
                         // The git domain needs neither a database nor a state
                         // directory: a command runs in the workspace root the
@@ -511,6 +537,13 @@ impl Worker {
                 };
                 Ok(Response::Filesystem(filesystem::handle(pool, input).await?))
             }
+            // The session domain (§2.6). The listing is answered from this
+            // Worker's own database and everything else from the resident
+            // Runtime that holds the PTYs, because a file descriptor does not
+            // travel between two processes.
+            Action::Session(input) => Ok(Response::Session(
+                session::handle(self.canvas.as_ref(), self.sessions.as_ref(), input).await?,
+            )),
             // The rollback direction. Applying the Host's reverse export is a
             // write to this database and nothing else: the epoch stays where
             // it is until the controller has compared the report's digests
