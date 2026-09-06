@@ -370,6 +370,20 @@ enum GitReadMethod {
   GIT_READ_METHOD_MESSAGE_PROVIDERS = 18;
   GIT_READ_METHOD_MESSAGE_SOURCE = 19;
   GIT_READ_METHOD_OPERATIONS = 20;
+  // Drafting a commit message. It travels on the read channel although it
+  // starts a CLI, because it stages nothing, commits nothing and takes no
+  // repository lock: putting a suggestion in the write queue would make it
+  // wait behind a push. It still needs the execute grant, which the Host
+  // checks before forwarding.
+  GIT_READ_METHOD_MESSAGE_GENERATE = 21;
+  // Clones. They are on this channel and not in the queue because a clone has
+  // no repository yet: nothing to lock, no worktree to serialize with and no
+  // precondition to state. The Host still records the job, because the
+  // execution host forgets a clone when its process ends and the Host does
+  // not — which is the whole reason `GitCloneJob` is stored at all.
+  GIT_READ_METHOD_CLONE_START = 22;
+  GIT_READ_METHOD_CLONE_STATUS = 23;
+  GIT_READ_METHOD_CLONE_CANCEL = 24;
 }
 
 // One forwarded read. The body is the same version-locked JSON the action

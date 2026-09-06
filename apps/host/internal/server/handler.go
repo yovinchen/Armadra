@@ -65,7 +65,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "Local request origin is not allowed")
 			return
 		}
-		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path) || githubMethod(r.URL.Path) || updatesMethod(r.URL.Path) || canvasMethod(r.URL.Path) || ownershipMethod(r.URL.Path) || settingsMethod(r.URL.Path) || filesystemMethod(r.URL.Path)) {
+		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path) || githubMethod(r.URL.Path) || updatesMethod(r.URL.Path) || canvasMethod(r.URL.Path) || ownershipMethod(r.URL.Path) || settingsMethod(r.URL.Path) || filesystemMethod(r.URL.Path) || gitMethod(r.URL.Path)) {
 			if origin != options.PublicOrigin {
 				writeError(w, 403, "PERMISSION_DENIED", "Authentication requires the Host HTTPS origin")
 				return
@@ -115,6 +115,14 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 				// an empty root, which a client would read as "this workspace
 				// has no files".
 				filesystemRequest(w, r, identity, options.Identity, options.Filesystem)
+				return
+			}
+			if gitMethod(r.URL.Path) {
+				// A Host with no git service authenticates first and then
+				// answers UNSUPPORTED from inside; it never answers with an
+				// empty queue, which a client would read as "nothing is
+				// running" rather than "this Host does not run Git".
+				gitRequest(w, r, identity, options.Identity, options.Git)
 				return
 			}
 			if canvasMethod(r.URL.Path) {

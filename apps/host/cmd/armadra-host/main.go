@@ -28,6 +28,7 @@ import (
 	"armadra.local/host/internal/eventstream"
 	"armadra.local/host/internal/externalservice"
 	"armadra.local/host/internal/fshost"
+	"armadra.local/host/internal/githost"
 	"armadra.local/host/internal/githubcred"
 	"armadra.local/host/internal/githubhost"
 	"armadra.local/host/internal/hoststate"
@@ -570,6 +571,28 @@ func serveHost(parent context.Context, c config) (err error) {
 	if err != nil {
 		return err
 	}
+	// The git surface is assembled on the same terms as the others: it answers
+	// reads whoever owns writes, and its queue refuses with ownership_moved
+	// until this Host is the settled owner. Its executor is the one part that
+	// can be absent -- without a Runtime binary there is no execution host to
+	// run a command on, and the surface says UNSUPPORTED rather than accepting
+	// a write it could never run.
+	repositoryQueue, err := githost.New(githost.Options{
+		Store:    database,
+		HostID:   state.ID,
+		Roots:    fileRoots,
+		Executor: newGitExecutor(c.runtimeBinary, state.ID),
+	})
+	if err != nil {
+		return err
+	}
+	// Anything this Host left running when it stopped is settled before the
+	// queue accepts anything new. An entry still marked RUNNING while a fresh
+	// one is dispatched would let two writes into one checkout, which is the
+	// one thing the queue exists to prevent.
+	if _, err = repositoryQueue.Reconcile(ctx); err != nil {
+		return err
+	}
 	switches, err := ownership.New(ownership.Options{
 		Store:      database,
 		InstanceID: identity.InstanceID,
@@ -577,6 +600,7 @@ func serveHost(parent context.Context, c config) (err error) {
 			canvashost.Domain:   canvases.AsProjector(),
 			settingshost.Domain: settings.AsProjector(),
 			fshost.Domain:       fileRoots.AsProjector(),
+			githost.Domain:      repositoryQueue.AsProjector(),
 		},
 		ExportRoot: filepath.Join(c.dataDir, "ownership-exports"),
 	})
@@ -622,13 +646,13 @@ func serveHost(parent context.Context, c config) (err error) {
 	// stored outbox the HTTPS event page reads, and it is woken by the storage
 	// kernel's own commit notification, so a saved change reaches a second
 	// client in the time one write takes rather than in one poll interval.
-	events, err := eventstream.New(eventstream.Options{Store: database, HostID: state.ID, Projectors: []eventstream.Projector{canvashost.EventProjector{}, settingshost.EventProjector{}, fshost.EventProjector{}}})
+	events, err := eventstream.New(eventstream.Options{Store: database, HostID: state.ID, Projectors: []eventstream.Projector{canvashost.EventProjector{}, settingshost.EventProjector{}, fshost.EventProjector{}, githost.EventProjector{}}})
 	if err != nil {
 		return err
 	}
 	defer events.Close()
 	database.SetCommitNotifier(events.Notify)
-	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link, Updates: releases, Canvas: canvases, Settings: settings, Filesystem: fileRoots, Events: events, Ownership: switches, OpenHandoff: openHandoff}
+	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link, Updates: releases, Canvas: canvases, Settings: settings, Filesystem: fileRoots, Git: repositoryQueue, Events: events, Ownership: switches, OpenHandoff: openHandoff}
 	// The switch binds its own listener with the same routes. `options` is
 	// captured by reference, so the manager it is about to be given is the one
 	// this closure serves with.

@@ -14,6 +14,7 @@ import (
 	"armadra.local/host/internal/canvashost"
 	"armadra.local/host/internal/daemon"
 	"armadra.local/host/internal/fshost"
+	"armadra.local/host/internal/githost"
 	"armadra.local/host/internal/hoststate"
 	"armadra.local/host/internal/ownership"
 	"armadra.local/host/internal/settingshost"
@@ -154,6 +155,17 @@ func openOwnership(c config) (*hoststate.State, *storage.Store, *canvashost.Serv
 		state.Close()
 		return nil, nil, nil, nil, err
 	}
+	// The offline entry point has no execution channel of its own: an operator
+	// running this holds the data-directory lock, so the Runtime is stopped and
+	// there is nothing to run a command on. The git projector needs none --
+	// what it checks is that no queue is in flight, and the Host's own queue is
+	// empty in a process that has just started.
+	repositoryQueue, err := githost.New(githost.Options{Store: database, HostID: state.ID, Roots: fileRoots})
+	if err != nil {
+		database.Close()
+		state.Close()
+		return nil, nil, nil, nil, err
+	}
 	// The offline command has no Host instance, so the state's own ID stands in
 	// for one. It is only ever used to bind maintenance tokens, and this entry
 	// point never issues or spends one.
@@ -164,6 +176,7 @@ func openOwnership(c config) (*hoststate.State, *storage.Store, *canvashost.Serv
 			canvashost.Domain:   canvases.AsProjector(),
 			settingshost.Domain: settings.AsProjector(),
 			fshost.Domain:       fileRoots.AsProjector(),
+			githost.Domain:      repositoryQueue.AsProjector(),
 		},
 	})
 	if err != nil {

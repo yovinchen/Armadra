@@ -356,6 +356,20 @@ const (
 	GitReadMethod_GIT_READ_METHOD_MESSAGE_PROVIDERS   GitReadMethod = 18
 	GitReadMethod_GIT_READ_METHOD_MESSAGE_SOURCE      GitReadMethod = 19
 	GitReadMethod_GIT_READ_METHOD_OPERATIONS          GitReadMethod = 20
+	// Drafting a commit message. It travels on the read channel although it
+	// starts a CLI, because it stages nothing, commits nothing and takes no
+	// repository lock: putting a suggestion in the write queue would make it
+	// wait behind a push. It still needs the execute grant, which the Host
+	// checks before forwarding.
+	GitReadMethod_GIT_READ_METHOD_MESSAGE_GENERATE GitReadMethod = 21
+	// Clones. They are on this channel and not in the queue because a clone has
+	// no repository yet: nothing to lock, no worktree to serialize with and no
+	// precondition to state. The Host still records the job, because the
+	// execution host forgets a clone when its process ends and the Host does
+	// not — which is the whole reason `GitCloneJob` is stored at all.
+	GitReadMethod_GIT_READ_METHOD_CLONE_START  GitReadMethod = 22
+	GitReadMethod_GIT_READ_METHOD_CLONE_STATUS GitReadMethod = 23
+	GitReadMethod_GIT_READ_METHOD_CLONE_CANCEL GitReadMethod = 24
 )
 
 // Enum value maps for GitReadMethod.
@@ -382,6 +396,10 @@ var (
 		18: "GIT_READ_METHOD_MESSAGE_PROVIDERS",
 		19: "GIT_READ_METHOD_MESSAGE_SOURCE",
 		20: "GIT_READ_METHOD_OPERATIONS",
+		21: "GIT_READ_METHOD_MESSAGE_GENERATE",
+		22: "GIT_READ_METHOD_CLONE_START",
+		23: "GIT_READ_METHOD_CLONE_STATUS",
+		24: "GIT_READ_METHOD_CLONE_CANCEL",
 	}
 	GitReadMethod_value = map[string]int32{
 		"GIT_READ_METHOD_UNSPECIFIED":         0,
@@ -405,6 +423,10 @@ var (
 		"GIT_READ_METHOD_MESSAGE_PROVIDERS":   18,
 		"GIT_READ_METHOD_MESSAGE_SOURCE":      19,
 		"GIT_READ_METHOD_OPERATIONS":          20,
+		"GIT_READ_METHOD_MESSAGE_GENERATE":    21,
+		"GIT_READ_METHOD_CLONE_START":         22,
+		"GIT_READ_METHOD_CLONE_STATUS":        23,
+		"GIT_READ_METHOD_CLONE_CANCEL":        24,
 	}
 )
 
@@ -3141,7 +3163,7 @@ const file_armadra_v1_git_proto_rawDesc = "" +
 	"\x17GIT_CLONE_STATE_RUNNING\x10\x01\x12\x1d\n" +
 	"\x19GIT_CLONE_STATE_SUCCEEDED\x10\x02\x12\x1a\n" +
 	"\x16GIT_CLONE_STATE_FAILED\x10\x03\x12\x1d\n" +
-	"\x19GIT_CLONE_STATE_CANCELLED\x10\x04*\xae\x05\n" +
+	"\x19GIT_CLONE_STATE_CANCELLED\x10\x04*\xb9\x06\n" +
 	"\rGitReadMethod\x12\x1f\n" +
 	"\x1bGIT_READ_METHOD_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cGIT_READ_METHOD_REPOSITORIES\x10\x01\x12\x1a\n" +
@@ -3164,7 +3186,11 @@ const file_armadra_v1_git_proto_rawDesc = "" +
 	"\x1bGIT_READ_METHOD_INTEGRATION\x10\x11\x12%\n" +
 	"!GIT_READ_METHOD_MESSAGE_PROVIDERS\x10\x12\x12\"\n" +
 	"\x1eGIT_READ_METHOD_MESSAGE_SOURCE\x10\x13\x12\x1e\n" +
-	"\x1aGIT_READ_METHOD_OPERATIONS\x10\x14B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	"\x1aGIT_READ_METHOD_OPERATIONS\x10\x14\x12$\n" +
+	" GIT_READ_METHOD_MESSAGE_GENERATE\x10\x15\x12\x1f\n" +
+	"\x1bGIT_READ_METHOD_CLONE_START\x10\x16\x12 \n" +
+	"\x1cGIT_READ_METHOD_CLONE_STATUS\x10\x17\x12 \n" +
+	"\x1cGIT_READ_METHOD_CLONE_CANCEL\x10\x18B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_git_proto_rawDescOnce sync.Once

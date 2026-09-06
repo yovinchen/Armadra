@@ -6,6 +6,7 @@ import (
 	"armadra.local/host/internal/eventstream"
 	"armadra.local/host/internal/externalservice"
 	"armadra.local/host/internal/fshost"
+	"armadra.local/host/internal/githost"
 	"armadra.local/host/internal/githubhost"
 	"armadra.local/host/internal/identity"
 	"armadra.local/host/internal/ownership"
@@ -53,6 +54,10 @@ type Options struct {
 	// Its methods then answer UNSUPPORTED, and the proxy keeps narrowing
 	// forwarded file requests the way it did before the domain existed.
 	Filesystem *fshost.Service
+	// Git is nil when this Host serves no git surface. Its methods then
+	// answer UNSUPPORTED rather than an empty queue, which a client cannot
+	// tell apart from a repository with nothing running.
+	Git *githost.Service
 	// Events is the Host -> client business event stream. Nil means this Host
 	// pushes nothing and `/ws/armadra.v1.EventStream` answers NOT_FOUND, which
 	// is what tells a client to keep polling instead of waiting silently.
