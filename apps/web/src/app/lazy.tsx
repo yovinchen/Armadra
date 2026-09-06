@@ -23,12 +23,6 @@ export const CommandPalette = lazy(() =>
   })),
 );
 
-export const DeliveryLog = lazy(() =>
-  import("@/panels/DeliveryLog").then((module) => ({
-    default: module.DeliveryLog,
-  })),
-);
-
 export const ControlConfirmDialog = lazy(() =>
   import("@/panels/ControlConfirmDialog").then((module) => ({
     default: module.ControlConfirmDialog,

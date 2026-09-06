@@ -6,7 +6,6 @@ import { TldrawWorkspace } from "../canvas/TldrawWorkspace";
 import {
   CommandPalette,
   ControlConfirmDialog,
-  DeliveryLog,
   ExplorerDrawer,
   SettingsDialog,
   SourceControlDrawer,
@@ -88,7 +87,6 @@ function AppShell() {
         <SourceControlDrawer />
         <SettingsDialog />
         <CommandPalette />
-        <DeliveryLog />
         <ControlConfirmDialog />
       </Suspense>
       <Toaster position="bottom-right" />

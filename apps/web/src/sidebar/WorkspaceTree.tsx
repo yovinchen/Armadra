@@ -32,7 +32,6 @@ import {
   RemoveWorkspaceDialog,
   useRemoveWorkspace,
 } from "../app/remove-workspace";
-import { openDeliveryLog } from "../panels/DeliveryLog";
 import { NewFolderDialog } from "../panels/NewFolderDialog";
 import { useCanvasStore } from "../store/canvas-store";
 import { Button } from "@/ui/button";
@@ -425,9 +424,6 @@ function WorkspaceRow({
           <DropdownMenuContent align="start" className="z-[var(--z-menu)]">
             <DropdownMenuItem onSelect={createBoard}>
               {t("tree.newBoard")}
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={!active} onSelect={openDeliveryLog}>
-              {t("delivery.title")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => closeWorkspace(summary.id)}>
