@@ -22,6 +22,10 @@ import { canFocusOnPhone } from "@/shell/mobile-focus";
 import { runCanvasCommand } from "@/canvas/commands";
 import { containerSize, getFlow } from "@/canvas/flow/flow-context";
 import { ConnectionHandles } from "@/canvas/flow/nodes/ConnectionHandles";
+import {
+  isZoomWheel,
+  zoomCanvasByWheel,
+} from "@/canvas/interaction/wheel-zoom";
 import { NodeAnnotationHost, NodeMetaActions } from "@/meta/NodeMeta";
 import { COLLAPSED_HEIGHT, DRAG_HANDLE_CLASS, nodeMeta } from "./registry";
 import { HEADER_HEIGHT } from "./geometry";
@@ -120,8 +124,14 @@ export function maximizeRect(): {
  *
  * 滚轮仍然要守：
  *  - `nowheel` 类挡住普通滚轮，让终端的 tmux 滚屏桥与编辑器自己滚；
- *  - 捕获相位把 ⌘/Ctrl+滚轮转发一份到 `.react-flow__pane`（d3-zoom 的挂载
- *    处），画布照常缩放，终端不跟着滚历史。
+ *  - 捕获相位把 ⌘/Ctrl+滚轮**自己算成一次缩放**（`interaction/wheel-zoom.ts`），
+ *    画布照常缩放，终端不跟着滚历史。
+ *
+ * 以前这里是把事件转发一份到 `.react-flow__pane`，让 d3-zoom 去处理。那条路
+ * 在终端拿到键盘焦点时会失灵：React Flow 判定「缩放还是平移」看的是
+ * `useKeyPress(zoomActivationKeyCode)`，而 keydown 落在 xterm 的隐藏 textarea
+ * 上时画布这边的 Meta 可能从没「按下过」，同一个手势于是变成平移（§6.3 A01）。
+ * 自己算就与键盘焦点无关了。
  */
 function useNodeBodyGuards(ref: React.RefObject<HTMLElement | null>): void {
   React.useEffect(() => {
@@ -129,13 +139,11 @@ function useNodeBodyGuards(ref: React.RefObject<HTMLElement | null>): void {
     if (!body) return;
 
     const onWheelCapture = (event: WheelEvent) => {
-      if (!(event.metaKey || event.ctrlKey)) return;
+      if (!isZoomWheel(event)) return;
+      // 终端不该跟着滚历史，浏览器也不该做页面缩放。
+      event.preventDefault();
       event.stopPropagation();
-      const pane = body
-        .closest(".react-flow")
-        ?.querySelector(".react-flow__pane");
-      if (!pane) return;
-      pane.dispatchEvent(new WheelEvent("wheel", event));
+      zoomCanvasByWheel(event);
     };
 
     body.addEventListener("wheel", onWheelCapture, {

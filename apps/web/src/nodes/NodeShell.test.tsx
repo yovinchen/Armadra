@@ -30,6 +30,11 @@ vi.mock("@/store/canvas-store", () => {
 
 import { installDomPolyfills } from "@/app/test-harness";
 import { renderFlow } from "@/canvas/test-support";
+import {
+  setFlow,
+  setFlowContainer,
+  type FlowHandle,
+} from "@/canvas/flow/flow-context";
 import { openNodeAnnotation } from "@/meta/annotations";
 import { NodeShell } from "./NodeShell";
 import { COLLAPSED_HEIGHT, HEADER_HEIGHT } from "./geometry";
@@ -67,8 +72,27 @@ function renderShell(
   );
 }
 
+/** ⌘滚轮那条路要一个挂着的画布：一个假实例 + 一个量得出尺寸的容器。 */
+function mountFlow() {
+  const setViewport = vi.fn((_viewport: { zoom: number }) =>
+    Promise.resolve(true),
+  );
+  const handle = {
+    getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
+    setViewport,
+  } as unknown as FlowHandle;
+  const container = document.createElement("div");
+  container.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect;
+  setFlow(handle);
+  setFlowContainer(container);
+  return { setViewport };
+}
+
 afterEach(() => {
   cleanup();
+  setFlow(null);
+  setFlowContainer(null);
   vi.clearAllMocks();
 });
 
@@ -503,6 +527,42 @@ describe("NodeShell", () => {
       '[data-slot="node-header"]',
     ) as HTMLElement;
     expect(header.classList.contains("drag-handle")).toBe(true);
+  });
+
+  /**
+   * A01：终端拿到键盘焦点时 ⌘滚轮仍然缩放画布。
+   *
+   * 转发给 `.react-flow__pane` 那条老路会在这时失灵（React Flow 判定缩放看
+   * `useKeyPress`，而 keydown 落在 xterm 的隐藏 textarea 上），所以壳自己算。
+   * 这里断言的是两件事：⌘滚轮不进节点体（终端不跟着滚历史），普通滚轮照进。
+   */
+  it("zooms the canvas on cmd+wheel over the body and leaves plain wheel to it", () => {
+    const flow = mountFlow();
+    const node = makeNode();
+    renderFlow(
+      <NodeShell node={node} selected={false}>
+        <div data-testid="terminal-body" />
+      </NodeShell>,
+      { nodeId: node.id },
+    );
+    const surface = screen.getByTestId("terminal-body");
+    const inner = vi.fn();
+    // 终端的滚屏桥就是这么挂的：节点体**子树**上的捕获相位监听器。
+    surface.addEventListener("wheel", inner, { capture: true });
+
+    fireEvent.wheel(surface, {
+      deltaY: -120,
+      metaKey: true,
+      clientX: 0,
+      clientY: 0,
+    });
+    expect(inner).not.toHaveBeenCalled();
+    expect(flow.setViewport).toHaveBeenCalledTimes(1);
+    expect(flow.setViewport.mock.calls[0]![0].zoom).toBeGreaterThan(1);
+
+    fireEvent.wheel(surface, { deltaY: -120 });
+    expect(inner).toHaveBeenCalledTimes(1);
+    expect(flow.setViewport).toHaveBeenCalledTimes(1);
   });
 
   /** 头部里的按钮仍然要挡住 pointerdown：一按就拖整个节点就点不中它们。 */
