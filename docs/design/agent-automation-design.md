@@ -4,7 +4,7 @@
 
 ## 实现状态（截至 2026-09-05）
 
-§1 能力交集已落地：能力表新增 `nativeRecurrence`、`structuredInputAck`、`supportsModelSelection`；求交集顺序为基础适配器 → 自定义配置 → CLI 版本探测 → 执行主机，实现在 `packages/shared/src/agent-capabilities.ts`，设置页的能力清单逐项显示裁决它的那一级。版本探测跑 `<launchCmd> --version` 并缓存到 `settings.agents.probes[<agentId>]`（`apps/runtime/src/agent_probe.rs`，24 小时过期，换启动程序即重探）；探不到就是 `failed`，对应能力显示 unknown，界面不画按钮。`CAPABILITY_MIN_VERSION` 目前是空表——没有可引用的发行说明就不编版本门槛，探测眼下只提供「问不出来 → 不承诺」这一半。`nativeRecurrence` 无内置适配器声明：七种 CLI 都没有可读的任务列表。执行主机方面，SSH 终端不带 `contextUsage` 与 `usage`（转录和账号都在对面机器上）。
+§1 能力交集已落地：能力表新增 `nativeRecurrence`、`structuredInputAck`、`supportsModelSelection`；求交集顺序为基础适配器 → 自定义配置 → CLI 版本探测 → 执行主机，实现在 `packages/shared/src/agent-capabilities.ts`，设置页的能力清单逐项显示裁决它的那一级。版本探测跑 `<launchCmd> --version` 并缓存到 `settings.agents.probes[<agentId>]`（`apps/runtime/src/agent_probe.rs`，24 小时过期，换启动程序即重探）；探不到就是 `failed`，对应能力显示 unknown，界面不画按钮。`CAPABILITY_MIN_VERSION` 目前是空表——没有可引用的发行说明就不编版本门槛，探测眼下只提供「问不出来 → 不承诺」这一半。`nativeRecurrence` 仍无内置适配器声明：七种 CLI 都没有可读的任务列表。但**读得到规则的时候**有一层适配：活动卡片可以带一条 `nativeRecurrence { dialect, rule, timezone }`（`packages/shared/src/domain/node-data.ts`，原文逐字保存、不做规范化），`apps/web/src/panels/automation/native-recurrence.ts` 把 cron 表达式与 launchd 的 `StartCalendarInterval` / `StartInterval` 翻成平台计划的 recurrence 预填进向导。翻不动的一律返回机器码并把原文摆出来：`@reboot`（是事件不是周期）、带秒的六字段、`L`/`W`/`#` 扩展、只有事件触发的 launchd 任务、`StartCalendarInterval` 数组里的多个时刻（一份计划只有一条重复规则）、以及超出 Host 上下限的 interval。时区不猜——crontab 行不带时区、launchd 用本机时区，源头没写就留空由人选。执行主机方面，SSH 终端不带 `contextUsage` 与 `usage`（转录和账号都在对面机器上）。
 
 §2 上下文用量：Claude 仍是 `provider_hook` / `reported` 精确来源。Codex 与 Gemini 走 `structured_transcript` / `estimated`——读各自的结构化转录，用可解释的字符启发式 `chars-v1`（ASCII 每四字符 1 token，非 ASCII 每字符 1 token）求和，附带置信、已统计消息数与是否截断（`apps/runtime/src/context_estimate.rs`）。转录读不出内容时返回 unknown，不返回 0%。分母来自模型上下文窗口表（`packages/shared/src/model-context.ts` 与 `apps/runtime/src/context_models.rs`），转录里报出的模型优先于启动时选的模型，表里没有的模型 capacity 为 null。opencode / Pi / OMP / Copilot 不声明 `contextUsage`：它们的历史不在本地结构化文件里。80/95 阈值进了设置页并持久化，只改徽标措辞，不自动压缩或打断。
 
@@ -116,7 +116,11 @@ Cron 正常触发、misfire 补发和一次性计划过期是三种记录，不�
 
 Host 未连接、未配对、没有执行 Worker 或设备没有该工作空间的自动化权限时，整页只显示原因与“前往设置 → 连接”，不渲染任何点了会失败的按钮；只读设备能看列表但没有管理按钮。
 
-已知限制：Host 的运行记录按时隙 hash 存储，分页顺序不是时间序，面板取回后按计划时间在客户端排序（每个计划最多翻 20 页）；面板只能创建、激活、暂停和立即运行，尚不能编辑已有计划。
+运行历史由 Host 分页，按时间倒序：run 本身仍按时隙 hash 存储，另有一份 `automation.run-history` 索引，键是 `<planId>/<倒序时刻>/<runId>`，与 run 同一个事务写入。于是一页确实是「再往前的 N 条」，游标确实是时间上的一个位置，客户端不再需要把全部翻回来自己排序。索引出现之前就存在的 run 由 `EnsureRunHistory` 在 Host 启动时一次性补投影（按工作空间打标记，只补不改），否则升级那一刻之前的历史会看起来像是被截断了。面板首屏取一页，其余由「加载更早的记录」显式请求。
+
+编辑已有计划走的是同一个向导：读回配置填表，另调 `GetPayload` 读回已存的提示词——Host 把 payload 与配置分开存，读不回来就不允许保存，否则一次编辑会把提示词悄悄清空。保存即 `Define(expectedRevision)`，Host 按既有规则递增 `config_version`、作废激活、把计划退回草稿，因此「保存」永远不等于「重新启用」，界面明说这一点。目标不在编辑范围内：换目标要重新冻结 Agent 定义与代次，那是另建一份计划的决定，表单把它只读展示。
+
+已知限制：编辑不改目标；`GetPayload` 需要 `automation:manage`，只读设备看不到已存内容。
 
 ### 4.2 目标为 Agent 终端（2026-09-06）
 

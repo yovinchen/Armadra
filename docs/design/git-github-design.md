@@ -224,6 +224,9 @@ Host 重启后的 Git 操作按实际 Git 状态对账：commit 查 OID/index，
 - **传输**（§7.3）：`githubapi` 统一处理 ETag 条件请求、Link 分页（只取页码，响应无法引导下一次请求）、限速头与退避。写操作永不重试：结果未读即报 `UNKNOWN_OUTCOME`，由调用方重新读取。重定向一律拒绝。
 - **状态映射**（§7.2）：`githubhost.ValidateMapping` 校验单一来源、组 ID/标签/选项唯一，并在两个方向的联动构成环时拒绝（组指向自身是不动点，允许）。同一 Issue 命中多个组显示 conflict，不擅自挑一个。`MoveIssue` 逐项返回 `GithubWriteOutcome`，标签移动只动映射管理的标签，关闭 Issue 只在显式配置联动时发生。
 - **PR 合并**（§8）：`MergePull` 重读 PR 与检查，`expected_head_sha` 或 `expected_check_rollup` 不符即停；仅提供仓库允许的合并策略；结果未读时重读而非重试。
+- **行内评审**（§8「评审」）：`GithubPullFile.patch` 带回远端给的 unified diff（每文件上限 64 KiB，超过就整份丢掉而不是截断——评论锚点是 hunk 头算出来的行号，截断之后的行号会把意见贴到没人读过的行上）。面板据此逐行给评论入口，草稿随同一次 `SubmitReview` 提交，因此在远端是一份评审而不是一堆散评论；远端标了 `outdated` 的历史行内评论不画在当前 diff 上，另起一段并写明位置已经对不上。
+- **检查重跑**（§8「检查」）：`RerunChecks` 只对 `rerunnable` 且没通过的 workflow run 发 `/actions/runs/{id}/rerun[-failed-jobs]`，逐个返回 `GithubWriteOutcome`；发之前重读 PR，head 变了就是 `HEAD_MOVED` 且一条不发；一条都不能重跑时是 `NOT_RERUNNABLE` 而不是静默无事发生。结果未读的那次停在 `PENDING`，永不自动再发——重发一次已经排上的流水线就是第二条流水线。
+- **合并后清理**（§8「清理」）：`DeleteBranch` 只删远端分支，必须带上面板显示的 `expected_sha` 并由 Host 重读比对，分支前进过就是 `REF_MOVED`；已经不在是 `NOT_FOUND` 而不是「删掉了」。本地检出的移除是另一个动作，走仓库面板那条安全移除，成功之后才清 `FrameBinding`（解绑只清画布上的绑定，不动磁盘），运行中的会话一概不碰。fork 的 head 分支不提供删除。
 - **刷新**：本机 Host 无 webhook，Host 在每个列表/详情响应里给出 `poll_interval_ms`，由客户端按这个节奏轮询。
 - **`ExternalReference`**：迁移 v4 的 `github_references`，ID 由链接语义派生，因此重复关联是同一条记录而不是两个徽标。
 
