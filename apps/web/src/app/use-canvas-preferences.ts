@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import { setNextStyle } from "../canvas/interaction/tool-store";
+import { setDefaultStyle } from "../canvas/interaction/tool-store";
 import {
   usePreferencesStore,
   type ResolvedTheme,
@@ -156,6 +156,6 @@ export function useCanvasPreferences(): void {
   }, [focus]);
 
   useEffect(() => {
-    setNextStyle({ color: defaultColor, size: defaultSize });
+    setDefaultStyle({ color: defaultColor, size: defaultSize });
   }, [defaultColor, defaultSize]);
 }

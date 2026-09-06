@@ -60,6 +60,8 @@ export function getTool(): CanvasToolId {
 export function setTool(next: CanvasToolId): void {
   if (tool === next) return;
   tool = next;
+  // 换工具就是新的一轮：样式面板上一次手动改的档位不再当基准。
+  forgetManualSize();
   for (const listener of toolListeners) listener();
 }
 
@@ -101,7 +103,7 @@ export function getNextStyle(): NextStyle {
   return nextStyle;
 }
 
-export function setNextStyle(patch: Partial<NextStyle>): void {
+function writeStyle(patch: Partial<NextStyle>): void {
   const merged = { ...nextStyle, ...patch };
   const changed = (Object.keys(merged) as (keyof NextStyle)[]).some(
     (key) => merged[key] !== nextStyle[key],
@@ -109,6 +111,58 @@ export function setNextStyle(patch: Partial<NextStyle>): void {
   if (!changed) return;
   nextStyle = merged;
   for (const listener of styleListeners) listener();
+}
+
+/** 用户自己改的样式（样式面板、Dock 的几何形菜单）。 */
+export function setNextStyle(patch: Partial<NextStyle>): void {
+  if (patch.size !== undefined) manualSize = patch.size;
+  writeStyle(patch);
+}
+
+/* ------------------------------ 笔画档位基准 ------------------------------ */
+
+/**
+ * 「动态尺寸」（§2.10）永远从**基准档位**推导，不吃自己上一次的结果。
+ *
+ * 缩到 50% 画一笔会把 `nextStyle.size` 顶粗一档。要是下一笔再拿这一档去缩
+ * 放，档位就只升不降——回到 100% 也退不回来，偏好里的默认粗细被永久盖掉
+ * （2026-09-06 用户反馈）。所以基准单独存：`preferenceSize` 是偏好推进来
+ * 的，`manualSize` 是样式面板手动改的（下一次工具切换时清掉），
+ * `setDerivedSize` 只改「下一个」的档位，碰不到基准。
+ */
+let preferenceSize: WhiteboardSize = DEFAULT_NEXT_STYLE.size;
+let manualSize: WhiteboardSize | null = null;
+
+/** 推导档位的基准：手动改过就用手动值，否则用偏好里的默认粗细。 */
+export function getBaseSize(): WhiteboardSize {
+  return manualSize ?? preferenceSize;
+}
+
+/**
+ * 丢掉手动档位，回到偏好的默认粗细。样式面板跟着一起回去，不让面板显示的
+ * 档位和下一笔实际画出来的对不上。
+ */
+function forgetManualSize(): void {
+  manualSize = null;
+  writeStyle({ size: preferenceSize });
+}
+
+/**
+ * 偏好 → 样式的单向推送（`app/use-canvas-preferences.ts`、
+ * `whiteboard/tools/ToolLayer.tsx`）。它重置基准，手动档位不再生效。
+ */
+export function setDefaultStyle(style: {
+  color: WhiteboardColor;
+  size: WhiteboardSize;
+}): void {
+  preferenceSize = style.size;
+  manualSize = null;
+  writeStyle(style);
+}
+
+/** 动态尺寸算出来的档位：只改「下一个」，不进基准。 */
+export function setDerivedSize(size: WhiteboardSize): void {
+  writeStyle({ size });
 }
 
 function subscribeStyle(listener: () => void): () => void {
@@ -124,8 +178,10 @@ export function useNextStyle(): NextStyle {
   );
 }
 
-/** 仅测试与画布卸载用：工具与样式都回到初始值。 */
+/** 仅测试与画布卸载用：工具、样式与档位基准都回到初始值。 */
 export function resetToolStore(): void {
   setTool("select");
-  setNextStyle(DEFAULT_NEXT_STYLE);
+  preferenceSize = DEFAULT_NEXT_STYLE.size;
+  manualSize = null;
+  writeStyle(DEFAULT_NEXT_STYLE);
 }

@@ -2,7 +2,7 @@ import * as React from "react";
 import { useStoreApi } from "@xyflow/react";
 
 import { usePreferencesStore } from "@/app/preferences-store";
-import { setNextStyle, useTool } from "../../interaction/tool-store";
+import { setDefaultStyle, useTool } from "../../interaction/tool-store";
 import { trackPointer } from "../../interaction/pointer";
 import { DraftPreview } from "./DraftPreview";
 import { useClipboardCommands } from "./use-clipboard";
@@ -79,7 +79,7 @@ function useDefaultStyle(): void {
   const color = usePreferencesStore((state) => state.whiteboard.defaultColor);
   const size = usePreferencesStore((state) => state.whiteboard.defaultSize);
   React.useEffect(() => {
-    setNextStyle({ color, size });
+    setDefaultStyle({ color, size });
   }, [color, size]);
 }
 
