@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { Workspace, WorkspaceSummary } from "@armadra/shared";
 import { toast } from "sonner";
 import { isConflict, runtimeApi } from "../api/client";
+import { filesGateway } from "../files/gateway";
 import { isTauri, pickDirectory } from "../platform";
 import { useCanvasStore } from "../store/canvas-store";
 import {
@@ -36,11 +37,12 @@ export function useCreateWorkspace() {
         options.createDirectory ?? false,
       );
       let workspace: Workspace;
+      // 经文件域网关：根注册落在哪一侧，取决于文件域现在归谁写。
       try {
-        workspace = await runtimeApi.createWorkspace(request);
+        workspace = await filesGateway.createWorkspace(request);
       } catch (cause) {
         if (!request.createDirectory || !isConflict(cause)) throw cause;
-        workspace = await runtimeApi.createWorkspace({
+        workspace = await filesGateway.createWorkspace({
           ...request,
           createDirectory: false,
         });

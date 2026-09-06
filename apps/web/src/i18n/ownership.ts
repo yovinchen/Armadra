@@ -38,6 +38,8 @@ export const ownership: MessageModule = {
     "ownership.reason.ownership.switch.unknown":
       "Runtime 的状态没读到，窗口保持打开",
     "ownership.reason.ownership.rollback.exported": "已写出反向导出包，待交回",
+    "ownership.filesystem.readonly": "文件归属正在切换，现在改不了工作区权限",
+    "ownership.filesystem.moved": "文件归属刚刚变了，已重新确认，请再试一次",
   },
   en: {
     "ownership.maintenance":
@@ -78,5 +80,9 @@ export const ownership: MessageModule = {
       "The Runtime's state was not read; the window stays open",
     "ownership.reason.ownership.rollback.exported":
       "The reverse export is written; the epoch has not moved back yet",
+    "ownership.filesystem.readonly":
+      "File ownership is switching; workspace permissions cannot change now",
+    "ownership.filesystem.moved":
+      "File ownership just changed; it has been re-checked, try again",
   },
 };

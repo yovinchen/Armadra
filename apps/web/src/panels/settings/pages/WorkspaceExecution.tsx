@@ -1,10 +1,14 @@
 import { useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { WorkspaceSummary } from "@armadra/shared";
-import { runtimeApi } from "@/api/client";
 import { useT } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
 import { Switch } from "@/ui/switch";
+import {
+  filesGateway,
+  FilesystemOwnershipMovedError,
+  FilesystemReadOnlyError,
+} from "@/files/gateway";
 import { invalidateGitQueries } from "../../git/queries";
 import { SettingsGroup } from "../SettingsGroup";
 import { SettingsRow } from "../SettingsRow";
@@ -21,16 +25,24 @@ export function WorkspaceExecution() {
     }: {
       id: string;
       permissions: NonNullable<typeof workspace>["permissions"];
-    }) => runtimeApi.updateWorkspace(id, { permissions }),
+      // 经文件域网关：这个开关改的是「这个工作空间允许执行吗」，切换后由
+      // Host 记录，调用方不需要知道写去了哪一侧。
+    }) => filesGateway.updatePermissions(id, permissions),
     onSuccess: (updated) => {
       client.setQueryData<WorkspaceSummary[]>(["workspaces"], (rows) =>
         rows?.map((row) =>
-          row.id === updated.id ? { ...row, ...updated } : row,
+          row.id === updated.workspaceId
+            ? { ...row, permissions: updated.permissions }
+            : row,
         ),
       );
       const current = useCanvasStore.getState();
-      if (current.workspace?.id === updated.id) current.setWorkspace(updated);
-      invalidateGitQueries(client, updated.id);
+      if (current.workspace?.id === updated.workspaceId)
+        current.setWorkspace({
+          ...current.workspace,
+          permissions: updated.permissions,
+        });
+      invalidateGitQueries(client, updated.workspaceId);
     },
   });
   if (!workspace) return null;
@@ -63,7 +75,13 @@ export function WorkspaceExecution() {
       </SettingsRow>
       {save.error && (
         <p role="alert" className="px-4 pb-3 text-xs text-destructive">
-          {t("gitRepo.permissionSaveFailed")}
+          {/* 「谁在写这个域」和「写失败了」是两件事：切换窗口开着的时候
+              这个开关根本不该被解释成保存失败，那会让人一直重试。 */}
+          {save.error instanceof FilesystemReadOnlyError
+            ? t("ownership.filesystem.readonly")
+            : save.error instanceof FilesystemOwnershipMovedError
+              ? t("ownership.filesystem.moved")
+              : t("gitRepo.permissionSaveFailed")}
         </p>
       )}
     </SettingsGroup>

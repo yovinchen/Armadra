@@ -10,8 +10,17 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useCanvasStore } from "@/store/canvas-store";
 import { usePreferencesStore } from "@/app/preferences-store";
+import { useOwnership } from "@/ownership/store";
 const update = vi.hoisted(() => vi.fn());
-vi.mock("@/api/client", () => ({ runtimeApi: { updateWorkspace: update } }));
+// The switch writes through the filesystem gateway now, so the ownership
+// record decides which side it reaches. This suite is about the switch, not
+// about the switchover: the domain stays with the Runtime, which is the state
+// the Runtime-side mock below describes.
+const ownershipDomains = vi.hoisted(() => vi.fn());
+vi.mock("@/api/client", () => ({
+  RuntimeRequestError: class RuntimeRequestError extends Error {},
+  runtimeApi: { updateWorkspace: update, ownershipDomains },
+}));
 import { WorkspaceExecution } from "./WorkspaceExecution";
 const workspace = (id = "w1") =>
   ({
@@ -23,8 +32,22 @@ const workspace = (id = "w1") =>
 afterEach(() => {
   cleanup();
   update.mockReset();
+  ownershipDomains.mockReset();
 });
 function mount() {
+  ownershipDomains.mockResolvedValue(
+    ["canvas", "settings", "filesystem", "session", "agent", "git"].map(
+      (domain) => ({
+        domain,
+        owner: "runtime",
+        phase: "settled",
+        epoch: 1n,
+        reasonCode: "ownership.initial",
+        updatedAt: "2026-09-06T00:00:00.000Z",
+      }),
+    ),
+  );
+  useOwnership.getState().reset();
   usePreferencesStore.setState({ locale: "en" });
   useCanvasStore.setState({ workspace: workspace() });
   const client = new QueryClient({
