@@ -92,10 +92,22 @@ export function Splash({ onDismiss }: SplashProps) {
       return () => window.clearTimeout(timer);
     }
     // 按 30fps 取整推进：和设计稿的逐帧导出一致，高刷屏上也不会多画。
-    let handle = 0;
+    //
+    // 每一帧同时挂 rAF 和一个定时器，谁先到谁推进、另一个作废。只靠 rAF 不
+    // 行：桌面壳的窗口是先隐藏着加载页面、Runtime 就绪后才显示的，WKWebView
+    // 在这段时间里不派发 rAF，显示之后也不一定恢复——动画会停在第一帧，
+    // 覆盖层把整个 App 压在底下。定时器不受渲染节流影响，兜住这种情况。
+    const frameInterval = 1000 / SPLASH_FPS;
+    let animation = 0;
+    let timer = 0;
     let started: number | null = null;
     let lastFrame = -1;
+    const cancel = () => {
+      cancelAnimationFrame(animation);
+      window.clearTimeout(timer);
+    };
     const tick = (now: number) => {
+      cancel();
       if (started === null) started = now;
       const elapsed = Math.min(SPLASH_DURATION_MS, now - started);
       const frame = Math.floor((elapsed * SPLASH_FPS) / 1000);
@@ -103,13 +115,28 @@ export function Splash({ onDismiss }: SplashProps) {
         api.renderAt((frame * 1000) / SPLASH_FPS);
         lastFrame = frame;
       }
-      if (elapsed < SPLASH_DURATION_MS) handle = requestAnimationFrame(tick);
+      if (elapsed < SPLASH_DURATION_MS) schedule();
       else finish();
     };
+    const schedule = () => {
+      animation = requestAnimationFrame(tick);
+      timer = window.setTimeout(
+        () => tick(performance.now()),
+        frameInterval * 2,
+      );
+    };
     api.renderAt(0);
-    handle = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(handle);
+    schedule();
+    return cancel;
   }, [reduced, leaving, finish]);
+
+  // 保险丝：不管帧推没推到头，到点就走。覆盖层吃掉所有输入，卡住等于把整个
+  // App 锁死，所以它的寿命不能只系在动画循环上。
+  useEffect(() => {
+    if (leaving) return;
+    const timer = window.setTimeout(finish, SPLASH_DURATION_MS + FADE_MS);
+    return () => window.clearTimeout(timer);
+  }, [leaving, finish]);
 
   // 淡出结束后才把 DOM 摘掉。
   useEffect(() => {

@@ -2,6 +2,10 @@ import { createRoot } from "react-dom/client";
 import { usePreferencesStore } from "../app/preferences-store";
 import { Splash } from "./Splash";
 import { markSplashShown, shouldShowSplash } from "./session";
+import { SPLASH_DURATION_MS } from "./timeline";
+
+/** 覆盖层无论如何都会在这个时刻之前消失：动画全长加淡出，再留两秒余量。 */
+export const SPLASH_HARD_LIMIT_MS = SPLASH_DURATION_MS + 2260;
 
 /**
  * 把开屏动画挂到自己的 React root 上。
@@ -24,7 +28,10 @@ export function mountSplash(): void {
   host.id = "splash-root";
   document.body.append(host);
   const root = createRoot(host);
+  let dismissed = false;
   const dismiss = () => {
+    if (dismissed) return;
+    dismissed = true;
     // 卸载自己的 root 必须错开当前这次渲染，否则 React 会警告同步卸载。
     setTimeout(() => {
       root.unmount();
@@ -32,4 +39,7 @@ export function mountSplash(): void {
     }, 0);
   };
   root.render(<Splash onDismiss={dismiss} />);
+  // 最后一道保险：组件自己的定时器也没能收场（React 没有再渲染、rAF 与
+  // 定时器都没推进）时，直接把覆盖层摘掉，底下的 App 露出来。
+  setTimeout(dismiss, SPLASH_HARD_LIMIT_MS);
 }
