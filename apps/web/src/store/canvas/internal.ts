@@ -7,6 +7,7 @@ import { usePreferencesStore } from "../../app/preferences-store";
 import { emptyWhiteboard } from "../../canvas/whiteboard/model";
 import { isCompactLayout } from "../../platform/layout";
 import { diffSnapshots, record, type CommitOptions } from "./history";
+import { markPatch } from "./pending";
 import {
   type CanvasStore,
   type PanelState,
@@ -66,18 +67,21 @@ export function commit(
   if (!state.document) return null;
   const next = mutate(state.document);
   if (!next) return null;
+  const items = state.whiteboard.items;
+  const references = state.whiteboard.references;
+  const diff = diffSnapshots(
+    {
+      nodes: state.document.nodes,
+      edges: state.document.edges,
+      items,
+      references,
+    },
+    { nodes: next.nodes, edges: next.edges, items, references },
+  );
+  // 差分不再只为历史算：远端合并要知道这个窗口动过哪几条（`pending.ts`），
+  // 所以 `history: "ignore"` 的本地编辑（整理排布、文字自适应高度）也要登记。
+  markPatch(diff.after);
   if ((options.history ?? "record") !== "ignore") {
-    const items = state.whiteboard.items;
-    const references = state.whiteboard.references;
-    const diff = diffSnapshots(
-      {
-        nodes: state.document.nodes,
-        edges: state.document.edges,
-        items,
-        references,
-      },
-      { nodes: next.nodes, edges: next.edges, items, references },
-    );
     record({
       label: options.label ?? "edit",
       before: diff.before,

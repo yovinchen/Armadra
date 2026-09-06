@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { BoardDocument } from "@armadra/shared";
 import { runtimeApi } from "../api/client";
+import { onWorkspaceEvent } from "../api/events";
+import { useDraftsActive } from "../canvas/flow/drafts";
 import {
   useCanvasEventFollower,
   useCanvasOwnership,
@@ -59,6 +62,11 @@ export function useBoardSync() {
   const setBoards = useCanvasStore((state) => state.setBoards);
   const selectBoard = useCanvasStore((state) => state.selectBoard);
   const setDocument = useCanvasStore((state) => state.setDocument);
+  const mergeRemoteDocument = useCanvasStore(
+    (state) => state.mergeRemoteDocument,
+  );
+  // 手势进行中不合远端改动（见下面的「文档载入」）。
+  const dragging = useDraftsActive();
   const openWorkspaceTab = usePreferencesStore(
     (state) => state.openWorkspaceTab,
   );
@@ -102,6 +110,24 @@ export function useBoardSync() {
     void queryClient.invalidateQueries({ queryKey: ["boards", workspaceId] });
   }, [queryClient, workspaceId]);
   useCanvasEventFollower(workspaceId, onCanvasChanged);
+
+  /**
+   * Runtime 在写时的同一件事（A04）。
+   *
+   * `board.changed` 带着保存之后的 `updatedAt`，那就是这块板的版本号：和
+   * 手里这份一样就是**自己刚存的那一次**，重取回来只会得到同一份，什么都
+   * 不做；不一样才是别人改的，让文档查询失效去取。没有这一层判断的话，
+   * 每一次自己的自动保存都会顺手拉一次整份文档回来。
+   */
+  useEffect(() => {
+    if (!workspaceId) return;
+    return onWorkspaceEvent("board.changed", (event) => {
+      const current = useCanvasStore.getState().document;
+      if (!current || current.board.id !== event.boardId) return;
+      if (current.board.updatedAt === event.updatedAt) return;
+      onCanvasChanged();
+    });
+  }, [onCanvasChanged, workspaceId]);
 
   /* ------------------------ 启动：恢复上次的工作空间 ---------------------- */
   /**
@@ -169,14 +195,42 @@ export function useBoardSync() {
   }, [boardId]);
 
   /* ------------------------------- 文档载入 ------------------------------ */
+  /**
+   * 第一次拿到某块板 → `setDocument`；之后每一次重取 → `mergeRemoteDocument`。
+   *
+   * 以前这里是「已经有同一块板就直接丢掉」，于是别的窗口的改动重取回来也
+   * 被扔了（A04 记的第二处原因）。现在走合并：本地干净时远端为准，本地还
+   * 脏时按保存冲突那套变基，视口永远留本地的（`canvas/sync/merge.ts`）。
+   *
+   * 两道闸门：
+   *  - **同一份响应只合一次**。合并会换掉 `document`，而 `document` 是这个
+   *    effect 的依赖；不记住合过哪一份就是一个自激循环。
+   *  - **手势进行中先不合**。拖动中把节点对象换掉会让 d3-drag 当场错位，
+   *    所以等 `drafts` 清空——那一刻这个 effect 会因为 `dragging` 变 false
+   *    重新跑一次，把攒着的那份合进来。
+   */
+  const mergedRef = useRef<BoardDocument | null>(null);
   useEffect(() => {
     if (!workspace || !board.data) return;
     if (board.data.board.workspaceId !== workspace.id) return;
     if (board.data.board.id !== boardId) return;
-    // 已经有同一块板的本地文档就不要覆盖，否则会吞掉未保存的编辑
-    if (document?.board.id === board.data.board.id) return;
-    setDocument(board.data);
-  }, [board.data, boardId, document, setDocument, workspace]);
+    if (document?.board.id !== board.data.board.id) {
+      mergedRef.current = board.data;
+      setDocument(board.data);
+      return;
+    }
+    if (dragging || mergedRef.current === board.data) return;
+    mergedRef.current = board.data;
+    mergeRemoteDocument(board.data);
+  }, [
+    board.data,
+    boardId,
+    document,
+    dragging,
+    mergeRemoteDocument,
+    setDocument,
+    workspace,
+  ]);
 
   /* ---------------------------- 保存失败后重试 --------------------------- */
   useEffect(() => {

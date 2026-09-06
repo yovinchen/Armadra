@@ -4,6 +4,7 @@ import type { CanvasEdge, CanvasNode } from "@armadra/shared";
 import type { Item, Reference } from "../../canvas/whiteboard/model";
 import { useCanvasStore } from "../canvas-store";
 import type { CanvasStore } from "./types";
+import { markPatch } from "./pending";
 
 /**
  * 撤销 / 重做（React Flow 计划 §2.7，归属 store）。
@@ -242,6 +243,8 @@ function applyTable<T extends { id: string }>(
 function applyPatch(patch: EntityPatch): void {
   const state = useCanvasStore.getState();
   if (!state.document) return;
+  // 撤销 / 重做也是这个窗口的编辑：远端合并时这几条以本地为准（`pending.ts`）。
+  markPatch(patch);
   const nodes = applyTable(state.document.nodes, patch.nodes);
   const edges = applyTable(state.document.edges, patch.edges);
   const items = applyTable(state.whiteboard.items, patch.items);

@@ -34,26 +34,33 @@ export const MAX_CONFLICT_REPLAYS = 3;
  * 用本地的：它们是这个窗口此刻的状态，而且白板快照下一次保存时本来就会
  * 从 editor 重新取一份。
  *
- * **已知局限**：白板原生 shape 不做合并，另一个窗口这段时间画的手绘会被
- * 本地快照盖掉。节点、连线、分组不受影响。
+ * `touched` 收窄了第一行：**只有这个窗口真的动过的那几条**才以本地为准，
+ * 其余照收远端的（`store/canvas/pending.ts`）。没有它时退回「两边都有的一律
+ * 本地为准」，那会把另一个窗口同一时间改的**别的**节点一起盖掉——两边各改
+ * 各的节点却互相吃掉对方，正是 A04 要的反例。
+ *
+ * **已知局限**：白板快照整块以本地为准（`whiteboard_json` 在这一层是不透明
+ * 字符串）。按对象合并在 `canvas/sync/merge.ts` 那条路上做。
  */
 export function replayLocalEdits(
   remote: BoardDocument,
   local: BoardDocument,
+  touched?: ReadonlySet<string>,
 ): BoardDocument {
   const since = Date.parse(local.board.updatedAt);
   const bornLocally = (createdAt: string) =>
     Number.isNaN(since) || Date.parse(createdAt) > since;
+  const mine = (id: string) => !touched || touched.has(id);
 
   const localNodes = new Map(local.nodes.map((node) => [node.id, node]));
   const remoteIds = new Set(remote.nodes.map((node) => node.id));
 
-  const nodes: CanvasNode[] = remote.nodes.map(
-    (node) => localNodes.get(node.id) ?? node,
+  const nodes: CanvasNode[] = remote.nodes.map((node) =>
+    mine(node.id) ? (localNodes.get(node.id) ?? node) : node,
   );
   for (const node of local.nodes) {
     if (remoteIds.has(node.id)) continue;
-    if (bornLocally(node.createdAt)) nodes.push(node);
+    if (mine(node.id) && bornLocally(node.createdAt)) nodes.push(node);
   }
 
   // 组员的父级可能刚被远端删掉：留着 `parentId` 会指向不存在的分组。
@@ -66,12 +73,12 @@ export function replayLocalEdits(
 
   const localEdges = new Map(local.edges.map((edge) => [edge.id, edge]));
   const remoteEdgeIds = new Set(remote.edges.map((edge) => edge.id));
-  const edges: CanvasEdge[] = remote.edges.map(
-    (edge) => localEdges.get(edge.id) ?? edge,
+  const edges: CanvasEdge[] = remote.edges.map((edge) =>
+    mine(edge.id) ? (localEdges.get(edge.id) ?? edge) : edge,
   );
   for (const edge of local.edges) {
     if (remoteEdgeIds.has(edge.id)) continue;
-    if (bornLocally(edge.createdAt)) edges.push(edge);
+    if (mine(edge.id) && bornLocally(edge.createdAt)) edges.push(edge);
   }
 
   return {

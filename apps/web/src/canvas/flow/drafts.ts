@@ -76,3 +76,20 @@ function subscribe(listener: () => void): () => void {
 export function useDrafts(): DraftMap {
   return React.useSyncExternalStore(subscribe, getDrafts, () => EMPTY);
 }
+
+/** 有没有手势正在进行。 */
+export function hasDrafts(): boolean {
+  return drafts.size > 0;
+}
+
+/**
+ * 「现在有手势在进行吗」，只订阅这一个布尔量。
+ *
+ * 远端合并（`app/use-board-sync.ts`）要等手势结束：拖动中把 `document` 换掉
+ * 会让 React Flow 手里的节点对象在一次 d3-drag 中途被替换，指针和节点当场
+ * 错位。整张草稿表会在拖动的每一帧变，所以壳不能订它——布尔量只在
+ * 「开始 / 结束」两个时刻变一次。
+ */
+export function useDraftsActive(): boolean {
+  return React.useSyncExternalStore(subscribe, hasDrafts, () => false);
+}

@@ -1,6 +1,7 @@
 import { getFlow } from "../../canvas/flow/flow-context";
 import { arrangeCanvas } from "../../canvas/tidy-flow";
 import { diffSnapshots, record, redo, undo } from "./history";
+import { markPatch } from "./pending";
 import { type CanvasGet, type CanvasSet, type CanvasStore } from "./types";
 
 export function createViewSlice(
@@ -50,23 +51,26 @@ export function createViewSlice(
     setWhiteboard: (doc, options = {}) =>
       set((state) => {
         if (state.whiteboard === doc) return state;
+        const nodes = state.document?.nodes ?? [];
+        const edges = state.document?.edges ?? [];
+        const diff = diffSnapshots(
+          {
+            nodes,
+            edges,
+            items: state.whiteboard.items,
+            references: state.whiteboard.references,
+          },
+          {
+            nodes,
+            edges,
+            items: doc.items,
+            references: doc.references,
+          },
+        );
+        // 与 `internal.commit` 同理：远端合并要知道动过哪几条（`pending.ts`）。
+        markPatch(diff.after);
+        markPatch(diff.before);
         if ((options.history ?? "record") !== "ignore") {
-          const nodes = state.document?.nodes ?? [];
-          const edges = state.document?.edges ?? [];
-          const diff = diffSnapshots(
-            {
-              nodes,
-              edges,
-              items: state.whiteboard.items,
-              references: state.whiteboard.references,
-            },
-            {
-              nodes,
-              edges,
-              items: doc.items,
-              references: doc.references,
-            },
-          );
           record({
             label: options.label ?? "whiteboard",
             before: diff.before,

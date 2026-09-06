@@ -108,6 +108,14 @@ export interface CanvasActions {
   setBoards: (boards: BoardBrief[]) => void;
   selectBoard: (boardId: string | null) => void;
   setDocument: (document: BoardDocument) => void;
+  /**
+   * 远端（别的窗口 / Agent / Host）改过之后重取回来的文档，合进当前状态。
+   *
+   * 与 `setDocument` 的三点不同：视口留本地的、本地未落盘的编辑不被盖掉、
+   * **撤销栈原样保留**（远端改动既不入栈也不清栈）。规则在
+   * `canvas/sync/merge.ts`。
+   */
+  mergeRemoteDocument: (document: BoardDocument) => void;
   setSaveState: (state: SaveState) => void;
   setSaveError: (message: string | null) => void;
   setPanel: <K extends keyof PanelState>(key: K, value: PanelState[K]) => void;

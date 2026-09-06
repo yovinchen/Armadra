@@ -15,6 +15,7 @@ import {
 } from "../canvas-ownership";
 import { serializeWhiteboard } from "../canvas/whiteboard/serialize";
 import { useCanvasStore } from "../store/canvas-store";
+import { clearLocalEdits, localEdits } from "../store/canvas/pending";
 import {
   CanvasSaveQueue,
   MAX_CONFLICT_REPLAYS,
@@ -91,7 +92,9 @@ async function resolveConflict(
   if (state.boardId !== boardId || !state.document) return;
   if (state.document.board.id !== boardId) return;
   useCanvasStore.setState({
-    document: replayLocalEdits(remote, state.document),
+    // 只把**这个窗口动过的**那几条重放上去；另一个窗口同时改的别的节点照收
+    // 远端的（`store/canvas/pending.ts`）。
+    document: replayLocalEdits(remote, state.document, localEdits()),
     saveState: "dirty",
     saveError: null,
   });
@@ -108,6 +111,9 @@ function boardQueue(): CanvasSaveQueue {
       const current = useCanvasStore.getState();
       if (current.boardId !== boardId || !current.document) return;
       if (current.document === source) {
+        // 手里这份原封不动地落盘了：这一轮的「本地动过哪些」结清，下一次
+        // 远端合并就该整份照收（`store/canvas/pending.ts`）。
+        if (reason !== "viewport") clearLocalEdits();
         useCanvasStore.setState({
           document: saved,
           saveState: reason === "viewport" ? current.saveState : "saved",

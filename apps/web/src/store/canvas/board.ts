@@ -1,6 +1,9 @@
 import { usePreferencesStore } from "../../app/preferences-store";
+import { mergeRemoteBoard } from "../../canvas/sync/merge";
+import { toItemId } from "../../canvas/whiteboard/model";
 import { parseWhiteboard } from "../../canvas/whiteboard/serialize";
 import { resetHistory } from "./history";
+import { clearLocalEdits, localEdits } from "./pending";
 import { emptyBoardState, initialPanels } from "./internal";
 import {
   type CanvasGet,
@@ -32,7 +35,7 @@ function isWorkPanel(key: keyof PanelState): key is WorkPanel {
 
 export function createBoardSlice(
   set: CanvasSet,
-  _get: CanvasGet,
+  get: CanvasGet,
 ): Pick<
   CanvasStore,
   | "boardId"
@@ -40,6 +43,7 @@ export function createBoardSlice(
   | "document"
   | "focusNodeId"
   | "maximized"
+  | "mergeRemoteDocument"
   | "panels"
   | "saveError"
   | "saveState"
@@ -67,6 +71,7 @@ export function createBoardSlice(
       set((state) => {
         if (state.workspace?.id === workspace?.id) return { workspace };
         resetHistory();
+        clearLocalEdits();
         return { workspace, boards: [], boardId: null, ...emptyBoardState };
       }),
 
@@ -79,6 +84,7 @@ export function createBoardSlice(
           return { boards: sorted };
         }
         resetHistory();
+        clearLocalEdits();
         return {
           boards: sorted,
           boardId: sorted[0]?.id ?? null,
@@ -90,6 +96,7 @@ export function createBoardSlice(
       set((state) => {
         if (state.boardId === boardId) return { boardId };
         resetHistory();
+        clearLocalEdits();
         return { boardId, ...emptyBoardState };
       }),
 
@@ -102,12 +109,64 @@ export function createBoardSlice(
      */
     setDocument: (document) => {
       resetHistory();
+      clearLocalEdits();
       set({
         ...emptyBoardState,
         document,
         whiteboard: parseWhiteboard(document.board.whiteboard).doc,
         boardId: document.board.id,
         saveState: "saved",
+      });
+    },
+
+    /**
+     * 远端改过之后重取回来的文档（`app/use-board-sync.ts` 收到
+     * `board.changed` / Host 事件后调）。
+     *
+     * 三条与 `setDocument` 不同的规矩，都是 A04 要的：
+     *
+     *  1. **撤销栈不动。** 既不记录（远端改动不该能被 ⌘Z 撤掉），也不清空
+     *     （别的窗口挪了一个节点，这边攒了半天的历史不该跟着没）。
+     *  2. **保存态不动。** 本地还脏就继续脏，那一轮防抖照常把改动写出去，
+     *     只是带上了远端刚给的 CAS 戳，下一次 PUT 不会再撞 409。
+     *  3. **没变就不写。** 自己刚保存完收到的是自己那份，`changed` 为 false，
+     *     一次多余的 `set` 都不做。
+     */
+    mergeRemoteDocument: (remote) => {
+      const state = get();
+      const local = state.document;
+      if (!local || state.boardId !== remote.board.id) return;
+      const dirty =
+        state.saveState === "dirty" ||
+        state.saveState === "saving" ||
+        state.saveState === "error";
+      const merged = mergeRemoteBoard({
+        local,
+        localWhiteboard: state.whiteboard,
+        remote,
+        dirty,
+        // 只有这个窗口动过的那几条以本地为准，其余照收远端的（`pending.ts`）。
+        localEdits: localEdits(),
+      });
+      if (!merged.changed) return;
+      // 远端删掉的东西不能继续留在选区里，否则 Delete 打在不存在的 id 上。
+      const nodeIds = new Set(merged.document.nodes.map((node) => node.id));
+      const itemIds = new Set(
+        merged.whiteboard.items.map((item) => toItemId(item.id)),
+      );
+      const edgeIds = new Set([
+        ...merged.document.edges.map((edge) => edge.id),
+        ...merged.whiteboard.references.map((reference) => reference.id),
+      ]);
+      set({
+        document: merged.document,
+        whiteboard: merged.whiteboard,
+        selectedNodeIds: state.selectedNodeIds.filter((id) => nodeIds.has(id)),
+        selectedItemIds: state.selectedItemIds.filter((id) => itemIds.has(id)),
+        selectedEdgeIds: state.selectedEdgeIds.filter((id) => edgeIds.has(id)),
+        maximized: Object.fromEntries(
+          Object.entries(state.maximized).filter(([id]) => nodeIds.has(id)),
+        ),
       });
     },
 
