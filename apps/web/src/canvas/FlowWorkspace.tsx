@@ -77,6 +77,7 @@ import { ShapeMenuContent } from "./menus/shape-menu";
 import { Minimap } from "./flow/Minimap";
 import { CanvasOverlays } from "./flow/overlays/CanvasOverlays";
 import { CanvasStylePanel } from "./StylePanel";
+import { removeItems } from "./whiteboard/store";
 import { ToolLayer } from "./whiteboard/tools/ToolLayer";
 import { resetProjectionCache, isItemId } from "./sync/project";
 import {
@@ -317,8 +318,8 @@ export function FlowWorkspace() {
           new Set((state.document?.nodes ?? []).map((node) => node.id)),
           new Set((state.document?.edges ?? []).map((edge) => edge.id)),
         );
-        // 白板对象直接删（没有会话要结束，也没有确认框要弹）。B2 接上
-        // `whiteboard.removeItems`；现在白板恒为空，这一堆永远是空的。
+        // 白板对象直接删：没有会话要结束，也没有确认框要弹。
+        if (split.items.length > 0) removeItems(split.items);
         requestDelete(split.nodes, split.edges);
       },
       "canvas.duplicate": () => store().duplicateNodes(store().selectedNodeIds),
