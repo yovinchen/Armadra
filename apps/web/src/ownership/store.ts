@@ -120,3 +120,17 @@ export function domainStatus(
   }
   return domains.find((entry) => entry.domain === domain)?.status ?? "unknown";
 }
+
+/**
+ * 设置域此刻的档位，供设置网关与设置页共用一份判断。
+ *
+ * 整份读取失败时是 `error` 而不是 `unknown`：两者都禁写，但要用户做的事不同
+ * ——「还没探到」等一会儿就有结果，「读不到归属记录」得先把 Runtime 接上。
+ * 正在探测、还没有结果时仍然是 `unknown`，那确实是「还不知道」。
+ */
+export function settingsStatus(
+  state: Pick<OwnershipState, "domains" | "failed"> = useOwnership.getState(),
+): CanvasOwnershipStatus {
+  if (state.failed) return "error";
+  return domainStatus("settings", state.domains);
+}

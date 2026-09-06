@@ -14,8 +14,24 @@ vi.mock("../../../api/client", () => ({
   runtimeApi: {
     settings: () => fetchSettings(),
     updateSettings: (patch: unknown) => patchSettings(patch),
+    /** 设置页经归属网关路由：探不到归属，整个域就是只读的。 */
+    ownershipDomains: () => Promise.resolve(settledDomains()),
   },
 }));
+
+/** 六个域都由 Runtime 写、都已落定；设置页只看 `settings` 那一行。 */
+function settledDomains() {
+  return ["canvas", "settings", "filesystem", "session", "agent", "git"].map(
+    (domain) => ({
+      domain,
+      owner: "runtime" as const,
+      epoch: 1n,
+      phase: "settled" as const,
+      reasonCode: "ownership.initial",
+      updatedAt: "2026-09-05T00:00:00.000Z",
+    }),
+  );
+}
 
 vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn() },

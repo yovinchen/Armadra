@@ -34,8 +34,24 @@ vi.mock("../api/client", () => ({
     installAgentHooks: (id: string) => installAgentHooks(id),
     uninstallAgentHooks: (id: string) => uninstallAgentHooks(id),
     testSshHost: (id: string) => testSshHost(id),
+    /** 设置页经归属网关路由：探不到归属，整个域就是只读的。 */
+    ownershipDomains: () => Promise.resolve(settledDomains()),
   },
 }));
+
+/** 六个域都由 Runtime 写、都已落定；设置页只看 `settings` 那一行。 */
+function settledDomains() {
+  return ["canvas", "settings", "filesystem", "session", "agent", "git"].map(
+    (domain) => ({
+      domain,
+      owner: "runtime" as const,
+      epoch: 1n,
+      phase: "settled" as const,
+      reasonCode: "ownership.initial",
+      updatedAt: "2026-09-05T00:00:00.000Z",
+    }),
+  );
+}
 
 import { installDomPolyfills, TestProviders } from "../app/test-harness";
 import { usePreferencesStore } from "../app/preferences-store";

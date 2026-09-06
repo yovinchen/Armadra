@@ -13,6 +13,10 @@ export const ownership: MessageModule = {
     "ownership.unknown": "尚未确认画布由谁写入，暂不保存",
     "ownership.error": "无法确认画布由谁写入，暂不保存",
     "ownership.recheck": "重新检查",
+    "ownership.settings.readonly": "设置正在切换写入方，现在只能查看",
+    "ownership.settings.error": "无法确认设置由谁写入，现在只能查看",
+    "ownership.settings.unconfirmed": "尚未确认设置由谁写入，这次保存没有发出",
+    "ownership.settings.host": "设置的写入已经交给 Host，请重新打开设置页",
     "ownership.save.readonly": "只读，未保存",
     "ownership.title": "写入归属",
     "ownership.note": "切换归属要在本机执行 armadra-host ownership switch。",
@@ -41,6 +45,14 @@ export const ownership: MessageModule = {
     "ownership.unknown": "Canvas writer not confirmed yet; saving is paused",
     "ownership.error": "Canvas writer could not be confirmed; saving is paused",
     "ownership.recheck": "Check again",
+    "ownership.settings.readonly":
+      "Settings are switching writers and are view-only right now",
+    "ownership.settings.error":
+      "The settings writer could not be confirmed; settings are view-only",
+    "ownership.settings.unconfirmed":
+      "The settings writer is not confirmed; this save was not sent",
+    "ownership.settings.host":
+      "Settings writes have moved to the Host; reopen this page",
     "ownership.save.readonly": "Read-only, not saved",
     "ownership.title": "Write ownership",
     "ownership.note":
