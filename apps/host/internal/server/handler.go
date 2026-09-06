@@ -65,7 +65,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "Local request origin is not allowed")
 			return
 		}
-		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path) || githubMethod(r.URL.Path) || updatesMethod(r.URL.Path) || canvasMethod(r.URL.Path) || ownershipMethod(r.URL.Path)) {
+		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path) || githubMethod(r.URL.Path) || updatesMethod(r.URL.Path) || canvasMethod(r.URL.Path) || ownershipMethod(r.URL.Path) || settingsMethod(r.URL.Path)) {
 			if origin != options.PublicOrigin {
 				writeError(w, 403, "PERMISSION_DENIED", "Authentication requires the Host HTTPS origin")
 				return
@@ -99,6 +99,14 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 				// decides where to save, and "unknown" is not an answer it can
 				// act on.
 				ownershipRequest(w, r, identity, options.Identity, options.Ownership, options.OpenHandoff)
+				return
+			}
+			if settingsMethod(r.URL.Path) {
+				// Host-wide, like the ownership record and unlike the canvas:
+				// a Host with no settings service authenticates first and then
+				// answers UNSUPPORTED from inside, so a device never learns
+				// "your settings are empty".
+				settingsRequest(w, r, identity, options.Identity, options.Settings)
 				return
 			}
 			if canvasMethod(r.URL.Path) {
@@ -233,6 +241,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			canvas:         authentication && options.Canvas != nil,
 			events:         authentication && options.Events != nil,
 			ownership:      authentication && options.Ownership != nil,
+			settings:       authentication && options.Settings != nil,
 		})
 	}), nil
 }
@@ -271,7 +280,7 @@ func deviceOrigin(r *http.Request, origin, public string) (string, bool) {
 // only when the surface really answers, so a client never plans against a
 // capability that would then refuse it.
 type helloSurfaces struct {
-	authentication, scheduling, github, proxying, canvas, events, ownership bool
+	authentication, scheduling, github, proxying, canvas, events, ownership, settings bool
 }
 
 func hello(w http.ResponseWriter, r *http.Request, identity Identity, surfaces helloSurfaces) {
@@ -353,6 +362,14 @@ func hello(w http.ResponseWriter, r *http.Request, identity Identity, surfaces h
 	// must read that before it decides where to save.
 	if surfaces.ownership {
 		capabilities = append(capabilities, "ownership.domains.v1")
+	}
+	// Advertised only when a settings service is actually assembled. Like the
+	// canvas capability it says the surface answers, not that this Host owns
+	// settings writes: which side writes the document is what
+	// OwnershipService/List reports, and a client must read that before it
+	// decides where to save a preference.
+	if surfaces.settings {
+		capabilities = append(capabilities, "settings.documents.v1")
 	}
 	writeProto(w, http.StatusOK, &pb.HelloResponse{
 		Protocol:         &pb.ProtocolVersion{Major: ProtocolMajor, Minor: min(request.Protocol.GetMinor(), ProtocolMinor)},

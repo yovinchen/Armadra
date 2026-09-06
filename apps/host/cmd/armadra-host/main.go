@@ -36,6 +36,7 @@ import (
 	"armadra.local/host/internal/ownership"
 	"armadra.local/host/internal/runtimelink"
 	"armadra.local/host/internal/server"
+	"armadra.local/host/internal/settingshost"
 	"armadra.local/host/internal/storage"
 	"armadra.local/host/internal/updates"
 	"armadra.local/host/internal/worker"
@@ -89,6 +90,11 @@ type config struct {
 	// runs the owner's work and moves ownership.
 	runtimeBinary   string
 	runtimeDatabase string
+	// The Runtime's settings.json. It defaults to the file beside
+	// --runtime-database, which is the Runtime's own layout; an operator whose
+	// database was relocated names the real file, so a switch reads the
+	// settings somebody actually edited instead of exporting defaults.
+	runtimeSettings string
 	// The release index this Host may consult, and the channel an operator
 	// pinned it to. An unset source means update checks answer UNSUPPORTED;
 	// nothing is inferred from the build (roadmap §3.12).
@@ -170,6 +176,7 @@ func parseConfig(args []string) (config, error) {
 		flags.StringVar(&c.workerStateDir, "worker-state-dir", "", "Absolute private directory for the Worker's own execution journal")
 		flags.StringVar(&c.runtimeBinary, "runtime-binary", "", "Absolute path to the Rust Runtime executable, enabling write-ownership switches over HTTPS")
 		flags.StringVar(&c.runtimeDatabase, "runtime-database", "", "Absolute path to the Runtime's database, enabling write-ownership switches over HTTPS")
+		flags.StringVar(&c.runtimeSettings, "runtime-settings", "", "Absolute path to the Runtime's settings.json (default: settings.json beside --runtime-database)")
 		flags.StringVar(&c.updatesSource, "updates-source", "", "Releases API base this Host may consult, e.g. https://api.github.com/repos/OWNER/REPO; unset means update checks answer UNSUPPORTED")
 		flags.StringVar(&releaseChannel, "release-channel", "", "Pin update checks to a channel: stable, beta or development; unset lets the caller ask")
 		flags.StringVar(&c.launcher, "launcher", "", "Who is starting this Host: desktop, service or cli (default: cli)")
@@ -339,6 +346,13 @@ func parseConfig(args []string) (config, error) {
 		if c.runtimeDatabase, err = filepath.Abs(c.runtimeDatabase); err != nil {
 			return c, err
 		}
+		if c.runtimeSettings == "" {
+			c.runtimeSettings = filepath.Join(filepath.Dir(c.runtimeDatabase), "settings.json")
+		} else if c.runtimeSettings, err = filepath.Abs(c.runtimeSettings); err != nil {
+			return c, err
+		}
+	} else if c.runtimeSettings != "" {
+		return c, fmt.Errorf("--runtime-settings has no effect without --runtime-binary and --runtime-database")
 	}
 	// version reports what this binary is and touches no state, so it must not
 	// depend on a resolvable per-user directory: an upgrade probes a candidate
@@ -537,6 +551,13 @@ func serveHost(parent context.Context, c config) (err error) {
 	if err != nil {
 		return err
 	}
+	// The settings surface is assembled on the same terms as the canvas one:
+	// it answers reads whoever owns writes, and its mutations refuse with
+	// ownership_moved until this Host is the settled owner of the domain.
+	settings, err := settingshost.New(settingshost.Options{Store: database, HostID: state.ID})
+	if err != nil {
+		return err
+	}
 	// The ownership record is always readable: a client has to know which side
 	// writes a domain before it saves anything, and that answer must not depend
 	// on this Host being able to move it. Moving it does depend on a Runtime to
@@ -544,7 +565,10 @@ func serveHost(parent context.Context, c config) (err error) {
 	switches, err := ownership.New(ownership.Options{
 		Store:      database,
 		InstanceID: identity.InstanceID,
-		Projectors: map[string]ownership.Projector{canvashost.Domain: canvases.AsProjector()},
+		Projectors: map[string]ownership.Projector{
+			canvashost.Domain:   canvases.AsProjector(),
+			settingshost.Domain: settings.AsProjector(),
+		},
 		ExportRoot: filepath.Join(c.dataDir, "ownership-exports"),
 	})
 	if err != nil {
@@ -560,6 +584,7 @@ func serveHost(parent context.Context, c config) (err error) {
 				Executable:     c.runtimeBinary,
 				HostID:         state.ID,
 				CanvasDatabase: c.runtimeDatabase,
+				SettingsFile:   c.runtimeSettings,
 				RequestTimeout: 30 * time.Second,
 			})
 			if err != nil {
@@ -588,13 +613,13 @@ func serveHost(parent context.Context, c config) (err error) {
 	// stored outbox the HTTPS event page reads, and it is woken by the storage
 	// kernel's own commit notification, so a saved change reaches a second
 	// client in the time one write takes rather than in one poll interval.
-	events, err := eventstream.New(eventstream.Options{Store: database, HostID: state.ID, Projectors: []eventstream.Projector{canvashost.EventProjector{}}})
+	events, err := eventstream.New(eventstream.Options{Store: database, HostID: state.ID, Projectors: []eventstream.Projector{canvashost.EventProjector{}, settingshost.EventProjector{}}})
 	if err != nil {
 		return err
 	}
 	defer events.Close()
 	database.SetCommitNotifier(events.Notify)
-	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link, Updates: releases, Canvas: canvases, Events: events, Ownership: switches, OpenHandoff: openHandoff}
+	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link, Updates: releases, Canvas: canvases, Settings: settings, Events: events, Ownership: switches, OpenHandoff: openHandoff}
 	// The switch binds its own listener with the same routes. `options` is
 	// captured by reference, so the manager it is about to be given is the one
 	// this closure serves with.

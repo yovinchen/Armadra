@@ -339,7 +339,32 @@ func (s *Store) Apply(ctx context.Context, operationID string, changes []Change)
 	return result, nil
 }
 
-func readReceipt(ctx context.Context, tx *sql.Tx, operationID string, digest []byte) (ApplyResult, bool, error) {
+// Receipt reads what one operation id already committed, without applying
+// anything and without a request to compare against.
+//
+// A caller whose change set is derived from the rows it is about to replace —
+// a settings write is, because the execution hosts it touches are read out of
+// storage — cannot rebuild that set once the write has landed. Its honest
+// replay would then hash differently from the first attempt and be refused as
+// a reused id, so it asks here first and answers with what it already did.
+func (s *Store) Receipt(ctx context.Context, operationID string) (ApplyResult, bool, error) {
+	if !textValid(operationID, 512, false) {
+		return ApplyResult{}, false, ErrInvalid
+	}
+	return readReceipt(ctx, s.db, operationID, nil)
+}
+
+// rows is the part of *sql.DB and *sql.Tx a receipt read needs, so the same
+// code answers inside the apply transaction and outside any transaction.
+type rows interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+// readReceipt returns the stored result for an operation id. A nil `digest`
+// means the caller is not comparing a request against it; a non-nil one that
+// differs is a reused id, which is refused rather than replayed.
+func readReceipt(ctx context.Context, tx rows, operationID string, digest []byte) (ApplyResult, bool, error) {
 	var result ApplyResult
 	var stored []byte
 	var transaction, first, last int64
@@ -351,7 +376,7 @@ func readReceipt(ctx context.Context, tx *sql.Tx, operationID string, digest []b
 	if err != nil {
 		return result, false, err
 	}
-	if string(stored) != string(digest) {
+	if digest != nil && string(stored) != string(digest) {
 		return result, false, ErrIdempotencyConflict
 	}
 	if transaction < 1 || first < 1 || last < first || count < 1 || count > MaxChanges || last-first+1 != int64(count) {

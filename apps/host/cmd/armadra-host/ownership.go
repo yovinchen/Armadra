@@ -15,6 +15,7 @@ import (
 	"armadra.local/host/internal/daemon"
 	"armadra.local/host/internal/hoststate"
 	"armadra.local/host/internal/ownership"
+	"armadra.local/host/internal/settingshost"
 	"armadra.local/host/internal/storage"
 	"armadra.local/host/internal/worker"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -49,6 +50,7 @@ type ownershipConfig struct {
 	importID         string
 	runtimeBinary    string
 	runtimeDatabase  string
+	runtimeSettings  string
 	exportDirectory  string
 	acceptExportOnly bool
 }
@@ -69,6 +71,7 @@ func (o *ownershipConfig) register(flags *flag.FlagSet) {
 	}
 	flags.StringVar(&o.runtimeBinary, "runtime-binary", "", "Absolute path to the Rust Runtime executable that stores the epoch")
 	flags.StringVar(&o.runtimeDatabase, "runtime-database", "", "Absolute path to the Runtime's database")
+	flags.StringVar(&o.runtimeSettings, "runtime-settings", "", "Absolute path to the Runtime's settings.json (default: settings.json beside --runtime-database)")
 }
 
 func (o *ownershipConfig) normalize() error {
@@ -93,6 +96,16 @@ func (o *ownershipConfig) normalize() error {
 		return err
 	}
 	if o.runtimeDatabase, err = filepath.Abs(o.runtimeDatabase); err != nil {
+		return err
+	}
+	// The settings document lives beside the database in the Runtime's own
+	// layout. Defaulting to it means an ordinary deployment names one path;
+	// naming the flag is what a relocated database needs, and without it a
+	// settings switch would read a file nobody has ever edited and export
+	// defaults over the operator's real preferences.
+	if o.runtimeSettings == "" {
+		o.runtimeSettings = filepath.Join(filepath.Dir(o.runtimeDatabase), "settings.json")
+	} else if o.runtimeSettings, err = filepath.Abs(o.runtimeSettings); err != nil {
 		return err
 	}
 	if o.action == "switch" && o.importID == "" {
@@ -128,13 +141,22 @@ func openOwnership(c config) (*hoststate.State, *storage.Store, *canvashost.Serv
 		state.Close()
 		return nil, nil, nil, nil, err
 	}
+	settings, err := settingshost.New(settingshost.Options{Store: database, HostID: state.ID})
+	if err != nil {
+		database.Close()
+		state.Close()
+		return nil, nil, nil, nil, err
+	}
 	// The offline command has no Host instance, so the state's own ID stands in
 	// for one. It is only ever used to bind maintenance tokens, and this entry
 	// point never issues or spends one.
 	switches, err := ownership.New(ownership.Options{
 		Store:      database,
 		InstanceID: state.ID,
-		Projectors: map[string]ownership.Projector{canvashost.Domain: canvases.AsProjector()},
+		Projectors: map[string]ownership.Projector{
+			canvashost.Domain:   canvases.AsProjector(),
+			settingshost.Domain: settings.AsProjector(),
+		},
 	})
 	if err != nil {
 		database.Close()
@@ -166,6 +188,7 @@ func runOwnership(ctx context.Context, c config) (err error) {
 		Executable:     c.ownership.runtimeBinary,
 		HostID:         state.ID,
 		CanvasDatabase: c.ownership.runtimeDatabase,
+		SettingsFile:   c.ownership.runtimeSettings,
 		RequestTimeout: 30 * time.Second,
 	})
 	if err != nil {

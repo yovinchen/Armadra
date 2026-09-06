@@ -9,6 +9,7 @@ import (
 	"armadra.local/host/internal/identity"
 	"armadra.local/host/internal/ownership"
 	"armadra.local/host/internal/runtimelink"
+	"armadra.local/host/internal/settingshost"
 	"armadra.local/host/internal/updates"
 	"errors"
 	"net"
@@ -51,6 +52,10 @@ type Options struct {
 	// pushes nothing and `/ws/armadra.v1.EventStream` answers NOT_FOUND, which
 	// is what tells a client to keep polling instead of waiting silently.
 	Events *eventstream.Hub
+	// Settings is nil when this Host serves no settings surface. Its methods
+	// then answer UNSUPPORTED rather than an empty document, which a client
+	// cannot tell apart from a machine whose preferences are all at default.
+	Settings *settingshost.Service
 	// Ownership moves a business domain between the Runtime and this Host.
 	// Nil means this Host reports no ownership surface at all; a non-nil
 	// service with no OpenHandoff can still answer reads, and refuses to move
