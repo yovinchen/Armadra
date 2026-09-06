@@ -325,6 +325,29 @@ async fn endpoint(
     })
 }
 
+/// Ends a session whose socket is gone, on whichever host runs it. Errors are
+/// swallowed on purpose: the socket has already closed and nobody is left to
+/// tell, and a session that cannot be found was already ended by `DELETE`.
+async fn end_session_after_socket(state: &AppState, workspace_id: &str, session_id: &str) {
+    let Ok(workspace) = readable(state, workspace_id).await else {
+        return;
+    };
+    match crate::remote::resolve(state, &workspace) {
+        Ok(crate::remote::Execution::Local) => {
+            state.language.close_session(workspace_id, session_id).await;
+        }
+        Ok(crate::remote::Execution::Remote(worker)) => {
+            if let Some(link) = worker.language.current().await {
+                link.close_session(session_id).await;
+                if !link.has_any_session() {
+                    worker.language.release().await;
+                }
+            }
+        }
+        Err(_) => {}
+    }
+}
+
 /// `GET /api/workspaces/{id}/language/sessions/{sessionId}/stream` (WebSocket)
 ///
 /// One text frame is one JSON-RPC message. The controller only forwards: it
@@ -342,7 +365,20 @@ pub async fn session_stream(
         .ok_or_else(|| AppError::NotFound("No such language session".into()))?;
     let outbox = unpark(&state, &session_id)
         .ok_or_else(|| AppError::Conflict("This language session already has a socket".into()))?;
-    Ok(ws.on_upgrade(move |socket| pump(endpoint, session_id, outbox, socket)))
+    // The socket *is* the session's lifetime. A tab that reloads, a browser
+    // that crashes and an explicit `DELETE` all end the same way, and a
+    // session nobody can reach still holds its documents open — the next
+    // session for the same file would be told it is a follower and would sit
+    // there with no diagnostics, waiting for a `didOpen` that already
+    // happened (design §2.2 `documents`). A remote session ends the same way
+    // through its link, so the execution host frees the server too.
+    let closing_state = state.clone();
+    let closing_workspace = workspace_id.clone();
+    let closing_session = session_id.clone();
+    Ok(ws.on_upgrade(move |socket| async move {
+        pump(endpoint, session_id, outbox, socket).await;
+        end_session_after_socket(&closing_state, &closing_workspace, &closing_session).await;
+    }))
 }
 
 async fn pump(
