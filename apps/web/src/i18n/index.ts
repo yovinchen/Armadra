@@ -1,6 +1,7 @@
 import { account } from "./account";
 import { agent } from "./agent";
 import { automation } from "./automation";
+import { browser } from "./browser";
 import { canvas } from "./canvas";
 import { collab } from "./collab";
 import { commands } from "./commands";
@@ -58,6 +59,7 @@ export const MESSAGE_MODULES = {
   launcher,
   canvas,
   nodes,
+  browser,
   agent,
   automation,
   account,

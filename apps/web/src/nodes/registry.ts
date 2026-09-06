@@ -20,7 +20,7 @@ import {
 
 import { AgentActivityNode } from "./AgentActivityNode";
 import { AutomationNode } from "./AutomationNode";
-import { BrowserNode } from "./BrowserNode";
+import { BrowserNode } from "./browser";
 import { DiffNode } from "./DiffNode";
 import { EditorNode } from "./EditorNode";
 import { FilesNode } from "./FilesNode";

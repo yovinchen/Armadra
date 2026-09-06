@@ -1,5 +1,9 @@
 import {
+  browserActivityListSchema,
   browserAvailabilitySchema,
+  browserLeaseRequestSchema,
+  browserLeaseSchema,
+  browserManagedStateSchema,
   browserCaptureRequestSchema,
   browserCaptureSchema,
   browserDownloadDecisionRequestSchema,
@@ -17,6 +21,7 @@ import {
   createBrowserSessionRequestSchema,
   type BrowserCaptureRequest,
   type BrowserInputRequest,
+  type BrowserLeaseRequest,
   type BrowserNavigateRequest,
   type BrowserSubscribeRequest,
   type BrowserViewport,
@@ -214,4 +219,49 @@ export const browserApi = {
         ...json(browserDownloadDecisionRequestSchema.parse({ accept })),
       },
     ),
+
+  /* --------------------------------- 租约 -------------------------------- */
+  /**
+   * 读 / 接管 / 交还控制租约（设计 §2.6）。
+   *
+   * `takeover` 会立刻撤销 Agent 的租约——它排队等的是「人顺手点了一下」，
+   * 不是「人明确接管」；后者之后 Agent 的动作直接被拒。
+   */
+  browserLease: (
+    workspaceId: string,
+    sessionId: string,
+    input: BrowserLeaseRequest,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/browser/sessions/${query(sessionId)}/lease`,
+      browserLeaseSchema,
+      {
+        method: "POST",
+        ...json(browserLeaseRequestSchema.parse(input)),
+      },
+    ),
+  /** 最近若干条动作，节点头部那一行（设计 §2.8）。 */
+  browserActivity: (
+    workspaceId: string,
+    sessionId: string,
+    signal?: AbortSignal,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/browser/sessions/${query(sessionId)}/activity`,
+      browserActivityListSchema,
+      { signal },
+    ),
+
+  /* ------------------------------- 受管浏览器 ----------------------------- */
+  /** 受管构建属于这台机器，不属于某个工作空间（设计 §2.1）。 */
+  browserManaged: (signal?: AbortSignal) =>
+    request("/api/browser/managed", browserManagedStateSchema, { signal }),
+  installBrowserManaged: () =>
+    request("/api/browser/managed", browserManagedStateSchema, {
+      method: "POST",
+    }),
+  removeBrowserManaged: () =>
+    request("/api/browser/managed", browserManagedStateSchema, {
+      method: "DELETE",
+    }),
 };

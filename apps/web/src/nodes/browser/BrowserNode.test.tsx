@@ -6,11 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type {
-  BrowserSession,
-  CanvasNode,
-  WorkspaceEvent,
-} from "@armadra/shared";
+import type { BrowserSession, CanvasNode } from "@armadra/shared";
 
 const store = vi.hoisted(() => ({
   document: { nodes: [] as CanvasNode[] },
@@ -37,6 +33,9 @@ const api = vi.hoisted(() => ({
   browserNavigate: vi.fn(),
   browserViewport: vi.fn(),
   browserCapture: vi.fn(),
+  browserLease: vi.fn(),
+  closeBrowserSession: vi.fn(),
+  installBrowserManaged: vi.fn(),
 }));
 
 const toasts = vi.hoisted(() => ({ toast: vi.fn(), error: vi.fn() }));
@@ -62,8 +61,17 @@ vi.mock("sonner", () => ({
 
 vi.mock("@/platform", () => ({ openExternal: vi.fn() }));
 
-import { BrowserNode, surfacePoint } from "./BrowserNode";
-import { dispatchWorkspaceEvent, resetWorkspaceEvents } from "@/api/events";
+import {
+  BrowserStreamClientSchema,
+  BrowserStreamFrameSchema,
+  create,
+  fromBinary,
+  toBinary,
+} from "@armadra/protocol";
+
+import { BrowserNode } from "./BrowserNode";
+import { surfacePoint } from "./geometry";
+import { resetWorkspaceEvents } from "@/api/events";
 
 const node = {
   id: "b1",
@@ -100,26 +108,65 @@ const session: BrowserSession = {
   leaseGeneration: 0,
 };
 
-function frame(overrides: Partial<Record<string, unknown>> = {}) {
-  return {
-    type: "browser.frame",
-    sessionId: "s1",
-    generation: 1,
-    frameSeq: 4,
-    navigationEpoch: 7,
-    viewportWidth: 1280,
-    viewportHeight: 720,
-    deviceScaleFactor: 1,
-    encoding: "jpeg",
-    data: "AAAA",
-    capturedAt: "2026-09-05T00:00:01.000Z",
-    ...overrides,
-  } as WorkspaceEvent;
+/**
+ * 帧流的假连接（设计 §2.9）。
+ *
+ * 测试直接扮演 Runtime：`sent` 是这一端发上去的 `BrowserStreamClient`，
+ * `deliver` 把一帧二进制 `BrowserStreamFrame` 塞下来。
+ */
+class FakeSocket {
+  static last: FakeSocket | null = null;
+  static opened: string[] = [];
+  binaryType = "";
+  readyState = 1;
+  closed = false;
+  sent: Uint8Array[] = [];
+  onopen: (() => void) | null = null;
+  onmessage: ((event: { data: unknown }) => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+
+  constructor(url: string) {
+    FakeSocket.last = this;
+    FakeSocket.opened.push(url);
+    queueMicrotask(() => this.onopen?.());
+  }
+
+  send(payload: ArrayBufferLike | Uint8Array) {
+    this.sent.push(new Uint8Array(payload as ArrayBufferLike));
+  }
+
+  close() {
+    this.closed = true;
+    this.readyState = 3;
+  }
+
+  /** 这一端发上去的第 n 条 `BrowserStreamClient`。 */
+  client(index: number) {
+    return fromBinary(BrowserStreamClientSchema, this.sent[index]!);
+  }
+
+  deliver(overrides: Record<string, unknown> = {}) {
+    const message = create(BrowserStreamFrameSchema, {
+      sessionId: "s1",
+      generation: 1n,
+      frameSeq: 4n,
+      navigationEpoch: 7n,
+      viewportWidth: 1280,
+      viewportHeight: 720,
+      deviceScaleFactor: 1,
+      encoding: "jpeg",
+      data: new Uint8Array([0xff, 0xd8, 0xff]),
+      capturedAtUnixMs: 0n,
+      ...overrides,
+    });
+    this.onmessage?.({
+      data: toBinary(BrowserStreamFrameSchema, message).buffer,
+    });
+  }
 }
 
 const drawImage = vi.fn();
-/** 最近一次 `new Image()`；测试自己触发 `onload`，jsdom 不解码 data URI。 */
-let lastImage: { src: string; onload: (() => void) | null } | null = null;
 
 function renderBrowser(selected = false) {
   return render(
@@ -160,25 +207,12 @@ beforeEach(() => {
   });
 
   drawImage.mockClear();
-  lastImage = null;
-  vi.stubGlobal(
-    "Image",
-    class {
-      onload: (() => void) | null = null;
-      #src = "";
-      constructor() {
-        lastImage = this as unknown as {
-          src: string;
-          onload: (() => void) | null;
-        };
-      }
-      set src(value: string) {
-        this.#src = value;
-      }
-      get src() {
-        return this.#src;
-      }
-    },
+  FakeSocket.last = null;
+  FakeSocket.opened = [];
+  vi.stubGlobal("WebSocket", FakeSocket);
+  // jsdom 不解 JPEG；这里只要一个「能画的东西」，画得对不对是浏览器的事。
+  vi.stubGlobal("createImageBitmap", () =>
+    Promise.resolve({ width: 1280, height: 720, close: vi.fn() }),
   );
   HTMLCanvasElement.prototype.getContext = vi.fn(
     () => ({ drawImage }) as unknown as CanvasRenderingContext2D,
@@ -206,34 +240,43 @@ describe("surfacePoint", () => {
 });
 
 describe("BrowserNode 受控模式", () => {
-  it("paints a frame for this session and ignores other sessions", async () => {
+  it("paints a frame from the dedicated stream and acknowledges it", async () => {
     renderBrowser();
     await waitFor(() => expect(api.createBrowserSession).toHaveBeenCalled());
     const canvas = (await screen.findByLabelText(
       "页面画面",
     )) as HTMLCanvasElement;
+    await waitFor(() => expect(FakeSocket.last).not.toBeNull());
+    const socket = FakeSocket.last!;
 
-    dispatchWorkspaceEvent(frame());
-    expect(lastImage?.src).toBe("data:image/jpeg;base64,AAAA");
-    lastImage?.onload?.();
-    expect(drawImage).toHaveBeenCalledTimes(1);
+    // 连上就订阅：`hello` 带可见性与带宽等级，没有第二次「订阅」调用。
+    await waitFor(() => expect(socket.sent.length).toBeGreaterThan(0));
+    expect(socket.client(0).message.case).toBe("hello");
+    expect(api.browserSubscribe).not.toHaveBeenCalled();
+    expect(FakeSocket.opened[0]).toContain(
+      "/api/workspaces/w1/browser/sessions/s1/stream",
+    );
+
+    socket.deliver();
+    await waitFor(() => expect(drawImage).toHaveBeenCalledTimes(1));
     expect(canvas.width).toBe(1280);
     expect(canvas.height).toBe(720);
-
-    // 别的会话的帧不属于这个节点，连 Image 都不该建。
-    lastImage = null;
-    dispatchWorkspaceEvent(frame({ sessionId: "other", data: "BBBB" }));
-    expect(lastImage).toBeNull();
-    expect(drawImage).toHaveBeenCalledTimes(1);
+    // 画完才确认：背压量的是这一端真的跟上了没有，不是网络缓冲区。
+    const ack = socket.client(socket.sent.length - 1);
+    expect(ack.message.case).toBe("ack");
+    expect(ack.message.value).toBe(4n);
   });
 
-  it("posts a click in viewport coordinates with the frame's epoch", async () => {
+  it("sends a click up the stream in viewport coordinates with the frame's epoch", async () => {
     renderBrowser();
     const canvas = (await screen.findByLabelText(
       "页面画面",
     )) as HTMLCanvasElement;
     await waitFor(() => expect(api.createBrowserSession).toHaveBeenCalled());
-    dispatchWorkspaceEvent(frame());
+    await waitFor(() => expect(FakeSocket.last).not.toBeNull());
+    const socket = FakeSocket.last!;
+    socket.deliver();
+    await waitFor(() => expect(drawImage).toHaveBeenCalled());
 
     // 显示框是 viewport 的一半，所以坐标要乘 2。
     canvas.getBoundingClientRect = () =>
@@ -242,32 +285,39 @@ describe("BrowserNode 受控模式", () => {
     fireEvent.pointerDown(canvas, { clientX: 100, clientY: 50, button: 0 });
     fireEvent.pointerUp(canvas, { clientX: 100, clientY: 50, button: 0 });
 
-    await waitFor(() => expect(api.browserInput).toHaveBeenCalled());
-    const [workspaceId, sessionId, request] = api.browserInput.mock.calls[0]!;
-    expect(workspaceId).toBe("w1");
-    expect(sessionId).toBe("s1");
-    expect(request.navigationEpoch).toBe(7);
-    expect(request.frameSeq).toBe(4);
-    expect(request.events[0]).toMatchObject({
-      kind: "mousePressed",
-      x: 200,
-      y: 100,
-      button: "left",
-    });
-    expect(request.events[1]).toMatchObject({ kind: "mouseReleased" });
+    await waitFor(() =>
+      expect(
+        socket.sent.some(
+          (_, index) => socket.client(index).message.case === "input",
+        ),
+      ).toBe(true),
+    );
+    const index = socket.sent.findIndex(
+      (_, at) => socket.client(at).message.case === "input",
+    );
+    const input = socket.client(index).message.value as {
+      navigationEpoch: bigint;
+      frameSeq: bigint;
+      events: { kind: number; x: number; y: number; button: string }[];
+    };
+    expect(input.navigationEpoch).toBe(7n);
+    expect(input.frameSeq).toBe(4n);
+    expect(input.events.map((event) => [event.x, event.y])).toEqual([
+      [200, 100],
+      [200, 100],
+    ]);
+    expect(input.events[0]!.button).toBe("left");
+    // HTTP 回退在连接可用时不该被用到。
+    expect(api.browserInput).not.toHaveBeenCalled();
   });
 
-  it("holds a screencast subscription and drops it without ending the session", async () => {
+  it("closes the stream on unmount without ending the session", async () => {
     const view = renderBrowser(true);
-    await waitFor(() =>
-      expect(api.browserSubscribe).toHaveBeenCalledWith("w1", "s1", {
-        visibility: "focused",
-      }),
-    );
+    await waitFor(() => expect(FakeSocket.last).not.toBeNull());
+    const socket = FakeSocket.last!;
     view.unmount();
-    await waitFor(() =>
-      expect(api.browserUnsubscribe).toHaveBeenCalledWith("w1", "s1", "sub-1"),
-    );
+    await waitFor(() => expect(socket.closed).toBe(true));
+    expect(api.closeBrowserSession).not.toHaveBeenCalled();
   });
 
   it("saves a screenshot and reports the workspace path", async () => {
