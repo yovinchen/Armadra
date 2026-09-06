@@ -91,6 +91,9 @@ export const SCM_SECTIONS = [
   "changes",
   "branches",
   "history",
+  // 引用日志紧跟历史：它是同一个问题的另一半——历史说「现在有什么」，
+  // reflog 说「刚才还有什么」。
+  "reflog",
   "worktrees",
   "stashes",
   "tags",
@@ -275,8 +278,7 @@ export function SourceControlDrawer() {
   // Creating a repository is never implied by another action: the button only
   // appears once a read reported no repository, and it still asks first.
   const init = useMutation({
-    mutationFn: () =>
-      gitGateway.init(target, `init/${crypto.randomUUID()}`),
+    mutationFn: () => gitGateway.init(target, `init/${crypto.randomUUID()}`),
     onSuccess: (result) => {
       invalidate();
       toast.success(
@@ -627,6 +629,7 @@ export function SourceControlDrawer() {
             [
               "branches",
               "history",
+              "reflog",
               "worktrees",
               "stashes",
               "tags",

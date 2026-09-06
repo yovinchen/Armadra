@@ -358,15 +358,29 @@ function IntegrationSession({
                 >
                   {t(`gitIntegration.abort${recoveryLabel(state.kind)}`)}
                 </Button>
-                {state.kind === "cherryPick" && state.empty && (
+                {((state.kind === "cherryPick" && state.empty) ||
+                  state.kind === "rebase") && (
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant={
+                      state.kind === "rebase" ? "destructive" : "outline"
+                    }
                     disabled={blocked || !state.canSkip}
                     onClick={() => resume("skip")}
                   >
-                    {t("gitRepo.skipIntegration")}
+                    {t(
+                      state.kind === "rebase"
+                        ? "gitRepo.skipReplayedCommit"
+                        : "gitRepo.skipIntegration",
+                    )}
                   </Button>
+                )}
+                {/* 跳过一个被重放的提交是**丢弃**它，不是「先放着」。这句话
+                    必须在按钮旁边，而不是只在确认框里。 */}
+                {state.kind === "rebase" && state.canSkip && (
+                  <p className="basis-full text-muted-foreground">
+                    {t("gitRepo.skipReplayedCommitHint")}
+                  </p>
                 )}
               </div>
               {state.mainline && (

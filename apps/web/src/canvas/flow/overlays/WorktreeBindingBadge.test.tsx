@@ -11,6 +11,7 @@ import type {
 
 import { runtimeApi } from "@/api/client";
 import { usePreferencesStore } from "@/app/preferences-store";
+import { OWNERSHIP_DOMAINS, useOwnership } from "@/ownership/store";
 import { installDomPolyfills, TestProviders } from "@/app/test-harness";
 import { useCanvasStore } from "@/store/canvas-store";
 import { WorktreeBindingBadge } from "./WorktreeBindingBadge";
@@ -123,6 +124,17 @@ function mount(bound: FrameBinding) {
 
 beforeEach(() => {
   usePreferencesStore.setState({ locale: "en" });
+  // 重建 worktree 是一次写，网关先要知道谁在写。摆的是产品自己的初始状态。
+  useOwnership.setState({
+    domains: OWNERSHIP_DOMAINS.map((domain) => ({
+      domain,
+      status: "runtime" as const,
+      epoch: 1n,
+      reasonCode: "ownership.initial",
+      updatedAt: "1970-01-01T00:00:00Z",
+    })),
+    failed: false,
+  });
   useCanvasStore.setState({
     workspace: null,
     document: null,
@@ -182,6 +194,11 @@ it("offers recreate and unbind once the checkout is gone", async () => {
   const operate = vi
     .spyOn(runtimeApi, "gitRepositoryOperate")
     .mockResolvedValue({} as never);
+  // 服务端判定这一路读不通时（这里没有桩），徽章退回发现结果那一档，而不
+  // 是宣布绑定坏了——这正是「检查失败不是结论」那条规则。
+  vi.spyOn(runtimeApi, "gitRepositoryWorktreeBinding").mockRejectedValue(
+    new Error("no verdict"),
+  );
   mount(binding());
   expect(await screen.findByText("Worktree not found")).toBeTruthy();
 
@@ -190,17 +207,21 @@ it("offers recreate and unbind once the checkout is gone", async () => {
     expect((recreate as HTMLButtonElement).disabled).toBe(false),
   );
   fireEvent.click(recreate);
-  expect(operate).toHaveBeenCalledExactlyOnceWith(
-    workspace.id,
-    {
-      kind: "createWorktree",
-      path: "wt/feature",
-      branch: "feature/login",
-      createBranch: false,
-      expectedOid: "a".repeat(40),
-      startPoint: null,
-    },
-    { headOid: "b".repeat(40), branch: "main" },
+  // 网关先要问一次归属，所以这一次写落在微任务上，不在点击的同一拍。
+  await vi.waitFor(() =>
+    expect(operate).toHaveBeenCalledExactlyOnceWith(
+      workspace.id,
+      {
+        kind: "createWorktree",
+        path: "wt/feature",
+        branch: "feature/login",
+        createBranch: false,
+        expectedOid: "a".repeat(40),
+        startPoint: null,
+      },
+      { headOid: "b".repeat(40), branch: "main" },
+      ".",
+    ),
   );
 });
 

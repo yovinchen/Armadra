@@ -21,6 +21,7 @@ import { Remotes } from "./Remotes";
 import { Worktrees } from "./Worktrees";
 import { Stashes } from "./Stashes";
 import { Integrations } from "./Integrations";
+import { Reflog } from "./Reflog";
 import { useCanvasStore } from "../../store/canvas-store";
 import { nodeDropPosition } from "@/canvas/placement";
 import { ReadError } from "./forms";
@@ -533,6 +534,18 @@ function RepositorySession({
             request={request}
             openFile={openRepositoryFile}
             loadIntegration={(signal) => gitGateway.integration(target, signal)}
+          />
+        )}
+        {tab === "reflog" && (
+          <Reflog
+            workspaceId={workspaceId}
+            repositoryKey={`${snapshot.repositoryId}:${snapshot.repositoryPath}`}
+            busy={busy || stale}
+            loadPage={(reference, cursor, signal) =>
+              gitGateway.reflog(target, { reference, cursor }, signal)
+            }
+            loadState={(signal) => gitGateway.integration(target, signal)}
+            request={request}
           />
         )}
         {tab === "integration" && (

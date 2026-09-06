@@ -10,7 +10,7 @@ import type {
 } from "@armadra/shared";
 import { useT } from "../../app/preferences-store";
 import { Button } from "../../ui/button";
-import { Field, ReadError, selectClass } from "./forms";
+import { Field, ReadError, selectClass, textareaClass } from "./forms";
 
 export interface RebaseTodoProps {
   workspaceId: string;
@@ -69,20 +69,40 @@ export function RebaseTodo({
     });
   const setCommand = (index: number, command: GitRebaseTodoCommand) =>
     setEntries((current) =>
+      current.map((entry, position) => {
+        if (position !== index) return entry;
+        // 只有 reword 带信息。换成别的动词时把它清掉，而不是留着一条永远
+        // 不会被用上的文本——服务端也会因为它而拒绝整份 todo。
+        if (command !== "reword") return { oid: entry.oid, command };
+        return {
+          ...entry,
+          command,
+          message: entry.message ?? subject(entry.oid),
+        };
+      }),
+    );
+  const setMessage = (index: number, message: string) =>
+    setEntries((current) =>
       current.map((entry, position) =>
-        position === index ? { ...entry, command } : entry,
+        position === index ? { ...entry, message } : entry,
       ),
     );
-  // A squash needs a kept commit before it, and dropping everything would
-  // leave nothing to replay. Both are refused by the service too.
+  // squash 与 fixup 前面都必须还有一个保留下来的提交；全部 drop 会没有东西
+  // 可重放；reword 必须带信息。三条服务端都会复核，这里先说出来。
   const keptBefore = entries.map((_, index) =>
     entries.slice(0, index).some((entry) => entry.command !== "drop"),
   );
+  const combining = (command: GitRebaseTodoCommand) =>
+    command === "squash" || command === "fixup";
   const invalid =
     entries.length === 0 ||
     entries.every((entry) => entry.command === "drop") ||
     entries.some(
-      (entry, index) => entry.command === "squash" && !keptBefore[index],
+      (entry, index) => combining(entry.command) && !keptBefore[index],
+    ) ||
+    entries.some(
+      (entry) =>
+        entry.command === "reword" && (entry.message ?? "").trim().length === 0,
     );
   const blocked =
     disabled || invalid || !state || Boolean(preview.data?.hasMerges);
@@ -122,14 +142,38 @@ export function RebaseTodo({
                   setCommand(index, event.target.value as GitRebaseTodoCommand)
                 }
               >
-                {(["pick", "squash", "drop"] as const).map((command) => (
+                {(
+                  ["pick", "reword", "edit", "squash", "fixup", "drop"] as const
+                ).map((command) => (
                   <option key={command} value={command}>
                     {t(`gitRepo.rebaseTodo.${command}`)}
                   </option>
                 ))}
               </select>
             </Field>
-            {entry.command === "squash" && !keptBefore[index] && (
+            {entry.command === "reword" && (
+              <Field label={t("gitRepo.rebaseTodoMessage")}>
+                <textarea
+                  className={textareaClass}
+                  rows={3}
+                  value={entry.message ?? ""}
+                  disabled={disabled}
+                  onChange={(event) => setMessage(index, event.target.value)}
+                />
+              </Field>
+            )}
+            {entry.command === "reword" &&
+              (entry.message ?? "").trim().length === 0 && (
+                <p role="alert" className="text-destructive">
+                  {t("gitRepo.rebaseTodoRewordNeedsMessage")}
+                </p>
+              )}
+            {entry.command === "edit" && (
+              <p className="text-muted-foreground">
+                {t("gitRepo.rebaseTodoEditStops")}
+              </p>
+            )}
+            {combining(entry.command) && !keptBefore[index] && (
               <p role="alert" className="text-destructive">
                 {t("gitRepo.rebaseTodoSquashNeedsKept")}
               </p>

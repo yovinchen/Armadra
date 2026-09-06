@@ -10,6 +10,8 @@ import { redactRemoteUrl } from "./Remotes";
 export type RepositoryTab =
   | "branches"
   | "history"
+  /** 引用日志：找回被 reset 或 rebase 丢下的提交（Git 设计 §3）。 */
+  | "reflog"
   | "worktrees"
   | "stashes"
   | "tags"

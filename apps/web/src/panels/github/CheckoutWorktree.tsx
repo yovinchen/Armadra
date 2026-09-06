@@ -42,8 +42,7 @@ export function CheckoutWorktree({
 
   const snapshot = useQuery({
     queryKey: ["git-repository-branches", workspaceId],
-    queryFn: ({ signal }) =>
-      gitGateway.branches(target, signal),
+    queryFn: ({ signal }) => gitGateway.branches(target, signal),
     retry: false,
   });
 

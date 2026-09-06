@@ -20,6 +20,10 @@ export function invalidateGitQueries(
     "git-message-source",
     "git-repository-branches",
     "git-repository-history",
+    // 引用日志与绑定判定都会被一次写改变：reset 之后 reflog 多一条，
+    // createWorktree / removeWorktree 之后绑定的结论可能翻过来。
+    "git-repository-reflog",
+    "git-worktree-binding",
     "git-repository-worktrees",
     "git-repository-operations",
     "git-repository-integration",

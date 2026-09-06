@@ -3,6 +3,9 @@ export const gitIntegration: MessageModule = {
   "zh-CN": {
     "gitRepo.startCherryPick": "择取提交",
     "gitRepo.skipIntegration": "跳过空提交",
+    "gitRepo.skipReplayedCommit": "跳过这个提交",
+    "gitRepo.skipReplayedCommitHint":
+      "跳过会丢弃当前停下的这个被重放的提交，其余照常继续。",
     "gitIntegration.cherryPick": "Cherry-pick · 择取提交",
     "gitIntegration.commitOid": "来源提交 OID",
     "gitIntegration.fullOid": "完整的提交对象 ID",
@@ -78,6 +81,9 @@ export const gitIntegration: MessageModule = {
   en: {
     "gitRepo.startCherryPick": "Cherry-pick commit",
     "gitRepo.skipIntegration": "Skip empty commit",
+    "gitRepo.skipReplayedCommit": "Skip this commit",
+    "gitRepo.skipReplayedCommitHint":
+      "Skipping discards the replayed commit this rebase stopped on; the rest continues.",
     "gitIntegration.cherryPick": "Cherry-pick a commit",
     "gitIntegration.commitOid": "Source commit OID",
     "gitIntegration.fullOid": "Full commit object ID",

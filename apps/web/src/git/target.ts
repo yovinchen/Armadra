@@ -25,7 +25,11 @@ export function gitTarget(
     // Host 那侧会因为它不是绝对路径而拒——这好过拼出一个假的绝对路径，让
     // 一次写落到某个碰巧同名的目录上。
     repositoryPath:
-      relative === "." ? root || relative : root ? `${root}/${relative}` : relative,
+      relative === "."
+        ? root || relative
+        : root
+          ? `${root}/${relative}`
+          : relative,
     repositoryId,
     path: relative,
   };

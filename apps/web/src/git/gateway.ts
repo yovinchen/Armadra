@@ -341,7 +341,10 @@ function decodeAction(action: Uint8Array): GitRepositoryAction | null {
     const decoded: unknown = JSON.parse(new TextDecoder().decode(action));
     const body = decoded as { action?: unknown };
     // 仓库动作包在 `{ path, action, expected }` 里；暂存这类逐路径写则是平的。
-    const candidate = body && typeof body === "object" && "action" in body ? body.action : decoded;
+    const candidate =
+      body && typeof body === "object" && "action" in body
+        ? body.action
+        : decoded;
     const parsed = gitRepositoryActionSchema.safeParse(candidate);
     return parsed.success ? parsed.data : null;
   } catch {
@@ -600,18 +603,32 @@ export const gitGateway = {
   },
 
   tags(target: GitTarget, signal?: AbortSignal) {
-    return route(target, GitReadMethod.TAGS, at(target), gitTagSnapshotSchema, () =>
-      runtimeApi.gitRepositoryTags(target.workspaceId, signal, target.path ?? "."),
+    return route(
+      target,
+      GitReadMethod.TAGS,
+      at(target),
+      gitTagSnapshotSchema,
+      () =>
+        runtimeApi.gitRepositoryTags(
+          target.workspaceId,
+          signal,
+          target.path ?? ".",
+        ),
     );
   },
 
   remotes(target: GitTarget, signal?: AbortSignal) {
-    return route(target, GitReadMethod.REMOTES, at(target), gitRemotesSchema, () =>
-      runtimeApi.gitRepositoryRemotes(
-        target.workspaceId,
-        signal,
-        target.path ?? ".",
-      ),
+    return route(
+      target,
+      GitReadMethod.REMOTES,
+      at(target),
+      gitRemotesSchema,
+      () =>
+        runtimeApi.gitRepositoryRemotes(
+          target.workspaceId,
+          signal,
+          target.path ?? ".",
+        ),
     );
   },
 
@@ -647,12 +664,17 @@ export const gitGateway = {
   },
 
   worktrees(target: GitTarget, signal?: AbortSignal) {
-    return route(target, GitReadMethod.WORKTREES, at(target), gitWorktreesSchema, () =>
-      runtimeApi.gitRepositoryWorktrees(
-        target.workspaceId,
-        signal,
-        target.path ?? ".",
-      ),
+    return route(
+      target,
+      GitReadMethod.WORKTREES,
+      at(target),
+      gitWorktreesSchema,
+      () =>
+        runtimeApi.gitRepositoryWorktrees(
+          target.workspaceId,
+          signal,
+          target.path ?? ".",
+        ),
     );
   },
 

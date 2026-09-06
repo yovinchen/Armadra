@@ -132,6 +132,97 @@ it("refuses a squash with nothing kept before it and a todo that drops everythin
   expect(props.request).not.toHaveBeenCalled();
 });
 
+it("carries a reword's message and refuses to run without one", async () => {
+  const props = setup();
+  await screen.findByText("First change");
+  const commands = screen.getAllByLabelText("gitRepo.rebaseTodoCommand");
+  fireEvent.change(commands[0]!, { target: { value: "reword" } });
+  // 默认填上原来的标题：改写信息的起点是它现在说的话。
+  const message = screen.getByLabelText(
+    "gitRepo.rebaseTodoMessage",
+  ) as HTMLTextAreaElement;
+  expect(message.value).toBe("First change");
+
+  const run = screen.getByRole("button", {
+    name: "gitRepo.startInteractiveRebase",
+  });
+  fireEvent.change(message, { target: { value: "   " } });
+  expect(screen.getByText("gitRepo.rebaseTodoRewordNeedsMessage")).toBeTruthy();
+  expect((run as HTMLButtonElement).disabled).toBe(true);
+
+  fireEvent.change(message, { target: { value: "改写后的标题" } });
+  fireEvent.click(run);
+  expect(props.request).toHaveBeenCalledExactlyOnceWith(
+    {
+      kind: "startInteractiveRebase",
+      onto,
+      todo: [
+        { oid: first, command: "reword", message: "改写后的标题" },
+        { oid: second, command: "pick" },
+      ],
+      expectedStateToken: state.stateToken,
+    },
+    state.head,
+  );
+});
+
+it("drops a message when the verb stops being a reword", async () => {
+  const props = setup();
+  await screen.findByText("First change");
+  const commands = screen.getAllByLabelText("gitRepo.rebaseTodoCommand");
+  fireEvent.change(commands[0]!, { target: { value: "reword" } });
+  fireEvent.change(screen.getByLabelText("gitRepo.rebaseTodoMessage"), {
+    target: { value: "never used" },
+  });
+  // 换成 fixup：那条信息永远不会被用上，留着它只会让服务端拒绝整份 todo。
+  fireEvent.change(commands[0]!, { target: { value: "pick" } });
+  fireEvent.change(commands[1]!, { target: { value: "fixup" } });
+  fireEvent.click(
+    screen.getByRole("button", { name: "gitRepo.startInteractiveRebase" }),
+  );
+  expect(props.request).toHaveBeenCalledExactlyOnceWith(
+    {
+      kind: "startInteractiveRebase",
+      onto,
+      todo: [
+        { oid: first, command: "pick" },
+        { oid: second, command: "fixup" },
+      ],
+      expectedStateToken: state.stateToken,
+    },
+    state.head,
+  );
+});
+
+it("refuses a fixup with nothing kept before it, exactly as a squash", async () => {
+  const props = setup();
+  await screen.findByText("First change");
+  const commands = screen.getAllByLabelText("gitRepo.rebaseTodoCommand");
+  fireEvent.change(commands[0]!, { target: { value: "fixup" } });
+  const run = screen.getByRole("button", {
+    name: "gitRepo.startInteractiveRebase",
+  });
+  expect(screen.getByText("gitRepo.rebaseTodoSquashNeedsKept")).toBeTruthy();
+  expect((run as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(run);
+  expect(props.request).not.toHaveBeenCalled();
+});
+
+it("says that an edit stops the replay rather than finishing it", async () => {
+  setup();
+  await screen.findByText("First change");
+  const commands = screen.getAllByLabelText("gitRepo.rebaseTodoCommand");
+  fireEvent.change(commands[0]!, { target: { value: "edit" } });
+  expect(screen.getByText("gitRepo.rebaseTodoEditStops")).toBeTruthy();
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "gitRepo.startInteractiveRebase",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(false);
+});
+
 it("does not offer the editor for a range that contains a merge commit", async () => {
   const props = setup({
     loadPreview: vi.fn(async () =>

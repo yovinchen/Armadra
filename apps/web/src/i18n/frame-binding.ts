@@ -19,6 +19,17 @@ export const frameBinding: MessageModule = {
     "frameBinding.missing": "找不到这个 worktree",
     "frameBinding.missingHint":
       "磁盘上已经没有这个 checkout：可以按原分支重新创建，或者解绑这个 Frame。",
+    // 绑定坏掉的方式不止一种，修法也不一样：目录没了可以重建，分支被切走
+    // 了不能——那个检出还在，重建只会失败。
+    "frameBinding.reason.missing": "找不到这个 worktree",
+    "frameBinding.reasonHint.missing":
+      "磁盘上已经没有这个 checkout：可以按原分支重新创建，或者解绑这个 Frame。",
+    "frameBinding.reason.mismatch": "这个目录已经不属于原来的仓库",
+    "frameBinding.reasonHint.mismatch":
+      "路径还在，但它现在是另一个仓库的检出。重建会落在错的地方，请解绑后重新绑定。",
+    "frameBinding.reason.branchChanged": "这个 worktree 的分支被切走了",
+    "frameBinding.reasonHint.branchChanged":
+      "检出本身还在，只是不在绑定记录的那个分支上了。切回去，或者解绑后重新绑定。",
     "frameBinding.recreate": "重新创建",
     "frameBinding.unbind": "解绑",
     "frameBinding.unbindFrame": "解绑 Frame",
@@ -44,6 +55,16 @@ export const frameBinding: MessageModule = {
     "frameBinding.missing": "Worktree not found",
     "frameBinding.missingHint":
       "The checkout is gone from disk. Recreate it on the same branch, or unbind this Frame.",
+    "frameBinding.reason.missing": "Worktree not found",
+    "frameBinding.reasonHint.missing":
+      "The checkout is gone from disk. Recreate it on the same branch, or unbind this Frame.",
+    "frameBinding.reason.mismatch":
+      "This directory is no longer that repository",
+    "frameBinding.reasonHint.mismatch":
+      "The path is still there, but it is a checkout of a different repository now. Recreating would land in the wrong place; unbind and bind it again.",
+    "frameBinding.reason.branchChanged": "This worktree switched branch",
+    "frameBinding.reasonHint.branchChanged":
+      "The checkout is still there, just not on the branch the binding recorded. Switch it back, or unbind and bind it again.",
     "frameBinding.recreate": "Recreate",
     "frameBinding.unbind": "Unbind",
     "frameBinding.unbindFrame": "Unbind Frame",

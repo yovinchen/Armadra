@@ -124,8 +124,9 @@ it("keeps Changes as the default and stops its commit shortcut outside that tab"
   expect(
     screen.getByRole("tab", { name: "Changes" }).getAttribute("aria-selected"),
   ).toBe("true");
-  // Changes, Branches, History, Worktrees, Stashes, Tags, Remotes, Conflicts.
-  expect(screen.getAllByRole("tab")).toHaveLength(8);
+  // Changes, Branches, History, Reflog, Worktrees, Stashes, Tags, Remotes,
+  // Conflicts.
+  expect(screen.getAllByRole("tab")).toHaveLength(9);
   fireEvent.change(screen.getByRole("textbox"), {
     target: { value: "draft commit" },
   });

@@ -59,3 +59,6 @@ export function ReadError({
 }
 export const selectClass =
   "h-9 min-w-0 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring";
+/** 同一套边框与焦点样式，给需要多行的字段（reword 的提交信息）。 */
+export const textareaClass =
+  "min-w-0 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring";

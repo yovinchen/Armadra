@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import type { CanvasNode, FrameBinding } from "@armadra/shared";
 
 import { runtimeApi } from "@/api/client";
+import { gitGateway } from "@/git/gateway";
+import { gitTarget } from "@/git/target";
 import { useT } from "@/app/preferences-store";
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
@@ -28,6 +30,23 @@ import {
 /** 路径太长时只留尾巴；完整值在 `title` 里。 */
 const MAX_PATH = 34;
 
+/**
+ * 服务端的判定 → 徽章要给出的那条修法。
+ *
+ * 「目录没了」和「这里已经不是这个仓库的 worktree 了」都只能重建或解绑；
+ * 「分支被切走了」不是——那个检出还在，重建它只会失败，所以那一档只提供
+ * 解绑，并说清发生了什么。
+ */
+const BINDING_CODES = {
+  ok: "ok",
+  pathMissing: "missing",
+  notAWorktree: "missing",
+  repositoryMismatch: "mismatch",
+  branchChanged: "branchChanged",
+} as const;
+
+type BindingReason = (typeof BINDING_CODES)[keyof typeof BINDING_CODES];
+
 export function truncatePath(path: string, max = MAX_PATH): string {
   return path.length <= max ? path : `…${path.slice(path.length - max + 1)}`;
 }
@@ -41,8 +60,43 @@ export function WorktreeBindingBadge({ node }: { node: CanvasNode }) {
   const repositories = useQuery({
     queryKey: ["git-repositories", workspaceId],
     queryFn: ({ signal }) =>
-      runtimeApi.gitRepositories(workspaceId!, {}, signal),
+      gitGateway.repositories(
+        gitTarget(workspaceId ?? "", workspace?.rootPath, "."),
+        {},
+        signal,
+      ),
     enabled: Boolean(workspaceId),
+    retry: false,
+  });
+  /**
+   * 服务端对这条绑定的判定（Git 设计 §5.1）。
+   *
+   * 仓库发现只能回答「这个路径在不在扫描结果里」，而绑定能坏的方式不止一
+   * 种：目录没了、目录还在但不再是这个仓库的 worktree、分支被人切走了。
+   * 每一种对应的修法不同，所以判定要带理由，不能只有一个布尔值。
+   *
+   * 它是**补充**而不是替代：这次检查本身失败时（探不到、没有执行权限），
+   * 徽章退回发现结果那一档，而不是宣布绑定坏了。
+   */
+  const verdict = useQuery({
+    queryKey: [
+      "git-worktree-binding",
+      workspaceId,
+      binding?.worktreePath,
+      binding?.branch,
+      binding?.repositoryId,
+    ],
+    queryFn: ({ signal }) =>
+      gitGateway.worktreeBinding(
+        gitTarget(workspaceId ?? "", workspace?.rootPath, "."),
+        {
+          worktreePath: binding!.worktreePath,
+          branch: binding!.branch,
+          repositoryId: binding!.repositoryId,
+        },
+        signal,
+      ),
+    enabled: Boolean(workspaceId) && Boolean(binding),
     retry: false,
   });
 
@@ -53,9 +107,9 @@ export function WorktreeBindingBadge({ node }: { node: CanvasNode }) {
   const root = list?.workspaceRoot ?? workspace?.rootPath;
   // 扫描被截断时不下「不存在」的结论：列表本来就不全。
   const known = list && !list.truncated ? list.repositories : undefined;
-  const repair = bindingRepairState(binding, known, undefined, {
-    workspaceRoot: root,
-  });
+  const repair = verdict.data
+    ? BINDING_CODES[verdict.data.code]
+    : bindingRepairState(binding, known, undefined, { workspaceRoot: root });
   const record = repositoryForBinding(binding, list?.repositories, {
     workspaceRoot: root,
   });
@@ -81,8 +135,8 @@ export function WorktreeBindingBadge({ node }: { node: CanvasNode }) {
         <DirtyBadge count={record ? record.dirtyCount : undefined} />
         <InitScriptBadge binding={binding} />
       </div>
-      {repair === "missing" ? (
-        <RepairPrompt node={node} binding={binding} />
+      {repair !== "ok" ? (
+        <RepairPrompt node={node} binding={binding} reason={repair} />
       ) : null}
     </div>
   );
@@ -135,17 +189,22 @@ function InitScriptBadge({ binding }: { binding: FrameBinding }) {
 function RepairPrompt({
   node,
   binding,
+  reason,
 }: {
   node: CanvasNode;
   binding: FrameBinding;
+  reason: Exclude<BindingReason, "ok">;
 }) {
   const t = useT();
   const workspaceId = useCanvasStore((state) => state.workspace?.id ?? null);
   const [busy, setBusy] = React.useState(false);
+  const workspaceRoot = useCanvasStore(
+    (state) => state.workspace?.rootPath ?? undefined,
+  );
+  const target = gitTarget(workspaceId ?? "", workspaceRoot, ".");
   const branches = useQuery({
     queryKey: ["git-repository-branches", workspaceId, "."],
-    queryFn: ({ signal }) =>
-      runtimeApi.gitRepositoryBranches(workspaceId!, ".", signal),
+    queryFn: ({ signal }) => gitGateway.branches(target, signal),
     enabled: Boolean(workspaceId),
     retry: false,
   });
@@ -160,9 +219,9 @@ function RepairPrompt({
   const recreate = () => {
     if (!workspaceId || !source || !branches.data || busy) return;
     setBusy(true);
-    void runtimeApi
-      .gitRepositoryOperate(
-        workspaceId,
+    void gitGateway
+      .operate(
+        target,
         {
           kind: "createWorktree",
           path: binding.worktreePath,
@@ -172,25 +231,31 @@ function RepairPrompt({
           startPoint: null,
         },
         branches.data.head,
+        `binding-repair/${crypto.randomUUID()}`,
       )
       .finally(() => setBusy(false));
   };
 
+  const recreatable = reason === "missing";
   return (
     <div role="alert" className="space-y-1">
       <p className="font-medium text-destructive">
-        {t("frameBinding.missing")}
+        {t(`frameBinding.reason.${reason}`)}
       </p>
-      <p className="text-muted-foreground">{t("frameBinding.missingHint")}</p>
+      <p className="text-muted-foreground">
+        {t(`frameBinding.reasonHint.${reason}`)}
+      </p>
       <div className="flex gap-1">
-        <Button
-          size="xs"
-          variant="outline"
-          disabled={busy || !source}
-          onClick={recreate}
-        >
-          {t("frameBinding.recreate")}
-        </Button>
+        {recreatable && (
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={busy || !source}
+            onClick={recreate}
+          >
+            {t("frameBinding.recreate")}
+          </Button>
+        )}
         <Button size="xs" variant="ghost" onClick={unbind}>
           {t("frameBinding.unbind")}
         </Button>
