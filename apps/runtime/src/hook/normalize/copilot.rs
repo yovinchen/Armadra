@@ -23,23 +23,42 @@
 //! because both fire — the same probe run showed one invocation per event under
 //! each spelling.
 //!
-//! Two events are deliberately not translated:
+//! `notification` is **four** events wearing one name. It is undocumented on
+//! docs.github.com — the reference page lists eight events and this is not one
+//! of them — so the source is the CLI's own changelog, 1.0.18 (2026-04-04),
+//! which added a "notification hook event that fires asynchronously on shell
+//! completion, permission prompts, elicitation dialogs, and agent completion"
+//! (<https://github.com/github/copilot-cli/blob/main/changelog.md>). The
+//! discriminator is `notification_type`, and the only value attested by a
+//! primary source is `permission_prompt`
+//! (<https://github.com/github/copilot-cli/issues/2586>, whose fix in 1.0.26
+//! narrowed it to "only fires when a prompt is actually shown to the user").
 //!
-//!   * **`notification`** is the one the design marks 本机核实 (§3.3). Neither
-//!     the non-interactive probe nor an interactive PTY run produced one, so
-//!     nothing here knows what its `notification_type` values mean. §3.3 says
-//!     ignore what is not verified, and that is what this does: a notification
-//!     changes no state at all rather than guessing `waiting`.
-//!   * **`preCompact`** would bump a compaction epoch, and Copilot declares no
-//!     `contextUsage` for it to reset (§4). Claude's `PreCompact` is dropped
-//!     for the same reason.
+//! So exactly one value is translated, to `waiting`, and every other value is
+//! dropped:
+//!
+//!   * a **shell completion** is not a state of the node — the turn that
+//!     started the command is still running, and `postToolUse` already says so;
+//!   * an **elicitation dialog** is plausibly `waiting` too, but no source
+//!     names its `notification_type`, and inventing the string would make the
+//!     mapping fire on nothing or on the wrong thing;
+//!   * **agent completion** already has an authoritative event in `agentStop`,
+//!     which carries the stop reason; a second, asynchronous `done` from a
+//!     notification could only arrive later and overwrite a newer turn.
+//!
+//! Because it is asynchronous, a `notification` is never a fence: it is not
+//! subscribed to gate anything, and nothing waits on its exit code.
+//!
+//! **`preCompact`** would bump a compaction epoch, and Copilot declares no
+//! `contextUsage` for it to reset (§4). Claude's `PreCompact` is dropped for
+//! the same reason.
 //!
 //! `preToolUse` never appears here because it is never subscribed: it is
 //! Copilot's only blocking event and a non-zero exit denies the tool (§6).
 
 use serde_json::Value;
 
-use super::{AgentEvent, DONE, EventKind, WORKING, apply_common, field, flag, text};
+use super::{AgentEvent, DONE, EventKind, WAITING, WORKING, apply_common, field, flag, text};
 
 pub fn normalize(node_id: &str, agent_id: &str, payload: &Value) -> Option<AgentEvent> {
     let mut event = match event_name(payload)? {
@@ -88,8 +107,9 @@ pub fn normalize(node_id: &str, agent_id: &str, payload: &Value) -> Option<Agent
             event
         }
         "errorOccurred" => error_occurred(node_id, agent_id, payload)?,
+        "notification" => notification(node_id, agent_id, payload)?,
         // See the module note.
-        "notification" | "preCompact" => return None,
+        "preCompact" => return None,
         _ => return None,
     };
     apply_common(&mut event, payload);
@@ -110,6 +130,19 @@ fn error_occurred(node_id: &str, agent_id: &str, payload: &Value) -> Option<Agen
         .and_then(|error| text(error, "message", "message"))
         .or_else(|| text(payload, "error", "error"));
     Some(event)
+}
+
+/// A permission prompt is on screen, or nothing this can attribute.
+///
+/// The type is compared exactly. A prefix or substring test would let a value
+/// this code has never seen — `permission_prompt_dismissed`, say — light up the
+/// header as "needs you" for a question nobody is being asked.
+fn notification(node_id: &str, agent_id: &str, payload: &Value) -> Option<AgentEvent> {
+    let kind = text(payload, "notification_type", "notificationType")?;
+    if kind != "permission_prompt" {
+        return None;
+    }
+    Some(AgentEvent::state(node_id, agent_id, WAITING))
 }
 
 /// The event this payload came from, as the camelCase name the hooks file uses.
@@ -376,18 +409,47 @@ mod tests {
         assert_eq!(fatal.last_message.as_deref(), Some("no credentials"));
     }
 
-    /// §3.3 marks the `notification` payload 本机核实 and neither probe run on
-    /// this machine produced one, so it stays unmapped. Guessing `waiting`
-    /// would park a node that is in fact working.
+    /// `notification` carries four unrelated occasions on one name (changelog
+    /// 1.0.18). Only `permission_prompt` names a state of the node, so only it
+    /// is translated; the other three would either say nothing new or, in the
+    /// case of agent completion, arrive after `agentStop` and overwrite a turn
+    /// that had already moved on.
     #[test]
-    fn an_unverified_notification_changes_nothing() {
+    fn only_a_permission_prompt_notification_says_needs_you() {
+        let waiting = run(json!({
+            "sessionId": "s-1",
+            "cwd": "/repo",
+            "hook_event_name": "Notification",
+            "message": "Copilot needs permission to run bash",
+            "notification_type": "permission_prompt"
+        }))
+        .unwrap();
+        assert_eq!(waiting.state, Some(WAITING));
+
+        // The shape rule reaches the same event without a name, and the
+        // camelCase spelling of the discriminator is the same discriminator.
+        let by_shape = run(json!({
+            "sessionId": "s-1",
+            "notificationType": "permission_prompt"
+        }))
+        .unwrap();
+        assert_eq!(by_shape.state, Some(WAITING));
+
+        // A shell that finished is not a state: the turn that ran it is still
+        // running, and `postToolUse` has already said so.
         assert!(
             run(json!({
                 "sessionId": "s-1",
-                "cwd": "/repo",
-                "hook_event_name": "Notification",
-                "message": "Copilot needs permission to run bash",
-                "notification_type": "permission_prompt"
+                "hook_event_name": "notification",
+                "notification_type": "shell_completion"
+            }))
+            .is_none()
+        );
+        // A value nobody has documented is not guessed at either.
+        assert!(
+            run(json!({
+                "sessionId": "s-1",
+                "notification_type": "permission_prompt_dismissed"
             }))
             .is_none()
         );
