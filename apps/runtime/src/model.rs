@@ -87,10 +87,11 @@ pub struct Board {
     pub name: String,
     pub sort_order: i64,
     pub viewport: Viewport,
-    /// Opaque tldraw snapshot of the whiteboard-native records only (tldraw
-    /// plan §6.1). The runtime never looks inside it — node shapes, frames and
-    /// node-to-node arrows are filtered out by the client because they are
-    /// carried by `nodes` / `edges`. Empty string means "no whiteboard yet".
+    /// Opaque whiteboard document (`armadra-flow` v2, see
+    /// `docs/design/canvas-react-flow.md` §3.1). The runtime never looks
+    /// inside it: nodes, frames and node-to-node links are carried by
+    /// `nodes` / `edges`, the whiteboard only holds ink, text, shapes, lines,
+    /// images and their references. Empty string means "no whiteboard yet".
     pub whiteboard: String,
     pub created_at: String,
     pub updated_at: String,
@@ -333,7 +334,7 @@ pub struct ContextLink {
     pub id: String,
     pub title: String,
     pub kind: String,
-    /// Only set when `kind == "shape"` (tldraw plan §6.3). A whiteboard shape
+    /// Only set when `kind == "shape"` (`docs/design/canvas-react-flow.md` §2.5). A whiteboard shape
     /// is not a node, so there is no row to read it back from: the canvas ships
     /// the readable part of the shape with the link itself — the text for text
     /// and geo shapes, a workspace-relative PNG path for everything the client
@@ -342,7 +343,7 @@ pub struct ContextLink {
     pub content: Option<ContextLinkContent>,
 }
 
-/// The readable payload of a linked whiteboard shape — tldraw plan §6.3.
+/// The readable payload of a linked whiteboard shape — `docs/design/canvas-react-flow.md` §2.5.
 /// Both fields are optional and both may be present: a frame export carries the
 /// PNG *and* the text found inside it.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
