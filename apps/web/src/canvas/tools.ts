@@ -102,14 +102,6 @@ export const CANVAS_TOOLS: readonly CanvasToolSpec[] = [
 ];
 
 /**
- * B0 只开放选择与手：白板层（画笔 / 形状 / 直线 / 箭头 / 文字 / 画框 /
- * 图片）在 B2 落地，那之前这些按钮点了没有任何反应，所以先禁用。
- * B2 把这张表删掉，`DockTools` 里的 `disabled` 判断也跟着回到只看锁定。
- */
-export const TOOLS_ENABLED_IN_B0: ReadonlySet<CanvasToolId> =
-  new Set<CanvasToolId>(["select", "hand"]);
-
-/**
  * 图片：不是工具，所以它没有命令、没有键位。
  * Dock 上那个按钮自己开文件选择，把文件交给外部内容处理器。
  */

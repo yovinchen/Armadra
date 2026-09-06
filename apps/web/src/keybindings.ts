@@ -288,6 +288,37 @@ export const COMMANDS = [
     allowWhileTyping: false,
   },
 
+  // ── canvas：剪贴板（React Flow 计划 F19） ────────────────────────
+  //
+  // 三条都不在终端与输入框里生效：⌘C / ⌘X / ⌘V 在那两处是系统行为，
+  // 截走就等于把复制粘贴弄坏。命中时 `useKeybindings` 会 `preventDefault`，
+  // 所以浏览器原生的 `paste` 事件不会再发出来——`canvas.paste` 自己去读
+  // 系统剪贴板（`whiteboard/clipboard.ts`）。
+  {
+    id: "canvas.copy",
+    labelKey: "cmd.canvas.copy",
+    scope: "canvas",
+    defaultKeys: both("Mod+C"),
+    allowInTerminal: false,
+    allowWhileTyping: false,
+  },
+  {
+    id: "canvas.cut",
+    labelKey: "cmd.canvas.cut",
+    scope: "canvas",
+    defaultKeys: both("Mod+X"),
+    allowInTerminal: false,
+    allowWhileTyping: false,
+  },
+  {
+    id: "canvas.paste",
+    labelKey: "cmd.canvas.paste",
+    scope: "canvas",
+    defaultKeys: both("Mod+V"),
+    allowInTerminal: false,
+    allowWhileTyping: false,
+  },
+
   // ── canvas：画布偏好（2026-09-05 用户反馈：偏好要能在系统里配） ──
   //
   // 键位沿用 v3 / 旧引擎的那一组（Q / ⌘\' / ⌘.），换引擎不改肌肉记忆，

@@ -77,6 +77,7 @@ import { ShapeMenuContent } from "./menus/shape-menu";
 import { Minimap } from "./flow/Minimap";
 import { CanvasOverlays } from "./flow/overlays/CanvasOverlays";
 import { CanvasStylePanel } from "./StylePanel";
+import { ToolLayer } from "./whiteboard/tools/ToolLayer";
 import { resetProjectionCache, isItemId } from "./sync/project";
 import {
   CANVAS_TOOLS,
@@ -488,7 +489,7 @@ export function FlowWorkspace() {
             <ViewportPortal>
               <CanvasOverlays />
             </ViewportPortal>
-            {/* B2 的工具覆盖层插槽（`whiteboard/tools/*`）。 */}
+            {/* 白板工具覆盖层（`whiteboard/tools/ToolLayer.tsx`）。 */}
             <ToolLayer />
           </ReactFlow>
           <CanvasStylePanel />
@@ -533,15 +534,4 @@ export function FlowWorkspace() {
       </AlertDialog>
     </ContextMenu>
   );
-}
-
-/**
- * 白板工具覆盖层的插槽（§5.3）。
- *
- * B2 在这里挂 `whiteboard/tools/{InkTool,ShapeTool,TextTool,LineTool,FrameTool}`：
- * `tool !== "select"` 时铺满画布的 `pointer-events: all` 层，进行中的图形画在
- * `<ViewportPortal>` 里，松手调 store。B0 恒为 null。
- */
-function ToolLayer() {
-  return null;
 }

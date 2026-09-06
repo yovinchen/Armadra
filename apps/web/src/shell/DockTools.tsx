@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
 import { useT } from "@/app/preferences-store";
 import { useCanvasLocked } from "@/canvas/canvas-lock";
 import { runCanvasCommand } from "@/canvas/commands";
+import { pickFilesForCanvas } from "@/canvas/dnd/external-content";
 import { useFlowHandle } from "@/canvas/flow/flow-context";
 import {
   getNextStyle,
@@ -25,7 +26,6 @@ import {
   CANVAS_TOOLS,
   GEO_OPTIONS,
   IMAGE_TOOL,
-  TOOLS_ENABLED_IN_B0,
   geoIcon,
   isToolDisabledWhenLocked,
   type CanvasToolSpec,
@@ -41,9 +41,8 @@ import { commandKeysLabel, type CommandId } from "@/keybindings";
  *
  * 画布没挂载（启动页）时整组不渲染：没有画布就没有工具可切。
  *
- * **B2 之前只开放选择与手**：白板层还没落地，画笔 / 形状 / 直线 / 箭头 /
- * 文字 / 画框 / 图片点了不会有任何反应，所以先按 `TOOLS_ENABLED_IN_B0`
- * 置灰。B2 把那张表连同这里的判断一起删掉。
+ * 置灰只剩一条规则：锁定视图时除「选择」之外全部禁用
+ * （`tools.isToolDisabledWhenLocked`）。
  */
 export function DockTools() {
   const t = useT();
@@ -53,9 +52,7 @@ export function DockTools() {
 
   if (!flow) return null;
 
-  const disabled = (id: string) =>
-    (locked && isToolDisabledWhenLocked(id)) ||
-    !TOOLS_ENABLED_IN_B0.has(id as CanvasToolSpec["id"]);
+  const disabled = (id: string) => locked && isToolDisabledWhenLocked(id);
 
   const buttons = (
     <>
@@ -76,7 +73,7 @@ export function DockTools() {
           />
         ),
       )}
-      <ImageToolButton disabled />
+      <ImageToolButton disabled={locked} />
     </>
   );
 
@@ -207,8 +204,7 @@ function GeoToolButton({ tool, active, disabled }: ToolButtonProps) {
 
 /**
  * 图片：不是工具，所以这里开一次文件选择，把文件交给外部内容处理器
- * （`dnd/external-content.pickFilesForCanvas`）。**B2 接上**：现在按下去
- * 只会上传，还没有白板对象可以承载它。
+ * （`dnd/external-content.pickFilesForCanvas`）。落点是视口中心。
  */
 function ImageToolButton({ disabled }: { disabled: boolean }) {
   const t = useT();
@@ -220,6 +216,7 @@ function ImageToolButton({ disabled }: { disabled: boolean }) {
           size="dock"
           label={t(IMAGE_TOOL.labelKey)}
           disabled={disabled}
+          onClick={() => pickFilesForCanvas()}
         >
           <Icon />
         </IconButton>
