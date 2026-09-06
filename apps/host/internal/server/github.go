@@ -24,7 +24,8 @@ func githubMethod(path string) bool {
 		"ResolveRepository",
 		"ListIssues", "GetIssue", "CreateIssue", "UpdateIssue", "SetIssueState", "CommentIssue",
 		"GetStatusMapping", "PutStatusMapping", "MoveIssue",
-		"ListPulls", "GetPull", "CreatePull", "SubmitReview", "GetChecks", "MergePull",
+		"ListPulls", "GetPull", "CreatePull", "SubmitReview", "GetChecks", "RerunChecks", "MergePull",
+		"DeleteBranch",
 		"LinkReference", "UnlinkReference", "ListReferences":
 		return true
 	}
@@ -348,6 +349,30 @@ func githubRequest(w http.ResponseWriter, r *http.Request, host Identity, servic
 			return
 		}
 		writeGithub(w, checks)
+	case "RerunChecks":
+		input := new(pb.RerunGithubChecksRequest)
+		caller, ok := githubAuth(w, r, host, service, input, func() *pb.CommandMeta { return input.Meta }, write, true)
+		if !ok {
+			return
+		}
+		result, err := github.RerunChecks(r.Context(), caller, input)
+		if err != nil {
+			githubFailure(w, err)
+			return
+		}
+		writeGithub(w, result)
+	case "DeleteBranch":
+		input := new(pb.DeleteGithubBranchRequest)
+		caller, ok := githubAuth(w, r, host, service, input, func() *pb.CommandMeta { return input.Meta }, write, true)
+		if !ok {
+			return
+		}
+		result, err := github.DeleteBranch(r.Context(), caller, input)
+		if err != nil {
+			githubFailure(w, err)
+			return
+		}
+		writeGithub(w, result)
 	case "MergePull":
 		input := new(pb.MergeGithubPullRequest)
 		caller, ok := githubAuth(w, r, host, service, input, func() *pb.CommandMeta { return input.Meta }, write, true)

@@ -572,3 +572,39 @@ func (c *Client) Viewer(ctx context.Context) (string, []string, error) {
 	}
 	return value.Login, response.OAuthScopes, nil
 }
+
+// RerunWorkflowRun restarts one Actions workflow run. `failedOnly` restarts
+// just the jobs that did not pass, which is what a reader who fixed one job
+// wants; the whole run is the fallback the API always accepts.
+//
+// It is a write, so it is never retried: a duplicated restart would burn a
+// second set of runner minutes and produce a second, competing result.
+func (c *Client) RerunWorkflowRun(ctx context.Context, ref *pb.GithubRepositoryRef, runID int64, failedOnly bool) error {
+	if runID <= 0 {
+		return fail(CodeInvalid, 0, "WORKFLOW_RUN_INVALID")
+	}
+	suffix := "/rerun"
+	if failedOnly {
+		suffix = "/rerun-failed-jobs"
+	}
+	path, err := c.repoPath(ref, "/actions/runs/"+strconv.FormatInt(runID, 10)+suffix)
+	if err != nil {
+		return err
+	}
+	_, err = c.Write(ctx, http.MethodPost, path, map[string]any{})
+	return err
+}
+
+// DeleteRef removes one branch ref. The caller has already re-read the ref and
+// compared it with what the reader saw; this only performs the delete.
+func (c *Client) DeleteRef(ctx context.Context, ref *pb.GithubRepositoryRef, name string) error {
+	if name == "" || len(name) > 255 || strings.Contains(name, "..") || strings.HasPrefix(name, "/") {
+		return fail(CodeInvalid, 0, "REF_INVALID")
+	}
+	path, err := c.repoPath(ref, "/git/refs/heads/"+url.PathEscape(name))
+	if err != nil {
+		return err
+	}
+	_, err = c.Write(ctx, http.MethodDelete, path, nil)
+	return err
+}

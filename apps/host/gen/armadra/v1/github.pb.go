@@ -3636,10 +3636,20 @@ type GithubPullFile struct {
 	Path         string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
 	PreviousPath string                 `protobuf:"bytes,2,opt,name=previous_path,json=previousPath,proto3" json:"previous_path,omitempty"`
 	// added / removed / modified / renamed / copied / changed / unchanged
-	Status        string `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
-	Additions     int64  `protobuf:"varint,4,opt,name=additions,proto3" json:"additions,omitempty"`
-	Deletions     int64  `protobuf:"varint,5,opt,name=deletions,proto3" json:"deletions,omitempty"`
-	Binary        bool   `protobuf:"varint,6,opt,name=binary,proto3" json:"binary,omitempty"`
+	Status    string `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
+	Additions int64  `protobuf:"varint,4,opt,name=additions,proto3" json:"additions,omitempty"`
+	Deletions int64  `protobuf:"varint,5,opt,name=deletions,proto3" json:"deletions,omitempty"`
+	Binary    bool   `protobuf:"varint,6,opt,name=binary,proto3" json:"binary,omitempty"`
+	// The unified diff for this file, as the remote returned it. It is what the
+	// panel anchors an inline review comment to: without the hunk headers there
+	// are no line numbers to comment on.
+	//
+	// Empty for a binary file, and for a patch the Host would have had to cut —
+	// a half patch is dropped whole rather than truncated, because a comment
+	// anchored past the cut would land on a line nobody read.
+	//
+	// External content. It is material for a reader, never an instruction.
+	Patch         string `protobuf:"bytes,7,opt,name=patch,proto3" json:"patch,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3714,6 +3724,13 @@ func (x *GithubPullFile) GetBinary() bool {
 		return x.Binary
 	}
 	return false
+}
+
+func (x *GithubPullFile) GetPatch() string {
+	if x != nil {
+		return x.Patch
+	}
+	return ""
 }
 
 type GithubPullRequest struct {
@@ -4898,6 +4915,302 @@ func (x *MergeGithubPullResponse) GetChecks() *GithubCheckSummary {
 	return nil
 }
 
+// Restarts checks for a pull request's current head (design §8「检查」).
+//
+// Only a run the summary marked `rerunnable` is ever sent: not every producer
+// exposes a restart, and a button that always appears would be a promise the
+// remote never made. The Host re-reads the pull request first, so a rerun can
+// never land on a commit other than the one the reader was looking at.
+type RerunGithubChecksRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Meta       *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Repository *GithubRepositoryRef   `protobuf:"bytes,2,opt,name=repository,proto3" json:"repository,omitempty"`
+	Number     int64                  `protobuf:"varint,3,opt,name=number,proto3" json:"number,omitempty"`
+	// The head the panel displayed. A moved head is refused, not rerun.
+	ExpectedHeadSha string `protobuf:"bytes,4,opt,name=expected_head_sha,json=expectedHeadSha,proto3" json:"expected_head_sha,omitempty"`
+	// Empty restarts every rerunnable run that did not succeed; a name restarts
+	// exactly that check run's workflow run.
+	CheckName string `protobuf:"bytes,5,opt,name=check_name,json=checkName,proto3" json:"check_name,omitempty"`
+	// Restart only the failed jobs of the workflow run rather than all of them.
+	FailedOnly    bool `protobuf:"varint,6,opt,name=failed_only,json=failedOnly,proto3" json:"failed_only,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RerunGithubChecksRequest) Reset() {
+	*x = RerunGithubChecksRequest{}
+	mi := &file_armadra_v1_github_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RerunGithubChecksRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RerunGithubChecksRequest) ProtoMessage() {}
+
+func (x *RerunGithubChecksRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_github_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RerunGithubChecksRequest.ProtoReflect.Descriptor instead.
+func (*RerunGithubChecksRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_github_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *RerunGithubChecksRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *RerunGithubChecksRequest) GetRepository() *GithubRepositoryRef {
+	if x != nil {
+		return x.Repository
+	}
+	return nil
+}
+
+func (x *RerunGithubChecksRequest) GetNumber() int64 {
+	if x != nil {
+		return x.Number
+	}
+	return 0
+}
+
+func (x *RerunGithubChecksRequest) GetExpectedHeadSha() string {
+	if x != nil {
+		return x.ExpectedHeadSha
+	}
+	return ""
+}
+
+func (x *RerunGithubChecksRequest) GetCheckName() string {
+	if x != nil {
+		return x.CheckName
+	}
+	return ""
+}
+
+func (x *RerunGithubChecksRequest) GetFailedOnly() bool {
+	if x != nil {
+		return x.FailedOnly
+	}
+	return false
+}
+
+type RerunGithubChecksResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// One outcome per workflow run the Host tried, so a partly accepted restart
+	// is visible instead of averaged into a single verdict. `target` is
+	// "workflow_run"; `requested_value` is the run id. A restart whose result
+	// was never read stays PENDING and is never sent a second time.
+	Outcomes []*GithubWriteOutcome `protobuf:"bytes,1,rep,name=outcomes,proto3" json:"outcomes,omitempty"`
+	// Machine code when nothing was sent: HEAD_MOVED, NOT_RERUNNABLE.
+	ReasonCode string `protobuf:"bytes,2,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	// The summary re-read after the restarts, for the same head.
+	Checks        *GithubCheckSummary `protobuf:"bytes,3,opt,name=checks,proto3" json:"checks,omitempty"`
+	RateLimit     *GithubRateLimit    `protobuf:"bytes,4,opt,name=rate_limit,json=rateLimit,proto3" json:"rate_limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RerunGithubChecksResponse) Reset() {
+	*x = RerunGithubChecksResponse{}
+	mi := &file_armadra_v1_github_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RerunGithubChecksResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RerunGithubChecksResponse) ProtoMessage() {}
+
+func (x *RerunGithubChecksResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_github_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RerunGithubChecksResponse.ProtoReflect.Descriptor instead.
+func (*RerunGithubChecksResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_github_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *RerunGithubChecksResponse) GetOutcomes() []*GithubWriteOutcome {
+	if x != nil {
+		return x.Outcomes
+	}
+	return nil
+}
+
+func (x *RerunGithubChecksResponse) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+func (x *RerunGithubChecksResponse) GetChecks() *GithubCheckSummary {
+	if x != nil {
+		return x.Checks
+	}
+	return nil
+}
+
+func (x *RerunGithubChecksResponse) GetRateLimit() *GithubRateLimit {
+	if x != nil {
+		return x.RateLimit
+	}
+	return nil
+}
+
+// Deletes one branch on the remote (design §8「清理」). Deleting the merged
+// source branch, closing the local checkout and ending sessions are three
+// separate actions; this one only removes the remote ref.
+type DeleteGithubBranchRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Meta       *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Repository *GithubRepositoryRef   `protobuf:"bytes,2,opt,name=repository,proto3" json:"repository,omitempty"`
+	Branch     string                 `protobuf:"bytes,3,opt,name=branch,proto3" json:"branch,omitempty"`
+	// The commit the panel displayed for that branch. Required: a branch that
+	// advanced since the read would take unreviewed commits with it, so the Host
+	// re-reads the ref and refuses instead of deleting what it did not show.
+	ExpectedSha   string `protobuf:"bytes,4,opt,name=expected_sha,json=expectedSha,proto3" json:"expected_sha,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteGithubBranchRequest) Reset() {
+	*x = DeleteGithubBranchRequest{}
+	mi := &file_armadra_v1_github_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteGithubBranchRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteGithubBranchRequest) ProtoMessage() {}
+
+func (x *DeleteGithubBranchRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_github_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteGithubBranchRequest.ProtoReflect.Descriptor instead.
+func (*DeleteGithubBranchRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_github_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *DeleteGithubBranchRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *DeleteGithubBranchRequest) GetRepository() *GithubRepositoryRef {
+	if x != nil {
+		return x.Repository
+	}
+	return nil
+}
+
+func (x *DeleteGithubBranchRequest) GetBranch() string {
+	if x != nil {
+		return x.Branch
+	}
+	return ""
+}
+
+func (x *DeleteGithubBranchRequest) GetExpectedSha() string {
+	if x != nil {
+		return x.ExpectedSha
+	}
+	return ""
+}
+
+type DeleteGithubBranchResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Deleted bool                   `protobuf:"varint,1,opt,name=deleted,proto3" json:"deleted,omitempty"`
+	// Machine code when not deleted: REF_MOVED, NOT_FOUND, PROTECTED,
+	// UNKNOWN_OUTCOME. Never empty when `deleted` is false.
+	ReasonCode    string `protobuf:"bytes,2,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteGithubBranchResponse) Reset() {
+	*x = DeleteGithubBranchResponse{}
+	mi := &file_armadra_v1_github_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteGithubBranchResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteGithubBranchResponse) ProtoMessage() {}
+
+func (x *DeleteGithubBranchResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_github_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteGithubBranchResponse.ProtoReflect.Descriptor instead.
+func (*DeleteGithubBranchResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_github_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *DeleteGithubBranchResponse) GetDeleted() bool {
+	if x != nil {
+		return x.Deleted
+	}
+	return false
+}
+
+func (x *DeleteGithubBranchResponse) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
 // Links one Issue or Pull request to one local session, branch or worktree.
 // A reference is a badge and a way back, not a task card: it never turns a
 // session into a GitHub object or the reverse.
@@ -4922,7 +5235,7 @@ type GithubExternalReference struct {
 
 func (x *GithubExternalReference) Reset() {
 	*x = GithubExternalReference{}
-	mi := &file_armadra_v1_github_proto_msgTypes[49]
+	mi := &file_armadra_v1_github_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4934,7 +5247,7 @@ func (x *GithubExternalReference) String() string {
 func (*GithubExternalReference) ProtoMessage() {}
 
 func (x *GithubExternalReference) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_github_proto_msgTypes[49]
+	mi := &file_armadra_v1_github_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4947,7 +5260,7 @@ func (x *GithubExternalReference) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GithubExternalReference.ProtoReflect.Descriptor instead.
 func (*GithubExternalReference) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_github_proto_rawDescGZIP(), []int{49}
+	return file_armadra_v1_github_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *GithubExternalReference) GetReferenceId() string {
@@ -5039,7 +5352,7 @@ type LinkGithubReferenceRequest struct {
 
 func (x *LinkGithubReferenceRequest) Reset() {
 	*x = LinkGithubReferenceRequest{}
-	mi := &file_armadra_v1_github_proto_msgTypes[50]
+	mi := &file_armadra_v1_github_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5051,7 +5364,7 @@ func (x *LinkGithubReferenceRequest) String() string {
 func (*LinkGithubReferenceRequest) ProtoMessage() {}
 
 func (x *LinkGithubReferenceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_github_proto_msgTypes[50]
+	mi := &file_armadra_v1_github_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5064,7 +5377,7 @@ func (x *LinkGithubReferenceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LinkGithubReferenceRequest.ProtoReflect.Descriptor instead.
 func (*LinkGithubReferenceRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_github_proto_rawDescGZIP(), []int{50}
+	return file_armadra_v1_github_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *LinkGithubReferenceRequest) GetMeta() *CommandMeta {
@@ -5099,7 +5412,7 @@ type UnlinkGithubReferenceRequest struct {
 
 func (x *UnlinkGithubReferenceRequest) Reset() {
 	*x = UnlinkGithubReferenceRequest{}
-	mi := &file_armadra_v1_github_proto_msgTypes[51]
+	mi := &file_armadra_v1_github_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5111,7 +5424,7 @@ func (x *UnlinkGithubReferenceRequest) String() string {
 func (*UnlinkGithubReferenceRequest) ProtoMessage() {}
 
 func (x *UnlinkGithubReferenceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_github_proto_msgTypes[51]
+	mi := &file_armadra_v1_github_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5124,7 +5437,7 @@ func (x *UnlinkGithubReferenceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnlinkGithubReferenceRequest.ProtoReflect.Descriptor instead.
 func (*UnlinkGithubReferenceRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_github_proto_rawDescGZIP(), []int{51}
+	return file_armadra_v1_github_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *UnlinkGithubReferenceRequest) GetMeta() *CommandMeta {
@@ -5158,7 +5471,7 @@ type UnlinkGithubReferenceResponse struct {
 
 func (x *UnlinkGithubReferenceResponse) Reset() {
 	*x = UnlinkGithubReferenceResponse{}
-	mi := &file_armadra_v1_github_proto_msgTypes[52]
+	mi := &file_armadra_v1_github_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5170,7 +5483,7 @@ func (x *UnlinkGithubReferenceResponse) String() string {
 func (*UnlinkGithubReferenceResponse) ProtoMessage() {}
 
 func (x *UnlinkGithubReferenceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_github_proto_msgTypes[52]
+	mi := &file_armadra_v1_github_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5183,7 +5496,7 @@ func (x *UnlinkGithubReferenceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnlinkGithubReferenceResponse.ProtoReflect.Descriptor instead.
 func (*UnlinkGithubReferenceResponse) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_github_proto_rawDescGZIP(), []int{52}
+	return file_armadra_v1_github_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *UnlinkGithubReferenceResponse) GetReferenceId() string {
@@ -5213,7 +5526,7 @@ type ListGithubReferencesRequest struct {
 
 func (x *ListGithubReferencesRequest) Reset() {
 	*x = ListGithubReferencesRequest{}
-	mi := &file_armadra_v1_github_proto_msgTypes[53]
+	mi := &file_armadra_v1_github_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5225,7 +5538,7 @@ func (x *ListGithubReferencesRequest) String() string {
 func (*ListGithubReferencesRequest) ProtoMessage() {}
 
 func (x *ListGithubReferencesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_github_proto_msgTypes[53]
+	mi := &file_armadra_v1_github_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5238,7 +5551,7 @@ func (x *ListGithubReferencesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGithubReferencesRequest.ProtoReflect.Descriptor instead.
 func (*ListGithubReferencesRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_github_proto_rawDescGZIP(), []int{53}
+	return file_armadra_v1_github_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *ListGithubReferencesRequest) GetMeta() *CommandMeta {
@@ -5280,7 +5593,7 @@ type ListGithubReferencesResponse struct {
 
 func (x *ListGithubReferencesResponse) Reset() {
 	*x = ListGithubReferencesResponse{}
-	mi := &file_armadra_v1_github_proto_msgTypes[54]
+	mi := &file_armadra_v1_github_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5292,7 +5605,7 @@ func (x *ListGithubReferencesResponse) String() string {
 func (*ListGithubReferencesResponse) ProtoMessage() {}
 
 func (x *ListGithubReferencesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_github_proto_msgTypes[54]
+	mi := &file_armadra_v1_github_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5305,7 +5618,7 @@ func (x *ListGithubReferencesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGithubReferencesResponse.ProtoReflect.Descriptor instead.
 func (*ListGithubReferencesResponse) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_github_proto_rawDescGZIP(), []int{54}
+	return file_armadra_v1_github_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *ListGithubReferencesResponse) GetReferences() []*GithubExternalReference {
@@ -5614,14 +5927,15 @@ const file_armadra_v1_github_proto_rawDesc = "" +
 	"\x04line\x18\x06 \x01(\x03R\x04line\x12\x12\n" +
 	"\x04side\x18\a \x01(\tR\x04side\x12\x1a\n" +
 	"\boutdated\x18\b \x01(\bR\boutdated\x12+\n" +
-	"\x12created_at_unix_ms\x18\t \x01(\x03R\x0fcreatedAtUnixMs\"\xb5\x01\n" +
+	"\x12created_at_unix_ms\x18\t \x01(\x03R\x0fcreatedAtUnixMs\"\xcb\x01\n" +
 	"\x0eGithubPullFile\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12#\n" +
 	"\rprevious_path\x18\x02 \x01(\tR\fpreviousPath\x12\x16\n" +
 	"\x06status\x18\x03 \x01(\tR\x06status\x12\x1c\n" +
 	"\tadditions\x18\x04 \x01(\x03R\tadditions\x12\x1c\n" +
 	"\tdeletions\x18\x05 \x01(\x03R\tdeletions\x12\x16\n" +
-	"\x06binary\x18\x06 \x01(\bR\x06binary\"\xbe\b\n" +
+	"\x06binary\x18\x06 \x01(\bR\x06binary\x12\x14\n" +
+	"\x05patch\x18\a \x01(\tR\x05patch\"\xbe\b\n" +
 	"\x11GithubPullRequest\x12?\n" +
 	"\n" +
 	"repository\x18\x01 \x01(\v2\x1f.armadra.v1.GithubRepositoryRefR\n" +
@@ -5749,7 +6063,36 @@ const file_armadra_v1_github_proto_rawDesc = "" +
 	"\vreason_code\x18\x03 \x01(\tR\n" +
 	"reasonCode\x121\n" +
 	"\x04pull\x18\x04 \x01(\v2\x1d.armadra.v1.GithubPullRequestR\x04pull\x126\n" +
-	"\x06checks\x18\x05 \x01(\v2\x1e.armadra.v1.GithubCheckSummaryR\x06checks\"\xde\x03\n" +
+	"\x06checks\x18\x05 \x01(\v2\x1e.armadra.v1.GithubCheckSummaryR\x06checks\"\x8c\x02\n" +
+	"\x18RerunGithubChecksRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12?\n" +
+	"\n" +
+	"repository\x18\x02 \x01(\v2\x1f.armadra.v1.GithubRepositoryRefR\n" +
+	"repository\x12\x16\n" +
+	"\x06number\x18\x03 \x01(\x03R\x06number\x12*\n" +
+	"\x11expected_head_sha\x18\x04 \x01(\tR\x0fexpectedHeadSha\x12\x1d\n" +
+	"\n" +
+	"check_name\x18\x05 \x01(\tR\tcheckName\x12\x1f\n" +
+	"\vfailed_only\x18\x06 \x01(\bR\n" +
+	"failedOnly\"\xec\x01\n" +
+	"\x19RerunGithubChecksResponse\x12:\n" +
+	"\boutcomes\x18\x01 \x03(\v2\x1e.armadra.v1.GithubWriteOutcomeR\boutcomes\x12\x1f\n" +
+	"\vreason_code\x18\x02 \x01(\tR\n" +
+	"reasonCode\x126\n" +
+	"\x06checks\x18\x03 \x01(\v2\x1e.armadra.v1.GithubCheckSummaryR\x06checks\x12:\n" +
+	"\n" +
+	"rate_limit\x18\x04 \x01(\v2\x1b.armadra.v1.GithubRateLimitR\trateLimit\"\xc4\x01\n" +
+	"\x19DeleteGithubBranchRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12?\n" +
+	"\n" +
+	"repository\x18\x02 \x01(\v2\x1f.armadra.v1.GithubRepositoryRefR\n" +
+	"repository\x12\x16\n" +
+	"\x06branch\x18\x03 \x01(\tR\x06branch\x12!\n" +
+	"\fexpected_sha\x18\x04 \x01(\tR\vexpectedSha\"W\n" +
+	"\x1aDeleteGithubBranchResponse\x12\x18\n" +
+	"\adeleted\x18\x01 \x01(\bR\adeleted\x12\x1f\n" +
+	"\vreason_code\x18\x02 \x01(\tR\n" +
+	"reasonCode\"\xde\x03\n" +
 	"\x17GithubExternalReference\x12!\n" +
 	"\freference_id\x18\x01 \x01(\tR\vreferenceId\x12!\n" +
 	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12?\n" +
@@ -5877,7 +6220,7 @@ func file_armadra_v1_github_proto_rawDescGZIP() []byte {
 }
 
 var file_armadra_v1_github_proto_enumTypes = make([]protoimpl.EnumInfo, 13)
-var file_armadra_v1_github_proto_msgTypes = make([]protoimpl.MessageInfo, 55)
+var file_armadra_v1_github_proto_msgTypes = make([]protoimpl.MessageInfo, 59)
 var file_armadra_v1_github_proto_goTypes = []any{
 	(GithubCredentialSource)(0),              // 0: armadra.v1.GithubCredentialSource
 	(GithubSecretStore)(0),                   // 1: armadra.v1.GithubSecretStore
@@ -5941,24 +6284,28 @@ var file_armadra_v1_github_proto_goTypes = []any{
 	(*GetGithubChecksRequest)(nil),           // 59: armadra.v1.GetGithubChecksRequest
 	(*MergeGithubPullRequest)(nil),           // 60: armadra.v1.MergeGithubPullRequest
 	(*MergeGithubPullResponse)(nil),          // 61: armadra.v1.MergeGithubPullResponse
-	(*GithubExternalReference)(nil),          // 62: armadra.v1.GithubExternalReference
-	(*LinkGithubReferenceRequest)(nil),       // 63: armadra.v1.LinkGithubReferenceRequest
-	(*UnlinkGithubReferenceRequest)(nil),     // 64: armadra.v1.UnlinkGithubReferenceRequest
-	(*UnlinkGithubReferenceResponse)(nil),    // 65: armadra.v1.UnlinkGithubReferenceResponse
-	(*ListGithubReferencesRequest)(nil),      // 66: armadra.v1.ListGithubReferencesRequest
-	(*ListGithubReferencesResponse)(nil),     // 67: armadra.v1.ListGithubReferencesResponse
-	(*CommandMeta)(nil),                      // 68: armadra.v1.CommandMeta
+	(*RerunGithubChecksRequest)(nil),         // 62: armadra.v1.RerunGithubChecksRequest
+	(*RerunGithubChecksResponse)(nil),        // 63: armadra.v1.RerunGithubChecksResponse
+	(*DeleteGithubBranchRequest)(nil),        // 64: armadra.v1.DeleteGithubBranchRequest
+	(*DeleteGithubBranchResponse)(nil),       // 65: armadra.v1.DeleteGithubBranchResponse
+	(*GithubExternalReference)(nil),          // 66: armadra.v1.GithubExternalReference
+	(*LinkGithubReferenceRequest)(nil),       // 67: armadra.v1.LinkGithubReferenceRequest
+	(*UnlinkGithubReferenceRequest)(nil),     // 68: armadra.v1.UnlinkGithubReferenceRequest
+	(*UnlinkGithubReferenceResponse)(nil),    // 69: armadra.v1.UnlinkGithubReferenceResponse
+	(*ListGithubReferencesRequest)(nil),      // 70: armadra.v1.ListGithubReferencesRequest
+	(*ListGithubReferencesResponse)(nil),     // 71: armadra.v1.ListGithubReferencesResponse
+	(*CommandMeta)(nil),                      // 72: armadra.v1.CommandMeta
 }
 var file_armadra_v1_github_proto_depIdxs = []int32{
 	0,   // 0: armadra.v1.GithubCredentialStatus.source:type_name -> armadra.v1.GithubCredentialSource
 	1,   // 1: armadra.v1.GithubCredentialStatus.store:type_name -> armadra.v1.GithubSecretStore
-	68,  // 2: armadra.v1.GetGithubCredentialRequest.meta:type_name -> armadra.v1.CommandMeta
-	68,  // 3: armadra.v1.ConfigureGithubCredentialRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 2: armadra.v1.GetGithubCredentialRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 3: armadra.v1.ConfigureGithubCredentialRequest.meta:type_name -> armadra.v1.CommandMeta
 	0,   // 4: armadra.v1.ConfigureGithubCredentialRequest.source:type_name -> armadra.v1.GithubCredentialSource
-	68,  // 5: armadra.v1.RevokeGithubCredentialRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 5: armadra.v1.RevokeGithubCredentialRequest.meta:type_name -> armadra.v1.CommandMeta
 	17,  // 6: armadra.v1.GithubRepository.ref:type_name -> armadra.v1.GithubRepositoryRef
 	7,   // 7: armadra.v1.GithubRepository.allowed_merge_methods:type_name -> armadra.v1.GithubMergeMethod
-	68,  // 8: armadra.v1.ResolveGithubRepositoryRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 8: armadra.v1.ResolveGithubRepositoryRequest.meta:type_name -> armadra.v1.CommandMeta
 	18,  // 9: armadra.v1.ResolveGithubRepositoryResponse.repository:type_name -> armadra.v1.GithubRepository
 	21,  // 10: armadra.v1.ResolveGithubRepositoryResponse.rate_limit:type_name -> armadra.v1.GithubRateLimit
 	17,  // 11: armadra.v1.GithubIssue.repository:type_name -> armadra.v1.GithubRepositoryRef
@@ -5970,27 +6317,27 @@ var file_armadra_v1_github_proto_depIdxs = []int32{
 	24,  // 17: armadra.v1.GithubIssue.milestone:type_name -> armadra.v1.GithubMilestone
 	22,  // 18: armadra.v1.GithubComment.author:type_name -> armadra.v1.GithubUser
 	2,   // 19: armadra.v1.GithubIssueFilter.state:type_name -> armadra.v1.GithubIssueState
-	68,  // 20: armadra.v1.ListGithubIssuesRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 20: armadra.v1.ListGithubIssuesRequest.meta:type_name -> armadra.v1.CommandMeta
 	17,  // 21: armadra.v1.ListGithubIssuesRequest.repository:type_name -> armadra.v1.GithubRepositoryRef
 	27,  // 22: armadra.v1.ListGithubIssuesRequest.filter:type_name -> armadra.v1.GithubIssueFilter
 	25,  // 23: armadra.v1.ListGithubIssuesResponse.issues:type_name -> armadra.v1.GithubIssue
 	21,  // 24: armadra.v1.ListGithubIssuesResponse.rate_limit:type_name -> armadra.v1.GithubRateLimit
-	68,  // 25: armadra.v1.GetGithubIssueRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 25: armadra.v1.GetGithubIssueRequest.meta:type_name -> armadra.v1.CommandMeta
 	17,  // 26: armadra.v1.GetGithubIssueRequest.repository:type_name -> armadra.v1.GithubRepositoryRef
 	25,  // 27: armadra.v1.GetGithubIssueResponse.issue:type_name -> armadra.v1.GithubIssue
 	26,  // 28: armadra.v1.GetGithubIssueResponse.comments:type_name -> armadra.v1.GithubComment
-	62,  // 29: armadra.v1.GetGithubIssueResponse.references:type_name -> armadra.v1.GithubExternalReference
+	66,  // 29: armadra.v1.GetGithubIssueResponse.references:type_name -> armadra.v1.GithubExternalReference
 	21,  // 30: armadra.v1.GetGithubIssueResponse.rate_limit:type_name -> armadra.v1.GithubRateLimit
-	68,  // 31: armadra.v1.CreateGithubIssueRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 31: armadra.v1.CreateGithubIssueRequest.meta:type_name -> armadra.v1.CommandMeta
 	17,  // 32: armadra.v1.CreateGithubIssueRequest.repository:type_name -> armadra.v1.GithubRepositoryRef
-	68,  // 33: armadra.v1.UpdateGithubIssueRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 33: armadra.v1.UpdateGithubIssueRequest.meta:type_name -> armadra.v1.CommandMeta
 	17,  // 34: armadra.v1.UpdateGithubIssueRequest.repository:type_name -> armadra.v1.GithubRepositoryRef
 	33,  // 35: armadra.v1.UpdateGithubIssueRequest.patch:type_name -> armadra.v1.GithubIssuePatch
-	68,  // 36: armadra.v1.SetGithubIssueStateRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 36: armadra.v1.SetGithubIssueStateRequest.meta:type_name -> armadra.v1.CommandMeta
 	17,  // 37: armadra.v1.SetGithubIssueStateRequest.repository:type_name -> armadra.v1.GithubRepositoryRef
 	2,   // 38: armadra.v1.SetGithubIssueStateRequest.state:type_name -> armadra.v1.GithubIssueState
 	3,   // 39: armadra.v1.SetGithubIssueStateRequest.reason:type_name -> armadra.v1.GithubIssueStateReason
-	68,  // 40: armadra.v1.CommentGithubIssueRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 40: armadra.v1.CommentGithubIssueRequest.meta:type_name -> armadra.v1.CommandMeta
 	17,  // 41: armadra.v1.CommentGithubIssueRequest.repository:type_name -> armadra.v1.GithubRepositoryRef
 	2,   // 42: armadra.v1.GithubStatusGroup.couples_issue_state:type_name -> armadra.v1.GithubIssueState
 	2,   // 43: armadra.v1.GithubStateCoupling.state:type_name -> armadra.v1.GithubIssueState
@@ -5998,12 +6345,12 @@ var file_armadra_v1_github_proto_depIdxs = []int32{
 	4,   // 45: armadra.v1.GithubStatusMapping.source:type_name -> armadra.v1.GithubStatusSource
 	37,  // 46: armadra.v1.GithubStatusMapping.groups:type_name -> armadra.v1.GithubStatusGroup
 	38,  // 47: armadra.v1.GithubStatusMapping.state_groups:type_name -> armadra.v1.GithubStateCoupling
-	68,  // 48: armadra.v1.GetGithubStatusMappingRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 48: armadra.v1.GetGithubStatusMappingRequest.meta:type_name -> armadra.v1.CommandMeta
 	17,  // 49: armadra.v1.GetGithubStatusMappingRequest.repository:type_name -> armadra.v1.GithubRepositoryRef
-	68,  // 50: armadra.v1.PutGithubStatusMappingRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 50: armadra.v1.PutGithubStatusMappingRequest.meta:type_name -> armadra.v1.CommandMeta
 	39,  // 51: armadra.v1.PutGithubStatusMappingRequest.mapping:type_name -> armadra.v1.GithubStatusMapping
 	5,   // 52: armadra.v1.GithubWriteOutcome.state:type_name -> armadra.v1.GithubWriteState
-	68,  // 53: armadra.v1.MoveGithubIssueRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 53: armadra.v1.MoveGithubIssueRequest.meta:type_name -> armadra.v1.CommandMeta
 	17,  // 54: armadra.v1.MoveGithubIssueRequest.repository:type_name -> armadra.v1.GithubRepositoryRef
 	25,  // 55: armadra.v1.MoveGithubIssueResponse.issue:type_name -> armadra.v1.GithubIssue
 	42,  // 56: armadra.v1.MoveGithubIssueResponse.outcomes:type_name -> armadra.v1.GithubWriteOutcome
@@ -6022,12 +6369,12 @@ var file_armadra_v1_github_proto_depIdxs = []int32{
 	22,  // 69: armadra.v1.GithubPullRequest.requested_reviewers:type_name -> armadra.v1.GithubUser
 	23,  // 70: armadra.v1.GithubPullRequest.labels:type_name -> armadra.v1.GithubLabel
 	6,   // 71: armadra.v1.GithubPullFilter.state:type_name -> armadra.v1.GithubPullState
-	68,  // 72: armadra.v1.ListGithubPullsRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 72: armadra.v1.ListGithubPullsRequest.meta:type_name -> armadra.v1.CommandMeta
 	17,  // 73: armadra.v1.ListGithubPullsRequest.repository:type_name -> armadra.v1.GithubRepositoryRef
 	51,  // 74: armadra.v1.ListGithubPullsRequest.filter:type_name -> armadra.v1.GithubPullFilter
 	50,  // 75: armadra.v1.ListGithubPullsResponse.pulls:type_name -> armadra.v1.GithubPullRequest
 	21,  // 76: armadra.v1.ListGithubPullsResponse.rate_limit:type_name -> armadra.v1.GithubRateLimit
-	68,  // 77: armadra.v1.GetGithubPullRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 77: armadra.v1.GetGithubPullRequest.meta:type_name -> armadra.v1.CommandMeta
 	17,  // 78: armadra.v1.GetGithubPullRequest.repository:type_name -> armadra.v1.GithubRepositoryRef
 	50,  // 79: armadra.v1.GetGithubPullResponse.pull:type_name -> armadra.v1.GithubPullRequest
 	49,  // 80: armadra.v1.GetGithubPullResponse.files:type_name -> armadra.v1.GithubPullFile
@@ -6035,35 +6382,42 @@ var file_armadra_v1_github_proto_depIdxs = []int32{
 	48,  // 82: armadra.v1.GetGithubPullResponse.review_comments:type_name -> armadra.v1.GithubReviewComment
 	26,  // 83: armadra.v1.GetGithubPullResponse.comments:type_name -> armadra.v1.GithubComment
 	46,  // 84: armadra.v1.GetGithubPullResponse.checks:type_name -> armadra.v1.GithubCheckSummary
-	62,  // 85: armadra.v1.GetGithubPullResponse.references:type_name -> armadra.v1.GithubExternalReference
+	66,  // 85: armadra.v1.GetGithubPullResponse.references:type_name -> armadra.v1.GithubExternalReference
 	21,  // 86: armadra.v1.GetGithubPullResponse.rate_limit:type_name -> armadra.v1.GithubRateLimit
-	68,  // 87: armadra.v1.CreateGithubPullRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 87: armadra.v1.CreateGithubPullRequest.meta:type_name -> armadra.v1.CommandMeta
 	17,  // 88: armadra.v1.CreateGithubPullRequest.repository:type_name -> armadra.v1.GithubRepositoryRef
-	68,  // 89: armadra.v1.SubmitGithubReviewRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 89: armadra.v1.SubmitGithubReviewRequest.meta:type_name -> armadra.v1.CommandMeta
 	17,  // 90: armadra.v1.SubmitGithubReviewRequest.repository:type_name -> armadra.v1.GithubRepositoryRef
 	10,  // 91: armadra.v1.SubmitGithubReviewRequest.state:type_name -> armadra.v1.GithubReviewState
 	57,  // 92: armadra.v1.SubmitGithubReviewRequest.comments:type_name -> armadra.v1.GithubReviewCommentDraft
-	68,  // 93: armadra.v1.GetGithubChecksRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 93: armadra.v1.GetGithubChecksRequest.meta:type_name -> armadra.v1.CommandMeta
 	17,  // 94: armadra.v1.GetGithubChecksRequest.repository:type_name -> armadra.v1.GithubRepositoryRef
-	68,  // 95: armadra.v1.MergeGithubPullRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 95: armadra.v1.MergeGithubPullRequest.meta:type_name -> armadra.v1.CommandMeta
 	17,  // 96: armadra.v1.MergeGithubPullRequest.repository:type_name -> armadra.v1.GithubRepositoryRef
 	7,   // 97: armadra.v1.MergeGithubPullRequest.method:type_name -> armadra.v1.GithubMergeMethod
 	9,   // 98: armadra.v1.MergeGithubPullRequest.expected_check_rollup:type_name -> armadra.v1.GithubCheckConclusion
 	50,  // 99: armadra.v1.MergeGithubPullResponse.pull:type_name -> armadra.v1.GithubPullRequest
 	46,  // 100: armadra.v1.MergeGithubPullResponse.checks:type_name -> armadra.v1.GithubCheckSummary
-	17,  // 101: armadra.v1.GithubExternalReference.repository:type_name -> armadra.v1.GithubRepositoryRef
-	11,  // 102: armadra.v1.GithubExternalReference.kind:type_name -> armadra.v1.GithubReferenceKind
-	12,  // 103: armadra.v1.GithubExternalReference.target_kind:type_name -> armadra.v1.GithubReferenceTargetKind
-	68,  // 104: armadra.v1.LinkGithubReferenceRequest.meta:type_name -> armadra.v1.CommandMeta
-	62,  // 105: armadra.v1.LinkGithubReferenceRequest.reference:type_name -> armadra.v1.GithubExternalReference
-	68,  // 106: armadra.v1.UnlinkGithubReferenceRequest.meta:type_name -> armadra.v1.CommandMeta
-	68,  // 107: armadra.v1.ListGithubReferencesRequest.meta:type_name -> armadra.v1.CommandMeta
-	62,  // 108: armadra.v1.ListGithubReferencesResponse.references:type_name -> armadra.v1.GithubExternalReference
-	109, // [109:109] is the sub-list for method output_type
-	109, // [109:109] is the sub-list for method input_type
-	109, // [109:109] is the sub-list for extension type_name
-	109, // [109:109] is the sub-list for extension extendee
-	0,   // [0:109] is the sub-list for field type_name
+	72,  // 101: armadra.v1.RerunGithubChecksRequest.meta:type_name -> armadra.v1.CommandMeta
+	17,  // 102: armadra.v1.RerunGithubChecksRequest.repository:type_name -> armadra.v1.GithubRepositoryRef
+	42,  // 103: armadra.v1.RerunGithubChecksResponse.outcomes:type_name -> armadra.v1.GithubWriteOutcome
+	46,  // 104: armadra.v1.RerunGithubChecksResponse.checks:type_name -> armadra.v1.GithubCheckSummary
+	21,  // 105: armadra.v1.RerunGithubChecksResponse.rate_limit:type_name -> armadra.v1.GithubRateLimit
+	72,  // 106: armadra.v1.DeleteGithubBranchRequest.meta:type_name -> armadra.v1.CommandMeta
+	17,  // 107: armadra.v1.DeleteGithubBranchRequest.repository:type_name -> armadra.v1.GithubRepositoryRef
+	17,  // 108: armadra.v1.GithubExternalReference.repository:type_name -> armadra.v1.GithubRepositoryRef
+	11,  // 109: armadra.v1.GithubExternalReference.kind:type_name -> armadra.v1.GithubReferenceKind
+	12,  // 110: armadra.v1.GithubExternalReference.target_kind:type_name -> armadra.v1.GithubReferenceTargetKind
+	72,  // 111: armadra.v1.LinkGithubReferenceRequest.meta:type_name -> armadra.v1.CommandMeta
+	66,  // 112: armadra.v1.LinkGithubReferenceRequest.reference:type_name -> armadra.v1.GithubExternalReference
+	72,  // 113: armadra.v1.UnlinkGithubReferenceRequest.meta:type_name -> armadra.v1.CommandMeta
+	72,  // 114: armadra.v1.ListGithubReferencesRequest.meta:type_name -> armadra.v1.CommandMeta
+	66,  // 115: armadra.v1.ListGithubReferencesResponse.references:type_name -> armadra.v1.GithubExternalReference
+	116, // [116:116] is the sub-list for method output_type
+	116, // [116:116] is the sub-list for method input_type
+	116, // [116:116] is the sub-list for extension type_name
+	116, // [116:116] is the sub-list for extension extendee
+	0,   // [0:116] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_github_proto_init() }
@@ -6079,7 +6433,7 @@ func file_armadra_v1_github_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_github_proto_rawDesc), len(file_armadra_v1_github_proto_rawDesc)),
 			NumEnums:      13,
-			NumMessages:   55,
+			NumMessages:   59,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

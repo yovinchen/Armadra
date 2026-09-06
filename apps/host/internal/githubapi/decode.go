@@ -374,7 +374,17 @@ func (v wirePull) toProto(ref *pb.GithubRepositoryRef, allowed []pb.GithubMergeM
 	return pull
 }
 
+// MaxPatchBytes is the largest per-file diff the Host forwards. A patch over
+// this is dropped whole rather than cut: an inline review comment is anchored
+// by the hunk headers, and a comment placed past a truncation would land on a
+// line the reviewer never saw.
+const MaxPatchBytes = 64 << 10
+
 func (v wireFile) toProto() *pb.GithubPullFile {
+	patch := v.Patch
+	if len(patch) > MaxPatchBytes {
+		patch = ""
+	}
 	return &pb.GithubPullFile{
 		Path:         v.Filename,
 		PreviousPath: v.PreviousFilename,
@@ -384,6 +394,7 @@ func (v wireFile) toProto() *pb.GithubPullFile {
 		// The remote omits a patch for a binary file; that absence, with a
 		// nonzero change, is the only signal it gives.
 		Binary: v.Patch == "" && v.Status != "unchanged" && v.Status != "renamed",
+		Patch:  patch,
 	}
 }
 

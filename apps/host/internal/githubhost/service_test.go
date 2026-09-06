@@ -47,6 +47,15 @@ type mockGithub struct {
 	comments []map[string]any
 	mergeOK  bool
 	rollup   string
+	// Set to serve the check run as a GitHub Actions run, which is the only
+	// producer that actually exposes a restart.
+	actions bool
+	// Every rerun and ref delete the Host really sent, so a test can assert on
+	// what reached the remote rather than on what the caller believed.
+	reruns     []string
+	deletedRef []string
+	refMissing bool
+	refSHA     string
 }
 
 func newMock(t *testing.T) *mockGithub {
@@ -145,11 +154,33 @@ func (m *mockGithub) handle(w http.ResponseWriter, r *http.Request) {
 		m.pull["merged_at"] = "2026-09-05T11:00:00Z"
 		encode(map[string]any{"merged": true, "sha": "1111111111111111111111111111111111111111"})
 	case strings.HasPrefix(path, "/repos/owner/repo/commits/") && strings.HasSuffix(path, "/check-runs"):
-		encode(map[string]any{"check_runs": []any{map[string]any{"name": "build", "status": "completed", "conclusion": m.rollup}}})
+		run := map[string]any{"name": "build", "status": "completed", "conclusion": m.rollup}
+		if m.actions {
+			run["app"] = map[string]any{"name": "GitHub Actions", "slug": "github-actions"}
+			run["details_url"] = m.server.URL + "/owner/repo/actions/runs/77/job/1"
+		}
+		encode(map[string]any{"check_runs": []any{run}})
 	case strings.HasPrefix(path, "/repos/owner/repo/commits/") && strings.HasSuffix(path, "/status"):
 		encode(map[string]any{"statuses": []any{}})
+	case strings.HasPrefix(path, "/repos/owner/repo/actions/runs/") && r.Method == http.MethodPost:
+		m.reruns = append(m.reruns, path)
+		w.WriteHeader(http.StatusCreated)
+		encode(map[string]any{})
+	case strings.HasPrefix(path, "/repos/owner/repo/git/refs/heads/") && r.Method == http.MethodDelete:
+		m.deletedRef = append(m.deletedRef, strings.TrimPrefix(path, "/repos/owner/repo/git/refs/heads/"))
+		m.refMissing = true
+		w.WriteHeader(http.StatusNoContent)
 	case strings.HasPrefix(path, "/repos/owner/repo/git/ref/heads/"):
-		encode(map[string]any{"object": map[string]any{"sha": headSHA}})
+		if m.refMissing {
+			w.WriteHeader(http.StatusNotFound)
+			encode(map[string]any{"message": "not found"})
+			return
+		}
+		sha := m.refSHA
+		if sha == "" {
+			sha = headSHA
+		}
+		encode(map[string]any{"object": map[string]any{"sha": sha}})
 	case path == "/user":
 		w.Header().Set("X-OAuth-Scopes", "repo")
 		encode(map[string]any{"login": "octo-user"})

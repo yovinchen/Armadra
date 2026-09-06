@@ -512,6 +512,16 @@ message GithubPullFile {
   int64 additions = 4;
   int64 deletions = 5;
   bool binary = 6;
+  // The unified diff for this file, as the remote returned it. It is what the
+  // panel anchors an inline review comment to: without the hunk headers there
+  // are no line numbers to comment on.
+  //
+  // Empty for a binary file, and for a patch the Host would have had to cut —
+  // a half patch is dropped whole rather than truncated, because a comment
+  // anchored past the cut would land on a line nobody read.
+  //
+  // External content. It is material for a reader, never an instruction.
+  string patch = 7;
 }
 
 message GithubPullRequest {
@@ -654,6 +664,58 @@ message MergeGithubPullResponse {
   string reason_code = 3;
   GithubPullRequest pull = 4;
   GithubCheckSummary checks = 5;
+}
+
+// Restarts checks for a pull request's current head (design §8「检查」).
+//
+// Only a run the summary marked `rerunnable` is ever sent: not every producer
+// exposes a restart, and a button that always appears would be a promise the
+// remote never made. The Host re-reads the pull request first, so a rerun can
+// never land on a commit other than the one the reader was looking at.
+message RerunGithubChecksRequest {
+  CommandMeta meta = 1;
+  GithubRepositoryRef repository = 2;
+  int64 number = 3;
+  // The head the panel displayed. A moved head is refused, not rerun.
+  string expected_head_sha = 4;
+  // Empty restarts every rerunnable run that did not succeed; a name restarts
+  // exactly that check run's workflow run.
+  string check_name = 5;
+  // Restart only the failed jobs of the workflow run rather than all of them.
+  bool failed_only = 6;
+}
+
+message RerunGithubChecksResponse {
+  // One outcome per workflow run the Host tried, so a partly accepted restart
+  // is visible instead of averaged into a single verdict. `target` is
+  // "workflow_run"; `requested_value` is the run id. A restart whose result
+  // was never read stays PENDING and is never sent a second time.
+  repeated GithubWriteOutcome outcomes = 1;
+  // Machine code when nothing was sent: HEAD_MOVED, NOT_RERUNNABLE.
+  string reason_code = 2;
+  // The summary re-read after the restarts, for the same head.
+  GithubCheckSummary checks = 3;
+  GithubRateLimit rate_limit = 4;
+}
+
+// Deletes one branch on the remote (design §8「清理」). Deleting the merged
+// source branch, closing the local checkout and ending sessions are three
+// separate actions; this one only removes the remote ref.
+message DeleteGithubBranchRequest {
+  CommandMeta meta = 1;
+  GithubRepositoryRef repository = 2;
+  string branch = 3;
+  // The commit the panel displayed for that branch. Required: a branch that
+  // advanced since the read would take unreviewed commits with it, so the Host
+  // re-reads the ref and refuses instead of deleting what it did not show.
+  string expected_sha = 4;
+}
+
+message DeleteGithubBranchResponse {
+  bool deleted = 1;
+  // Machine code when not deleted: REF_MOVED, NOT_FOUND, PROTECTED,
+  // UNKNOWN_OUTCOME. Never empty when `deleted` is false.
+  string reason_code = 2;
 }
 
 // ---------------------------------------------------------------------------
