@@ -233,42 +233,10 @@ func (s *Store) Apply(ctx context.Context, operationID string, changes []Change)
 		return result, err
 	}
 	defer tx.Rollback()
-	result, found, err := readReceipt(ctx, tx, operationID, digest[:])
-	if err != nil {
-		return ApplyResult{}, err
-	}
-	if found {
-		result.Replayed = true
-		return result, nil
-	}
-	var last, eventCounter, transactionMax int64
-	if err = tx.QueryRowContext(ctx, "SELECT last_sequence FROM store_meta WHERE singleton=1").Scan(&last); err != nil {
+	result, transactionID, replayed, err := openOperation(ctx, tx, operationID, digest[:], len(changes))
+	if err != nil || replayed {
 		return result, err
 	}
-	if err = tx.QueryRowContext(ctx, "SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name='operations'),0)").Scan(&transactionMax); err != nil {
-		return result, err
-	}
-	if err = tx.QueryRowContext(ctx, "SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name='events'),0)").Scan(&eventCounter); err != nil {
-		return result, err
-	}
-	if eventCounter != last {
-		return result, ErrCorrupt
-	}
-	if last < 0 || transactionMax < 0 {
-		return result, ErrCorrupt
-	}
-	if last > math.MaxInt64-int64(len(changes)) || transactionMax == math.MaxInt64 {
-		return result, ErrCounterExhausted
-	}
-	inserted, err := tx.ExecContext(ctx, "INSERT INTO operations(operation_id,request_digest,change_count,committed_at_ms) VALUES(?,?,?,?)", operationID, digest[:], len(changes), time.Now().UnixMilli())
-	if err != nil {
-		return result, err
-	}
-	transactionID, err := inserted.LastInsertId()
-	if err != nil {
-		return result, err
-	}
-	result = ApplyResult{OperationID: operationID, TransactionID: uint64(transactionID), Revisions: []Revision{}}
 	for index, change := range changes {
 		var current int64
 		err = tx.QueryRowContext(ctx, "SELECT revision FROM entities WHERE workspace_id=? AND kind=? AND entity_id=?", change.WorkspaceID, change.Kind, change.ID).Scan(&current)
@@ -307,27 +275,11 @@ func (s *Store) Apply(ctx context.Context, operationID string, changes []Change)
 		if err != nil {
 			return ApplyResult{}, err
 		}
-		event, err := tx.ExecContext(ctx, "INSERT INTO events(transaction_id,operation_id,transaction_index,transaction_size,workspace_id,kind,entity_id,revision,payload,deleted) VALUES(?,?,?,?,?,?,?,?,COALESCE(?,X''),?)", transactionID, operationID, index, len(changes), change.WorkspaceID, change.Kind, change.ID, next, change.Payload, deleted)
-		if err != nil {
+		if err = appendChange(ctx, tx, &result, transactionID, index, len(changes), Revision{Key: change.Key, Revision: uint64(next), Deleted: change.Delete}, change.Payload); err != nil {
 			return ApplyResult{}, err
 		}
-		sequence, err := event.LastInsertId()
-		if err != nil {
-			return ApplyResult{}, err
-		}
-		if index == 0 {
-			result.FirstSequence = uint64(sequence)
-		}
-		result.LastSequence = uint64(sequence)
-		if _, err = tx.ExecContext(ctx, "INSERT INTO operation_changes(operation_id,position,workspace_id,kind,entity_id,revision,deleted) VALUES(?,?,?,?,?,?,?)", operationID, index, change.WorkspaceID, change.Kind, change.ID, next, deleted); err != nil {
-			return ApplyResult{}, err
-		}
-		result.Revisions = append(result.Revisions, Revision{Key: change.Key, Revision: uint64(next), Deleted: change.Delete})
 	}
-	if _, err = tx.ExecContext(ctx, "UPDATE operations SET first_sequence=?,last_sequence=? WHERE operation_id=?", int64(result.FirstSequence), int64(result.LastSequence), operationID); err != nil {
-		return ApplyResult{}, err
-	}
-	if _, err = tx.ExecContext(ctx, "UPDATE store_meta SET last_sequence=? WHERE singleton=1", int64(result.LastSequence)); err != nil {
+	if err = closeOperation(ctx, tx, result); err != nil {
 		return ApplyResult{}, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -364,6 +316,105 @@ type rows interface {
 // readReceipt returns the stored result for an operation id. A nil `digest`
 // means the caller is not comparing a request against it; a non-nil one that
 // differs is a reused id, which is refused rather than replayed.
+// One operation, one transaction, one stretch of the durable sequence.
+//
+// Apply is the entity path, but it is not the only writer: a business domain
+// with its own table (the filesystem's `workspace_roots`, and the domains after
+// it) still has to publish onto the *same* sequence, in the same transaction as
+// the row it changed, or a client resuming from a cursor would be told about
+// half the Host's changes. These three helpers are that shared half, so there
+// is one implementation of "append to the outbox" rather than one per domain.
+//
+// openOperation reserves the transaction and reports a replay. A replay is the
+// caller's own retry: the stored receipt is returned unchanged, because
+// re-deriving it would describe the database as it is now rather than what the
+// first run actually did.
+func openOperation(ctx context.Context, tx *sql.Tx, operationID string, digest []byte, count int) (ApplyResult, int64, bool, error) {
+	result, found, err := readReceipt(ctx, tx, operationID, digest)
+	if err != nil {
+		return ApplyResult{}, 0, false, err
+	}
+	if found {
+		result.Replayed = true
+		return result, 0, true, nil
+	}
+	var last, eventCounter, transactionMax int64
+	if err = tx.QueryRowContext(ctx, "SELECT last_sequence FROM store_meta WHERE singleton=1").Scan(&last); err != nil {
+		return result, 0, false, err
+	}
+	if err = tx.QueryRowContext(ctx, "SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name='operations'),0)").Scan(&transactionMax); err != nil {
+		return result, 0, false, err
+	}
+	if err = tx.QueryRowContext(ctx, "SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name='events'),0)").Scan(&eventCounter); err != nil {
+		return result, 0, false, err
+	}
+	// The event counter and the published watermark are the same number seen
+	// two ways. If they have drifted apart, some writer has published a
+	// sequence the store_meta row never learned about, and continuing would
+	// hand a client a cursor that skips it.
+	if eventCounter != last {
+		return result, 0, false, ErrCorrupt
+	}
+	if last < 0 || transactionMax < 0 {
+		return result, 0, false, ErrCorrupt
+	}
+	if last > math.MaxInt64-int64(count) || transactionMax == math.MaxInt64 {
+		return result, 0, false, ErrCounterExhausted
+	}
+	inserted, err := tx.ExecContext(ctx, "INSERT INTO operations(operation_id,request_digest,change_count,committed_at_ms) VALUES(?,?,?,?)", operationID, digest, count, time.Now().UnixMilli())
+	if err != nil {
+		return result, 0, false, err
+	}
+	transactionID, err := inserted.LastInsertId()
+	if err != nil {
+		return result, 0, false, err
+	}
+	return ApplyResult{OperationID: operationID, TransactionID: uint64(transactionID), Revisions: []Revision{}}, transactionID, false, nil
+}
+
+// appendChange publishes one change: an event on the shared sequence and the
+// receipt line a replay is rebuilt from. `payload` is the entity's Protobuf
+// bytes and stays opaque; a deletion carries none, because the tombstone's id
+// and revision are the whole statement.
+func appendChange(ctx context.Context, tx *sql.Tx, result *ApplyResult, transactionID int64, index, size int, revision Revision, payload []byte) error {
+	deleted := 0
+	if revision.Deleted {
+		deleted = 1
+	}
+	stored, err := signed(revision.Revision)
+	if err != nil {
+		return err
+	}
+	event, err := tx.ExecContext(ctx, "INSERT INTO events(transaction_id,operation_id,transaction_index,transaction_size,workspace_id,kind,entity_id,revision,payload,deleted) VALUES(?,?,?,?,?,?,?,?,COALESCE(?,X''),?)", transactionID, result.OperationID, index, size, revision.WorkspaceID, revision.Kind, revision.ID, stored, payload, deleted)
+	if err != nil {
+		return err
+	}
+	sequence, err := event.LastInsertId()
+	if err != nil {
+		return err
+	}
+	if index == 0 {
+		result.FirstSequence = uint64(sequence)
+	}
+	result.LastSequence = uint64(sequence)
+	if _, err = tx.ExecContext(ctx, "INSERT INTO operation_changes(operation_id,position,workspace_id,kind,entity_id,revision,deleted) VALUES(?,?,?,?,?,?,?)", result.OperationID, index, revision.WorkspaceID, revision.Kind, revision.ID, stored, deleted); err != nil {
+		return err
+	}
+	result.Revisions = append(result.Revisions, revision)
+	return nil
+}
+
+// closeOperation records the range the operation published and advances the
+// watermark. It is the last write before the commit, so a reader that sees the
+// new watermark can always read every event up to it.
+func closeOperation(ctx context.Context, tx *sql.Tx, result ApplyResult) error {
+	if _, err := tx.ExecContext(ctx, "UPDATE operations SET first_sequence=?,last_sequence=? WHERE operation_id=?", int64(result.FirstSequence), int64(result.LastSequence), result.OperationID); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, "UPDATE store_meta SET last_sequence=? WHERE singleton=1", int64(result.LastSequence))
+	return err
+}
+
 func readReceipt(ctx context.Context, tx rows, operationID string, digest []byte) (ApplyResult, bool, error) {
 	var result ApplyResult
 	var stored []byte

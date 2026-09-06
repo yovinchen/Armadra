@@ -21,7 +21,7 @@ var (
 )
 
 const (
-	SchemaVersion    = 6
+	SchemaVersion    = 7
 	MaxChanges       = 256
 	MaxPayloadBytes  = 16 << 20
 	MaxBatchBytes    = 32 << 20

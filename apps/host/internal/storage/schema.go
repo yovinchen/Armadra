@@ -248,7 +248,37 @@ CREATE TABLE maintenance_tokens (
  consumed_at_ms INTEGER NOT NULL DEFAULT 0 CHECK(consumed_at_ms >= 0)
 )`
 
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6}
+// Where a workspace's files are and who may touch them
+// (Go Host 业务所有权迁移 §3.1 v7). The files themselves never move: this table
+// is the *registration*, which is the only part of the filesystem domain that
+// has an owner at all.
+//
+// It is a table of its own rather than an `entities` row because its columns
+// are queried as columns — the Runtime proxy narrows a forwarded file request
+// by reading one workspace's three permission bits, and decoding a payload to
+// answer that would put a Protobuf parse in front of every proxied read.
+//
+// The path is frozen. There is no statement that moves a root: a workspace
+// whose files are somewhere else is a new registration, because everything the
+// workspace holds is addressed relative to the path that was frozen. A
+// tombstone keeps its revision, so re-registering has to name it rather than
+// start from zero, which is what stops a delayed request from re-registering a
+// root under a revision that described a different directory.
+const schemaV7 = `CREATE TABLE workspace_roots (
+ workspace_id TEXT PRIMARY KEY,
+ execution_host_id TEXT NOT NULL,
+ canonical_path TEXT NOT NULL,
+ proof_sha256 BLOB NOT NULL CHECK(length(proof_sha256) IN (0,32)),
+ can_read INTEGER NOT NULL CHECK(can_read IN (0,1)),
+ can_write INTEGER NOT NULL CHECK(can_write IN (0,1)),
+ can_execute INTEGER NOT NULL CHECK(can_execute IN (0,1)),
+ deleted INTEGER NOT NULL DEFAULT 0 CHECK(deleted IN (0,1)),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ registered_at_ms INTEGER NOT NULL CHECK(registered_at_ms > 0),
+ updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0)
+)`
+
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7}
 
 type sqlReader interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
