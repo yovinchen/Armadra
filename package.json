@@ -12,6 +12,7 @@
     "handoff:read-smoke": "node tools/handoff-read-smoke.mjs",
     "host:smoke": "node tools/host-smoke.mjs",
     "canvas:e2e": "node tools/canvas-ownership-e2e.mjs",
+    "ownership:e2e": "node tools/ownership-e2e.mjs",
     "github:e2e": "node tools/github-e2e.mjs",
     "protocol:generate": "node tools/protocol.mjs generate",
     "protocol:check": "node tools/protocol.mjs check",

@@ -6,9 +6,9 @@
 // inside the check would prove nothing about the client that ships.
 //
 // It lives on its own because it is a layer, not a step: nothing here knows
-// what a canvas or an ownership epoch is, and the sequence in
-// canvas-ownership-e2e.mjs reads better without the bundling in the middle of
-// it.
+// what a canvas, a settings document or an ownership epoch is, and the
+// sequences in canvas-ownership-e2e.mjs and ownership-e2e.mjs read better
+// without the bundling in the middle of them.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -65,7 +65,7 @@ export function decodeValue(value) {
   }
   return value;
 }
-export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, origin, transport, pageOrigin }) {
+export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient, origin, transport, pageOrigin }) {
   const state = {};
   return {
     async hello() {
@@ -93,7 +93,27 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
         session: state.identity,
         hostId: state.hello.hostId,
       });
+      // So is the settings document: one per Host, not one per workspace.
+      if (HostSettingsClient)
+        state.settings = new HostSettingsClient({
+          session: state.identity,
+          hostId: state.hello.hostId,
+        });
       return true;
+    },
+    async settings(method, args) {
+      try {
+        return encodeValue(await state.settings[method](...decodeValue(args)));
+      } catch (error) {
+        return {
+          error: {
+            failure: error.failure ?? error.code ?? "unknown",
+            hostCode: error.hostCode ?? "",
+            httpStatus: error.httpStatus ?? 0,
+            outcomeUnknown: error.outcomeUnknown === true,
+          },
+        };
+      }
     },
     async ownership(method, args) {
       try {
@@ -145,6 +165,7 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
       HostIdentityClient: clients.HostIdentityClient,
       HostCanvasClient: clients.HostCanvasClient,
       HostOwnershipClient: clients.HostOwnershipClient,
+      HostSettingsClient: clients.HostSettingsClient,
       origin: appOrigin,
       transport: { fetch: transport },
       pageOrigin: appOrigin,
@@ -157,15 +178,17 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
         client.call(method, encodeValue(args)).then(decodeValue),
       ownership: (method, args) =>
         client.ownership(method, encodeValue(args)).then(decodeValue),
+      settings: (method, args) =>
+        client.settings(method, encodeValue(args)).then(decodeValue),
     };
   } else {
     const driverSource = join(workspace, "driver-source.mjs");
     writeFileSync(
       driverSource,
-      `import { HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient } from "@armadra/host-client";
+      `import { HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient } from "@armadra/host-client";
 import { createDriver } from "./driver-core.mjs";
 globalThis.armadra = createDriver({
-  HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient,
+  HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient,
   origin: ${JSON.stringify(appOrigin)}, transport: {},
 });
 globalThis.armadraReady = true;
