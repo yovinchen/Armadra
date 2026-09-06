@@ -8,10 +8,9 @@ import {
   addNodesForPaths,
   addWorkspaceEntriesToCanvas,
   captureImportTarget,
-  routeFile,
 } from "./external-content";
 import { pastePoint } from "../interaction/pointer";
-import { paste } from "../whiteboard/tools/use-clipboard";
+import { localClipboardText, paste } from "../whiteboard/tools/use-clipboard";
 import { RUNTIME_URL } from "../../api/client";
 import { isCanvasLocked } from "../canvas-lock";
 import {
@@ -38,9 +37,12 @@ import { t, usePreferencesStore } from "../../app/preferences-store";
  * | 工作区文件树拖入 | `addWorkspaceEntriesToCanvas` |
  * | 焦点在输入框 / 终端里的粘贴 | 拦下来，交给它们自己 |
  *
- * 粘贴有两条入口：⌘V 由 `keybindings.ts` 命中 `canvas.paste`（命中即
- * `preventDefault`，所以浏览器不会再发 `paste` 事件），右键菜单的「粘贴」
- * 与 Windows 上某些 IME 仍然会发原生 `paste`——那条走这里。
+ * 粘贴只有一条入口：浏览器原生的 `paste` 事件。⌘V 在 `keybindings.ts` 里
+ * 登记为 `native`（命中即放行，不 `preventDefault`），所以 ⌘V、右键菜单的
+ * 「粘贴」、IME 的粘贴走的是同一个事件。这条路是**必须**的——异步剪贴板
+ * API 读不到 Finder 复制的文件，打包壳的 WebView 上连 `read()` 都可能没有，
+ * 只有 `ClipboardEvent.clipboardData` 同时给得出文本、图片和文件
+ * （2026-09-06 用户反馈：从别处复制的内容粘不进画布）。
  */
 
 /* --------------------------------- 拖放 ----------------------------------- */
@@ -203,9 +205,10 @@ export function isTextEntry(target: EventTarget | null): boolean {
  * `document.body` 的冒泡相位提前 `stopPropagation`——目标元素这时已经
  * 收到事件，`document` 上的监听器再也看不到它。
  *
- * 落地规则与 ⌘V 那条路完全一样（`whiteboard/tools/use-clipboard.paste`）：
- * `armadra/canvas@1` 的 JSON 原样复原，图片 → `wb.image`，其余文本 →
- * `wb.text`；落点按 `pasteAtCursor` 偏好。
+ * 落地规则与拖放同一张表（`whiteboard/tools/use-clipboard.paste`）：
+ * `armadra/canvas@1` 的 JSON 原样复原，文件交给 `addBrowserFiles`
+ * （图片 → `wb.image`，其余 → 导入进工作区的 `editor` 节点），剩下的纯文本
+ * → `wb.text`；落点按 `pasteAtCursor` 偏好。
  */
 export function usePasteToCanvas(): void {
   useEffect(() => {
@@ -219,10 +222,13 @@ export function usePasteToCanvas(): void {
       if (!state.document || !state.workspace) return;
       if (isCanvasLocked()) return;
       const transfer = event.clipboardData;
-      const files = Array.from(transfer?.files ?? []).filter(
-        (file) => routeFile(file) === "image",
-      );
-      const text = transfer?.getData("text/plain") ?? null;
+      // 图片之外的文件也收：Finder 复制来的文件走的是拖放那条导入路径
+      // （`external-content.addBrowserFiles` 自己按同一张表分流）。
+      const files = Array.from(transfer?.files ?? []);
+      let text = transfer?.getData("text/plain") ?? null;
+      // 载荷是空的时候退回应用内那一份：系统剪贴板写不进去也不该让应用内的
+      // 复制粘贴失效（`use-clipboard.localClipboardText`）。
+      if (files.length === 0 && !text?.trim()) text = localClipboardText();
       if (files.length === 0 && !text?.trim()) return;
       event.preventDefault();
       void paste(

@@ -49,6 +49,15 @@ export interface CommandSpec {
   allowInTerminal: boolean;
   /** 焦点在输入框 / textarea / contenteditable 里时是否仍然由应用接管。 */
   allowWhileTyping: boolean;
+  /**
+   * 命中之后**放行**：不 `preventDefault`，也不派发 handler。
+   *
+   * 只有一条这样的命令（⌘V）。浏览器原生的 `paste` 事件是唯一能拿到剪贴板
+   * 里图片与文件的通道——异步剪贴板 API 读不到 Finder 复制的文件，打包壳的
+   * WebView 上连 `read()` 都可能没有。所以这一条只登记键位（命令面板与设置
+   * 页照样显示 ⌘V），真正的落地在 `canvas/dnd/os-drop.usePasteToCanvas`。
+   */
+  native?: boolean;
 }
 
 /** 两个平台绑同一套键时的简写。 */
@@ -291,9 +300,11 @@ export const COMMANDS = [
   // ── canvas：剪贴板（React Flow 计划 F19） ────────────────────────
   //
   // 三条都不在终端与输入框里生效：⌘C / ⌘X / ⌘V 在那两处是系统行为，
-  // 截走就等于把复制粘贴弄坏。命中时 `useKeybindings` 会 `preventDefault`，
-  // 所以浏览器原生的 `paste` 事件不会再发出来——`canvas.paste` 自己去读
-  // 系统剪贴板（`whiteboard/clipboard.ts`）。
+  // 截走就等于把复制粘贴弄坏。
+  //
+  // ⌘C / ⌘X 命中即 `preventDefault`：我们要写进剪贴板的是自己的 JSON
+  // （`whiteboard/clipboard.ts`），放行会让浏览器拿文档选区把它盖掉。
+  // ⌘V 相反，是 `native` 的——见 `CommandSpec.native`。
   {
     id: "canvas.copy",
     labelKey: "cmd.canvas.copy",
@@ -317,6 +328,7 @@ export const COMMANDS = [
     defaultKeys: both("Mod+V"),
     allowInTerminal: false,
     allowWhileTyping: false,
+    native: true,
   },
 
   // ── canvas：画布偏好（2026-09-05 用户反馈：偏好要能在系统里配） ──
@@ -911,6 +923,10 @@ export function useKeybindings(
           current.keymap?.[command.id]?.[mac ? "mac" : "other"] ??
           command.defaultKeys[mac ? "mac" : "other"];
         if (!matchKeyboardEvent(keyboardEvent, keys, { mac })) continue;
+
+        // 放行的那一条（⌘V）：浏览器接着发原生 `paste`，别的命令不再看这一下。
+        // `COMMANDS` 是 `as const`，只有真的写了 `native` 的那一条才有这个键。
+        if ("native" in command && command.native) return;
 
         keyboardEvent.preventDefault();
         keyboardEvent.stopPropagation();

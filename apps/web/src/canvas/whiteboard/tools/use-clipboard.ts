@@ -32,9 +32,11 @@ import { textItemAt } from "./draft";
  * 载体是系统剪贴板的 `text/plain`，内容是带签名的 JSON
  * （`whiteboard/clipboard.ts`）。所以跨窗口、跨画布、重启之后都能粘。
  *
- * 粘贴这条路要自己去读剪贴板：`keybindings.ts` 命中 ⌘V 之后会
- * `preventDefault`，浏览器就不会再发 `paste` 事件了。异步剪贴板读不到
- * （权限、旧 WebView）时退回 `readText`，两条都不行才提示。
+ * 键盘上的粘贴不走这里：⌘V 在 `keybindings.ts` 里登记为 `native`，浏览器
+ * 发出的原生 `paste` 事件由 `dnd/os-drop.usePasteToCanvas` 接住——只有那个
+ * 事件同时给得出文本、图片和 Finder 复制的文件。这里的 `pasteFromSystem`
+ * 只剩菜单与命令面板那一条路：它没有事件可用，只能去问异步剪贴板
+ * （读不到时退回 `readText`，两条都不行才用应用内那一份）。
  */
 
 interface ClipboardTarget {
@@ -98,6 +100,16 @@ export function resetLocalClipboard(): void {
   localClipboard = null;
 }
 
+/**
+ * 应用内那一份的内容。
+ *
+ * 原生 `paste` 事件的载荷是空的时候（系统剪贴板写入失败过，或者 WebView
+ * 不给我们看 `text/plain`）用它兜底，这样应用内的复制粘贴始终好用。
+ */
+export function localClipboardText(): string | null {
+  return localClipboard;
+}
+
 async function writeSystemClipboard(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);
@@ -133,11 +145,11 @@ export async function copySelection(cut: boolean): Promise<void> {
 /* -------------------------------- 粘贴 ------------------------------------ */
 
 /**
- * 读系统剪贴板并落地。
+ * 读系统剪贴板并落地（菜单与命令面板那条路；⌘V 走原生 `paste` 事件）。
  *
- * 三级：异步剪贴板（能拿到图片）→ `readText` → 应用内的那一份。⌘V 被
- * `keybindings.ts` `preventDefault` 掉了，浏览器不会再发 `paste` 事件，
- * 所以这条路必须自己把内容读回来。三级都空才提示。
+ * 三级：异步剪贴板（能拿到图片）→ `readText` → 应用内的那一份。菜单里点
+ * 「粘贴」时手上没有 `ClipboardEvent`，只能自己把内容读回来；异步剪贴板
+ * 给不出 Finder 复制的文件，所以那一类只有 ⌘V 那条路接得住。
  *
  * 落地规则与拖放同一张表（§2.8 最后一条）。
  */
@@ -175,7 +187,14 @@ export async function pasteFromSystem(at: Position): Promise<void> {
   await paste(target, { text, files });
 }
 
-/** 一次粘贴的落地（`paste` 事件与命令共用）。 */
+/**
+ * 一次粘贴的落地（`paste` 事件与命令共用）。
+ *
+ * 三条分流，与拖放同一张表（§2.8 最后一条）：`armadra/canvas@1` 的 JSON
+ * 原样复原 → 文件交给 `dnd/external-content.addBrowserFiles`（图片经
+ * `assets.uploadAsset` 落成图片对象，其余复制进工作区后建 `editor` 节点）
+ * → 剩下的纯文本落成一条文字对象，换行原样保留。
+ */
 export async function paste(
   target: ClipboardTarget,
   content: { text: string | null; files: readonly File[] },
@@ -185,9 +204,8 @@ export async function paste(
     pasteCanvasPayload(payload, target.at);
     return;
   }
-  const images = content.files.filter((file) => routeFile(file) === "image");
-  if (images.length > 0) {
-    await addBrowserFiles(images, target.at);
+  if (content.files.length > 0) {
+    await addBrowserFiles([...content.files], target.at);
     return;
   }
   if (content.text && content.text.trim().length > 0) {

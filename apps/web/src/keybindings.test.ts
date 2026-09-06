@@ -261,6 +261,26 @@ describe("useKeybindings", () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
+  /**
+   * ⌘V 是唯一一条 `native` 命令（2026-09-06 用户反馈：从别处复制的内容粘不
+   * 进画布）。截走它就等于让浏览器不发原生 `paste`，而那是唯一能拿到剪贴板
+   * 里图片与文件的通道，所以这里命中之后必须原样放行。
+   */
+  it("`native` 的命令命中即放行：不 preventDefault、也不派发", () => {
+    const onPaste = vi.fn();
+    const onCopy = vi.fn();
+    mount({ "canvas.paste": onPaste, "canvas.copy": onCopy });
+
+    const paste = fire({ key: "v", metaKey: true });
+    expect(onPaste).not.toHaveBeenCalled();
+    expect(paste.defaultPrevented).toBe(false);
+
+    // ⌘C 相反：我们要写自己的 JSON，放行会被文档选区盖掉。
+    const copy = fire({ key: "c", metaKey: true });
+    expect(onCopy).toHaveBeenCalledTimes(1);
+    expect(copy.defaultPrevented).toBe(true);
+  });
+
   it("终端里只放行 allowInTerminal 的命令", () => {
     const onPalette = vi.fn();
     const onUndo = vi.fn();

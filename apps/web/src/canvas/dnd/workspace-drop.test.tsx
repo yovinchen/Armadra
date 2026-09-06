@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   browser: vi.fn(async (..._args: unknown[]) => {}),
   paste: vi.fn(async (..._args: unknown[]) => {}),
   error: vi.fn(),
+  localClipboard: null as string | null,
   locked: false,
   nativeDrop: null as
     | null
@@ -52,6 +53,7 @@ vi.mock("../interaction/pointer", () => ({
 }));
 vi.mock("../whiteboard/tools/use-clipboard", () => ({
   paste: (...args: unknown[]) => mocks.paste(...args),
+  localClipboardText: () => mocks.localClipboard,
 }));
 vi.mock("../../app/preferences-store", () => ({
   t: (key: string) => key,
@@ -138,6 +140,7 @@ function pasteEvent(
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.locked = false;
+  mocks.localClipboard = null;
 });
 afterEach(() => {
   cleanup();
@@ -230,6 +233,29 @@ describe("粘贴", () => {
     expect(
       (mocks.paste.mock.calls[0]![1] as { files: File[] }).files,
     ).toHaveLength(1);
+  });
+
+  // Finder 复制来的文件是任意类型：分流归 `external-content`，这里一个不筛。
+  it("非图片文件也照收，交给同一张分流表", () => {
+    render(<Fixture />);
+    pasteEvent(screen.getByTestId("canvas"), {
+      files: [new File(["x"], "notes.pdf", { type: "application/pdf" })],
+    });
+    expect(
+      (mocks.paste.mock.calls[0]![1] as { files: File[] }).files.map(
+        (file) => file.name,
+      ),
+    ).toEqual(["notes.pdf"]);
+  });
+
+  it("载荷是空的时候退回应用内的那一份", () => {
+    mocks.localClipboard = '{"armadra":"canvas@1"}';
+    render(<Fixture />);
+    pasteEvent(screen.getByTestId("canvas"), { text: "" });
+    expect(mocks.paste).toHaveBeenCalledWith(
+      { workspaceId: "w1", at: { x: 7, y: 9 } },
+      expect.objectContaining({ text: '{"armadra":"canvas@1"}' }),
+    );
   });
 
   it("输入框与终端里的粘贴原样交给它们", () => {
