@@ -1,16 +1,35 @@
-// B5 重建：白板对象 → Agent 的内容引用（React Flow 计划 §2.5 / F29）。
-//
-// 旧引擎里这里从编辑器收集「一端绑节点、一端绑白板 shape」的箭头。
-// 引用现在是 `whiteboard.references` 里的一行（§3.1），PNG 由自写的
-// `whiteboard/raster.ts` 出，发布 / 缓存 / 重试的状态机原样保留。
-//
-// B0 只留下三样东西：`ContextLink` 的上限、纯文本辅助（Runtime 的字节口径
-// 由它决定，与引用模型无关），以及一个恒返回空表的 `useContentLinks`。
-// 这样 `context-links.ts`（推链接文档给 Runtime）照常工作，只是暂时没有
-// 白板来源的链接。
+import * as React from "react";
 import type { ContextLink } from "@armadra/shared";
 
+import { runtimeApi } from "@/api/client";
 import { t } from "@/app/preferences-store";
+import { useCanvasStore } from "@/store/canvas-store";
+import { assetIdOf, assetUrlFor } from "./assets";
+import { toItemId, type Item, type WhiteboardDoc } from "./whiteboard/model";
+import type { ColorScheme } from "./whiteboard/palette";
+import { rasterizeItems } from "./whiteboard/raster";
+import { canvasScheme } from "./whiteboard/scheme";
+
+/**
+ * 内容引用：白板对象 → Agent（React Flow 计划 §2.5 / F29，归属 B5）。
+ *
+ * 旧引擎里一条引用是「一端绑节点、一端绑白板 shape」的 tldraw 箭头，收集
+ * 时得把编辑器里所有 arrow 连同 binding 翻一遍。现在它就是
+ * `whiteboard.references` 里的一行 `{ id, itemId, nodeId }`（§3.1），所以这
+ * 个模块只读 `canvas-store` 的一份内存真相，不再需要编辑器。
+ *
+ * 跨端契约一个字段都没变（§2.5）：`ContextLink.content` 仍是
+ * `{ status, sourceShapeId, shapeType, text, textTruncated, pngPath }`，
+ * Runtime 的 `collab/context_link.rs` 不动。变的只有两处来源——
+ *
+ *  - `sourceShapeId` 填 `wb:<uuid>`，`shapeType` 填 `ink / text / shape /
+ *    image / line`（提示字段，Runtime 不按它分支）；
+ *  - PNG 由自写的 `whiteboard/raster.ts` 画，不再是编辑器的 `toImageDataUrl`。
+ *
+ * 发布 / 缓存 / 重试的状态机原样保留：文字与准备状态立即发布，栅格化按
+ * 两秒截止时间批量跑；导出串行、过期结果丢弃、失败最多三次，之后靠
+ * `REFRESH_CONTENT_EVENT` 显式重试。
+ */
 
 /** 栅格化 + 上传的防抖：连着改一笔不要每一帧都导出一次。 */
 export const EXPORT_DELAY_MS = 2000;
@@ -27,6 +46,9 @@ export const MAX_LINKS = 64;
 /** 内容引用在链接文档里的 `kind`（Runtime 的 `collab/context_link.rs`）。 */
 export const SHAPE_KIND = "shape";
 
+/** 一次导出最多重试几次；之后停在 `error`，等显式重试。 */
+export const MAX_EXPORT_ATTEMPTS = 3;
+
 /**
  * 白板对象类型 → 标题用的 i18n 键。
  *
@@ -40,6 +62,18 @@ export const CONTENT_TYPE_KEYS: Record<string, string> = {
   image: "content.image",
   line: "content.line",
   group: "content.group",
+};
+
+/**
+ * 导出图的底色。
+ *
+ * 不用透明：Agent 那头多半是把 PNG 贴进别的文档或直接用看图工具打开，
+ * 深色纸上的白墨迹落在白色背板上会整张看不见。底色跟着**画布纸张色**
+ * 走（`whiteboard/scheme.ts` 的同一条判据）。
+ */
+export const RASTER_BACKGROUND: Record<ColorScheme, string> = {
+  light: "#ffffff",
+  dark: "#1a1a1a",
 };
 
 /** 按字节截断（Runtime 校验的是字节数）。 */
@@ -73,10 +107,141 @@ export function contentTitle(
   return label(CONTENT_TYPE_KEYS[kind] ?? "content.shape");
 }
 
+/* --------------------------------- 文字 ----------------------------------- */
+
+/**
+ * 一个白板对象的可读文字。
+ *
+ * 只有两种对象带文字：`text` 的正文与 `shape` 的标签。墨迹、图片、直线
+ * 没有文字，交给 Agent 的就只有一张图。
+ */
+export function itemText(item: Item): string {
+  if (item.kind === "text") return item.text.trim();
+  if (item.kind === "shape") return (item.label ?? "").trim();
+  return "";
+}
+
+/**
+ * 「这个对象还是不是上次导出的那个样子」。
+ *
+ * 就是对象自己的 JSON **去掉 `x` / `y`**（§2.5）：挪一下位置画出来一模一样，
+ * 不值得再导一次。`w` / `h` 留着——缩放会改变栅格。图片对象的 `assetPath`
+ * 也在里面，所以换了图签名就变。
+ */
+export function itemSignature(item: Item | null | undefined): string {
+  if (!item) return "";
+  const { x: _x, y: _y, ...rest } = item;
+  return JSON.stringify(rest);
+}
+
+/* ------------------------------- 内容解析 --------------------------------- */
+
+export interface ContentDeps {
+  /** 栅格化后的 PNG → 工作区相对路径。 */
+  exportPng(exportId: string, dataUrl: string): Promise<string>;
+  /** 图片对象的 `assetPath` → 可加载的 URL（栅格化时要真的把图画进去）。 */
+  resolveImage?(assetPath: string): string | null;
+  scheme?: ColorScheme;
+  label?(key: string): string;
+}
+
+export interface ResolvedContent {
+  title: string;
+  content: NonNullable<ContextLink["content"]>;
+}
+
+/** `Blob` → `data:image/png;base64,…`（`exportPng` 只收这一种）。 */
+export async function blobToDataUrl(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  // 分块拼接：一次 `String.fromCharCode(...bytes)` 会在几百 KB 的图上把
+  // 参数栈打爆。
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  }
+  return `data:image/png;base64,${btoa(binary)}`;
+}
+
+/**
+ * 一个白板对象 → 链接文档里的那一条。
+ *
+ * 三条分流：
+ *
+ *  - `text`：只有正文，不导出 PNG（Agent 直接读字）。
+ *  - `image` 且是受管资产：`pngPath` 直接给 `.armadra/assets/…` 的相对路径，
+ *    字节已经在工作区里了，不重复导出。v2 的图片对象没有裁剪 / 翻转 /
+ *    旋转，所以这条分流永远成立（旧引擎那三个例外随 tldraw 一起没了）。
+ *  - 其余：栅格化后上传，`pngPath` 用返回的 `relativePath`。
+ */
+export async function resolveContent(
+  item: Item,
+  contentId: string,
+  deps: ContentDeps,
+): Promise<ResolvedContent> {
+  const text = itemText(item);
+  const title = contentTitle(item.kind, text, deps.label ?? t);
+  const content: NonNullable<ContextLink["content"]> = {};
+  if (text) content.text = clampText(text);
+
+  if (item.kind === "text") return { title, content };
+
+  if (item.kind === "image") {
+    const managed = assetIdOf(item.assetPath);
+    if (managed) {
+      content.pngPath = item.assetPath;
+      return { title, content };
+    }
+  }
+
+  const scheme = deps.scheme ?? "light";
+  const blob = await rasterizeItems([item], {
+    scale: 2,
+    padding: 16,
+    background: RASTER_BACKGROUND[scheme],
+    scheme,
+    resolveImage: deps.resolveImage,
+  });
+  content.pngPath = await deps.exportPng(contentId, await blobToDataUrl(blob));
+  return { title, content };
+}
+
+/* -------------------------------- 收集 ------------------------------------ */
+
+export interface ContentDescriptor {
+  /** `ContextLink.id`，也是 `.armadra/exports/<id>.png` 的文件名。 */
+  contentId: string;
+  nodeId: string;
+  item: Item;
+}
+
+/**
+ * 白板上所有的内容引用。
+ *
+ * 指向已经删掉的对象的引用行在这里被跳过（`whiteboard.removeItems` 会连引用
+ * 一起删，但远端灌进来的文档可能还带着）；节点是否存在由
+ * `context-links.buildLinkDocuments` 把关——它只往终端节点的文档里塞。
+ */
+export function collectContentLinks(
+  whiteboard: WhiteboardDoc,
+): ContentDescriptor[] {
+  const items = new Map(whiteboard.items.map((item) => [item.id, item]));
+  const found: ContentDescriptor[] = [];
+  for (const reference of whiteboard.references) {
+    const item = items.get(reference.itemId);
+    if (!item) continue;
+    found.push({ contentId: reference.id, nodeId: reference.nodeId, item });
+  }
+  return found;
+}
+
 /** 终端节点 id → 它的内容引用。 */
 export type ContentLinkMap = Record<string, ContextLink[]>;
 
 const NO_LINKS: ContentLinkMap = {};
+
+function sameMap(a: ContentLinkMap, b: ContentLinkMap): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
 
 /** 显式重试，桌面与 Web 的右键菜单共用。 */
 export const REFRESH_CONTENT_EVENT = "armadra:refresh-content-references";
@@ -85,7 +250,203 @@ export function refreshContentReferences(): void {
   window.dispatchEvent(new Event(REFRESH_CONTENT_EVENT));
 }
 
-/** B5 改成订阅 `whiteboard.references` 与 `items`。 */
+/** `content` 里与内容无关的那半边（每次都现算，不进缓存）。 */
+function sourceContent(item: Item): NonNullable<ContextLink["content"]> {
+  const text = itemText(item);
+  return {
+    sourceShapeId: toItemId(item.id),
+    shapeType: item.kind,
+    ...(text
+      ? {
+          text: clampText(text),
+          textTruncated:
+            new TextEncoder().encode(text).length > MAX_CONTENT_TEXT_BYTES,
+        }
+      : {}),
+  };
+}
+
+/**
+ * 画布上的内容引用（含已经解析好的 `content`）。
+ *
+ * 订阅的是 `canvas-store.whiteboard`：引用行、对象内容、对象尺寸任一变化
+ * 都会重新排一次导出。`document` 不订阅——节点标题变了不影响这份内容，
+ * 而节点被删掉时 `buildLinkDocuments` 自然就不会给它建文档。
+ */
 export function useContentLinks(): ContentLinkMap {
-  return NO_LINKS;
+  const workspaceId = useCanvasStore((state) => state.workspace?.id);
+  const boardId = useCanvasStore((state) => state.document?.board.id);
+  const [links, setLinks] = React.useState<ContentLinkMap>(NO_LINKS);
+
+  React.useEffect(() => {
+    setLinks((previous) => (sameMap(previous, NO_LINKS) ? previous : NO_LINKS));
+    if (!workspaceId) return;
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let inFlight = false;
+    let dirty = false;
+    let previewQueued = false;
+    const cache = new Map<string, { signature: string; link: ContextLink }>();
+    const failures = new Map<string, { signature: string; attempts: number }>();
+    const deps: ContentDeps = {
+      exportPng: async (exportId, dataUrl) => {
+        const response = await runtimeApi.exportPng(
+          workspaceId,
+          exportId,
+          dataUrl,
+        );
+        return response.relativePath;
+      },
+      resolveImage: (path) => assetUrlFor(workspaceId, path),
+    };
+    const whiteboard = () => useCanvasStore.getState().whiteboard;
+
+    const currentMap = (): ContentLinkMap => {
+      const next: ContentLinkMap = {};
+      for (const item of collectContentLinks(whiteboard())) {
+        const signature = itemSignature(item.item);
+        const cached = cache.get(item.contentId);
+        const failed = failures.get(item.contentId);
+        const source = sourceContent(item.item);
+        const link =
+          cached?.signature === signature
+            ? cached.link
+            : {
+                id: item.contentId,
+                title: contentTitle(item.item.kind, source.text ?? ""),
+                kind: SHAPE_KIND,
+                content: {
+                  ...source,
+                  status:
+                    item.item.kind === "text"
+                      ? ("ready" as const)
+                      : failed?.signature === signature &&
+                          failed.attempts >= MAX_EXPORT_ATTEMPTS
+                        ? ("error" as const)
+                        : ("pending" as const),
+                },
+              };
+        (next[item.nodeId] ??= []).push(link);
+      }
+      return next;
+    };
+
+    const publishPreview = () => {
+      if (disposed) return;
+      const next = currentMap();
+      setLinks((previous) => (sameMap(previous, next) ? previous : next));
+    };
+
+    /** 结果回来时这条引用还是原来那条吗（对象换了内容 / 引用被删）？ */
+    const stillCurrent = (item: ContentDescriptor, signature: string) => {
+      const doc = whiteboard();
+      const reference = doc.references.find(
+        (row) => row.id === item.contentId && row.nodeId === item.nodeId,
+      );
+      if (!reference || reference.itemId !== item.item.id) return false;
+      const current = doc.items.find((row) => row.id === item.item.id);
+      return itemSignature(current) === signature;
+    };
+
+    const run = async () => {
+      timer = null;
+      if (disposed) return;
+      if (inFlight) {
+        dirty = true;
+        return;
+      }
+      inFlight = true;
+      dirty = false;
+      const descriptors = collectContentLinks(whiteboard());
+      let retry = false;
+      try {
+        const alive = new Set(descriptors.map((item) => item.contentId));
+        for (const key of cache.keys()) if (!alive.has(key)) cache.delete(key);
+        for (const key of failures.keys())
+          if (!alive.has(key)) failures.delete(key);
+        for (const item of descriptors) {
+          const signature = itemSignature(item.item);
+          if (cache.get(item.contentId)?.signature === signature) continue;
+          const failure = failures.get(item.contentId);
+          const attempts =
+            failure?.signature === signature ? failure.attempts : 0;
+          if (attempts >= MAX_EXPORT_ATTEMPTS) continue;
+          try {
+            const resolved = await resolveContent(item.item, item.contentId, {
+              ...deps,
+              scheme: canvasScheme(),
+            });
+            if (disposed || !stillCurrent(item, signature)) {
+              dirty = true;
+              break;
+            }
+            cache.set(item.contentId, {
+              signature,
+              link: {
+                id: item.contentId,
+                title: resolved.title,
+                kind: SHAPE_KIND,
+                content: {
+                  ...sourceContent(item.item),
+                  ...resolved.content,
+                  status: "ready",
+                },
+              },
+            });
+            failures.delete(item.contentId);
+          } catch {
+            if (disposed || !stillCurrent(item, signature)) {
+              dirty = true;
+              break;
+            }
+            failures.set(item.contentId, { signature, attempts: attempts + 1 });
+            retry ||= attempts + 1 < MAX_EXPORT_ATTEMPTS;
+          }
+        }
+      } finally {
+        inFlight = false;
+        if (!disposed) {
+          publishPreview();
+          if (dirty || retry) schedule();
+        }
+      }
+    };
+
+    function schedule() {
+      if (disposed) return;
+      dirty = true;
+      // 有截止时间的排期：不断的无关编辑不会把导出无限推后。
+      if (timer === null)
+        timer = setTimeout(() => {
+          void run();
+        }, EXPORT_DELAY_MS);
+      if (!previewQueued) {
+        previewQueued = true;
+        queueMicrotask(() => {
+          previewQueued = false;
+          publishPreview();
+        });
+      }
+    }
+
+    const refresh = () => {
+      cache.clear();
+      failures.clear();
+      schedule();
+    };
+
+    schedule();
+    const off = useCanvasStore.subscribe((state, previous) => {
+      if (state.whiteboard !== previous.whiteboard) schedule();
+    });
+    window.addEventListener(REFRESH_CONTENT_EVENT, refresh);
+    return () => {
+      disposed = true;
+      if (timer !== null) clearTimeout(timer);
+      off();
+      window.removeEventListener(REFRESH_CONTENT_EVENT, refresh);
+    };
+  }, [workspaceId, boardId]);
+
+  return links;
 }
