@@ -9,10 +9,10 @@ use tauri_plugin_dialog::DialogExt;
 
 use armadra_desktop::{
     host,
-    lifecycle::DesktopLifecycle,
+    lifecycle::{DesktopLifecycle, reveal_window},
     native_session, runtime_data_dir,
     runtime_process::{RuntimeProcess, external_runtime_health_url, runtime_get, wait_for_runtime},
-    trace_lifecycle, transport,
+    shortcuts, trace_lifecycle, transport,
     transport::{RuntimeAddress, RuntimeTransport, WebSocketForwarder},
     updates, usage,
 };
@@ -86,16 +86,6 @@ fn diagnostic_bridge(_webview: &tauri::Webview) {}
 
 /* --------------------------------- 托盘 ---------------------------------- */
 
-/** 把窗口从隐藏 / 最小化里拉回前台。 */
-fn reveal(window: &WebviewWindow) {
-    if !window.state::<DesktopLifecycle>().reveal() {
-        return;
-    }
-    let _ = window.show();
-    let _ = window.unminimize();
-    let _ = window.set_focus();
-}
-
 fn request_quit(app: &tauri::AppHandle) {
     if !app.state::<DesktopLifecycle>().begin_quit() {
         return;
@@ -114,7 +104,7 @@ fn request_quit(app: &tauri::AppHandle) {
             eprintln!("Application shutdown incomplete: {error}");
             app.state::<DesktopLifecycle>().quit_failed();
             if let Some(window) = app.get_webview_window("main") {
-                reveal(&window);
+                reveal_window(&window);
             }
             app.dialog()
                 .message(format!(
@@ -225,7 +215,7 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             "tray-show" => {
                 if let Some(window) = app.get_webview_window("main") {
-                    reveal(&window);
+                    reveal_window(&window);
                 }
             }
             "tray-quit" => request_quit(app),
@@ -247,7 +237,7 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             } = event
                 && let Some(window) = tray.app_handle().get_webview_window("main")
             {
-                reveal(&window);
+                reveal_window(&window);
             }
         });
     if let Some(icon) = app.default_window_icon() {
@@ -348,6 +338,8 @@ fn main() {
         // app cannot provide. Notifications back the "agent needs you / agent
         // finished" alerts of plan §5.4.
         .plugin(tauri_plugin_dialog::init())
+        // 全局热键默认一个都不注册；插件只是让设置页能装上它选的那两个。
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         // Checking for a newer build is a read. Nothing here downloads or
@@ -364,9 +356,11 @@ fn main() {
             updates::updates_restart_report,
             // The page's only door to a Host session: a one-time ticket the
             // shell mints over the same-user control channel (design §4.4).
-            native_session::host_native_ticket
+            native_session::host_native_ticket,
+            shortcuts::global_shortcuts_apply
         ])
         .manage(updates::UpdatesController::default())
+        .manage(shortcuts::GlobalShortcuts::default())
         .manage(RuntimeProcess::default())
         .manage(DesktopLifecycle::default())
         .manage(RuntimeTransport::new(RuntimeAddress::for_data_dir(
@@ -392,7 +386,7 @@ fn main() {
         .on_menu_event(|app, event| match event.id().as_ref() {
             "desktop-show" => {
                 if let Some(window) = app.get_webview_window("main") {
-                    reveal(&window);
+                    reveal_window(&window);
                 }
             }
             "desktop-close" => {
@@ -523,7 +517,7 @@ fn main() {
         RunEvent::Reopen { .. } => {
             trace_lifecycle("reopen");
             if let Some(window) = app_handle.get_webview_window("main") {
-                reveal(&window);
+                reveal_window(&window);
             }
         }
         RunEvent::Ready => trace_lifecycle("ready"),

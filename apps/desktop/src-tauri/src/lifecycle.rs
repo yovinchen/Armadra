@@ -197,6 +197,24 @@ async fn stop_host_cli(config: &HostLaunchConfig) -> Result<(), String> {
     result.map_err(str::to_owned)
 }
 
+/// Brings the main window back from hidden or minimized.
+///
+/// The lifecycle's own `reveal()` is asked first: while a quit is in progress
+/// nothing may put the window back, or a hotkey pressed at the wrong moment
+/// would resurrect a window whose services are already stopping. Every entry
+/// point — tray click, dock reopen, global hotkey, menu item — goes through
+/// here so they cannot disagree about that.
+pub fn reveal_window(window: &tauri::WebviewWindow) -> bool {
+    use tauri::Manager;
+    if !window.state::<DesktopLifecycle>().reveal() {
+        return false;
+    }
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

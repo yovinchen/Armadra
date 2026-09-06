@@ -10,6 +10,7 @@ pub mod host;
 pub mod lifecycle;
 pub mod native_session;
 pub mod runtime_process;
+pub mod shortcuts;
 pub mod transport;
 pub mod updates;
 pub mod usage;

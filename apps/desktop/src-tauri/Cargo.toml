@@ -44,6 +44,9 @@ sha2 = "0.10.9"
 # `tray-icon` 提供托盘（§17 Tauri）；`image-png` 让托盘直接吃 bundle 里的 PNG 图标。
 tauri = { version = "2.10.2", features = ["tray-icon", "image-png", "macos-private-api"] }
 tauri-plugin-dialog = "2.7.3"
+# 系统级全局热键（快捷键页的 `global` 作用域）。默认一个都不注册：一个全局
+# 热键在别的应用里也会触发，装上它必须是用户明确做的事。
+tauri-plugin-global-shortcut = "2.3.0"
 tauri-plugin-notification = "2.4.0"
 tauri-plugin-opener = "2.5.5"
 # 自动更新契约（S03 / 路线图 §3.12）。插件只做「查一下」，安装仍是人的动作；
