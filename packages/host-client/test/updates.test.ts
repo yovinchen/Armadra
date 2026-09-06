@@ -111,14 +111,22 @@ describe("HostUpdatesClient", () => {
         target: "",
         url: "https://releases.invalid/download/v0.2.0/latest.json",
         sizeBytes: 900n,
-        signature: { state: UpdateSignatureState.PRESENT, value: "", keyId: "" },
+        signature: {
+          state: UpdateSignatureState.PRESENT,
+          value: "",
+          keyId: "",
+        },
       },
       {
         component: "desktop",
         target: "darwin-aarch64",
         url: "https://releases.invalid/download/v0.2.0/Armadra_0.2.0_darwin-aarch64.app.tar.gz",
         sizeBytes: 2048n,
-        signature: { state: UpdateSignatureState.PRESENT, value: "", keyId: "" },
+        signature: {
+          state: UpdateSignatureState.PRESENT,
+          value: "",
+          keyId: "",
+        },
       },
     ];
     const { api } = client(() =>

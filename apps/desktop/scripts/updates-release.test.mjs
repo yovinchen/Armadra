@@ -57,7 +57,8 @@ function updaterAsset(target) {
  */
 function deriveOffer(release, target) {
   const manifest = release.assets.find(
-    (asset) => assetComponent(asset.name) === "manifest" && asset.name === "latest.json",
+    (asset) =>
+      assetComponent(asset.name) === "manifest" && asset.name === "latest.json",
   );
   assert.ok(manifest, "the release publishes no updater manifest");
   const bundleName = updaterAsset(target);
@@ -70,7 +71,8 @@ function deriveOffer(release, target) {
   assert.ok(bundle, `the release publishes no desktop bundle for ${target}`);
   const manifestUrl = new URL(manifest.browser_download_url);
   const bundleUrl = new URL(bundle.browser_download_url);
-  const directory = (url) => url.pathname.slice(0, url.pathname.lastIndexOf("/") + 1);
+  const directory = (url) =>
+    url.pathname.slice(0, url.pathname.lastIndexOf("/") + 1);
   assert.equal(manifestUrl.origin, bundleUrl.origin);
   assert.equal(directory(manifestUrl), directory(bundleUrl));
   return {
@@ -205,10 +207,13 @@ describe("desktop update closure against a mock release", () => {
       join(directory, `${updaterAsset(TARGET)}.sig`),
       "utf8",
     );
-    assert.deepEqual(verifyDetached(publicKeyFile(other), signature, bundleBytes), {
-      ok: false,
-      reason: "signatureKeyMismatch",
-    });
+    assert.deepEqual(
+      verifyDetached(publicKeyFile(other), signature, bundleBytes),
+      {
+        ok: false,
+        reason: "signatureKeyMismatch",
+      },
+    );
   });
 
   it("keeps the installers out of the manifest", () => {
