@@ -2,12 +2,16 @@
 //! never the detached Host. No commands, flags, or process handles reach web IPC.
 //!
 //! The launch line and the short-lived CLI child live in [`launch`]; the checks
-//! that decide whether an answer may be trusted live in [`verify`].
+//! that decide whether an answer may be trusted live in [`verify`]; the native
+//! session ticket the page may ask for lives in [`native`].
 
 mod launch;
+mod native;
 #[cfg(test)]
 mod tests;
 mod verify;
+
+pub use self::native::{NativeTicket, NativeTicketError, issue_native_ticket};
 
 use std::{
     ffi::OsString,
@@ -73,9 +77,11 @@ pub struct HostLaunchConfig {
     /// both services describe themselves in one document (roadmap §4.4).
     pub endpoints_dir: Option<PathBuf>,
     /// `None` asks the Host for no TCP surface at all: it then answers only on
-    /// the same-user control IPC, and reports an empty `http_endpoint`. That is
-    /// the packaged shape. Development keeps a loopback endpoint so the browser
-    /// front end can still reach the Host directly.
+    /// the same-user control IPC, and reports an empty `http_endpoint`. Both
+    /// the packaged and the development shell keep the loopback endpoint: the
+    /// packaged page trades a control-channel ticket for a bearer session over
+    /// it (docs/design/host-native-session.md §4.4), and the browser front end
+    /// of a development build reaches the Host directly.
     //
     // Rust-only injection for isolated lifecycle tests; never exposed to web
     // commands.
@@ -98,16 +104,19 @@ impl HostLaunchConfig {
             std::env::var_os("ARMADRA_HOST_BINARY"),
             std::env::var_os("CARGO_TARGET_DIR"),
         )?;
+        let _ = development;
         let config = Self {
             binary,
             data_dir: std::env::var_os("ARMADRA_HOST_DATA_DIR").map(PathBuf::from),
             browser_origin,
             cli_timeout: Duration::from_secs(15),
             endpoints_dir: Some(endpoints_dir),
-            // A packaged desktop reaches the Host over its control IPC and asks
-            // it to hold no port; a development build keeps the loopback
-            // endpoint the browser front end and `armadra.sh` still use.
-            expected_http_endpoint: development.then(|| HOST_ENDPOINT.to_owned()),
+            // The loopback endpoint is what the page's native session rides
+            // on in a packaged build, and what the browser front end and
+            // `armadra.sh` still use in development. The origin granted to it
+            // differs: the page's own, which a packaged build spells as the
+            // native origin.
+            expected_http_endpoint: Some(HOST_ENDPOINT.to_owned()),
         };
         config.validate()?;
         Ok(config)

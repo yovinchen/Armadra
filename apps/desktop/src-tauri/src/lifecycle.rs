@@ -12,7 +12,7 @@ use std::{
 use armadra_protocol::{Message, v1};
 use tokio::{io::AsyncReadExt, process::Command};
 
-use crate::host::{self, HostLaunchConfig};
+use crate::host::{self, HostLaunchConfig, NativeTicket, NativeTicketError};
 
 const RUNNING: u8 = 0;
 const STOPPING: u8 = 1;
@@ -23,6 +23,9 @@ pub struct DesktopLifecycle {
     phase: AtomicU8,
     hidden: AtomicBool,
     host_config: Mutex<Option<Arc<HostLaunchConfig>>>,
+    /// What the last successful startup observed. A native session ticket is
+    /// bound to exactly this Host instance, so it is kept rather than re-read.
+    host_status: Mutex<Option<v1::HostStatus>>,
     host_operation: tokio::sync::Mutex<()>,
 }
 
@@ -84,17 +87,48 @@ impl DesktopLifecycle {
             return Ok(());
         }
         if let Some(config) = self.config() {
-            host::ensure_host(&config).await?;
+            let status = host::ensure_host(&config).await?;
+            *self.host_status.lock().expect("Host status lock") = Some(status);
         }
         Ok(())
     }
 
     pub async fn stop_host(&self) -> Result<(), String> {
         let _operation = self.host_operation.lock().await;
+        *self.host_status.lock().expect("Host status lock") = None;
         if let Some(config) = self.config() {
             stop_host_cli(&config).await?;
         }
         Ok(())
+    }
+
+    /// Mints one native session ticket for the page
+    /// (docs/design/host-native-session.md §4.4). It serializes with startup
+    /// and quit on the same lock, so a ticket is never issued for a Host that
+    /// is still starting or already being stopped; a startup that failed
+    /// earlier is retried here, because `start` on a running Host just
+    /// reports it.
+    pub async fn native_ticket(
+        &self,
+        device_name: &str,
+    ) -> Result<NativeTicket, NativeTicketError> {
+        let _operation = self.host_operation.lock().await;
+        if self.is_quitting() {
+            return Err(NativeTicketError::HostUnavailable);
+        }
+        let config = self.config().ok_or(NativeTicketError::HostUnavailable)?;
+        let known = self.host_status.lock().expect("Host status lock").clone();
+        let status = match known {
+            Some(status) => status,
+            None => {
+                let status = host::ensure_host(&config)
+                    .await
+                    .map_err(|_| NativeTicketError::HostUnavailable)?;
+                *self.host_status.lock().expect("Host status lock") = Some(status.clone());
+                status
+            }
+        };
+        host::issue_native_ticket(&config, &status, device_name).await
     }
 }
 

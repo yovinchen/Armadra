@@ -160,18 +160,28 @@ fn a_host_without_a_listener_asks_for_none_and_grants_no_origin() {
     assert!(!args.iter().any(|argument| argument == "--allow-origin"));
 }
 
-/// A packaged build asks for no port; a development build keeps the
-/// loopback endpoint the browser front end still uses.
+/// Both shells keep the loopback endpoint: the packaged page rides its native
+/// session on it (docs/design/host-native-session.md §4.4), the development
+/// browser front end reaches it directly.
 #[test]
-fn only_a_development_shell_expects_a_host_port() {
+fn every_shell_expects_the_loopback_host_port() {
     let shared = std::env::temp_dir();
     let packaged =
         HostLaunchConfig::from_environment(false, "tauri://localhost".into(), shared.clone());
     // Binary resolution depends on the running executable, so only the
     // endpoint decision is asserted here.
     if let Ok(config) = packaged {
-        assert_eq!(config.expected_http_endpoint, None);
+        assert_eq!(
+            config.expected_http_endpoint.as_deref(),
+            Some(HOST_ENDPOINT)
+        );
         assert_eq!(config.endpoints_dir.as_deref(), Some(shared.as_path()));
+        // The native origin is granted to that listener, and nothing else.
+        let args = config.arguments();
+        assert_eq!(
+            args.iter().filter(|arg| *arg == "--allow-origin").count(),
+            3
+        );
     }
     if let Ok(config) =
         HostLaunchConfig::from_environment(true, "http://127.0.0.1:1420".into(), shared)
@@ -181,6 +191,189 @@ fn only_a_development_shell_expects_a_host_port() {
             Some(HOST_ENDPOINT)
         );
     }
+}
+
+/// The `pair` line the shell runs for a native ticket: the page's own origin,
+/// the fixed device label, protobuf out, and the same data directory.
+#[test]
+fn native_ticket_arguments_bind_the_shell_origin_and_device_name() {
+    let mut config = config(std::env::temp_dir().join(binary_name()));
+    let directory = std::env::temp_dir().join("host data with spaces");
+    config.data_dir = Some(directory.clone());
+    let args = native::pair_arguments(&config, "本机桌面");
+    assert_eq!(
+        args,
+        [
+            OsString::from("pair"),
+            "--output".into(),
+            "protobuf".into(),
+            "--origin".into(),
+            "tauri://localhost".into(),
+            "--device-name".into(),
+            "本机桌面".into(),
+            "--data-dir".into(),
+            directory.into_os_string(),
+        ]
+    );
+    config.data_dir = None;
+    assert_eq!(native::pair_arguments(&config, "This desktop").len(), 7);
+}
+
+fn ticket_wire(overrides: impl FnOnce(&mut v1::BootstrapTicketResponse)) -> Vec<u8> {
+    let mut ticket = v1::BootstrapTicketResponse {
+        host_id: "host-1".into(),
+        host_instance_id: "instance-1".into(),
+        ticket: format!("{}.{}", "a".repeat(32), "B".repeat(43)),
+        origin: "tauri://localhost".into(),
+        expires_at_unix_ms: 2_000_000,
+    };
+    overrides(&mut ticket);
+    ticket.encode_to_vec()
+}
+
+/// A ticket is accepted only for the Host instance the shell observed, the
+/// page's origin and a future expiry; the shape of the secret is checked but
+/// its value is never echoed.
+#[test]
+fn native_ticket_must_match_the_observed_host_and_origin() {
+    let status = status();
+    let ticket = native::decode_ticket(
+        &ticket_wire(|_| {}),
+        &status,
+        "tauri://localhost",
+        1_000_000,
+    )
+    .unwrap();
+    assert_eq!(ticket.host_id, "host-1");
+    assert_eq!(ticket.origin, "tauri://localhost");
+    assert_eq!(ticket.expires_at_unix_ms, "2000000");
+    assert!(!format!("{ticket:?}").contains("BBBB"));
+    assert_eq!(
+        serde_json::to_value(&ticket).unwrap()["expiresAtUnixMs"],
+        "2000000"
+    );
+    for (name, wire, origin, now) in [
+        (
+            "other host",
+            ticket_wire(|t| t.host_id = "host-2".into()),
+            "tauri://localhost",
+            1_000_000,
+        ),
+        (
+            "other instance",
+            ticket_wire(|t| t.host_instance_id = "instance-2".into()),
+            "tauri://localhost",
+            1_000_000,
+        ),
+        (
+            "other origin",
+            ticket_wire(|_| {}),
+            "http://127.0.0.1:1420",
+            1_000_000,
+        ),
+        (
+            "expired",
+            ticket_wire(|_| {}),
+            "tauri://localhost",
+            2_000_000,
+        ),
+        (
+            "empty ticket",
+            ticket_wire(|t| t.ticket.clear()),
+            "tauri://localhost",
+            1_000_000,
+        ),
+        (
+            "malformed ticket",
+            ticket_wire(|t| t.ticket = "not a ticket".into()),
+            "tauri://localhost",
+            1_000_000,
+        ),
+        ("garbage", vec![0x0a, 0xff], "tauri://localhost", 1_000_000),
+    ] {
+        assert_eq!(
+            native::decode_ticket(&wire, &status, origin, now),
+            Err(native::NativeTicketError::Malformed),
+            "{name}"
+        );
+    }
+}
+
+/// A browser-origin (development) shell has no native session to offer, and a
+/// Host without a listener has nowhere the ticket could be spent.
+#[tokio::test(flavor = "current_thread")]
+async fn native_ticket_refuses_a_browser_origin_and_a_portless_host() {
+    let mut config = config(std::env::temp_dir().join(binary_name()));
+    config.browser_origin = "http://127.0.0.1:1420".into();
+    config.expected_http_endpoint = None;
+    assert_eq!(
+        issue_native_ticket(&config, &status(), "本机桌面").await,
+        Err(native::NativeTicketError::OriginUnsupported)
+    );
+    config.browser_origin = "tauri://localhost".into();
+    let mut portless = status();
+    portless.http_endpoint.clear();
+    assert_eq!(
+        issue_native_ticket(&config, &portless, "本机桌面").await,
+        Err(native::NativeTicketError::HostUnavailable)
+    );
+    assert_eq!(
+        issue_native_ticket(&config, &status(), " ").await,
+        Err(native::NativeTicketError::HostUnavailable)
+    );
+    // With a listener and a native origin the CLI is consulted, and a missing
+    // binary is a Host that cannot be reached rather than a CLI failure.
+    assert_eq!(
+        issue_native_ticket(&config, &status(), "本机桌面").await,
+        Err(native::NativeTicketError::HostUnavailable)
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "current_thread")]
+async fn real_pair_cli_output_is_bounded_and_stderr_is_not_echoed() {
+    let _serial = CLI_FIXTURES.lock().await;
+    let wire = ticket_wire(|t| t.expires_at_unix_ms = i64::MAX);
+    let escaped = wire
+        .iter()
+        .map(|byte| format!("\\{byte:03o}"))
+        .collect::<String>();
+    let fixture = ScriptFixture::new(&format!(
+        "test \"$1 $2 $3 $4 $5 $6 $7\" = 'pair --output protobuf --origin tauri://localhost --device-name 本机桌面' || exit 9\nprintf '{escaped}'"
+    ));
+    let ticket = issue_native_ticket(&config(fixture.path.clone()), &status(), "本机桌面")
+        .await
+        .unwrap();
+    assert_eq!(ticket.host_instance_id, "instance-1");
+    assert_eq!(ticket.ticket.len(), 32 + 1 + 43);
+    for (script, expected) in [
+        (
+            "printf 'private-credential' >&2; exit 7",
+            native::NativeTicketError::CliFailed,
+        ),
+        (
+            "exec head -c 65537 /dev/zero",
+            native::NativeTicketError::Malformed,
+        ),
+        (
+            "printf 'not protobuf at all'",
+            native::NativeTicketError::Malformed,
+        ),
+    ] {
+        let fixture = ScriptFixture::new(script);
+        let error = issue_native_ticket(&config(fixture.path.clone()), &status(), "本机桌面")
+            .await
+            .unwrap_err();
+        assert_eq!(error, expected, "{script}");
+        assert!(!error.to_string().contains("private"));
+    }
+    let fixture = ScriptFixture::new("exec sleep 30");
+    let mut slow = config(fixture.path.clone());
+    slow.cli_timeout = Duration::from_secs(1);
+    assert_eq!(
+        issue_native_ticket(&slow, &status(), "本机桌面").await,
+        Err(native::NativeTicketError::Timeout)
+    );
 }
 
 #[test]

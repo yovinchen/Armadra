@@ -90,13 +90,35 @@ pub(super) async fn run_start_observed(
     config: &HostLaunchConfig,
     on_spawn: impl FnOnce(u32),
 ) -> Result<Vec<u8>, HostLaunchError> {
+    run_cli_observed(config, config.arguments(), STDOUT_LIMIT, on_spawn).await
+}
+
+/// Runs one short-lived management command of the Host CLI and returns its
+/// stdout, bounded by `stdout_limit`. Every command the shell issues — `start`,
+/// and the `pair` that mints a native session ticket — goes through here, so
+/// they share the same timeout, the same bounded readers and the same rule
+/// that stderr is drained but never retained.
+pub(super) async fn run_cli(
+    config: &HostLaunchConfig,
+    arguments: Vec<OsString>,
+    stdout_limit: usize,
+) -> Result<Vec<u8>, HostLaunchError> {
+    run_cli_observed(config, arguments, stdout_limit, |_| {}).await
+}
+
+async fn run_cli_observed(
+    config: &HostLaunchConfig,
+    arguments: Vec<OsString>,
+    stdout_limit: usize,
+    on_spawn: impl FnOnce(u32),
+) -> Result<Vec<u8>, HostLaunchError> {
     config.validate()?;
     if !config.binary.is_file() {
         return Err(HostLaunchError::BinaryUnavailable);
     }
     let mut command = Command::new(&config.binary);
     command
-        .args(config.arguments())
+        .args(arguments)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -109,7 +131,7 @@ pub(super) async fn run_start_observed(
     let stderr = child.stderr.take().ok_or(HostLaunchError::CliIo)?;
     let execution = async {
         let (output, _, status) = tokio::try_join!(
-            read_limited(stdout, STDOUT_LIMIT, true),
+            read_limited(stdout, stdout_limit, true),
             read_limited(stderr, STDERR_LIMIT, false),
             async { child.wait().await.map_err(|_| HostLaunchError::CliIo) },
         )?;

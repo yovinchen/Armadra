@@ -10,7 +10,7 @@ use tauri_plugin_dialog::DialogExt;
 use armadra_desktop::{
     host,
     lifecycle::DesktopLifecycle,
-    runtime_data_dir,
+    native_session, runtime_data_dir,
     runtime_process::{RuntimeProcess, external_runtime_health_url, wait_for_runtime},
     trace_lifecycle, transport,
     transport::{RuntimeAddress, RuntimeTransport, WebSocketForwarder},
@@ -323,7 +323,10 @@ fn main() {
             updates::updates_dismiss,
             updates::updates_download,
             updates::updates_install,
-            updates::updates_restart_report
+            updates::updates_restart_report,
+            // The page's only door to a Host session: a one-time ticket the
+            // shell mints over the same-user control channel (design §4.4).
+            native_session::host_native_ticket
         ])
         .manage(updates::UpdatesController::default())
         .manage(RuntimeProcess::default())
