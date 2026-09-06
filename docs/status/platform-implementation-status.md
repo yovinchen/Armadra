@@ -138,7 +138,10 @@
 - **桌面打包与首启**（`1cff1e00`、`8f560ae5`）：`pnpm --filter @armadra/desktop build` 产出 macOS arm64 `Armadra.app`（79 MB，含 Runtime/Host/Hook 三个 sidecar）与 `.dmg`；本机打包需一次性 updater 签名密钥（`TAURI_SIGNING_PRIVATE_KEY` 取密钥内容而非路径），配置里公钥为空时最后的 `.sig` 步骤报错但 `.app`/`.dmg` 已完整。打包实测发现开屏动画在 WKWebView 里停在第一帧并锁住整个界面（窗口隐藏加载、显示后 rAF 不恢复），改为 rAF 与定时器双驱动并加两道到点必撤的保险；首次启动对空数据库在 `<数据目录>/workspaces/default` 建「Default」项目（读写执行全开、自带 Default 画布），前端无记忆时打开最近的工作空间。两项均在重新打包的 `.app` 上用空数据目录实机核验。注意 `tauri build` 单独运行不会重建 sidecar，须走 `pnpm --filter @armadra/desktop build`。
 - **B4 agent 域**（`3100ef16`…`9faa7429` 在主线的对应提交）：`agent.proto` 扩展（状态、审批、消息箱、投递、交接、上下文连线；事件实体 180–186、Worker 帧 28）、Host v9 `agent_*` 表（含 bundle 冻结触发器，`validateSchema` 学会 TRIGGER/UNIQUE INDEX）与 `agenthost`（HTTPS 方法与 Worker 通道；Hook 事件为拉取而非推送，游标为毫秒戳）、Runtime 交出 agent 域并答帧 28、Web 按归属路由 agent 写入、复用 `terminal:*` scope；`pnpm ownership:e2e --domain agent` 47 项。git 域现在依赖全部五个前置域（§1.2）。未做：向目标 pane 写入交接/消息（`DeliverHandoff/DeliverMessage` 答 NOT_WRITTEN）、`ReadTranscript/CaptureScreen`、Hook 的 post/inbox/ack/link 仍由 Runtime 本地答复、`hook_event` 无 Host 表。六个业务域至此全部可切换；B6 改名待 §4.4 条件评估。
 
-主树复核（B4 合入后）：Rust 全 workspace 通过、`clippy -D warnings` 与 `fmt --check` 通过、Web 182 文件 1702 项、shared 144、host-client 260、协议 TS 137 与 Rust 全过、Go 全部包 race（含真实 Worker）、`pnpm check` 通过、agent e2e 47、session e2e 39、git e2e 32、settings e2e 33、filesystem e2e 30、canvas e2e 73（改为接受每工作空间一个反向导出文件）。session 与 git 的 e2e 在 Go race 套件刚结束、机器满载时各有一次首跑失败，随后连续 3–4 次通过。
+- **画布从 tldraw 迁到 React Flow**（集成分支 `feature/canvas-react-flow`，设计 [canvas-react-flow.md](../design/canvas-react-flow.md)，7 批 Opus Agent 串并行实施后线性合入）：B0 骨架（`@xyflow/react` 12.11 + `perfect-freehand` 替换 tldraw 5.4，`canvas-store` 仍是真相，`sync/project.ts` 投影、自写撤销栈、节点承载、Dock 接线；产物与源码 tldraw 出现 0 次）；B1 连线/Frame/整理/覆盖层/缩略图（修 React Flow 换父后连线消失、成功连线误报重复两处）；B2 白板层（墨迹/文字/几何/线/图片五类对象、五个工具、样式面板、剪贴板含内存兜底、栅格化、拖放与资产导入）；B4 四套右键菜单、删四项 tldraw 专属偏好、专注模式、手机工具组收窄；B5 内容引用（引用边、上限与去重、`context-links` 契约不变、PNG 导出）；B6 跨批接线（白板对象把手、Delete 删引用、菜单插槽、手形工具收敛）与文档。旧数据不迁移（用户决定，未发版）：`whiteboard_json` 只认 v2 `{"engine":"armadra-flow","version":2}`。真实 Chrome 核对 A01–A10：A04（两窗口同板实时同步）本就未实现，A01 ⌘滚轮在终端有焦点时变平移，两项记为后续；30 节点 + 300 墨迹压力：空闲 120 fps、平移 112、拖节点 108（目标 ≥45），JS 堆 125–175 MB；手机 390×844 无横向滚动。release 配置 + 诊断桥编译的壳在空数据目录 25 秒内画布稳定、无错误。
+- 桌面壳新增 debug-only 诊断桥（`ARMADRA_DESKTOP_DIAGNOSTIC_WS` / `_PRELUDE`，release 可用 `--features diagnostic-bridge` 编入）；两轮大文件拆分后全仓库只剩 `keybindings.ts`、`github-e2e.mjs`、`content-links.test.ts` 三个 800–950 行文件，`repo.rules.json` 豁免表清空。
+
+主树复核（React Flow 合入后）：Web 202 文件 1919 项、shared 144、host-client 260、`pnpm check`、canvas e2e 73；React Flow 之前（B4 合入后）：Rust 全 workspace 通过、`clippy -D warnings` 与 `fmt --check` 通过、Web 182 文件 1702 项、shared 144、host-client 260、协议 TS 137 与 Rust 全过、Go 全部包 race（含真实 Worker）、`pnpm check` 通过、agent e2e 47、session e2e 39、git e2e 32、settings e2e 33、filesystem e2e 30、canvas e2e 73（改为接受每工作空间一个反向导出文件）。session 与 git 的 e2e 在 Go race 套件刚结束、机器满载时各有一次首跑失败，随后连续 3–4 次通过。
 
 ## 本轮验证（2026-09-06 上午，四轮全部合入后于主树重跑，私有目标目录）
 
@@ -258,12 +261,12 @@
 - Rust 已安装 macOS arm64、Windows x64 MSVC、Linux x64 目标；安装 target 不代表能在本机运行 Windows/Linux 实机测试。
 - 业务写入所有权按域切换：画布、settings、filesystem、session、agent、git 六个域均可经 CLI/HTTPS 切到 Go Host 并回滚（Runtime 在切换后拒写、仍答读）；`apps/runtime`→`apps/worker` 改名（B6）待 §4.4 条件评估。
 - 真实 Worker 测试与桌面 `src-tauri` Rust 测试不在默认命令内，验收时需单独运行。
-- **tldraw 许可证**：tldraw 5.4 在非开发来源（打包桌面的 `tauri://localhost`）上没有许可证密钥时，挂载 5 秒后把编辑器整个卸掉（画布内容与工具消失，终端 socket 随之关闭），浏览器开发不受影响。已接 `VITE_TLDRAW_LICENSE_KEY`（构建时注入，CI secret `TLDRAW_LICENSE_KEY`）；密钥需从 tldraw.dev 获取（免费试用 / hobby 许可 / 商业许可），未取得前打包版画布不可用。用 debug 壳的诊断桥（`ARMADRA_DESKTOP_DIAGNOSTIC_WS`）定位。
+- **tldraw 许可证（已解决）**：tldraw 5.4 在非开发来源上无密钥时挂载 5 秒后卸掉编辑器（打包版画布消失）；用 debug 壳的诊断桥定位后，画布整体改为 React Flow（MIT），tldraw 依赖已移除。
 - 数据目录：macOS `~/Library/Application Support/Armadra`、Windows `%LOCALAPPDATA%\Armadra`、Linux `$XDG_DATA_HOME/armadra`（默认 `~/.local/share/armadra`），`ARMADRA_DATA_DIR` 可覆盖；Host 用其下 `host/`，默认项目在 `workspaces/default/`。
 
 ## 下一步
 
-1. 画布从 tldraw 迁到 React Flow（设计文档进行中，见 `docs/design/canvas-react-flow.md`）；之后评估 B6 `apps/runtime`→`apps/worker` 改名（§4.4 条件满足后）。
+1. React Flow 后续：两窗口同板实时同步（A04）、终端有焦点时 ⌘滚轮缩放（A01）、Frame 作为引用来源、首帧引用边晚一帧；之后评估 B6 `apps/runtime`→`apps/worker` 改名（§4.4 条件满足后）。
 2. 每轮合入后重跑 `pnpm check`、`cargo test --workspace`、`go -C apps/host test -race ./...`（含真实 Worker）、`pnpm protocol:test`、`pnpm ownership:e2e --domain settings|filesystem`、`pnpm canvas:e2e`；`main` 快进。
 3. 剩余 800–1500 行文件的收尾拆分（`migration_export.rs`、`settings.rs`、`GitRepositoryPanel.tsx`、`SourceControlDrawer.tsx`、`keybindings.ts` 等）在实施轮之间进行，避免与在飞批次冲突。
 4. 需要实机的验收保持未完成：Windows、手机、真实 GitHub/SSH、CI 真实 runner、签名密钥。
