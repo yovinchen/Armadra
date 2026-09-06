@@ -932,6 +932,893 @@ func (x *WorkerSettingsSnapshot) GetReplayed() bool {
 	return false
 }
 
+// One thing wrong with a candidate document.
+//
+// A list, not a first failure: a settings page that has to be saved, refused,
+// fixed and saved again once per problem is a page nobody finishes.
+type SettingsProblem struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Where in the document, in the dotted spelling the front end already uses:
+	// "ssh.hosts[2].host", or empty for the document as a whole.
+	Path string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	// A stable key the client translates — "notAnObject", "tooLarge",
+	// "unknownSchemaVersion", "duplicateExecutionHostId", "invalidKey". Never a
+	// sentence: this Host does not write the user's language.
+	ReasonCode    string `protobuf:"bytes,39,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SettingsProblem) Reset() {
+	*x = SettingsProblem{}
+	mi := &file_armadra_v1_settings_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SettingsProblem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SettingsProblem) ProtoMessage() {}
+
+func (x *SettingsProblem) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_settings_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SettingsProblem.ProtoReflect.Descriptor instead.
+func (*SettingsProblem) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_settings_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *SettingsProblem) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *SettingsProblem) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+// Ask what a save would do, without doing it.
+//
+// Structure only, the same check Patch applies. Whether a custom agent
+// definition is coherent or a keybinding reachable is decided in
+// `packages/shared` and by the Runtime at startup, and a second opinion here
+// could disagree with the one that actually governs.
+type ValidateSettingsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Document      *SettingsDocument      `protobuf:"bytes,10,opt,name=document,proto3" json:"document,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidateSettingsRequest) Reset() {
+	*x = ValidateSettingsRequest{}
+	mi := &file_armadra_v1_settings_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateSettingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateSettingsRequest) ProtoMessage() {}
+
+func (x *ValidateSettingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_settings_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateSettingsRequest.ProtoReflect.Descriptor instead.
+func (*ValidateSettingsRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_settings_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ValidateSettingsRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *ValidateSettingsRequest) GetDocument() *SettingsDocument {
+	if x != nil {
+		return x.Document
+	}
+	return nil
+}
+
+type ValidateSettingsResponse struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Ok       bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	Problems []*SettingsProblem     `protobuf:"bytes,10,rep,name=problems,proto3" json:"problems,omitempty"`
+	// What the document would project to. Returned on success so a client can
+	// show the registry it is about to store instead of storing it to find out.
+	ExecutionHosts []*ExecutionHost `protobuf:"bytes,11,rep,name=execution_hosts,json=executionHosts,proto3" json:"execution_hosts,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ValidateSettingsResponse) Reset() {
+	*x = ValidateSettingsResponse{}
+	mi := &file_armadra_v1_settings_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateSettingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateSettingsResponse) ProtoMessage() {}
+
+func (x *ValidateSettingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_settings_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateSettingsResponse.ProtoReflect.Descriptor instead.
+func (*ValidateSettingsResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_settings_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ValidateSettingsResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+func (x *ValidateSettingsResponse) GetProblems() []*SettingsProblem {
+	if x != nil {
+		return x.Problems
+	}
+	return nil
+}
+
+func (x *ValidateSettingsResponse) GetExecutionHosts() []*ExecutionHost {
+	if x != nil {
+		return x.ExecutionHosts
+	}
+	return nil
+}
+
+// The portable form of one installation's settings.
+//
+// It carries no revision — a revision belongs to the store it came from, and
+// importing one would assert a history the destination never had — and no
+// credential: `identity_file` is a path each machine resolves against its own
+// filesystem, and there is no field a password or key material could travel
+// in. So this is a configuration file, not a secret.
+//
+// The preferences that belong to one machine are not here either. They are in
+// that machine's own `worker-settings.json` and never reached this Host; see
+// WorkerLocalSettings.
+type SettingsPackage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The package's own shape. An importer that does not recognise it refuses
+	// rather than guessing, because guessing would mean writing somebody's
+	// settings out of a file it could not read.
+	Version       uint32 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	Document      []byte `protobuf:"bytes,10,opt,name=document,proto3" json:"document,omitempty"`
+	SchemaVersion uint32 `protobuf:"varint,11,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	// Projected from `document` at export time, so a reader can see the machine
+	// registry without parsing the document. Never a second source: an import
+	// reads the document and projects again.
+	ExecutionHosts   []*ExecutionHost `protobuf:"bytes,12,rep,name=execution_hosts,json=executionHosts,proto3" json:"execution_hosts,omitempty"`
+	ExportedAtUnixMs int64            `protobuf:"varint,41,opt,name=exported_at_unix_ms,json=exportedAtUnixMs,proto3" json:"exported_at_unix_ms,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *SettingsPackage) Reset() {
+	*x = SettingsPackage{}
+	mi := &file_armadra_v1_settings_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SettingsPackage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SettingsPackage) ProtoMessage() {}
+
+func (x *SettingsPackage) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_settings_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SettingsPackage.ProtoReflect.Descriptor instead.
+func (*SettingsPackage) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_settings_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *SettingsPackage) GetVersion() uint32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *SettingsPackage) GetDocument() []byte {
+	if x != nil {
+		return x.Document
+	}
+	return nil
+}
+
+func (x *SettingsPackage) GetSchemaVersion() uint32 {
+	if x != nil {
+		return x.SchemaVersion
+	}
+	return 0
+}
+
+func (x *SettingsPackage) GetExecutionHosts() []*ExecutionHost {
+	if x != nil {
+		return x.ExecutionHosts
+	}
+	return nil
+}
+
+func (x *SettingsPackage) GetExportedAtUnixMs() int64 {
+	if x != nil {
+		return x.ExportedAtUnixMs
+	}
+	return 0
+}
+
+type ExportSettingsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Scope         SettingsScope          `protobuf:"varint,2,opt,name=scope,proto3,enum=armadra.v1.SettingsScope" json:"scope,omitempty"`
+	DeviceId      string                 `protobuf:"bytes,3,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportSettingsRequest) Reset() {
+	*x = ExportSettingsRequest{}
+	mi := &file_armadra_v1_settings_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportSettingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportSettingsRequest) ProtoMessage() {}
+
+func (x *ExportSettingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_settings_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportSettingsRequest.ProtoReflect.Descriptor instead.
+func (*ExportSettingsRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_settings_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ExportSettingsRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *ExportSettingsRequest) GetScope() SettingsScope {
+	if x != nil {
+		return x.Scope
+	}
+	return SettingsScope_SETTINGS_SCOPE_UNSPECIFIED
+}
+
+func (x *ExportSettingsRequest) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+type ExportSettingsResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Package *SettingsPackage       `protobuf:"bytes,1,opt,name=package,proto3" json:"package,omitempty"`
+	// The revision the package was taken at. An import back into the same store
+	// uses it as its compare-and-set baseline; an import into a different store
+	// ignores it.
+	Revision      uint64 `protobuf:"varint,2,opt,name=revision,proto3" json:"revision,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportSettingsResponse) Reset() {
+	*x = ExportSettingsResponse{}
+	mi := &file_armadra_v1_settings_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportSettingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportSettingsResponse) ProtoMessage() {}
+
+func (x *ExportSettingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_settings_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportSettingsResponse.ProtoReflect.Descriptor instead.
+func (*ExportSettingsResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_settings_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ExportSettingsResponse) GetPackage() *SettingsPackage {
+	if x != nil {
+		return x.Package
+	}
+	return nil
+}
+
+func (x *ExportSettingsResponse) GetRevision() uint64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+type ImportSettingsRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Meta             *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	OperationId      string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	ExpectedRevision uint64                 `protobuf:"varint,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	Package          *SettingsPackage       `protobuf:"bytes,10,opt,name=package,proto3" json:"package,omitempty"`
+	Scope            SettingsScope          `protobuf:"varint,11,opt,name=scope,proto3,enum=armadra.v1.SettingsScope" json:"scope,omitempty"`
+	DeviceId         string                 `protobuf:"bytes,12,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ImportSettingsRequest) Reset() {
+	*x = ImportSettingsRequest{}
+	mi := &file_armadra_v1_settings_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportSettingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportSettingsRequest) ProtoMessage() {}
+
+func (x *ImportSettingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_settings_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportSettingsRequest.ProtoReflect.Descriptor instead.
+func (*ImportSettingsRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_settings_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ImportSettingsRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *ImportSettingsRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *ImportSettingsRequest) GetExpectedRevision() uint64 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
+func (x *ImportSettingsRequest) GetPackage() *SettingsPackage {
+	if x != nil {
+		return x.Package
+	}
+	return nil
+}
+
+func (x *ImportSettingsRequest) GetScope() SettingsScope {
+	if x != nil {
+		return x.Scope
+	}
+	return SettingsScope_SETTINGS_SCOPE_UNSPECIFIED
+}
+
+func (x *ImportSettingsRequest) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+type ImportSettingsResponse struct {
+	state          protoimpl.MessageState  `protogen:"open.v1"`
+	Document       *SettingsDocument       `protobuf:"bytes,1,opt,name=document,proto3" json:"document,omitempty"`
+	Receipt        *CanvasOperationReceipt `protobuf:"bytes,2,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	ExecutionHosts []*ExecutionHost        `protobuf:"bytes,3,rep,name=execution_hosts,json=executionHosts,proto3" json:"execution_hosts,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ImportSettingsResponse) Reset() {
+	*x = ImportSettingsResponse{}
+	mi := &file_armadra_v1_settings_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportSettingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportSettingsResponse) ProtoMessage() {}
+
+func (x *ImportSettingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_settings_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportSettingsResponse.ProtoReflect.Descriptor instead.
+func (*ImportSettingsResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_settings_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ImportSettingsResponse) GetDocument() *SettingsDocument {
+	if x != nil {
+		return x.Document
+	}
+	return nil
+}
+
+func (x *ImportSettingsResponse) GetReceipt() *CanvasOperationReceipt {
+	if x != nil {
+		return x.Receipt
+	}
+	return nil
+}
+
+func (x *ImportSettingsResponse) GetExecutionHosts() []*ExecutionHost {
+	if x != nil {
+		return x.ExecutionHosts
+	}
+	return nil
+}
+
+type ListExecutionHostsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListExecutionHostsRequest) Reset() {
+	*x = ListExecutionHostsRequest{}
+	mi := &file_armadra_v1_settings_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListExecutionHostsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListExecutionHostsRequest) ProtoMessage() {}
+
+func (x *ListExecutionHostsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_settings_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListExecutionHostsRequest.ProtoReflect.Descriptor instead.
+func (*ListExecutionHostsRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_settings_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ListExecutionHostsRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+type ListExecutionHostsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// This machine first — it is always there and is never stored — then the
+	// registry in identifier order.
+	ExecutionHosts []*ExecutionHost `protobuf:"bytes,1,rep,name=execution_hosts,json=executionHosts,proto3" json:"execution_hosts,omitempty"`
+	// The document they were projected from, so a following write can name the
+	// revision it read instead of re-reading and racing itself.
+	DocumentRevision uint64 `protobuf:"varint,2,opt,name=document_revision,json=documentRevision,proto3" json:"document_revision,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ListExecutionHostsResponse) Reset() {
+	*x = ListExecutionHostsResponse{}
+	mi := &file_armadra_v1_settings_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListExecutionHostsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListExecutionHostsResponse) ProtoMessage() {}
+
+func (x *ListExecutionHostsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_settings_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListExecutionHostsResponse.ProtoReflect.Descriptor instead.
+func (*ListExecutionHostsResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_settings_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ListExecutionHostsResponse) GetExecutionHosts() []*ExecutionHost {
+	if x != nil {
+		return x.ExecutionHosts
+	}
+	return nil
+}
+
+func (x *ListExecutionHostsResponse) GetDocumentRevision() uint64 {
+	if x != nil {
+		return x.DocumentRevision
+	}
+	return 0
+}
+
+// Write one host.
+//
+// A document write with one entry replaced, not a write to a second store:
+// `expected_revision` is the *document's*, and every other byte of the
+// document is preserved exactly. A host that is only a projection cannot be
+// written any other way without the two being able to disagree.
+type PutExecutionHostRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Meta             *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	OperationId      string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	ExpectedRevision uint64                 `protobuf:"varint,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	ExecutionHost    *ExecutionHost         `protobuf:"bytes,10,opt,name=execution_host,json=executionHost,proto3" json:"execution_host,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *PutExecutionHostRequest) Reset() {
+	*x = PutExecutionHostRequest{}
+	mi := &file_armadra_v1_settings_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PutExecutionHostRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PutExecutionHostRequest) ProtoMessage() {}
+
+func (x *PutExecutionHostRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_settings_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PutExecutionHostRequest.ProtoReflect.Descriptor instead.
+func (*PutExecutionHostRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_settings_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *PutExecutionHostRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *PutExecutionHostRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *PutExecutionHostRequest) GetExpectedRevision() uint64 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
+func (x *PutExecutionHostRequest) GetExecutionHost() *ExecutionHost {
+	if x != nil {
+		return x.ExecutionHost
+	}
+	return nil
+}
+
+type PutExecutionHostResponse struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	ExecutionHost *ExecutionHost          `protobuf:"bytes,1,opt,name=execution_host,json=executionHost,proto3" json:"execution_host,omitempty"`
+	Receipt       *CanvasOperationReceipt `protobuf:"bytes,2,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	Document      *SettingsDocument       `protobuf:"bytes,3,opt,name=document,proto3" json:"document,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PutExecutionHostResponse) Reset() {
+	*x = PutExecutionHostResponse{}
+	mi := &file_armadra_v1_settings_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PutExecutionHostResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PutExecutionHostResponse) ProtoMessage() {}
+
+func (x *PutExecutionHostResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_settings_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PutExecutionHostResponse.ProtoReflect.Descriptor instead.
+func (*PutExecutionHostResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_settings_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *PutExecutionHostResponse) GetExecutionHost() *ExecutionHost {
+	if x != nil {
+		return x.ExecutionHost
+	}
+	return nil
+}
+
+func (x *PutExecutionHostResponse) GetReceipt() *CanvasOperationReceipt {
+	if x != nil {
+		return x.Receipt
+	}
+	return nil
+}
+
+func (x *PutExecutionHostResponse) GetDocument() *SettingsDocument {
+	if x != nil {
+		return x.Document
+	}
+	return nil
+}
+
+type DeleteExecutionHostRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Meta             *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	OperationId      string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	ExpectedRevision uint64                 `protobuf:"varint,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	ExecutionHostId  string                 `protobuf:"bytes,10,opt,name=execution_host_id,json=executionHostId,proto3" json:"execution_host_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *DeleteExecutionHostRequest) Reset() {
+	*x = DeleteExecutionHostRequest{}
+	mi := &file_armadra_v1_settings_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteExecutionHostRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteExecutionHostRequest) ProtoMessage() {}
+
+func (x *DeleteExecutionHostRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_settings_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteExecutionHostRequest.ProtoReflect.Descriptor instead.
+func (*DeleteExecutionHostRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_settings_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *DeleteExecutionHostRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *DeleteExecutionHostRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *DeleteExecutionHostRequest) GetExpectedRevision() uint64 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
+func (x *DeleteExecutionHostRequest) GetExecutionHostId() string {
+	if x != nil {
+		return x.ExecutionHostId
+	}
+	return ""
+}
+
+type DeleteExecutionHostResponse struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Receipt       *CanvasOperationReceipt `protobuf:"bytes,1,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	Document      *SettingsDocument       `protobuf:"bytes,2,opt,name=document,proto3" json:"document,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteExecutionHostResponse) Reset() {
+	*x = DeleteExecutionHostResponse{}
+	mi := &file_armadra_v1_settings_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteExecutionHostResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteExecutionHostResponse) ProtoMessage() {}
+
+func (x *DeleteExecutionHostResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_settings_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteExecutionHostResponse.ProtoReflect.Descriptor instead.
+func (*DeleteExecutionHostResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_settings_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *DeleteExecutionHostResponse) GetReceipt() *CanvasOperationReceipt {
+	if x != nil {
+		return x.Receipt
+	}
+	return nil
+}
+
+func (x *DeleteExecutionHostResponse) GetDocument() *SettingsDocument {
+	if x != nil {
+		return x.Document
+	}
+	return nil
+}
+
 var File_armadra_v1_settings_proto protoreflect.FileDescriptor
 
 const file_armadra_v1_settings_proto_rawDesc = "" +
@@ -998,7 +1885,70 @@ const file_armadra_v1_settings_proto_rawDesc = "" +
 	"\x05local\x18\v \x01(\v2\x1f.armadra.v1.WorkerLocalSettingsR\x05local\x12B\n" +
 	"\x0fexecution_hosts\x18\f \x03(\v2\x19.armadra.v1.ExecutionHostR\x0eexecutionHosts\x12\x18\n" +
 	"\aapplied\x18\r \x01(\bR\aapplied\x12\x1a\n" +
-	"\breplayed\x18\x0e \x01(\bR\breplayed*e\n" +
+	"\breplayed\x18\x0e \x01(\bR\breplayed\"F\n" +
+	"\x0fSettingsProblem\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1f\n" +
+	"\vreason_code\x18' \x01(\tR\n" +
+	"reasonCode\"\x80\x01\n" +
+	"\x17ValidateSettingsRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x128\n" +
+	"\bdocument\x18\n" +
+	" \x01(\v2\x1c.armadra.v1.SettingsDocumentR\bdocument\"\xa7\x01\n" +
+	"\x18ValidateSettingsResponse\x12\x0e\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\x127\n" +
+	"\bproblems\x18\n" +
+	" \x03(\v2\x1b.armadra.v1.SettingsProblemR\bproblems\x12B\n" +
+	"\x0fexecution_hosts\x18\v \x03(\v2\x19.armadra.v1.ExecutionHostR\x0eexecutionHosts\"\xe1\x01\n" +
+	"\x0fSettingsPackage\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\rR\aversion\x12\x1a\n" +
+	"\bdocument\x18\n" +
+	" \x01(\fR\bdocument\x12%\n" +
+	"\x0eschema_version\x18\v \x01(\rR\rschemaVersion\x12B\n" +
+	"\x0fexecution_hosts\x18\f \x03(\v2\x19.armadra.v1.ExecutionHostR\x0eexecutionHosts\x12-\n" +
+	"\x13exported_at_unix_ms\x18) \x01(\x03R\x10exportedAtUnixMs\"\x92\x01\n" +
+	"\x15ExportSettingsRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12/\n" +
+	"\x05scope\x18\x02 \x01(\x0e2\x19.armadra.v1.SettingsScopeR\x05scope\x12\x1b\n" +
+	"\tdevice_id\x18\x03 \x01(\tR\bdeviceId\"k\n" +
+	"\x16ExportSettingsResponse\x125\n" +
+	"\apackage\x18\x01 \x01(\v2\x1b.armadra.v1.SettingsPackageR\apackage\x12\x1a\n" +
+	"\brevision\x18\x02 \x01(\x04R\brevision\"\x99\x02\n" +
+	"\x15ImportSettingsRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12!\n" +
+	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12+\n" +
+	"\x11expected_revision\x18\x03 \x01(\x04R\x10expectedRevision\x125\n" +
+	"\apackage\x18\n" +
+	" \x01(\v2\x1b.armadra.v1.SettingsPackageR\apackage\x12/\n" +
+	"\x05scope\x18\v \x01(\x0e2\x19.armadra.v1.SettingsScopeR\x05scope\x12\x1b\n" +
+	"\tdevice_id\x18\f \x01(\tR\bdeviceId\"\xd4\x01\n" +
+	"\x16ImportSettingsResponse\x128\n" +
+	"\bdocument\x18\x01 \x01(\v2\x1c.armadra.v1.SettingsDocumentR\bdocument\x12<\n" +
+	"\areceipt\x18\x02 \x01(\v2\".armadra.v1.CanvasOperationReceiptR\areceipt\x12B\n" +
+	"\x0fexecution_hosts\x18\x03 \x03(\v2\x19.armadra.v1.ExecutionHostR\x0eexecutionHosts\"H\n" +
+	"\x19ListExecutionHostsRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\"\x8d\x01\n" +
+	"\x1aListExecutionHostsResponse\x12B\n" +
+	"\x0fexecution_hosts\x18\x01 \x03(\v2\x19.armadra.v1.ExecutionHostR\x0eexecutionHosts\x12+\n" +
+	"\x11document_revision\x18\x02 \x01(\x04R\x10documentRevision\"\xd8\x01\n" +
+	"\x17PutExecutionHostRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12!\n" +
+	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12+\n" +
+	"\x11expected_revision\x18\x03 \x01(\x04R\x10expectedRevision\x12@\n" +
+	"\x0eexecution_host\x18\n" +
+	" \x01(\v2\x19.armadra.v1.ExecutionHostR\rexecutionHost\"\xd4\x01\n" +
+	"\x18PutExecutionHostResponse\x12@\n" +
+	"\x0eexecution_host\x18\x01 \x01(\v2\x19.armadra.v1.ExecutionHostR\rexecutionHost\x12<\n" +
+	"\areceipt\x18\x02 \x01(\v2\".armadra.v1.CanvasOperationReceiptR\areceipt\x128\n" +
+	"\bdocument\x18\x03 \x01(\v2\x1c.armadra.v1.SettingsDocumentR\bdocument\"\xc5\x01\n" +
+	"\x1aDeleteExecutionHostRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12!\n" +
+	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12+\n" +
+	"\x11expected_revision\x18\x03 \x01(\x04R\x10expectedRevision\x12*\n" +
+	"\x11execution_host_id\x18\n" +
+	" \x01(\tR\x0fexecutionHostId\"\x95\x01\n" +
+	"\x1bDeleteExecutionHostResponse\x12<\n" +
+	"\areceipt\x18\x01 \x01(\v2\".armadra.v1.CanvasOperationReceiptR\areceipt\x128\n" +
+	"\bdocument\x18\x02 \x01(\v2\x1c.armadra.v1.SettingsDocumentR\bdocument*e\n" +
 	"\rSettingsScope\x12\x1e\n" +
 	"\x1aSETTINGS_SCOPE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15SETTINGS_SCOPE_GLOBAL\x10\x01\x12\x19\n" +
@@ -1025,46 +1975,84 @@ func file_armadra_v1_settings_proto_rawDescGZIP() []byte {
 }
 
 var file_armadra_v1_settings_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_armadra_v1_settings_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_armadra_v1_settings_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_armadra_v1_settings_proto_goTypes = []any{
-	(SettingsScope)(0),             // 0: armadra.v1.SettingsScope
-	(ExecutionHostKind)(0),         // 1: armadra.v1.ExecutionHostKind
-	(WorkerSettingsDirection)(0),   // 2: armadra.v1.WorkerSettingsDirection
-	(*SettingsDocument)(nil),       // 3: armadra.v1.SettingsDocument
-	(*SshExecutionHost)(nil),       // 4: armadra.v1.SshExecutionHost
-	(*ExecutionHost)(nil),          // 5: armadra.v1.ExecutionHost
-	(*WorkerLocalSettings)(nil),    // 6: armadra.v1.WorkerLocalSettings
-	(*GetSettingsRequest)(nil),     // 7: armadra.v1.GetSettingsRequest
-	(*GetSettingsResponse)(nil),    // 8: armadra.v1.GetSettingsResponse
-	(*PutSettingsRequest)(nil),     // 9: armadra.v1.PutSettingsRequest
-	(*PutSettingsResponse)(nil),    // 10: armadra.v1.PutSettingsResponse
-	(*WorkerSettingsRequest)(nil),  // 11: armadra.v1.WorkerSettingsRequest
-	(*WorkerSettingsSnapshot)(nil), // 12: armadra.v1.WorkerSettingsSnapshot
-	(*CommandMeta)(nil),            // 13: armadra.v1.CommandMeta
-	(*CanvasOperationReceipt)(nil), // 14: armadra.v1.CanvasOperationReceipt
+	(SettingsScope)(0),                  // 0: armadra.v1.SettingsScope
+	(ExecutionHostKind)(0),              // 1: armadra.v1.ExecutionHostKind
+	(WorkerSettingsDirection)(0),        // 2: armadra.v1.WorkerSettingsDirection
+	(*SettingsDocument)(nil),            // 3: armadra.v1.SettingsDocument
+	(*SshExecutionHost)(nil),            // 4: armadra.v1.SshExecutionHost
+	(*ExecutionHost)(nil),               // 5: armadra.v1.ExecutionHost
+	(*WorkerLocalSettings)(nil),         // 6: armadra.v1.WorkerLocalSettings
+	(*GetSettingsRequest)(nil),          // 7: armadra.v1.GetSettingsRequest
+	(*GetSettingsResponse)(nil),         // 8: armadra.v1.GetSettingsResponse
+	(*PutSettingsRequest)(nil),          // 9: armadra.v1.PutSettingsRequest
+	(*PutSettingsResponse)(nil),         // 10: armadra.v1.PutSettingsResponse
+	(*WorkerSettingsRequest)(nil),       // 11: armadra.v1.WorkerSettingsRequest
+	(*WorkerSettingsSnapshot)(nil),      // 12: armadra.v1.WorkerSettingsSnapshot
+	(*SettingsProblem)(nil),             // 13: armadra.v1.SettingsProblem
+	(*ValidateSettingsRequest)(nil),     // 14: armadra.v1.ValidateSettingsRequest
+	(*ValidateSettingsResponse)(nil),    // 15: armadra.v1.ValidateSettingsResponse
+	(*SettingsPackage)(nil),             // 16: armadra.v1.SettingsPackage
+	(*ExportSettingsRequest)(nil),       // 17: armadra.v1.ExportSettingsRequest
+	(*ExportSettingsResponse)(nil),      // 18: armadra.v1.ExportSettingsResponse
+	(*ImportSettingsRequest)(nil),       // 19: armadra.v1.ImportSettingsRequest
+	(*ImportSettingsResponse)(nil),      // 20: armadra.v1.ImportSettingsResponse
+	(*ListExecutionHostsRequest)(nil),   // 21: armadra.v1.ListExecutionHostsRequest
+	(*ListExecutionHostsResponse)(nil),  // 22: armadra.v1.ListExecutionHostsResponse
+	(*PutExecutionHostRequest)(nil),     // 23: armadra.v1.PutExecutionHostRequest
+	(*PutExecutionHostResponse)(nil),    // 24: armadra.v1.PutExecutionHostResponse
+	(*DeleteExecutionHostRequest)(nil),  // 25: armadra.v1.DeleteExecutionHostRequest
+	(*DeleteExecutionHostResponse)(nil), // 26: armadra.v1.DeleteExecutionHostResponse
+	(*CommandMeta)(nil),                 // 27: armadra.v1.CommandMeta
+	(*CanvasOperationReceipt)(nil),      // 28: armadra.v1.CanvasOperationReceipt
 }
 var file_armadra_v1_settings_proto_depIdxs = []int32{
 	0,  // 0: armadra.v1.SettingsDocument.scope:type_name -> armadra.v1.SettingsScope
 	4,  // 1: armadra.v1.ExecutionHost.ssh:type_name -> armadra.v1.SshExecutionHost
 	1,  // 2: armadra.v1.ExecutionHost.kind:type_name -> armadra.v1.ExecutionHostKind
-	13, // 3: armadra.v1.GetSettingsRequest.meta:type_name -> armadra.v1.CommandMeta
+	27, // 3: armadra.v1.GetSettingsRequest.meta:type_name -> armadra.v1.CommandMeta
 	0,  // 4: armadra.v1.GetSettingsRequest.scope:type_name -> armadra.v1.SettingsScope
 	3,  // 5: armadra.v1.GetSettingsResponse.document:type_name -> armadra.v1.SettingsDocument
 	5,  // 6: armadra.v1.GetSettingsResponse.execution_hosts:type_name -> armadra.v1.ExecutionHost
-	13, // 7: armadra.v1.PutSettingsRequest.meta:type_name -> armadra.v1.CommandMeta
+	27, // 7: armadra.v1.PutSettingsRequest.meta:type_name -> armadra.v1.CommandMeta
 	3,  // 8: armadra.v1.PutSettingsRequest.document:type_name -> armadra.v1.SettingsDocument
 	3,  // 9: armadra.v1.PutSettingsResponse.document:type_name -> armadra.v1.SettingsDocument
-	14, // 10: armadra.v1.PutSettingsResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
+	28, // 10: armadra.v1.PutSettingsResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
 	3,  // 11: armadra.v1.WorkerSettingsRequest.document:type_name -> armadra.v1.SettingsDocument
 	2,  // 12: armadra.v1.WorkerSettingsRequest.direction:type_name -> armadra.v1.WorkerSettingsDirection
 	3,  // 13: armadra.v1.WorkerSettingsSnapshot.document:type_name -> armadra.v1.SettingsDocument
 	6,  // 14: armadra.v1.WorkerSettingsSnapshot.local:type_name -> armadra.v1.WorkerLocalSettings
 	5,  // 15: armadra.v1.WorkerSettingsSnapshot.execution_hosts:type_name -> armadra.v1.ExecutionHost
-	16, // [16:16] is the sub-list for method output_type
-	16, // [16:16] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	27, // 16: armadra.v1.ValidateSettingsRequest.meta:type_name -> armadra.v1.CommandMeta
+	3,  // 17: armadra.v1.ValidateSettingsRequest.document:type_name -> armadra.v1.SettingsDocument
+	13, // 18: armadra.v1.ValidateSettingsResponse.problems:type_name -> armadra.v1.SettingsProblem
+	5,  // 19: armadra.v1.ValidateSettingsResponse.execution_hosts:type_name -> armadra.v1.ExecutionHost
+	5,  // 20: armadra.v1.SettingsPackage.execution_hosts:type_name -> armadra.v1.ExecutionHost
+	27, // 21: armadra.v1.ExportSettingsRequest.meta:type_name -> armadra.v1.CommandMeta
+	0,  // 22: armadra.v1.ExportSettingsRequest.scope:type_name -> armadra.v1.SettingsScope
+	16, // 23: armadra.v1.ExportSettingsResponse.package:type_name -> armadra.v1.SettingsPackage
+	27, // 24: armadra.v1.ImportSettingsRequest.meta:type_name -> armadra.v1.CommandMeta
+	16, // 25: armadra.v1.ImportSettingsRequest.package:type_name -> armadra.v1.SettingsPackage
+	0,  // 26: armadra.v1.ImportSettingsRequest.scope:type_name -> armadra.v1.SettingsScope
+	3,  // 27: armadra.v1.ImportSettingsResponse.document:type_name -> armadra.v1.SettingsDocument
+	28, // 28: armadra.v1.ImportSettingsResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
+	5,  // 29: armadra.v1.ImportSettingsResponse.execution_hosts:type_name -> armadra.v1.ExecutionHost
+	27, // 30: armadra.v1.ListExecutionHostsRequest.meta:type_name -> armadra.v1.CommandMeta
+	5,  // 31: armadra.v1.ListExecutionHostsResponse.execution_hosts:type_name -> armadra.v1.ExecutionHost
+	27, // 32: armadra.v1.PutExecutionHostRequest.meta:type_name -> armadra.v1.CommandMeta
+	5,  // 33: armadra.v1.PutExecutionHostRequest.execution_host:type_name -> armadra.v1.ExecutionHost
+	5,  // 34: armadra.v1.PutExecutionHostResponse.execution_host:type_name -> armadra.v1.ExecutionHost
+	28, // 35: armadra.v1.PutExecutionHostResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
+	3,  // 36: armadra.v1.PutExecutionHostResponse.document:type_name -> armadra.v1.SettingsDocument
+	27, // 37: armadra.v1.DeleteExecutionHostRequest.meta:type_name -> armadra.v1.CommandMeta
+	28, // 38: armadra.v1.DeleteExecutionHostResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
+	3,  // 39: armadra.v1.DeleteExecutionHostResponse.document:type_name -> armadra.v1.SettingsDocument
+	40, // [40:40] is the sub-list for method output_type
+	40, // [40:40] is the sub-list for method input_type
+	40, // [40:40] is the sub-list for extension type_name
+	40, // [40:40] is the sub-list for extension extendee
+	0,  // [0:40] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_settings_proto_init() }
@@ -1080,7 +2068,7 @@ func file_armadra_v1_settings_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_settings_proto_rawDesc), len(file_armadra_v1_settings_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   10,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

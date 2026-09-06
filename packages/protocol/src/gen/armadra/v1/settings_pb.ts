@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_settings: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Chlhcm1hZHJhL3YxL3NldHRpbmdzLnByb3RvEgphcm1hZHJhLnYxIrcBChBTZXR0aW5nc0RvY3VtZW50EigKBXNjb3BlGAEgASgOMhkuYXJtYWRyYS52MS5TZXR0aW5nc1Njb3BlEhEKCWRldmljZV9pZBgCIAEoCRIQCghkb2N1bWVudBgKIAEoDBIOCgZzaGEyNTYYCyABKAwSFgoOc2NoZW1hX3ZlcnNpb24YDCABKA0SGgoSdXBkYXRlZF9hdF91bml4X21zGCkgASgDEhAKCHJldmlzaW9uGDIgASgEInsKEFNzaEV4ZWN1dGlvbkhvc3QSDAoEaG9zdBgBIAEoCRIMCgRwb3J0GAIgASgNEgwKBHVzZXIYAyABKAkSFQoNaWRlbnRpdHlfZmlsZRgEIAEoCRITCgt3b3JrZXJfcGF0aBgFIAEoCRIRCglzdGF0ZV9kaXIYBiABKAkivgEKDUV4ZWN1dGlvbkhvc3QSGQoRZXhlY3V0aW9uX2hvc3RfaWQYASABKAkSDAoEbmFtZRgKIAEoCRIpCgNzc2gYCyABKAsyHC5hcm1hZHJhLnYxLlNzaEV4ZWN1dGlvbkhvc3QSKwoEa2luZBgeIAEoDjIdLmFybWFkcmEudjEuRXhlY3V0aW9uSG9zdEtpbmQSGgoSdXBkYXRlZF9hdF91bml4X21zGCkgASgDEhAKCHJldmlzaW9uGDIgASgEIngKE1dvcmtlckxvY2FsU2V0dGluZ3MSGAoQdGVybWluYWxfYmFja2VuZBgKIAEoCRIZChFicm93c2VyX2F2YWlsYWJsZRgLIAEoCBIUCgxwb3dlcl9wb2xpY3kYDCABKAkSFgoOcGF0aF9hdWdtZW50ZWQYDSABKAgieAoSR2V0U2V0dGluZ3NSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEigKBXNjb3BlGAIgASgOMhkuYXJtYWRyYS52MS5TZXR0aW5nc1Njb3BlEhEKCWRldmljZV9pZBgDIAEoCSKRAQoTR2V0U2V0dGluZ3NSZXNwb25zZRIuCghkb2N1bWVudBgBIAEoCzIcLmFybWFkcmEudjEuU2V0dGluZ3NEb2N1bWVudBIyCg9leGVjdXRpb25faG9zdHMYAiADKAsyGS5hcm1hZHJhLnYxLkV4ZWN1dGlvbkhvc3QSFgoOZXZlbnRfc2VxdWVuY2UYAyABKAQinAEKElB1dFNldHRpbmdzUmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRIUCgxvcGVyYXRpb25faWQYAiABKAkSGQoRZXhwZWN0ZWRfcmV2aXNpb24YAyABKAQSLgoIZG9jdW1lbnQYCiABKAsyHC5hcm1hZHJhLnYxLlNldHRpbmdzRG9jdW1lbnQiegoTUHV0U2V0dGluZ3NSZXNwb25zZRIuCghkb2N1bWVudBgBIAEoCzIcLmFybWFkcmEudjEuU2V0dGluZ3NEb2N1bWVudBIzCgdyZWNlaXB0GAIgASgLMiIuYXJtYWRyYS52MS5DYW52YXNPcGVyYXRpb25SZWNlaXB0IqoBChVXb3JrZXJTZXR0aW5nc1JlcXVlc3QSLgoIZG9jdW1lbnQYCiABKAsyHC5hcm1hZHJhLnYxLlNldHRpbmdzRG9jdW1lbnQSFgoOZXhwZWN0ZWRfZXBvY2gYCyABKAQSEQoJaW1wb3J0X2lkGAwgASgJEjYKCWRpcmVjdGlvbhgeIAEoDjIjLmFybWFkcmEudjEuV29ya2VyU2V0dGluZ3NEaXJlY3Rpb24izwEKFldvcmtlclNldHRpbmdzU25hcHNob3QSLgoIZG9jdW1lbnQYCiABKAsyHC5hcm1hZHJhLnYxLlNldHRpbmdzRG9jdW1lbnQSLgoFbG9jYWwYCyABKAsyHy5hcm1hZHJhLnYxLldvcmtlckxvY2FsU2V0dGluZ3MSMgoPZXhlY3V0aW9uX2hvc3RzGAwgAygLMhkuYXJtYWRyYS52MS5FeGVjdXRpb25Ib3N0Eg8KB2FwcGxpZWQYDSABKAgSEAoIcmVwbGF5ZWQYDiABKAgqZQoNU2V0dGluZ3NTY29wZRIeChpTRVRUSU5HU19TQ09QRV9VTlNQRUNJRklFRBAAEhkKFVNFVFRJTkdTX1NDT1BFX0dMT0JBTBABEhkKFVNFVFRJTkdTX1NDT1BFX0RFVklDRRACKnQKEUV4ZWN1dGlvbkhvc3RLaW5kEiMKH0VYRUNVVElPTl9IT1NUX0tJTkRfVU5TUEVDSUZJRUQQABIdChlFWEVDVVRJT05fSE9TVF9LSU5EX0xPQ0FMEAESGwoXRVhFQ1VUSU9OX0hPU1RfS0lORF9TU0gQAiqQAQoXV29ya2VyU2V0dGluZ3NEaXJlY3Rpb24SKQolV09SS0VSX1NFVFRJTkdTX0RJUkVDVElPTl9VTlNQRUNJRklFRBAAEiQKIFdPUktFUl9TRVRUSU5HU19ESVJFQ1RJT05fRVhQT1JUEAESJAogV09SS0VSX1NFVFRJTkdTX0RJUkVDVElPTl9JTVBPUlQQAkIjWiFhcm1hZHJhLmxvY2FsL2hvc3QvZ2VuL2FybWFkcmEvdjFiBnByb3RvMw",
+    "Chlhcm1hZHJhL3YxL3NldHRpbmdzLnByb3RvEgphcm1hZHJhLnYxIrcBChBTZXR0aW5nc0RvY3VtZW50EigKBXNjb3BlGAEgASgOMhkuYXJtYWRyYS52MS5TZXR0aW5nc1Njb3BlEhEKCWRldmljZV9pZBgCIAEoCRIQCghkb2N1bWVudBgKIAEoDBIOCgZzaGEyNTYYCyABKAwSFgoOc2NoZW1hX3ZlcnNpb24YDCABKA0SGgoSdXBkYXRlZF9hdF91bml4X21zGCkgASgDEhAKCHJldmlzaW9uGDIgASgEInsKEFNzaEV4ZWN1dGlvbkhvc3QSDAoEaG9zdBgBIAEoCRIMCgRwb3J0GAIgASgNEgwKBHVzZXIYAyABKAkSFQoNaWRlbnRpdHlfZmlsZRgEIAEoCRITCgt3b3JrZXJfcGF0aBgFIAEoCRIRCglzdGF0ZV9kaXIYBiABKAkivgEKDUV4ZWN1dGlvbkhvc3QSGQoRZXhlY3V0aW9uX2hvc3RfaWQYASABKAkSDAoEbmFtZRgKIAEoCRIpCgNzc2gYCyABKAsyHC5hcm1hZHJhLnYxLlNzaEV4ZWN1dGlvbkhvc3QSKwoEa2luZBgeIAEoDjIdLmFybWFkcmEudjEuRXhlY3V0aW9uSG9zdEtpbmQSGgoSdXBkYXRlZF9hdF91bml4X21zGCkgASgDEhAKCHJldmlzaW9uGDIgASgEIngKE1dvcmtlckxvY2FsU2V0dGluZ3MSGAoQdGVybWluYWxfYmFja2VuZBgKIAEoCRIZChFicm93c2VyX2F2YWlsYWJsZRgLIAEoCBIUCgxwb3dlcl9wb2xpY3kYDCABKAkSFgoOcGF0aF9hdWdtZW50ZWQYDSABKAgieAoSR2V0U2V0dGluZ3NSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEigKBXNjb3BlGAIgASgOMhkuYXJtYWRyYS52MS5TZXR0aW5nc1Njb3BlEhEKCWRldmljZV9pZBgDIAEoCSKRAQoTR2V0U2V0dGluZ3NSZXNwb25zZRIuCghkb2N1bWVudBgBIAEoCzIcLmFybWFkcmEudjEuU2V0dGluZ3NEb2N1bWVudBIyCg9leGVjdXRpb25faG9zdHMYAiADKAsyGS5hcm1hZHJhLnYxLkV4ZWN1dGlvbkhvc3QSFgoOZXZlbnRfc2VxdWVuY2UYAyABKAQinAEKElB1dFNldHRpbmdzUmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRIUCgxvcGVyYXRpb25faWQYAiABKAkSGQoRZXhwZWN0ZWRfcmV2aXNpb24YAyABKAQSLgoIZG9jdW1lbnQYCiABKAsyHC5hcm1hZHJhLnYxLlNldHRpbmdzRG9jdW1lbnQiegoTUHV0U2V0dGluZ3NSZXNwb25zZRIuCghkb2N1bWVudBgBIAEoCzIcLmFybWFkcmEudjEuU2V0dGluZ3NEb2N1bWVudBIzCgdyZWNlaXB0GAIgASgLMiIuYXJtYWRyYS52MS5DYW52YXNPcGVyYXRpb25SZWNlaXB0IqoBChVXb3JrZXJTZXR0aW5nc1JlcXVlc3QSLgoIZG9jdW1lbnQYCiABKAsyHC5hcm1hZHJhLnYxLlNldHRpbmdzRG9jdW1lbnQSFgoOZXhwZWN0ZWRfZXBvY2gYCyABKAQSEQoJaW1wb3J0X2lkGAwgASgJEjYKCWRpcmVjdGlvbhgeIAEoDjIjLmFybWFkcmEudjEuV29ya2VyU2V0dGluZ3NEaXJlY3Rpb24izwEKFldvcmtlclNldHRpbmdzU25hcHNob3QSLgoIZG9jdW1lbnQYCiABKAsyHC5hcm1hZHJhLnYxLlNldHRpbmdzRG9jdW1lbnQSLgoFbG9jYWwYCyABKAsyHy5hcm1hZHJhLnYxLldvcmtlckxvY2FsU2V0dGluZ3MSMgoPZXhlY3V0aW9uX2hvc3RzGAwgAygLMhkuYXJtYWRyYS52MS5FeGVjdXRpb25Ib3N0Eg8KB2FwcGxpZWQYDSABKAgSEAoIcmVwbGF5ZWQYDiABKAgiNAoPU2V0dGluZ3NQcm9ibGVtEgwKBHBhdGgYASABKAkSEwoLcmVhc29uX2NvZGUYJyABKAkicAoXVmFsaWRhdGVTZXR0aW5nc1JlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESLgoIZG9jdW1lbnQYCiABKAsyHC5hcm1hZHJhLnYxLlNldHRpbmdzRG9jdW1lbnQiiQEKGFZhbGlkYXRlU2V0dGluZ3NSZXNwb25zZRIKCgJvaxgBIAEoCBItCghwcm9ibGVtcxgKIAMoCzIbLmFybWFkcmEudjEuU2V0dGluZ3NQcm9ibGVtEjIKD2V4ZWN1dGlvbl9ob3N0cxgLIAMoCzIZLmFybWFkcmEudjEuRXhlY3V0aW9uSG9zdCKdAQoPU2V0dGluZ3NQYWNrYWdlEg8KB3ZlcnNpb24YASABKA0SEAoIZG9jdW1lbnQYCiABKAwSFgoOc2NoZW1hX3ZlcnNpb24YCyABKA0SMgoPZXhlY3V0aW9uX2hvc3RzGAwgAygLMhkuYXJtYWRyYS52MS5FeGVjdXRpb25Ib3N0EhsKE2V4cG9ydGVkX2F0X3VuaXhfbXMYKSABKAMiewoVRXhwb3J0U2V0dGluZ3NSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEigKBXNjb3BlGAIgASgOMhkuYXJtYWRyYS52MS5TZXR0aW5nc1Njb3BlEhEKCWRldmljZV9pZBgDIAEoCSJYChZFeHBvcnRTZXR0aW5nc1Jlc3BvbnNlEiwKB3BhY2thZ2UYASABKAsyGy5hcm1hZHJhLnYxLlNldHRpbmdzUGFja2FnZRIQCghyZXZpc2lvbhgCIAEoBCLaAQoVSW1wb3J0U2V0dGluZ3NSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEhQKDG9wZXJhdGlvbl9pZBgCIAEoCRIZChFleHBlY3RlZF9yZXZpc2lvbhgDIAEoBBIsCgdwYWNrYWdlGAogASgLMhsuYXJtYWRyYS52MS5TZXR0aW5nc1BhY2thZ2USKAoFc2NvcGUYCyABKA4yGS5hcm1hZHJhLnYxLlNldHRpbmdzU2NvcGUSEQoJZGV2aWNlX2lkGAwgASgJIrEBChZJbXBvcnRTZXR0aW5nc1Jlc3BvbnNlEi4KCGRvY3VtZW50GAEgASgLMhwuYXJtYWRyYS52MS5TZXR0aW5nc0RvY3VtZW50EjMKB3JlY2VpcHQYAiABKAsyIi5hcm1hZHJhLnYxLkNhbnZhc09wZXJhdGlvblJlY2VpcHQSMgoPZXhlY3V0aW9uX2hvc3RzGAMgAygLMhkuYXJtYWRyYS52MS5FeGVjdXRpb25Ib3N0IkIKGUxpc3RFeGVjdXRpb25Ib3N0c1JlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGEiawoaTGlzdEV4ZWN1dGlvbkhvc3RzUmVzcG9uc2USMgoPZXhlY3V0aW9uX2hvc3RzGAEgAygLMhkuYXJtYWRyYS52MS5FeGVjdXRpb25Ib3N0EhkKEWRvY3VtZW50X3JldmlzaW9uGAIgASgEIqQBChdQdXRFeGVjdXRpb25Ib3N0UmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRIUCgxvcGVyYXRpb25faWQYAiABKAkSGQoRZXhwZWN0ZWRfcmV2aXNpb24YAyABKAQSMQoOZXhlY3V0aW9uX2hvc3QYCiABKAsyGS5hcm1hZHJhLnYxLkV4ZWN1dGlvbkhvc3QisgEKGFB1dEV4ZWN1dGlvbkhvc3RSZXNwb25zZRIxCg5leGVjdXRpb25faG9zdBgBIAEoCzIZLmFybWFkcmEudjEuRXhlY3V0aW9uSG9zdBIzCgdyZWNlaXB0GAIgASgLMiIuYXJtYWRyYS52MS5DYW52YXNPcGVyYXRpb25SZWNlaXB0Ei4KCGRvY3VtZW50GAMgASgLMhwuYXJtYWRyYS52MS5TZXR0aW5nc0RvY3VtZW50Io8BChpEZWxldGVFeGVjdXRpb25Ib3N0UmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRIUCgxvcGVyYXRpb25faWQYAiABKAkSGQoRZXhwZWN0ZWRfcmV2aXNpb24YAyABKAQSGQoRZXhlY3V0aW9uX2hvc3RfaWQYCiABKAkiggEKG0RlbGV0ZUV4ZWN1dGlvbkhvc3RSZXNwb25zZRIzCgdyZWNlaXB0GAEgASgLMiIuYXJtYWRyYS52MS5DYW52YXNPcGVyYXRpb25SZWNlaXB0Ei4KCGRvY3VtZW50GAIgASgLMhwuYXJtYWRyYS52MS5TZXR0aW5nc0RvY3VtZW50KmUKDVNldHRpbmdzU2NvcGUSHgoaU0VUVElOR1NfU0NPUEVfVU5TUEVDSUZJRUQQABIZChVTRVRUSU5HU19TQ09QRV9HTE9CQUwQARIZChVTRVRUSU5HU19TQ09QRV9ERVZJQ0UQAip0ChFFeGVjdXRpb25Ib3N0S2luZBIjCh9FWEVDVVRJT05fSE9TVF9LSU5EX1VOU1BFQ0lGSUVEEAASHQoZRVhFQ1VUSU9OX0hPU1RfS0lORF9MT0NBTBABEhsKF0VYRUNVVElPTl9IT1NUX0tJTkRfU1NIEAIqkAEKF1dvcmtlclNldHRpbmdzRGlyZWN0aW9uEikKJVdPUktFUl9TRVRUSU5HU19ESVJFQ1RJT05fVU5TUEVDSUZJRUQQABIkCiBXT1JLRVJfU0VUVElOR1NfRElSRUNUSU9OX0VYUE9SVBABEiQKIFdPUktFUl9TRVRUSU5HU19ESVJFQ1RJT05fSU1QT1JUEAJCI1ohYXJtYWRyYS5sb2NhbC9ob3N0L2dlbi9hcm1hZHJhL3YxYgZwcm90bzM",
     [file_armadra_v1_canvas, file_armadra_v1_common],
   );
 
@@ -425,6 +425,469 @@ export type WorkerSettingsSnapshot =
 export const WorkerSettingsSnapshotSchema: GenMessage<WorkerSettingsSnapshot> =
   /*@__PURE__*/
   messageDesc(file_armadra_v1_settings, 9);
+
+/**
+ * One thing wrong with a candidate document.
+ *
+ * A list, not a first failure: a settings page that has to be saved, refused,
+ * fixed and saved again once per problem is a page nobody finishes.
+ *
+ * @generated from message armadra.v1.SettingsProblem
+ */
+export type SettingsProblem = Message<"armadra.v1.SettingsProblem"> & {
+  /**
+   * Where in the document, in the dotted spelling the front end already uses:
+   * "ssh.hosts[2].host", or empty for the document as a whole.
+   *
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * A stable key the client translates — "notAnObject", "tooLarge",
+   * "unknownSchemaVersion", "duplicateExecutionHostId", "invalidKey". Never a
+   * sentence: this Host does not write the user's language.
+   *
+   * @generated from field: string reason_code = 39;
+   */
+  reasonCode: string;
+};
+
+/**
+ * Describes the message armadra.v1.SettingsProblem.
+ * Use `create(SettingsProblemSchema)` to create a new message.
+ */
+export const SettingsProblemSchema: GenMessage<SettingsProblem> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_settings, 10);
+
+/**
+ * Ask what a save would do, without doing it.
+ *
+ * Structure only, the same check Patch applies. Whether a custom agent
+ * definition is coherent or a keybinding reachable is decided in
+ * `packages/shared` and by the Runtime at startup, and a second opinion here
+ * could disagree with the one that actually governs.
+ *
+ * @generated from message armadra.v1.ValidateSettingsRequest
+ */
+export type ValidateSettingsRequest =
+  Message<"armadra.v1.ValidateSettingsRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: armadra.v1.SettingsDocument document = 10;
+     */
+    document?: SettingsDocument;
+  };
+
+/**
+ * Describes the message armadra.v1.ValidateSettingsRequest.
+ * Use `create(ValidateSettingsRequestSchema)` to create a new message.
+ */
+export const ValidateSettingsRequestSchema: GenMessage<ValidateSettingsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_settings, 11);
+
+/**
+ * @generated from message armadra.v1.ValidateSettingsResponse
+ */
+export type ValidateSettingsResponse =
+  Message<"armadra.v1.ValidateSettingsResponse"> & {
+    /**
+     * @generated from field: bool ok = 1;
+     */
+    ok: boolean;
+
+    /**
+     * @generated from field: repeated armadra.v1.SettingsProblem problems = 10;
+     */
+    problems: SettingsProblem[];
+
+    /**
+     * What the document would project to. Returned on success so a client can
+     * show the registry it is about to store instead of storing it to find out.
+     *
+     * @generated from field: repeated armadra.v1.ExecutionHost execution_hosts = 11;
+     */
+    executionHosts: ExecutionHost[];
+  };
+
+/**
+ * Describes the message armadra.v1.ValidateSettingsResponse.
+ * Use `create(ValidateSettingsResponseSchema)` to create a new message.
+ */
+export const ValidateSettingsResponseSchema: GenMessage<ValidateSettingsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_settings, 12);
+
+/**
+ * The portable form of one installation's settings.
+ *
+ * It carries no revision — a revision belongs to the store it came from, and
+ * importing one would assert a history the destination never had — and no
+ * credential: `identity_file` is a path each machine resolves against its own
+ * filesystem, and there is no field a password or key material could travel
+ * in. So this is a configuration file, not a secret.
+ *
+ * The preferences that belong to one machine are not here either. They are in
+ * that machine's own `worker-settings.json` and never reached this Host; see
+ * WorkerLocalSettings.
+ *
+ * @generated from message armadra.v1.SettingsPackage
+ */
+export type SettingsPackage = Message<"armadra.v1.SettingsPackage"> & {
+  /**
+   * The package's own shape. An importer that does not recognise it refuses
+   * rather than guessing, because guessing would mean writing somebody's
+   * settings out of a file it could not read.
+   *
+   * @generated from field: uint32 version = 1;
+   */
+  version: number;
+
+  /**
+   * @generated from field: bytes document = 10;
+   */
+  document: Uint8Array;
+
+  /**
+   * @generated from field: uint32 schema_version = 11;
+   */
+  schemaVersion: number;
+
+  /**
+   * Projected from `document` at export time, so a reader can see the machine
+   * registry without parsing the document. Never a second source: an import
+   * reads the document and projects again.
+   *
+   * @generated from field: repeated armadra.v1.ExecutionHost execution_hosts = 12;
+   */
+  executionHosts: ExecutionHost[];
+
+  /**
+   * @generated from field: int64 exported_at_unix_ms = 41;
+   */
+  exportedAtUnixMs: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.SettingsPackage.
+ * Use `create(SettingsPackageSchema)` to create a new message.
+ */
+export const SettingsPackageSchema: GenMessage<SettingsPackage> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_settings, 13);
+
+/**
+ * @generated from message armadra.v1.ExportSettingsRequest
+ */
+export type ExportSettingsRequest =
+  Message<"armadra.v1.ExportSettingsRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: armadra.v1.SettingsScope scope = 2;
+     */
+    scope: SettingsScope;
+
+    /**
+     * @generated from field: string device_id = 3;
+     */
+    deviceId: string;
+  };
+
+/**
+ * Describes the message armadra.v1.ExportSettingsRequest.
+ * Use `create(ExportSettingsRequestSchema)` to create a new message.
+ */
+export const ExportSettingsRequestSchema: GenMessage<ExportSettingsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_settings, 14);
+
+/**
+ * @generated from message armadra.v1.ExportSettingsResponse
+ */
+export type ExportSettingsResponse =
+  Message<"armadra.v1.ExportSettingsResponse"> & {
+    /**
+     * @generated from field: armadra.v1.SettingsPackage package = 1;
+     */
+    package?: SettingsPackage;
+
+    /**
+     * The revision the package was taken at. An import back into the same store
+     * uses it as its compare-and-set baseline; an import into a different store
+     * ignores it.
+     *
+     * @generated from field: uint64 revision = 2;
+     */
+    revision: bigint;
+  };
+
+/**
+ * Describes the message armadra.v1.ExportSettingsResponse.
+ * Use `create(ExportSettingsResponseSchema)` to create a new message.
+ */
+export const ExportSettingsResponseSchema: GenMessage<ExportSettingsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_settings, 15);
+
+/**
+ * @generated from message armadra.v1.ImportSettingsRequest
+ */
+export type ImportSettingsRequest =
+  Message<"armadra.v1.ImportSettingsRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string operation_id = 2;
+     */
+    operationId: string;
+
+    /**
+     * @generated from field: uint64 expected_revision = 3;
+     */
+    expectedRevision: bigint;
+
+    /**
+     * @generated from field: armadra.v1.SettingsPackage package = 10;
+     */
+    package?: SettingsPackage;
+
+    /**
+     * @generated from field: armadra.v1.SettingsScope scope = 11;
+     */
+    scope: SettingsScope;
+
+    /**
+     * @generated from field: string device_id = 12;
+     */
+    deviceId: string;
+  };
+
+/**
+ * Describes the message armadra.v1.ImportSettingsRequest.
+ * Use `create(ImportSettingsRequestSchema)` to create a new message.
+ */
+export const ImportSettingsRequestSchema: GenMessage<ImportSettingsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_settings, 16);
+
+/**
+ * @generated from message armadra.v1.ImportSettingsResponse
+ */
+export type ImportSettingsResponse =
+  Message<"armadra.v1.ImportSettingsResponse"> & {
+    /**
+     * @generated from field: armadra.v1.SettingsDocument document = 1;
+     */
+    document?: SettingsDocument;
+
+    /**
+     * @generated from field: armadra.v1.CanvasOperationReceipt receipt = 2;
+     */
+    receipt?: CanvasOperationReceipt;
+
+    /**
+     * @generated from field: repeated armadra.v1.ExecutionHost execution_hosts = 3;
+     */
+    executionHosts: ExecutionHost[];
+  };
+
+/**
+ * Describes the message armadra.v1.ImportSettingsResponse.
+ * Use `create(ImportSettingsResponseSchema)` to create a new message.
+ */
+export const ImportSettingsResponseSchema: GenMessage<ImportSettingsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_settings, 17);
+
+/**
+ * @generated from message armadra.v1.ListExecutionHostsRequest
+ */
+export type ListExecutionHostsRequest =
+  Message<"armadra.v1.ListExecutionHostsRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+  };
+
+/**
+ * Describes the message armadra.v1.ListExecutionHostsRequest.
+ * Use `create(ListExecutionHostsRequestSchema)` to create a new message.
+ */
+export const ListExecutionHostsRequestSchema: GenMessage<ListExecutionHostsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_settings, 18);
+
+/**
+ * @generated from message armadra.v1.ListExecutionHostsResponse
+ */
+export type ListExecutionHostsResponse =
+  Message<"armadra.v1.ListExecutionHostsResponse"> & {
+    /**
+     * This machine first — it is always there and is never stored — then the
+     * registry in identifier order.
+     *
+     * @generated from field: repeated armadra.v1.ExecutionHost execution_hosts = 1;
+     */
+    executionHosts: ExecutionHost[];
+
+    /**
+     * The document they were projected from, so a following write can name the
+     * revision it read instead of re-reading and racing itself.
+     *
+     * @generated from field: uint64 document_revision = 2;
+     */
+    documentRevision: bigint;
+  };
+
+/**
+ * Describes the message armadra.v1.ListExecutionHostsResponse.
+ * Use `create(ListExecutionHostsResponseSchema)` to create a new message.
+ */
+export const ListExecutionHostsResponseSchema: GenMessage<ListExecutionHostsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_settings, 19);
+
+/**
+ * Write one host.
+ *
+ * A document write with one entry replaced, not a write to a second store:
+ * `expected_revision` is the *document's*, and every other byte of the
+ * document is preserved exactly. A host that is only a projection cannot be
+ * written any other way without the two being able to disagree.
+ *
+ * @generated from message armadra.v1.PutExecutionHostRequest
+ */
+export type PutExecutionHostRequest =
+  Message<"armadra.v1.PutExecutionHostRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string operation_id = 2;
+     */
+    operationId: string;
+
+    /**
+     * @generated from field: uint64 expected_revision = 3;
+     */
+    expectedRevision: bigint;
+
+    /**
+     * @generated from field: armadra.v1.ExecutionHost execution_host = 10;
+     */
+    executionHost?: ExecutionHost;
+  };
+
+/**
+ * Describes the message armadra.v1.PutExecutionHostRequest.
+ * Use `create(PutExecutionHostRequestSchema)` to create a new message.
+ */
+export const PutExecutionHostRequestSchema: GenMessage<PutExecutionHostRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_settings, 20);
+
+/**
+ * @generated from message armadra.v1.PutExecutionHostResponse
+ */
+export type PutExecutionHostResponse =
+  Message<"armadra.v1.PutExecutionHostResponse"> & {
+    /**
+     * @generated from field: armadra.v1.ExecutionHost execution_host = 1;
+     */
+    executionHost?: ExecutionHost;
+
+    /**
+     * @generated from field: armadra.v1.CanvasOperationReceipt receipt = 2;
+     */
+    receipt?: CanvasOperationReceipt;
+
+    /**
+     * @generated from field: armadra.v1.SettingsDocument document = 3;
+     */
+    document?: SettingsDocument;
+  };
+
+/**
+ * Describes the message armadra.v1.PutExecutionHostResponse.
+ * Use `create(PutExecutionHostResponseSchema)` to create a new message.
+ */
+export const PutExecutionHostResponseSchema: GenMessage<PutExecutionHostResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_settings, 21);
+
+/**
+ * @generated from message armadra.v1.DeleteExecutionHostRequest
+ */
+export type DeleteExecutionHostRequest =
+  Message<"armadra.v1.DeleteExecutionHostRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string operation_id = 2;
+     */
+    operationId: string;
+
+    /**
+     * @generated from field: uint64 expected_revision = 3;
+     */
+    expectedRevision: bigint;
+
+    /**
+     * @generated from field: string execution_host_id = 10;
+     */
+    executionHostId: string;
+  };
+
+/**
+ * Describes the message armadra.v1.DeleteExecutionHostRequest.
+ * Use `create(DeleteExecutionHostRequestSchema)` to create a new message.
+ */
+export const DeleteExecutionHostRequestSchema: GenMessage<DeleteExecutionHostRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_settings, 22);
+
+/**
+ * @generated from message armadra.v1.DeleteExecutionHostResponse
+ */
+export type DeleteExecutionHostResponse =
+  Message<"armadra.v1.DeleteExecutionHostResponse"> & {
+    /**
+     * @generated from field: armadra.v1.CanvasOperationReceipt receipt = 1;
+     */
+    receipt?: CanvasOperationReceipt;
+
+    /**
+     * @generated from field: armadra.v1.SettingsDocument document = 2;
+     */
+    document?: SettingsDocument;
+  };
+
+/**
+ * Describes the message armadra.v1.DeleteExecutionHostResponse.
+ * Use `create(DeleteExecutionHostResponseSchema)` to create a new message.
+ */
+export const DeleteExecutionHostResponseSchema: GenMessage<DeleteExecutionHostResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_settings, 23);
 
 /**
  * @generated from enum armadra.v1.SettingsScope

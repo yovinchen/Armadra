@@ -31,7 +31,8 @@ func settingsMethod(path string) bool {
 		return false
 	}
 	switch strings.TrimPrefix(path, SettingsPrefix) {
-	case "Get", "Put":
+	case "Get", "Put", "Validate", "Export", "Import",
+		"ListExecutionHosts", "PutExecutionHost", "DeleteExecutionHost":
 		return true
 	}
 	return false
@@ -135,6 +136,107 @@ func settingsRequest(w http.ResponseWriter, r *http.Request, host Identity, serv
 			return
 		}
 		result, err := settings.Put(r.Context(), caller, input)
+		if err != nil {
+			settingsFailure(w, err)
+			return
+		}
+		writeProto(w, http.StatusOK, result)
+	// Asking what a save would do is a read, and it stores nothing. It is
+	// deliberately answerable while the domain is mid-switch: refusing would
+	// only make the next save a blind one.
+	case "Validate":
+		input := new(pb.ValidateSettingsRequest)
+		if !decodeAuth(w, r, input) {
+			return
+		}
+		caller, err := settingsCaller(r, host, service, settings, input.Meta, settingshost.ScopeRead, false)
+		if err != nil {
+			settingsFailure(w, err)
+			return
+		}
+		result, err := settings.Validate(r.Context(), caller, input)
+		if err != nil {
+			settingsFailure(w, err)
+			return
+		}
+		writeProto(w, http.StatusOK, result)
+	case "Export":
+		input := new(pb.ExportSettingsRequest)
+		if !decodeAuth(w, r, input) {
+			return
+		}
+		caller, err := settingsCaller(r, host, service, settings, input.Meta, settingshost.ScopeRead, false)
+		if err != nil {
+			settingsFailure(w, err)
+			return
+		}
+		result, err := settings.ExportPackage(r.Context(), caller, input.Scope, input.DeviceId)
+		if err != nil {
+			settingsFailure(w, err)
+			return
+		}
+		writeProto(w, http.StatusOK, result)
+	case "Import":
+		input := new(pb.ImportSettingsRequest)
+		if !decodeAuth(w, r, input) {
+			return
+		}
+		caller, err := settingsCaller(r, host, service, settings, input.Meta, settingshost.ScopeWrite, true)
+		if err != nil {
+			settingsFailure(w, err)
+			return
+		}
+		result, err := settings.ImportPackage(r.Context(), caller, input)
+		if err != nil {
+			settingsFailure(w, err)
+			return
+		}
+		writeProto(w, http.StatusOK, result)
+	case "ListExecutionHosts":
+		input := new(pb.ListExecutionHostsRequest)
+		if !decodeAuth(w, r, input) {
+			return
+		}
+		caller, err := settingsCaller(r, host, service, settings, input.Meta, settingshost.ScopeRead, false)
+		if err != nil {
+			settingsFailure(w, err)
+			return
+		}
+		result, err := settings.ListExecutionHosts(r.Context(), caller)
+		if err != nil {
+			settingsFailure(w, err)
+			return
+		}
+		writeProto(w, http.StatusOK, result)
+	// Both host writes are document writes with one entry changed, so they take
+	// the write grant, the CSRF header and the document's own revision.
+	case "PutExecutionHost":
+		input := new(pb.PutExecutionHostRequest)
+		if !decodeAuth(w, r, input) {
+			return
+		}
+		caller, err := settingsCaller(r, host, service, settings, input.Meta, settingshost.ScopeWrite, true)
+		if err != nil {
+			settingsFailure(w, err)
+			return
+		}
+		result, err := settings.PutExecutionHost(r.Context(), caller, input)
+		if err != nil {
+			settingsFailure(w, err)
+			return
+		}
+		writeProto(w, http.StatusOK, result)
+	case "DeleteExecutionHost":
+		input := new(pb.DeleteExecutionHostRequest)
+		if !decodeAuth(w, r, input) {
+			return
+		}
+		caller, err := settingsCaller(r, host, service, settings, input.Meta, settingshost.ScopeWrite, true)
+		if err != nil {
+			settingsFailure(w, err)
+			return
+		}
+		result, err := settings.DeleteExecutionHost(r.Context(), caller, input)
 		if err != nil {
 			settingsFailure(w, err)
 			return

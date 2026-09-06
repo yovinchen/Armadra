@@ -183,3 +183,134 @@ message WorkerSettingsSnapshot {
   // the one the first attempt produced.
   bool replayed = 14;
 }
+
+/* ------------------------------ validation -------------------------------- */
+
+// One thing wrong with a candidate document.
+//
+// A list, not a first failure: a settings page that has to be saved, refused,
+// fixed and saved again once per problem is a page nobody finishes.
+message SettingsProblem {
+  // Where in the document, in the dotted spelling the front end already uses:
+  // "ssh.hosts[2].host", or empty for the document as a whole.
+  string path = 1;
+  // A stable key the client translates — "notAnObject", "tooLarge",
+  // "unknownSchemaVersion", "duplicateExecutionHostId", "invalidKey". Never a
+  // sentence: this Host does not write the user's language.
+  string reason_code = 39;
+}
+
+// Ask what a save would do, without doing it.
+//
+// Structure only, the same check Patch applies. Whether a custom agent
+// definition is coherent or a keybinding reachable is decided in
+// `packages/shared` and by the Runtime at startup, and a second opinion here
+// could disagree with the one that actually governs.
+message ValidateSettingsRequest {
+  CommandMeta meta = 1;
+  SettingsDocument document = 10;
+}
+message ValidateSettingsResponse {
+  bool ok = 1;
+  repeated SettingsProblem problems = 10;
+  // What the document would project to. Returned on success so a client can
+  // show the registry it is about to store instead of storing it to find out.
+  repeated ExecutionHost execution_hosts = 11;
+}
+
+/* ---------------------------- export and import --------------------------- */
+
+// The portable form of one installation's settings.
+//
+// It carries no revision — a revision belongs to the store it came from, and
+// importing one would assert a history the destination never had — and no
+// credential: `identity_file` is a path each machine resolves against its own
+// filesystem, and there is no field a password or key material could travel
+// in. So this is a configuration file, not a secret.
+//
+// The preferences that belong to one machine are not here either. They are in
+// that machine's own `worker-settings.json` and never reached this Host; see
+// WorkerLocalSettings.
+message SettingsPackage {
+  // The package's own shape. An importer that does not recognise it refuses
+  // rather than guessing, because guessing would mean writing somebody's
+  // settings out of a file it could not read.
+  uint32 version = 1;
+  bytes document = 10;
+  uint32 schema_version = 11;
+  // Projected from `document` at export time, so a reader can see the machine
+  // registry without parsing the document. Never a second source: an import
+  // reads the document and projects again.
+  repeated ExecutionHost execution_hosts = 12;
+  int64 exported_at_unix_ms = 41;
+}
+
+message ExportSettingsRequest {
+  CommandMeta meta = 1;
+  SettingsScope scope = 2;
+  string device_id = 3;
+}
+message ExportSettingsResponse {
+  SettingsPackage package = 1;
+  // The revision the package was taken at. An import back into the same store
+  // uses it as its compare-and-set baseline; an import into a different store
+  // ignores it.
+  uint64 revision = 2;
+}
+
+message ImportSettingsRequest {
+  CommandMeta meta = 1;
+  string operation_id = 2;
+  uint64 expected_revision = 3;
+  SettingsPackage package = 10;
+  SettingsScope scope = 11;
+  string device_id = 12;
+}
+message ImportSettingsResponse {
+  SettingsDocument document = 1;
+  CanvasOperationReceipt receipt = 2;
+  repeated ExecutionHost execution_hosts = 3;
+}
+
+/* ----------------------------- execution hosts ---------------------------- */
+
+message ListExecutionHostsRequest {
+  CommandMeta meta = 1;
+}
+message ListExecutionHostsResponse {
+  // This machine first — it is always there and is never stored — then the
+  // registry in identifier order.
+  repeated ExecutionHost execution_hosts = 1;
+  // The document they were projected from, so a following write can name the
+  // revision it read instead of re-reading and racing itself.
+  uint64 document_revision = 2;
+}
+
+// Write one host.
+//
+// A document write with one entry replaced, not a write to a second store:
+// `expected_revision` is the *document's*, and every other byte of the
+// document is preserved exactly. A host that is only a projection cannot be
+// written any other way without the two being able to disagree.
+message PutExecutionHostRequest {
+  CommandMeta meta = 1;
+  string operation_id = 2;
+  uint64 expected_revision = 3;
+  ExecutionHost execution_host = 10;
+}
+message PutExecutionHostResponse {
+  ExecutionHost execution_host = 1;
+  CanvasOperationReceipt receipt = 2;
+  SettingsDocument document = 3;
+}
+
+message DeleteExecutionHostRequest {
+  CommandMeta meta = 1;
+  string operation_id = 2;
+  uint64 expected_revision = 3;
+  string execution_host_id = 10;
+}
+message DeleteExecutionHostResponse {
+  CanvasOperationReceipt receipt = 1;
+  SettingsDocument document = 2;
+}
