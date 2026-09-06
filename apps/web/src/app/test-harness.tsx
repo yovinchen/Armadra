@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactFlowProvider } from "@xyflow/react";
 import { TooltipProvider } from "@/ui/tooltip";
 
 /**
@@ -28,13 +29,19 @@ export function installDomPolyfills() {
   }
 }
 
+/**
+ * 与 `app/App.tsx` 同一组 provider。`<ReactFlowProvider>` 也在里面：
+ * Dock 的缩放档位用 `useViewport()`，那个 hook 在 provider 之外会抛。
+ */
 export function TestProviders({ children }: { children: ReactNode }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
   return (
     <QueryClientProvider client={client}>
-      <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
+      <ReactFlowProvider>
+        <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
+      </ReactFlowProvider>
     </QueryClientProvider>
   );
 }

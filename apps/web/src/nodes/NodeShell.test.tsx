@@ -1,12 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import * as React from "react";
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-} from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import type { CanvasNode } from "@armadra/shared";
 
 const store = vi.hoisted(() => ({
@@ -35,6 +29,7 @@ vi.mock("@/store/canvas-store", () => {
 });
 
 import { installDomPolyfills } from "@/app/test-harness";
+import { renderFlow } from "@/canvas/test-support";
 import { openNodeAnnotation } from "@/meta/annotations";
 import { NodeShell } from "./NodeShell";
 import { COLLAPSED_HEIGHT, HEADER_HEIGHT } from "./geometry";
@@ -56,14 +51,19 @@ function makeNode(patch: Partial<CanvasNode> = {}): CanvasNode {
   } as CanvasNode;
 }
 
+/**
+ * `NodeShell` 的把手是真的 `<Handle>`，它要 React Flow 在**节点包装层**里
+ * 给的两个 context，所以壳必须挂进一个真的画布里（`canvas/test-support`）。
+ */
 function renderShell(
   props: Partial<React.ComponentProps<typeof NodeShell>> = {},
 ) {
   const node = props.node ?? makeNode();
-  return render(
+  return renderFlow(
     <NodeShell node={node} selected={false} {...props}>
       <div>body</div>
     </NodeShell>,
+    { nodeId: node.id },
   );
 }
 
@@ -84,17 +84,18 @@ describe("NodeShell", () => {
       return <div data-testid="persistent-body" />;
     }
     const node = makeNode();
-    const view = render(
+    const view = renderFlow(
       <NodeShell node={node} selected={false}>
         <Body />
       </NodeShell>,
+      { nodeId: node.id },
     );
     const body = screen.getByTestId("persistent-body");
     expect(
       (view.container.querySelector('[data-slot="node-header"]') as HTMLElement)
         .style.height,
     ).toBe(`${HEADER_HEIGHT}px`);
-    view.rerender(
+    view.rerenderNode(
       <NodeShell node={{ ...node, collapsed: true }} selected={false}>
         <Body />
       </NodeShell>,
@@ -107,7 +108,7 @@ describe("NodeShell", () => {
       (view.container.querySelector('[data-slot="node-body"]') as HTMLElement)
         .style.display,
     ).toBe("none");
-    view.rerender(
+    view.rerenderNode(
       <NodeShell node={node} selected={false}>
         <Body />
       </NodeShell>,
@@ -374,7 +375,7 @@ describe("NodeShell", () => {
 
   /**
    * 头部按钮改文档之前必须先同步选中态：按钮自己吃掉了 pointerdown（否则
-   * 一按就开始拖 shape），tldraw 的 select 工具不会经手这次点击。
+   * 一按就开始拖节点），React Flow 的选择不会经手这次点击。
    */
   it("selects the node before mutating it from the header", () => {
     renderShell();
@@ -485,29 +486,31 @@ describe("NodeShell", () => {
     ).toHaveLength(2);
   });
 
-  /** tldraw 计划 §4.1：体内指针事件不冒泡，拖拽只认头部。 */
-  it("keeps body pointer events out of the canvas", () => {
+  /**
+   * F02：拖拽只从头部起。React Flow 认的是 `dragHandle` 选择器与 `nodrag`
+   * 类，而不是「谁吞掉了 pointerdown」，所以断言的是类名与结构。
+   */
+  it("marks the body nodrag/nowheel and keeps the header a drag handle", () => {
     const { container } = renderShell();
     const body = container.querySelector(
       '[data-slot="node-body"]',
     ) as HTMLElement;
-    // React 19 把监听器委托到根容器上，所以「冒不冒泡到画布」等价于
-    // 「document 上还收不收得到」——tldraw 的 `.tl-canvas` 也在更外层。
+    expect(body.classList.contains("nodrag")).toBe(true);
+    // 普通滚轮归节点体自己（终端的 tmux 桥、编辑器的滚动），不缩放画布。
+    expect(body.classList.contains("nowheel")).toBe(true);
+
+    const header = container.querySelector(
+      '[data-slot="node-header"]',
+    ) as HTMLElement;
+    expect(header.classList.contains("drag-handle")).toBe(true);
+  });
+
+  /** 头部里的按钮仍然要挡住 pointerdown：一按就拖整个节点就点不中它们。 */
+  it("keeps header controls from starting a node drag", () => {
+    renderShell();
     const seen = vi.fn();
     document.addEventListener("pointerdown", seen);
     try {
-      fireEvent.pointerDown(body);
-      expect(seen).not.toHaveBeenCalled();
-
-      // 头部空白处相反：放行给 select 工具，否则节点拖不动。
-      const header = container.querySelector(
-        '[data-slot="node-header"]',
-      ) as HTMLElement;
-      fireEvent.pointerDown(header);
-      expect(seen).toHaveBeenCalledTimes(1);
-
-      // 头部里的按钮又要挡住：一按就拖整个节点的话，点不中任何一个钮。
-      seen.mockClear();
       fireEvent.pointerDown(screen.getByLabelText("关闭"));
       expect(seen).not.toHaveBeenCalled();
     } finally {

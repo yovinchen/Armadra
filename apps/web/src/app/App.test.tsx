@@ -37,9 +37,9 @@ vi.mock("../api/events", () => ({
   useRuntimeConnection: () => "open",
 }));
 
-/** 画布本身（tldraw）在 jsdom 里跑不动，这里只关心它在不在。 */
-vi.mock("../canvas/TldrawWorkspace", () => ({
-  TldrawWorkspace: () => <div data-testid="canvas" />,
+/** 画布本身在 jsdom 里跑不动，这里只关心它在不在。 */
+vi.mock("../canvas/FlowWorkspace", () => ({
+  FlowWorkspace: () => <div data-testid="canvas" />,
 }));
 
 import { installDomPolyfills } from "./test-harness";

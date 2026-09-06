@@ -19,8 +19,6 @@ import type {
   GitRepositoryRecord,
   GitWorktreeRecord,
 } from "@armadra/shared";
-import type { TLFrameShape } from "tldraw";
-
 import {
   absoluteWorktreePath,
   armInitScript,
@@ -37,8 +35,8 @@ import {
   repositoryForBinding,
   samePath,
 } from "./frame-binding";
-import { nodeToShape } from "./sync/project";
-import { shapeToNode } from "./sync/derive";
+import { emptyWhiteboard } from "./whiteboard/model";
+import { projectNodes } from "./sync/project";
 
 const BOARD = "019ff7d1-0d12-7421-833d-2c5e8d64ed00";
 const FRAME = "019ff7d1-0d12-7421-833d-2c5e8d64ed01";
@@ -284,16 +282,28 @@ describe("初始化脚本的闸", () => {
   });
 });
 
-describe("shape 往返", () => {
-  it("绑定跟着 frame 的 meta 走一圈还在", () => {
-    const shape = nodeToShape(frame()) as TLFrameShape;
-    const back = shapeToNode(shape, BOARD, STAMP);
-    expect(frameBindingOf(back)).toEqual(binding());
+/**
+ * React Flow 的投影不再是「有损映射 + 反向派生」：`data` 直接是那个
+ * `CanvasNode`，所以绑定天然跟着走。这两项现在证明的是**投影不改数据**。
+ */
+describe("投影不动绑定", () => {
+  const project = (node: ReturnType<typeof frame>) =>
+    projectNodes(
+      { board: { id: BOARD }, nodes: [node], edges: [] } as never,
+      emptyWhiteboard(),
+      new Map(),
+    )[0]!;
+
+  it("绑定跟着分组节点进 React Flow 的 `data`，一个字段不掉", () => {
+    const projected = project(frame());
+    expect(projected.type).toBe("group");
+    expect(frameBindingOf(projected.data as never)).toEqual(binding());
   });
 
-  it("没绑定的分组往返之后也没有 binding 字段", () => {
-    const plain = frame({ data: { kind: "group" } });
-    const back = shapeToNode(nodeToShape(plain) as TLFrameShape, BOARD, STAMP);
-    expect(back.data).toEqual({ kind: "group" });
+  it("没绑定的分组投影之后也没有 binding 字段", () => {
+    const projected = project(frame({ data: { kind: "group" } }));
+    expect((projected.data as { data: unknown }).data).toEqual({
+      kind: "group",
+    });
   });
 });

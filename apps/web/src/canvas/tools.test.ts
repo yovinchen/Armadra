@@ -9,13 +9,12 @@ import {
 import {
   CANVAS_TOOLS,
   CANVAS_TOOL_IDS,
+  GEO_IDS,
   GEO_OPTIONS,
   geoIcon,
   isToolDisabledWhenLocked,
-  isWhiteboardShapeType,
   shouldShowStylePanel,
   splitSelectionForDelete,
-  type SelectedShapeInfo,
 } from "./tools";
 
 /* ------------------------------ 工具键表 ---------------------------------- */
@@ -29,7 +28,7 @@ describe("工具键表", () => {
     }
   });
 
-  it("键位照抄 tldraw 默认", () => {
+  it("键位与 v3 / 旧引擎逐字一致：换引擎不改肌肉记忆", () => {
     const keys = Object.fromEntries(
       CANVAS_TOOLS.map((tool) => [
         tool.id,
@@ -89,6 +88,10 @@ describe("工具键表", () => {
     }
   });
 
+  it("形状下拉与 `Geo` 类型是同一张表，漏一种是编译错误", () => {
+    expect(GEO_OPTIONS.map((option) => option.geo)).toEqual([...GEO_IDS]);
+  });
+
   it("形状图标跟着 geo 样式走，未知值退回矩形", () => {
     expect(geoIcon("ellipse")).toBe(
       GEO_OPTIONS.find((option) => option.geo === "ellipse")?.icon,
@@ -106,6 +109,10 @@ describe("工具键表", () => {
   });
 });
 
+const NODE = "11111111-1111-4111-8111-111111111111";
+const OTHER_NODE = "22222222-2222-4222-8222-222222222222";
+const EDGE = "33333333-3333-4333-8333-333333333333";
+
 /* ------------------------------ 样式面板 ---------------------------------- */
 
 describe("shouldShowStylePanel", () => {
@@ -119,114 +126,66 @@ describe("shouldShowStylePanel", () => {
     expect(shouldShowStylePanel("select", [])).toBe(false);
   });
 
-  it("选中的全是节点 → 隐藏（节点没有 tldraw 样式）", () => {
-    expect(shouldShowStylePanel("select", ["armadra", "armadra"])).toBe(false);
+  it("选中的全是节点 → 隐藏（节点的颜色走右键菜单）", () => {
+    expect(shouldShowStylePanel("select", [NODE, OTHER_NODE])).toBe(false);
   });
 
-  it("选中项里有白板 shape → 显示，混合多选也显示", () => {
-    expect(shouldShowStylePanel("select", ["geo"])).toBe(true);
-    expect(shouldShowStylePanel("select", ["armadra", "arrow"])).toBe(true);
-    expect(shouldShowStylePanel("select", ["frame"])).toBe(true);
-  });
-
-  it("isWhiteboardShapeType 只把 `armadra` 排除在外", () => {
-    expect(isWhiteboardShapeType("armadra")).toBe(false);
-    expect(isWhiteboardShapeType("draw")).toBe(true);
-    expect(isWhiteboardShapeType("frame")).toBe(true);
+  it("选中项里有白板对象 → 显示，混合多选也显示", () => {
+    expect(shouldShowStylePanel("select", ["wb:abc"])).toBe(true);
+    expect(shouldShowStylePanel("select", [NODE, "wb:abc"])).toBe(true);
   });
 });
 
 /* -------------------------------- 删除 ------------------------------------ */
 
-const NODE = "11111111-1111-4111-8111-111111111111";
-const OTHER_NODE = "22222222-2222-4222-8222-222222222222";
-const EDGE = "33333333-3333-4333-8333-333333333333";
-
-function info(patch: Partial<SelectedShapeInfo>): SelectedShapeInfo {
-  return { id: "shape:x", type: "geo", edgeId: null, nodeId: null, ...patch };
-}
-
 describe("splitSelectionForDelete", () => {
   const nodes = new Set([NODE, OTHER_NODE]);
   const edges = new Set([EDGE]);
 
-  it("节点 / 边 / 白板 shape 各归各的堆", () => {
-    const split = splitSelectionForDelete(
-      [
-        info({ id: `shape:${NODE}`, type: "armadra", nodeId: NODE }),
-        info({ id: `shape:${EDGE}`, type: "arrow", edgeId: EDGE }),
-        info({ id: "shape:abc123", type: "geo" }),
-      ],
-      nodes,
-      edges,
-    );
-    expect(split).toEqual({
+  it("按 id 前缀分流：白板对象 / 节点 / 边各归各的堆", () => {
+    expect(
+      splitSelectionForDelete([NODE, EDGE, "wb:abc123"], nodes, edges),
+    ).toEqual({
       nodes: [NODE],
       edges: [EDGE],
-      shapes: ["shape:abc123"],
+      items: ["wb:abc123"],
     });
   });
 
-  it("没绑定的箭头是白板内容，直接删（Phase 2 待办 1）", () => {
+  it("白板对象不查表：文档里本来就没有它们", () => {
     const split = splitSelectionForDelete(
-      [info({ id: "shape:loose", type: "arrow" })],
-      nodes,
-      edges,
+      ["wb:one", "wb:two"],
+      new Set(),
+      new Set(),
     );
-    expect(split.shapes).toEqual(["shape:loose"]);
-    expect(split.edges).toEqual([]);
+    expect(split.items).toEqual(["wb:one", "wb:two"]);
+    expect(split.nodes).toEqual([]);
   });
 
-  it("`meta` 上写着边 id 但文档里没有这条边 → 当白板箭头删", () => {
-    const split = splitSelectionForDelete(
-      [
-        info({
-          id: "shape:ghost",
-          type: "arrow",
-          edgeId: "44444444-4444-4444-8444-444444444444",
-        }),
-      ],
-      nodes,
-      edges,
-    );
-    expect(split.edges).toEqual([]);
-    expect(split.shapes).toEqual(["shape:ghost"]);
+  it("两张表都不认的 id 一概不动：删了也同步不回去", () => {
+    const ghost = "55555555-5555-4555-8555-555555555555";
+    expect(splitSelectionForDelete([ghost], nodes, edges)).toEqual({
+      nodes: [],
+      edges: [],
+      items: [],
+    });
   });
 
-  it("文档里不存在的节点 shape 一概不动", () => {
+  it("节点 + 白板对象混合多选时两边都删", () => {
     const split = splitSelectionForDelete(
-      [
-        info({
-          id: "shape:55555555-5555-4555-8555-555555555555",
-          type: "armadra",
-          nodeId: "55555555-5555-4555-8555-555555555555",
-        }),
-      ],
-      nodes,
-      edges,
-    );
-    expect(split).toEqual({ nodes: [], edges: [], shapes: [] });
-  });
-
-  it("节点 + 白板 shape 混合多选时两边都删", () => {
-    const split = splitSelectionForDelete(
-      [
-        info({ id: `shape:${NODE}`, type: "armadra", nodeId: NODE }),
-        info({ id: "shape:draw1", type: "draw" }),
-        info({ id: "shape:frame1", type: "frame" }),
-      ],
+      [NODE, "wb:ink1", "wb:text1"],
       nodes,
       edges,
     );
     expect(split.nodes).toEqual([NODE]);
-    expect(split.shapes).toEqual(["shape:draw1", "shape:frame1"]);
+    expect(split.items).toEqual(["wb:ink1", "wb:text1"]);
   });
 
   it("空选区什么也不删", () => {
     expect(splitSelectionForDelete([], nodes, edges)).toEqual({
       nodes: [],
       edges: [],
-      shapes: [],
+      items: [],
     });
   });
 });

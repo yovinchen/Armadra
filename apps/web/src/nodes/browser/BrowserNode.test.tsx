@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { renderFlow } from "@/canvas/test-support";
 import type { BrowserSession, CanvasNode } from "@armadra/shared";
 
 const store = vi.hoisted(() => ({
@@ -169,7 +170,7 @@ class FakeSocket {
 const drawImage = vi.fn();
 
 function renderBrowser(selected = false) {
-  return render(
+  return renderFlow(
     <BrowserNode
       id="b1"
       node={node}
@@ -177,6 +178,7 @@ function renderBrowser(selected = false) {
       collapsed={false}
       focused={false}
     />,
+    { nodeId: "b1", selected },
   );
 }
 

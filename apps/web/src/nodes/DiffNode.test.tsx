@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { renderFlow } from "@/canvas/test-support";
 import type { CanvasNode } from "@armadra/shared";
 
 const store = vi.hoisted(() => ({
@@ -61,7 +62,7 @@ const node = {
 } as CanvasNode;
 
 function renderDiff() {
-  return render(
+  return renderFlow(
     <DiffNode
       id="d1"
       node={node}
@@ -69,6 +70,7 @@ function renderDiff() {
       collapsed={false}
       focused={false}
     />,
+    { nodeId: "d1" },
   );
 }
 

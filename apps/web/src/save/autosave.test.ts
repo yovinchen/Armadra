@@ -44,17 +44,8 @@ vi.mock("../api/client", () => ({
     (error as { status?: number } | null)?.status === 409,
 }));
 
-/**
- * `syncWhiteboard()` 只在画布挂着的时候才序列化快照。默认给它 `null`
- * （= 画布没挂），单个用例再把假 editor 塞进来测 8 MiB 那条分支。
- */
-const editorRef = vi.hoisted(() => ({ current: null as unknown }));
-vi.mock("../canvas/editor-context", async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  getEditor: () => editorRef.current,
-}));
-
 const { useCanvasStore } = await import("../store/canvas-store");
+const { emptyWhiteboard } = await import("../canvas/whiteboard/model");
 const { useCanvasOwnership } = await import("../canvas-ownership");
 const {
   EDIT_DEBOUNCE_MS,
@@ -113,7 +104,7 @@ beforeEach(() => {
     updatedAt: "2026-08-13T00:00:00.000Z",
   });
   useCanvasOwnership.setState({ status: "runtime", epoch: 1n });
-  editorRef.current = null;
+  useCanvasStore.setState({ whiteboard: emptyWhiteboard() });
   useCanvasStore.getState().setWorkspace(workspace);
   useCanvasStore.getState().setDocument(document);
   stop = startAutosave();
@@ -177,25 +168,27 @@ describe("autosave", () => {
     expect(useCanvasStore.getState().saveError).toBe("画布已被其他窗口修改");
   });
 
-  it("白板快照超过 8 MiB：不发 PUT，停在 error 并给出提示", async () => {
-    // 一个 text shape 就撑爆上限：`stripDocumentRecords` 会原样留下它。
-    const huge = {
-      store: {
-        "shape:ink": {
-          id: "shape:ink",
-          typeName: "shape",
-          type: "text",
-          parentId: "page:page",
-          props: { text: "x".repeat(MAX_WHITEBOARD_BYTES) },
-          meta: {},
-        },
+  it("白板超过 8 MiB：不发 PUT，停在 error 并给出提示", async () => {
+    // 一条文字对象就撑爆上限：序列化的是白板文档本身，没有别的开销。
+    useCanvasStore.setState({
+      whiteboard: {
+        ...emptyWhiteboard(),
+        items: [
+          {
+            id: "ink",
+            kind: "text",
+            x: 0,
+            y: 0,
+            w: 10,
+            h: 10,
+            z: 0,
+            style: { color: "black", size: "m" },
+            text: "x".repeat(MAX_WHITEBOARD_BYTES),
+          },
+        ],
       },
-      schema: { schemaVersion: 2, sequences: {} },
-    };
-    editorRef.current = { getSnapshot: () => ({ document: huge }) };
-    // 直接置脏而不是 `addNode`：`canvas-store` 的动作也会去问 `getEditor()`，
-    // 那和这条用例要测的东西无关。
-    useCanvasStore.setState({ saveState: "dirty" });
+      saveState: "dirty",
+    });
 
     await vi.advanceTimersByTimeAsync(EDIT_DEBOUNCE_MS);
     expect(saveBoard).not.toHaveBeenCalled();
@@ -203,31 +196,38 @@ describe("autosave", () => {
     expect(useCanvasStore.getState().saveError).toBe(
       "白板内容超出上限，未保存",
     );
-    // 超限的那份快照绝不写进文档：下一轮保存不该把它带上。
+    // 超限的那份内容绝不写进文档：下一轮保存不该把它带上。
     expect(useCanvasStore.getState().document?.board.whiteboard).toBe("");
   });
 
-  it("白板快照不超限时随编辑一起 PUT 出去", async () => {
-    const small = {
-      store: {
-        "shape:ink": {
-          id: "shape:ink",
-          typeName: "shape",
-          type: "text",
-          parentId: "page:page",
-          props: { text: "hi" },
-          meta: {},
-        },
+  it("白板不超限时随编辑一起 PUT 出去", async () => {
+    useCanvasStore.setState({
+      whiteboard: {
+        ...emptyWhiteboard(),
+        items: [
+          {
+            id: "ink",
+            kind: "text",
+            x: 0,
+            y: 0,
+            w: 10,
+            h: 10,
+            z: 0,
+            style: { color: "black", size: "m" },
+            text: "hi",
+          },
+        ],
       },
-      schema: { schemaVersion: 2, sequences: {} },
-    };
-    editorRef.current = { getSnapshot: () => ({ document: small }) };
-    useCanvasStore.setState({ saveState: "dirty" });
+      saveState: "dirty",
+    });
 
     await vi.advanceTimersByTimeAsync(EDIT_DEBOUNCE_MS);
     expect(saveBoard).toHaveBeenCalledTimes(1);
     const sent = saveBoard.mock.calls[0]?.[2] as BoardDocument;
-    expect(JSON.parse(sent.board.whiteboard).store["shape:ink"]).toBeTruthy();
+    const whiteboard = JSON.parse(sent.board.whiteboard);
+    expect(whiteboard.engine).toBe("armadra-flow");
+    expect(whiteboard.version).toBe(2);
+    expect(whiteboard.items[0].id).toBe("ink");
     expect(useCanvasStore.getState().saveState).toBe("saved");
   });
 

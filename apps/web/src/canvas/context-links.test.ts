@@ -1,25 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { BoardDocument, CanvasNode } from "@armadra/shared";
 
-/** tldraw 在模块加载时就读 `matchMedia`（`derive.ts` 会把它拉进来）。 */
-vi.hoisted(() => {
-  if (typeof window !== "undefined" && !window.matchMedia) {
-    Object.defineProperty(window, "matchMedia", {
-      writable: true,
-      value: (query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => undefined,
-        removeEventListener: () => undefined,
-        addListener: () => undefined,
-        removeListener: () => undefined,
-        dispatchEvent: () => false,
-      }),
-    });
-  }
-});
-
 const nodeMetaStub = {
   labelKey: "node.sticky",
   defaultSize: { width: 240, height: 200 },
@@ -37,7 +18,6 @@ import {
   changedDocuments,
   sameLinks,
 } from "./context-links";
-import { deriveEdges } from "./sync/derive";
 
 const stamp = "2026-09-04T00:00:00.000Z";
 
@@ -134,40 +114,31 @@ describe("changedDocuments", () => {
 });
 
 /**
- * 全链路：用户拉出来的连线（`link` shape）→ `edges` → 终端的链接文档。
+ * 全链路：用户拉出来的连线 → `edges` 行 → 终端的链接文档。
  *
- * 边的 uuid 在 `props.edgeId` 里（`shapes/LinkArrow.ts` 换形时写的）。
- * 派生层认得它，`usePublishContextLinks` 才有东西可推。
+ * React Flow 时代连线就是 `edges` 表里的一行（`onConnect` → `store.addEdge`），
+ * 没有中间形态，所以这里直接用一条边。
  */
-describe("link shape → edges → 链接文档", () => {
+describe("连线 → edges → 链接文档", () => {
   const TERM = "019ff7d1-0d12-7421-833d-2c5e8d64ed11";
   const NOTE = "019ff7d1-0d12-7421-833d-2c5e8d64ed12";
   const EDGE = "019ff7d1-0d12-7421-833d-2c5e8d64ed13";
 
-  it("link shape 派生出边并推成链接文档", () => {
-    const link = {
-      id: `shape:link-${EDGE}`,
-      type: "link",
-      typeName: "shape",
-      props: {
-        from: `shape:${NOTE}`,
-        to: `shape:${TERM}`,
-        edgeId: EDGE,
-        kind: "link",
-        createdAt: stamp,
-        updatedAt: stamp,
-      },
-      meta: {},
-    };
-
-    const derived = deriveEdges([link] as never, "board", []);
-    expect(derived.items).toHaveLength(1);
-    expect(derived.items[0]!.id).toBe(EDGE);
-
+  it("一条边推成一份链接文档，方向按「谁读谁」而不是拖的方向", () => {
     const board: BoardDocument = {
       board: {} as BoardDocument["board"],
       nodes: [node(TERM, "terminal", "Claude"), node(NOTE, "sticky", "结论")],
-      edges: derived.items,
+      edges: [
+        {
+          id: EDGE,
+          boardId: "board",
+          source: NOTE,
+          target: TERM,
+          kind: "link",
+          createdAt: stamp,
+          updatedAt: stamp,
+        },
+      ],
     };
     expect(buildLinkDocuments(board)[TERM]).toEqual([
       { id: NOTE, title: "结论", kind: "sticky" },
@@ -178,8 +149,8 @@ describe("link shape → edges → 链接文档", () => {
 /**
  * 内容链接（白板图形，`kind: "shape"`）并进终端的链接文档（§6.3）。
  *
- * 白板 shape 不在 `BoardDocument` 里，所以这一半由 `useContentLinks()` 从 editor
- * 收集后作为第二个参数传进来。
+ * 白板对象不在 `BoardDocument` 里（它们在 `whiteboard.items` 里），所以这一半
+ * 由 `useContentLinks()` 收集后作为第二个参数传进来。
  */
 describe("buildLinkDocuments · 内容链接", () => {
   const SHAPE = "019ff7d1-0d12-7421-833d-2c5e8d64edaa";
