@@ -21,6 +21,7 @@ import (
 	"time"
 
 	pb "armadra.local/host/gen/armadra/v1"
+	"armadra.local/host/internal/agenthost"
 	"armadra.local/host/internal/automationhost"
 	"armadra.local/host/internal/canvashost"
 	"armadra.local/host/internal/daemon"
@@ -626,6 +627,53 @@ func serveHost(parent context.Context, c config) (err error) {
 	if err != nil {
 		return err
 	}
+	// The agent surface is assembled on the same terms, and needs the same
+	// channel for the same reason: recording that somebody allowed a command is
+	// worth nothing unless the CLI that is blocked on it hears. A Host with no
+	// Runtime binary still answers every read and refuses the rest with a state
+	// a client can draw.
+	openAgentExecutor := func(ctx context.Context, executionHostID string) (agenthost.Executor, func(), error) {
+		if c.runtimeBinary == "" || executionHostID != "" {
+			return nil, nil, agenthost.ErrNoWorker
+		}
+		client, err := worker.Start(ctx, worker.Options{
+			Executable:     c.runtimeBinary,
+			HostID:         state.ID,
+			CanvasDatabase: c.runtimeDatabase,
+			SettingsFile:   c.runtimeSettings,
+			RequestTimeout: 30 * time.Second,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		return client, func() { _ = client.Close() }, nil
+	}
+	agents, err := agenthost.New(agenthost.Options{
+		Store:      database,
+		HostID:     state.ID,
+		InstanceID: identity.InstanceID,
+		Open:       openAgentExecutor,
+	})
+	if err != nil {
+		return err
+	}
+	// A dispatch this Host was in the middle of when it stopped is settled
+	// before anything new is accepted. Leaving it claimed would leave it
+	// claimed forever, and re-dispatching it would put a second copy of
+	// somebody's work in front of an agent that may already have the first.
+	if _, err = agents.ReconcileHandoffs(ctx); err != nil {
+		return err
+	}
+	// Context links are derived from the canvas' own edges, so the canvas
+	// service tells the agent service when they may have moved. It is a
+	// callback rather than a shared transaction because the dependency has to
+	// run this way round: the canvas domain was migrated first and must not
+	// have to know what an agent is.
+	canvases.SetAfterApply(func(ctx context.Context, workspaceID string) {
+		if _, err := agents.RefreshContextLinks(ctx, workspaceID); err != nil {
+			fmt.Fprintln(os.Stderr, "Armadra: could not refresh context links:", err)
+		}
+	})
 	switches, err := ownership.New(ownership.Options{
 		Store:      database,
 		InstanceID: identity.InstanceID,
@@ -635,6 +683,7 @@ func serveHost(parent context.Context, c config) (err error) {
 			fshost.Domain:       fileRoots.AsProjector(),
 			githost.Domain:      repositoryQueue.AsProjector(),
 			sessionhost.Domain:  sessions.AsProjector(),
+			agenthost.Domain:    agents.AsProjector(),
 		},
 		ExportRoot: filepath.Join(c.dataDir, "ownership-exports"),
 	})
@@ -680,13 +729,13 @@ func serveHost(parent context.Context, c config) (err error) {
 	// stored outbox the HTTPS event page reads, and it is woken by the storage
 	// kernel's own commit notification, so a saved change reaches a second
 	// client in the time one write takes rather than in one poll interval.
-	events, err := eventstream.New(eventstream.Options{Store: database, HostID: state.ID, Projectors: []eventstream.Projector{canvashost.EventProjector{}, settingshost.EventProjector{}, fshost.EventProjector{}, githost.EventProjector{}, sessionhost.EventProjector{}}})
+	events, err := eventstream.New(eventstream.Options{Store: database, HostID: state.ID, Projectors: []eventstream.Projector{canvashost.EventProjector{}, settingshost.EventProjector{}, fshost.EventProjector{}, githost.EventProjector{}, sessionhost.EventProjector{}, agenthost.EventProjector{}}})
 	if err != nil {
 		return err
 	}
 	defer events.Close()
 	database.SetCommitNotifier(events.Notify)
-	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link, Updates: releases, Canvas: canvases, Settings: settings, Filesystem: fileRoots, Git: repositoryQueue, Sessions: sessions, Events: events, Ownership: switches, OpenHandoff: openHandoff}
+	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link, Updates: releases, Canvas: canvases, Settings: settings, Filesystem: fileRoots, Git: repositoryQueue, Sessions: sessions, Agents: agents, Events: events, Ownership: switches, OpenHandoff: openHandoff}
 	// The switch binds its own listener with the same routes. `options` is
 	// captured by reference, so the manager it is about to be given is the one
 	// this closure serves with.

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"armadra.local/host/internal/agenthost"
 	"armadra.local/host/internal/automationhost"
 	"armadra.local/host/internal/canvashost"
 	"armadra.local/host/internal/eventstream"
@@ -72,6 +73,11 @@ type Options struct {
 	// cannot tell apart from a workspace whose terminals have all been closed
 	// — and would answer by offering to start one.
 	Sessions *sessionhost.Service
+	// Agents is nil when this Host serves no agent surface. Its methods then
+	// answer UNSUPPORTED rather than an empty status list, which a client
+	// cannot tell apart from a board where nothing is waiting — and would draw
+	// as "no agent needs you" while a CLI sits blocked on a question.
+	Agents *agenthost.Service
 	// Ownership moves a business domain between the Runtime and this Host.
 	// Nil means this Host reports no ownership surface at all; a non-nil
 	// service with no OpenHandoff can still answer reads, and refuses to move

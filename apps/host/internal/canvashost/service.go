@@ -32,6 +32,13 @@ type Options struct {
 type Service struct {
 	store   *storage.Store
 	options Options
+	// afterApply is told which workspace just changed, once a save has
+	// committed. It exists for exactly one consumer — the agent domain's
+	// context-link projection, which is derived from this domain's edges — and
+	// it is a callback rather than a shared transaction because the dependency
+	// has to run this way round: the canvas domain was migrated first and must
+	// not have to know what an agent is (business migration §2.7).
+	afterApply func(context.Context, string)
 }
 
 func New(options Options) (*Service, error) {
@@ -520,12 +527,28 @@ func operationKey(caller Caller, operationID string) (string, error) {
 	return "canvas/" + caller.PrincipalID + "/" + caller.WorkspaceID + "/" + operationID, nil
 }
 
+// SetAfterApply registers the one thing that runs after a committed save.
+//
+// It is set once, at assembly, and never from a request. A failure inside it is
+// the callback's own to report: a context-link projection that could not be
+// refreshed must not turn a saved board into an error the user sees, because
+// the board *was* saved.
+func (s *Service) SetAfterApply(hook func(context.Context, string)) {
+	if s != nil {
+		s.afterApply = hook
+	}
+}
+
 func (s *Service) apply(ctx context.Context, caller Caller, operationID string, changes []storage.Change) (storage.ApplyResult, error) {
 	key, err := operationKey(caller, operationID)
 	if err != nil {
 		return storage.ApplyResult{}, err
 	}
-	return s.store.Apply(ctx, key, changes)
+	result, err := s.store.Apply(ctx, key, changes)
+	if err == nil && s.afterApply != nil && !result.Replayed {
+		s.afterApply(ctx, caller.WorkspaceID)
+	}
+	return result, err
 }
 
 // receipt echoes the operation id the caller sent, not the storage key it was

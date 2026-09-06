@@ -11,6 +11,7 @@ import (
 	"time"
 
 	pb "armadra.local/host/gen/armadra/v1"
+	"armadra.local/host/internal/agenthost"
 	"armadra.local/host/internal/canvashost"
 	"armadra.local/host/internal/daemon"
 	"armadra.local/host/internal/fshost"
@@ -196,6 +197,36 @@ func openOwnership(c config) (*hoststate.State, *storage.Store, *canvashost.Serv
 		state.Close()
 		return nil, nil, nil, nil, err
 	}
+	// The agent domain gets a short-lived Worker per exchange for the same
+	// reason the session domain does: an offline adoption ends by settling what
+	// was in flight, and a rollback ends by asking the machine to read its own
+	// rows back rather than trusting the request that wrote them.
+	agents, err := agenthost.New(agenthost.Options{
+		Store:      database,
+		HostID:     state.ID,
+		InstanceID: state.ID,
+		Open: func(ctx context.Context, executionHostID string) (agenthost.Executor, func(), error) {
+			if c.ownership.runtimeBinary == "" || executionHostID != "" {
+				return nil, nil, agenthost.ErrNoWorker
+			}
+			client, err := worker.Start(ctx, worker.Options{
+				Executable:     c.ownership.runtimeBinary,
+				HostID:         state.ID,
+				CanvasDatabase: c.ownership.runtimeDatabase,
+				SettingsFile:   c.ownership.runtimeSettings,
+				RequestTimeout: 30 * time.Second,
+			})
+			if err != nil {
+				return nil, nil, err
+			}
+			return client, func() { _ = client.Close() }, nil
+		},
+	})
+	if err != nil {
+		database.Close()
+		state.Close()
+		return nil, nil, nil, nil, err
+	}
 	// The offline command has no Host instance, so the state's own ID stands in
 	// for one. It is only ever used to bind maintenance tokens, and this entry
 	// point never issues or spends one.
@@ -208,6 +239,7 @@ func openOwnership(c config) (*hoststate.State, *storage.Store, *canvashost.Serv
 			fshost.Domain:       fileRoots.AsProjector(),
 			githost.Domain:      repositoryQueue.AsProjector(),
 			sessionhost.Domain:  sessions.AsProjector(),
+			agenthost.Domain:    agents.AsProjector(),
 		},
 	})
 	if err != nil {
