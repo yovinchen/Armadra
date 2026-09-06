@@ -5,6 +5,7 @@
  */
 
 export type {
+  DeleteGithubBranchResponse,
   GetGithubIssueResponse,
   GetGithubPullResponse,
   GithubCheckRun,
@@ -36,6 +37,7 @@ export type {
   ListGithubReferencesResponse,
   MergeGithubPullResponse,
   MoveGithubIssueResponse,
+  RerunGithubChecksResponse,
   ResolveGithubRepositoryResponse,
 } from "@armadra/protocol";
 export {

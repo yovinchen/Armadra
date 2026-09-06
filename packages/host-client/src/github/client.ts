@@ -13,6 +13,7 @@ import * as mapping from "./mapping.js";
 import * as pulls from "./pulls.js";
 import * as references from "./references.js";
 import type {
+  DeleteGithubBranchResponse,
   GetGithubIssueResponse,
   GetGithubPullResponse,
   GithubCheckConclusion,
@@ -39,6 +40,7 @@ import type {
   ListGithubReferencesResponse,
   MergeGithubPullResponse,
   MoveGithubIssueResponse,
+  RerunGithubChecksResponse,
   ResolveGithubRepositoryResponse,
 } from "@armadra/protocol";
 
@@ -303,6 +305,29 @@ export class HostGithubClient {
     expectedCheckRollup?: GithubCheckConclusion;
   }): Promise<MergeGithubPullResponse> {
     return pulls.mergePull(this.#ctx, input);
+  }
+
+  /** Restarts the rerunnable checks for the head the panel displayed. */
+  rerunChecks(input: {
+    repository: GithubRepositoryRef;
+    number: bigint;
+    expectedHeadSha: string;
+    checkName?: string;
+    failedOnly?: boolean;
+  }): Promise<RerunGithubChecksResponse> {
+    return pulls.rerunChecks(this.#ctx, input);
+  }
+
+  /**
+   * Deletes one remote branch. Separate from merging on purpose: cleaning up
+   * is the reader's decision, and it touches nothing local.
+   */
+  deleteBranch(input: {
+    repository: GithubRepositoryRef;
+    branch: string;
+    expectedSha: string;
+  }): Promise<DeleteGithubBranchResponse> {
+    return pulls.deleteBranch(this.#ctx, input);
   }
 
   /* ---------------------------------------------------------------- references */
