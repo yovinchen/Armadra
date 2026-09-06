@@ -4,6 +4,7 @@
 //     pnpm ownership:e2e --domain settings
 //     pnpm ownership:e2e --domain filesystem
 //     pnpm ownership:e2e --domain git
+//     pnpm ownership:e2e --domain session
 //
 // Each scenario is its own module under `tools/ownership/`. The canvas domain
 // keeps its older and much wider script (`pnpm canvas:e2e`), which also drives
@@ -14,6 +15,7 @@ const scenarios = {
   settings: "./ownership/settings-e2e.mjs",
   filesystem: "./ownership/filesystem-e2e.mjs",
   git: "./ownership/git-e2e.mjs",
+  session: "./ownership/session-e2e.mjs",
 };
 
 const index = process.argv.indexOf("--domain");

@@ -703,6 +703,28 @@ func serveHost(parent context.Context, c config) (err error) {
 	if status := external.Status(); status.Enabled && status.BoundAddress != "" {
 		fmt.Printf("Armadra serving devices on %s at %s\n", status.BoundAddress, status.PublicOrigin)
 	}
+	// The sessions this Host holds describe processes it did not start, and a
+	// switch that ran while the Runtime was down had nobody to ask — those
+	// sessions are recorded LOST, which is honest and also stale the moment a
+	// Runtime comes back. So one reconciliation runs here, once, in the
+	// background: it asks the execution host what it actually holds and records
+	// that, which is what turns "nobody could see this" back into RUNNING or
+	// EXITED without a person having to press anything.
+	//
+	// It is best effort by design. A Runtime that is still starting simply
+	// leaves the sessions LOST for now, which a later start resolves; failing
+	// to boot the Host over it would be refusing to serve five other domains
+	// because one machine was slow.
+	go func() {
+		outcome, reclaimErr := sessions.Reclaim(ctx, "")
+		switch {
+		case reclaimErr != nil:
+			fmt.Fprintln(os.Stderr, "Armadra: sessions could not be reconciled:", reclaimErr)
+		case len(outcome.Ended)+len(outcome.Lost)+len(outcome.Regenerated) > 0:
+			fmt.Printf("Armadra reconciled sessions: %d ended, %d unreachable, %d replaced\n",
+				len(outcome.Ended), len(outcome.Lost), len(outcome.Regenerated))
+		}
+	}()
 	workers := 1
 	if listener != nil {
 		workers++

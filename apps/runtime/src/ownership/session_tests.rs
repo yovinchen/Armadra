@@ -27,19 +27,33 @@ async fn pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
     (pool, directory)
 }
 
-/// Inserts one `terminal_sessions` row directly. Going through the manager
-/// would start a real process, and what is under test here is the projection.
-async fn insert(
-    pool: &sqlx::SqlitePool,
-    id: &str,
-    workspace: &str,
-    key: &str,
-    kind: &str,
-    node: Option<&str>,
-    status: &str,
-    intent: &str,
+/// One `terminal_sessions` row, spelled out. It is a struct rather than nine
+/// positional arguments because half of them are short strings and a swapped
+/// pair would produce a row that inserts fine and means something else.
+struct Stored<'a> {
+    id: &'a str,
+    workspace: &'a str,
+    key: &'a str,
+    kind: &'a str,
+    node: Option<&'a str>,
+    status: &'a str,
+    intent: &'a str,
     generation: i64,
-) {
+}
+
+/// Inserts one row directly. Going through the manager would start a real
+/// process, and what is under test here is the projection.
+async fn insert(pool: &sqlx::SqlitePool, row: Stored<'_>) {
+    let Stored {
+        id,
+        workspace,
+        key,
+        kind,
+        node,
+        status,
+        intent,
+        generation,
+    } = row;
     sqlx::query(
         "INSERT INTO terminal_sessions (id, workspace_id, session_key, kind, owner_node_id, \
          agent_id, cwd, shell, command, status, exit_code, backend_kind, backend_ref, generation, \
@@ -184,26 +198,30 @@ async fn states_report_what_this_runtime_believes_and_carry_no_revision() {
     let id = workspace(&pool).await;
     insert(
         &pool,
-        "s-agent",
-        &id,
-        "node-one",
-        "agent",
-        Some("node-one"),
-        "running",
-        "none",
-        3,
+        Stored {
+            id: "s-agent",
+            workspace: &id,
+            key: "node-one",
+            kind: "agent",
+            node: Some("node-one"),
+            status: "running",
+            intent: "none",
+            generation: 3,
+        },
     )
     .await;
     insert(
         &pool,
-        "s-plain",
-        &id,
-        "s-plain",
-        "terminal",
-        None,
-        "terminated",
-        "process",
-        1,
+        Stored {
+            id: "s-plain",
+            workspace: &id,
+            key: "s-plain",
+            kind: "terminal",
+            node: None,
+            status: "terminated",
+            intent: "process",
+            generation: 1,
+        },
     )
     .await;
     let states = session::worker_states(&pool).await.unwrap();
@@ -242,14 +260,16 @@ async fn a_handback_writes_the_package_back_and_reads_it_straight_back() {
     let id = workspace(&pool).await;
     insert(
         &pool,
-        "s-one",
-        &id,
-        "node-one",
-        "terminal",
-        Some("node-one"),
-        "running",
-        "none",
-        1,
+        Stored {
+            id: "s-one",
+            workspace: &id,
+            key: "node-one",
+            kind: "terminal",
+            node: Some("node-one"),
+            status: "running",
+            intent: "none",
+            generation: 1,
+        },
     )
     .await;
     hand_to_host(&pool, 2).await;
@@ -324,14 +344,16 @@ async fn a_tombstone_removes_the_row_rather_than_restoring_it() {
     let id = workspace(&pool).await;
     insert(
         &pool,
-        "s-one",
-        &id,
-        "node-one",
-        "terminal",
-        Some("node-one"),
-        "running",
-        "none",
-        1,
+        Stored {
+            id: "s-one",
+            workspace: &id,
+            key: "node-one",
+            kind: "terminal",
+            node: Some("node-one"),
+            status: "running",
+            intent: "none",
+            generation: 1,
+        },
     )
     .await;
     hand_to_host(&pool, 2).await;
@@ -403,14 +425,16 @@ async fn a_package_whose_index_disagrees_with_its_records_is_refused() {
     let id = workspace(&pool).await;
     insert(
         &pool,
-        "s-one",
-        &id,
-        "node-one",
-        "terminal",
-        Some("node-one"),
-        "running",
-        "none",
-        1,
+        Stored {
+            id: "s-one",
+            workspace: &id,
+            key: "node-one",
+            kind: "terminal",
+            node: Some("node-one"),
+            status: "running",
+            intent: "none",
+            generation: 1,
+        },
     )
     .await;
     hand_to_host(&pool, 2).await;

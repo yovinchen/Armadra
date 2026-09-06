@@ -213,23 +213,38 @@ func (s *Service) groupedSessions(ctx context.Context) (map[string][]storage.Ses
 	return grouped, order, nil
 }
 
-// canonicalSession is one session in the form both sides hash. It carries only
-// what a `terminal_sessions` row can hold, so the comparison that decides
-// whether a rollback landed is about the rows rather than about this Host's
-// bookkeeping.
+// canonicalSession is one session in the form both sides hash.
+//
+// It carries only what a `terminal_sessions` row can hold, and that is a
+// smaller thing than a `Session`. Everything the Runtime has no column for is
+// cleared here rather than compared and found missing: the frozen argv, the
+// environment names, the SSH target, the agent's permission mode and model, the
+// launch digest this Host computed, and this Host's own revision and reason
+// code. They are all still in the package — the reverse export carries the full
+// record — but a *comparison* over them would be permanently false, because the
+// Runtime cannot read them back after storing them.
+//
+// The two enums are folded for the same reason. `terminal_sessions.status` has
+// four words and this domain has six values: STARTING, LOST and RECLAIMING have
+// no spelling there, because the Runtime *was* the execution host and could
+// never be out of touch with one. Folding them to RUNNING is what the column
+// has always meant — nobody observed this end — so a session the Host recorded
+// as LOST comes back as one the Runtime is simply not sure about, rather than
+// as one it believes finished.
 func canonicalSession(value *pb.Session) *pb.Session {
 	canonical := &pb.Session{
-		SessionId:          value.GetSessionId(),
-		WorkspaceId:        value.GetWorkspaceId(),
-		ExecutionHostId:    value.GetExecutionHostId(),
+		SessionId:   value.GetSessionId(),
+		WorkspaceId: value.GetWorkspaceId(),
+		// The Runtime's row has no execution host column: every session it
+		// holds is one it runs.
 		SessionKey:         value.GetSessionKey(),
 		OwnerNodeId:        value.GetOwnerNodeId(),
-		Launch:             value.GetLaunch(),
+		Launch:             canonicalLaunch(value.GetLaunch()),
 		BackendKind:        value.GetBackendKind(),
 		Generation:         value.GetGeneration(),
 		Kind:               value.GetKind(),
-		Status:             value.GetStatus(),
-		AttachState:        value.GetAttachState(),
+		Status:             canonicalStatus(value.GetStatus()),
+		AttachState:        canonicalAttach(value.GetAttachState()),
 		TerminationIntent:  value.GetTerminationIntent(),
 		CreatedAtUnixMs:    value.GetCreatedAtUnixMs(),
 		EndedAtUnixMs:      value.GetEndedAtUnixMs(),
@@ -241,6 +256,45 @@ func canonicalSession(value *pb.Session) *pb.Session {
 		canonical.ExitCode = &code
 	}
 	return canonical
+}
+
+// canonicalLaunch reduces a frozen launch to the four columns that hold it:
+// `cwd`, `shell`, `command` and `agent_id`.
+func canonicalLaunch(launch *pb.SessionLaunch) *pb.SessionLaunch {
+	if launch == nil {
+		return nil
+	}
+	canonical := &pb.SessionLaunch{
+		Shell:            launch.GetShell(),
+		Command:          launch.GetCommand(),
+		WorkingDirectory: launch.GetWorkingDirectory(),
+	}
+	if agent := launch.GetAgent(); agent.GetAgentId() != "" {
+		canonical.Agent = &pb.AgentLaunchSpec{
+			AgentId:          agent.GetAgentId(),
+			WorkingDirectory: launch.GetWorkingDirectory(),
+		}
+	}
+	return canonical
+}
+
+// canonicalStatus folds the six lifecycle values onto the two a
+// `terminal_sessions` row can express.
+func canonicalStatus(status pb.SessionStatus) pb.SessionStatus {
+	if status == pb.SessionStatus_SESSION_STATUS_EXITED {
+		return status
+	}
+	return pb.SessionStatus_SESSION_STATUS_RUNNING
+}
+
+func canonicalAttach(state pb.SessionAttachState) pb.SessionAttachState {
+	switch state {
+	case pb.SessionAttachState_SESSION_ATTACH_STATE_ATTACHED,
+		pb.SessionAttachState_SESSION_ATTACH_STATE_EXITED:
+		return state
+	default:
+		return pb.SessionAttachState_SESSION_ATTACH_STATE_DETACHED
+	}
 }
 
 // canonicalRun keeps only what a run says about a process. The revision is this

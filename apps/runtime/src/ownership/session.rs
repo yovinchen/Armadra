@@ -313,23 +313,36 @@ pub async fn worker_states(pool: &SqlitePool) -> AppResult<Vec<WorkerSessionStat
     states(pool).await
 }
 
-/// One session in the form both sides hash. Everything this Runtime cannot
-/// store is cleared here, in one place, so the Host's writer and this reader
-/// cannot disagree about what is being compared.
+/// One session in the form both sides hash.
+///
+/// Everything a `terminal_sessions` row cannot hold is cleared here, in one
+/// place, so the Host's writer and this reader cannot disagree about what is
+/// being compared: the frozen argv, the environment names, the SSH target, the
+/// agent's permission mode and model, the launch digest the Host computed, the
+/// execution host, and the Host's own revision and reason code. They are all
+/// still in the package — the reverse export carries the full record — but a
+/// comparison over them would be permanently false, because this side cannot
+/// read them back after storing them.
+///
+/// The two enums are folded for the same reason. `status` has four words here
+/// and six values in the contract: STARTING, LOST and RECLAIMING have no
+/// spelling in this table, because this Runtime *was* the execution host and
+/// could never be out of touch with one. Folding them to RUNNING is what the
+/// column has always meant — nobody observed this end.
 pub fn canonical(session: &Session) -> Session {
     Session {
         session_id: session.session_id.clone(),
         workspace_id: session.workspace_id.clone(),
-        execution_host_id: session.execution_host_id.clone(),
+        execution_host_id: String::new(),
         session_key: session.session_key.clone(),
         owner_node_id: session.owner_node_id.clone(),
-        launch: session.launch.clone(),
+        launch: session.launch.as_ref().map(canonical_launch),
         backend_kind: session.backend_kind.clone(),
         exit_code: session.exit_code,
         generation: session.generation,
         kind: session.kind,
-        status: session.status,
-        attach_state: session.attach_state,
+        status: canonical_status(session.status) as i32,
+        attach_state: canonical_attach(session.attach_state) as i32,
         termination_intent: session.termination_intent,
         reason_code: String::new(),
         created_at_unix_ms: session.created_at_unix_ms,
@@ -338,6 +351,49 @@ pub fn canonical(session: &Session) -> Session {
         last_output_at_unix_ms: session.last_output_at_unix_ms,
         revision: 0,
         deleted: session.deleted,
+    }
+}
+
+/// A frozen launch reduced to the four columns that hold it: `cwd`, `shell`,
+/// `command` and `agent_id`.
+fn canonical_launch(launch: &SessionLaunch) -> SessionLaunch {
+    SessionLaunch {
+        shell: launch.shell.clone(),
+        command: launch.command.clone(),
+        args: Vec::new(),
+        agent: launch
+            .agent
+            .as_ref()
+            .filter(|agent| !agent.agent_id.is_empty())
+            .map(|agent| armadra_protocol::v1::AgentLaunchSpec {
+                agent_id: agent.agent_id.clone(),
+                working_directory: launch.working_directory.clone(),
+                args: Vec::new(),
+                permission_mode: String::new(),
+                model_id: String::new(),
+                account_id: String::new(),
+            }),
+        env_refs: Vec::new(),
+        ssh_target_id: String::new(),
+        launch_sha256: Vec::new(),
+        working_directory: launch.working_directory.clone(),
+    }
+}
+
+/// The six lifecycle values folded onto the two a `terminal_sessions` row can
+/// express.
+fn canonical_status(status: i32) -> SessionStatus {
+    match SessionStatus::try_from(status) {
+        Ok(SessionStatus::Exited) => SessionStatus::Exited,
+        _ => SessionStatus::Running,
+    }
+}
+
+fn canonical_attach(state: i32) -> SessionAttachState {
+    match SessionAttachState::try_from(state) {
+        Ok(SessionAttachState::Attached) => SessionAttachState::Attached,
+        Ok(SessionAttachState::Exited) => SessionAttachState::Exited,
+        _ => SessionAttachState::Detached,
     }
 }
 
