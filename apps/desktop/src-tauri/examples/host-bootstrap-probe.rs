@@ -1,5 +1,5 @@
 //! Runs the exact native startup adapter without starting a GUI or Runtime.
-#[path = "../src/host.rs"]
+#[path = "../src/host/mod.rs"]
 pub mod host;
 
 use armadra_protocol::Message;
