@@ -4,9 +4,12 @@ import { agentEventSchema, agentStatusSchema } from "../domain/index.js";
 
 import {
   browserActivitySchema,
+  browserDialogSchema,
   browserDownloadSchema,
+  browserFileChooserSchema,
   browserLeaseSchema,
   browserSessionSchema,
+  browserTabListSchema,
 } from "./browser.js";
 import { fileChangeKindSchema } from "./files.js";
 import {
@@ -124,6 +127,32 @@ export const workspaceEventSchema = z.discriminatedUnion("type", [
     sessionId: z.string(),
     lease: browserLeaseSchema,
   }),
+  /**
+   * 标签条变了：开了、关了、导航了，或者活动标签换了（§2.2）。
+   *
+   * 整张表一起送而不是逐条差分：一次 `window.open` 会同时改活动标签和标签
+   * 数量，分两条推会让标签条在中间那一刻显示一个从未存在过的状态。
+   */
+  z.object({
+    type: z.literal("browser.tabs"),
+    sessionId: z.string(),
+    tabs: browserTabListSchema,
+  }),
+  /**
+   * 某个标签被 `alert` / `confirm` / `prompt` / `beforeunload` 挡住了，或者
+   * 挡住它的对话框已经被答复（§2.4）。`dialog` 缺席就是后者。
+   */
+  z.object({
+    type: z.literal("browser.dialog"),
+    sessionId: z.string(),
+    dialog: browserDialogSchema.optional(),
+  }),
+  /** 页面开了文件选择器，或者选择器已经被答复 / 超时（§2.3）。 */
+  z.object({
+    type: z.literal("browser.fileChooser"),
+    sessionId: z.string(),
+    chooser: browserFileChooserSchema.optional(),
+  }),
   /** 节点头部的一行「谁做了什么」（§2.8）；一次动作一条，不是一帧一条。 */
   browserActivitySchema.extend({ type: z.literal("browser.activity") }),
   /**
@@ -178,6 +207,18 @@ export type BrowserLeaseEvent = Extract<
 export type BrowserActivityEvent = Extract<
   WorkspaceEvent,
   { type: "browser.activity" }
+>;
+export type BrowserTabsEvent = Extract<
+  WorkspaceEvent,
+  { type: "browser.tabs" }
+>;
+export type BrowserDialogEvent = Extract<
+  WorkspaceEvent,
+  { type: "browser.dialog" }
+>;
+export type BrowserFileChooserEvent = Extract<
+  WorkspaceEvent,
+  { type: "browser.fileChooser" }
 >;
 export type SshPromptEvent = Extract<WorkspaceEvent, { type: "ssh.prompt" }>;
 export type WorkspaceUpdatedEvent = Extract<

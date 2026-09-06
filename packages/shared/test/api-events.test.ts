@@ -95,6 +95,42 @@ describe("runtime workspace events API", () => {
       },
       { type: "workspace.updated", workspaceId: uuid },
       {
+        type: "browser.tabs",
+        sessionId: uuid,
+        tabs: {
+          tabs: [
+            { tabId: "t1", url: "https://example.test/", active: true },
+            { tabId: "t2", loading: true, openerTabId: "t1" },
+          ],
+          activeTabId: "t1",
+        },
+      },
+      {
+        type: "browser.dialog",
+        sessionId: uuid,
+        dialog: {
+          dialogId: "d-1",
+          tabId: "t1",
+          kind: "beforeunload",
+          message: "Leave?",
+          openedAt: timestamp,
+        },
+      },
+      // 对话框被答复之后推的是同一个事件、没有 `dialog`——界面据此把
+      // 弹层收起来，而不是靠超时猜。
+      { type: "browser.dialog", sessionId: uuid },
+      {
+        type: "browser.fileChooser",
+        sessionId: uuid,
+        chooser: {
+          chooserId: "c-1",
+          tabId: "t1",
+          multiple: true,
+          openedAt: timestamp,
+        },
+      },
+      { type: "browser.fileChooser", sessionId: uuid },
+      {
         type: "browser.download",
         download: {
           downloadId: "d-1",
@@ -117,5 +153,42 @@ describe("runtime workspace events API", () => {
     expect(workspaceEventSchema.safeParse({ type: "acp.update" }).success).toBe(
       false,
     );
+  });
+
+  it("decodes the browser tab / dialog / chooser events the runtime emits", () => {
+    // 这三个事件 Runtime 一直在发，联合里却没有，`safeParse` 只会把它们丢掉
+    // 并告警——标签条和对话框界面因此收不到任何东西（§2.2/§2.3/§2.4）。
+    const tabs = workspaceEventSchema.parse({
+      type: "browser.tabs",
+      sessionId: uuid,
+      tabs: { tabs: [{ tabId: "t1", active: true }], activeTabId: "t1" },
+    });
+    expect(tabs).toMatchObject({ type: "browser.tabs" });
+    if (tabs.type !== "browser.tabs") throw new Error("narrowing failed");
+    expect(tabs.tabs.limit).toBe(16);
+    expect(tabs.tabs.tabs[0]).toMatchObject({ favicon: "", loading: false });
+
+    const chooser = workspaceEventSchema.parse({
+      type: "browser.fileChooser",
+      sessionId: uuid,
+      chooser: { chooserId: "c-1", tabId: "t1", openedAt: timestamp },
+    });
+    if (chooser.type !== "browser.fileChooser")
+      throw new Error("narrowing failed");
+    expect(chooser.chooser?.multiple).toBe(false);
+
+    expect(
+      workspaceEventSchema.safeParse({
+        type: "browser.dialog",
+        sessionId: uuid,
+        dialog: {
+          dialogId: "d",
+          tabId: "t1",
+          kind: "toast",
+          message: "",
+          openedAt: timestamp,
+        },
+      }).success,
+    ).toBe(false);
   });
 });
