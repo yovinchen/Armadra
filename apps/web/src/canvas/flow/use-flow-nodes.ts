@@ -13,6 +13,7 @@ import { useShallow } from "zustand/react/shallow";
 import { t } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
 import { MAX_LINKS } from "../content-links";
+import { createContentReference } from "../create-content-reference";
 import {
   classifyConnection,
   connectionRejection,
@@ -220,9 +221,29 @@ export function useFlowNodes(): FlowBindings {
     });
   }, []);
 
+  /**
+   * 松手且合法：按判定表分流。节点 ↔ 节点是 `edges` 表的一行；有一端是
+   * 白板对象时是 `whiteboard.references` 的一行（§2.3 / F29，B5）。
+   *
+   * 提示交给 `onConnectEnd`，所以这里 `notify: false`——`createContentReference`
+   * 默认会为「已经引用过了」弹一句，拖线时那句由 React Flow 的落点高亮
+   * 代劳，不必再响一次。
+   */
   const onConnect = React.useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return;
-    useCanvasStore.getState().addEdge(connection.source, connection.target);
+    const state = useCanvasStore.getState();
+    const verdict = classifyConnection(
+      { source: connection.source, target: connection.target },
+      { document: state.document, whiteboard: state.whiteboard },
+    );
+    if (verdict.kind === "reference") {
+      createContentReference(verdict.itemId, verdict.nodeId, {
+        notify: false,
+      });
+      return;
+    }
+    if (verdict.kind !== "link") return;
+    state.addEdge(verdict.source, verdict.target);
   }, []);
 
   /**

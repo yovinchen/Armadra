@@ -231,15 +231,22 @@ describe("取消与未知端", () => {
     });
   });
 
-  it("`isValidConnection` 在 B1 只放行 link，引用留给 B5", () => {
+  it("`isValidConnection` 放行 link 与引用，拒绝白板对象之间的连线（B5）", () => {
     const item = makeItem("text");
+    const other = makeItem("shape");
     const context = {
       document: board([terminal(A)]),
-      whiteboard: whiteboard([item]),
+      whiteboard: whiteboard([item, other]),
     };
     expect(
       isValidCanvasConnection(
         { source: toItemId(item.id), target: A },
+        context,
+      ),
+    ).toBe(true);
+    expect(
+      isValidCanvasConnection(
+        { source: toItemId(item.id), target: toItemId(other.id) },
         context,
       ),
     ).toBe(false);

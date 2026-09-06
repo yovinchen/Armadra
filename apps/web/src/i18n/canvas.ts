@@ -80,6 +80,10 @@ const zh = {
   "content.frame": "画框",
   "content.shape": "白板内容",
 
+  /* B5 reference */
+  "shape.removeReference": "移除引用",
+  "shape.referenceExists": "已经引用过这个对象了",
+
   /* 空白右键的添加菜单里的白板项 */
   "add.text": "新建文字",
   "add.frame": "新建画框",
@@ -241,6 +245,10 @@ const en: Record<keyof typeof zh, string> = {
   "content.highlight": "Highlight",
   "content.frame": "Frame",
   "content.shape": "Whiteboard content",
+
+  /* B5 reference */
+  "shape.removeReference": "Remove reference",
+  "shape.referenceExists": "This object is already referenced",
 
   "add.text": "New text",
   "add.frame": "New frame",

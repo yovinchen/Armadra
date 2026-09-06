@@ -140,13 +140,14 @@ function referenceVerdict(
 /**
  * `<ReactFlow isValidConnection>` 用的布尔判定。
  *
- * B1 只放行 `link`：引用边的建立、PNG 导出与状态机整个归 B5，在那之前
- * 放行等于让用户拖出一条什么都不会发生的线。B5 把 `"reference"` 加进
- * 这个集合并在 `onConnect` 里建 `whiteboard.references` 那一行。
+ * B1 只放行 `link`；B5 把 `"reference"` 也放行了——引用边的建立、PNG 导出
+ * 与发布状态机都已落地（`create-content-reference.ts`、`content-links.ts`），
+ * `use-flow-nodes.onConnect` 按 `verdict.kind` 分流。
  */
 export function isValidCanvasConnection(
   connection: ConnectionEnds,
   context: ConnectionContext,
 ): boolean {
-  return classifyConnection(connection, context).kind === "link";
+  const kind = classifyConnection(connection, context).kind;
+  return kind === "link" || kind === "reference";
 }
