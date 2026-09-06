@@ -38,6 +38,16 @@ pub struct SwitchRequest {
     /// Rebind even when the two roots do not look like the same project.
     #[serde(default)]
     pub force: bool,
+    /// End the terminals and browser sessions that are in the way, then
+    /// switch. Off by default and never implied by `force`: stopping somebody
+    /// else's running Agent is a decision, and the person making it has to
+    /// have seen the list first — which is why the refusal names every entry.
+    ///
+    /// It never covers an editor draft or an in-flight Git operation. Those
+    /// hold work that cannot be recovered by reopening a node, so they stay
+    /// refusals whatever the request asks for.
+    #[serde(default)]
+    pub stop_blockers: bool,
     /// Asking for the files to be copied across. Always refused; the field
     /// exists so the refusal can name what was asked rather than ignoring it.
     #[serde(default)]
@@ -80,6 +90,11 @@ pub struct Refusal {
     pub to: Option<RootFingerprint>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub blockers: Vec<Blocker>,
+    /// What `stopBlockers` actually ended before the switch was refused
+    /// anyway. Reported so the answer is not "nothing happened" when a
+    /// terminal really was killed — the person has to be told what they spent.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub stopped: Vec<Blocker>,
 }
 
 /// Compute a root's fingerprint on whichever machine owns it.
@@ -162,6 +177,10 @@ pub fn matches(from: &RootFingerprint, to: &RootFingerprint) -> bool {
 }
 
 /// Everything still bound to the workspace's current host.
+///
+/// The list is the design's (§3.3), and every entry names the thing rather
+/// than counting it: a person can close a terminal or a browser node, but
+/// nobody can act on "3 blockers".
 pub async fn blockers(state: &AppState, workspace: &Workspace) -> AppResult<Vec<Blocker>> {
     let mut blockers = Vec::new();
     for path in crate::file_watch::watched_paths(&workspace.id) {
@@ -184,6 +203,28 @@ pub async fn blockers(state: &AppState, workspace: &Workspace) -> AppResult<Vec<
             });
         }
     }
+    // A browser session holds a profile directory and a running Chromium on
+    // the machine the workspace is leaving. Its downloads land in that
+    // workspace's root, so it is bound to the host quite as firmly as a
+    // terminal is — it was simply missing from the list.
+    for session in crate::browser::stored_for_workspace(&state.pool, &workspace.id).await? {
+        if session.state != crate::browser::SessionState::Terminated {
+            blockers.push(Blocker {
+                kind: "browser".into(),
+                detail: session.node_id.clone(),
+            });
+        }
+    }
+    // An automation plan is the Host's, but the node that points at one is
+    // this workspace's, and the plan's target names the execution host it was
+    // pinned to. Rebinding underneath it would leave the plan writing to a
+    // machine nobody chose.
+    for node in automation_nodes(state, &workspace.id).await? {
+        blockers.push(Blocker {
+            kind: "automation".into(),
+            detail: node,
+        });
+    }
     for operation in crate::git_api::owned_operations(&workspace.id)? {
         blockers.push(Blocker {
             kind: "gitOperation".into(),
@@ -191,6 +232,71 @@ pub async fn blockers(state: &AppState, workspace: &Workspace) -> AppResult<Vec<
         });
     }
     Ok(blockers)
+}
+
+/// The automation nodes on this workspace's boards, by node id.
+///
+/// The plan itself lives on the Host; what this process can see is the card
+/// that references it, which is enough to name what has to be dealt with and
+/// is the only signal that is true without asking another service.
+async fn automation_nodes(state: &AppState, workspace_id: &str) -> AppResult<Vec<String>> {
+    Ok(sqlx::query_scalar::<_, String>(
+        "SELECT n.id FROM nodes n JOIN boards b ON b.id = n.board_id \
+         WHERE b.workspace_id = ? AND n.type = 'automation' ORDER BY n.created_at",
+    )
+    .bind(workspace_id)
+    .fetch_all(&state.pool)
+    .await?)
+}
+
+/// End what a switch is blocked on, on the caller's explicit say-so.
+///
+/// Only the two kinds that are *processes* are ended here: terminals and
+/// browser sessions. An editor draft is unsaved work and a Git operation is a
+/// repository mutation in flight — ending either on somebody's behalf would
+/// destroy something they cannot get back, so those stay refusals whatever the
+/// request says. An automation plan is the Host's and is not this process's to
+/// cancel; its node stays a blocker until the plan is retargeted.
+///
+/// What is stopped is not reopened here either: the nodes are still on the
+/// board, and the client reopens them against the new host once the rebinding
+/// has actually landed. Reopening before the switch commits would attach them
+/// to the machine that is being left.
+async fn stop(state: &AppState, workspace: &Workspace) -> AppResult<Vec<Blocker>> {
+    let mut stopped = Vec::new();
+    for session in db::list_sessions(&state.pool, &workspace.id).await? {
+        if !state.terminals.is_alive(&session.session_id).await {
+            continue;
+        }
+        // The persistent session goes with the process: leaving a tmux window
+        // behind on the old machine would be a session bound to a host the
+        // workspace no longer uses, which is the thing being removed.
+        state
+            .terminals
+            .terminate(
+                &session.session_id,
+                crate::terminal::TerminateMode::Session,
+            )
+            .await?;
+        stopped.push(Blocker {
+            kind: "terminal".into(),
+            detail: session.node_id.clone(),
+        });
+    }
+    for session in crate::browser::stored_for_workspace(&state.pool, &workspace.id).await? {
+        if session.state == crate::browser::SessionState::Terminated {
+            continue;
+        }
+        // `terminate = true`: detaching the picture would leave the browser
+        // running against the old host's profile, which is exactly the binding
+        // the switch has to remove.
+        crate::browser::session::close(state, &session.id, true).await?;
+        stopped.push(Blocker {
+            kind: "browser".into(),
+            detail: session.node_id.clone(),
+        });
+    }
+    Ok(stopped)
 }
 
 /// Apply the switch, or say why not.
@@ -221,6 +327,14 @@ pub async fn switch(
             "Forcing a switch needs the workspace write grant".into(),
         ));
     }
+    // Stopping happens before the list is taken again, and the second list is
+    // what decides. Anything that survived being stopped — a draft, a Git
+    // operation, an automation plan — still refuses the switch, so
+    // `stopBlockers` can never turn into "switch anyway".
+    let stopped = match request.stop_blockers {
+        true => stop(state, workspace).await?,
+        false => Vec::new(),
+    };
     let blockers = blockers(state, workspace).await?;
     if !blockers.is_empty() {
         return Ok(Err(Refusal {
@@ -229,6 +343,7 @@ pub async fn switch(
             from: None,
             to: None,
             blockers,
+            stopped,
         }));
     }
 
@@ -269,6 +384,7 @@ pub async fn switch(
             from: Some(from),
             to: Some(to),
             blockers: Vec::new(),
+            stopped,
         }));
     }
 
