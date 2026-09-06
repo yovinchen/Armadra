@@ -15,11 +15,12 @@
 use super::{SshHost, SshWorker, known_hosts};
 
 /// The argv that starts the Worker on `host` over SSH (H02):
-/// `ssh -o BatchMode=yes … destination <remote binary> worker --stdio …`.
+/// `ssh -o BatchMode=no … destination <remote binary> worker --stdio …`.
 ///
 /// No `-t`: stdin and stdout carry length-prefixed Protobuf frames, and a TTY
-/// would translate them. `BatchMode` keeps a password prompt from swallowing
-/// the stream — an unreachable host has to fail, not hang.
+/// would translate them. Prompting stays on, but only because it is routed to
+/// the askpass helper below — a prompt with nowhere to go would swallow the
+/// stream, and an unreachable host has to fail rather than hang.
 pub fn worker_argv(host: &SshHost, worker: &SshWorker) -> Vec<String> {
     argv_for(host, worker, false)
 }
@@ -276,6 +277,39 @@ mod tests {
         );
         assert_eq!(
             &argv[argv.len() - 2..],
+            ["--state-dir", "/var/lib/armadra/worker"]
+        );
+    }
+
+    /// The language link is the Worker line plus one flag, and nothing else.
+    /// It is the same kind of connection — no TTY, frames on stdio — so it has
+    /// to carry the same host-key options and the same askpass helper; a link
+    /// that still said `BatchMode=yes` would leave a password-authenticated
+    /// host able to run a Worker but never a language server.
+    #[test]
+    fn the_language_link_is_the_worker_line_plus_one_flag() {
+        let worker = SshWorker {
+            path: "/opt/armadra/armadra-runtime".into(),
+            state_dir: Some("/var/lib/armadra/worker".into()),
+        };
+        let base = worker_argv(&host(), &worker);
+        let link = language_link_argv(&host(), &worker);
+        assert_eq!(
+            link.iter()
+                .filter(|argument| *argument != "--language-link")
+                .cloned()
+                .collect::<Vec<_>>(),
+            base
+        );
+        // Directly after `--stdio`, so the state directory still trails the
+        // line the way `worker_argv` promises.
+        let stdio = link.iter().position(|argument| argument == "--stdio");
+        assert_eq!(
+            link.get(stdio.unwrap() + 1).map(String::as_str),
+            Some("--language-link")
+        );
+        assert_eq!(
+            &link[link.len() - 2..],
             ["--state-dir", "/var/lib/armadra/worker"]
         );
     }

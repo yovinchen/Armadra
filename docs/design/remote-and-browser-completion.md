@@ -448,6 +448,10 @@ SIGKILL 后恢复：Runtime 被 `kill -9` 时来不及结束浏览器，Chrome �
 
 批次 5 未做：`remote_ssh` 的伪 `ssh` 端到端（打印 `password:` 并调用 `SSH_ASKPASS`）没有写——伪 SSH 运行器是一个丢弃选项的 shell 脚本，它不实现 OpenSSH 的 askpass 协议，要写这条测试得先实现一个假的 `ssh`，那测的是这个假程序而不是 Armadra；`known_hosts`、`prompts`、`askpass` 三个模块的规则改由单元测试覆盖（指纹归属校验、一问一答一次读取、提示文本脱敏、三个环境变量缺一即拒、全部 argv 带 `StrictHostKeyChecking=yes`）。`ssh-keyscan`/`ssh-keygen` 的真实调用路径同理只有 argv 与解析被测，没有连过真实主机。切换的阻塞项目前覆盖编辑器草稿、活动终端与本进程持有的 Git 操作；浏览器 session 与自动化计划未纳入（本轮浏览器 session 只跑在控制端，自动化计划没有指向执行主机的登记）。
 
+批次 4 + 5 合并进主线（本机 macOS）：两批与主线上的语言服务 C/D、B1 设置域、B2 文件系统域、浏览器 1/2/3 改了同一批文件，合并按语义而非按行做。协议侧没有撞号——远端新增的 request 16/17 与 response 17/18/19 都落在主线未占用的编号上，`WorkerServiceOperation` 19–48、`service_contract_version` 与 `WorkerReadFileRequest.raw = 6` 原样保留，生成产物由 `pnpm protocol:generate` 重出。`worker/mod.rs` 同时保留语言链路（`language_link::CAPABILITY_V1` 无条件、`CAPABILITY` 随链路）、设置域（帧 25，随 `--settings-file`）、文件系统域（帧 26）与远端的仓库面板 / 文件管理 / 上传 / watch capability，dispatch 里五种语言动作是真实实现而不是远端分支留的 UNSUPPORTED 桩。`worker/transport.rs` 拆分后的 `serve` 与 `serve_commands` 都重新带上 `settings_file`，否则 `--settings-file` 会在拆分中被静默丢掉。
+
+合并时的三处取舍：① `terminal/ssh/argv.rs` 里重新长出 `language_link_argv`，但用的是远端分支的新选项（askpass 助手 + `known_hosts`）而不是主线原来的 `BatchMode=yes`——语言链路和 Worker 连接是同一种连接（无 TTY、stdio 上跑帧），密码主机不该「能起 Worker、起不了语言服务」；`remote/language.rs` 的 spawn 相应补上 `askpass::child_environment`，主线原来没有这一步是因为那时这条线还是 batch 模式。② `RemoteWorker` 只保留主线的 `display_name()` / `controller_id()`，删掉远端分支同义的 `host_name()`（无调用方）。③ Host 侧 `worker/wire.go` 的 result oneof 合法号集合不加 17/18/19：Go Host 走的是 `serve_commands`，那条路不开 watch、也不发主动帧，把这些号加进白名单等于让 Host 接收它读不懂的帧。
+
 只能交叉编译、实机待办：Windows Job Object 与 `lockfile` 处理、Windows Authenticode 校验、Windows/Linux 标准安装路径、Linux 沙箱（不默认加 `--no-sandbox`，容器 CI 用 `ARMADRA_BROWSER_ARGS` 显式给）、Windows 的 `GetProcessTimes` 进程身份。每批的实施记录只登记本机 Chrome、本地静态页与伪 SSH 的结果。
 
 ## 6. 验收清单

@@ -636,7 +636,17 @@ impl RemoteLanguage {
 
 async fn connect(worker: &RemoteWorker, events: &EventHub) -> AppResult<Link> {
     let argv = worker.language_argv();
-    let mut child = Command::new(&argv[0])
+    let mut command = Command::new(&argv[0]);
+    // The language link is the Worker connection's twin: no TTY, frames on
+    // stdio, and therefore the same askpass helper (design §3.6). Without it a
+    // password-authenticated host could start a Worker and then fail to open a
+    // language link, because `ssh` would have a prompt and nowhere to put it.
+    if let Some(environment) =
+        crate::terminal::ssh::askpass::child_environment(worker.execution_host_id())
+    {
+        command.envs(environment);
+    }
+    let mut child = command
         .args(&argv[1..])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
