@@ -3,13 +3,14 @@
 
 use chrono::Utc;
 use sqlx::{Row, SqlitePool};
+use std::path::Path;
 use uuid::Uuid;
 
 use crate::{
     error::{AppError, AppResult},
     model::{
-        BoardBrief, DEFAULT_BOARD_NAME, DEFAULT_WORKSPACE_COLOR, Viewport, Workspace,
-        WorkspacePermissions, WorkspaceSummary,
+        BoardBrief, DEFAULT_BOARD_NAME, DEFAULT_WORKSPACE_COLOR, DEFAULT_WORKSPACE_NAME, Viewport,
+        Workspace, WorkspacePermissions, WorkspaceSummary,
     },
 };
 
@@ -95,6 +96,52 @@ pub async fn create_workspace(
         created_at: now.clone(),
         updated_at: now,
     })
+}
+
+/// The project a fresh installation opens into.
+///
+/// Created once, when the `workspaces` table is empty: a first launch must
+/// not land on an empty shell that asks for a folder before anything can be
+/// tried. Its root is `<data dir>/workspaces/default`, inside the storage
+/// this Runtime already owns, so it needs no picker and no permission prompt
+/// — which is also why it may execute: an agent started there works on files
+/// nothing else on the machine depends on. The default board comes with the
+/// workspace, as it does for every other one.
+///
+/// Rows that exist, whatever they are, mean the user has already chosen, and
+/// nothing is added behind their back. `None` says so.
+pub async fn ensure_default_workspace(
+    pool: &SqlitePool,
+    data_dir: &Path,
+) -> AppResult<Option<Workspace>> {
+    let existing: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM workspaces")
+        .fetch_one(pool)
+        .await?;
+    if existing > 0 {
+        return Ok(None);
+    }
+    let root = data_dir.join("workspaces").join("default");
+    std::fs::create_dir_all(&root).map_err(|error| {
+        AppError::Internal(format!(
+            "could not create the default workspace at {}: {error}",
+            root.display()
+        ))
+    })?;
+    let root = crate::security::canonical_directory(&root)?;
+    let permissions = WorkspacePermissions {
+        read: true,
+        write: true,
+        execute: true,
+    };
+    create_workspace(
+        pool,
+        DEFAULT_WORKSPACE_NAME,
+        &root.to_string_lossy(),
+        None,
+        Some(&permissions),
+    )
+    .await
+    .map(Some)
 }
 
 /// A workspace whose files live on an SSH execution host (H02). The root is a

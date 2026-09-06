@@ -154,6 +154,29 @@ async fn main() -> anyhow::Result<()> {
         }
     };
     let pool = db::connect(&database_url).await?;
+    // A first launch opens into a project of its own rather than an empty
+    // shell. Only while this Runtime still decides what a workspace is: once
+    // the Host owns the canvas or the filesystem domain, adding a row here
+    // would be a write behind its back.
+    if armadra_runtime::ownership::local_write_allowed(
+        &pool,
+        armadra_runtime::ownership::OwnershipDomain::Canvas,
+    )
+    .await
+        && armadra_runtime::ownership::local_write_allowed(
+            &pool,
+            armadra_runtime::ownership::OwnershipDomain::Filesystem,
+        )
+        .await
+    {
+        match db::ensure_default_workspace(&pool, &data_dir()).await {
+            Ok(Some(workspace)) => {
+                tracing::info!(root = %workspace.root_path, "created the default workspace")
+            }
+            Ok(None) => {}
+            Err(error) => tracing::warn!(%error, "could not create the default workspace"),
+        }
+    }
     // Nothing that survived a restart is live knowledge; the UI shows those
     // rows as restored until a hook reports again.
     let restored = db::mark_agent_status_restored(&pool).await?;

@@ -80,3 +80,52 @@ async fn workspace_patch_updates_only_the_supplied_fields() {
         Err(AppError::BadRequest(_))
     ));
 }
+
+/// A fresh database gets one project under the data directory, with its
+/// board, and a database that already has any workspace is left alone.
+#[tokio::test]
+async fn an_empty_database_gets_a_default_workspace_once() {
+    let directory = tempfile::tempdir().unwrap();
+    let pool = connect(&format!(
+        "sqlite://{}?mode=rwc",
+        directory.path().join("fresh.db").display()
+    ))
+    .await
+    .unwrap();
+    let created = ensure_default_workspace(&pool, directory.path())
+        .await
+        .unwrap()
+        .expect("a fresh database gets the default workspace");
+    assert_eq!(created.name, DEFAULT_WORKSPACE_NAME);
+    let expected = directory
+        .path()
+        .join("workspaces")
+        .join("default")
+        .canonicalize()
+        .unwrap();
+    assert_eq!(created.root_path, expected.to_string_lossy());
+    assert!(created.permissions.execute);
+    let boards = list_boards(&pool, &created.id).await.unwrap();
+    assert_eq!(boards.len(), 1);
+    assert_eq!(boards[0].name, DEFAULT_BOARD_NAME);
+
+    // Second start: the row exists, so nothing is added.
+    assert!(
+        ensure_default_workspace(&pool, directory.path())
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(list_workspaces(&pool).await.unwrap().len(), 1);
+
+    // A database the user already populated is never touched either, even
+    // when their workspace lives somewhere else entirely.
+    let (other_pool, other_directory, _) = fixture("populated").await;
+    assert!(
+        ensure_default_workspace(&other_pool, other_directory.path())
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(!other_directory.path().join("workspaces").exists());
+}

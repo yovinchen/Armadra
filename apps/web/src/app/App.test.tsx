@@ -43,6 +43,7 @@ vi.mock("../canvas/TldrawWorkspace", () => ({
 }));
 
 import { installDomPolyfills } from "./test-harness";
+import { runtimeApi } from "../api/client";
 import { usePreferencesStore } from "./preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
 import { App } from "./App";
@@ -65,6 +66,7 @@ const workspace: Workspace = {
 afterEach(cleanup);
 
 beforeEach(() => {
+  vi.mocked(runtimeApi.listWorkspaces).mockResolvedValue([]);
   useCanvasStore.setState({ workspace: null, boards: [], boardId: null });
   useCanvasStore.getState().setPanel("sidebar", "open");
   usePreferencesStore.setState({
@@ -84,6 +86,31 @@ describe("App", () => {
     expect(screen.queryByText("最近")).toBeNull();
     expect(screen.queryByText("还没有工作空间")).toBeNull();
     expect(screen.queryByTestId("canvas")).toBeNull();
+  });
+
+  it("首次启动什么都不记得时，进列表里最近打开的工作空间", async () => {
+    vi.mocked(runtimeApi.listWorkspaces).mockResolvedValue([
+      { ...workspace, boards: [] },
+    ]);
+    render(<App />);
+
+    expect(await screen.findByTestId("canvas")).toBeTruthy();
+    expect(useCanvasStore.getState().workspace?.id).toBe(workspace.id);
+    expect(usePreferencesStore.getState().openWorkspaceIds).toEqual([
+      workspace.id,
+    ]);
+  });
+
+  it("关掉「恢复上次工作空间」后不替用户打开任何项目", async () => {
+    vi.mocked(runtimeApi.listWorkspaces).mockResolvedValue([
+      { ...workspace, boards: [] },
+    ]);
+    usePreferencesStore.setState({ restoreLastWorkspace: false });
+    render(<App />);
+
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(screen.queryByTestId("canvas")).toBeNull();
+    usePreferencesStore.setState({ restoreLastWorkspace: true });
   });
 
   it("打开工作空间后画布出现，壳不重建", () => {

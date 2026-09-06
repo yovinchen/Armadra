@@ -3,6 +3,9 @@ use serde_json::Value;
 
 pub const DEFAULT_WORKSPACE_COLOR: &str = "#5B5BD6";
 pub const DEFAULT_BOARD_NAME: &str = "Default";
+/// The workspace a fresh installation opens into; its files live under the
+/// data directory, so it exists on every machine without a picker.
+pub const DEFAULT_WORKSPACE_NAME: &str = "Default";
 /// Node palette default — mirrors `NODE_COLORS[0]` in packages/shared.
 pub const DEFAULT_NODE_COLOR: &str = "#0a84ff";
 

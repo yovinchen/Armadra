@@ -116,7 +116,14 @@ export function useBoardSync() {
     if (workspace || restoredWorkspaceRef.current || !workspaces.data) return;
     restoredWorkspaceRef.current = true;
     const remembered = bootWorkspaceRef.current;
-    const match = workspaces.data.find((item) => item.id === remembered);
+    // 什么都不记得（第一次启动，或上次把最后一个工作空间关掉了）就进列表里
+    // 最近打开的那个——首启时它就是 Runtime 建好的默认项目，进来就有画布。
+    // 「打开时恢复上次工作空间」关掉时 remembered 也是空，但那是用户要界面
+    // 空着的选择，不在这里替他做主。
+    const restore = usePreferencesStore.getState().restoreLastWorkspace;
+    const match =
+      workspaces.data.find((item) => item.id === remembered) ??
+      (restore ? workspaces.data[0] : undefined);
     if (!match) return;
     openWorkspaceTab(match.id);
     setWorkspace(match);
