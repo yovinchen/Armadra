@@ -5,6 +5,7 @@ import "armadra/v1/agent.proto";
 import "armadra/v1/common.proto";
 import "armadra/v1/command.proto";
 import "armadra/v1/canvas.proto";
+import "armadra/v1/filesystem.proto";
 import "armadra/v1/worker_channel.proto";
 import "armadra/v1/language.proto";
 import "armadra/v1/migration.proto";
@@ -199,6 +200,9 @@ message WorkerRequest {
     // epoch, so a controller that exported a document still has to complete
     // the switch through the ownership frames above.
     WorkerSettingsRequest settings = 25;
+    // The filesystem domain (business migration §2.9). 25 belongs to the
+    // settings domain; this one is 26 so the two land independently.
+    FilesystemWorkerRequest filesystem = 26;
   }
 }
 message WorkerResponse {
@@ -224,5 +228,6 @@ message WorkerResponse {
     LanguageApplyEditResult language_apply_edit = 33;
     ReverseImportReport reverse_import = 23;
     WorkerSettingsSnapshot settings = 25;
+    FilesystemWorkerResponse filesystem = 26;
   }
 }

@@ -2,6 +2,7 @@ syntax = "proto3";
 package armadra.v1;
 option go_package = "armadra.local/host/gen/armadra/v1";
 import "armadra/v1/canvas.proto";
+import "armadra/v1/filesystem.proto";
 
 // Offline export manifest, maximum 64 MiB. Not a network control frame.
 // The referenced SQLite file is a consistent snapshot. Asset files have their
@@ -147,6 +148,11 @@ message ReverseExportRecord {
     CanvasNode node = 3;
     CanvasEdge edge = 4;
     CanvasAnnotation annotation = 5;
+    // The filesystem domain's own entity. A package carries one kind of record
+    // per domain, so a reader that meets a member it does not expect for the
+    // domain named in the index refuses the package instead of applying half
+    // of it (`reverse.unsupported_entity`).
+    WorkspaceRoot workspace_root = 6;
   }
 }
 
