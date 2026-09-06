@@ -4,6 +4,10 @@ import {
   browserInputRequestSchema,
   browserReadSchema,
   browserSessionSchema,
+  browserSubscribeRequestSchema,
+  browserSubscriptionSchema,
+  browserTabListSchema,
+  browserUploadedSchema,
   browserViewportSchema,
 } from "../src/index.js";
 
@@ -99,5 +103,87 @@ describe("runtime browser API", () => {
         reasonCode: "chrome_not_found",
       }).searched,
     ).toEqual([]);
+  });
+
+  it("negotiates a frame encoding and defaults to JPEG for an older runtime", () => {
+    expect(
+      browserSubscribeRequestSchema.parse({
+        visibility: "focused",
+        acceptedEncodings: ["webp", "jpeg"],
+      }).acceptedEncodings,
+    ).toEqual(["webp", "jpeg"]);
+    // 一个说不出编码的客户端和一个不带 `encoding` 的旧 Runtime，结论都是
+    // JPEG——两边任何一边缺席都不会把 WebP 猜出来。
+    expect(
+      browserSubscribeRequestSchema.parse({ visibility: "visible" })
+        .acceptedEncodings,
+    ).toBeUndefined();
+    expect(
+      browserSubscriptionSchema.parse({
+        subscriptionId: "s-1",
+        expiresAt: timestamp,
+        quality: 65,
+        maxFps: 15,
+      }).encoding,
+    ).toBe("jpeg");
+    expect(
+      browserSubscriptionSchema.safeParse({
+        subscriptionId: "s-1",
+        expiresAt: timestamp,
+        quality: 65,
+        maxFps: 15,
+        encoding: "avif",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("models a tab strip and an upload receipt", () => {
+    const tabs = browserTabListSchema.parse({
+      tabs: [
+        { tabId: "t1", url: "https://example.test/", title: "Example" },
+        {
+          tabId: "t2",
+          active: true,
+          openerTabId: "t1",
+          loading: true,
+          favicon: "data:image/png;base64,iVBORw0KGgo=",
+          pendingDialog: {
+            dialogId: "d-1",
+            tabId: "t2",
+            kind: "confirm",
+            message: "Sure?",
+            openedAt: timestamp,
+          },
+        },
+      ],
+      activeTabId: "t2",
+    });
+    // 一个只报了 id 的标签也要能解出来：Runtime 在标签刚出现、还没导航完
+    // 的那一刻推的就是这个形状。
+    expect(tabs.tabs[0]).toMatchObject({ favicon: "", loading: false });
+    expect(tabs.tabs[1]?.pendingDialog?.kind).toBe("confirm");
+    expect(tabs.limit).toBe(16);
+    expect(
+      browserTabListSchema.safeParse({
+        tabs: [
+          {
+            tabId: "t1",
+            pendingDialog: {
+              dialogId: "d",
+              tabId: "t1",
+              kind: "toast",
+              message: "",
+              openedAt: timestamp,
+            },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+
+    expect(browserUploadedSchema.parse({ paths: ["a.png"] })).toEqual({
+      paths: ["a.png"],
+      tabId: "",
+      answeredChooser: false,
+    });
   });
 });

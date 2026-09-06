@@ -173,6 +173,7 @@ fn tabs_and_frame_bound_references_survive_the_wire() {
                     url: "http://127.0.0.1:8080/".into(),
                     title: "首页".into(),
                     navigation_epoch: 4,
+                    favicon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==".into(),
                     ..Default::default()
                 },
                 BrowserTab {
@@ -190,6 +191,7 @@ fn tabs_and_frame_bound_references_survive_the_wire() {
                         message: "离开此页？".into(),
                         ..Default::default()
                     }),
+                    favicon: String::new(),
                 },
             ],
             active_tab_id: "t2".into(),
@@ -432,6 +434,21 @@ fn every_new_verb_carries_its_target_and_lease_generation() {
             })),
         },
     );
+    // The upload route's answer has a message of its own now, so a phone
+    // parses it rather than guessing at an untyped body (§2.3).
+    check(
+        "browser_result_upload",
+        BrowserActionResult {
+            request_id: "请求-upload".into(),
+            result: Some(browser_action_result::Result::Upload(
+                BrowserUploadResponse {
+                    paths: vec!["docs/报告.pdf".into(), "assets/图.png".into()],
+                    tab_id: "t2".into(),
+                    answered_chooser: true,
+                },
+            )),
+        },
+    );
 }
 
 #[test]
@@ -462,9 +479,29 @@ fn the_dedicated_stream_carries_raw_frames_and_a_closed_uplink() {
                     visibility: BrowserVisibility::Focused as i32,
                     bandwidth_class: BrowserBandwidthClass::Metered as i32,
                     max_width: 960,
+                    accepted_encodings: vec!["webp".into(), "jpeg".into()],
                     ..Default::default()
                 },
             )),
+        },
+    );
+    // Chrome answers `Page.startScreencast { format: "webp" }` with real VP8
+    // WebP even though the protocol dump only lists jpeg/png, so the encoding
+    // a subscriber negotiated has to survive the wire as its own value.
+    check(
+        "browser_stream_frame_webp",
+        BrowserStreamFrame {
+            session_id: "browser-1".into(),
+            generation: 3,
+            frame_seq: 12,
+            navigation_epoch: 4,
+            tab_id: "t1".into(),
+            viewport_width: 960,
+            viewport_height: 540,
+            device_scale_factor: 1.0,
+            encoding: "webp".into(),
+            data: vec![0x52, 0x49, 0x46, 0x46, 0xf8, 0x01, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50],
+            captured_at_unix_ms: 1788557900001,
         },
     );
     // An acknowledgement is a bare number, so keeping the picture flowing
@@ -504,6 +541,7 @@ fn the_dedicated_stream_carries_raw_frames_and_a_closed_uplink() {
             quality: 45,
             max_fps: 4,
             max_width: 960,
+            encoding: "webp".into(),
         },
     );
     check(

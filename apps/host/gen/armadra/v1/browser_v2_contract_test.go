@@ -60,7 +60,8 @@ func TestBrowserControlSurface(t *testing.T) {
 		},
 		"browser_tab_list": &pb.BrowserTabList{
 			Tabs: []*pb.BrowserTab{
-				{TabId: "t1", Url: "http://127.0.0.1:8080/", Title: "首页", Active: false, NavigationEpoch: 4},
+				{TabId: "t1", Url: "http://127.0.0.1:8080/", Title: "首页", Active: false, NavigationEpoch: 4,
+					Favicon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=="},
 				{TabId: "t2", Url: "http://127.0.0.1:8081/弹窗", Title: "弹窗 😀", Active: true, OpenerTabId: "t1", NavigationEpoch: math.MaxUint64, Loading: true,
 					PendingDialog: &pb.BrowserDialog{DialogId: "d-2", TabId: "t2", Kind: pb.BrowserDialogKind_BROWSER_DIALOG_KIND_BEFORE_UNLOAD, Message: "离开此页？"}},
 			},
@@ -139,6 +140,20 @@ func TestBrowserControlSurface(t *testing.T) {
 		"browser_stream_hello": &pb.BrowserStreamClient{Message: &pb.BrowserStreamClient_Hello{Hello: &pb.BrowserSubscribeRequest{
 			SessionId: "browser-1", SubscriptionId: "sub-1", Visibility: pb.BrowserVisibility_BROWSER_VISIBILITY_FOCUSED,
 			BandwidthClass: pb.BrowserBandwidthClass_BROWSER_BANDWIDTH_CLASS_METERED, MaxWidth: 960,
+			AcceptedEncodings: []string{"webp", "jpeg"},
+		}}},
+		// The same frame in the other encoding a subscriber can negotiate. The
+		// RIFF/WEBP header is what a real Chrome screencast emits for
+		// `format: "webp"`, which the enum in the protocol dump does not list
+		// but the browser does accept (§2.9).
+		"browser_stream_frame_webp": &pb.BrowserStreamFrame{
+			SessionId: "browser-1", Generation: 3, FrameSeq: 12, NavigationEpoch: 4,
+			TabId: "t1", ViewportWidth: 960, ViewportHeight: 540, DeviceScaleFactor: 1,
+			Encoding: "webp", Data: []byte{0x52, 0x49, 0x46, 0x46, 0xf8, 0x01, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50},
+			CapturedAtUnixMs: 1788557900001,
+		},
+		"browser_result_upload": &pb.BrowserActionResult{RequestId: "请求-upload", Result: &pb.BrowserActionResult_Upload{Upload: &pb.BrowserUploadResponse{
+			Paths: []string{"docs/报告.pdf", "assets/图.png"}, TabId: "t2", AnsweredChooser: true,
 		}}},
 		"browser_stream_ack": &pb.BrowserStreamClient{Message: &pb.BrowserStreamClient_Ack{Ack: math.MaxUint64}},
 		"browser_stream_input": &pb.BrowserStreamClient{Message: &pb.BrowserStreamClient_Input{Input: &pb.BrowserInputRequest{
@@ -149,6 +164,7 @@ func TestBrowserControlSurface(t *testing.T) {
 		}}},
 		"browser_subscription_degraded": &pb.BrowserSubscription{
 			SubscriptionId: "sub-1", ExpiresAtUnixMs: 1788557900000, Quality: 45, MaxFps: 4, MaxWidth: 960,
+			Encoding: "webp",
 		},
 		"browser_activity_refused": &pb.BrowserActivity{
 			SessionId: "browser-1", Actor: "agent", ActorId: "node-2", Verb: "click", Target: "e4-12@t2/f3",

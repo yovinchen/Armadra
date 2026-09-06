@@ -98,7 +98,9 @@ message BrowserFrame {
   uint32 viewport_width = 5;
   uint32 viewport_height = 6;
   double device_scale_factor = 7;
-  // "jpeg"
+  // "jpeg" | "webp" — negotiated per session (§2.9). The workspace event
+  // channel only ever carries JPEG: it exists for clients that predate the
+  // dedicated stream, and those cannot say what they can decode.
   string encoding = 8;
   bytes data = 9;
   int64 captured_at_unix_ms = 10;
@@ -131,6 +133,12 @@ message BrowserSubscribeRequest {
   // the Host authenticates the device and does not forward that identity — so
   // it is only ever used to tell viewers apart, never to grant anything.
   string device_id = 7;
+  // Frame encodings this subscriber can decode, best first ("webp", "jpeg").
+  // Empty means JPEG only, which is what every client sent before this field
+  // existed. One page runs one screencast, so a session encodes WebP only
+  // when every live subscriber accepts it; the receipt below says which one
+  // was settled on rather than leaving the client to sniff the bytes.
+  repeated string accepted_encodings = 8;
 }
 
 message BrowserSubscription {
@@ -141,6 +149,8 @@ message BrowserSubscription {
   uint32 quality = 3;
   uint32 max_fps = 4;
   uint32 max_width = 5;
+  // "jpeg" | "webp" — the encoding the frames on this stream actually carry.
+  string encoding = 6;
 }
 
 /* -------------------------------- navigation ------------------------------ */
@@ -469,6 +479,7 @@ message BrowserActionResult {
     BrowserLease lease = 19;
     BrowserDialog dialog = 20;
     BrowserManagedState managed = 21;
+    BrowserUploadResponse upload = 22;
   }
 }
 
@@ -531,6 +542,13 @@ message BrowserTab {
   uint64 navigation_epoch = 6;
   bool loading = 7;
   BrowserDialog pending_dialog = 8;
+  // The tab's icon as a `data:` URL, resolved inside the controlled browser
+  // and capped at a few kilobytes. A URL would make every client that draws a
+  // tab strip fetch the site's icon from its own browser, with its own
+  // cookies — the controlled session is the one that is visiting the site, so
+  // it is the one that fetches. Empty when the page has none or it is too
+  // large (§2.8).
+  string favicon = 9;
 }
 
 message BrowserTabList {
@@ -696,6 +714,17 @@ message BrowserUploadRequest {
   uint64 lease_generation = 8;
 }
 
+// What `POST …/upload` answers. The paths come back exactly as they were
+// asked for — workspace-relative — so a client never learns an execution-host
+// absolute path from this route.
+message BrowserUploadResponse {
+  repeated string paths = 1;
+  string tab_id = 2;
+  // True when this answered a chooser the page had opened, rather than
+  // filling an `input[type=file]` directly (§2.3).
+  bool answered_chooser = 3;
+}
+
 enum BrowserTabAction {
   BROWSER_TAB_ACTION_UNSPECIFIED = 0;
   BROWSER_TAB_ACTION_LIST = 1;
@@ -743,7 +772,7 @@ message BrowserStreamFrame {
   uint32 viewport_width = 6;
   uint32 viewport_height = 7;
   double device_scale_factor = 8;
-  // "jpeg"
+  // "jpeg" | "webp" — whatever `BrowserSubscription.encoding` reported.
   string encoding = 9;
   bytes data = 10;
   int64 captured_at_unix_ms = 11;

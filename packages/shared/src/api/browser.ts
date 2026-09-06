@@ -108,6 +108,14 @@ export const browserTabSchema = z.object({
   navigationEpoch: z.number().int().nonnegative().default(0),
   loading: z.boolean().default(false),
   pendingDialog: browserDialogSchema.optional(),
+  /**
+   * 标签图标，`data:` URL，由受控浏览器自己取好再送上来。
+   *
+   * 不给 URL 让界面自己去拉：那会让每个画标签条的客户端用**自己**的浏览器
+   * 和 cookie 去访问那个站点，而正在访问它的是受控会话。取不到或超过上限
+   * 时是空串，界面退回首字母（§2.8）。
+   */
+  favicon: z.string().default(""),
 });
 
 export const browserTabListSchema = z.object({
@@ -210,6 +218,14 @@ export const browserUploadRequestSchema = z.object({
   leaseGeneration: z.number().int().nonnegative().optional(),
 });
 
+/** `POST …/upload` 的回包：路径原样回来，不会泄漏执行主机的绝对路径。 */
+export const browserUploadedSchema = z.object({
+  paths: z.array(z.string()).default([]),
+  tabId: z.string().default(""),
+  /** 真的答复了页面开的选择器，而不是直接往 `input[type=file]` 里填。 */
+  answeredChooser: z.boolean().default(false),
+});
+
 /* ------------------------------- 活动（§2.8） ------------------------------- */
 
 /** 只保留最近若干条在 session 内存里；持久记录仍是 `board-log.jsonl`。 */
@@ -232,6 +248,14 @@ export const browserActivityListSchema = z.object({
 
 /** 客户端说自己这条链路是什么，Worker 决定预算并在订阅回执里如实报告。 */
 export const BROWSER_BANDWIDTH_CLASSES = ["lan", "wan", "metered"] as const;
+
+/**
+ * 帧编码。一个页面只有一路 screencast，所以只有**所有**订阅者都说得出
+ * `webp` 时整条流才用 WebP；订阅回执里的 `encoding` 是实际结果，客户端照它
+ * 解码，不去嗅探字节（§2.9）。
+ */
+export const BROWSER_FRAME_ENCODINGS = ["jpeg", "webp"] as const;
+export const browserFrameEncodingSchema = z.enum(BROWSER_FRAME_ENCODINGS);
 
 /**
  * `navigationEpoch` 是「这一页」的编号：导航一次就 +1，旧 epoch 的输入
@@ -360,6 +384,8 @@ export const browserSubscribeRequestSchema = z.object({
   bandwidthClass: z.enum(BROWSER_BANDWIDTH_CLASSES).optional(),
   maxWidth: z.number().int().nonnegative().optional(),
   deviceId: z.string().optional(),
+  /** 这一端解得开的编码，好的在前；空数组等于「只有 JPEG」。 */
+  acceptedEncodings: z.array(browserFrameEncodingSchema).optional(),
 });
 export const browserSubscriptionSchema = z.object({
   subscriptionId: z.string(),
@@ -367,6 +393,8 @@ export const browserSubscriptionSchema = z.object({
   quality: z.number().int(),
   maxFps: z.number().int(),
   maxWidth: z.number().int().nonnegative().default(0),
+  /** 这条流实际发的编码；旧 Runtime 不带这个字段，按 JPEG 处理。 */
+  encoding: browserFrameEncodingSchema.default("jpeg"),
 });
 
 /** 稳定元素引用绑定 session/frame/epoch；导航后失效（§7）。 */
@@ -525,6 +553,8 @@ export type BrowserPressRequest = z.infer<typeof browserPressRequestSchema>;
 export type BrowserScrollDirection = (typeof BROWSER_SCROLL_DIRECTIONS)[number];
 export type BrowserScrollRequest = z.infer<typeof browserScrollRequestSchema>;
 export type BrowserUploadRequest = z.infer<typeof browserUploadRequestSchema>;
+export type BrowserUploaded = z.infer<typeof browserUploadedSchema>;
+export type BrowserFrameEncoding = (typeof BROWSER_FRAME_ENCODINGS)[number];
 export type BrowserActivity = z.infer<typeof browserActivitySchema>;
 export type BrowserActivityList = z.infer<typeof browserActivityListSchema>;
 export type BrowserBandwidthClass = (typeof BROWSER_BANDWIDTH_CLASSES)[number];

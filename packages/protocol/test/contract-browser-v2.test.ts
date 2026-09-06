@@ -161,6 +161,7 @@ describe("controlled browser: tabs, lease, dialogs, managed binary, stream", () 
           url: "http://127.0.0.1:8080/",
           title: "首页",
           navigationEpoch: 4n,
+          favicon: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==",
         },
         {
           tabId: "t2",
@@ -354,6 +355,19 @@ describe("controlled browser: tabs, lease, dialogs, managed binary, stream", () 
         },
       },
     });
+    // The upload route answers with a message of its own now, so a phone
+    // parses the body instead of guessing at it (§2.3).
+    check("browser_result_upload", BrowserActionResultSchema, {
+      requestId: "请求-upload",
+      result: {
+        case: "upload",
+        value: {
+          paths: ["docs/报告.pdf", "assets/图.png"],
+          tabId: "t2",
+          answeredChooser: true,
+        },
+      },
+    });
   });
 
   it("streams raw frames down and a closed set of messages up", () => {
@@ -379,8 +393,27 @@ describe("controlled browser: tabs, lease, dialogs, managed binary, stream", () 
           visibility: BrowserVisibility.FOCUSED,
           bandwidthClass: BrowserBandwidthClass.METERED,
           maxWidth: 960,
+          acceptedEncodings: ["webp", "jpeg"],
         },
       },
+    });
+    // A real Chrome answers `Page.startScreencast { format: "webp" }` with VP8
+    // WebP even though the protocol dump lists only jpeg/png, so the
+    // negotiated encoding travels as its own value rather than being sniffed.
+    check("browser_stream_frame_webp", BrowserStreamFrameSchema, {
+      sessionId: "browser-1",
+      generation: 3n,
+      frameSeq: 12n,
+      navigationEpoch: 4n,
+      tabId: "t1",
+      viewportWidth: 960,
+      viewportHeight: 540,
+      deviceScaleFactor: 1,
+      encoding: "webp",
+      data: new Uint8Array([
+        0x52, 0x49, 0x46, 0x46, 0xf8, 0x01, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
+      ]),
+      capturedAtUnixMs: 1788557900001n,
     });
     check("browser_stream_ack", BrowserStreamClientSchema, {
       message: { case: "ack", value: maxUint64 },
@@ -404,6 +437,7 @@ describe("controlled browser: tabs, lease, dialogs, managed binary, stream", () 
       quality: 45,
       maxFps: 4,
       maxWidth: 960,
+      encoding: "webp",
     });
     check("browser_activity_refused", BrowserActivitySchema, {
       sessionId: "browser-1",
