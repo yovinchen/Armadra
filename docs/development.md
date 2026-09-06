@@ -10,6 +10,22 @@
 | tmux    | 任意近版             | 默认终端后端；缺失时自动退回直连 PTY               |
 | macOS   | ≥ 13.3               | 桌面端打包目标；Web 端不限                         |
 
+## 一键脚本
+
+根目录的 `armadra.sh` 把下面各节串成子命令，任何一步失败即停止：
+
+| 命令 | 做什么 |
+| --- | --- |
+| `./armadra.sh doctor` | 检查 node / pnpm / rust / tmux / Xcode CLT |
+| `./armadra.sh install` | `pnpm install` + `cargo fetch` |
+| `./armadra.sh check` | shared 构建、TypeScript 类型检查、`cargo fmt --check`、clippy（警告即失败） |
+| `./armadra.sh test` | shared / web / Rust workspace 全部测试 |
+| `./armadra.sh build [--bundle]` | release 二进制 + sidecar + 前端产物；`--bundle` 再打 .app / .dmg |
+| `./armadra.sh run [desktop\|web]` | 桌面端 `tauri dev`，或 Runtime + 浏览器前端（⌃C 一起退出） |
+| `./armadra.sh all` | install → check → build → run |
+
+端口可用 `ARMADRA_RUNTIME_PORT` / `ARMADRA_WEB_PORT` 覆盖；43120 被占用（例如 Armadra.app 正在运行）时脚本会直接报错而不是抢端口。
+
 ## 安装
 
 ```bash

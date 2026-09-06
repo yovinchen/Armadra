@@ -58,6 +58,16 @@
 
 前置：Node.js ≥ 22、pnpm 11、Rust stable、tmux、macOS ≥ 13.3（桌面端）。
 
+一条命令从检查到运行：
+
+```bash
+./armadra.sh all        # doctor → install → check → build → run
+./armadra.sh run web    # 只起 Runtime 与浏览器里的前端
+./armadra.sh help       # 全部子命令
+```
+
+分步执行：
+
 ```bash
 pnpm install
 
