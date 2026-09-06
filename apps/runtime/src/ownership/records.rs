@@ -42,7 +42,7 @@ pub fn unsupported(detail: impl Into<String>) -> AppError {
     AppError::Conflict(format!("reverse.unsupported_entity: {}", detail.into()))
 }
 
-fn corrupt(detail: impl Into<String>) -> AppError {
+pub fn corrupt(detail: impl Into<String>) -> AppError {
     AppError::BadRequest(format!("reverse.package_invalid: {}", detail.into()))
 }
 
@@ -100,13 +100,23 @@ impl WorkspaceRecords {
             + self.annotations.len()) as u64
     }
 
-    /// The canonical record sequence: `revision` cleared everywhere and node
-    /// `assets` dropped. This is what both sides hash.
+    /// The canonical record sequence: `revision` cleared everywhere, node
+    /// `assets` dropped, and the workspace's permissions left out. This is
+    /// what both sides hash.
+    ///
+    /// The three excluded things are the three the canvas import does not
+    /// write. `revision` and `assets` are Host-side facts the Runtime has
+    /// nowhere to store; read/write/execute is the *filesystem* domain's
+    /// record (business migration §1.1), and the canvas entity carries only a
+    /// display copy of it. Hashing a field the import deliberately leaves
+    /// alone would make the round-trip comparison false the moment the
+    /// filesystem domain had changed it.
     pub fn canonical(&self) -> Vec<ReverseExportRecord> {
         let mut records = Vec::with_capacity(self.entity_count() as usize);
         if let Some(workspace) = &self.workspace {
             let mut value = workspace.clone();
             value.revision = 0;
+            value.permissions = None;
             records.push(ReverseExportRecord {
                 entity: Some(Entity::Workspace(value)),
             });
@@ -175,6 +185,12 @@ impl WorkspaceRecords {
                 Some(Entity::Node(node)) => result.nodes.push(node),
                 Some(Entity::Edge(edge)) => result.edges.push(edge),
                 Some(Entity::Annotation(annotation)) => result.annotations.push(annotation),
+                // Another domain's entity in a canvas package. It is refused
+                // rather than skipped: a rollback that dropped a record it did
+                // not recognise would hand the epoch back with a gap in it.
+                Some(Entity::WorkspaceRoot(_)) => {
+                    return Err(unsupported("a canvas package carries a workspace root"));
+                }
                 None => return Err(unsupported("an entity record names no known entity")),
             }
         }

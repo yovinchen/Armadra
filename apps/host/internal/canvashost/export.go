@@ -298,10 +298,15 @@ func encodeRecords(records []*pb.ReverseExportRecord) ([]byte, error) {
 	return payload, nil
 }
 
-// canonicalDigest hashes the same records with the two Host-side facts removed.
-// The Runtime cannot store either one, so a digest that included them could
-// never match the Runtime's re-read, and the comparison that decides whether a
-// rollback landed would be permanently false.
+// canonicalDigest hashes the same records with three things removed: the two
+// Host-side facts the Runtime cannot store, and the one field the canvas import
+// deliberately does not write.
+//
+// `revision` and node `assets` are the Host's own; read/write/execute is the
+// *filesystem* domain's record (business migration §1.1) and the canvas entity
+// carries only a display copy. Hashing any of them would make the comparison
+// that decides whether a rollback landed permanently false — for the last one,
+// from the moment the filesystem domain had changed a permission.
 func canonicalDigest(records []*pb.ReverseExportRecord) ([]byte, error) {
 	canonical := make([]*pb.ReverseExportRecord, 0, len(records))
 	for _, record := range records {
@@ -309,6 +314,7 @@ func canonicalDigest(records []*pb.ReverseExportRecord) ([]byte, error) {
 		switch entity := clone.Entity.(type) {
 		case *pb.ReverseExportRecord_Workspace:
 			entity.Workspace.Revision = 0
+			entity.Workspace.Permissions = nil
 		case *pb.ReverseExportRecord_Canvas:
 			entity.Canvas.Revision = 0
 		case *pb.ReverseExportRecord_Node:
