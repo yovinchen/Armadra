@@ -238,7 +238,16 @@ func (q *queue) run(entry scheduled) {
 			next.MessageCode = "git.operation.no_outcome"
 		}
 	}
-	if _, err = service.record(ctx, entry.workspaceID, next, running.GetRevision(), "finish"); err != nil {
+	// The row may have moved while the command ran: a progress report from the
+	// execution host advances the same entry. Re-reading the revision here is
+	// what keeps the outcome from being lost to a percentage — the outcome is
+	// the one write in this domain that must not fail a compare-and-set, since
+	// nothing else will ever say what happened.
+	expected := running.GetRevision()
+	if current, readErr := service.operation(ctx, entry.workspaceID, entry.operationID); readErr == nil {
+		expected = current.GetRevision()
+	}
+	if _, err = service.record(ctx, entry.workspaceID, next, expected, "finish"); err != nil {
 		return
 	}
 	// A write that changed the checkout invalidates the cached snapshot, so the

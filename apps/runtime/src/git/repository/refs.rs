@@ -277,6 +277,7 @@ impl RepositoryService {
                 let mut command = args(&[
                     "push",
                     "--porcelain",
+                    "--progress",
                     "--no-force",
                     "--no-mirror",
                     "--no-follow-tags",

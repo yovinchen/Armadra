@@ -389,9 +389,13 @@ pub(super) fn push_arguments(
     oid: &str,
     lease: Option<&ForceWithLease>,
 ) -> Vec<String> {
+    // `--progress` because stderr is a pipe here, not a terminal, and Git only
+    // reports counters when it believes somebody is watching. The percentages
+    // it writes are what the panel's bar moves on (Git 设计 §10).
     let mut arguments = args(&[
         "push",
         "--porcelain",
+        "--progress",
         "--no-force",
         "--no-mirror",
         "--no-follow-tags",

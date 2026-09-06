@@ -197,14 +197,29 @@ func serveHost(parent context.Context, c config) (err error) {
 	// can be absent -- without a Runtime binary there is no execution host to
 	// run a command on, and the surface says UNSUPPORTED rather than accepting
 	// a write it could never run.
+	// The executor and the queue depend on each other: the queue runs through
+	// the executor, and the executor's Workers report progress back into the
+	// queue. The sink is the cut — created first, attached once the queue
+	// exists, and never read before then because nothing has started a Worker
+	// yet.
+	gitReports := new(gitUpcallSink)
+	gitExec := newGitExecutor(c.runtimeBinary, state.ID, filepath.Join(c.dataDir, "git-worker"), gitReports)
 	repositoryQueue, err := githost.New(githost.Options{
 		Store:    database,
 		HostID:   state.ID,
 		Roots:    fileRoots,
-		Executor: newGitExecutor(c.runtimeBinary, state.ID),
+		Executor: gitExec,
 	})
 	if err != nil {
 		return err
+	}
+	gitReports.attach(repositoryQueue)
+	// The resident clone Worker is closed with this Host. A clone still running
+	// inside it ends with the process; its last recorded state stays in the
+	// store, so what is lost is the progress after that point rather than the
+	// record that a clone was started.
+	if closer, ok := gitExec.(interface{ Close() error }); ok {
+		defer func() { _ = closer.Close() }()
 	}
 	// Anything this Host left running when it stopped is settled before the
 	// queue accepts anything new. An entry still marked RUNNING while a fresh

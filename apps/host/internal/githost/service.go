@@ -284,6 +284,14 @@ func (s *Service) Enqueue(ctx context.Context, caller Caller, request *pb.Enqueu
 	if err != nil {
 		return nil, err
 	}
+	// The checkout has to be under the root this workspace registered. The
+	// execution host refuses the same path, and it is the one that can resolve
+	// a symlink — but a write aimed at an unrelated directory should not cost a
+	// process start to be told no, and a Frame whose binding drifted out of the
+	// project needs a reason it can repair rather than a generic failure.
+	if !insideRoot(root, request.GetScope().GetRepositoryPath()) {
+		return nil, ErrOutsideRoot
+	}
 	// A retry is answered before an identifier is minted. The entry's own id is
 	// generated here rather than taken from the request, so re-deriving it on a
 	// second attempt would produce a different entity and the idempotency

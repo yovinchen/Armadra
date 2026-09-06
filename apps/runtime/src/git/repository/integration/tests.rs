@@ -15,6 +15,7 @@ fn record(id: &str, state: OperationState) -> Arc<Operation> {
             },
             state,
             cancellation_requested: false,
+            progress: 0,
             created_at: "observed".into(),
             finished_at: Some("observed".into()),
             message: None,
@@ -22,6 +23,7 @@ fn record(id: &str, state: OperationState) -> Arc<Operation> {
         cancellation: Cancellation::default(),
         mutation_started: Arc::new(AtomicBool::new(false)),
         awaiting_resolution: AtomicBool::new(false),
+        progress: Arc::new(std::sync::atomic::AtomicU32::new(0)),
     })
 }
 

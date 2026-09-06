@@ -133,6 +133,29 @@ struct Operation {
     cancellation: Cancellation,
     mutation_started: Arc<AtomicBool>,
     awaiting_resolution: AtomicBool,
+    /// The newest percentage the running `git --progress` reported.
+    ///
+    /// An atomic rather than part of the snapshot's mutex because it is written
+    /// from the command's own output reader for every line, and a writer that
+    /// had to take the snapshot lock would contend with every poll. Shared
+    /// rather than owned because the command outlives the call that started it,
+    /// and the observer must not keep the whole entry alive to reach one
+    /// number.
+    progress: Arc<std::sync::atomic::AtomicU32>,
+}
+
+impl Operation {
+    /// The callback the command runner reports percentages to.
+    ///
+    /// It writes the counter and nothing else. Publishing the number — to the
+    /// panel, to the Host's event stream — belongs to whoever is watching the
+    /// operation, because a `git` command must never wait on a reader.
+    fn progress_observer(&self) -> Arc<dyn Fn(u32) + Send + Sync> {
+        let counter = self.progress.clone();
+        Arc::new(move |percent: u32| {
+            counter.store(percent, Ordering::SeqCst);
+        })
+    }
 }
 
 #[derive(Default)]
@@ -483,11 +506,35 @@ impl RepositoryService {
         mutation_started: Option<Arc<AtomicBool>>,
         environment: &[(String, String)],
     ) -> AppResult<CommandOutput> {
+        self.output_observed(
+            directory,
+            arguments,
+            timeout,
+            token,
+            mutation_started,
+            environment,
+            None,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn output_observed(
+        &self,
+        directory: &Path,
+        arguments: Vec<String>,
+        timeout: Duration,
+        token: &Cancellation,
+        mutation_started: Option<Arc<AtomicBool>>,
+        environment: &[(String, String)],
+        progress: Option<Arc<dyn Fn(u32) + Send + Sync>>,
+    ) -> AppResult<CommandOutput> {
         let arguments = crate::git::access::arguments(arguments, self.allow_helpers)?;
         let policy = GitRunPolicy {
             timeout,
             allow_helpers: self.allow_helpers,
             environment: environment.to_vec(),
+            progress,
         };
         let lease = self.command_lease()?;
         let directory = directory.to_owned();
@@ -542,12 +589,14 @@ impl RepositoryService {
         operation: &Operation,
     ) -> AppResult<()> {
         let output = self
-            .output(
+            .output_observed(
                 &context.repository,
                 arguments,
                 self.command_timeout,
                 &operation.cancellation,
                 Some(operation.mutation_started.clone()),
+                &[],
+                Some(operation.progress_observer()),
             )
             .await?;
         if output.status != Some(0) {

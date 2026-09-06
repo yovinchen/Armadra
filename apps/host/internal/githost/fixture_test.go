@@ -271,6 +271,36 @@ func (f *fixture) settled(id string) *pb.GitOperation {
 	}
 }
 
+// read is one entry as the store currently holds it.
+func (f *fixture) read(id string) *pb.GitOperation {
+	f.t.Helper()
+	operation, err := f.service.operation(fixtureContext, workspaceID, id)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return operation
+}
+
+// awaitState waits for one entry to reach a state. The queue runs in its own
+// goroutines, so a test that read the row once would be reading a race.
+func (f *fixture) awaitState(id string, state pb.GitOperationState) *pb.GitOperation {
+	f.t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		operation, err := f.service.operation(fixtureContext, workspaceID, id)
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			f.t.Fatal(err)
+		}
+		if err == nil && operation.GetState() == state {
+			return operation
+		}
+		if time.Now().After(deadline) {
+			f.t.Fatalf("operation %s never reached %v (state %v)", id, state, operation.GetState())
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+}
+
 // quiet waits for the queue to have nothing pending or running.
 func (f *fixture) quiet() {
 	f.t.Helper()

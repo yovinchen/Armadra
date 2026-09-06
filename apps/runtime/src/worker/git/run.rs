@@ -248,7 +248,7 @@ async fn run(root: &Path, operation: &GitOperation) -> AppResult<GitOperation> {
             let started = crate::git_api::REPOSITORIES
                 .start(workspace, path, request.action, expected)
                 .await?;
-            let settled = await_settled(&started.id).await?;
+            let settled = await_settled(&started.id, &id, &scope.repository_path).await?;
             (
                 Vec::new(),
                 match settled.state {
@@ -304,18 +304,34 @@ where
         .map_err(|_| AppError::Internal("The Git command could not be joined".into()))?
 }
 
-/// Waits for one repository operation to reach a final state.
+/// Waits for one repository operation to reach a final state, reporting what it
+/// sees on the way (Git 设计 §10, 进度).
 ///
 /// The service already runs it in the background and records what happened, so
 /// this is a read loop rather than a second execution path: whatever the
 /// operation ends as is what this reports, including a conflict that stopped
 /// for a person.
-async fn await_settled(id: &str) -> AppResult<crate::git_repository::OperationSnapshot> {
+///
+/// The loop is also where progress leaves this process. It is reported only
+/// when the number *changed*, so a fetch that spends a minute on one phase
+/// costs one frame rather than two thousand four hundred, and the Host's own
+/// rule — never backwards, never onto a settled entry — is what makes a frame
+/// that arrives late harmless.
+async fn await_settled(
+    id: &str,
+    operation_id: &str,
+    repository_path: &str,
+) -> AppResult<crate::git_repository::OperationSnapshot> {
     let deadline = tokio::time::Instant::now() + RUN_TIMEOUT;
+    let mut reported = 0;
     loop {
         let snapshot = crate::git_api::REPOSITORIES.operation(id)?;
         if snapshot.state.terminal() {
             return Ok(snapshot);
+        }
+        if snapshot.progress > reported {
+            reported = snapshot.progress;
+            super::progress::operation_progress(operation_id, repository_path, reported);
         }
         if tokio::time::Instant::now() >= deadline {
             // The command is still running and this side has stopped watching.

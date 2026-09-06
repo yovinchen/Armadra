@@ -153,6 +153,9 @@ func (s *Service) RepositoryState(ctx context.Context, caller Caller, request *p
 		if err != nil {
 			return nil, err
 		}
+		if !insideRoot(root, scope.GetRepositoryPath()) {
+			return nil, ErrOutsideRoot
+		}
 		state, err := s.executor.ObserveRepository(ctx, scope, root)
 		if err != nil {
 			return nil, err

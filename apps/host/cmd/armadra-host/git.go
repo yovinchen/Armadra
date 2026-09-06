@@ -2,50 +2,80 @@ package main
 
 import (
 	"context"
+	"os"
+	"sync"
 	"time"
 
 	pb "armadra.local/host/gen/armadra/v1"
 	"armadra.local/host/internal/githost"
+	"armadra.local/host/internal/storage"
 	"armadra.local/host/internal/worker"
 )
 
 // How this Host reaches Git (Go Host 业务所有权迁移 §2.8, §2.9).
 //
-// Every git frame runs in its own short-lived Worker, and that is a deliberate
-// choice rather than a missing optimisation. The exclusion that matters — one
-// write per worktree, refs taken in a fixed lock order — is established by the
-// Host's queue before a Worker is started at all, so a per-operation process
-// adds no race; what it does add is isolation. A `git rebase` that wedges, a
-// credential helper that hangs on a prompt, a hook that never returns: each of
-// those takes down one process that was running one operation, rather than the
-// resident Worker that also serves files and terminals.
+// There are two shapes of Worker here, and the difference between them is the
+// lifetime of the work rather than a preference.
 //
-// The Worker is started in the plain read-only mode: no state directory, so it
-// cannot run arbitrary commands, and no canvas database, so it cannot move an
-// epoch. The only thing it can do is answer git frames for the workspace root
-// the Host resolved from the filesystem domain and handed it.
+// **One Worker per operation.** A `git commit`, a `push`, a branch switch: the
+// exclusion that matters — one write per worktree, refs taken in a fixed lock
+// order — is established by the Host's queue before a Worker is started at all,
+// so a per-operation process adds no race; what it adds is isolation. A rebase
+// that wedges, a credential helper that hangs on a prompt, a hook that never
+// returns: each takes down one process that was running one operation, rather
+// than a resident Worker that also serves files and terminals.
 //
-// The cost is a process spawn per operation, which is small next to the `git`
-// subprocess it exists to run, and none at all on the read path a panel repaints
-// from — `Read` and `RepositoryState` pay it too, which is the honest trade to
-// record: this batch buys isolation and a simple lifetime with a spawn, and a
-// resident git Worker is the optimisation to make when the read path shows it
-// is needed.
+// **One resident Worker for clones.** A clone is the one thing whose job
+// outlives the frame that started it: `git clone` keeps running after the
+// answer is written, and the job lives in the Worker's own registry. A process
+// that ended would take the job with it and no later process could poll what it
+// began — which is why clones used to answer UNSUPPORTED. So the clone frames,
+// and only those, go to a Worker this Host keeps open.
+//
+// Both are started with a private state directory, which is what opens the
+// durable upcall outbox and lets the execution host report progress upward
+// (§2.9 上行帧 180). The earlier build withheld it deliberately, on the grounds
+// that a Worker without one cannot run arbitrary commands. That reasoning was
+// about a surface nobody can reach: the only thing that ever writes to this
+// process's stdin is this Host, and it writes git frames. What the directory
+// buys is the thing a person actually sees — a progress bar that moves during a
+// fetch, a push and a clone instead of a spinner that ends.
 type gitExecutor struct {
 	executable string
 	hostID     string
-	timeout    time.Duration
+	// stateDir opens the durable upcall outbox. Empty means this Host takes no
+	// progress reports and every Worker runs exactly as it did before.
+	stateDir string
+	upcalls  worker.UpcallSink
+	timeout  time.Duration
+
+	mu sync.Mutex
+	// resident serves the clone frames. It is opened on the first clone and
+	// kept until it fails, because a clone job cannot be polled from a
+	// different process than the one that started it.
+	resident *worker.Client
+	closed   bool
 }
 
 // newGitExecutor answers an untyped nil when there is no Runtime binary to run,
 // rather than a typed nil that would satisfy the interface and then fail on
 // every call. "This Host has no execution channel" is a thing the service
 // answers UNSUPPORTED for, and it has to be able to see it.
-func newGitExecutor(executable, hostID string) githost.Executor {
+func newGitExecutor(executable, hostID, stateDir string, upcalls worker.UpcallSink) githost.Executor {
 	if executable == "" {
 		return nil
 	}
-	return &gitExecutor{executable: executable, hostID: hostID, timeout: gitFrameTimeout}
+	if stateDir != "" {
+		// A state directory that cannot be made private is not used. Losing
+		// progress reports is visible and harmless; running with a directory
+		// somebody else can read is neither.
+		if err := os.MkdirAll(stateDir, 0o700); err != nil {
+			stateDir = ""
+		} else if err = storage.ProtectArtifactDirectory(stateDir); err != nil {
+			stateDir = ""
+		}
+	}
+	return &gitExecutor{executable: executable, hostID: hostID, stateDir: stateDir, upcalls: upcalls, timeout: gitFrameTimeout}
 }
 
 // gitFrameTimeout is the Worker transport's own ceiling for one frame, and this
@@ -55,20 +85,31 @@ func newGitExecutor(executable, hostID string) githost.Executor {
 // can outlast a minute, and when it does this Host reports UNKNOWN_OUTCOME —
 // which is the correct answer, because the frame ended without a reading and
 // nobody here knows whether the remote took it. What it costs is that an
-// operation which *did* succeed can be recorded as unknown, and resolving that
-// needs the resident git Worker rather than a longer timeout: a longer frame
-// would only move the same cliff further out.
+// operation which *did* succeed can be recorded as unknown. Progress reports do
+// not move that cliff; they only make it visible while it approaches.
 const gitFrameTimeout = time.Minute
+
+// cloneFrameTimeout bounds one *clone* frame, which is not the clone. Starting,
+// polling and cancelling a clone are each a question with an immediate answer;
+// the `git clone` itself runs on in the resident Worker and is bounded by that
+// Worker's own clone timeout, not by this.
+const cloneFrameTimeout = 30 * time.Second
+
+func (g *gitExecutor) options(timeout time.Duration) worker.Options {
+	return worker.Options{
+		Executable:     g.executable,
+		HostID:         g.hostID,
+		StateDir:       g.stateDir,
+		RequestTimeout: timeout,
+		Upcalls:        g.upcalls,
+	}
+}
 
 // with opens one Worker, runs `action`, and closes it. A Worker that did not
 // advertise the git capability is refused here rather than sent a frame it
 // would answer with an error.
 func (g *gitExecutor) with(ctx context.Context, action func(client *worker.Client) error) error {
-	client, err := worker.Start(ctx, worker.Options{
-		Executable:     g.executable,
-		HostID:         g.hostID,
-		RequestTimeout: g.timeout,
-	})
+	client, err := worker.Start(ctx, g.options(g.timeout))
 	if err != nil {
 		return err
 	}
@@ -77,6 +118,90 @@ func (g *gitExecutor) with(ctx context.Context, action func(client *worker.Clien
 		return githost.ErrUnsupported
 	}
 	return action(client)
+}
+
+// withResident runs `action` against the Worker this Host keeps open for
+// clones, starting it if there is none.
+//
+// A failure closes it. The next call then starts a fresh one, which is the only
+// honest recovery: a channel that answered an error is a channel whose clone
+// registry this Host can no longer reason about, and reusing it would report
+// progress for jobs that may no longer exist.
+func (g *gitExecutor) withResident(ctx context.Context, action func(client *worker.Client) error) error {
+	client, err := g.residentClient(ctx)
+	if err != nil {
+		return err
+	}
+	if err = action(client); err != nil {
+		g.dropResident(client)
+	}
+	return err
+}
+
+func (g *gitExecutor) residentClient(ctx context.Context) (*worker.Client, error) {
+	g.mu.Lock()
+	if g.closed {
+		g.mu.Unlock()
+		return nil, githost.ErrUnsupported
+	}
+	if g.resident != nil {
+		client := g.resident
+		g.mu.Unlock()
+		return client, nil
+	}
+	g.mu.Unlock()
+	// Started outside the lock: spawning a process takes long enough that
+	// holding a mutex across it would serialize every clone status poll behind
+	// one start. A second start that loses the race is closed below.
+	client, err := worker.Start(context.WithoutCancel(ctx), g.options(cloneFrameTimeout))
+	if err != nil {
+		return nil, err
+	}
+	if !client.SupportsGit() {
+		_ = client.Close()
+		return nil, githost.ErrUnsupported
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closed {
+		_ = client.Close()
+		return nil, githost.ErrUnsupported
+	}
+	if g.resident != nil {
+		_ = client.Close()
+		return g.resident, nil
+	}
+	g.resident = client
+	return client, nil
+}
+
+func (g *gitExecutor) dropResident(client *worker.Client) {
+	g.mu.Lock()
+	if g.resident == client {
+		g.resident = nil
+	} else {
+		client = nil
+	}
+	g.mu.Unlock()
+	if client != nil {
+		_ = client.Close()
+	}
+}
+
+// Close stops the resident clone Worker. A clone still running inside it ends
+// with the process, which is the same thing that happens when the Host stops
+// for any other reason — and the job's last recorded state stays in the store,
+// so what is lost is the progress after that point, never the record that a
+// clone was started.
+func (g *gitExecutor) Close() error {
+	g.mu.Lock()
+	client := g.resident
+	g.resident, g.closed = nil, true
+	g.mu.Unlock()
+	if client == nil {
+		return nil
+	}
+	return client.Close()
 }
 
 func (g *gitExecutor) RunGitOperation(ctx context.Context, operation *pb.GitOperation, workspaceRoot string) (*pb.GitOperation, error) {
@@ -109,31 +234,55 @@ func (g *gitExecutor) ObserveRepository(ctx context.Context, scope *pb.Repositor
 	return state, err
 }
 
+// cloneMethod names the reads whose work outlives the frame, and which
+// therefore have to reach the same process every time.
+func cloneMethod(method pb.GitReadMethod) bool {
+	switch method {
+	case pb.GitReadMethod_GIT_READ_METHOD_CLONE_START,
+		pb.GitReadMethod_GIT_READ_METHOD_CLONE_STATUS,
+		pb.GitReadMethod_GIT_READ_METHOD_CLONE_CANCEL:
+		return true
+	default:
+		return false
+	}
+}
+
 func (g *gitExecutor) ReadGit(ctx context.Context, read *pb.GitRead) (*pb.GitReadResult, error) {
 	var result *pb.GitReadResult
-	err := g.with(ctx, func(client *worker.Client) error {
+	run := func(client *worker.Client) error {
 		value, err := client.ReadGit(ctx, read)
 		result = value
 		return err
-	})
+	}
+	if cloneMethod(read.GetMethod()) {
+		return result, g.withResident(ctx, run)
+	}
+	err := g.with(ctx, run)
 	return result, err
 }
 
-// GitSnapshot asks a fresh Worker what it holds, which is always nothing: a
-// process that has just started has no queue. That is the correct answer rather
-// than a useless one — this Host runs every git operation in its own Worker, so
-// "what does the Runtime still hold" is genuinely zero, and the check that
-// matters for a switch is the *Host's* own queue, which `githost` reads
-// directly.
+// GitSnapshot asks what the execution host still holds.
 //
-// It is still asked over the channel rather than answered here, because the
-// statement has to come from the side that would know if it were not true.
+// It is asked of the resident Worker when there is one, because that is the
+// process a clone would be running in: a fresh Worker has never started
+// anything and would truthfully answer zero to a question about somebody else.
+// With no resident Worker a fresh one is asked, and its zero is the real
+// answer — nothing of this Host's is in flight anywhere.
 func (g *gitExecutor) GitSnapshot(ctx context.Context) (*pb.GitDomainSnapshot, error) {
 	var snapshot *pb.GitDomainSnapshot
-	err := g.with(ctx, func(client *worker.Client) error {
+	run := func(client *worker.Client) error {
 		result, err := client.GitSnapshot(ctx)
 		snapshot = result
 		return err
-	})
+	}
+	g.mu.Lock()
+	resident := g.resident
+	g.mu.Unlock()
+	if resident != nil {
+		if err := g.withResident(ctx, run); err == nil {
+			return snapshot, nil
+		}
+	}
+	err := g.with(ctx, run)
 	return snapshot, err
 }

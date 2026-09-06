@@ -104,6 +104,17 @@ var (
 	// ErrTerminal means the operation has already finished. Cancelling it would
 	// be a statement about something that is no longer happening.
 	ErrTerminal = errors.New("that git operation has already finished")
+	// ErrOutsideRoot means the checkout is not under the root the filesystem
+	// domain registered for this workspace (Git 设计 §5.1, §5.3).
+	//
+	// It is its own error rather than a plain authorization failure because it
+	// names the fixable thing. A Frame bound to a worktree somebody moved out
+	// of the project is not a device without a grant; it is a binding that
+	// drifted, and the panel's repair is to re-point or unbind it. The
+	// execution host refuses the same path for the same reason — this is the
+	// Host making the same statement about a request it can decide without
+	// starting a process.
+	ErrOutsideRoot = errors.New("that checkout is outside the workspace root")
 )
 
 // Domain is the name this package is registered under in the switch order.
@@ -130,6 +141,53 @@ func validPath(value string) bool {
 		}
 	}
 	return true
+}
+
+// insideRoot reports whether an absolute checkout path lies within the
+// workspace root the filesystem domain registered (Git 设计 §5.1).
+//
+// It is a *textual* containment check on two already-canonical absolute paths,
+// and it is deliberately not more than that: the directories are on the
+// execution host, so resolving symlinks here would be this Host guessing about
+// a filesystem it cannot see. The execution host makes the same check against
+// the real directory and is the one that can refuse a symlink that leaves the
+// root; this refuses the shapes that never needed a filesystem to be wrong —
+// a sibling directory, a parent, an unrelated tree — before a process is
+// started for them.
+//
+// Separators are normalized because a Host on one operating system queues
+// operations for execution hosts on another, and the comparison is on segment
+// boundaries so `/project-old` is not read as being inside `/project`.
+func insideRoot(root, path string) bool {
+	if root == "" || path == "" {
+		return false
+	}
+	root, path = normalizeRoot(root), normalizeRoot(path)
+	if path == root {
+		return true
+	}
+	return strings.HasPrefix(path, root+"/")
+}
+
+// normalizeRoot puts one absolute path into the single spelling this comparison
+// uses: forward separators, no trailing slash, and no leading `/private`.
+//
+// The last of those is not cosmetic. On macOS `/var/folders/…` and
+// `/private/var/folders/…` are the same directory reached through a symlinked
+// prefix, and both are ordinary: a registration canonicalizes to one while a
+// client that read the path from somewhere else holds the other. Comparing the
+// strings as given would refuse a checkout inside the very root registered for
+// it — the same trap `worker/git.rs` avoids by canonicalizing both sides, which
+// this Host cannot do because the directory is on another machine.
+func normalizeRoot(value string) string {
+	value = strings.ReplaceAll(value, "\\", "/")
+	for len(value) > 1 && strings.HasSuffix(value, "/") {
+		value = value[:len(value)-1]
+	}
+	if trimmed, found := strings.CutPrefix(value, "/private/"); found {
+		value = "/" + trimmed
+	}
+	return value
 }
 
 // windowsAbsolute recognises `C:\dir` and `\\server\share`. A Host on Linux

@@ -61,6 +61,12 @@ func gitFailure(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "CONFLICT", "ownership_moved")
 	case errors.Is(err, auth.ErrUnauthenticated):
 		writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "Device session is invalid or expired")
+	case errors.Is(err, githost.ErrOutsideRoot):
+		// Its own message, not the generic permission one. A Frame bound to a
+		// worktree that was moved out of the project is not a device without a
+		// grant, and the repair — re-point the binding or unbind it — is only
+		// findable if the answer says which of the two happened.
+		writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "git.checkout_outside_workspace_root")
 	case errors.Is(err, auth.ErrPermission), errors.Is(err, githost.ErrAuthorization):
 		writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "Git permission or CSRF check failed")
 	case errors.Is(err, githost.ErrNotFound), errors.Is(err, storage.ErrNotFound):

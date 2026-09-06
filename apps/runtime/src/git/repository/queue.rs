@@ -33,6 +33,14 @@ pub struct OperationSnapshot {
     pub action: RepositoryAction,
     pub state: OperationState,
     pub cancellation_requested: bool,
+    /// 0-100, as the running `git --progress` reported it (Git 设计 §10).
+    ///
+    /// It is a display value: only the network commands produce one, it can
+    /// stall, and a finished operation reports 100 whether or not `git` ever
+    /// printed it. `default` so an execution host of an older build still
+    /// deserializes here.
+    #[serde(default)]
+    pub progress: u32,
     pub created_at: String,
     pub finished_at: Option<String>,
     pub message: Option<String>,
@@ -73,6 +81,7 @@ impl RepositoryService {
             action: action.clone(),
             state: OperationState::Queued,
             cancellation_requested: false,
+            progress: 0,
             created_at: now(),
             finished_at: None,
             message: None,
@@ -82,6 +91,7 @@ impl RepositoryService {
             cancellation: Cancellation::default(),
             mutation_started: Arc::new(AtomicBool::new(false)),
             awaiting_resolution: AtomicBool::new(false),
+            progress: Arc::new(std::sync::atomic::AtomicU32::new(0)),
         });
         {
             // This gate also protects the insertion itself: a request that
@@ -167,7 +177,7 @@ impl RepositoryService {
         let operation = registry
             .get(id)
             .ok_or_else(|| AppError::NotFound("Git operation is unavailable".into()))?;
-        Ok(operation.snapshot.lock().expect("Git operation").clone())
+        Ok(read_snapshot(operation))
     }
 
     pub fn cancel(&self, id: &str) -> AppResult<OperationSnapshot> {
@@ -179,12 +189,14 @@ impl RepositoryService {
             .get(id)
             .cloned()
             .ok_or_else(|| AppError::NotFound("Git operation is unavailable".into()))?;
-        let mut snapshot = operation.snapshot.lock().expect("Git operation");
-        if !snapshot.state.terminal() {
-            snapshot.cancellation_requested = true;
-            operation.cancellation.cancel();
+        {
+            let mut snapshot = operation.snapshot.lock().expect("Git operation");
+            if !snapshot.state.terminal() {
+                snapshot.cancellation_requested = true;
+                operation.cancellation.cancel();
+            }
         }
-        Ok(snapshot.clone())
+        Ok(read_snapshot(&operation))
     }
 
     /// What this process still has in flight, across every workspace.
@@ -236,12 +248,35 @@ impl RepositoryService {
             .rev()
             .filter_map(|id| registry.get(id))
             .filter_map(|operation| {
-                let snapshot = operation.snapshot.lock().expect("Git operation");
-                (snapshot.repository_id == repository_id && snapshot.workspace_root == workspace)
-                    .then(|| snapshot.clone())
+                let matches = {
+                    let snapshot = operation.snapshot.lock().expect("Git operation");
+                    snapshot.repository_id == repository_id && snapshot.workspace_root == workspace
+                };
+                matches.then(|| read_snapshot(operation))
             })
             .collect())
     }
+}
+
+/// One entry as a caller reads it: the recorded snapshot with the live
+/// percentage folded in.
+///
+/// The two are stored apart because they are written from different places at
+/// different rates — the state by the operation's own task under a mutex, the
+/// percentage by the command's output reader for every line — and joining them
+/// here is what keeps a `git push` from taking a lock to say it reached 40%.
+///
+/// A settled operation reports 100 whichever number the command last printed.
+/// `git` does not always finish on a round percentage, and a bar frozen at 97
+/// beside a row that says "succeeded" is a worse lie than one that completes.
+fn read_snapshot(operation: &Operation) -> OperationSnapshot {
+    let mut snapshot = operation.snapshot.lock().expect("Git operation").clone();
+    snapshot.progress = if snapshot.state.terminal() {
+        100
+    } else {
+        operation.progress.load(Ordering::SeqCst).min(100)
+    };
+    snapshot
 }
 
 /// Awaiting integration records are capabilities referenced by live owners.

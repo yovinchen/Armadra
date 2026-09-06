@@ -233,6 +233,7 @@ impl RepositoryService {
             vec![
                 "fetch".into(),
                 "--atomic".into(),
+                "--progress".into(),
                 "--no-prune".into(),
                 "--no-prune-tags".into(),
                 "--no-tags".into(),

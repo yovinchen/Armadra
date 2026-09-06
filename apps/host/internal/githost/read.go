@@ -2,6 +2,8 @@ package githost
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 
 	pb "armadra.local/host/gen/armadra/v1"
 	"google.golang.org/protobuf/proto"
@@ -66,6 +68,24 @@ func (s *Service) Read(ctx context.Context, caller Caller, request *pb.ReadGitRe
 	if err != nil {
 		return nil, err
 	}
+	// Same containment rule as a write, and for the same reason: a read of a
+	// checkout outside the registered root is a read of a directory this
+	// workspace's grants never covered. The workspace-wide scan names no
+	// checkout, so it is exempt by construction.
+	if read.GetMethod() != pb.GitReadMethod_GIT_READ_METHOD_REPOSITORIES &&
+		!insideRoot(root, read.GetScope().GetRepositoryPath()) {
+		return nil, ErrOutsideRoot
+	}
+	// The binding check is the one read whose *body* names a directory. It is
+	// checked here rather than only on the execution host because a binding
+	// that drifted out of the project is exactly the case this answer exists
+	// for, and the answer must be the named refusal rather than a verdict about
+	// a directory nobody registered.
+	if read.GetMethod() == pb.GitReadMethod_GIT_READ_METHOD_WORKTREE_BINDING {
+		if err = validBindingBody(root, read.GetRequestJson()); err != nil {
+			return nil, err
+		}
+	}
 	forwarded, _ := proto.Clone(read).(*pb.GitRead)
 	if forwarded.GetScope() == nil {
 		forwarded.Scope = &pb.RepositoryScope{WorkspaceId: caller.WorkspaceID}
@@ -86,14 +106,58 @@ func (s *Service) Read(ctx context.Context, caller Caller, request *pb.ReadGitRe
 // itself. Asking a CLI to draft a commit message starts a program with the
 // user's own model account, which is execution however read-only its effect on
 // the repository is.
+//
+// The clone methods are here for a plainer reason: starting a clone makes the
+// machine fetch a repository and lands a directory on disk. It travels on the
+// read channel because it has no repository to lock yet, not because it is a
+// read, and a device holding only `git:read` must not be able to start one
+// through the channel's own shape.
 func executeRead(method pb.GitReadMethod) bool {
 	switch method {
 	case pb.GitReadMethod_GIT_READ_METHOD_MESSAGE_PROVIDERS,
-		pb.GitReadMethod_GIT_READ_METHOD_MESSAGE_SOURCE:
+		pb.GitReadMethod_GIT_READ_METHOD_MESSAGE_SOURCE,
+		pb.GitReadMethod_GIT_READ_METHOD_CLONE_START,
+		pb.GitReadMethod_GIT_READ_METHOD_CLONE_CANCEL:
 		return true
 	default:
 		return false
 	}
+}
+
+// bindingBody is the part of a `WORKTREE_BINDING` request this Host reads. The
+// rest travels through untouched; what is decoded here is only what has to be
+// decided before a process is started for it.
+type bindingBody struct {
+	WorktreePath string `json:"worktreePath"`
+}
+
+// validBindingBody checks the directory a Frame binding names (Git 设计 §5.1).
+//
+// A relative path is left alone: it is resolved against the root by the
+// execution host, which is the side that can. An absolute one is checked here,
+// because an absolute path is a claim about a specific directory and this Host
+// can already tell whether that directory is one this workspace registered.
+func validBindingBody(root string, body []byte) error {
+	if len(body) == 0 {
+		return ErrInvalid
+	}
+	var decoded bindingBody
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		return ErrInvalid
+	}
+	path := strings.TrimSpace(decoded.WorktreePath)
+	if path == "" || len(path) > MaxPathBytes || strings.ContainsRune(path, 0) {
+		return ErrInvalid
+	}
+	if !strings.HasPrefix(path, "/") && !windowsAbsolute(path) {
+		// Relative, and therefore resolved inside the root by the execution
+		// host. A traversal is refused there, against the real directory.
+		return nil
+	}
+	if !insideRoot(root, path) {
+		return ErrOutsideRoot
+	}
+	return nil
 }
 
 // GenerateMessage asks the execution host for an AI commit-message draft
@@ -119,6 +183,9 @@ func (s *Service) GenerateMessage(ctx context.Context, caller Caller, request *p
 	root, err := s.workspaceRoot(ctx, caller.WorkspaceID)
 	if err != nil {
 		return nil, err
+	}
+	if !insideRoot(root, request.GetScope().GetRepositoryPath()) {
+		return nil, ErrOutsideRoot
 	}
 	result, err := s.executor.ReadGit(ctx, &pb.GitRead{
 		Scope:         proto.Clone(request.GetScope()).(*pb.RepositoryScope),
