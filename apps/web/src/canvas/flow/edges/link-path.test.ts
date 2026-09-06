@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { Box } from "../geometry";
+import type { Box } from "../../geometry";
 import { linkCurve, pointOnCurve, sampleCurve } from "./link-path";
 
 /**

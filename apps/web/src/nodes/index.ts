@@ -1,5 +1,5 @@
 /**
- * 节点模块的对外面（计划书 §13.2 / tldraw 计划 §9.4）。
+ * 节点模块的对外面（计划书 §13.2 / React Flow 计划 §2.2）。
  *
  * 画布侧的入口不再是 React Flow 的 `nodeTypes`，而是 `canvas/shapes/
  * ArmadraShapeUtil` —— 它按 `NODE_BODY` 渲染节点体，按 `NODE_META` 夹住最小

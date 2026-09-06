@@ -13,7 +13,7 @@ import {
 import { WorktreeBindingLayer } from "./WorktreeBindingBadge";
 
 /**
- * 派生层（tldraw 计划 §4.4）：rope 等待关系 + 子代理卡片。
+ * 派生层（旧画布契约 §4.4）：rope 等待关系 + 子代理卡片。
  *
  * 挂在 `components.OnTheCanvas` 上，也就是 `.tl-html-layer` 里面——那一层
  * 已经被相机变换过了，所以这里的坐标**就是页面坐标**，不必自己乘缩放。

@@ -1,9 +1,9 @@
 import type { AgentGlow } from "@/agent/status-store";
 
 /**
- * 缩略图的几何与配色（tldraw 计划 §3.2 / Phase 2「overlays」）。
+ * 缩略图的几何与配色（旧画布契约 §3.2 / Phase 2「overlays」）。
  *
- * 为什么不用 tldraw 的 `DefaultMinimap`：`MinimapManager` 把整页 shape 合成
+ * 为什么不用旧引擎的缩略图：它把整页对象合成
  * **两条** `Path2D`（选中 / 未选中），再各刷一次颜色，颜色来自容器上的 4 个
  * 全局变量（`--tl-color-text-3 / -selected / -muted-1 / -low`）。也就是说
  * 「按 shape 上色」在它的渲染模型里没有位置——要么给库打补丁，要么自己画。

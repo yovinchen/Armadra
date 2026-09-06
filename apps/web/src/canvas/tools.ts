@@ -16,37 +16,24 @@ import {
   Triangle,
   Type,
 } from "lucide-react";
-import type { TLGeoShapeGeoStyle } from "@tldraw/tlschema";
 
 import type { CanvasCommandId } from "./commands";
+import { CANVAS_TOOL_IDS, type CanvasToolId } from "./interaction/tool-store";
+import { GEOS, isItemId, type Geo } from "./whiteboard/model";
 
 /**
- * 白板工具表（tldraw 计划 §5「Dock 工具组」）。
+ * 白板工具表（React Flow 计划 F21）。
  *
  * 一份规格驱动三处：Dock 的工具组、`keybindings.ts` 的 `canvas.tool.*`
- * 命令、`TldrawWorkspace` 注册的命令实现。id 就是 tldraw 自己的工具 id
- * （`editor.setCurrentTool(id)` / `editor.getCurrentToolId()`），所以这里
- * **不做映射表**，改动只有一处。
+ * 命令、`FlowWorkspace` 注册的命令实现。工具 id 从旧引擎换成我们自己的
+ * （`interaction/tool-store.ts`），集合一个没变，所以这里仍然**没有映射表**。
  *
- * `image` 不是 tldraw 的工具（5.4 没有 image tool），它在 Dock 上是一个
- * 触发文件选择的按钮，落到 `putExternalContent({ type: "files" })`——
- * 也就是 content agent 的外部内容处理器。所以它单列在 `IMAGE_TOOL`。
+ * `image` 不是工具：它在 Dock 上是一个触发文件选择的按钮，落到
+ * `dnd/external-content.ts` 的图片分支，所以单列在 `IMAGE_TOOL`。
  */
 
-/** tldraw 里真的存在、并且我们开放给用户的工具 id。 */
-export const CANVAS_TOOL_IDS = [
-  "select",
-  "hand",
-  "draw",
-  "highlight",
-  "geo",
-  "line",
-  "arrow",
-  "text",
-  "frame",
-] as const;
-
-export type CanvasToolId = (typeof CANVAS_TOOL_IDS)[number];
+export { CANVAS_TOOL_IDS };
+export type { CanvasToolId };
 
 export interface CanvasToolSpec {
   id: CanvasToolId;
@@ -115,8 +102,16 @@ export const CANVAS_TOOLS: readonly CanvasToolSpec[] = [
 ];
 
 /**
- * 图片：不是 tldraw 工具（5.4 没有 image tool），所以它没有命令、没有键位。
- * Dock 上那个按钮自己开文件选择，把文件交给 `putExternalContent`。
+ * B0 只开放选择与手：白板层（画笔 / 形状 / 直线 / 箭头 / 文字 / 画框 /
+ * 图片）在 B2 落地，那之前这些按钮点了没有任何反应，所以先禁用。
+ * B2 把这张表删掉，`DockTools` 里的 `disabled` 判断也跟着回到只看锁定。
+ */
+export const TOOLS_ENABLED_IN_B0: ReadonlySet<CanvasToolId> =
+  new Set<CanvasToolId>(["select", "hand"]);
+
+/**
+ * 图片：不是工具，所以它没有命令、没有键位。
+ * Dock 上那个按钮自己开文件选择，把文件交给外部内容处理器。
  */
 export const IMAGE_TOOL: { labelKey: string; icon: LucideIcon } = {
   labelKey: "tool.image",
@@ -126,14 +121,13 @@ export const IMAGE_TOOL: { labelKey: string; icon: LucideIcon } = {
 /* ------------------------------ 形状下拉 --------------------------------- */
 
 export interface GeoOption {
-  geo: TLGeoShapeGeoStyle;
+  geo: Geo;
   labelKey: string;
   icon: LucideIcon;
 }
 
 /**
- * 形状按钮的下拉。`geo` 是 tldraw 的样式属性（`GeoShapeGeoStyle`），
- * 选一项 = 把它写进「下一个 shape 的样式」再切到 `geo` 工具，
+ * 形状按钮的下拉。选一项 = 把它写进 `tool-store.nextStyle` 再切到形状工具，
  * 所以样式面板里的形状选择器与这里永远是同一个值。
  */
 export const GEO_OPTIONS: readonly GeoOption[] = [
@@ -145,7 +139,10 @@ export const GEO_OPTIONS: readonly GeoOption[] = [
   { geo: "star", labelKey: "geo.star", icon: Star },
 ];
 
-/** 当前 geo 样式对应的图标；未知值退回矩形。 */
+/** 表与类型必须同步：漏一种几何形是编译错误，不是运行时惊喜。 */
+export const GEO_IDS: readonly Geo[] = GEOS;
+
+/** 当前几何形对应的图标；未知值退回矩形。 */
 export function geoIcon(geo: string): LucideIcon {
   return GEO_OPTIONS.find((option) => option.geo === geo)?.icon ?? Square;
 }
@@ -156,7 +153,7 @@ export function geoIcon(geo: string): LucideIcon {
  * 锁定视图时哪些工具要置灰。
  *
  * 锁定锁的是相机，但「能画」而「不能平移」是自相矛盾的状态，所以除了
- * 选择之外全部禁用（§5 的锁定项 + Phase 3 第 6 条）。
+ * 选择之外全部禁用。
  */
 export function isToolDisabledWhenLocked(id: string): boolean {
   return id !== "select";
@@ -164,77 +161,55 @@ export function isToolDisabledWhenLocked(id: string): boolean {
 
 /* ------------------------------ 样式面板 --------------------------------- */
 
-/** 我们自己的节点 shape 类型；它没有任何 tldraw 样式。 */
-export const NODE_SHAPE_TYPE = "armadra";
-
-/** 是不是「白板原生」shape（有 tldraw 样式、归样式面板管）。 */
-export function isWhiteboardShapeType(type: string): boolean {
-  return type !== NODE_SHAPE_TYPE;
-}
-
 /**
- * 样式面板显隐（§12 第 2 条：复用 tldraw 的面板，只决定什么时候出现）。
+ * 样式面板显隐（§2.4）。两种情况显示：
  *
- * 两种情况显示：
  *  1. 当前工具不是选择——马上要画的东西需要先挑颜色粗细；
- *  2. 选中项里有白板 shape——它们真的有样式可改。
+ *  2. 选中项里有白板对象——它们真的有样式可改。
  *
- * 选中的全是 `armadra` 节点时隐藏：节点的颜色走自己的右键菜单，
- * tldraw 的面板对它们只会显示一个没用的透明度滑块。
+ * 选中的全是节点时隐藏：节点的颜色走自己的右键菜单。
  */
 export function shouldShowStylePanel(
   toolId: string,
-  selectedTypes: readonly string[],
+  selectedIds: readonly string[],
 ): boolean {
   if (toolId !== "select") return true;
-  return selectedTypes.some(isWhiteboardShapeType);
+  return selectedIds.some(isItemId);
 }
 
 /* -------------------------------- 删除 ----------------------------------- */
-
-/** `canvas.delete` 分流用的一条选中项。 */
-export interface SelectedShapeInfo {
-  /** tldraw 的 shape id。 */
-  id: string;
-  type: string;
-  /** 箭头的 `meta.armadra.id`（边 id）；不是边就是 null。 */
-  edgeId: string | null;
-  /** shape id 能还原出的节点 id；不是节点 shape 就是 null。 */
-  nodeId: string | null;
-}
 
 export interface DeleteSplit {
   /** 走 `store.removeNodes`（可能先弹会话确认框）。 */
   nodes: string[];
   /** 走 `store.removeEdges`。 */
   edges: string[];
-  /** 纯白板 shape，直接 `editor.deleteShapes`。 */
-  shapes: string[];
+  /** 白板对象，走 `whiteboard.removeItems`（B2）。 */
+  items: string[];
 }
 
 /**
- * 把一次选中拆成「节点 / 边 / 白板 shape」三堆（Phase 2 遗留待办 1）。
+ * 把一次选中拆成「节点 / 边 / 白板对象」三堆（F17）。
  *
- * 认边看的是 `meta.armadra.id` 而不是 shape id——用户拖出来的箭头 id 是随机的。
- * 认不出的箭头（没绑定、或只绑了一端）是白板内容，直接删。
- * 认不出的 `armadra` shape 一概不动：文档里没有它，删了也同步不回去。
+ * 判据就是 id：`wb:` 前缀是白板对象，其余按 `nodes` / `edges` 两张表查。
+ * 两张表都不认的 id 一概丢掉——文档里没有它，删了也同步不回去。
  */
 export function splitSelectionForDelete(
-  selected: readonly SelectedShapeInfo[],
+  selected: readonly string[],
   knownNodeIds: ReadonlySet<string>,
   knownEdgeIds: ReadonlySet<string>,
 ): DeleteSplit {
-  const split: DeleteSplit = { nodes: [], edges: [], shapes: [] };
-  for (const shape of selected) {
-    if (shape.nodeId !== null) {
-      if (knownNodeIds.has(shape.nodeId)) split.nodes.push(shape.nodeId);
+  const split: DeleteSplit = { nodes: [], edges: [], items: [] };
+  for (const id of selected) {
+    if (isItemId(id)) {
+      split.items.push(id);
       continue;
     }
-    if (shape.edgeId !== null && knownEdgeIds.has(shape.edgeId)) {
-      split.edges.push(shape.edgeId);
+    if (knownNodeIds.has(id)) {
+      split.nodes.push(id);
       continue;
     }
-    split.shapes.push(shape.id);
+    if (knownEdgeIds.has(id)) split.edges.push(id);
   }
   return split;
 }

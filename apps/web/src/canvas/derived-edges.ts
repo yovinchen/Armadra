@@ -20,7 +20,7 @@ import { useCanvasStore } from "@/store/canvas-store";
  *    刷新页面后绳子消失是可以接受的：它描述的是这次运行里的因果，不是数据。
  *  - **subagent**：父 Agent → 它的临时子代理卡片。
  *
- * 它们不是 tldraw 的 shape：`overlays/CanvasOverlays.tsx` 在
+ * 它们不是画布上的对象：`overlays/CanvasOverlays.tsx` 在
  * `components.OnTheCanvas` 里画一层 SVG，位置直接用页面坐标。
  */
 

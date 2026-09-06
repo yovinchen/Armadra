@@ -1,207 +1,159 @@
 /*
- * tldraw 换肤（docs/contracts/tldraw-canvas-plan.md §5「tldraw UI 槽位」）。
+ * React Flow 换肤（docs/design/canvas-react-flow.md §4.2）。
  *
- * §12 第 2 条：样式面板与缩略图复用 tldraw 的默认实现，但外观必须和
- * Dock、设置页、侧栏是同一套。做法是把 tldraw 的 `--tl-*` 变量整体重定向到
- * `tokens.css`，而不是逐条覆盖它的规则——这样 tldraw 升级时只要变量名没变，
- * 换肤就还在。剩下的几条规则只处理变量表达不了的东西：面板的位置、尺寸、
- * 字号，以及我们自己不要的那几个按钮。
+ * 做法与旧引擎一样：把 React Flow 的 `--xy-*` 变量整体重定向到
+ * `tokens.css` 的语义 token，而不是逐条覆盖它的规则——这样 RF 升级时只要
+ * 变量名没变，换肤就还在。剩下的规则只处理变量表达不了的东西：把手的尺寸、
+ * 选中框、分组的标题、浮层的位置，以及归属链接的让位。
  *
- * 作用域一律 `.canvas-stage .tl-*`（特异性 0,2,0），高于 tldraw 自己的
- * `.tl-theme__dark` / `.tl-container`（0,1,0），所以两张样式表谁先加载都一样。
+ * 作用域一律 `.canvas-stage .react-flow*`（特异性 0,2,0），高于 RF 自己的
+ * `.react-flow`（0,1,0），所以两张样式表谁先加载都一样。
  *
  * 深浅色不在这里分叉：`tokens.css` 的 `:root` / `:root[data-theme="light"]`
- * 已经把语义 token 切好了，这里只引用。tldraw 自己那套 `tl-theme__*` 类
- * 由 `app/use-tldraw-preferences.ts` 跟着应用主题一起翻。
+ * 已经把语义 token 切好了，这里只引用。
  */
 
 /* ------------------------- 变量映射（唯一的换肤入口） ---------------------- */
 
-.canvas-stage .tl-container {
-  /* 画布 */
-  --tl-color-background: var(--canvas-bg);
-  --tl-color-grid: var(--canvas-dot);
-  --tl-color-selection-fill: var(--brand-soft);
-  --tl-color-selection-stroke: var(--brand);
+.canvas-stage .react-flow {
+  /* 画布本体：底色由容器给（`--canvas-bg`），这里只管点阵与线 */
+  --xy-background-color: transparent;
+  --xy-background-pattern-color: var(--canvas-dot);
 
-  /* 三级表面：面板 = `--panel`，凹陷（缩略图底）= `--surface-deep` */
-  --tl-color-panel: var(--panel);
-  --tl-color-panel-contrast: var(--border);
-  --tl-color-panel-overlay: var(--surface-overlay);
-  --tl-color-panel-transparent: transparent;
-  --tl-color-low: var(--surface-deep);
-  --tl-color-low-border: var(--border);
-  --tl-color-divider: var(--border);
-  --tl-color-overlay: var(--scrim);
+  /* 边：默认灰，选中与连线预览用品牌色 */
+  --xy-edge-stroke: var(--muted-foreground);
+  --xy-edge-stroke-selected: var(--brand);
+  --xy-edge-stroke-width: 1.5;
+  --xy-connectionline-stroke: var(--brand);
+  --xy-connectionline-stroke-width: 1.5;
 
-  /* hover / active / 提示底，全部由 `--tint-rgb` 派生，深浅色自动跟随 */
-  --tl-color-muted-none: transparent;
-  --tl-color-muted-0: rgb(var(--tint-rgb) / 3%);
-  --tl-color-muted-1: var(--active);
-  --tl-color-muted-2: var(--hover);
-  --tl-color-hint: var(--hover);
+  /* 把手（`ConnectionHandles` 自己还有一套 `.node-connection-handle`） */
+  --xy-handle-background-color: var(--brand);
+  --xy-handle-border-color: var(--panel);
 
-  /* 强调色只用于选中态与主要按钮（§24.2「系统强调色」） */
-  --tl-color-selected: var(--brand);
-  --tl-color-selected-contrast: var(--on-accent);
-  --tl-color-focus: var(--ring);
-  --tl-color-primary: var(--brand);
-  --tl-color-tooltip: var(--surface-overlay);
+  /* 选区框 */
+  --xy-selection-background-color: var(--brand-soft);
+  --xy-selection-border: 1px dotted var(--brand);
 
-  /* 文字：正文 / 次要 / 禁用三档，和侧栏、设置页同源 */
-  --tl-color-text: var(--foreground);
-  --tl-color-text-0: var(--foreground);
-  --tl-color-text-1: var(--foreground);
-  --tl-color-text-3: var(--muted-foreground);
-  --tl-color-text-disabled: var(--faint);
-  --tl-color-text-shadow: var(--canvas-bg);
+  /* resize 把手与控件 */
+  --xy-resize-background-color: var(--brand);
 
-  /* 状态色 */
-  --tl-color-success: var(--success);
-  --tl-color-info: var(--brand);
-  --tl-color-warning: var(--warn);
-  --tl-color-danger: var(--danger);
+  /* 缩略图（B1 挂上去之后吃这一组） */
+  --xy-minimap-background-color: color-mix(
+    in srgb,
+    var(--panel) 92%,
+    transparent
+  );
+  --xy-minimap-mask-background-color: var(--scrim);
 
-  /* 圆角四档（§24.2：控件 6 / 卡片 10 / 面板 12） */
-  --tl-radius-0: 2px;
-  --tl-radius-1: var(--r-control);
-  --tl-radius-2: var(--r-control);
-  --tl-radius-3: var(--r-card);
-  --tl-radius-4: var(--r-panel);
+  /* 归属链接：一行小字，不该抢注意力 */
+  --xy-attribution-background-color: color-mix(
+    in srgb,
+    var(--panel) 80%,
+    transparent
+  );
 
-  /* 阴影：浅色下由 tokens.css 自动减半 */
-  --tl-shadow-1: var(--shadow-pill);
-  --tl-shadow-2: var(--shadow-node);
-  --tl-shadow-3: var(--shadow-node);
-  --tl-shadow-4: var(--shadow-dialog);
-
-  /* 界面字体与字号：13 正文，11 辅助，不出现 11px 以下（§24.2） */
   font-family: var(--font-ui);
-  font-size: var(--text-body);
-}
-
-/* tldraw 的 UI 层单独设了字重与字体，跟着应用字体栈走 */
-.canvas-stage .tlui-layout {
-  font-family: var(--font-ui);
-  font-weight: 400;
-}
-
-.canvas-stage .tlui-button,
-.canvas-stage .tlui-button__label {
-  font-size: var(--text-body);
-}
-
-.canvas-stage .tlui-kbd {
-  font-family: var(--font-code);
-  font-size: var(--text-caption);
-}
-
-/* ------------------------------ 样式面板 --------------------------------- */
-
-/*
- * 右上角。工具簇（`ControlsCluster`，`right:14` + 36px 宽）占着右边，
- * 面板贴在它左侧并与它顶部对齐：14 + 36 + 12 = 62。
- */
-.canvas-stage .tlui-style-panel__wrapper,
-.canvas-stage .tlui-style-panel__wrapper:only-child {
-  margin: 3px 62px 0 0;
-  background-color: color-mix(in srgb, var(--panel) 92%, transparent);
-  border: 1px solid var(--border);
-  border-radius: var(--r-panel);
-  box-shadow: var(--shadow-node);
-  backdrop-filter: blur(12px);
-}
-
-/* 分组标题：11px、大写、次要色（§24.2「源列表侧栏」的分组标题规格） */
-.canvas-stage .tlui-style-panel__subheading,
-.canvas-stage .tlui-style-panel__double-select-picker,
-.canvas-stage .tlui-style-panel__double-select-picker-label {
-  font-size: var(--text-caption);
-  color: var(--muted-foreground);
-}
-
-.canvas-stage .tlui-style-panel__section:not(:last-child) {
-  border-bottom: 1px solid var(--border);
-}
-
-/* ------------------------------- 缩略图 ---------------------------------- */
-
-/*
- * tldraw 把缩略图挂在 `NavigationPanel` 里，默认在左下并带一排缩放钮。
- * 缩放归 Dock（§5），所以这里只留缩略图本身，并挪回右下角——和被删掉的
- * `StatusMiniMap` 同一个位置、同一个尺寸（200×150）。
- *
- * 底部留 44px：tldraw 的水印（`.tl-watermark_SEE-LICENSE`，96×32，距边 4）
- * 钉死在右下角，§12 第 1 条决定带着水印上线，所以让缩略图给它让位，
- * 4 + 32 + 8 = 44。
- */
-.canvas-stage .tlui-navigation-panel {
-  position: absolute;
-  right: 14px;
-  bottom: var(--navigation-bottom);
-  left: auto;
-  width: var(--minimap-w);
-  min-width: var(--minimap-w);
-  flex-shrink: 0;
-  overflow: hidden;
-  background-color: color-mix(in srgb, var(--panel) 92%, transparent);
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
-  box-shadow: var(--shadow-pill);
-  backdrop-filter: blur(12px);
-}
-
-/* 默认皮肤画的那块「左下角贴边」底衬，右下角用不上 */
-.canvas-stage .tlui-navigation-panel::before {
-  display: none;
-}
-
-/* 缩放钮那一排（缩放在 Dock 上，不重复） */
-.canvas-stage .tlui-navigation-panel > .tlui-toolbar {
-  display: none;
-}
-
-.canvas-stage .tlui-minimap {
-  height: var(--minimap-h);
-  min-height: var(--minimap-h);
-  width: 100%;
-  padding: 6px;
-}
-
-/* ------------------------------ 菜单与浮层 -------------------------------- */
-
-.canvas-stage .tlui-menu {
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
-  box-shadow: var(--shadow-dialog);
-}
-
-.canvas-stage .tlui-toasts__container,
-.canvas-stage .tlui-dialog__content {
   font-size: var(--text-body);
 }
 
 /* ------------------------------ 画布内容 --------------------------------- */
 
 /*
- * 背景点阵（§5）。tldraw 的 `gridSteps` 是 64 / 16 / 4 / 1 档，
- * `app/use-tldraw-preferences.ts` 把 `gridSize` 设成「设置里的间距 ÷ 4」，
- * 于是可见的那档就是用户选的那个值（默认 4 × 6 = 24px）；最细的 1× 那层
- * 在这里关掉，只留整数倍。
+ * 节点容器只是一个定位盒：卡片的圆角、边框、阴影都由 `NodeShell` 画，
+ * RF 默认那层白底 + 1px 边框会在真正的卡片外面再套一圈。
  */
-.canvas-stage .tl-grid > rect:last-child {
-  display: none;
+.canvas-stage .react-flow__node {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+  color: inherit;
+  font-size: inherit;
+  text-align: left;
+  cursor: default;
 }
 
-.canvas-stage .tl-grid-dot {
-  fill: var(--canvas-dot);
+/* 选中框归 `NodeShell` 的 1.5px 品牌色 ring，别再套一层虚线 */
+.canvas-stage .react-flow__node.selected,
+.canvas-stage .react-flow__node:focus,
+.canvas-stage .react-flow__node:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
-/* frame 名字用应用字体，字号提到 11px（默认 12px 但是另一套字体） */
-.canvas-stage .tl-frame-label {
-  font-family: var(--font-ui);
+/* 分组：色带 + 半透明底，不裁剪子级（§1.3 的差异） */
+.canvas-stage .canvas-group {
+  background: color-mix(in srgb, var(--panel) 22%, transparent);
+  border-style: solid;
+  border-width: 1.5px;
+  overflow: visible;
+}
+.canvas-stage .canvas-group[data-selected="true"] {
+  background: color-mix(in srgb, var(--panel) 34%, transparent);
+}
+.canvas-stage .canvas-group-label {
+  position: absolute;
+  top: -18px;
+  left: 2px;
+  max-width: 100%;
+  overflow: hidden;
   font-size: var(--text-caption);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 连线预览与选中的边比默认粗一点，免得在点阵背景上看不见 */
+.canvas-stage .react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 2.5;
+}
+
+/* resize 把手：默认 4px 太小，触屏上根本按不住 */
+.canvas-stage .react-flow__resize-control.handle {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--panel);
+  border-radius: 2px;
+}
+.canvas-stage .react-flow__resize-control.line {
+  border-color: transparent;
+  border-width: 3px;
+}
+
+/* ------------------------------ 浮层与归属 -------------------------------- */
+
+/*
+ * 右下角的「React Flow」链接保留（MIT 礼节，不传 `proOptions`）。
+ * 它钉在容器右下角，所以缩略图、锁按钮与用量球都为它让出 24px。
+ */
+.canvas-stage .react-flow__attribution {
+  right: 12px;
+  bottom: 4px;
+  padding: 2px 5px;
+  border-radius: 5px;
+  font-size: var(--text-caption);
+}
+.canvas-stage .react-flow__attribution a {
   color: var(--muted-foreground);
+}
+
+.canvas-stage .react-flow__minimap {
+  right: 14px;
+  bottom: var(--navigation-bottom);
+  left: auto;
+  width: var(--minimap-w);
+  height: var(--minimap-h);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-pill);
+  backdrop-filter: blur(12px);
+}
+
+.canvas-lock-button {
+  bottom: var(--attribution-clearance);
 }
 
 /* 浮层以真实画布宽度布局；侧栏折叠后容器查询也会重新计算。 */
@@ -210,6 +162,8 @@
   isolation: isolate;
   --minimap-w: 200px;
   --minimap-h: 150px;
+  /* 4（边距）+ 22（归属链接高）+ 8（间隙） */
+  --attribution-clearance: 34px;
   --navigation-bottom: 44px;
 }
 
@@ -248,14 +202,14 @@
   .dock-tools-compact {
     display: block;
   }
-  .canvas-stage .tlui-navigation-panel,
+  .canvas-stage .react-flow__minimap,
   .canvas-usage-orb {
     --navigation-bottom: calc(38px + var(--dock-h) + 12px);
   }
 }
 
 @container workspace (max-width: 760px) {
-  .canvas-stage .tlui-navigation-panel,
+  .canvas-stage .react-flow__minimap,
   .canvas-usage-orb {
     --minimap-w: 160px;
     --minimap-h: 120px;
@@ -282,31 +236,13 @@
   background: transparent;
 }
 .workspace-surface[data-minimap-collapsed="true"],
-.workspace-surface[data-minimap-collapsed="true"] .tlui-navigation-panel,
+.workspace-surface[data-minimap-collapsed="true"] .react-flow__minimap,
 .workspace-surface[data-minimap-collapsed="true"] .canvas-usage-orb {
   --minimap-w: 36px;
   --minimap-h: 36px;
 }
 .canvas-usage-orb {
   transition: right 160ms ease-out;
-}
-
-/* Preserve the complete tldraw notice and its link, in one compact readable line. */
-.canvas-stage .tl-watermark_SEE-LICENSE[data-unlicensed="true"] {
-  width: 178px;
-  height: 22px;
-  right: 12px;
-  bottom: 4px;
-  border-radius: 5px;
-}
-.canvas-stage .tl-watermark_SEE-LICENSE[data-unlicensed="true"] > button,
-.canvas-stage
-  .tl-watermark_SEE-LICENSE[data-unlicensed="true"][data-mobile="true"]
-  > button {
-  display: block;
-  width: 178px;
-  height: 22px;
-  white-space: nowrap;
 }
 
 @media (prefers-reduced-motion: reduce) {

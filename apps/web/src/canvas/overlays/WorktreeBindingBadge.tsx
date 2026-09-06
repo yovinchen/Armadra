@@ -26,7 +26,7 @@ import { nodeBox } from "../geometry";
  * 以及把创建时排好队的初始化脚本发出去（只发一次，闸在 `frame-binding.ts`）。
  */
 
-/** 徽章相对 frame 左上角的内缩，避开 tldraw 自己的 frame 标签。 */
+/** 徽章相对 frame 左上角的内缩，避开 分组自己的标题。 */
 const INSET = 8;
 
 /** 路径太长时只留尾巴；完整值在 `title` 里。 */

@@ -4,8 +4,9 @@ import {
   QueryClientProvider,
   useQueryClient,
 } from "@tanstack/react-query";
+import { ReactFlowProvider } from "@xyflow/react";
 import { useWorkspaceEvents } from "../api/events";
-import { TldrawWorkspace } from "../canvas/TldrawWorkspace";
+import { FlowWorkspace } from "../canvas/FlowWorkspace";
 // 浮层都在 `./lazy` 里 `React.lazy` 包过，走各自的 chunk（§17 代码分割）。
 import {
   AutomationDrawer,
@@ -42,7 +43,7 @@ import { useAgentNotifications } from "./notifications";
 import { syncDocumentPreferences } from "./preferences-store";
 import { useAppKeybindings } from "./use-app-keybindings";
 import { useBoardSync } from "./use-board-sync";
-import { useTldrawPreferences } from "./use-tldraw-preferences";
+import { useCanvasPreferences } from "./use-canvas-preferences";
 
 function createQueryClient() {
   return new QueryClient({
@@ -52,13 +53,23 @@ function createQueryClient() {
   });
 }
 
+/**
+ * `<ReactFlowProvider>` 包住整棵树（React Flow 计划 §2.9）。
+ *
+ * Dock 的缩放档位用 `useViewport()`，命令面板与侧栏用 `flow-context` 的
+ * 树外句柄；provider 在最外层，两条路才都走得通。它自己不渲染任何东西，
+ * 也不要求下面真的有一个 `<ReactFlow>`——没有工作空间时画布不挂载，
+ * `useViewport()` 读到的就是 `{0,0,1}`。
+ */
 export function App() {
   const [queryClient] = useState(createQueryClient);
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider delayDuration={500}>
-        <AppShell />
-      </TooltipProvider>
+      <ReactFlowProvider>
+        <TooltipProvider delayDuration={500}>
+          <AppShell />
+        </TooltipProvider>
+      </ReactFlowProvider>
     </QueryClientProvider>
   );
 }
@@ -85,7 +96,7 @@ function AppShell() {
   );
 
   useEffect(syncDocumentPreferences, []);
-  useTldrawPreferences();
+  useCanvasPreferences();
   useWorkspaceEvents(workspace?.id ?? null);
   useAgentNotifications();
   useBoardSync();
@@ -100,7 +111,7 @@ function AppShell() {
         data-minimap-collapsed={minimapCollapsed}
       >
         <WindowDragLayer />
-        {workspace && <TldrawWorkspace />}
+        {workspace && <FlowWorkspace />}
         {workspace && (
           <>
             <ControlsCluster />

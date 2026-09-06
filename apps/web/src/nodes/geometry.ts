@@ -1,4 +1,4 @@
-/** Shared by the DOM shell, tldraw geometry and document sizing. */
+/** Shared by the DOM shell, the canvas projection and document sizing. */
 export const NODE_BORDER_WIDTH = 1;
 /** Preserve the existing collapsed document size, without an empty bottom band. */
 export const COLLAPSED_HEIGHT = 40;

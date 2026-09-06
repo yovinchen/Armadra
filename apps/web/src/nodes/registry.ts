@@ -28,7 +28,7 @@ import { StickyNode } from "./StickyNode";
 import { TerminalNode } from "./TerminalNode";
 
 /* -------------------------------------------------------------------------- */
-/* 契约（计划书 §13.2 / tldraw 计划 §9.4）                                      */
+/* 契约（计划书 §13.2 / React Flow 计划 §2.2）                                  */
 /* -------------------------------------------------------------------------- */
 
 export interface NodeBodyProps {
@@ -54,8 +54,8 @@ export interface NodeMeta {
 }
 
 /**
- * 头部拖拽把手。tldraw 里拖拽由 select 工具负责（体停止冒泡、头部不拦），
- * 这个类名只剩「哪块是头部」的标记作用：样式与测试都按它找元素。
+ * 头部拖拽把手。这个类名直接就是 React Flow 的 `dragHandle` 选择器
+ * （`sync/project.ts` 投影时给的），所以「哪块能拖」只在这里定义一次。
  */
 export const DRAG_HANDLE_CLASS = "drag-handle";
 export const NODE_DRAG_HANDLE = `.${DRAG_HANDLE_CLASS}`;
@@ -66,7 +66,7 @@ export { COLLAPSED_HEIGHT, HEADER_HEIGHT } from "./geometry";
 const STICKY_COLOR = "#ffd60a";
 
 /**
- * 分组是 tldraw 原生 frame（tldraw 计划 §4.2），没有节点体。
+ * 分组由 `flow/nodes/GroupNode.tsx` 自己画，没有节点体。
  * 键保留只为让类型完备：漏登记一种新节点类型必须是编译错误。
  */
 const GroupNodeBody: ComponentType<NodeBodyProps> = () => null;

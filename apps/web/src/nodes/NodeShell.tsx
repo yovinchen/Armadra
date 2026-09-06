@@ -20,8 +20,8 @@ import { useCanvasStore } from "@/store/canvas-store";
 import { useCompactLayout } from "@/platform/layout";
 import { canFocusOnPhone } from "@/shell/mobile-focus";
 import { runCanvasCommand } from "@/canvas/commands";
-import { getEditor } from "@/canvas/editor-context";
-import { ConnectionHandles } from "@/canvas/shapes/ConnectionHandles";
+import { containerSize, getFlow } from "@/canvas/flow/flow-context";
+import { ConnectionHandles } from "@/canvas/flow/nodes/ConnectionHandles";
 import { NodeAnnotationHost, NodeMetaActions } from "@/meta/NodeMeta";
 import { COLLAPSED_HEIGHT, DRAG_HANDLE_CLASS, nodeMeta } from "./registry";
 import { HEADER_HEIGHT } from "./geometry";
@@ -70,8 +70,8 @@ function closeNode(id: string) {
 /**
  * 头部按钮改文档之前，先把这个节点设成当前选中项。
  *
- * 点头部按钮不会经过 tldraw 的 select 工具（按钮自己吃掉了 pointerdown，
- * 否则一按就开始拖动整个 shape），所以选中态得我们自己补一次：折叠 /
+ * 点头部按钮不会经过 React Flow 的选择（按钮自己吃掉了 pointerdown，
+ * 否则一按就开始拖动整个节点），所以选中态得我们自己补一次：折叠 /
  * 最大化都改尺寸，用户理应看到被改的那个节点是选中的。
  */
 function focusNode(id: string): void {
@@ -82,9 +82,10 @@ function focusNode(id: string): void {
 const MAXIMIZE_MARGIN = 24;
 
 /**
- * store 只负责记 premaxRect，目标矩形由画布算（§13.1）。
+ * store 只负责记 premaxRect，目标矩形由画布算（§1.2 F04）。
  *
- * tldraw 直接给页面坐标的视口矩形，边距是屏幕像素，所以要除以缩放再内缩。
+ * React Flow 只给 `{x, y, zoom}`，视口矩形要自己从容器尺寸换算：左上角是
+ * `-x/zoom`，宽高是 `容器尺寸/zoom`。边距是屏幕像素，所以除以缩放再内缩。
  * 画布没挂载时（单测、启动瞬间）退回一个 1×1 的矩形：调用方拿到的仍是
  * 合法矩形，只是没有意义——总比抛异常好。
  */
@@ -94,31 +95,33 @@ export function maximizeRect(): {
   width: number;
   height: number;
 } {
-  const editor = getEditor();
-  if (!editor) return { x: 0, y: 0, width: 1, height: 1 };
-  const bounds = editor.getViewportPageBounds();
-  const margin = MAXIMIZE_MARGIN / (editor.getZoomLevel() || 1);
+  const flow = getFlow();
+  const { width, height } = containerSize();
+  if (!flow || width <= 0 || height <= 0) {
+    return { x: 0, y: 0, width: 1, height: 1 };
+  }
+  const viewport = flow.getViewport();
+  const zoom = viewport.zoom || 1;
+  const margin = MAXIMIZE_MARGIN / zoom;
   return {
-    x: bounds.x + margin,
-    y: bounds.y + margin,
-    width: Math.max(1, bounds.w - margin * 2),
-    height: Math.max(1, bounds.h - margin * 2),
+    x: -viewport.x / zoom + margin,
+    y: -viewport.y / zoom + margin,
+    width: Math.max(1, width / zoom - margin * 2),
+    height: Math.max(1, height / zoom - margin * 2),
   };
 }
 
 /**
- * 节点体的事件守卫（tldraw 计划 §4.1 与 Phase 0 结论 2）。
+ * 节点体的滚轮守卫（React Flow 计划 F02）。
  *
- * 指针：tldraw 的画布事件是 `.tl-canvas` 上的 React props，同一棵合成树，
- * 合成事件的 `stopPropagation` 就够——体内点击既不选中也不拖动，拖拽只认
- * 头部。这也是旧 `nodrag` 类的替代品：类名不再有任何行为。
+ * 指针事件不再需要守卫：拖拽只从 `dragHandle`（头部）起，体内的
+ * pointerdown 本来就不会拖动节点，也不会被 React Flow 拦下来。点一下体
+ * 会把节点选中——这是有意为之（§1.3），⌘方向键导航从此不必先点头部。
  *
- * 滚轮：tldraw 的 wheel 是**原生**监听且挂在 `.tl-canvas` 上，React 19 的
- * 委托在更外层的 React 根，合成事件来不及。必须原生监听，而且分两相：
- *  - 冒泡相位挡普通滚轮（§18.5 的 tmux copy-mode 桥挂在更深的
- *    `[data-slot="terminal-body"]` 上，捕获相位会把它饿死）；
- *  - 捕获相位只拦 ⌘/Ctrl+滚轮，并转发一份到 `.tl-canvas`，让画布缩放的同时
- *    终端不跟着滚历史。
+ * 滚轮仍然要守：
+ *  - `nowheel` 类挡住普通滚轮，让终端的 tmux 滚屏桥与编辑器自己滚；
+ *  - 捕获相位把 ⌘/Ctrl+滚轮转发一份到 `.react-flow__pane`（d3-zoom 的挂载
+ *    处），画布照常缩放，终端不跟着滚历史。
  */
 function useNodeBodyGuards(ref: React.RefObject<HTMLElement | null>): void {
   React.useEffect(() => {
@@ -128,53 +131,25 @@ function useNodeBodyGuards(ref: React.RefObject<HTMLElement | null>): void {
     const onWheelCapture = (event: WheelEvent) => {
       if (!(event.metaKey || event.ctrlKey)) return;
       event.stopPropagation();
-      const canvas = body.closest(".tl-container")?.querySelector(".tl-canvas");
-      if (!canvas) return;
-      canvas.dispatchEvent(new WheelEvent("wheel", event));
-    };
-    const onWheel = (event: WheelEvent) => {
-      if (event.metaKey || event.ctrlKey) return;
-      event.stopPropagation();
+      const pane = body
+        .closest(".react-flow")
+        ?.querySelector(".react-flow__pane");
+      if (!pane) return;
+      pane.dispatchEvent(new WheelEvent("wheel", event));
     };
 
     body.addEventListener("wheel", onWheelCapture, {
       passive: false,
       capture: true,
     });
-    body.addEventListener("wheel", onWheel, { passive: false });
-    return () => {
+    return () =>
       body.removeEventListener("wheel", onWheelCapture, { capture: true });
-      body.removeEventListener("wheel", onWheel);
-    };
   }, [ref]);
 }
 
 /**
- * 指针是否落在 tldraw 的叠加层（选中框的 resize / 旋转把手）上。
- *
- * 5.4 把把手画在叠加层画布上、命中完全靠几何：pointerdown 必须先到达
- * `.tl-canvas`，select 工具才会去问 `overlays.getOverlayAtPoint`。把手有一半
- * 压在节点体上，体如果一律吞掉 pointerdown，边缘的 resize 就永远拖不动
- * （2026-09-04 真实鼠标验证时发现）。所以只在**没有**命中叠加层时才拦。
- * 体内其它位置 `getOverlayAtPoint` 回 null，指示器不参与命中。
- */
-function pointsAtOverlay(event: React.PointerEvent<HTMLElement>): boolean {
-  const editor = getEditor();
-  if (!editor) return false;
-  const page = editor.screenToPage({ x: event.clientX, y: event.clientY });
-  return Boolean(
-    editor.overlays.getOverlayAtPoint(page, editor.getHitTestMargin()),
-  );
-}
-
-function stopPointer(event: React.PointerEvent<HTMLElement>): void {
-  if (pointsAtOverlay(event)) return;
-  event.stopPropagation();
-}
-
-/**
  * 头部里的控件（按钮、输入框、标题）自己吃掉 pointerdown，其余头部区域
- * 放行给 tldraw 的 select 工具去拖动。选择器是 `nodrag` 类的替代品。
+ * 放行给 React Flow 去拖动。
  */
 const HEADER_CONTROLS =
   'button, input, textarea, select, [role="textbox"], [contenteditable="true"], [data-no-drag="true"]';
@@ -184,9 +159,7 @@ function onHeaderPointerDown(event: React.PointerEvent<HTMLElement>): void {
   // A read-only title fills the header's free space and remains a drag target.
   // Its click handler enters rename only when the pointer did not move.
   if (target?.closest('[data-node-title="true"]')) return;
-  if (target?.closest(HEADER_CONTROLS) && !pointsAtOverlay(event)) {
-    event.stopPropagation();
-  }
+  if (target?.closest(HEADER_CONTROLS)) event.stopPropagation();
 }
 
 export function NodeShell({
@@ -217,8 +190,8 @@ export function NodeShell({
       className="node-glow relative h-full w-full"
       style={collapsed ? { height: COLLAPSED_HEIGHT } : undefined}
     >
-      {/* resize 把手由 tldraw 的选择框提供（`hideResizeHandles=false`），
-          最小尺寸在 `ArmadraShapeUtil.onResize` 里按 `NODE_META.minSize` 夹住。 */}
+      {/* resize 把手由 `<NodeResizer>` 提供（`flow/nodes/ArmadraNode.tsx`），
+          最小尺寸按 `NODE_META.minSize`。 */}
       <div
         className={cn(
           "node-frame flex h-full w-full flex-col overflow-hidden rounded-[var(--r-card)]",
@@ -240,12 +213,10 @@ export function NodeShell({
         <div
           ref={bodyRef}
           data-slot="node-body"
-          className="min-h-0 flex-1 overflow-hidden"
+          // `nowheel`：普通滚轮归节点体自己（终端的 tmux 桥、编辑器的滚动），
+          // 不缩放画布；`nodrag`：体内按下不拖节点，拖拽只从头部起（F02）。
+          className="nodrag nowheel min-h-0 flex-1 overflow-hidden"
           style={collapsed ? { display: "none" } : undefined}
-          // 体内指针事件不冒泡到 `.tl-canvas`：不选中、不拖动（§4.1）
-          onPointerDown={stopPointer}
-          onPointerMove={stopPointer}
-          onPointerUp={stopPointer}
         >
           {children}
         </div>
@@ -423,13 +394,12 @@ function NodeTitle({ node }: { node: CanvasNode }) {
       event.shiftKey ||
       event.ctrlKey ||
       event.metaKey ||
-      event.altKey ||
-      pointsAtOverlay(event)
+      event.altKey
     )
       return;
     // This title owns the touch gesture. Prevent Radix's enclosing canvas menu
-    // from arming its long-press timer while tldraw captures the pointer.
-    // Keep bubbling so the native canvas drag state still receives pointerdown.
+    // from arming its long-press timer while the canvas captures the pointer.
+    // Keep bubbling so the node drag state still receives pointerdown.
     if (event.pointerType === "touch" || event.pointerType === "pen")
       event.preventDefault();
     gestureCleanup.current?.();
@@ -460,8 +430,8 @@ function NodeTitle({ node }: { node: CanvasNode }) {
         next.metaKey ||
         next.altKey;
       cleanup();
-      // tldraw captures pointerup and click on its canvas. Wait until its
-      // pointing state settles, then turn a short press into inline rename.
+      // The canvas captures pointerup and click. Wait until its pointing state
+      // settles, then turn a short press into inline rename.
       if (!suppressClick.current)
         queueMicrotask(() => {
           if (titleRef.current?.isConnected) begin();
@@ -511,8 +481,8 @@ function NodeTitle({ node }: { node: CanvasNode }) {
         }}
         onBlur={(event) => commit(event.target.value)}
         onKeyDownCapture={(event) => {
-          // tldraw has native key listeners inside the React root. Capture is
-          // required to isolate input before those listeners can blur it.
+          // The canvas has native key listeners inside the React root. Capture
+          // is required to isolate input before those listeners can blur it.
           event.stopPropagation();
           if (
             composing.current ||
