@@ -1,0 +1,17 @@
+-- Which channel a node's state was learned through — Agent 协作通道 §3.2.
+--
+-- Seven CLIs now report state over two transports: a command Hook the CLI
+-- forks (`hook`), and an in-process extension that speaks the same HTTP on the
+-- same socket (`extension`). Both carry the same three layers of authentication
+-- and both are evidence a turn really ended. `observed` is the third value and
+-- the reason this is a column rather than a derived label: §3.4 lets the PTY
+-- output pump guess `active` / `quiet` for a CLI that has no adapter at all,
+-- and that guess may drive a header hint and auto-naming but must never satisfy
+-- the idle gate that lets one agent write into another's terminal. Reading a
+-- guess as a report is how a prompt lands mid-turn.
+--
+-- Nullable with no default on purpose. NULL is "nothing has reported", which a
+-- node header draws as unknown; backfilling every existing row with `hook`
+-- would claim a source for nodes that never had one, including the ones whose
+-- rows were written by the stale sweep rather than by a CLI.
+ALTER TABLE agent_status ADD COLUMN state_source TEXT;

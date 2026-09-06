@@ -45,6 +45,7 @@ var legacyMigrations = []string{
 	"legacy/0010_host_imports.sql",
 	"legacy/0011_domain_ownership.sql",
 	"legacy/0012_browser_process.sql",
+	"legacy/0013_agent_status_source.sql",
 }
 
 // legacyVersion reads the migration number out of an embedded file name. SQLx
