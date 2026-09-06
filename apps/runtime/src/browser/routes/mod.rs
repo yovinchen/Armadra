@@ -18,13 +18,15 @@ use crate::{
 };
 
 use super::{
-    Availability, BrowserSession, Capture, Download, ReadMode, ReadResponse, SessionList,
-    Subscription, Viewport, WaitOutcome, readable_workspace,
+    Activity, Availability, BrowserSession, Capture, Download, Lease, ReadMode, ReadResponse,
+    SessionList, Subscription, Viewport, WaitOutcome, readable_workspace,
     session::{
-        self, CaptureRequest, CreateRequest, InputRequest, Live, NavigateRequest, SubscribeRequest,
-        WaitRequest,
+        self, CaptureRequest, CreateRequest, InputRequest, LeaseRequest, Live, NavigateRequest,
+        SubscribeRequest, WaitRequest,
     },
 };
+
+pub mod stream;
 
 /// `GET /api/workspaces/{id}/browser/availability`
 pub async fn availability(
@@ -72,6 +74,8 @@ pub async fn list(
                 can_go_forward: false,
                 created_at: stored.created_at,
                 updated_at: stored.updated_at,
+                lease: super::Lease::free(stored.lease_generation),
+                lease_generation: stored.lease_generation,
             },
         })
         .collect();
@@ -284,6 +288,100 @@ pub async fn decide_download(
     Ok(Json(
         session::decide_download(&live, &workspace, &download_id, decision.accept).await?,
     ))
+}
+
+/* ---------------------------------- lease --------------------------------- */
+
+/// `POST …/sessions/{sessionId}/lease` — read it, take it over, or hand it
+/// back (design §2.6).
+///
+/// Reading is free. Taking over and handing back are execution: they decide
+/// who drives a browser that is open on this machine, which is why the Host
+/// classifies them next to a terminal write.
+pub async fn lease(
+    State(state): State<AppState>,
+    Path((workspace_id, session_id)): Path<(String, String)>,
+    Json(request): Json<LeaseRequest>,
+) -> AppResult<Json<Lease>> {
+    readable_workspace(&state, &workspace_id).await?;
+    let live = live_in(&state, &workspace_id, &session_id).await?;
+    Ok(Json(session::lease::control(&live, &request).await?))
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityList {
+    activity: Vec<Activity>,
+}
+
+/// `GET …/sessions/{sessionId}/activity` — the last few actions, for the
+/// header badge. In memory and bounded; the durable record is the board log.
+pub async fn activity(
+    State(state): State<AppState>,
+    Path((workspace_id, session_id)): Path<(String, String)>,
+) -> AppResult<Json<ActivityList>> {
+    readable_workspace(&state, &workspace_id).await?;
+    let live = live_in(&state, &workspace_id, &session_id).await?;
+    Ok(Json(ActivityList {
+        activity: live.activity(),
+    }))
+}
+
+/* -------------------------------- managed --------------------------------- */
+
+/// `GET /api/browser/managed` — the pinned build's state on this machine.
+///
+/// Not workspace-scoped: the managed browser is a property of the execution
+/// host, and every workspace on it sees the same one.
+pub async fn managed(
+    State(state): State<AppState>,
+) -> AppResult<Json<crate::browser::launch::ManagedState>> {
+    Ok(Json(super::availability(&state).managed))
+}
+
+/// `POST /api/browser/managed` — download, verify and install it.
+///
+/// One install at a time per machine, and the call answers with the state it
+/// ended in rather than with a job id: the install is bounded, and a caller
+/// that wants progress reads `GET` while it runs.
+pub async fn install_managed(
+    State(state): State<AppState>,
+) -> AppResult<Json<crate::browser::launch::ManagedState>> {
+    let service = super::service(&state);
+    // The launch mutex already serializes "something is doing a big thing to
+    // the browser on this machine", which is exactly the scope needed here.
+    let _guard = service.launching.lock().await;
+    let manifest = super::launch::managed::Manifest::current()
+        .map_err(|reason| AppError::Conflict(format!("browser manifest unusable: {reason}")))?;
+    let data_dir = state.hooks.data_dir().to_path_buf();
+    let progress = super::launch::managed::Progress::default();
+    match super::launch::managed::install(
+        &data_dir,
+        &manifest,
+        super::launch::managed::download_enabled(),
+        &progress,
+    )
+    .await
+    {
+        Ok(_) => Ok(Json(super::launch::managed::state(&data_dir, &manifest))),
+        // A failed install is a state to show, not a stack trace: the reason
+        // code is stable and the panel localizes it.
+        Err(reason_code) => Err(AppError::Conflict(reason_code)),
+    }
+}
+
+/// `DELETE /api/browser/managed` — remove it again. Only ever the directory
+/// the managed module names.
+pub async fn remove_managed(
+    State(state): State<AppState>,
+) -> AppResult<Json<crate::browser::launch::ManagedState>> {
+    let service = super::service(&state);
+    let _guard = service.launching.lock().await;
+    let manifest = super::launch::managed::Manifest::current()
+        .map_err(|reason| AppError::Conflict(format!("browser manifest unusable: {reason}")))?;
+    let data_dir = state.hooks.data_dir().to_path_buf();
+    super::launch::managed::remove(&data_dir, &manifest).map_err(AppError::Conflict)?;
+    Ok(Json(super::launch::managed::state(&data_dir, &manifest)))
 }
 
 /* --------------------------------- helpers -------------------------------- */

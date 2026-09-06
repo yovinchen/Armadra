@@ -132,6 +132,8 @@ pub(super) fn unsupported(
         can_go_forward: false,
         created_at: now.clone(),
         updated_at: now,
+        lease: Lease::default(),
+        lease_generation: 0,
     }
 }
 
@@ -303,6 +305,8 @@ fn adopt(
         elements: Mutex::new((0, 0)),
         stream: Mutex::new(StreamState::default()),
         frame_seq: AtomicU64::new(0),
+        lease: Mutex::new(lease::Machine::resuming(stored.lease_generation)),
+        lease_wake: tokio::sync::Notify::new(),
         pool: state.pool.clone(),
         events: state.events.clone(),
     });
@@ -369,6 +373,10 @@ pub(super) fn record_of(stored: &StoredSession) -> BrowserSession {
         can_go_forward: false,
         created_at: stored.created_at.clone(),
         updated_at: stored.updated_at.clone(),
+        // A restarted Runtime holds no lease; only the counter survives, so a
+        // generation a client saw before the restart cannot come round again.
+        lease: Lease::free(stored.lease_generation),
+        lease_generation: stored.lease_generation,
     }
 }
 

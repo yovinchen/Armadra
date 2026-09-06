@@ -91,6 +91,8 @@ fn browser_events_serialize_with_the_shared_discriminants() {
         can_go_forward: false,
         created_at: "2026-09-06T00:00:00+00:00".into(),
         updated_at: "2026-09-06T00:00:01+00:00".into(),
+        lease: crate::browser::Lease::default(),
+        lease_generation: 0,
     };
     let json = serde_json::to_value(WorkspaceEvent::BrowserSession {
         session: Box::new(session),

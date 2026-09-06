@@ -149,6 +149,9 @@ async fn a_real_browser_session_navigates_reads_clicks_types_and_captures() {
         &InputRequest {
             navigation_epoch: before,
             frame_seq: Some(1),
+            lease_generation: None,
+            device_id: String::new(),
+            display_name: String::new(),
             events: vec![InputEvent {
                 kind: "mousePressed".into(),
                 x: 10.0,
@@ -169,6 +172,9 @@ async fn a_real_browser_session_navigates_reads_clicks_types_and_captures() {
             &InputRequest {
                 navigation_epoch: after,
                 frame_seq: None,
+                lease_generation: None,
+                device_id: String::new(),
+                display_name: String::new(),
                 events: vec![InputEvent {
                     kind: "wheel".into(),
                     x: 100.0,

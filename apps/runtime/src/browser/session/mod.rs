@@ -31,10 +31,10 @@ use crate::{
 };
 
 use super::{
-    Admission, BrowserSession, Capture, ConsoleEntry, Download, DownloadState, Element,
-    MAX_ELEMENTS, MAX_TEXT_BYTES, NetworkEntry, ProcessIdentity, RING_CAPACITY, ReadMode,
-    ReadResponse, SessionState, StoredSession, Subscription, Viewport, Visibility, WaitOutcome,
-    cdp,
+    Activity, Admission, BandwidthClass, BrowserSession, Budget, Capture, ConsoleEntry, Download,
+    DownloadState, Element, Lease, MAX_ELEMENTS, MAX_TEXT_BYTES, NetworkEntry, ProcessIdentity,
+    RING_CAPACITY, ReadMode, ReadResponse, SessionState, StoredSession, Subscription, Viewport,
+    Visibility, WaitOutcome, cdp,
     cdp::{CdpClient, CdpError, CdpEvent},
     dom, launch, service,
 };
@@ -43,21 +43,23 @@ mod console;
 mod downloads;
 mod events;
 mod input;
+pub mod lease;
 mod lifecycle;
 mod navigate;
 mod read;
-mod screencast;
 mod startup;
+mod stream;
 
 use self::console::*;
 pub use self::downloads::*;
 use self::events::*;
 pub use self::input::*;
+pub use self::lease::{Actor, Grant, LeaseRequest, Machine as LeaseMachine};
 pub use self::lifecycle::*;
 pub use self::navigate::*;
 pub use self::read::*;
-pub use self::screencast::*;
 pub use self::startup::*;
+pub use self::stream::*;
 
 /// Longest a `wait` may block. An agent that asks for more gets this, and is
 /// told; nothing here waits forever (design §7).
@@ -95,12 +97,21 @@ pub struct Live {
     policy: Mutex<crate::browser::NetworkPolicy>,
     record: Mutex<BrowserSession>,
     rings: Mutex<Rings>,
-    subscriptions: Mutex<HashMap<String, (Visibility, DateTime<Utc>)>>,
+    /// One entry per viewer, each with its own budget and its own idea of how
+    /// far behind it is: a phone on a metered link must not cost the desktop
+    /// node its frame rate (§2.9).
+    subscriptions: Mutex<HashMap<String, Subscriber>>,
     /// `(epoch, count)` of the last `elements` read. A reference minted before
     /// the current epoch is refused rather than resolved (design §7).
     elements: Mutex<(u64, usize)>,
     stream: Mutex<StreamState>,
     frame_seq: AtomicU64,
+    /// Who may drive the page (§2.6). In memory: after a restart nobody does,
+    /// and the generation continues from the row.
+    lease: Mutex<lease::Machine>,
+    /// Woken when the lease is released, so an agent action that is waiting
+    /// out a person's typing starts again the moment it can.
+    lease_wake: tokio::sync::Notify,
     pool: sqlx::SqlitePool,
     events: crate::events::EventHub,
 }
@@ -110,13 +121,9 @@ struct Rings {
     console: VecDeque<ConsoleEntry>,
     network: VecDeque<(String, NetworkEntry)>,
     downloads: Vec<Download>,
-}
-
-#[derive(Default)]
-struct StreamState {
-    mode: Option<Visibility>,
-    last_frame: Option<Instant>,
-    max_fps: u32,
+    /// The last few actions, for the node header. Not stored anywhere: the
+    /// durable record is the board log (§2.8).
+    activity: VecDeque<Activity>,
 }
 
 impl Live {
@@ -132,6 +139,59 @@ impl Live {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .navigation_epoch
+    }
+
+    /// The lease state machine. The guard is a `std::sync::Mutex` guard, so
+    /// the rule at the top of this file applies: never hold it across an
+    /// `.await`.
+    pub(super) fn lease_machine(&self) -> std::sync::MutexGuard<'_, lease::Machine> {
+        self.lease
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Copies the lease into the published record. Returns false when it did
+    /// not actually change, so a renewal does not produce an event per click.
+    pub(super) fn remember_lease(&self, lease: &Lease) -> bool {
+        self.edit(|record| {
+            if record.lease == *lease {
+                return false;
+            }
+            record.lease = lease.clone();
+            record.lease_generation = lease.generation;
+            true
+        })
+    }
+
+    /// Adds one line to the header's activity list and tells the canvas.
+    pub(super) fn record_activity(&self, activity: Activity) {
+        {
+            let mut rings = self
+                .rings
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if rings.activity.len() >= crate::browser::ACTIVITY_CAPACITY {
+                rings.activity.pop_front();
+            }
+            rings.activity.push_back(activity.clone());
+        }
+        self.events.publish(
+            &self.workspace_id,
+            WorkspaceEvent::BrowserActivity {
+                activity: Box::new(activity),
+            },
+        );
+    }
+
+    /// The last few actions, newest last.
+    pub fn activity(&self) -> Vec<Activity> {
+        self.rings
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .activity
+            .iter()
+            .cloned()
+            .collect()
     }
 
     fn edit<R>(&self, apply: impl FnOnce(&mut BrowserSession) -> R) -> R {

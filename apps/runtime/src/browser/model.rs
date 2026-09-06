@@ -109,6 +109,12 @@ pub struct BrowserSession {
     pub can_go_forward: bool,
     pub created_at: String,
     pub updated_at: String,
+    /// Who may drive this session right now (§2.6). Reads never consult it.
+    pub lease: Lease,
+    /// The stored counter the lease's generation continues from, so a client
+    /// that slept through a Runtime restart cannot present a generation that
+    /// has come back around to being current.
+    pub lease_generation: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -117,6 +123,100 @@ pub struct SessionList {
     pub sessions: Vec<BrowserSession>,
     pub availability: Availability,
 }
+
+/* ---------------------------------- lease --------------------------------- */
+
+/// Who is allowed to drive the page. One session, one holder (§2.6).
+///
+/// `HumanTakeover` is not merely "a human with a longer lease": it is the
+/// state a person enters deliberately, and it revokes the agent's lease
+/// instead of making the agent wait. That difference is the whole reason
+/// there are two human states rather than one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LeaseState {
+    Free,
+    Human,
+    HumanTakeover,
+    Agent,
+}
+
+impl LeaseState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Free => "free",
+            Self::Human => "human",
+            Self::HumanTakeover => "humanTakeover",
+            Self::Agent => "agent",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LeaseHolder {
+    /// `human` or `agent`.
+    pub kind: &'static str,
+    /// A viewer's own opaque id, or an agent's node id. Never an
+    /// authenticated identity — the Host authenticates the device and does
+    /// not forward that identity — so it only ever tells holders apart.
+    pub id: String,
+    pub display_name: String,
+}
+
+/// The lease as every client sees it. Matches `BrowserLease` in
+/// `browser.proto` field for field.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Lease {
+    pub state: LeaseState,
+    pub generation: u64,
+    /// RFC 3339, or empty when the state does not lapse on its own: a
+    /// takeover is held until the person hands it back.
+    pub expires_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub holder: Option<LeaseHolder>,
+}
+
+impl Lease {
+    pub fn free(generation: u64) -> Self {
+        Self {
+            state: LeaseState::Free,
+            generation,
+            expires_at: String::new(),
+            holder: None,
+        }
+    }
+}
+
+impl Default for Lease {
+    fn default() -> Self {
+        Self::free(0)
+    }
+}
+
+/// One line of "who did what to this page" for the node header (§2.8).
+///
+/// Only the last few are kept, in memory. The durable record stays the board
+/// log, which every agent action already writes.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Activity {
+    pub session_id: String,
+    /// `human` or `agent`.
+    pub actor: &'static str,
+    pub actor_id: String,
+    pub verb: String,
+    pub target: String,
+    /// `ok`, `refused`, or `unknown` — the last for an action that was
+    /// dispatched and then had its lease revoked. It is never retried.
+    pub outcome: &'static str,
+    pub reason_code: String,
+    pub at: String,
+}
+
+/// How many activity lines one session remembers (§2.8).
+pub const ACTIVITY_CAPACITY: usize = 20;
 
 /* ------------------------------- ring buffers ------------------------------ */
 
@@ -280,14 +380,107 @@ pub enum Visibility {
 }
 
 impl Visibility {
-    /// Quality, `everyNthFrame` and the frame ceiling the Worker itself
-    /// enforces. The last number is real: frames arriving faster are dropped
-    /// after being acknowledged, so the reported `maxFps` is not advisory.
+    /// The LAN budget, which is what a node on the same machine gets.
+    /// Kept as a method because everything that is not a link-quality
+    /// decision still asks a `Visibility` what it wants.
     pub fn budget(self) -> (u32, u32, u32) {
-        match self {
-            Self::Focused => (65, 1, 15),
-            Self::Visible => (40, 2, 5),
-            Self::Hidden => (0, 0, 0),
+        let budget = Budget::of(self, BandwidthClass::Lan);
+        (budget.quality, budget.every_nth, budget.max_fps)
+    }
+}
+
+/// How much link there is between one subscriber and this session (§2.9).
+///
+/// The subscriber says what it can afford; the Worker decides the budget and
+/// reports back what it settled on, so a phone shows the degradation rather
+/// than assuming it did not happen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BandwidthClass {
+    #[default]
+    Lan,
+    Wan,
+    Metered,
+}
+
+/// What one subscriber is actually served.
+///
+/// `max_fps` is real rather than advisory: frames arriving faster are dropped
+/// after being acknowledged. `max_width` of zero means "no ceiling", which is
+/// not the same as a ceiling of zero.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Budget {
+    pub quality: u32,
+    /// The design §2.9 thinning factor. It is *not* handed to Chrome's
+    /// `everyNthFrame`, which counts repaints rather than time and therefore
+    /// swallows the last frame of a click; the thinning happens per
+    /// subscriber, where the newest frame always survives. Kept because it is
+    /// what makes one class's budget wider than another's.
+    pub every_nth: u32,
+    pub max_fps: u32,
+    pub max_width: u32,
+}
+
+impl Budget {
+    pub const NOTHING: Self = Self {
+        quality: 0,
+        every_nth: 0,
+        max_fps: 0,
+        max_width: 0,
+    };
+
+    /// The table in design §2.9. A hidden subscriber gets nothing at all in
+    /// every class — it still holds the session open, it just costs no frames.
+    pub fn of(visibility: Visibility, bandwidth: BandwidthClass) -> Self {
+        let (quality, every_nth, max_fps, max_width) = match (visibility, bandwidth) {
+            (Visibility::Hidden, _) => return Self::NOTHING,
+            (Visibility::Focused, BandwidthClass::Lan) => (65, 1, 15, 0),
+            (Visibility::Visible, BandwidthClass::Lan) => (40, 2, 5, 0),
+            (Visibility::Focused, BandwidthClass::Wan) => (50, 2, 8, 1_280),
+            (Visibility::Visible, BandwidthClass::Wan) => (35, 3, 3, 1_280),
+            (Visibility::Focused, BandwidthClass::Metered) => (45, 3, 4, 960),
+            // Design §2.9 pins only the focused row for a metered link; a
+            // visible one gets the WAN cadence under the metered ceiling.
+            (Visibility::Visible, BandwidthClass::Metered) => (35, 3, 3, 960),
+        };
+        Self {
+            quality,
+            every_nth,
+            max_fps,
+            max_width,
+        }
+    }
+
+    /// The subscriber's own ceiling, applied on top of its class. A client
+    /// that asks for less gets less; it can never ask for more.
+    pub fn with_client_ceiling(mut self, requested: u32) -> Self {
+        if requested > 0 {
+            self.max_width = match self.max_width {
+                0 => requested,
+                current => current.min(requested),
+            };
+        }
+        self
+    }
+
+    /// The one screencast the page can run has to satisfy the most demanding
+    /// subscriber; every other one is thinned down from it per frame.
+    pub fn widen(self, other: Self) -> Self {
+        if other == Self::NOTHING {
+            return self;
+        }
+        if self == Self::NOTHING {
+            return other;
+        }
+        Self {
+            quality: self.quality.max(other.quality),
+            every_nth: self.every_nth.min(other.every_nth).max(1),
+            max_fps: self.max_fps.max(other.max_fps),
+            // Zero is "no ceiling", so it wins over any number.
+            max_width: match (self.max_width, other.max_width) {
+                (0, _) | (_, 0) => 0,
+                (left, right) => left.max(right),
+            },
         }
     }
 }
@@ -297,6 +490,10 @@ impl Visibility {
 pub const SUBSCRIPTION_TTL_SECONDS: i64 = 15;
 /// Above this, a session refuses new subscriptions rather than growing.
 pub const MAX_SUBSCRIPTIONS: usize = 16;
+/// Frames a subscriber may leave unacknowledged before it starts being
+/// skipped rather than queued behind (§2.9). Every subscriber is counted on
+/// its own, so a slow phone does not hold up a desktop node.
+pub const MAX_UNACKED_FRAMES: u64 = 2;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -305,4 +502,7 @@ pub struct Subscription {
     pub expires_at: String,
     pub quality: u32,
     pub max_fps: u32,
+    /// What the Worker settled on, not what was asked for. Zero means the
+    /// picture is sent at the page's own width.
+    pub max_width: u32,
 }

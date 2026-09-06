@@ -10,6 +10,8 @@
 //! axum listener on `127.0.0.1:0`, and the profile is a throwaway directory
 //! inside the test's own temporary data directory.
 
+mod budget;
+mod lease;
 mod live;
 mod managed;
 mod persistence;

@@ -100,6 +100,21 @@ pub enum WorkspaceEvent {
     BrowserDownload {
         download: Box<crate::browser::Download>,
     },
+    /// The control lease changed hands (design §2.6). Every client shows the
+    /// same badge from this, rather than each inferring a holder from whatever
+    /// it last did itself.
+    #[serde(rename = "browser.lease", rename_all = "camelCase")]
+    BrowserLease {
+        session_id: String,
+        lease: Box<crate::browser::Lease>,
+    },
+    /// One line of "who did what" for the node header (design §2.8). Low
+    /// frequency by construction: one per action, not one per frame.
+    #[serde(rename = "browser.activity")]
+    BrowserActivity {
+        #[serde(flatten)]
+        activity: Box<crate::browser::Activity>,
+    },
     /// One language session's state (language service design §2.9).
     ///
     /// It rides the workspace stream rather than the session socket so the

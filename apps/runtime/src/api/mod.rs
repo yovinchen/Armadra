@@ -17,7 +17,9 @@ mod git;
 mod health;
 mod search;
 mod settings;
-mod support;
+/// Shared request checks. `pub(crate)` because the browser's own stream route
+/// has to apply the same WebSocket origin rule as this module's sockets do.
+pub(crate) mod support;
 mod terminals;
 mod usage;
 mod workspaces;

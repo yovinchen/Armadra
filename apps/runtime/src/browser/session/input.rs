@@ -11,6 +11,17 @@ pub struct InputRequest {
     #[serde(default)]
     pub frame_seq: Option<u64>,
     pub events: Vec<InputEvent>,
+    /// The generation the caller last saw. Absent means it is not tracking
+    /// one, which is allowed: a person clicking is not required to have read
+    /// the lease first (§2.6).
+    #[serde(default)]
+    pub lease_generation: Option<u64>,
+    /// The viewer this input came from, so the badge can say "you" on one
+    /// device and "another device" on the others.
+    #[serde(default)]
+    pub device_id: String,
+    #[serde(default)]
+    pub display_name: String,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -64,6 +75,27 @@ pub async fn input(live: &Live, request: &InputRequest) -> AppResult<u32> {
         return Err(AppError::Conflict(
             "That browser session is not accepting input".into(),
         ));
+    }
+    // A person's ordinary input takes the lease straight away — it never
+    // queues, and it preempts an agent (§2.6). Taking it *before* dispatching
+    // is what makes the agent's next action see a human holder.
+    let actor = lease::Actor::human(
+        lease::device_or_local(&request.device_id),
+        lease::truncate_name(&request.display_name),
+    );
+    let before = live.lease_machine().generation();
+    lease::acquire(live, &actor, request.lease_generation).await?;
+    if live.lease_machine().generation() != before {
+        live.record_activity(crate::browser::Activity {
+            session_id: live.session_id.clone(),
+            actor: "human",
+            actor_id: actor.id().to_owned(),
+            verb: "input".into(),
+            target: String::new(),
+            outcome: "ok",
+            reason_code: String::new(),
+            at: Utc::now().to_rfc3339(),
+        });
     }
     let mut accepted = 0;
     for event in &request.events {

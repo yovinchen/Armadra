@@ -463,6 +463,28 @@ pub fn router_with_state(state: AppState) -> Router {
             "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/downloads/{download_id}",
             post(browser::routes::decide_download),
         )
+        // The dedicated picture stream (§2.9). Binary Protobuf both ways, and
+        // one socket per viewer: the connection *is* the subscription.
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/stream",
+            get(browser::routes::stream::stream),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/lease",
+            post(browser::routes::lease),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/activity",
+            get(browser::routes::activity),
+        )
+        // The pinned browser build belongs to the machine, not to a
+        // workspace: every workspace on this host sees the same one.
+        .route(
+            "/api/browser/managed",
+            get(browser::routes::managed)
+                .post(browser::routes::install_managed)
+                .delete(browser::routes::remove_managed),
+        )
         // Host / session resources (T02). Sampling is a subscription: the
         // panel renews while it is open and the sampler stops on its own once
         // the last subscription lapses, so a closed panel costs nothing.

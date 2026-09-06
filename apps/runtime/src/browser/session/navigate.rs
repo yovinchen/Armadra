@@ -99,14 +99,10 @@ pub(super) async fn set_viewport_inner(live: &Live, viewport: Viewport) -> AppRe
     live.edit(|record| record.viewport = viewport);
     // A resize changes the screencast bounds, so the stream is restarted with
     // the new maximums rather than left scaling an old size.
-    let mode = live
-        .stream
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .mode;
-    if let Some(mode) = mode {
+    let budget = live.running_budget();
+    if let Some(budget) = budget {
         let _ = stop_stream(live).await;
-        let _ = start_stream(live, mode).await;
+        let _ = start_stream(live, budget).await;
     }
     live.publish().await;
     Ok(())

@@ -118,6 +118,25 @@ pub async fn run(
         .await
         .map_err(refuse)?;
 
+    // Input-shaped verbs take the control lease; reads never do (§2.6). A
+    // person who is mid-input makes this wait, briefly, and then refuses; a
+    // person who pressed "take over" makes it fail at once with
+    // `LEASE_REVOKED`, and the action is not retried.
+    let actor = session::Actor::agent(&caller.node.id, &opened.session_id, &caller.node.title);
+    if LEASE_VERBS.contains(&verb)
+        && let Err(error) = session::lease::acquire(&live, &actor, None).await
+    {
+        let reason = error.to_string();
+        live.record_activity(activity(
+            &opened.session_id,
+            &caller.node.id,
+            verb,
+            "refused",
+            &reason,
+        ));
+        return Err(refuse(error));
+    }
+
     let outcome = match verb {
         "navigate" => navigate(&live, args).await,
         "read" => read(&live, args).await,
@@ -141,7 +160,55 @@ pub async fn run(
             .err()
             .map(|refusal| refusal.message.as_str()),
     );
+    // The header badge shows the same thing the trace records, one line of it,
+    // so somebody watching the canvas can see the agent working (§2.8).
+    match outcome.as_ref() {
+        Ok(_) => live.record_activity(activity(
+            &opened.session_id,
+            &caller.node.id,
+            verb,
+            "ok",
+            "",
+        )),
+        Err(refusal) => live.record_activity(activity(
+            &opened.session_id,
+            &caller.node.id,
+            verb,
+            "refused",
+            &refusal.message,
+        )),
+    }
     outcome
+}
+
+/// Verbs that drive the page rather than read it. `read`, `wait` and
+/// `capture` are reads and never take the lease (§2.6).
+const LEASE_VERBS: &[&str] = &["navigate", "click", "type"];
+
+fn activity(
+    session_id: &str,
+    node_id: &str,
+    verb: &str,
+    outcome: &'static str,
+    reason: &str,
+) -> super::Activity {
+    super::Activity {
+        session_id: session_id.to_owned(),
+        actor: "agent",
+        actor_id: node_id.to_owned(),
+        verb: verb.to_owned(),
+        target: String::new(),
+        outcome,
+        // The badge localizes a stable code; a whole refusal message would be
+        // prose in one language sitting in a chip.
+        reason_code: reason
+            .split(':')
+            .next()
+            .filter(|code| code.starts_with("LEASE_"))
+            .unwrap_or_default()
+            .to_owned(),
+        at: chrono::Utc::now().to_rfc3339(),
+    }
 }
 
 fn capability_allowed(state: &AppState, agent_id: Option<&str>) -> bool {
