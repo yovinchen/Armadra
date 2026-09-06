@@ -113,3 +113,9 @@ export const CodeActionMenu = lazy(() =>
     default: module.CodeActionMenu,
   })),
 );
+
+export const MergeDialog = lazy(() =>
+  import("@/editor/merge/MergeDialog").then((module) => ({
+    default: module.MergeDialog,
+  })),
+);

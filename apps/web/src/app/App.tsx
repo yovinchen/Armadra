@@ -18,6 +18,7 @@ import {
   HandoffHistoryDrawer,
   CodeActionMenu,
   EditPreviewDialog,
+  MergeDialog,
   ProblemsPanel,
   ReferencesPanel,
   ResourceDrawer,
@@ -134,6 +135,7 @@ function AppShell() {
         <ReferencesPanel />
         <EditPreviewDialog />
         <CodeActionMenu />
+        <MergeDialog />
         <ResourceDrawer />
         <AutomationDrawer />
         <UsageDashboard />

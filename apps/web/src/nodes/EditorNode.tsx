@@ -5,6 +5,7 @@ import {
   Download,
   Eye,
   File,
+  GitMerge,
   Lightbulb,
   Pencil,
   Save,
@@ -44,6 +45,7 @@ import { useExternalChanges } from "./editor/use-external-changes";
 import { useFileSave } from "./editor/use-save";
 import { useLanguageService } from "@/editor/language/use-language";
 import { languageIdFor } from "@/editor/language/language-ids";
+import { hasConflictMarkers, openMergeView } from "@/editor/merge/conflict";
 
 /**
  * 文件编辑器节点（编辑器设计 §2–§4）。
@@ -323,6 +325,16 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
         ? state.content
         : "";
 
+  /**
+   * 这个文件里有 Git 冲突标记。判断只看已经读进来的正文，不额外问 Git：
+   * 合并入口出现的条件应该和「打开它就看得见 `<<<<<<<`」完全一致，而三份
+   * 原文要等真的打开合并视图时再去索引里取。
+   */
+  const conflicted =
+    state.kind === "text" &&
+    state.identity === identity &&
+    hasConflictMarkers(state.content);
+
   const headerActions = (
     <>
       {state.kind === "text" && !state.sha256 && (
@@ -403,6 +415,14 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
           }}
         >
           <Lightbulb />
+        </IconButton>
+      )}
+      {conflicted && writable && workspaceId && (
+        <IconButton
+          label={t("merge.open")}
+          onClick={() => void openMergeView(workspaceId, path)}
+        >
+          <GitMerge />
         </IconButton>
       )}
       {writable && state.kind === "text" && (

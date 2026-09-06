@@ -34,6 +34,7 @@ import { fileDrag } from "./file-drag";
 import { resources } from "./resources";
 import { fileWorkflow } from "./file-workflow";
 import { languageService } from "./language-service";
+import { editorMerge } from "./editor-merge";
 import { terminal } from "./terminal";
 import { updates } from "./updates";
 import { usage } from "./usage";
@@ -85,6 +86,7 @@ export const MESSAGE_MODULES = {
   "file-drag": fileDrag,
   "file-workflow": fileWorkflow,
   "language-service": languageService,
+  "editor-merge": editorMerge,
   explorer,
   mobile,
   modals,
