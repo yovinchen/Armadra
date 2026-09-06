@@ -1,8 +1,12 @@
 import { useViewport } from "@xyflow/react";
 import { Gauge, LayoutGrid, Plus, Redo2, Undo2 } from "lucide-react";
-import { AddMenuContent } from "../canvas/menus/AddMenuContent";
+import {
+  ADD_MENU_CONTENT_CLASS,
+  AddMenuContent,
+} from "../canvas/menus/AddMenuContent";
 import { DockTools } from "./DockTools";
-import { screenToPage } from "../canvas/flow/flow-context";
+import { useMenuTooltip } from "./menu-tooltip";
+import { currentViewportCenter } from "../canvas/placement";
 import { fitView, zoomToLevel } from "../canvas/flow/use-flow-viewport";
 import { canEditCanvas, useCanvasOwnership } from "../canvas-ownership";
 import { useCanUndo, useCanRedo, useCanvasStore } from "../store/canvas-store";
@@ -42,39 +46,51 @@ export function Dock() {
   const agents = useEnabledAgents();
   const usagePanel = useCanvasStore((state) => state.panels.usage);
   const setPanel = useCanvasStore((state) => state.setPanel);
+  const addMenu = useMenuTooltip();
+  const zoomMenu = useMenuTooltip();
 
   if (!workspace) return null;
-
-  const center = () => {
-    const { innerWidth, innerHeight } = window;
-    return screenToPage({ x: innerWidth / 2, y: innerHeight / 2 });
-  };
 
   return (
     <div
       data-slot="dock"
       className="canvas-dock z-[var(--z-dock)] flex h-[var(--dock-h)] items-center gap-1 rounded-[var(--r-panel)] border border-border bg-[var(--panel)]/90 px-1.5 shadow-[var(--shadow-pill)] backdrop-blur-[12px]"
     >
-      <DropdownMenu>
+      <DropdownMenu {...addMenu.menuProps}>
         <Tooltip delayDuration={500}>
-          <TooltipTrigger asChild>
+          <TooltipTrigger asChild {...addMenu.tooltipTriggerProps}>
             <DropdownMenuTrigger asChild>
-              <IconButton size="dock" label={t("dock.add")}>
+              <IconButton
+                size="dock"
+                label={t("dock.add")}
+                active={addMenu.menuOpen}
+              >
                 <Plus />
               </IconButton>
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent>{t("dock.add")}</TooltipContent>
+          {/* 菜单展开时不再挂提示：它会压在第一条菜单项上。 */}
+          {addMenu.menuOpen ? null : (
+            <TooltipContent>{t("dock.add")}</TooltipContent>
+          )}
         </Tooltip>
         <DropdownMenuContent
           align="center"
           side="top"
-          className="z-[var(--z-menu)]"
+          className={cn("z-[var(--z-menu)]", ADD_MENU_CONTENT_CLASS)}
         >
-          <AddMenuContent
-            kind="dropdown"
-            ctx={{ addNode, position: center(), workspace, agents }}
-          />
+          {/* 落点在**展开这一刻**算：菜单开着时相机还能动。 */}
+          {addMenu.menuOpen && (
+            <AddMenuContent
+              kind="dropdown"
+              ctx={{
+                addNode,
+                position: currentViewportCenter(),
+                workspace,
+                agents,
+              }}
+            />
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -142,20 +158,28 @@ export function Dock() {
 
       <SaveDot />
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <IconButton
-            size="dock"
-            label={t("dock.zoom")}
-            className="w-[52px] text-[length:var(--text-caption)] font-medium tabular-nums"
-          >
-            {Math.round(zoom * 100)}%
-          </IconButton>
-        </DropdownMenuTrigger>
+      <DropdownMenu {...zoomMenu.menuProps}>
+        <Tooltip delayDuration={500}>
+          <TooltipTrigger asChild {...zoomMenu.tooltipTriggerProps}>
+            <DropdownMenuTrigger asChild>
+              <IconButton
+                size="dock"
+                label={t("dock.zoom")}
+                active={zoomMenu.menuOpen}
+                className="w-[52px] text-[length:var(--text-caption)] font-medium tabular-nums"
+              >
+                {Math.round(zoom * 100)}%
+              </IconButton>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          {zoomMenu.menuOpen ? null : (
+            <TooltipContent>{t("dock.zoom")}</TooltipContent>
+          )}
+        </Tooltip>
         <DropdownMenuContent
           align="center"
           side="top"
-          className="z-[var(--z-menu)]"
+          className="z-[var(--z-menu)] w-auto min-w-32"
         >
           {ZOOM_STEPS.map((step) => (
             <DropdownMenuItem

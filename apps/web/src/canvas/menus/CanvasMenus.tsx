@@ -7,7 +7,7 @@ import { useEnabledAgents } from "@/app/use-agents";
 import { useCanvasStore } from "@/store/canvas-store";
 import { getFlow } from "../flow/flow-context";
 import { isItemId } from "../whiteboard/model";
-import { AddMenuContent } from "./AddMenuContent";
+import { ADD_MENU_CONTENT_CLASS, AddMenuContent } from "./AddMenuContent";
 import { EdgeMenuContent } from "./edge-menu";
 import { ItemMenuContent } from "./item-menu";
 import { NodeMenuContent } from "./node-menu";
@@ -75,7 +75,8 @@ export function useCanvasMenus(): CanvasMenus {
   const [target, setTarget] = React.useState<CanvasMenuTarget>({
     kind: "pane",
   });
-  // 新建菜单的落点：右键那一下的画布坐标（新节点落在指针下，不是视口中心）。
+  // 新建菜单的落点锚点：右键那一下的画布坐标（新节点以指针为中心，
+  // 不是视口中心）。
   const [position, setPosition] = React.useState<Position>({ x: 0, y: 0 });
 
   const rememberPoint = React.useCallback(
@@ -111,8 +112,11 @@ export function useCanvasMenus(): CanvasMenus {
     [rememberPoint],
   );
 
+  // 空白处右键出的是新建菜单，它比节点/边/对象菜单宽（标签不截断）。
   const menus = (
-    <ContextMenuContent className="min-w-44">
+    <ContextMenuContent
+      className={target.kind === "pane" ? ADD_MENU_CONTENT_CLASS : "min-w-44"}
+    >
       <CanvasMenuBody
         target={target}
         position={position}

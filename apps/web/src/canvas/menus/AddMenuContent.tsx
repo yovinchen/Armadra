@@ -27,6 +27,21 @@ export interface AddMenuContentProps {
   kind: "context" | "dropdown";
 }
 
+/**
+ * 新建菜单容器的尺寸，三处入口共用。
+ *
+ * shadcn 生成的 `DropdownMenuContent` 把宽度钉在触发器上
+ * （`w-(--radix-dropdown-menu-trigger-width)`）。Dock 的 `+` 是一颗 32px 的
+ * 图标钮，菜单于是缩到 `min-w-32`（128px），「新建终端」「打开文件…」
+ * 「新建定时计划」全被省略号吃掉。这里改回按内容排版，并给一个放得下
+ * 「标签 + 快捷键」的下限。
+ *
+ * 高度不必在这里管：两种容器都已经是
+ * `max-h-(--radix-*-content-available-height)` 配 `overflow-y-auto`，
+ * 窗口矮的时候菜单自己滚，不会顶出视口。
+ */
+export const ADD_MENU_CONTENT_CLASS = "w-auto min-w-60 max-w-80";
+
 export function AddMenuContent({ ctx, kind }: AddMenuContentProps) {
   const t = useT();
   // `t` 按 locale 记忆化，所以切语言时菜单会重建，平时不会每帧重算。
