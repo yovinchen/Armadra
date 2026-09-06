@@ -522,6 +522,55 @@ async fn real_cli_stdout_is_protobuf_and_errors_do_not_echo_stderr() {
     );
 }
 
+/// A Host an older packaged build left behind without a port is stopped and
+/// started again once; a Host on some other port is left alone and reported.
+#[cfg(unix)]
+#[tokio::test(flavor = "current_thread")]
+async fn a_portless_host_from_an_older_shell_is_replaced_once() {
+    let _serial = CLI_FIXTURES.lock().await;
+    let escape = |wire: &[u8]| {
+        wire.iter()
+            .map(|byte| format!("\\{byte:03o}"))
+            .collect::<String>()
+    };
+    let mut portless = status();
+    portless.http_endpoint.clear();
+    let (old, new) = (escape(&management(portless)), escape(&management(status())));
+    let marker = std::env::temp_dir().join(format!("armadra-host-replaced-{}", std::process::id()));
+    let _ = std::fs::remove_file(&marker);
+    let marker_path = marker.display();
+    // `start` answers with the portless instance until `stop` has been called.
+    let fixture = ScriptFixture::new(&format!(
+        "case \"$1\" in stop) touch '{marker_path}'; printf '{old}';; \
+         start) if [ -e '{marker_path}' ]; then printf '{new}'; else printf '{old}'; fi;; esac"
+    ));
+    assert_eq!(
+        start_running(&config(fixture.path.clone())).await.unwrap(),
+        management(status())
+    );
+    assert!(marker.is_file(), "the old Host was stopped");
+    let _ = std::fs::remove_file(&marker);
+
+    // A Host on another port was configured by someone else: no stop is sent.
+    let mut elsewhere = status();
+    elsewhere.http_endpoint = "http://127.0.0.1:12345".into();
+    let elsewhere = escape(&management(elsewhere));
+    let fixture = ScriptFixture::new(&format!(
+        "case \"$1\" in stop) touch '{marker_path}';; start) printf '{elsewhere}';; esac"
+    ));
+    assert_eq!(
+        start_running(&config(fixture.path.clone())).await,
+        Err(HostLaunchError::EndpointMismatch)
+    );
+    assert!(!marker.exists(), "a foreign Host is never stopped");
+    assert!(portless_running(&management({
+        let mut portless = status();
+        portless.http_endpoint.clear();
+        portless
+    })));
+    assert!(!portless_running(&management(status())));
+}
+
 #[cfg(unix)]
 #[tokio::test(flavor = "current_thread")]
 async fn timeout_kills_and_reaps_only_the_cli_parent() {

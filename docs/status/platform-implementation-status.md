@@ -166,6 +166,7 @@
 - **Git 域**（`97017b49`…`601148dc`）：常驻 git Worker 承接 clone，`WorkerGitUpcall` 进度上行（6/7）；worktree 绑定校验与五种判决；面板全部读写经网关；rebase reword/edit/fixup/skip；reflog；pathspec 与批量状态；每个 git Worker 私有状态目录（并发时 SQLite 日志争用曾致 UNKNOWN_OUTCOME）；git e2e 39 项。
 - **settings / 远端**（`06fea221`…`6d3b5d69`）：六条本地设置拆到 `worker-settings.json`（载入时一次性搬迁，不随所有权迁移）；`/api/execution-hosts` 与 Host 侧 CRUD/Validate/Export/Import（`TestExecutionHost` 留在 Worker）；切换阻塞项补浏览器会话与自动化节点、`stopBlockers` 停完重取再判；远端错误口径 `unsupported_on_remote`；AI 提交信息远端经 `GIT_MESSAGE_CAPTURE = 53` 在持仓侧采集、控制端生成（`service_contract_version` 2）。
 - 主树复核（十条分支全部合入后，`6d3b5d69` 起）：`pnpm check` 通过；协议 TS 140；shared 152；host-client 288；桌面脚本 12；Web 231 文件 2216 项；`clippy --workspace --all-targets -D warnings`（含 desktop）通过；Runtime lib 977 项与全部集成二进制（`remote_execution` 的语言服务远端重启期望由 501 改为 404，因两批同时落地）；`armadra-hook` 44；桌面 cargo 全部套件；Go Host 全部包 race（含真实 Worker）；canvas e2e 73、settings 35、filesystem 30、session 39、git 39、agent 47、GitHub 42、原生会话 smoke 通过。满载时 `hook::tests::extension::an_unreachable_socket_*` 首跑失败一次，单独重跑通过。
+- **更新路径**：新壳启动时若 `start` 遇到旧打包版留下的无端口 Host（`--listen none`），只在对方没有任何端口时视为自己上一版的实例，`stop` 后重新 `start` 一次；别的端口仍报 `EndpointMismatch`（探针实测：用户机器上旧版 Host 常驻时新壳 Host 功能不可用，即此根因）。
 - 合并冲突手工处理：编辑器键位（引用侧栏与 ⌘. 进 `editor` 作用域，专注模式 `when: "!editorFocus"`）、`main.rs` 命令表、自动化与源码控制抽屉改 `WorkPanelSheet`、worker.proto 操作号（50 冲突改 53）与回放快照计数。
 
 ## 本轮验证（2026-09-06 上午，四轮全部合入后于主树重跑，私有目标目录）

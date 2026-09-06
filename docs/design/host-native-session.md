@@ -61,6 +61,10 @@
 - `host/native.rs`：`issue_native_ticket()` 复用 `launch.rs` 的子进程模式运行 `pair`，stdout 上限 64 KiB、stderr 不保留、限时 15 秒；核对票据的 `hostId` / `hostInstanceId` 与本次 `ensure_host` 观察到的一致、来源与壳配置一致、未过期。
 - `native_session.rs`：唯一暴露给页面的命令 `host_native_ticket`，只读，返回 `{ hostId, hostInstanceId, origin, ticket, expiresAtUnixMs }`；不暴露进程、路径或标志。命令与 Host 启停串行（同一把 `host_operation` 锁），退出中或 Host 未就绪时报 `hostUnavailable`。
 
+### 4.5 更新路径：替换旧壳留下的无端口 Host
+
+`armadra-host start` 只回答「谁已经持有这个数据目录」，不核对配置。旧的打包版用 `--listen none` 启动 Host，用户装新版本后（旧 Host 可能仍在后台），新壳的 `start` 会遇到那个没有端口的实例，页面永远拿不到会话。桌面壳在 `EndpointMismatch` 且对方**没有任何端口**时把它视为自己上一版留下的（只有桌面壳启动过无端口的 Host），发一次 `stop` 再 `start`；任何其他不一致（别的端口）仍然报错不动，那不是这个壳该停的进程。
+
 ## 5. 验证
 
 - Go：`internal/server/native_test.go`（原生来源 + bearer 成功、浏览器来源同票据拒绝、票据二次使用拒绝、HTTPS 形态拒绝原生、bearer 不能用于 Cookie 形态、预检）、`cmd/armadra-host/pair_test.go`（回环 Host 对被允许的原生来源出票、对浏览器来源仍拒绝）。

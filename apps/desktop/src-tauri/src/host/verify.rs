@@ -29,6 +29,20 @@ pub(super) fn valid_endpoint(endpoint: &str) -> bool {
         && parsed.password().is_none()
         && parsed.origin().ascii_serialization() == endpoint
 }
+/// Whether `wire` describes a running Host that holds no HTTP port at all.
+///
+/// Only this shell ever started such a Host — packaged builds asked for
+/// `--listen none` before the page's native session needed the loopback port
+/// (docs/design/host-native-session.md §4.4) — so meeting one at startup means
+/// an older build of the desktop left it behind, not that somebody else
+/// configured a Host on this machine.
+pub(super) fn portless_running(wire: &[u8]) -> bool {
+    matches!(
+        decode_running(wire, None),
+        Ok(status) if status.http_endpoint.is_empty()
+    )
+}
+
 pub(super) fn decode_running(
     wire: &[u8],
     expected_endpoint: Option<&str>,

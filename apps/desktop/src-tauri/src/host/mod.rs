@@ -21,8 +21,8 @@ use std::{
 
 use armadra_protocol::v1;
 
-use self::launch::{resolve_binary, run_start};
-use self::verify::{decode_running, valid_endpoint, valid_origin, verify_origin};
+use self::launch::{resolve_binary, run_cli, run_start};
+use self::verify::{decode_running, portless_running, valid_endpoint, valid_origin, verify_origin};
 
 pub const HOST_ENDPOINT: &str = "http://127.0.0.1:43121";
 const HELLO_PATH: &str = "/rpc/armadra.v1.HostService/Hello";
@@ -193,8 +193,44 @@ impl HostLaunchConfig {
     }
 }
 
-pub async fn ensure_host(config: &HostLaunchConfig) -> Result<v1::HostStatus, HostLaunchError> {
+/// `start`, replacing at most once a Host this shell left behind without a
+/// port.
+///
+/// `armadra-host start` answers with whatever instance already owns the data
+/// directory, however it was configured. A packaged build before the native
+/// session started its Host with `--listen none`; after an update the new
+/// shell meets that instance, and the page could never reach it. That Host is
+/// ours to replace — same launcher, same data directory — so it is stopped and
+/// `start` runs again with the current listen configuration. Every other
+/// mismatch (a port that is not the one asked for) still fails: that Host was
+/// configured by somebody else, and stopping it is not this shell's call.
+async fn start_running(config: &HostLaunchConfig) -> Result<Vec<u8>, HostLaunchError> {
     let wire = run_start(config).await?;
+    match decode_running(&wire, config.expected_http_endpoint.as_deref()) {
+        Err(HostLaunchError::EndpointMismatch)
+            if config.expected_http_endpoint.is_some() && portless_running(&wire) =>
+        {
+            run_cli(config, stop_arguments(config), STDOUT_LIMIT).await?;
+            run_start(config).await
+        }
+        Err(error) => Err(error),
+        Ok(_) => Ok(wire),
+    }
+}
+
+fn stop_arguments(config: &HostLaunchConfig) -> Vec<OsString> {
+    let mut args: Vec<OsString> = ["stop", "--output", "protobuf"]
+        .into_iter()
+        .map(Into::into)
+        .collect();
+    if let Some(directory) = &config.data_dir {
+        args.extend(["--data-dir".into(), directory.as_os_str().to_owned()]);
+    }
+    args
+}
+
+pub async fn ensure_host(config: &HostLaunchConfig) -> Result<v1::HostStatus, HostLaunchError> {
+    let wire = start_running(config).await?;
     let status = decode_running(&wire, config.expected_http_endpoint.as_deref())?;
     // There is no browser surface to probe when the Host holds no port; its
     // identity came back over the control IPC, which is already same-user only.
