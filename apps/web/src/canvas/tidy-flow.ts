@@ -6,6 +6,7 @@ import { isCanvasLocked } from "./canvas-lock";
 import { nodeBox, type Box } from "./geometry";
 import { tidy, type TidyLink, type TidyOptions } from "./tidy";
 import { toItemId, type Item } from "./whiteboard/model";
+import { moveItems } from "./whiteboard/store";
 
 /**
  * 整理排布的画布侧（React Flow 计划 §1.2 F09，替代 `tidy-editor.ts`）。
@@ -21,7 +22,8 @@ import { toItemId, type Item } from "./whiteboard/model";
  * （内容引用）。两端各自上溯到自己的顶层容器，连在一起的东西才不会被拆到
  * 画布两头。
  *
- * **一次手势一条历史**：节点走 `moveNodes`、白板对象走 `setWhiteboard`，
+ * **一次手势一条历史**：节点走 `moveNodes`、白板对象走 `whiteboard.moveItems`
+ * （§2.11 就是这么约定的：整理只挪位置，不该有权把整份白板文档换掉），
  * 两次 commit 由 `beginCoalesce` / `endCoalesce` 合并成一条，所以整理之后
  * 按一下 ⌘Z 就整块回到原位。
  *
@@ -88,7 +90,7 @@ function links(ids: ReadonlySet<string>): TidyLink[] {
 /**
  * 把整块画布重排一次，保持内容包围盒的左上角不动。
  *
- * 返回值只给测试用：真正的效果是一次 `moveNodes` + 一次 `setWhiteboard`，
+ * 返回值只给测试用：真正的效果是一次 `moveNodes` + 一次 `moveItems`，
  * 合并成一条历史。
  */
 export function arrangeCanvas(
@@ -137,14 +139,7 @@ export function arrangeCanvas(
   try {
     if (nodeMoves.length > 0) useCanvasStore.getState().moveNodes(nodeMoves);
     if (itemMoves.size > 0) {
-      const current = useCanvasStore.getState().whiteboard;
-      useCanvasStore.getState().setWhiteboard({
-        ...current,
-        items: current.items.map((item) => {
-          const move = itemMoves.get(toItemId(item.id));
-          return move ? { ...item, x: move.x, y: move.y } : item;
-        }),
-      });
+      moveItems([...itemMoves].map(([id, position]) => ({ id, position })));
     }
   } finally {
     endCoalesce();
