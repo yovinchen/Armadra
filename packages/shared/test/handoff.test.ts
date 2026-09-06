@@ -131,13 +131,26 @@ describe("handoff bundle contract", () => {
     ).toThrow();
   });
 
-  it("refuses a delivery state the runtime never reports", () => {
-    expect(
-      handoffViewSchema.parse({ ...view(), state: "unknownOutcome" }).state,
-    ).toBe("unknownOutcome");
-    expect(() =>
-      handoffViewSchema.parse({ ...view(), state: "delivered" }),
-    ).toThrow();
+  it("accepts the four states and nothing that describes a pane write", () => {
+    for (const state of ["prepared", "queued", "acknowledged", "cancelled"]) {
+      expect(handoffViewSchema.parse({ ...view(), state }).state).toBe(state);
+    }
+    // Every one of these described what a paste into the target's terminal
+    // did, and nothing pastes any more. The runtime normalizes rows a previous
+    // version left behind, so a client that saw one would be reading a state
+    // its own runtime cannot produce.
+    for (const gone of [
+      "dispatching",
+      "notified",
+      "unknownOutcome",
+      "failed",
+      "expired",
+      "delivered",
+    ]) {
+      expect(() =>
+        handoffViewSchema.parse({ ...view(), state: gone }),
+      ).toThrow();
+    }
   });
 
   it("mirrors the runtime's budget tiers and template limits on the request", () => {
