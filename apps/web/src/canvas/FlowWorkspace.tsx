@@ -21,13 +21,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/ui/alert-dialog";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuTrigger,
-} from "@/ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/ui/context-menu";
 import { IconButton } from "@/ui/icon-button";
-import { useEnabledAgents } from "@/app/use-agents";
 import { useT } from "@/app/preferences-store";
 import { usePreferencesStore, useResolvedTheme } from "@/app/preferences-store";
 import { canvasColorScheme } from "@/app/use-canvas-preferences";
@@ -71,15 +66,13 @@ import {
   NODE_DRAG_THRESHOLD,
   SELECTION_KEY_CODE,
 } from "./interaction/keyboard";
-import { AddMenuContent } from "./menus/AddMenuContent";
-import { NodeMenuContent } from "./menus/node-menu";
-import { ShapeMenuContent } from "./menus/shape-menu";
+import { useCanvasMenus } from "./menus/CanvasMenus";
 import { Minimap } from "./flow/Minimap";
 import { CanvasOverlays } from "./flow/overlays/CanvasOverlays";
 import { CanvasStylePanel } from "./StylePanel";
 import { removeItems } from "./whiteboard/store";
 import { ToolLayer } from "./whiteboard/tools/ToolLayer";
-import { resetProjectionCache, isItemId } from "./sync/project";
+import { resetProjectionCache } from "./sync/project";
 import {
   CANVAS_TOOLS,
   isToolDisabledWhenLocked,
@@ -149,22 +142,20 @@ function onBoardOpened(document: BoardDocument): void {
 export function FlowWorkspace() {
   const t = useT();
   const flow = useReactFlow();
-  const workspace = useCanvasStore((state) => state.workspace);
-  const agents = useEnabledAgents();
   const theme = useResolvedTheme();
   const preferences = usePreferencesStore((state) => state.whiteboard);
   const ownership = useCanvasOwnership((state) => state.status);
   const editable = canEditCanvas(ownership);
   // 锁定状态住在 `canvas-lock.ts`：Dock 的工具组在这棵树之外，要一起读。
   const locked = useCanvasLocked();
-  const [menuNode, setMenuNode] = React.useState<CanvasNode | null>(null);
-  const [menuItemId, setMenuItemId] = React.useState<string | null>(null);
-  const [menuPosition, setMenuPosition] = React.useState({ x: 0, y: 0 });
   const [pendingDelete, setPendingDelete] =
     React.useState<PendingDelete | null>(null);
   const container = React.useRef<HTMLDivElement>(null);
 
   const bindings = useFlowNodes();
+  // 右键菜单插槽（§5.3）：`handlers` 摊给 `<ReactFlow>`，`menus` 摆在
+  // 触发器后面。四种菜单的分流与目标状态都在 `menus/CanvasMenus.tsx`。
+  const { handlers: menuHandlers, menus } = useCanvasMenus();
   useViewportSync();
   useBoardAutosave();
   usePasteToCanvas();
@@ -382,54 +373,6 @@ export function FlowWorkspace() {
     return () => window.removeEventListener(CENTER_NODE_EVENT, onCenter);
   }, []);
 
-  /* ------------------------------ 右键菜单 -------------------------------- */
-
-  const openMenuAt = React.useCallback(
-    (event: { clientX: number; clientY: number }) => {
-      setMenuPosition(
-        flow.screenToFlowPosition({ x: event.clientX, y: event.clientY }),
-      );
-    },
-    [flow],
-  );
-
-  const onPaneContextMenu = React.useCallback(
-    (event: React.MouseEvent | MouseEvent) => {
-      openMenuAt(event);
-      setMenuNode(null);
-      setMenuItemId(null);
-    },
-    [openMenuAt],
-  );
-
-  const onNodeContextMenu = React.useCallback(
-    (event: React.MouseEvent, node: { id: string }) => {
-      openMenuAt(event);
-      if (isItemId(node.id)) {
-        setMenuNode(null);
-        setMenuItemId(node.id);
-        return;
-      }
-      const nodes = useCanvasStore.getState().document?.nodes ?? [];
-      setMenuItemId(null);
-      setMenuNode(nodes.find((item) => item.id === node.id) ?? null);
-    },
-    [openMenuAt],
-  );
-
-  const addMenuContext = React.useMemo(
-    () =>
-      workspace
-        ? {
-            addNode: useCanvasStore.getState().addNode,
-            position: menuPosition,
-            workspace,
-            agents,
-          }
-        : null,
-    [agents, menuPosition, workspace],
-  );
-
   /* ------------------------------ 渲染 ------------------------------------ */
 
   const options = React.useMemo(
@@ -471,8 +414,7 @@ export function FlowWorkspace() {
             elevateNodesOnSelect={false}
             // 方向键归 `canvas.focus*`，Tab 循环焦点会和节点体抢。
             disableKeyboardA11y
-            onPaneContextMenu={onPaneContextMenu}
-            onNodeContextMenu={onNodeContextMenu}
+            {...menuHandlers}
             // 预览线与落成后的边共用同一条贝塞尔（§2.5，B1）。
             connectionLineComponent={ConnectionLine}
           >
@@ -505,15 +447,7 @@ export function FlowWorkspace() {
         </div>
       </ContextMenuTrigger>
 
-      <ContextMenuContent className="min-w-44">
-        {menuNode ? (
-          <NodeMenuContent node={menuNode} />
-        ) : menuItemId ? (
-          <ShapeMenuContent itemId={menuItemId} />
-        ) : addMenuContext ? (
-          <AddMenuContent ctx={addMenuContext} kind="context" />
-        ) : null}
-      </ContextMenuContent>
+      {menus}
 
       <AlertDialog
         open={pendingDelete !== null}
