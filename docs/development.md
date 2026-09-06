@@ -38,7 +38,7 @@ Runtime 与前端是两个进程，桌面壳会自己拉起 Runtime。
 
 ```bash
 # 1. Runtime（监听 127.0.0.1:43120）
-cargo run -p armadra-runtime
+cargo run -p armadra-runtime   # 开发模式下桌面壳不会自己拉起 Runtime，必须单独跑
 
 # 2a. 浏览器里跑前端（127.0.0.1:1420）
 pnpm --filter @armadra/web dev

@@ -71,7 +71,7 @@
 ```bash
 pnpm install
 
-# Runtime，监听 127.0.0.1:43120
+# Runtime，监听 127.0.0.1:43120（开发模式下桌面壳不会自己拉起它，必须单独跑）
 cargo run -p armadra-runtime
 
 # 前端，浏览器里跑

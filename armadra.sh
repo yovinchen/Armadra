@@ -108,30 +108,38 @@ port_in_use() {
   lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
 }
 
-run_desktop() {
-  port_in_use "$RUNTIME_PORT" && fail "端口 $RUNTIME_PORT 已被占用（Armadra.app 是否正在运行？）"
-  step "准备 sidecar（桌面壳在开发模式也从 target/release 拉起 Runtime）"
-  pnpm --filter @armadra/desktop prepare:sidecar
-  pnpm --filter @armadra/shared build
-  step "启动桌面端（tauri dev，前端热更新，⌃C 退出）"
-  exec pnpm --filter @armadra/desktop dev
-}
-
-run_web() {
-  port_in_use "$RUNTIME_PORT" && fail "端口 $RUNTIME_PORT 已被占用（Armadra.app 是否正在运行？）"
+# 开发模式下桌面壳**不会**自己拉起 Runtime（`RuntimeProcess::start` 只在
+# `custom-protocol`，也就是打包后的正式构建里生效），所以这里先把 debug
+# Runtime 起在后台，再开 tauri dev；⌃C 时一起结束。
+start_runtime() {
   step "编译 Runtime（debug）"
   cargo build -p armadra-runtime -p armadra-hook
-  pnpm --filter @armadra/shared build
   step "启动 Runtime（127.0.0.1:$RUNTIME_PORT）"
   ARMADRA_RUNTIME_PORT="$RUNTIME_PORT" ./target/debug/armadra-runtime &
-  local runtime_pid=$!
-  trap 'kill "$runtime_pid" 2>/dev/null || true' EXIT INT TERM
-  for _ in $(seq 1 30); do
+  RUNTIME_PID=$!
+  trap 'kill "$RUNTIME_PID" 2>/dev/null || true' EXIT INT TERM
+  for _ in $(seq 1 40); do
     curl -sf "http://127.0.0.1:$RUNTIME_PORT/api/health" >/dev/null 2>&1 && break
     sleep 0.3
   done
   curl -sf "http://127.0.0.1:$RUNTIME_PORT/api/health" >/dev/null 2>&1 || fail "Runtime 未在 $RUNTIME_PORT 就绪"
   ok "Runtime 就绪"
+}
+
+run_desktop() {
+  port_in_use "$RUNTIME_PORT" && fail "端口 $RUNTIME_PORT 已被占用（Armadra.app 是否正在运行？）"
+  step "准备 sidecar（tauri 的 externalBin 校验要求文件存在）"
+  pnpm --filter @armadra/desktop prepare:sidecar
+  pnpm --filter @armadra/shared build
+  start_runtime
+  step "启动桌面端（tauri dev，前端热更新，⌃C 同时结束 Runtime）"
+  pnpm --filter @armadra/desktop dev
+}
+
+run_web() {
+  port_in_use "$RUNTIME_PORT" && fail "端口 $RUNTIME_PORT 已被占用（Armadra.app 是否正在运行？）"
+  pnpm --filter @armadra/shared build
+  start_runtime
   step "启动前端（http://127.0.0.1:$WEB_PORT，⌃C 同时结束 Runtime）"
   VITE_RUNTIME_URL="http://127.0.0.1:$RUNTIME_PORT" \
     pnpm --filter @armadra/web exec vite --port "$WEB_PORT" --host 127.0.0.1
