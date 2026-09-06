@@ -141,21 +141,73 @@ pub async fn save_board(
             "Board changed since it was loaded; reload before saving".into(),
         ));
     }
-    sqlx::query("DELETE FROM edges WHERE board_id = ?")
-        .bind(&board.id)
-        .execute(&mut *transaction)
-        .await?;
-    sqlx::query("DELETE FROM nodes WHERE board_id = ?")
-        .bind(&board.id)
-        .execute(&mut *transaction)
-        .await?;
+    // A save is a diff, never a rewrite. `agent_mailbox.source_node_id` and
+    // `.target_node_id` are `ON DELETE CASCADE` on `nodes`, so deleting and
+    // re-inserting every row would drop every message on the board on every
+    // autosave — a drag, a rename or a colour change included. Nodes the
+    // document still has are updated in place; only the ones it dropped are
+    // deleted, and those *should* take their mailbox with them.
+    let stored_edge_ids: Vec<String> =
+        sqlx::query_scalar("SELECT id FROM edges WHERE board_id = ?")
+            .bind(&board.id)
+            .fetch_all(&mut *transaction)
+            .await?;
+    let stored_node_ids: Vec<String> =
+        sqlx::query_scalar("SELECT id FROM nodes WHERE board_id = ?")
+            .bind(&board.id)
+            .fetch_all(&mut *transaction)
+            .await?;
+    let kept_edge_ids = request
+        .edges
+        .iter()
+        .map(|edge| edge.id.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    let kept_node_ids = request
+        .nodes
+        .iter()
+        .map(|node| node.id.as_str())
+        .collect::<std::collections::HashSet<_>>();
+
+    // Edges first: an edge the document dropped may point at a node it also
+    // dropped, and `edges` is `ON DELETE CASCADE` on `nodes` too. Every edge
+    // that stays has both endpoints in `request.nodes` (`validate_document`),
+    // so nothing surviving the node deletes is left dangling.
+    for id in stored_edge_ids
+        .iter()
+        .filter(|id| !kept_edge_ids.contains(id.as_str()))
+    {
+        sqlx::query("DELETE FROM edges WHERE id = ?")
+            .bind(id)
+            .execute(&mut *transaction)
+            .await?;
+    }
+    for id in stored_node_ids
+        .iter()
+        .filter(|id| !kept_node_ids.contains(id.as_str()))
+    {
+        sqlx::query("DELETE FROM nodes WHERE id = ?")
+            .bind(id)
+            .execute(&mut *transaction)
+            .await?;
+    }
 
     for node in request.nodes {
-        sqlx::query(
+        // The `WHERE` guard keeps an id owned by another board from being
+        // moved onto this one: the plain INSERT used to fail on the primary
+        // key, and silently stealing the row would be worse than either.
+        let written = sqlx::query(
             "INSERT INTO nodes (id, board_id, type, title, color, x, y, width, height, collapsed, \
                                 expanded_height, parent_id, labels_json, note, data_json, \
                                 created_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
+             ON CONFLICT(id) DO UPDATE SET \
+               type = excluded.type, title = excluded.title, color = excluded.color, \
+               x = excluded.x, y = excluded.y, width = excluded.width, height = excluded.height, \
+               collapsed = excluded.collapsed, expanded_height = excluded.expanded_height, \
+               parent_id = excluded.parent_id, labels_json = excluded.labels_json, \
+               note = excluded.note, data_json = excluded.data_json, \
+               created_at = excluded.created_at, updated_at = excluded.updated_at \
+             WHERE nodes.board_id = excluded.board_id",
         )
         .bind(&node.id)
         .bind(&node.board_id)
@@ -182,11 +234,21 @@ pub async fn save_board(
         .bind(&node.updated_at)
         .execute(&mut *transaction)
         .await?;
+        if written.rows_affected() != 1 {
+            return Err(AppError::BadRequest(
+                "Board contains a node that belongs to another board".into(),
+            ));
+        }
     }
     for edge in request.edges {
-        sqlx::query(
+        let written = sqlx::query(
             "INSERT INTO edges (id, board_id, source_node_id, target_node_id, kind, created_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
+             VALUES (?, ?, ?, ?, ?, ?, ?) \
+             ON CONFLICT(id) DO UPDATE SET \
+               source_node_id = excluded.source_node_id, \
+               target_node_id = excluded.target_node_id, kind = excluded.kind, \
+               created_at = excluded.created_at, updated_at = excluded.updated_at \
+             WHERE edges.board_id = excluded.board_id",
         )
         .bind(&edge.id)
         .bind(&edge.board_id)
@@ -197,6 +259,11 @@ pub async fn save_board(
         .bind(&edge.updated_at)
         .execute(&mut *transaction)
         .await?;
+        if written.rows_affected() != 1 {
+            return Err(AppError::BadRequest(
+                "Board contains an edge that belongs to another board".into(),
+            ));
+        }
     }
     transaction.commit().await?;
     load_board(pool, workspace_id, board_id).await
