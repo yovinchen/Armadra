@@ -47,6 +47,10 @@ export function ComponentList({
                   ? t("resources.component.tree")
                   : t("resources.component.selfOnly")}
                 {` · pid ${component.process.pid}`}
+                {component.location === "remote" &&
+                  ` · ${t("resources.location.remote")}`}
+                {component.unknownReason === "remote" &&
+                  ` · ${t("resources.unknown.remote")}`}
               </div>
             </div>
             <span className="w-14 shrink-0 text-right text-[12px] tabular-nums">

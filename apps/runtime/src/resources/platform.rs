@@ -87,6 +87,11 @@ pub struct LanguageServerTarget {
 #[serde(rename_all = "camelCase")]
 pub struct PlatformComponent {
     pub kind: ComponentKind,
+    /// Which machine the process is on. A remote row carries no numbers: the
+    /// control machine cannot measure another host's memory, and reporting the
+    /// local `ssh` client's few megabytes as the server's footprint would be a
+    /// lie (design §8, language service design §3.3).
+    pub location: super::sample::Location,
     pub process: ProcessSample,
     /// The figures cover the descendants too. The Runtime is `false`: its
     /// children are the user's sessions, which have their own rows.
@@ -125,6 +130,7 @@ pub fn components(
         }
         let mut component = PlatformComponent {
             kind,
+            location: super::sample::Location::Local,
             process: sample,
             tree,
             child_count: None,
@@ -177,6 +183,41 @@ pub fn components(
         }
     }
     found
+}
+
+/// A language server running on a remote execution host.
+///
+/// It is listed so the panel can say the editor started a process somewhere,
+/// and it carries no CPU or memory because this machine has no way to measure
+/// them. `unknown_reason` says which, rather than showing zeros that would read
+/// as an idle server.
+pub fn remote_language_components(
+    servers: &[crate::language::ServerDescriptor],
+) -> Vec<PlatformComponent> {
+    servers
+        .iter()
+        .filter(|server| server.pid.is_some())
+        .map(|server| PlatformComponent {
+            kind: ComponentKind::LanguageServer,
+            location: super::sample::Location::Remote,
+            process: ProcessSample {
+                pid: server.pid.unwrap_or_default(),
+                start_time_unix_ms: server.start_time_unix_ms,
+                // The executable's own name, as the execution host reported it.
+                name: std::path::Path::new(&server.executable)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| server.server_id.clone()),
+                parent_pid: None,
+                memory_bytes: None,
+                cpu_percent: None,
+            },
+            tree: false,
+            child_count: None,
+            children: Vec::new(),
+            unknown_reason: Some("remote"),
+        })
+        .collect()
 }
 
 /// The Go Host, if this Runtime is actually running under one.

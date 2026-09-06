@@ -327,6 +327,22 @@ impl ResourceService {
         // filesystems, and priming sleeps for the platform's minimum CPU
         // window: blocking work that must not sit on an async worker.
         let sampler = self.inner.sampler.clone();
+        // A remote workspace's servers run on the other machine. They are
+        // listed from what that machine last reported, without numbers this
+        // one cannot honestly produce.
+        let remote_language = match crate::db::get_workspace(&state.pool, workspace_id).await {
+            Ok(workspace) => match crate::remote::resolve(state, &workspace) {
+                Ok(crate::remote::Execution::Remote(worker)) => {
+                    match worker.language.current().await {
+                        Some(link) => platform::remote_language_components(&link.descriptors()),
+                        None => Vec::new(),
+                    }
+                }
+                _ => Vec::new(),
+            },
+            Err(_) => Vec::new(),
+        };
+
         let sample = tokio::task::spawn_blocking(move || {
             let mut guard = sampler
                 .lock()
@@ -337,6 +353,8 @@ impl ResourceService {
             guard.sample(&targets, &language)
         })
         .await?;
+        let mut sample = sample;
+        sample.components.extend(remote_language);
 
         // One process-table walk serves both the panel and the RSS ceiling:
         // walking it again just for the language servers would double the cost

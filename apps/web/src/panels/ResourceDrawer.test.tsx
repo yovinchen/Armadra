@@ -117,6 +117,7 @@ const snapshot: ResourceSnapshot = {
   components: [
     {
       kind: "runtime",
+      location: "local",
       process: {
         pid: 90,
         startTimeUnixMs: 1_788_556_200_000,

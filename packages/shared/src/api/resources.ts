@@ -129,6 +129,14 @@ export const platformComponentSchema = z.object({
    * do — leaving it out would make a busy server look idle.
    */
   kind: z.enum(["runtime", "host", "commandWorker", "languageServer"]),
+  /**
+   * Which machine the process is on. A language server for a remote workspace
+   * runs on the execution host, so its row is `remote` and carries no numbers:
+   * this machine cannot measure another host's memory, and the local `ssh`
+   * client's few megabytes are not the server's footprint (language service
+   * design §3.3).
+   */
+  location: resourceLocationSchema.default("local"),
   process: processSampleSchema,
   tree: z.boolean(),
   childCount: z.number().int().nonnegative().nullable(),
