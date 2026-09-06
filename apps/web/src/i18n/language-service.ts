@@ -82,6 +82,7 @@ export const languageService: MessageModule = {
     "lsp.blocked.noVersion": "没有内容版本，无法安全写入",
 
     "lsp.action.title": "代码操作",
+    "lsp.action.description": "选择一项要应用到当前选区的代码操作",
     "lsp.action.loading": "正在获取…",
     "lsp.action.empty": "这里没有可用的代码操作",
     "lsp.action.failed": "获取代码操作失败",
@@ -187,6 +188,7 @@ export const languageService: MessageModule = {
       "No content version, so it cannot be written safely",
 
     "lsp.action.title": "Code actions",
+    "lsp.action.description": "Pick a code action to apply to the selection",
     "lsp.action.loading": "Asking the server…",
     "lsp.action.empty": "No code actions here",
     "lsp.action.failed": "Could not get code actions",

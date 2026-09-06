@@ -34,6 +34,7 @@ export function CodeActionMenu() {
         if (!next) close();
       }}
       title={t("lsp.action.title")}
+      description={t("lsp.action.description")}
       className="z-[var(--z-dialog)]"
     >
       <CommandList>

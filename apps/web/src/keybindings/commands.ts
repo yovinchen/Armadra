@@ -395,6 +395,8 @@ export const COMMANDS = [
     defaultKeys: both("Mod+Period"),
     allowInTerminal: false,
     allowWhileTyping: false,
+    // 编辑器里的 ⌘. 是代码操作（`editor.codeActions`），专注模式让出去。
+    when: "!editorFocus",
   },
 
   // ── canvas：白板工具（React Flow 计划 F21 的工具键表） ───────────
