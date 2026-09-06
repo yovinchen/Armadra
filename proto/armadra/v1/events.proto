@@ -6,6 +6,7 @@ option go_package = "armadra.local/host/gen/armadra/v1";
 
 import "armadra/v1/canvas.proto";
 import "armadra/v1/common.proto";
+import "armadra/v1/settings.proto";
 
 // The Host -> client business event stream (host business migration §2.3).
 //
@@ -68,8 +69,13 @@ enum EventCursorStatus {
 //
 // The `entity` oneof reserves twenty numbers per domain, assigned in the switch
 // order of §1.2: canvas 100-119, settings 120-139, filesystem 140-159,
-// session 160-179, agent 180-219, git 220-239. Only canvas is populated in this
-// batch; a domain still owned by the Worker publishes nothing here.
+// session 160-179, agent 180-219, git 220-239. A domain still owned by the
+// Worker publishes nothing here.
+//
+// The settings domain is host-wide, so its envelopes carry an empty
+// `workspace_id`. A subscription admits them on the domain grant alone: the
+// document belongs to every workspace the session follows, and attributing it
+// to one of them would hide the change from the others.
 message EventEnvelope {
   uint64 sequence = 1;
   uint64 transaction_id = 2;
@@ -93,6 +99,8 @@ message EventEnvelope {
     CanvasNode canvas_node = 102;
     CanvasEdge canvas_edge = 103;
     CanvasAnnotation canvas_annotation = 104;
+    SettingsDocument settings_document = 120;
+    ExecutionHost settings_execution_host = 121;
   }
 }
 

@@ -18,6 +18,8 @@ import type {
 import { file_armadra_v1_canvas } from "./canvas_pb.js";
 import type { ErrorResponse, StreamAck } from "./common_pb.js";
 import { file_armadra_v1_common } from "./common_pb.js";
+import type { ExecutionHost, SettingsDocument } from "./settings_pb.js";
+import { file_armadra_v1_settings } from "./settings_pb.js";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -26,8 +28,8 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_events: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Chdhcm1hZHJhL3YxL2V2ZW50cy5wcm90bxIKYXJtYWRyYS52MSK2BAoNRXZlbnRFbnZlbG9wZRIQCghzZXF1ZW5jZRgBIAEoBBIWCg50cmFuc2FjdGlvbl9pZBgCIAEoBBIUCgxvcGVyYXRpb25faWQYAyABKAkSGQoRdHJhbnNhY3Rpb25faW5kZXgYBCABKA0SGAoQdHJhbnNhY3Rpb25fc2l6ZRgFIAEoDRIUCgx3b3Jrc3BhY2VfaWQYBiABKAkSJwoGZG9tYWluGAcgASgOMhcuYXJtYWRyYS52MS5FdmVudERvbWFpbhIMCgRraW5kGAggASgJEhEKCWVudGl0eV9pZBgJIAEoCRIrCghwcmlvcml0eRgKIAEoDjIZLmFybWFkcmEudjEuRXZlbnRQcmlvcml0eRIQCghyZXZpc2lvbhgyIAEoBBIPCgdkZWxldGVkGDMgASgIEjcKEGNhbnZhc193b3Jrc3BhY2UYZCABKAsyGy5hcm1hZHJhLnYxLkNhbnZhc1dvcmtzcGFjZUgAEiQKBmNhbnZhcxhlIAEoCzISLmFybWFkcmEudjEuQ2FudmFzSAASLQoLY2FudmFzX25vZGUYZiABKAsyFi5hcm1hZHJhLnYxLkNhbnZhc05vZGVIABItCgtjYW52YXNfZWRnZRhnIAEoCzIWLmFybWFkcmEudjEuQ2FudmFzRWRnZUgAEjkKEWNhbnZhc19hbm5vdGF0aW9uGGggASgLMhwuYXJtYWRyYS52MS5DYW52YXNBbm5vdGF0aW9uSABCCAoGZW50aXR5IrYBChZTdWJzY3JpYmVFdmVudHNSZXF1ZXN0EhYKDmFmdGVyX3NlcXVlbmNlGAEgASgEEhUKDXdvcmtzcGFjZV9pZHMYCiADKAkSKAoHZG9tYWlucxgLIAMoDjIXLmFybWFkcmEudjEuRXZlbnREb21haW4SEgoKcGFnZV9ieXRlcxgMIAEoDRIvCgxtaW5fcHJpb3JpdHkYDSABKA4yGS5hcm1hZHJhLnYxLkV2ZW50UHJpb3JpdHkiuAEKCUV2ZW50UGFnZRIpCgZldmVudHMYCiADKAsyGS5hcm1hZHJhLnYxLkV2ZW50RW52ZWxvcGUSEwoLbmV4dF9jdXJzb3IYCyABKAQSEgoKbWluX2N1cnNvchgMIAEoBBIWCg5oaWdoX3dhdGVybWFyaxgNIAEoBBIQCghoYXNfbW9yZRgOIAEoCBItCgZzdGF0dXMYHiABKA4yHS5hcm1hZHJhLnYxLkV2ZW50Q3Vyc29yU3RhdHVzIkEKDkV2ZW50SGVhcnRiZWF0EhYKDmhpZ2hfd2F0ZXJtYXJrGAogASgEEhcKD3NlbnRfYXRfdW5peF9tcxgoIAEoAyKAAgoQRXZlbnRTdHJlYW1GcmFtZRI3CglzdWJzY3JpYmUYZCABKAsyIi5hcm1hZHJhLnYxLlN1YnNjcmliZUV2ZW50c1JlcXVlc3RIABIlCgRwYWdlGGUgASgLMhUuYXJtYWRyYS52MS5FdmVudFBhZ2VIABIvCgloZWFydGJlYXQYZiABKAsyGi5hcm1hZHJhLnYxLkV2ZW50SGVhcnRiZWF0SAASJAoDYWNrGGcgASgLMhUuYXJtYWRyYS52MS5TdHJlYW1BY2tIABIqCgVlcnJvchhoIAEoCzIZLmFybWFkcmEudjEuRXJyb3JSZXNwb25zZUgAQgkKB3BheWxvYWQqxAEKC0V2ZW50RG9tYWluEhwKGEVWRU5UX0RPTUFJTl9VTlNQRUNJRklFRBAAEhcKE0VWRU5UX0RPTUFJTl9DQU5WQVMQARIZChVFVkVOVF9ET01BSU5fU0VUVElOR1MQAhIbChdFVkVOVF9ET01BSU5fRklMRVNZU1RFTRADEhgKFEVWRU5UX0RPTUFJTl9TRVNTSU9OEAQSFgoSRVZFTlRfRE9NQUlOX0FHRU5UEAUSFAoQRVZFTlRfRE9NQUlOX0dJVBAGKmMKDUV2ZW50UHJpb3JpdHkSHgoaRVZFTlRfUFJJT1JJVFlfVU5TUEVDSUZJRUQQABIZChVFVkVOVF9QUklPUklUWV9OT1JNQUwQARIXChNFVkVOVF9QUklPUklUWV9ISUdIEAIqpQEKEUV2ZW50Q3Vyc29yU3RhdHVzEiMKH0VWRU5UX0NVUlNPUl9TVEFUVVNfVU5TUEVDSUZJRUQQABIaChZFVkVOVF9DVVJTT1JfU1RBVFVTX09LEAESKQolRVZFTlRfQ1VSU09SX1NUQVRVU19TTkFQU0hPVF9SRVFVSVJFRBACEiQKIEVWRU5UX0NVUlNPUl9TVEFUVVNfQ1VSU09SX0FIRUFEEANCI1ohYXJtYWRyYS5sb2NhbC9ob3N0L2dlbi9hcm1hZHJhL3YxYgZwcm90bzM",
-    [file_armadra_v1_canvas, file_armadra_v1_common],
+    "Chdhcm1hZHJhL3YxL2V2ZW50cy5wcm90bxIKYXJtYWRyYS52MSKvBQoNRXZlbnRFbnZlbG9wZRIQCghzZXF1ZW5jZRgBIAEoBBIWCg50cmFuc2FjdGlvbl9pZBgCIAEoBBIUCgxvcGVyYXRpb25faWQYAyABKAkSGQoRdHJhbnNhY3Rpb25faW5kZXgYBCABKA0SGAoQdHJhbnNhY3Rpb25fc2l6ZRgFIAEoDRIUCgx3b3Jrc3BhY2VfaWQYBiABKAkSJwoGZG9tYWluGAcgASgOMhcuYXJtYWRyYS52MS5FdmVudERvbWFpbhIMCgRraW5kGAggASgJEhEKCWVudGl0eV9pZBgJIAEoCRIrCghwcmlvcml0eRgKIAEoDjIZLmFybWFkcmEudjEuRXZlbnRQcmlvcml0eRIQCghyZXZpc2lvbhgyIAEoBBIPCgdkZWxldGVkGDMgASgIEjcKEGNhbnZhc193b3Jrc3BhY2UYZCABKAsyGy5hcm1hZHJhLnYxLkNhbnZhc1dvcmtzcGFjZUgAEiQKBmNhbnZhcxhlIAEoCzISLmFybWFkcmEudjEuQ2FudmFzSAASLQoLY2FudmFzX25vZGUYZiABKAsyFi5hcm1hZHJhLnYxLkNhbnZhc05vZGVIABItCgtjYW52YXNfZWRnZRhnIAEoCzIWLmFybWFkcmEudjEuQ2FudmFzRWRnZUgAEjkKEWNhbnZhc19hbm5vdGF0aW9uGGggASgLMhwuYXJtYWRyYS52MS5DYW52YXNBbm5vdGF0aW9uSAASOQoRc2V0dGluZ3NfZG9jdW1lbnQYeCABKAsyHC5hcm1hZHJhLnYxLlNldHRpbmdzRG9jdW1lbnRIABI8ChdzZXR0aW5nc19leGVjdXRpb25faG9zdBh5IAEoCzIZLmFybWFkcmEudjEuRXhlY3V0aW9uSG9zdEgAQggKBmVudGl0eSK2AQoWU3Vic2NyaWJlRXZlbnRzUmVxdWVzdBIWCg5hZnRlcl9zZXF1ZW5jZRgBIAEoBBIVCg13b3Jrc3BhY2VfaWRzGAogAygJEigKB2RvbWFpbnMYCyADKA4yFy5hcm1hZHJhLnYxLkV2ZW50RG9tYWluEhIKCnBhZ2VfYnl0ZXMYDCABKA0SLwoMbWluX3ByaW9yaXR5GA0gASgOMhkuYXJtYWRyYS52MS5FdmVudFByaW9yaXR5IrgBCglFdmVudFBhZ2USKQoGZXZlbnRzGAogAygLMhkuYXJtYWRyYS52MS5FdmVudEVudmVsb3BlEhMKC25leHRfY3Vyc29yGAsgASgEEhIKCm1pbl9jdXJzb3IYDCABKAQSFgoOaGlnaF93YXRlcm1hcmsYDSABKAQSEAoIaGFzX21vcmUYDiABKAgSLQoGc3RhdHVzGB4gASgOMh0uYXJtYWRyYS52MS5FdmVudEN1cnNvclN0YXR1cyJBCg5FdmVudEhlYXJ0YmVhdBIWCg5oaWdoX3dhdGVybWFyaxgKIAEoBBIXCg9zZW50X2F0X3VuaXhfbXMYKCABKAMigAIKEEV2ZW50U3RyZWFtRnJhbWUSNwoJc3Vic2NyaWJlGGQgASgLMiIuYXJtYWRyYS52MS5TdWJzY3JpYmVFdmVudHNSZXF1ZXN0SAASJQoEcGFnZRhlIAEoCzIVLmFybWFkcmEudjEuRXZlbnRQYWdlSAASLwoJaGVhcnRiZWF0GGYgASgLMhouYXJtYWRyYS52MS5FdmVudEhlYXJ0YmVhdEgAEiQKA2FjaxhnIAEoCzIVLmFybWFkcmEudjEuU3RyZWFtQWNrSAASKgoFZXJyb3IYaCABKAsyGS5hcm1hZHJhLnYxLkVycm9yUmVzcG9uc2VIAEIJCgdwYXlsb2FkKsQBCgtFdmVudERvbWFpbhIcChhFVkVOVF9ET01BSU5fVU5TUEVDSUZJRUQQABIXChNFVkVOVF9ET01BSU5fQ0FOVkFTEAESGQoVRVZFTlRfRE9NQUlOX1NFVFRJTkdTEAISGwoXRVZFTlRfRE9NQUlOX0ZJTEVTWVNURU0QAxIYChRFVkVOVF9ET01BSU5fU0VTU0lPThAEEhYKEkVWRU5UX0RPTUFJTl9BR0VOVBAFEhQKEEVWRU5UX0RPTUFJTl9HSVQQBipjCg1FdmVudFByaW9yaXR5Eh4KGkVWRU5UX1BSSU9SSVRZX1VOU1BFQ0lGSUVEEAASGQoVRVZFTlRfUFJJT1JJVFlfTk9STUFMEAESFwoTRVZFTlRfUFJJT1JJVFlfSElHSBACKqUBChFFdmVudEN1cnNvclN0YXR1cxIjCh9FVkVOVF9DVVJTT1JfU1RBVFVTX1VOU1BFQ0lGSUVEEAASGgoWRVZFTlRfQ1VSU09SX1NUQVRVU19PSxABEikKJUVWRU5UX0NVUlNPUl9TVEFUVVNfU05BUFNIT1RfUkVRVUlSRUQQAhIkCiBFVkVOVF9DVVJTT1JfU1RBVFVTX0NVUlNPUl9BSEVBRBADQiNaIWFybWFkcmEubG9jYWwvaG9zdC9nZW4vYXJtYWRyYS92MWIGcHJvdG8z",
+    [file_armadra_v1_canvas, file_armadra_v1_common, file_armadra_v1_settings],
   );
 
 /**
@@ -37,8 +39,13 @@ export const file_armadra_v1_events: GenFile =
  *
  * The `entity` oneof reserves twenty numbers per domain, assigned in the switch
  * order of §1.2: canvas 100-119, settings 120-139, filesystem 140-159,
- * session 160-179, agent 180-219, git 220-239. Only canvas is populated in this
- * batch; a domain still owned by the Worker publishes nothing here.
+ * session 160-179, agent 180-219, git 220-239. A domain still owned by the
+ * Worker publishes nothing here.
+ *
+ * The settings domain is host-wide, so its envelopes carry an empty
+ * `workspace_id`. A subscription admits them on the domain grant alone: the
+ * document belongs to every workspace the session follows, and attributing it
+ * to one of them would hide the change from the others.
  *
  * @generated from message armadra.v1.EventEnvelope
  */
@@ -147,6 +154,20 @@ export type EventEnvelope = Message<"armadra.v1.EventEnvelope"> & {
          */
         value: CanvasAnnotation;
         case: "canvasAnnotation";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.SettingsDocument settings_document = 120;
+         */
+        value: SettingsDocument;
+        case: "settingsDocument";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.ExecutionHost settings_execution_host = 121;
+         */
+        value: ExecutionHost;
+        case: "settingsExecutionHost";
       }
     | { case: undefined; value?: undefined };
 };

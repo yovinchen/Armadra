@@ -1291,6 +1291,7 @@ type WorkerRequest struct {
 	//	*WorkerRequest_LanguageFrame
 	//	*WorkerRequest_LanguageApplyEdit
 	//	*WorkerRequest_ApplyReverseExport
+	//	*WorkerRequest_Settings
 	Action        isWorkerRequest_Action `protobuf_oneof:"action"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1505,6 +1506,15 @@ func (x *WorkerRequest) GetApplyReverseExport() *ApplyReverseExportRequest {
 	return nil
 }
 
+func (x *WorkerRequest) GetSettings() *WorkerSettingsRequest {
+	if x != nil {
+		if x, ok := x.Action.(*WorkerRequest_Settings); ok {
+			return x.Settings
+		}
+	}
+	return nil
+}
+
 type isWorkerRequest_Action interface {
 	isWorkerRequest_Action()
 }
@@ -1587,6 +1597,14 @@ type WorkerRequest_ApplyReverseExport struct {
 	ApplyReverseExport *ApplyReverseExportRequest `protobuf:"bytes,24,opt,name=apply_reverse_export,json=applyReverseExport,proto3,oneof"`
 }
 
+type WorkerRequest_Settings struct {
+	// The settings domain's own frame (§2.4). It reads and writes the
+	// execution host's settings file and nothing else: it never moves an
+	// epoch, so a controller that exported a document still has to complete
+	// the switch through the ownership frames above.
+	Settings *WorkerSettingsRequest `protobuf:"bytes,25,opt,name=settings,proto3,oneof"`
+}
+
 func (*WorkerRequest_Hello) isWorkerRequest_Action() {}
 
 func (*WorkerRequest_RegisterRoot) isWorkerRequest_Action() {}
@@ -1619,6 +1637,8 @@ func (*WorkerRequest_LanguageApplyEdit) isWorkerRequest_Action() {}
 
 func (*WorkerRequest_ApplyReverseExport) isWorkerRequest_Action() {}
 
+func (*WorkerRequest_Settings) isWorkerRequest_Action() {}
+
 type WorkerResponse struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	RequestId  string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -1641,6 +1661,7 @@ type WorkerResponse struct {
 	//	*WorkerResponse_LanguageFrame
 	//	*WorkerResponse_LanguageApplyEdit
 	//	*WorkerResponse_ReverseImport
+	//	*WorkerResponse_Settings
 	Result        isWorkerResponse_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1839,6 +1860,15 @@ func (x *WorkerResponse) GetReverseImport() *ReverseImportReport {
 	return nil
 }
 
+func (x *WorkerResponse) GetSettings() *WorkerSettingsSnapshot {
+	if x != nil {
+		if x, ok := x.Result.(*WorkerResponse_Settings); ok {
+			return x.Settings
+		}
+	}
+	return nil
+}
+
 type isWorkerResponse_Result interface {
 	isWorkerResponse_Result()
 }
@@ -1905,6 +1935,10 @@ type WorkerResponse_ReverseImport struct {
 	ReverseImport *ReverseImportReport `protobuf:"bytes,23,opt,name=reverse_import,json=reverseImport,proto3,oneof"`
 }
 
+type WorkerResponse_Settings struct {
+	Settings *WorkerSettingsSnapshot `protobuf:"bytes,25,opt,name=settings,proto3,oneof"`
+}
+
 func (*WorkerResponse_Hello) isWorkerResponse_Result() {}
 
 func (*WorkerResponse_RegisteredRoot) isWorkerResponse_Result() {}
@@ -1935,12 +1969,14 @@ func (*WorkerResponse_LanguageApplyEdit) isWorkerResponse_Result() {}
 
 func (*WorkerResponse_ReverseImport) isWorkerResponse_Result() {}
 
+func (*WorkerResponse_Settings) isWorkerResponse_Result() {}
+
 var File_armadra_v1_worker_proto protoreflect.FileDescriptor
 
 const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"\x17armadra/v1/worker.proto\x12\n" +
-	"armadra.v1\x1a\x16armadra/v1/agent.proto\x1a\x17armadra/v1/common.proto\x1a\x18armadra/v1/command.proto\x1a\x17armadra/v1/canvas.proto\x1a\x1farmadra/v1/worker_channel.proto\x1a\x19armadra/v1/language.proto\x1a\x1aarmadra/v1/migration.proto\"M\n" +
+	"armadra.v1\x1a\x16armadra/v1/agent.proto\x1a\x17armadra/v1/common.proto\x1a\x18armadra/v1/command.proto\x1a\x17armadra/v1/canvas.proto\x1a\x1farmadra/v1/worker_channel.proto\x1a\x19armadra/v1/language.proto\x1a\x1aarmadra/v1/migration.proto\x1a\x19armadra/v1/settings.proto\"M\n" +
 	"\x12WorkerHelloRequest\x127\n" +
 	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\"\x99\x04\n" +
 	"\x13WorkerHelloResponse\x127\n" +
@@ -2033,8 +2069,7 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\x15WorkerServiceResponse\x12\x1f\n" +
 	"\vhttp_status\x18\x01 \x01(\rR\n" +
 	"httpStatus\x12#\n" +
-	"\rresponse_json\x18\x02 \x01(\fR\fresponseJson\"\xf3\n" +
-	"\n" +
+	"\rresponse_json\x18\x02 \x01(\fR\fresponseJson\"\xb4\v\n" +
 	"\rWorkerRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -2058,8 +2093,9 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\x16close_language_session\x18  \x01(\v2'.armadra.v1.CloseLanguageSessionRequestH\x00R\x14closeLanguageSession\x12B\n" +
 	"\x0elanguage_frame\x18! \x01(\v2\x19.armadra.v1.LanguageFrameH\x00R\rlanguageFrame\x12V\n" +
 	"\x13language_apply_edit\x18\" \x01(\v2$.armadra.v1.LanguageApplyEditRequestH\x00R\x11languageApplyEdit\x12Y\n" +
-	"\x14apply_reverse_export\x18\x18 \x01(\v2%.armadra.v1.ApplyReverseExportRequestH\x00R\x12applyReverseExportB\b\n" +
-	"\x06action\"\xe5\b\n" +
+	"\x14apply_reverse_export\x18\x18 \x01(\v2%.armadra.v1.ApplyReverseExportRequestH\x00R\x12applyReverseExport\x12?\n" +
+	"\bsettings\x18\x19 \x01(\v2!.armadra.v1.WorkerSettingsRequestH\x00R\bsettingsB\b\n" +
+	"\x06action\"\xa7\t\n" +
 	"\x0eWorkerResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -2082,7 +2118,8 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\x10language_session\x18\x1f \x01(\v2\x1b.armadra.v1.LanguageSessionH\x00R\x0flanguageSession\x12B\n" +
 	"\x0elanguage_frame\x18  \x01(\v2\x19.armadra.v1.LanguageFrameH\x00R\rlanguageFrame\x12U\n" +
 	"\x13language_apply_edit\x18! \x01(\v2#.armadra.v1.LanguageApplyEditResultH\x00R\x11languageApplyEdit\x12H\n" +
-	"\x0ereverse_import\x18\x17 \x01(\v2\x1f.armadra.v1.ReverseImportReportH\x00R\rreverseImportB\b\n" +
+	"\x0ereverse_import\x18\x17 \x01(\v2\x1f.armadra.v1.ReverseImportReportH\x00R\rreverseImport\x12@\n" +
+	"\bsettings\x18\x19 \x01(\v2\".armadra.v1.WorkerSettingsSnapshotH\x00R\bsettingsB\b\n" +
 	"\x06result*\x89\x05\n" +
 	"\x16WorkerServiceOperation\x12(\n" +
 	"$WORKER_SERVICE_OPERATION_UNSPECIFIED\x10\x00\x12)\n" +
@@ -2148,13 +2185,15 @@ var file_armadra_v1_worker_proto_goTypes = []any{
 	(*LanguageFrame)(nil),               // 28: armadra.v1.LanguageFrame
 	(*LanguageApplyEditRequest)(nil),    // 29: armadra.v1.LanguageApplyEditRequest
 	(*ApplyReverseExportRequest)(nil),   // 30: armadra.v1.ApplyReverseExportRequest
-	(*ErrorResponse)(nil),               // 31: armadra.v1.ErrorResponse
-	(*CommandResponse)(nil),             // 32: armadra.v1.CommandResponse
-	(*AgentResponse)(nil),               // 33: armadra.v1.AgentResponse
-	(*LanguageCapabilities)(nil),        // 34: armadra.v1.LanguageCapabilities
-	(*LanguageSession)(nil),             // 35: armadra.v1.LanguageSession
-	(*LanguageApplyEditResult)(nil),     // 36: armadra.v1.LanguageApplyEditResult
-	(*ReverseImportReport)(nil),         // 37: armadra.v1.ReverseImportReport
+	(*WorkerSettingsRequest)(nil),       // 31: armadra.v1.WorkerSettingsRequest
+	(*ErrorResponse)(nil),               // 32: armadra.v1.ErrorResponse
+	(*CommandResponse)(nil),             // 33: armadra.v1.CommandResponse
+	(*AgentResponse)(nil),               // 34: armadra.v1.AgentResponse
+	(*LanguageCapabilities)(nil),        // 35: armadra.v1.LanguageCapabilities
+	(*LanguageSession)(nil),             // 36: armadra.v1.LanguageSession
+	(*LanguageApplyEditResult)(nil),     // 37: armadra.v1.LanguageApplyEditResult
+	(*ReverseImportReport)(nil),         // 38: armadra.v1.ReverseImportReport
+	(*WorkerSettingsSnapshot)(nil),      // 39: armadra.v1.WorkerSettingsSnapshot
 }
 var file_armadra_v1_worker_proto_depIdxs = []int32{
 	19, // 0: armadra.v1.WorkerHelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
@@ -2181,26 +2220,28 @@ var file_armadra_v1_worker_proto_depIdxs = []int32{
 	28, // 21: armadra.v1.WorkerRequest.language_frame:type_name -> armadra.v1.LanguageFrame
 	29, // 22: armadra.v1.WorkerRequest.language_apply_edit:type_name -> armadra.v1.LanguageApplyEditRequest
 	30, // 23: armadra.v1.WorkerRequest.apply_reverse_export:type_name -> armadra.v1.ApplyReverseExportRequest
-	2,  // 24: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
-	4,  // 25: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
-	7,  // 26: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
-	9,  // 27: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
-	31, // 28: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
-	14, // 29: armadra.v1.WorkerResponse.file_written:type_name -> armadra.v1.WorkerFileWritten
-	16, // 30: armadra.v1.WorkerResponse.service:type_name -> armadra.v1.WorkerServiceResponse
-	32, // 31: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
-	33, // 32: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
-	12, // 33: armadra.v1.WorkerResponse.write_ownership:type_name -> armadra.v1.WorkerWriteOwnership
-	34, // 34: armadra.v1.WorkerResponse.language_capabilities:type_name -> armadra.v1.LanguageCapabilities
-	35, // 35: armadra.v1.WorkerResponse.language_session:type_name -> armadra.v1.LanguageSession
-	28, // 36: armadra.v1.WorkerResponse.language_frame:type_name -> armadra.v1.LanguageFrame
-	36, // 37: armadra.v1.WorkerResponse.language_apply_edit:type_name -> armadra.v1.LanguageApplyEditResult
-	37, // 38: armadra.v1.WorkerResponse.reverse_import:type_name -> armadra.v1.ReverseImportReport
-	39, // [39:39] is the sub-list for method output_type
-	39, // [39:39] is the sub-list for method input_type
-	39, // [39:39] is the sub-list for extension type_name
-	39, // [39:39] is the sub-list for extension extendee
-	0,  // [0:39] is the sub-list for field type_name
+	31, // 24: armadra.v1.WorkerRequest.settings:type_name -> armadra.v1.WorkerSettingsRequest
+	2,  // 25: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
+	4,  // 26: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
+	7,  // 27: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
+	9,  // 28: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
+	32, // 29: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
+	14, // 30: armadra.v1.WorkerResponse.file_written:type_name -> armadra.v1.WorkerFileWritten
+	16, // 31: armadra.v1.WorkerResponse.service:type_name -> armadra.v1.WorkerServiceResponse
+	33, // 32: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
+	34, // 33: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
+	12, // 34: armadra.v1.WorkerResponse.write_ownership:type_name -> armadra.v1.WorkerWriteOwnership
+	35, // 35: armadra.v1.WorkerResponse.language_capabilities:type_name -> armadra.v1.LanguageCapabilities
+	36, // 36: armadra.v1.WorkerResponse.language_session:type_name -> armadra.v1.LanguageSession
+	28, // 37: armadra.v1.WorkerResponse.language_frame:type_name -> armadra.v1.LanguageFrame
+	37, // 38: armadra.v1.WorkerResponse.language_apply_edit:type_name -> armadra.v1.LanguageApplyEditResult
+	38, // 39: armadra.v1.WorkerResponse.reverse_import:type_name -> armadra.v1.ReverseImportReport
+	39, // 40: armadra.v1.WorkerResponse.settings:type_name -> armadra.v1.WorkerSettingsSnapshot
+	41, // [41:41] is the sub-list for method output_type
+	41, // [41:41] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_worker_proto_init() }
@@ -2215,6 +2256,7 @@ func file_armadra_v1_worker_proto_init() {
 	file_armadra_v1_worker_channel_proto_init()
 	file_armadra_v1_language_proto_init()
 	file_armadra_v1_migration_proto_init()
+	file_armadra_v1_settings_proto_init()
 	file_armadra_v1_worker_proto_msgTypes[7].OneofWrappers = []any{}
 	file_armadra_v1_worker_proto_msgTypes[12].OneofWrappers = []any{}
 	file_armadra_v1_worker_proto_msgTypes[16].OneofWrappers = []any{
@@ -2234,6 +2276,7 @@ func file_armadra_v1_worker_proto_init() {
 		(*WorkerRequest_LanguageFrame)(nil),
 		(*WorkerRequest_LanguageApplyEdit)(nil),
 		(*WorkerRequest_ApplyReverseExport)(nil),
+		(*WorkerRequest_Settings)(nil),
 	}
 	file_armadra_v1_worker_proto_msgTypes[17].OneofWrappers = []any{
 		(*WorkerResponse_Hello)(nil),
@@ -2251,6 +2294,7 @@ func file_armadra_v1_worker_proto_init() {
 		(*WorkerResponse_LanguageFrame)(nil),
 		(*WorkerResponse_LanguageApplyEdit)(nil),
 		(*WorkerResponse_ReverseImport)(nil),
+		(*WorkerResponse_Settings)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

@@ -8,6 +8,7 @@ import "armadra/v1/canvas.proto";
 import "armadra/v1/worker_channel.proto";
 import "armadra/v1/language.proto";
 import "armadra/v1/migration.proto";
+import "armadra/v1/settings.proto";
 
 // The initial Worker transport is a parent-owned anonymous stdin/stdout pipe.
 // These messages are never accepted on an unauthenticated HTTP endpoint.
@@ -193,6 +194,11 @@ message WorkerRequest {
     // back. Applying it does not move ownership, and refusing it is what stops
     // a rollback that would lose whatever the Host wrote.
     ApplyReverseExportRequest apply_reverse_export = 24;
+    // The settings domain's own frame (§2.4). It reads and writes the
+    // execution host's settings file and nothing else: it never moves an
+    // epoch, so a controller that exported a document still has to complete
+    // the switch through the ownership frames above.
+    WorkerSettingsRequest settings = 25;
   }
 }
 message WorkerResponse {
@@ -217,5 +223,6 @@ message WorkerResponse {
     LanguageFrame language_frame = 32;
     LanguageApplyEditResult language_apply_edit = 33;
     ReverseImportReport reverse_import = 23;
+    WorkerSettingsSnapshot settings = 25;
   }
 }

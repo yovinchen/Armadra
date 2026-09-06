@@ -221,8 +221,13 @@ func (EventCursorStatus) EnumDescriptor() ([]byte, []int) {
 //
 // The `entity` oneof reserves twenty numbers per domain, assigned in the switch
 // order of §1.2: canvas 100-119, settings 120-139, filesystem 140-159,
-// session 160-179, agent 180-219, git 220-239. Only canvas is populated in this
-// batch; a domain still owned by the Worker publishes nothing here.
+// session 160-179, agent 180-219, git 220-239. A domain still owned by the
+// Worker publishes nothing here.
+//
+// The settings domain is host-wide, so its envelopes carry an empty
+// `workspace_id`. A subscription admits them on the domain grant alone: the
+// document belongs to every workspace the session follows, and attributing it
+// to one of them would hide the change from the others.
 type EventEnvelope struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Sequence      uint64                 `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
@@ -248,6 +253,8 @@ type EventEnvelope struct {
 	//	*EventEnvelope_CanvasNode
 	//	*EventEnvelope_CanvasEdge
 	//	*EventEnvelope_CanvasAnnotation
+	//	*EventEnvelope_SettingsDocument
+	//	*EventEnvelope_SettingsExecutionHost
 	Entity        isEventEnvelope_Entity `protobuf_oneof:"entity"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -419,6 +426,24 @@ func (x *EventEnvelope) GetCanvasAnnotation() *CanvasAnnotation {
 	return nil
 }
 
+func (x *EventEnvelope) GetSettingsDocument() *SettingsDocument {
+	if x != nil {
+		if x, ok := x.Entity.(*EventEnvelope_SettingsDocument); ok {
+			return x.SettingsDocument
+		}
+	}
+	return nil
+}
+
+func (x *EventEnvelope) GetSettingsExecutionHost() *ExecutionHost {
+	if x != nil {
+		if x, ok := x.Entity.(*EventEnvelope_SettingsExecutionHost); ok {
+			return x.SettingsExecutionHost
+		}
+	}
+	return nil
+}
+
 type isEventEnvelope_Entity interface {
 	isEventEnvelope_Entity()
 }
@@ -443,6 +468,14 @@ type EventEnvelope_CanvasAnnotation struct {
 	CanvasAnnotation *CanvasAnnotation `protobuf:"bytes,104,opt,name=canvas_annotation,json=canvasAnnotation,proto3,oneof"`
 }
 
+type EventEnvelope_SettingsDocument struct {
+	SettingsDocument *SettingsDocument `protobuf:"bytes,120,opt,name=settings_document,json=settingsDocument,proto3,oneof"`
+}
+
+type EventEnvelope_SettingsExecutionHost struct {
+	SettingsExecutionHost *ExecutionHost `protobuf:"bytes,121,opt,name=settings_execution_host,json=settingsExecutionHost,proto3,oneof"`
+}
+
 func (*EventEnvelope_CanvasWorkspace) isEventEnvelope_Entity() {}
 
 func (*EventEnvelope_Canvas) isEventEnvelope_Entity() {}
@@ -452,6 +485,10 @@ func (*EventEnvelope_CanvasNode) isEventEnvelope_Entity() {}
 func (*EventEnvelope_CanvasEdge) isEventEnvelope_Entity() {}
 
 func (*EventEnvelope_CanvasAnnotation) isEventEnvelope_Entity() {}
+
+func (*EventEnvelope_SettingsDocument) isEventEnvelope_Entity() {}
+
+func (*EventEnvelope_SettingsExecutionHost) isEventEnvelope_Entity() {}
 
 // One connection carries one subscription. Re-subscribing on the same
 // connection is refused rather than silently replacing the cursor.
@@ -817,7 +854,7 @@ var File_armadra_v1_events_proto protoreflect.FileDescriptor
 const file_armadra_v1_events_proto_rawDesc = "" +
 	"\n" +
 	"\x17armadra/v1/events.proto\x12\n" +
-	"armadra.v1\x1a\x17armadra/v1/canvas.proto\x1a\x17armadra/v1/common.proto\"\x84\x06\n" +
+	"armadra.v1\x1a\x17armadra/v1/canvas.proto\x1a\x17armadra/v1/common.proto\x1a\x19armadra/v1/settings.proto\"\xa6\a\n" +
 	"\rEventEnvelope\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12%\n" +
 	"\x0etransaction_id\x18\x02 \x01(\x04R\rtransactionId\x12!\n" +
@@ -838,7 +875,9 @@ const file_armadra_v1_events_proto_rawDesc = "" +
 	"canvasNode\x129\n" +
 	"\vcanvas_edge\x18g \x01(\v2\x16.armadra.v1.CanvasEdgeH\x00R\n" +
 	"canvasEdge\x12K\n" +
-	"\x11canvas_annotation\x18h \x01(\v2\x1c.armadra.v1.CanvasAnnotationH\x00R\x10canvasAnnotationB\b\n" +
+	"\x11canvas_annotation\x18h \x01(\v2\x1c.armadra.v1.CanvasAnnotationH\x00R\x10canvasAnnotation\x12K\n" +
+	"\x11settings_document\x18x \x01(\v2\x1c.armadra.v1.SettingsDocumentH\x00R\x10settingsDocument\x12S\n" +
+	"\x17settings_execution_host\x18y \x01(\v2\x19.armadra.v1.ExecutionHostH\x00R\x15settingsExecutionHostB\b\n" +
 	"\x06entity\"\xf4\x01\n" +
 	"\x16SubscribeEventsRequest\x12%\n" +
 	"\x0eafter_sequence\x18\x01 \x01(\x04R\rafterSequence\x12#\n" +
@@ -915,8 +954,10 @@ var file_armadra_v1_events_proto_goTypes = []any{
 	(*CanvasNode)(nil),             // 10: armadra.v1.CanvasNode
 	(*CanvasEdge)(nil),             // 11: armadra.v1.CanvasEdge
 	(*CanvasAnnotation)(nil),       // 12: armadra.v1.CanvasAnnotation
-	(*StreamAck)(nil),              // 13: armadra.v1.StreamAck
-	(*ErrorResponse)(nil),          // 14: armadra.v1.ErrorResponse
+	(*SettingsDocument)(nil),       // 13: armadra.v1.SettingsDocument
+	(*ExecutionHost)(nil),          // 14: armadra.v1.ExecutionHost
+	(*StreamAck)(nil),              // 15: armadra.v1.StreamAck
+	(*ErrorResponse)(nil),          // 16: armadra.v1.ErrorResponse
 }
 var file_armadra_v1_events_proto_depIdxs = []int32{
 	0,  // 0: armadra.v1.EventEnvelope.domain:type_name -> armadra.v1.EventDomain
@@ -926,20 +967,22 @@ var file_armadra_v1_events_proto_depIdxs = []int32{
 	10, // 4: armadra.v1.EventEnvelope.canvas_node:type_name -> armadra.v1.CanvasNode
 	11, // 5: armadra.v1.EventEnvelope.canvas_edge:type_name -> armadra.v1.CanvasEdge
 	12, // 6: armadra.v1.EventEnvelope.canvas_annotation:type_name -> armadra.v1.CanvasAnnotation
-	0,  // 7: armadra.v1.SubscribeEventsRequest.domains:type_name -> armadra.v1.EventDomain
-	1,  // 8: armadra.v1.SubscribeEventsRequest.min_priority:type_name -> armadra.v1.EventPriority
-	3,  // 9: armadra.v1.EventPage.events:type_name -> armadra.v1.EventEnvelope
-	2,  // 10: armadra.v1.EventPage.status:type_name -> armadra.v1.EventCursorStatus
-	4,  // 11: armadra.v1.EventStreamFrame.subscribe:type_name -> armadra.v1.SubscribeEventsRequest
-	5,  // 12: armadra.v1.EventStreamFrame.page:type_name -> armadra.v1.EventPage
-	6,  // 13: armadra.v1.EventStreamFrame.heartbeat:type_name -> armadra.v1.EventHeartbeat
-	13, // 14: armadra.v1.EventStreamFrame.ack:type_name -> armadra.v1.StreamAck
-	14, // 15: armadra.v1.EventStreamFrame.error:type_name -> armadra.v1.ErrorResponse
-	16, // [16:16] is the sub-list for method output_type
-	16, // [16:16] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	13, // 7: armadra.v1.EventEnvelope.settings_document:type_name -> armadra.v1.SettingsDocument
+	14, // 8: armadra.v1.EventEnvelope.settings_execution_host:type_name -> armadra.v1.ExecutionHost
+	0,  // 9: armadra.v1.SubscribeEventsRequest.domains:type_name -> armadra.v1.EventDomain
+	1,  // 10: armadra.v1.SubscribeEventsRequest.min_priority:type_name -> armadra.v1.EventPriority
+	3,  // 11: armadra.v1.EventPage.events:type_name -> armadra.v1.EventEnvelope
+	2,  // 12: armadra.v1.EventPage.status:type_name -> armadra.v1.EventCursorStatus
+	4,  // 13: armadra.v1.EventStreamFrame.subscribe:type_name -> armadra.v1.SubscribeEventsRequest
+	5,  // 14: armadra.v1.EventStreamFrame.page:type_name -> armadra.v1.EventPage
+	6,  // 15: armadra.v1.EventStreamFrame.heartbeat:type_name -> armadra.v1.EventHeartbeat
+	15, // 16: armadra.v1.EventStreamFrame.ack:type_name -> armadra.v1.StreamAck
+	16, // 17: armadra.v1.EventStreamFrame.error:type_name -> armadra.v1.ErrorResponse
+	18, // [18:18] is the sub-list for method output_type
+	18, // [18:18] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_events_proto_init() }
@@ -949,12 +992,15 @@ func file_armadra_v1_events_proto_init() {
 	}
 	file_armadra_v1_canvas_proto_init()
 	file_armadra_v1_common_proto_init()
+	file_armadra_v1_settings_proto_init()
 	file_armadra_v1_events_proto_msgTypes[0].OneofWrappers = []any{
 		(*EventEnvelope_CanvasWorkspace)(nil),
 		(*EventEnvelope_Canvas)(nil),
 		(*EventEnvelope_CanvasNode)(nil),
 		(*EventEnvelope_CanvasEdge)(nil),
 		(*EventEnvelope_CanvasAnnotation)(nil),
+		(*EventEnvelope_SettingsDocument)(nil),
+		(*EventEnvelope_SettingsExecutionHost)(nil),
 	}
 	file_armadra_v1_events_proto_msgTypes[4].OneofWrappers = []any{
 		(*EventStreamFrame_Subscribe)(nil),

@@ -1,0 +1,185 @@
+syntax = "proto3";
+
+package armadra.v1;
+
+option go_package = "armadra.local/host/gen/armadra/v1";
+
+import "armadra/v1/canvas.proto";
+import "armadra/v1/common.proto";
+
+// The settings domain (Go Host 业务所有权迁移 §2.4).
+//
+// Settings are one document, not a table. Every preference the product has —
+// terminal, whiteboard, notifications, the three keybinding layers, custom
+// agent definitions, usage thresholds, the SSH execution host registry — lives
+// in one camelCase JSON object with one revision over the whole of it. That is
+// deliberate: a settings page saves several sections at once, and a per-key
+// revision would let two saves interleave into a document neither of them ever
+// read.
+//
+// Three rules make the document movable between the Runtime and the Host
+// without either side having to understand the other's rules:
+//
+//  1. **The bytes are the document.** `document` is the exact content of the
+//     Runtime's `settings.json`, not a re-serialization of a parsed tree. A
+//     digest over re-encoded JSON would depend on two languages agreeing about
+//     key order, number formatting and escaping; a digest over the bytes that
+//     were written depends on nothing.
+//  2. **The Host validates structure, not meaning.** A JSON object, a size
+//     ceiling, a top-level key shape, a schema version. Whether a custom agent
+//     definition is coherent, or a keybinding reachable, is decided by
+//     `packages/shared` for the front end and by the Runtime at startup — one
+//     set of rules, not a second one on the Host that could disagree.
+//  3. **Execution hosts are a projection, never a second source.** An
+//     `ExecutionHost` is `settings.ssh.hosts[]` read out as an entity so the
+//     stream and the consistency checks can name one host rather than "the
+//     document changed". Writing one means writing the document.
+//
+// Subscribing is not a method here. Settings changes travel on the shared
+// Host -> client event stream under `EventDomain.SETTINGS` (events.proto), with
+// the same durable sequence every other domain uses; `GetSettingsResponse`
+// carries the sequence its document was read at, which is where a subscription
+// starts. A second, settings-only stream would be a second ordering to keep in
+// agreement with the first.
+
+enum SettingsScope {
+  SETTINGS_SCOPE_UNSPECIFIED = 0;
+  // The document that follows the account across devices.
+  SETTINGS_SCOPE_GLOBAL = 1;
+  // The per-device overlay the third keybinding layer is stored in. It names
+  // `device_id`; a DEVICE document with no device is refused rather than
+  // treated as the global one.
+  SETTINGS_SCOPE_DEVICE = 2;
+}
+
+// One settings document. The whole object carries one revision, and `sha256`
+// is over `document` exactly as it appears here.
+message SettingsDocument {
+  SettingsScope scope = 1;
+  // Empty for GLOBAL. Required for DEVICE.
+  string device_id = 2;
+  // camelCase JSON object, at most one MiB. Never a fragment: a partial
+  // document would read as "these keys were deleted".
+  bytes document = 10;
+  bytes sha256 = 11;
+  // The document's own shape version, independent of the protocol's. A Host
+  // that does not recognise it stores and returns it untouched but refuses to
+  // hand a domain back into a Runtime that reads an older one.
+  uint32 schema_version = 12;
+  int64 updated_at_unix_ms = 41;
+  uint64 revision = 50;
+}
+
+enum ExecutionHostKind {
+  EXECUTION_HOST_KIND_UNSPECIFIED = 0;
+  // This machine. Its `execution_host_id` is the empty string, the same
+  // convention Runtime migration 0009 already stores for a local workspace.
+  EXECUTION_HOST_KIND_LOCAL = 1;
+  EXECUTION_HOST_KIND_SSH = 2;
+}
+
+// Where a remote Worker is reached and started. Credentials are never here:
+// `identity_file` is a path the execution host resolves for itself, and a
+// password or key material has no field to travel in.
+message SshExecutionHost {
+  string host = 1;
+  uint32 port = 2;
+  string user = 3;
+  string identity_file = 4;
+  string worker_path = 5;
+  string state_dir = 6;
+}
+
+// One execution host, projected out of `settings.ssh.hosts[]`.
+message ExecutionHost {
+  string execution_host_id = 1;
+  string name = 10;
+  SshExecutionHost ssh = 11;
+  ExecutionHostKind kind = 30;
+  int64 updated_at_unix_ms = 41;
+  uint64 revision = 50;
+}
+
+// The preferences that stay on the execution host: which terminal backend it
+// actually has, whether a browser is usable there, its power policy, whether
+// its PATH was augmented. They are facts about one machine, so they are
+// reported by the Worker and never stored on the Host — a Host copy would be
+// authoritative about a machine it is not running on.
+message WorkerLocalSettings {
+  string terminal_backend = 10;
+  bool browser_available = 11;
+  string power_policy = 12;
+  bool path_augmented = 13;
+}
+
+message GetSettingsRequest {
+  CommandMeta meta = 1;
+  SettingsScope scope = 2;
+  string device_id = 3;
+}
+message GetSettingsResponse {
+  SettingsDocument document = 1;
+  // Projected from the document in the same read, so a client never sees a
+  // host list that belongs to a different revision of the document.
+  repeated ExecutionHost execution_hosts = 2;
+  // The sequence this document was read at. A subscription to the settings
+  // domain of the event stream continues from here rather than from zero,
+  // which would replay the document's whole history as fresh changes.
+  uint64 event_sequence = 3;
+}
+
+// A whole-document write under compare-and-set. `expected_revision` is the
+// revision the caller read; zero means "this document has never been written",
+// so a first write cannot silently replace one that already exists.
+message PutSettingsRequest {
+  CommandMeta meta = 1;
+  string operation_id = 2;
+  uint64 expected_revision = 3;
+  SettingsDocument document = 10;
+}
+message PutSettingsResponse {
+  SettingsDocument document = 1;
+  CanvasOperationReceipt receipt = 2;
+}
+
+// The Worker channel's settings frames (§2.9, action/result 25).
+//
+// One frame carries both directions of the move, because they are the same
+// conversation: taking the domain over reads the Runtime's document, handing it
+// back writes it. Splitting them into two actions would let a controller export
+// with one build and import with another.
+enum WorkerSettingsDirection {
+  WORKER_SETTINGS_DIRECTION_UNSPECIFIED = 0;
+  // Read the execution host's settings document and report it. Changes
+  // nothing.
+  WORKER_SETTINGS_DIRECTION_EXPORT = 1;
+  // Write `document` into the Runtime's own settings file, read it back, and
+  // report what is actually stored. Refused unless the Runtime records the
+  // Host as the owner of the settings domain at `expected_epoch`.
+  WORKER_SETTINGS_DIRECTION_IMPORT = 2;
+}
+
+message WorkerSettingsRequest {
+  // Required for IMPORT, and the bytes are written verbatim.
+  SettingsDocument document = 10;
+  uint64 expected_epoch = 11;
+  // Namespaces the import in the Runtime's own ledger. The same identifier
+  // with the same document replays the first result; with a different document
+  // it is refused rather than applied over it.
+  string import_id = 12;
+  WorkerSettingsDirection direction = 30;
+}
+
+message WorkerSettingsSnapshot {
+  // On EXPORT, what the Runtime holds. On IMPORT, what it holds after the
+  // write — read back from the file, not echoed from the request, so the
+  // digest the controller compares is evidence rather than a restatement.
+  SettingsDocument document = 10;
+  WorkerLocalSettings local = 11;
+  repeated ExecutionHost execution_hosts = 12;
+  // IMPORT only: the write happened in this exchange.
+  bool applied = 13;
+  // IMPORT only: this identifier had already been applied, and the answer is
+  // the one the first attempt produced.
+  bool replayed = 14;
+}
