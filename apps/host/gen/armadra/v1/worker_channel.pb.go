@@ -206,6 +206,14 @@ const (
 	WorkerGitUpcallKind_WORKER_GIT_UPCALL_KIND_REPOSITORY_CHANGED WorkerGitUpcallKind = 3
 	WorkerGitUpcallKind_WORKER_GIT_UPCALL_KIND_CONFLICT_DETECTED  WorkerGitUpcallKind = 4
 	WorkerGitUpcallKind_WORKER_GIT_UPCALL_KIND_WORKTREE_CHANGED   WorkerGitUpcallKind = 5
+	// A clone's progress and its end. They are their own kinds rather than the
+	// operation ones because a clone is not a queue entry: it has no repository
+	// to be about, no lock to hold and no precondition to have been decided
+	// against. For these two, and only these two, `operation_id` carries the
+	// clone job's identifier, and `repository_path` is the directory the clone is
+	// producing rather than one that already exists.
+	WorkerGitUpcallKind_WORKER_GIT_UPCALL_KIND_CLONE_PROGRESS WorkerGitUpcallKind = 6
+	WorkerGitUpcallKind_WORKER_GIT_UPCALL_KIND_CLONE_FINISHED WorkerGitUpcallKind = 7
 )
 
 // Enum value maps for WorkerGitUpcallKind.
@@ -217,6 +225,8 @@ var (
 		3: "WORKER_GIT_UPCALL_KIND_REPOSITORY_CHANGED",
 		4: "WORKER_GIT_UPCALL_KIND_CONFLICT_DETECTED",
 		5: "WORKER_GIT_UPCALL_KIND_WORKTREE_CHANGED",
+		6: "WORKER_GIT_UPCALL_KIND_CLONE_PROGRESS",
+		7: "WORKER_GIT_UPCALL_KIND_CLONE_FINISHED",
 	}
 	WorkerGitUpcallKind_value = map[string]int32{
 		"WORKER_GIT_UPCALL_KIND_UNSPECIFIED":        0,
@@ -225,6 +235,8 @@ var (
 		"WORKER_GIT_UPCALL_KIND_REPOSITORY_CHANGED": 3,
 		"WORKER_GIT_UPCALL_KIND_CONFLICT_DETECTED":  4,
 		"WORKER_GIT_UPCALL_KIND_WORKTREE_CHANGED":   5,
+		"WORKER_GIT_UPCALL_KIND_CLONE_PROGRESS":     6,
+		"WORKER_GIT_UPCALL_KIND_CLONE_FINISHED":     7,
 	}
 )
 
@@ -976,14 +988,16 @@ const file_armadra_v1_worker_channel_proto_rawDesc = "" +
 	"%WORKER_UPCALL_DISPOSITION_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"WORKER_UPCALL_DISPOSITION_ACCEPTED\x10\x01\x12'\n" +
 	"#WORKER_UPCALL_DISPOSITION_DUPLICATE\x10\x02\x12&\n" +
-	"\"WORKER_UPCALL_DISPOSITION_REJECTED\x10\x03*\xa5\x02\n" +
+	"\"WORKER_UPCALL_DISPOSITION_REJECTED\x10\x03*\xfb\x02\n" +
 	"\x13WorkerGitUpcallKind\x12&\n" +
 	"\"WORKER_GIT_UPCALL_KIND_UNSPECIFIED\x10\x00\x12-\n" +
 	")WORKER_GIT_UPCALL_KIND_OPERATION_PROGRESS\x10\x01\x12-\n" +
 	")WORKER_GIT_UPCALL_KIND_OPERATION_FINISHED\x10\x02\x12-\n" +
 	")WORKER_GIT_UPCALL_KIND_REPOSITORY_CHANGED\x10\x03\x12,\n" +
 	"(WORKER_GIT_UPCALL_KIND_CONFLICT_DETECTED\x10\x04\x12+\n" +
-	"'WORKER_GIT_UPCALL_KIND_WORKTREE_CHANGED\x10\x05B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	"'WORKER_GIT_UPCALL_KIND_WORKTREE_CHANGED\x10\x05\x12)\n" +
+	"%WORKER_GIT_UPCALL_KIND_CLONE_PROGRESS\x10\x06\x12)\n" +
+	"%WORKER_GIT_UPCALL_KIND_CLONE_FINISHED\x10\aB#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_worker_channel_proto_rawDescOnce sync.Once

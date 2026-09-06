@@ -195,4 +195,12 @@ enum WorkerGitUpcallKind {
   WORKER_GIT_UPCALL_KIND_REPOSITORY_CHANGED = 3;
   WORKER_GIT_UPCALL_KIND_CONFLICT_DETECTED = 4;
   WORKER_GIT_UPCALL_KIND_WORKTREE_CHANGED = 5;
+  // A clone's progress and its end. They are their own kinds rather than the
+  // operation ones because a clone is not a queue entry: it has no repository
+  // to be about, no lock to hold and no precondition to have been decided
+  // against. For these two, and only these two, `operation_id` carries the
+  // clone job's identifier, and `repository_path` is the directory the clone is
+  // producing rather than one that already exists.
+  WORKER_GIT_UPCALL_KIND_CLONE_PROGRESS = 6;
+  WORKER_GIT_UPCALL_KIND_CLONE_FINISHED = 7;
 }

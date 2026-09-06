@@ -125,6 +125,25 @@ pub fn read_status(workspace_root: &Path) -> AppResult<GitStatus> {
 
 /// `read_status` scoped to one repository under the workspace (roadmap §4.1).
 pub fn read_status_at(workspace_root: &Path, requested: &str) -> AppResult<GitStatus> {
+    read_status_filtered(workspace_root, requested, &[])
+}
+
+/// `read_status_at` narrowed to a pathspec list (Git 设计 §3, 服务端筛选).
+///
+/// The filter is applied by Git rather than by the caller, and it is applied to
+/// **both** passes — the summary and the per-file rows — so `changedCount` and
+/// `files` describe the same set. A count taken over the whole checkout beside a
+/// list taken over one directory is the shape that makes a panel say "3 changes"
+/// above one row.
+///
+/// The branch, ahead and behind numbers are deliberately *not* narrowed: they
+/// are facts about the checkout, and a pathspec does not change how far ahead
+/// of its upstream a branch is.
+pub fn read_status_filtered(
+    workspace_root: &Path,
+    requested: &str,
+    pathspecs: &[String],
+) -> AppResult<GitStatus> {
     let Some(context) = repo_context(workspace_root, requested)? else {
         return Ok(GitStatus {
             repository: false,
@@ -135,15 +154,18 @@ pub fn read_status_at(workspace_root: &Path, requested: &str) -> AppResult<GitSt
             files: vec![],
         });
     };
-    let output = git(
-        &context.repository,
-        &[
-            "status",
-            "--porcelain=v2",
-            "--branch",
-            "--untracked-files=all",
-        ],
-    )?;
+    let pathspecs = valid_pathspecs(pathspecs)?;
+    let mut summary = vec![
+        "status",
+        "--porcelain=v2",
+        "--branch",
+        "--untracked-files=all",
+    ];
+    if !pathspecs.is_empty() {
+        summary.push("--");
+        summary.extend(pathspecs.iter().map(String::as_str));
+    }
+    let output = git(&context.repository, &summary)?;
     let mut branch = None;
     let mut ahead = None;
     let mut behind = None;
@@ -174,6 +196,105 @@ pub fn read_status_at(workspace_root: &Path, requested: &str) -> AppResult<GitSt
         changed_count,
         ahead,
         behind,
-        files: status_entries(&context.repository, &[])?,
+        files: status_entries(&context.repository, &pathspecs)?,
+    })
+}
+
+/* ------------------------------ batch status ------------------------------ */
+
+/// Several checkouts' status in one request (Git 设计 §4.1 全部仓库聚合).
+///
+/// The aggregated Changes view used to make one round trip per repository, and
+/// a workspace with a dozen checkouts paid a dozen. Worse, the answers were then
+/// rendered as one list although each had been observed at a different moment.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatusBatchRequest {
+    /// The checkouts, as workspace-relative directories. `.` is the root.
+    pub paths: Vec<String>,
+    /// An optional pathspec filter, applied to every checkout in the batch.
+    #[serde(default)]
+    pub pathspecs: Vec<String>,
+}
+
+/// One checkout's answer. `status` and `error` are exclusive, and one of them is
+/// always present: a repository that could not be read is reported as that
+/// repository's failure rather than losing the whole batch, because one broken
+/// checkout in a workspace of twelve must not blank the other eleven.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatusBatchEntry {
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<GitStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<StatusBatchFailure>,
+}
+
+/// The Runtime's own `{ code, message }`, per repository.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatusBatchFailure {
+    pub code: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatusBatchResponse {
+    pub repositories: Vec<StatusBatchEntry>,
+    /// When this batch was taken. One timestamp for the whole answer, which is
+    /// the honest thing to say: the checkouts were read in sequence, so this is
+    /// "not older than", never "at this instant".
+    pub observed_at: String,
+}
+
+/// The largest batch. A workspace with more checkouts than this asks twice —
+/// which is still two round trips instead of sixty.
+const MAX_STATUS_BATCH: usize = 64;
+
+/// Reads every named checkout's status in one pass.
+pub fn read_status_batch(
+    workspace_root: &Path,
+    request: &StatusBatchRequest,
+) -> AppResult<StatusBatchResponse> {
+    if request.paths.is_empty() || request.paths.len() > MAX_STATUS_BATCH {
+        return Err(AppError::BadRequest(
+            "Between one and 64 repositories may be read at once".into(),
+        ));
+    }
+    // The pathspecs are validated once, before any Git runs. A malformed filter
+    // is the caller's mistake for the whole request, not twelve identical
+    // per-repository failures.
+    valid_pathspecs(&request.pathspecs)?;
+    let mut repositories = Vec::with_capacity(request.paths.len());
+    let mut seen = std::collections::HashSet::new();
+    for path in &request.paths {
+        if !seen.insert(path.clone()) {
+            continue;
+        }
+        let entry = match read_status_filtered(workspace_root, path, &request.pathspecs) {
+            Ok(status) => StatusBatchEntry {
+                path: path.clone(),
+                status: Some(status),
+                error: None,
+            },
+            Err(error) => {
+                let (code, message) = error.code_and_message();
+                StatusBatchEntry {
+                    path: path.clone(),
+                    status: None,
+                    error: Some(StatusBatchFailure {
+                        code: code.to_owned(),
+                        message,
+                    }),
+                }
+            }
+        };
+        repositories.push(entry);
+    }
+    Ok(StatusBatchResponse {
+        repositories,
+        observed_at: chrono::Utc::now().to_rfc3339(),
     })
 }

@@ -11,24 +11,23 @@
 //! without interpreting: it does not have to know what any of these answers
 //! mean, only that it must not change them.
 //!
-//! Clones are the one method here that is refused. A clone outlives the frame
-//! that starts it -- its job lives in a per-process registry and its `git`
-//! child keeps running -- and this Host starts a Worker per operation, so a job
-//! started in one process could never be polled from another. Answering
-//! UNSUPPORTED is the honest form of that; the resident git Worker the
-//! executor's own comment names is what makes it possible.
+//! Clones are the one group here that needs the process to outlive its frame:
+//! the job lives in a per-process registry and its `git` child keeps running
+//! after the answer is written. They are therefore served by the Host's
+//! *resident* clone Worker rather than by the per-operation one, and
+//! `clone.rs` says what that buys and what it costs.
 
 use std::path::Path;
 
 use armadra_protocol::v1::{GitRead, GitReadMethod, GitReadResult};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-use super::{failure, invalid, read_method, requested, result, root};
+use super::{clone, failure, invalid, read_method, requested, result, root};
 use crate::{
     error::{AppError, AppResult},
     git,
     git_hunks::GitHunkScope,
-    git_repository::HistoryRequest,
+    git_repository::{HistoryRequest, ReflogRequest, WorktreeBindingRequest},
 };
 
 #[derive(Default, Deserialize)]
@@ -58,15 +57,13 @@ struct ReadBody {
     max_depth: Option<usize>,
     #[serde(default)]
     workspace_id: Option<String>,
-}
-
-/// A method this build cannot perform. It is a real answer with a real status,
-/// not a transport error, because "this deployment cannot do that" is something
-/// a client renders rather than retries.
-#[derive(Serialize)]
-struct Unsupported {
-    code: &'static str,
-    message: &'static str,
+    /// The server-side pathspec filter shared by `status`, `diff` and
+    /// `history`. Empty is the whole checkout.
+    #[serde(default)]
+    paths: Vec<String>,
+    /// The clone job a status or cancel is about.
+    #[serde(default)]
+    job_id: Option<String>,
 }
 
 /// Forwards one query.
@@ -81,15 +78,6 @@ fn json<T: serde::Serialize>(value: &T) -> AppResult<GitReadResult> {
     let body = serde_json::to_vec(value)
         .map_err(|_| AppError::Internal("The Git answer could not be encoded".into()))?;
     Ok(result(200, body))
-}
-
-fn unsupported(message: &'static str) -> AppResult<GitReadResult> {
-    let body = serde_json::to_vec(&Unsupported {
-        code: "unsupported",
-        message,
-    })
-    .unwrap_or_else(|_| b"{}".to_vec());
-    Ok(result(501, body))
 }
 
 async fn answer(read: GitRead) -> AppResult<GitReadResult> {
@@ -129,7 +117,26 @@ async fn answer(read: GitRead) -> AppResult<GitReadResult> {
             json(&list)
         }
         GitReadMethod::Status => {
-            let value = blocking(&workspace, &path, git::read_status_at).await?;
+            let pathspecs = body.paths.clone();
+            let value = blocking(&workspace, &path, move |workspace, path| {
+                git::read_status_filtered(workspace, path, &pathspecs)
+            })
+            .await?;
+            json(&value)
+        }
+        GitReadMethod::StatusBatch => {
+            // Every checkout in the batch is addressed the way the panel
+            // addresses one: workspace-relative, and re-checked inside the root
+            // by the same code a single status goes through. A batch is a
+            // saving in round trips, never a way past a check.
+            let request: git::StatusBatchRequest = serde_json::from_slice(&read.request_json)
+                .map_err(|error| invalid(&format!("the batch status body does not parse: {error}")))?;
+            let value = tokio::task::spawn_blocking({
+                let workspace = workspace.clone();
+                move || git::read_status_batch(&workspace, &request)
+            })
+            .await
+            .map_err(|_| AppError::Internal("The batch status could not be joined".into()))??;
             json(&value)
         }
         GitReadMethod::HeadCommit => {
@@ -139,7 +146,7 @@ async fn answer(read: GitRead) -> AppResult<GitReadResult> {
         GitReadMethod::Diff => {
             let request = git::DiffRequest {
                 scope: Default::default(),
-                paths: Vec::new(),
+                paths: body.paths.clone(),
                 ignore_whitespace: false,
             };
             let value = blocking(&workspace, &path, move |workspace, path| {
@@ -175,8 +182,26 @@ async fn answer(read: GitRead) -> AppResult<GitReadResult> {
                 reference: body.reference.unwrap_or_else(|| "HEAD".into()),
                 limit: body.limit.unwrap_or(50),
                 cursor: body.cursor,
+                paths: body.paths,
             };
             json(&repositories.history(&workspace, &path, request).await?)
+        }
+        GitReadMethod::Reflog => {
+            let request = ReflogRequest {
+                reference: body.reference.unwrap_or_else(|| "HEAD".into()),
+                limit: body.limit.unwrap_or(50),
+                cursor: body.cursor,
+            };
+            json(&repositories.reflog(&workspace, &path, request).await?)
+        }
+        GitReadMethod::WorktreeBinding => {
+            let request: WorktreeBindingRequest = serde_json::from_slice(&read.request_json)
+                .map_err(|error| invalid(&format!("the binding body does not parse: {error}")))?;
+            json(
+                &repositories
+                    .verify_worktree_binding(&workspace, &request)
+                    .await?,
+            )
         }
         GitReadMethod::CommitDetail => {
             let oid = body
@@ -233,13 +258,17 @@ async fn answer(read: GitRead) -> AppResult<GitReadResult> {
                 .map_err(|error| invalid(&format!("the draft request does not parse: {error}")))?;
             json(&crate::git_message::generate(&workspace, request).await?)
         }
-        // See the module comment: a clone outlives the frame that starts it, so
-        // a Host that runs one Worker per operation could never poll the job it
-        // began. Saying so is the honest answer; pretending to start one would
-        // leave a `git clone` running with nobody able to reach it.
-        GitReadMethod::CloneStart | GitReadMethod::CloneStatus | GitReadMethod::CloneCancel => {
-            unsupported("Clones need a resident git Worker; this deployment runs one per operation")
-        }
+        GitReadMethod::CloneStart => clone::start(&workspace, &read.request_json).await,
+        GitReadMethod::CloneStatus => clone::status(
+            body.job_id
+                .as_deref()
+                .ok_or_else(|| invalid("a clone status names no job"))?,
+        ),
+        GitReadMethod::CloneCancel => clone::cancel(
+            body.job_id
+                .as_deref()
+                .ok_or_else(|| invalid("a clone cancel names no job"))?,
+        ),
         GitReadMethod::Unspecified => Err(invalid("the read method is unspecified")),
     }
 }

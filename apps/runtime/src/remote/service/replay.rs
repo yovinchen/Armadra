@@ -63,6 +63,9 @@ pub fn replay(operation: WorkerServiceOperation) -> Replay {
         | Operation::GitMessageSource
         | Operation::GitOperations
         | Operation::GitOperationGet
+        | Operation::GitReflog
+        | Operation::GitStatusBatch
+        | Operation::GitWorktreeBinding
         | Operation::FileInfo
         | Operation::FileEntryTrashList
         | Operation::WatchSubscribe
@@ -111,7 +114,10 @@ pub fn capability(operation: WorkerServiceOperation) -> Option<&'static str> {
         | Operation::GitOperationGet
         | Operation::GitOperationStart
         | Operation::GitOperationCancel
-        | Operation::GitApplyHunk => Some(GIT_PANEL_CAPABILITY),
+        | Operation::GitApplyHunk
+        | Operation::GitReflog
+        | Operation::GitStatusBatch
+        | Operation::GitWorktreeBinding => Some(GIT_PANEL_CAPABILITY),
         Operation::FileInfo
         | Operation::FileEntryTrashList
         | Operation::FileEntryCreate
@@ -166,6 +172,9 @@ pub const ALL: &[WorkerServiceOperation] = {
         Operation::GitOperationStart,
         Operation::GitOperationCancel,
         Operation::GitApplyHunk,
+        Operation::GitReflog,
+        Operation::GitStatusBatch,
+        Operation::GitWorktreeBinding,
         Operation::FileEntryTrashList,
         Operation::FileInfo,
         Operation::FileEntryCreate,

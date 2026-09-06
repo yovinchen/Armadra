@@ -70,6 +70,21 @@ impl AppError {
         (status.as_u16(), body)
     }
 
+    /// The `{ code, message }` pair, for an answer that reports *several*
+    /// outcomes at once.
+    ///
+    /// A batch status over a dozen checkouts is one such answer: one broken
+    /// repository is that repository's failure, not the request's, so its code
+    /// and message have to sit inside a successful response beside eleven
+    /// results. Those callers cannot go through [`Self::parts`], which encodes a
+    /// whole body, but they must not hand-write the message either — this is the
+    /// path where an `Io` or a `Database` error is replaced by a safe sentence
+    /// instead of being rendered verbatim.
+    pub fn code_and_message(self) -> (&'static str, String) {
+        let (_, code, message) = self.status_code_message();
+        (code, message)
+    }
+
     fn status_code_message(self) -> (StatusCode, &'static str, String) {
         match self {
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, "bad_request", message),

@@ -162,17 +162,22 @@ impl RepositoryService {
                 "A todo that drops every commit would leave nothing to replay".into(),
             ));
         }
-        // A squash needs a kept entry before it, after any reordering.
+        // A squash or a fixup needs a kept entry before it, after any
+        // reordering. `keeps_commit` is what decides that, in one place, so a
+        // verb added later cannot be forgotten here.
         let mut previous_kept = false;
         for entry in todo {
-            match entry.command {
-                RebaseTodoCommand::Squash if !previous_kept => {
-                    return Err(AppError::BadRequest(
-                        "A squash needs a kept commit before it in the reviewed order".into(),
-                    ));
-                }
-                RebaseTodoCommand::Drop => {}
-                _ => previous_kept = true,
+            if matches!(
+                entry.command,
+                RebaseTodoCommand::Squash | RebaseTodoCommand::Fixup
+            ) && !previous_kept
+            {
+                return Err(AppError::BadRequest(
+                    "A squash or fixup needs a kept commit before it in the reviewed order".into(),
+                ));
+            }
+            if entry.command.keeps_commit() {
+                previous_kept = true;
             }
         }
 
@@ -516,47 +521,102 @@ impl RepositoryService {
 struct TodoScript {
     editor: String,
     path: PathBuf,
+    /// The message files a `reword` entry amends from. They live beside the
+    /// todo, are removed with it, and are what makes a reword possible without
+    /// an editor: the message was decided and reviewed before Git started.
+    messages: Vec<PathBuf>,
 }
 
 impl Drop for TodoScript {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.path);
+        for message in &self.messages {
+            let _ = std::fs::remove_file(message);
+        }
     }
+}
+
+/// A path this service may pass to Git inside single quotes.
+///
+/// Git runs `GIT_SEQUENCE_EDITOR` and a todo's `exec` line through
+/// `sh -c`, so a path containing a quote or a control character would stop
+/// being one argument. Such a path is refused rather than escaped: escaping is
+/// where this kind of check goes wrong, and a repository whose Git directory
+/// contains a quote is rare enough to be told about.
+fn shell_safe(path: &Path, what: &str) -> AppResult<String> {
+    let value = path
+        .to_str()
+        .ok_or_else(|| AppError::Internal(format!("Rebase {what} path is not valid UTF-8")))?;
+    if value.contains('\'') || value.chars().any(char::is_control) {
+        return Err(AppError::Internal(format!(
+            "Rebase {what} path cannot be passed to Git safely"
+        )));
+    }
+    Ok(value.to_owned())
+}
+
+/// Creates one 0600 file with exactly these bytes, refusing to reuse an
+/// existing one.
+fn write_new(path: &Path, contents: &str, what: &str) -> AppResult<()> {
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options
+        .open(path)
+        .map_err(|_| AppError::Internal(format!("Could not stage the rebase {what}")))?;
+    file.write_all(contents.as_bytes())
+        .map_err(|_| AppError::Internal(format!("Could not stage the rebase {what}")))?;
+    Ok(())
 }
 
 impl TodoScript {
     fn write(common_dir: &Path, session_id: &str, todo: &[RebaseTodoEntry]) -> AppResult<Self> {
         let path = common_dir.join(format!("armadra-rebase-todo-{session_id}"));
-        let quoted = path
-            .to_str()
-            .ok_or_else(|| AppError::Internal("Rebase todo path is not valid UTF-8".into()))?;
-        if quoted.contains('\'') || quoted.chars().any(char::is_control) {
-            return Err(AppError::Internal(
-                "Rebase todo path cannot be passed to Git safely".into(),
-            ));
-        }
-        // Only `pick`, `squash` and `drop` reach this point, and every OID was
-        // validated as hex, so no line can carry a Git directive of its own.
+        let quoted = shell_safe(&path, "todo")?;
+        let editor = format!("cp -- '{quoted}'");
+        // The file is registered before it is written, so a failure halfway
+        // through still removes everything this call created.
+        let mut script = Self {
+            editor,
+            path,
+            messages: Vec::new(),
+        };
+        // Every OID was validated as hex and every keyword comes from a closed
+        // enum, so no line can carry a Git directive of its own. A `reword` is
+        // written as its `pick` plus one generated `exec`, because Git's own
+        // `reword` opens an editor and there is no editor here to open.
+        //
+        // The `exec` is not the arbitrary-command verb the todo editor still
+        // refuses to offer: its whole text is produced here from a path this
+        // service created and a fixed argument list, and the message it reads
+        // is a file rather than an argument, so nothing a caller typed ever
+        // becomes part of a command line.
         let mut contents = String::new();
-        for entry in todo {
+        for (index, entry) in todo.iter().enumerate() {
             contents.push_str(entry.command.keyword());
             contents.push(' ');
             contents.push_str(&entry.oid);
             contents.push('\n');
+            if entry.command != RebaseTodoCommand::Reword {
+                continue;
+            }
+            let message = entry.message.as_deref().ok_or_else(|| {
+                AppError::Internal("A reword reached execution without its message".into())
+            })?;
+            let message_path =
+                common_dir.join(format!("armadra-rebase-message-{session_id}-{index}"));
+            let quoted_message = shell_safe(&message_path, "message")?;
+            write_new(&message_path, message, "message")?;
+            script.messages.push(message_path);
+            contents.push_str(&format!(
+                "exec git commit --amend --allow-empty --file '{quoted_message}'\n"
+            ));
         }
-        let editor = format!("cp -- '{quoted}'");
-        let mut options = std::fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options
-            .open(&path)
-            .map_err(|_| AppError::Internal("Could not stage the rebase todo".into()))?;
-        file.write_all(contents.as_bytes())
-            .map_err(|_| AppError::Internal("Could not stage the rebase todo".into()))?;
-        Ok(Self { editor, path })
+        write_new(&script.path, &contents, "todo")?;
+        Ok(script)
     }
 }

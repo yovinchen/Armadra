@@ -10,6 +10,14 @@ pub struct HistoryRequest {
     #[serde(default = "history_limit")]
     pub limit: usize,
     pub cursor: Option<String>,
+    /// Narrow the log to these paths, on the server (Git 设计 §4.2 路径过滤).
+    ///
+    /// It is part of the cursor's identity, so a page taken under one filter
+    /// cannot be continued under another: `--skip` counts commits that passed
+    /// the filter, and changing it mid-page would skip a different set than the
+    /// one already shown.
+    #[serde(default)]
+    pub paths: Vec<String>,
 }
 fn head_ref() -> String {
     "HEAD".into()
@@ -23,6 +31,7 @@ impl Default for HistoryRequest {
             reference: head_ref(),
             limit: history_limit(),
             cursor: None,
+            paths: Vec::new(),
         }
     }
 }
@@ -58,6 +67,11 @@ pub(super) struct HistoryCursor {
     reference: String,
     anchor_oid: String,
     offset: usize,
+    /// The pathspec filter the earlier page was taken under. It is carried
+    /// rather than re-supplied so a client cannot continue a filtered page with
+    /// a different filter and receive a window over neither set.
+    #[serde(default)]
+    paths: Vec<String>,
 }
 
 impl RepositoryService {
@@ -76,6 +90,7 @@ impl RepositoryService {
         let token = Cancellation::default();
         self.validate_reference(&context.repository, &request.reference, &token)
             .await?;
+        let paths = crate::git::valid_pathspecs(&request.paths)?;
         let (anchor, offset) = if let Some(cursor) = request.cursor {
             if cursor.len() > 4096 {
                 return Err(invalid_cursor());
@@ -88,6 +103,7 @@ impl RepositoryService {
             if cursor.version != 1
                 || cursor.repository_id != context.repository_id()
                 || cursor.reference != request.reference
+                || cursor.paths != paths
                 || !valid_oid(&cursor.anchor_oid)
                 || cursor.offset > 1_000_000
             {
@@ -130,24 +146,22 @@ impl RepositoryService {
                 shallow,
             });
         };
-        let output = self
-            .read(
-                &context.repository,
-                vec![
-                    "log".into(),
-                    "--topo-order".into(),
-                    "--no-show-signature".into(),
-                    "--no-decorate".into(),
-                    "-z".into(),
-                    "--format=%H%x00%P%x00%an%x00%ae%x00%aI%x00%cI%x00%s".into(),
-                    format!("--skip={offset}"),
-                    format!("--max-count={}", request.limit + 1),
-                    anchor_oid.clone(),
-                    "--".into(),
-                ],
-                &token,
-            )
-            .await?;
+        let mut arguments = vec![
+            "log".into(),
+            "--topo-order".into(),
+            "--no-show-signature".into(),
+            "--no-decorate".into(),
+            "-z".into(),
+            "--format=%H%x00%P%x00%an%x00%ae%x00%aI%x00%cI%x00%s".into(),
+            format!("--skip={offset}"),
+            format!("--max-count={}", request.limit + 1),
+            anchor_oid.clone(),
+            "--".into(),
+        ];
+        // Everything after `--` is a pathspec, so a filter can only ever narrow
+        // the log; it can never become an option.
+        arguments.extend(paths.iter().cloned());
+        let output = self.read(&context.repository, arguments, &token).await?;
         let refs = self.commit_refs(&context.repository, &token).await?;
         let mut commits = parse_history(&output, &refs)?;
         let more = commits.len() > request.limit;
@@ -161,6 +175,7 @@ impl RepositoryService {
                         reference: request.reference.clone(),
                         anchor_oid: anchor_oid.clone(),
                         offset: offset + commits.len(),
+                        paths: paths.clone(),
                     })
                     .map_err(|_| malformed())?,
                 ),

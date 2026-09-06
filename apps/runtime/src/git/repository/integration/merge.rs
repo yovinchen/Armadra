@@ -191,7 +191,7 @@ impl RepositoryService {
             ));
         }
         if recovery == Recovery::Skip && !state.can_skip {
-            return Err(AppError::Conflict("Only an owned empty cherry-pick can be skipped; nonempty work must be resolved or explicitly aborted".into()));
+            return Err(AppError::Conflict("Only an owned empty cherry-pick or a paused rebase can be skipped; other work must be resolved or explicitly aborted".into()));
         }
         if recovery != Recovery::Continue {
             self.protect_abort_paths(
@@ -226,18 +226,20 @@ impl RepositoryService {
                     "--abort"
                 },
             ]),
-            // Skip would silently drop a whole replayed commit, so a rebase
-            // only offers the two decisions the caller can actually review.
-            ("rebase", mode @ (Recovery::Continue | Recovery::Abort)) => args(&[
+            // A rebase offers all three. `--skip` drops the commit the sequence
+            // stopped on and replays the rest; it is reachable only through
+            // `can_skip`, which requires an owned, paused rebase, so it can
+            // never be a way to discard work nobody looked at.
+            ("rebase", mode) => args(&[
                 "-c",
                 "core.editor=:",
                 "-c",
                 "rerere.enabled=false",
                 "rebase",
-                if mode == Recovery::Continue {
-                    "--continue"
-                } else {
-                    "--abort"
+                match mode {
+                    Recovery::Continue => "--continue",
+                    Recovery::Abort => "--abort",
+                    Recovery::Skip => "--skip",
                 },
             ]),
             _ => {
@@ -259,9 +261,10 @@ impl RepositoryService {
         } else {
             expected.clone()
         };
-        if state.kind == "rebase" && recovery == Recovery::Continue && after.kind == "rebase" {
-            // A replay can stop again on the next commit. That is still the
-            // same owned sequence, not a failed recovery.
+        if state.kind == "rebase" && recovery != Recovery::Abort && after.kind == "rebase" {
+            // A replay can stop again on the next commit — after a continue and
+            // equally after a skip. That is still the same owned sequence, not
+            // a failed recovery.
             let still_owned = self
                 .inner
                 .integrations
@@ -274,7 +277,14 @@ impl RepositoryService {
                 return Ok(());
             }
         }
-        if after.kind != "none" || (recovery != Recovery::Continue && head != restored) {
+        // A finished abort has to land back where the sequence started, and so
+        // does a skipped cherry-pick: skipping an empty pick preserves HEAD by
+        // definition. A skipped rebase is the exception — dropping one replayed
+        // commit and finishing the rest is *supposed* to move HEAD, so it is
+        // checked by `verify_rebase` below rather than by equality here.
+        let must_restore = matches!(recovery, Recovery::Abort)
+            || (recovery == Recovery::Skip && state.kind != "rebase");
+        if after.kind != "none" || (must_restore && head != restored) {
             return Err(AppError::Conflict("Git did not finish the requested recovery; inspect the current state before another action".into()));
         }
         if recovery == Recovery::Continue && state.kind == "cherryPick" {
@@ -297,7 +307,12 @@ impl RepositoryService {
             )
             .await?;
         }
-        if recovery == Recovery::Continue && state.kind == "rebase" {
+        // A rebase that *finished* is verified whether the last decision was a
+        // continue or a skip: both end with the branch back on itself and the
+        // confirmed target reachable, and a skip that left the repository
+        // somewhere else is exactly the outcome nobody should have to discover
+        // later.
+        if recovery != Recovery::Abort && state.kind == "rebase" {
             self.verify_rebase(context, &state, &head, token).await?;
         }
         if recovery == Recovery::Continue && state.kind == "merge" {
@@ -339,6 +354,9 @@ impl RepositoryService {
                     "Git integration was explicitly aborted; its starting state was restored"
                 }
                 Recovery::Continue => "Git integration was completed by a confirmed continuation",
+                Recovery::Skip if state.kind == "rebase" => {
+                    "The replayed commit the rebase stopped on was explicitly skipped"
+                }
                 Recovery::Skip => {
                     "The empty cherry-pick was explicitly skipped; HEAD was preserved"
                 }

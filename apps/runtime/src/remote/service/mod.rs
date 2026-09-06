@@ -304,6 +304,13 @@ async fn dispatch(
         Operation::GitRebaseTodo => {
             git::rebase_todo(root, decode(&request_json)?, allow_execute).await
         }
+        Operation::GitReflog => git::reflog(root, decode(&request_json)?, allow_execute).await,
+        Operation::GitStatusBatch => {
+            git::status_batch(root, decode(&request_json)?, allow_execute).await
+        }
+        Operation::GitWorktreeBinding => {
+            git::worktree_binding(root, decode(&request_json)?, allow_execute).await
+        }
         Operation::GitTags => git::tags(root, decode(&request_json)?, allow_execute).await,
         Operation::GitRemotes => git::remotes(root, decode(&request_json)?, allow_execute).await,
         Operation::GitStashes => git::stashes(root, decode(&request_json)?, allow_execute).await,

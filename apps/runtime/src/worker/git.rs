@@ -42,9 +42,13 @@ use armadra_protocol::v1::{
 
 use crate::error::{AppError, AppResult};
 
+mod clone;
 mod observe;
+pub mod progress;
 mod read;
 mod run;
+
+pub use progress::{attach as attach_upcalls, clone_progress as report_clone_progress};
 
 /// Advertised unconditionally: running a Git command needs a workspace root,
 /// which arrives in the frame, and nothing else. A Worker started for a
@@ -120,6 +124,12 @@ fn requested(root: &Path, scope: &RepositoryScope) -> AppResult<String> {
 
 /// Handles one git frame.
 pub async fn handle(request: GitWorkerRequest) -> AppResult<GitWorkerResponse> {
+    // Every frame names the workspace it is about, and the upward reports this
+    // process sends have to be attributed to the same one. It is taken from the
+    // frame rather than from a flag because the Host is the side that knows it.
+    if let Some(workspace) = frame_workspace(&request) {
+        progress::remember_workspace(workspace);
+    }
     let result = match request.action {
         Some(git_worker_request::Action::Snapshot(_)) => {
             git_worker_response::Result::Snapshot(snapshot())
@@ -170,6 +180,19 @@ pub async fn handle(request: GitWorkerRequest) -> AppResult<GitWorkerResponse> {
     })
 }
 
+/// The workspace one frame is about, when it names one.
+fn frame_workspace(request: &GitWorkerRequest) -> Option<&str> {
+    let scope = match request.action.as_ref()? {
+        git_worker_request::Action::Run(input) => input.operation.as_ref()?.scope.as_ref()?,
+        git_worker_request::Action::Observe(input) => input.scope.as_ref()?,
+        git_worker_request::Action::Read(input) => input.scope.as_ref()?,
+        git_worker_request::Action::Cancel(_) | git_worker_request::Action::Snapshot(_) => {
+            return None;
+        }
+    };
+    Some(scope.workspace_id.as_str()).filter(|value| !value.is_empty())
+}
+
 /// What this process still has in flight.
 ///
 /// It is always this process's own registry, and for a Worker started to answer
@@ -182,9 +205,11 @@ fn snapshot() -> GitDomainSnapshot {
     GitDomainSnapshot {
         queued,
         running,
-        // Clone jobs live in the same per-process registry as the queue and
-        // die with it, so a process with no queue has no clones either.
-        clone_jobs: 0,
+        // Clone jobs live in the same per-process registry as the queue and die
+        // with it. A Worker that only ever answered one frame has none; a
+        // resident one, which is what makes a Host-side clone possible at all,
+        // can have several, and a switch has to see them.
+        clone_jobs: crate::git::active_clone_count(),
         active_operation_ids,
     }
 }

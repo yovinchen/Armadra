@@ -20,7 +20,10 @@ use axum::{
     extract::{Path as AxumPath, Query, State},
 };
 use serde::Deserialize;
-use std::{path::Path, sync::LazyLock};
+use std::{
+    path::{Path, PathBuf},
+    sync::LazyLock,
+};
 
 pub mod queue;
 
@@ -443,6 +446,10 @@ pub struct RepositoryHistoryQuery {
     #[serde(default = "history_limit")]
     limit: usize,
     cursor: Option<String>,
+    /// Comma-separated repository-relative paths, filtered by Git rather than
+    /// by the caller. Absent is the whole repository. The spelling matches
+    /// `GitDiffQuery.paths`, which is the other read that takes a pathspec.
+    paths: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -512,6 +519,7 @@ pub async fn history(
     Query(query): Query<RepositoryHistoryQuery>,
 ) -> AppResult<JsonAnswer> {
     let workspace = workspace(&state, &id, false).await?;
+    let paths = comma_paths(query.paths.as_deref());
     if let Some(answer) = proxied(
         &state,
         &workspace,
@@ -521,6 +529,7 @@ pub async fn history(
             reference: query.reference.clone(),
             limit: query.limit,
             cursor: query.cursor.clone(),
+            paths: paths.clone(),
         },
     )
     .await?
@@ -537,6 +546,161 @@ pub async fn history(
                     reference: query.reference,
                     limit: query.limit,
                     cursor: query.cursor,
+                    paths,
+                },
+            )
+            .await?,
+    )
+}
+
+/// A comma-separated query parameter as a pathspec list. Empty entries are
+/// dropped rather than passed on, because an empty pathspec matches everything
+/// and would silently widen the filter it was meant to narrow.
+fn comma_paths(value: Option<&str>) -> Vec<String> {
+    value
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
+#[derive(Deserialize)]
+pub struct ReflogQuery {
+    #[serde(default = "root_path")]
+    path: String,
+    #[serde(default = "head_reference")]
+    reference: String,
+    #[serde(default = "history_limit")]
+    limit: usize,
+    cursor: Option<String>,
+}
+
+/// One page of a ref's reference log (Git 设计 §3 "Reflog").
+pub async fn reflog(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<ReflogQuery>,
+) -> AppResult<JsonAnswer> {
+    let workspace = workspace(&state, &id, false).await?;
+    if let Some(answer) = proxied(
+        &state,
+        &workspace,
+        WorkerServiceOperation::GitReflog,
+        &service::git::ReflogPayload {
+            path: query.path.clone(),
+            reference: query.reference.clone(),
+            limit: query.limit,
+            cursor: query.cursor.clone(),
+        },
+    )
+    .await?
+    {
+        return Ok(answer);
+    }
+    JsonAnswer::local(
+        &REPOSITORIES
+            .with_execution(workspace.permissions.execute)
+            .reflog(
+                Path::new(&workspace.root_path),
+                &query.path,
+                ReflogRequest {
+                    reference: query.reference,
+                    limit: query.limit,
+                    cursor: query.cursor,
+                },
+            )
+            .await?,
+    )
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StatusBatchBody {
+    paths: Vec<String>,
+    #[serde(default)]
+    pathspecs: Vec<String>,
+}
+
+/// Several checkouts' status in one request (Git 设计 §4.1 全部仓库聚合).
+///
+/// It is a POST because the list of checkouts is a body, not a path: a
+/// workspace with a dozen repositories would otherwise put a dozen paths in a
+/// query string, where they are length-bounded and awkward to escape. Nothing
+/// about it writes.
+pub async fn status_batch(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<StatusBatchBody>,
+) -> AppResult<JsonAnswer> {
+    let workspace = workspace(&state, &id, false).await?;
+    crate::git::access::require_execution(workspace.permissions.execute, "Git worktree status")?;
+    if let Some(answer) = proxied(
+        &state,
+        &workspace,
+        WorkerServiceOperation::GitStatusBatch,
+        &service::git::StatusBatchPayload {
+            paths: body.paths.clone(),
+            pathspecs: body.pathspecs.clone(),
+        },
+    )
+    .await?
+    {
+        return Ok(answer);
+    }
+    let root = PathBuf::from(&workspace.root_path);
+    let request = crate::git::StatusBatchRequest {
+        paths: body.paths,
+        pathspecs: body.pathspecs,
+    };
+    let value = tokio::task::spawn_blocking(move || crate::git::read_status_batch(&root, &request))
+        .await
+        .map_err(|_| AppError::Internal("The batch status could not be joined".into()))??;
+    JsonAnswer::local(&value)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorktreeBindingBody {
+    worktree_path: String,
+    #[serde(default)]
+    branch: Option<String>,
+    #[serde(default)]
+    repository_id: Option<String>,
+}
+
+/// Whether a Frame's worktree binding still names a checkout of the repository
+/// it claims (Git 设计 §5.1, §5.3).
+pub async fn worktree_binding(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<WorktreeBindingBody>,
+) -> AppResult<JsonAnswer> {
+    let workspace = workspace(&state, &id, false).await?;
+    if let Some(answer) = proxied(
+        &state,
+        &workspace,
+        WorkerServiceOperation::GitWorktreeBinding,
+        &service::git::WorktreeBindingPayload {
+            worktree_path: body.worktree_path.clone(),
+            branch: body.branch.clone(),
+            repository_id: body.repository_id.clone(),
+        },
+    )
+    .await?
+    {
+        return Ok(answer);
+    }
+    JsonAnswer::local(
+        &REPOSITORIES
+            .with_execution(workspace.permissions.execute)
+            .verify_worktree_binding(
+                Path::new(&workspace.root_path),
+                &WorktreeBindingRequest {
+                    worktree_path: body.worktree_path,
+                    branch: body.branch,
+                    repository_id: body.repository_id,
                 },
             )
             .await?,

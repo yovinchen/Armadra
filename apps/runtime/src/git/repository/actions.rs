@@ -3,25 +3,53 @@
 
 use super::*;
 
-/// What an interactive rebase does with one replayed commit. Deliberately a
-/// small set: no `edit`, no `exec`, and no `fixup` — each of those either stops
-/// for an interaction this service cannot drive or runs an arbitrary command.
+/// What an interactive rebase does with one replayed commit.
+///
+/// `exec` is deliberately still absent: it is the one verb whose meaning is an
+/// arbitrary command supplied by the caller, and this service never runs one.
+/// The rest are here because each of them is a decision a person makes in the
+/// todo editor and can review before it runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum RebaseTodoCommand {
     Pick,
+    /// Replay the commit and replace its message with the one the entry
+    /// carries. Git's own `reword` opens an editor, which nothing here can
+    /// drive, so the message is decided before the rebase starts — which is
+    /// also what makes it reviewable in the todo editor rather than in a
+    /// terminal that appeared halfway through.
+    Reword,
+    /// Replay the commit and stop, so a person can amend it and continue. The
+    /// sequence stays owned while it waits; `ContinueIntegration` resumes it.
+    Edit,
     /// Combine into the previous entry. Git's own prefilled combined message is
     /// kept, because no editor runs.
     Squash,
+    /// Combine into the previous entry and discard this commit's message. It is
+    /// the difference a person means when they say "this was a fix to the one
+    /// before it", and the reason it is separate from `squash`.
+    Fixup,
     Drop,
 }
 impl RebaseTodoCommand {
     pub(super) fn keyword(self) -> &'static str {
         match self {
             Self::Pick => "pick",
+            // A reword is written as a pick plus a generated amend; see
+            // `TodoScript::write`. Git's own `reword` would open an editor.
+            Self::Reword => "pick",
+            Self::Edit => "edit",
             Self::Squash => "squash",
+            Self::Fixup => "fixup",
             Self::Drop => "drop",
         }
+    }
+    /// Whether this verb leaves a commit behind for a later `squash` or
+    /// `fixup` to combine into. A squash does: what it leaves is the combined
+    /// commit, which the next entry can combine into in turn. Only `drop`
+    /// leaves nothing.
+    pub(super) fn keeps_commit(self) -> bool {
+        !matches!(self, Self::Drop)
     }
 }
 
@@ -30,6 +58,14 @@ impl RebaseTodoCommand {
 pub struct RebaseTodoEntry {
     pub oid: String,
     pub command: RebaseTodoCommand,
+    /// The replacement message, for `reword` only.
+    ///
+    /// It is refused on every other verb rather than ignored: a caller that
+    /// sent a message with a `pick` believed it would be used, and silently
+    /// dropping it would rewrite history with the old message and report
+    /// success.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
 /// The commits `StartInteractiveRebase` would replay, oldest first — the order
@@ -345,10 +381,37 @@ impl RepositoryService {
                 }
                 for entry in todo {
                     require_oid(&entry.oid)?;
+                    match (entry.command, entry.message.as_deref()) {
+                        (RebaseTodoCommand::Reword, Some(message)) => {
+                            if message.trim().is_empty()
+                                || message.len() > 10_000
+                                || message.contains('\0')
+                            {
+                                return Err(AppError::BadRequest(
+                                    "A reword needs a message of 1–10000 bytes".into(),
+                                ));
+                            }
+                        }
+                        (RebaseTodoCommand::Reword, None) => {
+                            return Err(AppError::BadRequest(
+                                "A reword must carry the message it replaces the old one with"
+                                    .into(),
+                            ));
+                        }
+                        (_, Some(_)) => {
+                            return Err(AppError::BadRequest(
+                                "Only a reword may carry a message".into(),
+                            ));
+                        }
+                        (_, None) => {}
+                    }
                 }
-                if todo.first().map(|entry| entry.command) == Some(RebaseTodoCommand::Squash) {
+                if matches!(
+                    todo.first().map(|entry| entry.command),
+                    Some(RebaseTodoCommand::Squash | RebaseTodoCommand::Fixup)
+                ) {
                     return Err(AppError::BadRequest(
-                        "The first replayed commit has nothing to squash into".into(),
+                        "The first replayed commit has nothing to combine into".into(),
                     ));
                 }
             }

@@ -62,7 +62,12 @@ async fn conflicted_rebase_reports_its_branch_and_continues_only_after_staging()
     assert_eq!(paused.original_branch.as_deref(), Some("main"));
     assert_eq!(paused.original_head.as_deref(), Some(original.as_str()));
     assert_eq!(paused.target_oid.as_deref(), Some(target.as_str()));
-    assert!(!paused.can_continue && !paused.can_skip);
+    // Continuing needs the conflict resolved and staged first. Skipping does
+    // not: dropping the commit the replay stopped on is a decision about that
+    // commit, and refusing it until its conflict is resolved would demand work
+    // on a change the caller has decided to discard.
+    assert!(!paused.can_continue);
+    assert!(paused.can_skip);
     assert_eq!(paused.conflicts.len(), 1);
     assert_eq!(paused.conflicts[0].path, "file");
     assert_eq!(
@@ -217,6 +222,16 @@ fn entry(oid: &str, command: RebaseTodoCommand) -> RebaseTodoEntry {
     RebaseTodoEntry {
         oid: oid.into(),
         command,
+        message: None,
+    }
+}
+
+/// A `reword` entry, which is the one verb that carries the message it applies.
+fn reworded(oid: &str, message: &str) -> RebaseTodoEntry {
+    RebaseTodoEntry {
+        oid: oid.into(),
+        command: RebaseTodoCommand::Reword,
+        message: Some(message.into()),
     }
 }
 
@@ -410,6 +425,227 @@ async fn a_todo_that_does_not_cover_the_range_is_refused_before_anything_moves()
     );
     assert_eq!(repo.status().await.head, before);
     assert_eq!(repo.status().await.kind, "none");
+}
+
+#[tokio::test]
+async fn reword_replaces_the_message_of_exactly_its_own_commit() {
+    let repo = Repo::new();
+    repo.commit("base", "base\n");
+    git(&repo.path, &["switch", "-c", "topic"]);
+    let target = repo.commit("topic", "incoming\n");
+    git(&repo.path, &["switch", "main"]);
+    let first = repo.commit("one", "one\n");
+    let second = repo.commit("two", "two\n");
+
+    assert_eq!(
+        repo.interactive(
+            &target,
+            vec![
+                entry(&first, RebaseTodoCommand::Pick),
+                reworded(&second, "改写后的信息\n\n第二段\n"),
+            ],
+        )
+        .await
+        .state,
+        OperationState::Succeeded
+    );
+    let after = repo.status().await;
+    assert_eq!(after.kind, "none");
+    assert_eq!(after.head.branch.as_deref(), Some("main"));
+    let messages = git(
+        &repo.path,
+        &["log", "--format=%s", &format!("{target}..HEAD")],
+    );
+    // Newest first: the reworded commit, then the one that was only picked.
+    assert_eq!(
+        messages.lines().collect::<Vec<_>>(),
+        vec!["改写后的信息", "test commit"],
+        "{messages}"
+    );
+    let body = git(&repo.path, &["log", "-1", "--format=%b"]);
+    assert!(body.contains("第二段"), "{body}");
+    assert_eq!(git(&repo.path, &["status", "--porcelain"]), "");
+    // The message file lives beside the todo and is removed with it.
+    let leftovers = std::fs::read_dir(repo.path.join(".git"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("armadra-rebase-")
+        })
+        .count();
+    assert_eq!(leftovers, 0);
+}
+
+#[tokio::test]
+async fn a_reword_without_a_message_and_a_message_on_any_other_verb_are_refused() {
+    let repo = Repo::new();
+    repo.commit("base", "base\n");
+    git(&repo.path, &["switch", "-c", "topic"]);
+    let target = repo.commit("topic", "incoming\n");
+    git(&repo.path, &["switch", "main"]);
+    let first = repo.commit("one", "one\n");
+    let before = repo.status().await.head;
+
+    for todo in [
+        vec![entry(&first, RebaseTodoCommand::Reword)],
+        vec![reworded(&first, "  ")],
+        vec![RebaseTodoEntry {
+            oid: first.clone(),
+            command: RebaseTodoCommand::Pick,
+            message: Some("这条信息永远不会被用上".into()),
+        }],
+    ] {
+        assert!(
+            repo.service
+                .start(
+                    repo.temp.path().to_owned(),
+                    repo.path.to_str().unwrap().into(),
+                    Action::StartInteractiveRebase {
+                        onto: target.clone(),
+                        todo,
+                        expected_state_token: repo.status().await.state_token,
+                    },
+                    before.clone(),
+                )
+                .await
+                .is_err()
+        );
+    }
+    assert_eq!(repo.status().await.head, before);
+    assert_eq!(repo.status().await.kind, "none");
+}
+
+#[tokio::test]
+async fn edit_stops_the_replay_and_a_continue_finishes_it() {
+    let repo = Repo::new();
+    repo.commit("base", "base\n");
+    git(&repo.path, &["switch", "-c", "topic"]);
+    let target = repo.commit("topic", "incoming\n");
+    git(&repo.path, &["switch", "main"]);
+    let first = repo.commit("one", "one\n");
+    let second = repo.commit("two", "two\n");
+
+    assert_eq!(
+        repo.interactive(
+            &target,
+            vec![
+                entry(&first, RebaseTodoCommand::Edit),
+                entry(&second, RebaseTodoCommand::Pick),
+            ],
+        )
+        .await
+        .state,
+        OperationState::AwaitingResolution,
+        "an edit stops for a person rather than running to the end"
+    );
+    let paused = repo.status().await;
+    assert_eq!(paused.kind, "rebase");
+    assert!(paused.owned, "the stopped replay is ours to drive");
+    assert!(
+        paused.can_continue,
+        "an edit stop has no conflict to resolve first"
+    );
+    // The person amends, exactly as `edit` exists for.
+    std::fs::write(repo.path.join("one"), "amended\n").unwrap();
+    git(&repo.path, &["add", "--", "one"]);
+    git(&repo.path, &["commit", "--amend", "--no-edit"]);
+
+    assert_eq!(repo.resume(false).await.state, OperationState::Succeeded);
+    let after = repo.status().await;
+    assert_eq!(after.kind, "none");
+    assert_eq!(after.head.branch.as_deref(), Some("main"));
+    assert_eq!(
+        std::fs::read_to_string(repo.path.join("one")).unwrap(),
+        "amended\n"
+    );
+    assert!(repo.path.join("two").exists(), "the rest still replayed");
+}
+
+#[tokio::test]
+async fn fixup_combines_without_keeping_the_combined_commit_message() {
+    let repo = Repo::new();
+    repo.commit("base", "base\n");
+    git(&repo.path, &["switch", "-c", "topic"]);
+    let target = repo.commit("topic", "incoming\n");
+    git(&repo.path, &["switch", "main"]);
+    let first = repo.commit("one", "one\n");
+    std::fs::write(repo.path.join("two"), "two\n").unwrap();
+    git(&repo.path, &["add", "-f", "--", "two"]);
+    git(&repo.path, &["commit", "-m", "修复上一条"]);
+    let second = git(&repo.path, &["rev-parse", "HEAD"]);
+
+    assert_eq!(
+        repo.interactive(
+            &target,
+            vec![
+                entry(&first, RebaseTodoCommand::Pick),
+                entry(&second, RebaseTodoCommand::Fixup),
+            ],
+        )
+        .await
+        .state,
+        OperationState::Succeeded
+    );
+    assert_eq!(
+        git(
+            &repo.path,
+            &["rev-list", "--count", &format!("{target}..HEAD")]
+        ),
+        "1",
+        "the two commits became one"
+    );
+    // This is the whole difference from `squash`: the fixed-up commit's own
+    // message is discarded rather than concatenated.
+    let message = git(&repo.path, &["log", "-1", "--format=%B"]);
+    assert!(!message.contains("修复上一条"), "{message}");
+    assert!(message.contains("test commit"), "{message}");
+    assert!(repo.path.join("one").exists());
+    assert!(repo.path.join("two").exists());
+}
+
+#[tokio::test]
+async fn a_paused_rebase_can_skip_the_commit_it_stopped_on() {
+    let repo = Repo::new();
+    let (_original, target) = repo.conflict();
+    assert_eq!(
+        repo.rebase(&target).await.state,
+        OperationState::AwaitingResolution
+    );
+    let paused = repo.status().await;
+    assert_eq!(paused.kind, "rebase");
+    assert!(
+        paused.can_skip,
+        "a paused rebase offers skip as well as continue and abort"
+    );
+    let session = paused.session_id.clone().unwrap();
+
+    let skipped = repo
+        .run(
+            Action::SkipIntegration {
+                session_id: session,
+                expected_state_token: paused.state_token.clone(),
+            },
+            paused.head.clone(),
+        )
+        .await;
+    assert_eq!(skipped.state, OperationState::Succeeded);
+    let after = repo.status().await;
+    assert_eq!(after.kind, "none", "the sequence finished");
+    assert_eq!(after.head.branch.as_deref(), Some("main"));
+    // The dropped commit is really gone, and the target is still reachable —
+    // which is the pair `verify_rebase` checks after a skip as well as after a
+    // continue.
+    assert_eq!(
+        git(
+            &repo.path,
+            &["rev-list", "--count", &format!("{target}..HEAD")]
+        ),
+        "0"
+    );
+    assert_eq!(git(&repo.path, &["status", "--porcelain"]), "");
 }
 
 #[tokio::test]

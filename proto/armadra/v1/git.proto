@@ -384,6 +384,24 @@ enum GitReadMethod {
   GIT_READ_METHOD_CLONE_START = 22;
   GIT_READ_METHOD_CLONE_STATUS = 23;
   GIT_READ_METHOD_CLONE_CANCEL = 24;
+  // The reference log of one ref (Git 设计 §3 "Reflog"). It is paged like the
+  // history because a reflog on a busy checkout is thousands of entries and a
+  // panel renders a screen of them.
+  GIT_READ_METHOD_REFLOG = 25;
+  // Several checkouts' status in one answer. A workspace with a dozen
+  // repositories used to cost a dozen round trips to draw one aggregated
+  // Changes list, and each of those was a separate `git status` whose answers
+  // were then read as if they had been taken at one moment. One request makes
+  // that one observation, and each repository's answer carries its own failure
+  // rather than losing the whole batch to one broken checkout.
+  GIT_READ_METHOD_STATUS_BATCH = 26;
+  // Whether a Frame's worktree binding still names a checkout this workspace
+  // may address: inside the registered root, and genuinely a worktree of the
+  // repository the binding claims. The answer is a verdict with a reason code,
+  // never a boolean — "the path left the root" and "the checkout was removed"
+  // are different things for a person to fix, and a binding that is merely
+  // stale must not be reported as one that was never allowed.
+  GIT_READ_METHOD_WORKTREE_BINDING = 27;
 }
 
 // One forwarded read. The body is the same version-locked JSON the action

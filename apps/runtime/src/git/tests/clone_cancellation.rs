@@ -62,7 +62,7 @@ fn cancellation_reaps_its_clone_and_preserves_user_visible_destination() {
         .args(["clone", "--progress", "--"])
         .arg(&source)
         .arg(&target);
-    let clone = spawn_clone_process(process, "target", target.clone()).unwrap();
+    let clone = spawn_clone_process(process, "target", target.clone(), "file:///local").unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     while !target.join("clone-hook-ready").exists() {
         assert!(Instant::now() < deadline);

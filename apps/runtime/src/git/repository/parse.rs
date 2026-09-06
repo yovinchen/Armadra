@@ -21,6 +21,35 @@ pub(super) fn fields_with_lf(bytes: &[u8], width: usize) -> AppResult<Vec<Vec<St
     Ok(records)
 }
 
+/// `git log -z --format=…%x00…` output: every field and every record end is a
+/// NUL, so the whole answer is one flat NUL-separated list whose length is a
+/// multiple of the record width.
+///
+/// It is separate from [`fields_with_lf`] because that one reads `for-each-ref`
+/// output, where a record ends with a newline. Reading one with the other's
+/// rule turns a subject containing a newline — which a reflog message may — into
+/// a malformed record.
+pub(super) fn fields_with_nul(bytes: &[u8], width: usize) -> AppResult<Vec<Vec<String>>> {
+    if bytes.is_empty() {
+        return Ok(vec![]);
+    }
+    let mut fields: Vec<_> = bytes.split(|byte| *byte == 0).collect();
+    if fields.last() == Some(&b"".as_slice()) {
+        fields.pop();
+    }
+    if width == 0 || fields.len() % width != 0 {
+        return Err(malformed());
+    }
+    fields
+        .chunks_exact(width)
+        .map(|row| {
+            row.iter()
+                .map(|value| text(value).map(str::to_owned))
+                .collect::<AppResult<Vec<String>>>()
+        })
+        .collect()
+}
+
 pub(super) fn parse_tracking(track: &str) -> AppResult<(Option<u64>, Option<u64>, bool)> {
     if track == "gone" {
         return Ok((None, None, true));

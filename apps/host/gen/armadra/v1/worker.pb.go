@@ -82,6 +82,15 @@ const (
 	WorkerServiceOperation_WORKER_SERVICE_OPERATION_ASSET_IMPORT      WorkerServiceOperation = 46
 	WorkerServiceOperation_WORKER_SERVICE_OPERATION_WATCH_SUBSCRIBE   WorkerServiceOperation = 47
 	WorkerServiceOperation_WORKER_SERVICE_OPERATION_WATCH_UNSUBSCRIBE WorkerServiceOperation = 48
+	// The reference log of one ref, and the two reads that were added with it:
+	// several checkouts' status in one answer, and whether a Frame's worktree
+	// binding still names a checkout of the repository it claims. They are here
+	// rather than in the git block above because the numbers only ever grow —
+	// renumbering the block would move every operation an SSH host already
+	// answers.
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_REFLOG           WorkerServiceOperation = 50
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_STATUS_BATCH     WorkerServiceOperation = 51
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_WORKTREE_BINDING WorkerServiceOperation = 52
 )
 
 // Enum value maps for WorkerServiceOperation.
@@ -132,6 +141,9 @@ var (
 		46: "WORKER_SERVICE_OPERATION_ASSET_IMPORT",
 		47: "WORKER_SERVICE_OPERATION_WATCH_SUBSCRIBE",
 		48: "WORKER_SERVICE_OPERATION_WATCH_UNSUBSCRIBE",
+		50: "WORKER_SERVICE_OPERATION_GIT_REFLOG",
+		51: "WORKER_SERVICE_OPERATION_GIT_STATUS_BATCH",
+		52: "WORKER_SERVICE_OPERATION_GIT_WORKTREE_BINDING",
 	}
 	WorkerServiceOperation_value = map[string]int32{
 		"WORKER_SERVICE_OPERATION_UNSPECIFIED":             0,
@@ -179,6 +191,9 @@ var (
 		"WORKER_SERVICE_OPERATION_ASSET_IMPORT":            46,
 		"WORKER_SERVICE_OPERATION_WATCH_SUBSCRIBE":         47,
 		"WORKER_SERVICE_OPERATION_WATCH_UNSUBSCRIBE":       48,
+		"WORKER_SERVICE_OPERATION_GIT_REFLOG":              50,
+		"WORKER_SERVICE_OPERATION_GIT_STATUS_BATCH":        51,
+		"WORKER_SERVICE_OPERATION_GIT_WORKTREE_BINDING":    52,
 	}
 )
 
@@ -3272,7 +3287,7 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"agent_host\x18\x1c \x01(\v2\x1f.armadra.v1.AgentWorkerResponseH\x00R\tagentHost\x121\n" +
 	"\x03git\x18\x1d \x01(\v2\x1d.armadra.v1.GitWorkerResponseH\x00R\x03gitB\b\n" +
-	"\x06result*\xfa\x0f\n" +
+	"\x06result*\x85\x11\n" +
 	"\x16WorkerServiceOperation\x12(\n" +
 	"$WORKER_SERVICE_OPERATION_UNSPECIFIED\x10\x00\x12)\n" +
 	"%WORKER_SERVICE_OPERATION_FILE_VERSION\x10\x01\x12+\n" +
@@ -3319,7 +3334,10 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"+WORKER_SERVICE_OPERATION_FILE_ENTRY_RESTORE\x10-\x12)\n" +
 	"%WORKER_SERVICE_OPERATION_ASSET_IMPORT\x10.\x12,\n" +
 	"(WORKER_SERVICE_OPERATION_WATCH_SUBSCRIBE\x10/\x12.\n" +
-	"*WORKER_SERVICE_OPERATION_WATCH_UNSUBSCRIBE\x100\"\x04\b1\x101B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	"*WORKER_SERVICE_OPERATION_WATCH_UNSUBSCRIBE\x100\x12'\n" +
+	"#WORKER_SERVICE_OPERATION_GIT_REFLOG\x102\x12-\n" +
+	")WORKER_SERVICE_OPERATION_GIT_STATUS_BATCH\x103\x121\n" +
+	"-WORKER_SERVICE_OPERATION_GIT_WORKTREE_BINDING\x104\"\x04\b1\x101B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_worker_proto_rawDescOnce sync.Once

@@ -168,6 +168,22 @@ pub fn router_with_state(state: AppState) -> Router {
             get(git_api::history),
         )
         .route(
+            "/api/workspaces/{workspace_id}/git/repository/reflog",
+            get(git_api::reflog),
+        )
+        // A POST that writes nothing: the list of checkouts is a body, because
+        // a dozen paths in a query string is where escaping goes wrong.
+        .route(
+            "/api/workspaces/{workspace_id}/git/repository/status-batch",
+            post(git_api::status_batch),
+        )
+        // Likewise a POST for a read: a Frame's binding is a record with three
+        // fields, and checking it must not put a filesystem path in a URL.
+        .route(
+            "/api/workspaces/{workspace_id}/git/repository/worktree-binding",
+            post(git_api::worktree_binding),
+        )
+        .route(
             "/api/workspaces/{workspace_id}/git/repository/commit",
             get(git_api::commit_detail),
         )

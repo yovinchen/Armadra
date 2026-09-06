@@ -34,8 +34,8 @@ use crate::{
 };
 
 pub use self::clone::{
-    CloneStarted, CloneState, CloneStatus, cancel_clone, clone_directory_name, clone_status,
-    start_clone, validate_clone_url,
+    CloneStarted, CloneState, CloneStatus, active_clone_count, cancel_clone, clone_directory_name,
+    clone_status, start_clone, validate_clone_url,
 };
 pub use self::commit::{
     AmendRequest, CommitResult, HeadCommit, InitResult, commit, head_commit, init_repository,
@@ -48,8 +48,9 @@ pub use self::stage::{
     mark_resolved, revert_paths, stage_paths, unstage_paths,
 };
 pub use self::status::{
-    GitFileStatus, GitStatus, dirty_entry_count, normalize_file_status, parse_porcelain_z,
-    read_status, read_status_at,
+    GitFileStatus, GitStatus, StatusBatchEntry, StatusBatchFailure, StatusBatchRequest,
+    StatusBatchResponse, dirty_entry_count, normalize_file_status, parse_porcelain_z, read_status,
+    read_status_at, read_status_batch, read_status_filtered,
 };
 
 const MAX_PATHS_PER_REQUEST: usize = 200;
@@ -152,6 +153,37 @@ fn require_repository(workspace_root: &Path, requested: &str) -> AppResult<RepoC
 fn is_tracked(context: &RepoContext, relative: &str) -> AppResult<bool> {
     let output = git(&context.repository, &["ls-files", "--", relative])?;
     Ok(!output.trim().is_empty())
+}
+
+/// The pathspec list a read may narrow itself with, checked before it becomes
+/// Git arguments.
+///
+/// It is a *filter*, so unlike [`prepare_paths`] nothing here has to exist: a
+/// panel narrowing its Changes list to a directory that was just deleted is
+/// asking a legitimate question with an empty answer. What is refused is a
+/// spelling that would stop being a path — an absolute one, one that climbs out
+/// of the repository, or one Git would read as an option because it starts with
+/// a dash. Every entry is passed after `--`, so it can only ever be a pathspec.
+pub fn valid_pathspecs(paths: &[String]) -> AppResult<Vec<String>> {
+    if paths.len() > MAX_PATHS_PER_REQUEST {
+        return Err(AppError::BadRequest(
+            "At most 200 pathspecs may be supplied".into(),
+        ));
+    }
+    let mut prepared = Vec::with_capacity(paths.len());
+    for requested in paths {
+        let value = requested.trim();
+        if value.is_empty() {
+            continue;
+        }
+        if value.starts_with('-') {
+            return Err(AppError::BadRequest(
+                "A pathspec must not start with a dash".into(),
+            ));
+        }
+        prepared.push(workspace_relative_path(value)?);
+    }
+    Ok(prepared)
 }
 
 /// Reject absolute paths, `..` traversal, and paths whose closest existing

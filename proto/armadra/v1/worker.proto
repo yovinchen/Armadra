@@ -194,6 +194,15 @@ enum WorkerServiceOperation {
   WORKER_SERVICE_OPERATION_WATCH_SUBSCRIBE = 47;
   WORKER_SERVICE_OPERATION_WATCH_UNSUBSCRIBE = 48;
   reserved 49;
+  // The reference log of one ref, and the two reads that were added with it:
+  // several checkouts' status in one answer, and whether a Frame's worktree
+  // binding still names a checkout of the repository it claims. They are here
+  // rather than in the git block above because the numbers only ever grow —
+  // renumbering the block would move every operation an SSH host already
+  // answers.
+  WORKER_SERVICE_OPERATION_GIT_REFLOG = 50;
+  WORKER_SERVICE_OPERATION_GIT_STATUS_BATCH = 51;
+  WORKER_SERVICE_OPERATION_GIT_WORKTREE_BINDING = 52;
 }
 // A version-locked payload, not a cross-version wire contract: both ends are
 // the same Armadra build, asserted by WorkerHelloResponse.runtime_version, and

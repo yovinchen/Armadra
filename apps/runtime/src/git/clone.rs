@@ -30,6 +30,18 @@ pub struct CloneStatus {
     pub target: PathBuf,
     /// The directory name, which becomes the workspace name.
     pub name: String,
+    /// Whether the job stopped because somebody asked it to. It is a separate
+    /// fact from `state`, which only knows that the process did not succeed: a
+    /// cancelled clone and a failed one need different words in front of a
+    /// person, and the Host records them as different terminal states.
+    pub cancelled: bool,
+    /// The URL with any credential removed, produced here because this is the
+    /// side that held the original.
+    pub display_url: String,
+    /// 0–100, read from `git clone --progress`. It is a display value: Git
+    /// reports several phases and this is the newest percentage any of them
+    /// printed, so it can stall and it never goes backwards on its own.
+    pub percent: u32,
 }
 
 struct CloneJob {
@@ -38,6 +50,8 @@ struct CloneJob {
     error: Option<String>,
     target: PathBuf,
     name: String,
+    display_url: String,
+    percent: u32,
     control: Arc<command::Control>,
     /// Set by `cancel_clone` so the reader thread reports a cancel, not a crash.
     cancelled: bool,
@@ -133,13 +147,17 @@ pub(super) fn spawn_clone_job(url: &str, name: &str, target: PathBuf) -> AppResu
         .args(["clone", "--progress", "--"])
         .arg(url)
         .arg(&target);
-    spawn_clone_process(process, name, target)
+    spawn_clone_process(process, name, target, url)
 }
 
+/// `url` is only ever used to produce the redacted display form. The process
+/// was built by the caller, so a test can point one at a local bare repository
+/// without loosening [`validate_clone_url`], and still get the same record.
 pub(super) fn spawn_clone_process(
     process: std::process::Command,
     name: &str,
     target: PathBuf,
+    url: &str,
 ) -> AppResult<CloneStarted> {
     let registration = command::register()?;
     let control = registration.control.clone();
@@ -166,6 +184,10 @@ pub(super) fn spawn_clone_process(
                 error: None,
                 target: target.clone(),
                 name: name.to_owned(),
+                // The credential is removed here, by the side that has the
+                // original. Nothing downstream ever sees the other form.
+                display_url: command::sanitize(url),
+                percent: 0,
                 control,
                 cancelled: false,
                 finished_at: None,
@@ -256,6 +278,25 @@ impl Drop for CloneProgress {
     }
 }
 
+/// `Receiving objects:  47% (470/1000)` → 47.
+///
+/// Git prints a percentage for several phases in turn, each restarting at zero,
+/// so this is read as "the newest number Git printed" and nothing more. It is a
+/// display value: it can stall, and a caller must never treat it as an estimate
+/// of remaining time or as evidence that the clone is still alive.
+fn clone_percent(line: &str) -> Option<u32> {
+    let (before, _) = line.split_once('%')?;
+    let digits: String = before
+        .chars()
+        .rev()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    if digits.is_empty() {
+        return None;
+    }
+    digits.chars().rev().collect::<String>().parse().ok()
+}
+
 fn push_clone_line(job_id: &str, buffer: &mut Vec<u8>) {
     if buffer.is_empty() {
         return;
@@ -266,12 +307,25 @@ fn push_clone_line(job_id: &str, buffer: &mut Vec<u8>) {
         return;
     }
     let line = command::sanitize(&line);
-    let mut registry = jobs();
-    if let Some(job) = registry.get_mut(job_id) {
-        if job.lines.len() == CLONE_MAX_LINES {
-            job.lines.pop_front();
+    let percent = clone_percent(&line);
+    let mut report = None;
+    {
+        let mut registry = jobs();
+        if let Some(job) = registry.get_mut(job_id) {
+            if job.lines.len() == CLONE_MAX_LINES {
+                job.lines.pop_front();
+            }
+            job.lines.push_back(line);
+            if let Some(percent) = percent.filter(|value| *value <= 100) {
+                job.percent = percent;
+                report = Some(percent);
+            }
         }
-        job.lines.push_back(line);
+    }
+    // Reported outside the lock: a progress frame goes to a durable outbox and
+    // must never be written while the whole clone registry is held.
+    if let Some(percent) = report {
+        crate::worker::git::report_clone_progress(job_id, percent);
     }
 }
 
@@ -286,7 +340,28 @@ pub fn clone_status(job_id: &str) -> AppResult<CloneStatus> {
         error: job.error.clone(),
         target: job.target.clone(),
         name: job.name.clone(),
+        cancelled: job.cancelled,
+        display_url: job.display_url.clone(),
+        // A finished clone is at 100 even when Git's last line stopped short of
+        // printing it: the honest reading of "the process exited successfully"
+        // is that the work is done, and a bar frozen at 97% is a worse lie than
+        // one that completes.
+        percent: if job.state == CloneState::Done {
+            100
+        } else {
+            job.percent
+        },
     })
+}
+
+/// How many clones this process still has running. A switch reads it: moving
+/// the domain with a clone in flight would leave the only record of a
+/// half-written directory in a process that is about to stop being the writer.
+pub fn active_clone_count() -> u32 {
+    jobs()
+        .values()
+        .filter(|job| job.state == CloneState::Running)
+        .count() as u32
 }
 
 /// Request cancellation of exactly this clone's child. A final destination is

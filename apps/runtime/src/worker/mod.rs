@@ -278,6 +278,10 @@ impl Worker {
         if let Some(bridge) = self.sessions.take() {
             self.sessions = Some(bridge.with_upcalls(Some(upcalls.clone())));
         }
+        // The git domain's producers are process-global registries — the clone
+        // jobs and the repository command runner — so it takes the handle
+        // rather than being handed one per frame (§2.9 上行帧 180).
+        git::attach_upcalls(upcalls.clone());
         self.upcalls = Some(upcalls);
         self.bearer = (socket, pipe);
     }

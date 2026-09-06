@@ -40,6 +40,10 @@ pub struct HistoryPayload {
     pub reference: String,
     pub limit: usize,
     pub cursor: Option<String>,
+    /// The server-side pathspec filter. `default` rather than required so a
+    /// controller of an older build keeps deserializing against this one.
+    #[serde(default)]
+    pub paths: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,6 +151,7 @@ pub async fn history(root: PathBuf, payload: HistoryPayload, execute: bool) -> A
                     reference: payload.reference,
                     limit: payload.limit,
                     cursor: payload.cursor,
+                    paths: payload.paths,
                 },
             )
             .await?,
@@ -199,6 +204,96 @@ pub async fn rebase_todo(
     super::encode(
         &service
             .rebase_todo_preview(&root, &payload.path, &payload.onto)
+            .await?,
+    )
+}
+
+/// One page of a ref's reference log.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReflogPayload {
+    pub path: String,
+    pub reference: String,
+    pub limit: usize,
+    pub cursor: Option<String>,
+}
+
+/// Several checkouts' status in one request. The list of checkouts travels
+/// whole because the saving is the round trip: forwarding twelve of these would
+/// be the twelve requests this operation exists to replace.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatusBatchPayload {
+    pub paths: Vec<String>,
+    #[serde(default)]
+    pub pathspecs: Vec<String>,
+}
+
+/// Whether a Frame's worktree binding still describes a checkout.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeBindingPayload {
+    pub worktree_path: String,
+    #[serde(default)]
+    pub branch: Option<String>,
+    #[serde(default)]
+    pub repository_id: Option<String>,
+}
+
+pub async fn reflog(root: PathBuf, payload: ReflogPayload, execute: bool) -> AppResult<Vec<u8>> {
+    let service = git_api::REPOSITORIES.with_execution(execute);
+    super::encode(
+        &service
+            .reflog(
+                &root,
+                &payload.path,
+                git_repository::ReflogRequest {
+                    reference: payload.reference,
+                    limit: payload.limit,
+                    cursor: payload.cursor,
+                },
+            )
+            .await?,
+    )
+}
+
+pub async fn status_batch(
+    root: PathBuf,
+    payload: StatusBatchPayload,
+    execute: bool,
+) -> AppResult<Vec<u8>> {
+    // Running `git status` may invoke this repository's own filters, so it is
+    // execution — the same gate the single-checkout status passes through, and
+    // the reason a batch cannot be the cheaper way around it.
+    super::git::execution_required(execute)?;
+    blocking(move || {
+        git::read_status_batch(
+            &root,
+            &git::StatusBatchRequest {
+                paths: payload.paths,
+                pathspecs: payload.pathspecs,
+            },
+        )
+    })
+    .await
+}
+
+pub async fn worktree_binding(
+    root: PathBuf,
+    payload: WorktreeBindingPayload,
+    execute: bool,
+) -> AppResult<Vec<u8>> {
+    let service = git_api::REPOSITORIES.with_execution(execute);
+    super::encode(
+        &service
+            .verify_worktree_binding(
+                &root,
+                &git_repository::WorktreeBindingRequest {
+                    worktree_path: payload.worktree_path,
+                    branch: payload.branch,
+                    repository_id: payload.repository_id,
+                },
+            )
             .await?,
     )
 }
@@ -349,6 +444,9 @@ pub fn requires_execution(operation: armadra_protocol::v1::WorkerServiceOperatio
             | Operation::GitOperationStart
             | Operation::GitOperationCancel
             | Operation::GitApplyHunk
+            | Operation::GitReflog
+            | Operation::GitStatusBatch
+            | Operation::GitWorktreeBinding
     )
 }
 

@@ -42,6 +42,7 @@ mod history;
 mod integration;
 mod parse;
 mod queue;
+mod reflog;
 mod refs;
 mod remotes;
 mod stash;
@@ -56,9 +57,10 @@ pub use commits::{CommitDetail, CommitFile, CommitFileDiff};
 pub use history::{CommitRecord, HistoryPage, HistoryRequest};
 pub use integration::{CherryPickPreview, ConflictFile, ConflictSide, IntegrationSnapshot};
 pub use queue::{OperationSnapshot, OperationState};
+pub use reflog::{ReflogEntry, ReflogPage, ReflogRequest};
 pub use refs::{RemoteRecord, TagRecord, TagSnapshot};
 pub use stash::{StashDetail, StashRecord, StashSnapshot};
-pub use worktrees::WorktreeRecord;
+pub use worktrees::{WorktreeBindingRequest, WorktreeBindingVerdict, WorktreeRecord};
 
 use self::{command::*, execute::*, parse::*, worktrees::*};
 

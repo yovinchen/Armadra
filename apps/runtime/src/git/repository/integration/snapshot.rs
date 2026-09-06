@@ -69,10 +69,19 @@ impl RepositoryService {
             && conflicts.is_empty()
             && staged.status == Some(0)
             && unstaged.status == Some(0);
-        // Skip drops the pick outright; for a revert that would silently leave
-        // the change it was meant to undo in place, so only Abort is offered.
-        let can_skip = owned && empty && actual.kind == "cherryPick";
         let rebase = actual.kind == "rebase";
+        // Skip drops the pick outright; for a revert that would silently leave
+        // the change it was meant to undo in place, so only Abort is offered
+        // there.
+        //
+        // A paused rebase may be skipped (Git 设计 §3 "continue/skip/abort").
+        // What makes that safe is not that it is harmless — it discards one
+        // replayed commit — but that it is explicit: the sequence is stopped,
+        // the caller has read which commit it stopped on, and the panel names
+        // that commit in its confirmation. Offering it only for an *empty*
+        // stop, as a cherry-pick does, would leave the ordinary conflicted case
+        // with nothing but "resolve it or abort the whole rebase".
+        let can_skip = owned && ((empty && actual.kind == "cherryPick") || rebase);
         Ok(IntegrationSnapshot {
             repository_id: state.repository_id,
             repository_path: state.repository_path,
