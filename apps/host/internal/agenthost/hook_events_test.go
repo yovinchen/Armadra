@@ -104,6 +104,26 @@ func TestABodyThatDoesNotMatchItsDigestIsRefused(t *testing.T) {
 	}
 }
 
+// The upcall arrives unasked, so the ownership check has to be on the landing
+// point rather than only on the drain that calls it. While the Runtime owns the
+// domain its tables are the record, and a push that wrote here as well would be
+// the dual write this migration exists to avoid.
+func TestAHookTurnChangesNothingWhileTheRuntimeOwnsTheDomain(t *testing.T) {
+	f := newFixture(t)
+	f.seedNode(nodeOne, "agent")
+
+	applied, err := f.service.ObserveHookEvent(fixtureContext, hookEvent(t, "node-one/1000", 1000))
+	if err != nil || applied {
+		t.Fatalf("the Host recorded an agent event it does not own: %v %v", applied, err)
+	}
+	if _, err = f.store.GetHookEvent(fixtureContext, "node-one/1000"); err == nil {
+		t.Fatal("a turn was kept under the wrong owner")
+	}
+	if _, err = f.store.GetAgentStatus(fixtureContext, nodeOne); err == nil {
+		t.Fatal("a status was written under the wrong owner")
+	}
+}
+
 // The projector has to claim the new kind, or the row would be stored and
 // never reach a client — which is the same as not storing it, for anyone
 // watching a board.

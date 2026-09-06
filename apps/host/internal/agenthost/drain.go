@@ -87,6 +87,9 @@ func (s *Service) Drain(ctx context.Context, executionHostID string) (DrainOutco
 		return outcome, nil
 	}
 	for _, event := range drained.GetEvents() {
+		// `Owned` was checked above; `ObserveHookEvent` checks it again for the
+		// upcall's sake, and a second read of one row is not worth a second
+		// entry point that could drift from this one.
 		applied, err := s.ObserveHookEvent(ctx, event)
 		if err != nil {
 			return outcome, err

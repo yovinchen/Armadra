@@ -41,6 +41,19 @@ import (
 // so that neither can record something the other would have recorded
 // differently.
 func (s *Service) ObserveHookEvent(ctx context.Context, event *pb.HookEvent) (bool, error) {
+	// The drain checks this before it asks; the upcall arrives unasked, so the
+	// check has to be here as well. While the Runtime owns the domain its own
+	// tables are the record, and writing here too would be the dual write this
+	// migration exists to avoid — with the twist that a push, unlike a pull,
+	// would do it without anybody having called anything.
+	//
+	// Accepting the frame and changing nothing is deliberate. Refusing it would
+	// leave it unacknowledged and replayed forever against a Host that will
+	// never be allowed to record it.
+	owned, err := s.Owned(ctx)
+	if err != nil || !owned {
+		return false, err
+	}
 	if err := s.recordHookEvent(ctx, event); err != nil {
 		return false, err
 	}
