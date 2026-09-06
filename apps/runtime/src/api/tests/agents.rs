@@ -491,3 +491,88 @@ async fn suggest_title_prefers_the_transcript_and_falls_back_to_the_agent() {
         json!({ "title": "给终端节点加上 AI 命名", "source": "transcript" })
     );
 }
+
+/// The transcript route answers two ways and never a third: the rendered tail,
+/// or 501 with the reason. It must never answer an empty body, because a panel
+/// cannot tell that from a session that has said nothing yet.
+#[tokio::test]
+async fn the_transcript_route_refuses_rather_than_answering_an_empty_body() {
+    let directory = tempdir().unwrap();
+    let pool = db::connect(&format!(
+        "sqlite://{}?mode=rwc",
+        directory.path().join("transcript.db").display()
+    ))
+    .await
+    .unwrap();
+    let workspace = db::create_workspace(
+        &pool,
+        "fixture",
+        directory.path().to_str().unwrap(),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let router = phase4_router(&pool, directory.path());
+    let node_id = uuid::Uuid::now_v7().to_string();
+    let route = format!("/api/agent-status/{node_id}/transcript");
+
+    // A node that never reported is a 404, not an empty transcript.
+    let (status, _) = call(&router, "GET", &route, None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let patch = |agent_id: &str, transcript: Option<String>| db::AgentStatusPatch {
+        node_id: node_id.clone(),
+        workspace_id: workspace.id.clone(),
+        agent_id: agent_id.into(),
+        state: Some("done".into()),
+        state_source: None,
+        unread: false,
+        session_id: None,
+        pending_id: None,
+        verified: true,
+        transcript_path: transcript,
+        session_phase: None,
+        errored: None,
+        interrupted: None,
+        last_event_at: None,
+    };
+
+    // A provider that keeps nothing this machine can read says so.
+    db::upsert_agent_status(&pool, patch("opencode", None))
+        .await
+        .unwrap();
+    let (status, body) = call(&router, "GET", &route, None).await;
+    assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+    assert_eq!(body["code"], "unsupported");
+
+    let transcript = directory.path().join("session.jsonl");
+    std::fs::write(
+        &transcript,
+        "{\"type\":\"user\",\"message\":{\"content\":\"修一下构建\"}}\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"好的\"}]}}\n",
+    )
+    .unwrap();
+    db::upsert_agent_status(
+        &pool,
+        patch("claude", Some(transcript.to_string_lossy().into_owned())),
+    )
+    .await
+    .unwrap();
+    let (status, body) = call(&router, "GET", &route, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["text"], "[用户] 修一下构建\n[助手] 好的");
+    assert_eq!(body["truncated"], false);
+
+    // A file that renders to no messages is the same refusal: an event log is
+    // not a conversation, and a blank panel would say it was an empty one.
+    let events = directory.path().join("events.jsonl");
+    std::fs::write(&events, "{\"event\":\"session.start\"}\n").unwrap();
+    db::upsert_agent_status(
+        &pool,
+        patch("copilot", Some(events.to_string_lossy().into_owned())),
+    )
+    .await
+    .unwrap();
+    let (status, _) = call(&router, "GET", &route, None).await;
+    assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+}

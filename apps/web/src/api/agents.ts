@@ -14,6 +14,7 @@ import {
   importAssetRequestSchema,
   skillReportSchema,
   suggestTitleResponseSchema,
+  agentTranscriptSchema,
   uploadAssetRequestSchema,
   uploadAssetResponseSchema,
   type ContextLink,
@@ -105,6 +106,20 @@ export const agentsApi = {
       `/api/agent-status/${query(nodeId)}/suggest-title`,
       suggestTitleResponseSchema,
       { method: "POST" },
+    ),
+  /**
+   * 一个节点自己的对话尾部（每条消息一行散文）。
+   *
+   * 是读，所以两种归属下都答：转录本来就是这台机器上的文件，Worker 通道的
+   * `ReadTranscript` 读的是同一份。没有可读转录的 CLI 回 501 并说明原因，
+   * 不回空正文——空正文和「这一轮还没说话」分不开。
+   */
+  agentTranscript: (nodeId: string, maxBytes?: number) =>
+    request(
+      `/api/agent-status/${query(nodeId)}/transcript${
+        maxBytes ? `?maxBytes=${maxBytes}` : ""
+      }`,
+      agentTranscriptSchema,
     ),
   answerApproval: (pendingId: string, decision: "allow" | "deny") =>
     request(

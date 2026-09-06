@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"slices"
@@ -159,6 +160,63 @@ func (c *Client) DeliverMessage(ctx context.Context, request *pb.DeliverMessageR
 		return nil, err
 	}
 	return receipt(result.GetDelivery(), request.GetTraceId())
+}
+
+// ReadTranscript reads the tail of a node's own conversation.
+//
+// The Worker refuses rather than answering empty when the provider keeps
+// nothing this Host can read, so an error here is a fact about the CLI and not
+// a transport failure. The caller reports the reason instead of drawing a blank
+// pane as though it were the session.
+func (c *Client) ReadTranscript(ctx context.Context, request *pb.ReadTranscriptRequest) (*pb.TranscriptExcerpt, error) {
+	if request.GetNodeId() == "" {
+		return nil, &Error{Code: CodeInvalid}
+	}
+	result, err := c.agentHostExchange(ctx, &pb.AgentWorkerRequest{
+		Action: &pb.AgentWorkerRequest_ReadTranscript{ReadTranscript: request},
+	})
+	if err != nil {
+		return nil, err
+	}
+	excerpt := result.GetTranscript()
+	if excerpt == nil || excerpt.GetNodeId() != request.GetNodeId() {
+		// An excerpt about another node answers a question nobody asked, and
+		// showing it would attribute one agent's words to another.
+		return nil, &Error{Code: CodeProtocol}
+	}
+	if len(excerpt.GetContentSha256()) == sha256.Size {
+		sum := sha256.Sum256(excerpt.GetContent())
+		if !bytes.Equal(sum[:], excerpt.GetContentSha256()) {
+			return nil, &Error{Code: CodeProtocol}
+		}
+	}
+	clone, ok := proto.Clone(excerpt).(*pb.TranscriptExcerpt)
+	if !ok {
+		return nil, &Error{Code: CodeProtocol}
+	}
+	return clone, nil
+}
+
+// CaptureScreen returns what is on the node's pane right now.
+func (c *Client) CaptureScreen(ctx context.Context, request *pb.CaptureAgentScreenRequest) (*pb.CapturedAgentScreen, error) {
+	if request.GetNodeId() == "" || request.GetSessionId() == "" {
+		return nil, &Error{Code: CodeInvalid}
+	}
+	result, err := c.agentHostExchange(ctx, &pb.AgentWorkerRequest{
+		Action: &pb.AgentWorkerRequest_CaptureScreen{CaptureScreen: request},
+	})
+	if err != nil {
+		return nil, err
+	}
+	screen := result.GetScreen()
+	if screen == nil || screen.GetNodeId() != request.GetNodeId() {
+		return nil, &Error{Code: CodeProtocol}
+	}
+	clone, ok := proto.Clone(screen).(*pb.CapturedAgentScreen)
+	if !ok {
+		return nil, &Error{Code: CodeProtocol}
+	}
+	return clone, nil
 }
 
 // Hooks installs or removes a CLI's Hook configuration on the execution host.

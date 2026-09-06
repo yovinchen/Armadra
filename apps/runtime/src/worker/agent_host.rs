@@ -37,8 +37,9 @@ use armadra_hook::{
 use armadra_protocol::Message as _;
 use armadra_protocol::v1::{
     AgentDeliveryReceipt, AgentStatus, AgentWorkerRequest, AgentWorkerResponse, Approval,
-    DeliverApprovalAnswerRequest, DeliveryOutcome, DrainAgentEventsRequest, DrainedAgentEvents,
-    HookEvent, HookEventKind, HookInstallState, WorkerAgentStates, agent_worker_request,
+    CaptureAgentScreenRequest, CapturedAgentScreen, DeliverApprovalAnswerRequest, DeliveryOutcome,
+    DrainAgentEventsRequest, DrainedAgentEvents, HookEvent, HookEventKind, HookInstallState,
+    ReadTranscriptRequest, TranscriptExcerpt, WorkerAgentStates, agent_worker_request,
     agent_worker_response,
 };
 use serde_json::{Value, json};
@@ -170,6 +171,140 @@ impl Bridge {
             observed_at_unix_ms: chrono::Utc::now().timestamp_millis(),
         })
     }
+
+    /// A screenful of the node's pane, from the process that holds the PTY.
+    ///
+    /// The agent frame does not grow its own capture: this is the session
+    /// domain's `/automation/session-capture`, asked for by node rather than
+    /// by session id. Two implementations of "what is on that screen" would be
+    /// two answers to disagree about.
+    async fn capture_screen(
+        &self,
+        request: &CaptureAgentScreenRequest,
+    ) -> AppResult<CapturedAgentScreen> {
+        let session_id = require(&request.session_id, "a session id")?;
+        let answer = self
+            .call(
+                "/automation/session-capture",
+                json!({
+                    "sessionId": session_id,
+                    "lines": request.lines,
+                    // Escapes are for a terminal that will render them. What
+                    // travels here is read by a person and by a model, so the
+                    // pane goes up as plain text.
+                    "escapes": false,
+                }),
+            )
+            .await?;
+        Ok(CapturedAgentScreen {
+            node_id: request.node_id.clone(),
+            data: answer
+                .get("data")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+        })
+    }
+}
+
+/// The tail of a node's transcript, rendered as one prose line per message.
+///
+/// Which sessions have one is a fact about the CLI, not a policy:
+///
+///   * a provider that **reports its own transcript path** through the Hook
+///     (Claude Code, and any custom agent wrapping one) is read at that path;
+///   * **Codex** and **Gemini CLI** write structured session files under their
+///     own home, found by session id;
+///   * everything else is refused with the reason, because there is nothing to
+///     read rather than nothing to say. OpenCode keeps its history in a private
+///     store only its own CLI exports; Pi and Oh My Pi report a live context
+///     window instead of a file; Copilot's `events.jsonl` is an internal event
+///     log, not a conversation this renderer can turn into messages.
+///
+/// A refusal is the point. An empty excerpt would be indistinguishable from a
+/// session that has said nothing yet, and the Host would draw a blank pane as
+/// though it were the truth.
+async fn transcript(
+    pool: &SqlitePool,
+    request: &ReadTranscriptRequest,
+) -> AppResult<TranscriptExcerpt> {
+    let node_id = require(&request.node_id, "a node id")?;
+    let status = crate::db::get_agent_status(pool, node_id).await?;
+    // The status row names the agent that has been reporting; a node that has
+    // never reported still has the agent its session was created with.
+    let provider = match status.as_ref() {
+        Some(status) => status.agent_id.clone(),
+        None => crate::db::find_node_owner(pool, node_id)
+            .await?
+            .and_then(|owner| owner.agent_id)
+            .unwrap_or_default(),
+    };
+    // The Host's own copy of the reference wins: it is the one the record it is
+    // reconciling was written from. The row is the fallback for a Host that
+    // asked without one.
+    let path = String::from_utf8(request.transcript_ref.clone())
+        .ok()
+        .filter(|path| !path.is_empty())
+        .or_else(|| status.as_ref().and_then(|status| status.transcript_path.clone()));
+    let session_id = Some(request.session_id.clone())
+        .filter(|id| !id.is_empty())
+        .or_else(|| status.as_ref().and_then(|status| status.session_id.clone()));
+    let located = crate::collab::transcript::locate(
+        &provider,
+        path.as_deref(),
+        session_id.as_deref(),
+    )
+    .ok_or_else(|| {
+        AppError::Unsupported(format!(
+            "No transcript this execution host can read for {}",
+            if provider.is_empty() {
+                "this node"
+            } else {
+                provider.as_str()
+            }
+        ))
+    })?;
+    let budget = match request.max_bytes {
+        0 => crate::collab::transcript::MAX_TAIL_BYTES,
+        bytes => u64::from(bytes).min(crate::collab::transcript::MAX_TAIL_BYTES),
+    };
+    let text = crate::collab::transcript::read_tail(&located.path, budget)
+        .map_err(|_| AppError::NotFound("The transcript could not be read".into()))?;
+    let lines = crate::collab::transcript::render(&text);
+    if lines.is_empty() {
+        return Err(AppError::Unsupported(format!(
+            "The file {provider} reports is not a conversation this reader renders"
+        )));
+    }
+    let rendered = lines.join("\n");
+    let truncated = rendered.len() > crate::collab::transcript::MAX_RENDERED_BYTES;
+    let content = if truncated {
+        // On a character boundary, so the bytes that travel are still text.
+        let mut end = crate::collab::transcript::MAX_RENDERED_BYTES;
+        while end > 0 && !rendered.is_char_boundary(end) {
+            end -= 1;
+        }
+        rendered[..end].to_string()
+    } else {
+        rendered
+    };
+    let content = content.into_bytes();
+    Ok(TranscriptExcerpt {
+        node_id: node_id.to_string(),
+        content_sha256: Sha256::digest(&content).to_vec(),
+        content,
+        truncated,
+        observed_at_unix_ms: chrono::Utc::now().timestamp_millis(),
+    })
+}
+
+fn require<'a>(value: &'a str, what: &str) -> AppResult<&'a str> {
+    if value.is_empty() {
+        return Err(AppError::BadRequest(format!(
+            "The agent request needs {what}"
+        )));
+    }
+    Ok(value)
 }
 
 pub async fn handle(
@@ -221,11 +356,11 @@ pub async fn handle(
         Some(agent_worker_request::Action::UninstallHooks(input)) => Ok(answer(
             agent_worker_response::Result::Hooks(state(install::uninstall(&input.agent_id)?)),
         )),
-        // Reading a transcript and capturing a pane are reads this batch left
-        // to the session domain's own capture, which already answers them.
-        Some(agent_worker_request::Action::ReadTranscript(_))
-        | Some(agent_worker_request::Action::CaptureScreen(_)) => Err(AppError::BadRequest(
-            "This Worker does not read transcripts on the agent frame".into(),
+        Some(agent_worker_request::Action::ReadTranscript(input)) => Ok(answer(
+            agent_worker_response::Result::Transcript(transcript(database(pool)?, &input).await?),
+        )),
+        Some(agent_worker_request::Action::CaptureScreen(input)) => Ok(answer(
+            agent_worker_response::Result::Screen(door(bridge)?.capture_screen(&input).await?),
         )),
         // An action a newer Host introduced is refused rather than answered
         // with an empty result, which the Host would read as agreement.

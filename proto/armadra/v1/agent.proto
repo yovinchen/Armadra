@@ -653,6 +653,30 @@ message UninstallHooksRequest {
 }
 message UninstallHooksResponse { HookInstallState state = 1; }
 
+// armadra.v1.AgentService/ReadTranscript and /CaptureScreen — one node's own
+// material, forwarded and never stored.
+//
+// They are reads with a write's shape: nothing on this Host changes, but the
+// answer comes from the execution host rather than from a table, because §2.7
+// keeps `transcript_ref` opaque here on purpose. A Host that cached either one
+// would be serving a conversation from a moment that has passed.
+//
+// The node is the only thing a client names. The session and the transcript
+// reference come from this Host's own record, so a caller cannot point the
+// execution host at a file of its choosing.
+message ReadAgentTranscriptRequest {
+  CommandMeta meta = 1;
+  string node_id = 10;
+  uint32 max_bytes = 11;
+}
+message ReadAgentTranscriptResponse { TranscriptExcerpt excerpt = 1; }
+message CaptureAgentScreenCommand {
+  CommandMeta meta = 1;
+  string node_id = 10;
+  uint32 lines = 11;
+}
+message CaptureAgentScreenCommandResponse { CapturedAgentScreen screen = 1; }
+
 /* ------------------------------------------------- Host -> Worker (action 28) */
 
 // Read this Worker's own agent rows, for verifying a switch and a handback.

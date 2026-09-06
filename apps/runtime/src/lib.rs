@@ -698,6 +698,10 @@ pub fn router_with_state(state: AppState) -> Router {
             post(api::suggest_agent_title),
         )
         .route(
+            "/api/agent-status/{node_id}/transcript",
+            get(api::read_agent_transcript),
+        )
+        .route(
             "/api/terminals/{session_id}/node-token/refresh",
             post(api::refresh_node_token),
         )

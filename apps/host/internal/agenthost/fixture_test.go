@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"testing"
 	"time"
 
@@ -45,6 +46,13 @@ type machine struct {
 	failDeliver bool
 	handoffs    []*pb.DeliverHandoffRequest
 	installs    []string
+	// reads records the transcript and screen requests that reached the
+	// machine, so a test can assert what this Host filled in for the caller
+	// rather than only what came back.
+	transcripts []*pb.ReadTranscriptRequest
+	screens     []*pb.CaptureAgentScreenRequest
+	// noTranscript is the refusal a provider that keeps none produces.
+	noTranscript bool
 }
 
 func newMachine() *machine {
@@ -95,6 +103,26 @@ func (m *machine) DeliverMessage(_ context.Context, request *pb.DeliverMessageRe
 func (m *machine) Hooks(_ context.Context, agentID string, install bool) (*pb.HookInstallState, error) {
 	m.installs = append(m.installs, agentID)
 	return &pb.HookInstallState{AgentId: agentID, Installed: install, ClientRevision: 3, ConfigPath: "/home/用户/.claude/settings.json"}, nil
+}
+
+func (m *machine) ReadTranscript(_ context.Context, request *pb.ReadTranscriptRequest) (*pb.TranscriptExcerpt, error) {
+	m.transcripts = append(m.transcripts, request)
+	if m.noTranscript {
+		return nil, errors.New("No transcript this execution host can read for opencode")
+	}
+	content := []byte("[用户] 修一下构建\n[助手] 好的")
+	sum := sha256.Sum256(content)
+	return &pb.TranscriptExcerpt{
+		NodeId:           request.GetNodeId(),
+		Content:          content,
+		ContentSha256:    sum[:],
+		ObservedAtUnixMs: 1788560523004,
+	}, nil
+}
+
+func (m *machine) CaptureScreen(_ context.Context, request *pb.CaptureAgentScreenRequest) (*pb.CapturedAgentScreen, error) {
+	m.screens = append(m.screens, request)
+	return &pb.CapturedAgentScreen{NodeId: request.GetNodeId(), Data: "$ cargo test\nok"}, nil
 }
 
 // WorkerAgents is the handback read. It is on the same type so a test can hand

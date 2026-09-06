@@ -95,6 +95,21 @@ export const suggestTitleResponseSchema = z.object({
 });
 
 /**
+ * `GET /api/agent-status/{nodeId}/transcript` — the node's own conversation,
+ * one prose line per message.
+ *
+ * `truncated` is a field rather than an ellipsis in the text because a cut-off
+ * conversation read as a whole one is a wrong answer, not a short one. A
+ * provider that keeps nothing readable answers 501 with a reason, so an empty
+ * `text` here never stands for "this CLI has no transcript".
+ */
+export const agentTranscriptSchema = z.object({
+  nodeId: z.string().max(160),
+  text: z.string(),
+  truncated: z.boolean(),
+});
+
+/**
  * What a linked whiteboard shape reads as (docs/design/canvas-react-flow.md
  * §2.5). Only present when `kind === "shape"`: text items carry their text,
  * everything else is rasterised by the client and referenced by a
@@ -123,6 +138,7 @@ export const contextLinkSchema = z.object({
 });
 
 export type SuggestTitleResponse = z.infer<typeof suggestTitleResponseSchema>;
+export type AgentTranscript = z.infer<typeof agentTranscriptSchema>;
 export type AgentInfo = z.infer<typeof agentInfoSchema>;
 export type HookInstallReport = z.infer<typeof hookInstallReportSchema>;
 export type SkillReport = z.infer<typeof skillReportSchema>;

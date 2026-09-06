@@ -165,6 +165,7 @@ fn host_id(value: &str) -> bool {
 fn error_response(error: AppError) -> ErrorResponse {
     let code = match &error {
         AppError::BadRequest(_) => "INVALID_ARGUMENT",
+        AppError::Unsupported(_) => "UNSUPPORTED",
         AppError::Forbidden(_) => "PERMISSION_DENIED",
         AppError::NotFound(_) => "NOT_FOUND",
         AppError::Conflict(_) | AppError::OwnershipMoved(_) => "CONFLICT",
@@ -175,6 +176,17 @@ fn error_response(error: AppError) -> ErrorResponse {
         _ => "INTERNAL",
     };
     // File bodies and raw OS diagnostics do not enter controller logs.
+    //
+    // UNSUPPORTED is the exception, and deliberately so: its message is written
+    // by this Worker, names a capability rather than a path, and is the whole
+    // content of the answer — "no transcript" and "this provider keeps none"
+    // are different facts and a controller has to be able to tell them apart.
+    if let AppError::Unsupported(message) = &error {
+        return ErrorResponse {
+            code: code.into(),
+            message: message.clone(),
+        };
+    }
     ErrorResponse {
         code: code.into(),
         message: match code {

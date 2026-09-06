@@ -14,8 +14,12 @@ import {
   GetHandoffRequestSchema,
   GetHandoffResponseSchema,
   HandoffState,
+  CaptureAgentScreenCommandSchema,
+  CaptureAgentScreenCommandResponseSchema,
   InstallHooksRequestSchema,
   InstallHooksResponseSchema,
+  ReadAgentTranscriptRequestSchema,
+  ReadAgentTranscriptResponseSchema,
   ListAgentStatusRequestSchema,
   ListAgentStatusResponseSchema,
   ListApprovalsRequestSchema,
@@ -209,6 +213,18 @@ export interface ContextLinksRecord {
   links: ContextLinkRecord[];
   updatedAtUnixMs: bigint;
   revision: bigint;
+}
+
+/**
+ * One node's own material, forwarded from the execution host and stored
+ * nowhere. `truncated` is why the excerpt is a record rather than a string: a
+ * cut-off conversation read as a whole one is a wrong answer, not a short one.
+ */
+export interface TranscriptExcerptRecord {
+  nodeId: string;
+  text: string;
+  truncated: boolean;
+  observedAtUnixMs: bigint;
 }
 
 export interface HookInstallRecord {
@@ -754,6 +770,71 @@ export class HostAgentClient {
       false,
       (wire) =>
         fromBinary(ListContextLinksResponseSchema, wire).links.map(decodeLinks),
+    );
+  }
+
+  /**
+   * The tail of a node's own conversation, as the execution host renders it.
+   *
+   * Only the node is named. The session and the transcript reference come from
+   * the Host's own record, so this cannot be pointed at a file of the caller's
+   * choosing. A provider that keeps nothing readable — OpenCode's private
+   * store, Pi's live window, Copilot's event log — is a refusal with a reason,
+   * never an empty excerpt.
+   */
+  async readTranscript(input: {
+    nodeId: string;
+    maxBytes?: number;
+  }): Promise<TranscriptExcerptRecord> {
+    if (!input?.nodeId) throw new HostCanvasError("invalid");
+    const request = create(ReadAgentTranscriptRequestSchema, {
+      meta: this.#meta(),
+      nodeId: input.nodeId,
+      maxBytes: input.maxBytes ?? 0,
+    });
+    return this.#call(
+      "ReadTranscript",
+      toBinary(ReadAgentTranscriptRequestSchema, request),
+      false,
+      (wire) => {
+        const excerpt = fromBinary(
+          ReadAgentTranscriptResponseSchema,
+          wire,
+        ).excerpt;
+        if (!excerpt?.nodeId) throw new HostCanvasError("response");
+        return {
+          nodeId: excerpt.nodeId,
+          text: new TextDecoder().decode(excerpt.content),
+          truncated: excerpt.truncated,
+          observedAtUnixMs: excerpt.observedAtUnixMs,
+        };
+      },
+    );
+  }
+
+  /** What the node's pane is showing right now, as plain text. */
+  async captureScreen(input: {
+    nodeId: string;
+    lines?: number;
+  }): Promise<string> {
+    if (!input?.nodeId) throw new HostCanvasError("invalid");
+    const request = create(CaptureAgentScreenCommandSchema, {
+      meta: this.#meta(),
+      nodeId: input.nodeId,
+      lines: input.lines ?? 0,
+    });
+    return this.#call(
+      "CaptureScreen",
+      toBinary(CaptureAgentScreenCommandSchema, request),
+      false,
+      (wire) => {
+        const screen = fromBinary(
+          CaptureAgentScreenCommandResponseSchema,
+          wire,
+        ).screen;
+        if (!screen?.nodeId) throw new HostCanvasError("response");
+        return screen.data;
+      },
     );
   }
 

@@ -34,6 +34,7 @@ vi.mock("../platform", () => ({
 vi.mock("../api/events", () => ({
   useWorkspaceEvents: () => undefined,
   onWorkspaceEvent: () => () => undefined,
+  onWorkspaceConnection: () => () => undefined,
   useRuntimeConnection: () => "open",
 }));
 

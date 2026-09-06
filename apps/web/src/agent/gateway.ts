@@ -103,6 +103,17 @@ export interface ApprovalRecord {
   revision: bigint;
 }
 
+/**
+ * 一个节点自己的材料：它说过什么、它现在显示什么。两侧都不存，读完就丢。
+ *
+ * `truncated` 单独一个字段，因为「截断的对话被当成完整的」是答错，不是答少。
+ */
+export interface TranscriptRecord {
+  nodeId: string;
+  text: string;
+  truncated: boolean;
+}
+
 /** 一次投递的回执。`unknown` 不是失败，是「说不清」，谁都不许自动重发。 */
 export interface DeliveryRecord {
   traceId: string;
@@ -169,6 +180,57 @@ export const agentGateway = {
       answered: record.state === "answered",
       revision: record.revision,
     };
+  },
+
+  /**
+   * 一个节点自己的对话尾部。
+   *
+   * 转录是执行主机上的一份文件，两侧读的是同一份；差别只在谁来读。没有可读
+   * 转录的 CLI 两侧都是拒绝并说明原因，绝不是一段空正文——空正文和「这一轮
+   * 还没说话」在界面上分不开。
+   */
+  async readTranscript(
+    workspaceId: string,
+    nodeId: string,
+  ): Promise<TranscriptRecord> {
+    if ((await readRoute()) === "runtime") {
+      const answer = await runtimeApi.agentTranscript(nodeId);
+      return {
+        nodeId: answer.nodeId,
+        text: answer.text,
+        truncated: answer.truncated,
+      };
+    }
+    const client = await resolver(workspaceId, false);
+    const record = await client.readTranscript({ nodeId });
+    return {
+      nodeId: record.nodeId,
+      text: record.text,
+      truncated: record.truncated,
+    };
+  },
+
+  /**
+   * 这个节点的终端此刻显示的内容。
+   *
+   * Runtime 那一侧按会话抓屏——它就是持有 PTY 的进程；Host 那一侧按节点问，
+   * 会话 id 由 Host 自己的记录填，客户端指定不了别人的会话。
+   */
+  async captureScreen(
+    workspaceId: string,
+    nodeId: string,
+    sessionId: string,
+    lines?: number,
+  ): Promise<string> {
+    if ((await readRoute()) === "runtime") {
+      // 没有会话就没有画面。这不是一屏空白：那个节点底下没有东西在跑。
+      if (!sessionId)
+        throw new RuntimeRequestError(404, "No session is running", "not_found");
+      const answer = await runtimeApi.captureTerminal(sessionId, { lines });
+      return answer.data;
+    }
+    const client = await resolver(workspaceId, false);
+    return client.captureScreen({ nodeId, lines });
   },
 
   /** 一个节点被告知了什么，新的在前。 */

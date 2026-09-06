@@ -48,6 +48,11 @@ type Executor interface {
 	DeliverMessage(ctx context.Context, request *pb.DeliverMessageRequest) (*pb.AgentDeliveryReceipt, error)
 	// Hooks installs or removes a CLI's Hook configuration on that machine.
 	Hooks(ctx context.Context, agentID string, install bool) (*pb.HookInstallState, error)
+	// ReadTranscript reads the tail of a node's conversation, or refuses with
+	// the reason when that provider keeps none this Host can read.
+	ReadTranscript(ctx context.Context, request *pb.ReadTranscriptRequest) (*pb.TranscriptExcerpt, error)
+	// CaptureScreen returns what is on a node's pane right now.
+	CaptureScreen(ctx context.Context, request *pb.CaptureAgentScreenRequest) (*pb.CapturedAgentScreen, error)
 }
 
 // OpenExecutor produces a channel to the execution host for one exchange, or an

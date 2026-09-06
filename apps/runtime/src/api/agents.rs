@@ -234,6 +234,83 @@ pub async fn mark_agent_status_read(
     Ok(Json(receipt.status))
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranscriptQuery {
+    max_bytes: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranscriptExcerpt {
+    pub node_id: String,
+    pub text: String,
+    /// The excerpt stopped at the rendered ceiling. A cut-off conversation read
+    /// as a whole one is a wrong answer, not a short one.
+    pub truncated: bool,
+}
+
+/// `GET /api/agent-status/{nodeId}/transcript` — the node's own conversation,
+/// rendered one prose line per message.
+///
+/// This is a read, so it answers whichever side owns the agent domain's
+/// records: the transcript is a file on this machine either way, and the
+/// Worker channel's `ReadTranscript` (§2.7) reads the very same one.
+///
+/// A provider that keeps nothing readable is **501, not an empty body**.
+/// OpenCode's history lives in a store only its own CLI exports, Pi and Oh My
+/// Pi report a live context window rather than a file, and Copilot's
+/// `events.jsonl` is an event log this renderer cannot turn into messages. An
+/// empty excerpt would be indistinguishable from a session that has said
+/// nothing yet, and the panel would draw the blank as the truth.
+pub async fn read_agent_transcript(
+    State(state): State<AppState>,
+    AxumPath(node_id): AxumPath<String>,
+    Query(query): Query<TranscriptQuery>,
+) -> AppResult<Json<TranscriptExcerpt>> {
+    let status = db::get_agent_status(&state.pool, &node_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("This node has never reported".into()))?;
+    let provider = state.settings.base_agent(&status.agent_id);
+    let located = crate::collab::transcript::locate(
+        &provider,
+        status.transcript_path.as_deref(),
+        status.session_id.as_deref(),
+    )
+    .ok_or_else(|| {
+        AppError::Unsupported(format!("{provider} keeps no transcript this machine can read"))
+    })?;
+    let budget = query
+        .max_bytes
+        .unwrap_or(crate::collab::transcript::MAX_TAIL_BYTES)
+        .clamp(1, crate::collab::transcript::MAX_TAIL_BYTES);
+    let text = crate::collab::transcript::read_tail(&located.path, budget)
+        .map_err(|_| AppError::NotFound("The transcript could not be read".into()))?;
+    let lines = crate::collab::transcript::render(&text);
+    if lines.is_empty() {
+        return Err(AppError::Unsupported(format!(
+            "The file {provider} reports is not a conversation this reader renders"
+        )));
+    }
+    let rendered = lines.join("\n");
+    let ceiling = crate::collab::transcript::MAX_RENDERED_BYTES;
+    let truncated = rendered.len() > ceiling;
+    let text = if truncated {
+        let mut end = ceiling;
+        while end > 0 && !rendered.is_char_boundary(end) {
+            end -= 1;
+        }
+        rendered[..end].to_string()
+    } else {
+        rendered
+    };
+    Ok(Json(TranscriptExcerpt {
+        node_id,
+        text,
+        truncated,
+    }))
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SuggestedTitle {

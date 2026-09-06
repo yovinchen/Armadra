@@ -9,16 +9,28 @@
  * `agent/sessions` 已经把两者合流并分好桶。一行 = 品牌色点 + 标题 + 所在
  * 画布 + 状态胶囊 + 相对时间；点一行就切到那块板并把画布居中过去。
  */
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { MoreHorizontal } from "lucide-react";
 
 import { useSessions, type SessionRow } from "../agent/sessions";
 import { useT } from "../app/preferences-store";
 import { formatRelativeTime } from "../lib/format";
 import { useCanvasStore } from "../store/canvas-store";
 import { Button } from "@/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
+import { IconButton } from "@/ui/icon-button";
 import { ScrollArea } from "@/ui/scroll-area";
 import { StatusPill, type StatusTone } from "@/ui/status-pill";
 import { agentSections, bucketTone } from "./agent-panel";
+import {
+  AgentInspectDialog,
+  type AgentInspectTarget,
+} from "./AgentInspectDialog";
 import { gotoNode } from "./goto-node";
 
 export function AgentStatusPanel({ onClose }: { onClose: () => void }) {
@@ -26,6 +38,7 @@ export function AgentStatusPanel({ onClose }: { onClose: () => void }) {
   const workspace = useCanvasStore((state) => state.workspace);
   const boards = useCanvasStore((state) => state.boards);
   const { sessions } = useSessions(workspace?.id ?? null);
+  const [inspecting, setInspecting] = useState<AgentInspectTarget | null>(null);
 
   const sections = useMemo(() => agentSections(sessions), [sessions]);
   const boardNames = useMemo(
@@ -66,6 +79,15 @@ export function AgentStatusPanel({ onClose }: { onClose: () => void }) {
                       onClose();
                       gotoNode(row.boardId, row.nodeId);
                     }}
+                    onInspect={(tab) =>
+                      setInspecting({
+                        workspaceId: workspace?.id ?? "",
+                        nodeId: row.nodeId,
+                        sessionId: row.sessionId,
+                        title: row.title,
+                        tab,
+                      })
+                    }
                   />
                 ))}
               </ul>
@@ -73,6 +95,10 @@ export function AgentStatusPanel({ onClose }: { onClose: () => void }) {
           ))}
         </div>
       </ScrollArea>
+      <AgentInspectDialog
+        target={inspecting}
+        onClose={() => setInspecting(null)}
+      />
     </div>
   );
 }
@@ -83,15 +109,18 @@ function AgentRow({
   tone,
   label,
   onSelect,
+  onInspect,
 }: {
   row: SessionRow;
   boardName: string;
   tone: StatusTone;
   label: string;
   onSelect: () => void;
+  onInspect: (tab: AgentInspectTarget["tab"]) => void;
 }) {
+  const t = useT();
   return (
-    <li>
+    <li className="group/agent relative">
       <Button
         variant="ghost"
         size="sm"
@@ -112,6 +141,24 @@ function AgentRow({
           </span>
         </span>
       </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <IconButton
+            label={t("agentInspect.menu")}
+            className="absolute top-1 right-1.5 opacity-0 focus-visible:opacity-100 group-hover/agent:opacity-100 data-[state=open]:opacity-100"
+          >
+            <MoreHorizontal />
+          </IconButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="z-[var(--z-menu)]">
+          <DropdownMenuItem onSelect={() => onInspect("transcript")}>
+            {t("agentInspect.transcript")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onInspect("screen")}>
+            {t("agentInspect.screen")}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </li>
   );
 }

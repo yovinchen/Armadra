@@ -1,5 +1,6 @@
 import { account } from "./account";
 import { agent } from "./agent";
+import { agentInspect } from "./agent-inspect";
 import { automation } from "./automation";
 import { browser } from "./browser";
 import { canvas } from "./canvas";
@@ -63,6 +64,7 @@ export const MESSAGE_MODULES = {
   nodes,
   browser,
   agent,
+  "agent-inspect": agentInspect,
   automation,
   account,
   terminal,

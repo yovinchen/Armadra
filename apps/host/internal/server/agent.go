@@ -274,5 +274,39 @@ func agentRequest(w http.ResponseWriter, r *http.Request, host Identity, service
 				return agents.UninstallHooks(ctx, caller, in)
 			},
 		}, new(pb.UninstallHooksRequest))
+	// Both of these are reads that leave no trace here: they resolve the node,
+	// forward to the machine the CLI runs on, and pass the answer through.
+	// `mutating` stays false for exactly that reason — there is no operation id
+	// to replay and nothing that a second call could double.
+	case "ReadTranscript":
+		serveAgent(w, r, host, service, agents, agentCall[pb.ReadAgentTranscriptRequest, pb.ReadAgentTranscriptResponse]{
+			permission: agenthost.ScopeRead,
+			meta:       func(in *pb.ReadAgentTranscriptRequest) *pb.CommandMeta { return in.GetMeta() },
+			act: func(caller agenthost.Caller, in *pb.ReadAgentTranscriptRequest) (*pb.ReadAgentTranscriptResponse, error) {
+				excerpt, err := agents.ReadTranscript(ctx, caller, &pb.ReadTranscriptRequest{
+					NodeId:   in.GetNodeId(),
+					MaxBytes: in.GetMaxBytes(),
+				})
+				if err != nil {
+					return nil, err
+				}
+				return &pb.ReadAgentTranscriptResponse{Excerpt: excerpt}, nil
+			},
+		}, new(pb.ReadAgentTranscriptRequest))
+	case "CaptureScreen":
+		serveAgent(w, r, host, service, agents, agentCall[pb.CaptureAgentScreenCommand, pb.CaptureAgentScreenCommandResponse]{
+			permission: agenthost.ScopeRead,
+			meta:       func(in *pb.CaptureAgentScreenCommand) *pb.CommandMeta { return in.GetMeta() },
+			act: func(caller agenthost.Caller, in *pb.CaptureAgentScreenCommand) (*pb.CaptureAgentScreenCommandResponse, error) {
+				screen, err := agents.CaptureScreen(ctx, caller, &pb.CaptureAgentScreenRequest{
+					NodeId: in.GetNodeId(),
+					Lines:  in.GetLines(),
+				})
+				if err != nil {
+					return nil, err
+				}
+				return &pb.CaptureAgentScreenCommandResponse{Screen: screen}, nil
+			},
+		}, new(pb.CaptureAgentScreenCommand))
 	}
 }
