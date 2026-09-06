@@ -1848,7 +1848,7 @@ format: "png" })` → `runtimeApi.exportPng(workspaceId, contentId, dataUrl)` �
   多一条断言：`list` 里出现 `类型=白板内容`。
 
 > **`.claude/skills/get-linked-context/SKILL.md` 没有改，也改不了**：仓库里没有
-> 这个文件（`grep -rn get-linked-context` 只命中 `docs/contracts/tldraw-canvas-plan.md`）。
+> 这个文件（`grep -rn get-linked-context` 只命中 `docs/history/tldraw-canvas-plan.md`）。
 > `~/.claude/skills/get-linked-context/` 是**另一个应用**装的技能，它的 shim 指向
 > 那个应用自己的 Application Support 目录，与本仓库无关。本仓库对应的那份是 `armadra-linked-context`，由 `skills.rs` 生成，
 > 已按上面改好；用户机器上那份 `~/.claude/skills/armadra-linked-context/SKILL.md`

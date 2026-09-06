@@ -2,7 +2,7 @@
 
 > 下一阶段目标见 [画布工作平台设计总纲](../design/canvas-platform-design.md)及其专项文档：Go 常驻 Host、Protobuf、后台调度和跨端能力均为待实施方案。本文件继续描述当前实现，不将目标能力提前计入现状。
 
-> 当前实现的架构。画布层细节见 [tldraw-canvas-plan.md](../contracts/tldraw-canvas-plan.md)，
+> 当前实现的架构。画布层细节见 [画布换成 React Flow](../design/canvas-react-flow.md)，
 > Agent 运行时与接口契约见 [v3-agent-terminal-plan.md](../contracts/v3-agent-terminal-plan.md)。
 > 选型演进的原始讨论见 [ChatGPT 会话归档](../research/chatgpt-conversation-archive.md)。
 
@@ -11,7 +11,7 @@
 独立 Go Host 已有身份、单实例、后台启停和 Protobuf 基础。桌面启动时异步启动/发现 Host，设置页可显式检查连接；Go Host 的生命周期独立于界面。默认应用业务仍由下述 Rust Runtime 提供。关闭桌面窗口隐藏前台并保留服务；Command Q/托盘退出经私有控制结束受管会话和后台。普通 Runtime 重启信号保留 tmux 恢复语义；尚未切换业务数据库或接入 Host 调度。实际进度见 [平台实施记录](../status/platform-implementation-status.md)。
 
 Armadra 是一个 local-first 的桌面画布：把 Claude Code、Codex、Gemini CLI、
-opencode 等 CLI Agent 作为终端节点放在一块 tldraw 白板上，节点之间连一条线即
+opencode 等 CLI Agent 作为终端节点放在一块无限画布上，节点之间连一条线即
 建立上下文链接，Agent 可以读取被链接一端的转录、终端画面或白板内容。
 
 所有数据留在本机：SQLite 一个库 + 工作区里的 `.armadra/` 目录，没有服务端。
@@ -26,7 +26,7 @@ opencode 等 CLI Agent 作为终端节点放在一块 tldraw 白板上，节点�
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │ 加载同一套页面
 ┌───────────────────────────────▼──────────────────────────────────────┐
-│ apps/web  React 19 + Vite + tldraw 5 + shadcn/ui + Tailwind v4        │
+│ apps/web  React 19 + Vite + React Flow 12 + shadcn/ui + Tailwind v4   │
 │ 画布、节点、终端 UI（xterm.js）、编辑器（CodeMirror 6）、设置、会话侧栏 │
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │ HTTP + WebSocket，127.0.0.1:43120
@@ -52,21 +52,30 @@ opencode 等 CLI Agent 作为终端节点放在一块 tldraw 白板上，节点�
 
 窗口浮层以侧栏之外的可用画布区域为布局容器。标题栏图标共用 44px 高度的
 中心线；底部 Dock 与右侧导航区分别预留空间。窄窗口使用紧凑工具菜单，并把
-缩略图与用量球移到 Dock 上方；缩略图由自定义 NavigationPanel 承载，不跟随
-tldraw 默认的移动端断点隐藏。用量球位于缩略图左侧。
+缩略图与用量球移到 Dock 上方；缩略图是自写的 `canvas/flow/Minimap.tsx`，
+按窗口宽度自己决定收起，不跟随画布库的断点。用量球位于缩略图左侧。
 
 用量快照保留供应商返回的基础与模型专属额度窗口，每个窗口独立显示已用比例和
 重置时间。数据采集时间与额度重置时间分开显示；后台刷新和手动刷新共用串行化
 与冷却时间，前端只轮询缓存，不把缓存轮询时间当成数据更新时间。
 
-tldraw 5 的 store 是画布在内存里的唯一真相：
+画布引擎是 React Flow 12（`@xyflow/react`，MIT），白板层自写。
+**`canvas-store` 是画布在内存里的唯一真相**，React Flow 只是受控视图：
+`nodes` / `edges` 由 `document.nodes / edges` 与白板文档投影出来
+（`canvas/sync/project.ts`），用户手势经 `onNodesChange` 等回调翻译成
+`canvas-store` 的动作，没有反向派生。
 
-- **节点**是自定义 `ShapeUtil`（`apps/web/src/canvas/shapes/ArmadraShapeUtil.tsx`），
-  节点体是普通 React 组件，所以终端、编辑器、iframe 直接渲染在 shape 里。
-- **分组**是 tldraw 原生 frame。
-- **上下文链接**是两端有 binding 的自定义箭头（`LinkShapeUtil` + `LinkBindingUtil`）。
-- **白板内容**（手绘、几何、文字、图片、高亮）是 tldraw 原生 shape，与节点共用
-  一套相机、选择和撤销栈。
+- **节点**是 `armadra` 类型的自定义节点（`canvas/flow/nodes/ArmadraNode.tsx`），
+  节点体是普通 React 组件，所以终端、编辑器、iframe 直接渲染在节点里。
+  拖拽只从头部起（`dragHandle`），体内的指针事件归节点体自己。
+- **分组**是 `group` 节点（`canvas/flow/nodes/GroupNode.tsx`），子节点用
+  React Flow 的 `parentId` 子流，坐标相对父级。
+- **上下文链接**是 `link` 类型的边（`canvas/flow/edges/LinkEdge.tsx`）：
+  两端节点相对边的中点之间的贝塞尔曲线，方向与标签由两端的节点类型算出来。
+- **白板内容**（手绘、几何、文字、图片、直线）是 `wb.*` 节点，与节点共用
+  同一套相机、选择和撤销栈；内容引用是 `reference` 边。
+- **撤销 / 重做**是自写的逐实体差异栈（`store/canvas/history.ts`），
+  远端在撤销期间新增的实体不受影响。
 
 节点类型共 7 种（`packages/shared/src/domain.ts`）：
 `terminal`（含 Agent）、`sticky`、`group`、`editor`、`diff`、`files`、`browser`。
@@ -106,9 +115,9 @@ Hook 时提供独立的按需技能，不再追加全局长指令。详见
 
 ```text
                   ┌──────────────── 内存真相 ────────────────┐
-                  │  tldraw store（shape / binding / asset）   │
+                  │  canvas-store（document + whiteboard）     │
                   └───┬───────────────────────┬──────────────┘
-       派生 nodes/edges │                       │ 其余记录整份序列化
+          nodes/edges  │                       │ 白板文档整份序列化
                         ▼                       ▼
         Workspace / Board / Node / Edge      白板快照（不透明 JSON）
         （SQLite 的 nodes / edges 表）        （boards.whiteboard_json）
@@ -116,10 +125,11 @@ Hook 时提供独立的按需技能，不再追加全局长指令。详见
 
 - 持久化两条通道由 `PUT /api/workspaces/{id}/boards/{boardId}/document` 一次带走。
   节点与连线仍是 `nodes` / `edges` 表——Runtime、hook、控制动词、会话侧栏只认这张表；
-  节点 `<uuid>` ↔ shape `shape:<uuid>`，不查表；分组是原生 frame。
-- 白板原生内容序列化成一份 tldraw 快照存进 `boards.whiteboard_json`，
-  **Runtime 不解析它**。写之前先剔掉节点记录（`canvas/sync/snapshot.ts`），
-  上限 8 MiB，超了这一轮不保存并提示。
+  节点 id 就是那一行的 uuid，白板对象是 `wb:<uuid>`，都不查表；分组是 `group` 节点。
+- 白板对象与内容引用序列化成一份 `{"engine":"armadra-flow","version":2,…}` 的
+  JSON 存进 `boards.whiteboard_json`，**Runtime 不解析它**（只看长度与摘要）。
+  上限 8 MiB，超了这一轮不保存并提示。不认识的 `engine` / 更高的 `version`
+  按「保留原文」处理：不覆盖，也不显示成空白板。
 - **图片资产不进快照**：字节走 `POST /api/workspaces/{id}/assets`（或按路径
   `.../assets/import`），内容寻址落在工作区的
   `.armadra/assets/<sha256 前 16 位>.<ext>`，快照里只留 URL 与工作区相对路径。

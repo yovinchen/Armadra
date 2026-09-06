@@ -171,7 +171,10 @@ describe("LineNode", () => {
  */
 describe("ItemFrame 的把手", () => {
   const rendered: [Item["kind"], () => HTMLElement][] = [
-    ["ink", () => renderFlow(<InkNode {...props(makeItem("ink"))} />).container],
+    [
+      "ink",
+      () => renderFlow(<InkNode {...props(makeItem("ink"))} />).container,
+    ],
     [
       "text",
       () => renderFlow(<TextNode {...props(makeItem("text"))} />).container,

@@ -2,7 +2,7 @@
 
 # Armadra
 
-本地优先的桌面画布：将真实 CLI Agent 放在 tldraw 白板上，通过连线共享上下文。
+本地优先的桌面画布：将真实 CLI Agent 放在无限画布上，通过连线共享上下文。
 支持 Claude Code、Codex、Gemini CLI、OpenCode、Pi、OMP 和 GitHub Copilot。
 
 ## 能做什么
@@ -37,7 +37,7 @@ pnpm --filter @armadra/desktop build   # 桌面打包
 
 | 目录                                                   | 职责                                   |
 | ------------------------------------------------------ | -------------------------------------- |
-| [apps/web](apps/web/README.md)                         | React / Vite / tldraw 前端             |
+| [apps/web](apps/web/README.md)                         | React / Vite / React Flow 前端         |
 | [apps/runtime](apps/runtime/README.md)                 | Rust / Axum / SQLite，当前业务执行服务 |
 | [apps/desktop](apps/desktop/README.md)                 | Tauri 2 薄壳与 sidecar                 |
 | [apps/host](apps/host/README.md)                       | Go 后台服务，分阶段承接 Runtime 能力   |

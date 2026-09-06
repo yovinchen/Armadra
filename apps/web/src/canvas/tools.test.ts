@@ -168,9 +168,7 @@ describe("splitSelectionForDelete", () => {
 
   it("三张表都不认的 id 一概不动：删了也同步不回去", () => {
     const ghost = "55555555-5555-4555-8555-555555555555";
-    expect(
-      splitSelectionForDelete([ghost], nodes, edges, references),
-    ).toEqual({
+    expect(splitSelectionForDelete([ghost], nodes, edges, references)).toEqual({
       nodes: [],
       edges: [],
       items: [],

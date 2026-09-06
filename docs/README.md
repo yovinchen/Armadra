@@ -59,7 +59,8 @@
 
 ## contracts/ 实施契约
 
-- [v3 Agent 终端](contracts/v3-agent-terminal-plan.md)、[tldraw 画布](contracts/tldraw-canvas-plan.md)：章节 §N 被代码引用，保留编号。
+- [v3 Agent 终端](contracts/v3-agent-terminal-plan.md)：章节 §N 被代码引用，保留编号。
+- [tldraw 画布](history/tldraw-canvas-plan.md) 已被 [React Flow 画布](design/canvas-react-flow.md)取代并移入 `history/`；它的 §6.1 / §6.2 / §6.3 仍被 Runtime 与 Host 的注释引用，编号照旧不动。
 
 ## history/ 与 research/
 
