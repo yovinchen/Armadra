@@ -13,6 +13,7 @@
 
 pub mod claude;
 pub mod codex;
+pub mod copilot;
 pub mod gemini;
 pub mod opencode;
 
@@ -174,6 +175,7 @@ pub fn normalize_as(
 ) -> Option<AgentEvent> {
     match provider {
         "codex" => codex::normalize(node_id, agent_id, payload),
+        "copilot" => copilot::normalize(node_id, agent_id, payload),
         "gemini" => gemini::normalize(node_id, agent_id, payload),
         "opencode" => opencode::normalize(node_id, agent_id, payload),
         _ => claude::normalize(node_id, agent_id, payload),

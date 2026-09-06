@@ -50,12 +50,12 @@ pub const OBSERVED: &str = "observed";
 /// strongest source. `None` is a provider with no adapter, whose state is only
 /// ever whatever §3.4 observes.
 ///
-/// Extension point for the later batches: B1 adds Copilot as a command Hook,
-/// B2 adds Pi / Oh My Pi as extensions, and B3 moves opencode from the first
-/// arm to the second when its plugin stops forking the client.
+/// Extension point for the later batches: B2 adds Pi / Oh My Pi as extensions,
+/// and B3 moves opencode from the first arm to the second when its plugin stops
+/// forking the client.
 pub fn state_source_for(provider: &str) -> Option<&'static str> {
     match provider {
-        "claude" | "codex" | "gemini" | "opencode" => Some(STATE_SOURCE_HOOK),
+        "claude" | "codex" | "gemini" | "opencode" | "copilot" => Some(STATE_SOURCE_HOOK),
         _ => None,
     }
 }
@@ -458,10 +458,12 @@ mod tests {
         // this is ever asked.
         assert_eq!(state_source_for("custom:wrapper"), None);
         assert_eq!(state_source_for(""), None);
-        // Declared but not yet wired: B1 gives Copilot a command Hook, B2 gives
-        // Pi / Oh My Pi an extension. Until then the capability says the
-        // adapter exists and the source says nothing has reported through it.
-        for pending in ["pi", "omp", "copilot"] {
+        // B1 wired Copilot's command Hook, so it now names a channel like the
+        // other four. Pi / Oh My Pi wait for B2's extension: until then the
+        // capability says the adapter exists and the source says nothing has
+        // reported through it.
+        assert_eq!(state_source_for("copilot"), Some(STATE_SOURCE_HOOK));
+        for pending in ["pi", "omp"] {
             assert_eq!(state_source_for(pending), None);
         }
     }

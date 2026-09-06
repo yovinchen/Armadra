@@ -597,6 +597,133 @@ async fn a_real_report_is_accepted_for_a_node_the_board_has_not_saved_yet() {
     assert_eq!(row.session_id.as_deref(), Some("s-1"));
 }
 
+/// Copilot end to end on its own path — 协作通道 §5.2.
+///
+/// Worth its own route test because Copilot is the one provider whose payload
+/// does not name its event: everything below is recovered from the body's
+/// shape, so a normalizer that regressed to "look for `hook_event_name`" would
+/// pass every unit test in isolation and leave the node blank here. The bodies
+/// are the ones Copilot CLI 1.0.83 sent during the probe run recorded in
+/// `hook::normalize::copilot`.
+#[tokio::test]
+async fn a_copilot_turn_is_understood_from_its_shape_alone() {
+    let fixture = fixture("hook-copilot-turn").await;
+    let token = fixture
+        .state
+        .hooks
+        .issue_node_token(&fixture.node_id)
+        .unwrap();
+    let forged = format!("{}.wrong", token.split_once('.').unwrap().0);
+    let verified: &[(&str, &str)] = &[
+        ("x-armadra-hook-token", &fixture.bearer),
+        ("x-armadra-node-token", &token),
+    ];
+    let legacy: &[(&str, &str)] = &[("x-armadra-hook-token", &fixture.bearer)];
+    let forged: &[(&str, &str)] = &[
+        ("x-armadra-hook-token", &fixture.bearer),
+        ("x-armadra-node-token", &forged),
+    ];
+    let body =
+        |payload: Value| json!({ "nodeId": fixture.node_id, "version": 1, "payload": payload });
+
+    // `prompt` and nothing else identifies the event.
+    assert_eq!(
+        fixture
+            .post_hook(
+                "copilot",
+                body(json!({ "sessionId": "s-1", "cwd": "/repo", "prompt": "echo hello" })),
+                verified,
+            )
+            .await,
+        StatusCode::NO_CONTENT
+    );
+    let status = fixture.status().await.unwrap();
+    assert_eq!(status.agent_id, "copilot");
+    assert_eq!(status.state.as_deref(), Some("working"));
+    assert_eq!(status.state_source.as_deref(), Some("hook"));
+    assert!(status.verified);
+
+    // `stopReason` + `stop_hook_active` is `agentStop`, and it is the only
+    // event that reports where the session's transcript lives.
+    assert_eq!(
+        fixture
+            .post_hook(
+                "copilot",
+                body(json!({
+                    "sessionId": "s-1",
+                    "cwd": "/repo",
+                    "transcriptPath": "/home/dev/.copilot/session-state/s-1/events.jsonl",
+                    "stopReason": "end_turn",
+                    "stop_hook_active": false
+                })),
+                verified,
+            )
+            .await,
+        StatusCode::NO_CONTENT
+    );
+    let status = fixture.status().await.unwrap();
+    assert_eq!(status.state.as_deref(), Some("done"));
+    assert_eq!(status.state_source.as_deref(), Some("hook"));
+    assert_eq!(status.session_id.as_deref(), Some("s-1"));
+    assert_eq!(
+        status.transcript_path.as_deref(),
+        Some("/home/dev/.copilot/session-state/s-1/events.jsonl")
+    );
+    assert!(status.unread);
+
+    // No node token: accepted as a status report, but not verified — the same
+    // three-verdict ladder every other provider is on.
+    assert_eq!(
+        fixture
+            .post_hook(
+                "copilot",
+                body(json!({ "sessionId": "s-1", "cwd": "/repo", "prompt": "again" })),
+                legacy,
+            )
+            .await,
+        StatusCode::NO_CONTENT
+    );
+    assert!(!fixture.status().await.unwrap().verified);
+
+    // Our key id with a wrong MAC is a forgery, and nothing it says lands.
+    assert_eq!(
+        fixture
+            .post_hook(
+                "copilot",
+                body(json!({ "sessionId": "s-1", "stopReason": "end_turn" })),
+                forged,
+            )
+            .await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        fixture.status().await.unwrap().state.as_deref(),
+        Some("working")
+    );
+
+    // §3.3 leaves `notification` unverified, so it must not move the badge off
+    // the working state the prompt above set.
+    assert_eq!(
+        fixture
+            .post_hook(
+                "copilot",
+                body(json!({
+                    "sessionId": "s-1",
+                    "hook_event_name": "Notification",
+                    "message": "Copilot needs permission",
+                    "notification_type": "permission_prompt"
+                })),
+                verified,
+            )
+            .await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        fixture.status().await.unwrap().state.as_deref(),
+        Some("working")
+    );
+}
+
 /// A custom agent has no hooks of its own: the hook line the installer wrote
 /// runs `armadra-hook <base>`, so the report arrives on the *base* provider's path
 /// while the node is a `custom:` one. The node must keep its own id and the
