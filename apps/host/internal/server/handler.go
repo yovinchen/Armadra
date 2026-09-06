@@ -259,6 +259,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			events:         authentication && options.Events != nil,
 			ownership:      authentication && options.Ownership != nil,
 			settings:       authentication && options.Settings != nil,
+			repositories:   authentication && options.Git != nil,
 		})
 	}), nil
 }
@@ -298,6 +299,7 @@ func deviceOrigin(r *http.Request, origin, public string) (string, bool) {
 // capability that would then refuse it.
 type helloSurfaces struct {
 	authentication, scheduling, github, proxying, canvas, filesystem, events, ownership, settings bool
+	repositories                                                                                  bool
 }
 
 func hello(w http.ResponseWriter, r *http.Request, identity Identity, surfaces helloSurfaces) {
@@ -394,6 +396,13 @@ func hello(w http.ResponseWriter, r *http.Request, identity Identity, surfaces h
 	// decides where to save a preference.
 	if surfaces.settings {
 		capabilities = append(capabilities, "settings.documents.v1")
+	}
+	// Advertised only when the git queue is assembled. Like the others it says
+	// the surface answers, not that this Host owns git writes: which side runs
+	// a commit is what OwnershipService/List reports, and a client reads that
+	// before it offers a button that would push.
+	if surfaces.repositories {
+		capabilities = append(capabilities, "git.queue.v1")
 	}
 	writeProto(w, http.StatusOK, &pb.HelloResponse{
 		Protocol:         &pb.ProtocolVersion{Major: ProtocolMajor, Minor: min(request.Protocol.GetMinor(), ProtocolMinor)},

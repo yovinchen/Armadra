@@ -323,6 +323,7 @@ export * from "./automation.js";
 export * from "./canvas.js";
 export * from "./events.js";
 export * from "./filesystem.js";
+export * from "./git.js";
 export * from "./ownership.js";
 export * from "./settings.js";
 export * from "./github/index.js";

@@ -40,6 +40,10 @@ export const ownership: MessageModule = {
     "ownership.reason.ownership.rollback.exported": "已写出反向导出包，待交回",
     "ownership.filesystem.readonly": "文件归属正在切换，现在改不了工作区权限",
     "ownership.filesystem.moved": "文件归属刚刚变了，已重新确认，请再试一次",
+    "ownership.git.readonly": "Git 归属正在切换，现在不能改仓库",
+    "ownership.git.moved": "Git 归属刚刚变了，已重新确认，请再试一次",
+    "ownership.git.unknownOutcome":
+      "这次操作被打断了，远端有没有收下还不知道；请先看一眼再决定",
   },
   en: {
     "ownership.maintenance":
@@ -84,5 +88,11 @@ export const ownership: MessageModule = {
       "File ownership is switching; workspace permissions cannot change now",
     "ownership.filesystem.moved":
       "File ownership just changed; it has been re-checked, try again",
+    "ownership.git.readonly":
+      "Git ownership is switching; the repository cannot be changed right now",
+    "ownership.git.moved":
+      "Git ownership just changed; it has been re-checked, try again",
+    "ownership.git.unknownOutcome":
+      "This operation was interrupted; whether the remote took it is not known. Look before deciding",
   },
 };
