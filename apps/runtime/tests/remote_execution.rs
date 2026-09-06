@@ -260,19 +260,37 @@ async fn scenario() {
     assert_eq!(current["exists"], true);
     assert_ne!(current["sha256"], Value::Null);
 
-    // What still refuses, and why: drafting a commit message runs a provider
-    // CLI configured on this machine against a diff on the other one.
+    // Drafting a commit message reaches the execution host now: the diff is
+    // captured there and only the model runs here. What comes back is a
+    // repository answer — this request names an index digest the host does not
+    // have — rather than "your workspace is on the wrong machine".
     let (status, answer) = call(
         app,
         json_request(
             "POST",
             format!("/api/workspaces/{id}/git/message/generate"),
-            json!({ "provider": "claude", "indexDigest": "0".repeat(64) }),
+            json!({ "provider": "claude-bare", "indexDigest": "0".repeat(64) }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{answer}");
+    assert_eq!(answer["code"], "conflict", "{answer}");
+
+    // What genuinely cannot move keeps its own code. A language server is a
+    // process this Runtime started and holds the handle to, so restarting one
+    // for a workspace on another machine is not a missing feature — it is a
+    // workspace on the wrong machine, and the two have different remedies.
+    let (status, answer) = call(
+        app,
+        json_request(
+            "POST",
+            format!("/api/workspaces/{id}/language/servers/rust-analyzer/restart"),
+            json!({}),
         ),
     )
     .await;
     assert_eq!(status, StatusCode::NOT_IMPLEMENTED, "{answer}");
-    assert_eq!(answer["code"], "unsupported");
+    assert_eq!(answer["code"], "unsupported_on_remote", "{answer}");
 }
 
 /// A host whose Worker cannot be started is refused, and refused as
