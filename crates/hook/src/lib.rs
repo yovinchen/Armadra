@@ -66,16 +66,32 @@ CANVAS:
 
 BROWSER VERBS (the browser node linked to this one):
   navigate --url URL            open an address; --action back|forward|reload|stop
+  back | forward                walk the history of the current tab
   read [--mode text|elements|links|title|console|network] [-n N]
   click --selector CSS | --ref REF | --x N --y N
   type --selector CSS --text TEXT [--replace] [--submit]
+  select --selector CSS|--ref REF --value V [--value V] | --label L
+  press --key Enter|Tab|Escape|ArrowDown|F5|<char> [--modifiers ctrl,shift]
+  scroll --direction up|down|left|right [--amount PX] | --to-ref REF
   wait --selector CSS | --url-contains TEXT | --title-contains TEXT [--timeout MS]
   capture [--full-page] [--format png|jpeg]      save a screenshot into .armadra/
+  upload --path REL [--path REL] [--selector CSS | --ref REF]
+  download [--id ID --accept | --id ID --reject]  list or decide the queue
+  tabs [--switch t2 | --new URL]                 list, switch or open a tab
+  close --tab t2                                 close one tab, never the last
+  dialog --accept | --dismiss [--text TEXT]      answer alert/confirm/prompt
 
 BROWSER OPTIONS:
   --node <id|title>         which linked browser node (defaults to the only one)
-  Element references from `read --mode elements` are only valid until the page
-  navigates; after that the runtime answers STALE_TARGET and you read again.
+  --tab t2 / --frame ID     which tab and frame; defaults to the active tab's
+                            main frame, so most calls need neither
+  Element references from `read --mode elements` are only valid until that
+  frame navigates; after that the runtime answers STALE_TARGET and you read
+  again. A reference read inside an iframe looks like `e3-12@t1/<frameId>` and
+  carries its own address, so it can be passed straight back.
+  `upload --path` only takes workspace-relative paths.
+  While a page is showing a dialog, actions on that tab answer DIALOG_PENDING
+  with the dialog's text; `read` still works, and `dialog` clears it.
 
 ENVIRONMENT:
   ARMADRA_NODE_ID          canvas node id; when unset hook mode is a no-op
