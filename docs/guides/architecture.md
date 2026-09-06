@@ -98,7 +98,7 @@ Agent 节点就是终端节点里跑着一个 CLI，没有中间协议：
    （`hook` / `extension` / `observed`）通过工作空间事件 WebSocket 推给前端，
    并随 `GET /api/workspaces/{id}/sessions` 一起返回，使刷新后节点头部的来源徽标不丢。
 5. 没有任何适配的终端只有 `observed`：Runtime 按已有的输入围栏与输出计数给一个弱提示，
-   它不写进状态、也不能满足交接与主动投递的空闲门（`terminal/observation.rs`）。
+   它不写进状态、也不能满足自动化提示词的空闲门（`terminal/observation.rs` 的 `input_idle`）。
 6. 权限请求在节点头部直答，答案写回 `<数据目录>/pending/`，hook 客户端阻塞读取。
 
 内置 Agent 定义集中在 `packages/shared/src/agents.ts`（launch 命令、prompt 传递方式、
@@ -109,7 +109,7 @@ Agent 之间的协作走 Runtime 的两个动词表面：
 
 - `POST /context-link/{verb}`：读取被链接节点的转录、摘要或终端画面。
 - `POST /control/{verb}`：`list` / `open-terminal` / `open-agent` / `sticky` /
-  `link` / `rename` / `color` / `post` / `inbox` / `ack` / `send` / `reply` / `notify` / `close`。
+  `link` / `rename` / `color` / `post` / `inbox` / `ack` / `handoff-read` / `interrupt` / `close`；`send` / `reply` / `notify` 已移除，消息只进信箱由接收方自己读。
 
 所有 Agent 终端都能调用 `armadra-hook canvas help` 读取短帮助。默认协作采用
 `post` / `inbox` / `ack` 拉取消息箱，不自动注入终端输入或追加启动提示。显式安装
@@ -150,7 +150,7 @@ SQLite 基础表由 `0001_initial.sql` 创建；`0002_agent_mailbox.sql` 增量�
 | `agent_status`                        | 每个 Agent 节点的当前状态（hook reduce 的结果）     |
 | `agent_approvals`                     | 权限请求与答复                                      |
 | `agent_mailbox`                       | 持久化拉取消息箱（幂等发送、确认、过期）            |
-| `agent_deliveries`                    | Agent 之间的消息投递记录                            |
+| `agent_deliveries`                    | 已弃用：Runtime 不再写入，仅 Host 侧保留读取        |
 | `context_links`                       | 供 Agent 查询的链接视图                             |
 | `hook_installs`                       | 每个 CLI 的 hook 安装记录                           |
 | `conversations`                       | 会话索引（provider + session id → 标题）            |
