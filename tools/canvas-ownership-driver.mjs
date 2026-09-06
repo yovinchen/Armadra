@@ -65,7 +65,7 @@ export function decodeValue(value) {
   }
   return value;
 }
-export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient, origin, transport, pageOrigin }) {
+export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient, HostFilesystemClient, origin, transport, pageOrigin }) {
   const state = {};
   return {
     async hello() {
@@ -99,11 +99,35 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
           session: state.identity,
           hostId: state.hello.hostId,
         });
+      // The filesystem surface is workspace-scoped like the canvas: which
+      // workspace's root is being asked about is not something a request gets
+      // to claim about itself.
+      if (HostFilesystemClient) {
+        state.filesystem = new HostFilesystemClient({
+          session: state.identity,
+          hostId: state.hello.hostId,
+          workspaceId,
+        });
+      }
       return true;
     },
     async settings(method, args) {
       try {
         return encodeValue(await state.settings[method](...decodeValue(args)));
+      } catch (error) {
+        return {
+          error: {
+            failure: error.failure ?? error.code ?? "unknown",
+            hostCode: error.hostCode ?? "",
+            httpStatus: error.httpStatus ?? 0,
+            outcomeUnknown: error.outcomeUnknown === true,
+          },
+        };
+      }
+    },
+    async filesystem(method, args) {
+      try {
+        return encodeValue(await state.filesystem[method](...decodeValue(args)));
       } catch (error) {
         return {
           error: {
@@ -166,6 +190,7 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
       HostCanvasClient: clients.HostCanvasClient,
       HostOwnershipClient: clients.HostOwnershipClient,
       HostSettingsClient: clients.HostSettingsClient,
+      HostFilesystemClient: clients.HostFilesystemClient,
       origin: appOrigin,
       transport: { fetch: transport },
       pageOrigin: appOrigin,
@@ -180,15 +205,17 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
         client.ownership(method, encodeValue(args)).then(decodeValue),
       settings: (method, args) =>
         client.settings(method, encodeValue(args)).then(decodeValue),
+      filesystem: (method, args) =>
+        client.filesystem(method, encodeValue(args)).then(decodeValue),
     };
   } else {
     const driverSource = join(workspace, "driver-source.mjs");
     writeFileSync(
       driverSource,
-      `import { HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient } from "@armadra/host-client";
+      `import { HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient, HostFilesystemClient, HostFilesystemClient } from "@armadra/host-client";
 import { createDriver } from "./driver-core.mjs";
 globalThis.armadra = createDriver({
-  HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient,
+  HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient, HostFilesystemClient,
   origin: ${JSON.stringify(appOrigin)}, transport: {},
 });
 globalThis.armadraReady = true;
