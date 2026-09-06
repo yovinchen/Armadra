@@ -262,7 +262,9 @@ describe("editor file information", () => {
     await view();
     fireEvent.click(screen.getByRole("button", { name: "Preview" }));
 
-    const heading = await screen.findByText("Title");
+    // 预览与编辑器同屏，CodeMirror 把 `# Title` 也画成文本，所以按标签限定
+    // 这一次查询——不限定的话「谁先画完」决定这条断言过不过。
+    const heading = await screen.findByText("Title", { selector: "h1" });
     expect(heading.tagName).toBe("H1");
     // 裸 HTML 只以文本出现，页面上没有 script 元素。
     expect(document.querySelector(".sticky-markdown script")).toBeNull();
