@@ -9,25 +9,21 @@ import { Button } from "@/ui/button";
 import { useCanvasStore } from "@/store/canvas-store";
 import {
   bindingRepairState,
-  boundFrames,
   consumeArmedInitScript,
   frameBindingOf,
   repositoryForBinding,
-} from "../frame-binding";
-import { nodeBox } from "../geometry";
+} from "../../frame-binding";
 
 /**
  * 绑定徽章（roadmap §3.4 G03）。
  *
- * 挂在 `CanvasOverlays` 里，所以坐标就是页面坐标；徽章自己把指针事件收回来
- * （修复提示上有按钮），外面那层仍然是 `pointer-events: none`。
+ * 宿主是 `flow/nodes/GroupNode.tsx`：Frame 现在是一个真的 DOM 节点，徽章
+ * 直接贴在它的左上角，旧引擎里那一层「按 `nodeBox()` 算页面坐标再绝对定位」
+ * 的 `WorktreeBindingLayer` 整个删掉了。
  *
  * 三件事在这里做：读出分支 / 路径 / 未提交变更数，判定 checkout 还在不在，
  * 以及把创建时排好队的初始化脚本发出去（只发一次，闸在 `frame-binding.ts`）。
  */
-
-/** 徽章相对 frame 左上角的内缩，避开 分组自己的标题。 */
-const INSET = 8;
 
 /** 路径太长时只留尾巴；完整值在 `title` 里。 */
 const MAX_PATH = 34;
@@ -35,38 +31,6 @@ const MAX_PATH = 34;
 export function truncatePath(path: string, max = MAX_PATH): string {
   return path.length <= max ? path : `…${path.slice(path.length - max + 1)}`;
 }
-
-/* --------------------------------- 整层 ----------------------------------- */
-
-export function WorktreeBindingLayer() {
-  const nodes = useCanvasStore((state) => state.document?.nodes);
-  const frames = React.useMemo(() => boundFrames(nodes ?? []), [nodes]);
-  if (frames.length === 0) return null;
-  const list = nodes ?? [];
-  return (
-    <>
-      {frames.map((frame) => {
-        const box = nodeBox(list, frame);
-        return (
-          <div
-            key={frame.id}
-            className="absolute"
-            style={{
-              left: box.x + INSET,
-              top: box.y + INSET,
-              maxWidth: Math.max(box.width - INSET * 2, 160),
-              pointerEvents: "all",
-            }}
-          >
-            <WorktreeBindingBadge node={frame} />
-          </div>
-        );
-      })}
-    </>
-  );
-}
-
-/* -------------------------------- 单个徽章 -------------------------------- */
 
 export function WorktreeBindingBadge({ node }: { node: CanvasNode }) {
   const t = useT();
@@ -294,4 +258,4 @@ function settleInitScript(
   });
 }
 
-export default WorktreeBindingLayer;
+export default WorktreeBindingBadge;

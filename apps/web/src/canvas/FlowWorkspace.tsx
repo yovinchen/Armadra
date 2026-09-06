@@ -74,7 +74,7 @@ import {
 import { AddMenuContent } from "./menus/AddMenuContent";
 import { NodeMenuContent } from "./menus/node-menu";
 import { ShapeMenuContent } from "./menus/shape-menu";
-import { CanvasOverlays } from "./overlays/CanvasOverlays";
+import { CanvasOverlays } from "./flow/overlays/CanvasOverlays";
 import { CanvasStylePanel } from "./StylePanel";
 import { resetProjectionCache, isItemId } from "./sync/project";
 import {

@@ -1,35 +1,41 @@
 import * as React from "react";
 
 import { SubagentCard } from "@/nodes/SubagentCard";
-import { FrameReferenceBadges } from "@/panels/github/FrameReferenceBadges";
 import { useCanvasStore } from "@/store/canvas-store";
-import { ropeLabel, useDerivedEdges, type DerivedEdge } from "../derived-edges";
-import { bezierPath, edgeGeometry, nodeBox, type Box } from "../geometry";
+import {
+  ropeLabel,
+  useDerivedEdges,
+  type DerivedEdge,
+} from "../../derived-edges";
+import { bezierPath, edgeGeometry, nodeBox, type Box } from "../../geometry";
 import {
   CARD_HEIGHT,
   useSubagentPlacements,
   type SubagentPlacement,
-} from "../SubagentLayer";
-import { WorktreeBindingLayer } from "./WorktreeBindingBadge";
+} from "../../SubagentLayer";
 
 /**
  * 派生层（旧画布契约 §4.4）：rope 等待关系 + 子代理卡片。
  *
- * 挂在 `components.OnTheCanvas` 上，也就是 `.tl-html-layer` 里面——那一层
- * 已经被相机变换过了，所以这里的坐标**就是页面坐标**，不必自己乘缩放。
+ * 挂在 `<ViewportPortal>` 里，也就是 `.react-flow__viewport` 内部——那一层
+ * 已经被相机变换过了，所以这里的坐标**就是画布坐标**，不必自己乘缩放。
  *
  * 这一层不入库、不可选中、不进撤销，所以整块 `pointer-events: none`，
  * 只有子代理卡片自己把指针事件收回去（它有展开按钮）。
+ *
+ * 绑定徽章与 GitHub 徽标不再在这里：Frame 现在是一个真的 DOM 节点，
+ * 两个徽章直接由 `flow/nodes/GroupNode.tsx` 渲染（F08），页面坐标换算
+ * 整段消失。
  */
 
 /** 虚线流动的周期长度；`stroke-dasharray` 是 `6 4`，一轮正好 10。 */
 export const ROPE_DASH = "6 4";
 
-/** `⏳` 的字号与底衬半径（页面单位；跟着相机缩放，和节点上的文字同一档）。 */
+/** `⏳` 的字号与底衬半径（画布单位；跟着相机缩放，和节点上的文字同一档）。 */
 const LABEL_FONT_SIZE = 12;
 const LABEL_RADIUS = 9;
 
-/** SVG 用页面坐标，而页面坐标可以是负的，所以往四周各铺这么远。 */
+/** SVG 用画布坐标，而画布坐标可以是负的，所以往四周各铺这么远。 */
 const CANVAS_SPAN = 100_000;
 
 export function CanvasOverlays() {
@@ -54,10 +60,6 @@ export function CanvasOverlays() {
 
   return (
     <>
-      {/* 绑定徽章（G03）自己判断有没有要画的，和绳子 / 子代理各走各的。 */}
-      <WorktreeBindingLayer />
-      {/* 分组上的 GitHub 关联徽标：frame 没有节点体，只能挂在这一层。 */}
-      <FrameReferenceBadges />
       {edges.length > 0 ? (
         <svg
           aria-hidden
@@ -77,20 +79,25 @@ export function CanvasOverlays() {
         </svg>
       ) : null}
       {placements.map((placement) => (
-        <div
-          key={placement.id}
-          className="absolute"
-          style={{
-            left: placement.x,
-            top: placement.y,
-            width: placement.width,
-            pointerEvents: "all",
-          }}
-        >
-          <SubagentCard card={placement.card} />
-        </div>
+        <SubagentSlot key={placement.id} placement={placement} />
       ))}
     </>
+  );
+}
+
+function SubagentSlot({ placement }: { placement: SubagentPlacement }) {
+  return (
+    <div
+      className="absolute"
+      style={{
+        left: placement.x,
+        top: placement.y,
+        width: placement.width,
+        pointerEvents: "all",
+      }}
+    >
+      <SubagentCard card={placement.card} />
+    </div>
   );
 }
 
