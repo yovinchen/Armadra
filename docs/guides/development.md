@@ -78,6 +78,17 @@ Runtime 把它导入自己的 `canvas.db` 并回读逐项核验，再断言 Host
 `CANVAS_E2E_SKIP_APP=1` 跳过浏览器部分（改从 Node 走同一 TLS 代理），或用 `CHROME_PATH` 指定浏览器，脚本不下载任何东西。
 构建缓存命中时整轮约 20 秒，跳过浏览器部分约 15 秒；首次构建 Runtime 与 Web 产物另计。
 
+`pnpm agent:smoke <runtime 绝对路径> <hook 绝对路径> <pi|omp|copilot|opencode>` 用真实 CLI 验证状态通道：
+临时数据目录起 Runtime（端口由内核分配），装适配、建 Agent 节点、跑一个回合，断言节点依次出现
+`working → done`、`stateSource` 与该适配的通道一致（命令 Hook 为 `hook`，进程内扩展为 `extension`），
+Pi / OMP 另外断言 `context-usage` 返回 `provider_hook / reported`，卸载后安装前就有的文件字节不变。
+两个路径参数要给绝对路径：它们会写进 CLI 的配置文件，而 CLI 从自己的工作目录解析。
+CLI 不在 PATH 或起不来时打印原因并以 0 退出。真实凭据不动用户配置：脚本给 Runtime 一个临时 `HOME`
+（`COPILOT_HOME` 等变量不在终端子进程的继承白名单里，只有 `HOME` 两边一致），把该 CLI 的凭据与模型设置
+**复制**进去，macOS 另把 `~/Library/Keychains` 软链过去供 `security` 读取；失败时保留临时目录并打印路径。
+`pnpm handoff:read-smoke <runtime> <hook> [source] [target]` 走交接的读取与确认，默认 `claude`→`codex`，
+可换成任意两个声明了 `hooks` 的 Agent。
+
 `armadra.sh check` 执行 shared 构建、TS 检查、Rust fmt / clippy；`test` 执行 shared、web 与 Rust workspace 测试。
 它们不替代独立的 Go、协议与桌面脚本检查。`all` 执行 doctor → install → check → build → run。
 

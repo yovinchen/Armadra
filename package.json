@@ -10,6 +10,7 @@
     "host:bootstrap-smoke": "node tools/host-bootstrap-smoke.mjs",
     "host:lifecycle-smoke": "node tools/host-lifecycle-smoke.mjs",
     "handoff:read-smoke": "node tools/handoff-read-smoke.mjs",
+    "agent:smoke": "node tools/agent-channel-smoke.mjs",
     "host:smoke": "node tools/host-smoke.mjs",
     "canvas:e2e": "node tools/canvas-ownership-e2e.mjs",
     "ownership:e2e": "node tools/ownership-e2e.mjs",
