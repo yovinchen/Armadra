@@ -1,15 +1,16 @@
 /**
  * 左侧 docked 侧栏（§20 →§22 →§26）。
  *
- * 顶栏删掉之后，侧栏顶部这 44px 接管了 macOS 红绿灯的位置：整条是窗口拖拽区。
+ * 顶栏删掉之后，侧栏顶部这 44px 让位给 macOS 红绿灯：这里只留一条空占位，
+ * 拖拽本身由全局的 `WindowDragLayer` 铺在窗口最上面那 44px 上统一接管
+ * （折叠与展开都在，侧栏收到 0 宽也不会缺一块）。
  * 折叠按钮就贴在红绿灯右侧，**画在侧栏外面**（fixed），所以侧栏收到 0 宽之后
- * 它还在标题栏的同一个位置上——这正是 Codex 桌面版的做法。折叠时侧栏那条
- * 拖拽区跟着消失，于是左上角单独留一条同高的拖拽带，否则无边框窗口没地方拖。
+ * 它还在标题栏的同一个位置上——这正是 Codex 桌面版的做法。
  *
  * 折叠是把宽度收到 0（150ms 过渡）而不是卸载：里面的会话查询、树的展开状态、
  * 滚动位置都保住，展开时不用重来一遍；画布自己盯着容器尺寸重排。
  *
- * 自上而下：拖拽区 / 工作空间名 + 搜索 + 通知 / 新建看板 / 置顶 / 项目 / 设置。
+ * 自上而下：标题栏占位 / 工作空间名 + 搜索 + 通知 / 新建看板 / 置顶 / 项目 / 设置。
  */
 import { PanelLeft, Settings } from "lucide-react";
 
@@ -24,7 +25,7 @@ import { Button } from "@/ui/button";
 import { IconButton } from "@/ui/icon-button";
 import { Separator } from "@/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
-import { DRAG_REGION, NO_DRAG_REGION, trafficLightInset } from "./window-region";
+import { noDragProps, trafficLightInset } from "./window-region";
 
 export function LeftSidebar() {
   const t = useT();
@@ -32,15 +33,6 @@ export function LeftSidebar() {
 
   return (
     <>
-      {!open && (
-        <div
-          aria-hidden
-          data-testid="window-drag-strip"
-          style={DRAG_REGION}
-          className="fixed top-0 left-0 z-[var(--z-tabbar)] h-[var(--tabbar-h)] w-[120px]"
-        />
-      )}
-
       <SidebarToggle open={open} />
 
       <aside
@@ -53,8 +45,7 @@ export function LeftSidebar() {
         <div className="flex h-full w-[var(--sidebar-w)] flex-col overflow-hidden">
           <div
             aria-hidden
-            data-testid="window-drag-region"
-            style={DRAG_REGION}
+            data-testid="window-titlebar-inset"
             className="h-[var(--tabbar-h)] shrink-0"
           />
           <SidebarHeader />
@@ -82,7 +73,8 @@ function SidebarToggle({ open }: { open: boolean }) {
 
   return (
     <div
-      style={{ ...NO_DRAG_REGION, left: trafficLightInset() + 8 }}
+      {...noDragProps()}
+      style={{ left: trafficLightInset() + 8 }}
       className="fixed top-[9px] z-[calc(var(--z-tabbar)+1)]"
     >
       <Tooltip delayDuration={500}>

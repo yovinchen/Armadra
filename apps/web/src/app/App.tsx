@@ -16,6 +16,7 @@ import { ControlsCluster } from "../shell/ControlsCluster";
 import { Dock } from "../shell/Dock";
 import { LeftSidebar } from "../shell/LeftSidebar";
 import { UsageOrb } from "../shell/UsageOrb";
+import { WindowDragLayer } from "../shell/WindowDragLayer";
 import { useCanvasStore } from "../store/canvas-store";
 import { Toaster } from "@/ui/sonner";
 import { TooltipProvider } from "@/ui/tooltip";
@@ -65,6 +66,7 @@ function AppShell() {
     return (
       <>
         <Launcher />
+        <WindowDragLayer />
         <Suspense fallback={null}>
           <SettingsDialog />
         </Suspense>
@@ -80,6 +82,7 @@ function AppShell() {
         <TldrawWorkspace />
       </div>
       <ControlsCluster />
+      <WindowDragLayer />
       <Dock />
       <UsageOrb />
       <Banners />

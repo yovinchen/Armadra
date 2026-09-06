@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import type { Workspace } from "@armadra/shared";
 
 vi.mock("../api/client", () => ({
@@ -79,11 +85,10 @@ describe("LeftSidebar", () => {
     expect(screen.getByText("新建看板")).toBeTruthy();
     expect(screen.getByText("项目")).toBeTruthy();
     expect(screen.getByText("设置")).toBeTruthy();
-    expect(screen.getByTestId("window-drag-region")).toBeTruthy();
-    expect(screen.queryByTestId("window-drag-strip")).toBeNull();
+    expect(screen.getByTestId("window-titlebar-inset")).toBeTruthy();
   });
 
-  it("折叠钮留在标题栏，折叠后左上角补一条拖拽带", () => {
+  it("折叠钮留在标题栏，拖拽交给全局拖拽层，这里不再自带拖拽带", () => {
     renderSidebar();
     const toggle = screen.getByLabelText("收起侧栏");
 
@@ -91,9 +96,7 @@ describe("LeftSidebar", () => {
     expect(useCanvasStore.getState().panels.sidebar).toBe("collapsed");
     // 折叠之后按钮还在（同一个元素，没有被卸载），只是换了名字
     expect(screen.getByLabelText("展开侧栏")).toBe(toggle);
-
-    const strip = screen.getByTestId("window-drag-strip");
-    expect(strip.className).toContain("w-[120px]");
+    expect(screen.queryByTestId("window-drag-strip")).toBeNull();
   });
 
   it("搜索打开命令面板，通知打开投递记录", () => {
