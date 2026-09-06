@@ -528,7 +528,7 @@ pub async fn target(state: &AppState, request: TargetRequest) -> AppResult<Targe
     };
     if !state
         .terminals
-        .handoff_idle(&node.id, &session_id, generation)
+        .input_idle(&node.id, &session_id, generation)
         .await
     {
         return Ok(TargetStatus::on(

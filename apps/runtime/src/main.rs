@@ -239,10 +239,6 @@ async fn main() -> anyhow::Result<()> {
     resources.power().start();
     // Endpoint file, unix socket listener and the 60s stale-agent sweep.
     hook::start(state.clone(), bound_port);
-    // Accepted handoffs are delivered by this worker, never by the request that
-    // accepted them: the target has to be idle first, and a queued notification
-    // stays cancellable until it is actually written.
-    let mut handoffs = armadra_runtime::handoff::start_background(state.clone());
     // Controlled browser sessions outlive the Runtime (B01, design §9): every
     // kept session is relaunched from its own profile and re-navigated to the
     // URL it was on. Its page state does not come back, and the design says so
@@ -302,13 +298,9 @@ async fn main() -> anyhow::Result<()> {
             return Ok(());
         },
     };
-    // Stop claiming queued handoffs before the terminals go away, so a paste is
-    // never attempted into a session that is already being torn down. A worker
-    // that is still draining is reported, not silently ignored: the outcome of
-    // an in-flight write is exactly what a user needs to know about.
-    if let Err(error) = handoffs.shutdown(Duration::from_secs(4)).await {
-        tracing::error!(%error, "Handoff delivery shutdown did not complete");
-    }
+    // An accepted handoff needs nothing from shutdown: it was written to the
+    // target's mailbox inside the request that approved it, so there is no
+    // in-flight write whose outcome a restart could lose.
     // Filesystem watchers hold OS handles and a drain thread each; they are
     // released as soon as admission stops, before the slower cleanups run.
     armadra_runtime::file_watch::shutdown();

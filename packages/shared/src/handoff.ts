@@ -84,16 +84,21 @@ export const handoffBundleSchema = z.object({
     omitted: z.array(z.string()),
   }),
 });
+/**
+ * 交接的四个状态。
+ *
+ * 冻结（`prepared`）→ 用户批准，材料进目标收件箱（`queued`）→ 目标自己确认
+ * 那条消息（`acknowledged`），或者来源撤回、收件箱那条被删掉（`cancelled`）。
+ *
+ * 不再有 `dispatching` / `notified` / `unknownOutcome` / `failed` / `expired`：
+ * 它们描述的是「往对方终端里写」这件事的各种结果，而现在没有这个动作。旧库里
+ * 留下的那些值由 Runtime 读出来时归一成 `queued`——批准过、进了信箱、没被确认。
+ */
 export const handoffStateSchema = z.enum([
   "prepared",
   "queued",
-  "dispatching",
-  "notified",
   "acknowledged",
-  "unknownOutcome",
-  "failed",
   "cancelled",
-  "expired",
 ]);
 export const handoffViewSchema = z.object({
   bundle: handoffBundleSchema,
@@ -105,18 +110,6 @@ export const handoffViewSchema = z.object({
   acceptedAt: z.string().nullable(),
   updatedAt: z.string(),
   sourceHasNewActivity: z.boolean(),
-  /**
-   * How many times delivery has been claimed. A refusal the gate proved
-   * returns the notification to the queue, so `state` alone cannot say whether
-   * this is the first try or the twentieth.
-   */
-  attempts: z.number().int().nonnegative().default(0),
-  /**
-   * What the delivery queue did, beside what the handoff is: `pending`,
-   * `dispatching`, `sent`, `unknown` or `cancelled`. Absent on a prepared
-   * handoff, which has not been queued at all.
-   */
-  outboxState: z.string().nullable().default(null),
 });
 export const handoffListSchema = z.array(handoffViewSchema);
 export type HandoffSections = z.infer<typeof handoffSectionsSchema>;

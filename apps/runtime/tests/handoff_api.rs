@@ -2,9 +2,8 @@
 //!
 //! The module functions are unit-tested next to their own code; what is tested
 //! here is the door itself: that a workspace id in the path is the only
-//! workspace a request can reach, that approving twice does not queue a second
-//! notification, and that a cancelled handoff leaves nothing for the delivery
-//! worker to pick up.
+//! workspace a request can reach, that approving twice leaves one inbox entry
+//! rather than two, and that withdrawing takes that entry back out.
 use armadra_runtime::{
     AppState, db, events::EventHub, hook::HookService, model::ContextLink, router_with_state,
     settings::SettingsStore, terminal::TerminalManager, usage::UsageService,
@@ -234,9 +233,19 @@ async fn handoff_routes_preview_then_accept_once_and_never_leak_across_workspace
     assert_eq!(status, StatusCode::OK, "{accepted}");
     assert_eq!(accepted["state"], "queued");
     assert_eq!(mailbox_count(&fixture.pool).await, 1);
+    // Approving is the whole of delivery: the material is in the target's
+    // inbox under a key naming this handoff, and nothing was written anywhere
+    // a terminal could scroll away.
+    assert_eq!(
+        message_key(&fixture.pool).await,
+        format!("handoff:{id}"),
+        "the inbox entry does not name this handoff"
+    );
+    assert_eq!(outbox_rows(&fixture.pool).await, 0);
+    assert_eq!(delivery_rows(&fixture.pool).await, 0);
 
-    // Approving again returns the same queued notification rather than a
-    // second one: a double click is not a second delivery.
+    // Approving again returns the same inbox entry rather than a second one: a
+    // double click is not two copies of somebody's work.
     let (status, again) = request(
         &fixture.app,
         "POST",
@@ -246,12 +255,12 @@ async fn handoff_routes_preview_then_accept_once_and_never_leak_across_workspace
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(again["mailboxId"], accepted["mailboxId"]);
+    assert_eq!(again["state"], "queued");
     assert_eq!(mailbox_count(&fixture.pool).await, 1);
-    assert_eq!(outbox_state(&fixture.pool, &id).await, "pending");
 }
 
 #[tokio::test]
-async fn cancelling_a_queued_handoff_withdraws_it_before_anything_is_written() {
+async fn cancelling_a_queued_handoff_takes_the_inbox_entry_back_out() {
     let fixture = fixture().await;
     let base = format!("/api/workspaces/{}/handoffs", fixture.workspace_id);
     let (_, prepared) = request(&fixture.app, "POST", &base, fixture.prepare_body.clone()).await;
@@ -276,18 +285,9 @@ async fn cancelling_a_queued_handoff_withdraws_it_before_anything_is_written() {
     .await;
     assert_eq!(status, StatusCode::OK, "{cancelled}");
     assert_eq!(cancelled["state"], "cancelled");
-    // The pending mailbox message is withdrawn and the outbox row leaves the
-    // `pending` state the delivery worker selects on, so nothing is written to
-    // the target afterwards.
+    // Withdrawing is deleting the inbox entry. There is nothing else to undo:
+    // the target's next `inbox` simply does not list it.
     assert_eq!(mailbox_count(&fixture.pool).await, 0);
-    assert_eq!(outbox_state(&fixture.pool, &id).await, "cancelled");
-    let claimable: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM agent_handoffs h JOIN agent_handoff_outbox o ON o.handoff_id=h.id WHERE o.state='pending' AND h.state='queued'",
-    )
-    .fetch_one(&fixture.pool)
-    .await
-    .unwrap();
-    assert_eq!(claimable, 0);
 
     // Cancelling again is refused rather than pretending it withdrew something.
     let (status, _) = request(
@@ -306,9 +306,22 @@ async fn mailbox_count(pool: &sqlx::SqlitePool) -> i64 {
         .await
         .unwrap()
 }
-async fn outbox_state(pool: &sqlx::SqlitePool, id: &str) -> String {
-    sqlx::query_scalar("SELECT state FROM agent_handoff_outbox WHERE handoff_id=?")
-        .bind(id)
+async fn message_key(pool: &sqlx::SqlitePool) -> String {
+    sqlx::query_scalar("SELECT message_key FROM agent_mailbox")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+/// Both tables survive their published migrations and neither is written any
+/// more. A row in either would mean a delivery path came back.
+async fn outbox_rows(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM agent_handoff_outbox")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+async fn delivery_rows(pool: &sqlx::SqlitePool) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM agent_deliveries")
         .fetch_one(pool)
         .await
         .unwrap()

@@ -36,11 +36,13 @@ export function HandoffBadge({ nodeId }: { nodeId: string }) {
     retry: false,
     staleTime: Infinity,
   });
+  // 交接的状态只在目标自己 `ack` 那条收件箱消息时变一次，而那必然发生在目标
+  // 的一个回合里，所以跟着它的状态上报刷新即可：没有投递事件可听，也不需要
+  // 为一个 chip 起一路轮询。
   React.useEffect(
     () =>
-      onWorkspaceEvent("agent.delivery", (event) => {
-        if (event.sourceNodeId !== nodeId && event.targetNodeId !== nodeId)
-          return;
+      onWorkspaceEvent("agent.status", (event) => {
+        if (event.status.nodeId !== nodeId) return;
         void client.invalidateQueries({ queryKey: key });
       }),
     [client, key, nodeId],

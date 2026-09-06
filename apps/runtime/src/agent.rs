@@ -68,7 +68,7 @@ pub fn state_source_for(provider: &str) -> Option<&'static str> {
 /// The one question every gate has to ask. `hook` and `extension` are two
 /// transports for the same authenticated report and both count; `observed` and
 /// "nothing has reported" do not, and §3.4 is explicit that an observation may
-/// never satisfy `handoff_idle` or the `send` idle gate. Written here, once, so
+/// never satisfy `input_idle`, the scheduler's gate. Written here, once, so
 /// a later caller cannot accidentally spell it as "the source is set".
 pub fn state_source_is_reported(source: Option<&str>) -> bool {
     matches!(source, Some(STATE_SOURCE_HOOK | STATE_SOURCE_EXTENSION))

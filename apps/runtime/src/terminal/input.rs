@@ -253,26 +253,19 @@ impl TerminalManager {
         self.note_observed_state_source(session_id).await;
     }
 
+    /// The serialized delivery gate a scheduled prompt goes through, reporting
+    /// the session's input revision immediately after our own frame. The
+    /// scheduler needs that number: a turn that finishes later is only
+    /// attributable to this paste while it is still the newest input on the
+    /// session.
+    ///
     /// Only preflight failures prove no input was submitted. Once the backend
     /// is called, any failure is uncertain and must never trigger blind retry.
     /// Key ownership stays locked across generation/idle checks and the frame.
-    pub async fn paste_handoff(
-        &self,
-        node_id: &str,
-        session_id: &str,
-        generation: u64,
-        expected_programs: &[String],
-        text: &str,
-    ) -> GuardedPasteOutcome {
-        self.guarded_paste(node_id, session_id, generation, expected_programs, text)
-            .await
-            .0
-    }
-
-    /// The same serialized delivery gate, additionally reporting the session's
-    /// input revision immediately after our own frame. A scheduled delivery
-    /// needs that number: a turn that finishes later is only attributable to
-    /// this paste while it is still the newest input on the session.
+    ///
+    /// The one caller is `automation`: a run the user scheduled, writing a
+    /// prompt the user wrote. No agent can reach this — a peer's message goes
+    /// to the mailbox and waits to be read.
     pub async fn guarded_paste(
         &self,
         node_id: &str,
@@ -288,7 +281,7 @@ impl TerminalManager {
             return (GuardedPasteOutcome::NotWritten("targetUnavailable"), None);
         };
         let _key_guard = self.key_gate(&first.key).lock_owned().await;
-        if !self.handoff_idle(node_id, session_id, generation).await {
+        if !self.input_idle(node_id, session_id, generation).await {
             return (GuardedPasteOutcome::NotWritten("targetBusy"), None);
         }
         let Ok(record) = self.checked(session_id, generation).await else {

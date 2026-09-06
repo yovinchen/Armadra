@@ -3,7 +3,8 @@
 //! Two kinds of knowledge live here and they must not be confused. An
 //! [`AgentObservation`] is a *report*: an adapter inside the CLI posted it over
 //! `hook.sock` with a bearer token, a node token and a terminal binding, and it
-//! is what `handoff_idle` and the `send` idle gate are allowed to believe. The
+//! is what `input_idle` — the automation scheduler's gate — is allowed to
+//! believe. The
 //! rest of this module is the PTY-side guess of 协作通道 §3.4, for a terminal
 //! that has no adapter at all: it reads the clock beside counters the pump
 //! already keeps, it may say `state_source = observed`, and that is the end of
@@ -56,9 +57,9 @@ impl TerminalManager {
     /// The three prohibitions of §3.4 are structural rather than remembered:
     /// the only write is [`crate::db::set_agent_state_source`], which cannot
     /// reach `state`, cannot create a row, and leaves `updated_at` alone; the
-    /// gates in `handoff_idle` and `collab::messaging` read
-    /// [`AgentObservation`] and `state_source_is_reported`, neither of which
-    /// this touches; and nothing here flushes a delivery queue.
+    /// gate in `input_idle` reads [`AgentObservation`] and
+    /// `state_source_is_reported`, neither of which this touches; and there is
+    /// no delivery queue left for it to flush.
     ///
     /// It refuses to overwrite a source that *is* a report. An adapter that
     /// posted a minute ago and has been quiet since is still the node's status
@@ -193,7 +194,7 @@ impl TerminalManager {
         true
     }
 
-    pub async fn handoff_idle(&self, node_id: &str, session_id: &str, generation: u64) -> bool {
+    pub async fn input_idle(&self, node_id: &str, session_id: &str, generation: u64) -> bool {
         if !self
             .is_current_node_session(node_id, session_id, generation)
             .await

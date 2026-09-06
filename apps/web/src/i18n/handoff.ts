@@ -3,12 +3,12 @@ import type { MessageModule } from "./index";
 /**
  * 对话交接文案（docs/design/agent-automation-design.md §7）。
  *
- * 措辞上有两条硬规矩，和 Runtime 那边的 `delivery::notice` 是一致的：
+ * 措辞上有两条硬规矩，和 Runtime 那边的 `handoff::notice` 是一致的：
  *
  *  1. 交接包是**资料**，不是系统指令，也不转移任何权限批准。界面上不能出现
  *     「让对方执行」「已交给对方继续」这类把资料说成命令的说法。
- *  2. 通知送达 ≠ 对方看过、做过或做完。状态文案只描述这一侧观察到的事实，
- *     `unknownOutcome` 就写「结果未知」，不许美化成「已送达」。
+ *  2. 进了对方收件箱 ≠ 对方看过、做过或做完。四个状态只说这一侧能证明的事：
+ *     冻结了、进了收件箱、对方自己确认了、撤回了。
  */
 const zh = {
   "handoff.open": "交接到…",
@@ -47,18 +47,13 @@ const zh = {
   "handoff.noExcerpt": "没有可用的转录摘录",
   "handoff.status": "状态",
   "handoff.prepared": "已冻结，等待确认",
-  "handoff.queued": "已排队，等目标空闲",
-  "handoff.dispatching": "正在写入目标",
-  "handoff.notified": "通知已写入目标输入框",
+  "handoff.queued": "已放进目标的收件箱",
   "handoff.acknowledged": "目标已确认收到",
-  "handoff.unknownOutcome": "写入结果未知",
-  "handoff.failed": "没有送达",
   "handoff.cancelled": "已撤回",
-  "handoff.expired": "已过期",
-  "handoff.notifiedNote":
-    "写进了目标的输入框，没有替它回车。对方是否阅读、如何处理由它自己决定。",
+  "handoff.queuedNote":
+    "没有写进对方的终端。它什么时候读、读不读、怎么处理，由它自己决定。",
   "handoff.reason": "原因：{code}",
-  "handoff.accepted": "已确认，等目标空闲时通知。",
+  "handoff.accepted": "已确认，材料已放进目标的收件箱。",
   "handoff.cancelledToast": "已撤回这次交接。",
   "handoff.history": "本节点的交接",
   "handoff.noHistory": "还没有交接记录",
@@ -67,8 +62,6 @@ const zh = {
   "handoff.historyAgents": "来源 → 目标",
   "handoff.historyCreated": "冻结时间",
   "handoff.historyUpdated": "最近更新",
-  "handoff.historyAttempts": "投递尝试",
-  "handoff.historyQueue": "队列状态",
   "handoff.historyReason": "原因码",
   "handoff.noWorkspace": "先打开一个工作空间",
   "handoff.reload": "刷新",
@@ -117,18 +110,13 @@ const en: Record<keyof typeof zh, string> = {
   "handoff.noExcerpt": "No transcript excerpt was available",
   "handoff.status": "Status",
   "handoff.prepared": "Frozen, waiting for your confirmation",
-  "handoff.queued": "Queued until the target is idle",
-  "handoff.dispatching": "Writing to the target",
-  "handoff.notified": "Notice written to the target's input",
+  "handoff.queued": "In the target's inbox",
   "handoff.acknowledged": "The target acknowledged it",
-  "handoff.unknownOutcome": "Write outcome unknown",
-  "handoff.failed": "Not delivered",
   "handoff.cancelled": "Withdrawn",
-  "handoff.expired": "Expired",
-  "handoff.notifiedNote":
-    "Written into the target's input without pressing Return. Whether it reads or acts on it is its own decision.",
+  "handoff.queuedNote":
+    "Nothing was written into the target's terminal. When it reads this, and whether it acts on it, is its own decision.",
   "handoff.reason": "Reason: {code}",
-  "handoff.accepted": "Confirmed. The target is notified once it is idle.",
+  "handoff.accepted": "Confirmed. The material is in the target's inbox.",
   "handoff.cancelledToast": "This handoff was withdrawn.",
   "handoff.history": "Handoffs for this node",
   "handoff.noHistory": "No handoffs yet",
@@ -137,8 +125,6 @@ const en: Record<keyof typeof zh, string> = {
   "handoff.historyAgents": "Source → target",
   "handoff.historyCreated": "Frozen at",
   "handoff.historyUpdated": "Last change",
-  "handoff.historyAttempts": "Delivery attempts",
-  "handoff.historyQueue": "Queue state",
   "handoff.historyReason": "Reason code",
   "handoff.noWorkspace": "Open a workspace first",
   "handoff.reload": "Reload",

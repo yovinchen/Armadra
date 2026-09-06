@@ -140,8 +140,8 @@ pub async fn upsert_agent_status(
 ///
 /// This is the door §3.4's PTY-side observation comes through, and the only
 /// one: the design forbids an observation from writing `agent_status.state`,
-/// from satisfying `handoff_idle` or the `send` idle gate, and from draining a
-/// delivery queue. A separate statement is what makes that enforceable — the
+/// and from satisfying `input_idle`, the scheduler's gate. A separate
+/// statement is what makes that enforceable — the
 /// upsert above cannot be reached with a state left alone, and this one cannot
 /// reach `state`.
 ///

@@ -14,14 +14,12 @@ import { useCanvasStore } from "@/store/canvas-store";
 /**
  * 工作空间的交接历史（自动化设计 §7）。
  *
- * 三条规矩：
+ * 两条规矩：
  *
  *  1. 来源与目标读的是**冻结在包里**的身份，不重新解析当前画布。节点被删掉
  *     之后，这条记录仍然要说清当时那次交接发生在谁和谁之间。
- *  2. 「已投递」和「已确认」分开显示，`unknownOutcome` 自成一行——写进输入框
- *     不等于对方读过或做完，写入结果未知更不等于失败。
- *  3. 重试次数是投递门认领的次数，不是成功次数：目标忙、前台不是那个 Agent
- *     都会把通知退回队列，只看状态分不出第一次和第二十次。
+ *  2. 「已放进收件箱」和「目标已确认」分开显示：材料进了信箱不等于对方读过
+ *     或做完，只有对方自己 `ack` 那条消息才是确认。
  */
 export function HandoffHistoryDrawer() {
   const t = useT();
@@ -150,14 +148,6 @@ function HandoffRow({
         <dd>{at(view.bundle.createdAt)}</dd>
         <dt>{t("handoff.historyUpdated")}</dt>
         <dd>{at(view.updatedAt)}</dd>
-        <dt>{t("handoff.historyAttempts")}</dt>
-        <dd>{view.attempts}</dd>
-        {view.outboxState ? (
-          <>
-            <dt>{t("handoff.historyQueue")}</dt>
-            <dd>{view.outboxState}</dd>
-          </>
-        ) : null}
         {reason ? (
           <>
             <dt>{t("handoff.historyReason")}</dt>

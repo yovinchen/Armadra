@@ -31,15 +31,13 @@ function view(overrides: Partial<HandoffView> = {}): HandoffView {
       sections: { goal: "接手索引重建" },
     },
     digest: "digest-1",
-    state: "unknownOutcome",
+    state: "queued",
     mailboxId: "mailbox-1",
     traceId: "trace-1",
-    errorCode: "writeOutcomeUnknown",
+    errorCode: null,
     acceptedAt: "2026-09-05T10:01:00.000Z",
     updatedAt: "2026-09-05T10:02:00.000Z",
     sourceHasNewActivity: false,
-    attempts: 3,
-    outboxState: "unknown",
     ...overrides,
   } as unknown as HandoffView;
 }
@@ -62,19 +60,17 @@ beforeEach(() => {
 });
 
 describe("handoff history", () => {
-  it("reads the frozen identities, the attempts and the reason code", async () => {
+  it("reads the frozen identities and where the material stands", async () => {
     api.workspaceHandoffs.mockResolvedValue([view()]);
     draw();
     // The row names both ends, in the direction the material travelled.
     expect(await screen.findByText("夜间构建")).toBeTruthy();
     expect(screen.getByText("复盘")).toBeTruthy();
     expect(screen.getByText("claude → codex")).toBeTruthy();
-    // An unknown write outcome is its own state, never a failure and never a
-    // delivery, and the machine token is shown as-is rather than translated.
-    expect(screen.getByText("写入结果未知")).toBeTruthy();
-    expect(screen.getByText("writeOutcomeUnknown")).toBeTruthy();
-    // Retries are countable: "queued" alone cannot tell one try from twenty.
-    expect(screen.getByText("3")).toBeTruthy();
+    // "In the inbox" is as much as this side can say. It is not "delivered",
+    // and it is certainly not "acknowledged" — only the target says that.
+    expect(screen.getByText("已放进目标的收件箱")).toBeTruthy();
+    expect(screen.queryByText("目标已确认收到")).toBeNull();
   });
 
   it("says it could not read the history rather than showing none", async () => {

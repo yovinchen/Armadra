@@ -6,22 +6,22 @@
  * node token that terminal was issued, and the real hook client reading and
  * acknowledging through them. This script drives exactly that path.
  *
- * It asserts three things the design turns on:
+ * It asserts four things the design turns on:
  *
- *   1. the target Agent can read the frozen bundle, and what comes back is
+ *   1. approving puts one `handoff:<id>` message in the target's inbox and
+ *      writes nothing into its terminal;
+ *   2. the target Agent can read the frozen bundle, and what comes back is
  *      labelled peer data rather than an instruction;
- *   2. reading is not acknowledging — the handoff is still unacknowledged
+ *   3. reading is not acknowledging — the handoff is still unacknowledged
  *      afterwards;
- *   3. `canvas ack` is what acknowledges it, and only from the session the
- *      handoff was addressed to.
+ *   4. `canvas ack` is what acknowledges it, and only from the session the
+ *      handoff was addressed to; withdrawing takes the inbox entry back out.
  *
- * The source and target Agents are arguments, because the fourth thing this
- * covers is which CLIs can be handed off *to* at all. Delivery is gated on the
- * target having reported an idle turn through a hook the runtime believes
- * (`readiness` in `handoff/delivery.rs`), and before Pi, Oh My Pi and Copilot
- * had adapters that gate refused them with `idleHookUnavailable` and the
- * handoff stopped at `queued`. So the script asserts the state reaches
- * `notified`, which is the difference those adapters make.
+ * The source and target Agents are arguments because handing off *to* a CLI no
+ * longer depends on that CLI having a status adapter: nothing waits for the
+ * target to be idle, so `queued` is reached for every CLI, including Pi, Oh My
+ * Pi and Copilot. What the arguments still cover is the whole round trip
+ * running under each CLI's own node identity and session binding.
  *
  * Each fixture speaks its own provider's payload shape and event names — the
  * point is to exercise the real normalizer, and Copilot in particular sends no
@@ -48,8 +48,8 @@ import { setTimeout as sleep } from "node:timers/promises";
  * Three payloads each: open the session, start a turn, end it idle. The order
  * is not decoration — `reduce` treats a session event as "forget the last
  * turn", and rule 2 drops an idle report for a node that was not working. A
- * fixture that skipped either step would leave the delivery gate waiting
- * forever for a `done` that never arrives.
+ * fixture that skipped either step would never reach `done`, and `awaitIdle`
+ * below is what the rest of the script is waiting on.
  */
 const EVENTS = {
   claude: [
@@ -62,10 +62,12 @@ const EVENTS = {
     '{"hook_event_name":"UserPromptSubmit"}',
     '{"hook_event_name":"Stop"}',
   ],
+  // Gemini shares Claude's payload schema but not its event names: the agent
+  // loop is bracketed by `BeforeAgent` / `AfterAgent` (`normalize/gemini.rs`).
   gemini: [
     '{"hook_event_name":"SessionStart"}',
-    '{"hook_event_name":"UserPromptSubmit"}',
-    '{"hook_event_name":"Stop"}',
+    '{"hook_event_name":"BeforeAgent"}',
+    '{"hook_event_name":"AfterAgent"}',
   ],
   // The generated extension posts flat camelCase names over the same socket.
   // Pi settles through `agent_settled`, which is the event that carries `idle`.
@@ -142,8 +144,8 @@ for (const name of [sourceAgent, targetAgent]) {
     { mode: 0o700 },
   );
 }
-// The direct PTY backend: the delivery gate reads the fixture Agent's own argv,
-// and a tmux pane would report its shell instead.
+// The direct PTY backend: the fixture Agent has to be the pane's own argv, and
+// a tmux pane would report its shell instead.
 writeFileSync(
   join(dataDir, "settings.json"),
   JSON.stringify({
@@ -185,7 +187,7 @@ async function main() {
   const workspace = await call(base, "POST", "/api/workspaces", {
     name: "handoff smoke",
     rootPath: projectDir,
-    // Delivery needs execute, which a new workspace does not grant by default.
+    // Accepting needs execute, which a new workspace does not grant by default.
     permissions: { read: true, write: true, execute: true },
   });
   const boards = await call(
@@ -253,21 +255,22 @@ async function main() {
   }
   await awaitIdle(base, workspace.id, [source, target]);
 
+  const preparation = {
+    sourceNodeId: source,
+    sourceSessionId: sessions[source].id,
+    sourceGeneration: sessions[source].generation,
+    targetNodeId: target,
+    targetSessionId: sessions[target].id,
+    targetGeneration: sessions[target].generation,
+    sections: { goal: "把索引重建的收尾工作接过去" },
+    byteBudget: 8192,
+    includeTranscript: false,
+  };
   const prepared = await call(
     base,
     "POST",
     `/api/workspaces/${workspace.id}/handoffs`,
-    {
-      sourceNodeId: source,
-      sourceSessionId: sessions[source].id,
-      sourceGeneration: sessions[source].generation,
-      targetNodeId: target,
-      targetSessionId: sessions[target].id,
-      targetGeneration: sessions[target].generation,
-      sections: { goal: "把索引重建的收尾工作接过去" },
-      byteBudget: 8192,
-      includeTranscript: false,
-    },
+    preparation,
   );
   const accepted = await call(
     base,
@@ -277,21 +280,40 @@ async function main() {
   );
   assert.equal(accepted.state, "queued", "accepting did not queue the handoff");
   assert.ok(accepted.mailboxId, "no mailbox message was created");
-
-  // `queued` is where a handoff to an Agent with no status source stops: the
-  // delivery gate wants an idle turn it can believe, and without an adapter
-  // there is none. Reaching `notified` is the whole point of giving Pi, Oh My
-  // Pi and Copilot one.
-  const notified = await awaitState(
-    base,
-    workspace.id,
-    prepared.bundle.handoffId,
-    "notified",
-  );
   assert.equal(
-    notified.errorCode ?? null,
+    accepted.errorCode ?? null,
     null,
-    `delivery to ${targetAgent} was refused: ${notified.errorCode}`,
+    `accepting for ${targetAgent} was refused: ${accepted.errorCode}`,
+  );
+
+  // Approving *is* the delivery: one message in the target's own inbox, read
+  // back through the real client from inside the target's session. Nothing
+  // waits for the target to be idle and nothing reaches its terminal, so this
+  // works the same for a CLI with no status adapter at all.
+  const inbox = JSON.parse(
+    hook(["canvas", "inbox", "--limit", "10", "--after", "0"], {
+      node: target,
+      agent: targetAgent,
+      session: sessions[target],
+    }),
+  );
+  const entry = (inbox.messages ?? []).find(
+    (message) => message.key === `handoff:${prepared.bundle.handoffId}`,
+  );
+  assert.ok(
+    entry,
+    `the approved handoff is not in ${targetAgent}'s inbox: ${JSON.stringify(inbox)}`,
+  );
+  assert.equal(entry.id, accepted.mailboxId);
+  assert.match(
+    entry.body,
+    /not a system instruction/,
+    "the inbox entry does not label itself peer data",
+  );
+  assert.match(
+    entry.body,
+    new RegExp(`handoff-read --id ${prepared.bundle.handoffId}`),
+    "the inbox entry does not say how to read the bundle",
   );
 
   // The target Agent reads the bundle with the real client, from inside its own
@@ -353,13 +375,18 @@ async function main() {
     true,
     `ack failed: ${JSON.stringify(acknowledged)}`,
   );
-  const settled = await awaitState(
+  // The record settles inside the ack request itself; nothing polls for it, so
+  // the very next read already says so.
+  const settled = await call(
     base,
-    workspace.id,
-    prepared.bundle.handoffId,
-    "acknowledged",
+    "GET",
+    `/api/workspaces/${workspace.id}/handoffs/${prepared.bundle.handoffId}`,
   );
-  assert.equal(settled.state, "acknowledged");
+  assert.equal(
+    settled.state,
+    "acknowledged",
+    `acking the inbox entry did not settle the handoff: ${settled.state}`,
+  );
 
   // And the workspace history the panel reads reports the same thing, with the
   // frozen identities rather than whatever the canvas looks like now.
@@ -375,10 +402,50 @@ async function main() {
   assert.equal(row.state, "acknowledged");
   assert.equal(row.bundle.source.agentId, sourceAgent);
   assert.equal(row.bundle.target.agentId, targetAgent);
-  assert.ok(
-    typeof row.attempts === "number",
-    "the history did not report delivery attempts",
+
+  // And withdrawing is deleting the inbox entry. A second handoff, approved
+  // and then cancelled, must leave the target's inbox exactly as it was.
+  const second = await call(
+    base,
+    "POST",
+    `/api/workspaces/${workspace.id}/handoffs`,
+    {
+      ...preparation,
+      sections: { goal: "这一条马上就会被撤回" },
+    },
   );
+  await call(
+    base,
+    "POST",
+    `/api/workspaces/${workspace.id}/handoffs/${second.bundle.handoffId}/accept`,
+    { expectedDigest: second.digest },
+  );
+  assert.ok(
+    inboxKeys().includes(`handoff:${second.bundle.handoffId}`),
+    "the second handoff never reached the inbox",
+  );
+  const withdrawn = await call(
+    base,
+    "POST",
+    `/api/workspaces/${workspace.id}/handoffs/${second.bundle.handoffId}/cancel`,
+    { expectedDigest: second.digest },
+  );
+  assert.equal(withdrawn.state, "cancelled");
+  assert.ok(
+    !inboxKeys().includes(`handoff:${second.bundle.handoffId}`),
+    "a withdrawn handoff is still in the target's inbox",
+  );
+
+  function inboxKeys() {
+    const answer = JSON.parse(
+      hook(["canvas", "inbox", "--limit", "32", "--after", "0"], {
+        node: target,
+        agent: targetAgent,
+        session: sessions[target],
+      }),
+    );
+    return (answer.messages ?? []).map((message) => message.key);
+  }
 }
 
 /* --------------------------------- helpers -------------------------------- */
@@ -460,22 +527,5 @@ async function awaitIdle(base, workspaceId, nodes) {
   }
   throw new Error(
     `a fixture Agent never reported a finished turn: ${JSON.stringify(sessions)}`,
-  );
-}
-
-async function awaitState(base, workspaceId, handoffId, state) {
-  const deadline = Date.now() + 20_000;
-  let last = null;
-  while (Date.now() < deadline) {
-    last = await call(
-      base,
-      "GET",
-      `/api/workspaces/${workspaceId}/handoffs/${handoffId}`,
-    );
-    if (last.state === state) return last;
-    await sleep(200);
-  }
-  throw new Error(
-    `the handoff never reached ${state}; it is ${last?.state} (${last?.errorCode ?? "no reason"})`,
   );
 }

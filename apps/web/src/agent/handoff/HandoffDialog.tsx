@@ -59,13 +59,13 @@ const SECTION_KEYS = [
 ] as const;
 type SectionKey = (typeof SECTION_KEYS)[number];
 
-/** 还能撤回的状态：目标那边尚未被写入。 */
+/** 还能撤回的状态：收件箱那条还在，目标尚未确认。 */
 export function canWithdraw(state: string): boolean {
   return state === "prepared" || state === "queued";
 }
-/** 还会变的状态：值得继续轮询。 */
+/** 还会变的状态：值得继续轮询。等的是目标自己去确认那条收件箱消息。 */
 export function isSettled(state: string): boolean {
-  return ["acknowledged", "failed", "cancelled", "expired"].includes(state);
+  return ["acknowledged", "cancelled"].includes(state);
 }
 
 export function HandoffDialog() {
@@ -370,9 +370,9 @@ function HandoffPreview({ view }: { view: HandoffView }) {
         <span className="font-medium">{t("handoff.status")}</span>
         <span className="flex items-center gap-2">
           <Badge variant="outline">{t(`handoff.${view.state}`)}</Badge>
-          {view.state === "notified" && (
+          {view.state === "queued" && (
             <span className="text-muted-foreground">
-              {t("handoff.notifiedNote")}
+              {t("handoff.queuedNote")}
             </span>
           )}
         </span>

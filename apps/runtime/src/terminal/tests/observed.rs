@@ -268,7 +268,7 @@ async fn an_observation_does_not_open_the_idle_gate() {
     assert!(
         !fixture
             .manager
-            .handoff_idle(&node_id, &session.id, session.generation as u64)
+            .input_idle(&node_id, &session.id, session.generation as u64)
             .await
     );
 }

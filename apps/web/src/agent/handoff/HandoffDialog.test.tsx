@@ -190,8 +190,11 @@ describe("handoff dialog", () => {
       "55555555-5555-4555-8555-555555555555",
       "digest-of-the-preview",
     );
+    expect(await screen.findByText("In the target's inbox")).toBeTruthy();
+    // Approving puts the material in an inbox. It does not say the target has
+    // seen it, and the dialog must not imply that it has.
     expect(
-      await screen.findByText("Queued until the target is idle"),
+      screen.getByText(/Nothing was written into the target's terminal/),
     ).toBeTruthy();
   });
 
@@ -217,8 +220,8 @@ describe("handoff dialog", () => {
     expect(api.acceptHandoff).not.toHaveBeenCalled();
   });
 
-  it("reports a written notice as written, not as work the target has done", async () => {
-    api.prepareHandoff.mockResolvedValue(view("notified"));
+  it("reports an acknowledgement as the target's own act", async () => {
+    api.prepareHandoff.mockResolvedValue(view("acknowledged"));
     render(
       <TestProviders>
         <HandoffDialog />
@@ -230,47 +233,24 @@ describe("handoff dialog", () => {
     });
     await chooseTarget("Reviewer · Codex");
     fireEvent.click(screen.getByRole("button", { name: "Preview" }));
-    expect(
-      await screen.findByText("Notice written to the target's input"),
-    ).toBeTruthy();
-    expect(screen.getByText(/without pressing Return/)).toBeTruthy();
-    // A written notice can no longer be withdrawn, so no withdraw button.
+    expect(await screen.findByText("The target acknowledged it")).toBeTruthy();
+    // Acknowledged is the target's word, and it ends the source's options:
+    // there is nothing left to withdraw.
     expect(screen.queryByRole("button", { name: "Withdraw" })).toBeNull();
-  });
-
-  it("surfaces an unknown write outcome as unknown", async () => {
-    api.prepareHandoff.mockResolvedValue(
-      view("unknownOutcome", { errorCode: "writeOutcomeUnknown" }),
-    );
-    render(
-      <TestProviders>
-        <HandoffDialog />
-      </TestProviders>,
-    );
-    openHandoff({ nodeId: SOURCE, sessionId: "s", generation: 2 });
-    fireEvent.change(await screen.findByLabelText("Goal"), {
-      target: { value: "Continue" },
-    });
-    await chooseTarget("Reviewer · Codex");
-    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
-    expect(await screen.findByText("Write outcome unknown")).toBeTruthy();
-    expect(screen.getByText("Reason: writeOutcomeUnknown")).toBeTruthy();
   });
 });
 
-describe("delivery state predicates", () => {
-  it("allows withdrawal only before the target was written to", () => {
+describe("handoff state predicates", () => {
+  it("allows withdrawal while the inbox entry is still unacknowledged", () => {
     expect(canWithdraw("prepared")).toBe(true);
     expect(canWithdraw("queued")).toBe(true);
-    expect(canWithdraw("dispatching")).toBe(false);
-    expect(canWithdraw("notified")).toBe(false);
-    expect(canWithdraw("unknownOutcome")).toBe(false);
+    expect(canWithdraw("acknowledged")).toBe(false);
+    expect(canWithdraw("cancelled")).toBe(false);
   });
-  it("keeps polling while an outcome can still change", () => {
+  it("keeps polling until the target answers or the source withdraws", () => {
+    // Only the target can move this on, and it does so out of band.
+    expect(isSettled("prepared")).toBe(false);
     expect(isSettled("queued")).toBe(false);
-    expect(isSettled("notified")).toBe(false);
-    // An unknown outcome can still be resolved by a target acknowledgement.
-    expect(isSettled("unknownOutcome")).toBe(false);
     expect(isSettled("acknowledged")).toBe(true);
     expect(isSettled("cancelled")).toBe(true);
   });

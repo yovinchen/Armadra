@@ -269,7 +269,11 @@ async fn ack(
     })?;
     let key:Option<String>=sqlx::query_scalar("SELECT message_key FROM agent_mailbox WHERE id=? AND target_node_id=? AND workspace_id=? AND expires_at>?")
         .bind(id).bind(&caller.node.id).bind(&caller.node.workspace_id).bind(now).fetch_optional(&state.pool).await.map_err(internal)?;
-    if let Some(handoff) = key.as_deref().and_then(|key| key.strip_prefix("handoff:")) {
+    let handoff_id = key
+        .as_deref()
+        .and_then(|key| key.strip_prefix("handoff:"))
+        .map(str::to_owned);
+    if let Some(handoff) = handoff_id.as_deref() {
         let session = args.text("sessionId").ok_or_else(|| {
             refuse(
                 StatusCode::FORBIDDEN,
@@ -306,6 +310,14 @@ async fn ack(
             "message_not_found",
             "Message not found in your inbox or expired.",
         ));
+    }
+    // Acknowledging the inbox entry *is* acknowledging the handoff. Nothing
+    // polls for this: the record settles in the same request that acked it,
+    // and only for a message this caller was allowed to ack.
+    if handoff_id.is_some() {
+        crate::handoff::note_acknowledged(state, id)
+            .await
+            .map_err(internal)?;
     }
     Ok(
         json!({ "ok": true, "protocol": "armadra.mailbox.v1", "id": id, "message": format!("Acknowledged {id}.") }),
