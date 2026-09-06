@@ -1,10 +1,17 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { HostResources, SessionResources } from "@armadra/shared";
+import type {
+  CanvasNode,
+  HostResources,
+  SessionResources,
+} from "@armadra/shared";
 
 import { usePreferencesStore } from "@/app/preferences-store";
 import {
+  LOCAL_HOST,
   UNKNOWN,
   diskUsedPercent,
+  executionHostOf,
+  executionHosts,
   formatCount,
   formatLoad,
   formatMetricBytes,
@@ -12,6 +19,7 @@ import {
   formatUptime,
   liveSessions,
   memoryUsedPercent,
+  sessionsOnHost,
   sortSessions,
   unknownReasonKey,
 } from "./metrics";
@@ -37,6 +45,7 @@ const host = (patch: Partial<HostResources> = {}): HostResources => ({
     availableBytes: 600,
     swapTotalBytes: 200,
     swapUsedBytes: 50,
+    pressure: null,
   },
   loadAverage: { one: 1.234, five: 2, fifteen: 3 },
   disk: { mountPoint: "/", totalBytes: 1_000, availableBytes: 250 },
@@ -115,6 +124,7 @@ describe("推导出来的比例", () => {
             availableBytes: 600,
             swapTotalBytes: null,
             swapUsedBytes: null,
+            pressure: null,
           },
         }),
       ),
@@ -210,5 +220,62 @@ describe("已经不在的会话", () => {
       "no-pid",
       "warming",
     ]);
+  });
+});
+
+describe("执行主机", () => {
+  const terminal = (id: string, hostId?: string): CanvasNode =>
+    ({
+      id,
+      type: "terminal",
+      title: "t",
+      position: { x: 0, y: 0 },
+      data: {
+        kind: "terminal",
+        ...(hostId ? { ssh: { hostId } } : {}),
+      },
+    }) as unknown as CanvasNode;
+
+  it("节点上的 SSH 覆盖优先于工作空间的执行主机", () => {
+    const row = session({ sessionId: "a", nodeId: "n-1", location: "remote" });
+    expect(executionHostOf(row, [terminal("n-1", "build-box")], "ci-box")).toBe(
+      "build-box",
+    );
+  });
+
+  it("没有覆盖时跟随工作空间；工作空间也没有就是本机", () => {
+    const row = session({ sessionId: "a", nodeId: "n-1" });
+    expect(executionHostOf(row, [terminal("n-1")], "ci-box")).toBe("ci-box");
+    expect(executionHostOf(row, [terminal("n-1")], "")).toBe(LOCAL_HOST);
+  });
+
+  it("远端会话说不出是哪台机器时是 null，而不是被算成本机", () => {
+    const orphaned = session({
+      sessionId: "a",
+      nodeId: null,
+      location: "remote",
+    });
+    expect(executionHostOf(orphaned, [], "")).toBeNull();
+  });
+
+  it("按主机过滤只留那台机器上的会话，未知单独成组", () => {
+    const rows = [
+      session({ sessionId: "local" }),
+      session({ sessionId: "ssh", nodeId: "n-1", location: "remote" }),
+      session({ sessionId: "orphan", nodeId: null, location: "remote" }),
+    ];
+    const nodes = [terminal("n-1", "build-box")];
+    expect(executionHosts(rows, nodes, "")).toEqual([
+      "build-box",
+      LOCAL_HOST,
+      null,
+    ]);
+    expect(
+      sessionsOnHost(rows, "build-box", nodes, "").map((row) => row.sessionId),
+    ).toEqual(["ssh"]);
+    expect(
+      sessionsOnHost(rows, null, nodes, "").map((row) => row.sessionId),
+    ).toEqual(["orphan"]);
+    expect(sessionsOnHost(rows, "all", nodes, "")).toHaveLength(3);
   });
 });

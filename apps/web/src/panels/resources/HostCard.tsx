@@ -78,6 +78,16 @@ export function HostCard({ host }: { host: HostResources }) {
             host.memory.availableBytes,
           )} / ${formatMetricBytes(host.memory.totalBytes)}`}
         />
+        {/*
+          压力是系统自己的判断，不是从已用比例推出来的——可回收缓存也算「已用」，
+          一台 95% 的机器常常毫无压力。读不到就是「未知」，不是「正常」。
+        */}
+        <Metric
+          slot="memory-pressure"
+          label={t("resources.host.pressure")}
+          value={t(`resources.pressure.${host.memory.pressure ?? "unknown"}`)}
+          title={t("resources.pressure.hint")}
+        />
         <Metric label={t("resources.host.swap")} value={swap} />
         <Metric label={t("resources.host.load")} value={load} />
         <Metric
@@ -118,13 +128,18 @@ function Metric({
   label,
   value,
   hint,
+  title,
+  slot,
 }: {
   label: string;
   value: string;
   hint?: string;
+  /** Long-form explanation, shown on hover; the cell stays one short value. */
+  title?: string;
+  slot?: string;
 }) {
   return (
-    <div className="min-w-0">
+    <div className="min-w-0" data-slot={slot} title={title}>
       <dt className="truncate text-[11px] text-muted-foreground">{label}</dt>
       <dd className="truncate tabular-nums">
         {value}

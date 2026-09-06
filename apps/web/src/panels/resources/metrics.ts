@@ -10,6 +10,7 @@
  */
 import { formatBytes } from "@/lib/format";
 import type {
+  CanvasNode,
   HostResources,
   ResourceUnknownReason,
   SessionResources,
@@ -141,5 +142,67 @@ export function liveSessions(
         session.unknownReason !== null &&
         GONE_REASONS.has(session.unknownReason)
       ),
+  );
+}
+
+/* ------------------------------- 执行主机 --------------------------------- */
+
+/**
+ * 一个会话跑在哪台执行主机上。
+ *
+ * 这条信息不在采样结果里，因为 Runtime 的会话记录本身没存 SSH 主机 id——它只
+ * 知道「这个会话的首进程是 ssh」。真正的主机 id 在画布上：终端节点的
+ * `ssh.hostId`，或者工作空间自己的执行主机。所以判定顺序是
+ * **节点覆盖 → 工作空间 → 本机**。
+ *
+ * 判不出来时返回 `null`，界面归到「未知主机」——不默认算本机：一个远程会话
+ * 被算成本机，比说不知道更糟。
+ */
+export const LOCAL_HOST = "local";
+
+export function executionHostOf(
+  session: SessionResources,
+  nodes: readonly CanvasNode[] | undefined,
+  workspaceExecutionHostId: string | undefined,
+): string | null {
+  const node = session.nodeId
+    ? nodes?.find((candidate) => candidate.id === session.nodeId)
+    : undefined;
+  const override =
+    node?.data.kind === "terminal" ? node.data.ssh?.hostId : undefined;
+  if (override) return override;
+  // 远程会话而节点已经不在（或者从来不是终端节点）时说不出是哪台机器。
+  if (session.location === "remote") {
+    return workspaceExecutionHostId || null;
+  }
+  return workspaceExecutionHostId || LOCAL_HOST;
+}
+
+/** 会话列表里出现过的执行主机，稳定排序；`null` 收敛成一个「未知」条目。 */
+export function executionHosts(
+  sessions: readonly SessionResources[],
+  nodes: readonly CanvasNode[] | undefined,
+  workspaceExecutionHostId: string | undefined,
+): (string | null)[] {
+  const seen = new Set<string | null>();
+  for (const session of sessions)
+    seen.add(executionHostOf(session, nodes, workspaceExecutionHostId));
+  const known = [...seen]
+    .filter((host): host is string => host !== null)
+    .sort((left, right) => left.localeCompare(right));
+  return seen.has(null) ? [...known, null] : known;
+}
+
+/** 按执行主机过滤；`"all"` 不过滤。 */
+export function sessionsOnHost(
+  sessions: readonly SessionResources[],
+  host: string | null | "all",
+  nodes: readonly CanvasNode[] | undefined,
+  workspaceExecutionHostId: string | undefined,
+): SessionResources[] {
+  if (host === "all") return [...sessions];
+  return sessions.filter(
+    (session) =>
+      executionHostOf(session, nodes, workspaceExecutionHostId) === host,
   );
 }

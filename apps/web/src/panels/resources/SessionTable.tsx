@@ -32,10 +32,13 @@ import { usePreferencesStore } from "@/app/preferences-store";
 import { ProcessTree } from "./ProcessTree";
 import { crossedThreshold } from "./memory-alert";
 import {
+  LOCAL_HOST,
+  executionHosts,
   formatCount,
   formatMetricBytes,
   formatPercent,
   liveSessions,
+  sessionsOnHost,
   sortSessions,
   unknownReasonKey,
   type SessionSort,
@@ -52,8 +55,13 @@ export function SessionTable({
 }) {
   const t = useT();
   const nodes = useCanvasStore((state) => state.document?.nodes);
+  const workspaceHostId = useCanvasStore(
+    (state) => state.workspace?.executionHostId,
+  );
   const selectNodes = useCanvasStore((state) => state.selectNodes);
   const [ending, setEnding] = useState<SessionResources | null>(null);
+  // `"all"` 或者一个具体主机；`null` 是「判不出来的那些」。
+  const [host, setHost] = useState<string | null | "all">("all");
   // 展开的会话；默认全收起，因为大多数会话下面只有一个 shell。
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -68,7 +76,18 @@ export function SessionTable({
     session.sessionId.slice(0, 8);
 
   // 结束了的会话不留占位行：进程不在了就从列表消失（`liveSessions`）。
-  const rows = sortSessions(liveSessions(sessions), sort, titleOf);
+  const live = liveSessions(sessions);
+  const hosts = executionHosts(live, nodes, workspaceHostId);
+  const rows = sortSessions(
+    sessionsOnHost(live, host, nodes, workspaceHostId),
+    sort,
+    titleOf,
+  );
+  const hostLabel = (value: string | null) => {
+    if (value === null) return t("resources.host.filter.unknown");
+    if (value === LOCAL_HOST) return t("resources.host.filter.local");
+    return value;
+  };
 
   const endSession = (session: SessionResources) => {
     setEnding(null);
@@ -81,7 +100,7 @@ export function SessionTable({
       .catch(() => toast.error(t("resources.endFailed")));
   };
 
-  if (rows.length === 0) {
+  if (live.length === 0) {
     return (
       <p className="px-1 py-2 text-[12px] text-muted-foreground">
         {t("resources.noSessions")}
@@ -91,6 +110,39 @@ export function SessionTable({
 
   return (
     <>
+      {/*
+        执行主机过滤只在真的有第二台主机时出现：一台机器上的「全部主机」下拉
+        是一个只有一个选项的控件。
+      */}
+      {hosts.length > 1 && (
+        <div className="flex items-center gap-1 pb-1">
+          <span className="text-[11px] text-muted-foreground">
+            {t("resources.host.filter")}
+          </span>
+          {(["all", ...hosts] as const).map((value) => (
+            <button
+              key={value === "all" ? "all" : (value ?? "unknown")}
+              type="button"
+              data-slot="resource-host-filter"
+              data-host={value === "all" ? "all" : (value ?? "unknown")}
+              data-active={host === value ? "true" : undefined}
+              onClick={() => setHost(value)}
+              className="max-w-32 truncate rounded-[var(--r-control)] px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent data-[active=true]:bg-accent data-[active=true]:text-foreground"
+            >
+              {value === "all"
+                ? t("resources.host.filter.all")
+                : hostLabel(value)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {rows.length === 0 && (
+        <p className="px-1 py-2 text-[12px] text-muted-foreground">
+          {t("resources.host.filterEmpty")}
+        </p>
+      )}
+
       <div className="flex items-center gap-1 pb-1">
         {/* 排序只换看的顺序，测不出来的一律排在最后，不当 0 混进来。 */}
         {(["cpu", "memory", "name"] as const).map((key) => (

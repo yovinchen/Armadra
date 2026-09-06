@@ -52,6 +52,7 @@ const snapshot: ResourceSnapshot = {
       availableBytes: 14_647_967_744,
       swapTotalBytes: null,
       swapUsedBytes: null,
+      pressure: "warning",
     },
     loadAverage: { one: 1.5, five: 1.2, fifteen: 1 },
     disk: {
@@ -253,6 +254,30 @@ describe("ResourceDrawer", () => {
     expect(screen.getByText("98.8%")).toBeTruthy();
     expect(screen.queryByText("0 B")).toBeNull();
     expect(screen.queryByText("0%")).toBeNull();
+  });
+
+  it("内存压力显示系统自己的判断，测不到时是未知而不是正常", async () => {
+    useCanvasStore.getState().setPanel("resources", "drawer");
+    const { unmount } = render(<ResourceDrawer />);
+    const cell = await waitFor(() => {
+      const node = document.querySelector('[data-slot="memory-pressure"]');
+      if (!node) throw new Error("no pressure cell yet");
+      return node;
+    });
+    expect(cell.textContent).toContain("偏紧");
+    // 已用比例高不等于有压力，两格分别显示，不合并。
+    expect(cell.textContent).not.toContain("55.3%");
+    unmount();
+
+    snapshot.host.memory.pressure = null;
+    useCanvasStore.getState().setPanel("resources", "drawer");
+    render(<ResourceDrawer />);
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-slot="memory-pressure"]')?.textContent,
+      ).toContain("未知"),
+    );
+    snapshot.host.memory.pressure = "warning";
   });
 
   it("平台组件单独一组，Runtime 那行写明只算它自己", async () => {
