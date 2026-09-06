@@ -44,20 +44,25 @@ Runtime 分不出也不会因此多给任何权限。区别只是省掉每个事
 
 写到哪一个目录由各 CLI 自己的环境变量决定，Armadra 照抄它们的语义，不发明新的：
 
-| CLI            | 变量                                                     | 语义                                                                                |
-| -------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Claude Code    | `CLAUDE_CONFIG_DIR`                                      | 直接就是配置目录                                                                    |
-| Codex          | `CODEX_HOME`                                             | 直接就是配置目录                                                                    |
-| GitHub Copilot | `COPILOT_HOME`                                           | 直接就是配置目录                                                                    |
-| Gemini CLI     | `GEMINI_CLI_HOME`                                        | **是 HOME 的替代，不是 `~/.gemini` 的替代**：配置目录为 `$GEMINI_CLI_HOME/.gemini` |
-| OpenCode       | `OPENCODE_CONFIG_DIR`，否则 `$XDG_CONFIG_HOME/opencode` | 前者直接就是配置目录                                                                |
-| Pi / Oh My Pi  | `PI_CODING_AGENT_DIR`（OMP 另有 `PI_CONFIG_DIR` 与 profile） | 直接就是 agent 目录                                                                 |
+| CLI            | 变量                                                         | 语义                                                                               |
+| -------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Claude Code    | `CLAUDE_CONFIG_DIR`                                          | 直接就是配置目录                                                                   |
+| Codex          | `CODEX_HOME`                                                 | 直接就是配置目录                                                                   |
+| GitHub Copilot | `COPILOT_HOME`                                               | 直接就是配置目录                                                                   |
+| Gemini CLI     | `GEMINI_CLI_HOME`                                            | **是 HOME 的替代，不是 `~/.gemini` 的替代**：配置目录为 `$GEMINI_CLI_HOME/.gemini` |
+| OpenCode       | `OPENCODE_CONFIG_DIR`，否则 `$XDG_CONFIG_HOME/opencode`      | 前者直接就是配置目录                                                               |
+| Pi / Oh My Pi  | `PI_CODING_AGENT_DIR`（OMP 另有 `PI_CONFIG_DIR` 与 profile） | 直接就是 agent 目录                                                                |
 
 `GEMINI_CLI_HOME` 曾被当作配置目录本身，于是 hook 被写进 `$GEMINI_CLI_HOME/settings.json`——比 CLI 真正读的那份高一层，
 安装看起来成功但一条事件都不会到；转录查找同样从高一层开始，永远返回「没有转录」。gemini-cli 的 `paths.ts` 把这个变量
 从自己的 `homedir()` 返回，`storage.ts` 再往上拼 `.gemini`；其配置文档的原话是它「will create a `.gemini` folder inside
 this directory」。`GEMINI_DIR` 在 gemini-cli 里是常量字符串 `.gemini`，不是环境变量，因此不再作为覆盖读取。
 转录落在 `$GEMINI_CLI_HOME/.gemini/tmp/<项目标识>/chats/`。
+
+这些覆盖变量都**不在**终端子进程的继承白名单里（`terminal/backend.rs::INHERITED_ENV` 只放行 `HOME`、`XDG_*` 等）。
+也就是说：给 Runtime 进程设了 `GEMINI_CLI_HOME`（或 `CODEX_HOME`、`COPILOT_HOME`……），安装器会写到那个目录，
+而画布上起的 CLI 仍然按自己的 `HOME` 去找——两边指向不同的地方，安装看起来成功但事件不会到。
+七种 CLI 都是这个情况，不是某一个的问题；要重定向就改 `HOME`，`pnpm agent:smoke` 用的正是这个办法。
 
 ### Copilot 的 `notification`
 

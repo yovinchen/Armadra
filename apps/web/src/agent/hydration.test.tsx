@@ -86,9 +86,9 @@ describe("useAgentStatusHydration", () => {
     });
     await waitFor(() => expect(mock.sessions).toHaveBeenCalledTimes(2));
     await waitFor(() => {
-      expect(
-        useAgentStatusStore.getState().statuses["node-1"]?.updatedAt,
-      ).toBe("2026-09-07T00:01:00Z");
+      expect(useAgentStatusStore.getState().statuses["node-1"]?.updatedAt).toBe(
+        "2026-09-07T00:01:00Z",
+      );
     });
   });
 

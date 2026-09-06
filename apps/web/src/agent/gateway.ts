@@ -225,7 +225,11 @@ export const agentGateway = {
     if ((await readRoute()) === "runtime") {
       // 没有会话就没有画面。这不是一屏空白：那个节点底下没有东西在跑。
       if (!sessionId)
-        throw new RuntimeRequestError(404, "No session is running", "not_found");
+        throw new RuntimeRequestError(
+          404,
+          "No session is running",
+          "not_found",
+        );
       const answer = await runtimeApi.captureTerminal(sessionId, { lines });
       return answer.data;
     }
