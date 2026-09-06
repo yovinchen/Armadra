@@ -392,6 +392,29 @@ pub struct LeaseRequest {
     pub display_name: String,
 }
 
+/// The lease as it stands, with anything that has lapsed already expired.
+///
+/// Reading is free for both sides: an agent that has just been refused needs
+/// to be able to say *who* is driving without taking anything itself (§2.7).
+pub fn status(live: &Live) -> Lease {
+    let mut machine = live.lease_machine();
+    machine.expire(Utc::now());
+    machine.snapshot()
+}
+
+/// Hands back a lease this actor holds. Holding none is a refusal rather than
+/// a silent success, so `lease --release` cannot look like it freed a lease
+/// somebody else is holding.
+pub async fn release(live: &Live, actor: &Actor) -> AppResult<Lease> {
+    let lease = {
+        let mut machine = live.lease_machine();
+        machine.release(actor)?;
+        machine.snapshot()
+    };
+    publish(live, lease.clone()).await;
+    Ok(lease)
+}
+
 /// Takes over or hands back on behalf of a person at a client.
 pub async fn control(live: &Live, request: &LeaseRequest) -> AppResult<Lease> {
     let actor = Actor::human(
@@ -399,11 +422,7 @@ pub async fn control(live: &Live, request: &LeaseRequest) -> AppResult<Lease> {
         truncate_name(&request.display_name),
     );
     match request.action.as_str() {
-        "status" => {
-            let mut machine = live.lease_machine();
-            machine.expire(Utc::now());
-            Ok(machine.snapshot())
-        }
+        "status" => Ok(status(live)),
         "takeover" => {
             let (lease, revoked) = {
                 let mut machine = live.lease_machine();
@@ -433,15 +452,7 @@ pub async fn control(live: &Live, request: &LeaseRequest) -> AppResult<Lease> {
             publish(live, lease.clone()).await;
             Ok(lease)
         }
-        "release" => {
-            let lease = {
-                let mut machine = live.lease_machine();
-                machine.release(&actor)?;
-                machine.snapshot()
-            };
-            publish(live, lease.clone()).await;
-            Ok(lease)
-        }
+        "release" => release(live, &actor).await,
         other => Err(AppError::BadRequest(format!(
             "Unknown lease action `{other}`; expected status, takeover or release"
         ))),

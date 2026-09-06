@@ -9,7 +9,7 @@
 //!   * **The same session as the human.** There is no agent-only browser. The
 //!     verb resolves the node's live session and drives that, so a person can
 //!     watch what the agent did and take over by clicking (design §7).
-//!   * **A closed verb list.** Sixteen of them, listed in [`VERBS`]. No
+//!   * **A closed verb list.** Seventeen of them, listed in [`VERBS`]. No
 //!     `eval`, no CDP method name, no selector that becomes code, and no verb
 //!     that ends the session — closing a node is not the same as closing a
 //!     page (§2.7).
@@ -28,7 +28,7 @@ use crate::{
     model::ContextLink,
 };
 
-use self::render::{describe_download, render_read, render_tabs};
+use self::render::{describe_download, render_lease, render_read, render_tabs};
 use super::{
     ReadMode, TargetRef,
     session::{
@@ -42,7 +42,7 @@ use super::{
 /// round trip and a refusal in the model's context.
 pub const VERBS: &[&str] = &[
     "navigate", "read", "click", "type", "wait", "capture", "select", "press", "scroll", "upload",
-    "download", "back", "forward", "close", "tabs", "dialog",
+    "download", "back", "forward", "close", "tabs", "dialog", "lease",
 ];
 
 /// Default page-text budget for an agent read. Smaller than the API's ceiling
@@ -166,6 +166,7 @@ pub async fn run(
         "close" => close_tab(&live, args).await,
         "tabs" => tabs(&live, args).await,
         "dialog" => dialog(&live, args).await,
+        "lease" => lease(&live, &actor, args).await,
         _ => unreachable!("verb was checked above"),
     };
     // The node's activity trace records what happened either way: a refused
@@ -619,6 +620,27 @@ async fn tabs(live: &session::Live, args: &Args<'_>) -> Result<String, Refusal> 
         session::tab_list(live)
     };
     Ok(render_tabs(&list))
+}
+
+/// `lease --status | --release`.
+///
+/// It never takes the lease — that is the point of it. `--status` is how an
+/// agent that has just been refused finds out whether a person took over or
+/// is merely typing, and `--release` is how it hands its own back early
+/// rather than making the next person wait out the idle timer (§2.7).
+///
+/// There is deliberately no way for an agent to take the lease *away* from
+/// somebody: taking over is a person's decision, made at a client.
+async fn lease(
+    live: &session::Live,
+    actor: &session::Actor,
+    args: &Args<'_>,
+) -> Result<String, Refusal> {
+    if args.flag("release") {
+        let lease = session::lease::release(live, actor).await.map_err(refuse)?;
+        return Ok(format!("已交还租约。{}", render_lease(&lease)));
+    }
+    Ok(render_lease(&session::lease::status(live)))
 }
 
 async fn close_tab(live: &session::Live, args: &Args<'_>) -> Result<String, Refusal> {

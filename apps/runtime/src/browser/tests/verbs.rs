@@ -193,6 +193,76 @@ async fn scroll_offset(live: &session::Live) -> f64 {
         .unwrap_or(0.0)
 }
 
+/// The seventeenth verb, which is the only one that reads the lease instead of
+/// taking it: an agent that has been refused has to be able to find out who is
+/// driving, and to hand its own turn back early (§2.7).
+#[tokio::test]
+async fn an_agent_reads_and_hands_back_the_lease_without_ever_taking_one() {
+    let fixture = fixture("lease-verb").await;
+    if browser_or_skip(&fixture.state, "an_agent_reads_and_hands_back…").is_none() {
+        return;
+    }
+    let page = serve_page().await;
+    let (_workspace, live) = open(&fixture, page.url("/form")).await;
+
+    let agent = crate::collab::load_node(&fixture.state.pool, &fixture.agent_id)
+        .await
+        .unwrap()
+        .unwrap();
+    let caller = crate::collab::Caller {
+        node: agent,
+        verdict: crate::hook::auth::Verdict::Verified,
+    };
+    let call = async |verb: &str, args: serde_json::Map<String, Value>| {
+        crate::browser::agent::run(&fixture.state, &caller, verb, &crate::collab::Args(&args)).await
+    };
+
+    // Nobody is driving, and asking did not change that.
+    let body = call("lease", serde_json::Map::new()).await.unwrap();
+    assert!(body.contains("没有人在操作"), "got {body}");
+    assert_eq!(
+        session::lease::status(&live).state,
+        crate::browser::LeaseState::Free
+    );
+
+    // One action that drives the page takes it; the verb then names the agent.
+    let mut clicked = serde_json::Map::new();
+    clicked.insert("selector".into(), json!("#picked"));
+    call("click", clicked).await.unwrap();
+    let body = call("lease", serde_json::Map::new()).await.unwrap();
+    assert!(body.contains("Agent 正在操作"), "got {body}");
+
+    // Handing it back frees it early rather than waiting out the idle timer.
+    let mut released = serde_json::Map::new();
+    released.insert("release".into(), json!(true));
+    let body = call("lease", released).await.unwrap();
+    assert!(body.contains("已交还租约"), "got {body}");
+    assert_eq!(
+        session::lease::status(&live).state,
+        crate::browser::LeaseState::Free
+    );
+
+    // A person's takeover revokes the agent's turn: the next action is refused
+    // and not retried, while reading the lease still works.
+    session::lease::control(
+        &live,
+        &session::LeaseRequest {
+            action: "takeover".into(),
+            lease_generation: None,
+            device_id: "device-1".into(),
+            display_name: "我".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let mut clicked = serde_json::Map::new();
+    clicked.insert("selector".into(), json!("#picked"));
+    let refusal = call("click", clicked).await.unwrap_err();
+    assert!(refusal.message.contains("LEASE_REVOKED"), "{refusal:?}");
+    let body = call("lease", serde_json::Map::new()).await.unwrap();
+    assert!(body.contains("人已接管：我"), "got {body}");
+}
+
 /// Both ends of the verb list are the same list. The hook checks it locally so
 /// a typo costs an error line instead of a round trip, which is only true
 /// while the two agree.
@@ -203,11 +273,10 @@ fn the_hook_and_the_runtime_know_the_same_verbs() {
     runtime.sort_unstable();
     hook.sort_unstable();
     assert_eq!(runtime, hook);
-    assert_eq!(runtime.len(), 16);
-    // `lease` is not here on purpose: the control lease arrives with the
-    // badges and the frame stream, and a verb for a lease that does not exist
-    // yet would be a promise this round does not keep.
-    assert!(!runtime.contains(&"lease"));
+    assert_eq!(runtime.len(), 17);
+    // `lease` is the seventeenth: the sixteen this round added drive the page,
+    // and the lease that decides who may drive it landed alongside them.
+    assert!(runtime.contains(&"lease"));
     for verb in &runtime {
         assert!(
             armadra_hook::USAGE.contains(*verb),

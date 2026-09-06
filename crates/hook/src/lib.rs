@@ -80,6 +80,7 @@ BROWSER VERBS (the browser node linked to this one):
   tabs [--switch t2 | --new URL]                 list, switch or open a tab
   close --tab t2                                 close one tab, never the last
   dialog --accept | --dismiss [--text TEXT]      answer alert/confirm/prompt
+  lease [--status | --release]                   who is driving; give yours back
 
 BROWSER OPTIONS:
   --node <id|title>         which linked browser node (defaults to the only one)
@@ -92,6 +93,10 @@ BROWSER OPTIONS:
   `upload --path` only takes workspace-relative paths.
   While a page is showing a dialog, actions on that tab answer DIALOG_PENDING
   with the dialog's text; `read` still works, and `dialog` clears it.
+  Anything that drives the page takes the control lease. A person mid-typing
+  makes it wait briefly and then answers LEASE_HELD_BY_HUMAN; a person who
+  took the browser over makes it answer LEASE_REVOKED at once — do not retry
+  either, read `lease --status` and say so instead.
 
 ENVIRONMENT:
   ARMADRA_NODE_ID          canvas node id; when unset hook mode is a no-op

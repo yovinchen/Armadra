@@ -103,9 +103,9 @@ pub fn run_canvas(args: &[String]) -> i32 {
 ///
 /// The list is checked here as well as in the runtime so a typo costs a local
 /// error line instead of a round trip and a refusal in the model's context.
-pub const BROWSER_VERBS: [&str; 16] = [
+pub const BROWSER_VERBS: [&str; 17] = [
     "navigate", "read", "click", "type", "wait", "capture", "select", "press", "scroll", "upload",
-    "download", "back", "forward", "close", "tabs", "dialog",
+    "download", "back", "forward", "close", "tabs", "dialog", "lease",
 ];
 
 /// `armadra-hook browser <verb> [--flag value]...`

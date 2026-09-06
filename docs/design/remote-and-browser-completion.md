@@ -433,6 +433,14 @@ SIGKILL 后恢复：Runtime 被 `kill -9` 时来不及结束浏览器，Chrome �
 
 批次 2 的偏差与未做项：`Target.attachedToTarget` 后必须立刻 `Runtime.runIfWaitingForDebugger`，否则 `window.open` 的那次点击不会返回；frame 的执行上下文只在 `Runtime.executionContext{Destroyed,sCleared}` 时作废，不在 `frameNavigated` 时作废——同源子 frame 的首次导航会复用初始上下文，跟着导航清掉会让该 frame 读不到。真实 Chrome 测试仍放在 `apps/runtime/src/browser/tests/`（`frames` / `tabs` / `dialogs` / `transfers` / `verbs`）而不是 `apps/runtime/tests/browser_actions.rs`，与批次 1 的做法一致，验收命令相应是 `cargo test -p armadra-runtime --lib browser::`。`NetworkPolicy` 新增 `popups`，但工作空间设置尚未写入它（`Live::set_policy` 是唯一入口，界面随批次 3）；上传的 HTTP 响应 `Uploaded` 没有对应的 proto 消息与 shared schema；每 session 16 个标签的上限只有纯逻辑与 `TabList.limit` 覆盖，没有开 16 个真实标签去测；人的输入不写 `BrowserActivity`（会随每次鼠标移动刷屏），留到批次 3 与租约一起做；帧载荷仍走工作空间事件通道且不带 `tab_id`，属批次 3。
 
+批次 2 + 3 合并（已完成，本机 macOS + 本机 Chrome）：两批各自改了同一批文件，合并按语义而非按行做。帧流落在多目标模型上——`screencast.rs` 的改动进了批次 3 改名后的 `session/stream.rs`，`Page.screencastFrameAck` 回到出帧的那个 CDP session，非活动标签的帧只确认不发布，`StreamState` 记住 screencast 起在哪个 session，切标签时按记住的那个停、按订阅者预算在新标签重起（切标签不改预算，也不重建订阅）。租约按 session 而非按 target：一个会话一个租约，换标签不换持有者。`POST …/input` 先查对话框再取租约——被 `DIALOG_PENDING` 拒掉的一批输入不应顺手改变谁在控制。`events.rs` 同时保留两批的事件变体（`browser.lease` / `tabs` / `dialog` / `fileChooser` / `activity`），`Activity` 只留批次 3 的 `&'static str` 版本，`describe_target` 保留，`NetworkPolicy.popups` 保留。
+
+第十七个动词 `lease --status | --release` 在此补上：批次 2 把它留给批次 3，批次 3 只做了 `POST …/lease` 的人机接管而没有动词，两批合并后 §2.7 的表才完整。它不取租约（取租约就没法用来查「谁在挡着我」），也不能替人接管——接管是人在客户端做的决定。同时按 §2.7 的「部分」列把 `tabs --list` 与 `download --list` 排除在取租约之外，只有 `--switch/--new` 与 `--accept/--reject` 取。`BROWSER_VERBS` 与 `agent::VERBS` 同步为 17 项，帮助文本补上 `lease` 与两条租约拒绝码，两端一致仍由测试断言。
+
+合并后验证：`cargo test -p armadra-runtime --lib browser::` 59 项全绿（批次 1 的 27 + 批次 2 的 10 + 批次 3 的 22），`--test browser_stream` 2 项通过、本机路径「点击 → 新帧」p95 70 ms（中位 68 ms，20 次）；`cargo test -p armadra-runtime`、`cargo test -p armadra-hook`、`cargo clippy --workspace --exclude armadra-desktop --all-targets -D warnings`、`cargo fmt --all --check`、`pnpm protocol:check`、`pnpm --filter @armadra/web test` 与 `typecheck`、`pnpm check`、`go -C apps/host test ./internal/server/...` 通过。Host 侧不需要改：`browserClass` 按「读=read、`subscription`=write、其余=execute」分类，批次 2 的 `tabs` / `dialog` / `upload` 路由已经落在正确的一档。
+
+合并未做：`browser.tabs` / `browser.dialog` / `browser.fileChooser` 三个事件仍不在 `packages/shared` 的事件联合里，Web 的 `safeParse` 只会丢掉它们并告警——标签条与对话框的界面本就是批次 2 记下的未做项，补 schema 而不补界面只是把缺口挪个位置。批次 2 与批次 3 各自的未做项都仍然成立。
+
 只能交叉编译、实机待办：Windows Job Object 与 `lockfile` 处理、Windows Authenticode 校验、Windows/Linux 标准安装路径、Linux 沙箱（不默认加 `--no-sandbox`，容器 CI 用 `ARMADRA_BROWSER_ARGS` 显式给）、Windows 的 `GetProcessTimes` 进程身份。每批的实施记录只登记本机 Chrome、本地静态页与伪 SSH 的结果。
 
 ## 6. 验收清单
