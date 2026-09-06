@@ -37,6 +37,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/api/client", () => ({
   isConflict: () => true,
   runtimeApi: {
+    // 编辑器挂载时读一次 `language.formatOnSave`（语言服务设计 §2.3）。
+    settings: () => Promise.resolve({}),
     fileInfo: async () => ({ preview: "text" }),
     readFile: mocks.read,
     writeFile: mocks.write,

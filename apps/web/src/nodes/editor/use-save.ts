@@ -25,6 +25,14 @@ export function useFileSave(
     setDirty: React.Dispatch<React.SetStateAction<boolean>>;
     setSaving: React.Dispatch<React.SetStateAction<boolean>>;
     setExternal: React.Dispatch<React.SetStateAction<ExternalChange | null>>;
+    /**
+     * 写盘之前的一步。`language.formatOnSave` 打开时这里会请求
+     * `textDocument/formatting` 并把结果应用到草稿（语言服务设计 §2.3
+     * 「保存」）；超时或失败都只是跳过，保存照常进行。
+     */
+    beforeSave?: () => Promise<void> | void;
+    /** 写盘成功之后：`didSave`。409 时不调用——那一次没有保存。 */
+    afterSave?: () => void;
   },
 ): SaveActions {
   const {
@@ -35,6 +43,8 @@ export function useFileSave(
     setDirty,
     setSaving,
     setExternal,
+    beforeSave,
+    afterSave,
   } = options;
   const t = useT();
 
@@ -51,11 +61,23 @@ export function useFileSave(
       (!refs.versionRef.current && !refs.recreateRef.current)
     )
       return;
-    const submitted = view.state.sliceDoc();
     const token = {};
     refs.pendingSaveRef.current = token;
     setSaving(true);
     try {
+      // 格式化改的是草稿，所以要在取正文之前跑完；它自己有 3 秒预算，
+      // 超时就当没格式化过。关着的时候它同步返回，`PUT` 不会因此晚一个
+      // 微任务发出去。
+      const formatting = beforeSave?.();
+      if (formatting) {
+        await formatting;
+        if (
+          refs.identityRef.current !== identity ||
+          refs.viewRef.current !== view
+        )
+          return;
+      }
+      const submitted = view.state.sliceDoc();
       const result = await runtimeApi.writeFile(
         workspaceId,
         path,
@@ -77,6 +99,7 @@ export function useFileSave(
       refs.baselineRef.current = submitted;
       setDirty(view.state.sliceDoc() !== submitted);
       setExternal(null);
+      afterSave?.();
     } catch (error) {
       if (refs.identityRef.current !== identity) return;
       toast.error(
@@ -100,7 +123,7 @@ export function useFileSave(
         if (refs.identityRef.current === identity) setSaving(false);
       }
     }
-  }, [path, identity, workspaceId, writable]);
+  }, [path, identity, workspaceId, writable, beforeSave, afterSave]);
 
   const onKeyDown = React.useCallback(
     (event: React.KeyboardEvent) => {

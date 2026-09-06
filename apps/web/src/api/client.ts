@@ -11,6 +11,7 @@ import { systemApi } from "./system";
 import { workspacesApi } from "./workspaces";
 import { boardsApi } from "./boards";
 import { filesApi } from "./files";
+import { languageApi } from "./language";
 import { searchApi } from "./search";
 import { terminalsApi } from "./terminals";
 import { resourcesApi } from "./resources";
@@ -31,6 +32,7 @@ export {
 } from "./request";
 export {
   initRuntimeSockets,
+  languageSessionUrl,
   terminalWebSocketUrl,
   workspaceEventsUrl,
 } from "./sockets";
@@ -55,6 +57,7 @@ export const runtimeApi = {
   ...workspacesApi,
   ...boardsApi,
   ...filesApi,
+  ...languageApi,
   ...searchApi,
   ...terminalsApi,
   ...resourcesApi,

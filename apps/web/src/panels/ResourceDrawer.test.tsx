@@ -195,6 +195,7 @@ beforeEach(() => {
       handoff: "closed",
       usage: "closed",
       github: "closed",
+      problems: "closed",
       quickOpen: false,
       settings: false,
       palette: false,

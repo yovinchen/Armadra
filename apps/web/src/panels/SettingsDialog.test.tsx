@@ -138,6 +138,7 @@ describe("SettingsDialog", () => {
         handoff: "closed",
         usage: "closed",
         github: "closed",
+        problems: "closed",
         settings: true,
         palette: false,
         quickOpen: false,

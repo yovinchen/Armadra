@@ -31,6 +31,7 @@ import { frameBinding } from "./frame-binding";
 import { fileDrag } from "./file-drag";
 import { resources } from "./resources";
 import { fileWorkflow } from "./file-workflow";
+import { languageService } from "./language-service";
 import { terminal } from "./terminal";
 import { updates } from "./updates";
 import { usage } from "./usage";
@@ -79,6 +80,7 @@ export const MESSAGE_MODULES = {
   handoff,
   "file-drag": fileDrag,
   "file-workflow": fileWorkflow,
+  "language-service": languageService,
   explorer,
   mobile,
   modals,

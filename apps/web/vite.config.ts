@@ -68,7 +68,10 @@ function isCodeMirrorCore(id: string): boolean {
   if (marker < 0) return false;
   const rest = id.slice(marker + "node_modules".length + 1).replace(/\\/g, "/");
   if (rest.startsWith("@codemirror/"))
-    return !rest.startsWith("@codemirror/lang-");
+    return (
+      !rest.startsWith("@codemirror/lang-") &&
+      !rest.startsWith("@codemirror/lsp-client")
+    );
   if (rest.startsWith("@lezer/")) {
     const name = rest.split("/")[1];
     return name === "common" || name === "highlight" || name === "lr";
@@ -93,6 +96,15 @@ const vendorGroups = [
     // 只收编辑器内核：`@codemirror/lang-*` 与对应的 `@lezer` 语法包是
     // EditorNode 按扩展名动态 `import()` 的，划进组里就等于又变回静态加载了。
     test: isCodeMirrorCore,
+  },
+  {
+    name: "language",
+    // 排在 `codemirror` 之后：`isCodeMirrorCore` 已经把 lsp-client 排除掉，
+    // 所以这一组只收它自己和它渲染 hover 文档用的 `marked`。放在前面会让
+    // 编辑器内核被吸进这一块，反过来变成「打开编辑器就加载 LSP 客户端」。
+    // 语言服务设计 §2.4 的体积门槛量的就是这个 chunk。
+    priority: 25,
+    test: /[\\/]node_modules[\\/](@codemirror[\\/]lsp-client|marked)[\\/]/,
   },
   {
     name: "xterm",

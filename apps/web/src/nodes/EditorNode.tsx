@@ -40,6 +40,8 @@ import { useEditorRefs } from "./editor/refs";
 import type { ExternalChange, LoadState, ViewMode } from "./editor/types";
 import { useExternalChanges } from "./editor/use-external-changes";
 import { useFileSave } from "./editor/use-save";
+import { useLanguageService } from "@/editor/language/use-language";
+import { languageIdFor } from "@/editor/language/language-ids";
 
 /**
  * 文件编辑器节点（编辑器设计 §2–§4）。
@@ -65,6 +67,8 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
   const [degraded, setDegraded] = React.useState(false);
   /** Markdown 才有的编辑/并排/预览；其它文件永远是 `edit`。 */
   const [viewMode, setViewMode] = React.useState<ViewMode>("edit");
+  /** 每重建一次 CodeMirror 就自增：语言扩展要重新插一遍。 */
+  const [viewGeneration, setViewGeneration] = React.useState(0);
 
   const identity = JSON.stringify([workspaceId, path]);
   const refs = useEditorRefs(identity);
@@ -164,7 +168,7 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     void loadEditorCore().then((core) => {
       if (cancelled) return;
       refs.coreRef.current = core;
-      const { view, language, access } = core.create({
+      const { view, language, access, service } = core.create({
         parent: host,
         doc: content,
         readonly: !refs.writableRef.current,
@@ -181,7 +185,9 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
       refs.viewIdentityRef.current = identity;
       refs.languageRef.current = language;
       refs.accessRef.current = access;
+      refs.serviceRef.current = service;
       setDirty(false);
+      setViewGeneration((generation) => generation + 1);
       // 搜索面板开着这个文件时排队的「打开到行」，挂载后自己来取。
       const line = takePendingReveal(path);
       if (line !== undefined) revealLine(view, line);
@@ -202,6 +208,7 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
       }
       refs.languageRef.current = null;
       refs.accessRef.current = null;
+      refs.serviceRef.current = null;
     };
     // `t` 只决定查找面板的初始文案，切语言不该重建编辑器（会丢光标与撤销栈）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -255,6 +262,30 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     setDegraded,
   });
 
+  /* ------------------------------- 语言服务 ------------------------------- */
+
+  // 有内容版本才开会话：没有版本的文件（非 UTF-8、超过 1 MiB）Runtime 给
+  // 不出可核对的正文，状态栏说「LSP 不适用」而不是开一条会话（§2.3）。
+  const languageEligible =
+    state.kind === "text" &&
+    state.identity === identity &&
+    Boolean(state.sha256) &&
+    languageIdFor(path) !== null;
+
+  const language = useLanguageService({
+    nodeId: id,
+    path,
+    workspaceId,
+    identity,
+    eligible: languageEligible,
+    dirty,
+    sha256: state.kind === "text" ? state.sha256 : undefined,
+    viewRef: refs.viewRef,
+    viewIdentityRef: refs.viewIdentityRef,
+    serviceRef: refs.serviceRef,
+    viewGeneration,
+  });
+
   /* --------------------------------- 保存 --------------------------------- */
 
   const { save, onKeyDown } = useFileSave(refs, {
@@ -265,6 +296,8 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     setDirty,
     setSaving,
     setExternal,
+    beforeSave: language.beforeSave,
+    afterSave: language.afterSave,
   });
 
   /* --------------------------------- 渲染 --------------------------------- */
@@ -448,7 +481,12 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
                 />
               )}
             </div>
-            <StatusBar state={state} />
+            <StatusBar
+              state={state}
+              language={language.status}
+              ownership={language.ownership}
+              languageApplicable={languageEligible}
+            />
           </div>
         )}
       </div>

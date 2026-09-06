@@ -30,6 +30,8 @@ const mocks = vi.hoisted(() => ({ read: vi.fn(), write: vi.fn() }));
 vi.mock("@/api/client", () => ({
   isConflict: () => false,
   runtimeApi: {
+    // 编辑器挂载时读一次 `language.formatOnSave`（语言服务设计 §2.3）。
+    settings: () => Promise.resolve({}),
     fileInfo: async () => ({ preview: "text" }),
     readFile: mocks.read,
     writeFile: mocks.write,
@@ -121,8 +123,9 @@ describe("editor file information", () => {
     await view();
     expect(screen.getByText("UTF-8")).toBeTruthy();
     expect(screen.getByText("LF")).toBeTruthy();
-    // 没有语言服务器就明说，不摆一个空补全入口。
-    expect(screen.getByText("LSP not enabled")).toBeTruthy();
+    // `.txt` 没有 languageId，所以状态栏说的是「不适用」而不是「不可用」：
+    // 前者是这个文件的性质，后者才是缺 server（语言服务设计 §2.3）。
+    expect(screen.getByText("LSP not applicable")).toBeTruthy();
   });
 
   it("keeps CRLF through a save instead of silently normalizing the file", async () => {

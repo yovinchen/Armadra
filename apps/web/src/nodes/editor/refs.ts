@@ -15,6 +15,8 @@ export interface EditorRefs {
   viewRef: React.RefObject<EditorView | null>;
   languageRef: React.RefObject<Compartment | null>;
   accessRef: React.RefObject<Compartment | null>;
+  /** 语言服务扩展的槽位（语言服务设计 §4.2）。 */
+  serviceRef: React.RefObject<Compartment | null>;
   baselineRef: React.RefObject<string>;
   /** 磁盘上这个文件的字节数，读到时记下、每次保存成功后更新（仅用于显示与旧接口兼容）。 */
   sizeRef: React.RefObject<number | undefined>;
@@ -38,6 +40,7 @@ export function useEditorRefs(identity: string): EditorRefs {
     viewRef: { current: null },
     languageRef: { current: null },
     accessRef: { current: null },
+    serviceRef: { current: null },
     baselineRef: { current: "" },
     sizeRef: { current: undefined },
     versionRef: { current: undefined },

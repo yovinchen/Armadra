@@ -13,6 +13,7 @@ import { workspaceEventSchema, type WorkspaceEvent } from "@armadra/shared";
 
 import { workspaceEventsUrl } from "./client";
 import { useAgentStatusStore } from "../agent/status-store";
+import { useLanguageStatusStore } from "../editor/language/status-store";
 
 type EventType = WorkspaceEvent["type"];
 type EventOf<T extends EventType> = Extract<WorkspaceEvent, { type: T }>;
@@ -49,6 +50,9 @@ export function onWorkspaceEvent<T extends EventType>(
  */
 export function dispatchWorkspaceEvent(event: WorkspaceEvent): void {
   useAgentStatusStore.getState().handleEvent(event);
+  // 语言会话与服务器状态走同一条流（语言服务设计 §2.9）：状态栏和设置页
+  // 因此不必为了看一眼状态就开一条会话 socket。
+  useLanguageStatusStore.getState().handleEvent(event);
   for (const handler of handlers.get(event.type) ?? []) handler(event);
 }
 

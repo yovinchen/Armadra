@@ -48,6 +48,8 @@ export interface PanelState {
   usage: "closed" | "drawer" | "pinned";
   /** 右侧工作面板的「GitHub」页（Git/GitHub 设计 §1 / 画布平台设计 §4）。 */
   github: "closed" | "drawer";
+  /** 语言服务的诊断（语言服务设计 §1.1）。按工作空间聚合，点击跳转。 */
+  problems: "closed" | "drawer";
   settings: boolean;
   palette: boolean;
   /** 快速打开（⌘P，E01/M4）。 */

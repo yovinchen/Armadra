@@ -8,6 +8,8 @@ const readFile = vi.fn();
 vi.mock("@/api/client", () => ({
   isConflict: () => false,
   runtimeApi: {
+    // 编辑器挂载时读一次 `language.formatOnSave`（语言服务设计 §2.3）。
+    settings: () => Promise.resolve({}),
     fileInfo: (...args: unknown[]) => fileInfo(...args),
     readFile: (...args: unknown[]) => readFile(...args),
     fileDownloadUrl: (_workspace: string, path: string) =>

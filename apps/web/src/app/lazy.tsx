@@ -79,3 +79,15 @@ export const GithubDrawer = lazy(() =>
     default: module.GithubDrawer,
   })),
 );
+
+export const ProblemsPanel = lazy(() =>
+  import("@/panels/problems/ProblemsPanel").then((module) => ({
+    default: module.ProblemsPanel,
+  })),
+);
+
+export const EditPreviewDialog = lazy(() =>
+  import("@/editor/language/EditPreviewDialog").then((module) => ({
+    default: module.EditPreviewDialog,
+  })),
+);

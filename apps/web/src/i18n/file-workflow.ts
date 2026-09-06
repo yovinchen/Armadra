@@ -1,10 +1,10 @@
 import type { MessageModule } from "./index";
 
 /**
- * 快速打开、项目搜索、文件操作与语言服务状态（E01/M4）。
+ * 快速打开、项目搜索与文件操作（E01/M4）。
  *
- * 编辑器节点自身的文案仍在 `nodes.ts` 的 `editor.*`；这里是围绕文件工作流
- * 的三个面板与一条「未启用」状态。
+ * 编辑器节点自身的文案在 `nodes.ts` 的 `editor.*`，语言服务的在
+ * `language-service.ts` 的 `lsp.*`；这里是围绕文件工作流的三个面板。
  */
 export const fileWorkflow: MessageModule = {
   "zh-CN": {
@@ -51,11 +51,6 @@ export const fileWorkflow: MessageModule = {
     "fileOps.renameTitle": "重命名「{name}」",
     "fileOps.failed": "操作失败",
     "fileOps.moved": "已移动到 {path}",
-
-    "lsp.title": "语言服务",
-    "lsp.probing": "正在探测…",
-    "lsp.unavailable": "未启用",
-    "lsp.description": "尚未接入语言服务器，编辑器只提供语法高亮与文本编辑。",
   },
   en: {
     "quickOpen.title": "Quick open",
@@ -102,11 +97,5 @@ export const fileWorkflow: MessageModule = {
     "fileOps.renameTitle": "Rename “{name}”",
     "fileOps.failed": "The operation failed",
     "fileOps.moved": "Moved to {path}",
-
-    "lsp.title": "Language service",
-    "lsp.probing": "Probing…",
-    "lsp.unavailable": "Not enabled",
-    "lsp.description":
-      "No language server is connected; the editor provides syntax highlighting and text editing only.",
   },
 };

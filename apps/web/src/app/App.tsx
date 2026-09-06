@@ -15,6 +15,8 @@ import {
   GithubDrawer,
   HandoffDialog,
   HandoffHistoryDrawer,
+  EditPreviewDialog,
+  ProblemsPanel,
   ResourceDrawer,
   QuickOpen,
   SettingsDialog,
@@ -114,6 +116,8 @@ function AppShell() {
       <Suspense fallback={null}>
         <ExplorerDrawer />
         <SourceControlDrawer />
+        <ProblemsPanel />
+        <EditPreviewDialog />
         <ResourceDrawer />
         <AutomationDrawer />
         <UsageDashboard />

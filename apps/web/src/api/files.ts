@@ -6,7 +6,6 @@ import {
   fileListSchema,
   fileVersionSchema,
   importFilesResponseSchema,
-  languageServiceStatusSchema,
   renameFileEntryRequestSchema,
   trashEntrySchema,
   trashListSchema,
@@ -126,15 +125,6 @@ export const filesApi = {
       `/api/workspaces/${workspaceId}/file-entries/restore`,
       fileEntryResultSchema,
       { method: "POST", ...json({ id }) },
-    ),
-  /**
-   * 语言服务能力探测。目前唯一可能的回答是 `unavailable`：没有 LSP 就
-   * 明说，不摆一个空补全列表（编辑器设计 §2、§4）。
-   */
-  languageService: (workspaceId: string) =>
-    request(
-      `/api/workspaces/${workspaceId}/language-service`,
-      languageServiceStatusSchema,
     ),
   /**
    * 声明某个编辑器节点正打开这个文件（E01/M4）。

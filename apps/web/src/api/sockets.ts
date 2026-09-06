@@ -36,3 +36,19 @@ export function terminalWebSocketUrl(
 export function workspaceEventsUrl(workspaceId: string): string {
   return socketUrl(`/api/workspaces/${workspaceId}/events`);
 }
+
+/**
+ * 一个语言会话一条 WebSocket（语言服务设计 §2.9）。
+ *
+ * 文本帧就是一条 JSON-RPC 消息。不复用工作空间事件流：那条是单向推送，
+ * 而会话必须能往上发；会话*状态*仍走事件流，所以状态栏和设置页不必为了
+ * 看一眼状态就开一条会话 socket。
+ */
+export function languageSessionUrl(
+  workspaceId: string,
+  sessionId: string,
+): string {
+  return socketUrl(
+    `/api/workspaces/${workspaceId}/language/sessions/${query(sessionId)}/stream`,
+  );
+}

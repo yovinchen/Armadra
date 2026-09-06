@@ -75,6 +75,31 @@ export const runtimeSettingsSchema = z.looseObject({
       cost: z.looseObject({ enabled: z.boolean().optional() }).optional(),
     })
     .optional(),
+  /**
+   * `language.*`（语言服务设计 §1.2、§3.3）。
+   *
+   * `servers.<serverId>` 是用户自己的覆盖：可执行路径、参数、开关，以及
+   * 原样交给 server 的 `initializationOptions` / `settings`。这里刻意没有
+   * 「安装」这类键——Armadra 不下载、不安装任何 language server。
+   */
+  language: z
+    .looseObject({
+      idleStopSeconds: z.number().int().nonnegative().optional(),
+      maxServers: z.number().int().positive().optional(),
+      maxRssBytes: z.number().int().nonnegative().optional(),
+      formatOnSave: z.boolean().optional(),
+      servers: z
+        .record(
+          z.string(),
+          z.looseObject({
+            path: z.string().optional(),
+            args: z.array(z.string()).optional(),
+            enabled: z.boolean().optional(),
+          }),
+        )
+        .optional(),
+    })
+    .optional(),
   /** `.armadra` 日志保留天数；`0` = 永久（§24.1 数据页）。 */
   logs: z
     .looseObject({ retentionDays: z.number().int().nonnegative().optional() })
@@ -145,6 +170,20 @@ export interface RuntimeSettingsPatch {
     channel?: "stable" | "beta";
     autoCheck?: boolean;
     autoDownload?: boolean;
+  };
+  /**
+   * 语言服务。`servers` 是按 serverId 的浅合并，所以关掉一个 server 只要
+   * 发它自己那一段；`null` 让 Runtime 的 merge 删掉这个键。
+   */
+  language?: {
+    idleStopSeconds?: number;
+    maxServers?: number;
+    maxRssBytes?: number;
+    formatOnSave?: boolean;
+    servers?: Record<
+      string,
+      { path?: string | null; args?: string[]; enabled?: boolean }
+    >;
   };
   /** 防休眠策略（T02）。 */
   power?: { policy?: PowerPolicy };

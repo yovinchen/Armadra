@@ -64,6 +64,7 @@ describe("useAppKeybindings", () => {
         handoff: "closed",
         usage: "closed",
         github: "closed",
+        problems: "closed",
         settings: false,
         palette: false,
         quickOpen: false,

@@ -72,6 +72,11 @@ export interface EditorCore {
     view: EditorView;
     language: Compartment;
     access: Compartment;
+    /**
+     * 语言服务的扩展槽（语言服务设计 §4.2）。会话是异步开起来的，编辑器
+     * 不等它：文件先打开、能编辑，补全 / 诊断 / hover 到货后热插进来。
+     */
+    service: Compartment;
   };
   /** 打开查找/替换面板；替换那一半由 `EditorState.readOnly` 决定是否出现。 */
   openSearch(view: EditorView): void;
@@ -103,6 +108,7 @@ export function loadEditorCore(): Promise<EditorCore> {
         }: CreateEditorOptions) {
           const language = new Compartment();
           const access = new Compartment();
+          const service = new Compartment();
           const view = new EditorView({
             parent,
             state: EditorState.create({
@@ -118,6 +124,7 @@ export function loadEditorCore(): Promise<EditorCore> {
                   ? [EditorState.lineSeparator.of(lineSeparator)]
                   : []),
                 language.of([]),
+                service.of([]),
                 access.of(EditorState.readOnly.of(readonly)),
                 EditorView.updateListener.of((update) => {
                   if (update.docChanged) onDocChanged(update.state.sliceDoc());
@@ -125,7 +132,7 @@ export function loadEditorCore(): Promise<EditorCore> {
               ],
             }),
           });
-          return { view, language, access };
+          return { view, language, access, service };
         },
         openSearch(view: EditorView) {
           openSearchPanel(view);
