@@ -105,7 +105,10 @@ describe("Launcher", () => {
   it("超过 8 个工作空间才长出搜索框，且只筛出匹配的行", async () => {
     listWorkspaces.mockResolvedValue(
       Array.from({ length: 9 }, (_, index) =>
-        workspace(`${index + 1}1111111-1111-4111-8111-111111111111`, `ws${index}`),
+        workspace(
+          `${index + 1}1111111-1111-4111-8111-111111111111`,
+          `ws${index}`,
+        ),
       ),
     );
     render(
@@ -133,7 +136,7 @@ describe("Launcher", () => {
     expect(screen.getByLabelText("工作空间操作")).toBeTruthy();
   });
 
-  it("新建文件夹卡片打开对话框", async () => {
+  it("新建文件夹卡片打开对话框，里面只有路径一项", async () => {
     listWorkspaces.mockResolvedValue([]);
     render(
       <TestProviders>
@@ -141,7 +144,20 @@ describe("Launcher", () => {
       </TestProviders>,
     );
     fireEvent.click(await screen.findByText("新建文件夹"));
-    expect(await screen.findByLabelText("父目录")).toBeTruthy();
+    expect(await screen.findByLabelText("路径")).toBeTruthy();
+    expect(screen.queryByLabelText("名称")).toBeNull();
+    expect(screen.queryByLabelText("颜色")).toBeNull();
+  });
+
+  it("浏览器里没有系统选择器，「打开文件夹」退回手填路径的对话框", async () => {
+    listWorkspaces.mockResolvedValue([]);
+    render(
+      <TestProviders>
+        <Launcher />
+      </TestProviders>,
+    );
+    fireEvent.click(await screen.findByText("打开文件夹"));
+    expect(await screen.findByLabelText("路径")).toBeTruthy();
   });
 
   it("克隆仓库卡片打开对话框", async () => {

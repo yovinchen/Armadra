@@ -37,8 +37,13 @@ export function useBoardSync() {
     // 「打开时恢复上次工作空间」关掉后只是不**读**这两个值；仍然照常写回，
     // 这样重新打开开关时上次的位置还在（§24.1 通用页）。
     const restore = usePreferencesStore.getState().restoreLastWorkspace;
-    bootWorkspaceRef.current = restore ? lastWorkspaceId() : null;
-    bootBoardRef.current = restore ? lastBoardId() : null;
+    // URL 参数优先（`?workspace=<id>&board=<id>`）：深链、多窗口与排查问题时
+    // 不必先改 localStorage 才能落到指定看板。
+    const params = new URLSearchParams(window.location.search);
+    bootWorkspaceRef.current =
+      params.get("workspace") ?? (restore ? lastWorkspaceId() : null);
+    bootBoardRef.current =
+      params.get("board") ?? (restore ? lastBoardId() : null);
   }
 
   const workspace = useCanvasStore((state) => state.workspace);

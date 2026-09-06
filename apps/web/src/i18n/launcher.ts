@@ -22,11 +22,9 @@ export const launcher: MessageModule = {
     "launcher.cancel": "取消",
 
     "folder.parent": "父目录",
-    "folder.name": "名称",
     "folder.choose": "选择",
 
     "clone.url": "仓库地址",
-    "clone.name": "目录名",
     "clone.start": "克隆",
     "clone.progress": "克隆进度",
   },
@@ -50,11 +48,9 @@ export const launcher: MessageModule = {
     "launcher.cancel": "Cancel",
 
     "folder.parent": "Parent folder",
-    "folder.name": "Name",
     "folder.choose": "Choose",
 
     "clone.url": "Repository URL",
-    "clone.name": "Folder name",
     "clone.start": "Clone",
     "clone.progress": "Clone progress",
   },

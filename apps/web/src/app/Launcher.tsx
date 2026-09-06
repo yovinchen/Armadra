@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   FolderOpen,
   FolderPlus,
@@ -6,22 +6,22 @@ import {
   RefreshCw,
   Settings,
 } from "lucide-react";
-import { onFileDrop, pickDirectory } from "../platform";
+import { toast } from "sonner";
+import { onFileDrop } from "../platform";
 import { useCanvasStore } from "../store/canvas-store";
 import { CloneRepoDialog } from "../panels/CloneRepoDialog";
 import { NewFolderDialog } from "../panels/NewFolderDialog";
-import { NewWorkspaceDialog } from "../panels/NewWorkspaceDialog";
 import { BrandMark } from "@/ui/brand-mark";
 import { Button } from "@/ui/button";
 import { IconButton } from "@/ui/icon-button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
-import {
-  DRAG_REGION,
-  NO_DRAG_REGION,
-  trafficLightInset,
-} from "../shell/window-region";
+import { trafficLightInset } from "../shell/window-region";
 import { useT } from "./preferences-store";
-import { useOpenWorkspace } from "./workspace-actions";
+import {
+  useCreateWorkspace,
+  useOpenFolder,
+  useOpenWorkspace,
+} from "./workspace-actions";
 import { useWorkspacesQuery, WorkspaceGrid } from "./WorkspaceGrid";
 
 /**
@@ -35,37 +35,37 @@ import { useWorkspacesQuery, WorkspaceGrid } from "./WorkspaceGrid";
  *
  * 品牌 mark、操作条、列表行共用同一条左边缘，页面只有一个对齐轴。
  *
- * 三段操作分别对应新建文件夹（Runtime `mkdir`）、打开文件夹（系统选择器
- * → 新建工作空间对话框）与克隆仓库。拖一个目录进窗口等同于「打开文件夹」。
+ * 三段操作分别对应新建文件夹（一个路径字段，Runtime `mkdir`）、打开文件夹
+ * （系统选择器选完即建即开，不再弹对话框）与克隆仓库。拖一个目录进窗口
+ * 等同于「打开文件夹」。名称取路径末段，颜色轮询，权限固定全开——
+ * 这三样都不再问用户（2026-09-05）。
  */
 export function Launcher() {
   const t = useT();
   const workspaces = useWorkspacesQuery();
   const openWorkspace = useOpenWorkspace();
+  const createWorkspace = useCreateWorkspace();
   const setPanel = useCanvasStore((state) => state.setPanel);
-  const [openDialog, setOpenDialog] = useState(false);
   const [folderDialog, setFolderDialog] = useState(false);
   const [cloneDialog, setCloneDialog] = useState(false);
-  const [droppedPath, setDroppedPath] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const openFolder = useOpenFolder(
+    useCallback(() => setFolderDialog(true), []),
+  );
 
+  // 拖一个目录进窗口 = 打开文件夹：名称取路径末段，不再问任何问题。
   useEffect(
     () =>
       onFileDrop((paths) => {
         const first = paths[0];
-        if (!first) return;
-        setDroppedPath(first);
-        setOpenDialog(true);
         setDragging(false);
+        if (!first) return;
+        void createWorkspace(first)
+          .then(openWorkspace)
+          .catch((cause: Error) => toast.error(cause.message));
       }),
-    [],
+    [createWorkspace, openWorkspace],
   );
-
-  async function browse() {
-    const picked = await pickDirectory();
-    setDroppedPath(picked);
-    setOpenDialog(true);
-  }
 
   return (
     <div
@@ -80,14 +80,12 @@ export function Launcher() {
         setDragging(false);
       }}
     >
+      {/* 这一条与全局拖拽层同高：空白处拖窗口，右边的设置钮自己抬到拖拽层之上 */}
       <header
-        style={{
-          ...DRAG_REGION,
-          paddingLeft: trafficLightInset() || undefined,
-        }}
+        style={{ paddingLeft: trafficLightInset() || undefined }}
         className="flex h-[var(--tabbar-h)] shrink-0 items-center px-3"
       >
-        <div className="ml-auto" style={NO_DRAG_REGION}>
+        <div className="relative z-[var(--z-dock)] ml-auto">
           <Tooltip>
             <TooltipTrigger asChild>
               <IconButton
@@ -124,7 +122,7 @@ export function Launcher() {
           <ActionSegment
             icon={<FolderOpen />}
             label={t("launcher.open")}
-            onClick={() => void browse()}
+            onClick={() => void openFolder()}
           />
           <ActionSegment
             icon={<GitBranch />}
@@ -135,7 +133,9 @@ export function Launcher() {
 
         {workspaces.isError && (
           <div className="mt-4 flex h-9 shrink-0 items-center gap-2 rounded-[var(--r-card)] border border-[color-mix(in_srgb,var(--danger)_28%,transparent)] bg-[var(--danger-soft)] px-3">
-            <span className="text-[var(--danger)]">{t("launcher.offline")}</span>
+            <span className="text-[var(--danger)]">
+              {t("launcher.offline")}
+            </span>
             <Button
               variant="ghost"
               size="sm"
@@ -173,12 +173,6 @@ export function Launcher() {
         </div>
       )}
 
-      <NewWorkspaceDialog
-        open={openDialog}
-        onOpenChange={setOpenDialog}
-        initialPath={droppedPath}
-        onCreated={openWorkspace}
-      />
       <NewFolderDialog
         open={folderDialog}
         onOpenChange={setFolderDialog}

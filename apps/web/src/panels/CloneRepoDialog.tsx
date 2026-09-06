@@ -44,7 +44,8 @@ export interface CloneRepoDialogProps {
 }
 
 /**
- * 克隆仓库（§20）：地址 + 父目录 + 可选目录名。
+ * 克隆仓库（§20，2026-09-05 精简）：地址 + 父目录，没有别的。
+ * 目录名与工作空间名都由 Runtime 从仓库地址推出来。
  *
  * Runtime 立刻返回 `jobId`，进度靠轮询——克隆完成之前还没有工作空间，
  * 也就没有工作空间事件流可用。完成时 Runtime 顺手建好工作空间并回给我们。
@@ -58,7 +59,6 @@ export function CloneRepoDialog({
   const queryClient = useQueryClient();
   const [url, setUrl] = useState("");
   const [parent, setParent] = useState("");
-  const [name, setName] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const jobRef = useRef<string | null>(null);
@@ -71,7 +71,6 @@ export function CloneRepoDialog({
     if (open) {
       setUrl("");
       setParent("");
-      setName("");
       setJobId(null);
       setFailure(null);
     }
@@ -82,7 +81,6 @@ export function CloneRepoDialog({
       runtimeApi.cloneRepository({
         url: url.trim(),
         parent: parent.trim(),
-        ...(name.trim() ? { name: name.trim() } : {}),
       }),
     onSuccess: (started) => {
       setFailure(null);
@@ -195,16 +193,6 @@ export function CloneRepoDialog({
               </Button>
             )}
           </div>
-
-          <label className="text-muted-foreground" htmlFor="clone-name">
-            {t("clone.name")}
-          </label>
-          <Input
-            id="clone-name"
-            value={name}
-            disabled={running}
-            onChange={(event) => setName(event.target.value)}
-          />
         </div>
 
         {running && (

@@ -8,14 +8,7 @@ export const modals: MessageModule = {
     "dialog.create": "创建",
     "dialog.save": "保存",
 
-    "workspace.new": "新建工作空间",
-    "workspace.name": "名称",
     "workspace.path": "路径",
-    "workspace.browse": "选择目录",
-    "workspace.color": "颜色",
-    "workspace.read": "读取",
-    "workspace.write": "写入",
-    "workspace.execute": "执行",
 
     "board.new": "新建看板",
     "board.rename": "重命名看板",
@@ -207,14 +200,7 @@ export const modals: MessageModule = {
     "dialog.create": "Create",
     "dialog.save": "Save",
 
-    "workspace.new": "New workspace",
-    "workspace.name": "Name",
     "workspace.path": "Path",
-    "workspace.browse": "Choose folder",
-    "workspace.color": "Colour",
-    "workspace.read": "Read",
-    "workspace.write": "Write",
-    "workspace.execute": "Execute",
 
     "board.new": "New board",
     "board.rename": "Rename board",
