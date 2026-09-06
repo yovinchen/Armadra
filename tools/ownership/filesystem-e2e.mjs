@@ -30,12 +30,10 @@
 //      the Runtime's own rows, so the change the Host made during its tenure is
 //      readable from the Runtime afterwards and the Runtime writes again.
 //
-// Switch order (§1.2): the filesystem domain depends on canvas and settings.
-// The canvas is switched here first. The settings domain has no projector on
-// this Host yet, so it cannot be switched at all — the state machine skips a
-// dependency it could never satisfy, which is what lets one domain land before
-// the domain in front of it has been built. The step below states that
-// explicitly rather than leaving it to be inferred from a passing run.
+// Switch order (§1.2): the filesystem domain depends on canvas and settings,
+// so both are switched here first, in that order. A switch attempted before
+// they settled is refused by dependency order, which the settings scenario
+// proves; this one proves the plan names both dependencies it verified.
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -189,9 +187,13 @@ try {
     canvas.ownership?.owner === "CANVAS_OWNERSHIP_OWNER_HOST",
     `epoch=${canvas.ownership?.epoch}`,
   );
-  note(
-    "the settings domain has no projector on this Host yet, so it cannot be switched; " +
-      "the state machine skips a dependency it could never satisfy (§1.2)",
+  // Then the settings: the filesystem depends on it too, and a switch attempted
+  // before it settled is refused by dependency order rather than half-done.
+  const settings = switchDomain("settings");
+  step(
+    "the settings moved to the Host next, as the switch order requires",
+    settings.ownership?.owner === "CANVAS_OWNERSHIP_OWNER_HOST",
+    `epoch=${settings.ownership?.epoch}`,
   );
 
   const switched = switchDomain("filesystem");
@@ -212,13 +214,20 @@ try {
       Object.values(checks).every((check) => !check.differences?.length),
     Object.keys(checks).join(", "),
   );
-  // The switch verified the dependency it could, and only that one.
+  // The switch verified both dependencies, and reports both as the Host's.
+  const dependencies = Object.fromEntries(
+    (switched.plan?.dependencies ?? []).map((entry) => [
+      entry.domain,
+      entry.owner,
+    ]),
+  );
   step(
-    "the plan reports the dependency it actually verified",
-    (switched.plan?.dependencies ?? []).length === 1 &&
-      switched.plan.dependencies[0].domain ===
-        "WRITE_OWNERSHIP_DOMAIN_CANVAS" &&
-      switched.plan.dependencies[0].owner === "CANVAS_OWNERSHIP_OWNER_HOST",
+    "the plan reports the two dependencies it actually verified",
+    Object.keys(dependencies).length === 2 &&
+      dependencies.WRITE_OWNERSHIP_DOMAIN_CANVAS ===
+        "CANVAS_OWNERSHIP_OWNER_HOST" &&
+      dependencies.WRITE_OWNERSHIP_DOMAIN_SETTINGS ===
+        "CANVAS_OWNERSHIP_OWNER_HOST",
     (switched.plan?.dependencies ?? [])
       .map((entry) => `${entry.domain}=${entry.owner}`)
       .join(" "),
@@ -474,9 +483,31 @@ try {
     Object.keys(reverseChecks).join(", "),
   );
 
-  // The canvas follows the filesystem back: a workspace patch touches both
-  // domains, so leaving the canvas on the Host would refuse it for a reason
-  // this section is not about.
+  // The dependencies follow the filesystem back in reverse switch order:
+  // settings first, then the canvas. A workspace patch touches the canvas
+  // too, so leaving it on the Host would refuse it for a reason this section
+  // is not about.
+  const settingsBack = JSON.parse(
+    harness.hostCli([
+      "ownership",
+      "rollback",
+      "--domain",
+      "settings",
+      "--export",
+      join(harness.workspace, "reverse-settings"),
+      "--runtime-binary",
+      harness.runtimeBinary,
+      "--runtime-database",
+      harness.runtimeDatabase,
+      "--output",
+      "json",
+    ]),
+  );
+  step(
+    "the settings followed the filesystem back to the Runtime",
+    settingsBack.ownership?.owner === "CANVAS_OWNERSHIP_OWNER_RUNTIME",
+    `epoch=${settingsBack.ownership?.epoch}`,
+  );
   const canvasBack = JSON.parse(
     harness.hostCli([
       "ownership",
