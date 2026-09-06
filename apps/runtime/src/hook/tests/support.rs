@@ -156,6 +156,20 @@ impl Fixture {
         .await
     }
 
+    /// Re-points the fixture node at another provider. A context reading is
+    /// only answered when the node's agent and its session's agent agree, so a
+    /// per-provider case has to move both.
+    pub(super) async fn set_agent(&self, agent_id: &str) {
+        sqlx::query("UPDATE nodes SET data_json = ? WHERE id = ?")
+            .bind(
+                json!({ "kind": "terminal", "cwd": ".", "agent": { "id": agent_id } }).to_string(),
+            )
+            .bind(&self.node_id)
+            .execute(&self.state.pool)
+            .await
+            .unwrap();
+    }
+
     pub(super) async fn status(&self) -> Option<crate::model::AgentStatus> {
         db::get_agent_status(&self.state.pool, &self.node_id)
             .await

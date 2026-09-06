@@ -3,6 +3,8 @@
 //! receipt and the stale sweep).
 
 mod auth;
+mod extension;
+mod extension_routes;
 mod reports;
 mod routes;
 mod support;
