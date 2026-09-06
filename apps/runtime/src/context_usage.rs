@@ -364,6 +364,19 @@ pub fn parse_claude(node_id: &str, report: &ContextReport, now_ms: i64) -> Optio
     })
 }
 
+/// Which providers hand us a measured window instead of a transcript to add up.
+///
+/// Claude reports one through its status line; Pi and Oh My Pi report one from
+/// inside the CLI process, where `ctx.getContextUsage()` answers for the live
+/// model (协作通道 §2.2). All three land in [`parse_claude`] because they all
+/// send the same envelope: one already-summed count in the first of the three
+/// disjoint buckets, a capacity, and a null `current_usage` when the reading
+/// no longer describes the session. All three therefore read `provider_hook` /
+/// `reported`, which is the whole point — the number is measured, not guessed.
+fn reports_a_live_window(provider: &str) -> bool {
+    matches!(provider, "claude" | "pi" | "omp")
+}
+
 /// Capability narrowing concerns application features, not manual CLI commands
 /// and not workspace authorization (which remains a separate check).
 pub fn has_capability(
@@ -394,7 +407,7 @@ pub async fn ingest(
     payload: &Value,
 ) -> crate::error::AppResult<bool> {
     use crate::db;
-    if provider != "claude" {
+    if !reports_a_live_window(provider) {
         return Ok(false);
     }
     let Ok(report) = serde_json::from_value::<ContextReport>(payload.clone()) else {
@@ -503,9 +516,10 @@ pub async fn get_snapshot(
     if !has_capability(&state.settings, agent_id, "contextUsage") {
         return Ok(unknown("unsupported"));
     }
-    // Claude is the only provider that publishes a live window; everything else
-    // that declares the capability is read from its structured transcript.
-    if state.settings.base_agent(agent_id) == "claude" {
+    // Only a provider that publishes a live window is answered from the cache;
+    // everything else that declares the capability is read from its structured
+    // transcript.
+    if reports_a_live_window(&state.settings.base_agent(agent_id)) {
         return Ok(state.hooks.context_usage().snapshot(
             node_id,
             &session.id,
