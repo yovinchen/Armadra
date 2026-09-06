@@ -99,7 +99,8 @@ func (e *Engine) RunNow(ctx context.Context, auth Authorization, workspace, id s
 	if err = e.commit(ctx, auth.PrincipalID, "run-now",
 		update{entityKey(c.WorkspaceId, planKind, plan.Id), snapshot.Revision, plan},
 		update{entityKey(c.WorkspaceId, runKind, runID), 0, run},
-		update{entityKey("", operationKind, hashText(run.OperationId)), 0, &pb.AutomationRunRef{RunId: runID, PlanId: plan.Id, WorkspaceId: c.WorkspaceId}}); err != nil {
+		update{entityKey("", operationKind, hashText(run.OperationId)), 0, &pb.AutomationRunRef{RunId: runID, PlanId: plan.Id, WorkspaceId: c.WorkspaceId}},
+		historyEntry(run)); err != nil {
 		return RunSnapshot{}, err
 	}
 	return RunSnapshot{Run: run, Revision: 1}, nil

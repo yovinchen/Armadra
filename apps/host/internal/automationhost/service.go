@@ -116,6 +116,12 @@ func New(ctx context.Context, options Options) (*Service, error) {
 		return nil, err
 	}
 	s.engine = engine
+	// Runs written before the history index existed are projected into it once,
+	// before anything can page them: a run history that silently began at the
+	// upgrade would look truncated rather than ordered.
+	if err = engine.EnsureRunHistory(ctx); err != nil {
+		return nil, err
+	}
 	if err = s.start(ctx); err != nil {
 		return nil, err
 	}

@@ -236,7 +236,9 @@ func (e *Engine) materialize(ctx context.Context, snapshot PlanSnapshot, now, sc
 		}
 	}
 	run.RequestSha256 = dispatchHash(run)
-	return e.commit(ctx, "host", "materialize-slot", update{entityKey(c.WorkspaceId, planKind, plan.Id), snapshot.Revision, plan}, update{entityKey(c.WorkspaceId, runKind, runID), 0, run}, update{entityKey("", operationKind, hashText(run.OperationId)), 0, &pb.AutomationRunRef{RunId: runID, PlanId: plan.Id, WorkspaceId: c.WorkspaceId}})
+	// The history row is written in the same transaction as the run: an index
+	// that could lag behind the runs would page past history that exists.
+	return e.commit(ctx, "host", "materialize-slot", update{entityKey(c.WorkspaceId, planKind, plan.Id), snapshot.Revision, plan}, update{entityKey(c.WorkspaceId, runKind, runID), 0, run}, update{entityKey("", operationKind, hashText(run.OperationId)), 0, &pb.AutomationRunRef{RunId: runID, PlanId: plan.Id, WorkspaceId: c.WorkspaceId}}, historyEntry(run))
 }
 func (e *Engine) claim(ctx context.Context, snapshot PlanSnapshot, now int64) (bool, error) {
 	plan := snapshot.Plan

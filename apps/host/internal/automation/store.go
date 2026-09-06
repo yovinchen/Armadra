@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	pb "armadra.local/host/gen/armadra/v1"
@@ -21,7 +22,52 @@ const (
 	indexKind      = "automation.plan-index"
 	operationKind  = "automation.operation-index"
 	gateKind       = "automation.target-gate"
+	// The time-ordered view of the run kind; see [historyID] and [Engine.ListRuns].
+	historyKind = "automation.run-history"
+	// Set once the pre-index runs of a workspace have been projected into it.
+	historyStateKind = "automation.run-history-state"
 )
+
+const (
+	// Page bounds for [Engine.ListRuns]. The Host surface clamps too; this is
+	// the floor so a direct caller cannot ask for an unbounded page.
+	MaxRunPage     = 200
+	DefaultRunPage = 50
+	// How many storage pages one ListRuns call will read before answering with
+	// a cursor. A page can come back empty because the byte budget ended it,
+	// so a single pass is not enough, and an unbounded loop is not an option.
+	maxHistoryPasses = 32
+	// Runs projected per backfill transaction. Well under storage.MaxChanges.
+	historyBackfillBatch = 100
+)
+
+// historyID orders one plan's runs newest first.
+//
+// `<planId>/<descending scheduled instant>/<runId>`: entity ids sort as bytes,
+// so the complement of the instant makes ascending byte order descending time
+// order, and the plan-id prefix keeps one plan's history contiguous. Plan ids
+// cannot contain `/` ([validID]), so the prefix is unambiguous. The run id is
+// the tie-breaker; two runs of one plan cannot share a slot, but a key that
+// could collide would silently drop history.
+func historyID(planID string, scheduledAt int64, runID string) string {
+	if scheduledAt < 0 {
+		scheduledAt = 0
+	}
+	if scheduledAt > maxTimestampMS {
+		scheduledAt = maxTimestampMS
+	}
+	return fmt.Sprintf("%s/%016x/%s", planID, maxTimestampMS-scheduledAt, runID)
+}
+
+// historyEntry is the index row for one run, as an update ready to commit in
+// the same transaction that creates the run.
+func historyEntry(run *pb.AutomationRun) update {
+	return update{
+		entityKey(run.WorkspaceId, historyKind, historyID(run.PlanId, run.ScheduledAtUnixMs, run.Id)),
+		0,
+		&pb.AutomationRunRef{RunId: run.Id, PlanId: run.PlanId, WorkspaceId: run.WorkspaceId},
+	}
+}
 
 func entityKey(workspace, kind, id string) storage.Key {
 	return storage.Key{WorkspaceID: workspace, Kind: kind, ID: id}
@@ -185,24 +231,66 @@ func (e *Engine) gate(ctx context.Context, target *pb.AutomationTarget) (*pb.Aut
 	}
 	return v, rev, err
 }
+// ListRuns pages one plan's runs newest first, from the durable history index
+// rather than the run entities themselves.
+//
+// A run is stored under a slot hash, so listing the run kind gives an order
+// with no meaning: a page of it is an arbitrary twentieth of the plan's
+// history, and the panel had to fetch everything and sort locally to show
+// anything true. The index keys the same runs by descending scheduled instant
+// inside a plan-id prefix, so a page really is "the next N older runs" and a
+// cursor really is a position in time. See [historyID].
 func (e *Engine) ListRuns(ctx context.Context, workspace, planID, after string, limit int) (RunsPage, error) {
 	if !validID(workspace) || !validID(planID) {
 		return RunsPage{}, ErrInvalid
 	}
-	page, err := e.store.List(ctx, storage.ListOptions{WorkspaceID: workspace, Kind: runKind, AfterID: after, Limit: limit})
-	if err != nil {
-		return RunsPage{}, err
+	if limit <= 0 || limit > MaxRunPage {
+		limit = DefaultRunPage
 	}
-	result := RunsPage{NextID: page.NextID, HasMore: page.HasMore, Runs: []RunSnapshot{}}
-	for _, entity := range page.Entities {
-		run := new(pb.AutomationRun)
-		if err = proto.Unmarshal(entity.Payload, run); err != nil {
-			return result, storage.ErrCorrupt
+	prefix := planID + "/"
+	cursor := after
+	if cursor == "" {
+		cursor = prefix
+	}
+	// A cursor from another plan would page through somebody else's history.
+	if !strings.HasPrefix(cursor, prefix) {
+		return RunsPage{}, ErrInvalid
+	}
+	result := RunsPage{Runs: []RunSnapshot{}}
+	// Bounded so a storage page that is entirely byte-budget cannot spin.
+	for pass := 0; pass < maxHistoryPasses && len(result.Runs) < limit; pass++ {
+		page, err := e.store.List(ctx, storage.ListOptions{WorkspaceID: workspace, Kind: historyKind, AfterID: cursor, Limit: limit - len(result.Runs)})
+		if err != nil {
+			return RunsPage{}, err
 		}
-		if run.PlanId == planID {
-			result.Runs = append(result.Runs, RunSnapshot{Run: run, Revision: entity.Revision})
+		for _, entity := range page.Entities {
+			// The index is one contiguous run of keys per plan, so the first
+			// key outside the prefix is the end of this plan's history.
+			if !strings.HasPrefix(entity.ID, prefix) {
+				return result, nil
+			}
+			ref := new(pb.AutomationRunRef)
+			if proto.Unmarshal(entity.Payload, ref) != nil || ref.PlanId != planID || ref.WorkspaceId != workspace {
+				return RunsPage{}, storage.ErrCorrupt
+			}
+			run, err := e.GetRun(ctx, workspace, ref.RunId)
+			if err != nil {
+				return RunsPage{}, err
+			}
+			result.Runs = append(result.Runs, run)
+			cursor = entity.ID
+		}
+		if !page.HasMore {
+			return result, nil
+		}
+		if len(page.Entities) == 0 {
+			// The byte budget alone ended the page; advance past it so the
+			// next pass makes progress instead of re-reading the same key.
+			cursor = page.NextID
 		}
 	}
+	result.NextID = cursor
+	result.HasMore = true
 	return result, nil
 }
 func (e *Engine) verify(ctx context.Context, auth Authorization, config *pb.AutomationPlanConfig) error {

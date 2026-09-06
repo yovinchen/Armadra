@@ -1,6 +1,7 @@
 package automationhost
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -203,6 +204,37 @@ func (s *Service) Define(ctx context.Context, caller Caller, planID string, conf
 		return nil, err
 	}
 	return planSnapshot(snapshot)
+}
+
+// Payload reads back the stdin / prompt a plan was defined with.
+//
+// An edit re-sends the whole configuration, so without this the panel would
+// have to make the user retype the prompt or quietly replace it with an empty
+// one. It needs the manage grant — the same one that wrote it — and it is
+// checked against the plan's own recorded reference, so a caller cannot name an
+// arbitrary digest and read somebody else's stored bytes.
+func (s *Service) Payload(ctx context.Context, caller Caller, planID string) (*pb.GetAutomationPayloadResponse, error) {
+	if err := s.authorize(caller, ScopeManage); err != nil {
+		return nil, err
+	}
+	if !idPattern.MatchString(planID) {
+		return nil, automation.ErrInvalid
+	}
+	snapshot, err := s.engine.GetPlan(ctx, caller.WorkspaceID, planID)
+	if err != nil {
+		return nil, err
+	}
+	record, err := s.store.AutomationPayload(ctx, caller.WorkspaceID, snapshot.Plan.GetConfig().GetPayloadRef())
+	if err != nil {
+		return nil, err
+	}
+	// The plan names a digest; bytes that do not match it are not this plan's
+	// payload, and handing them back would let an edit dispatch something the
+	// reader never saw.
+	if !bytes.Equal(record.SHA256[:], snapshot.Plan.GetConfig().GetPayloadSha256()) {
+		return nil, storage.ErrCorrupt
+	}
+	return &pb.GetAutomationPayloadResponse{PlanId: planID, Payload: record.Payload, PayloadSha256: append([]byte(nil), record.SHA256[:]...)}, nil
 }
 
 // Activate requires the exact revision, configuration version and digest the
