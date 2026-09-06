@@ -193,8 +193,15 @@ Go Host 已增加独立私有设备认证表与 Protobuf 会话接口。浏览�
 | 节点 token          | `<数据目录>/node-tokens/<nodeId>`                 | —                                               |
 | 待答权限            | `<数据目录>/pending/`                             | —                                               |
 | Runtime 偏好        | `<数据目录>/settings.json`                        | —                                               |
+| 本机偏好            | `<数据目录>/worker-settings.json`                 | —                                               |
 | 私有 tmux server    | `<数据目录>/tmux.sock` + `tmux.conf`（0700 目录） | —                                               |
 | 工作区产物          | `<工作区>/.armadra/`（assets、exports、板日志）   | —                                               |
+
+偏好分两个文件：`settings.json` 跟着账号走，`worker-settings.json` 属于这台
+机器（`apps/runtime/src/settings/local.rs`：终端后端、浏览器可执行文件、电源
+策略、CLI 路径覆盖与探测缓存）。载入时合成一份文档、写入时再拆开，所以
+`GET /api/settings` 仍是一个对象；`GET /api/settings/local` 告诉界面哪些键属于
+本机。settings 域的写入所有权切到 Host 再切回来时，本机那一半原地不动。
 
 Runtime 启动时把 PATH 换成补齐过的版本（Homebrew、mise shims、mise Node 安装
 目录），并把同一份 PATH 交给所有终端子进程——从 `.app` 启动的 GUI 进程拿到的是
