@@ -22,6 +22,7 @@ import {
   textItemAt,
   type Draft,
 } from "./draft";
+import { snapToGrid } from "./grid";
 
 /**
  * 白板工具的指针通道（React Flow 计划 §2.4 / F21–F25，归属 whiteboard）。
@@ -46,15 +47,6 @@ import {
 
 export interface ToolPointerState {
   draft: Draft | null;
-}
-
-/** 吸附到网格（偏好 `snap`）。 */
-function snapped(point: Position, grid: number, snap: boolean): Position {
-  if (!snap || grid <= 0) return point;
-  return {
-    x: Math.round(point.x / grid) * grid,
-    y: Math.round(point.y / grid) * grid,
-  };
 }
 
 export function useToolPointer(): ToolPointerState {
@@ -97,7 +89,7 @@ export function useToolPointer(): ToolPointerState {
     };
 
     const pageOf = (event: PointerEvent): Position =>
-      snapped(
+      snapToGrid(
         flow.screenToFlowPosition({ x: event.clientX, y: event.clientY }),
         latest.current.preferences.gridSize,
         latest.current.preferences.snap,

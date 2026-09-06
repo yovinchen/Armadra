@@ -6,6 +6,7 @@ import { setNextStyle, useTool } from "../../interaction/tool-store";
 import { trackPointer } from "../../interaction/pointer";
 import { DraftPreview } from "./DraftPreview";
 import { useClipboardCommands } from "./use-clipboard";
+import { useDoubleClickText } from "./use-double-click-text";
 import { useItemDrag } from "./use-item-drag";
 import { useToolPointer } from "./use-tool-pointer";
 
@@ -15,8 +16,9 @@ import { useToolPointer } from "./use-tool-pointer";
  * `FlowWorkspace` 只 import 这一个组件；工具、剪贴板、拖动桥接、光标全在
  * 这棵子树里，B0 的装配文件不用为白板层改任何东西。
  *
- * 它渲染的东西只有一样：进行中的图形（`<DraftPreview>`）。其余四件事都是
- * 副作用——指针通道、拖动落位、剪贴板命令、粘贴落点的指针记录。
+ * 它渲染的东西只有一样：进行中的图形（`<DraftPreview>`）。其余几件事都是
+ * 副作用——指针通道、拖动落位、剪贴板命令、空白处双击建文字、粘贴落点的
+ * 指针记录。
  */
 
 /**
@@ -44,6 +46,7 @@ export function ToolLayer() {
 
   useItemDrag();
   useClipboardCommands();
+  useDoubleClickText();
   useDefaultStyle();
 
   // 光标写在 React Flow 的容器上：铺一层透明覆盖层只为了换光标，会顺带
