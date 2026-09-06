@@ -24,6 +24,39 @@ export const agentIdSchema = z
     { message: "Unknown agent id" },
   );
 
+/** The longest a handle may be — mirrors `MAX_HANDLE_CHARS` in the runtime. */
+export const MAX_HANDLE_CHARS = 24;
+
+/**
+ * A short alias an agent can address a node by, instead of quoting its title.
+ *
+ * 1–{@link MAX_HANDLE_CHARS} characters: a leading ASCII letter or digit, then
+ * letters, digits, `-` or `_`, all lowercase. The narrow charset is what keeps
+ * a handle unambiguous on a command line — nothing to quote and nothing that
+ * looks like an id.
+ *
+ * This is a mirror of `normalize_handle` in
+ * `apps/runtime/src/collab/addressing.rs`, which stays the authority: the
+ * runtime re-validates every handle it reads, so a board written by hand can
+ * never register one this schema would reject.
+ */
+export const handleSchema = z
+  .string()
+  .min(1)
+  .max(MAX_HANDLE_CHARS)
+  .regex(
+    /^[a-z0-9][a-z0-9_-]*$/,
+    "A handle is lowercase letters, digits, - or _, starting with a letter or digit",
+  );
+
+/**
+ * Spread into every node data variant. Addressing is a property of the node,
+ * not of what it runs: a sticky can be handed a handle for the same reason a
+ * terminal can, and a variant that dropped the key would have the canvas strip
+ * a handle the runtime had just written.
+ */
+const addressable = { handle: handleSchema.optional() };
+
 /** A launch armed by `open-agent --after A,B`; the PTY stays a plain shell until every dependency is done. */
 export const pendingLaunchSchema = z.object({
   command: z.string().max(4_000),
@@ -77,6 +110,7 @@ export const sshTargetSchema = z.object({
 
 export const terminalNodeDataSchema = z.object({
   kind: z.literal("terminal"),
+  ...addressable,
   sessionId: z.string().uuid().optional(),
   cwd: z.string().max(4_000).optional(),
   shell: z.string().max(1_024).optional(),
@@ -89,6 +123,7 @@ export const MAX_STICKY_CONTENT = 20_000;
 
 export const stickyNodeDataSchema = z.object({
   kind: z.literal("sticky"),
+  ...addressable,
   content: z.string().max(MAX_STICKY_CONTENT).default(""),
 });
 
@@ -123,6 +158,7 @@ export const frameBindingSchema = z.object({
 /** The group label is `node.title` and its tint is `node.color`. */
 export const groupNodeDataSchema = z.object({
   kind: z.literal("group"),
+  ...addressable,
   /** Absent for an ordinary Frame; present once one is bound to a checkout. */
   binding: frameBindingSchema.nullish(),
 });
@@ -154,6 +190,7 @@ export const languageServiceSchema = z.object({
 
 export const editorNodeDataSchema = z.object({
   kind: z.literal("editor"),
+  ...addressable,
   path: z.string().min(1).max(4_000),
   language: z.string().max(40).optional(),
   readonly: z.boolean().optional(),
@@ -166,6 +203,7 @@ export const diffScopeSchema = z.enum(DIFF_SCOPES);
 
 export const diffNodeDataSchema = z.object({
   kind: z.literal("diff"),
+  ...addressable,
   repoPath: z.string().min(1).max(4_000),
   scope: diffScopeSchema.default("worktree"),
   paths: z.array(z.string().max(4_000)).max(1_000).optional(),
@@ -173,11 +211,13 @@ export const diffNodeDataSchema = z.object({
 
 export const filesNodeDataSchema = z.object({
   kind: z.literal("files"),
+  ...addressable,
   path: z.string().min(1).max(4_000),
 });
 
 export const browserNodeDataSchema = z.object({
   kind: z.literal("browser"),
+  ...addressable,
   url: z.string().max(4_000).default(""),
 });
 
@@ -196,6 +236,7 @@ export const automationScheduleKindSchema = z.enum(AUTOMATION_SCHEDULE_KINDS);
 
 export const automationNodeDataSchema = z.object({
   kind: z.literal("automation"),
+  ...addressable,
   /** `AutomationPlan.id` on the execution Host — the only durable binding. */
   planId: z.string().min(1).max(200),
   /** The Host workspace scope the plan lives in, not the local board id. */
@@ -219,6 +260,7 @@ export const agentActivitySourceSchema = z.enum(AGENT_ACTIVITY_SOURCES);
 
 export const agentActivityNodeDataSchema = z.object({
   kind: z.literal("agentActivity"),
+  ...addressable,
   /** The observed terminal node on this board. */
   sourceNodeId: z.string().uuid(),
   source: agentActivitySourceSchema.default("loop"),

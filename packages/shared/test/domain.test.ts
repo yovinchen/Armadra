@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_NODE_COLOR,
   EDGE_KINDS,
+  MAX_HANDLE_CHARS,
   NODE_COLORS,
   NODE_TYPES,
   accountRefSchema,
@@ -11,6 +12,7 @@ import {
   canvasEdgeSchema,
   canvasNodeSchema,
   editorNodeDataSchema,
+  handleSchema,
   terminalNodeDataSchema,
   workspaceSchema,
 } from "../src/index.js";
@@ -115,6 +117,68 @@ describe("canvas domain v3", () => {
       expect(parsed.success, `${String(data.kind)} rejected`).toBe(true);
     }
     expect(payloads).toHaveLength(NODE_TYPES.length);
+  });
+
+  it("carries a handle on every node type and mirrors the runtime's charset", () => {
+    // A handle survives the round trip on every variant: the canvas parses the
+    // board the runtime wrote, so a variant that dropped the key would silently
+    // erase a handle the addressing rules had just been told about.
+    const payloads: Record<string, unknown>[] = [
+      { kind: "terminal" },
+      { kind: "sticky", content: "note" },
+      { kind: "group" },
+      { kind: "editor", path: "src/App.tsx" },
+      { kind: "diff", repoPath: "." },
+      { kind: "files", path: "src" },
+      { kind: "browser", url: "https://example.com" },
+      {
+        kind: "automation",
+        planId: "plan-1",
+        planWorkspaceId: "workspace-1",
+        executionHostId: "0123456789abcdef0123456789abcdef",
+      },
+      { kind: "agentActivity", sourceNodeId: otherNodeId },
+    ];
+    expect(payloads).toHaveLength(NODE_TYPES.length);
+    for (const data of payloads) {
+      const parsed = canvasNodeSchema.parse(
+        node({
+          type: data.kind,
+          title: String(data.kind),
+          data: { ...data, handle: "review-2" },
+        }),
+      );
+      expect(parsed.data, `${String(data.kind)} dropped its handle`).toEqual(
+        expect.objectContaining({ handle: "review-2" }),
+      );
+    }
+    // A node with no handle is the normal case, not a parse failure.
+    expect(
+      canvasNodeSchema.parse(node()).data as { handle?: string },
+    ).not.toHaveProperty("handle");
+  });
+
+  it("refuses handles the runtime would not have written", () => {
+    expect(handleSchema.safeParse("a").success).toBe(true);
+    expect(handleSchema.safeParse("a".repeat(MAX_HANDLE_CHARS)).success).toBe(
+      true,
+    );
+    expect(handleSchema.safeParse("9-lives_x").success).toBe(true);
+    for (const rejected of [
+      "",
+      "a".repeat(MAX_HANDLE_CHARS + 1),
+      // Case is folded by the runtime before it is stored, so an uppercase
+      // handle in a document is one that never went through `rename`.
+      "Review",
+      "-leading",
+      "_leading",
+      "has space",
+      "结论",
+      "dot.ted",
+      "slash/ed",
+    ]) {
+      expect(handleSchema.safeParse(rejected).success, rejected).toBe(false);
+    }
   });
 
   it("keeps the plan card and the activity card as separate entities", () => {
