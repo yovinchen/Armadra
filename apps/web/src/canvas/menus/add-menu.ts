@@ -26,6 +26,8 @@ import { useCanvasStore } from "../../store/canvas-store";
 import type { Translate } from "../../app/preferences-store";
 import { runCanvasCommand, type CanvasCommandId } from "../commands";
 import { pickFilesForCanvas } from "../dnd/external-content";
+import { addItems, createItemId, select } from "../whiteboard/store";
+import { textItemAt } from "../whiteboard/tools/draft";
 import { openAutomationPanel } from "../../panels/automation/open";
 
 /**
@@ -70,11 +72,16 @@ function command(id: CanvasCommandId): () => void {
 const FRAME_SIZE = { width: 640, height: 420 };
 
 /**
- * 「文字」：B2 重建。文字是一条 `whiteboard.items`（`wb.text`），
- * 建完直接进编辑态——那需要白板层的工具与节点组件都在位。
+ * 「文字」= 一条 `whiteboard.items`（`wb.text`，不进 `nodes` 表）。
+ *
+ * 与文字工具点一下走的是同一条路（`whiteboard/tools/draft.textItemAt`）：
+ * 空文字对象建出来就选中，`TextNode` 看到 `text` 为空自动进编辑态，所以
+ * 菜单里点「新建文字」和用文字工具点一下的结果一模一样。
  */
-function addTextShape(_position: Position): void {
-  // B2: whiteboard.addItems([{ kind: "text", ... }]) 并进入编辑态。
+function addTextShape(position: Position): void {
+  const item = textItemAt(position, createItemId());
+  addItems([item]);
+  select([item.id]);
 }
 
 /** 「画框」= 分组节点（`nodes` 表里的一行），落点即左上角。 */
