@@ -6,7 +6,9 @@
 
 `SourceControlPanel` 使用 Changes / Branches / History / Worktrees 页签。顶部固定 RepoScopePicker：项目、执行主机、worktree、当前分支及 ahead/behind；所有操作旁都能识别目标仓库。
 
-**已实施（§4.1 多仓库）**：顶部为仓库切换器，Changes 页左侧是按父仓库分组的仓库列表（图标、名称、当前分支、脏文件数）。Changes 页可切到「全部仓库」聚合视图，逐仓库读取状态后合并展示，每一行标注来源仓库；该视图只读——暂存 / 还原仍打到行自己的仓库，提交按钮关闭。跨仓库一次提交刻意不做。
+**已实施（§4.1 多仓库）**：顶部为仓库切换器，Changes 页左侧是按父仓库分组的仓库列表（图标、名称、当前分支、脏文件数）。Changes 页可切到「全部仓库」聚合视图，**一次批量请求**读回全部检出的状态后合并展示，每一行标注来源仓库；该视图只读——暂存 / 还原仍打到行自己的仓库，提交按钮关闭。跨仓库一次提交刻意不做。
+
+批量状态（`POST /git/repository/status-batch`）与服务端 pathspec 是同一件事的两半。原先聚合视图每个仓库一次往返，十二个仓库就是十二次；更糟的是那十二个答案被当成一份列表渲染，而它们是十二个不同时刻观察到的。现在一次请求一次观察，读不出来的仓库带着自己的 `{ code, message }` 回来——十二个里坏一个不该让另外十一个变成空白。status、diff 与 log 都接受 pathspec 数组并由 Git 过滤；status 的过滤同时作用于计数与行，两者因此描述同一个集合（分支与 ahead/behind 不受影响，它们是关于检出的事实，不是关于这次筛选的）。pathspec 一律走 `--` 之后，且拒绝绝对路径、`..` 与以 `-` 开头的写法。
 
 `GitHubPanel` 使用 Issues / Pull requests 页签，共用仓库、状态、作者、标签、负责人筛选；详情可以展开为全屏。Issue/PR 与画布节点的关联仅显示小徽标和“定位关联会话”，不将会话转换成任务卡片。
 
@@ -56,7 +58,7 @@ Git 仓库/索引/文件系统是代码状态真相，Host 里的状态是缓存
 | Reset                       | soft/mixed/hard 明确区分影响范围                | hard 展示文件损失；不得由普通“撤销”触发                   |
 | Stash                       | include-untracked 可选、命名、列表、diff        | apply 与 drop 分离；pop 冲突不假定 stash 已删除           |
 | Tag / Remote                | 标签创建/删除/推送，远端增删改                  | 展示本地/远端范围；带凭据 URL 脱敏                        |
-| Reflog                      | 高级历史入口                                    | 找回 OID 后创建分支；恢复动作仍有 ref 前置检查            |
+| Reflog                      | 高级历史入口（已实施，见 §4.0）                 | 找回 OID 后创建分支；恢复动作仍有 ref 前置检查            |
 
 `feature/...` 是分支名称建议，不是独立 Git 操作；默认按用途建议 `feature/…`、`fix/…`、`refactor/…`，用户可编辑。遵守项目分支/工作树命名规则，禁止使用项目明确禁止的前缀。
 
@@ -79,9 +81,22 @@ M4 补齐的其余部分同样落在 Runtime `RepositoryService` 与 `apps/web/s
 - Diff 增加并排视图、`--ignore-all-space` 与 diff 内搜索。忽略空白只影响补丁与行数统计，文件列表照旧列出仅空白变化的文件（标注「仅空白差异」），并排视图纯排版、不重算差异。
 - 历史行操作：复制 OID、游离检出、从该提交建分支、cherry-pick、`Revert{targetOid, mainline, expectedStateToken}`、`Reset{mode, targetOid, expectedStateToken, discardChanges}`。revert 与 cherry-pick 共用同一套 owned 序列与 Continue/Abort，没有 skip；hard reset 在工作区不干净时必须显式确认，并先用 stash 后端记录一份含未跟踪文件的快照作为可恢复点。
 - 标签与远端各有独立页签。标签的删除与推送按标签对象本身 CAS，创建不提供 force，推送保留 `--no-force`；远端 URL 走与克隆相同的白名单，其中的凭据在离开 Runtime 前脱敏，界面也不会把脱敏值回填后送回。
-- 交互式 rebase 提供可审阅的 todo：预览将被重放的提交（最旧在前），支持重排、squash、drop，随后用写入仓库 Git 目录的临时文件加 `GIT_SEQUENCE_EDITOR=cp -- '<path>'` 非交互执行。提交的 todo 必须覆盖区间内全部提交，丢弃只能显式写 drop。`reword`、`edit`、`exec`、`fixup` 未实现，含合并提交的区间不走 todo 编辑器。
+- 交互式 rebase 提供可审阅的 todo：预览将被重放的提交（最旧在前），支持重排与 `pick`、`reword`、`edit`、`squash`、`fixup`、`drop`，随后用写入仓库 Git 目录的临时文件加 `GIT_SEQUENCE_EDITOR=cp -- '<path>'` 非交互执行。提交的 todo 必须覆盖区间内全部提交，丢弃只能显式写 drop。`reword` 的新信息在提交 todo 时就定下来——运行期没有编辑器可开，这也正是它在列表里可审阅的原因；它写成 `pick` 加一条本服务自己生成的 `exec git commit --amend --file '<路径>'`，信息走文件而不是命令行参数，非 `reword` 的条目带信息是拒绝而不是忽略。`edit` 停下后由 Continue 继续；`squash` 与 `fixup` 都要求前面还有一个保留的提交。`exec` 仍不开放给调用方：它唯一的含义就是「跑一条别人给的命令」。含合并提交的区间不走 todo 编辑器。
+- 暂停中的 rebase 可以 `skip`：丢弃当前停下的那个被重放的提交，其余照常继续，随后与 continue 走同一套完成校验（回到原分支、确认过的目标提交可达）。它不要求先解决冲突——在一个已决定丢弃的改动上先做完工作是没有意义的——但界面在按钮旁写明这是丢弃，并且和其他写一样过确认门。cherry-pick 的 skip 仍只对空提交开放，revert 仍只有 continue/abort。
 
 ## 4. Diff、历史图与冲突中心
+
+### 4.0 Reflog（已实施）
+
+`GET /git/repository/reflog` 按引用分页返回条目（`index`、`selector`、`oid`、`previousOid`、`action`、`message`、`committerName`、`loggedAt`），面板作为 History 之外的独立页签。
+
+三件事决定了它的形状：
+
+- **分页按位置数，不按锚点。** reflog 是往前面插的，没有一个不动的锚可以钉住窗口；游标只带偏移与引用，换引用即失效。每条自带 `loggedAt`，所以窗口滑动过是看得出来的。
+- **`selector` 是给人看的，`oid` 是用来动的。** `HEAD@{3}` 会随新条目往前挤而指向别的提交，而且多条可以共用一个 OID（一次没移动的 checkout 也会记）。所以恢复动作——游离检出、从这里建分支、reset——一律用该行自己的 OID，并复用历史页那套确认门与 `expectedStateToken`。
+- **对象 ID 没有 reflog。** 传一个 OID 当引用是拒绝，不是空页：空页会被读成「这里什么都没发生过」。
+
+`loggedAt` 取自 `--date=iso-strict` 下的 `%gD`——那是唯一暴露条目自身时间的位置——索引取行在页内的位置，因为 `git log -g` 就是从 0 开始按序列出的。
 
 ### 4.1 Diff
 
@@ -247,6 +262,21 @@ Host 重启后的 Git 操作按实际 Git 状态对账：commit 查 OID/index，
   ref 前进两次。Host 重启后的对账按种类判定：网络类一律未知，提交读 HEAD 判定，其余未知。
 - **读不入库**：除 `RepositoryState` 这一份带 `observedAt` 的快照外，转发的读一律不缓存，状态码原样带回。
 
-已知限制：克隆未接线（一次克隆比启动它的帧活得久，而当前每个操作起一个短命 Worker）；上行帧已定契约未接线，
-进度与外部改动靠写后的一次观察刷新；一次操作的帧上限是一分钟，超时报 `UNKNOWN_OUTCOME`；
-Host 侧的 worktree 必须落在工作空间根内。
+- **两种 Worker，按活多久分**：写与读各起一个短命 Worker——队列在起进程之前就已经建立了排他，所以每操作一个进程不增加竞态，
+  换来的是隔离：一次卡死的 rebase、一个挂在提示上的凭据助手，倒掉的是跑那一个操作的进程。**克隆例外**：它的 `git` 子进程比启动它的帧活得久，
+  作业在 Worker 自己的注册表里，进程一结束作业就没了——所以 clone 的三个方法走一个**常驻** Worker。每个 Worker 有**自己**的状态目录：
+  状态目录是一个 Worker 私有的日志与 outbox，两个进程开同一个就是一次争用的 SQLite，会直接让一帧失败
+  （`TestRealRustWorkersRunConcurrentlyWithPrivateStateDirectories`）。
+- **进度走上行帧**（§10 进度）：`git --progress` 写到 stderr 的百分比进到操作自己的快照（Runtime 直连模式的面板也读得到），
+  变化时经 `WorkerGitUpcall` 上报，Host 按三条规则应用——已落定的条目不再打开、百分比不倒退、**结论从不取自上报**
+  （`RunGitOperation` 的响应才是结论）。克隆是唯一的例外，因为它没有一个用来落定的响应帧：终态确实来自上报，
+  而 `GetClone` 仍会重读作业，所以丢一帧的代价是慢一拍而不是错一次。
+- **本地镜像可克隆**：Worker 通道接受工作空间根内的本地目录作为克隆源，HTTP 路由不接受。差别在于注册过的根：
+  HTTP 路由克隆到调用方指定的父目录，那里的本地源就是「任意路径复制到任意路径」；这里两端都在某个人注册过的根内。
+- **落在根外的检出按名拒绝**：`ErrOutsideRoot` 与一般的权限失败分开，因为它指出的是可修的那件事——一条漂到项目外的 Frame 绑定
+  不是「设备没有授权」。Host 的判定是两条已规范化绝对路径之间的文本包含（macOS 的 `/private` 前缀先抹平，那是同一个目录的两种拼法），
+  能解符号链接的是执行主机，它做同样的判定。
+- **Frame 绑定有判定**：`GIT_READ_METHOD_WORKTREE_BINDING` 回的是带理由的裁决（`ok` / `pathMissing` / `notAWorktree` /
+  `repositoryMismatch` / `branchChanged`），因为修法不同：目录没了可以重建，分支被切走了不能——那个检出还在，重建只会失败。
+
+已知限制：一次操作的帧上限仍是一分钟，超时报 `UNKNOWN_OUTCOME`；进度上报只让这道坎在逼近时可见，并不移动它——那要靠常驻的 git Worker。
