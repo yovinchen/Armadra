@@ -2741,6 +2741,128 @@ func (x *AutomationPlanSnapshot) GetConfigSha256() []byte {
 	return nil
 }
 
+// Reads back the frozen stdin / prompt of one plan.
+//
+// Editing a plan re-sends its whole configuration, so a panel that could not
+// read the stored payload would have to either make the user retype the prompt
+// or silently replace it with an empty one. It requires automation:manage —
+// the same grant that wrote it — and the payload is what the user typed, never
+// a credential: DefineAutomationRequest is the only inbound path, and the Host
+// derives the reference and digest from it.
+type GetAutomationPayloadRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	PlanId        string                 `protobuf:"bytes,2,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAutomationPayloadRequest) Reset() {
+	*x = GetAutomationPayloadRequest{}
+	mi := &file_armadra_v1_automation_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAutomationPayloadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAutomationPayloadRequest) ProtoMessage() {}
+
+func (x *GetAutomationPayloadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_automation_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAutomationPayloadRequest.ProtoReflect.Descriptor instead.
+func (*GetAutomationPayloadRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *GetAutomationPayloadRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *GetAutomationPayloadRequest) GetPlanId() string {
+	if x != nil {
+		return x.PlanId
+	}
+	return ""
+}
+
+type GetAutomationPayloadResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	PlanId  string                 `protobuf:"bytes,1,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
+	Payload []byte                 `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`
+	// The digest the plan's configuration names, so a caller can prove the bytes
+	// it got back are the ones the plan actually dispatches.
+	PayloadSha256 []byte `protobuf:"bytes,3,opt,name=payload_sha256,json=payloadSha256,proto3" json:"payload_sha256,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAutomationPayloadResponse) Reset() {
+	*x = GetAutomationPayloadResponse{}
+	mi := &file_armadra_v1_automation_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAutomationPayloadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAutomationPayloadResponse) ProtoMessage() {}
+
+func (x *GetAutomationPayloadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_automation_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAutomationPayloadResponse.ProtoReflect.Descriptor instead.
+func (*GetAutomationPayloadResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *GetAutomationPayloadResponse) GetPlanId() string {
+	if x != nil {
+		return x.PlanId
+	}
+	return ""
+}
+
+func (x *GetAutomationPayloadResponse) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *GetAutomationPayloadResponse) GetPayloadSha256() []byte {
+	if x != nil {
+		return x.PayloadSha256
+	}
+	return nil
+}
+
 type AutomationRunSnapshot struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Run           *AutomationRun         `protobuf:"bytes,1,opt,name=run,proto3" json:"run,omitempty"`
@@ -2751,7 +2873,7 @@ type AutomationRunSnapshot struct {
 
 func (x *AutomationRunSnapshot) Reset() {
 	*x = AutomationRunSnapshot{}
-	mi := &file_armadra_v1_automation_proto_msgTypes[27]
+	mi := &file_armadra_v1_automation_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2763,7 +2885,7 @@ func (x *AutomationRunSnapshot) String() string {
 func (*AutomationRunSnapshot) ProtoMessage() {}
 
 func (x *AutomationRunSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_automation_proto_msgTypes[27]
+	mi := &file_armadra_v1_automation_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2776,7 +2898,7 @@ func (x *AutomationRunSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AutomationRunSnapshot.ProtoReflect.Descriptor instead.
 func (*AutomationRunSnapshot) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{27}
+	return file_armadra_v1_automation_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *AutomationRunSnapshot) GetRun() *AutomationRun {
@@ -2999,7 +3121,14 @@ const file_armadra_v1_automation_proto_rawDesc = "" +
 	"\x16AutomationPlanSnapshot\x12.\n" +
 	"\x04plan\x18\x01 \x01(\v2\x1a.armadra.v1.AutomationPlanR\x04plan\x12\x1a\n" +
 	"\brevision\x18\x02 \x01(\x04R\brevision\x12#\n" +
-	"\rconfig_sha256\x18\x03 \x01(\fR\fconfigSha256\"`\n" +
+	"\rconfig_sha256\x18\x03 \x01(\fR\fconfigSha256\"c\n" +
+	"\x1bGetAutomationPayloadRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x17\n" +
+	"\aplan_id\x18\x02 \x01(\tR\x06planId\"x\n" +
+	"\x1cGetAutomationPayloadResponse\x12\x17\n" +
+	"\aplan_id\x18\x01 \x01(\tR\x06planId\x12\x18\n" +
+	"\apayload\x18\x02 \x01(\fR\apayload\x12%\n" +
+	"\x0epayload_sha256\x18\x03 \x01(\fR\rpayloadSha256\"`\n" +
 	"\x15AutomationRunSnapshot\x12+\n" +
 	"\x03run\x18\x01 \x01(\v2\x19.armadra.v1.AutomationRunR\x03run\x12\x1a\n" +
 	"\brevision\x18\x02 \x01(\x04R\brevision*\xe7\x01\n" +
@@ -3068,7 +3197,7 @@ func file_armadra_v1_automation_proto_rawDescGZIP() []byte {
 }
 
 var file_armadra_v1_automation_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_armadra_v1_automation_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_armadra_v1_automation_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_armadra_v1_automation_proto_goTypes = []any{
 	(AutomationPlanState)(0),              // 0: armadra.v1.AutomationPlanState
 	(AutomationMisfirePolicy)(0),          // 1: armadra.v1.AutomationMisfirePolicy
@@ -3105,10 +3234,12 @@ var file_armadra_v1_automation_proto_goTypes = []any{
 	(*ListAutomationRunsRequest)(nil),     // 32: armadra.v1.ListAutomationRunsRequest
 	(*ListAutomationRunsResponse)(nil),    // 33: armadra.v1.ListAutomationRunsResponse
 	(*AutomationPlanSnapshot)(nil),        // 34: armadra.v1.AutomationPlanSnapshot
-	(*AutomationRunSnapshot)(nil),         // 35: armadra.v1.AutomationRunSnapshot
-	(*AgentLaunchSpec)(nil),               // 36: armadra.v1.AgentLaunchSpec
-	(*CommandLaunchSpec)(nil),             // 37: armadra.v1.CommandLaunchSpec
-	(*CommandMeta)(nil),                   // 38: armadra.v1.CommandMeta
+	(*GetAutomationPayloadRequest)(nil),   // 35: armadra.v1.GetAutomationPayloadRequest
+	(*GetAutomationPayloadResponse)(nil),  // 36: armadra.v1.GetAutomationPayloadResponse
+	(*AutomationRunSnapshot)(nil),         // 37: armadra.v1.AutomationRunSnapshot
+	(*AgentLaunchSpec)(nil),               // 38: armadra.v1.AgentLaunchSpec
+	(*CommandLaunchSpec)(nil),             // 39: armadra.v1.CommandLaunchSpec
+	(*CommandMeta)(nil),                   // 40: armadra.v1.CommandMeta
 }
 var file_armadra_v1_automation_proto_depIdxs = []int32{
 	8,  // 0: armadra.v1.AutomationSchedule.once:type_name -> armadra.v1.AutomationOnce
@@ -3117,7 +3248,7 @@ var file_armadra_v1_automation_proto_depIdxs = []int32{
 	11, // 3: armadra.v1.AutomationSchedule.loop_after_completion:type_name -> armadra.v1.AutomationLoopAfterCompletion
 	5,  // 4: armadra.v1.AutomationTarget.kind:type_name -> armadra.v1.AutomationTargetKind
 	6,  // 5: armadra.v1.AutomationTarget.cold_start_policy:type_name -> armadra.v1.AutomationColdStartPolicy
-	36, // 6: armadra.v1.AutomationTarget.agent_launch:type_name -> armadra.v1.AgentLaunchSpec
+	38, // 6: armadra.v1.AutomationTarget.agent_launch:type_name -> armadra.v1.AgentLaunchSpec
 	12, // 7: armadra.v1.AutomationPlanConfig.schedule:type_name -> armadra.v1.AutomationSchedule
 	13, // 8: armadra.v1.AutomationPlanConfig.target:type_name -> armadra.v1.AutomationTarget
 	1,  // 9: armadra.v1.AutomationPlanConfig.misfire_policy:type_name -> armadra.v1.AutomationMisfirePolicy
@@ -3129,28 +3260,29 @@ var file_armadra_v1_automation_proto_depIdxs = []int32{
 	15, // 15: armadra.v1.AutomationRun.activation:type_name -> armadra.v1.AutomationActivation
 	3,  // 16: armadra.v1.AutomationRun.state:type_name -> armadra.v1.AutomationRunState
 	4,  // 17: armadra.v1.AutomationReceipt.outcome:type_name -> armadra.v1.AutomationOutcome
-	37, // 18: armadra.v1.AutomationCommandSession.launch:type_name -> armadra.v1.CommandLaunchSpec
+	39, // 18: armadra.v1.AutomationCommandSession.launch:type_name -> armadra.v1.CommandLaunchSpec
 	7,  // 19: armadra.v1.AutomationCommandSession.state:type_name -> armadra.v1.AutomationCommandSessionState
-	38, // 20: armadra.v1.DefineCommandSessionRequest.meta:type_name -> armadra.v1.CommandMeta
-	37, // 21: armadra.v1.DefineCommandSessionRequest.launch:type_name -> armadra.v1.CommandLaunchSpec
-	38, // 22: armadra.v1.ListCommandSessionsRequest.meta:type_name -> armadra.v1.CommandMeta
+	40, // 20: armadra.v1.DefineCommandSessionRequest.meta:type_name -> armadra.v1.CommandMeta
+	39, // 21: armadra.v1.DefineCommandSessionRequest.launch:type_name -> armadra.v1.CommandLaunchSpec
+	40, // 22: armadra.v1.ListCommandSessionsRequest.meta:type_name -> armadra.v1.CommandMeta
 	22, // 23: armadra.v1.ListCommandSessionsResponse.sessions:type_name -> armadra.v1.AutomationCommandSession
-	38, // 24: armadra.v1.DefineAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
+	40, // 24: armadra.v1.DefineAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
 	14, // 25: armadra.v1.DefineAutomationRequest.config:type_name -> armadra.v1.AutomationPlanConfig
-	38, // 26: armadra.v1.ActivateAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
-	38, // 27: armadra.v1.PauseAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
-	38, // 28: armadra.v1.RunAutomationNowRequest.meta:type_name -> armadra.v1.CommandMeta
-	38, // 29: armadra.v1.ListAutomationPlansRequest.meta:type_name -> armadra.v1.CommandMeta
+	40, // 26: armadra.v1.ActivateAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
+	40, // 27: armadra.v1.PauseAutomationRequest.meta:type_name -> armadra.v1.CommandMeta
+	40, // 28: armadra.v1.RunAutomationNowRequest.meta:type_name -> armadra.v1.CommandMeta
+	40, // 29: armadra.v1.ListAutomationPlansRequest.meta:type_name -> armadra.v1.CommandMeta
 	34, // 30: armadra.v1.ListAutomationPlansResponse.plans:type_name -> armadra.v1.AutomationPlanSnapshot
-	38, // 31: armadra.v1.ListAutomationRunsRequest.meta:type_name -> armadra.v1.CommandMeta
-	35, // 32: armadra.v1.ListAutomationRunsResponse.runs:type_name -> armadra.v1.AutomationRunSnapshot
+	40, // 31: armadra.v1.ListAutomationRunsRequest.meta:type_name -> armadra.v1.CommandMeta
+	37, // 32: armadra.v1.ListAutomationRunsResponse.runs:type_name -> armadra.v1.AutomationRunSnapshot
 	16, // 33: armadra.v1.AutomationPlanSnapshot.plan:type_name -> armadra.v1.AutomationPlan
-	20, // 34: armadra.v1.AutomationRunSnapshot.run:type_name -> armadra.v1.AutomationRun
-	35, // [35:35] is the sub-list for method output_type
-	35, // [35:35] is the sub-list for method input_type
-	35, // [35:35] is the sub-list for extension type_name
-	35, // [35:35] is the sub-list for extension extendee
-	0,  // [0:35] is the sub-list for field type_name
+	40, // 34: armadra.v1.GetAutomationPayloadRequest.meta:type_name -> armadra.v1.CommandMeta
+	20, // 35: armadra.v1.AutomationRunSnapshot.run:type_name -> armadra.v1.AutomationRun
+	36, // [36:36] is the sub-list for method output_type
+	36, // [36:36] is the sub-list for method input_type
+	36, // [36:36] is the sub-list for extension type_name
+	36, // [36:36] is the sub-list for extension extendee
+	0,  // [0:36] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_automation_proto_init() }
@@ -3173,7 +3305,7 @@ func file_armadra_v1_automation_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_automation_proto_rawDesc), len(file_armadra_v1_automation_proto_rawDesc)),
 			NumEnums:      8,
-			NumMessages:   28,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

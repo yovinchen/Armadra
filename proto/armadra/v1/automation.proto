@@ -311,4 +311,25 @@ message AutomationPlanSnapshot {
   // Digest of the normalized stored configuration, required to activate it.
   bytes config_sha256 = 3;
 }
+
+// Reads back the frozen stdin / prompt of one plan.
+//
+// Editing a plan re-sends its whole configuration, so a panel that could not
+// read the stored payload would have to either make the user retype the prompt
+// or silently replace it with an empty one. It requires automation:manage —
+// the same grant that wrote it — and the payload is what the user typed, never
+// a credential: DefineAutomationRequest is the only inbound path, and the Host
+// derives the reference and digest from it.
+message GetAutomationPayloadRequest {
+  CommandMeta meta = 1;
+  string plan_id = 2;
+}
+
+message GetAutomationPayloadResponse {
+  string plan_id = 1;
+  bytes payload = 2;
+  // The digest the plan's configuration names, so a caller can prove the bytes
+  // it got back are the ones the plan actually dispatches.
+  bytes payload_sha256 = 3;
+}
 message AutomationRunSnapshot { AutomationRun run = 1; uint64 revision = 2; }

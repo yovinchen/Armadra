@@ -8,6 +8,8 @@ import {
   AutomationRunSnapshotSchema,
   DefineAutomationRequestSchema,
   DefineCommandSessionRequestSchema,
+  GetAutomationPayloadRequestSchema,
+  GetAutomationPayloadResponseSchema,
   ListAutomationPlansRequestSchema,
   ListAutomationPlansResponseSchema,
   ListAutomationRunsRequestSchema,
@@ -309,6 +311,34 @@ export class HostAutomationClient {
       toBinary(DefineAutomationRequestSchema, request),
       true,
       (wire) => this.#plan(fromBinary(AutomationPlanSnapshotSchema, wire)),
+    );
+  }
+
+  /**
+   * The stdin / prompt a plan was defined with.
+   *
+   * An edit re-sends the whole configuration, so the form has to start from
+   * the payload the plan really has: retyping it is a burden, and sending an
+   * empty one would silently turn a plan into one that types nothing.
+   */
+  async planPayload(planId: string): Promise<Uint8Array> {
+    if (!scopedId.test(planId ?? "")) reject("invalid");
+    const request = create(GetAutomationPayloadRequestSchema, {
+      meta: this.#meta(),
+      planId,
+    });
+    return this.#call(
+      "GetPayload",
+      toBinary(GetAutomationPayloadRequestSchema, request),
+      false,
+      (wire) => {
+        const value = fromBinary(GetAutomationPayloadResponseSchema, wire);
+        // Bytes for another plan are not an answer to this question.
+        if (value.planId !== planId) reject("response");
+        if (value.payload.byteLength > MAX_AUTOMATION_PAYLOAD_BYTES)
+          reject("response");
+        return value.payload;
+      },
     );
   }
 

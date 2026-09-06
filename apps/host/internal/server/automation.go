@@ -19,7 +19,7 @@ func automationMethod(path string) bool {
 		return false
 	}
 	switch strings.TrimPrefix(path, AutomationPrefix) {
-	case "DefineCommandSession", "ListCommandSessions", "Define", "Activate", "Pause", "RunNow", "ListPlans", "ListRuns":
+	case "DefineCommandSession", "ListCommandSessions", "Define", "GetPayload", "Activate", "Pause", "RunNow", "ListPlans", "ListRuns":
 		return true
 	}
 	return false
@@ -134,6 +134,24 @@ func automationRequest(w http.ResponseWriter, r *http.Request, host Identity, se
 			return
 		}
 		writeProto(w, http.StatusOK, snapshot)
+	case "GetPayload":
+		input := new(pb.GetAutomationPayloadRequest)
+		if !decodeAuth(w, r, input) {
+			return
+		}
+		// A read, but of something only the writer may see, so it is checked
+		// against the manage grant rather than the read one.
+		caller, err := automationCaller(r, host, service, input.Meta, automationhost.ScopeManage, false)
+		if err != nil {
+			automationFailure(w, err)
+			return
+		}
+		result, err := plans.Payload(r.Context(), caller, input.PlanId)
+		if err != nil {
+			automationFailure(w, err)
+			return
+		}
+		writeProto(w, http.StatusOK, result)
 	case "Activate":
 		input := new(pb.ActivateAutomationRequest)
 		if !decodeAuth(w, r, input) {
