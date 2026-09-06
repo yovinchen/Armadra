@@ -32,7 +32,7 @@ use crate::error::{AppError, AppResult};
 
 /// Mirrors `HOOK_CLIENT_REVISION` in packages/shared/src/hook-events.ts.
 /// Bumping it marks every installed configuration as stale.
-pub const HOOK_CLIENT_REVISION: i64 = 3;
+pub const HOOK_CLIENT_REVISION: i64 = 4;
 
 /// The substring that identifies a command as ours.
 pub const CLIENT_NAME: &str = "armadra-hook";
@@ -69,6 +69,58 @@ pub const GEMINI_HOOK_EVENTS: &[&str] = &[
     "AfterTool",
     "Notification",
     "SessionEnd",
+];
+/// Pi — handler names the generated TS extension registers, not keys in a
+/// settings file (协作通道 §3.3). `agent_settled` is the one the idle gate
+/// reads: Pi documents it as the event a status integration should use, and it
+/// is the only one that says the CLI is genuinely idle rather than between two
+/// of its own steps. `tool_call` is observed, never blocked — §3.5 forbids
+/// manufacturing a permission dialog the CLI never asked for.
+pub const PI_HOOK_EVENTS: &[&str] = &[
+    "session_start",
+    "before_agent_start",
+    "agent_start",
+    "tool_call",
+    "tool_result",
+    "agent_end",
+    "agent_settled",
+    "session_compact",
+    "model_select",
+    "session_shutdown",
+];
+/// Oh My Pi — Pi's list plus its own compaction event. It is a fork, so the
+/// names are listed rather than inherited.
+pub const OMP_HOOK_EVENTS: &[&str] = &[
+    "session_start",
+    "before_agent_start",
+    "agent_start",
+    "tool_call",
+    "tool_result",
+    "agent_end",
+    "agent_settled",
+    "session_compact",
+    "model_select",
+    "session_shutdown",
+    "auto_compaction_end",
+];
+/// GitHub Copilot CLI — command hooks in `~/.copilot/hooks/armadra.json`.
+///
+/// `preToolUse` is absent and must stay absent: it is Copilot's only blocking
+/// event and reads a non-zero exit or a crash as a denial (§6). Subscribing it
+/// would turn a missing binary or a moved path into "every tool call is
+/// refused", on a channel whose whole contract is that it fails open.
+pub const COPILOT_HOOK_EVENTS: &[&str] = &[
+    "sessionStart",
+    "userPromptSubmitted",
+    "postToolUse",
+    "postToolUseFailure",
+    "notification",
+    "agentStop",
+    "subagentStart",
+    "subagentStop",
+    "errorOccurred",
+    "preCompact",
+    "sessionEnd",
 ];
 
 /// What `POST /api/agents/{id}/hooks/install|uninstall` answers with.
@@ -338,6 +390,28 @@ mod tests {
     use super::*;
     use serde_json::json;
     use tempfile::tempdir;
+
+    /// The tables here and in packages/shared are the same statement written
+    /// twice, and the installers read this one. The exclusion is what a test
+    /// can actually protect: `preToolUse` is fail-closed in Copilot, so an
+    /// innocent-looking "subscribe everything" edit would make a missing binary
+    /// refuse every tool call.
+    #[test]
+    fn the_event_tables_hold_what_each_new_adapter_reads() {
+        for events in [PI_HOOK_EVENTS, OMP_HOOK_EVENTS, COPILOT_HOOK_EVENTS] {
+            assert!(!events.is_empty());
+            let mut seen = events.to_vec();
+            seen.sort_unstable();
+            seen.dedup();
+            assert_eq!(seen.len(), events.len(), "an event is listed twice");
+        }
+        assert!(PI_HOOK_EVENTS.contains(&"agent_settled"));
+        assert!(OMP_HOOK_EVENTS.contains(&"agent_settled"));
+        assert!(OMP_HOOK_EVENTS.contains(&"auto_compaction_end"));
+        assert!(!PI_HOOK_EVENTS.contains(&"auto_compaction_end"));
+        assert!(COPILOT_HOOK_EVENTS.contains(&"agentStop"));
+        assert!(!COPILOT_HOOK_EVENTS.contains(&"preToolUse"));
+    }
 
     #[test]
     fn a_command_is_ours_when_it_names_the_client() {

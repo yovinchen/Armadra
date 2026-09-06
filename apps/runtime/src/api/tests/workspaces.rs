@@ -257,6 +257,7 @@ async fn removing_a_workspace_destroys_its_sessions_and_cascades_its_rows() {
             workspace_id: workspace.id.clone(),
             agent_id: "claude".into(),
             state: Some("working".into()),
+            state_source: None,
             unread: true,
             session_id: Some(session_id.clone()),
             pending_id: None,

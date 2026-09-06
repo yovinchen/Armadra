@@ -2,6 +2,55 @@
 
 use super::support::*;
 
+/// 0013 / 协作通道 §3.2. The source is stamped by the route from the provider,
+/// stored on the row and published with it, so a client can draw "done (as
+/// reported by a hook)" apart from "done, as far as the output pump can tell".
+///
+/// Two things are asserted rather than one: that the payload cannot name its
+/// own channel — an extension and a forked client post identical bodies, so a
+/// body that could claim `extension` could claim anything — and that a provider
+/// with no adapter yet leaves the column alone instead of guessing.
+#[tokio::test]
+async fn a_report_records_the_channel_it_arrived_on_and_publishes_it() {
+    let fixture = fixture("hook-state-source").await;
+    let mut events = fixture.state.events.subscribe(&fixture.workspace_id);
+
+    assert_eq!(
+        fixture
+            .report(json!({"hook_event_name":"UserPromptSubmit"}))
+            .await,
+        StatusCode::NO_CONTENT
+    );
+    let status = fixture.status().await.unwrap();
+    assert_eq!(status.state.as_deref(), Some("working"));
+    assert_eq!(status.state_source.as_deref(), Some("hook"));
+
+    let published = loop {
+        match events.recv().await.unwrap() {
+            crate::events::WorkspaceEvent::AgentStatus { status } => break status,
+            _ => continue,
+        }
+    };
+    assert_eq!(published.state_source.as_deref(), Some("hook"));
+    assert_eq!(
+        serde_json::to_value(&published).unwrap()["stateSource"],
+        "hook"
+    );
+
+    // A body that says otherwise is not consulted: the route derives the source
+    // from the provider it was posted to.
+    assert_eq!(
+        fixture
+            .report(json!({"hook_event_name":"Stop","stateSource":"extension"}))
+            .await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        fixture.status().await.unwrap().state_source.as_deref(),
+        Some("hook")
+    );
+}
+
 #[tokio::test]
 async fn disabled_custom_hooks_are_not_processed() {
     let fixture = fixture("disabled-hook-capability").await;

@@ -39,6 +39,7 @@ pub const STALE_WORKING_MINUTES: i64 = 20;
 #[derive(Debug, Clone, Default)]
 pub struct Current {
     pub state: Option<String>,
+    pub state_source: Option<String>,
     pub unread: bool,
     pub session_id: Option<String>,
     pub pending_id: Option<String>,
@@ -62,6 +63,12 @@ pub struct Memory {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Next {
     pub state: Option<String>,
+    /// Which channel produced this state. It follows the state rather than the
+    /// row: a report that changes nothing changes no source either, and a
+    /// report the reducer drops (a late `working` inside the holdoff) leaves
+    /// the previous channel standing, because the state it described is the one
+    /// still on screen.
+    pub state_source: Option<String>,
     pub unread: bool,
     pub session_id: Option<String>,
     pub pending_id: Option<String>,
@@ -89,6 +96,10 @@ pub fn reduce(
     // is replaced.
     let mut next = Next {
         state: current.state.clone(),
+        state_source: event
+            .state_source
+            .map(str::to_owned)
+            .or_else(|| current.state_source.clone()),
         unread: current.unread,
         session_id: event
             .session_id
@@ -438,6 +449,46 @@ mod tests {
             assert!(reduce(at(0), &current(WORKING), &mut memory, &event).is_none());
             assert!(memory.done_at.is_none());
         }
+    }
+
+    /// The source travels with the state it describes, which is what makes the
+    /// pair readable: a node drawn as `done` and a node drawn as `done
+    /// (observed)` are two different claims, and the second must not silently
+    /// become the first because a later report forgot to say.
+    #[test]
+    fn the_state_source_follows_the_state_it_describes() {
+        let mut memory = Memory::default();
+        let mut event = working("n");
+        event.new_turn = Some(true);
+        event.state_source = Some(crate::agent::STATE_SOURCE_HOOK);
+        let next = reduce(at(0), &Current::default(), &mut memory, &event).unwrap();
+        assert_eq!(next.state_source.as_deref(), Some("hook"));
+
+        // A synthetic close — the sweep, a dead terminal — names no channel, so
+        // the row keeps the one that last reported. Blanking it here would make
+        // every swept node look like one that never had an adapter.
+        let reported = Current {
+            state: Some(WORKING.into()),
+            state_source: Some("hook".into()),
+            ..Current::default()
+        };
+        let next = reduce(at(1), &reported, &mut memory, &stale_event("n", "claude")).unwrap();
+        assert_eq!(next.state.as_deref(), Some(DONE));
+        assert_eq!(next.state_source.as_deref(), Some("hook"));
+
+        // A CLI that changed channel says so, and the newer answer wins.
+        let mut settled = AgentEvent::state("n", "claude", DONE);
+        settled.state_source = Some(crate::agent::STATE_SOURCE_EXTENSION);
+        let next = reduce(at(2), &reported, &mut memory, &settled).unwrap();
+        assert_eq!(next.state_source.as_deref(), Some("extension"));
+
+        // A session reset is still a report from the channel that sent it.
+        let mut session = AgentEvent::new("n", "claude", EventKind::Session);
+        session.session_phase = Some("start");
+        session.state_source = Some(crate::agent::STATE_SOURCE_HOOK);
+        let next = reduce(at(3), &reported, &mut memory, &session).unwrap();
+        assert!(next.state.is_none());
+        assert_eq!(next.state_source.as_deref(), Some("hook"));
     }
 
     #[test]

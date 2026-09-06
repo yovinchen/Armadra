@@ -348,6 +348,7 @@ impl Fixture {
                 workspace_id: self.workspace_id.clone(),
                 agent_id: agent_id.to_owned(),
                 state: Some("done".to_owned()),
+                state_source: None,
                 unread: true,
                 session_id: Some("session-1".to_owned()),
                 pending_id: None,

@@ -20,9 +20,9 @@ pub async fn records_for(
 ) -> AppResult<AgentRecords> {
     let mut result = AgentRecords::default();
     for row in sqlx::query(
-        "SELECT node_id, workspace_id, agent_id, state, unread, session_id, verified, restored, \
-         transcript_path, last_event_at, session_phase, errored, interrupted, updated_at \
-         FROM agent_status WHERE workspace_id = ? ORDER BY node_id",
+        "SELECT node_id, workspace_id, agent_id, state, state_source, unread, session_id, \
+         verified, restored, transcript_path, last_event_at, session_phase, errored, \
+         interrupted, updated_at FROM agent_status WHERE workspace_id = ? ORDER BY node_id",
     )
     .bind(workspace_id)
     .fetch_all(&mut *connection)
@@ -44,6 +44,7 @@ pub async fn records_for(
                 .try_get::<Option<i64>, _>("interrupted")?
                 .map(|value| value != 0),
             transcript_ref: text(&row, "transcript_path")?.into_bytes(),
+            state_source: text(&row, "state_source")?,
             state: state_of(&text(&row, "state")?)? as i32,
             session_phase: text(&row, "session_phase")?,
             reason_code: String::new(),

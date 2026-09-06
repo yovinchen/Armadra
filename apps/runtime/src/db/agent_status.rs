@@ -19,6 +19,11 @@ pub struct AgentStatusPatch {
     pub workspace_id: String,
     pub agent_id: String,
     pub state: Option<String>,
+    /// Which channel the report arrived on (协作通道 §3.2). Derived by the
+    /// caller from the provider, never from the payload: an extension and a
+    /// command Hook post identical bodies, so a client that could name its own
+    /// source could name the strongest one.
+    pub state_source: Option<String>,
     pub unread: bool,
     pub session_id: Option<String>,
     pub pending_id: Option<String>,
@@ -40,6 +45,7 @@ fn agent_status_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<AgentStatus, s
         workspace_id: row.try_get("workspace_id")?,
         agent_id: row.try_get("agent_id")?,
         state: row.try_get("state")?,
+        state_source: row.try_get("state_source")?,
         unread: row.try_get::<i64, _>("unread")? != 0,
         session_id: row.try_get("session_id")?,
         pending_id: row.try_get("pending_id")?,
@@ -66,9 +72,9 @@ fn agent_status_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<AgentStatus, s
 macro_rules! agent_status_select {
     ($tail:literal) => {
         concat!(
-            "SELECT node_id, workspace_id, agent_id, state, unread, session_id, pending_id, ",
-            "verified, restored, updated_at, transcript_path, last_event_at, session_phase, ",
-            "errored, interrupted ",
+            "SELECT node_id, workspace_id, agent_id, state, state_source, unread, session_id, ",
+            "pending_id, verified, restored, updated_at, transcript_path, last_event_at, ",
+            "session_phase, errored, interrupted ",
             "FROM agent_status ",
             $tail
         )
@@ -87,14 +93,22 @@ pub async fn upsert_agent_status(
     {
         return Err(AppError::BadRequest("Unknown agent state".into()));
     }
+    // The vocabulary is closed for the same reason the states are: a value
+    // nobody recognises would be read as "not a report" by every gate and as a
+    // label by the header, which is two different answers to one question.
+    if let Some(source) = patch.state_source.as_deref()
+        && !crate::agent::AGENT_STATE_SOURCES.contains(&source)
+    {
+        return Err(AppError::BadRequest("Unknown agent state source".into()));
+    }
     let now = Utc::now().to_rfc3339();
     let last_event_at = patch.last_event_at.clone();
     sqlx::query(
-        "INSERT INTO agent_status (node_id, workspace_id, agent_id, state, unread, session_id, pending_id, \
+        "INSERT INTO agent_status (node_id, workspace_id, agent_id, state, state_source, unread, session_id, pending_id, \
            verified, restored, updated_at, transcript_path, last_event_at, session_phase, errored, interrupted) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?) \
          ON CONFLICT(node_id) DO UPDATE SET workspace_id = excluded.workspace_id, agent_id = excluded.agent_id, \
-           state = excluded.state, unread = excluded.unread, session_id = excluded.session_id, \
+           state = excluded.state, state_source = excluded.state_source, unread = excluded.unread, session_id = excluded.session_id, \
            pending_id = excluded.pending_id, verified = excluded.verified, restored = 0, updated_at = excluded.updated_at, \
            transcript_path = excluded.transcript_path, session_phase = excluded.session_phase, \
            errored = excluded.errored, interrupted = excluded.interrupted, \
@@ -104,6 +118,7 @@ pub async fn upsert_agent_status(
     .bind(&patch.workspace_id)
     .bind(&patch.agent_id)
     .bind(&patch.state)
+    .bind(&patch.state_source)
     .bind(i64::from(patch.unread))
     .bind(&patch.session_id)
     .bind(&patch.pending_id)
@@ -119,6 +134,41 @@ pub async fn upsert_agent_status(
     get_agent_status(pool, &patch.node_id)
         .await?
         .ok_or_else(|| AppError::Internal("Agent status disappeared after writing it".into()))
+}
+
+/// Records where a node's state is coming from without touching the state.
+///
+/// This is the door §3.4's PTY-side observation comes through, and the only
+/// one: the design forbids an observation from writing `agent_status.state`,
+/// from satisfying `handoff_idle` or the `send` idle gate, and from draining a
+/// delivery queue. A separate statement is what makes that enforceable — the
+/// upsert above cannot be reached with a state left alone, and this one cannot
+/// reach `state`.
+///
+/// It never *creates* a row. A node no CLI has ever reported for has nothing to
+/// annotate, and inventing a row here would put a node on the stale sweep's
+/// list on the strength of a guess. `updated_at` is left alone for the same
+/// reason: an observation is not an event, and moving it would reorder the
+/// session list every time a terminal went quiet. Returns whether a row was
+/// touched, so a caller can skip a broadcast that says nothing new.
+pub async fn set_agent_state_source(
+    pool: &SqlitePool,
+    node_id: &str,
+    source: &str,
+) -> AppResult<bool> {
+    if !crate::agent::AGENT_STATE_SOURCES.contains(&source) {
+        return Err(AppError::BadRequest("Unknown agent state source".into()));
+    }
+    Ok(sqlx::query(
+        "UPDATE agent_status SET state_source = ? WHERE node_id = ? AND COALESCE(state_source, '') <> ?",
+    )
+    .bind(source)
+    .bind(node_id)
+    .bind(source)
+    .execute(pool)
+    .await?
+    .rows_affected()
+        > 0)
 }
 
 pub async fn get_agent_status(pool: &SqlitePool, node_id: &str) -> AppResult<Option<AgentStatus>> {

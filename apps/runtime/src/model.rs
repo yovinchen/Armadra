@@ -272,6 +272,13 @@ pub struct AgentStatus {
     pub agent_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub state: Option<String>,
+    /* 0013 column — which channel `state` was learned through (协作通道 §3.2):
+    `hook`, `extension` or `observed`. `None` is "nothing has reported", which
+    a node header draws as unknown rather than as idle. `observed` is a guess
+    and never satisfies a gate; `crate::agent::state_source_is_reported` is the
+    single place that decides. */
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_source: Option<String>,
     pub unread: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,

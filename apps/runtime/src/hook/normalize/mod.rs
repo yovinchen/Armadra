@@ -52,6 +52,12 @@ pub struct AgentEvent {
     pub kind: EventKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub state: Option<&'static str>,
+    /// Which channel this report arrived on (协作通道 §3.2). Set by the ingest
+    /// route from the provider, never parsed out of the payload: an extension
+    /// and a command Hook post identical bodies, so a payload that could name
+    /// its own source could name the strongest one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state_source: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub new_turn: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -111,6 +117,7 @@ impl AgentEvent {
             agent_id: agent_id.to_owned(),
             kind,
             state: None,
+            state_source: None,
             new_turn: None,
             interrupted: None,
             errored: None,

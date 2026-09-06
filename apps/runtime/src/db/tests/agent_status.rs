@@ -18,6 +18,7 @@ async fn agent_status_approvals_links_and_deliveries_round_trip() {
             workspace_id: workspace.id.clone(),
             agent_id: "claude".into(),
             state: Some("working".into()),
+            state_source: None,
             unread: false,
             session_id: Some("s-1".into()),
             pending_id: None,
@@ -42,6 +43,7 @@ async fn agent_status_approvals_links_and_deliveries_round_trip() {
             workspace_id: workspace.id.clone(),
             agent_id: "claude".into(),
             state: Some("blocked".into()),
+            state_source: None,
             unread: true,
             session_id: Some("s-1".into()),
             pending_id: Some("p-1".into()),
@@ -69,6 +71,7 @@ async fn agent_status_approvals_links_and_deliveries_round_trip() {
                 workspace_id: workspace.id.clone(),
                 agent_id: "claude".into(),
                 state: Some("thinking".into()),
+                state_source: None,
                 unread: false,
                 session_id: None,
                 pending_id: None,
@@ -83,6 +86,94 @@ async fn agent_status_approvals_links_and_deliveries_round_trip() {
         .await,
         Err(AppError::BadRequest(_))
     ));
+
+    // 0013: the source travels with the row, and the vocabulary is closed for
+    // the same reason the states are — an unrecognised value would read as "not
+    // a report" to every gate and as a label to the header.
+    assert!(blocked.state_source.is_none());
+    let reported = upsert_agent_status(
+        &pool,
+        AgentStatusPatch {
+            node_id: node_id.clone(),
+            workspace_id: workspace.id.clone(),
+            agent_id: "claude".into(),
+            state: Some("done".into()),
+            state_source: Some("hook".into()),
+            unread: true,
+            session_id: Some("s-1".into()),
+            pending_id: None,
+            verified: true,
+            transcript_path: None,
+            session_phase: None,
+            errored: Some(false),
+            interrupted: Some(false),
+            last_event_at: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(reported.state_source.as_deref(), Some("hook"));
+    assert!(matches!(
+        upsert_agent_status(
+            &pool,
+            AgentStatusPatch {
+                node_id: node_id.clone(),
+                workspace_id: workspace.id.clone(),
+                agent_id: "claude".into(),
+                state: Some("done".into()),
+                state_source: Some("telepathy".into()),
+                unread: false,
+                session_id: None,
+                pending_id: None,
+                verified: false,
+                transcript_path: None,
+                session_phase: None,
+                errored: None,
+                interrupted: None,
+                last_event_at: None,
+            },
+        )
+        .await,
+        Err(AppError::BadRequest(_))
+    ));
+
+    // The observation door (§3.4): it annotates the source and leaves the state
+    // alone, which is what stops a quiet terminal from being read as a finished
+    // turn. It reports whether anything changed, and never invents a row.
+    assert!(
+        set_agent_state_source(&pool, &node_id, "observed")
+            .await
+            .unwrap()
+    );
+    let observed = get_agent_status(&pool, &node_id).await.unwrap().unwrap();
+    assert_eq!(observed.state_source.as_deref(), Some("observed"));
+    assert_eq!(
+        observed.state.as_deref(),
+        Some("done"),
+        "an observation must not rewrite the reduced state"
+    );
+    assert!(
+        !set_agent_state_source(&pool, &node_id, "observed")
+            .await
+            .unwrap(),
+        "saying the same thing twice is not a change to broadcast"
+    );
+    assert!(
+        !set_agent_state_source(&pool, &Uuid::now_v7().to_string(), "observed")
+            .await
+            .unwrap(),
+        "a node nothing has reported for has no row to annotate"
+    );
+    assert!(matches!(
+        set_agent_state_source(&pool, &node_id, "telepathy").await,
+        Err(AppError::BadRequest(_))
+    ));
+    // Back to a real report, so the rest of this test sees the row it expects.
+    assert!(
+        set_agent_state_source(&pool, &node_id, "hook")
+            .await
+            .unwrap()
+    );
 
     assert_eq!(mark_agent_status_restored(&pool).await.unwrap(), 1);
     assert!(

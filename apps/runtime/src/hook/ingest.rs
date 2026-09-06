@@ -168,6 +168,11 @@ pub async fn ingest(
         return Ok(StatusCode::NO_CONTENT);
     };
     event.verified = Some(verdict.is_verified());
+    // Derived from the provider, not read out of the body. An in-process
+    // extension and a forked `armadra-hook` post the same JSON with the same
+    // headers, so a payload that could name its own channel could name the
+    // strongest one (协作通道 §3.2).
+    event.state_source = crate::agent::state_source_for(&provider);
     event.client_revision = header(&headers, CLIENT_REVISION_HEADER).and_then(|v| v.parse().ok());
     // The envelope's pendingId is authoritative: only the client knows which
     // file it wrote the request to.
@@ -243,6 +248,7 @@ pub async fn apply(
             unread: status.unread,
             session_id: status.session_id.clone(),
             pending_id: status.pending_id.clone(),
+            state_source: status.state_source.clone(),
             transcript_path: status.transcript_path.clone(),
             session_phase: status.session_phase.clone(),
             errored: status.errored,
@@ -267,6 +273,7 @@ pub async fn apply(
             workspace_id: workspace_id.to_owned(),
             agent_id: agent_id.to_owned(),
             state: next.state.clone(),
+            state_source: next.state_source.clone(),
             unread: next.unread,
             session_id: next.session_id.clone(),
             pending_id: next.pending_id.clone(),

@@ -14,6 +14,13 @@ pub fn canonical_status(status: &AgentStatus) -> AgentStatus {
     AgentStatus {
         generation: 0,
         reason_code: String::new(),
+        // Dropped for the reason the module note gives: it is a fact about how
+        // this Runtime learned a state, not about the record. The Host has no
+        // column for it (协作通道 §4 leaves the Host data model alone), so
+        // comparing it would make every round trip false — and it is the one
+        // field the handback deliberately does not rewrite either, so a
+        // rollback leaves the local note standing rather than blanking it.
+        state_source: String::new(),
         updated_at_unix_ms: 0,
         revision: 0,
         ..status.clone()

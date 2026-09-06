@@ -28,6 +28,49 @@ pub const AGENT_CAPABILITIES: &[&str] = &[
     "supportsModelSelection",
 ];
 
+/// Mirrors `AGENT_STATE_SOURCES` in packages/shared and the `state_source`
+/// column added by migration `0013` — 协作通道 §3.2.
+pub const AGENT_STATE_SOURCES: &[&str] = &[STATE_SOURCE_HOOK, STATE_SOURCE_EXTENSION, OBSERVED];
+
+/// A command Hook the CLI forked: `armadra-hook <provider>` over `hook.sock`.
+pub const STATE_SOURCE_HOOK: &str = "hook";
+/// An extension inside the CLI's own process, speaking the same HTTP on the
+/// same socket. Same bearer, same node token, same terminal binding — it is the
+/// in-process form of the command Hook, not a more trusted one (§3.1 channel B).
+pub const STATE_SOURCE_EXTENSION: &str = "extension";
+/// The PTY-side guess of §3.4, for a terminal with no adapter at all. It is a
+/// display-level hint and nothing more; see [`state_source_is_reported`].
+pub const OBSERVED: &str = "observed";
+
+/// Which channel a provider's status reports arrive on.
+///
+/// The answer is a property of how that adapter is installed, not of the
+/// request: an extension and a command Hook post the same body with the same
+/// headers, so trusting a client's own claim would let any of them name the
+/// strongest source. `None` is a provider with no adapter, whose state is only
+/// ever whatever §3.4 observes.
+///
+/// Extension point for the later batches: B1 adds Copilot as a command Hook,
+/// B2 adds Pi / Oh My Pi as extensions, and B3 moves opencode from the first
+/// arm to the second when its plugin stops forking the client.
+pub fn state_source_for(provider: &str) -> Option<&'static str> {
+    match provider {
+        "claude" | "codex" | "gemini" | "opencode" => Some(STATE_SOURCE_HOOK),
+        _ => None,
+    }
+}
+
+/// Whether a source is a *report* rather than a guess.
+///
+/// The one question every gate has to ask. `hook` and `extension` are two
+/// transports for the same authenticated report and both count; `observed` and
+/// "nothing has reported" do not, and §3.4 is explicit that an observation may
+/// never satisfy `handoff_idle` or the `send` idle gate. Written here, once, so
+/// a later caller cannot accidentally spell it as "the source is set".
+pub fn state_source_is_reported(source: Option<&str>) -> bool {
+    matches!(source, Some(STATE_SOURCE_HOOK | STATE_SOURCE_EXTENSION))
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct AgentDefinition {
     pub id: &'static str,
@@ -113,7 +156,19 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
         color: "#e8b86d",
         launch_cmd: "pi",
         prompt_mode: "argv",
-        capabilities: &["resume", "browser", "contextLink", "supportsModelSelection"],
+        // `hooks` means "there is a status source", not "there is a hooks key
+        // in a settings file": Pi's is an in-process TS extension on the same
+        // socket (协作通道 §3.1 channel B). Its `contextUsage` is the reported
+        // kind — the extension reads the live window instead of estimating one.
+        capabilities: &[
+            "hooks",
+            "resume",
+            "browser",
+            "contextLink",
+            "contextUsage",
+            "structuredInputAck",
+            "supportsModelSelection",
+        ],
     },
     AgentDefinition {
         id: "omp",
@@ -121,7 +176,16 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
         color: "#d4a373",
         launch_cmd: "omp",
         prompt_mode: "argv",
-        capabilities: &["resume", "browser", "contextLink", "supportsModelSelection"],
+        // Same extension API as Pi, under its own config home.
+        capabilities: &[
+            "hooks",
+            "resume",
+            "browser",
+            "contextLink",
+            "contextUsage",
+            "structuredInputAck",
+            "supportsModelSelection",
+        ],
     },
     AgentDefinition {
         id: "copilot",
@@ -129,7 +193,18 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
         color: "#a371f7",
         launch_cmd: "copilot",
         prompt_mode: "flag-prompt",
-        capabilities: &["resume", "browser", "contextLink", "supportsModelSelection"],
+        // A command hook like Claude's. No `contextUsage`: Copilot has no
+        // status line, and whether its session events carry per-turn token
+        // counts is unverified (§6) — a capability is not declared from a
+        // document.
+        capabilities: &[
+            "hooks",
+            "resume",
+            "browser",
+            "contextLink",
+            "structuredInputAck",
+            "supportsModelSelection",
+        ],
     },
 ];
 
@@ -344,6 +419,51 @@ mod tests {
         assert_eq!(definition("pi").unwrap().launch_cmd, "pi");
         assert_eq!(definition("omp").unwrap().launch_cmd, "omp");
         assert_eq!(definition("copilot").unwrap().launch_cmd, "copilot");
+    }
+
+    /// The gate question, spelled once. `observed` is the value the whole
+    /// column exists for and the one that must never pass: §3.4 lets the output
+    /// pump guess that a terminal has gone quiet, and treating that guess as
+    /// evidence of an ended turn is how a handoff lands mid-sentence.
+    #[test]
+    fn an_observation_is_never_a_report() {
+        assert!(state_source_is_reported(Some(STATE_SOURCE_HOOK)));
+        assert!(state_source_is_reported(Some(STATE_SOURCE_EXTENSION)));
+        assert!(!state_source_is_reported(Some(OBSERVED)));
+        assert!(!state_source_is_reported(None));
+        assert!(!state_source_is_reported(Some("")));
+        assert!(!state_source_is_reported(Some("invented")));
+    }
+
+    #[test]
+    fn every_provider_with_a_source_declares_hooks_and_names_a_known_channel() {
+        for agent in AGENT_REGISTRY {
+            let source = state_source_for(agent.id);
+            if let Some(source) = source {
+                assert!(
+                    AGENT_STATE_SOURCES.contains(&source),
+                    "{} names an unknown channel",
+                    agent.id
+                );
+                assert!(
+                    agent.capabilities.contains(&"hooks"),
+                    "{} reports a state it has no capability for",
+                    agent.id
+                );
+            }
+        }
+        assert_eq!(state_source_for("claude"), Some(STATE_SOURCE_HOOK));
+        // No provider is ever guessed at: an id with no adapter has no source,
+        // and neither does a custom entry, whose base picks the channel before
+        // this is ever asked.
+        assert_eq!(state_source_for("custom:wrapper"), None);
+        assert_eq!(state_source_for(""), None);
+        // Declared but not yet wired: B1 gives Copilot a command Hook, B2 gives
+        // Pi / Oh My Pi an extension. Until then the capability says the
+        // adapter exists and the source says nothing has reported through it.
+        for pending in ["pi", "omp", "copilot"] {
+            assert_eq!(state_source_for(pending), None);
+        }
     }
 
     #[test]
