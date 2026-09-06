@@ -1,4 +1,5 @@
-import type { Edge, Node } from "@xyflow/react";
+import { Position } from "@xyflow/react";
+import type { Edge, Node, NodeHandle } from "@xyflow/react";
 import type { BoardDocument, CanvasEdge, CanvasNode } from "@armadra/shared";
 
 import { COLLAPSED_HEIGHT, defaultNodeSize } from "../../store/defaults";
@@ -108,6 +109,32 @@ function reuse(
   return projected;
 }
 
+/* ------------------------------- 把手兜底 ---------------------------------- */
+
+/**
+ * 「只有落点」的节点（分组与白板对象）的把手几何。
+ *
+ * React Flow 的 `EdgeWrapper` 在 `getEdgePosition` 返回 null 时**整条边不画**，
+ * 而它要么读 `internals.handleBounds`（DOM 量出来的），要么读节点自己带的
+ * `handles`。前者要等 `ResizeObserver` 跑完一轮才有，所以一条刚建出来的引用
+ * 边在第一帧上找不到起点侧的把手，只能等下一帧——这就是「引用边首帧不显示」。
+ *
+ * 这里把几何直接写进投影：`ConnectionHandles dropOnly` 的两个把手
+ * （落点 `body` 与永不交互的起笔锚点 `anchor`）都是 `inset: 0` 的整块覆盖层，
+ * 节点内坐标恒为 `(0, 0, w, h)`，所以这份兜底与 DOM 量出来的**完全一致**，
+ * 不是近似值——`parseHandles` 会让它盖过测量结果也无所谓。
+ *
+ * 带圆点把手的普通节点**不给**：那两个圆点的真实包围盒由 CSS 决定
+ * （14px 的点、居中在边上），写死一份近似值会让连线的起点和吸附判定偏掉。
+ */
+function dropOnlyHandles(width: number, height: number): NodeHandle[] {
+  const box = { x: 0, y: 0, width, height };
+  return [
+    { id: "body", type: "target", position: Position.Left, ...box },
+    { id: "anchor", type: "source", position: Position.Right, ...box },
+  ];
+}
+
 /* ------------------------------- 节点投影 ---------------------------------- */
 
 /** 折叠时高度钉死；草稿（拖动 / resize 进行中）压在文档值之上。 */
@@ -158,6 +185,8 @@ function projectNode(
       // 分组没有节点体，整块都是把手。
       ...(isGroup ? {} : { dragHandle: NODE_DRAG_HANDLE }),
       connectable: !isGroup && nodeMeta(node.type).hasBridgeHandles,
+      // 分组只有落点与锚点两个覆盖层把手，几何算得出来（见 `dropOnlyHandles`）。
+      ...(isGroup ? { handles: dropOnlyHandles(box.width, box.height) } : {}),
       zIndex: isGroup ? GROUP_Z_INDEX : NODE_Z_INDEX,
       ...(node.parentId ? { parentId: node.parentId } : {}),
     } as ArmadraFlowNode;
@@ -180,6 +209,9 @@ function projectItem(item: Item, selected: boolean): CanvasFlowNode {
     // 同上：`draggable` 交给全局的 `nodesDraggable`。
     // 白板对象只作引用的一端（§2.3）；对象之间连线用直线 / 箭头工具。
     connectable: true,
+    // 引用边的起点恒为白板对象。把手几何直接给死，边就不必等一帧测量
+    // （见 `dropOnlyHandles`）。
+    handles: dropOnlyHandles(item.w, item.h),
     zIndex: item.z,
     ...(item.parentId ? { parentId: item.parentId } : {}),
   }));

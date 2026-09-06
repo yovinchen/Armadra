@@ -323,6 +323,58 @@ describe("projectEdges", () => {
   });
 });
 
+describe("把手兜底几何", () => {
+  it("白板对象带上 `handles`，量到尺寸之前引用边也画得出来", () => {
+    const whiteboard: WhiteboardDoc = {
+      ...emptyWhiteboard(),
+      items: [
+        {
+          id: "abc",
+          kind: "shape",
+          x: 0,
+          y: 0,
+          w: 120,
+          h: 80,
+          z: 0,
+          style: { color: "black", size: "m" },
+          geo: "rectangle",
+        },
+      ],
+    };
+    const projected = projectNodes(board([]), whiteboard, NO_DRAFTS);
+    expect(projected[0]!.handles).toEqual([
+      {
+        id: "body",
+        type: "target",
+        position: "left",
+        x: 0,
+        y: 0,
+        width: 120,
+        height: 80,
+      },
+      {
+        id: "anchor",
+        type: "source",
+        position: "right",
+        x: 0,
+        y: 0,
+        width: 120,
+        height: 80,
+      },
+    ]);
+  });
+
+  it("分组同理；带圆点把手的普通节点不给（那两个点的包围盒归 CSS）", () => {
+    const projected = projectNodes(
+      board([node(GROUP, { type: "group" }), node(NODE)]),
+      EMPTY,
+      NO_DRAFTS,
+    );
+    expect(projected[0]!.handles).toHaveLength(2);
+    expect(projected[1]!.handles).toBeUndefined();
+  });
+});
+
 describe("id 判定", () => {
   it("`wb:` 前缀区分白板对象与 `nodes` 行", () => {
     expect(isItemId("wb:abc")).toBe(true);
