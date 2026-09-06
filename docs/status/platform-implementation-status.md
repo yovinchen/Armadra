@@ -135,6 +135,7 @@
 - **远端 4+5**（`2639098a`…`289bf8aa`）：整个工作区在执行主机上运行（`WorkerServiceOperation` 19–48、上传分块与 sha256 校验、监听事件推送取代 2 秒轮询、Worker 帧 16/17 与响应 17–19）、主机密钥确认与 SSH 认证提示对话框（askpass 助手、`StrictHostKeyChecking=yes`）、`worker/mod.rs` 拆为 `mod/service/transport`、`remote/client/` 四文件；合并 Agent 在当前主线上调和：语言链路也走 askpass、`settings_file` 在拆分后重新接线、Go `wire.go` 白名单不放主动帧；远端伪 SSH 套件 5 个。
 - **B5 git 域**（`79adead0`…`4afd5abb` + 修正 `8f7212bb`）：`git.proto`（`RepositoryScope/State/Operation/Expectation`、封闭 `GitActionKind`、`Read` 单方法 + 封闭 `GitReadMethod`、事件实体 220–222、Worker 帧 29、上行帧 180）、Host `githost`（`git_operations` 队列同 worktree 串行、`RepositoryState` 缓存、`Enqueue` 唯一写入口、重启后按类型对账；记录走通用 `entities` 表，未加 Host 迁移）、Worker 每帧跑一个排队操作并在域切走后拒写（发现三处真 bug：29 不在响应白名单、`/var` 与 `/private/var` 路径比对、15 分钟帧超上限）、Web 网关把逐动作路由拼成 `Enqueue`；`pnpm ownership:e2e --domain git` 30 项（真实仓库 + 本地裸远程）。未做：clone 在 Worker 侧答 UNSUPPORTED、上行帧未接线、面板仍直连 `runtimeApi`。
 - **B3 session 域**（`9b7ff2bd`…`797af796`）：`session.proto`（意图 + 运行两种实体 160/161、Worker 帧 27、通道上行 140）、Host v8 `sessions/session_runs/session_claims` 与 `sessionhost`（`Create/Start/List/Get/Terminate/Recycle/Close`，`SuggestTitle/GetContextUsage` 转 Worker；终端 WebSocket 代理升级前按记录校验 `session_id/generation`；`command_sessions` 投影为 `kind=COMMAND`）、Worker 经 Runtime 私有端点起停会话并回报、Runtime 切走后创建/启动/终止答 409、Web 挂载终端只读不决策（缺会话经 `Create/Start`）、复用 `terminal:*` scope；`pnpm ownership:e2e --domain session` 39 项。未做：主动 `RunLost` 上行与周期对账（只在 Host 启动时对账一次）、远端执行主机会话、`terminal/mod.rs` 拆分。合并到远端 4+5 之后的主线时，`serve/serve_commands` 的 `session_data_dir` 参数移入 `worker/transport.rs`。
+- **桌面打包与首启**（`1cff1e00`、`8f560ae5`）：`pnpm --filter @armadra/desktop build` 产出 macOS arm64 `Armadra.app`（79 MB，含 Runtime/Host/Hook 三个 sidecar）与 `.dmg`；本机打包需一次性 updater 签名密钥（`TAURI_SIGNING_PRIVATE_KEY` 取密钥内容而非路径），配置里公钥为空时最后的 `.sig` 步骤报错但 `.app`/`.dmg` 已完整。打包实测发现开屏动画在 WKWebView 里停在第一帧并锁住整个界面（窗口隐藏加载、显示后 rAF 不恢复），改为 rAF 与定时器双驱动并加两道到点必撤的保险；首次启动对空数据库在 `<数据目录>/workspaces/default` 建「Default」项目（读写执行全开、自带 Default 画布），前端无记忆时打开最近的工作空间。两项均在重新打包的 `.app` 上用空数据目录实机核验。注意 `tauri build` 单独运行不会重建 sidecar，须走 `pnpm --filter @armadra/desktop build`。
 - **进行中**：B4 agent 域（Worker 帧 28、事件实体 180–186、Host v9）。
 
 主树复核（B3 合入后）：Rust 全 workspace 通过、`clippy -D warnings` 与 `fmt --check` 通过、Web 181 文件 1692 项、shared 144、host-client 249、协议 TS 129 与 Rust 全过、Go 28 包 race（含真实 Worker）、`pnpm check` 通过、session e2e 39、git e2e 30、settings e2e 33、filesystem e2e 30、canvas e2e 73、GitHub e2e 29。session 与 git 的 e2e 在 Go race 套件刚结束、机器满载时各有一次首跑失败，随后连续 3–4 次通过。
@@ -257,6 +258,7 @@
 - Rust 已安装 macOS arm64、Windows x64 MSVC、Linux x64 目标；安装 target 不代表能在本机运行 Windows/Linux 实机测试。
 - 业务写入所有权按域切换：画布、settings、filesystem、session、git 五个域可经 CLI/HTTPS 切到 Go Host 并回滚（Runtime 在切换后拒写、仍答读）；agent 域仍由 Rust Runtime 拥有，Host 表面在实施中。
 - 真实 Worker 测试与桌面 `src-tauri` Rust 测试不在默认命令内，验收时需单独运行。
+- 数据目录：macOS `~/Library/Application Support/Armadra`、Windows `%LOCALAPPDATA%\Armadra`、Linux `$XDG_DATA_HOME/armadra`（默认 `~/.local/share/armadra`），`ARMADRA_DATA_DIR` 可覆盖；Host 用其下 `host/`，默认项目在 `workspaces/default/`。
 
 ## 下一步
 
