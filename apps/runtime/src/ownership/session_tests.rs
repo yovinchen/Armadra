@@ -482,3 +482,51 @@ async fn each_domain_refuses_the_other_domains_package() {
     let refused = import::apply(&pool, &canvas).await.unwrap_err();
     assert!(format!("{refused}").contains("reverse."), "{refused}");
 }
+
+/// The package is the domain's whole content (§2.12). A tombstone names the
+/// row it removes, but a session the Host dropped without one would otherwise
+/// still be here — and a rollback would show a terminal the user removed as
+/// running again.
+#[tokio::test]
+async fn a_package_that_no_longer_names_a_session_removes_it() {
+    let (pool, directory) = pool().await;
+    let id = workspace(&pool).await;
+    for session_id in ["s-one", "s-two"] {
+        insert(
+            &pool,
+            Stored {
+                id: session_id,
+                workspace: &id,
+                key: session_id,
+                kind: "terminal",
+                node: Some(session_id),
+                status: "running",
+                intent: "none",
+                generation: 1,
+            },
+        )
+        .await;
+    }
+    hand_to_host(&pool, 2).await;
+
+    // The Host's package carries only the session that survived. It is taken
+    // from the rows themselves rather than hand-built, so the read-back digest
+    // compares a rollback against a package a Host would really have written.
+    let kept = session::sessions(&pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|session| session.session_id == "s-one")
+        .unwrap();
+    let package = directory.path().join("package");
+    std::fs::create_dir_all(&package).unwrap();
+    write_package(&package, 2, &id, &[kept], &[]);
+
+    session_import::apply(&pool, &request(&package, 2, "handback-sweep"))
+        .await
+        .unwrap();
+
+    let stored = session::sessions(&pool).await.unwrap();
+    assert_eq!(stored.len(), 1, "{stored:?}");
+    assert_eq!(stored[0].session_id, "s-one");
+}

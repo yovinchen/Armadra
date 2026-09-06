@@ -16,6 +16,7 @@ mod deliveries;
 mod documents;
 mod hook_installs;
 mod legacy_archive;
+mod orphans;
 mod sessions;
 mod validation;
 mod workspaces;
@@ -25,7 +26,7 @@ mod tests;
 
 pub use self::{
     agent_status::*, approvals::*, boards::*, context_links::*, deliveries::*, documents::*,
-    hook_installs::*, legacy_archive::*, sessions::*, validation::*, workspaces::*,
+    hook_installs::*, legacy_archive::*, orphans::*, sessions::*, validation::*, workspaces::*,
 };
 
 /// The node types a board is made of. Mirrored as `NODE_TYPES` in

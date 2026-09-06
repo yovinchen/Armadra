@@ -566,6 +566,41 @@ pub async fn apply_sessions(
             }
             written += affected;
         }
+        // The package is the domain's whole content (§2.12). A tombstone above
+        // deletes the row it names, but a session the Host dropped without one
+        // — a record removed while the Host held the domain — would otherwise
+        // still be here, and a rollback would show a terminal the user removed
+        // as running again.
+        //
+        // The sweep is per workspace and only over the workspaces the package
+        // actually carries, so a rollback of one workspace never empties
+        // another's sessions.
+        let mut by_workspace: std::collections::BTreeMap<&str, Vec<String>> =
+            std::collections::BTreeMap::new();
+        for session in &package.sessions {
+            // A tombstone still names its workspace, and its workspace is still
+            // covered by the package. It contributes the workspace and not the
+            // identifier, which is what makes "the package holds only closures
+            // for this workspace" mean "this workspace has none left".
+            let kept = by_workspace
+                .entry(session.workspace_id.as_str())
+                .or_default();
+            if !session.deleted {
+                kept.push(session.session_id.clone());
+            }
+        }
+        for (workspace_id, ids) in by_workspace {
+            super::sweep::delete_absent(
+                transaction,
+                workspace_id,
+                &super::sweep::Kept {
+                    table: "terminal_sessions",
+                    id_column: "id",
+                    ids,
+                },
+            )
+            .await?;
+        }
     }
 
     let stored = sessions(&mut **transaction).await?;

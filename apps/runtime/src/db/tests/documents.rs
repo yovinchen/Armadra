@@ -205,9 +205,148 @@ async fn deleting_a_node_cascades_only_its_own_mailbox() {
     );
     assert_eq!(count(&pool, "SELECT COUNT(*) FROM edges").await, 0);
     assert_eq!(count(&pool, "SELECT COUNT(*) FROM nodes").await, 2);
-    // `agent_status.node_id` is a plain column, not a foreign key, so nothing
-    // cascades there. Pinned so the day it becomes one is a deliberate change.
-    assert!(get_agent_status(&pool, &bob.id).await.unwrap().is_some());
+    // `agent_status.node_id` is a plain column with no foreign key, so nothing
+    // cascades there — the sweep in `db::orphans` is what takes it, and the
+    // node that stayed keeps its own row.
+    assert!(get_agent_status(&pool, &bob.id).await.unwrap().is_none());
+    assert!(get_agent_status(&pool, &alice.id).await.unwrap().is_none());
+}
+
+/// The line this sweep draws: live rows that still answer a question about a
+/// node that is gone are deleted; receipts are not.
+///
+/// `context_links` is the one that matters most — it is the projection of edges
+/// that no longer exist, and it is what decides whether one agent may read
+/// another's transcript. The terminal session is the deliberate exception on
+/// the other side: `owner_node_id` names a process, and deleting the row would
+/// lose the only handle anything has on a shell that is still running.
+#[tokio::test]
+async fn a_deleted_node_loses_its_live_rows_and_keeps_its_receipts() {
+    let (pool, _directory, workspace) = fixture("delete-orphans").await;
+    let board = default_board(&pool, &workspace.id).await;
+    let alice = sticky_node(&board.id);
+    let bob = sticky_node(&board.id);
+    let saved = save_board(
+        &pool,
+        &workspace.id,
+        &board.id,
+        SaveBoardRequest {
+            expected_updated_at: &board.updated_at,
+            nodes: &[alice.clone(), bob.clone()],
+            edges: &[],
+            viewport: Viewport::default(),
+            whiteboard: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let seed = async |sql: &'static str, binds: Vec<String>| {
+        let mut query = sqlx::query(sql);
+        for value in &binds {
+            query = query.bind(value);
+        }
+        query.execute(&pool).await.unwrap();
+    };
+    // One open question and one somebody answered.
+    seed(
+        "INSERT INTO agent_approvals(id, node_id, workspace_id, request_json, created_at) \
+         VALUES('approval-open', ?, ?, '{}', '2026-09-07T00:00:00Z')",
+        vec![bob.id.clone(), workspace.id.clone()],
+    )
+    .await;
+    seed(
+        "INSERT INTO agent_approvals(id, node_id, workspace_id, request_json, answer, answered_at, created_at) \
+         VALUES('approval-answered', ?, ?, '{}', 'allow', '2026-09-07T00:00:00Z', '2026-09-07T00:00:00Z')",
+        vec![bob.id.clone(), workspace.id.clone()],
+    )
+    .await;
+    seed(
+        "INSERT INTO context_links(node_id, workspace_id, links_json, updated_at) \
+         VALUES(?, ?, '[]', '2026-09-07T00:00:00Z')",
+        vec![bob.id.clone(), workspace.id.clone()],
+    )
+    .await;
+    seed(
+        "INSERT INTO agent_deliveries(trace_id, workspace_id, source_node_id, target_node_id, outcome, created_at) \
+         VALUES('trace-1', ?, ?, ?, 'submitted', '2026-09-07T00:00:00Z')",
+        vec![workspace.id.clone(), alice.id.clone(), bob.id.clone()],
+    )
+    .await;
+    seed(
+        "INSERT INTO agent_handoffs(id, workspace_id, source_node_id, source_session_id, source_generation, \
+         target_node_id, target_session_id, target_generation, bundle_json, bundle_digest, state, created_at, updated_at) \
+         VALUES('handoff-1', ?, ?, 's-1', 1, ?, 's-2', 1, '{}', 'digest', 'prepared', '2026-09-07T00:00:00Z', '2026-09-07T00:00:00Z')",
+        vec![workspace.id.clone(), alice.id.clone(), bob.id.clone()],
+    )
+    .await;
+    seed(
+        "INSERT INTO agent_handoff_outbox(handoff_id, state, created_at) \
+         VALUES('handoff-1', 'pending', '2026-09-07T00:00:00Z')",
+        vec![],
+    )
+    .await;
+    seed(
+        "INSERT INTO terminal_sessions(id, workspace_id, owner_node_id, cwd, shell, status, created_at) \
+         VALUES('session-1', ?, ?, '/tmp', 'zsh', 'running', '2026-09-07T00:00:00Z')",
+        vec![workspace.id.clone(), bob.id.clone()],
+    )
+    .await;
+
+    save_board(
+        &pool,
+        &workspace.id,
+        &board.id,
+        SaveBoardRequest {
+            expected_updated_at: &saved.board.updated_at,
+            nodes: std::slice::from_ref(&alice),
+            edges: &[],
+            viewport: Viewport::default(),
+            whiteboard: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        count(&pool, "SELECT COUNT(*) FROM context_links").await,
+        0,
+        "a link document outlived the edges it was derived from"
+    );
+    assert_eq!(
+        count(
+            &pool,
+            "SELECT COUNT(*) FROM agent_approvals WHERE answer IS NULL"
+        )
+        .await,
+        0,
+        "a question nobody can answer stayed open"
+    );
+    assert_eq!(
+        count(
+            &pool,
+            "SELECT COUNT(*) FROM agent_approvals WHERE answer IS NOT NULL"
+        )
+        .await,
+        1,
+        "an answered question is a receipt and must survive"
+    );
+    assert_eq!(
+        count(&pool, "SELECT COUNT(*) FROM agent_handoff_outbox").await,
+        0,
+        "a pending dispatch nobody can complete stayed queued"
+    );
+    // Receipts stay. `0004_agent_handoffs.sql` says so outright: identities
+    // survive node deletion so historical receipts remain honest.
+    assert_eq!(count(&pool, "SELECT COUNT(*) FROM agent_handoffs").await, 1);
+    assert_eq!(count(&pool, "SELECT COUNT(*) FROM agent_deliveries").await, 1);
+    // The process outlives the node on purpose. `resources::orphans` lists it
+    // as having no node, with adopt and terminate next to it, and a person
+    // decides what happens to a running program.
+    assert_eq!(
+        count(&pool, "SELECT COUNT(*) FROM terminal_sessions").await,
+        1
+    );
 }
 
 /// Added, removed and untouched rows in a single save, plus the CAS that has

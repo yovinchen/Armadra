@@ -181,15 +181,24 @@ pub async fn save_board(
             .execute(&mut *transaction)
             .await?;
     }
-    for id in stored_node_ids
+    let dropped_node_ids: Vec<String> = stored_node_ids
         .iter()
         .filter(|id| !kept_node_ids.contains(id.as_str()))
-    {
+        .cloned()
+        .collect();
+    for id in &dropped_node_ids {
         sqlx::query("DELETE FROM nodes WHERE id = ?")
             .bind(id)
             .execute(&mut *transaction)
             .await?;
     }
+    // Only two of the tables that store a node id have a foreign key to follow
+    // it down. The rest are plain columns, and a status, an open permission
+    // question or a context-link document left behind by a deleted node is a
+    // row nothing can reach and something can still answer from. See
+    // `db::orphans` for the full table and for why the terminal session is the
+    // one thing deliberately kept.
+    super::orphans::forget_nodes(&mut transaction, &dropped_node_ids).await?;
 
     for node in request.nodes {
         // The `WHERE` guard keeps an id owned by another board from being

@@ -32,6 +32,7 @@ pub mod import_cli;
 pub mod records;
 pub mod session;
 pub mod session_import;
+pub mod sweep;
 
 use armadra_protocol::v1::CanvasOwnershipOwner;
 use axum::{Json, extract::State};

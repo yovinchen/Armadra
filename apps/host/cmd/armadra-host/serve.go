@@ -301,6 +301,13 @@ func serveHost(parent context.Context, c config) (err error) {
 		if _, err := agents.RefreshContextLinks(ctx, workspaceID); err != nil {
 			fmt.Fprintln(os.Stderr, "Armadra: could not refresh context links:", err)
 		}
+		// A canvas save is the only moment at which "this node no longer
+		// exists" becomes true here, so it is also where a deleted node's live
+		// agent records are retired. Receipts are left alone; see
+		// `agenthost.ForgetNodes`.
+		if _, err := agents.ForgetNodes(ctx, workspaceID); err != nil {
+			fmt.Fprintln(os.Stderr, "Armadra: could not retire deleted nodes:", err)
+		}
 	})
 	switches, err := ownership.New(ownership.Options{
 		Store:      database,

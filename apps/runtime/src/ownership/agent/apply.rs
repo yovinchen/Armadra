@@ -8,7 +8,7 @@ use armadra_protocol::v1::{
 
 use crate::error::AppResult;
 
-use super::super::records;
+use super::super::{records, sweep};
 use super::canonical::content_digest;
 use super::columns::{handoff_columns, outcome_column, state_column};
 use super::links::encode_links;
@@ -275,6 +275,80 @@ pub async fn apply_records(
             .await?;
             written += 1;
         }
+    }
+
+    // The package is the domain's whole content (§2.12), so whatever it no
+    // longer names is gone from the Host and has to go from here too. Without
+    // this a rollback was additive in one direction only: a status the Host
+    // deleted came back, and an approval somebody withdrew was open again.
+    //
+    // `agent_handoff_outbox` is swept through its parent rather than directly:
+    // it has no workspace column, and an entry whose handoff is gone is work
+    // nothing can finish.
+    for (_, workspace_id, records) in files {
+        for kept in [
+            sweep::Kept {
+                table: "agent_status",
+                id_column: "node_id",
+                ids: records
+                    .statuses
+                    .iter()
+                    .map(|status| status.node_id.clone())
+                    .collect(),
+            },
+            sweep::Kept {
+                table: "agent_approvals",
+                id_column: "id",
+                ids: records
+                    .approvals
+                    .iter()
+                    .map(|approval| approval.approval_id.clone())
+                    .collect(),
+            },
+            sweep::Kept {
+                table: "agent_mailbox",
+                id_column: "id",
+                ids: records
+                    .messages
+                    .iter()
+                    .map(|message| message.message_id.clone())
+                    .collect(),
+            },
+            sweep::Kept {
+                table: "agent_deliveries",
+                id_column: "trace_id",
+                ids: records
+                    .deliveries
+                    .iter()
+                    .map(|delivery| delivery.trace_id.clone())
+                    .collect(),
+            },
+            sweep::Kept {
+                table: "agent_handoffs",
+                id_column: "id",
+                ids: records
+                    .handoffs
+                    .iter()
+                    .map(|handoff| handoff.handoff_id.clone())
+                    .collect(),
+            },
+            sweep::Kept {
+                table: "context_links",
+                id_column: "node_id",
+                ids: records
+                    .links
+                    .iter()
+                    .map(|links| links.node_id.clone())
+                    .collect(),
+            },
+        ] {
+            sweep::delete_absent(transaction, workspace_id, &kept).await?;
+        }
+        sqlx::query(
+            "DELETE FROM agent_handoff_outbox WHERE handoff_id NOT IN (SELECT id FROM agent_handoffs)",
+        )
+        .execute(&mut **transaction)
+        .await?;
     }
 
     // Read the rows back, per workspace, exactly as a fresh export would.

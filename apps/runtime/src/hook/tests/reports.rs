@@ -701,8 +701,9 @@ async fn a_copilot_turn_is_understood_from_its_shape_alone() {
         Some("working")
     );
 
-    // §3.3 leaves `notification` unverified, so it must not move the badge off
-    // the working state the prompt above set.
+    // A permission prompt is on screen: that is the one `notification_type`
+    // with a primary source behind it, and it is the whole reason the event is
+    // worth translating.
     assert_eq!(
         fixture
             .post_hook(
@@ -720,7 +721,29 @@ async fn a_copilot_turn_is_understood_from_its_shape_alone() {
     );
     assert_eq!(
         fixture.status().await.unwrap().state.as_deref(),
-        Some("working")
+        Some("waiting")
+    );
+
+    // The same event carrying a type nobody has documented moves nothing. A
+    // shell that finished is not a state of the node, and the turn that ran it
+    // is still running.
+    assert_eq!(
+        fixture
+            .post_hook(
+                "copilot",
+                body(json!({
+                    "sessionId": "s-1",
+                    "hook_event_name": "Notification",
+                    "notification_type": "shell_completion"
+                })),
+                verified,
+            )
+            .await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        fixture.status().await.unwrap().state.as_deref(),
+        Some("waiting")
     );
 }
 

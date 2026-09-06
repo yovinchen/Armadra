@@ -575,3 +575,65 @@ async fn the_agent_guard_refuses_writes_and_leaves_reads_alone() {
     let (agents, _) = agent::worker_states(&pool).await.unwrap();
     assert_eq!(agents.len(), 1);
 }
+
+/// The package is the domain's whole content (§2.12), so a rollback has to
+/// remove what it no longer names as well as write back what it does.
+///
+/// Without the sweep a rollback was additive in one direction only: a status
+/// the Host deleted came back, an approval somebody withdrew was open again,
+/// and nothing said so — the report counts what was written and never what was
+/// left behind.
+#[tokio::test]
+async fn a_package_that_no_longer_names_a_record_removes_it() {
+    let (pool, directory) = pool().await;
+    let id = workspace(&pool).await;
+    nodes(&pool, &id).await;
+    insert_status(&pool, &id, "node-one", "idle", None).await;
+    insert_status(&pool, &id, "node-two", "working", None).await;
+    insert_approval(&pool, &id, "node-one", "approval-one").await;
+    insert_approval(&pool, &id, "node-two", "approval-two").await;
+    insert_handoff(&pool, &id, "handoff-one", "prepared").await;
+    hand_to_host(&pool, 2).await;
+
+    // The Host kept one node and dropped everything else while it held the
+    // domain, so its package names only what survived.
+    let mut connection = pool.acquire().await.unwrap();
+    let before = agent::records_for(&mut connection, &id).await.unwrap();
+    drop(connection);
+    let kept: Vec<_> = before
+        .records()
+        .into_iter()
+        .filter(|record| match &record.entity {
+            Some(Entity::AgentStatus(status)) => status.node_id == "node-one",
+            Some(Entity::Approval(approval)) => approval.node_id == "node-one",
+            _ => false,
+        })
+        .collect();
+    assert_eq!(kept.len(), 2, "the fixture no longer has both kinds");
+
+    let package = directory.path().join("package");
+    std::fs::create_dir_all(&package).unwrap();
+    write_package(&package, 2, &id, &kept);
+    agent_import::apply(&pool, &request(&package, 2, "import-sweep"))
+        .await
+        .unwrap();
+
+    let mut connection = pool.acquire().await.unwrap();
+    let stored = agent::records_for(&mut connection, &id).await.unwrap();
+    assert_eq!(stored.statuses.len(), 1);
+    assert_eq!(stored.statuses[0].node_id, "node-one");
+    assert_eq!(stored.approvals.len(), 1);
+    assert_eq!(stored.approvals[0].approval_id, "approval-one");
+    assert!(
+        stored.handoffs.is_empty(),
+        "a handoff the package dropped survived the rollback"
+    );
+    // The outbox goes with its parent: an entry naming a handoff that is gone
+    // is work nothing can finish.
+    let outbox: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM agent_handoff_outbox")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(outbox, 0);
+}
