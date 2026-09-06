@@ -50,12 +50,15 @@ pub const OBSERVED: &str = "observed";
 /// strongest source. `None` is a provider with no adapter, whose state is only
 /// ever whatever §3.4 observes.
 ///
-/// Extension point for the later batches: B2 adds Pi / Oh My Pi as extensions,
-/// and B3 moves opencode from the first arm to the second when its plugin stops
-/// forking the client.
+/// Extension point for B3: opencode moves from the first arm to the second
+/// when its plugin stops forking the client.
 pub fn state_source_for(provider: &str) -> Option<&'static str> {
     match provider {
         "claude" | "codex" | "gemini" | "opencode" | "copilot" => Some(STATE_SOURCE_HOOK),
+        // Pi and Oh My Pi report from a TS extension inside the CLI's own
+        // process (协作通道 §3.1 channel B). Same socket, same bearer, same
+        // node token — a different transport, not a different authority.
+        "pi" | "omp" => Some(STATE_SOURCE_EXTENSION),
         _ => None,
     }
 }
@@ -458,14 +461,12 @@ mod tests {
         // this is ever asked.
         assert_eq!(state_source_for("custom:wrapper"), None);
         assert_eq!(state_source_for(""), None);
-        // B1 wired Copilot's command Hook, so it now names a channel like the
-        // other four. Pi / Oh My Pi wait for B2's extension: until then the
-        // capability says the adapter exists and the source says nothing has
-        // reported through it.
+        // Copilot reports through a forked command Hook; Pi and Oh My Pi from
+        // inside the CLI process, which is the one distinction the column
+        // exists to draw.
         assert_eq!(state_source_for("copilot"), Some(STATE_SOURCE_HOOK));
-        for pending in ["pi", "omp"] {
-            assert_eq!(state_source_for(pending), None);
-        }
+        assert_eq!(state_source_for("pi"), Some(STATE_SOURCE_EXTENSION));
+        assert_eq!(state_source_for("omp"), Some(STATE_SOURCE_EXTENSION));
     }
 
     #[test]

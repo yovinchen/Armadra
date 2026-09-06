@@ -16,6 +16,7 @@ pub mod codex;
 pub mod copilot;
 pub mod gemini;
 pub mod opencode;
+pub mod pi;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -178,6 +179,9 @@ pub fn normalize_as(
         "copilot" => copilot::normalize(node_id, agent_id, payload),
         "gemini" => gemini::normalize(node_id, agent_id, payload),
         "opencode" => opencode::normalize(node_id, agent_id, payload),
+        // One parser for both: OMP is a fork of Pi's extension API and the
+        // vocabularies differ by an alias, not by a shape.
+        "pi" | "omp" => pi::normalize(node_id, agent_id, payload),
         _ => claude::normalize(node_id, agent_id, payload),
     }
 }
