@@ -271,15 +271,33 @@ function projectEdge(edge: CanvasEdge, selected: boolean): CanvasFlowEdge {
 
 function projectReference(
   reference: Reference,
+  source: string,
   selected: boolean,
 ): CanvasFlowEdge {
   return {
     id: reference.id,
     type: "reference",
-    source: toItemId(reference.itemId),
+    source,
     target: reference.nodeId,
     selected,
   } as ReferenceFlowEdge;
+}
+
+/**
+ * 引用的来源端在画布上是哪个 id。
+ *
+ * `references.itemId` 存的是裸 uuid，两种来源共用这一格：白板对象在画布上
+ * 是 `wb:<uuid>`，Frame 就是它自己的节点 id（`frame-reference.ts`）。都找不到
+ * 就返回 null——那条引用指向已经删掉的东西，这一帧不画。
+ */
+function referenceSourceId(
+  itemId: string,
+  items: ReadonlySet<string>,
+  frames: ReadonlySet<string>,
+): string | null {
+  const asItem = toItemId(itemId);
+  if (items.has(asItem)) return asItem;
+  return frames.has(itemId) ? itemId : null;
 }
 
 /** 两端有一个不在画布上的边投影不出来（远端刚删掉那个节点时会发生）。 */
@@ -289,6 +307,11 @@ export function projectEdges(
   selection: Selection = EMPTY_SELECTION,
 ): CanvasFlowEdge[] {
   const nodes = new Set((document?.nodes ?? []).map((node) => node.id));
+  const frames = new Set(
+    (document?.nodes ?? [])
+      .filter((node) => node.type === "group")
+      .map((node) => node.id),
+  );
   const items = new Set(whiteboard.items.map((item) => toItemId(item.id)));
   const edges: CanvasFlowEdge[] = [];
   for (const edge of document?.edges ?? []) {
@@ -296,9 +319,12 @@ export function projectEdges(
     edges.push(projectEdge(edge, selection.edges.has(edge.id)));
   }
   for (const reference of whiteboard.references) {
-    if (!items.has(toItemId(reference.itemId))) continue;
+    const source = referenceSourceId(reference.itemId, items, frames);
+    if (!source) continue;
     if (!nodes.has(reference.nodeId)) continue;
-    edges.push(projectReference(reference, selection.edges.has(reference.id)));
+    edges.push(
+      projectReference(reference, source, selection.edges.has(reference.id)),
+    );
   }
   return edges;
 }

@@ -23,6 +23,7 @@ import { useT } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
 import { frameBindingOf } from "../frame-binding";
 import { runCanvasCommand } from "../commands";
+import { ReferenceSubmenu } from "./reference-menu";
 
 /**
  * 节点右键菜单（§3.2）。
@@ -170,6 +171,12 @@ export function NodeMenuContent({ node }: { node: CanvasNode }) {
         {node.collapsed ? <ChevronDown /> : <ChevronRight />}
         {node.collapsed ? t("node.expand") : t("node.collapse")}
       </ContextMenuItem>
+
+      {node.type === "group" ? (
+        // Frame 可以当引用来源：引用它 = 引用它圈住的那一片
+        // （`canvas/frame-reference.ts`）。白板对象那条路在 `item-menu.tsx`。
+        <ReferenceSubmenu sourceId={node.id} />
+      ) : null}
 
       {frameBindingOf(node) ? (
         // 解绑只清 `data.binding`，磁盘上的 checkout 一个字节都不动；

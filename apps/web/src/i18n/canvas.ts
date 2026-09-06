@@ -79,6 +79,20 @@ const zh = {
   "content.highlight": "高亮",
   "content.frame": "画框",
   "content.shape": "白板内容",
+  /* Frame 引用交给 Agent 的成员清单（canvas/frame-reference.ts） */
+  "content.frameSummary": "画框「{title}」里的内容：",
+  "content.frameEmpty": "画框「{title}」目前是空的。",
+  "content.frameLine": "- {kind}：{text}",
+  "content.frameLineBare": "- {kind}",
+  "content.frameMore": "- 还有 {count} 项未列出",
+  /* 画框清单里节点那几行的类型名 */
+  "content.terminal": "终端",
+  "content.editor": "文件",
+  "content.diff": "差异",
+  "content.files": "目录",
+  "content.browser": "网页",
+  "content.automation": "自动化",
+  "content.agentActivity": "活动",
 
   /* B5 reference */
   "shape.removeReference": "移除引用",
@@ -245,6 +259,18 @@ const en: Record<keyof typeof zh, string> = {
   "content.highlight": "Highlight",
   "content.frame": "Frame",
   "content.shape": "Whiteboard content",
+  "content.frameSummary": "Inside the frame \u201c{title}\u201d:",
+  "content.frameEmpty": "The frame \u201c{title}\u201d is empty.",
+  "content.frameLine": "- {kind}: {text}",
+  "content.frameLineBare": "- {kind}",
+  "content.frameMore": "- and {count} more",
+  "content.terminal": "Terminal",
+  "content.editor": "File",
+  "content.diff": "Diff",
+  "content.files": "Folder",
+  "content.browser": "Web page",
+  "content.automation": "Automation",
+  "content.agentActivity": "Activity",
 
   /* B5 reference */
   "shape.removeReference": "Remove reference",

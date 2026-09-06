@@ -291,6 +291,36 @@ describe("projectEdges", () => {
       },
     ]);
   });
+
+  it("来源是 Frame 时起点就是那个分组节点的 id，不加 `wb:` 前缀", () => {
+    const whiteboard: WhiteboardDoc = {
+      ...emptyWhiteboard(),
+      references: [{ id: "ref-frame", itemId: GROUP, nodeId: NODE }],
+    };
+    const edges = projectEdges(
+      board([node(NODE), node(GROUP, { type: "group" })]),
+      whiteboard,
+    );
+    expect(edges).toEqual([
+      {
+        id: "ref-frame",
+        type: "reference",
+        source: GROUP,
+        target: NODE,
+        selected: false,
+      },
+    ]);
+  });
+
+  it("来源既不是白板对象也不是 Frame 时整条不画（普通节点当不了来源）", () => {
+    const whiteboard: WhiteboardDoc = {
+      ...emptyWhiteboard(),
+      references: [{ id: "ref-x", itemId: OTHER, nodeId: NODE }],
+    };
+    expect(projectEdges(board([node(NODE), node(OTHER)]), whiteboard)).toEqual(
+      [],
+    );
+  });
 });
 
 describe("id 判定", () => {

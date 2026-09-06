@@ -126,7 +126,7 @@ function open(): void {
     <ContextMenu>
       <ContextMenuTrigger>目标</ContextMenuTrigger>
       <ContextMenuContent>
-        <ReferenceSubmenu itemId={`wb:${item.id}`} />
+        <ReferenceSubmenu sourceId={`wb:${item.id}`} />
       </ContextMenuContent>
     </ContextMenu>,
   );

@@ -4,6 +4,7 @@ import type { BoardDocument, CanvasNode } from "@armadra/shared";
 import { t } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
 import { MAX_LINKS } from "./content-links";
+import { frameById } from "./frame-reference";
 import { fromItemId, type WhiteboardDoc } from "./whiteboard/model";
 import { addReference, removeReferences } from "./whiteboard/store";
 
@@ -20,6 +21,22 @@ import { addReference, removeReferences } from "./whiteboard/store";
  * 与从把手拖到白板对象（`flow/use-flow-nodes.onConnect`）。上限与去重的
  * 判定在两条路上必须一致，所以判定只写一份。
  */
+
+/**
+ * 能**当来源**的东西：一条白板对象，或一个 Frame。
+ *
+ * Frame 引用的是它圈住的那一片（`frame-reference.ts`），所以来源判定不能只
+ * 看白板对象表。两张表的 id 都是裸 uuid，不会撞。
+ */
+export function referenceSourceExists(
+  document: BoardDocument | null,
+  whiteboard: WhiteboardDoc,
+  sourceId: string,
+): boolean {
+  const bare = fromItemId(sourceId);
+  if (whiteboard.items.some((item) => item.id === bare)) return true;
+  return Boolean(frameById(document, bare));
+}
 
 /** 能接收内容引用的节点：带 Agent 的终端（Runtime 只对它们开链接文档）。 */
 export function referenceTargets(document: BoardDocument | null): CanvasNode[] {
@@ -87,7 +104,7 @@ export function createContentReference(
   const state = useCanvasStore.getState();
   const whiteboard = state.whiteboard;
   const bare = fromItemId(itemId);
-  if (!whiteboard.items.some((item) => item.id === bare)) {
+  if (!referenceSourceExists(state.document, whiteboard, bare)) {
     return { kind: "rejected", reason: "unknown" };
   }
   if (!referenceTargets(state.document).some((node) => node.id === nodeId)) {

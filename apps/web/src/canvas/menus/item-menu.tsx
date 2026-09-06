@@ -125,7 +125,7 @@ export function ItemMenuContent({ itemId }: ItemMenuContentProps) {
         </ContextMenuItem>
       ) : null}
 
-      <ReferenceSubmenu itemId={itemId} />
+      <ReferenceSubmenu sourceId={itemId} />
 
       <ContextMenuSeparator />
       <ContextMenuItem

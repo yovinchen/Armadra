@@ -1,10 +1,16 @@
 import * as React from "react";
-import type { ContextLink } from "@armadra/shared";
+import type { BoardDocument, ContextLink } from "@armadra/shared";
 
 import { runtimeApi } from "@/api/client";
 import { t } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
 import { assetIdOf, assetUrlFor } from "./assets";
+import {
+  frameSignature,
+  frameSource,
+  frameSummaryText,
+  type FrameSource,
+} from "./frame-reference";
 import { toItemId, type Item, type WhiteboardDoc } from "./whiteboard/model";
 import type { ColorScheme } from "./whiteboard/palette";
 import { rasterizeItems } from "./whiteboard/raster";
@@ -62,6 +68,16 @@ export const CONTENT_TYPE_KEYS: Record<string, string> = {
   image: "content.image",
   line: "content.line",
   group: "content.group",
+  // 画框引用的清单里也会出现节点（`frame-reference.ts`），所以节点类型
+  // 也在这张表里。
+  terminal: "content.terminal",
+  sticky: "content.note",
+  editor: "content.editor",
+  diff: "content.diff",
+  files: "content.files",
+  browser: "content.browser",
+  automation: "content.automation",
+  agentActivity: "content.agentActivity",
 };
 
 /**
@@ -142,7 +158,7 @@ export interface ContentDeps {
   /** 图片对象的 `assetPath` → 可加载的 URL（栅格化时要真的把图画进去）。 */
   resolveImage?(assetPath: string): string | null;
   scheme?: ColorScheme;
-  label?(key: string): string;
+  label?(key: string, values?: Record<string, string | number>): string;
 }
 
 export interface ResolvedContent {
@@ -205,13 +221,125 @@ export async function resolveContent(
   return { title, content };
 }
 
+/* ------------------------------ 来源的三个投影 ----------------------------- */
+
+/**
+ * 引用来源的三个投影：给 Runtime 的 `sourceShapeId` / `shapeType`、可读文字、
+ * 变化签名。白板对象与 Frame 只在这三处不同，状态机的其余部分完全共用。
+ */
+
+/** `wb:<uuid>`（白板对象）或裸 uuid（Frame）。Runtime 只当它是一个提示串。 */
+export function sourceShapeId(source: ReferenceSource): string {
+  return source.kind === "item"
+    ? toItemId(source.item.id)
+    : source.frame.frame.id;
+}
+
+/** `ink` / `text` / `shape` / `image` / `line`，或 Frame 的 `group`。 */
+export function sourceShapeType(source: ReferenceSource): string {
+  return source.kind === "item" ? source.item.kind : "group";
+}
+
+/** 这个来源还是不是上次导出的那个样子（缓存键）。 */
+export function sourceSignature(source: ReferenceSource): string {
+  return source.kind === "item"
+    ? itemSignature(source.item)
+    : frameSignature(source.frame);
+}
+
+/** 交给 Agent 的可读文字：对象的正文 / 标签，Frame 的成员清单。 */
+export function sourceText(
+  source: ReferenceSource,
+  label: (key: string, values?: Record<string, string | number>) => string = t,
+): string {
+  if (source.kind === "item") return itemText(source.item);
+  const title = source.frame.frame.title;
+  return frameSummaryText(
+    source.frame,
+    (kind) => label(CONTENT_TYPE_KEYS[kind] ?? "content.shape"),
+    {
+      empty: label("content.frameEmpty", { title }),
+      header: label("content.frameSummary", { title }),
+      line: (line) =>
+        line.text
+          ? label("content.frameLine", { kind: line.kind, text: line.text })
+          : label("content.frameLineBare", { kind: line.kind }),
+      more: (rest) => label("content.frameMore", { count: rest }),
+    },
+  );
+}
+
+/** 链接标题：对象按类型 / 正文，Frame 用它自己的标题。 */
+export function sourceTitle(
+  source: ReferenceSource,
+  label: (key: string, values?: Record<string, string | number>) => string = t,
+): string {
+  if (source.kind === "item") {
+    return contentTitle(source.item.kind, itemText(source.item), label);
+  }
+  const title = source.frame.frame.title.trim();
+  return title ? clampText(title, 160) : label("content.group");
+}
+
+/**
+ * 一个 Frame → 链接文档里的那一条。
+ *
+ * 文字是成员清单，图是**框里所有白板对象一起**栅格化出来的一张（节点画不
+ * 出来——终端和编辑器的画面不在白板文档里），所以框里只有节点时就只有文字。
+ */
+export async function resolveFrameContent(
+  frame: FrameSource,
+  contentId: string,
+  deps: ContentDeps,
+): Promise<ResolvedContent> {
+  const label = deps.label ?? t;
+  const source: ReferenceSource = { kind: "frame", frame };
+  const content: NonNullable<ContextLink["content"]> = {};
+  const text = sourceText(source, label);
+  if (text) content.text = clampText(text);
+  if (frame.items.length === 0) {
+    return { title: sourceTitle(source, label), content };
+  }
+  const scheme = deps.scheme ?? "light";
+  const blob = await rasterizeItems(frame.items, {
+    scale: 2,
+    padding: 16,
+    background: RASTER_BACKGROUND[scheme],
+    scheme,
+    resolveImage: deps.resolveImage,
+  });
+  content.pngPath = await deps.exportPng(contentId, await blobToDataUrl(blob));
+  return { title: sourceTitle(source, label), content };
+}
+
+/** 两条来源共用的入口。 */
+export function resolveSource(
+  source: ReferenceSource,
+  contentId: string,
+  deps: ContentDeps,
+): Promise<ResolvedContent> {
+  return source.kind === "item"
+    ? resolveContent(source.item, contentId, deps)
+    : resolveFrameContent(source.frame, contentId, deps);
+}
+
 /* -------------------------------- 收集 ------------------------------------ */
+
+/**
+ * 一条引用的来源：一个白板对象，或一个 Frame（`frame-reference.ts`）。
+ *
+ * `whiteboard.references.itemId` 两种都存裸 uuid，靠「在 `items` 里还是在
+ * `nodes` 里」区分——两张表的 id 都是 uuid，不会撞。
+ */
+export type ReferenceSource =
+  | { kind: "item"; item: Item }
+  | { kind: "frame"; frame: FrameSource };
 
 export interface ContentDescriptor {
   /** `ContextLink.id`，也是 `.armadra/exports/<id>.png` 的文件名。 */
   contentId: string;
   nodeId: string;
-  item: Item;
+  source: ReferenceSource;
 }
 
 /**
@@ -223,13 +351,27 @@ export interface ContentDescriptor {
  */
 export function collectContentLinks(
   whiteboard: WhiteboardDoc,
+  document: BoardDocument | null = null,
 ): ContentDescriptor[] {
   const items = new Map(whiteboard.items.map((item) => [item.id, item]));
   const found: ContentDescriptor[] = [];
   for (const reference of whiteboard.references) {
     const item = items.get(reference.itemId);
-    if (!item) continue;
-    found.push({ contentId: reference.id, nodeId: reference.nodeId, item });
+    if (item) {
+      found.push({
+        contentId: reference.id,
+        nodeId: reference.nodeId,
+        source: { kind: "item", item },
+      });
+      continue;
+    }
+    const frame = frameSource(document, whiteboard, reference.itemId);
+    if (!frame) continue;
+    found.push({
+      contentId: reference.id,
+      nodeId: reference.nodeId,
+      source: { kind: "frame", frame },
+    });
   }
   return found;
 }
@@ -251,11 +393,14 @@ export function refreshContentReferences(): void {
 }
 
 /** `content` 里与内容无关的那半边（每次都现算，不进缓存）。 */
-function sourceContent(item: Item): NonNullable<ContextLink["content"]> {
-  const text = itemText(item);
+function sourceContent(
+  source: ReferenceSource,
+  label: (key: string, values?: Record<string, string | number>) => string = t,
+): NonNullable<ContextLink["content"]> {
+  const text = sourceText(source, label);
   return {
-    sourceShapeId: toItemId(item.id),
-    shapeType: item.kind,
+    sourceShapeId: sourceShapeId(source),
+    shapeType: sourceShapeType(source),
     ...(text
       ? {
           text: clampText(text),
@@ -300,30 +445,34 @@ export function useContentLinks(): ContentLinkMap {
       resolveImage: (path) => assetUrlFor(workspaceId, path),
     };
     const whiteboard = () => useCanvasStore.getState().whiteboard;
+    const board = () => useCanvasStore.getState().document;
+    const links = () => collectContentLinks(whiteboard(), board());
 
     const currentMap = (): ContentLinkMap => {
       const next: ContentLinkMap = {};
-      for (const item of collectContentLinks(whiteboard())) {
-        const signature = itemSignature(item.item);
+      for (const item of links()) {
+        const signature = sourceSignature(item.source);
         const cached = cache.get(item.contentId);
         const failed = failures.get(item.contentId);
-        const source = sourceContent(item.item);
+        const content = sourceContent(item.source);
+        // 只有纯文字用不着导出图；Frame 一律要（它的图是成员合成的）。
+        const instant =
+          item.source.kind === "item" && item.source.item.kind === "text";
         const link =
           cached?.signature === signature
             ? cached.link
             : {
                 id: item.contentId,
-                title: contentTitle(item.item.kind, source.text ?? ""),
+                title: sourceTitle(item.source),
                 kind: SHAPE_KIND,
                 content: {
-                  ...source,
-                  status:
-                    item.item.kind === "text"
-                      ? ("ready" as const)
-                      : failed?.signature === signature &&
-                          failed.attempts >= MAX_EXPORT_ATTEMPTS
-                        ? ("error" as const)
-                        : ("pending" as const),
+                  ...content,
+                  status: instant
+                    ? ("ready" as const)
+                    : failed?.signature === signature &&
+                        failed.attempts >= MAX_EXPORT_ATTEMPTS
+                      ? ("error" as const)
+                      : ("pending" as const),
                 },
               };
         (next[item.nodeId] ??= []).push(link);
@@ -337,15 +486,14 @@ export function useContentLinks(): ContentLinkMap {
       setLinks((previous) => (sameMap(previous, next) ? previous : next));
     };
 
-    /** 结果回来时这条引用还是原来那条吗（对象换了内容 / 引用被删）？ */
+    /** 结果回来时这条引用还是原来那条吗（来源换了内容 / 引用被删）？ */
     const stillCurrent = (item: ContentDescriptor, signature: string) => {
-      const doc = whiteboard();
-      const reference = doc.references.find(
-        (row) => row.id === item.contentId && row.nodeId === item.nodeId,
-      );
-      if (!reference || reference.itemId !== item.item.id) return false;
-      const current = doc.items.find((row) => row.id === item.item.id);
-      return itemSignature(current) === signature;
+      const current = links().find((row) => row.contentId === item.contentId);
+      if (!current || current.nodeId !== item.nodeId) return false;
+      if (sourceShapeId(current.source) !== sourceShapeId(item.source)) {
+        return false;
+      }
+      return sourceSignature(current.source) === signature;
     };
 
     const run = async () => {
@@ -357,7 +505,7 @@ export function useContentLinks(): ContentLinkMap {
       }
       inFlight = true;
       dirty = false;
-      const descriptors = collectContentLinks(whiteboard());
+      const descriptors = links();
       let retry = false;
       try {
         const alive = new Set(descriptors.map((item) => item.contentId));
@@ -365,14 +513,14 @@ export function useContentLinks(): ContentLinkMap {
         for (const key of failures.keys())
           if (!alive.has(key)) failures.delete(key);
         for (const item of descriptors) {
-          const signature = itemSignature(item.item);
+          const signature = sourceSignature(item.source);
           if (cache.get(item.contentId)?.signature === signature) continue;
           const failure = failures.get(item.contentId);
           const attempts =
             failure?.signature === signature ? failure.attempts : 0;
           if (attempts >= MAX_EXPORT_ATTEMPTS) continue;
           try {
-            const resolved = await resolveContent(item.item, item.contentId, {
+            const resolved = await resolveSource(item.source, item.contentId, {
               ...deps,
               scheme: canvasScheme(),
             });
@@ -387,7 +535,7 @@ export function useContentLinks(): ContentLinkMap {
                 title: resolved.title,
                 kind: SHAPE_KIND,
                 content: {
-                  ...sourceContent(item.item),
+                  ...sourceContent(item.source),
                   ...resolved.content,
                   status: "ready",
                 },
@@ -436,8 +584,15 @@ export function useContentLinks(): ContentLinkMap {
     };
 
     schedule();
+    // Frame 引用的内容来自 `document`（成员节点、Frame 的框与标题），
+    // 所以文档变了也要重排一次——白板对象那条路照旧只看 `whiteboard`。
     const off = useCanvasStore.subscribe((state, previous) => {
-      if (state.whiteboard !== previous.whiteboard) schedule();
+      if (
+        state.whiteboard !== previous.whiteboard ||
+        state.document !== previous.document
+      ) {
+        schedule();
+      }
     });
     window.addEventListener(REFRESH_CONTENT_EVENT, refresh);
     return () => {

@@ -302,6 +302,49 @@ describe("createContentReference", () => {
   });
 });
 
+describe("Frame 当来源", () => {
+  const frame = () => node("frame", "group");
+
+  it("Frame 也能建引用，`itemId` 存的就是那个分组节点的 id", () => {
+    load([agent(), frame()], []);
+    const outcome = createContentReference("frame", "agent");
+    expect(outcome.kind).toBe("created");
+    expect(references()).toEqual([
+      { id: expect.any(String), itemId: "frame", nodeId: "agent" },
+    ]);
+  });
+
+  it("同一个 Frame 对同一个 Agent 只留一条，第二次是定位", () => {
+    load([agent(), frame()], []);
+    const first = createContentReference("frame", "agent");
+    const second = createContentReference("frame", "agent");
+    expect(second).toEqual({ kind: "existing", id: (first as never)["id"] });
+    expect(references()).toHaveLength(1);
+  });
+
+  it("普通节点当不了来源", () => {
+    load([agent(), sticky()], []);
+    expect(createContentReference("note", "agent")).toEqual({
+      kind: "rejected",
+      reason: "unknown",
+    });
+    expect(references()).toEqual([]);
+  });
+
+  it("上限与白板对象共用同一格：Frame 也占一个对端", () => {
+    const one = item();
+    load(
+      [agent(), frame()],
+      [one],
+      [{ id: "r1", itemId: one.id, nodeId: "agent" }],
+    );
+    createContentReference("frame", "agent");
+    expect(
+      referenceCountForNode(state().document, state().whiteboard, "agent"),
+    ).toBe(2);
+  });
+});
+
 describe("findReference", () => {
   it("找到同一对（对象，节点）的那一行", () => {
     const one = item();

@@ -57,9 +57,13 @@ const {
   MAX_LINKS,
   refreshContentReferences,
   resolveContent,
+  resolveFrameContent,
   SHAPE_KIND,
+  sourceShapeId,
+  sourceShapeType,
   useContentLinks,
 } = await import("./content-links");
+const { frameSource } = await import("./frame-reference");
 
 type Item = import("zod").infer<typeof itemSchema>;
 
@@ -252,7 +256,9 @@ describe("collectContentLinks", () => {
       items: [one],
       references: [{ id: "r1", itemId: one.id, nodeId: "agent" }],
     } as never);
-    expect(found).toEqual([{ contentId: "r1", nodeId: "agent", item: one }]);
+    expect(found).toEqual([
+      { contentId: "r1", nodeId: "agent", source: { kind: "item", item: one } },
+    ]);
   });
 
   it("指向已经删掉的对象的引用行被跳过", () => {
@@ -262,6 +268,110 @@ describe("collectContentLinks", () => {
       references: [{ id: "r1", itemId: "gone", nodeId: "agent" }],
     } as never);
     expect(found).toEqual([]);
+  });
+});
+
+/* --------------------------- Frame 当引用来源 ------------------------------ */
+
+describe("Frame 当引用来源", () => {
+  const FRAME = "019ff7d1-0d12-7421-833d-2c5e8d64ed09";
+
+  function frameDocument(): BoardDocument {
+    return {
+      board,
+      nodes: [
+        {
+          id: FRAME,
+          boardId: board.id,
+          type: "group",
+          title: "设计稿",
+          color: "#0a84ff",
+          position: { x: 0, y: 0 },
+          size: { width: 400, height: 400 },
+          labels: [],
+          note: "",
+          data: { kind: "group" },
+          createdAt: stamp,
+          updatedAt: stamp,
+        },
+        {
+          id: "019ff7d1-0d12-7421-833d-2c5e8d64ed0a",
+          boardId: board.id,
+          type: "terminal",
+          title: "claude",
+          color: "#0a84ff",
+          position: { x: 20, y: 20 },
+          size: { width: 100, height: 100 },
+          labels: [],
+          note: "",
+          data: { kind: "terminal" },
+          createdAt: stamp,
+          updatedAt: stamp,
+        },
+      ],
+      edges: [],
+    } as never as BoardDocument;
+  }
+
+  it("`itemId` 指向一个 Frame 时收成一条 `frame` 来源", () => {
+    const inside = text("需求确认");
+    const found = collectContentLinks(
+      {
+        ...emptyWhiteboard(),
+        items: [inside],
+        references: [{ id: "r1", itemId: FRAME, nodeId: "agent" }],
+      } as never,
+      frameDocument(),
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]!.source.kind).toBe("frame");
+    expect(sourceShapeId(found[0]!.source)).toBe(FRAME);
+    expect(sourceShapeType(found[0]!.source)).toBe("group");
+  });
+
+  it("没有文档时（或 Frame 已删）那条引用被跳过", () => {
+    const found = collectContentLinks({
+      ...emptyWhiteboard(),
+      items: [],
+      references: [{ id: "r1", itemId: FRAME, nodeId: "agent" }],
+    } as never);
+    expect(found).toEqual([]);
+  });
+
+  it("`content.text` 是成员清单，PNG 是框里所有白板对象一起栅格化的一张", async () => {
+    const exportPng = vi.fn(async () => ".armadra/exports/r1.png");
+    const one = text("需求确认");
+    const two = ink();
+    const source = frameSource(
+      frameDocument(),
+      { ...emptyWhiteboard(), items: [one, two] } as never,
+      FRAME,
+    )!;
+    const resolved = await resolveFrameContent(source, "r1", {
+      exportPng,
+      label,
+    });
+    expect(resolved.title).toBe("设计稿");
+    expect(resolved.content.pngPath).toBe(".armadra/exports/r1.png");
+    // 两条对象一次栅格化，不是一条一张。
+    const rastered = rasterize.mock.calls[0] as unknown as [unknown[]];
+    expect(rastered[0]).toHaveLength(2);
+    expect(resolved.content.text).toContain("content.frameSummary");
+    expect(resolved.content.text).toContain("content.frameLine");
+    // 节点也在清单里：Agent 读得到「框里还有一个终端」。
+    expect(resolved.content.text!.split("\n")).toHaveLength(4);
+  });
+
+  it("框里一个白板对象都没有时只给文字，不导出 PNG", async () => {
+    const exportPng = vi.fn(async () => ".armadra/exports/r1.png");
+    const source = frameSource(frameDocument(), emptyWhiteboard(), FRAME)!;
+    const resolved = await resolveFrameContent(source, "r1", {
+      exportPng,
+      label,
+    });
+    expect(resolved.content.pngPath).toBeUndefined();
+    expect(exportPng).not.toHaveBeenCalled();
+    expect(rasterize).not.toHaveBeenCalled();
   });
 });
 

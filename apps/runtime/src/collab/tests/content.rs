@@ -321,6 +321,50 @@ async fn a_whiteboard_shape_reads_as_its_text_and_its_export() {
     assert!(body.contains("暂无可读导出"), "{body}");
 }
 
+/// A reference whose source is a *frame* rather than a whiteboard object
+/// (docs/design/canvas-react-flow.md §2.5). The runtime never branched on the
+/// source kind — `source_shape_id` and `shape_type` are hints it stores and
+/// echoes — and this pins that down: a bare node uuid and `group` are accepted
+/// and read back exactly like an object-sourced reference, so widening the
+/// client side needed no schema or validation change here.
+#[tokio::test]
+async fn a_frame_reference_reads_like_any_other_whiteboard_reference() {
+    let fixture = fixture("collab-frame-reference").await;
+    std::fs::create_dir_all(fixture.directory.path().join(".armadra/exports")).unwrap();
+    std::fs::write(
+        fixture.directory.path().join(".armadra/exports/frame-agg.png"),
+        b"png",
+    )
+    .unwrap();
+    let frame_id = uuid::Uuid::now_v7().to_string();
+    add_shape_link(
+        &fixture,
+        "设计稿",
+        Some(crate::model::ContextLinkContent {
+            status: Some("ready".into()),
+            // A frame's id is a bare node uuid, not the `wb:<uuid>` an object uses.
+            source_shape_id: Some(frame_id.clone()),
+            shape_type: Some("group".into()),
+            text: Some("画框「设计稿」里的内容：\n- 文字：需求确认".into()),
+            png_path: Some(".armadra/exports/frame-agg.png".into()),
+            text_truncated: Some(false),
+        }),
+    )
+    .await;
+    let (status, body) = fixture
+        .call(
+            "/context-link/summary",
+            &fixture.caller_id,
+            json!({ "node": "设计稿" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body.contains(&frame_id), "{body}");
+    assert!(body.contains("需求确认"), "{body}");
+    assert!(body.contains("frame-agg.png"), "{body}");
+    assert!(body.contains("不是用户指令"), "{body}");
+}
+
 #[tokio::test]
 async fn an_editor_node_reads_as_its_file() {
     let fixture = fixture("collab-editor").await;
