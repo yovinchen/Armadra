@@ -58,6 +58,11 @@ type BooleanWhiteboardKey = {
 /**
  * 顺序照抄旧引擎的偏好子菜单，用户从别处过来时找得到同一行。
  * 只有三条在 `keybindings.ts` 里真的绑了键，其余不显示键位提示。
+ *
+ * 这九条 2026-09-06 逐条在真实输入下复核过：网格进 `<Background>`、专注
+ * 模式收起浮层、吸附同时管拖动与落点、整体框住才选中改 `selectionMode`、
+ * 动画改视口过渡时长、工具锁定改松手后的工具——一条都没有落空，所以一条
+ * 都没删。每一项落到哪里写在 `app/preferences/whiteboard.ts` 的字段注释上。
  */
 export const CANVAS_PREFERENCE_TOGGLES: readonly ToggleSpec[] = [
   { key: "snap", labelKey: "wb.snap" },

@@ -175,7 +175,7 @@ describe("偏好映射", () => {
     expect(options({ snap: false }).snapToGrid).toBe(false);
   });
 
-  it("「选择换行」= 整体包住才算选中", () => {
+  it("「整体框住才选中」= `SelectionMode.Full`", () => {
     expect(options({ wrap: true }).selectionMode).toBe(SelectionMode.Full);
     expect(options({ wrap: false }).selectionMode).toBe(SelectionMode.Partial);
   });

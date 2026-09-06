@@ -13,8 +13,8 @@ import { canvasScheme } from "./whiteboard/scheme";
 /**
  * 内容引用：白板对象 → Agent（React Flow 计划 §2.5 / F29，归属 B5）。
  *
- * 旧引擎里一条引用是「一端绑节点、一端绑白板 shape」的 tldraw 箭头，收集
- * 时得把编辑器里所有 arrow 连同 binding 翻一遍。现在它就是
+ * 旧引擎里一条引用是「一端绑节点、一端绑白板 shape」的箭头对象，收集时得
+ * 把编辑器里所有箭头连同 binding 翻一遍。现在它就是
  * `whiteboard.references` 里的一行 `{ id, itemId, nodeId }`（§3.1），所以这
  * 个模块只读 `canvas-store` 的一份内存真相，不再需要编辑器。
  *
@@ -170,7 +170,7 @@ export async function blobToDataUrl(blob: Blob): Promise<string> {
  *  - `text`：只有正文，不导出 PNG（Agent 直接读字）。
  *  - `image` 且是受管资产：`pngPath` 直接给 `.armadra/assets/…` 的相对路径，
  *    字节已经在工作区里了，不重复导出。v2 的图片对象没有裁剪 / 翻转 /
- *    旋转，所以这条分流永远成立（旧引擎那三个例外随 tldraw 一起没了）。
+ *    旋转，所以这条分流永远成立（旧引擎那三个例外随它一起没了）。
  *  - 其余：栅格化后上传，`pngPath` 用返回的 `relativePath`。
  */
 export async function resolveContent(

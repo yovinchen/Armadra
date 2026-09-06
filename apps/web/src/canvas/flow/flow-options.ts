@@ -2,7 +2,7 @@ import { SelectionMode } from "@xyflow/react";
 import type { KeyCode, SnapGrid } from "@xyflow/react";
 
 import type { WhiteboardPreferences } from "@/app/preferences/whiteboard";
-import type { CanvasToolId } from "../interaction/tool-store";
+import { isDrawingTool, type CanvasToolId } from "../interaction/tool-store";
 import {
   MULTI_SELECTION_KEY_CODE,
   PAN_ACTIVATION_KEY_CODE,
@@ -25,15 +25,6 @@ export interface FlowOptionsInput {
   editable: boolean;
   /** 当前工具（`interaction/tool-store`）：手形与绘图工具各改一组值。 */
   tool?: CanvasToolId;
-}
-
-/**
- * 会自己吃掉左键的白板工具（选择与手之外的全部）。
- *
- * 手形不算：它的左键归 React Flow 的 `panOnDrag`，不归工具层的指针通道。
- */
-export function isDrawingTool(tool: CanvasToolId): boolean {
-  return tool !== "select" && tool !== "hand";
 }
 
 export interface FlowOptions {
@@ -99,7 +90,7 @@ export function flowOptions({
     panActivationKeyCode: locked ? null : PAN_ACTIVATION_KEY_CODE,
     multiSelectionKeyCode: MULTI_SELECTION_KEY_CODE,
     selectionOnDrag: !locked && !hand && !drawing,
-    // 「选择换行」= 整体包住才算选中。
+    // 「整体框住才选中」= `SelectionMode.Full`；关掉时碰到就算选中。
     selectionMode: whiteboard.wrap ? SelectionMode.Full : SelectionMode.Partial,
     snapToGrid: whiteboard.snap,
     snapGrid: [grid, grid],

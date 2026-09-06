@@ -3,8 +3,8 @@ import * as React from "react";
 /**
  * 「锁定视图」的开关（旧画布契约 §5，Phase 3 第 6 条）。
  *
- * 锁定原本只是 `TldrawWorkspace` 的一个局部 state，但工具组在 Dock 上、
- * 在画布组件树之外，所以要有一处两边都能读的真相。做法与
+ * 锁定原本只是画布组件的一个局部 state，但工具组在 Dock 上、在画布组件树
+ * 之外，所以要有一处两边都能读的真相。做法与
  * `flow/flow-context.ts` 一样：模块级变量 + `useSyncExternalStore`，
  * 不进 zustand（它是 UI 的瞬时状态，不该跟着画布文档存盘）。
  *

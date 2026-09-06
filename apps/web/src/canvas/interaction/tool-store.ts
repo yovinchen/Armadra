@@ -37,6 +37,17 @@ export function isCanvasToolId(value: string): value is CanvasToolId {
   return (CANVAS_TOOL_IDS as readonly string[]).includes(value);
 }
 
+/**
+ * 会自己吃掉左键的工具（选择与手之外的全部）。
+ *
+ * 两处读它，读的必须是同一个判据：`flow/flow-options.ts` 靠它关掉 React Flow
+ * 的框选 / 节点拖动 / 拖动平移，`whiteboard/tools/use-tool-pointer.ts` 靠它
+ * 决定要不要接管指针。手形不算——它的左键归 `panOnDrag`，不归工具层。
+ */
+export function isDrawingTool(tool: CanvasToolId): boolean {
+  return tool !== "select" && tool !== "hand";
+}
+
 /* --------------------------------- 工具 ----------------------------------- */
 
 let tool: CanvasToolId = "select";

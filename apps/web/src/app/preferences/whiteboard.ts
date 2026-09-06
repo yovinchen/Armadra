@@ -76,25 +76,32 @@ export type WhiteboardInputMode = (typeof WHITEBOARD_INPUT_MODES)[number];
  * 旧引擎的四项（调试面板、增强辅助、缩放方向反转、手绘 / 整洁风格档）在
  * React Flow 下没有对应能力，B4 整条删掉——留一个改了没反应的开关比少一个
  * 开关更糟。localStorage 里的残留键无害：没人读它们。
+ *
+ * 剩下的每一项 2026-09-06 逐条复核过（用户反馈：偏好里不该留改了没反应的
+ * 开关）。下面每条注释写的就是它在 React Flow 下**真正落到哪里**，用旧引擎
+ * 的字段名描述自己的那几条一并改掉了——那些名字在这个代码库里已经不存在。
  */
 export interface WhiteboardPreferences {
   background: WhiteboardBackground;
-  /** 点阵开关，映射 `isGridMode`。 */
+  /** 点阵：画不画 `<Background variant="dots">`（`FlowWorkspace`）。 */
   grid: boolean;
   gridSize: WhiteboardGridSize;
-  /** 吸附，映射 `isSnapMode`。 */
+  /**
+   * 吸附：`<ReactFlow snapToGrid snapGrid>`（拖节点与拖白板对象都走它），
+   * 外加工具层自己算的落点（`whiteboard/tools/grid.ts`）。
+   */
   snap: boolean;
-  /** 缩放时新形状字号跟随，映射 `isDynamicSizeMode`。 */
+  /** 缩放时新对象的笔画档位跟着变：`tools/use-tool-pointer.applyDynamicSize`。 */
   dynamicSize: boolean;
-  /** 动画，映射 `animationSpeed` 1 / 0。 */
+  /** 视口动画：`flow/use-flow-viewport.duration()`，关掉就是 0ms 直接跳。 */
   animation: boolean;
-  /** 画完一个形状后工具不退回选择，映射 instance 的 `isToolLocked`。 */
+  /** 画完一个对象后工具不退回选择：`tools/use-tool-pointer.finish`。 */
   toolLock: boolean;
-  /** 框选时整体包住才算选中，映射 `isWrapMode`。 */
+  /** 框选判据：`<ReactFlow selectionMode>` 的 `Full`（开）/ `Partial`（关）。 */
   wrap: boolean;
-  /** 专注模式：缩略图、样式面板、锁按钮全部收起。 */
+  /** 专注模式：缩略图、收起钮、锁按钮全部收起（`styles/canvas.css`）。 */
   focus: boolean;
-  /** 拖到视口边缘时自动平移，映射 `edgeScrollSpeed` 1 / 0。 */
+  /** 拖到视口边缘时自动平移：`autoPanOnNodeDrag` / `autoPanOnConnect`。 */
   edgeScroll: boolean;
   /** 粘贴到光标处而不是视口中心；落点算在 `interaction/pointer.ts`。 */
   pasteAtCursor: boolean;

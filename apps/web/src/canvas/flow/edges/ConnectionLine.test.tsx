@@ -8,8 +8,8 @@ import { ConnectionLine } from "./ConnectionLine";
 /**
  * 拖线时的预览（React Flow 计划 §2.5 第三条）。
  *
- * 替代旧引擎的 `shapes/NodeArrowShapeUtil.test.tsx`（那一项测的是 tldraw
- * 箭头工具的预览覆写）。这里只有一条断言值得写：预览与落成后的 `LinkEdge`
+ * 替代旧引擎的 `shapes/NodeArrowShapeUtil.test.tsx`（那一项测的是箭头工具
+ * 的预览覆写）。这里只有一条断言值得写：预览与落成后的 `LinkEdge`
  * **必须是同一条曲线**，否则松手那一刻线会突然弹到别处。
  */
 

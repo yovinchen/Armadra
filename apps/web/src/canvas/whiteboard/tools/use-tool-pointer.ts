@@ -8,6 +8,7 @@ import { useCanvasStore } from "@/store/canvas-store";
 import { isCanvasLocked } from "../../canvas-lock";
 import {
   getNextStyle,
+  isDrawingTool,
   setNextStyle,
   setTool,
   useTool,
@@ -66,7 +67,8 @@ export function useToolPointer(): ToolPointerState {
     const dom = store.getState().domNode;
     if (!dom) return;
     // 选择与手形都不画东西：手形整个交给 React Flow 的 `panOnDrag`。
-    if (tool === "select" || tool === "hand") return;
+    // 判据与 `flow-options` 共用一个，两边不会对「哪些工具吃左键」有分歧。
+    if (!isDrawingTool(tool)) return;
 
     let pointerId: number | null = null;
     let current: Draft | null = null;

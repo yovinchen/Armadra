@@ -11,8 +11,9 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
-    // import 会被提升，tldraw 在模块顶层就读 `matchMedia`，所以这一类补丁
-    // 必须在 setupFiles 里打，测试文件内的 `installDomPolyfills()` 太晚了。
+    // import 会被提升，模块顶层就读 `matchMedia` 的依赖不止一个，所以这
+    // 一类补丁必须在 setupFiles 里打，测试文件内的 `installDomPolyfills()`
+    // 太晚了。
     setupFiles: ["./src/app/test-setup.ts"],
   },
 });

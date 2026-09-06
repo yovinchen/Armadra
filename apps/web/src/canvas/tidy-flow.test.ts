@@ -17,7 +17,7 @@ import { arrangeCanvas } from "./tidy-flow";
  * 整理排布的画布侧（React Flow 计划 T06 / F09）。
  *
  * 重写自旧引擎的 `tidy-editor.test.ts`（7 项）：那一版从编辑器里捞 shape，
- * 还要处理旋转、隐藏、tldraw 的对象锁与「绕开固定对象」。现在输入只有
+ * 还要处理旋转、隐藏、对象锁与「绕开固定对象」。现在输入只有
  * `document.nodes` 与 `whiteboard.items` 两张表，剩下的断言是：谁参与、
  * 谁跟着容器走、链接怎么上溯、以及整块只留一条历史。
  *
