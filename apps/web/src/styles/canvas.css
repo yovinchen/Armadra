@@ -216,6 +216,29 @@
   }
 }
 
+/*
+ * 手机（≤767px，与 `platform/layout.isCompactLayout` 同一个断点）：底部有一条
+ * 导航（`shell/MobileBottomNav`，56px 再加安全区）。Dock 必须坐在它**上面**
+ * ——上面那条容器查询给的 38px 会被导航盖掉一截，工具按钮按不到。
+ *
+ * 写成媒体查询而不是容器查询：导航是窗口级的固定条，跟画布容器有多宽无关；
+ * 放在容器查询之后，同权重下由它接管 `--dock-bottom`。
+ */
+@media (max-width: 767px) {
+  .canvas-dock {
+    --dock-bottom: calc(
+      var(--mobile-nav-h) + env(safe-area-inset-bottom) + 10px
+    );
+  }
+  .canvas-stage .react-flow__minimap,
+  .canvas-usage-orb {
+    --navigation-bottom: calc(
+      var(--mobile-nav-h) + env(safe-area-inset-bottom) + 10px + var(--dock-h) +
+        12px
+    );
+  }
+}
+
 .workspace-surface[data-minimap-collapsed="true"],
 .workspace-surface[data-minimap-collapsed="true"] .react-flow__minimap,
 .workspace-surface[data-minimap-collapsed="true"] .canvas-usage-orb {

@@ -188,6 +188,8 @@
   --tabbar-h: 44px;
   --sidebar-w: 240px;
   --dock-h: 44px;
+  /* 手机底部导航（`shell/MobileBottomNav`）的高度，不含安全区。 */
+  --mobile-nav-h: 56px;
   --drawer-w: 360px;
   --scm-w: 460px;
 

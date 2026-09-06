@@ -109,10 +109,13 @@ export function MobileBottomNav() {
           <button
             key={destination.id}
             type="button"
+            // 图标下面那行小字在这个尺寸下会被截断，所以无障碍名称单独给一份
+            // 完整的，不指望读屏去拼 `<span>` 里的残字。
+            aria-label={t(destination.labelKey)}
             aria-current={current ? "page" : undefined}
             disabled={needsWorkspace && destination.panel !== "settings"}
             className={cn(
-              "flex min-h-14 flex-1 flex-col items-center justify-center gap-1 px-1",
+              "flex min-h-[var(--mobile-nav-h)] flex-1 flex-col items-center justify-center gap-1 px-1",
               "text-[11px] leading-4 transition-colors disabled:opacity-40",
               current
                 ? "text-[var(--brand)]"
@@ -126,7 +129,9 @@ export function MobileBottomNav() {
             }}
           >
             <Icon className="size-5" aria-hidden />
-            <span>{t(destination.labelKey)}</span>
+            <span aria-hidden className="max-w-full truncate">
+              {t(destination.labelKey)}
+            </span>
           </button>
         );
       })}
