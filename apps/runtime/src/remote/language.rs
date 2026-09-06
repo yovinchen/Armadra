@@ -51,8 +51,6 @@ use crate::{
 
 /// Capability the second connection must advertise before a frame is written.
 pub const LINK_CAPABILITY: &str = "language.link.v1";
-/// Capability any connection advertises when it can at least probe.
-pub const CAPABILITY: &str = "language.v1";
 /// How long one request on the link may take end to end.
 const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
