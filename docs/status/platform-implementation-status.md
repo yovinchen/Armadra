@@ -132,9 +132,10 @@
 - **浏览器 2+3**（`241d4cb6`…`27a8ca3b`、`b3763fab`…`81ed33f9`）：批次 3 先合入：一个会话的画面与控制交给多个观看者（租约记名设备、Host 按终端类授权、浏览器节点拆分并挂到帧流）；批次 2 由合并 Agent 在批次 3 之上语义调和后合入：标签/frame/对话框/上传在同一会话内寻址，Hook 侧十个浏览器动词，`lease --status/--release` 补为第 17 个动词，`POST …/input` 先查对话框再取租约；浏览器测试 60 项，点击→新帧 p95 70 ms（§8 目标 350 ms）。
 - **B1 settings 域**（`43913a3e`…`1e2dbfaa`）：`settings.proto`（文档为不透明字节 + sha256）、Host `settingshost`（文档与执行主机注册、Adopt 经 Worker 帧 25 读取、Release 反向导出 + Runtime 重读核验）、`ownership.Adoption` 把实时链路交给每个域、事件流按域授权放行 host-wide 变更、Runtime 在 Host 拥有 settings 后拒写（语言探测缓存也按归属决定是否持久化）、Web `settingsGateway` 按归属路由读写且 `maintenance/error` 显示只读原因；`pnpm ownership:e2e --domain settings` 33 项（含依赖顺序拒绝、HTTPS 保存/冲突/事件、回滚后 Runtime 读到 Host 期间改动）。
 - **B2 filesystem 域**（`2acbb55d`…`d2894307`）：`filesystem.proto`（根注册、权限、Register/Update/Unregister/List、Worker 帧 26）、Host v7 `workspace_roots` 与 `fshost`（决定文件在哪、谁能碰；文件 I/O 仍在 Worker）、`permissions_json` 归 filesystem 域独有（画布摘要不再含权限，两种语言的规范摘要同步）、Host 代理按自己的记录收窄转发的文件请求、Web 工作区注册经 filesystem 网关、复用 `files:read/write` scope；`pnpm ownership:e2e --domain filesystem` 30 项。两个域合入后依赖顺序完整生效：filesystem 场景改为 canvas→settings→filesystem 切换、逆序回滚，两个场景收进 `tools/ownership/` 由 `tools/ownership-e2e.mjs --domain` 分发。
-- **进行中**：远端 4+5（整个工作区在执行主机上运行、主机密钥确认与 SSH 提示、上传/监听推送）由合并 Agent 调和到当前主线；B3 session 与 B5 git 域并行实施（预分配 Worker 帧 27/29、事件实体 160/180、Host v8/v9）；B4 agent 在 B3 后。
+- **远端 4+5**（`2639098a`…`289bf8aa`）：整个工作区在执行主机上运行（`WorkerServiceOperation` 19–48、上传分块与 sha256 校验、监听事件推送取代 2 秒轮询、Worker 帧 16/17 与响应 17–19）、主机密钥确认与 SSH 认证提示对话框（askpass 助手、`StrictHostKeyChecking=yes`）、`worker/mod.rs` 拆为 `mod/service/transport`、`remote/client/` 四文件；合并 Agent 在当前主线上调和：语言链路也走 askpass、`settings_file` 在拆分后重新接线、Go `wire.go` 白名单不放主动帧；远端伪 SSH 套件 5 个。
+- **进行中**：B3 session 与 B5 git 域并行实施（预分配 Worker 帧 27/29、事件实体 160/180、Host v8/v9）；B4 agent 在 B3 后。
 
-主树复核（B2 与浏览器合入后）：Rust 全 workspace 通过（runtime lib 759 项 + 30 余个集成套件）、`clippy -D warnings` 与 `fmt --check` 通过、Web 177 文件 1664 项、shared 140、host-client 238、协议 TS 97 与 Rust 全过、Go 全部包 race（含真实 Worker）、`pnpm check` 通过、canvas e2e 73 项。
+主树复核（远端 4+5 合入后）：Rust 全 workspace 通过（60 个测试二进制 1157 项）、`clippy -D warnings` 与 `fmt --check` 通过、Web 179 文件 1677 项、shared 144、host-client 238、协议 TS 112 与 Rust 全过、Go 27 包 race（含真实 Worker）、`pnpm check` 通过、settings e2e 33、filesystem e2e 30、canvas e2e 73、GitHub e2e 29。
 
 ## 本轮验证（2026-09-06 上午，四轮全部合入后于主树重跑，私有目标目录）
 
@@ -257,7 +258,7 @@
 
 ## 下一步
 
-1. 合入远端 4+5、B3 session、B5 git；之后 B4 agent、B6 `apps/runtime`→`apps/worker` 改名（§4.4 条件满足后）。
+1. 合入 B3 session、B5 git；之后 B4 agent、B6 `apps/runtime`→`apps/worker` 改名（§4.4 条件满足后）。
 2. 每轮合入后重跑 `pnpm check`、`cargo test --workspace`、`go -C apps/host test -race ./...`（含真实 Worker）、`pnpm protocol:test`、`pnpm ownership:e2e --domain settings|filesystem`、`pnpm canvas:e2e`；`main` 快进。
 3. 剩余 800–1500 行文件的收尾拆分（`migration_export.rs`、`settings.rs`、`GitRepositoryPanel.tsx`、`SourceControlDrawer.tsx`、`keybindings.ts` 等）在实施轮之间进行，避免与在飞批次冲突。
 4. 需要实机的验收保持未完成：Windows、手机、真实 GitHub/SSH、CI 真实 runner、签名密钥。
