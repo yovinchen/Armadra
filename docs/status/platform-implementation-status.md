@@ -141,6 +141,15 @@
 - **画布从 tldraw 迁到 React Flow**（集成分支 `feature/canvas-react-flow`，设计 [canvas-react-flow.md](../design/canvas-react-flow.md)，7 批 Opus Agent 串并行实施后线性合入）：B0 骨架（`@xyflow/react` 12.11 + `perfect-freehand` 替换 tldraw 5.4，`canvas-store` 仍是真相，`sync/project.ts` 投影、自写撤销栈、节点承载、Dock 接线；产物与源码 tldraw 出现 0 次）；B1 连线/Frame/整理/覆盖层/缩略图（修 React Flow 换父后连线消失、成功连线误报重复两处）；B2 白板层（墨迹/文字/几何/线/图片五类对象、五个工具、样式面板、剪贴板含内存兜底、栅格化、拖放与资产导入）；B4 四套右键菜单、删四项 tldraw 专属偏好、专注模式、手机工具组收窄；B5 内容引用（引用边、上限与去重、`context-links` 契约不变、PNG 导出）；B6 跨批接线（白板对象把手、Delete 删引用、菜单插槽、手形工具收敛）与文档。旧数据不迁移（用户决定，未发版）：`whiteboard_json` 只认 v2 `{"engine":"armadra-flow","version":2}`。真实 Chrome 核对 A01–A10：A04（两窗口同板实时同步）本就未实现，A01 ⌘滚轮在终端有焦点时变平移，两项记为后续；30 节点 + 300 墨迹压力：空闲 120 fps、平移 112、拖节点 108（目标 ≥45），JS 堆 125–175 MB；手机 390×844 无横向滚动。release 配置 + 诊断桥编译的壳在空数据目录 25 秒内画布稳定、无错误。
 - 桌面壳新增 debug-only 诊断桥（`ARMADRA_DESKTOP_DIAGNOSTIC_WS` / `_PRELUDE`，release 可用 `--features diagnostic-bridge` 编入）；两轮大文件拆分后全仓库只剩 `keybindings.ts`、`github-e2e.mjs`、`content-links.test.ts` 三个 800–950 行文件，`repo.rules.json` 豁免表清空。
 
+## 第八轮：用户实测反馈修复与协作模型重构（2026-09-06 晚至 09-07 凌晨）
+
+- **画布输入修复**（`978cad33`…`9be5770c`）：绘图工具拖拽出框选矩形（根因：React Flow `Pane.onPointerDownCapture` 由 `#root` 的委托监听器先于 `.react-flow` 上的捕获监听器执行，改为绘图工具激活时关闭 `selectionOnDrag/nodesDraggable/panOnDrag/elementsSelectable`，真实输入 7 种工具核对 0 命中）、空白处双击建文字、外部剪贴板粘贴（放行原生 `paste`：文本/图片/Finder 文件）、画布偏好 12 项逐项实测均生效（只改「选择换行」文案为「整体框住才选中」）。
+- **面板修复**（`27c89585`…`5c7e74bc`）：资源面板不再列出进程已退出的会话；文件图标问号原是 Git 未跟踪状态字母被放进图标位，新增按扩展名的 lucide 图标集；文件管理器面包屑折叠为「根 › … › 倒数第二级 › 当前级」。
+- **tldraw 残留清零**（`f6695ff3`…`032da0d0`）：白板引擎线上标识改为 `armadra-flow`（Runtime/Host/三端契约与 fixtures 同步）、注释引用改指 React Flow 设计、动态尺寸档位只升不降修复；仓库里只剩已发布迁移 `0001_initial.sql` 的一句 SQL 注释与 history/research 文档。
+- **协作通道**（设计 [agent-collaboration-channels.md](../design/agent-collaboration-channels.md)，B0–B5）：`agent_status.state_source`（hook / extension / observed，迁移 0013，`HOOK_CLIENT_REVISION` 4）；Copilot 命令 Hook（不订阅 fail-closed 的 `preToolUse`；`events.jsonl` 无逐轮 token 字段故不开上下文占用）；Pi / Oh My Pi 扩展进程内直连 `hook.sock`（node `socketPath` / bun `fetch unix` 实证）并经 `getContextUsage()` 精确上报（OMP 18.1.8 经 `session_stop` 收敛）；OpenCode 插件改直连；设置页三种 CLI 可安装、节点头部来源徽标、PTY 侧 `observed` 只写来源不写状态；`pnpm agent:smoke` 真实 CLI 冒烟：Pi、OMP、Copilot 通过，opencode 本机二进制未跑 postinstall 无法启动。顺带修：`armadra-hook` 把无正文 204 当传输错误、Copilot 首轮 `working` 被 `sessionStart` 抹掉。
+- **协作模型重构**（用户方案，批 1/2/3/4/6）：技能与 Hook 解耦（一份 `armadra/SKILL.md`，独立安装接口，七种 CLI 技能目录按各自 loader 核实）；`post --to` / `context-link --node` 按名字寻址（id → handle → 标题精确 → 唯一子串，只在连线文档内；`rename --handle`；`inbox` 带 `fromTitle`）；删除主动投递（`collab/messaging/`、`delivery_queue`、`send/reply/notify`、`agentMessaging` 开关、`handoff/delivery.rs`、`paste_handoff`）；交接改走信箱（批准即写 `handoff:<id>` 消息，状态 `prepared → queued → acknowledged | cancelled`；`handoff-read` 不视为确认）；`canvas interrupt` 动词与节点头部「打断」按钮只发 Escape。批 5（画布上直接允许/拒绝权限）待用户决定，设置页开关已收起。
+- **存盘级联缺陷**（`e9bc1e4e`）：`save_board` 原为整表 DELETE + INSERT，`agent_mailbox` 对 `nodes` 级联删除导致任何画布改动清空信箱；改为按 id 差异更新，真删节点才级联。
+
 主树复核（React Flow 合入后）：Web 202 文件 1919 项、shared 144、host-client 260、`pnpm check`、canvas e2e 73；React Flow 之前（B4 合入后）：Rust 全 workspace 通过、`clippy -D warnings` 与 `fmt --check` 通过、Web 182 文件 1702 项、shared 144、host-client 260、协议 TS 137 与 Rust 全过、Go 全部包 race（含真实 Worker）、`pnpm check` 通过、agent e2e 47、session e2e 39、git e2e 32、settings e2e 33、filesystem e2e 30、canvas e2e 73（改为接受每工作空间一个反向导出文件）。session 与 git 的 e2e 在 Go race 套件刚结束、机器满载时各有一次首跑失败，随后连续 3–4 次通过。
 
 ## 本轮验证（2026-09-06 上午，四轮全部合入后于主树重跑，私有目标目录）
@@ -266,7 +275,7 @@
 
 ## 下一步
 
-1. React Flow 后续：两窗口同板实时同步（A04）、终端有焦点时 ⌘滚轮缩放（A01）、Frame 作为引用来源、首帧引用边晚一帧；之后评估 B6 `apps/runtime`→`apps/worker` 改名（§4.4 条件满足后）。
+1. 协作模型批 5（画布上直接允许/拒绝权限）待决定；`GEMINI_CLI_HOME` 语义修正；React Flow 后续：两窗口同板实时同步（A04）、终端有焦点时 ⌘滚轮缩放（A01）、Frame 作为引用来源；之后评估 B6 `apps/runtime`→`apps/worker` 改名（§4.4 条件满足后）。
 2. 每轮合入后重跑 `pnpm check`、`cargo test --workspace`、`go -C apps/host test -race ./...`（含真实 Worker）、`pnpm protocol:test`、`pnpm ownership:e2e --domain settings|filesystem`、`pnpm canvas:e2e`；`main` 快进。
 3. 剩余 800–1500 行文件的收尾拆分（`migration_export.rs`、`settings.rs`、`GitRepositoryPanel.tsx`、`SourceControlDrawer.tsx`、`keybindings.ts` 等）在实施轮之间进行，避免与在飞批次冲突。
 4. 需要实机的验收保持未完成：Windows、手机、真实 GitHub/SSH、CI 真实 runner、签名密钥。
