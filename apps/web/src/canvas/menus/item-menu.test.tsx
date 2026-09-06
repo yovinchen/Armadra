@@ -19,6 +19,10 @@ import type { Item } from "../whiteboard/model";
 const state = {
   selectedItemIds: [] as string[],
   addNode: vi.fn(() => "node-1"),
+  // 「引用到 Agent」子菜单（`reference-menu.tsx`）现在挂在这份菜单里，
+  // 它订阅文档与引用行。板子上没有 Agent 终端时它只渲染一条禁用提示。
+  document: null,
+  whiteboard: { engine: "armadra-flow", version: 2, items: [], references: [] },
 };
 const items: Item[] = [];
 

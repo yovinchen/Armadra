@@ -50,7 +50,10 @@ const { emptyWhiteboard } = await import("../whiteboard/model");
 const { ContextMenu, ContextMenuContent, ContextMenuTrigger } = await import(
   "@/ui/context-menu"
 );
-const { ReferenceSubmenu } = await import("./reference-menu");
+const { ReferenceSubmenu, isReferenceEdgeId } = await import(
+  "./reference-menu"
+);
+const { EdgeMenuContent } = await import("./edge-menu");
 
 const stamp = "2026-09-06T00:00:00.000Z";
 
@@ -155,5 +158,52 @@ describe("ReferenceSubmenu", () => {
     );
     open();
     expect(screen.getByText("引用到 Agent")).toBeTruthy();
+  });
+});
+
+/**
+ * 边菜单的分流（F18 的第四种 × F29）。
+ *
+ * 引用不在 `document.edges` 里，走 `removeEdges` 删只会静静地什么都不发生。
+ * 所以「命中的是哪一种边」必须在菜单里就分开，而不是在删除动作里补救。
+ */
+describe("引用边的右键菜单", () => {
+  const reference = { id: "r1", itemId: item.id, nodeId: "agent" };
+
+  function openEdgeMenu(edgeId: string): void {
+    render(
+      <ContextMenu>
+        <ContextMenuTrigger>边</ContextMenuTrigger>
+        <ContextMenuContent>
+          <EdgeMenuContent edgeId={edgeId} />
+        </ContextMenuContent>
+      </ContextMenu>,
+    );
+    fireEvent.contextMenu(screen.getByText("边"));
+  }
+
+  it("`isReferenceEdgeId` 只认引用行的 id", () => {
+    const whiteboard = {
+      ...emptyWhiteboard(),
+      references: [reference],
+    } as never;
+    expect(isReferenceEdgeId(whiteboard, "r1")).toBe(true);
+    expect(isReferenceEdgeId(whiteboard, "e1")).toBe(false);
+    expect(isReferenceEdgeId(emptyWhiteboard(), "r1")).toBe(false);
+  });
+
+  it("命中引用边时给「重新同步 / 移除引用」两项，而不是「删除连线」", () => {
+    load([node("agent", "Claude Code", true)], [reference]);
+    openEdgeMenu("r1");
+    expect(screen.getByText("重新同步引用")).toBeTruthy();
+    expect(screen.getByText("移除引用")).toBeTruthy();
+    expect(screen.queryByText("删除连线")).toBeNull();
+  });
+
+  it("命中普通连线时仍然只有删除一项", () => {
+    load([node("agent", "Claude Code", true)], [reference]);
+    openEdgeMenu("e1");
+    expect(screen.getByText("删除连线")).toBeTruthy();
+    expect(screen.queryByText("移除引用")).toBeNull();
   });
 });

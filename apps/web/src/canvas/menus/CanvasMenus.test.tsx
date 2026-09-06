@@ -58,6 +58,8 @@ const edge: CanvasEdge = {
 const state = {
   workspace,
   document: { nodes: [node], edges: [edge] },
+  // 对象菜单的引用子菜单与边菜单的引用分流都读这份白板文档。
+  whiteboard: { engine: "armadra-flow", version: 2, items: [], references: [] },
   selectedNodeIds: [] as string[],
   selectedItemIds: [] as string[],
   selectedEdgeIds: [] as string[],

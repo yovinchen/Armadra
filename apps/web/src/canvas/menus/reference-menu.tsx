@@ -16,7 +16,7 @@ import {
   referenceTargets,
   removeContentReference,
 } from "../create-content-reference";
-import { fromItemId } from "../whiteboard/model";
+import { fromItemId, type WhiteboardDoc } from "../whiteboard/model";
 
 /**
  * 「引用到 Agent」子菜单与引用边的菜单项（React Flow 计划 §2.5 / F29，
@@ -127,9 +127,17 @@ export function ReferenceEdgeMenuItems({
   );
 }
 
-/** 这条边是不是一条内容引用（B4 的 `edge-menu` 用它分流）。 */
-export function isReferenceEdgeId(edgeId: string): boolean {
-  const whiteboard = useCanvasStore.getState().whiteboard;
+/**
+ * 这条边是不是一条内容引用（`edge-menu.tsx` 用它分流）。
+ *
+ * 纯函数，白板文档从外面喂进来：`edge-menu` 把它塞进 zustand 的选择器，
+ * 得到的是一个布尔量，菜单不会因为引用数组换了身份（导出状态机每两秒推
+ * 一次）而白重渲一遍。
+ */
+export function isReferenceEdgeId(
+  whiteboard: WhiteboardDoc,
+  edgeId: string,
+): boolean {
   return whiteboard.references.some((reference) => reference.id === edgeId);
 }
 

@@ -18,7 +18,7 @@ import {
   reorder,
   select,
 } from "../whiteboard/store";
-import { ReferenceMenuItems } from "./ReferenceMenuItems";
+import { ReferenceSubmenu } from "./reference-menu";
 
 /**
  * 白板对象的右键菜单（React Flow 计划 F18；原 `shape-menu.tsx`）。
@@ -31,7 +31,10 @@ import { ReferenceMenuItems } from "./ReferenceMenuItems";
  * 颜色、粗细、填充不在这里：它们归样式面板（`whiteboard/StylePanel.tsx`），
  * 一份样式两个入口只会互相打架。
  *
- * 「引用到 Agent」子菜单在 `ReferenceMenuItems.tsx`（B5 填）。
+ * 「引用到 Agent」子菜单在 `reference-menu.tsx`。它只认**命中的那一个**
+ * 对象，不跟着选区展开：一次引用一个对象，多选十条墨迹再一键全引用只会
+ * 无声地撞上 64 的上限（`create-content-reference.MAX_LINKS`），而用户以为
+ * 十条都进去了。
  */
 
 /** 复制出来的对象相对原件的偏移（画布单位），和粘贴的手感一致。 */
@@ -122,7 +125,7 @@ export function ItemMenuContent({ itemId }: ItemMenuContentProps) {
         </ContextMenuItem>
       ) : null}
 
-      <ReferenceMenuItems itemIds={targetIds} />
+      <ReferenceSubmenu itemId={itemId} />
 
       <ContextMenuSeparator />
       <ContextMenuItem
