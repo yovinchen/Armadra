@@ -38,7 +38,7 @@ doctor() {
   need rustc "https://rustup.rs"
   local node_major
   node_major="$(node -p 'process.versions.node.split(".")[0]')"
-  [ "$node_major" -ge 22 ] || fail "Node 版本过低（$(node -v)），需要 >= 22"
+  [ "${node_major}" -ge 22 ] || fail "Node 版本过低（$(node -v)），需要 >= 22"
   ok "node $(node -v)"
   ok "pnpm $(pnpm -v)"
   ok "$(rustc --version)"
@@ -114,35 +114,39 @@ port_in_use() {
 start_runtime() {
   step "编译 Runtime（debug）"
   cargo build -p armadra-runtime -p armadra-hook
-  step "启动 Runtime（127.0.0.1:$RUNTIME_PORT）"
-  ARMADRA_RUNTIME_PORT="$RUNTIME_PORT" ./target/debug/armadra-runtime &
+  step "启动 Runtime（127.0.0.1:${RUNTIME_PORT}）"
+  ARMADRA_RUNTIME_PORT="${RUNTIME_PORT}" ./target/debug/armadra-runtime &
   RUNTIME_PID=$!
-  trap 'kill "$RUNTIME_PID" 2>/dev/null || true' EXIT INT TERM
+  trap 'kill "${RUNTIME_PID}" 2>/dev/null || true' EXIT INT TERM
   for _ in $(seq 1 40); do
-    curl -sf "http://127.0.0.1:$RUNTIME_PORT/api/health" >/dev/null 2>&1 && break
+    curl -sf "http://127.0.0.1:${RUNTIME_PORT}/api/health" >/dev/null 2>&1 && break
     sleep 0.3
   done
-  curl -sf "http://127.0.0.1:$RUNTIME_PORT/api/health" >/dev/null 2>&1 || fail "Runtime 未在 $RUNTIME_PORT 就绪"
+  curl -sf "http://127.0.0.1:${RUNTIME_PORT}/api/health" >/dev/null 2>&1 || fail "Runtime 未在 ${RUNTIME_PORT} 就绪"
   ok "Runtime 就绪"
 }
 
 run_desktop() {
-  port_in_use "$RUNTIME_PORT" && fail "端口 $RUNTIME_PORT 已被占用（Armadra.app 是否正在运行？）"
+  port_in_use "${RUNTIME_PORT}" && fail "端口 ${RUNTIME_PORT} 已被占用（Armadra.app 或上次的 Runtime 还在跑？pkill -f armadra-runtime）"
+  # tauri.conf.json 的 devUrl 固定是 127.0.0.1:1420：被别的项目占住时 vite 会换端口，
+  # 桌面壳却会一直等 1420，看起来像卡死。
+  port_in_use 1420 && fail "端口 1420 已被占用，桌面开发模式的前端必须跑在 1420（先关掉占用它的进程）"
   step "准备 sidecar（tauri 的 externalBin 校验要求文件存在）"
   pnpm --filter @armadra/desktop prepare:sidecar
   pnpm --filter @armadra/shared build
   start_runtime
   step "启动桌面端（tauri dev，前端热更新，⌃C 同时结束 Runtime）"
-  pnpm --filter @armadra/desktop dev
+  VITE_RUNTIME_URL="http://127.0.0.1:${RUNTIME_PORT}" pnpm --filter @armadra/desktop dev
 }
 
 run_web() {
-  port_in_use "$RUNTIME_PORT" && fail "端口 $RUNTIME_PORT 已被占用（Armadra.app 是否正在运行？）"
+  port_in_use "${RUNTIME_PORT}" && fail "端口 ${RUNTIME_PORT} 已被占用（Armadra.app 或上次的 Runtime 还在跑？pkill -f armadra-runtime）"
+  port_in_use "${WEB_PORT}" && fail "端口 ${WEB_PORT} 已被占用（用 ARMADRA_WEB_PORT=xxxx 换一个）"
   pnpm --filter @armadra/shared build
   start_runtime
-  step "启动前端（http://127.0.0.1:$WEB_PORT，⌃C 同时结束 Runtime）"
-  VITE_RUNTIME_URL="http://127.0.0.1:$RUNTIME_PORT" \
-    pnpm --filter @armadra/web exec vite --port "$WEB_PORT" --host 127.0.0.1
+  step "启动前端（http://127.0.0.1:${WEB_PORT}，⌃C 同时结束 Runtime）"
+  VITE_RUNTIME_URL="http://127.0.0.1:${RUNTIME_PORT}" \
+    pnpm --filter @armadra/web exec vite --port "${WEB_PORT}" --host 127.0.0.1
 }
 
 run() {
