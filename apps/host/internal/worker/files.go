@@ -216,6 +216,14 @@ func (c *Client) validResult(request *pb.WorkerRequest, response *pb.WorkerRespo
 		}
 		return false
 	}
+	// The agent frames are screened in agents_host.go, where the cursor and the
+	// delivery rules live. Here a frame only has to be a well-formed answer of
+	// the shape that was asked for: a listing whose entries name no node cannot
+	// be compared with anything, and letting one through would make a handback
+	// pass on a record nobody can name.
+	if input := request.GetAgentHost(); input != nil {
+		return validAgentResult(input, response.GetAgentHost())
+	}
 	if input := request.GetReadFile(); input != nil {
 		chunk := response.GetFileChunk()
 		if chunk == nil || chunk.RootId != input.RootId || !relativePath(chunk.Path, false) || chunk.MimeType == "" || len(chunk.MimeType) > 256 || len(chunk.Sha256) != sha256.Size || chunk.Offset != input.Offset || chunk.TotalBytes > uint64(c.hello.MaxTextFileBytes) || chunk.Offset > chunk.TotalBytes || len(chunk.Data) > int(input.MaxBytes) || uint64(len(chunk.Data)) > chunk.TotalBytes-chunk.Offset || chunk.Eof != (chunk.Offset+uint64(len(chunk.Data)) == chunk.TotalBytes) || (!chunk.Eof && len(chunk.Data) == 0) || (len(input.ExpectedSha256) > 0 && !bytes.Equal(input.ExpectedSha256, chunk.Sha256)) {

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"crypto/sha256"
 	"slices"
 
 	pb "armadra.local/host/gen/armadra/v1"
@@ -189,6 +190,67 @@ func (c *Client) Hooks(ctx context.Context, agentID string, install bool) (*pb.H
 		return nil, &Error{Code: CodeProtocol}
 	}
 	return clone, nil
+}
+
+// validAgentResult screens one answer against the action that was sent.
+//
+// It lives here rather than in `files.go` for the reason the git screening does:
+// what makes an agent answer well formed is an agent-domain question, and the
+// frame validator should not have to know six of them.
+func validAgentResult(input *pb.AgentWorkerRequest, result *pb.AgentWorkerResponse) bool {
+	if result == nil {
+		return false
+	}
+	switch {
+	case input.GetListAgents() != nil:
+		states := result.GetAgents()
+		if states == nil {
+			return false
+		}
+		// One entry per node, named once. A duplicate would make a handback
+		// comparison read the second copy and never notice the first differed.
+		seen := map[string]bool{}
+		for _, state := range states.GetAgents() {
+			if state == nil || state.GetNodeId() == "" || seen[state.GetNodeId()] {
+				return false
+			}
+			seen[state.GetNodeId()] = true
+		}
+		for _, approval := range states.GetApprovals() {
+			if approval == nil || approval.GetApprovalId() == "" {
+				return false
+			}
+		}
+		return true
+	case input.GetDrainEvents() != nil:
+		drained := result.GetEvents()
+		if drained == nil {
+			return false
+		}
+		// Every reported turn has to carry a body that can be checked. One
+		// without a digest is a body this Host would have to trust, and a
+		// truncated one would then be recorded as a shorter event.
+		for _, event := range drained.GetEvents() {
+			if event == nil || event.GetNodeId() == "" || event.GetEventId() == "" {
+				return false
+			}
+			if len(event.GetPayload()) > 0 && len(event.GetPayloadSha256()) != sha256.Size {
+				return false
+			}
+		}
+		return true
+	case input.GetDeliverApproval() != nil, input.GetDeliverHandoff() != nil, input.GetDeliverMessage() != nil:
+		return result.GetDelivery() != nil
+	case input.GetInstallHooks() != nil:
+		return result.GetHooks().GetInstalled()
+	case input.GetUninstallHooks() != nil:
+		return result.GetHooks() != nil && !result.GetHooks().GetInstalled()
+	case input.GetReadTranscript() != nil:
+		return result.GetTranscript() != nil
+	case input.GetCaptureScreen() != nil:
+		return result.GetScreen() != nil
+	}
+	return false
 }
 
 // receipt screens one delivery answer.
