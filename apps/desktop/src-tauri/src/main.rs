@@ -63,7 +63,7 @@ fn mark_tauri_document(webview: &tauri::Webview) {
  * 什么错从外面完全看不见；这条桥就是为了在真实的壳里看见它。只编进 debug
  * 构建，发布版没有这段代码。
  */
-#[cfg(debug_assertions)]
+#[cfg(any(debug_assertions, feature = "diagnostic-bridge"))]
 fn diagnostic_bridge(webview: &tauri::Webview) {
     let Ok(target) = std::env::var("ARMADRA_DESKTOP_DIAGNOSTIC_WS") else {
         return;
@@ -81,7 +81,7 @@ fn diagnostic_bridge(webview: &tauri::Webview) {
     let _ = webview.eval(&script);
 }
 
-#[cfg(not(debug_assertions))]
+#[cfg(not(any(debug_assertions, feature = "diagnostic-bridge")))]
 fn diagnostic_bridge(_webview: &tauri::Webview) {}
 
 /* --------------------------------- 托盘 ---------------------------------- */

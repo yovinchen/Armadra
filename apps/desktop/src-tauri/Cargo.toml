@@ -63,5 +63,8 @@ window-vibrancy = "0.6.0"
 tempfile = "3.23.0"
 
 [features]
+# Compiles the page diagnostic bridge into a release binary for one-off
+# investigations of the packaged webview; never enabled by the bundle scripts.
+diagnostic-bridge = []
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
