@@ -28,6 +28,8 @@ import {
   EventEnvelopeSchema,
   HandoffSchema,
   HandoffState,
+  HookEventKind,
+  HookEventSchema,
   MailboxMessageSchema,
   WorkerRequestSchema,
 } from "../src/index.js";
@@ -73,6 +75,7 @@ describe("agent records", () => {
       verified: true,
       interrupted: true,
       transcriptRef: utf8.encode("claude/8f2d1c4a"),
+      stateSource: "hook",
       state: AgentState.BLOCKED,
       sessionPhase: "turn",
       reasonCode: "agent.blocked.approval",
@@ -80,6 +83,45 @@ describe("agent records", () => {
       updatedAtUnixMs: 1_788_557_900_000n,
       revision: beyondDouble,
     });
+  });
+
+  // The browser draws the source as a hint next to the badge, so it has to
+  // survive a provider it has never heard of and a kind that was appended after
+  // the first four adapters. Neither the payload nor its digest is ever read
+  // here: it is the Worker's normalized form, carried, not parsed.
+  it("carries a turn opening from an unknown provider", () => {
+    check("agent_hook_event_turn_start", HookEventSchema, {
+      eventId: "f0a1b2c3d4e5f60718293a4b5c6d7e8f",
+      nodeId: "3f7c0a12-9b5e-4d21-8a6f-2c1b0d9e8a77",
+      sessionId: "8f2d1c4a6b7e40a9b1c2d3e4f5a6b7c8",
+      generation: 7n,
+      workspaceId: "0123456789abcdef0123456789abcdef",
+      provider: "pi",
+      payload: utf8.encode(
+        '{"kind":"state","state":"working","stateSource":"extension"}',
+      ),
+      payloadSha256: new Uint8Array(32).fill(0x7e),
+      schemaVersion: 1,
+      kind: HookEventKind.TURN_START,
+      observedAtUnixMs: 1_788_557_700_000n,
+    });
+  });
+
+  // Appending the two kinds the extension CLIs need must not renumber the six
+  // that were already on the wire: a shifted value would turn every stored
+  // SESSION_END into an APPROVAL.
+  it("keeps the hook event kinds append-only", () => {
+    expect([
+      HookEventKind.UNSPECIFIED,
+      HookEventKind.SESSION_START,
+      HookEventKind.USER_PROMPT,
+      HookEventKind.TURN_END,
+      HookEventKind.NOTIFICATION,
+      HookEventKind.APPROVAL,
+      HookEventKind.SESSION_END,
+      HookEventKind.TURN_START,
+      HookEventKind.COMPACTION,
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
   });
 
   it("carries an approval's request as bytes with its digest", () => {

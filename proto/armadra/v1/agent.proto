@@ -234,6 +234,16 @@ message AgentStatus {
   optional bool interrupted = 14;
   // Opaque to the Host: the Worker's own way of naming this node's transcript.
   bytes transcript_ref = 15;
+  // Which channel the state above was learned through: `hook` (a command Hook
+  // the CLI forked), `extension` (an in-process extension on the same socket),
+  // `observed` (the PTY-side weak hint). Empty means nothing has reported.
+  //
+  // It is a string for the reason `session_phase` is, and it describes the
+  // *channel*, never the agent. The distinction is load-bearing: `observed` is
+  // a display-level guess that may not satisfy an idle gate, so folding it into
+  // the other two would let a prompt be written into a terminal that is
+  // mid-turn. See docs/design/agent-collaboration-channels.md §3.2 / §3.4.
+  string state_source = 16;
   AgentState state = 30;
   // The CLI's own phase word (`startup`, `turn`, `compact`, …). It is a string
   // for the reason `decision` is: it is one provider's vocabulary, and mapping
@@ -257,6 +267,15 @@ enum HookEventKind {
   HOOK_EVENT_KIND_NOTIFICATION = 4;
   HOOK_EVENT_KIND_APPROVAL = 5;
   HOOK_EVENT_KIND_SESSION_END = 6;
+  // A turn opening, which is not the same statement as USER_PROMPT: the
+  // extension CLIs announce a turn when a tool result resumes the loop, with
+  // nobody having typed anything. Reducing both to "a prompt was submitted"
+  // would make a node claim a person is waiting on it.
+  HOOK_EVENT_KIND_TURN_START = 7;
+  // The CLI compacted its own context. It says nothing about the node's state;
+  // what it invalidates is the last context reading, which is why it is its own
+  // kind rather than a notification with a special message.
+  HOOK_EVENT_KIND_COMPACTION = 8;
 }
 
 // One normalized Hook event, as the Worker reports it.

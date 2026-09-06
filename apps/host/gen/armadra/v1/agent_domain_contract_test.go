@@ -13,12 +13,15 @@ import (
 //
 // `agent_contract_test.go` pins the prompt-delivery surface, which writes into
 // a PTY. This file pins the shapes the Host owns once the domain has switched,
-// and each of the six is a statement the other two runtimes have to read the
+// and each of the seven is a statement the other two runtimes have to read the
 // same way:
 //
 //   - a status that is BLOCKED with an *absent* `errored`, because "no error
 //     was reported" and "an error was reported as false" are different things
-//     to draw and only one of them is a red badge;
+//     to draw and only one of them is a red badge, and whose `state_source`
+//     says which channel that verdict came through;
+//   - a normalized Hook event of a kind no CLI had when the enum was written,
+//     carrying a payload this Host never parses and its digest;
 //   - an approval still pending, whose body is a provider's own JSON carried as
 //     bytes with its digest;
 //   - a mailbox message nobody has acknowledged, whose zero acknowledgement
@@ -45,12 +48,31 @@ func TestAgentDomainWire(t *testing.T) {
 			Verified:          true,
 			Interrupted:       &interrupted,
 			TranscriptRef:     []byte("claude/8f2d1c4a"),
+			StateSource:       "hook",
 			State:             pb.AgentState_AGENT_STATE_BLOCKED,
 			SessionPhase:      "turn",
 			ReasonCode:        "agent.blocked.approval",
 			LastEventAtUnixMs: 1788557800000,
 			UpdatedAtUnixMs:   1788557900000,
 			Revision:          9007199254740993,
+		},
+		// A turn opening reported by a provider this Host has never heard of.
+		// Both halves are the point: `provider` is routed on and not
+		// interpreted, and TURN_START is a kind the enum gained after the first
+		// four adapters, so a Host that folded an unknown kind into a default
+		// would silently change what a node's state was reduced from.
+		"agent_hook_event_turn_start": &pb.HookEvent{
+			EventId:          "f0a1b2c3d4e5f60718293a4b5c6d7e8f",
+			NodeId:           "3f7c0a12-9b5e-4d21-8a6f-2c1b0d9e8a77",
+			SessionId:        "8f2d1c4a6b7e40a9b1c2d3e4f5a6b7c8",
+			Generation:       7,
+			WorkspaceId:      "0123456789abcdef0123456789abcdef",
+			Provider:         "pi",
+			Payload:          []byte(`{"kind":"state","state":"working","stateSource":"extension"}`),
+			PayloadSha256:    bytes.Repeat([]byte{0x7e}, 32),
+			SchemaVersion:    1,
+			Kind:             pb.HookEventKind_HOOK_EVENT_KIND_TURN_START,
+			ObservedAtUnixMs: 1788557700000,
 		},
 		// The question itself. The body is the provider's own JSON and is never
 		// expanded into fields; the digest is what makes carrying it safe.
@@ -183,6 +205,28 @@ func TestAgentStatusOptionalBoolsStayDistinct(t *testing.T) {
 	decoded := new(pb.AgentStatus)
 	if err = proto.Unmarshal(silentWire, decoded); err != nil || decoded.Errored != nil {
 		t.Fatal("an absent errored flag decoded as a value")
+	}
+}
+
+// The Hook event kinds are a closed list, and each number is what one runtime
+// wrote and another reads back. Appending TURN_START and COMPACTION for the
+// extension CLIs must not renumber the six that were already on the wire: a
+// shifted value would turn every stored SESSION_END into an APPROVAL.
+func TestHookEventKindNumbersAreAppendOnly(t *testing.T) {
+	for kind, number := range map[pb.HookEventKind]int32{
+		pb.HookEventKind_HOOK_EVENT_KIND_UNSPECIFIED:   0,
+		pb.HookEventKind_HOOK_EVENT_KIND_SESSION_START: 1,
+		pb.HookEventKind_HOOK_EVENT_KIND_USER_PROMPT:   2,
+		pb.HookEventKind_HOOK_EVENT_KIND_TURN_END:      3,
+		pb.HookEventKind_HOOK_EVENT_KIND_NOTIFICATION:  4,
+		pb.HookEventKind_HOOK_EVENT_KIND_APPROVAL:      5,
+		pb.HookEventKind_HOOK_EVENT_KIND_SESSION_END:   6,
+		pb.HookEventKind_HOOK_EVENT_KIND_TURN_START:    7,
+		pb.HookEventKind_HOOK_EVENT_KIND_COMPACTION:    8,
+	} {
+		if int32(kind) != number {
+			t.Fatalf("%s moved to %d", kind, kind)
+		}
 	}
 }
 

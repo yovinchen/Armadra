@@ -235,6 +235,15 @@ const (
 	HookEventKind_HOOK_EVENT_KIND_NOTIFICATION  HookEventKind = 4
 	HookEventKind_HOOK_EVENT_KIND_APPROVAL      HookEventKind = 5
 	HookEventKind_HOOK_EVENT_KIND_SESSION_END   HookEventKind = 6
+	// A turn opening, which is not the same statement as USER_PROMPT: the
+	// extension CLIs announce a turn when a tool result resumes the loop, with
+	// nobody having typed anything. Reducing both to "a prompt was submitted"
+	// would make a node claim a person is waiting on it.
+	HookEventKind_HOOK_EVENT_KIND_TURN_START HookEventKind = 7
+	// The CLI compacted its own context. It says nothing about the node's state;
+	// what it invalidates is the last context reading, which is why it is its own
+	// kind rather than a notification with a special message.
+	HookEventKind_HOOK_EVENT_KIND_COMPACTION HookEventKind = 8
 )
 
 // Enum value maps for HookEventKind.
@@ -247,6 +256,8 @@ var (
 		4: "HOOK_EVENT_KIND_NOTIFICATION",
 		5: "HOOK_EVENT_KIND_APPROVAL",
 		6: "HOOK_EVENT_KIND_SESSION_END",
+		7: "HOOK_EVENT_KIND_TURN_START",
+		8: "HOOK_EVENT_KIND_COMPACTION",
 	}
 	HookEventKind_value = map[string]int32{
 		"HOOK_EVENT_KIND_UNSPECIFIED":   0,
@@ -256,6 +267,8 @@ var (
 		"HOOK_EVENT_KIND_NOTIFICATION":  4,
 		"HOOK_EVENT_KIND_APPROVAL":      5,
 		"HOOK_EVENT_KIND_SESSION_END":   6,
+		"HOOK_EVENT_KIND_TURN_START":    7,
+		"HOOK_EVENT_KIND_COMPACTION":    8,
 	}
 )
 
@@ -1260,8 +1273,18 @@ type AgentStatus struct {
 	Errored     *bool  `protobuf:"varint,13,opt,name=errored,proto3,oneof" json:"errored,omitempty"`
 	Interrupted *bool  `protobuf:"varint,14,opt,name=interrupted,proto3,oneof" json:"interrupted,omitempty"`
 	// Opaque to the Host: the Worker's own way of naming this node's transcript.
-	TranscriptRef []byte     `protobuf:"bytes,15,opt,name=transcript_ref,json=transcriptRef,proto3" json:"transcript_ref,omitempty"`
-	State         AgentState `protobuf:"varint,30,opt,name=state,proto3,enum=armadra.v1.AgentState" json:"state,omitempty"`
+	TranscriptRef []byte `protobuf:"bytes,15,opt,name=transcript_ref,json=transcriptRef,proto3" json:"transcript_ref,omitempty"`
+	// Which channel the state above was learned through: `hook` (a command Hook
+	// the CLI forked), `extension` (an in-process extension on the same socket),
+	// `observed` (the PTY-side weak hint). Empty means nothing has reported.
+	//
+	// It is a string for the reason `session_phase` is, and it describes the
+	// *channel*, never the agent. The distinction is load-bearing: `observed` is
+	// a display-level guess that may not satisfy an idle gate, so folding it into
+	// the other two would let a prompt be written into a terminal that is
+	// mid-turn. See docs/design/agent-collaboration-channels.md §3.2 / §3.4.
+	StateSource string     `protobuf:"bytes,16,opt,name=state_source,json=stateSource,proto3" json:"state_source,omitempty"`
+	State       AgentState `protobuf:"varint,30,opt,name=state,proto3,enum=armadra.v1.AgentState" json:"state,omitempty"`
 	// The CLI's own phase word (`startup`, `turn`, `compact`, …). It is a string
 	// for the reason `decision` is: it is one provider's vocabulary, and mapping
 	// it would be this Host deciding what that provider meant.
@@ -1380,6 +1403,13 @@ func (x *AgentStatus) GetTranscriptRef() []byte {
 		return x.TranscriptRef
 	}
 	return nil
+}
+
+func (x *AgentStatus) GetStateSource() string {
+	if x != nil {
+		return x.StateSource
+	}
+	return ""
 }
 
 func (x *AgentStatus) GetState() AgentState {
@@ -5477,7 +5507,7 @@ const file_armadra_v1_agent_proto_rawDesc = "" +
 	"\x06target\x18\n" +
 	" \x01(\v2\x1d.armadra.v1.AgentTargetStatusH\x00R\x06target\x12:\n" +
 	"\areceipt\x18\v \x01(\v2\x1e.armadra.v1.AgentPromptReceiptH\x00R\areceiptB\b\n" +
-	"\x06result\"\x85\x05\n" +
+	"\x06result\"\xa8\x05\n" +
 	"\vAgentStatus\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12!\n" +
 	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12\x1d\n" +
@@ -5493,7 +5523,8 @@ const file_armadra_v1_agent_proto_rawDesc = "" +
 	"\brestored\x18\f \x01(\bR\brestored\x12\x1d\n" +
 	"\aerrored\x18\r \x01(\bH\x00R\aerrored\x88\x01\x01\x12%\n" +
 	"\vinterrupted\x18\x0e \x01(\bH\x01R\vinterrupted\x88\x01\x01\x12%\n" +
-	"\x0etranscript_ref\x18\x0f \x01(\fR\rtranscriptRef\x12,\n" +
+	"\x0etranscript_ref\x18\x0f \x01(\fR\rtranscriptRef\x12!\n" +
+	"\fstate_source\x18\x10 \x01(\tR\vstateSource\x12,\n" +
 	"\x05state\x18\x1e \x01(\x0e2\x16.armadra.v1.AgentStateR\x05state\x12#\n" +
 	"\rsession_phase\x18\x1f \x01(\tR\fsessionPhase\x12\x1f\n" +
 	"\vreason_code\x18' \x01(\tR\n" +
@@ -5900,7 +5931,7 @@ const file_armadra_v1_agent_proto_rawDesc = "" +
 	"\x13AGENT_STATE_WORKING\x10\x02\x12\x17\n" +
 	"\x13AGENT_STATE_WAITING\x10\x03\x12\x17\n" +
 	"\x13AGENT_STATE_BLOCKED\x10\x04\x12\x14\n" +
-	"\x10AGENT_STATE_DONE\x10\x05*\xf3\x01\n" +
+	"\x10AGENT_STATE_DONE\x10\x05*\xb3\x02\n" +
 	"\rHookEventKind\x12\x1f\n" +
 	"\x1bHOOK_EVENT_KIND_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dHOOK_EVENT_KIND_SESSION_START\x10\x01\x12\x1f\n" +
@@ -5908,7 +5939,9 @@ const file_armadra_v1_agent_proto_rawDesc = "" +
 	"\x18HOOK_EVENT_KIND_TURN_END\x10\x03\x12 \n" +
 	"\x1cHOOK_EVENT_KIND_NOTIFICATION\x10\x04\x12\x1c\n" +
 	"\x18HOOK_EVENT_KIND_APPROVAL\x10\x05\x12\x1f\n" +
-	"\x1bHOOK_EVENT_KIND_SESSION_END\x10\x06*\x84\x01\n" +
+	"\x1bHOOK_EVENT_KIND_SESSION_END\x10\x06\x12\x1e\n" +
+	"\x1aHOOK_EVENT_KIND_TURN_START\x10\a\x12\x1e\n" +
+	"\x1aHOOK_EVENT_KIND_COMPACTION\x10\b*\x84\x01\n" +
 	"\rApprovalState\x12\x1e\n" +
 	"\x1aAPPROVAL_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16APPROVAL_STATE_PENDING\x10\x01\x12\x1b\n" +

@@ -57,6 +57,7 @@ fn agent_records_cross_the_wire_unchanged() {
             errored: None,
             interrupted: Some(true),
             transcript_ref: b"claude/8f2d1c4a".to_vec(),
+            state_source: "hook".into(),
             state: AgentState::Blocked as i32,
             session_phase: "turn".into(),
             reason_code: "agent.blocked.approval".into(),
@@ -64,6 +65,22 @@ fn agent_records_cross_the_wire_unchanged() {
             updated_at_unix_ms: 1_788_557_900_000,
             revision: 9_007_199_254_740_993,
             deleted: false,
+        },
+    );
+    check(
+        "agent_hook_event_turn_start",
+        HookEvent {
+            event_id: "f0a1b2c3d4e5f60718293a4b5c6d7e8f".into(),
+            node_id: "3f7c0a12-9b5e-4d21-8a6f-2c1b0d9e8a77".into(),
+            session_id: "8f2d1c4a6b7e40a9b1c2d3e4f5a6b7c8".into(),
+            generation: 7,
+            workspace_id: "0123456789abcdef0123456789abcdef".into(),
+            provider: "pi".into(),
+            payload: br#"{"kind":"state","state":"working","stateSource":"extension"}"#.to_vec(),
+            payload_sha256: vec![0x7e; 32],
+            schema_version: 1,
+            kind: HookEventKind::TurnStart as i32,
+            observed_at_unix_ms: 1_788_557_700_000,
         },
     );
     check(
@@ -212,6 +229,27 @@ fn a_reported_false_is_not_an_absent_flag() {
             .errored,
         None
     );
+}
+
+/// The Hook event kinds are a closed list, and each number is what one runtime
+/// wrote and another reads back. Appending the two the extension CLIs need must
+/// not renumber the six that were already on the wire: a shifted value would
+/// turn every stored SESSION_END into an APPROVAL.
+#[test]
+fn hook_event_kinds_are_append_only() {
+    for (kind, number) in [
+        (HookEventKind::Unspecified, 0),
+        (HookEventKind::SessionStart, 1),
+        (HookEventKind::UserPrompt, 2),
+        (HookEventKind::TurnEnd, 3),
+        (HookEventKind::Notification, 4),
+        (HookEventKind::Approval, 5),
+        (HookEventKind::SessionEnd, 6),
+        (HookEventKind::TurnStart, 7),
+        (HookEventKind::Compaction, 8),
+    ] {
+        assert_eq!(kind as i32, number, "{kind:?} moved");
+    }
 }
 
 /// The agent domain's frames sit on their own numbers in both directions. 21 is
