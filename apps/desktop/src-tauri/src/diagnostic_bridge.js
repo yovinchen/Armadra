@@ -30,9 +30,19 @@
       original(...args);
     };
   }
-  window.addEventListener("error", (event) =>
-    send("error", (event.error && event.error.stack) || event.message),
-  );
+  window.addEventListener("error", (event) => {
+    const error = event.error;
+    send(
+      "error",
+      error
+        ? String(error.name) +
+            ": " +
+            String(error.message) +
+            "\n" +
+            String(error.stack || "")
+        : String(event.message),
+    );
+  });
   window.addEventListener("unhandledrejection", (event) =>
     send(
       "unhandledrejection",
@@ -99,8 +109,8 @@
   });
   const watched = (node) =>
     node.nodeType === 1 &&
-    (node.matches?.(".tl-container, #splash-root, #root, .splash") ||
-      node.querySelector?.(".tl-container, #splash-root, .splash"));
+    (node.matches?.(".react-flow, #splash-root, #root, .splash") ||
+      node.querySelector?.(".react-flow, #splash-root, .splash"));
   const observer = new MutationObserver((records) => {
     for (const record of records) {
       for (const node of record.addedNodes)
@@ -134,46 +144,22 @@
   else document.addEventListener("DOMContentLoaded", startObserver);
   let ticks = 0;
   const probe = setInterval(() => {
-    const container = document.querySelector(".tl-container");
-    const rect = container ? container.getBoundingClientRect() : null;
+    const flow = document.querySelector(".react-flow");
+    const rect = flow ? flow.getBoundingClientRect() : null;
+    const viewport = document.querySelector(".react-flow__viewport");
     send(
       "probe",
       JSON.stringify({
-        tl: document.querySelectorAll(".tl-container").length,
-        shapes: document.querySelectorAll(".tl-shape").length,
-        culled: document.querySelectorAll(
-          ".tl-shape__culled, [data-shape-culled]",
-        ).length,
+        flow: document.querySelectorAll(".react-flow").length,
+        nodes: document.querySelectorAll(".react-flow__node").length,
+        edges: document.querySelectorAll(".react-flow__edge").length,
         visibility: document.visibilityState,
         focus: document.hasFocus(),
         viewport: [window.innerWidth, window.innerHeight],
         rect: rect ? [Math.round(rect.width), Math.round(rect.height)] : null,
-        layer: (document.querySelector(".tl-html-layer") || {}).style
-          ? document.querySelector(".tl-html-layer").style.transform
-          : null,
-        canvas: (() => {
-          const c = document.querySelector(".tl-canvas");
-          if (!c) return null;
-          const r = c.getBoundingClientRect();
-          return [Math.round(r.width), Math.round(r.height)];
-        })(),
-        collapsedNodes: document.querySelectorAll(
-          "[data-collapsed='true'], .node-collapsed",
-        ).length,
+        transform: viewport ? viewport.style.transform : null,
         terminals: document.querySelectorAll(".xterm").length,
-        inner: (() => {
-          const c = document.querySelector(".tl-container");
-          if (!c) return null;
-          return (
-            [...c.children]
-              .map((n) => n.className || n.tagName)
-              .join(" | ")
-              .slice(0, 300) +
-            " :: " +
-            c.innerHTML.slice(0, 260)
-          );
-        })(),
-        text: document.body.innerText.slice(0, 60),
+        text: document.body.innerText.replace(/\s+/g, " ").slice(0, 160),
       }),
     );
     if (++ticks >= 40) clearInterval(probe);
