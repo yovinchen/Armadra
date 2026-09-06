@@ -64,6 +64,41 @@ describe("手势分工", () => {
   });
 });
 
+/**
+ * 手形工具（F21）。
+ *
+ * B2 曾经在 `whiteboard/tools/use-tool-pointer.ts` 里自己接一份左键平移；
+ * 现在同一个手势只有 React Flow 这一份实现，所以这张表就是它的全部行为。
+ */
+describe("手形工具", () => {
+  const hand = options({}, { tool: "hand" });
+
+  it("左键也能平移，中键照旧", () => {
+    expect(hand.panOnDrag).toEqual([0, 1]);
+  });
+
+  it("框选与节点拖动一起关掉：三者都吃左键", () => {
+    expect(hand.selectionOnDrag).toBe(false);
+    // 节点不装 d3-drag，按在节点上的那一下才落得到画布上。
+    expect(hand.nodesDraggable).toBe(false);
+  });
+
+  it("其余工具不受影响：左键仍然是框选", () => {
+    for (const tool of ["select", "draw", "geo", "text"] as const) {
+      const result = options({}, { tool });
+      expect(result.panOnDrag).toEqual([1]);
+      expect(result.selectionOnDrag).toBe(true);
+      expect(result.nodesDraggable).toBe(true);
+    }
+  });
+
+  it("锁定优先于工具：手形也一样什么都不能拖", () => {
+    const locked = options({}, { tool: "hand", locked: true });
+    expect(locked.panOnDrag).toBe(false);
+    expect(locked.selectionOnDrag).toBe(false);
+  });
+});
+
 describe("锁定视图", () => {
   const locked = options({}, { locked: true });
 

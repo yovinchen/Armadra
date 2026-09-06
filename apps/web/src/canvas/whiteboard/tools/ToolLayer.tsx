@@ -19,10 +19,15 @@ import { useToolPointer } from "./use-tool-pointer";
  * 副作用——指针通道、拖动落位、剪贴板命令、粘贴落点的指针记录。
  */
 
-/** 工具 → 画布上的光标。手形按住时变成攥紧的手。 */
+/**
+ * 工具 → 画布上的光标。
+ *
+ * 手形不在表里：它的平移归 React Flow（`flow-options.panOnDrag` 含 0），
+ * 抓 / 攥的两态由 React Flow 自己的 `.react-flow__pane.draggable`
+ * 与 `.dragging` 给，容器上再压一层反而会盖掉「按住时攥紧」那一半。
+ */
 const CURSORS: Record<string, string> = {
   select: "",
-  hand: "grab",
   draw: "crosshair",
   highlight: "crosshair",
   geo: "crosshair",
@@ -35,7 +40,7 @@ const CURSORS: Record<string, string> = {
 export function ToolLayer() {
   const tool = useTool();
   const store = useStoreApi();
-  const { draft, panning } = useToolPointer();
+  const { draft } = useToolPointer();
 
   useItemDrag();
   useClipboardCommands();
@@ -46,12 +51,11 @@ export function ToolLayer() {
   React.useEffect(() => {
     const dom = store.getState().domNode;
     if (!dom) return;
-    const cursor = panning ? "grabbing" : (CURSORS[tool] ?? "");
-    dom.style.cursor = cursor;
+    dom.style.cursor = CURSORS[tool] ?? "";
     return () => {
       dom.style.cursor = "";
     };
-  }, [panning, store, tool]);
+  }, [store, tool]);
 
   // 「粘贴到光标处」要知道鼠标最后停在哪（§2.8）。
   React.useEffect(() => {

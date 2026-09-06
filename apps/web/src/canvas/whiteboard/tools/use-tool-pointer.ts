@@ -31,14 +31,13 @@ import {
  * 节点拖动全都收不到这一下。这么做有一个覆盖层给不了的好处——滚轮事件
  * 一个都不拦，所以画画的时候仍然能滚轮平移、⌘滚轮缩放，手不用先切回选择。
  *
- * 手形工具也在这里：`flow-options` 只给了中键平移（`panOnDrag: [1]`），
- * 左键留给框选，所以「手」得自己按住左键改视口。
+ * 手形工具**不在**这里：它是一次视口平移，与空格、中键是同一件事，所以
+ * 归 `flow/flow-options.panOnDrag`（工具是「手」时含 0）。同一个手势有两份
+ * 实现的话，两边的惯性、边缘自动平移、锁定判据迟早会分叉。
  */
 
 export interface ToolPointerState {
   draft: Draft | null;
-  /** 手形工具正在平移；光标要变成攥紧的手。 */
-  panning: boolean;
 }
 
 /** 吸附到网格（偏好 `snap`）。 */
@@ -58,7 +57,6 @@ export function useToolPointer(): ToolPointerState {
   const ownership = useCanvasOwnership((state) => state.status);
   const editable = canEditCanvas(ownership);
   const [draft, setDraft] = React.useState<Draft | null>(null);
-  const [panning, setPanning] = React.useState(false);
 
   // 回调里要读最新的偏好，但 effect 不该因为改了一次网格间距就重挂。
   const latest = React.useRef({ preferences, tool, editable });
@@ -67,7 +65,8 @@ export function useToolPointer(): ToolPointerState {
   React.useEffect(() => {
     const dom = store.getState().domNode;
     if (!dom) return;
-    if (tool === "select") return;
+    // 选择与手形都不画东西：手形整个交给 React Flow 的 `panOnDrag`。
+    if (tool === "select" || tool === "hand") return;
 
     let pointerId: number | null = null;
     let current: Draft | null = null;
@@ -78,29 +77,6 @@ export function useToolPointer(): ToolPointerState {
         latest.current.preferences.gridSize,
         latest.current.preferences.snap,
       );
-
-    /* ------------------------------ 手形 -------------------------------- */
-
-    let panFrom: { x: number; y: number; vx: number; vy: number } | null = null;
-
-    const panMove = (event: PointerEvent) => {
-      if (!panFrom) return;
-      const viewport = flow.getViewport();
-      flow.setViewport({
-        x: panFrom.vx + (event.clientX - panFrom.x),
-        y: panFrom.vy + (event.clientY - panFrom.y),
-        zoom: viewport.zoom,
-      });
-    };
-
-    const panEnd = () => {
-      panFrom = null;
-      setPanning(false);
-      window.removeEventListener("pointermove", panMove);
-      window.removeEventListener("pointerup", panEnd);
-    };
-
-    /* ------------------------------ 绘制 -------------------------------- */
 
     const finish = () => {
       const drawn = current;
@@ -146,21 +122,6 @@ export function useToolPointer(): ToolPointerState {
         return;
       }
       const active = latest.current;
-      if (active.tool === "hand") {
-        event.stopPropagation();
-        event.preventDefault();
-        const viewport = flow.getViewport();
-        panFrom = {
-          x: event.clientX,
-          y: event.clientY,
-          vx: viewport.x,
-          vy: viewport.y,
-        };
-        setPanning(true);
-        window.addEventListener("pointermove", panMove);
-        window.addEventListener("pointerup", panEnd);
-        return;
-      }
       if (isCanvasLocked() || !active.editable) return;
       event.stopPropagation();
       event.preventDefault();
@@ -191,11 +152,10 @@ export function useToolPointer(): ToolPointerState {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
-      panEnd();
     };
   }, [flow, store, tool]);
 
-  return { draft, panning };
+  return { draft };
 }
 
 /** 触屏与压感笔给真实压力，鼠标恒为 0.5（`pressure` 在鼠标上是 0 或 0.5）。 */
