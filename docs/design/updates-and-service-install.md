@@ -164,6 +164,8 @@ stateDiagram-v2
 ### 2.5 引入步骤（一次性）
 
 1. `pnpm tauri signer generate -w <本机私钥路径>`；公钥写入 `tauri.conf.json` 的 `plugins.updater.pubkey`（可提交），私钥与口令进入 GitHub secret `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`，本机副本进入密码管理器后删除。
+   在此之前 `apps/desktop/scripts/signing.mjs` 在打包开工前就判定这一次是签、是跳过还是拒绝，
+   不让「缺私钥」变成二十分钟之后的 `Missing comment in public key`；步骤与判定表写在[开发指南](../guides/development.md#更新签名)。
 2. `bundle.createUpdaterArtifacts: true`；`plugins.updater.active: true`；`endpoints` 留空，由 CI 用 `--config` 注入 `https://github.com/yovinchen/Armadra/releases/latest/download/latest.json`。
 3. `updates.rs` 的 `a_complete_updater_block_is_configured` 测试改为断言「源码配置有 pubkey、无 endpoints」，防止把地址写死进仓库。
 4. 首个带签名的版本发布后，旧的无签名安装只能手动升级一次；发布说明写明。
@@ -254,7 +256,7 @@ Session Host（Windows）：有活动会话时不替换，报告 `sessionHostDef
 | 最新         | 两次检查都为无更新                         | `updates.state.upToDate`                 | 上次检查时间                         | 检查更新             |
 | 无法确认     | Host `UNAVAILABLE`、壳 `sourceUnreachable` | `updates.state.unavailable`              | 原因键、`retry_after`                | 稍后重试             |
 | 可用         | `AVAILABLE`                                | `updates.state.available`                | 版本、通道、大小、签名状态、说明链接 | 下载 / 跳过此版本    |
-| 下载中       | 壳进度事件                                 | `updates.state.downloading`（新增）      | 已收 / 总量                          | 取消                 |
+| 下载中       | 壳进度事件                                 | `updates.state.downloading`（新增）      | 已收 / 总量                          | 取消（丢弃已收字节） |
 | 已下载待重启 | 壳 `Downloaded`                            | `updates.state.downloaded`（新增）       | 将暂停的计划数、会话数               | 重启并更新 / 稍后    |
 | 失败         | 壳 `Failed`                                | `updates.state.failed`（新增）           | 原因键                               | 重试 / 打开发布页    |
 
@@ -264,10 +266,11 @@ Session Host（Windows）：有活动会话时不替换，报告 `sessionHostDef
 - 「最新」必须同时满足 Host 与壳两个来源都回答了；只有一个来源回答时显示该来源的结果并标注「桌面壳未检查」/「后台服务未检查」。
 - 通道选择从 React 局部状态改为 Runtime `settings.updates.channel`；`autoCheck`（默认开）、`autoDownload`（默认关）同处。
 - 「已下载待重启」在设置页之外只有一个入口：托盘菜单项「重启以完成更新」与一条系统通知；不做常驻横幅。
+  通知可用 `settings.updates.notify` 关掉（默认开）；关掉之后托盘项仍在——那是不打开设置页也能知道有更新待装的最后一条路。
 
 ### 4.2 壳与页面的桥
 
-`apps/web/src/updates/shell-updater.ts` 封装 Tauri command（`updates_state`、`updates_check`、`updates_download`、`updates_install`）与 `updates://progress` 事件；非 Tauri 环境返回 `Unsupported`。页面合并 `useUpdatesSession`（Host）与壳状态，合并逻辑放在纯函数 `state.ts` 里测试。
+`apps/web/src/updates/shell-updater.ts` 封装 Tauri command（`updates_state`、`updates_check`、`updates_download`、`updates_cancel`、`updates_install`）与 `updates://progress`、`updates://staged` 两个事件；非 Tauri 环境返回 `Unsupported`。页面合并 `useUpdatesSession`（Host）与壳状态，合并逻辑放在纯函数 `state.ts` 里测试。
 
 ## 5. 代码布局
 
@@ -301,6 +304,8 @@ Session Host（Windows）：有活动会话时不替换，报告 `sessionHostDef
 | `src/updates/mod.rs`                   | Tauri command：`updates_state` / `check` / `download` / `install` | 现 `updates.rs` 迁入，< 300 行           |
 | `src/updates/machine.rs`               | 纯状态机：状态、事件、转移，不依赖 Tauri                          | 新增                                     |
 | `src/updates/offer.rs`                 | Host 答案 → 清单 URL、摘要、目标 的转换；`launcher` 判断          | 新增                                     |
+| `src/updates/cancel.rs`                | 取消令牌：`arm` / `cancel` / `finish` 与两处竞态                  | 新增                                     |
+| `src/updates/notify.rs`                | 托盘项与系统通知的开关判断与文案                                  | 新增                                     |
 | `src/updates/coordinate.rs`            | 停止受管后台、`pending-restart.json`、重启后健康检查              | 新增；复用 `lifecycle.rs`                |
 | `tests/updates_machine.rs`             | 状态机转移表测试                                                  | 测试                                     |
 | `tests/updates_offer.rs`               | 清单 URL 派生、摘要比对、拒绝非 https / 非同 Release 的 URL       | 测试                                     |
@@ -347,8 +352,13 @@ Session Host（Windows）：有活动会话时不替换，报告 `sessionHostDef
 - 批次 0：已完成。`updates.proto` 追加 `UpdateArtifact.component` / `CheckForUpdateRequest.component`，协议 minor 1→2；`internal/buildinfo` 与 `hoststate` 的 `launcher` 记录落地，`version` 输出加 `version` / `channel`。`launcher` 未上协议（`HostStatus` 未改），只经 CLI `status` 的 JSON 报告。
 - 批次 A：已完成。脚本落在 `tools/release/*`（不是 `scripts/release/*`，随[仓库结构 §2](./repository-structure.md#2-目标结构) 的迁移），新增 `.github/workflows/release.yml` 与 `tools/ci/validate-workflows.mjs`；`pnpm release:dry-run` 用一次性密钥在临时目录跑完整条清单 + 签名 + 校验。签名用 Node 自带 Ed25519 写 minisign 的 legacy `Ed` 格式（不预哈希），Host 侧同样只验这一种：预哈希需要 BLAKE2b，标准库没有，为发布脚本给 Host 加依赖不划算。尚无真实密钥，流水线产出的 Release 会在说明里写明未签名；`release.yml` 本身只校验结构，从未真跑过。
 - 批次 C：已完成。`internal/updates/{download,verify}.go`、`internal/servicedef/{register,register_exec,register_unix,register_windows,rollback}.go`、`cmd/armadra-host/service_{install,upgrade,upgrade_release}.go`；`upgrade --from-release` / `--rollback`、`install --register` / `uninstall --unregister` 可用。平台判断按 build tag 只拆了 uid / 提权两处（`register_unix.go`、`register_windows.go`），launchctl / systemctl / sc.exe 的命令行在所有平台都能生成与断言，与本包既有渲染器一致。Session Host 的 `--drain-sessions` 与 `--serve-web` 目录替换未做。
-- 批次 B：已完成。桌面壳的业务逻辑抽成 `armadra_desktop` 库（`src/lib.rs`、`src/runtime_process.rs`），`main.rs` 只剩 Tauri builder 与窗口 / 托盘；更新逻辑在 `src/updates/{mod,machine,offer,coordinate}.rs`，测试在 `tests/updates_{machine,offer,coordinate,config}.rs`。与 §2.1 的差别一处：`Preparing` / `Installing` 建模为 `Downloaded` 的 phase，对外仍只报 §4.1 的 11 个状态。清单地址来自 Host 给的同一次发布（`endpoints` 运行时覆盖），摘要取自 Host 的资产列表而不是清单本身，签名密钥标识与内置公钥不符时在下载前就拒绝。`--launcher desktop` 由壳传给 Host，更新前只停 `launcher.json` 记为 desktop 且可执行文件对得上的 Host。`bundle.createUpdaterArtifacts` 已置 true，`plugins.updater` 仍无公钥（`active: false`），因此壳一律报「未配置」，下载与安装路径在本机无法对真实包演练；检查→下载→验签闭环由 `apps/desktop/scripts/updates-release.test.mjs` 用 mock 发布服务器 + 一次性 minisign 密钥覆盖。未做：取消进行中的下载（Tauri 无中止句柄）、Tauri capability 未新增（四个命令走 `invoke_handler`，不需要权限项）。
-- 批次 D：已完成。`apps/web/src/updates/{shell-updater,state,use-update-state}.ts` 与重写的 `UpdatesPage`；`state.ts` 的合并对「每一种 Host 侧 × 每一种壳侧」穷举测试，保证任何一边没回答都不写「已是最新」。通道与 `autoCheck` / `autoDownload` 落 Runtime `settings.updates`；`host-client` 的 `check()` 透传 `component`。未做：托盘「重启以完成更新」菜单项与系统通知（§4.1 末条）、下载取消按钮。
+- 批次 B：已完成。桌面壳的业务逻辑抽成 `armadra_desktop` 库（`src/lib.rs`、`src/runtime_process.rs`），`main.rs` 只剩 Tauri builder 与窗口 / 托盘；更新逻辑在 `src/updates/{mod,machine,offer,coordinate}.rs`，测试在 `tests/updates_{machine,offer,coordinate,config}.rs`。与 §2.1 的差别一处：`Preparing` / `Installing` 建模为 `Downloaded` 的 phase，对外仍只报 §4.1 的 11 个状态。清单地址来自 Host 给的同一次发布（`endpoints` 运行时覆盖），摘要取自 Host 的资产列表而不是清单本身，签名密钥标识与内置公钥不符时在下载前就拒绝。`--launcher desktop` 由壳传给 Host，更新前只停 `launcher.json` 记为 desktop 且可执行文件对得上的 Host。`bundle.createUpdaterArtifacts` 已置 true，`plugins.updater` 仍无公钥（`active: false`），因此壳一律报「未配置」，下载与安装路径在本机无法对真实包演练；检查→下载→验签闭环由 `apps/desktop/scripts/updates-release.test.mjs` 用 mock 发布服务器 + 一次性 minisign 密钥覆盖。取消进行中的下载后来补上了：Tauri 确实没有中止句柄，所以壳把 `download()` 与一个取消令牌一起 `select!`，
+  输的一方被丢弃——丢掉这个 future 就会关掉响应体，字节真的停下来（`src/updates/cancel.rs`，`tests/updates_cancel.rs`）。
+  托盘「重启以完成更新」与系统通知也补上了：`src/updates/notify.rs` 决定要不要发通知（读 `settings.updates.notify`，
+  默认开）并给出两种语言的文案，`main.rs` 监听 `updates://staged` 事件按需插入 / 移除托盘项（`muda` 的菜单项不能隐藏，
+  只能插拔）。Tauri capability 仍未新增：命令走 `invoke_handler` 不需要权限项，通知用的 `notification:default` 早已在列。
+- 批次 D：已完成。`apps/web/src/updates/{shell-updater,state,use-update-state}.ts` 与重写的 `UpdatesPage`；`state.ts` 的合并对「每一种 Host 侧 × 每一种壳侧」穷举测试，保证任何一边没回答都不写「已是最新」。通道与 `autoCheck` / `autoDownload` 落 Runtime `settings.updates`；`host-client` 的 `check()` 透传 `component`。托盘菜单项、系统通知与下载取消按钮后来补上了（见批次 B）：设置页在「下载中」与「检查中」只给「取消」一个动作，
+  `updates.notify` 开关落在同一段 Runtime settings 里。
 
 | 批次 | 范围                                                                                                | 产物                                                          | 验收命令                                                                                                                                          | 无网络验证                                                                                                                                                                      |
 | ---- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

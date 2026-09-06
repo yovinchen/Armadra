@@ -1,0 +1,55 @@
+/**
+ * `pnpm --filter @armadra/desktop build`.
+ *
+ * Two steps, in this order and for this reason: the signing decision is made
+ * and reported *before* the sidecars are compiled, so a build that could not be
+ * signed says so in the first second rather than in the last one
+ * (see `signing.mjs`).
+ */
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { main as prepareSidecar } from "./prepare-sidecar.mjs";
+import { REQUIRE_ENV, signingPlan, tauriArgs } from "./signing.mjs";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const app = resolve(here, "..");
+
+export function build({ env = process.env, argv = [] } = {}) {
+  const config = JSON.parse(
+    readFileSync(join(app, "src-tauri", "tauri.conf.json"), "utf8"),
+  );
+  const plan = signingPlan({ env, config });
+  if (plan.mode === "refuse") {
+    console.error(`✗ ${plan.message}`);
+    return 1;
+  }
+  // A skipped signature is a warning, not a footnote: it changes what the
+  // resulting build is, and CI turns it into a failure with REQUIRE_ENV.
+  (plan.mode === "skip" ? console.warn : console.log)(
+    `${plan.mode === "skip" ? "!" : "→"} ${plan.message}`,
+  );
+
+  prepareSidecar();
+  execFileSync(
+    "pnpm",
+    ["exec", "tauri", "build", ...tauriArgs(plan), ...argv],
+    {
+      cwd: app,
+      stdio: "inherit",
+      env,
+    },
+  );
+  return 0;
+}
+
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  process.exit(build({ argv: process.argv.slice(2) }));
+}
+
+export { REQUIRE_ENV };

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tauri dev",
     "prepare:sidecar": "node scripts/prepare-sidecar.mjs",
-    "build": "pnpm prepare:sidecar && tauri build",
+    "build": "node scripts/build.mjs",
     "predev": "pnpm prepare:host --native",
     "prepare:host": "node scripts/prepare-host.mjs",
     "test": "node --test scripts/*.test.mjs"

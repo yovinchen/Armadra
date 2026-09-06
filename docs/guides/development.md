@@ -102,6 +102,34 @@ CLI 不在 PATH 或起不来时打印原因并以 0 退出。真实凭据不动�
 打包会构建 Runtime、Hook 和 Go Host，再按 target triple 暂存 sidecar。
 目标、缓存与交叉构建规则见[桌面构建说明](../../apps/desktop/README.md)。
 
+### 更新签名
+
+桌面包的更新验签用一对 minisign 密钥：私钥签 updater 包，公钥内嵌进壳，
+壳只接受由内嵌公钥签出的清单（[发布、更新与服务安装 §2.5](../design/updates-and-service-install.md#25-引入步骤一次性)）。
+仓库里**没有**真实密钥，`plugins.updater.pubkey` 是空串。
+
+生成与注入：
+
+```sh
+pnpm --filter @armadra/desktop exec tauri signer generate -w "$TMPDIR/armadra.key"
+# 公钥（.key.pub 的内容）填进 apps/desktop/src-tauri/tauri.conf.json 的 plugins.updater.pubkey，可入库
+# 私钥与口令只进 GitHub secret：TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+export TAURI_SIGNING_PRIVATE_KEY="$(cat "$TMPDIR/armadra.key")"
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=…   # 生成时设了口令才需要
+```
+
+`pnpm --filter @armadra/desktop build` 在开工前就决定这次要不要签名（`scripts/signing.mjs`），
+而不是把失败留到打包最后一步：
+
+| `TAURI_SIGNING_PRIVATE_KEY` | 配置里的 `pubkey` | 结果                                                                  |
+| --------------------------- | ----------------- | --------------------------------------------------------------------- |
+| 有                          | 有                | 正常签名                                                              |
+| 有                          | 空                | **立即报错**：签出的包这个壳自己会拒绝，先补上公钥                    |
+| 无                          | 任意              | 跳过签名，并关掉 `createUpdaterArtifacts`：只出安装包，命令行明确告警 |
+
+CI 发布作业设 `ARMADRA_REQUIRE_SIGNED_BUNDLE=1`，把「跳过」变成失败——发布不能是无签名的。
+本机想演练完整的清单 + 签名 + 校验用 `pnpm release:dry-run`，它自带一次性密钥，不碰任何真实密钥。
+
 ## Host 连接
 
 桌面启动时异步启动/发现 Host；纯 Web 模式手工启动，并允许实际页面的精确来源：
