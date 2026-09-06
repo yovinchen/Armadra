@@ -11,6 +11,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HostIdentitySession, HelloResponse } from "@armadra/host-client";
 import { hostIdentity } from "../../../i18n/host-identity";
+import { hostNative } from "../../../i18n/host-native";
 
 const mocks = vi.hoisted(() => ({ create: vi.fn() }));
 vi.mock("@armadra/host-client", async (original) => {
@@ -33,7 +34,8 @@ vi.mock("../../../app/preferences-store", async (original) => {
     useT: () => {
       const locale = actual.usePreferencesStore((state) => state.locale);
       return (key: string, values: Record<string, string | number> = {}) => {
-        let result = hostIdentity[locale][key] ?? key;
+        let result =
+          hostIdentity[locale][key] ?? hostNative[locale][key] ?? key;
         for (const [name, value] of Object.entries(values))
           result = result.replaceAll(`{${name}}`, String(value));
         return result;
@@ -45,6 +47,10 @@ vi.mock("../../../app/preferences-store", async (original) => {
 import { HostIdentityPanel } from "./HostIdentityPanel";
 import { HostIdentityError } from "@armadra/host-client";
 import { usePreferencesStore } from "../../../app/preferences-store";
+import {
+  HostNativeSessionError,
+  resetNativeSession,
+} from "../../../host/native-session";
 
 const origin = "https://host.test";
 const hostId = "1".repeat(32),
@@ -128,6 +134,75 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+});
+
+describe("HostIdentityPanel inside the desktop shell", () => {
+  const nativeHello: HelloResponse = {
+    ...hello,
+    capabilities: ["identity.native-session.v1"],
+  };
+  function shell() {
+    vi.stubGlobal("location", {
+      origin: "null",
+      protocol: "tauri:",
+      host: "localhost",
+    });
+    (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ =
+      {};
+  }
+  afterEach(() => {
+    delete (window as Window & { __TAURI_INTERNALS__?: unknown })
+      .__TAURI_INTERNALS__;
+    resetNativeSession();
+  });
+  it("opens a native session against the loopback Host without asking for a ticket", async () => {
+    shell();
+    api.resume.mockResolvedValue({
+      ...session,
+      device: { ...session.device!, displayName: "本机桌面" },
+    });
+    render(
+      <HostIdentityPanel
+        address="http://127.0.0.1:43121"
+        hello={nativeHello}
+      />,
+    );
+    await screen.findByText(/本机桌面 · 服务所有者/);
+    expect(mocks.create).toHaveBeenCalledOnce();
+    const options = mocks.create.mock.calls[0]![0] as {
+      baseUrl: string;
+      pageOrigin: string;
+      transport: { kind: string };
+    };
+    expect(options.baseUrl).toBe("http://127.0.0.1:43121");
+    expect(options.pageOrigin).toBe("tauri://localhost");
+    expect(options.transport.kind).toBe("native");
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(setItem).not.toHaveBeenCalled();
+  });
+  it("still refuses a Host without the native capability, and a remote address", () => {
+    shell();
+    render(
+      <HostIdentityPanel address="http://127.0.0.1:43121" hello={hello} />,
+    );
+    expect(screen.getByText("此服务尚未提供浏览器设备登录。")).toBeTruthy();
+    cleanup();
+    render(<HostIdentityPanel address={origin} hello={nativeHello} />);
+    expect(screen.getByText(/当前页面来源不同/)).toBeTruthy();
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it("shows the shell's own reason when it cannot issue a ticket", async () => {
+    shell();
+    api.resume.mockRejectedValue(new HostNativeSessionError("hostUnavailable"));
+    render(
+      <HostIdentityPanel
+        address="http://127.0.0.1:43121"
+        hello={nativeHello}
+      />,
+    );
+    await screen.findByText(/后台服务尚未就绪/);
+    expect(document.body.textContent).not.toContain("hostNative.blocked");
+  });
 });
 
 describe("HostIdentityPanel", () => {

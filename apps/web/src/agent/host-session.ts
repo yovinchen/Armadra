@@ -1,14 +1,18 @@
 import {
   HostAgentClient,
-  HostIdentityClient,
+  type HostIdentityClient,
   type HostIdentitySession,
 } from "@armadra/host-client";
 
 import { loadHostAddress, probeHost } from "../host/connection";
+import {
+  createHostIdentity,
+  hasHostSessionCapability,
+  hostSessionBlock,
+} from "../host/native-session";
 
 /** Host 装好 Agent 记录面时在 Hello 里报的能力名（业务迁移 §2.7）。 */
 export const AGENT_CAPABILITY = "agent.records.v1";
-const AGENT_CAPABILITY_IDENTITY = "identity.browser-session.v1";
 
 /**
  * 拿不到 Host Agent 域客户端的原因。和画布、文件、会话那几套分档一致，因为
@@ -45,18 +49,6 @@ function permits(
   );
 }
 
-function addressBlock(address: string): AgentHostBlockReason | null {
-  let url: URL;
-  try {
-    url = new URL(address);
-  } catch {
-    return "tlsRequired";
-  }
-  if (url.protocol !== "https:") return "tlsRequired";
-  if (url.origin !== globalThis.location?.origin) return "sameOrigin";
-  return null;
-}
-
 let cached: {
   workspaceId: string;
   address: string;
@@ -84,7 +76,7 @@ export async function resolveHostAgentClient(
     cached.address === address
   )
     return cached.client;
-  const blocked = addressBlock(address);
+  const blocked = hostSessionBlock(address);
   if (blocked) throw new AgentHostUnavailableError(blocked);
 
   const hello = await probeHost(address, new AbortController().signal).catch(
@@ -92,14 +84,14 @@ export async function resolveHostAgentClient(
       throw new AgentHostUnavailableError("disconnected");
     },
   );
-  if (!hello.capabilities.includes(AGENT_CAPABILITY_IDENTITY))
+  if (!hasHostSessionCapability(hello))
     throw new AgentHostUnavailableError("noSession");
   if (!hello.capabilities.includes(AGENT_CAPABILITY))
     throw new AgentHostUnavailableError("unsupported");
 
   let identity: HostIdentityClient;
   try {
-    identity = new HostIdentityClient({
+    identity = createHostIdentity({
       baseUrl: address,
       hostId: hello.hostId,
       hostInstanceId: hello.hostInstanceId,

@@ -1,14 +1,19 @@
 import { create } from "zustand";
 import {
-  HostIdentityClient,
+  type HostIdentityClient,
   HostUpdatesClient,
   type HelloResponse,
   type HostIdentitySession,
 } from "@armadra/host-client";
 
 import { loadHostAddress, probeHost } from "./connection";
+import {
+  HostNativeSessionError,
+  createHostIdentity,
+  hasHostSessionCapability,
+  hostSessionBlock,
+} from "./native-session";
 
-const SESSION_CAPABILITY = "identity.browser-session.v1";
 /** Host-wide: a release is not a property of one workspace (§3 S03). */
 export const UPDATES_PERMISSION = "updates:read";
 
@@ -22,6 +27,7 @@ export const UPDATES_PERMISSION = "updates:read";
 export type UpdatesBlockReason =
   | "tlsRequired"
   | "sameOrigin"
+  | "nativeSession"
   | "disconnected"
   | "noSession"
   | "signedOut"
@@ -48,18 +54,6 @@ function permits(session: HostIdentitySession): boolean {
       !scope.workspaceId &&
       !scope.executionHostId,
   );
-}
-
-function addressBlock(address: string): UpdatesBlockReason | null {
-  let url: URL;
-  try {
-    url = new URL(address);
-  } catch {
-    return "tlsRequired";
-  }
-  if (url.protocol !== "https:") return "tlsRequired";
-  if (url.origin !== globalThis.location?.origin) return "sameOrigin";
-  return null;
 }
 
 /**
@@ -94,7 +88,7 @@ export const useUpdatesSession = create<UpdatesSessionStore>((set, get) => {
       drop();
       const address = loadHostAddress();
       set({ address, state: { status: "connecting" } });
-      const blocked = addressBlock(address);
+      const blocked = hostSessionBlock(address);
       if (blocked) {
         set({ state: { status: "blocked", reason: blocked } });
         return;
@@ -108,13 +102,13 @@ export const useUpdatesSession = create<UpdatesSessionStore>((set, get) => {
         return;
       }
       if (!live()) return;
-      if (!hello.capabilities.includes(SESSION_CAPABILITY)) {
+      if (!hasHostSessionCapability(hello)) {
         set({ state: { status: "blocked", reason: "noSession" } });
         return;
       }
       let client: HostIdentityClient;
       try {
-        client = new HostIdentityClient({
+        client = createHostIdentity({
           baseUrl: address,
           hostId: hello.hostId,
           hostInstanceId: hello.hostInstanceId,
@@ -127,10 +121,18 @@ export const useUpdatesSession = create<UpdatesSessionStore>((set, get) => {
       let session: HostIdentitySession | null;
       try {
         session = await client.resume();
-      } catch {
+      } catch (error) {
         if (live()) {
           drop();
-          set({ state: { status: "blocked", reason: "disconnected" } });
+          set({
+            state: {
+              status: "blocked",
+              reason:
+                error instanceof HostNativeSessionError
+                  ? "nativeSession"
+                  : "disconnected",
+            },
+          });
         }
         return;
       }

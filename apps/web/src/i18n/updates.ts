@@ -106,6 +106,8 @@ export const updates: MessageModule = {
       "更新检查需要通过后台服务的 HTTPS 地址访问。",
     "updates.blocked.sameOrigin":
       "当前页面来源与后台服务地址不一致，无法使用已登录的会话。",
+    "updates.blocked.nativeSession":
+      "桌面壳未能建立本机会话，原因见「后台服务」设置。",
     "updates.blocked.disconnected": "无法连接后台服务。",
     "updates.blocked.noSession": "此后台服务版本不支持浏览器会话登录。",
     "updates.blocked.signedOut": "此设备尚未登录后台服务。",
@@ -233,6 +235,8 @@ export const updates: MessageModule = {
       "Update checks need the background service's HTTPS address.",
     "updates.blocked.sameOrigin":
       "This page origin differs from the background service address, so the signed-in session cannot be used.",
+    "updates.blocked.nativeSession":
+      "The desktop shell could not open a local session; see the Background service settings.",
     "updates.blocked.disconnected": "Cannot reach the background service.",
     "updates.blocked.noSession":
       "This background service version does not support browser sessions.",

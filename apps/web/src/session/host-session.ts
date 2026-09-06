@@ -1,14 +1,18 @@
 import {
-  HostIdentityClient,
+  type HostIdentityClient,
   HostSessionClient,
   type HostIdentitySession,
 } from "@armadra/host-client";
 
 import { loadHostAddress, probeHost } from "../host/connection";
+import {
+  createHostIdentity,
+  hasHostSessionCapability,
+  hostSessionBlock,
+} from "../host/native-session";
 
 /** Host 装好会话面时在 Hello 里报的能力名（业务迁移 §2.6）。 */
 export const SESSION_CAPABILITY = "session.records.v1";
-const SESSION_CAPABILITY_IDENTITY = "identity.browser-session.v1";
 
 /**
  * 拿不到 Host 会话域客户端的原因。和画布、文件那两套分档一致，因为要用户做
@@ -45,18 +49,6 @@ function permits(
   );
 }
 
-function addressBlock(address: string): SessionHostBlockReason | null {
-  let url: URL;
-  try {
-    url = new URL(address);
-  } catch {
-    return "tlsRequired";
-  }
-  if (url.protocol !== "https:") return "tlsRequired";
-  if (url.origin !== globalThis.location?.origin) return "sameOrigin";
-  return null;
-}
-
 let cached: {
   workspaceId: string;
   address: string;
@@ -83,7 +75,7 @@ export async function resolveHostSessionClient(
     cached.address === address
   )
     return cached.client;
-  const blocked = addressBlock(address);
+  const blocked = hostSessionBlock(address);
   if (blocked) throw new SessionHostUnavailableError(blocked);
 
   const hello = await probeHost(address, new AbortController().signal).catch(
@@ -91,14 +83,14 @@ export async function resolveHostSessionClient(
       throw new SessionHostUnavailableError("disconnected");
     },
   );
-  if (!hello.capabilities.includes(SESSION_CAPABILITY_IDENTITY))
+  if (!hasHostSessionCapability(hello))
     throw new SessionHostUnavailableError("noSession");
   if (!hello.capabilities.includes(SESSION_CAPABILITY))
     throw new SessionHostUnavailableError("unsupported");
 
   let identity: HostIdentityClient;
   try {
-    identity = new HostIdentityClient({
+    identity = createHostIdentity({
       baseUrl: address,
       hostId: hello.hostId,
       hostInstanceId: hello.hostInstanceId,

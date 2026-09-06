@@ -1,14 +1,18 @@
 import {
   HostCanvasClient,
-  HostIdentityClient,
+  type HostIdentityClient,
   type HostIdentitySession,
 } from "@armadra/host-client";
 
 import { loadHostAddress, probeHost } from "../host/connection";
+import {
+  createHostIdentity,
+  hasHostSessionCapability,
+  hostSessionBlock,
+} from "../host/native-session";
 
 /** Host 装好画布面在 Hello 里报的能力名（H01 §3.2）。 */
 export const CANVAS_CAPABILITY = "canvas.documents.v1";
-const SESSION_CAPABILITY = "identity.browser-session.v1";
 
 /**
  * 拿不到 Host 画布客户端的原因。每一档对应一句人话，不合并成「连不上」：
@@ -44,18 +48,6 @@ function permits(
   );
 }
 
-function addressBlock(address: string): CanvasHostBlockReason | null {
-  let url: URL;
-  try {
-    url = new URL(address);
-  } catch {
-    return "tlsRequired";
-  }
-  if (url.protocol !== "https:") return "tlsRequired";
-  if (url.origin !== globalThis.location?.origin) return "sameOrigin";
-  return null;
-}
-
 let cached: {
   workspaceId: string;
   address: string;
@@ -80,7 +72,7 @@ export async function resolveHostCanvasClient(
     cached.address === address
   )
     return cached.client;
-  const blocked = addressBlock(address);
+  const blocked = hostSessionBlock(address);
   if (blocked) throw new CanvasHostUnavailableError(blocked);
 
   const hello = await probeHost(address, new AbortController().signal).catch(
@@ -88,14 +80,14 @@ export async function resolveHostCanvasClient(
       throw new CanvasHostUnavailableError("disconnected");
     },
   );
-  if (!hello.capabilities.includes(SESSION_CAPABILITY))
+  if (!hasHostSessionCapability(hello))
     throw new CanvasHostUnavailableError("noSession");
   if (!hello.capabilities.includes(CANVAS_CAPABILITY))
     throw new CanvasHostUnavailableError("unsupported");
 
   let identity: HostIdentityClient;
   try {
-    identity = new HostIdentityClient({
+    identity = createHostIdentity({
       baseUrl: address,
       hostId: hello.hostId,
       hostInstanceId: hello.hostInstanceId,

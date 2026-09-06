@@ -25,6 +25,8 @@ const zh = {
   "github.blocked.noWorkspace": "先打开一个工作空间",
   "github.blocked.tlsRequired": "Host 地址必须是同源的 HTTPS 地址",
   "github.blocked.sameOrigin": "Host 地址与当前页面不同源",
+  "github.blocked.nativeSession":
+    "桌面壳未能建立本机会话，原因见「设置 → 连接 → 后台服务」",
   "github.blocked.disconnected": "连不上 Host",
   "github.blocked.unsupported": "这个 Host 没有 GitHub 服务",
   "github.blocked.noSession": "这个 Host 不支持浏览器会话",
@@ -357,6 +359,8 @@ const en: Record<keyof typeof zh, string> = {
   "github.blocked.noWorkspace": "Open a workspace first",
   "github.blocked.tlsRequired": "The Host address must be same-origin HTTPS",
   "github.blocked.sameOrigin": "The Host address is not this page's origin",
+  "github.blocked.nativeSession":
+    "The desktop shell could not open a local session; see Settings → Connection → Background service",
   "github.blocked.disconnected": "Cannot reach the Host",
   "github.blocked.unsupported": "This Host has no GitHub service",
   "github.blocked.noSession": "This Host does not support browser sessions",

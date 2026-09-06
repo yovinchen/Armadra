@@ -1,17 +1,22 @@
 import { create } from "zustand";
 import {
   HostAutomationClient,
-  HostIdentityClient,
+  type HostIdentityClient,
   type HelloResponse,
   type HostIdentitySession,
 } from "@armadra/host-client";
 
 import { loadHostAddress, probeHost } from "./connection";
+import {
+  HostNativeSessionError,
+  createHostIdentity,
+  hasHostSessionCapability,
+  hostSessionBlock,
+} from "./native-session";
 import { rememberHostCsrf } from "./proxy-session";
 
 /** Advertised only when the Host actually assembled an execution Worker. */
 export const AUTOMATION_CAPABILITY = "automation.plans.v1";
-const SESSION_CAPABILITY = "identity.browser-session.v1";
 
 /**
  * Why the automation surface cannot be used right now. Each value maps to one
@@ -23,6 +28,7 @@ export type AutomationBlockReason =
   | "noWorkspace"
   | "tlsRequired"
   | "sameOrigin"
+  | "nativeSession"
   | "disconnected"
   | "unsupported"
   | "noSession"
@@ -68,19 +74,6 @@ function permits(
   );
 }
 
-/** Rejects an address the browser session transport cannot use at all. */
-function addressBlock(address: string): AutomationBlockReason | null {
-  let url: URL;
-  try {
-    url = new URL(address);
-  } catch {
-    return "tlsRequired";
-  }
-  if (url.protocol !== "https:") return "tlsRequired";
-  if (url.origin !== globalThis.location?.origin) return "sameOrigin";
-  return null;
-}
-
 export const useAutomationSession = create<AutomationSessionStore>(
   (set, get) => {
     let identity: HostIdentityClient | null = null;
@@ -111,7 +104,7 @@ export const useAutomationSession = create<AutomationSessionStore>(
         }
         const address = loadHostAddress();
         set({ address, state: { status: "connecting" } });
-        const blocked = addressBlock(address);
+        const blocked = hostSessionBlock(address);
         if (blocked) {
           set({ state: { status: "blocked", reason: blocked } });
           return;
@@ -125,7 +118,7 @@ export const useAutomationSession = create<AutomationSessionStore>(
           return;
         }
         if (!live()) return;
-        if (!hello.capabilities.includes(SESSION_CAPABILITY)) {
+        if (!hasHostSessionCapability(hello)) {
           set({ state: { status: "blocked", reason: "noSession" } });
           return;
         }
@@ -135,7 +128,7 @@ export const useAutomationSession = create<AutomationSessionStore>(
         }
         let client: HostIdentityClient;
         try {
-          client = new HostIdentityClient({
+          client = createHostIdentity({
             baseUrl: address,
             hostId: hello.hostId,
             hostInstanceId: hello.hostInstanceId,
@@ -151,10 +144,18 @@ export const useAutomationSession = create<AutomationSessionStore>(
         let session: HostIdentitySession | null;
         try {
           session = await client.resume();
-        } catch {
+        } catch (error) {
           if (live()) {
             drop();
-            set({ state: { status: "blocked", reason: "disconnected" } });
+            set({
+              state: {
+                status: "blocked",
+                reason:
+                  error instanceof HostNativeSessionError
+                    ? "nativeSession"
+                    : "disconnected",
+              },
+            });
           }
           return;
         }

@@ -6,7 +6,7 @@ export const hostIdentity: MessageModule = {
     "hostIdentity.tlsRequired":
       "尚未配置 HTTPS 登录。当前 HTTP 服务仅支持连接检查，不能保存或发送登录凭据。",
     "hostIdentity.sameOrigin":
-      "请在该服务的 HTTPS 同源页面管理设备。当前页面来源不同，不能直接登录；桌面原生连接将单独接入。",
+      "请在该服务的 HTTPS 同源页面管理设备。当前页面来源不同，不能直接登录；桌面壳只对本机回环地址自动登录。",
     "hostIdentity.checkRequired": "请先检查连接，确认服务身份。",
     "hostIdentity.unsupported": "此服务尚未提供浏览器设备登录。",
     "hostIdentity.loading": "正在恢复设备登录…",
@@ -73,7 +73,7 @@ export const hostIdentity: MessageModule = {
     "hostIdentity.tlsRequired":
       "HTTPS sign-in is not configured. The current HTTP service supports connection checks only and cannot receive sign-in credentials.",
     "hostIdentity.sameOrigin":
-      "Manage devices from this service’s own HTTPS page. This page has a different origin and cannot sign in directly; native desktop connections require a separate integration.",
+      "Manage devices from this service’s own HTTPS page. This page has a different origin and cannot sign in directly; the desktop shell signs in automatically only to the local loopback address.",
     "hostIdentity.checkRequired":
       "Check the connection first to confirm the service identity.",
     "hostIdentity.unsupported":

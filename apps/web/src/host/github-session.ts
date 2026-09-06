@@ -1,17 +1,22 @@
 import { create } from "zustand";
 import {
   HostGithubClient,
-  HostIdentityClient,
+  type HostIdentityClient,
   type GithubCredentialStatus,
   type HelloResponse,
   type HostIdentitySession,
 } from "@armadra/host-client";
 
 import { loadHostAddress, probeHost } from "./connection";
+import {
+  HostNativeSessionError,
+  createHostIdentity,
+  hasHostSessionCapability,
+  hostSessionBlock,
+} from "./native-session";
 
 /** Advertised only when the Host assembled a GitHub credential service. */
 export const GITHUB_CAPABILITY = "github.issues.v1";
-const SESSION_CAPABILITY = "identity.browser-session.v1";
 
 /**
  * Why the GitHub surface cannot be used right now.
@@ -25,6 +30,7 @@ export type GithubBlockReason =
   | "noWorkspace"
   | "tlsRequired"
   | "sameOrigin"
+  | "nativeSession"
   | "disconnected"
   | "unsupported"
   | "noSession"
@@ -78,19 +84,6 @@ function permits(
   );
 }
 
-/** Rejects an address the browser session transport cannot use at all. */
-function addressBlock(address: string): GithubBlockReason | null {
-  let url: URL;
-  try {
-    url = new URL(address);
-  } catch {
-    return "tlsRequired";
-  }
-  if (url.protocol !== "https:") return "tlsRequired";
-  if (url.origin !== globalThis.location?.origin) return "sameOrigin";
-  return null;
-}
-
 export const useGithubSession = create<GithubSessionStore>((set, get) => {
   let identity: HostIdentityClient | null = null;
   let attempt = 0;
@@ -122,7 +115,7 @@ export const useGithubSession = create<GithubSessionStore>((set, get) => {
       }
       const address = loadHostAddress();
       set({ address, state: { status: "connecting" } });
-      const blocked = addressBlock(address);
+      const blocked = hostSessionBlock(address);
       if (blocked) {
         set({ state: { status: "blocked", reason: blocked } });
         return;
@@ -136,7 +129,7 @@ export const useGithubSession = create<GithubSessionStore>((set, get) => {
         return;
       }
       if (!live()) return;
-      if (!hello.capabilities.includes(SESSION_CAPABILITY)) {
+      if (!hasHostSessionCapability(hello)) {
         set({ state: { status: "blocked", reason: "noSession" } });
         return;
       }
@@ -146,7 +139,7 @@ export const useGithubSession = create<GithubSessionStore>((set, get) => {
       }
       let client: HostIdentityClient;
       try {
-        client = new HostIdentityClient({
+        client = createHostIdentity({
           baseUrl: address,
           hostId: hello.hostId,
           hostInstanceId: hello.hostInstanceId,
@@ -159,10 +152,20 @@ export const useGithubSession = create<GithubSessionStore>((set, get) => {
       let session: HostIdentitySession | null;
       try {
         session = await client.resume();
-      } catch {
+      } catch (error) {
         if (live()) {
           drop();
-          set({ state: { status: "blocked", reason: "disconnected" } });
+          set({
+            state: {
+              status: "blocked",
+              // In the desktop shell the session comes from a ticket the
+              // shell issues; when that fails the settings page knows why.
+              reason:
+                error instanceof HostNativeSessionError
+                  ? "nativeSession"
+                  : "disconnected",
+            },
+          });
         }
         return;
       }

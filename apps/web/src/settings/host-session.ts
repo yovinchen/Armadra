@@ -1,15 +1,19 @@
 import {
-  HostIdentityClient,
+  type HostIdentityClient,
   HostSettingsClient,
   type HostIdentitySession,
 } from "@armadra/host-client";
 
 import type { CanvasHostBlockReason } from "../canvas-ownership/host-session";
 import { loadHostAddress, probeHost } from "../host/connection";
+import {
+  createHostIdentity,
+  hasHostSessionCapability,
+  hostSessionBlock,
+} from "../host/native-session";
 
 /** Host 装好设置面之后在 Hello 里报的能力名（业务所有权迁移 §2.4）。 */
 export const SETTINGS_CAPABILITY = "settings.documents.v1";
-const SESSION_CAPABILITY = "identity.browser-session.v1";
 
 /**
  * 拿不到 Host 设置客户端的原因，沿用画布那一套词表。
@@ -44,18 +48,6 @@ function permits(
   );
 }
 
-function addressBlock(address: string): SettingsHostBlockReason | null {
-  let url: URL;
-  try {
-    url = new URL(address);
-  } catch {
-    return "tlsRequired";
-  }
-  if (url.protocol !== "https:") return "tlsRequired";
-  if (url.origin !== globalThis.location?.origin) return "sameOrigin";
-  return null;
-}
-
 let cached: {
   address: string;
   identity: HostIdentityClient;
@@ -73,7 +65,7 @@ export async function resolveHostSettingsClient(
 ): Promise<HostSettingsClient> {
   const address = loadHostAddress();
   if (cached && cached.address === address) return cached.client;
-  const blocked = addressBlock(address);
+  const blocked = hostSessionBlock(address);
   if (blocked) throw new SettingsHostUnavailableError(blocked);
 
   const hello = await probeHost(address, new AbortController().signal).catch(
@@ -81,14 +73,14 @@ export async function resolveHostSettingsClient(
       throw new SettingsHostUnavailableError("disconnected");
     },
   );
-  if (!hello.capabilities.includes(SESSION_CAPABILITY))
+  if (!hasHostSessionCapability(hello))
     throw new SettingsHostUnavailableError("noSession");
   if (!hello.capabilities.includes(SETTINGS_CAPABILITY))
     throw new SettingsHostUnavailableError("unsupported");
 
   let identity: HostIdentityClient;
   try {
-    identity = new HostIdentityClient({
+    identity = createHostIdentity({
       baseUrl: address,
       hostId: hello.hostId,
       hostInstanceId: hello.hostInstanceId,

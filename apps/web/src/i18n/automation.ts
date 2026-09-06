@@ -23,6 +23,8 @@ const zh = {
   "automation.blocked.noWorkspace": "先打开一个工作空间",
   "automation.blocked.tlsRequired": "Host 地址必须是同源的 HTTPS 地址",
   "automation.blocked.sameOrigin": "Host 地址与当前页面不同源",
+  "automation.blocked.nativeSession":
+    "桌面壳未能建立本机会话，原因见「设置 → 连接 → 后台服务」",
   "automation.blocked.disconnected": "连不上 Host",
   "automation.blocked.unsupported": "这个 Host 没有执行 Worker，无法运行计划",
   "automation.blocked.noSession": "这个 Host 不支持浏览器会话",
@@ -200,6 +202,8 @@ const en: Record<keyof typeof zh, string> = {
     "The Host address must be a same-origin HTTPS address",
   "automation.blocked.sameOrigin":
     "The Host address is not the origin of this page",
+  "automation.blocked.nativeSession":
+    "The desktop shell could not open a local session; see Settings → Connection → Background service",
   "automation.blocked.disconnected": "Cannot reach the Host",
   "automation.blocked.unsupported":
     "This Host has no execution Worker, so it cannot run plans",

@@ -19,6 +19,7 @@ import { shell } from "./shell";
 import { ssh } from "./ssh";
 import { host } from "./host";
 import { hostIdentity } from "./host-identity";
+import { hostNative } from "./host-native";
 import { legacyArchives } from "./legacy-archives";
 import { contextUsage } from "./context-usage";
 import { gitHunks } from "./git-hunks";
@@ -69,6 +70,7 @@ export const MESSAGE_MODULES = {
   ssh,
   host,
   "host-identity": hostIdentity,
+  "host-native": hostNative,
   "external-service": externalService,
   "legacy-archives": legacyArchives,
   "context-usage": contextUsage,

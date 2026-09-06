@@ -1,14 +1,18 @@
 import {
   HostGitClient,
-  HostIdentityClient,
+  type HostIdentityClient,
   type HostIdentitySession,
 } from "@armadra/host-client";
 
 import { loadHostAddress, probeHost } from "../host/connection";
+import {
+  createHostIdentity,
+  hasHostSessionCapability,
+  hostSessionBlock,
+} from "../host/native-session";
 
 /** Host 装好 Git 队列面时在 Hello 里报的能力名（业务迁移 §2.8）。 */
 export const GIT_CAPABILITY = "git.queue.v1";
-const SESSION_CAPABILITY = "identity.browser-session.v1";
 
 /**
  * 拿不到 Host Git 客户端的原因。分档和文件域一致，因为要用户做的事一致：
@@ -45,18 +49,6 @@ function permits(
   );
 }
 
-function addressBlock(address: string): GitHostBlockReason | null {
-  let url: URL;
-  try {
-    url = new URL(address);
-  } catch {
-    return "tlsRequired";
-  }
-  if (url.protocol !== "https:") return "tlsRequired";
-  if (url.origin !== globalThis.location?.origin) return "sameOrigin";
-  return null;
-}
-
 let cached: {
   workspaceId: string;
   address: string;
@@ -84,7 +76,7 @@ export async function resolveHostGitClient(
     cached.address === address
   )
     return cached.client;
-  const blocked = addressBlock(address);
+  const blocked = hostSessionBlock(address);
   if (blocked) throw new GitHostUnavailableError(blocked);
 
   const hello = await probeHost(address, new AbortController().signal).catch(
@@ -92,14 +84,14 @@ export async function resolveHostGitClient(
       throw new GitHostUnavailableError("disconnected");
     },
   );
-  if (!hello.capabilities.includes(SESSION_CAPABILITY))
+  if (!hasHostSessionCapability(hello))
     throw new GitHostUnavailableError("noSession");
   if (!hello.capabilities.includes(GIT_CAPABILITY))
     throw new GitHostUnavailableError("unsupported");
 
   let identity: HostIdentityClient;
   try {
-    identity = new HostIdentityClient({
+    identity = createHostIdentity({
       baseUrl: address,
       hostId: hello.hostId,
       hostInstanceId: hello.hostInstanceId,

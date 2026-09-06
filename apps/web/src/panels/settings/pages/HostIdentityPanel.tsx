@@ -1,12 +1,18 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
-  HostIdentityClient,
+  type HostIdentityClient,
   HostIdentityError,
   type HelloResponse,
   type HostIdentityDevices,
   type HostIdentitySession,
 } from "@armadra/host-client";
 import { usePreferencesStore, useT } from "../../../app/preferences-store";
+import {
+  createHostIdentity,
+  hasHostSessionCapability,
+  hostSessionBlock,
+  nativeSessionFailureKey,
+} from "../../../host/native-session";
 import { rememberHostCsrf } from "../../../host/proxy-session";
 import { Button } from "@/ui/button";
 import {
@@ -30,22 +36,20 @@ function availability(
   address: string,
   hello: HelloResponse | undefined,
 ): string | null {
-  let url: URL;
-  try {
-    url = new URL(address);
-  } catch {
-    return "hostIdentity.tlsRequired";
-  }
-  if (url.protocol !== "https:") return "hostIdentity.tlsRequired";
-  if (url.origin !== globalThis.location?.origin)
-    return "hostIdentity.sameOrigin";
+  // The same judgement every session-bound module uses: HTTPS same-origin in
+  // a browser, loopback HTTP inside the desktop shell.
+  const blocked = hostSessionBlock(address);
+  if (blocked) return `hostIdentity.${blocked}`;
   if (!hello?.hostId || !hello.hostInstanceId)
     return "hostIdentity.checkRequired";
-  if (!hello.capabilities.includes("identity.browser-session.v1"))
-    return "hostIdentity.unsupported";
+  if (!hasHostSessionCapability(hello)) return "hostIdentity.unsupported";
   return null;
 }
 function failureKey(error: unknown): string {
+  // Inside the shell the ticket comes from the shell itself; its failure has
+  // its own sentence so the person knows which side to look at.
+  const native = nativeSessionFailureKey(error);
+  if (native) return native;
   if (!(error instanceof HostIdentityError))
     return "hostIdentity.error.network";
   if (error.outcomeUnknown) return "hostIdentity.error.unknown";
@@ -149,7 +153,7 @@ export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
       // The Runtime calls this Host proxies share this session, so its CSRF
       // token has exactly one holder in the page (H02).
       if (config)
-        client = new HostIdentityClient({
+        client = createHostIdentity({
           ...config,
           onCsrfToken: rememberHostCsrf,
         });

@@ -1,14 +1,18 @@
 import {
   HostFilesystemClient,
-  HostIdentityClient,
+  type HostIdentityClient,
   type HostIdentitySession,
 } from "@armadra/host-client";
 
 import { loadHostAddress, probeHost } from "../host/connection";
+import {
+  createHostIdentity,
+  hasHostSessionCapability,
+  hostSessionBlock,
+} from "../host/native-session";
 
 /** Host 装好根注册面时在 Hello 里报的能力名（业务迁移 §2.5）。 */
 export const FILESYSTEM_CAPABILITY = "filesystem.roots.v1";
-const SESSION_CAPABILITY = "identity.browser-session.v1";
 
 /**
  * 拿不到 Host 文件域客户端的原因。和画布那套分档一致，因为要用户做的事
@@ -45,18 +49,6 @@ function permits(
   );
 }
 
-function addressBlock(address: string): FilesystemHostBlockReason | null {
-  let url: URL;
-  try {
-    url = new URL(address);
-  } catch {
-    return "tlsRequired";
-  }
-  if (url.protocol !== "https:") return "tlsRequired";
-  if (url.origin !== globalThis.location?.origin) return "sameOrigin";
-  return null;
-}
-
 let cached: {
   workspaceId: string;
   address: string;
@@ -82,7 +74,7 @@ export async function resolveHostFilesystemClient(
     cached.address === address
   )
     return cached.client;
-  const blocked = addressBlock(address);
+  const blocked = hostSessionBlock(address);
   if (blocked) throw new FilesystemHostUnavailableError(blocked);
 
   const hello = await probeHost(address, new AbortController().signal).catch(
@@ -90,14 +82,14 @@ export async function resolveHostFilesystemClient(
       throw new FilesystemHostUnavailableError("disconnected");
     },
   );
-  if (!hello.capabilities.includes(SESSION_CAPABILITY))
+  if (!hasHostSessionCapability(hello))
     throw new FilesystemHostUnavailableError("noSession");
   if (!hello.capabilities.includes(FILESYSTEM_CAPABILITY))
     throw new FilesystemHostUnavailableError("unsupported");
 
   let identity: HostIdentityClient;
   try {
-    identity = new HostIdentityClient({
+    identity = createHostIdentity({
       baseUrl: address,
       hostId: hello.hostId,
       hostInstanceId: hello.hostInstanceId,
