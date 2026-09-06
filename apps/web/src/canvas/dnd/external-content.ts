@@ -10,8 +10,10 @@ import {
   type CanvasNodeType,
 } from "@armadra/shared";
 import { runtimeApi } from "../../api/client";
+import { AssetTooLargeError, uploadAsset } from "../assets";
+import { addItems } from "../whiteboard/store";
 import { canEditCanvas, useCanvasOwnership } from "../../canvas-ownership";
-import { containerSize, getFlow } from "../flow/flow-context";
+import { viewportCentre } from "../interaction/pointer";
 import { t } from "../../app/preferences-store";
 import { useCanvasStore } from "../../store/canvas-store";
 import {
@@ -31,9 +33,9 @@ import {
  * React Flow 不接管 drop / paste，所以两条入口都归我们自己：`os-drop.ts`
  * 的 `onDrop` 与它装的 `paste` 监听。
  *
- * **B2 重建图片与文字那两条分支**：它们要建白板对象，而白板层还没有。
- * B0 保留全部纯分流函数与节点落地（目录 / 文件 → 节点），那部分不依赖
- * 白板，拖一个目录进画布现在就能用。
+ * SVG 一律先在本地栅格化成 PNG 再上传：`<img>` 里的 SVG 不执行脚本，所以
+ * 画一遍再取像素是安全的，而把原始 SVG 存进工作区并由 Runtime 以
+ * `image/svg+xml` 发回来就不是——那等于把一段可执行文档放进画布。
  */
 
 /* ------------------------------ 纯分流函数 -------------------------------- */
@@ -144,22 +146,123 @@ export function offsetBy(position: Position, index: number): Position {
 
 /* ------------------------------- 图片落地 --------------------------------- */
 
+/** 量不出自然尺寸时给的兜底（正方形，缩放上限内）。 */
+const FALLBACK_IMAGE_SIZE: ImageBox = { w: 320, h: 320 };
+
+/** 自然尺寸：解码一次拿宽高。解不开（坏文件、jsdom）时回 null。 */
+export async function measureImage(source: Blob): Promise<ImageBox | null> {
+  if (typeof createImageBitmap !== "function") return null;
+  try {
+    const bitmap = await createImageBitmap(source);
+    const box = { w: bitmap.width, h: bitmap.height };
+    bitmap.close?.();
+    return box;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * 图片 → `wb.image` 白板对象。**B2 重建。**
+ * SVG → PNG。
+ *
+ * 走 `<img>` 解码：SVG 在 `<img>` 里是脚本禁用的，所以这条路不会执行文件
+ * 里的 `<script>`；画进画布再取 PNG 之后，进工作区的就只是像素。
+ * 环境画不了（jsdom、没有 canvas）时原样返回，调用方仍然拿到一个文件。
+ */
+export async function rasterizeSvg(file: File): Promise<File> {
+  if (typeof document === "undefined" || typeof Image === "undefined") {
+    return file;
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error("svg decode failed"));
+      element.src = url;
+    });
+    const size = imageShapeSize({
+      w: image.naturalWidth || FALLBACK_IMAGE_SIZE.w,
+      h: image.naturalHeight || FALLBACK_IMAGE_SIZE.h,
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = size.w * 2;
+    canvas.height = size.h * 2;
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/png"),
+    );
+    if (!blob) return file;
+    return new File([blob], `${baseName(file.name)}.png`, {
+      type: "image/png",
+    });
+  } catch {
+    return file;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/**
+ * 图片 → `wb.image` 白板对象。
  *
  * 字节走 `assets.uploadAsset`（落到 `.armadra/assets/`，内容寻址），白板
- * 文档里只留 `assetPath`；自然尺寸用 `createImageBitmap` 量，再经
- * `imageShapeSize` 等比缩到 800px 以内，一排的落点由 `layoutImages` 算。
- * SVG 一律先栅格化成 PNG 再上传（B2 决定：规避内联脚本）。
+ * 文档里只留 `assetPath`；自然尺寸解码一次量出来，再经 `imageShapeSize`
+ * 等比缩到 800px 以内，一排的落点由 `layoutImages` 算。
  *
- * 返回建出来的白板对象 id；B0 恒为空数组。
+ * 一张失败不影响其余：上传报错只提示那一张的文件名，已经上传成功的照建。
+ * 返回建出来的白板对象 id。
  */
 export async function createImageShapes(
-  _files: readonly File[],
-  _point: Position,
-  _target: ImportTarget | null = captureImportTarget(),
+  files: readonly File[],
+  point: Position,
+  target: ImportTarget | null = captureImportTarget(),
 ): Promise<string[]> {
-  return [];
+  if (!target || files.length === 0) return [];
+  const uploaded: { path: string; size: ImageBox; alt: string }[] = [];
+  for (const original of files) {
+    if (!importTargetIsActive(target)) return [];
+    const file =
+      original.type === "image/svg+xml" || extensionOf(original.name) === "svg"
+        ? await rasterizeSvg(original)
+        : original;
+    const natural = (await measureImage(file)) ?? FALLBACK_IMAGE_SIZE;
+    try {
+      const path = await uploadAsset(target.workspaceId, file);
+      uploaded.push({
+        path,
+        size: imageShapeSize(natural),
+        alt: baseName(original.name),
+      });
+    } catch (cause) {
+      // 超限时 `uploadAsset` 已经提示过一次了，别再刷第二条。
+      if (!(cause instanceof AssetTooLargeError)) {
+        toast.error(t("canvas.assetFailed", { name: baseName(original.name) }));
+      }
+    }
+  }
+  if (uploaded.length === 0 || !importTargetIsActive(target)) return [];
+  const points = layoutImages(
+    uploaded.map((entry) => entry.size),
+    point,
+  );
+  return addItems(
+    uploaded.map((entry, index) => ({
+      id: crypto.randomUUID(),
+      kind: "image" as const,
+      x: points[index]!.x,
+      y: points[index]!.y,
+      w: entry.size.w,
+      h: entry.size.h,
+      z: 0,
+      parentId: null,
+      style: { color: "black" as const, size: "m" as const },
+      assetPath: entry.path,
+      alt: entry.alt,
+    })),
+  );
 }
 
 /* ------------------------------- 节点落地 --------------------------------- */
@@ -373,25 +476,58 @@ export function pickFilesForCanvas(point?: Position): void {
 }
 
 /**
- * 磁盘上的图片 → `wb.image` 白板对象（桌面端 OS 拖放专用）。**B2 重建。**
+ * 磁盘上的图片 → `wb.image` 白板对象（桌面端 OS 拖放专用）。
  *
  * webview 收不到 `DataTransfer`，壳里也没有 fs 插件，所以字节只能由 Runtime
  * 读：`importAsset` 把文件复制进 `.armadra/assets/`（内容寻址，同一张图只落
  * 一份），路径直接写进白板对象，不必再取回来重传一遍。
+ *
+ * 自然尺寸得回头取一次（Runtime 不返回宽高）：取不回来就按兜底尺寸落，
+ * 图仍然在画布上，用户拖一下把手就好，比整张丢掉强。
  */
 async function importImageShape(
-  _workspaceId: string,
-  _path: string,
-  _position: Position,
-  _target: ImportTarget,
+  workspaceId: string,
+  path: string,
+  position: Position,
+  target: ImportTarget,
 ): Promise<void> {
-  // B2: runtimeApi.importAsset -> whiteboard.addItems([{ kind: "image" }])
+  let asset: { id: string; path: string };
+  try {
+    asset = await runtimeApi.importAsset(workspaceId, path);
+  } catch (cause) {
+    toast.error(t("canvas.assetFailed", { name: baseName(path) }));
+    void cause;
+    return;
+  }
+  if (!importTargetIsActive(target)) return;
+  const natural =
+    (await fetchImageSize(runtimeApi.assetUrl(workspaceId, asset.id))) ??
+    FALLBACK_IMAGE_SIZE;
+  if (!importTargetIsActive(target)) return;
+  const size = imageShapeSize(natural);
+  addItems([
+    {
+      id: crypto.randomUUID(),
+      kind: "image",
+      x: position.x - size.w / 2,
+      y: position.y - size.h / 2,
+      w: size.w,
+      h: size.h,
+      z: 0,
+      parentId: null,
+      style: { color: "black", size: "m" },
+      assetPath: asset.path,
+      alt: baseName(path),
+    },
+  ]);
 }
 
-/** 没有指针位置时的落点（粘贴走这条）：视口中心的画布坐标。 */
-function viewportCentre(): Position {
-  const flow = getFlow();
-  const { width, height } = containerSize();
-  if (!flow || width <= 0) return { x: 0, y: 0 };
-  return flow.screenToFlowPosition({ x: width / 2, y: height / 2 });
+async function fetchImageSize(url: string): Promise<ImageBox | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    return await measureImage(await response.blob());
+  } catch {
+    return null;
+  }
 }

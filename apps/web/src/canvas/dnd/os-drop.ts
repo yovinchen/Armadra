@@ -8,7 +8,10 @@ import {
   addNodesForPaths,
   addWorkspaceEntriesToCanvas,
   captureImportTarget,
+  routeFile,
 } from "./external-content";
+import { pastePoint } from "../interaction/pointer";
+import { paste } from "../whiteboard/tools/use-clipboard";
 import { RUNTIME_URL } from "../../api/client";
 import { isCanvasLocked } from "../canvas-lock";
 import {
@@ -20,7 +23,7 @@ import {
   type WorkspaceFileDropDetail,
 } from "../../files/workspace-drag";
 import { toast } from "sonner";
-import { t } from "../../app/preferences-store";
+import { t, usePreferencesStore } from "../../app/preferences-store";
 
 /**
  * 拖放与粘贴的入口（React Flow 计划 F27）。
@@ -35,7 +38,9 @@ import { t } from "../../app/preferences-store";
  * | 工作区文件树拖入 | `addWorkspaceEntriesToCanvas` |
  * | 焦点在输入框 / 终端里的粘贴 | 拦下来，交给它们自己 |
  *
- * **粘贴建对象是 B2**：那要建白板对象，白板层还没有。这里先只保留守卫。
+ * 粘贴有两条入口：⌘V 由 `keybindings.ts` 命中 `canvas.paste`（命中即
+ * `preventDefault`，所以浏览器不会再发 `paste` 事件），右键菜单的「粘贴」
+ * 与 Windows 上某些 IME 仍然会发原生 `paste`——那条走这里。
  */
 
 /* --------------------------------- 拖放 ----------------------------------- */
@@ -192,19 +197,49 @@ export function isTextEntry(target: EventTarget | null): boolean {
 }
 
 /**
- * 粘贴守卫。**B2 补上「粘贴建对象」那一半**（图片 → `wb.image`、文本 →
- * `wb.text`、`armadra/canvas@1` JSON → 原样复原，落点按 `pasteAtCursor`）。
+ * 原生 `paste` 事件的落地。
  *
- * 守卫本身现在就要在：输入框、终端、可编辑区里的粘贴必须原样交给它们，
- * 所以在 `document.body` 的冒泡相位提前 `stopPropagation`——目标元素这时
- * 已经收到事件，`document` 上的监听器再也看不到它。
+ * 守卫先行：输入框、终端、可编辑区里的粘贴必须原样交给它们，所以在
+ * `document.body` 的冒泡相位提前 `stopPropagation`——目标元素这时已经
+ * 收到事件，`document` 上的监听器再也看不到它。
+ *
+ * 落地规则与 ⌘V 那条路完全一样（`whiteboard/tools/use-clipboard.paste`）：
+ * `armadra/canvas@1` 的 JSON 原样复原，图片 → `wb.image`，其余文本 →
+ * `wb.text`；落点按 `pasteAtCursor` 偏好。
  */
 export function usePasteToCanvas(): void {
   useEffect(() => {
     const guard = (event: ClipboardEvent) => {
       if (isTextEntry(event.target)) event.stopPropagation();
     };
+    const onPaste = (event: ClipboardEvent) => {
+      if (isTextEntry(event.target) || isTerminalDropTarget(event.target))
+        return;
+      const state = useCanvasStore.getState();
+      if (!state.document || !state.workspace) return;
+      if (isCanvasLocked()) return;
+      const transfer = event.clipboardData;
+      const files = Array.from(transfer?.files ?? []).filter(
+        (file) => routeFile(file) === "image",
+      );
+      const text = transfer?.getData("text/plain") ?? null;
+      if (files.length === 0 && !text?.trim()) return;
+      event.preventDefault();
+      void paste(
+        {
+          workspaceId: state.workspace.id,
+          at: pastePoint(
+            usePreferencesStore.getState().whiteboard.pasteAtCursor,
+          ),
+        },
+        { text, files },
+      );
+    };
     document.body.addEventListener("paste", guard);
-    return () => document.body.removeEventListener("paste", guard);
+    document.addEventListener("paste", onPaste);
+    return () => {
+      document.body.removeEventListener("paste", guard);
+      document.removeEventListener("paste", onPaste);
+    };
   }, []);
 }
