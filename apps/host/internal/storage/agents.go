@@ -206,6 +206,20 @@ func affectedOne(updated sql.Result, err error) error {
 	return nil
 }
 
+// blob binds a possibly-nil slice as an empty blob rather than as NULL.
+//
+// Every BLOB column in the agent tables is NOT NULL, because "no transcript
+// reference" and "nobody has said" are the same thing here and a nullable
+// column would invite a third state. Go's nil slice binds as NULL, so it is
+// normalised once, at the boundary, rather than by a COALESCE repeated in
+// every statement.
+func blob(value []byte) []byte {
+	if value == nil {
+		return []byte{}
+	}
+	return value
+}
+
 func optionalBool(value *bool) any {
 	if value == nil {
 		return nil
@@ -371,7 +385,7 @@ func (s *Store) PutAgentStatus(ctx context.Context, operationID string, status A
 	values := []any{
 		status.NodeID, status.WorkspaceID, status.SessionID, generation, status.AgentID,
 		int64(status.Unread), boolean(status.Verified), boolean(status.Restored),
-		optionalBool(status.Errored), optionalBool(status.Interrupted), status.TranscriptRef,
+		optionalBool(status.Errored), optionalBool(status.Interrupted), blob(status.TranscriptRef),
 		status.State, status.SessionPhase, status.ReasonCode, boolean(status.Deleted),
 	}
 	return s.putAgentRecord(ctx, operationID, agentRecord{
@@ -385,12 +399,12 @@ func (s *Store) PutAgentStatus(ctx context.Context, operationID string, status A
 		payload:     status.Payload,
 		insert: func(ctx context.Context, tx *sql.Tx, next int64) error {
 			_, err := tx.ExecContext(ctx, "INSERT INTO agent_status("+agentStatusColumns+") VALUES("+placeholders(19)+")",
-				append(append([]any{}, values...), next, status.LastEventMS, status.UpdatedAtMS, status.Payload)...)
+				append(append([]any{}, values...), next, status.LastEventMS, status.UpdatedAtMS, blob(status.Payload))...)
 			return err
 		},
 		update: func(ctx context.Context, tx *sql.Tx, next, current int64) error {
 			return affectedOne(tx.ExecContext(ctx, "UPDATE agent_status SET workspace_id=?,session_id=?,generation=?,agent_id=?,unread=?,verified=?,restored=?,errored=?,interrupted=?,transcript_ref=?,state=?,session_phase=?,reason_code=?,deleted=?,revision=?,last_event_at_ms=?,updated_at_ms=?,payload=? WHERE node_id=? AND revision=?",
-				append(append([]any{}, values[1:]...), next, status.LastEventMS, status.UpdatedAtMS, status.Payload, status.NodeID, current)...))
+				append(append([]any{}, values[1:]...), next, status.LastEventMS, status.UpdatedAtMS, blob(status.Payload), status.NodeID, current)...))
 		},
 	}, expected)
 }
@@ -546,15 +560,15 @@ func (s *Store) PutApproval(ctx context.Context, operationID string, approval Ap
 		insert: func(ctx context.Context, tx *sql.Tx, next int64) error {
 			_, err := tx.ExecContext(ctx, "INSERT INTO agent_approvals("+approvalColumns+") VALUES("+placeholders(15)+")",
 				approval.ApprovalID, approval.NodeID, approval.WorkspaceID, approval.SessionID,
-				generation, approval.Request, approval.RequestSHA256, approval.Decision,
+				generation, blob(approval.Request), blob(approval.RequestSHA256), approval.Decision,
 				approval.AnsweredBy, approval.State, approval.ReasonCode, next,
-				approval.CreatedAtMS, approval.AnsweredAtMS, approval.Payload)
+				approval.CreatedAtMS, approval.AnsweredAtMS, blob(approval.Payload))
 			return err
 		},
 		update: func(ctx context.Context, tx *sql.Tx, next, current int64) error {
 			return affectedOne(tx.ExecContext(ctx, "UPDATE agent_approvals SET decision=?,answered_by=?,state=?,reason_code=?,revision=?,answered_at_ms=?,payload=? WHERE approval_id=? AND revision=?",
 				approval.Decision, approval.AnsweredBy, approval.State, approval.ReasonCode,
-				next, approval.AnsweredAtMS, approval.Payload, approval.ApprovalID, current))
+				next, approval.AnsweredAtMS, blob(approval.Payload), approval.ApprovalID, current))
 		},
 	}, expected)
 }

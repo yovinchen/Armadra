@@ -251,10 +251,10 @@ func (s *Store) PutHandoff(ctx context.Context, operationID string, handoff Hand
 			_, err := tx.ExecContext(ctx, "INSERT INTO agent_handoffs("+handoffColumns+") VALUES("+placeholders(22)+")",
 				handoff.HandoffID, handoff.WorkspaceID, handoff.SourceNodeID, handoff.TargetNodeID,
 				handoff.SourceSessionID, sourceGen, handoff.TargetSessionID, targetGen,
-				handoff.Bundle, handoff.BundleSHA256, handoff.MailboxID, handoff.TraceID,
+				blob(handoff.Bundle), blob(handoff.BundleSHA256), handoff.MailboxID, handoff.TraceID,
 				int64(handoff.Attempts), handoff.State, handoff.ErrorCode, handoff.ClaimedAtMS,
 				handoff.ClaimInstanceID, next, handoff.CreatedAtMS, handoff.AcceptedAtMS,
-				handoff.UpdatedAtMS, handoff.Payload)
+				handoff.UpdatedAtMS, blob(handoff.Payload))
 			return err
 		},
 		// The frozen columns are absent from this statement, which is why the
@@ -264,7 +264,7 @@ func (s *Store) PutHandoff(ctx context.Context, operationID string, handoff Hand
 			return affectedOne(tx.ExecContext(ctx, "UPDATE agent_handoffs SET mailbox_id=?,trace_id=?,attempts=?,state=?,error_code=?,claimed_at_ms=?,claim_instance_id=?,revision=?,accepted_at_ms=?,updated_at_ms=?,payload=? WHERE handoff_id=? AND revision=?",
 				handoff.MailboxID, handoff.TraceID, int64(handoff.Attempts), handoff.State,
 				handoff.ErrorCode, handoff.ClaimedAtMS, handoff.ClaimInstanceID, next,
-				handoff.AcceptedAtMS, handoff.UpdatedAtMS, handoff.Payload,
+				handoff.AcceptedAtMS, handoff.UpdatedAtMS, blob(handoff.Payload),
 				handoff.HandoffID, current))
 		},
 	}, expected)
@@ -385,12 +385,12 @@ func (s *Store) PutContextLinks(ctx context.Context, operationID string, links C
 		payload:     links.Payload,
 		insert: func(ctx context.Context, tx *sql.Tx, next int64) error {
 			_, err := tx.ExecContext(ctx, "INSERT INTO agent_context_links("+contextLinksColumns+") VALUES("+placeholders(6)+")",
-				links.NodeID, links.WorkspaceID, links.Links, next, links.UpdatedAtMS, links.Payload)
+				links.NodeID, links.WorkspaceID, blob(links.Links), next, links.UpdatedAtMS, blob(links.Payload))
 			return err
 		},
 		update: func(ctx context.Context, tx *sql.Tx, next, current int64) error {
 			return affectedOne(tx.ExecContext(ctx, "UPDATE agent_context_links SET workspace_id=?,links=?,revision=?,updated_at_ms=?,payload=? WHERE node_id=? AND revision=?",
-				links.WorkspaceID, links.Links, next, links.UpdatedAtMS, links.Payload, links.NodeID, current))
+				links.WorkspaceID, blob(links.Links), next, links.UpdatedAtMS, blob(links.Payload), links.NodeID, current))
 		},
 	}, expected)
 }

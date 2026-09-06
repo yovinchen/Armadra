@@ -237,13 +237,13 @@ func (s *Store) PutMailboxMessage(ctx context.Context, operationID string, messa
 			_, err := tx.ExecContext(ctx, "INSERT INTO agent_mailbox("+mailboxColumns+") VALUES("+placeholders(13)+")",
 				message.MessageID, message.WorkspaceID, message.SourceNodeID, message.TargetNodeID,
 				message.MessageKey, message.Body, sequence, boolean(message.Deleted), next,
-				message.CreatedAtMS, message.ExpiresAtMS, message.AckedAtMS, message.Payload)
+				message.CreatedAtMS, message.ExpiresAtMS, message.AckedAtMS, blob(message.Payload))
 			return err
 		},
 		update: func(ctx context.Context, tx *sql.Tx, next, current int64) error {
 			return affectedOne(tx.ExecContext(ctx, "UPDATE agent_mailbox SET body=?,deleted=?,revision=?,expires_at_ms=?,acknowledged_at_ms=?,payload=? WHERE message_id=? AND revision=?",
 				message.Body, boolean(message.Deleted), next, message.ExpiresAtMS,
-				message.AckedAtMS, message.Payload, message.MessageID, current))
+				message.AckedAtMS, blob(message.Payload), message.MessageID, current))
 		},
 	}, expected)
 }
@@ -365,13 +365,13 @@ func (s *Store) PutDelivery(ctx context.Context, operationID string, delivery De
 			_, err := tx.ExecContext(ctx, "INSERT INTO agent_deliveries("+deliveryColumns+") VALUES("+placeholders(11)+")",
 				delivery.TraceID, delivery.WorkspaceID, delivery.SourceNodeID, delivery.TargetNodeID,
 				delivery.Receipt, int64(delivery.BodyChars), delivery.Outcome, delivery.ReasonCode,
-				next, delivery.CreatedAtMS, delivery.Payload)
+				next, delivery.CreatedAtMS, blob(delivery.Payload))
 			return err
 		},
 		update: func(ctx context.Context, tx *sql.Tx, next, current int64) error {
 			return affectedOne(tx.ExecContext(ctx, "UPDATE agent_deliveries SET receipt=?,body_chars=?,outcome=?,reason_code=?,revision=?,payload=? WHERE trace_id=? AND revision=?",
 				delivery.Receipt, int64(delivery.BodyChars), delivery.Outcome, delivery.ReasonCode,
-				next, delivery.Payload, delivery.TraceID, current))
+				next, blob(delivery.Payload), delivery.TraceID, current))
 		},
 	}, expected)
 }
