@@ -9,3 +9,6 @@ docs/research
 .claude/skills
 .claude/agents
 target-main
+# Golden fixtures written by `cargo test`, not by hand. Reformatting them would
+# make the snapshot they exist to pin fail on the next run.
+apps/runtime/tests/fixtures

@@ -9,10 +9,17 @@ pub mod channel;
 pub mod filesystem;
 pub mod language_link;
 pub mod outbox;
+pub mod service;
 pub mod settings;
 pub mod socket;
+pub mod transport;
 pub mod upload;
 pub mod watch;
+
+// The transport is a separate concern from what a request means, but the two
+// entry points are the module's public surface and stay reachable as
+// `worker::serve` / `worker::serve_commands`.
+pub use transport::{serve, serve_commands};
 
 use crate::{error::AppError, files, ownership, security};
 use armadra_protocol::{Message, v1::*};
@@ -25,7 +32,6 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub const MAX_FRAME: usize = 1 << 20;
 pub const MAX_CHUNK: usize = 256 << 10;
@@ -676,36 +682,11 @@ impl Worker {
                     size: written.size,
                 }))
             }
-            // Version-locked operations proxied from a controller. The list is
-            // closed and the payload is this build's own JSON; see
-            // `remote::service` for why that is safe here and nowhere else.
-            Action::Service(input) => {
-                let Ok(operation) = WorkerServiceOperation::try_from(input.operation) else {
-                    return Ok(Response::Error(ErrorResponse {
-                        code: "UNSUPPORTED".into(),
-                        message: "Worker service operation is not recognized".into(),
-                    }));
-                };
-                let root = self.root(&input.root_id)?;
-                let (http_status, response_json) = crate::remote::service::handle(
-                    root,
-                    operation,
-                    input.request_json,
-                    input.allow_write,
-                    input.allow_execute,
-                )
-                .await;
-                if response_json.len() > MAX_FRAME - 1024 {
-                    return Ok(Response::Error(ErrorResponse {
-                        code: "RESOURCE_EXHAUSTED".into(),
-                        message: "The answer is larger than one Worker frame".into(),
-                    }));
-                }
-                Ok(Response::Service(WorkerServiceResponse {
-                    http_status,
-                    response_json,
-                }))
-            }
+            // The three actions that work on a whole root rather than on one
+            // file. Each has rules of its own, so they live in `service`.
+            Action::Service(input) => self.service(input).await,
+            Action::Watch(input) => self.watch(input),
+            Action::Upload(input) => self.upload(input),
             // Editor language services (language service design §2.7, §2.8).
             // Discovery answers on any connection — it runs `--version` and
             // starts nothing. Everything that holds state needs the link,
@@ -742,299 +723,6 @@ impl Worker {
             // the link takes it off the request path before it reaches here.
             // Arriving on the serial connection is a controller mistake.
             Action::LanguageFrame(_) => Ok(unsupported_language()),
-            // Watching is not a service payload: the events it produces are
-            // unsolicited frames that belong to the connection, so the
-            // subscription is typed and the connection owns it.
-            Action::Watch(input) => {
-                if self.watches.is_none() {
-                    return Ok(Response::Error(ErrorResponse {
-                        code: "UNSUPPORTED".into(),
-                        message: "This Worker transport cannot push watch events".into(),
-                    }));
-                }
-                let operation = WorkerServiceOperation::try_from(input.operation)
-                    .map_err(|_| invalid("Unknown watch operation"))?;
-                if input.paths.len() > crate::remote::service::MAX_WATCH_PATHS {
-                    return Err(invalid("Too many watched paths"));
-                }
-                // The root is resolved before the subscription is borrowed, so
-                // an unregistered root fails without disturbing the watches
-                // that already exist.
-                let root = match operation {
-                    WorkerServiceOperation::WatchSubscribe => Some(self.root(&input.root_id)?),
-                    WorkerServiceOperation::WatchUnsubscribe => None,
-                    _ => {
-                        return Ok(Response::Error(ErrorResponse {
-                            code: "UNSUPPORTED".into(),
-                            message: "That is not a watch operation".into(),
-                        }));
-                    }
-                };
-                let watches = self.watches.as_mut().expect("checked above");
-                match root {
-                    Some(root) => watches.subscribe(&root, &input.root_id, &input.paths)?,
-                    None => watches.unsubscribe(&input.paths)?,
-                }
-                Ok(Response::Watch(WorkerWatchSubscription {
-                    root_id: input.root_id,
-                    watched_paths: watches.watched_paths(),
-                    sequence: watches.next_sequence(),
-                }))
-            }
-            // Chunked upload. Every step needs the write grant, because every
-            // step is part of one write: a controller that may not write must
-            // not even be able to occupy the host's temporary space.
-            Action::Upload(input) => {
-                let step = input
-                    .step
-                    .ok_or_else(|| invalid("The upload step is missing"))?;
-                let receipt = match step {
-                    worker_upload_request::Step::Begin(begin) => {
-                        if !begin.allow_write {
-                            return Err(AppError::Forbidden(
-                                "The execution host received an upload without the workspace grant"
-                                    .into(),
-                            ));
-                        }
-                        let root = self.root(&begin.root_id)?;
-                        self.uploads.begin(
-                            &root,
-                            &begin.path,
-                            begin.total_bytes,
-                            &begin.sha256,
-                            begin.overwrite_sha256,
-                        )?
-                    }
-                    // The upload id is the capability: this Worker minted it,
-                    // it is a v7 UUID, and it names a destination already
-                    // proven to be inside a registered root.
-                    worker_upload_request::Step::Chunk(chunk) => {
-                        self.uploads
-                            .chunk(&chunk.upload_id, chunk.offset, &chunk.data)?
-                    }
-                    worker_upload_request::Step::Commit(commit) => {
-                        self.uploads.commit(&commit.upload_id)?
-                    }
-                    worker_upload_request::Step::Abort(abort) => {
-                        self.uploads.abort(&abort.upload_id)?
-                    }
-                };
-                Ok(Response::Upload(WorkerUploadResponse {
-                    upload_id: receipt.upload_id,
-                    received_bytes: receipt.received_bytes,
-                    sha256: receipt.sha256,
-                    path: receipt.path,
-                }))
-            }
         }
     }
-}
-
-/// The remote-execution transport.
-///
-/// Reading runs in its own task so that a filesystem event can be written the
-/// moment it happens rather than after the controller's next request — that is
-/// what turns remote watching from a two-second poll into a push (design §3.4).
-/// The reader owns the frame boundary, so no read is ever cancelled halfway
-/// through one; the loop below only ever picks between two already-complete
-/// items.
-pub async fn serve<R, W>(
-    input: R,
-    mut output: W,
-    canvas: Option<SqlitePool>,
-    settings_file: Option<PathBuf>,
-) -> anyhow::Result<()>
-where
-    R: AsyncRead + Unpin + Send + 'static,
-    W: AsyncWrite + Unpin,
-{
-    let mut worker = match canvas {
-        Some(pool) => Worker::with_canvas(pool),
-        None => Worker::default(),
-    };
-    if let Some(file) = settings_file {
-        worker = worker.with_settings_file(file);
-    }
-    let (watches, mut events) = watch::Watches::new();
-    worker.watches = Some(watches);
-
-    let (requests_tx, mut requests) = tokio::sync::mpsc::channel::<WorkerRequest>(1);
-    let reader = tokio::spawn(async move { read_frames(input, requests_tx).await });
-
-    let result = loop {
-        tokio::select! {
-            // A request in hand is answered first: an answer the controller is
-            // blocked on must not queue behind a burst of file events.
-            biased;
-            request = requests.recv() => {
-                let Some(request) = request else { break Ok(()) };
-                let response = worker.handle(request).await;
-                if let Err(error) = write_frame(&mut output, &response).await {
-                    break Err(error);
-                }
-            }
-            event = events.recv() => {
-                let Some(event) = event else { continue };
-                // An unsolicited frame: no request id, which is exactly how the
-                // controller's demultiplexer tells it from an answer.
-                let frame = WorkerResponse {
-                    request_id: String::new(),
-                    host_id: worker.host.clone().unwrap_or_default(),
-                    instance_id: worker.instance.clone(),
-                    result: Some(worker_response::Result::WatchEvent(event)),
-                };
-                if let Err(error) = write_frame(&mut output, &frame).await {
-                    break Err(error);
-                }
-            }
-        }
-    };
-    reader.abort();
-    match reader.await {
-        Ok(read) => result.and(read),
-        // Aborting the reader is how this loop stops; that is not a failure.
-        Err(_) => result,
-    }
-}
-
-async fn read_frames<R: AsyncRead + Unpin>(
-    mut input: R,
-    requests: tokio::sync::mpsc::Sender<WorkerRequest>,
-) -> anyhow::Result<()> {
-    loop {
-        let mut prefix = [0u8; 4];
-        if input.read(&mut prefix[..1]).await? == 0 {
-            return Ok(());
-        }
-        input.read_exact(&mut prefix[1..]).await?;
-        let length = u32::from_be_bytes(prefix) as usize;
-        anyhow::ensure!(
-            length > 0 && length <= MAX_FRAME,
-            "Invalid Worker frame length"
-        );
-        let mut bytes = vec![0; length];
-        input.read_exact(&mut bytes).await?;
-        if requests
-            .send(WorkerRequest::decode(bytes.as_slice())?)
-            .await
-            .is_err()
-        {
-            return Ok(());
-        }
-    }
-}
-
-async fn write_frame<W: AsyncWrite + Unpin>(
-    output: &mut W,
-    response: &WorkerResponse,
-) -> anyhow::Result<()> {
-    let bytes = response.encode_to_vec();
-    anyhow::ensure!(
-        bytes.len() <= MAX_FRAME,
-        "Worker response exceeds frame limit"
-    );
-    output
-        .write_all(&(bytes.len() as u32).to_be_bytes())
-        .await?;
-    output.write_all(&bytes).await?;
-    output.flush().await?;
-    Ok(())
-}
-
-/// Command mode: the resident bidirectional channel over stdio, plus a private
-/// socket bearer for a controller that has to reattach (§2.9).
-///
-/// Reading runs in its own task, so end of input is noticed while a request is
-/// still being handled and a dead controller cannot leave an otherwise healthy
-/// Worker running jobs on its behalf. That property predates the upward flow
-/// and [`channel::serve`] keeps it for both bearers.
-///
-/// The outbox is opened before the handshake, because the handshake has to say
-/// truthfully whether this Worker can report upward *and* how much it already
-/// owes. A Worker whose outbox will not open still serves requests: losing the
-/// upward flow is visible to the Host, losing execution is not what was asked
-/// for.
-pub async fn serve_commands<R, W>(
-    input: R,
-    output: W,
-    path: PathBuf,
-    canvas: Option<SqlitePool>,
-    settings_file: Option<PathBuf>,
-) -> anyhow::Result<()>
-where
-    R: AsyncRead + Unpin + Send + 'static,
-    W: AsyncWrite + Unpin + Send + 'static,
-{
-    let mut worker = Worker {
-        command_path: Some(path.clone()),
-        canvas,
-        settings_file,
-        ..Default::default()
-    };
-    // The state directory's privacy is proven here, once, exactly as the
-    // command journal proves it; the outbox and the bearer both live inside it.
-    let state_dir = crate::command::store::private_directory(&path)?;
-    let instance = worker.instance.clone();
-    let channel = match outbox::Outbox::open(&state_dir, &instance).await {
-        Ok(outbox) => Some(std::sync::Arc::new(channel::Channel::new(outbox))),
-        Err(error) => {
-            tracing::error!(%error, "the upcall outbox could not be opened; this Worker will not report upward");
-            None
-        }
-    };
-    let bearer = match channel.as_ref() {
-        Some(_) => match socket::bind(&state_dir, &instance) {
-            Ok(bearer) => Some(bearer),
-            Err(error) => {
-                // stdio still works; only the reattach path is lost, and the
-                // handshake will not claim an address that does not exist.
-                tracing::warn!(%error, "the upcall socket bearer could not be bound");
-                None
-            }
-        },
-        None => None,
-    };
-    if let Some(channel) = channel.as_ref() {
-        let (socket, pipe) = match bearer.as_ref() {
-            Some(bearer) => (bearer.socket.clone(), bearer.pipe.clone()),
-            None => (None, None),
-        };
-        worker.attach_channel(channel.upcaller(), socket, pipe);
-    }
-    let worker = std::sync::Arc::new(tokio::sync::Mutex::new(worker));
-    let (stop, stop_rx) = tokio::sync::watch::channel(false);
-    let bearer_task = match (bearer, channel.as_ref()) {
-        (Some(bearer), Some(channel)) => {
-            let worker = std::sync::Arc::clone(&worker);
-            let channel = std::sync::Arc::clone(channel);
-            Some(tokio::spawn(async move {
-                bearer.serve(worker, channel, stop_rx).await
-            }))
-        }
-        _ => None,
-    };
-    let result = channel::serve(
-        input,
-        output,
-        std::sync::Arc::clone(&worker),
-        channel.clone(),
-    )
-    .await;
-    let _ = stop.send(true);
-    if let Some(task) = bearer_task {
-        task.abort();
-        let _ = task.await;
-    }
-    if let Some(channel) = channel {
-        channel.outbox().close().await;
-    }
-    let manager = worker.lock().await.commands.take();
-    if let Some(manager) = manager {
-        let confirmation = manager.shutdown().await?;
-        anyhow::ensure!(
-            confirmation.cleanup_confirmed,
-            "Worker command cleanup was not confirmed"
-        );
-    }
-    result
 }
