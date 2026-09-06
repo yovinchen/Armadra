@@ -278,7 +278,80 @@ const schemaV7 = `CREATE TABLE workspace_roots (
  updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0)
 )`
 
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7}
+// The session domain's records (Go Host 业务所有权迁移 §3.1 v8).
+//
+// Three tables, because they answer three different questions and are read at
+// three different rates.
+//
+// `sessions` is the intent: which node wants a shell, on which machine, running
+// what, and what the last thing anybody observed about it was. It is a table of
+// its own rather than an `entities` row because every column here is queried as
+// a column — a client lists a workspace's sessions by kind and owning node, a
+// reclaim looks one up by its logical key, and a sweep wants the ones nobody has
+// heard from. Decoding a payload to answer any of those would put a Protobuf
+// parse in front of the busiest read in the domain.
+//
+// `session_runs` is one generation of one session. It is separate because a
+// session outlives its runs: recycling a node produces a second run of the same
+// session, and the `backend_ref` — a handle on an object inside a process this
+// Host does not run — belongs to the run rather than to the intent. The primary
+// key is (session, generation), so a run that is reported twice is the same row
+// and a run under a new generation is a new one.
+//
+// `session_claims` records which Worker instance last spoke for an execution
+// host. It is what makes the difference between EXITED and LOST decidable: a
+// session whose claim is stale was not observed to end, it was observed to be
+// unreachable, and those are different things to tell a user.
+//
+// `generation` is stored but never allocated here. It is the Worker's value —
+// the only side that knows when a pane was replaced — and a Host that handed
+// out generations would be handing out claims about processes it has never
+// seen.
+const schemaV8 = `CREATE TABLE sessions (
+ session_id TEXT PRIMARY KEY,
+ workspace_id TEXT NOT NULL,
+ execution_host_id TEXT NOT NULL,
+ session_key TEXT NOT NULL,
+ owner_node_id TEXT NOT NULL,
+ kind INTEGER NOT NULL CHECK(kind BETWEEN 0 AND 3),
+ status INTEGER NOT NULL CHECK(status BETWEEN 0 AND 6),
+ attach_state INTEGER NOT NULL CHECK(attach_state BETWEEN 0 AND 3),
+ termination_intent INTEGER NOT NULL CHECK(termination_intent BETWEEN 0 AND 4),
+ backend_kind TEXT NOT NULL,
+ generation INTEGER NOT NULL DEFAULT 0 CHECK(generation >= 0),
+ exit_code INTEGER,
+ launch BLOB NOT NULL,
+ launch_sha256 BLOB NOT NULL CHECK(length(launch_sha256) IN (0,32)),
+ reason_code TEXT NOT NULL CHECK(length(reason_code) <= 64),
+ deleted INTEGER NOT NULL DEFAULT 0 CHECK(deleted IN (0,1)),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0),
+ updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0),
+ ended_at_ms INTEGER NOT NULL DEFAULT 0 CHECK(ended_at_ms >= 0),
+ last_output_at_ms INTEGER NOT NULL DEFAULT 0 CHECK(last_output_at_ms >= 0)
+);
+CREATE INDEX idx_sessions_owner ON sessions(workspace_id, kind, owner_node_id);
+CREATE INDEX idx_sessions_key ON sessions(session_key, generation);
+CREATE INDEX idx_sessions_status ON sessions(status, updated_at_ms);
+CREATE TABLE session_runs (
+ session_id TEXT NOT NULL,
+ generation INTEGER NOT NULL CHECK(generation > 0),
+ worker_instance_id TEXT NOT NULL,
+ backend_ref TEXT NOT NULL,
+ exit_code INTEGER,
+ reason_code TEXT NOT NULL CHECK(length(reason_code) <= 64),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ started_at_ms INTEGER NOT NULL CHECK(started_at_ms > 0),
+ ended_at_ms INTEGER NOT NULL DEFAULT 0 CHECK(ended_at_ms >= 0),
+ PRIMARY KEY(session_id, generation)
+);
+CREATE TABLE session_claims (
+ execution_host_id TEXT PRIMARY KEY,
+ worker_instance_id TEXT NOT NULL,
+ claimed_at_ms INTEGER NOT NULL CHECK(claimed_at_ms > 0)
+)`
+
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8}
 
 type sqlReader interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
@@ -300,11 +373,15 @@ func objectName(token string) string {
 // so validateSchema compares a database against this build's own statements
 // rather than against a version number it would have to trust.
 //
-// Four statement forms are recognised, and an unrecognised one is an error
+// Five statement forms are recognised, and an unrecognised one is an error
 // rather than a skip: a migration this function cannot model would leave the
 // validator silently blind to whatever that statement changed.
 //
 //	CREATE TABLE name (...)        defines an object
+//	CREATE INDEX name ON t(...)    defines one too; SQLite stores an index in
+//	                               sqlite_schema exactly as it stores a table,
+//	                               so an index that drifted or disappeared has
+//	                               to be as visible here as a column would be
 //	ALTER TABLE old RENAME TO new  moves it, and SQLite quotes the new name in
 //	                               the schema text it stores
 //	DROP TABLE name                removes it
@@ -320,6 +397,12 @@ func expectedObjects(version int) (map[string]string, error) {
 			parts := strings.Fields(statement)
 			switch {
 			case len(parts) >= 4 && strings.EqualFold(parts[0], "CREATE") && strings.EqualFold(parts[1], "TABLE"):
+				result[objectName(parts[2])] = statement
+			// An index is a schema object with its own name, and a database
+			// missing one is a database whose queries silently scan. It is
+			// modelled here rather than exempted so it is compared like
+			// everything else.
+			case len(parts) >= 5 && strings.EqualFold(parts[0], "CREATE") && strings.EqualFold(parts[1], "INDEX") && strings.EqualFold(parts[3], "ON"):
 				result[objectName(parts[2])] = statement
 			case len(parts) == 5 && strings.EqualFold(parts[0], "ALTER") && strings.EqualFold(parts[1], "TABLE") && strings.EqualFold(parts[3], "RENAME"):
 				return nil, fmt.Errorf("%w: rename needs a target", ErrSchema)
@@ -362,7 +445,10 @@ func validateSchema(ctx context.Context, db sqlReader, hostID string) (int, erro
 			rows.Close()
 			return 0, err
 		}
-		if kind != "table" || !statement.Valid {
+		// Tables and the indexes over them; SQLite's own automatic indexes
+		// carry no SQL and are already excluded by the `sqlite_*` filter above,
+		// so anything left without a statement is drift.
+		if (kind != "table" && kind != "index") || !statement.Valid {
 			rows.Close()
 			return 0, ErrSchema
 		}
