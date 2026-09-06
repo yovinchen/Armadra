@@ -115,11 +115,11 @@ const vendorGroups = [
     test: /[\\/]node_modules[\\/]@xterm[\\/](xterm|addon-fit|addon-unicode11)[\\/]/,
   },
   {
-    name: "tldraw",
+    name: "xyflow",
     priority: 30,
-    // tldraw 5.4 的全部子包 + 它自带的运行时依赖（编辑器内核、状态、校验、
-    // 富文本）。`@tldraw/assets` 只是一堆 `?url` 导入，不进 JS 组。
-    test: /[\\/]node_modules[\\/](tldraw|@tldraw|@tiptap|prosemirror-.*|@use-gesture|classnames|hotkeys-js|idb|lodash\.isequal|nanoid|core-js|canvas-size)[\\/]/,
+    // React Flow 与它的运行时依赖：`@xyflow/system`、d3 的三个手势包、
+    // `classcat`、以及 RF 自带的 zustand 4（与应用的 zustand 5 各自独立）。
+    test: /[\\/]node_modules[\\/](@xyflow|d3-drag|d3-selection|d3-zoom|d3-transition|d3-ease|d3-interpolate|d3-timer|d3-color|d3-dispatch|classcat|perfect-freehand)[\\/]/,
   },
   {
     name: "radix",
@@ -141,12 +141,6 @@ export default defineConfig({
       // tsconfig.app.json 的 paths 保持一致。
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
-  },
-  optimizeDeps: {
-    // `@tldraw/assets/imports.vite` 全是 `./fonts/x.woff2?url` 这样的导入，
-    // 依赖预打包（rolldown）不认 `?url` 后缀，会以 UNLOADABLE_DEPENDENCY 报错。
-    // 排除掉，交给 vite 正常的资源管线处理，字体图标照样自托管。
-    exclude: ["@tldraw/assets"],
   },
   build: {
     rolldownOptions: {
