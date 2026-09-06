@@ -12,20 +12,10 @@ import { runtimeApi, RuntimeRequestError } from "../../api/client";
 import { useT } from "../../app/preferences-store";
 import { Button } from "../../ui/button";
 import { ScrollArea } from "../../ui/scroll-area";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "../../ui/alert-dialog";
 import { Branches } from "./Branches";
 import { History } from "./History";
 import { Tags } from "./Tags";
-import { Remotes, redactRemoteUrl } from "./Remotes";
+import { Remotes } from "./Remotes";
 import { Worktrees } from "./Worktrees";
 import { Stashes } from "./Stashes";
 import { Integrations } from "./Integrations";
@@ -33,134 +23,19 @@ import { useCanvasStore } from "../../store/canvas-store";
 import { currentViewportCenter } from "../viewport";
 import { ReadError } from "./forms";
 import { invalidateGitQueries } from "./queries";
+import { RepositoryConfirmDialog } from "./RepositoryConfirmDialog";
+import {
+  actionTarget,
+  emptyTracking,
+  mergeOperation,
+  running,
+  type Confirmation,
+  type RepositoryTab,
+  type Tracking,
+} from "./operations";
 
-export type RepositoryTab =
-  | "branches"
-  | "history"
-  | "worktrees"
-  | "stashes"
-  | "tags"
-  | "remotes"
-  | "integration";
-const running = (operation: GitRepositoryOperation | null | undefined) =>
-  operation?.state === "queued" || operation?.state === "running";
-// Merge network snapshots monotonically. An integration's initial command can
-// progress from awaitingResolution/unknownOutcome to a reconciled final state;
-// delayed polling and list responses must not bring that command back to life.
-function mergeOperation(
-  current: GitRepositoryOperation | null | undefined,
-  incoming: GitRepositoryOperation,
-): GitRepositoryOperation {
-  if (!current || current.id !== incoming.id) return incoming;
-  const rank = {
-    queued: 0,
-    running: 1,
-    awaitingResolution: 2,
-    unknownOutcome: 3,
-    succeeded: 4,
-    failed: 4,
-    cancelled: 4,
-  };
-  let result = incoming;
-  if (
-    rank[incoming.state] < rank[current.state] ||
-    (rank[current.state] === 4 && incoming.state !== current.state)
-  )
-    result = current;
-  else if (
-    incoming.state === current.state &&
-    current.finishedAt &&
-    incoming.finishedAt &&
-    Date.parse(incoming.finishedAt) < Date.parse(current.finishedAt)
-  )
-    result = current;
-  const cancellationRequested =
-    current.cancellationRequested || result.cancellationRequested;
-  if (
-    result.state === current.state &&
-    result.finishedAt === current.finishedAt &&
-    result.message === current.message &&
-    cancellationRequested === current.cancellationRequested
-  )
-    return current;
-  return cancellationRequested === result.cancellationRequested
-    ? result
-    : { ...result, cancellationRequested };
-}
-
-type Tracking = {
-  operation: GitRepositoryOperation | null;
-  pending: boolean;
-  uncertain: boolean;
-  error: string | null;
-};
-const emptyTracking: Tracking = {
-  operation: null,
-  pending: false,
-  uncertain: false,
-  error: null,
-};
-
-export function actionTarget(action: GitRepositoryAction): string {
-  switch (action.kind) {
-    case "startCherryPick":
-    case "revert":
-      return `${action.targetOid}${action.mainline ? ` · parent ${action.mainline}` : ""}`;
-    case "checkoutCommit":
-      return action.targetOid;
-    case "reset":
-      return `${action.mode} → ${action.targetOid}`;
-    case "createTag":
-      return `${action.name} → ${action.targetOid}`;
-    case "deleteTag":
-      return `${action.name} (${action.expectedOid})`;
-    case "pushTag":
-      return `${action.remote} / ${action.name} (${action.expectedOid})`;
-    case "addRemote":
-    case "setRemoteUrl":
-      // Never echo a credential back, not even one just typed here.
-      return `${action.name} → ${redactRemoteUrl(action.url)}`;
-    case "renameRemote":
-      return `${action.name} → ${action.newName}`;
-    case "removeRemote":
-      return action.name;
-    case "startMerge":
-      return `${action.targetOid}${action.message ? ` · ${action.message}` : ""}`;
-    case "startRebase":
-      return action.onto;
-    case "startInteractiveRebase":
-      return `${action.onto} · ${action.todo
-        .map((entry) => `${entry.command} ${entry.oid.slice(0, 8)}`)
-        .join(", ")}`;
-    case "continueIntegration":
-    case "abortIntegration":
-    case "skipIntegration":
-      return action.sessionId;
-    case "createStash":
-      return action.message || "Stash";
-    case "applyStash":
-    case "popStash":
-    case "dropStash":
-      return action.oid;
-    case "fetch":
-      return action.remote;
-    case "pull":
-      return `${action.remote} / ${action.branch}`;
-    case "push":
-      return `${action.remote} / ${action.branch}${action.forceWithLease ? ` ← ${action.forceWithLease.expectedRemoteOid}` : ""}`;
-    case "sync":
-      return `${action.remote} / ${action.branch} @ ${action.expectedRemoteOid ?? "—"}`;
-    case "createBranch":
-      return `${action.name} ← ${action.startPoint ?? "HEAD"}`;
-    case "switchBranch":
-    case "deleteBranch":
-      return `${action.name} (${action.expectedOid})`;
-    case "createWorktree":
-      return `${action.path} · ${action.branch} ← ${action.createBranch ? (action.startPoint ?? "HEAD") : action.expectedOid}`;
-    case "removeWorktree":
-      return `${action.path} (${action.expectedOid})`;
-  }
-}
+export { actionTarget } from "./operations";
+export type { RepositoryTab } from "./operations";
 
 export function GitRepositoryPanel({
   workspaceId,
@@ -379,18 +254,10 @@ function RepositorySession({
     // Scope and operation identity are captured by this keyed session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [operation.data, operationId]);
-  const [confirmation, setConfirmation] = useState<{
-    action: GitRepositoryAction;
-    expected: GitExpectedState;
-    review?: { oid: string; mainline: number | null; parentOid: string | null };
-  } | null>(null);
+  const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   // Overwriting published history takes a second, separate acknowledgement of
   // the exact remote commit the lease replaces.
   const [acknowledged, setAcknowledged] = useState(false);
-  const lease =
-    confirmation?.action.kind === "push"
-      ? confirmation.action.forceWithLease
-      : null;
   const submit = useMutation({
     mutationFn: async (input: {
       action: GitRepositoryAction;
@@ -749,209 +616,15 @@ function RepositorySession({
           />
         )}
       </ScrollArea>
-      <AlertDialog
-        open={confirmation !== null}
-        onOpenChange={(open) => {
-          if (!open) setConfirmation(null);
-        }}
-      >
-        <AlertDialogContent className="max-h-[90dvh] overflow-y-auto">
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("gitRepo.confirmTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("gitRepo.confirmDescription")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {confirmation && (
-            <dl className="space-y-2 break-all text-xs">
-              {confirmation.review && (
-                <div>
-                  <dt className="text-muted-foreground">
-                    {t("gitIntegration.commitOid")}
-                  </dt>
-                  <dd className="font-mono">{confirmation.review.oid}</dd>
-                  {confirmation.review.mainline && (
-                    <dd>
-                      {t("gitIntegration.mainline")}:{" "}
-                      {confirmation.review.mainline}
-                      {confirmation.review.parentOid && (
-                        <span className="font-mono">
-                          {" "}
-                          · {confirmation.review.parentOid}
-                        </span>
-                      )}
-                    </dd>
-                  )}
-                </div>
-              )}
-              {confirmation.action.kind === "startCherryPick" && (
-                <div>
-                  <dt>{t("gitIntegration.pickSafety")}</dt>
-                  <dd>
-                    {confirmation.action.recordOrigin ? "✓ " : "— "}
-                    {t("gitIntegration.recordOrigin")}
-                  </dd>
-                  {confirmation.action.mainline && (
-                    <dd>
-                      {t("gitIntegration.mainline")}:{" "}
-                      {confirmation.action.mainline}
-                    </dd>
-                  )}
-                </div>
-              )}
-              {confirmation.action.kind === "revert" && (
-                <div>
-                  <dd>{t("gitRepo.revertSafety")}</dd>
-                  {confirmation.action.mainline && (
-                    <dd>
-                      {t("gitIntegration.mainline")}:{" "}
-                      {confirmation.action.mainline}
-                    </dd>
-                  )}
-                </div>
-              )}
-              {confirmation.action.kind === "checkoutCommit" && (
-                <div>
-                  <dd>{t("gitRepo.detachedSafety")}</dd>
-                </div>
-              )}
-              {confirmation.action.kind === "reset" && (
-                <div>
-                  <dd>
-                    {t(`gitRepo.resetSafety.${confirmation.action.mode}`)}
-                  </dd>
-                  {confirmation.action.discardChanges && (
-                    <dd>{t("gitRepo.resetRecovery")}</dd>
-                  )}
-                </div>
-              )}
-              {confirmation.action.kind === "skipIntegration" && (
-                <div>
-                  <dd>{t("gitIntegration.skipSafety")}</dd>
-                </div>
-              )}
-              {confirmation.action.kind === "startMerge" && (
-                <div>
-                  <dd>{t("gitIntegration.startSafety")}</dd>
-                </div>
-              )}
-              {confirmation.action.kind === "startRebase" && (
-                <div>
-                  <dd>{t("gitIntegration.rebaseSafety")}</dd>
-                </div>
-              )}
-              {confirmation.action.kind === "startInteractiveRebase" && (
-                <div>
-                  <dd>{t("gitRepo.rebaseTodoSafety")}</dd>
-                  <dd>{t("gitIntegration.rebaseSafety")}</dd>
-                </div>
-              )}
-              {confirmation.action.kind === "sync" && (
-                <div>
-                  <dt className="text-muted-foreground">
-                    {t("gitRepo.remoteOid")}
-                  </dt>
-                  <dd className="font-mono">
-                    {confirmation.action.expectedRemoteOid ??
-                      t("gitRepo.remoteBranchMissing")}
-                  </dd>
-                  <dd>{t("gitRepo.syncSafety")}</dd>
-                </div>
-              )}
-              {lease && (
-                <div className="space-y-1 rounded-md border border-destructive p-2">
-                  <dt className="text-muted-foreground">
-                    {t("gitRepo.leaseReplaces")}
-                  </dt>
-                  <dd className="font-mono">{lease.expectedRemoteOid}</dd>
-                  <dd>{t("gitRepo.leaseSafety")}</dd>
-                  <dd>
-                    <label className="flex min-h-9 items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-[var(--brand)]"
-                        checked={acknowledged}
-                        onChange={(event) =>
-                          setAcknowledged(event.target.checked)
-                        }
-                      />
-                      {t("gitRepo.leaseAcknowledge")}
-                    </label>
-                  </dd>
-                </div>
-              )}
-              {confirmation.action.kind === "abortIntegration" && (
-                <div>
-                  <dd>{t("gitIntegration.abortSafety")}</dd>
-                </div>
-              )}
-              {confirmation.action.kind === "createStash" && (
-                <div>
-                  <dt>{t("gitStash.safety")}</dt>
-                  <dd>
-                    {confirmation.action.includeUntracked ? "✓ " : "— "}
-                    {t("gitStash.includeUntracked")}
-                  </dd>
-                </div>
-              )}
-              {(confirmation.action.kind === "applyStash" ||
-                confirmation.action.kind === "popStash") && (
-                <div>
-                  <dt>{t("gitStash.conflictSafety")}</dt>
-                  <dd>
-                    {confirmation.action.reinstateIndex ? "✓ " : "— "}
-                    {t("gitStash.reinstateIndex")}
-                  </dd>
-                </div>
-              )}
-              {(confirmation.action.kind === "popStash" ||
-                confirmation.action.kind === "dropStash") && (
-                <div>
-                  <dd>{t("gitStash.dropSafety")}</dd>
-                </div>
-              )}
-              <div>
-                <dt className="text-muted-foreground">
-                  {t("gitRepo.repository")}
-                </dt>
-                <dd>{snapshot.repositoryPath}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">
-                  {t(`gitRepo.${confirmation.action.kind}`)}
-                </dt>
-                <dd>{actionTarget(confirmation.action)}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">{t("gitRepo.head")}</dt>
-                <dd>
-                  {confirmation.expected.branch ?? t("gitRepo.detached")} ·{" "}
-                  {confirmation.expected.headOid ?? t("gitRepo.unborn")}
-                </dd>
-              </div>
-            </dl>
-          )}
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("gitRepo.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={busy || stale || (Boolean(lease) && !acknowledged)}
-              onClick={() => {
-                if (
-                  confirmation &&
-                  !busy &&
-                  !stale &&
-                  (!lease || acknowledged)
-                ) {
-                  submit.mutate(confirmation);
-                  setConfirmation(null);
-                }
-              }}
-            >
-              {t(lease ? "gitRepo.confirmForce" : "gitRepo.confirm")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <RepositoryConfirmDialog
+        confirmation={confirmation}
+        setConfirmation={setConfirmation}
+        acknowledged={acknowledged}
+        setAcknowledged={setAcknowledged}
+        blocked={busy || stale}
+        repositoryPath={snapshot.repositoryPath}
+        submit={submit.mutate}
+      />
     </>
   );
 }
