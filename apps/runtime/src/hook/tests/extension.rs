@@ -567,13 +567,18 @@ fn run_opencode_case(runtime: &Path, transport: Transport) {
     let socket = socket_dir.path().join("h.sock");
     let (captured, _listener) = serve(&socket);
     let endpoint = publish_endpoint(root.path(), &socket);
-    // Deliberately absent: if the direct connection ever fails, the fallback
-    // must be what breaks, not the assertions below.
-    let module = install_module(
-        root.path(),
-        "opencode",
-        Path::new("/nonexistent/armadra-hook"),
-    );
+    // A client that records being run rather than one that cannot be found:
+    // the point of B3 is that no process is forked at all, and a missing
+    // binary would fail silently and prove nothing.
+    let forked = root.path().join("forked.txt");
+    let stub = root.path().join("armadra-hook");
+    fs::write(
+        &stub,
+        format!("#!/bin/sh\necho ran > {}\n", forked.display()),
+    )
+    .unwrap();
+    fs::set_permissions(&stub, fs::Permissions::from_mode(0o755)).unwrap();
+    let module = install_module(root.path(), "opencode", &stub);
 
     let hooks = drive_with(
         runtime,
@@ -642,6 +647,13 @@ fn run_opencode_case(runtime: &Path, transport: Transport) {
 
     // Two allocations, and the shared counter agrees with what was reported.
     assert_eq!(sequence_value(&endpoint), 2);
+    // And the claim B3 is for: a turn's worth of bus events cost zero
+    // processes. The client is on disk and runnable — it was simply never
+    // needed.
+    assert!(
+        !forked.exists(),
+        "the plugin forked the client instead of using the socket"
+    );
 }
 
 #[test]
