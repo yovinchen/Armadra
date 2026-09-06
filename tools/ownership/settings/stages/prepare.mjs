@@ -2,12 +2,14 @@
 // 顺序的切换会被拒绝——settings 依赖 canvas，canvas 还没落到 Host 上时这一步必须
 // 整条拒绝，而不是做一半。
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 import {
   digestOf,
   hostBinary,
   hostData,
   hostEnv,
+  loadLocalSettingPaths,
   ownershipCli,
   runtimeCall,
   runtimeDiagnostics,
@@ -28,6 +30,16 @@ export async function prepareSettings() {
     "the Runtime started on a kernel-assigned loopback port",
     await startRuntime(),
     `${runtimeOrigin} ${runtimeDiagnostics}`.trim(),
+  );
+
+  // Which keys stay on this machine, straight from the side that enforces it.
+  // Every digest below is over the account's half only, because that is the
+  // only half a switch moves.
+  const localPaths = await loadLocalSettingPaths();
+  step(
+    "the Runtime names the settings that stay on this execution host",
+    localPaths.includes("terminal.backend") && localPaths.includes("power.policy"),
+    localPaths.join(", "),
   );
 
   const domains = await runtimeCall("GET", "/api/ownership/domains");
@@ -83,13 +95,24 @@ export async function prepareSettings() {
   const runtimeDocument = settingsShape(written.json);
   const runtimeDigest = digestOf(runtimeDocument);
   const fileDigest = settingsFileDigest();
+  const onDisk = JSON.parse(readFileSync(runtimeSettings, "utf8"));
   step(
-    "the document on disk is the one the Runtime answered with",
-    fileDigest.length === 64 &&
-      digestOf(
-        settingsShape(JSON.parse(readFileSync(runtimeSettings, "utf8"))),
-      ) === runtimeDigest,
+    "the document on disk is the one the Runtime answered with, minus its local half",
+    fileDigest.length === 64 && digestOf(settingsShape(onDisk)) === runtimeDigest,
     `file sha256=${fileDigest.slice(0, 16)}`,
+  );
+  // The split is a property of the files, not of the comparison above: a
+  // `settings.json` that still carried `terminal.backend` would pass that
+  // digest and then hand the Host a key belonging to one machine.
+  const localOnDisk = JSON.parse(
+    readFileSync(join(dirname(runtimeSettings), "worker-settings.json"), "utf8"),
+  );
+  step(
+    "the local half is in worker-settings.json and nowhere else",
+    onDisk.terminal?.backend === undefined &&
+      localOnDisk.terminal?.backend === "tmux" &&
+      localOnDisk.ssh === undefined,
+    `shared=${Object.keys(onDisk).join(",")} local=${Object.keys(localOnDisk).join(",")}`,
   );
 
   /* -------------------------- 2. the dependency order refuses to be skipped */

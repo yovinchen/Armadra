@@ -621,16 +621,55 @@ export async function openHostStream(protocol, jar) {
 /* --------------------------------------------------- the settings document */
 
 /**
+ * The dotted paths that stay on this execution host (§1.4). Read from the
+ * Runtime rather than listed here: it is the side that enforces the split, and
+ * a second list would be the e2e agreeing with itself.
+ */
+export let localSettingPaths = [];
+
+export async function loadLocalSettingPaths() {
+  const answer = await runtimeCall("GET", "/api/settings/local");
+  localSettingPaths = answer.json?.paths ?? [];
+  return localSettingPaths;
+}
+
+/**
  * The document the Runtime writes, reduced to what both sides must agree on.
  *
  * Timestamps and revisions are deliberately absent: they are the two things the
  * design says legitimately differ between a Runtime that stamps `updatedAt` and
- * a Host that counts revisions (§6.3). Everything else has to survive a switch
- * and a rollback unchanged, so it is all in the digest.
+ * a Host that counts revisions (§6.3).
+ *
+ * So are the local settings. `GET /api/settings` answers with both halves
+ * merged, but only the account's half is ever stored on the Host or written to
+ * `settings.json`, and `worker-settings.json` deliberately stays behind when
+ * the domain moves. Comparing the merged answer against either of those would
+ * be comparing a document against a different document — which is exactly what
+ * the `settings.local_split` check exists to make visible rather than hide.
  */
 export function settingsShape(document) {
   const copy = JSON.parse(JSON.stringify(document ?? {}));
+  for (const path of localSettingPaths) prune(copy, path.split("."));
   return stable(copy);
+}
+
+/** Delete one dotted path, and any section it leaves empty. */
+function prune(node, segments) {
+  if (!node || typeof node !== "object") return;
+  const [head, ...rest] = segments;
+  if (rest.length === 0) {
+    delete node[head];
+    return;
+  }
+  prune(node[head], rest);
+  if (
+    node[head] &&
+    typeof node[head] === "object" &&
+    !Array.isArray(node[head]) &&
+    Object.keys(node[head]).length === 0
+  ) {
+    delete node[head];
+  }
 }
 
 export function stable(value) {
