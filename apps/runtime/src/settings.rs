@@ -58,6 +58,20 @@ const DEFAULT_COST_ENABLED: bool = true;
 /// 数据页). `0` means "keep forever"; the settings page offers 7 / 30 / 90 / 0.
 pub const LOG_RETENTION_CHOICES: &[u64] = &[0, 7, 30, 90];
 const DEFAULT_LOG_RETENTION_DAYS: u64 = 30;
+/// `updates.channel` — which releases this installation is offered
+/// (docs/design/updates-and-service-install.md §4.1). `development` is not a
+/// choice: it describes a build that never went through CI, and asking for it
+/// would not turn a released build into one.
+pub const UPDATE_CHANNELS: &[&str] = &["stable", "beta"];
+const DEFAULT_UPDATE_CHANNEL: &str = "stable";
+/// `updates.autoCheck` — whether the periodic check runs. On by default:
+/// checking is a read, and a person who is never told a release exists cannot
+/// decide to install it.
+const DEFAULT_UPDATE_AUTO_CHECK: bool = true;
+/// `updates.autoDownload` — whether an offered update is fetched without being
+/// asked. Off by default: it spends somebody's bandwidth and disk, and design
+/// §2.4 makes that an explicit choice rather than a discovered one.
+const DEFAULT_UPDATE_AUTO_DOWNLOAD: bool = false;
 /// `power.policy` — which lease sources may hold off idle sleep (T02, design
 /// §9). The default is the most conservative one that still gives the user a
 /// switch: nothing keeps the machine awake unless a person asked for it.
@@ -493,6 +507,35 @@ pub fn normalize(raw: &Value) -> Value {
     logs.insert("retentionDays".into(), Value::from(retention));
     document.insert("logs".into(), Value::Object(logs));
 
+    // `updates.*` (S03 §4.1). The channel used to be React state, so it was
+    // forgotten on reload and differed between the desktop shell and a browser
+    // looking at the same installation; it lives here now. An unknown channel
+    // snaps back to stable rather than being rejected: the conservative reading
+    // of a broken value is the conservative channel.
+    let mut updates = document
+        .get("updates")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let channel = updates
+        .get("channel")
+        .and_then(Value::as_str)
+        .filter(|channel| UPDATE_CHANNELS.contains(channel))
+        .unwrap_or(DEFAULT_UPDATE_CHANNEL)
+        .to_owned();
+    updates.insert("channel".into(), Value::String(channel));
+    let auto_check = updates
+        .get("autoCheck")
+        .and_then(Value::as_bool)
+        .unwrap_or(DEFAULT_UPDATE_AUTO_CHECK);
+    updates.insert("autoCheck".into(), Value::Bool(auto_check));
+    let auto_download = updates
+        .get("autoDownload")
+        .and_then(Value::as_bool)
+        .unwrap_or(DEFAULT_UPDATE_AUTO_DOWNLOAD);
+    updates.insert("autoDownload".into(), Value::Bool(auto_download));
+    document.insert("updates".into(), Value::Object(updates));
+
     // `power.policy` (T02). An unknown value snaps back to the default rather
     // than being rejected: the safest reading of a broken value is the
     // conservative default, not a machine that refuses to sleep.
@@ -859,6 +902,43 @@ mod tests {
             .patch(&serde_json::json!({ "usage": { "enabled": false } }))
             .unwrap();
         assert!(!store.usage_enabled());
+    }
+
+    /// S03 §4.1: the channel and the two switches are part of the document, so
+    /// a reload and a second client see the same answer.
+    #[test]
+    fn update_preferences_default_to_checking_but_not_downloading() {
+        let document = normalize(&serde_json::json!({}));
+        assert_eq!(document["updates"]["channel"], "stable");
+        assert_eq!(document["updates"]["autoCheck"], true);
+        // Spending somebody's bandwidth is a choice they make, not one they
+        // discover (design §2.4).
+        assert_eq!(document["updates"]["autoDownload"], false);
+
+        let chosen = normalize(&serde_json::json!({
+            "updates": { "channel": "beta", "autoCheck": false, "autoDownload": true }
+        }));
+        assert_eq!(chosen["updates"]["channel"], "beta");
+        assert_eq!(chosen["updates"]["autoCheck"], false);
+        assert_eq!(chosen["updates"]["autoDownload"], true);
+    }
+
+    /// A channel nobody offers — including "development", which describes a
+    /// build rather than a preference — reads back as stable.
+    #[test]
+    fn an_unknown_update_channel_snaps_back_to_stable() {
+        for channel in serde_json::json!(["development", "nightly", "", "Stable", 7, null])
+            .as_array()
+            .unwrap()
+        {
+            let document = normalize(&serde_json::json!({ "updates": { "channel": channel } }));
+            assert_eq!(document["updates"]["channel"], "stable", "{channel}");
+        }
+        let broken = normalize(&serde_json::json!({
+            "updates": { "autoCheck": "yes", "autoDownload": 1 }
+        }));
+        assert_eq!(broken["updates"]["autoCheck"], true);
+        assert_eq!(broken["updates"]["autoDownload"], false);
     }
 
     #[test]
