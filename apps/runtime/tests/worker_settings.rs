@@ -20,6 +20,12 @@ const HOST: &str = "0123456789abcdef0123456789abcdef";
 
 /// A settings file with one SSH host that carries a key nothing projects, so a
 /// leak into the entity list is visible rather than theoretical.
+///
+/// It also still names `terminal.backend` and `power.policy`, which belong to
+/// `worker-settings.json` and not here. That is deliberate: the local
+/// projection has to come from the machine's own file, so a shared document
+/// that names them anyway — one written before the split, or by another
+/// machine — must not be what the answer reports.
 const DOCUMENT: &str = r#"{
   "terminal": { "backend": "tmux" },
   "power": { "policy": "never" },
@@ -62,9 +68,26 @@ async fn fixture() -> Fixture {
     }
 }
 
+/// The half that stays on this execution host (`settings::local`). Never
+/// exported, never imported, and the only thing `WorkerLocalSettings` is read
+/// from.
+const LOCAL_DOCUMENT: &str = r#"{
+  "terminal": { "backend": "direct" },
+  "power": { "policy": "agentSessions" }
+}"#;
+
 fn write(fixture: &Fixture, contents: &str) {
     std::fs::create_dir_all(fixture.file.parent().unwrap()).unwrap();
     std::fs::write(&fixture.file, contents).unwrap();
+}
+
+fn local_file(fixture: &Fixture) -> std::path::PathBuf {
+    fixture.file.parent().unwrap().join("worker-settings.json")
+}
+
+fn write_local(fixture: &Fixture, contents: &str) {
+    std::fs::create_dir_all(fixture.file.parent().unwrap()).unwrap();
+    std::fs::write(local_file(fixture), contents).unwrap();
 }
 
 async fn hand_settings_to_the_host(fixture: &Fixture) {
@@ -119,7 +142,12 @@ async fn a_missing_settings_file_exports_the_normalized_defaults() {
     // The defaults `SettingsStore::patch` would have written, parsed back to
     // prove they are a document rather than an empty object.
     let parsed: serde_json::Value = serde_json::from_slice(&exported.document).unwrap();
-    assert_eq!(parsed["terminal"]["backend"], "auto");
+    assert_eq!(parsed["terminal"]["detachedGraceMinutes"], 1440);
+    // The account's half only: `terminal.backend` and `power.policy` are this
+    // machine's answers and travel in no direction.
+    assert!(parsed["terminal"].get("backend").is_none());
+    assert!(parsed.get("power").is_none());
+    // Nothing local has been written either, so the projection is the default.
     assert_eq!(snapshot.local.unwrap().terminal_backend, "auto");
     assert!(snapshot.execution_hosts.is_empty());
     // Reading must not create the file: an export changes nothing.
@@ -133,6 +161,7 @@ async fn a_missing_settings_file_exports_the_normalized_defaults() {
 async fn an_existing_file_is_exported_byte_for_byte_with_its_projections() {
     let fixture = fixture().await;
     write(&fixture, DOCUMENT);
+    write_local(&fixture, LOCAL_DOCUMENT);
     let snapshot = settings::export(&fixture.file).unwrap();
     let exported = snapshot.document.unwrap();
     assert_eq!(exported.document, DOCUMENT.as_bytes());
@@ -141,11 +170,12 @@ async fn an_existing_file_is_exported_byte_for_byte_with_its_projections() {
         Sha256::digest(DOCUMENT.as_bytes()).to_vec()
     );
 
-    // The local half is what this machine actually holds, taken from the same
-    // bytes rather than from a running Runtime's in-memory store.
+    // The local half is what this machine actually holds, read from
+    // `worker-settings.json` — not from the document, which names `tmux` and
+    // `never` and is the authority on neither.
     let local = snapshot.local.unwrap();
-    assert_eq!(local.terminal_backend, "tmux");
-    assert_eq!(local.power_policy, "never");
+    assert_eq!(local.terminal_backend, "direct");
+    assert_eq!(local.power_policy, "agentSessions");
     assert!(!local.browser_available);
 
     // Execution hosts are a projection of `ssh.hosts[]`. The local machine is
@@ -273,8 +303,11 @@ async fn an_accepted_import_writes_the_file_and_reports_the_re_read() {
     assert_eq!(std::fs::read(&fixture.file).unwrap(), DOCUMENT.as_bytes());
     assert_eq!(stored.document, DOCUMENT.as_bytes());
     assert_eq!(stored.sha256, Sha256::digest(DOCUMENT.as_bytes()).to_vec());
-    // Local settings and hosts describe the document that is now on disk.
-    assert_eq!(snapshot.local.unwrap().terminal_backend, "tmux");
+    // The hosts describe the document that is now on disk. The local half is
+    // untouched by an import — it is this machine's, not the account's — so it
+    // still reports the default and no file was created for it.
+    assert_eq!(snapshot.local.unwrap().terminal_backend, "auto");
+    assert!(!local_file(&fixture).exists());
     assert_eq!(snapshot.execution_hosts.len(), 1);
     // One document, one entity, recorded under the epoch the switch is at.
     let row = sqlx::query_as::<_, (String, i64, i64)>(

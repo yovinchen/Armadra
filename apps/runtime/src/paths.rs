@@ -68,6 +68,22 @@ pub fn settings_file() -> PathBuf {
     data_dir().join("settings.json")
 }
 
+/// The preferences that belong to this execution host rather than to the
+/// account (migration §1.4). Kept beside `settings.json` and derived from it,
+/// so a Worker started with `--settings-file` splits into the same directory.
+pub fn worker_settings_file() -> PathBuf {
+    worker_settings_beside(&settings_file())
+}
+
+/// The local document that belongs beside `settings`. Always the same
+/// directory: the two halves are one document and must move together.
+pub fn worker_settings_beside(settings: &std::path::Path) -> PathBuf {
+    settings
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join("worker-settings.json")
+}
+
 /// Private tmux server socket. Never `~/.tmux`: the runtime's sessions must not
 /// mix with the user's own server (plan §15.3).
 pub fn tmux_socket() -> PathBuf {

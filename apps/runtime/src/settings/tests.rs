@@ -253,3 +253,96 @@ fn patching_one_key_keeps_the_others() {
     let reloaded = SettingsStore::load_from(&path).terminal();
     assert_eq!(reloaded.backend, BackendChoice::Direct);
 }
+
+/* ------------------------- the local settings split ----------------------- */
+
+/// A patch that touches both halves writes both files, and each file holds
+/// only its own keys — a `worker-settings.json` carrying the account's
+/// preferences would send them nowhere, and a `settings.json` carrying the
+/// machine's would send them everywhere.
+#[test]
+fn a_patch_lands_in_the_file_the_key_belongs_to() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("settings.json");
+    let store = SettingsStore::load_from(&path);
+    store
+        .patch(&serde_json::json!({
+            "terminal": { "backend": "tmux", "detachedGraceMinutes": 30 },
+            "power": { "policy": "never" },
+        }))
+        .unwrap();
+
+    let shared: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(shared["terminal"]["detachedGraceMinutes"], 30);
+    assert!(shared["terminal"].get("backend").is_none());
+    assert!(shared.get("power").is_none());
+
+    let local: Value = serde_json::from_slice(
+        &std::fs::read(directory.path().join("worker-settings.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(local["terminal"]["backend"], "tmux");
+    assert_eq!(local["power"]["policy"], "never");
+    assert!(local.get("usage").is_none());
+
+    // And the two are one document again on the next start.
+    let reloaded = SettingsStore::load_from(&path);
+    assert_eq!(reloaded.terminal().backend, BackendChoice::Tmux);
+    assert_eq!(reloaded.terminal().detached_grace_minutes, 30);
+    assert_eq!(reloaded.power_policy(), PowerPolicy::Never);
+}
+
+/// The product has not shipped, so no compatibility with the old shape is
+/// owed — but a settings file somebody already configured must not lose its
+/// terminal backend just because this build reads two files instead of one.
+#[test]
+fn a_settings_file_written_before_the_split_moves_its_local_keys_once() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("settings.json");
+    let local_path = directory.path().join("worker-settings.json");
+    std::fs::write(
+        &path,
+        r#"{"terminal":{"backend":"tmux","detachedGraceMinutes":30},
+            "browser":{"executablePath":"/opt/chrome"},"theme":"dark"}"#,
+    )
+    .unwrap();
+
+    let store = SettingsStore::load_from(&path);
+    assert_eq!(store.terminal().backend, BackendChoice::Tmux);
+    assert_eq!(store.browser_executable().as_deref(), Some("/opt/chrome"));
+
+    // The move happens on load, not on the next patch: an export taken before
+    // anybody changes a setting must already show the split.
+    let shared: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert!(shared["terminal"].get("backend").is_none());
+    // `browser` survives because `keepAlive` and `headful` are preferences
+    // about the node, not about the machine; only the binary's path moves.
+    assert!(shared["browser"].get("executablePath").is_none());
+    assert_eq!(shared["theme"], "dark");
+    let local: Value = serde_json::from_slice(&std::fs::read(&local_path).unwrap()).unwrap();
+    assert_eq!(local["terminal"]["backend"], "tmux");
+    assert_eq!(local["browser"]["executablePath"], "/opt/chrome");
+
+    let reloaded = SettingsStore::load_from(&path);
+    assert_eq!(reloaded.terminal().backend, BackendChoice::Tmux);
+    assert_eq!(reloaded.terminal().detached_grace_minutes, 30);
+}
+
+/// Once both files exist the local one decides. A `settings.json` that arrived
+/// from the Host still carrying a `terminal.backend` — one exported by an
+/// older build — must not change which backend this machine uses.
+#[test]
+fn a_shared_document_cannot_reintroduce_a_local_key() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("settings.json");
+    std::fs::write(&path, r#"{"terminal":{"backend":"direct"}}"#).unwrap();
+    std::fs::write(
+        directory.path().join("worker-settings.json"),
+        r#"{"terminal":{"backend":"tmux"}}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        SettingsStore::load_from(&path).terminal().backend,
+        BackendChoice::Tmux
+    );
+}

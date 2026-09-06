@@ -20,9 +20,17 @@
 //!     ownership row must already name the Host: importing while this Runtime
 //!     is the writer would overwrite a document it is still serving.
 //!
-//! Local settings and execution hosts are projections of the same bytes, taken
-//! in the same exchange, so a controller never sees a host list that belongs to
-//! a different document than the digest it recorded.
+//! Execution hosts are a projection of the same bytes, taken in the same
+//! exchange, so a controller never sees a host list that belongs to a different
+//! document than the digest it recorded.
+//!
+//! `WorkerLocalSettings` is the one part that is *not* read out of those bytes.
+//! It describes this machine — its terminal backend, its browser binary, its
+//! power policy — and those keys live in `worker-settings.json`
+//! ([`crate::settings::local`]), which does not travel: the settings domain's
+//! ownership can move to the Host and back while the local document stays
+//! exactly where it is. Reading it out of the exported bytes would report the
+//! defaults of a machine nobody configured.
 
 use std::path::{Path, PathBuf};
 
@@ -126,15 +134,17 @@ pub fn export(file: &Path) -> AppResult<WorkerSettingsSnapshot> {
         }
         Err(error) => return Err(error.into()),
     };
-    snapshot(bytes, updated_at, false, false)
+    snapshot(file, bytes, updated_at, false, false)
 }
 
-/// What `SettingsStore::patch` writes for an empty document, byte for byte:
-/// the same normalization and the same pretty printer, so an export taken
-/// before the first patch and the file written by that patch are the same
-/// bytes.
+/// What `SettingsStore::patch` writes into `settings.json` for an empty
+/// document, byte for byte: the same normalization, the same split into the
+/// account's half and this machine's half, and the same pretty printer, so an
+/// export taken before the first patch and the file written by that patch are
+/// the same bytes.
 fn default_document() -> Vec<u8> {
-    serde_json::to_string_pretty(&crate::settings::normalize(&Value::Null))
+    let (shared, _) = crate::settings::local::split(&crate::settings::normalize(&Value::Null));
+    serde_json::to_string_pretty(&shared)
         .unwrap_or_else(|_| "{}".into())
         .into_bytes()
 }
@@ -150,10 +160,12 @@ fn modified_unix_ms(metadata: &std::fs::Metadata) -> i64 {
 
 /// The snapshot for one set of document bytes.
 ///
-/// `local` and `execution_hosts` are derived from these same bytes rather than
-/// from the running Runtime's in-memory store, so everything in the answer
-/// describes the one document whose digest it carries.
+/// `execution_hosts` is derived from these same bytes rather than from the
+/// running Runtime's in-memory store, so everything the Host will store
+/// describes the one document whose digest the answer carries. `local` comes
+/// from the file beside it, because those keys never leave this machine.
 fn snapshot(
+    file: &Path,
     bytes: Vec<u8>,
     updated_at_unix_ms: i64,
     applied: bool,
@@ -162,6 +174,13 @@ fn snapshot(
     let parsed: Value = serde_json::from_slice(&bytes)
         .map_err(|_| AppError::Internal("The settings document is not JSON".into()))?;
     let store = SettingsStore::in_memory(parsed);
+    // Read from the file beside the document, never from the document: these
+    // keys stay on the execution host and are not in the bytes that travel.
+    let local = std::fs::read(paths::worker_settings_beside(file))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+        .unwrap_or(Value::Null);
+    let local = SettingsStore::in_memory(local);
     Ok(WorkerSettingsSnapshot {
         document: Some(SettingsDocument {
             // GLOBAL and nothing else: the per-device overlay is a Host
@@ -177,7 +196,7 @@ fn snapshot(
             // a first import from here is.
             revision: 0,
         }),
-        local: Some(local_settings(&store)),
+        local: Some(local_settings(&local)),
         execution_hosts: store
             .ssh_hosts()
             .iter()
@@ -343,7 +362,7 @@ pub async fn import(
                 .into(),
         ));
     }
-    let snapshot = snapshot(reread, modified_unix_ms(&metadata), true, false)?;
+    let snapshot = snapshot(file, reread, modified_unix_ms(&metadata), true, false)?;
 
     let epoch = i64::try_from(stored.epoch).map_err(|_| {
         AppError::Conflict("reverse.epoch_mismatch: the stored epoch is out of range".into())

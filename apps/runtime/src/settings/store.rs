@@ -20,6 +20,9 @@ use super::*;
 #[derive(Clone)]
 pub struct SettingsStore {
     path: PathBuf,
+    /// `<data_dir>/worker-settings.json` — the execution host's own half
+    /// ([`super::local`]). Empty for an in-memory store.
+    local_path: PathBuf,
     document: Arc<RwLock<Value>>,
 }
 
@@ -30,20 +33,45 @@ impl SettingsStore {
         Self::load_from(&paths::settings_file())
     }
 
+    /// Reads both halves and merges them into one document.
+    ///
+    /// The first load of a `settings.json` written before the split still
+    /// carries the local keys. They are moved rather than ignored — the person
+    /// configured tmux once and must not have to configure it again — and both
+    /// files are rewritten straight away, so the move happens once instead of
+    /// waiting for whatever the next patch happens to be.
     pub fn load_from(path: &Path) -> Self {
-        let raw = std::fs::read_to_string(path)
-            .ok()
-            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-            .unwrap_or(Value::Null);
-        Self {
+        let local_path = paths::worker_settings_beside(path);
+        let shared = read_json(path);
+        let local = read_json(&local_path);
+        let migrating = super::local::carries_local(&shared);
+        let store = Self {
             path: path.to_path_buf(),
-            document: Arc::new(RwLock::new(normalize(&raw))),
+            local_path,
+            document: Arc::new(RwLock::new(normalize(&super::local::overlay(
+                &shared,
+                &(if migrating && local.is_null() {
+                    // Nothing local has ever been written, so the values in
+                    // `settings.json` are the ones this machine is actually
+                    // using: take them as the local half.
+                    super::local::split(&shared).1
+                } else {
+                    local
+                }),
+            )))),
+        };
+        if migrating {
+            // Best effort: a read-only data directory still serves the merged
+            // document, it just re-does this on the next start.
+            let _ = store.persist(&store.read().clone());
         }
+        store
     }
 
     pub fn in_memory(document: Value) -> Self {
         Self {
             path: PathBuf::new(),
+            local_path: PathBuf::new(),
             document: Arc::new(RwLock::new(normalize(&document))),
         }
     }
@@ -242,22 +270,46 @@ impl SettingsStore {
         let mut next = document.clone();
         merge(&mut next, patch);
         *document = normalize(&next);
-        let serialized = serde_json::to_string_pretty(&*document)
-            .unwrap_or_else(|_| "{}".into())
-            .into_bytes();
-        let path = self.path.clone();
         let result = document.clone();
         drop(document);
-        if !path.as_os_str().is_empty() {
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent)?;
-                paths::harden_directory(parent);
-            }
-            std::fs::write(&path, serialized)?;
-            paths::harden_file(&path);
-        }
+        self.persist(&result)?;
         Ok(result)
     }
+
+    /// Writes the merged document back as its two halves.
+    ///
+    /// Both files are written every time, even when only one half changed: the
+    /// two are one document, and a run that wrote a new `settings.json` next to
+    /// a `worker-settings.json` from before the change would leave the pair
+    /// describing a state that never existed.
+    fn persist(&self, document: &Value) -> AppResult<()> {
+        if self.path.as_os_str().is_empty() {
+            return Ok(());
+        }
+        let (shared, local) = super::local::split(document);
+        write_json(&self.path, &shared)?;
+        write_json(&self.local_path, &local)
+    }
+}
+
+fn read_json(path: &Path) -> Value {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .unwrap_or(Value::Null)
+}
+
+fn write_json(path: &Path, value: &Value) -> AppResult<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+        paths::harden_directory(parent);
+    }
+    let serialized = serde_json::to_string_pretty(value)
+        .unwrap_or_else(|_| "{}".into())
+        .into_bytes();
+    std::fs::write(path, serialized)?;
+    paths::harden_file(path);
+    Ok(())
 }
 
 impl Default for SettingsStore {

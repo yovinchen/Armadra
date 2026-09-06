@@ -1,4 +1,7 @@
-//! `<data_dir>/settings.json` — the runtime's own preferences.
+//! `<data_dir>/settings.json` — the runtime's own preferences, plus
+//! `<data_dir>/worker-settings.json` for the handful of keys that describe
+//! *this* execution host and must not follow the account to another one
+//! ([`local`]).
 //!
 //! Only the terminal keys of plan §15.1 are modelled today. The file is kept as
 //! a raw JSON object so that keys written by a newer build (or by hand) survive
@@ -9,6 +12,7 @@
 //! `agents` owns `agents.custom[]`, and `store` is the loaded document.
 
 mod agents;
+pub mod local;
 mod schema;
 mod store;
 #[cfg(test)]
@@ -18,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 pub use self::agents::{custom_agent_env, expand_env_value, parse_custom_agents, valid_env_key};
+pub use self::local::{LOCAL_PATHS, is_local, local_paths};
 pub use self::schema::normalize;
 pub use self::store::SettingsStore;
 
