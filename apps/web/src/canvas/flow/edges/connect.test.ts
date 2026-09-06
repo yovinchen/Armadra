@@ -214,6 +214,23 @@ describe("取消与未知端", () => {
     ).toEqual({ kind: "reject", reason: "unknown" });
   });
 
+  /**
+   * 回归（B1 真实浏览器里抓到的）：React Flow 先调 `onConnect` 建边、再调
+   * `onConnectEnd`。松手那一刻文档里已经有这条边了，所以「刚连上就说重复」
+   * 是可以复现的——`onConnectEnd` 必须先看 `connectionState.isValid`，
+   * 判定表只负责回答「为什么不行」。
+   */
+  it("连成之后再问一遍会得到「重复」——所以提示要按 `isValid` 闸住", () => {
+    const context = {
+      document: board([terminal(A), terminal(B)], [makeEdge(A, B)]),
+      whiteboard: whiteboard(),
+    };
+    expect(classifyConnection({ source: A, target: B }, context)).toEqual({
+      kind: "reject",
+      reason: "duplicate",
+    });
+  });
+
   it("`isValidConnection` 在 B1 只放行 link，引用留给 B5", () => {
     const item = makeItem("text");
     const context = {

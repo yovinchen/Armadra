@@ -1,5 +1,5 @@
 import * as React from "react";
-import { MiniMap, useReactFlow } from "@xyflow/react";
+import { MiniMap, Panel, useReactFlow } from "@xyflow/react";
 import type { MiniMapNodeProps } from "@xyflow/react";
 import { ChevronDown, Map } from "lucide-react";
 
@@ -213,15 +213,18 @@ export function Minimap() {
       )}
       {/*
        * 收起按钮不进 `<MiniMap>`（它只渲染一张 SVG，没有插槽），所以贴着
-       * 缩略图右上角单独摆一个。位置全部由 `styles/canvas.css` 的那三个变量
-       * 算出来，收起时 `--minimap-w/h` 变成 36px（`App` 在
-       * `.workspace-surface` 上写 `data-minimap-collapsed`），按钮自然落到
-       * 缩略图原来的位置上，用量球也跟着挪。
+       * 缩略图右上角单独摆一个。
+       *
+       * 用 `<Panel>` 包一层不是为了它的默认角落，而是为了那 15px 的
+       * `margin`——`<MiniMap>` 自己就是一个 Panel，`styles/canvas.css` 里
+       * 的 `right: 14px` 实际落在 29px 上。同一个盒模型才对得齐。
+       *
+       * 收起时 `--minimap-w/h` 变成 36px（`App` 在 `.workspace-surface` 上写
+       * `data-minimap-collapsed`），按钮自然落到缩略图原来的位置，用量球也
+       * 跟着挪。
        */}
-      <IconButton
-        size="cluster"
-        data-slot="minimap-toggle"
-        className="minimap-toggle absolute z-[var(--z-dock)] border border-border bg-[var(--panel)]/90 backdrop-blur-[12px]"
+      <Panel
+        position="bottom-right"
         style={
           collapsed
             ? { right: 14, bottom: "var(--navigation-bottom)" }
@@ -231,13 +234,19 @@ export function Minimap() {
                   "calc(var(--navigation-bottom) + var(--minimap-h) - 32px)",
               }
         }
-        label={toggleLabel}
-        title={toggleLabel}
-        aria-expanded={!collapsed}
-        onClick={() => setCollapsed(!collapsed)}
       >
-        {collapsed ? <Map /> : <ChevronDown />}
-      </IconButton>
+        <IconButton
+          size="cluster"
+          data-slot="minimap-toggle"
+          className="minimap-toggle border border-border bg-[var(--panel)]/90 backdrop-blur-[12px]"
+          label={toggleLabel}
+          title={toggleLabel}
+          aria-expanded={!collapsed}
+          onClick={() => setCollapsed(!collapsed)}
+        >
+          {collapsed ? <Map /> : <ChevronDown />}
+        </IconButton>
+      </Panel>
     </>
   );
 }

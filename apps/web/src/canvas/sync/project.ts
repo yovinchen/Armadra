@@ -140,6 +140,13 @@ function projectNode(
       position: { x: box.x, y: box.y },
       width: box.width,
       height: box.height,
+      // 尺寸由文档给死，所以顺带把 `measured` 也填上——不是可有可无的重复：
+      // React Flow 在 `adoptUserNodes` 里重建一个节点时，只有 `measured` 存在
+      // 才会把上一份 `handleBounds` 带过去（`parseHandles`）。留空的话，任何
+      // 一次节点对象换身份（换父、`setNodeExtent` 那次 `checkEquality: false`
+      // 的全量重建）都会把把手尺寸清掉，而 DOM 尺寸没变、`ResizeObserver`
+      // 不会再响，于是**所有连线永久消失**、把手也再拉不出线来。
+      measured: { width: box.width, height: box.height },
       data: node,
       selected,
       draggable: true,
@@ -162,6 +169,8 @@ function projectItem(item: Item, selected: boolean): CanvasFlowNode {
     position: { x: item.x, y: item.y },
     width: item.w,
     height: item.h,
+    // 与节点同理（见 `projectNode`）：`measured` 是 `handleBounds` 的保命符。
+    measured: { width: item.w, height: item.h },
     data: item,
     selected,
     draggable: true,

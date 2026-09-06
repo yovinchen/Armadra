@@ -229,13 +229,16 @@ export function useFlowNodes(): FlowBindings {
    * 松手：只在**落到了某个节点上却被拒绝**时提示一次。
    *
    * 拖到空白处松手是「取消」，不是错误（把手是用来连东西的，空放什么都不
-   * 发生）；落在合法目标上时 `onConnect` 已经建好了边，也没什么可说的。
+   * 发生）。合法的那一次也不提示，而且必须先看 `isValid`：React Flow 在
+   * `onConnect` **之后**才调这里，那时边已经建好了，再判定一次得到的是
+   * 「这两个节点已经连过了」——刚连上就说重复。
    */
   const onConnectEnd = React.useCallback(
     (
       _event: MouseEvent | TouchEvent,
       connectionState: FinalConnectionState,
     ) => {
+      if (connectionState.isValid) return;
       const from = connectionState.fromNode?.id ?? null;
       const to = connectionState.toNode?.id ?? null;
       if (!from || !to) return;

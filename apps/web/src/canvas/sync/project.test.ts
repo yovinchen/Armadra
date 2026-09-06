@@ -107,6 +107,40 @@ describe("projectNodes", () => {
     expect(projected.width).toBe(240);
   });
 
+  /**
+   * 回归（B1 真实浏览器里抓到的）：`measured` 一旦缺席，React Flow 在
+   * `adoptUserNodes` 重建节点时就会把上一份 `handleBounds` 丢掉
+   * （`parseHandles` 只在 `userNode.measured` 存在时才带过去）。DOM 尺寸没变、
+   * `ResizeObserver` 不再响，于是**换一次父就所有连线永久消失**。
+   */
+  it("`measured` 与 `width/height` 同值：React Flow 靠它保住把手尺寸", () => {
+    const projected = projectNodes(
+      board([node(NODE, { collapsed: true })]),
+      EMPTY,
+      NO_DRAFTS,
+    )[0]!;
+    expect(projected.measured).toEqual({ width: 240, height: 40 });
+
+    const whiteboard: WhiteboardDoc = {
+      ...emptyWhiteboard(),
+      items: [
+        {
+          id: "abc",
+          kind: "shape",
+          x: 0,
+          y: 0,
+          w: 160,
+          h: 120,
+          z: 0,
+          style: { color: "black", size: "m" },
+          geo: "rectangle",
+        },
+      ],
+    };
+    const item = projectNodes(board([]), whiteboard, NO_DRAFTS)[0]!;
+    expect(item.measured).toEqual({ width: 160, height: 120 });
+  });
+
   it("组员带 `parentId`，坐标保持相对；分组排在组员前面", () => {
     const group = node(GROUP, { type: "group", data: { kind: "group" } });
     const child = node(NODE, {
