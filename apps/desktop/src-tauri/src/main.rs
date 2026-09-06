@@ -54,6 +54,36 @@ fn mark_tauri_document(webview: &tauri::Webview) {
     let _ = webview.eval("document.documentElement.setAttribute('data-tauri','')");
 }
 
+/**
+ * 开发构建的诊断桥：`ARMADRA_DESKTOP_DIAGNOSTIC_WS=ws://127.0.0.1:<port>` 时，
+ * 把页面里的 console.error / console.warn、未捕获异常、未处理的 rejection 和
+ * 非 2xx 的 fetch 逐条发到那个回环 WebSocket。
+ *
+ * 打包后的 WKWebView 没有开发者工具，Runtime 的 stderr 也被壳吞掉，页面出了
+ * 什么错从外面完全看不见；这条桥就是为了在真实的壳里看见它。只编进 debug
+ * 构建，发布版没有这段代码。
+ */
+#[cfg(debug_assertions)]
+fn diagnostic_bridge(webview: &tauri::Webview) {
+    let Ok(target) = std::env::var("ARMADRA_DESKTOP_DIAGNOSTIC_WS") else {
+        return;
+    };
+    if !target.starts_with("ws://127.0.0.1:") {
+        return;
+    }
+    // An optional prelude runs before the page's own scripts, e.g. to flip a
+    // localStorage preference for one launch.
+    let prelude = std::env::var("ARMADRA_DESKTOP_DIAGNOSTIC_PRELUDE").unwrap_or_default();
+    let script = format!(
+        "{prelude}\n{}",
+        include_str!("diagnostic_bridge.js").replace("__TARGET__", &target)
+    );
+    let _ = webview.eval(&script);
+}
+
+#[cfg(not(debug_assertions))]
+fn diagnostic_bridge(_webview: &tauri::Webview) {}
+
 /* --------------------------------- 托盘 ---------------------------------- */
 
 /** 把窗口从隐藏 / 最小化里拉回前台。 */
@@ -344,7 +374,10 @@ fn main() {
                 let _ = window.hide();
             }
         })
-        .on_page_load(|webview, _payload| mark_tauri_document(webview))
+        .on_page_load(|webview, _payload| {
+            mark_tauri_document(webview);
+            diagnostic_bridge(webview);
+        })
         .setup(|app| {
             trace_lifecycle("setup");
             let transport = app.state::<RuntimeTransport>().inner().clone();
