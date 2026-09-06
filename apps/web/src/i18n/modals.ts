@@ -108,6 +108,9 @@ export const modals: MessageModule = {
     "settings.hooks.revision": "已安装 rev {value}", // i18n-exempt
     "settings.hooks.missing": "未安装",
     "settings.hooks.pullOnly": "按需协作，无 Hook 适配",
+    // 协作通道 §3.1 通道 B：Pi / Oh My Pi 的状态来源是 CLI 进程内的 TS
+    // 扩展，不是配置文件里的 hooks 键。两者认证相同，装的东西不同。
+    "settings.hooks.extension": "进程内扩展",
     "settings.permissionUnsupported":
       "此 CLI 不支持当前默认权限模式，请先在设置中选择默认模式。",
     "settings.hooks.install": "安装",
@@ -363,6 +366,7 @@ export const modals: MessageModule = {
     "settings.hooks.revision": "Installed rev {value}",
     "settings.hooks.missing": "Not installed",
     "settings.hooks.pullOnly": "Pull collaboration; no hook adapter",
+    "settings.hooks.extension": "In-process extension",
     "settings.permissionUnsupported":
       "This CLI does not support the default permission mode. Choose its default mode in Settings first.",
     "settings.hooks.install": "Install",
