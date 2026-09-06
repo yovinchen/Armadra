@@ -87,14 +87,19 @@ Agent 节点就是终端节点里跑着一个 CLI，没有中间协议：
 
 1. Runtime 在 PTY 里启动 CLI，注入 `ARMADRA_NODE_ID`、`ARMADRA_ENDPOINT_FILE`
    等环境变量。
-2. 用户在设置中显式安装后，Runtime 往支持的 CLI 配置文件里装 hook（`apps/runtime/src/hook/install/`），
-   hook 命令是 `armadra-hook` 这个小二进制。
-3. CLI 在回合开始 / 结束 / 请求权限时调用 `armadra-hook`，它读
-   `<数据目录>/hook-endpoint.env` 找到 Runtime（优先 Unix socket，其次回环 TCP），
-   带 per-node token 回报。
-4. Runtime 归一化各家 hook 载荷（`hook/normalize/`）、reduce 成节点状态
-   （`working` / `waiting` / `blocked` / `done`），通过工作空间事件 WebSocket 推给前端。
-5. 权限请求在节点头部直答，答案写回 `<数据目录>/pending/`，hook 客户端阻塞读取。
+2. 用户在设置中显式安装后，Runtime 往该 CLI 的配置目录写适配（`apps/runtime/src/hook/install/`）。
+   形式按 CLI 分两种：Claude / Codex / Gemini / Copilot 装**命令 Hook**，行是 `armadra-hook` 这个小二进制；
+   Pi / Oh My Pi 装一份生成的 **TS 扩展**（`extensions/armadra-status.ts`），OpenCode 装插件。
+3. 命令 Hook 每个事件 fork 一次 `armadra-hook`；进程内扩展在 CLI 自己的进程里说同一套 HTTP。
+   两者都读 `<数据目录>/hook-endpoint.env` 找到 Runtime（优先 Unix socket，其次回环 TCP），
+   带 per-node token 与终端绑定回报——同样的凭据、同样的请求，Runtime 不因来源多给权限。
+4. Runtime 归一化各家载荷（`hook/normalize/`）、reduce 成节点状态
+   （`working` / `waiting` / `blocked` / `done`），连同来源标识 `stateSource`
+   （`hook` / `extension` / `observed`）通过工作空间事件 WebSocket 推给前端，
+   并随 `GET /api/workspaces/{id}/sessions` 一起返回，使刷新后节点头部的来源徽标不丢。
+5. 没有任何适配的终端只有 `observed`：Runtime 按已有的输入围栏与输出计数给一个弱提示，
+   它不写进状态、也不能满足交接与主动投递的空闲门（`terminal/observation.rs`）。
+6. 权限请求在节点头部直答，答案写回 `<数据目录>/pending/`，hook 客户端阻塞读取。
 
 内置 Agent 定义集中在 `packages/shared/src/agents.ts`（launch 命令、prompt 传递方式、
 权限模式对应的 argv、resume 方式、能力位），Runtime 侧只镜像 id 与启动程序
@@ -216,4 +221,11 @@ Rust可使用独立 `worker --stdio` 入口，通过父Go进程私有管道提�
 
 ## 10. 会话上下文来源
 
-上下文统计与账号额度分离。当前接Claude状态栏白名单输入字段，按真实PTY会话/generation和单调序号更新运行期缓存；模型/会话变化、压缩空报告、断连都会清除不再可信的显示。源时间仅展示，陈旧年龄使用单调时间。未知容量和预留量不填0；其他CLI和估算器尚未启用。自定义Agent能力可收窄，既有用户状态栏不会被安装器覆盖。
+上下文统计与账号额度分离。读数按真实 PTY 会话 / generation 与单调序号更新运行期缓存；
+模型或会话变化、压缩后的空报告、断连都会清除不再可信的显示。源时间仅展示，陈旧年龄使用单调时间。
+未知容量与预留量不填 0。
+
+来源分三档：Claude 的状态行与 Pi / Oh My Pi 扩展里的 `ctx.getContextUsage()` 都是提供方**实测**的当前窗口
+（`provider_hook` / `reported`）；Codex 与 Gemini 按需读本地结构化转录尾部**估算**（`structured_transcript`）；
+OpenCode 与 Copilot 没有可信的本地读数，界面留空——Copilot 的会话事件文件只在压缩开始与退出时写占用数字，
+晚于描述一个活着的会话所需的时刻。自定义 Agent 能力可收窄，既有用户状态栏不会被安装器覆盖。
