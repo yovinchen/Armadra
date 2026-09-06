@@ -228,9 +228,9 @@ fn exchange(mut stream: Stream, bytes: &[u8], deadline: Instant) -> Result<Respo
     let mut raw = Vec::new();
     let mut buffer = [0u8; 4096];
     loop {
-        stream
-            .set_timeout(remaining(deadline))
-            .map_err(|error| format!("cannot arm socket timeouts: {error}"))?;
+        if let Err(error) = stream.set_timeout(remaining(deadline)) {
+            return finish(&raw, format!("cannot arm socket timeouts: {error}"));
+        }
         match stream.read(&mut buffer) {
             Ok(0) => break,
             Ok(count) => {
@@ -244,10 +244,36 @@ fn exchange(mut stream: Stream, bytes: &[u8], deadline: Instant) -> Result<Respo
                     return Err("hook response is implausibly large".to_string());
                 }
             }
-            Err(error) => return Err(format!("cannot read response: {error}")),
+            Err(error) => return finish(&raw, format!("cannot read response: {error}")),
         }
     }
     parse_response(&raw)
+}
+
+/// Turns a socket failure into a success when the bytes already in hand are a
+/// complete response.
+///
+/// The runtime answers a hook report with a bodyless `204` and closes at once.
+/// A peer that has gone away makes the next syscall fail — a reset read, or on
+/// macOS an `EINVAL` from re-arming the timeout on a torn-down socket — and
+/// reporting that as a transport error would throw away an answer we have
+/// already received.
+fn finish(raw: &[u8], error: String) -> Result<Response, String> {
+    match try_parse(raw) {
+        Some(response) => Ok(response),
+        None => Err(error),
+    }
+}
+
+/// Statuses that RFC 9110 defines as carrying no body at all. Their head is the
+/// whole response, so there is nothing to wait for once the blank line lands.
+fn has_no_body(status: u16) -> bool {
+    status == 204 || status == 304 || (100..200).contains(&status)
+}
+
+/// Reads the status code out of an already-split response head.
+fn status_code(head: &str) -> Option<u16> {
+    head.lines().next()?.split_whitespace().nth(1)?.parse().ok()
 }
 
 /// Returns a response only when the buffer already contains a complete one.
@@ -255,6 +281,12 @@ fn try_parse(raw: &[u8]) -> Option<Response> {
     let head_end = find(raw, b"\r\n\r\n")? + 4;
     let head = String::from_utf8_lossy(&raw[..head_end]);
     let body = &raw[head_end..];
+    // A `204 No Content` names no length and sends no body, so without this the
+    // loop would wait for an EOF the runtime's already-closed socket cannot
+    // deliver and the report would look like a transport failure.
+    if status_code(&head).is_some_and(has_no_body) {
+        return parse_response(raw).ok();
+    }
     let chunked = header_value(&head, "transfer-encoding")
         .map(|value| value.to_ascii_lowercase().contains("chunked"))
         .unwrap_or(false);
@@ -277,18 +309,20 @@ fn try_parse(raw: &[u8]) -> Option<Response> {
 pub fn parse_response(raw: &[u8]) -> Result<Response, String> {
     let head_end = find(raw, b"\r\n\r\n").ok_or_else(|| "truncated response".to_string())? + 4;
     let head = String::from_utf8_lossy(&raw[..head_end]).into_owned();
-    let status_line = head.lines().next().unwrap_or_default();
-    let status: u16 = status_line
-        .split_whitespace()
-        .nth(1)
-        .and_then(|code| code.parse().ok())
-        .ok_or_else(|| format!("unparseable status line: {status_line}"))?;
+    let status = status_code(&head).ok_or_else(|| {
+        format!(
+            "unparseable status line: {}",
+            head.lines().next().unwrap_or_default()
+        )
+    })?;
 
     let raw_body = &raw[head_end..];
     let chunked = header_value(&head, "transfer-encoding")
         .map(|value| value.to_ascii_lowercase().contains("chunked"))
         .unwrap_or(false);
-    let body = if chunked {
+    let body = if has_no_body(status) {
+        Vec::new()
+    } else if chunked {
         decode_chunked(raw_body)
     } else if let Some(length) =
         header_value(&head, "content-length").and_then(|value| value.trim().parse::<usize>().ok())
@@ -400,5 +434,73 @@ mod tests {
         assert_eq!(response.status, 204);
         assert!(response.body.is_empty());
         assert!(response.is_success());
+    }
+
+    #[test]
+    fn a_bodyless_status_is_complete_at_the_blank_line() {
+        // No Content-Length and no Transfer-Encoding: the head is all there is.
+        for raw in [
+            &b"HTTP/1.1 204 No Content\r\n\r\n"[..],
+            &b"HTTP/1.1 304 Not Modified\r\nETag: \"x\"\r\n\r\n"[..],
+            &b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"[..],
+        ] {
+            let response = try_parse(raw).expect("complete without waiting for EOF");
+            assert!(response.body.is_empty());
+        }
+        // A body-carrying status with no framing still has to read to EOF.
+        assert!(try_parse(b"HTTP/1.1 200 OK\r\n\r\npartial").is_none());
+    }
+
+    /// Answers one connection with `response`, then either closes at once or
+    /// holds the socket open — the two shapes a runtime reply can take.
+    fn serve_once(response: &'static str, linger: Duration) -> u16 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let Ok((mut stream, _)) = listener.accept() else {
+                return;
+            };
+            // Drain the request head so the client's write never blocks.
+            let mut scratch = [0u8; 4096];
+            let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+            let _ = stream.read(&mut scratch);
+            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.flush();
+            std::thread::sleep(linger);
+        });
+        port
+    }
+
+    fn endpoint_on(port: u16) -> Endpoint {
+        Endpoint {
+            port: Some(port),
+            ..Endpoint::default()
+        }
+    }
+
+    #[test]
+    fn a_204_then_an_immediate_close_is_a_success() {
+        let port = serve_once("HTTP/1.1 204 No Content\r\n\r\n", Duration::ZERO);
+        let request = Request::post_json("/hook/copilot", Vec::new(), b"{}".to_vec());
+        let response = send(&endpoint_on(port), &request).expect("204 is a complete response");
+        assert_eq!(response.status, 204);
+        assert!(response.is_success());
+        assert!(response.body.is_empty());
+    }
+
+    #[test]
+    fn a_204_returns_without_waiting_for_the_peer_to_close() {
+        // The old client only stopped at EOF, so a peer that kept the socket
+        // open burned the whole budget and reported a transport error.
+        let port = serve_once("HTTP/1.1 204 No Content\r\n\r\n", Duration::from_secs(5));
+        let request = Request::post_json("/hook/copilot", Vec::new(), b"{}".to_vec());
+        let started = Instant::now();
+        let response = send(&endpoint_on(port), &request).expect("204 is a complete response");
+        assert_eq!(response.status, 204);
+        assert!(
+            started.elapsed() < TOTAL_TIMEOUT,
+            "took {:?}, so it waited on the socket instead of the framing",
+            started.elapsed()
+        );
     }
 }
