@@ -118,11 +118,11 @@ func validateWire(wire []byte, descriptor protoreflect.MessageDescriptor, depth 
 		// Envelope identity (1–3) and the result oneof: the file/hello members
 		// (10–14), the command result (20), the agent result (21), the
 		// write-ownership answer (22), the reverse import report (23) and the
-		// settings snapshot (25), the filesystem roots (26) and the git result
-		// (29). A number outside this set leaves resultCount
+		// settings snapshot (25), the filesystem roots (26), the session answers (27)
+		// and the git result (29). A number outside this set leaves resultCount
 		// at zero and the frame is refused, which is the point — a Worker
 		// cannot answer with a shape this build has never been taught to check.
-		if envelope && (number <= 3 || (number >= 10 && number <= 14) || number == 20 || number == 21 || number == 22 || number == 23 || number == 25 || number == 26 || number == 29) {
+		if envelope && (number <= 3 || (number >= 10 && number <= 14) || number == 20 || number == 21 || number == 22 || number == 23 || number == 25 || number == 26 || number == 27 || number == 29) {
 			if seen[number] || kind != protowire.BytesType {
 				return &Error{Code: CodeProtocol}
 			}
@@ -195,6 +195,8 @@ func resultMatches(response *pb.WorkerResponse, kind string) bool {
 		return response.GetFilesystem() != nil
 	case "git":
 		return response.GetGit() != nil
+	case "session":
+		return response.GetSession() != nil
 	}
 	return false
 }

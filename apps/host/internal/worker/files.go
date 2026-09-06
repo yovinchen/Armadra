@@ -181,6 +181,41 @@ func (c *Client) validResult(request *pb.WorkerRequest, response *pb.WorkerRespo
 	if input := request.GetGit(); input != nil {
 		return validGitResult(input, response.GetGit())
 	}
+	// The session frames are screened in sessions.go, where the run rules live.
+	// Here a frame only has to be a well-formed answer of the shape that was
+	// asked for: a listing whose entries name no session cannot be compared
+	// with anything, and letting one through would make a handback pass on a
+	// row nobody can name.
+	if input := request.GetSession(); input != nil {
+		result := response.GetSession()
+		if result == nil {
+			return false
+		}
+		if states := result.GetSessions(); states != nil {
+			seen := map[string]bool{}
+			for _, state := range states.GetSessions() {
+				if state == nil || state.GetSessionId() == "" || seen[state.GetSessionId()] {
+					return false
+				}
+				seen[state.GetSessionId()] = true
+			}
+			return input.GetListSessions() != nil || input.GetReclaimRuns() != nil
+		}
+		if run := result.GetRun(); run != nil {
+			return run.GetSessionId() != "" && (input.GetStartRun() != nil || input.GetSignalRun() != nil)
+		}
+		if capture := result.GetCapture(); capture != nil {
+			return input.GetCaptureRun() != nil && capture.GetSessionId() != ""
+		}
+		if result.GetTitle() != nil {
+			return input.GetSuggestTitle() != nil
+		}
+		if usage := result.GetContextUsage(); usage != nil {
+			return input.GetContextUsage() != nil &&
+				(len(usage.GetUsage()) == 0 || len(usage.GetUsageSha256()) == sha256.Size)
+		}
+		return false
+	}
 	if input := request.GetReadFile(); input != nil {
 		chunk := response.GetFileChunk()
 		if chunk == nil || chunk.RootId != input.RootId || !relativePath(chunk.Path, false) || chunk.MimeType == "" || len(chunk.MimeType) > 256 || len(chunk.Sha256) != sha256.Size || chunk.Offset != input.Offset || chunk.TotalBytes > uint64(c.hello.MaxTextFileBytes) || chunk.Offset > chunk.TotalBytes || len(chunk.Data) > int(input.MaxBytes) || uint64(len(chunk.Data)) > chunk.TotalBytes-chunk.Offset || chunk.Eof != (chunk.Offset+uint64(len(chunk.Data)) == chunk.TotalBytes) || (!chunk.Eof && len(chunk.Data) == 0) || (len(input.ExpectedSha256) > 0 && !bytes.Equal(input.ExpectedSha256, chunk.Sha256)) {

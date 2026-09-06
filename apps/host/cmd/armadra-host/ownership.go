@@ -17,6 +17,7 @@ import (
 	"armadra.local/host/internal/githost"
 	"armadra.local/host/internal/hoststate"
 	"armadra.local/host/internal/ownership"
+	"armadra.local/host/internal/sessionhost"
 	"armadra.local/host/internal/settingshost"
 	"armadra.local/host/internal/storage"
 	"armadra.local/host/internal/worker"
@@ -166,6 +167,35 @@ func openOwnership(c config) (*hoststate.State, *storage.Store, *canvashost.Serv
 		state.Close()
 		return nil, nil, nil, nil, err
 	}
+	// The offline command has no long-lived Worker, so the session domain gets
+	// one per exchange. It is the same short-lived Worker the switch itself
+	// uses, and it is what makes an offline adoption end by asking the machine
+	// what it actually holds rather than trusting the rows it just projected.
+	sessions, err := sessionhost.New(sessionhost.Options{
+		Store:  database,
+		HostID: state.ID,
+		Open: func(ctx context.Context, executionHostID string) (sessionhost.Runner, func(), error) {
+			if c.ownership.runtimeBinary == "" || executionHostID != "" {
+				return nil, nil, sessionhost.ErrNoWorker
+			}
+			client, err := worker.Start(ctx, worker.Options{
+				Executable:     c.ownership.runtimeBinary,
+				HostID:         state.ID,
+				CanvasDatabase: c.ownership.runtimeDatabase,
+				SettingsFile:   c.ownership.runtimeSettings,
+				RequestTimeout: 30 * time.Second,
+			})
+			if err != nil {
+				return nil, nil, err
+			}
+			return client, func() { _ = client.Close() }, nil
+		},
+	})
+	if err != nil {
+		database.Close()
+		state.Close()
+		return nil, nil, nil, nil, err
+	}
 	// The offline command has no Host instance, so the state's own ID stands in
 	// for one. It is only ever used to bind maintenance tokens, and this entry
 	// point never issues or spends one.
@@ -177,6 +207,7 @@ func openOwnership(c config) (*hoststate.State, *storage.Store, *canvashost.Serv
 			settingshost.Domain: settings.AsProjector(),
 			fshost.Domain:       fileRoots.AsProjector(),
 			githost.Domain:      repositoryQueue.AsProjector(),
+			sessionhost.Domain:  sessions.AsProjector(),
 		},
 	})
 	if err != nil {

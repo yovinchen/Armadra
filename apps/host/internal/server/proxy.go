@@ -11,6 +11,7 @@ import (
 	"armadra.local/host/internal/fshost"
 	auth "armadra.local/host/internal/identity"
 	"armadra.local/host/internal/runtimelink"
+	"armadra.local/host/internal/sessionhost"
 )
 
 // RuntimePrefix is the only path space the Host forwards to the execution
@@ -54,7 +55,7 @@ func isWebSocketUpgrade(r *http.Request) bool {
 
 // runtimeRequest authenticates a device, checks its grants against the exact
 // route it asked for, and only then forwards to the local Runtime.
-func runtimeRequest(w http.ResponseWriter, r *http.Request, host Identity, service *auth.Service, link *runtimelink.Resolver, roots *fshost.Service, origin string) {
+func runtimeRequest(w http.ResponseWriter, r *http.Request, host Identity, service *auth.Service, link *runtimelink.Resolver, roots *fshost.Service, sessions *sessionhost.Service, origin string) {
 	authorization, known := authorizeRuntimePath(r.Method, r.URL.Path)
 	if !known {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Unknown endpoint")
@@ -86,7 +87,10 @@ func runtimeRequest(w http.ResponseWriter, r *http.Request, host Identity, servi
 		authFailure(w, err)
 		return
 	}
-	_ = principal
+	if err = narrowToRecordedSession(r, sessions, authorization, principal.Scopes); err != nil {
+		authFailure(w, err)
+		return
+	}
 	target, err := link.Resolve()
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "DISCONNECTED", "The local Runtime is not reachable")
@@ -144,6 +148,51 @@ func narrowToRegisteredRoot(r *http.Request, roots *fshost.Service, authorizatio
 		allowed = root.Read && root.Write && root.Execute
 	}
 	if !allowed {
+		return auth.ErrPermission
+	}
+	return nil
+}
+
+// narrowToRecordedSession is the second half of a terminal request's
+// authorization once the Host owns the session domain
+// (Go Host 业务所有权迁移 §2.6).
+//
+// The terminal WebSocket path and its frames do not change: attaching is
+// execution and stays on the execution host. What changes is who decides
+// whether the session being attached to exists and belongs to this device's
+// workspace. Until the switch the Runtime's own `terminal_sessions` row
+// answered that; from the switch onwards this Host holds the record, so a
+// forwarded attach is checked here — a Host that kept deferring would be
+// letting a device attach to a session it has already closed, or to one in a
+// workspace it was never granted.
+//
+// It only narrows, exactly like the filesystem check: a session this Host has
+// no record for while the domain is still the Runtime's leaves the request as
+// the grant check left it, because widening on a missing record is how a
+// permission system starts granting things by accident.
+func narrowToRecordedSession(r *http.Request, sessions *sessionhost.Service, authorization runtimeAuthorization, scopes []auth.Scope) error {
+	if sessions == nil || authorization.session == "" {
+		return nil
+	}
+	owned, err := sessions.Owned(r.Context())
+	if err != nil {
+		return auth.ErrPermission
+	}
+	if !owned {
+		return nil
+	}
+	record, err := sessions.Session(r.Context(), authorization.session)
+	if err != nil {
+		// While the Host owns the domain, a session with no record is a session
+		// nobody may attach to through this Host. Falling back to the Runtime's
+		// row would be reading the record the switch just retired.
+		return auth.ErrPermission
+	}
+	// The grant check already proved the device may act on *some* workspace;
+	// this proves the session it named is in one of them. Without it a device
+	// granted one workspace could attach to another's terminal by knowing its
+	// identifier.
+	if !auth.Permits(scopes, []auth.Scope{{Permission: terminalArea.read, WorkspaceID: record.WorkspaceID}}) {
 		return auth.ErrPermission
 	}
 	return nil

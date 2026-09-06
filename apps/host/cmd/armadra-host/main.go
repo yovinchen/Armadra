@@ -38,6 +38,7 @@ import (
 	"armadra.local/host/internal/ownership"
 	"armadra.local/host/internal/runtimelink"
 	"armadra.local/host/internal/server"
+	"armadra.local/host/internal/sessionhost"
 	"armadra.local/host/internal/settingshost"
 	"armadra.local/host/internal/storage"
 	"armadra.local/host/internal/updates"
@@ -593,6 +594,38 @@ func serveHost(parent context.Context, c config) (err error) {
 	if _, err = repositoryQueue.Reconcile(ctx); err != nil {
 		return err
 	}
+	// The session surface is assembled on the same terms as the others, with
+	// one addition: it needs a way to reach the machine that holds the PTYs,
+	// because deciding a session should run is worth nothing without somebody
+	// to run it. A Host with no Runtime binary configured still answers every
+	// read and refuses the rest with a state a client can draw, rather than
+	// pretending it started something.
+	openRunner := func(ctx context.Context, executionHostID string) (sessionhost.Runner, func(), error) {
+		if c.runtimeBinary == "" {
+			return nil, nil, sessionhost.ErrNoWorker
+		}
+		// Remote execution hosts are the settings domain's routing decision and
+		// have no Worker of their own here yet; saying so is better than
+		// silently running somebody's command on the wrong machine.
+		if executionHostID != "" {
+			return nil, nil, sessionhost.ErrNoWorker
+		}
+		client, err := worker.Start(ctx, worker.Options{
+			Executable:     c.runtimeBinary,
+			HostID:         state.ID,
+			CanvasDatabase: c.runtimeDatabase,
+			SettingsFile:   c.runtimeSettings,
+			RequestTimeout: 30 * time.Second,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		return client, func() { _ = client.Close() }, nil
+	}
+	sessions, err := sessionhost.New(sessionhost.Options{Store: database, HostID: state.ID, Open: openRunner})
+	if err != nil {
+		return err
+	}
 	switches, err := ownership.New(ownership.Options{
 		Store:      database,
 		InstanceID: identity.InstanceID,
@@ -601,6 +634,7 @@ func serveHost(parent context.Context, c config) (err error) {
 			settingshost.Domain: settings.AsProjector(),
 			fshost.Domain:       fileRoots.AsProjector(),
 			githost.Domain:      repositoryQueue.AsProjector(),
+			sessionhost.Domain:  sessions.AsProjector(),
 		},
 		ExportRoot: filepath.Join(c.dataDir, "ownership-exports"),
 	})
@@ -646,13 +680,13 @@ func serveHost(parent context.Context, c config) (err error) {
 	// stored outbox the HTTPS event page reads, and it is woken by the storage
 	// kernel's own commit notification, so a saved change reaches a second
 	// client in the time one write takes rather than in one poll interval.
-	events, err := eventstream.New(eventstream.Options{Store: database, HostID: state.ID, Projectors: []eventstream.Projector{canvashost.EventProjector{}, settingshost.EventProjector{}, fshost.EventProjector{}, githost.EventProjector{}}})
+	events, err := eventstream.New(eventstream.Options{Store: database, HostID: state.ID, Projectors: []eventstream.Projector{canvashost.EventProjector{}, settingshost.EventProjector{}, fshost.EventProjector{}, githost.EventProjector{}, sessionhost.EventProjector{}}})
 	if err != nil {
 		return err
 	}
 	defer events.Close()
 	database.SetCommitNotifier(events.Notify)
-	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link, Updates: releases, Canvas: canvases, Settings: settings, Filesystem: fileRoots, Git: repositoryQueue, Events: events, Ownership: switches, OpenHandoff: openHandoff}
+	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link, Updates: releases, Canvas: canvases, Settings: settings, Filesystem: fileRoots, Git: repositoryQueue, Sessions: sessions, Events: events, Ownership: switches, OpenHandoff: openHandoff}
 	// The switch binds its own listener with the same routes. `options` is
 	// captured by reference, so the manager it is about to be given is the one
 	// this closure serves with.

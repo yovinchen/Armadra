@@ -11,6 +11,7 @@ import (
 	"armadra.local/host/internal/identity"
 	"armadra.local/host/internal/ownership"
 	"armadra.local/host/internal/runtimelink"
+	"armadra.local/host/internal/sessionhost"
 	"armadra.local/host/internal/settingshost"
 	"armadra.local/host/internal/updates"
 	"errors"
@@ -66,6 +67,11 @@ type Options struct {
 	// then answer UNSUPPORTED rather than an empty document, which a client
 	// cannot tell apart from a machine whose preferences are all at default.
 	Settings *settingshost.Service
+	// Sessions is nil when this Host serves no session surface. Its methods
+	// then answer UNSUPPORTED rather than an empty listing, which a client
+	// cannot tell apart from a workspace whose terminals have all been closed
+	// — and would answer by offering to start one.
+	Sessions *sessionhost.Service
 	// Ownership moves a business domain between the Runtime and this Host.
 	// Nil means this Host reports no ownership surface at all; a non-nil
 	// service with no OpenHandoff can still answer reads, and refuses to move

@@ -65,7 +65,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "Local request origin is not allowed")
 			return
 		}
-		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path) || githubMethod(r.URL.Path) || updatesMethod(r.URL.Path) || canvasMethod(r.URL.Path) || ownershipMethod(r.URL.Path) || settingsMethod(r.URL.Path) || filesystemMethod(r.URL.Path) || gitMethod(r.URL.Path)) {
+		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path) || githubMethod(r.URL.Path) || updatesMethod(r.URL.Path) || canvasMethod(r.URL.Path) || ownershipMethod(r.URL.Path) || settingsMethod(r.URL.Path) || filesystemMethod(r.URL.Path) || gitMethod(r.URL.Path) || sessionMethod(r.URL.Path)) {
 			if origin != options.PublicOrigin {
 				writeError(w, 403, "PERMISSION_DENIED", "Authentication requires the Host HTTPS origin")
 				return
@@ -123,6 +123,15 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 				// empty queue, which a client would read as "nothing is
 				// running" rather than "this Host does not run Git".
 				gitRequest(w, r, identity, options.Identity, options.Git)
+				return
+			}
+			if sessionMethod(r.URL.Path) {
+				// A Host with no session service authenticates first and then
+				// answers UNSUPPORTED from inside; it never answers with an
+				// empty listing, which a client would read as "this workspace
+				// has no terminals" and offer to start one on top of whatever
+				// is already running.
+				sessionRequest(w, r, identity, options.Identity, options.Sessions)
 				return
 			}
 			if canvasMethod(r.URL.Path) {
@@ -194,7 +203,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 				writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "An exact same-origin request is required")
 				return
 			}
-			runtimeRequest(w, r, identity, options.Identity, options.Runtime, options.Filesystem, device)
+			runtimeRequest(w, r, identity, options.Identity, options.Runtime, options.Filesystem, options.Sessions, device)
 			return
 		}
 		// Defined but unimplemented surfaces answer UNSUPPORTED rather than
@@ -256,6 +265,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			proxying:       authentication && options.Runtime != nil,
 			canvas:         authentication && options.Canvas != nil,
 			filesystem:     authentication && options.Filesystem != nil,
+			sessions:       authentication && options.Sessions != nil,
 			events:         authentication && options.Events != nil,
 			ownership:      authentication && options.Ownership != nil,
 			settings:       authentication && options.Settings != nil,
@@ -299,7 +309,7 @@ func deviceOrigin(r *http.Request, origin, public string) (string, bool) {
 // capability that would then refuse it.
 type helloSurfaces struct {
 	authentication, scheduling, github, proxying, canvas, filesystem, events, ownership, settings bool
-	repositories                                                                                  bool
+	repositories, sessions                                                                        bool
 }
 
 func hello(w http.ResponseWriter, r *http.Request, identity Identity, surfaces helloSurfaces) {
@@ -403,6 +413,13 @@ func hello(w http.ResponseWriter, r *http.Request, identity Identity, surfaces h
 	// before it offers a button that would push.
 	if surfaces.repositories {
 		capabilities = append(capabilities, "git.queue.v1")
+	}
+	// Advertised only when a session service is assembled. Like the others it
+	// says the surface answers, not that this Host decides whether a terminal
+	// exists: OwnershipService/List reports that, and a client reads it before
+	// it decides whether mounting a node may start a program.
+	if surfaces.sessions {
+		capabilities = append(capabilities, "session.records.v1")
 	}
 	writeProto(w, http.StatusOK, &pb.HelloResponse{
 		Protocol:         &pb.ProtocolVersion{Major: ProtocolMajor, Minor: min(request.Protocol.GetMinor(), ProtocolMinor)},

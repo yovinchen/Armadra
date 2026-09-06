@@ -61,6 +61,12 @@ type runtimeAuthorization struct {
 	// which route was classified how.
 	workspace string
 	files     bool
+	// session is the terminal session a `/api/terminals/{id}/...` route names,
+	// empty for every other route. Once the Host owns the session domain a
+	// forwarded terminal request is also checked against that record
+	// (proxy.go), so which route named which session is recorded here rather
+	// than re-derived — the two checks must not be able to disagree.
+	session string
 }
 
 // authorizeRuntimePath maps one Runtime route onto the grants it needs. An
@@ -76,6 +82,7 @@ func authorizeRuntimePath(method, path string) (runtimeAuthorization, bool) {
 		return runtimeAuthorization{}, false
 	}
 	workspace := ""
+	session := ""
 	area := canvasArea
 	class := classOf(method)
 	switch segments[0] {
@@ -97,6 +104,12 @@ func authorizeRuntimePath(method, path string) (runtimeAuthorization, bool) {
 		}
 		if len(segments) >= 3 && segments[2] == "ws" {
 			class = executeAccess
+		}
+		// `/api/terminals` with no identifier is creation, which the session
+		// domain refuses once it has moved; everything below it names one
+		// session, and that name is what the second narrowing checks.
+		if len(segments) >= 2 && segments[1] != "backend" {
+			session = segments[1]
 		}
 	case "agents", "agent-status", "conversations":
 		area = canvasArea
@@ -154,7 +167,7 @@ func authorizeRuntimePath(method, path string) (runtimeAuthorization, bool) {
 	if class == executeAccess && scopes[0].Permission != terminalArea.write {
 		scopes = append(scopes, identity.Scope{Permission: terminalArea.write, WorkspaceID: workspace})
 	}
-	return runtimeAuthorization{scopes: scopes, class: class, workspace: workspace, files: area == filesArea}, true
+	return runtimeAuthorization{scopes: scopes, class: class, workspace: workspace, files: area == filesArea, session: session}, true
 }
 
 // workspaceArea resolves the part of a /api/workspaces/{id}/... route after the
