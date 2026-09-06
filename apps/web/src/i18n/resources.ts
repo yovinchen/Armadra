@@ -42,7 +42,6 @@ export const resources: MessageModule = {
     "resources.sort.memory": "按内存",
     "resources.sort.name": "按名称",
     "resources.session.children": "子进程 {count}",
-    "resources.session.ended": "已结束",
     "resources.session.locate": "定位到节点",
     "resources.session.end": "结束会话",
     "resources.session.memoryEstimated":
@@ -52,9 +51,7 @@ export const resources: MessageModule = {
     "resources.endFailed": "结束会话失败",
 
     "resources.unknown.remote": "在远程主机上运行，本机测不到指标",
-    "resources.unknown.exited": "会话已结束",
     "resources.unknown.no-pid": "没有可用的进程号",
-    "resources.unknown.not-found": "进程已经不在了",
     "resources.unknown.warming-up": "正在建立采样基线",
 
     "resources.sort.hint": "点一次换排序；测不出来的排在最后，不当 0",
@@ -160,7 +157,6 @@ export const resources: MessageModule = {
     "resources.sort.memory": "By memory",
     "resources.sort.name": "By name",
     "resources.session.children": "{count} children",
-    "resources.session.ended": "Ended",
     "resources.session.locate": "Find on canvas",
     "resources.session.end": "End session",
     "resources.session.memoryEstimated":
@@ -171,9 +167,7 @@ export const resources: MessageModule = {
     "resources.endFailed": "Could not end the session",
 
     "resources.unknown.remote": "Runs on a remote host; not measurable here",
-    "resources.unknown.exited": "Session has ended",
     "resources.unknown.no-pid": "No process id available",
-    "resources.unknown.not-found": "The process is gone",
     "resources.unknown.warming-up": "Establishing a sampling baseline",
 
     "resources.sort.hint":

@@ -56,9 +56,10 @@ async fn a_busy_session_reports_real_cpu_and_memory() {
         .unwrap();
 }
 
-/// A metric this runtime cannot answer is `null` with a reason, never `0`.
+/// A session whose process is gone is removed from the list, not listed with
+/// dashes in every column: "已退出的会话直接移除，不保留".
 #[tokio::test(flavor = "multi_thread")]
-async fn an_ended_session_reports_unknown_rather_than_zero() {
+async fn an_ended_session_is_dropped_from_the_sample() {
     let fixture = fixture().await;
     let session = fixture
         .terminals()
@@ -77,26 +78,25 @@ async fn an_ended_session_reports_unknown_rather_than_zero() {
     }
 
     let snapshot = fixture.snapshot(true).await;
-    let measured = snapshot
-        .sessions
-        .iter()
-        .find(|entry| entry.session_id == session.id)
-        .expect("an ended session is still listed");
-    assert!(!measured.alive);
-    assert_eq!(measured.cpu_percent, None);
-    assert_eq!(measured.memory_bytes, None);
-    assert_eq!(measured.child_count, None);
-    assert!(matches!(
-        measured.unknown_reason,
-        Some("exited") | Some("not-found")
-    ));
-
-    // And on the wire the keys are present and null, so a client never has to
-    // tell "absent" from "unknown".
-    let json = serde_json::to_value(measured).unwrap();
-    assert!(json["cpuPercent"].is_null());
-    assert!(json["memoryBytes"].is_null());
-    assert_eq!(json["sessionId"], measured.session_id);
+    assert!(
+        !snapshot
+            .sessions
+            .iter()
+            .any(|entry| entry.session_id == session.id),
+        "an ended session must not be listed: {:?}",
+        snapshot.sessions
+    );
+    // Nothing else is swept up with it: no row in the sample describes a
+    // session whose process is gone.
+    assert!(
+        !snapshot
+            .sessions
+            .iter()
+            .any(|entry| !entry.alive
+                || matches!(entry.unknown_reason, Some("exited") | Some("not-found"))),
+        "{:?}",
+        snapshot.sessions
+    );
 }
 
 /// An SSH session runs somewhere else; the local `ssh` client's footprint is
@@ -125,6 +125,14 @@ async fn ssh_sessions_are_remote_and_carry_no_numbers() {
     assert_eq!(measured.unknown_reason, Some("remote"));
     assert_eq!(measured.cpu_percent, None);
     assert_eq!(measured.memory_bytes, None);
+
+    // A metric this runtime cannot answer is `null` with a reason, never `0`:
+    // on the wire the keys are present and null, so a client never has to tell
+    // "absent" from "unknown".
+    let json = serde_json::to_value(measured).unwrap();
+    assert!(json["cpuPercent"].is_null());
+    assert!(json["memoryBytes"].is_null());
+    assert_eq!(json["sessionId"], measured.session_id);
 
     let _ = fixture
         .terminals()

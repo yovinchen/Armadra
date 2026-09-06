@@ -10,6 +10,7 @@ import {
   formatMetricBytes,
   formatPercent,
   formatUptime,
+  liveSessions,
   memoryUsedPercent,
   sortSessions,
   unknownReasonKey,
@@ -175,6 +176,39 @@ describe("未知原因", () => {
   it("有数字时不给徽标，没数字时给出 i18n 键", () => {
     expect(unknownReasonKey(null)).toBeNull();
     expect(unknownReasonKey("remote")).toBe("resources.unknown.remote");
-    expect(unknownReasonKey("exited")).toBe("resources.unknown.exited");
+    expect(unknownReasonKey("no-pid")).toBe("resources.unknown.no-pid");
+  });
+});
+
+describe("已经不在的会话", () => {
+  it("退出的和进程找不到的都不进列表", () => {
+    const rows = liveSessions([
+      session({ sessionId: "live" }),
+      session({ sessionId: "ended", alive: false, unknownReason: "exited" }),
+      session({
+        sessionId: "gone",
+        memoryBytes: null,
+        cpuPercent: null,
+        unknownReason: "not-found",
+      }),
+    ]);
+    expect(rows.map((row) => row.sessionId)).toEqual(["live"]);
+  });
+
+  it("远端、没有 pid 和刚起来的会话都留着——它们还在，只是测不到", () => {
+    const rows = liveSessions([
+      session({
+        sessionId: "remote",
+        location: "remote",
+        unknownReason: "remote",
+      }),
+      session({ sessionId: "no-pid", pid: null, unknownReason: "no-pid" }),
+      session({ sessionId: "warming", unknownReason: "warming-up" }),
+    ]);
+    expect(rows.map((row) => row.sessionId)).toEqual([
+      "remote",
+      "no-pid",
+      "warming",
+    ]);
   });
 });

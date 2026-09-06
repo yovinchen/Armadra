@@ -161,9 +161,27 @@ pub struct SessionResources {
     /// [`MAX_LISTED_CHILDREN`]. `childCount` stays the real total, so an empty
     /// list next to a non-zero count means "not listed", not "none".
     pub children: Vec<ProcessSample>,
-    /// Why the numbers are missing, when they are: `remote`, `exited`,
-    /// `no-pid`, `not-found` or `warming-up`.
+    /// Why the numbers are missing, when they are: `remote`, `no-pid` or
+    /// `warming-up`. The two reasons that mean "this process is not on this
+    /// machine any more" — `exited` and `not-found` — never reach a client:
+    /// [`GONE_REASONS`] drops those rows from the sample instead.
     pub unknown_reason: Option<&'static str>,
+}
+
+/// A session whose leader has exited, or whose pid is no longer in the process
+/// table, is not a row with dashes in it — it is not a row at all. Sessions
+/// that ended are dropped from the sample rather than listed as unmeasurable,
+/// so the panel's session list only ever holds sessions that are still there.
+/// Sessions the runtime lost track of but whose processes survive are the
+/// orphan list's business, which is built separately and is unaffected.
+const GONE_REASONS: [&str; 2] = ["exited", "not-found"];
+
+/// Whether this row describes a session whose process is gone. See
+/// [`GONE_REASONS`].
+fn is_gone(session: &SessionResources) -> bool {
+    session
+        .unknown_reason
+        .is_some_and(|reason| GONE_REASONS.contains(&reason))
 }
 
 /// What the sampler is asked to measure. Built from the terminal manager's
@@ -272,6 +290,7 @@ impl Sampler {
         let sessions = targets
             .iter()
             .map(|target| self.session(target, &children, baseline))
+            .filter(|session| !is_gone(session))
             .collect();
         let components = super::platform::components(&self.system, &children, baseline, language);
         Sample {

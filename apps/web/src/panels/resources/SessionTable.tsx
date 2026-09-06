@@ -4,7 +4,8 @@
  * 三条约束写在这里，因为它们都是「不要」：
  *  - 测不出来的格子是短横线，不是 0；
  *  - 内存是进程树 RSS 之和，标为**估计**，不叫「独占内存」；
- *  - 面板不会自动杀任何会话，结束是用户点的，而且要再确认一次。
+ *  - 面板不会自动杀任何会话，结束是用户点的，而且要再确认一次；
+ *  - 进程已经不在的会话不占一行，直接从列表里消失。
  */
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Crosshair, X } from "lucide-react";
@@ -34,6 +35,7 @@ import {
   formatCount,
   formatMetricBytes,
   formatPercent,
+  liveSessions,
   sortSessions,
   unknownReasonKey,
   type SessionSort,
@@ -65,7 +67,8 @@ export function SessionTable({
     session.cwd.split("/").pop() ??
     session.sessionId.slice(0, 8);
 
-  const rows = sortSessions(sessions, sort, titleOf);
+  // 结束了的会话不留占位行：进程不在了就从列表消失（`liveSessions`）。
+  const rows = sortSessions(liveSessions(sessions), sort, titleOf);
 
   const endSession = (session: SessionResources) => {
     setEnding(null);
@@ -148,11 +151,6 @@ export function SessionTable({
                     <span className="truncate text-[12px]">
                       {titleOf(session)}
                     </span>
-                    {!session.alive && (
-                      <Badge variant="ghost" className="text-[10px]">
-                        {t("resources.session.ended")}
-                      </Badge>
-                    )}
                     {session.location === "remote" && (
                       <Badge variant="outline" className="text-[10px]">
                         {t("resources.location.remote")}
@@ -216,14 +214,13 @@ export function SessionTable({
                       <Crosshair />
                     </IconButton>
                   )}
-                  {session.alive && (
-                    <IconButton
-                      label={t("resources.session.end")}
-                      onClick={() => setEnding(session)}
-                    >
-                      <X />
-                    </IconButton>
-                  )}
+                  {/* 列表里只剩还在跑的会话，所以「结束」总是可按的。 */}
+                  <IconButton
+                    label={t("resources.session.end")}
+                    onClick={() => setEnding(session)}
+                  >
+                    <X />
+                  </IconButton>
                 </div>
               </div>
 

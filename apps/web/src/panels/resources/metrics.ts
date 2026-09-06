@@ -118,3 +118,28 @@ export function unknownReasonKey(
 ): string | null {
   return reason === null ? null : `resources.unknown.${reason}`;
 }
+
+/**
+ * 进程已经不在的会话不进列表：Runtime 采样时就不返回它们，这里再挡一道，
+ * 免得旧 Runtime 或远端主机回来的快照又把「已退出 / 进程已经不在了」这样
+ * 一整行短横线塞进面板。会话结束就消失，不留占位。
+ *
+ * 跑丢的会话由「孤立会话」区块单独负责，那份列表不经过这里。
+ */
+const GONE_REASONS: ReadonlySet<ResourceUnknownReason> = new Set([
+  "exited",
+  "not-found",
+]);
+
+export function liveSessions(
+  sessions: readonly SessionResources[],
+): SessionResources[] {
+  return sessions.filter(
+    (session) =>
+      session.alive &&
+      !(
+        session.unknownReason !== null &&
+        GONE_REASONS.has(session.unknownReason)
+      ),
+  );
+}

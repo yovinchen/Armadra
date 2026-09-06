@@ -157,7 +157,7 @@ describe("MemoryBadge", () => {
 
   it("测不出来的内存不会触发提醒", async () => {
     resources.mockResolvedValue(
-      snapshot([session({ memoryBytes: null, unknownReason: "not-found" })]),
+      snapshot([session({ memoryBytes: null, unknownReason: "no-pid" })]),
     );
     mount();
     await waitFor(() =>
