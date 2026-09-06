@@ -14,8 +14,10 @@
 //!   * it never invents a denominator — the capacity comes from
 //!     [`crate::context_models`] and is `None` for an unrecognised model;
 //!   * it never reads a provider whose history we cannot see locally (opencode
-//!     exports through its own CLI, Pi/OMP/Copilot keep private stores), so
-//!     those adapters simply do not declare `contextUsage`;
+//!     exports through its own CLI, Pi/OMP keep private stores), so those
+//!     adapters simply do not declare `contextUsage`. Copilot's store *is*
+//!     readable — its `agentStop` hook reports the path — but it declares no
+//!     `contextUsage` either, for the reason [`estimate_events_jsonl`] records;
 //!   * it never reports zero. A transcript with no readable turns yields no
 //!     reading at all, because "0 %" and "we could not tell" are different
 //!     statements and only one of them is true.
@@ -215,6 +217,7 @@ pub fn estimate_transcript(agent_id: &str, path: &Path) -> Option<Estimated> {
     match agent_id {
         "codex" => estimate_jsonl(&text, truncated),
         "gemini" => estimate_document(&text, truncated),
+        "copilot" => estimate_events_jsonl(&text, truncated),
         _ => None,
     }
 }
@@ -279,6 +282,180 @@ fn estimate_document(text: &str, truncated: bool) -> Option<Estimated> {
         truncated || items.len() > MAX_RECORDS,
         text.len() as u64,
     )
+}
+
+/// Copilot `events.jsonl` — 协作通道 §2.1 / §4.
+///
+/// **Not wired to a capability.** `copilot` does not declare `contextUsage`,
+/// so nothing in the product calls this yet. The design gates that capability
+/// on whether the file carries per-turn token counts (§4, §6), and the answer
+/// verified against Copilot CLI 1.0.83 on 2026-09-06 is *no*: an occupancy
+/// figure — `currentTokens` / `systemTokens` / `conversationTokens` /
+/// `toolDefinitionsTokens` — is written only by `session.compaction_start` and
+/// `session.shutdown`, both of which are too late to describe a live session.
+/// (An older build wrote `outputTokens` on each `assistant.message`; that is
+/// the reply's own length, not what the window holds, and 1.0.83 no longer
+/// writes it at all.) So a Copilot reading could only ever be the same
+/// `chars-v1` estimate codex and gemini get, and until that is a product
+/// decision the capability stays off. This function is what flipping it needs.
+///
+/// The file is an envelope per line — `{id, parentId, timestamp, type, data}` —
+/// and unlike a codex rollout it is *not* all conversation: hook invocations,
+/// tool telemetry and usage checkpoints are interleaved with it, and a tool
+/// call is written twice (once inside the assistant message that requested it,
+/// once as its own `tool.execution_start`). So the record types that carry
+/// context are listed rather than walked, which is also what keeps the same
+/// tool call from being charged for twice.
+fn estimate_events_jsonl(text: &str, truncated: bool) -> Option<Estimated> {
+    let sampled = text.len() as u64;
+    let mut tokens = 0u64;
+    let mut messages = 0u64;
+    let mut model = None;
+    let mut session = None;
+    let mut compacted = false;
+    let mut records = 0usize;
+    let mut hit_limit = false;
+
+    for line in text.lines() {
+        if records >= MAX_RECORDS {
+            hit_limit = true;
+            break;
+        }
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        // A truncated read cuts the last line mid-record; an unparsable line is
+        // skipped rather than read as the end of the transcript.
+        let Ok(record) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        records += 1;
+        let kind = record
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let Some(data) = record.get("data") else {
+            continue;
+        };
+        if let Some(named) = names_model(data) {
+            model = Some(named);
+        }
+        if session.is_none()
+            && let Some(id) = data.get("sessionId").and_then(Value::as_str)
+            && !id.is_empty()
+            && id.len() <= 200
+        {
+            session = Some(id.to_owned());
+        }
+        if kind == "session.compaction_complete" {
+            compacted = true;
+        }
+        let before = tokens;
+        count_event(kind, data, &mut tokens);
+        if tokens > before {
+            messages += 1;
+        }
+    }
+
+    let mut estimated = finish(
+        tokens,
+        messages,
+        model,
+        session,
+        truncated || hit_limit,
+        sampled,
+    )?;
+    // Copilot drops the turns it compacted away from the *window* but keeps
+    // every one of them in the file, so after a compaction the sum is an upper
+    // bound rather than a reading — the same statement the module note makes
+    // about codex, here with the record that proves it.
+    if compacted {
+        estimated.estimate.confidence = "low".into();
+    }
+    Some(estimated)
+}
+
+/// The text one `events.jsonl` record put into the model's window.
+///
+/// Everything not listed is deliberately worth zero: `tool.execution_start`
+/// repeats the arguments already charged to the assistant message that asked
+/// for the call, `toolTelemetry` is instrumentation the model never saw, and
+/// `hook.*` records are our own hook client's round trip.
+fn count_event(kind: &str, data: &Value, tokens: &mut u64) {
+    match kind {
+        // `transformedContent` is what was actually sent — the prompt plus the
+        // envelope Copilot wraps it in — and falls back to the raw prompt.
+        "user.message" => {
+            let content = data
+                .get("transformedContent")
+                .and_then(Value::as_str)
+                .or_else(|| data.get("content").and_then(Value::as_str))
+                .unwrap_or_default();
+            *tokens += estimate_tokens(content);
+        }
+        "system.message" => count_key(data, "content", tokens),
+        "assistant.message" => {
+            count_key(data, "content", tokens);
+            count_key(data, "reasoningText", tokens);
+            if let Some(requests) = data.get("toolRequests").and_then(Value::as_array) {
+                for request in requests {
+                    if let Some(arguments) = request.get("arguments") {
+                        count_arguments(arguments, tokens);
+                    }
+                }
+            }
+        }
+        // `detailedContent` is the transcript's copy for the user; `content` is
+        // what went back to the model.
+        "tool.execution_complete" => {
+            if let Some(result) = data.get("result") {
+                count_key(result, "content", tokens);
+            }
+        }
+        "session.compaction_complete" => count_key(data, "summaryContent", tokens),
+        _ => {}
+    }
+}
+
+/// Every string in a tool call's argument bag.
+///
+/// A transcript record is an envelope whose keys are transport, which is why
+/// [`count_content`] refuses to charge for one. An argument bag is the
+/// opposite: the model wrote it, all of it went into the request, and its
+/// values are as often plain strings under keys like `command` as they are
+/// nested objects.
+fn count_arguments(value: &Value, tokens: &mut u64) {
+    match value {
+        Value::String(text) => *tokens += estimate_tokens(text),
+        Value::Array(items) => {
+            for item in items {
+                count_arguments(item, tokens);
+            }
+        }
+        Value::Object(map) => {
+            for item in map.values() {
+                count_arguments(item, tokens);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn count_key(value: &Value, key: &str, tokens: &mut u64) {
+    if let Some(text) = value.get(key).and_then(Value::as_str) {
+        *tokens += estimate_tokens(text);
+    }
+}
+
+/// The model a record names, in the order Copilot means them: an explicit
+/// switch, then the model a turn ran on, then the launch selection.
+fn names_model(data: &Value) -> Option<String> {
+    ["newModel", "model", "selectedModel"]
+        .iter()
+        .find_map(|key| data.get(*key).and_then(Value::as_str))
+        .filter(|model| !model.is_empty() && model.len() <= 200)
+        .map(str::to_owned)
 }
 
 fn finish(
@@ -393,6 +570,114 @@ mod tests {
         assert_eq!(estimate_tokens("中文"), 2);
         assert_eq!(estimate_tokens("abcd中文"), 3);
         assert_eq!(estimate_tokens(""), 0);
+    }
+
+    /// One real session recorded from Copilot CLI 1.0.83 (2026-09-06): a
+    /// prompt, one `bash` call, two assistant turns and the shutdown record.
+    /// Machine paths, identifiers and the vendor's system prompt are replaced;
+    /// every record type and field name is exactly what the CLI wrote.
+    const COPILOT_EVENTS: &str = include_str!("../tests/fixtures/copilot/events.jsonl");
+
+    #[test]
+    fn a_copilot_session_is_summed_from_the_records_that_carry_context() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = write(directory.path(), "events.jsonl", COPILOT_EVENTS);
+        let estimated = estimate_transcript("copilot", &path).unwrap();
+
+        // The prompt, the system message, two assistant messages and the tool
+        // result — and nothing else in a file that is mostly not conversation.
+        assert_eq!(estimated.estimate.messages, 5);
+        assert!(estimated.used_tokens > 0);
+        // `session.model_change` switched the model before the first turn.
+        assert_eq!(estimated.model_id.as_deref(), Some("claude-sonnet-5"));
+        assert_eq!(
+            estimated.provider_session_id.as_deref(),
+            Some("00000000-0000-4000-8000-000000000000")
+        );
+        assert_eq!(estimated.estimate.confidence, "medium");
+        assert!(!estimated.estimate.truncated);
+
+        // The same reading through the public entry point every other provider
+        // uses, so a capability flip needs no other wiring.
+        let cached = cached_estimate("node-copilot", "copilot", &path).unwrap();
+        assert_eq!(cached, estimated);
+        forget("node-copilot");
+    }
+
+    /// A tool call appears twice in the file — inside the assistant message
+    /// that asked for it and again as `tool.execution_start`. Charging both
+    /// would inflate every tool-heavy session.
+    #[test]
+    fn a_tool_call_is_charged_once_and_telemetry_never() {
+        let directory = tempfile::tempdir().unwrap();
+        let assistant = json!({"type":"assistant.message","data":{
+            "content":"abcd",
+            "model":"claude-sonnet-5",
+            "toolRequests":[{"name":"bash","toolCallId":"c-1",
+                "arguments":{"command":"abcdabcd"}}]}});
+        let with_duplicate = [
+            assistant.clone(),
+            json!({"type":"tool.execution_start","data":{"toolCallId":"c-1","toolName":"bash",
+                "arguments":{"command":"abcdabcd"}}}),
+            json!({"type":"tool.execution_complete","data":{"toolCallId":"c-1","success":true,
+                "result":{"content":"abcd","detailedContent":"abcdabcdabcdabcd"},
+                "toolTelemetry":{"properties":{"command":"abcdabcdabcdabcdabcdabcd"}}}}),
+        ]
+        .map(|value| value.to_string())
+        .join("\n");
+        let path = write(directory.path(), "duplicate.jsonl", &with_duplicate);
+        let estimated = estimate_transcript("copilot", &path).unwrap();
+        // content 4 + arguments 8 + result content 4 = 16 characters → 4 tokens.
+        // The repeated arguments, the UI's `detailedContent` and the telemetry
+        // are all worth nothing.
+        assert_eq!(estimated.used_tokens, 4);
+        assert_eq!(estimated.estimate.messages, 2);
+    }
+
+    /// The file keeps every compacted-away turn, so a sum taken after a
+    /// compaction is an upper bound on the window rather than a reading of it.
+    #[test]
+    fn a_compacted_copilot_session_is_reported_at_low_confidence() {
+        let directory = tempfile::tempdir().unwrap();
+        let lines = [
+            json!({"type":"user.message","data":{"content":"abcdabcd"}}),
+            json!({"type":"session.compaction_start",
+                "data":{"systemTokens":7800,"conversationTokens":82358}}),
+            json!({"type":"session.compaction_complete",
+                "data":{"success":true,"preCompactionTokens":102630,"summaryContent":"abcd"}}),
+        ]
+        .map(|value| value.to_string())
+        .join("\n");
+        let path = write(directory.path(), "compacted.jsonl", &lines);
+        let estimated = estimate_transcript("copilot", &path).unwrap();
+        assert_eq!(estimated.estimate.confidence, "low");
+        // The occupancy figures Copilot writes at compaction time are not read:
+        // they describe the moment before the compaction, not the window now.
+        assert_eq!(estimated.used_tokens, 3);
+        assert!(!estimated.estimate.truncated);
+    }
+
+    #[test]
+    fn a_copilot_file_with_no_conversation_yields_no_reading() {
+        let directory = tempfile::tempdir().unwrap();
+        // Session bookkeeping only — including the shutdown record that does
+        // carry token counts. "We could not tell" is not "0 %".
+        let lines = [
+            json!({"type":"session.start","data":{"sessionId":"s-1","selectedModel":"gpt-5"}}),
+            json!({"type":"hook.start","data":{"hookType":"sessionStart","input":{}}}),
+            json!({"type":"session.shutdown","data":{"currentTokens":23552,
+                "systemTokens":12224,"conversationTokens":234}}),
+            json!({"type":"assistant.turn_end","data":{"turnId":"t-1"}}),
+        ]
+        .map(|value| value.to_string())
+        .join("\n");
+        // Plus a half-written trailing line, which a truncated read produces.
+        let path = write(
+            directory.path(),
+            "empty.jsonl",
+            &format!("{lines}\n{{\"type\":\"user.mess"),
+        );
+        assert!(estimate_transcript("copilot", &path).is_none());
     }
 
     #[test]
