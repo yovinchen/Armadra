@@ -102,6 +102,15 @@ export const CANVAS_TOOLS: readonly CanvasToolSpec[] = [
 ];
 
 /**
+ * 手机上开放的工具（F32 / §6.6）。
+ *
+ * 手指画不出能用的墨迹，几何形与文字都要跟着一个样式面板，390×844 里
+ * 摆不下——所以只留平移与选择这两件在触屏上真的好用的事。桌面窗口缩到
+ * 767px 以下也走这一条（同一个断点，`platform/layout.isCompactLayout`）。
+ */
+export const PHONE_TOOL_IDS: readonly CanvasToolId[] = ["select", "hand"];
+
+/**
  * 图片：不是工具，所以它没有命令、没有键位。
  * Dock 上那个按钮自己开文件选择，把文件交给外部内容处理器。
  */

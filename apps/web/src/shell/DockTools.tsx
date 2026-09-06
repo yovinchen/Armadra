@@ -13,6 +13,7 @@ import { Separator } from "@/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
 import { useT } from "@/app/preferences-store";
 import { useCanvasLocked } from "@/canvas/canvas-lock";
+import { useCompactLayout } from "@/platform/layout";
 import { runCanvasCommand } from "@/canvas/commands";
 import { pickFilesForCanvas } from "@/canvas/dnd/external-content";
 import { useFlowHandle } from "@/canvas/flow/flow-context";
@@ -26,6 +27,7 @@ import {
   CANVAS_TOOLS,
   GEO_OPTIONS,
   IMAGE_TOOL,
+  PHONE_TOOL_IDS,
   geoIcon,
   isToolDisabledWhenLocked,
   type CanvasToolSpec,
@@ -43,20 +45,28 @@ import { commandKeysLabel, type CommandId } from "@/keybindings";
  *
  * 置灰只剩一条规则：锁定视图时除「选择」之外全部禁用
  * （`tools.isToolDisabledWhenLocked`）。
+ *
+ * 手机（`isCompactLayout()`，≤ 767px）上只留选择与手（F32）：手指画不出
+ * 能用的墨迹，而每多一个按钮，390px 宽的 Dock 就少一分能按得中的余量。
+ * 图片按钮同样收起——它开的是系统文件选择器，手机上那条路不通。
  */
 export function DockTools() {
   const t = useT();
   const flow = useFlowHandle();
   const locked = useCanvasLocked();
   const currentTool = useTool();
+  const phone = useCompactLayout();
 
   if (!flow) return null;
 
   const disabled = (id: string) => locked && isToolDisabledWhenLocked(id);
+  const tools = phone
+    ? CANVAS_TOOLS.filter((tool) => PHONE_TOOL_IDS.includes(tool.id))
+    : CANVAS_TOOLS;
 
   const buttons = (
     <>
-      {CANVAS_TOOLS.map((tool) =>
+      {tools.map((tool) =>
         tool.id === "geo" ? (
           <GeoToolButton
             key={tool.id}
@@ -73,7 +83,7 @@ export function DockTools() {
           />
         ),
       )}
-      <ImageToolButton disabled={locked} />
+      {phone ? null : <ImageToolButton disabled={locked} />}
     </>
   );
 

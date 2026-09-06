@@ -11,6 +11,7 @@ import {
   CANVAS_TOOL_IDS,
   GEO_IDS,
   GEO_OPTIONS,
+  PHONE_TOOL_IDS,
   geoIcon,
   isToolDisabledWhenLocked,
   shouldShowStylePanel,
