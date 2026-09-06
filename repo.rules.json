@@ -77,11 +77,6 @@
         "path": "tools/canvas-ownership-e2e.mjs",
         "lines": 2115,
         "note": "§5 第 6 步：端到端脚本按阶段拆分"
-      },
-      {
-        "path": "packages/protocol/test/contract.test.ts",
-        "lines": 1545,
-        "note": "§5 第 6 步：按 proto 文件拆契约测试"
       }
     ]
   },

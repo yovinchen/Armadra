@@ -8,11 +8,20 @@ import {
   type MessageInitShape,
 } from "@bufbuild/protobuf";
 import {
+  AgentPromptPhase,
+  AgentPromptReceiptSchema,
+  AgentPromptRequestSchema,
   AgentState,
   AgentStatusSchema,
+  AgentTargetRequestSchema,
+  AgentTargetState,
+  AgentTargetStatusSchema,
   AgentWorkerResponseSchema,
   ApprovalSchema,
   ApprovalState,
+  AutomationColdStartPolicy,
+  AutomationTargetKind,
+  AutomationTargetSchema,
   DeliveryOutcome,
   DeliverySchema,
   EventDomain,
@@ -254,5 +263,101 @@ describe("agent records", () => {
     expect(
       fromBinary(EventEnvelopeSchema, toBinary(EventEnvelopeSchema, envelope)),
     ).toEqual(envelope);
+  });
+
+  it("keeps prompt delivery evidence separable from proven non-delivery", () => {
+    check("agent_target_status", AgentTargetStatusSchema, {
+      state: AgentTargetState.ABSENT,
+      sessionId: "会话-1",
+      generation: maxUint64,
+      reasonCode: "SESSION_ABSENT",
+    });
+    check("agent_target_request", AgentTargetRequestSchema, {
+      workspaceId: "workspace-1",
+      nodeId: "node-1",
+      sessionId: "session-1",
+      generation: 9007199254740993n,
+      expected: {
+        agentId: "claude",
+        workingDirectory: "/项目/仓库",
+        accountId: "default",
+      },
+      coldStart: {
+        agentId: "claude",
+        workingDirectory: "/项目/仓库",
+        args: ["--flag", "值📦"],
+        permissionMode: "acceptEdits",
+        modelId: "sonnet",
+        accountId: "default",
+      },
+    });
+    check("agent_prompt_request", AgentPromptRequestSchema, {
+      operationId:
+        "automation/principal-1/host-0123456789abcdef0123456789abcdef/workspace-1/dispatch/run-1",
+      requestSha256: new Uint8Array(32).fill(5),
+      workspaceId: "workspace-1",
+      nodeId: "node-1",
+      sessionId: "session-1",
+      generation: 9007199254740993n,
+      prompt: new TextEncoder().encode("每晚复盘：读取 diff 后写结论\n"),
+      expected: {
+        agentId: "claude",
+        workingDirectory: "/项目/仓库",
+        args: ["--flag", "值📦"],
+        permissionMode: "acceptEdits",
+        modelId: "sonnet",
+        accountId: "default",
+      },
+    });
+    check("agent_prompt_not_written", AgentPromptReceiptSchema, {
+      operationId: "operation-1",
+      requestSha256: new Uint8Array(32).fill(6),
+      phase: AgentPromptPhase.NOT_WRITTEN,
+      sequence: 1n,
+      observedAtUnixMs: 1788557000000n,
+      reasonCode: "TARGET_BUSY",
+      sessionId: "session-1",
+      generation: 3n,
+      noEffectProven: true,
+    });
+    check("agent_prompt_unknown", AgentPromptReceiptSchema, {
+      operationId: "operation-1",
+      requestSha256: new Uint8Array(32).fill(6),
+      phase: 999 as AgentPromptPhase,
+      sequence: maxUint64,
+      observedAtUnixMs: 1788557900000n,
+      reasonCode: "UNATTRIBUTED",
+      sessionId: "session-2",
+      generation: maxUint64,
+      coldStarted: true,
+    });
+    check("automation_agent_target", AutomationTargetSchema, {
+      executionHostId: "0123456789abcdef0123456789abcdef",
+      sessionId: "session-1",
+      generation: 7n,
+      kind: AutomationTargetKind.AGENT_SESSION_PROMPT,
+      nodeId: "node-1",
+      coldStartPolicy: AutomationColdStartPolicy.LAUNCH_FROZEN,
+      agentLaunch: {
+        agentId: "codex",
+        workingDirectory: "/项目/仓库",
+        accountId: "default",
+      },
+    });
+    // A plan frozen before the field existed stays a command target.
+    const legacy = fromBinary(
+      AutomationTargetSchema,
+      toBinary(
+        AutomationTargetSchema,
+        create(AutomationTargetSchema, {
+          executionHostId: "host-1",
+          sessionId: "session-1",
+          generation: 1n,
+        }),
+      ),
+    );
+    expect(legacy.kind).toBe(AutomationTargetKind.UNSPECIFIED);
+    expect(legacy.nodeId).toBe("");
+    expect(legacy.agentLaunch).toBeUndefined();
   });
 });
