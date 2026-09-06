@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use super::{ServerState, discover, edits, lifecycle::OpenedSession, reason};
+use super::{ServerState, discover, edits, reason};
 use crate::{
     AppState, db,
     error::{AppError, AppResult},
@@ -60,26 +60,58 @@ pub async fn language_service(
         .as_deref()
         .is_some_and(|value| value == "1" || value == "true");
     let allow_execute = workspace.permissions.execute;
-    let mut servers = discover::discover(&state.settings, "local", allow_execute, refresh).await;
-    // A server that is actually running says so, over whatever the probe
-    // cached: the probe answers "could this start", the hub answers "is it".
-    for hub in state.language.hubs_for(&workspace_id) {
-        let live = hub.descriptor();
-        if let Some(row) = servers
-            .iter_mut()
-            .find(|row| row.server_id == live.server_id)
-        {
-            row.state = live.state;
-            row.reason = live.reason.clone();
-            row.restart_count = live.restart_count;
-            row.pid = live.pid;
-            row.start_time_unix_ms = live.start_time_unix_ms;
-            row.open_documents = live.open_documents;
-            if !live.features.is_empty() {
-                row.features = live.features;
+    let servers = match crate::remote::resolve(&state, &workspace)? {
+        crate::remote::Execution::Local => {
+            let mut servers =
+                discover::discover(&state.settings, "local", allow_execute, refresh).await;
+            // A server that is actually running says so, over whatever the
+            // probe cached: the probe answers "could this start", the hub
+            // answers "is it".
+            for hub in state.language.hubs_for(&workspace_id) {
+                let live = hub.descriptor();
+                if let Some(row) = servers
+                    .iter_mut()
+                    .find(|row| row.server_id == live.server_id)
+                {
+                    row.state = live.state;
+                    row.reason = live.reason.clone();
+                    row.restart_count = live.restart_count;
+                    row.pid = live.pid;
+                    row.start_time_unix_ms = live.start_time_unix_ms;
+                    row.open_documents = live.open_documents;
+                    if !live.features.is_empty() {
+                        row.features = live.features;
+                    }
+                }
             }
+            servers
         }
-    }
+        // The execution host probes its own machine. It answers without the
+        // grant, because probing starts nothing; the gate is applied here,
+        // over its answer, exactly as `discover` applies it locally.
+        crate::remote::Execution::Remote(worker) => {
+            let mut servers = match worker.language.current().await {
+                // A live link knows which servers are actually running; the
+                // serial connection is a different process and would report
+                // none of them.
+                Some(link) => link.capabilities(refresh).await?,
+                None => crate::remote::language::descriptors(
+                    worker
+                        .language_capabilities(&workspace.id, &workspace.root_path, refresh)
+                        .await?,
+                ),
+            };
+            if !allow_execute {
+                for row in &mut servers {
+                    if row.state != ServerState::Unsupported {
+                        row.state = ServerState::Unsupported;
+                        row.reason = Some(reason::EXECUTION_NOT_GRANTED.to_owned());
+                    }
+                }
+            }
+            servers
+        }
+    };
     let usable = servers
         .iter()
         .any(|server| server.state != ServerState::Unsupported);
@@ -92,9 +124,19 @@ pub async fn language_service(
         } else {
             Some(reason::SERVER_NOT_FOUND.to_owned())
         },
-        execution_host_id: "local".into(),
+        execution_host_id: execution_host_id(&workspace),
         servers,
     }))
+}
+
+/// What the client is told the servers run on. Empty means this machine, and
+/// the interface has one word for that.
+fn execution_host_id(workspace: &Workspace) -> String {
+    if workspace.execution_host_id.is_empty() {
+        "local".to_owned()
+    } else {
+        workspace.execution_host_id.clone()
+    }
 }
 
 /* -------------------------------- sessions -------------------------------- */
@@ -129,20 +171,57 @@ pub async fn open_session(
     Json(request): Json<OpenSessionRequest>,
 ) -> AppResult<Json<OpenSessionResponse>> {
     let workspace = readable(&state, &workspace_id).await?;
-    crate::remote::refuse_remote(&workspace, "Language services on a remote execution host")?;
-    let opened = state
-        .language
-        .open_session(
-            &state.settings,
-            &state.events,
-            &workspace_id,
-            std::path::Path::new(&workspace.root_path),
-            &request.language_id,
-            &request.client_id,
-            workspace.permissions.write,
-            workspace.permissions.execute,
-        )
-        .await?;
+    let opened = match crate::remote::resolve(&state, &workspace)? {
+        crate::remote::Execution::Local => {
+            let opened = state
+                .language
+                .open_session(
+                    &state.settings,
+                    &state.events,
+                    &workspace_id,
+                    std::path::Path::new(&workspace.root_path),
+                    &request.language_id,
+                    &request.client_id,
+                    workspace.permissions.write,
+                    workspace.permissions.execute,
+                )
+                .await?;
+            Opened {
+                session_id: opened.session_id,
+                server_id: opened.server_id,
+                generation: opened.generation,
+                state: opened.state,
+                reason: opened.reason,
+                capabilities: opened.capabilities,
+                outbox: opened.outbox,
+            }
+        }
+        // The second connection is opened here and nowhere else, so a host
+        // that is only ever browsed never spends an `ssh` session on it.
+        crate::remote::Execution::Remote(worker) => {
+            let link = worker.language.ensure(&worker, &state.events).await?;
+            let opened = link
+                .open_session(
+                    &workspace_id,
+                    &workspace.id,
+                    &workspace.root_path,
+                    &request.language_id,
+                    &request.client_id,
+                    workspace.permissions.write,
+                    workspace.permissions.execute,
+                )
+                .await?;
+            Opened {
+                session_id: opened.session_id,
+                server_id: opened.server_id,
+                generation: opened.generation,
+                state: opened.state,
+                reason: opened.reason,
+                capabilities: opened.capabilities,
+                outbox: opened.outbox,
+            }
+        }
+    };
     let answer = OpenSessionResponse {
         session_id: opened.session_id.clone(),
         generation: opened.generation,
@@ -154,8 +233,19 @@ pub async fn open_session(
     // The socket has not been opened yet, so the receiver is parked until the
     // client connects. Parking it rather than dropping it means diagnostics
     // published between `POST` and the upgrade are not lost.
-    park(&state, &workspace_id, opened);
+    park(&state, &workspace_id, opened.session_id, opened.outbox);
     Ok(Json(answer))
+}
+
+/// One opened session, whichever machine answered.
+struct Opened {
+    session_id: String,
+    server_id: String,
+    generation: u64,
+    state: ServerState,
+    reason: Option<String>,
+    capabilities: Value,
+    outbox: mpsc::UnboundedReceiver<Vec<u8>>,
 }
 
 /// `DELETE /api/workspaces/{id}/language/sessions/{sessionId}`
@@ -163,13 +253,76 @@ pub async fn close_session(
     State(state): State<AppState>,
     AxumPath((workspace_id, session_id)): AxumPath<(String, String)>,
 ) -> AppResult<Json<serde_json::Value>> {
-    readable(&state, &workspace_id).await?;
-    let closed = state
-        .language
-        .close_session(&workspace_id, &session_id)
-        .await;
+    let workspace = readable(&state, &workspace_id).await?;
+    let closed = match crate::remote::resolve(&state, &workspace)? {
+        crate::remote::Execution::Local => {
+            state
+                .language
+                .close_session(&workspace_id, &session_id)
+                .await
+        }
+        crate::remote::Execution::Remote(worker) => match worker.language.current().await {
+            Some(link) => {
+                let closed = link.close_session(&session_id).await;
+                // The last session on a host takes the `ssh` session with it:
+                // `sshd` allows ten by default, and one held open for an editor
+                // nobody has any more is one a terminal cannot have (design
+                // §2.7).
+                if !link.has_any_session() {
+                    worker.language.release().await;
+                }
+                closed
+            }
+            None => false,
+        },
+    };
     unpark(&state, &session_id);
     Ok(Json(serde_json::json!({ "closed": closed })))
+}
+
+/// Where a session's messages go. The controller holds one of these per open
+/// socket and knows nothing else about the machine behind it.
+#[derive(Clone)]
+enum Endpoint {
+    Local(std::sync::Arc<super::mux::Hub>),
+    Remote(std::sync::Arc<crate::remote::language::Link>),
+}
+
+impl Endpoint {
+    /// One JSON-RPC message on its way to the server. A remote send waits for
+    /// link credit, which is what turns a flood into back pressure on the tab
+    /// rather than unbounded memory here.
+    async fn send(&self, session_id: &str, body: &[u8]) -> bool {
+        match self {
+            Self::Local(hub) => {
+                super::session::handle(hub, session_id, body);
+                true
+            }
+            Self::Remote(link) => link.send(session_id, body.to_vec()).await.is_ok(),
+        }
+    }
+}
+
+/// The endpoint that holds `session_id`, or `None` when nothing does.
+async fn endpoint(
+    state: &AppState,
+    workspace: &Workspace,
+    session_id: &str,
+) -> AppResult<Option<Endpoint>> {
+    Ok(match crate::remote::resolve(state, workspace)? {
+        crate::remote::Execution::Local => state
+            .language
+            .hubs_for(&workspace.id)
+            .into_iter()
+            .find(|hub| hub.lock().sessions.contains_key(session_id))
+            .map(Endpoint::Local),
+        crate::remote::Execution::Remote(worker) => worker
+            .language
+            .current()
+            .await
+            .filter(|link| link.has_session(session_id))
+            .map(Endpoint::Remote),
+    })
 }
 
 /// `GET /api/workspaces/{id}/language/sessions/{sessionId}/stream` (WebSocket)
@@ -183,20 +336,17 @@ pub async fn session_stream(
     ws: WebSocketUpgrade,
 ) -> AppResult<Response> {
     crate::api::validate_websocket_origin(&headers)?;
-    readable(&state, &workspace_id).await?;
-    let hub = state
-        .language
-        .hubs_for(&workspace_id)
-        .into_iter()
-        .find(|hub| hub.lock().sessions.contains_key(&session_id))
+    let workspace = readable(&state, &workspace_id).await?;
+    let endpoint = endpoint(&state, &workspace, &session_id)
+        .await?
         .ok_or_else(|| AppError::NotFound("No such language session".into()))?;
     let outbox = unpark(&state, &session_id)
         .ok_or_else(|| AppError::Conflict("This language session already has a socket".into()))?;
-    Ok(ws.on_upgrade(move |socket| pump(hub, session_id, outbox, socket)))
+    Ok(ws.on_upgrade(move |socket| pump(endpoint, session_id, outbox, socket)))
 }
 
 async fn pump(
-    hub: std::sync::Arc<super::mux::Hub>,
+    endpoint: Endpoint,
     session_id: String,
     mut outbox: mpsc::UnboundedReceiver<Vec<u8>>,
     socket: WebSocket,
@@ -209,11 +359,14 @@ async fn pump(
                     let Ok(text) = String::from_utf8(body) else { continue };
                     if sender.send(Message::Text(text.into())).await.is_err() { break; }
                 }
+                // The sender was dropped: the server is gone, or a remote link
+                // died and marked this session disconnected. Closing the socket
+                // is how the client learns to stop waiting.
                 None => break,
             },
             message = incoming.next() => match message {
                 Some(Ok(Message::Text(text))) => {
-                    super::session::handle(&hub, &session_id, text.as_bytes());
+                    if !endpoint.send(&session_id, text.as_bytes()).await { break; }
                 }
                 // A language message is text. A binary frame is not one, and
                 // guessing at an encoding is how a payload gets corrupted.
@@ -247,7 +400,44 @@ pub async fn apply_edit(
             "This workspace is opened read-only".into(),
         ));
     }
-    crate::remote::refuse_remote(&workspace, "Applying language edits on a remote host")?;
+    // A remote edit is applied where the files are. The versions travel with
+    // it, so every file is still checked against what the caller read — on the
+    // machine that writes it, which is the only place that check means
+    // anything.
+    if let crate::remote::Execution::Remote(worker) = crate::remote::resolve(&state, &workspace)? {
+        let link = worker
+            .language
+            .current()
+            .await
+            .ok_or_else(|| AppError::NotFound("No such language session".into()))?;
+        let result = link
+            .apply_edit(
+                &workspace.id,
+                &workspace.root_path,
+                &session_id,
+                &request.edit,
+                request.expected_sha256,
+                workspace.permissions.write,
+            )
+            .await?;
+        // The remote watcher would find these on its next pass; publishing them
+        // now is what makes an open editor reload as promptly as it does for a
+        // local edit.
+        for file in &result.applied {
+            state.events.publish(
+                &workspace_id,
+                crate::events::WorkspaceEvent::FileChanged {
+                    workspace_id: workspace_id.clone(),
+                    path: file.path.clone(),
+                    kind: crate::events::FileChangeKind::Modified,
+                    sha256: Some(file.sha256.clone()),
+                    size: Some(file.size),
+                    mtime: None,
+                },
+            );
+        }
+        return Ok(Json(result));
+    }
     let hub = state
         .language
         .hubs_for(&workspace_id)
@@ -294,6 +484,10 @@ pub async fn restart_server(
     if !workspace.permissions.execute {
         return Err(AppError::Forbidden(reason::EXECUTION_NOT_GRANTED.into()));
     }
+    // The wire has no restart action, so a remote server is restarted by
+    // closing its sessions and opening them again. Saying so is better than a
+    // button that quietly does nothing on one kind of workspace.
+    crate::remote::refuse_remote(&workspace, "Restarting a language server on a remote host")?;
     state.language.restart(&workspace_id, &server_id).await?;
     descriptor(&state, &workspace_id, &server_id)
 }
@@ -303,7 +497,8 @@ pub async fn stop_server(
     State(state): State<AppState>,
     AxumPath((workspace_id, server_id)): AxumPath<(String, String)>,
 ) -> AppResult<Json<super::ServerDescriptor>> {
-    readable(&state, &workspace_id).await?;
+    let workspace = readable(&state, &workspace_id).await?;
+    crate::remote::refuse_remote(&workspace, "Stopping a language server on a remote host")?;
     state.language.stop(&workspace_id, &server_id).await?;
     descriptor(&state, &workspace_id, &server_id)
 }
@@ -342,10 +537,14 @@ fn parked() -> &'static Parked {
     PARKED.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
 }
 
-fn park(state: &AppState, workspace_id: &str, opened: OpenedSession) {
-    let session_id = opened.session_id.clone();
+fn park(
+    state: &AppState,
+    workspace_id: &str,
+    session_id: String,
+    outbox: mpsc::UnboundedReceiver<Vec<u8>>,
+) {
     if let Ok(mut parked) = parked().lock() {
-        parked.insert(session_id.clone(), opened.outbox);
+        parked.insert(session_id.clone(), outbox);
     }
     // A session nobody ever connects would hold a server open forever, so it
     // is given a minute to produce a socket and then closed like any other.

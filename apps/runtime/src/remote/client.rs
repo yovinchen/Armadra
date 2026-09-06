@@ -36,7 +36,7 @@ use tokio::{
 use crate::{
     error::{AppError, AppResult},
     remote::service::{Replay, replay},
-    terminal::ssh::{SshHost, SshWorker, worker_argv},
+    terminal::ssh::{SshHost, SshWorker, language_link_argv, worker_argv},
     worker::MAX_FRAME,
 };
 
@@ -165,6 +165,11 @@ pub struct RemoteWorker {
     /// the process, so a reconnect re-binds the same controller.
     host_id: String,
     state: Mutex<Supervisor>,
+    /// The second connection, opened only while an editor has a language
+    /// session on this host (language service design §2.7). Idle hosts pay
+    /// nothing for it, and `sshd`'s session limit is not spent on a link
+    /// nobody is using.
+    pub language: super::language::RemoteLanguage,
 }
 
 impl RemoteWorker {
@@ -178,6 +183,7 @@ impl RemoteWorker {
                 failures: 0,
                 parked_until: None,
             }),
+            language: super::language::RemoteLanguage::default(),
         }
     }
 
@@ -185,13 +191,24 @@ impl RemoteWorker {
         &self.host.id
     }
 
+    /// The host's display name, for messages a person reads.
+    pub fn display_name(&self) -> &str {
+        &self.host.name
+    }
+
+    /// The controller identity this host's Worker sessions are bound to.
+    pub fn controller_id(&self) -> &str {
+        &self.host_id
+    }
+
     /// The argv this host's Worker is started with, `ssh` included.
     pub fn argv(&self) -> Vec<String> {
-        let mut argv = worker_argv(&self.host, &self.worker);
-        if let Some(launcher) = launcher_override() {
-            argv[0] = launcher;
-        }
-        argv
+        substitute(worker_argv(&self.host, &self.worker))
+    }
+
+    /// The argv for the language link: the same line plus `--language-link`.
+    pub fn language_argv(&self) -> Vec<String> {
+        substitute(language_link_argv(&self.host, &self.worker))
     }
 
     async fn connect(&self, state: &mut Supervisor) -> AppResult<()> {
@@ -526,6 +543,35 @@ impl RemoteWorker {
         }
     }
 
+    /// Server discovery on the execution host, over the serial connection.
+    ///
+    /// Discovery starts nothing: it runs each candidate's `--version` and
+    /// caches the answer. That is why it does not need the language link, and
+    /// why a settings page can list a host's servers before anybody opens an
+    /// editor on it.
+    pub async fn language_capabilities(
+        &self,
+        root_id: &str,
+        root_path: &str,
+        refresh: bool,
+    ) -> AppResult<v1::LanguageCapabilities> {
+        match self
+            .send(
+                root_id,
+                root_path,
+                v1::worker_request::Action::LanguageCapabilities(v1::LanguageCapabilitiesRequest {
+                    root_id: root_id.to_owned(),
+                    refresh,
+                }),
+                Replay::Safe,
+            )
+            .await?
+        {
+            v1::worker_response::Result::LanguageCapabilities(capabilities) => Ok(capabilities),
+            _ => Err(self.wrong_answer()),
+        }
+    }
+
     /// One proxied operation. The answer is the execution host's own status
     /// and JSON body, forwarded to the client unchanged.
     pub async fn service(
@@ -579,7 +625,7 @@ fn outcome_is_unknown(failure: Transport, replayable: Replay) -> bool {
     failure == Transport::Lost && replayable == Replay::Never
 }
 
-fn remote_error(name: &str, error: &v1::ErrorResponse) -> AppError {
+pub(crate) fn remote_error(name: &str, error: &v1::ErrorResponse) -> AppError {
     match error.code.as_str() {
         "INVALID_ARGUMENT" => AppError::BadRequest(error.message.clone()),
         "PERMISSION_DENIED" => AppError::Forbidden(error.message.clone()),
@@ -591,7 +637,15 @@ fn remote_error(name: &str, error: &v1::ErrorResponse) -> AppError {
     }
 }
 
-fn launcher_override() -> Option<String> {
+/// Applies the launcher override to argv[0], and nothing else.
+fn substitute(mut argv: Vec<String>) -> Vec<String> {
+    if let Some(launcher) = launcher_override() {
+        argv[0] = launcher;
+    }
+    argv
+}
+
+pub(crate) fn launcher_override() -> Option<String> {
     let value = std::env::var(LAUNCHER_OVERRIDE).ok()?;
     // Only an absolute path: a bare name would resolve through PATH, which is
     // not something a launch line should depend on.

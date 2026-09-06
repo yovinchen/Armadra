@@ -7,6 +7,7 @@
 //! host: the local filesystem is never consulted, not even to guess.
 
 pub mod client;
+pub mod language;
 pub mod service;
 pub mod watch;
 
