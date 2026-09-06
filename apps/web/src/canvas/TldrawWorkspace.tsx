@@ -627,6 +627,11 @@ export function TldrawWorkspace() {
           aria-label={t("canvas.label")}
         >
           <Tldraw
+            // tldraw 5 在非开发来源（打包桌面的 `tauri://localhost`、外部
+            // 托管的正式域名）上没有许可证时，挂载 5 秒后会把编辑器整个卸掉
+            // （`LicenseProvider` 的 unlicensed-production 门）。密钥在构建时
+            // 从环境注入，没有就按 tldraw 的规则来，不在代码里绕。
+            licenseKey={import.meta.env.VITE_TLDRAW_LICENSE_KEY || undefined}
             assetUrls={assetUrls}
             assets={assets}
             components={components}

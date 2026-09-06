@@ -258,6 +258,7 @@
 - Rust 已安装 macOS arm64、Windows x64 MSVC、Linux x64 目标；安装 target 不代表能在本机运行 Windows/Linux 实机测试。
 - 业务写入所有权按域切换：画布、settings、filesystem、session、git 五个域可经 CLI/HTTPS 切到 Go Host 并回滚（Runtime 在切换后拒写、仍答读）；agent 域仍由 Rust Runtime 拥有，Host 表面在实施中。
 - 真实 Worker 测试与桌面 `src-tauri` Rust 测试不在默认命令内，验收时需单独运行。
+- **tldraw 许可证**：tldraw 5.4 在非开发来源（打包桌面的 `tauri://localhost`）上没有许可证密钥时，挂载 5 秒后把编辑器整个卸掉（画布内容与工具消失，终端 socket 随之关闭），浏览器开发不受影响。已接 `VITE_TLDRAW_LICENSE_KEY`（构建时注入，CI secret `TLDRAW_LICENSE_KEY`）；密钥需从 tldraw.dev 获取（免费试用 / hobby 许可 / 商业许可），未取得前打包版画布不可用。用 debug 壳的诊断桥（`ARMADRA_DESKTOP_DIAGNOSTIC_WS`）定位。
 - 数据目录：macOS `~/Library/Application Support/Armadra`、Windows `%LOCALAPPDATA%\Armadra`、Linux `$XDG_DATA_HOME/armadra`（默认 `~/.local/share/armadra`），`ARMADRA_DATA_DIR` 可覆盖；Host 用其下 `host/`，默认项目在 `workspaces/default/`。
 
 ## 下一步
