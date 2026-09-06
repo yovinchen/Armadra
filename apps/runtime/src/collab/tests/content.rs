@@ -122,7 +122,10 @@ async fn an_ambiguous_link_target_is_refused_rather_than_guessed() {
             content: None,
         },
     ];
-    let refusal = context_link::resolve_target(&links, Some("构建")).unwrap_err();
+    let handles = addressing::Handles::default();
+    let error = addressing::resolve_link(&links, &handles, Some("构建")).unwrap_err();
+    assert_eq!(error.code(), "target_ambiguous");
+    let refusal = error.refusal("--node");
     assert_eq!(refusal.status, StatusCode::BAD_REQUEST);
     assert!(
         refusal.message.contains("同时匹配 2"),
@@ -131,18 +134,23 @@ async fn an_ambiguous_link_target_is_refused_rather_than_guessed() {
     );
 
     // Two links and no `--node` is equally ambiguous.
-    let refusal = context_link::resolve_target(&links, None).unwrap_err();
-    assert!(refusal.message.contains("--node"), "{}", refusal.message);
+    let error = addressing::resolve_link(&links, &handles, None).unwrap_err();
+    assert_eq!(error.code(), "target_unspecified");
+    assert!(
+        error.refusal("--node").message.contains("--node"),
+        "{}",
+        error.refusal("--node").message
+    );
 
     // One link needs no `--node`, and an exact title beats a substring.
     assert_eq!(
-        context_link::resolve_target(&links[..1], None)
+        addressing::resolve_link(&links[..1], &handles, None)
             .unwrap()
             .title,
         "构建 A"
     );
     assert_eq!(
-        context_link::resolve_target(&links, Some("构建 B"))
+        addressing::resolve_link(&links, &handles, Some("构建 B"))
             .unwrap()
             .title,
         "构建 B"

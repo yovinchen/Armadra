@@ -13,6 +13,7 @@
 //! to touch from the database rather than from the request: the link document
 //! for reads, the board for writes, and the identity verdict for both.
 
+pub mod addressing;
 pub mod approvals;
 pub mod board_log;
 pub mod context_link;
@@ -198,6 +199,53 @@ impl Refusal {
             status: StatusCode::NOT_FOUND,
             message: message.into(),
         }
+    }
+}
+
+/// A refusal plus the stable code a JSON caller branches on.
+///
+/// The prose surfaces only ever print `message`, but `/control` answers JSON,
+/// and "which agent did you mean?" is a question a client can act on — retry
+/// with an id, draw a link, pick a new handoff key. Kept beside [`Refusal`]
+/// rather than inside it so every existing refusal keeps compiling and simply
+/// falls back to the code its status implies.
+#[derive(Debug, Clone)]
+pub struct Refused {
+    pub status: StatusCode,
+    pub code: &'static str,
+    pub message: String,
+}
+
+impl Refused {
+    pub fn new(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            status,
+            code,
+            message: message.into(),
+        }
+    }
+
+    /// A refusal that already knows its own code.
+    pub fn coded(refusal: Refusal, code: &'static str) -> Self {
+        Self {
+            status: refusal.status,
+            code,
+            message: refusal.message,
+        }
+    }
+}
+
+impl From<Refusal> for Refused {
+    fn from(refusal: Refusal) -> Self {
+        let code = match refusal.status {
+            StatusCode::BAD_REQUEST => "bad_request",
+            StatusCode::FORBIDDEN => "forbidden",
+            StatusCode::NOT_FOUND => "not_found",
+            StatusCode::CONFLICT => "conflict",
+            StatusCode::TOO_MANY_REQUESTS => "too_many_requests",
+            _ => "internal_error",
+        };
+        Self::coded(refusal, code)
     }
 }
 

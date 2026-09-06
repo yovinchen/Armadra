@@ -17,8 +17,8 @@ use serde_json::Value;
 use crate::{AppState, db, error::AppError, files, git, model::ContextLink, security};
 
 use super::{
-    Args, Caller, NodeRef, Refusal, load_node, load_session, text_reply, transcript, truncate,
-    workspace_root,
+    Args, Caller, NodeRef, Refusal, addressing, load_node, load_session, text_reply, transcript,
+    truncate, workspace_root,
 };
 
 pub const VERBS: &[&str] = &["list", "summary", "transcript", "terminal"];
@@ -80,7 +80,11 @@ pub async fn run(
         .count(&["n", "lines"])
         .unwrap_or(DEFAULT_LINES)
         .clamp(1, MAX_LINES);
-    let link = resolve_target(&document.links, args.text("node"))?;
+    let handles = addressing::load_handles(&state.pool, &document.links)
+        .await
+        .map_err(internal)?;
+    let link = addressing::resolve_link(&document.links, &handles, args.text("node"))
+        .map_err(|error| error.refusal("--node"))?;
     // A whiteboard shape is not a node (docs/design/canvas-react-flow.md §2.5):
     // there is no row to load, no session and no verb that means anything
     // different for it, so the link document itself is the source and every
@@ -116,68 +120,6 @@ pub async fn run(
         "transcript" => read_transcript(state, &target, None).await,
         _ => unreachable!("verb was checked above"),
     }
-}
-
-/* -------------------------------- resolution ------------------------------ */
-
-/// Resolves `--node` against the caller's own link document — id first, then an
-/// exact title, then a unique substring. Ambiguity is refused rather than
-/// guessed: writing to the wrong agent is worse than not writing at all.
-pub fn resolve_target<'a>(
-    links: &'a [ContextLink],
-    wanted: Option<&str>,
-) -> Result<&'a ContextLink, Refusal> {
-    if links.is_empty() {
-        return Err(Refusal::forbidden(
-            "这个节点还没有连接任何其他节点，没有可读的上下文。",
-        ));
-    }
-    let Some(wanted) = wanted else {
-        return match links {
-            [only] => Ok(only),
-            _ => Err(Refusal::bad_request(format!(
-                "这个节点连接了 {} 个节点，请用 --node 指明要读哪一个。",
-                links.len()
-            ))),
-        };
-    };
-    let wanted = wanted.trim();
-    if let Some(link) = links.iter().find(|link| link.id == wanted) {
-        return Ok(link);
-    }
-    let lowered = wanted.to_lowercase();
-    let exact: Vec<&ContextLink> = links
-        .iter()
-        .filter(|link| link.title.to_lowercase() == lowered)
-        .collect();
-    match exact.as_slice() {
-        [only] => return Ok(only),
-        [] => {}
-        many => return Err(ambiguous(wanted, many)),
-    }
-    let partial: Vec<&ContextLink> = links
-        .iter()
-        .filter(|link| link.title.to_lowercase().contains(&lowered))
-        .collect();
-    match partial.as_slice() {
-        [only] => Ok(only),
-        [] => Err(Refusal::forbidden(format!(
-            "「{wanted}」不在这个节点的链接列表里，已拒绝；先在画布上连一条线。"
-        ))),
-        many => Err(ambiguous(wanted, many)),
-    }
-}
-
-fn ambiguous(wanted: &str, matches: &[&ContextLink]) -> Refusal {
-    let names = matches
-        .iter()
-        .map(|link| format!("{}（{}）", link.title, link.id))
-        .collect::<Vec<_>>()
-        .join("、");
-    Refusal::bad_request(format!(
-        "「{wanted}」同时匹配 {} 个链接：{names}。请用节点 ID 指明。",
-        matches.len()
-    ))
 }
 
 /* --------------------------------- sources -------------------------------- */
