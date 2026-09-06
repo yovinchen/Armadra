@@ -117,18 +117,14 @@ const zh = {
   "canvas.assetTooLarge": "图片超过 {limit} MB，没有添加",
   "canvas.assetFailed": "{name} 上传失败",
 
-  /* B2 clipboard：复制 / 剪切 / 粘贴（React Flow 计划 F19）。
-     `cmd.canvas.*` 三条是命令面板与快捷键设置页读的标签；命令表其余
-     标签在 `i18n/commands.ts`（B4 归属），这三条随剪贴板一起落在这里，
-     B4 收尾时可以整体搬过去。 */
-  "cmd.canvas.copy": "复制",
-  "cmd.canvas.cut": "剪切",
-  "cmd.canvas.paste": "粘贴",
+  /* 复制 / 剪切 / 粘贴的提示（React Flow 计划 F19）。
+     `cmd.canvas.copy/cut/paste` 三条命令标签在 `i18n/commands.ts`，
+     和命令表其余标签放在一起。 */
   "clipboard.copied": "已复制 {count} 项",
   "clipboard.cut": "已剪切 {count} 项",
   "clipboard.unavailable": "系统剪贴板不可用",
 
-  /* B2 style：白板样式面板（React Flow 计划 F28） */
+  /* 白板样式面板（React Flow 计划 F28） */
   "style.panel": "样式",
   "style.color": "颜色",
   "style.size": "粗细",
@@ -148,9 +144,10 @@ const zh = {
   "style.arrow.start": "起点箭头",
   "style.arrow.end": "终点箭头",
 
-  /* 画布偏好菜单（右上工具簇的滑块钮，2026-09-05 用户反馈）。
-     值全部存在 `preferences-store` 的 `whiteboard` 段里，
-     与设置 → 白板是同一份。 */
+  /* 画布偏好菜单（右上工具簇的滑块钮，2026-09-05 用户反馈；F31）。
+     值全部存在 `preferences-store` 的 `whiteboard` 段里，与设置 → 白板是
+     同一份。换引擎删掉的四项（调试、增强辅助、缩放反转、风格档）连同
+     文案一起删（§2.10）。 */
   "wb.menu": "画布偏好",
   "wb.snap": "始终吸附",
   "wb.toolLock": "工具锁定",
@@ -160,17 +157,13 @@ const zh = {
   "wb.edgeScroll": "边缘滚动",
   "wb.dynamicSize": "动态尺寸",
   "wb.pasteAtCursor": "粘贴至光标处",
-  "wb.debug": "调试模式",
+  "wb.animation": "动画",
   "wb.theme": "主题",
   "wb.background": "画布背景",
-  "wb.a11y": "辅助功能",
-  "wb.enhancedA11y": "增强辅助模式",
-  "wb.animation": "动画",
   "wb.input": "输入设备",
   "wb.input.auto": "自动",
   "wb.input.mouse": "鼠标",
   "wb.input.trackpad": "触控板",
-  "wb.zoomInverted": "缩放方向反转",
 
   /* 删除确认：只有节点里跑着会话时才弹 */
   "delete.session.title": "结束会话并删除？",
@@ -279,15 +272,10 @@ const en: Record<keyof typeof zh, string> = {
   "canvas.assetTooLarge": "Image is over {limit} MB and was not added",
   "canvas.assetFailed": "Could not upload {name}",
 
-  /* B2 clipboard */
-  "cmd.canvas.copy": "Copy",
-  "cmd.canvas.cut": "Cut",
-  "cmd.canvas.paste": "Paste",
   "clipboard.copied": "Copied {count} items",
   "clipboard.cut": "Cut {count} items",
   "clipboard.unavailable": "The system clipboard is unavailable",
 
-  /* B2 style */
   "style.panel": "Style",
   "style.color": "Colour",
   "style.size": "Weight",
@@ -316,17 +304,13 @@ const en: Record<keyof typeof zh, string> = {
   "wb.edgeScroll": "Edge scrolling",
   "wb.dynamicSize": "Dynamic size",
   "wb.pasteAtCursor": "Paste at cursor",
-  "wb.debug": "Debug mode",
+  "wb.animation": "Animation",
   "wb.theme": "Theme",
   "wb.background": "Canvas background",
-  "wb.a11y": "Accessibility",
-  "wb.enhancedA11y": "Enhanced accessibility",
-  "wb.animation": "Animation",
   "wb.input": "Input device",
   "wb.input.auto": "Auto",
   "wb.input.mouse": "Mouse",
   "wb.input.trackpad": "Trackpad",
-  "wb.zoomInverted": "Invert zoom direction",
 
   "delete.session.title": "End the session and delete?",
   "delete.session.confirm": "Delete",

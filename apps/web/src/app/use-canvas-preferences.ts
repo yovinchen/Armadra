@@ -14,7 +14,10 @@ import {
  * 变化时推给画布。旧引擎那条反向通道（编辑器写回偏好）连同它的防环
  * 逻辑一起删掉了——React Flow 不持有偏好，没有人会在背后改它们。
  *
- * 这个 hook 只做两件事：写背景变量、把默认颜色 / 粗细推给工具 store。
+ * 这个 hook 做三件事：写背景变量、把「专注模式」写成根元素上的一个属性
+ * （浮层的显隐是 CSS 的事，`styles/canvas.css` 里一条规则收掉缩略图、
+ * 收起钮与锁按钮）、把默认颜色 / 粗细推给工具 store。
+ *
  * 其余偏好由 `canvas/flow/flow-options.ts` 算成 `<ReactFlow>` 的 props，
  * 那是纯函数，`FlowWorkspace` 直接读。
  */
@@ -112,12 +115,30 @@ export function applyCanvasBackground(vars: CanvasBackgroundVars | null): void {
   root.style.setProperty("--canvas-dot", vars["--canvas-dot"]);
 }
 
+/* ------------------------------- 专注模式 --------------------------------- */
+
+/**
+ * 专注模式（§2.10 的 `focus`）：缩略图、样式面板、锁按钮全部收起。
+ *
+ * 样式面板自己读偏好（它本来就在重渲），另外两个是画布装配里的浮层，
+ * 谁都不该为一个布尔值多订阅一次 store——所以写根元素上的一个属性，
+ * 显隐交给 `styles/canvas.css` 那一条规则。
+ */
+export const CANVAS_FOCUS_ATTRIBUTE = "data-canvas-focus";
+
+export function applyCanvasFocusMode(focus: boolean): void {
+  const root = document.documentElement;
+  if (focus) root.setAttribute(CANVAS_FOCUS_ATTRIBUTE, "true");
+  else root.removeAttribute(CANVAS_FOCUS_ATTRIBUTE);
+}
+
 /* --------------------------------- Hook ----------------------------------- */
 
 export function useCanvasPreferences(): void {
   const background = usePreferencesStore(
     (state) => state.whiteboard.background,
   );
+  const focus = usePreferencesStore((state) => state.whiteboard.focus);
   const defaultColor = usePreferencesStore(
     (state) => state.whiteboard.defaultColor,
   );
@@ -128,6 +149,11 @@ export function useCanvasPreferences(): void {
   useEffect(() => {
     applyCanvasBackground(canvasBackgroundVars(background));
   }, [background]);
+
+  useEffect(() => {
+    applyCanvasFocusMode(focus);
+    return () => applyCanvasFocusMode(false);
+  }, [focus]);
 
   useEffect(() => {
     setNextStyle({ color: defaultColor, size: defaultSize });

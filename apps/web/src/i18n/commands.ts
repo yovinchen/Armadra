@@ -33,6 +33,9 @@ export const commands: MessageModule = {
     "cmd.canvas.focusUp": "选中上方节点",
     "cmd.canvas.focusDown": "选中下方节点",
     "cmd.canvas.delete": "删除所选",
+    "cmd.canvas.copy": "复制",
+    "cmd.canvas.cut": "剪切",
+    "cmd.canvas.paste": "粘贴",
 
     /* 画布偏好（2026-09-05） */
     "cmd.canvas.toggleToolLock": "工具锁定",
@@ -83,6 +86,9 @@ export const commands: MessageModule = {
     "cmd.canvas.focusUp": "Select node above",
     "cmd.canvas.focusDown": "Select node below",
     "cmd.canvas.delete": "Delete selection",
+    "cmd.canvas.copy": "Copy",
+    "cmd.canvas.cut": "Cut",
+    "cmd.canvas.paste": "Paste",
 
     "cmd.canvas.toggleToolLock": "Tool lock",
     "cmd.canvas.toggleGrid": "Show grid",

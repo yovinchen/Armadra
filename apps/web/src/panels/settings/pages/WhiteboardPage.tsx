@@ -4,7 +4,6 @@ import {
   WHITEBOARD_GRID_SIZES,
   WHITEBOARD_INPUT_MODES,
   WHITEBOARD_SIZES,
-  WHITEBOARD_STYLES,
   usePreferencesStore,
   useT,
   type WhiteboardBackground,
@@ -12,8 +11,8 @@ import {
   type WhiteboardGridSize,
   type WhiteboardInputMode,
   type WhiteboardSize,
-  type WhiteboardStyle,
 } from "../../../app/preferences-store";
+import { colorHex } from "../../../canvas/whiteboard/palette";
 import { SettingsGroup } from "../SettingsGroup";
 import { SettingsRow } from "../SettingsRow";
 import { CONTROL_WIDTH } from "./GeneralPage";
@@ -29,39 +28,19 @@ import {
 import { Switch } from "@/ui/switch";
 
 /**
- * 白板 13 色在浅色底上的十六进制值（B2 抽到 `whiteboard/palette.ts`）。
+ * 设置 → 白板（2026-09-04 用户反馈：白板配置要能在系统里自主配置；
+ * 2026-09-05：偏好里所有的设置都要能在系统里自主配置；React Flow 计划 F31）。
  *
- * 色点只是设置页里的预览，不参与画布渲染，所以固定用浅色主题那一套：
- * 深色主题的同名色是同一个语义，换一套只会让色点和用户记住的颜色对不上。
- * `white` 在浅底上要靠边框才看得见，单独给一圈描边。
- */
-const SWATCHES: Record<WhiteboardColor, string> = {
-  black: "#1d1d1d",
-  grey: "#9fa8b2",
-  white: "#ffffff",
-  blue: "#4465e9",
-  "light-blue": "#4ba1f1",
-  green: "#099268",
-  "light-green": "#4cb05e",
-  yellow: "#f1ac4b",
-  orange: "#e16919",
-  red: "#e03131",
-  "light-red": "#f87777",
-  violet: "#ae3ec9",
-  "light-violet": "#e085f4",
-};
-
-/**
- * 设置 → 白板（2026-09-04 用户反馈：把 白板配置要能在系统里自主配置；
- * 2026-09-05：偏好里所有的设置都要能在系统里自主配置）。
- *
- * 四张卡：外观（背景、网格）、行为（吸附、工具锁定、选择换行、动态尺寸、
- * 粘贴至光标处、边缘滚动、专注模式）、辅助与输入（动画、增强辅助、输入
- * 设备、缩放反转、调试）、默认风格（手绘 / 整洁、颜色、粗细）。
+ * 四张卡：外观（背景、网格、网格间距）、行为（吸附、工具锁定、选择换行、
+ * 动态尺寸、粘贴至光标处、边缘滚动、专注模式）、动画与输入（动画、输入
+ * 设备）、默认样式（颜色、粗细）。
  *
  * 前两张半与右上工具簇的画布偏好菜单是**同一份 store**，两处任改一处、
- * 另一处立刻跟着变；默认风格那一组只在这里出现（菜单里放不下）。
+ * 另一处立刻跟着变；默认样式那一组只在这里出现（菜单里放不下）。
  * 界面语言不在这里——它静默跟随应用语言。
+ *
+ * 换引擎删掉的四项见 §2.10：调试面板、增强辅助、缩放方向反转、手绘 /
+ * 整洁风格档在 React Flow 下都没有对应能力。
  */
 export function WhiteboardPage() {
   const t = useT();
@@ -188,14 +167,6 @@ export function WhiteboardPage() {
           />
         </SettingsRow>
 
-        <SettingsRow label={t("settings.whiteboard.enhancedA11y")}>
-          <Switch
-            checked={whiteboard.enhancedA11y}
-            aria-label={t("settings.whiteboard.enhancedA11y")}
-            onCheckedChange={(next) => set("enhancedA11y", next)}
-          />
-        </SettingsRow>
-
         <SettingsRow label={t("settings.whiteboard.inputMode")}>
           <Select
             value={whiteboard.inputMode}
@@ -215,44 +186,9 @@ export function WhiteboardPage() {
             </SelectContent>
           </Select>
         </SettingsRow>
-
-        <SettingsRow label={t("settings.whiteboard.zoomInverted")}>
-          <Switch
-            checked={whiteboard.zoomInverted}
-            disabled={whiteboard.inputMode !== "mouse"}
-            aria-label={t("settings.whiteboard.zoomInverted")}
-            onCheckedChange={(next) => set("zoomInverted", next)}
-          />
-        </SettingsRow>
-
-        <SettingsRow label={t("settings.whiteboard.debug")}>
-          <Switch
-            checked={whiteboard.debug}
-            aria-label={t("settings.whiteboard.debug")}
-            onCheckedChange={(next) => set("debug", next)}
-          />
-        </SettingsRow>
       </SettingsGroup>
 
       <SettingsGroup>
-        <SettingsRow label={t("settings.whiteboard.style")}>
-          <Select
-            value={whiteboard.style}
-            onValueChange={(value) => set("style", value as WhiteboardStyle)}
-          >
-            <SelectTrigger size="sm" className={CONTROL_WIDTH}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="z-[var(--z-dialog)]">
-              {WHITEBOARD_STYLES.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {t(`settings.whiteboard.style.${option}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </SettingsRow>
-
         <SettingsRow label={t("settings.whiteboard.defaultColor")}>
           <WhiteboardSwatches
             value={whiteboard.defaultColor}
@@ -287,6 +223,11 @@ export function WhiteboardPage() {
 /**
  * 白板 13 色的色板。
  *
+ * 色值从 `whiteboard/palette.ts` 读（一份表，画布与设置页同源），固定取
+ * 浅色那一支：色点只是预览，深色主题的同名色是同一支笔的另一档亮度，
+ * 换一套只会让色点和用户记住的颜色对不上。`white` 靠 `ColorDot` 的边框
+ * 在浅底上才看得见。
+ *
  * 没有复用 `ui/color-picker` 的 `ColorSwatches`：那一个的色值白名单是节点
  * 调色板的 7 色（`NODE_COLORS`），是画布控制 API 的契约，掺进白板的
  * 颜色名会把两套色板搅在一起。这里只复用 `ColorDot` 与 `Button`。
@@ -319,7 +260,7 @@ function WhiteboardSwatches({
             onClick={() => onChange(color)}
           >
             <ColorDot
-              color={SWATCHES[color]}
+              color={colorHex(color, "light")}
               size={14}
               selected={selected}
               className="border border-border"

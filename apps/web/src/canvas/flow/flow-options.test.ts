@@ -23,11 +23,7 @@ const preferences: WhiteboardPreferences = {
   focus: false,
   edgeScroll: true,
   pasteAtCursor: false,
-  debug: false,
-  enhancedA11y: false,
   inputMode: "auto",
-  zoomInverted: false,
-  style: "sketch",
   defaultColor: "black",
   defaultSize: "m",
 };

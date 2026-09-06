@@ -11,7 +11,7 @@ import {
 import { commandKeysLabel, type CommandId } from "../keybindings";
 import { useCanvasStore } from "../store/canvas-store";
 import { useT } from "../app/preferences-store";
-import { CanvasPreferencesMenu } from "../canvas/CanvasPreferencesMenu";
+import { CanvasPreferencesMenu } from "../canvas/menus/CanvasPreferencesMenu";
 import { cn } from "@/lib/cn";
 import { DropdownMenu, DropdownMenuTrigger } from "@/ui/dropdown-menu";
 import { IconButton } from "@/ui/icon-button";
@@ -28,7 +28,7 @@ import type { ReactNode } from "react";
  * §26：侧栏折叠钮搬到了标题栏红绿灯右侧（`shell/LeftSidebar`），这里没有了。
  *
  * 2026-09-05 用户反馈：最后一个钮不再是应用设置，而是**画布偏好**
- * （`canvas/CanvasPreferencesMenu`）。应用设置只剩侧栏左下角那一个入口，
+ * （`canvas/menus/CanvasPreferencesMenu`）。应用设置只剩侧栏左下角那一个入口，
  * 快捷键 ⌘, 照旧。
  */
 

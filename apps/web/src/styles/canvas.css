@@ -216,25 +216,6 @@
   }
 }
 
-.canvas-stage .canvas-navigation {
-  transition: width 160ms ease-out;
-}
-.canvas-navigation .minimap-toggle {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  background: var(--panel);
-  opacity: 0.9;
-}
-.canvas-navigation[data-collapsed="true"] {
-  height: 36px;
-  display: grid;
-  place-items: center;
-}
-.canvas-navigation[data-collapsed="true"] .minimap-toggle {
-  position: static;
-  background: transparent;
-}
 .workspace-surface[data-minimap-collapsed="true"],
 .workspace-surface[data-minimap-collapsed="true"] .react-flow__minimap,
 .workspace-surface[data-minimap-collapsed="true"] .canvas-usage-orb {
@@ -246,8 +227,19 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .canvas-stage .canvas-navigation,
   .canvas-usage-orb {
     transition: none;
   }
+}
+
+/*
+ * 专注模式（§2.10 的 `focus`）：缩略图、收起钮、锁按钮一起收走，画布上
+ * 只剩内容与 Dock。属性由 `app/use-canvas-preferences.ts` 写在根元素上。
+ *
+ * 归属链接不收：MIT 礼节不看模式（§0 归属标识）。
+ */
+:root[data-canvas-focus="true"] .canvas-stage .react-flow__minimap,
+:root[data-canvas-focus="true"] .canvas-stage .minimap-toggle,
+:root[data-canvas-focus="true"] .canvas-lock-button {
+  display: none;
 }

@@ -11,11 +11,7 @@ const WB_WRAP_KEY = "armadra.whiteboard.wrap";
 const WB_FOCUS_KEY = "armadra.whiteboard.focus";
 const WB_EDGE_SCROLL_KEY = "armadra.whiteboard.edgeScroll";
 const WB_PASTE_AT_CURSOR_KEY = "armadra.whiteboard.pasteAtCursor";
-const WB_DEBUG_KEY = "armadra.whiteboard.debug";
-const WB_ENHANCED_A11Y_KEY = "armadra.whiteboard.enhancedA11y";
 const WB_INPUT_MODE_KEY = "armadra.whiteboard.inputMode";
-const WB_ZOOM_INVERTED_KEY = "armadra.whiteboard.zoomInverted";
-const WB_STYLE_KEY = "armadra.whiteboard.style";
 const WB_COLOR_KEY = "armadra.whiteboard.defaultColor";
 const WB_SIZE_KEY = "armadra.whiteboard.defaultSize";
 
@@ -38,10 +34,6 @@ export type WhiteboardBackground = (typeof WHITEBOARD_BACKGROUNDS)[number];
 /** 点阵间距（px）。`<Background gap>` 直接吃这个值，不再有换算。 */
 export const WHITEBOARD_GRID_SIZES = [12, 24, 48] as const;
 export type WhiteboardGridSize = (typeof WHITEBOARD_GRID_SIZES)[number];
-
-/** 新形状的默认风格：手绘（`draw` 线型 + 手写体）/ 整洁（实线 + 无衬线）。 */
-export const WHITEBOARD_STYLES = ["sketch", "clean"] as const;
-export type WhiteboardStyle = (typeof WHITEBOARD_STYLES)[number];
 
 /** 白板的 13 个颜色名，顺序即色板顺序；十六进制表在 `whiteboard/palette.ts`。 */
 export const WHITEBOARD_COLORS = [
@@ -75,11 +67,15 @@ export const WHITEBOARD_INPUT_MODES = ["auto", "mouse", "trackpad"] as const;
 export type WhiteboardInputMode = (typeof WHITEBOARD_INPUT_MODES)[number];
 
 /**
- * 白板偏好。
+ * 白板偏好（React Flow 计划 §2.10 的映射表）。
  *
- * 和终端外观一样整块存：`use-canvas-preferences.ts` 写背景变量与工具默认
- * 样式，`canvas/flow/flow-options.ts` 把其余各项算成 `<ReactFlow>` 的
- * props，这里是唯一真相。
+ * 和终端外观一样整块存：`use-canvas-preferences.ts` 写背景变量、专注模式
+ * 与工具默认样式，`canvas/flow/flow-options.ts` 把其余各项算成
+ * `<ReactFlow>` 的 props，这里是唯一真相。
+ *
+ * 旧引擎的四项（调试面板、增强辅助、缩放方向反转、手绘 / 整洁风格档）在
+ * React Flow 下没有对应能力，B4 整条删掉——留一个改了没反应的开关比少一个
+ * 开关更糟。localStorage 里的残留键无害：没人读它们。
  */
 export interface WhiteboardPreferences {
   background: WhiteboardBackground;
@@ -100,17 +96,10 @@ export interface WhiteboardPreferences {
   focus: boolean;
   /** 拖到视口边缘时自动平移，映射 `edgeScrollSpeed` 1 / 0。 */
   edgeScroll: boolean;
-  /** 粘贴到光标处而不是视口中心，映射 `isPasteAtCursorMode`。 */
+  /** 粘贴到光标处而不是视口中心；落点算在 `interaction/pointer.ts`。 */
   pasteAtCursor: boolean;
-  /** 调试面板。React Flow 没有对应物，B4 连同这一项一起删。 */
-  debug: boolean;
-  /** 增强辅助模式，映射 `enhancedA11yMode`。 */
-  enhancedA11y: boolean;
-  /** 输入设备，映射 `inputMode`（`auto` → `null`）。 */
+  /** 输入设备：`mouse` 时滚轮缩放、拖动平移，其余两档反过来。 */
   inputMode: WhiteboardInputMode;
-  /** 缩放方向反转，映射 `isZoomDirectionInverted`；只在鼠标模式下有意义。 */
-  zoomInverted: boolean;
-  style: WhiteboardStyle;
   defaultColor: WhiteboardColor;
   defaultSize: WhiteboardSize;
 }
@@ -127,11 +116,7 @@ export const WHITEBOARD_KEYS: Record<keyof WhiteboardPreferences, string> = {
   focus: WB_FOCUS_KEY,
   edgeScroll: WB_EDGE_SCROLL_KEY,
   pasteAtCursor: WB_PASTE_AT_CURSOR_KEY,
-  debug: WB_DEBUG_KEY,
-  enhancedA11y: WB_ENHANCED_A11Y_KEY,
   inputMode: WB_INPUT_MODE_KEY,
-  zoomInverted: WB_ZOOM_INVERTED_KEY,
-  style: WB_STYLE_KEY,
   defaultColor: WB_COLOR_KEY,
   defaultSize: WB_SIZE_KEY,
 };
@@ -158,11 +143,7 @@ export function storedWhiteboardPreferences(): WhiteboardPreferences {
     focus: storedBoolean(WB_FOCUS_KEY, false),
     edgeScroll: storedBoolean(WB_EDGE_SCROLL_KEY, true),
     pasteAtCursor: storedBoolean(WB_PASTE_AT_CURSOR_KEY, false),
-    debug: storedBoolean(WB_DEBUG_KEY, false),
-    enhancedA11y: storedBoolean(WB_ENHANCED_A11Y_KEY, false),
     inputMode: storedEnum(WB_INPUT_MODE_KEY, WHITEBOARD_INPUT_MODES, "auto"),
-    zoomInverted: storedBoolean(WB_ZOOM_INVERTED_KEY, false),
-    style: storedEnum(WB_STYLE_KEY, WHITEBOARD_STYLES, "sketch"),
     defaultColor: storedEnum(WB_COLOR_KEY, WHITEBOARD_COLORS, "black"),
     defaultSize: storedEnum(WB_SIZE_KEY, WHITEBOARD_SIZES, "m"),
   };

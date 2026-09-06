@@ -73,9 +73,11 @@ export const boardSchema = z.object({
   sortOrder: z.number().int().default(0),
   viewport: viewportSchema.default(DEFAULT_VIEWPORT),
   /**
-   * Opaque tldraw store snapshot (JSON string) holding the whiteboard-native
-   * records only — tldraw plan §6.1. Empty string = no whiteboard content.
-   * Defaulted so a document written before migration 0009 still parses.
+   * Opaque whiteboard document (JSON string) holding the whiteboard-native
+   * objects only — canvas-react-flow plan §3.1. Neither the runtime nor the
+   * host looks inside it; only the web client parses it. Empty string = no
+   * whiteboard content. Defaulted so a document written before migration 0009
+   * still parses.
    */
   whiteboard: z.string().max(MAX_WHITEBOARD_BYTES).default(""),
   createdAt: timestampSchema,
