@@ -155,4 +155,67 @@ func TestPlainHTTPHostRefusesBrowserPairing(t *testing.T) {
 	if _, err := pairProcess(t, []string{"pair", "--data-dir", c.dataDir, "--origin", "https://armadra.example", "--device-name", "phone"}); err == nil {
 		t.Fatal("HTTP-only Host issued unusable cookie credentials")
 	}
+	// A desktop shell origin the operator did not allow is not an audience
+	// either: the ticket could never be spent on this listener.
+	if _, err := pairProcess(t, []string{"pair", "--data-dir", c.dataDir, "--origin", "tauri://localhost", "--device-name", "本机桌面"}); err == nil {
+		t.Fatal("HTTP-only Host issued a native ticket for an origin it does not serve")
+	}
+}
+
+// The desktop shape: a plain loopback Host that allows the shell's origin
+// mints native tickets for it, and the ticket buys a bearer session over that
+// same listener (docs/design/host-native-session.md §2).
+func TestPlainHTTPHostPairsTheAllowedNativeOrigin(t *testing.T) {
+	c, err := parseConfig([]string{"serve", "--data-dir", t.TempDir(), "--listen", "127.0.0.1:0", "--allow-origin", "tauri://localhost", "--allow-origin", "http://127.0.0.1:1420"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := startPairHost(t, c)
+	if _, err := pairProcess(t, []string{"pair", "--data-dir", c.dataDir, "--origin", "http://127.0.0.1:1420", "--device-name", "browser"}); err == nil {
+		t.Fatal("plain Host issued a ticket to a browser origin")
+	}
+	wire, err := pairProcess(t, []string{"pair", "--data-dir", c.dataDir, "--origin", "tauri://localhost", "--device-name", "本机桌面", "--output", "protobuf"})
+	if err != nil {
+		t.Fatal("native pair subprocess failed")
+	}
+	ticket := new(pb.BootstrapTicketResponse)
+	if proto.Unmarshal(wire, ticket) != nil || ticket.HostId != status.HostId || ticket.HostInstanceId != status.HostInstanceId || ticket.Origin != "tauri://localhost" || ticket.Ticket == "" {
+		t.Fatal("CLI returned an invalid native ticket")
+	}
+	client := &http.Client{Timeout: 3 * time.Second}
+	request := func(origin, path string, input proto.Message, bearer string) (int, []byte) {
+		t.Helper()
+		data, _ := proto.Marshal(input)
+		req, _ := http.NewRequest("POST", status.HttpEndpoint+server.AuthPrefix+path, bytes.NewReader(data))
+		req.Header.Set("Origin", origin)
+		req.Header.Set("Content-Type", server.MediaType)
+		if bearer != "" {
+			req.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		response, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(response.Body)
+		response.Body.Close()
+		return response.StatusCode, body
+	}
+	pair := &pb.PairDeviceRequest{ExpectedHostId: status.HostId, ExpectedInstanceId: status.HostInstanceId, Ticket: ticket.Ticket}
+	if code, _ := request("http://127.0.0.1:1420", "Pair", pair, ""); code != 403 {
+		t.Fatalf("browser origin spent a native ticket: %d", code)
+	}
+	code, body := request("tauri://localhost", "Pair", pair, "")
+	session := new(pb.AuthenticatedSession)
+	if code != 200 || proto.Unmarshal(body, session) != nil || session.Native == nil || session.Device.DisplayName != "本机桌面" {
+		t.Fatalf("native origin could not consume the CLI ticket: %d", code)
+	}
+	if code, _ = request("tauri://localhost", "Pair", pair, ""); code != 401 {
+		t.Fatalf("ticket was consumable twice: %d", code)
+	}
+	if code, _ = request("tauri://localhost", "Current", &pb.CurrentSessionRequest{}, session.Native.AccessToken); code != 200 {
+		t.Fatalf("bearer did not restore the native session: %d", code)
+	}
+	if code, _ = request("tauri://localhost", "Current", &pb.CurrentSessionRequest{}, ""); code != 401 {
+		t.Fatalf("a native request without a bearer authenticated: %d", code)
+	}
 }

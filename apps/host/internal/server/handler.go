@@ -65,21 +65,30 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "Local request origin is not allowed")
 			return
 		}
+		// The desktop shell's native transport is the one way onto the
+		// authenticated surface without HTTPS: plain loopback HTTP from an
+		// explicitly allowed native origin, with bearer credentials that only
+		// a ticket from the same-user control channel can mint
+		// (docs/design/host-native-session.md §2). Everything else keeps the
+		// browser rule below, unchanged.
+		native := nativeSession(r, origin, explicit, options)
 		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path) || githubMethod(r.URL.Path) || updatesMethod(r.URL.Path) || canvasMethod(r.URL.Path) || ownershipMethod(r.URL.Path) || settingsMethod(r.URL.Path) || filesystemMethod(r.URL.Path) || gitMethod(r.URL.Path) || sessionMethod(r.URL.Path) || agentMethod(r.URL.Path)) {
-			if origin != options.PublicOrigin {
-				writeError(w, 403, "PERMISSION_DENIED", "Authentication requires the Host HTTPS origin")
-				return
-			}
-			if r.TLS == nil || options.PublicOrigin == "" {
-				writeError(w, 403, "PERMISSION_DENIED", "Browser authentication requires configured HTTPS")
-				return
-			}
-			if origin == "" {
-				writeError(w, 403, "PERMISSION_DENIED", "An exact browser origin is required")
-				return
+			if !native {
+				if origin != options.PublicOrigin {
+					writeError(w, 403, "PERMISSION_DENIED", "Authentication requires the Host HTTPS origin")
+					return
+				}
+				if r.TLS == nil || options.PublicOrigin == "" {
+					writeError(w, 403, "PERMISSION_DENIED", "Browser authentication requires configured HTTPS")
+					return
+				}
+				if origin == "" {
+					writeError(w, 403, "PERMISSION_DENIED", "An exact browser origin is required")
+					return
+				}
 			}
 			if r.Method == http.MethodOptions {
-				identityPreflight(w, r, origin)
+				identityPreflight(w, r, origin, native)
 				return
 			}
 			if r.Method != http.MethodPost {
@@ -88,7 +97,9 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 				return
 			}
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			if !native {
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
 			if automationMethod(r.URL.Path) {
 				automationRequest(w, r, identity, options.Identity, options.Automation)
 				return
@@ -267,19 +278,24 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			return
 		}
 		authentication := options.Identity != nil && options.PublicOrigin != "" && r.TLS != nil
+		// The business surfaces answer a native session exactly as they
+		// answer a browser session; only the proxy and the event stream stay
+		// HTTPS-only, because the desktop shell has its own Runtime channel.
+		session := authentication || native
 		hello(w, r, identity, helloSurfaces{
 			authentication: authentication,
-			scheduling:     authentication && options.Automation != nil,
-			github:         authentication && options.GitHub != nil,
+			nativeSession:  native,
+			scheduling:     session && options.Automation != nil,
+			github:         session && options.GitHub != nil,
 			proxying:       authentication && options.Runtime != nil,
-			canvas:         authentication && options.Canvas != nil,
-			filesystem:     authentication && options.Filesystem != nil,
-			sessions:       authentication && options.Sessions != nil,
-			agents:         authentication && options.Agents != nil,
+			canvas:         session && options.Canvas != nil,
+			filesystem:     session && options.Filesystem != nil,
+			sessions:       session && options.Sessions != nil,
+			agents:         session && options.Agents != nil,
 			events:         authentication && options.Events != nil,
-			ownership:      authentication && options.Ownership != nil,
-			settings:       authentication && options.Settings != nil,
-			repositories:   authentication && options.Git != nil,
+			ownership:      session && options.Ownership != nil,
+			settings:       session && options.Settings != nil,
+			repositories:   session && options.Git != nil,
 		})
 	}), nil
 }
@@ -320,6 +336,10 @@ func deviceOrigin(r *http.Request, origin, public string) (string, bool) {
 type helloSurfaces struct {
 	authentication, scheduling, github, proxying, canvas, filesystem, events, ownership, settings bool
 	repositories, sessions, agents                                                                bool
+	// nativeSession is true only for the request's own origin: the desktop
+	// shell asking over loopback HTTP from an allowed native origin. A browser
+	// page never sees it advertised, and never could use it.
+	nativeSession bool
 }
 
 func hello(w http.ResponseWriter, r *http.Request, identity Identity, surfaces helloSurfaces) {
@@ -365,6 +385,12 @@ func hello(w http.ResponseWriter, r *http.Request, identity Identity, surfaces h
 	capabilities := []string{"protocol.hello.v1", "host.identity.v1"}
 	if surfaces.authentication {
 		capabilities = append(capabilities, "identity.browser-session.v1")
+	}
+	// Advertised only to the desktop shell's own origin over loopback HTTP
+	// (docs/design/host-native-session.md §3): it says this Host will trade a
+	// control-channel ticket for a bearer session, not that anyone is signed in.
+	if surfaces.nativeSession {
+		capabilities = append(capabilities, "identity.native-session.v1")
 	}
 	// Advertised only when a Worker is actually assembled: a client must never
 	// read this as "plans exist" on a Host that cannot run them.

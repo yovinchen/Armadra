@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -435,7 +436,15 @@ func serveHost(parent context.Context, c config) (err error) {
 				}, nil
 			},
 			Bootstrap: func(ctx context.Context, request *pb.BootstrapTicketRequest) (*pb.BootstrapTicketResponse, error) {
-				if c.publicOrigin == "" || request.Origin != c.publicOrigin {
+				// A ticket is minted only for an origin that can actually
+				// spend it: the HTTPS public origin, or — on a plain loopback
+				// Host — a desktop shell origin the operator allowed, which
+				// the shell then trades for a bearer session over that
+				// listener (docs/design/host-native-session.md §2). A plain
+				// Host still refuses browser origins: it could never set
+				// their cookies.
+				native := c.publicOrigin == "" && listener != nil && server.NativeOrigin(request.Origin) && slices.Contains(c.origins, request.Origin)
+				if !native && (c.publicOrigin == "" || request.Origin != c.publicOrigin) {
 					return nil, auth.ErrPermission
 				}
 				scopes := make([]auth.Scope, 0, len(request.Scopes))

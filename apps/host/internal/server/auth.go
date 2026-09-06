@@ -35,6 +35,13 @@ func cookieName(host string, secure bool, purpose string) string {
 	return prefix + host + "_" + purpose
 }
 func credential(r *http.Request, host, purpose string) string {
+	// The desktop shell's native transport cannot rely on cookies under a
+	// custom scheme, so it presents the same secrets as a bearer token
+	// (docs/design/host-native-session.md §3). The handler gate only lets a
+	// plain-HTTP request this far when it is a native session request.
+	if nativeRequest(r) {
+		return bearerCredential(r)
+	}
 	name := cookieName(host, r.TLS != nil, purpose)
 	value := ""
 	count := 0
@@ -50,6 +57,11 @@ func credential(r *http.Request, host, purpose string) string {
 	return value
 }
 func sessionCookies(w http.ResponseWriter, r *http.Request, host string, credentials auth.SessionCredentials) {
+	// A native session gets its secrets in the response body instead; setting
+	// cookies as well would leave a second copy the page never asked for.
+	if nativeRequest(r) {
+		return
+	}
 	for _, item := range []struct {
 		purpose, value string
 		expiry         int64
@@ -58,6 +70,9 @@ func sessionCookies(w http.ResponseWriter, r *http.Request, host string, credent
 	}
 }
 func clearSessionCookies(w http.ResponseWriter, r *http.Request, host string) {
+	if nativeRequest(r) {
+		return
+	}
 	for _, purpose := range []string{"access", "refresh"} {
 		http.SetCookie(w, &http.Cookie{Name: cookieName(host, r.TLS != nil, purpose), Path: "/", MaxAge: -1, Expires: time.Unix(1, 0), HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode})
 	}
@@ -131,6 +146,16 @@ func principalResponse(principal auth.Principal, csrf string, expiry int64) *pb.
 	return &pb.AuthenticatedSession{HostId: principal.HostID, Device: &pb.DeviceIdentity{DeviceId: principal.DeviceID, PrincipalId: principal.PrincipalID, DisplayName: principal.DeviceName, Role: string(principal.Role), CreatedAtUnixMs: principal.DeviceCreatedAtMS, Revision: principal.DeviceEpoch}, Scopes: grants(principal.Scopes), CsrfToken: csrf, ExpiresAtUnixMs: expiry}
 }
 
+// credentialResponse is the Pair / Refresh answer: the session plus, on the
+// native transport only, the bearer secrets the cookies would otherwise carry.
+func credentialResponse(r *http.Request, credentials auth.SessionCredentials) *pb.AuthenticatedSession {
+	session := principalResponse(credentials.Principal, credentials.CSRFToken, credentials.AccessExpiresAtMS)
+	if nativeRequest(r) {
+		session.Native = &pb.NativeSessionCredentials{AccessToken: credentials.AccessToken, RefreshToken: credentials.RefreshToken}
+	}
+	return session
+}
+
 func identityRequest(w http.ResponseWriter, r *http.Request, host Identity, service *auth.Service) {
 	// All operations, including recovery, require the already validated exact
 	// Origin. Non-simple POST prevents forms and anonymous navigation from pairing.
@@ -152,7 +177,7 @@ func identityRequest(w http.ResponseWriter, r *http.Request, host Identity, serv
 			return
 		}
 		sessionCookies(w, r, host.HostID, result)
-		writeProto(w, 200, principalResponse(result.Principal, result.CSRFToken, result.AccessExpiresAtMS))
+		writeProto(w, 200, credentialResponse(r, result))
 	case "Current":
 		if !decodeAuth(w, r, new(pb.CurrentSessionRequest)) {
 			return
@@ -173,7 +198,7 @@ func identityRequest(w http.ResponseWriter, r *http.Request, host Identity, serv
 			return
 		}
 		sessionCookies(w, r, host.HostID, result)
-		writeProto(w, 200, principalResponse(result.Principal, result.CSRFToken, result.AccessExpiresAtMS))
+		writeProto(w, 200, credentialResponse(r, result))
 	case "RenewCsrf":
 		if !decodeAuth(w, r, new(pb.RenewCsrfRequest)) {
 			return
@@ -227,7 +252,7 @@ func identityRequest(w http.ResponseWriter, r *http.Request, host Identity, serv
 	}
 }
 
-func identityPreflight(w http.ResponseWriter, r *http.Request, origin string) {
+func identityPreflight(w http.ResponseWriter, r *http.Request, origin string, native bool) {
 	if origin == "" || len(r.Header.Values("Access-Control-Request-Method")) != 1 || r.Header.Get("Access-Control-Request-Method") != "POST" {
 		authFailure(w, auth.ErrPermission)
 		return
@@ -236,6 +261,13 @@ func identityPreflight(w http.ResponseWriter, r *http.Request, origin string) {
 		for _, header := range strings.Split(line, ",") {
 			switch strings.ToLower(strings.TrimSpace(header)) {
 			case "content-type", "accept", "x-armadra-csrf":
+			case "authorization":
+				// Only the native transport sends a bearer; a browser page
+				// asking to send one is refused exactly as before.
+				if !native {
+					authFailure(w, auth.ErrPermission)
+					return
+				}
 			default:
 				authFailure(w, auth.ErrPermission)
 				return
@@ -243,9 +275,14 @@ func identityPreflight(w http.ResponseWriter, r *http.Request, origin string) {
 		}
 	}
 	w.Header().Set("Access-Control-Allow-Origin", origin)
-	w.Header().Set("Access-Control-Allow-Credentials", "true")
 	w.Header().Set("Access-Control-Allow-Methods", "POST")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept, X-Armadra-CSRF")
+	if native {
+		// No cookies travel on this transport, so no credentialed CORS either.
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept, X-Armadra-CSRF, Authorization")
+	} else {
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept, X-Armadra-CSRF")
+	}
 	w.Header().Add("Vary", "Access-Control-Request-Method")
 	w.Header().Add("Vary", "Access-Control-Request-Headers")
 	w.WriteHeader(204)
