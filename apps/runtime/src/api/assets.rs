@@ -107,6 +107,11 @@ pub async fn upload_asset(
     body: axum::body::Bytes,
 ) -> AppResult<Json<UploadAssetResponse>> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
+    if !workspace.permissions.write {
+        return Err(AppError::Forbidden(
+            "This workspace is opened read-only".into(),
+        ));
+    }
     let content_type = headers
         .get(axum::http::header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
@@ -122,8 +127,79 @@ pub async fn upload_asset(
         })?;
         (extension, body.to_vec())
     };
+    // The store lives with the workspace. On a remote one the bytes are
+    // streamed to the execution host and the dedupe is the same content
+    // address, asked for over the wire instead of read off this disk.
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote_store(worker, &workspace, extension, &bytes)
+            .await
+            .map(Json);
+    }
     let root = canonical_directory(&workspace.root_path)?;
     store_asset(&root, &workspace.id, extension, &bytes).map(Json)
+}
+
+/// The remote half of [`store_asset`].
+///
+/// Content addressing is what makes this safe to do in two steps: the name is
+/// derived from the bytes, so asking whether it already exists and then
+/// uploading it cannot race into a different file — the worst case is two
+/// uploads of identical content, and the second one is refused as "already
+/// there", which is the answer either way.
+async fn remote_store(
+    worker: &crate::remote::client::RemoteWorker,
+    workspace: &crate::model::Workspace,
+    extension: &str,
+    bytes: &[u8],
+) -> AppResult<UploadAssetResponse> {
+    use sha2::{Digest, Sha256};
+
+    if bytes.is_empty() {
+        return Err(AppError::BadRequest("Asset is empty".into()));
+    }
+    if bytes.len() > MAX_ASSET_BYTES {
+        return Err(AppError::BadRequest("Asset is too large".into()));
+    }
+    let id = format!("{}.{extension}", hex16(&Sha256::digest(bytes)));
+    let path = format!("{ASSETS_DIRECTORY}/{id}");
+    let known = remote::read::<_, crate::imports::FileInfo>(
+        worker,
+        workspace,
+        armadra_protocol::v1::WorkerServiceOperation::FileInfo,
+        &remote::service::PathPayload { path: path.clone() },
+    )
+    .await
+    .is_ok();
+    if !known {
+        remote::upload::upload(
+            worker,
+            &workspace.id,
+            &workspace.root_path,
+            &path,
+            bytes,
+            // Create-only. A name that appeared between the check and the
+            // upload holds the same bytes, so a conflict here is success.
+            None,
+        )
+        .await
+        .or_else(|error| match error {
+            AppError::Conflict(_) => Ok(crate::remote::upload::Uploaded {
+                path: path.clone(),
+                sha256: String::new(),
+                bytes: bytes.len(),
+            }),
+            other => Err(other),
+        })?;
+    }
+    Ok(UploadAssetResponse {
+        url: format!("/api/workspaces/{}/assets/{id}", workspace.id),
+        mime_type: asset_mime(extension)
+            .unwrap_or("application/octet-stream")
+            .to_owned(),
+        path,
+        id,
+        bytes: bytes.len(),
+    })
 }
 
 /// Copy already-validated bytes into `<workspace>/.armadra/assets/` under their
@@ -184,11 +260,41 @@ pub async fn import_asset(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Json(request): Json<ImportAssetRequest>,
-) -> AppResult<Json<UploadAssetResponse>> {
+) -> AppResult<remote::JsonAnswer> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
-    remote::refuse_remote(&workspace, "Importing a whiteboard asset by path")?;
+    // The path named here is a path on the machine the workspace executes on,
+    // so the read, the type check and the dedupe all happen there.
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            armadra_protocol::v1::WorkerServiceOperation::AssetImport,
+            &remote::service::assets::ImportAssetPayload {
+                path: request.path,
+                workspace_id: workspace.id.clone(),
+            },
+        )
+        .await;
+    }
     let root = canonical_directory(&workspace.root_path)?;
-    let source = resolve_import_source(&root, &request.path)?;
+    let stored =
+        tokio::task::spawn_blocking(move || import_asset_at(&root, &workspace.id, &request.path))
+            .await??;
+    remote::JsonAnswer::local(&stored)
+}
+
+/// Copy one already-on-disk image into `<root>/.armadra/assets/`.
+///
+/// Split out of the route because the execution host runs exactly this when a
+/// remote workspace imports by path: same type table, same size ceiling, same
+/// content-addressed name, so the answer is indistinguishable from a local
+/// import except for which disk the bytes came off.
+pub fn import_asset_at(
+    root: &Path,
+    workspace_id: &str,
+    requested: &str,
+) -> AppResult<UploadAssetResponse> {
+    let source = resolve_import_source(root, requested)?;
     let extension = asset_extension_of_file(&source)
         .ok_or_else(|| AppError::BadRequest("Asset type is not an accepted image type".into()))?;
 
@@ -202,7 +308,7 @@ pub async fn import_asset(
     let bytes = std::fs::read(&source)
         .map_err(|error| AppError::BadRequest(format!("Asset could not be read: {error}")))?;
 
-    store_asset(&root, &workspace.id, extension, &bytes).map(Json)
+    store_asset(root, workspace_id, extension, &bytes)
 }
 
 /// `GET /api/workspaces/{id}/assets/{assetId}` — serves an uploaded asset back.
@@ -227,9 +333,22 @@ pub async fn get_asset(
     let Some(mime) = mime else {
         return Err(AppError::BadRequest("Asset id is invalid".into()));
     };
-    let root = canonical_directory(&workspace.root_path)?;
-    let bytes = std::fs::read(root.join(ASSETS_DIRECTORY).join(&asset_id))
-        .map_err(|_| AppError::NotFound("Asset was not found".into()))?;
+    let relative = format!("{ASSETS_DIRECTORY}/{asset_id}");
+    let bytes = match remote::resolve(&state, &workspace)?.remote() {
+        // A board does not care which machine its pictures are on, so the
+        // read follows the workspace rather than the controller's disk.
+        Some(worker) => {
+            remote::download::fetch(worker, &workspace, &relative)
+                .await
+                .map_err(|_| AppError::NotFound("Asset was not found".into()))?
+                .bytes
+        }
+        None => {
+            let root = canonical_directory(&workspace.root_path)?;
+            std::fs::read(root.join(&relative))
+                .map_err(|_| AppError::NotFound("Asset was not found".into()))?
+        }
+    };
     Response::builder()
         .header(header::CONTENT_TYPE, mime)
         .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")

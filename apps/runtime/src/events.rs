@@ -51,6 +51,21 @@ pub enum WorkspaceEvent {
         board_id: String,
         updated_at: String,
     },
+    /// `ssh` is asking for a password or a key passphrase and there is no TTY
+    /// to ask on (remote completion design §3.6). Broadcast rather than
+    /// answered here: the secret belongs to a person, and the prompt text is
+    /// already redacted by the time it reaches this variant.
+    #[serde(rename = "ssh.prompt", rename_all = "camelCase")]
+    SshPrompt {
+        prompt: crate::terminal::ssh::prompts::SshPrompt,
+    },
+    /// The workspace itself changed in a way that invalidates everything the
+    /// client is holding about it — today only an execution-host switch, which
+    /// re-points every path at a different machine (remote completion design
+    /// §3.3). Carries no fields on purpose: a partial patch is exactly what
+    /// must not happen here.
+    #[serde(rename = "workspace.updated", rename_all = "camelCase")]
+    WorkspaceUpdated { workspace_id: String },
     /// A control verb waiting for a human (plan §5.8). The canvas answers with
     /// `POST /api/control/confirm/{requestId}`; the verb gives up after 130s.
     #[serde(rename = "control.confirm", rename_all = "camelCase")]

@@ -1,0 +1,10 @@
+{
+  "capability": "remote.git.panel.v1",
+  "operation": 25,
+  "replay": "safe",
+  "request": {
+    "onto": "main",
+    "path": "."
+  },
+  "responseType": "git_repository::RebaseTodoPreview"
+}

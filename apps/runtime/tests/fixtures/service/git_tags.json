@@ -1,0 +1,9 @@
+{
+  "capability": "remote.git.panel.v1",
+  "operation": 26,
+  "replay": "safe",
+  "request": {
+    "path": "."
+  },
+  "responseType": "git_repository::TagSnapshot"
+}

@@ -1,0 +1,10 @@
+{
+  "capability": null,
+  "operation": 3,
+  "replay": "safe",
+  "request": {
+    "limit": 50,
+    "query": "main"
+  },
+  "responseType": "file_search::IndexedFiles"
+}

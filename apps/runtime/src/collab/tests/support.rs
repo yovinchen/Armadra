@@ -140,6 +140,7 @@ pub(super) async fn fixture(name: &str) -> Fixture {
     let bearer = crate::hook::endpoint::read(&hooks.endpoint_file())["ARMADRA_HOOK_TOKEN"].clone();
     let state = AppState {
         language: Default::default(),
+        askpass: Default::default(),
         remote: Default::default(),
         resources: crate::resources::ResourceService::new(settings.clone()),
         terminals: TerminalManager::with_config(

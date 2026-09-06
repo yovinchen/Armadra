@@ -1,0 +1,11 @@
+{
+  "capability": "remote.git.panel.v1",
+  "operation": 31,
+  "replay": "safe",
+  "request": {
+    "mainline": null,
+    "oid": "abc",
+    "path": "."
+  },
+  "responseType": "git_repository::CherryPickPreview"
+}

@@ -1,0 +1,9 @@
+{
+  "capability": "remote.files.manage.v1",
+  "operation": 45,
+  "replay": "never",
+  "request": {
+    "id": "0123456789abcdef"
+  },
+  "responseType": "file_ops::EntryResult"
+}

@@ -75,6 +75,7 @@ async fn fixture_with(settings: serde_json::Value) -> Fixture {
     let state = AppState {
         remote: Default::default(),
         language: Default::default(),
+        askpass: Default::default(),
         terminals: crate::terminal::TerminalManager::with_config(
             pool.clone(),
             events.clone(),

@@ -1,0 +1,10 @@
+{
+  "capability": "remote.git.panel.v1",
+  "operation": 19,
+  "replay": "safe",
+  "request": {
+    "maxDepth": 3,
+    "refresh": false
+  },
+  "responseType": "git_discovery::GitRepositoryList"
+}

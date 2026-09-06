@@ -94,6 +94,7 @@ pub(super) async fn fixture(name: &str) -> Fixture {
     };
     let state = AppState {
         language: Default::default(),
+        askpass: Default::default(),
         remote: Default::default(),
         resources: crate::resources::ResourceService::new(settings.clone()),
         terminals: TerminalManager::with_config(

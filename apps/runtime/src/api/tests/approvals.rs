@@ -33,6 +33,7 @@ async fn answering_an_approval_publishes_it_to_the_workspace() {
     let state = AppState {
         remote: Default::default(),
         language: Default::default(),
+        askpass: Default::default(),
         resources: crate::resources::ResourceService::new(settings.clone()),
         terminals,
         usage: crate::usage::UsageService::new(settings.clone()),

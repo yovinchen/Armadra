@@ -12,7 +12,11 @@ pub struct CommitResult {
 }
 
 /// The commit `--amend` would rewrite, as the composer has to present it.
-#[derive(Debug, Clone, Serialize)]
+///
+/// Deserializable as well as serializable: this is one of the version-locked
+/// service payloads, so the controller reads back what an execution host
+/// produced when it compares two roots.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HeadCommit {
     pub oid: String,

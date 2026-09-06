@@ -170,6 +170,7 @@ async fn the_sessions_sidebar_joins_nodes_and_agent_status() {
     let router = crate::router_with_state(AppState {
         remote: Default::default(),
         language: Default::default(),
+        askpass: Default::default(),
         resources: crate::resources::ResourceService::new(settings.clone()),
         terminals: terminals.clone(),
         usage: crate::usage::UsageService::new(settings.clone()),
@@ -290,6 +291,7 @@ fn phase4_router(pool: &sqlx::SqlitePool, directory: &std::path::Path) -> Router
     crate::router_with_state(AppState {
         remote: Default::default(),
         language: Default::default(),
+        askpass: Default::default(),
         resources: crate::resources::ResourceService::new(settings.clone()),
         terminals,
         usage: crate::usage::UsageService::new(settings.clone()),

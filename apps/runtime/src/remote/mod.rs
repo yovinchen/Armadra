@@ -7,8 +7,12 @@
 //! host: the local filesystem is never consulted, not even to guess.
 
 pub mod client;
+pub mod download;
+pub mod imports;
 pub mod language;
 pub mod service;
+pub mod switch;
+pub mod upload;
 pub mod watch;
 
 use std::sync::Arc;
@@ -120,9 +124,67 @@ pub async fn proxy<T: Serialize>(
     Ok(JsonAnswer::remote(status, body))
 }
 
-/// The surfaces that have no remote implementation yet. Called by the routes
-/// that only run locally, so a remote workspace gets an explicit 501 with the
-/// feature named instead of silently operating on the controller's disk.
+/// Proxy one operation and decode the execution host's answer into a value.
+///
+/// Used where the controller has to *act* on what came back — filter a list by
+/// which workspace owns it, record an operation id — rather than hand the body
+/// straight to the client. A non-200 answer keeps the execution host's own
+/// status instead of collapsing into a decode failure.
+pub async fn read<T, R>(
+    worker: &RemoteWorker,
+    workspace: &Workspace,
+    operation: WorkerServiceOperation,
+    payload: &T,
+) -> AppResult<R>
+where
+    T: Serialize,
+    R: for<'a> serde::Deserialize<'a>,
+{
+    let request_json = serde_json::to_vec(payload)
+        .map_err(|_| AppError::Internal("Request could not be encoded".into()))?;
+    let (status, body) = worker
+        .service(
+            &workspace.id,
+            &workspace.root_path,
+            operation,
+            request_json,
+            workspace.permissions.write,
+            workspace.permissions.execute,
+        )
+        .await?;
+    decode(status, &body)
+}
+
+/// An answer that is not 200 is the execution host's own error, and keeps its
+/// meaning rather than becoming "the body was unreadable".
+pub fn decode<T: for<'a> serde::Deserialize<'a>>(status: u16, body: &[u8]) -> AppResult<T> {
+    if status != 200 {
+        let message = serde_json::from_slice::<serde_json::Value>(body)
+            .ok()
+            .and_then(|value| value["message"].as_str().map(str::to_owned))
+            .unwrap_or_else(|| "The execution host refused the request".to_owned());
+        return Err(match status {
+            400 => AppError::BadRequest(message),
+            403 => AppError::Forbidden(message),
+            404 => AppError::NotFound(message),
+            409 => AppError::Conflict(message),
+            501 => AppError::Unsupported(message),
+            _ => AppError::Internal(message),
+        });
+    }
+    serde_json::from_slice(body).map_err(|_| {
+        AppError::Internal("The execution host answered with an unreadable body".into())
+    })
+}
+
+/// The two surfaces that still run only where this process runs.
+///
+/// Everything the remote completion design gives an operation to now executes
+/// on the host that owns the files. What is left needs something this machine
+/// has and the other does not: a language server this Runtime started, or the
+/// AI provider CLI and credentials the commit drafter runs. Naming the feature
+/// is the honest answer; silently operating on the controller's disk would not
+/// be.
 pub fn refuse_remote(workspace: &Workspace, feature: &str) -> AppResult<()> {
     if workspace.execution_host_id.is_empty() {
         return Ok(());

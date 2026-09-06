@@ -205,7 +205,8 @@ async fn root_registration_is_idempotent_and_cannot_rebind_or_escape() {
                             path: "escape.txt".into(),
                             offset: 0,
                             max_bytes: 100,
-                            expected_sha256: None
+                            expected_sha256: None,
+                            raw: false,
                         })
                     ))
                     .await
@@ -230,6 +231,7 @@ async fn byte_chunks_preserve_unicode_and_require_a_stable_content_version() {
         offset: 0,
         max_bytes: 5,
         expected_sha256: None,
+        raw: false,
     };
     let first = worker
         .handle(request(
@@ -330,8 +332,10 @@ async fn malformed_truncated_and_oversized_frames_fail_closed() {
         vec![0, 0, 0, 1, 255],
     ] {
         let mut output = vec![];
+        // Owned rather than borrowed: the reader half runs in its own task now,
+        // so what is handed to `serve` has to outlive this call.
         assert!(
-            serve(bytes.as_slice(), &mut output, None, None)
+            serve(std::io::Cursor::new(bytes), &mut output, None, None)
                 .await
                 .is_err()
         );

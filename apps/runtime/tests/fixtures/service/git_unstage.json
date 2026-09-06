@@ -1,0 +1,12 @@
+{
+  "capability": null,
+  "operation": 14,
+  "replay": "never",
+  "request": {
+    "path": ".",
+    "paths": [
+      "a.txt"
+    ]
+  },
+  "responseType": "git::RepositoryStatus"
+}

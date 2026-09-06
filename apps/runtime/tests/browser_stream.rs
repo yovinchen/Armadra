@@ -158,6 +158,7 @@ async fn fixture() -> Fixture {
     let state = AppState {
         language: Default::default(),
         remote: Default::default(),
+        askpass: Default::default(),
         resources: armadra_runtime::resources::ResourceService::new(settings.clone()),
         terminals: TerminalManager::with_config(
             pool.clone(),

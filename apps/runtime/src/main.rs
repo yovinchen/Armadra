@@ -18,6 +18,16 @@ async fn main() -> anyhow::Result<()> {
     {
         return armadra_runtime::command::run_guardian(&arguments[1..]).await;
     }
+    // `ssh` runs this through `SSH_ASKPASS` with the prompt as argv[2]. It
+    // talks to a Runtime that is already running and exits; it never starts a
+    // server, opens a database, or prompts on its own (design §3.6).
+    if arguments
+        .first()
+        .is_some_and(|argument| argument == "ssh-askpass")
+    {
+        let prompt = arguments.get(1).map(String::as_str).unwrap_or_default();
+        std::process::exit(armadra_runtime::terminal::ssh::askpass::run(prompt));
+    }
     if arguments
         .first()
         .is_some_and(|argument| argument == "worker")
@@ -177,6 +187,7 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState {
         remote: Default::default(),
         language: Default::default(),
+        askpass: Default::default(),
         events,
         pool,
         usage: UsageService::new(settings.clone()),

@@ -1,161 +1,60 @@
-//! The controller half of the remote Worker link (H02).
+//! The controller half of the remote Worker link (H02, completed in design
+//! §3.4 and §3.5).
 //!
 //! One execution host is one child process — `ssh … armadra-runtime worker
 //! --stdio` — whose stdin and stdout carry the same length-prefixed Protobuf
-//! frames as the local Worker bridge. The Worker answers one frame at a time,
-//! so the connection is guarded by a mutex and requests are strictly
-//! sequential; that also gives Git mutations on one host a real queue.
+//! frames as the local Worker bridge. Requests are guarded by a mutex and are
+//! strictly sequential; that also gives Git mutations on one host a real queue.
+//! Reading, however, runs in its own task ([`connection`]), so the Worker can
+//! push filesystem events between requests and a dead session is noticed the
+//! moment it dies.
 //!
-//! Three invariants:
+//! Four invariants:
 //!
-//! * **No silent local fallback.** A missing binary, a failed handshake or a
-//!   version mismatch is `UNSUPPORTED`. The workspace's files are on the other
-//!   machine; answering from this one would be a different project.
+//! * **No silent local fallback.** A missing binary, a failed handshake or an
+//!   incompatible service contract is `UNSUPPORTED`. The workspace's files are
+//!   on the other machine; answering from this one would be a different
+//!   project.
 //! * **Bounded reconnect.** Consecutive failed connects back off and then stop
-//!   for a cooldown, so an unreachable host costs one attempt per request
-//!   window instead of an `ssh` storm.
+//!   for a cooldown ([`supervisor`]).
 //! * **No duplicated effects.** A request that was already written and then
 //!   lost the transport is reported as an unknown outcome. Only operations
 //!   marked replay-safe are re-sent, and only on a freshly established
 //!   connection.
+//! * **Missing capabilities are named, not fatal.** A Worker without the
+//!   repository panel still serves files; the panel answers 501 saying which
+//!   capability is absent ([`handshake`]).
 
-use std::{
-    collections::HashSet,
-    process::Stdio,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+pub mod connection;
+pub mod handshake;
+pub mod supervisor;
 
-use armadra_protocol::{Message, v1};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, BufReader},
-    process::{Child, ChildStdin, ChildStdout, Command},
-    sync::Mutex,
-};
+use std::{process::Stdio, sync::Arc};
+
+use armadra_protocol::v1;
+use tokio::{process::Command, sync::Mutex};
 
 use crate::{
     error::{AppError, AppResult},
-    remote::service::{Replay, replay},
+    remote::service::{Replay, capability, replay},
     terminal::ssh::{SshHost, SshWorker, language_link_argv, worker_argv},
-    worker::MAX_FRAME,
 };
 
-/// Capability the remote Worker must advertise before anything is proxied.
-pub const REMOTE_CAPABILITY: &str = "remote.execution.v1";
-/// How long a single proxied request may take end to end.
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
-/// Consecutive connect failures before the host is parked.
-const MAX_CONNECT_ATTEMPTS: u32 = 3;
-/// Backoff between those attempts, and the park after the last one.
-const RECONNECT_BACKOFF: [Duration; 3] = [
-    Duration::from_millis(250),
-    Duration::from_millis(1_000),
-    Duration::from_millis(4_000),
-];
-const COOLDOWN: Duration = Duration::from_secs(30);
+use connection::{Connection, Transport};
+use supervisor::Supervisor;
+
+pub use handshake::REMOTE_CAPABILITY;
+
+/// How many unsolicited frames may queue for a subscriber before the oldest is
+/// dropped. A subscriber that falls this far behind reconciles by polling, so
+/// dropping is preferable to holding the connection's reader hostage.
+const EVENT_BACKLOG: usize = 256;
 
 /// Replaces the `ssh` program for tests and for a user who tunnels the Worker
 /// some other way. It substitutes only argv[0]; every SSH option and the
 /// remote command stay exactly as they would be, so what is exercised is the
 /// real launch line. Must be an absolute path.
 pub const LAUNCHER_OVERRIDE: &str = "ARMADRA_REMOTE_WORKER_LAUNCHER";
-
-fn now_millis() -> i64 {
-    chrono::Utc::now().timestamp_millis()
-}
-
-struct Connection {
-    child: Child,
-    stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
-    instance_id: String,
-    /// Root ids registered on *this* connection. A reconnect starts empty.
-    roots: HashSet<String>,
-}
-
-impl Connection {
-    async fn call(
-        &mut self,
-        host_id: &str,
-        action: v1::worker_request::Action,
-    ) -> Result<v1::worker_response::Result, Transport> {
-        let request = v1::WorkerRequest {
-            request_id: uuid::Uuid::now_v7().simple().to_string(),
-            host_id: host_id.to_owned(),
-            expected_instance_id: self.instance_id.clone(),
-            deadline_unix_ms: now_millis() + REQUEST_TIMEOUT.as_millis() as i64,
-            action: Some(action),
-        };
-        let bytes = request.encode_to_vec();
-        if bytes.len() > MAX_FRAME {
-            // Detected before anything is written, so nothing ran.
-            return Err(Transport::TooLarge);
-        }
-        let request_id = request.request_id.clone();
-        self.write(&bytes).await.map_err(|_| Transport::Write)?;
-        let response = tokio::time::timeout(REQUEST_TIMEOUT, self.read())
-            .await
-            .map_err(|_| Transport::Lost)?
-            .map_err(|_| Transport::Lost)?;
-        // The handshake is what learns the instance; from then on every answer
-        // has to come from that same Worker session, so a reconnected child
-        // cannot be mistaken for the one the request was aimed at.
-        if response.request_id != request_id
-            || (!self.instance_id.is_empty() && response.instance_id != self.instance_id)
-        {
-            return Err(Transport::Lost);
-        }
-        response.result.ok_or(Transport::Lost)
-    }
-
-    async fn write(&mut self, bytes: &[u8]) -> std::io::Result<()> {
-        self.stdin
-            .write_all(&(bytes.len() as u32).to_be_bytes())
-            .await?;
-        self.stdin.write_all(bytes).await?;
-        self.stdin.flush().await
-    }
-
-    async fn read(&mut self) -> anyhow::Result<v1::WorkerResponse> {
-        let mut prefix = [0u8; 4];
-        self.stdout.read_exact(&mut prefix).await?;
-        let length = u32::from_be_bytes(prefix) as usize;
-        anyhow::ensure!(
-            length > 0 && length <= MAX_FRAME,
-            "Invalid Worker frame length"
-        );
-        let mut bytes = vec![0; length];
-        self.stdout.read_exact(&mut bytes).await?;
-        Ok(v1::WorkerResponse::decode(bytes.as_slice())?)
-    }
-}
-
-impl Drop for Connection {
-    fn drop(&mut self) {
-        // Closing stdin is the Worker's own shutdown signal; the kill is the
-        // backstop for an `ssh` that ignored it.
-        self.child.start_kill().ok();
-    }
-}
-
-/// Why a connection stopped being usable. Only `Connect` and `TooLarge` prove
-/// the request never reached the execution host.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Transport {
-    /// The request was never written.
-    Write,
-    /// Written, and then the answer never arrived.
-    Lost,
-    TooLarge,
-}
-
-struct Supervisor {
-    connection: Option<Connection>,
-    /// Consecutive failed connects.
-    failures: u32,
-    /// When connecting is allowed again after the attempt budget ran out.
-    parked_until: Option<Instant>,
-}
 
 /// One execution host: its configuration, and at most one live child.
 pub struct RemoteWorker {
@@ -170,6 +69,9 @@ pub struct RemoteWorker {
     /// nothing for it, and `sshd`'s session limit is not spent on a link
     /// nobody is using.
     pub language: super::language::RemoteLanguage,
+    /// Unsolicited frames. Created once and shared with every connection, so a
+    /// subscriber survives a reconnect without re-subscribing here.
+    events: tokio::sync::broadcast::Sender<v1::WorkerWatchEvent>,
 }
 
 impl RemoteWorker {
@@ -178,12 +80,9 @@ impl RemoteWorker {
             host,
             worker,
             host_id,
-            state: Mutex::new(Supervisor {
-                connection: None,
-                failures: 0,
-                parked_until: None,
-            }),
+            state: Mutex::new(Supervisor::default()),
             language: super::language::RemoteLanguage::default(),
+            events: tokio::sync::broadcast::channel(EVENT_BACKLOG).0,
         }
     }
 
@@ -201,6 +100,29 @@ impl RemoteWorker {
         &self.host_id
     }
 
+    /// Filesystem events this host pushes. Subscribing does not itself
+    /// subscribe on the Worker; [`Self::watch_subscribe`] does that.
+    pub fn events(&self) -> tokio::sync::broadcast::Receiver<v1::WorkerWatchEvent> {
+        self.events.subscribe()
+    }
+
+    /// The Worker's own release when it differs from this controller's, for
+    /// the node badge. `None` while nothing has connected yet.
+    pub async fn version_badge(&self) -> Option<String> {
+        self.state.lock().await.version_badge.clone()
+    }
+
+    /// Whether the live connection advertises `capability`. A host that is not
+    /// connected reports `false` rather than connecting to find out.
+    pub async fn advertises(&self, capability: &str) -> bool {
+        self.state
+            .lock()
+            .await
+            .connection
+            .as_ref()
+            .is_some_and(|connection| connection.has_capability(capability))
+    }
+
     /// The argv this host's Worker is started with, `ssh` included.
     pub fn argv(&self) -> Vec<String> {
         substitute(worker_argv(&self.host, &self.worker))
@@ -215,39 +137,38 @@ impl RemoteWorker {
         if state.connection.is_some() {
             return Ok(());
         }
-        if let Some(until) = state.parked_until {
-            if Instant::now() < until {
-                return Err(AppError::Unavailable(format!(
-                    "Execution host {} is not reachable; the connection is paused",
-                    self.host.name
-                )));
-            }
-            state.parked_until = None;
-            state.failures = 0;
+        if state.parked() {
+            return Err(AppError::Unavailable(format!(
+                "Execution host {} is not reachable; the connection is paused",
+                self.host.name
+            )));
         }
-        let attempt = state.failures.min(MAX_CONNECT_ATTEMPTS - 1) as usize;
-        if state.failures > 0 {
-            tokio::time::sleep(RECONNECT_BACKOFF[attempt]).await;
+        if let Some(wait) = state.backoff() {
+            tokio::time::sleep(wait).await;
         }
         match self.open().await {
-            Ok((connection, _)) => {
-                state.connection = Some(connection);
-                state.failures = 0;
+            Ok((connection, _, accepted)) => {
+                state.succeeded(connection, accepted.version_badge);
                 Ok(())
             }
             Err(error) => {
-                state.failures += 1;
-                if state.failures >= MAX_CONNECT_ATTEMPTS {
-                    state.parked_until = Some(Instant::now() + COOLDOWN);
-                }
+                state.failed();
                 Err(error)
             }
         }
     }
 
-    async fn open(&self) -> AppResult<(Connection, v1::WorkerHelloResponse)> {
+    async fn open(&self) -> AppResult<(Connection, v1::WorkerHelloResponse, handshake::Accepted)> {
         let argv = self.argv();
-        let mut child = Command::new(&argv[0])
+        let mut command = Command::new(&argv[0]);
+        // A password prompt has no TTY to go to, so it goes to the person
+        // through the Armadra client instead (design §3.6). Absent when this
+        // Runtime has no address the helper could reach, in which case the
+        // helper exits non-zero and `ssh` fails cleanly.
+        if let Some(environment) = crate::terminal::ssh::askpass::child_environment(&self.host.id) {
+            command.envs(environment);
+        }
+        let child = command
             .args(&argv[1..])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -262,15 +183,7 @@ impl RemoteWorker {
                     self.host.name
                 ))
             })?;
-        let stdin = child.stdin.take().expect("piped stdin");
-        let stdout = BufReader::new(child.stdout.take().expect("piped stdout"));
-        let mut connection = Connection {
-            child,
-            stdin,
-            stdout,
-            instance_id: String::new(),
-            roots: HashSet::new(),
-        };
+        let mut connection = Connection::open(child, self.events.clone());
         let result = connection
             .call(
                 &self.host_id,
@@ -300,31 +213,10 @@ impl RemoteWorker {
                 )));
             }
         };
-        let expected = env!("CARGO_PKG_VERSION");
-        if hello.runtime_version != expected {
-            return Err(AppError::Unsupported(format!(
-                "Execution host {} runs Armadra {}, this controller is {expected}; \
-                 install a matching remote Worker",
-                self.host.name,
-                if hello.runtime_version.is_empty() {
-                    "an older build"
-                } else {
-                    &hello.runtime_version
-                },
-            )));
-        }
-        if !hello
-            .capabilities
-            .iter()
-            .any(|capability| capability == REMOTE_CAPABILITY)
-        {
-            return Err(AppError::Unsupported(format!(
-                "Execution host {} does not offer remote execution",
-                self.host.name
-            )));
-        }
-        connection.instance_id = hello.instance_id.clone();
-        Ok((connection, hello))
+        let accepted = handshake::accept(&self.host.name, &hello)?;
+        connection.instance_id = accepted.instance_id.clone();
+        connection.capabilities = accepted.capabilities.clone();
+        Ok((connection, hello, accepted))
     }
 
     /// Send one action, registering `root` first when the current connection
@@ -418,11 +310,9 @@ impl RemoteWorker {
         let mut state = self.state.lock().await;
         // A probe is the one place a parked host is retried immediately: the
         // user just asked, and "still parked" would be a useless answer.
-        state.parked_until = None;
-        state.failures = 0;
-        state.connection = None;
-        let (connection, hello) = self.open().await?;
-        state.connection = Some(connection);
+        state.resume();
+        let (connection, hello, accepted) = self.open().await?;
+        state.succeeded(connection, accepted.version_badge);
         Ok(hello)
     }
 
@@ -492,6 +382,33 @@ impl RemoteWorker {
         offset: u64,
         expected_sha256: Option<Vec<u8>>,
     ) -> AppResult<v1::WorkerFileChunk> {
+        self.read(root_id, root_path, path, offset, expected_sha256, false)
+            .await
+    }
+
+    /// The same chunked read, asked for bytes instead of editor text. Used by
+    /// downloads and by whiteboard assets, neither of which is text.
+    pub async fn read_raw_file(
+        &self,
+        root_id: &str,
+        root_path: &str,
+        path: &str,
+        offset: u64,
+        expected_sha256: Option<Vec<u8>>,
+    ) -> AppResult<v1::WorkerFileChunk> {
+        self.read(root_id, root_path, path, offset, expected_sha256, true)
+            .await
+    }
+
+    async fn read(
+        &self,
+        root_id: &str,
+        root_path: &str,
+        path: &str,
+        offset: u64,
+        expected_sha256: Option<Vec<u8>>,
+        raw: bool,
+    ) -> AppResult<v1::WorkerFileChunk> {
         match self
             .send(
                 root_id,
@@ -502,6 +419,7 @@ impl RemoteWorker {
                     offset,
                     max_bytes: crate::worker::MAX_CHUNK as u32,
                     expected_sha256,
+                    raw,
                 }),
                 Replay::Safe,
             )
@@ -574,6 +492,10 @@ impl RemoteWorker {
 
     /// One proxied operation. The answer is the execution host's own status
     /// and JSON body, forwarded to the client unchanged.
+    ///
+    /// An operation whose capability this Worker does not advertise is refused
+    /// here rather than sent: the Worker would answer `UNSUPPORTED` anyway, and
+    /// naming the capability is more useful than relaying that.
     pub async fn service(
         &self,
         root_id: &str,
@@ -583,6 +505,9 @@ impl RemoteWorker {
         allow_write: bool,
         allow_execute: bool,
     ) -> AppResult<(u16, Vec<u8>)> {
+        if let Some(capability) = capability(operation) {
+            self.require_capability(capability).await?;
+        }
         match self
             .send(
                 root_id,
@@ -603,6 +528,158 @@ impl RemoteWorker {
                 response.response_json,
             )),
             _ => Err(self.wrong_answer()),
+        }
+    }
+
+    /// Subscribe to filesystem events for `paths`, or unsubscribe from them.
+    ///
+    /// A Worker without `remote.watch.v1` refuses here, and the caller falls
+    /// back to polling rather than waiting for events that never come.
+    pub async fn watch(
+        &self,
+        root_id: &str,
+        root_path: &str,
+        operation: v1::WorkerServiceOperation,
+        paths: Vec<String>,
+    ) -> AppResult<v1::WorkerWatchSubscription> {
+        self.require_capability(crate::remote::service::replay::WATCH_CAPABILITY)
+            .await?;
+        match self
+            .send(
+                root_id,
+                root_path,
+                v1::worker_request::Action::Watch(v1::WorkerWatchRequest {
+                    root_id: root_id.to_owned(),
+                    operation: operation as i32,
+                    paths,
+                }),
+                // A subscription has no effect to duplicate: re-subscribing the
+                // same path re-baselines it.
+                Replay::Safe,
+            )
+            .await?
+        {
+            v1::worker_response::Result::Watch(subscription) => Ok(subscription),
+            _ => Err(self.wrong_answer()),
+        }
+    }
+
+    /// Open a chunked upload. Answers the id the remaining steps use.
+    pub async fn upload_begin(
+        &self,
+        root_id: &str,
+        root_path: &str,
+        path: &str,
+        total_bytes: u64,
+        sha256: String,
+        overwrite_sha256: Option<String>,
+    ) -> AppResult<String> {
+        self.require_capability(crate::remote::service::replay::UPLOAD_CAPABILITY)
+            .await?;
+        Ok(self
+            .upload_step(
+                root_id,
+                root_path,
+                v1::worker_upload_request::Step::Begin(v1::WorkerUploadBegin {
+                    root_id: root_id.to_owned(),
+                    path: path.to_owned(),
+                    total_bytes,
+                    sha256,
+                    overwrite_sha256,
+                    allow_write: true,
+                }),
+            )
+            .await?
+            .upload_id)
+    }
+
+    /// Append one chunk; answers how many bytes the host now holds.
+    pub async fn upload_chunk(
+        &self,
+        root_id: &str,
+        root_path: &str,
+        upload_id: &str,
+        offset: u64,
+        data: Vec<u8>,
+    ) -> AppResult<u64> {
+        Ok(self
+            .upload_step(
+                root_id,
+                root_path,
+                v1::worker_upload_request::Step::Chunk(v1::WorkerUploadChunk {
+                    upload_id: upload_id.to_owned(),
+                    offset,
+                    data,
+                }),
+            )
+            .await?
+            .received_bytes)
+    }
+
+    pub async fn upload_commit(
+        &self,
+        root_id: &str,
+        root_path: &str,
+        upload_id: &str,
+    ) -> AppResult<v1::WorkerUploadResponse> {
+        self.upload_step(
+            root_id,
+            root_path,
+            v1::worker_upload_request::Step::Commit(v1::WorkerUploadCommit {
+                upload_id: upload_id.to_owned(),
+            }),
+        )
+        .await
+    }
+
+    pub async fn upload_abort(
+        &self,
+        root_id: &str,
+        root_path: &str,
+        upload_id: &str,
+    ) -> AppResult<v1::WorkerUploadResponse> {
+        self.upload_step(
+            root_id,
+            root_path,
+            v1::worker_upload_request::Step::Abort(v1::WorkerUploadAbort {
+                upload_id: upload_id.to_owned(),
+            }),
+        )
+        .await
+    }
+
+    async fn upload_step(
+        &self,
+        root_id: &str,
+        root_path: &str,
+        step: v1::worker_upload_request::Step,
+    ) -> AppResult<v1::WorkerUploadResponse> {
+        match self
+            .send(
+                root_id,
+                root_path,
+                v1::worker_request::Action::Upload(v1::WorkerUploadRequest { step: Some(step) }),
+                // Every step writes. A step that was sent and then lost its
+                // answer may have landed, and re-sending it would either
+                // duplicate bytes or publish a file twice.
+                Replay::Never,
+            )
+            .await?
+        {
+            v1::worker_response::Result::Upload(response) => Ok(response),
+            _ => Err(self.wrong_answer()),
+        }
+    }
+
+    /// Refuse before sending when the live connection lacks `capability`.
+    async fn require_capability(&self, capability: &str) -> AppResult<()> {
+        let mut state = self.state.lock().await;
+        self.connect(&mut state).await?;
+        let connection = state.connection.as_ref().expect("connected");
+        if connection.has_capability(capability) {
+            Ok(())
+        } else {
+            Err(handshake::missing_capability(&self.host.name, capability))
         }
     }
 
@@ -632,6 +709,7 @@ pub(crate) fn remote_error(name: &str, error: &v1::ErrorResponse) -> AppError {
         "NOT_FOUND" => AppError::NotFound(error.message.clone()),
         "CONFLICT" | "STALE_GENERATION" => AppError::Conflict(error.message.clone()),
         "UNSUPPORTED" => AppError::Unsupported(error.message.clone()),
+        "RESOURCE_EXHAUSTED" => AppError::BadRequest(error.message.clone()),
         "TIMEOUT" => AppError::Unavailable(format!("Execution host {name} timed out")),
         _ => AppError::Internal(format!("Execution host {name}: {}", error.message)),
     }
@@ -735,92 +813,4 @@ fn signature(host: &SshHost, worker: &SshWorker) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use armadra_protocol::v1::WorkerServiceOperation;
-
-    fn host() -> SshHost {
-        SshHost {
-            id: "box".into(),
-            name: "Box".into(),
-            host: "example.invalid".into(),
-            user: Some("ada".into()),
-            port: None,
-            identity_file: None,
-            extra_args: Vec::new(),
-            worker: Some(SshWorker {
-                path: "/opt/armadra/armadra-runtime".into(),
-                state_dir: None,
-            }),
-        }
-    }
-
-    #[test]
-    fn a_commit_that_was_written_and_then_lost_is_an_unknown_outcome_not_a_retry() {
-        assert!(outcome_is_unknown(
-            Transport::Lost,
-            replay(WorkerServiceOperation::GitCommit)
-        ));
-        // Nothing left this machine, so nothing ran and a retry is honest.
-        assert!(!outcome_is_unknown(
-            Transport::Write,
-            replay(WorkerServiceOperation::GitCommit)
-        ));
-        assert!(!outcome_is_unknown(
-            Transport::TooLarge,
-            replay(WorkerServiceOperation::GitCommit)
-        ));
-        // A read has no effect to duplicate.
-        assert!(!outcome_is_unknown(
-            Transport::Lost,
-            replay(WorkerServiceOperation::GitStatus)
-        ));
-    }
-
-    #[test]
-    fn the_launch_line_only_substitutes_the_program() {
-        let host = host();
-        let worker = RemoteWorker::new(
-            host.clone(),
-            host.worker.clone().unwrap(),
-            "0123456789abcdef0123456789abcdef".into(),
-        );
-        let argv = worker.argv();
-        assert_eq!(
-            argv[1..],
-            worker_argv(&host, host.worker.as_ref().unwrap())[1..]
-        );
-        assert!(argv.iter().any(|value| value == "--stdio"));
-    }
-
-    #[test]
-    fn a_relative_or_split_launcher_override_is_ignored() {
-        // Not a test of the environment itself — `launcher_override` is the
-        // only place the value is trusted, and a PATH lookup or an argument
-        // smuggled through a space must not become part of the launch line.
-        assert!(!accepted_launcher("ssh"));
-        assert!(!accepted_launcher("/usr/bin/env ssh"));
-        assert!(accepted_launcher("/usr/bin/ssh"));
-    }
-
-    fn accepted_launcher(value: &str) -> bool {
-        value.starts_with('/') && !value.contains(char::is_whitespace)
-    }
-
-    #[tokio::test]
-    async fn a_worker_registry_hands_back_the_same_child_for_the_same_configuration() {
-        let workers = RemoteWorkers::default();
-        let first = workers.get(Some(host()), "box").unwrap();
-        let second = workers.get(Some(host()), "box").unwrap();
-        assert!(Arc::ptr_eq(&first, &second));
-        // An edited binary path is a different machine's Worker as far as this
-        // registry is concerned, and must not reuse the old child.
-        let mut edited = host();
-        edited.worker = Some(SshWorker {
-            path: "/opt/armadra/other".into(),
-            state_dir: None,
-        });
-        let third = workers.get(Some(edited), "box").unwrap();
-        assert!(!Arc::ptr_eq(&first, &third));
-    }
-}
+mod tests;

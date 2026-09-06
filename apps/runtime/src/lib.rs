@@ -89,6 +89,10 @@ pub struct AppState {
     /// Language servers for the editor (E01/LSP). Holds no process and starts
     /// no sweep until an editor opens a session.
     pub language: language::Manager,
+    /// One-time tokens for the `SSH_ASKPASS` helper (design §3.6). Empty until
+    /// an `ssh` that may need a password is started; a helper without one is
+    /// some other process and is refused.
+    pub askpass: std::sync::Arc<api::ssh::AskpassTokens>,
 }
 
 /// The controller identity a remote Worker binds its session to. One per
@@ -108,6 +112,7 @@ pub fn router(pool: SqlitePool) -> Router {
         resources: ResourceService::new(settings.clone()),
         remote: std::sync::Arc::new(remote::RemoteWorkers::new(controller_id())),
         language: language::Manager::new(),
+        askpass: Default::default(),
         events,
         pool,
         settings,
@@ -221,6 +226,14 @@ pub fn router_with_state(state: AppState) -> Router {
         // A project on an SSH execution host (H02). A static segment, so it
         // never collides with `/api/workspaces/{workspace_id}`.
         .route("/api/workspaces/remote", post(api::open_remote_workspace))
+        // Re-point an existing workspace at a different execution host. A
+        // separate route from `PATCH /api/workspaces/{id}` because it is not a
+        // preference: it changes which machine the project is on, and it can
+        // be refused with reasons that patch has nowhere to put.
+        .route(
+            "/api/workspaces/{workspace_id}/execution-host",
+            patch(api::switch_execution_host),
+        )
         .route(
             "/api/workspaces/import",
             post(api::import_workspace).layer(DefaultBodyLimit::max(
@@ -629,6 +642,30 @@ pub fn router_with_state(state: AppState) -> Router {
         .route(
             "/api/ssh/hosts/{host_id}/worker/test",
             post(api::test_remote_worker),
+        )
+        // Host keys are confirmed by a person, never by `ssh` (design §3.6).
+        // The scan is a read; the POST is the trust, and it writes only to the
+        // file Armadra owns.
+        .route(
+            "/api/ssh/hosts/{host_id}/host-keys/scan",
+            post(api::scan_host_keys),
+        )
+        .route(
+            "/api/ssh/hosts/{host_id}/host-keys",
+            post(api::trust_host_key).delete(api::forget_host_key),
+        )
+        // Authentication prompts: what is waiting, and a person's answer.
+        .route("/api/ssh/prompts", get(api::list_prompts))
+        .route(
+            "/api/ssh/hosts/{host_id}/prompts/{prompt_id}",
+            post(api::answer_prompt).delete(api::cancel_prompt),
+        )
+        // The askpass helper's own endpoints. Bearer-token only, and the token
+        // is one this Runtime minted for one connection attempt.
+        .route("/api/ssh/askpass/prompts", post(api::open_prompt))
+        .route(
+            "/api/ssh/askpass/prompts/{prompt_id}",
+            get(api::read_prompt),
         )
         .route("/api/conversations", get(api::list_conversations))
         .route(

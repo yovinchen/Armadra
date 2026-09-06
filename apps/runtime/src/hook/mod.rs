@@ -280,6 +280,17 @@ pub fn start(state: AppState, port: Option<u16>) {
     if let Err(error) = state.hooks.publish_endpoint(port) {
         tracing::warn!(%error, "hook clients will not find this runtime");
     }
+    // The `SSH_ASKPASS` helper needs to reach this Runtime, and the port is
+    // only known here. Without it the helper exits non-zero and `ssh` fails
+    // cleanly, which is why this is a `warn` and not a hard failure.
+    if let Some(port) = port {
+        crate::terminal::ssh::askpass::publish(
+            format!("http://127.0.0.1:{port}"),
+            state.askpass.clone(),
+        );
+    } else {
+        tracing::warn!("this runtime listens on no port; SSH password prompts are unavailable");
+    }
     spawn_unix_listener(state.clone());
     // Plan §5.5: pending permission files left by a client that was killed
     // mid-wait are cleared at start-up and hourly.

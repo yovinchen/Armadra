@@ -163,6 +163,7 @@ async fn removing_a_workspace_destroys_its_sessions_and_cascades_its_rows() {
     let router = crate::router_with_state(AppState {
         remote: Default::default(),
         language: Default::default(),
+        askpass: Default::default(),
         resources: crate::resources::ResourceService::new(settings.clone()),
         terminals: terminals.clone(),
         usage: crate::usage::UsageService::new(settings.clone()),

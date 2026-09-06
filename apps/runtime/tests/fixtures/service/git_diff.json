@@ -1,0 +1,14 @@
+{
+  "capability": null,
+  "operation": 12,
+  "replay": "safe",
+  "request": {
+    "ignoreWhitespace": false,
+    "path": ".",
+    "paths": [
+      "a.txt"
+    ],
+    "scope": "worktree"
+  },
+  "responseType": "git::DiffResult"
+}

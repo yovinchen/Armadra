@@ -77,6 +77,19 @@ pub enum WatchStatus {
     Unsupported,
 }
 
+/// How changes will reach the client. Locally there is only one way; a remote
+/// workspace has two, and which one is in use is worth saying out loud — a
+/// two-second poll and a filesystem event are different promises about
+/// latency, and the node badge shows which one this file got.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum WatchMode {
+    /// A filesystem watcher: local, or an execution host pushing events.
+    Events,
+    /// The execution host predates event pushing, so its files are polled.
+    Poll,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WatchRegistration {
@@ -84,6 +97,7 @@ pub struct WatchRegistration {
     /// Why watching is unavailable. `None` when `status == Watching`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    pub mode: WatchMode,
     pub version: FileVersion,
 }
 
@@ -288,6 +302,9 @@ fn register_with(
     Ok(WatchRegistration {
         status,
         reason,
+        // Local files are always watched by the platform when they are watched
+        // at all; there is no polling mode on this side.
+        mode: WatchMode::Events,
         version,
     })
 }
@@ -324,6 +341,22 @@ pub fn unregister(workspace_id: &str, requested: &str, node_id: &str) -> AppResu
         registry.workspaces.remove(workspace_id);
     }
     Ok(())
+}
+
+/// Which files a workspace currently has open, for the execution-host switch:
+/// an editor holding an unsaved view of a path on the old machine is exactly
+/// the kind of thing that must be closed before the workspace moves, and
+/// listing them is more useful than a count (remote completion design §3.3).
+pub fn watched_paths(workspace_id: &str) -> Vec<String> {
+    let Ok(registry) = registry() else {
+        return Vec::new();
+    };
+    let Some(entry) = registry.workspaces.get(workspace_id) else {
+        return Vec::new();
+    };
+    let mut paths: Vec<String> = entry.files.keys().cloned().collect();
+    paths.sort();
+    paths
 }
 
 /// Stop watching a whole workspace: read access revoked, workspace removed, or

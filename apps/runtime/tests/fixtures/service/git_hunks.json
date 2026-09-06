@@ -1,0 +1,10 @@
+{
+  "capability": "remote.git.panel.v1",
+  "operation": 32,
+  "replay": "safe",
+  "request": {
+    "file": "a.txt",
+    "scope": "worktree"
+  },
+  "responseType": "git_hunks::GitHunkDiff"
+}

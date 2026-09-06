@@ -85,6 +85,7 @@ async fn message_routes_read_staged_source_and_require_execution_authority() {
     let app = router_with_state(AppState {
         remote: Default::default(),
         language: Default::default(),
+        askpass: Default::default(),
         resources: armadra_runtime::resources::ResourceService::new(settings.clone()),
         pool: pool.clone(),
         events: events.clone(),

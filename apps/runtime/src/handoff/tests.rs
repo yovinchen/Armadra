@@ -77,6 +77,7 @@ async fn fixture() -> Fixture {
     let state = AppState {
         remote: Default::default(),
         language: Default::default(),
+        askpass: Default::default(),
         resources: crate::resources::ResourceService::new(settings.clone()),
         pool: pool.clone(),
         terminals: crate::terminal::TerminalManager::with_config(

@@ -5,7 +5,7 @@
 
 mod agents;
 mod approvals;
-mod assets;
+pub mod assets;
 mod boards;
 mod clone;
 mod context_links;
@@ -17,6 +17,7 @@ mod git;
 mod health;
 mod search;
 mod settings;
+pub mod ssh;
 /// Shared request checks. `pub(crate)` because the browser's own stream route
 /// has to apply the same WebSocket origin rule as this module's sockets do.
 pub(crate) mod support;
@@ -29,6 +30,6 @@ mod tests;
 
 pub use self::{
     agents::*, approvals::*, assets::*, boards::*, clone::*, context_links::*, data::*, events::*,
-    exports::*, files::*, git::*, health::*, search::*, settings::*, support::*, terminals::*,
-    usage::*, workspaces::*,
+    exports::*, files::*, git::*, health::*, search::*, settings::*, ssh::*, support::*,
+    terminals::*, usage::*, workspaces::*,
 };

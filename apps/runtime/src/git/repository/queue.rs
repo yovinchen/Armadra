@@ -3,7 +3,7 @@
 
 use super::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum OperationState {
     Queued,
@@ -20,7 +20,10 @@ impl OperationState {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+/// Deserializable too: a remote workspace queues on the execution host, so
+/// the controller has to read back the snapshot that host produced (remote
+/// completion design 3.1).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OperationSnapshot {
     pub id: String,

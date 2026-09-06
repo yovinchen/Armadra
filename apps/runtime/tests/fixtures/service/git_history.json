@@ -1,0 +1,12 @@
+{
+  "capability": "remote.git.panel.v1",
+  "operation": 21,
+  "replay": "safe",
+  "request": {
+    "cursor": null,
+    "limit": 50,
+    "path": ".",
+    "reference": "HEAD"
+  },
+  "responseType": "git_repository::HistoryPage"
+}

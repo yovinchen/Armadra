@@ -1,0 +1,7 @@
+{
+  "capability": null,
+  "operation": 18,
+  "replay": "never",
+  "request": {},
+  "responseType": "git::RepositoryStatus"
+}

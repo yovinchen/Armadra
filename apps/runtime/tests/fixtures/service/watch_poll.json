@@ -1,0 +1,11 @@
+{
+  "capability": null,
+  "operation": 4,
+  "replay": "safe",
+  "request": {
+    "paths": [
+      "src/main.rs"
+    ]
+  },
+  "responseType": "service::WatchPollResult"
+}

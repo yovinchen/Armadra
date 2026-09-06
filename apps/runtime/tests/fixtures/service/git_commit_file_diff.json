@@ -1,0 +1,12 @@
+{
+  "capability": "remote.git.panel.v1",
+  "operation": 23,
+  "replay": "safe",
+  "request": {
+    "base": null,
+    "file": "a.txt",
+    "oid": "abc",
+    "path": "."
+  },
+  "responseType": "git_repository::CommitFileDiff"
+}

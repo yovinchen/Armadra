@@ -304,6 +304,7 @@ async fn watched_files_report_external_changes_until_read_access_is_revoked() {
     let router = crate::router_with_state(AppState {
         remote: Default::default(),
         language: Default::default(),
+        askpass: Default::default(),
         resources: crate::resources::ResourceService::new(settings.clone()),
         terminals,
         usage: crate::usage::UsageService::new(settings.clone()),

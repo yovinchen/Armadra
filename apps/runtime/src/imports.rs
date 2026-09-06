@@ -17,17 +17,20 @@ pub const MAX_BATCH_BYTES: usize = 64 * 1024 * 1024;
 pub const MAX_FILES: usize = 256;
 const DIRECTORY: &str = ".armadra/imports";
 
-#[derive(Debug, Serialize)]
+/// Deserializable as well as serializable: this is one of the version-locked
+/// service payloads, so the controller has to be able to read back what an
+/// execution host produced (remote completion design §3.1).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileInfo {
     pub path: String,
     pub name: String,
     pub size: u64,
     pub mime_type: String,
-    pub preview: &'static str,
+    pub preview: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportResult {
     pub path: String,
@@ -415,7 +418,8 @@ pub fn file_info(root: &Path, requested: &str) -> AppResult<FileInfo> {
         "text"
     } else {
         "download"
-    };
+    }
+    .to_owned();
     Ok(FileInfo {
         path: crate::security::relative_to_root(&root, &path)?,
         name: path

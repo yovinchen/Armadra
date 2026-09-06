@@ -92,6 +92,7 @@ async fn serve() -> Option<Fixture> {
     let events = EventHub::new();
     let state = AppState {
         remote: Default::default(),
+        askpass: Default::default(),
         language: Default::default(),
         resources: ResourceService::new(settings.clone()),
         terminals: TerminalManager::new(pool.clone(), events.clone()),

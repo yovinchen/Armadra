@@ -85,6 +85,7 @@ async fn integration_routes_require_the_creating_workspace_and_explicit_continue
     let app = router_with_state(AppState {
         remote: Default::default(),
         language: Default::default(),
+        askpass: Default::default(),
         resources: armadra_runtime::resources::ResourceService::new(settings.clone()),
         pool: pool.clone(),
         events: events.clone(),
@@ -210,6 +211,7 @@ async fn cherry_pick_preview_and_empty_skip_remain_workspace_scoped() {
     let app = router_with_state(AppState {
         remote: Default::default(),
         language: Default::default(),
+        askpass: Default::default(),
         resources: armadra_runtime::resources::ResourceService::new(settings.clone()),
         pool: pool.clone(),
         events: events.clone(),

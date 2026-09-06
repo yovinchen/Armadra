@@ -20,7 +20,7 @@ pub(super) enum Recovery {
 
 const MAX_PREVIEW: u64 = 64 * 1024;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConflictSide {
     pub oid: String,
@@ -30,7 +30,7 @@ pub struct ConflictSide {
     pub binary: Option<bool>,
     pub truncated: bool,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConflictFile {
     pub path: String,
@@ -38,7 +38,7 @@ pub struct ConflictFile {
     pub ours: Option<ConflictSide>,
     pub theirs: Option<ConflictSide>,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IntegrationSnapshot {
     pub repository_id: String,

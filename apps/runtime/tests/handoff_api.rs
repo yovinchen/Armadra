@@ -118,6 +118,7 @@ async fn fixture() -> Fixture {
     let app = router_with_state(AppState {
         remote: Default::default(),
         language: Default::default(),
+        askpass: Default::default(),
         resources: armadra_runtime::resources::ResourceService::new(settings.clone()),
         terminals: TerminalManager::with_config(
             pool.clone(),

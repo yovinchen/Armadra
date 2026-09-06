@@ -109,6 +109,7 @@ pub(super) async fn state_fixture(name: &str) -> (AppState, tempfile::TempDir) {
         AppState {
             remote: Default::default(),
             language: Default::default(),
+            askpass: Default::default(),
             resources: crate::resources::ResourceService::new(settings.clone()),
             terminals,
             usage: crate::usage::UsageService::new(settings.clone()),

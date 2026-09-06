@@ -1,0 +1,10 @@
+{
+  "capability": "remote.files.manage.v1",
+  "operation": 42,
+  "replay": "never",
+  "request": {
+    "from": "a.txt",
+    "to": "b.txt"
+  },
+  "responseType": "file_ops::EntryResult"
+}

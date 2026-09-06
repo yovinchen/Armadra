@@ -1,0 +1,9 @@
+{
+  "capability": "remote.git.panel.v1",
+  "operation": 27,
+  "replay": "safe",
+  "request": {
+    "path": "."
+  },
+  "responseType": "Vec<git_repository::RemoteRecord>"
+}

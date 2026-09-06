@@ -287,6 +287,38 @@ pub async fn update_workspace(
     get_workspace(pool, id).await
 }
 
+/// Point a workspace at a different execution host and root.
+///
+/// Deliberately separate from [`update_workspace`]: name, colour and
+/// permissions are preferences, while this changes *which machine the project
+/// is on*. Everything that decides whether it is allowed — the fingerprint
+/// comparison and the blocker list — happens in `remote::switch` before this
+/// is reached, so a caller that reaches here has already proved the case.
+pub async fn rebind_workspace_execution(
+    pool: &SqlitePool,
+    id: &str,
+    execution_host_id: &str,
+    root_path: &str,
+) -> AppResult<Workspace> {
+    if root_path.trim().is_empty() {
+        return Err(AppError::BadRequest("Workspace root is required".into()));
+    }
+    let now = Utc::now().to_rfc3339();
+    let result = sqlx::query(
+        "UPDATE workspaces SET execution_host_id = ?, root_path = ?, updated_at = ? WHERE id = ?",
+    )
+    .bind(execution_host_id)
+    .bind(root_path)
+    .bind(&now)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("Workspace was not found".into()));
+    }
+    get_workspace(pool, id).await
+}
+
 /// 从列表移除 (plan §20): the workspace row and everything the schema hangs off
 /// it — boards → nodes/edges, terminal sessions → logs, agent status,
 /// approvals, context links, deliveries — go away through `ON DELETE CASCADE`.

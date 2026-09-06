@@ -1,0 +1,14 @@
+{
+  "capability": null,
+  "operation": 17,
+  "replay": "never",
+  "request": {
+    "amend": null,
+    "message": "subject",
+    "path": ".",
+    "paths": [
+      "a.txt"
+    ]
+  },
+  "responseType": "git::CommitResult"
+}

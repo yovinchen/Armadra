@@ -11,6 +11,8 @@ pub mod language_link;
 pub mod outbox;
 pub mod settings;
 pub mod socket;
+pub mod upload;
+pub mod watch;
 
 use crate::{error::AppError, files, ownership, security};
 use armadra_protocol::{Message, v1::*};
@@ -65,6 +67,14 @@ pub struct Worker {
     /// is what a serial connection must say: the servers live in the process
     /// that holds the link, not in this one.
     language: Option<std::sync::Arc<language_link::Host>>,
+    /// Chunked uploads in flight. Empty until a controller opens one, and
+    /// dropped with this process, which is what cleans up their temporary
+    /// files if the connection dies mid-stream.
+    uploads: upload::Uploads,
+    /// The connection's filesystem subscription. Present only once the serve
+    /// loop has somewhere to put unsolicited frames, so a Worker whose
+    /// transport cannot carry them never claims it can watch.
+    watches: Option<watch::Watches>,
 }
 impl Default for Worker {
     fn default() -> Self {
@@ -80,6 +90,8 @@ impl Default for Worker {
             upcalls: None,
             bearer: (None, None),
             language: None,
+            uploads: upload::Uploads::default(),
+            watches: None,
         }
     }
 }
@@ -338,6 +350,11 @@ impl Worker {
                     platform: std::env::consts::OS.into(),
                     architecture: std::env::consts::ARCH.into(),
                     runtime_version: env!("CARGO_PKG_VERSION").into(),
+                    // What the controller actually gates on. The exact
+                    // version match it used to require rejected every pair of
+                    // builds that differed by a patch even though their
+                    // payloads were identical (design §3.5).
+                    service_contract_version: crate::remote::service::replay::CONTRACT_VERSION,
                     capabilities: {
                         let mut capabilities: Vec<String> = vec![
                             "worker.roots.v1".into(),
@@ -349,9 +366,21 @@ impl Worker {
                             // runs `--version` and starts no server. Sessions
                             // need the link, which is claimed separately.
                             language_link::CAPABILITY_V1.into(),
+                            // Served unconditionally: they need nothing this
+                            // process might not have been given.
+                            crate::remote::service::replay::GIT_PANEL_CAPABILITY.into(),
+                            crate::remote::service::replay::FILES_MANAGE_CAPABILITY.into(),
+                            crate::remote::service::replay::UPLOAD_CAPABILITY.into(),
                         ];
                         if self.language.is_some() {
                             capabilities.push(language_link::CAPABILITY.into());
+                        }
+                        // Only a transport that can carry unsolicited frames
+                        // may claim to watch: without one, a controller would
+                        // wait forever for events instead of falling back to
+                        // the poll it already has.
+                        if self.watches.is_some() {
+                            capabilities.push(watch::CAPABILITY.into());
                         }
                         if self.agents.is_some() {
                             capabilities.push(agent_bridge::CAPABILITY.into());
@@ -571,10 +600,21 @@ impl Worker {
                 }
                 let root = self.root(&input.root_id)?;
                 let path = input.path.clone();
-                let file = tokio::task::spawn_blocking(move || files::read_text_file(&root, &path))
-                    .await??;
-                let bytes = file.content.as_bytes();
-                let sha256 = Sha256::digest(bytes).to_vec();
+                // Two readers behind one message. The editor's asks for text
+                // and gets the encoding, BOM and preview limit with it; a
+                // download or a whiteboard asset asks for the bytes, because
+                // neither of those is text and refusing them would make a
+                // remote workspace's own pictures unreadable.
+                let (relative, mime_type, bytes) = if input.raw {
+                    tokio::task::spawn_blocking(move || files::read_raw_file(&root, &path))
+                        .await??
+                } else {
+                    let file =
+                        tokio::task::spawn_blocking(move || files::read_text_file(&root, &path))
+                            .await??;
+                    (file.path, file.mime_type, file.content.into_bytes())
+                };
+                let sha256 = Sha256::digest(&bytes).to_vec();
                 if input
                     .expected_sha256
                     .as_ref()
@@ -594,8 +634,8 @@ impl Worker {
                     .min(bytes.len());
                 Ok(Response::FileChunk(WorkerFileChunk {
                     root_id: input.root_id,
-                    path: file.path,
-                    mime_type: file.mime_type,
+                    path: relative,
+                    mime_type,
                     sha256,
                     total_bytes: bytes.len() as u64,
                     offset: input.offset,
@@ -702,16 +742,112 @@ impl Worker {
             // the link takes it off the request path before it reaches here.
             // Arriving on the serial connection is a controller mistake.
             Action::LanguageFrame(_) => Ok(unsupported_language()),
+            // Watching is not a service payload: the events it produces are
+            // unsolicited frames that belong to the connection, so the
+            // subscription is typed and the connection owns it.
+            Action::Watch(input) => {
+                if self.watches.is_none() {
+                    return Ok(Response::Error(ErrorResponse {
+                        code: "UNSUPPORTED".into(),
+                        message: "This Worker transport cannot push watch events".into(),
+                    }));
+                }
+                let operation = WorkerServiceOperation::try_from(input.operation)
+                    .map_err(|_| invalid("Unknown watch operation"))?;
+                if input.paths.len() > crate::remote::service::MAX_WATCH_PATHS {
+                    return Err(invalid("Too many watched paths"));
+                }
+                // The root is resolved before the subscription is borrowed, so
+                // an unregistered root fails without disturbing the watches
+                // that already exist.
+                let root = match operation {
+                    WorkerServiceOperation::WatchSubscribe => Some(self.root(&input.root_id)?),
+                    WorkerServiceOperation::WatchUnsubscribe => None,
+                    _ => {
+                        return Ok(Response::Error(ErrorResponse {
+                            code: "UNSUPPORTED".into(),
+                            message: "That is not a watch operation".into(),
+                        }));
+                    }
+                };
+                let watches = self.watches.as_mut().expect("checked above");
+                match root {
+                    Some(root) => watches.subscribe(&root, &input.root_id, &input.paths)?,
+                    None => watches.unsubscribe(&input.paths)?,
+                }
+                Ok(Response::Watch(WorkerWatchSubscription {
+                    root_id: input.root_id,
+                    watched_paths: watches.watched_paths(),
+                    sequence: watches.next_sequence(),
+                }))
+            }
+            // Chunked upload. Every step needs the write grant, because every
+            // step is part of one write: a controller that may not write must
+            // not even be able to occupy the host's temporary space.
+            Action::Upload(input) => {
+                let step = input
+                    .step
+                    .ok_or_else(|| invalid("The upload step is missing"))?;
+                let receipt = match step {
+                    worker_upload_request::Step::Begin(begin) => {
+                        if !begin.allow_write {
+                            return Err(AppError::Forbidden(
+                                "The execution host received an upload without the workspace grant"
+                                    .into(),
+                            ));
+                        }
+                        let root = self.root(&begin.root_id)?;
+                        self.uploads.begin(
+                            &root,
+                            &begin.path,
+                            begin.total_bytes,
+                            &begin.sha256,
+                            begin.overwrite_sha256,
+                        )?
+                    }
+                    // The upload id is the capability: this Worker minted it,
+                    // it is a v7 UUID, and it names a destination already
+                    // proven to be inside a registered root.
+                    worker_upload_request::Step::Chunk(chunk) => {
+                        self.uploads
+                            .chunk(&chunk.upload_id, chunk.offset, &chunk.data)?
+                    }
+                    worker_upload_request::Step::Commit(commit) => {
+                        self.uploads.commit(&commit.upload_id)?
+                    }
+                    worker_upload_request::Step::Abort(abort) => {
+                        self.uploads.abort(&abort.upload_id)?
+                    }
+                };
+                Ok(Response::Upload(WorkerUploadResponse {
+                    upload_id: receipt.upload_id,
+                    received_bytes: receipt.received_bytes,
+                    sha256: receipt.sha256,
+                    path: receipt.path,
+                }))
+            }
         }
     }
 }
 
-pub async fn serve<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
-    mut input: R,
+/// The remote-execution transport.
+///
+/// Reading runs in its own task so that a filesystem event can be written the
+/// moment it happens rather than after the controller's next request — that is
+/// what turns remote watching from a two-second poll into a push (design §3.4).
+/// The reader owns the frame boundary, so no read is ever cancelled halfway
+/// through one; the loop below only ever picks between two already-complete
+/// items.
+pub async fn serve<R, W>(
+    input: R,
     mut output: W,
     canvas: Option<SqlitePool>,
     settings_file: Option<PathBuf>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+where
+    R: AsyncRead + Unpin + Send + 'static,
+    W: AsyncWrite + Unpin,
+{
     let mut worker = match canvas {
         Some(pool) => Worker::with_canvas(pool),
         None => Worker::default(),
@@ -719,6 +855,52 @@ pub async fn serve<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     if let Some(file) = settings_file {
         worker = worker.with_settings_file(file);
     }
+    let (watches, mut events) = watch::Watches::new();
+    worker.watches = Some(watches);
+
+    let (requests_tx, mut requests) = tokio::sync::mpsc::channel::<WorkerRequest>(1);
+    let reader = tokio::spawn(async move { read_frames(input, requests_tx).await });
+
+    let result = loop {
+        tokio::select! {
+            // A request in hand is answered first: an answer the controller is
+            // blocked on must not queue behind a burst of file events.
+            biased;
+            request = requests.recv() => {
+                let Some(request) = request else { break Ok(()) };
+                let response = worker.handle(request).await;
+                if let Err(error) = write_frame(&mut output, &response).await {
+                    break Err(error);
+                }
+            }
+            event = events.recv() => {
+                let Some(event) = event else { continue };
+                // An unsolicited frame: no request id, which is exactly how the
+                // controller's demultiplexer tells it from an answer.
+                let frame = WorkerResponse {
+                    request_id: String::new(),
+                    host_id: worker.host.clone().unwrap_or_default(),
+                    instance_id: worker.instance.clone(),
+                    result: Some(worker_response::Result::WatchEvent(event)),
+                };
+                if let Err(error) = write_frame(&mut output, &frame).await {
+                    break Err(error);
+                }
+            }
+        }
+    };
+    reader.abort();
+    match reader.await {
+        Ok(read) => result.and(read),
+        // Aborting the reader is how this loop stops; that is not a failure.
+        Err(_) => result,
+    }
+}
+
+async fn read_frames<R: AsyncRead + Unpin>(
+    mut input: R,
+    requests: tokio::sync::mpsc::Sender<WorkerRequest>,
+) -> anyhow::Result<()> {
     loop {
         let mut prefix = [0u8; 4];
         if input.read(&mut prefix[..1]).await? == 0 {
@@ -732,19 +914,31 @@ pub async fn serve<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
         );
         let mut bytes = vec![0; length];
         input.read_exact(&mut bytes).await?;
-        let request = WorkerRequest::decode(bytes.as_slice())?;
-        let response = worker.handle(request).await;
-        let bytes = response.encode_to_vec();
-        anyhow::ensure!(
-            bytes.len() <= MAX_FRAME,
-            "Worker response exceeds frame limit"
-        );
-        output
-            .write_all(&(bytes.len() as u32).to_be_bytes())
-            .await?;
-        output.write_all(&bytes).await?;
-        output.flush().await?;
+        if requests
+            .send(WorkerRequest::decode(bytes.as_slice())?)
+            .await
+            .is_err()
+        {
+            return Ok(());
+        }
     }
+}
+
+async fn write_frame<W: AsyncWrite + Unpin>(
+    output: &mut W,
+    response: &WorkerResponse,
+) -> anyhow::Result<()> {
+    let bytes = response.encode_to_vec();
+    anyhow::ensure!(
+        bytes.len() <= MAX_FRAME,
+        "Worker response exceeds frame limit"
+    );
+    output
+        .write_all(&(bytes.len() as u32).to_be_bytes())
+        .await?;
+    output.write_all(&bytes).await?;
+    output.flush().await?;
+    Ok(())
 }
 
 /// Command mode: the resident bidirectional channel over stdio, plus a private

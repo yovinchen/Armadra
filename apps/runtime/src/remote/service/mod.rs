@@ -3,12 +3,12 @@
 //!
 //! The payloads are the Runtime's own camelCase JSON. That is a **version-lock**,
 //! not a wire contract: the handshake refuses a Worker whose
-//! `runtime_version` differs from this build, so both ends are literally the
-//! same program and the same serde derives. Anything that has to survive
-//! across versions — the envelope, the operation list, the handshake — is
-//! typed Protobuf in `proto/armadra/v1/worker.proto`.
+//! [`replay::CONTRACT_VERSION`] differs from this build, so both ends are the
+//! same serde derives even when their patch versions differ. Anything that has
+//! to survive across versions — the envelope, the operation list, the
+//! handshake — is typed Protobuf in `proto/armadra/v1/worker.proto`.
 //!
-//! Two rules hold on the Worker side:
+//! Three rules hold on the Worker side:
 //!
 //! 1. **Grants travel with the request.** The controller resolves a
 //!    workspace's read/write/execute permissions from its own database; the
@@ -17,6 +17,13 @@
 //! 2. **The root is the frozen canonical directory.** Every operation resolves
 //!    inside `Worker::root`, which re-canonicalizes and rejects a root that
 //!    moved since it was registered.
+//! 3. **The list is closed.** An operation number this build does not know is
+//!    `UNSUPPORTED`, never a passthrough.
+
+pub mod assets;
+pub mod files;
+pub mod git;
+pub mod replay;
 
 use std::path::{Path, PathBuf};
 
@@ -24,9 +31,11 @@ use armadra_protocol::v1::WorkerServiceOperation;
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 
+pub use replay::{Replay, capability, replay};
+
 use crate::{
     error::{AppError, AppResult},
-    file_search, file_watch, git,
+    file_search, file_watch, git as git_core,
 };
 
 /// One repository or directory under the workspace root.
@@ -49,7 +58,7 @@ pub struct PathsPayload {
 pub struct RevertPayload {
     pub path: String,
     pub paths: Vec<String>,
-    pub source: git::RestoreSource,
+    pub source: git_core::RestoreSource,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,7 +81,7 @@ pub struct CommitPayload {
 #[serde(rename_all = "camelCase")]
 pub struct DiffPayload {
     pub path: String,
-    pub scope: git::DiffScope,
+    pub scope: git_core::DiffScope,
     pub paths: Vec<String>,
     pub ignore_whitespace: bool,
 }
@@ -101,38 +110,6 @@ pub struct WatchPollResult {
 /// How many paths one poll may carry. A workspace with more open editors than
 /// this polls the rest on the next tick rather than growing an unbounded frame.
 pub const MAX_WATCH_PATHS: usize = 256;
-
-/// Whether an operation may be replayed on a fresh connection after a
-/// transport failure. `Never` is the default for anything with an effect: a
-/// request that was already written is reported as an unknown outcome, never
-/// re-sent (design §3.4).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Replay {
-    Safe,
-    Never,
-}
-
-/// Read-only operations may be retried once; everything that writes may not.
-pub fn replay(operation: WorkerServiceOperation) -> Replay {
-    use WorkerServiceOperation as Operation;
-    match operation {
-        Operation::FileRead
-        | Operation::FileVersion
-        | Operation::SearchContent
-        | Operation::SearchIndex
-        | Operation::WatchPoll
-        | Operation::GitStatus
-        | Operation::GitHeadCommit
-        | Operation::GitDiff => Replay::Safe,
-        Operation::GitStage
-        | Operation::GitUnstage
-        | Operation::GitRevert
-        | Operation::GitResolve
-        | Operation::GitCommit
-        | Operation::GitInit
-        | Operation::Unspecified => Replay::Never,
-    }
-}
 
 fn decode<T: for<'a> Deserialize<'a>>(bytes: &[u8]) -> AppResult<T> {
     serde_json::from_slice(bytes)
@@ -182,19 +159,8 @@ async fn dispatch(
     use WorkerServiceOperation as Operation;
     // Git touches repository filters and hooks, so every Git operation needs
     // the workspace's execution grant, exactly as it does locally.
-    if matches!(
-        operation,
-        Operation::GitStatus
-            | Operation::GitHeadCommit
-            | Operation::GitDiff
-            | Operation::GitStage
-            | Operation::GitUnstage
-            | Operation::GitRevert
-            | Operation::GitResolve
-            | Operation::GitCommit
-            | Operation::GitInit
-    ) {
-        git::access::require_execution(allow_execute, "This Git operation")?;
+    if git::requires_execution(operation) {
+        git::execution_required(allow_execute)?;
     }
     if matches!(replay(operation), Replay::Never) && operation != Operation::Unspecified {
         require(
@@ -241,19 +207,19 @@ async fn dispatch(
         }
         Operation::GitStatus => {
             let payload: PathPayload = decode(&request_json)?;
-            blocking(move || git::read_status_at(&root, &payload.path)).await
+            blocking(move || git_core::read_status_at(&root, &payload.path)).await
         }
         Operation::GitHeadCommit => {
             let payload: PathPayload = decode(&request_json)?;
-            blocking(move || git::head_commit(&root, &payload.path)).await
+            blocking(move || git_core::head_commit(&root, &payload.path)).await
         }
         Operation::GitDiff => {
             let payload: DiffPayload = decode(&request_json)?;
             blocking(move || {
-                git::read_diff_with_execution(
+                git_core::read_diff_with_execution(
                     &root,
                     &payload.path,
-                    &git::DiffRequest {
+                    &git_core::DiffRequest {
                         scope: payload.scope,
                         paths: payload.paths,
                         ignore_whitespace: payload.ignore_whitespace,
@@ -268,7 +234,7 @@ async fn dispatch(
             let guard = guard(&root, &payload.path).await?;
             blocking(move || {
                 let _guard = guard;
-                git::stage_paths(&root, &payload.path, &payload.paths)
+                git_core::stage_paths(&root, &payload.path, &payload.paths)
             })
             .await
         }
@@ -277,7 +243,7 @@ async fn dispatch(
             let guard = guard(&root, &payload.path).await?;
             blocking(move || {
                 let _guard = guard;
-                git::unstage_paths(&root, &payload.path, &payload.paths)
+                git_core::unstage_paths(&root, &payload.path, &payload.paths)
             })
             .await
         }
@@ -286,7 +252,7 @@ async fn dispatch(
             let guard = guard(&root, &payload.path).await?;
             blocking(move || {
                 let _guard = guard;
-                git::mark_resolved(&root, &payload.path, &payload.paths)
+                git_core::mark_resolved(&root, &payload.path, &payload.paths)
             })
             .await
         }
@@ -295,7 +261,7 @@ async fn dispatch(
             let guard = guard(&root, &payload.path).await?;
             blocking(move || {
                 let _guard = guard;
-                git::revert_paths(&root, &payload.path, &payload.paths, payload.source)
+                git_core::revert_paths(&root, &payload.path, &payload.paths, payload.source)
             })
             .await
         }
@@ -304,11 +270,11 @@ async fn dispatch(
             let guard = guard(&root, &payload.path).await?;
             blocking(move || {
                 let _guard = guard;
-                let amend = payload.amend.map(|amend| git::AmendRequest {
+                let amend = payload.amend.map(|amend| git_core::AmendRequest {
                     expected_head: amend.expected_head,
                     allow_published: amend.allow_published,
                 });
-                git::commit(
+                git_core::commit(
                     &root,
                     &payload.path,
                     &payload.message,
@@ -318,7 +284,86 @@ async fn dispatch(
             })
             .await
         }
-        Operation::GitInit => blocking(move || git::init_repository(&root)).await,
+        Operation::GitInit => blocking(move || git_core::init_repository(&root)).await,
+
+        /* ------------------------- repository panel ------------------------ */
+        Operation::GitRepositories => {
+            git::repositories(root, decode(&request_json)?, allow_execute).await
+        }
+        Operation::GitBranches => git::branches(root, decode(&request_json)?, allow_execute).await,
+        Operation::GitHistory => git::history(root, decode(&request_json)?, allow_execute).await,
+        Operation::GitCommitDetail => {
+            git::commit_detail(root, decode(&request_json)?, allow_execute).await
+        }
+        Operation::GitCommitFileDiff => {
+            git::commit_file_diff(root, decode(&request_json)?, allow_execute).await
+        }
+        Operation::GitWorktrees => {
+            git::worktrees(root, decode(&request_json)?, allow_execute).await
+        }
+        Operation::GitRebaseTodo => {
+            git::rebase_todo(root, decode(&request_json)?, allow_execute).await
+        }
+        Operation::GitTags => git::tags(root, decode(&request_json)?, allow_execute).await,
+        Operation::GitRemotes => git::remotes(root, decode(&request_json)?, allow_execute).await,
+        Operation::GitStashes => git::stashes(root, decode(&request_json)?, allow_execute).await,
+        Operation::GitStashDetail => {
+            git::stash_detail(root, decode(&request_json)?, allow_execute).await
+        }
+        Operation::GitIntegration => {
+            git::integration(root, decode(&request_json)?, allow_execute).await
+        }
+        Operation::GitCherryPickPreview => {
+            git::cherry_pick_preview(root, decode(&request_json)?, allow_execute).await
+        }
+        Operation::GitHunks => git::hunks(root, decode(&request_json)?).await,
+        Operation::GitApplyHunk => git::apply_hunk(root, decode(&request_json)?).await,
+        Operation::GitMessageSource => {
+            let _: git::RootPayload = decode(&request_json)?;
+            git::message_source(root).await
+        }
+        Operation::GitOperations => {
+            git::operations(root, decode(&request_json)?, allow_execute).await
+        }
+        // The queue records live in this process. After a Worker restart they
+        // are gone and the lookup is a 404 — the repository is still readable,
+        // only the record of who drove it is lost, which is the same thing an
+        // external `git` run leaves behind.
+        Operation::GitOperationGet => git::operation(decode(&request_json)?).await,
+        Operation::GitOperationStart => git::start(root, decode(&request_json)?).await,
+        Operation::GitOperationCancel => git::cancel(decode(&request_json)?).await,
+
+        /* -------------------------- file management ------------------------ */
+        Operation::FileInfo => {
+            let payload: PathPayload = decode(&request_json)?;
+            files::info(root, payload.path).await
+        }
+        Operation::FileEntryCreate => files::create(root, decode(&request_json)?).await,
+        // One filesystem call answers both numbers: what differs is whether the
+        // parent directory changed, which the caller already decided.
+        Operation::FileEntryRename | Operation::FileEntryMove => {
+            files::rename(root, decode(&request_json)?).await
+        }
+        Operation::FileEntryDelete => {
+            let payload: PathPayload = decode(&request_json)?;
+            files::trash(root, payload.path).await
+        }
+        Operation::FileEntryTrashList => {
+            let _: files::TrashListPayload = decode(&request_json)?;
+            files::list_trash(root).await
+        }
+        Operation::FileEntryRestore => files::restore(root, decode(&request_json)?).await,
+        Operation::AssetImport => assets::import(root, decode(&request_json)?).await,
+
+        /* ------------------------------ watching --------------------------- */
+        // Subscriptions travel as the typed `WorkerWatchRequest`, because the
+        // events they produce are unsolicited frames and belong to the
+        // connection rather than to one answer. These numbers exist so the
+        // operation is nameable in the capability table and in the contract
+        // snapshot; the JSON road to them is deliberately closed.
+        Operation::WatchSubscribe | Operation::WatchUnsubscribe => Err(AppError::BadRequest(
+            "Watch subscriptions travel as a typed Worker request, not as a service payload".into(),
+        )),
     }
 }
 
@@ -343,32 +388,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn every_operation_that_writes_is_marked_unreplayable() {
-        use WorkerServiceOperation as Operation;
-        for operation in [
-            Operation::GitStage,
-            Operation::GitUnstage,
-            Operation::GitRevert,
-            Operation::GitResolve,
-            Operation::GitCommit,
-            Operation::GitInit,
-        ] {
-            assert_eq!(replay(operation), Replay::Never, "{operation:?}");
-        }
-        for operation in [
-            Operation::FileVersion,
-            Operation::SearchContent,
-            Operation::SearchIndex,
-            Operation::WatchPoll,
-            Operation::GitStatus,
-            Operation::GitHeadCommit,
-            Operation::GitDiff,
-        ] {
-            assert_eq!(replay(operation), Replay::Safe, "{operation:?}");
-        }
-    }
 
     #[tokio::test]
     async fn a_git_operation_without_the_execution_grant_fails_on_the_execution_host() {
@@ -414,5 +433,78 @@ mod tests {
         )
         .await;
         assert_eq!(status, 501);
+    }
+
+    /// Renaming, deleting and restoring are writes wherever they run. A
+    /// controller that resolved a read-only workspace and forwarded anyway
+    /// must be refused by the machine holding the files.
+    #[tokio::test]
+    async fn file_management_without_the_write_grant_is_refused_on_the_execution_host() {
+        let root = tempfile::tempdir().unwrap();
+        for (operation, payload) in [
+            (
+                WorkerServiceOperation::FileEntryCreate,
+                serde_json::json!({ "path": "new.txt", "kind": "file" }),
+            ),
+            (
+                WorkerServiceOperation::FileEntryRename,
+                serde_json::json!({ "from": "a.txt", "to": "b.txt" }),
+            ),
+            (
+                WorkerServiceOperation::FileEntryDelete,
+                serde_json::json!({ "path": "a.txt" }),
+            ),
+            (
+                WorkerServiceOperation::FileEntryRestore,
+                serde_json::json!({ "id": "0123456789abcdef" }),
+            ),
+        ] {
+            let (status, body) = handle(
+                root.path().to_owned(),
+                operation,
+                serde_json::to_vec(&payload).unwrap(),
+                false,
+                true,
+            )
+            .await;
+            assert_eq!(status, 403, "{operation:?}");
+            let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(value["code"], "forbidden", "{operation:?}");
+        }
+    }
+
+    /// The trash listing is a read, so it is served without a write grant —
+    /// and it has to actually answer, because restoring is impossible without
+    /// knowing what is there.
+    #[tokio::test]
+    async fn the_trash_listing_is_a_read_and_answers_without_a_write_grant() {
+        let root = tempfile::tempdir().unwrap();
+        let (status, body) = handle(
+            root.path().to_owned(),
+            WorkerServiceOperation::FileEntryTrashList,
+            b"{}".to_vec(),
+            false,
+            false,
+        )
+        .await;
+        assert_eq!(status, 200);
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value, serde_json::json!([]));
+    }
+
+    /// A subscription is not a service payload. Letting it in through this
+    /// door would create a watcher whose events nothing is demultiplexing.
+    #[tokio::test]
+    async fn a_watch_subscription_is_refused_on_the_service_road() {
+        let root = tempfile::tempdir().unwrap();
+        let (status, _) = handle(
+            root.path().to_owned(),
+            WorkerServiceOperation::WatchSubscribe,
+            serde_json::to_vec(&serde_json::json!({ "paths": ["a.txt"] })).unwrap(),
+            true,
+            true,
+        )
+        .await;
+        assert_eq!(status, 400);
     }
 }

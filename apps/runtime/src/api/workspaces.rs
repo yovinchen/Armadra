@@ -156,6 +156,41 @@ pub async fn open_remote_workspace(
     ))
 }
 
+/// `PATCH /api/workspaces/{id}/execution-host` — move a workspace to another
+/// execution host (remote completion design §3.3).
+///
+/// A rebinding, never a file move: the new host's root has to look like the
+/// same project, and nothing may still be bound to the old one. A refusal
+/// comes back as a 409 whose body is the structured reason — both
+/// fingerprints, or the list of blockers — because "conflict" alone is not
+/// something a person can act on.
+pub async fn switch_execution_host(
+    State(state): State<AppState>,
+    AxumPath(workspace_id): AxumPath<String>,
+    Json(request): Json<crate::remote::switch::SwitchRequest>,
+) -> AppResult<axum::response::Response> {
+    use axum::response::IntoResponse;
+
+    let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
+    if !workspace.permissions.read {
+        return Err(AppError::Forbidden("This workspace is not readable".into()));
+    }
+    match crate::remote::switch::switch(&state, &workspace, request).await? {
+        Ok(updated) => {
+            // The whole client view of this workspace is now about a different
+            // machine, so it refetches rather than patching what it has.
+            state.events.publish(
+                &workspace_id,
+                crate::events::WorkspaceEvent::WorkspaceUpdated {
+                    workspace_id: workspace_id.clone(),
+                },
+            );
+            Ok(Json(updated).into_response())
+        }
+        Err(refusal) => Ok((axum::http::StatusCode::CONFLICT, Json(refusal)).into_response()),
+    }
+}
+
 /// What a remote Worker reports about itself.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

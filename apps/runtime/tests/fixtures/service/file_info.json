@@ -1,0 +1,9 @@
+{
+  "capability": "remote.files.manage.v1",
+  "operation": 40,
+  "replay": "safe",
+  "request": {
+    "path": "src/main.rs"
+  },
+  "responseType": "imports::FileInfo"
+}

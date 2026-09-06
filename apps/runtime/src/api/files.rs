@@ -17,7 +17,6 @@ use crate::{
     error::{AppError, AppResult},
     file_ops, file_watch, files, imports,
     remote::{self, JsonAnswer},
-    security::resolve_in_root,
 };
 
 #[derive(Deserialize)]
@@ -90,13 +89,28 @@ pub async fn file_info(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Query(query): Query<RequestedPath>,
-) -> AppResult<Json<imports::FileInfo>> {
+) -> AppResult<JsonAnswer> {
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
-    remote::refuse_remote(&workspace, "Reading local file metadata")?;
-    Ok(Json(imports::file_info(
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            WorkerServiceOperation::FileInfo,
+            &remote::service::PathPayload { path: query.path },
+        )
+        .await;
+    }
+    JsonAnswer::local(&imports::file_info(
         Path::new(&workspace.root_path),
         &query.path,
-    )?))
+    )?)
+}
+
+/// The last path segment of a workspace-relative path, for the download name.
+/// The path itself was resolved by whichever machine owns the file, so this is
+/// presentation only.
+fn file_name(relative: &str) -> &str {
+    relative.rsplit('/').next().unwrap_or(relative)
 }
 
 /// Raw downloads retain the same canonical workspace boundary as text reads.
@@ -106,24 +120,26 @@ pub async fn download_file(
     AxumPath(workspace_id): AxumPath<String>,
     Query(query): Query<RequestedPath>,
 ) -> AppResult<Response> {
-    use std::io::Read;
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
-    remote::refuse_remote(&workspace, "Downloading a file")?;
-    let root = Path::new(&workspace.root_path);
-    let path = resolve_in_root(root, &query.path)?;
-    if !path.is_file() {
-        return Err(AppError::BadRequest("Requested path is not a file".into()));
-    }
-    let mut bytes = Vec::new();
-    std::fs::File::open(&path)?
-        .take(imports::MAX_FILE_BYTES as u64 + 1)
-        .read_to_end(&mut bytes)?;
-    if bytes.len() > imports::MAX_FILE_BYTES {
-        return Err(AppError::BadRequest(
-            "File exceeds the 16 MiB download limit".into(),
-        ));
-    }
-    let name = path.file_name().unwrap_or_default().to_string_lossy();
+    // The bytes come off whichever machine owns them. A remote read is the
+    // same chunked reader the editor uses, asked for the bytes rather than for
+    // text, so a picture on the execution host downloads like any other file.
+    let (name, bytes) = match remote::resolve(&state, &workspace)?.remote() {
+        Some(worker) => {
+            let downloaded = remote::download::fetch(worker, &workspace, &query.path).await?;
+            (file_name(&downloaded.path).to_owned(), downloaded.bytes)
+        }
+        None => {
+            let root = Path::new(&workspace.root_path);
+            let (relative, _, bytes) = tokio::task::spawn_blocking({
+                let root = root.to_owned();
+                let requested = query.path.clone();
+                move || files::read_raw_file(&root, &requested)
+            })
+            .await??;
+            (file_name(&relative).to_owned(), bytes)
+        }
+    };
     let encoded: String = name
         .as_bytes()
         .iter()
@@ -153,8 +169,14 @@ pub async fn upload_files(
             "This workspace is opened read-only".into(),
         ));
     }
-    remote::refuse_remote(&workspace, "Uploading files")?;
     let manifest = imports::read_manifest(&mut multipart, false).await?;
+    // The files land where the workspace lives. Remotely each one is streamed
+    // to the execution host and published there atomically.
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return Ok(Json(
+            remote::imports::receive(worker, &workspace, &mut multipart, &manifest).await?,
+        ));
+    }
     let root = Path::new(&workspace.root_path);
     let mut batch = imports::ImportBatch::new(root)?;
     imports::receive_files(&mut multipart, &mut batch, &manifest).await?;
@@ -177,9 +199,13 @@ pub async fn import_local_files(
             "This workspace is opened read-only".into(),
         ));
     }
-    remote::refuse_remote(&workspace, "Importing local files")?;
     if request.paths.is_empty() || request.paths.len() > imports::MAX_FILES {
         return Err(AppError::BadRequest("Import requires 1–256 files".into()));
+    }
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return Ok(Json(
+            remote::imports::copy_paths(worker, &workspace, request.paths).await?,
+        ));
     }
     let root = Path::new(&workspace.root_path);
     let mut batch = imports::ImportBatch::new(root)?;
@@ -265,14 +291,25 @@ pub async fn create_file_entry(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Json(request): Json<CreateEntryRequest>,
-) -> AppResult<Json<file_ops::EntryResult>> {
+) -> AppResult<JsonAnswer> {
     let workspace = writable_workspace(&state, &workspace_id).await?;
-    remote::refuse_remote(&workspace, "Creating, renaming and deleting files")?;
-    tokio::task::spawn_blocking(move || {
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            WorkerServiceOperation::FileEntryCreate,
+            &remote::service::files::CreateEntryPayload {
+                path: request.path,
+                kind: request.kind,
+            },
+        )
+        .await;
+    }
+    let result = tokio::task::spawn_blocking(move || {
         file_ops::create_entry(Path::new(&workspace.root_path), &request.path, request.kind)
-            .map(Json)
     })
-    .await?
+    .await??;
+    JsonAnswer::local(&result)
 }
 
 #[derive(Debug, Deserialize)]
@@ -287,14 +324,42 @@ pub async fn rename_file_entry(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Json(request): Json<RenameEntryRequest>,
-) -> AppResult<Json<file_ops::EntryResult>> {
+) -> AppResult<JsonAnswer> {
     let workspace = writable_workspace(&state, &workspace_id).await?;
-    remote::refuse_remote(&workspace, "Creating, renaming and deleting files")?;
-    tokio::task::spawn_blocking(move || {
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            // Renaming in place and moving to another folder are the same
+            // filesystem call, but they are separate operation numbers so an
+            // audit of what a controller asked for stays readable.
+            if parent_of(&request.from) == parent_of(&request.to) {
+                WorkerServiceOperation::FileEntryRename
+            } else {
+                WorkerServiceOperation::FileEntryMove
+            },
+            &remote::service::files::RenameEntryPayload {
+                from: request.from,
+                to: request.to,
+            },
+        )
+        .await;
+    }
+    let result = tokio::task::spawn_blocking(move || {
         file_ops::rename_entry(Path::new(&workspace.root_path), &request.from, &request.to)
-            .map(Json)
     })
-    .await?
+    .await??;
+    JsonAnswer::local(&result)
+}
+
+/// The folder part of a workspace-relative path, for telling a rename from a
+/// move. Purely descriptive: both end in the same call, and the boundary check
+/// happens on the machine that owns the files.
+fn parent_of(path: &str) -> &str {
+    match path.rsplit_once('/') {
+        Some((parent, _)) => parent,
+        None => "",
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -309,26 +374,43 @@ pub async fn trash_file_entry(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Json(request): Json<TrashEntryRequest>,
-) -> AppResult<Json<file_ops::TrashEntry>> {
+) -> AppResult<JsonAnswer> {
     let workspace = writable_workspace(&state, &workspace_id).await?;
-    remote::refuse_remote(&workspace, "Creating, renaming and deleting files")?;
-    tokio::task::spawn_blocking(move || {
-        file_ops::trash_entry(Path::new(&workspace.root_path), &request.path).map(Json)
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            WorkerServiceOperation::FileEntryDelete,
+            &remote::service::PathPayload { path: request.path },
+        )
+        .await;
+    }
+    let result = tokio::task::spawn_blocking(move || {
+        file_ops::trash_entry(Path::new(&workspace.root_path), &request.path)
     })
-    .await?
+    .await??;
+    JsonAnswer::local(&result)
 }
 
 /// `GET /api/workspaces/{id}/file-entries/trash` — what can still be restored.
 pub async fn list_trash(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
-) -> AppResult<Json<Vec<file_ops::TrashEntry>>> {
+) -> AppResult<JsonAnswer> {
     let workspace = readable_workspace(&state, &workspace_id).await?;
-    remote::refuse_remote(&workspace, "Creating, renaming and deleting files")?;
-    tokio::task::spawn_blocking(move || {
-        file_ops::list_trash(Path::new(&workspace.root_path)).map(Json)
-    })
-    .await?
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            WorkerServiceOperation::FileEntryTrashList,
+            &remote::service::files::TrashListPayload {},
+        )
+        .await;
+    }
+    let result =
+        tokio::task::spawn_blocking(move || file_ops::list_trash(Path::new(&workspace.root_path)))
+            .await??;
+    JsonAnswer::local(&result)
 }
 
 #[derive(Debug, Deserialize)]
@@ -342,13 +424,22 @@ pub async fn restore_file_entry(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
     Json(request): Json<RestoreEntryRequest>,
-) -> AppResult<Json<file_ops::EntryResult>> {
+) -> AppResult<JsonAnswer> {
     let workspace = writable_workspace(&state, &workspace_id).await?;
-    remote::refuse_remote(&workspace, "Creating, renaming and deleting files")?;
-    tokio::task::spawn_blocking(move || {
-        file_ops::restore_trash(Path::new(&workspace.root_path), &request.id).map(Json)
+    if let Some(worker) = remote::resolve(&state, &workspace)?.remote() {
+        return remote::proxy(
+            worker,
+            &workspace,
+            WorkerServiceOperation::FileEntryRestore,
+            &remote::service::files::RestoreEntryPayload { id: request.id },
+        )
+        .await;
+    }
+    let result = tokio::task::spawn_blocking(move || {
+        file_ops::restore_trash(Path::new(&workspace.root_path), &request.id)
     })
-    .await?
+    .await??;
+    JsonAnswer::local(&result)
 }
 
 /* ------------------------------ file watching ----------------------------- */

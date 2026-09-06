@@ -58,6 +58,7 @@ async fn a_custom_agent_terminal_carries_its_own_id_and_env() {
     let state = AppState {
         remote: Default::default(),
         language: Default::default(),
+        askpass: Default::default(),
         resources: crate::resources::ResourceService::new(settings.clone()),
         terminals,
         usage: crate::usage::UsageService::new(settings.clone()),
@@ -110,6 +111,7 @@ async fn agent_terminals_require_a_node_and_a_known_agent() {
     let router = crate::router_with_state(AppState {
         remote: Default::default(),
         language: Default::default(),
+        askpass: Default::default(),
         resources: crate::resources::ResourceService::new(settings.clone()),
         terminals,
         usage: crate::usage::UsageService::new(settings.clone()),

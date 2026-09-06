@@ -55,6 +55,7 @@ async fn serve_on_socket() -> Fixture {
     let state = AppState {
         remote: Default::default(),
         language: Default::default(),
+        askpass: Default::default(),
         resources: armadra_runtime::resources::ResourceService::new(settings.clone()),
         terminals: TerminalManager::new(pool.clone(), events.clone()),
         hooks: HookService::new(directory.path().to_path_buf(), None),

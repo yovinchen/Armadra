@@ -1,0 +1,11 @@
+{
+  "capability": "remote.git.panel.v1",
+  "operation": 22,
+  "replay": "safe",
+  "request": {
+    "base": null,
+    "oid": "abc",
+    "path": "."
+  },
+  "responseType": "git_repository::CommitDetail"
+}

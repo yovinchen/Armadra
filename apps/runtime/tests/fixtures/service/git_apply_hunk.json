@@ -1,0 +1,13 @@
+{
+  "capability": "remote.git.panel.v1",
+  "operation": 38,
+  "replay": "never",
+  "request": {
+    "action": "stage",
+    "diffDigest": "abc",
+    "file": "a.txt",
+    "hunkId": "h1",
+    "scope": "worktree"
+  },
+  "responseType": "git_hunks::GitHunkResult"
+}

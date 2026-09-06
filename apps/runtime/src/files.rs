@@ -135,6 +135,40 @@ pub fn list_directory(root: &Path, requested: &str) -> AppResult<FileList> {
     })
 }
 
+/// Read a file as bytes, for a download or a whiteboard asset.
+///
+/// Separate from [`read_text_file`] because that one is the *editor's* reader:
+/// it refuses binary and stops at the preview limit, both of which are right
+/// for an editor and wrong for a picture. The answer is the workspace-relative
+/// path, an always-opaque content type and the bytes; the caller decides how
+/// to frame them, and the download route keeps them an attachment.
+pub fn read_raw_file(root: &Path, requested: &str) -> AppResult<(String, String, Vec<u8>)> {
+    use std::io::Read;
+
+    let root = canonical_directory(root)?;
+    let path = resolve_in_root(&root, requested)?;
+    let metadata = fs::metadata(&path)?;
+    if !metadata.is_file() {
+        return Err(AppError::BadRequest("Requested path is not a file".into()));
+    }
+    let mut bytes = Vec::new();
+    File::open(&path)?
+        .take(crate::imports::MAX_FILE_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > crate::imports::MAX_FILE_BYTES {
+        return Err(AppError::BadRequest(
+            "File exceeds the 16 MiB download limit".into(),
+        ));
+    }
+    Ok((
+        relative_to_root(&root, &path)?,
+        // Never sniffed: an uploaded HTML or SVG file must not be able to
+        // execute in the Runtime's origin on the way back out.
+        "application/octet-stream".to_owned(),
+        bytes,
+    ))
+}
+
 pub fn read_text_file(root: &Path, requested: &str) -> AppResult<FileContent> {
     let root = canonical_directory(root)?;
     let path = resolve_in_root(&root, requested)?;

@@ -1,14 +1,26 @@
-//! SSH hosts and the `ssh` argv a terminal session runs (plan §21, row SSH).
+//! SSH hosts: what may be configured, and what Armadra does with it (plan §21,
+//! completed in remote completion design §3.6).
 //!
-//! Two rules govern everything here:
+//! Three rules govern everything here:
 //!
 //! 1. **argv, never a shell string.** The command handed to a backend is
 //!    `["ssh", …]` with each option its own element, so a host called
 //!    `a;rm -rf /` could at worst become one (meaningless) `ssh` argument. It
-//!    never gets that far: every field is validated first.
+//!    never gets that far: every field is validated first. See [`argv`].
 //! 2. **Validation belongs to the runtime.** `settings.json` is a plain file a
 //!    user can edit by hand, so `normalize_hosts` drops entries that do not
 //!    pass rather than trusting the front end's own check.
+//! 3. **Armadra decides about host keys and secrets, not `ssh`.** Trust is a
+//!    person confirming a fingerprint ([`known_hosts`]) and a password is a
+//!    person answering a dialog ([`prompts`], [`askpass`]). Neither is ever
+//!    resolved by a prompt on a TTY nobody is watching.
+
+pub mod argv;
+pub mod askpass;
+pub mod known_hosts;
+pub mod prompts;
+
+pub use argv::{language_link_argv, probe_argv, ssh_argv, worker_argv};
 
 use std::process::Stdio;
 
@@ -35,10 +47,20 @@ const MAX_PATH: usize = 4_096;
 const MAX_EXTRA_ARGS: usize = 16;
 const MAX_EXTRA_ARG: usize = 128;
 
-/// `-o` values that turn `ssh` into a local command runner. They are not shell
-/// injection (there is no shell), but they do execute a program of the user's
-/// choosing at connect time, so they stay out of the stored configuration.
-const FORBIDDEN_OPTIONS: &[&str] = &["proxycommand", "localcommand", "permitlocalcommand"];
+/// `-o` values that turn `ssh` into a local command runner, or that would let
+/// a hand-edited settings file undo the host-key decision Armadra makes on the
+/// user's behalf. Neither is shell injection — there is no shell — but the
+/// first executes a program of the user's choosing at connect time and the
+/// second silently re-enables the automatic trust this design exists to
+/// prevent.
+const FORBIDDEN_OPTIONS: &[&str] = &[
+    "proxycommand",
+    "localcommand",
+    "permitlocalcommand",
+    "stricthostkeychecking",
+    "userknownhostsfile",
+    "globalknownhostsfile",
+];
 
 /// Where the Armadra Worker binary lives on an SSH host, and where it may keep
 /// its private state (H02). Absent means this host runs terminals only: a
@@ -199,120 +221,6 @@ pub fn validate_host(host: &SshHost) -> Result<(), String> {
     Ok(())
 }
 
-/// The argv that starts the Worker on `host` over SSH (H02):
-/// `ssh -o BatchMode=yes … destination <remote binary> worker --stdio …`.
-///
-/// No `-t`: stdin and stdout carry length-prefixed Protobuf frames, and a TTY
-/// would translate them. `BatchMode` keeps a password prompt from swallowing
-/// the stream — an unreachable host has to fail, not hang.
-pub fn worker_argv(host: &SshHost, worker: &SshWorker) -> Vec<String> {
-    argv_for(host, worker, false)
-}
-
-/// The same launch line with `--language-link`, for the second connection an
-/// execution host gets while an editor has a language session on it (language
-/// service design §2.7).
-///
-/// Everything about it — the options, the destination, the remote binary, the
-/// state directory — is the first connection's line. Only the one flag differs,
-/// so a host that can run a Worker at all can run this without further setup.
-pub fn language_link_argv(host: &SshHost, worker: &SshWorker) -> Vec<String> {
-    argv_for(host, worker, true)
-}
-
-fn argv_for(host: &SshHost, worker: &SshWorker, language_link: bool) -> Vec<String> {
-    let mut argv = vec![
-        "ssh".to_owned(),
-        "-o".to_owned(),
-        "BatchMode=yes".to_owned(),
-        "-o".to_owned(),
-        "ConnectTimeout=10".to_owned(),
-        "-o".to_owned(),
-        "ServerAliveInterval=30".to_owned(),
-    ];
-    if let Some(port) = host.port {
-        argv.push("-p".to_owned());
-        argv.push(port.to_string());
-    }
-    if let Some(identity) = host.identity_file.as_deref() {
-        argv.push("-i".to_owned());
-        argv.push(identity.to_owned());
-    }
-    argv.extend(host.extra_args.iter().cloned());
-    argv.push(destination(host));
-    argv.push(worker.path.clone());
-    argv.push("worker".to_owned());
-    argv.push("--stdio".to_owned());
-    if language_link {
-        argv.push("--language-link".to_owned());
-    }
-    if let Some(directory) = worker.state_dir.as_deref() {
-        argv.push("--state-dir".to_owned());
-        argv.push(directory.to_owned());
-    }
-    argv
-}
-
-/// `user@host`, with the brackets of an IPv6 literal removed — `ssh` takes a
-/// bare address as its destination, brackets are URI syntax.
-fn destination(host: &SshHost) -> String {
-    let address = host
-        .host
-        .strip_prefix('[')
-        .and_then(|value| value.strip_suffix(']'))
-        .unwrap_or(&host.host);
-    match host.user.as_deref() {
-        Some(user) => format!("{user}@{address}"),
-        None => address.to_owned(),
-    }
-}
-
-/// The argv of the session's command, program included:
-/// `ssh -t -o ServerAliveInterval=30 [-p PORT] [-i FILE] [extra…] user@host`.
-pub fn ssh_argv(host: &SshHost) -> Vec<String> {
-    let mut argv = vec![
-        "ssh".to_owned(),
-        "-t".to_owned(),
-        "-o".to_owned(),
-        "ServerAliveInterval=30".to_owned(),
-    ];
-    if let Some(port) = host.port {
-        argv.push("-p".to_owned());
-        argv.push(port.to_string());
-    }
-    if let Some(identity) = host.identity_file.as_deref() {
-        argv.push("-i".to_owned());
-        argv.push(identity.to_owned());
-    }
-    argv.extend(host.extra_args.iter().cloned());
-    argv.push(destination(host));
-    argv
-}
-
-/// The reachability probe: no TTY, no password prompt, five seconds, `true` as
-/// the remote command.
-fn probe_argv(host: &SshHost) -> Vec<String> {
-    let mut argv = vec![
-        "ssh".to_owned(),
-        "-o".to_owned(),
-        "BatchMode=yes".to_owned(),
-        "-o".to_owned(),
-        "ConnectTimeout=5".to_owned(),
-    ];
-    if let Some(port) = host.port {
-        argv.push("-p".to_owned());
-        argv.push(port.to_string());
-    }
-    if let Some(identity) = host.identity_file.as_deref() {
-        argv.push("-i".to_owned());
-        argv.push(identity.to_owned());
-    }
-    argv.extend(host.extra_args.iter().cloned());
-    argv.push(destination(host));
-    argv.push("true".to_owned());
-    argv
-}
-
 /* -------------------------------- settings -------------------------------- */
 
 /// Parses `settings.ssh.hosts[]`, dropping anything malformed or invalid and
@@ -434,52 +342,6 @@ mod tests {
     }
 
     #[test]
-    fn argv_is_the_plan_s_command_line() {
-        assert_eq!(
-            ssh_argv(&host()),
-            vec![
-                "ssh",
-                "-t",
-                "-o",
-                "ServerAliveInterval=30",
-                "ada@example.com"
-            ]
-        );
-    }
-
-    #[test]
-    fn port_identity_and_extra_arguments_are_separate_elements() {
-        let mut host = host();
-        host.port = Some(2222);
-        host.identity_file = Some("/home/ada/.ssh/id_ed25519".into());
-        host.extra_args = vec!["-4".into(), "-oStrictHostKeyChecking=accept-new".into()];
-        assert_eq!(
-            ssh_argv(&host),
-            vec![
-                "ssh",
-                "-t",
-                "-o",
-                "ServerAliveInterval=30",
-                "-p",
-                "2222",
-                "-i",
-                "/home/ada/.ssh/id_ed25519",
-                "-4",
-                "-oStrictHostKeyChecking=accept-new",
-                "ada@example.com",
-            ]
-        );
-    }
-
-    #[test]
-    fn ipv6_loses_its_brackets_in_the_destination() {
-        let mut host = host();
-        host.host = "[fe80::1]".into();
-        host.user = None;
-        assert_eq!(ssh_argv(&host).last().unwrap(), "fe80::1");
-    }
-
-    #[test]
     fn a_shell_payload_in_the_host_is_rejected() {
         for evil in [
             "a;rm -rf /",
@@ -554,52 +416,6 @@ mod tests {
     }
 
     #[test]
-    fn the_worker_command_is_batch_mode_without_a_tty() {
-        let mut host = host();
-        host.port = Some(2222);
-        host.worker = Some(SshWorker {
-            path: "/opt/armadra/armadra-runtime".into(),
-            state_dir: Some("/var/lib/armadra/worker".into()),
-        });
-        let argv = worker_argv(&host, host.worker.as_ref().unwrap());
-        assert!(argv.windows(2).any(|pair| pair == ["-o", "BatchMode=yes"]));
-        assert!(!argv.iter().any(|argument| argument == "-t"));
-        assert_eq!(
-            argv[argv.len() - 8..],
-            [
-                "-p",
-                "2222",
-                "ada@example.com",
-                "/opt/armadra/armadra-runtime",
-                "worker",
-                "--stdio",
-                "--state-dir",
-                "/var/lib/armadra/worker",
-            ]
-        );
-    }
-
-    #[test]
-    fn the_state_directory_is_two_arguments_and_only_when_configured() {
-        let mut host = host();
-        host.worker = Some(SshWorker {
-            path: "/opt/armadra/armadra-runtime".into(),
-            state_dir: None,
-        });
-        let argv = worker_argv(&host, host.worker.as_ref().unwrap());
-        assert_eq!(argv.last().unwrap(), "--stdio");
-        host.worker = Some(SshWorker {
-            path: "/opt/armadra/armadra-runtime".into(),
-            state_dir: Some("/var/lib/armadra/worker".into()),
-        });
-        let argv = worker_argv(&host, host.worker.as_ref().unwrap());
-        assert_eq!(
-            &argv[argv.len() - 2..],
-            ["--state-dir", "/var/lib/armadra/worker"]
-        );
-    }
-
-    #[test]
     fn a_worker_path_that_the_remote_shell_would_split_is_rejected() {
         for bad in ["relative/armadra", "/opt/armadra runtime", "/opt/$(id)"] {
             let mut host = host();
@@ -615,18 +431,6 @@ mod tests {
             state_dir: Some("../state".into()),
         });
         assert_eq!(validate_host(&host).unwrap_err(), "worker.stateDir");
-    }
-
-    #[test]
-    fn probe_is_batch_mode_and_ends_in_true() {
-        let argv = probe_argv(&host());
-        assert!(argv.windows(2).any(|pair| pair == ["-o", "BatchMode=yes"]));
-        assert!(
-            argv.windows(2)
-                .any(|pair| pair == ["-o", "ConnectTimeout=5"])
-        );
-        assert_eq!(argv.last().unwrap(), "true");
-        assert!(!argv.iter().any(|argument| argument == "-t"));
     }
 
     #[test]
