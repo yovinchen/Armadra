@@ -115,16 +115,72 @@ beforeEach(() => {
 });
 
 describe("WorkspaceTree", () => {
-  it("「项目」组默认展开，缩进列出看板与节点数", async () => {
+  it("「项目」组默认展开，缩进列出看板；行尾不带节点数", async () => {
     renderTree();
 
     expect(await screen.findByText("repo")).toBeTruthy();
     expect(screen.getByText("Default")).toBeTruthy();
     expect(screen.getByText("实验")).toBeTruthy();
-    // 非当前看板的节点数来自工作空间列表
-    expect(await screen.findByLabelText("7 个节点")).toBeTruthy();
+    expect(screen.queryByText("3")).toBeNull();
+    expect(screen.queryByText("7")).toBeNull();
     // 没有置顶就不显示置顶组
     expect(screen.queryByText("置顶")).toBeNull();
+  });
+
+  it("看板行不展开 Agent，Agent 也不出现在树里", async () => {
+    sessions.mockResolvedValue([
+      {
+        nodeId: "node-1",
+        boardId: FIRST,
+        sessionId: "session-1",
+        title: "Codex",
+        cwd: "/repo",
+        agentId: "codex",
+        state: "idle",
+        unread: true,
+        updatedAt: timestamp,
+        alive: true,
+      },
+    ]);
+    renderTree();
+
+    await screen.findByText("Default");
+    // 会话只喂行尾那颗点，标题不进树
+    expect(await screen.findByLabelText("未读")).toBeTruthy();
+    expect(screen.queryByText("Codex")).toBeNull();
+  });
+
+  it("看板名是纯文本，没有输入框", async () => {
+    renderTree();
+
+    fireEvent.doubleClick(await screen.findByText("实验"));
+    expect(screen.queryByLabelText("看板名称")).toBeNull();
+    expect(updateBoard).not.toHaveBeenCalled();
+  });
+
+  it("项目名是纯文本，没有输入框", async () => {
+    renderTree();
+
+    fireEvent.doubleClick(await screen.findByText("repo"));
+    expect(screen.queryByLabelText("工作空间名称")).toBeNull();
+    expect(updateWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("看板菜单只有置顶与删除", async () => {
+    renderTree();
+    await screen.findByText("实验");
+
+    openMenu(screen.getAllByLabelText("看板操作")[1]!);
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual(["置顶", "删除"]);
+  });
+
+  it("「项目」右边的 + 添加项目（浏览器里退回新建文件夹对话框）", async () => {
+    renderTree();
+    await screen.findByText("repo");
+
+    fireEvent.click(screen.getByLabelText("添加项目"));
+    expect(await screen.findByText("新建文件夹")).toBeTruthy();
   });
 
   it("点工作空间行收起它的看板，状态写进偏好", async () => {
@@ -142,38 +198,6 @@ describe("WorkspaceTree", () => {
 
     fireEvent.click(await screen.findByText("实验"));
     expect(useCanvasStore.getState().boardId).toBe(SECOND);
-  });
-
-  it("双击看板改名", async () => {
-    updateBoard.mockResolvedValue({ id: SECOND, name: "改过" });
-    renderTree();
-
-    fireEvent.doubleClick(await screen.findByText("实验"));
-    const input = screen.getByLabelText("看板名称");
-    fireEvent.change(input, { target: { value: "改过" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-
-    await waitFor(() =>
-      expect(updateBoard).toHaveBeenCalledWith(workspace.id, SECOND, {
-        name: "改过",
-      }),
-    );
-  });
-
-  it("双击工作空间行改名", async () => {
-    updateWorkspace.mockResolvedValue({ ...workspace, name: "新名字" });
-    renderTree();
-
-    fireEvent.doubleClick(await screen.findByText("repo"));
-    const input = screen.getByLabelText("工作空间名称");
-    fireEvent.change(input, { target: { value: "新名字" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-
-    await waitFor(() =>
-      expect(updateWorkspace).toHaveBeenCalledWith(workspace.id, {
-        name: "新名字",
-      }),
-    );
   });
 
   it("看板菜单里的置顶把它放进置顶组", async () => {

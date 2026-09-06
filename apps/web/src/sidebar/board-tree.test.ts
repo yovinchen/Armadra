@@ -27,7 +27,7 @@ function row(partial: Partial<SessionRow> & { nodeId: string }): SessionRow {
 }
 
 function board(id: string, name = id): BoardEntry {
-  return { id, name, nodeCount: 0 };
+  return { id, name };
 }
 
 const attention = (item: SessionRow) =>

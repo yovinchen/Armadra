@@ -6,11 +6,10 @@
  */
 import type { SessionRow } from "../agent/sessions";
 
-/** 树里的一块板：名称 + 节点数，两个数据源统一成这个形状。 */
+/** 树里的一块板：只有 id 与名称，两个数据源统一成这个形状。 */
 export interface BoardEntry {
   id: string;
   name: string;
-  nodeCount: number;
 }
 
 /** 一块板上的 Agent 汇总信号：行尾那个点画成红的还是蓝的。 */

@@ -85,6 +85,7 @@ describe("LeftSidebar", () => {
     expect(screen.getAllByText("repo")).toHaveLength(1);
     expect(screen.getByText("新建看板")).toBeTruthy();
     expect(screen.getByText("项目")).toBeTruthy();
+    expect(screen.getByLabelText("添加项目")).toBeTruthy();
     expect(screen.getByText("设置")).toBeTruthy();
     expect(screen.getByTestId("window-titlebar-inset")).toBeTruthy();
   });
