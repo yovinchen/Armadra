@@ -17,7 +17,7 @@ import {
   automationKeys,
   allPlans,
   findPlan,
-  planRuns,
+  runPage,
 } from "@/panels/automation/queries";
 import { openAutomationPanel } from "@/panels/automation/open";
 import { usePreferencesStore, useT } from "@/app/preferences-store";
@@ -53,14 +53,16 @@ export function AutomationNode({ id, node, selected }: NodeBodyProps) {
     refetchInterval: 15_000,
   });
   const snapshot = findPlan(plans.data, data?.planId ?? "");
+  // The card only ever shows the most recent receipt, and the Host already
+  // orders its history newest first, so one page is the whole question.
   const runs = useQuery({
     queryKey: automationKeys.runs(workspaceId ?? "", data?.planId ?? ""),
-    queryFn: () => planRuns(client!, data!.planId),
+    queryFn: () => runPage(client!, data!.planId, ""),
     enabled: Boolean(client && snapshot),
     retry: false,
     refetchInterval: 15_000,
   });
-  const latest = runs.data?.[0]?.run;
+  const latest = runs.data?.runs[0]?.run;
   const plan = snapshot?.plan;
   const kind = scheduleKind(plan?.config) ?? data?.scheduleKind ?? null;
   const zone =

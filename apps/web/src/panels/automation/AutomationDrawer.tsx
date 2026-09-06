@@ -55,6 +55,9 @@ export function AutomationDrawer() {
   const prefill = useAutomationFocus((store) => store.prefill);
   const compose = useAutomationFocus((store) => store.compose);
   const clearPrefill = useAutomationFocus((store) => store.clearPrefill);
+  const editingPlanId = useAutomationFocus((store) => store.editingPlanId);
+  const editPlan = useAutomationFocus((store) => store.editPlan);
+  const stopEditing = useAutomationFocus((store) => store.stopEditing);
   const state = useAutomationSession((store) => store.state);
   const connect = useAutomationSession((store) => store.connect);
   const queryClient = useQueryClient();
@@ -126,13 +129,19 @@ export function AutomationDrawer() {
         planId: request.planId,
         config: request.config,
         payload: request.payload,
-        expectedRevision: 0n,
+        expectedRevision: request.expectedRevision,
       });
     },
-    onSuccess: (snapshot) => {
+    onSuccess: (snapshot, request) => {
       invalidate();
+      stopEditing();
       setTab("plans");
       focus(snapshot.plan?.id ?? null);
+      // An edit stores a new version and hands the plan back as a draft. Say
+      // so: a person who edited a running plan and walked away would otherwise
+      // believe it was still armed.
+      if (request.expectedRevision > 0n)
+        toast.success(t("automation.savedDraft"));
     },
     onError: fail,
   });
@@ -179,6 +188,22 @@ export function AutomationDrawer() {
   const focused = plans.data?.find(
     (snapshot) => snapshot.plan?.id === focusPlanId,
   );
+  // The edit target, resolved from the list rather than captured at click
+  // time: the revision the save carries has to be the one on screen now, so a
+  // plan another device moved on is refused instead of overwritten.
+  const editingSnapshot = editingPlanId
+    ? (plans.data?.find((snapshot) => snapshot.plan?.id === editingPlanId) ??
+      null)
+    : null;
+  const editing =
+    editingSnapshot?.plan?.config && editingSnapshot.plan.id
+      ? {
+          planId: editingSnapshot.plan.id,
+          config: editingSnapshot.plan.config,
+          expectedRevision: editingSnapshot.revision,
+          configVersion: editingSnapshot.plan.configVersion,
+        }
+      : null;
 
   return (
     <WorkPanelSheet
@@ -285,6 +310,7 @@ export function AutomationDrawer() {
                     onActivate={() => activate.mutate(snapshot)}
                     onPause={() => pause.mutate(snapshot)}
                     onRunNow={() => runNow.mutate(snapshot)}
+                    onEdit={() => editPlan(snapshot.plan?.id ?? "")}
                     onViewRuns={() => revealRuns(snapshot.plan?.id ?? "")}
                     onShowOnCanvas={() => showOnCanvas(snapshot)}
                     onDetach={() => {
@@ -334,6 +360,7 @@ export function AutomationDrawer() {
                   workspaceId={workspaceId}
                   busy={busy}
                   prefill={prefill}
+                  edit={editing}
                   onCreate={(request) => {
                     clearPrefill();
                     createPlan.mutate(request);

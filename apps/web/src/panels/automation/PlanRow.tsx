@@ -26,6 +26,7 @@ export interface PlanRowProps {
   onActivate: () => void;
   onPause: () => void;
   onRunNow: () => void;
+  onEdit: () => void;
   onViewRuns: () => void;
   onShowOnCanvas: () => void;
   onDetach: () => void;
@@ -50,6 +51,7 @@ export function PlanRow({
   onActivate,
   onPause,
   onRunNow,
+  onEdit,
   onViewRuns,
   onShowOnCanvas,
   onDetach,
@@ -142,6 +144,25 @@ export function PlanRow({
           </Button>
         )}
         {/* 没有 manage 权限时这些按钮不渲染，而不是渲染成禁用的假按钮。 */}
+        {canManage && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="min-h-10"
+            data-slot="automation-edit"
+            disabled={busy}
+            // 编辑保存的是这份计划的新一版；Host 会因此作废激活、把它退回
+            // 草稿，所以按钮下面那句话必须说出来，而不是让人事后发现。
+            title={
+              plan.state === ACTIVE
+                ? t("automation.editActiveNote")
+                : t("automation.editNote")
+            }
+            onClick={onEdit}
+          >
+            {t("automation.edit")}
+          </Button>
+        )}
         {canManage && plan.state !== ACTIVE && (
           <Button
             size="sm"

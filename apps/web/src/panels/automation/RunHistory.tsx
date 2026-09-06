@@ -1,10 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import type {
   AutomationPlanSnapshot,
   HostAutomationClient,
 } from "@armadra/host-client";
 
 import { Badge } from "@/ui/badge";
+import { Button } from "@/ui/button";
 import {
   Select,
   SelectContent,
@@ -14,7 +15,7 @@ import {
 } from "@/ui/select";
 import { useT } from "@/app/preferences-store";
 import { instant, reasonLabel, receiptPhase, runStateKey } from "./model";
-import { automationKeys, planRuns } from "./queries";
+import { automationKeys, runPage } from "./queries";
 
 export interface RunHistoryProps {
   client: HostAutomationClient;
@@ -30,6 +31,10 @@ export interface RunHistoryProps {
  *
  * 每条记录都带收据阶段与派发次数：投递过和执行完是两回事，未知结果也单独
  * 成一行，不会被归进成功或失败。reasonCode 原样显示。
+ *
+ * 分页由 Host 做，游标就是时间上的位置，所以「加载更早」拿到的确实是更早的
+ * 那一页——而不是先把全部翻回来再在本地排一遍。第一页之外的记录只在有人要看
+ * 的时候才请求。
  */
 export function RunHistory({
   client,
@@ -40,12 +45,15 @@ export function RunHistory({
   onSelect,
 }: RunHistoryProps) {
   const t = useT();
-  const runs = useQuery({
+  const runs = useInfiniteQuery({
     queryKey: automationKeys.runs(workspaceId, planId ?? ""),
-    queryFn: () => planRuns(client, planId!),
+    queryFn: ({ pageParam }) => runPage(client, planId!, pageParam),
+    initialPageParam: "",
+    getNextPageParam: (page) => page.nextCursor,
     enabled: Boolean(planId),
     retry: false,
   });
+  const rows = runs.data?.pages.flatMap((page) => page.runs) ?? [];
 
   return (
     <div className="min-w-0 space-y-3 p-3">
@@ -62,13 +70,13 @@ export function RunHistory({
         </SelectContent>
       </Select>
 
-      {runs.isSuccess && runs.data.length === 0 && (
+      {runs.isSuccess && rows.length === 0 && (
         <p className="text-[12px] text-muted-foreground">
           {t("automation.emptyRuns")}
         </p>
       )}
 
-      {runs.data?.map(({ run }) =>
+      {rows.map(({ run }) =>
         !run ? null : (
           <section
             key={run.id}
@@ -117,6 +125,28 @@ export function RunHistory({
             </dl>
           </section>
         ),
+      )}
+
+      {/*
+        显式的「加载更早」，不是滚到底自动拉：翻页会打 Host，而一个正在读的人
+        不该因为滚过了头就替他发一串请求。
+      */}
+      {runs.hasNextPage && (
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="min-h-10 w-full"
+          data-slot="automation-runs-more"
+          disabled={runs.isFetchingNextPage}
+          onClick={() => void runs.fetchNextPage()}
+        >
+          {t(
+            runs.isFetchingNextPage
+              ? "automation.runs.loading"
+              : "automation.runs.more",
+          )}
+        </Button>
       )}
     </div>
   );

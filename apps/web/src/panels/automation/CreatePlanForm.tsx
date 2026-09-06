@@ -6,7 +6,7 @@ import type {
   CommandLaunchSpec,
   HostAutomationClient,
 } from "@armadra/host-client";
-import type { AutomationScheduleKind } from "@armadra/shared";
+import type { AutomationScheduleKind, NativeRecurrence } from "@armadra/shared";
 
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
@@ -23,11 +23,14 @@ import { runtimeApi } from "@/api/client";
 import { useCanvasStore } from "@/store/canvas-store";
 import { agentTargets, frozenLaunch } from "./agent-targets";
 import { timezoneOptions, validCron, validTimezone } from "./model";
+import { translateNativeRecurrence } from "./native-recurrence";
 import { allCommandSessions, automationKeys } from "./queries";
 import {
   buildLaunchSpec,
   buildPlanConfig,
   defaultWizardState,
+  targetFromConfig,
+  wizardStateFromConfig,
   type WizardState,
 } from "./wizard";
 
@@ -43,6 +46,11 @@ export interface CreatePlanRequest {
   config: AutomationPlanConfig;
   payload: Uint8Array;
   session?: NewSessionRequest;
+  /**
+   * Zero creates. Any other value edits the plan at exactly that revision, so
+   * a save that raced another device is refused instead of overwriting it.
+   */
+  expectedRevision: bigint;
 }
 
 /**
@@ -56,6 +64,24 @@ export interface CreatePlanPrefill {
   title: string;
   /** `native` when this came from an observed CLI loop rather than the wizard. */
   origin: "native";
+  /**
+   * The repeat rule the card observed, if it read one. Translated into the
+   * schedule fields where that is possible and shown verbatim where it is
+   * not — see `native-recurrence.ts`. Nothing here is created or activated.
+   */
+  recurrence?: NativeRecurrence;
+}
+
+/**
+ * An existing plan being edited. The Host treats an edit as a new version of
+ * the same plan: `config_version` advances, the activation is invalidated, and
+ * the plan returns to draft — so saving is never the same as re-arming it.
+ */
+export interface EditPlanTarget {
+  planId: string;
+  config: AutomationPlanConfig;
+  expectedRevision: bigint;
+  configVersion: bigint;
 }
 
 export interface CreatePlanFormProps {
@@ -65,6 +91,8 @@ export interface CreatePlanFormProps {
   workspaceId: string;
   busy: boolean;
   prefill?: CreatePlanPrefill | null;
+  /** Set to edit an existing plan instead of creating one. */
+  edit?: EditPlanTarget | null;
   onCreate: (input: CreatePlanRequest) => void;
 }
 
@@ -105,17 +133,63 @@ export function CreatePlanForm({
   workspaceId,
   busy,
   prefill,
+  edit,
   onCreate,
 }: CreatePlanFormProps) {
   const t = useT();
-  const [state, setState] = React.useState<WizardState>(() =>
-    defaultWizardState(),
+  // A native card's rule is translated once, not on every render, and the
+  // refusal is kept: "we could not translate this, here is what it said" is
+  // the useful answer, and re-deriving it below would drop it.
+  const translated = React.useMemo(
+    () =>
+      prefill?.recurrence
+        ? translateNativeRecurrence(prefill.recurrence)
+        : null,
+    [prefill?.recurrence],
   );
+  // The stored plan's own target. An edit re-sends it rather than re-picking
+  // it: repointing a plan is a separate decision from rescheduling it.
+  const frozenTarget = React.useMemo(
+    () => (edit ? targetFromConfig(edit.config) : null),
+    [edit],
+  );
+  const [state, setState] = React.useState<WizardState>(() => {
+    if (edit) return wizardStateFromConfig(edit.config, "");
+    const base = defaultWizardState();
+    return {
+      ...base,
+      ...(prefill?.title ? { title: prefill.title } : {}),
+      ...(translated?.ok ? translated.draft : {}),
+    };
+  });
+  // The payload lives apart from the configuration on the Host, so an edit
+  // reads it back. Until it arrives the field stays empty and the form is not
+  // submittable: saving an empty payload would silently blank the prompt.
+  const stored = useQuery({
+    queryKey: automationKeys.payload(workspaceId, edit?.planId ?? ""),
+    queryFn: () => client.planPayload(edit!.planId),
+    enabled: Boolean(edit),
+    retry: false,
+  });
+  const loadedPayload = React.useRef(false);
+  React.useEffect(() => {
+    if (!edit || loadedPayload.current || !stored.data) return;
+    loadedPayload.current = true;
+    setState((current) => ({
+      ...current,
+      payload: new TextDecoder().decode(stored.data),
+    }));
+  }, [edit, stored.data]);
   const [targetKind, setTargetKind] = React.useState<"command" | "agent">(
-    prefill?.targetKind ?? "command",
+    frozenTarget?.kind ?? prefill?.targetKind ?? "command",
   );
-  const [agentNodeId, setAgentNodeId] = React.useState(prefill?.nodeId ?? "");
-  const [coldStart, setColdStart] = React.useState(false);
+  const [agentNodeId, setAgentNodeId] = React.useState(
+    (frozenTarget?.kind === "agent" ? frozenTarget.nodeId : "") ||
+      (prefill?.nodeId ?? ""),
+  );
+  const [coldStart, setColdStart] = React.useState(
+    frozenTarget?.kind === "agent" ? frozenTarget.coldStart : false,
+  );
   const nodes = useCanvasStore((store) => store.document?.nodes);
   const agents = React.useMemo(() => agentTargets(nodes), [nodes]);
   const agentNode = nodes?.find((node) => node.id === agentNodeId);
@@ -185,6 +259,22 @@ export function CreatePlanForm({
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
+    // An edit re-sends the plan's own frozen target. Everything else the form
+    // shows is editable; the target is displayed and left alone.
+    if (edit && frozenTarget) {
+      const config = buildPlanConfig(state, frozenTarget);
+      if (!config.ok) {
+        setError({ field: config.field, messageKey: config.messageKey });
+        return;
+      }
+      onCreate({
+        planId: edit.planId,
+        config: config.config,
+        payload: new TextEncoder().encode(state.payload),
+        expectedRevision: edit.expectedRevision,
+      });
+      return;
+    }
     if (targetKind === "agent") {
       const target = await agentTarget();
       if (!target) {
@@ -207,6 +297,7 @@ export function CreatePlanForm({
         planId: randomId("plan"),
         config: config.config,
         payload: new TextEncoder().encode(state.payload),
+        expectedRevision: 0n,
       });
       return;
     }
@@ -252,6 +343,7 @@ export function CreatePlanForm({
       planId: randomId("plan"),
       config: config.config,
       payload: new TextEncoder().encode(state.payload),
+      expectedRevision: 0n,
       ...(session ? { session } : {}),
     });
   }
@@ -275,29 +367,76 @@ export function CreatePlanForm({
           </p>
         ) : null}
 
-        {field(
-          t("automation.wizard.targetKind"),
-          <Select
-            value={targetKind}
-            onValueChange={(value) =>
-              setTargetKind(value as "command" | "agent")
-            }
+        {/*
+          原生规则：翻得动就把日程字段填好，翻不动就把原文原样摆出来，
+          让人自己决定怎么写——不硬凑一个「差不多」的周期。
+        */}
+        {translated ? (
+          <div
+            role="status"
+            data-slot="native-recurrence"
+            data-translated={translated.ok ? "true" : "false"}
+            className="min-w-0 space-y-1 rounded-md border border-border px-3 py-2 text-[11px] text-muted-foreground"
           >
-            <SelectTrigger size="sm" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="z-[var(--z-dialog)]">
-              <SelectItem value="command">
-                {t("automation.wizard.targetKind.command")}
-              </SelectItem>
-              <SelectItem value="agent" disabled={agents.length === 0}>
-                {t("automation.wizard.targetKind.agent")}
-              </SelectItem>
-            </SelectContent>
-          </Select>,
+            <p>
+              {translated.ok
+                ? t("automation.wizard.recurrenceTranslated")
+                : t(`automation.wizard.recurrence.${translated.reason}`)}
+            </p>
+            <p className="min-w-0 break-all font-mono select-text">
+              {t(`automation.wizard.dialect.${translated.source.dialect}`)} ·{" "}
+              {translated.source.rule}
+            </p>
+          </div>
+        ) : null}
+
+        {edit ? (
+          <>
+            <p
+              role="status"
+              data-slot="automation-edit-notice"
+              className="rounded-md border border-border px-3 py-2 text-[11px] text-muted-foreground"
+            >
+              {t("automation.wizard.editNote")}
+            </p>
+            {field(
+              t("automation.wizard.targetKind"),
+              <p className="min-w-0 truncate rounded-md border border-border px-3 py-2 text-[12px] text-muted-foreground select-text">
+                {t(`automation.wizard.targetKind.${targetKind}`)} ·{" "}
+                {frozenTarget?.kind === "agent"
+                  ? frozenTarget.agentLaunch.agentId
+                  : (frozenTarget?.sessionId ?? "")}
+              </p>,
+            )}
+            <p className="text-[11px] text-muted-foreground">
+              {t("automation.wizard.editTargetFrozen")}
+            </p>
+          </>
+        ) : (
+          field(
+            t("automation.wizard.targetKind"),
+            <Select
+              value={targetKind}
+              onValueChange={(value) =>
+                setTargetKind(value as "command" | "agent")
+              }
+            >
+              <SelectTrigger size="sm" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="z-[var(--z-dialog)]">
+                <SelectItem value="command">
+                  {t("automation.wizard.targetKind.command")}
+                </SelectItem>
+                <SelectItem value="agent" disabled={agents.length === 0}>
+                  {t("automation.wizard.targetKind.agent")}
+                </SelectItem>
+              </SelectContent>
+            </Select>,
+          )
         )}
 
-        {targetKind === "agent" ? (
+        {edit ? null : targetKind === "agent" ? (
           <>
             {field(
               t("automation.wizard.agentNode"),
@@ -337,7 +476,8 @@ export function CreatePlanForm({
           </>
         ) : null}
 
-        {targetKind === "command" &&
+        {!edit &&
+          targetKind === "command" &&
           field(
             t("automation.wizard.session"),
             <Select
@@ -359,7 +499,7 @@ export function CreatePlanForm({
             problem("session"),
           )}
 
-        {targetKind === "agent" ? null : mode === "existing" ? (
+        {edit || targetKind === "agent" ? null : mode === "existing" ? (
           field(
             t("automation.wizard.sessionId"),
             <Select value={sessionId} onValueChange={setSessionId}>
@@ -631,10 +771,23 @@ export function CreatePlanForm({
         )}
 
         <p className="text-[11px] text-muted-foreground">
-          {t("automation.wizard.created")}
+          {t(edit ? "automation.wizard.saved" : "automation.wizard.created")}
         </p>
-        <Button type="submit" size="sm" className="min-h-10" disabled={busy}>
-          {t("automation.create")}
+        {edit && stored.isError ? (
+          <p role="status" className="text-[11px] text-destructive">
+            {t("automation.wizard.payloadUnavailable")}
+          </p>
+        ) : null}
+        <Button
+          type="submit"
+          size="sm"
+          className="min-h-10"
+          data-slot="automation-submit"
+          // An edit cannot be saved before the stored payload has been read:
+          // sending an empty one would blank the prompt without saying so.
+          disabled={busy || (Boolean(edit) && !stored.isSuccess)}
+        >
+          {t(edit ? "automation.save" : "automation.create")}
         </Button>
       </fieldset>
     </form>

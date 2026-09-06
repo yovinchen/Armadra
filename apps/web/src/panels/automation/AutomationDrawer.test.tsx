@@ -101,8 +101,23 @@ function client(overrides: Record<string, unknown> = {}) {
     ),
     definePlan: vi.fn(async () => planSnapshot()),
     defineCommandSession: vi.fn(async () => ({ sessionId: "session-1" })),
+    planPayload: vi.fn(async () => new TextEncoder().encode("每晚构建一次")),
     ...overrides,
   };
+}
+
+/** One run snapshot, so a paged history has something distinguishable in it. */
+function runSnapshot(id: string, scheduledAt: bigint) {
+  return create(AutomationRunSnapshotSchema, {
+    run: {
+      id,
+      planId: "plan-1",
+      workspaceId: "workspace-1",
+      scheduledAtUnixMs: scheduledAt,
+      state: 7,
+    },
+    revision: 1n,
+  });
 }
 
 function ready(api: ReturnType<typeof client>, canManage = true) {
@@ -134,7 +149,13 @@ beforeEach(() => {
   store.removeNodes.mockClear();
   session.connect.mockClear();
   session.state = { status: "idle" };
-  useAutomationFocus.setState({ planId: null, reveal: 0 });
+  useAutomationFocus.setState({
+    planId: null,
+    reveal: 0,
+    prefill: null,
+    editingPlanId: null,
+    compose: 0,
+  });
 });
 afterEach(cleanup);
 
@@ -321,6 +342,122 @@ describe("run history navigation", () => {
     await waitFor(() =>
       expect(screen.getByText("这个计划还没有运行记录")).toBeTruthy(),
     );
+  });
+
+  it("asks the Host for the next page instead of pulling the whole history", async () => {
+    const api = client({
+      listRuns: vi.fn(async (_plan: string, cursor: string) =>
+        cursor === ""
+          ? {
+              runs: [runSnapshot("run-new", 3_000n)],
+              nextId: "cursor-1",
+              hasMore: true,
+            }
+          : {
+              runs: [runSnapshot("run-old", 1_000n)],
+              nextId: "",
+              hasMore: false,
+            },
+      ),
+    });
+    ready(api);
+    renderDrawer();
+    fireEvent.click(await screen.findByText("查看运行历史"));
+    // Only the first page is requested until somebody asks for more.
+    await waitFor(() =>
+      expect(document.querySelector('[data-run-id="run-new"]')).toBeTruthy(),
+    );
+    expect(api.listRuns).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-run-id="run-old"]')).toBeNull();
+
+    fireEvent.click(screen.getByText("加载更早的记录"));
+    await waitFor(() =>
+      expect(document.querySelector('[data-run-id="run-old"]')).toBeTruthy(),
+    );
+    // The second call carries the cursor the Host issued, not a page number
+    // this panel invented.
+    expect(api.listRuns).toHaveBeenLastCalledWith(
+      "plan-1",
+      "cursor-1",
+      expect.any(Number),
+    );
+    // Nothing more to fetch, so the affordance goes away.
+    expect(screen.queryByText("加载更早的记录")).toBeNull();
+  });
+});
+
+describe("editing a plan", () => {
+  it("saves a new version at the revision on screen and says it is a draft again", async () => {
+    const api = client();
+    ready(api);
+    renderDrawer();
+    fireEvent.click(await screen.findByText("编辑"));
+    // The stored prompt is read back: saving an empty payload would blank it.
+    const prompt = (await screen.findByDisplayValue(
+      "每晚构建一次",
+    )) as HTMLTextAreaElement;
+    expect(api.planPayload).toHaveBeenCalledWith("plan-1");
+    fireEvent.change(prompt, { target: { value: "换一句提示词" } });
+    fireEvent.click(screen.getByText("保存新版本"));
+    await waitFor(() => expect(api.definePlan).toHaveBeenCalled());
+    const request = (
+      api.definePlan.mock.calls.at(-1) as unknown as [
+        {
+          planId: string;
+          config: { schedule?: { kind?: { case?: string } }; title: string };
+          payload: Uint8Array;
+          expectedRevision: bigint;
+        },
+      ]
+    )[0];
+    expect(request.planId).toBe("plan-1");
+    // The exact revision the row displayed, so a save that raced another
+    // device is refused rather than overwriting it.
+    expect(request.expectedRevision).toBe(5n);
+    expect(new TextDecoder().decode(request.payload)).toBe("换一句提示词");
+    // The schedule the plan already had is re-sent, not a fresh default.
+    expect(request.config.schedule?.kind?.case).toBe("cron");
+    expect(request.config.title).toBe("每晚构建");
+    // Back on the list afterwards, and the plan is no longer being edited.
+    await waitFor(() => expect(screen.getByText("每晚构建")).toBeTruthy());
+    expect(useAutomationFocus.getState().editingPlanId).toBeNull();
+  });
+
+  it("cannot be saved before the stored prompt has been read", async () => {
+    let resolvePayload: ((value: Uint8Array) => void) | null = null;
+    const api = client({
+      planPayload: vi.fn(
+        () =>
+          new Promise<Uint8Array>((resolve) => {
+            resolvePayload = resolve;
+          }),
+      ),
+    });
+    ready(api);
+    renderDrawer();
+    fireEvent.click(await screen.findByText("编辑"));
+    const submit = await waitFor(() => {
+      const button = document.querySelector<HTMLButtonElement>(
+        '[data-slot="automation-submit"]',
+      );
+      if (!button) throw new Error("no submit button yet");
+      return button;
+    });
+    expect(submit.disabled).toBe(true);
+    resolvePayload!(new TextEncoder().encode("已存的提示词"));
+    await waitFor(() => expect(submit.disabled).toBe(false));
+  });
+
+  it("shows the frozen target read-only rather than re-picking one", async () => {
+    const api = client();
+    ready(api);
+    renderDrawer();
+    fireEvent.click(await screen.findByText("编辑"));
+    expect(
+      await screen.findByText(/目标沿用这份计划冻结下来的那一个/),
+    ).toBeTruthy();
+    // The target pickers are gone: repointing a plan is a different decision.
+    expect(screen.queryByText("已有的命令会话")).toBeNull();
   });
 });
 

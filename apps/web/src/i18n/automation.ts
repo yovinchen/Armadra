@@ -67,6 +67,14 @@ const zh = {
   "automation.viewRuns": "查看运行历史",
   "automation.showOnCanvas": "在画布上显示",
   "automation.create": "创建",
+  "automation.save": "保存新版本",
+  "automation.edit": "编辑",
+  "automation.editNote": "改动会保存为这个计划的新一版，仍是草稿。",
+  "automation.editActiveNote":
+    "这个计划正在运行中。保存新版本会作废当前激活，把它退回草稿——要重新启用才会继续执行。",
+  "automation.savedDraft": "已保存为新版本；计划回到草稿，需要重新启用",
+  "automation.runs.more": "加载更早的记录",
+  "automation.runs.loading": "正在加载",
   "automation.cancel": "取消",
   "automation.confirmActivate": "启用这个计划？",
   "automation.confirmActivateNote":
@@ -128,6 +136,28 @@ const zh = {
   "automation.wizard.invalidTime": "请填写一个有效时间",
   "automation.wizard.invalidInterval": "间隔必须是正整数毫秒",
   "automation.wizard.created": "计划已创建为草稿，启用后才会执行",
+  "automation.wizard.saved":
+    "保存的是这个计划的新一版；保存后它回到草稿，重新启用才会继续执行。",
+  "automation.wizard.editNote":
+    "正在编辑一个已有的计划。保存会写入新一版并作废当前激活。",
+  "automation.wizard.editTargetFrozen":
+    "目标沿用这份计划冻结下来的那一个；换目标是另一件事，要新建一份计划。",
+  "automation.wizard.payloadUnavailable":
+    "读不到已存的内容，因此不能保存——否则会把提示词清空。",
+  "automation.wizard.dialect.cron": "cron",
+  "automation.wizard.dialect.launchd": "launchd",
+  "automation.wizard.recurrenceTranslated":
+    "已按下面这条原生规则预填日程；仍然由你确认后才创建草稿。",
+  "automation.wizard.recurrence.unsupportedDialect":
+    "不认识这种调度器，日程没有预填；下面是原文。",
+  "automation.wizard.recurrence.unsupportedSyntax":
+    "这条规则用到了平台计划没有的写法，硬凑会在边界上跑偏，所以没有预填；下面是原文。",
+  "automation.wizard.recurrence.noSchedule":
+    "这个任务靠事件触发，没有「多久跑一次」可翻；下面是原文。",
+  "automation.wizard.recurrence.multipleTimes":
+    "原生规则描述了多个时刻，一份计划只有一条重复规则——拆成几份由你决定；下面是原文。",
+  "automation.wizard.recurrence.malformed":
+    "这条规则读不出来，日程没有预填；下面是原文。",
 
   /* 运行历史 */
   "automation.run.scheduled": "计划时间",
@@ -245,6 +275,16 @@ const en: Record<keyof typeof zh, string> = {
   "automation.viewRuns": "View run history",
   "automation.showOnCanvas": "Show on canvas",
   "automation.create": "Create",
+  "automation.save": "Save new version",
+  "automation.edit": "Edit",
+  "automation.editNote":
+    "Changes are stored as a new version of this plan, still a draft.",
+  "automation.editActiveNote":
+    "This plan is active. Saving a new version invalidates the current activation and returns it to draft — it runs again only once re-activated.",
+  "automation.savedDraft":
+    "Saved as a new version. The plan is a draft again and needs re-activating.",
+  "automation.runs.more": "Load older runs",
+  "automation.runs.loading": "Loading",
   "automation.cancel": "Cancel",
   "automation.confirmActivate": "Activate this plan?",
   "automation.confirmActivateNote":
@@ -312,6 +352,28 @@ const en: Record<keyof typeof zh, string> = {
     "The interval must be a positive number of milliseconds",
   "automation.wizard.created":
     "Created as a draft; it runs only once activated",
+  "automation.wizard.saved":
+    "Saves a new version of this plan. It returns to draft, and runs again only once you re-activate it.",
+  "automation.wizard.editNote":
+    "Editing an existing plan. Saving stores a new version and invalidates the current activation.",
+  "automation.wizard.editTargetFrozen":
+    "The target stays the one this plan froze. Pointing a plan somewhere else is a different decision — create a new plan for it.",
+  "automation.wizard.payloadUnavailable":
+    "The stored content could not be read, so this cannot be saved — doing so would blank the prompt.",
+  "automation.wizard.dialect.cron": "cron",
+  "automation.wizard.dialect.launchd": "launchd",
+  "automation.wizard.recurrenceTranslated":
+    "The schedule below was filled in from this native rule. It still becomes a draft only when you confirm.",
+  "automation.wizard.recurrence.unsupportedDialect":
+    "This scheduler is not one we can read, so nothing was filled in. Its rule is shown as written.",
+  "automation.wizard.recurrence.unsupportedSyntax":
+    "This rule uses something a platform schedule has no equivalent for, and an approximation would drift at the boundaries. Its rule is shown as written.",
+  "automation.wizard.recurrence.noSchedule":
+    "This job is triggered by events rather than on a period, so there is no “how often” to translate. Its rule is shown as written.",
+  "automation.wizard.recurrence.multipleTimes":
+    "The native rule names several times and one plan carries one recurrence. Splitting it is your decision; its rule is shown as written.",
+  "automation.wizard.recurrence.malformed":
+    "This rule could not be read, so nothing was filled in. It is shown as written.",
 
   "automation.run.scheduled": "Scheduled",
   "automation.run.completed": "Completed",

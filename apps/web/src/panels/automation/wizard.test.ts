@@ -5,6 +5,8 @@ import {
   buildPlanConfig,
   defaultWizardState,
   localInput,
+  targetFromConfig,
+  wizardStateFromConfig,
   type WizardState,
   type WizardTarget,
 } from "./wizard";
@@ -257,5 +259,111 @@ describe("agent terminal targets", () => {
     expect(config.target?.nodeId).toBe("");
     expect(config.target?.agentLaunch).toBeUndefined();
     expect(config.target?.coldStartPolicy).toBe(1);
+  });
+});
+
+/**
+ * Editing a plan re-sends its whole configuration, so the form has to be able
+ * to reproduce what is stored. Anything this round trip drops would be saved
+ * as if the user had changed it.
+ */
+describe("editing an existing plan", () => {
+  const agentTarget: WizardTarget = {
+    kind: "agent",
+    workspaceId: "workspace-1",
+    executionHostId: "0123456789abcdef0123456789abcdef",
+    sessionId: "session-1",
+    generation: 3n,
+    nodeId: "9f1d0f66-0f7b-7c1f-9a2c-2f7b0f7c1f9a",
+    agentLaunch: {
+      $typeName: "armadra.v1.AgentLaunchSpec",
+      agentId: "claude",
+      workingDirectory: ".",
+      args: ["--permission-mode", "plan"],
+      permissionMode: "plan",
+      modelId: "",
+      accountId: "default",
+    },
+    coldStart: false,
+  };
+
+  const roundTrip = (overrides: Partial<WizardState> = {}) => {
+    const stored = built(overrides);
+    const frozen = targetFromConfig(stored);
+    expect(frozen).not.toBeNull();
+    const state = wizardStateFromConfig(
+      stored,
+      "prompt",
+      Date.parse("2026-09-05T12:00:00Z"),
+    );
+    const rebuilt = buildPlanConfig(state, frozen!);
+    if (!rebuilt.ok)
+      throw new Error(`unexpected refusal: ${rebuilt.messageKey}`);
+    return { stored, rebuilt: rebuilt.config, state };
+  };
+
+  it("reproduces every schedule shape byte for byte", () => {
+    for (const overrides of [
+      {},
+      { scheduleKind: "interval" as const },
+      { scheduleKind: "cron" as const, timezone: "Asia/Shanghai" },
+      { scheduleKind: "loop" as const, maxRuns: "5" },
+    ]) {
+      const { stored, rebuilt } = roundTrip(overrides);
+      expect(rebuilt.schedule, JSON.stringify(overrides)).toEqual(
+        stored.schedule,
+      );
+    }
+  });
+
+  it("keeps the policies, bounds and title the plan already had", () => {
+    const { stored, rebuilt } = roundTrip({
+      misfire: "coalesce",
+      concurrency: "queue",
+      busyTtlMs: "120000",
+      maxRuns: "7",
+      expiresAt: "2026-12-01T09:30",
+    });
+    expect(rebuilt.title).toBe(stored.title);
+    expect(rebuilt.misfirePolicy).toBe(stored.misfirePolicy);
+    expect(rebuilt.concurrencyPolicy).toBe(stored.concurrencyPolicy);
+    expect(rebuilt.busyTtlMs).toBe(stored.busyTtlMs);
+    expect(rebuilt.maxRuns).toBe(stored.maxRuns);
+    expect(rebuilt.expiresAtUnixMs).toBe(stored.expiresAtUnixMs);
+  });
+
+  it("re-sends the frozen target rather than re-deriving one", () => {
+    const { stored, rebuilt } = roundTrip();
+    expect(rebuilt.target).toEqual(stored.target);
+  });
+
+  it("carries an agent target's launch spec and cold-start choice", () => {
+    const stored = buildPlanConfig(form({ payload: "每晚复盘" }), {
+      ...agentTarget,
+      coldStart: true,
+    });
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) return;
+    const frozen = targetFromConfig(stored.config);
+    expect(frozen?.kind).toBe("agent");
+    if (frozen?.kind !== "agent") return;
+    expect(frozen.coldStart).toBe(true);
+    expect(frozen.agentLaunch).toEqual(agentTarget.agentLaunch);
+    const rebuilt = buildPlanConfig(
+      wizardStateFromConfig(stored.config, "每晚复盘"),
+      frozen,
+    );
+    expect(rebuilt.ok && rebuilt.config.target).toEqual(stored.config.target);
+  });
+
+  it("cannot rebuild an agent target whose launch definition is missing", () => {
+    const stored = buildPlanConfig(form({ payload: "x" }), agentTarget);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) return;
+    const broken = {
+      ...stored.config,
+      target: { ...stored.config.target!, agentLaunch: undefined },
+    };
+    expect(targetFromConfig(broken)).toBeNull();
   });
 });

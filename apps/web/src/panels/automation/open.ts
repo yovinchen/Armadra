@@ -21,22 +21,44 @@ export const useAutomationFocus = create<{
    * one-shot request, not a mode the page stays in.
    */
   prefill: CreatePlanPrefill | null;
+  /**
+   * The plan being edited, or `null` for a new one. Unlike `prefill` this *is*
+   * a mode: the form stays on that plan until the edit is saved or abandoned,
+   * because leaving it half-way and silently turning back into "create" would
+   * make the next save create a second plan.
+   */
+  editingPlanId: string | null;
   compose: number;
   focus: (planId: string | null) => void;
   revealRuns: (planId: string) => void;
   proposePlan: (prefill: CreatePlanPrefill) => void;
   clearPrefill: () => void;
+  editPlan: (planId: string) => void;
+  stopEditing: () => void;
 }>((set) => ({
   planId: null,
   reveal: 0,
   prefill: null,
+  editingPlanId: null,
   compose: 0,
   focus: (planId) => set({ planId }),
   revealRuns: (planId) =>
     set((state) => ({ planId, reveal: state.reveal + 1 })),
   proposePlan: (prefill) =>
-    set((state) => ({ prefill, compose: state.compose + 1 })),
+    set((state) => ({
+      prefill,
+      editingPlanId: null,
+      compose: state.compose + 1,
+    })),
   clearPrefill: () => set({ prefill: null }),
+  editPlan: (planId) =>
+    set((state) => ({
+      editingPlanId: planId,
+      planId,
+      prefill: null,
+      compose: state.compose + 1,
+    })),
+  stopEditing: () => set({ editingPlanId: null }),
 }));
 
 /** Opens the automation page, on one plan's run history when given a plan. */
@@ -56,5 +78,17 @@ export function openAutomationPanel(planId: string | null = null): void {
  */
 export function proposePlanFromNative(prefill: CreatePlanPrefill): void {
   useAutomationFocus.getState().proposePlan(prefill);
+  useCanvasStore.getState().setPanel("automation", "drawer");
+}
+
+/**
+ * Opens the create form on an existing plan.
+ *
+ * Saving it stores a **new version** of that plan and returns it to draft —
+ * the Host invalidates the activation on every configuration change — so this
+ * is never a way to edit something that is currently armed without noticing.
+ */
+export function editAutomationPlan(planId: string): void {
+  useAutomationFocus.getState().editPlan(planId);
   useCanvasStore.getState().setPanel("automation", "drawer");
 }

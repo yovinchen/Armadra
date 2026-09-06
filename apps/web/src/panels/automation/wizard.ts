@@ -95,6 +95,76 @@ export function defaultWizardState(now = Date.now()): WizardState {
   };
 }
 
+/**
+ * The wizard state that reproduces a stored plan, for editing it.
+ *
+ * Everything the Host keeps is read back from the configuration; the payload
+ * comes separately (`HostAutomationClient.planPayload`) because the Host stores
+ * it apart from the configuration. Anything the Host does not store — there is
+ * nothing today — would have to be left blank rather than invented, because a
+ * field the form filled in by guessing would be saved as if it had been read.
+ */
+export function wizardStateFromConfig(
+  config: AutomationPlanConfig,
+  payload: string,
+  now = Date.now(),
+): WizardState {
+  const base = defaultWizardState(now);
+  const schedule = config.schedule?.kind;
+  const state: WizardState = {
+    ...base,
+    title: config.title,
+    payload,
+    misfire:
+      config.misfirePolicy === AutomationMisfirePolicy.COALESCE_ONE
+        ? "coalesce"
+        : "skip",
+    concurrency:
+      config.concurrencyPolicy === AutomationConcurrencyPolicy.QUEUE_ONE
+        ? "queue"
+        : "forbid",
+    // A stored zero is "the Host normalized it away", not a real setting, and
+    // showing it would leave a form that cannot be submitted at all.
+    busyTtlMs:
+      config.busyTtlMs > 0n ? String(config.busyTtlMs) : base.busyTtlMs,
+    maxRuns: config.maxRuns > 0n ? String(config.maxRuns) : "",
+    expiresAt:
+      config.expiresAtUnixMs > 0n
+        ? localInput(Number(config.expiresAtUnixMs))
+        : "",
+  };
+  switch (schedule?.case) {
+    case "once":
+      return {
+        ...state,
+        scheduleKind: "once",
+        at: localInput(Number(schedule.value.atUnixMs)),
+      };
+    case "interval":
+      return {
+        ...state,
+        scheduleKind: "interval",
+        anchor: localInput(Number(schedule.value.anchorUnixMs)),
+        intervalMs: String(schedule.value.intervalMs),
+      };
+    case "cron":
+      return {
+        ...state,
+        scheduleKind: "cron",
+        cron: schedule.value.expression,
+        timezone: schedule.value.timezone,
+      };
+    case "loopAfterCompletion":
+      return {
+        ...state,
+        scheduleKind: "loop",
+        loopDelayMs: String(schedule.value.delayMs),
+      };
+    default:
+      return state;
+  }
+}
+
 /** A `datetime-local` string for the browser's own zone. */
 export function localInput(epochMs: number): string {
   const date = new Date(
@@ -167,6 +237,39 @@ function planTarget(target: WizardTarget): AutomationPlanConfig["target"] {
       ? AutomationColdStartPolicy.LAUNCH_FROZEN
       : AutomationColdStartPolicy.SKIP,
     agentLaunch: target.agentLaunch,
+  };
+}
+
+/**
+ * The target a stored plan already carries, so an edit re-sends exactly it.
+ *
+ * An edit changes the schedule and the content; re-picking the target is a
+ * different, larger decision (it re-freezes the agent definition and the
+ * generation), and doing it implicitly on every save would quietly repoint a
+ * plan at whatever the canvas looks like today. The form shows this read-only.
+ */
+export function targetFromConfig(
+  config: AutomationPlanConfig,
+): WizardTarget | null {
+  const target = config.target;
+  if (!target) return null;
+  const base = {
+    workspaceId: config.workspaceId,
+    executionHostId: target.executionHostId,
+    sessionId: target.sessionId,
+    generation: target.generation,
+  };
+  if (target.kind !== AutomationTargetKind.AGENT_SESSION_PROMPT) {
+    return { ...base, kind: "command" };
+  }
+  if (!target.agentLaunch) return null;
+  return {
+    ...base,
+    kind: "agent",
+    nodeId: target.nodeId,
+    agentLaunch: target.agentLaunch,
+    coldStart:
+      target.coldStartPolicy === AutomationColdStartPolicy.LAUNCH_FROZEN,
   };
 }
 

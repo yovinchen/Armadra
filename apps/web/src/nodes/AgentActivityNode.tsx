@@ -134,6 +134,12 @@ export function AgentActivityNode({ id, node, selected }: NodeBodyProps) {
                   nodeId: sourceId,
                   title: source.title,
                   origin: "native",
+                  // 卡片读到过的重复规则原样带过去；能翻的向导会预填，翻不
+                  // 动的把原文摆出来（`native-recurrence.ts`）。没读到规则的
+                  // 卡片什么也不带——不给它编一个。
+                  ...(data?.nativeRecurrence
+                    ? { recurrence: data.nativeRecurrence }
+                    : {}),
                 })
               }
             >
