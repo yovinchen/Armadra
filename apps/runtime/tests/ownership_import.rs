@@ -354,7 +354,7 @@ async fn an_entity_this_build_cannot_store_stops_the_whole_import() {
     newer.canvases[0].name = "被拒绝的包".into();
     newer.canvases[0].whiteboard = Some(CanvasWhiteboard {
         schema_version: 99,
-        engine_version: "tldraw".into(),
+        engine_version: "armadra-flow".into(),
         snapshot: b"{}".to_vec(),
         sha256: records::digest(b"{}"),
         bytes: 2,

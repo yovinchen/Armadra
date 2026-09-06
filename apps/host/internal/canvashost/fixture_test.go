@@ -26,7 +26,7 @@ import (
 )
 
 // A real Runtime export, built from the Runtime's own numbered migrations and
-// carrying the content C02 names: tldraw drawings, an image asset, nested
+// carrying the content C02 names: whiteboard drawings, an image asset, nested
 // frames, context links and a whiteboard snapshot. The tests below migrate it
 // into the Host and then compare every one of those item by item.
 const (
@@ -43,14 +43,14 @@ const (
 
 	fixtureTime = "2026-09-05T01:02:03.004+08:00"
 
-	// A whiteboard snapshot with real tldraw-shaped records: freehand ink, a
-	// geometric shape, text and a managed image asset. Nothing decodes it; the
-	// test asserts the bytes and the digest arrive unchanged.
-	whiteboardJSON = `{"schemaVersion":2,"records":[` +
-		`{"id":"shape:draw1","typeName":"shape","type":"draw","x":12.5,"y":-4.25,"props":{"segments":[{"type":"free","points":[{"x":0,"y":0},{"x":3.5,"y":9.75}]}]}},` +
-		`{"id":"shape:geo1","typeName":"shape","type":"geo","x":100,"y":200,"props":{"geo":"rectangle","w":64,"h":32,"text":"几何 📐"}},` +
-		`{"id":"shape:text1","typeName":"shape","type":"text","props":{"text":"手写文字 note"}},` +
-		`{"id":"asset:image1","typeName":"asset","type":"image","meta":{"armadra":{"path":".armadra/assets/proof.png"}},"props":{"src":".armadra/assets/proof.png","w":8,"h":8}}]}`
+	// A whiteboard snapshot in the canvas' own v2 document format: freehand
+	// ink, a geometric shape, text and a managed image asset. Nothing decodes
+	// it; the test asserts the bytes and the digest arrive unchanged.
+	whiteboardJSON = `{"engine":"armadra-flow","version":2,"items":[` +
+		`{"id":"019ff7d1-0d12-7421-833d-2c5e8d64ef01","kind":"ink","x":12.5,"y":-4.25,"w":3.5,"h":9.75,"z":1,"style":{"color":"black","size":"m"},"highlight":false,"points":[[0,0,0.5],[3.5,9.75,0.6]]},` +
+		`{"id":"019ff7d1-0d12-7421-833d-2c5e8d64ef02","kind":"shape","x":100,"y":200,"w":64,"h":32,"z":2,"style":{"color":"blue","size":"m","dash":"solid","fill":"semi"},"geo":"rectangle","label":"几何 📐"},` +
+		`{"id":"019ff7d1-0d12-7421-833d-2c5e8d64ef03","kind":"text","x":0,"y":0,"w":240,"h":48,"z":3,"style":{"color":"black","size":"m","align":"start"},"text":"手写文字 note"},` +
+		`{"id":"019ff7d1-0d12-7421-833d-2c5e8d64ef04","kind":"image","x":0,"y":0,"w":8,"h":8,"z":4,"assetPath":".armadra/assets/proof.png","alt":""}],"references":[]}`
 
 	stickyLabels = `["需要复核","中文"]`
 	stickyNote   = "Keep exact whitespace.\n第二行 'quote'."

@@ -53,7 +53,7 @@ func TestReservedAccountAndPresenceWire(t *testing.T) {
 			ExpectedRevision: proto.Uint64(0),
 			Revision:         9007199254740993,
 			Kind:             pb.MutationKind_MUTATION_KIND_WHITEBOARD_BLOB,
-			PayloadType:      "tldraw/snapshot",
+			PayloadType:      "armadra-flow/snapshot",
 			Payload:          []byte{0, 255, 27, 10},
 			ObservedAtUnixMs: math.MinInt64,
 		},

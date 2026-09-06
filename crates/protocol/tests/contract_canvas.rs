@@ -80,7 +80,7 @@ fn canvas_documents_events_and_the_ownership_handoff() {
                 }),
                 whiteboard: Some(CanvasWhiteboard {
                     schema_version: 2,
-                    engine_version: "tldraw-5".into(),
+                    engine_version: "armadra-flow".into(),
                     snapshot: vec![0x00, 0x9f, 0x99, 0x82],
                     sha256: vec![1; 32],
                     bytes: 4,

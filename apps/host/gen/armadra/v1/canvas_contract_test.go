@@ -52,7 +52,7 @@ func TestCanvasWire(t *testing.T) {
 				Viewport:    &pb.CanvasViewport{X: -0.5, Y: 12.25, Zoom: 1.5},
 				Whiteboard: &pb.CanvasWhiteboard{
 					SchemaVersion: 2,
-					EngineVersion: "tldraw-5",
+					EngineVersion: "armadra-flow",
 					Snapshot:      []byte{0x00, 0x9f, 0x99, 0x82},
 					Sha256:        bytes.Repeat([]byte{1}, 32),
 					Bytes:         4,

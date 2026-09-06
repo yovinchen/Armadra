@@ -88,7 +88,7 @@ describe("canvas ownership and document wire contracts", () => {
         viewport: { x: -0.5, y: 12.25, zoom: 1.5 },
         whiteboard: {
           schemaVersion: 2,
-          engineVersion: "tldraw-5",
+          engineVersion: "armadra-flow",
           snapshot: new Uint8Array([0x00, 0x9f, 0x99, 0x82]),
           sha256: new Uint8Array(32).fill(1),
           bytes: 4n,

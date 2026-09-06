@@ -34,9 +34,10 @@ func take(t *testing.T, f *fixture) *pb.CanvasDocument {
 	return result.Document
 }
 
-// C02: a real Runtime export carrying tldraw drawings, an image asset, nested
-// frames, a context link and a whiteboard snapshot must arrive on the Host with
-// every one of those unchanged. Each assertion below is one acceptance item.
+// C02: a real Runtime export carrying whiteboard drawings, an image asset,
+// nested frames, a context link and a whiteboard snapshot must arrive on the
+// Host with every one of those unchanged. Each assertion below is one
+// acceptance item.
 func TestMigratedCanvasMatchesTheExportItemByItem(t *testing.T) {
 	f := newFixture(t)
 	importID := f.stage()

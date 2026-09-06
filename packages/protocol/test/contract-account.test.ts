@@ -125,7 +125,7 @@ describe("reserved account and presence contracts", () => {
       expectedRevision: 0n,
       revision: 9007199254740993n,
       kind: MutationKind.WHITEBOARD_BLOB,
-      payloadType: "tldraw/snapshot",
+      payloadType: "armadra-flow/snapshot",
       payload: new Uint8Array([0, 255, 27, 10]),
       observedAtUnixMs: -9223372036854775808n,
     });

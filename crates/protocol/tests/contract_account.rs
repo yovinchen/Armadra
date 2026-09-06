@@ -116,7 +116,7 @@ fn reserved_account_and_presence_envelopes() {
             expected_revision: Some(0),
             revision: 9_007_199_254_740_993,
             kind: MutationKind::WhiteboardBlob as i32,
-            payload_type: "tldraw/snapshot".into(),
+            payload_type: "armadra-flow/snapshot".into(),
             payload: vec![0, 255, 27, 10],
             observed_at_unix_ms: i64::MIN,
         },

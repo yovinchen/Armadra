@@ -33,7 +33,7 @@ use crate::error::{AppError, AppResult};
 /// higher one came from a Host that understands a format this build does not,
 /// and applying it would write bytes the canvas cannot render.
 pub const WHITEBOARD_SCHEMA_VERSION: u32 = 1;
-pub const WHITEBOARD_ENGINE: &str = "tldraw";
+pub const WHITEBOARD_ENGINE: &str = "armadra-flow";
 
 /// Refusals that name the package rather than the database. They are the
 /// `reverse.unsupported_entity` case from the design: a rollback that would

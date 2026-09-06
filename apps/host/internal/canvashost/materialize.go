@@ -258,11 +258,11 @@ func projectCanvas(row legacyRow) (*pb.Canvas, error) {
 		UpdatedAtUnixMs: updatedMS,
 	}
 	// The whiteboard travels as opaque bytes with its own digest, exactly as
-	// the export recorded it. Nothing here parses tldraw's records.
+	// the export recorded it. Nothing here parses the whiteboard document.
 	if whiteboard != "" {
 		canvas.Whiteboard = &pb.CanvasWhiteboard{
 			SchemaVersion: 1,
-			EngineVersion: "tldraw",
+			EngineVersion: "armadra-flow",
 			Snapshot:      []byte(whiteboard),
 			Sha256:        digest([]byte(whiteboard)),
 			Bytes:         uint64(len(whiteboard)),
