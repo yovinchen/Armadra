@@ -483,7 +483,7 @@ async fn drain(
 /// because that is what "normalized" means here: the raw body a CLI wrote never
 /// leaves this machine, and what travels is what this Runtime made of it. The
 /// digest is what lets the Host refuse a body that was truncated in flight.
-fn hook_event(status: &AgentStatus) -> HookEvent {
+pub fn hook_event(status: &AgentStatus) -> HookEvent {
     let payload = status.encode_to_vec();
     let digest = Sha256::digest(&payload).to_vec();
     HookEvent {

@@ -9,6 +9,7 @@ pub mod agent_host;
 pub mod channel;
 pub mod filesystem;
 pub mod git;
+pub mod hook_pump;
 pub mod language_link;
 pub mod outbox;
 pub mod service;

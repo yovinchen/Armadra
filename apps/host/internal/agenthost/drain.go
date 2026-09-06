@@ -87,7 +87,7 @@ func (s *Service) Drain(ctx context.Context, executionHostID string) (DrainOutco
 		return outcome, nil
 	}
 	for _, event := range drained.GetEvents() {
-		applied, err := s.applyHookEvent(ctx, event)
+		applied, err := s.ObserveHookEvent(ctx, event)
 		if err != nil {
 			return outcome, err
 		}

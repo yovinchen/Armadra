@@ -56,6 +56,9 @@ type Options struct {
 	// Host that assembles no session service: the frame is still recorded, it
 	// simply changes no session record.
 	Sessions SessionObserver
+	// Agents is the agent domain's landing point for a Hook report, on the same
+	// terms.
+	Agents AgentObserver
 	Clock                func() time.Time
 	RequestTimeout       time.Duration
 	PollInterval         time.Duration
@@ -196,7 +199,7 @@ func (s *Service) start(ctx context.Context) error {
 	// Every rebuilt Worker gets the upcall sink, so the supervisor's existing
 	// restart path is also the channel's reconnect path: a Worker that comes
 	// back replays what it owes over the new pipe with no extra machinery.
-	client, err := worker.Start(ctx, worker.Options{Executable: s.options.Executable, HostID: s.options.HostID, StateDir: s.options.StateDir, RequestTimeout: s.options.RequestTimeout, Upcalls: upcallRecorder{store: s.store, hostInstance: s.options.InstanceID, sessions: s.options.Sessions}})
+	client, err := worker.Start(ctx, worker.Options{Executable: s.options.Executable, HostID: s.options.HostID, StateDir: s.options.StateDir, RequestTimeout: s.options.RequestTimeout, Upcalls: upcallRecorder{store: s.store, hostInstance: s.options.InstanceID, sessions: s.options.Sessions, agents: s.options.Agents}})
 	if err != nil {
 		s.disable("WORKER_START_FAILED")
 		return err

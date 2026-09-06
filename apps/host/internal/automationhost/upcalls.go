@@ -9,35 +9,51 @@ import (
 	"log/slog"
 
 	pb "armadra.local/host/gen/armadra/v1"
+	"armadra.local/host/internal/agenthost"
 	"armadra.local/host/internal/sessionhost"
 	"armadra.local/host/internal/storage"
 	"armadra.local/host/internal/worker"
 	"google.golang.org/protobuf/proto"
 )
 
-// The Host's first subscriber to the resident channel (business migration
-// §2.9, §2.10).
+// The Host's subscriber to the resident channel (business migration §2.9,
+// §2.10).
 //
-// This batch delivers the *transport*, not a domain. No domain has moved to the
-// Host yet, so there is nothing here that reduces an upcall into agent state:
-// doing that now would be writing the agent domain's projection before its
-// contract exists, and it would have to be unwritten when B4 arrives. What this
-// does instead is durably record that the report arrived, under a key an
-// operator and a later batch can both use.
-//
-// Recording is what makes the delivery real. The Worker retires a frame from
+// Every accepted frame is recorded raw, under a key an operator and a later
+// batch can both use, *and* handed to whichever domain owns what it is about.
+// Recording is what makes the delivery real: the Worker retires a frame from
 // its outbox on the strength of this Host's acknowledgement, so acknowledging
 // something that was only logged would lose it on the next restart.
+//
+// The raw record stays even now that domains project. It is the only place a
+// frame this build does not understand survives — a newer Worker's kind, a body
+// shape a later batch adds — and dropping it would make forward compatibility
+// depend on this file being current.
 
 // UpcallEntityKind is the storage kind every recorded upcall is filed under.
 // It is deliberately not an agent-domain kind: nothing reads it as agent state.
 const UpcallEntityKind = "workerUpcall"
+
+// HookEventUpcallSchema is the `WorkerAgentUpcall.schema_version` that means
+// "the body is an encoded HookEvent". Schema 1 is the scheduled-delivery
+// receipt the automation bridge has always sent under the same kind; the number
+// is what tells them apart, because Protobuf would happily decode either as the
+// other.
+const HookEventUpcallSchema = 2
 
 // SessionObserver is the session domain's landing point for a run report
 // (business migration §2.6, upcall 140). It is an interface so this package
 // keeps knowing nothing about session records beyond "somebody owns them".
 type SessionObserver interface {
 	ObserveRun(ctx context.Context, report *pb.WorkerSessionUpcall) error
+}
+
+// AgentObserver is the agent domain's landing point for a Hook report
+// (business migration §2.7, upcall 160). The same event also reaches that
+// domain through its own drain, which is why recording is idempotent by event
+// id: the two paths converge on one row rather than racing for it.
+type AgentObserver interface {
+	ObserveHookEvent(ctx context.Context, event *pb.HookEvent) (bool, error)
 }
 
 // upcallRecorder writes one entity, and therefore one event, per accepted
@@ -50,6 +66,8 @@ type upcallRecorder struct {
 	// sessions is nil on a Host that assembles no session service. The frame is
 	// still recorded; it simply changes no session record.
 	sessions SessionObserver
+	// agents is nil on the same terms.
+	agents AgentObserver
 }
 
 // Deliver records the frame, and returns only once it is durable: the
@@ -117,18 +135,72 @@ func (r upcallRecorder) Deliver(ctx context.Context, upcall worker.Upcall) error
 // replaying it forever cannot make the record appear. Anything else is left for
 // the Worker to replay.
 func (r upcallRecorder) project(ctx context.Context, frame *pb.WorkerUpcall) error {
-	report := frame.GetSession()
-	if report == nil || r.sessions == nil {
+	if report := frame.GetSession(); report != nil && r.sessions != nil {
+		err := r.sessions.ObserveRun(ctx, report)
+		switch {
+		case err == nil:
+		case errors.Is(err, sessionhost.ErrUnknownSession), errors.Is(err, sessionhost.ErrInvalid):
+			return fmt.Errorf("run report names no session this Host has: %w", worker.ErrUpcallUnacceptable)
+		default:
+			return fmt.Errorf("run report could not be applied: %w", err)
+		}
+	}
+	if report := frame.GetAgent(); report != nil && r.agents != nil {
+		return r.projectAgent(ctx, report)
+	}
+	return nil
+}
+
+// projectAgent decodes the agent frame's opaque body into the normalized event
+// it carries and hands it to the agent domain.
+//
+// The kind alone does not say what the body is. `HOOK_TURN` is also what a
+// scheduled prompt delivery reports, carrying a receipt rather than an event,
+// and Protobuf would decode one as the other into a plausible-looking record.
+// `schema_version` is the discriminator §2.9 provides for exactly this, so a
+// body is decoded only when the Worker said which shape it is. Anything else is
+// recorded raw and changes no agent record — which is what it did before this
+// batch, and is not a regression for a frame nobody claimed.
+func (r upcallRecorder) projectAgent(ctx context.Context, report *pb.WorkerAgentUpcall) error {
+	if report.GetSchemaVersion() != HookEventUpcallSchema {
 		return nil
 	}
-	err := r.sessions.ObserveRun(ctx, report)
+	switch report.GetKind() {
+	case pb.WorkerAgentUpcallKind_WORKER_AGENT_UPCALL_KIND_HOOK_TURN,
+		pb.WorkerAgentUpcallKind_WORKER_AGENT_UPCALL_KIND_APPROVAL_REQUESTED:
+	default:
+		return nil
+	}
+	event := new(pb.HookEvent)
+	if err := proto.Unmarshal(report.GetPayload(), event); err != nil {
+		// A body that will not decode cannot be made to by asking again.
+		return fmt.Errorf("hook report could not be decoded: %w", worker.ErrUpcallUnacceptable)
+	}
+	if event.GetEventId() == "" {
+		// The frame's own entity id is the fallback: it is what makes a
+		// replayed frame the same record rather than a second one (§2.9).
+		event.EventId = report.GetEntityId()
+	}
+	if event.GetNodeId() == "" {
+		event.NodeId = report.GetNodeId()
+	}
+	if event.GetWorkspaceId() == "" {
+		event.WorkspaceId = report.GetWorkspaceId()
+	}
+	if event.GetSessionId() == "" {
+		event.SessionId = report.GetSessionId()
+	}
+	if event.GetObservedAtUnixMs() == 0 {
+		event.ObservedAtUnixMs = report.GetObservedAtUnixMs()
+	}
+	_, err := r.agents.ObserveHookEvent(ctx, event)
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, sessionhost.ErrUnknownSession), errors.Is(err, sessionhost.ErrInvalid):
-		return fmt.Errorf("run report names no session this Host has: %w", worker.ErrUpcallUnacceptable)
+	case errors.Is(err, agenthost.ErrInvalid):
+		return fmt.Errorf("hook report is not usable: %w", worker.ErrUpcallUnacceptable)
 	default:
-		return fmt.Errorf("run report could not be applied: %w", err)
+		return fmt.Errorf("hook report could not be applied: %w", err)
 	}
 }
 

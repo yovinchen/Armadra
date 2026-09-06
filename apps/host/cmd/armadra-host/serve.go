@@ -245,16 +245,6 @@ func serveHost(parent context.Context, c config) (err error) {
 	if err != nil {
 		return err
 	}
-	// Automation is assembled after the session surface because it owns the
-	// resident Worker channel, and that channel is how a run report reaches the
-	// records that describe it. Without the observer the frame would still be
-	// recorded and still change nothing, which is exactly the state this batch
-	// is fixing.
-	plans, err := startAutomation(ctx, c, state.ID, identity.InstanceID, database, sessions)
-	if err != nil {
-		return err
-	}
-	defer func() { err = errors.Join(err, plans.Close()) }()
 	// The agent surface is assembled on the same terms, and needs the same
 	// channel for the same reason: recording that somebody allowed a command is
 	// worth nothing unless the CLI that is blocked on it hears. A Host with no
@@ -285,6 +275,16 @@ func serveHost(parent context.Context, c config) (err error) {
 	if err != nil {
 		return err
 	}
+	// Automation is assembled last of the three because it owns the resident
+	// Worker channel, and that channel is how a report the Host did not ask for
+	// reaches the records it describes. Without these observers the frames
+	// would still be recorded and would still change nothing, which is exactly
+	// the state this batch is fixing.
+	plans, err := startAutomation(ctx, c, state.ID, identity.InstanceID, database, sessions, agents)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, plans.Close()) }()
 	// A dispatch this Host was in the middle of when it stopped is settled
 	// before anything new is accepted. Leaving it claimed would leave it
 	// claimed forever, and re-dispatching it would put a second copy of
@@ -509,8 +509,8 @@ func applyExternalSwitch(ctx context.Context, c config, external *externalservic
 // startAutomation returns nil when the operator did not configure an execution
 // Worker. Scheduling is then unsupported and every other Host function keeps
 // working; a half-configured pair is rejected earlier, in parseConfig.
-func startAutomation(ctx context.Context, c config, hostID, instanceID string, database *storage.Store, sessions automationhost.SessionObserver) (*automationhost.Service, error) {
-	options := automationhost.Options{Executable: c.workerBinary, StateDir: c.workerStateDir, HostID: hostID, InstanceID: instanceID, Store: database, Sessions: sessions}
+func startAutomation(ctx context.Context, c config, hostID, instanceID string, database *storage.Store, sessions automationhost.SessionObserver, agents automationhost.AgentObserver) (*automationhost.Service, error) {
+	options := automationhost.Options{Executable: c.workerBinary, StateDir: c.workerStateDir, HostID: hostID, InstanceID: instanceID, Store: database, Sessions: sessions, Agents: agents}
 	if !automationhost.Configured(options) {
 		return nil, nil
 	}

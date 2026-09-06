@@ -499,7 +499,52 @@ CREATE TABLE agent_drain_cursor (
  updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0)
 )`
 
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8, schemaV9}
+// The Hook events themselves (Go Host 业务所有权迁移 §2.7 `HookEvent`,
+// events.proto entity 181).
+//
+// v9 folded a Hook turn into `agent_status` and threw the turn away. That made
+// the *current* state durable and the history of how it got there unrecoverable
+// — an approval that appeared and was answered inside one drain interval left
+// no trace at all, and "this node has been idle for an hour" and "nothing has
+// ever reported for this node" were the same row.
+//
+// So the normalized event is kept as well. Three things about this table are
+// deliberate:
+//
+// **It is append-only in practice.** `event_id` is the Worker's own identifier
+// for the thing that happened — a node and the instant it was observed — so a
+// replayed frame writes the same row rather than a second one, and a row is
+// never updated after it lands. There is no revision CAS to lose a race on
+// because nothing ever contends for one of these rows.
+//
+// **The payload stays opaque, with its digest beside it.** §2.7 makes the
+// normalized body the Worker's to define; storing it as bytes plus a SHA-256 is
+// what makes recording a body this Host does not parse safe. A body that does
+// not match its digest is refused rather than stored short.
+//
+// **The raw CLI event never arrives here.** What travels is what the machine
+// that saw the event made of it. That is the whole reason `provider` is a free
+// string: it routes and labels, and nothing on this side interprets it.
+const schemaV10 = `CREATE TABLE agent_hook_events (
+ event_id TEXT PRIMARY KEY,
+ node_id TEXT NOT NULL,
+ workspace_id TEXT NOT NULL,
+ session_id TEXT NOT NULL,
+ generation INTEGER NOT NULL DEFAULT 0 CHECK(generation >= 0),
+ provider TEXT NOT NULL,
+ kind INTEGER NOT NULL CHECK(kind >= 0),
+ body BLOB NOT NULL,
+ body_sha256 BLOB NOT NULL CHECK(length(body_sha256) IN (0,32)),
+ schema_version INTEGER NOT NULL DEFAULT 0 CHECK(schema_version >= 0),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ observed_at_ms INTEGER NOT NULL CHECK(observed_at_ms >= 0),
+ recorded_at_ms INTEGER NOT NULL CHECK(recorded_at_ms > 0),
+ payload BLOB NOT NULL
+);
+CREATE INDEX idx_agent_hook_events_node ON agent_hook_events(node_id, observed_at_ms);
+CREATE INDEX idx_agent_hook_events_workspace ON agent_hook_events(workspace_id, observed_at_ms)`
+
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8, schemaV9, schemaV10}
 
 type sqlReader interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)

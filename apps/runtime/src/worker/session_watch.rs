@@ -274,7 +274,6 @@ mod tests {
         // The same two rows, one of which the Runtime has since recorded as
         // ended: that one is an exit, with the evidence to say so.
         let mut ended = Watcher::new();
-        let mut rows = rows;
         rows[1].status = SessionStatus::Exited as i32;
         rows[1].exit_code = Some(0);
         // A row that says exited is skipped by `watched`, so nothing is said

@@ -14,7 +14,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use armadra_protocol::{Message, v1::*};
 
-use super::{MAX_FRAME, Worker, channel, outbox, session, session_watch, socket, watch};
+use super::{MAX_FRAME, Worker, channel, hook_pump, outbox, session, session_watch, socket, watch};
 
 /// The remote-execution transport.
 ///
@@ -198,7 +198,7 @@ where
     // own bridge rather than sharing the request path's: they run
     // concurrently, and a session command must not queue behind a liveness
     // check that happens to be mid-flight.
-    let watcher = match (canvas, session_data_dir, channel.as_ref()) {
+    let watcher = match (canvas.clone(), session_data_dir, channel.as_ref()) {
         (Some(pool), Some(data_dir), Some(channel)) => {
             let bridge = std::sync::Arc::new(
                 session::Bridge::new(data_dir).with_upcalls(Some(channel.upcaller())),
@@ -209,6 +209,17 @@ where
                 session_watch::DEFAULT_INTERVAL,
             )))
         }
+        _ => None,
+    };
+    // The same argument for Hook turns (§2.7). The Host's drain finds them
+    // eventually; pushing is what makes "the CLI is blocked on a permission
+    // question" visible in seconds rather than whenever somebody looks.
+    let pump = match (canvas, channel.as_ref()) {
+        (Some(pool), Some(channel)) => Some(tokio::spawn(hook_pump::run(
+            pool,
+            channel.upcaller(),
+            hook_pump::DEFAULT_INTERVAL,
+        ))),
         _ => None,
     };
     let worker = std::sync::Arc::new(tokio::sync::Mutex::new(worker));
@@ -231,7 +242,7 @@ where
     )
     .await;
     let _ = stop.send(true);
-    if let Some(task) = watcher {
+    for task in [watcher, pump].into_iter().flatten() {
         task.abort();
         let _ = task.await;
     }

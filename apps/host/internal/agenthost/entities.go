@@ -372,6 +372,9 @@ func payload(value proto.Message) ([]byte, error) {
 		typed.Revision = 0
 	case *pb.ContextLinks:
 		typed.Revision = 0
+	// A HookEvent has no revision to clear: it records something that happened
+	// once, and a version number on it would imply it could change.
+	case *pb.HookEvent:
 	default:
 		return nil, ErrInvalid
 	}

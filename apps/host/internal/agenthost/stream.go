@@ -9,7 +9,7 @@ import (
 // The agent domain's contribution to the cross-domain event stream
 // (Go Host 业务所有权迁移 §2.3, §2.10).
 //
-// Six kinds rather than one, because the six change for six different reasons
+// Seven kinds rather than one, because they change for different reasons
 // and a client subscribes to the ones it draws: a board follows status, a node
 // header follows approvals, an inbox follows mailbox messages, a handoff card
 // follows handoffs. One "agent changed" kind would make every consumer decode a
@@ -34,6 +34,10 @@ func (EventProjector) Project(event storage.Event) (*pb.EventEnvelope, error) {
 	switch event.Kind {
 	case storage.AgentStatusKind:
 		return decode(event, "status", pb.EventPriority_EVENT_PRIORITY_NORMAL, new(pb.AgentStatus))
+	// The turn itself, alongside the state it produced. Normal priority: the
+	// state is what a board draws, and this is the history behind it.
+	case storage.HookEventKind:
+		return decode(event, "hookEvent", pb.EventPriority_EVENT_PRIORITY_NORMAL, new(pb.HookEvent))
 	case storage.ApprovalKind:
 		return decode(event, "approval", pb.EventPriority_EVENT_PRIORITY_HIGH, new(pb.Approval))
 	case storage.MailboxKind:
@@ -99,6 +103,11 @@ func decode(event storage.Event, kind string, priority pb.EventPriority, into pr
 	case *pb.ContextLinks:
 		typed.Revision = event.Revision
 		result.Entity = &pb.EventEnvelope_ContextLinks{ContextLinks: typed}
+	// A HookEvent carries no revision of its own: it is a record of something
+	// that happened once, and a version number on it would imply it could
+	// change.
+	case *pb.HookEvent:
+		result.Entity = &pb.EventEnvelope_HookEvent{HookEvent: typed}
 	default:
 		return nil, storage.ErrCorrupt
 	}
