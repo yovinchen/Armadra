@@ -137,7 +137,9 @@ ProblemsPanel┘ (@codemirror/lsp-client)              │                  │ 
 2. `edit-preview.ts` 生成预览：文件列表、每文件 `unifiedLineDiff`、当前已知的内容版本（打开的文档取编辑器版本；未打开的由执行主机在应用时读取）。存在 `armadra-external:` 路径或未打开且不可写的路径 → 该项标 blocked，整个编辑不可应用。
 3. 用户确认 → `POST …/language/sessions/{sessionId}/edits`，执行主机逐文件 `write_text_file(expectedSha256)`，返回 `applied[] / failed[]`。
 4. 已打开的文件靠 `file.changed` 自动重载（它们必须是干净的）；失败列表在对话框里保留，用户可重新计算（再发一次 rename）。
-5. server 主动的 `workspace/applyEdit`（部分 codeAction 走这条）在执行主机侧转成同样的预览流程，等待用户 60 s，超时或拒绝回 `applied: false`。
+5. server 主动的 `workspace/applyEdit`（部分 codeAction 走这条）在执行主机侧**直接过同一道门**：write 授权、同一个 `edits::parse`、同样拒绝覆盖有草稿的文件、同样逐文件核对 sha256、同样发 `file.changed` 让打开的编辑器自己重载。与客户端发起的编辑唯一不同的是版本从哪来——没有人预览过它，所以 sha 在写之前当场读，读不出版本的文件（非 UTF-8）整次编辑失败而不是盲写。答复是真实结果：全部落盘才 `applied: true`，否则 `applied: false` 带 `failureReason`（`read_only` / `edit_not_applicable` / `unsaved_changes` / 写入失败的 code）与 `failedChange`。
+
+   **与本节原方案的偏差**：原本写的是「转成 Web 侧的预览流程，等用户 60 s」。没有这样做，因为那要求执行主机能反向拉起一个浏览器对话框并阻塞等它——远端工作空间上这条路要穿过 link、控制端与 socket 三层，而超时那一支（60 s 后回 `applied: false`）恰恰是最常见的结果。现在的门与客户端那条完全一致，触发它的又几乎总是用户刚点下的代码操作，所以「谁批准的」这个问题的答案没有变。
 
 ### 2.7 远端 Worker：经 stdio 协议代理
 
@@ -392,19 +394,35 @@ message LanguageApplyEditResult { repeated LanguageAppliedFile applied = 1; repe
 
 实施状态 · 批次 A（2026-09-06）：`language.proto`、`worker.proto` oneof 30–34 / 30–33、`resources.proto` 的 `PLATFORM_COMPONENT_KIND_LANGUAGE_SERVER = 6`、五个 `proto/fixtures/language_*.hex` 与三端契约测试（`crates/protocol/tests/contract_language.rs`、`packages/protocol/test/contract-language.test.ts`、`apps/host/gen/armadra/v1/language_contract_test.go`）已落；`packages/shared/src/api/language.ts` 加宽 `languageServiceStatusSchema` 并新增会话 / 编辑 / 事件 schema（原 `api/search.ts` 里的窄版已移走）；Runtime `language/{registry,discover,settings}.rs` 与加宽的 `GET …/language-service`（execute 门、`?refresh=1`、按语言列 available / unsupported+reason+版本）、`events.rs` 的 `language.session` / `language.server` 变体均可用。真实进程验证：本机 `ruff 0.16.1` → python 行 `available` + 版本；无 execute 时同一行降为 `unsupported / execution_not_granted` 且保留路径与版本；rustup 的 `rust-analyzer` 代理 → `server_probe_failed`。
 
-实施状态 · 批次 B（2026-09-06）：`language/{jsonrpc,server,documents,session,mux,uri,policy,edits,lifecycle,link,routes}.rs` 与 §2.9 的 JSON 端点、会话专用 WebSocket 已实现；进程无 shell、剥离 `ARMADRA_*`、unix `setsid` + `killpg`，Windows 走 `command::containment_ready()` 门。资源面板按 manager 记录的 (pid, startTime) 出 `languageServer` 组件行并据此执行 RSS 上限。未做：`workspace/applyEdit` 的服务器主动预览流程（§2.6 第 5 条）当前一律回 `applied: false`；`formatOnSave` 只有设置项，触发在批次 C；远端仍走 `UNSUPPORTED`。验证：`cargo test -p armadra-runtime language`（53 个用例，含 mock 的两会话同 uri、id 撞车、跨会话 cancel、uri 全字段改写、根外 external、崩溃重启重放、空闲停后重启、大响应转 `-32803`、write 门拒绝 rename）与 `cargo test -p armadra-runtime --test language_real -- --ignored`（`ruff server` 真实诊断 F401 → formatting → `POST edits` 落盘并发 `file.changed`）。
+实施状态 · 批次 B（2026-09-06）：`language/{jsonrpc,server,documents,session,mux,uri,policy,edits,lifecycle,link,routes}.rs` 与 §2.9 的 JSON 端点、会话专用 WebSocket 已实现；进程无 shell、剥离 `ARMADRA_*`、unix `setsid` + `killpg`，Windows 走 `command::containment_ready()` 门。资源面板按 manager 记录的 (pid, startTime) 出 `languageServer` 组件行并据此执行 RSS 上限。当时未做（批次 E 已补，见下）：`workspace/applyEdit` 一律回 `applied: false`；`formatOnSave` 只有设置项，触发在批次 C；远端仍走 `UNSUPPORTED`。验证：`cargo test -p armadra-runtime language`（53 个用例，含 mock 的两会话同 uri、id 撞车、跨会话 cancel、uri 全字段改写、根外 external、崩溃重启重放、空闲停后重启、大响应转 `-32803`、write 门拒绝 rename）与 `cargo test -p armadra-runtime --test language_real -- --ignored`（`ruff server` 真实诊断 F401 → formatting → `POST edits` 落盘并发 `file.changed`）。
 
 实施状态 · 批次 D（2026-09-06）：`worker/language_link.rs`（`worker --stdio --language-link` 的读/写/请求三路并发、epoch 公告、ack/credit）与 `remote/language.rs`（第二条 ssh 连接、握手校验 `runtime_version` 与 `language.link.v1`、pending 表、断线处理）已实现；`terminal/ssh.rs` 加 `language_link_argv`，`RemoteWorker` 持有按需打开、最后一个会话关闭即释放的 link。远端工作空间的 `POST …/language/sessions`、`DELETE`、会话 WS、`POST …/edits` 不再 `UNSUPPORTED`，而是经 link 代理；`GET …/language-service` 有 link 时问 link（能看到真正在跑的 server），没有时走串行连接的 `LanguageCapabilities`。权限与上限沿用同一份代码：方法 allowlist、write 门、进程数与 RSS 上限、Windows containment 门都在远端 Worker 里执行。资源面板按 link 缓存的 descriptor 出 `languageServer` 行，`location: remote`、`unknownReason: remote`、不带 CPU/内存数字。
 
 **与 §2.7 的一处偏差**：会话开关与 `WorkspaceEdit` 应用走 **language-link 连接**而不是串行连接。两条 ssh 连接是两个进程，串行连接里开的会话够不到 link 进程里启动的 server；只有能力探测（`--version`，不启动任何东西）留在串行连接上，这样设置页在没有 link 时也能列出远端的 server。请求—应答的形状、控制端解析 `allow_write/allow_execute`、执行主机复核都没有变，`worker.proto` 里那段注释已按此改写（只改注释，无字段变化）。
 
-未做：远端没有 restart / stop 端点（协议里没有这两个动作），远端服务器只能靠关闭会话再开；§2.7 的「所有 server idle 后 5 分钟再关 link」换成了「最后一个会话关闭即关 link」，重开一条 ssh 连接比多占一个 `MaxSessions` 名额便宜；断线后控制端不替客户端重放任何请求，会话置 `disconnected`、socket 关闭，由客户端在新 epoch 上重开并自己重发 `didOpen`——in-flight 的 rename/apply 写请求按「结果未知」对待，重发才是唯一会造成二次损害的动作。
+当时未做（批次 E 已补）：远端没有 restart / stop 端点。现在 `LanguageControlRequest` 走 language link（和会话开关同一条连接，理由也一样：server 活在持有 link 的那个进程里），execute 授权在执行主机侧复查一次——重启会起一个进程，能起它的那台机器就是该拒绝它的那台。仍然保留的：§2.7 的「所有 server idle 后 5 分钟再关 link」换成了「最后一个会话关闭即关 link」，重开一条 ssh 连接比多占一个 `MaxSessions` 名额便宜；断线后控制端不替客户端重放任何请求，会话置 `disconnected`、socket 关闭，由客户端在新 epoch 上重开并自己重发 `didOpen`——in-flight 的 rename/apply 写请求按「结果未知」对待，重发才是唯一会造成二次损害的动作。
 
 验证：`cargo test -p armadra-runtime`（`--lib language` 过滤下 66 个用例，含 credit window 的背压、超窗单帧、关闭唤醒、ack 释放前序，以及 Worker 侧旧 epoch 帧丢弃与 ack 归还）；`cargo test -p armadra-runtime --test language_remote`（真实子进程：伪 SSH 运行器 → `worker --stdio --language-link` → `tools/probes/mock-lsp.mjs`，覆盖串行探测不开 link、会话打开、诊断经 link 到达且 uri 仍是 `armadra:///`、`workspace/executeCommand` 在远端被 `-32601` 拒绝、hover 往返、descriptor 带 pid；再 SIGKILL link 进程，断言 `disconnected` 事件、outbox 关闭、新 epoch 重建后重发 didOpen 又出诊断；本机有 `ruff` 时同一条链路跑真实 `ruff server` 并断言 F401）。
 
 实施状态 · 批次 C（2026-09-06）：`@codemirror/lsp-client` 6.2.5 已引入（体积判定见 §2.4）；`apps/web/src/editor/language/` 下 `client / transport / documents / diagnostics / extensions / commands / edit-preview / language-ids / uri / sanitize / settings / status-store / diagnostics-store / open-files / use-language` 与 `LanguageStatus.tsx`、`EditPreviewDialog.tsx` 可用，`EditorNode` 用新的 `service` Compartment 热插它们；`panels/problems/ProblemsPanel.tsx`（按文件分组、点击定位）、编辑器状态栏语言服务格（状态 + reason + 重启/停止 + 诊断计数）、设置页语言服务表（每语言一行、开关、路径覆盖、重新探测、`formatOnSave`）与 `i18n/language-service.ts` 已落。补全 / hover / 签名帮助 / 定义 / 引用用官方实现；重命名换成「先预览再由执行主机按 sha256 逐文件写」，格式化另写一个可等待的版本供 `formatOnSave` 用（3 s 预算，超时跳过）。同一文件多节点按 §2.5：只有拥有者视图发 `didChange`，拥有者关闭时所有权转给最早的跟随者并补一次全文。
 
-未做：引用面板仍用 `@codemirror/lsp-client` 自带的编辑器内面板，没有做成侧栏页（§4.2 `ReferencesPanel.tsx`）；符号快速打开的 `@` / `#` 前缀（§1.1「符号」）未接；代码操作还没有界面入口（协议层已过滤掉带 `command` 的动作）；服务器主动的 `workspace/applyEdit` 仍由执行主机一律回 `applied: false`（§2.6 第 5 条，属批次 B 未做项）；失去 execute 授权时正在运行的 server 不会立即关停（§1.3），要等空闲或手动停止。
+未做：失去 execute 授权时正在运行的 server 不会立即关停（§1.3），要等空闲或手动停止。
+
+实施状态 · 批次 E（2026-09-07，收尾）：批次 B 与 C 的四个未做项已补齐。
+
+| 项                     | 落在哪                                                                                                                                                                      |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 服务器主动 `applyEdit` | `language/mux.rs` 的 `apply_server_edit` + `edits::current_versions` + `policy::server_edit_allowed`（§2.6 第 5 条，实际做法与偏差见那一条）                                |
+| 引用侧栏页             | `editor/language/references{,-store}.ts` 与 `panels/references/ReferencesPanel.tsx`；⇧F12 换成自己的命令，`panels.references` 是新的一页，命令面板有 `app.references`       |
+| 符号 `@` / `#`         | `editor/language/symbols.ts` + `panels/QuickOpen.tsx`；`@` 走 `textDocument/documentSymbol`（当前选中的编辑器节点），`#` 走 `workspace/symbol` 并问遍当前开着的每一种语言   |
+| 代码操作入口           | `editor/language/code-actions.ts` + `CodeActionMenu.tsx`；⌘. 与编辑器头部的灯泡，选中后走同一条 `WorkspaceEdit` 预览，必要时先 `codeAction/resolve`                         |
+| 远端 restart / stop    | `language.proto` 的 `LanguageControlRequest/Result` + `worker.proto` 请求 35 / 响应 34；`worker/language_link.rs::control`、`remote/language/link.rs::control`、`routes.rs` |
+
+`@` / `#` 只经**已经开着**的会话去问：⌘P 打开的是一个列表，不该顺手把一个 language server 拉起来；没有会话时列表为空并说明原因。代码操作菜单里不会出现只带 `command` 的动作——执行主机已经摘掉它们（§6.2），Web 侧 `readActions` 再复述一遍同一条规则，好让旧版本执行主机也不至于摆出点不动的菜单项。
+
+**§6.2 的一条没有放开**：任务要求「选择后应用 edit 或执行 command」，其中「执行 command」需要开放 `workspace/executeCommand`，而 §3.1 把它列为「任何情况拒绝」、§6.2 明确写着不开放，`policy.rs` 的 `NEVER_METHODS` 也在执行主机侧拦着。这一条按原设计保留，代码操作只应用 `edit`；要改需要先改 §3.1 / §6.2 与 `policy.rs`，那是一次安全边界的决定，不是收尾。
+
+验证：`cargo test -p armadra-runtime`；`cargo clippy --workspace --exclude armadra-desktop --all-targets -- -D warnings`；`pnpm protocol:check` 与 `pnpm protocol:test`；`pnpm --filter @armadra/web test` / `typecheck`；`pnpm check`。新增用例：`language/tests/mux.rs` 的三条 `workspace/applyEdit`（真写盘、只读拒绝、根外整次拒绝，都经 `tools/probes/mock-lsp.mjs --apply-edit` 主动发起并把答复当作诊断回报）；`tests/language_remote.rs` 里按 pid 断言的远端 restart / stop / 无 execute 拒绝；Web 侧 `merge3`、`references`、`code-actions`、`ReferencesPanel`、`QuickOpen` 的 `@` / `#`、以及「浏览器不替执行主机应用 `workspace/applyEdit`」。体积（§6.1 第 13 条）：`language-*.js` = 59.8 kB raw / **18.9 kB gzip**，比批次 C 记的 19.9 kB 还小一点——引用换成自己的实现之后 `findReferencesKeymap` 不再被引入；引用面板、符号与代码操作各自在自己的 chunk 里，不打开编辑器都不加载。
 
 批次 C 期间修掉的两个联调缺陷：会话 socket 关闭时控制端没有关会话，于是重新加载页面后新会话被当成跟随者、再也收不到诊断（`routes.rs`，回归测试 `apps/runtime/tests/language_session_socket.rs`）；Web 侧开会话前必须先探测一次，否则刚起来的 Runtime 上第一条会话得到 `server_not_found`（`client.ts` 的 `ensureDiscovered`）。
 
