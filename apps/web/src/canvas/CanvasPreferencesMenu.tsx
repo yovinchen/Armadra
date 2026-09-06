@@ -25,13 +25,13 @@ import {
 import { commandKeysLabel, type CommandId } from "@/keybindings";
 
 /**
- * 画布偏好菜单（2026-09-05 用户反馈：「tldraw 原生组件的能力并没有加入到
+ * 画布偏好菜单（2026-09-05 用户反馈：「白板引擎的原生能力并没有加入到
  * 系统中……右侧的设置主要就是展开这一个里面的配置」）。
  *
- * 结构对齐 tldraw 主菜单里的「偏好」子菜单：九个勾选项 + 四个子菜单
+ * 结构对齐旧引擎主菜单里的「偏好」子菜单：九个勾选项 + 四个子菜单
  * （主题 / 画布背景 / 辅助功能 / 输入设备）。这里**不碰 editor**——每一项
- * 都写 `preferences-store` 的 `whiteboard` 段，由 `use-tldraw-preferences`
- * 单向推给 tldraw；反过来 tldraw 里改了（快捷键 Q / ⌘' / ⌘.）也会写回同一处，
+ * 都写 `preferences-store` 的 `whiteboard` 段，由 `use-canvas-preferences`
+ * 单向推给画布；快捷键（Q / ⌘' / ⌘.）改的也是同一处，
  * 所以这个菜单的勾选状态与设置 → 白板永远一致。
  *
  * 只吐 `<DropdownMenuContent>`：调用方（`shell/ControlsCluster`）自己套
@@ -53,7 +53,7 @@ type BooleanWhiteboardKey = {
 }[keyof WhiteboardPreferences];
 
 /**
- * 顺序照抄 tldraw 的偏好子菜单，用户从别处过来时找得到同一行。
+ * 顺序照抄旧引擎的偏好子菜单，用户从别处过来时找得到同一行。
  * 只有三条在 `keybindings.ts` 里真的绑了键，其余不显示键位提示。
  */
 export const CANVAS_PREFERENCE_TOGGLES: readonly ToggleSpec[] = [
@@ -166,7 +166,7 @@ export function CanvasPreferencesMenu() {
             ))}
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
-          {/* 反转的是滚轮的缩放方向，触控板与自动档下 tldraw 不读这一位，
+          {/* 反转的是滚轮的缩放方向，触控板与自动档下 这一位读不到，
               所以跟着它自己的菜单一起置灰。 */}
           <DropdownMenuCheckboxItem
             checked={whiteboard.zoomInverted}

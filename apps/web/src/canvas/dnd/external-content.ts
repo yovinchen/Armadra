@@ -9,21 +9,9 @@ import {
   type Position,
   type CanvasNodeType,
 } from "@armadra/shared";
-import {
-  createShapeId,
-  AssetRecordType,
-  getAssetInfo,
-  sanitizeSvg,
-  defaultHandleExternalTextContent,
-  type Editor,
-  type TLAsset,
-  type TLShapeId,
-  type TLShapePartial,
-} from "tldraw";
-
 import { runtimeApi } from "../../api/client";
-import { getEditor } from "../editor-context";
-import { AssetTooLargeError, createAssetStore } from "../assets";
+import { canEditCanvas, useCanvasOwnership } from "../../canvas-ownership";
+import { containerSize, getFlow } from "../flow/flow-context";
 import { t } from "../../app/preferences-store";
 import { useCanvasStore } from "../../store/canvas-store";
 import {
@@ -33,17 +21,19 @@ import {
 } from "../../files/workspace-drag";
 
 /**
- * 外部内容分流（tldraw 计划 §4.5、§8 Phase 3 / content）。
+ * 外部内容分流（React Flow 计划 F27）。
  *
- * 用户 2026-09-04 定的两条：**图片一律 tldraw 原生 image shape**（字节走
- * §6.2 的资产接口，不进快照），**文本一律 tldraw 原生 text shape**（Markdown
- * 也当纯文本，不再生成便签）。剩下的 OS 文件才是节点：目录 → `files`，
- * 其余文件复制到工作区后创建 `editor`（二进制显示附件）。
+ * 规则表一条没变：**图片 → `wb.image` 白板对象**（字节走资产接口，白板
+ * 文档里只留 `assetPath`），**文本 / URL → `wb.text`**（Markdown 也当纯
+ * 文本）。剩下的 OS 文件才是节点：目录 → `files`，其余文件复制到工作区后
+ * 创建 `editor`（二进制显示附件）。
  *
- * tldraw 自己就监听画布的 `drop` 与文档的 `paste`，两条路最后都汇到
- * `editor.putExternalContent`，所以这里只要覆盖 `files` / `text` / `url` 三个
- * 处理器，拖放与粘贴就自动同规则。`svg-text` 保持 tldraw 默认（它本来就走
- * 资产仓库）。
+ * React Flow 不接管 drop / paste，所以两条入口都归我们自己：`os-drop.ts`
+ * 的 `onDrop` 与它装的 `paste` 监听。
+ *
+ * **B2 重建图片与文字那两条分支**：它们要建白板对象，而白板层还没有。
+ * B0 保留全部纯分流函数与节点落地（目录 / 文件 → 节点），那部分不依赖
+ * 白板，拖一个目录进画布现在就能用。
  */
 
 /* ------------------------------ 纯分流函数 -------------------------------- */
@@ -155,109 +145,21 @@ export function offsetBy(position: Position, index: number): Position {
 /* ------------------------------- 图片落地 --------------------------------- */
 
 /**
- * 图片 → image shape。
+ * 图片 → `wb.image` 白板对象。**B2 重建。**
  *
- * `getAssetForExternalContent` 会走 tldraw 默认的 file 资产处理器，它调
- * `editor.uploadAsset`，也就是我们挂在 `<Tldraw assets>` 上的
- * `createAssetStore`——字节最终落到 Runtime 的 `.armadra/assets/`，
- * 记录里只留 URL 与 `meta.armadra.path`。
+ * 字节走 `assets.uploadAsset`（落到 `.armadra/assets/`，内容寻址），白板
+ * 文档里只留 `assetPath`；自然尺寸用 `createImageBitmap` 量，再经
+ * `imageShapeSize` 等比缩到 800px 以内，一排的落点由 `layoutImages` 算。
+ * SVG 一律先栅格化成 PNG 再上传（B2 决定：规避内联脚本）。
+ *
+ * 返回建出来的白板对象 id；B0 恒为空数组。
  */
 export async function createImageShapes(
-  editor: Editor,
-  files: readonly File[],
-  point: Position,
-  target: ImportTarget | null = captureImportTarget(),
-): Promise<TLShapeId[]> {
-  const assets: TLAsset[] = [];
-  for (const file of files) {
-    if (target && !importTargetIsActive(target)) return [];
-    try {
-      if (file.size > MAX_ASSET_BYTES) {
-        toast.error(
-          t("canvas.assetTooLarge", {
-            limit: Math.round(MAX_ASSET_BYTES / 1024 / 1024),
-          }),
-        );
-        throw new AssetTooLargeError();
-      }
-      // Keep tldraw's dimensions/hash/animation metadata and SVG sanitation,
-      // but bind uploads to the workspace captured at the start of the drop.
-      // The global asset store otherwise follows workspace switches mid-decode.
-      const mimes: Record<string, string> = {
-        png: "image/png",
-        jpg: "image/jpeg",
-        jpeg: "image/jpeg",
-        gif: "image/gif",
-        webp: "image/webp",
-        avif: "image/avif",
-        bmp: "image/bmp",
-        svg: "image/svg+xml",
-      };
-      let safeFile = file.type
-        ? file
-        : new File([file], file.name, {
-            type: mimes[extensionOf(file.name)] ?? "",
-          });
-      if (safeFile.type === "image/svg+xml") {
-        const sanitized = sanitizeSvg(await safeFile.text());
-        if (!sanitized) throw new Error("SVG contains no safe image content");
-        safeFile = new File([sanitized], safeFile.name, {
-          type: safeFile.type,
-        });
-      }
-      const info = await getAssetInfo(editor, safeFile);
-      if (!info) throw new Error("Unsupported image format");
-      if (!target || !importTargetIsActive(target)) return [];
-      const asset = AssetRecordType.create(info);
-      const uploaded = await createAssetStore(() => target.workspaceId).upload(
-        asset,
-        safeFile,
-      );
-      asset.props.src = uploaded.src;
-      if (uploaded.meta) asset.meta = { ...asset.meta, ...uploaded.meta };
-      if (asset) assets.push(asset);
-    } catch (cause) {
-      // 超限时资产仓库已经提示过了，别再叠一条泛泛的「上传失败」。
-      if (cause instanceof AssetTooLargeError) continue;
-      console.error("asset upload failed", cause);
-      toast.error(t("canvas.assetFailed", { name: file.name }));
-    }
-  }
-  if (assets.length === 0 || (target && !importTargetIsActive(target)))
-    return [];
-
-  const sizes = assets.map((asset) =>
-    imageShapeSize({
-      w: Number((asset.props as { w?: number }).w) || MAX_IMAGE_DIMENSION,
-      h: Number((asset.props as { h?: number }).h) || MAX_IMAGE_DIMENSION,
-    }),
-  );
-  const points = layoutImages(sizes, point);
-
-  const partials: TLShapePartial[] = assets.map((asset, index) => ({
-    id: createShapeId(),
-    type: "image",
-    x: points[index]!.x,
-    y: points[index]!.y,
-    props: {
-      w: sizes[index]!.w,
-      h: sizes[index]!.h,
-      assetId: asset.id,
-    },
-  }));
-
-  editor.run(() => {
-    const missing = assets.filter((asset) => !editor.getAsset(asset.id));
-    if (missing.length > 0) editor.createAssets(missing);
-    editor.createShapes(partials);
-    // 页面满了的时候 `createShapes` 什么都不建也不报错，所以选中之前先确认。
-    const created = partials
-      .map((partial) => partial.id)
-      .filter((id) => Boolean(editor.getShape(id)));
-    if (created.length > 0) editor.select(...created);
-  });
-
-  return partials.map((partial) => partial.id);
+  _files: readonly File[],
+  _point: Position,
+  _target: ImportTarget | null = captureImportTarget(),
+): Promise<string[]> {
+  return [];
 }
 
 /* ------------------------------- 节点落地 --------------------------------- */
@@ -269,7 +171,6 @@ export async function createImageShapes(
 export interface ImportTarget {
   workspaceId: string;
   boardId: string;
-  editor: Editor | null;
 }
 
 export function captureImportTarget(): ImportTarget | null {
@@ -278,17 +179,21 @@ export function captureImportTarget(): ImportTarget | null {
   return {
     workspaceId: state.workspace.id,
     boardId: state.document.board.id,
-    editor: getEditor(),
   };
 }
 
+/**
+ * 这次导入的目标还是当初那块画布吗？
+ *
+ * 三件事一起看：工作空间没换、画布没换、这块画布现在能写。最后一条以前
+ * 问的是 `editor.getIsReadonly()`，现在问归属网关（F36）——只读态由它决定。
+ */
 export function importTargetIsActive(target: ImportTarget): boolean {
   const state = useCanvasStore.getState();
   return (
     state.workspace?.id === target.workspaceId &&
     state.document?.board.id === target.boardId &&
-    getEditor() === target.editor &&
-    target.editor?.getIsReadonly?.() !== true
+    canEditCanvas(useCanvasOwnership.getState().status)
   );
 }
 
@@ -339,14 +244,8 @@ export async function addWorkspaceEntriesToCanvas(
           title: entry.name,
           data: { kind: "files", path: directory.path },
         });
-    } else if (target.editor && isImagePath(entry.path)) {
-      await importImageShape(
-        target.editor,
-        target.workspaceId,
-        entry.path,
-        point,
-        target,
-      );
+    } else if (isImagePath(entry.path)) {
+      await importImageShape(target.workspaceId, entry.path, point, target);
     } else {
       const info = await runtimeApi.fileInfo(target.workspaceId, entry.path);
       assertRelativeWorkspacePath(info.path);
@@ -369,14 +268,8 @@ export async function addNodesForPaths(
   for (const [index, path] of paths.entries()) {
     if (!importTargetIsActive(target)) return;
     const point = offsetBy(position, index);
-    if (target.editor && isImagePath(path)) {
-      await importImageShape(
-        target.editor,
-        target.workspaceId,
-        path,
-        point,
-        target,
-      );
+    if (isImagePath(path)) {
+      await importImageShape(target.workspaceId, path, point, target);
       continue;
     }
     try {
@@ -417,7 +310,6 @@ export async function addNodesForPaths(
 
 /** Browser paths are names relative to an imported copy, never local paths. */
 export async function addBrowserFiles(
-  editor: Editor,
   files: readonly File[],
   point: Position,
   target: ImportTarget | null = captureImportTarget(),
@@ -433,7 +325,7 @@ export async function addBrowserFiles(
   }
   const images = files.filter((file) => routeFile(file) === "image");
   const others = files.filter((file) => routeFile(file) === "file");
-  if (images.length) await createImageShapes(editor, images, point, target);
+  if (images.length) await createImageShapes(images, point, target);
   if (!others.length || !importTargetIsActive(target)) return;
   // Repeated names get distinct paths without overwriting either file.
   const used = new Set<string>();
@@ -460,19 +352,18 @@ export async function addBrowserFiles(
 /** A keyboard/touch-friendly alternative to drag-and-drop, reusable by menus. */
 export function pickFilesForCanvas(point?: Position): void {
   const target = captureImportTarget();
-  const editor = target?.editor;
-  if (!target || !editor) return;
+  if (!target) return;
   const input = document.createElement("input");
   input.type = "file";
   input.multiple = true;
   input.hidden = true;
-  const position = point ?? fallbackPoint(editor);
+  const position = point ?? viewportCentre();
   input.addEventListener(
     "change",
     () => {
       const files = Array.from(input.files ?? []);
       input.remove();
-      void addBrowserFiles(editor, files, position, target);
+      void addBrowserFiles(files, position, target);
     },
     { once: true },
   );
@@ -482,82 +373,25 @@ export function pickFilesForCanvas(point?: Position): void {
 }
 
 /**
- * 磁盘上的图片 → image shape（桌面端 OS 拖放专用）。
+ * 磁盘上的图片 → `wb.image` 白板对象（桌面端 OS 拖放专用）。**B2 重建。**
  *
  * webview 收不到 `DataTransfer`，壳里也没有 fs 插件，所以字节只能由 Runtime
- * 读：`importAsset` 把文件复制进 `.armadra/assets/`（内容寻址，同一张图只落一
- * 份），再取回来包成 `File` 交给 `createImageShapes`——这样尺寸、`meta.armadra.path`
- * 和浏览器那条路完全同规则。取回时的那次重传只在 loopback 上发生，重新上传
- * 的哈希相同，Runtime 认得出来不会再写盘。
+ * 读：`importAsset` 把文件复制进 `.armadra/assets/`（内容寻址，同一张图只落
+ * 一份），路径直接写进白板对象，不必再取回来重传一遍。
  */
 async function importImageShape(
-  editor: Editor,
-  workspaceId: string,
-  path: string,
-  position: Position,
-  target: ImportTarget,
+  _workspaceId: string,
+  _path: string,
+  _position: Position,
+  _target: ImportTarget,
 ): Promise<void> {
-  const name = baseName(path);
-  try {
-    const imported = await runtimeApi.importAsset(workspaceId, path);
-    const response = await fetch(runtimeApi.assetUrl(workspaceId, imported.id));
-    if (!response.ok) throw new Error(`asset ${response.status}`);
-    const file = new File([await response.blob()], name, {
-      type: imported.mimeType,
-    });
-    if (importTargetIsActive(target))
-      await createImageShapes(editor, [file], position, target);
-  } catch (cause) {
-    console.error("asset import failed", cause);
-    toast.error(t("canvas.assetFailed", { name }));
-  }
+  // B2: runtimeApi.importAsset -> whiteboard.addItems([{ kind: "image" }])
 }
 
-/* ---------------------------- 处理器注册 ---------------------------------- */
-
-/** 没有指针位置时的落点（粘贴走这条）。 */
-function fallbackPoint(editor: Editor): Position {
-  const center = editor.getViewportPageBounds().center;
-  return { x: center.x, y: center.y };
-}
-
-/**
- * 覆盖 `files` 与 `text` 两个外部内容处理器；返回注销函数。
- *
- * `registerExternalContentHandler(type, null)` 就是注销，所以卸载时把两个
- * 都置 null——`<Tldraw>` 重新挂载时会重新装一遍它自己的默认实现。
- */
-export function registerExternalContent(editor: Editor): () => void {
-  editor.registerExternalContentHandler("files", async (content) => {
-    const point = content.point
-      ? { x: content.point.x, y: content.point.y }
-      : fallbackPoint(editor);
-
-    await addBrowserFiles(editor, content.files, point);
-  });
-
-  // 文本一律纯文本：把 `html` 丢掉，Markdown 也就只是一段字。
-  editor.registerExternalContentHandler("text", async (content) => {
-    await defaultHandleExternalTextContent(editor, {
-      point: content.point,
-      text: content.text,
-    });
-  });
-
-  /*
-   * URL 也是一段字。tldraw 默认会开一个 bookmark（或可嵌入站点的 embed）
-   * shape，而这两种在 §4.5 里已经停用——`shapes/retired-shapes.ts`。
-   */
-  editor.registerExternalContentHandler("url", async (content) => {
-    await defaultHandleExternalTextContent(editor, {
-      point: content.point,
-      text: content.url,
-    });
-  });
-
-  return () => {
-    editor.registerExternalContentHandler("files", null);
-    editor.registerExternalContentHandler("text", null);
-    editor.registerExternalContentHandler("url", null);
-  };
+/** 没有指针位置时的落点（粘贴走这条）：视口中心的画布坐标。 */
+function viewportCentre(): Position {
+  const flow = getFlow();
+  const { width, height } = containerSize();
+  if (!flow || width <= 0) return { x: 0, y: 0 };
+  return flow.screenToFlowPosition({ x: width / 2, y: height / 2 });
 }

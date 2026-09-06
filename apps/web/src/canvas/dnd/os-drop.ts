@@ -2,7 +2,7 @@ import { useCallback, useEffect, type DragEvent } from "react";
 
 import { onFileDrop } from "../../platform";
 import { useCanvasStore } from "../../store/canvas-store";
-import { getEditor, screenToPage } from "../editor-context";
+import { screenToPage } from "../flow/flow-context";
 import {
   addBrowserFiles,
   addNodesForPaths,
@@ -23,17 +23,19 @@ import { toast } from "sonner";
 import { t } from "../../app/preferences-store";
 
 /**
- * 拖放与粘贴的入口（tldraw 计划 §8 Phase 3 / content）。
+ * 拖放与粘贴的入口（React Flow 计划 F27）。
  *
- * 规则本身住在 `external-content.ts`，因为 tldraw 自己就监听画布的 `drop`
- * 和文档的 `paste`，两条路最后都进 `editor.putExternalContent`。这个文件
- * 只补 tldraw 覆盖不到的两块：
+ * 规则本身住在 `external-content.ts`。React Flow 不接管 drop / paste，
+ * 所以这个文件是**唯一入口**（旧引擎里它只是补两块盲区）：
  *
  * | 场景 | 处理 |
  * | --- | --- |
- * | 桌面版 OS 拖放（Tauri 给真实路径，webview 收不到 `DataTransfer`） | 图片 → Runtime 按路径导入资产后建 image shape，目录 → `files` 节点，其余 → `editor` 节点 |
- * | 掉在 tldraw 容器外面的浏览器拖放 | 原样转交 `putExternalContent` |
- * | 焦点在输入框 / 终端里的粘贴 | 拦下来，别让 tldraw 变成 text shape |
+ * | 桌面版 OS 拖放（Tauri 给真实路径，webview 收不到 `DataTransfer`） | 图片 → Runtime 按路径导入资产后建白板图片，目录 → `files` 节点，其余 → `editor` 节点 |
+ * | 浏览器拖放（`DataTransfer`） | 同一张规则表 |
+ * | 工作区文件树拖入 | `addWorkspaceEntriesToCanvas` |
+ * | 焦点在输入框 / 终端里的粘贴 | 拦下来，交给它们自己 |
+ *
+ * **粘贴建对象是 B2**：那要建白板对象，白板层还没有。这里先只保留守卫。
  */
 
 /* --------------------------------- 拖放 ----------------------------------- */
@@ -101,10 +103,7 @@ export function useOsDrop(): OsDropHandlers {
     event.dataTransfer.dropEffect = "copy";
   }, []);
 
-  /**
-   * 兜底：tldraw 的画布自己会处理落在它身上的拖放（并且 `stopPropagation`），
-   * 所以这里只会收到落在画布容器**外面**的那些。
-   */
+  /** 画布上所有的浏览器拖放都进这里：React Flow 不接管 drop。 */
   const onDrop = useCallback((event: DragEvent<HTMLElement>) => {
     if (isTerminalDropTarget(event.target)) return;
     if (hasWorkspaceFileDrag(event.dataTransfer)) {
@@ -131,12 +130,10 @@ export function useOsDrop(): OsDropHandlers {
     }
     const files = Array.from(event.dataTransfer.files ?? []);
     if (files.length === 0) return;
-    const editor = getEditor();
     const target = captureImportTarget();
-    if (!editor || !target) return;
+    if (!target) return;
     const point = screenToPage({ x: event.clientX, y: event.clientY });
-    editor.markHistoryStoppingPoint("drop");
-    void addBrowserFiles(editor, files, point, target);
+    void addBrowserFiles(files, point, target);
   }, []);
 
   return { onDragOver, onDrop };
@@ -195,13 +192,12 @@ export function isTextEntry(target: EventTarget | null): boolean {
 }
 
 /**
- * 粘贴：图片 → image shape，文本 → text shape，落点是视口中心。
+ * 粘贴守卫。**B2 补上「粘贴建对象」那一半**（图片 → `wb.image`、文本 →
+ * `wb.text`、`armadra/canvas@1` JSON → 原样复原，落点按 `pasteAtCursor`）。
  *
- * 这两条 tldraw 已经替我们做了（`useNativeClipboardEvents` → `putExternalContent`
- * → `external-content.ts` 的处理器），这里只剩一件事：**别让它抢走输入框的粘贴**。
- * tldraw 的监听器挂在 `document` 上且不认输入框，所以在 `document.body` 的冒泡
- * 相位提前 `stopPropagation`——目标元素这时已经收到事件，document 上的那个
- * 再也看不到它。
+ * 守卫本身现在就要在：输入框、终端、可编辑区里的粘贴必须原样交给它们，
+ * 所以在 `document.body` 的冒泡相位提前 `stopPropagation`——目标元素这时
+ * 已经收到事件，`document` 上的监听器再也看不到它。
  */
 export function usePasteToCanvas(): void {
   useEffect(() => {

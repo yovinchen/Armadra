@@ -19,14 +19,12 @@ import {
   Type,
   Upload,
 } from "lucide-react";
-import { createShapeId, toRichText } from "tldraw";
 import type { AgentInfo, Position, SshHost, Workspace } from "@armadra/shared";
 import type { CommandId } from "../../keybindings";
 import type { CanvasActions } from "../../store/canvas-store";
 import { useCanvasStore } from "../../store/canvas-store";
 import type { Translate } from "../../app/preferences-store";
 import { runCanvasCommand, type CanvasCommandId } from "../commands";
-import { getEditor } from "../editor-context";
 import { pickFilesForCanvas } from "../dnd/external-content";
 import { openAutomationPanel } from "../../panels/automation/open";
 
@@ -68,44 +66,23 @@ function command(id: CanvasCommandId): () => void {
   };
 }
 
-/** 新建画框的默认尺寸；比一个终端节点稍宽，画进去还有余量。 */
-const FRAME_SIZE = { w: 640, h: 420 };
+/** 新建分组的默认尺寸；比一个终端节点稍宽，画进去还有余量。 */
+const FRAME_SIZE = { width: 640, height: 420 };
 
 /**
- * 「文字」「画框」直接在落点造一个 tldraw 原生 shape（§4.5：能用原生就用原生）。
- * 它们不是 `nodes` 表里的行，所以走 editor 而不是 `addNode`。
+ * 「文字」：B2 重建。文字是一条 `whiteboard.items`（`wb.text`），
+ * 建完直接进编辑态——那需要白板层的工具与节点组件都在位。
  */
-function addTextShape(position: Position): void {
-  const editor = getEditor();
-  if (!editor) return;
-  const id = createShapeId();
-  editor.createShape({
-    id,
-    type: "text",
-    x: position.x,
-    y: position.y,
-    props: { richText: toRichText("") },
-  });
-  const shape = editor.getShape(id);
-  if (!shape) return;
-  editor.select(id);
-  // 建完直接进编辑态，与双击空白起字的手感一致。
-  editor.setEditingShape(id);
-  editor.setCurrentTool("select.editing_shape", { target: "shape", shape });
+function addTextShape(_position: Position): void {
+  // B2: whiteboard.addItems([{ kind: "text", ... }]) 并进入编辑态。
 }
 
+/** 「画框」= 分组节点（`nodes` 表里的一行），落点即左上角。 */
 function addFrameShape(position: Position): void {
-  const editor = getEditor();
-  if (!editor) return;
-  const id = createShapeId();
-  editor.createShape({
-    id,
-    type: "frame",
-    x: position.x,
-    y: position.y,
-    props: FRAME_SIZE,
+  useCanvasStore.getState().addNode("group", {
+    position,
+    size: FRAME_SIZE,
   });
-  editor.select(id);
 }
 
 /**

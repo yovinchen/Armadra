@@ -1,31 +1,19 @@
-import {
-  DefaultStylePanel,
-  useEditor,
-  useValue,
-  type TLUiStylePanelProps,
-} from "tldraw";
-
+// B2 重建：白板样式面板（React Flow 计划 F28）。
+//
+// 没有现成的样式面板可复用了，要自己写：shadcn 的
+// `Popover` / `ToggleGroup` / `Tooltip`，改「下一个对象的样式」
+// （`interaction/tool-store.nextStyle`）或选中对象的样式
+// （`whiteboard.updateItem`）。色板在 `whiteboard/palette.ts`。
+//
+// 显隐规则（`tools.shouldShowStylePanel`）是纯函数，已经改好并有单测；
+// B0 只是还没有面板可以显示，所以这里恒为 null。
+import { useCanvasStore } from "@/store/canvas-store";
+import { useTool } from "./interaction/tool-store";
 import { shouldShowStylePanel } from "./tools";
 
-/**
- * 样式面板（§12 第 2 条：复用 tldraw 的实现，换肤已在 `styles/canvas.css`）。
- *
- * 这里只加一层显隐：tldraw 默认只要「选中了任何东西」就把面板亮出来，
- * 而我们的 `armadra` 节点一个 tldraw 样式都没有，于是选中一个终端会得到一个
- * 只有透明度滑块的空面板。判断逻辑是纯函数（`tools.ts`），有单测。
- */
-export function CanvasStylePanel(props: TLUiStylePanelProps) {
-  const editor = useEditor();
-  const visible = useValue(
-    "style panel visible",
-    () =>
-      shouldShowStylePanel(
-        editor.getCurrentToolId(),
-        editor.getSelectedShapes().map((shape) => shape.type),
-      ),
-    [editor],
-  );
-
-  if (!visible) return null;
-  return <DefaultStylePanel {...props} />;
+export function CanvasStylePanel() {
+  const tool = useTool();
+  const selected = useCanvasStore((state) => state.selectedItemIds);
+  if (!shouldShowStylePanel(tool, selected)) return null;
+  return null;
 }
