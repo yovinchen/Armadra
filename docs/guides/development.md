@@ -38,11 +38,13 @@ Runtime 的 `--listen` 可重复，每次一个：`tcp:IP:PORT`（端口 `0` 由
 含地址、instance id、pid 与写入时间；正常退出时撤回自己那段。
 `./armadra.sh run web` 与 Vite 开发代理都从这个文件读地址，`VITE_RUNTIME_URL` 显式覆盖时不装代理。
 
-打包后的桌面壳不监听端口：它以 `--listen unix:<数据目录>/runtime.sock`（Windows 为命名管道）
-启动 Runtime，以 `--listen none` 启动 Go Host。WebView 的 HTTP 走 `armadra://` 自定义协议转发到该 socket；
+打包后的桌面壳自己不监听端口：它以 `--listen unix:<数据目录>/runtime.sock`（Windows 为命名管道）
+启动 Runtime。WebView 的 HTTP 走 `armadra://` 自定义协议转发到该 socket；
 WebSocket 无法经自定义协议传输，由壳在 `127.0.0.1` 的随机端口上做回环转发，端口登记在 `endpoints.json`，
-页面通过 `armadra://localhost/__armadra/transport` 取得。因此 `lsof -i -P | grep -i Armadra` 在
-「对外服务未开启」时只会看到这一个回环转发端口。
+页面通过 `armadra://localhost/__armadra/transport` 取得。Go Host 则以 `--listen 127.0.0.1:43121`
+加原生来源的 `--allow-origin` 启动：页面经壳的私有控制通道取票、再向这个回环端口换取 Bearer 会话
+（[桌面壳原生 Host 会话](../design/host-native-session.md)）。因此 `lsof -i -P | grep -i Armadra` 在
+「对外服务未开启」时会看到回环转发端口与 Host 的 43121。
 
 桌面包与 `./armadra.sh run desktop` 会持有自己的 Runtime；后者额外用 `ARMADRA_RUNTIME_LISTEN`
 加一个回环端口，因为开发页面在 `http://127.0.0.1:1420`，那里用不了自定义协议。直接执行桌面 `dev` 默认连接外部 Runtime。
@@ -113,10 +115,11 @@ go -C apps/host run ./cmd/armadra-host --allow-origin http://127.0.0.1:1420
 编辑、取消或离开检查页会使旧检查失效。已有服务配置不兼容时报告失败，不自动重配。
 
 Origin 不含路径或末尾 `/`，可多次传入。桌面按平台使用 `tauri://localhost`、
-`http://tauri.localhost` 或 `https://tauri.localhost`。打包桌面用 `--listen none` 启动 Host，
-不监听端口也不接受 `--allow-origin`；CSP 只允许 `armadra:` 自定义协议与回环 WebSocket，
-不再默认放开 `http://127.0.0.1:43120` / `43121`，开发模式的放行写在 `devCsp`。
-CORS 只允许读取元数据，设备登录与远程执行另属未完成能力。详见[Host 说明](../../apps/host/README.md)。
+`http://tauri.localhost` 或 `https://tauri.localhost`，打包与开发都把 Host 起在 `127.0.0.1:43121` 并放行这些来源；
+打包 CSP 只允许 `armadra:` 自定义协议、回环 WebSocket 与 `http://127.0.0.1:43121`，
+不再默认放开 `http://127.0.0.1:43120`，开发模式的放行写在 `devCsp`。
+浏览器来源的 CORS 只允许读取元数据；壳内的原生来源经票据换取 Bearer 会话（[设备认证](./host-device-auth.md)），
+远程执行另属未完成能力。详见[Host 说明](../../apps/host/README.md)。
 
 ## 环境变量与数据
 

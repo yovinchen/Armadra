@@ -11,6 +11,8 @@
 大写蛇形后与值前缀匹配时才裁剪前缀，否则每个运行时都会得到 `GithubIssueState::GithubIssueStateOpen`
 这样的名字。该 schema 里唯一可能携带密文的字段是 `ConfigureGithubCredentialRequest.token`，只入不出。
 
+`AuthenticatedSession.native`（`NativeSessionCredentials`）只在桌面壳的原生传输上由 Pair / Refresh 设置，
+浏览器响应永不设置：Cookie 传输里这两枚密文只在 `Set-Cookie` 里。
 minor 1 的 hostId 是数据目录持久身份，hostInstanceId 每次启动变化，均不是认证 token。
 minor 0 可协商且允许缺 hostId。传输控制帧上限 1 MiB，由宿主实施；编解码器不负责认证或授权。
 

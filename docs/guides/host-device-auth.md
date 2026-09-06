@@ -43,4 +43,13 @@ armadra-host pair --data-dir /path/to/host-data \
 
 接口前缀为 `/rpc/armadra.v1.IdentityService/`，提供 `Pair`、`Current`、`RenewCsrf`、`Refresh`、`Logout`、`ListDevices`、`RevokeDevice`。全部为有界 Protobuf POST，拒绝错误 Origin、重复认证 Cookie、压缩编码与畸形消息。Hello 仅在 HTTPS 认证实际配置时报告 `identity.browser-session.v1`。
 
+## 桌面壳
+
+打包桌面壳的页面来源是 `tauri://localhost`（Windows 为 `http(s)://tauri.localhost`），永远满足不了上面的浏览器规则，但它与 Host 同属一个系统账号。壳因此走一条独立的原生路径（[设计](../design/host-native-session.md)）：
+
+- 壳以 `--listen 127.0.0.1:43121 --allow-origin <原生来源>` 启动 Host，再用 `armadra-host pair --origin <原生来源> --device-name 本机桌面 --output protobuf` 经 OS 私有控制通道取一张票据；票据与浏览器票据同一张表、同样两分钟有效、只能消费一次。回环 HTTP 的 Host 只对被 `--allow-origin` 允许的原生来源出票，对浏览器来源仍然拒绝；HTTPS Host 只认 `--public-origin`。
+- 页面只调用一个只读命令 `host_native_ticket` 取票，再向回环 HTTP 的 `IdentityService/Pair` 换会话。自定义 scheme 下 Cookie 不可靠，原生会话把 access / refresh 放在 `AuthenticatedSession.native` 里返回，页面以 `Authorization: Bearer` 发送（Refresh / RenewCsrf / Logout 带 refresh，其余带 access），CSRF 头不变；凭据只在页面内存，不落 localStorage、URL 或日志。
+- Host 只在「回环 HTTP + 请求 `Origin` 是被允许的原生来源」时接受 bearer；预检额外允许 `Authorization`，不设 `Access-Control-Allow-Credentials`。撤销、绝对期限、轮转与 revision 核对复用同一套会话表。Hello 仅对该来源报告 `identity.native-session.v1`，业务面能力随之报告；`/api` 代理与事件流仍只在 HTTPS 形态开放。
+- 每次启动壳都会新建一台「本机桌面」设备；`pnpm host:native-session-smoke` 用真实 Host 与 CLI 代替壳的取票流程验证整条链路。
+
 真实 TLS、证书主机名、Cookie 属性、CLI 到 HTTPS 配对及数据库权限边界均有独立临时环境测试；未以这些测试代替移动浏览器、系统证书部署或 Windows 实机验收。

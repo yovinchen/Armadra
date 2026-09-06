@@ -38,6 +38,9 @@ Windows 使用 `armadra-host.exe`。省略子命令等同 `serve`（前台）；
 | `--output protobuf`  | 管理命令返回单个 `HostManagementResult`，无尾随换行；默认 JSON 供人阅读                                 |
 
 `--listen none` 且没有 TLS 参数时不建 TCP 监听，也不接受 `--allow-origin`；`HostStatus.httpEndpoint` 为空串表示「没有 HTTP 面」。
+回环 HTTP 加 `--allow-origin tauri://localhost`（或 `http(s)://tauri.localhost`）是打包桌面壳的形态：`pair --origin tauri://localhost`
+对这个来源出票，页面用它换取 `Authorization: Bearer` 会话，Hello 只对该来源报告 `identity.native-session.v1`；
+浏览器来源在回环 HTTP 上仍然只能读元数据（[设备认证](../../docs/guides/host-device-auth.md)）。
 `--listen none` 配上 TLS 与 `--public-origin` 是「只服务其它设备」的形态：在对外服务打开之前不监听任何端口。
 启动后把本次地址写入 `<endpoints-dir>/endpoints.json`（0600，只改 `host` 段），正常退出时撤回；写不进去只告警不中止。
 
