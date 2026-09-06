@@ -83,19 +83,65 @@ describe("手形工具", () => {
     expect(hand.nodesDraggable).toBe(false);
   });
 
-  it("其余工具不受影响：左键仍然是框选", () => {
-    for (const tool of ["select", "draw", "geo", "text"] as const) {
-      const result = options({}, { tool });
-      expect(result.panOnDrag).toEqual([1]);
-      expect(result.selectionOnDrag).toBe(true);
-      expect(result.nodesDraggable).toBe(true);
-    }
+  it("选择工具不受影响：左键仍然是框选", () => {
+    const result = options({}, { tool: "select" });
+    expect(result.panOnDrag).toEqual([1]);
+    expect(result.selectionOnDrag).toBe(true);
+    expect(result.nodesDraggable).toBe(true);
+    expect(result.elementsSelectable).toBe(true);
   });
 
   it("锁定优先于工具：手形也一样什么都不能拖", () => {
     const locked = options({}, { tool: "hand", locked: true });
     expect(locked.panOnDrag).toBe(false);
     expect(locked.selectionOnDrag).toBe(false);
+  });
+});
+
+/**
+ * 绘图工具（2026-09-06 用户反馈：选了画笔拖动时框选矩形照样出来）。
+ *
+ * 框选起点是 `Pane` 的 `onPointerDownCapture`，React 19 从根容器派发整条
+ * 捕获路径，工具层装在 `.react-flow` 上的捕获监听器比它晚——所以只能在
+ * 这张表里让 React Flow 压根不装那个 handler。七个绘图工具逐个钉住。
+ */
+describe("绘图工具", () => {
+  const DRAWING = [
+    "draw",
+    "highlight",
+    "geo",
+    "line",
+    "arrow",
+    "text",
+    "frame",
+  ] as const;
+
+  it("框选、节点拖动、拖动平移全关：左键整条归工具层", () => {
+    for (const tool of DRAWING) {
+      const result = options({}, { tool });
+      expect({ tool, ...result }).toMatchObject({
+        tool,
+        selectionOnDrag: false,
+        nodesDraggable: false,
+        panOnDrag: false,
+        // 画过一个节点之后那一下 `click` 不该顺手把它选中。
+        elementsSelectable: false,
+      });
+    }
+  });
+
+  it("相机手势照旧：滚轮平移、⌘滚轮与捏合缩放、空格拖平移", () => {
+    const result = options({}, { tool: "draw" });
+    expect(result.panOnScroll).toBe(true);
+    expect(result.zoomOnPinch).toBe(true);
+    expect(result.panActivationKeyCode).toBe("Space");
+  });
+
+  it("锁定优先：工具已经退回选择，这张表也不该再放行", () => {
+    const locked = options({}, { tool: "draw", locked: true });
+    expect(locked.panOnDrag).toBe(false);
+    expect(locked.selectionOnDrag).toBe(false);
+    expect(locked.elementsSelectable).toBe(true);
   });
 });
 

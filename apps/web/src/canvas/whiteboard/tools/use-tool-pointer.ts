@@ -27,9 +27,17 @@ import {
  * 白板工具的指针通道（React Flow 计划 §2.4 / F21–F25，归属 whiteboard）。
  *
  * 不铺一层 `pointer-events: all` 的覆盖层，而是在 React Flow 的容器上装一个
- * **捕获相位**的 `pointerdown`：命中就 `stopPropagation`，d3-drag、框选、
- * 节点拖动全都收不到这一下。这么做有一个覆盖层给不了的好处——滚轮事件
+ * **捕获相位**的 `pointerdown`。这么做有一个覆盖层给不了的好处——滚轮事件
  * 一个都不拦，所以画画的时候仍然能滚轮平移、⌘滚轮缩放，手不用先切回选择。
+ *
+ * 但这个监听器**挡不住 React Flow 的框选**（2026-09-06 用户反馈：选了画笔
+ * 拖动时框选矩形照样出来）。原因是相位：React Flow 的框选起点是 `Pane` 的
+ * `onPointerDownCapture`，而 React 19 把委托监听器装在根容器（`#root`）上，
+ * 根容器是 `.react-flow` 的祖先——它的捕获监听器先跑，并在那一刻就把整条
+ * 捕获路径派发完了。等这里的 `stopPropagation` 执行时，`userSelectionRect`
+ * 已经建好，收不回来。所以「绘图工具不框选」只能由
+ * `flow/flow-options.ts` 关掉 `selectionOnDrag` 来保证，这里的
+ * `stopPropagation` 只负责挡住真正装在 DOM 上的那些监听器（d3-drag 等）。
  *
  * 手形工具**不在**这里：它是一次视口平移，与空格、中键是同一件事，所以
  * 归 `flow/flow-options.panOnDrag`（工具是「手」时含 0）。同一个手势有两份
@@ -70,6 +78,23 @@ export function useToolPointer(): ToolPointerState {
 
     let pointerId: number | null = null;
     let current: Draft | null = null;
+    let swallowClick = false;
+
+    /**
+     * 吞掉这一笔松手之后紧跟着的那一下 `click`。
+     *
+     * 绘图工具下 `selectionOnDrag` 是关的（`flow/flow-options.ts`），React Flow
+     * 的 `Pane` 因此改用它的 `onClick` —— 那个 handler 会
+     * `resetSelectedElements()`，把刚落成的对象重新取消选中。`click` 是**冒泡**
+     * 相位的 React prop，根容器的委托监听器要等事件冒泡上去才跑，所以装在
+     * `.react-flow` 上的捕获监听器能赶在它前面把事件截住（`pointerdown`
+     * 那条路不行，原因见文件顶部）。
+     */
+    const onClickCapture = (event: MouseEvent) => {
+      if (!swallowClick) return;
+      swallowClick = false;
+      event.stopPropagation();
+    };
 
     const pageOf = (event: PointerEvent): Position =>
       snapped(
@@ -113,6 +138,7 @@ export function useToolPointer(): ToolPointerState {
     };
 
     const onPointerDown = (event: PointerEvent) => {
+      swallowClick = false;
       if (event.button !== 0) return;
       // 样式面板、锁按钮、节点体里的输入框不归工具管。
       if (
@@ -123,6 +149,7 @@ export function useToolPointer(): ToolPointerState {
       }
       const active = latest.current;
       if (isCanvasLocked() || !active.editable) return;
+      swallowClick = true;
       event.stopPropagation();
       event.preventDefault();
       const at = pageOf(event);
@@ -147,8 +174,10 @@ export function useToolPointer(): ToolPointerState {
     };
 
     dom.addEventListener("pointerdown", onPointerDown, true);
+    dom.addEventListener("click", onClickCapture, true);
     return () => {
       dom.removeEventListener("pointerdown", onPointerDown, true);
+      dom.removeEventListener("click", onClickCapture, true);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);

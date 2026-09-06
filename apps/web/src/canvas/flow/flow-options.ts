@@ -23,8 +23,17 @@ export interface FlowOptionsInput {
   locked: boolean;
   /** 归属网关说这块画布现在能不能写（`canEditCanvas`）。 */
   editable: boolean;
-  /** 当前工具（`interaction/tool-store`）。只有「手」改这张表。 */
+  /** 当前工具（`interaction/tool-store`）：手形与绘图工具各改一组值。 */
   tool?: CanvasToolId;
+}
+
+/**
+ * 会自己吃掉左键的白板工具（选择与手之外的全部）。
+ *
+ * 手形不算：它的左键归 React Flow 的 `panOnDrag`，不归工具层的指针通道。
+ */
+export function isDrawingTool(tool: CanvasToolId): boolean {
+  return tool !== "select" && tool !== "hand";
 }
 
 export interface FlowOptions {
@@ -57,6 +66,16 @@ export interface FlowOptions {
  * 节点拖动关掉——两者都吃左键，留着会跟平移抢同一下按压；节点拖动关掉之后
  * React Flow 不再给节点装 d3-drag，按在节点上的那一下才落得到画布上，
  * 手形工具因此在节点上方也能平移，而不是只在空白处。
+ *
+ * 绘图工具（画笔 / 高亮 / 形状 / 直线 / 箭头 / 文字 / 画框）同理，而且**必须**
+ * 在这张表里关掉框选：React Flow 的框选起点是 `Pane` 的 `onPointerDownCapture`
+ * ——一个 React 的捕获相位 prop。React 19 把所有委托监听器装在根容器
+ * （`#root`）上，根容器是 `.react-flow` 的祖先，所以它的捕获监听器比工具层
+ * 装在 `.react-flow` 上的捕获监听器**更早**触发，整条捕获路径（含 Pane 的
+ * `onPointerDownCapture`）在那一刻已经派发完毕。工具层再 `stopPropagation`
+ * 也来不及——框选矩形已经建好了。唯一能让它不建的办法就是让 React Flow
+ * 压根不装那个 handler，即 `selectionOnDrag: false`（`isSelecting` 随之为
+ * false，`Pane` 就不再传 `onPointerDownCapture`）。
  */
 export function flowOptions({
   whiteboard,
@@ -67,27 +86,29 @@ export function flowOptions({
   const mouse = whiteboard.inputMode === "mouse";
   const grid = whiteboard.gridSize;
   const hand = !locked && tool === "hand";
+  const drawing = !locked && isDrawingTool(tool);
   return {
-    // 中键拖动始终能平移；左键留给框选，手形工具或锁定时另说。
-    panOnDrag: locked ? false : hand ? [0, 1] : [1],
+    // 中键拖动平移；手形连左键一起，绘图工具全关（那一下归工具层）。
+    panOnDrag: locked || drawing ? false : hand ? [0, 1] : [1],
     panOnScroll: !locked && !mouse,
     zoomOnScroll: !locked && mouse,
     zoomOnPinch: !locked,
-    // 双击留给「进入文字编辑」（B2），不缩放。
+    // 双击留给「空白处新建文字」（`tools/use-double-click-text.ts`），不缩放。
     zoomOnDoubleClick: false,
     zoomActivationKeyCode: locked ? null : ZOOM_ACTIVATION_KEY_CODE,
     panActivationKeyCode: locked ? null : PAN_ACTIVATION_KEY_CODE,
     multiSelectionKeyCode: MULTI_SELECTION_KEY_CODE,
-    selectionOnDrag: !locked && !hand,
+    selectionOnDrag: !locked && !hand && !drawing,
     // 「选择换行」= 整体包住才算选中。
     selectionMode: whiteboard.wrap ? SelectionMode.Full : SelectionMode.Partial,
     snapToGrid: whiteboard.snap,
     snapGrid: [grid, grid],
     autoPanOnNodeDrag: whiteboard.edgeScroll,
     autoPanOnConnect: whiteboard.edgeScroll,
-    nodesDraggable: editable && !hand,
+    nodesDraggable: editable && !hand && !drawing,
     nodesConnectable: editable,
     // 只读时仍然可选：看得见选中框才知道右键菜单作用在谁身上。
-    elementsSelectable: true,
+    // 绘图时关掉：画过一个节点之后那一下 `click` 不该顺手把它选中。
+    elementsSelectable: !drawing,
   };
 }
