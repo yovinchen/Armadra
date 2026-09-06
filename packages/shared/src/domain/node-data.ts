@@ -258,6 +258,33 @@ export const automationNodeDataSchema = z.object({
 export const AGENT_ACTIVITY_SOURCES = ["loop", "subagent"] as const;
 export const agentActivitySourceSchema = z.enum(AGENT_ACTIVITY_SOURCES);
 
+/**
+ * Which scheduler wrote the repeat rule a card observed. `cron` is a crontab
+ * line, `launchd` a job's `StartCalendarInterval` / `StartInterval`.
+ */
+export const NATIVE_RECURRENCE_DIALECTS = ["cron", "launchd"] as const;
+export const nativeRecurrenceDialectSchema = z.enum(NATIVE_RECURRENCE_DIALECTS);
+
+/**
+ * The repeat rule a native activity card observed, kept verbatim.
+ *
+ * `rule` is the scheduler's own text — a crontab expression, or the JSON of a
+ * launchd `StartCalendarInterval` / `StartInterval`. It is stored unparsed
+ * because it is *evidence*: the panel translates it into a platform schedule
+ * where it can (`panels/automation/native-recurrence.ts`) and shows the
+ * original where it cannot, and a normalized copy would quietly lose the parts
+ * that made it untranslatable.
+ *
+ * A timezone belongs with it: a crontab line means nothing without one, and
+ * guessing the reader's device zone is how a plan ends up running at the wrong
+ * hour. Empty means the source did not say.
+ */
+export const nativeRecurrenceSchema = z.object({
+  dialect: nativeRecurrenceDialectSchema,
+  rule: z.string().min(1).max(2_000),
+  timezone: z.string().max(64).default(""),
+});
+
 export const agentActivityNodeDataSchema = z.object({
   kind: z.literal("agentActivity"),
   ...addressable,
@@ -277,6 +304,12 @@ export const agentActivityNodeDataSchema = z.object({
     .max(2 ** 53 - 1)
     .default(0),
   nativeJobId: z.string().max(200).default(""),
+  /**
+   * The repeat rule the discovery read, when it read one. Absent for a card
+   * built from Hook events, which report iterations rather than a schedule —
+   * an activity without a readable rule must not be given an invented one.
+   */
+  nativeRecurrence: nativeRecurrenceSchema.optional(),
 });
 
 export const canvasNodeDataSchema = z.discriminatedUnion("kind", [
@@ -309,3 +342,6 @@ export type AutomationNodeData = z.infer<typeof automationNodeDataSchema>;
 export type AgentActivityNodeData = z.infer<typeof agentActivityNodeDataSchema>;
 export type AutomationScheduleKind = (typeof AUTOMATION_SCHEDULE_KINDS)[number];
 export type AgentActivitySource = (typeof AGENT_ACTIVITY_SOURCES)[number];
+export type NativeRecurrence = z.infer<typeof nativeRecurrenceSchema>;
+export type NativeRecurrenceDialect =
+  (typeof NATIVE_RECURRENCE_DIALECTS)[number];

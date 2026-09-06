@@ -12,12 +12,27 @@ import { terminalBackendKindSchema } from "./terminals.js";
  */
 export const resourceLocationSchema = z.enum(["local", "remote"]);
 
+/**
+ * The operating system's own memory-pressure verdict, where it publishes one
+ * (macOS today). It is deliberately *not* derived from used/total: most "used"
+ * memory on a modern kernel is reclaimable, so a machine at 95% used is very
+ * often under no pressure at all, and a ratio presented as a pressure level
+ * would say the opposite of the truth. `null` is "not measured", never "fine".
+ */
+export const resourceMemoryPressureSchema = z.enum([
+  "normal",
+  "warning",
+  "critical",
+]);
+
 export const resourceMemorySchema = z.object({
   totalBytes: z.number().int().nonnegative().nullable(),
   usedBytes: z.number().int().nonnegative().nullable(),
   availableBytes: z.number().int().nonnegative().nullable(),
   swapTotalBytes: z.number().int().nonnegative().nullable(),
   swapUsedBytes: z.number().int().nonnegative().nullable(),
+  /** Absent on a runtime that predates the field, which is also unknown. */
+  pressure: resourceMemoryPressureSchema.nullable().default(null),
 });
 
 export const resourceLoadAverageSchema = z.object({
@@ -128,7 +143,16 @@ export const platformComponentSchema = z.object({
    * runs the Go toolchain, and that helper is the work the server exists to
    * do — leaving it out would make a busy server look idle.
    */
-  kind: z.enum(["runtime", "host", "commandWorker", "languageServer"]),
+  kind: z.enum([
+    "runtime",
+    "host",
+    "commandWorker",
+    "languageServer",
+    /** The Windows persistent-session host (T01), which outlives the runtime. */
+    "sessionHost",
+    /** A managed browser a browser node started (B01), measured as a tree. */
+    "browserWorker",
+  ]),
   /**
    * Which machine the process is on. A language server for a remote workspace
    * runs on the execution host, so its row is `remote` and carries no numbers:
@@ -262,6 +286,9 @@ export const powerLeaseRequestSchema = z.object({
 });
 
 export type ResourceLocation = z.infer<typeof resourceLocationSchema>;
+export type ResourceMemoryPressure = z.infer<
+  typeof resourceMemoryPressureSchema
+>;
 export type HostResources = z.infer<typeof hostResourcesSchema>;
 export type SessionResources = z.infer<typeof sessionResourcesSchema>;
 export type ProcessSample = z.infer<typeof processSampleSchema>;

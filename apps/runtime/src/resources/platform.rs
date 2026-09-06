@@ -6,16 +6,26 @@
 //! its own so a heavy build inside a terminal is never read as the app being
 //! bloated, and the app being bloated is never hidden inside a session total.
 //!
-//! ## Discovery is structural, never a name scan
+//! ## Discovery is evidence, never a resemblance
 //!
-//! Nothing here searches the machine for processes that look like ours. A
-//! component is found only by its position relative to *this* process:
+//! Nothing here claims a process because it looks like ours. A component is
+//! found either by its position relative to *this* process, or from a pid this
+//! Runtime itself recorded when it started the thing:
 //!
 //! * **runtime** — this process, by pid.
 //! * **host** — an ancestor of ours, or a sibling under our own parent (the
 //!   desktop shell starts the Go Host and the Runtime side by side).
 //! * **command worker** — a child of the Host, or of us, running our own
 //!   executable.
+//! * **browser worker** — the managed browser a browser node started. The
+//!   session store recorded its pid *and* its start time, so it is claimed
+//!   from that record rather than by looking for something Chrome-shaped.
+//! * **session host** — `armadra-session-host` (Windows, T01). This is the one
+//!   row a position check cannot find: the host deliberately outlives the
+//!   Runtime that asked for it and is not our child, which is the whole point
+//!   of a persistent session. It is matched by executable name **and** by
+//!   living in the same install directory as this Runtime or as the Host, so a
+//!   second install's host is still never claimed as ours.
 //!
 //! Another user's Armadra, a second install, or an unrelated binary that
 //! happens to share a name is therefore never claimed, and nothing here can
@@ -40,6 +50,12 @@ use super::sample::{MAX_LISTED_CHILDREN, ProcessKey, ProcessSample, process_samp
 /// The Go Host's executable, without a Windows extension.
 const HOST_BINARY: &str = "armadra-host";
 
+/// The Windows persistent-session host's executable (T01). It is started
+/// detached so it survives this Runtime, which is why it is the one component
+/// found by name rather than by position — narrowed by install directory in
+/// [`same_install`].
+const SESSION_HOST_BINARY: &str = "armadra-session-host";
+
 /// How far up the process tree the Host may be looked for. The desktop shell
 /// starts both, so it is one or two hops; the bound is what keeps a stale or
 /// looping parent table from walking forever.
@@ -57,6 +73,14 @@ pub enum ComponentKind {
     /// is authoritative rather than a name match, and is the only way to tell
     /// one apart from a compiler a user is running in a terminal.
     LanguageServer,
+    /// The Windows persistent-session host (T01). Deliberately outlives this
+    /// Runtime, so it is the one component matched by name; see the module
+    /// note and [`same_install`].
+    SessionHost,
+    /// A managed browser a browser node started (B01). Claimed from the
+    /// session store's recorded `(pid, startTime)`, never by looking for a
+    /// process that resembles a browser — the user's own Chrome is not ours.
+    BrowserWorker,
 }
 
 impl ComponentKind {
@@ -66,21 +90,27 @@ impl ComponentKind {
             Self::Host => "host",
             Self::CommandWorker => "commandWorker",
             Self::LanguageServer => "languageServer",
+            Self::SessionHost => "sessionHost",
+            Self::BrowserWorker => "browserWorker",
         }
     }
 }
 
-/// A language server the manager started, as the sampler is told about it.
+/// A process Armadra started and still has on record, as the sampler is told
+/// about it: a language server, or a managed browser.
 ///
 /// The start time travels with the pid because a pid alone does not identify a
-/// process: by the time a sample is taken, a server that exited may have had
-/// its pid reused, and claiming that process would put somebody else's memory
-/// in Armadra's own total.
+/// process: by the time a sample is taken, a process that exited may have had
+/// its pid reused, and claiming that one would put somebody else's memory in
+/// Armadra's own total.
 #[derive(Debug, Clone)]
-pub struct LanguageServerTarget {
+pub struct TrackedProcess {
     pub pid: i64,
     pub start_time_unix_ms: Option<i64>,
 }
+
+/// The language manager's own name for [`TrackedProcess`].
+pub type LanguageServerTarget = TrackedProcess;
 
 /// One of Armadra's own processes.
 #[derive(Debug, Clone, Serialize)]
@@ -115,6 +145,7 @@ pub fn components(
     children: &HashMap<Pid, Vec<Pid>>,
     baseline: bool,
     language: &[LanguageServerTarget],
+    browsers: &[TrackedProcess],
 ) -> Vec<PlatformComponent> {
     let me = Pid::from_u32(std::process::id());
     let mut found: Vec<PlatformComponent> = Vec::new();
@@ -160,29 +191,93 @@ pub fn components(
     for pid in command_worker_pids(system, children, me, host, own_binary.as_deref()) {
         push(ComponentKind::CommandWorker, pid, true);
     }
-    // Measured as trees: `rust-analyzer` runs `cargo check`, `gopls` runs the
-    // Go toolchain, and the helper is the work the server exists to do.
-    for target in language {
-        if target.pid <= 0 || target.pid > i64::from(u32::MAX) {
-            continue;
-        }
-        let pid = Pid::from_u32(target.pid as u32);
-        // Recorded start time against measured start time. A mismatch means
-        // the pid was reused, and the process there now is not ours.
-        let reused = match (
-            target.start_time_unix_ms,
-            system
-                .process(pid)
-                .and_then(super::sample::start_time_unix_ms),
-        ) {
-            (Some(recorded), Some(measured)) => (recorded - measured).abs() > 2_000,
-            _ => false,
-        };
-        if !reused {
-            push(ComponentKind::LanguageServer, pid, true);
+    // A session host is not our child by design — it outlives us — so it is
+    // matched by name, narrowed to this install (see `session_host_pids`).
+    for pid in session_host_pids(system, me, host) {
+        push(ComponentKind::SessionHost, pid, true);
+    }
+    // Both of these are recorded pids, not name matches. Measured as trees:
+    // `rust-analyzer` runs `cargo check` and a browser's renderers and GPU
+    // helper are the work the browser exists to do, so leaving the children
+    // out would make a busy one look idle.
+    for (kind, targets) in [
+        (ComponentKind::LanguageServer, language),
+        (ComponentKind::BrowserWorker, browsers),
+    ] {
+        for target in targets {
+            if let Some(pid) = live_pid(system, target) {
+                push(kind, pid, true);
+            }
         }
     }
     found
+}
+
+/// A recorded `(pid, startTime)` resolved against the live process table.
+///
+/// `None` when the pid is out of range, or when the process there now started
+/// at a different time — the number was reused, and that process is not ours.
+fn live_pid(system: &System, target: &TrackedProcess) -> Option<Pid> {
+    if target.pid <= 0 || target.pid > i64::from(u32::MAX) {
+        return None;
+    }
+    let pid = Pid::from_u32(target.pid as u32);
+    let measured = system
+        .process(pid)
+        .and_then(super::sample::start_time_unix_ms);
+    match (target.start_time_unix_ms, measured) {
+        // The slack absorbs the one-second resolution of the Unix fallback.
+        (Some(recorded), Some(measured)) if (recorded - measured).abs() > 2_000 => None,
+        _ => Some(pid),
+    }
+}
+
+/// Whether `pid` runs out of the same install directory as `reference`.
+///
+/// This is what keeps a name match from claiming a second install's session
+/// host — or a colleague's, on a shared machine. A process whose executable
+/// path cannot be read is *not* claimed: an unreadable path is unknown
+/// provenance, and unknown provenance is not ours.
+fn same_install(system: &System, pid: Pid, reference: &std::path::Path) -> bool {
+    system
+        .process(pid)
+        .and_then(sysinfo::Process::exe)
+        .and_then(|path| path.parent())
+        .is_some_and(|directory| directory == reference)
+}
+
+/// Session hosts belonging to this install.
+///
+/// The install directories are ours and the Host's: a packaged build puts the
+/// three binaries side by side, and a development build can have the Runtime
+/// and the Host in different target directories.
+fn session_host_pids(system: &System, me: Pid, host: Option<Pid>) -> Vec<Pid> {
+    let directory_of = |pid: Pid| {
+        system
+            .process(pid)
+            .and_then(sysinfo::Process::exe)
+            .and_then(|path| path.parent())
+            .map(std::path::Path::to_path_buf)
+    };
+    let mut roots: Vec<std::path::PathBuf> = [Some(me), host]
+        .into_iter()
+        .flatten()
+        .filter_map(directory_of)
+        .collect();
+    roots.sort();
+    roots.dedup();
+    if roots.is_empty() {
+        return Vec::new();
+    }
+    let mut hosts: Vec<Pid> = system
+        .processes()
+        .iter()
+        .filter(|(_, process)| super::sample::executable_name(process) == SESSION_HOST_BINARY)
+        .map(|(pid, _)| *pid)
+        .filter(|pid| roots.iter().any(|root| same_install(system, *pid, root)))
+        .collect();
+    hosts.sort();
+    hosts
 }
 
 /// A language server running on a remote execution host.
@@ -373,7 +468,7 @@ mod tests {
             }
         }
 
-        let found = components(&system, &children, true, &[]);
+        let found = components(&system, &children, true, &[], &[]);
         let runtime = found
             .iter()
             .find(|component| component.kind == ComponentKind::Runtime)
@@ -435,5 +530,135 @@ mod tests {
 
         // And an empty table simply has no ancestors.
         assert!(ancestors_of(|_| None, pid(1), MAX_ANCESTRY).is_empty());
+    }
+
+    /// A recorded pid is only ours while the process there still has the start
+    /// time we wrote down. Otherwise the number was reused, and claiming it
+    /// would put a stranger's memory in Armadra's own total.
+    #[test]
+    fn a_recorded_pid_is_dropped_once_the_number_has_been_reused() {
+        let mut system = System::new();
+        system.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::All,
+            true,
+            sysinfo::ProcessRefreshKind::nothing(),
+        );
+        let me = i64::from(std::process::id());
+        let measured = system
+            .process(Pid::from_u32(std::process::id()))
+            .and_then(super::super::sample::start_time_unix_ms);
+
+        // The real start time resolves; a different one does not.
+        assert_eq!(
+            live_pid(
+                &system,
+                &TrackedProcess {
+                    pid: me,
+                    start_time_unix_ms: measured,
+                },
+            ),
+            Some(Pid::from_u32(std::process::id())),
+        );
+        assert_eq!(
+            live_pid(
+                &system,
+                &TrackedProcess {
+                    pid: me,
+                    start_time_unix_ms: Some(1_000),
+                },
+            ),
+            None,
+        );
+        // Out-of-range numbers are not looked up at all.
+        for pid in [0, -1, i64::from(u32::MAX) + 1] {
+            assert_eq!(
+                live_pid(
+                    &system,
+                    &TrackedProcess {
+                        pid,
+                        start_time_unix_ms: None,
+                    },
+                ),
+                None,
+                "{pid}",
+            );
+        }
+    }
+
+    /// A browser Armadra started is listed from that record, as a tree — its
+    /// renderers and GPU helper are the work it exists to do.
+    #[test]
+    fn a_recorded_browser_is_listed_as_a_tree_component() {
+        let mut system = System::new();
+        system.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::All,
+            true,
+            sysinfo::ProcessRefreshKind::nothing()
+                .with_cpu()
+                .with_memory()
+                .with_exe(sysinfo::UpdateKind::OnlyIfNotSet),
+        );
+        let children: HashMap<Pid, Vec<Pid>> = HashMap::new();
+        let me = Pid::from_u32(std::process::id());
+        let start = system
+            .process(me)
+            .and_then(super::super::sample::start_time_unix_ms);
+
+        // This process stands in for a managed browser: what is being pinned
+        // is that a *recorded* pid becomes a row, and a reused one does not.
+        let found = components(
+            &system,
+            &children,
+            true,
+            &[],
+            &[TrackedProcess {
+                pid: i64::from(std::process::id()),
+                start_time_unix_ms: start,
+            }],
+        );
+        // The runtime rule claimed this pid first, so it appears once — the
+        // deduplication is on (pid, startTime) and the first rule wins.
+        assert_eq!(
+            found
+                .iter()
+                .filter(|component| component.process.pid == i64::from(std::process::id()))
+                .count(),
+            1,
+        );
+
+        let stale = components(
+            &system,
+            &children,
+            true,
+            &[],
+            &[TrackedProcess {
+                pid: i64::from(std::process::id()),
+                start_time_unix_ms: Some(1_000),
+            }],
+        );
+        assert!(
+            !stale
+                .iter()
+                .any(|component| component.kind == ComponentKind::BrowserWorker),
+            "a reused pid must never be claimed as a browser we started",
+        );
+    }
+
+    /// Nothing on a developer machine is this install's session host, and a
+    /// name match alone must not adopt one.
+    #[test]
+    fn no_session_host_is_claimed_from_a_bare_test_binary() {
+        let mut system = System::new();
+        system.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::All,
+            true,
+            sysinfo::ProcessRefreshKind::nothing().with_exe(sysinfo::UpdateKind::OnlyIfNotSet),
+        );
+        let me = Pid::from_u32(std::process::id());
+        assert!(session_host_pids(&system, me, None).is_empty());
+        // Every component kind has a stable wire name; the panel keys its
+        // labels off these.
+        assert_eq!(ComponentKind::SessionHost.as_str(), "sessionHost");
+        assert_eq!(ComponentKind::BrowserWorker.as_str(), "browserWorker");
     }
 }

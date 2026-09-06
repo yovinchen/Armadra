@@ -30,6 +30,7 @@
 pub mod inhibit;
 pub mod orphans;
 pub mod platform;
+pub mod platform_memory;
 pub mod platform_power;
 pub mod power;
 pub mod routes;
@@ -322,6 +323,22 @@ impl ResourceService {
         // knows which pids it started, so the sampler is told rather than
         // asked to recognise them (design §3.3).
         let language = state.language.running_processes();
+        // Same rule for managed browsers: the session store recorded the pid
+        // *and* the start time when it launched one, which is the only way to
+        // tell Armadra's browser from the user's own (browser design §2.10).
+        // A workspace whose sessions cannot be read contributes none rather
+        // than falling back to a name scan.
+        let browsers: Vec<platform::TrackedProcess> =
+            crate::browser::store::stored_for_workspace(&state.pool, workspace_id)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|session| session.process.is_recorded())
+                .map(|session| platform::TrackedProcess {
+                    pid: i64::from(session.process.pid),
+                    start_time_unix_ms: Some(session.process.started_at_unix_ms),
+                })
+                .collect();
 
         // `sysinfo` walks the whole process table and stats the mounted
         // filesystems, and priming sleeps for the platform's minimum CPU
@@ -350,7 +367,7 @@ impl ResourceService {
             if prime {
                 guard.prime();
             }
-            guard.sample(&targets, &language)
+            guard.sample(&targets, &language, &browsers)
         })
         .await?;
         let mut sample = sample;

@@ -43,6 +43,15 @@ pub struct MemoryUsage {
     pub available_bytes: Option<u64>,
     pub swap_total_bytes: Option<u64>,
     pub swap_used_bytes: Option<u64>,
+    /// The operating system's own memory-pressure verdict, where it publishes
+    /// one. `None` means this platform was not asked or would not answer —
+    /// never "fine". See [`super::platform_memory::pressure`].
+    ///
+    /// It is deliberately not derived from the fields above: a machine with
+    /// most of its memory in reclaimable caches reads as 95% used and is under
+    /// no pressure at all, and a ratio presented as a pressure level would say
+    /// the opposite of the truth.
+    pub pressure: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -282,6 +291,7 @@ impl Sampler {
         &mut self,
         targets: &[SessionTarget],
         language: &[super::platform::LanguageServerTarget],
+        browsers: &[super::platform::TrackedProcess],
     ) -> Sample {
         let baseline = self.has_cpu_baseline();
         self.refresh();
@@ -292,7 +302,8 @@ impl Sampler {
             .map(|target| self.session(target, &children, baseline))
             .filter(|session| !is_gone(session))
             .collect();
-        let components = super::platform::components(&self.system, &children, baseline, language);
+        let components =
+            super::platform::components(&self.system, &children, baseline, language, browsers);
         Sample {
             host,
             sessions,
@@ -316,6 +327,7 @@ impl Sampler {
                 available_bytes: (total > 0).then_some(self.system.available_memory()),
                 swap_total_bytes: (swap_total > 0).then_some(swap_total),
                 swap_used_bytes: (swap_total > 0).then_some(self.system.used_swap()),
+                pressure: super::platform_memory::pressure(),
             },
             load_average: load_average(),
             disk: disk_for_data_dir(),

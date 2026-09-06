@@ -155,6 +155,58 @@ async fn rejects_invalid_headers_parents_and_agents() {
     assert!(validate_document(&board.id, &[agent], &[]).is_err());
 }
 
+/// A native card may carry the repeat rule its discovery read. The rule is
+/// stored verbatim — it is evidence of what the machine was told to do — so
+/// only the dialect and the bounds are enforced here.
+#[tokio::test]
+async fn an_activity_card_may_carry_the_recurrence_rule_it_observed() {
+    let (pool, _directory, workspace) = fixture("recurrence").await;
+    let board = default_board(&pool, &workspace.id).await;
+    let mut card = sticky_node(&board.id);
+    card.node_type = "agentActivity".into();
+    let with = |recurrence: serde_json::Value| {
+        serde_json::json!({
+            "kind": "agentActivity",
+            "sourceNodeId": "3f0d6a4e-6f3d-4c9a-9f2b-1c0f5a7d8e21",
+            "nativeRecurrence": recurrence,
+        })
+    };
+
+    for accepted in [
+        serde_json::json!({ "dialect": "cron", "rule": "0 3 * * *", "timezone": "Asia/Shanghai" }),
+        // No timezone: a crontab line does not carry one, and the panel asks.
+        serde_json::json!({ "dialect": "launchd", "rule": "{\"StartInterval\":900}" }),
+        // Something no parser understands is still stored as written.
+        serde_json::json!({ "dialect": "cron", "rule": "@reboot" }),
+    ] {
+        card.data = with(accepted.clone());
+        validate_document(&board.id, std::slice::from_ref(&card), &[])
+            .unwrap_or_else(|error| panic!("{accepted} rejected: {error}"));
+    }
+
+    for rejected in [
+        serde_json::json!({ "dialect": "systemd", "rule": "OnCalendar=daily" }),
+        serde_json::json!({ "dialect": "cron" }),
+        serde_json::json!({ "dialect": "cron", "rule": "" }),
+        serde_json::json!({ "dialect": "cron", "rule": "*".repeat(2_001) }),
+        serde_json::json!({ "dialect": "cron", "rule": "0 3 * * *", "timezone": "z".repeat(65) }),
+    ] {
+        card.data = with(rejected.clone());
+        assert!(
+            validate_document(&board.id, std::slice::from_ref(&card), &[]).is_err(),
+            "{rejected} should have been rejected",
+        );
+    }
+
+    // Absent is fine: a card built from Hook events reports iterations, not a
+    // schedule, and must not be given an invented one.
+    card.data = serde_json::json!({
+        "kind": "agentActivity",
+        "sourceNodeId": "3f0d6a4e-6f3d-4c9a-9f2b-1c0f5a7d8e21",
+    });
+    validate_document(&board.id, std::slice::from_ref(&card), &[]).unwrap();
+}
+
 #[test]
 fn labels_and_notes_are_bounded() {
     let board_id = Uuid::now_v7().to_string();

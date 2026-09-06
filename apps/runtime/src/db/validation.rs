@@ -7,7 +7,7 @@ use uuid::Uuid;
 use super::workspaces::is_hex_color;
 use super::{
     AGENT_ACTIVITY_SOURCES, AUTOMATION_SCHEDULE_KINDS, BUILTIN_AGENT_IDS, DIFF_SCOPES, EDGE_KINDS,
-    MAX_WHITEBOARD_BYTES, NODE_TYPES, PERMISSION_MODES,
+    MAX_WHITEBOARD_BYTES, NATIVE_RECURRENCE_DIALECTS, NODE_TYPES, PERMISSION_MODES,
 };
 use crate::{
     error::{AppError, AppResult},
@@ -203,9 +203,30 @@ pub fn valid_node_data(node: &CanvasNode) -> bool {
                 && data.get("generation").is_none_or(|value| {
                     value.is_null() || value.as_u64().is_some_and(|v| v < (1 << 53))
                 })
+                && data
+                    .get("nativeRecurrence")
+                    .is_none_or(|value| value.is_null() || valid_native_recurrence(value))
         }
         _ => false,
     }
+}
+
+/// `data.nativeRecurrence` on an activity card.
+///
+/// The rule is bounded and stored **verbatim**: it is evidence of what the
+/// machine was told to do, and normalizing it here would quietly drop the parts
+/// that make one untranslatable. Only the dialect is constrained, because that
+/// is what tells the panel which parser to try.
+fn valid_native_recurrence(value: &Value) -> bool {
+    value
+        .get("dialect")
+        .and_then(Value::as_str)
+        .is_some_and(|dialect| NATIVE_RECURRENCE_DIALECTS.contains(&dialect))
+        && value
+            .get("rule")
+            .and_then(Value::as_str)
+            .is_some_and(|rule| !rule.is_empty() && rule.chars().count() <= 2_000)
+        && optional_bounded_string(value, "timezone", 64)
 }
 
 /// `data.agent` on a terminal node — plan §5.1.

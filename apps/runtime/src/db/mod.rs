@@ -48,6 +48,10 @@ pub const NODE_TYPES: &[&str] = &[
 pub const AUTOMATION_SCHEDULE_KINDS: &[&str] = &["once", "interval", "cron", "loop"];
 /// Where an `agentActivity` card's observations come from.
 pub const AGENT_ACTIVITY_SOURCES: &[&str] = &["loop", "subagent"];
+/// Which scheduler wrote a native card's repeat rule. The rule itself is kept
+/// verbatim and never parsed here: it is evidence of what the machine was told
+/// to do, and the panel is the only thing that tries to translate it.
+pub const NATIVE_RECURRENCE_DIALECTS: &[&str] = &["cron", "launchd"];
 
 pub const EDGE_KINDS: &[&str] = &["link"];
 pub const AGENT_STATES: &[&str] = &["working", "waiting", "blocked", "done"];
