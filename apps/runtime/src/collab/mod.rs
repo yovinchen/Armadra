@@ -5,8 +5,13 @@
 //!
 //!   * [`context_link`] — an agent reads a node it is linked to;
 //!   * [`control`] — an agent opens, renames, colours or links nodes;
-//!   * [`messaging`] — an agent writes a framed message into another node's PTY;
+//!   * [`mailbox`] — an agent posts to a peer's inbox and reads its own;
 //!   * [`approvals`] — the permission round trip closed by an answer file.
+//!
+//! Nothing here writes prose into another agent's terminal on that agent's
+//! behalf. Collaboration is a pull: the sender stores a message, the receiver
+//! reads it when it chooses to. The one write that remains is `interrupt`, and
+//! it carries no text — it is the Escape key and nothing else.
 //!
 //! Everything here is defensive by construction. The caller is a CLI acting on
 //! text it read somewhere, so every verb re-derives what the caller is allowed
@@ -18,10 +23,8 @@ pub mod approvals;
 pub mod board_log;
 pub mod context_link;
 pub mod control;
-pub mod delivery_queue;
 mod hook_write;
 pub mod mailbox;
-pub mod messaging;
 pub mod skills;
 pub mod transcript;
 
@@ -38,7 +41,6 @@ use axum::{
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use sqlx::{Row, SqlitePool};
@@ -85,6 +87,40 @@ pub fn expected_processes(agent_id: &str) -> Vec<String> {
             _ => Vec::new(),
         },
     }
+}
+
+/// The pane gate: is the foreground of this PTY still the agent we think it is?
+///
+/// Nothing writes prose into somebody else's terminal any more, but two callers
+/// still need the answer: the automation scheduler, before it starts a prompt
+/// the user scheduled, and `interrupt`, before it sends an Escape.
+pub fn pane_runs_agent(
+    info: &crate::terminal::backend::ForegroundInfo,
+    expected: &[String],
+) -> bool {
+    if expected.is_empty() {
+        return false;
+    }
+    let mut haystacks: Vec<&str> = Vec::new();
+    if let Some(command) = info.command.as_deref() {
+        haystacks.push(command);
+    }
+    for child in &info.children {
+        haystacks.push(child);
+    }
+    haystacks
+        .iter()
+        .any(|line| expected.iter().any(|name| line_names_program(line, name)))
+}
+
+/// `claude` matches `claude`, `/opt/bin/claude --resume` and
+/// `node /usr/lib/claude/cli.js`, but not `claude-code-notifier`.
+fn line_names_program(line: &str, name: &str) -> bool {
+    line.split(|c: char| c.is_whitespace() || c == '/' || c == '\\')
+        .any(|token| {
+            let token = token.trim_end_matches(".exe");
+            token == name || token.strip_suffix(".js").is_some_and(|stem| stem == name)
+        })
 }
 
 /* ------------------------------ request shape ----------------------------- */
@@ -412,20 +448,14 @@ pub async fn resolve_caller(
 
 /* ----------------------------- collaboration state ------------------------ */
 
-/// Per-runtime, in-memory state the plan does not persist: flow-control
-/// windows, the delivery queue, and the board-log fallback ring.
+/// Per-runtime, in-memory state the plan does not persist: the board-log
+/// fallback ring, and the verbs waiting on a human verdict.
 ///
 /// Keyed by data directory rather than stored in `AppState`, so the routes can
 /// be added without reshaping a struct three other agents also touch. One
 /// process serves one data directory; a test fixture gets its own.
 pub struct CollabState {
     pub data_dir: PathBuf,
-    /// `(source, target)` → when that pair last delivered.
-    pub flow: Mutex<HashMap<(String, String), DateTime<Utc>>>,
-    /// sender → the targets it has written to since its last `newTurn`.
-    pub turns: Mutex<HashMap<String, Vec<String>>>,
-    /// target → messages waiting for it to go idle.
-    pub queue: Mutex<HashMap<String, VecDeque<delivery_queue::Queued>>>,
     /// Board-log entries for workspaces whose root we cannot write.
     pub ring: Mutex<VecDeque<Value>>,
     /// Set once the orphan sweep task is running.
@@ -438,9 +468,6 @@ impl CollabState {
     pub(crate) fn new(data_dir: PathBuf) -> Self {
         Self {
             data_dir,
-            flow: Mutex::new(HashMap::new()),
-            turns: Mutex::new(HashMap::new()),
-            queue: Mutex::new(HashMap::new()),
             ring: Mutex::new(VecDeque::new()),
             sweeping: Mutex::new(false),
             confirms: Mutex::new(HashMap::new()),
@@ -465,17 +492,6 @@ pub fn collab(state: &AppState) -> Arc<CollabState> {
         .entry(key.clone())
         .or_insert_with(|| Arc::new(CollabState::new(key)))
         .clone()
-}
-
-/// Called from the hook ingest path when a node opens a new turn: the
-/// per-turn fan-out budget (plan §5.7 rule 4) starts over.
-pub fn note_new_turn(state: &AppState, node_id: &str) {
-    let collab = collab(state);
-    let mut turns = collab
-        .turns
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    turns.remove(node_id);
 }
 
 /* --------------------------------- helpers -------------------------------- */

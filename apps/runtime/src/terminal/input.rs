@@ -295,9 +295,9 @@ impl TerminalManager {
             return (GuardedPasteOutcome::NotWritten("targetChanged"), None);
         };
         let foreground = self.backend(record.kind).foreground(&record.key).await;
-        if !foreground.is_ok_and(|foreground| {
-            crate::collab::messaging::pane_runs_agent(&foreground, expected_programs)
-        }) {
+        if !foreground
+            .is_ok_and(|foreground| crate::collab::pane_runs_agent(&foreground, expected_programs))
+        {
             return (GuardedPasteOutcome::NotWritten("targetNotAgentPane"), None);
         }
         let frame = format!(

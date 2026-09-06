@@ -14,7 +14,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/ui/select";
-import { Switch } from "@/ui/switch";
 
 /** 「跟随全局」在 Select 里需要一个值——空串会被 Radix 当成未选中。 */
 const INHERIT = "__inherit__";
@@ -22,7 +21,7 @@ const INHERIT = "__inherit__";
 /**
  * 设置 → 工作区（§24.1）：**当前**这块工作空间的开关。
  *
- * Agent 互发消息与默认 Agent 覆盖都存在 Runtime 的 `workspaces.<id>` 段里。
+ * 默认 Agent 覆盖存在 Runtime 的 `workspaces.<id>` 段里。
  */
 export function WorkspacePage() {
   const t = useT();
@@ -35,7 +34,6 @@ export function WorkspacePage() {
   const section = workspaceId
     ? settings.data?.workspaces?.[workspaceId]
     : undefined;
-  const agentMessaging = section?.agentMessaging === true;
   const defaultAgent = section?.defaultAgent ?? INHERIT;
 
   if (!workspaceId) {
@@ -50,19 +48,6 @@ export function WorkspacePage() {
     <>
       <WorkspaceExecution />
       <SettingsGroup>
-        <SettingsRow label={t("settings.agentMessaging")}>
-          <Switch
-            checked={agentMessaging}
-            disabled={!settings.data}
-            aria-label={t("settings.agentMessaging")}
-            onCheckedChange={(next) =>
-              save.mutate({
-                workspaces: { [workspaceId]: { agentMessaging: next } },
-              })
-            }
-          />
-        </SettingsRow>
-
         <SettingsRow label={t("settings.workspaceDefaultAgent")}>
           <Select
             value={defaultAgent}

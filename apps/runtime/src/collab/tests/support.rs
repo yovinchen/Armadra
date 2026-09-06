@@ -399,15 +399,6 @@ impl Fixture {
         .unwrap();
     }
 
-    pub(super) fn enable_messaging(&self) {
-        self.state
-            .settings
-            .patch(&json!({
-                "workspaces": { self.workspace_id.clone(): { "agentMessaging": true } }
-            }))
-            .unwrap();
-    }
-
     pub(super) async fn link_caller_to(&self, target: &str, title: &str, kind: &str) {
         db::put_context_links(
             &self.state.pool,

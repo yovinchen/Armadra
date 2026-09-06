@@ -21,7 +21,7 @@ use crate::{
 
 use super::{
     Args, Caller, NODE_PALETTE, PLACEMENT_GAP, Refusal, Refused, addressing, collapse_newlines,
-    default_size, mailbox, messaging,
+    default_size, mailbox,
 };
 
 mod board;
@@ -50,9 +50,6 @@ pub const VERBS: &[&str] = &[
     "link",
     "rename",
     "color",
-    "send",
-    "reply",
-    "notify",
     "close",
 ];
 
@@ -65,9 +62,9 @@ pub struct Outcome {
     pub message: String,
     pub result: Option<Value>,
     pub warning: Option<String>,
-    /// A verb whose own reply shape *is* the answer (messaging's discriminated
-    /// union). Rendered as the whole body rather than nested under `result`,
-    /// so the agent reads `outcome` and `retryable` without unwrapping.
+    /// A verb whose own reply shape *is* the answer (the mailbox protocol, a
+    /// handoff bundle). Rendered as the whole body rather than nested under
+    /// `result`, so the agent reads `protocol` and `id` without unwrapping.
     pub raw: Option<Value>,
 }
 
@@ -173,13 +170,6 @@ pub async fn run(
         "link" => link(state, caller, args).await.map_err(Refused::from),
         "rename" => rename(state, caller, args).await.map_err(Refused::from),
         "color" => color(state, caller, args).await.map_err(Refused::from),
-        "send" | "reply" | "notify" => {
-            // A refused delivery is an answer, not an error: the agent needs
-            // `outcome` and `retryable` to decide what to do next, and a 4xx
-            // would reduce both to one stderr line.
-            let report = messaging::run(state, caller, verb, args).await?;
-            Ok(Outcome::raw(report.to_json(), report.message.clone()))
-        }
         "close" => close(state, caller, args).await.map_err(Refused::from),
         _ => unreachable!("verb was checked above"),
     }

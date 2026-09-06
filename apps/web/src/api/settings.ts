@@ -53,15 +53,11 @@ export const runtimeSettingsSchema = z.looseObject({
       detachedGraceMinutes: 1440,
       dormantAfterSeconds: 120,
     }),
-  /**
-   * 每个工作空间一段（`workspaces.<id>`）。`agentMessaging` 默认关：
-   * Runtime 的 `collab/messaging.rs` 在门链第三步读的就是这个键（§5.7）。
-   */
+  /** 每个工作空间一段（`workspaces.<id>`）。 */
   workspaces: z
     .record(
       z.string(),
       z.looseObject({
-        agentMessaging: z.boolean().optional(),
         /** 这块工作空间里新建 Agent 节点时的默认 CLI（§24.1 工作区页）。 */
         defaultAgent: z.string().optional(),
       }),
@@ -164,10 +160,7 @@ export type RuntimeSettings = z.infer<typeof runtimeSettingsSchema>;
 /** PATCH 是按段浅合并，因此每段都可以只给一部分键。 */
 export interface RuntimeSettingsPatch {
   terminal?: Partial<RuntimeSettings["terminal"]>;
-  workspaces?: Record<
-    string,
-    { agentMessaging?: boolean; defaultAgent?: string | null }
-  >;
+  workspaces?: Record<string, { defaultAgent?: string | null }>;
   /** 数组是整段替换（Runtime 的 merge 只对对象递归），删主机就是发新数组。 */
   ssh?: { hosts: SshHost[] };
   agents?: { custom: CustomAgent[] };

@@ -31,9 +31,6 @@ const zh = {
   "confirm.allow": "允许",
   "confirm.deny": "拒绝",
   "confirm.expired": "这个请求已经失效。",
-
-  /* 设置 → 工作区 */
-  "settings.agentMessaging": "允许 Agent 互发消息",
 } as const;
 
 const en: Record<keyof typeof zh, string> = {
@@ -54,8 +51,6 @@ const en: Record<keyof typeof zh, string> = {
   "confirm.allow": "Allow",
   "confirm.deny": "Deny",
   "confirm.expired": "This request has expired.",
-
-  "settings.agentMessaging": "Let agents message each other",
 };
 
 export const collab: MessageModule = { "zh-CN": zh, en };

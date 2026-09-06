@@ -322,20 +322,10 @@ pub async fn apply(
         },
     );
 
-    // Plan §5.7. A new turn resets the sender's per-turn fan-out budget, and a
-    // node that just went idle drains whatever was queued for it — on its own
-    // task, because the hook client is waiting on this response with a 1.5s
-    // deadline and a flush can take seconds.
-    if event.new_turn == Some(true) {
-        crate::collab::note_new_turn(state, &event.node_id);
-    }
-    if next.state.as_deref() == Some("done") {
-        let state = state.clone();
-        let node_id = event.node_id.clone();
-        tokio::spawn(async move {
-            crate::collab::messaging::flush_for(&state, &node_id).await;
-        });
-    }
+    // A node reaching `done` used to drain a queue of messages waiting to be
+    // typed into it. Nothing is queued for a terminal any more: a peer's
+    // message sits in `agent_mailbox` until that agent reads its own inbox, so
+    // going idle is no longer an event anything acts on.
     Ok(Some(status))
 }
 

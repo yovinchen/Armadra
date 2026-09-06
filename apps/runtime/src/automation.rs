@@ -541,7 +541,7 @@ pub async fn target(state: &AppState, request: TargetRequest) -> AppResult<Targe
     let expected =
         collab::expected_processes(&state.settings.base_agent(&request.expected.agent_id));
     let foreground = state.terminals.foreground(&session_id).await;
-    if !foreground.is_ok_and(|info| collab::messaging::pane_runs_agent(&info, &expected)) {
+    if !foreground.is_ok_and(|info| collab::pane_runs_agent(&info, &expected)) {
         return Ok(TargetStatus::on(
             "busy",
             "TARGET_NOT_AGENT_PANE",

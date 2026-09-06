@@ -1,5 +1,14 @@
 //! The `agent_deliveries` table: messages handed to a node and the log the
 //! sender reads back.
+//!
+//! **Deprecated as a collaboration record.** `canvas send / reply / notify` —
+//! the verbs that typed a peer's message into a terminal — are gone, and the
+//! collaboration layer no longer inserts here: a peer's message lives in
+//! `agent_mailbox` until its recipient reads it. Published migrations are not
+//! rewritten, so the table and this module stay: the ownership domain still
+//! imports and exports the rows a Host wrote, `GET /api/workspaces/{id}/
+//! deliveries` still reads the history back, and old rows keep meaning what
+//! they meant. Nothing new is written by the Runtime itself.
 
 use chrono::Utc;
 use sqlx::{Row, SqlitePool};
