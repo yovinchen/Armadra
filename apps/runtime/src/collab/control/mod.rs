@@ -27,11 +27,13 @@ use super::{
 mod board;
 mod close;
 mod edits;
+mod interrupt;
 mod nodes;
 
 use self::board::*;
 use self::close::*;
 use self::edits::*;
+use self::interrupt::*;
 use self::nodes::*;
 
 pub use self::board::launch_command;
@@ -50,6 +52,7 @@ pub const VERBS: &[&str] = &[
     "link",
     "rename",
     "color",
+    "interrupt",
     "close",
 ];
 
@@ -170,6 +173,7 @@ pub async fn run(
         "link" => link(state, caller, args).await.map_err(Refused::from),
         "rename" => rename(state, caller, args).await.map_err(Refused::from),
         "color" => color(state, caller, args).await.map_err(Refused::from),
+        "interrupt" => interrupt(state, caller, args).await,
         "close" => close(state, caller, args).await.map_err(Refused::from),
         _ => unreachable!("verb was checked above"),
     }

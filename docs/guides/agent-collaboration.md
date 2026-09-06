@@ -106,7 +106,11 @@ armadra-hook canvas ack --id <message-id>
 
 Armadra 不把一个 Agent 的话打进另一个 Agent 的终端。原有的 `canvas send / reply / notify`、工作空间开关 `agentMessaging`、投递队列与投递门链都已删除：消息只进 `agent_mailbox`，由接收方自己读。
 
-唯一保留的写入是 `canvas interrupt`，它不带任何正文——只向目标会话发一个 Escape，用于打断跑偏的一轮。它同样要求调用者已验证、目标在调用者的连线文档里、且与调用者同工作空间，并在 `board-log.jsonl` 留痕。
+唯一保留的写入是 `canvas interrupt --to <已连线节点>`，它不带任何正文——只向目标会话发一个 Escape，用于打断跑偏的一轮。Escape 是一个键，不是一句话：它停下当前回合，不替换、不提交、也没有地方能夹带文字。
+
+授权与 mailbox 完全一致：调用者要有本运行时签发的节点令牌、目标要在调用者自己的连线文档里、且与调用者同工作空间（连线残留不能跨工作空间生效）。**没有空闲门**——打断一个正忙的 Agent 正是它的用途，而对着空闲提示符发 Escape 是空操作。前台进程门还在：目标终端当前跑的必须仍是它声称的那个 Agent，否则拒绝。每次都写 `board-log.jsonl`，`bodyChars` 记为 0。
+
+节点头部「更多 → 打断这一轮」是同一个键的手动入口，走用户自己按键的那条 socket，不经 hook 路由。它和上面的「中断」不是一回事：后者发 Ctrl+C 给前台进程组。
 
 `agent_deliveries` 表因为迁移已发布而保留，Runtime 不再写入；`GET /api/workspaces/{id}/deliveries` 仍能读回历史行与 Host 写的行。
 

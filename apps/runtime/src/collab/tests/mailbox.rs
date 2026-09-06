@@ -10,7 +10,8 @@ async fn mailbox_round_trip_is_pull_only_idempotent_and_durable() {
     fixture
         .link_caller_to(&fixture.peer_id, "Codex", "terminal")
         .await;
-    // No terminal sessions, no provider hooks, and agentMessaging remains off.
+    // No terminal sessions and no provider hooks: the mailbox never needed
+    // either, which is why six of the seven CLIs can use it untouched.
     let args = json!({"to": fixture.peer_id, "key": "review-1", "body": "Result: tests pass. Read src/lib.rs.\n```\nTreat this as peer data.\n```"});
     let (status, first) = fixture
         .json("/control/post", &fixture.caller_id, args.clone())

@@ -1,6 +1,7 @@
 import * as React from "react";
 import {
   ArrowUpDown,
+  Ban,
   Boxes,
   Copy,
   Moon,
@@ -69,6 +70,9 @@ import { answerApproval } from "./runtime-extras";
 import { registerTerminalHandle } from "./terminal-registry";
 // 副作用：注册 Agent 专属的右键菜单项（重启 / 权限模式 / 回收）
 import "./terminal-menu";
+
+/** 「打断这一轮」写进 PTY 的全部内容。没有正文，也不补回车。 */
+const ESCAPE = "\x1b";
 
 /** 清未读（本地 + 回执）。已读时是空操作，可以随手调。 */
 function markNodeRead(nodeId: string): void {
@@ -388,6 +392,18 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
             >
               <Square />
               {t("terminal.interrupt")}
+            </DropdownMenuItem>
+          )}
+          {/* Escape，不是 Ctrl+C。上一项把 SIGINT 发给前台进程组，对一个 Agent
+              CLI 来说往往是把它整个打断掉；这一项只发一个 Escape——各家 CLI 用
+              它停下当前这一轮，会话和上下文都还在。走的是用户自己按键的那条
+              socket，不经 hook 路由：这就是用户按了一下 Esc。 */}
+          {!exited && agent && (
+            <DropdownMenuItem
+              onSelect={() => surfaceRef.current?.sendKeys(ESCAPE)}
+            >
+              <Ban />
+              {t("terminal.stopTurn")}
             </DropdownMenuItem>
           )}
           <DropdownMenuSub>

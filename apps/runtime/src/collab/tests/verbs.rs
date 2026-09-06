@@ -494,6 +494,181 @@ async fn a_refused_close_leaves_the_board_alone() {
     assert_eq!(document.nodes.len(), 3);
 }
 
+/* -------------------------------- interrupt ------------------------------- */
+
+/// The only write left into somebody else's terminal, and the gates that keep
+/// it from becoming the delivery primitive it replaced.
+#[tokio::test]
+async fn interrupt_needs_a_link_and_writes_nothing_but_escape() {
+    let fixture = fixture("collab-interrupt").await;
+
+    // 1 — the peer exists on the board, but nobody drew an edge to it. Not
+    // being linked is a permission answer, not "no such node": saying the
+    // latter would let an agent probe the board by name.
+    let (status, body) = fixture
+        .json(
+            "/control/interrupt",
+            &fixture.caller_id,
+            json!({ "to": &fixture.peer_id }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert!(body["error"].as_str().unwrap().contains("连"), "{body}");
+
+    // 2 — a name nobody is linked to, once a link to somebody else exists.
+    fixture
+        .link_caller_to(&fixture.peer_id, "Codex 审阅", "terminal")
+        .await;
+    let (status, body) = fixture
+        .json(
+            "/control/interrupt",
+            &fixture.caller_id,
+            json!({ "to": "某个不存在的节点" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+
+    // 3 — a linked peer with no running session. The link is fine; there is
+    // simply nothing to interrupt.
+    let (status, body) = fixture
+        .json(
+            "/control/interrupt",
+            &fixture.caller_id,
+            json!({ "to": "Codex 审阅" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert!(body["error"].as_str().unwrap().contains("终端会话"));
+
+    // 4 — nobody may interrupt themselves. A node is never in its own link
+    // document, so this is refused before the self-check even runs; the check
+    // stays in the verb because a future link shape must not make it reachable.
+    let (status, body) = fixture
+        .json(
+            "/control/interrupt",
+            &fixture.caller_id,
+            json!({ "to": &fixture.caller_id }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["code"], "target_not_linked");
+
+    // 5 — a live terminal the caller is linked to. A plain terminal node has
+    // no agent to check the foreground against, so this is the write itself.
+    let shell_id = add_board_node(
+        &fixture,
+        "terminal",
+        "构建",
+        json!({ "kind": "terminal", "cwd": "." }),
+    )
+    .await;
+    link_caller(&fixture, &shell_id, "构建", "terminal").await;
+    let session = fixture
+        .state
+        .terminals
+        .spawn(crate::terminal::SpawnRequest {
+            workspace_id: fixture.workspace_id.clone(),
+            cwd: fixture.directory.path().to_string_lossy().into_owned(),
+            shell: None,
+            command: Some("/bin/sh".into()),
+            args: vec!["-c".into(), "sleep 30".into()],
+            kind: "terminal".into(),
+            owner_node_id: Some(shell_id.clone()),
+            agent_id: None,
+            env: vec![],
+        })
+        .await
+        .unwrap();
+
+    // A dry run says what would happen and writes nothing.
+    let (status, body) = fixture
+        .json(
+            "/control/interrupt",
+            &fixture.caller_id,
+            json!({ "to": "构建", "dry-run": true }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["result"]["dryRun"], true);
+
+    let (status, body) = fixture
+        .json(
+            "/control/interrupt",
+            &fixture.caller_id,
+            json!({ "to": "构建" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["result"]["id"], shell_id);
+
+    // Traced like any other reach into a peer's node, and traced as carrying
+    // nothing: a body of zero characters is the claim worth recording.
+    let log =
+        std::fs::read_to_string(fixture.directory.path().join(".armadra/board-log.jsonl")).unwrap();
+    let entry: Value = serde_json::from_str(log.lines().last().unwrap()).unwrap();
+    assert_eq!(entry["outcome"], "interrupted");
+    assert_eq!(entry["receipt"], "escape");
+    assert_eq!(entry["bodyChars"], 0);
+    assert_eq!(entry["source"], fixture.caller_id);
+    assert_eq!(entry["target"], shell_id);
+
+    let _ = fixture
+        .state
+        .terminals
+        .terminate(&session.id, crate::terminal::TerminateMode::Session)
+        .await;
+}
+
+/// A link that outlived a workspace move does not carry the interrupt with it.
+#[tokio::test]
+async fn interrupt_refuses_a_target_in_another_workspace() {
+    let fixture = fixture("collab-interrupt-scope").await;
+    fixture
+        .link_caller_to(&fixture.peer_id, "Codex 审阅", "terminal")
+        .await;
+
+    // The peer moves to a board in another workspace while the caller's link
+    // document still names it. The link document is not the authority on where
+    // a node lives — the node's own board is, and that is what is re-read.
+    // Its own root: a workspace is identified by where it points, so reusing
+    // the fixture's path would hand back the fixture's own workspace.
+    let root = fixture.directory.path().join("elsewhere");
+    std::fs::create_dir_all(&root).unwrap();
+    let other = db::create_workspace(
+        &fixture.state.pool,
+        "elsewhere",
+        root.to_str().unwrap(),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    assert_ne!(other.id, fixture.workspace_id);
+    let elsewhere = db::list_boards(&fixture.state.pool, &other.id)
+        .await
+        .unwrap()
+        .remove(0);
+    sqlx::query("UPDATE nodes SET board_id=? WHERE id=?")
+        .bind(&elsewhere.id)
+        .bind(&fixture.peer_id)
+        .execute(&fixture.state.pool)
+        .await
+        .unwrap();
+
+    let (status, body) = fixture
+        .json(
+            "/control/interrupt",
+            &fixture.caller_id,
+            json!({ "to": "Codex 审阅" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert!(
+        body["error"].as_str().unwrap().contains("工作空间"),
+        "{body}"
+    );
+}
+
 #[test]
 fn the_palette_and_the_default_sizes_match_the_plan() {
     assert_eq!(NODE_PALETTE.len(), 7);

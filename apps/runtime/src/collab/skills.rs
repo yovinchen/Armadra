@@ -20,7 +20,7 @@ pub const END_MARKER: &str = "<!-- armadra:skills:end -->";
 
 /// Bumped when the wording changes; written into the file so a stale install is
 /// visible in a diff and readable by the settings page.
-pub const SKILLS_REVISION: u32 = 5;
+pub const SKILLS_REVISION: u32 = 6;
 
 /// The directory name we own under a CLI's skills root.
 pub const SKILL_NAME: &str = "armadra";
@@ -300,7 +300,7 @@ armadra-hook canvas open-agent --agent codex --after <id> --after <id>   # 等�
 armadra-hook canvas sticky --title \"结论\" --content \"...\"   # 便签\n\
 armadra-hook canvas link --from <id> --to <id>             # 建立上下文链接（双向可读）\n\
 armadra-hook canvas rename --node <id> --title \"新标题\"\n\
-armadra-hook canvas interrupt --node <id>                  # 打断目标节点当前输入（发送 Escape）\n\
+armadra-hook canvas interrupt --to <已连线节点>             # 打断对方当前这一轮（只发一个 Escape，不带正文）\n\
 ```\n\n\
 - `open-terminal` / `open-agent` / `sticky` / `link` 支持 `--dry-run`，只回报会发生什么，不改画布。\n\
 - 新节点会放在你右边。`--after` 让新 Agent 等依赖节点跑完再启动。\n\

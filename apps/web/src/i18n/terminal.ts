@@ -5,6 +5,7 @@ const zh = {
   "terminal.label": "终端",
   "terminal.input": "终端输入",
   "terminal.interrupt": "中断",
+  "terminal.stopTurn": "打断这一轮",
   "terminal.more": "更多",
   "terminal.collaboration": "Agent 协作",
   "terminal.collaborationHint":
@@ -59,6 +60,7 @@ const en: Record<keyof typeof zh, string> = {
   "terminal.label": "Terminal",
   "terminal.input": "Terminal input",
   "terminal.interrupt": "Interrupt",
+  "terminal.stopTurn": "Stop this turn",
   "terminal.more": "More",
   "terminal.collaboration": "Agent collaboration",
   "terminal.collaborationHint":
