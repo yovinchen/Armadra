@@ -17,6 +17,8 @@ const fetchDataInfo = vi.fn();
 const patchSettings = vi.fn();
 const installAgentHooks = vi.fn();
 const uninstallAgentHooks = vi.fn();
+const installAgentSkills = vi.fn();
+const uninstallAgentSkills = vi.fn();
 const testSshHost = vi.fn();
 
 vi.mock("../api/client", () => ({
@@ -33,6 +35,8 @@ vi.mock("../api/client", () => ({
     updateSettings: (patch: unknown) => patchSettings(patch),
     installAgentHooks: (id: string) => installAgentHooks(id),
     uninstallAgentHooks: (id: string) => uninstallAgentHooks(id),
+    installAgentSkills: (id: string) => installAgentSkills(id),
+    uninstallAgentSkills: (id: string) => uninstallAgentSkills(id),
     testSshHost: (id: string) => testSshHost(id),
     /** 设置页经归属网关路由：探不到归属，整个域就是只读的。 */
     ownershipDomains: () => Promise.resolve(settledDomains()),
@@ -108,6 +112,14 @@ function page() {
   return screen.getByTestId("settings-page");
 }
 
+/** 一张设置卡片：小标题旁边那个 `settings-group` 容器。 */
+function settingsGroup(title: string | HTMLElement) {
+  const heading = typeof title === "string" ? screen.getByText(title) : title;
+  const group = heading.parentElement?.querySelector(".settings-group");
+  if (!group) throw new Error("no settings group for the given title");
+  return group as HTMLElement;
+}
+
 function open() {
   return render(
     <TestProviders>
@@ -137,6 +149,13 @@ describe("SettingsDialog", () => {
       );
     installAgentHooks.mockReset();
     uninstallAgentHooks.mockReset();
+    installAgentSkills.mockReset().mockResolvedValue({
+      agentId: "claude",
+      installed: true,
+      revision: 5,
+      paths: ["/home/u/.claude/skills/armadra/SKILL.md"],
+    });
+    uninstallAgentSkills.mockReset();
     testSshHost.mockReset();
     usePreferencesStore.setState({
       lastSettingsSection: null,
@@ -301,18 +320,47 @@ describe("SettingsDialog", () => {
       ),
     ).toBeTruthy();
 
+    // 技能与 Hook 是两张卡片，按钮字面一样，所以按卡片定位。
+    const hooks = settingsGroup(zh("settings.hooks"));
     fireEvent.click(
-      screen.getByRole("button", { name: zh("settings.hooks.reinstall") }),
+      within(hooks).getByRole("button", {
+        name: zh("settings.hooks.reinstall"),
+      }),
     );
     await waitFor(() =>
       expect(installAgentHooks).toHaveBeenCalledWith("claude"),
     );
     fireEvent.click(
-      screen.getByRole("button", { name: zh("settings.hooks.uninstall") }),
+      within(hooks).getByRole("button", {
+        name: zh("settings.hooks.uninstall"),
+      }),
     );
     await waitFor(() =>
       expect(uninstallAgentHooks).toHaveBeenCalledWith("claude"),
     );
+  });
+
+  it("协作技能是独立的一组，装它不碰 Hook", async () => {
+    open();
+    fireEvent.click(navItem(zh("settings.section.hooks")));
+    // 等 agents 落地：Hook 那一行的 rev 一出现，两组都已经渲染完。
+    await screen.findByText(
+      zh("settings.hooks.revision").replace("{value}", "3"),
+    );
+    const skills = settingsGroup(zh("settings.skills"));
+    // 没有 skillsRevision = 没装，按钮是「安装」。
+    expect(
+      within(skills).getByText(zh("settings.skills.missing")),
+    ).toBeTruthy();
+    fireEvent.click(
+      within(skills).getByRole("button", {
+        name: zh("settings.skills.install"),
+      }),
+    );
+    await waitFor(() =>
+      expect(installAgentSkills).toHaveBeenCalledWith("claude"),
+    );
+    expect(installAgentHooks).not.toHaveBeenCalled();
   });
 
   it("数据页读 info 并按选项 PATCH 日志保留天数", async () => {

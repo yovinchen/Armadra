@@ -107,7 +107,6 @@ export const modals: MessageModule = {
     "settings.hooks.installed": "已安装",
     "settings.hooks.revision": "已安装 rev {value}", // i18n-exempt
     "settings.hooks.missing": "未安装",
-    "settings.hooks.pullOnly": "按需协作，无 Hook 适配",
     // 协作通道 §3.1 通道 B：Pi / Oh My Pi 的状态来源是 CLI 进程内的 TS
     // 扩展，不是配置文件里的 hooks 键。两者认证相同，装的东西不同。
     "settings.hooks.extension": "进程内扩展",
@@ -119,9 +118,19 @@ export const modals: MessageModule = {
     "settings.hooks.done": "Hook 已安装", // i18n-exempt
     "settings.hooks.removed": "Hook 已卸载", // i18n-exempt
     "settings.hooks.failed": "Hook 操作失败", // i18n-exempt
-    "settings.hooks.replyApprovals": "Hook 直答", // i18n-exempt
-    "settings.hooks.replyApprovals.note": "权限请求由 Runtime 直接回复。", // i18n-exempt
     "settings.agent.missing": "未检测到 CLI", // i18n-exempt
+
+    // 协作技能与状态 Hook 是两件互不依赖的事，所以是两组文案。
+    "settings.skills": "协作技能",
+    "settings.skills.revision": "已安装 rev {value}", // i18n-exempt
+    "settings.skills.missing": "未安装",
+    "settings.skills.install": "安装",
+    "settings.skills.reinstall": "重装",
+    "settings.skills.uninstall": "卸载",
+    "settings.skills.done": "协作技能已安装",
+    "settings.skills.removed": "协作技能已卸载",
+    "settings.skills.failed": "协作技能操作失败",
+    "settings.skills.unchanged": "内容已是最新，文件未改动。",
 
     "settings.whiteboard.background": "背景",
     "settings.whiteboard.background.theme": "跟随主题",
@@ -365,7 +374,6 @@ export const modals: MessageModule = {
     "settings.hooks.installed": "Installed",
     "settings.hooks.revision": "Installed rev {value}",
     "settings.hooks.missing": "Not installed",
-    "settings.hooks.pullOnly": "Pull collaboration; no hook adapter",
     "settings.hooks.extension": "In-process extension",
     "settings.permissionUnsupported":
       "This CLI does not support the default permission mode. Choose its default mode in Settings first.",
@@ -375,10 +383,18 @@ export const modals: MessageModule = {
     "settings.hooks.done": "Hooks installed",
     "settings.hooks.removed": "Hooks removed",
     "settings.hooks.failed": "Hook action failed",
-    "settings.hooks.replyApprovals": "Answer approvals in hooks",
-    "settings.hooks.replyApprovals.note":
-      "The runtime answers permission prompts directly.",
     "settings.agent.missing": "CLI not found",
+
+    "settings.skills": "Collaboration skill",
+    "settings.skills.revision": "Installed rev {value}",
+    "settings.skills.missing": "Not installed",
+    "settings.skills.install": "Install",
+    "settings.skills.reinstall": "Reinstall",
+    "settings.skills.uninstall": "Uninstall",
+    "settings.skills.done": "Collaboration skill installed",
+    "settings.skills.removed": "Collaboration skill removed",
+    "settings.skills.failed": "Skill action failed",
+    "settings.skills.unchanged": "Already current; the file was not touched.",
 
     "settings.whiteboard.background": "Background",
     "settings.whiteboard.background.theme": "Follow theme",
