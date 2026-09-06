@@ -296,7 +296,7 @@ async fn byte_chunks_preserve_unicode_and_require_a_stable_content_version() {
 async fn framed_handshake_flushes_and_clean_eof_terminates() {
     let (mut client, server) = tokio::io::duplex(4096);
     let (reader, writer) = tokio::io::split(server);
-    let task = tokio::spawn(serve(reader, writer, None));
+    let task = tokio::spawn(serve(reader, writer, None, None));
     let hello = request(
         "",
         worker_request::Action::Hello(WorkerHelloRequest {
@@ -330,7 +330,11 @@ async fn malformed_truncated_and_oversized_frames_fail_closed() {
         vec![0, 0, 0, 1, 255],
     ] {
         let mut output = vec![];
-        assert!(serve(bytes.as_slice(), &mut output, None).await.is_err());
+        assert!(
+            serve(bytes.as_slice(), &mut output, None, None)
+                .await
+                .is_err()
+        );
         assert!(output.is_empty());
     }
 }

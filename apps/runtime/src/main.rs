@@ -42,16 +42,24 @@ async fn main() -> anyhow::Result<()> {
                 .await?;
             return Ok(());
         }
+        let settings_file = worker.settings_file;
         if let Some(path) = worker.state_dir {
             armadra_runtime::worker::serve_commands(
                 tokio::io::stdin(),
                 tokio::io::stdout(),
                 path,
                 canvas,
+                settings_file,
             )
             .await?;
         } else {
-            armadra_runtime::worker::serve(tokio::io::stdin(), tokio::io::stdout(), canvas).await?;
+            armadra_runtime::worker::serve(
+                tokio::io::stdin(),
+                tokio::io::stdout(),
+                canvas,
+                settings_file,
+            )
+            .await?;
         }
         return Ok(());
     }
@@ -328,7 +336,8 @@ const USAGE: &str = "Usage: armadra-runtime [--desktop-control-stdin] [--listen 
      \x20 armadra-runtime import-host-export --help";
 
 const WORKER_USAGE: &str = "Usage: armadra-runtime worker --stdio [--language-link] \
-     [--state-dir ABSOLUTE_PRIVATE_DIRECTORY] [--canvas-database ABSOLUTE_FILE]";
+     [--state-dir ABSOLUTE_PRIVATE_DIRECTORY] [--canvas-database ABSOLUTE_FILE] \
+     [--settings-file ABSOLUTE_FILE]";
 
 /// The Worker mode's arguments, everything after `worker`.
 ///
@@ -339,11 +348,17 @@ const WORKER_USAGE: &str = "Usage: armadra-runtime worker --stdio [--language-li
 /// `--language-link` is the second connection an execution host gets when an
 /// editor opens a language session on it (language service design §2.7). It
 /// changes the whole connection: after the handshake neither side takes turns.
+///
+/// `--settings-file` is the same arrangement for the settings domain (Go Host
+/// 业务所有权迁移 §2.4): without it the settings frame answers UNSUPPORTED
+/// rather than exporting whichever `settings.json` this process's environment
+/// happens to point at.
 #[derive(Debug, Default, PartialEq, Eq)]
 struct WorkerArguments {
     state_dir: Option<std::path::PathBuf>,
     canvas_database: Option<std::path::PathBuf>,
     language_link: bool,
+    settings_file: Option<std::path::PathBuf>,
 }
 
 impl WorkerArguments {
@@ -365,10 +380,16 @@ impl WorkerArguments {
             let slot = match argument.as_str() {
                 "--state-dir" => &mut parsed.state_dir,
                 "--canvas-database" => &mut parsed.canvas_database,
+                "--settings-file" => &mut parsed.settings_file,
                 _ => anyhow::bail!("{WORKER_USAGE}"),
             };
             anyhow::ensure!(slot.is_none(), "{WORKER_USAGE}");
-            *slot = Some(std::path::PathBuf::from(rest.next().context(WORKER_USAGE)?));
+            let path = std::path::PathBuf::from(rest.next().context(WORKER_USAGE)?);
+            // A relative path would resolve against whatever directory the
+            // controller spawned this process in, which is not a place any of
+            // these files live.
+            anyhow::ensure!(path.is_absolute(), "{WORKER_USAGE}");
+            *slot = Some(path);
         }
         // A language link holds language servers and nothing else. Opening the
         // canvas database on it would put two processes behind one handoff.
@@ -583,7 +604,7 @@ mod tests {
     }
 
     /// The two shapes the Go Host already launches must keep working, and the
-    /// canvas database stays opt-in.
+    /// canvas database and the settings file stay opt-in.
     #[test]
     fn worker_arguments_keep_the_existing_launches_and_add_the_canvas_database() {
         let parse = |arguments: &[&str]| {
@@ -614,6 +635,7 @@ mod tests {
                 state_dir: Some("/private/armadra".into()),
                 canvas_database: Some("/data/canvas.db".into()),
                 language_link: false,
+                settings_file: None,
             }
         );
         // The language link is a flag, not a flag with a value, and it may
@@ -630,6 +652,25 @@ mod tests {
                 state_dir: Some("/private/armadra".into()),
                 canvas_database: None,
                 language_link: true,
+                settings_file: None,
+            }
+        );
+        // The settings domain needs both halves: the file it reads and writes,
+        // and the database whose ownership row an import has to check.
+        assert_eq!(
+            parse(&[
+                "--stdio",
+                "--settings-file",
+                "/data/settings.json",
+                "--canvas-database",
+                "/data/canvas.db",
+            ])
+            .unwrap(),
+            WorkerArguments {
+                state_dir: None,
+                canvas_database: Some("/data/canvas.db".into()),
+                language_link: false,
+                settings_file: Some("/data/settings.json".into()),
             }
         );
         for arguments in [
@@ -646,6 +687,18 @@ mod tests {
                 "--canvas-database",
                 "/data/canvas.db",
             ],
+            vec!["--stdio", "--settings-file"],
+            vec![
+                "--stdio",
+                "--settings-file",
+                "/a/settings.json",
+                "--settings-file",
+                "/b/settings.json",
+            ],
+            // A relative path resolves against the controller's working
+            // directory, which is not where any of these files live.
+            vec!["--stdio", "--settings-file", "settings.json"],
+            vec!["--stdio", "--canvas-database", "canvas.db"],
         ] {
             assert!(
                 parse(&arguments).is_err(),

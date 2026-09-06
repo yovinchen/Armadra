@@ -8,6 +8,7 @@ pub mod agent_bridge;
 pub mod channel;
 pub mod language_link;
 pub mod outbox;
+pub mod settings;
 pub mod socket;
 
 use crate::{error::AppError, files, ownership, security};
@@ -46,6 +47,11 @@ pub struct Worker {
     /// named one, and then every ownership action answers UNSUPPORTED rather
     /// than inventing a record.
     canvas: Option<SqlitePool>,
+    /// The Runtime's `settings.json`, the file frame 25 reads and writes
+    /// (Go Host 业务所有权迁移 §2.4). Absent unless `--settings-file` named
+    /// one, and then the settings action answers UNSUPPORTED rather than
+    /// guessing at a data directory this process was not pointed at.
+    settings_file: Option<PathBuf>,
     /// The upward half of the resident channel. Present only when a durable
     /// outbox was opened, because a Worker that cannot persist a report must
     /// not advertise that it can deliver one.
@@ -69,6 +75,7 @@ impl Default for Worker {
             commands: None,
             agents: None,
             canvas: None,
+            settings_file: None,
             upcalls: None,
             bearer: (None, None),
             language: None,
@@ -184,6 +191,13 @@ impl Worker {
             canvas: Some(canvas),
             ..Self::default()
         }
+    }
+    /// The settings file frame 25 exports and imports. Absolute, because a
+    /// relative path would resolve against whatever directory the controller
+    /// happened to spawn this process in.
+    pub fn with_settings_file(mut self, file: PathBuf) -> Self {
+        self.settings_file = Some(file);
+        self
     }
     /// The instance id this Worker will report, needed before the handshake by
     /// whatever opens the outbox: the deduplication key is
@@ -352,6 +366,14 @@ impl Worker {
                             // package, and a controller that needs one must
                             // not plan a rollback against a Worker that cannot.
                             capabilities.push(REVERSE_IMPORT_CAPABILITY.into());
+                            // The settings domain needs both halves: the file
+                            // to read and write, and the ownership row an
+                            // import has to check before it writes. A Worker
+                            // that has only one of them would have to refuse
+                            // half of what this capability promises.
+                            if self.settings_file.is_some() {
+                                capabilities.push(settings::CAPABILITY.into());
+                            }
                         }
                         // Only a Worker with a durable outbox claims it can
                         // report upward. Claiming it without one would promise
@@ -438,6 +460,17 @@ impl Worker {
                     ownership::import::apply(pool, &input).await?,
                 ))
             }
+            // Both directions of the settings domain (§2.4). Without a
+            // settings file there is no document to export and nowhere to
+            // import one, and inventing a path would write over whichever
+            // Runtime's data directory this process happened to inherit.
+            Action::Settings(input) => match self.settings_file.clone() {
+                Some(file) => settings::handle(&file, self.canvas.as_ref(), input).await,
+                None => Ok(Response::Error(ErrorResponse {
+                    code: "UNSUPPORTED".into(),
+                    message: "Settings are not configured".into(),
+                })),
+            },
             Action::RegisterRoot(input) => {
                 if !id(&input.root_id) || input.path.is_empty() || input.path.len() > 32_768 {
                     return Err(invalid("Invalid root registration"));
@@ -661,11 +694,15 @@ pub async fn serve<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     mut input: R,
     mut output: W,
     canvas: Option<SqlitePool>,
+    settings_file: Option<PathBuf>,
 ) -> anyhow::Result<()> {
     let mut worker = match canvas {
         Some(pool) => Worker::with_canvas(pool),
         None => Worker::default(),
     };
+    if let Some(file) = settings_file {
+        worker = worker.with_settings_file(file);
+    }
     loop {
         let mut prefix = [0u8; 4];
         if input.read(&mut prefix[..1]).await? == 0 {
@@ -712,6 +749,7 @@ pub async fn serve_commands<R, W>(
     output: W,
     path: PathBuf,
     canvas: Option<SqlitePool>,
+    settings_file: Option<PathBuf>,
 ) -> anyhow::Result<()>
 where
     R: AsyncRead + Unpin + Send + 'static,
@@ -720,6 +758,7 @@ where
     let mut worker = Worker {
         command_path: Some(path.clone()),
         canvas,
+        settings_file,
         ..Default::default()
     };
     // The state directory's privacy is proven here, once, exactly as the

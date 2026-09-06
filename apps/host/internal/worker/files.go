@@ -144,6 +144,14 @@ func (c *Client) validResult(request *pb.WorkerRequest, response *pb.WorkerRespo
 		}
 		return true
 	}
+	// The settings snapshot is compared against the request in settings.go,
+	// which is where the direction rules live, and against the export package
+	// in settingshost, which is where the digests are decided. Here it only has
+	// to be a self-consistent snapshot: a document whose digest describes other
+	// bytes would pass every later comparison that trusted the digest.
+	if request.GetSettings() != nil {
+		return validSettingsSnapshot(response.GetSettings())
+	}
 	if input := request.GetReadFile(); input != nil {
 		chunk := response.GetFileChunk()
 		if chunk == nil || chunk.RootId != input.RootId || !relativePath(chunk.Path, false) || chunk.MimeType == "" || len(chunk.MimeType) > 256 || len(chunk.Sha256) != sha256.Size || chunk.Offset != input.Offset || chunk.TotalBytes > uint64(c.hello.MaxTextFileBytes) || chunk.Offset > chunk.TotalBytes || len(chunk.Data) > int(input.MaxBytes) || uint64(len(chunk.Data)) > chunk.TotalBytes-chunk.Offset || chunk.Eof != (chunk.Offset+uint64(len(chunk.Data)) == chunk.TotalBytes) || (!chunk.Eof && len(chunk.Data) == 0) || (len(input.ExpectedSha256) > 0 && !bytes.Equal(input.ExpectedSha256, chunk.Sha256)) {

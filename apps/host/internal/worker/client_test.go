@@ -33,18 +33,20 @@ var fixtureContent = []byte("ab中文🙂 'quoted'\nlast line 尾")
 // required by Start. The ordinary test runner never interprets this branch.
 func TestMain(m *testing.M) {
 	if len(os.Args) == 3 && os.Args[1] == "worker" && os.Args[2] == "--stdio" {
-		fixtureWorker("")
+		fixtureWorker("", "")
 		os.Exit(0)
 	}
 	// The ownership handoff mode, which the real Runtime enters with the same
-	// flag. It advertises one extra capability and answers two extra actions.
-	if len(os.Args) == 5 && os.Args[1] == "worker" && os.Args[2] == "--stdio" && os.Args[3] == "--canvas-database" {
-		fixtureWorker(os.Args[4])
+	// flags: the ownership row lives in the database, the settings document in
+	// the file beside it, and one process answers both.
+	if len(os.Args) == 7 && os.Args[1] == "worker" && os.Args[2] == "--stdio" &&
+		os.Args[3] == "--canvas-database" && os.Args[5] == "--settings-file" {
+		fixtureWorker(os.Args[4], os.Args[6])
 		os.Exit(0)
 	}
 	os.Exit(m.Run())
 }
-func fixtureWorker(canvasDatabase string) {
+func fixtureWorker(canvasDatabase, settingsFile string) {
 	mode := os.Getenv("ARMADRA_TEST_WORKER_MODE")
 	if file := os.Getenv("ARMADRA_TEST_WORKER_PID"); file != "" {
 		_ = os.WriteFile(file, []byte(strconv.Itoa(os.Getpid())), 0600)
@@ -88,6 +90,12 @@ func fixtureWorker(canvasDatabase string) {
 			h := &pb.WorkerHelloResponse{Protocol: &pb.ProtocolVersion{Major: 1, Minor: 0}, HostId: request.HostId, InstanceId: instance, Platform: platform, Architecture: "aarch64", Capabilities: []string{"worker.roots.v1", "files.directory-read.v1", "files.text-read.v1"}, MaxFrameBytes: MaxFrameBytes, MaxFileChunkBytes: MaxFileChunkBytes, MaxTextFileBytes: MaxTextFileBytes}
 			if canvasDatabase != "" && mode != "ownership-silent" {
 				h.Capabilities = append(h.Capabilities, ownershipCapability)
+			}
+			// The settings frames are advertised separately from the ownership
+			// row, so a Worker that can move an epoch but not read a settings
+			// file is a state the tests can actually produce.
+			if canvasDatabase != "" && mode != "ownership-silent" && mode != "settings-silent" {
+				h.Capabilities = append(h.Capabilities, SettingsCapability)
 			}
 			if runtime.GOARCH == "amd64" {
 				h.Architecture = "x86_64"
@@ -176,6 +184,17 @@ func fixtureWorker(canvasDatabase string) {
 						record.Domain = set.Domain
 						response.Result = &pb.WorkerResponse_WriteOwnership{WriteOwnership: record}
 					}
+				case *pb.WorkerRequest_Settings:
+					if settingsFile == "" {
+						reject("UNSUPPORTED")
+						break
+					}
+					snapshot, code := fixtureSettings(settingsFile, input.Settings, mode)
+					if code != "" {
+						reject(code)
+						break
+					}
+					response.Result = &pb.WorkerResponse_Settings{Settings: snapshot}
 				default:
 					reject("UNSUPPORTED")
 				}
@@ -728,4 +747,108 @@ func writeFixtureOwnership(path string, record *pb.WorkerWriteOwnership) {
 	if err == nil {
 		_ = os.WriteFile(path, data, 0600)
 	}
+}
+
+// The fake Runtime's settings file. It holds the document as bytes, exactly as
+// the real one does, so an import writes what it was sent and an export reports
+// what is on disk rather than what was last asked for.
+const fixtureSettingsJSON = `{"theme":"dark","ssh":{"hosts":[` +
+	`{"id":"build-box","name":"Build","host":"build.example","user":"ci","identityFile":"/keys/ci",` +
+	`"worker":{"path":"/opt/armadra/worker","stateDir":"/var/lib/armadra"}}]}}`
+
+func readFixtureSettings(path string) *pb.SettingsDocument {
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) == 0 {
+		data = []byte(fixtureSettingsJSON)
+	}
+	sum := sha256.Sum256(data)
+	return &pb.SettingsDocument{
+		Scope:           pb.SettingsScope_SETTINGS_SCOPE_GLOBAL,
+		Document:        data,
+		Sha256:          sum[:],
+		SchemaVersion:   1,
+		UpdatedAtUnixMs: 1788560523004,
+	}
+}
+
+// fixtureExecutionHosts is the Worker's own derivation of the registry: the
+// machine it runs on, then the SSH entries the document names. The Host derives
+// the same set independently, which is what makes comparing them worth doing.
+func fixtureExecutionHosts(document []byte) []*pb.ExecutionHost {
+	var envelope struct {
+		SSH struct {
+			Hosts []struct {
+				ID           string `json:"id"`
+				Name         string `json:"name"`
+				Host         string `json:"host"`
+				User         string `json:"user"`
+				Port         uint32 `json:"port"`
+				IdentityFile string `json:"identityFile"`
+				Worker       *struct {
+					Path     string `json:"path"`
+					StateDir string `json:"stateDir"`
+				} `json:"worker"`
+			} `json:"hosts"`
+		} `json:"ssh"`
+	}
+	hosts := []*pb.ExecutionHost{{Kind: pb.ExecutionHostKind_EXECUTION_HOST_KIND_LOCAL}}
+	if json.Unmarshal(document, &envelope) != nil {
+		return hosts
+	}
+	for _, entry := range envelope.SSH.Hosts {
+		ssh := &pb.SshExecutionHost{Host: entry.Host, Port: entry.Port, User: entry.User, IdentityFile: entry.IdentityFile}
+		if entry.Worker != nil {
+			ssh.WorkerPath, ssh.StateDir = entry.Worker.Path, entry.Worker.StateDir
+		}
+		hosts = append(hosts, &pb.ExecutionHost{
+			ExecutionHostId: entry.ID,
+			Name:            entry.Name,
+			Ssh:             ssh,
+			Kind:            pb.ExecutionHostKind_EXECUTION_HOST_KIND_SSH,
+		})
+	}
+	return hosts
+}
+
+func fixtureSettings(path string, request *pb.WorkerSettingsRequest, mode string) (*pb.WorkerSettingsSnapshot, string) {
+	switch request.GetDirection() {
+	case pb.WorkerSettingsDirection_WORKER_SETTINGS_DIRECTION_EXPORT:
+		document := readFixtureSettings(path)
+		snapshot := &pb.WorkerSettingsSnapshot{
+			Document:       document,
+			Local:          &pb.WorkerLocalSettings{TerminalBackend: "pty", BrowserAvailable: true},
+			ExecutionHosts: fixtureExecutionHosts(document.Document),
+		}
+		switch mode {
+		case "settings-wrong-digest":
+			snapshot.Document.Sha256 = make([]byte, 32)
+		case "settings-claims-write":
+			snapshot.Applied = true
+		}
+		return snapshot, ""
+	case pb.WorkerSettingsDirection_WORKER_SETTINGS_DIRECTION_IMPORT:
+		document := request.GetDocument()
+		if document == nil || len(document.Document) == 0 {
+			return nil, "INVALID_ARGUMENT"
+		}
+		if mode != "settings-import-drops" {
+			if err := os.WriteFile(path, document.Document, 0600); err != nil {
+				return nil, "INTERNAL"
+			}
+		}
+		// Read back from the file, never echoed from the request, so the digest
+		// the controller compares is evidence rather than a restatement.
+		stored := readFixtureSettings(path)
+		snapshot := &pb.WorkerSettingsSnapshot{
+			Document:       stored,
+			Local:          &pb.WorkerLocalSettings{TerminalBackend: "pty"},
+			ExecutionHosts: fixtureExecutionHosts(stored.Document),
+			Applied:        true,
+		}
+		if mode == "settings-silent-write" {
+			snapshot.Applied = false
+		}
+		return snapshot, ""
+	}
+	return nil, "INVALID_ARGUMENT"
 }

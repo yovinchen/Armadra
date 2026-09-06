@@ -73,6 +73,13 @@ type Options struct {
 	// the Runtime's own database, and may not run commands. The two modes are
 	// deliberately exclusive, so a scheduling Worker can never move ownership.
 	CanvasDatabase string
+	// SettingsFile is the Runtime's own settings.json, which the settings
+	// frames read and rewrite. It is only meaningful alongside CanvasDatabase,
+	// and it defaults to the file that sits beside that database — the
+	// Runtime's own layout — so an ordinary deployment names one path, not two.
+	// An operator whose database was relocated names the real file instead of
+	// silently exporting a default document nobody has ever edited.
+	SettingsFile   string
 	RequestTimeout time.Duration
 	// Upcalls opts into the resident bidirectional channel (business migration
 	// §2.9). A non-nil sink installs a reader pump after a handshake that
@@ -233,6 +240,20 @@ func Start(ctx context.Context, options Options) (*Client, error) {
 		if err != nil {
 			return nil, &Error{Code: CodeInvalid}
 		}
+		if options.SettingsFile == "" {
+			options.SettingsFile = filepath.Join(filepath.Dir(options.CanvasDatabase), "settings.json")
+		}
+		// Unlike the database, the file need not exist yet: a Runtime that has
+		// never been configured writes it on first use, and refusing here would
+		// make a fresh install unswitchable. Only the shape is checked.
+		if !filepath.IsAbs(options.SettingsFile) || strings.IndexByte(options.SettingsFile, 0) >= 0 {
+			return nil, &Error{Code: CodeInvalid}
+		}
+	} else if options.SettingsFile != "" {
+		// A settings file with no ownership database names a mode this Worker
+		// is not being started in; accepting it would suggest the settings
+		// frames are available when nothing can answer them.
+		return nil, &Error{Code: CodeInvalid}
 	}
 	c := &Client{commandMode: options.StateDir != "", ownershipMode: options.CanvasDatabase != "", hostID: options.HostID, timeout: timeout, gate: make(chan struct{}, 1), stopped: make(chan struct{}), reaped: make(chan struct{}), stderrDone: make(chan struct{})}
 	c.gate <- struct{}{}
@@ -262,7 +283,7 @@ func Start(ctx context.Context, options Options) (*Client, error) {
 		args = append(args, "--state-dir", options.StateDir)
 	}
 	if options.CanvasDatabase != "" {
-		args = append(args, "--canvas-database", options.CanvasDatabase)
+		args = append(args, "--canvas-database", options.CanvasDatabase, "--settings-file", options.SettingsFile)
 	}
 	c.cmd = exec.Command(executable, args...)
 	c.containment, err = newContainment(c.commandMode)
