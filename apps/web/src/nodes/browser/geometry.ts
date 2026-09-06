@@ -118,3 +118,24 @@ export function modifierMask(event: {
     (event.shiftKey ? MOD_SHIFT : 0)
   );
 }
+
+/**
+ * 执行主机上的绝对路径 → 工作空间相对路径（设计 §2.3）。
+ *
+ * Runtime 只接受相对路径，并且自己会再解析一次；这里先算一遍，是为了能在
+ * 选完文件的那一刻就说「这个文件不在这个工作空间里」，而不是把一个注定被
+ * 拒的请求发出去、再把 400 翻译给人看。越界返回 `null`。
+ */
+export function relativeToRoot(root: string, absolute: string): string | null {
+  const normalize = (value: string) => value.replace(/\\/g, "/");
+  const base = normalize(root).replace(/\/+$/, "");
+  const path = normalize(absolute);
+  if (!base || path === base) return null;
+  if (!path.startsWith(`${base}/`)) return null;
+  const relative = path.slice(base.length + 1);
+  // `.` 与 `..` 在这里没有合法用法：选择器给的是一条真实存在的路径。
+  if (!relative || relative.split("/").some((part) => part === "..")) {
+    return null;
+  }
+  return relative;
+}

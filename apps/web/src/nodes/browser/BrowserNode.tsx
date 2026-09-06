@@ -25,13 +25,21 @@ import type { NodeBodyProps } from "../registry";
 import { Frame } from "./Frame";
 import { ActivityLine, LeaseBadge } from "./Lease";
 import { UnsupportedPanel } from "./Managed";
+import { DialogPrompt, FileChooserPrompt } from "./Prompts";
+import { TabStrip, useTabs } from "./TabStrip";
 import {
   MAX_HISTORY,
   VIEWPORT_DEBOUNCE_MS,
   clampViewport,
   normalizeUrl,
 } from "./geometry";
-import { useAvailability, useLease, useSession, useStream } from "./session";
+import {
+  useAvailability,
+  useLease,
+  usePrompts,
+  useSession,
+  useStream,
+} from "./session";
 
 /** 沿用 v2 的沙箱位；预览节点不允许顶层导航，也不给下载权限。 */
 const SANDBOX = "allow-scripts allow-same-origin allow-forms allow-popups";
@@ -69,6 +77,12 @@ export function BrowserNode({ id, node, selected, focused }: NodeBodyProps) {
    */
   const theme = useResolvedTheme();
   const workspaceId = useCanvasStore((state) => state.workspace?.id);
+  // 文件选择器要把绝对路径换算成工作空间相对路径，所以它需要根目录；远端
+  // 工作空间的根在**那台**主机上，本机选择器选不到，界面据此换一条路。
+  const workspaceRoot = useCanvasStore((state) => state.workspace?.rootPath);
+  const remoteWorkspace = useCanvasStore(
+    (state) => (state.workspace?.executionHostId ?? "") !== "",
+  );
   const url = node.data.kind === "browser" ? node.data.url : "";
 
   const [address, setAddress] = React.useState(url);
@@ -130,6 +144,17 @@ export function BrowserNode({ id, node, selected, focused }: NodeBodyProps) {
     visibility,
     canvasRef,
     lease.lease?.generation,
+  );
+
+  /* --------------------- 标签条、对话框与文件选择器 --------------------- */
+  const tabs = useTabs(
+    workspaceId,
+    controlled ? (session?.sessionId ?? null) : null,
+  );
+  const prompts = usePrompts(
+    controlled ? (session?.sessionId ?? null) : null,
+    session?.pendingDialog,
+    session?.pendingFileChooser,
   );
 
   /* ------------------------------ 尺寸 → viewport ------------------------ */
@@ -400,6 +425,14 @@ export function BrowserNode({ id, node, selected, focused }: NodeBodyProps) {
             )}
           </div>
         )}
+        {controlled && !unsupportedPanel && (
+          <TabStrip
+            workspaceId={workspaceId}
+            sessionId={session?.sessionId ?? null}
+            tabs={tabs}
+            newTabUrl={url}
+          />
+        )}
         <div
           ref={surfaceRef}
           className="relative min-h-0 flex-1 bg-[var(--browser-bg)]"
@@ -417,6 +450,30 @@ export function BrowserNode({ id, node, selected, focused }: NodeBodyProps) {
               send={stream.send}
               touch={Boolean(focused)}
             />
+          )}
+
+          {/*
+            页面停在那里等一个人的两种情况。它们是弹层而不是节点里的一条
+            横幅：对话框没答复之前这个标签上的输入全被拒，一条容易被忽略
+            的横幅换来的是「我的点击没反应」（§2.3 / §2.4）。
+          */}
+          {controlled && (
+            <>
+              <DialogPrompt
+                workspaceId={workspaceId}
+                sessionId={session?.sessionId ?? null}
+                dialog={prompts.dialog}
+                onAnswered={prompts.clearDialog}
+              />
+              <FileChooserPrompt
+                workspaceId={workspaceId}
+                workspaceRoot={workspaceRoot ?? ""}
+                remote={remoteWorkspace}
+                sessionId={session?.sessionId ?? null}
+                chooser={prompts.chooser}
+                onAnswered={prompts.clearChooser}
+              />
+            </>
           )}
 
           {mode === "compatibility" && url && (

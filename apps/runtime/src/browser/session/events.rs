@@ -39,7 +39,7 @@ pub(super) async fn handle_event(live: &Live, event: CdpEvent) {
             // Every tab's icon, not only the one on screen: the strip shows
             // all of them, and a background tab that never gets asked would
             // sit there as a letter forever.
-            tabs::refresh_favicon(live, session);
+            favicon::refresh(live, session);
             if session == active {
                 refresh_page_state(live).await;
                 live.publish().await;

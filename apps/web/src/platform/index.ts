@@ -43,6 +43,36 @@ export async function pickDirectory(): Promise<string | null> {
   }
 }
 
+/**
+ * Opens the system file picker. Resolves to the absolute paths that were
+ * chosen, or an empty list when the user cancels — and always on the web,
+ * where callers fall back to an `<input type="file">`.
+ *
+ * Paths rather than bytes, on purpose. The caller that needs this is the
+ * controlled browser's file chooser, and what the Runtime accepts there is a
+ * workspace-relative path it resolves on the execution host itself (browser
+ * completion design §2.3); handing it bytes would mean writing a copy into
+ * the project before the page could see the file.
+ */
+export async function pickFiles(options: {
+  multiple: boolean;
+  defaultPath?: string;
+}): Promise<string[]> {
+  if (!isTauri()) return [];
+  try {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const picked = await open({
+      multiple: options.multiple,
+      ...(options.defaultPath ? { defaultPath: options.defaultPath } : {}),
+    });
+    if (Array.isArray(picked)) return picked;
+    return typeof picked === "string" ? [picked] : [];
+  } catch (cause) {
+    console.error("pickFiles failed", cause);
+    return [];
+  }
+}
+
 /** Opens a URL outside the app window. */
 export async function openExternal(url: string): Promise<void> {
   if (!isTauri()) {

@@ -11,6 +11,7 @@ import {
 import {
   browserSubscriptionSchema,
   type BrowserBandwidthClass,
+  type BrowserFrameEncoding,
   type BrowserInputEvent,
   type BrowserInputKind,
   type BrowserSubscription,
@@ -55,11 +56,38 @@ export interface StreamOptions {
   bandwidthClass: BrowserBandwidthClass;
   /** 0 表示这一端自己没有宽度上限。 */
   maxWidth?: number;
+  /** 这一端解得开的编码，好的在前；缺省按本机能力探测。 */
+  acceptedEncodings?: BrowserFrameEncoding[];
+}
+
+/**
+ * 这个浏览器解不解得开 WebP（设计 §2.9）。
+ *
+ * 用 `canvas.toDataURL` 问：能**编码**的一定能解码，反过来不成立，所以这是
+ * 一个偏保守的答案——保守的方向是继续用 JPEG，而不是拿到一张画不出来的图。
+ * 结果缓存起来：一个画布上十个浏览器节点不该各建一次 canvas。
+ */
+let webpSupport: boolean | null = null;
+export function decodableEncodings(): BrowserFrameEncoding[] {
+  if (webpSupport === null) {
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1;
+      canvas.height = 1;
+      webpSupport = canvas
+        .toDataURL("image/webp")
+        .startsWith("data:image/webp");
+    } catch {
+      webpSupport = false;
+    }
+  }
+  return webpSupport ? ["webp", "jpeg"] : ["jpeg"];
 }
 
 export interface StreamHandle {
   /** 可见性或带宽变了：重述预算，Runtime 回一份新的回执。 */
   update(options: Pick<StreamOptions, "visibility" | "bandwidthClass">): void;
+
   /** 发一批输入。返回 false 表示连接还没建立，调用方走 HTTP 回退。 */
   send(
     events: BrowserInputEvent[],
@@ -107,22 +135,29 @@ function subscribe(options: StreamOptions) {
     bandwidthClass: BANDWIDTH[options.bandwidthClass],
     maxWidth: options.maxWidth ?? 0,
     deviceId: options.deviceId,
+    acceptedEncodings: options.acceptedEncodings ?? decodableEncodings(),
   };
 }
 
 /**
- * 把一帧的 JPEG 字节变成能画的东西。
+ * 把一帧的字节变成能画的东西。
+ *
+ * MIME 取自帧自己声明的 `encoding`：一条流的编码是协商出来的，不是猜的，
+ * 而帧上那个字段是唯一说得准的地方——协商换挡时还在路上的那一帧，说的是
+ * 它自己是什么，不是流现在是什么。空的或不认识的一律按 JPEG，那是旧
+ * Runtime 的行为。
  *
  * `createImageBitmap` 在 worker 线程上解码，比 `new Image()` 少一次主线程
  * 停顿；没有它（jsdom、老 WebView）就退回 `Image` + object URL。
  */
 async function decode(
   bytes: Uint8Array,
+  encoding: string,
 ): Promise<ImageBitmap | HTMLImageElement | null> {
   // 复制出一段独立的 ArrayBuffer：protobuf 解出来的 Uint8Array 可能是
   // 整条消息缓冲区上的一个视图，直接交给 Blob 会连带整帧之外的字节。
   const blob = new Blob([bytes.slice().buffer as ArrayBuffer], {
-    type: "image/jpeg",
+    type: encoding === "webp" ? "image/webp" : "image/jpeg",
   });
   if (typeof createImageBitmap === "function") {
     try {
@@ -201,7 +236,7 @@ export function openBrowserStream(
         BrowserStreamFrameSchema,
         new Uint8Array(event.data as ArrayBuffer),
       );
-      void decode(frame.data).then((bitmap) => {
+      void decode(frame.data, frame.encoding).then((bitmap) => {
         if (!bitmap || socket !== next || stopped) return;
         handlers.onFrame({
           frameSeq: Number(frame.frameSeq),

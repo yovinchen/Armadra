@@ -1,9 +1,12 @@
 import {
   browserActivityListSchema,
   browserAvailabilitySchema,
+  browserDialogSchema,
   browserLeaseRequestSchema,
   browserLeaseSchema,
   browserManagedStateSchema,
+  browserTabListSchema,
+  browserUploadedSchema,
   browserCaptureRequestSchema,
   browserCaptureSchema,
   browserDownloadDecisionRequestSchema,
@@ -26,6 +29,14 @@ import {
   type BrowserSubscribeRequest,
   type BrowserViewport,
   type CreateBrowserSessionRequest,
+} from "@armadra/shared";
+import {
+  browserDialogRequestSchema,
+  browserUploadRequestSchema,
+} from "@armadra/shared";
+import type {
+  BrowserDialogRequest,
+  BrowserUploadRequest,
 } from "@armadra/shared";
 import { json, noContentSchema, query, request } from "./request";
 
@@ -250,6 +261,67 @@ export const browserApi = {
       `/api/workspaces/${query(workspaceId)}/browser/sessions/${query(sessionId)}/activity`,
       browserActivityListSchema,
       { signal },
+    ),
+
+  /* --------------------------- 标签、对话框与上传 -------------------------- */
+  /** 标签条读的就是这一份；推送走 `browser.tabs` 事件（设计 §2.2）。 */
+  browserTabs: (workspaceId: string, sessionId: string, signal?: AbortSignal) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/browser/sessions/${query(sessionId)}/tabs`,
+      browserTabListSchema,
+      { signal },
+    ),
+  browserOpenTab: (workspaceId: string, sessionId: string, url: string) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/browser/sessions/${query(sessionId)}/tabs`,
+      browserTabListSchema,
+      { method: "POST", ...json({ url }) },
+    ),
+  browserActivateTab: (workspaceId: string, sessionId: string, tabId: string) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/browser/sessions/${query(sessionId)}/tabs/${query(tabId)}`,
+      browserTabListSchema,
+      { method: "POST" },
+    ),
+  /** 最后一个标签关不掉（`LAST_TAB`）：结束会话是另一回事（设计 §2.2）。 */
+  browserCloseTab: (workspaceId: string, sessionId: string, tabId: string) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/browser/sessions/${query(sessionId)}/tabs/${query(tabId)}`,
+      browserTabListSchema,
+      { method: "DELETE" },
+    ),
+  /**
+   * 答复挡住页面的那个对话框（设计 §2.4）。
+   *
+   * 在它被答复之前，这个标签上的输入一律 409 `DIALOG_PENDING`——所以这不是
+   * 一个可有可无的按钮，而是页面继续往下走的唯一出口。
+   */
+  browserDialog: (
+    workspaceId: string,
+    sessionId: string,
+    input: BrowserDialogRequest,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/browser/sessions/${query(sessionId)}/dialog`,
+      browserDialogSchema,
+      {
+        method: "POST",
+        ...json(browserDialogRequestSchema.parse(input)),
+      },
+    ),
+  /** `paths` 只接受工作空间相对路径；绝对路径由 Runtime 直接拒（§2.3）。 */
+  browserUpload: (
+    workspaceId: string,
+    sessionId: string,
+    input: BrowserUploadRequest,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/browser/sessions/${query(sessionId)}/upload`,
+      browserUploadedSchema,
+      {
+        method: "POST",
+        ...json(browserUploadRequestSchema.parse(input)),
+      },
     ),
 
   /* ------------------------------- 受管浏览器 ----------------------------- */

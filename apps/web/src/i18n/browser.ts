@@ -45,6 +45,36 @@ const zh = {
   "browser.activity.refused": "被拒",
   "browser.activity.unknown": "结果未知",
 
+  /* 标签条（§2.2） */
+  "browser.tabs.label": "标签",
+  "browser.tabs.new": "新建标签",
+  "browser.tabs.close": "关闭标签",
+  "browser.tabs.untitled": "新标签页",
+  "browser.tabs.failed": "标签操作失败",
+
+  /* 对话框（§2.4） */
+  "browser.dialog.alert": "页面提示",
+  "browser.dialog.confirm": "页面询问",
+  "browser.dialog.prompt": "页面要求输入",
+  "browser.dialog.beforeunload": "离开此页？",
+  "browser.dialog.answer": "回答",
+  "browser.dialog.accept": "确定",
+  "browser.dialog.dismiss": "取消",
+  "browser.dialog.leave": "离开",
+  "browser.dialog.stay": "留在此页",
+  "browser.dialog.failed": "对话框已经被答复",
+
+  /* 文件选择（§2.3） */
+  "browser.chooser.title": "页面要选择文件",
+  "browser.chooser.input": "要提交的文件",
+  "browser.chooser.nativeHint": "只能选工作空间里的文件。",
+  "browser.chooser.importHint": "选中的文件会先导入到 .armadra/imports/。",
+  "browser.chooser.choose": "选择文件",
+  "browser.chooser.later": "暂不选择",
+  "browser.chooser.filled": "已提交 {count} 个文件",
+  "browser.chooser.outsideRoot": "文件不在这个工作空间里",
+  "browser.chooser.failed": "文件提交失败",
+
   /* 帧流（§2.9） */
   "browser.stream.reconnecting": "画面重连中",
 
@@ -95,6 +125,34 @@ const en: Record<keyof typeof zh, string> = {
   "browser.lease.failed": "That lease request failed",
   "browser.activity.refused": "refused",
   "browser.activity.unknown": "outcome unknown",
+
+  "browser.tabs.label": "Tabs",
+  "browser.tabs.new": "New tab",
+  "browser.tabs.close": "Close tab",
+  "browser.tabs.untitled": "New tab",
+  "browser.tabs.failed": "That tab action failed",
+
+  "browser.dialog.alert": "The page says",
+  "browser.dialog.confirm": "The page asks",
+  "browser.dialog.prompt": "The page wants an answer",
+  "browser.dialog.beforeunload": "Leave this page?",
+  "browser.dialog.answer": "Answer",
+  "browser.dialog.accept": "OK",
+  "browser.dialog.dismiss": "Cancel",
+  "browser.dialog.leave": "Leave",
+  "browser.dialog.stay": "Stay",
+  "browser.dialog.failed": "That dialog has already been answered",
+
+  "browser.chooser.title": "The page is asking for a file",
+  "browser.chooser.input": "Files to send",
+  "browser.chooser.nativeHint": "Only files inside this workspace can be sent.",
+  "browser.chooser.importHint":
+    "The files you pick are imported into .armadra/imports/ first.",
+  "browser.chooser.choose": "Choose files",
+  "browser.chooser.later": "Not now",
+  "browser.chooser.filled": "Sent {count} file(s)",
+  "browser.chooser.outsideRoot": "That file is outside this workspace",
+  "browser.chooser.failed": "Sending the files failed",
 
   "browser.stream.reconnecting": "Reconnecting the picture",
 

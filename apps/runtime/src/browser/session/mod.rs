@@ -45,6 +45,7 @@ mod console;
 mod dialogs;
 mod downloads;
 mod events;
+mod favicon;
 mod input;
 pub mod lease;
 mod lifecycle;

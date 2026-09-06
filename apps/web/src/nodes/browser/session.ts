@@ -3,6 +3,8 @@ import { toast } from "sonner";
 import type {
   BrowserActivity,
   BrowserAvailability,
+  BrowserDialog,
+  BrowserFileChooser,
   BrowserInputEvent,
   BrowserLease,
   BrowserSession,
@@ -212,6 +214,60 @@ export function useLease(
     busy,
     takeover: React.useCallback(() => act("takeover"), [act]),
     handback: React.useCallback(() => act("release"), [act]),
+  };
+}
+
+/* --------------------------- 对话框与文件选择器 --------------------------- */
+
+/**
+ * 页面停在那里等一个人的两种情况（设计 §2.3 / §2.4）。
+ *
+ * 对话框和文件选择器是同一种问题：页面自己走不下去了。两者都不会被自动
+ * 答复——一个自作主张接受的 `beforeunload` 会丢掉别人没提交的表单——也都
+ * 不会被无限期挂着，Runtime 分别在 120 秒和 60 秒后按最保守的方式收场。
+ */
+export interface Prompts {
+  dialog: BrowserDialog | null;
+  chooser: BrowserFileChooser | null;
+  /** 本地先收起来：答复已经发出去了，等事件绕回来会显得像卡住。 */
+  clearDialog: () => void;
+  clearChooser: () => void;
+}
+
+export function usePrompts(
+  sessionId: string | null,
+  /** 会话快照里的那一份：节点是后挂上来的，可能已经有一个在等了。 */
+  pendingDialog: BrowserDialog | undefined,
+  pendingChooser: BrowserFileChooser | undefined,
+): Prompts {
+  const [dialog, setDialog] = React.useState<BrowserDialog | null>(null);
+  const [chooser, setChooser] = React.useState<BrowserFileChooser | null>(null);
+
+  React.useEffect(() => setDialog(pendingDialog ?? null), [pendingDialog]);
+  React.useEffect(() => setChooser(pendingChooser ?? null), [pendingChooser]);
+
+  React.useEffect(
+    () =>
+      onWorkspaceEvent("browser.dialog", (event) => {
+        // 同一个事件也用来说「已经答复了」——那时没有 `dialog`，弹层就该
+        // 收起来，而不是等它自己超时。别的设备答复的也走这一条。
+        if (event.sessionId === sessionId) setDialog(event.dialog ?? null);
+      }),
+    [sessionId],
+  );
+  React.useEffect(
+    () =>
+      onWorkspaceEvent("browser.fileChooser", (event) => {
+        if (event.sessionId === sessionId) setChooser(event.chooser ?? null);
+      }),
+    [sessionId],
+  );
+
+  return {
+    dialog,
+    chooser,
+    clearDialog: React.useCallback(() => setDialog(null), []),
+    clearChooser: React.useCallback(() => setChooser(null), []),
   };
 }
 
