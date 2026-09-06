@@ -133,7 +133,10 @@ const vendorGroups = [
   },
 ];
 
-export default defineConfig({
+// 代理与 `VITE_RUNTIME_URL` 的覆盖只属于开发服务器：生产构建（打包桌面壳）
+// 必须让页面在运行时按来源自己解析 Runtime 地址，否则本机碰巧在跑的一个
+// 开发 Runtime 会把「空地址」烤进产物，`tauri://localhost` 上一启动就报错。
+export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
@@ -152,19 +155,21 @@ export default defineConfig({
     },
   },
   // 代理装上时前端用自己的源，请求由 Vite 转给 Runtime；没装就保持原来的默认。
-  define: runtimeTarget
-    ? { "import.meta.env.VITE_RUNTIME_URL": '""' }
-    : undefined,
+  define:
+    command === "serve" && runtimeTarget
+      ? { "import.meta.env.VITE_RUNTIME_URL": '""' }
+      : undefined,
   server: {
     host: "127.0.0.1",
     port: 1420,
     strictPort: true,
-    proxy: runtimeTarget
-      ? {
-          // `ws` 让终端与工作空间事件流也走同一条路。
-          "/api": { target: runtimeTarget, ws: true, changeOrigin: false },
-          "/health": { target: runtimeTarget, changeOrigin: false },
-        }
-      : undefined,
+    proxy:
+      command === "serve" && runtimeTarget
+        ? {
+            // `ws` 让终端与工作空间事件流也走同一条路。
+            "/api": { target: runtimeTarget, ws: true, changeOrigin: false },
+            "/health": { target: runtimeTarget, changeOrigin: false },
+          }
+        : undefined,
   },
-});
+}));
