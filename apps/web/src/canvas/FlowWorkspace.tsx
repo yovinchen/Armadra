@@ -74,6 +74,7 @@ import {
 import { AddMenuContent } from "./menus/AddMenuContent";
 import { NodeMenuContent } from "./menus/node-menu";
 import { ShapeMenuContent } from "./menus/shape-menu";
+import { Minimap } from "./flow/Minimap";
 import { CanvasOverlays } from "./flow/overlays/CanvasOverlays";
 import { CanvasStylePanel } from "./StylePanel";
 import { resetProjectionCache, isItemId } from "./sync/project";
@@ -482,6 +483,8 @@ export function FlowWorkspace() {
             ) : null}
             {/* 派生层（rope / 子代理卡片）：坐标是画布坐标，
                 `<ViewportPortal>` 已经替我们做完相机变换（F07）。 */}
+            {/* 状态缩略图（F20，B1）。它是 `<Panel>`，位置在 canvas.css 里。 */}
+            <Minimap />
             <ViewportPortal>
               <CanvasOverlays />
             </ViewportPortal>
