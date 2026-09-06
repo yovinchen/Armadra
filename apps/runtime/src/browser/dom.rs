@@ -19,6 +19,27 @@ pub const PAGE_TEXT: &str =
     "(()=>{const b=document.body;return b?b.innerText:document.documentElement.textContent||''})()";
 
 pub const TITLE: &str = "document.title";
+
+/// The tab's icon, as a `data:` URL, fetched by the page itself.
+///
+/// It runs in the page's own context on purpose: the request is the one the
+/// browser would make for the favicon anyway, from the profile that is already
+/// on that site. `credentials: "omit"` keeps it from being a *second*,
+/// differently-authenticated request, and the size ceiling keeps a site from
+/// putting a megabyte into an event every client on the workspace reads.
+/// Anything that goes wrong is an empty string — a tab with no icon is a tab
+/// with a letter in the strip, not an error.
+pub const FAVICON: &str = "(async()=>{try{\
+const l=document.querySelector(\"link[rel~='icon' i][href]\");\
+const h=l?l.href:new URL('/favicon.ico',location.href).href;\
+if(!/^https?:/.test(h))return '';\
+const r=await fetch(h,{credentials:'omit',redirect:'follow'});\
+if(!r.ok)return '';\
+const b=await r.blob();\
+if(b.size===0||b.size>8192||!/^image\\//.test(b.type))return '';\
+return await new Promise(ok=>{const f=new FileReader();\
+f.onload=()=>ok(typeof f.result==='string'?f.result:'');\
+f.onerror=()=>ok('');f.readAsDataURL(b)})}catch(e){return ''}})()";
 pub const LOCATION: &str = "location.href";
 
 /// The addressed frame's own viewport, so a wheel event can be aimed at the

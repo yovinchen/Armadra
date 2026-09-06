@@ -231,12 +231,23 @@ async fn open_stream(
 }
 
 fn hello(visibility: BrowserVisibility, bandwidth: BrowserBandwidthClass) -> Vec<u8> {
+    hello_accepting(visibility, bandwidth, &[])
+}
+
+/// The same, from a subscriber that says what it can decode. An empty list is
+/// a client that cannot say, which is JPEG (§2.9).
+fn hello_accepting(
+    visibility: BrowserVisibility,
+    bandwidth: BrowserBandwidthClass,
+    encodings: &[&str],
+) -> Vec<u8> {
     BrowserStreamClient {
         message: Some(browser_stream_client::Message::Hello(
             BrowserSubscribeRequest {
                 visibility: visibility as i32,
                 bandwidth_class: bandwidth as i32,
                 device_id: "device-under-test".into(),
+                accepted_encodings: encodings.iter().map(|value| (*value).to_owned()).collect(),
                 ..BrowserSubscribeRequest::default()
             },
         )),
@@ -466,6 +477,111 @@ async fn a_phone_sized_viewer_sees_frames_and_its_clicks_produce_new_ones() {
         "a session nobody is watching runs no screencast"
     );
     assert_eq!(receipt["maxFps"], 0);
+}
+
+/// A subscriber that says it decodes WebP gets WebP, and one that does not
+/// keeps JPEG — from a real browser, because Chrome's own protocol dump lists
+/// only jpeg and png for `Page.startScreencast` and the fact that it answers
+/// `webp` anyway is exactly the kind of claim that has to be tested rather
+/// than read (§2.9).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_subscriber_that_decodes_webp_is_sent_webp() {
+    let fixture = fixture().await;
+    if browser_or_skip(&fixture.state, "browser_stream::webp").is_none() {
+        return;
+    }
+    let page = serve_page().await;
+    let (status, session) = post(
+        &fixture,
+        &format!("/api/workspaces/{}/browser/sessions", fixture.workspace_id),
+        json!({
+            "nodeId": fixture.node_id,
+            "url": format!("http://127.0.0.1:{}/", page.port()),
+            "viewport": { "width": 800, "height": 600, "deviceScaleFactor": 1 },
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "{session}");
+    let session_id = session["sessionId"].as_str().unwrap().to_owned();
+
+    // 1. JPEG first, so the two encodings are measured on the same page.
+    let mut plain = open_stream(&fixture, &session_id).await;
+    plain
+        .send(WsMessage::Binary(
+            hello(BrowserVisibility::Focused, BrowserBandwidthClass::Lan).into(),
+        ))
+        .await
+        .unwrap();
+    let receipt = next_receipt(&mut plain).await;
+    assert_eq!(
+        receipt["encoding"], "jpeg",
+        "a client that did not say what it decodes gets the old encoding"
+    );
+    let jpeg = next_frame(&mut plain, Duration::from_secs(20))
+        .await
+        .expect("a subscriber gets a picture");
+    assert_eq!(jpeg.encoding, "jpeg");
+    assert!(jpeg.data.starts_with(&[0xff, 0xd8]));
+    plain.close(None).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    // 2. The same page to a subscriber that can decode WebP.
+    let mut socket = open_stream(&fixture, &session_id).await;
+    socket
+        .send(WsMessage::Binary(
+            hello_accepting(
+                BrowserVisibility::Focused,
+                BrowserBandwidthClass::Lan,
+                &["webp", "jpeg"],
+            )
+            .into(),
+        ))
+        .await
+        .unwrap();
+    let receipt = next_receipt(&mut socket).await;
+    let negotiated = receipt["encoding"].as_str().unwrap().to_owned();
+    let frame = next_frame(&mut socket, Duration::from_secs(20))
+        .await
+        .expect("a subscriber gets a picture");
+    assert_eq!(frame.encoding, negotiated, "the frame says what it is");
+    if negotiated == "jpeg" {
+        // A browser that takes its own enum literally. The fallback is the
+        // behaviour under test here: the viewer still has a picture.
+        println!("browser_stream: this browser refused a WebP screencast; served JPEG");
+        assert!(frame.data.starts_with(&[0xff, 0xd8]));
+        socket.close(None).await.unwrap();
+        return;
+    }
+    assert_eq!(negotiated, "webp");
+    assert!(
+        frame.data.starts_with(b"RIFF") && frame.data[8..12] == *b"WEBP",
+        "the bytes are a real WebP container, not a relabelled JPEG"
+    );
+    println!(
+        "browser_stream 800x600 first frame: jpeg {} bytes, webp {} bytes",
+        jpeg.data.len(),
+        frame.data.len()
+    );
+
+    // 3. One subscriber that cannot decode WebP takes the whole session back
+    //    to JPEG: there is one screencast, and half a picture for one viewer
+    //    is worse than a larger one for both.
+    let mut old = open_stream(&fixture, &session_id).await;
+    old.send(WsMessage::Binary(
+        hello(BrowserVisibility::Focused, BrowserBandwidthClass::Lan).into(),
+    ))
+    .await
+    .unwrap();
+    let old_receipt = next_receipt(&mut old).await;
+    assert_eq!(old_receipt["encoding"], "jpeg");
+    let downgraded = next_frame(&mut socket, Duration::from_secs(20))
+        .await
+        .expect("the webp viewer keeps getting frames, in the other encoding");
+    assert_eq!(downgraded.encoding, "jpeg");
+    assert!(downgraded.data.starts_with(&[0xff, 0xd8]));
+
+    old.close(None).await.unwrap();
+    socket.close(None).await.unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]

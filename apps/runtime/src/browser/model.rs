@@ -151,6 +151,14 @@ pub struct Tab {
     pub loading: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pending_dialog: Option<Dialog>,
+    /// The tab's icon as a `data:` URL, or empty (§2.8).
+    ///
+    /// Resolved inside the controlled browser rather than handed out as a URL
+    /// for each client to fetch. A tab strip that fetched icons itself would
+    /// send every site a request from the *viewer's* browser and cookies —
+    /// from a phone on the far side of the Host, no less — while the session
+    /// that is actually visiting the site sits right here.
+    pub favicon: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -544,6 +552,66 @@ pub enum BandwidthClass {
     Metered,
 }
 
+/// How a frame's bytes are encoded (§2.9).
+///
+/// Chrome's protocol dump lists only `jpeg` and `png` for
+/// `Page.startScreencast`, but a real Chrome 152 answers `format: "webp"` with
+/// genuine VP8 WebP — verified against a live browser, and re-checked at
+/// runtime because a build that refuses it must not cost anyone their picture.
+/// PNG is not offered: a lossless screenshot of a web page is several times a
+/// JPEG of it, which is the wrong direction for every link class in the table
+/// below.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FrameEncoding {
+    #[default]
+    Jpeg,
+    Webp,
+}
+
+impl FrameEncoding {
+    /// What Chrome is told, and what the frame says it is.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Jpeg => "jpeg",
+            Self::Webp => "webp",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "jpeg" => Some(Self::Jpeg),
+            "webp" => Some(Self::Webp),
+            _ => None,
+        }
+    }
+
+    /// The quality to ask for at a given JPEG quality.
+    ///
+    /// WebP's scale is not JPEG's: the same number is a visibly better and
+    /// distinctly larger picture, which would spend the saving on quality
+    /// nobody asked for. The shift is the configurable part
+    /// (`ARMADRA_BROWSER_WEBP_QUALITY_SHIFT`, default 10) because the right
+    /// trade differs between a LAN desktop and a metered phone, and because a
+    /// number nobody can change is a number nobody can measure.
+    pub fn quality_from(self, jpeg_quality: u32) -> u32 {
+        match self {
+            Self::Jpeg => jpeg_quality,
+            Self::Webp => jpeg_quality.saturating_sub(webp_quality_shift()).max(5),
+        }
+    }
+}
+
+/// How far below the JPEG quality WebP is asked to sit. Read once per call
+/// rather than cached: it is only read when a screencast starts.
+fn webp_quality_shift() -> u32 {
+    std::env::var("ARMADRA_BROWSER_WEBP_QUALITY_SHIFT")
+        .ok()
+        .and_then(|value| value.parse::<u32>().ok())
+        .map(|shift| shift.min(50))
+        .unwrap_or(10)
+}
+
 /// What one subscriber is actually served.
 ///
 /// `max_fps` is real rather than advisory: frames arriving faster are dropped
@@ -646,4 +714,8 @@ pub struct Subscription {
     /// What the Worker settled on, not what was asked for. Zero means the
     /// picture is sent at the page's own width.
     pub max_width: u32,
+    /// The encoding the frames on this stream carry. One page runs one
+    /// screencast, so this is a session-wide answer even though every
+    /// subscriber asks for itself.
+    pub encoding: FrameEncoding,
 }

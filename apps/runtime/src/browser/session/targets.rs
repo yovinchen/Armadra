@@ -31,6 +31,10 @@ pub(super) struct TabState {
     pub(super) title: String,
     pub(super) opener_tab_id: String,
     pub(super) loading: bool,
+    /// The last icon this tab resolved, as a `data:` URL. Kept across a
+    /// navigation until the new document answers, so the strip does not blink
+    /// back to a letter on every click.
+    pub(super) favicon: String,
     /// Set once this target has answered `Page.enable` and the rest of the
     /// per-tab setup. Chrome replaces the target it starts with while it
     /// settles, and a command sent to the one it threw away comes back as
@@ -61,6 +65,7 @@ impl TabState {
             navigation_epoch: self.epoch,
             loading: self.loading,
             pending_dialog: self.dialog.clone(),
+            favicon: self.favicon.clone(),
         }
     }
 }

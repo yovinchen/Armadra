@@ -153,3 +153,70 @@ async fn a_blocked_popup_is_closed_and_the_reason_is_recorded() {
         .unwrap();
     drop(page);
 }
+
+/// The strip's icon comes from the controlled browser, not from whoever is
+/// looking at it (§2.8).
+///
+/// The assertion that matters is the shape: a `data:image/…` URL, resolved by
+/// the session that is already on that site. A tab strip that fetched icons
+/// itself would send the site a request from each viewer's own browser and
+/// cookies — including a phone on the far side of the Host — which is a
+/// different request from a different party, made only because somebody
+/// looked at a node.
+#[tokio::test]
+async fn a_tab_carries_the_icon_the_session_fetched_for_it() {
+    let fixture = fixture("favicon").await;
+    if browser_or_skip(&fixture.state, "a_tab_carries_the_icon…").is_none() {
+        return;
+    }
+    let page = serve_page().await;
+    let (_workspace, live) = open(&fixture, page.url("/")).await;
+
+    until(&live, "the icon to be resolved", async || {
+        session::tab_list(&live)
+            .tabs
+            .first()
+            .is_some_and(|tab| !tab.favicon.is_empty())
+    })
+    .await;
+    let icon = session::tab_list(&live).tabs[0].favicon.clone();
+    assert!(
+        icon.starts_with("data:image/png;base64,"),
+        "the bytes travel with the tab rather than as a URL to go and fetch: {}",
+        &icon[..icon.len().min(40)]
+    );
+    let bytes = {
+        use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+        BASE64
+            .decode(icon.trim_start_matches("data:image/png;base64,"))
+            .expect("a data URL carries base64")
+    };
+    assert_eq!(bytes, FAVICON_PNG, "and they are the page's own icon");
+
+    // A page with no icon of its own says so with an empty string. Nothing is
+    // invented here, because the strip's own letter is the better placeholder.
+    session::navigate(
+        &live,
+        &NavigateRequest {
+            action: "goto".into(),
+            url: Some(page.url("/second")),
+        },
+    )
+    .await
+    .unwrap();
+    until(&live, "the second page to settle", async || {
+        session::tab_list(&live)
+            .tabs
+            .first()
+            .is_some_and(|tab| tab.url.ends_with("/second"))
+    })
+    .await;
+    // Long enough for the helper to have run and come back empty on a 404.
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    assert_eq!(session::tab_list(&live).tabs[0].favicon, "");
+
+    session::close(&fixture.state, &live.session_id, true)
+        .await
+        .unwrap();
+    drop(page);
+}

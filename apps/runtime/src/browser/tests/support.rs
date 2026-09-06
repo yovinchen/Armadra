@@ -202,7 +202,18 @@ pub(super) fn canvas_node(
 
 /// The page every CDP test drives. Deliberately self-contained: no external
 /// asset, no font, no network of any kind.
+/// A 1x1 PNG, so the favicon a page declares is a real image with a real MIME
+/// type rather than something the helper has to be lenient about.
+pub(super) const FAVICON_PNG: &[u8] = &[
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+    0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xd0, 0xcf, 0xbf, 0xf1,
+    0x1f, 0x00, 0x04, 0xbd, 0x02, 0x76, 0xcc, 0x67, 0x94, 0xd0, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+    0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+];
+
 pub(super) const PAGE: &str = r#"<!doctype html><html><head><meta charset="utf-8">
+<link rel="icon" href="/favicon.png">
 <title>Armadra 受控浏览器</title></head><body style="font:24px sans-serif;margin:32px">
 <h1 id="heading">受控浏览器测试页</h1>
 <p id="result">Waiting</p>
@@ -346,6 +357,15 @@ async fn serve_with(cross_origin: Option<u16>) -> Page {
                         "attachment; filename=\"notes.txt\"",
                     )],
                     "受控浏览器下载测试\n",
+                )
+            }),
+        )
+        .route(
+            "/favicon.png",
+            get(|| async {
+                (
+                    [(axum::http::header::CONTENT_TYPE, "image/png")],
+                    FAVICON_PNG,
                 )
             }),
         )

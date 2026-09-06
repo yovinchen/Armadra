@@ -46,13 +46,14 @@ pub async fn switch_tab(live: &Live, tab_id: &str) -> AppResult<TabList> {
     // subscriber gets a primed frame of the new page rather than waiting for
     // it to repaint (§2.9).
     let running = live.running_budget();
+    let encoding = live.running_encoding();
     if running.is_some() {
         let _ = stop_stream(live).await;
     }
     let viewport = live.snapshot().viewport;
     let _ = apply_viewport(live, viewport).await;
     if let Some(budget) = running {
-        let _ = start_stream(live, budget).await;
+        let _ = start_stream(live, budget, encoding).await;
     }
     live.sync_active();
     live.publish().await;
@@ -215,6 +216,7 @@ async fn adopt_tab(live: &Live, session: &str, target_id: &str, url: &str, info:
                 title: String::new(),
                 opener_tab_id: opened_by.clone(),
                 loading: false,
+                favicon: String::new(),
                 ready: false,
                 epoch: 0,
                 main_frame: String::new(),
@@ -538,6 +540,78 @@ fn forget_tab(live: &Live, tab_id: &str) {
     }
 }
 
+/// How long the page gets to hand back its icon before this gives up. The
+/// fetch happens inside the page, so it is a real network request to whatever
+/// site the tab is on; a slow one costs a letter in the strip and nothing else.
+const FAVICON_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Asks one tab for its icon, off the event pump.
+///
+/// Spawned rather than awaited: the pump processes every CDP event for the
+/// whole session, and a command that waits on a page's own `fetch` would hold
+/// up navigations, frames and the picture behind it. The answer is dropped if
+/// the tab navigated again while it was in flight — a stale icon beside a new
+/// page is worse than no icon.
+pub(super) fn refresh_favicon(live: &Live, session: &str) {
+    let (tab_id, epoch) = {
+        let targets = live
+            .targets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match targets.tabs.iter().find(|tab| tab.session == session) {
+            Some(tab) => (tab.tab_id.clone(), tab.epoch),
+            None => return,
+        }
+    };
+    let session = session.to_owned();
+    let handle = live.clone_handle();
+    tokio::spawn(async move {
+        let Some(live) = handle.upgrade() else { return };
+        let call = live.call_in(
+            &session,
+            "Runtime.evaluate",
+            json!({
+                "expression": dom::FAVICON,
+                "returnByValue": true,
+                // The helper is a promise: without this the value comes back
+                // as the promise object rather than the icon.
+                "awaitPromise": true,
+                "userGesture": false,
+            }),
+        );
+        let Ok(Ok(result)) = tokio::time::timeout(FAVICON_TIMEOUT, call).await else {
+            return;
+        };
+        let favicon = result
+            .get("result")
+            .and_then(|value| value.get("value"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        // Only ever a `data:` URL, and only up to what the helper's own
+        // ceiling allows plus base64's overhead. Whatever else a page manages
+        // to return is not something a client is asked to render.
+        if !favicon.starts_with("data:image/") || favicon.len() > 16_384 {
+            return;
+        }
+        let changed = {
+            let mut targets = live
+                .targets
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            match targets.tab_mut(&tab_id) {
+                Some(tab) if tab.epoch == epoch && tab.favicon != favicon => {
+                    tab.favicon = favicon.to_owned();
+                    true
+                }
+                _ => false,
+            }
+        };
+        if changed {
+            live.publish_tabs();
+        }
+    });
+}
+
 pub(super) async fn on_target_info(live: &Live, params: &Value) {
     let Some(info) = params.get("targetInfo") else {
         return;
@@ -608,6 +682,9 @@ pub(super) async fn on_frame_navigated(live: &Live, session: &str, params: &Valu
             tab.epoch += 1;
             tab.url = url.clone();
             tab.title = String::new();
+            // The previous site's mark beside the new site's address is worse
+            // than no mark at all; `Page.loadEventFired` asks for the new one.
+            tab.favicon = String::new();
             // Every frame of the old document went with it. Keeping them
             // would let a reference resolve against a frame that no longer
             // exists, which is worse than `STALE_TARGET`.

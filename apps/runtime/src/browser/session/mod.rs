@@ -32,8 +32,8 @@ use crate::{
 
 use super::{
     ACTIVITY_CAPACITY, Activity, Admission, BandwidthClass, BrowserSession, Budget, Capture,
-    ConsoleEntry, Dialog, DialogKind, Download, DownloadState, Element, FileChooser, Lease,
-    MAX_ELEMENTS, MAX_TEXT_BYTES, NetworkEntry, ProcessIdentity, RING_CAPACITY, ReadMode,
+    ConsoleEntry, Dialog, DialogKind, Download, DownloadState, Element, FileChooser, FrameEncoding,
+    Lease, MAX_ELEMENTS, MAX_TEXT_BYTES, NetworkEntry, ProcessIdentity, RING_CAPACITY, ReadMode,
     ReadResponse, SessionState, StoredSession, Subscription, Tab, TabList, TargetRef, Viewport,
     Visibility, WaitOutcome, cdp,
     cdp::{CdpClient, CdpError, CdpEvent},

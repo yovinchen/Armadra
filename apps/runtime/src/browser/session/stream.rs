@@ -23,6 +23,10 @@ pub(super) struct Subscriber {
     /// The ceiling this client asked for, kept so a renewal that does not
     /// re-state it does not silently widen the picture.
     requested_width: u32,
+    /// Whether this subscriber said it can decode WebP. A subscriber that did
+    /// not say so is one that cannot: the field did not exist before, and a
+    /// client that predates it would be handed bytes it cannot draw.
+    accepts_webp: bool,
     expires_at: DateTime<Utc>,
     /// Set for a viewer on the dedicated stream. `None` means it is reading
     /// the workspace event channel instead, which cannot acknowledge frames.
@@ -67,6 +71,10 @@ pub struct StreamFrame {
     pub height: u32,
     pub device_scale_factor: f64,
     pub captured_at_unix_ms: i64,
+    /// What these bytes are. Carried on the frame rather than looked up from
+    /// the session, because a frame that was in flight when the encoding
+    /// changed still has to say what it actually is.
+    pub encoding: FrameEncoding,
     pub data: Vec<u8>,
 }
 
@@ -88,6 +96,14 @@ pub(super) struct StreamState {
     /// it where it was started rather than on the tab that just became active
     /// — which has no screencast to stop (§2.2).
     session: String,
+    /// What the running screencast is encoding, and therefore what every
+    /// subscriber is being served and what the receipts report.
+    encoding: FrameEncoding,
+    /// Set once a browser has refused `format: "webp"`. Chrome's protocol dump
+    /// only ever promised jpeg and png, so a build that takes the enum
+    /// literally is allowed to exist; it costs one failed command per session,
+    /// after which this session stops asking.
+    webp_refused: bool,
 }
 
 impl Live {
@@ -98,6 +114,49 @@ impl Live {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .running
+    }
+
+    /// What the picture is encoded as right now.
+    pub(super) fn running_encoding(&self) -> FrameEncoding {
+        self.stream
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .encoding
+    }
+}
+
+/// The encoding the one screencast should run at.
+///
+/// WebP only when *every* live subscriber can decode it. There is one
+/// screencast per page and this module does not re-encode per viewer, so the
+/// alternative would be handing a client bytes it cannot draw — a blank node
+/// rather than a slightly larger picture. One old client on the workspace
+/// therefore costs everyone WebP, which is the correct order of harms.
+pub(super) fn effective_encoding(live: &Live) -> FrameEncoding {
+    if live
+        .stream
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .webp_refused
+    {
+        return FrameEncoding::Jpeg;
+    }
+    let now = Utc::now();
+    let subscriptions = live
+        .subscriptions
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut live_subscribers = subscriptions
+        .values()
+        .filter(|subscriber| subscriber.expires_at > now && subscriber.budget().max_fps > 0)
+        .peekable();
+    if live_subscribers.peek().is_none() {
+        return FrameEncoding::Jpeg;
+    }
+    if live_subscribers.all(|subscriber| subscriber.accepts_webp) {
+        FrameEncoding::Webp
+    } else {
+        FrameEncoding::Jpeg
     }
 }
 
@@ -147,6 +206,19 @@ pub(super) async fn on_frame(live: &Live, from: &str, params: &Value) {
 /// leave it looking at a stale page. A viewer on the event channel has no
 /// timer, so the frame rate is enforced here, the way it always was.
 pub(super) fn publish_frame(live: &Live, data: &str, width: u32, height: u32) {
+    publish_frame_as(live, data, width, height, live.running_encoding());
+}
+
+/// The same, told explicitly what it is publishing. A primed frame is a
+/// screenshot rather than a screencast frame and can be encoded differently
+/// from whatever the stream is running, so it says which.
+pub(super) fn publish_frame_as(
+    live: &Live,
+    data: &str,
+    width: u32,
+    height: u32,
+    encoding: FrameEncoding,
+) {
     let now = Instant::now();
     let record = live.snapshot();
     let (streamed, evented) = {
@@ -188,6 +260,7 @@ pub(super) fn publish_frame(live: &Live, data: &str, width: u32, height: u32) {
             height,
             device_scale_factor: record.viewport.device_scale_factor,
             captured_at_unix_ms: Utc::now().timestamp_millis(),
+            encoding,
             data: bytes,
         });
         let subscriptions = live
@@ -201,7 +274,12 @@ pub(super) fn publish_frame(live: &Live, data: &str, width: u32, height: u32) {
         }
     }
 
-    if evented {
+    // The workspace event channel is JPEG and stays JPEG. Its subscribers
+    // predate the dedicated stream and have no way to say what they decode, so
+    // there is nobody to negotiate with; a WebP frame there would simply not
+    // draw. It costs nothing today — the web node moved off this path — and a
+    // session with no event-channel subscriber never encodes base64 at all.
+    if evented && encoding == FrameEncoding::Jpeg {
         {
             let mut subscriptions = live
                 .subscriptions
@@ -240,12 +318,16 @@ pub(super) fn publish_frame(live: &Live, data: &str, width: u32, height: u32) {
 /// page would otherwise stare at an empty node until something moved. A single
 /// screenshot published through the same path is the first picture; the stream
 /// takes over from there.
-pub(super) async fn prime_frame(live: &Live, quality: u32) {
+pub(super) async fn prime_frame(live: &Live, budget: Budget, encoding: FrameEncoding) {
     let viewport = live.snapshot().viewport;
     let Ok(result) = live
         .call(
             "Page.captureScreenshot",
-            json!({ "format": "jpeg", "quality": quality, "optimizeForSpeed": true }),
+            json!({
+                "format": encoding.as_str(),
+                "quality": encoding.quality_from(budget.quality),
+                "optimizeForSpeed": true,
+            }),
         )
         .await
     else {
@@ -265,7 +347,7 @@ pub(super) async fn prime_frame(live: &Live, quality: u32) {
             subscriber.last_sent = None;
         }
     }
-    publish_frame(live, data, viewport.width, viewport.height);
+    publish_frame_as(live, data, viewport.width, viewport.height, encoding);
 }
 
 /* ------------------------------- subscriptions ----------------------------- */
@@ -286,6 +368,20 @@ pub struct SubscribeRequest {
     /// Opaque per-viewer id, used only to name the lease's human holder.
     #[serde(default)]
     pub device_id: String,
+    /// Encodings this subscriber can decode, best first. An empty list is a
+    /// client that cannot say, which is treated as JPEG-only — the field is
+    /// newer than the stream, and guessing the other way would hand an old
+    /// client bytes it cannot draw.
+    #[serde(default)]
+    pub accepted_encodings: Vec<String>,
+}
+
+impl SubscribeRequest {
+    fn accepts_webp(&self) -> bool {
+        self.accepted_encodings
+            .iter()
+            .any(|encoding| FrameEncoding::parse(encoding) == Some(FrameEncoding::Webp))
+    }
 }
 
 pub async fn subscribe(live: &Live, request: &SubscribeRequest) -> AppResult<Subscription> {
@@ -329,6 +425,7 @@ pub(crate) fn insert_subscriber(
             existing.visibility = request.visibility;
             existing.bandwidth = request.bandwidth_class;
             existing.requested_width = request.max_width;
+            existing.accepts_webp = request.accepts_webp();
             existing.expires_at = expires_at;
             if sender.is_some() {
                 existing.sender = sender;
@@ -341,6 +438,7 @@ pub(crate) fn insert_subscriber(
                     visibility: request.visibility,
                     bandwidth: request.bandwidth_class,
                     requested_width: request.max_width,
+                    accepts_webp: request.accepts_webp(),
                     expires_at,
                     sender,
                     last_sent: None,
@@ -357,7 +455,7 @@ pub(crate) fn insert_subscriber(
 /// re-encoding per viewer is not something this module does. The frame
 /// ceiling is this subscriber's own, and it is enforced.
 pub(crate) fn describe(live: &Live, subscription_id: &str) -> Subscription {
-    let (running, applied_width) = {
+    let (running, applied_width, encoding) = {
         let stream = live
             .stream
             .lock()
@@ -365,6 +463,7 @@ pub(crate) fn describe(live: &Live, subscription_id: &str) -> Subscription {
         (
             stream.running.unwrap_or(Budget::NOTHING),
             stream.applied_width,
+            stream.encoding,
         )
     };
     let subscriptions = live
@@ -380,9 +479,13 @@ pub(crate) fn describe(live: &Live, subscription_id: &str) -> Subscription {
         expires_at: subscriber
             .map(|subscriber| subscriber.expires_at.to_rfc3339())
             .unwrap_or_default(),
-        quality: running.quality,
+        // The quality reported is the one Chrome was told, on the scale of
+        // the encoding it was told to use — not the JPEG number the class
+        // table names, which would describe a picture nobody is being sent.
+        quality: encoding.quality_from(running.quality),
         max_fps: mine.max_fps,
         max_width: applied_width,
+        encoding,
     }
 }
 
@@ -425,12 +528,17 @@ pub(super) fn effective_budget(live: &Live) -> Budget {
 /// for. No subscribers means no picture — and the page keeps running.
 pub async fn reconcile_stream(live: &Live) {
     let wanted = effective_budget(live);
-    let current = live
-        .stream
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .running;
-    if current == Some(wanted) || (current.is_none() && wanted == Budget::NOTHING) {
+    let encoding = effective_encoding(live);
+    let (current, running_encoding) = {
+        let stream = live
+            .stream
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        (stream.running, stream.encoding)
+    };
+    if (current == Some(wanted) && running_encoding == encoding)
+        || (current.is_none() && wanted == Budget::NOTHING)
+    {
         return;
     }
     if wanted == Budget::NOTHING {
@@ -440,22 +548,75 @@ pub async fn reconcile_stream(live: &Live) {
     if current.is_some() {
         let _ = stop_stream(live).await;
     }
-    let _ = start_stream(live, wanted).await;
+    let _ = start_stream(live, wanted, encoding).await;
 }
 
-pub(super) async fn start_stream(live: &Live, budget: Budget) -> AppResult<()> {
+pub(super) async fn start_stream(
+    live: &Live,
+    budget: Budget,
+    encoding: FrameEncoding,
+) -> AppResult<()> {
     let viewport = live.snapshot().viewport;
     let max_width = match budget.max_width {
         0 => viewport.width,
         ceiling => ceiling.min(viewport.width),
     };
-    live.call(
-        "Page.startScreencast",
-        json!({
-            "format": "jpeg",
-            "quality": budget.quality,
-            "maxWidth": max_width,
-            "maxHeight": viewport.height,
+    let started = live
+        .call(
+            "Page.startScreencast",
+            screencast_params(budget, encoding, max_width, viewport.height),
+        )
+        .await;
+    // A browser that takes its own protocol dump literally refuses WebP. That
+    // is a picture nobody sees, so it is retried as JPEG rather than reported
+    // — once, after which this session stops asking.
+    let encoding = match (started, encoding) {
+        (Ok(_), encoding) => encoding,
+        (Err(error), FrameEncoding::Jpeg) => return Err(error),
+        (Err(_), FrameEncoding::Webp) => {
+            live.stream
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .webp_refused = true;
+            tracing::info!("this browser refused a WebP screencast; falling back to JPEG");
+            live.call(
+                "Page.startScreencast",
+                screencast_params(budget, FrameEncoding::Jpeg, max_width, viewport.height),
+            )
+            .await?;
+            FrameEncoding::Jpeg
+        }
+    };
+    {
+        let mut stream = live
+            .stream
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        stream.running = Some(budget);
+        stream.encoding = encoding;
+        stream.applied_width = if max_width >= viewport.width {
+            0
+        } else {
+            max_width
+        };
+        stream.last_frame = None;
+        stream.session = live.active_session();
+    }
+    prime_frame(live, budget, encoding).await;
+    Ok(())
+}
+
+fn screencast_params(
+    budget: Budget,
+    encoding: FrameEncoding,
+    max_width: u32,
+    max_height: u32,
+) -> Value {
+    json!({
+        "format": encoding.as_str(),
+        "quality": encoding.quality_from(budget.quality),
+        "maxWidth": max_width,
+        "maxHeight": max_height,
             // Deliberately 1, not `budget.every_nth`. Chrome only produces a
             // screencast frame when the compositor has something new, so
             // "every Nth" counts repaints, not time: a click that repaints
@@ -465,26 +626,8 @@ pub(super) async fn start_stream(live: &Live, budget: Budget) -> AppResult<()> {
             // click produced a frame only when the five-second sweep happened
             // to restart the stream. The thinning is done per subscriber
             // instead, where the newest frame always survives (§2.9).
-            "everyNthFrame": 1,
-        }),
-    )
-    .await?;
-    {
-        let mut stream = live
-            .stream
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        stream.running = Some(budget);
-        stream.applied_width = if max_width >= viewport.width {
-            0
-        } else {
-            max_width
-        };
-        stream.last_frame = None;
-        stream.session = live.active_session();
-    }
-    prime_frame(live, budget.quality).await;
-    Ok(())
+        "everyNthFrame": 1,
+    })
 }
 
 pub(super) async fn stop_stream(live: &Live) -> AppResult<()> {
@@ -511,6 +654,7 @@ pub(super) async fn stop_stream(live: &Live) -> AppResult<()> {
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     stream.running = None;
     stream.applied_width = 0;
+    stream.encoding = FrameEncoding::Jpeg;
     stream.session.clear();
     Ok(())
 }

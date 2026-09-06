@@ -500,7 +500,9 @@ fn the_dedicated_stream_carries_raw_frames_and_a_closed_uplink() {
             viewport_height: 540,
             device_scale_factor: 1.0,
             encoding: "webp".into(),
-            data: vec![0x52, 0x49, 0x46, 0x46, 0xf8, 0x01, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50],
+            data: vec![
+                0x52, 0x49, 0x46, 0x46, 0xf8, 0x01, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
+            ],
             captured_at_unix_ms: 1788557900001,
         },
     );

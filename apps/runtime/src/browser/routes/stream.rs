@@ -231,6 +231,7 @@ fn subscribe_request(hello: &BrowserSubscribeRequest, held: Option<&str>) -> Sub
         },
         max_width: hello.max_width,
         device_id: hello.device_id.clone(),
+        accepted_encodings: hello.accepted_encodings.clone(),
     }
 }
 
@@ -276,7 +277,10 @@ fn encode(session_id: &str, frame: &StreamFrame) -> Vec<u8> {
         viewport_width: frame.width,
         viewport_height: frame.height,
         device_scale_factor: frame.device_scale_factor,
-        encoding: "jpeg".into(),
+        // What these bytes are, taken from the frame rather than from the
+        // session: a frame encoded before the stream changed encodings still
+        // has to describe itself truthfully.
+        encoding: frame.encoding.as_str().into(),
         data: frame.data.clone(),
         captured_at_unix_ms: frame.captured_at_unix_ms,
     }

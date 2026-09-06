@@ -38,6 +38,7 @@ async fn frames_flow_only_while_a_subscriber_wants_them() {
             bandwidth_class: crate::browser::BandwidthClass::Lan,
             max_width: 0,
             device_id: String::new(),
+            accepted_encodings: Vec::new(),
         },
     )
     .await
@@ -119,6 +120,7 @@ async fn closing_a_node_stops_the_picture_and_not_the_page() {
             bandwidth_class: crate::browser::BandwidthClass::Lan,
             max_width: 0,
             device_id: String::new(),
+            accepted_encodings: Vec::new(),
         },
     )
     .await

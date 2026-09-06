@@ -101,8 +101,9 @@ pub(super) async fn set_viewport_inner(live: &Live, viewport: Viewport) -> AppRe
     // the new maximums rather than left scaling an old size.
     let budget = live.running_budget();
     if let Some(budget) = budget {
+        let encoding = live.running_encoding();
         let _ = stop_stream(live).await;
-        let _ = start_stream(live, budget).await;
+        let _ = start_stream(live, budget, encoding).await;
     }
     live.publish().await;
     Ok(())
