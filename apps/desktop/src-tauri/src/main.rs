@@ -11,7 +11,7 @@ use armadra_desktop::{
     host,
     lifecycle::{DesktopLifecycle, reveal_window},
     native_session, runtime_data_dir,
-    runtime_process::{RuntimeProcess, external_runtime_health_url, runtime_get, wait_for_runtime},
+    runtime_process::{RuntimeProcess, runtime_get, wait_for_runtime},
     shortcuts, trace_lifecycle, transport,
     transport::{RuntimeAddress, RuntimeTransport, WebSocketForwarder},
     updates, usage,
