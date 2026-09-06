@@ -2127,3 +2127,64 @@ util 缺席时 `loadSnapshot` 会整份失败。停用只发生在「创建」�
 - 点过的：搜索到便签正文（`tmux` → 命中「部署清单」带摘要）、搜到别的板上的
   节点并跳过去（`实验` → 切板 + 居中）、铃铛展开/再点收回/Esc 收回、
   清 localStorage 后启动直接进壳（无首页、无提示文案、画布区空）。
+
+## canvas-prefs
+
+2026-09-05 用户反馈：「tldraw 原生组件的能力并没有加入到系统中。偏好里所有的
+设置都需要在系统中实现……页面中右侧的设置主要就是展开这一个里面的配置进行
+设置，左下角的配置负责展开应用的配置。」
+
+### 落在哪
+
+- **右上工具簇最后一个钮**（`shell/ControlsCluster.tsx`）从「应用设置」换成
+  「画布偏好」（`SlidersHorizontal`），展开
+  `canvas/CanvasPreferencesMenu.tsx`。应用设置只剩侧栏左下角一个入口，
+  快捷键 ⌘, 照旧。
+- 菜单结构对齐 tldraw 原生「偏好」子菜单：九个勾选项（始终吸附 / 工具锁定 /
+  显示网格 / 选择换行 / 专注模式 / 边缘滚动 / 动态尺寸 / 粘贴至光标处 /
+  调试模式）+ 四个子菜单（主题 / 画布背景 / 辅助功能 / 输入设备，输入设备
+  里带一条只在鼠标模式下可用的「缩放方向反转」）。
+
+### 唯一真相：`preferences-store` 的 `whiteboard` 段
+
+新增字段 `toolLock` / `wrap` / `focus` / `edgeScroll` / `pasteAtCursor` /
+`debug` / `enhancedA11y` / `inputMode` / `zoomInverted`，全部持久化在
+`armadra.whiteboard.*`。默认值与 tldraw 的 `defaultUserPreferences` 一一对齐
+（有单测守着），所以第一次挂载不会「自己改一次」。
+
+`app/use-tldraw-preferences.ts` 负责两个方向：
+
+- **推下去**：`tldrawUserPatch()` → `editor.user.updateUserPreferences`，
+  `tldrawInstancePatch()` → `editor.updateInstanceState`（逐字段比对后才写）。
+- **读回来**：`react()` 订阅 → `readTldrawPreferences()` →
+  `whiteboardFromTldraw()` → `whiteboardChanges()` 只吐真正不同的键。
+  不成环靠两层：diff 为空就不写，`setWhiteboardPreference` 再挡一次相同值。
+
+**给后来人的坑**：反向通道**不能**读 `editor.user.getUserPreferences()`。
+那是一个另一种形状的派生对象——`isDynamicSizeMode` 在里面叫
+`isDynamicResizeMode`，`edgeScrollSpeed` 与 `isPasteAtCursorMode` 根本不在。
+照着它读会把这三项当成「关」写回 store。要逐个 getter 取
+（`getIsDynamicResizeMode()` / `getEdgeScrollSpeed()` / `getIsPasteAtCursorMode()`
+……），每个 getter 自己解析过默认值。
+
+### 共享文件上动的地方
+
+- `keybindings.ts`：canvas 作用域**只追加**三条 —
+  `canvas.toggleToolLock`（Q）、`canvas.toggleGrid`（Mod+'）、
+  `canvas.toggleFocus`（Mod+.），`allowInTerminal=false`。
+  文案在 `i18n/commands.ts` 的 `cmd.canvas.toggle*`。
+- `app/commands.ts`：这三条在 `run()` 的 switch 里直接翻
+  `preferences-store` 的对应位（不碰 editor），画布没挂载时也是安全空操作。
+- `canvas/TldrawWorkspace.tsx`：`components` 里把 `DebugPanel: null` **拿掉**了。
+  它只在 `isDebugMode` 为真时渲染，置空等于「调试模式」按了没反应；
+  `DebugMenu` 仍然置空。
+- `panels/settings/pages/WhiteboardPage.tsx`：加了同一组开关（外加输入设备
+  下拉）。设置页与菜单读写同一份 store，两处任改一处另一处立刻跟着变；
+  默认风格 / 默认颜色 / 默认粗细只在设置页出现。
+
+### 已验（浏览器，隔离 Runtime + Vite）
+
+九个勾选项逐个切换 → `editor.getInstanceState()` /
+`editor.user.get*()` 对应变化 → `armadra.whiteboard.*` 落盘 → 刷新后原样恢复；
+Q / ⌘' / ⌘. 生效并反映到菜单勾选与设置页；四个子菜单（含 tldraw 的调试面板
+真的出现、专注模式真的收起 tldraw 面板）；深浅色各走了一遍。

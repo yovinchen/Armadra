@@ -4,7 +4,9 @@ import {
   WHITEBOARD_BACKGROUNDS,
   WHITEBOARD_COLORS,
   WHITEBOARD_GRID_SIZES,
+  WHITEBOARD_INPUT_MODES,
   usePreferencesStore,
+  type WhiteboardPreferences,
 } from "./preferences-store";
 import {
   WHITEBOARD_BACKGROUND_COLORS,
@@ -15,7 +17,14 @@ import {
   canvasDotColor,
   luminance,
   tldrawGridSize,
+  tldrawInputMode,
+  tldrawInstancePatch,
   tldrawLocale,
+  tldrawUserPatch,
+  whiteboardChanges,
+  whiteboardFromTldraw,
+  whiteboardInputMode,
+  type TldrawPreferenceSnapshot,
 } from "./use-tldraw-preferences";
 
 /**
@@ -150,10 +159,49 @@ describe("白板偏好的默认值与持久化", () => {
       snap: false,
       dynamicSize: false,
       animation: true,
+      toolLock: false,
+      wrap: false,
+      focus: false,
+      edgeScroll: true,
+      pasteAtCursor: false,
+      debug: false,
+      enhancedA11y: false,
+      inputMode: "auto",
+      zoomInverted: false,
       style: "sketch",
       defaultColor: "black",
       defaultSize: "m",
     });
+  });
+
+  it("tldraw 那一组的默认值与 tldraw 自己的默认值一致", () => {
+    // 对齐 `defaultUserPreferences`：不一致的话第一次挂载就会「自动改一次」。
+    const { whiteboard } = usePreferencesStore.getState();
+    const user = tldrawUserPatch(whiteboard, "dark", "zh-CN");
+    expect(user.isSnapMode).toBe(false);
+    expect(user.isWrapMode).toBe(false);
+    expect(user.isDynamicSizeMode).toBe(false);
+    expect(user.isPasteAtCursorMode).toBe(false);
+    expect(user.enhancedA11yMode).toBe(false);
+    expect(user.isZoomDirectionInverted).toBe(false);
+    expect(user.edgeScrollSpeed).toBe(1);
+    expect(user.animationSpeed).toBe(1);
+    expect(user.inputMode).toBeNull();
+    expect(tldrawInstancePatch(whiteboard)).toEqual({
+      isGridMode: true,
+      isToolLocked: false,
+      isFocusMode: false,
+      isDebugMode: false,
+    });
+  });
+
+  it("相同的值不再写一次 localStorage", () => {
+    const set = usePreferencesStore.getState().setWhiteboardPreference;
+    const before = usePreferencesStore.getState().whiteboard;
+    set("snap", before.snap);
+    // 同一个对象引用：订阅者不会因为「设了个一样的值」白重渲染。
+    expect(usePreferencesStore.getState().whiteboard).toBe(before);
+    expect(cells.has("armadra.whiteboard.snap")).toBe(false);
   });
 
   it("每一项都写进 localStorage 并进 store", () => {
@@ -180,5 +228,166 @@ describe("白板偏好的默认值与持久化", () => {
   it("色板就是 tldraw 的 13 色", () => {
     expect(WHITEBOARD_COLORS).toHaveLength(13);
     expect(new Set(WHITEBOARD_COLORS).size).toBe(13);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 偏好 ⇄ tldraw 的字段映射（2026-09-05）                                       */
+/* -------------------------------------------------------------------------- */
+
+/** 一份「每一项都不是默认值」的偏好，用来验映射真的逐字段搬过去了。 */
+const FLIPPED: WhiteboardPreferences = {
+  background: "paper",
+  grid: false,
+  gridSize: 48,
+  snap: true,
+  dynamicSize: true,
+  animation: false,
+  toolLock: true,
+  wrap: true,
+  focus: true,
+  edgeScroll: false,
+  pasteAtCursor: true,
+  debug: true,
+  enhancedA11y: true,
+  inputMode: "trackpad",
+  zoomInverted: true,
+  style: "clean",
+  defaultColor: "blue",
+  defaultSize: "l",
+};
+
+describe("偏好 → tldraw", () => {
+  it("user preferences 的每一位都跟着翻", () => {
+    expect(tldrawUserPatch(FLIPPED, "dark", "en")).toEqual({
+      // 纸色是亮底，色板必须翻成浅色（和应用主题无关）
+      colorScheme: "light",
+      locale: "en",
+      animationSpeed: 0,
+      edgeScrollSpeed: 0,
+      enhancedA11yMode: true,
+      inputMode: "trackpad",
+      isDynamicSizeMode: true,
+      isPasteAtCursorMode: true,
+      isSnapMode: true,
+      isWrapMode: true,
+      isZoomDirectionInverted: true,
+    });
+  });
+
+  it("instance 的四个开关单独一份", () => {
+    expect(tldrawInstancePatch(FLIPPED)).toEqual({
+      isGridMode: false,
+      isToolLocked: true,
+      isFocusMode: true,
+      isDebugMode: true,
+    });
+  });
+
+  it("布尔项走的是 1 / 0 而不是 true / false", () => {
+    // tldraw 的这两位是数字：写成布尔会被它的校验器拒掉。
+    expect(tldrawUserPatch({ ...FLIPPED, animation: true }, "dark", "en")
+      .animationSpeed).toBe(1);
+    expect(tldrawUserPatch({ ...FLIPPED, edgeScroll: true }, "dark", "en")
+      .edgeScrollSpeed).toBe(1);
+  });
+
+  it("输入设备的 auto 就是 tldraw 的 null，来回都认", () => {
+    expect(tldrawInputMode("auto")).toBeNull();
+    expect(tldrawInputMode("mouse")).toBe("mouse");
+    expect(tldrawInputMode("trackpad")).toBe("trackpad");
+    for (const mode of WHITEBOARD_INPUT_MODES) {
+      expect(whiteboardInputMode(tldrawInputMode(mode))).toBe(mode);
+    }
+    // 没存过 / 存了别的：一律当自动。
+    expect(whiteboardInputMode(null)).toBe("auto");
+    expect(whiteboardInputMode(undefined)).toBe("auto");
+  });
+});
+
+describe("tldraw → 偏好（反向通道）", () => {
+  /**
+   * 把一份偏好推给 tldraw，再原样读回来。
+   *
+   * `snapshot` 模拟的是 `readTldrawPreferences`：tldraw 的每个 getter 都
+   * 自己解析过默认值，所以到这一步已经没有 `null` / `undefined` 了。
+   */
+  function snapshot(
+    whiteboard: WhiteboardPreferences,
+    overrides: Partial<TldrawPreferenceSnapshot> = {},
+  ): TldrawPreferenceSnapshot {
+    const user = tldrawUserPatch(whiteboard, "dark", "zh-CN");
+    const instance = tldrawInstancePatch(whiteboard);
+    return {
+      animationSpeed: user.animationSpeed ?? 1,
+      edgeScrollSpeed: user.edgeScrollSpeed ?? 1,
+      enhancedA11yMode: Boolean(user.enhancedA11yMode),
+      inputMode: user.inputMode ?? null,
+      isDynamicSizeMode: Boolean(user.isDynamicSizeMode),
+      isPasteAtCursorMode: Boolean(user.isPasteAtCursorMode),
+      isSnapMode: Boolean(user.isSnapMode),
+      isWrapMode: Boolean(user.isWrapMode),
+      isZoomDirectionInverted: Boolean(user.isZoomDirectionInverted),
+      ...instance,
+      ...overrides,
+    };
+  }
+
+  function roundTrip(whiteboard: WhiteboardPreferences) {
+    return whiteboardFromTldraw(snapshot(whiteboard));
+  }
+
+  it("推下去再读回来，值一个都不变", () => {
+    for (const whiteboard of [
+      usePreferencesStore.getState().whiteboard,
+      FLIPPED,
+    ]) {
+      const back = roundTrip(whiteboard);
+      for (const [key, value] of Object.entries(back)) {
+        expect(value, key).toBe(
+          whiteboard[key as keyof WhiteboardPreferences],
+        );
+      }
+    }
+  });
+
+  it("不成环：推下去引起的那次反应 diff 是空的", () => {
+    for (const whiteboard of [
+      usePreferencesStore.getState().whiteboard,
+      FLIPPED,
+    ]) {
+      expect(whiteboardChanges(whiteboard, roundTrip(whiteboard))).toEqual({});
+    }
+  });
+
+  it("tldraw 那头改了一位，只吐那一位", () => {
+    const whiteboard = usePreferencesStore.getState().whiteboard;
+    // 用户按 Q：instance 的 `isToolLocked` 变了，其余没动。
+    const incoming = whiteboardFromTldraw(
+      snapshot(whiteboard, { isToolLocked: true }),
+    );
+    expect(whiteboardChanges(whiteboard, incoming)).toEqual({ toolLock: true });
+  });
+
+  it("背景 / 风格 / 颜色不在反向映射里", () => {
+    const back = roundTrip(FLIPPED);
+    // 这几项 tldraw 那头没有对应物，回写它们会把用户的选择抹掉。
+    for (const key of ["background", "gridSize", "style", "defaultColor", "defaultSize"]) {
+      expect(back).not.toHaveProperty(key);
+    }
+  });
+
+  it("1 / 0 那两位翻回布尔", () => {
+    const off = whiteboardFromTldraw(
+      snapshot(FLIPPED, { edgeScrollSpeed: 0, animationSpeed: 0 }),
+    );
+    expect(off.edgeScroll).toBe(false);
+    expect(off.animation).toBe(false);
+
+    const on = whiteboardFromTldraw(
+      snapshot(FLIPPED, { edgeScrollSpeed: 1, animationSpeed: 1 }),
+    );
+    expect(on.edgeScroll).toBe(true);
+    expect(on.animation).toBe(true);
   });
 });

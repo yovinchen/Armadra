@@ -99,13 +99,16 @@ const CAMERA_THROTTLE_MS = 300;
 /**
  * §5「tldraw UI 槽位」：Dock / 右键菜单 / 命令面板承担的槽位全部置空，
  * 只留 StylePanel 与 NavigationPanel（Minimap 的宿主，置空缩略图就没了）。
+ *
+ * 2026-09-05：`DebugPanel` 从这张置空表里拿掉了。它只在 `isDebugMode` 为真
+ * 时渲染，而「调试模式」现在是画布偏好里的一项——置空它等于那一项按了没反应。
+ * `DebugMenu`（面板右下角那个下拉）仍然置空：它开的是 tldraw 自己的菜单树。
  */
 const components: TLComponents = {
   Toolbar: null,
   MenuPanel: null,
   PageMenu: null,
   HelpMenu: null,
-  DebugPanel: null,
   DebugMenu: null,
   KeyboardShortcutsDialog: null,
   ContextMenu: null,

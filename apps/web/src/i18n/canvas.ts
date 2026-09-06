@@ -91,6 +91,30 @@ const zh = {
   "canvas.assetTooLarge": "图片超过 {limit} MB，没有添加",
   "canvas.assetFailed": "{name} 上传失败",
 
+  /* 画布偏好菜单（右上工具簇的滑块钮，2026-09-05 用户反馈）。
+     这一组对齐 tldraw 原生「偏好」子菜单，值全部存在 `preferences-store`
+     的 `whiteboard` 段里，与设置 → 白板是同一份。 */
+  "wb.menu": "画布偏好",
+  "wb.snap": "始终吸附",
+  "wb.toolLock": "工具锁定",
+  "wb.grid": "显示网格",
+  "wb.wrap": "选择换行",
+  "wb.focus": "专注模式",
+  "wb.edgeScroll": "边缘滚动",
+  "wb.dynamicSize": "动态尺寸",
+  "wb.pasteAtCursor": "粘贴至光标处",
+  "wb.debug": "调试模式",
+  "wb.theme": "主题",
+  "wb.background": "画布背景",
+  "wb.a11y": "辅助功能",
+  "wb.enhancedA11y": "增强辅助模式",
+  "wb.animation": "动画",
+  "wb.input": "输入设备",
+  "wb.input.auto": "自动",
+  "wb.input.mouse": "鼠标",
+  "wb.input.trackpad": "触控板",
+  "wb.zoomInverted": "缩放方向反转",
+
   /* 删除确认：只有节点里跑着会话时才弹 */
   "delete.session.title": "结束会话并删除？",
   "delete.session.confirm": "删除",
@@ -170,6 +194,27 @@ const en: Record<keyof typeof zh, string> = {
 
   "canvas.assetTooLarge": "Image is over {limit} MB and was not added",
   "canvas.assetFailed": "Could not upload {name}",
+
+  "wb.menu": "Canvas preferences",
+  "wb.snap": "Always snap",
+  "wb.toolLock": "Tool lock",
+  "wb.grid": "Show grid",
+  "wb.wrap": "Select on wrap",
+  "wb.focus": "Distraction-free",
+  "wb.edgeScroll": "Edge scrolling",
+  "wb.dynamicSize": "Dynamic size",
+  "wb.pasteAtCursor": "Paste at cursor",
+  "wb.debug": "Debug mode",
+  "wb.theme": "Theme",
+  "wb.background": "Canvas background",
+  "wb.a11y": "Accessibility",
+  "wb.enhancedA11y": "Enhanced accessibility",
+  "wb.animation": "Animation",
+  "wb.input": "Input device",
+  "wb.input.auto": "Auto",
+  "wb.input.mouse": "Mouse",
+  "wb.input.trackpad": "Trackpad",
+  "wb.zoomInverted": "Invert zoom direction",
 
   "delete.session.title": "End the session and delete?",
   "delete.session.confirm": "Delete",

@@ -1,8 +1,17 @@
-import { FolderTree, GitBranch, Search, Settings, Shrink } from "lucide-react";
+import * as React from "react";
+import {
+  FolderTree,
+  GitBranch,
+  Search,
+  Shrink,
+  SlidersHorizontal,
+} from "lucide-react";
 import { commandKeysLabel, type CommandId } from "../keybindings";
 import { useCanvasStore } from "../store/canvas-store";
 import { useT } from "../app/preferences-store";
+import { CanvasPreferencesMenu } from "../canvas/CanvasPreferencesMenu";
 import { cn } from "@/lib/cn";
+import { DropdownMenu, DropdownMenuTrigger } from "@/ui/dropdown-menu";
 import { IconButton } from "@/ui/icon-button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
 import type { ReactNode } from "react";
@@ -15,6 +24,10 @@ import type { ReactNode } from "react";
  * 每个钮只有图标，说明走 Tooltip（§14 第 1 条，延迟 500ms）。
  *
  * §26：侧栏折叠钮搬到了标题栏红绿灯右侧（`shell/LeftSidebar`），这里没有了。
+ *
+ * 2026-09-05 用户反馈：最后一个钮不再是应用设置，而是**画布偏好**
+ * （`canvas/CanvasPreferencesMenu`）。应用设置只剩侧栏左下角那一个入口，
+ * 快捷键 ⌘, 照旧。
  */
 
 /** 工具簇/侧栏钮共用的那条底。 */
@@ -23,6 +36,7 @@ const BAR =
 
 export function ControlsCluster() {
   const t = useT();
+  const [preferencesOpen, setPreferencesOpen] = React.useState(false);
   const panels = useCanvasStore((state) => state.panels);
   const setPanel = useCanvasStore((state) => state.setPanel);
   const focusNodeId = useCanvasStore((state) => state.focusNodeId);
@@ -80,14 +94,26 @@ export function ControlsCluster() {
           </ClusterButton>
         )}
 
-        <ClusterButton
-          label={t("cluster.settings")}
-          command="app.settings"
-          active={panels.settings}
-          onClick={() => setPanel("settings", !panels.settings)}
-        >
-          <Settings />
-        </ClusterButton>
+        <DropdownMenu open={preferencesOpen} onOpenChange={setPreferencesOpen}>
+          <Tooltip delayDuration={500}>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <IconButton
+                  size="cluster"
+                  label={t("wb.menu")}
+                  active={preferencesOpen}
+                >
+                  <SlidersHorizontal />
+                </IconButton>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            {/* 菜单展开时不要再挂 Tooltip：它会压在第一条勾选项上。 */}
+            {preferencesOpen ? null : (
+              <TooltipContent side="left">{t("wb.menu")}</TooltipContent>
+            )}
+          </Tooltip>
+          <CanvasPreferencesMenu />
+        </DropdownMenu>
       </div>
     </>
   );

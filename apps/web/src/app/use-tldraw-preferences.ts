@@ -4,10 +4,13 @@ import {
   DefaultDashStyle,
   DefaultFontStyle,
   DefaultSizeStyle,
+  react,
+  type Editor,
   type TLDefaultColorStyle,
   type TLDefaultDashStyle,
   type TLDefaultFontStyle,
   type TLDefaultSizeStyle,
+  type TLUserPreferences,
 } from "tldraw";
 
 import { useEditorHandle } from "../canvas/editor-context";
@@ -18,6 +21,8 @@ import {
   type ResolvedTheme,
   type WhiteboardBackground,
   type WhiteboardGridSize,
+  type WhiteboardInputMode,
+  type WhiteboardPreferences,
   type WhiteboardStyle,
 } from "./preferences-store";
 
@@ -26,8 +31,13 @@ import {
  * 「把 tldraw 原生的配置引入我们的设置」）。
  *
  * 值一律以 `preferences-store` 为准（持久化在 localStorage），挂载与变化时
- * 单向推给 tldraw；反向不读——用户在 tldraw 自己的菜单里改了什么，下次
- * 偏好变化时会被盖掉，这是刻意的：设置页是唯一入口。
+ * 推给 tldraw。2026-09-05 起**加了一条反向通道**：快捷键（Q / ⌘\' / ⌘.）与
+ * tldraw 自己写 instance state 的路径都会被 `react()` 观察到，值不同才写回
+ * store，于是偏好菜单、设置页、画布三处永远是同一个值。
+ *
+ * 不成环靠两层：`whiteboardChanges` 只吐真正不同的键，
+ * `setWhiteboardPreference` 再挡一次相同值——推给 tldraw 引起的那次反应
+ * 读到的就是刚写进去的值，diff 为空，链条到此为止。
  *
  * 壳这一层订阅 `editor-context`（画布外唯一允许的取 editor 途径，§9.1）。
  * 背景那一档不需要 editor：它改的是 `--canvas-bg` / `--canvas-dot` 两个
@@ -165,6 +175,185 @@ export function tldrawLocale(locale: Locale): string {
   return locale === "zh-CN" ? "zh-cn" : "en";
 }
 
+/* ------------------------------ 偏好 ⇄ tldraw ------------------------------ */
+
+/**
+ * 推给 `editor.user.updateUserPreferences` 的那一份。
+ *
+ * 只列我们管的字段：`id` / `name` / `color` 归 tldraw 自己（协作用），
+ * 这里不碰。`inputMode` 的 `auto` 就是 tldraw 的 `null`。
+ */
+export type TldrawUserPatch = Pick<
+  TLUserPreferences,
+  | "colorScheme"
+  | "locale"
+  | "animationSpeed"
+  | "edgeScrollSpeed"
+  | "enhancedA11yMode"
+  | "inputMode"
+  | "isDynamicSizeMode"
+  | "isPasteAtCursorMode"
+  | "isSnapMode"
+  | "isWrapMode"
+  | "isZoomDirectionInverted"
+>;
+
+/** 推给 `editor.updateInstanceState` 的那一份（instance 级的四个开关）。 */
+export interface TldrawInstancePatch {
+  isGridMode: boolean;
+  isToolLocked: boolean;
+  isFocusMode: boolean;
+  isDebugMode: boolean;
+}
+
+/** `auto` ⇄ `null`：tldraw 用 `null` 表示「自己判断输入设备」。 */
+export function tldrawInputMode(
+  mode: WhiteboardInputMode,
+): "mouse" | "trackpad" | null {
+  return mode === "auto" ? null : mode;
+}
+
+export function whiteboardInputMode(
+  mode: TLUserPreferences["inputMode"],
+): WhiteboardInputMode {
+  return mode === "mouse" || mode === "trackpad" ? mode : "auto";
+}
+
+export function tldrawUserPatch(
+  whiteboard: WhiteboardPreferences,
+  theme: ResolvedTheme,
+  locale: Locale,
+): TldrawUserPatch {
+  return {
+    colorScheme: canvasColorScheme(whiteboard.background, theme),
+    locale: tldrawLocale(locale),
+    animationSpeed: whiteboard.animation ? 1 : 0,
+    edgeScrollSpeed: whiteboard.edgeScroll ? 1 : 0,
+    enhancedA11yMode: whiteboard.enhancedA11y,
+    inputMode: tldrawInputMode(whiteboard.inputMode),
+    isDynamicSizeMode: whiteboard.dynamicSize,
+    isPasteAtCursorMode: whiteboard.pasteAtCursor,
+    isSnapMode: whiteboard.snap,
+    isWrapMode: whiteboard.wrap,
+    isZoomDirectionInverted: whiteboard.zoomInverted,
+  };
+}
+
+export function tldrawInstancePatch(
+  whiteboard: WhiteboardPreferences,
+): TldrawInstancePatch {
+  return {
+    isGridMode: whiteboard.grid,
+    isToolLocked: whiteboard.toolLock,
+    isFocusMode: whiteboard.focus,
+    isDebugMode: whiteboard.debug,
+  };
+}
+
+/** 反向映射的定义域：只有这些键归 tldraw 管，其余（背景 / 风格 / 色）不回写。 */
+export type WhiteboardMirrored = Pick<
+  WhiteboardPreferences,
+  | "animation"
+  | "debug"
+  | "dynamicSize"
+  | "edgeScroll"
+  | "enhancedA11y"
+  | "focus"
+  | "grid"
+  | "inputMode"
+  | "pasteAtCursor"
+  | "snap"
+  | "toolLock"
+  | "wrap"
+  | "zoomInverted"
+>;
+
+/**
+ * 反向通道读到的那一份，**已经解析过默认值**。
+ *
+ * 不能拿 `editor.user.getUserPreferences()` 当输入：它返回的是一个另一种
+ * 形状的派生对象——`isDynamicSizeMode` 在那里叫 `isDynamicResizeMode`，
+ * `edgeScrollSpeed` 与 `isPasteAtCursorMode` 干脆不在里面。照着它读会把
+ * 这三项当成「关」写回 store，用户刚打开的开关下一帧就自己弹回去。
+ * 逐个 getter 取才是对的（每个 getter 自己 `?? 默认值`）。
+ */
+export interface TldrawPreferenceSnapshot {
+  animationSpeed: number;
+  edgeScrollSpeed: number;
+  enhancedA11yMode: boolean;
+  inputMode: "mouse" | "trackpad" | null;
+  isDynamicSizeMode: boolean;
+  isPasteAtCursorMode: boolean;
+  isSnapMode: boolean;
+  isWrapMode: boolean;
+  isZoomDirectionInverted: boolean;
+  isGridMode: boolean;
+  isToolLocked: boolean;
+  isFocusMode: boolean;
+  isDebugMode: boolean;
+}
+
+/** 从 editor 上取一份快照；`react()` 的依赖就是这里读到的那些 atom。 */
+export function readTldrawPreferences(editor: Editor): TldrawPreferenceSnapshot {
+  const user = editor.user;
+  const instance = editor.getInstanceState();
+  return {
+    animationSpeed: user.getAnimationSpeed(),
+    edgeScrollSpeed: user.getEdgeScrollSpeed(),
+    enhancedA11yMode: user.getEnhancedA11yMode(),
+    inputMode: user.getInputMode(),
+    // tldraw 的 getter 名字里是 Resize，存的字段是 isDynamicSizeMode。
+    isDynamicSizeMode: user.getIsDynamicResizeMode(),
+    isPasteAtCursorMode: user.getIsPasteAtCursorMode(),
+    isSnapMode: user.getIsSnapMode(),
+    isWrapMode: user.getIsWrapMode(),
+    isZoomDirectionInverted: user.getIsZoomDirectionInverted(),
+    isGridMode: Boolean(instance.isGridMode),
+    isToolLocked: Boolean(instance.isToolLocked),
+    isFocusMode: Boolean(instance.isFocusMode),
+    isDebugMode: Boolean(instance.isDebugMode),
+  };
+}
+
+/** tldraw → 偏好。 */
+export function whiteboardFromTldraw(
+  snapshot: TldrawPreferenceSnapshot,
+): WhiteboardMirrored {
+  return {
+    animation: snapshot.animationSpeed !== 0,
+    debug: snapshot.isDebugMode,
+    dynamicSize: snapshot.isDynamicSizeMode,
+    edgeScroll: snapshot.edgeScrollSpeed !== 0,
+    enhancedA11y: snapshot.enhancedA11yMode,
+    focus: snapshot.isFocusMode,
+    grid: snapshot.isGridMode,
+    inputMode: whiteboardInputMode(snapshot.inputMode),
+    pasteAtCursor: snapshot.isPasteAtCursorMode,
+    snap: snapshot.isSnapMode,
+    toolLock: snapshot.isToolLocked,
+    wrap: snapshot.isWrapMode,
+    zoomInverted: snapshot.isZoomDirectionInverted,
+  };
+}
+
+/**
+ * 只留下真正不同的键。反向同步全靠它收敛：推下去之后再读回来，
+ * diff 是空的，于是不会再写 store，也就不会再推一次。
+ */
+export function whiteboardChanges(
+  current: WhiteboardPreferences,
+  incoming: WhiteboardMirrored,
+): Partial<WhiteboardMirrored> {
+  const changes: Partial<WhiteboardMirrored> = {};
+  for (const key of Object.keys(incoming) as (keyof WhiteboardMirrored)[]) {
+    if (current[key] !== incoming[key]) {
+      // 键与值的类型是一一对应的，但 TS 在同态映射上留不住这层关系。
+      (changes as Record<string, unknown>)[key] = incoming[key];
+    }
+  }
+  return changes;
+}
+
 /* --------------------------------- Hook ----------------------------------- */
 
 export function useTldrawPreferences(): void {
@@ -173,17 +362,7 @@ export function useTldrawPreferences(): void {
   const locale = usePreferencesStore((state) => state.locale);
   const whiteboard = usePreferencesStore((state) => state.whiteboard);
 
-  const {
-    background,
-    grid,
-    gridSize,
-    snap,
-    dynamicSize,
-    animation,
-    style,
-    defaultColor,
-    defaultSize,
-  } = whiteboard;
+  const { background, gridSize, style, defaultColor, defaultSize } = whiteboard;
 
   useEffect(() => {
     applyCanvasBackground(canvasBackgroundVars(background));
@@ -193,14 +372,23 @@ export function useTldrawPreferences(): void {
     if (!editor) return;
     // tldraw 自己按 `user.colorScheme` 给容器加 `tl-theme__dark` /
     // `tl-theme__light`，而应用主题是 `<html data-theme>`：两套开关必须一起动。
-    editor.user.updateUserPreferences({
-      colorScheme: canvasColorScheme(background, theme),
-      locale: tldrawLocale(locale),
-      isSnapMode: snap,
-      isDynamicSizeMode: dynamicSize,
-      animationSpeed: animation ? 1 : 0,
-    });
-  }, [editor, background, theme, locale, snap, dynamicSize, animation]);
+    editor.user.updateUserPreferences(tldrawUserPatch(whiteboard, theme, locale));
+  }, [editor, whiteboard, theme, locale]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const patch = tldrawInstancePatch(whiteboard);
+    const state = editor.getInstanceState();
+    // 逐字段比对再写：`updateInstanceState` 每次都会推一条新记录进 store，
+    // 而反向的 `react()` 正盯着它——无条件写就是一个自激的环。
+    const diff: Partial<TldrawInstancePatch> = {};
+    for (const key of Object.keys(patch) as (keyof TldrawInstancePatch)[]) {
+      if (state[key] !== patch[key]) diff[key] = patch[key];
+    }
+    if (Object.keys(diff).length === 0) return;
+    // `history: "ignore"`：切网格 / 工具锁不是画布上的一步，⌘Z 不该撤回它。
+    editor.updateInstanceState(diff, { history: "ignore" });
+  }, [editor, whiteboard]);
 
   useEffect(() => {
     if (!editor) return;
@@ -208,10 +396,7 @@ export function useTldrawPreferences(): void {
     if (editor.getDocumentSettings().gridSize !== size) {
       editor.updateDocumentSettings({ gridSize: size });
     }
-    if (editor.getInstanceState().isGridMode !== grid) {
-      editor.updateInstanceState({ isGridMode: grid }, { history: "ignore" });
-    }
-  }, [editor, grid, gridSize]);
+  }, [editor, gridSize]);
 
   useEffect(() => {
     if (!editor) return;
@@ -231,4 +416,28 @@ export function useTldrawPreferences(): void {
       options,
     );
   }, [editor, style, defaultColor, defaultSize]);
+
+  /* ------------------------------ 反向通道 -------------------------------- */
+
+  /**
+   * tldraw → 偏好。
+   *
+   * 这个 effect 必须排在上面几个「推下去」的后面：挂载时 effect 按声明顺序
+   * 跑，先推再订阅，`react()` 第一次求值读到的就已经是 store 的值。
+   * 反过来的话，tldraw 的默认值会在第一帧把用户存的偏好冲掉。
+   */
+  useEffect(() => {
+    if (!editor) return;
+    return react("whiteboard preferences", () => {
+      const incoming = whiteboardFromTldraw(readTldrawPreferences(editor));
+      const state = usePreferencesStore.getState();
+      const changes = whiteboardChanges(state.whiteboard, incoming);
+      for (const [key, value] of Object.entries(changes)) {
+        state.setWhiteboardPreference(
+          key as keyof WhiteboardPreferences,
+          value as WhiteboardPreferences[keyof WhiteboardPreferences],
+        );
+      }
+    });
+  }, [editor]);
 }

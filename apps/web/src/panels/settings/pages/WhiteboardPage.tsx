@@ -2,6 +2,7 @@ import {
   WHITEBOARD_BACKGROUNDS,
   WHITEBOARD_COLORS,
   WHITEBOARD_GRID_SIZES,
+  WHITEBOARD_INPUT_MODES,
   WHITEBOARD_SIZES,
   WHITEBOARD_STYLES,
   usePreferencesStore,
@@ -9,6 +10,7 @@ import {
   type WhiteboardBackground,
   type WhiteboardColor,
   type WhiteboardGridSize,
+  type WhiteboardInputMode,
   type WhiteboardSize,
   type WhiteboardStyle,
 } from "../../../app/preferences-store";
@@ -50,10 +52,16 @@ const SWATCHES: Record<WhiteboardColor, string> = {
 };
 
 /**
- * 设置 → 白板（2026-09-04 用户反馈：把 tldraw 原生配置引入我们的设置）。
+ * 设置 → 白板（2026-09-04 用户反馈：把 tldraw 原生配置引入我们的设置；
+ * 2026-09-05：偏好里所有的设置都要能在系统里自主配置）。
  *
- * 三张卡：外观（背景、网格）、行为（吸附、动态字号、动画）、默认风格
- * （手绘 / 整洁、颜色、粗细）。界面语言不在这里——它静默跟随应用语言。
+ * 四张卡：外观（背景、网格）、行为（吸附、工具锁定、选择换行、动态尺寸、
+ * 粘贴至光标处、边缘滚动、专注模式）、辅助与输入（动画、增强辅助、输入
+ * 设备、缩放反转、调试）、默认风格（手绘 / 整洁、颜色、粗细）。
+ *
+ * 前两张半与右上工具簇的画布偏好菜单是**同一份 store**，两处任改一处、
+ * 另一处立刻跟着变；默认风格那一组只在这里出现（菜单里放不下）。
+ * 界面语言不在这里——它静默跟随应用语言。
  */
 export function WhiteboardPage() {
   const t = useT();
@@ -122,6 +130,22 @@ export function WhiteboardPage() {
           />
         </SettingsRow>
 
+        <SettingsRow label={t("settings.whiteboard.toolLock")}>
+          <Switch
+            checked={whiteboard.toolLock}
+            aria-label={t("settings.whiteboard.toolLock")}
+            onCheckedChange={(next) => set("toolLock", next)}
+          />
+        </SettingsRow>
+
+        <SettingsRow label={t("settings.whiteboard.wrap")}>
+          <Switch
+            checked={whiteboard.wrap}
+            aria-label={t("settings.whiteboard.wrap")}
+            onCheckedChange={(next) => set("wrap", next)}
+          />
+        </SettingsRow>
+
         <SettingsRow label={t("settings.whiteboard.dynamicSize")}>
           <Switch
             checked={whiteboard.dynamicSize}
@@ -130,11 +154,82 @@ export function WhiteboardPage() {
           />
         </SettingsRow>
 
+        <SettingsRow label={t("settings.whiteboard.pasteAtCursor")}>
+          <Switch
+            checked={whiteboard.pasteAtCursor}
+            aria-label={t("settings.whiteboard.pasteAtCursor")}
+            onCheckedChange={(next) => set("pasteAtCursor", next)}
+          />
+        </SettingsRow>
+
+        <SettingsRow label={t("settings.whiteboard.edgeScroll")}>
+          <Switch
+            checked={whiteboard.edgeScroll}
+            aria-label={t("settings.whiteboard.edgeScroll")}
+            onCheckedChange={(next) => set("edgeScroll", next)}
+          />
+        </SettingsRow>
+
+        <SettingsRow label={t("settings.whiteboard.focus")}>
+          <Switch
+            checked={whiteboard.focus}
+            aria-label={t("settings.whiteboard.focus")}
+            onCheckedChange={(next) => set("focus", next)}
+          />
+        </SettingsRow>
+      </SettingsGroup>
+
+      <SettingsGroup>
         <SettingsRow label={t("settings.whiteboard.animation")}>
           <Switch
             checked={whiteboard.animation}
             aria-label={t("settings.whiteboard.animation")}
             onCheckedChange={(next) => set("animation", next)}
+          />
+        </SettingsRow>
+
+        <SettingsRow label={t("settings.whiteboard.enhancedA11y")}>
+          <Switch
+            checked={whiteboard.enhancedA11y}
+            aria-label={t("settings.whiteboard.enhancedA11y")}
+            onCheckedChange={(next) => set("enhancedA11y", next)}
+          />
+        </SettingsRow>
+
+        <SettingsRow label={t("settings.whiteboard.inputMode")}>
+          <Select
+            value={whiteboard.inputMode}
+            onValueChange={(value) =>
+              set("inputMode", value as WhiteboardInputMode)
+            }
+          >
+            <SelectTrigger size="sm" className={CONTROL_WIDTH}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="z-[var(--z-dialog)]">
+              {WHITEBOARD_INPUT_MODES.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {t(`settings.whiteboard.inputMode.${option}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingsRow>
+
+        <SettingsRow label={t("settings.whiteboard.zoomInverted")}>
+          <Switch
+            checked={whiteboard.zoomInverted}
+            disabled={whiteboard.inputMode !== "mouse"}
+            aria-label={t("settings.whiteboard.zoomInverted")}
+            onCheckedChange={(next) => set("zoomInverted", next)}
+          />
+        </SettingsRow>
+
+        <SettingsRow label={t("settings.whiteboard.debug")}>
+          <Switch
+            checked={whiteboard.debug}
+            aria-label={t("settings.whiteboard.debug")}
+            onCheckedChange={(next) => set("debug", next)}
           />
         </SettingsRow>
       </SettingsGroup>

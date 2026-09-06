@@ -240,6 +240,36 @@ export const COMMANDS = [
     allowWhileTyping: false,
   },
 
+  // ── canvas：tldraw 偏好（2026-09-05 用户反馈：偏好要能在系统里配） ──
+  //
+  // 键位照抄 tldraw 原生偏好菜单（Q / ⌘\' / ⌘.），这样从 tldraw 过来的人
+  // 按下去是同一件事。三条都写 `preferences-store` 的 `whiteboard` 段，
+  // 偏好菜单与设置页读的是同一个值。
+  {
+    id: "canvas.toggleToolLock",
+    labelKey: "cmd.canvas.toggleToolLock",
+    scope: "canvas",
+    defaultKeys: both("Q"),
+    allowInTerminal: false,
+    allowWhileTyping: false,
+  },
+  {
+    id: "canvas.toggleGrid",
+    labelKey: "cmd.canvas.toggleGrid",
+    scope: "canvas",
+    defaultKeys: both("Mod+Quote"),
+    allowInTerminal: false,
+    allowWhileTyping: false,
+  },
+  {
+    id: "canvas.toggleFocus",
+    labelKey: "cmd.canvas.toggleFocus",
+    scope: "canvas",
+    defaultKeys: both("Mod+Period"),
+    allowInTerminal: false,
+    allowWhileTyping: false,
+  },
+
   // ── canvas：白板工具（tldraw 计划 §5 的工具键表） ────────────────
   //
   // 键位照抄 tldraw 默认（V / H / D / ⇧D / R / L / A / T / F），这样从
