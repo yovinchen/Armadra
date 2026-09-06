@@ -170,12 +170,12 @@ pub(super) async fn fixture(name: &str) -> Fixture {
 
 /* --------------------------- content sources (§21) ------------------------- */
 
-/// Adds one content node to the fixture board and links the caller to it.
+/// Adds one node to the fixture board and answers with its id.
 ///
 /// The board is rewritten whole (that is what `save_board` does), so the three
 /// nodes the fixture already created are read back and passed through: a test
 /// that adds an editor must not delete the caller it is calling as.
-pub(super) async fn add_linked_node(
+pub(super) async fn add_board_node(
     fixture: &Fixture,
     node_type: &str,
     title: &str,
@@ -212,16 +212,20 @@ pub(super) async fn add_linked_node(
     )
     .await
     .unwrap();
-    // Appended, not replaced: a test that links two content nodes must keep
-    // both in the caller's document.
+    id
+}
+
+/// Appends one link to the caller's document, keeping the ones already there:
+/// a test that links two peers must keep both.
+pub(super) async fn link_caller(fixture: &Fixture, id: &str, title: &str, kind: &str) {
     let mut links = db::get_context_links(&fixture.state.pool, &fixture.caller_id)
         .await
         .unwrap()
         .links;
     links.push(ContextLink {
-        id: id.clone(),
+        id: id.to_owned(),
         title: title.to_owned(),
-        kind: node_type.to_owned(),
+        kind: kind.to_owned(),
         content: None,
     });
     db::put_context_links(
@@ -232,6 +236,37 @@ pub(super) async fn add_linked_node(
     )
     .await
     .unwrap();
+}
+
+/// Adds one content node to the fixture board and links the caller to it.
+pub(super) async fn add_linked_node(
+    fixture: &Fixture,
+    node_type: &str,
+    title: &str,
+    data: Value,
+) -> String {
+    let id = add_board_node(fixture, node_type, title, data).await;
+    link_caller(fixture, &id, title, node_type).await;
+    id
+}
+
+/// Adds one agent terminal, with an optional handle, optionally linked to the
+/// caller. An unlinked peer is how a test says "this node exists but the user
+/// never drew an edge to it".
+pub(super) async fn add_agent_node(
+    fixture: &Fixture,
+    title: &str,
+    handle: Option<&str>,
+    linked: bool,
+) -> String {
+    let mut data = json!({ "kind": "terminal", "cwd": ".", "agent": { "id": "gemini" } });
+    if let Some(handle) = handle {
+        data["handle"] = json!(handle);
+    }
+    let id = add_board_node(fixture, "terminal", title, data).await;
+    if linked {
+        link_caller(fixture, &id, title, "terminal").await;
+    }
     id
 }
 

@@ -400,18 +400,21 @@ pub async fn control(
 ) -> axum::response::Response {
     let text = collab::wants_text(&headers);
     if let Err(refusal) = require_bearer(&state, &headers) {
-        return control_error(text, StatusCode::FORBIDDEN, refusal.to_string());
+        return control_error(
+            text,
+            collab::Refused::new(StatusCode::FORBIDDEN, "forbidden", refusal.to_string()),
+        );
     }
     let Json(request) = body.unwrap_or_default();
     let caller = match collab::resolve_caller(&state, &headers, &request.node_id).await {
         Ok(caller) => caller,
-        Err(refusal) => return control_error(text, refusal.status, refusal.message),
+        Err(refusal) => return control_error(text, refusal.into()),
     };
     let args = collab::Args(&request.args);
     match collab::control::run(&state, &caller, &verb, &args).await {
         Ok(outcome) if text => collab::text_reply(StatusCode::OK, format!("{}\n", outcome.message)),
         Ok(outcome) => (StatusCode::OK, Json(outcome.to_json())).into_response(),
-        Err(refusal) => control_error(text, refusal.status, refusal.message),
+        Err(refused) => control_error(text, refused),
     }
 }
 
@@ -441,13 +444,21 @@ pub async fn browser(
     }
 }
 
-fn control_error(text: bool, status: StatusCode, message: String) -> axum::response::Response {
+/// `code` is what a client branches on — "which agent did you mean?" needs an
+/// answer a program can act on. `error` stays beside `message` because the
+/// `armadra-hook` client reads it when it renders its one stderr line.
+fn control_error(text: bool, refused: collab::Refused) -> axum::response::Response {
     if text {
-        return collab::text_reply(status, format!("{message}\n"));
+        return collab::text_reply(refused.status, format!("{}\n", refused.message));
     }
     (
-        status,
-        Json(serde_json::json!({ "ok": false, "error": message })),
+        refused.status,
+        Json(serde_json::json!({
+            "ok": false,
+            "code": refused.code,
+            "message": refused.message,
+            "error": refused.message,
+        })),
     )
         .into_response()
 }

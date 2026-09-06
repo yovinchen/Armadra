@@ -285,6 +285,193 @@ async fn mailbox_bounds_payload_cursor_expiry_and_pending_capacity() {
     );
 }
 
+/* ------------------------------- addressing ------------------------------ */
+
+#[tokio::test]
+async fn a_name_reaches_only_linked_peers_and_a_handle_outranks_a_title() {
+    let fixture = fixture("mailbox-addressing").await;
+    // Two peers the caller is linked to and one it is not. The unlinked node is
+    // titled exactly like a linked one, which is the whole point: an edge, not
+    // a name, is what makes a node addressable.
+    let reviewer = add_agent_node(&fixture, "审阅", Some("review"), true).await;
+    let named_review = add_agent_node(&fixture, "review", None, true).await;
+    let stranger = add_agent_node(&fixture, "审阅", None, false).await;
+    let post = |to: &str, key: &str| json!({"to": to, "key": key, "body": "hello"});
+
+    // A handle wins over a node whose *title* is that same word.
+    let (status, body) = fixture
+        .json(
+            "/control/post",
+            &fixture.caller_id,
+            post("review", "by-handle"),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (_, inbox) = fixture.json("/control/inbox", &reviewer, json!({})).await;
+    assert_eq!(inbox["messages"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        fixture
+            .json("/control/inbox", &named_review, json!({}))
+            .await
+            .1["messages"],
+        json!([]),
+        "the title match must not have received it"
+    );
+
+    // A title shared by two *linked* peers is ambiguous rather than guessed.
+    let unrelated = add_agent_node(&fixture, "审阅", None, true).await;
+    let (status, body) = fixture
+        .json(
+            "/control/post",
+            &fixture.caller_id,
+            post("审阅", "ambiguous"),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "target_ambiguous", "{body}");
+    assert!(body["message"].as_str().unwrap().contains(&unrelated));
+
+    // An id that exists on the board but has no link is refused, and so is a
+    // name that only an unlinked node answers to.
+    let (status, body) = fixture
+        .json(
+            "/control/post",
+            &fixture.caller_id,
+            post(&stranger, "by-id"),
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["code"], "target_not_linked", "{body}");
+    let (status, body) = fixture
+        .json(
+            "/control/post",
+            &fixture.caller_id,
+            post("没连线的节点", "by-name"),
+        )
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["code"], "target_not_linked", "{body}");
+}
+
+#[tokio::test]
+async fn an_inbox_names_its_senders_as_the_board_names_them_now() {
+    let fixture = fixture("mailbox-from-title").await;
+    fixture
+        .link_caller_to(&fixture.peer_id, "Codex", "terminal")
+        .await;
+    // The link is titled "Codex"; the node itself is "Codex 审阅". The inbox
+    // must report the node's own title, not the label on the caller's edge.
+    let (status, _) = fixture
+        .json(
+            "/control/post",
+            &fixture.caller_id,
+            json!({"to": "Codex", "key": "named", "body": "hello"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, inbox) = fixture
+        .json("/control/inbox", &fixture.peer_id, json!({}))
+        .await;
+    assert_eq!(inbox["messages"][0]["from"], fixture.caller_id);
+    assert_eq!(inbox["messages"][0]["fromTitle"], "Claude");
+
+    // The title is read back per call rather than stamped onto the row, so a
+    // renamed sender reads as the name the user is looking at now.
+    let (status, _) = fixture
+        .json(
+            "/control/rename",
+            &fixture.caller_id,
+            json!({"node": fixture.caller_id, "title": "Claude 主线"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _) = fixture
+        .json(
+            "/control/post",
+            &fixture.caller_id,
+            json!({"to": "Codex", "key": "renamed", "body": "hello again"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, inbox) = fixture
+        .json("/control/inbox", &fixture.peer_id, json!({}))
+        .await;
+    let last = inbox["messages"].as_array().unwrap().last().unwrap();
+    assert_eq!(last["fromTitle"], "Claude 主线");
+
+    // A deleted sender takes its messages with it (`agent_mailbox` cascades on
+    // `nodes`), so the empty title the join falls back to is defensive only.
+    sqlx::query("DELETE FROM nodes WHERE id = ?")
+        .bind(&fixture.caller_id)
+        .execute(&fixture.state.pool)
+        .await
+        .unwrap();
+    let (_, inbox) = fixture
+        .json("/control/inbox", &fixture.peer_id, json!({}))
+        .await;
+    assert_eq!(inbox["messages"], json!([]));
+}
+
+#[tokio::test]
+async fn a_handle_is_assigned_by_rename_and_stays_unique_on_the_board() {
+    let fixture = fixture("mailbox-handle-rename").await;
+    fixture
+        .link_caller_to(&fixture.peer_id, "Codex", "terminal")
+        .await;
+    let (status, body) = fixture
+        .json(
+            "/control/rename",
+            &fixture.caller_id,
+            json!({"node": fixture.peer_id, "handle": "Reviewer"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["result"]["handle"], "reviewer", "case is folded");
+    assert_eq!(
+        body["result"]["title"], "Codex 审阅",
+        "a handle-only rename keeps the title"
+    );
+
+    // The handle now addresses that node, even though no title contains it.
+    assert_eq!(
+        fixture
+            .json(
+                "/control/post",
+                &fixture.caller_id,
+                json!({"to": "reviewer", "key": "k", "body": "hello"})
+            )
+            .await
+            .0,
+        StatusCode::OK
+    );
+
+    // Two nodes may not share one handle, and a handle is not free-form text.
+    let (status, body) = fixture
+        .json(
+            "/control/rename",
+            &fixture.caller_id,
+            json!({"node": fixture.sticky_id, "handle": "reviewer"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        body["message"].as_str().unwrap().contains("已经属于"),
+        "{body}"
+    );
+    let (status, body) = fixture
+        .json(
+            "/control/rename",
+            &fixture.caller_id,
+            json!({"node": fixture.sticky_id, "handle": "结论 一"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        body["message"].as_str().unwrap().contains("不合法"),
+        "{body}"
+    );
+}
+
 #[tokio::test]
 async fn native_references_expose_material_and_honest_export_status() {
     let fixture = fixture("native-reference-status").await;

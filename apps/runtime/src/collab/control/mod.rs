@@ -20,8 +20,8 @@ use crate::{
 };
 
 use super::{
-    Args, Caller, NODE_PALETTE, PLACEMENT_GAP, Refusal, collapse_newlines, default_size, mailbox,
-    messaging,
+    Args, Caller, NODE_PALETTE, PLACEMENT_GAP, Refusal, Refused, addressing, collapse_newlines,
+    default_size, mailbox, messaging,
 };
 
 mod board;
@@ -110,28 +110,30 @@ impl Outcome {
     }
 }
 
-/// One control verb. `Err` carries the status and the sentence to print.
+/// One control verb. `Err` carries the status, the machine-readable code and
+/// the sentence to print.
 pub async fn run(
     state: &AppState,
     caller: &Caller,
     verb: &str,
     args: &Args<'_>,
-) -> Result<Outcome, Refusal> {
+) -> Result<Outcome, Refused> {
     if verb == "link"
         && caller.node.agent_id.as_deref().is_some_and(|agent| {
             agent.starts_with("custom:")
                 && !crate::context_usage::has_capability(&state.settings, agent, "contextLink")
         })
     {
-        return Err(Refusal::forbidden(
-            "Node context links are disabled for this custom Agent",
-        ));
+        return Err(
+            Refusal::forbidden("Node context links are disabled for this custom Agent").into(),
+        );
     }
     if !VERBS.contains(&verb) {
         return Err(Refusal::bad_request(format!(
             "未知的画布动词 `{verb}`，可用：{}。",
             VERBS.join(" / ")
-        )));
+        ))
+        .into());
     }
     if !LEGACY_VERBS.contains(&verb) {
         caller.require_verified(verb)?;
@@ -162,13 +164,15 @@ pub async fn run(
             let result = mailbox::run(state, caller, verb, args).await?;
             Ok(Outcome::raw(result.clone(), result.to_string()))
         }
-        "list" => list(state, caller).await,
-        "open-terminal" => open_terminal(state, caller, args).await,
-        "open-agent" => open_agent(state, caller, args).await,
-        "sticky" => sticky(state, caller, args).await,
-        "link" => link(state, caller, args).await,
-        "rename" => rename(state, caller, args).await,
-        "color" => color(state, caller, args).await,
+        "list" => list(state, caller).await.map_err(Refused::from),
+        "open-terminal" => open_terminal(state, caller, args)
+            .await
+            .map_err(Refused::from),
+        "open-agent" => open_agent(state, caller, args).await.map_err(Refused::from),
+        "sticky" => sticky(state, caller, args).await.map_err(Refused::from),
+        "link" => link(state, caller, args).await.map_err(Refused::from),
+        "rename" => rename(state, caller, args).await.map_err(Refused::from),
+        "color" => color(state, caller, args).await.map_err(Refused::from),
         "send" | "reply" | "notify" => {
             // A refused delivery is an answer, not an error: the agent needs
             // `outcome` and `retryable` to decide what to do next, and a 4xx
@@ -176,7 +180,7 @@ pub async fn run(
             let report = messaging::run(state, caller, verb, args).await?;
             Ok(Outcome::raw(report.to_json(), report.message.clone()))
         }
-        "close" => close(state, caller, args).await,
+        "close" => close(state, caller, args).await.map_err(Refused::from),
         _ => unreachable!("verb was checked above"),
     }
 }
