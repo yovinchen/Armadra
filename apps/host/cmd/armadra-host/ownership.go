@@ -13,6 +13,7 @@ import (
 	pb "armadra.local/host/gen/armadra/v1"
 	"armadra.local/host/internal/canvashost"
 	"armadra.local/host/internal/daemon"
+	"armadra.local/host/internal/fshost"
 	"armadra.local/host/internal/hoststate"
 	"armadra.local/host/internal/ownership"
 	"armadra.local/host/internal/settingshost"
@@ -147,6 +148,12 @@ func openOwnership(c config) (*hoststate.State, *storage.Store, *canvashost.Serv
 		state.Close()
 		return nil, nil, nil, nil, err
 	}
+	fileRoots, err := fshost.New(fshost.Options{Store: database, HostID: state.ID})
+	if err != nil {
+		database.Close()
+		state.Close()
+		return nil, nil, nil, nil, err
+	}
 	// The offline command has no Host instance, so the state's own ID stands in
 	// for one. It is only ever used to bind maintenance tokens, and this entry
 	// point never issues or spends one.
@@ -156,6 +163,7 @@ func openOwnership(c config) (*hoststate.State, *storage.Store, *canvashost.Serv
 		Projectors: map[string]ownership.Projector{
 			canvashost.Domain:   canvases.AsProjector(),
 			settingshost.Domain: settings.AsProjector(),
+			fshost.Domain:       fileRoots.AsProjector(),
 		},
 	})
 	if err != nil {

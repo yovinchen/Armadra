@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"armadra.local/host/internal/fshost"
 	auth "armadra.local/host/internal/identity"
 	"armadra.local/host/internal/runtimelink"
 )
@@ -53,7 +54,7 @@ func isWebSocketUpgrade(r *http.Request) bool {
 
 // runtimeRequest authenticates a device, checks its grants against the exact
 // route it asked for, and only then forwards to the local Runtime.
-func runtimeRequest(w http.ResponseWriter, r *http.Request, host Identity, service *auth.Service, link *runtimelink.Resolver, origin string) {
+func runtimeRequest(w http.ResponseWriter, r *http.Request, host Identity, service *auth.Service, link *runtimelink.Resolver, roots *fshost.Service, origin string) {
 	authorization, known := authorizeRuntimePath(r.Method, r.URL.Path)
 	if !known {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Unknown endpoint")
@@ -81,6 +82,10 @@ func runtimeRequest(w http.ResponseWriter, r *http.Request, host Identity, servi
 		authFailure(w, err)
 		return
 	}
+	if err = narrowToRegisteredRoot(r, roots, authorization); err != nil {
+		authFailure(w, err)
+		return
+	}
 	_ = principal
 	target, err := link.Resolve()
 	if err != nil {
@@ -92,6 +97,56 @@ func runtimeRequest(w http.ResponseWriter, r *http.Request, host Identity, servi
 		return
 	}
 	proxyRequest(w, r, link, target)
+}
+
+// narrowToRegisteredRoot is the second half of a file request's authorization
+// once the Host owns the filesystem domain (Go Host 业务所有权迁移 §2.5).
+//
+// A device's grants say what that device may ask for. A workspace's registered
+// root says what anyone may ask for in that workspace, and until the domain
+// moved it was the Runtime's own `workspaces.permissions_json` that answered
+// it. From the switch onwards this Host holds that record, so the Runtime's
+// copy is a stale one and a forwarded request has to be checked here — a Host
+// that kept deferring to the Runtime would be forwarding requests against
+// permissions it had already revoked.
+//
+// It only narrows. A workspace the Host has no registration for, or a domain
+// still owned by the Runtime, leaves the request exactly as the grant check
+// left it, because widening on a missing record is how a permission system
+// starts granting things by accident.
+func narrowToRegisteredRoot(r *http.Request, roots *fshost.Service, authorization runtimeAuthorization) error {
+	if roots == nil || !authorization.files || authorization.workspace == "" {
+		return nil
+	}
+	owned, err := roots.Owned(r.Context())
+	if err != nil || !owned {
+		// A store that cannot be read is not a reason to let the request
+		// through, but it is also not this function's decision to make: the
+		// error is reported as a refusal by the caller.
+		if err != nil {
+			return auth.ErrPermission
+		}
+		return nil
+	}
+	root, err := roots.Root(r.Context(), authorization.workspace)
+	if err != nil {
+		// While the Host owns the domain, a workspace with no registration is
+		// a workspace whose files nobody may reach through this Host. Falling
+		// back to the Runtime's row would be reading the record the switch
+		// just retired.
+		return auth.ErrPermission
+	}
+	allowed := root.Read
+	switch authorization.class {
+	case writeAccess:
+		allowed = root.Read && root.Write
+	case executeAccess:
+		allowed = root.Read && root.Write && root.Execute
+	}
+	if !allowed {
+		return auth.ErrPermission
+	}
+	return nil
 }
 
 // forwardHeader is the header the Runtime actually receives.

@@ -40,9 +40,20 @@ func dependencies(domain string, target string) []string {
 // checkDependencies reads each dependency and refuses at the first one that is
 // not settled on the target side. The records it verified are returned either
 // way: on a refusal they are what shows the operator where the order stands.
+//
+// A domain this Host has no projector for is skipped rather than counted as a
+// blocker. That distinction matters during a staged rollout: a domain with no
+// projector cannot be switched *at all*, so treating it as "still on the
+// Runtime" would make every domain after it permanently unmovable — the order
+// would enforce itself into a deadlock rather than into a sequence. The moment
+// its projector lands, it is checked like every other dependency, with no
+// change here.
 func (s *Service) checkDependencies(ctx context.Context, domain, target string) ([]storage.Ownership, error) {
 	verified := []storage.Ownership{}
 	for _, name := range dependencies(domain, target) {
+		if _, movable := s.options.Projectors[name]; !movable {
+			continue
+		}
 		record, err := s.Record(ctx, name)
 		if err != nil {
 			return verified, err

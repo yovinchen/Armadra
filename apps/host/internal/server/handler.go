@@ -65,7 +65,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "Local request origin is not allowed")
 			return
 		}
-		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path) || githubMethod(r.URL.Path) || updatesMethod(r.URL.Path) || canvasMethod(r.URL.Path) || ownershipMethod(r.URL.Path) || settingsMethod(r.URL.Path)) {
+		if options.Identity != nil && (authMethod(r.URL.Path) || automationMethod(r.URL.Path) || githubMethod(r.URL.Path) || updatesMethod(r.URL.Path) || canvasMethod(r.URL.Path) || ownershipMethod(r.URL.Path) || settingsMethod(r.URL.Path) || filesystemMethod(r.URL.Path)) {
 			if origin != options.PublicOrigin {
 				writeError(w, 403, "PERMISSION_DENIED", "Authentication requires the Host HTTPS origin")
 				return
@@ -107,6 +107,14 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 				// answers UNSUPPORTED from inside, so a device never learns
 				// "your settings are empty".
 				settingsRequest(w, r, identity, options.Identity, options.Settings)
+				return
+			}
+			if filesystemMethod(r.URL.Path) {
+				// A Host with no filesystem service authenticates first and
+				// then answers UNSUPPORTED from inside; it never answers with
+				// an empty root, which a client would read as "this workspace
+				// has no files".
+				filesystemRequest(w, r, identity, options.Identity, options.Filesystem)
 				return
 			}
 			if canvasMethod(r.URL.Path) {
@@ -178,7 +186,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 				writeError(w, http.StatusForbidden, "PERMISSION_DENIED", "An exact same-origin request is required")
 				return
 			}
-			runtimeRequest(w, r, identity, options.Identity, options.Runtime, device)
+			runtimeRequest(w, r, identity, options.Identity, options.Runtime, options.Filesystem, device)
 			return
 		}
 		// Defined but unimplemented surfaces answer UNSUPPORTED rather than
@@ -239,6 +247,7 @@ func NewHandlerWithOptions(identity Identity, options Options) (http.Handler, er
 			github:         authentication && options.GitHub != nil,
 			proxying:       authentication && options.Runtime != nil,
 			canvas:         authentication && options.Canvas != nil,
+			filesystem:     authentication && options.Filesystem != nil,
 			events:         authentication && options.Events != nil,
 			ownership:      authentication && options.Ownership != nil,
 			settings:       authentication && options.Settings != nil,
@@ -280,7 +289,7 @@ func deviceOrigin(r *http.Request, origin, public string) (string, bool) {
 // only when the surface really answers, so a client never plans against a
 // capability that would then refuse it.
 type helloSurfaces struct {
-	authentication, scheduling, github, proxying, canvas, events, ownership, settings bool
+	authentication, scheduling, github, proxying, canvas, filesystem, events, ownership, settings bool
 }
 
 func hello(w http.ResponseWriter, r *http.Request, identity Identity, surfaces helloSurfaces) {
@@ -349,6 +358,13 @@ func hello(w http.ResponseWriter, r *http.Request, identity Identity, surfaces h
 	// it saves anything.
 	if surfaces.canvas {
 		capabilities = append(capabilities, "canvas.documents.v1")
+	}
+	// Advertised only when the root-registration surface is assembled. As with
+	// the canvas, it says the surface answers, not that this Host owns
+	// filesystem writes: OwnershipService/List reports that, and a client reads
+	// it before it offers to change a workspace's permissions.
+	if surfaces.filesystem {
+		capabilities = append(capabilities, "filesystem.roots.v1")
 	}
 	// Advertised only when the stream is actually assembled. A client that does
 	// not see it keeps its polling fallback rather than waiting on a socket

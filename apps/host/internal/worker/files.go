@@ -152,6 +152,27 @@ func (c *Client) validResult(request *pb.WorkerRequest, response *pb.WorkerRespo
 	if request.GetSettings() != nil {
 		return validSettingsSnapshot(response.GetSettings())
 	}
+	// The filesystem read is a query about the Runtime's own rows, and the
+	// comparison that matters happens in fshost. Here the frame only has to be
+	// a well-formed answer to the action that was sent: a root per workspace,
+	// named once, with the permission set actually present — an absent one
+	// would be read as "nothing is allowed" by a caller that then compared it
+	// against a package saying otherwise.
+	if input := request.GetFilesystem(); input != nil {
+		roots := response.GetFilesystem().GetRoots()
+		if input.GetListRoots() == nil || roots == nil {
+			return false
+		}
+		seen := map[string]bool{}
+		for _, root := range roots.GetRoots() {
+			if root == nil || root.GetWorkspaceId() == "" || seen[root.GetWorkspaceId()] ||
+				root.GetPermissions() == nil || root.GetCanonicalPath() == "" {
+				return false
+			}
+			seen[root.GetWorkspaceId()] = true
+		}
+		return true
+	}
 	if input := request.GetReadFile(); input != nil {
 		chunk := response.GetFileChunk()
 		if chunk == nil || chunk.RootId != input.RootId || !relativePath(chunk.Path, false) || chunk.MimeType == "" || len(chunk.MimeType) > 256 || len(chunk.Sha256) != sha256.Size || chunk.Offset != input.Offset || chunk.TotalBytes > uint64(c.hello.MaxTextFileBytes) || chunk.Offset > chunk.TotalBytes || len(chunk.Data) > int(input.MaxBytes) || uint64(len(chunk.Data)) > chunk.TotalBytes-chunk.Offset || chunk.Eof != (chunk.Offset+uint64(len(chunk.Data)) == chunk.TotalBytes) || (!chunk.Eof && len(chunk.Data) == 0) || (len(input.ExpectedSha256) > 0 && !bytes.Equal(input.ExpectedSha256, chunk.Sha256)) {

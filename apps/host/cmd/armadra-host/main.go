@@ -27,6 +27,7 @@ import (
 	"armadra.local/host/internal/endpoints"
 	"armadra.local/host/internal/eventstream"
 	"armadra.local/host/internal/externalservice"
+	"armadra.local/host/internal/fshost"
 	"armadra.local/host/internal/githubcred"
 	"armadra.local/host/internal/githubhost"
 	"armadra.local/host/internal/hoststate"
@@ -562,12 +563,20 @@ func serveHost(parent context.Context, c config) (err error) {
 	// writes a domain before it saves anything, and that answer must not depend
 	// on this Host being able to move it. Moving it does depend on a Runtime to
 	// tell, which is what the handoff opener below is.
+	// The filesystem surface is assembled on the same terms as the canvas: it
+	// answers reads whoever owns writes, and the proxy asks it on every
+	// forwarded file request whether this Host is the one that decides.
+	fileRoots, err := fshost.New(fshost.Options{Store: database, HostID: state.ID})
+	if err != nil {
+		return err
+	}
 	switches, err := ownership.New(ownership.Options{
 		Store:      database,
 		InstanceID: identity.InstanceID,
 		Projectors: map[string]ownership.Projector{
 			canvashost.Domain:   canvases.AsProjector(),
 			settingshost.Domain: settings.AsProjector(),
+			fshost.Domain:       fileRoots.AsProjector(),
 		},
 		ExportRoot: filepath.Join(c.dataDir, "ownership-exports"),
 	})
@@ -613,13 +622,13 @@ func serveHost(parent context.Context, c config) (err error) {
 	// stored outbox the HTTPS event page reads, and it is woken by the storage
 	// kernel's own commit notification, so a saved change reaches a second
 	// client in the time one write takes rather than in one poll interval.
-	events, err := eventstream.New(eventstream.Options{Store: database, HostID: state.ID, Projectors: []eventstream.Projector{canvashost.EventProjector{}, settingshost.EventProjector{}}})
+	events, err := eventstream.New(eventstream.Options{Store: database, HostID: state.ID, Projectors: []eventstream.Projector{canvashost.EventProjector{}, settingshost.EventProjector{}, fshost.EventProjector{}}})
 	if err != nil {
 		return err
 	}
 	defer events.Close()
 	database.SetCommitNotifier(events.Notify)
-	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link, Updates: releases, Canvas: canvases, Settings: settings, Events: events, Ownership: switches, OpenHandoff: openHandoff}
+	options := server.Options{AllowedOrigins: c.origins, Identity: identities, PublicOrigin: c.publicOrigin, Automation: plans, GitHub: repositories, Web: web, Runtime: link, Updates: releases, Canvas: canvases, Settings: settings, Filesystem: fileRoots, Events: events, Ownership: switches, OpenHandoff: openHandoff}
 	// The switch binds its own listener with the same routes. `options` is
 	// captured by reference, so the manager it is about to be given is the one
 	// this closure serves with.

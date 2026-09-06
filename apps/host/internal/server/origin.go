@@ -5,6 +5,7 @@ import (
 	"armadra.local/host/internal/canvashost"
 	"armadra.local/host/internal/eventstream"
 	"armadra.local/host/internal/externalservice"
+	"armadra.local/host/internal/fshost"
 	"armadra.local/host/internal/githubhost"
 	"armadra.local/host/internal/identity"
 	"armadra.local/host/internal/ownership"
@@ -48,6 +49,10 @@ type Options struct {
 	// methods then answer UNSUPPORTED rather than an empty canvas, which a
 	// client cannot tell from a workspace that really has nothing on it.
 	Canvas *canvashost.Service
+	// Filesystem is nil when this Host serves no root-registration surface.
+	// Its methods then answer UNSUPPORTED, and the proxy keeps narrowing
+	// forwarded file requests the way it did before the domain existed.
+	Filesystem *fshost.Service
 	// Events is the Host -> client business event stream. Nil means this Host
 	// pushes nothing and `/ws/armadra.v1.EventStream` answers NOT_FOUND, which
 	// is what tells a client to keep polling instead of waiting silently.

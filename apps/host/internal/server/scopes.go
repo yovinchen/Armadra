@@ -54,6 +54,13 @@ type runtimeAuthorization struct {
 	// websocket requests cannot carry a CSRF header, so they are gated on the
 	// exact Origin and the SameSite=Strict session cookie instead.
 	class accessClass
+	// workspace and files are what the second narrowing needs: once the Host
+	// owns the filesystem domain, a forwarded file request is also checked
+	// against that workspace's registered root (proxy.go). They are recorded
+	// here rather than re-derived, so the two checks can never disagree about
+	// which route was classified how.
+	workspace string
+	files     bool
 }
 
 // authorizeRuntimePath maps one Runtime route onto the grants it needs. An
@@ -147,7 +154,7 @@ func authorizeRuntimePath(method, path string) (runtimeAuthorization, bool) {
 	if class == executeAccess && scopes[0].Permission != terminalArea.write {
 		scopes = append(scopes, identity.Scope{Permission: terminalArea.write, WorkspaceID: workspace})
 	}
-	return runtimeAuthorization{scopes: scopes, class: class}, true
+	return runtimeAuthorization{scopes: scopes, class: class, workspace: workspace, files: area == filesArea}, true
 }
 
 // workspaceArea resolves the part of a /api/workspaces/{id}/... route after the
