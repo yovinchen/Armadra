@@ -11,7 +11,7 @@ import {
   rememberWorkspace,
   usePreferencesStore,
 } from "./preferences-store";
-import { useWorkspacesQuery } from "./WorkspaceGrid";
+import { useWorkspacesQuery } from "./workspaces-query";
 
 /**
  * 加载链：工作空间 → 看板列表 → 看板文档，外加“记住上次打开的东西”。

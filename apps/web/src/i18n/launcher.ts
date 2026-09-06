@@ -1,20 +1,16 @@
 import type { MessageModule } from "./index";
 
-/** 首页（§20）：三张操作卡 + 最近工作空间，外加新建文件夹 / 克隆仓库对话框。 */
+/**
+ * 工作空间的打开 / 新建 / 克隆 / 移除，外加那两个对话框（§20 →§27）。
+ *
+ * 首页删掉之后这些串只剩侧栏顶行的下拉、工作空间行菜单与两个对话框在用，
+ * 模块名保留 `launcher` 以免键名整体搬家。
+ */
 export const launcher: MessageModule = {
   "zh-CN": {
-    "launcher.recent": "最近",
     "launcher.newFolder": "新建文件夹",
     "launcher.open": "打开文件夹",
     "launcher.clone": "克隆仓库",
-    "launcher.new": "新建",
-    "launcher.settings": "设置",
-    "launcher.search": "搜索",
-    "launcher.empty": "还没有工作空间",
-    "launcher.drop": "松开以新建工作空间",
-    "launcher.offline": "无法连接本地服务",
-    "launcher.reconnect": "重连",
-    "launcher.cardMenu": "工作空间操作",
     "launcher.remove": "从列表移除",
     "launcher.removeTitle": "移除工作空间？",
     "launcher.removeNote": "不会删除磁盘文件",
@@ -29,18 +25,9 @@ export const launcher: MessageModule = {
     "clone.progress": "克隆进度",
   },
   en: {
-    "launcher.recent": "Recent",
     "launcher.newFolder": "New folder",
     "launcher.open": "Open folder",
     "launcher.clone": "Clone repository",
-    "launcher.new": "New",
-    "launcher.settings": "Settings",
-    "launcher.search": "Search",
-    "launcher.empty": "No workspaces yet",
-    "launcher.drop": "Drop to create a workspace",
-    "launcher.offline": "Cannot reach the local runtime",
-    "launcher.reconnect": "Reconnect",
-    "launcher.cardMenu": "Workspace actions",
     "launcher.remove": "Remove from list",
     "launcher.removeTitle": "Remove workspace?",
     "launcher.removeNote": "Files on disk are not deleted",

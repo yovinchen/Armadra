@@ -4,7 +4,7 @@ import { buildAddMenu, type AddMenuItem } from "../canvas/menus/add-menu";
 import { runCanvasCommand } from "../canvas/commands";
 import { screenToPage } from "../canvas/editor-context";
 import { COMMAND_BY_ID, type CommandId } from "../keybindings";
-import { useT } from "./preferences-store";
+import { usePreferencesStore, useT } from "./preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
 import { useEnabledAgents } from "./use-agents";
 
@@ -72,6 +72,22 @@ export function useCommandDispatch(): CommandDispatch {
             ? null
             : (state.selectedNodeIds[0] ?? null);
           state.setFocusNode(next);
+          return;
+        }
+        // tldraw 偏好的三条快捷键（§偏好菜单）。写的是 `preferences-store`，
+        // 不是 editor：`use-tldraw-preferences` 会把新值推下去，而反向通道
+        // 保证 tldraw 自己改了也能回到同一个值。
+        case "canvas.toggleToolLock":
+        case "canvas.toggleGrid":
+        case "canvas.toggleFocus": {
+          const prefs = usePreferencesStore.getState();
+          const key =
+            id === "canvas.toggleToolLock"
+              ? "toolLock"
+              : id === "canvas.toggleGrid"
+                ? "grid"
+                : "focus";
+          prefs.setWhiteboardPreference(key, !prefs.whiteboard[key]);
           return;
         }
         case "scm.commit":

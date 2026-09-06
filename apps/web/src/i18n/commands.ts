@@ -32,6 +32,11 @@ export const commands: MessageModule = {
     "cmd.canvas.focusDown": "选中下方节点",
     "cmd.canvas.delete": "删除所选",
 
+    /* tldraw 偏好（2026-09-05） */
+    "cmd.canvas.toggleToolLock": "工具锁定",
+    "cmd.canvas.toggleGrid": "显示网格",
+    "cmd.canvas.toggleFocus": "专注模式",
+
     /* 白板工具（tldraw 计划 §5） */
     "cmd.canvas.tool.select": "选择工具",
     "cmd.canvas.tool.hand": "手形工具",
@@ -74,6 +79,10 @@ export const commands: MessageModule = {
     "cmd.canvas.focusUp": "Select node above",
     "cmd.canvas.focusDown": "Select node below",
     "cmd.canvas.delete": "Delete selection",
+
+    "cmd.canvas.toggleToolLock": "Tool lock",
+    "cmd.canvas.toggleGrid": "Show grid",
+    "cmd.canvas.toggleFocus": "Distraction-free",
 
     "cmd.canvas.tool.select": "Select tool",
     "cmd.canvas.tool.hand": "Hand tool",

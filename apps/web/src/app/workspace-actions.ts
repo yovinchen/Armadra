@@ -1,9 +1,9 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Workspace, WorkspaceSummary } from "@armadra/shared";
 import { toast } from "sonner";
 import { isConflict, runtimeApi } from "../api/client";
-import { isTauri, pickDirectory } from "../platform";
+import { isTauri, onFileDrop, pickDirectory } from "../platform";
 import { useCanvasStore } from "../store/canvas-store";
 import {
   rememberBoard,
@@ -103,6 +103,26 @@ export function useOpenFolder(fallback: () => void) {
       toast.error((cause as Error).message);
     }
   }, [createWorkspace, fallback, openWorkspace]);
+}
+
+/**
+ * 没打开工作空间时，把目录拖进窗口 = 打开它（首页删掉之后这条路留在壳上）。
+ * 有工作空间时不挂：画布自己接管拖放（`canvas/dnd/os-drop.ts`）。
+ */
+export function useOpenDroppedFolder(active: boolean) {
+  const createWorkspace = useCreateWorkspace();
+  const openWorkspace = useOpenWorkspace();
+
+  useEffect(() => {
+    if (!active) return;
+    return onFileDrop((paths) => {
+      const first = paths[0];
+      if (!first) return;
+      void createWorkspace(first)
+        .then(openWorkspace)
+        .catch((cause: Error) => toast.error(cause.message));
+    });
+  }, [active, createWorkspace, openWorkspace]);
 }
 
 /** 关闭一个工作空间 tab；关的是当前工作空间时切到剩下的第一个。 */
