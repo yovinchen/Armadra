@@ -41,14 +41,29 @@ pub(super) fn valid_workspace_name(name: &str) -> AppResult<&str> {
     Ok(name)
 }
 
+/// Registering where a workspace's files are is a filesystem-domain write, and
+/// creating the workspace row is a canvas-domain one (Go Host 业务所有权迁移
+/// §1.1). Both are checked, and the filesystem is checked first so the refusal
+/// names the domain that actually moved: filesystem may only be on the Host
+/// while the canvas already is, so checking the canvas first would report the
+/// canvas for every root registration.
+///
+/// Nothing about the files themselves is gated. Reading, writing, watching and
+/// searching keep answering whoever owns this record — the switch moves the
+/// decision, not the machine.
+async fn require_root_registration(pool: &sqlx::SqlitePool) -> AppResult<()> {
+    ownership::require_local_write(pool, ownership::OwnershipDomain::Filesystem).await?;
+    ownership::require_local_write(pool, ownership::OwnershipDomain::Canvas).await
+}
+
 pub async fn create_workspace(
     State(state): State<AppState>,
     Json(request): Json<CreateWorkspaceRequest>,
 ) -> AppResult<Json<Workspace>> {
     let name = valid_workspace_name(&request.name)?;
-    // Before `createDirectory` touches the disk: a refused canvas write must
+    // Before `createDirectory` touches the disk: a refused registration must
     // not leave a folder behind that nothing then references.
-    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Canvas).await?;
+    require_root_registration(&state.pool).await?;
     if request.create_directory {
         create_root_directory(&request.root_path)?;
     }
@@ -70,7 +85,7 @@ pub async fn open_directory_workspace(
     Json(request): Json<CreateWorkspaceRequest>,
 ) -> AppResult<Json<Workspace>> {
     let name = valid_workspace_name(&request.name)?;
-    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Canvas).await?;
+    require_root_registration(&state.pool).await?;
     let root = imports::directory_source(&request.root_path)?;
     Ok(Json(
         db::create_workspace(
@@ -110,6 +125,10 @@ pub async fn open_remote_workspace(
     Json(request): Json<OpenRemoteWorkspaceRequest>,
 ) -> AppResult<Json<Workspace>> {
     let name = valid_workspace_name(&request.name)?;
+    // Before the remote Worker is started: registering a root on another
+    // machine is the filesystem domain's decision, and a Runtime that no longer
+    // makes it must not open an SSH connection to act on it.
+    require_root_registration(&state.pool).await?;
     if !request.root_path.starts_with('/') || request.root_path.len() > 4_096 {
         return Err(AppError::BadRequest(
             "A remote workspace root must be an absolute path on the execution host".into(),
@@ -179,9 +198,9 @@ pub async fn import_workspace(
     mut multipart: axum::extract::Multipart,
 ) -> AppResult<Json<Workspace>> {
     let name = valid_workspace_name(&query.name)?;
-    // Before any uploaded byte is written: the import ends in a workspace row,
-    // and a Runtime that may not create one must not stage the files for it.
-    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Canvas).await?;
+    // Before any uploaded byte is written: the import ends in a registered
+    // root, and a Runtime that may not create one must not stage the files.
+    require_root_registration(&state.pool).await?;
     let manifest = imports::read_manifest(&mut multipart, true).await?;
     let mut batch =
         imports::ImportBatch::workspace(&paths::data_dir().join("imported-workspaces"))?;
@@ -242,6 +261,14 @@ pub async fn update_workspace(
     AxumPath(workspace_id): AxumPath<String>,
     Json(request): Json<UpdateWorkspaceRequest>,
 ) -> AppResult<Json<Workspace>> {
+    // Read, write and execute for a workspace are the filesystem domain's
+    // decision; the name and the colour are the canvas's. A patch that changes
+    // permissions therefore needs both, and one that only renames needs one —
+    // which is what keeps renaming a workspace working while its permissions
+    // are being decided on the Host.
+    if request.permissions.is_some() {
+        ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Filesystem).await?;
+    }
     ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Canvas).await?;
     let workspace = db::update_workspace(
         &state.pool,
@@ -275,8 +302,8 @@ pub async fn delete_workspace(
 ) -> AppResult<axum::http::StatusCode> {
     // Before the 404 probe and long before any teardown: a Runtime that no
     // longer owns the canvas must not destroy sessions for a row it cannot
-    // then delete.
-    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Canvas).await?;
+    // then delete, and removing the row removes the root registration with it.
+    require_root_registration(&state.pool).await?;
     // 404 before anything is torn down, so an unknown id is a no-op.
     db::get_workspace(&state.pool, &workspace_id).await?;
     state.terminals.destroy_workspace(&workspace_id).await;

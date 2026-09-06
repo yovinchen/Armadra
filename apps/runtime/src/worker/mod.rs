@@ -6,6 +6,7 @@
 //! opens no PTY of its own.
 pub mod agent_bridge;
 pub mod channel;
+pub mod filesystem;
 pub mod language_link;
 pub mod outbox;
 pub mod settings;
@@ -374,6 +375,11 @@ impl Worker {
                             if self.settings_file.is_some() {
                                 capabilities.push(settings::CAPABILITY.into());
                             }
+                            // And the filesystem domain's own read, which is a
+                            // third, separate statement: a controller that
+                            // needs a handback verified must not plan one
+                            // against a Worker that cannot answer it.
+                            capabilities.push(filesystem::CAPABILITY.into());
                         }
                         // Only a Worker with a durable outbox claims it can
                         // report upward. Claiming it without one would promise
@@ -447,6 +453,16 @@ impl Worker {
                     ownership::read(pool, ownership::OwnershipDomain::parse(&input.domain)?)
                         .await?,
                 )?))
+            }
+            // The filesystem domain's read (business migration §2.9). It is a
+            // query about this database's own rows, and a Worker that never
+            // opened one answers UNSUPPORTED rather than an empty list the
+            // Host would compare against its package and read as agreement.
+            Action::Filesystem(input) => {
+                let Some(pool) = self.canvas.as_ref() else {
+                    return Ok(unsupported_ownership());
+                };
+                Ok(Response::Filesystem(filesystem::handle(pool, input).await?))
             }
             // The rollback direction. Applying the Host's reverse export is a
             // write to this database and nothing else: the epoch stays where

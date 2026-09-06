@@ -40,6 +40,7 @@ use armadra_protocol::{
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqlitePool};
 
+pub use super::records::decode_records;
 use super::records::{self, ApplyPlan, WorkspaceRecords};
 use crate::error::{AppError, AppResult};
 
@@ -146,7 +147,21 @@ pub struct Package {
     pub workspaces: Vec<(PackageFile, WorkspaceRecords)>,
 }
 
-pub fn read(directory: &Path) -> AppResult<Package> {
+/// The package as it sits on disk, before any domain has read its records: the
+/// index, the digest of the index bytes, and each file's verified bytes.
+///
+/// Splitting the read here is what lets two domains share one format without
+/// sharing a reader. Everything a package promises *about itself* — the format
+/// version, the domain it names, the epoch, that no workspace appears twice,
+/// that each file's bytes hash to what the index says — is checked once, and
+/// the domain then only has to understand its own records.
+pub struct RawPackage {
+    pub index: PackageIndex,
+    pub index_sha256: Vec<u8>,
+    pub files: Vec<(PackageFile, Vec<u8>)>,
+}
+
+pub fn read_raw(directory: &Path, domain: &str) -> AppResult<RawPackage> {
     if !directory.is_absolute() {
         return Err(invalid("a package directory must be absolute"));
     }
@@ -167,9 +182,12 @@ pub fn read(directory: &Path) -> AppResult<Package> {
             index.format_version
         )));
     }
-    if index.domain != CANVAS_DOMAIN {
+    // A package is applied to the domain it names, never to the one the caller
+    // happened to ask for: applying a filesystem package as a canvas would
+    // rewrite rows nobody exported.
+    if index.domain != domain {
         return Err(invalid(format!(
-            "package domain {:?} is not the canvas domain",
+            "package domain {:?} is not the {domain} domain",
             index.domain
         )));
     }
@@ -177,19 +195,17 @@ pub fn read(directory: &Path) -> AppResult<Package> {
         return Err(invalid("the package names no epoch"));
     }
     if index.files.len() > MAX_FILES {
-        return Err(invalid("the package names more files than one canvas has"));
+        return Err(invalid("the package names more files than one domain has"));
     }
-
-    let mut workspaces = Vec::with_capacity(index.files.len());
+    let mut files = Vec::with_capacity(index.files.len());
     let mut seen = std::collections::BTreeSet::new();
-    let mut entities = 0u64;
     for file in &index.files {
         if !seen.insert(file.workspace_id.clone()) {
             return Err(invalid("the package names one workspace twice"));
         }
         let path = package_member(directory, &file.name)?;
         if std::fs::metadata(&path)?.len() > MAX_FILE_BYTES {
-            return Err(invalid("a package file is larger than any canvas needs"));
+            return Err(invalid("a package file is larger than any domain needs"));
         }
         let payload = std::fs::read(&path)?;
         if payload.len() as u64 != file.bytes || hex(&records::digest(&payload)) != file.sha256 {
@@ -198,7 +214,25 @@ pub fn read(directory: &Path) -> AppResult<Package> {
                 file.name
             )));
         }
-        let mut decoded = WorkspaceRecords::from_records(records::decode_records(&payload)?)?;
+        files.push((file.clone(), payload));
+    }
+    Ok(RawPackage {
+        index,
+        index_sha256,
+        files,
+    })
+}
+
+pub fn read(directory: &Path) -> AppResult<Package> {
+    let raw = read_raw(directory, CANVAS_DOMAIN)?;
+    let index = raw.index;
+    let index_sha256 = raw.index_sha256;
+    let mut workspaces = Vec::with_capacity(index.files.len());
+    let mut entities = 0u64;
+    for (file, payload) in raw.files {
+        let file = &file;
+        let payload = &payload;
+        let mut decoded = WorkspaceRecords::from_records(records::decode_records(payload)?)?;
         decoded.sort();
         // The canonical digest is what the Host will compare the re-read
         // against. Checking it here means a package whose index and records
@@ -245,28 +279,39 @@ pub fn read(directory: &Path) -> AppResult<Package> {
 /// The tables this import writes, in the order they are reported.
 const TOUCHED_TABLES: [&str; 4] = ["workspaces", "boards", "nodes", "edges"];
 
-/// Applies one package. The database must already record the Host as the owner
-/// of the canvas domain: importing a Host package while this Runtime is the
-/// writer would overwrite rows the Runtime is still serving.
+/// Applies one package to the domain the request names.
+///
+/// Every domain reaches its rows through the same four gates, which is why they
+/// are checked here rather than in each importer: the ledger has to exist, this
+/// Host has to be the settled owner, the epoch has to be the one the package
+/// was taken at, and an identifier that was already used has to replay instead
+/// of writing a second time. Only the rows differ.
 pub async fn apply(
     pool: &SqlitePool,
     request: &ApplyReverseExportRequest,
 ) -> AppResult<ReverseImportReport> {
-    if request.domain != CANVAS_DOMAIN {
-        return Err(invalid("only the canvas domain has a reverse importer"));
+    match request.domain.as_str() {
+        CANVAS_DOMAIN => apply_canvas(pool, request).await,
+        super::filesystem::DOMAIN => super::filesystem_import::apply(pool, request).await,
+        _ => Err(invalid("that domain has no reverse importer")),
     }
-    if request.import_id.is_empty()
-        || request.import_id.len() > 128
-        || !request
-            .import_id
+}
+
+/// The identifier a replay is recognised by. It is bounded and portable
+/// because it is also a primary key in the ledger and a path-free token in
+/// operator commands.
+pub fn valid_import_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
-    {
-        return Err(invalid("the import identifier is missing or not portable"));
-    }
-    // The ledger is what makes a retry harmless. A database that predates it
-    // is refused rather than imported without one, because an unrecorded
-    // import cannot be told apart from an unstarted one.
+}
+
+/// The ledger is what makes a retry harmless. A database that predates it is
+/// refused rather than imported without one, because an unrecorded import
+/// cannot be told apart from an unstarted one.
+pub async fn require_ledger(pool: &SqlitePool) -> AppResult<()> {
     let ledger: i64 =
         sqlx::query_scalar("SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name = ?")
             .bind("host_imports")
@@ -277,17 +322,19 @@ pub async fn apply(
             "reverse.ledger_missing: this database predates the reverse import ledger".into(),
         ));
     }
-    let directory = PathBuf::from(&request.package_path);
-    let package = read(&directory)?;
-    if !request.index_sha256.is_empty() && request.index_sha256 != package.index_sha256 {
-        return Err(AppError::Conflict(
-            "reverse.index_mismatch: the package index is not the one the controller asked for"
-                .into(),
-        ));
-    }
+    Ok(())
+}
 
-    let mut transaction = pool.begin_with("BEGIN IMMEDIATE").await?;
-    let stored = super::read_in(&mut *transaction, super::domains::OwnershipDomain::Canvas).await?;
+/// Checks the ownership record and the epoch inside the transaction the import
+/// is going to write in, so the owner that was checked cannot change between
+/// the check and the write.
+pub async fn require_host_epoch(
+    transaction: &mut sqlx::SqliteTransaction<'_>,
+    domain: super::domains::OwnershipDomain,
+    request: &ApplyReverseExportRequest,
+    package_epoch: u64,
+) -> AppResult<()> {
+    let stored = super::read_in(&mut **transaction, domain).await?;
     if stored.owner != super::WriteOwner::Host {
         return Err(AppError::Conflict(
             "reverse.not_host_owned: a reverse export is only applied while the Host owns writes"
@@ -300,34 +347,102 @@ pub async fn apply(
                 .into(),
         ));
     }
-    if package.index.epoch != stored.epoch {
+    if package_epoch != stored.epoch {
         return Err(AppError::Conflict(format!(
-            "reverse.epoch_mismatch: the package was taken at epoch {} and this database is at {}",
-            package.index.epoch, stored.epoch
+            "reverse.epoch_mismatch: the package was taken at epoch {package_epoch} and this database is at {}",
+            stored.epoch
         )));
     }
+    Ok(())
+}
 
-    // A replay answers with what the first run recorded. Re-deriving the
-    // digests here would report the database as it is now, which is not what
-    // the Host verified, and would quietly hide a change made in between.
-    if let Some(row) =
+/// A replay answers with what the first run recorded. Re-deriving the digests
+/// would report the database as it is now, which is not what the Host verified,
+/// and would quietly hide a change made in between.
+pub async fn replayed(
+    transaction: &mut sqlx::SqliteTransaction<'_>,
+    request: &ApplyReverseExportRequest,
+    index_sha256: &[u8],
+) -> AppResult<Option<ReverseImportReport>> {
+    let Some(row) =
         sqlx::query("SELECT index_sha256, report FROM host_imports WHERE import_id = ?")
             .bind(&request.import_id)
-            .fetch_optional(&mut *transaction)
+            .fetch_optional(&mut **transaction)
             .await?
-    {
-        let recorded: Vec<u8> = row.try_get("index_sha256")?;
-        if recorded != package.index_sha256 {
-            return Err(AppError::Conflict(
-                "reverse.import_id_reused: that import identifier already names a different package"
-                    .into(),
-            ));
-        }
-        let stored_report: Vec<u8> = row.try_get("report")?;
+    else {
+        return Ok(None);
+    };
+    let recorded: Vec<u8> = row.try_get("index_sha256")?;
+    if recorded != index_sha256 {
+        return Err(AppError::Conflict(
+            "reverse.import_id_reused: that import identifier already names a different package"
+                .into(),
+        ));
+    }
+    let stored_report: Vec<u8> = row.try_get("report")?;
+    let mut report = ReverseImportReport::decode(stored_report.as_slice())
+        .map_err(|_| AppError::Internal("A recorded import report cannot be read".into()))?;
+    report.replayed = true;
+    Ok(Some(report))
+}
+
+/// Writes the ledger row that makes the next identical request a replay.
+pub async fn record_import(
+    transaction: &mut sqlx::SqliteTransaction<'_>,
+    domain: &str,
+    request: &ApplyReverseExportRequest,
+    index: &PackageIndex,
+    index_sha256: &[u8],
+    report: &ReverseImportReport,
+) -> AppResult<()> {
+    let epoch = i64::try_from(index.epoch)
+        .map_err(|_| invalid("the package epoch exceeds the supported range"))?;
+    sqlx::query(
+        "INSERT INTO host_imports (import_id, domain, epoch, index_sha256, entity_count, report, applied_at) \
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&request.import_id)
+    .bind(domain)
+    .bind(epoch)
+    .bind(index_sha256)
+    .bind(i64::try_from(index.entity_count).unwrap_or(i64::MAX))
+    .bind(report.encode_to_vec())
+    .bind(chrono::Utc::now().to_rfc3339())
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}
+
+/// Applies one canvas package. The database must already record the Host as the
+/// owner of the canvas domain: importing a Host package while this Runtime is
+/// the writer would overwrite rows the Runtime is still serving.
+async fn apply_canvas(
+    pool: &SqlitePool,
+    request: &ApplyReverseExportRequest,
+) -> AppResult<ReverseImportReport> {
+    if !valid_import_id(&request.import_id) {
+        return Err(invalid("the import identifier is missing or not portable"));
+    }
+    require_ledger(pool).await?;
+    let directory = PathBuf::from(&request.package_path);
+    let package = read(&directory)?;
+    if !request.index_sha256.is_empty() && request.index_sha256 != package.index_sha256 {
+        return Err(AppError::Conflict(
+            "reverse.index_mismatch: the package index is not the one the controller asked for"
+                .into(),
+        ));
+    }
+
+    let mut transaction = pool.begin_with("BEGIN IMMEDIATE").await?;
+    require_host_epoch(
+        &mut transaction,
+        super::domains::OwnershipDomain::Canvas,
+        request,
+        package.index.epoch,
+    )
+    .await?;
+    if let Some(report) = replayed(&mut transaction, request, &package.index_sha256).await? {
         transaction.rollback().await?;
-        let mut report = ReverseImportReport::decode(stored_report.as_slice())
-            .map_err(|_| AppError::Internal("A recorded import report cannot be read".into()))?;
-        report.replayed = true;
         return Ok(report);
     }
 
@@ -394,21 +509,14 @@ pub async fn apply(
         issues: Vec::new(),
         applied_at_unix_ms: chrono::Utc::now().timestamp_millis(),
     };
-    let encoded = report.encode_to_vec();
-    let epoch = i64::try_from(package.index.epoch)
-        .map_err(|_| invalid("the package epoch exceeds the supported range"))?;
-    sqlx::query(
-        "INSERT INTO host_imports (import_id, domain, epoch, index_sha256, entity_count, report, applied_at) \
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+    record_import(
+        &mut transaction,
+        CANVAS_DOMAIN,
+        request,
+        &package.index,
+        &package.index_sha256,
+        &report,
     )
-    .bind(&request.import_id)
-    .bind(CANVAS_DOMAIN)
-    .bind(epoch)
-    .bind(&package.index_sha256)
-    .bind(i64::try_from(package.index.entity_count).unwrap_or(i64::MAX))
-    .bind(&encoded)
-    .bind(chrono::Utc::now().to_rfc3339())
-    .execute(&mut *transaction)
     .await?;
     transaction.commit().await?;
     Ok(report)
@@ -424,15 +532,26 @@ async fn write_workspace(
     let created = records::timestamp(plan.workspace.created_at_unix_ms)?;
     let updated = records::timestamp(plan.workspace.updated_at_unix_ms)?;
     let opened = records::optional_timestamp(plan.workspace.last_opened_at_unix_ms)?;
+    // Two columns are deliberately absent from the update list.
+    //
     // `execution_host_id` is not in a canvas entity and never travelled to the
     // Host, so the row is updated rather than replaced: recreating it would
     // reset the workspace to the local machine and cascade every terminal
     // session and context link away with it.
+    //
+    // `permissions_json` is the filesystem domain's record (business migration
+    // §1.1): read, write and execute are what that domain decides, and the
+    // canvas entity carries a display copy of them. The two domains roll back
+    // in order — filesystem first, canvas after — so a canvas package that
+    // wrote permissions would overwrite the ones the filesystem package had
+    // just restored, with a copy that was never updated. It is only ever
+    // written on the insert, where the row does not exist yet and the canvas
+    // package is the only thing that knows anything about it.
     sqlx::query(
         "INSERT INTO workspaces (id, name, root_path, color, permissions_json, last_opened_at, created_at, updated_at) \
          VALUES (?, ?, ?, ?, ?, ?, ?, ?) \
          ON CONFLICT(id) DO UPDATE SET name = excluded.name, root_path = excluded.root_path, \
-           color = excluded.color, permissions_json = excluded.permissions_json, \
+           color = excluded.color, \
            last_opened_at = excluded.last_opened_at, created_at = excluded.created_at, \
            updated_at = excluded.updated_at",
     )

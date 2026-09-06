@@ -23,6 +23,8 @@
 //! commands and Hook endpoints are not ownership, they are the machine.
 
 pub mod domains;
+pub mod filesystem;
+pub mod filesystem_import;
 pub mod import;
 pub mod import_cli;
 pub mod records;
@@ -313,5 +315,7 @@ pub async fn all(State(state): State<AppState>) -> AppResult<Json<Vec<WriteOwner
     Ok(Json(read_all(&state.pool).await?))
 }
 
+#[cfg(test)]
+mod filesystem_tests;
 #[cfg(test)]
 mod tests;
