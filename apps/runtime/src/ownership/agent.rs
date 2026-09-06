@@ -410,8 +410,12 @@ pub async fn records_for(
 /// One entry of the stored `links_json`.
 #[derive(serde::Deserialize, serde::Serialize)]
 struct StoredLink {
-    #[serde(rename = "nodeId")]
-    node_id: String,
+    /// The Runtime spells the other end's identifier `id`, not `nodeId`: the
+    /// document is a list of things this node may read, and a whiteboard shape
+    /// is one of them.
+    id: String,
+    #[serde(default)]
+    title: String,
     #[serde(default)]
     direction: String,
     #[serde(default)]
@@ -426,15 +430,16 @@ fn decode_links(raw: &str) -> AppResult<Vec<ContextLink>> {
         .map_err(|_| corrupt("a stored context link list cannot be read"))?;
     let mut links = stored
         .into_iter()
-        .filter(|entry| !entry.node_id.is_empty())
+        .filter(|entry| !entry.id.is_empty())
         .map(|entry| ContextLink {
-            target_node_id: entry.node_id,
+            target_node_id: entry.id,
             direction: if entry.direction == "incoming" {
                 ContextLinkDirection::Incoming as i32
             } else {
                 ContextLinkDirection::Outgoing as i32
             },
             kind: entry.kind,
+            title: entry.title,
         })
         .collect::<Vec<_>>();
     // One order, always: two readings of one board have to produce one digest.
@@ -449,7 +454,8 @@ fn encode_links(links: &[ContextLink]) -> String {
     let stored = links
         .iter()
         .map(|link| StoredLink {
-            node_id: link.target_node_id.clone(),
+            id: link.target_node_id.clone(),
+            title: link.title.clone(),
             direction: if link.direction == ContextLinkDirection::Incoming as i32 {
                 "incoming".into()
             } else {
@@ -548,6 +554,11 @@ pub fn canonical_delivery(delivery: &Delivery) -> Delivery {
 pub fn canonical_handoff(handoff: &Handoff) -> Handoff {
     Handoff {
         bundle_sha256: Vec::new(),
+        // `attempts` lives in `agent_handoff_outbox`, and a handoff that
+        // reached a terminal state has no outbox row left to hold it. Comparing
+        // it would make the round trip permanently false for exactly the
+        // handoffs that finished.
+        attempts: 0,
         updated_at_unix_ms: 0,
         revision: 0,
         ..handoff.clone()
@@ -622,11 +633,17 @@ pub fn from_records(records: Vec<ReverseExportRecord>) -> AppResult<AgentRecords
 /// about to be written would prove only that this process can hash its own
 /// buffer; the digests below come from a fresh read of the rows.
 ///
-/// A record the Host created while it held the domain has no row here. It is
-/// reported as an error issue rather than inserted, for the reason the session
-/// import gives: these rows reference `workspaces` and `nodes` rows the canvas
-/// domain owns and rolls back after this one, and inventing them would leave
-/// that rollback with records nobody exported.
+/// A record the Host created while it held the domain is *inserted*, not
+/// refused. That is what §2.12 asks for — the package is the domain's whole
+/// content, and a rollback that dropped everything the Host recorded would not
+/// be a rollback — and it is safe here in a way it is not for a session: these
+/// rows reference `workspaces` and `nodes`, and both of those exist already.
+/// The canvas domain rolls back after this one, but its rollback rewrites
+/// columns rather than removing nodes, so nothing this insert names disappears.
+///
+/// A row whose node really is gone is the one case left, and the database says
+/// so: the foreign key fails, and it is reported as an issue that blocks the
+/// handback rather than silently dropped.
 pub async fn apply_records(
     transaction: &mut sqlx::SqliteTransaction<'_>,
     request: &ApplyReverseExportRequest,
@@ -636,12 +653,19 @@ pub async fn apply_records(
     let mut issues = Vec::new();
     for (name, _workspace_id, records) in files {
         for status in &records.statuses {
-            let affected = sqlx::query(
-                "UPDATE agent_status SET workspace_id = ?, agent_id = ?, state = ?, unread = ?, \
-                 session_id = ?, verified = ?, restored = ?, transcript_path = ?, \
-                 last_event_at = ?, session_phase = ?, errored = ?, interrupted = ?, \
-                 updated_at = ? WHERE node_id = ?",
+            let stored = sqlx::query(
+                "INSERT INTO agent_status(node_id, workspace_id, agent_id, state, unread, \
+                 session_id, verified, restored, transcript_path, last_event_at, session_phase, \
+                 errored, interrupted, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
+                 ON CONFLICT(node_id) DO UPDATE SET workspace_id = excluded.workspace_id, \
+                 agent_id = excluded.agent_id, state = excluded.state, unread = excluded.unread, \
+                 session_id = excluded.session_id, verified = excluded.verified, \
+                 restored = excluded.restored, transcript_path = excluded.transcript_path, \
+                 last_event_at = excluded.last_event_at, session_phase = excluded.session_phase, \
+                 errored = excluded.errored, interrupted = excluded.interrupted, \
+                 updated_at = excluded.updated_at",
             )
+            .bind(&status.node_id)
             .bind(&status.workspace_id)
             .bind(&status.agent_id)
             .bind(state_column(
@@ -659,24 +683,33 @@ pub async fn apply_records(
             .bind(status.errored.map(i64::from))
             .bind(status.interrupted.map(i64::from))
             .bind(records::timestamp(status.updated_at_unix_ms.max(1))?)
-            .bind(&status.node_id)
             .execute(&mut **transaction)
-            .await?
-            .rows_affected();
-            if affected == 0 {
-                issues.push(missing(name, "agent_status", &status.node_id));
-                continue;
+            .await;
+            match stored {
+                Ok(result) => written += result.rows_affected(),
+                Err(_) => {
+                    issues.push(missing(name, "agent_status", &status.node_id));
+                    continue;
+                }
             }
-            written += affected;
         }
         for approval in &records.approvals {
             let answered = approval.state == ApprovalState::Answered as i32;
-            let affected = sqlx::query(
-                "UPDATE agent_approvals SET node_id = ?, workspace_id = ?, answer = ?, \
-                 answered_by = ?, answered_at = ? WHERE id = ?",
+            // `request_json` and `created_at` are the question as it was asked;
+            // they are written once, by the insert, and never rewritten. A
+            // rollback that could restate the question would leave an audit
+            // entry saying somebody allowed something they were never shown.
+            let stored = sqlx::query(
+                "INSERT INTO agent_approvals(id, node_id, workspace_id, request_json, answer, \
+                 answered_by, created_at, answered_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?) \
+                 ON CONFLICT(id) DO UPDATE SET node_id = excluded.node_id, \
+                 workspace_id = excluded.workspace_id, answer = excluded.answer, \
+                 answered_by = excluded.answered_by, answered_at = excluded.answered_at",
             )
+            .bind(&approval.approval_id)
             .bind(&approval.node_id)
             .bind(&approval.workspace_id)
+            .bind(String::from_utf8_lossy(&approval.request).into_owned())
             .bind(if answered {
                 none_if_empty(&approval.decision)
             } else {
@@ -687,90 +720,134 @@ pub async fn apply_records(
             } else {
                 None
             })
+            .bind(records::timestamp(approval.created_at_unix_ms.max(1))?)
             .bind(if answered {
                 records::optional_timestamp(approval.answered_at_unix_ms)?
             } else {
                 None
             })
-            .bind(&approval.approval_id)
             .execute(&mut **transaction)
-            .await?
-            .rows_affected();
-            if affected == 0 {
-                issues.push(missing(name, "agent_approvals", &approval.approval_id));
-                continue;
+            .await;
+            match stored {
+                Ok(result) => written += result.rows_affected(),
+                Err(_) => {
+                    issues.push(missing(name, "agent_approvals", &approval.approval_id));
+                    continue;
+                }
             }
-            written += affected;
         }
         for message in &records.messages {
-            let affected = sqlx::query(
-                "UPDATE agent_mailbox SET body = ?, expires_at = ?, acknowledged_at = ? \
-                 WHERE id = ?",
+            // `sequence` is the inbox's own order and is restored explicitly:
+            // letting the autoincrement pick a new one would reorder somebody's
+            // inbox on a rollback, which is two messages read in the wrong order.
+            let stored = sqlx::query(
+                "INSERT INTO agent_mailbox(sequence, id, workspace_id, source_node_id, \
+                 target_node_id, message_key, body, created_at, expires_at, acknowledged_at) \
+                 VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET \
+                 body = excluded.body, expires_at = excluded.expires_at, \
+                 acknowledged_at = excluded.acknowledged_at",
             )
+            .bind(message.sequence as i64)
+            .bind(&message.message_id)
+            .bind(&message.workspace_id)
+            .bind(&message.source_node_id)
+            .bind(&message.target_node_id)
+            .bind(&message.message_key)
             .bind(&message.body)
+            .bind(message.created_at_unix_ms)
             .bind(message.expires_at_unix_ms)
             .bind(if message.acknowledged_at_unix_ms > 0 {
                 Some(message.acknowledged_at_unix_ms)
             } else {
                 None
             })
-            .bind(&message.message_id)
             .execute(&mut **transaction)
-            .await?
-            .rows_affected();
-            if affected == 0 {
-                issues.push(missing(name, "agent_mailbox", &message.message_id));
-                continue;
+            .await;
+            match stored {
+                Ok(result) => written += result.rows_affected(),
+                Err(_) => {
+                    issues.push(missing(name, "agent_mailbox", &message.message_id));
+                    continue;
+                }
             }
-            written += affected;
         }
         for delivery in &records.deliveries {
-            let affected = sqlx::query(
-                "UPDATE agent_deliveries SET outcome = ?, receipt = ?, body_chars = ? \
-                 WHERE trace_id = ?",
+            let stored = sqlx::query(
+                "INSERT INTO agent_deliveries(trace_id, workspace_id, source_node_id, \
+                 target_node_id, outcome, receipt, body_chars, created_at) \
+                 VALUES(?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(trace_id) DO UPDATE SET \
+                 outcome = excluded.outcome, receipt = excluded.receipt, \
+                 body_chars = excluded.body_chars",
             )
+            .bind(&delivery.trace_id)
+            .bind(&delivery.workspace_id)
+            .bind(&delivery.source_node_id)
+            .bind(&delivery.target_node_id)
             .bind(outcome_column(
                 DeliveryOutcome::try_from(delivery.outcome).unwrap_or(DeliveryOutcome::Unknown),
             ))
             .bind(none_if_empty(&delivery.receipt))
             .bind(i64::from(delivery.body_chars))
-            .bind(&delivery.trace_id)
+            .bind(records::timestamp(delivery.created_at_unix_ms.max(1))?)
             .execute(&mut **transaction)
-            .await?
-            .rows_affected();
-            if affected == 0 {
-                issues.push(missing(name, "agent_deliveries", &delivery.trace_id));
-                continue;
+            .await;
+            match stored {
+                Ok(result) => written += result.rows_affected(),
+                Err(_) => {
+                    issues.push(missing(name, "agent_deliveries", &delivery.trace_id));
+                    continue;
+                }
             }
-            written += affected;
         }
         for handoff in &records.handoffs {
-            // The bundle and both endpoints are absent from this statement, and
-            // that is not an omission: `freeze_agent_handoff_bundle` aborts an
-            // update that touches them. A rollback restores what moved, and the
-            // frozen half never moved.
+            // The frozen half is in the INSERT and absent from the DO UPDATE,
+            // and that is not an omission: `freeze_agent_handoff_bundle` aborts
+            // an update that touches it. A rollback restores a handoff that was
+            // prepared here, and never rewrites one that already exists.
             let (state, outbox) = handoff_columns(
                 HandoffState::try_from(handoff.state).unwrap_or(HandoffState::Prepared),
             );
-            let affected = sqlx::query(
-                "UPDATE agent_handoffs SET state = ?, mailbox_id = ?, trace_id = ?, \
-                 error_code = ?, accepted_at = ?, updated_at = ? WHERE id = ?",
+            let source = handoff.source.clone().unwrap_or_default();
+            let target = handoff.target.clone().unwrap_or_default();
+            let stored = sqlx::query(
+                "INSERT INTO agent_handoffs(id, workspace_id, source_node_id, source_session_id, \
+                 source_generation, target_node_id, target_session_id, target_generation, \
+                 bundle_json, bundle_digest, state, mailbox_id, trace_id, error_code, created_at, \
+                 accepted_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
+                 ON CONFLICT(id) DO UPDATE SET state = excluded.state, \
+                 mailbox_id = excluded.mailbox_id, trace_id = excluded.trace_id, \
+                 error_code = excluded.error_code, accepted_at = excluded.accepted_at, \
+                 updated_at = excluded.updated_at",
             )
+            .bind(&handoff.handoff_id)
+            .bind(&handoff.workspace_id)
+            .bind(&handoff.source_node_id)
+            .bind(&source.session_id)
+            .bind(source.generation as i64)
+            .bind(&handoff.target_node_id)
+            .bind(&target.session_id)
+            .bind(target.generation as i64)
+            .bind(String::from_utf8_lossy(&handoff.bundle).into_owned())
+            // The column is this Runtime's own digest of the stored text, and
+            // `handoff::decode` re-checks it on every read. Writing the Host's
+            // bytes back verbatim would leave a row that refuses to be read.
+            .bind(crate::handoff::digest(handoff.bundle.as_slice()))
             .bind(state)
             .bind(none_if_empty(&handoff.mailbox_id))
             .bind(none_if_empty(&handoff.trace_id))
             .bind(none_if_empty(&handoff.error_code))
+            .bind(records::timestamp(handoff.created_at_unix_ms.max(1))?)
             .bind(records::optional_timestamp(handoff.accepted_at_unix_ms)?)
             .bind(records::timestamp(handoff.updated_at_unix_ms.max(1))?)
-            .bind(&handoff.handoff_id)
             .execute(&mut **transaction)
-            .await?
-            .rows_affected();
-            if affected == 0 {
-                issues.push(missing(name, "agent_handoffs", &handoff.handoff_id));
-                continue;
+            .await;
+            match stored {
+                Ok(result) => written += result.rows_affected(),
+                Err(_) => {
+                    issues.push(missing(name, "agent_handoffs", &handoff.handoff_id));
+                    continue;
+                }
             }
-            written += affected;
             if outbox.is_empty() {
                 sqlx::query("DELETE FROM agent_handoff_outbox WHERE handoff_id = ?")
                     .bind(&handoff.handoff_id)

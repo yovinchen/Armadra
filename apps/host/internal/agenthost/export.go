@@ -127,6 +127,11 @@ func (w workspaceRecords) records(canonical bool) []*pb.ReverseExportRecord {
 		if canonical {
 			value.Revision = 0
 			value.BundleSha256 = nil
+			// `attempts` lives in the Runtime's `agent_handoff_outbox`, and a
+			// handoff that reached a terminal state has no outbox row left to
+			// hold it. Comparing it would make the round trip permanently false
+			// for exactly the handoffs that finished.
+			value.Attempts = 0
 			value.UpdatedAtUnixMs = 0
 		}
 		out = append(out, &pb.ReverseExportRecord{Entity: &pb.ReverseExportRecord_Handoff{Handoff: value}})

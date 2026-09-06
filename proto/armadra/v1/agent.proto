@@ -445,6 +445,11 @@ message ContextLink {
   // What the other end is — `agent`, `terminal`, `sticky`, … The Host copies
   // the canvas node's own kind rather than deciding one.
   string kind = 10;
+  // What the other end is called. It travels because a link is a statement
+  // about something a person named: an agent reading its neighbours needs to
+  // say which one it read, and a projection that dropped the title would hand
+  // a rollback back a document with an identifier where a name used to be.
+  string title = 11;
 }
 
 // The links one node has, derived from the canvas' edges.

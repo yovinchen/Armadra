@@ -265,6 +265,7 @@ async fn applying_a_package_restores_the_records_it_names() {
                 target_node_id: "node-two".into(),
                 direction: ContextLinkDirection::Incoming as i32,
                 kind: "agent".into(),
+                title: "codex".into(),
             }],
             updated_at_unix_ms: 1_788_557_900_000,
             revision: 0,
@@ -311,11 +312,48 @@ async fn applying_a_package_restores_the_records_it_names() {
     assert!(again.replayed);
 }
 
-/// A record the Host produced while it held the domain has no row here. It is
-/// reported and blocks the handback rather than being invented: the row would
-/// reference a `nodes` row the canvas domain rolls back after this one.
+/// A record the Host produced while it held the domain has no row here, and it
+/// is written rather than refused: the package is the domain's whole content,
+/// and a rollback that dropped everything the Host recorded would not be one.
 #[tokio::test]
-async fn a_record_this_database_never_had_blocks_the_handback() {
+async fn a_record_the_host_produced_is_written_back() {
+    let (pool, directory) = pool().await;
+    let id = workspace(&pool).await;
+    nodes(&pool, &id).await;
+    hand_to_host(&pool, 2).await;
+    let package = directory.path().join("package");
+    std::fs::create_dir_all(&package).unwrap();
+    write_package(
+        &package,
+        2,
+        &id,
+        &[ReverseExportRecord {
+            entity: Some(Entity::AgentStatus(AgentStatus {
+                node_id: "node-one".into(),
+                workspace_id: id.clone(),
+                agent_id: "claude".into(),
+                state: AgentState::Done as i32,
+                updated_at_unix_ms: 1_788_557_900_000,
+                ..AgentStatus::default()
+            })),
+        }],
+    );
+    agent_import::apply(&pool, &request(&package, 2, "import-two"))
+        .await
+        .unwrap();
+    let (agents, _) = agent::worker_states(&pool).await.unwrap();
+    let written = agents
+        .iter()
+        .find(|state| state.node_id == "node-one")
+        .expect("the record the Host produced was not written back");
+    assert_eq!(written.state, AgentState::Done as i32);
+}
+
+/// A record whose node really is gone is the one case an insert cannot save.
+/// The database says so through its foreign key, and it blocks the handback
+/// rather than being dropped in silence.
+#[tokio::test]
+async fn a_record_whose_node_is_gone_blocks_the_handback() {
     let (pool, directory) = pool().await;
     let id = workspace(&pool).await;
     hand_to_host(&pool, 2).await;
@@ -326,21 +364,27 @@ async fn a_record_this_database_never_had_blocks_the_handback() {
         2,
         &id,
         &[ReverseExportRecord {
-            entity: Some(Entity::AgentStatus(AgentStatus {
-                node_id: "node-never".into(),
-                workspace_id: id.clone(),
-                state: AgentState::Idle as i32,
-                updated_at_unix_ms: 1_788_557_900_000,
-                ..AgentStatus::default()
-            })),
+            entity: Some(Entity::MailboxMessage(
+                armadra_protocol::v1::MailboxMessage {
+                    message_id: "m-orphan".into(),
+                    workspace_id: id.clone(),
+                    source_node_id: "node-gone".into(),
+                    target_node_id: "node-also-gone".into(),
+                    message_key: "k".into(),
+                    body: "无处可去".into(),
+                    sequence: 1,
+                    created_at_unix_ms: 1_788_557_800_000,
+                    ..armadra_protocol::v1::MailboxMessage::default()
+                },
+            )),
         }],
     );
-    let error = agent_import::apply(&pool, &request(&package, 2, "import-two"))
+    let error = agent_import::apply(&pool, &request(&package, 2, "import-orphan"))
         .await
         .unwrap_err();
     assert!(
         format!("{error:?}").contains("reverse.missing_agent_record"),
-        "the missing record was not named: {error:?}"
+        "the orphaned record was not named: {error:?}"
     );
 }
 

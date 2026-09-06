@@ -65,7 +65,7 @@ export function decodeValue(value) {
   }
   return value;
 }
-export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient, HostFilesystemClient, HostGitClient, HostSessionClient, origin, transport, pageOrigin }) {
+export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient, HostFilesystemClient, HostGitClient, HostSessionClient, HostAgentClient, origin, transport, pageOrigin }) {
   const state = {};
   return {
     async hello() {
@@ -119,10 +119,19 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
           workspaceId,
         });
       }
-      // So is the session surface: which workspace's terminals are being asked
+      // So is the session surface: which workspace.s terminals are being asked
       // about is not something a request gets to claim about itself.
       if (HostSessionClient) {
         state.session = new HostSessionClient({
+          session: state.identity,
+          hostId: state.hello.hostId,
+          workspaceId,
+        });
+      }
+      // And the agent surface, for the same reason: which workspace.s agents
+      // are waiting on somebody is not a request.s own claim.
+      if (HostAgentClient) {
+        state.agent = new HostAgentClient({
           session: state.identity,
           hostId: state.hello.hostId,
           workspaceId,
@@ -175,6 +184,20 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
     async session(method, args) {
       try {
         return encodeValue(await state.session[method](...decodeValue(args)));
+      } catch (error) {
+        return {
+          error: {
+            failure: error.failure ?? error.code ?? "unknown",
+            hostCode: error.hostCode ?? "",
+            httpStatus: error.httpStatus ?? 0,
+            outcomeUnknown: error.outcomeUnknown === true,
+          },
+        };
+      }
+    },
+    async agent(method, args) {
+      try {
+        return encodeValue(await state.agent[method](...decodeValue(args)));
       } catch (error) {
         return {
           error: {
@@ -240,6 +263,7 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
       HostFilesystemClient: clients.HostFilesystemClient,
       HostGitClient: clients.HostGitClient,
       HostSessionClient: clients.HostSessionClient,
+      HostAgentClient: clients.HostAgentClient,
       origin: appOrigin,
       transport: { fetch: transport },
       pageOrigin: appOrigin,
@@ -260,15 +284,17 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
         client.git(method, encodeValue(args)).then(decodeValue),
       session: (method, args) =>
         client.session(method, encodeValue(args)).then(decodeValue),
+      agent: (method, args) =>
+        client.agent(method, encodeValue(args)).then(decodeValue),
     };
   } else {
     const driverSource = join(workspace, "driver-source.mjs");
     writeFileSync(
       driverSource,
-      `import { HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient, HostFilesystemClient, HostGitClient, HostSessionClient } from "@armadra/host-client";
+      `import { HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient, HostFilesystemClient, HostGitClient, HostSessionClient, HostAgentClient } from "@armadra/host-client";
 import { createDriver } from "./driver-core.mjs";
 globalThis.armadra = createDriver({
-  HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient, HostFilesystemClient, HostGitClient, HostSessionClient,
+  HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient, HostFilesystemClient, HostGitClient, HostSessionClient, HostAgentClient,
   origin: ${JSON.stringify(appOrigin)}, transport: {},
 });
 globalThis.armadraReady = true;

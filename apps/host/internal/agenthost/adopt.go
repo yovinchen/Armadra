@@ -744,8 +744,15 @@ func (s *Service) adoptLinks(ctx context.Context, importID string, rows staged) 
 }
 
 // legacyLink is one entry of the Runtime's `links_json`.
+//
+// The Runtime spells the other end's identifier `id`, not `nodeId`: the
+// document is a list of *things this node may read*, and a whiteboard shape is
+// one of them. `title` and `kind` come along because a link says what it points
+// at, and a projection that dropped them would leave a board unable to draw the
+// difference between a neighbouring agent and a sticky note.
 type legacyLink struct {
-	NodeID    string `json:"nodeId"`
+	NodeID    string `json:"id"`
+	Title     string `json:"title"`
 	Direction string `json:"direction"`
 	Kind      string `json:"kind"`
 }
@@ -767,7 +774,12 @@ func decodeLegacyLinks(raw string) ([]*pb.ContextLink, error) {
 		if entry.Direction == "incoming" {
 			direction = pb.ContextLinkDirection_CONTEXT_LINK_DIRECTION_INCOMING
 		}
-		links = append(links, &pb.ContextLink{TargetNodeId: entry.NodeID, Direction: direction, Kind: entry.Kind})
+		links = append(links, &pb.ContextLink{
+			TargetNodeId: entry.NodeID,
+			Direction:    direction,
+			Kind:         entry.Kind,
+			Title:        entry.Title,
+		})
 	}
 	sortLinks(links)
 	return links, nil

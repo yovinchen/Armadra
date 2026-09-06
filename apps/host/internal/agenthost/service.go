@@ -3,6 +3,8 @@ package agenthost
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"time"
 
 	pb "armadra.local/host/gen/armadra/v1"
@@ -139,6 +141,18 @@ func (s *Service) authorizeWrite(ctx context.Context, caller Caller) error {
 	return nil
 }
 
+// note reports a failure that must not become the caller's. It is the one
+// place a swallowed error is written down, so "the board looked stale" is
+// something an operator can find a reason for.
+func (s *Service) note(what string, err error) {
+	if err == nil || errors.Is(err, ErrNoWorker) {
+		// An unreachable machine is an ordinary state on a Host whose Runtime
+		// is not running, and saying so on every listing would be noise.
+		return
+	}
+	fmt.Fprintln(os.Stderr, "Armadra:", what, "failed:", err)
+}
+
 func (s *Service) open(ctx context.Context, executionHostID string) (Executor, func(), error) {
 	if s.options.Open == nil {
 		return nil, nil, ErrNoWorker
@@ -157,9 +171,20 @@ func (s *Service) open(ctx context.Context, executionHostID string) (Executor, f
 
 // ListStatus answers the caller's own workspace only. A device granted one
 // workspace must not learn which agents are running in another.
+//
+// It drains first, and that is where the pull of §2.7 actually happens. The
+// execution host has no way to push — the process a Hook reaches binds no
+// upward channel — so somebody has to ask, and the moment a client wants to
+// draw the board is exactly the moment the answer matters. A drain that fails
+// is ignored rather than propagated: the records still answer, and a Host that
+// refused to list agents because a machine was briefly unreachable would blank
+// a board over a dropped request.
 func (s *Service) ListStatus(ctx context.Context, caller Caller, request *pb.ListAgentStatusRequest) (*pb.ListAgentStatusResponse, error) {
 	if err := s.authorize(caller, ScopeRead); err != nil {
 		return nil, err
+	}
+	if _, err := s.Drain(ctx, ""); err != nil {
+		s.note("agent drain", err)
 	}
 	after := request.GetAfterNodeId()
 	if after != "" && !validID(after) {
@@ -197,16 +222,39 @@ func (s *Service) Status(ctx context.Context, nodeID string) (storage.AgentStatu
 	return status, nil
 }
 
-// requireNode resolves a record the caller may act on in their own workspace.
+// requireNode resolves a node the caller may act on in their own workspace.
+//
+// A node that has never reported has no status, and that is an ordinary state
+// rather than a missing node: a terminal somebody just dropped on a board is a
+// legitimate handoff target and a legitimate inbox. So the canvas' own record
+// is the fallback, and only a node that is on nobody's board at all is refused.
 func (s *Service) requireNode(ctx context.Context, caller Caller, nodeID string) (storage.AgentStatus, error) {
 	status, err := s.Status(ctx, nodeID)
+	switch {
+	case err == nil:
+		if status.WorkspaceID != caller.WorkspaceID {
+			return storage.AgentStatus{}, ErrAuthorization
+		}
+		return status, nil
+	case errors.Is(err, ErrNotFound):
+	default:
+		return storage.AgentStatus{}, err
+	}
+	if !validID(nodeID) {
+		return storage.AgentStatus{}, ErrInvalid
+	}
+	// The canvas stores a node under `<canvas>/<node>`, so this is a scan of
+	// the workspace's nodes rather than a lookup. It is the same read the
+	// context-link projection makes, at board scale, and it runs only when the
+	// node has no status — which is once per node, ever.
+	kinds, err := s.nodeTypes(ctx, caller.WorkspaceID)
 	if err != nil {
 		return storage.AgentStatus{}, err
 	}
-	if status.WorkspaceID != caller.WorkspaceID {
-		return storage.AgentStatus{}, ErrAuthorization
+	if _, known := kinds[nodeID]; !known {
+		return storage.AgentStatus{}, ErrNotFound
 	}
-	return status, nil
+	return storage.AgentStatus{NodeID: nodeID, WorkspaceID: caller.WorkspaceID}, nil
 }
 
 /* ------------------------------------------------------------------ writes */

@@ -2179,7 +2179,12 @@ type ContextLink struct {
 	Direction    ContextLinkDirection   `protobuf:"varint,30,opt,name=direction,proto3,enum=armadra.v1.ContextLinkDirection" json:"direction,omitempty"`
 	// What the other end is — `agent`, `terminal`, `sticky`, … The Host copies
 	// the canvas node's own kind rather than deciding one.
-	Kind          string `protobuf:"bytes,10,opt,name=kind,proto3" json:"kind,omitempty"`
+	Kind string `protobuf:"bytes,10,opt,name=kind,proto3" json:"kind,omitempty"`
+	// What the other end is called. It travels because a link is a statement
+	// about something a person named: an agent reading its neighbours needs to
+	// say which one it read, and a projection that dropped the title would hand
+	// a rollback back a document with an identifier where a name used to be.
+	Title         string `protobuf:"bytes,11,opt,name=title,proto3" json:"title,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2231,6 +2236,13 @@ func (x *ContextLink) GetDirection() ContextLinkDirection {
 func (x *ContextLink) GetKind() string {
 	if x != nil {
 		return x.Kind
+	}
+	return ""
+}
+
+func (x *ContextLink) GetTitle() string {
+	if x != nil {
+		return x.Title
 	}
 	return ""
 }
@@ -5582,12 +5594,13 @@ const file_armadra_v1_agent_proto_rawDesc = "" +
 	"\x12created_at_unix_ms\x18( \x01(\x03R\x0fcreatedAtUnixMs\x12-\n" +
 	"\x13accepted_at_unix_ms\x18) \x01(\x03R\x10acceptedAtUnixMs\x12+\n" +
 	"\x12updated_at_unix_ms\x18* \x01(\x03R\x0fupdatedAtUnixMs\x12\x1a\n" +
-	"\brevision\x182 \x01(\x04R\brevision\"\x87\x01\n" +
+	"\brevision\x182 \x01(\x04R\brevision\"\x9d\x01\n" +
 	"\vContextLink\x12$\n" +
 	"\x0etarget_node_id\x18\x01 \x01(\tR\ftargetNodeId\x12>\n" +
 	"\tdirection\x18\x1e \x01(\x0e2 .armadra.v1.ContextLinkDirectionR\tdirection\x12\x12\n" +
 	"\x04kind\x18\n" +
-	" \x01(\tR\x04kind\"\xc2\x01\n" +
+	" \x01(\tR\x04kind\x12\x14\n" +
+	"\x05title\x18\v \x01(\tR\x05title\"\xc2\x01\n" +
 	"\fContextLinks\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12!\n" +
 	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12-\n" +
