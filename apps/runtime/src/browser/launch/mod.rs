@@ -188,6 +188,37 @@ fn candidates() -> Vec<PathBuf> {
     }
 }
 
+/// Asks the DevTools HTTP endpoint for the **browser's** debugger URL.
+///
+/// One socket for the whole browser is what makes tabs addressable: page and
+/// out-of-process-iframe targets attach themselves to it and are told apart by
+/// their CDP session id (§2.2). Connecting to a single page target instead
+/// would leave every `window.open` invisible.
+pub async fn browser_target(port: u16) -> Result<String, String> {
+    let url = format!("http://127.0.0.1:{port}/json/version");
+    let client = reqwest::Client::new();
+    let mut last = String::from("no browser endpoint");
+    for _ in 0..100 {
+        match client.get(&url).send().await {
+            Ok(response) => match response.json::<serde_json::Value>().await {
+                Ok(version) => {
+                    if let Some(socket) = version
+                        .get("webSocketDebuggerUrl")
+                        .and_then(serde_json::Value::as_str)
+                    {
+                        return Ok(socket.to_owned());
+                    }
+                    last = "no browser endpoint".to_owned();
+                }
+                Err(error) => last = error.to_string(),
+            },
+            Err(error) => last = error.to_string(),
+        }
+        tokio::time::sleep(process::STARTUP_POLL).await;
+    }
+    Err(last)
+}
+
 /// Asks the DevTools HTTP endpoint for a page target's debugger URL.
 ///
 /// Public because attaching is retried: a page target can be replaced while

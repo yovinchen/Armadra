@@ -39,9 +39,16 @@ async fn a_killed_runtime_reattaches_and_then_clears_a_stale_profile_lock() {
         .unwrap();
     // Something only this page instance knows. A relaunch would load the same
     // URL and lose it; a re-attach keeps the document that already exists.
-    session::type_text(&live, Target::Selector("#name"), "存活", false, false)
-        .await
-        .unwrap();
+    session::type_text(
+        &live,
+        Target::Selector("#name"),
+        &TargetRef::default(),
+        "存活",
+        false,
+        false,
+    )
+    .await
+    .unwrap();
 
     let stored = crate::browser::stored(&fixture.state.pool, &first.session_id)
         .await

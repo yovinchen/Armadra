@@ -1,4 +1,8 @@
-//! Pointer and keyboard input, plus the element targeting it resolves.
+//! Raw pointer and keyboard input from a person watching the picture.
+//!
+//! Everything here is aimed at the active tab in its own coordinates: the
+//! client that sent it was looking at that tab. Agent verbs resolve an
+//! address first and live in [`super::actions`].
 
 use super::*;
 
@@ -76,6 +80,10 @@ pub async fn input(live: &Live, request: &InputRequest) -> AppResult<u32> {
             "That browser session is not accepting input".into(),
         ));
     }
+    // A tab blocked in a dialog does not process input at all; saying so is
+    // better than dispatching events the renderer will never see (§2.4). It is
+    // checked before the lease so a refused batch does not also change hands.
+    dialog_guard(live, &live.active_tab_id())?;
     // A person's ordinary input takes the lease straight away — it never
     // queues, and it preempts an agent (§2.6). Taking it *before* dispatching
     // is what makes the agent's next action see a human holder.
@@ -187,176 +195,4 @@ pub(super) fn clamp_delta(value: f64) -> f64 {
     } else {
         0.0
     }
-}
-
-/* --------------------------------- targeting ------------------------------- */
-
-/// Where a click or a type should land. Exactly one of the three.
-pub enum Target<'a> {
-    Selector(&'a str),
-    ElementRef(&'a str),
-    Point(f64, f64),
-}
-
-impl<'a> Target<'a> {
-    pub fn parse(
-        selector: Option<&'a str>,
-        element_ref: Option<&'a str>,
-        point: Option<(f64, f64)>,
-    ) -> AppResult<Self> {
-        match (selector, element_ref, point) {
-            (Some(selector), None, None) if !selector.trim().is_empty() => {
-                Ok(Self::Selector(selector.trim()))
-            }
-            (None, Some(reference), None) if !reference.trim().is_empty() => {
-                Ok(Self::ElementRef(reference.trim()))
-            }
-            (None, None, Some((x, y))) => Ok(Self::Point(x, y)),
-            _ => Err(AppError::BadRequest(
-                "Give exactly one of a selector, an element reference, or coordinates".into(),
-            )),
-        }
-    }
-}
-
-/// Resolves a target to a viewport point, refusing a stale element reference.
-pub(super) async fn point_of(live: &Live, target: &Target<'_>) -> AppResult<(f64, f64)> {
-    let epoch = live.navigation_epoch();
-    let expression = match target {
-        Target::Point(x, y) => return Ok((*x, *y)),
-        Target::Selector(selector) => dom::rect_of(selector),
-        Target::ElementRef(reference) => dom::element_rect(resolve_ref(live, reference, epoch)?),
-    };
-    let value = live.evaluate(&expression).await?;
-    if value.is_null() {
-        return Err(AppError::NotFound(
-            "Nothing on the page matches that target".into(),
-        ));
-    }
-    if !value
-        .get("visible")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-    {
-        return Err(AppError::Conflict(
-            "That element is on the page but not visible".into(),
-        ));
-    }
-    Ok((
-        value.get("x").and_then(Value::as_f64).unwrap_or(0.0),
-        value.get("y").and_then(Value::as_f64).unwrap_or(0.0),
-    ))
-}
-
-/// `e<epoch>-<index>`, valid only for the epoch it was minted in.
-pub(super) fn resolve_ref(live: &Live, reference: &str, epoch: u64) -> AppResult<usize> {
-    let stale = || {
-        AppError::Conflict(
-            "STALE_TARGET: the page changed since that element was read; read it again".into(),
-        )
-    };
-    let body = reference.strip_prefix('e').ok_or_else(stale)?;
-    let (minted, index) = body.split_once('-').ok_or_else(stale)?;
-    let minted: u64 = minted.parse().map_err(|_| stale())?;
-    let index: usize = index.parse().map_err(|_| stale())?;
-    if minted != epoch {
-        return Err(stale());
-    }
-    let (read_epoch, count) = *live
-        .elements
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if read_epoch != epoch || index >= count {
-        return Err(stale());
-    }
-    Ok(index)
-}
-
-pub async fn click(
-    live: &Live,
-    target: Target<'_>,
-    modifiers: u32,
-    click_count: u32,
-) -> AppResult<BrowserSession> {
-    let (x, y) = point_of(live, &target).await?;
-    let epoch = live.navigation_epoch();
-    for phase in ["mousePressed", "mouseReleased"] {
-        live.call(
-            "Input.dispatchMouseEvent",
-            json!({
-                "type": phase,
-                "x": x,
-                "y": y,
-                "button": "left",
-                "clickCount": click_count.clamp(1, 3),
-                "modifiers": modifiers & 0b1111,
-            }),
-        )
-        .await?;
-    }
-    // A click that navigates should answer with the page it produced.
-    if wait_for_epoch_change(live, epoch, Duration::from_millis(400)).await {
-        settle(live).await;
-        live.publish().await;
-    }
-    Ok(live.snapshot())
-}
-
-pub async fn type_text(
-    live: &Live,
-    target: Target<'_>,
-    text: &str,
-    replace: bool,
-    submit: bool,
-) -> AppResult<BrowserSession> {
-    if text.chars().count() > 4_096 {
-        return Err(AppError::BadRequest("That text is too long".into()));
-    }
-    let epoch = live.navigation_epoch();
-    let focused = match &target {
-        Target::Selector(selector) => live.evaluate(&dom::focus_field(selector, replace)).await?,
-        Target::ElementRef(reference) => {
-            let index = resolve_ref(live, reference, epoch)?;
-            live.evaluate(&dom::focus_element(index, replace)).await?
-        }
-        Target::Point(x, y) => {
-            for phase in ["mousePressed", "mouseReleased"] {
-                live.call(
-                    "Input.dispatchMouseEvent",
-                    json!({ "type": phase, "x": x, "y": y, "button": "left", "clickCount": 1 }),
-                )
-                .await?;
-            }
-            Value::Bool(true)
-        }
-    };
-    if focused != Value::Bool(true) {
-        return Err(AppError::NotFound(
-            "Nothing on the page matches that target".into(),
-        ));
-    }
-    if !text.is_empty() {
-        live.call("Input.insertText", json!({ "text": text }))
-            .await?;
-    }
-    if submit {
-        for phase in ["keyDown", "keyUp"] {
-            live.call(
-                "Input.dispatchKeyEvent",
-                json!({
-                    "type": phase,
-                    "key": "Enter",
-                    "code": "Enter",
-                    "windowsVirtualKeyCode": 13,
-                    "text": "\r",
-                }),
-            )
-            .await?;
-        }
-        if wait_for_epoch_change(live, epoch, Duration::from_millis(600)).await {
-            settle(live).await;
-            live.publish().await;
-        }
-    }
-    Ok(live.snapshot())
 }

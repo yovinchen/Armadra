@@ -21,6 +21,11 @@ pub const PAGE_TEXT: &str =
 pub const TITLE: &str = "document.title";
 pub const LOCATION: &str = "location.href";
 
+/// The addressed frame's own viewport, so a wheel event can be aimed at the
+/// middle of an iframe rather than the middle of the page behind it.
+pub const FRAME_VIEWPORT: &str =
+    "({width:document.documentElement.clientWidth,height:document.documentElement.clientHeight})";
+
 /// Centre point and visibility of the first match, or `null`.
 pub fn rect_of(selector: &str) -> String {
     format!(
@@ -117,6 +122,96 @@ pub fn links(limit: usize) -> String {
          .trim().slice(0,200),value:e.href.slice(0,2000),\
          x:r.x,y:r.y,width:r.width,height:r.height,visible:r.width>0&&r.height>0}});}}\
          return out}})()"
+    )
+}
+
+/* ------------------------- addressing one element -------------------------- */
+
+/// The query every element read and every element reference uses. Written
+/// once so a reference resolves to exactly what the read reported.
+const INTERACTIVE: &str = "'a[href],button,input,select,textarea,summary,[role=button],\
+     [role=link],[role=textbox],[role=checkbox],[role=tab],[contenteditable=\"true\"]'";
+
+/// A caller's selector as an expression that yields one element or `null`.
+pub fn by_selector(selector: &str) -> String {
+    format!("document.querySelector({})", quote(selector))
+}
+
+/// The `index`-th interactive element, addressed the way [`elements`] does.
+pub fn by_index(index: usize) -> String {
+    format!("document.querySelectorAll({INTERACTIVE})[{index}]")
+}
+
+/// Where an out-of-process or same-process iframe's own `(0, 0)` sits in its
+/// parent's viewport: the border box plus the border and padding, which is
+/// where the child document actually starts.
+///
+/// Called through `Runtime.callFunctionOn` against the frame's owner element,
+/// so it is a constant here exactly like every other helper.
+pub const FRAME_ORIGIN: &str = "function(){const r=this.getBoundingClientRect();\
+     const s=getComputedStyle(this);const n=v=>parseFloat(v||'0')||0;\
+     return {x:r.x+n(s.borderLeftWidth)+n(s.paddingLeft),\
+     y:r.y+n(s.borderTopWidth)+n(s.paddingTop)}}";
+
+/// Sets a `<select>`'s options and tells the page about it.
+///
+/// Returns a code rather than a boolean so the caller can say *why* nothing
+/// happened: a `<div>` is `not_selectable`, and a value no option carries is
+/// `no_option` — neither is reported as success (§2.7).
+pub fn select_options(element: &str, values: &[String], labels: &[String]) -> String {
+    let list = |items: &[String]| {
+        format!(
+            "[{}]",
+            items
+                .iter()
+                .map(|item| quote(item))
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    };
+    format!(
+        "(()=>{{const e={element};if(!e)return 'missing';\
+         if(e.tagName!=='SELECT')return 'not_selectable';\
+         const vs={};const ls={};let matched=0;\
+         for(const o of Array.from(e.options)){{\
+         const label=(o.label||o.text||'').trim();\
+         const want=vs.includes(o.value)||ls.includes(label);\
+         if(want){{o.selected=true;matched++;}}else if(e.multiple){{o.selected=false;}}}}\
+         if(!matched)return 'no_option';\
+         e.dispatchEvent(new Event('input',{{bubbles:true}}));\
+         e.dispatchEvent(new Event('change',{{bubbles:true}}));\
+         return 'ok'}})()",
+        list(values),
+        list(labels)
+    )
+}
+
+/// Brings an element into view and reports where it ended up.
+pub fn scroll_into_view(element: &str) -> String {
+    format!(
+        "(()=>{{const e={element};if(!e)return null;\
+         e.scrollIntoView({{block:'center',inline:'center'}});\
+         const r=e.getBoundingClientRect();\
+         return {{x:r.x+r.width/2,y:r.y+r.height/2,width:r.width,height:r.height,\
+         visible:r.width>0&&r.height>0}}}})()"
+    )
+}
+
+/// The element itself when it is a file input, and `null` otherwise. The
+/// caller turns `null` into `NOT_FILE_INPUT` rather than filling something
+/// that was never a file input.
+pub fn file_input(selector: &str) -> String {
+    file_input_expression(&by_selector(selector))
+}
+
+pub fn file_input_at(index: usize) -> String {
+    file_input_expression(&by_index(index))
+}
+
+fn file_input_expression(element: &str) -> String {
+    format!(
+        "(()=>{{const e={element};\
+         return (e&&e.tagName==='INPUT'&&e.type==='file')?e:null}})()"
     )
 }
 

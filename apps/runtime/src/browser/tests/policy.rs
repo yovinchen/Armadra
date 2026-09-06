@@ -93,6 +93,10 @@ fn browser_events_serialize_with_the_shared_discriminants() {
         updated_at: "2026-09-06T00:00:01+00:00".into(),
         lease: crate::browser::Lease::default(),
         lease_generation: 0,
+        active_tab_id: "t1".into(),
+        tab_count: 2,
+        pending_dialog: None,
+        pending_file_chooser: None,
     };
     let json = serde_json::to_value(WorkspaceEvent::BrowserSession {
         session: Box::new(session),
@@ -137,6 +141,8 @@ fn browser_events_serialize_with_the_shared_discriminants() {
             received_bytes: 0,
             created_at: "2026-09-06T00:00:00+00:00".into(),
             reason_code: "awaiting_confirmation".into(),
+            tab_id: "t1".into(),
+            sha256: String::new(),
         }),
     })
     .unwrap();

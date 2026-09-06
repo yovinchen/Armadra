@@ -9,12 +9,15 @@
 //!   * **The same session as the human.** There is no agent-only browser. The
 //!     verb resolves the node's live session and drives that, so a person can
 //!     watch what the agent did and take over by clicking (design §7).
-//!   * **A closed verb list.** `navigate` / `read` / `click` / `type` / `wait`
-//!     / `capture`. No `eval`, no CDP method name, no selector that becomes
-//!     code.
+//!   * **A closed verb list.** Sixteen of them, listed in [`VERBS`]. No
+//!     `eval`, no CDP method name, no selector that becomes code, and no verb
+//!     that ends the session — closing a node is not the same as closing a
+//!     page (§2.7).
 //!
 //! Replies are `text/plain` prose because the reader is a model reading its own
 //! stdout, exactly like the context-link surface.
+
+mod render;
 
 use axum::http::StatusCode;
 
@@ -25,12 +28,22 @@ use crate::{
     model::ContextLink,
 };
 
+use self::render::{describe_download, render_read, render_tabs};
 use super::{
-    Download, DownloadState, ReadMode, ReadResponse,
-    session::{self, CaptureRequest, NavigateRequest, Target, WaitRequest},
+    ReadMode, TargetRef,
+    session::{
+        self, CaptureRequest, DialogRequest, NavigateRequest, PressRequest, ScrollRequest,
+        SelectRequest, Target, UploadRequest, WaitRequest,
+    },
 };
 
-pub const VERBS: &[&str] = &["navigate", "read", "click", "type", "wait", "capture"];
+/// Every verb, and nothing else. `armadra-hook`'s `BROWSER_VERBS` is the same
+/// list, checked there too so a typo costs a local error line rather than a
+/// round trip and a refusal in the model's context.
+pub const VERBS: &[&str] = &[
+    "navigate", "read", "click", "type", "wait", "capture", "select", "press", "scroll", "upload",
+    "download", "back", "forward", "close", "tabs", "dialog",
+];
 
 /// Default page-text budget for an agent read. Smaller than the API's ceiling
 /// because this text goes straight into a model's context window.
@@ -123,7 +136,7 @@ pub async fn run(
     // person who pressed "take over" makes it fail at once with
     // `LEASE_REVOKED`, and the action is not retried.
     let actor = session::Actor::agent(&caller.node.id, &opened.session_id, &caller.node.title);
-    if LEASE_VERBS.contains(&verb)
+    if needs_lease(verb, args)
         && let Err(error) = session::lease::acquire(&live, &actor, None).await
     {
         let reason = error.to_string();
@@ -131,6 +144,7 @@ pub async fn run(
             &opened.session_id,
             &caller.node.id,
             verb,
+            describe_target(args),
             "refused",
             &reason,
         ));
@@ -138,12 +152,20 @@ pub async fn run(
     }
 
     let outcome = match verb {
-        "navigate" => navigate(&live, args).await,
+        "navigate" | "back" | "forward" => navigate(&live, verb, args).await,
         "read" => read(&live, args).await,
         "click" => click(&live, args).await,
         "type" => type_text(&live, args).await,
         "wait" => wait(&live, args).await,
         "capture" => capture(&live, &workspace, args).await,
+        "select" => select(&live, args).await,
+        "press" => press(&live, args).await,
+        "scroll" => scroll(&live, args).await,
+        "upload" => upload(&live, &workspace, args).await,
+        "download" => download(&live, &workspace, args).await,
+        "close" => close_tab(&live, args).await,
+        "tabs" => tabs(&live, args).await,
+        "dialog" => dialog(&live, args).await,
         _ => unreachable!("verb was checked above"),
     };
     // The node's activity trace records what happened either way: a refused
@@ -167,6 +189,7 @@ pub async fn run(
             &opened.session_id,
             &caller.node.id,
             verb,
+            describe_target(args),
             "ok",
             "",
         )),
@@ -174,6 +197,7 @@ pub async fn run(
             &opened.session_id,
             &caller.node.id,
             verb,
+            describe_target(args),
             "refused",
             &refusal.message,
         )),
@@ -183,12 +207,30 @@ pub async fn run(
 
 /// Verbs that drive the page rather than read it. `read`, `wait` and
 /// `capture` are reads and never take the lease (§2.6).
-const LEASE_VERBS: &[&str] = &["navigate", "click", "type"];
+const LEASE_VERBS: &[&str] = &[
+    "navigate", "click", "type", "select", "press", "scroll", "upload", "back", "forward", "close",
+    "dialog",
+];
+
+/// Whether this call takes the control lease.
+///
+/// Two verbs are split by their arguments rather than by their name, which is
+/// what §2.7's "partly" column means: listing tabs or staged downloads is a
+/// read and must work while a person is driving, while switching a tab or
+/// accepting a download changes what that person is looking at.
+fn needs_lease(verb: &str, args: &Args<'_>) -> bool {
+    match verb {
+        "tabs" => args.text("switch").is_some() || args.text("new").is_some(),
+        "download" => args.flag("accept") || args.flag("reject"),
+        other => LEASE_VERBS.contains(&other),
+    }
+}
 
 fn activity(
     session_id: &str,
     node_id: &str,
     verb: &str,
+    target: String,
     outcome: &'static str,
     reason: &str,
 ) -> super::Activity {
@@ -197,7 +239,7 @@ fn activity(
         actor: "agent",
         actor_id: node_id.to_owned(),
         verb: verb.to_owned(),
-        target: String::new(),
+        target,
         outcome,
         // The badge localizes a stable code; a whole refusal message would be
         // prose in one language sitting in a chip.
@@ -209,6 +251,16 @@ fn activity(
             .to_owned(),
         at: chrono::Utc::now().to_rfc3339(),
     }
+}
+
+/// A one-line "what was aimed at", for the activity badge.
+fn describe_target(args: &Args<'_>) -> String {
+    for name in ["ref", "selector", "url", "key", "tab", "id", "path"] {
+        if let Some(value) = args.text(name) {
+            return crate::collab::truncate(value, 120);
+        }
+    }
+    String::new()
 }
 
 fn capability_allowed(state: &AppState, agent_id: Option<&str>) -> bool {
@@ -270,12 +322,41 @@ fn resolve_browser_link<'a>(
 
 /* --------------------------------- verbs ---------------------------------- */
 
-async fn navigate(live: &session::Live, args: &Args<'_>) -> Result<String, Refusal> {
-    let action = args
-        .text("action")
-        .or_else(|| args.text("url").map(|_| "goto"))
-        .unwrap_or("goto")
-        .to_owned();
+/// `--tab` / `--frame`, which every verb accepts and almost nobody passes.
+/// Absent means the active tab's main frame (§2.2).
+fn address_of(args: &Args<'_>) -> TargetRef {
+    TargetRef {
+        tab_id: args.text("tab").unwrap_or_default().to_owned(),
+        frame_id: args.text("frame").unwrap_or_default().to_owned(),
+    }
+}
+
+/// A repeatable flag, kept whole. Unlike `Args::list` this does not split on
+/// commas: an option value or a file name is allowed to contain one.
+fn repeated(args: &Args<'_>, name: &str) -> Vec<String> {
+    match args.0.get(name) {
+        Some(serde_json::Value::String(value)) => vec![value.trim().to_owned()],
+        Some(serde_json::Value::Array(values)) => values
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+async fn navigate(live: &session::Live, verb: &str, args: &Args<'_>) -> Result<String, Refusal> {
+    // `back` and `forward` are verbs of their own as well as actions of
+    // `navigate`; both spellings reach the same history walk (§2.7).
+    let action = match verb {
+        "back" | "forward" => verb.to_owned(),
+        _ => args
+            .text("action")
+            .or_else(|| args.text("url").map(|_| "goto"))
+            .unwrap_or("goto")
+            .to_owned(),
+    };
     let request = NavigateRequest {
         url: args.text("url").map(str::to_owned),
         action,
@@ -309,82 +390,10 @@ async fn read(live: &session::Live, args: &Args<'_>) -> Result<String, Refusal> 
         .count(&["max-bytes", "maxBytes"])
         .unwrap_or(DEFAULT_READ_BYTES as i64)
         .clamp(1_024, super::MAX_TEXT_BYTES as i64) as usize;
-    let response = session::read(live, mode, limit, bytes)
+    let response = session::read_in(live, &address_of(args), mode, limit, bytes)
         .await
         .map_err(refuse)?;
     Ok(render_read(mode, &response))
-}
-
-fn render_read(mode: ReadMode, response: &ReadResponse) -> String {
-    let mut out = format!(
-        "{}\n{}\n\n",
-        if response.title.is_empty() {
-            "（无标题）"
-        } else {
-            &response.title
-        },
-        response.url
-    );
-    match mode {
-        ReadMode::Title => {}
-        ReadMode::Text => out.push_str(&response.text),
-        ReadMode::Elements | ReadMode::Links => {
-            for element in &response.elements {
-                let reference = if element.element_ref.is_empty() {
-                    String::new()
-                } else {
-                    format!("[{}] ", element.element_ref)
-                };
-                out.push_str(&format!(
-                    "{reference}{} {}{}\n",
-                    element.role,
-                    element.name,
-                    if element.value.is_empty() {
-                        String::new()
-                    } else {
-                        format!("  ({})", element.value)
-                    }
-                ));
-            }
-            if response.elements.is_empty() {
-                out.push_str("（这一页没有可操作的元素）\n");
-            }
-        }
-        ReadMode::Console => {
-            for entry in &response.console {
-                out.push_str(&format!("{} {} {}\n", entry.at, entry.level, entry.text));
-            }
-            if response.console.is_empty() {
-                out.push_str("（没有 console 记录）\n");
-            }
-        }
-        ReadMode::Network => {
-            for entry in &response.network {
-                out.push_str(&format!(
-                    "{} {} {} {}{}\n",
-                    entry.method,
-                    entry.status,
-                    entry.url,
-                    entry.mime_type,
-                    if entry.failure_code.is_empty() {
-                        String::new()
-                    } else {
-                        format!("  失败：{}", entry.failure_code)
-                    }
-                ));
-            }
-            if response.network.is_empty() {
-                out.push_str("（没有网络记录）\n");
-            }
-        }
-    }
-    if response.truncated {
-        out.push_str("\n（内容已按上限截断）\n");
-    }
-    if !out.ends_with('\n') {
-        out.push('\n');
-    }
-    out
 }
 
 fn target_of<'a>(args: &'a Args<'_>) -> Result<Target<'a>, Refusal> {
@@ -400,7 +409,9 @@ fn target_of<'a>(args: &'a Args<'_>) -> Result<Target<'a>, Refusal> {
 
 async fn click(live: &session::Live, args: &Args<'_>) -> Result<String, Refusal> {
     let target = target_of(args)?;
-    let session = session::click(live, target, 0, 1).await.map_err(refuse)?;
+    let session = session::click(live, target, &address_of(args), 0, 1)
+        .await
+        .map_err(refuse)?;
     Ok(format!(
         "已点击。\n当前地址：{}\n导航序号：{}\n",
         session.url, session.navigation_epoch
@@ -413,6 +424,7 @@ async fn type_text(live: &session::Live, args: &Args<'_>) -> Result<String, Refu
     let session = session::type_text(
         live,
         target,
+        &address_of(args),
         &text,
         args.flag("replace"),
         args.flag("submit") || args.flag("enter"),
@@ -471,6 +483,189 @@ async fn capture(
     ))
 }
 
+async fn select(live: &session::Live, args: &Args<'_>) -> Result<String, Refusal> {
+    let request = SelectRequest {
+        selector: args.text("selector").map(str::to_owned),
+        element_ref: args.text("ref").map(str::to_owned),
+        values: repeated(args, "value"),
+        labels: repeated(args, "label"),
+        target: address_of(args),
+    };
+    let chosen = session::select(live, &request).await.map_err(refuse)?;
+    Ok(format!("已选中：{}\n", chosen.join("、")))
+}
+
+async fn press(live: &session::Live, args: &Args<'_>) -> Result<String, Refusal> {
+    let request = PressRequest {
+        key: args.text("key").unwrap_or_default().to_owned(),
+        modifiers: modifiers_of(args),
+        repeat: args.count(&["repeat"]).unwrap_or(1).clamp(1, 32) as u32,
+        target: address_of(args),
+    };
+    let times = session::press(live, &request).await.map_err(refuse)?;
+    Ok(format!("已按下 {} {} 次。\n", request.key, times))
+}
+
+/// `--modifiers` as a number, or as names a person would actually type.
+fn modifiers_of(args: &Args<'_>) -> u32 {
+    if let Some(value) = args.count(&["modifiers"]) {
+        return (value.max(0) as u32) & 0b1111;
+    }
+    let mut bits = 0;
+    for name in args.list("modifiers") {
+        bits |= match name.to_ascii_lowercase().as_str() {
+            "alt" | "option" => 1,
+            "ctrl" | "control" => 2,
+            "meta" | "cmd" | "command" => 4,
+            "shift" => 8,
+            _ => 0,
+        };
+    }
+    bits
+}
+
+async fn scroll(live: &session::Live, args: &Args<'_>) -> Result<String, Refusal> {
+    let request = ScrollRequest {
+        direction: args.text("direction").map(str::to_owned),
+        amount: args.count(&["amount"]).map(|value| value as f64),
+        element_ref: args
+            .text("to-ref")
+            .or_else(|| args.text("toRef"))
+            .or_else(|| args.text("ref"))
+            .map(str::to_owned),
+        selector: args.text("selector").map(str::to_owned),
+        target: address_of(args),
+    };
+    let outcome = session::scroll(live, &request).await.map_err(refuse)?;
+    Ok(match outcome.as_str() {
+        "into-view" => "已滚动到该元素。\n".to_owned(),
+        direction => format!("已向 {direction} 滚动。\n"),
+    })
+}
+
+async fn upload(
+    live: &session::Live,
+    workspace: &crate::model::Workspace,
+    args: &Args<'_>,
+) -> Result<String, Refusal> {
+    let request = UploadRequest {
+        chooser_id: args.text("chooser").map(str::to_owned),
+        selector: args.text("selector").map(str::to_owned),
+        element_ref: args.text("ref").map(str::to_owned),
+        paths: repeated(args, "path"),
+        target: address_of(args),
+    };
+    let uploaded = session::upload(live, workspace, &request)
+        .await
+        .map_err(refuse)?;
+    Ok(format!(
+        "已{}：{}\n",
+        if uploaded.answered_chooser {
+            "回填页面打开的文件选择器"
+        } else {
+            "填入文件输入框"
+        },
+        uploaded.paths.join("、")
+    ))
+}
+
+async fn download(
+    live: &session::Live,
+    workspace: &crate::model::Workspace,
+    args: &Args<'_>,
+) -> Result<String, Refusal> {
+    let Some(id) = args.text("id") else {
+        let queue = session::downloads(live);
+        if queue.is_empty() {
+            return Ok("下载队列是空的。\n".to_owned());
+        }
+        return Ok(queue.iter().map(describe_download).collect());
+    };
+    // Accepting is the only thing that writes bytes into the project, so it
+    // has to be asked for explicitly (§2.3).
+    let accept = if args.flag("accept") {
+        true
+    } else if args.flag("reject") || args.flag("decline") {
+        false
+    } else {
+        return Err(Refusal::bad_request(
+            "要处理一个下载，请给出 --accept 或 --reject。",
+        ));
+    };
+    let decided = session::decide_download(live, workspace, id, accept)
+        .await
+        .map_err(refuse)?;
+    Ok(if accept {
+        format!(
+            "已保存到工作区：{}\nsha256 {}\n",
+            decided.path,
+            if decided.sha256.is_empty() {
+                "（未知）"
+            } else {
+                &decided.sha256
+            }
+        )
+    } else {
+        format!("已丢弃暂存文件：{}\n", decided.suggested_filename)
+    })
+}
+
+async fn tabs(live: &session::Live, args: &Args<'_>) -> Result<String, Refusal> {
+    let list = if let Some(tab_id) = args.text("switch") {
+        session::switch_tab(live, tab_id).await.map_err(refuse)?
+    } else if let Some(url) = args.text("new") {
+        session::new_tab(live, url).await.map_err(refuse)?
+    } else {
+        session::tab_list(live)
+    };
+    Ok(render_tabs(&list))
+}
+
+async fn close_tab(live: &session::Live, args: &Args<'_>) -> Result<String, Refusal> {
+    let tab_id = args.text("tab").ok_or_else(|| {
+        Refusal::bad_request("`close` 只能关标签：请给出 --tab。结束整个会话不是动词。")
+    })?;
+    let list = session::close_tab(live, tab_id).await.map_err(refuse)?;
+    Ok(format!("已关闭标签 {tab_id}。\n{}", render_tabs(&list)))
+}
+
+async fn dialog(live: &session::Live, args: &Args<'_>) -> Result<String, Refusal> {
+    let accept = if args.flag("accept") {
+        true
+    } else if args.flag("dismiss") || args.flag("reject") {
+        false
+    } else {
+        return Err(Refusal::bad_request(
+            "请给出 --accept 或 --dismiss；对话框不会自己消失。",
+        ));
+    };
+    let request = DialogRequest {
+        tab_id: args.text("tab").map(str::to_owned),
+        dialog_id: args.text("id").map(str::to_owned),
+        accept,
+        prompt_text: args.text("text").map(str::to_owned),
+    };
+    let tab_id = match &request.tab_id {
+        Some(tab_id) => tab_id.clone(),
+        None => live.snapshot().active_tab_id,
+    };
+    let answered = session::handle_dialog(
+        live,
+        &tab_id,
+        request.dialog_id.as_deref(),
+        accept,
+        request.prompt_text.as_deref(),
+    )
+    .await
+    .map_err(refuse)?;
+    Ok(format!(
+        "已{}对话框（{}）：{}\n",
+        if accept { "接受" } else { "取消" },
+        answered.kind.as_str(),
+        answered.message
+    ))
+}
+
 /* -------------------------------- plumbing -------------------------------- */
 
 fn trace(
@@ -517,17 +712,4 @@ fn internal(error: AppError) -> Refusal {
         status: StatusCode::INTERNAL_SERVER_ERROR,
         message: error.to_string(),
     }
-}
-
-/// A short line for the downloads queue, used by the CLI's `read` of a session
-/// that has one pending. Kept here so the wording lives with the other prose.
-pub fn describe_download(download: &Download) -> String {
-    let state = match download.state {
-        DownloadState::Pending => "待确认",
-        DownloadState::InProgress => "下载中",
-        DownloadState::Completed => "已保存",
-        DownloadState::Cancelled => "已取消",
-        DownloadState::Failed => "失败",
-    };
-    format!("{state} {} {}\n", download.suggested_filename, download.url)
 }

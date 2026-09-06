@@ -115,7 +115,138 @@ pub struct BrowserSession {
     /// that slept through a Runtime restart cannot present a generation that
     /// has come back around to being current.
     pub lease_generation: u64,
+    /// The tab every unaddressed action lands on, and how many there are
+    /// (§2.2). A session that has never seen a second tab still reports its
+    /// one, so a client never has to guess what "the page" means.
+    pub active_tab_id: String,
+    pub tab_count: u32,
+    /// Set while a tab of this session is blocked in `alert` / `confirm` /
+    /// `prompt` / `beforeunload`. Input aimed at that tab is refused with
+    /// `DIALOG_PENDING` until somebody answers it (§2.4).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pending_dialog: Option<Dialog>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pending_file_chooser: Option<FileChooser>,
 }
+
+/* ----------------------------- tabs and frames ----------------------------- */
+
+/// Per-session ceiling. A page that opens more gets `tab_limit` rather than an
+/// unbounded fan of renderers (§2.2).
+pub const MAX_TABS: usize = 16;
+
+/// The tab id every action addresses. Runtime's own ordinal — the CDP
+/// `targetId` is deliberately never handed out, because a caller that could
+/// name one could address targets this module does not model.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Tab {
+    pub tab_id: String,
+    pub url: String,
+    pub title: String,
+    pub active: bool,
+    /// Set when the page opened this tab itself, so a popup shows as one.
+    pub opener_tab_id: String,
+    pub navigation_epoch: u64,
+    pub loading: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pending_dialog: Option<Dialog>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TabList {
+    pub tabs: Vec<Tab>,
+    pub active_tab_id: String,
+    pub limit: u32,
+}
+
+/// Where an action lands. Both halves empty means the active tab's main
+/// frame, which is what every caller written before tabs existed meant.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetRef {
+    #[serde(default)]
+    pub tab_id: String,
+    #[serde(default)]
+    pub frame_id: String,
+}
+
+impl TargetRef {
+    pub fn is_default(&self) -> bool {
+        self.tab_id.is_empty() && self.frame_id.is_empty()
+    }
+}
+
+/* --------------------------------- dialogs --------------------------------- */
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DialogKind {
+    Alert,
+    Confirm,
+    Prompt,
+    /// Never auto-accepted: whether leaving a page loses a form is a decision
+    /// for a person (§2.4).
+    #[serde(rename = "beforeunload")]
+    BeforeUnload,
+}
+
+impl DialogKind {
+    pub fn parse(value: &str) -> Self {
+        match value {
+            "confirm" => Self::Confirm,
+            "prompt" => Self::Prompt,
+            "beforeunload" => Self::BeforeUnload,
+            _ => Self::Alert,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Alert => "alert",
+            Self::Confirm => "confirm",
+            Self::Prompt => "prompt",
+            Self::BeforeUnload => "beforeunload",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Dialog {
+    pub dialog_id: String,
+    pub tab_id: String,
+    pub kind: DialogKind,
+    pub message: String,
+    pub default_prompt: String,
+    pub url: String,
+    pub opened_at: String,
+}
+
+/// How long an unanswered dialog blocks its tab before it is dismissed and
+/// the reason written to the console (§2.4).
+pub const DIALOG_TIMEOUT_SECONDS: u64 = 120;
+
+/// A file chooser the page opened and nobody has answered yet. `accept` is
+/// the page's hint for the picker, never a filter this side enforces.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileChooser {
+    pub chooser_id: String,
+    pub tab_id: String,
+    pub frame_id: String,
+    pub multiple: bool,
+    pub accept: String,
+    pub opened_at: String,
+}
+
+/// A chooser nobody answers is filled with nothing rather than left holding
+/// the page open forever (§2.3).
+pub const FILE_CHOOSER_TIMEOUT_SECONDS: u64 = 60;
+
+/// Most files one `upload` may name.
+pub const MAX_UPLOAD_FILES: usize = 20;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -276,6 +407,12 @@ pub struct Download {
     pub received_bytes: u64,
     pub created_at: String,
     pub reason_code: String,
+    /// Which tab produced it. Downloads are collected browser-wide, so this is
+    /// the only thing that says where one came from (§2.3).
+    pub tab_id: String,
+    /// Only computable once the transfer finished, so an in-flight download
+    /// carries an empty digest rather than a wrong one.
+    pub sha256: String,
 }
 
 /* --------------------------------- reads ---------------------------------- */
@@ -323,6 +460,10 @@ pub struct Element {
     pub y: f64,
     pub width: f64,
     pub height: f64,
+    /// Which tab and frame the reference is bound to. Empty means the active
+    /// tab's main frame, which is what an unaddressed read produced.
+    pub tab_id: String,
+    pub frame_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

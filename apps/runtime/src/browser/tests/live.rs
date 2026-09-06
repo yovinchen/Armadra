@@ -71,12 +71,25 @@ async fn a_real_browser_session_navigates_reads_clicks_types_and_captures() {
     assert_eq!(titled.title, "Armadra 受控浏览器");
 
     // --- type then click, the way a person would --------------------------
-    session::type_text(&live, Target::Selector("#name"), "世界", true, false)
-        .await
-        .unwrap();
-    session::click(&live, Target::Selector("#submit"), 0, 1)
-        .await
-        .unwrap();
+    session::type_text(
+        &live,
+        Target::Selector("#name"),
+        &TargetRef::default(),
+        "世界",
+        true,
+        false,
+    )
+    .await
+    .unwrap();
+    session::click(
+        &live,
+        Target::Selector("#submit"),
+        &TargetRef::default(),
+        0,
+        1,
+    )
+    .await
+    .unwrap();
     let read = session::read(&live, ReadMode::Text, 40, crate::browser::MAX_TEXT_BYTES)
         .await
         .unwrap();
@@ -92,17 +105,29 @@ async fn a_real_browser_session_navigates_reads_clicks_types_and_captures() {
         .find(|element| element.role == "button")
         .expect("the submit button should be in the element read");
     let stale = format!("e{}-0", elements.navigation_epoch + 7);
-    let refusal = session::click(&live, Target::ElementRef(&stale), 0, 1)
-        .await
-        .unwrap_err();
+    let refusal = session::click(
+        &live,
+        Target::ElementRef(&stale),
+        &TargetRef::default(),
+        0,
+        1,
+    )
+    .await
+    .unwrap_err();
     assert!(
         format!("{refusal}").contains("STALE_TARGET"),
         "got {refusal}"
     );
     // A fresh one still works.
-    session::click(&live, Target::ElementRef(&button.element_ref), 0, 1)
-        .await
-        .unwrap();
+    session::click(
+        &live,
+        Target::ElementRef(&button.element_ref),
+        &TargetRef::default(),
+        0,
+        1,
+    )
+    .await
+    .unwrap();
 
     // --- wait is bounded and says so when it gives up ---------------------
     let outcome = session::wait(

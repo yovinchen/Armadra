@@ -40,6 +40,11 @@ const MAX_MESSAGE_BYTES: usize = 24 * 1024 * 1024;
 pub struct CdpEvent {
     pub method: String,
     pub params: Value,
+    /// Which attached target the event came from, empty for the browser-level
+    /// session. Present because this client speaks the *flat* protocol: one
+    /// socket carries every page and out-of-process iframe, and the routing is
+    /// this string (§2.2).
+    pub session_id: String,
 }
 
 /// Why a call did not produce a result. Every variant maps to a stable reason
@@ -155,6 +160,11 @@ impl CdpClient {
                         .send(CdpEvent {
                             method: method.to_owned(),
                             params: value.get("params").cloned().unwrap_or(Value::Null),
+                            session_id: value
+                                .get("sessionId")
+                                .and_then(Value::as_str)
+                                .unwrap_or_default()
+                                .to_owned(),
                         })
                         .is_err()
                     {
@@ -190,13 +200,34 @@ impl CdpClient {
         self.closed.load(Ordering::SeqCst)
     }
 
-    /// One request/response round trip.
+    /// One request/response round trip on the browser-level session.
     pub async fn call(&self, method: &str, params: Value) -> Result<Value, CdpError> {
         self.call_with_timeout(method, params, CALL_TIMEOUT).await
     }
 
+    /// The same, addressed at one attached target. An empty `session` means
+    /// the browser itself.
+    pub async fn call_on(
+        &self,
+        session: &str,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, CdpError> {
+        self.dispatch(session, method, params, CALL_TIMEOUT).await
+    }
+
     pub async fn call_with_timeout(
         &self,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+    ) -> Result<Value, CdpError> {
+        self.dispatch("", method, params, timeout).await
+    }
+
+    async fn dispatch(
+        &self,
+        session: &str,
         method: &str,
         params: Value,
         timeout: Duration,
@@ -210,7 +241,10 @@ impl CdpClient {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .insert(id, sender);
-        let frame = json!({ "id": id, "method": method, "params": params });
+        let mut frame = json!({ "id": id, "method": method, "params": params });
+        if !session.is_empty() {
+            frame["sessionId"] = Value::String(session.to_owned());
+        }
         if self
             .outgoing
             .send(Message::Text(frame.to_string().into()))
@@ -238,11 +272,18 @@ impl CdpClient {
     /// Fire and forget. Used only for screencast acknowledgements, where
     /// waiting for the reply would gate the next frame on a round trip.
     pub fn notify(&self, method: &str, params: Value) {
+        self.notify_on("", method, params);
+    }
+
+    pub fn notify_on(&self, session: &str, method: &str, params: Value) {
         if self.is_closed() {
             return;
         }
         let id = self.next_id.fetch_add(1, Ordering::SeqCst) + 1;
-        let frame = json!({ "id": id, "method": method, "params": params });
+        let mut frame = json!({ "id": id, "method": method, "params": params });
+        if !session.is_empty() {
+            frame["sessionId"] = Value::String(session.to_owned());
+        }
         let _ = self.outgoing.send(Message::Text(frame.to_string().into()));
     }
 }

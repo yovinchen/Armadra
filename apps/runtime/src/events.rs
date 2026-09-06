@@ -108,8 +108,33 @@ pub enum WorkspaceEvent {
         session_id: String,
         lease: Box<crate::browser::Lease>,
     },
+    /// The session's tab strip changed: a tab opened, closed, navigated or
+    /// became the active one (§2.2).
+    #[serde(rename = "browser.tabs", rename_all = "camelCase")]
+    BrowserTabs {
+        session_id: String,
+        tabs: Box<crate::browser::TabList>,
+    },
+    /// A page is blocked in `alert` / `confirm` / `prompt` / `beforeunload`,
+    /// or the dialog it was blocked in has been answered (§2.4).
+    #[serde(rename = "browser.dialog", rename_all = "camelCase")]
+    BrowserDialog {
+        session_id: String,
+        /// Absent once the dialog has been answered or has timed out.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        dialog: Option<Box<crate::browser::Dialog>>,
+    },
+    /// A page opened a file chooser and is waiting for somebody to answer it,
+    /// or the chooser has been answered (§2.3).
+    #[serde(rename = "browser.fileChooser", rename_all = "camelCase")]
+    BrowserFileChooser {
+        session_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        chooser: Option<Box<crate::browser::FileChooser>>,
+    },
     /// One line of "who did what" for the node header (design §2.8). Low
-    /// frequency by construction: one per action, not one per frame.
+    /// frequency by construction: one per action, not one per frame, and only
+    /// the last few are kept in memory — the durable record is the board log.
     #[serde(rename = "browser.activity")]
     BrowserActivity {
         #[serde(flatten)]

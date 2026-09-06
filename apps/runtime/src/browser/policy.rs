@@ -40,6 +40,19 @@ pub struct NetworkPolicy {
     pub allow_private_networks: bool,
     #[serde(default)]
     pub loopback_ports: LoopbackPorts,
+    /// What happens to a window the page opens itself. `Tab` adopts it as a
+    /// tab of the same session — where the address policy still applies to its
+    /// first document request — and `Block` closes it on sight (§2.2).
+    #[serde(default)]
+    pub popups: PopupPolicy,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PopupPolicy {
+    #[default]
+    Tab,
+    Block,
 }
 
 fn yes() -> bool {
@@ -61,6 +74,7 @@ impl Default for NetworkPolicy {
         Self {
             allow_private_networks: true,
             loopback_ports: LoopbackPorts::Any,
+            popups: PopupPolicy::Tab,
         }
     }
 }

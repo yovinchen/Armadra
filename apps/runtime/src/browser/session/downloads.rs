@@ -2,9 +2,21 @@
 
 use super::*;
 
-pub(super) fn on_download_begin(live: &Live, params: &Value) {
+pub(super) fn on_download_begin(live: &Live, session: &str, params: &Value) {
     let Some(guid) = params.get("guid").and_then(Value::as_str) else {
         return;
+    };
+    // Downloads are collected browser-wide, so the tab is the only thing that
+    // says where one came from (§2.3).
+    let tab_id = {
+        let targets = live
+            .targets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        targets
+            .by_session(session)
+            .map(|tab| tab.tab_id.clone())
+            .unwrap_or_else(|| targets.active.clone())
     };
     let download = Download {
         download_id: guid.to_owned(),
@@ -28,6 +40,8 @@ pub(super) fn on_download_begin(live: &Live, params: &Value) {
         received_bytes: 0,
         created_at: Utc::now().to_rfc3339(),
         reason_code: "awaiting_confirmation".into(),
+        tab_id,
+        sha256: String::new(),
     };
     let mut rings = live
         .rings
@@ -46,7 +60,7 @@ pub(super) fn on_download_begin(live: &Live, params: &Value) {
     );
 }
 
-pub(super) fn on_download_progress(live: &Live, params: &Value) {
+pub(super) async fn on_download_progress(live: &Live, params: &Value) {
     let Some(guid) = params.get("guid").and_then(Value::as_str) else {
         return;
     };
@@ -64,7 +78,8 @@ pub(super) fn on_download_progress(live: &Live, params: &Value) {
         .get("state")
         .and_then(Value::as_str)
         .unwrap_or("inProgress");
-    let updated = {
+    let mut finished = false;
+    let mut updated = {
         let mut rings = live
             .rings
             .lock()
@@ -82,7 +97,11 @@ pub(super) fn on_download_progress(live: &Live, params: &Value) {
             // A finished transfer is still only staged: it stays `pending`
             // until a human accepts it into the workspace (design §6).
             "completed" => {
+                // Every byte is on disk, and none of them are in the project:
+                // the transfer is finished, the decision is not (design §6).
+                download.state = DownloadState::Pending;
                 download.reason_code = "awaiting_confirmation".into();
+                finished = true;
             }
             "canceled" => {
                 download.state = DownloadState::Cancelled;
@@ -92,12 +111,38 @@ pub(super) fn on_download_progress(live: &Live, params: &Value) {
         }
         download.clone()
     };
+    // The digest is only computable once every byte is on disk, so an
+    // in-flight download carries an empty one rather than a wrong one.
+    if finished && updated.sha256.is_empty() {
+        let staged = live.staging.join(&updated.download_id);
+        if let Some(digest) = digest_of(&staged) {
+            updated.sha256 = digest.clone();
+            let mut rings = live
+                .rings
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some(slot) = rings
+                .downloads
+                .iter_mut()
+                .find(|download| download.download_id == guid)
+            {
+                slot.sha256 = digest;
+            }
+        }
+    }
     live.events.publish(
         &live.workspace_id,
         WorkspaceEvent::BrowserDownload {
             download: Box::new(updated),
         },
     );
+}
+
+/// The sha256 of a staged file, or `None` when it cannot be read. A digest
+/// that could not be computed is reported as absent, never as zeroes.
+fn digest_of(path: &Path) -> Option<String> {
+    let bytes = std::fs::read(path).ok()?;
+    Some(format!("{:x}", Sha256::digest(&bytes)))
 }
 
 /* -------------------------------- downloads -------------------------------- */

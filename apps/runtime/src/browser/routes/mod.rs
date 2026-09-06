@@ -18,8 +18,8 @@ use crate::{
 };
 
 use super::{
-    Activity, Availability, BrowserSession, Capture, Download, Lease, ReadMode, ReadResponse,
-    SessionList, Subscription, Viewport, WaitOutcome, readable_workspace,
+    Activity, Availability, BrowserSession, Capture, Dialog, Download, Lease, ReadMode,
+    ReadResponse, SessionList, Subscription, TabList, Viewport, WaitOutcome, readable_workspace,
     session::{
         self, CaptureRequest, CreateRequest, InputRequest, LeaseRequest, Live, NavigateRequest,
         SubscribeRequest, WaitRequest,
@@ -76,6 +76,10 @@ pub async fn list(
                 updated_at: stored.updated_at,
                 lease: super::Lease::free(stored.lease_generation),
                 lease_generation: stored.lease_generation,
+                active_tab_id: String::new(),
+                tab_count: 0,
+                pending_dialog: None,
+                pending_file_chooser: None,
             },
         })
         .collect();
@@ -308,6 +312,93 @@ pub async fn lease(
     Ok(Json(session::lease::control(&live, &request).await?))
 }
 
+/* ---------------------------- tabs and dialogs ---------------------------- */
+
+/// `GET …/sessions/{sessionId}/tabs`
+pub async fn tabs(
+    State(state): State<AppState>,
+    Path((workspace_id, session_id)): Path<(String, String)>,
+) -> AppResult<Json<TabList>> {
+    readable_workspace(&state, &workspace_id).await?;
+    let live = live_in(&state, &workspace_id, &session_id).await?;
+    Ok(Json(session::tab_list(&live)))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenTab {
+    url: String,
+}
+
+/// `POST …/sessions/{sessionId}/tabs` — open one more tab on this session.
+pub async fn open_tab(
+    State(state): State<AppState>,
+    Path((workspace_id, session_id)): Path<(String, String)>,
+    Json(request): Json<OpenTab>,
+) -> AppResult<Json<TabList>> {
+    readable_workspace(&state, &workspace_id).await?;
+    let live = live_in(&state, &workspace_id, &session_id).await?;
+    Ok(Json(session::new_tab(&live, &request.url).await?))
+}
+
+/// `POST …/sessions/{sessionId}/tabs/{tabId}` — make it the active one.
+pub async fn activate_tab(
+    State(state): State<AppState>,
+    Path((workspace_id, session_id, tab_id)): Path<(String, String, String)>,
+) -> AppResult<Json<TabList>> {
+    readable_workspace(&state, &workspace_id).await?;
+    let live = live_in(&state, &workspace_id, &session_id).await?;
+    Ok(Json(session::switch_tab(&live, &tab_id).await?))
+}
+
+/// `DELETE …/sessions/{sessionId}/tabs/{tabId}`
+///
+/// The last tab is refused with `LAST_TAB`: ending a session is
+/// `DELETE …/sessions/{id}?terminate=true`, and nothing else (§2.2).
+pub async fn close_tab(
+    State(state): State<AppState>,
+    Path((workspace_id, session_id, tab_id)): Path<(String, String, String)>,
+) -> AppResult<Json<TabList>> {
+    readable_workspace(&state, &workspace_id).await?;
+    let live = live_in(&state, &workspace_id, &session_id).await?;
+    Ok(Json(session::close_tab(&live, &tab_id).await?))
+}
+
+/// `POST …/sessions/{sessionId}/dialog` — answer what the page is blocked on.
+pub async fn dialog(
+    State(state): State<AppState>,
+    Path((workspace_id, session_id)): Path<(String, String)>,
+    Json(request): Json<session::DialogRequest>,
+) -> AppResult<Json<Dialog>> {
+    readable_workspace(&state, &workspace_id).await?;
+    let live = live_in(&state, &workspace_id, &session_id).await?;
+    let tab_id = match &request.tab_id {
+        Some(tab_id) => tab_id.clone(),
+        None => live.snapshot().active_tab_id,
+    };
+    Ok(Json(
+        session::handle_dialog(
+            &live,
+            &tab_id,
+            request.dialog_id.as_deref(),
+            request.accept,
+            request.prompt_text.as_deref(),
+        )
+        .await?,
+    ))
+}
+
+/// `POST …/sessions/{sessionId}/upload` — put project files into a page.
+pub async fn upload(
+    State(state): State<AppState>,
+    Path((workspace_id, session_id)): Path<(String, String)>,
+    Json(request): Json<session::UploadRequest>,
+) -> AppResult<Json<session::Uploaded>> {
+    let workspace = readable_workspace(&state, &workspace_id).await?;
+    let live = live_in(&state, &workspace_id, &session_id).await?;
+    Ok(Json(session::upload(&live, &workspace, &request).await?))
+}
+
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActivityList {
@@ -315,7 +406,8 @@ pub struct ActivityList {
 }
 
 /// `GET …/sessions/{sessionId}/activity` — the last few actions, for the
-/// header badge. In memory and bounded; the durable record is the board log.
+/// node header. In memory and bounded; the durable record is the board log
+/// (§2.8).
 pub async fn activity(
     State(state): State<AppState>,
     Path((workspace_id, session_id)): Path<(String, String)>,

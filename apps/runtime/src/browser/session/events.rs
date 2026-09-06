@@ -3,40 +3,47 @@
 use super::*;
 
 pub(super) async fn handle_event(live: &Live, event: CdpEvent) {
+    let session = event.session_id.as_str();
+    let active = live.active_session();
     match event.method.as_str() {
-        "Page.screencastFrame" => on_frame(live, &event.params).await,
+        // The picture only ever comes from the tab on screen; a background
+        // tab's frames are acknowledged and dropped.
+        "Page.screencastFrame" => on_frame(live, session, &event.params).await,
+        "Target.attachedToTarget" => tabs::on_attached(live, session, &event.params).await,
+        "Target.detachedFromTarget" => tabs::on_detached(live, &event.params).await,
+        "Target.targetDestroyed" => tabs::on_target_destroyed(live, &event.params).await,
+        "Target.targetInfoChanged" => tabs::on_target_info(live, &event.params).await,
         "Page.frameNavigated" => {
-            let frame = event.params.get("frame");
-            let is_main = frame
-                .and_then(|frame| frame.get("parentId"))
-                .and_then(Value::as_str)
-                .is_none();
-            if !is_main {
-                return;
+            tabs::on_frame_navigated(live, session, &event.params).await;
+            if session == active {
+                refresh_page_state(live).await;
+                live.publish().await;
             }
-            let url = frame
-                .and_then(|frame| frame.get("url"))
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned();
-            live.edit(|record| {
-                record.navigation_epoch += 1;
-                record.url = url;
-                record.title = String::new();
-            });
-            refresh_page_state(live).await;
-            live.publish().await;
         }
+        "Page.frameAttached" => tabs::on_frame_attached(live, session, &event.params),
+        "Page.frameDetached" => tabs::on_frame_detached(live, session, &event.params),
+        "Runtime.executionContextCreated" => tabs::on_context_created(live, session, &event.params),
+        "Runtime.executionContextDestroyed" => {
+            tabs::on_context_destroyed(live, session, &event.params)
+        }
+        "Runtime.executionContextsCleared" => tabs::on_contexts_cleared(live, session),
         "Page.navigatedWithinDocument" => {
-            if let Some(url) = event.params.get("url").and_then(Value::as_str) {
+            if let Some(url) = event.params.get("url").and_then(Value::as_str)
+                && session == active
+            {
                 live.edit(|record| record.url = url.to_owned());
                 live.publish().await;
             }
         }
         "Page.loadEventFired" => {
-            refresh_page_state(live).await;
-            live.publish().await;
+            if session == active {
+                refresh_page_state(live).await;
+                live.publish().await;
+            }
         }
+        "Page.javascriptDialogOpening" => on_dialog_opening(live, session, &event.params).await,
+        "Page.javascriptDialogClosed" => on_dialog_closed(live, session).await,
+        "Page.fileChooserOpened" => on_file_chooser(live, session, &event.params).await,
         "Runtime.consoleAPICalled" => push_console(live, console_from_api(&event.params)),
         "Runtime.exceptionThrown" => push_console(live, console_from_exception(&event.params)),
         "Log.entryAdded" => push_console(live, console_from_log(&event.params)),
@@ -44,8 +51,8 @@ pub(super) async fn handle_event(live: &Live, event: CdpEvent) {
         "Network.responseReceived" => on_response(live, &event.params),
         "Network.loadingFinished" => on_loading_finished(live, &event.params),
         "Network.loadingFailed" => on_loading_failed(live, &event.params),
-        "Browser.downloadWillBegin" => on_download_begin(live, &event.params),
-        "Browser.downloadProgress" => on_download_progress(live, &event.params),
+        "Browser.downloadWillBegin" => on_download_begin(live, session, &event.params),
+        "Browser.downloadProgress" => on_download_progress(live, &event.params).await,
         "Inspector.targetCrashed" => {
             live.edit(|record| {
                 record.state = SessionState::Disconnected;
@@ -205,7 +212,7 @@ pub(super) fn on_loading_failed(live: &Live, params: &Value) {
 /// The request is never left paused: a decision this code cannot make is a
 /// page that hangs forever, so an internal failure continues the request
 /// rather than stranding it.
-pub(super) async fn on_document_request(live: &Live, params: &Value) {
+pub(super) async fn on_document_request(live: &Live, session: &str, params: &Value) {
     let Some(request_id) = params.get("requestId").and_then(Value::as_str) else {
         return;
     };
@@ -222,7 +229,11 @@ pub(super) async fn on_document_request(live: &Live, params: &Value) {
     // here, only something to let through.
     if params.get("responseStatusCode").is_some() || params.get("responseErrorReason").is_some() {
         let _ = live
-            .call("Fetch.continueResponse", json!({ "requestId": request_id }))
+            .call_in(
+                session,
+                "Fetch.continueResponse",
+                json!({ "requestId": request_id }),
+            )
             .await;
         return;
     }
@@ -234,14 +245,19 @@ pub(super) async fn on_document_request(live: &Live, params: &Value) {
     let admission = admit_document_now(&url, &policy).await;
     if admission.is_admitted() {
         let _ = live
-            .call("Fetch.continueRequest", json!({ "requestId": request_id }))
+            .call_in(
+                session,
+                "Fetch.continueRequest",
+                json!({ "requestId": request_id }),
+            )
             .await;
         return;
     }
     // `BlockedByClient` is what Chrome shows as ERR_BLOCKED_BY_CLIENT, which
     // is exactly what happened: this client blocked it.
     let _ = live
-        .call(
+        .call_in(
+            session,
             "Fetch.failRequest",
             json!({ "requestId": request_id, "errorReason": "BlockedByClient" }),
         )

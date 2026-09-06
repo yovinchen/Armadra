@@ -134,6 +134,10 @@ pub(super) fn unsupported(
         updated_at: now,
         lease: Lease::default(),
         lease_generation: 0,
+        active_tab_id: String::new(),
+        tab_count: 0,
+        pending_dialog: None,
+        pending_file_chooser: None,
     }
 }
 
@@ -288,7 +292,8 @@ fn adopt(
     containment: launch::Containment,
 ) -> Arc<Live> {
     let service = service(state);
-    let live = Arc::new(Live {
+    let live = Arc::new_cyclic(|me| Live {
+        me: me.clone(),
         session_id: stored.id.clone(),
         workspace_id: stored.workspace_id.clone(),
         node_id: stored.node_id.clone(),
@@ -302,7 +307,7 @@ fn adopt(
         record: Mutex::new(record_of(stored)),
         rings: Mutex::new(Rings::default()),
         subscriptions: Mutex::new(HashMap::new()),
-        elements: Mutex::new((0, 0)),
+        targets: Mutex::new(Targets::default()),
         stream: Mutex::new(StreamState::default()),
         frame_seq: AtomicU64::new(0),
         lease: Mutex::new(lease::Machine::resuming(stored.lease_generation)),
@@ -314,11 +319,11 @@ fn adopt(
     live
 }
 
-/// Connects to a page target and proves the connection can drive it.
+/// Connects to the **browser** endpoint and proves the connection works.
 ///
-/// The first target `/json/list` reports can already be gone by the time the
-/// socket opens — Chrome replaces the initial `about:blank` target while it
-/// settles — so a refused `Page.enable` means "attach again", not "give up".
+/// One socket for the whole browser rather than one page: tabs and
+/// out-of-process iframes attach themselves to it and are told apart by their
+/// CDP session id, which is what makes `window.open` visible at all (§2.2).
 pub(super) async fn attach(
     port: u16,
 ) -> Result<
@@ -328,12 +333,12 @@ pub(super) async fn attach(
     ),
     String,
 > {
-    let mut last = String::from("no page target");
+    let mut last = String::from("no browser endpoint");
     for attempt in 0..10 {
         if attempt > 0 {
             tokio::time::sleep(Duration::from_millis(150)).await;
         }
-        let websocket_url = match launch::page_target(port).await {
+        let websocket_url = match launch::browser_target(port).await {
             Ok(url) => url,
             Err(error) => {
                 last = error;
@@ -347,7 +352,7 @@ pub(super) async fn attach(
                 continue;
             }
         };
-        match client.call("Page.enable", json!({})).await {
+        match client.call("Browser.getVersion", json!({})).await {
             Ok(_) => return Ok((client, receiver)),
             Err(error) => last = error.to_string(),
         }
@@ -377,29 +382,25 @@ pub(super) fn record_of(stored: &StoredSession) -> BrowserSession {
         // generation a client saw before the restart cannot come round again.
         lease: Lease::free(stored.lease_generation),
         lease_generation: stored.lease_generation,
+        active_tab_id: String::new(),
+        tab_count: 0,
+        pending_dialog: None,
+        pending_file_chooser: None,
     }
 }
 
-/// Enables exactly the domains this module reads, and nothing else.
+/// Attaches to every tab and enables exactly the domains this module reads.
+///
+/// The per-tab half lives in [`targets::prepare_tab`] and runs from the pump,
+/// because a tab can appear at any time — a `window.open` three minutes from
+/// now gets the same treatment as the one Chrome started with.
 pub(super) async fn prepare(live: &Live, staging: &Path) -> AppResult<()> {
-    // `Page.enable` already happened in `attach`, which is what proved the
-    // connection drives a live page.
-    live.call("Runtime.enable", json!({})).await?;
-    live.call("Log.enable", json!({})).await?;
-    // Small browser-side buffers: we never ask for a response body, so keeping
-    // one would only cost memory and store material we promised not to hold.
-    live.call(
-        "Network.enable",
-        json!({ "maxTotalBufferSize": 1024, "maxResourceBufferSize": 1024 }),
-    )
-    .await?;
-    let viewport = live.snapshot().viewport;
-    apply_viewport(live, viewport).await?;
     let _ = std::fs::create_dir_all(staging);
     crate::paths::harden_directory(staging);
-    // `allowAndName` writes each file as its GUID into a directory outside the
-    // project; accepting a download is what moves it into the workspace.
-    live.call(
+    // Browser-level, so a download started in *any* tab lands in the same
+    // staging queue. `allowAndName` writes each file as its GUID outside the
+    // project; accepting it is what moves it into the workspace (§2.3).
+    live.call_browser(
         "Browser.setDownloadBehavior",
         json!({
             "behavior": "allowAndName",
@@ -408,19 +409,39 @@ pub(super) async fn prepare(live: &Live, staging: &Path) -> AppResult<()> {
         }),
     )
     .await?;
-    // Every document request pauses here first — the top-level navigation, an
-    // iframe's document, a popup's first request, and each redirect hop, since
-    // a hop arrives as its own paused request. That is what makes the URL
-    // policy hold for a redirect the caller never saw (§2.5).
-    live.call(
-        "Fetch.enable",
-        json!({
-            "patterns": [{ "urlPattern": "*", "requestStage": "Request",
-                           "resourceType": "Document" }],
-        }),
-    )
-    .await?;
-    Ok(())
+    // Page targets attach themselves from here on, including popups. The
+    // filtered form is the precise one; an older build that does not know
+    // `filter` gets the plain form, which attaches to the tab wrapper and is
+    // followed one level further by the pump.
+    let auto = json!({
+        "autoAttach": true, "waitForDebuggerOnStart": false, "flatten": true,
+        "filter": [{ "type": "page", "exclude": false }],
+    });
+    if live
+        .call_browser("Target.setAutoAttach", auto)
+        .await
+        .is_err()
+    {
+        live.call_browser(
+            "Target.setAutoAttach",
+            json!({ "autoAttach": true, "waitForDebuggerOnStart": false, "flatten": true }),
+        )
+        .await?;
+    }
+    // The first tab arrives through the pump, so the session is not ready
+    // until it has one to act on.
+    for _ in 0..100 {
+        if live.ready_session().is_some() {
+            let viewport = live.snapshot().viewport;
+            apply_viewport(live, viewport).await?;
+            live.sync_active();
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    Err(AppError::Conflict(
+        "The browser started but never attached a page".into(),
+    ))
 }
 
 pub(super) async fn apply_viewport(live: &Live, viewport: Viewport) -> AppResult<()> {
@@ -452,7 +473,17 @@ pub(super) fn spawn_pump(
             // inside the other is a deadlock that ends in two timeouts (§2.5).
             if event.method == "Fetch.requestPaused" {
                 let live = live.clone();
-                tokio::spawn(async move { on_document_request(&live, &event.params).await });
+                tokio::spawn(async move {
+                    on_document_request(&live, &event.session_id, &event.params).await
+                });
+                continue;
+            }
+            // A target attaching sets up a whole tab, which is several round
+            // trips; doing it on the pump would hold up every other tab's
+            // events for the duration.
+            if event.method == "Target.attachedToTarget" {
+                let live = live.clone();
+                tokio::spawn(async move { handle_event(&live, event).await });
                 continue;
             }
             handle_event(&live, event).await;

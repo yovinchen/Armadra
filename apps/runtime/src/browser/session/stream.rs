@@ -84,6 +84,10 @@ pub(super) struct StreamState {
     /// own width.
     applied_width: u32,
     last_frame: Option<Instant>,
+    /// The CDP session the screencast was started on, so switching tabs stops
+    /// it where it was started rather than on the tab that just became active
+    /// — which has no screencast to stop (§2.2).
+    session: String,
 }
 
 impl Live {
@@ -99,13 +103,23 @@ impl Live {
 
 /* ---------------------------------- frames --------------------------------- */
 
-pub(super) async fn on_frame(live: &Live, params: &Value) {
+pub(super) async fn on_frame(live: &Live, from: &str, params: &Value) {
     // Acknowledge first and unconditionally: an unacknowledged frame stops the
     // browser sending the next one, so dropping a frame for the budget must
-    // not also stall the stream.
+    // not also stall the stream. The acknowledgement goes back to the tab that
+    // produced it, which is not always the tab on screen.
     if let Some(session) = params.get("sessionId") {
-        live.client
-            .notify("Page.screencastFrameAck", json!({ "sessionId": session }));
+        live.client.notify_on(
+            from,
+            "Page.screencastFrameAck",
+            json!({ "sessionId": session }),
+        );
+    }
+    // A background tab's frames are acknowledged and then dropped: one session
+    // shows one tab, and publishing another tab's picture would put a page the
+    // viewer did not switch to on their screen (§2.2).
+    if from != live.active_session() {
+        return;
     }
     let Some(data) = params.get("data").and_then(Value::as_str) else {
         return;
@@ -467,19 +481,37 @@ pub(super) async fn start_stream(live: &Live, budget: Budget) -> AppResult<()> {
             max_width
         };
         stream.last_frame = None;
+        stream.session = live.active_session();
     }
     prime_frame(live, budget.quality).await;
     Ok(())
 }
 
 pub(super) async fn stop_stream(live: &Live) -> AppResult<()> {
-    live.call("Page.stopScreencast", json!({})).await?;
+    // Stopped where it was started. By the time a tab switch gets here the
+    // active tab is already the new one, and `Page.stopScreencast` on a tab
+    // that never had one leaves the old tab painting into nothing.
+    let session = {
+        let stream = live
+            .stream
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        stream.session.clone()
+    };
+    let session = if session.is_empty() {
+        live.active_session()
+    } else {
+        session
+    };
+    live.call_in(&session, "Page.stopScreencast", json!({}))
+        .await?;
     let mut stream = live
         .stream
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     stream.running = None;
     stream.applied_width = 0;
+    stream.session.clear();
     Ok(())
 }
 

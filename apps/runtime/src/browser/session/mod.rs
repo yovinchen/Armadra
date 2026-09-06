@@ -17,7 +17,7 @@ use std::{
 
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tokio::process::Child;
@@ -31,15 +31,18 @@ use crate::{
 };
 
 use super::{
-    Activity, Admission, BandwidthClass, BrowserSession, Budget, Capture, ConsoleEntry, Download,
-    DownloadState, Element, Lease, MAX_ELEMENTS, MAX_TEXT_BYTES, NetworkEntry, ProcessIdentity,
-    RING_CAPACITY, ReadMode, ReadResponse, SessionState, StoredSession, Subscription, Viewport,
+    ACTIVITY_CAPACITY, Activity, Admission, BandwidthClass, BrowserSession, Budget, Capture,
+    ConsoleEntry, Dialog, DialogKind, Download, DownloadState, Element, FileChooser, Lease,
+    MAX_ELEMENTS, MAX_TEXT_BYTES, NetworkEntry, ProcessIdentity, RING_CAPACITY, ReadMode,
+    ReadResponse, SessionState, StoredSession, Subscription, Tab, TabList, TargetRef, Viewport,
     Visibility, WaitOutcome, cdp,
     cdp::{CdpClient, CdpError, CdpEvent},
     dom, launch, service,
 };
 
+mod actions;
 mod console;
+mod dialogs;
 mod downloads;
 mod events;
 mod input;
@@ -49,8 +52,12 @@ mod navigate;
 mod read;
 mod startup;
 mod stream;
+mod tabs;
+mod targets;
 
+pub use self::actions::*;
 use self::console::*;
+pub use self::dialogs::*;
 pub use self::downloads::*;
 use self::events::*;
 pub use self::input::*;
@@ -60,6 +67,9 @@ pub use self::navigate::*;
 pub use self::read::*;
 pub use self::startup::*;
 pub use self::stream::*;
+pub use self::tabs::{close_tab, new_tab, switch_tab, tab_list};
+use self::targets::{PendingChooser, Targets};
+pub use self::targets::{Place, parse_ref};
 
 /// Longest a `wait` may block. An agent that asks for more gets this, and is
 /// told; nothing here waits forever (design §7).
@@ -73,6 +83,10 @@ pub const MAX_INPUT_EVENTS: usize = 64;
 /* -------------------------------- the session ------------------------------ */
 
 pub struct Live {
+    /// A handle back to this session, for the timers that outlive a call: a
+    /// dialog or a chooser nobody answered has to be able to find the session
+    /// again without keeping it alive on its own.
+    me: std::sync::Weak<Live>,
     pub session_id: String,
     pub workspace_id: String,
     pub node_id: String,
@@ -101,9 +115,9 @@ pub struct Live {
     /// far behind it is: a phone on a metered link must not cost the desktop
     /// node its frame rate (§2.9).
     subscriptions: Mutex<HashMap<String, Subscriber>>,
-    /// `(epoch, count)` of the last `elements` read. A reference minted before
-    /// the current epoch is refused rather than resolved (design §7).
-    elements: Mutex<(u64, usize)>,
+    /// Tabs, frames and the element references bound to them. The only place
+    /// that knows a CDP session id (§2.2).
+    targets: Mutex<Targets>,
     stream: Mutex<StreamState>,
     frame_seq: AtomicU64,
     /// Who may drive the page (§2.6). In memory: after a restart nobody does,
@@ -170,7 +184,7 @@ impl Live {
                 .rings
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if rings.activity.len() >= crate::browser::ACTIVITY_CAPACITY {
+            if rings.activity.len() >= ACTIVITY_CAPACITY {
                 rings.activity.pop_front();
             }
             rings.activity.push_back(activity.clone());
@@ -232,38 +246,83 @@ impl Live {
         }
     }
 
+    /// A command aimed at the active tab. Everything written before tabs
+    /// existed goes through here and keeps meaning "the page on screen".
+    ///
+    /// A page that is between documents has no frame host for a moment, and
+    /// Chrome answers anything from the `Page` domain with "not attached to an
+    /// active page" until it does. That is a moment, not a failure, so it is
+    /// waited out once — the alternative is telling a caller that a page they
+    /// can see does not exist.
     async fn call(&self, method: &str, params: Value) -> AppResult<Value> {
+        let session = self.active_session();
+        match self.client.call_on(&session, method, params.clone()).await {
+            Err(CdpError::Protocol(message)) if message.contains("Not attached") => {
+                tokio::time::sleep(Duration::from_millis(250)).await;
+                let session = self.active_session();
+                self.call_in(&session, method, params).await
+            }
+            other => other.map_err(|error| self.call_error(error)),
+        }
+    }
+
+    /// A command aimed at one attached target.
+    pub(super) async fn call_in(
+        &self,
+        session: &str,
+        method: &str,
+        params: Value,
+    ) -> AppResult<Value> {
+        self.client
+            .call_on(session, method, params)
+            .await
+            .map_err(|error| self.call_error(error))
+    }
+
+    /// A command aimed at the browser itself: downloads, targets, shutdown.
+    pub(super) async fn call_browser(&self, method: &str, params: Value) -> AppResult<Value> {
         self.client
             .call(method, params)
             .await
             .map_err(|error| self.call_error(error))
     }
 
-    /// Runs one of the fixed helpers in [`dom`] and returns its value.
+    /// Runs one of the fixed helpers in [`dom`] in the active tab's main
+    /// frame and returns its value.
     async fn evaluate(&self, expression: &str) -> AppResult<Value> {
-        let result = self
-            .call(
-                "Runtime.evaluate",
-                json!({
-                    "expression": expression,
-                    "returnByValue": true,
-                    "awaitPromise": false,
-                    // A helper must never trigger a page dialog or a user
-                    // gesture requirement; it only reads and focuses.
-                    "userGesture": false,
-                }),
-            )
-            .await?;
-        if result.get("exceptionDetails").is_some() {
-            return Err(AppError::BadRequest(
-                "The page rejected that request".into(),
-            ));
-        }
-        Ok(result
-            .get("result")
-            .and_then(|value| value.get("value"))
-            .cloned()
-            .unwrap_or(Value::Null))
+        let place = self.place(&TargetRef::default())?;
+        self.evaluate_in(&place, expression).await
+    }
+
+    /// What this session's document requests and popups are judged against.
+    /// Set from the workspace's `browserPolicy`; the default admits private
+    /// networks and every loopback port but Armadra's own (§2.5).
+    pub fn set_policy(&self, policy: crate::browser::NetworkPolicy) {
+        *self
+            .policy
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = policy;
+    }
+
+    pub fn policy(&self) -> crate::browser::NetworkPolicy {
+        self.policy
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    pub(super) fn clone_handle(&self) -> std::sync::Weak<Live> {
+        self.me.clone()
+    }
+
+    pub(super) fn publish_tabs(&self) {
+        self.events.publish(
+            &self.workspace_id,
+            WorkspaceEvent::BrowserTabs {
+                session_id: self.session_id.clone(),
+                tabs: Box::new(self.tab_list()),
+            },
+        );
     }
 }
 

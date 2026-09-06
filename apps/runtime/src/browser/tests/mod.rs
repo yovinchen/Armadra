@@ -11,6 +11,8 @@
 //! inside the test's own temporary data directory.
 
 mod budget;
+mod dialogs;
+mod frames;
 mod lease;
 mod live;
 mod managed;
@@ -19,3 +21,6 @@ mod policy;
 mod process;
 mod streaming;
 mod support;
+mod tabs;
+mod transfers;
+mod verbs;

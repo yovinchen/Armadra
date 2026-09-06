@@ -473,6 +473,24 @@ pub fn router_with_state(state: AppState) -> Router {
             "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/lease",
             post(browser::routes::lease),
         )
+        // Tabs, dialogs and uploads (§2.2–§2.4). A tab is closed by name; the
+        // session itself is only ended by `DELETE …?terminate=true`.
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/tabs",
+            get(browser::routes::tabs).post(browser::routes::open_tab),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/tabs/{tab_id}",
+            post(browser::routes::activate_tab).delete(browser::routes::close_tab),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/dialog",
+            post(browser::routes::dialog),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/upload",
+            post(browser::routes::upload),
+        )
         .route(
             "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/activity",
             get(browser::routes::activity),
