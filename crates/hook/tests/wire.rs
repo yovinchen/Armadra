@@ -173,7 +173,7 @@ fn hook_mode_sends_the_expected_request() {
     assert_eq!(captured.header("Host").as_deref(), Some("127.0.0.1"));
     assert_eq!(
         captured.header("X-Armadra-Hook-Client").as_deref(),
-        Some("3")
+        Some("4")
     );
     assert_eq!(
         captured.header("X-Armadra-Hook-Token").as_deref(),
