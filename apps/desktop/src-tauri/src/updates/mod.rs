@@ -241,6 +241,14 @@ async fn evaluate(app: &AppHandle, verdict: &HostVerdict) -> Event {
     }
 }
 
+/// "Skip this version": drops the offer without claiming anything about
+/// whether a newer one exists.
+#[tauri::command]
+pub fn updates_dismiss(app: AppHandle) -> UpdateState {
+    app.state::<UpdatesController>()
+        .apply(&app, Event::OfferDismissed)
+}
+
 async fn resolve_offer(app: &AppHandle, verdict: &HostVerdict) -> Result<Offer, Reason> {
     let insecure = development_override();
     let pointer = offer::pointer(&verdict.answer, &verdict.target, insecure)?;

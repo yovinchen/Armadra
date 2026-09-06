@@ -290,6 +290,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             updates::updates_state,
             updates::updates_check,
+            updates::updates_dismiss,
             updates::updates_download,
             updates::updates_install,
             updates::updates_restart_report

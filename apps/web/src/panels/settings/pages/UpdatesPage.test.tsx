@@ -7,8 +7,11 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { create } from "@armadra/protocol";
-import { CheckForUpdateResponseSchema } from "@armadra/protocol";
+
+import type {
+  ShellOffer,
+  ShellUpdateState,
+} from "../../../updates/shell-updater";
 
 const session = vi.hoisted(() => ({
   state: { status: "idle" } as Record<string, unknown>,
@@ -22,6 +25,28 @@ const store = vi.hoisted(() => ({
 }));
 
 const health = vi.hoisted(() => ({ version: "0.1.0" as string | undefined }));
+
+/** The two halves the page merges, driven directly. */
+const updates = vi.hoisted(() => ({
+  host: { kind: "notAsked" } as Record<string, unknown>,
+  shell: { state: "idle" } as Record<string, unknown>,
+  restart: null as Record<string, unknown> | null,
+  start: vi.fn(() => () => undefined),
+  check: vi.fn(async () => {}),
+  download: vi.fn(async () => {}),
+  install: vi.fn(async () => {}),
+  dismiss: vi.fn(async () => {}),
+  acknowledgeRestart: vi.fn(),
+}));
+
+const settings = vi.hoisted(() => ({
+  data: {
+    updates: { channel: "stable", autoCheck: true, autoDownload: false },
+  },
+}));
+const save = vi.hoisted(() => ({ mutate: vi.fn() }));
+
+const opened = vi.hoisted(() => ({ urls: [] as string[] }));
 
 vi.mock("../../../host/updates-session", () => {
   const useUpdatesSession = <T,>(selector: (state: typeof session) => T) =>
@@ -41,37 +66,47 @@ vi.mock("../../../api/client", () => ({
   runtimeApi: { health: async () => ({ version: health.version }) },
 }));
 
-import { UpdatesPage, reasonKey, updatesFailureKey } from "./UpdatesPage";
+vi.mock("../use-runtime-settings", () => ({
+  useRuntimeSettings: () => ({ settings, save }),
+}));
+
+vi.mock("../../../platform", () => ({
+  openExternal: async (url: string) => {
+    opened.urls.push(url);
+  },
+  isTauri: () => true,
+}));
+
+vi.mock("../../../updates/use-update-state", () => {
+  const useUpdateState = <T,>(selector: (state: typeof updates) => T) =>
+    selector(updates);
+  useUpdateState.getState = () => updates;
+  return {
+    useUpdateState,
+    CHECK_INTERVAL_MS: 21_600_000,
+    FIRST_CHECK_DELAY_MS: 30_000,
+  };
+});
+
+import { UpdatesPage } from "./UpdatesPage";
 import { usePreferencesStore } from "../../../app/preferences-store";
 import { SETTINGS_SECTIONS } from "../nav";
-import { HostAutomationError } from "@armadra/host-client";
 
-function response(overrides: Record<string, unknown>) {
-  return create(CheckForUpdateResponseSchema, {
-    installedVersion: { major: 0, minor: 1, patch: 0, prerelease: "" },
-    channel: 1,
-    ...overrides,
-  });
-}
+const offer: ShellOffer = {
+  version: "0.2.0",
+  target: "darwin-aarch64",
+  manifestUrl: "https://releases.invalid/download/v0.2.0/latest.json",
+  packageUrl:
+    "https://releases.invalid/download/v0.2.0/Armadra_0.2.0_darwin-aarch64.app.tar.gz",
+  sha256: "a".repeat(64),
+  sizeBytes: 4_194_304,
+  signed: true,
+  notesUrl: "https://releases.invalid/v0.2.0",
+};
 
-function ready(check: (input: unknown) => Promise<unknown>) {
-  session.state = {
-    status: "ready",
-    client: { check },
-    hello: { hostId: "a".repeat(32) },
-  };
-}
-
-/** Clicks the check button only once the version query has enabled it. */
-async function clickCheck() {
-  const button = (await screen.findByRole("button", {
-    name: "检查更新",
-  })) as HTMLButtonElement;
-  await waitFor(() => expect(button.disabled).toBe(false));
-  fireEvent.click(button);
-}
-
-function draw() {
+function draw(shell: ShellUpdateState, host?: Record<string, unknown>) {
+  updates.shell = shell as unknown as Record<string, unknown>;
+  if (host) updates.host = host;
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -82,10 +117,36 @@ function draw() {
   );
 }
 
+function answered(verdict: string, reasonCode = "") {
+  return {
+    kind: "answered",
+    verdict,
+    reasonCode,
+    retryAfterMs: 0,
+    checkedAtMs: 1,
+    release: null,
+  };
+}
+
+function status() {
+  return screen.getByRole("status").textContent;
+}
+
 beforeEach(() => {
-  session.state = { status: "idle" };
+  session.state = { status: "ready", client: { check: vi.fn() } };
   session.connect.mockClear();
   store.setPanel.mockClear();
+  save.mutate.mockClear();
+  updates.check.mockClear();
+  updates.download.mockClear();
+  updates.install.mockClear();
+  updates.dismiss.mockClear();
+  updates.host = { kind: "notAsked" };
+  updates.restart = null;
+  settings.data = {
+    updates: { channel: "stable", autoCheck: true, autoDownload: false },
+  };
+  opened.urls.length = 0;
   health.version = "0.1.0";
   usePreferencesStore.setState({ locale: "zh-CN" });
 });
@@ -96,109 +157,175 @@ describe("UpdatesPage", () => {
     const section = SETTINGS_SECTIONS.find((entry) => entry.id === "updates");
     expect(section?.groupKey).toBe("settings.group.advanced");
     expect(section?.labelKey).toBe("updates.nav");
-    const check = vi.fn();
-    ready(check);
-    draw();
-    await waitFor(() =>
-      expect(screen.getByRole("status").textContent).toBe("尚未检查更新"),
-    );
-    expect(check).not.toHaveBeenCalled();
+    draw({ state: "idle" });
+    await waitFor(() => expect(status()).toBe("尚未检查更新"));
+    expect(updates.check).not.toHaveBeenCalled();
     expect(session.connect).toHaveBeenCalled();
   });
 
-  // The whole point of the contract: a Host that never looked must not be
-  // rendered as "up to date".
-  it("says 未配置 when the Host reports UNSUPPORTED", async () => {
-    ready(async () =>
-      response({
-        state: 3,
-        reasonCode: "UPDATES_NOT_CONFIGURED",
-      }),
-    );
-    draw();
-    await clickCheck();
-    await waitFor(() =>
-      expect(screen.getByRole("status").textContent).toBe("未配置"),
-    );
-    expect(screen.queryByText("已是最新版本")).toBeNull();
-    expect(
-      screen.getByText(/没有配置发布来源，因此没有查询任何地方/),
-    ).toBeTruthy();
-  });
-
-  it("reports an unreachable source without claiming anything about versions", async () => {
-    ready(async () => response({ state: 4, reasonCode: "SOURCE_UNREACHABLE" }));
-    draw();
-    await clickCheck();
-    await waitFor(() =>
-      expect(screen.getByRole("status").textContent).toBe("无法确认"),
-    );
-    expect(screen.queryByText("已是最新版本")).toBeNull();
-    expect(screen.queryByText("有新版本可用")).toBeNull();
-  });
-
-  it("shows an available release with its signature state and no install button", async () => {
-    ready(async () =>
-      response({
-        state: 2,
-        channel: 1,
-        release: {
-          version: { major: 0, minor: 2, patch: 0, prerelease: "" },
-          channel: 1,
-          notesUrl: "https://releases.invalid/v0.2.0",
-          artifacts: [
-            {
-              target: "darwin-aarch64",
-              url: "https://releases.invalid/a.tar.gz",
-              sizeBytes: 2048n,
-              signature: { state: 1, value: "", keyId: "" },
-            },
-          ],
+  /** One rendering assertion per state of design §4.1. */
+  it("renders each of the eleven states with its own sentence", async () => {
+    const cases: [ShellUpdateState, Record<string, unknown>, string][] = [
+      [
+        { state: "notConfigured", missing: { pubkey: true, endpoints: true } },
+        answered("upToDate"),
+        "未配置",
+      ],
+      [{ state: "localBuild" }, answered("upToDate"), "本地构建"],
+      [
+        { state: "unsupported", reason: "notDesktop" },
+        answered("available"),
+        "此环境不能自动更新",
+      ],
+      [{ state: "idle" }, { kind: "notAsked" }, "尚未检查更新"],
+      [{ state: "checking" }, { kind: "checking" }, "正在检查…"],
+      [
+        { state: "upToDate", checkedAtMs: 1 },
+        answered("upToDate"),
+        "已是最新版本",
+      ],
+      [
+        {
+          state: "unavailable",
+          reason: "sourceUnreachable",
+          retryAfterMs: 900_000,
+          checkedAtMs: 1,
         },
-      }),
-    );
-    draw();
-    await clickCheck();
-    await waitFor(() =>
-      expect(screen.getByRole("status").textContent).toBe("有新版本可用"),
-    );
-    expect(screen.getByText("0.2.0")).toBeTruthy();
-    expect(screen.getByText(/发布包附带签名/)).toBeTruthy();
-    expect(screen.getByText(/不自动下载或安装/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /安装/ })).toBeNull();
+        answered("unavailable", "SOURCE_UNREACHABLE"),
+        "无法确认",
+      ],
+      [{ state: "available", offer }, answered("available"), "有新版本可用"],
+      [
+        {
+          state: "downloading",
+          offer,
+          receivedBytes: 1_048_576,
+          totalBytes: 4_194_304,
+        },
+        answered("available"),
+        "正在下载",
+      ],
+      [
+        { state: "downloaded", offer, phase: "ready", problem: null },
+        answered("available"),
+        "已下载，重启后生效",
+      ],
+      [
+        { state: "failed", reason: "digestMismatch", offer },
+        answered("available"),
+        "更新失败",
+      ],
+    ];
+    for (const [shell, host, expected] of cases) {
+      draw(shell, host);
+      await waitFor(() => expect(status()).toBe(expected));
+      cleanup();
+    }
   });
 
-  it("renders the blocked reason instead of a button that would fail", async () => {
-    session.state = { status: "blocked", reason: "signedOut" };
-    draw();
-    expect(await screen.findByText("此设备尚未登录后台服务。")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "检查更新" })).toBeNull();
+  // The whole point of the contract: a check nobody completed must never be
+  // rendered as "up to date".
+  it("never says 已是最新 when only one side answered", async () => {
+    draw(
+      { state: "upToDate", checkedAtMs: 1 },
+      answered("unavailable", "SOURCE_UNREACHABLE"),
+    );
+    await waitFor(() => expect(status()).toBe("无法确认"));
+    expect(screen.queryByText("已是最新版本")).toBeNull();
+    expect(screen.getByText("后台服务未给出结果。")).toBeTruthy();
+    expect(screen.getByText("无法读取发布来源，请稍后重试。")).toBeTruthy();
+  });
+
+  it("says which half of the updater configuration is missing", async () => {
+    draw(
+      { state: "notConfigured", missing: { pubkey: true, endpoints: false } },
+      answered("upToDate"),
+    );
+    await waitFor(() => expect(status()).toBe("未配置"));
+    expect(
+      screen.getByText("此构建没有内置签名公钥，无法验证任何安装包。"),
+    ).toBeTruthy();
+    expect(screen.queryByText(/没有内置发布地址/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "前往后台服务设置" }));
     expect(usePreferencesStore.getState().lastSettingsSection).toBe("host");
   });
 
-  it("explains a failed request rather than showing a stale result", async () => {
-    ready(async () => {
-      throw new HostAutomationError("unauthenticated");
-    });
-    draw();
-    await clickCheck();
-    await waitFor(() =>
-      expect(screen.getByRole("status").textContent).toBe(
-        "登录已失效，请重新登录后再试。",
-      ),
-    );
+  it("routes a blocked session to the background service settings", async () => {
+    session.state = { status: "blocked", reason: "signedOut" };
+    draw({ state: "idle" }, { kind: "blocked", reason: "signedOut" });
+    expect(await screen.findByText("此设备尚未登录后台服务。")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "检查更新" })).toBeNull();
   });
 
-  it("maps failures and reason codes to keys this build actually has", () => {
-    expect(updatesFailureKey(new HostAutomationError("permission"))).toBe(
-      "updates.error.permission",
+  it("downloads, skips and restarts through the shell", async () => {
+    draw({ state: "available", offer }, answered("available"));
+    await waitFor(() => expect(status()).toBe("有新版本可用"));
+    fireEvent.click(screen.getByRole("button", { name: "下载" }));
+    expect(updates.download).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "跳过此版本" }));
+    expect(updates.dismiss).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "查看发布说明" }));
+    await waitFor(() =>
+      expect(opened.urls).toEqual(["https://releases.invalid/v0.2.0"]),
     );
-    expect(updatesFailureKey(new Error("boom"))).toBe("updates.error.network");
-    expect(reasonKey("NO_ARTIFACT_FOR_TARGET")).toBe(
-      "updates.reason.NO_ARTIFACT_FOR_TARGET",
+
+    cleanup();
+    draw(
+      { state: "downloaded", offer, phase: "ready", problem: null },
+      answered("available"),
     );
-    // A token this version never heard of is never printed raw at a person.
-    expect(reasonKey("SOMETHING_NEW")).toBe("updates.reason.unknown");
+    await waitFor(() => expect(status()).toBe("已下载，重启后生效"));
+    expect(screen.getByText(/终端会话会保留/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "重启并更新" }));
+    expect(updates.install).toHaveBeenCalled();
+  });
+
+  it("offers nothing to press while the restart is under way", async () => {
+    draw(
+      { state: "downloaded", offer, phase: "installing", problem: null },
+      answered("available"),
+    );
+    await waitFor(() => expect(status()).toBe("已下载，重启后生效"));
+    expect(screen.queryByRole("button", { name: "重启并更新" })).toBeNull();
+  });
+
+  it("shows the transfer as bytes rather than a fraction of nothing", async () => {
+    draw(
+      { state: "downloading", offer, receivedBytes: 1_048_576, totalBytes: 0 },
+      answered("available"),
+    );
+    await waitFor(() => expect(screen.getByText("1.0 MB")).toBeTruthy());
+  });
+
+  it("persists the channel and the two switches to the runtime settings", async () => {
+    draw({ state: "idle" });
+    const auto = await screen.findByRole("switch", { name: "自动检查更新" });
+    fireEvent.click(auto);
+    expect(save.mutate).toHaveBeenCalledWith({ updates: { autoCheck: false } });
+    fireEvent.click(screen.getByRole("switch", { name: "自动下载更新" }));
+    expect(save.mutate).toHaveBeenCalledWith({
+      updates: { autoDownload: true },
+    });
+  });
+
+  it("reports a restart that did not deliver what it promised", async () => {
+    updates.restart = {
+      outcome: "incomplete",
+      mismatched: ["host"],
+      expectedVersion: "0.2.0",
+      previousVersion: "0.1.0",
+      previousPackageUrl:
+        "https://releases.invalid/download/v0.1.0/Armadra.dmg",
+    };
+    draw({ state: "idle" });
+    expect(
+      await screen.findByText(/更新未完成：后台服务 没有报告新版本/),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "0.1.0" }));
+    await waitFor(() =>
+      expect(opened.urls).toEqual([
+        "https://releases.invalid/download/v0.1.0/Armadra.dmg",
+      ]),
+    );
   });
 });

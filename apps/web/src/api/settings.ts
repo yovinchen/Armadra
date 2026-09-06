@@ -79,6 +79,19 @@ export const runtimeSettingsSchema = z.looseObject({
   logs: z
     .looseObject({ retentionDays: z.number().int().nonnegative().optional() })
     .optional(),
+  /**
+   * 更新偏好（S03 §4.1）。通道以前只是 React 局部状态，刷新就忘、桌面壳与
+   * 浏览器各说各话；现在落在这份文档里。`development` 不是可选项——它描述的
+   * 是「没过 CI 的构建」，不是一个能选的通道，Runtime 侧会把未知值归回
+   * `stable`。
+   */
+  updates: z
+    .looseObject({
+      channel: z.enum(["stable", "beta"]).catch("stable").optional(),
+      autoCheck: z.boolean().optional(),
+      autoDownload: z.boolean().optional(),
+    })
+    .optional(),
   /** 防休眠策略（T02，终端宿主设计 §9）；哪些来源的租约可以生效。 */
   power: z.looseObject({ policy: powerPolicySchema.optional() }).optional(),
   /** 资源面板打开时的采样间隔；Runtime 侧会夹在 500ms–60s 之间。 */
@@ -127,6 +140,12 @@ export interface RuntimeSettingsPatch {
     cost?: { enabled?: boolean };
   };
   logs?: { retentionDays?: number };
+  /** 更新通道与两个开关（S03 §4.1）。 */
+  updates?: {
+    channel?: "stable" | "beta";
+    autoCheck?: boolean;
+    autoDownload?: boolean;
+  };
   /** 防休眠策略（T02）。 */
   power?: { policy?: PowerPolicy };
   /** 资源面板采样间隔；Runtime 侧会夹回 500ms–60s。 */
