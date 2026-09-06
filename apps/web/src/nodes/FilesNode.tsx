@@ -1,18 +1,19 @@
 import * as React from "react";
 import type { FileEntry, GitFileStatus } from "@armadra/shared";
-import { ChevronRight } from "lucide-react";
 
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { ScrollArea } from "@/ui/scroll-area";
 import { runtimeApi } from "@/api/client";
-import { t as translate, useT } from "@/app/preferences-store";
+import { useT } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
 import { NodeShell } from "./NodeShell";
 import { NODE_META, type NodeBodyProps } from "./registry";
 import { useWorkspaceFileDrag } from "../files/use-workspace-file-drag";
 import { FileTypeIcon } from "./files/file-icons";
+import { FilesBreadcrumb } from "./files/FilesBreadcrumb";
+import { breadcrumbs, rootLabelFor, tailSizeFor } from "./files/breadcrumb";
 
 /** 新开的编辑器节点放在文件节点右边这么远。 */
 const SPAWN_GAP = 24;
@@ -25,28 +26,10 @@ const STATUS_COLOR: Record<GitFileStatus["status"], string> = {
   "?": "var(--muted-foreground)",
 };
 
-/** `a/b/c` → `[{label:"a",path:"a"}, {label:"b",path:"a/b"}, …]`，根目录单独一项。 */
-export function breadcrumbs(
-  path: string,
-  /** 根目录那一格的文案；默认按当前语言取。 */
-  rootLabel: string = translate("files.root"),
-): { label: string; path: string }[] {
-  const trimmed = path.replace(/^\.\/?/, "").replace(/^\/+|\/+$/g, "");
-  const crumbs: { label: string; path: string }[] = [
-    { label: rootLabel, path: "." },
-  ];
-  if (!trimmed) return crumbs;
-  let prefix = "";
-  for (const segment of trimmed.split("/")) {
-    if (!segment) continue;
-    prefix = prefix ? `${prefix}/${segment}` : segment;
-    crumbs.push({ label: segment, path: prefix });
-  }
-  return crumbs;
-}
-
 /**
  * 文件管理器节点（§3.4）：面包屑 + 过滤框 + 列表。
+ * 面包屑只显示工作空间根、一个 `…` 和最后两级（窄节点一级），见
+ * [`breadcrumb`](./files/breadcrumb.ts)。
  * 单击文件夹进入，双击文件在右边开一个编辑器节点。
  *
  * Git 字母徽标取自 `gitStatus().files`（一次 porcelain 扫描）；
@@ -57,6 +40,8 @@ export function FilesNode({ id, node, selected }: NodeBodyProps) {
   const data = node.data.kind === "files" ? node.data : undefined;
   const path = data?.path ?? ".";
   const workspaceId = useCanvasStore((state) => state.workspace?.id);
+  const workspaceName = useCanvasStore((state) => state.workspace?.name);
+  const workspaceRoot = useCanvasStore((state) => state.workspace?.rootPath);
   const dragProps = useWorkspaceFileDrag(workspaceId);
 
   const [entries, setEntries] = React.useState<FileEntry[] | null>(null);
@@ -133,31 +118,19 @@ export function FilesNode({ id, node, selected }: NodeBodyProps) {
     });
   }, [entries, filter]);
 
-  const crumbs = breadcrumbs(path, t("files.root"));
+  const crumbs = breadcrumbs(
+    path,
+    rootLabelFor(workspaceName, workspaceRoot, t("files.root")),
+  );
 
   return (
     <NodeShell node={node} selected={selected}>
       <div className="flex h-full w-full flex-col">
-        <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto px-1.5 pt-1.5">
-          {crumbs.map((crumb, index) => (
-            <React.Fragment key={crumb.path}>
-              {index > 0 && (
-                <ChevronRight
-                  aria-hidden
-                  className="size-3 shrink-0 text-muted-foreground"
-                />
-              )}
-              <Button
-                variant="ghost"
-                size="xs"
-                className="shrink-0 font-normal"
-                onClick={() => navigate(crumb.path)}
-              >
-                {crumb.label}
-              </Button>
-            </React.Fragment>
-          ))}
-        </div>
+        <FilesBreadcrumb
+          crumbs={crumbs}
+          tailSize={tailSizeFor(node.size?.width)}
+          onNavigate={navigate}
+        />
 
         <div className="shrink-0 p-1.5">
           <Input

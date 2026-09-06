@@ -13,7 +13,7 @@ const store = vi.hoisted(() => ({
   document: { nodes: [] as CanvasNode[] },
   focusNodeId: null as string | null,
   maximized: {} as Record<string, unknown>,
-  workspace: { id: "w1", rootPath: "/tmp" },
+  workspace: { id: "w1", name: "Armadra", rootPath: "/tmp" },
   selectNodes: vi.fn(),
   updateNode: vi.fn(),
   updateNodeData: vi.fn(),
@@ -40,7 +40,7 @@ vi.mock("@/api/client", () => ({
   terminalWebSocketUrl: (id: string) => `ws://x/${id}`,
 }));
 
-import { breadcrumbs, FilesNode } from "./FilesNode";
+import { FilesNode } from "./FilesNode";
 import { WORKSPACE_FILES_MIME } from "../files/workspace-drag";
 
 const node = {
@@ -81,21 +81,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
-});
-
-describe("breadcrumbs", () => {
-  it("always starts at the root", () => {
-    expect(breadcrumbs(".")).toEqual([{ label: "根目录", path: "." }]);
-  });
-
-  it("accumulates one crumb per segment", () => {
-    expect(breadcrumbs("src/nodes/ui")).toEqual([
-      { label: "根目录", path: "." },
-      { label: "src", path: "src" },
-      { label: "nodes", path: "src/nodes" },
-      { label: "ui", path: "src/nodes/ui" },
-    ]);
-  });
 });
 
 describe("FilesNode", () => {
@@ -183,6 +168,8 @@ describe("FilesNode", () => {
     });
   });
 
+  // 头一格显示工作空间名，不是「根目录」：一整条绝对路径逐级列出来会把
+  // 节点撑爆（见 files/breadcrumb.ts）。
   it("navigates back through the breadcrumb", async () => {
     api.listFiles.mockResolvedValue({
       path: "src",
@@ -190,7 +177,7 @@ describe("FilesNode", () => {
       entries: [],
     });
     renderFiles();
-    fireEvent.click(await screen.findByText("根目录"));
+    fireEvent.click(await screen.findByText("Armadra"));
     expect(store.updateNodeData).toHaveBeenCalledWith("f1", { path: "." });
   });
 

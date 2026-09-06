@@ -102,6 +102,8 @@ const zh = {
   /* 文件 */
   "files.filter": "过滤",
   "files.root": "根目录",
+  "files.breadcrumb": "当前路径",
+  "files.breadcrumb.more": "展开中间目录",
   "files.failed": "读取失败",
   "files.status.M": "已修改",
   "files.status.A": "新增",
@@ -227,6 +229,8 @@ const en: Record<keyof typeof zh, string> = {
 
   "files.filter": "Filter",
   "files.root": "Root",
+  "files.breadcrumb": "Current path",
+  "files.breadcrumb.more": "Show the folders in between",
   "files.failed": "Read failed",
   "files.status.M": "Modified",
   "files.status.A": "Added",

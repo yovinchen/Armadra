@@ -22,4 +22,4 @@ export {
 } from "./registry";
 export { SubagentCard, type SubagentCardProps } from "./SubagentCard";
 export { normalizeUrl } from "./browser";
-export { breadcrumbs } from "./FilesNode";
+export { breadcrumbs } from "./files/breadcrumb";
