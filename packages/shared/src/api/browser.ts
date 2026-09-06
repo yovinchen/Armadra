@@ -159,6 +159,9 @@ export const BROWSER_LEASE_ACTIONS = ["status", "takeover", "release"] as const;
 export const browserLeaseRequestSchema = z.object({
   action: z.enum(BROWSER_LEASE_ACTIONS),
   leaseGeneration: z.number().int().nonnegative().optional(),
+  /** 谁在接管或交还；与 `browserInputRequestSchema.deviceId` 同义。 */
+  deviceId: z.string().optional(),
+  displayName: z.string().optional(),
 });
 
 /* ------------------------------- 新动词（§2.7） ------------------------------ */
@@ -219,6 +222,10 @@ export const browserActivitySchema = z.object({
   outcome: z.enum(["ok", "refused", "unknown"]),
   reasonCode: z.string().default(""),
   at: z.string(),
+});
+
+export const browserActivityListSchema = z.object({
+  activity: z.array(browserActivitySchema),
 });
 
 /* ------------------------------ 帧流带宽（§2.9） ----------------------------- */
@@ -332,6 +339,12 @@ export const browserInputRequestSchema = z.object({
   events: z.array(browserInputEventSchema).min(1).max(64),
   target: browserTargetSchema.optional(),
   leaseGeneration: z.number().int().nonnegative().optional(),
+  /**
+   * 这一端的不透明标识，只用来在徽标上区分「你」和「其他设备」——
+   * Host 认证的是设备，但不会把身份转发给 Runtime，所以它不授予任何权限。
+   */
+  deviceId: z.string().optional(),
+  displayName: z.string().optional(),
 });
 
 export const browserInputResultSchema = z.object({
@@ -346,6 +359,7 @@ export const browserSubscribeRequestSchema = z.object({
   visibility: z.enum(BROWSER_VISIBILITIES),
   bandwidthClass: z.enum(BROWSER_BANDWIDTH_CLASSES).optional(),
   maxWidth: z.number().int().nonnegative().optional(),
+  deviceId: z.string().optional(),
 });
 export const browserSubscriptionSchema = z.object({
   subscriptionId: z.string(),
@@ -512,4 +526,5 @@ export type BrowserScrollDirection = (typeof BROWSER_SCROLL_DIRECTIONS)[number];
 export type BrowserScrollRequest = z.infer<typeof browserScrollRequestSchema>;
 export type BrowserUploadRequest = z.infer<typeof browserUploadRequestSchema>;
 export type BrowserActivity = z.infer<typeof browserActivitySchema>;
+export type BrowserActivityList = z.infer<typeof browserActivityListSchema>;
 export type BrowserBandwidthClass = (typeof BROWSER_BANDWIDTH_CLASSES)[number];

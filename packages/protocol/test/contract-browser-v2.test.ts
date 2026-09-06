@@ -321,6 +321,8 @@ describe("controlled browser: tabs, lease, dialogs, managed binary, stream", () 
           sessionId: "browser-1",
           action: BrowserLeaseAction.TAKEOVER,
           leaseGeneration: 7n,
+          deviceId: "设备-1",
+          displayName: "iPhone",
         },
       },
     });

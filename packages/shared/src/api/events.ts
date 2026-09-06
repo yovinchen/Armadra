@@ -2,7 +2,12 @@ import { z } from "zod";
 
 import { agentEventSchema, agentStatusSchema } from "../domain/index.js";
 
-import { browserDownloadSchema, browserSessionSchema } from "./browser.js";
+import {
+  browserActivitySchema,
+  browserDownloadSchema,
+  browserLeaseSchema,
+  browserSessionSchema,
+} from "./browser.js";
 import { fileChangeKindSchema } from "./files.js";
 import {
   languageServerEventSchema,
@@ -96,6 +101,17 @@ export const workspaceEventSchema = z.discriminatedUnion("type", [
     download: browserDownloadSchema,
   }),
   /**
+   * 控制租约换手了（§2.6）。所有客户端的徽标都从这里同步，而不是各自
+   * 根据「我刚才点过」推断谁在控制。
+   */
+  z.object({
+    type: z.literal("browser.lease"),
+    sessionId: z.string(),
+    lease: browserLeaseSchema,
+  }),
+  /** 节点头部的一行「谁做了什么」（§2.8）；一次动作一条，不是一帧一条。 */
+  browserActivitySchema.extend({ type: z.literal("browser.activity") }),
+  /**
    * A language session changed state (language service design §2.9). It rides
    * the workspace event stream rather than the session socket, so the status
    * line and the settings page can follow a server without opening one.
@@ -139,4 +155,12 @@ export type ResourceSampleEvent = Extract<
 export type BrowserFrameEvent = Extract<
   WorkspaceEvent,
   { type: "browser.frame" }
+>;
+export type BrowserLeaseEvent = Extract<
+  WorkspaceEvent,
+  { type: "browser.lease" }
+>;
+export type BrowserActivityEvent = Extract<
+  WorkspaceEvent,
+  { type: "browser.activity" }
 >;

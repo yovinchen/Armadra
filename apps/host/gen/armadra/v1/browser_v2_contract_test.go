@@ -115,6 +115,7 @@ func TestBrowserControlSurface(t *testing.T) {
 		"browser_action_lease": &pb.BrowserAction{Action: &pb.BrowserAction_Lease{Lease: &pb.BrowserLeaseRequest{
 			Meta: &pb.CommandMeta{RequestId: "请求-lease"}, SessionId: "browser-1",
 			Action: pb.BrowserLeaseAction_BROWSER_LEASE_ACTION_TAKEOVER, LeaseGeneration: 7,
+			DeviceId: "设备-1", DisplayName: "iPhone",
 		}}},
 		"browser_action_close_tab": &pb.BrowserAction{Action: &pb.BrowserAction_CloseTab{CloseTab: &pb.BrowserCloseTabRequest{
 			Meta: &pb.CommandMeta{RequestId: "请求-close-tab"}, SessionId: "browser-1", TabId: "t2", LeaseGeneration: 7,

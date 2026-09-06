@@ -381,6 +381,10 @@ fn every_new_verb_carries_its_target_and_lease_generation() {
                 session_id: "browser-1".into(),
                 action: BrowserLeaseAction::Takeover as i32,
                 lease_generation: 7,
+                // The device id is what a badge names as the human holder;
+                // it is not an authenticated identity and grants nothing.
+                device_id: "设备-1".into(),
+                display_name: "iPhone".into(),
             })),
         },
     );

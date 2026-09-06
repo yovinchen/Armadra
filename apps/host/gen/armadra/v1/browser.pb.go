@@ -1225,7 +1225,13 @@ type BrowserSubscribeRequest struct {
 	// Worker picks the budget; the subscriber only says what it can afford.
 	BandwidthClass BrowserBandwidthClass `protobuf:"varint,5,opt,name=bandwidth_class,json=bandwidthClass,proto3,enum=armadra.v1.BrowserBandwidthClass" json:"bandwidth_class,omitempty"`
 	// Downscale ceiling in CSS pixels. Zero means "no ceiling of my own".
-	MaxWidth      uint32 `protobuf:"varint,6,opt,name=max_width,json=maxWidth,proto3" json:"max_width,omitempty"`
+	MaxWidth uint32 `protobuf:"varint,6,opt,name=max_width,json=maxWidth,proto3" json:"max_width,omitempty"`
+	// Who is watching, as far as this session can tell: the viewer's own opaque
+	// id. It is what the lease names as its human holder, so a badge can say
+	// "you" rather than "somebody" (§2.6/§2.8). Not an authenticated identity —
+	// the Host authenticates the device and does not forward that identity — so
+	// it is only ever used to tell viewers apart, never to grant anything.
+	DeviceId      string `protobuf:"bytes,7,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1300,6 +1306,13 @@ func (x *BrowserSubscribeRequest) GetMaxWidth() uint32 {
 		return x.MaxWidth
 	}
 	return 0
+}
+
+func (x *BrowserSubscribeRequest) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
 }
 
 type BrowserSubscription struct {
@@ -1599,8 +1612,10 @@ type BrowserInputRequest struct {
 	// Refused when the lease changed hands since the caller last looked, so a
 	// revoked agent cannot land one more click (§2.6).
 	LeaseGeneration uint64 `protobuf:"varint,7,opt,name=lease_generation,json=leaseGeneration,proto3" json:"lease_generation,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The viewer this input came from; see `BrowserSubscribeRequest.device_id`.
+	DeviceId      string `protobuf:"bytes,8,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BrowserInputRequest) Reset() {
@@ -1680,6 +1695,13 @@ func (x *BrowserInputRequest) GetLeaseGeneration() uint64 {
 		return x.LeaseGeneration
 	}
 	return 0
+}
+
+func (x *BrowserInputRequest) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
 }
 
 // A reference bound to session/epoch. After a navigation the same string is
@@ -4430,8 +4452,14 @@ type BrowserLeaseRequest struct {
 	SessionId       string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	Action          BrowserLeaseAction     `protobuf:"varint,3,opt,name=action,proto3,enum=armadra.v1.BrowserLeaseAction" json:"action,omitempty"`
 	LeaseGeneration uint64                 `protobuf:"varint,4,opt,name=lease_generation,json=leaseGeneration,proto3" json:"lease_generation,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Which viewer is taking over or handing back; see
+	// `BrowserSubscribeRequest.device_id`.
+	DeviceId string `protobuf:"bytes,5,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	// Shown next to the badge on the other clients. Free text from the viewer,
+	// truncated, and never used for a decision.
+	DisplayName   string `protobuf:"bytes,6,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BrowserLeaseRequest) Reset() {
@@ -4490,6 +4518,20 @@ func (x *BrowserLeaseRequest) GetLeaseGeneration() uint64 {
 		return x.LeaseGeneration
 	}
 	return 0
+}
+
+func (x *BrowserLeaseRequest) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+func (x *BrowserLeaseRequest) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
 }
 
 type BrowserDialog struct {
@@ -5748,7 +5790,7 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\x04data\x18\t \x01(\fR\x04data\x12-\n" +
 	"\x13captured_at_unix_ms\x18\n" +
 	" \x01(\x03R\x10capturedAtUnixMs\x12\x15\n" +
-	"\x06tab_id\x18\v \x01(\tR\x05tabId\"\xb6\x02\n" +
+	"\x06tab_id\x18\v \x01(\tR\x05tabId\"\xd3\x02\n" +
 	"\x17BrowserSubscribeRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
 	"\n" +
@@ -5758,7 +5800,8 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"visibility\x18\x04 \x01(\x0e2\x1d.armadra.v1.BrowserVisibilityR\n" +
 	"visibility\x12J\n" +
 	"\x0fbandwidth_class\x18\x05 \x01(\x0e2!.armadra.v1.BrowserBandwidthClassR\x0ebandwidthClass\x12\x1b\n" +
-	"\tmax_width\x18\x06 \x01(\rR\bmaxWidth\"\xbb\x01\n" +
+	"\tmax_width\x18\x06 \x01(\rR\bmaxWidth\x12\x1b\n" +
+	"\tdevice_id\x18\a \x01(\tR\bdeviceId\"\xbb\x01\n" +
 	"\x13BrowserSubscription\x12'\n" +
 	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x12+\n" +
 	"\x12expires_at_unix_ms\x18\x02 \x01(\x03R\x0fexpiresAtUnixMs\x12\x18\n" +
@@ -5785,7 +5828,7 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\x03key\x18\t \x01(\tR\x03key\x12\x12\n" +
 	"\x04code\x18\n" +
 	" \x01(\tR\x04code\x12\x12\n" +
-	"\x04text\x18\v \x01(\tR\x04text\"\xbe\x02\n" +
+	"\x04text\x18\v \x01(\tR\x04text\"\xdb\x02\n" +
 	"\x13BrowserInputRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
 	"\n" +
@@ -5794,7 +5837,8 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\tframe_seq\x18\x04 \x01(\x04R\bframeSeq\x125\n" +
 	"\x06events\x18\x05 \x03(\v2\x1d.armadra.v1.BrowserInputEventR\x06events\x121\n" +
 	"\x06target\x18\x06 \x01(\v2\x19.armadra.v1.BrowserTargetR\x06target\x12)\n" +
-	"\x10lease_generation\x18\a \x01(\x04R\x0fleaseGeneration\"\xa1\x02\n" +
+	"\x10lease_generation\x18\a \x01(\x04R\x0fleaseGeneration\x12\x1b\n" +
+	"\tdevice_id\x18\b \x01(\tR\bdeviceId\"\xa1\x02\n" +
 	"\x0eBrowserElement\x12\x1f\n" +
 	"\velement_ref\x18\x01 \x01(\tR\n" +
 	"elementRef\x12\x12\n" +
@@ -6037,13 +6081,15 @@ const file_armadra_v1_browser_proto_rawDesc = "" +
 	"\x12expires_at_unix_ms\x18\x03 \x01(\x03R\x0fexpiresAtUnixMs\x125\n" +
 	"\x05human\x18\x04 \x01(\v2\x1d.armadra.v1.BrowserLeaseHumanH\x00R\x05human\x125\n" +
 	"\x05agent\x18\x05 \x01(\v2\x1d.armadra.v1.BrowserLeaseAgentH\x00R\x05agentB\b\n" +
-	"\x06holder\"\xc4\x01\n" +
+	"\x06holder\"\x84\x02\n" +
 	"\x13BrowserLeaseRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x126\n" +
 	"\x06action\x18\x03 \x01(\x0e2\x1e.armadra.v1.BrowserLeaseActionR\x06action\x12)\n" +
-	"\x10lease_generation\x18\x04 \x01(\x04R\x0fleaseGeneration\"\xf4\x01\n" +
+	"\x10lease_generation\x18\x04 \x01(\x04R\x0fleaseGeneration\x12\x1b\n" +
+	"\tdevice_id\x18\x05 \x01(\tR\bdeviceId\x12!\n" +
+	"\fdisplay_name\x18\x06 \x01(\tR\vdisplayName\"\xf4\x01\n" +
 	"\rBrowserDialog\x12\x1b\n" +
 	"\tdialog_id\x18\x01 \x01(\tR\bdialogId\x12\x15\n" +
 	"\x06tab_id\x18\x02 \x01(\tR\x05tabId\x121\n" +

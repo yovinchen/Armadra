@@ -125,6 +125,12 @@ message BrowserSubscribeRequest {
   BrowserBandwidthClass bandwidth_class = 5;
   // Downscale ceiling in CSS pixels. Zero means "no ceiling of my own".
   uint32 max_width = 6;
+  // Who is watching, as far as this session can tell: the viewer's own opaque
+  // id. It is what the lease names as its human holder, so a badge can say
+  // "you" rather than "somebody" (§2.6/§2.8). Not an authenticated identity —
+  // the Host authenticates the device and does not forward that identity — so
+  // it is only ever used to tell viewers apart, never to grant anything.
+  string device_id = 7;
 }
 
 message BrowserSubscription {
@@ -206,6 +212,8 @@ message BrowserInputRequest {
   // Refused when the lease changed hands since the caller last looked, so a
   // revoked agent cannot land one more click (§2.6).
   uint64 lease_generation = 7;
+  // The viewer this input came from; see `BrowserSubscribeRequest.device_id`.
+  string device_id = 8;
 }
 
 /* ---------------------------------- reads --------------------------------- */
@@ -580,6 +588,12 @@ message BrowserLeaseRequest {
   string session_id = 2;
   BrowserLeaseAction action = 3;
   uint64 lease_generation = 4;
+  // Which viewer is taking over or handing back; see
+  // `BrowserSubscribeRequest.device_id`.
+  string device_id = 5;
+  // Shown next to the badge on the other clients. Free text from the viewer,
+  // truncated, and never used for a decision.
+  string display_name = 6;
 }
 
 /* --------------------------- dialogs and choosers ------------------------- */
