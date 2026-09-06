@@ -419,6 +419,16 @@ SIGKILL 后恢复：Runtime 被 `kill -9` 时来不及结束浏览器，Chrome �
 
 实施状态 · 批次 1（已完成，本机 macOS + 本地静态页）：`launch/{managed,process}.rs` 落地受管清单与「下载 → 全量 sha256 → 解压 → codesign → 单次 rename」校验链、受管优先于本机检测、Unix 进程组与 Windows Job Object、启动即写 pid/started_at/cdp_port、SIGKILL 后按 pid 身份重附着或清 `SingletonLock` 重启、`Fetch` 对 Document 请求逐跳复检；浏览器测试 17 → 27 项全绿（新增 SIGKILL 重附着与清锁、重定向复检、受管清单四条失败路径、纯策略判定）。两处未做：`browser-manifest.json` 的 `targets` 留空且下载默认关闭（本仓库没有经真实下载核对过的 sha256，写一个猜的摘要只会让每次安装以 `sha256_mismatch` 失败），受管安装的 HTTP 路由与设置页按钮随批次 3 的面板一起做；Windows/Linux 的 `cargo check` 在本机无法运行（缺 Windows SDK 头文件与 `x86_64-linux-gnu-gcc`，`aws-lc-sys` 构建失败），与本轮改动无关，仍按「只能交叉编译、实机待办」记。
 
+实施状态 · 批次 3（已完成，本机 macOS + 本机 Chrome + 真实 Host 代理）：`session/lease.rs` 的状态机按 §2.6 逐行落地（人的普通输入抢占 Agent、Agent 排队 ≤ 5 秒后 `LEASE_HELD_BY_HUMAN`、接管即 `LEASE_REVOKED` 且不排队、世代随持有者变化 +1 并落 `lease_generation` 列、人 10 秒 / Agent 30 秒空闲自动释放、接管不自动过期）；`session/stream.rs` 改为每订阅者独立预算与背压，`routes/stream.rs` 提供 `WS …/browser/sessions/{sid}/stream`（下行 `BrowserStreamFrame`、上行 `BrowserStreamClient` 的 hello / ack / input / visibility，连接即订阅、断开即退订，输入被拒时回 `{ code, message }`）；`POST …/lease`、`GET …/activity` 与 `GET/POST/DELETE /api/browser/managed` 落地，`scopes.go` 新增 `browserArea`（读=`terminal:read`，`subscription`=write，其余=execute；`/api/browser/managed` 是该空间唯一的机器级路由，其余一律拒绝）；Web 拆成 `nodes/browser/{BrowserNode,Frame,Lease,Managed,geometry,input,session,stream}`（最大 400 行）、文案移入 `i18n/browser.ts`，`MobileFocusPage` 为浏览器节点加常驻控制行。
+
+实测（本机 macOS，Chrome 141，20 次「点击 → 新帧」）：本机路径 p95 **69 ms**（中位 68 ms，LAN focused 15 fps）；经真实 Host 代理、配对设备、390×844 手机视口的路径 p95 **145 ms**（中位 128 ms，WAN focused 8 fps，其中约 125 ms 是带宽等级自己的节流间隔）。两条都优于 §8 的 p95 ≤ 350 ms。测量脚本是 `cargo test -p armadra-runtime --test browser_stream` 与 `go -C apps/host test ./cmd/armadra-host -run TestAPhoneWatches`，没有 Chrome 时两者显式跳过。
+
+真实运行改掉了设计里两处会失效的写法，均已在代码注释里写明原因：**一、`everyNthFrame` 不再下发给 Chrome（固定 1）**——它数的是重绘次数而不是时间，一次点击只重绘一次时那一帧会被整个吞掉，观看者会一直停在旧画面上；实测 N=2 时点击只有在 5 秒扫描重启 screencast 时才出画面（p95 4.8 s），改成按订阅者节流后降到 145 ms，`Budget::every_nth` 保留为等级宽窄的判据。**二、背压计的是「已发未确认的帧数」而不是序号差**——`frame_seq` 是 session 计数器，会跳过这一路自己节流掉的帧，用序号差会让完全跟得上的客户端被误判为落后，实测每 20 次点击有 1 次白等一个 `ACK_PATIENCE`。另外 `StreamState.running` 存的是「要求的预算」而不是「告诉 Chrome 的宽度」，否则两者不相等会让扫描每 5 秒拆一次 screencast。
+
+批次 3 的协议增量：§2.11 的表没有为「哪个设备在操作」留字段，而 §2.6 的 `Human { device_id }` 与 §2.8 的「你 / 其他设备」都需要它，Host 又不会把认证过的设备身份转发给 Runtime。因此追加三个字段：`BrowserSubscribeRequest.device_id = 7`、`BrowserInputRequest.device_id = 8`、`BrowserLeaseRequest.{device_id = 5, display_name = 6}`。它们是客户端自报的不透明串，只用于把持有者区分开，不授予任何权限；`browser_action_lease` fixture 与三端契约测试同步覆盖。
+
+批次 3 未做：帧流仍只有 JPEG（视频通道按 §7 保留）；`browser.frame` 工作空间事件通道保留给尚未迁移的客户端，Web 节点已不再使用它，因此没有订阅者时不再产生 base64；`pnpm browser:e2e` 没有单开脚本——同样的真实链路由上面两个测试覆盖，无头 Chrome 的画布 e2e 不需要再跑一遍；手机实机仍是待办，390×844 是视口模拟。
+
 只能交叉编译、实机待办：Windows Job Object 与 `lockfile` 处理、Windows Authenticode 校验、Windows/Linux 标准安装路径、Linux 沙箱（不默认加 `--no-sandbox`，容器 CI 用 `ARMADRA_BROWSER_ARGS` 显式给）、Windows 的 `GetProcessTimes` 进程身份。每批的实施记录只登记本机 Chrome、本地静态页与伪 SSH 的结果。
 
 ## 6. 验收清单
