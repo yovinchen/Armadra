@@ -1,12 +1,14 @@
-//! The generated Pi / Oh My Pi extension, loaded by a real JS runtime.
+//! The generated Pi / Oh My Pi extension and opencode plugin, loaded by a real
+//! JS runtime.
 //!
-//! Everything else about this adapter can be asserted on a string. What cannot
-//! is the half that only exists once the module runs: that it parses, that it
-//! reaches `hook.sock` in-process instead of forking, that it sends the same
-//! headers and the same `terminalBinding` the Rust client sends, and that it
-//! takes its `sourceRevision` from the shared counter in the same 16-byte
+//! Everything else about these adapters can be asserted on a string. What
+//! cannot is the half that only exists once the module runs: that it parses,
+//! that it reaches `hook.sock` in-process instead of forking, that it sends the
+//! same headers and the same `terminalBinding` the Rust client sends, and that
+//! it takes its `sourceRevision` from the shared counter in the same 16-byte
 //! format. So the test installs the module, serves a socket, and drives the
-//! handlers with node (and with bun, which is what Oh My Pi runs on).
+//! handlers with node (and with bun, which is what Oh My Pi and opencode run
+//! on).
 //!
 //! Both runtimes are optional: a machine without them skips rather than fails,
 //! because the assertion is about the generated module and not about which
@@ -168,6 +170,7 @@ fn install_module(root: &Path, agent_id: &str, client_bin: &Path) -> PathBuf {
     let home = root.join(agent_id);
     let report = match agent_id {
         "omp" => crate::hook::install::omp::install(&home, client_bin),
+        "opencode" => crate::hook::install::opencode::install(&home, client_bin),
         _ => pi::install(&home, client_bin),
     }
     .unwrap();
@@ -209,8 +212,18 @@ process.stdout.write(JSON.stringify([...handlers.keys()]));
 "#;
 
 fn drive(runtime: &Path, module: &Path, endpoint: &Endpoint, events: &str) -> Vec<String> {
+    drive_with(runtime, module, endpoint, events, DRIVER)
+}
+
+fn drive_with(
+    runtime: &Path,
+    module: &Path,
+    endpoint: &Endpoint,
+    events: &str,
+    source: &str,
+) -> Vec<String> {
     let script = module.parent().unwrap().join("drive.mjs");
-    fs::write(&script, DRIVER).unwrap();
+    fs::write(&script, source).unwrap();
     let output = Command::new(runtime)
         .arg(&script)
         .env("ARMADRA_TEST_MODULE", module)
@@ -524,6 +537,208 @@ fn a_corrupt_sequence_is_never_reinitialised() {
         assert!(request.body["payload"].get("armadraContextUsage").is_none());
     }
     assert_eq!(fs::read(&sequence).unwrap(), [1, 2, 3]);
+}
+
+/* ------------------------------ opencode (B3) ----------------------------- */
+
+/// opencode's plugin shape rather than Pi's: a factory that returns the hooks
+/// object, and one `event` hook taking `{ event: { type, properties } }`.
+/// Each call is awaited because the plugin awaits its own report — the bus
+/// order is the state machine and must survive the transport.
+const OPENCODE_DRIVER: &str = r#"
+const module = await import(process.env.ARMADRA_TEST_MODULE);
+const hooks = await module.ArmadraStatus({});
+const properties = {
+  "message.updated": { info: { role: "user", sessionID: "oc-session-7" } },
+  "session.idle": { sessionID: "oc-session-7" },
+};
+for (const type of process.env.ARMADRA_TEST_EVENTS.split(",")) {
+  await hooks.event?.({ event: { type, properties: properties[type] ?? {} } });
+}
+process.stdout.write(JSON.stringify(Object.keys(hooks)));
+"#;
+
+fn run_opencode_case(runtime: &Path, transport: Transport) {
+    use crate::hook::normalize::{DONE, WORKING, normalize_as};
+
+    let root = tempfile::tempdir().unwrap();
+    // Short enough for the 104-byte sun_path limit on macOS.
+    let socket_dir = tempfile::tempdir_in("/tmp").unwrap();
+    let socket = socket_dir.path().join("h.sock");
+    let (captured, _listener) = serve(&socket);
+    let endpoint = publish_endpoint(root.path(), &socket);
+    // Deliberately absent: if the direct connection ever fails, the fallback
+    // must be what breaks, not the assertions below.
+    let module = install_module(
+        root.path(),
+        "opencode",
+        Path::new("/nonexistent/armadra-hook"),
+    );
+
+    let hooks = drive_with(
+        runtime,
+        &module,
+        &endpoint,
+        "message.updated,session.idle",
+        OPENCODE_DRIVER,
+    );
+    // One hook and only one: the plugin observes the bus and contributes
+    // nothing else — no tool, no auth provider, no decision.
+    assert_eq!(hooks, vec!["event".to_owned()]);
+
+    let seen = wait_for(&captured, 2);
+    assert_eq!(seen.len(), 2, "{seen:?}");
+
+    let opened = &seen[0];
+    assert_credentials(opened, "opencode");
+    // Which in-process transport ran. opencode runs plugins on bun, so bun's
+    // `fetch(url, { unix })` is the path that matters; node's
+    // `http.request({ socketPath })` sends no user agent at all. Asserting it
+    // is how a silent fall-through to the other — or to the network, or to the
+    // spawn fallback — gets noticed.
+    match transport {
+        Transport::BunUnixFetch => assert!(
+            opened
+                .header("User-Agent")
+                .is_some_and(|agent| agent.starts_with("Bun/")),
+            "expected bun's unix fetch, got {:?}",
+            opened.headers
+        ),
+        Transport::NodeSocketPath => assert!(
+            opened.header("User-Agent").is_none(),
+            "expected node's socketPath request, got {:?}",
+            opened.headers
+        ),
+    }
+    // The bus event is forwarded verbatim: deciding which topics mean anything
+    // is `normalize/opencode.rs`'s job, and B3 changed the transport only.
+    assert_eq!(opened.body["payload"]["type"], "message.updated");
+    assert_eq!(opened.body["payload"]["properties"]["info"]["role"], "user");
+    assert_eq!(opened.body["terminalBinding"]["sessionId"], SESSION_ID);
+    assert_eq!(opened.body["terminalBinding"]["generation"], GENERATION);
+    assert_eq!(opened.body["terminalBinding"]["sourceRevision"], "1");
+    // opencode exposes a plugin no live context window, so nothing is pushed.
+    assert!(opened.body["payload"].get("armadraContextUsage").is_none());
+
+    let turn = normalize_as("opencode", "opencode", NODE_ID, &opened.body["payload"]).unwrap();
+    assert_eq!(turn.state, Some(WORKING));
+    assert_eq!(turn.new_turn, Some(true));
+    assert_eq!(turn.session_id.as_deref(), Some("oc-session-7"));
+
+    // Ordering is the point of awaiting each report: an idle that overtook the
+    // message opening the turn would leave the node stuck on `working`.
+    let idle = &seen[1];
+    assert_credentials(idle, "opencode");
+    assert_eq!(idle.body["payload"]["type"], "session.idle");
+    assert_eq!(idle.body["terminalBinding"]["sourceRevision"], "2");
+    let settled = normalize_as("opencode", "opencode", NODE_ID, &idle.body["payload"]).unwrap();
+    assert_eq!(settled.state, Some(DONE));
+
+    // The column B3 moves: opencode now reports from inside its own process.
+    assert_eq!(
+        crate::agent::state_source_for("opencode"),
+        Some(crate::agent::STATE_SOURCE_EXTENSION)
+    );
+
+    // Two allocations, and the shared counter agrees with what was reported.
+    assert_eq!(sequence_value(&endpoint), 2);
+}
+
+#[test]
+fn bun_loads_the_opencode_plugin_and_reaches_the_socket_in_process() {
+    let Some(bun) = tool("bun") else {
+        eprintln!("skipping: bun is not on PATH");
+        return;
+    };
+    run_opencode_case(&bun, Transport::BunUnixFetch);
+}
+
+/// bun is what opencode ships with, but the module must not depend on it: the
+/// same file has to work if a build ever loads plugins under node.
+#[test]
+fn node_loads_the_opencode_plugin_over_its_own_socket_path() {
+    let Some(node) = tool("node") else {
+        eprintln!("skipping: node is not on PATH");
+        return;
+    };
+    run_opencode_case(&node, Transport::NodeSocketPath);
+}
+
+/// Outside a canvas terminal the factory must hand opencode no hooks at all,
+/// so the CLI behaves exactly as if the plugin were not on disk — and, in
+/// particular, so no bus event can reach the spawn fallback.
+#[test]
+fn without_a_node_id_the_opencode_plugin_registers_no_hook() {
+    let Some(node) = tool("node") else {
+        eprintln!("skipping: node is not on PATH");
+        return;
+    };
+    let root = tempfile::tempdir().unwrap();
+    let module = install_module(
+        root.path(),
+        "opencode",
+        Path::new("/nonexistent/armadra-hook"),
+    );
+    let script = module.parent().unwrap().join("bare.mjs");
+    fs::write(
+        &script,
+        "const m = await import(process.env.ARMADRA_TEST_MODULE);\n\
+         const hooks = await m.ArmadraStatus({});\n\
+         process.stdout.write(JSON.stringify(Object.keys(hooks)));\n",
+    )
+    .unwrap();
+    let output = Command::new(&node)
+        .arg(&script)
+        .env("ARMADRA_TEST_MODULE", &module)
+        .env_remove("ARMADRA_NODE_ID")
+        .env_remove("ARMADRA_ENDPOINT_FILE")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"[]");
+}
+
+/// The pre-B3 path, kept as the fallback: with the socket gone the plugin
+/// hands the bus event to `armadra-hook opencode` on stdin, which is exactly
+/// what the old `Bun.spawn` plugin did.
+#[test]
+fn an_unreachable_socket_still_spawns_the_client_for_opencode() {
+    let Some(node) = tool("node") else {
+        eprintln!("skipping: node is not on PATH");
+        return;
+    };
+    let root = tempfile::tempdir().unwrap();
+    let socket_dir = tempfile::tempdir_in("/tmp").unwrap();
+    let socket = socket_dir.path().join("missing.sock");
+    let endpoint = publish_endpoint(root.path(), &socket);
+
+    let recorded = root.path().join("stdin.json");
+    let stub = root.path().join("armadra-hook");
+    fs::write(
+        &stub,
+        format!(
+            "#!/bin/sh\nprintf '%s' \"$1\" > {argv}\ncat > {recorded}\n",
+            argv = root.path().join("argv.txt").display(),
+            recorded = recorded.display(),
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&stub, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let module = install_module(root.path(), "opencode", &stub);
+    // One event, so the stub is written exactly once.
+    drive_with(&node, &module, &endpoint, "session.idle", OPENCODE_DRIVER);
+
+    let payload: Value = serde_json::from_slice(&wait_for_file(&recorded)).unwrap();
+    // The fallback speaks the client's protocol: the raw bus event, not the
+    // envelope the direct path builds.
+    assert_eq!(payload["type"], "session.idle");
+    assert!(payload.get("nodeId").is_none());
+    assert_eq!(wait_for_file(&root.path().join("argv.txt")), b"opencode");
 }
 
 /// The provider-agnostic half B3 inherits: the same transport with no Pi
