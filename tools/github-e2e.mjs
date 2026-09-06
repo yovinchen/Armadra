@@ -36,7 +36,12 @@ import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { HEAD_SHA, mock, startMockGithub } from "./github/mock-server.mjs";
+import {
+  FILE_PATCH,
+  HEAD_SHA,
+  mock,
+  startMockGithub,
+} from "./github/mock-server.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const skipApplication = process.env.GITHUB_E2E_SKIP_APP === "1";
@@ -176,14 +181,21 @@ const appServer = createServer(credentials, (req, res) => {
   );
   if (!file.startsWith(distribution) || !existsSync(file))
     file = join(distribution, "index.html");
+  // Read first, then answer. Writing the 200 header before the read means a
+  // missing bundle — which is exactly the state GITHUB_E2E_SKIP_APP leaves —
+  // tries to send a 404 on a response that already has headers, and Node
+  // throws out of the request handler and takes the whole run with it.
+  let body;
   try {
-    res.writeHead(200, {
-      "Content-Type": mediaTypes[extname(file)] ?? "application/octet-stream",
-    });
-    res.end(readFileSync(file));
+    body = readFileSync(file);
   } catch {
     res.writeHead(404).end();
+    return;
   }
+  res.writeHead(200, {
+    "Content-Type": mediaTypes[extname(file)] ?? "application/octet-stream",
+  });
+  res.end(body);
 });
 
 /* ---------------------------------------------------------------- the Host */
@@ -306,7 +318,8 @@ try {
 import {
   HostClient, HostIdentityClient, HostGithubClient,
   GithubCredentialSource, GithubIssueState, GithubMergeMethod,
-  GithubReferenceKind, GithubReferenceTargetKind, GithubStatusSource,
+  GithubReferenceKind, GithubReferenceTargetKind, GithubReviewState,
+  GithubStatusSource,
 } from "@armadra/host-client";
 const state = {};
 function serialize(value) {
@@ -337,9 +350,17 @@ globalThis.armadra = {
     return serialize(await state.identity.pair(material));
   },
   call(method, ...args) {
-    return state.github[method](...args).then(serialize, (error) => ({
+    // The client validates its input before it returns a promise, so a
+    // refusal can arrive as a synchronous throw. Catching only the rejection
+    // would turn "the client refused" into a crashed run.
+    const fail = (error) => ({
       error: { failure: error.failure ?? error.code ?? "unknown", outcomeUnknown: error.outcomeUnknown === true },
-    }));
+    });
+    try {
+      return state.github[method](...args).then(serialize, fail);
+    } catch (error) {
+      return Promise.resolve(fail(error));
+    }
   },
   repository(owner, name, apiBase, host) {
     state.repository = create(GithubRepositoryRefSchema, { owner, name, apiBase, host });
@@ -352,6 +373,7 @@ globalThis.armadra = {
     mergeMethod: GithubMergeMethod,
     referenceKind: GithubReferenceKind,
     targetKind: GithubReferenceTargetKind,
+    reviewState: GithubReviewState,
     statusSource: GithubStatusSource,
   },
   schemas: { mapping: GithubStatusMappingSchema, reference: GithubExternalReferenceSchema },
@@ -715,6 +737,119 @@ globalThis.armadraReady = true;
     }),
   );
 
+  step(
+    "the detail carries the file's diff, so a line can be commented on",
+    detail.files?.length === 1 && detail.files[0].patch === FILE_PATCH,
+    JSON.stringify(detail.files?.[0]?.path),
+  );
+
+  // ---------------------------------------------------------------- review
+  const review = await evaluate(
+    page.sessionId,
+    `return await armadra.call("submitReview", {
+       repository: armadra.repositoryRef,
+       number: 9n,
+       commitSha: ${JSON.stringify(HEAD_SHA)},
+       state: armadra.enums.reviewState.COMMENTED,
+       body: "两处小问题",
+       comments: [
+         { path: "a.txt", line: 11n, side: "RIGHT", body: "这一行要判空" },
+         { path: "a.txt", line: 11n, side: "LEFT", body: "为什么删掉这个？" },
+       ],
+     });`,
+  );
+  step(
+    "a review with inline comments was submitted",
+    review.id === "31",
+    JSON.stringify(review.id ?? review),
+  );
+  const sent = mock.reviews.at(-1) ?? {};
+  step(
+    "the mock received each comment with its own path, line and side",
+    Array.isArray(sent.comments) &&
+      sent.comments.length === 2 &&
+      sent.comments[0].path === "a.txt" &&
+      sent.comments[0].line === 11 &&
+      sent.comments[0].side === "RIGHT" &&
+      sent.comments[1].side === "LEFT",
+    JSON.stringify(sent.comments),
+  );
+  step(
+    "the inline comments are anchored to the commit the reviewer read",
+    sent.commit_id === HEAD_SHA,
+    String(sent.commit_id),
+  );
+
+  const badSide = await evaluate(
+    page.sessionId,
+    `return await armadra.call("submitReview", {
+       repository: armadra.repositoryRef,
+       number: 9n,
+       commitSha: ${JSON.stringify(HEAD_SHA)},
+       state: armadra.enums.reviewState.COMMENTED,
+       comments: [{ path: "a.txt", line: 0n, side: "MIDDLE", body: "x" }],
+     });`,
+  );
+  step(
+    "a comment with no usable position never leaves the client",
+    badSide?.error?.failure === "invalid" && mock.reviews.length === 1,
+    JSON.stringify(badSide?.error),
+  );
+
+  // ----------------------------------------------------------------- rerun
+  const greenRerun = await evaluate(
+    page.sessionId,
+    `return await armadra.call("rerunChecks", {
+       repository: armadra.repositoryRef,
+       number: 9n,
+       expectedHeadSha: ${JSON.stringify(HEAD_SHA)},
+     });`,
+  );
+  step(
+    "a passing check is not restarted, and the Host says why",
+    greenRerun.reasonCode === "NOT_RERUNNABLE" && mock.reruns.length === 0,
+    greenRerun.reasonCode,
+  );
+
+  mock.failingChecks = true;
+  const movedRerun = await evaluate(
+    page.sessionId,
+    `return await armadra.call("rerunChecks", {
+       repository: armadra.repositoryRef,
+       number: 9n,
+       expectedHeadSha: ${JSON.stringify("0".repeat(40))},
+     });`,
+  );
+  step(
+    "a rerun naming a head that moved is refused before anything is sent",
+    movedRerun.reasonCode === "HEAD_MOVED" && mock.reruns.length === 0,
+    movedRerun.reasonCode,
+  );
+
+  const rerun = await evaluate(
+    page.sessionId,
+    `return await armadra.call("rerunChecks", {
+       repository: armadra.repositoryRef,
+       number: 9n,
+       expectedHeadSha: ${JSON.stringify(HEAD_SHA)},
+       failedOnly: true,
+     });`,
+  );
+  step(
+    "the failed workflow run was restarted, and only that one",
+    rerun.outcomes?.length === 1 &&
+      rerun.outcomes[0].state === 1 &&
+      rerun.outcomes[0].requestedValue === "77",
+    JSON.stringify(rerun.outcomes),
+  );
+  step(
+    "the mock received the failed-jobs restart for exactly that run",
+    mock.reruns.length === 1 &&
+      mock.reruns[0] === "/repos/owner/repo/actions/runs/77/rerun-failed-jobs",
+    JSON.stringify(mock.reruns),
+  );
+  mock.failingChecks = false;
+
   const stale = await evaluate(
     page.sessionId,
     `return await armadra.call("mergePull", {
@@ -769,6 +904,56 @@ globalThis.armadraReady = true;
       mock.merges[0].sha === HEAD_SHA &&
       mock.merges[0].merge_method === "squash",
     JSON.stringify(mock.merges[0]),
+  );
+
+  // --------------------------------------------------------------- cleanup
+  const staleBranch = await evaluate(
+    page.sessionId,
+    `return await armadra.call("deleteBranch", {
+       repository: armadra.repositoryRef,
+       branch: "feature/upload",
+       expectedSha: ${JSON.stringify("0".repeat(40))},
+     });`,
+  );
+  step(
+    "deleting a branch that moved since the panel read it is refused",
+    staleBranch.deleted === false &&
+      staleBranch.reasonCode === "REF_MOVED" &&
+      mock.deletedRefs.length === 0,
+    staleBranch.reasonCode,
+  );
+
+  const deleted = await evaluate(
+    page.sessionId,
+    `return await armadra.call("deleteBranch", {
+       repository: armadra.repositoryRef,
+       branch: "feature/upload",
+       expectedSha: ${JSON.stringify(HEAD_SHA)},
+     });`,
+  );
+  step(
+    "the merged source branch was deleted under the head the caller named",
+    deleted.deleted === true && mock.deletedRefs.length === 1,
+    JSON.stringify(mock.deletedRefs),
+  );
+
+  const gone = await evaluate(
+    page.sessionId,
+    `return await armadra.call("deleteBranch", {
+       repository: armadra.repositoryRef,
+       branch: "feature/upload",
+       expectedSha: ${JSON.stringify(HEAD_SHA)},
+     });`,
+  );
+  step(
+    "deleting it again reports NOT_FOUND rather than claiming a second deletion",
+    gone.deleted === false && gone.reasonCode === "NOT_FOUND",
+    gone.reasonCode,
+  );
+  step(
+    "cleanup never touched anything local: the merge is the only write recorded",
+    mock.merges.length === 1,
+    `${mock.merges.length} merges`,
   );
 
   const linked = await evaluate(

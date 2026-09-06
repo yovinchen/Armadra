@@ -28,7 +28,26 @@ export const mock = {
   created: [],
   requests: [],
   authorizations: new Set(),
+  /** Review bodies the Host actually sent, inline comments included. */
+  reviews: [],
+  /** Workflow-run restart paths the Host sent. */
+  reruns: [],
+  /** Branch refs the Host asked to delete. */
+  deletedRefs: [],
+  /** Set once the head branch is gone, so a re-read answers 404. */
+  branchDeleted: false,
+  /** Flipped by the e2e to make the checks come back as a failed Actions run. */
+  failingChecks: false,
 };
+
+/** The one file the mock's pull request touches, with a real hunk header. */
+export const FILE_PATCH = [
+  "@@ -10,3 +10,4 @@ func main() {",
+  " \tsetup()",
+  "-\told()",
+  "+\tfresh()",
+  "+\talso()",
+].join("\n");
 
 /** The mock as an HTTPS server; `startMockGithub` is the usual entry point. */
 export function createMockGithub(credentials) {
@@ -140,12 +159,47 @@ export function createMockGithub(credentials) {
             status: "modified",
             additions: 2,
             deletions: 1,
-            patch: "@@",
+            patch: FILE_PATCH,
           },
         ]);
       if (path === "/repos/owner/repo/pulls/9/reviews" && req.method === "GET")
         return send([]);
+      if (
+        path === "/repos/owner/repo/pulls/9/reviews" &&
+        req.method === "POST"
+      ) {
+        const input = json();
+        mock.reviews.push(input);
+        return send(
+          {
+            id: 31,
+            state: "COMMENTED",
+            commit_id: input.commit_id ?? HEAD_SHA,
+          },
+          200,
+        );
+      }
       if (path === "/repos/owner/repo/pulls/9/comments") return send([]);
+      if (
+        path.startsWith("/repos/owner/repo/actions/runs/") &&
+        req.method === "POST"
+      ) {
+        mock.reruns.push(path);
+        return send({}, 201);
+      }
+      if (
+        path.startsWith("/repos/owner/repo/git/refs/heads/") &&
+        req.method === "DELETE"
+      ) {
+        mock.deletedRefs.push(
+          decodeURIComponent(
+            path.slice("/repos/owner/repo/git/refs/heads/".length),
+          ),
+        );
+        mock.branchDeleted = true;
+        res.writeHead(204);
+        return res.end();
+      }
       if (path === "/repos/owner/repo/pulls/9/merge" && req.method === "PUT") {
         const input = json();
         mock.merges.push(input);
@@ -161,16 +215,27 @@ export function createMockGithub(credentials) {
             {
               name: "build",
               status: "completed",
-              conclusion: "success",
+              conclusion: mock.failingChecks ? "failure" : "success",
               app: { name: "GitHub Actions", slug: "github-actions" },
               details_url: "https://localhost/actions/runs/77/job/1",
+            },
+            // A producer with no restart endpoint, so the Host has to leave it
+            // alone rather than treating every check as rerunnable.
+            {
+              name: "legacy-lint",
+              status: "completed",
+              conclusion: mock.failingChecks ? "failure" : "success",
+              app: { name: "Some Bot", slug: "some-bot" },
+              details_url: "https://localhost/other/1",
             },
           ],
         });
       if (path.includes("/commits/") && path.endsWith("/status"))
         return send({ statuses: [] });
-      if (path.startsWith("/repos/owner/repo/git/ref/heads/"))
+      if (path.startsWith("/repos/owner/repo/git/ref/heads/")) {
+        if (mock.branchDeleted) return send({ message: "not found" }, 404);
         return send({ object: { sha: HEAD_SHA } });
+      }
       return send({ message: "not found" }, 404);
     });
   });
