@@ -33,6 +33,7 @@ import {
   type CanvasToolSpec,
 } from "@/canvas/tools";
 import { commandKeysLabel, type CommandId } from "@/keybindings";
+import { useMenuTooltip } from "./menu-tooltip";
 
 /**
  * Dock 的白板工具组（React Flow 计划 F21）。
@@ -160,15 +161,19 @@ function GeoToolButton({ tool, active, disabled }: ToolButtonProps) {
   const t = useT();
   const geo = useNextStyle().geo;
   const Icon = geoIcon(geo);
+  const menu = useMenuTooltip(
+    React.useCallback(
+      (open: boolean) => {
+        if (open) runCanvasCommand(tool.command);
+      },
+      [tool.command],
+    ),
+  );
 
   return (
-    <DropdownMenu
-      onOpenChange={(open) => {
-        if (open) runCanvasCommand(tool.command);
-      }}
-    >
+    <DropdownMenu {...menu.menuProps}>
       <Tooltip delayDuration={500}>
-        <TooltipTrigger asChild>
+        <TooltipTrigger asChild {...menu.tooltipTriggerProps}>
           <DropdownMenuTrigger asChild>
             <IconButton
               size="dock"
@@ -180,14 +185,17 @@ function GeoToolButton({ tool, active, disabled }: ToolButtonProps) {
             </IconButton>
           </DropdownMenuTrigger>
         </TooltipTrigger>
-        <TooltipContent>
-          {toolTooltip(tool.labelKey, tool.command, t)}
-        </TooltipContent>
+        {/* 菜单展开时不再挂提示：它会压在第一条菜单项上。 */}
+        {menu.menuOpen ? null : (
+          <TooltipContent>
+            {toolTooltip(tool.labelKey, tool.command, t)}
+          </TooltipContent>
+        )}
       </Tooltip>
       <DropdownMenuContent
         align="center"
         side="top"
-        className="z-[var(--z-menu)]"
+        className="z-[var(--z-menu)] w-auto min-w-40"
       >
         {GEO_OPTIONS.map((option) => {
           const OptionIcon = option.icon;

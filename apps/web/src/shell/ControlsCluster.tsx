@@ -1,4 +1,3 @@
-import * as React from "react";
 import {
   Activity,
   FolderTree,
@@ -9,13 +8,15 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { commandKeysLabel, type CommandId } from "../keybindings";
-import { useCanvasStore } from "../store/canvas-store";
+import { useCanvasStore, type PanelState } from "../store/canvas-store";
 import { useT } from "../app/preferences-store";
 import { CanvasPreferencesMenu } from "../canvas/menus/CanvasPreferencesMenu";
+import { WORK_PANEL_WIDTH, type WorkPanelKey } from "../panels/WorkPanelSheet";
 import { cn } from "@/lib/cn";
 import { DropdownMenu, DropdownMenuTrigger } from "@/ui/dropdown-menu";
 import { IconButton } from "@/ui/icon-button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
+import { useMenuTooltip } from "./menu-tooltip";
 import type { ReactNode } from "react";
 
 /**
@@ -36,21 +37,40 @@ import type { ReactNode } from "react";
 const BAR =
   "flex flex-col gap-2 rounded-[var(--r-card)] border border-border bg-[var(--panel)]/90 p-1 shadow-[var(--shadow-pill)] backdrop-blur-[12px]";
 
+/**
+ * 开着的那块右侧工作面板（`panels/WorkPanelSheet`）。抽屉是窗口级的固定层，
+ * 正好盖在这条工具簇上；不让开的话开着抽屉时这几个按钮一个都按不到——
+ * 用户点「资源管理器」以为没反应，其实点在抽屉上。
+ */
+function openWorkPanel(panels: PanelState): WorkPanelKey | null {
+  for (const key of Object.keys(WORK_PANEL_WIDTH) as WorkPanelKey[]) {
+    if (panels[key] === "drawer") return key;
+  }
+  return null;
+}
+
 export function ControlsCluster() {
   const t = useT();
-  const [preferencesOpen, setPreferencesOpen] = React.useState(false);
+  const preferences = useMenuTooltip();
   const panels = useCanvasStore((state) => state.panels);
   const setPanel = useCanvasStore((state) => state.setPanel);
   const focusNodeId = useCanvasStore((state) => state.focusNodeId);
   const setFocusNode = useCanvasStore((state) => state.setFocusNode);
+  const drawer = openWorkPanel(panels);
 
   return (
     <>
       <div
         data-slot="controls-cluster"
+        style={{
+          right: drawer
+            ? `calc(14px + min(100vw, ${WORK_PANEL_WIDTH[drawer]}))`
+            : undefined,
+        }}
         className={cn(
           BAR,
           "absolute top-[3px] right-[14px] z-[var(--z-cluster)]",
+          "transition-[right] duration-150 ease-out motion-reduce:transition-none",
         )}
       >
         <ClusterButton
@@ -122,21 +142,22 @@ export function ControlsCluster() {
           </ClusterButton>
         )}
 
-        <DropdownMenu open={preferencesOpen} onOpenChange={setPreferencesOpen}>
+        <DropdownMenu {...preferences.menuProps}>
           <Tooltip delayDuration={500}>
-            <TooltipTrigger asChild>
+            <TooltipTrigger asChild {...preferences.tooltipTriggerProps}>
               <DropdownMenuTrigger asChild>
                 <IconButton
                   size="cluster"
                   label={t("wb.menu")}
-                  active={preferencesOpen}
+                  active={preferences.menuOpen}
                 >
                   <SlidersHorizontal />
                 </IconButton>
               </DropdownMenuTrigger>
             </TooltipTrigger>
-            {/* 菜单展开时不要再挂 Tooltip：它会压在第一条勾选项上。 */}
-            {preferencesOpen ? null : (
+            {/* 菜单展开时不要再挂 Tooltip：它会压在第一条勾选项上。
+                菜单**关掉**之后也不该弹回来，那一下由 `useMenuTooltip` 拦。 */}
+            {preferences.menuOpen ? null : (
               <TooltipContent side="left">{t("wb.menu")}</TooltipContent>
             )}
           </Tooltip>
