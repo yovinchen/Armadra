@@ -2,14 +2,22 @@ import * as React from "react";
 import type {
   Connection,
   EdgeChange,
+  FinalConnectionState,
   IsValidConnection,
   NodeChange,
   OnSelectionChangeParams,
 } from "@xyflow/react";
+import { toast } from "sonner";
 import { useShallow } from "zustand/react/shallow";
 
+import { t } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
-import { isValidLink } from "../connection";
+import { MAX_LINKS } from "../content-links";
+import {
+  classifyConnection,
+  connectionRejection,
+  isValidCanvasConnection,
+} from "./edges/connect";
 import { centerOf, hitTestGroup, nodeBox, type Box } from "../geometry";
 import {
   EMPTY_SELECTION,
@@ -43,6 +51,10 @@ export interface FlowBindings {
   ) => void;
   onSelectionChange: (params: OnSelectionChangeParams) => void;
   onConnect: (connection: Connection) => void;
+  onConnectEnd: (
+    event: MouseEvent | TouchEvent,
+    state: FinalConnectionState,
+  ) => void;
   isValidConnection: IsValidConnection<CanvasFlowEdge>;
 }
 
@@ -192,27 +204,51 @@ export function useFlowNodes(): FlowBindings {
   );
 
   /**
-   * 连线合法性（§2.3 的判定表）。
+   * 连线合法性（§2.3 的判定表）。判定表本体是纯函数，住在
+   * `flow/edges/connect.ts`（B1）；这里只把 store 的当前状态喂进去。
    *
-   * B0 只覆盖「节点 → 节点」那一行：自连与重复由 `connection.isValidLink`
-   * 拒绝。白板对象作为引用一端（B5）与 `wb.* → wb.*` 的拒绝规则在那两批
-   * 里补上——现在白板恒为空，这两行走不到。
+   * 拖动中每一帧都会问一次，所以这里**不能**弹提示——「为什么不行」由
+   * `onConnectEnd` 在松手那一刻说一次。
    */
   const isValidConnection = React.useCallback<
     IsValidConnection<CanvasFlowEdge>
   >((connection) => {
-    const state = useCanvasStore.getState().document;
-    if (!state) return false;
-    if (isItemId(connection.source) || isItemId(connection.target)) {
-      return false;
-    }
-    return isValidLink(connection, state.nodes, state.edges);
+    const state = useCanvasStore.getState();
+    return isValidCanvasConnection(connection, {
+      document: state.document,
+      whiteboard: state.whiteboard,
+    });
   }, []);
 
   const onConnect = React.useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return;
     useCanvasStore.getState().addEdge(connection.source, connection.target);
   }, []);
+
+  /**
+   * 松手：只在**落到了某个节点上却被拒绝**时提示一次。
+   *
+   * 拖到空白处松手是「取消」，不是错误（把手是用来连东西的，空放什么都不
+   * 发生）；落在合法目标上时 `onConnect` 已经建好了边，也没什么可说的。
+   */
+  const onConnectEnd = React.useCallback(
+    (
+      _event: MouseEvent | TouchEvent,
+      connectionState: FinalConnectionState,
+    ) => {
+      const from = connectionState.fromNode?.id ?? null;
+      const to = connectionState.toNode?.id ?? null;
+      if (!from || !to) return;
+      const state = useCanvasStore.getState();
+      const verdict = classifyConnection(
+        { source: from, target: to },
+        { document: state.document, whiteboard: state.whiteboard },
+      );
+      const message = connectionRejection(verdict);
+      if (message) toast.error(t(message, { limit: MAX_LINKS }));
+    },
+    [],
+  );
 
   return {
     nodes,
@@ -223,6 +259,7 @@ export function useFlowNodes(): FlowBindings {
     onNodeDragStop,
     onSelectionChange,
     onConnect,
+    onConnectEnd,
     isValidConnection,
   };
 }

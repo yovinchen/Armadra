@@ -51,6 +51,7 @@ import {
   setFlowContainer,
 } from "./flow/flow-context";
 import { clearAllDrafts } from "./flow/drafts";
+import ConnectionLine from "./flow/edges/ConnectionLine";
 import { edgeTypes } from "./flow/edges/edge-types";
 import { nodeTypes } from "./flow/nodes/node-types";
 import { useFlowNodes } from "./flow/use-flow-nodes";
@@ -469,6 +470,8 @@ export function FlowWorkspace() {
             disableKeyboardA11y
             onPaneContextMenu={onPaneContextMenu}
             onNodeContextMenu={onNodeContextMenu}
+            // 预览线与落成后的边共用同一条贝塞尔（§2.5，B1）。
+            connectionLineComponent={ConnectionLine}
           >
             {preferences.grid ? (
               <Background
