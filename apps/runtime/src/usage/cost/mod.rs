@@ -19,7 +19,7 @@ pub mod scan;
 
 use std::sync::{Arc, Mutex, RwLock};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::settings::SettingsStore;
 
@@ -33,8 +33,8 @@ pub const MANUAL_COOLDOWN: std::time::Duration = std::time::Duration::from_secs(
 
 /// Token counters. `input` excludes cached reads on both providers, so the four
 /// buckets never double-count.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct TokenTotals {
     pub input: u64,
     pub output: u64,
@@ -168,7 +168,10 @@ impl CostService {
         Self {
             settings,
             summary: Arc::new(RwLock::new(CostSummary::empty(CostStatus::Unavailable))),
-            state: Arc::new(Mutex::new(scan::ScanState::default())),
+            // The cache from the last run. Every entry is re-validated against
+            // the file it describes before it is trusted, so a restart costs a
+            // stat per transcript instead of a full re-parse.
+            state: Arc::new(Mutex::new(scan::ScanState::load())),
             last_scan: Arc::new(Mutex::new(None)),
         }
     }
@@ -229,6 +232,9 @@ impl CostService {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             let scanned = guard.scan();
+            // Persisted while the lock is held, so the file always describes a
+            // state that was actually reached rather than a half-updated one.
+            guard.save();
             summarize(&scanned, &pricing::PriceTable::load(), chrono::Local::now())
         })
         .await
@@ -470,18 +476,18 @@ mod tests {
         let today = now().format("%Y-%m-%d").to_string();
         let result = result_with(&[
             (&today, "claude-opus-5", tokens(1_000_000, 0)),
-            (&today, "gpt-5-codex", tokens(1_000_000, 0)),
+            (&today, "gpt-4o", tokens(1_000_000, 0)),
         ]);
         let summary = summarize(&result, &prices(), now());
         assert_eq!(summary.today.tokens.input, 2_000_000);
         assert_eq!(summary.today.cost_usd, 5.0);
         assert!(!summary.today.complete);
-        assert_eq!(summary.unpriced_models, vec!["gpt-5-codex".to_owned()]);
+        assert_eq!(summary.unpriced_models, vec!["gpt-4o".to_owned()]);
         let unpriced = summary
             .today
             .models
             .iter()
-            .find(|model| model.model == "gpt-5-codex")
+            .find(|model| model.model == "gpt-4o")
             .unwrap();
         assert!(unpriced.cost_usd.is_none());
         assert_eq!(unpriced.tokens.input, 1_000_000);

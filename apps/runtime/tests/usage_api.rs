@@ -148,6 +148,22 @@ fn write_transcripts(home: &std::path::Path) {
         ),
     )
     .unwrap();
+    // A model with no built-in price. It contributes tokens and no dollars, and
+    // marks the window incomplete — the case the dashboard has to keep telling
+    // apart from "this cost nothing".
+    std::fs::write(
+        codex.join("unpriced.jsonl"),
+        format!(
+            concat!(
+                r#"{{"timestamp":"{today}","type":"session_meta","payload":{{"id":"s2","model":"house-model-1"}}}}"#,
+                "\n",
+                r#"{{"timestamp":"{today}","type":"event_msg","payload":{{"type":"token_count","info":{{"last_token_usage":{{"input_tokens":500,"cached_input_tokens":0,"output_tokens":0}}}}}}}}"#,
+                "\n"
+            ),
+            today = today
+        ),
+    )
+    .unwrap();
 }
 
 #[tokio::test]
@@ -281,16 +297,26 @@ async fn copilot_signs_in_by_device_flow_and_the_dashboard_reports_quota_and_cos
     assert_eq!(status, StatusCode::OK);
     assert_eq!(cost["status"], json!("ok"));
     assert_eq!(cost["daily"].as_array().unwrap().len(), 30);
-    // One million Opus input tokens is $5; the Codex model has no built-in
-    // price, so it contributes tokens but no dollars and marks the window
-    // incomplete.
-    assert_eq!(cost["today"]["costUsd"], json!(5.0));
+    // One million Opus input tokens is $5. The Codex session is priced too, at
+    // OpenAI's own rates: 400 billed input, 100 cached reads and 40 output on
+    // gpt-5-codex is $0.0009125, which rounds to the cent-fraction the API
+    // reports. The third model has no price at all, so it contributes tokens,
+    // no dollars, and marks the window incomplete — that is a different
+    // statement from "this cost nothing".
+    assert_eq!(cost["today"]["costUsd"], json!(5.0009));
     assert_eq!(cost["today"]["complete"], json!(false));
-    assert_eq!(cost["unpricedModels"], json!(["gpt-5-codex"]));
-    assert_eq!(cost["today"]["tokens"]["input"], json!(1_000_400));
+    assert_eq!(cost["unpricedModels"], json!(["house-model-1"]));
+    let codex_model = cost["today"]["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|model| model["model"] == json!("gpt-5-codex"))
+        .unwrap();
+    assert_eq!(codex_model["costUsd"], json!(0.0009));
+    assert_eq!(cost["today"]["tokens"]["input"], json!(1_000_900));
     assert_eq!(cost["today"]["tokens"]["cacheRead"], json!(100));
     assert_eq!(cost["files"]["claude"], json!(1));
-    assert_eq!(cost["files"]["codex"], json!(1));
+    assert_eq!(cost["files"]["codex"], json!(2));
     let serialized = cost.to_string();
     assert!(!serialized.contains("must never reach"), "{serialized}");
     assert!(!serialized.contains("demo"), "{serialized}");

@@ -9,9 +9,12 @@
 //!    overrides and extends it, so a price change or a model we do not ship a
 //!    row for can be fixed without a new build.
 //!
-//! The built-in rows cover the current Claude models only. Codex/OpenAI models
-//! and retired Claude snapshots have no built-in price and fall to rule 1
-//! until the user supplies the override file.
+//! The built-in rows cover the Claude models and the OpenAI models the Codex
+//! CLI runs. Retired snapshots of either have no built-in price and fall to
+//! rule 1 until the user supplies the override file.
+//!
+//! Each block records where its numbers came from and when they were read, so
+//! a stale row is recognisable as stale rather than as a fact.
 
 use std::collections::BTreeMap;
 
@@ -44,6 +47,19 @@ impl ModelPrice {
             output,
             cache_read,
             cache_write: input * 1.25,
+        }
+    }
+
+    /// An OpenAI row. Prompt caching there is **not** billed on write — a
+    /// cached prefix is discounted when it is read and costs nothing to
+    /// create — so `cache_write` is zero rather than the Anthropic 1.25×.
+    /// Carrying the Anthropic convention across would invent a charge.
+    const fn openai(input: f64, output: f64, cache_read: f64) -> Self {
+        Self {
+            input,
+            output,
+            cache_read,
+            cache_write: 0.0,
         }
     }
 
@@ -84,6 +100,28 @@ const BUILT_IN: &[(&str, ModelPrice)] = &[
     ("claude-sonnet-5", ModelPrice::standard(2.0, 10.0)),
     ("claude-sonnet-4-6", ModelPrice::standard(3.0, 15.0)),
     ("claude-haiku-4-5", ModelPrice::standard(1.0, 5.0)),
+    // ---------------------------------------------------------------------
+    // OpenAI models the Codex CLI runs.
+    //
+    // Source: OpenAI's published API pricing (<https://openai.com/api/pricing/>
+    // and <https://platform.openai.com/docs/pricing>), transcribed 2026-09-07.
+    // Standard tier, USD per million tokens; the cache figure is the discounted
+    // *cached input* rate, and cache creation is not billed (see
+    // [`ModelPrice::openai`]). Batch and priority tiers are different products
+    // and are not modelled: the CLI does not use them.
+    //
+    // A model missing from this list stays unpriced (rule 1) — including the
+    // subscription plans, where a Codex session is covered by a seat rather
+    // than metered, and these per-token figures would be the wrong question.
+    // `<data_dir>/model-pricing.json` is the correction path for both.
+    // ---------------------------------------------------------------------
+    ("gpt-5-codex", ModelPrice::openai(1.25, 10.0, 0.125)),
+    ("gpt-5", ModelPrice::openai(1.25, 10.0, 0.125)),
+    ("gpt-5-mini", ModelPrice::openai(0.25, 2.0, 0.025)),
+    ("gpt-5-nano", ModelPrice::openai(0.05, 0.4, 0.005)),
+    ("codex-mini-latest", ModelPrice::openai(1.5, 6.0, 0.375)),
+    ("o3", ModelPrice::openai(2.0, 8.0, 0.5)),
+    ("o4-mini", ModelPrice::openai(1.1, 4.4, 0.275)),
 ];
 
 #[derive(Deserialize)]
@@ -184,11 +222,29 @@ impl PriceTable {
     }
 }
 
-/// `claude-opus-4-5-20251101` → `claude-opus-4-5`. Returns `None` when the id
-/// does not end in an 8-digit date, so an unrelated id is never rewritten.
+/// Strips a snapshot date, in either vendor's spelling:
+/// `claude-opus-4-5-20251101` → `claude-opus-4-5` (Anthropic's `-YYYYMMDD`),
+/// `gpt-5-2025-08-07` → `gpt-5` (OpenAI's `-YYYY-MM-DD`).
+///
+/// Returns `None` when the id does not end in a date, so an unrelated id is
+/// never rewritten — `gpt-5-mini` must stay `gpt-5-mini` and not collapse into
+/// `gpt-5`, whose output tokens cost five times as much.
 fn undated(model: &str) -> Option<&str> {
+    let digits = |value: &str, len: usize| {
+        value.len() == len && value.bytes().all(|byte| byte.is_ascii_digit())
+    };
     let (head, tail) = model.rsplit_once('-')?;
-    (tail.len() == 8 && tail.bytes().all(|byte| byte.is_ascii_digit())).then_some(head)
+    if digits(tail, 8) {
+        return Some(head);
+    }
+    // `-YYYY-MM-DD`: three segments, checked from the end so a partial match
+    // (`gpt-5-mini`, `o4-mini`) falls through instead of being truncated.
+    if !digits(tail, 2) {
+        return None;
+    }
+    let (head, month) = head.rsplit_once('-')?;
+    let (head, year) = head.rsplit_once('-')?;
+    (digits(month, 2) && digits(year, 4)).then_some(head)
 }
 
 #[cfg(test)]
@@ -212,9 +268,41 @@ mod tests {
     }
 
     #[test]
+    fn an_openai_snapshot_resolves_to_its_undated_price() {
+        let table = table();
+        assert_eq!(undated("gpt-5-2025-08-07"), Some("gpt-5"));
+        assert_eq!(undated("o4-mini-2025-04-16"), Some("o4-mini"));
+        assert_eq!(
+            table.price("gpt-5-codex-2025-09-15"),
+            table.price("gpt-5-codex")
+        );
+        // A size suffix is not a date. Collapsing it would charge a mini
+        // session at the full model's rate.
+        assert_eq!(undated("gpt-5-mini"), None);
+        assert_ne!(
+            table.price("gpt-5-mini").unwrap().output,
+            table.price("gpt-5").unwrap().output
+        );
+        assert_eq!(undated("gpt-5-2025-08"), None);
+    }
+
+    #[test]
+    fn openai_rows_do_not_bill_cache_creation() {
+        let table = table();
+        // OpenAI discounts a cached read and charges nothing to create the
+        // cache; carrying Anthropic's 1.25× write rate across would invent a
+        // charge that does not exist.
+        for model in ["gpt-5-codex", "gpt-5-mini", "o3"] {
+            let price = table.price(model).unwrap_or_else(|| panic!("{model}"));
+            assert_eq!(price.cache_write, 0.0, "{model}");
+            assert!(price.cache_read < price.input, "{model}");
+        }
+    }
+
+    #[test]
     fn an_unknown_model_has_no_price_rather_than_a_guessed_one() {
         let table = table();
-        assert!(table.price("gpt-5-codex").is_none());
+        assert!(table.price("gpt-4o").is_none());
         assert!(table.price("claude-3-5-sonnet-20241022").is_none());
         assert!(table.price("").is_none());
     }
@@ -237,14 +325,14 @@ mod tests {
     fn the_override_file_adds_models_and_patches_existing_rows() {
         let file: PricingFile = serde_json::from_str(
             r#"{"models": {
-                "gpt-5-codex": {"input": 1.25, "output": 10, "cacheRead": 0.125},
+                "house-model-1": {"input": 1.25, "output": 10, "cacheRead": 0.125},
                 "claude-opus-5": {"output": 30},
                 "broken": {"cacheRead": 1}
             }}"#,
         )
         .unwrap();
         let table = PriceTable::with_overrides(&Some(file));
-        let added = table.price("gpt-5-codex").unwrap();
+        let added = table.price("house-model-1").unwrap();
         assert_eq!(added.input, 1.25);
         assert_eq!(added.cache_read, 0.125);
         // Unspecified fields fall back to the 1.25× default.

@@ -20,15 +20,29 @@
 //! re-parsing one file alone would be silently deduplicated away by the
 //! request-id set.
 //!
-//! Nothing but counters leaves this module. Prompts, responses, file paths and
-//! session ids are never retained: the parser reads the usage fields out of a
-//! line and drops the rest.
+//! That cache also survives a restart: it is written to
+//! `<data_dir>/usage-scan-cache.json` and read back at start-up, so re-opening
+//! the app does not re-parse a heavy user's whole log tree. Every entry is
+//! re-validated against the file it describes before it is trusted — a length
+//! or mtime that moved is re-parsed from the stored offset, and a file that
+//! shrank drops the whole cache exactly as it does in memory. See
+//! [`ScanState::load`].
+//!
+//! Nothing but counters leaves this module — and nothing but counters is
+//! persisted. Prompts, responses, file paths and session ids are never
+//! retained: the parser reads the usage fields out of a line and drops the
+//! rest. The cache does hold transcript **paths** and Claude **request ids**,
+//! because incremental parsing and cross-file deduplication are exactly what
+//! those two identify; it stays inside the runtime's own 0700 data directory
+//! and is written 0600.
 
 use std::{
     collections::{BTreeMap, HashSet},
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
 };
+
+use serde::{Deserialize, Serialize};
 
 use super::TokenTotals;
 
@@ -40,6 +54,15 @@ const MAX_FILES: usize = 4_000;
 /// Codex three (`sessions/<y>/<m>/<d>/*.jsonl`); six leaves room without
 /// wandering into an unrelated tree.
 const MAX_DEPTH: usize = 6;
+
+/// Cache-format tag. A file written by an older shape is discarded rather than
+/// coerced: a half-understood offset would silently under-count.
+const CACHE_VERSION: u32 = 1;
+/// Ceiling on the persisted request-id set. A user with more counted requests
+/// than this keeps working — the cache is simply not written, and the next
+/// start-up re-parses — because a deduplication set with holes in it would
+/// double-count instead of merely costing a scan.
+const MAX_CACHED_REQUEST_IDS: usize = 250_000;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Provider {
@@ -55,6 +78,14 @@ impl Provider {
         match self {
             Self::Claude => "claude",
             Self::Codex => "codex",
+        }
+    }
+
+    fn from_id(value: &str) -> Option<Self> {
+        match value {
+            "claude" => Some(Self::Claude),
+            "codex" => Some(Self::Codex),
+            _ => None,
         }
     }
 }
@@ -78,12 +109,181 @@ pub struct FileState {
     pub modified_ms: i64,
 }
 
-/// The whole incremental cache. Lives in memory; a restart re-scans.
+/// The whole incremental cache, persisted across restarts by
+/// [`ScanState::load`] / [`ScanState::save`].
 #[derive(Debug, Default)]
 pub struct ScanState {
     files: BTreeMap<PathBuf, FileState>,
     /// Claude request ids already counted, across every file.
     seen: HashSet<String>,
+}
+
+/* ------------------------------ persisted shape --------------------------- */
+
+/// One (date, model) bucket, flattened: a JSON object cannot key on a tuple,
+/// and inventing a delimiter to join them would break on a model id containing
+/// it.
+#[derive(Debug, Serialize, Deserialize)]
+struct CachedBucket {
+    date: String,
+    model: String,
+    tokens: TokenTotals,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct CachedFile {
+    path: String,
+    offset: u64,
+    len: u64,
+    #[serde(rename = "mtimeMs")]
+    mtime_ms: i64,
+    provider: String,
+    #[serde(default)]
+    model: Option<String>,
+    buckets: Vec<CachedBucket>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct CacheFile {
+    version: u32,
+    files: Vec<CachedFile>,
+    /// Claude request ids already counted. Cross-file, so it cannot be stored
+    /// per file: a resumed session replays a request into a *different* file.
+    seen: Vec<String>,
+}
+
+/// `<data_dir>/usage-scan-cache.json`.
+pub fn cache_path() -> PathBuf {
+    crate::paths::data_dir().join("usage-scan-cache.json")
+}
+
+impl ScanState {
+    /// The cache from the data directory, or an empty state.
+    ///
+    /// Every failure — missing, unreadable, malformed, or written by another
+    /// version — is an empty state, never a partial one. Re-scanning costs a
+    /// few seconds; a half-loaded offset table would under-count silently and
+    /// for good.
+    pub fn load() -> Self {
+        Self::load_from(&cache_path())
+    }
+
+    pub fn load_from(path: &Path) -> Self {
+        let Ok(raw) = std::fs::read_to_string(path) else {
+            return Self::default();
+        };
+        let file: CacheFile = match serde_json::from_str(&raw) {
+            Ok(file) => file,
+            Err(error) => {
+                tracing::warn!(%error, "usage scan cache did not parse; rescanning");
+                return Self::default();
+            }
+        };
+        if file.version != CACHE_VERSION {
+            return Self::default();
+        }
+        let mut state = Self {
+            seen: file.seen.into_iter().collect(),
+            ..Self::default()
+        };
+        for entry in file.files {
+            let Some(provider) = Provider::from_id(&entry.provider) else {
+                // An id this build does not know means a different parser
+                // produced those buckets. Its offsets are not ours to trust.
+                return Self::default();
+            };
+            let mut buckets = BTreeMap::new();
+            for bucket in entry.buckets {
+                buckets
+                    .entry((bucket.date, bucket.model))
+                    .or_insert_with(TokenTotals::default)
+                    .add(&bucket.tokens);
+            }
+            state.files.insert(
+                PathBuf::from(entry.path),
+                FileState {
+                    offset: entry.offset,
+                    len: entry.len,
+                    mtime_ms: entry.mtime_ms,
+                    buckets,
+                    model: entry.model,
+                    provider,
+                    // Re-derived from the file itself on the next parse; a
+                    // persisted "last written" would age into a lie about
+                    // which session is the current one.
+                    modified_ms: entry.mtime_ms,
+                },
+            );
+        }
+        state
+    }
+
+    /// Writes the cache to the data directory. Best effort: a scan that
+    /// succeeded is not failed because its cache could not be stored.
+    pub fn save(&self) {
+        self.save_to(&cache_path());
+    }
+
+    pub fn save_to(&self, path: &Path) {
+        if self.seen.len() > MAX_CACHED_REQUEST_IDS {
+            // A truncated deduplication set would double-count a replayed
+            // request, which is worse than re-scanning at the next start-up.
+            return;
+        }
+        let mut seen: Vec<String> = self.seen.iter().cloned().collect();
+        seen.sort();
+        let file = CacheFile {
+            version: CACHE_VERSION,
+            files: self
+                .files
+                .iter()
+                .filter_map(|(path, state)| {
+                    Some(CachedFile {
+                        // A path that is not UTF-8 is skipped rather than
+                        // lossily encoded: the next scan re-parses that file,
+                        // which is correct, where a mangled key would strand
+                        // its buckets under a name nothing matches.
+                        path: path.to_str()?.to_owned(),
+                        offset: state.offset,
+                        len: state.len,
+                        mtime_ms: state.mtime_ms,
+                        provider: state.provider.id().to_owned(),
+                        model: state.model.clone(),
+                        buckets: state
+                            .buckets
+                            .iter()
+                            .map(|((date, model), tokens)| CachedBucket {
+                                date: date.clone(),
+                                model: model.clone(),
+                                tokens: *tokens,
+                            })
+                            .collect(),
+                    })
+                })
+                .collect(),
+            seen,
+        };
+        let Ok(encoded) = serde_json::to_vec(&file) else {
+            return;
+        };
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        // Written beside the target and renamed, so a crash mid-write leaves
+        // the previous cache rather than a truncated one that would be read
+        // back as "these files are fully parsed".
+        let temporary = path.with_extension("json.tmp");
+        if std::fs::write(&temporary, &encoded).is_err() {
+            let _ = std::fs::remove_file(&temporary);
+            return;
+        }
+        crate::paths::harden_file(&temporary);
+        if std::fs::rename(&temporary, path).is_err() {
+            let _ = std::fs::remove_file(&temporary);
+            return;
+        }
+        crate::paths::harden_file(path);
+    }
 }
 
 /// What a scan produced.
@@ -604,5 +804,138 @@ mod tests {
         let result = ScanState::default().scan_roots(&fixture_roots(home.path()));
         assert!(result.buckets.is_empty());
         assert!(result.current.is_none());
+    }
+
+    /* ------------------------------- the cache ---------------------------- */
+
+    fn totals(result: &ScanResult) -> BTreeMap<BucketKey, TokenTotals> {
+        result.buckets.clone()
+    }
+
+    #[test]
+    fn a_restart_reuses_the_cache_instead_of_reparsing() {
+        let home = fixture();
+        let cache = home.path().join("usage-scan-cache.json");
+        let mut first = ScanState::default();
+        let before = first.scan_roots(&fixture_roots(home.path()));
+        first.save_to(&cache);
+        assert!(cache.exists());
+
+        // A fresh process: the cache is the only thing carried over.
+        let mut restarted = ScanState::load_from(&cache);
+        let path = home.path().join(".claude/projects/demo/session.jsonl");
+        let offset = restarted.files.get(&path).unwrap().offset;
+        assert!(offset > 0, "the cache must carry the parse position");
+
+        // Replace the transcript's bytes with lines carrying different usage,
+        // keeping its length and mtime. A scan that re-parsed would report
+        // those numbers; identical totals prove it read the cache instead.
+        let original = std::fs::metadata(&path).unwrap();
+        let filler = b"{\"type\":\"assistant\",\"requestId\":\"decoy\",\"message\":{\"model\":\"m\",\"usage\":{\"output_tokens\":999999}}}\n";
+        let mut replacement = Vec::new();
+        while replacement.len() + filler.len() <= original.len() as usize {
+            replacement.extend_from_slice(filler);
+        }
+        replacement.resize(original.len() as usize, b'\n');
+        std::fs::write(&path, &replacement).unwrap();
+        std::fs::File::options()
+            .append(true)
+            .open(&path)
+            .unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(original.modified().unwrap()))
+            .unwrap();
+
+        let after = restarted.scan_roots(&fixture_roots(home.path()));
+        assert_eq!(totals(&after), totals(&before));
+    }
+
+    #[test]
+    fn a_cached_file_that_grew_is_parsed_from_where_it_stopped() {
+        let home = fixture();
+        let cache = home.path().join("usage-scan-cache.json");
+        let path = home.path().join(".claude/projects/demo/session.jsonl");
+        let mut first = ScanState::default();
+        let before = first.scan_roots(&fixture_roots(home.path()));
+        first.save_to(&cache);
+
+        use std::io::Write;
+        let mut file = std::fs::OpenOptions::new().append(true).open(&path).unwrap();
+        writeln!(
+            file,
+            r#"{{"type":"assistant","requestId":"req-3","timestamp":"2026-09-05T11:00:00Z","message":{{"model":"claude-opus-5","usage":{{"output_tokens":7}}}}}}"#
+        )
+        .unwrap();
+        drop(file);
+
+        let mut restarted = ScanState::load_from(&cache);
+        let after = restarted.scan_roots(&fixture_roots(home.path()));
+        let sum = |result: &ScanResult| -> u64 {
+            result.buckets.values().map(|tokens| tokens.output).sum()
+        };
+        assert_eq!(sum(&after) - sum(&before), 7);
+    }
+
+    #[test]
+    fn a_replayed_request_stays_deduplicated_across_a_restart() {
+        let home = fixture();
+        let cache = home.path().join("usage-scan-cache.json");
+        let mut first = ScanState::default();
+        let before = first.scan_roots(&fixture_roots(home.path()));
+        first.save_to(&cache);
+
+        // A resumed session writes the same request into a *different* file,
+        // which is exactly why the request-id set has to survive the restart.
+        std::fs::write(
+            home.path().join(".claude/projects/demo/resumed.jsonl"),
+            concat!(
+                r#"{"type":"assistant","requestId":"req-1","timestamp":"2026-09-05T10:00:00Z","message":{"model":"claude-opus-5","usage":{"input_tokens":100,"output_tokens":200}}}"#,
+                "\n"
+            ),
+        )
+        .unwrap();
+        let after = ScanState::load_from(&cache).scan_roots(&fixture_roots(home.path()));
+        assert_eq!(
+            totals(&after),
+            totals(&before),
+            "a replayed request must not be counted twice after a restart"
+        );
+    }
+
+    #[test]
+    fn an_unusable_cache_rescans_rather_than_loading_half_of_it() {
+        let home = fixture();
+        let cache = home.path().join("usage-scan-cache.json");
+        let expected = totals(&ScanState::default().scan_roots(&fixture_roots(home.path())));
+
+        for content in [
+            "not json at all",
+            r#"{"version":999,"files":[],"seen":[]}"#,
+            // A provider this build does not know means another parser wrote
+            // those offsets; trusting them would strand real usage.
+            r#"{"version":1,"files":[{"path":"/x","offset":10,"len":10,"mtimeMs":1,"provider":"martian","buckets":[]}],"seen":["req-1"]}"#,
+        ] {
+            std::fs::write(&cache, content).unwrap();
+            let mut state = ScanState::load_from(&cache);
+            assert!(state.files.is_empty(), "{content}");
+            assert!(state.seen.is_empty(), "{content}");
+            assert_eq!(totals(&state.scan_roots(&fixture_roots(home.path()))), expected);
+        }
+        // A cache that is not there at all is the same empty state.
+        std::fs::remove_file(&cache).unwrap();
+        assert!(ScanState::load_from(&cache).files.is_empty());
+    }
+
+    #[test]
+    fn the_cache_holds_no_transcript_text() {
+        let home = fixture();
+        let cache = home.path().join("usage-scan-cache.json");
+        let mut state = ScanState::default();
+        state.scan_roots(&fixture_roots(home.path()));
+        state.save_to(&cache);
+        let written = std::fs::read_to_string(&cache).unwrap();
+        assert!(!written.contains("secret prompt"), "{written}");
+        assert!(!written.contains("\"s1\""), "{written}");
+        // No `.tmp` left behind by the atomic write.
+        assert!(!cache.with_extension("json.tmp").exists());
     }
 }
