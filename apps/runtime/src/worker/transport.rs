@@ -14,7 +14,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use armadra_protocol::{Message, v1::*};
 
-use super::{MAX_FRAME, Worker, channel, outbox, session, socket, watch};
+use super::{MAX_FRAME, Worker, channel, outbox, session, session_watch, socket, watch};
 
 /// The remote-execution transport.
 ///
@@ -158,9 +158,9 @@ where
 {
     let mut worker = Worker {
         command_path: Some(path.clone()),
-        canvas,
+        canvas: canvas.clone(),
         settings_file,
-        sessions: session_data_dir.map(session::Bridge::new),
+        sessions: session_data_dir.clone().map(session::Bridge::new),
         ..Default::default()
     };
     // The state directory's privacy is proven here, once, exactly as the
@@ -193,6 +193,24 @@ where
         };
         worker.attach_channel(channel.upcaller(), socket, pipe);
     }
+    // A pane that dies on its own is the one lifecycle event no request
+    // carries, so it is the one that needs watching for. The watcher gets its
+    // own bridge rather than sharing the request path's: they run
+    // concurrently, and a session command must not queue behind a liveness
+    // check that happens to be mid-flight.
+    let watcher = match (canvas, session_data_dir, channel.as_ref()) {
+        (Some(pool), Some(data_dir), Some(channel)) => {
+            let bridge = std::sync::Arc::new(
+                session::Bridge::new(data_dir).with_upcalls(Some(channel.upcaller())),
+            );
+            Some(tokio::spawn(session_watch::run(
+                pool,
+                bridge,
+                session_watch::DEFAULT_INTERVAL,
+            )))
+        }
+        _ => None,
+    };
     let worker = std::sync::Arc::new(tokio::sync::Mutex::new(worker));
     let (stop, stop_rx) = tokio::sync::watch::channel(false);
     let bearer_task = match (bearer, channel.as_ref()) {
@@ -213,6 +231,10 @@ where
     )
     .await;
     let _ = stop.send(true);
+    if let Some(task) = watcher {
+        task.abort();
+        let _ = task.await;
+    }
     if let Some(task) = bearer_task {
         task.abort();
         let _ = task.await;

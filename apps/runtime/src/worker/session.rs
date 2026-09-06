@@ -165,6 +165,24 @@ impl Bridge {
             tracing::warn!(%error, "a session upcall could not be queued");
         }
     }
+
+    /// Asks the resident Runtime which of these sessions it still holds.
+    ///
+    /// Public because the loss watcher ([`super::session_watch`]) asks the same
+    /// question on a timer that the Host asks on demand. One question, one
+    /// route, one answer: a second way to ask "is this pane there" would be a
+    /// second way to be wrong about it.
+    pub async fn reclaim_runs(
+        &self,
+        input: &ReclaimSessionRunsRequest,
+    ) -> AppResult<WorkerSessionStates> {
+        reclaim(self, input).await
+    }
+
+    /// Reports one run event upward, for a caller outside this module.
+    pub async fn report_run(&self, kind: WorkerSessionUpcallKind, state: &WorkerSessionState) {
+        self.report(kind, state).await;
+    }
 }
 
 fn text(value: &Value, key: &str) -> String {

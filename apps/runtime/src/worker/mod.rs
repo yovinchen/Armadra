@@ -13,6 +13,7 @@ pub mod language_link;
 pub mod outbox;
 pub mod service;
 pub mod session;
+pub mod session_watch;
 pub mod settings;
 pub mod socket;
 pub mod transport;

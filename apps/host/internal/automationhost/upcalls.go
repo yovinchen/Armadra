@@ -9,6 +9,7 @@ import (
 	"log/slog"
 
 	pb "armadra.local/host/gen/armadra/v1"
+	"armadra.local/host/internal/sessionhost"
 	"armadra.local/host/internal/storage"
 	"armadra.local/host/internal/worker"
 	"google.golang.org/protobuf/proto"
@@ -32,6 +33,13 @@ import (
 // It is deliberately not an agent-domain kind: nothing reads it as agent state.
 const UpcallEntityKind = "workerUpcall"
 
+// SessionObserver is the session domain's landing point for a run report
+// (business migration §2.6, upcall 140). It is an interface so this package
+// keeps knowing nothing about session records beyond "somebody owns them".
+type SessionObserver interface {
+	ObserveRun(ctx context.Context, report *pb.WorkerSessionUpcall) error
+}
+
 // upcallRecorder writes one entity, and therefore one event, per accepted
 // upcall.
 type upcallRecorder struct {
@@ -39,6 +47,9 @@ type upcallRecorder struct {
 	// hostInstance namespaces the idempotency key, so two Hosts sharing a store
 	// cannot collide on one Worker's sequence numbers.
 	hostInstance string
+	// sessions is nil on a Host that assembles no session service. The frame is
+	// still recorded; it simply changes no session record.
+	sessions SessionObserver
 }
 
 // Deliver records the frame, and returns only once it is durable: the
@@ -55,6 +66,14 @@ func (r upcallRecorder) Deliver(ctx context.Context, upcall worker.Upcall) error
 	payload, err := proto.Marshal(frame)
 	if err != nil {
 		return fmt.Errorf("worker upcall could not be encoded: %w", worker.ErrUpcallUnacceptable)
+	}
+	// The domain lands *before* the raw record. The record's id is the
+	// deduplication key, so a replay that found it already there returns early
+	// below; projecting first is what makes a Host that crashed between the two
+	// writes converge rather than drop the report. Every projection is
+	// idempotent, so doing it twice costs nothing.
+	if err = r.project(ctx, frame); err != nil {
+		return err
 	}
 	// The entity id *is* the deduplication key. The Host also deduplicates in
 	// memory, but that window dies with the process; this makes a replay after
@@ -89,11 +108,38 @@ func (r upcallRecorder) Deliver(ctx context.Context, upcall worker.Upcall) error
 	return nil
 }
 
+// project hands the frame to whichever domain owns what it is about.
+//
+// A domain that is not assembled on this Host is not an error: the frame is
+// still recorded, and a later batch reading those records loses nothing. A
+// domain that *is* assembled and refuses permanently — a report about a session
+// no record exists for — is turned into an unacceptable frame, because
+// replaying it forever cannot make the record appear. Anything else is left for
+// the Worker to replay.
+func (r upcallRecorder) project(ctx context.Context, frame *pb.WorkerUpcall) error {
+	report := frame.GetSession()
+	if report == nil || r.sessions == nil {
+		return nil
+	}
+	err := r.sessions.ObserveRun(ctx, report)
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, sessionhost.ErrUnknownSession), errors.Is(err, sessionhost.ErrInvalid):
+		return fmt.Errorf("run report names no session this Host has: %w", worker.ErrUpcallUnacceptable)
+	default:
+		return fmt.Errorf("run report could not be applied: %w", err)
+	}
+}
+
 // workspaceOf reports the workspace the report belongs to, empty when the
 // event is not scoped to one. An empty workspace is a legal storage key.
 func workspaceOf(frame *pb.WorkerUpcall) string {
 	if agent := frame.GetAgent(); agent != nil {
 		return agent.GetWorkspaceId()
+	}
+	if session := frame.GetSession(); session != nil {
+		return session.GetWorkspaceId()
 	}
 	return ""
 }
@@ -103,6 +149,9 @@ func workspaceOf(frame *pb.WorkerUpcall) string {
 func upcallKind(frame *pb.WorkerUpcall) string {
 	if agent := frame.GetAgent(); agent != nil {
 		return "agent:" + agent.GetKind().String()
+	}
+	if session := frame.GetSession(); session != nil {
+		return "session:" + session.GetKind().String()
 	}
 	return "unknown"
 }

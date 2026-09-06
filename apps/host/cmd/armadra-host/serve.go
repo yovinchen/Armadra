@@ -162,11 +162,6 @@ func serveHost(parent context.Context, c config) (err error) {
 			return err
 		}
 	}
-	plans, err := startAutomation(ctx, c, state.ID, identity.InstanceID, database)
-	if err != nil {
-		return err
-	}
-	defer func() { err = errors.Join(err, plans.Close()) }()
 	repositories, err := startGithub(c, state.ID, database)
 	if err != nil {
 		return err
@@ -250,6 +245,16 @@ func serveHost(parent context.Context, c config) (err error) {
 	if err != nil {
 		return err
 	}
+	// Automation is assembled after the session surface because it owns the
+	// resident Worker channel, and that channel is how a run report reaches the
+	// records that describe it. Without the observer the frame would still be
+	// recorded and still change nothing, which is exactly the state this batch
+	// is fixing.
+	plans, err := startAutomation(ctx, c, state.ID, identity.InstanceID, database, sessions)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, plans.Close()) }()
 	// The agent surface is assembled on the same terms, and needs the same
 	// channel for the same reason: recording that somebody allowed a command is
 	// worth nothing unless the CLI that is blocked on it hears. A Host with no
@@ -387,16 +392,14 @@ func serveHost(parent context.Context, c config) (err error) {
 	// leaves the sessions LOST for now, which a later start resolves; failing
 	// to boot the Host over it would be refusing to serve five other domains
 	// because one machine was slow.
-	go func() {
-		outcome, reclaimErr := sessions.Reclaim(ctx, "")
-		switch {
-		case reclaimErr != nil:
-			fmt.Fprintln(os.Stderr, "Armadra: sessions could not be reconciled:", reclaimErr)
-		case len(outcome.Ended)+len(outcome.Lost)+len(outcome.Regenerated) > 0:
-			fmt.Printf("Armadra reconciled sessions: %d ended, %d unreachable, %d replaced\n",
-				len(outcome.Ended), len(outcome.Lost), len(outcome.Regenerated))
-		}
-	}()
+	//
+	// The same pass then repeats on a timer, because "once at boot" left every
+	// minute after it uncovered: a pane that died while nobody was looking
+	// stayed RUNNING here until the next Start. The Worker's own RUN_LOST
+	// upcall is what makes that prompt; this is the backstop for the cases an
+	// upcall cannot cover — no Worker running when the pane died, a frame
+	// dropped while this process was down, a machine that has since come back.
+	go func() { _ = sessions.Reconcile(ctx, sessionhost.DefaultReconcileInterval) }()
 	workers := 1
 	if listener != nil {
 		workers++
@@ -506,8 +509,8 @@ func applyExternalSwitch(ctx context.Context, c config, external *externalservic
 // startAutomation returns nil when the operator did not configure an execution
 // Worker. Scheduling is then unsupported and every other Host function keeps
 // working; a half-configured pair is rejected earlier, in parseConfig.
-func startAutomation(ctx context.Context, c config, hostID, instanceID string, database *storage.Store) (*automationhost.Service, error) {
-	options := automationhost.Options{Executable: c.workerBinary, StateDir: c.workerStateDir, HostID: hostID, InstanceID: instanceID, Store: database}
+func startAutomation(ctx context.Context, c config, hostID, instanceID string, database *storage.Store, sessions automationhost.SessionObserver) (*automationhost.Service, error) {
+	options := automationhost.Options{Executable: c.workerBinary, StateDir: c.workerStateDir, HostID: hostID, InstanceID: instanceID, Store: database, Sessions: sessions}
 	if !automationhost.Configured(options) {
 		return nil, nil
 	}
