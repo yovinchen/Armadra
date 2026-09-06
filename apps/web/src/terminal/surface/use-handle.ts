@@ -1,6 +1,7 @@
 import * as React from "react";
 
-import { runtimeApi } from "@/api/client";
+import { sessionGateway } from "@/session";
+import { useCanvasStore } from "@/store/canvas-store";
 import { pasteIntoTerminal, writeClipboard } from "./clipboard";
 import { ensureSearch } from "./search";
 import type { SurfaceRefs } from "./refs";
@@ -40,7 +41,14 @@ export function useSurfaceHandle(
           return;
         }
         if (sessionId) {
-          void runtimeApi.terminateTerminal(sessionId, mode);
+          // Nothing is attached, so the request goes through the gateway
+          // rather than down a socket: ending a session is a lifecycle
+          // decision and follows whichever side owns the record.
+          void sessionGateway.terminate(
+            useCanvasStore.getState().workspace?.id ?? "",
+            sessionId,
+            mode,
+          );
         }
       },
       restart: () => {
@@ -50,8 +58,8 @@ export function useSurfaceHandle(
       },
       recycle: () => {
         if (!sessionId) return;
-        void runtimeApi
-          .recycleTerminal(sessionId)
+        void sessionGateway
+          .recycle(useCanvasStore.getState().workspace?.id ?? "", sessionId)
           .then(() => setAttempt((value) => value + 1))
           .catch((cause: unknown) => {
             patch({

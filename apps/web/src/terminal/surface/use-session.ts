@@ -1,7 +1,7 @@
 import * as React from "react";
 
-import { runtimeApi } from "@/api/client";
 import { agentSessionRequest } from "@/agent/launch";
+import { sessionGateway } from "@/session";
 import { useCanvasStore } from "@/store/canvas-store";
 import type { SurfaceRefs } from "./refs";
 import type { ConnectionStatus } from "./types";
@@ -9,6 +9,14 @@ import type { ConnectionStatus } from "./types";
 /**
  * 会话的建立：复用节点上记着的那一个，或者新建一个。和 `hello` 的时序绑在
  * 一起，所以 `freshSessionRef` / `launchPhaseRef` 也在这里复位。
+ *
+ * 两步都经会话网关（业务迁移 §2.6）。挂载先只**读**——这个节点有没有一个
+ * 还活着的会话——起不起是第二个决定，由这里在读不到时明确做出。归属在
+ * Runtime 还是 Host 由网关判断，调用方不需要知道走了哪一侧。
+ *
+ * 一个 `lost` 的会话不当成没有：执行主机很可能还留着那个 pane，重新起一个
+ * 等于在同一个 pane 上跑第二个程序。所以只有真的读不到、或者读到的已经结束
+ * 了，才会走到创建那一步。
  */
 export function useTerminalSession(
   refs: SurfaceRefs,
@@ -32,16 +40,16 @@ export function useTerminalSession(
           ? node.data
           : refs.dataRef.current;
 
-      if (!forceNew && nodeData.sessionId) {
-        try {
-          const existing = await runtimeApi.getTerminal(nodeData.sessionId);
-          if (existing.status === "running") {
-            refs.freshSessionRef.current = false;
-            setSessionId(existing.id);
-            return;
-          }
-        } catch {
-          // 404 / Runtime 重启：往下走，建一个新的
+      if (!forceNew) {
+        const existing = await sessionGateway.find(
+          workspace.id,
+          nodeId,
+          nodeData.sessionId,
+        );
+        if (existing && existing.state === "running") {
+          refs.freshSessionRef.current = false;
+          setSessionId(existing.sessionId);
+          return;
         }
       }
 
@@ -49,13 +57,12 @@ export function useTerminalSession(
       refs.creatingRef.current = true;
       patch({ connection: "starting", error: null });
       try {
-        const created = await runtimeApi.createTerminal({
+        const started = await sessionGateway.start({
           workspaceId: workspace.id,
-          cwd: nodeData.cwd ?? workspace.rootPath,
-          args: [],
           nodeId,
+          cwd: nodeData.cwd ?? workspace.rootPath,
           ...(nodeData.shell ? { shell: nodeData.shell } : {}),
-          // SSH 终端（§21）：只发主机 id，Runtime 自己从设置里拼 `ssh …`。
+          // SSH 终端（§21）：只发主机 id，执行主机自己从设置里拼 `ssh …`。
           ...(nodeData.ssh ? { ssh: { hostId: nodeData.ssh.hostId } } : {}),
           ...(nodeData.agent
             ? { agent: agentSessionRequest(nodeData.agent) }
@@ -64,10 +71,10 @@ export function useTerminalSession(
         refs.freshSessionRef.current = true;
         refs.launchPhaseRef.current = "idle";
         useCanvasStore.getState().updateNodeData(nodeId, {
-          sessionId: created.id,
+          sessionId: started.sessionId,
           lastExitCode: null,
         });
-        setSessionId(created.id);
+        setSessionId(started.sessionId);
         patch({ connection: "connecting", exitCode: null });
       } catch (cause) {
         patch({

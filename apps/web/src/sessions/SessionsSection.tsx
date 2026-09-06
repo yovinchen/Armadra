@@ -16,7 +16,7 @@ import {
   useSessions,
   type SessionBucket,
 } from "../agent/sessions";
-import { runtimeApi } from "../api/client";
+import { sessionGateway } from "../session";
 import { useT } from "../app/preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
 import { Button } from "../ui/button";
@@ -123,8 +123,8 @@ export function SessionsSection({ boardId }: { boardId: string }) {
                     variant="ghost"
                     size="xs"
                     onClick={() => {
-                      void runtimeApi
-                        .recycleTerminal(row.sessionId)
+                      void sessionGateway
+                        .recycle(workspace.id, row.sessionId)
                         .catch(() => toast.error(t("sessions.reopenFailed")));
                     }}
                   >

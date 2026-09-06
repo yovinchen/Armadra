@@ -325,6 +325,7 @@ export * from "./events.js";
 export * from "./filesystem.js";
 export * from "./git.js";
 export * from "./ownership.js";
+export * from "./session.js";
 export * from "./settings.js";
 export * from "./github/index.js";
 export * from "./updates.js";

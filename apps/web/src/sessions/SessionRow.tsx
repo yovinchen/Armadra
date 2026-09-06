@@ -12,6 +12,7 @@ import { agentLabel } from "../agent/launch";
 import { basename, type SessionRow as SessionRowData } from "../agent/sessions";
 import { isAttention, useAgentStatusStore } from "../agent/status-store";
 import { runtimeApi } from "../api/client";
+import { sessionGateway } from "../session";
 import {
   CENTER_NODE_EVENT,
   requestCenterOnNode,
@@ -87,8 +88,12 @@ export function SessionRow({ row }: { row: SessionRowData }) {
 
   const terminate = () => {
     setConfirming(false);
-    void runtimeApi
-      .terminateTerminal(row.sessionId, "session")
+    void sessionGateway
+      .terminate(
+        useCanvasStore.getState().workspace?.id ?? "",
+        row.sessionId,
+        "session",
+      )
       .catch(() => toast.error(t("sessions.terminateFailed")));
   };
 

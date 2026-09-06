@@ -32,6 +32,7 @@ import { IconButton } from "@/ui/icon-button";
 import { useEnabledAgents } from "@/app/use-agents";
 import { useT } from "@/app/preferences-store";
 import { useBoardAutosave } from "@/save/autosave";
+import { sessionGateway } from "@/session";
 import { useCanvasStore } from "@/store/canvas-store";
 import { runtimeApi } from "@/api/client";
 import { createAssetStore } from "./assets";
@@ -186,9 +187,15 @@ function endSessionsOf(nodeIds: readonly string[]): void {
     if (!nodeIds.includes(node.id) || node.data.kind !== "terminal") continue;
     const sessionId = node.data.sessionId;
     if (!sessionId) continue;
-    void runtimeApi.terminateTerminal(sessionId, "session").catch(() => {
-      /* 会话可能早已结束；Runtime 的巡检会兜底 */
-    });
+    void sessionGateway
+      .terminate(
+        useCanvasStore.getState().workspace?.id ?? "",
+        sessionId,
+        "session",
+      )
+      .catch(() => {
+        /* 会话可能早已结束；Runtime 的巡检会兜底 */
+      });
   }
 }
 

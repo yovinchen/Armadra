@@ -132,7 +132,10 @@ describe("sessions", () => {
               kind: SessionKind.TERMINAL,
               status: SessionStatus.RUNNING,
               attachState: SessionAttachState.DETACHED,
-              launch: { shell: "/bin/zsh", workingDirectory: "/home/用户/项目" },
+              launch: {
+                shell: "/bin/zsh",
+                workingDirectory: "/home/用户/项目",
+              },
             },
           ],
         },

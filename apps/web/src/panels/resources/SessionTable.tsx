@@ -11,7 +11,7 @@ import { ChevronDown, ChevronRight, Crosshair, X } from "lucide-react";
 import { toast } from "sonner";
 import type { SessionResources } from "@armadra/shared";
 
-import { runtimeApi } from "@/api/client";
+import { sessionGateway } from "@/session";
 import { useT } from "@/app/preferences-store";
 import { centerNode } from "@/sessions/SessionRow";
 import { useCanvasStore } from "@/store/canvas-store";
@@ -69,8 +69,12 @@ export function SessionTable({
 
   const endSession = (session: SessionResources) => {
     setEnding(null);
-    void runtimeApi
-      .terminateTerminal(session.sessionId, "session")
+    void sessionGateway
+      .terminate(
+        useCanvasStore.getState().workspace?.id ?? "",
+        session.sessionId,
+        "session",
+      )
       .catch(() => toast.error(t("resources.endFailed")));
   };
 
