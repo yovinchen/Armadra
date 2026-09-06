@@ -53,6 +53,8 @@ export interface PanelState {
   github: "closed" | "drawer";
   /** 语言服务的诊断（语言服务设计 §1.1）。按工作空间聚合，点击跳转。 */
   problems: "closed" | "drawer";
+  /** 「查找引用」的结果（语言服务设计 §1.1）。按文件分组，点击跳转。 */
+  references: "closed" | "drawer";
   settings: boolean;
   palette: boolean;
   /** 快速打开（⌘P，E01/M4）。 */

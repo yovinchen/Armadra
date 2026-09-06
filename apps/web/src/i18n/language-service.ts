@@ -81,6 +81,12 @@ export const languageService: MessageModule = {
     "lsp.blocked.unreadable": "读不到这个文件",
     "lsp.blocked.noVersion": "没有内容版本，无法安全写入",
 
+    "lsp.action.title": "代码操作",
+    "lsp.action.loading": "正在获取…",
+    "lsp.action.empty": "这里没有可用的代码操作",
+    "lsp.action.failed": "获取代码操作失败",
+    "lsp.action.noEdit": "这条操作没有可应用的修改",
+
     "problems.title": "问题",
     "problems.close": "关闭",
     "problems.empty": "没有诊断",
@@ -88,6 +94,22 @@ export const languageService: MessageModule = {
     "problems.summary": "{errors} 个错误 · {warnings} 个警告",
     "problems.at": "第 {line} 行",
     "cmd.app.problems": "问题面板",
+
+    "references.title": "引用",
+    "references.titleFor": "{symbol} 的引用",
+    "references.close": "关闭",
+    "references.searching": "正在查找…",
+    "references.failed": "查找引用失败",
+    "references.empty": "在编辑器里按 ⇧F12 查找引用",
+    "references.summary": "{count} 处 · {files} 个文件",
+    "references.open": "打开 {path} 第 {line} 行",
+    "references.external": "另有 {count} 处在工作区之外，不能打开",
+    "cmd.app.references": "引用面板",
+
+    "quickOpen.documentSymbols": "当前文件的符号",
+    "quickOpen.workspaceSymbols": "工作区符号",
+    "quickOpen.noDocument": "先打开一个编辑器节点",
+    "quickOpen.noSymbols": "没有符号；语言服务没在跑时这里是空的",
   },
   en: {
     "lsp.title": "Language service",
@@ -164,6 +186,12 @@ export const languageService: MessageModule = {
     "lsp.blocked.noVersion":
       "No content version, so it cannot be written safely",
 
+    "lsp.action.title": "Code actions",
+    "lsp.action.loading": "Asking the server…",
+    "lsp.action.empty": "No code actions here",
+    "lsp.action.failed": "Could not get code actions",
+    "lsp.action.noEdit": "This action carries no change to apply",
+
     "problems.title": "Problems",
     "problems.close": "Close",
     "problems.empty": "No diagnostics",
@@ -172,5 +200,21 @@ export const languageService: MessageModule = {
     "problems.summary": "{errors} errors · {warnings} warnings",
     "problems.at": "Line {line}",
     "cmd.app.problems": "Problems panel",
+
+    "references.title": "References",
+    "references.titleFor": "References to {symbol}",
+    "references.close": "Close",
+    "references.searching": "Searching…",
+    "references.failed": "Could not find references",
+    "references.empty": "Press ⇧F12 in the editor to find references",
+    "references.summary": "{count} in {files} files",
+    "references.open": "Open {path} line {line}",
+    "references.external": "{count} more outside the workspace, not openable",
+    "cmd.app.references": "References panel",
+
+    "quickOpen.documentSymbols": "Symbols in this file",
+    "quickOpen.workspaceSymbols": "Workspace symbols",
+    "quickOpen.noDocument": "Open an editor node first",
+    "quickOpen.noSymbols": "No symbols; empty while no language server runs",
   },
 };

@@ -225,6 +225,54 @@ describe("language client", () => {
     expect(useDiagnosticsStore.getState().byUri).toEqual({});
   });
 
+  // `workspace/applyEdit` is answered on the execution host — it is the LSP
+  // client, it holds the write grant, and it is where the files are. One never
+  // reaches a session socket in practice; if one did, the browser must refuse
+  // it rather than apply it, or the same edit would land twice.
+  it("refuses a server's workspace/applyEdit instead of applying it", async () => {
+    const { client } = acquireLanguageClient("w1", "python", fakeSocketFactory);
+    await settle();
+    const socket = lastSocket()!;
+    socket.open();
+    answerInitialize(socket);
+    await settle();
+    const view = open(client, "armadra:///src/main.py", "import os\n");
+    await settle();
+    const before = socket.sent.length;
+
+    socket.receive({
+      jsonrpc: "2.0",
+      id: "server-1",
+      method: "workspace/applyEdit",
+      params: {
+        edit: {
+          changes: {
+            "armadra:///src/main.py": [
+              {
+                range: {
+                  start: { line: 0, character: 0 },
+                  end: { line: 0, character: 6 },
+                },
+                newText: "from",
+              },
+            ],
+          },
+        },
+      },
+    });
+    await settle();
+
+    const answers = socket.sent
+      .slice(before)
+      .map((raw) => JSON.parse(raw) as Record<string, unknown>);
+    expect(answers).toHaveLength(1);
+    expect(answers[0]!.id).toBe("server-1");
+    // Told, not silently dropped: a server left waiting on an answer is a
+    // server that stops asking for anything else.
+    expect((answers[0]!.error as { code: number }).code).toBe(-32601);
+    expect(view.state.doc.toString()).toBe("import os\n");
+  });
+
   it("reopens a session after the socket drops, and replays didOpen", async () => {
     vi.useFakeTimers();
     try {

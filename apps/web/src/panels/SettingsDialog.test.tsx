@@ -174,6 +174,7 @@ describe("SettingsDialog", () => {
         usage: "closed",
         github: "closed",
         problems: "closed",
+        references: "closed",
         settings: true,
         palette: false,
         quickOpen: false,

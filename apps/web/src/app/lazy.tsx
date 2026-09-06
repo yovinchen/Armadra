@@ -96,8 +96,20 @@ export const ProblemsPanel = lazy(() =>
   })),
 );
 
+export const ReferencesPanel = lazy(() =>
+  import("@/panels/references/ReferencesPanel").then((module) => ({
+    default: module.ReferencesPanel,
+  })),
+);
+
 export const EditPreviewDialog = lazy(() =>
   import("@/editor/language/EditPreviewDialog").then((module) => ({
     default: module.EditPreviewDialog,
+  })),
+);
+
+export const CodeActionMenu = lazy(() =>
+  import("@/editor/language/CodeActionMenu").then((module) => ({
+    default: module.CodeActionMenu,
   })),
 );

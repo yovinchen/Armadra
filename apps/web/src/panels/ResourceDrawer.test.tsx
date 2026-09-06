@@ -196,6 +196,7 @@ beforeEach(() => {
       usage: "closed",
       github: "closed",
       problems: "closed",
+      references: "closed",
       quickOpen: false,
       settings: false,
       palette: false,

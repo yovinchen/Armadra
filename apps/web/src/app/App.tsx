@@ -16,8 +16,10 @@ import {
   GithubDrawer,
   HandoffDialog,
   HandoffHistoryDrawer,
+  CodeActionMenu,
   EditPreviewDialog,
   ProblemsPanel,
+  ReferencesPanel,
   ResourceDrawer,
   QuickOpen,
   SettingsDialog,
@@ -129,7 +131,9 @@ function AppShell() {
         <ExplorerDrawer />
         <SourceControlDrawer />
         <ProblemsPanel />
+        <ReferencesPanel />
         <EditPreviewDialog />
+        <CodeActionMenu />
         <ResourceDrawer />
         <AutomationDrawer />
         <UsageDashboard />

@@ -18,6 +18,8 @@ installDomPolyfills();
 
 const fileIndex = vi.fn();
 const openFileInEditor = vi.fn();
+const documentSymbols = vi.fn();
+const workspaceSymbols = vi.fn();
 
 vi.mock("@/api/client", () => ({
   RUNTIME_URL: "http://runtime",
@@ -26,6 +28,16 @@ vi.mock("@/api/client", () => ({
 vi.mock("@/files/open-editor", () => ({
   openFileInEditor: (...args: unknown[]) => openFileInEditor(...args),
 }));
+vi.mock("@/editor/language/symbols", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/editor/language/symbols")
+  >("@/editor/language/symbols");
+  return {
+    ...actual,
+    documentSymbols: (...args: unknown[]) => documentSymbols(...args),
+    workspaceSymbols: (...args: unknown[]) => workspaceSymbols(...args),
+  };
+});
 
 const timestamp = "2026-09-05T00:00:00.000Z";
 const workspace: Workspace = {
@@ -60,9 +72,31 @@ beforeEach(() => {
     scanned: 20,
   });
   openFileInEditor.mockReset();
+  documentSymbols.mockReset().mockResolvedValue([]);
+  workspaceSymbols.mockReset().mockResolvedValue([]);
   useCanvasStore.setState({ workspace });
   useCanvasStore.getState().setPanel("quickOpen", true);
 });
+
+/** 一个已经打开的编辑器节点，`@` 问的就是它。 */
+function openEditorNode(path: string) {
+  useCanvasStore.setState({
+    document: {
+      nodes: [
+        {
+          id: "n1",
+          type: "editor",
+          position: { x: 0, y: 0 },
+          size: { width: 400, height: 300 },
+          title: path,
+          data: { kind: "editor", path },
+        },
+      ],
+      edges: [],
+    } as never,
+    selectedNodeIds: ["n1"],
+  });
+}
 
 describe("QuickOpen", () => {
   it("asks the runtime for the match and opens the chosen file", async () => {
@@ -101,5 +135,60 @@ describe("QuickOpen", () => {
       target: { value: "x" },
     });
     expect(await screen.findByText("读取索引失败")).toBeTruthy();
+  });
+
+  // `@` 与 `#` 是两种问法，问的也是两个不同的东西：一个文档的符号表，和
+  // 整个工作区的符号索引。走错一条就是列出了别的文件里的东西。
+  it("asks the current document for `@` and jumps to the symbol's line", async () => {
+    openEditorNode("src/api/client.ts");
+    documentSymbols.mockResolvedValue([
+      { name: "openSession", kind: 12, path: "src/api/client.ts", line: 41 },
+    ]);
+    renderQuickOpen();
+    fireEvent.change(screen.getByPlaceholderText("按文件名查找"), {
+      target: { value: "@open" },
+    });
+    await waitFor(() =>
+      expect(documentSymbols).toHaveBeenCalledWith(
+        workspace.id,
+        "src/api/client.ts",
+      ),
+    );
+    // 前缀不是文件名的一部分：`@open` 不该同时变成一次文件索引查询。
+    expect(fileIndex.mock.calls.some(([, term]) => term === "@open")).toBe(
+      false,
+    );
+
+    fireEvent.click(await screen.findByText("openSession"));
+    // LSP 的行号从 0 起，编辑器的定位接口从 1 起。
+    expect(openFileInEditor).toHaveBeenCalledWith("src/api/client.ts", {
+      line: 42,
+    });
+  });
+
+  it("asks the workspace for `#` and shows which file each symbol is in", async () => {
+    workspaceSymbols.mockResolvedValue([
+      { name: "Manager", kind: 5, path: "src/language/mod.rs", line: 9 },
+    ]);
+    renderQuickOpen();
+    fireEvent.change(screen.getByPlaceholderText("按文件名查找"), {
+      target: { value: "#Manager" },
+    });
+    await waitFor(() =>
+      expect(workspaceSymbols).toHaveBeenCalledWith("Manager"),
+    );
+    expect(await screen.findByText("src/language/mod.rs")).toBeTruthy();
+  });
+
+  // 没有语言会话时符号列表是空的。说清楚这一点，而不是转一个永远转不完的圈。
+  it("says there are no symbols rather than pretending to still be loading", async () => {
+    openEditorNode("src/api/client.ts");
+    renderQuickOpen();
+    fireEvent.change(screen.getByPlaceholderText("按文件名查找"), {
+      target: { value: "@" },
+    });
+    expect(
+      await screen.findByText("没有符号；语言服务没在跑时这里是空的"),
+    ).toBeTruthy();
   });
 });

@@ -5,6 +5,7 @@ import {
   Download,
   Eye,
   File,
+  Lightbulb,
   Pencil,
   Save,
   Search,
@@ -385,6 +386,23 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
           ) : (
             <Pencil />
           )}
+        </IconButton>
+      )}
+      {/* 代码操作没有别的入口：⌘. 要先把焦点放进编辑器，而一块画布上的
+          编辑器常常还没有焦点。灯泡只在会话真的在跑时出现。 */}
+      {language.status?.state === "running" && state.kind === "text" && (
+        <IconButton
+          label={t("lsp.action.title")}
+          onClick={() => {
+            const view = refs.viewRef.current;
+            if (!view || refs.viewIdentityRef.current !== identity) return;
+            view.focus();
+            void import("@/editor/language/code-actions").then((module) =>
+              module.showCodeActions(view),
+            );
+          }}
+        >
+          <Lightbulb />
         </IconButton>
       )}
       {writable && state.kind === "text" && (

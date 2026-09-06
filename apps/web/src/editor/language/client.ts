@@ -343,6 +343,16 @@ export function acquireLanguageClient(
   };
 }
 
+/**
+ * 当前活着的全部客户端。
+ *
+ * 工作空间符号（`#`）要问遍每一种开着的语言：一个 Rust server 不知道
+ * TypeScript 文件里有什么，所以这件事只能是「问所有人再合起来」。
+ */
+export function listLanguageClients(): LanguageClient[] {
+  return [...clients.values()].map((entry) => entry.client);
+}
+
 /** 已经建起来的客户端，不新建。命令与预览对话框用。 */
 export function peekLanguageClient(
   workspaceId: string,

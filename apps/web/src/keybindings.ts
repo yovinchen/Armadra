@@ -135,6 +135,16 @@ export const COMMANDS = [
     allowInTerminal: false,
     allowWhileTyping: false,
   },
+  // 引用面板同理：它的入口是编辑器里的 ⇧F12，这一条只是让命令面板能把已经
+  // 算好的结果重新打开，不需要再占一个全局组合键。
+  {
+    id: "app.references",
+    labelKey: "cmd.app.references",
+    scope: "app",
+    defaultKeys: both(null),
+    allowInTerminal: false,
+    allowWhileTyping: false,
+  },
   // 文件工作流（E01/M4）。⌘P 是快速打开的通用键位；项目搜索让给
   // `canvas.focusMode` 占着的 ⌘⇧F，改用 ⌘⇧H——两条都在终端里也放行，
   // 因为它们打开的是应用面板，不是终端里的东西。

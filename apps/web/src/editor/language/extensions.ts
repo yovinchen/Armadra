@@ -1,7 +1,6 @@
 import type { Extension } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
 import {
-  findReferencesKeymap,
   formatKeymap,
   hoverTooltips,
   jumpToDefinitionKeymap,
@@ -10,7 +9,9 @@ import {
 } from "@codemirror/lsp-client";
 
 import type { LanguageClient } from "./client";
+import { showCodeActions } from "./code-actions";
 import { renameWithPreview } from "./commands";
+import { findReferencesInPanel } from "./references";
 
 /**
  * 一个 `EditorView` 的语言扩展（语言服务设计 §4.2 `extensions.ts`）。
@@ -20,8 +21,13 @@ import { renameWithPreview } from "./commands";
  * 会话拿不到（`unsupported`）时这里返回空数组，于是**没有补全源**——不出现
  * 一个永远是空的补全列表（设计 §1.1、§6.1 第 1 条）。
  *
- * 键位按设计 §4.2：F2 重命名、F12 定义、⇧F12 引用、⇧⌥F 格式化。重命名换成
- * 我们自己的实现（先预览再由执行主机写），其余用官方的。
+ * 键位按设计 §4.2：F2 重命名、F12 定义、⇧F12 引用、⇧⌥F 格式化，另加 ⌘.
+ * 代码操作。三条换成我们自己的实现，其余用官方的：
+ *
+ *  * **重命名**先预览再由执行主机按内容版本写（§2.6）；
+ *  * **引用**进侧栏页，因为官方那块面板贴在触发它的视图上，点一条跳到别的
+ *    文件时它就跟着消失了；
+ *  * **代码操作**官方没有入口，菜单与应用都在 `code-actions.ts`。
  */
 export function languageEditorExtensions(
   client: LanguageClient,
@@ -36,9 +42,10 @@ export function languageEditorExtensions(
     signatureHelp(),
     keymap.of([
       { key: "F2", run: renameWithPreview, preventDefault: true },
+      { key: "Shift-F12", run: findReferencesInPanel, preventDefault: true },
+      { key: "Mod-.", run: showCodeActions, preventDefault: true },
       ...formatKeymap,
       ...jumpToDefinitionKeymap,
-      ...findReferencesKeymap,
     ]),
   ];
 }

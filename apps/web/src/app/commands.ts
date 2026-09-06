@@ -82,6 +82,12 @@ export function useCommandDispatch(): CommandDispatch {
             panels.problems === "closed" ? "drawer" : "closed",
           );
           return;
+        case "app.references":
+          setPanel(
+            "references",
+            panels.references === "closed" ? "drawer" : "closed",
+          );
+          return;
         case "app.github":
           setPanel("github", panels.github === "closed" ? "drawer" : "closed");
           return;
