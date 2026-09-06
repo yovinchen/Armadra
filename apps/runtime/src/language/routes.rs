@@ -60,10 +60,18 @@ pub async fn language_service(
         .as_deref()
         .is_some_and(|value| value == "1" || value == "true");
     let allow_execute = workspace.permissions.execute;
+    // The probe cache lives in the settings document, so it may only be written
+    // while this Runtime still owns that domain. The probes themselves are
+    // facts about this machine and run either way.
+    let persist = crate::ownership::local_write_allowed(
+        &state.pool,
+        crate::ownership::OwnershipDomain::Settings,
+    )
+    .await;
     let servers = match crate::remote::resolve(&state, &workspace)? {
         crate::remote::Execution::Local => {
             let mut servers =
-                discover::discover(&state.settings, "local", allow_execute, refresh).await;
+                discover::discover(&state.settings, "local", allow_execute, refresh, persist).await;
             // A server that is actually running says so, over whatever the
             // probe cached: the probe answers "could this start", the hub
             // answers "is it".

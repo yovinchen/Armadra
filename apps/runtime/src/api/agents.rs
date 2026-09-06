@@ -18,6 +18,7 @@ use crate::{
     hook::install::{self, InstallReport},
     index,
     model::{AgentStatus, Conversation},
+    ownership,
 };
 
 /* ------------------------------- conversations ---------------------------- */
@@ -63,6 +64,11 @@ pub async fn refresh_conversations(
 /// is the hook that will actually fire for it.
 pub async fn agents(State(state): State<AppState>) -> AppResult<Json<Vec<AgentInfo>>> {
     let installs = db::list_hook_installs(&state.pool).await?;
+    // The probe cache lives in the settings document, so it may only be written
+    // while this Runtime still owns that domain; the probe itself is a fact
+    // about this machine and runs either way.
+    let persist =
+        ownership::local_write_allowed(&state.pool, ownership::OwnershipDomain::Settings).await;
     let mut detected = agent::detect();
     detected.extend(
         state
@@ -81,8 +87,9 @@ pub async fn agents(State(state): State<AppState>) -> AppResult<Json<Vec<AgentIn
         // `supported` or `unknown` on the client (design §1). A program that
         // is not installed is not run: there is nothing to ask.
         if info.installed {
-            info.probe =
-                Some(agent_probe::cached(&state.settings, &info.id, &info.launch_cmd).await);
+            info.probe = Some(
+                agent_probe::cached(&state.settings, &info.id, &info.launch_cmd, persist).await,
+            );
         }
     }
     Ok(Json(detected))

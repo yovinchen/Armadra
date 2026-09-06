@@ -93,9 +93,10 @@ pub(super) async fn call(
     (status, value)
 }
 
-/// Never `crate::router`: that one reads the user's real settings file and
-/// data directory, and a test must not touch either.
-pub(super) async fn router_fixture(name: &str) -> (Router, tempfile::TempDir) {
+/// The state a fixture router is built from. Exposed separately so a test that
+/// has to reach past the routes — the write-ownership rows, say — works against
+/// the same pool the router serves rather than a second database.
+pub(super) async fn state_fixture(name: &str) -> (AppState, tempfile::TempDir) {
     let directory = tempdir().unwrap();
     let database_url = format!(
         "sqlite://{}?mode=rwc",
@@ -105,7 +106,7 @@ pub(super) async fn router_fixture(name: &str) -> (Router, tempfile::TempDir) {
     let events = EventHub::new();
     let (terminals, settings) = test_terminals(&pool, &events, directory.path());
     (
-        crate::router_with_state(AppState {
+        AppState {
             remote: Default::default(),
             language: Default::default(),
             resources: crate::resources::ResourceService::new(settings.clone()),
@@ -115,9 +116,16 @@ pub(super) async fn router_fixture(name: &str) -> (Router, tempfile::TempDir) {
             hooks: test_hooks(directory.path()),
             events,
             pool,
-        }),
+        },
         directory,
     )
+}
+
+/// Never `crate::router`: that one reads the user's real settings file and
+/// data directory, and a test must not touch either.
+pub(super) async fn router_fixture(name: &str) -> (Router, tempfile::TempDir) {
+    let (state, directory) = state_fixture(name).await;
+    (crate::router_with_state(state), directory)
 }
 
 /// The 1×1 PNG every export / asset test uploads.

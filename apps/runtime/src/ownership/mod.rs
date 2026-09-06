@@ -206,6 +206,28 @@ pub async fn require_local_write(pool: &SqlitePool, domain: OwnershipDomain) -> 
     }
 }
 
+/// The same question asked by something that has an answer either way.
+///
+/// Probe caches are the one thing that writes the settings document outside the
+/// settings routes: a read route refreshes an agent or language-server probe
+/// and persists it as a side effect. Gating those like a route would make the
+/// read itself fail once the Host owns the domain, which is the opposite of
+/// what the guard is for; writing them anyway would leave two processes
+/// editing one file. Skipping the persist costs exactly one re-probe, which is
+/// what the call sites already tolerate when a write fails.
+///
+/// A record that cannot be read answers `false`. Who may write is then
+/// unknown, and a cache is never worth resolving that in favour of writing.
+pub async fn local_write_allowed(pool: &SqlitePool, domain: OwnershipDomain) -> bool {
+    matches!(
+        read(pool, domain).await,
+        Ok(WriteOwnership {
+            owner: WriteOwner::Runtime,
+            ..
+        })
+    )
+}
+
 /// Applies one handoff, or returns the stored row when that exact handoff has
 /// already been applied.
 ///

@@ -161,10 +161,18 @@ pub async fn probe(agent_id: &str, launch_cmd: &str) -> AgentProbe {
 
 /// Cached probe for one agent, refreshing it when it is missing, stale, or was
 /// taken against a different launch program.
+///
+/// `persist` is whether this Runtime still owns the settings document the cache
+/// lives in. Once the Host owns it, the probe still runs and still answers —
+/// it is a fact about this machine — but it is not written back, because two
+/// processes editing one document is the thing the ownership record exists to
+/// prevent. The cost is one re-probe per call, which is the same cost a failed
+/// write already had.
 pub async fn cached(
     settings: &crate::settings::SettingsStore,
     agent_id: &str,
     launch_cmd: &str,
+    persist: bool,
 ) -> AgentProbe {
     if let Some(entry) = stored(&settings.document(), agent_id)
         && entry.launch_cmd == launch_cmd
@@ -175,9 +183,11 @@ pub async fn cached(
     let fresh = probe(agent_id, launch_cmd).await;
     // A failed patch only costs a re-probe next time; it must never fail the
     // request that triggered it.
-    let _ = settings.patch(&serde_json::json!({
-        "agents": { "probes": { agent_id: fresh } }
-    }));
+    if persist {
+        let _ = settings.patch(&serde_json::json!({
+            "agents": { "probes": { agent_id: fresh } }
+        }));
+    }
     fresh
 }
 
@@ -243,16 +253,27 @@ mod tests {
     #[tokio::test]
     async fn a_cached_probe_is_reused_until_the_launch_command_changes() {
         let settings = crate::settings::SettingsStore::in_memory(serde_json::json!({}));
-        let first = cached(&settings, "echo", "/bin/echo").await;
+        let first = cached(&settings, "echo", "/bin/echo", true).await;
         assert_eq!(first.status, "ok");
         let stored_now = stored(&settings.document(), "echo").unwrap();
         assert_eq!(stored_now, first);
         // Same command: the stored answer is returned verbatim, timestamp and all.
-        assert_eq!(cached(&settings, "echo", "/bin/echo").await, first);
+        assert_eq!(cached(&settings, "echo", "/bin/echo", true).await, first);
         // A different program is a different question.
-        let other = cached(&settings, "echo", "definitely-not-a-real-binary-xyz").await;
+        let other = cached(&settings, "echo", "definitely-not-a-real-binary-xyz", true).await;
         assert_eq!(other.status, "failed");
         assert_eq!(other.launch_cmd, "definitely-not-a-real-binary-xyz");
+    }
+
+    /// Once the Host owns the settings document, the probe still answers — it
+    /// is a fact about this machine — but it stops being written into a
+    /// document this process no longer writes.
+    #[tokio::test]
+    async fn a_probe_is_not_persisted_once_the_settings_document_moved() {
+        let settings = crate::settings::SettingsStore::in_memory(serde_json::json!({}));
+        let answered = cached(&settings, "echo", "/bin/echo", false).await;
+        assert_eq!(answered.status, "ok");
+        assert!(stored(&settings.document(), "echo").is_none());
     }
 
     #[test]

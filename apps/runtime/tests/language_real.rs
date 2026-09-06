@@ -73,7 +73,7 @@ async fn a_real_server_diagnoses_formats_and_its_edit_lands_on_disk() {
 
     // Discovery first: the launcher only ever runs the absolute path a probe
     // resolved, so nothing can start until `--version` has answered.
-    let servers = language::discover::discover(&settings, "local", true, true).await;
+    let servers = language::discover::discover(&settings, "local", true, true, true).await;
     let python = servers
         .iter()
         .find(|server| server.language_id == "python")
@@ -209,7 +209,7 @@ async fn a_workspace_without_execute_lists_the_server_but_starts_nothing() {
         return;
     }
     let settings = SettingsStore::in_memory(json!({}));
-    let servers = language::discover::discover(&settings, "local", false, true).await;
+    let servers = language::discover::discover(&settings, "local", false, true, true).await;
     let python = servers
         .iter()
         .find(|server| server.language_id == "python")
@@ -252,7 +252,7 @@ async fn a_proxy_that_exists_but_cannot_run_is_a_probe_failure() {
         return;
     };
     let settings = SettingsStore::in_memory(json!({}));
-    let servers = language::discover::discover(&settings, "local", true, true).await;
+    let servers = language::discover::discover(&settings, "local", true, true, true).await;
     let rust = servers
         .iter()
         .find(|server| server.language_id == "rust")

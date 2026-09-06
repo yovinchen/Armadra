@@ -217,6 +217,7 @@ async fn cached(
     host_id: &str,
     candidate: &ServerCandidate,
     refresh: bool,
+    persist: bool,
 ) -> ServerProbe {
     let program = program_for(language, candidate);
     if !refresh
@@ -228,10 +229,15 @@ async fn cached(
     }
     let fresh = probe(candidate, &program).await;
     // A failed patch only costs a re-probe next time; it must never fail the
-    // request that triggered it.
-    let _ = settings.patch(&serde_json::json!({
-        "language": { "probes": { host_id: { candidate.server_id: fresh } } }
-    }));
+    // request that triggered it. The same is true once the Host owns the
+    // settings document this cache lives in: the probe still answers, it just
+    // stops being written back, because two processes editing one document is
+    // what the ownership record exists to prevent.
+    if persist {
+        let _ = settings.patch(&serde_json::json!({
+            "language": { "probes": { host_id: { candidate.server_id: fresh } } }
+        }));
+    }
     fresh
 }
 
@@ -257,6 +263,9 @@ pub async fn discover(
     host_id: &str,
     allow_execute: bool,
     refresh: bool,
+    // Whether this Runtime may still write the settings document the probe
+    // cache lives in.
+    persist: bool,
 ) -> Vec<ServerDescriptor> {
     let language = LanguageSettings::from_document(&settings.document());
     let gate = execution_reason(allow_execute);
@@ -272,7 +281,7 @@ pub async fn discover(
                     ..blank(entry.language_id, entry.extensions, candidate)
                 }
             } else {
-                let probe = cached(settings, &language, host_id, candidate, refresh).await;
+                let probe = cached(settings, &language, host_id, candidate, refresh, persist).await;
                 let (state, why) = probe.state();
                 ServerDescriptor {
                     executable: probe.executable.clone(),
