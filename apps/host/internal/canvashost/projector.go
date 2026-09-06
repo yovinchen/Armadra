@@ -29,7 +29,13 @@ func (s *Service) AsProjector() Projector { return Projector{service: s} }
 // Adopt projects a staged import into canvas entities and verifies it item for
 // item. A report that did not match is returned, not swallowed: the operator
 // needs to see which check failed.
-func (p Projector) Adopt(ctx context.Context, importID string) (*pb.OwnershipReport, error) {
+//
+// The live link is ignored on purpose. The canvas arrives as the offline bundle
+// `armadra-host import` staged, so everything this needs is already on disk
+// before the epoch is touched; reading it over the wire instead would make the
+// switch depend on a channel staying up for the length of a whole migration.
+func (p Projector) Adopt(ctx context.Context, adoption ownership.Adoption) (*pb.OwnershipReport, error) {
+	importID := adoption.ImportID
 	if _, err := p.service.Materialize(ctx, importID); err != nil {
 		return nil, err
 	}

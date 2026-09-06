@@ -27,12 +27,14 @@ type fakeProjector struct {
 	watermark uint64
 	adopted   int
 	released  int
+	adoption  Adoption
 	handback  Handback
 	failWith  error
 }
 
-func (p *fakeProjector) Adopt(context.Context, string) (*pb.OwnershipReport, error) {
+func (p *fakeProjector) Adopt(_ context.Context, adoption Adoption) (*pb.OwnershipReport, error) {
 	p.adopted++
+	p.adoption = adoption
 	if p.failWith != nil {
 		return nil, p.failWith
 	}
@@ -297,6 +299,22 @@ func TestDomainsMoveOnTheirOwnEpochs(t *testing.T) {
 
 // A domain with no projector cannot be switched. Recording ownership of data
 // this Host cannot move would be a switch on paper.
+// A domain is told about the live link, not only about the import id. The
+// canvas ignores it because its rows arrive as a staged bundle; a domain with
+// no bundle reads its export across this same channel, and one that discovered
+// mid-adoption that it had none would already have written.
+func TestAdoptionCarriesTheLiveLink(t *testing.T) {
+	h := newHarness(t)
+	h.switchTo(t, storage.OwnershipDomainCanvas, toHost)
+	adoption := h.projectors[storage.OwnershipDomainCanvas].adoption
+	if adoption.ImportID != "import-1" {
+		t.Fatalf("the adoption named import %q", adoption.ImportID)
+	}
+	if adoption.Link != Handoff(h.runtime) {
+		t.Fatalf("the adoption carried %v instead of the channel the epoch moves on", adoption.Link)
+	}
+}
+
 func TestSwitchRefusesADomainThisHostCannotMove(t *testing.T) {
 	h := newHarness(t, storage.OwnershipDomainCanvas)
 	_, err := h.service.IssueMaintenance(testContext, storage.OwnershipDomainAgent)

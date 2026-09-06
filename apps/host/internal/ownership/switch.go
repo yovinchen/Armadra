@@ -209,7 +209,7 @@ func (s *Service) move(ctx context.Context, request Request, epoch uint64, proje
 		if !validImportID(request.ImportID) {
 			return nil, ErrInvalid
 		}
-		report, err := projector.Adopt(ctx, request.ImportID)
+		report, err := projector.Adopt(ctx, Adoption{ImportID: request.ImportID, Link: request.Handoff})
 		if err != nil {
 			return report, err
 		}

@@ -90,6 +90,21 @@ type Handoff interface {
 	GetWriteOwnership(ctx context.Context, domain string) (*pb.WorkerWriteOwnership, error)
 }
 
+// Adoption is what a domain is told when it is taken over.
+type Adoption struct {
+	ImportID string
+	// Link is the live channel to the Runtime, the same one the epoch moves
+	// on. Canvas ignores it. A domain with no offline bundle reads its export
+	// across this link, and a domain that needs a capability the link does not
+	// have refuses before anything is written.
+	//
+	// It is offered to every domain rather than withheld from the ones that do
+	// not need it: the state machine cannot know which domain reads its data
+	// from a staged bundle and which reads it over the wire, and a domain that
+	// discovered mid-adoption that it had no link would already have written.
+	Link Handoff
+}
+
 // Projector is one domain's half of the move: how its data is taken over, how
 // it is handed back, and what the Host's event watermark is for it. A domain
 // with no projector cannot be switched at all, which is how a half-built domain
@@ -97,7 +112,7 @@ type Handoff interface {
 type Projector interface {
 	// Adopt stages, projects and verifies an import. A report that did not
 	// match is returned with ErrNotVerified rather than silently accepted.
-	Adopt(ctx context.Context, importID string) (*pb.OwnershipReport, error)
+	Adopt(ctx context.Context, adoption Adoption) (*pb.OwnershipReport, error)
 	// Release hands the domain back: it writes the reverse export into an empty
 	// directory, has the Runtime apply it, and compares the Runtime's re-read
 	// with what the package described. A report that did not match is returned
