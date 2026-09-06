@@ -77,6 +77,10 @@ impl TerminalManager {
                     input_safety: InputSafety::default(),
                     last_input_source_revision: Some(0),
                     observation: None,
+                    // An adopted session has been running without us watching
+                    // it; the first byte after adoption is the first thing
+                    // §3.4 is entitled to have an opinion about.
+                    last_pty_activity: None,
                     spec: TerminalSpec {
                         session_key: key.clone(),
                         workspace_id: session.workspace_id,
@@ -193,6 +197,12 @@ impl TerminalManager {
         };
         if record.generation != generation {
             return;
+        }
+        // §3.4's entire input, taken from the batch the pump was going to
+        // forward anyway. It is a timestamp, not a state: nothing downstream
+        // may read it as "the agent finished".
+        if let Some(record) = self.inner.records.write().await.get_mut(&session_id) {
+            record.last_pty_activity = Some(Instant::now());
         }
         // The tmux client stream is mostly redraws of a screen tmux already
         // keeps; only real process output is worth a log row.

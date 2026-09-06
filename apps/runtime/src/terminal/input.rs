@@ -224,6 +224,10 @@ impl TerminalManager {
             if edited {
                 record.input_revision = record.input_revision.saturating_add(1);
             }
+            // §3.4: typing counts as activity even when the CLI answers with
+            // nothing at all, which is what gives "asked, and then silence"
+            // its two seconds before the terminal reads as quiet.
+            record.last_pty_activity = Some(Instant::now());
             if !fence {
                 return;
             }
@@ -242,6 +246,11 @@ impl TerminalManager {
         if let Some(record) = self.inner.records.write().await.get_mut(session_id) {
             record.last_input_source_revision = revision;
         }
+        // A submitted line is the one moment worth asking whether this node has
+        // any status source at all (§3.4). Doing it here rather than in the
+        // output pump keeps it to at most one indexed lookup per prompt instead
+        // of one per 16 ms batch, and it is the moment the answer changes.
+        self.note_observed_state_source(session_id).await;
     }
 
     /// Only preflight failures prove no input was submitted. Once the backend

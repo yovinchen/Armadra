@@ -103,6 +103,7 @@ impl TerminalManager {
             input_safety: InputSafety::default(),
             last_input_source_revision: Some(0),
             observation: None,
+            last_pty_activity: None,
             spec,
         })
         .await;
@@ -239,6 +240,9 @@ impl TerminalManager {
             input_safety: InputSafety::default(),
             last_input_source_revision: Some(0),
             observation: None,
+            // A recycled session is a new terminal in an old shell: what the
+            // previous process was doing is not something to keep observing.
+            last_pty_activity: None,
             pid: handle.pid,
             exited: false,
             spec,

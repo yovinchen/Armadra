@@ -26,6 +26,7 @@ pub mod tmux;
 
 pub use batch::{FlushCadence, OutputBatch, interactive_cadence, spawn_output_batcher};
 use input::InputSafety;
+pub use observation::{OBSERVED_QUIET_AFTER, ObservedActivity};
 use records::SessionRecord;
 pub use records::{
     AgentObservation, AgentReport, AttachSession, BackendInfo, CaptureResponse, ClientMessage,

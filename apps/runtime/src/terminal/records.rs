@@ -152,6 +152,16 @@ pub(super) struct SessionRecord {
     pub(super) input_safety: InputSafety,
     pub(super) last_input_source_revision: Option<u64>,
     pub(super) observation: Option<AgentObservation>,
+    /// When this session last had input written into it, or output come back
+    /// out of it — 协作通道 §3.4.
+    ///
+    /// This is the whole of the PTY-side observation: no prompt parsing, no
+    /// OSC, no extra read of anything: just a clock beside the counters the
+    /// input fence and the output pump already keep. It answers `active` /
+    /// `quiet` (see [`super::ObservedActivity`]) and it is never evidence of
+    /// anything — an observation may not reach `agent_status.state` and may
+    /// not satisfy a delivery gate.
+    pub(super) last_pty_activity: Option<Instant>,
 }
 
 #[derive(Clone, Debug)]

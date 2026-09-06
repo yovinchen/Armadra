@@ -6,4 +6,6 @@ mod desktop_shutdown;
 #[cfg(unix)]
 mod dormancy;
 #[cfg(unix)]
+mod observed;
+#[cfg(unix)]
 mod sessions;
