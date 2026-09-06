@@ -17,6 +17,7 @@
 
 pub mod claude;
 pub mod codex;
+pub mod copilot;
 pub mod gemini;
 pub mod opencode;
 
@@ -226,6 +227,8 @@ pub fn config_home_with(
     Ok(match agent_id {
         "claude" => from_env("CLAUDE_CONFIG_DIR").unwrap_or_else(|| home.join(".claude")),
         "codex" => from_env("CODEX_HOME").unwrap_or_else(|| home.join(".codex")),
+        // Copilot's own override, documented alongside `~/.copilot/hooks/`.
+        "copilot" => from_env("COPILOT_HOME").unwrap_or_else(|| home.join(".copilot")),
         "gemini" => from_env("GEMINI_CLI_HOME")
             .or_else(|| from_env("GEMINI_DIR"))
             .unwrap_or_else(|| home.join(".gemini")),
@@ -245,6 +248,7 @@ pub fn install(agent_id: &str, client_bin: &Path) -> AppResult<InstallReport> {
     let report = match agent_id {
         "claude" => claude::install(&home, client_bin),
         "codex" => codex::install(&home, client_bin),
+        "copilot" => copilot::install(&home, client_bin),
         "gemini" => gemini::install(&home, client_bin),
         "opencode" => opencode::install(&home, client_bin),
         other => Err(AppError::BadRequest(format!(
@@ -268,6 +272,7 @@ pub fn uninstall(agent_id: &str) -> AppResult<InstallReport> {
     match agent_id {
         "claude" => claude::uninstall(&home),
         "codex" => codex::uninstall(&home),
+        "copilot" => copilot::uninstall(&home),
         "gemini" => gemini::uninstall(&home),
         "opencode" => opencode::uninstall(&home),
         other => Err(AppError::BadRequest(format!(
@@ -531,12 +536,17 @@ mod tests {
             config_home_with("opencode", none, home).unwrap(),
             home.join(".config/opencode")
         );
+        assert_eq!(
+            config_home_with("copilot", none, home).unwrap(),
+            home.join(".copilot")
+        );
 
         let overridden = |name: &str| match name {
             "CLAUDE_CONFIG_DIR" => Some(PathBuf::from("/tmp/claude-home")),
             "CODEX_HOME" => Some(PathBuf::from("/tmp/codex-home")),
             "GEMINI_CLI_HOME" => Some(PathBuf::from("/tmp/gemini-home")),
             "XDG_CONFIG_HOME" => Some(PathBuf::from("/tmp/xdg")),
+            "COPILOT_HOME" => Some(PathBuf::from("/tmp/copilot-home")),
             _ => None,
         };
         assert_eq!(
@@ -555,6 +565,10 @@ mod tests {
         assert_eq!(
             config_home_with("opencode", overridden, home).unwrap(),
             Path::new("/tmp/xdg/opencode")
+        );
+        assert_eq!(
+            config_home_with("copilot", overridden, home).unwrap(),
+            Path::new("/tmp/copilot-home")
         );
         assert!(config_home_with("custom:x", none, home).is_err());
     }
