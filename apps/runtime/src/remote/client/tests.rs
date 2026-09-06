@@ -6,6 +6,7 @@ use super::*;
 use crate::remote::service::replay::{
     FILES_MANAGE_CAPABILITY, GIT_PANEL_CAPABILITY, UPLOAD_CAPABILITY, WATCH_CAPABILITY,
 };
+use crate::remote::service::{capability, replay};
 
 fn host() -> SshHost {
     SshHost {
