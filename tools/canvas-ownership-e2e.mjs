@@ -1648,13 +1648,17 @@ try {
   const entries = readdirSync(reverseExport).sort();
   step(
     "the reverse export is a format version 2 package for the canvas domain",
-    entries.length === 2 &&
+    // One file per workspace: the e2e's own plus the Default one a fresh
+    // Runtime creates on first start.
+    entries.length === (index.files?.length ?? 0) + 1 &&
       entries.includes("export.json") &&
       index.formatVersion === 2 &&
       index.domain === "canvas" &&
       index.epoch === 2 &&
       index.entityCount > 0 &&
-      index.files?.length === 1,
+      (index.files?.length ?? 0) >= 1 &&
+      (index.files ?? []).reduce((sum, file) => sum + file.entityCount, 0) ===
+        index.entityCount,
     `${entries.join(", ")} epoch=${index.epoch} entities=${index.entityCount}`,
   );
   const mismatched = (index.files ?? []).filter((file) => {
@@ -1675,7 +1679,7 @@ try {
         (file) =>
           /^[0-9a-f]{64}$/.test(file.contentSha256) &&
           file.contentSha256 !== file.sha256 &&
-          file.entityCount === index.entityCount,
+          file.entityCount > 0,
       ),
     `contentSha256=${index.files?.[0]?.contentSha256?.slice(0, 16)}`,
   );
@@ -2015,8 +2019,10 @@ try {
       onlineIndex?.formatVersion === 2 &&
       onlineIndex?.domain === "canvas" &&
       onlineIndex?.epoch === 4 &&
-      onlineIndex?.files?.length === 1 &&
-      /^[0-9a-f]{64}$/.test(onlineIndex?.files?.[0]?.contentSha256 ?? ""),
+      (onlineIndex?.files?.length ?? 0) >= 1 &&
+      onlineIndex.files.every((file) =>
+        /^[0-9a-f]{64}$/.test(file.contentSha256 ?? ""),
+      ),
     `${packages.join(", ")} epoch=${onlineIndex?.epoch}`,
   );
 
