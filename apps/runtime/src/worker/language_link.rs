@@ -65,7 +65,9 @@ pub const CAPABILITY_V1: &str = "language.v1";
 pub async fn discovery(refresh: bool) -> LanguageCapabilities {
     static SETTINGS: std::sync::OnceLock<SettingsStore> = std::sync::OnceLock::new();
     let settings = SETTINGS.get_or_init(SettingsStore::load);
-    let servers = language::discover::discover(settings, "local", true, refresh).await;
+    // The cache is this machine's own, written by the process that probed it;
+    // the controller's settings ownership epoch says nothing about it.
+    let servers = language::discover::discover(settings, "local", true, refresh, true).await;
     let (documents, sessions, message) = language::capability_limits();
     LanguageCapabilities {
         execution_host_id: "local".into(),
@@ -142,7 +144,7 @@ impl Host {
     /// "is it", and the resource panel needs the second one.
     pub async fn capabilities(&self, refresh: bool) -> LanguageCapabilities {
         let mut servers =
-            language::discover::discover(&self.settings, "local", true, refresh).await;
+            language::discover::discover(&self.settings, "local", true, refresh, true).await;
         let workspaces: Vec<String> = self
             .sessions()
             .values()
