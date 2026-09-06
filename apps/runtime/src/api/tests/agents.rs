@@ -277,6 +277,43 @@ async fn the_sessions_sidebar_joins_nodes_and_agent_status() {
     assert_eq!(row["unread"], true);
     assert_eq!(row["pendingId"], "p-1");
     assert_eq!(row["alive"], true);
+    // Nothing has reported a source, and the payload must say so by omission
+    // rather than by inventing one (协作通道 §3.2).
+    assert!(row.get("stateSource").is_none());
+
+    // The badge on a node header is rebuilt from this list after a reload, so
+    // the column has to travel on it and not only on the `agent.status` event.
+    db::upsert_agent_status(
+        &pool,
+        db::AgentStatusPatch {
+            node_id: node_id.clone(),
+            workspace_id: workspace.id.clone(),
+            agent_id: "claude".into(),
+            state: Some("done".into()),
+            state_source: Some(crate::agent::STATE_SOURCE_HOOK.into()),
+            unread: false,
+            session_id: None,
+            pending_id: None,
+            verified: true,
+            transcript_path: None,
+            session_phase: None,
+            errored: None,
+            interrupted: None,
+            last_event_at: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let (status, sessions) = call(
+        &router,
+        "GET",
+        &format!("/api/workspaces/{}/sessions", workspace.id),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(sessions[0]["stateSource"], "hook");
 
     terminals
         .terminate(&session_id, TerminateMode::Process)

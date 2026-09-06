@@ -425,6 +425,15 @@ pub struct SessionSummary {
     pub agent_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub state: Option<String>,
+    /// The channel `state` was learned through — the same `agent_status`
+    /// column [`AgentStatus::state_source`] carries (协作通道 §3.2).
+    ///
+    /// It travels on this list as well as on the `agent.status` event because
+    /// the list is what a client rebuilds its mirror from after a reload; the
+    /// event only describes the *next* turn. Without it the source badge on a
+    /// node header disappears on every refresh.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state_source: Option<String>,
     pub unread: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pending_id: Option<String>,

@@ -189,6 +189,54 @@ describe("agent status mirror", () => {
     expect(store().statuses[NODE]!.state).toBe("working");
   });
 
+  // 刷新后来源徽标要还在：`agent.status` 帧只描述下一个回合，重建镜像的
+  // 是这份会话列表（协作通道 §3.2）。
+  it("restores the state source a reload would otherwise drop", () => {
+    store().hydrate(
+      [
+        {
+          nodeId: NODE,
+          boardId: "board",
+          sessionId: "s1",
+          kind: "terminal",
+          title: "pi",
+          cwd: "/repo",
+          agentId: "pi",
+          state: "done",
+          stateSource: "extension",
+          unread: false,
+          updatedAt: at(0),
+          alive: true,
+        },
+      ],
+      WORKSPACE,
+    );
+    expect(store().statuses[NODE]!.stateSource).toBe("extension");
+  });
+
+  // 没有来源的会话（自定义 CLI、还没有人上报过）不能被编造成一个来源。
+  it("leaves the state source absent when the session reports none", () => {
+    store().hydrate(
+      [
+        {
+          nodeId: NODE,
+          boardId: "board",
+          sessionId: "s1",
+          kind: "terminal",
+          title: "claude",
+          cwd: "/repo",
+          agentId: "claude",
+          state: "working",
+          unread: false,
+          updatedAt: at(0),
+          alive: true,
+        },
+      ],
+      WORKSPACE,
+    );
+    expect(store().statuses[NODE]!.stateSource).toBeUndefined();
+  });
+
   it("skips sessions without an agent", () => {
     store().hydrate(
       [

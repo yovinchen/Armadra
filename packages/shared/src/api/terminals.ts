@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   agentIdSchema,
   agentStateSchema,
+  agentStateSourceSchema,
   permissionModeSchema,
   sshTargetSchema,
 } from "../domain/index.js";
@@ -113,6 +114,15 @@ export const sessionSummarySchema = z.object({
   cwd: z.string(),
   agentId: agentIdSchema.optional(),
   state: agentStateSchema.optional(),
+  /**
+   * The channel `state` was learned through, mirroring `agentStatus.stateSource`
+   * (docs/design/agent-collaboration-channels.md §3.2). It travels here as well
+   * as on the `agent.status` event because this list is what rebuilds the
+   * mirror after a reload: without it the source badge on a node header would
+   * vanish on every refresh and only come back with the node's next turn.
+   * Absent means nothing has reported, which a header draws as unknown.
+   */
+  stateSource: agentStateSourceSchema.optional(),
   unread: z.boolean().default(false),
   pendingId: z.string().optional(),
   updatedAt: z.string().datetime({ offset: true }),

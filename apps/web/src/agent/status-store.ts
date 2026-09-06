@@ -254,6 +254,10 @@ export const useAgentStatusStore = create<AgentStatusState>((set, get) => ({
           workspaceId: workspaceId ?? previous?.workspaceId ?? "",
           agentId: session.agentId,
           state: session.state,
+          // 来源徽标只在 `agent.status` 帧里带就会「刷新即消失」：重连后要等
+          // 该节点下一个回合才回来。会话列表现在也带这一列（协作通道 §3.2），
+          // 于是镜像重建出来的条目和事件推来的条目形状一致。
+          stateSource: session.stateSource,
           unread: session.unread,
           sessionId: session.sessionId,
           pendingId: session.pendingId,

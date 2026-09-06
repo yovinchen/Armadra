@@ -82,7 +82,8 @@ pub async fn list_sessions(
         "SELECT s.id AS session_id, s.cwd AS cwd, s.owner_node_id AS node_id, \
                 s.agent_id AS session_agent_id, s.created_at AS created_at, \
                 n.board_id AS board_id, n.title AS title, \
-                st.agent_id AS status_agent_id, st.state AS state, st.unread AS unread, \
+                st.agent_id AS status_agent_id, st.state AS state, \
+                st.state_source AS state_source, st.unread AS unread, \
                 st.pending_id AS pending_id, st.updated_at AS status_updated_at \
          FROM terminal_sessions s \
          JOIN nodes n ON n.id = s.owner_node_id \
@@ -109,6 +110,7 @@ pub async fn list_sessions(
                 cwd: row.try_get("cwd")?,
                 agent_id: status_agent_id.or(session_agent_id),
                 state: row.try_get("state")?,
+                state_source: row.try_get("state_source")?,
                 unread: unread.unwrap_or(0) != 0,
                 pending_id: row.try_get("pending_id")?,
                 updated_at: status_updated_at.unwrap_or(created_at),
