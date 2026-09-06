@@ -7,6 +7,7 @@ import {
   GithubReferenceKind,
   GithubReviewState,
   type GithubRepositoryRef,
+  type GithubReviewCommentDraft,
   type HostGithubClient,
   type MergeGithubPullResponse,
 } from "@armadra/host-client";
@@ -27,6 +28,9 @@ import { Textarea } from "@/ui/textarea";
 import { useT } from "@/app/preferences-store";
 import { Field, selectClass } from "../git/forms";
 import { CheckoutWorktree } from "./CheckoutWorktree";
+import { ChecksSection } from "./ChecksSection";
+import { DiffReview } from "./DiffReview";
+import { MergeCleanup } from "./MergeCleanup";
 import {
   checkConclusionKey,
   failureKey,
@@ -88,6 +92,15 @@ export function PullDetail({
   const t = useT();
   const queryClient = useQueryClient();
   const [reviewBody, setReviewBody] = React.useState("");
+  /**
+   * Inline comment drafts, keyed by their anchor. They live here rather than
+   * in the diff view because they are part of the review being composed: one
+   * submission carries the body and every draft at once, which is what makes
+   * them one review on the remote instead of a scatter of loose comments.
+   */
+  const [drafts, setDrafts] = React.useState<
+    ReadonlyMap<string, GithubReviewCommentDraft>
+  >(new Map());
   const [method, setMethod] = React.useState<GithubMergeMethod | null>(null);
   const [confirm, setConfirm] = React.useState(false);
   const [outcome, setOutcome] = React.useState<MergeGithubPullResponse | null>(
@@ -117,13 +130,16 @@ export function PullDetail({
       client.submitReview({
         repository,
         number,
-        // The head that was on screen, so the review lands on what was read.
+        // The head that was on screen, so the review lands on what was read
+        // and every inline comment is anchored to that same commit.
         commitSha: pull!.headSha,
         state,
         body: reviewBody,
+        comments: [...drafts.values()].filter((draft) => draft.body.trim()),
       }),
     onSuccess: () => {
       setReviewBody("");
+      setDrafts(new Map());
       toast.success(t("github.review.submitted"));
       invalidate();
     },
@@ -222,69 +238,36 @@ export function PullDetail({
             {t("github.externalNote")}
           </p>
 
-          <section className="min-w-0 space-y-1">
-            <h4 className="text-[12px] font-medium text-muted-foreground">
-              {t("github.pull.diffSummary")}
-            </h4>
-            <p className="text-[12px] tabular-nums">
-              {t("github.pull.additions")} {String(pull.additions)} ·{" "}
-              {t("github.pull.deletions")} {String(pull.deletions)}
-            </p>
-            <ul className="min-w-0 space-y-1 text-[12px]">
-              {detail.data!.files.map((file) => (
-                <li
-                  key={file.path}
-                  className="flex min-w-0 items-center gap-2 font-mono"
-                >
-                  <span className="min-w-0 flex-1 truncate select-text">
-                    {file.path}
-                  </span>
-                  {file.binary ? (
-                    <span className="shrink-0 text-muted-foreground">
-                      {t("github.pull.binary")}
-                    </span>
-                  ) : (
-                    <span className="shrink-0 tabular-nums text-muted-foreground">
-                      +{String(file.additions)} −{String(file.deletions)}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
+          <p className="text-[12px] tabular-nums">
+            {t("github.pull.additions")} {String(pull.additions)} ·{" "}
+            {t("github.pull.deletions")} {String(pull.deletions)}
+          </p>
+          <DiffReview
+            files={detail.data!.files}
+            comments={detail.data!.reviewComments}
+            drafts={drafts}
+            canWrite={canWrite}
+            onDraft={(key, draft) =>
+              setDrafts((current) => new Map(current).set(key, draft))
+            }
+            onDiscard={(key) =>
+              setDrafts((current) => {
+                const next = new Map(current);
+                next.delete(key);
+                return next;
+              })
+            }
+          />
 
-          <section className="min-w-0 space-y-1">
-            <h4 className="text-[12px] font-medium text-muted-foreground">
-              {t("github.pull.checks")}
-            </h4>
-            {!checks || checks.runs.length === 0 ? (
-              <p className="text-[12px] text-muted-foreground">
-                {t("github.pull.noChecks")}
-              </p>
-            ) : (
-              <>
-                <p className="text-[12px]">
-                  {t("github.pull.checkRollup")} ·{" "}
-                  {t(checkConclusionKey(checks.rollup))}
-                </p>
-                <ul className="min-w-0 space-y-1 text-[12px]">
-                  {checks.runs.map((run) => (
-                    <li
-                      key={`${run.app}:${run.name}`}
-                      className="flex min-w-0 items-center gap-2"
-                    >
-                      <span className="min-w-0 flex-1 truncate">
-                        {run.name}
-                      </span>
-                      <Badge variant="outline">
-                        {t(checkConclusionKey(run.conclusion))}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </section>
+          <ChecksSection
+            client={client}
+            repository={repository}
+            number={number}
+            headSha={pull.headSha}
+            checks={checks}
+            canWrite={canWrite}
+            busy={busy}
+          />
 
           <ReferenceSection
             client={client}
@@ -331,6 +314,20 @@ export function PullDetail({
               <p className="text-[11px] text-muted-foreground">
                 {t("github.review.commit")} · {shortSha(pull.headSha)}
               </p>
+              {/*
+                行内草稿和这份评审一起提交：它们是同一次评审的一部分，分开发
+                会在远端变成一堆孤立评论。
+              */}
+              {drafts.size > 0 && (
+                <p
+                  className="text-[11px] text-muted-foreground"
+                  data-slot="github-inline-count"
+                >
+                  {t("github.review.inlineCount", {
+                    count: String(drafts.size),
+                  })}
+                </p>
+              )}
               <Field label={t("github.review.body")}>
                 <Textarea
                   value={reviewBody}
@@ -435,6 +432,17 @@ export function PullDetail({
             <CheckoutWorktree
               workspaceId={workspaceId}
               pull={pull}
+              busy={busy}
+            />
+          )}
+
+          {workspaceId && (
+            <MergeCleanup
+              client={client}
+              workspaceId={workspaceId}
+              repository={repository}
+              pull={pull}
+              canWrite={canWrite}
               busy={busy}
             />
           )}

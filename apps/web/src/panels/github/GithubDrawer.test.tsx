@@ -71,6 +71,7 @@ vi.mock("@/api/client", () => ({
   },
 }));
 
+import { runtimeApi } from "@/api/client";
 import { GithubDrawer } from "./GithubDrawer";
 import { useGithubFocus } from "./open";
 
@@ -183,6 +184,13 @@ function client(overrides: Record<string, unknown> = {}) {
     })),
     setIssueState: vi.fn(async () => issue),
     mergePull: vi.fn(async () => ({ merged: true, mergeSha: "c".repeat(40) })),
+    submitReview: vi.fn(async () => ({ id: 21n, state: 1 })),
+    rerunChecks: vi.fn(async () => ({
+      outcomes: [],
+      reasonCode: "NOT_RERUNNABLE",
+      checks,
+    })),
+    deleteBranch: vi.fn(async () => ({ deleted: true, reasonCode: "" })),
     listReferences: vi.fn(async () => ({
       references: [],
       nextId: "",
@@ -255,6 +263,9 @@ beforeEach(() => {
   session.state = { status: "idle" };
   session.client = null;
   useGithubFocus.setState({ tab: "issues", number: null, reveal: 0 });
+  vi.mocked(runtimeApi.gitRepositoryWorktrees).mockReset();
+  vi.mocked(runtimeApi.gitRepositoryWorktrees).mockResolvedValue([]);
+  vi.mocked(runtimeApi.gitRepositoryOperate).mockClear();
 });
 afterEach(cleanup);
 
@@ -590,5 +601,335 @@ describe("merging a pull request", () => {
     expect(await screen.findByText("Fix the import")).toBeTruthy();
     expect(screen.queryByText(/^合并/)).toBeNull();
     expect(screen.queryByText("Approve")).toBeNull();
+  });
+});
+
+const PATCH = [
+  "@@ -10,3 +10,3 @@",
+  " \tsetup()",
+  "-\told()",
+  "+\tfresh()",
+].join("\n");
+
+const changedFile = {
+  $typeName: "armadra.v1.GithubPullFile" as const,
+  path: "api.go",
+  previousPath: "",
+  status: "modified",
+  additions: 1n,
+  deletions: 1n,
+  binary: false,
+  patch: PATCH,
+};
+
+async function openPullDetail(api: ReturnType<typeof client>, write = true) {
+  ready(api, write);
+  renderDrawer();
+  await resolveRepository();
+  selectTab("Pull requests");
+  fireEvent.click(await screen.findByText("打开详情"));
+  await screen.findByText("Fix the import");
+}
+
+describe("inline review comments", () => {
+  const detail = (overrides: Record<string, unknown> = {}) => ({
+    pull,
+    files: [changedFile],
+    reviews: [],
+    reviewComments: [],
+    comments: [],
+    checks,
+    references: [],
+    pollIntervalMs: 60_000n,
+    ...overrides,
+  });
+
+  it("submits a line comment with the path, line and side the reviewer clicked", async () => {
+    const api = client({ getPull: vi.fn(async () => detail()) });
+    await openPullDetail(api);
+    fireEvent.click(screen.getByText("api.go"));
+    // The added line is line 11 on the head side, per the hunk header.
+    const entry = await waitFor(() => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-line="11"][data-side="RIGHT"] [data-slot="github-inline-comment"]',
+      );
+      if (!row) throw new Error("no inline entry yet");
+      return row;
+    });
+    fireEvent.click(entry);
+    const editor = await screen.findByLabelText("行内评论内容");
+    fireEvent.change(editor, { target: { value: "这里要判空" } });
+    fireEvent.click(screen.getByText("Comment"));
+    await waitFor(() =>
+      expect(api.submitReview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          commitSha: HEAD_SHA,
+          comments: [
+            expect.objectContaining({
+              path: "api.go",
+              line: 11n,
+              side: "RIGHT",
+              body: "这里要判空",
+            }),
+          ],
+        }),
+      ),
+    );
+  });
+
+  it("anchors a comment on a removed line to the base side", async () => {
+    const api = client({ getPull: vi.fn(async () => detail()) });
+    await openPullDetail(api);
+    fireEvent.click(screen.getByText("api.go"));
+    const entry = await waitFor(() => {
+      const row = document.querySelector<HTMLElement>(
+        '[data-line="11"][data-side="LEFT"] [data-slot="github-inline-comment"]',
+      );
+      if (!row) throw new Error("no inline entry yet");
+      return row;
+    });
+    fireEvent.click(entry);
+    expect(
+      document.querySelector(
+        '[data-slot="github-inline-draft"][data-side="LEFT"]',
+      ),
+    ).toBeTruthy();
+  });
+
+  it("never draws an outdated comment on a line of the current diff", async () => {
+    const api = client({
+      getPull: vi.fn(async () =>
+        detail({
+          reviewComments: [
+            {
+              $typeName: "armadra.v1.GithubReviewComment" as const,
+              id: 5n,
+              body: "旧位置的意见",
+              path: "api.go",
+              commitSha: "d".repeat(40),
+              line: 11n,
+              side: "RIGHT",
+              outdated: true,
+              createdAtUnixMs: 0n,
+            },
+          ],
+        }),
+      ),
+    });
+    await openPullDetail(api);
+    fireEvent.click(
+      document.querySelector<HTMLElement>('[data-path="api.go"] button')!,
+    );
+    expect(await screen.findByText(/位置已经对不上/)).toBeTruthy();
+    // It is listed once, in the outdated block, and never inside the diff.
+    expect(
+      document.querySelector('[data-slot="github-diff"] table')?.textContent,
+    ).not.toContain("旧位置的意见");
+  });
+
+  it("offers no inline entry where there is no patch to anchor to", async () => {
+    const api = client({
+      getPull: vi.fn(async () =>
+        detail({ files: [{ ...changedFile, patch: "" }] }),
+      ),
+    });
+    await openPullDetail(api);
+    expect(await screen.findByText(/因此没有行内入口/)).toBeTruthy();
+    expect(
+      document.querySelector('[data-slot="github-inline-comment"]'),
+    ).toBeNull();
+  });
+});
+
+describe("re-running checks", () => {
+  const failing = create(GithubCheckSummarySchema, {
+    headSha: HEAD_SHA,
+    rollup: 3,
+    runs: [
+      {
+        name: "build",
+        app: "GitHub Actions",
+        conclusion: 3,
+        rerunnable: true,
+        workflowRunId: 77n,
+      },
+      { name: "lint", app: "other", conclusion: 3, rerunnable: false },
+    ],
+  });
+
+  it("sends the head on screen and only for a run the remote can restart", async () => {
+    const api = client({
+      getPull: vi.fn(async () => ({
+        pull,
+        files: [],
+        reviews: [],
+        reviewComments: [],
+        comments: [],
+        checks: failing,
+        references: [],
+        pollIntervalMs: 60_000n,
+      })),
+      rerunChecks: vi.fn(async () => ({
+        outcomes: [{ actionId: "rerun:77", target: "workflow_run", state: 1 }],
+        reasonCode: "",
+        checks: failing,
+      })),
+    });
+    await openPullDetail(api);
+    // Only the Actions run gets a button; the other producer has no endpoint.
+    const buttons = document.querySelectorAll('[data-slot="github-rerun"]');
+    expect(buttons.length).toBe(1);
+    expect(buttons[0]!.getAttribute("data-check")).toBe("build");
+    fireEvent.click(buttons[0]!);
+    await waitFor(() =>
+      expect(api.rerunChecks).toHaveBeenCalledWith({
+        repository: ref,
+        number: 34n,
+        expectedHeadSha: HEAD_SHA,
+        checkName: "build",
+        failedOnly: true,
+      }),
+    );
+    expect(await screen.findByText(/已请求重跑 1 个/)).toBeTruthy();
+  });
+
+  it("says nothing was restarted rather than implying it was", async () => {
+    const api = client({
+      getPull: vi.fn(async () => ({
+        pull,
+        files: [],
+        reviews: [],
+        reviewComments: [],
+        comments: [],
+        checks: failing,
+        references: [],
+        pollIntervalMs: 60_000n,
+      })),
+      rerunChecks: vi.fn(async () => ({
+        outcomes: [],
+        reasonCode: "HEAD_MOVED",
+        checks: failing,
+      })),
+    });
+    await openPullDetail(api);
+    fireEvent.click(document.querySelector('[data-slot="github-rerun"]')!);
+    expect(await screen.findByText(/HEAD_MOVED/)).toBeTruthy();
+  });
+
+  it("shows no rerun affordance at all when nothing exposes one", async () => {
+    const api = client();
+    await openPullDetail(api);
+    await screen.findByText("Fix the import");
+    expect(document.querySelector('[data-slot="github-rerun"]')).toBeNull();
+  });
+});
+
+describe("cleaning up after a merge", () => {
+  const merged = create(GithubPullRequestSchema, {
+    ...pull,
+    state: 3,
+    mergedAtUnixMs: 1_788_557_900_000n,
+  });
+  const mergedDetail = {
+    pull: merged,
+    files: [],
+    reviews: [],
+    reviewComments: [],
+    comments: [],
+    checks,
+    references: [],
+    pollIntervalMs: 60_000n,
+  };
+
+  it("is not offered before the pull request is actually merged", async () => {
+    const api = client();
+    await openPullDetail(api);
+    expect(document.querySelector('[data-slot="github-cleanup"]')).toBeNull();
+  });
+
+  it("deletes the remote branch under the exact SHA on screen, after a confirmation", async () => {
+    const api = client({
+      getPull: vi.fn(async () => mergedDetail),
+      deleteBranch: vi.fn(async () => ({ deleted: true, reasonCode: "" })),
+    });
+    await openPullDetail(api);
+    fireEvent.click(
+      await screen.findByText(`删除远端分支 · ${merged.headRef}`),
+    );
+    expect(await screen.findByText("删除远端分支？")).toBeTruthy();
+    expect(api.deleteBranch).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("确认"));
+    await waitFor(() =>
+      expect(api.deleteBranch).toHaveBeenCalledWith({
+        repository: ref,
+        branch: "fix/import",
+        expectedSha: HEAD_SHA,
+      }),
+    );
+    expect(await screen.findByText("远端分支已删除")).toBeTruthy();
+  });
+
+  it("reports the Host's refusal instead of claiming a deletion", async () => {
+    const api = client({
+      getPull: vi.fn(async () => mergedDetail),
+      deleteBranch: vi.fn(async () => ({
+        deleted: false,
+        reasonCode: "REF_MOVED",
+      })),
+    });
+    await openPullDetail(api);
+    fireEvent.click(
+      await screen.findByText(`删除远端分支 · ${merged.headRef}`),
+    );
+    fireEvent.click(screen.getByText("确认"));
+    expect(await screen.findByText(/REF_MOVED/)).toBeTruthy();
+    expect(screen.queryByText("远端分支已删除")).toBeNull();
+  });
+
+  it("does not offer to delete a fork's branch", async () => {
+    const fork = create(GithubPullRequestSchema, {
+      ...merged,
+      fromFork: true,
+      headRepoFullName: "someone/armadra",
+    });
+    const api = client({
+      getPull: vi.fn(async () => ({ ...mergedDetail, pull: fork })),
+    });
+    await openPullDetail(api);
+    expect(await screen.findByText(/head 分支在 fork 仓库里/)).toBeTruthy();
+    expect(
+      document.querySelector('[data-slot="github-delete-branch"]'),
+    ).toBeNull();
+  });
+
+  it("keeps removing the checkout separate, and refuses a dirty one", async () => {
+    vi.mocked(runtimeApi.gitRepositoryWorktrees).mockResolvedValue([
+      {
+        path: "/tmp/fix-import",
+        branch: "fix/import",
+        headOid: "e".repeat(40),
+        isMain: false,
+        bare: false,
+        locked: false,
+        prunable: false,
+        accessible: true,
+        dirty: true,
+        lockReason: null,
+        pruneReason: null,
+      },
+    ] as never);
+    const api = client({ getPull: vi.fn(async () => mergedDetail) });
+    await openPullDetail(api);
+    const remove = await waitFor(() => {
+      const button = document.querySelector<HTMLButtonElement>(
+        '[data-slot="github-remove-worktree"]',
+      );
+      if (!button) throw new Error("no removal button yet");
+      return button;
+    });
+    // A checkout with uncommitted work is never removed from here.
+    expect(remove.disabled).toBe(true);
+    expect(await screen.findByText(/不能安全移除/)).toBeTruthy();
+    expect(runtimeApi.gitRepositoryOperate).not.toHaveBeenCalled();
   });
 });

@@ -250,6 +250,44 @@ const zh = {
   "github.review.commit": "评审针对的提交",
   "github.review.submitted": "评审已提交",
   "github.review.needsBody": "Request changes 必须写明意见",
+  "github.review.inlineAdd": "在这一行评论",
+  "github.review.inlineBody": "行内评论内容",
+  "github.review.inlineAt": "{side} 第 {line} 行",
+  "github.review.inlineDiscard": "丢弃这条",
+  "github.review.inlineCount": "另有 {count} 条行内评论会随这次评审一起提交",
+  "github.review.outdatedNote":
+    "以下行内评论锚在别的提交上，位置已经对不上，因此不画在当前差异里：",
+  "github.review.noPatch":
+    "远端没有给出这个文件的差异（太大或是二进制），因此没有行内入口。",
+
+  /* 检查重跑 */
+  "github.checks.rerun": "重跑",
+  "github.checks.rerunAll": "重跑失败的 {count} 项",
+  "github.checks.noRerun": "这些检查的产生方没有提供重跑接口",
+  "github.checks.rerunRequested": "已请求重跑 {count} 个 workflow run",
+  "github.checks.rerunUnknown": "其中一次的结果没读到，不会自动再发一遍",
+  "github.checks.notRerun": "没有重跑",
+
+  /* 合并后清理 */
+  "github.cleanup": "合并后清理",
+  "github.cleanup.note":
+    "删远端分支和移除本地检出是两件独立的事，各自确认；运行中的会话一概不动。",
+  "github.cleanup.deleteBranch": "删除远端分支",
+  "github.cleanup.removeWorktree": "移除本地检出",
+  "github.cleanup.forkBranch": "head 分支在 fork 仓库里，这里不提供删除。",
+  "github.cleanup.frame": "绑定的 Frame",
+  "github.cleanup.branchDeleted": "远端分支已删除",
+  "github.cleanup.branchKept": "没有删除",
+  "github.cleanup.worktreeQueued": "已请求移除这份检出",
+  "github.cleanup.worktreeBlocked":
+    "这份检出现在不能安全移除：有未提交改动、被锁定，或者是主 worktree。",
+  "github.cleanup.confirmBranch": "删除远端分支？",
+  "github.cleanup.confirmBranchNote":
+    "只删远端这条分支。分支在这期间前进过就会被拒绝，而不是照删。",
+  "github.cleanup.confirmWorktree": "移除本地检出？",
+  "github.cleanup.confirmWorktreeNote":
+    "走的是仓库面板那条安全移除；成功后才解绑 Frame，解绑只清画布上的绑定。",
+  "github.cleanup.confirmAction": "确认",
   "github.reviewState.commented": "已评论",
   "github.reviewState.approved": "已批准",
   "github.reviewState.changesRequested": "要求修改",
@@ -589,6 +627,48 @@ const en: Record<keyof typeof zh, string> = {
   "github.review.commit": "Reviewed commit",
   "github.review.submitted": "Review submitted",
   "github.review.needsBody": "Request changes needs a written reason",
+  "github.review.inlineAdd": "Comment on this line",
+  "github.review.inlineBody": "Inline comment",
+  "github.review.inlineAt": "{side} line {line}",
+  "github.review.inlineDiscard": "Discard",
+  "github.review.inlineCount":
+    "{count} inline comments go with this review when it is submitted",
+  "github.review.outdatedNote":
+    "These inline comments are anchored to another commit, so their position no longer holds and they are not drawn on this diff:",
+  "github.review.noPatch":
+    "The remote returned no diff for this file (too large, or binary), so there is nowhere to anchor an inline comment.",
+
+  /* Check reruns */
+  "github.checks.rerun": "Re-run",
+  "github.checks.rerunAll": "Re-run the {count} that did not pass",
+  "github.checks.noRerun":
+    "Nothing produced these checks exposes a way to restart them",
+  "github.checks.rerunRequested": "Requested {count} workflow run restarts",
+  "github.checks.rerunUnknown":
+    "One result was never read; it is not sent again automatically",
+  "github.checks.notRerun": "Nothing was restarted",
+
+  /* Cleanup after a merge */
+  "github.cleanup": "Clean up after the merge",
+  "github.cleanup.note":
+    "Deleting the remote branch and removing the local checkout are separate actions, each confirmed on its own. Running sessions are left alone.",
+  "github.cleanup.deleteBranch": "Delete the remote branch",
+  "github.cleanup.removeWorktree": "Remove the local checkout",
+  "github.cleanup.forkBranch":
+    "The head branch lives in a fork, so it is not offered for deletion here.",
+  "github.cleanup.frame": "Bound Frame",
+  "github.cleanup.branchDeleted": "The remote branch was deleted",
+  "github.cleanup.branchKept": "Not deleted",
+  "github.cleanup.worktreeQueued": "Removal of the checkout was requested",
+  "github.cleanup.worktreeBlocked":
+    "This checkout cannot be removed safely right now: uncommitted changes, a lock, or it is the main worktree.",
+  "github.cleanup.confirmBranch": "Delete the remote branch?",
+  "github.cleanup.confirmBranchNote":
+    "Only the remote branch. A branch that advanced since this was read is refused rather than deleted.",
+  "github.cleanup.confirmWorktree": "Remove the local checkout?",
+  "github.cleanup.confirmWorktreeNote":
+    "Uses the repository panel's safe removal. The Frame is unbound only after it succeeds, and unbinding only clears the canvas binding.",
+  "github.cleanup.confirmAction": "Confirm",
   "github.reviewState.commented": "Commented",
   "github.reviewState.approved": "Approved",
   "github.reviewState.changesRequested": "Changes requested",
