@@ -193,6 +193,15 @@ export const switchExecutionHostRequestSchema = z.object({
   /** Rebind even when the two roots do not look like the same project. */
   force: z.boolean().optional(),
   /**
+   * End the terminals and browser sessions in the way, then switch. Never
+   * implied by `force`: stopping a running Agent is a decision somebody makes
+   * after seeing the list, which is why the refusal names every entry.
+   *
+   * It never covers an editor draft or a Git operation in flight — those hold
+   * work that reopening a node does not bring back.
+   */
+  stopBlockers: z.boolean().optional(),
+  /**
    * Always refused by the runtime. Modelled so the refusal can name what was
    * asked instead of the request being silently reinterpreted.
    */
@@ -206,7 +215,11 @@ export const rootFingerprintSchema = z.object({
   entryCount: z.number().int().nonnegative(),
 });
 
-/** One thing still bound to the old host. `kind` is a key the UI translates. */
+/**
+ * One thing still bound to the old host. `kind` is a key the UI translates:
+ * `editorDraft`, `terminal`, `browser`, `automation`, `gitOperation`,
+ * `upload`.
+ */
 export const executionHostBlockerSchema = z.object({
   kind: z.string(),
   detail: z.string(),
@@ -223,7 +236,70 @@ export const executionHostRefusalSchema = z.object({
   from: rootFingerprintSchema.optional(),
   to: rootFingerprintSchema.optional(),
   blockers: z.array(executionHostBlockerSchema).default([]),
+  /**
+   * What `stopBlockers` really ended before the switch was refused anyway.
+   * "Nothing happened" is the wrong thing to show when a terminal was killed.
+   */
+  stopped: z.array(executionHostBlockerSchema).default([]),
 });
+
+/* ---------------------------- execution hosts ----------------------------- */
+
+/**
+ * `GET /api/execution-hosts` — the machines a workspace may run on, this one
+ * first. The local row has an empty id and no SSH block: it needs no
+ * registration, which is why it has no row to edit or delete either.
+ */
+export const executionHostSchema = z.object({
+  executionHostId: z.string(),
+  name: z.string(),
+  kind: z.enum(["local", "ssh"]),
+  ssh: sshHostSchema.optional(),
+  /**
+   * Without a Worker the host runs terminals only: a workspace cannot execute
+   * on it, and asking is refused rather than quietly served from this machine.
+   */
+  workerConfigured: z.boolean(),
+  workspaceCount: z.number().int().nonnegative(),
+});
+
+/**
+ * `POST /api/execution-hosts/{id}/validate` — reachability *and* the Worker
+ * handshake, kept apart because they have different fixes.
+ */
+export const executionHostValidationSchema = z.object({
+  executionHostId: z.string(),
+  reachable: z.boolean(),
+  workerOk: z.boolean(),
+  platform: z.string().optional(),
+  architecture: z.string().optional(),
+  runtimeVersion: z.string().optional(),
+  capabilities: z.array(z.string()).default([]),
+  /** `unreachable`, `noWorkerConfigured`, `handshakeRefused`. */
+  reason: z.string().optional(),
+  /** Redacted tail of whatever diagnostics were produced. */
+  detail: z.string().default(""),
+});
+
+/**
+ * The portable registry. It names where each host is and how the Worker starts
+ * there, and carries nothing that could authenticate to it — `identityFile` is
+ * a path each machine resolves against its own filesystem, and there is no
+ * field a password or key could travel in.
+ */
+export const executionHostPackageSchema = z.object({
+  version: z.number().int().positive(),
+  hosts: z.array(sshHostSchema),
+});
+
+/** `POST /api/execution-hosts/import`. */
+export const importExecutionHostsRequestSchema =
+  executionHostPackageSchema.extend({
+    /** Drop what this installation already has instead of merging. */
+    replace: z.boolean().optional(),
+    /** Allow an id that already exists to be replaced rather than refused. */
+    overwrite: z.boolean().optional(),
+  });
 
 export type SshHost = z.infer<typeof sshHostSchema>;
 export type RemoteWorkerProbe = z.infer<typeof remoteWorkerProbeSchema>;
@@ -244,3 +320,11 @@ export type SwitchExecutionHostRequest = z.infer<
 export type RootFingerprint = z.infer<typeof rootFingerprintSchema>;
 export type ExecutionHostBlocker = z.infer<typeof executionHostBlockerSchema>;
 export type ExecutionHostRefusal = z.infer<typeof executionHostRefusalSchema>;
+export type ExecutionHost = z.infer<typeof executionHostSchema>;
+export type ExecutionHostValidation = z.infer<
+  typeof executionHostValidationSchema
+>;
+export type ExecutionHostPackage = z.infer<typeof executionHostPackageSchema>;
+export type ImportExecutionHostsRequest = z.infer<
+  typeof importExecutionHostsRequestSchema
+>;

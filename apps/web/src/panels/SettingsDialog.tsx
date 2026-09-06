@@ -13,6 +13,7 @@ import { HooksPage } from "./settings/pages/HooksPage";
 import { HostPage } from "./settings/pages/HostPage";
 import { KeybindingsPage } from "./settings/pages/KeybindingsPage";
 import { NotificationsPage } from "./settings/pages/NotificationsPage";
+import { ExecutionHostsPage } from "./settings/pages/ExecutionHostsPage";
 import { SshPage } from "./settings/pages/SshPage";
 import { TerminalPage } from "./settings/pages/TerminalPage";
 import { UpdatesPage } from "./settings/pages/UpdatesPage";
@@ -44,6 +45,7 @@ const SECTION_PAGES: Record<string, () => React.ReactElement> = {
   terminal: TerminalPage,
   workspace: WorkspacePage,
   ssh: SshPage,
+  executionHosts: ExecutionHostsPage,
   data: DataPage,
   account: AccountPage,
   keybindings: KeybindingsPage,

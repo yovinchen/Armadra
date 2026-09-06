@@ -29,6 +29,7 @@ export {
   RuntimeConnectionError,
   RuntimeRequestError,
   isConflict,
+  isUnsupportedOnRemote,
 } from "./request";
 export {
   initRuntimeSockets,

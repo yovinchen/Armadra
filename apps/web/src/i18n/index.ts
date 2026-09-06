@@ -6,6 +6,7 @@ import { browser } from "./browser";
 import { canvas } from "./canvas";
 import { collab } from "./collab";
 import { commands } from "./commands";
+import { executionHosts } from "./execution-hosts";
 import { explorer } from "./explorer";
 import { externalService } from "./external-service";
 import { format } from "./format";
@@ -71,6 +72,7 @@ export const MESSAGE_MODULES = {
   resources,
   sessions,
   ssh,
+  "execution-hosts": executionHosts,
   host,
   "host-identity": hostIdentity,
   "host-native": hostNative,

@@ -1,6 +1,7 @@
 import {
   Bell,
   Bot,
+  Cpu,
   Database,
   Gauge,
   Info,
@@ -99,6 +100,14 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     groupKey: "settings.group.connection",
     labelKey: "ssh.nav",
     icon: Server,
+  },
+  {
+    // SSH 那一页编辑的是「怎么连」；这一页回答「有哪些机器、现在能不能用、
+    // 当前工作区跑在哪一台」——两件不同的事，所以是两页。
+    id: "executionHosts",
+    groupKey: "settings.group.connection",
+    labelKey: "executionHosts.nav",
+    icon: Cpu,
   },
   {
     id: "data",

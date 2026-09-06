@@ -7,6 +7,7 @@ import {
   type TerminalCursorStyle,
 } from "../../../app/preferences-store";
 import { RENDER_BUDGET_CHOICES } from "../../../terminal/render-budget";
+import { LocalSourceBadge } from "../local-source";
 import { SettingsGroup } from "../SettingsGroup";
 import { SettingsRow } from "../SettingsRow";
 import { useRuntimeSettings } from "../use-runtime-settings";
@@ -106,6 +107,8 @@ export function TerminalPage() {
     <>
       <SettingsGroup>
         <SettingsRow label={t("settings.terminalBackend")}>
+          {/* tmux 在这台机器上有、在另一台上没有，所以这一条不跟着账号走。 */}
+          <LocalSourceBadge path="terminal.backend" />
           <Select
             value={runtimeTerminal?.backend ?? "auto"}
             disabled={!settings.data}
@@ -177,6 +180,8 @@ export function TerminalPage() {
           label={t("resources.power.policyLabel")}
           footnote={t("resources.power.policyHint")}
         >
+          {/* 「这台机器可不可以被拖着不睡」——笔记本和构建机的答案不一样。 */}
+          <LocalSourceBadge path="power.policy" />
           <Select
             value={settings.data?.power?.policy ?? "manual"}
             disabled={!settings.data}

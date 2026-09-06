@@ -7,7 +7,13 @@ import { usePreferencesStore } from "../../app/preferences-store";
  * 把「是哪一类、编辑的是谁」放进这一个字符串里，页头的标题就能由 id 推出来，
  * 不必让页面把文案回传给对话框。
  */
-export type SubpageKind = "ssh" | "agent";
+export type SubpageKind = "ssh" | "agent" | "executionHosts";
+
+const SUBPAGE_KINDS: readonly SubpageKind[] = [
+  "ssh",
+  "agent",
+  "executionHosts",
+];
 
 export function subpageId(kind: SubpageKind, ref: string): string {
   return `${kind}:${ref}`;
@@ -21,8 +27,8 @@ export function parseSubpage(
   if (separator <= 0) return null;
   const kind = subpage.slice(0, separator);
   const ref = subpage.slice(separator + 1);
-  if (kind !== "ssh" && kind !== "agent") return null;
-  return { kind, ref };
+  if (!SUBPAGE_KINDS.includes(kind as SubpageKind)) return null;
+  return { kind: kind as SubpageKind, ref };
 }
 
 /** 子页标题的 i18n 键；新建与编辑各一句。 */
@@ -33,6 +39,7 @@ export function subpageTitleKey(subpage: string): string {
   if (parsed.kind === "ssh") {
     return isNew ? "ssh.dialog.add" : "ssh.dialog.edit";
   }
+  if (parsed.kind === "executionHosts") return "executionHosts.switch.title";
   return isNew ? "settings.customAgent.new" : "settings.customAgent.edit";
 }
 

@@ -74,6 +74,21 @@ export function isConflict(error: unknown): boolean {
   return error instanceof RuntimeRequestError && error.status === 409;
 }
 
+/**
+ * 这个动作只能在 Armadra 自己所在的机器上跑，而当前工作区在另一台
+ * （远端补全设计 §3.1）。
+ *
+ * 和普通的 `unsupported` 分开，是因为要用户做的事不一样：一个是「去装点
+ * 什么」，这个是「工作区在别的机器上」——后者可以由切换执行主机解决，界面
+ * 得说得出这句话。
+ */
+export function isUnsupportedOnRemote(error: unknown): boolean {
+  return (
+    error instanceof RuntimeRequestError &&
+    error.code === "unsupported_on_remote"
+  );
+}
+
 /** 只有会改状态的方法需要 CSRF；GET / HEAD 靠 SameSite Cookie 与精确 Origin。 */
 function unsafeMethod(method: string | undefined): boolean {
   const value = (method ?? "GET").toUpperCase();

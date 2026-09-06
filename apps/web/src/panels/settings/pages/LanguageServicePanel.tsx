@@ -1,8 +1,9 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RotateCw } from "lucide-react";
+import { toast } from "sonner";
 
-import { runtimeApi } from "@/api/client";
+import { isUnsupportedOnRemote, runtimeApi } from "@/api/client";
 import { useT } from "@/app/preferences-store";
 import { refreshFormatOnSave } from "@/editor/language/settings";
 import { useLanguageStatusStore } from "@/editor/language/status-store";
@@ -11,6 +12,7 @@ import { Button } from "@/ui/button";
 import { IconButton } from "@/ui/icon-button";
 import { Input } from "@/ui/input";
 import { Switch } from "@/ui/switch";
+import { LocalSourceBadge } from "../local-source";
 import { SettingsGroup } from "../SettingsGroup";
 import { SettingsRow } from "../SettingsRow";
 import { useRuntimeSettings } from "../use-runtime-settings";
@@ -54,8 +56,11 @@ export function LanguageServicePanel({ workspaceId }: { workspaceId: string }) {
         ? runtimeApi.restartLanguageServer(workspaceId, serverId)
         : runtimeApi.stopLanguageServer(workspaceId, serverId));
       await probe.refetch();
-    } catch {
-      // 失败的原因会在下一次探测的 reason 里；不再弹一次。
+    } catch (error) {
+      // 「这台机器上跑不了」不会出现在下一次探测的 reason 里——探测问的是
+      // 远端有没有这个 server，而这两个动作根本没到远端。所以只有这一种失败
+      // 需要说出来，其余照旧由 reason 解释。
+      if (isUnsupportedOnRemote(error)) toast.error(t("settings.remoteOnly"));
     } finally {
       setBusy(null);
     }
@@ -82,7 +87,10 @@ export function LanguageServicePanel({ workspaceId }: { workspaceId: string }) {
         />
       </SettingsRow>
 
+      {/* 每台机器的 language server 装在不同地方，探测结果也是这台机器的，
+          所以路径覆盖与探测缓存都留在本机。 */}
       <SettingsRow label={null}>
+        <LocalSourceBadge path="language.servers" />
         <Button
           size="sm"
           variant="secondary"

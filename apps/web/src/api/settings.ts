@@ -3,7 +3,12 @@ import {
   TERMINAL_BACKEND_CHOICES,
   answerSshPromptRequestSchema,
   customAgentSchema,
+  executionHostPackageSchema,
   executionHostRefusalSchema,
+  executionHostSchema,
+  executionHostValidationSchema,
+  importExecutionHostsRequestSchema,
+  localSettingsSchema,
   powerPolicySchema,
   remoteWorkerProbeSchema,
   sshHostKeyScanSchema,
@@ -15,6 +20,7 @@ import {
   workspaceSchema,
   type CustomAgent,
   type ExecutionHostRefusal,
+  type ImportExecutionHostsRequest,
   type PowerPolicy,
   type SshHost,
   type SwitchExecutionHostRequest,
@@ -211,6 +217,13 @@ export const settingsApi = {
   /* ----------------------------------- 设置 ----------------------------- */
   settings: () => request("/api/settings", runtimeSettingsSchema),
   /**
+   * 哪些键存在本机（迁移 §1.4）。
+   *
+   * 永远问 Runtime，不问 Host：本地那一半不随所有权迁移，所以无论设置文档
+   * 归谁写，这份清单都由跑在这台机器上的进程回答。
+   */
+  localSettings: () => request("/api/settings/local", localSettingsSchema),
+  /**
    * 连通性探测（§21）：Runtime 跑一次
    * `ssh -o BatchMode=yes -o ConnectTimeout=5 <目标> true`，
    * 回 `{ok, output}`；`output` 只有末几行且已脱敏。
@@ -291,6 +304,30 @@ export const settingsApi = {
     ),
 
   /* --------------------------------- 执行主机 --------------------------- */
+
+  /** 本机 + `settings.ssh.hosts[]`，本机永远在第一行。 */
+  executionHosts: () =>
+    request("/api/execution-hosts", z.array(executionHostSchema)),
+  /**
+   * 连通性与 Worker 握手一次问完。
+   *
+   * `ssh` 通得了、Worker 不对，和整台机器连不上，是两件要做不同处理的事，
+   * 所以答案里两个标志分开，不合成一个「失败」。
+   */
+  validateExecutionHost: (hostId: string) =>
+    request(
+      `/api/execution-hosts/${query(hostId)}/validate`,
+      executionHostValidationSchema,
+      { method: "POST" },
+    ),
+  /** 可携带的主机表；里面没有任何能用来认证的东西。 */
+  exportExecutionHosts: () =>
+    request("/api/execution-hosts/export", executionHostPackageSchema),
+  importExecutionHosts: (input: ImportExecutionHostsRequest) =>
+    request("/api/execution-hosts/import", z.array(executionHostSchema), {
+      method: "POST",
+      ...json(importExecutionHostsRequestSchema.parse(input)),
+    }),
 
   /**
    * 把工作空间改绑到另一台执行主机（设计 §3.3）。

@@ -11,6 +11,7 @@ export * from "./workspaces.js";
 export * from "./boards.js";
 export * from "./files.js";
 export * from "./search.js";
+export * from "./settings.js";
 export * from "./ssh.js";
 export * from "./terminals.js";
 export * from "./conversations.js";
