@@ -25,7 +25,8 @@ pub struct ExportPngResponse {
     /// Absolute path, which is what an agent is told to open.
     path: String,
     /// The same file relative to the workspace root, which is what a
-    /// `ContextLink.content.pngPath` carries (tldraw plan §6.3).
+    /// `ContextLink.content.pngPath` carries
+    /// (docs/design/canvas-react-flow.md §2.5).
     relative_path: String,
     bytes: usize,
 }
@@ -36,18 +37,19 @@ pub struct ExportPngResponse {
 const MAX_EXPORT_PNG_BYTES: usize = 8 * 1024 * 1024;
 const PNG_DATA_URL_PREFIX: &str = "data:image/png;base64,";
 
-/// `POST /api/workspaces/{id}/exports/{exportId}/png` — tldraw plan §6.3.
+/// `POST /api/workspaces/{id}/exports/{exportId}/png` —
+/// docs/design/canvas-react-flow.md §2.5.
 ///
 /// Whatever is on the whiteboard — ink, a geo shape, a whole frame — only
-/// exists as vectors inside the browser's tldraw store, so the one party that
-/// can rasterise it is the client. It uploads the PNG as a data URL and the
-/// runtime drops the bytes at `<workspace>/.armadra/exports/<exportId>.png`, which
-/// is the path a linked agent is handed.
+/// exists as vectors inside the browser's whiteboard document, so the one party
+/// that can rasterise it is the client. It uploads the PNG as a data URL and
+/// the runtime drops the bytes at
+/// `<workspace>/.armadra/exports/<exportId>.png`, which is the path a linked
+/// agent is handed.
 ///
-/// The export id is *not* required to be a node: since the tldraw migration the
-/// thing being exported is usually a plain whiteboard shape, which has no row
-/// anywhere. It only has to be a uuid, which is what keeps the file name from
-/// being a path.
+/// The export id is *not* required to be a node: the thing being exported is
+/// usually a plain whiteboard item, which has no row anywhere. It only has to
+/// be a uuid, which is what keeps the file name from being a path.
 pub async fn export_png(
     State(state): State<AppState>,
     AxumPath((workspace_id, export_id)): AxumPath<(String, String)>,

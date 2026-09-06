@@ -24,7 +24,7 @@
 .
 ├── apps/                      可运行产物，每个目录独立打包
 │   ├── desktop/               Tauri 壳：窗口、托盘、sidecar、更新（不写业务）
-│   ├── web/                   React / tldraw 前端（唯一页面）
+│   ├── web/                   React / React Flow 前端（唯一页面）
 │   ├── host/                  Go 中转服务：身份、调度、事件、业务状态、Worker 管理
 │   └── worker/                Rust 执行层（由 apps/runtime 演进）：终端、文件、Git、Hook、进程测量
 ├── crates/                    Rust 库，只被 apps 或其他 crate 依赖
@@ -156,7 +156,7 @@ CI（`.github/workflows/ci.yml`）按改动路径分作业：
 2. 清理根目录：`output/` 加入忽略并删除已跟踪文件，`design/logo-concepts` 移到 `assets/brand`，更新 README 链接。
 3. `packages/protocol-ts` → `packages/protocol`，`crates/armadra-hook` → `crates/hook`；只改路径与 workspace 配置，不改代码。
 4. `scripts/` → `tools/`，`armadra.sh` 与 `package.json` 指向新路径。
-5. 文档分目录：`guides/`、`design/`、`status/`、`contracts/`；移动前 grep 代码中的文件名引用（`v3-agent-terminal-plan` 在 web、runtime 与 shared 中被注释引用；`tldraw-canvas-plan` 已移入 `history/`，注释里引用的是它的 §N 编号，不是路径），一并更新。
+5. 文档分目录：`guides/`、`design/`、`status/`、`contracts/`；移动前 grep 代码中的文件名引用（`v3-agent-terminal-plan` 在 web、runtime 与 shared 中被注释引用；已归档的旧画布契约移入 `history/` 后，注释里只保留它的 §N 编号，不写路径），一并更新。
 6. 拆分超大文件：`api.rs` 的测试移到 `tests/`，路由按 workspace / terminal / git / settings 分模块；`git_repository.rs` 按 status / refs / history / operations 拆分。行数规则先以豁免表方式启用。
 7. 随 H01 写入所有权切换，`apps/runtime` → `apps/worker`，Host 成为唯一业务写入方；此时删除白名单表规则。
 

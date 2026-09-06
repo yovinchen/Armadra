@@ -516,8 +516,8 @@ func (x *CanvasViewport) GetZoom() float64 {
 	return 0
 }
 
-// The tldraw snapshot is opaque: schema version, engine version, bytes and a
-// digest. Nothing in the Host decodes it, and no field of it is projected.
+// The whiteboard snapshot is opaque: schema version, engine version, bytes and
+// a digest. Nothing in the Host decodes it, and no field of it is projected.
 type CanvasWhiteboard struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SchemaVersion uint32                 `protobuf:"varint,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`

@@ -115,7 +115,7 @@ Git 操作日志可复制，经脱敏后保存至 operation；凭据提示或编
 
 `WorktreeRecord`：repositoryId、worktreeId、path、branch、headOid、locked、prunable、isMain、status、setupState。
 
-**已实施（G03）**：`FrameBinding { worktreePath, branch, repositoryId, initScript, initScriptState, initScriptNodeId }` 落在 group 节点的 `data.binding` 上，并随 tldraw frame 形状的 `meta.armadra.binding` 往返持久化。绑定是**对已存在检出的一条记录**，不是检出本身。Frame 头部的 `WorktreeBindingBadge` 显示分支、路径、脏文件数与初始化脚本状态，脏文件数复用同一份仓库发现结果；检出不在发现结果里时显示 repair 提示，提供重新创建与解绑。
+**已实施（G03）**：`FrameBinding { worktreePath, branch, repositoryId, initScript, initScriptState, initScriptNodeId }` 落在 group 节点的 `data.binding` 上，随节点文档一起往返持久化。绑定是**对已存在检出的一条记录**，不是检出本身。Frame 头部的 `WorktreeBindingBadge` 显示分支、路径、脏文件数与初始化脚本状态，脏文件数复用同一份仓库发现结果；检出不在发现结果里时显示 repair 提示，提供重新创建与解绑。
 
 路径继承分两种：终端 `cwd` 用绝对路径（Runtime 直接把它交给子进程，相对路径会相对 Runtime 自己的工作目录解析），编辑器 / 文件树的 `path` 与 Diff 的 `repoPath` 用工作空间相对路径，与 `defaultNodeData` 一致。初始化脚本只跑一次：只有 `pending` 状态会触发，且在写入终端之前先把状态持久化为 `running`。
 

@@ -47,9 +47,10 @@ pub async fn put_context_links(
         if Uuid::parse_str(&link.id).is_err() || link.title.len() > 160 || link.kind.len() > 40 {
             return Err(AppError::BadRequest("Context link is invalid".into()));
         }
-        // A `shape` link carries its own readable payload (tldraw plan §6.3);
-        // it is stored verbatim and later handed to an agent, so bound it here
-        // rather than trusting whatever the canvas serialized.
+        // A `shape` link carries its own readable payload
+        // (docs/design/canvas-react-flow.md §2.5); it is stored verbatim and
+        // later handed to an agent, so bound it here rather than trusting
+        // whatever the canvas serialized.
         if let Some(content) = &link.content
             && (content
                 .text

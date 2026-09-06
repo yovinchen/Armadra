@@ -30,7 +30,7 @@ enum BrowserSessionState {
 }
 
 // CSS pixels, never canvas pixels: the client scales the frame inside its
-// tldraw shape rather than writing the zoom into the page viewport (§8).
+// browser node rather than writing the zoom into the page viewport (§8).
 message BrowserViewport {
   uint32 width = 1;
   uint32 height = 2;

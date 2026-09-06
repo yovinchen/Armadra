@@ -77,8 +77,8 @@ message CanvasViewport {
   double zoom = 3;
 }
 
-// The tldraw snapshot is opaque: schema version, engine version, bytes and a
-// digest. Nothing in the Host decodes it, and no field of it is projected.
+// The whiteboard snapshot is opaque: schema version, engine version, bytes and
+// a digest. Nothing in the Host decodes it, and no field of it is projected.
 message CanvasWhiteboard {
   uint32 schema_version = 1;
   string engine_version = 2;

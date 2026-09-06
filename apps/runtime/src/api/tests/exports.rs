@@ -5,8 +5,8 @@ use serde_json::json;
 
 use super::support::*;
 
-/// Tldraw plan §6.3: an export is a whiteboard shape, not a node, so the
-/// id only has to be a uuid.
+/// docs/design/canvas-react-flow.md §2.5: an export is a whiteboard item, not
+/// a node, so the id only has to be a uuid.
 #[tokio::test]
 async fn exports_no_longer_need_a_node() {
     let (router, directory) = router_fixture("api-exports").await;

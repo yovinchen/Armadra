@@ -40,8 +40,9 @@ fn scan_value(
 ) {
     match value {
         serde_json::Value::Object(object) => {
-            // Managed tldraw asset src URLs duplicate meta.armadra.path; the
-            // path is authoritative and old localhost origins are not fetched.
+            // A record that pairs meta.armadra.path with a props.src URL names
+            // the same asset twice; the path is authoritative and old localhost
+            // origins are not fetched.
             let managed_asset = object
                 .get("meta")
                 .and_then(|m| m.get("armadra"))

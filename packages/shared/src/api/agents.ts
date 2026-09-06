@@ -75,9 +75,10 @@ export const suggestTitleResponseSchema = z.object({
 });
 
 /**
- * What a linked whiteboard shape reads as (tldraw plan §6.3). Only present
- * when `kind === "shape"`: text shapes carry their text, everything else is
- * rasterised by the client and referenced by a workspace-relative PNG path.
+ * What a linked whiteboard shape reads as (docs/design/canvas-react-flow.md
+ * §2.5). Only present when `kind === "shape"`: text items carry their text,
+ * everything else is rasterised by the client and referenced by a
+ * workspace-relative PNG path.
  */
 export const contextLinkContentSchema = z.object({
   /** Render status is explicit: a visible link need not have a ready image. */
@@ -90,10 +91,13 @@ export const contextLinkContentSchema = z.object({
 });
 
 export const contextLinkSchema = z.object({
-  /** Node id, or the uuid part of a whiteboard shape id (`shape:<uuid>`). */
+  /** Node id, or the uuid of the whiteboard item behind a `shape` link. */
   id: z.string().uuid(),
   title: z.string().max(160),
-  /** A node type, or `"shape"` for whiteboard content (tldraw plan §6.3). */
+  /**
+   * A node type, or `"shape"` for whiteboard content
+   * (docs/design/canvas-react-flow.md §2.5).
+   */
   kind: z.string().max(40),
   content: contextLinkContentSchema.optional(),
 });

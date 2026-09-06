@@ -40,7 +40,7 @@ pub const EXPORTS_DIRECTORY: &str = ".armadra/exports";
 
 /// The thing being rasterised is a whiteboard shape rather than a node, so the
 /// file is keyed by an export uuid and every export shares one directory
-/// (tldraw plan §6.3).
+/// (docs/design/canvas-react-flow.md §2.5).
 pub fn export_path(root: &Path, export_id: &str) -> PathBuf {
     root.join(".armadra")
         .join("exports")
@@ -81,9 +81,10 @@ pub async fn run(
         .unwrap_or(DEFAULT_LINES)
         .clamp(1, MAX_LINES);
     let link = resolve_target(&document.links, args.text("node"))?;
-    // A whiteboard shape is not a node (tldraw plan §6.3): there is no row to
-    // load, no session and no verb that means anything different for it, so the
-    // link document itself is the source and every verb renders the same reply.
+    // A whiteboard shape is not a node (docs/design/canvas-react-flow.md §2.5):
+    // there is no row to load, no session and no verb that means anything
+    // different for it, so the link document itself is the source and every
+    // verb renders the same reply.
     if link.kind == "shape" {
         return read_shape(state, &caller.node.workspace_id, link).await;
     }
@@ -380,7 +381,7 @@ async fn read_directory(state: &AppState, target: &NodeRef) -> Result<String, Re
     Ok(out)
 }
 
-/// A linked whiteboard shape — tldraw plan §6.3.
+/// A linked whiteboard shape — docs/design/canvas-react-flow.md §2.5.
 ///
 /// The canvas ships the readable part with the link itself: the text of a text
 /// or geo shape, and/or the workspace-relative path of the PNG it rasterised

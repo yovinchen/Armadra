@@ -585,7 +585,7 @@ pub fn router_with_state(state: AppState) -> Router {
             "/api/workspaces/{workspace_id}/exports/{export_id}/png",
             post(api::export_png).layer(DefaultBodyLimit::max(MAX_UPLOAD_BODY_BYTES)),
         )
-        // Whiteboard assets — tldraw plan §6.2.
+        // Whiteboard assets — old canvas contract §6.2.
         .route(
             "/api/workspaces/{workspace_id}/assets",
             post(api::upload_asset).layer(DefaultBodyLimit::max(MAX_UPLOAD_BODY_BYTES)),

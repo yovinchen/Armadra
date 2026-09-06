@@ -236,7 +236,7 @@ pub(super) async fn add_linked_node(
 }
 
 /// Adds a `shape` link — a whiteboard record with no node behind it — to the
-/// caller's document (tldraw plan §6.3).
+/// caller's document (docs/design/canvas-react-flow.md §2.5).
 pub(super) async fn add_shape_link(
     fixture: &Fixture,
     title: &str,

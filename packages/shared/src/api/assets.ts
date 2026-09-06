@@ -3,10 +3,10 @@ import { z } from "zod";
 import { contextLinkSchema } from "./agents.js";
 
 /**
- * `POST /api/workspaces/{id}/assets` — tldraw plan §6.2.
+ * `POST /api/workspaces/{id}/assets` — old canvas contract §6.2.
  *
- * Backs `TLAssetStore.upload`. Two body shapes, because the client has two
- * kinds of source:
+ * Backs every picture that lands on a board. Two body shapes, because the
+ * client has two kinds of source:
  *
  *   - a `File` / `Blob` is posted **raw** with its own `Content-Type`;
  *   - an already-decoded data URL (a paste, say) is posted as `{ dataUrl }`
@@ -49,7 +49,7 @@ export const uploadAssetResponseSchema = z.object({
 });
 
 /**
- * `POST /api/workspaces/{id}/assets/import` — tldraw plan §8, Phase 3.
+ * `POST /api/workspaces/{id}/assets/import` — old canvas contract §8, Phase 3.
  *
  * The desktop shell only learns a *path* when the OS drops a file on it, never
  * the bytes, so the runtime reads the file and stores it exactly as an upload

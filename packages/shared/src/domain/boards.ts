@@ -60,9 +60,9 @@ export type LegacyKanbanArchive = Readonly<
 >;
 
 /**
- * Whiteboard snapshot cap — tldraw plan §6.1. Images never live inside the
- * snapshot (they go through the asset endpoint), so this is only ink, shapes
- * and text; 8 MiB is far beyond anything a hand can draw.
+ * Whiteboard snapshot cap — docs/design/canvas-react-flow.md §3.1. Images
+ * never live inside the snapshot (they go through the asset endpoint), so this
+ * is only ink, shapes and text; 8 MiB is far beyond anything a hand can draw.
  */
 export const MAX_WHITEBOARD_BYTES = 8 * 1024 * 1024;
 

@@ -140,8 +140,8 @@ export const CanvasViewportSchema: GenMessage<CanvasViewport> =
   messageDesc(file_armadra_v1_canvas, 2);
 
 /**
- * The tldraw snapshot is opaque: schema version, engine version, bytes and a
- * digest. Nothing in the Host decodes it, and no field of it is projected.
+ * The whiteboard snapshot is opaque: schema version, engine version, bytes and
+ * a digest. Nothing in the Host decodes it, and no field of it is projected.
  *
  * @generated from message armadra.v1.CanvasWhiteboard
  */

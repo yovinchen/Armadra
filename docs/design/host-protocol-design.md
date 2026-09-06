@@ -26,7 +26,7 @@ flowchart TD
 | Rust Worker    | 本机 CLI 启动、文件操作、Git 命令、Hook 归一化、进程测量、会话执行收据       | 任务看板、用户会话认证、第二份权威计划表                     |
 | Session Host   | Windows ConPTY 句柄、无头屏幕、进程、附着者                                  | 画布、项目配置、GitHub 登录                                  |
 | Browser Worker | 受管 Chromium 的会话、网页操作、画面与浏览器配置目录                         | 应用身份、任意远程 JS/RPC 执行入口                           |
-| 客户端         | 交互、局部草稿、tldraw 投影、渲染、订阅游标                                  | 调度时间、依赖完成判定、后台执行真相                         |
+| 客户端         | 交互、局部草稿、白板投影、渲染、订阅游标                                     | 调度时间、依赖完成判定、后台执行真相                         |
 
 Go Host 不替换现有 Rust 终端引擎；将 `apps/runtime` 渐进拆为执行服务。避免一次重写所有终端、Git、Hook 适配造成回归。
 
@@ -64,7 +64,7 @@ UI 托盘展示“后台正在运行 / 已停止”和计划数量；计划激�
 
 ## 3. Protobuf 传输分层
 
-Protobuf 是唯一的跨进程业务契约，避免 TS DTO、Go struct、Rust struct 三份手写定义。tldraw 私有记录、终端字节与图片不是强行展开成数千字段：作为带类型/版本/大小/校验和的专用载荷传输。
+Protobuf 是唯一的跨进程业务契约，避免 TS DTO、Go struct、Rust struct 三份手写定义。白板文档、终端字节与图片不是强行展开成数千字段：作为带类型/版本/大小/校验和的专用载荷传输。
 
 | 通道                | 传输                                       | 内容                                                |
 | ------------------- | ------------------------------------------ | --------------------------------------------------- |
@@ -199,7 +199,7 @@ message StreamAck {
 
 画布普通节点是类型化对象；自由图形快照是 `schemaVersion + engineVersion + bytes + digest`。业务节点投影、绑定和白板 blob 同一次 mutation 原子保存，禁止互相覆盖。Node ID 可映射到 shape ID，但浏览器与移动端不解析内部结构也能读取节点列表。
 
-首次跨设备编辑采用 Canvas 级编辑租约及 revision CAS：多个设备可查看，只有持租约者编辑画布；不把本地全量快照互相最后写入当作多人协同。未来按对象 revision、tombstone、actorId 和 operationId 演进；引入 tldraw 文档同步或 CRDT 前先冻结协议适配层。终端输入租约独立于画布编辑租约。
+首次跨设备编辑采用 Canvas 级编辑租约及 revision CAS：多个设备可查看，只有持租约者编辑画布；不把本地全量快照互相最后写入当作多人协同。未来按对象 revision、tombstone、actorId 和 operationId 演进；引入白板文档同步或 CRDT 前先冻结协议适配层。终端输入租约独立于画布编辑租约。
 
 ## 5. 本机对外服务与 SSH
 

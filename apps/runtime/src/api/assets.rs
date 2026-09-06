@@ -35,7 +35,8 @@ const ASSET_TYPES: &[(&str, &str)] = &[
     ("image/bmp", "bmp"),
 ];
 
-/// Same ceiling as the whiteboard snapshot (tldraw plan §6.2): an image that
+/// Same ceiling as the whiteboard snapshot (old canvas contract §6.2): an image
+/// that
 /// does not fit is one the user should not be pasting onto a board.
 pub const MAX_ASSET_BYTES: usize = 8 * 1024 * 1024;
 
@@ -90,12 +91,12 @@ pub struct UploadAssetResponse {
     bytes: usize,
 }
 
-/// `POST /api/workspaces/{id}/assets` — tldraw plan §6.2.
+/// `POST /api/workspaces/{id}/assets` — old canvas contract §6.2.
 ///
-/// Backs `TLAssetStore.upload`. Two body shapes are accepted because the client
-/// has two kinds of source: a `File`/`Blob` is posted raw with its own
-/// `Content-Type`, while an already-decoded `data:` URL (paste, migration of an
-/// old `image` node) is posted as `{"dataUrl": "…"}` with
+/// Backs every picture that lands on a board. Two body shapes are accepted
+/// because the client has two kinds of source: a `File`/`Blob` is posted raw
+/// with its own `Content-Type`, while an already-decoded `data:` URL (paste,
+/// drag from another page) is posted as `{"dataUrl": "…"}` with
 /// `Content-Type: application/json`.
 ///
 /// The stored name is the content hash, so re-uploading the same picture is a
@@ -247,7 +248,7 @@ pub struct ImportAssetRequest {
     path: String,
 }
 
-/// `POST /api/workspaces/{id}/assets/import` — tldraw plan §8, Phase 3.
+/// `POST /api/workspaces/{id}/assets/import` — old canvas contract §8, Phase 3.
 ///
 /// The desktop shell only ever learns a real *path* for an OS drag: the webview
 /// hands Tauri the drop and keeps the bytes to itself, and the shell has no

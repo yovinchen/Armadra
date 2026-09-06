@@ -248,7 +248,7 @@ try {
   ];
   report.limitations = [
     "not OS IME composition validation",
-    "not tldraw clipping or scaling",
+    "not canvas node clipping or scaling",
     "not a latency benchmark",
     "not production Browser Worker",
     "only the reported OS was executed",

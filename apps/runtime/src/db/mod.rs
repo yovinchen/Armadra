@@ -29,8 +29,8 @@ pub use self::{
 };
 
 /// The node types a board is made of. Mirrored as `NODE_TYPES` in
-/// packages/shared/src/domain.ts. Ink, text and images are whiteboard-native
-/// tldraw shapes and live in `boards.whiteboard_json`, not here.
+/// packages/shared/src/domain.ts. Ink, text and images are whiteboard items
+/// and live in `boards.whiteboard_json`, not here.
 pub const NODE_TYPES: &[&str] = &[
     "terminal",
     "sticky",
@@ -55,10 +55,10 @@ pub const PERMISSION_MODES: &[&str] = &["default", "auto-edit", "full-auto", "pl
 pub const BUILTIN_AGENT_IDS: &[&str] = crate::agent::AGENT_IDS;
 pub const DIFF_SCOPES: &[&str] = &["worktree", "staged"];
 
-/// Whiteboard snapshot cap — tldraw plan §6.1, mirrored as
-/// `MAX_WHITEBOARD_BYTES` in packages/shared/src/domain.ts. Images travel
+/// Whiteboard snapshot cap — docs/design/canvas-react-flow.md §3.1, mirrored
+/// as `MAX_WHITEBOARD_BYTES` in packages/shared/src/domain.ts. Images travel
 /// through the asset endpoint rather than inside the snapshot, so this only has
-/// to hold ink, text and shape records.
+/// to hold ink, text and shape items.
 pub const MAX_WHITEBOARD_BYTES: usize = 8 * 1024 * 1024;
 
 pub async fn connect(database_url: &str) -> AppResult<SqlitePool> {

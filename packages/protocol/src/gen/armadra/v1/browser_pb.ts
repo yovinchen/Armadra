@@ -24,7 +24,7 @@ export const file_armadra_v1_browser: GenFile =
 
 /**
  * CSS pixels, never canvas pixels: the client scales the frame inside its
- * tldraw shape rather than writing the zoom into the page viewport (§8).
+ * browser node rather than writing the zoom into the page viewport (§8).
  *
  * @generated from message armadra.v1.BrowserViewport
  */

@@ -728,7 +728,7 @@ func (BrowserBandwidthClass) EnumDescriptor() ([]byte, []int) {
 }
 
 // CSS pixels, never canvas pixels: the client scales the frame inside its
-// tldraw shape rather than writing the zoom into the page viewport (§8).
+// browser node rather than writing the zoom into the page viewport (§8).
 type BrowserViewport struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Width             uint32                 `protobuf:"varint,1,opt,name=width,proto3" json:"width,omitempty"`

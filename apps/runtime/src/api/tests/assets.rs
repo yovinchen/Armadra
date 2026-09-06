@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use super::support::*;
 use crate::api::*;
 
-/// Tldraw plan §6.2: content-addressed upload, both body shapes, and a
+/// Old canvas contract §6.2: content-addressed upload, both body shapes, and a
 /// crafted id that must not become a path.
 #[tokio::test]
 async fn assets_are_deduplicated_and_served_back() {
@@ -121,7 +121,7 @@ async fn assets_are_deduplicated_and_served_back() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
-/// Tldraw plan §8 Phase 3: importing by path lands in the same
+/// Old canvas contract §8 Phase 3: importing by path lands in the same
 /// content-addressed store as an upload, and refuses everything that is not
 /// a readable image file.
 #[tokio::test]

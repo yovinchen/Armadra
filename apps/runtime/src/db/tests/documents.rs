@@ -7,14 +7,14 @@ use crate::model::*;
 use uuid::Uuid;
 
 /// Migration 0009 plus the `None` = "leave it alone" rule the whiteboard
-/// shares with the kanban (tldraw plan §6.1).
+/// shares with the kanban (docs/design/canvas-react-flow.md §3.1).
 #[tokio::test]
 async fn a_whiteboard_snapshot_is_kept_overwritten_and_bounded() {
     let (pool, _directory, workspace) = fixture("whiteboard").await;
     let board = default_board(&pool, &workspace.id).await;
     assert_eq!(board.whiteboard, "", "0009 defaults to no whiteboard");
 
-    let snapshot = r#"{"store":{"shape:ink":{"type":"draw"}},"schema":{}}"#;
+    let snapshot = r#"{"engine":"armadra-flow","version":2,"items":[{"kind":"ink"}]}"#;
     let saved = save_board(
         &pool,
         &workspace.id,
@@ -98,8 +98,9 @@ async fn a_whiteboard_snapshot_is_kept_overwritten_and_bounded() {
     ));
 }
 
-/// A `shape` link carries its own readable payload (tldraw plan §6.3), so
-/// it has to survive the round trip through `links_json` — and be bounded.
+/// A `shape` link carries its own readable payload
+/// (docs/design/canvas-react-flow.md §2.5), so it has to survive the round
+/// trip through `links_json` — and be bounded.
 #[tokio::test]
 async fn shape_links_round_trip_their_content() {
     let (pool, _directory, workspace) = fixture("shape-links").await;

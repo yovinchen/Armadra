@@ -108,7 +108,7 @@ Markdown 预览禁用任意脚本，HTML 经清理；相对链接解析在工作
 
 采用受管 Chromium + 独立 Browser Worker。画布节点显示该浏览器会话的画面并转发操作，Agent 控制同一个 session。保留旧 iframe 为明确的兼容预览模式；它不计入“受控浏览器已完成”的验收。
 
-原因：Tauri 在不同平台使用不同 WebView 引擎，不能假设桌面系统 WebView 都具有同一套 Chromium 调试接口；原生子 WebView 与 tldraw 缩放、裁剪、遮挡的行为也需要逐平台验证。依据 [Tauri WebView 平台说明](https://v2.tauri.app/reference/webview-versions/) 与 [WebView API](https://v2.tauri.app/reference/javascript/api/namespacewebview/)。
+原因：Tauri 在不同平台使用不同 WebView 引擎，不能假设桌面系统 WebView 都具有同一套 Chromium 调试接口；原生子 WebView 与画布缩放、裁剪、遮挡的行为也需要逐平台验证。依据 [Tauri WebView 平台说明](https://v2.tauri.app/reference/webview-versions/) 与 [WebView API](https://v2.tauri.app/reference/javascript/api/namespacewebview/)。
 
 首轮 Browser Worker 使用 Rust 管理 Chromium 生命周期和受限 CDP 适配；不引入公开的原始 CDP 代理。浏览器二进制按 OS/架构单独受管下载或使用用户选定的受支持路径，校验 hash/签名和版本；缺少浏览器时提供安装/选择流程及明确不可用状态。
 
@@ -177,7 +177,7 @@ DOM 元素引用绑定 session/tab/frame/navigationEpoch；页面导航或元素
 
 ## 8. 画面传输与跨端输入
 
-浏览器 viewport 使用 CSS 像素，`BrowserFrame` 包含 frameSeq、navigationEpoch、viewportWidth/Height、deviceScaleFactor、编码、时间和资产/bytes。客户端在 tldraw shape 内缩放显示，不把画布缩放直接写成网页 viewport 尺寸。
+浏览器 viewport 使用 CSS 像素，`BrowserFrame` 包含 frameSeq、navigationEpoch、viewportWidth/Height、deviceScaleFactor、编码、时间和资产/bytes。客户端在画布的浏览器节点内缩放显示，不把画布缩放直接写成网页 viewport 尺寸。
 
 点击坐标从显示框映射回 CSS viewport，携带 frameSeq；过旧帧或导航变化时拒绝输入并请求新画面。移动端可切文本元素列表来提高可操作性。文本选择/剪贴板由 Browser Worker 受限接口配合，截图画面本身不能提供浏览器原生复制和无障碍语义。
 
