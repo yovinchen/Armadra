@@ -5,6 +5,7 @@ use serde_json::{Map, Value};
 
 use crate::terminal::ssh;
 
+use super::agents::normalize_custom_agents;
 use super::*;
 
 /// The whole settings document, normalized: known keys always present with
