@@ -682,6 +682,14 @@ pub fn router_with_state(state: AppState) -> Router {
             post(api::uninstall_hooks),
         )
         .route(
+            "/api/agents/{agent_id}/skills/install",
+            post(api::install_skills),
+        )
+        .route(
+            "/api/agents/{agent_id}/skills/uninstall",
+            post(api::uninstall_skills),
+        )
+        .route(
             "/api/agent-status/{node_id}/read",
             post(api::mark_agent_status_read),
         )

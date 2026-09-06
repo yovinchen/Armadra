@@ -239,6 +239,10 @@ pub struct AgentInfo {
     pub resolved_path: Option<String>,
     pub installed: bool,
     pub client_revision: Option<i64>,
+    /// Revision of the installed collaboration skill, absent when the skill is
+    /// not installed. Filled in by the API layer, which reads the file.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skills_revision: Option<u32>,
     /// Cached `--version` probe (`agent_probe.rs`), filled in by the API layer.
     /// `None` means "not probed", which resolves gated capabilities to unknown
     /// on the client — never to supported.
@@ -261,6 +265,7 @@ impl AgentInfo {
             installed: resolved.is_some(),
             resolved_path: resolved.map(|path| path.to_string_lossy().into_owned()),
             client_revision: None,
+            skills_revision: None,
             probe: None,
         }
     }
@@ -301,6 +306,7 @@ pub fn custom_info(custom: &crate::settings::CustomAgent) -> AgentInfo {
         installed: resolved.is_some(),
         resolved_path: resolved.map(|path| path.to_string_lossy().into_owned()),
         client_revision: None,
+        skills_revision: None,
         probe: None,
     }
 }

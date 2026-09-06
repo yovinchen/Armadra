@@ -12,6 +12,7 @@ import {
   exportPngResponseSchema,
   hookInstallReportSchema,
   importAssetRequestSchema,
+  skillReportSchema,
   suggestTitleResponseSchema,
   uploadAssetRequestSchema,
   uploadAssetResponseSchema,
@@ -73,6 +74,20 @@ export const agentsApi = {
     request(
       `/api/agents/${query(agentId)}/hooks/uninstall`,
       hookInstallReportSchema,
+      { method: "POST" },
+    ),
+  /**
+   * 协作技能（`skills/armadra/SKILL.md`），与状态 Hook 分开装卸。
+   * `paths` 是磁盘上真正变过的文件：内容没变时是空数组，文件的 mtime 不动。
+   */
+  installAgentSkills: (agentId: string) =>
+    request(`/api/agents/${query(agentId)}/skills/install`, skillReportSchema, {
+      method: "POST",
+    }),
+  uninstallAgentSkills: (agentId: string) =>
+    request(
+      `/api/agents/${query(agentId)}/skills/uninstall`,
+      skillReportSchema,
       { method: "POST" },
     ),
   /** 清掉某个节点的未读标记；其它窗口通过 workspace 事件流同步。 */

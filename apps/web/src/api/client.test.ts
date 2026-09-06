@@ -593,6 +593,33 @@ describe("hook 安装", () => {
     ).resolves.toMatchObject({ installed: false });
   });
 
+  it("技能装 / 卸走自己的路由，并回报改过哪些文件", async () => {
+    const fetchMock = stubJson({
+      agentId: "claude",
+      installed: true,
+      revision: 5,
+      paths: ["/home/u/.claude/skills/armadra/SKILL.md"],
+    });
+    const report = await runtimeApi.installAgentSkills("claude");
+    expect(report.revision).toBe(5);
+    expect(report.paths).toHaveLength(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://127.0.0.1:43120/api/agents/claude/skills/install");
+    expect(init.method).toBe("POST");
+
+    // 内容没变时 `paths` 是空的，文件一个字节都没写。
+    stubJson({ agentId: "codex", installed: true, revision: 5, paths: [] });
+    await expect(runtimeApi.installAgentSkills("codex")).resolves.toMatchObject(
+      {
+        paths: [],
+      },
+    );
+    stubJson({ agentId: "codex", installed: false, paths: [] });
+    await expect(
+      runtimeApi.uninstallAgentSkills("codex"),
+    ).resolves.toMatchObject({ installed: false });
+  });
+
   it("清未读标记打到 agent-status 路由", async () => {
     const fetchMock = stubJson({
       nodeId: workspaceId,

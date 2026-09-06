@@ -26,6 +26,12 @@ export const agentInfoSchema = z.object({
   /** Revision of the installed hook client, absent when hooks are not installed. */
   clientRevision: z.number().int().nonnegative().nullish(),
   /**
+   * Revision of the installed collaboration skill, absent when the skill is not
+   * installed. It is read from the file on disk rather than from a row, so a
+   * user who deletes the skill by hand sees that here on the next refresh.
+   */
+  skillsRevision: z.number().int().nonnegative().nullish(),
+  /**
    * Cached `--version` probe (`agent-capabilities.ts`). Absent means the CLI
    * has not been probed yet, which resolves gated capabilities to `unknown` —
    * never to supported.
@@ -49,6 +55,20 @@ export const hookInstallReportSchema = z.looseObject({
   installed: z.boolean(),
   /** Something worked but deserves a sentence in the settings page. */
   warning: z.string().optional(),
+});
+
+/**
+ * `POST /api/agents/{id}/skills/install|uninstall` — the collaboration skill,
+ * installed separately from the status hooks.
+ *
+ * `paths` is what actually changed on disk: an install that found the file
+ * already current answers with an empty list and leaves the mtime alone.
+ */
+export const skillReportSchema = z.looseObject({
+  agentId: agentIdSchema,
+  installed: z.boolean(),
+  revision: z.number().int().nonnegative().optional(),
+  paths: z.array(z.string()).default([]),
 });
 
 export const answerApprovalRequestSchema = z.object({
@@ -105,6 +125,7 @@ export const contextLinkSchema = z.object({
 export type SuggestTitleResponse = z.infer<typeof suggestTitleResponseSchema>;
 export type AgentInfo = z.infer<typeof agentInfoSchema>;
 export type HookInstallReport = z.infer<typeof hookInstallReportSchema>;
+export type SkillReport = z.infer<typeof skillReportSchema>;
 export type AnswerApprovalRequest = z.infer<typeof answerApprovalRequestSchema>;
 export type ContextLink = z.infer<typeof contextLinkSchema>;
 export type ContextLinkContent = z.infer<typeof contextLinkContentSchema>;

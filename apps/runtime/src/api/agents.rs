@@ -1,7 +1,7 @@
 //! `/api/agents`, `/api/conversations` and `/api/agent-status` — agent
 //! discovery, hook installs and the session status surfaces.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use axum::{
     Json,
@@ -83,6 +83,10 @@ pub async fn agents(State(state): State<AppState>) -> AppResult<Json<Vec<AgentIn
             .iter()
             .find(|install| install.agent_id == hook_provider)
             .map(|install| install.client_revision);
+        // The skill install has no row of its own: the file on disk *is* the
+        // state, so a user who deletes it by hand sees that here without
+        // anything having to notice.
+        info.skills_revision = crate::collab::skills::installed_revision_for(hook_provider);
         // Version probing is what decides whether a gated capability is
         // `supported` or `unknown` on the client (design §1). A program that
         // is not installed is not run: there is nothing to ask.
@@ -123,6 +127,80 @@ pub async fn uninstall_hooks(
     let report = install::uninstall(&agent_id)?;
     db::remove_hook_install(&state.pool, &report.agent_id).await?;
     Ok(Json(report))
+}
+
+/* ---------------------------------- skills -------------------------------- */
+
+/// What a skill install or uninstall did.
+///
+/// `paths` is what actually changed on disk, so an install that found the file
+/// already current answers with an empty list and an unchanged mtime.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillReport {
+    pub agent_id: String,
+    pub installed: bool,
+    /// The revision now on disk; absent once the skill has been removed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revision: Option<u32>,
+    pub paths: Vec<String>,
+}
+
+/// The provider whose skill directory a row writes into. A `custom:` entry
+/// borrows its base agent's, the same way it borrows its hooks.
+fn skill_provider(state: &AppState, agent_id: &str) -> String {
+    if let Some(custom) = state
+        .settings
+        .custom_agents()
+        .iter()
+        .find(|custom| custom.id == agent_id)
+    {
+        return custom.base_agent.clone();
+    }
+    agent_id.to_owned()
+}
+
+/// `POST /api/agents/{id}/skills/install` — writes the collaboration skill.
+/// Separate from the hooks install: a CLI can report status with no skill, and
+/// can read its mailbox with no hooks.
+pub async fn install_skills(
+    State(state): State<AppState>,
+    AxumPath(agent_id): AxumPath<String>,
+) -> AppResult<Json<SkillReport>> {
+    let provider = skill_provider(&state, &agent_id);
+    let paths = crate::collab::skills::install_for(&provider)?;
+    Ok(Json(SkillReport {
+        installed: true,
+        revision: crate::collab::skills::installed_revision_for(&provider),
+        paths: paths
+            .iter()
+            .map(PathBuf::as_path)
+            .map(display_path)
+            .collect(),
+        agent_id,
+    }))
+}
+
+pub async fn uninstall_skills(
+    State(state): State<AppState>,
+    AxumPath(agent_id): AxumPath<String>,
+) -> AppResult<Json<SkillReport>> {
+    let provider = skill_provider(&state, &agent_id);
+    let paths = crate::collab::skills::uninstall_for(&provider)?;
+    Ok(Json(SkillReport {
+        installed: false,
+        revision: None,
+        paths: paths
+            .iter()
+            .map(PathBuf::as_path)
+            .map(display_path)
+            .collect(),
+        agent_id,
+    }))
+}
+
+fn display_path(path: &Path) -> String {
+    path.display().to_string()
 }
 
 /// Clears the unread badge a finished turn raised. The client that read the

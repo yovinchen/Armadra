@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   agentInfoSchema,
   answerApprovalRequestSchema,
+  skillReportSchema,
   contextLinksRequestSchema,
   gitCommitRequestSchema,
 } from "../src/index.js";
@@ -21,6 +22,23 @@ describe("runtime agents API", () => {
     });
     expect(info.resolvedPath).toBeNull();
     expect(info.capabilities).toContain("hooks");
+  });
+
+  it("reports a skill install by what it changed on disk", () => {
+    const report = skillReportSchema.parse({
+      agentId: "claude",
+      installed: true,
+      revision: 5,
+      paths: ["/home/u/.claude/skills/armadra/SKILL.md"],
+    });
+    expect(report.revision).toBe(5);
+    // 内容已是最新时 Runtime 一个字节都不写，`paths` 就是空的。
+    expect(
+      skillReportSchema.parse({ agentId: "codex", installed: true }).paths,
+    ).toEqual([]);
+    expect(
+      skillReportSchema.safeParse({ agentId: "nope", installed: true }).success,
+    ).toBe(false);
   });
 
   it("validates approvals, context links and commits", () => {
