@@ -69,6 +69,14 @@ pub mod reason {
     /// The remote execution host's language link went away. The controller
     /// holds nothing current for that host until a new link is opened.
     pub const LINK_LOST: &str = "link_lost";
+
+    /// Why a server's own `workspace/applyEdit` was not applied. These travel
+    /// back to the *server* as `failureReason`, so they stay short and stable
+    /// for the same reason the others do: a server that logs them, and a user
+    /// reading that log, should see the same word every time.
+    pub const READ_ONLY: &str = "read_only";
+    pub const EDIT_NOT_APPLICABLE: &str = "edit_not_applicable";
+    pub const UNSAVED_CHANGES: &str = "unsaved_changes";
 }
 
 /* --------------------------------- limits --------------------------------- */
@@ -221,6 +229,27 @@ impl Feature {
             features.push(Feature::Diagnostics);
         }
         features
+    }
+}
+
+/// What a person pressed on a server row. Mirrors `LanguageControlAction` in
+/// `language.proto`; the two are separate actions rather than one flag because
+/// they end differently — a stopped server stays stopped until somebody
+/// restarts it, while a restart clears the crash budget and hands back a
+/// running process.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Control {
+    Restart,
+    Stop,
+}
+
+impl Control {
+    pub fn to_proto(self) -> armadra_protocol::v1::LanguageControlAction {
+        use armadra_protocol::v1::LanguageControlAction as Wire;
+        match self {
+            Self::Restart => Wire::Restart,
+            Self::Stop => Wire::Stop,
+        }
     }
 }
 

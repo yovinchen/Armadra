@@ -784,6 +784,13 @@ impl Worker {
                     host.apply_edit(root, input).await?,
                 ))
             }
+            // Restart and stop reach the servers themselves, so they need the
+            // link for the same reason session opening does: the serial
+            // connection is another process and holds none of them.
+            Action::LanguageControl(input) => match self.language.as_ref() {
+                Some(host) => Ok(Response::LanguageControl(host.control(input).await?)),
+                None => Ok(unsupported_language()),
+            },
             // A pushed frame carries no request id and expects no answer, so
             // the link takes it off the request path before it reaches here.
             // Arriving on the serial connection is a controller mistake.

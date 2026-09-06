@@ -11,6 +11,8 @@ import {
   LanguageAckSchema,
   LanguageApplyEditRequestSchema,
   LanguageCapabilitiesSchema,
+  LanguageControlAction,
+  LanguageControlRequestSchema,
   LanguageFeature,
   LanguageFrameSchema,
   LanguageMessageKind,
@@ -161,7 +163,26 @@ describe("language service wire contract", () => {
     expect(LanguageServerState.UNSPECIFIED).toBe(0);
     expect(LanguageFeature.UNSPECIFIED).toBe(0);
     expect(LanguageMessageKind.UNSPECIFIED).toBe(0);
+    expect(LanguageControlAction.UNSPECIFIED).toBe(0);
     expect(PlatformComponentKind.LANGUAGE_SERVER).toBe(6);
+  });
+
+  it("keeps stop and restart apart and defaults to neither", () => {
+    check("language_control", LanguageControlRequestSchema, {
+      rootId: "root-1",
+      workspaceId: "ws-1",
+      serverId: "ruff",
+      action: LanguageControlAction.RESTART,
+      allowExecute: true,
+    });
+    // An empty request is a caller that never said what it wanted. Reading it
+    // as "restart" would start a process nobody asked for.
+    const empty = create(LanguageControlRequestSchema, { serverId: "ruff" });
+    const decoded = fromBinary(
+      LanguageControlRequestSchema,
+      toBinary(LanguageControlRequestSchema, empty),
+    );
+    expect(decoded.action).toBe(LanguageControlAction.UNSPECIFIED);
   });
 
   it("adds the Worker language branches without disturbing the others", () => {

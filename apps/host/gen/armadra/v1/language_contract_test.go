@@ -87,6 +87,16 @@ func TestLanguageServiceWire(t *testing.T) {
 			ExpectedSha256: map[string]string{"src/主.py": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"},
 			AllowWrite:     true,
 		},
+		// Restart and stop are one frame with an action, and the action is not
+		// a boolean: a third one (say "reprobe") must be addable without the
+		// two that shipped changing meaning.
+		"language_control": &pb.LanguageControlRequest{
+			RootId:       "root-1",
+			WorkspaceId:  "ws-1",
+			ServerId:     "ruff",
+			Action:       pb.LanguageControlAction_LANGUAGE_CONTROL_ACTION_RESTART,
+			AllowExecute: true,
+		},
 	} {
 		data, err := proto.Marshal(message)
 		if err != nil {
@@ -125,8 +135,26 @@ func TestLanguageAbsentPidIsNotZero(t *testing.T) {
 func TestLanguageEnumsReserveZero(t *testing.T) {
 	if pb.LanguageServerState_LANGUAGE_SERVER_STATE_UNSPECIFIED != 0 ||
 		pb.LanguageFeature_LANGUAGE_FEATURE_UNSPECIFIED != 0 ||
-		pb.LanguageMessageKind_LANGUAGE_MESSAGE_KIND_UNSPECIFIED != 0 {
+		pb.LanguageMessageKind_LANGUAGE_MESSAGE_KIND_UNSPECIFIED != 0 ||
+		pb.LanguageControlAction_LANGUAGE_CONTROL_ACTION_UNSPECIFIED != 0 {
 		t.Fatal("a language enumeration gives 0 a meaning")
+	}
+}
+
+// A control frame with no action must not read as "restart": an empty request
+// is a caller that never said what it wanted, and starting a process on that
+// basis is the one outcome nobody asked for.
+func TestLanguageControlDefaultsToNoAction(t *testing.T) {
+	data, err := proto.Marshal(&pb.LanguageControlRequest{ServerId: "ruff"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back pb.LanguageControlRequest
+	if err = proto.Unmarshal(data, &back); err != nil {
+		t.Fatal(err)
+	}
+	if back.GetAction() != pb.LanguageControlAction_LANGUAGE_CONTROL_ACTION_UNSPECIFIED {
+		t.Fatal("an unset control action decoded as a real one")
 	}
 }
 

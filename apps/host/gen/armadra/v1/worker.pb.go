@@ -2116,6 +2116,7 @@ type WorkerRequest struct {
 	//	*WorkerRequest_CloseLanguageSession
 	//	*WorkerRequest_LanguageFrame
 	//	*WorkerRequest_LanguageApplyEdit
+	//	*WorkerRequest_LanguageControl
 	//	*WorkerRequest_ApplyReverseExport
 	//	*WorkerRequest_Settings
 	//	*WorkerRequest_Filesystem
@@ -2345,6 +2346,15 @@ func (x *WorkerRequest) GetLanguageApplyEdit() *LanguageApplyEditRequest {
 	return nil
 }
 
+func (x *WorkerRequest) GetLanguageControl() *LanguageControlRequest {
+	if x != nil {
+		if x, ok := x.Action.(*WorkerRequest_LanguageControl); ok {
+			return x.LanguageControl
+		}
+	}
+	return nil
+}
+
 func (x *WorkerRequest) GetApplyReverseExport() *ApplyReverseExportRequest {
 	if x != nil {
 		if x, ok := x.Action.(*WorkerRequest_ApplyReverseExport); ok {
@@ -2481,6 +2491,10 @@ type WorkerRequest_LanguageApplyEdit struct {
 	LanguageApplyEdit *LanguageApplyEditRequest `protobuf:"bytes,34,opt,name=language_apply_edit,json=languageApplyEdit,proto3,oneof"`
 }
 
+type WorkerRequest_LanguageControl struct {
+	LanguageControl *LanguageControlRequest `protobuf:"bytes,35,opt,name=language_control,json=languageControl,proto3,oneof"`
+}
+
 type WorkerRequest_ApplyReverseExport struct {
 	// The rollback direction of the switch: the Host's reverse export package
 	// is applied to the Runtime's own database before the epoch is handed
@@ -2562,6 +2576,8 @@ func (*WorkerRequest_LanguageFrame) isWorkerRequest_Action() {}
 
 func (*WorkerRequest_LanguageApplyEdit) isWorkerRequest_Action() {}
 
+func (*WorkerRequest_LanguageControl) isWorkerRequest_Action() {}
+
 func (*WorkerRequest_ApplyReverseExport) isWorkerRequest_Action() {}
 
 func (*WorkerRequest_Settings) isWorkerRequest_Action() {}
@@ -2598,6 +2614,7 @@ type WorkerResponse struct {
 	//	*WorkerResponse_LanguageSession
 	//	*WorkerResponse_LanguageFrame
 	//	*WorkerResponse_LanguageApplyEdit
+	//	*WorkerResponse_LanguageControl
 	//	*WorkerResponse_ReverseImport
 	//	*WorkerResponse_Settings
 	//	*WorkerResponse_Filesystem
@@ -2820,6 +2837,15 @@ func (x *WorkerResponse) GetLanguageApplyEdit() *LanguageApplyEditResult {
 	return nil
 }
 
+func (x *WorkerResponse) GetLanguageControl() *LanguageControlResult {
+	if x != nil {
+		if x, ok := x.Result.(*WorkerResponse_LanguageControl); ok {
+			return x.LanguageControl
+		}
+	}
+	return nil
+}
+
 func (x *WorkerResponse) GetReverseImport() *ReverseImportReport {
 	if x != nil {
 		if x, ok := x.Result.(*WorkerResponse_ReverseImport); ok {
@@ -2950,6 +2976,10 @@ type WorkerResponse_LanguageApplyEdit struct {
 	LanguageApplyEdit *LanguageApplyEditResult `protobuf:"bytes,33,opt,name=language_apply_edit,json=languageApplyEdit,proto3,oneof"`
 }
 
+type WorkerResponse_LanguageControl struct {
+	LanguageControl *LanguageControlResult `protobuf:"bytes,34,opt,name=language_control,json=languageControl,proto3,oneof"`
+}
+
 type WorkerResponse_ReverseImport struct {
 	ReverseImport *ReverseImportReport `protobuf:"bytes,23,opt,name=reverse_import,json=reverseImport,proto3,oneof"`
 }
@@ -3007,6 +3037,8 @@ func (*WorkerResponse_LanguageSession) isWorkerResponse_Result() {}
 func (*WorkerResponse_LanguageFrame) isWorkerResponse_Result() {}
 
 func (*WorkerResponse_LanguageApplyEdit) isWorkerResponse_Result() {}
+
+func (*WorkerResponse_LanguageControl) isWorkerResponse_Result() {}
 
 func (*WorkerResponse_ReverseImport) isWorkerResponse_Result() {}
 
@@ -3167,7 +3199,7 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12%\n" +
 	"\x0ereceived_bytes\x18\x02 \x01(\x04R\rreceivedBytes\x12\x16\n" +
 	"\x06sha256\x18\x03 \x01(\tR\x06sha256\x12\x12\n" +
-	"\x04path\x18\x04 \x01(\tR\x04path\"\x9f\x0e\n" +
+	"\x04path\x18\x04 \x01(\tR\x04path\"\xf0\x0e\n" +
 	"\rWorkerRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -3192,7 +3224,8 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\x15open_language_session\x18\x1f \x01(\v2&.armadra.v1.OpenLanguageSessionRequestH\x00R\x13openLanguageSession\x12_\n" +
 	"\x16close_language_session\x18  \x01(\v2'.armadra.v1.CloseLanguageSessionRequestH\x00R\x14closeLanguageSession\x12B\n" +
 	"\x0elanguage_frame\x18! \x01(\v2\x19.armadra.v1.LanguageFrameH\x00R\rlanguageFrame\x12V\n" +
-	"\x13language_apply_edit\x18\" \x01(\v2$.armadra.v1.LanguageApplyEditRequestH\x00R\x11languageApplyEdit\x12Y\n" +
+	"\x13language_apply_edit\x18\" \x01(\v2$.armadra.v1.LanguageApplyEditRequestH\x00R\x11languageApplyEdit\x12O\n" +
+	"\x10language_control\x18# \x01(\v2\".armadra.v1.LanguageControlRequestH\x00R\x0flanguageControl\x12Y\n" +
 	"\x14apply_reverse_export\x18\x18 \x01(\v2%.armadra.v1.ApplyReverseExportRequestH\x00R\x12applyReverseExport\x12?\n" +
 	"\bsettings\x18\x19 \x01(\v2!.armadra.v1.WorkerSettingsRequestH\x00R\bsettings\x12E\n" +
 	"\n" +
@@ -3202,7 +3235,7 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"agent_host\x18\x1c \x01(\v2\x1e.armadra.v1.AgentWorkerRequestH\x00R\tagentHost\x120\n" +
 	"\x03git\x18\x1d \x01(\v2\x1c.armadra.v1.GitWorkerRequestH\x00R\x03gitB\b\n" +
-	"\x06action\"\xdd\f\n" +
+	"\x06action\"\xad\r\n" +
 	"\x0eWorkerResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -3228,7 +3261,8 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\x15language_capabilities\x18\x1e \x01(\v2 .armadra.v1.LanguageCapabilitiesH\x00R\x14languageCapabilities\x12H\n" +
 	"\x10language_session\x18\x1f \x01(\v2\x1b.armadra.v1.LanguageSessionH\x00R\x0flanguageSession\x12B\n" +
 	"\x0elanguage_frame\x18  \x01(\v2\x19.armadra.v1.LanguageFrameH\x00R\rlanguageFrame\x12U\n" +
-	"\x13language_apply_edit\x18! \x01(\v2#.armadra.v1.LanguageApplyEditResultH\x00R\x11languageApplyEdit\x12H\n" +
+	"\x13language_apply_edit\x18! \x01(\v2#.armadra.v1.LanguageApplyEditResultH\x00R\x11languageApplyEdit\x12N\n" +
+	"\x10language_control\x18\" \x01(\v2!.armadra.v1.LanguageControlResultH\x00R\x0flanguageControl\x12H\n" +
 	"\x0ereverse_import\x18\x17 \x01(\v2\x1f.armadra.v1.ReverseImportReportH\x00R\rreverseImport\x12@\n" +
 	"\bsettings\x18\x19 \x01(\v2\".armadra.v1.WorkerSettingsSnapshotH\x00R\bsettings\x12F\n" +
 	"\n" +
@@ -3342,24 +3376,26 @@ var file_armadra_v1_worker_proto_goTypes = []any{
 	(*CloseLanguageSessionRequest)(nil), // 37: armadra.v1.CloseLanguageSessionRequest
 	(*LanguageFrame)(nil),               // 38: armadra.v1.LanguageFrame
 	(*LanguageApplyEditRequest)(nil),    // 39: armadra.v1.LanguageApplyEditRequest
-	(*ApplyReverseExportRequest)(nil),   // 40: armadra.v1.ApplyReverseExportRequest
-	(*WorkerSettingsRequest)(nil),       // 41: armadra.v1.WorkerSettingsRequest
-	(*FilesystemWorkerRequest)(nil),     // 42: armadra.v1.FilesystemWorkerRequest
-	(*SessionWorkerRequest)(nil),        // 43: armadra.v1.SessionWorkerRequest
-	(*AgentWorkerRequest)(nil),          // 44: armadra.v1.AgentWorkerRequest
-	(*GitWorkerRequest)(nil),            // 45: armadra.v1.GitWorkerRequest
-	(*ErrorResponse)(nil),               // 46: armadra.v1.ErrorResponse
-	(*CommandResponse)(nil),             // 47: armadra.v1.CommandResponse
-	(*AgentResponse)(nil),               // 48: armadra.v1.AgentResponse
-	(*LanguageCapabilities)(nil),        // 49: armadra.v1.LanguageCapabilities
-	(*LanguageSession)(nil),             // 50: armadra.v1.LanguageSession
-	(*LanguageApplyEditResult)(nil),     // 51: armadra.v1.LanguageApplyEditResult
-	(*ReverseImportReport)(nil),         // 52: armadra.v1.ReverseImportReport
-	(*WorkerSettingsSnapshot)(nil),      // 53: armadra.v1.WorkerSettingsSnapshot
-	(*FilesystemWorkerResponse)(nil),    // 54: armadra.v1.FilesystemWorkerResponse
-	(*SessionWorkerResponse)(nil),       // 55: armadra.v1.SessionWorkerResponse
-	(*AgentWorkerResponse)(nil),         // 56: armadra.v1.AgentWorkerResponse
-	(*GitWorkerResponse)(nil),           // 57: armadra.v1.GitWorkerResponse
+	(*LanguageControlRequest)(nil),      // 40: armadra.v1.LanguageControlRequest
+	(*ApplyReverseExportRequest)(nil),   // 41: armadra.v1.ApplyReverseExportRequest
+	(*WorkerSettingsRequest)(nil),       // 42: armadra.v1.WorkerSettingsRequest
+	(*FilesystemWorkerRequest)(nil),     // 43: armadra.v1.FilesystemWorkerRequest
+	(*SessionWorkerRequest)(nil),        // 44: armadra.v1.SessionWorkerRequest
+	(*AgentWorkerRequest)(nil),          // 45: armadra.v1.AgentWorkerRequest
+	(*GitWorkerRequest)(nil),            // 46: armadra.v1.GitWorkerRequest
+	(*ErrorResponse)(nil),               // 47: armadra.v1.ErrorResponse
+	(*CommandResponse)(nil),             // 48: armadra.v1.CommandResponse
+	(*AgentResponse)(nil),               // 49: armadra.v1.AgentResponse
+	(*LanguageCapabilities)(nil),        // 50: armadra.v1.LanguageCapabilities
+	(*LanguageSession)(nil),             // 51: armadra.v1.LanguageSession
+	(*LanguageApplyEditResult)(nil),     // 52: armadra.v1.LanguageApplyEditResult
+	(*LanguageControlResult)(nil),       // 53: armadra.v1.LanguageControlResult
+	(*ReverseImportReport)(nil),         // 54: armadra.v1.ReverseImportReport
+	(*WorkerSettingsSnapshot)(nil),      // 55: armadra.v1.WorkerSettingsSnapshot
+	(*FilesystemWorkerResponse)(nil),    // 56: armadra.v1.FilesystemWorkerResponse
+	(*SessionWorkerResponse)(nil),       // 57: armadra.v1.SessionWorkerResponse
+	(*AgentWorkerResponse)(nil),         // 58: armadra.v1.AgentWorkerResponse
+	(*GitWorkerResponse)(nil),           // 59: armadra.v1.GitWorkerResponse
 }
 var file_armadra_v1_worker_proto_depIdxs = []int32{
 	29, // 0: armadra.v1.WorkerHelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
@@ -3393,40 +3429,42 @@ var file_armadra_v1_worker_proto_depIdxs = []int32{
 	37, // 28: armadra.v1.WorkerRequest.close_language_session:type_name -> armadra.v1.CloseLanguageSessionRequest
 	38, // 29: armadra.v1.WorkerRequest.language_frame:type_name -> armadra.v1.LanguageFrame
 	39, // 30: armadra.v1.WorkerRequest.language_apply_edit:type_name -> armadra.v1.LanguageApplyEditRequest
-	40, // 31: armadra.v1.WorkerRequest.apply_reverse_export:type_name -> armadra.v1.ApplyReverseExportRequest
-	41, // 32: armadra.v1.WorkerRequest.settings:type_name -> armadra.v1.WorkerSettingsRequest
-	42, // 33: armadra.v1.WorkerRequest.filesystem:type_name -> armadra.v1.FilesystemWorkerRequest
-	43, // 34: armadra.v1.WorkerRequest.session:type_name -> armadra.v1.SessionWorkerRequest
-	44, // 35: armadra.v1.WorkerRequest.agent_host:type_name -> armadra.v1.AgentWorkerRequest
-	45, // 36: armadra.v1.WorkerRequest.git:type_name -> armadra.v1.GitWorkerRequest
-	2,  // 37: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
-	4,  // 38: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
-	7,  // 39: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
-	9,  // 40: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
-	46, // 41: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
-	14, // 42: armadra.v1.WorkerResponse.file_written:type_name -> armadra.v1.WorkerFileWritten
-	16, // 43: armadra.v1.WorkerResponse.service:type_name -> armadra.v1.WorkerServiceResponse
-	20, // 44: armadra.v1.WorkerResponse.watch_event:type_name -> armadra.v1.WorkerWatchEvent
-	18, // 45: armadra.v1.WorkerResponse.watch:type_name -> armadra.v1.WorkerWatchSubscription
-	26, // 46: armadra.v1.WorkerResponse.upload:type_name -> armadra.v1.WorkerUploadResponse
-	47, // 47: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
-	48, // 48: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
-	12, // 49: armadra.v1.WorkerResponse.write_ownership:type_name -> armadra.v1.WorkerWriteOwnership
-	49, // 50: armadra.v1.WorkerResponse.language_capabilities:type_name -> armadra.v1.LanguageCapabilities
-	50, // 51: armadra.v1.WorkerResponse.language_session:type_name -> armadra.v1.LanguageSession
-	38, // 52: armadra.v1.WorkerResponse.language_frame:type_name -> armadra.v1.LanguageFrame
-	51, // 53: armadra.v1.WorkerResponse.language_apply_edit:type_name -> armadra.v1.LanguageApplyEditResult
-	52, // 54: armadra.v1.WorkerResponse.reverse_import:type_name -> armadra.v1.ReverseImportReport
-	53, // 55: armadra.v1.WorkerResponse.settings:type_name -> armadra.v1.WorkerSettingsSnapshot
-	54, // 56: armadra.v1.WorkerResponse.filesystem:type_name -> armadra.v1.FilesystemWorkerResponse
-	55, // 57: armadra.v1.WorkerResponse.session:type_name -> armadra.v1.SessionWorkerResponse
-	56, // 58: armadra.v1.WorkerResponse.agent_host:type_name -> armadra.v1.AgentWorkerResponse
-	57, // 59: armadra.v1.WorkerResponse.git:type_name -> armadra.v1.GitWorkerResponse
-	60, // [60:60] is the sub-list for method output_type
-	60, // [60:60] is the sub-list for method input_type
-	60, // [60:60] is the sub-list for extension type_name
-	60, // [60:60] is the sub-list for extension extendee
-	0,  // [0:60] is the sub-list for field type_name
+	40, // 31: armadra.v1.WorkerRequest.language_control:type_name -> armadra.v1.LanguageControlRequest
+	41, // 32: armadra.v1.WorkerRequest.apply_reverse_export:type_name -> armadra.v1.ApplyReverseExportRequest
+	42, // 33: armadra.v1.WorkerRequest.settings:type_name -> armadra.v1.WorkerSettingsRequest
+	43, // 34: armadra.v1.WorkerRequest.filesystem:type_name -> armadra.v1.FilesystemWorkerRequest
+	44, // 35: armadra.v1.WorkerRequest.session:type_name -> armadra.v1.SessionWorkerRequest
+	45, // 36: armadra.v1.WorkerRequest.agent_host:type_name -> armadra.v1.AgentWorkerRequest
+	46, // 37: armadra.v1.WorkerRequest.git:type_name -> armadra.v1.GitWorkerRequest
+	2,  // 38: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
+	4,  // 39: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
+	7,  // 40: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
+	9,  // 41: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
+	47, // 42: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
+	14, // 43: armadra.v1.WorkerResponse.file_written:type_name -> armadra.v1.WorkerFileWritten
+	16, // 44: armadra.v1.WorkerResponse.service:type_name -> armadra.v1.WorkerServiceResponse
+	20, // 45: armadra.v1.WorkerResponse.watch_event:type_name -> armadra.v1.WorkerWatchEvent
+	18, // 46: armadra.v1.WorkerResponse.watch:type_name -> armadra.v1.WorkerWatchSubscription
+	26, // 47: armadra.v1.WorkerResponse.upload:type_name -> armadra.v1.WorkerUploadResponse
+	48, // 48: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
+	49, // 49: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
+	12, // 50: armadra.v1.WorkerResponse.write_ownership:type_name -> armadra.v1.WorkerWriteOwnership
+	50, // 51: armadra.v1.WorkerResponse.language_capabilities:type_name -> armadra.v1.LanguageCapabilities
+	51, // 52: armadra.v1.WorkerResponse.language_session:type_name -> armadra.v1.LanguageSession
+	38, // 53: armadra.v1.WorkerResponse.language_frame:type_name -> armadra.v1.LanguageFrame
+	52, // 54: armadra.v1.WorkerResponse.language_apply_edit:type_name -> armadra.v1.LanguageApplyEditResult
+	53, // 55: armadra.v1.WorkerResponse.language_control:type_name -> armadra.v1.LanguageControlResult
+	54, // 56: armadra.v1.WorkerResponse.reverse_import:type_name -> armadra.v1.ReverseImportReport
+	55, // 57: armadra.v1.WorkerResponse.settings:type_name -> armadra.v1.WorkerSettingsSnapshot
+	56, // 58: armadra.v1.WorkerResponse.filesystem:type_name -> armadra.v1.FilesystemWorkerResponse
+	57, // 59: armadra.v1.WorkerResponse.session:type_name -> armadra.v1.SessionWorkerResponse
+	58, // 60: armadra.v1.WorkerResponse.agent_host:type_name -> armadra.v1.AgentWorkerResponse
+	59, // 61: armadra.v1.WorkerResponse.git:type_name -> armadra.v1.GitWorkerResponse
+	62, // [62:62] is the sub-list for method output_type
+	62, // [62:62] is the sub-list for method input_type
+	62, // [62:62] is the sub-list for extension type_name
+	62, // [62:62] is the sub-list for extension extendee
+	0,  // [0:62] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_worker_proto_init() }
@@ -3472,6 +3510,7 @@ func file_armadra_v1_worker_proto_init() {
 		(*WorkerRequest_CloseLanguageSession)(nil),
 		(*WorkerRequest_LanguageFrame)(nil),
 		(*WorkerRequest_LanguageApplyEdit)(nil),
+		(*WorkerRequest_LanguageControl)(nil),
 		(*WorkerRequest_ApplyReverseExport)(nil),
 		(*WorkerRequest_Settings)(nil),
 		(*WorkerRequest_Filesystem)(nil),
@@ -3497,6 +3536,7 @@ func file_armadra_v1_worker_proto_init() {
 		(*WorkerResponse_LanguageSession)(nil),
 		(*WorkerResponse_LanguageFrame)(nil),
 		(*WorkerResponse_LanguageApplyEdit)(nil),
+		(*WorkerResponse_LanguageControl)(nil),
 		(*WorkerResponse_ReverseImport)(nil),
 		(*WorkerResponse_Settings)(nil),
 		(*WorkerResponse_Filesystem)(nil),

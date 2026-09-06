@@ -528,12 +528,7 @@ pub async fn restart_server(
     if !workspace.permissions.execute {
         return Err(AppError::Forbidden(reason::EXECUTION_NOT_GRANTED.into()));
     }
-    // The wire has no restart action, so a remote server is restarted by
-    // closing its sessions and opening them again. Saying so is better than a
-    // button that quietly does nothing on one kind of workspace.
-    crate::remote::refuse_remote(&workspace, "Restarting a language server on a remote host")?;
-    state.language.restart(&workspace_id, &server_id).await?;
-    descriptor(&state, &workspace_id, &server_id)
+    control(&state, &workspace, &server_id, super::Control::Restart).await
 }
 
 /// `POST /api/workspaces/{id}/language/servers/{serverId}/stop`
@@ -542,9 +537,47 @@ pub async fn stop_server(
     AxumPath((workspace_id, server_id)): AxumPath<(String, String)>,
 ) -> AppResult<Json<super::ServerDescriptor>> {
     let workspace = readable(&state, &workspace_id).await?;
-    crate::remote::refuse_remote(&workspace, "Stopping a language server on a remote host")?;
-    state.language.stop(&workspace_id, &server_id).await?;
-    descriptor(&state, &workspace_id, &server_id)
+    control(&state, &workspace, &server_id, super::Control::Stop).await
+}
+
+/// Restart or stop, on whichever machine runs the server.
+///
+/// A remote server is reached over the language link, because that is the
+/// connection its process belongs to. Without a link there is nothing running
+/// to act on, and saying so is better than a button that silently succeeds.
+async fn control(
+    state: &AppState,
+    workspace: &Workspace,
+    server_id: &str,
+    action: super::Control,
+) -> AppResult<Json<super::ServerDescriptor>> {
+    match crate::remote::resolve(state, workspace)? {
+        crate::remote::Execution::Local => {
+            match action {
+                super::Control::Stop => state.language.stop(&workspace.id, server_id).await?,
+                super::Control::Restart => {
+                    state.language.restart(&workspace.id, server_id).await?
+                }
+            }
+            descriptor(state, &workspace.id, server_id)
+        }
+        crate::remote::Execution::Remote(worker) => {
+            let link = worker.language.current().await.ok_or_else(|| {
+                AppError::NotFound("No language server is running on that host".into())
+            })?;
+            let server = link
+                .control(
+                    &workspace.id,
+                    &workspace.id,
+                    &workspace.root_path,
+                    server_id,
+                    action,
+                    workspace.permissions.execute,
+                )
+                .await?;
+            Ok(Json(server))
+        }
+    }
 }
 
 fn descriptor(

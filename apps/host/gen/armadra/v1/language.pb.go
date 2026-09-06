@@ -229,6 +229,59 @@ func (LanguageMessageKind) EnumDescriptor() ([]byte, []int) {
 	return file_armadra_v1_language_proto_rawDescGZIP(), []int{2}
 }
 
+// What a person pressed in the settings page or the resource panel. Stopping
+// and restarting are separate actions rather than one boolean because they end
+// differently: a stopped server stays stopped until somebody restarts it,
+// while a restart clears the crash budget and hands back a running process.
+type LanguageControlAction int32
+
+const (
+	LanguageControlAction_LANGUAGE_CONTROL_ACTION_UNSPECIFIED LanguageControlAction = 0
+	LanguageControlAction_LANGUAGE_CONTROL_ACTION_RESTART     LanguageControlAction = 1
+	LanguageControlAction_LANGUAGE_CONTROL_ACTION_STOP        LanguageControlAction = 2
+)
+
+// Enum value maps for LanguageControlAction.
+var (
+	LanguageControlAction_name = map[int32]string{
+		0: "LANGUAGE_CONTROL_ACTION_UNSPECIFIED",
+		1: "LANGUAGE_CONTROL_ACTION_RESTART",
+		2: "LANGUAGE_CONTROL_ACTION_STOP",
+	}
+	LanguageControlAction_value = map[string]int32{
+		"LANGUAGE_CONTROL_ACTION_UNSPECIFIED": 0,
+		"LANGUAGE_CONTROL_ACTION_RESTART":     1,
+		"LANGUAGE_CONTROL_ACTION_STOP":        2,
+	}
+)
+
+func (x LanguageControlAction) Enum() *LanguageControlAction {
+	p := new(LanguageControlAction)
+	*p = x
+	return p
+}
+
+func (x LanguageControlAction) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (LanguageControlAction) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_language_proto_enumTypes[3].Descriptor()
+}
+
+func (LanguageControlAction) Type() protoreflect.EnumType {
+	return &file_armadra_v1_language_proto_enumTypes[3]
+}
+
+func (x LanguageControlAction) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use LanguageControlAction.Descriptor instead.
+func (LanguageControlAction) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_language_proto_rawDescGZIP(), []int{3}
+}
+
 // Capability discovery, over the serial connection.
 type LanguageCapabilitiesRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
@@ -1108,6 +1161,135 @@ func (*LanguageFrame_Status) isLanguageFrame_Payload() {}
 
 func (*LanguageFrame_Ack) isLanguageFrame_Payload() {}
 
+// Restarting or stopping one server on the execution host that runs it.
+//
+// It travels on the language link and not the serial connection for the same
+// reason session opening does: the servers live in the process that holds the
+// link, and the serial connection could only stop ones it started itself.
+type LanguageControlRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	RootId      string                 `protobuf:"bytes,1,opt,name=root_id,json=rootId,proto3" json:"root_id,omitempty"`
+	WorkspaceId string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	ServerId    string                 `protobuf:"bytes,3,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	Action      LanguageControlAction  `protobuf:"varint,4,opt,name=action,proto3,enum=armadra.v1.LanguageControlAction" json:"action,omitempty"`
+	// Re-checked on the execution host: restarting a server starts a process,
+	// and the machine that would start it is the machine that must refuse.
+	AllowExecute  bool `protobuf:"varint,5,opt,name=allow_execute,json=allowExecute,proto3" json:"allow_execute,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LanguageControlRequest) Reset() {
+	*x = LanguageControlRequest{}
+	mi := &file_armadra_v1_language_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LanguageControlRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LanguageControlRequest) ProtoMessage() {}
+
+func (x *LanguageControlRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_language_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LanguageControlRequest.ProtoReflect.Descriptor instead.
+func (*LanguageControlRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_language_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *LanguageControlRequest) GetRootId() string {
+	if x != nil {
+		return x.RootId
+	}
+	return ""
+}
+
+func (x *LanguageControlRequest) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *LanguageControlRequest) GetServerId() string {
+	if x != nil {
+		return x.ServerId
+	}
+	return ""
+}
+
+func (x *LanguageControlRequest) GetAction() LanguageControlAction {
+	if x != nil {
+		return x.Action
+	}
+	return LanguageControlAction_LANGUAGE_CONTROL_ACTION_UNSPECIFIED
+}
+
+func (x *LanguageControlRequest) GetAllowExecute() bool {
+	if x != nil {
+		return x.AllowExecute
+	}
+	return false
+}
+
+// The server as it is *after* the action, so the settings page shows the
+// outcome rather than re-asking for it.
+type LanguageControlResult struct {
+	state         protoimpl.MessageState    `protogen:"open.v1"`
+	Server        *LanguageServerDescriptor `protobuf:"bytes,1,opt,name=server,proto3" json:"server,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LanguageControlResult) Reset() {
+	*x = LanguageControlResult{}
+	mi := &file_armadra_v1_language_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LanguageControlResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LanguageControlResult) ProtoMessage() {}
+
+func (x *LanguageControlResult) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_language_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LanguageControlResult.ProtoReflect.Descriptor instead.
+func (*LanguageControlResult) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_language_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *LanguageControlResult) GetServer() *LanguageServerDescriptor {
+	if x != nil {
+		return x.Server
+	}
+	return nil
+}
+
 // Applying a `WorkspaceEdit`, over the serial connection. Every file carries
 // the version the caller believes is on disk, so a rename can never overwrite
 // an edit that landed while the preview was open.
@@ -1127,7 +1309,7 @@ type LanguageApplyEditRequest struct {
 
 func (x *LanguageApplyEditRequest) Reset() {
 	*x = LanguageApplyEditRequest{}
-	mi := &file_armadra_v1_language_proto_msgTypes[10]
+	mi := &file_armadra_v1_language_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1139,7 +1321,7 @@ func (x *LanguageApplyEditRequest) String() string {
 func (*LanguageApplyEditRequest) ProtoMessage() {}
 
 func (x *LanguageApplyEditRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_language_proto_msgTypes[10]
+	mi := &file_armadra_v1_language_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1152,7 +1334,7 @@ func (x *LanguageApplyEditRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LanguageApplyEditRequest.ProtoReflect.Descriptor instead.
 func (*LanguageApplyEditRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_language_proto_rawDescGZIP(), []int{10}
+	return file_armadra_v1_language_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *LanguageApplyEditRequest) GetRootId() string {
@@ -1201,7 +1383,7 @@ type LanguageAppliedFile struct {
 
 func (x *LanguageAppliedFile) Reset() {
 	*x = LanguageAppliedFile{}
-	mi := &file_armadra_v1_language_proto_msgTypes[11]
+	mi := &file_armadra_v1_language_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1213,7 +1395,7 @@ func (x *LanguageAppliedFile) String() string {
 func (*LanguageAppliedFile) ProtoMessage() {}
 
 func (x *LanguageAppliedFile) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_language_proto_msgTypes[11]
+	mi := &file_armadra_v1_language_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1226,7 +1408,7 @@ func (x *LanguageAppliedFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LanguageAppliedFile.ProtoReflect.Descriptor instead.
 func (*LanguageAppliedFile) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_language_proto_rawDescGZIP(), []int{11}
+	return file_armadra_v1_language_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *LanguageAppliedFile) GetPath() string {
@@ -1261,7 +1443,7 @@ type LanguageFailedFile struct {
 
 func (x *LanguageFailedFile) Reset() {
 	*x = LanguageFailedFile{}
-	mi := &file_armadra_v1_language_proto_msgTypes[12]
+	mi := &file_armadra_v1_language_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1273,7 +1455,7 @@ func (x *LanguageFailedFile) String() string {
 func (*LanguageFailedFile) ProtoMessage() {}
 
 func (x *LanguageFailedFile) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_language_proto_msgTypes[12]
+	mi := &file_armadra_v1_language_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1286,7 +1468,7 @@ func (x *LanguageFailedFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LanguageFailedFile.ProtoReflect.Descriptor instead.
 func (*LanguageFailedFile) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_language_proto_rawDescGZIP(), []int{12}
+	return file_armadra_v1_language_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *LanguageFailedFile) GetPath() string {
@@ -1323,7 +1505,7 @@ type LanguageApplyEditResult struct {
 
 func (x *LanguageApplyEditResult) Reset() {
 	*x = LanguageApplyEditResult{}
-	mi := &file_armadra_v1_language_proto_msgTypes[13]
+	mi := &file_armadra_v1_language_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1335,7 +1517,7 @@ func (x *LanguageApplyEditResult) String() string {
 func (*LanguageApplyEditResult) ProtoMessage() {}
 
 func (x *LanguageApplyEditResult) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_language_proto_msgTypes[13]
+	mi := &file_armadra_v1_language_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1348,7 +1530,7 @@ func (x *LanguageApplyEditResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LanguageApplyEditResult.ProtoReflect.Descriptor instead.
 func (*LanguageApplyEditResult) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_language_proto_rawDescGZIP(), []int{13}
+	return file_armadra_v1_language_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *LanguageApplyEditResult) GetApplied() []*LanguageAppliedFile {
@@ -1459,7 +1641,15 @@ const file_armadra_v1_language_proto_rawDesc = "" +
 	" \x01(\v2\x1b.armadra.v1.LanguageMessageH\x00R\amessage\x12;\n" +
 	"\x06status\x18\v \x01(\v2!.armadra.v1.LanguageSessionStatusH\x00R\x06status\x12+\n" +
 	"\x03ack\x18\f \x01(\v2\x17.armadra.v1.LanguageAckH\x00R\x03ackB\t\n" +
-	"\apayload\"\xc9\x02\n" +
+	"\apayload\"\xd1\x01\n" +
+	"\x16LanguageControlRequest\x12\x17\n" +
+	"\aroot_id\x18\x01 \x01(\tR\x06rootId\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12\x1b\n" +
+	"\tserver_id\x18\x03 \x01(\tR\bserverId\x129\n" +
+	"\x06action\x18\x04 \x01(\x0e2!.armadra.v1.LanguageControlActionR\x06action\x12#\n" +
+	"\rallow_execute\x18\x05 \x01(\bR\fallowExecute\"U\n" +
+	"\x15LanguageControlResult\x12<\n" +
+	"\x06server\x18\x01 \x01(\v2$.armadra.v1.LanguageServerDescriptorR\x06server\"\xc9\x02\n" +
 	"\x18LanguageApplyEditRequest\x12\x17\n" +
 	"\aroot_id\x18\x01 \x01(\tR\x06rootId\x12\x1d\n" +
 	"\n" +
@@ -1510,7 +1700,11 @@ const file_armadra_v1_language_proto_rawDesc = "" +
 	"!LANGUAGE_MESSAGE_KIND_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dLANGUAGE_MESSAGE_KIND_REQUEST\x10\x01\x12\"\n" +
 	"\x1eLANGUAGE_MESSAGE_KIND_RESPONSE\x10\x02\x12&\n" +
-	"\"LANGUAGE_MESSAGE_KIND_NOTIFICATION\x10\x03B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	"\"LANGUAGE_MESSAGE_KIND_NOTIFICATION\x10\x03*\x87\x01\n" +
+	"\x15LanguageControlAction\x12'\n" +
+	"#LANGUAGE_CONTROL_ACTION_UNSPECIFIED\x10\x00\x12#\n" +
+	"\x1fLANGUAGE_CONTROL_ACTION_RESTART\x10\x01\x12 \n" +
+	"\x1cLANGUAGE_CONTROL_ACTION_STOP\x10\x02B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_language_proto_rawDescOnce sync.Once
@@ -1524,46 +1718,51 @@ func file_armadra_v1_language_proto_rawDescGZIP() []byte {
 	return file_armadra_v1_language_proto_rawDescData
 }
 
-var file_armadra_v1_language_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_armadra_v1_language_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_armadra_v1_language_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_armadra_v1_language_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_armadra_v1_language_proto_goTypes = []any{
 	(LanguageServerState)(0),            // 0: armadra.v1.LanguageServerState
 	(LanguageFeature)(0),                // 1: armadra.v1.LanguageFeature
 	(LanguageMessageKind)(0),            // 2: armadra.v1.LanguageMessageKind
-	(*LanguageCapabilitiesRequest)(nil), // 3: armadra.v1.LanguageCapabilitiesRequest
-	(*LanguageServerDescriptor)(nil),    // 4: armadra.v1.LanguageServerDescriptor
-	(*LanguageCapabilities)(nil),        // 5: armadra.v1.LanguageCapabilities
-	(*OpenLanguageSessionRequest)(nil),  // 6: armadra.v1.OpenLanguageSessionRequest
-	(*LanguageSession)(nil),             // 7: armadra.v1.LanguageSession
-	(*CloseLanguageSessionRequest)(nil), // 8: armadra.v1.CloseLanguageSessionRequest
-	(*LanguageMessage)(nil),             // 9: armadra.v1.LanguageMessage
-	(*LanguageSessionStatus)(nil),       // 10: armadra.v1.LanguageSessionStatus
-	(*LanguageAck)(nil),                 // 11: armadra.v1.LanguageAck
-	(*LanguageFrame)(nil),               // 12: armadra.v1.LanguageFrame
-	(*LanguageApplyEditRequest)(nil),    // 13: armadra.v1.LanguageApplyEditRequest
-	(*LanguageAppliedFile)(nil),         // 14: armadra.v1.LanguageAppliedFile
-	(*LanguageFailedFile)(nil),          // 15: armadra.v1.LanguageFailedFile
-	(*LanguageApplyEditResult)(nil),     // 16: armadra.v1.LanguageApplyEditResult
-	nil,                                 // 17: armadra.v1.LanguageApplyEditRequest.ExpectedSha256Entry
+	(LanguageControlAction)(0),          // 3: armadra.v1.LanguageControlAction
+	(*LanguageCapabilitiesRequest)(nil), // 4: armadra.v1.LanguageCapabilitiesRequest
+	(*LanguageServerDescriptor)(nil),    // 5: armadra.v1.LanguageServerDescriptor
+	(*LanguageCapabilities)(nil),        // 6: armadra.v1.LanguageCapabilities
+	(*OpenLanguageSessionRequest)(nil),  // 7: armadra.v1.OpenLanguageSessionRequest
+	(*LanguageSession)(nil),             // 8: armadra.v1.LanguageSession
+	(*CloseLanguageSessionRequest)(nil), // 9: armadra.v1.CloseLanguageSessionRequest
+	(*LanguageMessage)(nil),             // 10: armadra.v1.LanguageMessage
+	(*LanguageSessionStatus)(nil),       // 11: armadra.v1.LanguageSessionStatus
+	(*LanguageAck)(nil),                 // 12: armadra.v1.LanguageAck
+	(*LanguageFrame)(nil),               // 13: armadra.v1.LanguageFrame
+	(*LanguageControlRequest)(nil),      // 14: armadra.v1.LanguageControlRequest
+	(*LanguageControlResult)(nil),       // 15: armadra.v1.LanguageControlResult
+	(*LanguageApplyEditRequest)(nil),    // 16: armadra.v1.LanguageApplyEditRequest
+	(*LanguageAppliedFile)(nil),         // 17: armadra.v1.LanguageAppliedFile
+	(*LanguageFailedFile)(nil),          // 18: armadra.v1.LanguageFailedFile
+	(*LanguageApplyEditResult)(nil),     // 19: armadra.v1.LanguageApplyEditResult
+	nil,                                 // 20: armadra.v1.LanguageApplyEditRequest.ExpectedSha256Entry
 }
 var file_armadra_v1_language_proto_depIdxs = []int32{
 	0,  // 0: armadra.v1.LanguageServerDescriptor.state:type_name -> armadra.v1.LanguageServerState
 	1,  // 1: armadra.v1.LanguageServerDescriptor.features:type_name -> armadra.v1.LanguageFeature
-	4,  // 2: armadra.v1.LanguageCapabilities.servers:type_name -> armadra.v1.LanguageServerDescriptor
+	5,  // 2: armadra.v1.LanguageCapabilities.servers:type_name -> armadra.v1.LanguageServerDescriptor
 	0,  // 3: armadra.v1.LanguageSession.state:type_name -> armadra.v1.LanguageServerState
 	2,  // 4: armadra.v1.LanguageMessage.kind:type_name -> armadra.v1.LanguageMessageKind
 	0,  // 5: armadra.v1.LanguageSessionStatus.state:type_name -> armadra.v1.LanguageServerState
-	9,  // 6: armadra.v1.LanguageFrame.message:type_name -> armadra.v1.LanguageMessage
-	10, // 7: armadra.v1.LanguageFrame.status:type_name -> armadra.v1.LanguageSessionStatus
-	11, // 8: armadra.v1.LanguageFrame.ack:type_name -> armadra.v1.LanguageAck
-	17, // 9: armadra.v1.LanguageApplyEditRequest.expected_sha256:type_name -> armadra.v1.LanguageApplyEditRequest.ExpectedSha256Entry
-	14, // 10: armadra.v1.LanguageApplyEditResult.applied:type_name -> armadra.v1.LanguageAppliedFile
-	15, // 11: armadra.v1.LanguageApplyEditResult.failed:type_name -> armadra.v1.LanguageFailedFile
-	12, // [12:12] is the sub-list for method output_type
-	12, // [12:12] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	10, // 6: armadra.v1.LanguageFrame.message:type_name -> armadra.v1.LanguageMessage
+	11, // 7: armadra.v1.LanguageFrame.status:type_name -> armadra.v1.LanguageSessionStatus
+	12, // 8: armadra.v1.LanguageFrame.ack:type_name -> armadra.v1.LanguageAck
+	3,  // 9: armadra.v1.LanguageControlRequest.action:type_name -> armadra.v1.LanguageControlAction
+	5,  // 10: armadra.v1.LanguageControlResult.server:type_name -> armadra.v1.LanguageServerDescriptor
+	20, // 11: armadra.v1.LanguageApplyEditRequest.expected_sha256:type_name -> armadra.v1.LanguageApplyEditRequest.ExpectedSha256Entry
+	17, // 12: armadra.v1.LanguageApplyEditResult.applied:type_name -> armadra.v1.LanguageAppliedFile
+	18, // 13: armadra.v1.LanguageApplyEditResult.failed:type_name -> armadra.v1.LanguageFailedFile
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_language_proto_init() }
@@ -1583,8 +1782,8 @@ func file_armadra_v1_language_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_language_proto_rawDesc), len(file_armadra_v1_language_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   15,
+			NumEnums:      4,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

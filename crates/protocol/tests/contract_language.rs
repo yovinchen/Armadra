@@ -143,6 +143,29 @@ fn an_absent_expected_version_means_the_file_must_not_exist() {
 }
 
 #[test]
+fn stopping_and_restarting_are_separate_actions_and_neither_is_the_default() {
+    check(
+        "language_control",
+        LanguageControlRequest {
+            root_id: "root-1".into(),
+            workspace_id: "ws-1".into(),
+            server_id: "ruff".into(),
+            action: LanguageControlAction::Restart as i32,
+            allow_execute: true,
+        },
+    );
+    // A frame that names no action must not read as "restart": an empty
+    // request is a caller that never said what it wanted, and starting a
+    // process on that basis is the one outcome nobody asked for.
+    let empty = LanguageControlRequest {
+        server_id: "ruff".into(),
+        ..Default::default()
+    };
+    let decoded = LanguageControlRequest::decode(empty.encode_to_vec().as_slice()).unwrap();
+    assert_eq!(decoded.action, LanguageControlAction::Unspecified as i32);
+}
+
+#[test]
 fn the_worker_oneof_carries_language_branches_without_colliding() {
     let request = WorkerRequest {
         request_id: "language-1".into(),

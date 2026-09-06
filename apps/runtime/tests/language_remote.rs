@@ -315,6 +315,64 @@ async fn mock_scenario(pids: &Path) {
         "the execution host reports the server it started: {running:?}",
     );
 
+    // ---- restart and stop reach the remote process -----------------------
+    // A button that quietly does nothing on one kind of workspace is worse
+    // than no button, so these are asserted on the pid: a restart must have
+    // produced a *different* process, and a stop must leave none at all.
+    let before = running
+        .iter()
+        .find(|server| server.server_id == "marksman")
+        .and_then(|server| server.pid)
+        .expect("the execution host reports the pid it started");
+    let restarted = link
+        .control(
+            WORKSPACE,
+            ROOT_ID,
+            &root_path,
+            "marksman",
+            language::Control::Restart,
+            true,
+        )
+        .await
+        .expect("a remote server restarts");
+    assert_eq!(restarted.state, ServerState::Running, "{restarted:?}");
+    assert!(
+        restarted.pid.is_some_and(|pid| pid != before),
+        "restart replaced the process rather than reporting the old one: {restarted:?}",
+    );
+    // Without the execute grant the restart is refused on the machine that
+    // would start the process, not merely hidden in the interface.
+    assert!(
+        link.control(
+            WORKSPACE,
+            ROOT_ID,
+            &root_path,
+            "marksman",
+            language::Control::Restart,
+            false,
+        )
+        .await
+        .is_err(),
+        "a restart without the execute grant must be refused where it would run",
+    );
+    let stopped = link
+        .control(
+            WORKSPACE,
+            ROOT_ID,
+            &root_path,
+            "marksman",
+            language::Control::Stop,
+            true,
+        )
+        .await
+        .expect("a remote server stops");
+    assert_eq!(stopped.state, ServerState::Stopped);
+    assert_eq!(stopped.pid, None, "a stopped server reports no process");
+    // The restart replayed `didOpen`, so the session has diagnostics waiting.
+    // The next assertion is about the outbox *closing*, and a queue with
+    // anything left in it would answer that question with the wrong message.
+    while session.outbox.try_recv().is_ok() {}
+
     // ---- the link dies ---------------------------------------------------
     let started = worker_pids(pids, "link");
     unsafe { libc::kill(started[0], libc::SIGKILL) };

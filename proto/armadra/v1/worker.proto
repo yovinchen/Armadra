@@ -328,6 +328,7 @@ message WorkerRequest {
     CloseLanguageSessionRequest close_language_session = 32;
     LanguageFrame language_frame = 33;
     LanguageApplyEditRequest language_apply_edit = 34;
+    LanguageControlRequest language_control = 35;
     // The rollback direction of the switch: the Host's reverse export package
     // is applied to the Runtime's own database before the epoch is handed
     // back. Applying it does not move ownership, and refusing it is what stops
@@ -385,6 +386,7 @@ message WorkerResponse {
     LanguageSession language_session = 31;
     LanguageFrame language_frame = 32;
     LanguageApplyEditResult language_apply_edit = 33;
+    LanguageControlResult language_control = 34;
     ReverseImportReport reverse_import = 23;
     WorkerSettingsSnapshot settings = 25;
     FilesystemWorkerResponse filesystem = 26;

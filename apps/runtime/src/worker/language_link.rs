@@ -419,6 +419,51 @@ impl Host {
         Ok(result.to_proto())
     }
 
+    /* ------------------------------- control ------------------------------ */
+
+    /// Restart or stop one server on this machine (design §2.9 "manual
+    /// control", remote half).
+    ///
+    /// The workspace's execute grant is re-checked here rather than trusted
+    /// from the controller: restarting starts a process, and the machine that
+    /// would start it is the machine that must refuse. Stopping needs no
+    /// grant — ending something already running is never the dangerous
+    /// direction.
+    pub async fn control(&self, request: LanguageControlRequest) -> AppResult<LanguageControlResult> {
+        let action = LanguageControlAction::try_from(request.action)
+            .unwrap_or(LanguageControlAction::Unspecified);
+        match action {
+            LanguageControlAction::Restart => {
+                if !request.allow_execute {
+                    return Err(AppError::Forbidden(
+                        language::reason::EXECUTION_NOT_GRANTED.into(),
+                    ));
+                }
+                self.manager
+                    .restart(&request.workspace_id, &request.server_id)
+                    .await?;
+            }
+            LanguageControlAction::Stop => {
+                self.manager
+                    .stop(&request.workspace_id, &request.server_id)
+                    .await?;
+            }
+            LanguageControlAction::Unspecified => {
+                return Err(AppError::BadRequest(
+                    "That request does not say what to do with the server".into(),
+                ));
+            }
+        }
+        let server = self
+            .manager
+            .hub(&request.workspace_id, &request.server_id)
+            .map(|hub| hub.descriptor().to_proto())
+            .ok_or_else(|| AppError::NotFound("No such language server".into()))?;
+        Ok(LanguageControlResult {
+            server: Some(server),
+        })
+    }
+
     /// The Runtime is going away; end every server this link started.
     pub async fn shutdown(&self) {
         self.sessions().clear();

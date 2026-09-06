@@ -193,6 +193,37 @@ message LanguageFrame {
   }
 }
 
+// What a person pressed in the settings page or the resource panel. Stopping
+// and restarting are separate actions rather than one boolean because they end
+// differently: a stopped server stays stopped until somebody restarts it,
+// while a restart clears the crash budget and hands back a running process.
+enum LanguageControlAction {
+  LANGUAGE_CONTROL_ACTION_UNSPECIFIED = 0;
+  LANGUAGE_CONTROL_ACTION_RESTART = 1;
+  LANGUAGE_CONTROL_ACTION_STOP = 2;
+}
+
+// Restarting or stopping one server on the execution host that runs it.
+//
+// It travels on the language link and not the serial connection for the same
+// reason session opening does: the servers live in the process that holds the
+// link, and the serial connection could only stop ones it started itself.
+message LanguageControlRequest {
+  string root_id = 1;
+  string workspace_id = 2;
+  string server_id = 3;
+  LanguageControlAction action = 4;
+  // Re-checked on the execution host: restarting a server starts a process,
+  // and the machine that would start it is the machine that must refuse.
+  bool allow_execute = 5;
+}
+
+// The server as it is *after* the action, so the settings page shows the
+// outcome rather than re-asking for it.
+message LanguageControlResult {
+  LanguageServerDescriptor server = 1;
+}
+
 // Applying a `WorkspaceEdit`, over the serial connection. Every file carries
 // the version the caller believes is on disk, so a rename can never overwrite
 // an edit that landed while the preview was open.

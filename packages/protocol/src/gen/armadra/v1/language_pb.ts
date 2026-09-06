@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_language: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Chlhcm1hZHJhL3YxL2xhbmd1YWdlLnByb3RvEgphcm1hZHJhLnYxIj8KG0xhbmd1YWdlQ2FwYWJpbGl0aWVzUmVxdWVzdBIPCgdyb290X2lkGAEgASgJEg8KB3JlZnJlc2gYAiABKAgiiwMKGExhbmd1YWdlU2VydmVyRGVzY3JpcHRvchIRCglzZXJ2ZXJfaWQYASABKAkSEwoLbGFuZ3VhZ2VfaWQYAiABKAkSFwoPZmlsZV9leHRlbnNpb25zGAMgAygJEhIKCmV4ZWN1dGFibGUYBCABKAkSDwoHdmVyc2lvbhgFIAEoCRIuCgVzdGF0ZRgGIAEoDjIfLmFybWFkcmEudjEuTGFuZ3VhZ2VTZXJ2ZXJTdGF0ZRIOCgZyZWFzb24YByABKAkSLQoIZmVhdHVyZXMYCCADKA4yGy5hcm1hZHJhLnYxLkxhbmd1YWdlRmVhdHVyZRIVCg1yZXN0YXJ0X2NvdW50GAkgASgNEhAKA3BpZBgKIAEoA0gAiAEBEh8KEnN0YXJ0X3RpbWVfdW5peF9tcxgLIAEoA0gBiAEBEhYKDm9wZW5fZG9jdW1lbnRzGAwgASgNEhkKEXByb2JlZF9hdF91bml4X21zGA0gASgDQgYKBF9waWRCFQoTX3N0YXJ0X3RpbWVfdW5peF9tcyK1AQoUTGFuZ3VhZ2VDYXBhYmlsaXRpZXMSGQoRZXhlY3V0aW9uX2hvc3RfaWQYASABKAkSNQoHc2VydmVycxgCIAMoCzIkLmFybWFkcmEudjEuTGFuZ3VhZ2VTZXJ2ZXJEZXNjcmlwdG9yEhoKEm1heF9kb2N1bWVudF9ieXRlcxgDIAEoDRIUCgxtYXhfc2Vzc2lvbnMYBCABKA0SGQoRbWF4X21lc3NhZ2VfYnl0ZXMYBSABKA0izQEKGk9wZW5MYW5ndWFnZVNlc3Npb25SZXF1ZXN0Eg8KB3Jvb3RfaWQYASABKAkSFAoMd29ya3NwYWNlX2lkGAIgASgJEhIKCnNlc3Npb25faWQYAyABKAkSEwoLbGFuZ3VhZ2VfaWQYBCABKAkSEQoJY2xpZW50X2lkGAUgASgJEhMKC2FsbG93X3dyaXRlGAYgASgIEhUKDWFsbG93X2V4ZWN1dGUYByABKAgSIAoYY2xpZW50X2NhcGFiaWxpdGllc19qc29uGAggASgMIq4BCg9MYW5ndWFnZVNlc3Npb24SEgoKc2Vzc2lvbl9pZBgBIAEoCRIRCglzZXJ2ZXJfaWQYAiABKAkSEgoKZ2VuZXJhdGlvbhgDIAEoBBIuCgVzdGF0ZRgEIAEoDjIfLmFybWFkcmEudjEuTGFuZ3VhZ2VTZXJ2ZXJTdGF0ZRIOCgZyZWFzb24YBSABKAkSIAoYc2VydmVyX2NhcGFiaWxpdGllc19qc29uGAYgASgMIkEKG0Nsb3NlTGFuZ3VhZ2VTZXNzaW9uUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEg4KBnJlYXNvbhgCIAEoCSKgAQoPTGFuZ3VhZ2VNZXNzYWdlEhIKCnNlc3Npb25faWQYASABKAkSEAoIc2VxdWVuY2UYAiABKAQSLQoEa2luZBgDIAEoDjIfLmFybWFkcmEudjEuTGFuZ3VhZ2VNZXNzYWdlS2luZBIOCgZtZXRob2QYBCABKAkSEgoKcmVxdWVzdF9pZBgFIAEoCRIUCgxwYXlsb2FkX2pzb24YBiABKAwi4gEKFUxhbmd1YWdlU2Vzc2lvblN0YXR1cxISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQSLgoFc3RhdGUYAyABKA4yHy5hcm1hZHJhLnYxLkxhbmd1YWdlU2VydmVyU3RhdGUSDgoGcmVhc29uGAQgASgJEhUKDXJlc3RhcnRfY291bnQYBSABKA0SHQoQcHJvZ3Jlc3NfcGVyY2VudBgGIAEoDUgAiAEBEhYKDnByb2dyZXNzX3RpdGxlGAcgASgJQhMKEV9wcm9ncmVzc19wZXJjZW50IlsKC0xhbmd1YWdlQWNrEhIKCnNlc3Npb25faWQYASABKAkSGAoQcmVjZWl2ZWRfdGhyb3VnaBgCIAEoBBIeChZhdmFpbGFibGVfY3JlZGl0X2J5dGVzGAMgASgNIrsBCg1MYW5ndWFnZUZyYW1lEhIKCmxpbmtfZXBvY2gYASABKAkSLgoHbWVzc2FnZRgKIAEoCzIbLmFybWFkcmEudjEuTGFuZ3VhZ2VNZXNzYWdlSAASMwoGc3RhdHVzGAsgASgLMiEuYXJtYWRyYS52MS5MYW5ndWFnZVNlc3Npb25TdGF0dXNIABImCgNhY2sYDCABKAsyFy5hcm1hZHJhLnYxLkxhbmd1YWdlQWNrSABCCQoHcGF5bG9hZCL7AQoYTGFuZ3VhZ2VBcHBseUVkaXRSZXF1ZXN0Eg8KB3Jvb3RfaWQYASABKAkSEgoKc2Vzc2lvbl9pZBgCIAEoCRIbChN3b3Jrc3BhY2VfZWRpdF9qc29uGAMgASgMElEKD2V4cGVjdGVkX3NoYTI1NhgEIAMoCzI4LmFybWFkcmEudjEuTGFuZ3VhZ2VBcHBseUVkaXRSZXF1ZXN0LkV4cGVjdGVkU2hhMjU2RW50cnkSEwoLYWxsb3dfd3JpdGUYBSABKAgaNQoTRXhwZWN0ZWRTaGEyNTZFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIkEKE0xhbmd1YWdlQXBwbGllZEZpbGUSDAoEcGF0aBgBIAEoCRIOCgZzaGEyNTYYAiABKAkSDAoEc2l6ZRgDIAEoBCJBChJMYW5ndWFnZUZhaWxlZEZpbGUSDAoEcGF0aBgBIAEoCRIMCgRjb2RlGAIgASgJEg8KB21lc3NhZ2UYAyABKAkiewoXTGFuZ3VhZ2VBcHBseUVkaXRSZXN1bHQSMAoHYXBwbGllZBgBIAMoCzIfLmFybWFkcmEudjEuTGFuZ3VhZ2VBcHBsaWVkRmlsZRIuCgZmYWlsZWQYAiADKAsyHi5hcm1hZHJhLnYxLkxhbmd1YWdlRmFpbGVkRmlsZSrlAgoTTGFuZ3VhZ2VTZXJ2ZXJTdGF0ZRIlCiFMQU5HVUFHRV9TRVJWRVJfU1RBVEVfVU5TUEVDSUZJRUQQABIjCh9MQU5HVUFHRV9TRVJWRVJfU1RBVEVfQVZBSUxBQkxFEAESJQohTEFOR1VBR0VfU0VSVkVSX1NUQVRFX1VOU1VQUE9SVEVEEAISIgoeTEFOR1VBR0VfU0VSVkVSX1NUQVRFX1NUQVJUSU5HEAMSIQodTEFOR1VBR0VfU0VSVkVSX1NUQVRFX1JVTk5JTkcQBBImCiJMQU5HVUFHRV9TRVJWRVJfU1RBVEVfSURMRV9TVE9QUEVEEAUSIQodTEFOR1VBR0VfU0VSVkVSX1NUQVRFX0NSQVNIRUQQBhIhCh1MQU5HVUFHRV9TRVJWRVJfU1RBVEVfU1RPUFBFRBAHEiYKIkxBTkdVQUdFX1NFUlZFUl9TVEFURV9ESVNDT05ORUNURUQQCCqmAwoPTGFuZ3VhZ2VGZWF0dXJlEiAKHExBTkdVQUdFX0ZFQVRVUkVfVU5TUEVDSUZJRUQQABIfChtMQU5HVUFHRV9GRUFUVVJFX0NPTVBMRVRJT04QARIgChxMQU5HVUFHRV9GRUFUVVJFX0RJQUdOT1NUSUNTEAISGgoWTEFOR1VBR0VfRkVBVFVSRV9IT1ZFUhADEh8KG0xBTkdVQUdFX0ZFQVRVUkVfREVGSU5JVElPThAEEh8KG0xBTkdVQUdFX0ZFQVRVUkVfUkVGRVJFTkNFUxAFEhsKF0xBTkdVQUdFX0ZFQVRVUkVfUkVOQU1FEAYSHwobTEFOR1VBR0VfRkVBVFVSRV9GT1JNQVRUSU5HEAcSJAogTEFOR1VBR0VfRkVBVFVSRV9ET0NVTUVOVF9TWU1CT0wQCBIlCiFMQU5HVUFHRV9GRUFUVVJFX1dPUktTUEFDRV9TWU1CT0wQCRIgChxMQU5HVUFHRV9GRUFUVVJFX0NPREVfQUNUSU9OEAoSIwofTEFOR1VBR0VfRkVBVFVSRV9TSUdOQVRVUkVfSEVMUBALKqsBChNMYW5ndWFnZU1lc3NhZ2VLaW5kEiUKIUxBTkdVQUdFX01FU1NBR0VfS0lORF9VTlNQRUNJRklFRBAAEiEKHUxBTkdVQUdFX01FU1NBR0VfS0lORF9SRVFVRVNUEAESIgoeTEFOR1VBR0VfTUVTU0FHRV9LSU5EX1JFU1BPTlNFEAISJgoiTEFOR1VBR0VfTUVTU0FHRV9LSU5EX05PVElGSUNBVElPThADQiNaIWFybWFkcmEubG9jYWwvaG9zdC9nZW4vYXJtYWRyYS92MWIGcHJvdG8z",
+    "Chlhcm1hZHJhL3YxL2xhbmd1YWdlLnByb3RvEgphcm1hZHJhLnYxIj8KG0xhbmd1YWdlQ2FwYWJpbGl0aWVzUmVxdWVzdBIPCgdyb290X2lkGAEgASgJEg8KB3JlZnJlc2gYAiABKAgiiwMKGExhbmd1YWdlU2VydmVyRGVzY3JpcHRvchIRCglzZXJ2ZXJfaWQYASABKAkSEwoLbGFuZ3VhZ2VfaWQYAiABKAkSFwoPZmlsZV9leHRlbnNpb25zGAMgAygJEhIKCmV4ZWN1dGFibGUYBCABKAkSDwoHdmVyc2lvbhgFIAEoCRIuCgVzdGF0ZRgGIAEoDjIfLmFybWFkcmEudjEuTGFuZ3VhZ2VTZXJ2ZXJTdGF0ZRIOCgZyZWFzb24YByABKAkSLQoIZmVhdHVyZXMYCCADKA4yGy5hcm1hZHJhLnYxLkxhbmd1YWdlRmVhdHVyZRIVCg1yZXN0YXJ0X2NvdW50GAkgASgNEhAKA3BpZBgKIAEoA0gAiAEBEh8KEnN0YXJ0X3RpbWVfdW5peF9tcxgLIAEoA0gBiAEBEhYKDm9wZW5fZG9jdW1lbnRzGAwgASgNEhkKEXByb2JlZF9hdF91bml4X21zGA0gASgDQgYKBF9waWRCFQoTX3N0YXJ0X3RpbWVfdW5peF9tcyK1AQoUTGFuZ3VhZ2VDYXBhYmlsaXRpZXMSGQoRZXhlY3V0aW9uX2hvc3RfaWQYASABKAkSNQoHc2VydmVycxgCIAMoCzIkLmFybWFkcmEudjEuTGFuZ3VhZ2VTZXJ2ZXJEZXNjcmlwdG9yEhoKEm1heF9kb2N1bWVudF9ieXRlcxgDIAEoDRIUCgxtYXhfc2Vzc2lvbnMYBCABKA0SGQoRbWF4X21lc3NhZ2VfYnl0ZXMYBSABKA0izQEKGk9wZW5MYW5ndWFnZVNlc3Npb25SZXF1ZXN0Eg8KB3Jvb3RfaWQYASABKAkSFAoMd29ya3NwYWNlX2lkGAIgASgJEhIKCnNlc3Npb25faWQYAyABKAkSEwoLbGFuZ3VhZ2VfaWQYBCABKAkSEQoJY2xpZW50X2lkGAUgASgJEhMKC2FsbG93X3dyaXRlGAYgASgIEhUKDWFsbG93X2V4ZWN1dGUYByABKAgSIAoYY2xpZW50X2NhcGFiaWxpdGllc19qc29uGAggASgMIq4BCg9MYW5ndWFnZVNlc3Npb24SEgoKc2Vzc2lvbl9pZBgBIAEoCRIRCglzZXJ2ZXJfaWQYAiABKAkSEgoKZ2VuZXJhdGlvbhgDIAEoBBIuCgVzdGF0ZRgEIAEoDjIfLmFybWFkcmEudjEuTGFuZ3VhZ2VTZXJ2ZXJTdGF0ZRIOCgZyZWFzb24YBSABKAkSIAoYc2VydmVyX2NhcGFiaWxpdGllc19qc29uGAYgASgMIkEKG0Nsb3NlTGFuZ3VhZ2VTZXNzaW9uUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEg4KBnJlYXNvbhgCIAEoCSKgAQoPTGFuZ3VhZ2VNZXNzYWdlEhIKCnNlc3Npb25faWQYASABKAkSEAoIc2VxdWVuY2UYAiABKAQSLQoEa2luZBgDIAEoDjIfLmFybWFkcmEudjEuTGFuZ3VhZ2VNZXNzYWdlS2luZBIOCgZtZXRob2QYBCABKAkSEgoKcmVxdWVzdF9pZBgFIAEoCRIUCgxwYXlsb2FkX2pzb24YBiABKAwi4gEKFUxhbmd1YWdlU2Vzc2lvblN0YXR1cxISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmdlbmVyYXRpb24YAiABKAQSLgoFc3RhdGUYAyABKA4yHy5hcm1hZHJhLnYxLkxhbmd1YWdlU2VydmVyU3RhdGUSDgoGcmVhc29uGAQgASgJEhUKDXJlc3RhcnRfY291bnQYBSABKA0SHQoQcHJvZ3Jlc3NfcGVyY2VudBgGIAEoDUgAiAEBEhYKDnByb2dyZXNzX3RpdGxlGAcgASgJQhMKEV9wcm9ncmVzc19wZXJjZW50IlsKC0xhbmd1YWdlQWNrEhIKCnNlc3Npb25faWQYASABKAkSGAoQcmVjZWl2ZWRfdGhyb3VnaBgCIAEoBBIeChZhdmFpbGFibGVfY3JlZGl0X2J5dGVzGAMgASgNIrsBCg1MYW5ndWFnZUZyYW1lEhIKCmxpbmtfZXBvY2gYASABKAkSLgoHbWVzc2FnZRgKIAEoCzIbLmFybWFkcmEudjEuTGFuZ3VhZ2VNZXNzYWdlSAASMwoGc3RhdHVzGAsgASgLMiEuYXJtYWRyYS52MS5MYW5ndWFnZVNlc3Npb25TdGF0dXNIABImCgNhY2sYDCABKAsyFy5hcm1hZHJhLnYxLkxhbmd1YWdlQWNrSABCCQoHcGF5bG9hZCKcAQoWTGFuZ3VhZ2VDb250cm9sUmVxdWVzdBIPCgdyb290X2lkGAEgASgJEhQKDHdvcmtzcGFjZV9pZBgCIAEoCRIRCglzZXJ2ZXJfaWQYAyABKAkSMQoGYWN0aW9uGAQgASgOMiEuYXJtYWRyYS52MS5MYW5ndWFnZUNvbnRyb2xBY3Rpb24SFQoNYWxsb3dfZXhlY3V0ZRgFIAEoCCJNChVMYW5ndWFnZUNvbnRyb2xSZXN1bHQSNAoGc2VydmVyGAEgASgLMiQuYXJtYWRyYS52MS5MYW5ndWFnZVNlcnZlckRlc2NyaXB0b3Ii+wEKGExhbmd1YWdlQXBwbHlFZGl0UmVxdWVzdBIPCgdyb290X2lkGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkSGwoTd29ya3NwYWNlX2VkaXRfanNvbhgDIAEoDBJRCg9leHBlY3RlZF9zaGEyNTYYBCADKAsyOC5hcm1hZHJhLnYxLkxhbmd1YWdlQXBwbHlFZGl0UmVxdWVzdC5FeHBlY3RlZFNoYTI1NkVudHJ5EhMKC2FsbG93X3dyaXRlGAUgASgIGjUKE0V4cGVjdGVkU2hhMjU2RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJBChNMYW5ndWFnZUFwcGxpZWRGaWxlEgwKBHBhdGgYASABKAkSDgoGc2hhMjU2GAIgASgJEgwKBHNpemUYAyABKAQiQQoSTGFuZ3VhZ2VGYWlsZWRGaWxlEgwKBHBhdGgYASABKAkSDAoEY29kZRgCIAEoCRIPCgdtZXNzYWdlGAMgASgJInsKF0xhbmd1YWdlQXBwbHlFZGl0UmVzdWx0EjAKB2FwcGxpZWQYASADKAsyHy5hcm1hZHJhLnYxLkxhbmd1YWdlQXBwbGllZEZpbGUSLgoGZmFpbGVkGAIgAygLMh4uYXJtYWRyYS52MS5MYW5ndWFnZUZhaWxlZEZpbGUq5QIKE0xhbmd1YWdlU2VydmVyU3RhdGUSJQohTEFOR1VBR0VfU0VSVkVSX1NUQVRFX1VOU1BFQ0lGSUVEEAASIwofTEFOR1VBR0VfU0VSVkVSX1NUQVRFX0FWQUlMQUJMRRABEiUKIUxBTkdVQUdFX1NFUlZFUl9TVEFURV9VTlNVUFBPUlRFRBACEiIKHkxBTkdVQUdFX1NFUlZFUl9TVEFURV9TVEFSVElORxADEiEKHUxBTkdVQUdFX1NFUlZFUl9TVEFURV9SVU5OSU5HEAQSJgoiTEFOR1VBR0VfU0VSVkVSX1NUQVRFX0lETEVfU1RPUFBFRBAFEiEKHUxBTkdVQUdFX1NFUlZFUl9TVEFURV9DUkFTSEVEEAYSIQodTEFOR1VBR0VfU0VSVkVSX1NUQVRFX1NUT1BQRUQQBxImCiJMQU5HVUFHRV9TRVJWRVJfU1RBVEVfRElTQ09OTkVDVEVEEAgqpgMKD0xhbmd1YWdlRmVhdHVyZRIgChxMQU5HVUFHRV9GRUFUVVJFX1VOU1BFQ0lGSUVEEAASHwobTEFOR1VBR0VfRkVBVFVSRV9DT01QTEVUSU9OEAESIAocTEFOR1VBR0VfRkVBVFVSRV9ESUFHTk9TVElDUxACEhoKFkxBTkdVQUdFX0ZFQVRVUkVfSE9WRVIQAxIfChtMQU5HVUFHRV9GRUFUVVJFX0RFRklOSVRJT04QBBIfChtMQU5HVUFHRV9GRUFUVVJFX1JFRkVSRU5DRVMQBRIbChdMQU5HVUFHRV9GRUFUVVJFX1JFTkFNRRAGEh8KG0xBTkdVQUdFX0ZFQVRVUkVfRk9STUFUVElORxAHEiQKIExBTkdVQUdFX0ZFQVRVUkVfRE9DVU1FTlRfU1lNQk9MEAgSJQohTEFOR1VBR0VfRkVBVFVSRV9XT1JLU1BBQ0VfU1lNQk9MEAkSIAocTEFOR1VBR0VfRkVBVFVSRV9DT0RFX0FDVElPThAKEiMKH0xBTkdVQUdFX0ZFQVRVUkVfU0lHTkFUVVJFX0hFTFAQCyqrAQoTTGFuZ3VhZ2VNZXNzYWdlS2luZBIlCiFMQU5HVUFHRV9NRVNTQUdFX0tJTkRfVU5TUEVDSUZJRUQQABIhCh1MQU5HVUFHRV9NRVNTQUdFX0tJTkRfUkVRVUVTVBABEiIKHkxBTkdVQUdFX01FU1NBR0VfS0lORF9SRVNQT05TRRACEiYKIkxBTkdVQUdFX01FU1NBR0VfS0lORF9OT1RJRklDQVRJT04QAyqHAQoVTGFuZ3VhZ2VDb250cm9sQWN0aW9uEicKI0xBTkdVQUdFX0NPTlRST0xfQUNUSU9OX1VOU1BFQ0lGSUVEEAASIwofTEFOR1VBR0VfQ09OVFJPTF9BQ1RJT05fUkVTVEFSVBABEiAKHExBTkdVQUdFX0NPTlRST0xfQUNUSU9OX1NUT1AQAkIjWiFhcm1hZHJhLmxvY2FsL2hvc3QvZ2VuL2FybWFkcmEvdjFiBnByb3RvMw",
   );
 
 /**
@@ -498,6 +498,76 @@ export const LanguageFrameSchema: GenMessage<LanguageFrame> =
   messageDesc(file_armadra_v1_language, 9);
 
 /**
+ * Restarting or stopping one server on the execution host that runs it.
+ *
+ * It travels on the language link and not the serial connection for the same
+ * reason session opening does: the servers live in the process that holds the
+ * link, and the serial connection could only stop ones it started itself.
+ *
+ * @generated from message armadra.v1.LanguageControlRequest
+ */
+export type LanguageControlRequest =
+  Message<"armadra.v1.LanguageControlRequest"> & {
+    /**
+     * @generated from field: string root_id = 1;
+     */
+    rootId: string;
+
+    /**
+     * @generated from field: string workspace_id = 2;
+     */
+    workspaceId: string;
+
+    /**
+     * @generated from field: string server_id = 3;
+     */
+    serverId: string;
+
+    /**
+     * @generated from field: armadra.v1.LanguageControlAction action = 4;
+     */
+    action: LanguageControlAction;
+
+    /**
+     * Re-checked on the execution host: restarting a server starts a process,
+     * and the machine that would start it is the machine that must refuse.
+     *
+     * @generated from field: bool allow_execute = 5;
+     */
+    allowExecute: boolean;
+  };
+
+/**
+ * Describes the message armadra.v1.LanguageControlRequest.
+ * Use `create(LanguageControlRequestSchema)` to create a new message.
+ */
+export const LanguageControlRequestSchema: GenMessage<LanguageControlRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_language, 10);
+
+/**
+ * The server as it is *after* the action, so the settings page shows the
+ * outcome rather than re-asking for it.
+ *
+ * @generated from message armadra.v1.LanguageControlResult
+ */
+export type LanguageControlResult =
+  Message<"armadra.v1.LanguageControlResult"> & {
+    /**
+     * @generated from field: armadra.v1.LanguageServerDescriptor server = 1;
+     */
+    server?: LanguageServerDescriptor;
+  };
+
+/**
+ * Describes the message armadra.v1.LanguageControlResult.
+ * Use `create(LanguageControlResultSchema)` to create a new message.
+ */
+export const LanguageControlResultSchema: GenMessage<LanguageControlResult> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_language, 11);
+
+/**
  * Applying a `WorkspaceEdit`, over the serial connection. Every file carries
  * the version the caller believes is on disk, so a rename can never overwrite
  * an edit that landed while the preview was open.
@@ -543,7 +613,7 @@ export type LanguageApplyEditRequest =
  */
 export const LanguageApplyEditRequestSchema: GenMessage<LanguageApplyEditRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_language, 10);
+  messageDesc(file_armadra_v1_language, 12);
 
 /**
  * @generated from message armadra.v1.LanguageAppliedFile
@@ -571,7 +641,7 @@ export type LanguageAppliedFile = Message<"armadra.v1.LanguageAppliedFile"> & {
  */
 export const LanguageAppliedFileSchema: GenMessage<LanguageAppliedFile> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_language, 11);
+  messageDesc(file_armadra_v1_language, 13);
 
 /**
  * @generated from message armadra.v1.LanguageFailedFile
@@ -599,7 +669,7 @@ export type LanguageFailedFile = Message<"armadra.v1.LanguageFailedFile"> & {
  */
 export const LanguageFailedFileSchema: GenMessage<LanguageFailedFile> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_language, 12);
+  messageDesc(file_armadra_v1_language, 14);
 
 /**
  * Partial application is a real outcome and is reported as one: writing stops
@@ -627,7 +697,7 @@ export type LanguageApplyEditResult =
  */
 export const LanguageApplyEditResultSchema: GenMessage<LanguageApplyEditResult> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_language, 13);
+  messageDesc(file_armadra_v1_language, 15);
 
 /**
  * Where one server on one execution host is in its life (design §1.3).
@@ -810,3 +880,35 @@ export enum LanguageMessageKind {
 export const LanguageMessageKindSchema: GenEnum<LanguageMessageKind> =
   /*@__PURE__*/
   enumDesc(file_armadra_v1_language, 2);
+
+/**
+ * What a person pressed in the settings page or the resource panel. Stopping
+ * and restarting are separate actions rather than one boolean because they end
+ * differently: a stopped server stays stopped until somebody restarts it,
+ * while a restart clears the crash budget and hands back a running process.
+ *
+ * @generated from enum armadra.v1.LanguageControlAction
+ */
+export enum LanguageControlAction {
+  /**
+   * @generated from enum value: LANGUAGE_CONTROL_ACTION_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: LANGUAGE_CONTROL_ACTION_RESTART = 1;
+   */
+  RESTART = 1,
+
+  /**
+   * @generated from enum value: LANGUAGE_CONTROL_ACTION_STOP = 2;
+   */
+  STOP = 2,
+}
+
+/**
+ * Describes the enum armadra.v1.LanguageControlAction.
+ */
+export const LanguageControlActionSchema: GenEnum<LanguageControlAction> =
+  /*@__PURE__*/
+  enumDesc(file_armadra_v1_language, 3);

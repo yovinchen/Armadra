@@ -210,6 +210,72 @@ impl Link {
         }
     }
 
+    /// Restarts or stops one server on the execution host.
+    ///
+    /// The controller resolves the workspace's grants and sends them along;
+    /// the execution host checks them again before it starts anything. Both
+    /// halves are needed: this one so the button can be absent, that one so a
+    /// forged frame changes nothing.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn control(
+        &self,
+        workspace_id: &str,
+        root_id: &str,
+        root_path: &str,
+        server_id: &str,
+        action: language::Control,
+        allow_execute: bool,
+    ) -> AppResult<language::ServerDescriptor> {
+        self.ensure_root(root_id, root_path).await?;
+        let answer = self
+            .shared
+            .call(v1::worker_request::Action::LanguageControl(
+                v1::LanguageControlRequest {
+                    root_id: root_id.to_owned(),
+                    workspace_id: workspace_id.to_owned(),
+                    server_id: server_id.to_owned(),
+                    action: action.to_proto() as i32,
+                    allow_execute,
+                },
+            ))
+            .await?;
+        let result = match answer {
+            v1::worker_response::Result::LanguageControl(result) => result,
+            v1::worker_response::Result::Error(error) => {
+                return Err(remote_error(&self.shared.host_name, &error));
+            }
+            _ => return Err(self.wrong_answer()),
+        };
+        let server = result
+            .server
+            .ok_or_else(|| AppError::NotFound("No such language server".into()))?;
+        // The panel and the settings page read the cache, so it is refreshed
+        // from the same answer rather than by asking again.
+        let rows = descriptors(v1::LanguageCapabilities {
+            servers: vec![server],
+            ..Default::default()
+        });
+        let row = rows
+            .into_iter()
+            .next()
+            .ok_or_else(|| AppError::NotFound("No such language server".into()))?;
+        {
+            let mut cached = self
+                .shared
+                .descriptors
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            match cached
+                .iter_mut()
+                .find(|known| known.server_id == row.server_id)
+            {
+                Some(known) => *known = row.clone(),
+                None => cached.push(row.clone()),
+            }
+        }
+        Ok(row)
+    }
+
     /// Server discovery on the execution host.
     pub async fn capabilities(&self, refresh: bool) -> AppResult<Vec<language::ServerDescriptor>> {
         match self
