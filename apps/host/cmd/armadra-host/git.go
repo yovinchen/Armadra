@@ -45,8 +45,20 @@ func newGitExecutor(executable, hostID string) githost.Executor {
 	if executable == "" {
 		return nil
 	}
-	return &gitExecutor{executable: executable, hostID: hostID, timeout: 15 * time.Minute}
+	return &gitExecutor{executable: executable, hostID: hostID, timeout: gitFrameTimeout}
 }
+
+// gitFrameTimeout is the Worker transport's own ceiling for one frame, and this
+// executor asks for all of it.
+//
+// It is a real limit rather than a generous one: a `git push` to a slow remote
+// can outlast a minute, and when it does this Host reports UNKNOWN_OUTCOME —
+// which is the correct answer, because the frame ended without a reading and
+// nobody here knows whether the remote took it. What it costs is that an
+// operation which *did* succeed can be recorded as unknown, and resolving that
+// needs the resident git Worker rather than a longer timeout: a longer frame
+// would only move the same cliff further out.
+const gitFrameTimeout = time.Minute
 
 // with opens one Worker, runs `action`, and closes it. A Worker that did not
 // advertise the git capability is refused here rather than sent a frame it

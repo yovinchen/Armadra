@@ -31,6 +31,42 @@ func (c *Client) SupportsGit() bool {
 	return c != nil && c.hello != nil && slices.Contains(c.hello.Capabilities, GitCapability)
 }
 
+// validGitResult checks that a reply answers the frame that was sent.
+//
+// It is deliberately shallow. Whether an outcome is believable is the queue's
+// question, and it is asked in `githost` against the entry this Host stored;
+// what this function refuses is a reply that answers a different question —
+// an outcome for another operation, a snapshot in place of a repository — which
+// a later comparison would otherwise make against the wrong subject.
+func validGitResult(input *pb.GitWorkerRequest, result *pb.GitWorkerResponse) bool {
+	if result == nil {
+		return false
+	}
+	switch action := input.GetAction().(type) {
+	case *pb.GitWorkerRequest_Run:
+		outcome := result.GetOperation().GetOperation()
+		return outcome != nil && outcome.GetOperationId() == action.Run.GetOperation().GetOperationId()
+	case *pb.GitWorkerRequest_Cancel:
+		outcome := result.GetOperation().GetOperation()
+		return outcome != nil && outcome.GetOperationId() == action.Cancel.GetOperationId()
+	case *pb.GitWorkerRequest_Observe:
+		state := result.GetRepository()
+		// The observation time is what makes the answer a reading rather than
+		// a claim, so a snapshot without one is refused here: a cache that
+		// cannot say when it was taken cannot be told from the repository.
+		return state != nil && state.GetObservedAtUnixMs() > 0
+	case *pb.GitWorkerRequest_Read:
+		read := result.GetRead()
+		return read != nil && read.GetHttpStatus() >= 100 && read.GetHttpStatus() < 600
+	case *pb.GitWorkerRequest_Snapshot:
+		// An empty snapshot is the answer a switch proceeds on, so it must be
+		// distinguishable from no snapshot at all.
+		return result.GetSnapshot() != nil
+	default:
+		return false
+	}
+}
+
 func (c *Client) gitExchange(ctx context.Context, action *pb.GitWorkerRequest) (*pb.GitWorkerResponse, error) {
 	if c == nil {
 		return nil, &Error{Code: CodeUnsupported}

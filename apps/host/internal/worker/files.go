@@ -173,6 +173,14 @@ func (c *Client) validResult(request *pb.WorkerRequest, response *pb.WorkerRespo
 		}
 		return true
 	}
+	// The git frames are compared against what the Host asked for in githost,
+	// which is where the queue's own rules live. Here the reply only has to be
+	// an answer to the action that was sent, and shaped so a later comparison
+	// is worth making: an outcome naming a different operation would be
+	// recorded against the one this Host queued.
+	if input := request.GetGit(); input != nil {
+		return validGitResult(input, response.GetGit())
+	}
 	if input := request.GetReadFile(); input != nil {
 		chunk := response.GetFileChunk()
 		if chunk == nil || chunk.RootId != input.RootId || !relativePath(chunk.Path, false) || chunk.MimeType == "" || len(chunk.MimeType) > 256 || len(chunk.Sha256) != sha256.Size || chunk.Offset != input.Offset || chunk.TotalBytes > uint64(c.hello.MaxTextFileBytes) || chunk.Offset > chunk.TotalBytes || len(chunk.Data) > int(input.MaxBytes) || uint64(len(chunk.Data)) > chunk.TotalBytes-chunk.Offset || chunk.Eof != (chunk.Offset+uint64(len(chunk.Data)) == chunk.TotalBytes) || (!chunk.Eof && len(chunk.Data) == 0) || (len(input.ExpectedSha256) > 0 && !bytes.Equal(input.ExpectedSha256, chunk.Sha256)) {

@@ -94,7 +94,22 @@ fn requested(root: &Path, scope: &RepositoryScope) -> AppResult<String> {
         // routes do, and `resolve_in_root` will re-check it.
         return Ok(repository.to_owned());
     }
-    match candidate.strip_prefix(root) {
+    // Both sides are resolved before they are compared. A workspace root that
+    // reached this Host through the filesystem domain is canonical, and a
+    // repository path a client is holding may still be the pre-symlink
+    // spelling of the same directory -- `/var/folders/...` against
+    // `/private/var/folders/...` on macOS is the ordinary case, not an exotic
+    // one. Comparing the strings would refuse a checkout inside the very root
+    // that was registered for it.
+    //
+    // A path that cannot be resolved is not silently accepted: it is compared
+    // as written, which is the conservative reading, and the mismatch is then
+    // the refusal below.
+    let resolved_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let resolved = candidate
+        .canonicalize()
+        .unwrap_or_else(|_| candidate.to_path_buf());
+    match resolved.strip_prefix(&resolved_root) {
         Ok(relative) if relative.as_os_str().is_empty() => Ok(".".into()),
         Ok(relative) => Ok(relative.to_string_lossy().replace('\\', "/")),
         Err(_) => Err(AppError::Forbidden(

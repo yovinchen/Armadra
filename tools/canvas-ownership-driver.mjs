@@ -65,7 +65,7 @@ export function decodeValue(value) {
   }
   return value;
 }
-export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient, HostFilesystemClient, origin, transport, pageOrigin }) {
+export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient, HostFilesystemClient, HostGitClient, origin, transport, pageOrigin }) {
   const state = {};
   return {
     async hello() {
@@ -109,6 +109,16 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
           workspaceId,
         });
       }
+      // The git surface is workspace-scoped too: which repository a request
+      // may queue a write against is decided by the session's workspace, not
+      // by the request.
+      if (HostGitClient) {
+        state.git = new HostGitClient({
+          session: state.identity,
+          hostId: state.hello.hostId,
+          workspaceId,
+        });
+      }
       return true;
     },
     async settings(method, args) {
@@ -128,6 +138,20 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
     async filesystem(method, args) {
       try {
         return encodeValue(await state.filesystem[method](...decodeValue(args)));
+      } catch (error) {
+        return {
+          error: {
+            failure: error.failure ?? error.code ?? "unknown",
+            hostCode: error.hostCode ?? "",
+            httpStatus: error.httpStatus ?? 0,
+            outcomeUnknown: error.outcomeUnknown === true,
+          },
+        };
+      }
+    },
+    async git(method, args) {
+      try {
+        return encodeValue(await state.git[method](...decodeValue(args)));
       } catch (error) {
         return {
           error: {
@@ -191,6 +215,7 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
       HostOwnershipClient: clients.HostOwnershipClient,
       HostSettingsClient: clients.HostSettingsClient,
       HostFilesystemClient: clients.HostFilesystemClient,
+      HostGitClient: clients.HostGitClient,
       origin: appOrigin,
       transport: { fetch: transport },
       pageOrigin: appOrigin,
@@ -207,15 +232,17 @@ export function createDriver({ HostClient, HostIdentityClient, HostCanvasClient,
         client.settings(method, encodeValue(args)).then(decodeValue),
       filesystem: (method, args) =>
         client.filesystem(method, encodeValue(args)).then(decodeValue),
+      git: (method, args) =>
+        client.git(method, encodeValue(args)).then(decodeValue),
     };
   } else {
     const driverSource = join(workspace, "driver-source.mjs");
     writeFileSync(
       driverSource,
-      `import { HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient, HostFilesystemClient, HostFilesystemClient } from "@armadra/host-client";
+      `import { HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient, HostFilesystemClient, HostGitClient } from "@armadra/host-client";
 import { createDriver } from "./driver-core.mjs";
 globalThis.armadra = createDriver({
-  HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient, HostFilesystemClient,
+  HostClient, HostIdentityClient, HostCanvasClient, HostOwnershipClient, HostSettingsClient, HostFilesystemClient, HostGitClient,
   origin: ${JSON.stringify(appOrigin)}, transport: {},
 });
 globalThis.armadraReady = true;
