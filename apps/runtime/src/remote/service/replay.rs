@@ -61,6 +61,7 @@ pub fn replay(operation: WorkerServiceOperation) -> Replay {
         | Operation::GitCherryPickPreview
         | Operation::GitHunks
         | Operation::GitMessageSource
+        | Operation::GitMessageCapture
         | Operation::GitOperations
         | Operation::GitOperationGet
         | Operation::GitReflog
@@ -110,6 +111,7 @@ pub fn capability(operation: WorkerServiceOperation) -> Option<&'static str> {
         | Operation::GitCherryPickPreview
         | Operation::GitHunks
         | Operation::GitMessageSource
+        | Operation::GitMessageCapture
         | Operation::GitOperations
         | Operation::GitOperationGet
         | Operation::GitOperationStart
@@ -185,6 +187,7 @@ pub const ALL: &[WorkerServiceOperation] = {
         Operation::AssetImport,
         Operation::WatchSubscribe,
         Operation::WatchUnsubscribe,
+        Operation::GitMessageCapture,
     ]
 };
 

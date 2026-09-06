@@ -203,6 +203,15 @@ enum WorkerServiceOperation {
   WORKER_SERVICE_OPERATION_GIT_REFLOG = 50;
   WORKER_SERVICE_OPERATION_GIT_STATUS_BATCH = 51;
   WORKER_SERVICE_OPERATION_GIT_WORKTREE_BINDING = 52;
+  // The staged diff a commit message is drafted from, prompt included.
+  //
+  // GIT_MESSAGE_SOURCE answers only what a client may see; this answers the
+  // text as well, because the draft is the one panel action that runs in two
+  // places: the diff is captured — and redacted, and scanned for private keys
+  // — on the host that owns the repository, and the provider CLI then runs
+  // where its credentials are, which is the controller. Neither the worktree
+  // nor the credentials travel.
+  WORKER_SERVICE_OPERATION_GIT_MESSAGE_CAPTURE = 53;
 }
 // A version-locked payload, not a cross-version wire contract: both ends are
 // the same Armadra build, asserted by WorkerHelloResponse.runtime_version, and

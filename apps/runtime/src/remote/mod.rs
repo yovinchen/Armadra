@@ -177,19 +177,23 @@ pub fn decode<T: for<'a> serde::Deserialize<'a>>(status: u16, body: &[u8]) -> Ap
     })
 }
 
-/// The two surfaces that still run only where this process runs.
+/// The surfaces that still run only where this process runs.
 ///
 /// Everything the remote completion design gives an operation to now executes
-/// on the host that owns the files. What is left needs something this machine
-/// has and the other does not: a language server this Runtime started, or the
-/// AI provider CLI and credentials the commit drafter runs. Naming the feature
-/// is the honest answer; silently operating on the controller's disk would not
-/// be.
+/// on the host that owns the files — the repository panel, file management,
+/// asset import, and since the split capture even the AI commit-message draft.
+/// What is left needs something this machine *is*: a language server process
+/// this Runtime started and holds the handle to, or a window on this desktop.
+///
+/// The refusal has its own code (`unsupported_on_remote`) rather than the
+/// generic `unsupported`, because the two ask the person to do different
+/// things: one is "install something", this one is "this workspace is on
+/// another machine". The UI can act on the difference.
 pub fn refuse_remote(workspace: &Workspace, feature: &str) -> AppResult<()> {
     if workspace.execution_host_id.is_empty() {
         return Ok(());
     }
-    Err(AppError::Unsupported(format!(
-        "{feature} is not available on a remote execution host yet"
+    Err(AppError::UnsupportedOnRemote(format!(
+        "{feature} runs on the machine Armadra itself is on, and this workspace is on another"
     )))
 }

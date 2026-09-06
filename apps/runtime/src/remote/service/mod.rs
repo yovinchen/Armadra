@@ -329,6 +329,10 @@ async fn dispatch(
             let _: git::RootPayload = decode(&request_json)?;
             git::message_source(root).await
         }
+        Operation::GitMessageCapture => {
+            let _: git::RootPayload = decode(&request_json)?;
+            git::message_capture(root).await
+        }
         Operation::GitOperations => {
             git::operations(root, decode(&request_json)?, allow_execute).await
         }

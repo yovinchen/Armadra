@@ -25,6 +25,17 @@ pub enum AppError {
     /// reason to fall back to the local machine (H02).
     #[error("{0}")]
     Unsupported(String),
+    /// This action exists, but only where this process runs: it needs
+    /// something the controller has and the execution host does not — a
+    /// language server this Runtime started, a window on this desktop.
+    ///
+    /// Separate from `Unsupported` because the two ask for different things.
+    /// "Unsupported" means the feature is absent and the answer is to install
+    /// or upgrade something; this one means the workspace is simply on the
+    /// wrong machine, and the UI can say so — and offer the switch — instead
+    /// of showing a dead end (remote completion design §3.1).
+    #[error("{0}")]
+    UnsupportedOnRemote(String),
     /// The execution host is not reachable right now. The request had no
     /// effect and may be retried once the connection is back.
     #[error("{0}")]
@@ -96,6 +107,11 @@ impl AppError {
             Self::Conflict(message) => (StatusCode::CONFLICT, "conflict", message),
             Self::OwnershipMoved(message) => (StatusCode::CONFLICT, "ownership_moved", message),
             Self::Unsupported(message) => (StatusCode::NOT_IMPLEMENTED, "unsupported", message),
+            Self::UnsupportedOnRemote(message) => (
+                StatusCode::NOT_IMPLEMENTED,
+                "unsupported_on_remote",
+                message,
+            ),
             Self::Unavailable(message) => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "execution_host_unavailable",

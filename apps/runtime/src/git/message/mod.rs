@@ -78,7 +78,7 @@ pub struct GitMessageProvider {
     pub available: bool,
     pub reason: Option<String>,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitMessageSource {
     pub expected_head: Option<String>,
@@ -118,10 +118,31 @@ pub struct GitMessageDraft {
     pub language: GitMessageLanguage,
     pub conventional: bool,
 }
-struct Captured {
+/// The staged diff a draft is made from: the description a client already
+/// sees, and the text the model is actually given.
+///
+/// This crosses the Worker channel for a remote workspace (remote completion
+/// design §3.1). The prompt is captured **where the repository is** — so the
+/// path exclusions, the private-key scan and the redaction all run against the
+/// real files — and the provider CLI then runs where its credentials are,
+/// which is this machine. Splitting it that way is the only arrangement that
+/// does not require either the credentials or the whole worktree to travel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitMessageCapture {
+    #[serde(rename = "source")]
     public: GitMessageSource,
     prompt: String,
 }
+
+impl GitMessageCapture {
+    /// What the client is allowed to see about the capture.
+    pub fn source(&self) -> &GitMessageSource {
+        &self.public
+    }
+}
+
+type Captured = GitMessageCapture;
 struct ProviderConfig {
     binary: Option<PathBuf>,
     key: Option<OsString>,
@@ -209,43 +230,125 @@ async fn provider(config: &ProviderConfig) -> GitMessageProvider {
 }
 
 pub async fn source(root: &Path) -> AppResult<GitMessageSource> {
-    let guard = REPOSITORIES.mutation_guard(root, ".").await?;
-    Ok(capture(&guard.context).await?.public)
+    Ok(capture_staged(root).await?.public)
 }
+
+/// The whole capture, prompt included. Runs where the repository is: on a
+/// remote workspace this is what the Worker answers frame
+/// `GIT_MESSAGE_CAPTURE` with.
+pub async fn capture_staged(root: &Path) -> AppResult<GitMessageCapture> {
+    let guard = REPOSITORIES.mutation_guard(root, ".").await?;
+    capture(&guard.context).await
+}
+
 pub async fn generate(root: &Path, request: GitMessageRequest) -> AppResult<GitMessageDraft> {
     let root = root.to_owned();
-    let config = ProviderConfig::environment();
     tokio::spawn(async move {
         let _permit = GENERATIONS
             .try_acquire()
             .map_err(|_| bad("Another AI draft is running; wait before starting another"))?;
-        generate_with(&root, request, &config).await
+        generate_with(&root, request, &ProviderConfig::environment()).await
     })
     .await?
 }
+
+/// One local draft end to end. `config` is a parameter so the tests can drive
+/// a fake CLI through exactly the path the real one takes.
 async fn generate_with(
     root: &Path,
     request: GitMessageRequest,
     config: &ProviderConfig,
 ) -> AppResult<GitMessageDraft> {
-    if request.provider != PROVIDER || !digest_valid(&request.index_digest) {
-        return Err(bad("Unsupported message provider or source identity"));
+    check_request(&request)?;
+    let captured = capture_staged(root).await?;
+    if captured.public.expected_head != request.expected_head
+        || captured.public.index_digest != request.index_digest
+    {
+        return Err(stale());
     }
-    if !provider(config).await.available {
-        return Err(bad(
-            "Claude isolated mode is unavailable; check its CLI and the Runtime ANTHROPIC_API_KEY configuration",
-        ));
-    }
-    let captured = {
-        let guard = REPOSITORIES.mutation_guard(root, ".").await?;
-        let captured = capture(&guard.context).await?;
+    let message = draft_with(&captured, &request, config).await?;
+    // Generation never holds the Git write queue. A fresh observation rejects
+    // a draft if either HEAD or staged content changed while the model ran.
+    finish(&captured, &request, message, source(root).await?)
+}
+
+/// Draft a message from a capture taken somewhere else.
+///
+/// The provider CLI and its credentials are on this machine, so this is where
+/// the model runs whichever host the repository is on. What comes back is the
+/// message and nothing else: the caller re-reads the source on the host that
+/// owns it and only then assembles a draft, so a diff that moved while the
+/// model was thinking is still refused.
+pub async fn draft_from(
+    captured: GitMessageCapture,
+    request: GitMessageRequest,
+) -> AppResult<String> {
+    tokio::spawn(async move {
+        let _permit = GENERATIONS
+            .try_acquire()
+            .map_err(|_| bad("Another AI draft is running; wait before starting another"))?;
+        check_request(&request)?;
         if captured.public.expected_head != request.expected_head
             || captured.public.index_digest != request.index_digest
         {
             return Err(stale());
         }
-        captured
-    };
+        // A capture that arrived over the wire is still a capture this build
+        // made, but the ceiling is enforced again here: the prompt is what is
+        // handed to the provider, and nothing else re-checks its size.
+        if captured.prompt.len() > MAX_INPUT {
+            return Err(bad("The staged diff is too large to draft from"));
+        }
+        draft_with(&captured, &request, &ProviderConfig::environment()).await
+    })
+    .await?
+}
+
+/// Assemble the answer, refusing when the repository moved under the model.
+pub fn finish(
+    captured: &GitMessageCapture,
+    request: &GitMessageRequest,
+    message: String,
+    now: GitMessageSource,
+) -> AppResult<GitMessageDraft> {
+    if now.expected_head != captured.public.expected_head
+        || now.index_digest != captured.public.index_digest
+        || now.source_digest != captured.public.source_digest
+    {
+        return Err(stale());
+    }
+    Ok(GitMessageDraft {
+        message,
+        provider: PROVIDER.into(),
+        source_digest: now.source_digest,
+        expected_head: now.expected_head,
+        index_digest: now.index_digest,
+        included_files: now.included_files,
+        excluded_files: now.excluded_files,
+        truncated: now.truncated,
+        redacted: now.redacted,
+        language: request.language,
+        conventional: request.conventional,
+    })
+}
+
+fn check_request(request: &GitMessageRequest) -> AppResult<()> {
+    if request.provider != PROVIDER || !digest_valid(&request.index_digest) {
+        return Err(bad("Unsupported message provider or source identity"));
+    }
+    Ok(())
+}
+
+async fn draft_with(
+    captured: &GitMessageCapture,
+    request: &GitMessageRequest,
+    config: &ProviderConfig,
+) -> AppResult<String> {
+    if !provider(config).await.available {
+        return Err(bad(
+            "Claude isolated mode is unavailable; check its CLI and the Runtime ANTHROPIC_API_KEY configuration",
+        ));
+    }
     if captured.public.included_files.is_empty() {
         return Err(bad(
             "No non-sensitive staged text is available for a commit-message draft",
@@ -286,29 +389,7 @@ async fn generate_with(
         32 * 1024,
     )
     .await?;
-    let message = parse_result(&output)?;
-    // Generation never holds the Git write queue. A fresh observation rejects
-    // a draft if either HEAD or staged content changed while the model ran.
-    let now = source(root).await?;
-    if now.expected_head != captured.public.expected_head
-        || now.index_digest != captured.public.index_digest
-        || now.source_digest != captured.public.source_digest
-    {
-        return Err(stale());
-    }
-    Ok(GitMessageDraft {
-        message,
-        provider: PROVIDER.into(),
-        source_digest: now.source_digest,
-        expected_head: now.expected_head,
-        index_digest: now.index_digest,
-        included_files: now.included_files,
-        excluded_files: now.excluded_files,
-        truncated: now.truncated,
-        redacted: now.redacted,
-        language: request.language,
-        conventional: request.conventional,
-    })
+    parse_result(&output)
 }
 
 fn parse_result(bytes: &[u8]) -> AppResult<String> {

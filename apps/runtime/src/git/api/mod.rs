@@ -69,21 +69,45 @@ pub async fn message_source(
     )?;
     JsonAnswer::local(&crate::git_message::source(Path::new(&workspace.root_path)).await?)
 }
+/// `POST …/git/message/generate` — the AI commit-message draft.
+///
+/// The one panel action that runs in two places (remote completion design
+/// §3.1). Everything that reads the repository — capturing the staged diff,
+/// excluding sensitive paths, redacting it — happens on the execution host;
+/// the provider CLI, which is configured with this machine's credentials, runs
+/// here. Only the drafted message travels back, and nothing is written on
+/// either side: the person still commits it themselves.
+///
+/// The source is re-read on the owning host afterwards, so a diff that changed
+/// while the model was thinking is refused exactly as it is locally.
 pub async fn message_generate(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
     Json(request): Json<crate::git_message::GitMessageRequest>,
 ) -> AppResult<Json<crate::git_message::GitMessageDraft>> {
     let workspace = workspace(&state, &id, false).await?;
-    // The one panel action that is not proxied. Drafting runs a provider CLI
-    // configured on this machine against a diff on the other one, and there is
-    // no operation that splits it in two; saying so is better than running the
-    // CLI against the controller's own disk.
-    crate::remote::refuse_remote(&workspace, "Drafting a commit message with AI")?;
     crate::git::access::require_execution(workspace.permissions.execute, "AI generation")?;
-    crate::git_message::generate(Path::new(&workspace.root_path), request)
-        .await
-        .map(Json)
+    let Some(worker) = remote::resolve(&state, &workspace)?.remote().cloned() else {
+        return crate::git_message::generate(Path::new(&workspace.root_path), request)
+            .await
+            .map(Json);
+    };
+    let captured: crate::git_message::GitMessageCapture = remote::read(
+        &worker,
+        &workspace,
+        WorkerServiceOperation::GitMessageCapture,
+        &service::git::RootPayload {},
+    )
+    .await?;
+    let message = crate::git_message::draft_from(captured.clone(), request.clone()).await?;
+    let now: crate::git_message::GitMessageSource = remote::read(
+        &worker,
+        &workspace,
+        WorkerServiceOperation::GitMessageSource,
+        &service::git::RootPayload {},
+    )
+    .await?;
+    crate::git_message::finish(&captured, &request, message, now).map(Json)
 }
 
 pub async fn hunks(

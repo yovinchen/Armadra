@@ -356,11 +356,18 @@ pub async fn apply_hunk(root: PathBuf, payload: git_hunks::GitHunkMutation) -> A
     super::encode(&git_hunks::apply_hunk(&root, payload).await?)
 }
 
-/// What the AI drafter would read. The draft itself is not proxied: it runs a
-/// provider CLI configured on the controller, so it stays where that CLI and
-/// its credentials are.
+/// What the AI drafter would read, as a client sees it.
 pub async fn message_source(root: PathBuf) -> AppResult<Vec<u8>> {
     super::encode(&git_message::source(&root).await?)
+}
+
+/// The same capture with the prompt included.
+///
+/// The model is not run here: the provider CLI and its credentials belong to
+/// the controller. What crosses the channel is the redacted staged diff this
+/// host produced, and what comes back is a message — never a write.
+pub async fn message_capture(root: PathBuf) -> AppResult<Vec<u8>> {
+    super::encode(&git_message::capture_staged(&root).await?)
 }
 
 pub async fn operations(root: PathBuf, payload: PathPayload, execute: bool) -> AppResult<Vec<u8>> {
@@ -439,6 +446,7 @@ pub fn requires_execution(operation: armadra_protocol::v1::WorkerServiceOperatio
             | Operation::GitCherryPickPreview
             | Operation::GitHunks
             | Operation::GitMessageSource
+            | Operation::GitMessageCapture
             | Operation::GitOperations
             | Operation::GitOperationGet
             | Operation::GitOperationStart

@@ -91,6 +91,15 @@ const (
 	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_REFLOG           WorkerServiceOperation = 50
 	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_STATUS_BATCH     WorkerServiceOperation = 51
 	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_WORKTREE_BINDING WorkerServiceOperation = 52
+	// The staged diff a commit message is drafted from, prompt included.
+	//
+	// GIT_MESSAGE_SOURCE answers only what a client may see; this answers the
+	// text as well, because the draft is the one panel action that runs in two
+	// places: the diff is captured — and redacted, and scanned for private keys
+	// — on the host that owns the repository, and the provider CLI then runs
+	// where its credentials are, which is the controller. Neither the worktree
+	// nor the credentials travel.
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_MESSAGE_CAPTURE WorkerServiceOperation = 53
 )
 
 // Enum value maps for WorkerServiceOperation.
@@ -144,6 +153,7 @@ var (
 		50: "WORKER_SERVICE_OPERATION_GIT_REFLOG",
 		51: "WORKER_SERVICE_OPERATION_GIT_STATUS_BATCH",
 		52: "WORKER_SERVICE_OPERATION_GIT_WORKTREE_BINDING",
+		53: "WORKER_SERVICE_OPERATION_GIT_MESSAGE_CAPTURE",
 	}
 	WorkerServiceOperation_value = map[string]int32{
 		"WORKER_SERVICE_OPERATION_UNSPECIFIED":             0,
@@ -194,6 +204,7 @@ var (
 		"WORKER_SERVICE_OPERATION_GIT_REFLOG":              50,
 		"WORKER_SERVICE_OPERATION_GIT_STATUS_BATCH":        51,
 		"WORKER_SERVICE_OPERATION_GIT_WORKTREE_BINDING":    52,
+		"WORKER_SERVICE_OPERATION_GIT_MESSAGE_CAPTURE":     53,
 	}
 )
 
@@ -3287,7 +3298,7 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"agent_host\x18\x1c \x01(\v2\x1f.armadra.v1.AgentWorkerResponseH\x00R\tagentHost\x121\n" +
 	"\x03git\x18\x1d \x01(\v2\x1d.armadra.v1.GitWorkerResponseH\x00R\x03gitB\b\n" +
-	"\x06result*\x85\x11\n" +
+	"\x06result*\xb7\x11\n" +
 	"\x16WorkerServiceOperation\x12(\n" +
 	"$WORKER_SERVICE_OPERATION_UNSPECIFIED\x10\x00\x12)\n" +
 	"%WORKER_SERVICE_OPERATION_FILE_VERSION\x10\x01\x12+\n" +
@@ -3337,7 +3348,8 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"*WORKER_SERVICE_OPERATION_WATCH_UNSUBSCRIBE\x100\x12'\n" +
 	"#WORKER_SERVICE_OPERATION_GIT_REFLOG\x102\x12-\n" +
 	")WORKER_SERVICE_OPERATION_GIT_STATUS_BATCH\x103\x121\n" +
-	"-WORKER_SERVICE_OPERATION_GIT_WORKTREE_BINDING\x104\"\x04\b1\x101B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	"-WORKER_SERVICE_OPERATION_GIT_WORKTREE_BINDING\x104\x120\n" +
+	",WORKER_SERVICE_OPERATION_GIT_MESSAGE_CAPTURE\x105\"\x04\b1\x101B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_worker_proto_rawDescOnce sync.Once
