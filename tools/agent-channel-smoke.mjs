@@ -1,25 +1,19 @@
 /**
  * The status channel of one real Agent CLI, end to end.
  *
- * Unit tests already cover both halves in isolation: the installers write the
- * bytes they are supposed to write, and the normalizers turn a recorded payload
- * into an `AgentEvent`. Neither can answer the only question that decides
- * whether the channel works — does *this* CLI, on *this* machine, actually fire
- * the events we subscribed, through the transport we generated, with the node
- * token and terminal binding of a session the runtime created? That is what
- * this script drives (设计 docs/design/agent-collaboration-channels.md §5.2,
- * 真实 CLI row).
+ * Unit tests cover both halves apart: installers write the bytes they should,
+ * normalizers turn a recorded payload into an `AgentEvent`. Neither answers the
+ * question that decides whether the channel works — does *this* CLI, on *this*
+ * machine, fire the events we subscribed, through the transport we generated,
+ * with the node token and terminal binding of a session the runtime created?
+ * (设计 docs/design/agent-collaboration-channels.md §5.2, 真实 CLI row.)
  *
- * It asserts, for one provider:
- *
- *   1. installing writes an adapter into a config home the CLI reads;
- *   2. a turn in a runtime-created terminal moves the node `working → done`;
- *   3. `stateSource` on that row is the channel the adapter actually uses —
- *      `hook` for a forked command hook, `extension` for an in-process one;
- *   4. Pi / Oh My Pi additionally report a *measured* context window
- *      (`provider_hook` / `reported`), not an estimate;
- *   5. uninstalling leaves every file that existed before it byte for byte as
- *      it was, and removes everything the install wrote.
+ * For one provider it asserts: installing writes an adapter the CLI reads and
+ * touches nothing else; a turn moves the node `working → done`; `stateSource`
+ * names the channel that adapter really uses, on the event *and* on the
+ * sessions list a reloaded client rebuilds from; Pi and Oh My Pi report a
+ * measured context window rather than an estimate; and uninstalling removes
+ * every file of ours and leaves every file that is not ours byte for byte.
  *
  * ## The user's own configuration is never touched
  *
@@ -28,47 +22,28 @@
  * `COPILOT_HOME` / `PI_CODING_AGENT_DIR` / `OMP_PROFILE` are not (see
  * `terminal/backend.rs::INHERITED_ENV`). Pointing the installer at a directory
  * the CLI would not read is worse than useless, so the redirection has to be
- * one both sides agree on: this script gives the runtime a **temporary `HOME`**
- * and clears every per-CLI override out of its environment, which puts the
- * installer and the CLI in the same place.
- *
- * A temporary home has no credentials in it, so the config files that carry
- * them are **copied** out of the real config home first — an explicit
- * per-provider list, read only, never written back. On macOS the login keychain
- * is reached through `$HOME/Library/Keychains`, so that one path is symlinked;
- * without it a provider whose API key comes from `security find-generic-password`
- * cannot authenticate. Nothing else is shared, and the real config home is
- * never opened for writing — there is no backup/restore step to get wrong.
- *
- * ## How the turn is started
- *
- * Two ways, per provider (`deliver`). Most take the prompt on the command line
- * and exit the moment they are done; a dead terminal has no live session, so
- * `context-usage` would answer `session_ended` and the node's last state would
- * be raced by `terminal.exit`. Those are launched through a two-line wrapper
- * that runs the CLI and then blocks on stdin — the CLI itself is unwrapped,
- * same argv, same environment, same PTY.
- *
- * Copilot instead runs its normal interactive session and is handed the prompt
- * through the runtime's own paste endpoint, which is what a canvas node does.
+ * one both sides agree on: the runtime gets a **temporary `HOME`** and every
+ * per-CLI override is cleared out of its environment. That home has no
+ * credentials, so the files carrying them are **copied** out of the real config
+ * home first (`seed`, read only, never written back), and on macOS
+ * `~/Library/Keychains` is symlinked because `security` finds the login
+ * keychain through `$HOME`. The real config home is never opened for writing,
+ * so there is no backup/restore step to get wrong.
  *
  * ## Known result, 2026-09-06
  *
- * `pi` and `omp` pass. `copilot` fails at step 2, and the failure is real: on
- * 1.0.83 the `sessionStart` that opens a session arrives *after* that turn's
- * `userPromptSubmitted` — it carries the prompt as `initialPrompt`, so the
- * session is created *by* the first prompt — and a session event resets the
- * node by design (reduce rule 4, "a new session forgets the old turn"). So a
- * Copilot node's `working` lives about 20 ms and the user never sees RUNNING
- * on the turn that opened the session. `done` and `stateSource: hook` are
- * correct. That is an adapter question, not a script bug: a red `copilot` run
- * here is this defect until it is fixed.
+ * `pi`, `omp` and `copilot` pass; `opencode` cannot start on this machine.
+ * Copilot passes with one caveat recorded in 协作通道 §6: its `sessionStart`
+ * arrives *after* the first turn's `userPromptSubmitted`, and a session event
+ * resets the node by design, so the `working` this script sees on the event
+ * socket lives about 20 ms in the row a reloading client would read.
  *
  * Usage: node tools/agent-channel-smoke.mjs <armadra-runtime> <armadra-hook> <pi|omp|copilot|opencode>
  */
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
+import { request as httpRequest } from "node:http";
 import {
   cpSync,
   existsSync,
@@ -91,17 +66,20 @@ import { setTimeout as sleep } from "node:timers/promises";
 /**
  * What each CLI needs and what it must produce.
  *
- * `seed` are paths relative to the home directory. They are the files that
- * carry credentials and model selection — enough for one non-interactive turn,
- * and nothing about sessions, history or caches. A path that does not exist is
- * skipped: a CLI configured differently simply gets less, and the failure that
- * follows names what happened.
+ * `seed` are home-relative paths carrying credentials and model selection —
+ * enough for one turn, nothing about sessions, history or caches. A path that
+ * does not exist is skipped, and the failure that follows names what happened.
  *
- * `stateSource` lists the values that are correct for this provider. It is a
- * list because opencode is mid-migration: its plugin forks the client today
- * (`hook`) and moves in-process (`extension`) with B3, and this script has no
- * business deciding which of the two the runtime it is driving implements. It
- * prints what it saw either way.
+ * `deliver` is how the turn starts. `argv` puts the prompt on the command line,
+ * which means the CLI exits when it is done — a dead terminal has no live
+ * session, so those run through a wrapper that blocks on stdin afterwards.
+ * `paste` runs the CLI's own interactive session and types into it through the
+ * runtime's paste endpoint, which is what a canvas node does.
+ *
+ * `stateSource` lists the values correct for this provider. It is a list
+ * because opencode is mid-migration: its plugin forks the client today (`hook`)
+ * and moves in-process (`extension`) with B3, and this script has no business
+ * deciding which the runtime it drives implements. It prints what it saw.
  */
 const PROVIDERS = {
   pi: {
@@ -133,16 +111,10 @@ const PROVIDERS = {
     contextUsage: { source: "provider_hook", quality: "reported" },
   },
   copilot: {
-    /**
-     * Copilot is driven interactively because `-p` adds a second problem on
-     * top of the ordering one in the module note: `sessionEnd` follows
-     * `agentStop` by ~10 ms, so a non-interactive run ends with no state at
-     * all rather than with the `done` a user would see. A canvas node runs the
-     * CLI's normal session and types into it, which is what this does: launch,
-     * wait for the pane to settle, then paste + Enter through the runtime's own
-     * endpoint. What that leaves is the first-turn `working` — measured here,
-     * and reported as a failure rather than accommodated.
-     */
+    // Interactive, because with `-p` Copilot's `sessionEnd` follows `agentStop`
+    // by ~10 ms and the run ends with no state at all rather than the `done` a
+    // user would see. A canvas node runs the CLI's own session and types into
+    // it, which is what this does.
     deliver: "paste",
     args: () => ["--allow-all-tools"],
     seed: [
@@ -155,9 +127,7 @@ const PROVIDERS = {
     stateSource: ["hook"],
     contextUsage: null,
     // Interactive Copilot asks whether it may read the folder it opened in,
-    // and a modal waiting for a keypress swallows the pasted prompt. The
-    // answer belongs in the temporary home's own config, where Copilot keeps
-    // it for a folder the user has already trusted.
+    // and a modal waiting for a keypress swallows the pasted prompt.
     prepare(home, cwd) {
       const path = join(home, ".copilot", "config.json");
       let config = {};
@@ -192,7 +162,7 @@ const PROVIDERS = {
   },
 };
 
-/** Small enough to be cheap, specific enough that a wrong answer is obvious. */
+/** Cheap, and specific enough that a wrong answer would be obvious. */
 const PROMPT = "reply with the single word ok and do nothing else";
 
 /* ---------------------------------- setup --------------------------------- */
@@ -206,9 +176,8 @@ if (!runtimeArgument || !hookArgument || !definition) {
   process.exit(2);
 }
 
-// Absolute, because these paths end up in a configuration file the CLI runs
-// from its *own* working directory: a hook entry spelled `target/debug/…`
-// resolves against the project the terminal opened and silently never fires.
+// Absolute: these go into a config file the CLI runs from its own working
+// directory, where a `target/debug/…` entry resolves elsewhere and never fires.
 const runtimeBinary = resolve(runtimeArgument);
 const hookBinary = resolve(hookArgument);
 for (const binary of [runtimeBinary, hookBinary]) {
@@ -246,12 +215,8 @@ console.log(`${provider}: ${firstLine(version.stdout)} (${resolved})`);
 
 /** The first line with anything on it; a CLI may lead with a blank one. */
 function firstLine(text) {
-  return (
-    (text ?? "")
-      .split("\n")
-      .map((line) => line.trim())
-      .find((line) => line !== "") ?? ""
-  );
+  const lines = (text ?? "").split("\n").map((line) => line.trim());
+  return lines.find((line) => line !== "") ?? "";
 }
 
 // Not the platform temp directory: the runtime puts a unix socket in the data
@@ -273,10 +238,7 @@ writeFileSync(
   { mode: 0o600 },
 );
 
-// A `paste` provider runs its own interactive session, exactly as a canvas
-// node does, and needs no wrapper. An `argv` provider is handed the prompt on
-// its command line and exits the moment it is done; see the module note for
-// why the pane has to outlive that.
+// See `deliver` on the provider table for why only one of the two is wrapped.
 const launcher =
   definition.deliver === "paste" ? resolved : join(binDir, `${provider}-turn`);
 if (definition.deliver === "argv") {
@@ -329,8 +291,7 @@ async function main() {
   const base = await awaitEndpoint();
   const configHome = join(cliHome, definition.configHome);
 
-  // Everything the seeding put there, before the installer touches it. What
-  // uninstall has to give back.
+  // Everything the seeding put there, before the installer touches it.
   const before = digestTree(configHome);
 
   const install = await call(
@@ -345,9 +306,14 @@ async function main() {
     `the adapter was written outside the temporary home: ${install.configPath}`,
   );
   assert.ok(existsSync(install.configPath), "the adapter file was not written");
+  // Installing adds our own files and touches nothing else. Checked here,
+  // before the CLI runs, because afterwards the CLI has rewritten its own.
+  unchanged(before, configHome, "install");
   console.log(`installed ${install.configPath}`);
 
   const { workspaceId, nodeId } = await createBoard(base);
+  // Opened before the terminal, so no frame can be missed.
+  const stream = await watchStatus(base, workspaceId, nodeId);
   const session = await call(base, "POST", "/api/terminals", {
     workspaceId,
     cwd: ".",
@@ -358,44 +324,40 @@ async function main() {
   });
   if (definition.deliver === "paste") {
     await settle(base, session);
-    // Bracketed paste plus Enter — the same endpoint the canvas sends a
-    // prompt through, so the turn starts the way a user's would.
+    // Bracketed paste plus Enter, through the endpoint the canvas uses.
     await call(base, "POST", `/api/terminals/${session.id}/paste`, {
       text: PROMPT,
       enter: true,
     });
   }
 
-  // The whole point: these rows are written by the CLI's own adapter, over the
-  // runtime's socket, with the node token that terminal was issued.
-  const seen = [];
-  const working = await awaitState(base, workspaceId, nodeId, "working", seen, {
-    session,
-    // Reaching `done` without ever showing `working` is not a slow poll: it is
-    // a node that never told the user it was running. Say so, and stop —
-    // waiting for a `working` that already came and went would only time out
-    // four minutes later with a vaguer message.
-    give_up_on: "done",
-  });
-  console.log(`working — stateSource=${working.stateSource ?? "(none)"}`);
-  const done = await awaitState(base, workspaceId, nodeId, "done", seen, {
-    session,
-  });
-
+  // Written by the CLI's own adapter, over the runtime's socket, with the node
+  // token that terminal was issued.
+  const done = await stream.await("done", { base, session });
   assert.deepEqual(
-    seen,
+    stream.states,
     ["working", "done"],
-    `the node did not go working → done; it went ${seen.join(" → ")}`,
+    `the node did not go working → done; it went ${stream.states.join(" → ") || "nowhere"}`,
   );
   assert.ok(
     definition.stateSource.includes(done.stateSource),
     `stateSource was ${done.stateSource ?? "(none)"}, expected one of ${definition.stateSource.join(" / ")}`,
   );
-  console.log(`done — stateSource=${done.stateSource}`);
+  console.log(`working → done — stateSource=${done.stateSource}`);
+
+  // The same source on the sessions list, which is what a reloaded client
+  // rebuilds the node header from.
+  const summary = (
+    await call(base, "GET", `/api/workspaces/${workspaceId}/sessions`)
+  ).find((row) => row.nodeId === nodeId);
+  assert.equal(
+    summary?.stateSource,
+    done.stateSource,
+    "the sessions list disagreed with the event about the state source",
+  );
 
   if (definition.contextUsage) {
-    // A measured window, not a sum over a transcript: `estimate` is the field
-    // the UI reads to tell the two apart, and a reported reading omits it.
+    // A measured window, not a sum: `estimate` is how the UI tells them apart.
     const usage = await call(
       base,
       "GET",
@@ -422,6 +384,16 @@ async function main() {
     mode: "session",
   });
 
+  stream.close();
+  // Taken now rather than before the install: a CLI rewrites its own config as
+  // it runs — Copilot records the folder it trusted, the tab it showed — and
+  // the question here is only what *uninstall* changed.
+  const settled = digestTree(configHome);
+  const ours = new Set([
+    ...markedFiles(configHome),
+    relative(configHome, install.configPath),
+  ]);
+
   const removed = await call(
     base,
     "POST",
@@ -429,20 +401,25 @@ async function main() {
     {},
   );
   assert.equal(removed.installed, false);
-  assert.ok(
-    !existsSync(install.configPath),
-    `uninstall left ${install.configPath} behind`,
-  );
-  // A file that was there before the install must be there afterwards, with
-  // the same bytes. Files the CLI wrote for itself during the turn (sessions,
-  // caches, databases) are its own and are not compared.
-  for (const [path, digest] of before) {
-    const now = digestFile(join(configHome, path));
-    assert.equal(now, digest, `uninstall changed ${path}`);
+  for (const [path, digest] of settled) {
+    if (ours.has(path)) {
+      assert.ok(
+        !existsSync(join(configHome, path)),
+        `uninstall left ${path} behind`,
+      );
+      continue;
+    }
+    assert.equal(
+      digestFile(join(configHome, path)),
+      digest,
+      `uninstall changed ${path}, which is not ours`,
+    );
   }
   const leftovers = markedFiles(configHome);
   assert.deepEqual(leftovers, [], `uninstall left our own files: ${leftovers}`);
-  console.log(`uninstalled — ${before.size} pre-existing file(s) unchanged`);
+  console.log(
+    `uninstalled — removed ${ours.size}, left ${settled.size - ours.size} untouched`,
+  );
 }
 
 async function createBoard(base) {
@@ -495,11 +472,7 @@ async function createBoard(base) {
 
 /* --------------------------------- the home ------------------------------- */
 
-/**
- * Copies the credential-bearing files of the real config home into the
- * temporary one. Read only: nothing is written back, and a missing file is
- * simply not copied.
- */
+/** Copies `seed` into the temporary home. Read only; a missing file is skipped. */
 function seedHome() {
   const real = homedir();
   const copied = [];
@@ -526,11 +499,7 @@ function seedHome() {
   console.log(`seeded ${cliHome}: ${copied.join(", ") || "(nothing)"}`);
 }
 
-/**
- * The runtime's environment with every per-CLI config override removed, so
- * that `HOME` is the only thing deciding where the adapter goes — and the CLI,
- * which inherits `HOME` and not these, agrees with it.
- */
+/** `HOME` is left as the only thing deciding where the adapter goes. */
 function cleanEnvironment() {
   const env = { ...process.env };
   for (const key of [
@@ -582,7 +551,7 @@ function digestFile(path) {
   }
 }
 
-/** Relative path → digest, for every regular file under `root`. */
+/** Relative path → digest for every regular file under `root`. */
 function digestTree(root, base = root, into = new Map()) {
   let entries = [];
   try {
@@ -598,11 +567,21 @@ function digestTree(root, base = root, into = new Map()) {
   return into;
 }
 
+/** Asserts every file in `snapshot` still has the bytes it had. */
+function unchanged(snapshot, root, what) {
+  for (const [path, digest] of snapshot) {
+    assert.equal(
+      digestFile(join(root, path)),
+      digest,
+      `${what} changed ${path}`,
+    );
+  }
+}
+
 /**
- * Files under the config home that still carry our marker. The installers'
- * own recognition rule is "the text `armadra-hook` appears in it", so this is
- * the same question asked from outside: is anything of ours still installed?
- * Databases, logs and session directories are the CLI's own and are skipped.
+ * Files still carrying our marker — the installers' own recognition rule
+ * (`armadra-hook` appears in the file) asked from outside. Databases, logs and
+ * session directories are the CLI's own and are skipped.
  */
 function markedFiles(root, base = root, into = []) {
   let entries = [];
@@ -674,37 +653,108 @@ async function awaitEndpoint() {
 }
 
 /**
- * Polls the sessions list — the same payload the sidebar and the node header
- * rebuild from — until this node reports `state`, appending each new state to
- * `seen` so the caller can assert the order they arrived in.
- *
- * A real turn takes seconds and this looks every 150 ms, so an intermediate
- * state cannot realistically be missed; if one ever were, the order assertion
- * fails loudly rather than passing on a shorter sequence.
+ * Records every `agent.status` frame for one node off the workspace event
+ * socket — the stream the canvas listens to. It has to be the socket: a turn
+ * can be over in well under a second and a poll samples, so it would miss
+ * `working` and report "the node never said it was running", the one
+ * conclusion this script must not reach by accident. The handshake is
+ * hand-written because the runtime requires an `Origin`
+ * (`api/support.rs::validate_websocket_origin`) and the platform's `WebSocket`
+ * cannot set one; only unmasked server text frames are handled.
  */
-async function awaitState(
-  base,
-  workspaceId,
-  nodeId,
-  state,
-  seen,
-  { session, give_up_on },
-) {
-  const deadline = Date.now() + 240_000;
-  let last = [];
-  while (Date.now() < deadline) {
-    last = await call(base, "GET", `/api/workspaces/${workspaceId}/sessions`);
-    const row = last.find((entry) => entry.nodeId === nodeId);
-    if (row?.state && row.state !== seen.at(-1)) seen.push(row.state);
-    if (row?.state === state) return row;
-    if (give_up_on && seen.includes(give_up_on)) break;
-    await sleep(150);
+async function watchStatus(base, workspaceId, nodeId) {
+  const url = new URL(`${base}/api/workspaces/${workspaceId}/events`);
+  const states = [];
+  const frames = [];
+  const socket = await new Promise((resolve, reject) => {
+    const request = httpRequest({
+      hostname: url.hostname,
+      port: url.port,
+      path: url.pathname,
+      headers: {
+        Connection: "Upgrade",
+        Upgrade: "websocket",
+        "Sec-WebSocket-Key": randomBytes(16).toString("base64"),
+        "Sec-WebSocket-Version": "13",
+        Origin: `http://${url.host}`,
+      },
+    });
+    request.on("upgrade", (_response, upgraded) => resolve(upgraded));
+    request.on("response", (response) =>
+      reject(new Error(`the event socket answered ${response.statusCode}`)),
+    );
+    request.on("error", reject);
+    request.end();
+  });
+
+  let buffer = Buffer.alloc(0);
+  socket.on("data", (chunk) => {
+    buffer = Buffer.concat([buffer, chunk]);
+    for (;;) {
+      const frame = readFrame(buffer);
+      if (!frame) return;
+      buffer = frame.rest;
+      if (frame.opcode !== 1) continue;
+      let event;
+      try {
+        event = JSON.parse(frame.text);
+      } catch {
+        continue;
+      }
+      if (event.type !== "agent.status" || event.status?.nodeId !== nodeId) {
+        continue;
+      }
+      frames.push(event.status);
+      if (event.status.state && event.status.state !== states.at(-1)) {
+        states.push(event.status.state);
+      }
+    }
+  });
+  socket.on("error", () => undefined);
+
+  return {
+    states,
+    close: () => socket.destroy(),
+    /** Resolves with the frame that first reported `state`. */
+    async await(state, { base: endpoint, session }) {
+      const deadline = Date.now() + 240_000;
+      while (Date.now() < deadline) {
+        const frame = frames.find((status) => status.state === state);
+        if (frame) return frame;
+        await sleep(100);
+      }
+      throw new Error(
+        `${provider} never reported ${state} (saw ${states.join(" → ") || "nothing"})\n` +
+          `terminal:\n${await capture(endpoint, session)}`,
+      );
+    },
+  };
+}
+
+/**
+ * One WebSocket frame, or null when the buffer holds less than a whole one.
+ * Server frames are never masked and the runtime never fragments a message.
+ */
+function readFrame(buffer) {
+  if (buffer.length < 2) return null;
+  const opcode = buffer[0] & 0x0f;
+  let length = buffer[1] & 0x7f;
+  let offset = 2;
+  if (length === 126) {
+    if (buffer.length < 4) return null;
+    length = buffer.readUInt16BE(2);
+    offset = 4;
+  } else if (length === 127) {
+    if (buffer.length < 10) return null;
+    length = Number(buffer.readBigUInt64BE(2));
+    offset = 10;
   }
-  throw new Error(
-    `${provider} never reported ${state} (saw ${seen.join(" → ") || "nothing"})\n` +
-      `sessions: ${JSON.stringify(last)}\n` +
-      `terminal:\n${await capture(base, session)}`,
-  );
+  if (buffer.length < offset + length) return null;
+  return {
+    opcode,
+    text: buffer.toString("utf8", offset, offset + length),
+    rest: buffer.subarray(offset + length),
+  };
 }
 
 /** The pane's own output, so a failure says what the CLI actually printed. */
@@ -722,13 +772,10 @@ async function capture(base, session, lines = 40) {
 }
 
 /**
- * Waits until the pane has stopped changing, then a moment longer.
- *
- * A TUI is ready when it has finished drawing itself, and the only signal
- * available from outside is that its output went quiet. Copilot's first run in
- * a fresh home also unpacks itself, which takes seconds, so this waits for
- * quiet rather than for a fixed delay or a prompt string that changes with
- * every release.
+ * Waits until the pane stops changing: a TUI is ready when it has finished
+ * drawing, and going quiet is the only sign of that from outside. Copilot's
+ * first run in a fresh home unpacks itself, so this waits for quiet rather than
+ * a fixed delay or a prompt string that changes with every release.
  */
 async function settle(base, session) {
   const deadline = Date.now() + 120_000;
