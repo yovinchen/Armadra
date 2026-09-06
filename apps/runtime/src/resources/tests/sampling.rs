@@ -89,11 +89,8 @@ async fn an_ended_session_is_dropped_from_the_sample() {
     // Nothing else is swept up with it: no row in the sample describes a
     // session whose process is gone.
     assert!(
-        !snapshot
-            .sessions
-            .iter()
-            .any(|entry| !entry.alive
-                || matches!(entry.unknown_reason, Some("exited") | Some("not-found"))),
+        !snapshot.sessions.iter().any(|entry| !entry.alive
+            || matches!(entry.unknown_reason, Some("exited") | Some("not-found"))),
         "{:?}",
         snapshot.sessions
     );
