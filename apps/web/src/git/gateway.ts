@@ -1,14 +1,33 @@
 import {
   GitActionKind,
   GitOperationState,
+  GitReadMethod,
   type GitOperationRecord,
   type HostGitClient,
 } from "@armadra/host-client";
-import type {
-  GitExpectedState,
-  GitRepositoryAction,
-  GitRepositoryOperation,
-  GitRestoreSource,
+import {
+  gitBranchSnapshotSchema,
+  gitCherryPickPreviewSchema,
+  gitCommitDetailSchema,
+  gitCommitFileDiffSchema,
+  gitHistoryPageSchema,
+  gitIntegrationSnapshotSchema,
+  gitRebaseTodoPreviewSchema,
+  gitReflogPageSchema,
+  gitRemotesSchema,
+  gitRepositoryActionSchema,
+  gitRepositoryListSchema,
+  gitStashDetailSchema,
+  gitStashSnapshotSchema,
+  gitStatusBatchSchema,
+  gitStatusSchema,
+  gitTagSnapshotSchema,
+  gitWorktreeBindingVerdictSchema,
+  gitWorktreesSchema,
+  type GitExpectedState,
+  type GitRepositoryAction,
+  type GitRepositoryOperation,
+  type GitRestoreSource,
 } from "@armadra/shared";
 
 import { RuntimeRequestError, runtimeApi } from "../api/client";
@@ -159,6 +178,11 @@ function body(value: unknown): Uint8Array {
   return encoder.encode(JSON.stringify(value));
 }
 
+/** 读的 body 与写的动作走同一种编码：都是 Runtime 自己的 camelCase JSON。 */
+function encode(value: unknown): Uint8Array {
+  return encoder.encode(JSON.stringify(value));
+}
+
 /**
  * 同一次意图的重试用同一个 id：Host 认得出这是重放，不会排第二个提交。
  * 摘要覆盖动作本身，所以「同一个 id 换了内容」是冲突而不是替换。
@@ -186,6 +210,7 @@ function snapshot(
     action,
     state: STATES[record.state] ?? "queued",
     cancellationRequested: false,
+    progress: record.progress,
     createdAt: new Date(Number(record.createdAtUnixMs)).toISOString(),
     finishedAt:
       record.finishedAtUnixMs > 0n
@@ -228,6 +253,105 @@ async function enqueue(
     action: body(action),
     expected: expected?.headOid ? { headOid: expected.headOid } : undefined,
   });
+}
+
+/**
+ * 一次读走哪一侧。
+ *
+ * 规则和写不同，而且必须不同：**归属没落定时读走 Runtime**。它交出写权之后
+ * 仍然照常答读，所以切换窗口里面板照旧有内容；反过来把读也停掉，只会让用户
+ * 在一次维护里看到一整块空白，而那块空白并不代表仓库出了任何事。
+ */
+function readRoute(): "runtime" | "host" {
+  const state = useOwnership.getState();
+  const current = state.failed ? "error" : domainStatus("git", state.domains);
+  if (current === "host") return "host";
+  if (current === "unknown" || current === "error") {
+    // 顺手补一次探测，但**不等它**：这一次读照旧走 Runtime，下一次就走对
+    // 边。等下去的代价是每个面板第一次渲染都卡在一次网络往返上，而这次往返
+    // 换来的信息，对一次读来说并不改变答案——Runtime 两侧都答读。
+    void state.probe().catch(() => undefined);
+  }
+  return "runtime";
+}
+
+/**
+ * Host 那侧的读回来的是「Runtime 自己那条路由会返回的状态码 + 原样的 JSON」。
+ * 状态码原样带回是这条通道的全部意义：一个不存在的提交在两侧都得是 404，而
+ * 不能因为过了一次转发就变成 500。
+ */
+async function hostRead<T>(
+  target: GitTarget,
+  method: GitReadMethod,
+  body: unknown,
+  schema: { parse: (value: unknown) => T },
+): Promise<T> {
+  const client = await resolver(target.workspaceId, false);
+  const answer = await client.read({
+    method,
+    scope: {
+      workspaceId: target.workspaceId,
+      repositoryPath: target.repositoryPath,
+      repositoryId: target.repositoryId,
+    },
+    requestJson: body === undefined ? undefined : encode(body),
+  });
+  const text = new TextDecoder().decode(answer.body);
+  const parsed: unknown = text.length > 0 ? JSON.parse(text) : {};
+  if (answer.httpStatus < 200 || answer.httpStatus >= 300) {
+    const failure = parsed as { code?: unknown; message?: unknown };
+    // 状态码与 code 原样抛出：调用方处理一个 404 的方式，两侧必须一样。
+    throw new RuntimeRequestError(
+      answer.httpStatus,
+      typeof failure.message === "string" ? failure.message : "Git read failed",
+      typeof failure.code === "string" ? failure.code : undefined,
+      parsed,
+    );
+  }
+  return schema.parse(parsed);
+}
+
+/**
+ * 一次读的两条实现，选一条执行。
+ *
+ * 调用方只写一次形状：Runtime 那侧调它自己的路由，Host 那侧走 `Read` 通道，
+ * 两边解析同一份 zod schema——因为两边本来就是同一份 JSON。
+ */
+async function route<T>(
+  target: GitTarget,
+  method: GitReadMethod,
+  body: unknown,
+  schema: { parse: (value: unknown) => T },
+  runtime: () => Promise<T>,
+): Promise<T> {
+  if (readRoute() === "runtime") return runtime();
+  return hostRead(target, method, body, schema);
+}
+
+/**
+ * 队列条目里的动作字节 → 面板渲染的那个动作。
+ *
+ * 这些字节是**调用方自己发出去的那一份**：Host 只按 `kind` 排序，从不解析
+ * 它们。所以这里是在读自己写的东西，不是在依赖一份协议承诺的形状；解不出来
+ * 就是解不出来，不猜。
+ */
+function decodeAction(action: Uint8Array): GitRepositoryAction | null {
+  if (action.length === 0) return null;
+  try {
+    const decoded: unknown = JSON.parse(new TextDecoder().decode(action));
+    const body = decoded as { action?: unknown };
+    // 仓库动作包在 `{ path, action, expected }` 里；暂存这类逐路径写则是平的。
+    const candidate = body && typeof body === "object" && "action" in body ? body.action : decoded;
+    const parsed = gitRepositoryActionSchema.safeParse(candidate);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Host 的读 body 里，检出目录这一项。 */
+function at(target: GitTarget): { path: string } {
+  return { path: target.path ?? "." };
 }
 
 export const gitGateway = {
@@ -385,5 +509,397 @@ export const gitGateway = {
       return runtimeWrite(() => runtimeApi.gitInit(target.workspaceId));
     const record = await enqueue(target, GitActionKind.INIT, seed, {});
     return { repository: true, branch: null, path: record.affected[0] ?? "" };
+  },
+
+  /* --------------------------------- 读 ---------------------------------- */
+  //
+  // 每一条读都只写一次形状，两侧解析同一份 zod schema——因为两边本来就是同
+  // 一份 JSON：Host 那侧转发的是 Runtime 自己的路由，连状态码都原样带回。
+  //
+  // 面板从此不再直接调 `runtimeApi`。这不是整洁问题：切到 Host 之后，直连
+  // Runtime 的读读的是**那台 Runtime 眼里的仓库**，而写走的是 Host 的队列，
+  // 两者之间隔着一次转发和一份快照缓存；同一个面板里一半数据来自一侧、另一
+  // 半来自另一侧，是「暂存了却看不到」这类报告的来源。
+
+  /** 工作空间下的仓库发现。 */
+  repositories(
+    target: GitTarget,
+    options: { refresh?: boolean; maxDepth?: number } = {},
+    signal?: AbortSignal,
+  ) {
+    return route(
+      target,
+      GitReadMethod.REPOSITORIES,
+      { workspaceId: target.workspaceId, maxDepth: options.maxDepth },
+      gitRepositoryListSchema,
+      () => runtimeApi.gitRepositories(target.workspaceId, options, signal),
+    );
+  },
+
+  /** 一个检出的状态；`pathspecs` 由服务端过滤，不在浏览器里再筛一遍。 */
+  status(
+    target: GitTarget,
+    options: { pathspecs?: string[] } = {},
+    signal?: AbortSignal,
+  ) {
+    return route(
+      target,
+      GitReadMethod.STATUS,
+      { ...at(target), paths: options.pathspecs ?? [] },
+      gitStatusSchema,
+      () =>
+        runtimeApi.gitStatus(
+          target.workspaceId,
+          target.path ?? ".",
+          options.pathspecs,
+          signal,
+        ),
+    );
+  },
+
+  /**
+   * 一次取多个检出的状态（Git 设计 §4.1 全部仓库聚合）。
+   *
+   * 聚合视图原来是每个仓库一次往返，十二个仓库就是十二次；更糟的是那十二个
+   * 答案被当成一份列表渲染，而它们是十二个不同时刻观察到的。
+   */
+  statusBatch(
+    target: GitTarget,
+    paths: string[],
+    options: { pathspecs?: string[] } = {},
+    signal?: AbortSignal,
+  ) {
+    return route(
+      target,
+      GitReadMethod.STATUS_BATCH,
+      { paths, pathspecs: options.pathspecs ?? [] },
+      gitStatusBatchSchema,
+      () =>
+        runtimeApi.gitRepositoryStatusBatch(
+          target.workspaceId,
+          paths,
+          options,
+          signal,
+        ),
+    );
+  },
+
+  branches(target: GitTarget, signal?: AbortSignal) {
+    return route(
+      target,
+      GitReadMethod.BRANCHES,
+      at(target),
+      gitBranchSnapshotSchema,
+      () =>
+        runtimeApi.gitRepositoryBranches(
+          target.workspaceId,
+          target.path ?? ".",
+          signal,
+        ),
+    );
+  },
+
+  tags(target: GitTarget, signal?: AbortSignal) {
+    return route(target, GitReadMethod.TAGS, at(target), gitTagSnapshotSchema, () =>
+      runtimeApi.gitRepositoryTags(target.workspaceId, signal, target.path ?? "."),
+    );
+  },
+
+  remotes(target: GitTarget, signal?: AbortSignal) {
+    return route(target, GitReadMethod.REMOTES, at(target), gitRemotesSchema, () =>
+      runtimeApi.gitRepositoryRemotes(
+        target.workspaceId,
+        signal,
+        target.path ?? ".",
+      ),
+    );
+  },
+
+  stashes(target: GitTarget, signal?: AbortSignal) {
+    return route(
+      target,
+      GitReadMethod.STASHES,
+      at(target),
+      gitStashSnapshotSchema,
+      () =>
+        runtimeApi.gitRepositoryStashes(
+          target.workspaceId,
+          signal,
+          target.path ?? ".",
+        ),
+    );
+  },
+
+  stashDetail(target: GitTarget, oid: string, signal?: AbortSignal) {
+    return route(
+      target,
+      GitReadMethod.STASH_DETAIL,
+      { ...at(target), oid },
+      gitStashDetailSchema,
+      () =>
+        runtimeApi.gitRepositoryStashDetail(
+          target.workspaceId,
+          oid,
+          signal,
+          target.path ?? ".",
+        ),
+    );
+  },
+
+  worktrees(target: GitTarget, signal?: AbortSignal) {
+    return route(target, GitReadMethod.WORKTREES, at(target), gitWorktreesSchema, () =>
+      runtimeApi.gitRepositoryWorktrees(
+        target.workspaceId,
+        signal,
+        target.path ?? ".",
+      ),
+    );
+  },
+
+  /**
+   * Frame 绑定的这个 worktree 还在不在、还是不是它声称的那个仓库
+   * （Git 设计 §5.1、§5.3）。两侧都做同一套判定，Host 侧另外先拒掉落在
+   * 工作空间根之外的路径——那是一句关于「这个工作空间能不能碰它」的话，
+   * 不需要起一个进程才能说。
+   */
+  worktreeBinding(
+    target: GitTarget,
+    binding: {
+      worktreePath: string;
+      branch?: string | null;
+      repositoryId?: string | null;
+    },
+    signal?: AbortSignal,
+  ) {
+    return route(
+      target,
+      GitReadMethod.WORKTREE_BINDING,
+      {
+        worktreePath: binding.worktreePath,
+        ...(binding.branch ? { branch: binding.branch } : {}),
+        ...(binding.repositoryId ? { repositoryId: binding.repositoryId } : {}),
+      },
+      gitWorktreeBindingVerdictSchema,
+      () =>
+        runtimeApi.gitRepositoryWorktreeBinding(
+          target.workspaceId,
+          binding,
+          signal,
+        ),
+    );
+  },
+
+  history(
+    target: GitTarget,
+    options: {
+      reference?: string;
+      cursor?: string;
+      limit?: number;
+      paths?: string[];
+    } = {},
+    signal?: AbortSignal,
+  ) {
+    const reference = options.reference ?? "HEAD";
+    return route(
+      target,
+      GitReadMethod.HISTORY,
+      {
+        ...at(target),
+        reference,
+        limit: options.limit ?? 50,
+        cursor: options.cursor,
+        paths: options.paths ?? [],
+      },
+      gitHistoryPageSchema,
+      () =>
+        runtimeApi.gitRepositoryHistory(
+          target.workspaceId,
+          reference,
+          options.cursor,
+          signal,
+          target.path ?? ".",
+          options.limit,
+          options.paths,
+        ),
+    );
+  },
+
+  /** 一个引用的 reflog；找回被 reset 或 rebase 丢掉的提交就靠它。 */
+  reflog(
+    target: GitTarget,
+    options: { reference?: string; cursor?: string; limit?: number } = {},
+    signal?: AbortSignal,
+  ) {
+    const reference = options.reference ?? "HEAD";
+    return route(
+      target,
+      GitReadMethod.REFLOG,
+      {
+        ...at(target),
+        reference,
+        limit: options.limit ?? 50,
+        cursor: options.cursor,
+      },
+      gitReflogPageSchema,
+      () =>
+        runtimeApi.gitRepositoryReflog(
+          target.workspaceId,
+          reference,
+          options.cursor,
+          signal,
+          target.path ?? ".",
+          options.limit,
+        ),
+    );
+  },
+
+  commitDetail(
+    target: GitTarget,
+    oid: string,
+    base: string | null,
+    signal?: AbortSignal,
+  ) {
+    return route(
+      target,
+      GitReadMethod.COMMIT_DETAIL,
+      { ...at(target), oid, ...(base === null ? {} : { base }) },
+      gitCommitDetailSchema,
+      () =>
+        runtimeApi.gitRepositoryCommitDetail(
+          target.workspaceId,
+          oid,
+          base,
+          signal,
+          target.path ?? ".",
+        ),
+    );
+  },
+
+  commitFile(
+    target: GitTarget,
+    oid: string,
+    base: string | null,
+    file: string,
+    signal?: AbortSignal,
+  ) {
+    return route(
+      target,
+      GitReadMethod.COMMIT_FILE,
+      { ...at(target), oid, file, ...(base === null ? {} : { base }) },
+      gitCommitFileDiffSchema,
+      () =>
+        runtimeApi.gitRepositoryCommitFile(
+          target.workspaceId,
+          oid,
+          base,
+          file,
+          signal,
+          target.path ?? ".",
+        ),
+    );
+  },
+
+  rebaseTodo(target: GitTarget, onto: string, signal?: AbortSignal) {
+    return route(
+      target,
+      GitReadMethod.REBASE_TODO,
+      { ...at(target), onto },
+      gitRebaseTodoPreviewSchema,
+      () =>
+        runtimeApi.gitRepositoryRebaseTodo(
+          target.workspaceId,
+          onto,
+          signal,
+          target.path ?? ".",
+        ),
+    );
+  },
+
+  cherryPickPreview(
+    target: GitTarget,
+    oid: string,
+    mainline: number | null,
+    signal?: AbortSignal,
+  ) {
+    return route(
+      target,
+      GitReadMethod.CHERRY_PICK_PREVIEW,
+      { ...at(target), oid, ...(mainline === null ? {} : { mainline }) },
+      gitCherryPickPreviewSchema,
+      () =>
+        runtimeApi.gitRepositoryCherryPickPreview(
+          target.workspaceId,
+          oid,
+          mainline,
+          signal,
+          target.path ?? ".",
+        ),
+    );
+  },
+
+  integration(target: GitTarget, signal?: AbortSignal) {
+    return route(
+      target,
+      GitReadMethod.INTEGRATION,
+      at(target),
+      gitIntegrationSnapshotSchema,
+      () =>
+        runtimeApi.gitRepositoryIntegration(
+          target.workspaceId,
+          signal,
+          target.path ?? ".",
+        ),
+    );
+  },
+
+  /**
+   * 队列里的一条。轮询一次写的结果走的就是它。
+   *
+   * 和 `operations` 一样不转发：这条记录是 Host 自己的。动作解不出来时回退
+   * 到调用方手里那一份——它正是刚发出去的那个意图，比留空更接近事实。
+   */
+  async operation(
+    target: GitTarget,
+    operationId: string,
+    fallback: GitRepositoryAction,
+    signal?: AbortSignal,
+  ): Promise<GitRepositoryOperation> {
+    if (readRoute() === "runtime")
+      return runtimeApi.gitRepositoryOperation(
+        target.workspaceId,
+        operationId,
+        signal,
+      );
+    const client = await resolver(target.workspaceId, false);
+    const record = await client.getOperation(operationId);
+    return snapshot(record, decodeAction(record.action) ?? fallback);
+  },
+
+  /**
+   * 队列里的条目。
+   *
+   * 这一条**不转发**：Host 那侧读的是它自己的队列记录（`ListOperations`），
+   * 而那份记录正是这个域搬过来的东西。转发到执行主机只会读到 Runtime 那份
+   * 进程内队列——一个刚起来的 Worker 里它必然是空的。
+   */
+  async operations(target: GitTarget, signal?: AbortSignal) {
+    if (readRoute() === "runtime")
+      return runtimeApi.gitRepositoryOperations(
+        target.workspaceId,
+        target.path ?? ".",
+        signal,
+      );
+    const client = await resolver(target.workspaceId, false);
+    const records = await client.listOperations({
+      workspaceId: target.workspaceId,
+      repositoryPath: target.repositoryPath,
+      repositoryId: target.repositoryId,
+    });
+    return records.flatMap((record) => {
+      const action = decodeAction(record.action);
+      // 解不出动作的条目直接不显示。面板的每一行都要说清「这是哪条命令」，
+      // 编不出那句话时留白，好过挂一个名字对不上的动作。
+      return action ? [snapshot(record, action)] : [];
+    });
   },
 };

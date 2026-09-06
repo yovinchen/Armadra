@@ -76,6 +76,16 @@ export interface GitOperationRecord {
   state: GitOperationState;
   affected: string[];
   progress: number;
+  /**
+   * The Runtime's own camelCase JSON for this kind, exactly as the caller sent
+   * it, under the version lock `WorkerServiceRequest` states.
+   *
+   * It travels back so a client can render *what* was queued rather than only
+   * that something was. The Host never parses it — it schedules on `kind` — and
+   * a caller that decodes it is reading its own bytes, not a shape this
+   * protocol promises.
+   */
+  action: Uint8Array;
   /** A stable, localizable key. Git's own output never travels as UI text. */
   messageCode: string;
   createdAtUnixMs: bigint;
@@ -189,6 +199,7 @@ function decodeOperation(
     state: operation.state,
     affected: [...operation.affected],
     progress: operation.progress,
+    action: operation.action,
     messageCode: operation.messageCode,
     createdAtUnixMs: operation.createdAtUnixMs,
     startedAtUnixMs: operation.startedAtUnixMs,

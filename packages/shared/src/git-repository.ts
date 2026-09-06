@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { gitStatusSchema } from "./api/git.js";
 
 const oid = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i);
 const count = z.number().int().nonnegative().safe();
@@ -140,10 +141,41 @@ export type GitRepositoryList = z.infer<typeof gitRepositoryListSchema>;
  * this service cannot drive. A squash keeps Git's own prefilled combined
  * message rather than one the app invents.
  */
-export const gitRebaseTodoCommandSchema = z.enum(["pick", "squash", "drop"]);
+/**
+ * What an interactive rebase does with one replayed commit.
+ *
+ * `exec` is deliberately absent: it is the one verb whose meaning is an
+ * arbitrary command supplied by the caller, and nothing here runs one.
+ */
+export const gitRebaseTodoCommandSchema = z.enum([
+  "pick",
+  /** Replay it and use the message the entry carries. */
+  "reword",
+  /** Replay it and stop, so a person can amend and continue. */
+  "edit",
+  /** Combine into the previous entry, keeping both messages. */
+  "squash",
+  /** Combine into the previous entry, discarding this one's message. */
+  "fixup",
+  "drop",
+]);
 export const gitRebaseTodoEntrySchema = z
-  .object({ oid, command: gitRebaseTodoCommandSchema })
-  .strict();
+  .object({
+    oid,
+    command: gitRebaseTodoCommandSchema,
+    /**
+     * The replacement message, for `reword` only. It is refused on every other
+     * verb rather than ignored: a caller that sent one believed it would be
+     * used, and dropping it silently would rewrite history with the old message
+     * and report success.
+     */
+    message: z.string().min(1).max(10_000).optional(),
+  })
+  .strict()
+  .refine(
+    (entry) => (entry.command === "reword") === (entry.message !== undefined),
+    { message: "Only a reword carries a message, and it always carries one" },
+  );
 export const gitRebaseTodoPreviewSchema = z.object({
   onto: oid,
   /** The merge base the replay starts from. */
@@ -492,9 +524,96 @@ export const gitRepositoryOperationSchema = z.object({
     "awaitingResolution",
   ]),
   cancellationRequested: z.boolean(),
+  /**
+   * 0–100, as the running `git --progress` reported it. Only the network
+   * commands produce one; it can stall, and a finished operation reports 100
+   * whether or not `git` ever printed it.
+   */
+  progress: count.max(100).default(0),
   createdAt: z.string(),
   finishedAt: z.string().nullable(),
   message: z.string().nullable(),
+});
+
+/**
+ * One reference-log entry (Git 设计 §3 "Reflog").
+ *
+ * The reflog is the only record of where a ref *used to* point, so it is the
+ * one place a commit that a reset or a rebase left unreachable can still be
+ * found. `selector` rather than `oid` is the identity a recovery is built
+ * from: `HEAD@{3}` is what Git resolves back to that moment, and several
+ * entries can share one OID.
+ */
+export const gitReflogEntrySchema = z.object({
+  index: count,
+  selector: z.string().min(1),
+  oid,
+  /** The ref's value before this entry, when the previous one is on this page. */
+  previousOid: oid.nullable(),
+  /** `commit`, `checkout`, `reset`, `rebase` — Git's own verb, possibly empty. */
+  action: z.string(),
+  message: z.string(),
+  committerName: z.string(),
+  committerEmail: z.string(),
+  /** When the entry was written, which is not the commit's own date. */
+  loggedAt: z.string(),
+});
+export const gitReflogPageSchema = z.object({
+  reference: z.string(),
+  entries: z.array(gitReflogEntrySchema),
+  nextCursor: z.string().nullable(),
+});
+
+/**
+ * Several checkouts' status in one answer (Git 设计 §4.1 全部仓库聚合).
+ *
+ * Each repository carries its own failure. One broken checkout in a workspace
+ * of twelve must not blank the other eleven, and a row that could not be read
+ * is a different thing to draw from one that is clean.
+ */
+export const gitStatusBatchEntrySchema = z.object({
+  path: z.string(),
+  status: gitStatusSchema.optional(),
+  error: z.object({ code: z.string(), message: z.string() }).optional(),
+});
+export const gitStatusBatchSchema = z.object({
+  repositories: z.array(gitStatusBatchEntrySchema),
+  /**
+   * When the batch was taken. One timestamp for the whole answer, which is the
+   * honest thing to say: the checkouts were read in sequence, so it is "not
+   * older than", never "at this instant".
+   */
+  observedAt: z.string(),
+});
+
+/**
+ * Whether a Frame's worktree binding still names a checkout of the repository
+ * it claims (Git 设计 §5.1, §5.3).
+ *
+ * `code` rather than a bare boolean because the repairs differ: a checkout that
+ * was removed, a branch somebody switched and a repository that was re-cloned
+ * elsewhere are three different things for a person to fix.
+ */
+export const gitWorktreeBindingCodeSchema = z.enum([
+  "ok",
+  "pathMissing",
+  "notAWorktree",
+  "repositoryMismatch",
+  "branchChanged",
+]);
+export const gitWorktreeBindingVerdictSchema = z.object({
+  valid: z.boolean(),
+  code: gitWorktreeBindingCodeSchema,
+  /** The path as the execution host resolved it, workspace-relative. */
+  worktreePath: z.string(),
+  /** The same path, absolute — what a terminal's `cwd` needs. */
+  absolutePath: z.string(),
+  repositoryId: z.string(),
+  branch: z.string().nullable(),
+  headOid: oid.nullable(),
+  isMain: z.boolean(),
+  locked: z.boolean(),
+  prunable: z.boolean(),
 });
 export type GitExpectedState = z.infer<typeof gitExpectedStateSchema>;
 export type GitBranchSnapshot = z.infer<typeof gitBranchSnapshotSchema>;
@@ -514,4 +633,14 @@ export type GitForceWithLease = NonNullable<
 >;
 export type GitRepositoryOperation = z.infer<
   typeof gitRepositoryOperationSchema
+>;
+export type GitReflogEntry = z.infer<typeof gitReflogEntrySchema>;
+export type GitReflogPage = z.infer<typeof gitReflogPageSchema>;
+export type GitStatusBatchEntry = z.infer<typeof gitStatusBatchEntrySchema>;
+export type GitStatusBatch = z.infer<typeof gitStatusBatchSchema>;
+export type GitWorktreeBindingCode = z.infer<
+  typeof gitWorktreeBindingCodeSchema
+>;
+export type GitWorktreeBindingVerdict = z.infer<
+  typeof gitWorktreeBindingVerdictSchema
 >;

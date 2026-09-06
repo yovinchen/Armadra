@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { GithubPullRequest } from "@armadra/host-client";
 
-import { runtimeApi } from "@/api/client";
+import { gitGateway } from "@/git/gateway";
+import { useGitTarget } from "@/git/target";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { useT } from "@/app/preferences-store";
@@ -36,11 +37,13 @@ export function CheckoutWorktree({
   const [path, setPath] = React.useState("");
   const [branch, setBranch] = React.useState(suggestion);
   const [startPoint, setStartPoint] = React.useState("");
+  // 本地检出永远作用于工作空间根那个仓库；读写走同一条归属判定。
+  const target = useGitTarget(workspaceId, ".");
 
   const snapshot = useQuery({
     queryKey: ["git-repository-branches", workspaceId],
     queryFn: ({ signal }) =>
-      runtimeApi.gitRepositoryBranches(workspaceId, ".", signal),
+      gitGateway.branches(target, signal),
     retry: false,
   });
 
@@ -68,7 +71,12 @@ export function CheckoutWorktree({
         existing,
       });
       if (!action || !head) throw new Error(t("github.checkout.needsBranch"));
-      return runtimeApi.gitRepositoryOperate(workspaceId, action, head);
+      return gitGateway.operate(
+        target,
+        action,
+        head,
+        `checkout/${crypto.randomUUID()}`,
+      );
     },
     onSuccess: () => {
       toast.success(t("github.checkout.queued"));

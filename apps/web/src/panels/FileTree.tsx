@@ -28,6 +28,8 @@ import type { FileEntry, GitFileStatus } from "@armadra/shared";
 type DiffFileStatus = GitFileStatus["status"];
 
 import { runtimeApi } from "../api/client";
+import { gitGateway } from "../git/gateway";
+import { gitTarget } from "../git/target";
 import { cn } from "../lib/cn";
 import { useT } from "../app/preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
@@ -96,10 +98,16 @@ export function FileTree() {
   const writable = workspace?.permissions.write === true;
   const actions = useFileActions(workspace?.id);
   const [pending, setPending] = useState<PendingAction | null>(null);
+  // 文件树的角标读的是工作空间根那个仓库，和抽屉走同一条归属判定。
+  const gitStatusTarget = gitTarget(
+    workspace?.id ?? "",
+    workspace?.rootPath,
+    ".",
+  );
 
   const status = useQuery({
     queryKey: ["git-status", workspace?.id],
-    queryFn: () => runtimeApi.gitStatus(workspace!.id),
+    queryFn: ({ signal }) => gitGateway.status(gitStatusTarget, {}, signal),
     enabled: Boolean(workspace),
     refetchInterval: GIT_REFETCH_MS,
     retry: false,

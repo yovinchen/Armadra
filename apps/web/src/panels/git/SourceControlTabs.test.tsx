@@ -11,11 +11,23 @@ import { runtimeApi } from "../../api/client";
 import { useCanvasStore } from "../../store/canvas-store";
 import { usePreferencesStore } from "../../app/preferences-store";
 import { TestProviders, installDomPolyfills } from "../../app/test-harness";
+import { OWNERSHIP_DOMAINS, useOwnership } from "../../ownership/store";
 import { SourceControlDrawer, SCM_COMMIT_EVENT } from "../SourceControlDrawer";
 
 installDomPolyfills();
 beforeEach(() => {
   usePreferencesStore.setState({ locale: "en" });
+  // 写要先知道谁在写，网关会为此探一次归属。摆的是产品自己的初始状态。
+  useOwnership.setState({
+    domains: OWNERSHIP_DOMAINS.map((domain) => ({
+      domain,
+      status: "runtime" as const,
+      epoch: 1n,
+      reasonCode: "ownership.initial",
+      updatedAt: "1970-01-01T00:00:00Z",
+    })),
+    failed: false,
+  });
   useCanvasStore.setState({
     workspace: workspaceSchema.parse({
       id: "019ff7d1-0d12-7421-833d-2c5e8d64ed21",

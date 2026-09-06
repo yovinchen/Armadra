@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { GitRepositoryAction, GitBranchRecord } from "@armadra/shared";
-import { runtimeApi } from "../../api/client";
+import { gitGateway, type GitTarget } from "../../git/gateway";
 import { useT } from "../../app/preferences-store";
 import { useCanvasStore } from "../../store/canvas-store";
 import {
@@ -31,12 +31,15 @@ interface FrameIntent {
 export function Worktrees({
   workspaceId,
   repositoryKey,
+  target,
   branches,
   busy,
   request,
 }: {
   workspaceId: string;
   repositoryKey: string;
+  /** 这一次读关于哪个检出；读写走同一条归属判定。 */
+  target: GitTarget;
   branches: GitBranchRecord[];
   busy: boolean;
   request: (action: GitRepositoryAction) => void;
@@ -54,8 +57,7 @@ export function Worktrees({
     : Boolean(selectedBranch);
   const worktrees = useQuery({
     queryKey: ["git-repository-worktrees", workspaceId, repositoryKey],
-    queryFn: ({ signal }) =>
-      runtimeApi.gitRepositoryWorktrees(workspaceId, signal),
+    queryFn: ({ signal }) => gitGateway.worktrees(target, signal),
     retry: false,
   });
 

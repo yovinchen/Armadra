@@ -9,12 +9,15 @@ import {
   gitIntegrationSnapshotSchema,
   gitRebaseTodoPreviewSchema,
   gitRemotesSchema,
+  gitReflogPageSchema,
   gitRepositoryActionSchema,
   gitRepositoryListSchema,
   gitRepositoryOperationSchema,
+  gitStatusBatchSchema,
   gitStashDetailSchema,
   gitStashSnapshotSchema,
   gitTagSnapshotSchema,
+  gitWorktreeBindingVerdictSchema,
   gitWorktreesSchema,
   type GitExpectedState,
   type GitRepositoryAction,
@@ -75,9 +78,12 @@ export const gitRepositoryApi = {
     signal?: AbortSignal,
     path = ".",
     limit = 50,
+    paths?: string[],
   ) =>
     request(
-      `/api/workspaces/${query(workspaceId)}/git/repository/history?path=${query(path)}&reference=${query(reference)}&limit=${limit}${cursor ? `&cursor=${query(cursor)}` : ""}`,
+      `/api/workspaces/${query(workspaceId)}/git/repository/history?path=${query(path)}&reference=${query(reference)}&limit=${limit}${cursor ? `&cursor=${query(cursor)}` : ""}${
+        paths && paths.length > 0 ? `&paths=${query(paths.join(","))}` : ""
+      }`,
       gitHistoryPageSchema,
       { signal },
     ),
@@ -102,6 +108,75 @@ export const gitRepositoryApi = {
       `/api/workspaces/${query(workspaceId)}/git/repository/rebase-todo?path=${query(path)}&onto=${query(onto)}`,
       gitRebaseTodoPreviewSchema,
       { signal },
+    ),
+  /**
+   * One page of a ref's reference log (Git 设计 §3 "Reflog").
+   *
+   * Paged by offset rather than by an anchor: the reflog is prepended to and
+   * has no immutable anchor to hold a window still, and every entry carries its
+   * own `loggedAt` so a reader can see that the window slid.
+   */
+  gitRepositoryReflog: (
+    workspaceId: string,
+    reference = "HEAD",
+    cursor?: string,
+    signal?: AbortSignal,
+    path = ".",
+    limit = 50,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/reflog?path=${query(path)}&reference=${query(reference)}&limit=${limit}${cursor ? `&cursor=${query(cursor)}` : ""}`,
+      gitReflogPageSchema,
+      { signal },
+    ),
+  /**
+   * Several checkouts' status in one request (Git 设计 §4.1 全部仓库聚合).
+   *
+   * A POST because the list of checkouts is a body, not a path — a dozen paths
+   * in a query string is where escaping goes wrong. Nothing about it writes.
+   */
+  gitRepositoryStatusBatch: (
+    workspaceId: string,
+    paths: string[],
+    options: { pathspecs?: string[] } = {},
+    signal?: AbortSignal,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/status-batch`,
+      gitStatusBatchSchema,
+      {
+        method: "POST",
+        signal,
+        ...json({ paths, pathspecs: options.pathspecs ?? [] }),
+      },
+    ),
+  /**
+   * Whether a Frame's worktree binding still names a checkout of the repository
+   * it claims (Git 设计 §5.1). A verdict with a reason, never a boolean.
+   */
+  gitRepositoryWorktreeBinding: (
+    workspaceId: string,
+    binding: {
+      worktreePath: string;
+      branch?: string | null;
+      repositoryId?: string | null;
+    },
+    signal?: AbortSignal,
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/repository/worktree-binding`,
+      gitWorktreeBindingVerdictSchema,
+      {
+        method: "POST",
+        signal,
+        ...json({
+          worktreePath: binding.worktreePath,
+          ...(binding.branch ? { branch: binding.branch } : {}),
+          ...(binding.repositoryId
+            ? { repositoryId: binding.repositoryId }
+            : {}),
+        }),
+      },
     ),
   gitRepositoryTags: (workspaceId: string, signal?: AbortSignal, path = ".") =>
     request(

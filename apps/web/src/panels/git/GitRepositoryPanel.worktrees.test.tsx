@@ -127,6 +127,7 @@ describe("worktrees and history", () => {
     );
     await screen.findByRole("button", { name: /Root/ });
     // The page carries the checkout it is reading and the graph's page size.
+    // The trailing `paths` is the server-side pathspec filter, absent here.
     expect(read).toHaveBeenCalledWith(
       "workspace-one",
       "HEAD",
@@ -134,6 +135,7 @@ describe("worktrees and history", () => {
       expect.any(AbortSignal),
       ".",
       100,
+      undefined,
     );
     expect(
       document

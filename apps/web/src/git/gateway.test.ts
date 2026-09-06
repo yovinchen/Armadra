@@ -95,6 +95,7 @@ function runtimeSide() {
     action: branchAction,
     state: "queued" as const,
     cancellationRequested: false,
+    progress: 0,
     createdAt: timestamp,
     finishedAt: null,
     message: null,
@@ -131,6 +132,9 @@ function hostSide(calls: HostCall[]) {
     state: GitOperationState.QUEUED,
     affected: affectedFor(input),
     progress: 0,
+    // The Host stores the caller's own bytes and never parses them; a client
+    // that reads them back is reading what it sent.
+    action: input.action,
     messageCode: "",
     createdAtUnixMs: BigInt(Date.parse(timestamp)),
     startedAtUnixMs: 0n,

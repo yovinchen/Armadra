@@ -14,6 +14,7 @@ import type {
 import { runtimeApi } from "../../api/client";
 import { usePreferencesStore } from "../../app/preferences-store";
 import { installDomPolyfills } from "../../app/test-harness";
+import { OWNERSHIP_DOMAINS, useOwnership } from "../../ownership/store";
 import { GitRepositoryPanel } from "./GitRepositoryPanel";
 
 installDomPolyfills();
@@ -69,6 +70,7 @@ export function operation(
     action,
     state,
     cancellationRequested: false,
+    progress: 0,
     createdAt: "now",
     finishedAt: null,
     message: null,
@@ -137,6 +139,19 @@ export function view(
 export function setupGitRepositoryPanelTests(): void {
   beforeEach(() => {
     usePreferencesStore.setState({ locale: "en" });
+    // 写要先知道谁在写，所以网关会去探一次归属。这里摆的是**产品自己的初
+    // 始状态**——`ownership.initial` 就是第一次迁移写进去的那一行——而不是
+    // 为测试编的一档；验 Host 那侧的用例自己改成 `host`。
+    useOwnership.setState({
+      domains: OWNERSHIP_DOMAINS.map((domain) => ({
+        domain,
+        status: "runtime" as const,
+        epoch: 1n,
+        reasonCode: "ownership.initial",
+        updatedAt: "1970-01-01T00:00:00Z",
+      })),
+      failed: false,
+    });
     vi.spyOn(runtimeApi, "gitRepositoryBranches").mockResolvedValue(snapshot());
     vi.spyOn(runtimeApi, "gitRepositoryOperations").mockResolvedValue([]);
     vi.spyOn(runtimeApi, "gitRepositoryOperation").mockImplementation(

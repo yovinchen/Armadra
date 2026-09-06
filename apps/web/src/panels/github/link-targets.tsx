@@ -8,7 +8,8 @@ import {
   type HostGithubClient,
 } from "@armadra/host-client";
 
-import { runtimeApi } from "@/api/client";
+import { gitGateway } from "@/git/gateway";
+import { useGitTarget } from "@/git/target";
 import { useT } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
 import { selectClass } from "../git/forms";
@@ -78,17 +79,18 @@ export interface LinkTargets {
  */
 export function useLinkTargets(workspaceId: string): LinkTargets {
   const nodes = useCanvasStore((state) => state.document?.nodes);
+  const target = useGitTarget(workspaceId, ".");
   const branches = useQuery({
     queryKey: ["git-repository-branches", workspaceId],
     queryFn: ({ signal }) =>
-      runtimeApi.gitRepositoryBranches(workspaceId, ".", signal),
+      gitGateway.branches(target, signal),
     enabled: workspaceId.length > 0,
     retry: false,
   });
   const worktrees = useQuery({
     queryKey: ["git-repository-worktrees", workspaceId],
     queryFn: ({ signal }) =>
-      runtimeApi.gitRepositoryWorktrees(workspaceId, signal),
+      gitGateway.worktrees(target, signal),
     enabled: workspaceId.length > 0,
     retry: false,
   });

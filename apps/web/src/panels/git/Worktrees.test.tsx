@@ -119,6 +119,11 @@ function setup(nodes: CanvasNode[] = []) {
       <Worktrees
         workspaceId={workspace.id}
         repositoryKey="repo-0:."
+        target={{
+          workspaceId: workspace.id,
+          repositoryPath: workspace.rootPath,
+          path: ".",
+        }}
         branches={[]}
         busy={false}
         request={request}

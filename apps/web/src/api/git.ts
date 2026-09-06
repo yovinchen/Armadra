@@ -71,10 +71,24 @@ export const gitApi = {
         ...json(gitHunkMutationSchema.parse(mutation)),
       },
     ),
-  gitStatus: (workspaceId: string, path = ".") =>
+  /**
+   * `paths` is a server-side pathspec filter: Git applies it to both the count
+   * and the rows, so the two describe one set. Filtering in the browser after
+   * reading the whole checkout is what made a panel say "12 changes" above
+   * three of them.
+   */
+  gitStatus: (
+    workspaceId: string,
+    path = ".",
+    paths?: string[],
+    signal?: AbortSignal,
+  ) =>
     request(
-      `/api/workspaces/${query(workspaceId)}/git/status?path=${query(path)}`,
+      `/api/workspaces/${query(workspaceId)}/git/status?path=${query(path)}${
+        paths && paths.length > 0 ? `&paths=${query(paths.join(","))}` : ""
+      }`,
       gitStatusSchema,
+      { signal },
     ),
   /** `git init`; only offered when a status read reported no repository. */
   gitInit: (workspaceId: string) =>

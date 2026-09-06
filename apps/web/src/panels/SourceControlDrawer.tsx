@@ -26,6 +26,8 @@ import type {
 } from "@armadra/shared";
 
 import { runtimeApi } from "../api/client";
+import { gitGateway } from "../git/gateway";
+import { gitTarget } from "../git/target";
 import { useT } from "../app/preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
 import { useCompactLayout } from "../platform/layout";
@@ -142,9 +144,17 @@ export function SourceControlDrawer() {
   // 聚合视图只在 Changes 页存在；切到别的页时落回一个明确仓库，否则那些页
   // 会不知道自己在读哪个仓库。
   const repositoryPath = aggregate ? "." : selection;
+  // 读和写走同一条归属判定。切到 Host 之后直连 Runtime 的读读的是「那台
+  // Runtime 眼里的仓库」，而暂存排在 Host 的队列上——同一个抽屉里两半数据
+  // 来自两侧，正是「暂存了却看不到」这类报告的来源。
+  const target = gitTarget(
+    workspaceId ?? "",
+    workspace?.rootPath,
+    repositoryPath,
+  );
   const status = useQuery({
     queryKey: ["git-status", workspaceId, repositoryPath],
-    queryFn: () => runtimeApi.gitStatus(workspaceId!, repositoryPath),
+    queryFn: ({ signal }) => gitGateway.status(target, {}, signal),
     enabled: open && Boolean(workspaceId) && !aggregate,
     retry: false,
   });
@@ -159,47 +169,53 @@ export function SourceControlDrawer() {
       workspaceId,
       records.map((record) => record.repositoryPath).join(","),
     ],
-    queryFn: async () => {
-      const results = await Promise.all(
-        records.map(async (record) => ({
-          record,
-          status: await runtimeApi.gitStatus(
-            workspaceId!,
-            record.repositoryPath,
-          ),
-        })),
+    queryFn: async ({ signal }) => {
+      // 一次请求读完所有检出。原来是每个仓库一次往返，十二个仓库就是十二
+      // 次；更糟的是那十二个答案被当成一份列表渲染，而它们是十二个不同时刻
+      // 观察到的。读不出来的仓库带着自己的失败回来，不会把其余的一起清空。
+      const answer = await gitGateway.statusBatch(
+        target,
+        records.map((record) => record.repositoryPath),
+        {},
+        signal,
       );
-      return results.flatMap(({ record, status }) =>
-        status.files.map((file) => ({
+      const named = new Map(
+        records.map((record) => [record.repositoryPath, record.name]),
+      );
+      return answer.repositories.flatMap((entry) =>
+        (entry.status?.files ?? []).map((file) => ({
           ...file,
-          repositoryPath: record.repositoryPath,
-          repositoryName: record.name,
+          repositoryPath: entry.path,
+          repositoryName: named.get(entry.path) ?? entry.path,
         })),
       );
     },
     enabled: open && Boolean(workspaceId) && aggregate && records.length > 0,
     retry: false,
   });
+  /** 聚合视图里每一行都记着自己来自哪个仓库，写就打到那个仓库上。 */
+  const at = (repository: string) =>
+    gitTarget(workspaceId ?? "", workspace?.rootPath, repository);
   const invalidate = () => invalidateGitQueries(queryClient, workspaceId);
   const fail = (error: unknown) =>
     toast.error(error instanceof Error ? error.message : t("scm.failed"));
 
   const stage = useMutation({
     mutationFn: (input: { path: string; repository?: string }) =>
-      runtimeApi.gitStage(
-        workspaceId!,
+      gitGateway.stage(
+        at(input.repository ?? repositoryPath),
         [input.path],
-        input.repository ?? repositoryPath,
+        `stage/${input.repository ?? repositoryPath}/${crypto.randomUUID()}`,
       ),
     onSuccess: invalidate,
     onError: fail,
   });
   const unstage = useMutation({
     mutationFn: (input: { path: string; repository?: string }) =>
-      runtimeApi.gitUnstage(
-        workspaceId!,
+      gitGateway.unstage(
+        at(input.repository ?? repositoryPath),
         [input.path],
-        input.repository ?? repositoryPath,
+        `unstage/${input.repository ?? repositoryPath}/${crypto.randomUUID()}`,
       ),
     onSuccess: invalidate,
     onError: fail,
@@ -210,11 +226,11 @@ export function SourceControlDrawer() {
       source: GitRestoreSource;
       repository?: string;
     }) =>
-      runtimeApi.gitRevert(
-        workspaceId!,
+      gitGateway.revert(
+        at(input.repository ?? repositoryPath),
         [input.path],
         input.source,
-        input.repository ?? repositoryPath,
+        `revert/${input.repository ?? repositoryPath}/${crypto.randomUUID()}`,
       ),
     onSuccess: invalidate,
     onError: fail,
@@ -240,12 +256,12 @@ export function SourceControlDrawer() {
       : undefined;
   const commit = useMutation({
     mutationFn: (text: string) =>
-      runtimeApi.gitCommit(
-        workspaceId!,
+      gitGateway.commit(
+        target,
         text,
+        `commit/${repositoryPath}/${crypto.randomUUID()}`,
         undefined,
         amendPayload,
-        repositoryPath,
       ),
     onSuccess: (result) => {
       setMessage("");
@@ -259,7 +275,8 @@ export function SourceControlDrawer() {
   // Creating a repository is never implied by another action: the button only
   // appears once a read reported no repository, and it still asks first.
   const init = useMutation({
-    mutationFn: () => runtimeApi.gitInit(workspaceId!),
+    mutationFn: () =>
+      gitGateway.init(target, `init/${crypto.randomUUID()}`),
     onSuccess: (result) => {
       invalidate();
       toast.success(

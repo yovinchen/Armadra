@@ -5,7 +5,7 @@ import type {
   GitIntegrationSnapshot,
   GitRepositoryAction,
 } from "@armadra/shared";
-import { runtimeApi } from "../../api/client";
+import { gitGateway, type GitTarget } from "../../git/gateway";
 import { useT, usePreferencesStore } from "../../app/preferences-store";
 import { writeClipboard } from "../../terminal/TerminalSurface";
 import { Input } from "../../ui/input";
@@ -104,7 +104,7 @@ export function relativeTime(iso: string, now: number, locale: string) {
 export function History({
   workspaceId,
   repositoryKey,
-  repositoryPath,
+  target,
   busy,
   request,
   loadIntegration,
@@ -112,8 +112,8 @@ export function History({
 }: {
   workspaceId: string;
   repositoryKey: string;
-  /** 工作空间相对路径，缺省是工作空间根。 */
-  repositoryPath: string;
+  /** 这一次读关于哪个检出；读写走同一条归属判定。 */
+  target: GitTarget;
   busy: boolean;
   request: (action: GitRepositoryAction) => void;
   loadIntegration: (signal: AbortSignal) => Promise<GitIntegrationSnapshot>;
@@ -145,20 +145,16 @@ export function History({
     Boolean(state.head.headOid);
   const branches = useQuery({
     queryKey: ["git-repository-branches", workspaceId, repositoryKey],
-    queryFn: ({ signal }) =>
-      runtimeApi.gitRepositoryBranches(workspaceId, repositoryPath, signal),
+    queryFn: ({ signal }) => gitGateway.branches(target, signal),
     retry: false,
   });
   const history = useInfiniteQuery({
     queryKey: ["git-repository-history", workspaceId, repositoryKey, reference],
     queryFn: ({ pageParam, signal }) =>
-      runtimeApi.gitRepositoryHistory(
-        workspaceId,
-        reference,
-        pageParam,
+      gitGateway.history(
+        target,
+        { reference, cursor: pageParam, limit: PAGE_SIZE },
         signal,
-        repositoryPath,
-        PAGE_SIZE,
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor ?? undefined,
@@ -381,7 +377,7 @@ export function History({
             key={commit.oid}
             workspaceId={workspaceId}
             repositoryKey={repositoryKey}
-            repositoryPath={repositoryPath}
+            target={target}
             oid={commit.oid}
             openFile={openFile}
           />
@@ -468,13 +464,13 @@ function CommitRow({
 function CommitFiles({
   workspaceId,
   repositoryKey,
-  repositoryPath,
+  target,
   oid,
   openFile,
 }: {
   workspaceId: string;
   repositoryKey: string;
-  repositoryPath: string;
+  target: GitTarget;
   oid: string;
   openFile?: (path: string) => void;
 }) {
@@ -483,14 +479,7 @@ function CommitFiles({
   const [file, setFile] = useState<string | null>(null);
   const detail = useQuery({
     queryKey: ["git-repository-commit", workspaceId, repositoryKey, oid, base],
-    queryFn: ({ signal }) =>
-      runtimeApi.gitRepositoryCommitDetail(
-        workspaceId,
-        oid,
-        base,
-        signal,
-        repositoryPath,
-      ),
+    queryFn: ({ signal }) => gitGateway.commitDetail(target, oid, base, signal),
     retry: false,
   });
   const patch = useQuery({
@@ -503,14 +492,7 @@ function CommitFiles({
       file,
     ],
     queryFn: ({ signal }) =>
-      runtimeApi.gitRepositoryCommitFile(
-        workspaceId,
-        oid,
-        base,
-        file!,
-        signal,
-        repositoryPath,
-      ),
+      gitGateway.commitFile(target, oid, base, file!, signal),
     enabled: file !== null,
     retry: false,
   });

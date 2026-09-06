@@ -8,7 +8,9 @@ import type {
   GitRepositoryAction,
   GitRepositoryOperation,
 } from "@armadra/shared";
-import { runtimeApi, RuntimeRequestError } from "../../api/client";
+import { RuntimeRequestError } from "../../api/client";
+import { gitGateway, type GitTarget } from "../../git/gateway";
+import { useGitTarget } from "../../git/target";
 import { useT } from "../../app/preferences-store";
 import { Button } from "../../ui/button";
 import { ScrollArea } from "../../ui/scroll-area";
@@ -51,10 +53,13 @@ export function GitRepositoryPanel({
   repositoryPath?: string;
 }) {
   const t = useT();
+  // 每一次读都经网关，和写走同一条归属判定。切到 Host 之后直连 Runtime 的读
+  // 读的是「那台 Runtime 眼里的仓库」，而写排在 Host 的队列上——同一个面板
+  // 里两半数据来自两侧，正是「暂存了却看不到」这类报告的来源。
+  const lookup = useGitTarget(workspaceId, repositoryPath);
   const branches = useQuery({
     queryKey: ["git-repository-branches", workspaceId, repositoryPath],
-    queryFn: ({ signal }) =>
-      runtimeApi.gitRepositoryBranches(workspaceId, repositoryPath, signal),
+    queryFn: ({ signal }) => gitGateway.branches(lookup, signal),
     retry: false,
   });
   return (
@@ -99,6 +104,14 @@ function RepositorySession({
 }) {
   const t = useT();
   const client = useQueryClient();
+  // 检出的身份取自快照本身，而不是把工作空间根和相对路径再拼一次：那份绝对
+  // 路径是执行主机自己解析出来的，也正是 Host 用来串行的那一个键。
+  const target: GitTarget = {
+    workspaceId,
+    repositoryPath: snapshot.repositoryPath,
+    repositoryId: snapshot.repositoryId,
+    path: repositoryPath,
+  };
   const trackingKey = [
     "git-repository-active-operation",
     workspaceId,
@@ -164,11 +177,7 @@ function RepositorySession({
   const recent = useQuery({
     queryKey: recentKey,
     queryFn: async ({ signal }) => {
-      const items = await runtimeApi.gitRepositoryOperations(
-        workspaceId,
-        repositoryPath,
-        signal,
-      );
+      const items = await gitGateway.operations(target, signal);
       if (
         items.some(
           (item) =>
@@ -211,9 +220,10 @@ function RepositorySession({
   const operation = useQuery({
     queryKey: operationKey,
     queryFn: async ({ signal }) => {
-      const result = await runtimeApi.gitRepositoryOperation(
-        workspaceId,
+      const result = await gitGateway.operation(
+        target,
         operationId!,
+        tracking.operation?.action ?? lastRequested.current!,
         signal,
       );
       if (
@@ -234,6 +244,10 @@ function RepositorySession({
   });
   const invalidate = () => invalidateGitQueries(client, workspaceId);
   const lastInvalidated = useRef("");
+  // Host 的队列记录存的是版本锁字节，不是解析过的动作。轮询与取消回填的就是
+  // 调用方刚发出去的那一份，而不是去猜——猜出来的动作会在面板上显示成另一条
+  // 命令。
+  const lastRequested = useRef<GitRepositoryAction | null>(null);
   useEffect(() => {
     const incoming = operation.data;
     if (!incoming || incoming.id !== operationId) return;
@@ -263,11 +277,14 @@ function RepositorySession({
       action: GitRepositoryAction;
       expected: GitExpectedState;
     }) => {
-      const result = await runtimeApi.gitRepositoryOperate(
-        workspaceId,
+      lastRequested.current = input.action;
+      // 一次按钮一个种子。Host 认得出同一个种子是重放，所以它必须每次意图各
+      // 不相同——「再按一次」是第二个决定，不是同一个决定的重试。
+      const result = await gitGateway.operate(
+        target,
         input.action,
         input.expected,
-        repositoryPath,
+        `${snapshot.repositoryId}/${crypto.randomUUID()}`,
       );
       if (
         result.repositoryId !== snapshot.repositoryId ||
@@ -307,7 +324,12 @@ function RepositorySession({
   });
   const cancel = useMutation({
     mutationFn: async (id: string) => {
-      const result = await runtimeApi.gitRepositoryCancel(workspaceId, id);
+      const result = await gitGateway.cancel(
+        target,
+        id,
+        tracking.operation?.action ?? lastRequested.current!,
+        `cancel/${id}`,
+      );
       if (
         result.repositoryId !== snapshot.repositoryId ||
         result.repositoryPath !== snapshot.repositoryPath ||
@@ -506,17 +528,11 @@ function RepositorySession({
           <History
             workspaceId={workspaceId}
             repositoryKey={`${snapshot.repositoryId}:${snapshot.repositoryPath}`}
-            repositoryPath={repositoryPath}
+            target={target}
             busy={busy || stale}
             request={request}
             openFile={openRepositoryFile}
-            loadIntegration={(signal) =>
-              runtimeApi.gitRepositoryIntegration(
-                workspaceId,
-                signal,
-                repositoryPath,
-              )
-            }
+            loadIntegration={(signal) => gitGateway.integration(target, signal)}
           />
         )}
         {tab === "integration" && (
@@ -526,32 +542,19 @@ function RepositorySession({
             branches={snapshot.branches}
             busy={busy || stale}
             request={request}
-            loadSnapshot={(signal) =>
-              runtimeApi.gitRepositoryIntegration(
-                workspaceId,
-                signal,
-                repositoryPath,
-              )
-            }
+            loadSnapshot={(signal) => gitGateway.integration(target, signal)}
             loadCherryPick={(oid, mainline, signal) =>
-              runtimeApi.gitRepositoryCherryPickPreview(
-                workspaceId,
-                oid,
-                mainline,
-                signal,
-                repositoryPath,
-              )
+              gitGateway.cherryPickPreview(target, oid, mainline, signal)
             }
             loadRebaseTodo={(onto, signal) =>
-              runtimeApi.gitRepositoryRebaseTodo(
-                workspaceId,
-                onto,
-                signal,
-                repositoryPath,
-              )
+              gitGateway.rebaseTodo(target, onto, signal)
             }
             markResolved={(path) =>
-              runtimeApi.gitMarkResolved(workspaceId, [path], repositoryPath)
+              gitGateway.markResolved(
+                target,
+                [path],
+                `resolve/${snapshot.repositoryId}/${path}`,
+              )
             }
             openFile={openRepositoryFile}
           />
@@ -562,20 +565,9 @@ function RepositorySession({
             repositoryKey={`${snapshot.repositoryId}:${snapshot.repositoryPath}`}
             busy={busy || stale}
             request={request}
-            loadSnapshot={(signal) =>
-              runtimeApi.gitRepositoryStashes(
-                workspaceId,
-                signal,
-                repositoryPath,
-              )
-            }
+            loadSnapshot={(signal) => gitGateway.stashes(target, signal)}
             loadDetail={(oid, signal) =>
-              runtimeApi.gitRepositoryStashDetail(
-                workspaceId,
-                oid,
-                signal,
-                repositoryPath,
-              )
+              gitGateway.stashDetail(target, oid, signal)
             }
           />
         )}
@@ -586,9 +578,7 @@ function RepositorySession({
             remotes={snapshot.remotes}
             busy={busy || stale}
             request={request}
-            loadTags={(signal) =>
-              runtimeApi.gitRepositoryTags(workspaceId, signal, repositoryPath)
-            }
+            loadTags={(signal) => gitGateway.tags(target, signal)}
           />
         )}
         {tab === "remotes" && (
@@ -597,19 +587,14 @@ function RepositorySession({
             repositoryKey={`${snapshot.repositoryId}:${snapshot.repositoryPath}`}
             busy={busy || stale}
             request={request}
-            loadRemotes={(signal) =>
-              runtimeApi.gitRepositoryRemotes(
-                workspaceId,
-                signal,
-                repositoryPath,
-              )
-            }
+            loadRemotes={(signal) => gitGateway.remotes(target, signal)}
           />
         )}
         {tab === "worktrees" && (
           <Worktrees
             workspaceId={workspaceId}
             repositoryKey={`${snapshot.repositoryId}:${snapshot.repositoryPath}`}
+            target={target}
             branches={snapshot.branches}
             busy={busy || stale}
             request={request}

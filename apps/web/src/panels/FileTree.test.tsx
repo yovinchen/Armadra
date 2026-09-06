@@ -157,7 +157,12 @@ describe("FileTree", () => {
     const badge = await screen.findByTitle("已修改");
     expect(badge.textContent).toBe("M");
     // 徽标只来自 status，绝不为此再去算 diff。
-    expect(gitStatus).toHaveBeenCalledWith(workspace.id);
+    expect(gitStatus).toHaveBeenCalledWith(
+      workspace.id,
+      ".",
+      undefined,
+      expect.any(AbortSignal),
+    );
     // 截断提示属于展开的那一层目录。
     await screen.findByRole("status");
   });
