@@ -199,6 +199,27 @@ fn the_renderer_reads_a_whole_file_document_and_a_codex_wrapper() {
     assert!(transcript::render(thinking).is_empty());
 }
 
+/// `GEMINI_CLI_HOME` replaces the *home*, not `~/.gemini`: gemini-cli's own
+/// `homedir()` returns the variable and `Storage::getGlobalGeminiDir()` joins
+/// `.gemini` onto whatever that gave, which its configuration reference states
+/// in words — the CLI "will create a `.gemini` folder inside this directory".
+/// Read the other way, every transcript lookup starts one directory too high
+/// and comes back empty, which is indistinguishable from "this session has no
+/// transcript".
+#[test]
+fn the_gemini_root_is_a_home_with_dot_gemini_under_it() {
+    use std::path::{Path, PathBuf};
+    let home = Path::new("/home/dev");
+    assert_eq!(
+        transcript::gemini_home_in(None, home),
+        home.join(".gemini")
+    );
+    assert_eq!(
+        transcript::gemini_home_in(Some(PathBuf::from("/tmp/gemini-job-123")), home),
+        Path::new("/tmp/gemini-job-123/.gemini")
+    );
+}
+
 #[test]
 fn only_the_tail_of_a_transcript_is_read_and_never_a_half_line() {
     let directory = tempfile::tempdir().unwrap();

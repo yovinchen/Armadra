@@ -268,12 +268,27 @@ pub fn codex_home() -> PathBuf {
         .unwrap_or_else(|| home().join(".codex"))
 }
 
+/// `~/.gemini`, or `$GEMINI_CLI_HOME/.gemini`.
+///
+/// `GEMINI_CLI_HOME` overrides the *home directory* the CLI reads from, not the
+/// `.gemini` folder inside it: gemini-cli's own `homedir()` returns the
+/// variable and `Storage::getGlobalGeminiDir()` joins `.gemini` onto the
+/// result. Reading the variable as the config directory itself sent every
+/// transcript lookup one level too high, where nothing matches and the honest
+/// answer "no transcript" is indistinguishable from a real absence.
 pub fn gemini_home() -> PathBuf {
-    std::env::var_os("GEMINI_CLI_HOME")
-        .or_else(|| std::env::var_os("GEMINI_DIR"))
-        .map(PathBuf::from)
-        .filter(|path| !path.as_os_str().is_empty())
-        .unwrap_or_else(|| home().join(".gemini"))
+    gemini_home_in(
+        std::env::var_os("GEMINI_CLI_HOME")
+            .map(PathBuf::from)
+            .filter(|path| !path.as_os_str().is_empty()),
+        &home(),
+    )
+}
+
+/// The rule on its own, with the environment passed in so a test can state it
+/// without mutating a process-global the rest of the suite also reads.
+pub fn gemini_home_in(cli_home: Option<PathBuf>, home: &Path) -> PathBuf {
+    cli_home.unwrap_or_else(|| home.to_path_buf()).join(".gemini")
 }
 
 /// A bounded breadth-first walk. Neither CLI documents its directory layout, so

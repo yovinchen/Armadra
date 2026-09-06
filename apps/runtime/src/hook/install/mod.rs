@@ -239,9 +239,17 @@ pub fn config_home_with(
         "codex" => from_env("CODEX_HOME").unwrap_or_else(|| home.join(".codex")),
         // Copilot's own override, documented alongside `~/.copilot/hooks/`.
         "copilot" => from_env("COPILOT_HOME").unwrap_or_else(|| home.join(".copilot")),
+        // `GEMINI_CLI_HOME` replaces the *home directory*, not `~/.gemini`:
+        // gemini-cli's `paths.ts` returns it from its own `homedir()` and
+        // `storage.ts` then joins `GEMINI_DIR` (`.gemini`) onto whatever that
+        // gave. Its configuration reference says the same in words — the CLI
+        // "will create a `.gemini` folder inside this directory". Treating the
+        // variable as the config directory itself wrote our hook into
+        // `$GEMINI_CLI_HOME/settings.json`, one level above the only file the
+        // CLI reads, which looks exactly like a successful install.
         "gemini" => from_env("GEMINI_CLI_HOME")
-            .or_else(|| from_env("GEMINI_DIR"))
-            .unwrap_or_else(|| home.join(".gemini")),
+            .unwrap_or_else(|| home.to_path_buf())
+            .join(".gemini"),
         "opencode" => from_env("OPENCODE_CONFIG_DIR")
             .or_else(|| from_env("XDG_CONFIG_HOME").map(|path| path.join("opencode")))
             .unwrap_or_else(|| home.join(".config").join("opencode")),
@@ -610,9 +618,22 @@ mod tests {
             config_home_with("codex", overridden, home).unwrap(),
             Path::new("/tmp/codex-home")
         );
+        // `GEMINI_CLI_HOME` is a home, so `.gemini` still hangs off it. The
+        // CLI's own docs put it this way: it "will create a `.gemini` folder
+        // inside this directory".
         assert_eq!(
             config_home_with("gemini", overridden, home).unwrap(),
-            Path::new("/tmp/gemini-home")
+            Path::new("/tmp/gemini-home/.gemini")
+        );
+        // A name gemini-cli does not read must not move the file either: its
+        // `GEMINI_DIR` is the string `.gemini` in source, never an override.
+        let gemini_dir_only = |name: &str| match name {
+            "GEMINI_DIR" => Some(PathBuf::from("/tmp/not-a-variable")),
+            _ => None,
+        };
+        assert_eq!(
+            config_home_with("gemini", gemini_dir_only, home).unwrap(),
+            home.join(".gemini")
         );
         // XDG_CONFIG_HOME is a directory of config directories, not opencode's.
         assert_eq!(

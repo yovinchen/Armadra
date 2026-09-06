@@ -510,7 +510,6 @@ function cleanEnvironment() {
     "CODEX_HOME",
     "COPILOT_HOME",
     "GEMINI_CLI_HOME",
-    "GEMINI_DIR",
     "OPENCODE_CONFIG_DIR",
     "PI_CODING_AGENT_DIR",
     "PI_CONFIG_DIR",
