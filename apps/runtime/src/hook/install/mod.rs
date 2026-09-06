@@ -286,20 +286,11 @@ pub fn install(agent_id: &str, client_bin: &Path) -> AppResult<InstallReport> {
             "{other} has no hook installer"
         ))),
     }?;
-    // Hooks tell us what the agent is doing; the skills tell the agent what it
-    // can do here (plan §5.6 / §5.8). A skill we could not write is a warning,
-    // not a failed install: status reporting still works without it.
-    if let Err(error) = crate::collab::skills::install(agent_id, &home) {
-        tracing::warn!(%error, %agent_id, "hooks installed but the canvas instructions were not written");
-    }
     Ok(report)
 }
 
 pub fn uninstall(agent_id: &str) -> AppResult<InstallReport> {
     let home = config_home(agent_id)?;
-    if let Err(error) = crate::collab::skills::uninstall(agent_id, &home) {
-        tracing::warn!(%error, %agent_id, "could not remove the canvas instructions");
-    }
     match agent_id {
         "claude" => claude::uninstall(&home),
         "codex" => codex::uninstall(&home),
