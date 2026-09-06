@@ -28,7 +28,7 @@ pub const HOOK_PROTOCOL_VERSION: u64 = 1;
 
 /// Value of the `X-Armadra-Hook-Client` header. Bumped when the wire behaviour of
 /// this binary changes so the runtime can flag stale installs.
-pub const HOOK_CLIENT_REVISION: &str = "3";
+pub const HOOK_CLIENT_REVISION: &str = "4";
 
 /// Upper bound on the hook payload we are willing to buffer, in bytes.
 pub const MAX_PAYLOAD_BYTES: usize = 1024 * 1024;
