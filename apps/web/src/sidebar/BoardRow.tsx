@@ -1,5 +1,5 @@
 /**
- * 侧栏里的一行看板（§26）。
+ * 侧栏里的一行看板（§26 →§27）。
  *
  * 行本身 = 图标 + 名称 + 行尾信号点 + `⋯`；右键与 `⋯` 给同一组动作
  * （置顶 / 重命名 / 删除）。当前那块板下面多一行「N 个 Agent」，展开才把
@@ -16,6 +16,7 @@ import {
 
 import { useT } from "../app/preferences-store";
 import { SessionsSection } from "../sessions/SessionsSection";
+import { cn } from "@/lib/cn";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -62,6 +63,11 @@ export interface BoardRowProps {
   onTogglePin: () => void;
   /** 置顶组里的行会带上工作空间名，作为第二行的说明。 */
   caption?: string;
+  /**
+   * 项目行下面的看板：内容往右缩，但**底色仍然铺满**——高亮块因此与上面的
+   * 项目行严丝合缝，不会因为左边空一截、四角又是圆的而看着断开（§27）。
+   */
+  indent?: boolean;
 }
 
 export function BoardRow({
@@ -78,6 +84,7 @@ export function BoardRow({
   onDelete,
   onTogglePin,
   caption,
+  indent,
 }: BoardRowProps) {
   const t = useT();
   const [renaming, setRenaming] = useState(false);
@@ -86,7 +93,7 @@ export function BoardRow({
 
   if (renaming) {
     return (
-      <li>
+      <li className={indent ? "pl-4" : undefined}>
         <NameInput
           initial={board.name}
           label={t("sidebar.boardName")}
@@ -129,7 +136,10 @@ export function BoardRow({
         <ContextMenuTrigger asChild>
           <div
             data-active={active ? "true" : undefined}
-            className="group/board motion-hover flex h-7 items-center gap-1 rounded-[var(--r-control)] pr-1 pl-1.5 hover:bg-[var(--hover)] data-[active=true]:bg-[color-mix(in_srgb,var(--brand)_15%,transparent)] data-[active=true]:text-[var(--brand)]"
+            className={cn(
+              "group/board motion-hover flex h-7 items-center gap-1 rounded-[var(--r-control)] pr-1 hover:bg-[var(--hover)] data-[active=true]:bg-[color-mix(in_srgb,var(--brand)_15%,transparent)] data-[active=true]:text-[var(--brand)]",
+              indent ? "pl-4" : "pl-1.5",
+            )}
           >
             {pinned ? (
               <Pin className="size-3.5 shrink-0 opacity-60" />
@@ -199,6 +209,7 @@ export function BoardRow({
 
       {active && sessionCount > 0 && (
         <AgentsFold
+          indent={indent}
           open={agentsOpen}
           count={agentCount}
           onToggle={() => setAgentsOpen((value) => !value)}
@@ -238,17 +249,19 @@ export function BoardRow({
 function AgentsFold({
   open,
   count,
+  indent,
   onToggle,
   children,
 }: {
   open: boolean;
   count: number;
+  indent?: boolean;
   onToggle: () => void;
   children: ReactNode;
 }) {
   const t = useT();
   return (
-    <div className="pl-4">
+    <div className={indent ? "pl-7" : "pl-4"}>
       <Button
         variant="ghost"
         size="sm"

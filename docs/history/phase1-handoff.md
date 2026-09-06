@@ -2086,3 +2086,44 @@ util 缺席时 `loadSnapshot` 会整份失败。停用只发生在「创建」�
 - **环境干扰说明**：`localStorage` 的 `armadra.board` 是全应用共享的，验证途中被别的
   tab 改回过用户的 Default 一次（当时立刻切走，没有在用户的板上做任何写操作）。
   后来者验证时每次 reload 前都重新 `setItem` 一遍自己的看板 id。
+
+## sidebar-batch（app/ 壳 + sidebar/ + shell/LeftSidebar，2026-09-05）
+
+首页删除、标题栏对齐、搜索面板、Agent 面板、树密度五件事，已完成并验证。
+
+### 归属改动
+
+- **删除**：`app/Launcher.tsx`、`app/Launcher.test.tsx`、`app/WorkspaceGrid.tsx`。
+  `useWorkspacesQuery` 搬去新文件 **`app/workspaces-query.ts`**（`WorkspaceGrid`
+  只是它当初的宿主）——谁再引用 `app/WorkspaceGrid` 都要改成这里。
+- **新增**：`sidebar/SidebarSearch.tsx` + `sidebar/search-index.ts`（纯逻辑，带测试）、
+  `sidebar/AgentStatusPanel.tsx` + `sidebar/agent-panel.ts`（同上）、
+  `sidebar/goto-node.ts`（跨看板选中 + 居中）、`app/App.test.tsx`。
+- **改动**：`app/App.tsx`（单分支，没有工作空间时只有侧栏，画布与 Dock/工具簇/
+  用量胶囊一起缺席）、`shell/LeftSidebar.tsx`（44px 标题栏里放折叠 + 搜索 + 通知）、
+  `sidebar/SidebarHeader.tsx`（顶行写 `app.brand`）、`sidebar/WorkspaceTree.tsx`、
+  `sidebar/BoardRow.tsx`（新增 `indent`）、`i18n/shell.ts`（新增 `search.*` /
+  `agents.*`）、`i18n/launcher.ts`（删掉只给首页用的 9 个键）。
+- 没有碰 `shell/ControlsCluster.tsx`、`i18n/modals.ts`、`i18n/canvas.ts`、
+  preferences-store 的 whiteboard 段。本轮**没有**新增偏好键。
+
+### 需要别人做的
+
+1. **谁都行（低优先）**：`onFileDrop` 拖目录进窗口 = 新建工作空间，这条只活在
+   已删除的 `Launcher` 里，现在没了（画布自己的 `canvas/dnd/os-drop.ts` 不管
+   建工作空间）。要留这个能力就得在壳里重新挂一次，落点是 `app/App.tsx`。
+2. **决策留档，不是请求**：铃铛面板按 `agent/sessions` 的既有分桶渲染，所以除了
+   「需要你 / 运行中 / 未读 / 空闲」还会出现第五组「未知」——没有 Agent 状态的
+   普通终端落在那里。宁可多一组，也好过把活着的终端从面板里藏掉。
+
+### 验证记录（2026-09-05）
+
+- `pnpm --filter @armadra/web typecheck` 零错误；`test` **71 个文件 754 个用例全绿**。
+- 临时 Runtime（43122，`ARMADRA_DATA_DIR=/tmp/armadra-sidebar`）+ 临时前端
+  （launch.json 的 `web-sidebar`，1424）。用完已停 preview、kill 43122、删临时目录，
+  并把 `web-sidebar` 那条从 launch.json 里删回去。**全程没碰 43120。**
+- 量过的：三个钮的中心 y 都是 22（与红绿灯同线）；项目行 `y=144 h=28`、
+  两条看板行 `y=172 / 200`，`x` 同为 8 —— 零间隙、高亮块满宽。
+- 点过的：搜索到便签正文（`tmux` → 命中「部署清单」带摘要）、搜到别的板上的
+  节点并跳过去（`实验` → 切板 + 居中）、铃铛展开/再点收回/Esc 收回、
+  清 localStorage 后启动直接进壳（无首页、无提示文案、画布区空）。

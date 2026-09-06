@@ -66,6 +66,15 @@ export const shell: MessageModule = {
     "sidebar.boardDeleteConfirm": "删除",
     "sidebar.cancel": "取消",
 
+    "search.title": "搜索",
+    "search.placeholder": "搜索",
+    "search.empty": "无结果",
+    "search.boards": "看板",
+    "search.nodes": "节点",
+
+    "agents.title": "Agent",
+    "agents.close": "收起",
+
     "cluster.palette": "命令面板",
     "cluster.explorer": "资源管理器",
     "cluster.scm": "源码控制",
@@ -138,6 +147,15 @@ export const shell: MessageModule = {
     "sidebar.boardDeleteDescription": "The board and its nodes are removed.",
     "sidebar.boardDeleteConfirm": "Delete",
     "sidebar.cancel": "Cancel",
+
+    "search.title": "Search",
+    "search.placeholder": "Search",
+    "search.empty": "No results",
+    "search.boards": "Boards",
+    "search.nodes": "Nodes",
+
+    "agents.title": "Agents",
+    "agents.close": "Collapse",
 
     "cluster.palette": "Command palette",
     "cluster.explorer": "Explorer",

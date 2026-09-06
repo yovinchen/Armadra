@@ -9,21 +9,14 @@
  * Agent 列表不再是常驻的第二栏：它折在当前看板行下面（见 `BoardRow`）。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ChevronDown,
-  ChevronRight,
-  Folder,
-  MoreHorizontal,
-  Plus,
-  SquarePen,
-} from "lucide-react";
+import { Folder, MoreHorizontal, Plus, SquarePen } from "lucide-react";
 import type { WorkspaceSummary } from "@armadra/shared";
 
 import { isAttention } from "../agent/status-store";
 import { useSessions } from "../agent/sessions";
 import { useT, usePreferencesStore } from "../app/preferences-store";
 import { useCloseWorkspace, useOpenWorkspace } from "../app/workspace-actions";
-import { useWorkspacesQuery } from "../app/WorkspaceGrid";
+import { useWorkspacesQuery } from "../app/workspaces-query";
 import {
   RemoveWorkspaceDialog,
   useRemoveWorkspace,
@@ -419,11 +412,6 @@ function WorkspaceRow({
         />
       ) : (
         <div className="group/ws motion-hover flex h-7 items-center gap-1 rounded-[var(--r-control)] pr-1 pl-1.5 hover:bg-[var(--hover)]">
-          {collapsed ? (
-            <ChevronRight className="size-3.5 shrink-0 opacity-60" />
-          ) : (
-            <ChevronDown className="size-3.5 shrink-0 opacity-60" />
-          )}
           <Folder className="size-3.5 shrink-0 opacity-60" />
           <Button
             variant="ghost"
@@ -467,11 +455,12 @@ function WorkspaceRow({
       )}
 
       {!collapsed && (
-        <ul className="pl-4">
+        <ul>
           {visible.map((board) => (
             <BoardRow
               key={board.id}
               board={board}
+              indent
               active={board.id === activeBoardId}
               pinned={pinnedBoardIds.includes(board.id)}
               signal={signals[board.id]}
@@ -488,7 +477,7 @@ function WorkspaceRow({
             />
           ))}
           {creating && (
-            <li>
+            <li className="pl-4">
               <NameInput
                 initial=""
                 label={t("sidebar.boardName")}
@@ -504,7 +493,7 @@ function WorkspaceRow({
             </li>
           )}
           {boards.length > BOARD_PAGE_SIZE && (
-            <li>
+            <li className="pl-4">
               <Button
                 variant="ghost"
                 size="sm"
