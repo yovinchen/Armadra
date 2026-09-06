@@ -40,6 +40,37 @@ Pi 的 `--resume` 打开选择器；指定会话要用 `--session`。OMP 的 `--
 进程内扩展**不比**命令 Hook 更可信：两者用同一个 bearer、同一份每节点令牌、同一条终端绑定发同样的请求，
 Runtime 分不出也不会因此多给任何权限。区别只是省掉每个事件一次 fork。
 
+### 各 CLI 的配置目录覆盖
+
+写到哪一个目录由各 CLI 自己的环境变量决定，Armadra 照抄它们的语义，不发明新的：
+
+| CLI            | 变量                                                     | 语义                                                                                |
+| -------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Claude Code    | `CLAUDE_CONFIG_DIR`                                      | 直接就是配置目录                                                                    |
+| Codex          | `CODEX_HOME`                                             | 直接就是配置目录                                                                    |
+| GitHub Copilot | `COPILOT_HOME`                                           | 直接就是配置目录                                                                    |
+| Gemini CLI     | `GEMINI_CLI_HOME`                                        | **是 HOME 的替代，不是 `~/.gemini` 的替代**：配置目录为 `$GEMINI_CLI_HOME/.gemini` |
+| OpenCode       | `OPENCODE_CONFIG_DIR`，否则 `$XDG_CONFIG_HOME/opencode` | 前者直接就是配置目录                                                                |
+| Pi / Oh My Pi  | `PI_CODING_AGENT_DIR`（OMP 另有 `PI_CONFIG_DIR` 与 profile） | 直接就是 agent 目录                                                                 |
+
+`GEMINI_CLI_HOME` 曾被当作配置目录本身，于是 hook 被写进 `$GEMINI_CLI_HOME/settings.json`——比 CLI 真正读的那份高一层，
+安装看起来成功但一条事件都不会到；转录查找同样从高一层开始，永远返回「没有转录」。gemini-cli 的 `paths.ts` 把这个变量
+从自己的 `homedir()` 返回，`storage.ts` 再往上拼 `.gemini`；其配置文档的原话是它「will create a `.gemini` folder inside
+this directory」。`GEMINI_DIR` 在 gemini-cli 里是常量字符串 `.gemini`，不是环境变量，因此不再作为覆盖读取。
+转录落在 `$GEMINI_CLI_HOME/.gemini/tmp/<项目标识>/chats/`。
+
+### Copilot 的 `notification`
+
+`notification` 一个名字下面是四件事。官方文档页没有它（参考页只列八个事件），出处是 CLI 自己的 changelog 1.0.18：
+该事件「fires asynchronously on shell completion, permission prompts, elicitation dialogs, and agent completion」
+（<https://github.com/github/copilot-cli/blob/main/changelog.md>）。区分靠载荷里的 `notification_type`，
+唯一有一手出处的取值是 `permission_prompt`（<https://github.com/github/copilot-cli/issues/2586>，其修复在 1.0.26
+把它收窄成「只在真的向用户弹出提示时触发」）。
+
+因此只有 `permission_prompt` 映射成 NEEDS YOU，其余一律不映射：shell 跑完不是节点的状态（跑它的那一轮还在跑，
+`postToolUse` 已经说过了）；elicitation 对话大概也是「等你」，但没有任何出处给出它的 `notification_type`，编一个字符串
+只会打在错的地方；agent completion 已经有权威事件 `agentStop`，而 `notification` 是异步的，晚到的那一条只会盖掉更新的一轮。
+
 ### 来源徽标
 
 节点头部的小徽标说明这一条状态是怎么来的：

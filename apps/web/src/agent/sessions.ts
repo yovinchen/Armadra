@@ -159,13 +159,10 @@ export function useSessions(workspaceId: string | null): UseSessionsResult {
     retry: false,
   });
   const statuses = useAgentStatusStore((state) => state.statuses);
-  const hydrate = useAgentStatusStore((state) => state.hydrate);
   const tick = useTick(5_000);
 
-  useEffect(() => {
-    if (query.data && workspaceId) hydrate(query.data, workspaceId);
-  }, [query.data, workspaceId, hydrate]);
-
+  // 镜像补齐不在这里。它跟着应用挂载走（`useAgentStatusHydration`），
+  // 否则画布上的节点徽标会取决于侧栏挂没挂。
   const sessions = useMemo(
     () => mergeSessions(query.data ?? [], statuses, Date.now()),
     // `tick` 只是节拍源，故意进依赖数组。

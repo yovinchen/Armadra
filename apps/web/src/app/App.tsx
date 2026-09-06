@@ -5,6 +5,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { ReactFlowProvider } from "@xyflow/react";
+import { useAgentStatusHydration } from "../agent/hydration";
 import { useWorkspaceEvents } from "../api/events";
 import { FlowWorkspace } from "../canvas/FlowWorkspace";
 // 浮层都在 `./lazy` 里 `React.lazy` 包过，走各自的 chunk（§17 代码分割）。
@@ -101,6 +102,8 @@ function AppShell() {
   useEffect(syncDocumentPreferences, []);
   useCanvasPreferences();
   useWorkspaceEvents(workspace?.id ?? null);
+  // 节点徽标属于画布，不属于侧栏：镜像在这里补齐，与面板开合无关。
+  useAgentStatusHydration(workspace?.id ?? null);
   useAgentNotifications();
   useBoardSync();
   const dispatch = useCommandDispatch();
