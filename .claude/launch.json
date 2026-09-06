@@ -32,6 +32,23 @@
       ],
       "port": 1422,
       "url": "http://localhost:1422"
+    },
+    {
+      "name": "web-prod",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@armadra/web",
+        "exec",
+        "vite",
+        "preview",
+        "--port",
+        "1423",
+        "--host",
+        "localhost"
+      ],
+      "port": 1423,
+      "url": "http://localhost:1423"
     }
   ]
 }
