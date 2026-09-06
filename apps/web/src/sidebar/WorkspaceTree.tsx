@@ -268,7 +268,6 @@ function AddProjectButton() {
 
 /**
  * 「新建看板」（Codex 的「新对话」那一行）：在当前工作空间建一块板并切过去。
- * 行尾的 `+` 是同一个动作，只是位置不同。
  */
 function NewBoardRow() {
   const t = useT();
@@ -300,14 +299,6 @@ function NewBoardRow() {
           <SquarePen className="size-4 shrink-0 opacity-70" />
           <span className="truncate">{t("sidebar.newBoard")}</span>
         </Button>
-        <IconButton
-          label={t("sidebar.newBoard")}
-          disabled={!workspace || create.isPending}
-          className="shrink-0"
-          onClick={run}
-        >
-          <Plus />
-        </IconButton>
       </div>
     </div>
   );
