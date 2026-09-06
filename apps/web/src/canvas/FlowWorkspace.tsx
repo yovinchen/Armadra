@@ -59,7 +59,7 @@ import {
   zoomToLevel,
 } from "./flow/use-flow-viewport";
 import { boundingBox, nearestInDirection, nodeBox, type Box } from "./geometry";
-import { setTool } from "./interaction/tool-store";
+import { setTool, useTool } from "./interaction/tool-store";
 import {
   CONNECTION_RADIUS,
   DELETE_KEY_CODE,
@@ -70,7 +70,7 @@ import { useCanvasMenus } from "./menus/CanvasMenus";
 import { Minimap } from "./flow/Minimap";
 import { CanvasOverlays } from "./flow/overlays/CanvasOverlays";
 import { CanvasStylePanel } from "./StylePanel";
-import { removeItems } from "./whiteboard/store";
+import { removeItems, removeReferences } from "./whiteboard/store";
 import { ToolLayer } from "./whiteboard/tools/ToolLayer";
 import { resetProjectionCache } from "./sync/project";
 import {
@@ -295,7 +295,11 @@ export function FlowWorkspace() {
         state.setSelection({
           nodes: (state.document?.nodes ?? []).map((node) => node.id),
           items: state.whiteboard.items.map((item) => `wb:${item.id}`),
-          edges: (state.document?.edges ?? []).map((edge) => edge.id),
+          edges: [
+            ...(state.document?.edges ?? []).map((edge) => edge.id),
+            // 引用边与连线在选区里共用一格，全选自然也该把它们框进来。
+            ...state.whiteboard.references.map((reference) => reference.id),
+          ],
         });
       },
       "canvas.delete": () => {
@@ -308,9 +312,11 @@ export function FlowWorkspace() {
           ],
           new Set((state.document?.nodes ?? []).map((node) => node.id)),
           new Set((state.document?.edges ?? []).map((edge) => edge.id)),
+          new Set(state.whiteboard.references.map((reference) => reference.id)),
         );
-        // 白板对象直接删：没有会话要结束，也没有确认框要弹。
+        // 白板对象与引用直接删：没有会话要结束，也没有确认框要弹。
         if (split.items.length > 0) removeItems(split.items);
+        if (split.references.length > 0) removeReferences(split.references);
         requestDelete(split.nodes, split.edges);
       },
       "canvas.duplicate": () => store().duplicateNodes(store().selectedNodeIds),
@@ -375,9 +381,12 @@ export function FlowWorkspace() {
 
   /* ------------------------------ 渲染 ------------------------------------ */
 
+  // 手形工具改 `panOnDrag` / `selectionOnDrag` / `nodesDraggable` 三项
+  // （`flow-options`），所以当前工具也是这张表的输入。
+  const tool = useTool();
   const options = React.useMemo(
-    () => flowOptions({ whiteboard: preferences, locked, editable }),
-    [editable, locked, preferences],
+    () => flowOptions({ whiteboard: preferences, locked, editable, tool }),
+    [editable, locked, preferences, tool],
   );
 
   return (

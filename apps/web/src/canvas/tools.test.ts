@@ -142,6 +142,8 @@ describe("shouldShowStylePanel", () => {
 describe("splitSelectionForDelete", () => {
   const nodes = new Set([NODE, OTHER_NODE]);
   const edges = new Set([EDGE]);
+  const REFERENCE = "77777777-7777-4777-8777-777777777777";
+  const references = new Set([REFERENCE]);
 
   it("按 id 前缀分流：白板对象 / 节点 / 边各归各的堆", () => {
     expect(
@@ -150,6 +152,7 @@ describe("splitSelectionForDelete", () => {
       nodes: [NODE],
       edges: [EDGE],
       items: ["wb:abc123"],
+      references: [],
     });
   });
 
@@ -163,12 +166,15 @@ describe("splitSelectionForDelete", () => {
     expect(split.nodes).toEqual([]);
   });
 
-  it("两张表都不认的 id 一概不动：删了也同步不回去", () => {
+  it("三张表都不认的 id 一概不动：删了也同步不回去", () => {
     const ghost = "55555555-5555-4555-8555-555555555555";
-    expect(splitSelectionForDelete([ghost], nodes, edges)).toEqual({
+    expect(
+      splitSelectionForDelete([ghost], nodes, edges, references),
+    ).toEqual({
       nodes: [],
       edges: [],
       items: [],
+      references: [],
     });
   });
 
@@ -182,11 +188,29 @@ describe("splitSelectionForDelete", () => {
     expect(split.items).toEqual(["wb:ink1", "wb:text1"]);
   });
 
+  it("引用与连线在选区里混着，删除时分到两堆（F29）", () => {
+    const split = splitSelectionForDelete(
+      [EDGE, REFERENCE],
+      nodes,
+      edges,
+      references,
+    );
+    expect(split.edges).toEqual([EDGE]);
+    expect(split.references).toEqual([REFERENCE]);
+  });
+
+  it("不给引用表时引用 id 落空：删不掉，也不会被当成连线误删", () => {
+    const split = splitSelectionForDelete([REFERENCE], nodes, edges);
+    expect(split.references).toEqual([]);
+    expect(split.edges).toEqual([]);
+  });
+
   it("空选区什么也不删", () => {
-    expect(splitSelectionForDelete([], nodes, edges)).toEqual({
+    expect(splitSelectionForDelete([], nodes, edges, references)).toEqual({
       nodes: [],
       edges: [],
       items: [],
+      references: [],
     });
   });
 });

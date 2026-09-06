@@ -187,20 +187,33 @@ export interface DeleteSplit {
   edges: string[];
   /** 白板对象，走 `whiteboard.removeItems`（B2）。 */
   items: string[];
+  /** 内容引用，走 `whiteboard.removeReferences`（B5 / F29）。 */
+  references: string[];
 }
 
 /**
- * 把一次选中拆成「节点 / 边 / 白板对象」三堆（F17）。
+ * 把一次选中拆成「节点 / 边 / 白板对象 / 引用」四堆（F17）。
  *
- * 判据就是 id：`wb:` 前缀是白板对象，其余按 `nodes` / `edges` 两张表查。
- * 两张表都不认的 id 一概丢掉——文档里没有它，删了也同步不回去。
+ * 判据就是 id：`wb:` 前缀是白板对象，其余按三张表查。三张表都不认的 id
+ * 一概丢掉——文档里没有它，删了也同步不回去。
+ *
+ * 引用与上下文连线在 React Flow 上都是边，选区里混在同一格
+ * （`selectedEdgeIds`），但它们住在两份文档里：连线是 `document.edges`
+ * 的一行，引用是 `whiteboard.references` 的一行。少了这一堆，框选一片
+ * 「连线 + 引用」再按 Delete 会只删掉连线，引用静静地留着（B5 交接记录）。
  */
 export function splitSelectionForDelete(
   selected: readonly string[],
   knownNodeIds: ReadonlySet<string>,
   knownEdgeIds: ReadonlySet<string>,
+  knownReferenceIds: ReadonlySet<string> = new Set(),
 ): DeleteSplit {
-  const split: DeleteSplit = { nodes: [], edges: [], items: [] };
+  const split: DeleteSplit = {
+    nodes: [],
+    edges: [],
+    items: [],
+    references: [],
+  };
   for (const id of selected) {
     if (isItemId(id)) {
       split.items.push(id);
@@ -210,7 +223,11 @@ export function splitSelectionForDelete(
       split.nodes.push(id);
       continue;
     }
-    if (knownEdgeIds.has(id)) split.edges.push(id);
+    if (knownEdgeIds.has(id)) {
+      split.edges.push(id);
+      continue;
+    }
+    if (knownReferenceIds.has(id)) split.references.push(id);
   }
   return split;
 }
