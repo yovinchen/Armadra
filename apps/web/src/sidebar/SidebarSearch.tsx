@@ -19,7 +19,7 @@ import { Bot, LayoutGrid } from "lucide-react";
 import { basename } from "../agent/sessions";
 import { useT } from "../app/preferences-store";
 import { runtimeApi } from "../api/client";
-import { screenToPage } from "../canvas/flow/flow-context";
+import { nodeDropPosition } from "../canvas/placement";
 import { formatRelativeTime } from "../lib/format";
 import {
   resumeLaunchCommand,
@@ -118,10 +118,7 @@ export function SidebarSearch({ open, onOpenChange }: SidebarSearchProps) {
     if (!command) return;
     close();
     addNode("terminal", {
-      position: screenToPage({
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
-      }),
+      position: nodeDropPosition("terminal"),
       title: conversation.title,
       data: {
         kind: "terminal",

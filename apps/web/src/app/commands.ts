@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import type { Position } from "@armadra/shared";
 import { buildAddMenu, type AddMenuItem } from "../canvas/menus/add-menu";
 import { runCanvasCommand } from "../canvas/commands";
-import { screenToPage } from "../canvas/flow/flow-context";
+import { currentViewportCenter } from "../canvas/placement";
 import { COMMAND_BY_ID, type CommandId } from "../keybindings";
 import { usePreferencesStore, useT } from "./preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
@@ -19,7 +19,7 @@ export interface CommandDispatch {
   run: (id: CommandId) => void;
   /** 当前可用的新建菜单项（已按设置过滤掉禁用的 Agent）。 */
   addMenuItems: AddMenuItem[];
-  /** 视口中心的画布坐标，新建节点默认落在这里。 */
+  /** 视口中心的画布坐标；新建节点以它为**中心**摆下（`canvas/placement.ts`）。 */
   centerPosition: () => Position;
 }
 
@@ -36,15 +36,8 @@ export function useCommandDispatch(): CommandDispatch {
   const addMenuItems = useMemo(() => buildAddMenu(agents, t), [agents, t]);
 
   // 画布外的模块只经 `flow/flow-context` 拿画布实例；画布没挂载时
-  // `screenToPage` 原样返回屏幕坐标，节点仍然落在一个合理的位置。
-  const centerPosition = useCallback(
-    () =>
-      screenToPage({
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
-      }),
-    [],
-  );
+  // `currentViewportCenter` 退回画布存下的视口，节点仍然落在一个合理的位置。
+  const centerPosition = useCallback(() => currentViewportCenter(), []);
 
   const run = useCallback(
     (id: CommandId) => {

@@ -32,7 +32,7 @@ import {
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
 import { IconButton } from "@/ui/icon-button";
-import { currentViewportCenter } from "../viewport";
+import { nodeDropPosition } from "@/canvas/placement";
 
 export function OrphanList({
   workspaceId,
@@ -58,7 +58,7 @@ export function OrphanList({
       // 节点会拿到一个新会话，而不是这一个。
       addNode("terminal", {
         id: adopted.nodeId,
-        position: currentViewportCenter(),
+        position: nodeDropPosition("terminal"),
         data: {
           kind: "terminal",
           sessionId: adopted.sessionId,

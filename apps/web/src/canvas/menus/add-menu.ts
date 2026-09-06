@@ -25,6 +25,7 @@ import type { CanvasActions } from "../../store/canvas-store";
 import { useCanvasStore } from "../../store/canvas-store";
 import type { Translate } from "../../app/preferences-store";
 import { runCanvasCommand, type CanvasCommandId } from "../commands";
+import { nodeDropPosition } from "../placement";
 import { pickFilesForCanvas } from "../dnd/external-content";
 import { addItems, createItemId, select } from "../whiteboard/store";
 import { textItemAt } from "../whiteboard/tools/draft";
@@ -42,7 +43,13 @@ import { openAutomationPanel } from "../../panels/automation/open";
 
 export interface AddMenuContext {
   addNode: CanvasActions["addNode"];
-  /** 新节点的落点（画布坐标）。 */
+  /**
+   * 新节点的**中心**锚点（画布坐标），不是左上角。
+   *
+   * 浮层入口给视口中心，画布右键给鼠标点；节点以它为中心摆放，压住别的节点
+   * 就按 32px 让开——两件事都在 `canvas/placement.ts` 里做，菜单项只管把
+   * 锚点传下去。
+   */
   position: Position;
   workspace: Workspace;
   agents: AgentInfo[];
@@ -78,16 +85,16 @@ const FRAME_SIZE = { width: 640, height: 420 };
  * 空文字对象建出来就选中，`TextNode` 看到 `text` 为空自动进编辑态，所以
  * 菜单里点「新建文字」和用文字工具点一下的结果一模一样。
  */
-function addTextShape(position: Position): void {
-  const item = textItemAt(position, createItemId());
+function addTextShape(anchor: Position): void {
+  const item = textItemAt(anchor, createItemId());
   addItems([item]);
   select([item.id]);
 }
 
-/** 「画框」= 分组节点（`nodes` 表里的一行），落点即左上角。 */
-function addFrameShape(position: Position): void {
+/** 「画框」= 分组节点（`nodes` 表里的一行），以锚点为中心摆下。 */
+function addFrameShape(anchor: Position): void {
   useCanvasStore.getState().addNode("group", {
-    position,
+    position: nodeDropPosition("group", { anchor, size: FRAME_SIZE }),
     size: FRAME_SIZE,
   });
 }
@@ -106,7 +113,7 @@ export function sshMenuItems(hosts: SshHost[], t: Translate): AddMenuItem[] {
     group: "ssh",
     run: (context) => {
       context.addNode("terminal", {
-        position: context.position,
+        position: nodeDropPosition("terminal", { anchor: context.position }),
         title: host.name,
         data: { kind: "terminal", ssh: { hostId: host.id } },
       });
@@ -142,7 +149,7 @@ export function buildAddMenu(
         return;
       }
       context.addNode("terminal", {
-        position: context.position,
+        position: nodeDropPosition("terminal", { anchor: context.position }),
         title: agent.label,
         data: {
           kind: "terminal",
@@ -165,7 +172,9 @@ export function buildAddMenu(
       group: "terminal",
       shortcut: "canvas.newTerminal",
       run: (context) => {
-        context.addNode("terminal", { position: context.position });
+        context.addNode("terminal", {
+          position: nodeDropPosition("terminal", { anchor: context.position }),
+        });
       },
     },
     ...agentItems,
@@ -176,7 +185,9 @@ export function buildAddMenu(
       icon: StickyNote,
       group: "content",
       run: (context) => {
-        context.addNode("sticky", { position: context.position });
+        context.addNode("sticky", {
+          position: nodeDropPosition("sticky", { anchor: context.position }),
+        });
       },
     },
     {
@@ -186,7 +197,7 @@ export function buildAddMenu(
       group: "content",
       run: (context) => {
         context.addNode("files", {
-          position: context.position,
+          position: nodeDropPosition("files", { anchor: context.position }),
           data: { kind: "files", path: context.workspace.rootPath },
         });
       },
@@ -205,7 +216,10 @@ export function buildAddMenu(
       label: t("add.importFiles"),
       icon: Upload,
       group: "content",
-      run: (context) => pickFilesForCanvas(context.position),
+      run: (context) =>
+        pickFilesForCanvas(
+          nodeDropPosition("editor", { anchor: context.position }),
+        ),
     },
     {
       id: "add.text",
@@ -227,7 +241,9 @@ export function buildAddMenu(
       icon: Globe,
       group: "content",
       run: (context) => {
-        context.addNode("browser", { position: context.position });
+        context.addNode("browser", {
+          position: nodeDropPosition("browser", { anchor: context.position }),
+        });
       },
     },
     {
@@ -250,7 +266,9 @@ export function buildAddMenu(
           .document?.nodes.find((node) => node.type === "terminal");
         if (!source) return;
         context.addNode("agentActivity", {
-          position: context.position,
+          position: nodeDropPosition("agentActivity", {
+            anchor: context.position,
+          }),
           title: source.title,
           data: { kind: "agentActivity", sourceNodeId: source.id },
         });

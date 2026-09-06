@@ -51,7 +51,7 @@ import {
   ContextMenuTrigger,
 } from "../ui/context-menu";
 import { IconButton } from "../ui/icon-button";
-import { currentViewportCenter } from "./viewport";
+import { nodeDropPosition } from "@/canvas/placement";
 import { FileEntryDialog } from "./FileEntryDialog";
 import { useWorkspaceFileDrag } from "../files/use-workspace-file-drag";
 import {
@@ -343,7 +343,7 @@ function Row({
     }
     addNode("editor", {
       title: entry.name,
-      position: currentViewportCenter(),
+      position: nodeDropPosition("editor"),
       data: { kind: "editor", path: entry.path, readonly: entry.readonly },
     });
   };
@@ -443,7 +443,7 @@ function Row({
               onSelect={() =>
                 addNode("files", {
                   title: entry.name,
-                  position: currentViewportCenter(),
+                  position: nodeDropPosition("files"),
                   data: { kind: "files", path: entry.path },
                 })
               }

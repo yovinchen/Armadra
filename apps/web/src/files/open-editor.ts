@@ -7,7 +7,7 @@
  */
 import { requestCenterOnNode } from "@/canvas/flow/flow-context";
 import { revealInEditor } from "@/nodes/editor-reveal";
-import { currentViewportCenter } from "@/panels/viewport";
+import { nodeDropPosition } from "@/canvas/placement";
 import { useCanvasStore } from "@/store/canvas-store";
 
 import { basename } from "./file-operations";
@@ -32,7 +32,7 @@ export function openFileInEditor(
     existing?.id ??
     store.addNode("editor", {
       title: basename(path),
-      position: currentViewportCenter(),
+      position: nodeDropPosition("editor"),
       data: { kind: "editor", path, ...(readonly ? { readonly } : {}) },
     });
   if (existing) {

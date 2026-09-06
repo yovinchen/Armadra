@@ -48,10 +48,18 @@ const pickFilesForCanvas = vi.fn();
 const openAutomationPanel = vi.fn();
 const runCanvasCommand = vi.fn();
 
+type TestNode = {
+  id: string;
+  type: string;
+  title: string;
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+};
+
 const state = {
   addNode,
   setPanel,
-  document: { nodes: [] as { id: string; type: string; title: string }[] },
+  document: { nodes: [] as TestNode[] },
 };
 
 vi.mock("../../store/canvas-store", () => ({
@@ -94,7 +102,14 @@ const claude: AgentInfo = {
   clientRevision: 1,
 };
 
+/**
+ * 菜单拿到的是**中心**锚点，不是左上角（`canvas/placement.ts`）。
+ * 替身 registry 把所有类型的默认尺寸都给成 240×200，所以居中之后的左上角
+ * 是 `{120-120, 80-100}`；「画框」自带 640×420，另算。
+ */
 const position: Position = { x: 120, y: 80 };
+const centered = { x: 0, y: -20 };
+const framePosition = { x: -200, y: -130 };
 const t = (key: string) => key;
 const ctx = { addNode, position, workspace, agents: [claude] };
 
@@ -134,9 +149,28 @@ describe("buildAddMenu", () => {
     );
   });
 
-  it("新建终端落在右键那一点上", () => {
+  it("新建终端以右键那一点为中心", () => {
     itemById("add.terminal").run(ctx);
-    expect(addNode).toHaveBeenCalledWith("terminal", { position });
+    expect(addNode).toHaveBeenCalledWith("terminal", { position: centered });
+  });
+
+  it("落点压住已有节点时让开", () => {
+    state.document = {
+      nodes: [
+        {
+          id: "n1",
+          type: "terminal",
+          title: "shell",
+          position: centered,
+          size: { width: 240, height: 200 },
+        },
+      ],
+    };
+    itemById("add.terminal").run(ctx);
+    // 替身节点 240×200，所以要让 7 步（224px）才完全不压住。
+    expect(addNode).toHaveBeenCalledWith("terminal", {
+      position: { x: centered.x + 224, y: centered.y + 224 },
+    });
   });
 
   it("Agent 项带品牌色，且用的是 CLI 自己的名字（不翻译）", () => {
@@ -166,7 +200,7 @@ describe("buildAddMenu", () => {
     expect(menu).toHaveLength(1);
     menu[0]!.run(ctx);
     expect(addNode).toHaveBeenCalledWith("terminal", {
-      position,
+      position: centered,
       title: "build-box",
       data: { kind: "terminal", ssh: { hostId: "h1" } },
     });
@@ -174,13 +208,13 @@ describe("buildAddMenu", () => {
 
   it("便签走 `addNode`", () => {
     itemById("add.sticky").run(ctx);
-    expect(addNode).toHaveBeenCalledWith("sticky", { position });
+    expect(addNode).toHaveBeenCalledWith("sticky", { position: centered });
   });
 
   it("文件管理器带上工作区根路径", () => {
     itemById("add.files").run(ctx);
     expect(addNode).toHaveBeenCalledWith("files", {
-      position,
+      position: centered,
       data: { kind: "files", path: "/tmp/alpha" },
     });
   });
@@ -193,7 +227,7 @@ describe("buildAddMenu", () => {
 
   it("「导入文件…」把落点交给外部内容处理器", () => {
     itemById("add.importFiles").run(ctx);
-    expect(pickFilesForCanvas).toHaveBeenCalledWith(position);
+    expect(pickFilesForCanvas).toHaveBeenCalledWith(centered);
   });
 
   /** F18 / §2.2：文字是白板对象，不是节点——它不该出现在 `nodes` 表里。 */
@@ -208,19 +242,19 @@ describe("buildAddMenu", () => {
     expect(select).toHaveBeenCalledWith(["item-1"]);
   });
 
-  /** F05：「画框」= 分组节点，落点即左上角。 */
+  /** F05：「画框」= 分组节点，以锚点为中心摆下。 */
   it("「画框」建一个 `group` 节点", () => {
     itemById("add.frame").run(ctx);
     expect(addItems).not.toHaveBeenCalled();
     expect(addNode).toHaveBeenCalledWith("group", {
-      position,
+      position: framePosition,
       size: { width: 640, height: 420 },
     });
   });
 
   it("浏览器走 `addNode`", () => {
     itemById("add.browser").run(ctx);
-    expect(addNode).toHaveBeenCalledWith("browser", { position });
+    expect(addNode).toHaveBeenCalledWith("browser", { position: centered });
   });
 
   it("定时计划开的是自动化页，不建空卡片", () => {
@@ -233,12 +267,20 @@ describe("buildAddMenu", () => {
     const item = itemById("add.agentActivity");
     expect(item.disabledReason?.(ctx)).toBe("add.noTerminal");
     state.document = {
-      nodes: [{ id: "n1", type: "terminal", title: "shell" }],
+      nodes: [
+        {
+          id: "n1",
+          type: "terminal",
+          title: "shell",
+          position: { x: 900, y: 900 },
+          size: { width: 240, height: 200 },
+        },
+      ],
     };
     expect(item.disabledReason?.(ctx)).toBeNull();
     item.run(ctx);
     expect(addNode).toHaveBeenCalledWith("agentActivity", {
-      position,
+      position: centered,
       title: "shell",
       data: { kind: "agentActivity", sourceNodeId: "n1" },
     });

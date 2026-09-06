@@ -20,7 +20,7 @@ import { Worktrees } from "./Worktrees";
 import { Stashes } from "./Stashes";
 import { Integrations } from "./Integrations";
 import { useCanvasStore } from "../../store/canvas-store";
-import { currentViewportCenter } from "../viewport";
+import { nodeDropPosition } from "@/canvas/placement";
 import { ReadError } from "./forms";
 import { invalidateGitQueries } from "./queries";
 import { RepositoryConfirmDialog } from "./RepositoryConfirmDialog";
@@ -152,7 +152,7 @@ function RepositorySession({
       data: {
         path: `${snapshot.repositoryPath.replace(/[\\/]+$/, "")}/${path}`,
       },
-      position: currentViewportCenter(),
+      position: nodeDropPosition("editor"),
     });
     store.setPanel("scm", "closed");
   };
