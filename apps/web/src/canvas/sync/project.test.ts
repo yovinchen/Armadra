@@ -208,6 +208,42 @@ describe("projectNodes", () => {
   it("空文档投出空数组", () => {
     expect(projectNodes(null, EMPTY, NO_DRAFTS)).toEqual([]);
   });
+
+  /**
+   * 回归：投影上钉一个 `draggable: true` 会让全局的 `nodesDraggable` 永远
+   * 失效——React Flow 算的是
+   * `node.draggable || (nodesDraggable && node.draggable === undefined)`。
+   * 真机上表现为「只读画布仍然拖得动节点」「手形工具按住头部把节点拖走
+   * 而不是平移」。能不能拖是整块画布的事，不是单个节点的事。
+   */
+  it("节点与白板对象都不自带 `draggable`：留给 `flow-options.nodesDraggable`", () => {
+    const whiteboard: WhiteboardDoc = {
+      ...EMPTY,
+      items: [
+        {
+          id: "abc",
+          kind: "text",
+          x: 0,
+          y: 0,
+          w: 10,
+          h: 10,
+          z: 0,
+          parentId: null,
+          style: { color: "black", size: "m" },
+          text: "",
+        },
+      ],
+    };
+    const projected = projectNodes(
+      board([node(NODE), node(GROUP, { type: "group" })]),
+      whiteboard,
+      NO_DRAFTS,
+    );
+    expect(projected).toHaveLength(3);
+    for (const flowNode of projected) {
+      expect(flowNode.draggable).toBeUndefined();
+    }
+  });
 });
 
 describe("projectEdges", () => {

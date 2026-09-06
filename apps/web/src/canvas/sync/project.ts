@@ -149,7 +149,11 @@ function projectNode(
       measured: { width: box.width, height: box.height },
       data: node,
       selected,
-      draggable: true,
+      // `draggable` **不写**：React Flow 的 `isDraggable` 是
+      // `node.draggable || (nodesDraggable && node.draggable === undefined)`，
+      // 每个节点上钉一个 `true` 会让全局的 `nodesDraggable` 永远失效——只读
+      // 画布拖得动，手形工具也拖得动节点。能不能拖是整块画布的事
+      // （`flow-options.nodesDraggable` 看归属与当前工具），不是单个节点的事。
       // 拖拽只从头部起（F02）：体内的指针事件归节点体（终端、编辑器）。
       // 分组没有节点体，整块都是把手。
       ...(isGroup ? {} : { dragHandle: NODE_DRAG_HANDLE }),
@@ -173,7 +177,7 @@ function projectItem(item: Item, selected: boolean): CanvasFlowNode {
     measured: { width: item.w, height: item.h },
     data: item,
     selected,
-    draggable: true,
+    // 同上：`draggable` 交给全局的 `nodesDraggable`。
     // 白板对象只作引用的一端（§2.3）；对象之间连线用直线 / 箭头工具。
     connectable: true,
     zIndex: item.z,
