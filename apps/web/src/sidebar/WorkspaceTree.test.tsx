@@ -261,7 +261,7 @@ describe("WorkspaceTree", () => {
     await screen.findByText("repo");
     openMenu(screen.getByLabelText("工作空间菜单"));
     fireEvent.click(
-      await screen.findByRole("menuitem", { name: "从列表移除" }),
+      await screen.findByRole("menuitem", { name: "删除" }),
     );
 
     expect(deleteWorkspace).not.toHaveBeenCalled();

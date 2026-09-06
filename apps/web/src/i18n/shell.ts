@@ -22,8 +22,7 @@ export const shell: MessageModule = {
     "tab.close": "关闭",
 
     "tree.menu": "工作空间菜单",
-    "tree.newBoard": "新建看板",
-    "tree.close": "关闭",
+    "tree.delete": "删除",
 
     "dock.add": "新建",
     "dock.undo": "撤销",
@@ -46,6 +45,8 @@ export const shell: MessageModule = {
     "sidebar.newBoard": "新建看板",
     "sidebar.boardDefaultName": "看板 {index}",
     "sidebar.pinned": "置顶",
+    "sidebar.pin": "置顶",
+    "sidebar.unpin": "取消置顶",
     "sidebar.projects": "项目",
     "sidebar.addProject": "添加项目",
     "sidebar.boardPin": "置顶",
@@ -100,8 +101,7 @@ export const shell: MessageModule = {
     "tab.close": "Close",
 
     "tree.menu": "Workspace menu",
-    "tree.newBoard": "New board",
-    "tree.close": "Close",
+    "tree.delete": "Delete",
 
     "dock.add": "New",
     "dock.undo": "Undo",
@@ -124,6 +124,8 @@ export const shell: MessageModule = {
     "sidebar.newBoard": "New board",
     "sidebar.boardDefaultName": "Board {index}",
     "sidebar.pinned": "Pinned",
+    "sidebar.pin": "Pin",
+    "sidebar.unpin": "Unpin",
     "sidebar.projects": "Projects",
     "sidebar.addProject": "Add project",
     "sidebar.boardPin": "Pin",

@@ -37,6 +37,7 @@ const OPEN_WORKSPACES_KEY = "armadra.openWorkspaces";
 const COLLAPSED_WORKSPACES_KEY = "armadra.collapsedWorkspaces";
 /** 侧栏「置顶」组里的看板 id（§26）。 */
 const PINNED_BOARDS_KEY = "armadra.pinnedBoards";
+const PINNED_WORKSPACES_KEY = "armadra.pinnedWorkspaces";
 const DISABLED_AGENTS_KEY = "armadra.disabledAgents";
 /** 每个 Agent 的三态（默认 / 启用 / 禁用），§24.1 Agent 页。 */
 const AGENT_MODES_KEY = "armadra.agentModes";
@@ -421,6 +422,8 @@ export interface PreferencesState {
   collapsedWorkspaceIds: string[];
   /** 「置顶」组里的看板 id，顺序即置顶顺序（§26）。 */
   pinnedBoardIds: string[];
+  /** 置顶的项目（工作空间）id：在「项目」组里排到最前面。 */
+  pinnedWorkspaceIds: string[];
   /**
    * 每个 Agent 的三态（§24.1）。没有条目就是 `default`。
    * Runtime 侧还没有对应的持久化端点，先存在本地。
@@ -464,6 +467,7 @@ export interface PreferencesState {
   closeWorkspaceTab: (workspaceId: string) => void;
   setWorkspaceCollapsed: (workspaceId: string, collapsed: boolean) => void;
   setBoardPinned: (boardId: string, pinned: boolean) => void;
+  setWorkspacePinned: (workspaceId: string, pinned: boolean) => void;
   setAgentMode: (agentId: string, mode: AgentMode) => void;
   setLaunchOverride: (agentId: string, program: string) => void;
   setDefaultAgentId: (agentId: string | null) => void;
@@ -535,6 +539,7 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
   openWorkspaceIds: storedIds(OPEN_WORKSPACES_KEY),
   collapsedWorkspaceIds: storedIds(COLLAPSED_WORKSPACES_KEY),
   pinnedBoardIds: storedIds(PINNED_BOARDS_KEY),
+  pinnedWorkspaceIds: storedIds(PINNED_WORKSPACES_KEY),
   agentModes: storedAgentModes(),
   launchOverrides: storedRecord(LAUNCH_OVERRIDES_KEY),
   defaultAgentId: readStored(DEFAULT_AGENT_KEY),
@@ -605,6 +610,17 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
         JSON.stringify(collapsedWorkspaceIds),
       );
       return { collapsedWorkspaceIds };
+    });
+  },
+  setWorkspacePinned(workspaceId, pinned) {
+    set((state) => {
+      const has = state.pinnedWorkspaceIds.includes(workspaceId);
+      if (has === pinned) return state;
+      const pinnedWorkspaceIds = pinned
+        ? [...state.pinnedWorkspaceIds, workspaceId]
+        : state.pinnedWorkspaceIds.filter((id) => id !== workspaceId);
+      writeStored(PINNED_WORKSPACES_KEY, JSON.stringify(pinnedWorkspaceIds));
+      return { pinnedWorkspaceIds };
     });
   },
   setBoardPinned(boardId, pinned) {

@@ -23,7 +23,6 @@ import { isAttention } from "../agent/status-store";
 import { useSessions } from "../agent/sessions";
 import { useT, usePreferencesStore } from "../app/preferences-store";
 import {
-  useCloseWorkspace,
   useOpenFolder,
   useOpenWorkspace,
 } from "../app/workspace-actions";
@@ -75,6 +74,12 @@ export function WorkspaceTree() {
   );
   const pinnedBoardIds = usePreferencesStore((state) => state.pinnedBoardIds);
   const setBoardPinned = usePreferencesStore((state) => state.setBoardPinned);
+  const pinnedWorkspaceIds = usePreferencesStore(
+    (state) => state.pinnedWorkspaceIds,
+  );
+  const setWorkspacePinned = usePreferencesStore(
+    (state) => state.setWorkspacePinned,
+  );
   const openWorkspace = useOpenWorkspace();
 
   /** 跨工作空间切板：先换工作空间，等它的看板列表到位再选中目标。 */
@@ -97,8 +102,12 @@ export function WorkspaceTree() {
           ({ ...workspace, boards: [] } as WorkspaceSummary),
       );
     }
+    // 置顶的项目排到最前面，其余保持打开顺序（稳定排序）。
+    const rank = (item: WorkspaceSummary) =>
+      pinnedWorkspaceIds.includes(item.id) ? 0 : 1;
+    list.sort((a, b) => rank(a) - rank(b));
     return list;
-  }, [openWorkspaceIds, workspace, workspaces.data]);
+  }, [openWorkspaceIds, workspace, workspaces.data, pinnedWorkspaceIds]);
 
   useEffect(() => {
     if (!pending) return;
@@ -193,10 +202,14 @@ export function WorkspaceTree() {
                   activeBoardId={summary.id === workspace?.id ? boardId : null}
                   signals={signals}
                   pinnedBoardIds={pinnedBoardIds}
+                  pinned={pinnedWorkspaceIds.includes(summary.id)}
                   collapsed={collapsedIds.includes(summary.id)}
                   onToggle={(next) => setCollapsed(summary.id, next)}
                   onSelectBoard={(id) => openBoard(summary.id, id)}
                   onTogglePin={(id, next) => setBoardPinned(id, next)}
+                  onTogglePinWorkspace={(next) =>
+                    setWorkspacePinned(summary.id, next)
+                  }
                 />
               ))}
             </ul>
@@ -346,10 +359,12 @@ function WorkspaceRow({
   activeBoardId,
   signals,
   pinnedBoardIds,
+  pinned,
   collapsed,
   onToggle,
   onSelectBoard,
   onTogglePin,
+  onTogglePinWorkspace,
 }: {
   summary: WorkspaceSummary;
   active: boolean;
@@ -357,18 +372,19 @@ function WorkspaceRow({
   activeBoardId: string | null;
   signals: Record<string, BoardSignal>;
   pinnedBoardIds: string[];
+  pinned: boolean;
   collapsed: boolean;
   onToggle: (collapsed: boolean) => void;
   onSelectBoard: (boardId: string) => void;
   onTogglePin: (boardId: string, pinned: boolean) => void;
+  onTogglePinWorkspace: (pinned: boolean) => void;
 }) {
   const t = useT();
   const storeBoards = useCanvasStore((state) => state.boards);
   const boardId = useCanvasStore((state) => state.boardId);
   const selectBoard = useCanvasStore((state) => state.selectBoard);
-  const closeWorkspace = useCloseWorkspace();
   const removeWorkspace = useRemoveWorkspace();
-  const { create, remove } = useBoardMutations(summary.id);
+  const { remove } = useBoardMutations(summary.id);
 
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [expandedAll, setExpandedAll] = useState(false);
@@ -376,16 +392,6 @@ function WorkspaceRow({
   const visible = visibleBoards(boards, expandedAll, activeBoardId);
   const canDelete = boards.length > 1;
 
-  const createBoard = () => {
-    if (create.isPending) return;
-    onToggle(false);
-    const name = nextBoardName(boards, (index) =>
-      t("sidebar.boardDefaultName", { index }),
-    );
-    create.mutate(name, {
-      onSuccess: (board) => onSelectBoard(board.id),
-    });
-  };
 
   const deleteBoard = (id: string) => {
     remove.mutate(id, {
@@ -422,15 +428,11 @@ function WorkspaceRow({
             </IconButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="z-[var(--z-menu)]">
-            <DropdownMenuItem onSelect={createBoard}>
-              {t("tree.newBoard")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => closeWorkspace(summary.id)}>
-              {t("tree.close")}
+            <DropdownMenuItem onSelect={() => onTogglePinWorkspace(!pinned)}>
+              {pinned ? t("sidebar.unpin") : t("sidebar.pin")}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setConfirmRemove(true)}>
-              {t("launcher.remove")}
+              {t("tree.delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
