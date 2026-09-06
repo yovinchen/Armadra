@@ -14,13 +14,8 @@ import { toast } from "sonner";
 import {
   ChevronLeft,
   ChevronRight,
-  FileDiff,
-  ListFilter,
   GitBranch,
-  Minus,
-  Plus,
   RotateCw,
-  Undo2,
   X,
 } from "lucide-react";
 import type {
@@ -30,31 +25,28 @@ import type {
   GitRestoreSource,
 } from "@armadra/shared";
 
-type DiffFileStatus = GitFileStatus["status"];
-
 import { runtimeApi } from "../api/client";
 import { useT } from "../app/preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
 import { useCompactLayout } from "../platform/layout";
 import { cn } from "../lib/cn";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "../ui/alert-dialog";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { IconButton } from "../ui/icon-button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Sheet, SheetContent, SheetTitle } from "../ui/sheet";
 import { ExecutionHostBadge } from "./ExecutionHostBadge";
-import { Textarea } from "../ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import {
+  ChangeSection,
+  type ChangeActions,
+  type ChangeEntry as Row,
+} from "./git/ChangeList";
+import { CommitComposer } from "./git/CommitComposer";
+import {
+  SourceControlDialogs,
+  type RestoreTarget,
+} from "./git/SourceControlDialogs";
 import {
   GitRepositoryPanel,
   type RepositoryTab,
@@ -70,14 +62,6 @@ import { currentViewportCenter } from "./viewport";
 import { ChangesHunks } from "./git/ChangesHunks";
 import { invalidateGitQueries } from "./git/queries";
 import { CommitMessageAssistant } from "./git/CommitMessageAssistant";
-
-const STATUS_COLOR: Record<DiffFileStatus, string> = {
-  M: "var(--warn)",
-  A: "var(--success)",
-  D: "var(--danger)",
-  R: "var(--brand)",
-  "?": "var(--muted-foreground)",
-};
 
 /** 提交框的 ⌘⏎：壳的快捷键处理器发这个窗口事件，抽屉自己听。 */
 export const SCM_COMMIT_EVENT = "armadra:scm-commit";
@@ -120,12 +104,7 @@ export function SourceControlDrawer() {
   const t = useT();
 
   const [message, setMessage] = useState("");
-  const [restore, setRestore] = useState<{
-    path: string;
-    untracked: boolean;
-    /** 这个路径属于哪个仓库；聚合视图里每一行各自记住。 */
-    repository: string;
-  } | null>(null);
+  const [restore, setRestore] = useState<RestoreTarget | null>(null);
   const [confirmInit, setConfirmInit] = useState(false);
   const [amend, setAmend] = useState(false);
   const [acknowledgePublished, setAcknowledgePublished] = useState(false);
@@ -289,10 +268,6 @@ export function SourceControlDrawer() {
     onError: fail,
   });
 
-  type Row = GitFileStatus & {
-    repositoryPath?: string;
-    repositoryName?: string;
-  };
   const files = useMemo<Row[]>(
     () => (aggregate ? (everything.data ?? []) : (status.data?.files ?? [])),
     [aggregate, everything.data, status.data],
@@ -347,100 +322,28 @@ export function SourceControlDrawer() {
     setPanel("scm", "closed");
   };
 
-  const row = (
-    file: GitFileStatus & { repositoryPath?: string; repositoryName?: string },
-    scope: DiffScope,
-  ) => {
-    const repository = file.repositoryPath ?? repositoryPath;
-    return (
-      <div
-        key={`${repository}:${scope}:${file.path}`}
-        className="group flex h-8 items-center gap-2 rounded-md px-2 hover:bg-muted"
-      >
-        <Badge
-          variant="ghost"
-          className="h-4 w-4 shrink-0 justify-center p-0 font-mono text-[length:var(--text-caption)]"
-          style={{ color: STATUS_COLOR[file.status] }}
-          title={t(`explorer.status.${file.status}`)}
-        >
-          {file.status}
-        </Badge>
-        {/* 聚合视图里同名文件可能来自不同仓库，行上必须写清是哪一个。 */}
-        {file.repositoryName && (
-          <Badge
-            variant="ghost"
-            className="h-4 shrink-0 px-1 text-[length:var(--text-caption)] text-muted-foreground"
-            title={repository}
-          >
-            {file.repositoryName}
-          </Badge>
-        )}
-        <span
-          className="flex-1 truncate text-[13px]"
-          title={`${repository === "." ? "" : `${repository}/`}${file.path}`}
-        >
-          {file.path}
-        </span>
-        <div className="flex items-center gap-0.5">
-          <IconButton
-            label={t("gitHunk.title")}
-            onClick={() => {
-              if (!workspaceId) return;
-              setTab("changes");
-              setDrilled(true);
-              setHunk({ workspaceId, file: file.path, scope });
-            }}
-          >
-            <ListFilter />
-          </IconButton>
-          <IconButton
-            label={t("scm.diff")}
-            onClick={() => openDiff(file.path, scope, repository)}
-          >
-            <FileDiff />
-          </IconButton>
-          {scope === "staged" ? (
-            <IconButton
-              label={t("scm.unstage")}
-              onClick={() => unstage.mutate({ path: file.path, repository })}
-            >
-              <Minus />
-            </IconButton>
-          ) : (
-            <IconButton
-              label={t("scm.stage")}
-              onClick={() => stage.mutate({ path: file.path, repository })}
-            >
-              <Plus />
-            </IconButton>
-          )}
-          <IconButton
-            label={t("scm.restore")}
-            onClick={() =>
-              setRestore({
-                path: file.path,
-                untracked: file.status === "?",
-                repository,
-              })
-            }
-          >
-            <Undo2 />
-          </IconButton>
-        </div>
-      </div>
-    );
+  const changeActions: ChangeActions = {
+    repositoryPath,
+    onHunk: (path, scope) => {
+      if (!workspaceId) return;
+      setTab("changes");
+      setDrilled(true);
+      setHunk({ workspaceId, file: path, scope });
+    },
+    onDiff: openDiff,
+    onStage: stage.mutate,
+    onUnstage: unstage.mutate,
+    onRestore: setRestore,
   };
 
-  const section = (label: string, rows: Row[], scope: DiffScope) =>
-    rows.length === 0 ? null : (
-      <section className="px-2 py-1">
-        <h3 className="px-2 py-1 text-[11px] font-semibold tracking-wide text-muted-foreground">
-          {label}
-          <span className="ml-1 tabular-nums">{rows.length}</span>
-        </h3>
-        {rows.map((file) => row(file, scope))}
-      </section>
-    );
+  const section = (label: string, rows: Row[], scope: DiffScope) => (
+    <ChangeSection
+      label={label}
+      rows={rows}
+      scope={scope}
+      actions={changeActions}
+    />
+  );
 
   return (
     <>
@@ -694,74 +597,20 @@ export function SourceControlDrawer() {
                 )}
               </ScrollArea>
 
-              <div
-                className={cn(
-                  "flex shrink-0 flex-col gap-2 border-t border-border p-3",
-                  compact && hunk && "hidden",
-                )}
-              >
-                <Textarea
-                  value={message}
-                  onChange={(event) => setMessage(event.target.value)}
-                  placeholder={t("scm.message")}
-                  aria-label={t("scm.message")}
-                  className="min-h-[64px] resize-none"
-                />
-                {head && (
-                  <div className="space-y-1 text-xs">
-                    <label className="flex min-h-8 items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-[var(--brand)]"
-                        checked={amend}
-                        disabled={!amendable}
-                        onChange={(event) => toggleAmend(event.target.checked)}
-                      />
-                      {t("scm.amend")}
-                    </label>
-                    {amend && (
-                      <>
-                        <p className="break-words text-muted-foreground">
-                          {t("scm.amendTarget")}:{" "}
-                          <span className="font-mono">
-                            {head.oid.slice(0, 10)}
-                          </span>{" "}
-                          {head.subject}
-                        </p>
-                        <p className="text-muted-foreground">
-                          {t("scm.amendSafety")}
-                        </p>
-                      </>
-                    )}
-                    {!amendable && (
-                      <p className="text-muted-foreground">
-                        {t("scm.amendUnavailable")}
-                      </p>
-                    )}
-                    {amend && head.published && (
-                      <label className="flex min-h-8 items-center gap-2 rounded-md border border-destructive p-2">
-                        <input
-                          type="checkbox"
-                          className="size-4 accent-[var(--brand)]"
-                          checked={acknowledgePublished}
-                          onChange={(event) =>
-                            setAcknowledgePublished(event.target.checked)
-                          }
-                        />
-                        {t("scm.amendPublished")}
-                      </label>
-                    )}
-                  </div>
-                )}
-                <Button
-                  className="self-end"
-                  size="sm"
-                  disabled={!canCommit}
-                  onClick={() => commit.mutate(message.trim())}
-                >
-                  {t(amend ? "scm.amendCommit" : "scm.commit")}
-                </Button>
-              </div>
+              <CommitComposer
+                message={message}
+                setMessage={setMessage}
+                head={head}
+                amend={amend}
+                amendable={amendable}
+                toggleAmend={toggleAmend}
+                acknowledgePublished={acknowledgePublished}
+                setAcknowledgePublished={setAcknowledgePublished}
+                canCommit={canCommit}
+                commit={commit.mutate}
+                compact={compact}
+                hunkOpen={Boolean(hunk)}
+              />
             </TabsContent>
             {(
               [
@@ -793,98 +642,14 @@ export function SourceControlDrawer() {
         </SheetContent>
       </Sheet>
 
-      <AlertDialog
-        open={confirmInit}
-        onOpenChange={(next) => {
-          if (!next) setConfirmInit(false);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("scm.initTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("scm.initDescription")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("scm.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                setConfirmInit(false);
-                init.mutate();
-              }}
-            >
-              {t("scm.initConfirm")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/*
-       * Restoring from the index and restoring from HEAD lose different work,
-       * so they are two labelled actions rather than one “revert” whose
-       * effect the user has to guess.
-       */}
-      <AlertDialog
-        open={restore !== null}
-        onOpenChange={(next) => {
-          if (!next) setRestore(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("scm.revertTitle", { path: restore?.path ?? "" })}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {t(
-                restore?.untracked
-                  ? "scm.restoreUntracked"
-                  : "scm.restoreDescription",
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("scm.cancel")}</AlertDialogCancel>
-            {restore?.untracked ? (
-              <AlertDialogAction
-                onClick={() => {
-                  if (restore)
-                    revert.mutate({
-                      path: restore.path,
-                      source: "index",
-                      repository: restore.repository,
-                    });
-                  setRestore(null);
-                }}
-              >
-                {t("scm.restoreDelete")}
-              </AlertDialogAction>
-            ) : (
-              (["index", "head"] as const).map((source) => (
-                <AlertDialogAction
-                  key={source}
-                  onClick={() => {
-                    if (restore)
-                      revert.mutate({
-                        path: restore.path,
-                        source,
-                        repository: restore.repository,
-                      });
-                    setRestore(null);
-                  }}
-                >
-                  {t(
-                    source === "index"
-                      ? "scm.restoreFromIndex"
-                      : "scm.restoreFromHead",
-                  )}
-                </AlertDialogAction>
-              ))
-            )}
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <SourceControlDialogs
+        confirmInit={confirmInit}
+        setConfirmInit={setConfirmInit}
+        init={init.mutate}
+        restore={restore}
+        setRestore={setRestore}
+        revert={revert.mutate}
+      />
     </>
   );
 }
