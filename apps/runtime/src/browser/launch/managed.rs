@@ -16,6 +16,25 @@
 //!   says the managed browser is unavailable here — it does not fall back to
 //!   downloading something else.
 //!
+//! ## Where the digest comes from
+//!
+//! Chrome for Testing publishes none. Its JSON endpoints give a version and a
+//! URL per platform and nothing else; there is no sibling `.sha256`, and the
+//! only checksums on the wire are the storage layer's own `x-goog-hash`, which
+//! arrives from the same host as the bytes and so proves nothing that host
+//! could not also forge. A digest therefore has to be *observed* once and then
+//! held to.
+//!
+//! There are two ways to observe one, and both end at the same check.
+//! `tools/browser-manifest.mjs` does it on a machine with network access and
+//! writes the result into the build-pinned manifest — that is the strong form,
+//! because the digest is then reviewed and shipped. For a platform nobody has
+//! run that on, [`install`] does it on first download and records the result
+//! in `<data_dir>/browser-managed/pinned.json`; every later install on that
+//! machine is checked against it. Trust on first use is weaker than a reviewed
+//! digest and is not pretended otherwise, but it is strictly better than the
+//! alternative this replaces, which was to install nothing at all.
+//!
 //! ## The chain a byte has to pass
 //!
 //! download → sha256 over the whole file → extract to a private staging
@@ -42,9 +61,12 @@ const EMBEDDED: &str = include_str!("../../../browser-manifest.json");
 /// from a local listener; it reads a file, it never fetches one.
 const MANIFEST_OVERRIDE: &str = "ARMADRA_BROWSER_MANIFEST";
 
-/// The download half is off unless this is set. Design §2.1 wants an install
-/// button; until a build ships digests it has verified, the honest state is
-/// "this build cannot install one", and that is what `download_disabled` says.
+/// The download half is off unless this is set, and stays off by default even
+/// now that the manifest carries a verified digest for one platform. Two
+/// reasons, neither of them about trust: it is ~180 MB, and on a platform
+/// nobody has pinned yet the first install is trust on first use, which is a
+/// decision a person should make rather than one a default should make for
+/// them. A build with it off answers `download_disabled` and says so.
 const DOWNLOAD_SWITCH: &str = "ARMADRA_BROWSER_MANAGED_DOWNLOAD";
 
 /// Refuse an archive larger than this before writing any of it.
@@ -65,8 +87,14 @@ pub struct Manifest {
 pub struct ManifestTarget {
     pub url: String,
     /// Lowercase hex over the whole archive, checked before anything is
-    /// unpacked.
+    /// unpacked. Empty means nobody has run `tools/browser-manifest.mjs` on
+    /// this platform yet, so the first download pins it instead (see [`Pins`]).
+    #[serde(default)]
     pub sha256: String,
+    /// The archive's size, or zero when it is unknown for the same reason the
+    /// digest is. A known size is checked first because it is the cheap half
+    /// of the same statement.
+    #[serde(default)]
     pub bytes: u64,
     /// Where the browser lives inside the extracted archive.
     pub executable: String,
@@ -192,6 +220,73 @@ impl Progress {
     }
 }
 
+/* ------------------------------ trust on first use ------------------------ */
+
+/// One digest this machine observed for one archive, kept so the *second*
+/// download of it has something to be checked against.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Pin {
+    pub sha256: String,
+    pub bytes: u64,
+    /// The URL the bytes came from. A pin only speaks for the archive it saw:
+    /// if the manifest later points the same version somewhere else, that is
+    /// not a digest this machine has ever verified, and saying so is more
+    /// useful than silently accepting whatever the new URL serves.
+    pub url: String,
+    pub pinned_at: String,
+}
+
+/// `<data_dir>/browser-managed/pinned.json` — digests this machine observed,
+/// keyed by `<version>-<os>-<arch>`.
+///
+/// Deliberately not a database row: it has to be readable by a person who is
+/// asking "what did this machine actually install", and it has to survive the
+/// data directory being copied to another machine, where it goes on meaning
+/// the same thing.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Pins(BTreeMap<String, Pin>);
+
+impl Pins {
+    fn path(data_dir: &Path) -> PathBuf {
+        root(data_dir).join("pinned.json")
+    }
+
+    /// Reads the file. A file that cannot be parsed is treated as empty on
+    /// purpose: the consequence is one extra trust-on-first-use, and the
+    /// alternative — refusing to install until somebody deletes a JSON file —
+    /// buys nothing, because an attacker who can rewrite it can also delete it.
+    pub fn load(data_dir: &Path) -> Self {
+        std::fs::read_to_string(Self::path(data_dir))
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn get(&self, key: &str) -> Option<&Pin> {
+        self.0.get(key)
+    }
+
+    pub fn record(data_dir: &Path, key: &str, pin: Pin) {
+        let mut pins = Self::load(data_dir);
+        pins.0.insert(key.to_owned(), pin);
+        let Ok(text) = serde_json::to_string_pretty(&pins) else {
+            return;
+        };
+        if std::fs::create_dir_all(root(data_dir)).is_err() {
+            return;
+        }
+        let _ = std::fs::write(Self::path(data_dir), format!("{text}\n"));
+    }
+}
+
+/// `<version>-<os>-<arch>`, matching the install directory's name so the two
+/// can be read side by side.
+pub fn pin_key(version: &str) -> String {
+    format!("{version}-{}", target_key())
+}
+
 pub fn root(data_dir: &Path) -> PathBuf {
     data_dir.join("browser-managed")
 }
@@ -275,6 +370,27 @@ pub async fn install(
         progress.set(ManagedState::failed(&version, "archive_too_large"));
         return Err("archive_too_large".into());
     }
+    // What this download will be checked against, and where that came from.
+    // A build-pinned digest is the strong answer and wins outright; a digest
+    // this machine pinned earlier is the trust-on-first-use answer; `None` is
+    // the first use itself.
+    let key = pin_key(&version);
+    let pinned = Pins::load(data_dir);
+    let expected = if !target.sha256.is_empty() {
+        Some(target.sha256.clone())
+    } else {
+        match pinned.get(&key) {
+            Some(pin) if pin.url == target.url => Some(pin.sha256.clone()),
+            Some(_) => {
+                // Same version, different archive, and this machine has
+                // already trusted one of them. Nothing here can tell which is
+                // the real one, so it says so instead of picking.
+                progress.set(ManagedState::failed(&version, "pin_url_changed"));
+                return Err("pin_url_changed".into());
+            }
+            None => None,
+        }
+    };
     progress.set(ManagedState {
         state: "downloading".into(),
         version: version.clone(),
@@ -285,13 +401,13 @@ pub async fn install(
 
     let scratch = Scratch::new(&root(data_dir))?;
     let archive = scratch.path.join("archive");
-    match fetch(target, &archive, progress).await {
-        Ok(()) => {}
+    let observed = match fetch(target, expected.as_deref(), &archive, progress).await {
+        Ok(observed) => observed,
         Err(reason) => {
             progress.set(ManagedState::failed(&version, &reason));
             return Err(reason);
         }
-    }
+    };
 
     progress.set(ManagedState {
         state: "verifying".into(),
@@ -321,6 +437,21 @@ pub async fn install(
     })();
     match result {
         Ok(path) => {
+            // Pinned only now, and only for a first use: an archive that
+            // failed the layout or the signature check is not one to hold this
+            // machine to for every install after it.
+            if expected.is_none() {
+                Pins::record(
+                    data_dir,
+                    &key,
+                    Pin {
+                        sha256: observed.sha256,
+                        bytes: observed.bytes,
+                        url: target.url.clone(),
+                        pinned_at: chrono::Utc::now().to_rfc3339(),
+                    },
+                );
+            }
             progress.set(state(data_dir, manifest));
             Ok(path)
         }
@@ -363,10 +494,24 @@ impl Drop for Scratch {
     }
 }
 
-/// Streams the archive to disk and refuses it unless the whole file hashes to
-/// the manifest's digest. The hash covers the bytes that were written, not the
-/// bytes that were promised.
-async fn fetch(target: &ManifestTarget, into: &Path, progress: &Progress) -> Result<(), String> {
+/// What one download turned out to be.
+struct Observed {
+    sha256: String,
+    bytes: u64,
+}
+
+/// Streams the archive to disk, hashing as it goes.
+///
+/// `expected` is the digest this download has to match; `None` is the first
+/// use of an archive nobody has pinned, and the digest is returned so the
+/// caller can pin it once the rest of the chain has passed. The hash covers
+/// the bytes that were written, never the bytes that were promised.
+async fn fetch(
+    target: &ManifestTarget,
+    expected: Option<&str>,
+    into: &Path,
+    progress: &Progress,
+) -> Result<Observed, String> {
     let response = reqwest::Client::new()
         .get(&target.url)
         .send()
@@ -390,7 +535,10 @@ async fn fetch(target: &ManifestTarget, into: &Path, progress: &Progress) -> Res
         progress.received(received);
     }
     drop(file);
-    if received != target.bytes {
+    // A known size is the cheap half of the digest, so it is checked first and
+    // reported the same way. Zero means the size is unknown for the same
+    // reason the digest is, and there is nothing to compare.
+    if target.bytes != 0 && received != target.bytes {
         return Err("sha256_mismatch".into());
     }
     let digest = hasher.finalize();
@@ -399,10 +547,15 @@ async fn fetch(target: &ManifestTarget, into: &Path, progress: &Progress) -> Res
         let _ = write!(text, "{byte:02x}");
         text
     });
-    if !actual.eq_ignore_ascii_case(&target.sha256) {
+    if let Some(expected) = expected
+        && !actual.eq_ignore_ascii_case(expected)
+    {
         return Err("sha256_mismatch".into());
     }
-    Ok(())
+    Ok(Observed {
+        sha256: actual,
+        bytes: received,
+    })
 }
 
 /// Unpacks a zip into `into`. Entry names are checked rather than trusted: an

@@ -20,6 +20,7 @@
     "protocol:check": "node tools/protocol.mjs check",
     "protocol:test": "node tools/protocol.mjs test",
     "protocol:fixtures": "node tools/protocol.mjs fixtures",
+    "browser:manifest": "node tools/browser-manifest.mjs",
     "repo:check": "node tools/repo-check.mjs",
     "repo:test": "node --test tools/repo-check.test.mjs",
     "ci:workflows": "node tools/ci/validate-workflows.mjs",

@@ -10,24 +10,45 @@ use std::io::Write;
 
 use super::support::*;
 
-use crate::browser::launch::managed::{self, Manifest, Progress};
+use crate::browser::launch::managed::{self, Manifest, Pin, Pins, Progress};
 
-/// The manifest that ships in the repository names no target, because no
-/// digest here has been checked against a real download. Every platform is
-/// therefore told the managed browser is unavailable — which is the honest
-/// answer, and the one the panel renders instead of a button that would fail.
+/// Every digest in the shipped manifest is one somebody observed by running
+/// `tools/browser-manifest.mjs` on that platform — Chrome for Testing
+/// publishes none — so an entry either carries a real 64-hex digest or is
+/// absent. A guessed one would fail every install with `sha256_mismatch`,
+/// which is worse than the platform simply not being pinned yet.
 #[test]
-fn the_shipped_manifest_declares_no_target_rather_than_a_guessed_digest() {
+fn the_shipped_manifest_carries_observed_digests_and_no_guessed_ones() {
     let manifest = Manifest::current().expect("the built-in manifest must parse");
-    assert!(
-        manifest.target().is_none(),
-        "a shipped digest would have to have been verified against a real download"
-    );
+    for (key, target) in &manifest.targets {
+        assert!(
+            target.sha256.len() == 64 && target.sha256.chars().all(|c| c.is_ascii_hexdigit()),
+            "{key} has a digest that did not come from a real download"
+        );
+        assert!(target.bytes > 0, "{key} pins a digest but not a size");
+        assert!(
+            target.url.starts_with("https://"),
+            "{key} would be fetched over something other than https"
+        );
+    }
     let directory = tempfile::tempdir().unwrap();
     let state = managed::state(directory.path(), &manifest);
-    assert_eq!(state.state, "failed");
-    assert_eq!(state.reason_code, "manifest_missing_target");
-    assert!(!state.supported);
+    match manifest.target() {
+        // This platform is pinned: nothing is installed yet, and the panel
+        // offers the install rather than an explanation.
+        Some(target) => {
+            assert_eq!(state.state, "absent");
+            assert!(state.supported);
+            assert_eq!(state.total_bytes, target.bytes);
+        }
+        // A platform nobody has run the script on says so, and does not fall
+        // back to downloading something else.
+        None => {
+            assert_eq!(state.state, "failed");
+            assert_eq!(state.reason_code, "manifest_missing_target");
+            assert!(!state.supported);
+        }
+    }
     assert!(managed::installed(directory.path(), &manifest).is_none());
 }
 
@@ -116,6 +137,100 @@ async fn an_install_refuses_a_manifest_it_cannot_verify() {
     }
 }
 
+/// A platform the manifest cannot pin still ends up with a digest — just a
+/// weaker one. The first download is trusted and recorded; every one after it
+/// is checked against what the first saw, so an archive that changed under the
+/// same version and URL is refused (§2.1).
+#[tokio::test]
+async fn an_unpinned_target_is_trusted_once_and_held_to_it_afterwards() {
+    let directory = tempfile::tempdir().unwrap();
+    let data_dir = directory.path().join("data");
+    std::fs::create_dir_all(&data_dir).unwrap();
+
+    let archive = build_archive(directory.path());
+    let digest = sha256_of(&archive);
+    let bytes = std::fs::metadata(&archive).unwrap().len();
+    let serving = serve_archive(archive.clone()).await;
+    // No digest and no size: what a manifest entry looks like on a platform
+    // nobody has run `tools/browser-manifest.mjs` on.
+    let blank = manifest_from(&unpinned_json(&serving.url()));
+    let key = managed::pin_key("1.2.3");
+    assert!(Pins::load(&data_dir).get(&key).is_none());
+
+    let progress = Progress::default();
+    let first = managed::install(&data_dir, &blank, true, &progress).await;
+    if cfg!(target_os = "macos") {
+        // macOS still asks `codesign`, and an archive this test built is not
+        // signed. What matters here is what did *not* happen: a failed install
+        // pins nothing, so the next attempt is still a first use.
+        assert_eq!(first.unwrap_err(), "signature_invalid");
+        assert!(
+            Pins::load(&data_dir).get(&key).is_none(),
+            "an archive that failed the chain is not what this machine is held to"
+        );
+        return;
+    }
+
+    first.expect("a first download is trusted");
+    let pin = Pins::load(&data_dir).get(&key).cloned().expect("pinned");
+    assert_eq!(pin.sha256, digest);
+    assert_eq!(pin.bytes, bytes);
+    assert_eq!(pin.url, serving.url());
+
+    // Same URL, different bytes. The manifest never had an opinion; the pin is
+    // the whole reason this is caught at all.
+    std::fs::remove_dir_all(managed::install_dir(&data_dir, "1.2.3")).unwrap();
+    let tampered = directory.path().join("tampered.zip");
+    std::fs::copy(&archive, &tampered).unwrap();
+    {
+        use std::io::Write as _;
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&tampered)
+            .unwrap();
+        file.write_all(b"extra").unwrap();
+    }
+    serving.serve(tampered);
+    let progress = Progress::default();
+    assert_eq!(
+        managed::install(&data_dir, &blank, true, &progress)
+            .await
+            .unwrap_err(),
+        "sha256_mismatch"
+    );
+    assert_eq!(progress.snapshot().reason_code, "sha256_mismatch");
+}
+
+/// The same version served from somewhere else is not an archive this machine
+/// has ever verified, so it says so rather than granting a second first use.
+#[tokio::test]
+async fn a_pinned_version_pointed_at_a_new_url_is_refused() {
+    let directory = tempfile::tempdir().unwrap();
+    let data_dir = directory.path().join("data");
+    std::fs::create_dir_all(&data_dir).unwrap();
+    let blank = manifest_from(&unpinned_json("http://127.0.0.1:1/other.zip"));
+
+    Pins::record(
+        &data_dir,
+        &managed::pin_key("1.2.3"),
+        Pin {
+            sha256: "c".repeat(64),
+            bytes: 4,
+            url: "http://127.0.0.1:2/browser.zip".into(),
+            pinned_at: "2026-09-07T00:00:00Z".into(),
+        },
+    );
+    let progress = Progress::default();
+    assert_eq!(
+        managed::install(&data_dir, &blank, true, &progress)
+            .await
+            .unwrap_err(),
+        "pin_url_changed",
+        "nothing here can tell which of the two archives is the real one"
+    );
+    assert_eq!(progress.snapshot().reason_code, "pin_url_changed");
+}
+
 /// An installed managed browser is chosen over whatever the machine happens to
 /// have: it is the pinned build this module's CDP adaptation was written
 /// against, and the system Chrome updates itself on its own schedule (§2.1).
@@ -197,6 +312,21 @@ fn sha256_of(path: &std::path::Path) -> String {
         .collect()
 }
 
+/// A manifest entry for a platform nobody has pinned: a URL and a layout, and
+/// nothing yet to check the bytes against.
+fn unpinned_json(url: &str) -> String {
+    serde_json::json!({
+        "version": "1.2.3",
+        "targets": {
+            managed::target_key(): {
+                "url": url,
+                "executable": "chrome-test/browser",
+            }
+        }
+    })
+    .to_string()
+}
+
 fn manifest_json(url: &str, sha256: &str, bytes: u64) -> String {
     serde_json::json!({
         "version": "1.2.3",
@@ -215,11 +345,22 @@ fn manifest_json(url: &str, sha256: &str, bytes: u64) -> String {
 struct Serving {
     address: SocketAddr,
     handle: tokio::task::JoinHandle<()>,
+    /// What the one route reads. Shared rather than captured so a test can
+    /// change what the *same* URL serves, which is the only way to ask whether
+    /// a recorded digest is really what catches a swapped archive.
+    served: std::sync::Arc<std::sync::Mutex<std::path::PathBuf>>,
 }
 
 impl Serving {
     fn url(&self) -> String {
         format!("http://127.0.0.1:{}/browser.zip", self.address.port())
+    }
+
+    fn serve(&self, path: std::path::PathBuf) {
+        *self
+            .served
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = path;
     }
 }
 
@@ -232,10 +373,15 @@ impl Drop for Serving {
 /// The archive over loopback. Nothing in this suite reaches a public host, and
 /// the ports Armadra itself uses are skipped.
 async fn serve_archive(path: std::path::PathBuf) -> Serving {
+    let served = std::sync::Arc::new(std::sync::Mutex::new(path));
+    let route = served.clone();
     let router = Router::new().route(
         "/browser.zip",
         get(move || {
-            let path = path.clone();
+            let path = route
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone();
             async move { std::fs::read(path).unwrap_or_default() }
         }),
     );
@@ -250,5 +396,9 @@ async fn serve_archive(path: std::path::PathBuf) -> Serving {
     let handle = tokio::spawn(async move {
         let _ = axum::serve(listener, router).await;
     });
-    Serving { address, handle }
+    Serving {
+        address,
+        handle,
+        served,
+    }
 }
