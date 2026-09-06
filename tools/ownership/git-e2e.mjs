@@ -214,7 +214,11 @@ try {
       ]),
     );
 
-  for (const name of ["canvas", "settings", "filesystem"]) {
+  // Git is last in the switch order (§1.2), so every other domain has to have
+  // settled on the Host before it may move. The session and agent domains were
+  // skipped while they had no projector; now that they have one, the order
+  // enforces itself and this list is the whole of it.
+  for (const name of ["canvas", "settings", "filesystem", "session", "agent"]) {
     const moved = switchDomain(name);
     step(
       `the ${name} domain moved to the Host first, as the switch order requires`,
