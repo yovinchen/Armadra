@@ -1,0 +1,11 @@
+{
+  "capability": "remote.git.panel.v1",
+  "operation": 52,
+  "replay": "safe",
+  "request": {
+    "branch": "feature/login",
+    "repositoryId": null,
+    "worktreePath": "worktrees/feature"
+  },
+  "responseType": "git_repository::WorktreeBindingVerdict"
+}

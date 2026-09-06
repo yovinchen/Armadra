@@ -1,15 +1,12 @@
 {
   "capability": "remote.git.panel.v1",
-  "operation": 21,
+  "operation": 50,
   "replay": "safe",
   "request": {
     "cursor": null,
     "limit": 50,
     "path": ".",
-    "paths": [
-      "src"
-    ],
     "reference": "HEAD"
   },
-  "responseType": "git_repository::HistoryPage"
+  "responseType": "git_repository::ReflogPage"
 }

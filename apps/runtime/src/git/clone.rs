@@ -130,13 +130,28 @@ pub struct CloneStarted {
 /// Returns as soon as the child is running: the caller polls [`clone_status`]
 /// and creates the workspace once the job reports `Done`.
 pub fn start_clone(url: &str, parent: &str, name: Option<&str>) -> AppResult<CloneStarted> {
-    let url = validate_clone_url(url)?;
+    start_clone_from(&validate_clone_url(url)?, parent, name)
+}
+
+/// The same, for a source the caller has already decided is one it may clone.
+///
+/// The Worker channel is the only caller: it accepts a *local* directory inside
+/// the registered workspace root in addition to the remote URLs
+/// [`validate_clone_url`] allows, because there both ends of the copy are inside
+/// a root somebody registered. This entry point exists so that decision is made
+/// once, where the root is known, instead of being re-derived by loosening the
+/// allowlist for everybody.
+pub fn start_clone_from(
+    source: &str,
+    parent: &str,
+    name: Option<&str>,
+) -> AppResult<CloneStarted> {
     let name = match name.map(str::trim).filter(|name| !name.is_empty()) {
         Some(name) => valid_directory_name(name)?.to_owned(),
-        None => clone_directory_name(&url)?,
+        None => clone_directory_name(source)?,
     };
     let target = prepare_new_directory(parent, &name)?;
-    spawn_clone_job(&url, &name, target)
+    spawn_clone_job(source, &name, target)
 }
 
 /// The half that actually runs Git, split out so tests can point it at a local

@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -40,42 +43,81 @@ import (
 // process's stdin is this Host, and it writes git frames. What the directory
 // buys is the thing a person actually sees — a progress bar that moves during a
 // fetch, a push and a clone instead of a spinner that ends.
+//
+// **Private** is the operative word: one directory per Worker, not one shared
+// between them. A state directory is a Worker's own journal and outbox, and two
+// processes opening one is a contended SQLite file that fails a frame outright
+// — which `TestRealRustWorkersShareOneStateDirectoryConcurrently` demonstrates,
+// and which the queue would produce constantly, since running different
+// worktrees in parallel is the whole point of it.
 type gitExecutor struct {
 	executable string
 	hostID     string
-	// stateDir opens the durable upcall outbox. Empty means this Host takes no
-	// progress reports and every Worker runs exactly as it did before.
-	stateDir string
-	upcalls  worker.UpcallSink
-	timeout  time.Duration
+	// stateRoot is where each Worker's private state directory is made. Empty
+	// means this Host takes no progress reports and every Worker runs exactly as
+	// it did before.
+	stateRoot string
+	upcalls   worker.UpcallSink
+	timeout   time.Duration
 
 	mu sync.Mutex
 	// resident serves the clone frames. It is opened on the first clone and
 	// kept until it fails, because a clone job cannot be polled from a
 	// different process than the one that started it.
 	resident *worker.Client
-	closed   bool
+	// residentState removes that Worker's private state directory when it goes.
+	residentState func()
+	closed        bool
 }
 
 // newGitExecutor answers an untyped nil when there is no Runtime binary to run,
 // rather than a typed nil that would satisfy the interface and then fail on
 // every call. "This Host has no execution channel" is a thing the service
 // answers UNSUPPORTED for, and it has to be able to see it.
-func newGitExecutor(executable, hostID, stateDir string, upcalls worker.UpcallSink) githost.Executor {
+func newGitExecutor(executable, hostID, stateRoot string, upcalls worker.UpcallSink) githost.Executor {
 	if executable == "" {
 		return nil
 	}
-	if stateDir != "" {
-		// A state directory that cannot be made private is not used. Losing
-		// progress reports is visible and harmless; running with a directory
-		// somebody else can read is neither.
-		if err := os.MkdirAll(stateDir, 0o700); err != nil {
-			stateDir = ""
-		} else if err = storage.ProtectArtifactDirectory(stateDir); err != nil {
-			stateDir = ""
+	if stateRoot != "" {
+		// A state root that cannot be made private is not used. Losing progress
+		// reports is visible and harmless; running with a directory somebody
+		// else can read is neither.
+		if err := os.MkdirAll(stateRoot, 0o700); err != nil {
+			stateRoot = ""
+		} else if err = storage.ProtectArtifactDirectory(stateRoot); err != nil {
+			stateRoot = ""
 		}
 	}
-	return &gitExecutor{executable: executable, hostID: hostID, stateDir: stateDir, upcalls: upcalls, timeout: gitFrameTimeout}
+	return &gitExecutor{executable: executable, hostID: hostID, stateRoot: stateRoot, upcalls: upcalls, timeout: gitFrameTimeout}
+}
+
+// privateState makes one Worker's own state directory and answers the function
+// that removes it.
+//
+// An empty name is a Worker without an outbox, which is a Worker that cannot
+// report progress and is otherwise identical. That is the right failure: a
+// directory this Host could not create privately must not become a directory it
+// uses anyway, and a stalled progress bar is a smaller loss than a shared
+// journal that fails frames.
+func (g *gitExecutor) privateState() (string, func()) {
+	if g.stateRoot == "" {
+		return "", func() {}
+	}
+	name := make([]byte, 8)
+	if _, err := rand.Read(name); err != nil {
+		return "", func() {}
+	}
+	// Short on purpose: the Worker binds a Unix socket inside this directory,
+	// and that path has a hard length limit far below what a filesystem allows.
+	directory := filepath.Join(g.stateRoot, hex.EncodeToString(name))
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return "", func() {}
+	}
+	if err := storage.ProtectArtifactDirectory(directory); err != nil {
+		_ = os.RemoveAll(directory)
+		return "", func() {}
+	}
+	return directory, func() { _ = os.RemoveAll(directory) }
 }
 
 // gitFrameTimeout is the Worker transport's own ceiling for one frame, and this
@@ -95,11 +137,11 @@ const gitFrameTimeout = time.Minute
 // Worker's own clone timeout, not by this.
 const cloneFrameTimeout = 30 * time.Second
 
-func (g *gitExecutor) options(timeout time.Duration) worker.Options {
+func (g *gitExecutor) options(state string, timeout time.Duration) worker.Options {
 	return worker.Options{
 		Executable:     g.executable,
 		HostID:         g.hostID,
-		StateDir:       g.stateDir,
+		StateDir:       state,
 		RequestTimeout: timeout,
 		Upcalls:        g.upcalls,
 	}
@@ -109,7 +151,9 @@ func (g *gitExecutor) options(timeout time.Duration) worker.Options {
 // advertise the git capability is refused here rather than sent a frame it
 // would answer with an error.
 func (g *gitExecutor) with(ctx context.Context, action func(client *worker.Client) error) error {
-	client, err := worker.Start(ctx, g.options(g.timeout))
+	state, discard := g.privateState()
+	defer discard()
+	client, err := worker.Start(ctx, g.options(state, g.timeout))
 	if err != nil {
 		return err
 	}
@@ -153,32 +197,40 @@ func (g *gitExecutor) residentClient(ctx context.Context) (*worker.Client, error
 	// Started outside the lock: spawning a process takes long enough that
 	// holding a mutex across it would serialize every clone status poll behind
 	// one start. A second start that loses the race is closed below.
-	client, err := worker.Start(context.WithoutCancel(ctx), g.options(cloneFrameTimeout))
+	state, discard := g.privateState()
+	client, err := worker.Start(context.WithoutCancel(ctx), g.options(state, cloneFrameTimeout))
 	if err != nil {
+		discard()
 		return nil, err
 	}
 	if !client.SupportsGit() {
 		_ = client.Close()
+		discard()
 		return nil, githost.ErrUnsupported
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if g.closed {
+	if g.closed || g.resident != nil {
+		existing := g.resident
 		_ = client.Close()
+		discard()
+		if existing != nil {
+			return existing, nil
+		}
 		return nil, githost.ErrUnsupported
 	}
-	if g.resident != nil {
-		_ = client.Close()
-		return g.resident, nil
-	}
-	g.resident = client
+	g.resident, g.residentState = client, discard
 	return client, nil
 }
 
 func (g *gitExecutor) dropResident(client *worker.Client) {
 	g.mu.Lock()
+	discard := func() {}
 	if g.resident == client {
 		g.resident = nil
+		if g.residentState != nil {
+			discard, g.residentState = g.residentState, nil
+		}
 	} else {
 		client = nil
 	}
@@ -186,6 +238,7 @@ func (g *gitExecutor) dropResident(client *worker.Client) {
 	if client != nil {
 		_ = client.Close()
 	}
+	discard()
 }
 
 // Close stops the resident clone Worker. A clone still running inside it ends
@@ -196,8 +249,12 @@ func (g *gitExecutor) dropResident(client *worker.Client) {
 func (g *gitExecutor) Close() error {
 	g.mu.Lock()
 	client := g.resident
-	g.resident, g.closed = nil, true
+	discard := g.residentState
+	g.resident, g.residentState, g.closed = nil, nil, true
 	g.mu.Unlock()
+	if discard != nil {
+		defer discard()
+	}
 	if client == nil {
 		return nil
 	}

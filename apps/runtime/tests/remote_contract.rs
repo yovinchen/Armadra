@@ -135,8 +135,39 @@ fn examples() -> BTreeMap<WorkerServiceOperation, (Value, &'static str)> {
     examples.insert(
         Operation::GitHistory,
         (
-            json!({ "path": ".", "reference": "HEAD", "limit": 50, "cursor": null }),
+            json!({
+                "path": ".",
+                "reference": "HEAD",
+                "limit": 50,
+                "cursor": null,
+                "paths": ["src"],
+            }),
             "git_repository::HistoryPage",
+        ),
+    );
+    examples.insert(
+        Operation::GitReflog,
+        (
+            json!({ "path": ".", "reference": "HEAD", "limit": 50, "cursor": null }),
+            "git_repository::ReflogPage",
+        ),
+    );
+    examples.insert(
+        Operation::GitStatusBatch,
+        (
+            json!({ "paths": [".", "packages/web"], "pathspecs": ["src"] }),
+            "git::StatusBatchResponse",
+        ),
+    );
+    examples.insert(
+        Operation::GitWorktreeBinding,
+        (
+            json!({
+                "worktreePath": "worktrees/feature",
+                "branch": "feature/login",
+                "repositoryId": null,
+            }),
+            "git_repository::WorktreeBindingVerdict",
         ),
     );
     examples.insert(
@@ -347,6 +378,13 @@ fn every_request_example_still_deserializes_into_the_type_the_worker_decodes() {
     serde_json::from_value::<service::git::RepositoriesPayload>(decode(Operation::GitRepositories))
         .unwrap();
     serde_json::from_value::<service::git::HistoryPayload>(decode(Operation::GitHistory)).unwrap();
+    serde_json::from_value::<service::git::ReflogPayload>(decode(Operation::GitReflog)).unwrap();
+    serde_json::from_value::<service::git::StatusBatchPayload>(decode(Operation::GitStatusBatch))
+        .unwrap();
+    serde_json::from_value::<service::git::WorktreeBindingPayload>(decode(
+        Operation::GitWorktreeBinding,
+    ))
+    .unwrap();
     serde_json::from_value::<service::git::CommitPayload>(decode(Operation::GitCommitDetail))
         .unwrap();
     serde_json::from_value::<service::git::CommitFilePayload>(decode(Operation::GitCommitFileDiff))

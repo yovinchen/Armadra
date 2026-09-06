@@ -257,6 +257,6 @@ mod tests {
             let _ = replay(*operation);
             let _ = capability(*operation);
         }
-        assert_eq!(ALL.len(), 44, "an operation was added without a snapshot");
+        assert_eq!(ALL.len(), 47, "an operation was added without a snapshot");
     }
 }

@@ -2,21 +2,29 @@ import {
   create,
   fromBinary,
   toBinary,
+  CancelGitCloneRequestSchema,
+  CancelGitCloneResponseSchema,
   CancelGitOperationRequestSchema,
   CancelGitOperationResponseSchema,
   EnqueueGitOperationRequestSchema,
   EnqueueGitOperationResponseSchema,
+  GetGitCloneRequestSchema,
+  GetGitCloneResponseSchema,
   GetGitOperationRequestSchema,
   GetGitOperationResponseSchema,
   GetRepositoryStateRequestSchema,
   GetRepositoryStateResponseSchema,
   GitActionKind,
+  GitCloneState,
   GitOperationState,
   GitReadMethod,
   ListGitOperationsRequestSchema,
   ListGitOperationsResponseSchema,
   ReadGitRequestSchema,
   ReadGitResponseSchema,
+  StartGitCloneRequestSchema,
+  StartGitCloneResponseSchema,
+  type GitCloneJob,
   type GitOperation,
   type RepositoryState,
 } from "@armadra/protocol";
@@ -45,6 +53,7 @@ const SERVICE = "GitService";
 
 export {
   GitActionKind,
+  GitCloneState,
   GitOperationState,
   GitReadMethod,
 } from "@armadra/protocol";
@@ -132,10 +141,63 @@ export interface ReadGitInput {
   requestJson?: Uint8Array;
 }
 
+/**
+ * One clone, as a caller renders it.
+ *
+ * The URL is deliberately absent. A clone URL can carry a credential, and a
+ * record that kept one would turn a read of the Host's own store into a leak;
+ * what comes back is the digest, which recognises the same clone twice, and the
+ * redacted form the execution host produced from the original.
+ */
+export interface GitCloneRecord {
+  jobId: string;
+  workspaceId: string;
+  urlSha256: Uint8Array;
+  /** Credentials already removed, by the side that held them. */
+  displayUrl: string;
+  targetPath: string;
+  /** 0–100, as the running `git clone --progress` reported it. */
+  progress: number;
+  state: GitCloneState;
+  messageCode: string;
+  createdAtUnixMs: bigint;
+  updatedAtUnixMs: bigint;
+  revision: bigint;
+}
+
 /** A forwarded read, with the status the Runtime's own route would return. */
 export interface GitReadAnswer {
   httpStatus: number;
   body: Uint8Array;
+}
+
+/**
+ * One clone record as it arrives. An unspecified state is refused rather than
+ * defaulted: "the Host did not say" and "it is running" are different
+ * statements, and reading the first as the second shows a finished clone as one
+ * that never ends.
+ */
+function decodeClone(job: GitCloneJob | undefined): GitCloneRecord {
+  if (
+    !job ||
+    job.jobId === "" ||
+    job.revision <= 0n ||
+    job.state === GitCloneState.UNSPECIFIED
+  )
+    throw new HostCanvasError("response");
+  return {
+    jobId: job.jobId,
+    workspaceId: job.workspaceId,
+    urlSha256: job.urlSha256,
+    displayUrl: job.displayUrl,
+    targetPath: job.targetPath,
+    progress: job.progress,
+    state: job.state,
+    messageCode: job.messageCode,
+    createdAtUnixMs: job.createdAtUnixMs,
+    updatedAtUnixMs: job.updatedAtUnixMs,
+    revision: job.revision,
+  };
 }
 
 const idPattern = /^[0-9a-f]{32}$/;
@@ -426,6 +488,84 @@ export class HostGitClient {
       false,
       (wire) =>
         decodeState(fromBinary(GetRepositoryStateResponseSchema, wire).state),
+    );
+  }
+
+  /**
+   * Starts one clone on the execution host.
+   *
+   * It is not an `Enqueue`: a clone has no repository yet, so there is nothing
+   * to lock, no worktree to serialize with and no precondition to state. What
+   * the Host does keep is the job record, because the execution host forgets a
+   * clone when its process ends and the Host does not.
+   */
+  async startClone(input: {
+    operationId: string;
+    url: string;
+    targetPath?: string;
+  }): Promise<GitCloneRecord> {
+    if (
+      !input ||
+      !validOperationId(input.operationId) ||
+      typeof input.url !== "string" ||
+      input.url.length === 0
+    )
+      throw new HostCanvasError("invalid");
+    const request = create(StartGitCloneRequestSchema, {
+      meta: this.#meta(),
+      operationId: input.operationId,
+      url: input.url,
+      targetPath: input.targetPath ?? "",
+    });
+    return this.#call(
+      "Clone",
+      toBinary(StartGitCloneRequestSchema, request),
+      true,
+      (wire) => decodeClone(fromBinary(StartGitCloneResponseSchema, wire).job),
+    );
+  }
+
+  /**
+   * One clone's record, refreshed from the execution host while it is still
+   * running. A finished job is answered from the record alone.
+   */
+  async getClone(jobId: string): Promise<GitCloneRecord> {
+    if (typeof jobId !== "string" || jobId.length === 0)
+      throw new HostCanvasError("invalid");
+    const request = create(GetGitCloneRequestSchema, {
+      meta: this.#meta(),
+      jobId,
+    });
+    return this.#call(
+      "GetClone",
+      toBinary(GetGitCloneRequestSchema, request),
+      false,
+      (wire) => decodeClone(fromBinary(GetGitCloneResponseSchema, wire).job),
+    );
+  }
+
+  /**
+   * Stops a running clone. Unlike a push there is no unknown outcome to worry
+   * about: a clone writes into a directory this side named, and cancelling it
+   * keeps whatever it had already written rather than deleting a path a person
+   * chose.
+   */
+  async cancelClone(
+    operationId: string,
+    jobId: string,
+  ): Promise<GitCloneRecord> {
+    if (!validOperationId(operationId) || typeof jobId !== "string" || !jobId)
+      throw new HostCanvasError("invalid");
+    const request = create(CancelGitCloneRequestSchema, {
+      meta: this.#meta(),
+      operationId,
+      jobId,
+    });
+    return this.#call(
+      "CancelClone",
+      toBinary(CancelGitCloneRequestSchema, request),
+      true,
+      (wire) => decodeClone(fromBinary(CancelGitCloneResponseSchema, wire).job),
     );
   }
 

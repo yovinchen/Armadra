@@ -35,7 +35,7 @@ use crate::{
 
 pub use self::clone::{
     CloneStarted, CloneState, CloneStatus, active_clone_count, cancel_clone, clone_directory_name,
-    clone_status, start_clone, validate_clone_url,
+    clone_status, start_clone, start_clone_from, validate_clone_url,
 };
 pub use self::commit::{
     AmendRequest, CommitResult, HeadCommit, InitResult, commit, head_commit, init_repository,

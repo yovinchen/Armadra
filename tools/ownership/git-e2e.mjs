@@ -504,6 +504,170 @@ try {
     `HTTP ${missing.httpStatus}${refusal(missing)}`,
   );
 
+  /* ------------------------- 7b. the reads added with this batch ----------- */
+
+  const decode = (answer) => JSON.parse(new TextDecoder().decode(answer.body));
+
+  // The reflog is the only record of where a ref used to point, so it is the
+  // one place a commit that a reset or a rebase left unreachable can be found.
+  const reflog = await driver.git("read", [
+    {
+      method: GitReadMethod.REFLOG,
+      scope,
+      requestJson: body({ reference: "HEAD", limit: 5 }),
+    },
+  ]);
+  const entries = reflog.httpStatus === 200 ? decode(reflog).entries : [];
+  step(
+    "the reflog is forwarded, newest first, with the selector a recovery uses",
+    reflog.httpStatus === 200 &&
+      entries.length > 0 &&
+      entries[0].selector === "HEAD@{0}" &&
+      entries[0].oid === externalHead &&
+      typeof entries[0].loggedAt === "string" &&
+      entries[0].loggedAt.includes("T"),
+    `HTTP ${reflog.httpStatus} entries=${entries.length}${refusal(reflog)}`,
+  );
+
+  // One request for every checkout instead of one per checkout. The aggregate
+  // Changes view used to pay a round trip per repository and then render the
+  // answers as though they had been taken at one moment.
+  writeFileSync(join(harness.project, "批量.txt"), "批量\n");
+  const batch = await driver.git("read", [
+    {
+      method: GitReadMethod.STATUS_BATCH,
+      scope,
+      requestJson: body({
+        paths: [".", "worktrees/功能", "不存在的仓库"],
+        pathspecs: [],
+      }),
+    },
+  ]);
+  const repositories =
+    batch.httpStatus === 200 ? decode(batch).repositories : [];
+  step(
+    "one batch reads every checkout and keeps a broken one to itself",
+    batch.httpStatus === 200 &&
+      repositories.length === 3 &&
+      repositories[0].status?.branch === "main" &&
+      repositories[1].status?.branch === "功能" &&
+      repositories[2].status === undefined &&
+      typeof repositories[2].error?.code === "string",
+    `HTTP ${batch.httpStatus} rows=${repositories.length}${refusal(batch)}`,
+  );
+
+  // A pathspec is applied by Git, to both the count and the rows, so the two
+  // describe one set rather than two.
+  const narrowed = await driver.git("read", [
+    {
+      method: GitReadMethod.STATUS,
+      scope,
+      requestJson: body({ path: ".", paths: ["不存在的目录"] }),
+    },
+  ]);
+  const filtered = narrowed.httpStatus === 200 ? decode(narrowed) : {};
+  step(
+    "a pathspec narrows the count and the rows together, on the server",
+    narrowed.httpStatus === 200 &&
+      filtered.changedCount === 0 &&
+      Array.isArray(filtered.files) &&
+      filtered.files.length === 0 &&
+      filtered.branch === "main",
+    `HTTP ${narrowed.httpStatus} changed=${filtered.changedCount}${refusal(narrowed)}`,
+  );
+
+  // A Frame binding is a record about a checkout that already exists, so it can
+  // drift. The verdict names which way, because the repairs differ.
+  const binding = (payload) =>
+    driver.git("read", [
+      {
+        method: GitReadMethod.WORKTREE_BINDING,
+        scope,
+        requestJson: body(payload),
+      },
+    ]);
+  const bound = await binding({
+    worktreePath: "worktrees/功能",
+    branch: "功能",
+  });
+  const moved = await binding({
+    worktreePath: "worktrees/功能",
+    branch: "别的分支",
+  });
+  step(
+    "a Frame binding is verified against the worktree it claims",
+    bound.httpStatus === 200 &&
+      decode(bound).valid === true &&
+      decode(bound).code === "ok" &&
+      moved.httpStatus === 200 &&
+      decode(moved).valid === false &&
+      decode(moved).code === "branchChanged",
+    `ok=${bound.httpStatus} moved=${moved.httpStatus}${refusal(bound)}${refusal(moved)}`,
+  );
+
+  // A checkout outside the registered root is refused by the Host itself,
+  // before a process is started for it: a binding that drifted out of the
+  // project needs a reason it can repair, not a generic failure.
+  const outside = await driver.git("read", [
+    {
+      method: GitReadMethod.STATUS,
+      scope: { workspaceId, repositoryPath: harness.workspace },
+      requestJson: body({ path: "." }),
+    },
+  ]);
+  // The bare remote lives beside the project, not inside it, so a binding that
+  // names it is a binding that left the registered root.
+  const outsideBinding = await binding({ worktreePath: remote });
+  step(
+    "the Host refuses a checkout outside the registered root, by name",
+    outside?.error?.hostCode === "PERMISSION_DENIED" &&
+      outsideBinding?.error?.hostCode === "PERMISSION_DENIED",
+    `scope=${outside?.error?.hostCode ?? "accepted"} binding=${outsideBinding?.error?.hostCode ?? "accepted"}`,
+  );
+
+  /* ---------------------------------------- 7c. a clone through the Host */
+
+  // The clone the earlier build could not run at all: its `git` child outlives
+  // the frame that starts it, so a Host that ran one Worker per operation could
+  // never poll the job it began.
+  //
+  // The source is a bare mirror inside the workspace root. That is the one
+  // local source the Worker channel accepts — both ends of the copy are then
+  // inside a root somebody registered — and it is what makes this a real clone
+  // with no network and no credential.
+  const mirror = join(harness.project, "镜像.git");
+  git(harness.project, ["clone", "--bare", "--", harness.project, mirror]);
+  const started = await driver.git("startClone", [
+    {
+      operationId: `git/${workspaceId}/clone-1`,
+      url: mirror,
+      targetPath: "克隆",
+    },
+  ]);
+  step(
+    "the Host started a clone on the execution host",
+    started?.jobId?.length > 0 &&
+      started.state === 1 &&
+      // The URL never reaches the Host's store: only its digest and a redacted
+      // display form produced by the side that held the original.
+      started.urlSha256?.length === 32 &&
+      !started.displayUrl.includes("@"),
+    `job=${started?.jobId?.slice(0, 8)} state=${started?.state}${refusal(started)}`,
+  );
+  let clone = started;
+  const cloneDeadline = Date.now() + 60_000;
+  while (clone?.jobId && clone.state === 1 && Date.now() < cloneDeadline) {
+    await sleep(100);
+    clone = await driver.git("getClone", [started.jobId]);
+  }
+  step(
+    "the clone finished and the repository is on disk",
+    clone?.state === 2 &&
+      clone.progress === 100 &&
+      existsSync(join(harness.project, "克隆", "README.md")),
+    `state=${clone?.state} progress=${clone?.progress}${refusal(clone)}`,
+  );
+
   const snapshot = await driver.git("repositoryState", [scope, true]);
   step(
     "the Host caches a repository snapshot with the time it was observed",
@@ -614,7 +778,7 @@ try {
     `HTTP ${writesAgain.status}`,
   );
   note(
-    "clone jobs are not exercised: a clone outlives the Worker that starts it, and this Host runs one Worker per operation (see the B5 row in docs/design/host-business-migration.md)",
+    "the clone above is what exercises the upward progress path: the job reaches 100 through the execution host's own reports, not through a value this side invented",
   );
 } catch (error) {
   failure = error;

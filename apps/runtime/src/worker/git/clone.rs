@@ -120,6 +120,48 @@ fn destination(workspace: &Path, target: Option<&str>) -> AppResult<(PathBuf, Op
     Ok((resolve_in_root(workspace, parent)?, Some(name.to_owned())))
 }
 
+/// The source, as this side will hand it to `git clone`.
+///
+/// A remote URL goes through the Runtime's own allowlist unchanged: `https://`,
+/// `ssh://` and the scp-like form, and nothing else — `ext::` and friends are
+/// refused there for the reason they have always been refused.
+///
+/// A **local** source is the one thing this path allows that the HTTP route
+/// does not, and the difference is the registered root. The HTTP route clones
+/// into a parent directory the caller names, so a local source there would be
+/// one arbitrary path copied to another. Here both ends are inside the root the
+/// filesystem domain registered for this workspace, which is what makes cloning
+/// a bare mirror that sits beside the project — the ordinary way to work
+/// offline, and the shape a `git worktree`-style layout already has — a
+/// bounded operation rather than an open one.
+fn source(workspace: &Path, url: &str) -> AppResult<String> {
+    if let Ok(remote) = git::validate_clone_url(url) {
+        return Ok(remote);
+    }
+    let candidate = if Path::new(url).is_absolute() {
+        let resolved = std::fs::canonicalize(url)
+            .map_err(|_| AppError::BadRequest("Repository URL is invalid".into()))?;
+        let root = workspace
+            .canonicalize()
+            .unwrap_or_else(|_| workspace.to_path_buf());
+        if !resolved.starts_with(&root) {
+            return Err(AppError::Forbidden(
+                "A local clone source must be inside the workspace".into(),
+            ));
+        }
+        resolved
+    } else {
+        resolve_in_root(workspace, url)?
+    };
+    if !candidate.is_dir() {
+        return Err(AppError::BadRequest("Repository URL is invalid".into()));
+    }
+    candidate
+        .to_str()
+        .map(str::to_owned)
+        .ok_or_else(|| AppError::BadRequest("Clone source must be a UTF-8 path".into()))
+}
+
 /// Starts one clone and answers with the job the Host will poll.
 pub async fn start(workspace: &Path, request_json: &[u8]) -> AppResult<GitReadResult> {
     let body: StartBody = serde_json::from_slice(request_json)
@@ -129,12 +171,11 @@ pub async fn start(workspace: &Path, request_json: &[u8]) -> AppResult<GitReadRe
         .to_str()
         .ok_or_else(|| AppError::BadRequest("Clone destination must be a UTF-8 path".into()))?
         .to_owned();
-    let url = body.url.clone();
-    let started = tokio::task::spawn_blocking(move || {
-        git::start_clone(&url, &parent, name.as_deref())
-    })
-    .await
-    .map_err(|_| AppError::Internal("The clone could not be started".into()))??;
+    let url = source(workspace, body.url.trim())?;
+    let started =
+        tokio::task::spawn_blocking(move || git::start_clone_from(&url, &parent, name.as_deref()))
+            .await
+            .map_err(|_| AppError::Internal("The clone could not be started".into()))??;
     // The status is read back rather than assembled from the request: the
     // redacted URL and the resolved target are facts this process produced, and
     // reporting the request's own values would report what was asked for
