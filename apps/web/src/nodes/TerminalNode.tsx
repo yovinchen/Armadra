@@ -40,6 +40,7 @@ import { useContextUsage } from "@/agent/context-usage/use-context-usage";
 import { agentLabel } from "@/agent/launch";
 import { useNodeCapabilities } from "@/agent/capabilities";
 import { PendingLaunchButton } from "@/agent/PendingLaunchButton";
+import { StateSourceBadge } from "@/agent/StateSourceBadge";
 import {
   agentHeaderState,
   useAgentStatus,
@@ -226,6 +227,11 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
 
   const headerChips = (
     <>
+      {/* 状态来源（协作通道 §3.2）。会话结束之后不再说来源：那时头部说的
+          是「已退出」，「谁报的」已经没有对象了。 */}
+      {agent && !exited && (
+        <StateSourceBadge source={agentStatus?.stateSource} />
+      )}
       {agent && (
         <ContextUsageBadge
           nodeId={id}
