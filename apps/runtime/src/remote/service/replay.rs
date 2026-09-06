@@ -13,7 +13,13 @@ use armadra_protocol::v1::WorkerServiceOperation;
 /// payload shapes are the same. Bump it whenever a request or response type
 /// behind any `WorkerServiceOperation` changes in a way an older peer would
 /// misread — `apps/runtime/tests/remote_contract.rs` fails until you do.
-pub const CONTRACT_VERSION: u32 = 1;
+///
+/// 2: `GIT_MESSAGE_CAPTURE`. It joins the repository panel's existing
+/// capability rather than getting one of its own, so a Worker that advertises
+/// the panel and does not know the operation would answer an unhelpful
+/// UNSUPPORTED for the AI draft alone; the version lock is what turns that into
+/// a refusal at the handshake, where it can be read.
+pub const CONTRACT_VERSION: u32 = 2;
 
 /// Capabilities a Worker advertises per group of operations. A Worker that
 /// omits one answers that group with 501 naming the capability, and keeps
@@ -260,6 +266,6 @@ mod tests {
             let _ = replay(*operation);
             let _ = capability(*operation);
         }
-        assert_eq!(ALL.len(), 47, "an operation was added without a snapshot");
+        assert_eq!(ALL.len(), 48, "an operation was added without a snapshot");
     }
 }

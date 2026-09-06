@@ -1,0 +1,7 @@
+{
+  "capability": "remote.git.panel.v1",
+  "operation": 53,
+  "replay": "safe",
+  "request": {},
+  "responseType": "git_message::GitMessageCapture"
+}

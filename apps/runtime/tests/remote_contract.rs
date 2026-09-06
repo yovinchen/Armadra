@@ -243,6 +243,13 @@ fn examples() -> BTreeMap<WorkerServiceOperation, (Value, &'static str)> {
         Operation::GitMessageSource,
         (json!({}), "git_message::GitMessageSource"),
     );
+    // Same empty request as the source read, a different answer: this one
+    // carries the prompt as well, because the model runs on the controller
+    // while the diff is captured on the host that owns the repository.
+    examples.insert(
+        Operation::GitMessageCapture,
+        (json!({}), "git_message::GitMessageCapture"),
+    );
     examples.insert(
         Operation::GitOperations,
         (repository(), "Vec<git_repository::OperationSnapshot>"),
