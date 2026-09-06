@@ -43,6 +43,45 @@ const (
 	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_RESOLVE     WorkerServiceOperation = 16
 	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_COMMIT      WorkerServiceOperation = 17
 	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_INIT        WorkerServiceOperation = 18
+	// The repository panel (remote completion design §3.1). The per-worktree
+	// mutation queue lives next to the repository it serializes, so it runs on
+	// the execution host and the controller only forwards.
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_REPOSITORIES        WorkerServiceOperation = 19
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_BRANCHES            WorkerServiceOperation = 20
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_HISTORY             WorkerServiceOperation = 21
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_COMMIT_DETAIL       WorkerServiceOperation = 22
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_COMMIT_FILE_DIFF    WorkerServiceOperation = 23
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_WORKTREES           WorkerServiceOperation = 24
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_REBASE_TODO         WorkerServiceOperation = 25
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_TAGS                WorkerServiceOperation = 26
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_REMOTES             WorkerServiceOperation = 27
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_STASHES             WorkerServiceOperation = 28
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_STASH_DETAIL        WorkerServiceOperation = 29
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_INTEGRATION         WorkerServiceOperation = 30
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_CHERRY_PICK_PREVIEW WorkerServiceOperation = 31
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_HUNKS               WorkerServiceOperation = 32
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_MESSAGE_SOURCE      WorkerServiceOperation = 33
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_OPERATIONS          WorkerServiceOperation = 34
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_OPERATION_GET       WorkerServiceOperation = 35
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_OPERATION_START     WorkerServiceOperation = 36
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_OPERATION_CANCEL    WorkerServiceOperation = 37
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_APPLY_HUNK          WorkerServiceOperation = 38
+	// What is still restorable under the execution host's own
+	// `.armadra/trash/`. A read, so it cannot share a number with the restore
+	// that follows it: the two have opposite replay rules.
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_FILE_ENTRY_TRASH_LIST WorkerServiceOperation = 39
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_FILE_INFO             WorkerServiceOperation = 40
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_FILE_ENTRY_CREATE     WorkerServiceOperation = 41
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_FILE_ENTRY_RENAME     WorkerServiceOperation = 42
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_FILE_ENTRY_MOVE       WorkerServiceOperation = 43
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_FILE_ENTRY_DELETE     WorkerServiceOperation = 44
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_FILE_ENTRY_RESTORE    WorkerServiceOperation = 45
+	// The source file is already on the execution host; the Worker copies it
+	// into that host's own `.armadra/assets/`. Bytes from a browser travel as
+	// WorkerUploadRequest instead.
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_ASSET_IMPORT      WorkerServiceOperation = 46
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_WATCH_SUBSCRIBE   WorkerServiceOperation = 47
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_WATCH_UNSUBSCRIBE WorkerServiceOperation = 48
 )
 
 // Enum value maps for WorkerServiceOperation.
@@ -63,23 +102,83 @@ var (
 		16: "WORKER_SERVICE_OPERATION_GIT_RESOLVE",
 		17: "WORKER_SERVICE_OPERATION_GIT_COMMIT",
 		18: "WORKER_SERVICE_OPERATION_GIT_INIT",
+		19: "WORKER_SERVICE_OPERATION_GIT_REPOSITORIES",
+		20: "WORKER_SERVICE_OPERATION_GIT_BRANCHES",
+		21: "WORKER_SERVICE_OPERATION_GIT_HISTORY",
+		22: "WORKER_SERVICE_OPERATION_GIT_COMMIT_DETAIL",
+		23: "WORKER_SERVICE_OPERATION_GIT_COMMIT_FILE_DIFF",
+		24: "WORKER_SERVICE_OPERATION_GIT_WORKTREES",
+		25: "WORKER_SERVICE_OPERATION_GIT_REBASE_TODO",
+		26: "WORKER_SERVICE_OPERATION_GIT_TAGS",
+		27: "WORKER_SERVICE_OPERATION_GIT_REMOTES",
+		28: "WORKER_SERVICE_OPERATION_GIT_STASHES",
+		29: "WORKER_SERVICE_OPERATION_GIT_STASH_DETAIL",
+		30: "WORKER_SERVICE_OPERATION_GIT_INTEGRATION",
+		31: "WORKER_SERVICE_OPERATION_GIT_CHERRY_PICK_PREVIEW",
+		32: "WORKER_SERVICE_OPERATION_GIT_HUNKS",
+		33: "WORKER_SERVICE_OPERATION_GIT_MESSAGE_SOURCE",
+		34: "WORKER_SERVICE_OPERATION_GIT_OPERATIONS",
+		35: "WORKER_SERVICE_OPERATION_GIT_OPERATION_GET",
+		36: "WORKER_SERVICE_OPERATION_GIT_OPERATION_START",
+		37: "WORKER_SERVICE_OPERATION_GIT_OPERATION_CANCEL",
+		38: "WORKER_SERVICE_OPERATION_GIT_APPLY_HUNK",
+		39: "WORKER_SERVICE_OPERATION_FILE_ENTRY_TRASH_LIST",
+		40: "WORKER_SERVICE_OPERATION_FILE_INFO",
+		41: "WORKER_SERVICE_OPERATION_FILE_ENTRY_CREATE",
+		42: "WORKER_SERVICE_OPERATION_FILE_ENTRY_RENAME",
+		43: "WORKER_SERVICE_OPERATION_FILE_ENTRY_MOVE",
+		44: "WORKER_SERVICE_OPERATION_FILE_ENTRY_DELETE",
+		45: "WORKER_SERVICE_OPERATION_FILE_ENTRY_RESTORE",
+		46: "WORKER_SERVICE_OPERATION_ASSET_IMPORT",
+		47: "WORKER_SERVICE_OPERATION_WATCH_SUBSCRIBE",
+		48: "WORKER_SERVICE_OPERATION_WATCH_UNSUBSCRIBE",
 	}
 	WorkerServiceOperation_value = map[string]int32{
-		"WORKER_SERVICE_OPERATION_UNSPECIFIED":     0,
-		"WORKER_SERVICE_OPERATION_FILE_VERSION":    1,
-		"WORKER_SERVICE_OPERATION_SEARCH_CONTENT":  2,
-		"WORKER_SERVICE_OPERATION_SEARCH_INDEX":    3,
-		"WORKER_SERVICE_OPERATION_WATCH_POLL":      4,
-		"WORKER_SERVICE_OPERATION_FILE_READ":       5,
-		"WORKER_SERVICE_OPERATION_GIT_STATUS":      10,
-		"WORKER_SERVICE_OPERATION_GIT_HEAD_COMMIT": 11,
-		"WORKER_SERVICE_OPERATION_GIT_DIFF":        12,
-		"WORKER_SERVICE_OPERATION_GIT_STAGE":       13,
-		"WORKER_SERVICE_OPERATION_GIT_UNSTAGE":     14,
-		"WORKER_SERVICE_OPERATION_GIT_REVERT":      15,
-		"WORKER_SERVICE_OPERATION_GIT_RESOLVE":     16,
-		"WORKER_SERVICE_OPERATION_GIT_COMMIT":      17,
-		"WORKER_SERVICE_OPERATION_GIT_INIT":        18,
+		"WORKER_SERVICE_OPERATION_UNSPECIFIED":             0,
+		"WORKER_SERVICE_OPERATION_FILE_VERSION":            1,
+		"WORKER_SERVICE_OPERATION_SEARCH_CONTENT":          2,
+		"WORKER_SERVICE_OPERATION_SEARCH_INDEX":            3,
+		"WORKER_SERVICE_OPERATION_WATCH_POLL":              4,
+		"WORKER_SERVICE_OPERATION_FILE_READ":               5,
+		"WORKER_SERVICE_OPERATION_GIT_STATUS":              10,
+		"WORKER_SERVICE_OPERATION_GIT_HEAD_COMMIT":         11,
+		"WORKER_SERVICE_OPERATION_GIT_DIFF":                12,
+		"WORKER_SERVICE_OPERATION_GIT_STAGE":               13,
+		"WORKER_SERVICE_OPERATION_GIT_UNSTAGE":             14,
+		"WORKER_SERVICE_OPERATION_GIT_REVERT":              15,
+		"WORKER_SERVICE_OPERATION_GIT_RESOLVE":             16,
+		"WORKER_SERVICE_OPERATION_GIT_COMMIT":              17,
+		"WORKER_SERVICE_OPERATION_GIT_INIT":                18,
+		"WORKER_SERVICE_OPERATION_GIT_REPOSITORIES":        19,
+		"WORKER_SERVICE_OPERATION_GIT_BRANCHES":            20,
+		"WORKER_SERVICE_OPERATION_GIT_HISTORY":             21,
+		"WORKER_SERVICE_OPERATION_GIT_COMMIT_DETAIL":       22,
+		"WORKER_SERVICE_OPERATION_GIT_COMMIT_FILE_DIFF":    23,
+		"WORKER_SERVICE_OPERATION_GIT_WORKTREES":           24,
+		"WORKER_SERVICE_OPERATION_GIT_REBASE_TODO":         25,
+		"WORKER_SERVICE_OPERATION_GIT_TAGS":                26,
+		"WORKER_SERVICE_OPERATION_GIT_REMOTES":             27,
+		"WORKER_SERVICE_OPERATION_GIT_STASHES":             28,
+		"WORKER_SERVICE_OPERATION_GIT_STASH_DETAIL":        29,
+		"WORKER_SERVICE_OPERATION_GIT_INTEGRATION":         30,
+		"WORKER_SERVICE_OPERATION_GIT_CHERRY_PICK_PREVIEW": 31,
+		"WORKER_SERVICE_OPERATION_GIT_HUNKS":               32,
+		"WORKER_SERVICE_OPERATION_GIT_MESSAGE_SOURCE":      33,
+		"WORKER_SERVICE_OPERATION_GIT_OPERATIONS":          34,
+		"WORKER_SERVICE_OPERATION_GIT_OPERATION_GET":       35,
+		"WORKER_SERVICE_OPERATION_GIT_OPERATION_START":     36,
+		"WORKER_SERVICE_OPERATION_GIT_OPERATION_CANCEL":    37,
+		"WORKER_SERVICE_OPERATION_GIT_APPLY_HUNK":          38,
+		"WORKER_SERVICE_OPERATION_FILE_ENTRY_TRASH_LIST":   39,
+		"WORKER_SERVICE_OPERATION_FILE_INFO":               40,
+		"WORKER_SERVICE_OPERATION_FILE_ENTRY_CREATE":       41,
+		"WORKER_SERVICE_OPERATION_FILE_ENTRY_RENAME":       42,
+		"WORKER_SERVICE_OPERATION_FILE_ENTRY_MOVE":         43,
+		"WORKER_SERVICE_OPERATION_FILE_ENTRY_DELETE":       44,
+		"WORKER_SERVICE_OPERATION_FILE_ENTRY_RESTORE":      45,
+		"WORKER_SERVICE_OPERATION_ASSET_IMPORT":            46,
+		"WORKER_SERVICE_OPERATION_WATCH_SUBSCRIBE":         47,
+		"WORKER_SERVICE_OPERATION_WATCH_UNSUBSCRIBE":       48,
 	}
 )
 
@@ -168,10 +267,17 @@ type WorkerHelloResponse struct {
 	MaxFrameBytes     uint32                 `protobuf:"varint,7,opt,name=max_frame_bytes,json=maxFrameBytes,proto3" json:"max_frame_bytes,omitempty"`
 	MaxFileChunkBytes uint32                 `protobuf:"varint,8,opt,name=max_file_chunk_bytes,json=maxFileChunkBytes,proto3" json:"max_file_chunk_bytes,omitempty"`
 	MaxTextFileBytes  uint32                 `protobuf:"varint,9,opt,name=max_text_file_bytes,json=maxTextFileBytes,proto3" json:"max_text_file_bytes,omitempty"`
-	// The Worker binary's own release version. A controller that proxies
-	// version-locked service payloads (WorkerServiceRequest) requires an exact
-	// match; an empty value means the Worker predates remote execution.
+	// The Worker binary's own release version. Two builds whose
+	// `service_contract_version` agree may differ here: the value became a
+	// badge on the node rather than a gate (remote completion design §3.5). An
+	// empty value means the Worker predates remote execution.
 	RuntimeVersion string `protobuf:"bytes,10,opt,name=runtime_version,json=runtimeVersion,proto3" json:"runtime_version,omitempty"`
+	// The version of the version-locked service payloads below. A controller
+	// proxies WorkerServiceRequest only to a Worker that reports the same
+	// number, because the bytes are one build's serde derives and nothing
+	// negotiates them. Zero means the Worker predates the contract version and
+	// is therefore only usable under the older exact-`runtime_version` rule.
+	ServiceContractVersion uint32 `protobuf:"varint,11,opt,name=service_contract_version,json=serviceContractVersion,proto3" json:"service_contract_version,omitempty"`
 	// Absent in the backward-compatible read-only mode.
 	Commands *CommandCapabilities `protobuf:"bytes,20,opt,name=commands,proto3" json:"commands,omitempty"`
 	// The resident bidirectional channel (business migration §2.9). Absent when
@@ -281,6 +387,13 @@ func (x *WorkerHelloResponse) GetRuntimeVersion() string {
 		return x.RuntimeVersion
 	}
 	return ""
+}
+
+func (x *WorkerHelloResponse) GetServiceContractVersion() uint32 {
+	if x != nil {
+		return x.ServiceContractVersion
+	}
+	return 0
 }
 
 func (x *WorkerHelloResponse) GetCommands() *CommandCapabilities {
@@ -605,8 +718,15 @@ type WorkerReadFileRequest struct {
 	MaxBytes uint32                 `protobuf:"varint,4,opt,name=max_bytes,json=maxBytes,proto3" json:"max_bytes,omitempty"`
 	// Required after the first chunk to prevent mixing different file versions.
 	ExpectedSha256 []byte `protobuf:"bytes,5,opt,name=expected_sha256,json=expectedSha256,proto3,oneof" json:"expected_sha256,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Read the bytes as they are instead of as editor text. The default is the
+	// text reader, which refuses binary and caps at the preview limit; a
+	// download or a whiteboard asset needs neither of those, and inventing a
+	// second message for the same chunked read would only duplicate the
+	// version-mixing check. Additive: an older Worker ignores it and answers
+	// exactly as it did before.
+	Raw           bool `protobuf:"varint,6,opt,name=raw,proto3" json:"raw,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WorkerReadFileRequest) Reset() {
@@ -672,6 +792,13 @@ func (x *WorkerReadFileRequest) GetExpectedSha256() []byte {
 		return x.ExpectedSha256
 	}
 	return nil
+}
+
+func (x *WorkerReadFileRequest) GetRaw() bool {
+	if x != nil {
+		return x.Raw
+	}
+	return false
 }
 
 type WorkerFileChunk struct {
@@ -1267,6 +1394,703 @@ func (x *WorkerServiceResponse) GetResponseJson() []byte {
 	return nil
 }
 
+// Native filesystem watching on the execution host (design §3.4). The
+// operation is one of WATCH_SUBSCRIBE / WATCH_UNSUBSCRIBE; anything else is
+// refused rather than treated as a subscribe, so a mistyped request never
+// registers a watcher nobody asked for.
+type WorkerWatchRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RootId        string                 `protobuf:"bytes,1,opt,name=root_id,json=rootId,proto3" json:"root_id,omitempty"`
+	Operation     WorkerServiceOperation `protobuf:"varint,2,opt,name=operation,proto3,enum=armadra.v1.WorkerServiceOperation" json:"operation,omitempty"`
+	Paths         []string               `protobuf:"bytes,3,rep,name=paths,proto3" json:"paths,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerWatchRequest) Reset() {
+	*x = WorkerWatchRequest{}
+	mi := &file_armadra_v1_worker_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerWatchRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerWatchRequest) ProtoMessage() {}
+
+func (x *WorkerWatchRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerWatchRequest.ProtoReflect.Descriptor instead.
+func (*WorkerWatchRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *WorkerWatchRequest) GetRootId() string {
+	if x != nil {
+		return x.RootId
+	}
+	return ""
+}
+
+func (x *WorkerWatchRequest) GetOperation() WorkerServiceOperation {
+	if x != nil {
+		return x.Operation
+	}
+	return WorkerServiceOperation_WORKER_SERVICE_OPERATION_UNSPECIFIED
+}
+
+func (x *WorkerWatchRequest) GetPaths() []string {
+	if x != nil {
+		return x.Paths
+	}
+	return nil
+}
+
+// The receipt for a subscribe or unsubscribe. `sequence` is the number the
+// next event on this connection will carry, so a controller that reconnects
+// knows where the new stream starts rather than guessing from the old one.
+type WorkerWatchSubscription struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RootId        string                 `protobuf:"bytes,1,opt,name=root_id,json=rootId,proto3" json:"root_id,omitempty"`
+	WatchedPaths  uint32                 `protobuf:"varint,2,opt,name=watched_paths,json=watchedPaths,proto3" json:"watched_paths,omitempty"`
+	Sequence      uint64                 `protobuf:"varint,3,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerWatchSubscription) Reset() {
+	*x = WorkerWatchSubscription{}
+	mi := &file_armadra_v1_worker_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerWatchSubscription) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerWatchSubscription) ProtoMessage() {}
+
+func (x *WorkerWatchSubscription) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerWatchSubscription.ProtoReflect.Descriptor instead.
+func (*WorkerWatchSubscription) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *WorkerWatchSubscription) GetRootId() string {
+	if x != nil {
+		return x.RootId
+	}
+	return ""
+}
+
+func (x *WorkerWatchSubscription) GetWatchedPaths() uint32 {
+	if x != nil {
+		return x.WatchedPaths
+	}
+	return 0
+}
+
+func (x *WorkerWatchSubscription) GetSequence() uint64 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+// `kind` is `modified`, `removed` or `replaced`, the same three the local
+// watcher publishes. A removal carries no digest, size or mtime.
+type WorkerWatchChange struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	Sha256        string                 `protobuf:"bytes,3,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	Size          uint64                 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
+	Mtime         string                 `protobuf:"bytes,5,opt,name=mtime,proto3" json:"mtime,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerWatchChange) Reset() {
+	*x = WorkerWatchChange{}
+	mi := &file_armadra_v1_worker_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerWatchChange) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerWatchChange) ProtoMessage() {}
+
+func (x *WorkerWatchChange) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerWatchChange.ProtoReflect.Descriptor instead.
+func (*WorkerWatchChange) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *WorkerWatchChange) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *WorkerWatchChange) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *WorkerWatchChange) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *WorkerWatchChange) GetSize() uint64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *WorkerWatchChange) GetMtime() string {
+	if x != nil {
+		return x.Mtime
+	}
+	return ""
+}
+
+// An unsolicited frame: `WorkerResponse.request_id` is empty, which is what
+// distinguishes it from an answer. `sequence` is monotonic per connection, so
+// a gap after a reconnect is visible and reconciled by one poll.
+type WorkerWatchEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RootId        string                 `protobuf:"bytes,1,opt,name=root_id,json=rootId,proto3" json:"root_id,omitempty"`
+	Sequence      uint64                 `protobuf:"varint,2,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	Changes       []*WorkerWatchChange   `protobuf:"bytes,3,rep,name=changes,proto3" json:"changes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerWatchEvent) Reset() {
+	*x = WorkerWatchEvent{}
+	mi := &file_armadra_v1_worker_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerWatchEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerWatchEvent) ProtoMessage() {}
+
+func (x *WorkerWatchEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerWatchEvent.ProtoReflect.Descriptor instead.
+func (*WorkerWatchEvent) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *WorkerWatchEvent) GetRootId() string {
+	if x != nil {
+		return x.RootId
+	}
+	return ""
+}
+
+func (x *WorkerWatchEvent) GetSequence() uint64 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+func (x *WorkerWatchEvent) GetChanges() []*WorkerWatchChange {
+	if x != nil {
+		return x.Changes
+	}
+	return nil
+}
+
+// Chunked upload to the execution host (design §3.1). The Worker writes a
+// temporary file beside the destination and publishes it atomically only once
+// the whole stream hashes to `sha256`, so a dropped connection leaves the
+// destination untouched rather than half written.
+type WorkerUploadBegin struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	RootId     string                 `protobuf:"bytes,1,opt,name=root_id,json=rootId,proto3" json:"root_id,omitempty"`
+	Path       string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	TotalBytes uint64                 `protobuf:"varint,3,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`
+	// Lowercase hexadecimal SHA-256 of the complete file the caller will send.
+	Sha256 string `protobuf:"bytes,4,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	// The content version being replaced. Absent means create-only, the same
+	// rule WorkerWriteFileRequest follows.
+	OverwriteSha256 *string `protobuf:"bytes,5,opt,name=overwrite_sha256,json=overwriteSha256,proto3,oneof" json:"overwrite_sha256,omitempty"`
+	// The workspace's write grant, resolved by the controller and re-checked
+	// here: an upload is a write, and the same rule that governs
+	// WorkerServiceRequest governs it. A begin without the grant is refused, so
+	// a controller that skipped its own check cannot even occupy the host's
+	// temporary space.
+	AllowWrite    bool `protobuf:"varint,6,opt,name=allow_write,json=allowWrite,proto3" json:"allow_write,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerUploadBegin) Reset() {
+	*x = WorkerUploadBegin{}
+	mi := &file_armadra_v1_worker_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerUploadBegin) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerUploadBegin) ProtoMessage() {}
+
+func (x *WorkerUploadBegin) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerUploadBegin.ProtoReflect.Descriptor instead.
+func (*WorkerUploadBegin) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *WorkerUploadBegin) GetRootId() string {
+	if x != nil {
+		return x.RootId
+	}
+	return ""
+}
+
+func (x *WorkerUploadBegin) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *WorkerUploadBegin) GetTotalBytes() uint64 {
+	if x != nil {
+		return x.TotalBytes
+	}
+	return 0
+}
+
+func (x *WorkerUploadBegin) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *WorkerUploadBegin) GetOverwriteSha256() string {
+	if x != nil && x.OverwriteSha256 != nil {
+		return *x.OverwriteSha256
+	}
+	return ""
+}
+
+func (x *WorkerUploadBegin) GetAllowWrite() bool {
+	if x != nil {
+		return x.AllowWrite
+	}
+	return false
+}
+
+type WorkerUploadChunk struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UploadId      string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	Offset        uint64                 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	Data          []byte                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerUploadChunk) Reset() {
+	*x = WorkerUploadChunk{}
+	mi := &file_armadra_v1_worker_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerUploadChunk) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerUploadChunk) ProtoMessage() {}
+
+func (x *WorkerUploadChunk) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerUploadChunk.ProtoReflect.Descriptor instead.
+func (*WorkerUploadChunk) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *WorkerUploadChunk) GetUploadId() string {
+	if x != nil {
+		return x.UploadId
+	}
+	return ""
+}
+
+func (x *WorkerUploadChunk) GetOffset() uint64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *WorkerUploadChunk) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+type WorkerUploadCommit struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UploadId      string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerUploadCommit) Reset() {
+	*x = WorkerUploadCommit{}
+	mi := &file_armadra_v1_worker_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerUploadCommit) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerUploadCommit) ProtoMessage() {}
+
+func (x *WorkerUploadCommit) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerUploadCommit.ProtoReflect.Descriptor instead.
+func (*WorkerUploadCommit) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *WorkerUploadCommit) GetUploadId() string {
+	if x != nil {
+		return x.UploadId
+	}
+	return ""
+}
+
+type WorkerUploadAbort struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UploadId      string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerUploadAbort) Reset() {
+	*x = WorkerUploadAbort{}
+	mi := &file_armadra_v1_worker_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerUploadAbort) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerUploadAbort) ProtoMessage() {}
+
+func (x *WorkerUploadAbort) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerUploadAbort.ProtoReflect.Descriptor instead.
+func (*WorkerUploadAbort) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *WorkerUploadAbort) GetUploadId() string {
+	if x != nil {
+		return x.UploadId
+	}
+	return ""
+}
+
+type WorkerUploadRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Step:
+	//
+	//	*WorkerUploadRequest_Begin
+	//	*WorkerUploadRequest_Chunk
+	//	*WorkerUploadRequest_Commit
+	//	*WorkerUploadRequest_Abort
+	Step          isWorkerUploadRequest_Step `protobuf_oneof:"step"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerUploadRequest) Reset() {
+	*x = WorkerUploadRequest{}
+	mi := &file_armadra_v1_worker_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerUploadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerUploadRequest) ProtoMessage() {}
+
+func (x *WorkerUploadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerUploadRequest.ProtoReflect.Descriptor instead.
+func (*WorkerUploadRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *WorkerUploadRequest) GetStep() isWorkerUploadRequest_Step {
+	if x != nil {
+		return x.Step
+	}
+	return nil
+}
+
+func (x *WorkerUploadRequest) GetBegin() *WorkerUploadBegin {
+	if x != nil {
+		if x, ok := x.Step.(*WorkerUploadRequest_Begin); ok {
+			return x.Begin
+		}
+	}
+	return nil
+}
+
+func (x *WorkerUploadRequest) GetChunk() *WorkerUploadChunk {
+	if x != nil {
+		if x, ok := x.Step.(*WorkerUploadRequest_Chunk); ok {
+			return x.Chunk
+		}
+	}
+	return nil
+}
+
+func (x *WorkerUploadRequest) GetCommit() *WorkerUploadCommit {
+	if x != nil {
+		if x, ok := x.Step.(*WorkerUploadRequest_Commit); ok {
+			return x.Commit
+		}
+	}
+	return nil
+}
+
+func (x *WorkerUploadRequest) GetAbort() *WorkerUploadAbort {
+	if x != nil {
+		if x, ok := x.Step.(*WorkerUploadRequest_Abort); ok {
+			return x.Abort
+		}
+	}
+	return nil
+}
+
+type isWorkerUploadRequest_Step interface {
+	isWorkerUploadRequest_Step()
+}
+
+type WorkerUploadRequest_Begin struct {
+	Begin *WorkerUploadBegin `protobuf:"bytes,1,opt,name=begin,proto3,oneof"`
+}
+
+type WorkerUploadRequest_Chunk struct {
+	Chunk *WorkerUploadChunk `protobuf:"bytes,2,opt,name=chunk,proto3,oneof"`
+}
+
+type WorkerUploadRequest_Commit struct {
+	Commit *WorkerUploadCommit `protobuf:"bytes,3,opt,name=commit,proto3,oneof"`
+}
+
+type WorkerUploadRequest_Abort struct {
+	Abort *WorkerUploadAbort `protobuf:"bytes,4,opt,name=abort,proto3,oneof"`
+}
+
+func (*WorkerUploadRequest_Begin) isWorkerUploadRequest_Step() {}
+
+func (*WorkerUploadRequest_Chunk) isWorkerUploadRequest_Step() {}
+
+func (*WorkerUploadRequest_Commit) isWorkerUploadRequest_Step() {}
+
+func (*WorkerUploadRequest_Abort) isWorkerUploadRequest_Step() {}
+
+// Every step answers with the bytes accepted so far. `sha256` and `path` are
+// filled in by the commit, and `path` is the workspace-relative destination
+// the file actually landed on.
+type WorkerUploadResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UploadId      string                 `protobuf:"bytes,1,opt,name=upload_id,json=uploadId,proto3" json:"upload_id,omitempty"`
+	ReceivedBytes uint64                 `protobuf:"varint,2,opt,name=received_bytes,json=receivedBytes,proto3" json:"received_bytes,omitempty"`
+	Sha256        string                 `protobuf:"bytes,3,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	Path          string                 `protobuf:"bytes,4,opt,name=path,proto3" json:"path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerUploadResponse) Reset() {
+	*x = WorkerUploadResponse{}
+	mi := &file_armadra_v1_worker_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerUploadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerUploadResponse) ProtoMessage() {}
+
+func (x *WorkerUploadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerUploadResponse.ProtoReflect.Descriptor instead.
+func (*WorkerUploadResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *WorkerUploadResponse) GetUploadId() string {
+	if x != nil {
+		return x.UploadId
+	}
+	return ""
+}
+
+func (x *WorkerUploadResponse) GetReceivedBytes() uint64 {
+	if x != nil {
+		return x.ReceivedBytes
+	}
+	return 0
+}
+
+func (x *WorkerUploadResponse) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *WorkerUploadResponse) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
 type WorkerRequest struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	RequestId          string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -1281,6 +2105,8 @@ type WorkerRequest struct {
 	//	*WorkerRequest_ReadFile
 	//	*WorkerRequest_WriteFile
 	//	*WorkerRequest_Service
+	//	*WorkerRequest_Watch
+	//	*WorkerRequest_Upload
 	//	*WorkerRequest_Command
 	//	*WorkerRequest_Agent
 	//	*WorkerRequest_SetWriteOwnership
@@ -1300,7 +2126,7 @@ type WorkerRequest struct {
 
 func (x *WorkerRequest) Reset() {
 	*x = WorkerRequest{}
-	mi := &file_armadra_v1_worker_proto_msgTypes[16]
+	mi := &file_armadra_v1_worker_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1312,7 +2138,7 @@ func (x *WorkerRequest) String() string {
 func (*WorkerRequest) ProtoMessage() {}
 
 func (x *WorkerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_worker_proto_msgTypes[16]
+	mi := &file_armadra_v1_worker_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1325,7 +2151,7 @@ func (x *WorkerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkerRequest.ProtoReflect.Descriptor instead.
 func (*WorkerRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{16}
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *WorkerRequest) GetRequestId() string {
@@ -1412,6 +2238,24 @@ func (x *WorkerRequest) GetService() *WorkerServiceRequest {
 	if x != nil {
 		if x, ok := x.Action.(*WorkerRequest_Service); ok {
 			return x.Service
+		}
+	}
+	return nil
+}
+
+func (x *WorkerRequest) GetWatch() *WorkerWatchRequest {
+	if x != nil {
+		if x, ok := x.Action.(*WorkerRequest_Watch); ok {
+			return x.Watch
+		}
+	}
+	return nil
+}
+
+func (x *WorkerRequest) GetUpload() *WorkerUploadRequest {
+	if x != nil {
+		if x, ok := x.Action.(*WorkerRequest_Upload); ok {
+			return x.Upload
 		}
 	}
 	return nil
@@ -1553,6 +2397,14 @@ type WorkerRequest_Service struct {
 	Service *WorkerServiceRequest `protobuf:"bytes,15,opt,name=service,proto3,oneof"`
 }
 
+type WorkerRequest_Watch struct {
+	Watch *WorkerWatchRequest `protobuf:"bytes,16,opt,name=watch,proto3,oneof"`
+}
+
+type WorkerRequest_Upload struct {
+	Upload *WorkerUploadRequest `protobuf:"bytes,17,opt,name=upload,proto3,oneof"`
+}
+
 type WorkerRequest_Command struct {
 	Command *CommandRequest `protobuf:"bytes,20,opt,name=command,proto3,oneof"`
 }
@@ -1633,6 +2485,10 @@ func (*WorkerRequest_WriteFile) isWorkerRequest_Action() {}
 
 func (*WorkerRequest_Service) isWorkerRequest_Action() {}
 
+func (*WorkerRequest_Watch) isWorkerRequest_Action() {}
+
+func (*WorkerRequest_Upload) isWorkerRequest_Action() {}
+
 func (*WorkerRequest_Command) isWorkerRequest_Action() {}
 
 func (*WorkerRequest_Agent) isWorkerRequest_Action() {}
@@ -1671,6 +2527,9 @@ type WorkerResponse struct {
 	//	*WorkerResponse_Error
 	//	*WorkerResponse_FileWritten
 	//	*WorkerResponse_Service
+	//	*WorkerResponse_WatchEvent
+	//	*WorkerResponse_Watch
+	//	*WorkerResponse_Upload
 	//	*WorkerResponse_Command
 	//	*WorkerResponse_Agent
 	//	*WorkerResponse_WriteOwnership
@@ -1688,7 +2547,7 @@ type WorkerResponse struct {
 
 func (x *WorkerResponse) Reset() {
 	*x = WorkerResponse{}
-	mi := &file_armadra_v1_worker_proto_msgTypes[17]
+	mi := &file_armadra_v1_worker_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1700,7 +2559,7 @@ func (x *WorkerResponse) String() string {
 func (*WorkerResponse) ProtoMessage() {}
 
 func (x *WorkerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_worker_proto_msgTypes[17]
+	mi := &file_armadra_v1_worker_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1713,7 +2572,7 @@ func (x *WorkerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkerResponse.ProtoReflect.Descriptor instead.
 func (*WorkerResponse) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{17}
+	return file_armadra_v1_worker_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *WorkerResponse) GetRequestId() string {
@@ -1802,6 +2661,33 @@ func (x *WorkerResponse) GetService() *WorkerServiceResponse {
 	if x != nil {
 		if x, ok := x.Result.(*WorkerResponse_Service); ok {
 			return x.Service
+		}
+	}
+	return nil
+}
+
+func (x *WorkerResponse) GetWatchEvent() *WorkerWatchEvent {
+	if x != nil {
+		if x, ok := x.Result.(*WorkerResponse_WatchEvent); ok {
+			return x.WatchEvent
+		}
+	}
+	return nil
+}
+
+func (x *WorkerResponse) GetWatch() *WorkerWatchSubscription {
+	if x != nil {
+		if x, ok := x.Result.(*WorkerResponse_Watch); ok {
+			return x.Watch
+		}
+	}
+	return nil
+}
+
+func (x *WorkerResponse) GetUpload() *WorkerUploadResponse {
+	if x != nil {
+		if x, ok := x.Result.(*WorkerResponse_Upload); ok {
+			return x.Upload
 		}
 	}
 	return nil
@@ -1929,6 +2815,20 @@ type WorkerResponse_Service struct {
 	Service *WorkerServiceResponse `protobuf:"bytes,16,opt,name=service,proto3,oneof"`
 }
 
+type WorkerResponse_WatchEvent struct {
+	// The only frame a Worker sends without being asked. `request_id` is
+	// empty on it and on nothing else.
+	WatchEvent *WorkerWatchEvent `protobuf:"bytes,17,opt,name=watch_event,json=watchEvent,proto3,oneof"`
+}
+
+type WorkerResponse_Watch struct {
+	Watch *WorkerWatchSubscription `protobuf:"bytes,18,opt,name=watch,proto3,oneof"`
+}
+
+type WorkerResponse_Upload struct {
+	Upload *WorkerUploadResponse `protobuf:"bytes,19,opt,name=upload,proto3,oneof"`
+}
+
 type WorkerResponse_Command struct {
 	Command *CommandResponse `protobuf:"bytes,20,opt,name=command,proto3,oneof"`
 }
@@ -1985,6 +2885,12 @@ func (*WorkerResponse_FileWritten) isWorkerResponse_Result() {}
 
 func (*WorkerResponse_Service) isWorkerResponse_Result() {}
 
+func (*WorkerResponse_WatchEvent) isWorkerResponse_Result() {}
+
+func (*WorkerResponse_Watch) isWorkerResponse_Result() {}
+
+func (*WorkerResponse_Upload) isWorkerResponse_Result() {}
+
 func (*WorkerResponse_Command) isWorkerResponse_Result() {}
 
 func (*WorkerResponse_Agent) isWorkerResponse_Result() {}
@@ -2012,7 +2918,7 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\x17armadra/v1/worker.proto\x12\n" +
 	"armadra.v1\x1a\x16armadra/v1/agent.proto\x1a\x17armadra/v1/common.proto\x1a\x18armadra/v1/command.proto\x1a\x17armadra/v1/canvas.proto\x1a\x1barmadra/v1/filesystem.proto\x1a\x1farmadra/v1/worker_channel.proto\x1a\x19armadra/v1/language.proto\x1a\x1aarmadra/v1/migration.proto\x1a\x19armadra/v1/settings.proto\"M\n" +
 	"\x12WorkerHelloRequest\x127\n" +
-	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\"\x99\x04\n" +
+	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\"\xd3\x04\n" +
 	"\x13WorkerHelloResponse\x127\n" +
 	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\x12\x17\n" +
 	"\ahost_id\x18\x02 \x01(\tR\x06hostId\x12\x1f\n" +
@@ -2025,7 +2931,8 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\x14max_file_chunk_bytes\x18\b \x01(\rR\x11maxFileChunkBytes\x12-\n" +
 	"\x13max_text_file_bytes\x18\t \x01(\rR\x10maxTextFileBytes\x12'\n" +
 	"\x0fruntime_version\x18\n" +
-	" \x01(\tR\x0eruntimeVersion\x12;\n" +
+	" \x01(\tR\x0eruntimeVersion\x128\n" +
+	"\x18service_contract_version\x18\v \x01(\rR\x16serviceContractVersion\x12;\n" +
 	"\bcommands\x18\x14 \x01(\v2\x1f.armadra.v1.CommandCapabilitiesR\bcommands\x12=\n" +
 	"\achannel\x18\x15 \x01(\v2#.armadra.v1.WorkerChannelCapabilityR\achannel\"B\n" +
 	"\x13RegisterRootRequest\x12\x17\n" +
@@ -2047,13 +2954,14 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\aroot_id\x18\x01 \x01(\tR\x06rootId\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x125\n" +
 	"\aentries\x18\x03 \x03(\v2\x1b.armadra.v1.WorkerFileEntryR\aentries\x12\x1c\n" +
-	"\ttruncated\x18\x04 \x01(\bR\ttruncated\"\xbb\x01\n" +
+	"\ttruncated\x18\x04 \x01(\bR\ttruncated\"\xcd\x01\n" +
 	"\x15WorkerReadFileRequest\x12\x17\n" +
 	"\aroot_id\x18\x01 \x01(\tR\x06rootId\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x16\n" +
 	"\x06offset\x18\x03 \x01(\x04R\x06offset\x12\x1b\n" +
 	"\tmax_bytes\x18\x04 \x01(\rR\bmaxBytes\x12,\n" +
-	"\x0fexpected_sha256\x18\x05 \x01(\fH\x00R\x0eexpectedSha256\x88\x01\x01B\x12\n" +
+	"\x0fexpected_sha256\x18\x05 \x01(\fH\x00R\x0eexpectedSha256\x88\x01\x01\x12\x10\n" +
+	"\x03raw\x18\x06 \x01(\bR\x03rawB\x12\n" +
 	"\x10_expected_sha256\"\xd2\x01\n" +
 	"\x0fWorkerFileChunk\x12\x17\n" +
 	"\aroot_id\x18\x01 \x01(\tR\x06rootId\x12\x12\n" +
@@ -2103,7 +3011,54 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\x15WorkerServiceResponse\x12\x1f\n" +
 	"\vhttp_status\x18\x01 \x01(\rR\n" +
 	"httpStatus\x12#\n" +
-	"\rresponse_json\x18\x02 \x01(\fR\fresponseJson\"\xfb\v\n" +
+	"\rresponse_json\x18\x02 \x01(\fR\fresponseJson\"\x85\x01\n" +
+	"\x12WorkerWatchRequest\x12\x17\n" +
+	"\aroot_id\x18\x01 \x01(\tR\x06rootId\x12@\n" +
+	"\toperation\x18\x02 \x01(\x0e2\".armadra.v1.WorkerServiceOperationR\toperation\x12\x14\n" +
+	"\x05paths\x18\x03 \x03(\tR\x05paths\"s\n" +
+	"\x17WorkerWatchSubscription\x12\x17\n" +
+	"\aroot_id\x18\x01 \x01(\tR\x06rootId\x12#\n" +
+	"\rwatched_paths\x18\x02 \x01(\rR\fwatchedPaths\x12\x1a\n" +
+	"\bsequence\x18\x03 \x01(\x04R\bsequence\"}\n" +
+	"\x11WorkerWatchChange\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x16\n" +
+	"\x06sha256\x18\x03 \x01(\tR\x06sha256\x12\x12\n" +
+	"\x04size\x18\x04 \x01(\x04R\x04size\x12\x14\n" +
+	"\x05mtime\x18\x05 \x01(\tR\x05mtime\"\x80\x01\n" +
+	"\x10WorkerWatchEvent\x12\x17\n" +
+	"\aroot_id\x18\x01 \x01(\tR\x06rootId\x12\x1a\n" +
+	"\bsequence\x18\x02 \x01(\x04R\bsequence\x127\n" +
+	"\achanges\x18\x03 \x03(\v2\x1d.armadra.v1.WorkerWatchChangeR\achanges\"\xdf\x01\n" +
+	"\x11WorkerUploadBegin\x12\x17\n" +
+	"\aroot_id\x18\x01 \x01(\tR\x06rootId\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x1f\n" +
+	"\vtotal_bytes\x18\x03 \x01(\x04R\n" +
+	"totalBytes\x12\x16\n" +
+	"\x06sha256\x18\x04 \x01(\tR\x06sha256\x12.\n" +
+	"\x10overwrite_sha256\x18\x05 \x01(\tH\x00R\x0foverwriteSha256\x88\x01\x01\x12\x1f\n" +
+	"\vallow_write\x18\x06 \x01(\bR\n" +
+	"allowWriteB\x13\n" +
+	"\x11_overwrite_sha256\"\\\n" +
+	"\x11WorkerUploadChunk\x12\x1b\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x16\n" +
+	"\x06offset\x18\x02 \x01(\x04R\x06offset\x12\x12\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\"1\n" +
+	"\x12WorkerUploadCommit\x12\x1b\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\"0\n" +
+	"\x11WorkerUploadAbort\x12\x1b\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\"\xfc\x01\n" +
+	"\x13WorkerUploadRequest\x125\n" +
+	"\x05begin\x18\x01 \x01(\v2\x1d.armadra.v1.WorkerUploadBeginH\x00R\x05begin\x125\n" +
+	"\x05chunk\x18\x02 \x01(\v2\x1d.armadra.v1.WorkerUploadChunkH\x00R\x05chunk\x128\n" +
+	"\x06commit\x18\x03 \x01(\v2\x1e.armadra.v1.WorkerUploadCommitH\x00R\x06commit\x125\n" +
+	"\x05abort\x18\x04 \x01(\v2\x1d.armadra.v1.WorkerUploadAbortH\x00R\x05abortB\x06\n" +
+	"\x04step\"\x86\x01\n" +
+	"\x14WorkerUploadResponse\x12\x1b\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12%\n" +
+	"\x0ereceived_bytes\x18\x02 \x01(\x04R\rreceivedBytes\x12\x16\n" +
+	"\x06sha256\x18\x03 \x01(\tR\x06sha256\x12\x12\n" +
+	"\x04path\x18\x04 \x01(\tR\x04path\"\xee\f\n" +
 	"\rWorkerRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -2118,6 +3073,8 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"write_file\x18\x0e \x01(\v2\".armadra.v1.WorkerWriteFileRequestH\x00R\twriteFile\x12<\n" +
 	"\aservice\x18\x0f \x01(\v2 .armadra.v1.WorkerServiceRequestH\x00R\aservice\x126\n" +
+	"\x05watch\x18\x10 \x01(\v2\x1e.armadra.v1.WorkerWatchRequestH\x00R\x05watch\x129\n" +
+	"\x06upload\x18\x11 \x01(\v2\x1f.armadra.v1.WorkerUploadRequestH\x00R\x06upload\x126\n" +
 	"\acommand\x18\x14 \x01(\v2\x1a.armadra.v1.CommandRequestH\x00R\acommand\x120\n" +
 	"\x05agent\x18\x15 \x01(\v2\x18.armadra.v1.AgentRequestH\x00R\x05agent\x12V\n" +
 	"\x13set_write_ownership\x18\x16 \x01(\v2$.armadra.v1.SetWriteOwnershipRequestH\x00R\x11setWriteOwnership\x12V\n" +
@@ -2132,7 +3089,7 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"filesystem\x18\x1a \x01(\v2#.armadra.v1.FilesystemWorkerRequestH\x00R\n" +
 	"filesystemB\b\n" +
-	"\x06action\"\xef\t\n" +
+	"\x06action\"\xa9\v\n" +
 	"\x0eWorkerResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -2147,7 +3104,11 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"file_chunk\x18\r \x01(\v2\x1b.armadra.v1.WorkerFileChunkH\x00R\tfileChunk\x121\n" +
 	"\x05error\x18\x0e \x01(\v2\x19.armadra.v1.ErrorResponseH\x00R\x05error\x12B\n" +
 	"\ffile_written\x18\x0f \x01(\v2\x1d.armadra.v1.WorkerFileWrittenH\x00R\vfileWritten\x12=\n" +
-	"\aservice\x18\x10 \x01(\v2!.armadra.v1.WorkerServiceResponseH\x00R\aservice\x127\n" +
+	"\aservice\x18\x10 \x01(\v2!.armadra.v1.WorkerServiceResponseH\x00R\aservice\x12?\n" +
+	"\vwatch_event\x18\x11 \x01(\v2\x1c.armadra.v1.WorkerWatchEventH\x00R\n" +
+	"watchEvent\x12;\n" +
+	"\x05watch\x18\x12 \x01(\v2#.armadra.v1.WorkerWatchSubscriptionH\x00R\x05watch\x12:\n" +
+	"\x06upload\x18\x13 \x01(\v2 .armadra.v1.WorkerUploadResponseH\x00R\x06upload\x127\n" +
 	"\acommand\x18\x14 \x01(\v2\x1b.armadra.v1.CommandResponseH\x00R\acommand\x121\n" +
 	"\x05agent\x18\x15 \x01(\v2\x19.armadra.v1.AgentResponseH\x00R\x05agent\x12K\n" +
 	"\x0fwrite_ownership\x18\x16 \x01(\v2 .armadra.v1.WorkerWriteOwnershipH\x00R\x0ewriteOwnership\x12W\n" +
@@ -2160,7 +3121,7 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"filesystem\x18\x1a \x01(\v2$.armadra.v1.FilesystemWorkerResponseH\x00R\n" +
 	"filesystemB\b\n" +
-	"\x06result*\x89\x05\n" +
+	"\x06result*\xfa\x0f\n" +
 	"\x16WorkerServiceOperation\x12(\n" +
 	"$WORKER_SERVICE_OPERATION_UNSPECIFIED\x10\x00\x12)\n" +
 	"%WORKER_SERVICE_OPERATION_FILE_VERSION\x10\x01\x12+\n" +
@@ -2177,7 +3138,37 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"#WORKER_SERVICE_OPERATION_GIT_REVERT\x10\x0f\x12(\n" +
 	"$WORKER_SERVICE_OPERATION_GIT_RESOLVE\x10\x10\x12'\n" +
 	"#WORKER_SERVICE_OPERATION_GIT_COMMIT\x10\x11\x12%\n" +
-	"!WORKER_SERVICE_OPERATION_GIT_INIT\x10\x12B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	"!WORKER_SERVICE_OPERATION_GIT_INIT\x10\x12\x12-\n" +
+	")WORKER_SERVICE_OPERATION_GIT_REPOSITORIES\x10\x13\x12)\n" +
+	"%WORKER_SERVICE_OPERATION_GIT_BRANCHES\x10\x14\x12(\n" +
+	"$WORKER_SERVICE_OPERATION_GIT_HISTORY\x10\x15\x12.\n" +
+	"*WORKER_SERVICE_OPERATION_GIT_COMMIT_DETAIL\x10\x16\x121\n" +
+	"-WORKER_SERVICE_OPERATION_GIT_COMMIT_FILE_DIFF\x10\x17\x12*\n" +
+	"&WORKER_SERVICE_OPERATION_GIT_WORKTREES\x10\x18\x12,\n" +
+	"(WORKER_SERVICE_OPERATION_GIT_REBASE_TODO\x10\x19\x12%\n" +
+	"!WORKER_SERVICE_OPERATION_GIT_TAGS\x10\x1a\x12(\n" +
+	"$WORKER_SERVICE_OPERATION_GIT_REMOTES\x10\x1b\x12(\n" +
+	"$WORKER_SERVICE_OPERATION_GIT_STASHES\x10\x1c\x12-\n" +
+	")WORKER_SERVICE_OPERATION_GIT_STASH_DETAIL\x10\x1d\x12,\n" +
+	"(WORKER_SERVICE_OPERATION_GIT_INTEGRATION\x10\x1e\x124\n" +
+	"0WORKER_SERVICE_OPERATION_GIT_CHERRY_PICK_PREVIEW\x10\x1f\x12&\n" +
+	"\"WORKER_SERVICE_OPERATION_GIT_HUNKS\x10 \x12/\n" +
+	"+WORKER_SERVICE_OPERATION_GIT_MESSAGE_SOURCE\x10!\x12+\n" +
+	"'WORKER_SERVICE_OPERATION_GIT_OPERATIONS\x10\"\x12.\n" +
+	"*WORKER_SERVICE_OPERATION_GIT_OPERATION_GET\x10#\x120\n" +
+	",WORKER_SERVICE_OPERATION_GIT_OPERATION_START\x10$\x121\n" +
+	"-WORKER_SERVICE_OPERATION_GIT_OPERATION_CANCEL\x10%\x12+\n" +
+	"'WORKER_SERVICE_OPERATION_GIT_APPLY_HUNK\x10&\x122\n" +
+	".WORKER_SERVICE_OPERATION_FILE_ENTRY_TRASH_LIST\x10'\x12&\n" +
+	"\"WORKER_SERVICE_OPERATION_FILE_INFO\x10(\x12.\n" +
+	"*WORKER_SERVICE_OPERATION_FILE_ENTRY_CREATE\x10)\x12.\n" +
+	"*WORKER_SERVICE_OPERATION_FILE_ENTRY_RENAME\x10*\x12,\n" +
+	"(WORKER_SERVICE_OPERATION_FILE_ENTRY_MOVE\x10+\x12.\n" +
+	"*WORKER_SERVICE_OPERATION_FILE_ENTRY_DELETE\x10,\x12/\n" +
+	"+WORKER_SERVICE_OPERATION_FILE_ENTRY_RESTORE\x10-\x12)\n" +
+	"%WORKER_SERVICE_OPERATION_ASSET_IMPORT\x10.\x12,\n" +
+	"(WORKER_SERVICE_OPERATION_WATCH_SUBSCRIBE\x10/\x12.\n" +
+	"*WORKER_SERVICE_OPERATION_WATCH_UNSUBSCRIBE\x100\"\x04\b1\x101B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_worker_proto_rawDescOnce sync.Once
@@ -2192,7 +3183,7 @@ func file_armadra_v1_worker_proto_rawDescGZIP() []byte {
 }
 
 var file_armadra_v1_worker_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_armadra_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_armadra_v1_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_armadra_v1_worker_proto_goTypes = []any{
 	(WorkerServiceOperation)(0),         // 0: armadra.v1.WorkerServiceOperation
 	(*WorkerHelloRequest)(nil),          // 1: armadra.v1.WorkerHelloRequest
@@ -2211,81 +3202,102 @@ var file_armadra_v1_worker_proto_goTypes = []any{
 	(*WorkerFileWritten)(nil),           // 14: armadra.v1.WorkerFileWritten
 	(*WorkerServiceRequest)(nil),        // 15: armadra.v1.WorkerServiceRequest
 	(*WorkerServiceResponse)(nil),       // 16: armadra.v1.WorkerServiceResponse
-	(*WorkerRequest)(nil),               // 17: armadra.v1.WorkerRequest
-	(*WorkerResponse)(nil),              // 18: armadra.v1.WorkerResponse
-	(*ProtocolVersion)(nil),             // 19: armadra.v1.ProtocolVersion
-	(*CommandCapabilities)(nil),         // 20: armadra.v1.CommandCapabilities
-	(*WorkerChannelCapability)(nil),     // 21: armadra.v1.WorkerChannelCapability
-	(CanvasOwnershipOwner)(0),           // 22: armadra.v1.CanvasOwnershipOwner
-	(*CommandRequest)(nil),              // 23: armadra.v1.CommandRequest
-	(*AgentRequest)(nil),                // 24: armadra.v1.AgentRequest
-	(*LanguageCapabilitiesRequest)(nil), // 25: armadra.v1.LanguageCapabilitiesRequest
-	(*OpenLanguageSessionRequest)(nil),  // 26: armadra.v1.OpenLanguageSessionRequest
-	(*CloseLanguageSessionRequest)(nil), // 27: armadra.v1.CloseLanguageSessionRequest
-	(*LanguageFrame)(nil),               // 28: armadra.v1.LanguageFrame
-	(*LanguageApplyEditRequest)(nil),    // 29: armadra.v1.LanguageApplyEditRequest
-	(*ApplyReverseExportRequest)(nil),   // 30: armadra.v1.ApplyReverseExportRequest
-	(*WorkerSettingsRequest)(nil),       // 31: armadra.v1.WorkerSettingsRequest
-	(*FilesystemWorkerRequest)(nil),     // 32: armadra.v1.FilesystemWorkerRequest
-	(*ErrorResponse)(nil),               // 33: armadra.v1.ErrorResponse
-	(*CommandResponse)(nil),             // 34: armadra.v1.CommandResponse
-	(*AgentResponse)(nil),               // 35: armadra.v1.AgentResponse
-	(*LanguageCapabilities)(nil),        // 36: armadra.v1.LanguageCapabilities
-	(*LanguageSession)(nil),             // 37: armadra.v1.LanguageSession
-	(*LanguageApplyEditResult)(nil),     // 38: armadra.v1.LanguageApplyEditResult
-	(*ReverseImportReport)(nil),         // 39: armadra.v1.ReverseImportReport
-	(*WorkerSettingsSnapshot)(nil),      // 40: armadra.v1.WorkerSettingsSnapshot
-	(*FilesystemWorkerResponse)(nil),    // 41: armadra.v1.FilesystemWorkerResponse
+	(*WorkerWatchRequest)(nil),          // 17: armadra.v1.WorkerWatchRequest
+	(*WorkerWatchSubscription)(nil),     // 18: armadra.v1.WorkerWatchSubscription
+	(*WorkerWatchChange)(nil),           // 19: armadra.v1.WorkerWatchChange
+	(*WorkerWatchEvent)(nil),            // 20: armadra.v1.WorkerWatchEvent
+	(*WorkerUploadBegin)(nil),           // 21: armadra.v1.WorkerUploadBegin
+	(*WorkerUploadChunk)(nil),           // 22: armadra.v1.WorkerUploadChunk
+	(*WorkerUploadCommit)(nil),          // 23: armadra.v1.WorkerUploadCommit
+	(*WorkerUploadAbort)(nil),           // 24: armadra.v1.WorkerUploadAbort
+	(*WorkerUploadRequest)(nil),         // 25: armadra.v1.WorkerUploadRequest
+	(*WorkerUploadResponse)(nil),        // 26: armadra.v1.WorkerUploadResponse
+	(*WorkerRequest)(nil),               // 27: armadra.v1.WorkerRequest
+	(*WorkerResponse)(nil),              // 28: armadra.v1.WorkerResponse
+	(*ProtocolVersion)(nil),             // 29: armadra.v1.ProtocolVersion
+	(*CommandCapabilities)(nil),         // 30: armadra.v1.CommandCapabilities
+	(*WorkerChannelCapability)(nil),     // 31: armadra.v1.WorkerChannelCapability
+	(CanvasOwnershipOwner)(0),           // 32: armadra.v1.CanvasOwnershipOwner
+	(*CommandRequest)(nil),              // 33: armadra.v1.CommandRequest
+	(*AgentRequest)(nil),                // 34: armadra.v1.AgentRequest
+	(*LanguageCapabilitiesRequest)(nil), // 35: armadra.v1.LanguageCapabilitiesRequest
+	(*OpenLanguageSessionRequest)(nil),  // 36: armadra.v1.OpenLanguageSessionRequest
+	(*CloseLanguageSessionRequest)(nil), // 37: armadra.v1.CloseLanguageSessionRequest
+	(*LanguageFrame)(nil),               // 38: armadra.v1.LanguageFrame
+	(*LanguageApplyEditRequest)(nil),    // 39: armadra.v1.LanguageApplyEditRequest
+	(*ApplyReverseExportRequest)(nil),   // 40: armadra.v1.ApplyReverseExportRequest
+	(*WorkerSettingsRequest)(nil),       // 41: armadra.v1.WorkerSettingsRequest
+	(*FilesystemWorkerRequest)(nil),     // 42: armadra.v1.FilesystemWorkerRequest
+	(*ErrorResponse)(nil),               // 43: armadra.v1.ErrorResponse
+	(*CommandResponse)(nil),             // 44: armadra.v1.CommandResponse
+	(*AgentResponse)(nil),               // 45: armadra.v1.AgentResponse
+	(*LanguageCapabilities)(nil),        // 46: armadra.v1.LanguageCapabilities
+	(*LanguageSession)(nil),             // 47: armadra.v1.LanguageSession
+	(*LanguageApplyEditResult)(nil),     // 48: armadra.v1.LanguageApplyEditResult
+	(*ReverseImportReport)(nil),         // 49: armadra.v1.ReverseImportReport
+	(*WorkerSettingsSnapshot)(nil),      // 50: armadra.v1.WorkerSettingsSnapshot
+	(*FilesystemWorkerResponse)(nil),    // 51: armadra.v1.FilesystemWorkerResponse
 }
 var file_armadra_v1_worker_proto_depIdxs = []int32{
-	19, // 0: armadra.v1.WorkerHelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
-	19, // 1: armadra.v1.WorkerHelloResponse.protocol:type_name -> armadra.v1.ProtocolVersion
-	20, // 2: armadra.v1.WorkerHelloResponse.commands:type_name -> armadra.v1.CommandCapabilities
-	21, // 3: armadra.v1.WorkerHelloResponse.channel:type_name -> armadra.v1.WorkerChannelCapability
+	29, // 0: armadra.v1.WorkerHelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
+	29, // 1: armadra.v1.WorkerHelloResponse.protocol:type_name -> armadra.v1.ProtocolVersion
+	30, // 2: armadra.v1.WorkerHelloResponse.commands:type_name -> armadra.v1.CommandCapabilities
+	31, // 3: armadra.v1.WorkerHelloResponse.channel:type_name -> armadra.v1.WorkerChannelCapability
 	6,  // 4: armadra.v1.WorkerDirectory.entries:type_name -> armadra.v1.WorkerFileEntry
-	22, // 5: armadra.v1.SetWriteOwnershipRequest.owner:type_name -> armadra.v1.CanvasOwnershipOwner
-	22, // 6: armadra.v1.WorkerWriteOwnership.owner:type_name -> armadra.v1.CanvasOwnershipOwner
+	32, // 5: armadra.v1.SetWriteOwnershipRequest.owner:type_name -> armadra.v1.CanvasOwnershipOwner
+	32, // 6: armadra.v1.WorkerWriteOwnership.owner:type_name -> armadra.v1.CanvasOwnershipOwner
 	0,  // 7: armadra.v1.WorkerServiceRequest.operation:type_name -> armadra.v1.WorkerServiceOperation
-	1,  // 8: armadra.v1.WorkerRequest.hello:type_name -> armadra.v1.WorkerHelloRequest
-	3,  // 9: armadra.v1.WorkerRequest.register_root:type_name -> armadra.v1.RegisterRootRequest
-	5,  // 10: armadra.v1.WorkerRequest.list_directory:type_name -> armadra.v1.WorkerListDirectoryRequest
-	8,  // 11: armadra.v1.WorkerRequest.read_file:type_name -> armadra.v1.WorkerReadFileRequest
-	13, // 12: armadra.v1.WorkerRequest.write_file:type_name -> armadra.v1.WorkerWriteFileRequest
-	15, // 13: armadra.v1.WorkerRequest.service:type_name -> armadra.v1.WorkerServiceRequest
-	23, // 14: armadra.v1.WorkerRequest.command:type_name -> armadra.v1.CommandRequest
-	24, // 15: armadra.v1.WorkerRequest.agent:type_name -> armadra.v1.AgentRequest
-	10, // 16: armadra.v1.WorkerRequest.set_write_ownership:type_name -> armadra.v1.SetWriteOwnershipRequest
-	11, // 17: armadra.v1.WorkerRequest.get_write_ownership:type_name -> armadra.v1.GetWriteOwnershipRequest
-	25, // 18: armadra.v1.WorkerRequest.language_capabilities:type_name -> armadra.v1.LanguageCapabilitiesRequest
-	26, // 19: armadra.v1.WorkerRequest.open_language_session:type_name -> armadra.v1.OpenLanguageSessionRequest
-	27, // 20: armadra.v1.WorkerRequest.close_language_session:type_name -> armadra.v1.CloseLanguageSessionRequest
-	28, // 21: armadra.v1.WorkerRequest.language_frame:type_name -> armadra.v1.LanguageFrame
-	29, // 22: armadra.v1.WorkerRequest.language_apply_edit:type_name -> armadra.v1.LanguageApplyEditRequest
-	30, // 23: armadra.v1.WorkerRequest.apply_reverse_export:type_name -> armadra.v1.ApplyReverseExportRequest
-	31, // 24: armadra.v1.WorkerRequest.settings:type_name -> armadra.v1.WorkerSettingsRequest
-	32, // 25: armadra.v1.WorkerRequest.filesystem:type_name -> armadra.v1.FilesystemWorkerRequest
-	2,  // 26: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
-	4,  // 27: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
-	7,  // 28: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
-	9,  // 29: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
-	33, // 30: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
-	14, // 31: armadra.v1.WorkerResponse.file_written:type_name -> armadra.v1.WorkerFileWritten
-	16, // 32: armadra.v1.WorkerResponse.service:type_name -> armadra.v1.WorkerServiceResponse
-	34, // 33: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
-	35, // 34: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
-	12, // 35: armadra.v1.WorkerResponse.write_ownership:type_name -> armadra.v1.WorkerWriteOwnership
-	36, // 36: armadra.v1.WorkerResponse.language_capabilities:type_name -> armadra.v1.LanguageCapabilities
-	37, // 37: armadra.v1.WorkerResponse.language_session:type_name -> armadra.v1.LanguageSession
-	28, // 38: armadra.v1.WorkerResponse.language_frame:type_name -> armadra.v1.LanguageFrame
-	38, // 39: armadra.v1.WorkerResponse.language_apply_edit:type_name -> armadra.v1.LanguageApplyEditResult
-	39, // 40: armadra.v1.WorkerResponse.reverse_import:type_name -> armadra.v1.ReverseImportReport
-	40, // 41: armadra.v1.WorkerResponse.settings:type_name -> armadra.v1.WorkerSettingsSnapshot
-	41, // 42: armadra.v1.WorkerResponse.filesystem:type_name -> armadra.v1.FilesystemWorkerResponse
-	43, // [43:43] is the sub-list for method output_type
-	43, // [43:43] is the sub-list for method input_type
-	43, // [43:43] is the sub-list for extension type_name
-	43, // [43:43] is the sub-list for extension extendee
-	0,  // [0:43] is the sub-list for field type_name
+	0,  // 8: armadra.v1.WorkerWatchRequest.operation:type_name -> armadra.v1.WorkerServiceOperation
+	19, // 9: armadra.v1.WorkerWatchEvent.changes:type_name -> armadra.v1.WorkerWatchChange
+	21, // 10: armadra.v1.WorkerUploadRequest.begin:type_name -> armadra.v1.WorkerUploadBegin
+	22, // 11: armadra.v1.WorkerUploadRequest.chunk:type_name -> armadra.v1.WorkerUploadChunk
+	23, // 12: armadra.v1.WorkerUploadRequest.commit:type_name -> armadra.v1.WorkerUploadCommit
+	24, // 13: armadra.v1.WorkerUploadRequest.abort:type_name -> armadra.v1.WorkerUploadAbort
+	1,  // 14: armadra.v1.WorkerRequest.hello:type_name -> armadra.v1.WorkerHelloRequest
+	3,  // 15: armadra.v1.WorkerRequest.register_root:type_name -> armadra.v1.RegisterRootRequest
+	5,  // 16: armadra.v1.WorkerRequest.list_directory:type_name -> armadra.v1.WorkerListDirectoryRequest
+	8,  // 17: armadra.v1.WorkerRequest.read_file:type_name -> armadra.v1.WorkerReadFileRequest
+	13, // 18: armadra.v1.WorkerRequest.write_file:type_name -> armadra.v1.WorkerWriteFileRequest
+	15, // 19: armadra.v1.WorkerRequest.service:type_name -> armadra.v1.WorkerServiceRequest
+	17, // 20: armadra.v1.WorkerRequest.watch:type_name -> armadra.v1.WorkerWatchRequest
+	25, // 21: armadra.v1.WorkerRequest.upload:type_name -> armadra.v1.WorkerUploadRequest
+	33, // 22: armadra.v1.WorkerRequest.command:type_name -> armadra.v1.CommandRequest
+	34, // 23: armadra.v1.WorkerRequest.agent:type_name -> armadra.v1.AgentRequest
+	10, // 24: armadra.v1.WorkerRequest.set_write_ownership:type_name -> armadra.v1.SetWriteOwnershipRequest
+	11, // 25: armadra.v1.WorkerRequest.get_write_ownership:type_name -> armadra.v1.GetWriteOwnershipRequest
+	35, // 26: armadra.v1.WorkerRequest.language_capabilities:type_name -> armadra.v1.LanguageCapabilitiesRequest
+	36, // 27: armadra.v1.WorkerRequest.open_language_session:type_name -> armadra.v1.OpenLanguageSessionRequest
+	37, // 28: armadra.v1.WorkerRequest.close_language_session:type_name -> armadra.v1.CloseLanguageSessionRequest
+	38, // 29: armadra.v1.WorkerRequest.language_frame:type_name -> armadra.v1.LanguageFrame
+	39, // 30: armadra.v1.WorkerRequest.language_apply_edit:type_name -> armadra.v1.LanguageApplyEditRequest
+	40, // 31: armadra.v1.WorkerRequest.apply_reverse_export:type_name -> armadra.v1.ApplyReverseExportRequest
+	41, // 32: armadra.v1.WorkerRequest.settings:type_name -> armadra.v1.WorkerSettingsRequest
+	42, // 33: armadra.v1.WorkerRequest.filesystem:type_name -> armadra.v1.FilesystemWorkerRequest
+	2,  // 34: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
+	4,  // 35: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
+	7,  // 36: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
+	9,  // 37: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
+	43, // 38: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
+	14, // 39: armadra.v1.WorkerResponse.file_written:type_name -> armadra.v1.WorkerFileWritten
+	16, // 40: armadra.v1.WorkerResponse.service:type_name -> armadra.v1.WorkerServiceResponse
+	20, // 41: armadra.v1.WorkerResponse.watch_event:type_name -> armadra.v1.WorkerWatchEvent
+	18, // 42: armadra.v1.WorkerResponse.watch:type_name -> armadra.v1.WorkerWatchSubscription
+	26, // 43: armadra.v1.WorkerResponse.upload:type_name -> armadra.v1.WorkerUploadResponse
+	44, // 44: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
+	45, // 45: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
+	12, // 46: armadra.v1.WorkerResponse.write_ownership:type_name -> armadra.v1.WorkerWriteOwnership
+	46, // 47: armadra.v1.WorkerResponse.language_capabilities:type_name -> armadra.v1.LanguageCapabilities
+	47, // 48: armadra.v1.WorkerResponse.language_session:type_name -> armadra.v1.LanguageSession
+	38, // 49: armadra.v1.WorkerResponse.language_frame:type_name -> armadra.v1.LanguageFrame
+	48, // 50: armadra.v1.WorkerResponse.language_apply_edit:type_name -> armadra.v1.LanguageApplyEditResult
+	49, // 51: armadra.v1.WorkerResponse.reverse_import:type_name -> armadra.v1.ReverseImportReport
+	50, // 52: armadra.v1.WorkerResponse.settings:type_name -> armadra.v1.WorkerSettingsSnapshot
+	51, // 53: armadra.v1.WorkerResponse.filesystem:type_name -> armadra.v1.FilesystemWorkerResponse
+	54, // [54:54] is the sub-list for method output_type
+	54, // [54:54] is the sub-list for method input_type
+	54, // [54:54] is the sub-list for extension type_name
+	54, // [54:54] is the sub-list for extension extendee
+	0,  // [0:54] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_worker_proto_init() }
@@ -2304,13 +3316,22 @@ func file_armadra_v1_worker_proto_init() {
 	file_armadra_v1_settings_proto_init()
 	file_armadra_v1_worker_proto_msgTypes[7].OneofWrappers = []any{}
 	file_armadra_v1_worker_proto_msgTypes[12].OneofWrappers = []any{}
-	file_armadra_v1_worker_proto_msgTypes[16].OneofWrappers = []any{
+	file_armadra_v1_worker_proto_msgTypes[20].OneofWrappers = []any{}
+	file_armadra_v1_worker_proto_msgTypes[24].OneofWrappers = []any{
+		(*WorkerUploadRequest_Begin)(nil),
+		(*WorkerUploadRequest_Chunk)(nil),
+		(*WorkerUploadRequest_Commit)(nil),
+		(*WorkerUploadRequest_Abort)(nil),
+	}
+	file_armadra_v1_worker_proto_msgTypes[26].OneofWrappers = []any{
 		(*WorkerRequest_Hello)(nil),
 		(*WorkerRequest_RegisterRoot)(nil),
 		(*WorkerRequest_ListDirectory)(nil),
 		(*WorkerRequest_ReadFile)(nil),
 		(*WorkerRequest_WriteFile)(nil),
 		(*WorkerRequest_Service)(nil),
+		(*WorkerRequest_Watch)(nil),
+		(*WorkerRequest_Upload)(nil),
 		(*WorkerRequest_Command)(nil),
 		(*WorkerRequest_Agent)(nil),
 		(*WorkerRequest_SetWriteOwnership)(nil),
@@ -2324,7 +3345,7 @@ func file_armadra_v1_worker_proto_init() {
 		(*WorkerRequest_Settings)(nil),
 		(*WorkerRequest_Filesystem)(nil),
 	}
-	file_armadra_v1_worker_proto_msgTypes[17].OneofWrappers = []any{
+	file_armadra_v1_worker_proto_msgTypes[27].OneofWrappers = []any{
 		(*WorkerResponse_Hello)(nil),
 		(*WorkerResponse_RegisteredRoot)(nil),
 		(*WorkerResponse_Directory)(nil),
@@ -2332,6 +3353,9 @@ func file_armadra_v1_worker_proto_init() {
 		(*WorkerResponse_Error)(nil),
 		(*WorkerResponse_FileWritten)(nil),
 		(*WorkerResponse_Service)(nil),
+		(*WorkerResponse_WatchEvent)(nil),
+		(*WorkerResponse_Watch)(nil),
+		(*WorkerResponse_Upload)(nil),
 		(*WorkerResponse_Command)(nil),
 		(*WorkerResponse_Agent)(nil),
 		(*WorkerResponse_WriteOwnership)(nil),
@@ -2349,7 +3373,7 @@ func file_armadra_v1_worker_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_worker_proto_rawDesc), len(file_armadra_v1_worker_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   18,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

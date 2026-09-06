@@ -156,6 +156,9 @@ fn the_handshake_reports_the_channel_and_its_absence() {
             platform: "macos".into(),
             architecture: "aarch64".into(),
             capabilities: vec!["worker.roots.v1".into(), "worker.upcall.v1".into()],
+            // A Worker that predates the service contract reports zero, which is
+            // what keeps it on the older exact-version rule.
+            service_contract_version: 0,
             max_frame_bytes: 1 << 20,
             max_file_chunk_bytes: 256 << 10,
             max_text_file_bytes: 1 << 20,

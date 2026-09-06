@@ -56,7 +56,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_worker: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Chdhcm1hZHJhL3YxL3dvcmtlci5wcm90bxIKYXJtYWRyYS52MSJDChJXb3JrZXJIZWxsb1JlcXVlc3QSLQoIcHJvdG9jb2wYASABKAsyGy5hcm1hZHJhLnYxLlByb3RvY29sVmVyc2lvbiL+AgoTV29ya2VySGVsbG9SZXNwb25zZRItCghwcm90b2NvbBgBIAEoCzIbLmFybWFkcmEudjEuUHJvdG9jb2xWZXJzaW9uEg8KB2hvc3RfaWQYAiABKAkSEwoLaW5zdGFuY2VfaWQYAyABKAkSEAoIcGxhdGZvcm0YBCABKAkSFAoMYXJjaGl0ZWN0dXJlGAUgASgJEhQKDGNhcGFiaWxpdGllcxgGIAMoCRIXCg9tYXhfZnJhbWVfYnl0ZXMYByABKA0SHAoUbWF4X2ZpbGVfY2h1bmtfYnl0ZXMYCCABKA0SGwoTbWF4X3RleHRfZmlsZV9ieXRlcxgJIAEoDRIXCg9ydW50aW1lX3ZlcnNpb24YCiABKAkSMQoIY29tbWFuZHMYFCABKAsyHy5hcm1hZHJhLnYxLkNvbW1hbmRDYXBhYmlsaXRpZXMSNAoHY2hhbm5lbBgVIAEoCzIjLmFybWFkcmEudjEuV29ya2VyQ2hhbm5lbENhcGFiaWxpdHkiNAoTUmVnaXN0ZXJSb290UmVxdWVzdBIPCgdyb290X2lkGAEgASgJEgwKBHBhdGgYAiABKAkiOQoOUmVnaXN0ZXJlZFJvb3QSDwoHcm9vdF9pZBgBIAEoCRIWCg5jYW5vbmljYWxfcGF0aBgCIAEoCSI7ChpXb3JrZXJMaXN0RGlyZWN0b3J5UmVxdWVzdBIPCgdyb290X2lkGAEgASgJEgwKBHBhdGgYAiABKAkiWwoPV29ya2VyRmlsZUVudHJ5EgwKBG5hbWUYASABKAkSDAoEcGF0aBgCIAEoCRIMCgRraW5kGAMgASgJEgwKBHNpemUYBCABKAQSEAoIcmVhZG9ubHkYBSABKAgicQoPV29ya2VyRGlyZWN0b3J5Eg8KB3Jvb3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRIsCgdlbnRyaWVzGAMgAygLMhsuYXJtYWRyYS52MS5Xb3JrZXJGaWxlRW50cnkSEQoJdHJ1bmNhdGVkGAQgASgIIosBChVXb3JrZXJSZWFkRmlsZVJlcXVlc3QSDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEg4KBm9mZnNldBgDIAEoBBIRCgltYXhfYnl0ZXMYBCABKA0SHAoPZXhwZWN0ZWRfc2hhMjU2GAUgASgMSACIAQFCEgoQX2V4cGVjdGVkX3NoYTI1NiKTAQoPV29ya2VyRmlsZUNodW5rEg8KB3Jvb3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRIRCgltaW1lX3R5cGUYAyABKAkSDgoGc2hhMjU2GAQgASgMEhMKC3RvdGFsX2J5dGVzGAUgASgEEg4KBm9mZnNldBgGIAEoBBIMCgRkYXRhGAcgASgMEgsKA2VvZhgIIAEoCCKXAQoYU2V0V3JpdGVPd25lcnNoaXBSZXF1ZXN0Eg4KBmRvbWFpbhgBIAEoCRIvCgVvd25lchgCIAEoDjIgLmFybWFkcmEudjEuQ2FudmFzT3duZXJzaGlwT3duZXISDQoFZXBvY2gYAyABKAQSFgoOZXhwZWN0ZWRfZXBvY2gYBCABKAQSEwoLcmVhc29uX2NvZGUYBSABKAkiKgoYR2V0V3JpdGVPd25lcnNoaXBSZXF1ZXN0Eg4KBmRvbWFpbhgBIAEoCSKXAQoUV29ya2VyV3JpdGVPd25lcnNoaXASDgoGZG9tYWluGAEgASgJEi8KBW93bmVyGAIgASgOMiAuYXJtYWRyYS52MS5DYW52YXNPd25lcnNoaXBPd25lchINCgVlcG9jaBgDIAEoBBIaChJ1cGRhdGVkX2F0X3VuaXhfbXMYBCABKAMSEwoLcmVhc29uX2NvZGUYBSABKAkihwEKFldvcmtlcldyaXRlRmlsZVJlcXVlc3QSDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEg8KB2NvbnRlbnQYAyABKAkSHAoPZXhwZWN0ZWRfc2hhMjU2GAQgASgJSACIAQESCwoDYm9tGAUgASgIQhIKEF9leHBlY3RlZF9zaGEyNTYiUAoRV29ya2VyRmlsZVdyaXR0ZW4SDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEg4KBnNoYTI1NhgDIAEoCRIMCgRzaXplGAQgASgEIqABChRXb3JrZXJTZXJ2aWNlUmVxdWVzdBIPCgdyb290X2lkGAEgASgJEjUKCW9wZXJhdGlvbhgCIAEoDjIiLmFybWFkcmEudjEuV29ya2VyU2VydmljZU9wZXJhdGlvbhIUCgxyZXF1ZXN0X2pzb24YAyABKAwSEwoLYWxsb3dfd3JpdGUYBCABKAgSFQoNYWxsb3dfZXhlY3V0ZRgFIAEoCCJDChVXb3JrZXJTZXJ2aWNlUmVzcG9uc2USEwoLaHR0cF9zdGF0dXMYASABKA0SFQoNcmVzcG9uc2VfanNvbhgCIAEoDCK/CQoNV29ya2VyUmVxdWVzdBISCgpyZXF1ZXN0X2lkGAEgASgJEg8KB2hvc3RfaWQYAiABKAkSHAoUZXhwZWN0ZWRfaW5zdGFuY2VfaWQYAyABKAkSGAoQZGVhZGxpbmVfdW5peF9tcxgEIAEoAxIvCgVoZWxsbxgKIAEoCzIeLmFybWFkcmEudjEuV29ya2VySGVsbG9SZXF1ZXN0SAASOAoNcmVnaXN0ZXJfcm9vdBgLIAEoCzIfLmFybWFkcmEudjEuUmVnaXN0ZXJSb290UmVxdWVzdEgAEkAKDmxpc3RfZGlyZWN0b3J5GAwgASgLMiYuYXJtYWRyYS52MS5Xb3JrZXJMaXN0RGlyZWN0b3J5UmVxdWVzdEgAEjYKCXJlYWRfZmlsZRgNIAEoCzIhLmFybWFkcmEudjEuV29ya2VyUmVhZEZpbGVSZXF1ZXN0SAASOAoKd3JpdGVfZmlsZRgOIAEoCzIiLmFybWFkcmEudjEuV29ya2VyV3JpdGVGaWxlUmVxdWVzdEgAEjMKB3NlcnZpY2UYDyABKAsyIC5hcm1hZHJhLnYxLldvcmtlclNlcnZpY2VSZXF1ZXN0SAASLQoHY29tbWFuZBgUIAEoCzIaLmFybWFkcmEudjEuQ29tbWFuZFJlcXVlc3RIABIpCgVhZ2VudBgVIAEoCzIYLmFybWFkcmEudjEuQWdlbnRSZXF1ZXN0SAASQwoTc2V0X3dyaXRlX293bmVyc2hpcBgWIAEoCzIkLmFybWFkcmEudjEuU2V0V3JpdGVPd25lcnNoaXBSZXF1ZXN0SAASQwoTZ2V0X3dyaXRlX293bmVyc2hpcBgXIAEoCzIkLmFybWFkcmEudjEuR2V0V3JpdGVPd25lcnNoaXBSZXF1ZXN0SAASSAoVbGFuZ3VhZ2VfY2FwYWJpbGl0aWVzGB4gASgLMicuYXJtYWRyYS52MS5MYW5ndWFnZUNhcGFiaWxpdGllc1JlcXVlc3RIABJHChVvcGVuX2xhbmd1YWdlX3Nlc3Npb24YHyABKAsyJi5hcm1hZHJhLnYxLk9wZW5MYW5ndWFnZVNlc3Npb25SZXF1ZXN0SAASSQoWY2xvc2VfbGFuZ3VhZ2Vfc2Vzc2lvbhggIAEoCzInLmFybWFkcmEudjEuQ2xvc2VMYW5ndWFnZVNlc3Npb25SZXF1ZXN0SAASMwoObGFuZ3VhZ2VfZnJhbWUYISABKAsyGS5hcm1hZHJhLnYxLkxhbmd1YWdlRnJhbWVIABJDChNsYW5ndWFnZV9hcHBseV9lZGl0GCIgASgLMiQuYXJtYWRyYS52MS5MYW5ndWFnZUFwcGx5RWRpdFJlcXVlc3RIABJFChRhcHBseV9yZXZlcnNlX2V4cG9ydBgYIAEoCzIlLmFybWFkcmEudjEuQXBwbHlSZXZlcnNlRXhwb3J0UmVxdWVzdEgAEjUKCHNldHRpbmdzGBkgASgLMiEuYXJtYWRyYS52MS5Xb3JrZXJTZXR0aW5nc1JlcXVlc3RIABI5CgpmaWxlc3lzdGVtGBogASgLMiMuYXJtYWRyYS52MS5GaWxlc3lzdGVtV29ya2VyUmVxdWVzdEgAQggKBmFjdGlvbiL4BwoOV29ya2VyUmVzcG9uc2USEgoKcmVxdWVzdF9pZBgBIAEoCRIPCgdob3N0X2lkGAIgASgJEhMKC2luc3RhbmNlX2lkGAMgASgJEjAKBWhlbGxvGAogASgLMh8uYXJtYWRyYS52MS5Xb3JrZXJIZWxsb1Jlc3BvbnNlSAASNQoPcmVnaXN0ZXJlZF9yb290GAsgASgLMhouYXJtYWRyYS52MS5SZWdpc3RlcmVkUm9vdEgAEjAKCWRpcmVjdG9yeRgMIAEoCzIbLmFybWFkcmEudjEuV29ya2VyRGlyZWN0b3J5SAASMQoKZmlsZV9jaHVuaxgNIAEoCzIbLmFybWFkcmEudjEuV29ya2VyRmlsZUNodW5rSAASKgoFZXJyb3IYDiABKAsyGS5hcm1hZHJhLnYxLkVycm9yUmVzcG9uc2VIABI1CgxmaWxlX3dyaXR0ZW4YDyABKAsyHS5hcm1hZHJhLnYxLldvcmtlckZpbGVXcml0dGVuSAASNAoHc2VydmljZRgQIAEoCzIhLmFybWFkcmEudjEuV29ya2VyU2VydmljZVJlc3BvbnNlSAASLgoHY29tbWFuZBgUIAEoCzIbLmFybWFkcmEudjEuQ29tbWFuZFJlc3BvbnNlSAASKgoFYWdlbnQYFSABKAsyGS5hcm1hZHJhLnYxLkFnZW50UmVzcG9uc2VIABI7Cg93cml0ZV9vd25lcnNoaXAYFiABKAsyIC5hcm1hZHJhLnYxLldvcmtlcldyaXRlT3duZXJzaGlwSAASQQoVbGFuZ3VhZ2VfY2FwYWJpbGl0aWVzGB4gASgLMiAuYXJtYWRyYS52MS5MYW5ndWFnZUNhcGFiaWxpdGllc0gAEjcKEGxhbmd1YWdlX3Nlc3Npb24YHyABKAsyGy5hcm1hZHJhLnYxLkxhbmd1YWdlU2Vzc2lvbkgAEjMKDmxhbmd1YWdlX2ZyYW1lGCAgASgLMhkuYXJtYWRyYS52MS5MYW5ndWFnZUZyYW1lSAASQgoTbGFuZ3VhZ2VfYXBwbHlfZWRpdBghIAEoCzIjLmFybWFkcmEudjEuTGFuZ3VhZ2VBcHBseUVkaXRSZXN1bHRIABI5Cg5yZXZlcnNlX2ltcG9ydBgXIAEoCzIfLmFybWFkcmEudjEuUmV2ZXJzZUltcG9ydFJlcG9ydEgAEjYKCHNldHRpbmdzGBkgASgLMiIuYXJtYWRyYS52MS5Xb3JrZXJTZXR0aW5nc1NuYXBzaG90SAASOgoKZmlsZXN5c3RlbRgaIAEoCzIkLmFybWFkcmEudjEuRmlsZXN5c3RlbVdvcmtlclJlc3BvbnNlSABCCAoGcmVzdWx0KokFChZXb3JrZXJTZXJ2aWNlT3BlcmF0aW9uEigKJFdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9VTlNQRUNJRklFRBAAEikKJVdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9GSUxFX1ZFUlNJT04QARIrCidXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fU0VBUkNIX0NPTlRFTlQQAhIpCiVXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fU0VBUkNIX0lOREVYEAMSJwojV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX1dBVENIX1BPTEwQBBImCiJXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fRklMRV9SRUFEEAUSJwojV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0dJVF9TVEFUVVMQChIsCihXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fR0lUX0hFQURfQ09NTUlUEAsSJQohV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0dJVF9ESUZGEAwSJgoiV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0dJVF9TVEFHRRANEigKJFdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9HSVRfVU5TVEFHRRAOEicKI1dPUktFUl9TRVJWSUNFX09QRVJBVElPTl9HSVRfUkVWRVJUEA8SKAokV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0dJVF9SRVNPTFZFEBASJwojV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0dJVF9DT01NSVQQERIlCiFXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fR0lUX0lOSVQQEkIjWiFhcm1hZHJhLmxvY2FsL2hvc3QvZ2VuL2FybWFkcmEvdjFiBnByb3RvMw",
+    "Chdhcm1hZHJhL3YxL3dvcmtlci5wcm90bxIKYXJtYWRyYS52MSJDChJXb3JrZXJIZWxsb1JlcXVlc3QSLQoIcHJvdG9jb2wYASABKAsyGy5hcm1hZHJhLnYxLlByb3RvY29sVmVyc2lvbiKgAwoTV29ya2VySGVsbG9SZXNwb25zZRItCghwcm90b2NvbBgBIAEoCzIbLmFybWFkcmEudjEuUHJvdG9jb2xWZXJzaW9uEg8KB2hvc3RfaWQYAiABKAkSEwoLaW5zdGFuY2VfaWQYAyABKAkSEAoIcGxhdGZvcm0YBCABKAkSFAoMYXJjaGl0ZWN0dXJlGAUgASgJEhQKDGNhcGFiaWxpdGllcxgGIAMoCRIXCg9tYXhfZnJhbWVfYnl0ZXMYByABKA0SHAoUbWF4X2ZpbGVfY2h1bmtfYnl0ZXMYCCABKA0SGwoTbWF4X3RleHRfZmlsZV9ieXRlcxgJIAEoDRIXCg9ydW50aW1lX3ZlcnNpb24YCiABKAkSIAoYc2VydmljZV9jb250cmFjdF92ZXJzaW9uGAsgASgNEjEKCGNvbW1hbmRzGBQgASgLMh8uYXJtYWRyYS52MS5Db21tYW5kQ2FwYWJpbGl0aWVzEjQKB2NoYW5uZWwYFSABKAsyIy5hcm1hZHJhLnYxLldvcmtlckNoYW5uZWxDYXBhYmlsaXR5IjQKE1JlZ2lzdGVyUm9vdFJlcXVlc3QSDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJIjkKDlJlZ2lzdGVyZWRSb290Eg8KB3Jvb3RfaWQYASABKAkSFgoOY2Fub25pY2FsX3BhdGgYAiABKAkiOwoaV29ya2VyTGlzdERpcmVjdG9yeVJlcXVlc3QSDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJIlsKD1dvcmtlckZpbGVFbnRyeRIMCgRuYW1lGAEgASgJEgwKBHBhdGgYAiABKAkSDAoEa2luZBgDIAEoCRIMCgRzaXplGAQgASgEEhAKCHJlYWRvbmx5GAUgASgIInEKD1dvcmtlckRpcmVjdG9yeRIPCgdyb290X2lkGAEgASgJEgwKBHBhdGgYAiABKAkSLAoHZW50cmllcxgDIAMoCzIbLmFybWFkcmEudjEuV29ya2VyRmlsZUVudHJ5EhEKCXRydW5jYXRlZBgEIAEoCCKYAQoVV29ya2VyUmVhZEZpbGVSZXF1ZXN0Eg8KB3Jvb3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRIOCgZvZmZzZXQYAyABKAQSEQoJbWF4X2J5dGVzGAQgASgNEhwKD2V4cGVjdGVkX3NoYTI1NhgFIAEoDEgAiAEBEgsKA3JhdxgGIAEoCEISChBfZXhwZWN0ZWRfc2hhMjU2IpMBCg9Xb3JrZXJGaWxlQ2h1bmsSDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhEKCW1pbWVfdHlwZRgDIAEoCRIOCgZzaGEyNTYYBCABKAwSEwoLdG90YWxfYnl0ZXMYBSABKAQSDgoGb2Zmc2V0GAYgASgEEgwKBGRhdGEYByABKAwSCwoDZW9mGAggASgIIpcBChhTZXRXcml0ZU93bmVyc2hpcFJlcXVlc3QSDgoGZG9tYWluGAEgASgJEi8KBW93bmVyGAIgASgOMiAuYXJtYWRyYS52MS5DYW52YXNPd25lcnNoaXBPd25lchINCgVlcG9jaBgDIAEoBBIWCg5leHBlY3RlZF9lcG9jaBgEIAEoBBITCgtyZWFzb25fY29kZRgFIAEoCSIqChhHZXRXcml0ZU93bmVyc2hpcFJlcXVlc3QSDgoGZG9tYWluGAEgASgJIpcBChRXb3JrZXJXcml0ZU93bmVyc2hpcBIOCgZkb21haW4YASABKAkSLwoFb3duZXIYAiABKA4yIC5hcm1hZHJhLnYxLkNhbnZhc093bmVyc2hpcE93bmVyEg0KBWVwb2NoGAMgASgEEhoKEnVwZGF0ZWRfYXRfdW5peF9tcxgEIAEoAxITCgtyZWFzb25fY29kZRgFIAEoCSKHAQoWV29ya2VyV3JpdGVGaWxlUmVxdWVzdBIPCgdyb290X2lkGAEgASgJEgwKBHBhdGgYAiABKAkSDwoHY29udGVudBgDIAEoCRIcCg9leHBlY3RlZF9zaGEyNTYYBCABKAlIAIgBARILCgNib20YBSABKAhCEgoQX2V4cGVjdGVkX3NoYTI1NiJQChFXb3JrZXJGaWxlV3JpdHRlbhIPCgdyb290X2lkGAEgASgJEgwKBHBhdGgYAiABKAkSDgoGc2hhMjU2GAMgASgJEgwKBHNpemUYBCABKAQioAEKFFdvcmtlclNlcnZpY2VSZXF1ZXN0Eg8KB3Jvb3RfaWQYASABKAkSNQoJb3BlcmF0aW9uGAIgASgOMiIuYXJtYWRyYS52MS5Xb3JrZXJTZXJ2aWNlT3BlcmF0aW9uEhQKDHJlcXVlc3RfanNvbhgDIAEoDBITCgthbGxvd193cml0ZRgEIAEoCBIVCg1hbGxvd19leGVjdXRlGAUgASgIIkMKFVdvcmtlclNlcnZpY2VSZXNwb25zZRITCgtodHRwX3N0YXR1cxgBIAEoDRIVCg1yZXNwb25zZV9qc29uGAIgASgMImsKEldvcmtlcldhdGNoUmVxdWVzdBIPCgdyb290X2lkGAEgASgJEjUKCW9wZXJhdGlvbhgCIAEoDjIiLmFybWFkcmEudjEuV29ya2VyU2VydmljZU9wZXJhdGlvbhINCgVwYXRocxgDIAMoCSJTChdXb3JrZXJXYXRjaFN1YnNjcmlwdGlvbhIPCgdyb290X2lkGAEgASgJEhUKDXdhdGNoZWRfcGF0aHMYAiABKA0SEAoIc2VxdWVuY2UYAyABKAQiXAoRV29ya2VyV2F0Y2hDaGFuZ2USDAoEcGF0aBgBIAEoCRIMCgRraW5kGAIgASgJEg4KBnNoYTI1NhgDIAEoCRIMCgRzaXplGAQgASgEEg0KBW10aW1lGAUgASgJImUKEFdvcmtlcldhdGNoRXZlbnQSDwoHcm9vdF9pZBgBIAEoCRIQCghzZXF1ZW5jZRgCIAEoBBIuCgdjaGFuZ2VzGAMgAygLMh0uYXJtYWRyYS52MS5Xb3JrZXJXYXRjaENoYW5nZSKgAQoRV29ya2VyVXBsb2FkQmVnaW4SDwoHcm9vdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhMKC3RvdGFsX2J5dGVzGAMgASgEEg4KBnNoYTI1NhgEIAEoCRIdChBvdmVyd3JpdGVfc2hhMjU2GAUgASgJSACIAQESEwoLYWxsb3dfd3JpdGUYBiABKAhCEwoRX292ZXJ3cml0ZV9zaGEyNTYiRAoRV29ya2VyVXBsb2FkQ2h1bmsSEQoJdXBsb2FkX2lkGAEgASgJEg4KBm9mZnNldBgCIAEoBBIMCgRkYXRhGAMgASgMIicKEldvcmtlclVwbG9hZENvbW1pdBIRCgl1cGxvYWRfaWQYASABKAkiJgoRV29ya2VyVXBsb2FkQWJvcnQSEQoJdXBsb2FkX2lkGAEgASgJIt8BChNXb3JrZXJVcGxvYWRSZXF1ZXN0Ei4KBWJlZ2luGAEgASgLMh0uYXJtYWRyYS52MS5Xb3JrZXJVcGxvYWRCZWdpbkgAEi4KBWNodW5rGAIgASgLMh0uYXJtYWRyYS52MS5Xb3JrZXJVcGxvYWRDaHVua0gAEjAKBmNvbW1pdBgDIAEoCzIeLmFybWFkcmEudjEuV29ya2VyVXBsb2FkQ29tbWl0SAASLgoFYWJvcnQYBCABKAsyHS5hcm1hZHJhLnYxLldvcmtlclVwbG9hZEFib3J0SABCBgoEc3RlcCJfChRXb3JrZXJVcGxvYWRSZXNwb25zZRIRCgl1cGxvYWRfaWQYASABKAkSFgoOcmVjZWl2ZWRfYnl0ZXMYAiABKAQSDgoGc2hhMjU2GAMgASgJEgwKBHBhdGgYBCABKAkiowoKDVdvcmtlclJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIPCgdob3N0X2lkGAIgASgJEhwKFGV4cGVjdGVkX2luc3RhbmNlX2lkGAMgASgJEhgKEGRlYWRsaW5lX3VuaXhfbXMYBCABKAMSLwoFaGVsbG8YCiABKAsyHi5hcm1hZHJhLnYxLldvcmtlckhlbGxvUmVxdWVzdEgAEjgKDXJlZ2lzdGVyX3Jvb3QYCyABKAsyHy5hcm1hZHJhLnYxLlJlZ2lzdGVyUm9vdFJlcXVlc3RIABJACg5saXN0X2RpcmVjdG9yeRgMIAEoCzImLmFybWFkcmEudjEuV29ya2VyTGlzdERpcmVjdG9yeVJlcXVlc3RIABI2CglyZWFkX2ZpbGUYDSABKAsyIS5hcm1hZHJhLnYxLldvcmtlclJlYWRGaWxlUmVxdWVzdEgAEjgKCndyaXRlX2ZpbGUYDiABKAsyIi5hcm1hZHJhLnYxLldvcmtlcldyaXRlRmlsZVJlcXVlc3RIABIzCgdzZXJ2aWNlGA8gASgLMiAuYXJtYWRyYS52MS5Xb3JrZXJTZXJ2aWNlUmVxdWVzdEgAEi8KBXdhdGNoGBAgASgLMh4uYXJtYWRyYS52MS5Xb3JrZXJXYXRjaFJlcXVlc3RIABIxCgZ1cGxvYWQYESABKAsyHy5hcm1hZHJhLnYxLldvcmtlclVwbG9hZFJlcXVlc3RIABItCgdjb21tYW5kGBQgASgLMhouYXJtYWRyYS52MS5Db21tYW5kUmVxdWVzdEgAEikKBWFnZW50GBUgASgLMhguYXJtYWRyYS52MS5BZ2VudFJlcXVlc3RIABJDChNzZXRfd3JpdGVfb3duZXJzaGlwGBYgASgLMiQuYXJtYWRyYS52MS5TZXRXcml0ZU93bmVyc2hpcFJlcXVlc3RIABJDChNnZXRfd3JpdGVfb3duZXJzaGlwGBcgASgLMiQuYXJtYWRyYS52MS5HZXRXcml0ZU93bmVyc2hpcFJlcXVlc3RIABJIChVsYW5ndWFnZV9jYXBhYmlsaXRpZXMYHiABKAsyJy5hcm1hZHJhLnYxLkxhbmd1YWdlQ2FwYWJpbGl0aWVzUmVxdWVzdEgAEkcKFW9wZW5fbGFuZ3VhZ2Vfc2Vzc2lvbhgfIAEoCzImLmFybWFkcmEudjEuT3Blbkxhbmd1YWdlU2Vzc2lvblJlcXVlc3RIABJJChZjbG9zZV9sYW5ndWFnZV9zZXNzaW9uGCAgASgLMicuYXJtYWRyYS52MS5DbG9zZUxhbmd1YWdlU2Vzc2lvblJlcXVlc3RIABIzCg5sYW5ndWFnZV9mcmFtZRghIAEoCzIZLmFybWFkcmEudjEuTGFuZ3VhZ2VGcmFtZUgAEkMKE2xhbmd1YWdlX2FwcGx5X2VkaXQYIiABKAsyJC5hcm1hZHJhLnYxLkxhbmd1YWdlQXBwbHlFZGl0UmVxdWVzdEgAEkUKFGFwcGx5X3JldmVyc2VfZXhwb3J0GBggASgLMiUuYXJtYWRyYS52MS5BcHBseVJldmVyc2VFeHBvcnRSZXF1ZXN0SAASNQoIc2V0dGluZ3MYGSABKAsyIS5hcm1hZHJhLnYxLldvcmtlclNldHRpbmdzUmVxdWVzdEgAEjkKCmZpbGVzeXN0ZW0YGiABKAsyIy5hcm1hZHJhLnYxLkZpbGVzeXN0ZW1Xb3JrZXJSZXF1ZXN0SABCCAoGYWN0aW9uIpcJCg5Xb3JrZXJSZXNwb25zZRISCgpyZXF1ZXN0X2lkGAEgASgJEg8KB2hvc3RfaWQYAiABKAkSEwoLaW5zdGFuY2VfaWQYAyABKAkSMAoFaGVsbG8YCiABKAsyHy5hcm1hZHJhLnYxLldvcmtlckhlbGxvUmVzcG9uc2VIABI1Cg9yZWdpc3RlcmVkX3Jvb3QYCyABKAsyGi5hcm1hZHJhLnYxLlJlZ2lzdGVyZWRSb290SAASMAoJZGlyZWN0b3J5GAwgASgLMhsuYXJtYWRyYS52MS5Xb3JrZXJEaXJlY3RvcnlIABIxCgpmaWxlX2NodW5rGA0gASgLMhsuYXJtYWRyYS52MS5Xb3JrZXJGaWxlQ2h1bmtIABIqCgVlcnJvchgOIAEoCzIZLmFybWFkcmEudjEuRXJyb3JSZXNwb25zZUgAEjUKDGZpbGVfd3JpdHRlbhgPIAEoCzIdLmFybWFkcmEudjEuV29ya2VyRmlsZVdyaXR0ZW5IABI0CgdzZXJ2aWNlGBAgASgLMiEuYXJtYWRyYS52MS5Xb3JrZXJTZXJ2aWNlUmVzcG9uc2VIABIzCgt3YXRjaF9ldmVudBgRIAEoCzIcLmFybWFkcmEudjEuV29ya2VyV2F0Y2hFdmVudEgAEjQKBXdhdGNoGBIgASgLMiMuYXJtYWRyYS52MS5Xb3JrZXJXYXRjaFN1YnNjcmlwdGlvbkgAEjIKBnVwbG9hZBgTIAEoCzIgLmFybWFkcmEudjEuV29ya2VyVXBsb2FkUmVzcG9uc2VIABIuCgdjb21tYW5kGBQgASgLMhsuYXJtYWRyYS52MS5Db21tYW5kUmVzcG9uc2VIABIqCgVhZ2VudBgVIAEoCzIZLmFybWFkcmEudjEuQWdlbnRSZXNwb25zZUgAEjsKD3dyaXRlX293bmVyc2hpcBgWIAEoCzIgLmFybWFkcmEudjEuV29ya2VyV3JpdGVPd25lcnNoaXBIABJBChVsYW5ndWFnZV9jYXBhYmlsaXRpZXMYHiABKAsyIC5hcm1hZHJhLnYxLkxhbmd1YWdlQ2FwYWJpbGl0aWVzSAASNwoQbGFuZ3VhZ2Vfc2Vzc2lvbhgfIAEoCzIbLmFybWFkcmEudjEuTGFuZ3VhZ2VTZXNzaW9uSAASMwoObGFuZ3VhZ2VfZnJhbWUYICABKAsyGS5hcm1hZHJhLnYxLkxhbmd1YWdlRnJhbWVIABJCChNsYW5ndWFnZV9hcHBseV9lZGl0GCEgASgLMiMuYXJtYWRyYS52MS5MYW5ndWFnZUFwcGx5RWRpdFJlc3VsdEgAEjkKDnJldmVyc2VfaW1wb3J0GBcgASgLMh8uYXJtYWRyYS52MS5SZXZlcnNlSW1wb3J0UmVwb3J0SAASNgoIc2V0dGluZ3MYGSABKAsyIi5hcm1hZHJhLnYxLldvcmtlclNldHRpbmdzU25hcHNob3RIABI6CgpmaWxlc3lzdGVtGBogASgLMiQuYXJtYWRyYS52MS5GaWxlc3lzdGVtV29ya2VyUmVzcG9uc2VIAEIICgZyZXN1bHQq+g8KFldvcmtlclNlcnZpY2VPcGVyYXRpb24SKAokV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX1VOU1BFQ0lGSUVEEAASKQolV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0ZJTEVfVkVSU0lPThABEisKJ1dPUktFUl9TRVJWSUNFX09QRVJBVElPTl9TRUFSQ0hfQ09OVEVOVBACEikKJVdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9TRUFSQ0hfSU5ERVgQAxInCiNXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fV0FUQ0hfUE9MTBAEEiYKIldPUktFUl9TRVJWSUNFX09QRVJBVElPTl9GSUxFX1JFQUQQBRInCiNXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fR0lUX1NUQVRVUxAKEiwKKFdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9HSVRfSEVBRF9DT01NSVQQCxIlCiFXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fR0lUX0RJRkYQDBImCiJXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fR0lUX1NUQUdFEA0SKAokV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0dJVF9VTlNUQUdFEA4SJwojV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0dJVF9SRVZFUlQQDxIoCiRXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fR0lUX1JFU09MVkUQEBInCiNXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fR0lUX0NPTU1JVBAREiUKIVdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9HSVRfSU5JVBASEi0KKVdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9HSVRfUkVQT1NJVE9SSUVTEBMSKQolV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0dJVF9CUkFOQ0hFUxAUEigKJFdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9HSVRfSElTVE9SWRAVEi4KKldPUktFUl9TRVJWSUNFX09QRVJBVElPTl9HSVRfQ09NTUlUX0RFVEFJTBAWEjEKLVdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9HSVRfQ09NTUlUX0ZJTEVfRElGRhAXEioKJldPUktFUl9TRVJWSUNFX09QRVJBVElPTl9HSVRfV09SS1RSRUVTEBgSLAooV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0dJVF9SRUJBU0VfVE9ETxAZEiUKIVdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9HSVRfVEFHUxAaEigKJFdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9HSVRfUkVNT1RFUxAbEigKJFdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9HSVRfU1RBU0hFUxAcEi0KKVdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9HSVRfU1RBU0hfREVUQUlMEB0SLAooV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0dJVF9JTlRFR1JBVElPThAeEjQKMFdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9HSVRfQ0hFUlJZX1BJQ0tfUFJFVklFVxAfEiYKIldPUktFUl9TRVJWSUNFX09QRVJBVElPTl9HSVRfSFVOS1MQIBIvCitXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fR0lUX01FU1NBR0VfU09VUkNFECESKwonV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0dJVF9PUEVSQVRJT05TECISLgoqV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0dJVF9PUEVSQVRJT05fR0VUECMSMAosV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0dJVF9PUEVSQVRJT05fU1RBUlQQJBIxCi1XT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fR0lUX09QRVJBVElPTl9DQU5DRUwQJRIrCidXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fR0lUX0FQUExZX0hVTksQJhIyCi5XT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fRklMRV9FTlRSWV9UUkFTSF9MSVNUECcSJgoiV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0ZJTEVfSU5GTxAoEi4KKldPUktFUl9TRVJWSUNFX09QRVJBVElPTl9GSUxFX0VOVFJZX0NSRUFURRApEi4KKldPUktFUl9TRVJWSUNFX09QRVJBVElPTl9GSUxFX0VOVFJZX1JFTkFNRRAqEiwKKFdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9GSUxFX0VOVFJZX01PVkUQKxIuCipXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fRklMRV9FTlRSWV9ERUxFVEUQLBIvCitXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fRklMRV9FTlRSWV9SRVNUT1JFEC0SKQolV09SS0VSX1NFUlZJQ0VfT1BFUkFUSU9OX0FTU0VUX0lNUE9SVBAuEiwKKFdPUktFUl9TRVJWSUNFX09QRVJBVElPTl9XQVRDSF9TVUJTQ1JJQkUQLxIuCipXT1JLRVJfU0VSVklDRV9PUEVSQVRJT05fV0FUQ0hfVU5TVUJTQ1JJQkUQMCIECDEQMUIjWiFhcm1hZHJhLmxvY2FsL2hvc3QvZ2VuL2FybWFkcmEvdjFiBnByb3RvMw",
     [
       file_armadra_v1_agent,
       file_armadra_v1_common,
@@ -142,13 +142,25 @@ export type WorkerHelloResponse = Message<"armadra.v1.WorkerHelloResponse"> & {
   maxTextFileBytes: number;
 
   /**
-   * The Worker binary's own release version. A controller that proxies
-   * version-locked service payloads (WorkerServiceRequest) requires an exact
-   * match; an empty value means the Worker predates remote execution.
+   * The Worker binary's own release version. Two builds whose
+   * `service_contract_version` agree may differ here: the value became a
+   * badge on the node rather than a gate (remote completion design §3.5). An
+   * empty value means the Worker predates remote execution.
    *
    * @generated from field: string runtime_version = 10;
    */
   runtimeVersion: string;
+
+  /**
+   * The version of the version-locked service payloads below. A controller
+   * proxies WorkerServiceRequest only to a Worker that reports the same
+   * number, because the bytes are one build's serde derives and nothing
+   * negotiates them. Zero means the Worker predates the contract version and
+   * is therefore only usable under the older exact-`runtime_version` rule.
+   *
+   * @generated from field: uint32 service_contract_version = 11;
+   */
+  serviceContractVersion: number;
 
   /**
    * Absent in the backward-compatible read-only mode.
@@ -348,6 +360,18 @@ export type WorkerReadFileRequest =
      * @generated from field: optional bytes expected_sha256 = 5;
      */
     expectedSha256?: Uint8Array;
+
+    /**
+     * Read the bytes as they are instead of as editor text. The default is the
+     * text reader, which refuses binary and caps at the preview limit; a
+     * download or a whiteboard asset needs neither of those, and inventing a
+     * second message for the same chunked read would only duplicate the
+     * version-mixing check. Additive: an older Worker ignores it and answers
+     * exactly as it did before.
+     *
+     * @generated from field: bool raw = 6;
+     */
+    raw: boolean;
   };
 
 /**
@@ -677,6 +701,353 @@ export const WorkerServiceResponseSchema: GenMessage<WorkerServiceResponse> =
   messageDesc(file_armadra_v1_worker, 15);
 
 /**
+ * Native filesystem watching on the execution host (design §3.4). The
+ * operation is one of WATCH_SUBSCRIBE / WATCH_UNSUBSCRIBE; anything else is
+ * refused rather than treated as a subscribe, so a mistyped request never
+ * registers a watcher nobody asked for.
+ *
+ * @generated from message armadra.v1.WorkerWatchRequest
+ */
+export type WorkerWatchRequest = Message<"armadra.v1.WorkerWatchRequest"> & {
+  /**
+   * @generated from field: string root_id = 1;
+   */
+  rootId: string;
+
+  /**
+   * @generated from field: armadra.v1.WorkerServiceOperation operation = 2;
+   */
+  operation: WorkerServiceOperation;
+
+  /**
+   * @generated from field: repeated string paths = 3;
+   */
+  paths: string[];
+};
+
+/**
+ * Describes the message armadra.v1.WorkerWatchRequest.
+ * Use `create(WorkerWatchRequestSchema)` to create a new message.
+ */
+export const WorkerWatchRequestSchema: GenMessage<WorkerWatchRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker, 16);
+
+/**
+ * The receipt for a subscribe or unsubscribe. `sequence` is the number the
+ * next event on this connection will carry, so a controller that reconnects
+ * knows where the new stream starts rather than guessing from the old one.
+ *
+ * @generated from message armadra.v1.WorkerWatchSubscription
+ */
+export type WorkerWatchSubscription =
+  Message<"armadra.v1.WorkerWatchSubscription"> & {
+    /**
+     * @generated from field: string root_id = 1;
+     */
+    rootId: string;
+
+    /**
+     * @generated from field: uint32 watched_paths = 2;
+     */
+    watchedPaths: number;
+
+    /**
+     * @generated from field: uint64 sequence = 3;
+     */
+    sequence: bigint;
+  };
+
+/**
+ * Describes the message armadra.v1.WorkerWatchSubscription.
+ * Use `create(WorkerWatchSubscriptionSchema)` to create a new message.
+ */
+export const WorkerWatchSubscriptionSchema: GenMessage<WorkerWatchSubscription> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker, 17);
+
+/**
+ * `kind` is `modified`, `removed` or `replaced`, the same three the local
+ * watcher publishes. A removal carries no digest, size or mtime.
+ *
+ * @generated from message armadra.v1.WorkerWatchChange
+ */
+export type WorkerWatchChange = Message<"armadra.v1.WorkerWatchChange"> & {
+  /**
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * @generated from field: string kind = 2;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: string sha256 = 3;
+   */
+  sha256: string;
+
+  /**
+   * @generated from field: uint64 size = 4;
+   */
+  size: bigint;
+
+  /**
+   * @generated from field: string mtime = 5;
+   */
+  mtime: string;
+};
+
+/**
+ * Describes the message armadra.v1.WorkerWatchChange.
+ * Use `create(WorkerWatchChangeSchema)` to create a new message.
+ */
+export const WorkerWatchChangeSchema: GenMessage<WorkerWatchChange> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker, 18);
+
+/**
+ * An unsolicited frame: `WorkerResponse.request_id` is empty, which is what
+ * distinguishes it from an answer. `sequence` is monotonic per connection, so
+ * a gap after a reconnect is visible and reconciled by one poll.
+ *
+ * @generated from message armadra.v1.WorkerWatchEvent
+ */
+export type WorkerWatchEvent = Message<"armadra.v1.WorkerWatchEvent"> & {
+  /**
+   * @generated from field: string root_id = 1;
+   */
+  rootId: string;
+
+  /**
+   * @generated from field: uint64 sequence = 2;
+   */
+  sequence: bigint;
+
+  /**
+   * @generated from field: repeated armadra.v1.WorkerWatchChange changes = 3;
+   */
+  changes: WorkerWatchChange[];
+};
+
+/**
+ * Describes the message armadra.v1.WorkerWatchEvent.
+ * Use `create(WorkerWatchEventSchema)` to create a new message.
+ */
+export const WorkerWatchEventSchema: GenMessage<WorkerWatchEvent> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker, 19);
+
+/**
+ * Chunked upload to the execution host (design §3.1). The Worker writes a
+ * temporary file beside the destination and publishes it atomically only once
+ * the whole stream hashes to `sha256`, so a dropped connection leaves the
+ * destination untouched rather than half written.
+ *
+ * @generated from message armadra.v1.WorkerUploadBegin
+ */
+export type WorkerUploadBegin = Message<"armadra.v1.WorkerUploadBegin"> & {
+  /**
+   * @generated from field: string root_id = 1;
+   */
+  rootId: string;
+
+  /**
+   * @generated from field: string path = 2;
+   */
+  path: string;
+
+  /**
+   * @generated from field: uint64 total_bytes = 3;
+   */
+  totalBytes: bigint;
+
+  /**
+   * Lowercase hexadecimal SHA-256 of the complete file the caller will send.
+   *
+   * @generated from field: string sha256 = 4;
+   */
+  sha256: string;
+
+  /**
+   * The content version being replaced. Absent means create-only, the same
+   * rule WorkerWriteFileRequest follows.
+   *
+   * @generated from field: optional string overwrite_sha256 = 5;
+   */
+  overwriteSha256?: string;
+
+  /**
+   * The workspace's write grant, resolved by the controller and re-checked
+   * here: an upload is a write, and the same rule that governs
+   * WorkerServiceRequest governs it. A begin without the grant is refused, so
+   * a controller that skipped its own check cannot even occupy the host's
+   * temporary space.
+   *
+   * @generated from field: bool allow_write = 6;
+   */
+  allowWrite: boolean;
+};
+
+/**
+ * Describes the message armadra.v1.WorkerUploadBegin.
+ * Use `create(WorkerUploadBeginSchema)` to create a new message.
+ */
+export const WorkerUploadBeginSchema: GenMessage<WorkerUploadBegin> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker, 20);
+
+/**
+ * @generated from message armadra.v1.WorkerUploadChunk
+ */
+export type WorkerUploadChunk = Message<"armadra.v1.WorkerUploadChunk"> & {
+  /**
+   * @generated from field: string upload_id = 1;
+   */
+  uploadId: string;
+
+  /**
+   * @generated from field: uint64 offset = 2;
+   */
+  offset: bigint;
+
+  /**
+   * @generated from field: bytes data = 3;
+   */
+  data: Uint8Array;
+};
+
+/**
+ * Describes the message armadra.v1.WorkerUploadChunk.
+ * Use `create(WorkerUploadChunkSchema)` to create a new message.
+ */
+export const WorkerUploadChunkSchema: GenMessage<WorkerUploadChunk> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker, 21);
+
+/**
+ * @generated from message armadra.v1.WorkerUploadCommit
+ */
+export type WorkerUploadCommit = Message<"armadra.v1.WorkerUploadCommit"> & {
+  /**
+   * @generated from field: string upload_id = 1;
+   */
+  uploadId: string;
+};
+
+/**
+ * Describes the message armadra.v1.WorkerUploadCommit.
+ * Use `create(WorkerUploadCommitSchema)` to create a new message.
+ */
+export const WorkerUploadCommitSchema: GenMessage<WorkerUploadCommit> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker, 22);
+
+/**
+ * @generated from message armadra.v1.WorkerUploadAbort
+ */
+export type WorkerUploadAbort = Message<"armadra.v1.WorkerUploadAbort"> & {
+  /**
+   * @generated from field: string upload_id = 1;
+   */
+  uploadId: string;
+};
+
+/**
+ * Describes the message armadra.v1.WorkerUploadAbort.
+ * Use `create(WorkerUploadAbortSchema)` to create a new message.
+ */
+export const WorkerUploadAbortSchema: GenMessage<WorkerUploadAbort> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker, 23);
+
+/**
+ * @generated from message armadra.v1.WorkerUploadRequest
+ */
+export type WorkerUploadRequest = Message<"armadra.v1.WorkerUploadRequest"> & {
+  /**
+   * @generated from oneof armadra.v1.WorkerUploadRequest.step
+   */
+  step:
+    | {
+        /**
+         * @generated from field: armadra.v1.WorkerUploadBegin begin = 1;
+         */
+        value: WorkerUploadBegin;
+        case: "begin";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.WorkerUploadChunk chunk = 2;
+         */
+        value: WorkerUploadChunk;
+        case: "chunk";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.WorkerUploadCommit commit = 3;
+         */
+        value: WorkerUploadCommit;
+        case: "commit";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.WorkerUploadAbort abort = 4;
+         */
+        value: WorkerUploadAbort;
+        case: "abort";
+      }
+    | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message armadra.v1.WorkerUploadRequest.
+ * Use `create(WorkerUploadRequestSchema)` to create a new message.
+ */
+export const WorkerUploadRequestSchema: GenMessage<WorkerUploadRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker, 24);
+
+/**
+ * Every step answers with the bytes accepted so far. `sha256` and `path` are
+ * filled in by the commit, and `path` is the workspace-relative destination
+ * the file actually landed on.
+ *
+ * @generated from message armadra.v1.WorkerUploadResponse
+ */
+export type WorkerUploadResponse =
+  Message<"armadra.v1.WorkerUploadResponse"> & {
+    /**
+     * @generated from field: string upload_id = 1;
+     */
+    uploadId: string;
+
+    /**
+     * @generated from field: uint64 received_bytes = 2;
+     */
+    receivedBytes: bigint;
+
+    /**
+     * @generated from field: string sha256 = 3;
+     */
+    sha256: string;
+
+    /**
+     * @generated from field: string path = 4;
+     */
+    path: string;
+  };
+
+/**
+ * Describes the message armadra.v1.WorkerUploadResponse.
+ * Use `create(WorkerUploadResponseSchema)` to create a new message.
+ */
+export const WorkerUploadResponseSchema: GenMessage<WorkerUploadResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker, 25);
+
+/**
  * @generated from message armadra.v1.WorkerRequest
  */
 export type WorkerRequest = Message<"armadra.v1.WorkerRequest"> & {
@@ -745,6 +1116,20 @@ export type WorkerRequest = Message<"armadra.v1.WorkerRequest"> & {
          */
         value: WorkerServiceRequest;
         case: "service";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.WorkerWatchRequest watch = 16;
+         */
+        value: WorkerWatchRequest;
+        case: "watch";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.WorkerUploadRequest upload = 17;
+         */
+        value: WorkerUploadRequest;
+        case: "upload";
       }
     | {
         /**
@@ -864,7 +1249,7 @@ export type WorkerRequest = Message<"armadra.v1.WorkerRequest"> & {
  */
 export const WorkerRequestSchema: GenMessage<WorkerRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_worker, 16);
+  messageDesc(file_armadra_v1_worker, 26);
 
 /**
  * @generated from message armadra.v1.WorkerResponse
@@ -937,6 +1322,30 @@ export type WorkerResponse = Message<"armadra.v1.WorkerResponse"> & {
          */
         value: WorkerServiceResponse;
         case: "service";
+      }
+    | {
+        /**
+         * The only frame a Worker sends without being asked. `request_id` is
+         * empty on it and on nothing else.
+         *
+         * @generated from field: armadra.v1.WorkerWatchEvent watch_event = 17;
+         */
+        value: WorkerWatchEvent;
+        case: "watchEvent";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.WorkerWatchSubscription watch = 18;
+         */
+        value: WorkerWatchSubscription;
+        case: "watch";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.WorkerUploadResponse upload = 19;
+         */
+        value: WorkerUploadResponse;
+        case: "upload";
       }
     | {
         /**
@@ -1020,7 +1429,7 @@ export type WorkerResponse = Message<"armadra.v1.WorkerResponse"> & {
  */
 export const WorkerResponseSchema: GenMessage<WorkerResponse> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_worker, 17);
+  messageDesc(file_armadra_v1_worker, 27);
 
 /**
  * Operations the controller proxies to the execution host unchanged. The list
@@ -1106,6 +1515,168 @@ export enum WorkerServiceOperation {
    * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_INIT = 18;
    */
   GIT_INIT = 18,
+
+  /**
+   * The repository panel (remote completion design §3.1). The per-worktree
+   * mutation queue lives next to the repository it serializes, so it runs on
+   * the execution host and the controller only forwards.
+   *
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_REPOSITORIES = 19;
+   */
+  GIT_REPOSITORIES = 19,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_BRANCHES = 20;
+   */
+  GIT_BRANCHES = 20,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_HISTORY = 21;
+   */
+  GIT_HISTORY = 21,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_COMMIT_DETAIL = 22;
+   */
+  GIT_COMMIT_DETAIL = 22,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_COMMIT_FILE_DIFF = 23;
+   */
+  GIT_COMMIT_FILE_DIFF = 23,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_WORKTREES = 24;
+   */
+  GIT_WORKTREES = 24,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_REBASE_TODO = 25;
+   */
+  GIT_REBASE_TODO = 25,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_TAGS = 26;
+   */
+  GIT_TAGS = 26,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_REMOTES = 27;
+   */
+  GIT_REMOTES = 27,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_STASHES = 28;
+   */
+  GIT_STASHES = 28,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_STASH_DETAIL = 29;
+   */
+  GIT_STASH_DETAIL = 29,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_INTEGRATION = 30;
+   */
+  GIT_INTEGRATION = 30,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_CHERRY_PICK_PREVIEW = 31;
+   */
+  GIT_CHERRY_PICK_PREVIEW = 31,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_HUNKS = 32;
+   */
+  GIT_HUNKS = 32,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_MESSAGE_SOURCE = 33;
+   */
+  GIT_MESSAGE_SOURCE = 33,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_OPERATIONS = 34;
+   */
+  GIT_OPERATIONS = 34,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_OPERATION_GET = 35;
+   */
+  GIT_OPERATION_GET = 35,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_OPERATION_START = 36;
+   */
+  GIT_OPERATION_START = 36,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_OPERATION_CANCEL = 37;
+   */
+  GIT_OPERATION_CANCEL = 37,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_GIT_APPLY_HUNK = 38;
+   */
+  GIT_APPLY_HUNK = 38,
+
+  /**
+   * What is still restorable under the execution host's own
+   * `.armadra/trash/`. A read, so it cannot share a number with the restore
+   * that follows it: the two have opposite replay rules.
+   *
+   * @generated from enum value: WORKER_SERVICE_OPERATION_FILE_ENTRY_TRASH_LIST = 39;
+   */
+  FILE_ENTRY_TRASH_LIST = 39,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_FILE_INFO = 40;
+   */
+  FILE_INFO = 40,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_FILE_ENTRY_CREATE = 41;
+   */
+  FILE_ENTRY_CREATE = 41,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_FILE_ENTRY_RENAME = 42;
+   */
+  FILE_ENTRY_RENAME = 42,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_FILE_ENTRY_MOVE = 43;
+   */
+  FILE_ENTRY_MOVE = 43,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_FILE_ENTRY_DELETE = 44;
+   */
+  FILE_ENTRY_DELETE = 44,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_FILE_ENTRY_RESTORE = 45;
+   */
+  FILE_ENTRY_RESTORE = 45,
+
+  /**
+   * The source file is already on the execution host; the Worker copies it
+   * into that host's own `.armadra/assets/`. Bytes from a browser travel as
+   * WorkerUploadRequest instead.
+   *
+   * @generated from enum value: WORKER_SERVICE_OPERATION_ASSET_IMPORT = 46;
+   */
+  ASSET_IMPORT = 46,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_WATCH_SUBSCRIBE = 47;
+   */
+  WATCH_SUBSCRIBE = 47,
+
+  /**
+   * @generated from enum value: WORKER_SERVICE_OPERATION_WATCH_UNSUBSCRIBE = 48;
+   */
+  WATCH_UNSUBSCRIBE = 48,
 }
 
 /**

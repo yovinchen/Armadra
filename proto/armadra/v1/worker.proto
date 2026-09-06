@@ -25,10 +25,17 @@ message WorkerHelloResponse {
   uint32 max_frame_bytes = 7;
   uint32 max_file_chunk_bytes = 8;
   uint32 max_text_file_bytes = 9;
-  // The Worker binary's own release version. A controller that proxies
-  // version-locked service payloads (WorkerServiceRequest) requires an exact
-  // match; an empty value means the Worker predates remote execution.
+  // The Worker binary's own release version. Two builds whose
+  // `service_contract_version` agree may differ here: the value became a
+  // badge on the node rather than a gate (remote completion design §3.5). An
+  // empty value means the Worker predates remote execution.
   string runtime_version = 10;
+  // The version of the version-locked service payloads below. A controller
+  // proxies WorkerServiceRequest only to a Worker that reports the same
+  // number, because the bytes are one build's serde derives and nothing
+  // negotiates them. Zero means the Worker predates the contract version and
+  // is therefore only usable under the older exact-`runtime_version` rule.
+  uint32 service_contract_version = 11;
   // Absent in the backward-compatible read-only mode.
   CommandCapabilities commands = 20;
   // The resident bidirectional channel (business migration §2.9). Absent when
@@ -60,6 +67,13 @@ message WorkerReadFileRequest {
   uint32 max_bytes = 4;
   // Required after the first chunk to prevent mixing different file versions.
   optional bytes expected_sha256 = 5;
+  // Read the bytes as they are instead of as editor text. The default is the
+  // text reader, which refuses binary and caps at the preview limit; a
+  // download or a whiteboard asset needs neither of those, and inventing a
+  // second message for the same chunked read would only duplicate the
+  // version-mixing check. Additive: an older Worker ignores it and answers
+  // exactly as it did before.
+  bool raw = 6;
 }
 message WorkerFileChunk {
   string root_id = 1;
@@ -138,6 +152,46 @@ enum WorkerServiceOperation {
   WORKER_SERVICE_OPERATION_GIT_RESOLVE = 16;
   WORKER_SERVICE_OPERATION_GIT_COMMIT = 17;
   WORKER_SERVICE_OPERATION_GIT_INIT = 18;
+  // The repository panel (remote completion design §3.1). The per-worktree
+  // mutation queue lives next to the repository it serializes, so it runs on
+  // the execution host and the controller only forwards.
+  WORKER_SERVICE_OPERATION_GIT_REPOSITORIES = 19;
+  WORKER_SERVICE_OPERATION_GIT_BRANCHES = 20;
+  WORKER_SERVICE_OPERATION_GIT_HISTORY = 21;
+  WORKER_SERVICE_OPERATION_GIT_COMMIT_DETAIL = 22;
+  WORKER_SERVICE_OPERATION_GIT_COMMIT_FILE_DIFF = 23;
+  WORKER_SERVICE_OPERATION_GIT_WORKTREES = 24;
+  WORKER_SERVICE_OPERATION_GIT_REBASE_TODO = 25;
+  WORKER_SERVICE_OPERATION_GIT_TAGS = 26;
+  WORKER_SERVICE_OPERATION_GIT_REMOTES = 27;
+  WORKER_SERVICE_OPERATION_GIT_STASHES = 28;
+  WORKER_SERVICE_OPERATION_GIT_STASH_DETAIL = 29;
+  WORKER_SERVICE_OPERATION_GIT_INTEGRATION = 30;
+  WORKER_SERVICE_OPERATION_GIT_CHERRY_PICK_PREVIEW = 31;
+  WORKER_SERVICE_OPERATION_GIT_HUNKS = 32;
+  WORKER_SERVICE_OPERATION_GIT_MESSAGE_SOURCE = 33;
+  WORKER_SERVICE_OPERATION_GIT_OPERATIONS = 34;
+  WORKER_SERVICE_OPERATION_GIT_OPERATION_GET = 35;
+  WORKER_SERVICE_OPERATION_GIT_OPERATION_START = 36;
+  WORKER_SERVICE_OPERATION_GIT_OPERATION_CANCEL = 37;
+  WORKER_SERVICE_OPERATION_GIT_APPLY_HUNK = 38;
+  // What is still restorable under the execution host's own
+  // `.armadra/trash/`. A read, so it cannot share a number with the restore
+  // that follows it: the two have opposite replay rules.
+  WORKER_SERVICE_OPERATION_FILE_ENTRY_TRASH_LIST = 39;
+  WORKER_SERVICE_OPERATION_FILE_INFO = 40;
+  WORKER_SERVICE_OPERATION_FILE_ENTRY_CREATE = 41;
+  WORKER_SERVICE_OPERATION_FILE_ENTRY_RENAME = 42;
+  WORKER_SERVICE_OPERATION_FILE_ENTRY_MOVE = 43;
+  WORKER_SERVICE_OPERATION_FILE_ENTRY_DELETE = 44;
+  WORKER_SERVICE_OPERATION_FILE_ENTRY_RESTORE = 45;
+  // The source file is already on the execution host; the Worker copies it
+  // into that host's own `.armadra/assets/`. Bytes from a browser travel as
+  // WorkerUploadRequest instead.
+  WORKER_SERVICE_OPERATION_ASSET_IMPORT = 46;
+  WORKER_SERVICE_OPERATION_WATCH_SUBSCRIBE = 47;
+  WORKER_SERVICE_OPERATION_WATCH_UNSUBSCRIBE = 48;
+  reserved 49;
 }
 // A version-locked payload, not a cross-version wire contract: both ends are
 // the same Armadra build, asserted by WorkerHelloResponse.runtime_version, and
@@ -159,6 +213,86 @@ message WorkerServiceResponse {
   bytes response_json = 2;
 }
 
+// Native filesystem watching on the execution host (design §3.4). The
+// operation is one of WATCH_SUBSCRIBE / WATCH_UNSUBSCRIBE; anything else is
+// refused rather than treated as a subscribe, so a mistyped request never
+// registers a watcher nobody asked for.
+message WorkerWatchRequest {
+  string root_id = 1;
+  WorkerServiceOperation operation = 2;
+  repeated string paths = 3;
+}
+// The receipt for a subscribe or unsubscribe. `sequence` is the number the
+// next event on this connection will carry, so a controller that reconnects
+// knows where the new stream starts rather than guessing from the old one.
+message WorkerWatchSubscription {
+  string root_id = 1;
+  uint32 watched_paths = 2;
+  uint64 sequence = 3;
+}
+// `kind` is `modified`, `removed` or `replaced`, the same three the local
+// watcher publishes. A removal carries no digest, size or mtime.
+message WorkerWatchChange {
+  string path = 1;
+  string kind = 2;
+  string sha256 = 3;
+  uint64 size = 4;
+  string mtime = 5;
+}
+// An unsolicited frame: `WorkerResponse.request_id` is empty, which is what
+// distinguishes it from an answer. `sequence` is monotonic per connection, so
+// a gap after a reconnect is visible and reconciled by one poll.
+message WorkerWatchEvent {
+  string root_id = 1;
+  uint64 sequence = 2;
+  repeated WorkerWatchChange changes = 3;
+}
+
+// Chunked upload to the execution host (design §3.1). The Worker writes a
+// temporary file beside the destination and publishes it atomically only once
+// the whole stream hashes to `sha256`, so a dropped connection leaves the
+// destination untouched rather than half written.
+message WorkerUploadBegin {
+  string root_id = 1;
+  string path = 2;
+  uint64 total_bytes = 3;
+  // Lowercase hexadecimal SHA-256 of the complete file the caller will send.
+  string sha256 = 4;
+  // The content version being replaced. Absent means create-only, the same
+  // rule WorkerWriteFileRequest follows.
+  optional string overwrite_sha256 = 5;
+  // The workspace's write grant, resolved by the controller and re-checked
+  // here: an upload is a write, and the same rule that governs
+  // WorkerServiceRequest governs it. A begin without the grant is refused, so
+  // a controller that skipped its own check cannot even occupy the host's
+  // temporary space.
+  bool allow_write = 6;
+}
+message WorkerUploadChunk {
+  string upload_id = 1;
+  uint64 offset = 2;
+  bytes data = 3;
+}
+message WorkerUploadCommit { string upload_id = 1; }
+message WorkerUploadAbort { string upload_id = 1; }
+message WorkerUploadRequest {
+  oneof step {
+    WorkerUploadBegin begin = 1;
+    WorkerUploadChunk chunk = 2;
+    WorkerUploadCommit commit = 3;
+    WorkerUploadAbort abort = 4;
+  }
+}
+// Every step answers with the bytes accepted so far. `sha256` and `path` are
+// filled in by the commit, and `path` is the workspace-relative destination
+// the file actually landed on.
+message WorkerUploadResponse {
+  string upload_id = 1;
+  uint64 received_bytes = 2;
+  string sha256 = 3;
+  string path = 4;
+}
+
 message WorkerRequest {
   string request_id = 1;
   string host_id = 2;
@@ -171,6 +305,8 @@ message WorkerRequest {
     WorkerReadFileRequest read_file = 13;
     WorkerWriteFileRequest write_file = 14;
     WorkerServiceRequest service = 15;
+    WorkerWatchRequest watch = 16;
+    WorkerUploadRequest upload = 17;
     CommandRequest command = 20;
     // Proxied to the Runtime that owns the PTY. Only present when the Worker
     // was started with a state directory and found a live local Runtime.
@@ -217,6 +353,11 @@ message WorkerResponse {
     ErrorResponse error = 14;
     WorkerFileWritten file_written = 15;
     WorkerServiceResponse service = 16;
+    // The only frame a Worker sends without being asked. `request_id` is
+    // empty on it and on nothing else.
+    WorkerWatchEvent watch_event = 17;
+    WorkerWatchSubscription watch = 18;
+    WorkerUploadResponse upload = 19;
     CommandResponse command = 20;
     AgentResponse agent = 21;
     WorkerWriteOwnership write_ownership = 22;
