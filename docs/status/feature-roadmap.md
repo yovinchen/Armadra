@@ -36,6 +36,7 @@ Armadra 是 local-first 的 AI Coding 画布：把真实 CLI Agent（Claude Code
 | Kanban 退役为只读归档；节点备注保留                                                | ✅   |
 | 迁移到 Host 后 ID、位置、资源、嵌套 Frame 一致性验收（C02）                        | ✅   |
 | 多设备画布编辑租约与 revision CAS（H04 前置）                                      | ⬜   |
+| 画布换成 React Flow，白板自写（[设计](../design/canvas-react-flow.md)）            | ⬜   |
 
 ### 3.2 Agent 终端与协作
 
