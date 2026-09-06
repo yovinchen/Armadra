@@ -1230,6 +1230,12 @@ type ReverseExportRecord struct {
 	//	*ReverseExportRecord_WorkspaceRoot
 	//	*ReverseExportRecord_Session
 	//	*ReverseExportRecord_SessionRun
+	//	*ReverseExportRecord_AgentStatus
+	//	*ReverseExportRecord_Approval
+	//	*ReverseExportRecord_MailboxMessage
+	//	*ReverseExportRecord_Delivery
+	//	*ReverseExportRecord_Handoff
+	//	*ReverseExportRecord_ContextLinks
 	Entity        isReverseExportRecord_Entity `protobuf_oneof:"entity"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1344,6 +1350,60 @@ func (x *ReverseExportRecord) GetSessionRun() *SessionRun {
 	return nil
 }
 
+func (x *ReverseExportRecord) GetAgentStatus() *AgentStatus {
+	if x != nil {
+		if x, ok := x.Entity.(*ReverseExportRecord_AgentStatus); ok {
+			return x.AgentStatus
+		}
+	}
+	return nil
+}
+
+func (x *ReverseExportRecord) GetApproval() *Approval {
+	if x != nil {
+		if x, ok := x.Entity.(*ReverseExportRecord_Approval); ok {
+			return x.Approval
+		}
+	}
+	return nil
+}
+
+func (x *ReverseExportRecord) GetMailboxMessage() *MailboxMessage {
+	if x != nil {
+		if x, ok := x.Entity.(*ReverseExportRecord_MailboxMessage); ok {
+			return x.MailboxMessage
+		}
+	}
+	return nil
+}
+
+func (x *ReverseExportRecord) GetDelivery() *Delivery {
+	if x != nil {
+		if x, ok := x.Entity.(*ReverseExportRecord_Delivery); ok {
+			return x.Delivery
+		}
+	}
+	return nil
+}
+
+func (x *ReverseExportRecord) GetHandoff() *Handoff {
+	if x != nil {
+		if x, ok := x.Entity.(*ReverseExportRecord_Handoff); ok {
+			return x.Handoff
+		}
+	}
+	return nil
+}
+
+func (x *ReverseExportRecord) GetContextLinks() *ContextLinks {
+	if x != nil {
+		if x, ok := x.Entity.(*ReverseExportRecord_ContextLinks); ok {
+			return x.ContextLinks
+		}
+	}
+	return nil
+}
+
 type isReverseExportRecord_Entity interface {
 	isReverseExportRecord_Entity()
 }
@@ -1387,6 +1447,34 @@ type ReverseExportRecord_SessionRun struct {
 	SessionRun *SessionRun `protobuf:"bytes,8,opt,name=session_run,json=sessionRun,proto3,oneof"`
 }
 
+type ReverseExportRecord_AgentStatus struct {
+	// The agent domain's records (§2.7, §3.3 agent row). Five members, because
+	// five Runtime tables move together and a package that carried only some
+	// of them would roll back an approval whose node has no status, or a
+	// handoff whose message is gone.
+	AgentStatus *AgentStatus `protobuf:"bytes,9,opt,name=agent_status,json=agentStatus,proto3,oneof"`
+}
+
+type ReverseExportRecord_Approval struct {
+	Approval *Approval `protobuf:"bytes,10,opt,name=approval,proto3,oneof"`
+}
+
+type ReverseExportRecord_MailboxMessage struct {
+	MailboxMessage *MailboxMessage `protobuf:"bytes,11,opt,name=mailbox_message,json=mailboxMessage,proto3,oneof"`
+}
+
+type ReverseExportRecord_Delivery struct {
+	Delivery *Delivery `protobuf:"bytes,12,opt,name=delivery,proto3,oneof"`
+}
+
+type ReverseExportRecord_Handoff struct {
+	Handoff *Handoff `protobuf:"bytes,13,opt,name=handoff,proto3,oneof"`
+}
+
+type ReverseExportRecord_ContextLinks struct {
+	ContextLinks *ContextLinks `protobuf:"bytes,14,opt,name=context_links,json=contextLinks,proto3,oneof"`
+}
+
 func (*ReverseExportRecord_Workspace) isReverseExportRecord_Entity() {}
 
 func (*ReverseExportRecord_Canvas) isReverseExportRecord_Entity() {}
@@ -1402,6 +1490,18 @@ func (*ReverseExportRecord_WorkspaceRoot) isReverseExportRecord_Entity() {}
 func (*ReverseExportRecord_Session) isReverseExportRecord_Entity() {}
 
 func (*ReverseExportRecord_SessionRun) isReverseExportRecord_Entity() {}
+
+func (*ReverseExportRecord_AgentStatus) isReverseExportRecord_Entity() {}
+
+func (*ReverseExportRecord_Approval) isReverseExportRecord_Entity() {}
+
+func (*ReverseExportRecord_MailboxMessage) isReverseExportRecord_Entity() {}
+
+func (*ReverseExportRecord_Delivery) isReverseExportRecord_Entity() {}
+
+func (*ReverseExportRecord_Handoff) isReverseExportRecord_Entity() {}
+
+func (*ReverseExportRecord_ContextLinks) isReverseExportRecord_Entity() {}
 
 // Apply a reverse export package to the Runtime's own database. The Runtime is
 // in the rolling_back phase when this arrives, and nothing here moves an epoch.
@@ -1610,7 +1710,7 @@ var File_armadra_v1_migration_proto protoreflect.FileDescriptor
 const file_armadra_v1_migration_proto_rawDesc = "" +
 	"\n" +
 	"\x1aarmadra/v1/migration.proto\x12\n" +
-	"armadra.v1\x1a\x17armadra/v1/canvas.proto\x1a\x1barmadra/v1/filesystem.proto\x1a\x18armadra/v1/session.proto\"\x92\x06\n" +
+	"armadra.v1\x1a\x16armadra/v1/agent.proto\x1a\x17armadra/v1/canvas.proto\x1a\x1barmadra/v1/filesystem.proto\x1a\x18armadra/v1/session.proto\"\x92\x06\n" +
 	"\x17MigrationExportManifest\x12%\n" +
 	"\x0eformat_version\x18\x01 \x01(\rR\rformatVersion\x12\x1b\n" +
 	"\texport_id\x18\x02 \x01(\tR\bexportId\x12-\n" +
@@ -1713,7 +1813,7 @@ const file_armadra_v1_migration_proto_rawDesc = "" +
 	"\x0eevent_sequence\x18\x04 \x01(\x04R\reventSequence\x12\x16\n" +
 	"\x06domain\x18\x05 \x01(\tR\x06domain\x123\n" +
 	"\x05files\x18\x06 \x03(\v2\x1d.armadra.v1.ReverseExportFileR\x05files\x12!\n" +
-	"\fentity_count\x18\a \x01(\x04R\ventityCount\"\xd6\x03\n" +
+	"\fentity_count\x18\a \x01(\x04R\ventityCount\"\xb5\x06\n" +
 	"\x13ReverseExportRecord\x12;\n" +
 	"\tworkspace\x18\x01 \x01(\v2\x1b.armadra.v1.CanvasWorkspaceH\x00R\tworkspace\x12,\n" +
 	"\x06canvas\x18\x02 \x01(\v2\x12.armadra.v1.CanvasH\x00R\x06canvas\x12,\n" +
@@ -1725,7 +1825,14 @@ const file_armadra_v1_migration_proto_rawDesc = "" +
 	"\x0eworkspace_root\x18\x06 \x01(\v2\x19.armadra.v1.WorkspaceRootH\x00R\rworkspaceRoot\x12/\n" +
 	"\asession\x18\a \x01(\v2\x13.armadra.v1.SessionH\x00R\asession\x129\n" +
 	"\vsession_run\x18\b \x01(\v2\x16.armadra.v1.SessionRunH\x00R\n" +
-	"sessionRunB\b\n" +
+	"sessionRun\x12<\n" +
+	"\fagent_status\x18\t \x01(\v2\x17.armadra.v1.AgentStatusH\x00R\vagentStatus\x122\n" +
+	"\bapproval\x18\n" +
+	" \x01(\v2\x14.armadra.v1.ApprovalH\x00R\bapproval\x12E\n" +
+	"\x0fmailbox_message\x18\v \x01(\v2\x1a.armadra.v1.MailboxMessageH\x00R\x0emailboxMessage\x122\n" +
+	"\bdelivery\x18\f \x01(\v2\x14.armadra.v1.DeliveryH\x00R\bdelivery\x12/\n" +
+	"\ahandoff\x18\r \x01(\v2\x13.armadra.v1.HandoffH\x00R\ahandoff\x12?\n" +
+	"\rcontext_links\x18\x0e \x01(\v2\x18.armadra.v1.ContextLinksH\x00R\fcontextLinksB\b\n" +
 	"\x06entity\"\xbd\x01\n" +
 	"\x19ApplyReverseExportRequest\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\x12!\n" +
@@ -1787,6 +1894,12 @@ var file_armadra_v1_migration_proto_goTypes = []any{
 	(*WorkspaceRoot)(nil),             // 22: armadra.v1.WorkspaceRoot
 	(*Session)(nil),                   // 23: armadra.v1.Session
 	(*SessionRun)(nil),                // 24: armadra.v1.SessionRun
+	(*AgentStatus)(nil),               // 25: armadra.v1.AgentStatus
+	(*Approval)(nil),                  // 26: armadra.v1.Approval
+	(*MailboxMessage)(nil),            // 27: armadra.v1.MailboxMessage
+	(*Delivery)(nil),                  // 28: armadra.v1.Delivery
+	(*Handoff)(nil),                   // 29: armadra.v1.Handoff
+	(*ContextLinks)(nil),              // 30: armadra.v1.ContextLinks
 }
 var file_armadra_v1_migration_proto_depIdxs = []int32{
 	1,  // 0: armadra.v1.MigrationExportManifest.migrations:type_name -> armadra.v1.ExportMigration
@@ -1809,14 +1922,20 @@ var file_armadra_v1_migration_proto_depIdxs = []int32{
 	22, // 17: armadra.v1.ReverseExportRecord.workspace_root:type_name -> armadra.v1.WorkspaceRoot
 	23, // 18: armadra.v1.ReverseExportRecord.session:type_name -> armadra.v1.Session
 	24, // 19: armadra.v1.ReverseExportRecord.session_run:type_name -> armadra.v1.SessionRun
-	12, // 20: armadra.v1.ReverseImportReport.reexported:type_name -> armadra.v1.ReverseExportFile
-	2,  // 21: armadra.v1.ReverseImportReport.tables:type_name -> armadra.v1.ExportTable
-	7,  // 22: armadra.v1.ReverseImportReport.issues:type_name -> armadra.v1.ExportIssue
-	23, // [23:23] is the sub-list for method output_type
-	23, // [23:23] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	25, // 20: armadra.v1.ReverseExportRecord.agent_status:type_name -> armadra.v1.AgentStatus
+	26, // 21: armadra.v1.ReverseExportRecord.approval:type_name -> armadra.v1.Approval
+	27, // 22: armadra.v1.ReverseExportRecord.mailbox_message:type_name -> armadra.v1.MailboxMessage
+	28, // 23: armadra.v1.ReverseExportRecord.delivery:type_name -> armadra.v1.Delivery
+	29, // 24: armadra.v1.ReverseExportRecord.handoff:type_name -> armadra.v1.Handoff
+	30, // 25: armadra.v1.ReverseExportRecord.context_links:type_name -> armadra.v1.ContextLinks
+	12, // 26: armadra.v1.ReverseImportReport.reexported:type_name -> armadra.v1.ReverseExportFile
+	2,  // 27: armadra.v1.ReverseImportReport.tables:type_name -> armadra.v1.ExportTable
+	7,  // 28: armadra.v1.ReverseImportReport.issues:type_name -> armadra.v1.ExportIssue
+	29, // [29:29] is the sub-list for method output_type
+	29, // [29:29] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_migration_proto_init() }
@@ -1824,6 +1943,7 @@ func file_armadra_v1_migration_proto_init() {
 	if File_armadra_v1_migration_proto != nil {
 		return
 	}
+	file_armadra_v1_agent_proto_init()
 	file_armadra_v1_canvas_proto_init()
 	file_armadra_v1_filesystem_proto_init()
 	file_armadra_v1_session_proto_init()
@@ -1843,6 +1963,12 @@ func file_armadra_v1_migration_proto_init() {
 		(*ReverseExportRecord_WorkspaceRoot)(nil),
 		(*ReverseExportRecord_Session)(nil),
 		(*ReverseExportRecord_SessionRun)(nil),
+		(*ReverseExportRecord_AgentStatus)(nil),
+		(*ReverseExportRecord_Approval)(nil),
+		(*ReverseExportRecord_MailboxMessage)(nil),
+		(*ReverseExportRecord_Delivery)(nil),
+		(*ReverseExportRecord_Handoff)(nil),
+		(*ReverseExportRecord_ContextLinks)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

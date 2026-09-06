@@ -100,6 +100,16 @@ message WorkerAgentUpcall {
   string workspace_id = 1;
   string node_id = 2;
   string session_id = 3;
+  // The generation the observation was made against, so a report about a pane
+  // that has since been replaced is visible as one rather than applied to the
+  // pane that replaced it (agent domain, §2.7).
+  uint64 generation = 4;
+  // The identifier of whatever the report is about — an approval id, a trace
+  // id, a hook event id. It is what makes a replayed frame the same record
+  // rather than a second one; `(worker_instance_id, sequence)` deduplicates a
+  // frame, and this deduplicates the *thing* across Worker restarts, where the
+  // sequence window has been reset.
+  string entity_id = 5;
   bytes payload = 10;
   // SHA-256 of `payload`, so a truncated or rewritten body is refused rather
   // than stored as a shorter event.
@@ -116,6 +126,15 @@ enum WorkerAgentUpcallKind {
   WORKER_AGENT_UPCALL_KIND_HOOK_TURN = 1;
   // A CLI is blocked waiting for a permission answer.
   WORKER_AGENT_UPCALL_KIND_APPROVAL_REQUESTED = 2;
+  // What became of one attempt to put something in front of an agent. It is a
+  // receipt, not a decision: whether SUBMITTED or UNKNOWN is the right reading
+  // is a fact about the execution host's input gate, which is why the outcome
+  // travels rather than being inferred here from the absence of an error.
+  WORKER_AGENT_UPCALL_KIND_DELIVERY_RECEIPT = 3;
+  // A node left a message for another node through the Hook's own verbs.
+  WORKER_AGENT_UPCALL_KIND_MAILBOX_POST = 4;
+  // A node acknowledged one it had been left.
+  WORKER_AGENT_UPCALL_KIND_MAILBOX_ACK = 5;
 }
 
 // The Host's receipt. `ack_sequence` is the highest *contiguous* sequence the

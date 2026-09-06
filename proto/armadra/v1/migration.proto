@@ -1,6 +1,7 @@
 syntax = "proto3";
 package armadra.v1;
 option go_package = "armadra.local/host/gen/armadra/v1";
+import "armadra/v1/agent.proto";
 import "armadra/v1/canvas.proto";
 import "armadra/v1/filesystem.proto";
 import "armadra/v1/session.proto";
@@ -159,6 +160,16 @@ message ReverseExportRecord {
     // generation nothing accounts for.
     Session session = 7;
     SessionRun session_run = 8;
+    // The agent domain's records (§2.7, §3.3 agent row). Five members, because
+    // five Runtime tables move together and a package that carried only some
+    // of them would roll back an approval whose node has no status, or a
+    // handoff whose message is gone.
+    AgentStatus agent_status = 9;
+    Approval approval = 10;
+    MailboxMessage mailbox_message = 11;
+    Delivery delivery = 12;
+    Handoff handoff = 13;
+    ContextLinks context_links = 14;
   }
 }
 

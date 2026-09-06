@@ -9,6 +9,16 @@ import type {
 } from "@bufbuild/protobuf/codegenv1";
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv1";
 import type {
+  AgentStatus,
+  Approval,
+  ContextLinks,
+  Delivery,
+  Handoff,
+  HookEvent,
+  MailboxMessage,
+} from "./agent_pb.js";
+import { file_armadra_v1_agent } from "./agent_pb.js";
+import type {
   Canvas,
   CanvasAnnotation,
   CanvasEdge,
@@ -34,8 +44,9 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_events: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Chdhcm1hZHJhL3YxL2V2ZW50cy5wcm90bxIKYXJtYWRyYS52MSLkBwoNRXZlbnRFbnZlbG9wZRIQCghzZXF1ZW5jZRgBIAEoBBIWCg50cmFuc2FjdGlvbl9pZBgCIAEoBBIUCgxvcGVyYXRpb25faWQYAyABKAkSGQoRdHJhbnNhY3Rpb25faW5kZXgYBCABKA0SGAoQdHJhbnNhY3Rpb25fc2l6ZRgFIAEoDRIUCgx3b3Jrc3BhY2VfaWQYBiABKAkSJwoGZG9tYWluGAcgASgOMhcuYXJtYWRyYS52MS5FdmVudERvbWFpbhIMCgRraW5kGAggASgJEhEKCWVudGl0eV9pZBgJIAEoCRIrCghwcmlvcml0eRgKIAEoDjIZLmFybWFkcmEudjEuRXZlbnRQcmlvcml0eRIQCghyZXZpc2lvbhgyIAEoBBIPCgdkZWxldGVkGDMgASgIEjcKEGNhbnZhc193b3Jrc3BhY2UYZCABKAsyGy5hcm1hZHJhLnYxLkNhbnZhc1dvcmtzcGFjZUgAEiQKBmNhbnZhcxhlIAEoCzISLmFybWFkcmEudjEuQ2FudmFzSAASLQoLY2FudmFzX25vZGUYZiABKAsyFi5hcm1hZHJhLnYxLkNhbnZhc05vZGVIABItCgtjYW52YXNfZWRnZRhnIAEoCzIWLmFybWFkcmEudjEuQ2FudmFzRWRnZUgAEjkKEWNhbnZhc19hbm5vdGF0aW9uGGggASgLMhwuYXJtYWRyYS52MS5DYW52YXNBbm5vdGF0aW9uSAASOQoRc2V0dGluZ3NfZG9jdW1lbnQYeCABKAsyHC5hcm1hZHJhLnYxLlNldHRpbmdzRG9jdW1lbnRIABI8ChdzZXR0aW5nc19leGVjdXRpb25faG9zdBh5IAEoCzIZLmFybWFkcmEudjEuRXhlY3V0aW9uSG9zdEgAEjUKD2ZpbGVzeXN0ZW1fcm9vdBiMASABKAsyGS5hcm1hZHJhLnYxLldvcmtzcGFjZVJvb3RIABInCgdzZXNzaW9uGKABIAEoCzITLmFybWFkcmEudjEuU2Vzc2lvbkgAEi4KC3Nlc3Npb25fcnVuGKEBIAEoCzIWLmFybWFkcmEudjEuU2Vzc2lvblJ1bkgAEjIKDWdpdF9vcGVyYXRpb24Y3AEgASgLMhguYXJtYWRyYS52MS5HaXRPcGVyYXRpb25IABI8ChRnaXRfcmVwb3NpdG9yeV9zdGF0ZRjdASABKAsyGy5hcm1hZHJhLnYxLlJlcG9zaXRvcnlTdGF0ZUgAEjEKDWdpdF9jbG9uZV9qb2IY3gEgASgLMhcuYXJtYWRyYS52MS5HaXRDbG9uZUpvYkgAQggKBmVudGl0eSK2AQoWU3Vic2NyaWJlRXZlbnRzUmVxdWVzdBIWCg5hZnRlcl9zZXF1ZW5jZRgBIAEoBBIVCg13b3Jrc3BhY2VfaWRzGAogAygJEigKB2RvbWFpbnMYCyADKA4yFy5hcm1hZHJhLnYxLkV2ZW50RG9tYWluEhIKCnBhZ2VfYnl0ZXMYDCABKA0SLwoMbWluX3ByaW9yaXR5GA0gASgOMhkuYXJtYWRyYS52MS5FdmVudFByaW9yaXR5IrgBCglFdmVudFBhZ2USKQoGZXZlbnRzGAogAygLMhkuYXJtYWRyYS52MS5FdmVudEVudmVsb3BlEhMKC25leHRfY3Vyc29yGAsgASgEEhIKCm1pbl9jdXJzb3IYDCABKAQSFgoOaGlnaF93YXRlcm1hcmsYDSABKAQSEAoIaGFzX21vcmUYDiABKAgSLQoGc3RhdHVzGB4gASgOMh0uYXJtYWRyYS52MS5FdmVudEN1cnNvclN0YXR1cyJBCg5FdmVudEhlYXJ0YmVhdBIWCg5oaWdoX3dhdGVybWFyaxgKIAEoBBIXCg9zZW50X2F0X3VuaXhfbXMYKCABKAMigAIKEEV2ZW50U3RyZWFtRnJhbWUSNwoJc3Vic2NyaWJlGGQgASgLMiIuYXJtYWRyYS52MS5TdWJzY3JpYmVFdmVudHNSZXF1ZXN0SAASJQoEcGFnZRhlIAEoCzIVLmFybWFkcmEudjEuRXZlbnRQYWdlSAASLwoJaGVhcnRiZWF0GGYgASgLMhouYXJtYWRyYS52MS5FdmVudEhlYXJ0YmVhdEgAEiQKA2FjaxhnIAEoCzIVLmFybWFkcmEudjEuU3RyZWFtQWNrSAASKgoFZXJyb3IYaCABKAsyGS5hcm1hZHJhLnYxLkVycm9yUmVzcG9uc2VIAEIJCgdwYXlsb2FkKsQBCgtFdmVudERvbWFpbhIcChhFVkVOVF9ET01BSU5fVU5TUEVDSUZJRUQQABIXChNFVkVOVF9ET01BSU5fQ0FOVkFTEAESGQoVRVZFTlRfRE9NQUlOX1NFVFRJTkdTEAISGwoXRVZFTlRfRE9NQUlOX0ZJTEVTWVNURU0QAxIYChRFVkVOVF9ET01BSU5fU0VTU0lPThAEEhYKEkVWRU5UX0RPTUFJTl9BR0VOVBAFEhQKEEVWRU5UX0RPTUFJTl9HSVQQBipjCg1FdmVudFByaW9yaXR5Eh4KGkVWRU5UX1BSSU9SSVRZX1VOU1BFQ0lGSUVEEAASGQoVRVZFTlRfUFJJT1JJVFlfTk9STUFMEAESFwoTRVZFTlRfUFJJT1JJVFlfSElHSBACKqUBChFFdmVudEN1cnNvclN0YXR1cxIjCh9FVkVOVF9DVVJTT1JfU1RBVFVTX1VOU1BFQ0lGSUVEEAASGgoWRVZFTlRfQ1VSU09SX1NUQVRVU19PSxABEikKJUVWRU5UX0NVUlNPUl9TVEFUVVNfU05BUFNIT1RfUkVRVUlSRUQQAhIkCiBFVkVOVF9DVVJTT1JfU1RBVFVTX0NVUlNPUl9BSEVBRBADQiNaIWFybWFkcmEubG9jYWwvaG9zdC9nZW4vYXJtYWRyYS92MWIGcHJvdG8z",
+    "Chdhcm1hZHJhL3YxL2V2ZW50cy5wcm90bxIKYXJtYWRyYS52MSKvCgoNRXZlbnRFbnZlbG9wZRIQCghzZXF1ZW5jZRgBIAEoBBIWCg50cmFuc2FjdGlvbl9pZBgCIAEoBBIUCgxvcGVyYXRpb25faWQYAyABKAkSGQoRdHJhbnNhY3Rpb25faW5kZXgYBCABKA0SGAoQdHJhbnNhY3Rpb25fc2l6ZRgFIAEoDRIUCgx3b3Jrc3BhY2VfaWQYBiABKAkSJwoGZG9tYWluGAcgASgOMhcuYXJtYWRyYS52MS5FdmVudERvbWFpbhIMCgRraW5kGAggASgJEhEKCWVudGl0eV9pZBgJIAEoCRIrCghwcmlvcml0eRgKIAEoDjIZLmFybWFkcmEudjEuRXZlbnRQcmlvcml0eRIQCghyZXZpc2lvbhgyIAEoBBIPCgdkZWxldGVkGDMgASgIEjcKEGNhbnZhc193b3Jrc3BhY2UYZCABKAsyGy5hcm1hZHJhLnYxLkNhbnZhc1dvcmtzcGFjZUgAEiQKBmNhbnZhcxhlIAEoCzISLmFybWFkcmEudjEuQ2FudmFzSAASLQoLY2FudmFzX25vZGUYZiABKAsyFi5hcm1hZHJhLnYxLkNhbnZhc05vZGVIABItCgtjYW52YXNfZWRnZRhnIAEoCzIWLmFybWFkcmEudjEuQ2FudmFzRWRnZUgAEjkKEWNhbnZhc19hbm5vdGF0aW9uGGggASgLMhwuYXJtYWRyYS52MS5DYW52YXNBbm5vdGF0aW9uSAASOQoRc2V0dGluZ3NfZG9jdW1lbnQYeCABKAsyHC5hcm1hZHJhLnYxLlNldHRpbmdzRG9jdW1lbnRIABI8ChdzZXR0aW5nc19leGVjdXRpb25faG9zdBh5IAEoCzIZLmFybWFkcmEudjEuRXhlY3V0aW9uSG9zdEgAEjUKD2ZpbGVzeXN0ZW1fcm9vdBiMASABKAsyGS5hcm1hZHJhLnYxLldvcmtzcGFjZVJvb3RIABInCgdzZXNzaW9uGKABIAEoCzITLmFybWFkcmEudjEuU2Vzc2lvbkgAEi4KC3Nlc3Npb25fcnVuGKEBIAEoCzIWLmFybWFkcmEudjEuU2Vzc2lvblJ1bkgAEjAKDGFnZW50X3N0YXR1cxi0ASABKAsyFy5hcm1hZHJhLnYxLkFnZW50U3RhdHVzSAASLAoKaG9va19ldmVudBi1ASABKAsyFS5hcm1hZHJhLnYxLkhvb2tFdmVudEgAEikKCGFwcHJvdmFsGLYBIAEoCzIULmFybWFkcmEudjEuQXBwcm92YWxIABI2Cg9tYWlsYm94X21lc3NhZ2UYtwEgASgLMhouYXJtYWRyYS52MS5NYWlsYm94TWVzc2FnZUgAEikKCGRlbGl2ZXJ5GLgBIAEoCzIULmFybWFkcmEudjEuRGVsaXZlcnlIABInCgdoYW5kb2ZmGLkBIAEoCzITLmFybWFkcmEudjEuSGFuZG9mZkgAEjIKDWNvbnRleHRfbGlua3MYugEgASgLMhguYXJtYWRyYS52MS5Db250ZXh0TGlua3NIABIyCg1naXRfb3BlcmF0aW9uGNwBIAEoCzIYLmFybWFkcmEudjEuR2l0T3BlcmF0aW9uSAASPAoUZ2l0X3JlcG9zaXRvcnlfc3RhdGUY3QEgASgLMhsuYXJtYWRyYS52MS5SZXBvc2l0b3J5U3RhdGVIABIxCg1naXRfY2xvbmVfam9iGN4BIAEoCzIXLmFybWFkcmEudjEuR2l0Q2xvbmVKb2JIAEIICgZlbnRpdHkitgEKFlN1YnNjcmliZUV2ZW50c1JlcXVlc3QSFgoOYWZ0ZXJfc2VxdWVuY2UYASABKAQSFQoNd29ya3NwYWNlX2lkcxgKIAMoCRIoCgdkb21haW5zGAsgAygOMhcuYXJtYWRyYS52MS5FdmVudERvbWFpbhISCgpwYWdlX2J5dGVzGAwgASgNEi8KDG1pbl9wcmlvcml0eRgNIAEoDjIZLmFybWFkcmEudjEuRXZlbnRQcmlvcml0eSK4AQoJRXZlbnRQYWdlEikKBmV2ZW50cxgKIAMoCzIZLmFybWFkcmEudjEuRXZlbnRFbnZlbG9wZRITCgtuZXh0X2N1cnNvchgLIAEoBBISCgptaW5fY3Vyc29yGAwgASgEEhYKDmhpZ2hfd2F0ZXJtYXJrGA0gASgEEhAKCGhhc19tb3JlGA4gASgIEi0KBnN0YXR1cxgeIAEoDjIdLmFybWFkcmEudjEuRXZlbnRDdXJzb3JTdGF0dXMiQQoORXZlbnRIZWFydGJlYXQSFgoOaGlnaF93YXRlcm1hcmsYCiABKAQSFwoPc2VudF9hdF91bml4X21zGCggASgDIoACChBFdmVudFN0cmVhbUZyYW1lEjcKCXN1YnNjcmliZRhkIAEoCzIiLmFybWFkcmEudjEuU3Vic2NyaWJlRXZlbnRzUmVxdWVzdEgAEiUKBHBhZ2UYZSABKAsyFS5hcm1hZHJhLnYxLkV2ZW50UGFnZUgAEi8KCWhlYXJ0YmVhdBhmIAEoCzIaLmFybWFkcmEudjEuRXZlbnRIZWFydGJlYXRIABIkCgNhY2sYZyABKAsyFS5hcm1hZHJhLnYxLlN0cmVhbUFja0gAEioKBWVycm9yGGggASgLMhkuYXJtYWRyYS52MS5FcnJvclJlc3BvbnNlSABCCQoHcGF5bG9hZCrEAQoLRXZlbnREb21haW4SHAoYRVZFTlRfRE9NQUlOX1VOU1BFQ0lGSUVEEAASFwoTRVZFTlRfRE9NQUlOX0NBTlZBUxABEhkKFUVWRU5UX0RPTUFJTl9TRVRUSU5HUxACEhsKF0VWRU5UX0RPTUFJTl9GSUxFU1lTVEVNEAMSGAoURVZFTlRfRE9NQUlOX1NFU1NJT04QBBIWChJFVkVOVF9ET01BSU5fQUdFTlQQBRIUChBFVkVOVF9ET01BSU5fR0lUEAYqYwoNRXZlbnRQcmlvcml0eRIeChpFVkVOVF9QUklPUklUWV9VTlNQRUNJRklFRBAAEhkKFUVWRU5UX1BSSU9SSVRZX05PUk1BTBABEhcKE0VWRU5UX1BSSU9SSVRZX0hJR0gQAiqlAQoRRXZlbnRDdXJzb3JTdGF0dXMSIwofRVZFTlRfQ1VSU09SX1NUQVRVU19VTlNQRUNJRklFRBAAEhoKFkVWRU5UX0NVUlNPUl9TVEFUVVNfT0sQARIpCiVFVkVOVF9DVVJTT1JfU1RBVFVTX1NOQVBTSE9UX1JFUVVJUkVEEAISJAogRVZFTlRfQ1VSU09SX1NUQVRVU19DVVJTT1JfQUhFQUQQA0IjWiFhcm1hZHJhLmxvY2FsL2hvc3QvZ2VuL2FybWFkcmEvdjFiBnByb3RvMw",
     [
+      file_armadra_v1_agent,
       file_armadra_v1_canvas,
       file_armadra_v1_common,
       file_armadra_v1_settings,
@@ -207,6 +218,66 @@ export type EventEnvelope = Message<"armadra.v1.EventEnvelope"> & {
          */
         value: SessionRun;
         case: "sessionRun";
+      }
+    | {
+        /**
+         * The agent domain (§2.7). Seven members rather than one, because the
+         * seven change for seven different reasons and a client subscribes to the
+         * ones it draws: a board follows status, a node header follows approvals,
+         * an inbox follows mailbox messages, a handoff card follows handoffs. One
+         * "agent changed" kind would make every consumer decode a transcript
+         * reference to discover nothing it cared about moved.
+         *
+         * `hook_event` is here even though nothing renders it on its own: it is
+         * the evidence a status was reduced *from*, and a client that has to
+         * explain why a node says WAITING has nowhere else to look.
+         *
+         * @generated from field: armadra.v1.AgentStatus agent_status = 180;
+         */
+        value: AgentStatus;
+        case: "agentStatus";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.HookEvent hook_event = 181;
+         */
+        value: HookEvent;
+        case: "hookEvent";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.Approval approval = 182;
+         */
+        value: Approval;
+        case: "approval";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.MailboxMessage mailbox_message = 183;
+         */
+        value: MailboxMessage;
+        case: "mailboxMessage";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.Delivery delivery = 184;
+         */
+        value: Delivery;
+        case: "delivery";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.Handoff handoff = 185;
+         */
+        value: Handoff;
+        case: "handoff";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.ContextLinks context_links = 186;
+         */
+        value: ContextLinks;
+        case: "contextLinks";
       }
     | {
         /**

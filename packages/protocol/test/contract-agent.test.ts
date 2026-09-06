@@ -1,0 +1,258 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import {
+  create,
+  fromBinary,
+  toBinary,
+  type DescMessage,
+  type MessageInitShape,
+} from "@bufbuild/protobuf";
+import {
+  AgentState,
+  AgentStatusSchema,
+  AgentWorkerResponseSchema,
+  ApprovalSchema,
+  ApprovalState,
+  DeliveryOutcome,
+  DeliverySchema,
+  EventDomain,
+  EventEnvelopeSchema,
+  HandoffSchema,
+  HandoffState,
+  MailboxMessageSchema,
+  WorkerRequestSchema,
+} from "../src/index.js";
+
+function fixture(name: string): Uint8Array {
+  const hex = readFileSync(
+    new URL(`../../../proto/fixtures/${name}.hex`, import.meta.url),
+    "utf8",
+  ).trim();
+  return new Uint8Array(Buffer.from(hex, "hex"));
+}
+
+function check<T extends DescMessage>(
+  name: string,
+  schema: T,
+  init: MessageInitShape<T>,
+) {
+  const expected = create(schema, init);
+  const wire = fixture(name);
+  expect(fromBinary(schema, wire)).toEqual(expected);
+  expect(toBinary(schema, expected)).toEqual(wire);
+}
+
+const beyondDouble = 9_007_199_254_740_993n;
+const maxUint64 = 18_446_744_073_709_551_615n;
+const utf8 = new TextEncoder();
+
+// The agent domain's record half (Go Host 业务所有权迁移 §2.7).
+//
+// The browser reads these because it is the side that draws them: a node header
+// that says BLOCKED, an approval a person is about to answer from a phone, an
+// inbox badge, a handoff card. Each of the shapes below is a distinction the
+// interface has to keep — and the ones that matter most are the absences.
+describe("agent records", () => {
+  it("keeps an absent errored flag absent on a blocked node", () => {
+    check("agent_status_blocked", AgentStatusSchema, {
+      nodeId: "3f7c0a12-9b5e-4d21-8a6f-2c1b0d9e8a77",
+      workspaceId: "0123456789abcdef0123456789abcdef",
+      sessionId: "8f2d1c4a6b7e40a9b1c2d3e4f5a6b7c8",
+      generation: 7n,
+      agentId: "claude",
+      unread: 3,
+      verified: true,
+      interrupted: true,
+      transcriptRef: utf8.encode("claude/8f2d1c4a"),
+      state: AgentState.BLOCKED,
+      sessionPhase: "turn",
+      reasonCode: "agent.blocked.approval",
+      lastEventAtUnixMs: 1_788_557_800_000n,
+      updatedAtUnixMs: 1_788_557_900_000n,
+      revision: beyondDouble,
+    });
+  });
+
+  it("carries an approval's request as bytes with its digest", () => {
+    check("agent_approval_pending", ApprovalSchema, {
+      approvalId: "b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2",
+      nodeId: "3f7c0a12-9b5e-4d21-8a6f-2c1b0d9e8a77",
+      workspaceId: "0123456789abcdef0123456789abcdef",
+      sessionId: "8f2d1c4a6b7e40a9b1c2d3e4f5a6b7c8",
+      generation: 7n,
+      request: utf8.encode('{"tool":"Bash","command":"rm -rf 构建/"}'),
+      requestSha256: new Uint8Array(32).fill(0x5a),
+      state: ApprovalState.PENDING,
+      createdAtUnixMs: 1_788_557_800_000n,
+      revision: 1n,
+    });
+  });
+
+  it("reads an unread message by its zero acknowledgement stamp", () => {
+    check("agent_mailbox_unread", MailboxMessageSchema, {
+      messageId: "c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6",
+      workspaceId: "0123456789abcdef0123456789abcdef",
+      sourceNodeId: "3f7c0a12-9b5e-4d21-8a6f-2c1b0d9e8a77",
+      targetNodeId: "9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d",
+      messageKey: "handoff/迁移",
+      body: "接手 agent 域的 e2e，剩下的在 tools/ownership/。",
+      sequence: 42n,
+      createdAtUnixMs: 1_788_557_800_000n,
+      expiresAtUnixMs: 1_788_644_200_000n,
+      revision: 1n,
+    });
+  });
+
+  // UNKNOWN is not a failure. A client draws it as "we cannot tell", and
+  // nothing — no button, no timer — resends from it.
+  it("reports a delivery nobody can attribute as UNKNOWN", () => {
+    check("agent_delivery_unknown", DeliverySchema, {
+      traceId: "d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9",
+      workspaceId: "0123456789abcdef0123456789abcdef",
+      sourceNodeId: "3f7c0a12-9b5e-4d21-8a6f-2c1b0d9e8a77",
+      targetNodeId: "9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d",
+      receipt: "armadra-9a8b7c6d:0.0",
+      bodyChars: 128,
+      outcome: DeliveryOutcome.UNKNOWN,
+      reasonCode: "agent.delivery.unattributable",
+      createdAtUnixMs: 1_788_557_900_000n,
+      revision: 2n,
+    });
+  });
+
+  it("keeps a handoff's frozen bundle and its attempt count", () => {
+    check("agent_handoff_unknown_outcome", HandoffSchema, {
+      handoffId: "e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+      workspaceId: "0123456789abcdef0123456789abcdef",
+      sourceNodeId: "3f7c0a12-9b5e-4d21-8a6f-2c1b0d9e8a77",
+      targetNodeId: "9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d",
+      source: {
+        sessionId: "8f2d1c4a6b7e40a9b1c2d3e4f5a6b7c8",
+        generation: 7n,
+      },
+      target: {
+        sessionId: "1a2b3c4d5e6f708192a3b4c5d6e7f809",
+        generation: 2n,
+      },
+      bundle: utf8.encode(
+        '{"summary":"迁移到 Host","files":["docs/design/host-business-migration.md"]}',
+      ),
+      bundleSha256: new Uint8Array(32).fill(0x3c),
+      mailboxId: "c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6",
+      traceId: "d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9",
+      attempts: 2,
+      state: HandoffState.UNKNOWN_OUTCOME,
+      errorCode: "agent.handoff.unattributable",
+      createdAtUnixMs: 1_788_557_000_000n,
+      acceptedAtUnixMs: 1_788_557_500_000n,
+      updatedAtUnixMs: 1_788_557_900_000n,
+      revision: maxUint64,
+    });
+  });
+
+  it("reads the Worker's own listing of its agent rows", () => {
+    check("agent_worker_states", AgentWorkerResponseSchema, {
+      result: {
+        case: "agents",
+        value: {
+          workerInstanceId: "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+          agents: [
+            {
+              nodeId: "3f7c0a12-9b5e-4d21-8a6f-2c1b0d9e8a77",
+              workspaceId: "0123456789abcdef0123456789abcdef",
+              sessionId: "8f2d1c4a6b7e40a9b1c2d3e4f5a6b7c8",
+              generation: 7n,
+              agentId: "claude",
+              unread: 3,
+              verified: true,
+              transcriptRef: utf8.encode("claude/8f2d1c4a"),
+              state: AgentState.BLOCKED,
+              sessionPhase: "turn",
+              lastEventAtUnixMs: 1_788_557_800_000n,
+              updatedAtUnixMs: 1_788_557_900_000n,
+            },
+          ],
+          approvals: [
+            {
+              approvalId: "b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2",
+              nodeId: "3f7c0a12-9b5e-4d21-8a6f-2c1b0d9e8a77",
+              workspaceId: "0123456789abcdef0123456789abcdef",
+              request: utf8.encode('{"tool":"Bash","command":"rm -rf 构建/"}'),
+              requestSha256: new Uint8Array(32).fill(0x5a),
+              state: ApprovalState.PENDING,
+              createdAtUnixMs: 1_788_557_800_000n,
+            },
+          ],
+        },
+      },
+    });
+  });
+
+  // "The CLI reported no error" and "nobody has reported anything" are a green
+  // badge and a grey one. Folding them would make every node that has never run
+  // look like one that ran cleanly.
+  it("distinguishes a reported false from an absent flag", () => {
+    const reported = create(AgentStatusSchema, { nodeId: "n", errored: false });
+    const silent = create(AgentStatusSchema, { nodeId: "n" });
+    expect(toBinary(AgentStatusSchema, reported)).not.toEqual(
+      toBinary(AgentStatusSchema, silent),
+    );
+    expect(
+      fromBinary(AgentStatusSchema, toBinary(AgentStatusSchema, silent))
+        .errored,
+    ).toBeUndefined();
+    expect(
+      fromBinary(AgentStatusSchema, toBinary(AgentStatusSchema, reported))
+        .errored,
+    ).toBe(false);
+  });
+
+  // 21 is the released prompt frame and writes into a PTY; 28 carries the
+  // records the Host owns. A client that confused them would answer a listing
+  // by typing into somebody's terminal.
+  it("travels on worker action 28 and envelope members 180-186", () => {
+    expect(
+      WorkerRequestSchema.fields.find((field) => field.name === "agent_host")
+        ?.number,
+    ).toBe(28);
+    const request = create(WorkerRequestSchema, {
+      requestId: "h-agent-1",
+      hostId: "0123456789abcdef0123456789abcdef",
+      action: {
+        case: "agentHost",
+        value: { action: { case: "listAgents", value: {} } },
+      },
+    });
+    expect(
+      fromBinary(WorkerRequestSchema, toBinary(WorkerRequestSchema, request)),
+    ).toEqual(request);
+
+    for (const [name, expected] of [
+      ["agent_status", 180],
+      ["hook_event", 181],
+      ["approval", 182],
+      ["mailbox_message", 183],
+      ["delivery", 184],
+      ["handoff", 185],
+      ["context_links", 186],
+    ] as const) {
+      expect(
+        EventEnvelopeSchema.fields.find((field) => field.name === name)?.number,
+      ).toBe(expected);
+    }
+
+    const envelope = create(EventEnvelopeSchema, {
+      sequence: 12n,
+      domain: EventDomain.AGENT,
+      kind: "approval",
+      entityId: "b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2",
+      entity: {
+        case: "approval",
+        value: { approvalId: "b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2" },
+      },
+    });
+    expect(
+      fromBinary(EventEnvelopeSchema, toBinary(EventEnvelopeSchema, envelope)),
+    ).toEqual(envelope);
+  });
+});

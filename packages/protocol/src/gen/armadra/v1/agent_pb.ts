@@ -8,6 +8,10 @@ import type {
   GenMessage,
 } from "@bufbuild/protobuf/codegenv1";
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv1";
+import type { CanvasOperationReceipt } from "./canvas_pb.js";
+import { file_armadra_v1_canvas } from "./canvas_pb.js";
+import type { CommandMeta, SessionAddress } from "./common_pb.js";
+import { file_armadra_v1_common } from "./common_pb.js";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -16,7 +20,8 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_agent: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "ChZhcm1hZHJhL3YxL2FnZW50LnByb3RvEgphcm1hZHJhLnYxIosBCg9BZ2VudExhdW5jaFNwZWMSEAoIYWdlbnRfaWQYASABKAkSGQoRd29ya2luZ19kaXJlY3RvcnkYAiABKAkSDAoEYXJncxgDIAMoCRIXCg9wZXJtaXNzaW9uX21vZGUYBCABKAkSEAoIbW9kZWxfaWQYBSABKAkSEgoKYWNjb3VudF9pZBgGIAEoCSLDAQoSQWdlbnRUYXJnZXRSZXF1ZXN0EhQKDHdvcmtzcGFjZV9pZBgBIAEoCRIPCgdub2RlX2lkGAIgASgJEhIKCnNlc3Npb25faWQYAyABKAkSEgoKZ2VuZXJhdGlvbhgEIAEoBBItCghleHBlY3RlZBgFIAEoCzIbLmFybWFkcmEudjEuQWdlbnRMYXVuY2hTcGVjEi8KCmNvbGRfc3RhcnQYBiABKAsyGy5hcm1hZHJhLnYxLkFnZW50TGF1bmNoU3BlYyJ9ChFBZ2VudFRhcmdldFN0YXR1cxIrCgVzdGF0ZRgBIAEoDjIcLmFybWFkcmEudjEuQWdlbnRUYXJnZXRTdGF0ZRISCgpzZXNzaW9uX2lkGAIgASgJEhIKCmdlbmVyYXRpb24YAyABKAQSEwoLcmVhc29uX2NvZGUYBCABKAki1gEKEkFnZW50UHJvbXB0UmVxdWVzdBIUCgxvcGVyYXRpb25faWQYASABKAkSFgoOcmVxdWVzdF9zaGEyNTYYAiABKAwSFAoMd29ya3NwYWNlX2lkGAMgASgJEg8KB25vZGVfaWQYBCABKAkSEgoKc2Vzc2lvbl9pZBgFIAEoCRISCgpnZW5lcmF0aW9uGAYgASgEEg4KBnByb21wdBgHIAEoDBItCghleHBlY3RlZBgJIAEoCzIbLmFybWFkcmEudjEuQWdlbnRMYXVuY2hTcGVjSgQICBAJIjAKGEFnZW50UHJvbXB0TG9va3VwUmVxdWVzdBIUCgxvcGVyYXRpb25faWQYASABKAkiiwIKEkFnZW50UHJvbXB0UmVjZWlwdBIUCgxvcGVyYXRpb25faWQYASABKAkSFgoOcmVxdWVzdF9zaGEyNTYYAiABKAwSKwoFcGhhc2UYAyABKA4yHC5hcm1hZHJhLnYxLkFnZW50UHJvbXB0UGhhc2USEAoIc2VxdWVuY2UYBCABKAQSGwoTb2JzZXJ2ZWRfYXRfdW5peF9tcxgFIAEoAxITCgtyZWFzb25fY29kZRgGIAEoCRISCgpzZXNzaW9uX2lkGAcgASgJEhIKCmdlbmVyYXRpb24YCCABKAQSFAoMY29sZF9zdGFydGVkGAkgASgIEhgKEG5vX2VmZmVjdF9wcm92ZW4YCiABKAgitAEKDEFnZW50UmVxdWVzdBIwCgZ0YXJnZXQYCiABKAsyHi5hcm1hZHJhLnYxLkFnZW50VGFyZ2V0UmVxdWVzdEgAEjAKBnByb21wdBgLIAEoCzIeLmFybWFkcmEudjEuQWdlbnRQcm9tcHRSZXF1ZXN0SAASNgoGbG9va3VwGAwgASgLMiQuYXJtYWRyYS52MS5BZ2VudFByb21wdExvb2t1cFJlcXVlc3RIAEIICgZhY3Rpb24ifQoNQWdlbnRSZXNwb25zZRIvCgZ0YXJnZXQYCiABKAsyHS5hcm1hZHJhLnYxLkFnZW50VGFyZ2V0U3RhdHVzSAASMQoHcmVjZWlwdBgLIAEoCzIeLmFybWFkcmEudjEuQWdlbnRQcm9tcHRSZWNlaXB0SABCCAoGcmVzdWx0KtQBChBBZ2VudFRhcmdldFN0YXRlEiIKHkFHRU5UX1RBUkdFVF9TVEFURV9VTlNQRUNJRklFRBAAEhwKGEFHRU5UX1RBUkdFVF9TVEFURV9SRUFEWRABEhsKF0FHRU5UX1RBUkdFVF9TVEFURV9CVVNZEAISHQoZQUdFTlRfVEFSR0VUX1NUQVRFX0FCU0VOVBADEiIKHkFHRU5UX1RBUkdFVF9TVEFURV9VTlNVUFBPUlRFRBAEEh4KGkFHRU5UX1RBUkdFVF9TVEFURV9VTktOT1dOEAUq4AEKEEFnZW50UHJvbXB0UGhhc2USIgoeQUdFTlRfUFJPTVBUX1BIQVNFX1VOU1BFQ0lGSUVEEAASIgoeQUdFTlRfUFJPTVBUX1BIQVNFX05PVF9XUklUVEVOEAESIAocQUdFTlRfUFJPTVBUX1BIQVNFX1NVQk1JVFRFRBACEiAKHEFHRU5UX1BST01QVF9QSEFTRV9DT01QTEVURUQQAxIgChxBR0VOVF9QUk9NUFRfUEhBU0VfQUJBTkRPTkVEEAQSHgoaQUdFTlRfUFJPTVBUX1BIQVNFX1VOS05PV04QBUIjWiFhcm1hZHJhLmxvY2FsL2hvc3QvZ2VuL2FybWFkcmEvdjFiBnByb3RvMw",
+    "ChZhcm1hZHJhL3YxL2FnZW50LnByb3RvEgphcm1hZHJhLnYxIosBCg9BZ2VudExhdW5jaFNwZWMSEAoIYWdlbnRfaWQYASABKAkSGQoRd29ya2luZ19kaXJlY3RvcnkYAiABKAkSDAoEYXJncxgDIAMoCRIXCg9wZXJtaXNzaW9uX21vZGUYBCABKAkSEAoIbW9kZWxfaWQYBSABKAkSEgoKYWNjb3VudF9pZBgGIAEoCSLDAQoSQWdlbnRUYXJnZXRSZXF1ZXN0EhQKDHdvcmtzcGFjZV9pZBgBIAEoCRIPCgdub2RlX2lkGAIgASgJEhIKCnNlc3Npb25faWQYAyABKAkSEgoKZ2VuZXJhdGlvbhgEIAEoBBItCghleHBlY3RlZBgFIAEoCzIbLmFybWFkcmEudjEuQWdlbnRMYXVuY2hTcGVjEi8KCmNvbGRfc3RhcnQYBiABKAsyGy5hcm1hZHJhLnYxLkFnZW50TGF1bmNoU3BlYyJ9ChFBZ2VudFRhcmdldFN0YXR1cxIrCgVzdGF0ZRgBIAEoDjIcLmFybWFkcmEudjEuQWdlbnRUYXJnZXRTdGF0ZRISCgpzZXNzaW9uX2lkGAIgASgJEhIKCmdlbmVyYXRpb24YAyABKAQSEwoLcmVhc29uX2NvZGUYBCABKAki1gEKEkFnZW50UHJvbXB0UmVxdWVzdBIUCgxvcGVyYXRpb25faWQYASABKAkSFgoOcmVxdWVzdF9zaGEyNTYYAiABKAwSFAoMd29ya3NwYWNlX2lkGAMgASgJEg8KB25vZGVfaWQYBCABKAkSEgoKc2Vzc2lvbl9pZBgFIAEoCRISCgpnZW5lcmF0aW9uGAYgASgEEg4KBnByb21wdBgHIAEoDBItCghleHBlY3RlZBgJIAEoCzIbLmFybWFkcmEudjEuQWdlbnRMYXVuY2hTcGVjSgQICBAJIjAKGEFnZW50UHJvbXB0TG9va3VwUmVxdWVzdBIUCgxvcGVyYXRpb25faWQYASABKAkiiwIKEkFnZW50UHJvbXB0UmVjZWlwdBIUCgxvcGVyYXRpb25faWQYASABKAkSFgoOcmVxdWVzdF9zaGEyNTYYAiABKAwSKwoFcGhhc2UYAyABKA4yHC5hcm1hZHJhLnYxLkFnZW50UHJvbXB0UGhhc2USEAoIc2VxdWVuY2UYBCABKAQSGwoTb2JzZXJ2ZWRfYXRfdW5peF9tcxgFIAEoAxITCgtyZWFzb25fY29kZRgGIAEoCRISCgpzZXNzaW9uX2lkGAcgASgJEhIKCmdlbmVyYXRpb24YCCABKAQSFAoMY29sZF9zdGFydGVkGAkgASgIEhgKEG5vX2VmZmVjdF9wcm92ZW4YCiABKAgitAEKDEFnZW50UmVxdWVzdBIwCgZ0YXJnZXQYCiABKAsyHi5hcm1hZHJhLnYxLkFnZW50VGFyZ2V0UmVxdWVzdEgAEjAKBnByb21wdBgLIAEoCzIeLmFybWFkcmEudjEuQWdlbnRQcm9tcHRSZXF1ZXN0SAASNgoGbG9va3VwGAwgASgLMiQuYXJtYWRyYS52MS5BZ2VudFByb21wdExvb2t1cFJlcXVlc3RIAEIICgZhY3Rpb24ifQoNQWdlbnRSZXNwb25zZRIvCgZ0YXJnZXQYCiABKAsyHS5hcm1hZHJhLnYxLkFnZW50VGFyZ2V0U3RhdHVzSAASMQoHcmVjZWlwdBgLIAEoCzIeLmFybWFkcmEudjEuQWdlbnRQcm9tcHRSZWNlaXB0SABCCAoGcmVzdWx0IrcDCgtBZ2VudFN0YXR1cxIPCgdub2RlX2lkGAEgASgJEhQKDHdvcmtzcGFjZV9pZBgCIAEoCRISCgpzZXNzaW9uX2lkGAMgASgJEhIKCmdlbmVyYXRpb24YBCABKAQSEAoIYWdlbnRfaWQYBSABKAkSDgoGdW5yZWFkGAogASgNEhAKCHZlcmlmaWVkGAsgASgIEhAKCHJlc3RvcmVkGAwgASgIEhQKB2Vycm9yZWQYDSABKAhIAIgBARIYCgtpbnRlcnJ1cHRlZBgOIAEoCEgBiAEBEhYKDnRyYW5zY3JpcHRfcmVmGA8gASgMEiUKBXN0YXRlGB4gASgOMhYuYXJtYWRyYS52MS5BZ2VudFN0YXRlEhUKDXNlc3Npb25fcGhhc2UYHyABKAkSEwoLcmVhc29uX2NvZGUYJyABKAkSHQoVbGFzdF9ldmVudF9hdF91bml4X21zGCggASgDEhoKEnVwZGF0ZWRfYXRfdW5peF9tcxgpIAEoAxIQCghyZXZpc2lvbhgyIAEoBBIPCgdkZWxldGVkGDMgASgIQgoKCF9lcnJvcmVkQg4KDF9pbnRlcnJ1cHRlZCKFAgoJSG9va0V2ZW50EhAKCGV2ZW50X2lkGAEgASgJEg8KB25vZGVfaWQYAiABKAkSEgoKc2Vzc2lvbl9pZBgDIAEoCRISCgpnZW5lcmF0aW9uGAQgASgEEhQKDHdvcmtzcGFjZV9pZBgFIAEoCRIQCghwcm92aWRlchgKIAEoCRIPCgdwYXlsb2FkGAsgASgMEhYKDnBheWxvYWRfc2hhMjU2GAwgASgMEhYKDnNjaGVtYV92ZXJzaW9uGA0gASgNEicKBGtpbmQYHiABKA4yGS5hcm1hZHJhLnYxLkhvb2tFdmVudEtpbmQSGwoTb2JzZXJ2ZWRfYXRfdW5peF9tcxgoIAEoAyLIAgoIQXBwcm92YWwSEwoLYXBwcm92YWxfaWQYASABKAkSDwoHbm9kZV9pZBgCIAEoCRIUCgx3b3Jrc3BhY2VfaWQYAyABKAkSEgoKc2Vzc2lvbl9pZBgEIAEoCRISCgpnZW5lcmF0aW9uGAUgASgEEg8KB3JlcXVlc3QYCiABKAwSFgoOcmVxdWVzdF9zaGEyNTYYCyABKAwSEAoIZGVjaXNpb24YDCABKAkSEwoLYW5zd2VyZWRfYnkYDSABKAkSKAoFc3RhdGUYHiABKA4yGS5hcm1hZHJhLnYxLkFwcHJvdmFsU3RhdGUSEwoLcmVhc29uX2NvZGUYJyABKAkSGgoSY3JlYXRlZF9hdF91bml4X21zGCggASgDEhsKE2Fuc3dlcmVkX2F0X3VuaXhfbXMYKSABKAMSEAoIcmV2aXNpb24YMiABKAQimwIKDk1haWxib3hNZXNzYWdlEhIKCm1lc3NhZ2VfaWQYASABKAkSFAoMd29ya3NwYWNlX2lkGAIgASgJEhYKDnNvdXJjZV9ub2RlX2lkGAMgASgJEhYKDnRhcmdldF9ub2RlX2lkGAQgASgJEhMKC21lc3NhZ2Vfa2V5GAUgASgJEgwKBGJvZHkYCiABKAkSEAoIc2VxdWVuY2UYCyABKAQSGgoSY3JlYXRlZF9hdF91bml4X21zGCggASgDEhoKEmV4cGlyZXNfYXRfdW5peF9tcxgpIAEoAxIfChdhY2tub3dsZWRnZWRfYXRfdW5peF9tcxgqIAEoAxIQCghyZXZpc2lvbhgyIAEoBBIPCgdkZWxldGVkGDMgASgIIvgBCghEZWxpdmVyeRIQCgh0cmFjZV9pZBgBIAEoCRIUCgx3b3Jrc3BhY2VfaWQYAiABKAkSFgoOc291cmNlX25vZGVfaWQYAyABKAkSFgoOdGFyZ2V0X25vZGVfaWQYBCABKAkSDwoHcmVjZWlwdBgKIAEoCRISCgpib2R5X2NoYXJzGAsgASgNEiwKB291dGNvbWUYHiABKA4yGy5hcm1hZHJhLnYxLkRlbGl2ZXJ5T3V0Y29tZRITCgtyZWFzb25fY29kZRgnIAEoCRIaChJjcmVhdGVkX2F0X3VuaXhfbXMYKCABKAMSEAoIcmV2aXNpb24YMiABKAQivgMKB0hhbmRvZmYSEgoKaGFuZG9mZl9pZBgBIAEoCRIUCgx3b3Jrc3BhY2VfaWQYAiABKAkSFgoOc291cmNlX25vZGVfaWQYAyABKAkSFgoOdGFyZ2V0X25vZGVfaWQYBCABKAkSKgoGc291cmNlGAUgASgLMhouYXJtYWRyYS52MS5TZXNzaW9uQWRkcmVzcxIqCgZ0YXJnZXQYBiABKAsyGi5hcm1hZHJhLnYxLlNlc3Npb25BZGRyZXNzEg4KBmJ1bmRsZRgKIAEoDBIVCg1idW5kbGVfc2hhMjU2GAsgASgMEhIKCm1haWxib3hfaWQYDCABKAkSEAoIdHJhY2VfaWQYDSABKAkSEAoIYXR0ZW1wdHMYDiABKA0SJwoFc3RhdGUYHiABKA4yGC5hcm1hZHJhLnYxLkhhbmRvZmZTdGF0ZRISCgplcnJvcl9jb2RlGCcgASgJEhoKEmNyZWF0ZWRfYXRfdW5peF9tcxgoIAEoAxIbChNhY2NlcHRlZF9hdF91bml4X21zGCkgASgDEhoKEnVwZGF0ZWRfYXRfdW5peF9tcxgqIAEoAxIQCghyZXZpc2lvbhgyIAEoBCJoCgtDb250ZXh0TGluaxIWCg50YXJnZXRfbm9kZV9pZBgBIAEoCRIzCglkaXJlY3Rpb24YHiABKA4yIC5hcm1hZHJhLnYxLkNvbnRleHRMaW5rRGlyZWN0aW9uEgwKBGtpbmQYCiABKAkiiwEKDENvbnRleHRMaW5rcxIPCgdub2RlX2lkGAEgASgJEhQKDHdvcmtzcGFjZV9pZBgCIAEoCRImCgVsaW5rcxgKIAMoCzIXLmFybWFkcmEudjEuQ29udGV4dExpbmsSGgoSdXBkYXRlZF9hdF91bml4X21zGCkgASgDEhAKCHJldmlzaW9uGDIgASgEImUKFkxpc3RBZ2VudFN0YXR1c1JlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESFQoNYWZ0ZXJfbm9kZV9pZBgKIAEoCRINCgVsaW1pdBgLIAEoDSJsChdMaXN0QWdlbnRTdGF0dXNSZXNwb25zZRIpCghzdGF0dXNlcxgKIAMoCzIXLmFybWFkcmEudjEuQWdlbnRTdGF0dXMSFAoMbmV4dF9ub2RlX2lkGAsgASgJEhAKCGhhc19tb3JlGAwgASgIIn8KFE1hcmtBZ2VudFJlYWRSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEhQKDG9wZXJhdGlvbl9pZBgCIAEoCRIZChFleHBlY3RlZF9yZXZpc2lvbhgDIAEoBBIPCgdub2RlX2lkGAogASgJInUKFU1hcmtBZ2VudFJlYWRSZXNwb25zZRInCgZzdGF0dXMYASABKAsyFy5hcm1hZHJhLnYxLkFnZW50U3RhdHVzEjMKB3JlY2VpcHQYAiABKAsyIi5hcm1hZHJhLnYxLkNhbnZhc09wZXJhdGlvblJlY2VpcHQidwoUTGlzdEFwcHJvdmFsc1JlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESDwoHbm9kZV9pZBgKIAEoCRIYChBpbmNsdWRlX2Fuc3dlcmVkGAsgASgIEg0KBWxpbWl0GAwgASgNIkAKFUxpc3RBcHByb3ZhbHNSZXNwb25zZRInCglhcHByb3ZhbHMYCiADKAsyFC5hcm1hZHJhLnYxLkFwcHJvdmFsIpYBChVBbnN3ZXJBcHByb3ZhbFJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESFAoMb3BlcmF0aW9uX2lkGAIgASgJEhkKEWV4cGVjdGVkX3JldmlzaW9uGAMgASgEEhMKC2FwcHJvdmFsX2lkGAogASgJEhAKCGRlY2lzaW9uGAsgASgJInUKFkFuc3dlckFwcHJvdmFsUmVzcG9uc2USJgoIYXBwcm92YWwYASABKAsyFC5hcm1hZHJhLnYxLkFwcHJvdmFsEjMKB3JlY2VpcHQYAiABKAsyIi5hcm1hZHJhLnYxLkNhbnZhc09wZXJhdGlvblJlY2VpcHQiXgoVTGlzdERlbGl2ZXJpZXNSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEg8KB25vZGVfaWQYCiABKAkSDQoFbGltaXQYCyABKA0iQgoWTGlzdERlbGl2ZXJpZXNSZXNwb25zZRIoCgpkZWxpdmVyaWVzGAogAygLMhQuYXJtYWRyYS52MS5EZWxpdmVyeSKAAQoSTGlzdE1haWxib3hSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEhYKDnRhcmdldF9ub2RlX2lkGAogASgJEhwKFGluY2x1ZGVfYWNrbm93bGVkZ2VkGAsgASgIEg0KBWxpbWl0GAwgASgNIkMKE0xpc3RNYWlsYm94UmVzcG9uc2USLAoIbWVzc2FnZXMYCiADKAsyGi5hcm1hZHJhLnYxLk1haWxib3hNZXNzYWdlIpsCChVQcmVwYXJlSGFuZG9mZlJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESFAoMb3BlcmF0aW9uX2lkGAIgASgJEhkKEWV4cGVjdGVkX3JldmlzaW9uGAMgASgEEhIKCmhhbmRvZmZfaWQYCiABKAkSFgoOc291cmNlX25vZGVfaWQYCyABKAkSFgoOdGFyZ2V0X25vZGVfaWQYDCABKAkSKgoGc291cmNlGA0gASgLMhouYXJtYWRyYS52MS5TZXNzaW9uQWRkcmVzcxIqCgZ0YXJnZXQYDiABKAsyGi5hcm1hZHJhLnYxLlNlc3Npb25BZGRyZXNzEg4KBmJ1bmRsZRgPIAEoDCJzChZQcmVwYXJlSGFuZG9mZlJlc3BvbnNlEiQKB2hhbmRvZmYYASABKAsyEy5hcm1hZHJhLnYxLkhhbmRvZmYSMwoHcmVjZWlwdBgCIAEoCzIiLmFybWFkcmEudjEuQ2FudmFzT3BlcmF0aW9uUmVjZWlwdCKCAQoUQWNjZXB0SGFuZG9mZlJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESFAoMb3BlcmF0aW9uX2lkGAIgASgJEhkKEWV4cGVjdGVkX3JldmlzaW9uGAMgASgEEhIKCmhhbmRvZmZfaWQYCiABKAkicgoVQWNjZXB0SGFuZG9mZlJlc3BvbnNlEiQKB2hhbmRvZmYYASABKAsyEy5hcm1hZHJhLnYxLkhhbmRvZmYSMwoHcmVjZWlwdBgCIAEoCzIiLmFybWFkcmEudjEuQ2FudmFzT3BlcmF0aW9uUmVjZWlwdCKXAQoUQ2FuY2VsSGFuZG9mZlJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESFAoMb3BlcmF0aW9uX2lkGAIgASgJEhkKEWV4cGVjdGVkX3JldmlzaW9uGAMgASgEEhIKCmhhbmRvZmZfaWQYCiABKAkSEwoLcmVhc29uX2NvZGUYCyABKAkicgoVQ2FuY2VsSGFuZG9mZlJlc3BvbnNlEiQKB2hhbmRvZmYYASABKAsyEy5hcm1hZHJhLnYxLkhhbmRvZmYSMwoHcmVjZWlwdBgCIAEoCzIiLmFybWFkcmEudjEuQ2FudmFzT3BlcmF0aW9uUmVjZWlwdCJcChNMaXN0SGFuZG9mZnNSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEg8KB25vZGVfaWQYCiABKAkSDQoFbGltaXQYCyABKA0iPQoUTGlzdEhhbmRvZmZzUmVzcG9uc2USJQoIaGFuZG9mZnMYCiADKAsyEy5hcm1hZHJhLnYxLkhhbmRvZmYiTgoRR2V0SGFuZG9mZlJlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESEgoKaGFuZG9mZl9pZBgKIAEoCSI6ChJHZXRIYW5kb2ZmUmVzcG9uc2USJAoHaGFuZG9mZhgBIAEoCzITLmFybWFkcmEudjEuSGFuZG9mZiJRChdMaXN0Q29udGV4dExpbmtzUmVxdWVzdBIlCgRtZXRhGAEgASgLMhcuYXJtYWRyYS52MS5Db21tYW5kTWV0YRIPCgdub2RlX2lkGAogASgJIkMKGExpc3RDb250ZXh0TGlua3NSZXNwb25zZRInCgVsaW5rcxgKIAMoCzIYLmFybWFkcmEudjEuQ29udGV4dExpbmtzImQKE0luc3RhbGxIb29rc1JlcXVlc3QSJQoEbWV0YRgBIAEoCzIXLmFybWFkcmEudjEuQ29tbWFuZE1ldGESFAoMb3BlcmF0aW9uX2lkGAIgASgJEhAKCGFnZW50X2lkGAogASgJIpgBChBIb29rSW5zdGFsbFN0YXRlEhAKCGFnZW50X2lkGAEgASgJEhEKCWluc3RhbGxlZBgKIAEoCBIXCg9jbGllbnRfcmV2aXNpb24YCyABKA0SEwoLY29uZmlnX3BhdGgYDCABKAkSEwoLcmVhc29uX2NvZGUYJyABKAkSHAoUaW5zdGFsbGVkX2F0X3VuaXhfbXMYKCABKAMiQwoUSW5zdGFsbEhvb2tzUmVzcG9uc2USKwoFc3RhdGUYASABKAsyHC5hcm1hZHJhLnYxLkhvb2tJbnN0YWxsU3RhdGUiZgoVVW5pbnN0YWxsSG9va3NSZXF1ZXN0EiUKBG1ldGEYASABKAsyFy5hcm1hZHJhLnYxLkNvbW1hbmRNZXRhEhQKDG9wZXJhdGlvbl9pZBgCIAEoCRIQCghhZ2VudF9pZBgKIAEoCSJFChZVbmluc3RhbGxIb29rc1Jlc3BvbnNlEisKBXN0YXRlGAEgASgLMhwuYXJtYWRyYS52MS5Ib29rSW5zdGFsbFN0YXRlIhkKF0xpc3RXb3JrZXJBZ2VudHNSZXF1ZXN0IoQDChBXb3JrZXJBZ2VudFN0YXRlEg8KB25vZGVfaWQYASABKAkSFAoMd29ya3NwYWNlX2lkGAIgASgJEhIKCnNlc3Npb25faWQYAyABKAkSEgoKZ2VuZXJhdGlvbhgEIAEoBBIQCghhZ2VudF9pZBgFIAEoCRIOCgZ1bnJlYWQYCiABKA0SEAoIdmVyaWZpZWQYCyABKAgSEAoIcmVzdG9yZWQYDCABKAgSFAoHZXJyb3JlZBgNIAEoCEgAiAEBEhgKC2ludGVycnVwdGVkGA4gASgISAGIAQESFgoOdHJhbnNjcmlwdF9yZWYYDyABKAwSJQoFc3RhdGUYHiABKA4yFi5hcm1hZHJhLnYxLkFnZW50U3RhdGUSFQoNc2Vzc2lvbl9waGFzZRgfIAEoCRIdChVsYXN0X2V2ZW50X2F0X3VuaXhfbXMYKCABKAMSGgoSdXBkYXRlZF9hdF91bml4X21zGCkgASgDQgoKCF9lcnJvcmVkQg4KDF9pbnRlcnJ1cHRlZCKGAQoRV29ya2VyQWdlbnRTdGF0ZXMSGgoSd29ya2VyX2luc3RhbmNlX2lkGAEgASgJEiwKBmFnZW50cxgKIAMoCzIcLmFybWFkcmEudjEuV29ya2VyQWdlbnRTdGF0ZRInCglhcHByb3ZhbHMYCyADKAsyFC5hcm1hZHJhLnYxLkFwcHJvdmFsIkAKF0RyYWluQWdlbnRFdmVudHNSZXF1ZXN0EhYKDmFmdGVyX3NlcXVlbmNlGAEgASgEEg0KBWxpbWl0GAogASgNIrcBChJEcmFpbmVkQWdlbnRFdmVudHMSFQoNbmV4dF9zZXF1ZW5jZRgBIAEoBBIQCghoYXNfbW9yZRgCIAEoCBIlCgZldmVudHMYCiADKAsyFS5hcm1hZHJhLnYxLkhvb2tFdmVudBInCglhcHByb3ZhbHMYCyADKAsyFC5hcm1hZHJhLnYxLkFwcHJvdmFsEigKCmRlbGl2ZXJpZXMYDCADKAsyFC5hcm1hZHJhLnYxLkRlbGl2ZXJ5IpMBChxEZWxpdmVyQXBwcm92YWxBbnN3ZXJSZXF1ZXN0EhMKC2FwcHJvdmFsX2lkGAEgASgJEg8KB25vZGVfaWQYAiABKAkSEgoKc2Vzc2lvbl9pZBgDIAEoCRISCgpnZW5lcmF0aW9uGAQgASgEEhAKCGRlY2lzaW9uGAogASgJEhMKC2Fuc3dlcmVkX2J5GAsgASgJIsQBChVEZWxpdmVySGFuZG9mZlJlcXVlc3QSEgoKaGFuZG9mZl9pZBgBIAEoCRIUCgx3b3Jrc3BhY2VfaWQYAiABKAkSFgoOc291cmNlX25vZGVfaWQYAyABKAkSFgoOdGFyZ2V0X25vZGVfaWQYBCABKAkSKgoGdGFyZ2V0GAUgASgLMhouYXJtYWRyYS52MS5TZXNzaW9uQWRkcmVzcxIOCgZidW5kbGUYCiABKAwSFQoNYnVuZGxlX3NoYTI1NhgLIAEoDCKLAQoVRGVsaXZlck1lc3NhZ2VSZXF1ZXN0EhAKCHRyYWNlX2lkGAEgASgJEhQKDHdvcmtzcGFjZV9pZBgCIAEoCRIWCg5zb3VyY2Vfbm9kZV9pZBgDIAEoCRIWCg50YXJnZXRfbm9kZV9pZBgEIAEoCRIMCgRib2R5GAogASgJEgwKBG1vZGUYCyABKAkirQEKFEFnZW50RGVsaXZlcnlSZWNlaXB0EhAKCHRyYWNlX2lkGAEgASgJEg8KB3JlY2VpcHQYCiABKAkSEgoKYm9keV9jaGFycxgLIAEoDRIsCgdvdXRjb21lGB4gASgOMhsuYXJtYWRyYS52MS5EZWxpdmVyeU91dGNvbWUSEwoLcmVhc29uX2NvZGUYJyABKAkSGwoTb2JzZXJ2ZWRfYXRfdW5peF9tcxgoIAEoAyJnChVSZWFkVHJhbnNjcmlwdFJlcXVlc3QSDwoHbm9kZV9pZBgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEhYKDnRyYW5zY3JpcHRfcmVmGAogASgMEhEKCW1heF9ieXRlcxgLIAEoDSJ9ChFUcmFuc2NyaXB0RXhjZXJwdBIPCgdub2RlX2lkGAEgASgJEg8KB2NvbnRlbnQYCiABKAwSFgoOY29udGVudF9zaGEyNTYYCyABKAwSEQoJdHJ1bmNhdGVkGAwgASgIEhsKE29ic2VydmVkX2F0X3VuaXhfbXMYKCABKAMiTwoZQ2FwdHVyZUFnZW50U2NyZWVuUmVxdWVzdBIPCgdub2RlX2lkGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkSDQoFbGluZXMYCiABKA0iNAoTQ2FwdHVyZWRBZ2VudFNjcmVlbhIPCgdub2RlX2lkGAEgASgJEgwKBGRhdGEYCiABKAki0AQKEkFnZW50V29ya2VyUmVxdWVzdBI6CgtsaXN0X2FnZW50cxhkIAEoCzIjLmFybWFkcmEudjEuTGlzdFdvcmtlckFnZW50c1JlcXVlc3RIABI7CgxkcmFpbl9ldmVudHMYZSABKAsyIy5hcm1hZHJhLnYxLkRyYWluQWdlbnRFdmVudHNSZXF1ZXN0SAASRAoQZGVsaXZlcl9hcHByb3ZhbBhmIAEoCzIoLmFybWFkcmEudjEuRGVsaXZlckFwcHJvdmFsQW5zd2VyUmVxdWVzdEgAEjwKD2RlbGl2ZXJfaGFuZG9mZhhnIAEoCzIhLmFybWFkcmEudjEuRGVsaXZlckhhbmRvZmZSZXF1ZXN0SAASPAoPZGVsaXZlcl9tZXNzYWdlGGggASgLMiEuYXJtYWRyYS52MS5EZWxpdmVyTWVzc2FnZVJlcXVlc3RIABI8Cg9yZWFkX3RyYW5zY3JpcHQYaSABKAsyIS5hcm1hZHJhLnYxLlJlYWRUcmFuc2NyaXB0UmVxdWVzdEgAEj8KDmNhcHR1cmVfc2NyZWVuGGogASgLMiUuYXJtYWRyYS52MS5DYXB0dXJlQWdlbnRTY3JlZW5SZXF1ZXN0SAASOAoNaW5zdGFsbF9ob29rcxhrIAEoCzIfLmFybWFkcmEudjEuSW5zdGFsbEhvb2tzUmVxdWVzdEgAEjwKD3VuaW5zdGFsbF9ob29rcxhsIAEoCzIhLmFybWFkcmEudjEuVW5pbnN0YWxsSG9va3NSZXF1ZXN0SABCCAoGYWN0aW9uIs8CChNBZ2VudFdvcmtlclJlc3BvbnNlEi8KBmFnZW50cxhkIAEoCzIdLmFybWFkcmEudjEuV29ya2VyQWdlbnRTdGF0ZXNIABIwCgZldmVudHMYZSABKAsyHi5hcm1hZHJhLnYxLkRyYWluZWRBZ2VudEV2ZW50c0gAEjQKCGRlbGl2ZXJ5GGYgASgLMiAuYXJtYWRyYS52MS5BZ2VudERlbGl2ZXJ5UmVjZWlwdEgAEjMKCnRyYW5zY3JpcHQYaSABKAsyHS5hcm1hZHJhLnYxLlRyYW5zY3JpcHRFeGNlcnB0SAASMQoGc2NyZWVuGGogASgLMh8uYXJtYWRyYS52MS5DYXB0dXJlZEFnZW50U2NyZWVuSAASLQoFaG9va3MYayABKAsyHC5hcm1hZHJhLnYxLkhvb2tJbnN0YWxsU3RhdGVIAEIICgZyZXN1bHQq1AEKEEFnZW50VGFyZ2V0U3RhdGUSIgoeQUdFTlRfVEFSR0VUX1NUQVRFX1VOU1BFQ0lGSUVEEAASHAoYQUdFTlRfVEFSR0VUX1NUQVRFX1JFQURZEAESGwoXQUdFTlRfVEFSR0VUX1NUQVRFX0JVU1kQAhIdChlBR0VOVF9UQVJHRVRfU1RBVEVfQUJTRU5UEAMSIgoeQUdFTlRfVEFSR0VUX1NUQVRFX1VOU1VQUE9SVEVEEAQSHgoaQUdFTlRfVEFSR0VUX1NUQVRFX1VOS05PV04QBSrgAQoQQWdlbnRQcm9tcHRQaGFzZRIiCh5BR0VOVF9QUk9NUFRfUEhBU0VfVU5TUEVDSUZJRUQQABIiCh5BR0VOVF9QUk9NUFRfUEhBU0VfTk9UX1dSSVRURU4QARIgChxBR0VOVF9QUk9NUFRfUEhBU0VfU1VCTUlUVEVEEAISIAocQUdFTlRfUFJPTVBUX1BIQVNFX0NPTVBMRVRFRBADEiAKHEFHRU5UX1BST01QVF9QSEFTRV9BQkFORE9ORUQQBBIeChpBR0VOVF9QUk9NUFRfUEhBU0VfVU5LTk9XThAFKqABCgpBZ2VudFN0YXRlEhsKF0FHRU5UX1NUQVRFX1VOU1BFQ0lGSUVEEAASFAoQQUdFTlRfU1RBVEVfSURMRRABEhcKE0FHRU5UX1NUQVRFX1dPUktJTkcQAhIXChNBR0VOVF9TVEFURV9XQUlUSU5HEAMSFwoTQUdFTlRfU1RBVEVfQkxPQ0tFRBAEEhQKEEFHRU5UX1NUQVRFX0RPTkUQBSrzAQoNSG9va0V2ZW50S2luZBIfChtIT09LX0VWRU5UX0tJTkRfVU5TUEVDSUZJRUQQABIhCh1IT09LX0VWRU5UX0tJTkRfU0VTU0lPTl9TVEFSVBABEh8KG0hPT0tfRVZFTlRfS0lORF9VU0VSX1BST01QVBACEhwKGEhPT0tfRVZFTlRfS0lORF9UVVJOX0VORBADEiAKHEhPT0tfRVZFTlRfS0lORF9OT1RJRklDQVRJT04QBBIcChhIT09LX0VWRU5UX0tJTkRfQVBQUk9WQUwQBRIfChtIT09LX0VWRU5UX0tJTkRfU0VTU0lPTl9FTkQQBiqEAQoNQXBwcm92YWxTdGF0ZRIeChpBUFBST1ZBTF9TVEFURV9VTlNQRUNJRklFRBAAEhoKFkFQUFJPVkFMX1NUQVRFX1BFTkRJTkcQARIbChdBUFBST1ZBTF9TVEFURV9BTlNXRVJFRBACEhoKFkFQUFJPVkFMX1NUQVRFX0VYUElSRUQQAyqTAQoPRGVsaXZlcnlPdXRjb21lEiAKHERFTElWRVJZX09VVENPTUVfVU5TUEVDSUZJRUQQABIeChpERUxJVkVSWV9PVVRDT01FX1NVQk1JVFRFRBABEiAKHERFTElWRVJZX09VVENPTUVfTk9UX1dSSVRURU4QAhIcChhERUxJVkVSWV9PVVRDT01FX1VOS05PV04QAyqZAgoMSGFuZG9mZlN0YXRlEh0KGUhBTkRPRkZfU1RBVEVfVU5TUEVDSUZJRUQQABIaChZIQU5ET0ZGX1NUQVRFX1BSRVBBUkVEEAESGAoUSEFORE9GRl9TVEFURV9RVUVVRUQQAhIdChlIQU5ET0ZGX1NUQVRFX0RJU1BBVENISU5HEAMSGwoXSEFORE9GRl9TVEFURV9ERUxJVkVSRUQQBBIeChpIQU5ET0ZGX1NUQVRFX0FDS05PV0xFREdFRBAFEhsKF0hBTkRPRkZfU1RBVEVfQ0FOQ0VMTEVEEAYSGAoUSEFORE9GRl9TVEFURV9GQUlMRUQQBxIhCh1IQU5ET0ZGX1NUQVRFX1VOS05PV05fT1VUQ09NRRAIKogBChRDb250ZXh0TGlua0RpcmVjdGlvbhImCiJDT05URVhUX0xJTktfRElSRUNUSU9OX1VOU1BFQ0lGSUVEEAASIwofQ09OVEVYVF9MSU5LX0RJUkVDVElPTl9PVVRHT0lORxABEiMKH0NPTlRFWFRfTElOS19ESVJFQ1RJT05fSU5DT01JTkcQAkIjWiFhcm1hZHJhLmxvY2FsL2hvc3QvZ2VuL2FybWFkcmEvdjFiBnByb3RvMw",
+    [file_armadra_v1_canvas, file_armadra_v1_common],
   );
 
 /**
@@ -401,6 +406,2180 @@ export const AgentResponseSchema: GenMessage<AgentResponse> =
   messageDesc(file_armadra_v1_agent, 7);
 
 /**
+ * One agent node's status as the Host records it.
+ *
+ * `transcript_ref` is deliberately not a path. The transcript is a file on the
+ * execution host, in whatever layout that CLI uses; the Host stores an opaque
+ * reference and hands it back to the Worker when somebody asks to read it. A
+ * path here would be a path this Host cannot open, on a machine it may not be.
+ *
+ * @generated from message armadra.v1.AgentStatus
+ */
+export type AgentStatus = Message<"armadra.v1.AgentStatus"> & {
+  /**
+   * @generated from field: string node_id = 1;
+   */
+  nodeId: string;
+
+  /**
+   * @generated from field: string workspace_id = 2;
+   */
+  workspaceId: string;
+
+  /**
+   * The session the status was last observed against, and the generation of
+   * that session's run. Together they make a stale report visible: a turn
+   * reported for a generation that has been replaced describes a pane nobody
+   * is looking at any more.
+   *
+   * @generated from field: string session_id = 3;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: uint64 generation = 4;
+   */
+  generation: bigint;
+
+  /**
+   * @generated from field: string agent_id = 5;
+   */
+  agentId: string;
+
+  /**
+   * @generated from field: uint32 unread = 10;
+   */
+  unread: number;
+
+  /**
+   * @generated from field: bool verified = 11;
+   */
+  verified: boolean;
+
+  /**
+   * @generated from field: bool restored = 12;
+   */
+  restored: boolean;
+
+  /**
+   * @generated from field: optional bool errored = 13;
+   */
+  errored?: boolean;
+
+  /**
+   * @generated from field: optional bool interrupted = 14;
+   */
+  interrupted?: boolean;
+
+  /**
+   * Opaque to the Host: the Worker's own way of naming this node's transcript.
+   *
+   * @generated from field: bytes transcript_ref = 15;
+   */
+  transcriptRef: Uint8Array;
+
+  /**
+   * @generated from field: armadra.v1.AgentState state = 30;
+   */
+  state: AgentState;
+
+  /**
+   * The CLI's own phase word (`startup`, `turn`, `compact`, …). It is a string
+   * for the reason `decision` is: it is one provider's vocabulary, and mapping
+   * it would be this Host deciding what that provider meant.
+   *
+   * @generated from field: string session_phase = 31;
+   */
+  sessionPhase: string;
+
+  /**
+   * @generated from field: string reason_code = 39;
+   */
+  reasonCode: string;
+
+  /**
+   * @generated from field: int64 last_event_at_unix_ms = 40;
+   */
+  lastEventAtUnixMs: bigint;
+
+  /**
+   * @generated from field: int64 updated_at_unix_ms = 41;
+   */
+  updatedAtUnixMs: bigint;
+
+  /**
+   * @generated from field: uint64 revision = 50;
+   */
+  revision: bigint;
+
+  /**
+   * @generated from field: bool deleted = 51;
+   */
+  deleted: boolean;
+};
+
+/**
+ * Describes the message armadra.v1.AgentStatus.
+ * Use `create(AgentStatusSchema)` to create a new message.
+ */
+export const AgentStatusSchema: GenMessage<AgentStatus> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 8);
+
+/**
+ * One normalized Hook event, as the Worker reports it.
+ *
+ * **Normalized** is the load-bearing word. The raw body a CLI writes never
+ * reaches the Host: the Worker parses it, reduces it, and reports what it
+ * meant. What travels as `payload` is the Worker's own normalized form with its
+ * digest, so a Host can store and republish an event whose provider it has
+ * never heard of without having to understand that provider's format.
+ *
+ * @generated from message armadra.v1.HookEvent
+ */
+export type HookEvent = Message<"armadra.v1.HookEvent"> & {
+  /**
+   * @generated from field: string event_id = 1;
+   */
+  eventId: string;
+
+  /**
+   * @generated from field: string node_id = 2;
+   */
+  nodeId: string;
+
+  /**
+   * @generated from field: string session_id = 3;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: uint64 generation = 4;
+   */
+  generation: bigint;
+
+  /**
+   * @generated from field: string workspace_id = 5;
+   */
+  workspaceId: string;
+
+  /**
+   * `claude`, `codex`, `gemini`, … The Host records it and routes on it; it
+   * does not interpret it.
+   *
+   * @generated from field: string provider = 10;
+   */
+  provider: string;
+
+  /**
+   * @generated from field: bytes payload = 11;
+   */
+  payload: Uint8Array;
+
+  /**
+   * @generated from field: bytes payload_sha256 = 12;
+   */
+  payloadSha256: Uint8Array;
+
+  /**
+   * @generated from field: uint32 schema_version = 13;
+   */
+  schemaVersion: number;
+
+  /**
+   * @generated from field: armadra.v1.HookEventKind kind = 30;
+   */
+  kind: HookEventKind;
+
+  /**
+   * @generated from field: int64 observed_at_unix_ms = 40;
+   */
+  observedAtUnixMs: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.HookEvent.
+ * Use `create(HookEventSchema)` to create a new message.
+ */
+export const HookEventSchema: GenMessage<HookEvent> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 9);
+
+/**
+ * One permission question a CLI is blocked on.
+ *
+ * The blocking read lives on the execution host and so does the file that
+ * releases it. This record exists so the question can be *seen* from a phone,
+ * answered there, and answered exactly once: `decision` plus `answered_by` plus
+ * the revision are what stop two devices answering the same question two
+ * different ways.
+ *
+ * @generated from message armadra.v1.Approval
+ */
+export type Approval = Message<"armadra.v1.Approval"> & {
+  /**
+   * @generated from field: string approval_id = 1;
+   */
+  approvalId: string;
+
+  /**
+   * @generated from field: string node_id = 2;
+   */
+  nodeId: string;
+
+  /**
+   * @generated from field: string workspace_id = 3;
+   */
+  workspaceId: string;
+
+  /**
+   * @generated from field: string session_id = 4;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: uint64 generation = 5;
+   */
+  generation: bigint;
+
+  /**
+   * The provider's own request, as JSON bytes. It is not expanded into fields,
+   * for the reason stated at the top of this section.
+   *
+   * @generated from field: bytes request = 10;
+   */
+  request: Uint8Array;
+
+  /**
+   * @generated from field: bytes request_sha256 = 11;
+   */
+  requestSha256: Uint8Array;
+
+  /**
+   * The CLI's own word for the answer. Never mapped onto an enum.
+   *
+   * @generated from field: string decision = 12;
+   */
+  decision: string;
+
+  /**
+   * The principal that answered, so an audit can say who allowed something.
+   *
+   * @generated from field: string answered_by = 13;
+   */
+  answeredBy: string;
+
+  /**
+   * @generated from field: armadra.v1.ApprovalState state = 30;
+   */
+  state: ApprovalState;
+
+  /**
+   * @generated from field: string reason_code = 39;
+   */
+  reasonCode: string;
+
+  /**
+   * @generated from field: int64 created_at_unix_ms = 40;
+   */
+  createdAtUnixMs: bigint;
+
+  /**
+   * @generated from field: int64 answered_at_unix_ms = 41;
+   */
+  answeredAtUnixMs: bigint;
+
+  /**
+   * @generated from field: uint64 revision = 50;
+   */
+  revision: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.Approval.
+ * Use `create(ApprovalSchema)` to create a new message.
+ */
+export const ApprovalSchema: GenMessage<Approval> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 10);
+
+/**
+ * One message left in a node's mailbox by another node.
+ *
+ * `sequence` is the mailbox's own order and has nothing to do with the event
+ * stream's. It is what an inbox pages by, and it is why a message delivered
+ * twice under one `message_key` is one row: the unique key is (source, target,
+ * message_key), so a retrying sender cannot fill an inbox with copies of one
+ * thought.
+ *
+ * @generated from message armadra.v1.MailboxMessage
+ */
+export type MailboxMessage = Message<"armadra.v1.MailboxMessage"> & {
+  /**
+   * @generated from field: string message_id = 1;
+   */
+  messageId: string;
+
+  /**
+   * @generated from field: string workspace_id = 2;
+   */
+  workspaceId: string;
+
+  /**
+   * @generated from field: string source_node_id = 3;
+   */
+  sourceNodeId: string;
+
+  /**
+   * @generated from field: string target_node_id = 4;
+   */
+  targetNodeId: string;
+
+  /**
+   * @generated from field: string message_key = 5;
+   */
+  messageKey: string;
+
+  /**
+   * @generated from field: string body = 10;
+   */
+  body: string;
+
+  /**
+   * @generated from field: uint64 sequence = 11;
+   */
+  sequence: bigint;
+
+  /**
+   * @generated from field: int64 created_at_unix_ms = 40;
+   */
+  createdAtUnixMs: bigint;
+
+  /**
+   * @generated from field: int64 expires_at_unix_ms = 41;
+   */
+  expiresAtUnixMs: bigint;
+
+  /**
+   * Zero means nobody has read it. A timestamp rather than a flag, so an inbox
+   * can say how long a message sat unread.
+   *
+   * @generated from field: int64 acknowledged_at_unix_ms = 42;
+   */
+  acknowledgedAtUnixMs: bigint;
+
+  /**
+   * @generated from field: uint64 revision = 50;
+   */
+  revision: bigint;
+
+  /**
+   * @generated from field: bool deleted = 51;
+   */
+  deleted: boolean;
+};
+
+/**
+ * Describes the message armadra.v1.MailboxMessage.
+ * Use `create(MailboxMessageSchema)` to create a new message.
+ */
+export const MailboxMessageSchema: GenMessage<MailboxMessage> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 11);
+
+/**
+ * The receipt for one `send` / `reply` / `notify`.
+ *
+ * It is a record of an attempt, not a message: the body is not here, only how
+ * many characters it had. A delivery log that carried bodies would be a second
+ * copy of every conversation, in the one database meant to hold decisions
+ * rather than content.
+ *
+ * @generated from message armadra.v1.Delivery
+ */
+export type Delivery = Message<"armadra.v1.Delivery"> & {
+  /**
+   * @generated from field: string trace_id = 1;
+   */
+  traceId: string;
+
+  /**
+   * @generated from field: string workspace_id = 2;
+   */
+  workspaceId: string;
+
+  /**
+   * @generated from field: string source_node_id = 3;
+   */
+  sourceNodeId: string;
+
+  /**
+   * @generated from field: string target_node_id = 4;
+   */
+  targetNodeId: string;
+
+  /**
+   * The execution host's own receipt string, opaque here.
+   *
+   * @generated from field: string receipt = 10;
+   */
+  receipt: string;
+
+  /**
+   * @generated from field: uint32 body_chars = 11;
+   */
+  bodyChars: number;
+
+  /**
+   * @generated from field: armadra.v1.DeliveryOutcome outcome = 30;
+   */
+  outcome: DeliveryOutcome;
+
+  /**
+   * @generated from field: string reason_code = 39;
+   */
+  reasonCode: string;
+
+  /**
+   * @generated from field: int64 created_at_unix_ms = 40;
+   */
+  createdAtUnixMs: bigint;
+
+  /**
+   * @generated from field: uint64 revision = 50;
+   */
+  revision: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.Delivery.
+ * Use `create(DeliverySchema)` to create a new message.
+ */
+export const DeliverySchema: GenMessage<Delivery> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 12);
+
+/**
+ * One node handing its work to another.
+ *
+ * The bundle is frozen the moment it is prepared, and it is frozen on both
+ * sides: the Runtime has a trigger that aborts an update touching it, and the
+ * Host refuses one. That is not belt and braces — it is the whole meaning of
+ * the record. A handoff whose bundle could change after it was accepted would
+ * be a handoff where what the target read is not what the source sent.
+ *
+ * @generated from message armadra.v1.Handoff
+ */
+export type Handoff = Message<"armadra.v1.Handoff"> & {
+  /**
+   * @generated from field: string handoff_id = 1;
+   */
+  handoffId: string;
+
+  /**
+   * @generated from field: string workspace_id = 2;
+   */
+  workspaceId: string;
+
+  /**
+   * @generated from field: string source_node_id = 3;
+   */
+  sourceNodeId: string;
+
+  /**
+   * @generated from field: string target_node_id = 4;
+   */
+  targetNodeId: string;
+
+  /**
+   * Which session each side was on when the handoff was prepared. A target
+   * whose session has been replaced since is a target the bundle was not aimed
+   * at, and that is decidable only because both are recorded.
+   *
+   * @generated from field: armadra.v1.SessionAddress source = 5;
+   */
+  source?: SessionAddress;
+
+  /**
+   * @generated from field: armadra.v1.SessionAddress target = 6;
+   */
+  target?: SessionAddress;
+
+  /**
+   * @generated from field: bytes bundle = 10;
+   */
+  bundle: Uint8Array;
+
+  /**
+   * @generated from field: bytes bundle_sha256 = 11;
+   */
+  bundleSha256: Uint8Array;
+
+  /**
+   * The mailbox message that carries the bundle to the target, once one
+   * exists, and the delivery whose receipt says what happened to it.
+   *
+   * @generated from field: string mailbox_id = 12;
+   */
+  mailboxId: string;
+
+  /**
+   * @generated from field: string trace_id = 13;
+   */
+  traceId: string;
+
+  /**
+   * How many times dispatch has been attempted. It is evidence for a person,
+   * never a trigger: nothing here retries on its own.
+   *
+   * @generated from field: uint32 attempts = 14;
+   */
+  attempts: number;
+
+  /**
+   * @generated from field: armadra.v1.HandoffState state = 30;
+   */
+  state: HandoffState;
+
+  /**
+   * @generated from field: string error_code = 39;
+   */
+  errorCode: string;
+
+  /**
+   * @generated from field: int64 created_at_unix_ms = 40;
+   */
+  createdAtUnixMs: bigint;
+
+  /**
+   * @generated from field: int64 accepted_at_unix_ms = 41;
+   */
+  acceptedAtUnixMs: bigint;
+
+  /**
+   * @generated from field: int64 updated_at_unix_ms = 42;
+   */
+  updatedAtUnixMs: bigint;
+
+  /**
+   * @generated from field: uint64 revision = 50;
+   */
+  revision: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.Handoff.
+ * Use `create(HandoffSchema)` to create a new message.
+ */
+export const HandoffSchema: GenMessage<Handoff> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 13);
+
+/**
+ * @generated from message armadra.v1.ContextLink
+ */
+export type ContextLink = Message<"armadra.v1.ContextLink"> & {
+  /**
+   * @generated from field: string target_node_id = 1;
+   */
+  targetNodeId: string;
+
+  /**
+   * @generated from field: armadra.v1.ContextLinkDirection direction = 30;
+   */
+  direction: ContextLinkDirection;
+
+  /**
+   * What the other end is — `agent`, `terminal`, `sticky`, … The Host copies
+   * the canvas node's own kind rather than deciding one.
+   *
+   * @generated from field: string kind = 10;
+   */
+  kind: string;
+};
+
+/**
+ * Describes the message armadra.v1.ContextLink.
+ * Use `create(ContextLinkSchema)` to create a new message.
+ */
+export const ContextLinkSchema: GenMessage<ContextLink> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 14);
+
+/**
+ * The links one node has, derived from the canvas' edges.
+ *
+ * This is a *projection* and never a client write. The edges are the canvas
+ * domain's records; a client that could write context links directly would be
+ * able to make a node read a transcript it is not connected to, which is the
+ * one thing the whole "context follows the connection" rule exists to prevent.
+ *
+ * @generated from message armadra.v1.ContextLinks
+ */
+export type ContextLinks = Message<"armadra.v1.ContextLinks"> & {
+  /**
+   * @generated from field: string node_id = 1;
+   */
+  nodeId: string;
+
+  /**
+   * @generated from field: string workspace_id = 2;
+   */
+  workspaceId: string;
+
+  /**
+   * @generated from field: repeated armadra.v1.ContextLink links = 10;
+   */
+  links: ContextLink[];
+
+  /**
+   * @generated from field: int64 updated_at_unix_ms = 41;
+   */
+  updatedAtUnixMs: bigint;
+
+  /**
+   * @generated from field: uint64 revision = 50;
+   */
+  revision: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.ContextLinks.
+ * Use `create(ContextLinksSchema)` to create a new message.
+ */
+export const ContextLinksSchema: GenMessage<ContextLinks> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 15);
+
+/**
+ * armadra.v1.AgentService/ListStatus — the board's own read.
+ *
+ * @generated from message armadra.v1.ListAgentStatusRequest
+ */
+export type ListAgentStatusRequest =
+  Message<"armadra.v1.ListAgentStatusRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string after_node_id = 10;
+     */
+    afterNodeId: string;
+
+    /**
+     * @generated from field: uint32 limit = 11;
+     */
+    limit: number;
+  };
+
+/**
+ * Describes the message armadra.v1.ListAgentStatusRequest.
+ * Use `create(ListAgentStatusRequestSchema)` to create a new message.
+ */
+export const ListAgentStatusRequestSchema: GenMessage<ListAgentStatusRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 16);
+
+/**
+ * @generated from message armadra.v1.ListAgentStatusResponse
+ */
+export type ListAgentStatusResponse =
+  Message<"armadra.v1.ListAgentStatusResponse"> & {
+    /**
+     * @generated from field: repeated armadra.v1.AgentStatus statuses = 10;
+     */
+    statuses: AgentStatus[];
+
+    /**
+     * @generated from field: string next_node_id = 11;
+     */
+    nextNodeId: string;
+
+    /**
+     * @generated from field: bool has_more = 12;
+     */
+    hasMore: boolean;
+  };
+
+/**
+ * Describes the message armadra.v1.ListAgentStatusResponse.
+ * Use `create(ListAgentStatusResponseSchema)` to create a new message.
+ */
+export const ListAgentStatusResponseSchema: GenMessage<ListAgentStatusResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 17);
+
+/**
+ * armadra.v1.AgentService/MarkRead — the unread badge, cleared.
+ *
+ * It is a write with a CAS revision like any other, because two clients
+ * clearing the same badge are two decisions about one record and the second has
+ * to learn it lost.
+ *
+ * @generated from message armadra.v1.MarkAgentReadRequest
+ */
+export type MarkAgentReadRequest =
+  Message<"armadra.v1.MarkAgentReadRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string operation_id = 2;
+     */
+    operationId: string;
+
+    /**
+     * @generated from field: uint64 expected_revision = 3;
+     */
+    expectedRevision: bigint;
+
+    /**
+     * @generated from field: string node_id = 10;
+     */
+    nodeId: string;
+  };
+
+/**
+ * Describes the message armadra.v1.MarkAgentReadRequest.
+ * Use `create(MarkAgentReadRequestSchema)` to create a new message.
+ */
+export const MarkAgentReadRequestSchema: GenMessage<MarkAgentReadRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 18);
+
+/**
+ * @generated from message armadra.v1.MarkAgentReadResponse
+ */
+export type MarkAgentReadResponse =
+  Message<"armadra.v1.MarkAgentReadResponse"> & {
+    /**
+     * @generated from field: armadra.v1.AgentStatus status = 1;
+     */
+    status?: AgentStatus;
+
+    /**
+     * @generated from field: armadra.v1.CanvasOperationReceipt receipt = 2;
+     */
+    receipt?: CanvasOperationReceipt;
+  };
+
+/**
+ * Describes the message armadra.v1.MarkAgentReadResponse.
+ * Use `create(MarkAgentReadResponseSchema)` to create a new message.
+ */
+export const MarkAgentReadResponseSchema: GenMessage<MarkAgentReadResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 19);
+
+/**
+ * @generated from message armadra.v1.ListApprovalsRequest
+ */
+export type ListApprovalsRequest =
+  Message<"armadra.v1.ListApprovalsRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string node_id = 10;
+     */
+    nodeId: string;
+
+    /**
+     * Answered approvals are history; the default is the questions still open.
+     *
+     * @generated from field: bool include_answered = 11;
+     */
+    includeAnswered: boolean;
+
+    /**
+     * @generated from field: uint32 limit = 12;
+     */
+    limit: number;
+  };
+
+/**
+ * Describes the message armadra.v1.ListApprovalsRequest.
+ * Use `create(ListApprovalsRequestSchema)` to create a new message.
+ */
+export const ListApprovalsRequestSchema: GenMessage<ListApprovalsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 20);
+
+/**
+ * @generated from message armadra.v1.ListApprovalsResponse
+ */
+export type ListApprovalsResponse =
+  Message<"armadra.v1.ListApprovalsResponse"> & {
+    /**
+     * @generated from field: repeated armadra.v1.Approval approvals = 10;
+     */
+    approvals: Approval[];
+  };
+
+/**
+ * Describes the message armadra.v1.ListApprovalsResponse.
+ * Use `create(ListApprovalsResponseSchema)` to create a new message.
+ */
+export const ListApprovalsResponseSchema: GenMessage<ListApprovalsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 21);
+
+/**
+ * armadra.v1.AgentService/AnswerApproval — recorded, then delivered.
+ *
+ * The order is the point, and it is the opposite of the session domain's. A
+ * session records after the Worker acts, because the Worker's answer is the
+ * fact. An approval records *first*, under CAS, because the record is what
+ * stops a second device answering the same question — and only then is the
+ * answer written into the file the CLI is blocked on.
+ *
+ * @generated from message armadra.v1.AnswerApprovalRequest
+ */
+export type AnswerApprovalRequest =
+  Message<"armadra.v1.AnswerApprovalRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string operation_id = 2;
+     */
+    operationId: string;
+
+    /**
+     * @generated from field: uint64 expected_revision = 3;
+     */
+    expectedRevision: bigint;
+
+    /**
+     * @generated from field: string approval_id = 10;
+     */
+    approvalId: string;
+
+    /**
+     * The CLI's own word. Passed through unchanged.
+     *
+     * @generated from field: string decision = 11;
+     */
+    decision: string;
+  };
+
+/**
+ * Describes the message armadra.v1.AnswerApprovalRequest.
+ * Use `create(AnswerApprovalRequestSchema)` to create a new message.
+ */
+export const AnswerApprovalRequestSchema: GenMessage<AnswerApprovalRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 22);
+
+/**
+ * @generated from message armadra.v1.AnswerApprovalResponse
+ */
+export type AnswerApprovalResponse =
+  Message<"armadra.v1.AnswerApprovalResponse"> & {
+    /**
+     * @generated from field: armadra.v1.Approval approval = 1;
+     */
+    approval?: Approval;
+
+    /**
+     * @generated from field: armadra.v1.CanvasOperationReceipt receipt = 2;
+     */
+    receipt?: CanvasOperationReceipt;
+  };
+
+/**
+ * Describes the message armadra.v1.AnswerApprovalResponse.
+ * Use `create(AnswerApprovalResponseSchema)` to create a new message.
+ */
+export const AnswerApprovalResponseSchema: GenMessage<AnswerApprovalResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 23);
+
+/**
+ * @generated from message armadra.v1.ListDeliveriesRequest
+ */
+export type ListDeliveriesRequest =
+  Message<"armadra.v1.ListDeliveriesRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string node_id = 10;
+     */
+    nodeId: string;
+
+    /**
+     * @generated from field: uint32 limit = 11;
+     */
+    limit: number;
+  };
+
+/**
+ * Describes the message armadra.v1.ListDeliveriesRequest.
+ * Use `create(ListDeliveriesRequestSchema)` to create a new message.
+ */
+export const ListDeliveriesRequestSchema: GenMessage<ListDeliveriesRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 24);
+
+/**
+ * @generated from message armadra.v1.ListDeliveriesResponse
+ */
+export type ListDeliveriesResponse =
+  Message<"armadra.v1.ListDeliveriesResponse"> & {
+    /**
+     * @generated from field: repeated armadra.v1.Delivery deliveries = 10;
+     */
+    deliveries: Delivery[];
+  };
+
+/**
+ * Describes the message armadra.v1.ListDeliveriesResponse.
+ * Use `create(ListDeliveriesResponseSchema)` to create a new message.
+ */
+export const ListDeliveriesResponseSchema: GenMessage<ListDeliveriesResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 25);
+
+/**
+ * armadra.v1.AgentService/ListMailbox — one node's inbox, oldest first.
+ *
+ * @generated from message armadra.v1.ListMailboxRequest
+ */
+export type ListMailboxRequest = Message<"armadra.v1.ListMailboxRequest"> & {
+  /**
+   * @generated from field: armadra.v1.CommandMeta meta = 1;
+   */
+  meta?: CommandMeta;
+
+  /**
+   * @generated from field: string target_node_id = 10;
+   */
+  targetNodeId: string;
+
+  /**
+   * @generated from field: bool include_acknowledged = 11;
+   */
+  includeAcknowledged: boolean;
+
+  /**
+   * @generated from field: uint32 limit = 12;
+   */
+  limit: number;
+};
+
+/**
+ * Describes the message armadra.v1.ListMailboxRequest.
+ * Use `create(ListMailboxRequestSchema)` to create a new message.
+ */
+export const ListMailboxRequestSchema: GenMessage<ListMailboxRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 26);
+
+/**
+ * @generated from message armadra.v1.ListMailboxResponse
+ */
+export type ListMailboxResponse = Message<"armadra.v1.ListMailboxResponse"> & {
+  /**
+   * @generated from field: repeated armadra.v1.MailboxMessage messages = 10;
+   */
+  messages: MailboxMessage[];
+};
+
+/**
+ * Describes the message armadra.v1.ListMailboxResponse.
+ * Use `create(ListMailboxResponseSchema)` to create a new message.
+ */
+export const ListMailboxResponseSchema: GenMessage<ListMailboxResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 27);
+
+/**
+ * armadra.v1.AgentService/PrepareHandoff — freeze the bundle, send nothing.
+ *
+ * Preparing records what would be sent, with the digest that makes it
+ * unchangeable, so accepting later accepts a thing that has been reviewed
+ * rather than whatever the source happens to look like by then.
+ *
+ * @generated from message armadra.v1.PrepareHandoffRequest
+ */
+export type PrepareHandoffRequest =
+  Message<"armadra.v1.PrepareHandoffRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string operation_id = 2;
+     */
+    operationId: string;
+
+    /**
+     * @generated from field: uint64 expected_revision = 3;
+     */
+    expectedRevision: bigint;
+
+    /**
+     * @generated from field: string handoff_id = 10;
+     */
+    handoffId: string;
+
+    /**
+     * @generated from field: string source_node_id = 11;
+     */
+    sourceNodeId: string;
+
+    /**
+     * @generated from field: string target_node_id = 12;
+     */
+    targetNodeId: string;
+
+    /**
+     * @generated from field: armadra.v1.SessionAddress source = 13;
+     */
+    source?: SessionAddress;
+
+    /**
+     * @generated from field: armadra.v1.SessionAddress target = 14;
+     */
+    target?: SessionAddress;
+
+    /**
+     * @generated from field: bytes bundle = 15;
+     */
+    bundle: Uint8Array;
+  };
+
+/**
+ * Describes the message armadra.v1.PrepareHandoffRequest.
+ * Use `create(PrepareHandoffRequestSchema)` to create a new message.
+ */
+export const PrepareHandoffRequestSchema: GenMessage<PrepareHandoffRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 28);
+
+/**
+ * @generated from message armadra.v1.PrepareHandoffResponse
+ */
+export type PrepareHandoffResponse =
+  Message<"armadra.v1.PrepareHandoffResponse"> & {
+    /**
+     * @generated from field: armadra.v1.Handoff handoff = 1;
+     */
+    handoff?: Handoff;
+
+    /**
+     * @generated from field: armadra.v1.CanvasOperationReceipt receipt = 2;
+     */
+    receipt?: CanvasOperationReceipt;
+  };
+
+/**
+ * Describes the message armadra.v1.PrepareHandoffResponse.
+ * Use `create(PrepareHandoffResponseSchema)` to create a new message.
+ */
+export const PrepareHandoffResponseSchema: GenMessage<PrepareHandoffResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 29);
+
+/**
+ * armadra.v1.AgentService/AcceptHandoff — queue it, then deliver it once.
+ *
+ * @generated from message armadra.v1.AcceptHandoffRequest
+ */
+export type AcceptHandoffRequest =
+  Message<"armadra.v1.AcceptHandoffRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string operation_id = 2;
+     */
+    operationId: string;
+
+    /**
+     * @generated from field: uint64 expected_revision = 3;
+     */
+    expectedRevision: bigint;
+
+    /**
+     * @generated from field: string handoff_id = 10;
+     */
+    handoffId: string;
+  };
+
+/**
+ * Describes the message armadra.v1.AcceptHandoffRequest.
+ * Use `create(AcceptHandoffRequestSchema)` to create a new message.
+ */
+export const AcceptHandoffRequestSchema: GenMessage<AcceptHandoffRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 30);
+
+/**
+ * @generated from message armadra.v1.AcceptHandoffResponse
+ */
+export type AcceptHandoffResponse =
+  Message<"armadra.v1.AcceptHandoffResponse"> & {
+    /**
+     * @generated from field: armadra.v1.Handoff handoff = 1;
+     */
+    handoff?: Handoff;
+
+    /**
+     * @generated from field: armadra.v1.CanvasOperationReceipt receipt = 2;
+     */
+    receipt?: CanvasOperationReceipt;
+  };
+
+/**
+ * Describes the message armadra.v1.AcceptHandoffResponse.
+ * Use `create(AcceptHandoffResponseSchema)` to create a new message.
+ */
+export const AcceptHandoffResponseSchema: GenMessage<AcceptHandoffResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 31);
+
+/**
+ * @generated from message armadra.v1.CancelHandoffRequest
+ */
+export type CancelHandoffRequest =
+  Message<"armadra.v1.CancelHandoffRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string operation_id = 2;
+     */
+    operationId: string;
+
+    /**
+     * @generated from field: uint64 expected_revision = 3;
+     */
+    expectedRevision: bigint;
+
+    /**
+     * @generated from field: string handoff_id = 10;
+     */
+    handoffId: string;
+
+    /**
+     * @generated from field: string reason_code = 11;
+     */
+    reasonCode: string;
+  };
+
+/**
+ * Describes the message armadra.v1.CancelHandoffRequest.
+ * Use `create(CancelHandoffRequestSchema)` to create a new message.
+ */
+export const CancelHandoffRequestSchema: GenMessage<CancelHandoffRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 32);
+
+/**
+ * @generated from message armadra.v1.CancelHandoffResponse
+ */
+export type CancelHandoffResponse =
+  Message<"armadra.v1.CancelHandoffResponse"> & {
+    /**
+     * @generated from field: armadra.v1.Handoff handoff = 1;
+     */
+    handoff?: Handoff;
+
+    /**
+     * @generated from field: armadra.v1.CanvasOperationReceipt receipt = 2;
+     */
+    receipt?: CanvasOperationReceipt;
+  };
+
+/**
+ * Describes the message armadra.v1.CancelHandoffResponse.
+ * Use `create(CancelHandoffResponseSchema)` to create a new message.
+ */
+export const CancelHandoffResponseSchema: GenMessage<CancelHandoffResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 33);
+
+/**
+ * @generated from message armadra.v1.ListHandoffsRequest
+ */
+export type ListHandoffsRequest = Message<"armadra.v1.ListHandoffsRequest"> & {
+  /**
+   * @generated from field: armadra.v1.CommandMeta meta = 1;
+   */
+  meta?: CommandMeta;
+
+  /**
+   * @generated from field: string node_id = 10;
+   */
+  nodeId: string;
+
+  /**
+   * @generated from field: uint32 limit = 11;
+   */
+  limit: number;
+};
+
+/**
+ * Describes the message armadra.v1.ListHandoffsRequest.
+ * Use `create(ListHandoffsRequestSchema)` to create a new message.
+ */
+export const ListHandoffsRequestSchema: GenMessage<ListHandoffsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 34);
+
+/**
+ * @generated from message armadra.v1.ListHandoffsResponse
+ */
+export type ListHandoffsResponse =
+  Message<"armadra.v1.ListHandoffsResponse"> & {
+    /**
+     * @generated from field: repeated armadra.v1.Handoff handoffs = 10;
+     */
+    handoffs: Handoff[];
+  };
+
+/**
+ * Describes the message armadra.v1.ListHandoffsResponse.
+ * Use `create(ListHandoffsResponseSchema)` to create a new message.
+ */
+export const ListHandoffsResponseSchema: GenMessage<ListHandoffsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 35);
+
+/**
+ * @generated from message armadra.v1.GetHandoffRequest
+ */
+export type GetHandoffRequest = Message<"armadra.v1.GetHandoffRequest"> & {
+  /**
+   * @generated from field: armadra.v1.CommandMeta meta = 1;
+   */
+  meta?: CommandMeta;
+
+  /**
+   * @generated from field: string handoff_id = 10;
+   */
+  handoffId: string;
+};
+
+/**
+ * Describes the message armadra.v1.GetHandoffRequest.
+ * Use `create(GetHandoffRequestSchema)` to create a new message.
+ */
+export const GetHandoffRequestSchema: GenMessage<GetHandoffRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 36);
+
+/**
+ * @generated from message armadra.v1.GetHandoffResponse
+ */
+export type GetHandoffResponse = Message<"armadra.v1.GetHandoffResponse"> & {
+  /**
+   * @generated from field: armadra.v1.Handoff handoff = 1;
+   */
+  handoff?: Handoff;
+};
+
+/**
+ * Describes the message armadra.v1.GetHandoffResponse.
+ * Use `create(GetHandoffResponseSchema)` to create a new message.
+ */
+export const GetHandoffResponseSchema: GenMessage<GetHandoffResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 37);
+
+/**
+ * armadra.v1.AgentService/ListContextLinks — the projection, read only.
+ *
+ * @generated from message armadra.v1.ListContextLinksRequest
+ */
+export type ListContextLinksRequest =
+  Message<"armadra.v1.ListContextLinksRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string node_id = 10;
+     */
+    nodeId: string;
+  };
+
+/**
+ * Describes the message armadra.v1.ListContextLinksRequest.
+ * Use `create(ListContextLinksRequestSchema)` to create a new message.
+ */
+export const ListContextLinksRequestSchema: GenMessage<ListContextLinksRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 38);
+
+/**
+ * @generated from message armadra.v1.ListContextLinksResponse
+ */
+export type ListContextLinksResponse =
+  Message<"armadra.v1.ListContextLinksResponse"> & {
+    /**
+     * @generated from field: repeated armadra.v1.ContextLinks links = 10;
+     */
+    links: ContextLinks[];
+  };
+
+/**
+ * Describes the message armadra.v1.ListContextLinksResponse.
+ * Use `create(ListContextLinksResponseSchema)` to create a new message.
+ */
+export const ListContextLinksResponseSchema: GenMessage<ListContextLinksResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 39);
+
+/**
+ * armadra.v1.AgentService/InstallHooks and /UninstallHooks — execution.
+ *
+ * Installing a Hook edits a CLI's own configuration file on the execution host.
+ * It is forwarded, never performed here: the file is that machine's and the
+ * CLI's version is that machine's, and a Host that wrote it would be writing
+ * into a configuration it cannot read back.
+ *
+ * @generated from message armadra.v1.InstallHooksRequest
+ */
+export type InstallHooksRequest = Message<"armadra.v1.InstallHooksRequest"> & {
+  /**
+   * @generated from field: armadra.v1.CommandMeta meta = 1;
+   */
+  meta?: CommandMeta;
+
+  /**
+   * @generated from field: string operation_id = 2;
+   */
+  operationId: string;
+
+  /**
+   * @generated from field: string agent_id = 10;
+   */
+  agentId: string;
+};
+
+/**
+ * Describes the message armadra.v1.InstallHooksRequest.
+ * Use `create(InstallHooksRequestSchema)` to create a new message.
+ */
+export const InstallHooksRequestSchema: GenMessage<InstallHooksRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 40);
+
+/**
+ * @generated from message armadra.v1.HookInstallState
+ */
+export type HookInstallState = Message<"armadra.v1.HookInstallState"> & {
+  /**
+   * @generated from field: string agent_id = 1;
+   */
+  agentId: string;
+
+  /**
+   * @generated from field: bool installed = 10;
+   */
+  installed: boolean;
+
+  /**
+   * @generated from field: uint32 client_revision = 11;
+   */
+  clientRevision: number;
+
+  /**
+   * The configuration file the Worker actually touched, for a person to check.
+   *
+   * @generated from field: string config_path = 12;
+   */
+  configPath: string;
+
+  /**
+   * @generated from field: string reason_code = 39;
+   */
+  reasonCode: string;
+
+  /**
+   * @generated from field: int64 installed_at_unix_ms = 40;
+   */
+  installedAtUnixMs: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.HookInstallState.
+ * Use `create(HookInstallStateSchema)` to create a new message.
+ */
+export const HookInstallStateSchema: GenMessage<HookInstallState> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 41);
+
+/**
+ * @generated from message armadra.v1.InstallHooksResponse
+ */
+export type InstallHooksResponse =
+  Message<"armadra.v1.InstallHooksResponse"> & {
+    /**
+     * @generated from field: armadra.v1.HookInstallState state = 1;
+     */
+    state?: HookInstallState;
+  };
+
+/**
+ * Describes the message armadra.v1.InstallHooksResponse.
+ * Use `create(InstallHooksResponseSchema)` to create a new message.
+ */
+export const InstallHooksResponseSchema: GenMessage<InstallHooksResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 42);
+
+/**
+ * @generated from message armadra.v1.UninstallHooksRequest
+ */
+export type UninstallHooksRequest =
+  Message<"armadra.v1.UninstallHooksRequest"> & {
+    /**
+     * @generated from field: armadra.v1.CommandMeta meta = 1;
+     */
+    meta?: CommandMeta;
+
+    /**
+     * @generated from field: string operation_id = 2;
+     */
+    operationId: string;
+
+    /**
+     * @generated from field: string agent_id = 10;
+     */
+    agentId: string;
+  };
+
+/**
+ * Describes the message armadra.v1.UninstallHooksRequest.
+ * Use `create(UninstallHooksRequestSchema)` to create a new message.
+ */
+export const UninstallHooksRequestSchema: GenMessage<UninstallHooksRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 43);
+
+/**
+ * @generated from message armadra.v1.UninstallHooksResponse
+ */
+export type UninstallHooksResponse =
+  Message<"armadra.v1.UninstallHooksResponse"> & {
+    /**
+     * @generated from field: armadra.v1.HookInstallState state = 1;
+     */
+    state?: HookInstallState;
+  };
+
+/**
+ * Describes the message armadra.v1.UninstallHooksResponse.
+ * Use `create(UninstallHooksResponseSchema)` to create a new message.
+ */
+export const UninstallHooksResponseSchema: GenMessage<UninstallHooksResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 44);
+
+/**
+ * Read this Worker's own agent rows, for verifying a switch and a handback.
+ *
+ * It is the agent domain's equivalent of `ListWorkerSessionsRequest` and exists
+ * for the same reason: a report assembled from the request would say what the
+ * Worker was asked to store, and only a reading of the rows says what it holds.
+ *
+ * @generated from message armadra.v1.ListWorkerAgentsRequest
+ */
+export type ListWorkerAgentsRequest =
+  Message<"armadra.v1.ListWorkerAgentsRequest"> & {};
+
+/**
+ * Describes the message armadra.v1.ListWorkerAgentsRequest.
+ * Use `create(ListWorkerAgentsRequestSchema)` to create a new message.
+ */
+export const ListWorkerAgentsRequestSchema: GenMessage<ListWorkerAgentsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 45);
+
+/**
+ * What the Worker knows about one agent node right now. No revisions anywhere:
+ * the Worker stores no CAS token for a domain it does not own.
+ *
+ * @generated from message armadra.v1.WorkerAgentState
+ */
+export type WorkerAgentState = Message<"armadra.v1.WorkerAgentState"> & {
+  /**
+   * @generated from field: string node_id = 1;
+   */
+  nodeId: string;
+
+  /**
+   * @generated from field: string workspace_id = 2;
+   */
+  workspaceId: string;
+
+  /**
+   * @generated from field: string session_id = 3;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: uint64 generation = 4;
+   */
+  generation: bigint;
+
+  /**
+   * @generated from field: string agent_id = 5;
+   */
+  agentId: string;
+
+  /**
+   * @generated from field: uint32 unread = 10;
+   */
+  unread: number;
+
+  /**
+   * @generated from field: bool verified = 11;
+   */
+  verified: boolean;
+
+  /**
+   * @generated from field: bool restored = 12;
+   */
+  restored: boolean;
+
+  /**
+   * @generated from field: optional bool errored = 13;
+   */
+  errored?: boolean;
+
+  /**
+   * @generated from field: optional bool interrupted = 14;
+   */
+  interrupted?: boolean;
+
+  /**
+   * @generated from field: bytes transcript_ref = 15;
+   */
+  transcriptRef: Uint8Array;
+
+  /**
+   * @generated from field: armadra.v1.AgentState state = 30;
+   */
+  state: AgentState;
+
+  /**
+   * @generated from field: string session_phase = 31;
+   */
+  sessionPhase: string;
+
+  /**
+   * @generated from field: int64 last_event_at_unix_ms = 40;
+   */
+  lastEventAtUnixMs: bigint;
+
+  /**
+   * @generated from field: int64 updated_at_unix_ms = 41;
+   */
+  updatedAtUnixMs: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.WorkerAgentState.
+ * Use `create(WorkerAgentStateSchema)` to create a new message.
+ */
+export const WorkerAgentStateSchema: GenMessage<WorkerAgentState> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 46);
+
+/**
+ * @generated from message armadra.v1.WorkerAgentStates
+ */
+export type WorkerAgentStates = Message<"armadra.v1.WorkerAgentStates"> & {
+  /**
+   * @generated from field: string worker_instance_id = 1;
+   */
+  workerInstanceId: string;
+
+  /**
+   * @generated from field: repeated armadra.v1.WorkerAgentState agents = 10;
+   */
+  agents: WorkerAgentState[];
+
+  /**
+   * The approvals the execution host is currently blocked on. They travel with
+   * the states because they are read from one machine at one moment, and a Host
+   * that asked twice could see a question appear between the two answers.
+   *
+   * @generated from field: repeated armadra.v1.Approval approvals = 11;
+   */
+  approvals: Approval[];
+};
+
+/**
+ * Describes the message armadra.v1.WorkerAgentStates.
+ * Use `create(WorkerAgentStatesSchema)` to create a new message.
+ */
+export const WorkerAgentStatesSchema: GenMessage<WorkerAgentStates> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 47);
+
+/**
+ * Drain what has happened on the execution host since `after_sequence`.
+ *
+ * This is a *pull*, and that is a deliberate departure from §2.7's push. The
+ * resident Runtime — the process a Hook actually reaches — binds no upward
+ * channel of its own; only a Host-spawned Worker does. So the Host asks, over
+ * the same short-lived Worker door every other execution-shaped request uses,
+ * rather than waiting for a report that has no way to arrive. The cursor makes
+ * that as safe as a push would be: a drain the Host did not record is one it
+ * asks for again, and the same `event_id` recorded twice is one row.
+ *
+ * @generated from message armadra.v1.DrainAgentEventsRequest
+ */
+export type DrainAgentEventsRequest =
+  Message<"armadra.v1.DrainAgentEventsRequest"> & {
+    /**
+     * @generated from field: uint64 after_sequence = 1;
+     */
+    afterSequence: bigint;
+
+    /**
+     * @generated from field: uint32 limit = 10;
+     */
+    limit: number;
+  };
+
+/**
+ * Describes the message armadra.v1.DrainAgentEventsRequest.
+ * Use `create(DrainAgentEventsRequestSchema)` to create a new message.
+ */
+export const DrainAgentEventsRequestSchema: GenMessage<DrainAgentEventsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 48);
+
+/**
+ * @generated from message armadra.v1.DrainedAgentEvents
+ */
+export type DrainedAgentEvents = Message<"armadra.v1.DrainedAgentEvents"> & {
+  /**
+   * The cursor to pass next time. It only moves forward.
+   *
+   * @generated from field: uint64 next_sequence = 1;
+   */
+  nextSequence: bigint;
+
+  /**
+   * @generated from field: bool has_more = 2;
+   */
+  hasMore: boolean;
+
+  /**
+   * @generated from field: repeated armadra.v1.HookEvent events = 10;
+   */
+  events: HookEvent[];
+
+  /**
+   * @generated from field: repeated armadra.v1.Approval approvals = 11;
+   */
+  approvals: Approval[];
+
+  /**
+   * @generated from field: repeated armadra.v1.Delivery deliveries = 12;
+   */
+  deliveries: Delivery[];
+};
+
+/**
+ * Describes the message armadra.v1.DrainedAgentEvents.
+ * Use `create(DrainedAgentEventsSchema)` to create a new message.
+ */
+export const DrainedAgentEventsSchema: GenMessage<DrainedAgentEvents> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 49);
+
+/**
+ * Write an answer into the file the CLI is blocked on.
+ *
+ * The Host has already recorded the decision, under CAS, before this is sent.
+ * If this fails the record still says the question was answered, which is
+ * correct: somebody did answer it, and the failure is that the machine did not
+ * hear — a state a person can act on, unlike a record that quietly forgot.
+ *
+ * @generated from message armadra.v1.DeliverApprovalAnswerRequest
+ */
+export type DeliverApprovalAnswerRequest =
+  Message<"armadra.v1.DeliverApprovalAnswerRequest"> & {
+    /**
+     * @generated from field: string approval_id = 1;
+     */
+    approvalId: string;
+
+    /**
+     * @generated from field: string node_id = 2;
+     */
+    nodeId: string;
+
+    /**
+     * @generated from field: string session_id = 3;
+     */
+    sessionId: string;
+
+    /**
+     * @generated from field: uint64 generation = 4;
+     */
+    generation: bigint;
+
+    /**
+     * @generated from field: string decision = 10;
+     */
+    decision: string;
+
+    /**
+     * @generated from field: string answered_by = 11;
+     */
+    answeredBy: string;
+  };
+
+/**
+ * Describes the message armadra.v1.DeliverApprovalAnswerRequest.
+ * Use `create(DeliverApprovalAnswerRequestSchema)` to create a new message.
+ */
+export const DeliverApprovalAnswerRequestSchema: GenMessage<DeliverApprovalAnswerRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 50);
+
+/**
+ * Put a prepared bundle in front of the target agent.
+ *
+ * @generated from message armadra.v1.DeliverHandoffRequest
+ */
+export type DeliverHandoffRequest =
+  Message<"armadra.v1.DeliverHandoffRequest"> & {
+    /**
+     * @generated from field: string handoff_id = 1;
+     */
+    handoffId: string;
+
+    /**
+     * @generated from field: string workspace_id = 2;
+     */
+    workspaceId: string;
+
+    /**
+     * @generated from field: string source_node_id = 3;
+     */
+    sourceNodeId: string;
+
+    /**
+     * @generated from field: string target_node_id = 4;
+     */
+    targetNodeId: string;
+
+    /**
+     * @generated from field: armadra.v1.SessionAddress target = 5;
+     */
+    target?: SessionAddress;
+
+    /**
+     * @generated from field: bytes bundle = 10;
+     */
+    bundle: Uint8Array;
+
+    /**
+     * @generated from field: bytes bundle_sha256 = 11;
+     */
+    bundleSha256: Uint8Array;
+  };
+
+/**
+ * Describes the message armadra.v1.DeliverHandoffRequest.
+ * Use `create(DeliverHandoffRequestSchema)` to create a new message.
+ */
+export const DeliverHandoffRequestSchema: GenMessage<DeliverHandoffRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 51);
+
+/**
+ * Put one message in front of an agent (`send` / `reply` / `notify`).
+ *
+ * @generated from message armadra.v1.DeliverMessageRequest
+ */
+export type DeliverMessageRequest =
+  Message<"armadra.v1.DeliverMessageRequest"> & {
+    /**
+     * @generated from field: string trace_id = 1;
+     */
+    traceId: string;
+
+    /**
+     * @generated from field: string workspace_id = 2;
+     */
+    workspaceId: string;
+
+    /**
+     * @generated from field: string source_node_id = 3;
+     */
+    sourceNodeId: string;
+
+    /**
+     * @generated from field: string target_node_id = 4;
+     */
+    targetNodeId: string;
+
+    /**
+     * @generated from field: string body = 10;
+     */
+    body: string;
+
+    /**
+     * `send`, `reply` or `notify`. The execution host's own vocabulary, passed
+     * through rather than mapped.
+     *
+     * @generated from field: string mode = 11;
+     */
+    mode: string;
+  };
+
+/**
+ * Describes the message armadra.v1.DeliverMessageRequest.
+ * Use `create(DeliverMessageRequestSchema)` to create a new message.
+ */
+export const DeliverMessageRequestSchema: GenMessage<DeliverMessageRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 52);
+
+/**
+ * The Worker's answer to either delivery: what it can prove happened.
+ *
+ * @generated from message armadra.v1.AgentDeliveryReceipt
+ */
+export type AgentDeliveryReceipt =
+  Message<"armadra.v1.AgentDeliveryReceipt"> & {
+    /**
+     * @generated from field: string trace_id = 1;
+     */
+    traceId: string;
+
+    /**
+     * @generated from field: string receipt = 10;
+     */
+    receipt: string;
+
+    /**
+     * @generated from field: uint32 body_chars = 11;
+     */
+    bodyChars: number;
+
+    /**
+     * @generated from field: armadra.v1.DeliveryOutcome outcome = 30;
+     */
+    outcome: DeliveryOutcome;
+
+    /**
+     * @generated from field: string reason_code = 39;
+     */
+    reasonCode: string;
+
+    /**
+     * @generated from field: int64 observed_at_unix_ms = 40;
+     */
+    observedAtUnixMs: bigint;
+  };
+
+/**
+ * Describes the message armadra.v1.AgentDeliveryReceipt.
+ * Use `create(AgentDeliveryReceiptSchema)` to create a new message.
+ */
+export const AgentDeliveryReceiptSchema: GenMessage<AgentDeliveryReceipt> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 53);
+
+/**
+ * Read a node's transcript, or a screenful of its pane.
+ *
+ * @generated from message armadra.v1.ReadTranscriptRequest
+ */
+export type ReadTranscriptRequest =
+  Message<"armadra.v1.ReadTranscriptRequest"> & {
+    /**
+     * @generated from field: string node_id = 1;
+     */
+    nodeId: string;
+
+    /**
+     * @generated from field: string session_id = 2;
+     */
+    sessionId: string;
+
+    /**
+     * @generated from field: bytes transcript_ref = 10;
+     */
+    transcriptRef: Uint8Array;
+
+    /**
+     * @generated from field: uint32 max_bytes = 11;
+     */
+    maxBytes: number;
+  };
+
+/**
+ * Describes the message armadra.v1.ReadTranscriptRequest.
+ * Use `create(ReadTranscriptRequestSchema)` to create a new message.
+ */
+export const ReadTranscriptRequestSchema: GenMessage<ReadTranscriptRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 54);
+
+/**
+ * @generated from message armadra.v1.TranscriptExcerpt
+ */
+export type TranscriptExcerpt = Message<"armadra.v1.TranscriptExcerpt"> & {
+  /**
+   * @generated from field: string node_id = 1;
+   */
+  nodeId: string;
+
+  /**
+   * @generated from field: bytes content = 10;
+   */
+  content: Uint8Array;
+
+  /**
+   * @generated from field: bytes content_sha256 = 11;
+   */
+  contentSha256: Uint8Array;
+
+  /**
+   * @generated from field: bool truncated = 12;
+   */
+  truncated: boolean;
+
+  /**
+   * @generated from field: int64 observed_at_unix_ms = 40;
+   */
+  observedAtUnixMs: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.TranscriptExcerpt.
+ * Use `create(TranscriptExcerptSchema)` to create a new message.
+ */
+export const TranscriptExcerptSchema: GenMessage<TranscriptExcerpt> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 55);
+
+/**
+ * @generated from message armadra.v1.CaptureAgentScreenRequest
+ */
+export type CaptureAgentScreenRequest =
+  Message<"armadra.v1.CaptureAgentScreenRequest"> & {
+    /**
+     * @generated from field: string node_id = 1;
+     */
+    nodeId: string;
+
+    /**
+     * @generated from field: string session_id = 2;
+     */
+    sessionId: string;
+
+    /**
+     * @generated from field: uint32 lines = 10;
+     */
+    lines: number;
+  };
+
+/**
+ * Describes the message armadra.v1.CaptureAgentScreenRequest.
+ * Use `create(CaptureAgentScreenRequestSchema)` to create a new message.
+ */
+export const CaptureAgentScreenRequestSchema: GenMessage<CaptureAgentScreenRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 56);
+
+/**
+ * @generated from message armadra.v1.CapturedAgentScreen
+ */
+export type CapturedAgentScreen = Message<"armadra.v1.CapturedAgentScreen"> & {
+  /**
+   * @generated from field: string node_id = 1;
+   */
+  nodeId: string;
+
+  /**
+   * @generated from field: string data = 10;
+   */
+  data: string;
+};
+
+/**
+ * Describes the message armadra.v1.CapturedAgentScreen.
+ * Use `create(CapturedAgentScreenSchema)` to create a new message.
+ */
+export const CapturedAgentScreenSchema: GenMessage<CapturedAgentScreen> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 57);
+
+/**
+ * @generated from message armadra.v1.AgentWorkerRequest
+ */
+export type AgentWorkerRequest = Message<"armadra.v1.AgentWorkerRequest"> & {
+  /**
+   * @generated from oneof armadra.v1.AgentWorkerRequest.action
+   */
+  action:
+    | {
+        /**
+         * @generated from field: armadra.v1.ListWorkerAgentsRequest list_agents = 100;
+         */
+        value: ListWorkerAgentsRequest;
+        case: "listAgents";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.DrainAgentEventsRequest drain_events = 101;
+         */
+        value: DrainAgentEventsRequest;
+        case: "drainEvents";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.DeliverApprovalAnswerRequest deliver_approval = 102;
+         */
+        value: DeliverApprovalAnswerRequest;
+        case: "deliverApproval";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.DeliverHandoffRequest deliver_handoff = 103;
+         */
+        value: DeliverHandoffRequest;
+        case: "deliverHandoff";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.DeliverMessageRequest deliver_message = 104;
+         */
+        value: DeliverMessageRequest;
+        case: "deliverMessage";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.ReadTranscriptRequest read_transcript = 105;
+         */
+        value: ReadTranscriptRequest;
+        case: "readTranscript";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.CaptureAgentScreenRequest capture_screen = 106;
+         */
+        value: CaptureAgentScreenRequest;
+        case: "captureScreen";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.InstallHooksRequest install_hooks = 107;
+         */
+        value: InstallHooksRequest;
+        case: "installHooks";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.UninstallHooksRequest uninstall_hooks = 108;
+         */
+        value: UninstallHooksRequest;
+        case: "uninstallHooks";
+      }
+    | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message armadra.v1.AgentWorkerRequest.
+ * Use `create(AgentWorkerRequestSchema)` to create a new message.
+ */
+export const AgentWorkerRequestSchema: GenMessage<AgentWorkerRequest> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 58);
+
+/**
+ * @generated from message armadra.v1.AgentWorkerResponse
+ */
+export type AgentWorkerResponse = Message<"armadra.v1.AgentWorkerResponse"> & {
+  /**
+   * @generated from oneof armadra.v1.AgentWorkerResponse.result
+   */
+  result:
+    | {
+        /**
+         * @generated from field: armadra.v1.WorkerAgentStates agents = 100;
+         */
+        value: WorkerAgentStates;
+        case: "agents";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.DrainedAgentEvents events = 101;
+         */
+        value: DrainedAgentEvents;
+        case: "events";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.AgentDeliveryReceipt delivery = 102;
+         */
+        value: AgentDeliveryReceipt;
+        case: "delivery";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.TranscriptExcerpt transcript = 105;
+         */
+        value: TranscriptExcerpt;
+        case: "transcript";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.CapturedAgentScreen screen = 106;
+         */
+        value: CapturedAgentScreen;
+        case: "screen";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.HookInstallState hooks = 107;
+         */
+        value: HookInstallState;
+        case: "hooks";
+      }
+    | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message armadra.v1.AgentWorkerResponse.
+ * Use `create(AgentWorkerResponseSchema)` to create a new message.
+ */
+export const AgentWorkerResponseSchema: GenMessage<AgentWorkerResponse> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_agent, 59);
+
+/**
  * Why a target cannot be written to right now. Only ABSENT is a condition a
  * frozen cold start may repair, and only when the plan enabled one.
  *
@@ -515,3 +2694,277 @@ export enum AgentPromptPhase {
 export const AgentPromptPhaseSchema: GenEnum<AgentPromptPhase> =
   /*@__PURE__*/
   enumDesc(file_armadra_v1_agent, 1);
+
+/**
+ * The reduced state of one agent node, as `hook/reduce.rs` computes it.
+ *
+ * It is a reduction of observed events, not a claim about a process. WAITING
+ * means a CLI asked a question; BLOCKED means it cannot proceed until one is
+ * answered; DONE means a turn finished. None of them say a program is alive —
+ * that is the session domain's `SessionStatus`, and conflating the two would
+ * let a node be drawn as busy after its terminal had gone.
+ *
+ * @generated from enum armadra.v1.AgentState
+ */
+export enum AgentState {
+  /**
+   * @generated from enum value: AGENT_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: AGENT_STATE_IDLE = 1;
+   */
+  IDLE = 1,
+
+  /**
+   * @generated from enum value: AGENT_STATE_WORKING = 2;
+   */
+  WORKING = 2,
+
+  /**
+   * @generated from enum value: AGENT_STATE_WAITING = 3;
+   */
+  WAITING = 3,
+
+  /**
+   * @generated from enum value: AGENT_STATE_BLOCKED = 4;
+   */
+  BLOCKED = 4,
+
+  /**
+   * @generated from enum value: AGENT_STATE_DONE = 5;
+   */
+  DONE = 5,
+}
+
+/**
+ * Describes the enum armadra.v1.AgentState.
+ */
+export const AgentStateSchema: GenEnum<AgentState> =
+  /*@__PURE__*/
+  enumDesc(file_armadra_v1_agent, 2);
+
+/**
+ * What kind of turn a Hook reported. The list is closed; an unrecognised value
+ * is refused rather than folded into a default, because a default here would
+ * silently change what a node's state was reduced from.
+ *
+ * @generated from enum armadra.v1.HookEventKind
+ */
+export enum HookEventKind {
+  /**
+   * @generated from enum value: HOOK_EVENT_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: HOOK_EVENT_KIND_SESSION_START = 1;
+   */
+  SESSION_START = 1,
+
+  /**
+   * @generated from enum value: HOOK_EVENT_KIND_USER_PROMPT = 2;
+   */
+  USER_PROMPT = 2,
+
+  /**
+   * @generated from enum value: HOOK_EVENT_KIND_TURN_END = 3;
+   */
+  TURN_END = 3,
+
+  /**
+   * @generated from enum value: HOOK_EVENT_KIND_NOTIFICATION = 4;
+   */
+  NOTIFICATION = 4,
+
+  /**
+   * @generated from enum value: HOOK_EVENT_KIND_APPROVAL = 5;
+   */
+  APPROVAL = 5,
+
+  /**
+   * @generated from enum value: HOOK_EVENT_KIND_SESSION_END = 6;
+   */
+  SESSION_END = 6,
+}
+
+/**
+ * Describes the enum armadra.v1.HookEventKind.
+ */
+export const HookEventKindSchema: GenEnum<HookEventKind> =
+  /*@__PURE__*/
+  enumDesc(file_armadra_v1_agent, 3);
+
+/**
+ * @generated from enum armadra.v1.ApprovalState
+ */
+export enum ApprovalState {
+  /**
+   * @generated from enum value: APPROVAL_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: APPROVAL_STATE_PENDING = 1;
+   */
+  PENDING = 1,
+
+  /**
+   * @generated from enum value: APPROVAL_STATE_ANSWERED = 2;
+   */
+  ANSWERED = 2,
+
+  /**
+   * Nobody answered inside the window the CLI was willing to wait. It is not a
+   * denial: the CLI stopped asking, and recording it as denied would tell a
+   * user a decision was taken that nobody took.
+   *
+   * @generated from enum value: APPROVAL_STATE_EXPIRED = 3;
+   */
+  EXPIRED = 3,
+}
+
+/**
+ * Describes the enum armadra.v1.ApprovalState.
+ */
+export const ApprovalStateSchema: GenEnum<ApprovalState> =
+  /*@__PURE__*/
+  enumDesc(file_armadra_v1_agent, 4);
+
+/**
+ * What became of one attempt to put something in front of an agent.
+ *
+ * The three outcomes are the three the prompt receipt uses and mean the same
+ * things: SUBMITTED is proof bytes were accepted, NOT_WRITTEN is proof they
+ * were not, and UNKNOWN is the honest answer when neither can be shown.
+ * Nothing is ever retried automatically out of UNKNOWN.
+ *
+ * @generated from enum armadra.v1.DeliveryOutcome
+ */
+export enum DeliveryOutcome {
+  /**
+   * @generated from enum value: DELIVERY_OUTCOME_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: DELIVERY_OUTCOME_SUBMITTED = 1;
+   */
+  SUBMITTED = 1,
+
+  /**
+   * @generated from enum value: DELIVERY_OUTCOME_NOT_WRITTEN = 2;
+   */
+  NOT_WRITTEN = 2,
+
+  /**
+   * @generated from enum value: DELIVERY_OUTCOME_UNKNOWN = 3;
+   */
+  UNKNOWN = 3,
+}
+
+/**
+ * Describes the enum armadra.v1.DeliveryOutcome.
+ */
+export const DeliveryOutcomeSchema: GenEnum<DeliveryOutcome> =
+  /*@__PURE__*/
+  enumDesc(file_armadra_v1_agent, 5);
+
+/**
+ * Where a handoff stands.
+ *
+ * It is one enum over what used to be two columns — `agent_handoffs.state` and
+ * `agent_handoff_outbox.state` — because a client asking "did this land?" could
+ * never answer from either alone. UNKNOWN_OUTCOME is the value the merge exists
+ * for: the claim was persisted, the write may or may not have reached the
+ * terminal, and nobody may resend it automatically.
+ *
+ * @generated from enum armadra.v1.HandoffState
+ */
+export enum HandoffState {
+  /**
+   * @generated from enum value: HANDOFF_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: HANDOFF_STATE_PREPARED = 1;
+   */
+  PREPARED = 1,
+
+  /**
+   * @generated from enum value: HANDOFF_STATE_QUEUED = 2;
+   */
+  QUEUED = 2,
+
+  /**
+   * @generated from enum value: HANDOFF_STATE_DISPATCHING = 3;
+   */
+  DISPATCHING = 3,
+
+  /**
+   * @generated from enum value: HANDOFF_STATE_DELIVERED = 4;
+   */
+  DELIVERED = 4,
+
+  /**
+   * @generated from enum value: HANDOFF_STATE_ACKNOWLEDGED = 5;
+   */
+  ACKNOWLEDGED = 5,
+
+  /**
+   * @generated from enum value: HANDOFF_STATE_CANCELLED = 6;
+   */
+  CANCELLED = 6,
+
+  /**
+   * @generated from enum value: HANDOFF_STATE_FAILED = 7;
+   */
+  FAILED = 7,
+
+  /**
+   * @generated from enum value: HANDOFF_STATE_UNKNOWN_OUTCOME = 8;
+   */
+  UNKNOWN_OUTCOME = 8,
+}
+
+/**
+ * Describes the enum armadra.v1.HandoffState.
+ */
+export const HandoffStateSchema: GenEnum<HandoffState> =
+  /*@__PURE__*/
+  enumDesc(file_armadra_v1_agent, 6);
+
+/**
+ * One edge, seen from a node.
+ *
+ * @generated from enum armadra.v1.ContextLinkDirection
+ */
+export enum ContextLinkDirection {
+  /**
+   * @generated from enum value: CONTEXT_LINK_DIRECTION_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * This node is the edge's source: it reads the other one.
+   *
+   * @generated from enum value: CONTEXT_LINK_DIRECTION_OUTGOING = 1;
+   */
+  OUTGOING = 1,
+
+  /**
+   * This node is the edge's target: the other one reads it.
+   *
+   * @generated from enum value: CONTEXT_LINK_DIRECTION_INCOMING = 2;
+   */
+  INCOMING = 2,
+}
+
+/**
+ * Describes the enum armadra.v1.ContextLinkDirection.
+ */
+export const ContextLinkDirectionSchema: GenEnum<ContextLinkDirection> =
+  /*@__PURE__*/
+  enumDesc(file_armadra_v1_agent, 7);

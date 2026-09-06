@@ -41,6 +41,12 @@ fn an_agent_upcall_keeps_its_opaque_payload_and_digest() {
                 workspace_id: "workspace-1".into(),
                 node_id: "节点-1".into(),
                 session_id: "会话-1".into(),
+                // The agent batch added a generation and an entity id. They are
+                // zero and empty here on purpose: this fixture is the frame as
+                // the channel batch pinned it, and a Worker that predates the
+                // agent domain sends exactly these bytes.
+                generation: 0,
+                entity_id: String::new(),
                 payload: vec![0, 255, 27, 10],
                 payload_sha256: vec![5; 32],
                 schema_version: 1,

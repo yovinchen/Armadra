@@ -157,6 +157,374 @@ func (AgentPromptPhase) EnumDescriptor() ([]byte, []int) {
 	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{1}
 }
 
+// The reduced state of one agent node, as `hook/reduce.rs` computes it.
+//
+// It is a reduction of observed events, not a claim about a process. WAITING
+// means a CLI asked a question; BLOCKED means it cannot proceed until one is
+// answered; DONE means a turn finished. None of them say a program is alive —
+// that is the session domain's `SessionStatus`, and conflating the two would
+// let a node be drawn as busy after its terminal had gone.
+type AgentState int32
+
+const (
+	AgentState_AGENT_STATE_UNSPECIFIED AgentState = 0
+	AgentState_AGENT_STATE_IDLE        AgentState = 1
+	AgentState_AGENT_STATE_WORKING     AgentState = 2
+	AgentState_AGENT_STATE_WAITING     AgentState = 3
+	AgentState_AGENT_STATE_BLOCKED     AgentState = 4
+	AgentState_AGENT_STATE_DONE        AgentState = 5
+)
+
+// Enum value maps for AgentState.
+var (
+	AgentState_name = map[int32]string{
+		0: "AGENT_STATE_UNSPECIFIED",
+		1: "AGENT_STATE_IDLE",
+		2: "AGENT_STATE_WORKING",
+		3: "AGENT_STATE_WAITING",
+		4: "AGENT_STATE_BLOCKED",
+		5: "AGENT_STATE_DONE",
+	}
+	AgentState_value = map[string]int32{
+		"AGENT_STATE_UNSPECIFIED": 0,
+		"AGENT_STATE_IDLE":        1,
+		"AGENT_STATE_WORKING":     2,
+		"AGENT_STATE_WAITING":     3,
+		"AGENT_STATE_BLOCKED":     4,
+		"AGENT_STATE_DONE":        5,
+	}
+)
+
+func (x AgentState) Enum() *AgentState {
+	p := new(AgentState)
+	*p = x
+	return p
+}
+
+func (x AgentState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AgentState) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_agent_proto_enumTypes[2].Descriptor()
+}
+
+func (AgentState) Type() protoreflect.EnumType {
+	return &file_armadra_v1_agent_proto_enumTypes[2]
+}
+
+func (x AgentState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AgentState.Descriptor instead.
+func (AgentState) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{2}
+}
+
+// What kind of turn a Hook reported. The list is closed; an unrecognised value
+// is refused rather than folded into a default, because a default here would
+// silently change what a node's state was reduced from.
+type HookEventKind int32
+
+const (
+	HookEventKind_HOOK_EVENT_KIND_UNSPECIFIED   HookEventKind = 0
+	HookEventKind_HOOK_EVENT_KIND_SESSION_START HookEventKind = 1
+	HookEventKind_HOOK_EVENT_KIND_USER_PROMPT   HookEventKind = 2
+	HookEventKind_HOOK_EVENT_KIND_TURN_END      HookEventKind = 3
+	HookEventKind_HOOK_EVENT_KIND_NOTIFICATION  HookEventKind = 4
+	HookEventKind_HOOK_EVENT_KIND_APPROVAL      HookEventKind = 5
+	HookEventKind_HOOK_EVENT_KIND_SESSION_END   HookEventKind = 6
+)
+
+// Enum value maps for HookEventKind.
+var (
+	HookEventKind_name = map[int32]string{
+		0: "HOOK_EVENT_KIND_UNSPECIFIED",
+		1: "HOOK_EVENT_KIND_SESSION_START",
+		2: "HOOK_EVENT_KIND_USER_PROMPT",
+		3: "HOOK_EVENT_KIND_TURN_END",
+		4: "HOOK_EVENT_KIND_NOTIFICATION",
+		5: "HOOK_EVENT_KIND_APPROVAL",
+		6: "HOOK_EVENT_KIND_SESSION_END",
+	}
+	HookEventKind_value = map[string]int32{
+		"HOOK_EVENT_KIND_UNSPECIFIED":   0,
+		"HOOK_EVENT_KIND_SESSION_START": 1,
+		"HOOK_EVENT_KIND_USER_PROMPT":   2,
+		"HOOK_EVENT_KIND_TURN_END":      3,
+		"HOOK_EVENT_KIND_NOTIFICATION":  4,
+		"HOOK_EVENT_KIND_APPROVAL":      5,
+		"HOOK_EVENT_KIND_SESSION_END":   6,
+	}
+)
+
+func (x HookEventKind) Enum() *HookEventKind {
+	p := new(HookEventKind)
+	*p = x
+	return p
+}
+
+func (x HookEventKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (HookEventKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_agent_proto_enumTypes[3].Descriptor()
+}
+
+func (HookEventKind) Type() protoreflect.EnumType {
+	return &file_armadra_v1_agent_proto_enumTypes[3]
+}
+
+func (x HookEventKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use HookEventKind.Descriptor instead.
+func (HookEventKind) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{3}
+}
+
+type ApprovalState int32
+
+const (
+	ApprovalState_APPROVAL_STATE_UNSPECIFIED ApprovalState = 0
+	ApprovalState_APPROVAL_STATE_PENDING     ApprovalState = 1
+	ApprovalState_APPROVAL_STATE_ANSWERED    ApprovalState = 2
+	// Nobody answered inside the window the CLI was willing to wait. It is not a
+	// denial: the CLI stopped asking, and recording it as denied would tell a
+	// user a decision was taken that nobody took.
+	ApprovalState_APPROVAL_STATE_EXPIRED ApprovalState = 3
+)
+
+// Enum value maps for ApprovalState.
+var (
+	ApprovalState_name = map[int32]string{
+		0: "APPROVAL_STATE_UNSPECIFIED",
+		1: "APPROVAL_STATE_PENDING",
+		2: "APPROVAL_STATE_ANSWERED",
+		3: "APPROVAL_STATE_EXPIRED",
+	}
+	ApprovalState_value = map[string]int32{
+		"APPROVAL_STATE_UNSPECIFIED": 0,
+		"APPROVAL_STATE_PENDING":     1,
+		"APPROVAL_STATE_ANSWERED":    2,
+		"APPROVAL_STATE_EXPIRED":     3,
+	}
+)
+
+func (x ApprovalState) Enum() *ApprovalState {
+	p := new(ApprovalState)
+	*p = x
+	return p
+}
+
+func (x ApprovalState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ApprovalState) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_agent_proto_enumTypes[4].Descriptor()
+}
+
+func (ApprovalState) Type() protoreflect.EnumType {
+	return &file_armadra_v1_agent_proto_enumTypes[4]
+}
+
+func (x ApprovalState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ApprovalState.Descriptor instead.
+func (ApprovalState) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{4}
+}
+
+// What became of one attempt to put something in front of an agent.
+//
+// The three outcomes are the three the prompt receipt uses and mean the same
+// things: SUBMITTED is proof bytes were accepted, NOT_WRITTEN is proof they
+// were not, and UNKNOWN is the honest answer when neither can be shown.
+// Nothing is ever retried automatically out of UNKNOWN.
+type DeliveryOutcome int32
+
+const (
+	DeliveryOutcome_DELIVERY_OUTCOME_UNSPECIFIED DeliveryOutcome = 0
+	DeliveryOutcome_DELIVERY_OUTCOME_SUBMITTED   DeliveryOutcome = 1
+	DeliveryOutcome_DELIVERY_OUTCOME_NOT_WRITTEN DeliveryOutcome = 2
+	DeliveryOutcome_DELIVERY_OUTCOME_UNKNOWN     DeliveryOutcome = 3
+)
+
+// Enum value maps for DeliveryOutcome.
+var (
+	DeliveryOutcome_name = map[int32]string{
+		0: "DELIVERY_OUTCOME_UNSPECIFIED",
+		1: "DELIVERY_OUTCOME_SUBMITTED",
+		2: "DELIVERY_OUTCOME_NOT_WRITTEN",
+		3: "DELIVERY_OUTCOME_UNKNOWN",
+	}
+	DeliveryOutcome_value = map[string]int32{
+		"DELIVERY_OUTCOME_UNSPECIFIED": 0,
+		"DELIVERY_OUTCOME_SUBMITTED":   1,
+		"DELIVERY_OUTCOME_NOT_WRITTEN": 2,
+		"DELIVERY_OUTCOME_UNKNOWN":     3,
+	}
+)
+
+func (x DeliveryOutcome) Enum() *DeliveryOutcome {
+	p := new(DeliveryOutcome)
+	*p = x
+	return p
+}
+
+func (x DeliveryOutcome) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DeliveryOutcome) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_agent_proto_enumTypes[5].Descriptor()
+}
+
+func (DeliveryOutcome) Type() protoreflect.EnumType {
+	return &file_armadra_v1_agent_proto_enumTypes[5]
+}
+
+func (x DeliveryOutcome) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DeliveryOutcome.Descriptor instead.
+func (DeliveryOutcome) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{5}
+}
+
+// Where a handoff stands.
+//
+// It is one enum over what used to be two columns — `agent_handoffs.state` and
+// `agent_handoff_outbox.state` — because a client asking "did this land?" could
+// never answer from either alone. UNKNOWN_OUTCOME is the value the merge exists
+// for: the claim was persisted, the write may or may not have reached the
+// terminal, and nobody may resend it automatically.
+type HandoffState int32
+
+const (
+	HandoffState_HANDOFF_STATE_UNSPECIFIED     HandoffState = 0
+	HandoffState_HANDOFF_STATE_PREPARED        HandoffState = 1
+	HandoffState_HANDOFF_STATE_QUEUED          HandoffState = 2
+	HandoffState_HANDOFF_STATE_DISPATCHING     HandoffState = 3
+	HandoffState_HANDOFF_STATE_DELIVERED       HandoffState = 4
+	HandoffState_HANDOFF_STATE_ACKNOWLEDGED    HandoffState = 5
+	HandoffState_HANDOFF_STATE_CANCELLED       HandoffState = 6
+	HandoffState_HANDOFF_STATE_FAILED          HandoffState = 7
+	HandoffState_HANDOFF_STATE_UNKNOWN_OUTCOME HandoffState = 8
+)
+
+// Enum value maps for HandoffState.
+var (
+	HandoffState_name = map[int32]string{
+		0: "HANDOFF_STATE_UNSPECIFIED",
+		1: "HANDOFF_STATE_PREPARED",
+		2: "HANDOFF_STATE_QUEUED",
+		3: "HANDOFF_STATE_DISPATCHING",
+		4: "HANDOFF_STATE_DELIVERED",
+		5: "HANDOFF_STATE_ACKNOWLEDGED",
+		6: "HANDOFF_STATE_CANCELLED",
+		7: "HANDOFF_STATE_FAILED",
+		8: "HANDOFF_STATE_UNKNOWN_OUTCOME",
+	}
+	HandoffState_value = map[string]int32{
+		"HANDOFF_STATE_UNSPECIFIED":     0,
+		"HANDOFF_STATE_PREPARED":        1,
+		"HANDOFF_STATE_QUEUED":          2,
+		"HANDOFF_STATE_DISPATCHING":     3,
+		"HANDOFF_STATE_DELIVERED":       4,
+		"HANDOFF_STATE_ACKNOWLEDGED":    5,
+		"HANDOFF_STATE_CANCELLED":       6,
+		"HANDOFF_STATE_FAILED":          7,
+		"HANDOFF_STATE_UNKNOWN_OUTCOME": 8,
+	}
+)
+
+func (x HandoffState) Enum() *HandoffState {
+	p := new(HandoffState)
+	*p = x
+	return p
+}
+
+func (x HandoffState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (HandoffState) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_agent_proto_enumTypes[6].Descriptor()
+}
+
+func (HandoffState) Type() protoreflect.EnumType {
+	return &file_armadra_v1_agent_proto_enumTypes[6]
+}
+
+func (x HandoffState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use HandoffState.Descriptor instead.
+func (HandoffState) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{6}
+}
+
+// One edge, seen from a node.
+type ContextLinkDirection int32
+
+const (
+	ContextLinkDirection_CONTEXT_LINK_DIRECTION_UNSPECIFIED ContextLinkDirection = 0
+	// This node is the edge's source: it reads the other one.
+	ContextLinkDirection_CONTEXT_LINK_DIRECTION_OUTGOING ContextLinkDirection = 1
+	// This node is the edge's target: the other one reads it.
+	ContextLinkDirection_CONTEXT_LINK_DIRECTION_INCOMING ContextLinkDirection = 2
+)
+
+// Enum value maps for ContextLinkDirection.
+var (
+	ContextLinkDirection_name = map[int32]string{
+		0: "CONTEXT_LINK_DIRECTION_UNSPECIFIED",
+		1: "CONTEXT_LINK_DIRECTION_OUTGOING",
+		2: "CONTEXT_LINK_DIRECTION_INCOMING",
+	}
+	ContextLinkDirection_value = map[string]int32{
+		"CONTEXT_LINK_DIRECTION_UNSPECIFIED": 0,
+		"CONTEXT_LINK_DIRECTION_OUTGOING":    1,
+		"CONTEXT_LINK_DIRECTION_INCOMING":    2,
+	}
+)
+
+func (x ContextLinkDirection) Enum() *ContextLinkDirection {
+	p := new(ContextLinkDirection)
+	*p = x
+	return p
+}
+
+func (x ContextLinkDirection) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ContextLinkDirection) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_agent_proto_enumTypes[7].Descriptor()
+}
+
+func (ContextLinkDirection) Type() protoreflect.EnumType {
+	return &file_armadra_v1_agent_proto_enumTypes[7]
+}
+
+func (x ContextLinkDirection) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ContextLinkDirection.Descriptor instead.
+func (ContextLinkDirection) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{7}
+}
+
 // A frozen Agent launch definition. It names configuration only: an agent id,
 // a directory and CLI arguments. Credentials, tokens and environment values
 // never appear here, and only the "default" account is supported.
@@ -869,12 +1237,4166 @@ func (*AgentResponse_Target) isAgentResponse_Result() {}
 
 func (*AgentResponse_Receipt) isAgentResponse_Result() {}
 
+// One agent node's status as the Host records it.
+//
+// `transcript_ref` is deliberately not a path. The transcript is a file on the
+// execution host, in whatever layout that CLI uses; the Host stores an opaque
+// reference and hands it back to the Worker when somebody asks to read it. A
+// path here would be a path this Host cannot open, on a machine it may not be.
+type AgentStatus struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	NodeId      string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	WorkspaceId string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	// The session the status was last observed against, and the generation of
+	// that session's run. Together they make a stale report visible: a turn
+	// reported for a generation that has been replaced describes a pane nobody
+	// is looking at any more.
+	SessionId   string `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Generation  uint64 `protobuf:"varint,4,opt,name=generation,proto3" json:"generation,omitempty"`
+	AgentId     string `protobuf:"bytes,5,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	Unread      uint32 `protobuf:"varint,10,opt,name=unread,proto3" json:"unread,omitempty"`
+	Verified    bool   `protobuf:"varint,11,opt,name=verified,proto3" json:"verified,omitempty"`
+	Restored    bool   `protobuf:"varint,12,opt,name=restored,proto3" json:"restored,omitempty"`
+	Errored     *bool  `protobuf:"varint,13,opt,name=errored,proto3,oneof" json:"errored,omitempty"`
+	Interrupted *bool  `protobuf:"varint,14,opt,name=interrupted,proto3,oneof" json:"interrupted,omitempty"`
+	// Opaque to the Host: the Worker's own way of naming this node's transcript.
+	TranscriptRef []byte     `protobuf:"bytes,15,opt,name=transcript_ref,json=transcriptRef,proto3" json:"transcript_ref,omitempty"`
+	State         AgentState `protobuf:"varint,30,opt,name=state,proto3,enum=armadra.v1.AgentState" json:"state,omitempty"`
+	// The CLI's own phase word (`startup`, `turn`, `compact`, …). It is a string
+	// for the reason `decision` is: it is one provider's vocabulary, and mapping
+	// it would be this Host deciding what that provider meant.
+	SessionPhase      string `protobuf:"bytes,31,opt,name=session_phase,json=sessionPhase,proto3" json:"session_phase,omitempty"`
+	ReasonCode        string `protobuf:"bytes,39,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	LastEventAtUnixMs int64  `protobuf:"varint,40,opt,name=last_event_at_unix_ms,json=lastEventAtUnixMs,proto3" json:"last_event_at_unix_ms,omitempty"`
+	UpdatedAtUnixMs   int64  `protobuf:"varint,41,opt,name=updated_at_unix_ms,json=updatedAtUnixMs,proto3" json:"updated_at_unix_ms,omitempty"`
+	Revision          uint64 `protobuf:"varint,50,opt,name=revision,proto3" json:"revision,omitempty"`
+	Deleted           bool   `protobuf:"varint,51,opt,name=deleted,proto3" json:"deleted,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *AgentStatus) Reset() {
+	*x = AgentStatus{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentStatus) ProtoMessage() {}
+
+func (x *AgentStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentStatus.ProtoReflect.Descriptor instead.
+func (*AgentStatus) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *AgentStatus) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *AgentStatus) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *AgentStatus) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *AgentStatus) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *AgentStatus) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *AgentStatus) GetUnread() uint32 {
+	if x != nil {
+		return x.Unread
+	}
+	return 0
+}
+
+func (x *AgentStatus) GetVerified() bool {
+	if x != nil {
+		return x.Verified
+	}
+	return false
+}
+
+func (x *AgentStatus) GetRestored() bool {
+	if x != nil {
+		return x.Restored
+	}
+	return false
+}
+
+func (x *AgentStatus) GetErrored() bool {
+	if x != nil && x.Errored != nil {
+		return *x.Errored
+	}
+	return false
+}
+
+func (x *AgentStatus) GetInterrupted() bool {
+	if x != nil && x.Interrupted != nil {
+		return *x.Interrupted
+	}
+	return false
+}
+
+func (x *AgentStatus) GetTranscriptRef() []byte {
+	if x != nil {
+		return x.TranscriptRef
+	}
+	return nil
+}
+
+func (x *AgentStatus) GetState() AgentState {
+	if x != nil {
+		return x.State
+	}
+	return AgentState_AGENT_STATE_UNSPECIFIED
+}
+
+func (x *AgentStatus) GetSessionPhase() string {
+	if x != nil {
+		return x.SessionPhase
+	}
+	return ""
+}
+
+func (x *AgentStatus) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+func (x *AgentStatus) GetLastEventAtUnixMs() int64 {
+	if x != nil {
+		return x.LastEventAtUnixMs
+	}
+	return 0
+}
+
+func (x *AgentStatus) GetUpdatedAtUnixMs() int64 {
+	if x != nil {
+		return x.UpdatedAtUnixMs
+	}
+	return 0
+}
+
+func (x *AgentStatus) GetRevision() uint64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *AgentStatus) GetDeleted() bool {
+	if x != nil {
+		return x.Deleted
+	}
+	return false
+}
+
+// One normalized Hook event, as the Worker reports it.
+//
+// **Normalized** is the load-bearing word. The raw body a CLI writes never
+// reaches the Host: the Worker parses it, reduces it, and reports what it
+// meant. What travels as `payload` is the Worker's own normalized form with its
+// digest, so a Host can store and republish an event whose provider it has
+// never heard of without having to understand that provider's format.
+type HookEvent struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	EventId     string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	NodeId      string                 `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	SessionId   string                 `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Generation  uint64                 `protobuf:"varint,4,opt,name=generation,proto3" json:"generation,omitempty"`
+	WorkspaceId string                 `protobuf:"bytes,5,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	// `claude`, `codex`, `gemini`, … The Host records it and routes on it; it
+	// does not interpret it.
+	Provider         string        `protobuf:"bytes,10,opt,name=provider,proto3" json:"provider,omitempty"`
+	Payload          []byte        `protobuf:"bytes,11,opt,name=payload,proto3" json:"payload,omitempty"`
+	PayloadSha256    []byte        `protobuf:"bytes,12,opt,name=payload_sha256,json=payloadSha256,proto3" json:"payload_sha256,omitempty"`
+	SchemaVersion    uint32        `protobuf:"varint,13,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	Kind             HookEventKind `protobuf:"varint,30,opt,name=kind,proto3,enum=armadra.v1.HookEventKind" json:"kind,omitempty"`
+	ObservedAtUnixMs int64         `protobuf:"varint,40,opt,name=observed_at_unix_ms,json=observedAtUnixMs,proto3" json:"observed_at_unix_ms,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *HookEvent) Reset() {
+	*x = HookEvent{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HookEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HookEvent) ProtoMessage() {}
+
+func (x *HookEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HookEvent.ProtoReflect.Descriptor instead.
+func (*HookEvent) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *HookEvent) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+func (x *HookEvent) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *HookEvent) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *HookEvent) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *HookEvent) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *HookEvent) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *HookEvent) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *HookEvent) GetPayloadSha256() []byte {
+	if x != nil {
+		return x.PayloadSha256
+	}
+	return nil
+}
+
+func (x *HookEvent) GetSchemaVersion() uint32 {
+	if x != nil {
+		return x.SchemaVersion
+	}
+	return 0
+}
+
+func (x *HookEvent) GetKind() HookEventKind {
+	if x != nil {
+		return x.Kind
+	}
+	return HookEventKind_HOOK_EVENT_KIND_UNSPECIFIED
+}
+
+func (x *HookEvent) GetObservedAtUnixMs() int64 {
+	if x != nil {
+		return x.ObservedAtUnixMs
+	}
+	return 0
+}
+
+// One permission question a CLI is blocked on.
+//
+// The blocking read lives on the execution host and so does the file that
+// releases it. This record exists so the question can be *seen* from a phone,
+// answered there, and answered exactly once: `decision` plus `answered_by` plus
+// the revision are what stop two devices answering the same question two
+// different ways.
+type Approval struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	ApprovalId  string                 `protobuf:"bytes,1,opt,name=approval_id,json=approvalId,proto3" json:"approval_id,omitempty"`
+	NodeId      string                 `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	WorkspaceId string                 `protobuf:"bytes,3,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	SessionId   string                 `protobuf:"bytes,4,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Generation  uint64                 `protobuf:"varint,5,opt,name=generation,proto3" json:"generation,omitempty"`
+	// The provider's own request, as JSON bytes. It is not expanded into fields,
+	// for the reason stated at the top of this section.
+	Request       []byte `protobuf:"bytes,10,opt,name=request,proto3" json:"request,omitempty"`
+	RequestSha256 []byte `protobuf:"bytes,11,opt,name=request_sha256,json=requestSha256,proto3" json:"request_sha256,omitempty"`
+	// The CLI's own word for the answer. Never mapped onto an enum.
+	Decision string `protobuf:"bytes,12,opt,name=decision,proto3" json:"decision,omitempty"`
+	// The principal that answered, so an audit can say who allowed something.
+	AnsweredBy       string        `protobuf:"bytes,13,opt,name=answered_by,json=answeredBy,proto3" json:"answered_by,omitempty"`
+	State            ApprovalState `protobuf:"varint,30,opt,name=state,proto3,enum=armadra.v1.ApprovalState" json:"state,omitempty"`
+	ReasonCode       string        `protobuf:"bytes,39,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	CreatedAtUnixMs  int64         `protobuf:"varint,40,opt,name=created_at_unix_ms,json=createdAtUnixMs,proto3" json:"created_at_unix_ms,omitempty"`
+	AnsweredAtUnixMs int64         `protobuf:"varint,41,opt,name=answered_at_unix_ms,json=answeredAtUnixMs,proto3" json:"answered_at_unix_ms,omitempty"`
+	Revision         uint64        `protobuf:"varint,50,opt,name=revision,proto3" json:"revision,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *Approval) Reset() {
+	*x = Approval{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Approval) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Approval) ProtoMessage() {}
+
+func (x *Approval) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Approval.ProtoReflect.Descriptor instead.
+func (*Approval) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *Approval) GetApprovalId() string {
+	if x != nil {
+		return x.ApprovalId
+	}
+	return ""
+}
+
+func (x *Approval) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *Approval) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *Approval) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *Approval) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *Approval) GetRequest() []byte {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+func (x *Approval) GetRequestSha256() []byte {
+	if x != nil {
+		return x.RequestSha256
+	}
+	return nil
+}
+
+func (x *Approval) GetDecision() string {
+	if x != nil {
+		return x.Decision
+	}
+	return ""
+}
+
+func (x *Approval) GetAnsweredBy() string {
+	if x != nil {
+		return x.AnsweredBy
+	}
+	return ""
+}
+
+func (x *Approval) GetState() ApprovalState {
+	if x != nil {
+		return x.State
+	}
+	return ApprovalState_APPROVAL_STATE_UNSPECIFIED
+}
+
+func (x *Approval) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+func (x *Approval) GetCreatedAtUnixMs() int64 {
+	if x != nil {
+		return x.CreatedAtUnixMs
+	}
+	return 0
+}
+
+func (x *Approval) GetAnsweredAtUnixMs() int64 {
+	if x != nil {
+		return x.AnsweredAtUnixMs
+	}
+	return 0
+}
+
+func (x *Approval) GetRevision() uint64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+// One message left in a node's mailbox by another node.
+//
+// `sequence` is the mailbox's own order and has nothing to do with the event
+// stream's. It is what an inbox pages by, and it is why a message delivered
+// twice under one `message_key` is one row: the unique key is (source, target,
+// message_key), so a retrying sender cannot fill an inbox with copies of one
+// thought.
+type MailboxMessage struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	MessageId       string                 `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	WorkspaceId     string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	SourceNodeId    string                 `protobuf:"bytes,3,opt,name=source_node_id,json=sourceNodeId,proto3" json:"source_node_id,omitempty"`
+	TargetNodeId    string                 `protobuf:"bytes,4,opt,name=target_node_id,json=targetNodeId,proto3" json:"target_node_id,omitempty"`
+	MessageKey      string                 `protobuf:"bytes,5,opt,name=message_key,json=messageKey,proto3" json:"message_key,omitempty"`
+	Body            string                 `protobuf:"bytes,10,opt,name=body,proto3" json:"body,omitempty"`
+	Sequence        uint64                 `protobuf:"varint,11,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	CreatedAtUnixMs int64                  `protobuf:"varint,40,opt,name=created_at_unix_ms,json=createdAtUnixMs,proto3" json:"created_at_unix_ms,omitempty"`
+	ExpiresAtUnixMs int64                  `protobuf:"varint,41,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
+	// Zero means nobody has read it. A timestamp rather than a flag, so an inbox
+	// can say how long a message sat unread.
+	AcknowledgedAtUnixMs int64  `protobuf:"varint,42,opt,name=acknowledged_at_unix_ms,json=acknowledgedAtUnixMs,proto3" json:"acknowledged_at_unix_ms,omitempty"`
+	Revision             uint64 `protobuf:"varint,50,opt,name=revision,proto3" json:"revision,omitempty"`
+	Deleted              bool   `protobuf:"varint,51,opt,name=deleted,proto3" json:"deleted,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *MailboxMessage) Reset() {
+	*x = MailboxMessage{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MailboxMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MailboxMessage) ProtoMessage() {}
+
+func (x *MailboxMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MailboxMessage.ProtoReflect.Descriptor instead.
+func (*MailboxMessage) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *MailboxMessage) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+func (x *MailboxMessage) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *MailboxMessage) GetSourceNodeId() string {
+	if x != nil {
+		return x.SourceNodeId
+	}
+	return ""
+}
+
+func (x *MailboxMessage) GetTargetNodeId() string {
+	if x != nil {
+		return x.TargetNodeId
+	}
+	return ""
+}
+
+func (x *MailboxMessage) GetMessageKey() string {
+	if x != nil {
+		return x.MessageKey
+	}
+	return ""
+}
+
+func (x *MailboxMessage) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+func (x *MailboxMessage) GetSequence() uint64 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+func (x *MailboxMessage) GetCreatedAtUnixMs() int64 {
+	if x != nil {
+		return x.CreatedAtUnixMs
+	}
+	return 0
+}
+
+func (x *MailboxMessage) GetExpiresAtUnixMs() int64 {
+	if x != nil {
+		return x.ExpiresAtUnixMs
+	}
+	return 0
+}
+
+func (x *MailboxMessage) GetAcknowledgedAtUnixMs() int64 {
+	if x != nil {
+		return x.AcknowledgedAtUnixMs
+	}
+	return 0
+}
+
+func (x *MailboxMessage) GetRevision() uint64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *MailboxMessage) GetDeleted() bool {
+	if x != nil {
+		return x.Deleted
+	}
+	return false
+}
+
+// The receipt for one `send` / `reply` / `notify`.
+//
+// It is a record of an attempt, not a message: the body is not here, only how
+// many characters it had. A delivery log that carried bodies would be a second
+// copy of every conversation, in the one database meant to hold decisions
+// rather than content.
+type Delivery struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	TraceId      string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	WorkspaceId  string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	SourceNodeId string                 `protobuf:"bytes,3,opt,name=source_node_id,json=sourceNodeId,proto3" json:"source_node_id,omitempty"`
+	TargetNodeId string                 `protobuf:"bytes,4,opt,name=target_node_id,json=targetNodeId,proto3" json:"target_node_id,omitempty"`
+	// The execution host's own receipt string, opaque here.
+	Receipt         string          `protobuf:"bytes,10,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	BodyChars       uint32          `protobuf:"varint,11,opt,name=body_chars,json=bodyChars,proto3" json:"body_chars,omitempty"`
+	Outcome         DeliveryOutcome `protobuf:"varint,30,opt,name=outcome,proto3,enum=armadra.v1.DeliveryOutcome" json:"outcome,omitempty"`
+	ReasonCode      string          `protobuf:"bytes,39,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	CreatedAtUnixMs int64           `protobuf:"varint,40,opt,name=created_at_unix_ms,json=createdAtUnixMs,proto3" json:"created_at_unix_ms,omitempty"`
+	Revision        uint64          `protobuf:"varint,50,opt,name=revision,proto3" json:"revision,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *Delivery) Reset() {
+	*x = Delivery{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Delivery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Delivery) ProtoMessage() {}
+
+func (x *Delivery) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Delivery.ProtoReflect.Descriptor instead.
+func (*Delivery) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *Delivery) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
+}
+
+func (x *Delivery) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *Delivery) GetSourceNodeId() string {
+	if x != nil {
+		return x.SourceNodeId
+	}
+	return ""
+}
+
+func (x *Delivery) GetTargetNodeId() string {
+	if x != nil {
+		return x.TargetNodeId
+	}
+	return ""
+}
+
+func (x *Delivery) GetReceipt() string {
+	if x != nil {
+		return x.Receipt
+	}
+	return ""
+}
+
+func (x *Delivery) GetBodyChars() uint32 {
+	if x != nil {
+		return x.BodyChars
+	}
+	return 0
+}
+
+func (x *Delivery) GetOutcome() DeliveryOutcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return DeliveryOutcome_DELIVERY_OUTCOME_UNSPECIFIED
+}
+
+func (x *Delivery) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+func (x *Delivery) GetCreatedAtUnixMs() int64 {
+	if x != nil {
+		return x.CreatedAtUnixMs
+	}
+	return 0
+}
+
+func (x *Delivery) GetRevision() uint64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+// One node handing its work to another.
+//
+// The bundle is frozen the moment it is prepared, and it is frozen on both
+// sides: the Runtime has a trigger that aborts an update touching it, and the
+// Host refuses one. That is not belt and braces — it is the whole meaning of
+// the record. A handoff whose bundle could change after it was accepted would
+// be a handoff where what the target read is not what the source sent.
+type Handoff struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	HandoffId    string                 `protobuf:"bytes,1,opt,name=handoff_id,json=handoffId,proto3" json:"handoff_id,omitempty"`
+	WorkspaceId  string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	SourceNodeId string                 `protobuf:"bytes,3,opt,name=source_node_id,json=sourceNodeId,proto3" json:"source_node_id,omitempty"`
+	TargetNodeId string                 `protobuf:"bytes,4,opt,name=target_node_id,json=targetNodeId,proto3" json:"target_node_id,omitempty"`
+	// Which session each side was on when the handoff was prepared. A target
+	// whose session has been replaced since is a target the bundle was not aimed
+	// at, and that is decidable only because both are recorded.
+	Source       *SessionAddress `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
+	Target       *SessionAddress `protobuf:"bytes,6,opt,name=target,proto3" json:"target,omitempty"`
+	Bundle       []byte          `protobuf:"bytes,10,opt,name=bundle,proto3" json:"bundle,omitempty"`
+	BundleSha256 []byte          `protobuf:"bytes,11,opt,name=bundle_sha256,json=bundleSha256,proto3" json:"bundle_sha256,omitempty"`
+	// The mailbox message that carries the bundle to the target, once one
+	// exists, and the delivery whose receipt says what happened to it.
+	MailboxId string `protobuf:"bytes,12,opt,name=mailbox_id,json=mailboxId,proto3" json:"mailbox_id,omitempty"`
+	TraceId   string `protobuf:"bytes,13,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	// How many times dispatch has been attempted. It is evidence for a person,
+	// never a trigger: nothing here retries on its own.
+	Attempts         uint32       `protobuf:"varint,14,opt,name=attempts,proto3" json:"attempts,omitempty"`
+	State            HandoffState `protobuf:"varint,30,opt,name=state,proto3,enum=armadra.v1.HandoffState" json:"state,omitempty"`
+	ErrorCode        string       `protobuf:"bytes,39,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	CreatedAtUnixMs  int64        `protobuf:"varint,40,opt,name=created_at_unix_ms,json=createdAtUnixMs,proto3" json:"created_at_unix_ms,omitempty"`
+	AcceptedAtUnixMs int64        `protobuf:"varint,41,opt,name=accepted_at_unix_ms,json=acceptedAtUnixMs,proto3" json:"accepted_at_unix_ms,omitempty"`
+	UpdatedAtUnixMs  int64        `protobuf:"varint,42,opt,name=updated_at_unix_ms,json=updatedAtUnixMs,proto3" json:"updated_at_unix_ms,omitempty"`
+	Revision         uint64       `protobuf:"varint,50,opt,name=revision,proto3" json:"revision,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *Handoff) Reset() {
+	*x = Handoff{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Handoff) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Handoff) ProtoMessage() {}
+
+func (x *Handoff) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Handoff.ProtoReflect.Descriptor instead.
+func (*Handoff) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *Handoff) GetHandoffId() string {
+	if x != nil {
+		return x.HandoffId
+	}
+	return ""
+}
+
+func (x *Handoff) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *Handoff) GetSourceNodeId() string {
+	if x != nil {
+		return x.SourceNodeId
+	}
+	return ""
+}
+
+func (x *Handoff) GetTargetNodeId() string {
+	if x != nil {
+		return x.TargetNodeId
+	}
+	return ""
+}
+
+func (x *Handoff) GetSource() *SessionAddress {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+func (x *Handoff) GetTarget() *SessionAddress {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *Handoff) GetBundle() []byte {
+	if x != nil {
+		return x.Bundle
+	}
+	return nil
+}
+
+func (x *Handoff) GetBundleSha256() []byte {
+	if x != nil {
+		return x.BundleSha256
+	}
+	return nil
+}
+
+func (x *Handoff) GetMailboxId() string {
+	if x != nil {
+		return x.MailboxId
+	}
+	return ""
+}
+
+func (x *Handoff) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
+}
+
+func (x *Handoff) GetAttempts() uint32 {
+	if x != nil {
+		return x.Attempts
+	}
+	return 0
+}
+
+func (x *Handoff) GetState() HandoffState {
+	if x != nil {
+		return x.State
+	}
+	return HandoffState_HANDOFF_STATE_UNSPECIFIED
+}
+
+func (x *Handoff) GetErrorCode() string {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ""
+}
+
+func (x *Handoff) GetCreatedAtUnixMs() int64 {
+	if x != nil {
+		return x.CreatedAtUnixMs
+	}
+	return 0
+}
+
+func (x *Handoff) GetAcceptedAtUnixMs() int64 {
+	if x != nil {
+		return x.AcceptedAtUnixMs
+	}
+	return 0
+}
+
+func (x *Handoff) GetUpdatedAtUnixMs() int64 {
+	if x != nil {
+		return x.UpdatedAtUnixMs
+	}
+	return 0
+}
+
+func (x *Handoff) GetRevision() uint64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+type ContextLink struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	TargetNodeId string                 `protobuf:"bytes,1,opt,name=target_node_id,json=targetNodeId,proto3" json:"target_node_id,omitempty"`
+	Direction    ContextLinkDirection   `protobuf:"varint,30,opt,name=direction,proto3,enum=armadra.v1.ContextLinkDirection" json:"direction,omitempty"`
+	// What the other end is — `agent`, `terminal`, `sticky`, … The Host copies
+	// the canvas node's own kind rather than deciding one.
+	Kind          string `protobuf:"bytes,10,opt,name=kind,proto3" json:"kind,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContextLink) Reset() {
+	*x = ContextLink{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContextLink) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContextLink) ProtoMessage() {}
+
+func (x *ContextLink) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContextLink.ProtoReflect.Descriptor instead.
+func (*ContextLink) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ContextLink) GetTargetNodeId() string {
+	if x != nil {
+		return x.TargetNodeId
+	}
+	return ""
+}
+
+func (x *ContextLink) GetDirection() ContextLinkDirection {
+	if x != nil {
+		return x.Direction
+	}
+	return ContextLinkDirection_CONTEXT_LINK_DIRECTION_UNSPECIFIED
+}
+
+func (x *ContextLink) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+// The links one node has, derived from the canvas' edges.
+//
+// This is a *projection* and never a client write. The edges are the canvas
+// domain's records; a client that could write context links directly would be
+// able to make a node read a transcript it is not connected to, which is the
+// one thing the whole "context follows the connection" rule exists to prevent.
+type ContextLinks struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	NodeId          string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	WorkspaceId     string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	Links           []*ContextLink         `protobuf:"bytes,10,rep,name=links,proto3" json:"links,omitempty"`
+	UpdatedAtUnixMs int64                  `protobuf:"varint,41,opt,name=updated_at_unix_ms,json=updatedAtUnixMs,proto3" json:"updated_at_unix_ms,omitempty"`
+	Revision        uint64                 `protobuf:"varint,50,opt,name=revision,proto3" json:"revision,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ContextLinks) Reset() {
+	*x = ContextLinks{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContextLinks) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContextLinks) ProtoMessage() {}
+
+func (x *ContextLinks) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContextLinks.ProtoReflect.Descriptor instead.
+func (*ContextLinks) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ContextLinks) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *ContextLinks) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *ContextLinks) GetLinks() []*ContextLink {
+	if x != nil {
+		return x.Links
+	}
+	return nil
+}
+
+func (x *ContextLinks) GetUpdatedAtUnixMs() int64 {
+	if x != nil {
+		return x.UpdatedAtUnixMs
+	}
+	return 0
+}
+
+func (x *ContextLinks) GetRevision() uint64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+// armadra.v1.AgentService/ListStatus — the board's own read.
+type ListAgentStatusRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	AfterNodeId   string                 `protobuf:"bytes,10,opt,name=after_node_id,json=afterNodeId,proto3" json:"after_node_id,omitempty"`
+	Limit         uint32                 `protobuf:"varint,11,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAgentStatusRequest) Reset() {
+	*x = ListAgentStatusRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAgentStatusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAgentStatusRequest) ProtoMessage() {}
+
+func (x *ListAgentStatusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAgentStatusRequest.ProtoReflect.Descriptor instead.
+func (*ListAgentStatusRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ListAgentStatusRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *ListAgentStatusRequest) GetAfterNodeId() string {
+	if x != nil {
+		return x.AfterNodeId
+	}
+	return ""
+}
+
+func (x *ListAgentStatusRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListAgentStatusResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Statuses      []*AgentStatus         `protobuf:"bytes,10,rep,name=statuses,proto3" json:"statuses,omitempty"`
+	NextNodeId    string                 `protobuf:"bytes,11,opt,name=next_node_id,json=nextNodeId,proto3" json:"next_node_id,omitempty"`
+	HasMore       bool                   `protobuf:"varint,12,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAgentStatusResponse) Reset() {
+	*x = ListAgentStatusResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAgentStatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAgentStatusResponse) ProtoMessage() {}
+
+func (x *ListAgentStatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAgentStatusResponse.ProtoReflect.Descriptor instead.
+func (*ListAgentStatusResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ListAgentStatusResponse) GetStatuses() []*AgentStatus {
+	if x != nil {
+		return x.Statuses
+	}
+	return nil
+}
+
+func (x *ListAgentStatusResponse) GetNextNodeId() string {
+	if x != nil {
+		return x.NextNodeId
+	}
+	return ""
+}
+
+func (x *ListAgentStatusResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
+}
+
+// armadra.v1.AgentService/MarkRead — the unread badge, cleared.
+//
+// It is a write with a CAS revision like any other, because two clients
+// clearing the same badge are two decisions about one record and the second has
+// to learn it lost.
+type MarkAgentReadRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Meta             *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	OperationId      string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	ExpectedRevision uint64                 `protobuf:"varint,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	NodeId           string                 `protobuf:"bytes,10,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *MarkAgentReadRequest) Reset() {
+	*x = MarkAgentReadRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MarkAgentReadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MarkAgentReadRequest) ProtoMessage() {}
+
+func (x *MarkAgentReadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MarkAgentReadRequest.ProtoReflect.Descriptor instead.
+func (*MarkAgentReadRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *MarkAgentReadRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *MarkAgentReadRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *MarkAgentReadRequest) GetExpectedRevision() uint64 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
+func (x *MarkAgentReadRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+type MarkAgentReadResponse struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Status        *AgentStatus            `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	Receipt       *CanvasOperationReceipt `protobuf:"bytes,2,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MarkAgentReadResponse) Reset() {
+	*x = MarkAgentReadResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MarkAgentReadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MarkAgentReadResponse) ProtoMessage() {}
+
+func (x *MarkAgentReadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MarkAgentReadResponse.ProtoReflect.Descriptor instead.
+func (*MarkAgentReadResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *MarkAgentReadResponse) GetStatus() *AgentStatus {
+	if x != nil {
+		return x.Status
+	}
+	return nil
+}
+
+func (x *MarkAgentReadResponse) GetReceipt() *CanvasOperationReceipt {
+	if x != nil {
+		return x.Receipt
+	}
+	return nil
+}
+
+type ListApprovalsRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Meta   *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	NodeId string                 `protobuf:"bytes,10,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	// Answered approvals are history; the default is the questions still open.
+	IncludeAnswered bool   `protobuf:"varint,11,opt,name=include_answered,json=includeAnswered,proto3" json:"include_answered,omitempty"`
+	Limit           uint32 `protobuf:"varint,12,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ListApprovalsRequest) Reset() {
+	*x = ListApprovalsRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListApprovalsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListApprovalsRequest) ProtoMessage() {}
+
+func (x *ListApprovalsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListApprovalsRequest.ProtoReflect.Descriptor instead.
+func (*ListApprovalsRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ListApprovalsRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *ListApprovalsRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *ListApprovalsRequest) GetIncludeAnswered() bool {
+	if x != nil {
+		return x.IncludeAnswered
+	}
+	return false
+}
+
+func (x *ListApprovalsRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListApprovalsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Approvals     []*Approval            `protobuf:"bytes,10,rep,name=approvals,proto3" json:"approvals,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListApprovalsResponse) Reset() {
+	*x = ListApprovalsResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListApprovalsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListApprovalsResponse) ProtoMessage() {}
+
+func (x *ListApprovalsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListApprovalsResponse.ProtoReflect.Descriptor instead.
+func (*ListApprovalsResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ListApprovalsResponse) GetApprovals() []*Approval {
+	if x != nil {
+		return x.Approvals
+	}
+	return nil
+}
+
+// armadra.v1.AgentService/AnswerApproval — recorded, then delivered.
+//
+// The order is the point, and it is the opposite of the session domain's. A
+// session records after the Worker acts, because the Worker's answer is the
+// fact. An approval records *first*, under CAS, because the record is what
+// stops a second device answering the same question — and only then is the
+// answer written into the file the CLI is blocked on.
+type AnswerApprovalRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Meta             *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	OperationId      string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	ExpectedRevision uint64                 `protobuf:"varint,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	ApprovalId       string                 `protobuf:"bytes,10,opt,name=approval_id,json=approvalId,proto3" json:"approval_id,omitempty"`
+	// The CLI's own word. Passed through unchanged.
+	Decision      string `protobuf:"bytes,11,opt,name=decision,proto3" json:"decision,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AnswerApprovalRequest) Reset() {
+	*x = AnswerApprovalRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AnswerApprovalRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AnswerApprovalRequest) ProtoMessage() {}
+
+func (x *AnswerApprovalRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AnswerApprovalRequest.ProtoReflect.Descriptor instead.
+func (*AnswerApprovalRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *AnswerApprovalRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *AnswerApprovalRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *AnswerApprovalRequest) GetExpectedRevision() uint64 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
+func (x *AnswerApprovalRequest) GetApprovalId() string {
+	if x != nil {
+		return x.ApprovalId
+	}
+	return ""
+}
+
+func (x *AnswerApprovalRequest) GetDecision() string {
+	if x != nil {
+		return x.Decision
+	}
+	return ""
+}
+
+type AnswerApprovalResponse struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Approval      *Approval               `protobuf:"bytes,1,opt,name=approval,proto3" json:"approval,omitempty"`
+	Receipt       *CanvasOperationReceipt `protobuf:"bytes,2,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AnswerApprovalResponse) Reset() {
+	*x = AnswerApprovalResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AnswerApprovalResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AnswerApprovalResponse) ProtoMessage() {}
+
+func (x *AnswerApprovalResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AnswerApprovalResponse.ProtoReflect.Descriptor instead.
+func (*AnswerApprovalResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *AnswerApprovalResponse) GetApproval() *Approval {
+	if x != nil {
+		return x.Approval
+	}
+	return nil
+}
+
+func (x *AnswerApprovalResponse) GetReceipt() *CanvasOperationReceipt {
+	if x != nil {
+		return x.Receipt
+	}
+	return nil
+}
+
+type ListDeliveriesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	NodeId        string                 `protobuf:"bytes,10,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	Limit         uint32                 `protobuf:"varint,11,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDeliveriesRequest) Reset() {
+	*x = ListDeliveriesRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDeliveriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDeliveriesRequest) ProtoMessage() {}
+
+func (x *ListDeliveriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDeliveriesRequest.ProtoReflect.Descriptor instead.
+func (*ListDeliveriesRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ListDeliveriesRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *ListDeliveriesRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *ListDeliveriesRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListDeliveriesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Deliveries    []*Delivery            `protobuf:"bytes,10,rep,name=deliveries,proto3" json:"deliveries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDeliveriesResponse) Reset() {
+	*x = ListDeliveriesResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDeliveriesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDeliveriesResponse) ProtoMessage() {}
+
+func (x *ListDeliveriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDeliveriesResponse.ProtoReflect.Descriptor instead.
+func (*ListDeliveriesResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ListDeliveriesResponse) GetDeliveries() []*Delivery {
+	if x != nil {
+		return x.Deliveries
+	}
+	return nil
+}
+
+// armadra.v1.AgentService/ListMailbox — one node's inbox, oldest first.
+type ListMailboxRequest struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Meta                *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	TargetNodeId        string                 `protobuf:"bytes,10,opt,name=target_node_id,json=targetNodeId,proto3" json:"target_node_id,omitempty"`
+	IncludeAcknowledged bool                   `protobuf:"varint,11,opt,name=include_acknowledged,json=includeAcknowledged,proto3" json:"include_acknowledged,omitempty"`
+	Limit               uint32                 `protobuf:"varint,12,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *ListMailboxRequest) Reset() {
+	*x = ListMailboxRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMailboxRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMailboxRequest) ProtoMessage() {}
+
+func (x *ListMailboxRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMailboxRequest.ProtoReflect.Descriptor instead.
+func (*ListMailboxRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ListMailboxRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *ListMailboxRequest) GetTargetNodeId() string {
+	if x != nil {
+		return x.TargetNodeId
+	}
+	return ""
+}
+
+func (x *ListMailboxRequest) GetIncludeAcknowledged() bool {
+	if x != nil {
+		return x.IncludeAcknowledged
+	}
+	return false
+}
+
+func (x *ListMailboxRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListMailboxResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Messages      []*MailboxMessage      `protobuf:"bytes,10,rep,name=messages,proto3" json:"messages,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMailboxResponse) Reset() {
+	*x = ListMailboxResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMailboxResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMailboxResponse) ProtoMessage() {}
+
+func (x *ListMailboxResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMailboxResponse.ProtoReflect.Descriptor instead.
+func (*ListMailboxResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ListMailboxResponse) GetMessages() []*MailboxMessage {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
+}
+
+// armadra.v1.AgentService/PrepareHandoff — freeze the bundle, send nothing.
+//
+// Preparing records what would be sent, with the digest that makes it
+// unchangeable, so accepting later accepts a thing that has been reviewed
+// rather than whatever the source happens to look like by then.
+type PrepareHandoffRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Meta             *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	OperationId      string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	ExpectedRevision uint64                 `protobuf:"varint,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	HandoffId        string                 `protobuf:"bytes,10,opt,name=handoff_id,json=handoffId,proto3" json:"handoff_id,omitempty"`
+	SourceNodeId     string                 `protobuf:"bytes,11,opt,name=source_node_id,json=sourceNodeId,proto3" json:"source_node_id,omitempty"`
+	TargetNodeId     string                 `protobuf:"bytes,12,opt,name=target_node_id,json=targetNodeId,proto3" json:"target_node_id,omitempty"`
+	Source           *SessionAddress        `protobuf:"bytes,13,opt,name=source,proto3" json:"source,omitempty"`
+	Target           *SessionAddress        `protobuf:"bytes,14,opt,name=target,proto3" json:"target,omitempty"`
+	Bundle           []byte                 `protobuf:"bytes,15,opt,name=bundle,proto3" json:"bundle,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *PrepareHandoffRequest) Reset() {
+	*x = PrepareHandoffRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrepareHandoffRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrepareHandoffRequest) ProtoMessage() {}
+
+func (x *PrepareHandoffRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrepareHandoffRequest.ProtoReflect.Descriptor instead.
+func (*PrepareHandoffRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *PrepareHandoffRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *PrepareHandoffRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *PrepareHandoffRequest) GetExpectedRevision() uint64 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
+func (x *PrepareHandoffRequest) GetHandoffId() string {
+	if x != nil {
+		return x.HandoffId
+	}
+	return ""
+}
+
+func (x *PrepareHandoffRequest) GetSourceNodeId() string {
+	if x != nil {
+		return x.SourceNodeId
+	}
+	return ""
+}
+
+func (x *PrepareHandoffRequest) GetTargetNodeId() string {
+	if x != nil {
+		return x.TargetNodeId
+	}
+	return ""
+}
+
+func (x *PrepareHandoffRequest) GetSource() *SessionAddress {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+func (x *PrepareHandoffRequest) GetTarget() *SessionAddress {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *PrepareHandoffRequest) GetBundle() []byte {
+	if x != nil {
+		return x.Bundle
+	}
+	return nil
+}
+
+type PrepareHandoffResponse struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Handoff       *Handoff                `protobuf:"bytes,1,opt,name=handoff,proto3" json:"handoff,omitempty"`
+	Receipt       *CanvasOperationReceipt `protobuf:"bytes,2,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrepareHandoffResponse) Reset() {
+	*x = PrepareHandoffResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrepareHandoffResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrepareHandoffResponse) ProtoMessage() {}
+
+func (x *PrepareHandoffResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrepareHandoffResponse.ProtoReflect.Descriptor instead.
+func (*PrepareHandoffResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *PrepareHandoffResponse) GetHandoff() *Handoff {
+	if x != nil {
+		return x.Handoff
+	}
+	return nil
+}
+
+func (x *PrepareHandoffResponse) GetReceipt() *CanvasOperationReceipt {
+	if x != nil {
+		return x.Receipt
+	}
+	return nil
+}
+
+// armadra.v1.AgentService/AcceptHandoff — queue it, then deliver it once.
+type AcceptHandoffRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Meta             *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	OperationId      string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	ExpectedRevision uint64                 `protobuf:"varint,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	HandoffId        string                 `protobuf:"bytes,10,opt,name=handoff_id,json=handoffId,proto3" json:"handoff_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *AcceptHandoffRequest) Reset() {
+	*x = AcceptHandoffRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcceptHandoffRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcceptHandoffRequest) ProtoMessage() {}
+
+func (x *AcceptHandoffRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcceptHandoffRequest.ProtoReflect.Descriptor instead.
+func (*AcceptHandoffRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *AcceptHandoffRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *AcceptHandoffRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *AcceptHandoffRequest) GetExpectedRevision() uint64 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
+func (x *AcceptHandoffRequest) GetHandoffId() string {
+	if x != nil {
+		return x.HandoffId
+	}
+	return ""
+}
+
+type AcceptHandoffResponse struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Handoff       *Handoff                `protobuf:"bytes,1,opt,name=handoff,proto3" json:"handoff,omitempty"`
+	Receipt       *CanvasOperationReceipt `protobuf:"bytes,2,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AcceptHandoffResponse) Reset() {
+	*x = AcceptHandoffResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcceptHandoffResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcceptHandoffResponse) ProtoMessage() {}
+
+func (x *AcceptHandoffResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcceptHandoffResponse.ProtoReflect.Descriptor instead.
+func (*AcceptHandoffResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *AcceptHandoffResponse) GetHandoff() *Handoff {
+	if x != nil {
+		return x.Handoff
+	}
+	return nil
+}
+
+func (x *AcceptHandoffResponse) GetReceipt() *CanvasOperationReceipt {
+	if x != nil {
+		return x.Receipt
+	}
+	return nil
+}
+
+type CancelHandoffRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Meta             *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	OperationId      string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	ExpectedRevision uint64                 `protobuf:"varint,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	HandoffId        string                 `protobuf:"bytes,10,opt,name=handoff_id,json=handoffId,proto3" json:"handoff_id,omitempty"`
+	ReasonCode       string                 `protobuf:"bytes,11,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *CancelHandoffRequest) Reset() {
+	*x = CancelHandoffRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelHandoffRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelHandoffRequest) ProtoMessage() {}
+
+func (x *CancelHandoffRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelHandoffRequest.ProtoReflect.Descriptor instead.
+func (*CancelHandoffRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *CancelHandoffRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *CancelHandoffRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *CancelHandoffRequest) GetExpectedRevision() uint64 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
+func (x *CancelHandoffRequest) GetHandoffId() string {
+	if x != nil {
+		return x.HandoffId
+	}
+	return ""
+}
+
+func (x *CancelHandoffRequest) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+type CancelHandoffResponse struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Handoff       *Handoff                `protobuf:"bytes,1,opt,name=handoff,proto3" json:"handoff,omitempty"`
+	Receipt       *CanvasOperationReceipt `protobuf:"bytes,2,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelHandoffResponse) Reset() {
+	*x = CancelHandoffResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelHandoffResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelHandoffResponse) ProtoMessage() {}
+
+func (x *CancelHandoffResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelHandoffResponse.ProtoReflect.Descriptor instead.
+func (*CancelHandoffResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *CancelHandoffResponse) GetHandoff() *Handoff {
+	if x != nil {
+		return x.Handoff
+	}
+	return nil
+}
+
+func (x *CancelHandoffResponse) GetReceipt() *CanvasOperationReceipt {
+	if x != nil {
+		return x.Receipt
+	}
+	return nil
+}
+
+type ListHandoffsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	NodeId        string                 `protobuf:"bytes,10,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	Limit         uint32                 `protobuf:"varint,11,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListHandoffsRequest) Reset() {
+	*x = ListHandoffsRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListHandoffsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListHandoffsRequest) ProtoMessage() {}
+
+func (x *ListHandoffsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListHandoffsRequest.ProtoReflect.Descriptor instead.
+func (*ListHandoffsRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *ListHandoffsRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *ListHandoffsRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *ListHandoffsRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListHandoffsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Handoffs      []*Handoff             `protobuf:"bytes,10,rep,name=handoffs,proto3" json:"handoffs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListHandoffsResponse) Reset() {
+	*x = ListHandoffsResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListHandoffsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListHandoffsResponse) ProtoMessage() {}
+
+func (x *ListHandoffsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListHandoffsResponse.ProtoReflect.Descriptor instead.
+func (*ListHandoffsResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *ListHandoffsResponse) GetHandoffs() []*Handoff {
+	if x != nil {
+		return x.Handoffs
+	}
+	return nil
+}
+
+type GetHandoffRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	HandoffId     string                 `protobuf:"bytes,10,opt,name=handoff_id,json=handoffId,proto3" json:"handoff_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetHandoffRequest) Reset() {
+	*x = GetHandoffRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetHandoffRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetHandoffRequest) ProtoMessage() {}
+
+func (x *GetHandoffRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetHandoffRequest.ProtoReflect.Descriptor instead.
+func (*GetHandoffRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *GetHandoffRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *GetHandoffRequest) GetHandoffId() string {
+	if x != nil {
+		return x.HandoffId
+	}
+	return ""
+}
+
+type GetHandoffResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Handoff       *Handoff               `protobuf:"bytes,1,opt,name=handoff,proto3" json:"handoff,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetHandoffResponse) Reset() {
+	*x = GetHandoffResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetHandoffResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetHandoffResponse) ProtoMessage() {}
+
+func (x *GetHandoffResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetHandoffResponse.ProtoReflect.Descriptor instead.
+func (*GetHandoffResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *GetHandoffResponse) GetHandoff() *Handoff {
+	if x != nil {
+		return x.Handoff
+	}
+	return nil
+}
+
+// armadra.v1.AgentService/ListContextLinks — the projection, read only.
+type ListContextLinksRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	NodeId        string                 `protobuf:"bytes,10,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListContextLinksRequest) Reset() {
+	*x = ListContextLinksRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListContextLinksRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListContextLinksRequest) ProtoMessage() {}
+
+func (x *ListContextLinksRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListContextLinksRequest.ProtoReflect.Descriptor instead.
+func (*ListContextLinksRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *ListContextLinksRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *ListContextLinksRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+type ListContextLinksResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Links         []*ContextLinks        `protobuf:"bytes,10,rep,name=links,proto3" json:"links,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListContextLinksResponse) Reset() {
+	*x = ListContextLinksResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListContextLinksResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListContextLinksResponse) ProtoMessage() {}
+
+func (x *ListContextLinksResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListContextLinksResponse.ProtoReflect.Descriptor instead.
+func (*ListContextLinksResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *ListContextLinksResponse) GetLinks() []*ContextLinks {
+	if x != nil {
+		return x.Links
+	}
+	return nil
+}
+
+// armadra.v1.AgentService/InstallHooks and /UninstallHooks — execution.
+//
+// Installing a Hook edits a CLI's own configuration file on the execution host.
+// It is forwarded, never performed here: the file is that machine's and the
+// CLI's version is that machine's, and a Host that wrote it would be writing
+// into a configuration it cannot read back.
+type InstallHooksRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	OperationId   string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	AgentId       string                 `protobuf:"bytes,10,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InstallHooksRequest) Reset() {
+	*x = InstallHooksRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InstallHooksRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InstallHooksRequest) ProtoMessage() {}
+
+func (x *InstallHooksRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InstallHooksRequest.ProtoReflect.Descriptor instead.
+func (*InstallHooksRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *InstallHooksRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *InstallHooksRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *InstallHooksRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+type HookInstallState struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	AgentId        string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	Installed      bool                   `protobuf:"varint,10,opt,name=installed,proto3" json:"installed,omitempty"`
+	ClientRevision uint32                 `protobuf:"varint,11,opt,name=client_revision,json=clientRevision,proto3" json:"client_revision,omitempty"`
+	// The configuration file the Worker actually touched, for a person to check.
+	ConfigPath        string `protobuf:"bytes,12,opt,name=config_path,json=configPath,proto3" json:"config_path,omitempty"`
+	ReasonCode        string `protobuf:"bytes,39,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	InstalledAtUnixMs int64  `protobuf:"varint,40,opt,name=installed_at_unix_ms,json=installedAtUnixMs,proto3" json:"installed_at_unix_ms,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *HookInstallState) Reset() {
+	*x = HookInstallState{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HookInstallState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HookInstallState) ProtoMessage() {}
+
+func (x *HookInstallState) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HookInstallState.ProtoReflect.Descriptor instead.
+func (*HookInstallState) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *HookInstallState) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *HookInstallState) GetInstalled() bool {
+	if x != nil {
+		return x.Installed
+	}
+	return false
+}
+
+func (x *HookInstallState) GetClientRevision() uint32 {
+	if x != nil {
+		return x.ClientRevision
+	}
+	return 0
+}
+
+func (x *HookInstallState) GetConfigPath() string {
+	if x != nil {
+		return x.ConfigPath
+	}
+	return ""
+}
+
+func (x *HookInstallState) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+func (x *HookInstallState) GetInstalledAtUnixMs() int64 {
+	if x != nil {
+		return x.InstalledAtUnixMs
+	}
+	return 0
+}
+
+type InstallHooksResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	State         *HookInstallState      `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InstallHooksResponse) Reset() {
+	*x = InstallHooksResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InstallHooksResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InstallHooksResponse) ProtoMessage() {}
+
+func (x *InstallHooksResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InstallHooksResponse.ProtoReflect.Descriptor instead.
+func (*InstallHooksResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *InstallHooksResponse) GetState() *HookInstallState {
+	if x != nil {
+		return x.State
+	}
+	return nil
+}
+
+type UninstallHooksRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	OperationId   string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	AgentId       string                 `protobuf:"bytes,10,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UninstallHooksRequest) Reset() {
+	*x = UninstallHooksRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UninstallHooksRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UninstallHooksRequest) ProtoMessage() {}
+
+func (x *UninstallHooksRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UninstallHooksRequest.ProtoReflect.Descriptor instead.
+func (*UninstallHooksRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *UninstallHooksRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *UninstallHooksRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *UninstallHooksRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+type UninstallHooksResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	State         *HookInstallState      `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UninstallHooksResponse) Reset() {
+	*x = UninstallHooksResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UninstallHooksResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UninstallHooksResponse) ProtoMessage() {}
+
+func (x *UninstallHooksResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UninstallHooksResponse.ProtoReflect.Descriptor instead.
+func (*UninstallHooksResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *UninstallHooksResponse) GetState() *HookInstallState {
+	if x != nil {
+		return x.State
+	}
+	return nil
+}
+
+// Read this Worker's own agent rows, for verifying a switch and a handback.
+//
+// It is the agent domain's equivalent of `ListWorkerSessionsRequest` and exists
+// for the same reason: a report assembled from the request would say what the
+// Worker was asked to store, and only a reading of the rows says what it holds.
+type ListWorkerAgentsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWorkerAgentsRequest) Reset() {
+	*x = ListWorkerAgentsRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWorkerAgentsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWorkerAgentsRequest) ProtoMessage() {}
+
+func (x *ListWorkerAgentsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWorkerAgentsRequest.ProtoReflect.Descriptor instead.
+func (*ListWorkerAgentsRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{45}
+}
+
+// What the Worker knows about one agent node right now. No revisions anywhere:
+// the Worker stores no CAS token for a domain it does not own.
+type WorkerAgentState struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	NodeId            string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	WorkspaceId       string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	SessionId         string                 `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Generation        uint64                 `protobuf:"varint,4,opt,name=generation,proto3" json:"generation,omitempty"`
+	AgentId           string                 `protobuf:"bytes,5,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	Unread            uint32                 `protobuf:"varint,10,opt,name=unread,proto3" json:"unread,omitempty"`
+	Verified          bool                   `protobuf:"varint,11,opt,name=verified,proto3" json:"verified,omitempty"`
+	Restored          bool                   `protobuf:"varint,12,opt,name=restored,proto3" json:"restored,omitempty"`
+	Errored           *bool                  `protobuf:"varint,13,opt,name=errored,proto3,oneof" json:"errored,omitempty"`
+	Interrupted       *bool                  `protobuf:"varint,14,opt,name=interrupted,proto3,oneof" json:"interrupted,omitempty"`
+	TranscriptRef     []byte                 `protobuf:"bytes,15,opt,name=transcript_ref,json=transcriptRef,proto3" json:"transcript_ref,omitempty"`
+	State             AgentState             `protobuf:"varint,30,opt,name=state,proto3,enum=armadra.v1.AgentState" json:"state,omitempty"`
+	SessionPhase      string                 `protobuf:"bytes,31,opt,name=session_phase,json=sessionPhase,proto3" json:"session_phase,omitempty"`
+	LastEventAtUnixMs int64                  `protobuf:"varint,40,opt,name=last_event_at_unix_ms,json=lastEventAtUnixMs,proto3" json:"last_event_at_unix_ms,omitempty"`
+	UpdatedAtUnixMs   int64                  `protobuf:"varint,41,opt,name=updated_at_unix_ms,json=updatedAtUnixMs,proto3" json:"updated_at_unix_ms,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *WorkerAgentState) Reset() {
+	*x = WorkerAgentState{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerAgentState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerAgentState) ProtoMessage() {}
+
+func (x *WorkerAgentState) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerAgentState.ProtoReflect.Descriptor instead.
+func (*WorkerAgentState) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *WorkerAgentState) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *WorkerAgentState) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *WorkerAgentState) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *WorkerAgentState) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *WorkerAgentState) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *WorkerAgentState) GetUnread() uint32 {
+	if x != nil {
+		return x.Unread
+	}
+	return 0
+}
+
+func (x *WorkerAgentState) GetVerified() bool {
+	if x != nil {
+		return x.Verified
+	}
+	return false
+}
+
+func (x *WorkerAgentState) GetRestored() bool {
+	if x != nil {
+		return x.Restored
+	}
+	return false
+}
+
+func (x *WorkerAgentState) GetErrored() bool {
+	if x != nil && x.Errored != nil {
+		return *x.Errored
+	}
+	return false
+}
+
+func (x *WorkerAgentState) GetInterrupted() bool {
+	if x != nil && x.Interrupted != nil {
+		return *x.Interrupted
+	}
+	return false
+}
+
+func (x *WorkerAgentState) GetTranscriptRef() []byte {
+	if x != nil {
+		return x.TranscriptRef
+	}
+	return nil
+}
+
+func (x *WorkerAgentState) GetState() AgentState {
+	if x != nil {
+		return x.State
+	}
+	return AgentState_AGENT_STATE_UNSPECIFIED
+}
+
+func (x *WorkerAgentState) GetSessionPhase() string {
+	if x != nil {
+		return x.SessionPhase
+	}
+	return ""
+}
+
+func (x *WorkerAgentState) GetLastEventAtUnixMs() int64 {
+	if x != nil {
+		return x.LastEventAtUnixMs
+	}
+	return 0
+}
+
+func (x *WorkerAgentState) GetUpdatedAtUnixMs() int64 {
+	if x != nil {
+		return x.UpdatedAtUnixMs
+	}
+	return 0
+}
+
+type WorkerAgentStates struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	WorkerInstanceId string                 `protobuf:"bytes,1,opt,name=worker_instance_id,json=workerInstanceId,proto3" json:"worker_instance_id,omitempty"`
+	Agents           []*WorkerAgentState    `protobuf:"bytes,10,rep,name=agents,proto3" json:"agents,omitempty"`
+	// The approvals the execution host is currently blocked on. They travel with
+	// the states because they are read from one machine at one moment, and a Host
+	// that asked twice could see a question appear between the two answers.
+	Approvals     []*Approval `protobuf:"bytes,11,rep,name=approvals,proto3" json:"approvals,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkerAgentStates) Reset() {
+	*x = WorkerAgentStates{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerAgentStates) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerAgentStates) ProtoMessage() {}
+
+func (x *WorkerAgentStates) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerAgentStates.ProtoReflect.Descriptor instead.
+func (*WorkerAgentStates) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *WorkerAgentStates) GetWorkerInstanceId() string {
+	if x != nil {
+		return x.WorkerInstanceId
+	}
+	return ""
+}
+
+func (x *WorkerAgentStates) GetAgents() []*WorkerAgentState {
+	if x != nil {
+		return x.Agents
+	}
+	return nil
+}
+
+func (x *WorkerAgentStates) GetApprovals() []*Approval {
+	if x != nil {
+		return x.Approvals
+	}
+	return nil
+}
+
+// Drain what has happened on the execution host since `after_sequence`.
+//
+// This is a *pull*, and that is a deliberate departure from §2.7's push. The
+// resident Runtime — the process a Hook actually reaches — binds no upward
+// channel of its own; only a Host-spawned Worker does. So the Host asks, over
+// the same short-lived Worker door every other execution-shaped request uses,
+// rather than waiting for a report that has no way to arrive. The cursor makes
+// that as safe as a push would be: a drain the Host did not record is one it
+// asks for again, and the same `event_id` recorded twice is one row.
+type DrainAgentEventsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AfterSequence uint64                 `protobuf:"varint,1,opt,name=after_sequence,json=afterSequence,proto3" json:"after_sequence,omitempty"`
+	Limit         uint32                 `protobuf:"varint,10,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DrainAgentEventsRequest) Reset() {
+	*x = DrainAgentEventsRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DrainAgentEventsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DrainAgentEventsRequest) ProtoMessage() {}
+
+func (x *DrainAgentEventsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DrainAgentEventsRequest.ProtoReflect.Descriptor instead.
+func (*DrainAgentEventsRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *DrainAgentEventsRequest) GetAfterSequence() uint64 {
+	if x != nil {
+		return x.AfterSequence
+	}
+	return 0
+}
+
+func (x *DrainAgentEventsRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type DrainedAgentEvents struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The cursor to pass next time. It only moves forward.
+	NextSequence  uint64       `protobuf:"varint,1,opt,name=next_sequence,json=nextSequence,proto3" json:"next_sequence,omitempty"`
+	HasMore       bool         `protobuf:"varint,2,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	Events        []*HookEvent `protobuf:"bytes,10,rep,name=events,proto3" json:"events,omitempty"`
+	Approvals     []*Approval  `protobuf:"bytes,11,rep,name=approvals,proto3" json:"approvals,omitempty"`
+	Deliveries    []*Delivery  `protobuf:"bytes,12,rep,name=deliveries,proto3" json:"deliveries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DrainedAgentEvents) Reset() {
+	*x = DrainedAgentEvents{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DrainedAgentEvents) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DrainedAgentEvents) ProtoMessage() {}
+
+func (x *DrainedAgentEvents) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DrainedAgentEvents.ProtoReflect.Descriptor instead.
+func (*DrainedAgentEvents) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *DrainedAgentEvents) GetNextSequence() uint64 {
+	if x != nil {
+		return x.NextSequence
+	}
+	return 0
+}
+
+func (x *DrainedAgentEvents) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
+}
+
+func (x *DrainedAgentEvents) GetEvents() []*HookEvent {
+	if x != nil {
+		return x.Events
+	}
+	return nil
+}
+
+func (x *DrainedAgentEvents) GetApprovals() []*Approval {
+	if x != nil {
+		return x.Approvals
+	}
+	return nil
+}
+
+func (x *DrainedAgentEvents) GetDeliveries() []*Delivery {
+	if x != nil {
+		return x.Deliveries
+	}
+	return nil
+}
+
+// Write an answer into the file the CLI is blocked on.
+//
+// The Host has already recorded the decision, under CAS, before this is sent.
+// If this fails the record still says the question was answered, which is
+// correct: somebody did answer it, and the failure is that the machine did not
+// hear — a state a person can act on, unlike a record that quietly forgot.
+type DeliverApprovalAnswerRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ApprovalId    string                 `protobuf:"bytes,1,opt,name=approval_id,json=approvalId,proto3" json:"approval_id,omitempty"`
+	NodeId        string                 `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	SessionId     string                 `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Generation    uint64                 `protobuf:"varint,4,opt,name=generation,proto3" json:"generation,omitempty"`
+	Decision      string                 `protobuf:"bytes,10,opt,name=decision,proto3" json:"decision,omitempty"`
+	AnsweredBy    string                 `protobuf:"bytes,11,opt,name=answered_by,json=answeredBy,proto3" json:"answered_by,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeliverApprovalAnswerRequest) Reset() {
+	*x = DeliverApprovalAnswerRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeliverApprovalAnswerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeliverApprovalAnswerRequest) ProtoMessage() {}
+
+func (x *DeliverApprovalAnswerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeliverApprovalAnswerRequest.ProtoReflect.Descriptor instead.
+func (*DeliverApprovalAnswerRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *DeliverApprovalAnswerRequest) GetApprovalId() string {
+	if x != nil {
+		return x.ApprovalId
+	}
+	return ""
+}
+
+func (x *DeliverApprovalAnswerRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *DeliverApprovalAnswerRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *DeliverApprovalAnswerRequest) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *DeliverApprovalAnswerRequest) GetDecision() string {
+	if x != nil {
+		return x.Decision
+	}
+	return ""
+}
+
+func (x *DeliverApprovalAnswerRequest) GetAnsweredBy() string {
+	if x != nil {
+		return x.AnsweredBy
+	}
+	return ""
+}
+
+// Put a prepared bundle in front of the target agent.
+type DeliverHandoffRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	HandoffId     string                 `protobuf:"bytes,1,opt,name=handoff_id,json=handoffId,proto3" json:"handoff_id,omitempty"`
+	WorkspaceId   string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	SourceNodeId  string                 `protobuf:"bytes,3,opt,name=source_node_id,json=sourceNodeId,proto3" json:"source_node_id,omitempty"`
+	TargetNodeId  string                 `protobuf:"bytes,4,opt,name=target_node_id,json=targetNodeId,proto3" json:"target_node_id,omitempty"`
+	Target        *SessionAddress        `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`
+	Bundle        []byte                 `protobuf:"bytes,10,opt,name=bundle,proto3" json:"bundle,omitempty"`
+	BundleSha256  []byte                 `protobuf:"bytes,11,opt,name=bundle_sha256,json=bundleSha256,proto3" json:"bundle_sha256,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeliverHandoffRequest) Reset() {
+	*x = DeliverHandoffRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeliverHandoffRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeliverHandoffRequest) ProtoMessage() {}
+
+func (x *DeliverHandoffRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeliverHandoffRequest.ProtoReflect.Descriptor instead.
+func (*DeliverHandoffRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *DeliverHandoffRequest) GetHandoffId() string {
+	if x != nil {
+		return x.HandoffId
+	}
+	return ""
+}
+
+func (x *DeliverHandoffRequest) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *DeliverHandoffRequest) GetSourceNodeId() string {
+	if x != nil {
+		return x.SourceNodeId
+	}
+	return ""
+}
+
+func (x *DeliverHandoffRequest) GetTargetNodeId() string {
+	if x != nil {
+		return x.TargetNodeId
+	}
+	return ""
+}
+
+func (x *DeliverHandoffRequest) GetTarget() *SessionAddress {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *DeliverHandoffRequest) GetBundle() []byte {
+	if x != nil {
+		return x.Bundle
+	}
+	return nil
+}
+
+func (x *DeliverHandoffRequest) GetBundleSha256() []byte {
+	if x != nil {
+		return x.BundleSha256
+	}
+	return nil
+}
+
+// Put one message in front of an agent (`send` / `reply` / `notify`).
+type DeliverMessageRequest struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	TraceId      string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	WorkspaceId  string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	SourceNodeId string                 `protobuf:"bytes,3,opt,name=source_node_id,json=sourceNodeId,proto3" json:"source_node_id,omitempty"`
+	TargetNodeId string                 `protobuf:"bytes,4,opt,name=target_node_id,json=targetNodeId,proto3" json:"target_node_id,omitempty"`
+	Body         string                 `protobuf:"bytes,10,opt,name=body,proto3" json:"body,omitempty"`
+	// `send`, `reply` or `notify`. The execution host's own vocabulary, passed
+	// through rather than mapped.
+	Mode          string `protobuf:"bytes,11,opt,name=mode,proto3" json:"mode,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeliverMessageRequest) Reset() {
+	*x = DeliverMessageRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeliverMessageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeliverMessageRequest) ProtoMessage() {}
+
+func (x *DeliverMessageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeliverMessageRequest.ProtoReflect.Descriptor instead.
+func (*DeliverMessageRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *DeliverMessageRequest) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
+}
+
+func (x *DeliverMessageRequest) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *DeliverMessageRequest) GetSourceNodeId() string {
+	if x != nil {
+		return x.SourceNodeId
+	}
+	return ""
+}
+
+func (x *DeliverMessageRequest) GetTargetNodeId() string {
+	if x != nil {
+		return x.TargetNodeId
+	}
+	return ""
+}
+
+func (x *DeliverMessageRequest) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+func (x *DeliverMessageRequest) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+// The Worker's answer to either delivery: what it can prove happened.
+type AgentDeliveryReceipt struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	TraceId          string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	Receipt          string                 `protobuf:"bytes,10,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	BodyChars        uint32                 `protobuf:"varint,11,opt,name=body_chars,json=bodyChars,proto3" json:"body_chars,omitempty"`
+	Outcome          DeliveryOutcome        `protobuf:"varint,30,opt,name=outcome,proto3,enum=armadra.v1.DeliveryOutcome" json:"outcome,omitempty"`
+	ReasonCode       string                 `protobuf:"bytes,39,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	ObservedAtUnixMs int64                  `protobuf:"varint,40,opt,name=observed_at_unix_ms,json=observedAtUnixMs,proto3" json:"observed_at_unix_ms,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *AgentDeliveryReceipt) Reset() {
+	*x = AgentDeliveryReceipt{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentDeliveryReceipt) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentDeliveryReceipt) ProtoMessage() {}
+
+func (x *AgentDeliveryReceipt) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentDeliveryReceipt.ProtoReflect.Descriptor instead.
+func (*AgentDeliveryReceipt) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *AgentDeliveryReceipt) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
+}
+
+func (x *AgentDeliveryReceipt) GetReceipt() string {
+	if x != nil {
+		return x.Receipt
+	}
+	return ""
+}
+
+func (x *AgentDeliveryReceipt) GetBodyChars() uint32 {
+	if x != nil {
+		return x.BodyChars
+	}
+	return 0
+}
+
+func (x *AgentDeliveryReceipt) GetOutcome() DeliveryOutcome {
+	if x != nil {
+		return x.Outcome
+	}
+	return DeliveryOutcome_DELIVERY_OUTCOME_UNSPECIFIED
+}
+
+func (x *AgentDeliveryReceipt) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+func (x *AgentDeliveryReceipt) GetObservedAtUnixMs() int64 {
+	if x != nil {
+		return x.ObservedAtUnixMs
+	}
+	return 0
+}
+
+// Read a node's transcript, or a screenful of its pane.
+type ReadTranscriptRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	TranscriptRef []byte                 `protobuf:"bytes,10,opt,name=transcript_ref,json=transcriptRef,proto3" json:"transcript_ref,omitempty"`
+	MaxBytes      uint32                 `protobuf:"varint,11,opt,name=max_bytes,json=maxBytes,proto3" json:"max_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadTranscriptRequest) Reset() {
+	*x = ReadTranscriptRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadTranscriptRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadTranscriptRequest) ProtoMessage() {}
+
+func (x *ReadTranscriptRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadTranscriptRequest.ProtoReflect.Descriptor instead.
+func (*ReadTranscriptRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *ReadTranscriptRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *ReadTranscriptRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *ReadTranscriptRequest) GetTranscriptRef() []byte {
+	if x != nil {
+		return x.TranscriptRef
+	}
+	return nil
+}
+
+func (x *ReadTranscriptRequest) GetMaxBytes() uint32 {
+	if x != nil {
+		return x.MaxBytes
+	}
+	return 0
+}
+
+type TranscriptExcerpt struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	NodeId           string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	Content          []byte                 `protobuf:"bytes,10,opt,name=content,proto3" json:"content,omitempty"`
+	ContentSha256    []byte                 `protobuf:"bytes,11,opt,name=content_sha256,json=contentSha256,proto3" json:"content_sha256,omitempty"`
+	Truncated        bool                   `protobuf:"varint,12,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	ObservedAtUnixMs int64                  `protobuf:"varint,40,opt,name=observed_at_unix_ms,json=observedAtUnixMs,proto3" json:"observed_at_unix_ms,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *TranscriptExcerpt) Reset() {
+	*x = TranscriptExcerpt{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TranscriptExcerpt) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TranscriptExcerpt) ProtoMessage() {}
+
+func (x *TranscriptExcerpt) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TranscriptExcerpt.ProtoReflect.Descriptor instead.
+func (*TranscriptExcerpt) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *TranscriptExcerpt) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *TranscriptExcerpt) GetContent() []byte {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *TranscriptExcerpt) GetContentSha256() []byte {
+	if x != nil {
+		return x.ContentSha256
+	}
+	return nil
+}
+
+func (x *TranscriptExcerpt) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+func (x *TranscriptExcerpt) GetObservedAtUnixMs() int64 {
+	if x != nil {
+		return x.ObservedAtUnixMs
+	}
+	return 0
+}
+
+type CaptureAgentScreenRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Lines         uint32                 `protobuf:"varint,10,opt,name=lines,proto3" json:"lines,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CaptureAgentScreenRequest) Reset() {
+	*x = CaptureAgentScreenRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CaptureAgentScreenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CaptureAgentScreenRequest) ProtoMessage() {}
+
+func (x *CaptureAgentScreenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CaptureAgentScreenRequest.ProtoReflect.Descriptor instead.
+func (*CaptureAgentScreenRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *CaptureAgentScreenRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *CaptureAgentScreenRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *CaptureAgentScreenRequest) GetLines() uint32 {
+	if x != nil {
+		return x.Lines
+	}
+	return 0
+}
+
+type CapturedAgentScreen struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	Data          string                 `protobuf:"bytes,10,opt,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CapturedAgentScreen) Reset() {
+	*x = CapturedAgentScreen{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CapturedAgentScreen) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CapturedAgentScreen) ProtoMessage() {}
+
+func (x *CapturedAgentScreen) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CapturedAgentScreen.ProtoReflect.Descriptor instead.
+func (*CapturedAgentScreen) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *CapturedAgentScreen) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *CapturedAgentScreen) GetData() string {
+	if x != nil {
+		return x.Data
+	}
+	return ""
+}
+
+type AgentWorkerRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Action:
+	//
+	//	*AgentWorkerRequest_ListAgents
+	//	*AgentWorkerRequest_DrainEvents
+	//	*AgentWorkerRequest_DeliverApproval
+	//	*AgentWorkerRequest_DeliverHandoff
+	//	*AgentWorkerRequest_DeliverMessage
+	//	*AgentWorkerRequest_ReadTranscript
+	//	*AgentWorkerRequest_CaptureScreen
+	//	*AgentWorkerRequest_InstallHooks
+	//	*AgentWorkerRequest_UninstallHooks
+	Action        isAgentWorkerRequest_Action `protobuf_oneof:"action"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentWorkerRequest) Reset() {
+	*x = AgentWorkerRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentWorkerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentWorkerRequest) ProtoMessage() {}
+
+func (x *AgentWorkerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentWorkerRequest.ProtoReflect.Descriptor instead.
+func (*AgentWorkerRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *AgentWorkerRequest) GetAction() isAgentWorkerRequest_Action {
+	if x != nil {
+		return x.Action
+	}
+	return nil
+}
+
+func (x *AgentWorkerRequest) GetListAgents() *ListWorkerAgentsRequest {
+	if x != nil {
+		if x, ok := x.Action.(*AgentWorkerRequest_ListAgents); ok {
+			return x.ListAgents
+		}
+	}
+	return nil
+}
+
+func (x *AgentWorkerRequest) GetDrainEvents() *DrainAgentEventsRequest {
+	if x != nil {
+		if x, ok := x.Action.(*AgentWorkerRequest_DrainEvents); ok {
+			return x.DrainEvents
+		}
+	}
+	return nil
+}
+
+func (x *AgentWorkerRequest) GetDeliverApproval() *DeliverApprovalAnswerRequest {
+	if x != nil {
+		if x, ok := x.Action.(*AgentWorkerRequest_DeliverApproval); ok {
+			return x.DeliverApproval
+		}
+	}
+	return nil
+}
+
+func (x *AgentWorkerRequest) GetDeliverHandoff() *DeliverHandoffRequest {
+	if x != nil {
+		if x, ok := x.Action.(*AgentWorkerRequest_DeliverHandoff); ok {
+			return x.DeliverHandoff
+		}
+	}
+	return nil
+}
+
+func (x *AgentWorkerRequest) GetDeliverMessage() *DeliverMessageRequest {
+	if x != nil {
+		if x, ok := x.Action.(*AgentWorkerRequest_DeliverMessage); ok {
+			return x.DeliverMessage
+		}
+	}
+	return nil
+}
+
+func (x *AgentWorkerRequest) GetReadTranscript() *ReadTranscriptRequest {
+	if x != nil {
+		if x, ok := x.Action.(*AgentWorkerRequest_ReadTranscript); ok {
+			return x.ReadTranscript
+		}
+	}
+	return nil
+}
+
+func (x *AgentWorkerRequest) GetCaptureScreen() *CaptureAgentScreenRequest {
+	if x != nil {
+		if x, ok := x.Action.(*AgentWorkerRequest_CaptureScreen); ok {
+			return x.CaptureScreen
+		}
+	}
+	return nil
+}
+
+func (x *AgentWorkerRequest) GetInstallHooks() *InstallHooksRequest {
+	if x != nil {
+		if x, ok := x.Action.(*AgentWorkerRequest_InstallHooks); ok {
+			return x.InstallHooks
+		}
+	}
+	return nil
+}
+
+func (x *AgentWorkerRequest) GetUninstallHooks() *UninstallHooksRequest {
+	if x != nil {
+		if x, ok := x.Action.(*AgentWorkerRequest_UninstallHooks); ok {
+			return x.UninstallHooks
+		}
+	}
+	return nil
+}
+
+type isAgentWorkerRequest_Action interface {
+	isAgentWorkerRequest_Action()
+}
+
+type AgentWorkerRequest_ListAgents struct {
+	ListAgents *ListWorkerAgentsRequest `protobuf:"bytes,100,opt,name=list_agents,json=listAgents,proto3,oneof"`
+}
+
+type AgentWorkerRequest_DrainEvents struct {
+	DrainEvents *DrainAgentEventsRequest `protobuf:"bytes,101,opt,name=drain_events,json=drainEvents,proto3,oneof"`
+}
+
+type AgentWorkerRequest_DeliverApproval struct {
+	DeliverApproval *DeliverApprovalAnswerRequest `protobuf:"bytes,102,opt,name=deliver_approval,json=deliverApproval,proto3,oneof"`
+}
+
+type AgentWorkerRequest_DeliverHandoff struct {
+	DeliverHandoff *DeliverHandoffRequest `protobuf:"bytes,103,opt,name=deliver_handoff,json=deliverHandoff,proto3,oneof"`
+}
+
+type AgentWorkerRequest_DeliverMessage struct {
+	DeliverMessage *DeliverMessageRequest `protobuf:"bytes,104,opt,name=deliver_message,json=deliverMessage,proto3,oneof"`
+}
+
+type AgentWorkerRequest_ReadTranscript struct {
+	ReadTranscript *ReadTranscriptRequest `protobuf:"bytes,105,opt,name=read_transcript,json=readTranscript,proto3,oneof"`
+}
+
+type AgentWorkerRequest_CaptureScreen struct {
+	CaptureScreen *CaptureAgentScreenRequest `protobuf:"bytes,106,opt,name=capture_screen,json=captureScreen,proto3,oneof"`
+}
+
+type AgentWorkerRequest_InstallHooks struct {
+	InstallHooks *InstallHooksRequest `protobuf:"bytes,107,opt,name=install_hooks,json=installHooks,proto3,oneof"`
+}
+
+type AgentWorkerRequest_UninstallHooks struct {
+	UninstallHooks *UninstallHooksRequest `protobuf:"bytes,108,opt,name=uninstall_hooks,json=uninstallHooks,proto3,oneof"`
+}
+
+func (*AgentWorkerRequest_ListAgents) isAgentWorkerRequest_Action() {}
+
+func (*AgentWorkerRequest_DrainEvents) isAgentWorkerRequest_Action() {}
+
+func (*AgentWorkerRequest_DeliverApproval) isAgentWorkerRequest_Action() {}
+
+func (*AgentWorkerRequest_DeliverHandoff) isAgentWorkerRequest_Action() {}
+
+func (*AgentWorkerRequest_DeliverMessage) isAgentWorkerRequest_Action() {}
+
+func (*AgentWorkerRequest_ReadTranscript) isAgentWorkerRequest_Action() {}
+
+func (*AgentWorkerRequest_CaptureScreen) isAgentWorkerRequest_Action() {}
+
+func (*AgentWorkerRequest_InstallHooks) isAgentWorkerRequest_Action() {}
+
+func (*AgentWorkerRequest_UninstallHooks) isAgentWorkerRequest_Action() {}
+
+type AgentWorkerResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Result:
+	//
+	//	*AgentWorkerResponse_Agents
+	//	*AgentWorkerResponse_Events
+	//	*AgentWorkerResponse_Delivery
+	//	*AgentWorkerResponse_Transcript
+	//	*AgentWorkerResponse_Screen
+	//	*AgentWorkerResponse_Hooks
+	Result        isAgentWorkerResponse_Result `protobuf_oneof:"result"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentWorkerResponse) Reset() {
+	*x = AgentWorkerResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentWorkerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentWorkerResponse) ProtoMessage() {}
+
+func (x *AgentWorkerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentWorkerResponse.ProtoReflect.Descriptor instead.
+func (*AgentWorkerResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *AgentWorkerResponse) GetResult() isAgentWorkerResponse_Result {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+func (x *AgentWorkerResponse) GetAgents() *WorkerAgentStates {
+	if x != nil {
+		if x, ok := x.Result.(*AgentWorkerResponse_Agents); ok {
+			return x.Agents
+		}
+	}
+	return nil
+}
+
+func (x *AgentWorkerResponse) GetEvents() *DrainedAgentEvents {
+	if x != nil {
+		if x, ok := x.Result.(*AgentWorkerResponse_Events); ok {
+			return x.Events
+		}
+	}
+	return nil
+}
+
+func (x *AgentWorkerResponse) GetDelivery() *AgentDeliveryReceipt {
+	if x != nil {
+		if x, ok := x.Result.(*AgentWorkerResponse_Delivery); ok {
+			return x.Delivery
+		}
+	}
+	return nil
+}
+
+func (x *AgentWorkerResponse) GetTranscript() *TranscriptExcerpt {
+	if x != nil {
+		if x, ok := x.Result.(*AgentWorkerResponse_Transcript); ok {
+			return x.Transcript
+		}
+	}
+	return nil
+}
+
+func (x *AgentWorkerResponse) GetScreen() *CapturedAgentScreen {
+	if x != nil {
+		if x, ok := x.Result.(*AgentWorkerResponse_Screen); ok {
+			return x.Screen
+		}
+	}
+	return nil
+}
+
+func (x *AgentWorkerResponse) GetHooks() *HookInstallState {
+	if x != nil {
+		if x, ok := x.Result.(*AgentWorkerResponse_Hooks); ok {
+			return x.Hooks
+		}
+	}
+	return nil
+}
+
+type isAgentWorkerResponse_Result interface {
+	isAgentWorkerResponse_Result()
+}
+
+type AgentWorkerResponse_Agents struct {
+	Agents *WorkerAgentStates `protobuf:"bytes,100,opt,name=agents,proto3,oneof"`
+}
+
+type AgentWorkerResponse_Events struct {
+	Events *DrainedAgentEvents `protobuf:"bytes,101,opt,name=events,proto3,oneof"`
+}
+
+type AgentWorkerResponse_Delivery struct {
+	Delivery *AgentDeliveryReceipt `protobuf:"bytes,102,opt,name=delivery,proto3,oneof"`
+}
+
+type AgentWorkerResponse_Transcript struct {
+	Transcript *TranscriptExcerpt `protobuf:"bytes,105,opt,name=transcript,proto3,oneof"`
+}
+
+type AgentWorkerResponse_Screen struct {
+	Screen *CapturedAgentScreen `protobuf:"bytes,106,opt,name=screen,proto3,oneof"`
+}
+
+type AgentWorkerResponse_Hooks struct {
+	Hooks *HookInstallState `protobuf:"bytes,107,opt,name=hooks,proto3,oneof"`
+}
+
+func (*AgentWorkerResponse_Agents) isAgentWorkerResponse_Result() {}
+
+func (*AgentWorkerResponse_Events) isAgentWorkerResponse_Result() {}
+
+func (*AgentWorkerResponse_Delivery) isAgentWorkerResponse_Result() {}
+
+func (*AgentWorkerResponse_Transcript) isAgentWorkerResponse_Result() {}
+
+func (*AgentWorkerResponse_Screen) isAgentWorkerResponse_Result() {}
+
+func (*AgentWorkerResponse_Hooks) isAgentWorkerResponse_Result() {}
+
 var File_armadra_v1_agent_proto protoreflect.FileDescriptor
 
 const file_armadra_v1_agent_proto_rawDesc = "" +
 	"\n" +
 	"\x16armadra/v1/agent.proto\x12\n" +
-	"armadra.v1\"\xd0\x01\n" +
+	"armadra.v1\x1a\x17armadra/v1/canvas.proto\x1a\x17armadra/v1/common.proto\"\xd0\x01\n" +
 	"\x0fAgentLaunchSpec\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12+\n" +
 	"\x11working_directory\x18\x02 \x01(\tR\x10workingDirectory\x12\x12\n" +
@@ -943,6 +5465,406 @@ const file_armadra_v1_agent_proto_rawDesc = "" +
 	"\x06target\x18\n" +
 	" \x01(\v2\x1d.armadra.v1.AgentTargetStatusH\x00R\x06target\x12:\n" +
 	"\areceipt\x18\v \x01(\v2\x1e.armadra.v1.AgentPromptReceiptH\x00R\areceiptB\b\n" +
+	"\x06result\"\x85\x05\n" +
+	"\vAgentStatus\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x03 \x01(\tR\tsessionId\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x04 \x01(\x04R\n" +
+	"generation\x12\x19\n" +
+	"\bagent_id\x18\x05 \x01(\tR\aagentId\x12\x16\n" +
+	"\x06unread\x18\n" +
+	" \x01(\rR\x06unread\x12\x1a\n" +
+	"\bverified\x18\v \x01(\bR\bverified\x12\x1a\n" +
+	"\brestored\x18\f \x01(\bR\brestored\x12\x1d\n" +
+	"\aerrored\x18\r \x01(\bH\x00R\aerrored\x88\x01\x01\x12%\n" +
+	"\vinterrupted\x18\x0e \x01(\bH\x01R\vinterrupted\x88\x01\x01\x12%\n" +
+	"\x0etranscript_ref\x18\x0f \x01(\fR\rtranscriptRef\x12,\n" +
+	"\x05state\x18\x1e \x01(\x0e2\x16.armadra.v1.AgentStateR\x05state\x12#\n" +
+	"\rsession_phase\x18\x1f \x01(\tR\fsessionPhase\x12\x1f\n" +
+	"\vreason_code\x18' \x01(\tR\n" +
+	"reasonCode\x120\n" +
+	"\x15last_event_at_unix_ms\x18( \x01(\x03R\x11lastEventAtUnixMs\x12+\n" +
+	"\x12updated_at_unix_ms\x18) \x01(\x03R\x0fupdatedAtUnixMs\x12\x1a\n" +
+	"\brevision\x182 \x01(\x04R\brevision\x12\x18\n" +
+	"\adeleted\x183 \x01(\bR\adeletedB\n" +
+	"\n" +
+	"\b_erroredB\x0e\n" +
+	"\f_interrupted\"\x83\x03\n" +
+	"\tHookEvent\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x17\n" +
+	"\anode_id\x18\x02 \x01(\tR\x06nodeId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x03 \x01(\tR\tsessionId\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x04 \x01(\x04R\n" +
+	"generation\x12!\n" +
+	"\fworkspace_id\x18\x05 \x01(\tR\vworkspaceId\x12\x1a\n" +
+	"\bprovider\x18\n" +
+	" \x01(\tR\bprovider\x12\x18\n" +
+	"\apayload\x18\v \x01(\fR\apayload\x12%\n" +
+	"\x0epayload_sha256\x18\f \x01(\fR\rpayloadSha256\x12%\n" +
+	"\x0eschema_version\x18\r \x01(\rR\rschemaVersion\x12-\n" +
+	"\x04kind\x18\x1e \x01(\x0e2\x19.armadra.v1.HookEventKindR\x04kind\x12-\n" +
+	"\x13observed_at_unix_ms\x18( \x01(\x03R\x10observedAtUnixMs\"\xee\x03\n" +
+	"\bApproval\x12\x1f\n" +
+	"\vapproval_id\x18\x01 \x01(\tR\n" +
+	"approvalId\x12\x17\n" +
+	"\anode_id\x18\x02 \x01(\tR\x06nodeId\x12!\n" +
+	"\fworkspace_id\x18\x03 \x01(\tR\vworkspaceId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x04 \x01(\tR\tsessionId\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x05 \x01(\x04R\n" +
+	"generation\x12\x18\n" +
+	"\arequest\x18\n" +
+	" \x01(\fR\arequest\x12%\n" +
+	"\x0erequest_sha256\x18\v \x01(\fR\rrequestSha256\x12\x1a\n" +
+	"\bdecision\x18\f \x01(\tR\bdecision\x12\x1f\n" +
+	"\vanswered_by\x18\r \x01(\tR\n" +
+	"answeredBy\x12/\n" +
+	"\x05state\x18\x1e \x01(\x0e2\x19.armadra.v1.ApprovalStateR\x05state\x12\x1f\n" +
+	"\vreason_code\x18' \x01(\tR\n" +
+	"reasonCode\x12+\n" +
+	"\x12created_at_unix_ms\x18( \x01(\x03R\x0fcreatedAtUnixMs\x12-\n" +
+	"\x13answered_at_unix_ms\x18) \x01(\x03R\x10answeredAtUnixMs\x12\x1a\n" +
+	"\brevision\x182 \x01(\x04R\brevision\"\xb6\x03\n" +
+	"\x0eMailboxMessage\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x01 \x01(\tR\tmessageId\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12$\n" +
+	"\x0esource_node_id\x18\x03 \x01(\tR\fsourceNodeId\x12$\n" +
+	"\x0etarget_node_id\x18\x04 \x01(\tR\ftargetNodeId\x12\x1f\n" +
+	"\vmessage_key\x18\x05 \x01(\tR\n" +
+	"messageKey\x12\x12\n" +
+	"\x04body\x18\n" +
+	" \x01(\tR\x04body\x12\x1a\n" +
+	"\bsequence\x18\v \x01(\x04R\bsequence\x12+\n" +
+	"\x12created_at_unix_ms\x18( \x01(\x03R\x0fcreatedAtUnixMs\x12+\n" +
+	"\x12expires_at_unix_ms\x18) \x01(\x03R\x0fexpiresAtUnixMs\x125\n" +
+	"\x17acknowledged_at_unix_ms\x18* \x01(\x03R\x14acknowledgedAtUnixMs\x12\x1a\n" +
+	"\brevision\x182 \x01(\x04R\brevision\x12\x18\n" +
+	"\adeleted\x183 \x01(\bR\adeleted\"\xee\x02\n" +
+	"\bDelivery\x12\x19\n" +
+	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12$\n" +
+	"\x0esource_node_id\x18\x03 \x01(\tR\fsourceNodeId\x12$\n" +
+	"\x0etarget_node_id\x18\x04 \x01(\tR\ftargetNodeId\x12\x18\n" +
+	"\areceipt\x18\n" +
+	" \x01(\tR\areceipt\x12\x1d\n" +
+	"\n" +
+	"body_chars\x18\v \x01(\rR\tbodyChars\x125\n" +
+	"\aoutcome\x18\x1e \x01(\x0e2\x1b.armadra.v1.DeliveryOutcomeR\aoutcome\x12\x1f\n" +
+	"\vreason_code\x18' \x01(\tR\n" +
+	"reasonCode\x12+\n" +
+	"\x12created_at_unix_ms\x18( \x01(\x03R\x0fcreatedAtUnixMs\x12\x1a\n" +
+	"\brevision\x182 \x01(\x04R\brevision\"\x86\x05\n" +
+	"\aHandoff\x12\x1d\n" +
+	"\n" +
+	"handoff_id\x18\x01 \x01(\tR\thandoffId\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12$\n" +
+	"\x0esource_node_id\x18\x03 \x01(\tR\fsourceNodeId\x12$\n" +
+	"\x0etarget_node_id\x18\x04 \x01(\tR\ftargetNodeId\x122\n" +
+	"\x06source\x18\x05 \x01(\v2\x1a.armadra.v1.SessionAddressR\x06source\x122\n" +
+	"\x06target\x18\x06 \x01(\v2\x1a.armadra.v1.SessionAddressR\x06target\x12\x16\n" +
+	"\x06bundle\x18\n" +
+	" \x01(\fR\x06bundle\x12#\n" +
+	"\rbundle_sha256\x18\v \x01(\fR\fbundleSha256\x12\x1d\n" +
+	"\n" +
+	"mailbox_id\x18\f \x01(\tR\tmailboxId\x12\x19\n" +
+	"\btrace_id\x18\r \x01(\tR\atraceId\x12\x1a\n" +
+	"\battempts\x18\x0e \x01(\rR\battempts\x12.\n" +
+	"\x05state\x18\x1e \x01(\x0e2\x18.armadra.v1.HandoffStateR\x05state\x12\x1d\n" +
+	"\n" +
+	"error_code\x18' \x01(\tR\terrorCode\x12+\n" +
+	"\x12created_at_unix_ms\x18( \x01(\x03R\x0fcreatedAtUnixMs\x12-\n" +
+	"\x13accepted_at_unix_ms\x18) \x01(\x03R\x10acceptedAtUnixMs\x12+\n" +
+	"\x12updated_at_unix_ms\x18* \x01(\x03R\x0fupdatedAtUnixMs\x12\x1a\n" +
+	"\brevision\x182 \x01(\x04R\brevision\"\x87\x01\n" +
+	"\vContextLink\x12$\n" +
+	"\x0etarget_node_id\x18\x01 \x01(\tR\ftargetNodeId\x12>\n" +
+	"\tdirection\x18\x1e \x01(\x0e2 .armadra.v1.ContextLinkDirectionR\tdirection\x12\x12\n" +
+	"\x04kind\x18\n" +
+	" \x01(\tR\x04kind\"\xc2\x01\n" +
+	"\fContextLinks\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12-\n" +
+	"\x05links\x18\n" +
+	" \x03(\v2\x17.armadra.v1.ContextLinkR\x05links\x12+\n" +
+	"\x12updated_at_unix_ms\x18) \x01(\x03R\x0fupdatedAtUnixMs\x12\x1a\n" +
+	"\brevision\x182 \x01(\x04R\brevision\"\x7f\n" +
+	"\x16ListAgentStatusRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\"\n" +
+	"\rafter_node_id\x18\n" +
+	" \x01(\tR\vafterNodeId\x12\x14\n" +
+	"\x05limit\x18\v \x01(\rR\x05limit\"\x8b\x01\n" +
+	"\x17ListAgentStatusResponse\x123\n" +
+	"\bstatuses\x18\n" +
+	" \x03(\v2\x17.armadra.v1.AgentStatusR\bstatuses\x12 \n" +
+	"\fnext_node_id\x18\v \x01(\tR\n" +
+	"nextNodeId\x12\x19\n" +
+	"\bhas_more\x18\f \x01(\bR\ahasMore\"\xac\x01\n" +
+	"\x14MarkAgentReadRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12!\n" +
+	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12+\n" +
+	"\x11expected_revision\x18\x03 \x01(\x04R\x10expectedRevision\x12\x17\n" +
+	"\anode_id\x18\n" +
+	" \x01(\tR\x06nodeId\"\x86\x01\n" +
+	"\x15MarkAgentReadResponse\x12/\n" +
+	"\x06status\x18\x01 \x01(\v2\x17.armadra.v1.AgentStatusR\x06status\x12<\n" +
+	"\areceipt\x18\x02 \x01(\v2\".armadra.v1.CanvasOperationReceiptR\areceipt\"\x9d\x01\n" +
+	"\x14ListApprovalsRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x17\n" +
+	"\anode_id\x18\n" +
+	" \x01(\tR\x06nodeId\x12)\n" +
+	"\x10include_answered\x18\v \x01(\bR\x0fincludeAnswered\x12\x14\n" +
+	"\x05limit\x18\f \x01(\rR\x05limit\"K\n" +
+	"\x15ListApprovalsResponse\x122\n" +
+	"\tapprovals\x18\n" +
+	" \x03(\v2\x14.armadra.v1.ApprovalR\tapprovals\"\xd1\x01\n" +
+	"\x15AnswerApprovalRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12!\n" +
+	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12+\n" +
+	"\x11expected_revision\x18\x03 \x01(\x04R\x10expectedRevision\x12\x1f\n" +
+	"\vapproval_id\x18\n" +
+	" \x01(\tR\n" +
+	"approvalId\x12\x1a\n" +
+	"\bdecision\x18\v \x01(\tR\bdecision\"\x88\x01\n" +
+	"\x16AnswerApprovalResponse\x120\n" +
+	"\bapproval\x18\x01 \x01(\v2\x14.armadra.v1.ApprovalR\bapproval\x12<\n" +
+	"\areceipt\x18\x02 \x01(\v2\".armadra.v1.CanvasOperationReceiptR\areceipt\"s\n" +
+	"\x15ListDeliveriesRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x17\n" +
+	"\anode_id\x18\n" +
+	" \x01(\tR\x06nodeId\x12\x14\n" +
+	"\x05limit\x18\v \x01(\rR\x05limit\"N\n" +
+	"\x16ListDeliveriesResponse\x124\n" +
+	"\n" +
+	"deliveries\x18\n" +
+	" \x03(\v2\x14.armadra.v1.DeliveryR\n" +
+	"deliveries\"\xb0\x01\n" +
+	"\x12ListMailboxRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12$\n" +
+	"\x0etarget_node_id\x18\n" +
+	" \x01(\tR\ftargetNodeId\x121\n" +
+	"\x14include_acknowledged\x18\v \x01(\bR\x13includeAcknowledged\x12\x14\n" +
+	"\x05limit\x18\f \x01(\rR\x05limit\"M\n" +
+	"\x13ListMailboxResponse\x126\n" +
+	"\bmessages\x18\n" +
+	" \x03(\v2\x1a.armadra.v1.MailboxMessageR\bmessages\"\xff\x02\n" +
+	"\x15PrepareHandoffRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12!\n" +
+	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12+\n" +
+	"\x11expected_revision\x18\x03 \x01(\x04R\x10expectedRevision\x12\x1d\n" +
+	"\n" +
+	"handoff_id\x18\n" +
+	" \x01(\tR\thandoffId\x12$\n" +
+	"\x0esource_node_id\x18\v \x01(\tR\fsourceNodeId\x12$\n" +
+	"\x0etarget_node_id\x18\f \x01(\tR\ftargetNodeId\x122\n" +
+	"\x06source\x18\r \x01(\v2\x1a.armadra.v1.SessionAddressR\x06source\x122\n" +
+	"\x06target\x18\x0e \x01(\v2\x1a.armadra.v1.SessionAddressR\x06target\x12\x16\n" +
+	"\x06bundle\x18\x0f \x01(\fR\x06bundle\"\x85\x01\n" +
+	"\x16PrepareHandoffResponse\x12-\n" +
+	"\ahandoff\x18\x01 \x01(\v2\x13.armadra.v1.HandoffR\ahandoff\x12<\n" +
+	"\areceipt\x18\x02 \x01(\v2\".armadra.v1.CanvasOperationReceiptR\areceipt\"\xb2\x01\n" +
+	"\x14AcceptHandoffRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12!\n" +
+	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12+\n" +
+	"\x11expected_revision\x18\x03 \x01(\x04R\x10expectedRevision\x12\x1d\n" +
+	"\n" +
+	"handoff_id\x18\n" +
+	" \x01(\tR\thandoffId\"\x84\x01\n" +
+	"\x15AcceptHandoffResponse\x12-\n" +
+	"\ahandoff\x18\x01 \x01(\v2\x13.armadra.v1.HandoffR\ahandoff\x12<\n" +
+	"\areceipt\x18\x02 \x01(\v2\".armadra.v1.CanvasOperationReceiptR\areceipt\"\xd3\x01\n" +
+	"\x14CancelHandoffRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12!\n" +
+	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12+\n" +
+	"\x11expected_revision\x18\x03 \x01(\x04R\x10expectedRevision\x12\x1d\n" +
+	"\n" +
+	"handoff_id\x18\n" +
+	" \x01(\tR\thandoffId\x12\x1f\n" +
+	"\vreason_code\x18\v \x01(\tR\n" +
+	"reasonCode\"\x84\x01\n" +
+	"\x15CancelHandoffResponse\x12-\n" +
+	"\ahandoff\x18\x01 \x01(\v2\x13.armadra.v1.HandoffR\ahandoff\x12<\n" +
+	"\areceipt\x18\x02 \x01(\v2\".armadra.v1.CanvasOperationReceiptR\areceipt\"q\n" +
+	"\x13ListHandoffsRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x17\n" +
+	"\anode_id\x18\n" +
+	" \x01(\tR\x06nodeId\x12\x14\n" +
+	"\x05limit\x18\v \x01(\rR\x05limit\"G\n" +
+	"\x14ListHandoffsResponse\x12/\n" +
+	"\bhandoffs\x18\n" +
+	" \x03(\v2\x13.armadra.v1.HandoffR\bhandoffs\"_\n" +
+	"\x11GetHandoffRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x1d\n" +
+	"\n" +
+	"handoff_id\x18\n" +
+	" \x01(\tR\thandoffId\"C\n" +
+	"\x12GetHandoffResponse\x12-\n" +
+	"\ahandoff\x18\x01 \x01(\v2\x13.armadra.v1.HandoffR\ahandoff\"_\n" +
+	"\x17ListContextLinksRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x17\n" +
+	"\anode_id\x18\n" +
+	" \x01(\tR\x06nodeId\"J\n" +
+	"\x18ListContextLinksResponse\x12.\n" +
+	"\x05links\x18\n" +
+	" \x03(\v2\x18.armadra.v1.ContextLinksR\x05links\"\x80\x01\n" +
+	"\x13InstallHooksRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12!\n" +
+	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12\x19\n" +
+	"\bagent_id\x18\n" +
+	" \x01(\tR\aagentId\"\xe7\x01\n" +
+	"\x10HookInstallState\x12\x19\n" +
+	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x1c\n" +
+	"\tinstalled\x18\n" +
+	" \x01(\bR\tinstalled\x12'\n" +
+	"\x0fclient_revision\x18\v \x01(\rR\x0eclientRevision\x12\x1f\n" +
+	"\vconfig_path\x18\f \x01(\tR\n" +
+	"configPath\x12\x1f\n" +
+	"\vreason_code\x18' \x01(\tR\n" +
+	"reasonCode\x12/\n" +
+	"\x14installed_at_unix_ms\x18( \x01(\x03R\x11installedAtUnixMs\"J\n" +
+	"\x14InstallHooksResponse\x122\n" +
+	"\x05state\x18\x01 \x01(\v2\x1c.armadra.v1.HookInstallStateR\x05state\"\x82\x01\n" +
+	"\x15UninstallHooksRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12!\n" +
+	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12\x19\n" +
+	"\bagent_id\x18\n" +
+	" \x01(\tR\aagentId\"L\n" +
+	"\x16UninstallHooksResponse\x122\n" +
+	"\x05state\x18\x01 \x01(\v2\x1c.armadra.v1.HookInstallStateR\x05state\"\x19\n" +
+	"\x17ListWorkerAgentsRequest\"\xb3\x04\n" +
+	"\x10WorkerAgentState\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x03 \x01(\tR\tsessionId\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x04 \x01(\x04R\n" +
+	"generation\x12\x19\n" +
+	"\bagent_id\x18\x05 \x01(\tR\aagentId\x12\x16\n" +
+	"\x06unread\x18\n" +
+	" \x01(\rR\x06unread\x12\x1a\n" +
+	"\bverified\x18\v \x01(\bR\bverified\x12\x1a\n" +
+	"\brestored\x18\f \x01(\bR\brestored\x12\x1d\n" +
+	"\aerrored\x18\r \x01(\bH\x00R\aerrored\x88\x01\x01\x12%\n" +
+	"\vinterrupted\x18\x0e \x01(\bH\x01R\vinterrupted\x88\x01\x01\x12%\n" +
+	"\x0etranscript_ref\x18\x0f \x01(\fR\rtranscriptRef\x12,\n" +
+	"\x05state\x18\x1e \x01(\x0e2\x16.armadra.v1.AgentStateR\x05state\x12#\n" +
+	"\rsession_phase\x18\x1f \x01(\tR\fsessionPhase\x120\n" +
+	"\x15last_event_at_unix_ms\x18( \x01(\x03R\x11lastEventAtUnixMs\x12+\n" +
+	"\x12updated_at_unix_ms\x18) \x01(\x03R\x0fupdatedAtUnixMsB\n" +
+	"\n" +
+	"\b_erroredB\x0e\n" +
+	"\f_interrupted\"\xab\x01\n" +
+	"\x11WorkerAgentStates\x12,\n" +
+	"\x12worker_instance_id\x18\x01 \x01(\tR\x10workerInstanceId\x124\n" +
+	"\x06agents\x18\n" +
+	" \x03(\v2\x1c.armadra.v1.WorkerAgentStateR\x06agents\x122\n" +
+	"\tapprovals\x18\v \x03(\v2\x14.armadra.v1.ApprovalR\tapprovals\"V\n" +
+	"\x17DrainAgentEventsRequest\x12%\n" +
+	"\x0eafter_sequence\x18\x01 \x01(\x04R\rafterSequence\x12\x14\n" +
+	"\x05limit\x18\n" +
+	" \x01(\rR\x05limit\"\xed\x01\n" +
+	"\x12DrainedAgentEvents\x12#\n" +
+	"\rnext_sequence\x18\x01 \x01(\x04R\fnextSequence\x12\x19\n" +
+	"\bhas_more\x18\x02 \x01(\bR\ahasMore\x12-\n" +
+	"\x06events\x18\n" +
+	" \x03(\v2\x15.armadra.v1.HookEventR\x06events\x122\n" +
+	"\tapprovals\x18\v \x03(\v2\x14.armadra.v1.ApprovalR\tapprovals\x124\n" +
+	"\n" +
+	"deliveries\x18\f \x03(\v2\x14.armadra.v1.DeliveryR\n" +
+	"deliveries\"\xd4\x01\n" +
+	"\x1cDeliverApprovalAnswerRequest\x12\x1f\n" +
+	"\vapproval_id\x18\x01 \x01(\tR\n" +
+	"approvalId\x12\x17\n" +
+	"\anode_id\x18\x02 \x01(\tR\x06nodeId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x03 \x01(\tR\tsessionId\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x04 \x01(\x04R\n" +
+	"generation\x12\x1a\n" +
+	"\bdecision\x18\n" +
+	" \x01(\tR\bdecision\x12\x1f\n" +
+	"\vanswered_by\x18\v \x01(\tR\n" +
+	"answeredBy\"\x96\x02\n" +
+	"\x15DeliverHandoffRequest\x12\x1d\n" +
+	"\n" +
+	"handoff_id\x18\x01 \x01(\tR\thandoffId\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12$\n" +
+	"\x0esource_node_id\x18\x03 \x01(\tR\fsourceNodeId\x12$\n" +
+	"\x0etarget_node_id\x18\x04 \x01(\tR\ftargetNodeId\x122\n" +
+	"\x06target\x18\x05 \x01(\v2\x1a.armadra.v1.SessionAddressR\x06target\x12\x16\n" +
+	"\x06bundle\x18\n" +
+	" \x01(\fR\x06bundle\x12#\n" +
+	"\rbundle_sha256\x18\v \x01(\fR\fbundleSha256\"\xc9\x01\n" +
+	"\x15DeliverMessageRequest\x12\x19\n" +
+	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12$\n" +
+	"\x0esource_node_id\x18\x03 \x01(\tR\fsourceNodeId\x12$\n" +
+	"\x0etarget_node_id\x18\x04 \x01(\tR\ftargetNodeId\x12\x12\n" +
+	"\x04body\x18\n" +
+	" \x01(\tR\x04body\x12\x12\n" +
+	"\x04mode\x18\v \x01(\tR\x04mode\"\xf1\x01\n" +
+	"\x14AgentDeliveryReceipt\x12\x19\n" +
+	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x18\n" +
+	"\areceipt\x18\n" +
+	" \x01(\tR\areceipt\x12\x1d\n" +
+	"\n" +
+	"body_chars\x18\v \x01(\rR\tbodyChars\x125\n" +
+	"\aoutcome\x18\x1e \x01(\x0e2\x1b.armadra.v1.DeliveryOutcomeR\aoutcome\x12\x1f\n" +
+	"\vreason_code\x18' \x01(\tR\n" +
+	"reasonCode\x12-\n" +
+	"\x13observed_at_unix_ms\x18( \x01(\x03R\x10observedAtUnixMs\"\x93\x01\n" +
+	"\x15ReadTranscriptRequest\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12%\n" +
+	"\x0etranscript_ref\x18\n" +
+	" \x01(\fR\rtranscriptRef\x12\x1b\n" +
+	"\tmax_bytes\x18\v \x01(\rR\bmaxBytes\"\xba\x01\n" +
+	"\x11TranscriptExcerpt\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x18\n" +
+	"\acontent\x18\n" +
+	" \x01(\fR\acontent\x12%\n" +
+	"\x0econtent_sha256\x18\v \x01(\fR\rcontentSha256\x12\x1c\n" +
+	"\ttruncated\x18\f \x01(\bR\ttruncated\x12-\n" +
+	"\x13observed_at_unix_ms\x18( \x01(\x03R\x10observedAtUnixMs\"i\n" +
+	"\x19CaptureAgentScreenRequest\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x14\n" +
+	"\x05lines\x18\n" +
+	" \x01(\rR\x05lines\"B\n" +
+	"\x13CapturedAgentScreen\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x12\n" +
+	"\x04data\x18\n" +
+	" \x01(\tR\x04data\"\xd7\x05\n" +
+	"\x12AgentWorkerRequest\x12F\n" +
+	"\vlist_agents\x18d \x01(\v2#.armadra.v1.ListWorkerAgentsRequestH\x00R\n" +
+	"listAgents\x12H\n" +
+	"\fdrain_events\x18e \x01(\v2#.armadra.v1.DrainAgentEventsRequestH\x00R\vdrainEvents\x12U\n" +
+	"\x10deliver_approval\x18f \x01(\v2(.armadra.v1.DeliverApprovalAnswerRequestH\x00R\x0fdeliverApproval\x12L\n" +
+	"\x0fdeliver_handoff\x18g \x01(\v2!.armadra.v1.DeliverHandoffRequestH\x00R\x0edeliverHandoff\x12L\n" +
+	"\x0fdeliver_message\x18h \x01(\v2!.armadra.v1.DeliverMessageRequestH\x00R\x0edeliverMessage\x12L\n" +
+	"\x0fread_transcript\x18i \x01(\v2!.armadra.v1.ReadTranscriptRequestH\x00R\x0ereadTranscript\x12N\n" +
+	"\x0ecapture_screen\x18j \x01(\v2%.armadra.v1.CaptureAgentScreenRequestH\x00R\rcaptureScreen\x12F\n" +
+	"\rinstall_hooks\x18k \x01(\v2\x1f.armadra.v1.InstallHooksRequestH\x00R\finstallHooks\x12L\n" +
+	"\x0funinstall_hooks\x18l \x01(\v2!.armadra.v1.UninstallHooksRequestH\x00R\x0euninstallHooksB\b\n" +
+	"\x06action\"\x84\x03\n" +
+	"\x13AgentWorkerResponse\x127\n" +
+	"\x06agents\x18d \x01(\v2\x1d.armadra.v1.WorkerAgentStatesH\x00R\x06agents\x128\n" +
+	"\x06events\x18e \x01(\v2\x1e.armadra.v1.DrainedAgentEventsH\x00R\x06events\x12>\n" +
+	"\bdelivery\x18f \x01(\v2 .armadra.v1.AgentDeliveryReceiptH\x00R\bdelivery\x12?\n" +
+	"\n" +
+	"transcript\x18i \x01(\v2\x1d.armadra.v1.TranscriptExcerptH\x00R\n" +
+	"transcript\x129\n" +
+	"\x06screen\x18j \x01(\v2\x1f.armadra.v1.CapturedAgentScreenH\x00R\x06screen\x124\n" +
+	"\x05hooks\x18k \x01(\v2\x1c.armadra.v1.HookInstallStateH\x00R\x05hooksB\b\n" +
 	"\x06result*\xd4\x01\n" +
 	"\x10AgentTargetState\x12\"\n" +
 	"\x1eAGENT_TARGET_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
@@ -957,7 +5879,47 @@ const file_armadra_v1_agent_proto_rawDesc = "" +
 	"\x1cAGENT_PROMPT_PHASE_SUBMITTED\x10\x02\x12 \n" +
 	"\x1cAGENT_PROMPT_PHASE_COMPLETED\x10\x03\x12 \n" +
 	"\x1cAGENT_PROMPT_PHASE_ABANDONED\x10\x04\x12\x1e\n" +
-	"\x1aAGENT_PROMPT_PHASE_UNKNOWN\x10\x05B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	"\x1aAGENT_PROMPT_PHASE_UNKNOWN\x10\x05*\xa0\x01\n" +
+	"\n" +
+	"AgentState\x12\x1b\n" +
+	"\x17AGENT_STATE_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10AGENT_STATE_IDLE\x10\x01\x12\x17\n" +
+	"\x13AGENT_STATE_WORKING\x10\x02\x12\x17\n" +
+	"\x13AGENT_STATE_WAITING\x10\x03\x12\x17\n" +
+	"\x13AGENT_STATE_BLOCKED\x10\x04\x12\x14\n" +
+	"\x10AGENT_STATE_DONE\x10\x05*\xf3\x01\n" +
+	"\rHookEventKind\x12\x1f\n" +
+	"\x1bHOOK_EVENT_KIND_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dHOOK_EVENT_KIND_SESSION_START\x10\x01\x12\x1f\n" +
+	"\x1bHOOK_EVENT_KIND_USER_PROMPT\x10\x02\x12\x1c\n" +
+	"\x18HOOK_EVENT_KIND_TURN_END\x10\x03\x12 \n" +
+	"\x1cHOOK_EVENT_KIND_NOTIFICATION\x10\x04\x12\x1c\n" +
+	"\x18HOOK_EVENT_KIND_APPROVAL\x10\x05\x12\x1f\n" +
+	"\x1bHOOK_EVENT_KIND_SESSION_END\x10\x06*\x84\x01\n" +
+	"\rApprovalState\x12\x1e\n" +
+	"\x1aAPPROVAL_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16APPROVAL_STATE_PENDING\x10\x01\x12\x1b\n" +
+	"\x17APPROVAL_STATE_ANSWERED\x10\x02\x12\x1a\n" +
+	"\x16APPROVAL_STATE_EXPIRED\x10\x03*\x93\x01\n" +
+	"\x0fDeliveryOutcome\x12 \n" +
+	"\x1cDELIVERY_OUTCOME_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aDELIVERY_OUTCOME_SUBMITTED\x10\x01\x12 \n" +
+	"\x1cDELIVERY_OUTCOME_NOT_WRITTEN\x10\x02\x12\x1c\n" +
+	"\x18DELIVERY_OUTCOME_UNKNOWN\x10\x03*\x99\x02\n" +
+	"\fHandoffState\x12\x1d\n" +
+	"\x19HANDOFF_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16HANDOFF_STATE_PREPARED\x10\x01\x12\x18\n" +
+	"\x14HANDOFF_STATE_QUEUED\x10\x02\x12\x1d\n" +
+	"\x19HANDOFF_STATE_DISPATCHING\x10\x03\x12\x1b\n" +
+	"\x17HANDOFF_STATE_DELIVERED\x10\x04\x12\x1e\n" +
+	"\x1aHANDOFF_STATE_ACKNOWLEDGED\x10\x05\x12\x1b\n" +
+	"\x17HANDOFF_STATE_CANCELLED\x10\x06\x12\x18\n" +
+	"\x14HANDOFF_STATE_FAILED\x10\a\x12!\n" +
+	"\x1dHANDOFF_STATE_UNKNOWN_OUTCOME\x10\b*\x88\x01\n" +
+	"\x14ContextLinkDirection\x12&\n" +
+	"\"CONTEXT_LINK_DIRECTION_UNSPECIFIED\x10\x00\x12#\n" +
+	"\x1fCONTEXT_LINK_DIRECTION_OUTGOING\x10\x01\x12#\n" +
+	"\x1fCONTEXT_LINK_DIRECTION_INCOMING\x10\x02B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_agent_proto_rawDescOnce sync.Once
@@ -971,36 +5933,164 @@ func file_armadra_v1_agent_proto_rawDescGZIP() []byte {
 	return file_armadra_v1_agent_proto_rawDescData
 }
 
-var file_armadra_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_armadra_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_armadra_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
+var file_armadra_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 60)
 var file_armadra_v1_agent_proto_goTypes = []any{
-	(AgentTargetState)(0),            // 0: armadra.v1.AgentTargetState
-	(AgentPromptPhase)(0),            // 1: armadra.v1.AgentPromptPhase
-	(*AgentLaunchSpec)(nil),          // 2: armadra.v1.AgentLaunchSpec
-	(*AgentTargetRequest)(nil),       // 3: armadra.v1.AgentTargetRequest
-	(*AgentTargetStatus)(nil),        // 4: armadra.v1.AgentTargetStatus
-	(*AgentPromptRequest)(nil),       // 5: armadra.v1.AgentPromptRequest
-	(*AgentPromptLookupRequest)(nil), // 6: armadra.v1.AgentPromptLookupRequest
-	(*AgentPromptReceipt)(nil),       // 7: armadra.v1.AgentPromptReceipt
-	(*AgentRequest)(nil),             // 8: armadra.v1.AgentRequest
-	(*AgentResponse)(nil),            // 9: armadra.v1.AgentResponse
+	(AgentTargetState)(0),                // 0: armadra.v1.AgentTargetState
+	(AgentPromptPhase)(0),                // 1: armadra.v1.AgentPromptPhase
+	(AgentState)(0),                      // 2: armadra.v1.AgentState
+	(HookEventKind)(0),                   // 3: armadra.v1.HookEventKind
+	(ApprovalState)(0),                   // 4: armadra.v1.ApprovalState
+	(DeliveryOutcome)(0),                 // 5: armadra.v1.DeliveryOutcome
+	(HandoffState)(0),                    // 6: armadra.v1.HandoffState
+	(ContextLinkDirection)(0),            // 7: armadra.v1.ContextLinkDirection
+	(*AgentLaunchSpec)(nil),              // 8: armadra.v1.AgentLaunchSpec
+	(*AgentTargetRequest)(nil),           // 9: armadra.v1.AgentTargetRequest
+	(*AgentTargetStatus)(nil),            // 10: armadra.v1.AgentTargetStatus
+	(*AgentPromptRequest)(nil),           // 11: armadra.v1.AgentPromptRequest
+	(*AgentPromptLookupRequest)(nil),     // 12: armadra.v1.AgentPromptLookupRequest
+	(*AgentPromptReceipt)(nil),           // 13: armadra.v1.AgentPromptReceipt
+	(*AgentRequest)(nil),                 // 14: armadra.v1.AgentRequest
+	(*AgentResponse)(nil),                // 15: armadra.v1.AgentResponse
+	(*AgentStatus)(nil),                  // 16: armadra.v1.AgentStatus
+	(*HookEvent)(nil),                    // 17: armadra.v1.HookEvent
+	(*Approval)(nil),                     // 18: armadra.v1.Approval
+	(*MailboxMessage)(nil),               // 19: armadra.v1.MailboxMessage
+	(*Delivery)(nil),                     // 20: armadra.v1.Delivery
+	(*Handoff)(nil),                      // 21: armadra.v1.Handoff
+	(*ContextLink)(nil),                  // 22: armadra.v1.ContextLink
+	(*ContextLinks)(nil),                 // 23: armadra.v1.ContextLinks
+	(*ListAgentStatusRequest)(nil),       // 24: armadra.v1.ListAgentStatusRequest
+	(*ListAgentStatusResponse)(nil),      // 25: armadra.v1.ListAgentStatusResponse
+	(*MarkAgentReadRequest)(nil),         // 26: armadra.v1.MarkAgentReadRequest
+	(*MarkAgentReadResponse)(nil),        // 27: armadra.v1.MarkAgentReadResponse
+	(*ListApprovalsRequest)(nil),         // 28: armadra.v1.ListApprovalsRequest
+	(*ListApprovalsResponse)(nil),        // 29: armadra.v1.ListApprovalsResponse
+	(*AnswerApprovalRequest)(nil),        // 30: armadra.v1.AnswerApprovalRequest
+	(*AnswerApprovalResponse)(nil),       // 31: armadra.v1.AnswerApprovalResponse
+	(*ListDeliveriesRequest)(nil),        // 32: armadra.v1.ListDeliveriesRequest
+	(*ListDeliveriesResponse)(nil),       // 33: armadra.v1.ListDeliveriesResponse
+	(*ListMailboxRequest)(nil),           // 34: armadra.v1.ListMailboxRequest
+	(*ListMailboxResponse)(nil),          // 35: armadra.v1.ListMailboxResponse
+	(*PrepareHandoffRequest)(nil),        // 36: armadra.v1.PrepareHandoffRequest
+	(*PrepareHandoffResponse)(nil),       // 37: armadra.v1.PrepareHandoffResponse
+	(*AcceptHandoffRequest)(nil),         // 38: armadra.v1.AcceptHandoffRequest
+	(*AcceptHandoffResponse)(nil),        // 39: armadra.v1.AcceptHandoffResponse
+	(*CancelHandoffRequest)(nil),         // 40: armadra.v1.CancelHandoffRequest
+	(*CancelHandoffResponse)(nil),        // 41: armadra.v1.CancelHandoffResponse
+	(*ListHandoffsRequest)(nil),          // 42: armadra.v1.ListHandoffsRequest
+	(*ListHandoffsResponse)(nil),         // 43: armadra.v1.ListHandoffsResponse
+	(*GetHandoffRequest)(nil),            // 44: armadra.v1.GetHandoffRequest
+	(*GetHandoffResponse)(nil),           // 45: armadra.v1.GetHandoffResponse
+	(*ListContextLinksRequest)(nil),      // 46: armadra.v1.ListContextLinksRequest
+	(*ListContextLinksResponse)(nil),     // 47: armadra.v1.ListContextLinksResponse
+	(*InstallHooksRequest)(nil),          // 48: armadra.v1.InstallHooksRequest
+	(*HookInstallState)(nil),             // 49: armadra.v1.HookInstallState
+	(*InstallHooksResponse)(nil),         // 50: armadra.v1.InstallHooksResponse
+	(*UninstallHooksRequest)(nil),        // 51: armadra.v1.UninstallHooksRequest
+	(*UninstallHooksResponse)(nil),       // 52: armadra.v1.UninstallHooksResponse
+	(*ListWorkerAgentsRequest)(nil),      // 53: armadra.v1.ListWorkerAgentsRequest
+	(*WorkerAgentState)(nil),             // 54: armadra.v1.WorkerAgentState
+	(*WorkerAgentStates)(nil),            // 55: armadra.v1.WorkerAgentStates
+	(*DrainAgentEventsRequest)(nil),      // 56: armadra.v1.DrainAgentEventsRequest
+	(*DrainedAgentEvents)(nil),           // 57: armadra.v1.DrainedAgentEvents
+	(*DeliverApprovalAnswerRequest)(nil), // 58: armadra.v1.DeliverApprovalAnswerRequest
+	(*DeliverHandoffRequest)(nil),        // 59: armadra.v1.DeliverHandoffRequest
+	(*DeliverMessageRequest)(nil),        // 60: armadra.v1.DeliverMessageRequest
+	(*AgentDeliveryReceipt)(nil),         // 61: armadra.v1.AgentDeliveryReceipt
+	(*ReadTranscriptRequest)(nil),        // 62: armadra.v1.ReadTranscriptRequest
+	(*TranscriptExcerpt)(nil),            // 63: armadra.v1.TranscriptExcerpt
+	(*CaptureAgentScreenRequest)(nil),    // 64: armadra.v1.CaptureAgentScreenRequest
+	(*CapturedAgentScreen)(nil),          // 65: armadra.v1.CapturedAgentScreen
+	(*AgentWorkerRequest)(nil),           // 66: armadra.v1.AgentWorkerRequest
+	(*AgentWorkerResponse)(nil),          // 67: armadra.v1.AgentWorkerResponse
+	(*SessionAddress)(nil),               // 68: armadra.v1.SessionAddress
+	(*CommandMeta)(nil),                  // 69: armadra.v1.CommandMeta
+	(*CanvasOperationReceipt)(nil),       // 70: armadra.v1.CanvasOperationReceipt
 }
 var file_armadra_v1_agent_proto_depIdxs = []int32{
-	2,  // 0: armadra.v1.AgentTargetRequest.expected:type_name -> armadra.v1.AgentLaunchSpec
-	2,  // 1: armadra.v1.AgentTargetRequest.cold_start:type_name -> armadra.v1.AgentLaunchSpec
+	8,  // 0: armadra.v1.AgentTargetRequest.expected:type_name -> armadra.v1.AgentLaunchSpec
+	8,  // 1: armadra.v1.AgentTargetRequest.cold_start:type_name -> armadra.v1.AgentLaunchSpec
 	0,  // 2: armadra.v1.AgentTargetStatus.state:type_name -> armadra.v1.AgentTargetState
-	2,  // 3: armadra.v1.AgentPromptRequest.expected:type_name -> armadra.v1.AgentLaunchSpec
+	8,  // 3: armadra.v1.AgentPromptRequest.expected:type_name -> armadra.v1.AgentLaunchSpec
 	1,  // 4: armadra.v1.AgentPromptReceipt.phase:type_name -> armadra.v1.AgentPromptPhase
-	3,  // 5: armadra.v1.AgentRequest.target:type_name -> armadra.v1.AgentTargetRequest
-	5,  // 6: armadra.v1.AgentRequest.prompt:type_name -> armadra.v1.AgentPromptRequest
-	6,  // 7: armadra.v1.AgentRequest.lookup:type_name -> armadra.v1.AgentPromptLookupRequest
-	4,  // 8: armadra.v1.AgentResponse.target:type_name -> armadra.v1.AgentTargetStatus
-	7,  // 9: armadra.v1.AgentResponse.receipt:type_name -> armadra.v1.AgentPromptReceipt
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	9,  // 5: armadra.v1.AgentRequest.target:type_name -> armadra.v1.AgentTargetRequest
+	11, // 6: armadra.v1.AgentRequest.prompt:type_name -> armadra.v1.AgentPromptRequest
+	12, // 7: armadra.v1.AgentRequest.lookup:type_name -> armadra.v1.AgentPromptLookupRequest
+	10, // 8: armadra.v1.AgentResponse.target:type_name -> armadra.v1.AgentTargetStatus
+	13, // 9: armadra.v1.AgentResponse.receipt:type_name -> armadra.v1.AgentPromptReceipt
+	2,  // 10: armadra.v1.AgentStatus.state:type_name -> armadra.v1.AgentState
+	3,  // 11: armadra.v1.HookEvent.kind:type_name -> armadra.v1.HookEventKind
+	4,  // 12: armadra.v1.Approval.state:type_name -> armadra.v1.ApprovalState
+	5,  // 13: armadra.v1.Delivery.outcome:type_name -> armadra.v1.DeliveryOutcome
+	68, // 14: armadra.v1.Handoff.source:type_name -> armadra.v1.SessionAddress
+	68, // 15: armadra.v1.Handoff.target:type_name -> armadra.v1.SessionAddress
+	6,  // 16: armadra.v1.Handoff.state:type_name -> armadra.v1.HandoffState
+	7,  // 17: armadra.v1.ContextLink.direction:type_name -> armadra.v1.ContextLinkDirection
+	22, // 18: armadra.v1.ContextLinks.links:type_name -> armadra.v1.ContextLink
+	69, // 19: armadra.v1.ListAgentStatusRequest.meta:type_name -> armadra.v1.CommandMeta
+	16, // 20: armadra.v1.ListAgentStatusResponse.statuses:type_name -> armadra.v1.AgentStatus
+	69, // 21: armadra.v1.MarkAgentReadRequest.meta:type_name -> armadra.v1.CommandMeta
+	16, // 22: armadra.v1.MarkAgentReadResponse.status:type_name -> armadra.v1.AgentStatus
+	70, // 23: armadra.v1.MarkAgentReadResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
+	69, // 24: armadra.v1.ListApprovalsRequest.meta:type_name -> armadra.v1.CommandMeta
+	18, // 25: armadra.v1.ListApprovalsResponse.approvals:type_name -> armadra.v1.Approval
+	69, // 26: armadra.v1.AnswerApprovalRequest.meta:type_name -> armadra.v1.CommandMeta
+	18, // 27: armadra.v1.AnswerApprovalResponse.approval:type_name -> armadra.v1.Approval
+	70, // 28: armadra.v1.AnswerApprovalResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
+	69, // 29: armadra.v1.ListDeliveriesRequest.meta:type_name -> armadra.v1.CommandMeta
+	20, // 30: armadra.v1.ListDeliveriesResponse.deliveries:type_name -> armadra.v1.Delivery
+	69, // 31: armadra.v1.ListMailboxRequest.meta:type_name -> armadra.v1.CommandMeta
+	19, // 32: armadra.v1.ListMailboxResponse.messages:type_name -> armadra.v1.MailboxMessage
+	69, // 33: armadra.v1.PrepareHandoffRequest.meta:type_name -> armadra.v1.CommandMeta
+	68, // 34: armadra.v1.PrepareHandoffRequest.source:type_name -> armadra.v1.SessionAddress
+	68, // 35: armadra.v1.PrepareHandoffRequest.target:type_name -> armadra.v1.SessionAddress
+	21, // 36: armadra.v1.PrepareHandoffResponse.handoff:type_name -> armadra.v1.Handoff
+	70, // 37: armadra.v1.PrepareHandoffResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
+	69, // 38: armadra.v1.AcceptHandoffRequest.meta:type_name -> armadra.v1.CommandMeta
+	21, // 39: armadra.v1.AcceptHandoffResponse.handoff:type_name -> armadra.v1.Handoff
+	70, // 40: armadra.v1.AcceptHandoffResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
+	69, // 41: armadra.v1.CancelHandoffRequest.meta:type_name -> armadra.v1.CommandMeta
+	21, // 42: armadra.v1.CancelHandoffResponse.handoff:type_name -> armadra.v1.Handoff
+	70, // 43: armadra.v1.CancelHandoffResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
+	69, // 44: armadra.v1.ListHandoffsRequest.meta:type_name -> armadra.v1.CommandMeta
+	21, // 45: armadra.v1.ListHandoffsResponse.handoffs:type_name -> armadra.v1.Handoff
+	69, // 46: armadra.v1.GetHandoffRequest.meta:type_name -> armadra.v1.CommandMeta
+	21, // 47: armadra.v1.GetHandoffResponse.handoff:type_name -> armadra.v1.Handoff
+	69, // 48: armadra.v1.ListContextLinksRequest.meta:type_name -> armadra.v1.CommandMeta
+	23, // 49: armadra.v1.ListContextLinksResponse.links:type_name -> armadra.v1.ContextLinks
+	69, // 50: armadra.v1.InstallHooksRequest.meta:type_name -> armadra.v1.CommandMeta
+	49, // 51: armadra.v1.InstallHooksResponse.state:type_name -> armadra.v1.HookInstallState
+	69, // 52: armadra.v1.UninstallHooksRequest.meta:type_name -> armadra.v1.CommandMeta
+	49, // 53: armadra.v1.UninstallHooksResponse.state:type_name -> armadra.v1.HookInstallState
+	2,  // 54: armadra.v1.WorkerAgentState.state:type_name -> armadra.v1.AgentState
+	54, // 55: armadra.v1.WorkerAgentStates.agents:type_name -> armadra.v1.WorkerAgentState
+	18, // 56: armadra.v1.WorkerAgentStates.approvals:type_name -> armadra.v1.Approval
+	17, // 57: armadra.v1.DrainedAgentEvents.events:type_name -> armadra.v1.HookEvent
+	18, // 58: armadra.v1.DrainedAgentEvents.approvals:type_name -> armadra.v1.Approval
+	20, // 59: armadra.v1.DrainedAgentEvents.deliveries:type_name -> armadra.v1.Delivery
+	68, // 60: armadra.v1.DeliverHandoffRequest.target:type_name -> armadra.v1.SessionAddress
+	5,  // 61: armadra.v1.AgentDeliveryReceipt.outcome:type_name -> armadra.v1.DeliveryOutcome
+	53, // 62: armadra.v1.AgentWorkerRequest.list_agents:type_name -> armadra.v1.ListWorkerAgentsRequest
+	56, // 63: armadra.v1.AgentWorkerRequest.drain_events:type_name -> armadra.v1.DrainAgentEventsRequest
+	58, // 64: armadra.v1.AgentWorkerRequest.deliver_approval:type_name -> armadra.v1.DeliverApprovalAnswerRequest
+	59, // 65: armadra.v1.AgentWorkerRequest.deliver_handoff:type_name -> armadra.v1.DeliverHandoffRequest
+	60, // 66: armadra.v1.AgentWorkerRequest.deliver_message:type_name -> armadra.v1.DeliverMessageRequest
+	62, // 67: armadra.v1.AgentWorkerRequest.read_transcript:type_name -> armadra.v1.ReadTranscriptRequest
+	64, // 68: armadra.v1.AgentWorkerRequest.capture_screen:type_name -> armadra.v1.CaptureAgentScreenRequest
+	48, // 69: armadra.v1.AgentWorkerRequest.install_hooks:type_name -> armadra.v1.InstallHooksRequest
+	51, // 70: armadra.v1.AgentWorkerRequest.uninstall_hooks:type_name -> armadra.v1.UninstallHooksRequest
+	55, // 71: armadra.v1.AgentWorkerResponse.agents:type_name -> armadra.v1.WorkerAgentStates
+	57, // 72: armadra.v1.AgentWorkerResponse.events:type_name -> armadra.v1.DrainedAgentEvents
+	61, // 73: armadra.v1.AgentWorkerResponse.delivery:type_name -> armadra.v1.AgentDeliveryReceipt
+	63, // 74: armadra.v1.AgentWorkerResponse.transcript:type_name -> armadra.v1.TranscriptExcerpt
+	65, // 75: armadra.v1.AgentWorkerResponse.screen:type_name -> armadra.v1.CapturedAgentScreen
+	49, // 76: armadra.v1.AgentWorkerResponse.hooks:type_name -> armadra.v1.HookInstallState
+	77, // [77:77] is the sub-list for method output_type
+	77, // [77:77] is the sub-list for method input_type
+	77, // [77:77] is the sub-list for extension type_name
+	77, // [77:77] is the sub-list for extension extendee
+	0,  // [0:77] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_agent_proto_init() }
@@ -1008,6 +6098,8 @@ func file_armadra_v1_agent_proto_init() {
 	if File_armadra_v1_agent_proto != nil {
 		return
 	}
+	file_armadra_v1_canvas_proto_init()
+	file_armadra_v1_common_proto_init()
 	file_armadra_v1_agent_proto_msgTypes[6].OneofWrappers = []any{
 		(*AgentRequest_Target)(nil),
 		(*AgentRequest_Prompt)(nil),
@@ -1017,13 +6109,34 @@ func file_armadra_v1_agent_proto_init() {
 		(*AgentResponse_Target)(nil),
 		(*AgentResponse_Receipt)(nil),
 	}
+	file_armadra_v1_agent_proto_msgTypes[8].OneofWrappers = []any{}
+	file_armadra_v1_agent_proto_msgTypes[46].OneofWrappers = []any{}
+	file_armadra_v1_agent_proto_msgTypes[58].OneofWrappers = []any{
+		(*AgentWorkerRequest_ListAgents)(nil),
+		(*AgentWorkerRequest_DrainEvents)(nil),
+		(*AgentWorkerRequest_DeliverApproval)(nil),
+		(*AgentWorkerRequest_DeliverHandoff)(nil),
+		(*AgentWorkerRequest_DeliverMessage)(nil),
+		(*AgentWorkerRequest_ReadTranscript)(nil),
+		(*AgentWorkerRequest_CaptureScreen)(nil),
+		(*AgentWorkerRequest_InstallHooks)(nil),
+		(*AgentWorkerRequest_UninstallHooks)(nil),
+	}
+	file_armadra_v1_agent_proto_msgTypes[59].OneofWrappers = []any{
+		(*AgentWorkerResponse_Agents)(nil),
+		(*AgentWorkerResponse_Events)(nil),
+		(*AgentWorkerResponse_Delivery)(nil),
+		(*AgentWorkerResponse_Transcript)(nil),
+		(*AgentWorkerResponse_Screen)(nil),
+		(*AgentWorkerResponse_Hooks)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_agent_proto_rawDesc), len(file_armadra_v1_agent_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   8,
+			NumEnums:      8,
+			NumMessages:   60,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

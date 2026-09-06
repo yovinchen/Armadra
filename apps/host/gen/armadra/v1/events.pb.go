@@ -258,6 +258,13 @@ type EventEnvelope struct {
 	//	*EventEnvelope_FilesystemRoot
 	//	*EventEnvelope_Session
 	//	*EventEnvelope_SessionRun
+	//	*EventEnvelope_AgentStatus
+	//	*EventEnvelope_HookEvent
+	//	*EventEnvelope_Approval
+	//	*EventEnvelope_MailboxMessage
+	//	*EventEnvelope_Delivery
+	//	*EventEnvelope_Handoff
+	//	*EventEnvelope_ContextLinks
 	//	*EventEnvelope_GitOperation
 	//	*EventEnvelope_GitRepositoryState
 	//	*EventEnvelope_GitCloneJob
@@ -477,6 +484,69 @@ func (x *EventEnvelope) GetSessionRun() *SessionRun {
 	return nil
 }
 
+func (x *EventEnvelope) GetAgentStatus() *AgentStatus {
+	if x != nil {
+		if x, ok := x.Entity.(*EventEnvelope_AgentStatus); ok {
+			return x.AgentStatus
+		}
+	}
+	return nil
+}
+
+func (x *EventEnvelope) GetHookEvent() *HookEvent {
+	if x != nil {
+		if x, ok := x.Entity.(*EventEnvelope_HookEvent); ok {
+			return x.HookEvent
+		}
+	}
+	return nil
+}
+
+func (x *EventEnvelope) GetApproval() *Approval {
+	if x != nil {
+		if x, ok := x.Entity.(*EventEnvelope_Approval); ok {
+			return x.Approval
+		}
+	}
+	return nil
+}
+
+func (x *EventEnvelope) GetMailboxMessage() *MailboxMessage {
+	if x != nil {
+		if x, ok := x.Entity.(*EventEnvelope_MailboxMessage); ok {
+			return x.MailboxMessage
+		}
+	}
+	return nil
+}
+
+func (x *EventEnvelope) GetDelivery() *Delivery {
+	if x != nil {
+		if x, ok := x.Entity.(*EventEnvelope_Delivery); ok {
+			return x.Delivery
+		}
+	}
+	return nil
+}
+
+func (x *EventEnvelope) GetHandoff() *Handoff {
+	if x != nil {
+		if x, ok := x.Entity.(*EventEnvelope_Handoff); ok {
+			return x.Handoff
+		}
+	}
+	return nil
+}
+
+func (x *EventEnvelope) GetContextLinks() *ContextLinks {
+	if x != nil {
+		if x, ok := x.Entity.(*EventEnvelope_ContextLinks); ok {
+			return x.ContextLinks
+		}
+	}
+	return nil
+}
+
 func (x *EventEnvelope) GetGitOperation() *GitOperation {
 	if x != nil {
 		if x, ok := x.Entity.(*EventEnvelope_GitOperation); ok {
@@ -552,6 +622,44 @@ type EventEnvelope_SessionRun struct {
 	SessionRun *SessionRun `protobuf:"bytes,161,opt,name=session_run,json=sessionRun,proto3,oneof"`
 }
 
+type EventEnvelope_AgentStatus struct {
+	// The agent domain (§2.7). Seven members rather than one, because the
+	// seven change for seven different reasons and a client subscribes to the
+	// ones it draws: a board follows status, a node header follows approvals,
+	// an inbox follows mailbox messages, a handoff card follows handoffs. One
+	// "agent changed" kind would make every consumer decode a transcript
+	// reference to discover nothing it cared about moved.
+	//
+	// `hook_event` is here even though nothing renders it on its own: it is
+	// the evidence a status was reduced *from*, and a client that has to
+	// explain why a node says WAITING has nowhere else to look.
+	AgentStatus *AgentStatus `protobuf:"bytes,180,opt,name=agent_status,json=agentStatus,proto3,oneof"`
+}
+
+type EventEnvelope_HookEvent struct {
+	HookEvent *HookEvent `protobuf:"bytes,181,opt,name=hook_event,json=hookEvent,proto3,oneof"`
+}
+
+type EventEnvelope_Approval struct {
+	Approval *Approval `protobuf:"bytes,182,opt,name=approval,proto3,oneof"`
+}
+
+type EventEnvelope_MailboxMessage struct {
+	MailboxMessage *MailboxMessage `protobuf:"bytes,183,opt,name=mailbox_message,json=mailboxMessage,proto3,oneof"`
+}
+
+type EventEnvelope_Delivery struct {
+	Delivery *Delivery `protobuf:"bytes,184,opt,name=delivery,proto3,oneof"`
+}
+
+type EventEnvelope_Handoff struct {
+	Handoff *Handoff `protobuf:"bytes,185,opt,name=handoff,proto3,oneof"`
+}
+
+type EventEnvelope_ContextLinks struct {
+	ContextLinks *ContextLinks `protobuf:"bytes,186,opt,name=context_links,json=contextLinks,proto3,oneof"`
+}
+
 type EventEnvelope_GitOperation struct {
 	// The git domain (§2.8). An operation is the entry a client follows
 	// from queued to finished; the repository state is the cache it renders
@@ -587,6 +695,20 @@ func (*EventEnvelope_FilesystemRoot) isEventEnvelope_Entity() {}
 func (*EventEnvelope_Session) isEventEnvelope_Entity() {}
 
 func (*EventEnvelope_SessionRun) isEventEnvelope_Entity() {}
+
+func (*EventEnvelope_AgentStatus) isEventEnvelope_Entity() {}
+
+func (*EventEnvelope_HookEvent) isEventEnvelope_Entity() {}
+
+func (*EventEnvelope_Approval) isEventEnvelope_Entity() {}
+
+func (*EventEnvelope_MailboxMessage) isEventEnvelope_Entity() {}
+
+func (*EventEnvelope_Delivery) isEventEnvelope_Entity() {}
+
+func (*EventEnvelope_Handoff) isEventEnvelope_Entity() {}
+
+func (*EventEnvelope_ContextLinks) isEventEnvelope_Entity() {}
 
 func (*EventEnvelope_GitOperation) isEventEnvelope_Entity() {}
 
@@ -958,8 +1080,7 @@ var File_armadra_v1_events_proto protoreflect.FileDescriptor
 const file_armadra_v1_events_proto_rawDesc = "" +
 	"\n" +
 	"\x17armadra/v1/events.proto\x12\n" +
-	"armadra.v1\x1a\x17armadra/v1/canvas.proto\x1a\x17armadra/v1/common.proto\x1a\x19armadra/v1/settings.proto\x1a\x1barmadra/v1/filesystem.proto\x1a\x14armadra/v1/git.proto\x1a\x18armadra/v1/session.proto\"\xaf\n" +
-	"\n" +
+	"armadra.v1\x1a\x16armadra/v1/agent.proto\x1a\x17armadra/v1/canvas.proto\x1a\x17armadra/v1/common.proto\x1a\x19armadra/v1/settings.proto\x1a\x1barmadra/v1/filesystem.proto\x1a\x14armadra/v1/git.proto\x1a\x18armadra/v1/session.proto\"\xcd\r\n" +
 	"\rEventEnvelope\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12%\n" +
 	"\x0etransaction_id\x18\x02 \x01(\x04R\rtransactionId\x12!\n" +
@@ -986,7 +1107,15 @@ const file_armadra_v1_events_proto_rawDesc = "" +
 	"\x0ffilesystem_root\x18\x8c\x01 \x01(\v2\x19.armadra.v1.WorkspaceRootH\x00R\x0efilesystemRoot\x120\n" +
 	"\asession\x18\xa0\x01 \x01(\v2\x13.armadra.v1.SessionH\x00R\asession\x12:\n" +
 	"\vsession_run\x18\xa1\x01 \x01(\v2\x16.armadra.v1.SessionRunH\x00R\n" +
-	"sessionRun\x12@\n" +
+	"sessionRun\x12=\n" +
+	"\fagent_status\x18\xb4\x01 \x01(\v2\x17.armadra.v1.AgentStatusH\x00R\vagentStatus\x127\n" +
+	"\n" +
+	"hook_event\x18\xb5\x01 \x01(\v2\x15.armadra.v1.HookEventH\x00R\thookEvent\x123\n" +
+	"\bapproval\x18\xb6\x01 \x01(\v2\x14.armadra.v1.ApprovalH\x00R\bapproval\x12F\n" +
+	"\x0fmailbox_message\x18\xb7\x01 \x01(\v2\x1a.armadra.v1.MailboxMessageH\x00R\x0emailboxMessage\x123\n" +
+	"\bdelivery\x18\xb8\x01 \x01(\v2\x14.armadra.v1.DeliveryH\x00R\bdelivery\x120\n" +
+	"\ahandoff\x18\xb9\x01 \x01(\v2\x13.armadra.v1.HandoffH\x00R\ahandoff\x12@\n" +
+	"\rcontext_links\x18\xba\x01 \x01(\v2\x18.armadra.v1.ContextLinksH\x00R\fcontextLinks\x12@\n" +
 	"\rgit_operation\x18\xdc\x01 \x01(\v2\x18.armadra.v1.GitOperationH\x00R\fgitOperation\x12P\n" +
 	"\x14git_repository_state\x18\xdd\x01 \x01(\v2\x1b.armadra.v1.RepositoryStateH\x00R\x12gitRepositoryState\x12>\n" +
 	"\rgit_clone_job\x18\xde\x01 \x01(\v2\x17.armadra.v1.GitCloneJobH\x00R\vgitCloneJobB\b\n" +
@@ -1071,11 +1200,18 @@ var file_armadra_v1_events_proto_goTypes = []any{
 	(*WorkspaceRoot)(nil),          // 15: armadra.v1.WorkspaceRoot
 	(*Session)(nil),                // 16: armadra.v1.Session
 	(*SessionRun)(nil),             // 17: armadra.v1.SessionRun
-	(*GitOperation)(nil),           // 18: armadra.v1.GitOperation
-	(*RepositoryState)(nil),        // 19: armadra.v1.RepositoryState
-	(*GitCloneJob)(nil),            // 20: armadra.v1.GitCloneJob
-	(*StreamAck)(nil),              // 21: armadra.v1.StreamAck
-	(*ErrorResponse)(nil),          // 22: armadra.v1.ErrorResponse
+	(*AgentStatus)(nil),            // 18: armadra.v1.AgentStatus
+	(*HookEvent)(nil),              // 19: armadra.v1.HookEvent
+	(*Approval)(nil),               // 20: armadra.v1.Approval
+	(*MailboxMessage)(nil),         // 21: armadra.v1.MailboxMessage
+	(*Delivery)(nil),               // 22: armadra.v1.Delivery
+	(*Handoff)(nil),                // 23: armadra.v1.Handoff
+	(*ContextLinks)(nil),           // 24: armadra.v1.ContextLinks
+	(*GitOperation)(nil),           // 25: armadra.v1.GitOperation
+	(*RepositoryState)(nil),        // 26: armadra.v1.RepositoryState
+	(*GitCloneJob)(nil),            // 27: armadra.v1.GitCloneJob
+	(*StreamAck)(nil),              // 28: armadra.v1.StreamAck
+	(*ErrorResponse)(nil),          // 29: armadra.v1.ErrorResponse
 }
 var file_armadra_v1_events_proto_depIdxs = []int32{
 	0,  // 0: armadra.v1.EventEnvelope.domain:type_name -> armadra.v1.EventDomain
@@ -1090,23 +1226,30 @@ var file_armadra_v1_events_proto_depIdxs = []int32{
 	15, // 9: armadra.v1.EventEnvelope.filesystem_root:type_name -> armadra.v1.WorkspaceRoot
 	16, // 10: armadra.v1.EventEnvelope.session:type_name -> armadra.v1.Session
 	17, // 11: armadra.v1.EventEnvelope.session_run:type_name -> armadra.v1.SessionRun
-	18, // 12: armadra.v1.EventEnvelope.git_operation:type_name -> armadra.v1.GitOperation
-	19, // 13: armadra.v1.EventEnvelope.git_repository_state:type_name -> armadra.v1.RepositoryState
-	20, // 14: armadra.v1.EventEnvelope.git_clone_job:type_name -> armadra.v1.GitCloneJob
-	0,  // 15: armadra.v1.SubscribeEventsRequest.domains:type_name -> armadra.v1.EventDomain
-	1,  // 16: armadra.v1.SubscribeEventsRequest.min_priority:type_name -> armadra.v1.EventPriority
-	3,  // 17: armadra.v1.EventPage.events:type_name -> armadra.v1.EventEnvelope
-	2,  // 18: armadra.v1.EventPage.status:type_name -> armadra.v1.EventCursorStatus
-	4,  // 19: armadra.v1.EventStreamFrame.subscribe:type_name -> armadra.v1.SubscribeEventsRequest
-	5,  // 20: armadra.v1.EventStreamFrame.page:type_name -> armadra.v1.EventPage
-	6,  // 21: armadra.v1.EventStreamFrame.heartbeat:type_name -> armadra.v1.EventHeartbeat
-	21, // 22: armadra.v1.EventStreamFrame.ack:type_name -> armadra.v1.StreamAck
-	22, // 23: armadra.v1.EventStreamFrame.error:type_name -> armadra.v1.ErrorResponse
-	24, // [24:24] is the sub-list for method output_type
-	24, // [24:24] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	18, // 12: armadra.v1.EventEnvelope.agent_status:type_name -> armadra.v1.AgentStatus
+	19, // 13: armadra.v1.EventEnvelope.hook_event:type_name -> armadra.v1.HookEvent
+	20, // 14: armadra.v1.EventEnvelope.approval:type_name -> armadra.v1.Approval
+	21, // 15: armadra.v1.EventEnvelope.mailbox_message:type_name -> armadra.v1.MailboxMessage
+	22, // 16: armadra.v1.EventEnvelope.delivery:type_name -> armadra.v1.Delivery
+	23, // 17: armadra.v1.EventEnvelope.handoff:type_name -> armadra.v1.Handoff
+	24, // 18: armadra.v1.EventEnvelope.context_links:type_name -> armadra.v1.ContextLinks
+	25, // 19: armadra.v1.EventEnvelope.git_operation:type_name -> armadra.v1.GitOperation
+	26, // 20: armadra.v1.EventEnvelope.git_repository_state:type_name -> armadra.v1.RepositoryState
+	27, // 21: armadra.v1.EventEnvelope.git_clone_job:type_name -> armadra.v1.GitCloneJob
+	0,  // 22: armadra.v1.SubscribeEventsRequest.domains:type_name -> armadra.v1.EventDomain
+	1,  // 23: armadra.v1.SubscribeEventsRequest.min_priority:type_name -> armadra.v1.EventPriority
+	3,  // 24: armadra.v1.EventPage.events:type_name -> armadra.v1.EventEnvelope
+	2,  // 25: armadra.v1.EventPage.status:type_name -> armadra.v1.EventCursorStatus
+	4,  // 26: armadra.v1.EventStreamFrame.subscribe:type_name -> armadra.v1.SubscribeEventsRequest
+	5,  // 27: armadra.v1.EventStreamFrame.page:type_name -> armadra.v1.EventPage
+	6,  // 28: armadra.v1.EventStreamFrame.heartbeat:type_name -> armadra.v1.EventHeartbeat
+	28, // 29: armadra.v1.EventStreamFrame.ack:type_name -> armadra.v1.StreamAck
+	29, // 30: armadra.v1.EventStreamFrame.error:type_name -> armadra.v1.ErrorResponse
+	31, // [31:31] is the sub-list for method output_type
+	31, // [31:31] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_events_proto_init() }
@@ -1114,6 +1257,7 @@ func file_armadra_v1_events_proto_init() {
 	if File_armadra_v1_events_proto != nil {
 		return
 	}
+	file_armadra_v1_agent_proto_init()
 	file_armadra_v1_canvas_proto_init()
 	file_armadra_v1_common_proto_init()
 	file_armadra_v1_settings_proto_init()
@@ -1131,6 +1275,13 @@ func file_armadra_v1_events_proto_init() {
 		(*EventEnvelope_FilesystemRoot)(nil),
 		(*EventEnvelope_Session)(nil),
 		(*EventEnvelope_SessionRun)(nil),
+		(*EventEnvelope_AgentStatus)(nil),
+		(*EventEnvelope_HookEvent)(nil),
+		(*EventEnvelope_Approval)(nil),
+		(*EventEnvelope_MailboxMessage)(nil),
+		(*EventEnvelope_Delivery)(nil),
+		(*EventEnvelope_Handoff)(nil),
+		(*EventEnvelope_ContextLinks)(nil),
 		(*EventEnvelope_GitOperation)(nil),
 		(*EventEnvelope_GitRepositoryState)(nil),
 		(*EventEnvelope_GitCloneJob)(nil),

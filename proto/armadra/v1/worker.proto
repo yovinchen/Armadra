@@ -346,6 +346,12 @@ message WorkerRequest {
     // against, and the run commands — start, signal, reclaim, capture — that
     // the Host issues once it owns the intent but never the process.
     SessionWorkerRequest session = 27;
+    // The agent domain (§2.7, §2.9). It is named `agent_host` because 21 is
+    // already `agent`: that one writes a prompt into a PTY, this one carries
+    // the records the Host owns once the domain has switched. Two frames, two
+    // meanings, and renaming the released one to make room would break every
+    // Worker that already speaks it.
+    AgentWorkerRequest agent_host = 28;
     // The git domain (§2.8). 27 and 28 belong to the session and agent
     // domains, whose batches land independently, so this one is 29 rather
     // than the next free number: a frame renumbered at merge time would be a
@@ -383,6 +389,7 @@ message WorkerResponse {
     WorkerSettingsSnapshot settings = 25;
     FilesystemWorkerResponse filesystem = 26;
     SessionWorkerResponse session = 27;
+    AgentWorkerResponse agent_host = 28;
     GitWorkerResponse git = 29;
   }
 }

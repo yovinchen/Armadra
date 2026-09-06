@@ -83,6 +83,15 @@ const (
 	WorkerAgentUpcallKind_WORKER_AGENT_UPCALL_KIND_HOOK_TURN WorkerAgentUpcallKind = 1
 	// A CLI is blocked waiting for a permission answer.
 	WorkerAgentUpcallKind_WORKER_AGENT_UPCALL_KIND_APPROVAL_REQUESTED WorkerAgentUpcallKind = 2
+	// What became of one attempt to put something in front of an agent. It is a
+	// receipt, not a decision: whether SUBMITTED or UNKNOWN is the right reading
+	// is a fact about the execution host's input gate, which is why the outcome
+	// travels rather than being inferred here from the absence of an error.
+	WorkerAgentUpcallKind_WORKER_AGENT_UPCALL_KIND_DELIVERY_RECEIPT WorkerAgentUpcallKind = 3
+	// A node left a message for another node through the Hook's own verbs.
+	WorkerAgentUpcallKind_WORKER_AGENT_UPCALL_KIND_MAILBOX_POST WorkerAgentUpcallKind = 4
+	// A node acknowledged one it had been left.
+	WorkerAgentUpcallKind_WORKER_AGENT_UPCALL_KIND_MAILBOX_ACK WorkerAgentUpcallKind = 5
 )
 
 // Enum value maps for WorkerAgentUpcallKind.
@@ -91,11 +100,17 @@ var (
 		0: "WORKER_AGENT_UPCALL_KIND_UNSPECIFIED",
 		1: "WORKER_AGENT_UPCALL_KIND_HOOK_TURN",
 		2: "WORKER_AGENT_UPCALL_KIND_APPROVAL_REQUESTED",
+		3: "WORKER_AGENT_UPCALL_KIND_DELIVERY_RECEIPT",
+		4: "WORKER_AGENT_UPCALL_KIND_MAILBOX_POST",
+		5: "WORKER_AGENT_UPCALL_KIND_MAILBOX_ACK",
 	}
 	WorkerAgentUpcallKind_value = map[string]int32{
 		"WORKER_AGENT_UPCALL_KIND_UNSPECIFIED":        0,
 		"WORKER_AGENT_UPCALL_KIND_HOOK_TURN":          1,
 		"WORKER_AGENT_UPCALL_KIND_APPROVAL_REQUESTED": 2,
+		"WORKER_AGENT_UPCALL_KIND_DELIVERY_RECEIPT":   3,
+		"WORKER_AGENT_UPCALL_KIND_MAILBOX_POST":       4,
+		"WORKER_AGENT_UPCALL_KIND_MAILBOX_ACK":        5,
 	}
 )
 
@@ -520,7 +535,17 @@ type WorkerAgentUpcall struct {
 	WorkspaceId string                 `protobuf:"bytes,1,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
 	NodeId      string                 `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 	SessionId   string                 `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Payload     []byte                 `protobuf:"bytes,10,opt,name=payload,proto3" json:"payload,omitempty"`
+	// The generation the observation was made against, so a report about a pane
+	// that has since been replaced is visible as one rather than applied to the
+	// pane that replaced it (agent domain, §2.7).
+	Generation uint64 `protobuf:"varint,4,opt,name=generation,proto3" json:"generation,omitempty"`
+	// The identifier of whatever the report is about — an approval id, a trace
+	// id, a hook event id. It is what makes a replayed frame the same record
+	// rather than a second one; `(worker_instance_id, sequence)` deduplicates a
+	// frame, and this deduplicates the *thing* across Worker restarts, where the
+	// sequence window has been reset.
+	EntityId string `protobuf:"bytes,5,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
+	Payload  []byte `protobuf:"bytes,10,opt,name=payload,proto3" json:"payload,omitempty"`
 	// SHA-256 of `payload`, so a truncated or rewritten body is refused rather
 	// than stored as a shorter event.
 	PayloadSha256    []byte                `protobuf:"bytes,11,opt,name=payload_sha256,json=payloadSha256,proto3" json:"payload_sha256,omitempty"`
@@ -579,6 +604,20 @@ func (x *WorkerAgentUpcall) GetNodeId() string {
 func (x *WorkerAgentUpcall) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
+	}
+	return ""
+}
+
+func (x *WorkerAgentUpcall) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *WorkerAgentUpcall) GetEntityId() string {
+	if x != nil {
+		return x.EntityId
 	}
 	return ""
 }
@@ -877,12 +916,16 @@ const file_armadra_v1_worker_channel_proto_rawDesc = "" +
 	"\asession\x18\x8c\x01 \x01(\v2\x1f.armadra.v1.WorkerSessionUpcallH\x00R\asession\x126\n" +
 	"\x05agent\x18\xa0\x01 \x01(\v2\x1d.armadra.v1.WorkerAgentUpcallH\x00R\x05agent\x120\n" +
 	"\x03git\x18\xb4\x01 \x01(\v2\x1b.armadra.v1.WorkerGitUpcallH\x00R\x03gitB\a\n" +
-	"\x05event\"\xdd\x02\n" +
+	"\x05event\"\x9a\x03\n" +
 	"\x11WorkerAgentUpcall\x12!\n" +
 	"\fworkspace_id\x18\x01 \x01(\tR\vworkspaceId\x12\x17\n" +
 	"\anode_id\x18\x02 \x01(\tR\x06nodeId\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x03 \x01(\tR\tsessionId\x12\x18\n" +
+	"session_id\x18\x03 \x01(\tR\tsessionId\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x04 \x01(\x04R\n" +
+	"generation\x12\x1b\n" +
+	"\tentity_id\x18\x05 \x01(\tR\bentityId\x12\x18\n" +
 	"\apayload\x18\n" +
 	" \x01(\fR\apayload\x12%\n" +
 	"\x0epayload_sha256\x18\v \x01(\fR\rpayloadSha256\x12%\n" +
@@ -921,11 +964,14 @@ const file_armadra_v1_worker_channel_proto_rawDesc = "" +
 	" WORKER_CHANNEL_STATE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dWORKER_CHANNEL_STATE_DISABLED\x10\x01\x12\x1e\n" +
 	"\x1aWORKER_CHANNEL_STATE_READY\x10\x02\x12\"\n" +
-	"\x1eWORKER_CHANNEL_STATE_REPLAYING\x10\x03*\x9a\x01\n" +
+	"\x1eWORKER_CHANNEL_STATE_REPLAYING\x10\x03*\x9e\x02\n" +
 	"\x15WorkerAgentUpcallKind\x12(\n" +
 	"$WORKER_AGENT_UPCALL_KIND_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"WORKER_AGENT_UPCALL_KIND_HOOK_TURN\x10\x01\x12/\n" +
-	"+WORKER_AGENT_UPCALL_KIND_APPROVAL_REQUESTED\x10\x02*\xbd\x01\n" +
+	"+WORKER_AGENT_UPCALL_KIND_APPROVAL_REQUESTED\x10\x02\x12-\n" +
+	")WORKER_AGENT_UPCALL_KIND_DELIVERY_RECEIPT\x10\x03\x12)\n" +
+	"%WORKER_AGENT_UPCALL_KIND_MAILBOX_POST\x10\x04\x12(\n" +
+	"$WORKER_AGENT_UPCALL_KIND_MAILBOX_ACK\x10\x05*\xbd\x01\n" +
 	"\x17WorkerUpcallDisposition\x12)\n" +
 	"%WORKER_UPCALL_DISPOSITION_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"WORKER_UPCALL_DISPOSITION_ACCEPTED\x10\x01\x12'\n" +

@@ -2120,6 +2120,7 @@ type WorkerRequest struct {
 	//	*WorkerRequest_Settings
 	//	*WorkerRequest_Filesystem
 	//	*WorkerRequest_Session
+	//	*WorkerRequest_AgentHost
 	//	*WorkerRequest_Git
 	Action        isWorkerRequest_Action `protobuf_oneof:"action"`
 	unknownFields protoimpl.UnknownFields
@@ -2380,6 +2381,15 @@ func (x *WorkerRequest) GetSession() *SessionWorkerRequest {
 	return nil
 }
 
+func (x *WorkerRequest) GetAgentHost() *AgentWorkerRequest {
+	if x != nil {
+		if x, ok := x.Action.(*WorkerRequest_AgentHost); ok {
+			return x.AgentHost
+		}
+	}
+	return nil
+}
+
 func (x *WorkerRequest) GetGit() *GitWorkerRequest {
 	if x != nil {
 		if x, ok := x.Action.(*WorkerRequest_Git); ok {
@@ -2501,6 +2511,15 @@ type WorkerRequest_Session struct {
 	Session *SessionWorkerRequest `protobuf:"bytes,27,opt,name=session,proto3,oneof"`
 }
 
+type WorkerRequest_AgentHost struct {
+	// The agent domain (§2.7, §2.9). It is named `agent_host` because 21 is
+	// already `agent`: that one writes a prompt into a PTY, this one carries
+	// the records the Host owns once the domain has switched. Two frames, two
+	// meanings, and renaming the released one to make room would break every
+	// Worker that already speaks it.
+	AgentHost *AgentWorkerRequest `protobuf:"bytes,28,opt,name=agent_host,json=agentHost,proto3,oneof"`
+}
+
 type WorkerRequest_Git struct {
 	// The git domain (§2.8). 27 and 28 belong to the session and agent
 	// domains, whose batches land independently, so this one is 29 rather
@@ -2551,6 +2570,8 @@ func (*WorkerRequest_Filesystem) isWorkerRequest_Action() {}
 
 func (*WorkerRequest_Session) isWorkerRequest_Action() {}
 
+func (*WorkerRequest_AgentHost) isWorkerRequest_Action() {}
+
 func (*WorkerRequest_Git) isWorkerRequest_Action() {}
 
 type WorkerResponse struct {
@@ -2581,6 +2602,7 @@ type WorkerResponse struct {
 	//	*WorkerResponse_Settings
 	//	*WorkerResponse_Filesystem
 	//	*WorkerResponse_Session
+	//	*WorkerResponse_AgentHost
 	//	*WorkerResponse_Git
 	Result        isWorkerResponse_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
@@ -2834,6 +2856,15 @@ func (x *WorkerResponse) GetSession() *SessionWorkerResponse {
 	return nil
 }
 
+func (x *WorkerResponse) GetAgentHost() *AgentWorkerResponse {
+	if x != nil {
+		if x, ok := x.Result.(*WorkerResponse_AgentHost); ok {
+			return x.AgentHost
+		}
+	}
+	return nil
+}
+
 func (x *WorkerResponse) GetGit() *GitWorkerResponse {
 	if x != nil {
 		if x, ok := x.Result.(*WorkerResponse_Git); ok {
@@ -2935,6 +2966,10 @@ type WorkerResponse_Session struct {
 	Session *SessionWorkerResponse `protobuf:"bytes,27,opt,name=session,proto3,oneof"`
 }
 
+type WorkerResponse_AgentHost struct {
+	AgentHost *AgentWorkerResponse `protobuf:"bytes,28,opt,name=agent_host,json=agentHost,proto3,oneof"`
+}
+
 type WorkerResponse_Git struct {
 	Git *GitWorkerResponse `protobuf:"bytes,29,opt,name=git,proto3,oneof"`
 }
@@ -2980,6 +3015,8 @@ func (*WorkerResponse_Settings) isWorkerResponse_Result() {}
 func (*WorkerResponse_Filesystem) isWorkerResponse_Result() {}
 
 func (*WorkerResponse_Session) isWorkerResponse_Result() {}
+
+func (*WorkerResponse_AgentHost) isWorkerResponse_Result() {}
 
 func (*WorkerResponse_Git) isWorkerResponse_Result() {}
 
@@ -3130,7 +3167,7 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12%\n" +
 	"\x0ereceived_bytes\x18\x02 \x01(\x04R\rreceivedBytes\x12\x16\n" +
 	"\x06sha256\x18\x03 \x01(\tR\x06sha256\x12\x12\n" +
-	"\x04path\x18\x04 \x01(\tR\x04path\"\xde\r\n" +
+	"\x04path\x18\x04 \x01(\tR\x04path\"\x9f\x0e\n" +
 	"\rWorkerRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -3161,9 +3198,11 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"filesystem\x18\x1a \x01(\v2#.armadra.v1.FilesystemWorkerRequestH\x00R\n" +
 	"filesystem\x12<\n" +
-	"\asession\x18\x1b \x01(\v2 .armadra.v1.SessionWorkerRequestH\x00R\asession\x120\n" +
+	"\asession\x18\x1b \x01(\v2 .armadra.v1.SessionWorkerRequestH\x00R\asession\x12?\n" +
+	"\n" +
+	"agent_host\x18\x1c \x01(\v2\x1e.armadra.v1.AgentWorkerRequestH\x00R\tagentHost\x120\n" +
 	"\x03git\x18\x1d \x01(\v2\x1c.armadra.v1.GitWorkerRequestH\x00R\x03gitB\b\n" +
-	"\x06action\"\x9b\f\n" +
+	"\x06action\"\xdd\f\n" +
 	"\x0eWorkerResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -3195,7 +3234,9 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"filesystem\x18\x1a \x01(\v2$.armadra.v1.FilesystemWorkerResponseH\x00R\n" +
 	"filesystem\x12=\n" +
-	"\asession\x18\x1b \x01(\v2!.armadra.v1.SessionWorkerResponseH\x00R\asession\x121\n" +
+	"\asession\x18\x1b \x01(\v2!.armadra.v1.SessionWorkerResponseH\x00R\asession\x12@\n" +
+	"\n" +
+	"agent_host\x18\x1c \x01(\v2\x1f.armadra.v1.AgentWorkerResponseH\x00R\tagentHost\x121\n" +
 	"\x03git\x18\x1d \x01(\v2\x1d.armadra.v1.GitWorkerResponseH\x00R\x03gitB\b\n" +
 	"\x06result*\xfa\x0f\n" +
 	"\x16WorkerServiceOperation\x12(\n" +
@@ -3305,18 +3346,20 @@ var file_armadra_v1_worker_proto_goTypes = []any{
 	(*WorkerSettingsRequest)(nil),       // 41: armadra.v1.WorkerSettingsRequest
 	(*FilesystemWorkerRequest)(nil),     // 42: armadra.v1.FilesystemWorkerRequest
 	(*SessionWorkerRequest)(nil),        // 43: armadra.v1.SessionWorkerRequest
-	(*GitWorkerRequest)(nil),            // 44: armadra.v1.GitWorkerRequest
-	(*ErrorResponse)(nil),               // 45: armadra.v1.ErrorResponse
-	(*CommandResponse)(nil),             // 46: armadra.v1.CommandResponse
-	(*AgentResponse)(nil),               // 47: armadra.v1.AgentResponse
-	(*LanguageCapabilities)(nil),        // 48: armadra.v1.LanguageCapabilities
-	(*LanguageSession)(nil),             // 49: armadra.v1.LanguageSession
-	(*LanguageApplyEditResult)(nil),     // 50: armadra.v1.LanguageApplyEditResult
-	(*ReverseImportReport)(nil),         // 51: armadra.v1.ReverseImportReport
-	(*WorkerSettingsSnapshot)(nil),      // 52: armadra.v1.WorkerSettingsSnapshot
-	(*FilesystemWorkerResponse)(nil),    // 53: armadra.v1.FilesystemWorkerResponse
-	(*SessionWorkerResponse)(nil),       // 54: armadra.v1.SessionWorkerResponse
-	(*GitWorkerResponse)(nil),           // 55: armadra.v1.GitWorkerResponse
+	(*AgentWorkerRequest)(nil),          // 44: armadra.v1.AgentWorkerRequest
+	(*GitWorkerRequest)(nil),            // 45: armadra.v1.GitWorkerRequest
+	(*ErrorResponse)(nil),               // 46: armadra.v1.ErrorResponse
+	(*CommandResponse)(nil),             // 47: armadra.v1.CommandResponse
+	(*AgentResponse)(nil),               // 48: armadra.v1.AgentResponse
+	(*LanguageCapabilities)(nil),        // 49: armadra.v1.LanguageCapabilities
+	(*LanguageSession)(nil),             // 50: armadra.v1.LanguageSession
+	(*LanguageApplyEditResult)(nil),     // 51: armadra.v1.LanguageApplyEditResult
+	(*ReverseImportReport)(nil),         // 52: armadra.v1.ReverseImportReport
+	(*WorkerSettingsSnapshot)(nil),      // 53: armadra.v1.WorkerSettingsSnapshot
+	(*FilesystemWorkerResponse)(nil),    // 54: armadra.v1.FilesystemWorkerResponse
+	(*SessionWorkerResponse)(nil),       // 55: armadra.v1.SessionWorkerResponse
+	(*AgentWorkerResponse)(nil),         // 56: armadra.v1.AgentWorkerResponse
+	(*GitWorkerResponse)(nil),           // 57: armadra.v1.GitWorkerResponse
 }
 var file_armadra_v1_worker_proto_depIdxs = []int32{
 	29, // 0: armadra.v1.WorkerHelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
@@ -3354,34 +3397,36 @@ var file_armadra_v1_worker_proto_depIdxs = []int32{
 	41, // 32: armadra.v1.WorkerRequest.settings:type_name -> armadra.v1.WorkerSettingsRequest
 	42, // 33: armadra.v1.WorkerRequest.filesystem:type_name -> armadra.v1.FilesystemWorkerRequest
 	43, // 34: armadra.v1.WorkerRequest.session:type_name -> armadra.v1.SessionWorkerRequest
-	44, // 35: armadra.v1.WorkerRequest.git:type_name -> armadra.v1.GitWorkerRequest
-	2,  // 36: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
-	4,  // 37: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
-	7,  // 38: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
-	9,  // 39: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
-	45, // 40: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
-	14, // 41: armadra.v1.WorkerResponse.file_written:type_name -> armadra.v1.WorkerFileWritten
-	16, // 42: armadra.v1.WorkerResponse.service:type_name -> armadra.v1.WorkerServiceResponse
-	20, // 43: armadra.v1.WorkerResponse.watch_event:type_name -> armadra.v1.WorkerWatchEvent
-	18, // 44: armadra.v1.WorkerResponse.watch:type_name -> armadra.v1.WorkerWatchSubscription
-	26, // 45: armadra.v1.WorkerResponse.upload:type_name -> armadra.v1.WorkerUploadResponse
-	46, // 46: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
-	47, // 47: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
-	12, // 48: armadra.v1.WorkerResponse.write_ownership:type_name -> armadra.v1.WorkerWriteOwnership
-	48, // 49: armadra.v1.WorkerResponse.language_capabilities:type_name -> armadra.v1.LanguageCapabilities
-	49, // 50: armadra.v1.WorkerResponse.language_session:type_name -> armadra.v1.LanguageSession
-	38, // 51: armadra.v1.WorkerResponse.language_frame:type_name -> armadra.v1.LanguageFrame
-	50, // 52: armadra.v1.WorkerResponse.language_apply_edit:type_name -> armadra.v1.LanguageApplyEditResult
-	51, // 53: armadra.v1.WorkerResponse.reverse_import:type_name -> armadra.v1.ReverseImportReport
-	52, // 54: armadra.v1.WorkerResponse.settings:type_name -> armadra.v1.WorkerSettingsSnapshot
-	53, // 55: armadra.v1.WorkerResponse.filesystem:type_name -> armadra.v1.FilesystemWorkerResponse
-	54, // 56: armadra.v1.WorkerResponse.session:type_name -> armadra.v1.SessionWorkerResponse
-	55, // 57: armadra.v1.WorkerResponse.git:type_name -> armadra.v1.GitWorkerResponse
-	58, // [58:58] is the sub-list for method output_type
-	58, // [58:58] is the sub-list for method input_type
-	58, // [58:58] is the sub-list for extension type_name
-	58, // [58:58] is the sub-list for extension extendee
-	0,  // [0:58] is the sub-list for field type_name
+	44, // 35: armadra.v1.WorkerRequest.agent_host:type_name -> armadra.v1.AgentWorkerRequest
+	45, // 36: armadra.v1.WorkerRequest.git:type_name -> armadra.v1.GitWorkerRequest
+	2,  // 37: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
+	4,  // 38: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
+	7,  // 39: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
+	9,  // 40: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
+	46, // 41: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
+	14, // 42: armadra.v1.WorkerResponse.file_written:type_name -> armadra.v1.WorkerFileWritten
+	16, // 43: armadra.v1.WorkerResponse.service:type_name -> armadra.v1.WorkerServiceResponse
+	20, // 44: armadra.v1.WorkerResponse.watch_event:type_name -> armadra.v1.WorkerWatchEvent
+	18, // 45: armadra.v1.WorkerResponse.watch:type_name -> armadra.v1.WorkerWatchSubscription
+	26, // 46: armadra.v1.WorkerResponse.upload:type_name -> armadra.v1.WorkerUploadResponse
+	47, // 47: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
+	48, // 48: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
+	12, // 49: armadra.v1.WorkerResponse.write_ownership:type_name -> armadra.v1.WorkerWriteOwnership
+	49, // 50: armadra.v1.WorkerResponse.language_capabilities:type_name -> armadra.v1.LanguageCapabilities
+	50, // 51: armadra.v1.WorkerResponse.language_session:type_name -> armadra.v1.LanguageSession
+	38, // 52: armadra.v1.WorkerResponse.language_frame:type_name -> armadra.v1.LanguageFrame
+	51, // 53: armadra.v1.WorkerResponse.language_apply_edit:type_name -> armadra.v1.LanguageApplyEditResult
+	52, // 54: armadra.v1.WorkerResponse.reverse_import:type_name -> armadra.v1.ReverseImportReport
+	53, // 55: armadra.v1.WorkerResponse.settings:type_name -> armadra.v1.WorkerSettingsSnapshot
+	54, // 56: armadra.v1.WorkerResponse.filesystem:type_name -> armadra.v1.FilesystemWorkerResponse
+	55, // 57: armadra.v1.WorkerResponse.session:type_name -> armadra.v1.SessionWorkerResponse
+	56, // 58: armadra.v1.WorkerResponse.agent_host:type_name -> armadra.v1.AgentWorkerResponse
+	57, // 59: armadra.v1.WorkerResponse.git:type_name -> armadra.v1.GitWorkerResponse
+	60, // [60:60] is the sub-list for method output_type
+	60, // [60:60] is the sub-list for method input_type
+	60, // [60:60] is the sub-list for extension type_name
+	60, // [60:60] is the sub-list for extension extendee
+	0,  // [0:60] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_worker_proto_init() }
@@ -3431,6 +3476,7 @@ func file_armadra_v1_worker_proto_init() {
 		(*WorkerRequest_Settings)(nil),
 		(*WorkerRequest_Filesystem)(nil),
 		(*WorkerRequest_Session)(nil),
+		(*WorkerRequest_AgentHost)(nil),
 		(*WorkerRequest_Git)(nil),
 	}
 	file_armadra_v1_worker_proto_msgTypes[27].OneofWrappers = []any{
@@ -3455,6 +3501,7 @@ func file_armadra_v1_worker_proto_init() {
 		(*WorkerResponse_Settings)(nil),
 		(*WorkerResponse_Filesystem)(nil),
 		(*WorkerResponse_Session)(nil),
+		(*WorkerResponse_AgentHost)(nil),
 		(*WorkerResponse_Git)(nil),
 	}
 	type x struct{}

@@ -4,6 +4,7 @@ package armadra.v1;
 
 option go_package = "armadra.local/host/gen/armadra/v1";
 
+import "armadra/v1/agent.proto";
 import "armadra/v1/canvas.proto";
 import "armadra/v1/common.proto";
 import "armadra/v1/settings.proto";
@@ -111,6 +112,23 @@ message EventEnvelope {
     // backend reference to find out whether anything it cares about moved.
     Session session = 160;
     SessionRun session_run = 161;
+    // The agent domain (§2.7). Seven members rather than one, because the
+    // seven change for seven different reasons and a client subscribes to the
+    // ones it draws: a board follows status, a node header follows approvals,
+    // an inbox follows mailbox messages, a handoff card follows handoffs. One
+    // "agent changed" kind would make every consumer decode a transcript
+    // reference to discover nothing it cared about moved.
+    //
+    // `hook_event` is here even though nothing renders it on its own: it is
+    // the evidence a status was reduced *from*, and a client that has to
+    // explain why a node says WAITING has nowhere else to look.
+    AgentStatus agent_status = 180;
+    HookEvent hook_event = 181;
+    Approval approval = 182;
+    MailboxMessage mailbox_message = 183;
+    Delivery delivery = 184;
+    Handoff handoff = 185;
+    ContextLinks context_links = 186;
     // The git domain (§2.8). An operation is the entry a client follows
     // from queued to finished; the repository state is the cache it renders
     // between observations; a clone job is neither, because it exists before
