@@ -42,6 +42,27 @@ func TestRuntimeRoutesAreClassifiedAsReadWriteOrExecute(t *testing.T) {
 		{http.MethodGet, "/api/settings", []string{"settings:read"}, ""},
 		{http.MethodPut, "/api/settings", []string{"settings:write"}, ""},
 		{http.MethodPost, "/api/usage/copilot/login", []string{"credential:use", "terminal:write"}, ""},
+		// A controlled browser is terminal-class authority: it opens pages on
+		// this machine and types into them. Reading a session or watching its
+		// picture is read; the frame stream is a GET and so is read too.
+		{http.MethodGet, "/api/workspaces/w-1/browser/sessions", []string{"terminal:read"}, "w-1"},
+		{http.MethodGet, "/api/workspaces/w-1/browser/availability", []string{"terminal:read"}, "w-1"},
+		{http.MethodGet, "/api/workspaces/w-1/browser/sessions/s-1/stream", []string{"terminal:read"}, "w-1"},
+		{http.MethodGet, "/api/workspaces/w-1/browser/sessions/s-1/read", []string{"terminal:read"}, "w-1"},
+		// Holding a subscription makes the machine encode frames, which is a
+		// write but not a program being driven.
+		{http.MethodPost, "/api/workspaces/w-1/browser/sessions/s-1/subscription", []string{"terminal:write"}, "w-1"},
+		{http.MethodDelete, "/api/workspaces/w-1/browser/sessions/s-1/subscription/x", []string{"terminal:write"}, "w-1"},
+		// Driving the page is execution.
+		{http.MethodPost, "/api/workspaces/w-1/browser/sessions/s-1/input", []string{"terminal:write"}, "w-1"},
+		{http.MethodPost, "/api/workspaces/w-1/browser/sessions/s-1/navigate", []string{"terminal:write"}, "w-1"},
+		{http.MethodPost, "/api/workspaces/w-1/browser/sessions/s-1/lease", []string{"terminal:write"}, "w-1"},
+		{http.MethodPost, "/api/workspaces/w-1/browser/sessions", []string{"terminal:write"}, "w-1"},
+		// The pinned build belongs to the machine, so it is never narrowed to
+		// a workspace.
+		{http.MethodGet, "/api/browser/managed", []string{"terminal:read"}, ""},
+		{http.MethodPost, "/api/browser/managed", []string{"terminal:write"}, ""},
+		{http.MethodDelete, "/api/browser/managed", []string{"terminal:write"}, ""},
 	} {
 		authorization, known := authorizeRuntimePath(expectation.method, expectation.path)
 		if !known {
@@ -61,7 +82,10 @@ func TestRuntimeRoutesAreClassifiedAsReadWriteOrExecute(t *testing.T) {
 func TestUnknownRuntimeRoutesAreRefusedRatherThanInheritingAPrefix(t *testing.T) {
 	for _, path := range []string{
 		"/api/not-a-route", "/api/", "/api/../health", "/health", "/rpc/armadra.v1.HostService/Hello",
-		"/api/browser/sessions",
+		// `/api/browser/managed` is the only machine-level browser route; the
+		// rest of that space is workspace-scoped and must not be reachable
+		// without naming a workspace.
+		"/api/browser/sessions", "/api/browser", "/api/browser/managed/install",
 	} {
 		if _, known := authorizeRuntimePath(http.MethodGet, path); known {
 			t.Fatalf("%s was authorized by an unrelated prefix", path)

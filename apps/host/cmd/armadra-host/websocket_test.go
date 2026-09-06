@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -23,6 +24,11 @@ import (
 type testSocket struct {
 	conn   net.Conn
 	reader *bufio.Reader
+	// A real client acknowledges frames from wherever it draws them, which is
+	// not where it sends input from. Two goroutines writing one socket would
+	// interleave frames, so writes are serialized here rather than in every
+	// test that has both.
+	writes sync.Mutex
 }
 
 func dialTestSocket(address, path, origin string, config *tls.Config, cookies []*http.Cookie) (*testSocket, error) {
@@ -85,11 +91,22 @@ func dialTestSocket(address, path, origin string, config *tls.Config, cookies []
 func (s *testSocket) Close() { s.conn.Close() }
 
 func (s *testSocket) writeText(payload string) error {
+	return s.write(0x81, []byte(payload))
+}
+
+// writeBinary sends one binary frame. The browser frame stream is Protobuf in
+// both directions, so a text-only client could not drive it at all.
+func (s *testSocket) writeBinary(payload []byte) error {
+	return s.write(0x82, payload)
+}
+
+func (s *testSocket) write(opcode byte, body []byte) error {
+	s.writes.Lock()
+	defer s.writes.Unlock()
 	if err := s.conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
 		return err
 	}
-	body := []byte(payload)
-	frame := []byte{0x81}
+	frame := []byte{opcode}
 	switch {
 	case len(body) < 126:
 		frame = append(frame, byte(0x80|len(body)))
@@ -97,7 +114,8 @@ func (s *testSocket) writeText(payload string) error {
 		frame = append(frame, 0x80|126, 0, 0)
 		binary.BigEndian.PutUint16(frame[2:], uint16(len(body)))
 	default:
-		return errors.New("test frames stay small")
+		frame = append(frame, 0x80|127, 0, 0, 0, 0, 0, 0, 0, 0)
+		binary.BigEndian.PutUint64(frame[2:], uint64(len(body)))
 	}
 	var mask [4]byte
 	if _, err := rand.Read(mask[:]); err != nil {
@@ -115,12 +133,26 @@ func (s *testSocket) writeText(payload string) error {
 // control frames. Fragmentation is not expected from this server.
 func (s *testSocket) readText(deadline time.Time) (string, error) {
 	for {
-		if err := s.conn.SetReadDeadline(deadline); err != nil {
+		opcode, body, err := s.readFrame(deadline)
+		if err != nil {
 			return "", err
+		}
+		if opcode == 0x1 {
+			return string(body), nil
+		}
+	}
+}
+
+// readFrame returns one data frame's opcode and payload. A close frame ends
+// the read with io.EOF; control frames are skipped.
+func (s *testSocket) readFrame(deadline time.Time) (byte, []byte, error) {
+	for {
+		if err := s.conn.SetReadDeadline(deadline); err != nil {
+			return 0, nil, err
 		}
 		head := make([]byte, 2)
 		if _, err := io.ReadFull(s.reader, head); err != nil {
-			return "", err
+			return 0, nil, err
 		}
 		opcode := head[0] & 0x0f
 		masked := head[1]&0x80 != 0
@@ -129,25 +161,25 @@ func (s *testSocket) readText(deadline time.Time) (string, error) {
 		case 126:
 			extended := make([]byte, 2)
 			if _, err := io.ReadFull(s.reader, extended); err != nil {
-				return "", err
+				return 0, nil, err
 			}
 			length = int(binary.BigEndian.Uint16(extended))
 		case 127:
 			extended := make([]byte, 8)
 			if _, err := io.ReadFull(s.reader, extended); err != nil {
-				return "", err
+				return 0, nil, err
 			}
 			length = int(binary.BigEndian.Uint64(extended))
 		}
 		var mask [4]byte
 		if masked {
 			if _, err := io.ReadFull(s.reader, mask[:]); err != nil {
-				return "", err
+				return 0, nil, err
 			}
 		}
 		body := make([]byte, length)
 		if _, err := io.ReadFull(s.reader, body); err != nil {
-			return "", err
+			return 0, nil, err
 		}
 		if masked {
 			for index := range body {
@@ -155,10 +187,10 @@ func (s *testSocket) readText(deadline time.Time) (string, error) {
 			}
 		}
 		switch opcode {
-		case 0x1:
-			return string(body), nil
+		case 0x1, 0x2:
+			return opcode, body, nil
 		case 0x8:
-			return "", io.EOF
+			return 0, nil, io.EOF
 		default:
 		}
 	}

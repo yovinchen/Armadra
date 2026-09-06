@@ -32,11 +32,18 @@ const (
 type runtimeArea struct{ read, write string }
 
 var (
-	canvasArea     = runtimeArea{"canvas:read", "canvas:write"}
-	terminalArea   = runtimeArea{"terminal:read", "terminal:write"}
-	filesArea      = runtimeArea{"files:read", "files:write"}
-	gitArea        = runtimeArea{"git:read", "git:write"}
-	resourcesArea  = runtimeArea{"resources:read", "settings:write"}
+	canvasArea    = runtimeArea{"canvas:read", "canvas:write"}
+	terminalArea  = runtimeArea{"terminal:read", "terminal:write"}
+	filesArea     = runtimeArea{"files:read", "files:write"}
+	gitArea       = runtimeArea{"git:read", "git:write"}
+	resourcesArea = runtimeArea{"resources:read", "settings:write"}
+	// A controlled browser opens web pages on the machine the Host runs on
+	// and lets whoever drives it type into them. That is the same class of
+	// authority as a terminal, so reading a session or watching its picture
+	// needs terminal:read, and anything that drives the page — navigating,
+	// input, a lease takeover, installing the managed build — is execution
+	// (browser completion design §2.9).
+	browserArea    = runtimeArea{"terminal:read", "terminal:write"}
 	settingsArea   = runtimeArea{"settings:read", "settings:write"}
 	credentialArea = runtimeArea{"resources:read", "credential:use"}
 )
@@ -87,6 +94,19 @@ func authorizeRuntimePath(method, path string) (runtimeAuthorization, bool) {
 	case "agents", "agent-status", "conversations":
 		area = canvasArea
 		if len(segments) >= 3 && (segments[2] == "hooks" || segments[2] == "suggest-title") {
+			class = executeAccess
+		}
+	case "browser":
+		// `/api/browser/managed` is the machine's pinned browser build, not a
+		// workspace's: installing or removing it runs an installer on this
+		// host, and reading its state is read. It is the only route in this
+		// space — anything else under it is refused rather than let in on the
+		// strength of the prefix.
+		if len(segments) != 2 || segments[1] != "managed" {
+			return runtimeAuthorization{}, false
+		}
+		area = browserArea
+		if class != readAccess {
 			class = executeAccess
 		}
 	case "approvals", "control":
@@ -147,6 +167,8 @@ func workspaceArea(segments []string, class accessClass) (runtimeArea, accessCla
 			class = executeAccess
 		}
 		return resourcesArea, class
+	case "browser":
+		return browserArea, browserClass(segments, class)
 	case "sessions", "handoffs", "deliveries", "context-links", "nodes":
 		if len(segments) >= 3 && (segments[2] == "accept" || segments[2] == "cancel") {
 			class = executeAccess
@@ -158,6 +180,23 @@ func workspaceArea(segments []string, class accessClass) (runtimeArea, accessCla
 		// boards, assets, exports, events and anything else the canvas owns.
 		return canvasArea, class
 	}
+}
+
+// browserClass splits a /api/workspaces/{id}/browser/... route three ways.
+//
+// Reading a session, its page text, its downloads or its picture is read —
+// including the frame stream, which is a WebSocket the Host proxies without
+// looking inside. Holding a subscription is a write: it makes the machine
+// encode frames. Everything that drives the page is execution, because a
+// browser typing into a page is a program running on this host.
+func browserClass(segments []string, class accessClass) accessClass {
+	if class == readAccess {
+		return readAccess
+	}
+	if len(segments) >= 4 && segments[3] == "subscription" {
+		return writeAccess
+	}
+	return executeAccess
 }
 
 // canvasWorkspaceClass separates opening a directory on the machine from
