@@ -38,7 +38,8 @@ export async function prepareSettings() {
   const localPaths = await loadLocalSettingPaths();
   step(
     "the Runtime names the settings that stay on this execution host",
-    localPaths.includes("terminal.backend") && localPaths.includes("power.policy"),
+    localPaths.includes("terminal.backend") &&
+      localPaths.includes("power.policy"),
     localPaths.join(", "),
   );
 
@@ -98,14 +99,18 @@ export async function prepareSettings() {
   const onDisk = JSON.parse(readFileSync(runtimeSettings, "utf8"));
   step(
     "the document on disk is the one the Runtime answered with, minus its local half",
-    fileDigest.length === 64 && digestOf(settingsShape(onDisk)) === runtimeDigest,
+    fileDigest.length === 64 &&
+      digestOf(settingsShape(onDisk)) === runtimeDigest,
     `file sha256=${fileDigest.slice(0, 16)}`,
   );
   // The split is a property of the files, not of the comparison above: a
   // `settings.json` that still carried `terminal.backend` would pass that
   // digest and then hand the Host a key belonging to one machine.
   const localOnDisk = JSON.parse(
-    readFileSync(join(dirname(runtimeSettings), "worker-settings.json"), "utf8"),
+    readFileSync(
+      join(dirname(runtimeSettings), "worker-settings.json"),
+      "utf8",
+    ),
   );
   step(
     "the local half is in worker-settings.json and nowhere else",
