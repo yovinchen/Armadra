@@ -87,6 +87,9 @@ fn an_outcome_serializes_as_the_page_reads_it() {
         (BindingState::Invalid, "invalid"),
         (BindingState::Taken, "taken"),
     ] {
-        assert_eq!(serde_json::to_string(&state).expect("serialize"), format!("\"{tag}\""));
+        assert_eq!(
+            serde_json::to_string(&state).expect("serialize"),
+            format!("\"{tag}\"")
+        );
     }
 }

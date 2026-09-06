@@ -101,12 +101,7 @@ pub fn global_shortcuts_apply(app: AppHandle, bindings: Vec<Binding>) -> Vec<Bin
     let state = app.state::<GlobalShortcuts>();
     // 先全部释放：活着的热键集合就等于最后一次 apply 的那张表，中间没有
     // 一份会和设置文档慢慢对不上的增量状态。
-    for shortcut in state
-        .held
-        .lock()
-        .expect("global shortcut lock")
-        .drain(..)
-    {
+    for shortcut in state.held.lock().expect("global shortcut lock").drain(..) {
         let _ = manager.unregister(shortcut);
     }
 
