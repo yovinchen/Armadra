@@ -96,11 +96,19 @@ export const PI_HOOK_EVENTS = [
 ] as const;
 
 /**
- * Oh My Pi — Pi's extension API plus its own compaction event. OMP is a fork,
- * so the names are verified separately rather than assumed to track Pi.
+ * Oh My Pi — Pi's extension API plus its own settle and compaction events. OMP
+ * is a fork, so the names are verified separately rather than assumed to track
+ * Pi.
+ *
+ * Verified against `@oh-my-pi/pi-coding-agent` 18.1.8: that build settles
+ * through `session_stop`, not `agent_settled`, and has no `model_select`. Both
+ * Pi spellings stay registered anyway — `pi.on()` is a map insert, an event the
+ * CLI never emits costs nothing, and a fork that re-converges keeps working
+ * without a reinstall.
  */
 export const OMP_HOOK_EVENTS = [
   ...PI_HOOK_EVENTS,
+  "session_stop",
   "auto_compaction_end",
 ] as const;
 

@@ -147,7 +147,11 @@ describe("hook events", () => {
   it("subscribes the events each new adapter's state actually comes from", () => {
     expect(HOOK_EVENTS.pi).toContain("agent_settled");
     expect(HOOK_EVENTS.omp).toContain("agent_settled");
-    // OMP is a fork with its own compaction event, so its list is not Pi's.
+    // OMP is a fork with its own settle and compaction events, so its list is
+    // not Pi's: 18.1.8 emits `session_stop` where Pi emits `agent_settled`,
+    // and losing it would leave that CLI with no idle evidence at all.
+    expect(HOOK_EVENTS.omp).toContain("session_stop");
+    expect(HOOK_EVENTS.pi).not.toContain("session_stop");
     expect(HOOK_EVENTS.omp).toContain("auto_compaction_end");
     expect(HOOK_EVENTS.pi).not.toContain("auto_compaction_end");
     expect(HOOK_EVENTS.copilot).toContain("agentStop");

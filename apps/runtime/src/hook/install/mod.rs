@@ -18,8 +18,11 @@
 pub mod claude;
 pub mod codex;
 pub mod copilot;
+pub mod extension_template;
 pub mod gemini;
+pub mod omp;
 pub mod opencode;
+pub mod pi;
 
 use std::{
     env, fs, io,
@@ -89,8 +92,14 @@ pub const PI_HOOK_EVENTS: &[&str] = &[
     "model_select",
     "session_shutdown",
 ];
-/// Oh My Pi — Pi's list plus its own compaction event. It is a fork, so the
-/// names are listed rather than inherited.
+/// Oh My Pi — Pi's list plus its own settle and compaction events. It is a
+/// fork, so the names are listed rather than inherited.
+///
+/// Verified against `@oh-my-pi/pi-coding-agent` 18.1.8: that build settles
+/// through `session_stop`, not `agent_settled`, and has no `model_select`.
+/// Both Pi spellings stay registered anyway — `on()` is a map insert, an event
+/// the CLI never emits costs nothing, and a fork that re-converges keeps
+/// working without a reinstall.
 pub const OMP_HOOK_EVENTS: &[&str] = &[
     "session_start",
     "before_agent_start",
@@ -99,6 +108,7 @@ pub const OMP_HOOK_EVENTS: &[&str] = &[
     "tool_result",
     "agent_end",
     "agent_settled",
+    "session_stop",
     "session_compact",
     "model_select",
     "session_shutdown",
@@ -235,6 +245,25 @@ pub fn config_home_with(
         "opencode" => from_env("OPENCODE_CONFIG_DIR")
             .or_else(|| from_env("XDG_CONFIG_HOME").map(|path| path.join("opencode")))
             .unwrap_or_else(|| home.join(".config").join("opencode")),
+        // Pi's own `ENV_AGENT_DIR`. The extensions directory hangs off the
+        // *agent* directory (`~/.pi/agent`), not the config root.
+        "pi" => from_env("PI_CODING_AGENT_DIR").unwrap_or_else(|| home.join(".pi").join("agent")),
+        // OMP reads the same override, plus a profile that wins over it and a
+        // configurable root name — `~/.omp/profiles/<name>/agent`.
+        "omp" => {
+            let root = home.join(
+                from_env("PI_CONFIG_DIR")
+                    .filter(|name| name.components().count() == 1)
+                    .unwrap_or_else(|| PathBuf::from(".omp")),
+            );
+            match from_env("OMP_PROFILE")
+                .or_else(|| from_env("PI_PROFILE"))
+                .filter(|profile| is_profile_name(profile))
+            {
+                Some(profile) => root.join("profiles").join(profile).join("agent"),
+                None => from_env("PI_CODING_AGENT_DIR").unwrap_or_else(|| root.join("agent")),
+            }
+        }
         other => {
             return Err(AppError::BadRequest(format!(
                 "{other} has no hook installer"
@@ -251,6 +280,8 @@ pub fn install(agent_id: &str, client_bin: &Path) -> AppResult<InstallReport> {
         "copilot" => copilot::install(&home, client_bin),
         "gemini" => gemini::install(&home, client_bin),
         "opencode" => opencode::install(&home, client_bin),
+        "pi" => pi::install(&home, client_bin),
+        "omp" => omp::install(&home, client_bin),
         other => Err(AppError::BadRequest(format!(
             "{other} has no hook installer"
         ))),
@@ -275,10 +306,28 @@ pub fn uninstall(agent_id: &str) -> AppResult<InstallReport> {
         "copilot" => copilot::uninstall(&home),
         "gemini" => gemini::uninstall(&home),
         "opencode" => opencode::uninstall(&home),
+        "pi" => pi::uninstall(&home),
+        "omp" => omp::uninstall(&home),
         other => Err(AppError::BadRequest(format!(
             "{other} has no hook installer"
         ))),
     }
+}
+
+/// A profile name that is safe to put in a path. OMP's own rules are stricter
+/// (it also rejects reserved Windows device names); anything this lets through
+/// that OMP would not simply resolves to a directory OMP never reads, which
+/// costs a wasted install and never a write outside the config home.
+fn is_profile_name(profile: &Path) -> bool {
+    profile.components().count() == 1
+        && profile.to_str().is_some_and(|name| {
+            !name.is_empty()
+                && name.len() <= 64
+                && name != "default"
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'))
+        })
 }
 
 /* ------------------------- shared JSON manipulation ------------------------ */
@@ -412,6 +461,10 @@ mod tests {
         }
         assert!(PI_HOOK_EVENTS.contains(&"agent_settled"));
         assert!(OMP_HOOK_EVENTS.contains(&"agent_settled"));
+        // The settle event OMP 18.x actually emits. Losing it would leave that
+        // fork with no idle evidence and `send` / handoff refused again.
+        assert!(OMP_HOOK_EVENTS.contains(&"session_stop"));
+        assert!(!PI_HOOK_EVENTS.contains(&"session_stop"));
         assert!(OMP_HOOK_EVENTS.contains(&"auto_compaction_end"));
         assert!(!PI_HOOK_EVENTS.contains(&"auto_compaction_end"));
         assert!(COPILOT_HOOK_EVENTS.contains(&"agentStop"));
@@ -540,6 +593,15 @@ mod tests {
             config_home_with("copilot", none, home).unwrap(),
             home.join(".copilot")
         );
+        // The extensions directory hangs off the agent dir, not the root.
+        assert_eq!(
+            config_home_with("pi", none, home).unwrap(),
+            home.join(".pi/agent")
+        );
+        assert_eq!(
+            config_home_with("omp", none, home).unwrap(),
+            home.join(".omp/agent")
+        );
 
         let overridden = |name: &str| match name {
             "CLAUDE_CONFIG_DIR" => Some(PathBuf::from("/tmp/claude-home")),
@@ -571,5 +633,71 @@ mod tests {
             Path::new("/tmp/copilot-home")
         );
         assert!(config_home_with("custom:x", none, home).is_err());
+    }
+
+    /// Pi and OMP read the *same* agent-dir override, and OMP layers a profile
+    /// and a configurable root name on top of it. Getting the precedence wrong
+    /// writes an extension into a directory the CLI never scans, which looks
+    /// exactly like a successful install and reports nothing.
+    #[test]
+    fn the_pi_family_follows_its_shared_override_and_omp_profiles() {
+        let home = Path::new("/home/dev");
+        let agent_dir = |name: &str| match name {
+            "PI_CODING_AGENT_DIR" => Some(PathBuf::from("/tmp/pi-agent")),
+            _ => None,
+        };
+        assert_eq!(
+            config_home_with("pi", agent_dir, home).unwrap(),
+            Path::new("/tmp/pi-agent")
+        );
+        assert_eq!(
+            config_home_with("omp", agent_dir, home).unwrap(),
+            Path::new("/tmp/pi-agent")
+        );
+
+        // A profile wins over the agent-dir override, exactly as OMP resolves it.
+        let profile = |name: &str| match name {
+            "PI_CODING_AGENT_DIR" => Some(PathBuf::from("/tmp/pi-agent")),
+            "OMP_PROFILE" => Some(PathBuf::from("work")),
+            _ => None,
+        };
+        assert_eq!(
+            config_home_with("omp", profile, home).unwrap(),
+            home.join(".omp/profiles/work/agent")
+        );
+        // Pi has no profiles; it keeps reading the override.
+        assert_eq!(
+            config_home_with("pi", profile, home).unwrap(),
+            Path::new("/tmp/pi-agent")
+        );
+
+        // A renamed root, and a profile name that could escape the config home.
+        let renamed = |name: &str| match name {
+            "PI_CONFIG_DIR" => Some(PathBuf::from(".omp-alt")),
+            _ => None,
+        };
+        assert_eq!(
+            config_home_with("omp", renamed, home).unwrap(),
+            home.join(".omp-alt/agent")
+        );
+        for hostile in ["../../etc", "a/b", "", "default"] {
+            let escaping = |name: &str| match name {
+                "OMP_PROFILE" => Some(PathBuf::from(hostile)),
+                _ => None,
+            };
+            assert_eq!(
+                config_home_with("omp", escaping, home).unwrap(),
+                home.join(".omp/agent"),
+                "{hostile}"
+            );
+        }
+        let escaping_root = |name: &str| match name {
+            "PI_CONFIG_DIR" => Some(PathBuf::from("../elsewhere")),
+            _ => None,
+        };
+        assert_eq!(
+            config_home_with("omp", escaping_root, home).unwrap(),
+            home.join(".omp/agent")
+        );
     }
 }
