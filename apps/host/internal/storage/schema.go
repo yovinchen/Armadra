@@ -351,7 +351,155 @@ CREATE TABLE session_claims (
  claimed_at_ms INTEGER NOT NULL CHECK(claimed_at_ms > 0)
 )`
 
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8}
+// The agent domain's records (Go Host 业务所有权迁移 §3.1 v9, §2.7).
+//
+// Six tables, because six things change for six different reasons and are read
+// by six different parts of a board. They are columns rather than payloads for
+// the reason the session tables are: every one of them is queried *as* a
+// column. A board lists a workspace's statuses; a node header asks for the
+// approvals that are still open; an inbox pages one node's messages by their
+// own sequence; a handoff card looks one up by identifier. Decoding a Protobuf
+// to answer any of those would put a parse in front of the busiest reads in the
+// domain.
+//
+// Three things here are worth stating outright.
+//
+// **The handoff outbox is folded in.** §3.1 v9 names `agent_handoffs` and
+// `agent_handoff_outbox` separately, as the Runtime has them. But the whole
+// point of `HandoffState` is that a client asking "did this land?" could never
+// answer from either table alone, and two rows that must be read together and
+// can disagree are a worse record than one that cannot. `claimed_at_ms` and
+// `claim_instance_id` are the outbox's only real content — who is dispatching
+// this right now — and they live on the row they describe.
+//
+// **The bundle is frozen by the database.** The trigger below aborts any update
+// that touches the bundle, its digest, or either endpoint. The service refuses
+// the same thing, and the duplication is deliberate: a handoff whose bundle
+// could change after it was accepted would be a handoff where what the target
+// read is not what the source sent, and that is not a property to leave to one
+// layer's care. This is the first migration to define a trigger, which is why
+// `expectedObjects` and `validateSchema` learn about them alongside it.
+//
+// **Context links are a projection.** The table has no client write path at
+// all. It is derived from the canvas' own edges, and a client that could write
+// it directly could make a node read a transcript it is not connected to.
+const schemaV9 = `CREATE TABLE agent_status (
+ node_id TEXT PRIMARY KEY,
+ workspace_id TEXT NOT NULL,
+ session_id TEXT NOT NULL,
+ generation INTEGER NOT NULL DEFAULT 0 CHECK(generation >= 0),
+ agent_id TEXT NOT NULL,
+ unread INTEGER NOT NULL DEFAULT 0 CHECK(unread >= 0),
+ verified INTEGER NOT NULL DEFAULT 0 CHECK(verified IN (0,1)),
+ restored INTEGER NOT NULL DEFAULT 0 CHECK(restored IN (0,1)),
+ errored INTEGER CHECK(errored IS NULL OR errored IN (0,1)),
+ interrupted INTEGER CHECK(interrupted IS NULL OR interrupted IN (0,1)),
+ transcript_ref BLOB NOT NULL,
+ state INTEGER NOT NULL CHECK(state BETWEEN 0 AND 5),
+ session_phase TEXT NOT NULL,
+ reason_code TEXT NOT NULL CHECK(length(reason_code) <= 64),
+ deleted INTEGER NOT NULL DEFAULT 0 CHECK(deleted IN (0,1)),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ last_event_at_ms INTEGER NOT NULL DEFAULT 0 CHECK(last_event_at_ms >= 0),
+ updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0),
+ payload BLOB NOT NULL
+);
+CREATE INDEX idx_agent_status_workspace ON agent_status(workspace_id, updated_at_ms);
+CREATE INDEX idx_agent_status_state ON agent_status(state, last_event_at_ms);
+CREATE TABLE agent_approvals (
+ approval_id TEXT PRIMARY KEY,
+ node_id TEXT NOT NULL,
+ workspace_id TEXT NOT NULL,
+ session_id TEXT NOT NULL,
+ generation INTEGER NOT NULL DEFAULT 0 CHECK(generation >= 0),
+ request BLOB NOT NULL,
+ request_sha256 BLOB NOT NULL CHECK(length(request_sha256) IN (0,32)),
+ decision TEXT NOT NULL,
+ answered_by TEXT NOT NULL,
+ state INTEGER NOT NULL CHECK(state BETWEEN 0 AND 3),
+ reason_code TEXT NOT NULL CHECK(length(reason_code) <= 64),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0),
+ answered_at_ms INTEGER NOT NULL DEFAULT 0 CHECK(answered_at_ms >= 0),
+ payload BLOB NOT NULL
+);
+CREATE INDEX idx_agent_approvals_node ON agent_approvals(node_id, state, created_at_ms);
+CREATE TABLE agent_mailbox (
+ message_id TEXT PRIMARY KEY,
+ workspace_id TEXT NOT NULL,
+ source_node_id TEXT NOT NULL,
+ target_node_id TEXT NOT NULL,
+ message_key TEXT NOT NULL,
+ body TEXT NOT NULL,
+ sequence INTEGER NOT NULL CHECK(sequence > 0),
+ deleted INTEGER NOT NULL DEFAULT 0 CHECK(deleted IN (0,1)),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0),
+ expires_at_ms INTEGER NOT NULL DEFAULT 0 CHECK(expires_at_ms >= 0),
+ acknowledged_at_ms INTEGER NOT NULL DEFAULT 0 CHECK(acknowledged_at_ms >= 0),
+ payload BLOB NOT NULL
+);
+CREATE INDEX idx_agent_mailbox_inbox ON agent_mailbox(target_node_id, sequence);
+CREATE INDEX idx_agent_mailbox_expiry ON agent_mailbox(expires_at_ms);
+CREATE UNIQUE INDEX idx_agent_mailbox_key ON agent_mailbox(source_node_id, target_node_id, message_key);
+CREATE TABLE agent_deliveries (
+ trace_id TEXT PRIMARY KEY,
+ workspace_id TEXT NOT NULL,
+ source_node_id TEXT NOT NULL,
+ target_node_id TEXT NOT NULL,
+ receipt TEXT NOT NULL,
+ body_chars INTEGER NOT NULL DEFAULT 0 CHECK(body_chars >= 0),
+ outcome INTEGER NOT NULL CHECK(outcome BETWEEN 0 AND 3),
+ reason_code TEXT NOT NULL CHECK(length(reason_code) <= 64),
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0),
+ payload BLOB NOT NULL
+);
+CREATE INDEX idx_agent_deliveries_workspace ON agent_deliveries(workspace_id, created_at_ms);
+CREATE INDEX idx_agent_deliveries_target ON agent_deliveries(target_node_id, created_at_ms);
+CREATE TABLE agent_handoffs (
+ handoff_id TEXT PRIMARY KEY,
+ workspace_id TEXT NOT NULL,
+ source_node_id TEXT NOT NULL,
+ target_node_id TEXT NOT NULL,
+ source_session_id TEXT NOT NULL,
+ source_generation INTEGER NOT NULL DEFAULT 0 CHECK(source_generation >= 0),
+ target_session_id TEXT NOT NULL,
+ target_generation INTEGER NOT NULL DEFAULT 0 CHECK(target_generation >= 0),
+ bundle BLOB NOT NULL,
+ bundle_sha256 BLOB NOT NULL CHECK(length(bundle_sha256) IN (0,32)),
+ mailbox_id TEXT NOT NULL,
+ trace_id TEXT NOT NULL,
+ attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+ state INTEGER NOT NULL CHECK(state BETWEEN 0 AND 8),
+ error_code TEXT NOT NULL CHECK(length(error_code) <= 64),
+ claimed_at_ms INTEGER NOT NULL DEFAULT 0 CHECK(claimed_at_ms >= 0),
+ claim_instance_id TEXT NOT NULL,
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ created_at_ms INTEGER NOT NULL CHECK(created_at_ms > 0),
+ accepted_at_ms INTEGER NOT NULL DEFAULT 0 CHECK(accepted_at_ms >= 0),
+ updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0),
+ payload BLOB NOT NULL
+);
+CREATE INDEX idx_agent_handoffs_workspace ON agent_handoffs(workspace_id, created_at_ms);
+CREATE INDEX idx_agent_handoffs_target ON agent_handoffs(target_node_id, state);
+CREATE TRIGGER freeze_agent_handoff_bundle BEFORE UPDATE OF workspace_id, source_node_id, target_node_id, source_session_id, source_generation, target_session_id, target_generation, bundle, bundle_sha256, created_at_ms ON agent_handoffs BEGIN SELECT RAISE(ABORT, 'handoff bundle is immutable'); END;
+CREATE TABLE agent_context_links (
+ node_id TEXT PRIMARY KEY,
+ workspace_id TEXT NOT NULL,
+ links BLOB NOT NULL,
+ revision INTEGER NOT NULL CHECK(revision > 0),
+ updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0),
+ payload BLOB NOT NULL
+);
+CREATE INDEX idx_agent_context_links_workspace ON agent_context_links(workspace_id);
+CREATE TABLE agent_drain_cursor (
+ execution_host_id TEXT PRIMARY KEY,
+ last_sequence INTEGER NOT NULL DEFAULT 0 CHECK(last_sequence >= 0),
+ updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms > 0)
+)`
+
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8, schemaV9}
 
 type sqlReader interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
@@ -369,11 +517,51 @@ func objectName(token string) string {
 	return strings.Trim(token, `"'()`)
 }
 
+// splitStatements cuts one migration into the statements SQLite will see.
+//
+// A semicolon is the separator everywhere except inside a trigger body, where
+// `BEGIN … END` wraps statements that each end in one. Splitting naively would
+// hand the validator two halves of a trigger and a stray `END`, so the depth of
+// the nearest enclosing BEGIN is tracked and a semicolon inside one is not a
+// cut. Nothing else in these migrations nests, and a form this function cannot
+// model reaches `expectedObjects` as an unrecognised statement rather than as
+// something skipped.
+func splitStatements(migration string) []string {
+	statements := []string{}
+	current := strings.Builder{}
+	depth := 0
+	flush := func() {
+		if text := canonicalSQL(current.String()); text != "" {
+			statements = append(statements, text)
+		}
+		current.Reset()
+	}
+	for _, line := range strings.Split(migration, "\n") {
+		for _, word := range strings.Fields(line) {
+			switch strings.ToUpper(strings.Trim(word, ";")) {
+			case "BEGIN":
+				depth++
+			case "END":
+				if depth > 0 {
+					depth--
+				}
+			}
+			current.WriteString(word)
+			current.WriteByte(' ')
+			if depth == 0 && strings.HasSuffix(word, ";") {
+				flush()
+			}
+		}
+	}
+	flush()
+	return statements
+}
+
 // expectedObjects folds the migrations into the schema they must have produced,
 // so validateSchema compares a database against this build's own statements
 // rather than against a version number it would have to trust.
 //
-// Five statement forms are recognised, and an unrecognised one is an error
+// Six statement forms are recognised, and an unrecognised one is an error
 // rather than a skip: a migration this function cannot model would leave the
 // validator silently blind to whatever that statement changed.
 //
@@ -382,6 +570,12 @@ func objectName(token string) string {
 //	                               sqlite_schema exactly as it stores a table,
 //	                               so an index that drifted or disappeared has
 //	                               to be as visible here as a column would be
+//	CREATE TRIGGER name ... ON t   defines a rule the database itself enforces.
+//	                               It is stored in sqlite_schema like the other
+//	                               two, and a trigger that vanished would be a
+//	                               constraint silently stopping — which is the
+//	                               one kind of drift a bundle freeze cannot
+//	                               afford
 //	ALTER TABLE old RENAME TO new  moves it, and SQLite quotes the new name in
 //	                               the schema text it stores
 //	DROP TABLE name                removes it
@@ -389,8 +583,7 @@ func objectName(token string) string {
 func expectedObjects(version int) (map[string]string, error) {
 	result := map[string]string{"schema_migrations": canonicalSQL(ledgerSQL)}
 	for _, migration := range migrations[:version] {
-		for _, statement := range strings.Split(migration, ";") {
-			statement = canonicalSQL(statement)
+		for _, statement := range splitStatements(migration) {
 			if statement == "" {
 				continue
 			}
@@ -398,12 +591,19 @@ func expectedObjects(version int) (map[string]string, error) {
 			switch {
 			case len(parts) >= 4 && strings.EqualFold(parts[0], "CREATE") && strings.EqualFold(parts[1], "TABLE"):
 				result[objectName(parts[2])] = statement
+			case len(parts) >= 5 && strings.EqualFold(parts[0], "CREATE") && strings.EqualFold(parts[1], "TRIGGER"):
+				result[objectName(parts[2])] = statement
 			// An index is a schema object with its own name, and a database
 			// missing one is a database whose queries silently scan. It is
 			// modelled here rather than exempted so it is compared like
-			// everything else.
+			// everything else. A UNIQUE index is more than an index — it is a
+			// constraint — so losing one has to be as visible as losing a
+			// column, and the word is part of the text SQLite stores.
 			case len(parts) >= 5 && strings.EqualFold(parts[0], "CREATE") && strings.EqualFold(parts[1], "INDEX") && strings.EqualFold(parts[3], "ON"):
 				result[objectName(parts[2])] = statement
+			case len(parts) >= 6 && strings.EqualFold(parts[0], "CREATE") && strings.EqualFold(parts[1], "UNIQUE") &&
+				strings.EqualFold(parts[2], "INDEX") && strings.EqualFold(parts[4], "ON"):
+				result[objectName(parts[3])] = statement
 			case len(parts) == 5 && strings.EqualFold(parts[0], "ALTER") && strings.EqualFold(parts[1], "TABLE") && strings.EqualFold(parts[3], "RENAME"):
 				return nil, fmt.Errorf("%w: rename needs a target", ErrSchema)
 			case len(parts) == 6 && strings.EqualFold(parts[0], "ALTER") && strings.EqualFold(parts[1], "TABLE") &&
@@ -445,10 +645,11 @@ func validateSchema(ctx context.Context, db sqlReader, hostID string) (int, erro
 			rows.Close()
 			return 0, err
 		}
-		// Tables and the indexes over them; SQLite's own automatic indexes
-		// carry no SQL and are already excluded by the `sqlite_*` filter above,
-		// so anything left without a statement is drift.
-		if (kind != "table" && kind != "index") || !statement.Valid {
+		// Tables, the indexes over them, and the triggers that enforce a rule
+		// the code must not be the only guardian of; SQLite's own automatic
+		// indexes carry no SQL and are already excluded by the `sqlite_*`
+		// filter above, so anything left without a statement is drift.
+		if (kind != "table" && kind != "index" && kind != "trigger") || !statement.Valid {
 			rows.Close()
 			return 0, ErrSchema
 		}

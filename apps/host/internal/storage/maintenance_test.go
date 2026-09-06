@@ -29,10 +29,18 @@ func TestMaintenanceTokenIsSingleUseAndBound(t *testing.T) {
 		t.Fatalf("a re-issued token was accepted: %v", err)
 	}
 	for name, attempt := range map[string]func() error{
-		"unknown token":  func() error { return store.ConsumeMaintenanceToken(ctx, tokenHash("other"), OwnershipDomainCanvas, "instance-1", 2000) },
-		"another domain": func() error { return store.ConsumeMaintenanceToken(ctx, hash, OwnershipDomainSession, "instance-1", 2000) },
-		"another Host":   func() error { return store.ConsumeMaintenanceToken(ctx, hash, OwnershipDomainCanvas, "instance-2", 2000) },
-		"after expiry":   func() error { return store.ConsumeMaintenanceToken(ctx, hash, OwnershipDomainCanvas, "instance-1", 121000) },
+		"unknown token": func() error {
+			return store.ConsumeMaintenanceToken(ctx, tokenHash("other"), OwnershipDomainCanvas, "instance-1", 2000)
+		},
+		"another domain": func() error {
+			return store.ConsumeMaintenanceToken(ctx, hash, OwnershipDomainSession, "instance-1", 2000)
+		},
+		"another Host": func() error {
+			return store.ConsumeMaintenanceToken(ctx, hash, OwnershipDomainCanvas, "instance-2", 2000)
+		},
+		"after expiry": func() error {
+			return store.ConsumeMaintenanceToken(ctx, hash, OwnershipDomainCanvas, "instance-1", 121000)
+		},
 	} {
 		if err := attempt(); !errors.Is(err, ErrMaintenanceToken) {
 			t.Fatalf("%s: %v", name, err)

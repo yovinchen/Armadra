@@ -109,6 +109,20 @@ func TestExpectedObjectsModelsEveryStatementForm(t *testing.T) {
 	if _, ok := objects["maintenance_tokens"]; !ok {
 		t.Fatal("v6 did not define maintenance_tokens")
 	}
+	// v9 introduces the two forms the fold had never met: a trigger, whose body
+	// holds semicolons that must not split it, and a UNIQUE index, which is a
+	// constraint rather than merely a lookup. Both are objects SQLite stores,
+	// so both have to be compared like a column — a trigger that vanished would
+	// be a bundle freeze silently stopping.
+	if !strings.Contains(objects["freeze_agent_handoff_bundle"], "RAISE(ABORT,") {
+		t.Fatalf("the handoff freeze trigger did not fold into one object: %q", objects["freeze_agent_handoff_bundle"])
+	}
+	if !strings.HasPrefix(objects["idx_agent_mailbox_key"], "CREATE UNIQUE INDEX") {
+		t.Fatalf("the mailbox key constraint folded as a plain index: %q", objects["idx_agent_mailbox_key"])
+	}
+	if _, ok := objects["END"]; ok {
+		t.Fatal("the trigger body was split into a statement of its own")
+	}
 
 	// v1 through v5 fold to exactly what they folded to before v6 existed:
 	// the validator change must not move an older database's expectations.
