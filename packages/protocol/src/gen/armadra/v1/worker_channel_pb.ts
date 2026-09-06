@@ -8,6 +8,8 @@ import type {
   GenMessage,
 } from "@bufbuild/protobuf/codegenv1";
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv1";
+import type { GitOperationState, RepositoryState } from "./git_pb.js";
+import { file_armadra_v1_git } from "./git_pb.js";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -16,7 +18,8 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_worker_channel: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Ch9hcm1hZHJhL3YxL3dvcmtlcl9jaGFubmVsLnByb3RvEgphcm1hZHJhLnYxIuUBChdXb3JrZXJDaGFubmVsQ2FwYWJpbGl0eRIaChJ3b3JrZXJfaW5zdGFuY2VfaWQYASABKAkSDgoGc29ja2V0GAIgASgJEgwKBHBpcGUYAyABKAkSGAoQaGlnaGVzdF9zZXF1ZW5jZRgKIAEoBBIWCg51bmFja25vd2xlZGdlZBgLIAEoDRIaChJtYXhfdW5hY2tub3dsZWRnZWQYDCABKA0SLQoFc3RhdGUYHiABKA4yHi5hcm1hZHJhLnYxLldvcmtlckNoYW5uZWxTdGF0ZRITCgtyZWFzb25fY29kZRgnIAEoCSK3AQoMV29ya2VyVXBjYWxsEhIKCnJlcXVlc3RfaWQYASABKAkSGgoSd29ya2VyX2luc3RhbmNlX2lkGAIgASgJEhAKCHNlcXVlbmNlGAMgASgEEg8KB2F0dGVtcHQYBCABKA0SGgoSZW1pdHRlZF9hdF91bml4X21zGCggASgDEi8KBWFnZW50GKABIAEoCzIdLmFybWFkcmEudjEuV29ya2VyQWdlbnRVcGNhbGxIAEIHCgVldmVudCLyAQoRV29ya2VyQWdlbnRVcGNhbGwSFAoMd29ya3NwYWNlX2lkGAEgASgJEg8KB25vZGVfaWQYAiABKAkSEgoKc2Vzc2lvbl9pZBgDIAEoCRIPCgdwYXlsb2FkGAogASgMEhYKDnBheWxvYWRfc2hhMjU2GAsgASgMEhYKDnNjaGVtYV92ZXJzaW9uGAwgASgNEi8KBGtpbmQYHiABKA4yIS5hcm1hZHJhLnYxLldvcmtlckFnZW50VXBjYWxsS2luZBITCgtyZWFzb25fY29kZRgnIAEoCRIbChNvYnNlcnZlZF9hdF91bml4X21zGCggASgDItYBChFXb3JrZXJVcGNhbGxSZXBseRISCgpyZXF1ZXN0X2lkGAEgASgJEg8KB2hvc3RfaWQYAiABKAkSGgoSd29ya2VyX2luc3RhbmNlX2lkGAMgASgJEhQKDGFja19zZXF1ZW5jZRgKIAEoBBI4CgtkaXNwb3NpdGlvbhgeIAEoDjIjLmFybWFkcmEudjEuV29ya2VyVXBjYWxsRGlzcG9zaXRpb24SEwoLcmVhc29uX2NvZGUYJyABKAkSGwoTcmVjZWl2ZWRfYXRfdW5peF9tcxgoIAEoAyqhAQoSV29ya2VyQ2hhbm5lbFN0YXRlEiQKIFdPUktFUl9DSEFOTkVMX1NUQVRFX1VOU1BFQ0lGSUVEEAASIQodV09SS0VSX0NIQU5ORUxfU1RBVEVfRElTQUJMRUQQARIeChpXT1JLRVJfQ0hBTk5FTF9TVEFURV9SRUFEWRACEiIKHldPUktFUl9DSEFOTkVMX1NUQVRFX1JFUExBWUlORxADKpoBChVXb3JrZXJBZ2VudFVwY2FsbEtpbmQSKAokV09SS0VSX0FHRU5UX1VQQ0FMTF9LSU5EX1VOU1BFQ0lGSUVEEAASJgoiV09SS0VSX0FHRU5UX1VQQ0FMTF9LSU5EX0hPT0tfVFVSThABEi8KK1dPUktFUl9BR0VOVF9VUENBTExfS0lORF9BUFBST1ZBTF9SRVFVRVNURUQQAiq9AQoXV29ya2VyVXBjYWxsRGlzcG9zaXRpb24SKQolV09SS0VSX1VQQ0FMTF9ESVNQT1NJVElPTl9VTlNQRUNJRklFRBAAEiYKIldPUktFUl9VUENBTExfRElTUE9TSVRJT05fQUNDRVBURUQQARInCiNXT1JLRVJfVVBDQUxMX0RJU1BPU0lUSU9OX0RVUExJQ0FURRACEiYKIldPUktFUl9VUENBTExfRElTUE9TSVRJT05fUkVKRUNURUQQA0IjWiFhcm1hZHJhLmxvY2FsL2hvc3QvZ2VuL2FybWFkcmEvdjFiBnByb3RvMw",
+    "Ch9hcm1hZHJhL3YxL3dvcmtlcl9jaGFubmVsLnByb3RvEgphcm1hZHJhLnYxIuUBChdXb3JrZXJDaGFubmVsQ2FwYWJpbGl0eRIaChJ3b3JrZXJfaW5zdGFuY2VfaWQYASABKAkSDgoGc29ja2V0GAIgASgJEgwKBHBpcGUYAyABKAkSGAoQaGlnaGVzdF9zZXF1ZW5jZRgKIAEoBBIWCg51bmFja25vd2xlZGdlZBgLIAEoDRIaChJtYXhfdW5hY2tub3dsZWRnZWQYDCABKA0SLQoFc3RhdGUYHiABKA4yHi5hcm1hZHJhLnYxLldvcmtlckNoYW5uZWxTdGF0ZRITCgtyZWFzb25fY29kZRgnIAEoCSLkAQoMV29ya2VyVXBjYWxsEhIKCnJlcXVlc3RfaWQYASABKAkSGgoSd29ya2VyX2luc3RhbmNlX2lkGAIgASgJEhAKCHNlcXVlbmNlGAMgASgEEg8KB2F0dGVtcHQYBCABKA0SGgoSZW1pdHRlZF9hdF91bml4X21zGCggASgDEi8KBWFnZW50GKABIAEoCzIdLmFybWFkcmEudjEuV29ya2VyQWdlbnRVcGNhbGxIABIrCgNnaXQYtAEgASgLMhsuYXJtYWRyYS52MS5Xb3JrZXJHaXRVcGNhbGxIAEIHCgVldmVudCLyAQoRV29ya2VyQWdlbnRVcGNhbGwSFAoMd29ya3NwYWNlX2lkGAEgASgJEg8KB25vZGVfaWQYAiABKAkSEgoKc2Vzc2lvbl9pZBgDIAEoCRIPCgdwYXlsb2FkGAogASgMEhYKDnBheWxvYWRfc2hhMjU2GAsgASgMEhYKDnNjaGVtYV92ZXJzaW9uGAwgASgNEi8KBGtpbmQYHiABKA4yIS5hcm1hZHJhLnYxLldvcmtlckFnZW50VXBjYWxsS2luZBITCgtyZWFzb25fY29kZRgnIAEoCRIbChNvYnNlcnZlZF9hdF91bml4X21zGCggASgDItYBChFXb3JrZXJVcGNhbGxSZXBseRISCgpyZXF1ZXN0X2lkGAEgASgJEg8KB2hvc3RfaWQYAiABKAkSGgoSd29ya2VyX2luc3RhbmNlX2lkGAMgASgJEhQKDGFja19zZXF1ZW5jZRgKIAEoBBI4CgtkaXNwb3NpdGlvbhgeIAEoDjIjLmFybWFkcmEudjEuV29ya2VyVXBjYWxsRGlzcG9zaXRpb24SEwoLcmVhc29uX2NvZGUYJyABKAkSGwoTcmVjZWl2ZWRfYXRfdW5peF9tcxgoIAEoAyK6AgoPV29ya2VyR2l0VXBjYWxsEhQKDHdvcmtzcGFjZV9pZBgBIAEoCRIUCgxvcGVyYXRpb25faWQYAiABKAkSFwoPcmVwb3NpdG9yeV9wYXRoGAMgASgJEhAKCHByb2dyZXNzGAogASgNEhAKCGFmZmVjdGVkGAsgAygJEi8KCnJlcG9zaXRvcnkYDCABKAsyGy5hcm1hZHJhLnYxLlJlcG9zaXRvcnlTdGF0ZRIsCgVzdGF0ZRgeIAEoDjIdLmFybWFkcmEudjEuR2l0T3BlcmF0aW9uU3RhdGUSLQoEa2luZBgfIAEoDjIfLmFybWFkcmEudjEuV29ya2VyR2l0VXBjYWxsS2luZBITCgtyZWFzb25fY29kZRgnIAEoCRIbChNvYnNlcnZlZF9hdF91bml4X21zGCggASgDKqEBChJXb3JrZXJDaGFubmVsU3RhdGUSJAogV09SS0VSX0NIQU5ORUxfU1RBVEVfVU5TUEVDSUZJRUQQABIhCh1XT1JLRVJfQ0hBTk5FTF9TVEFURV9ESVNBQkxFRBABEh4KGldPUktFUl9DSEFOTkVMX1NUQVRFX1JFQURZEAISIgoeV09SS0VSX0NIQU5ORUxfU1RBVEVfUkVQTEFZSU5HEAMqmgEKFVdvcmtlckFnZW50VXBjYWxsS2luZBIoCiRXT1JLRVJfQUdFTlRfVVBDQUxMX0tJTkRfVU5TUEVDSUZJRUQQABImCiJXT1JLRVJfQUdFTlRfVVBDQUxMX0tJTkRfSE9PS19UVVJOEAESLworV09SS0VSX0FHRU5UX1VQQ0FMTF9LSU5EX0FQUFJPVkFMX1JFUVVFU1RFRBACKr0BChdXb3JrZXJVcGNhbGxEaXNwb3NpdGlvbhIpCiVXT1JLRVJfVVBDQUxMX0RJU1BPU0lUSU9OX1VOU1BFQ0lGSUVEEAASJgoiV09SS0VSX1VQQ0FMTF9ESVNQT1NJVElPTl9BQ0NFUFRFRBABEicKI1dPUktFUl9VUENBTExfRElTUE9TSVRJT05fRFVQTElDQVRFEAISJgoiV09SS0VSX1VQQ0FMTF9ESVNQT1NJVElPTl9SRUpFQ1RFRBADKqUCChNXb3JrZXJHaXRVcGNhbGxLaW5kEiYKIldPUktFUl9HSVRfVVBDQUxMX0tJTkRfVU5TUEVDSUZJRUQQABItCilXT1JLRVJfR0lUX1VQQ0FMTF9LSU5EX09QRVJBVElPTl9QUk9HUkVTUxABEi0KKVdPUktFUl9HSVRfVVBDQUxMX0tJTkRfT1BFUkFUSU9OX0ZJTklTSEVEEAISLQopV09SS0VSX0dJVF9VUENBTExfS0lORF9SRVBPU0lUT1JZX0NIQU5HRUQQAxIsCihXT1JLRVJfR0lUX1VQQ0FMTF9LSU5EX0NPTkZMSUNUX0RFVEVDVEVEEAQSKwonV09SS0VSX0dJVF9VUENBTExfS0lORF9XT1JLVFJFRV9DSEFOR0VEEAVCI1ohYXJtYWRyYS5sb2NhbC9ob3N0L2dlbi9hcm1hZHJhL3YxYgZwcm90bzM",
+    [file_armadra_v1_git],
   );
 
 /**
@@ -140,8 +143,8 @@ export type WorkerUpcall = Message<"armadra.v1.WorkerUpcall"> & {
 
   /**
    * One member per business domain, twenty numbers apart as §2.1 requires:
-   * 100 settings, 120 filesystem, 140 session, 160 agent, 180 git. Only the
-   * agent member exists in this batch; the rest arrive with their domains.
+   * 100 settings, 120 filesystem, 140 session, 160 agent, 180 git. The
+   * settings, filesystem and session members arrive with their domains.
    *
    * @generated from oneof armadra.v1.WorkerUpcall.event
    */
@@ -152,6 +155,13 @@ export type WorkerUpcall = Message<"armadra.v1.WorkerUpcall"> & {
          */
         value: WorkerAgentUpcall;
         case: "agent";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.WorkerGitUpcall git = 180;
+         */
+        value: WorkerGitUpcall;
+        case: "git";
       }
     | { case: undefined; value?: undefined };
 };
@@ -284,6 +294,86 @@ export const WorkerUpcallReplySchema: GenMessage<WorkerUpcallReply> =
   messageDesc(file_armadra_v1_worker_channel, 3);
 
 /**
+ * A git-domain report from the execution host (business migration §2.8,
+ * Git 设计 §10): progress on a running operation, the outcome of one that
+ * finished, a repository that changed under an external `git`, a conflict that
+ * stopped an integration, or a worktree that appeared or vanished.
+ *
+ * It is a report, not a decision. The Worker says what it observed; whether a
+ * finished push counts as SUCCEEDED or UNKNOWN_OUTCOME is a reading of the
+ * execution host's own state, which is why the state travels here rather than
+ * being inferred by the Host from the absence of an error.
+ *
+ * @generated from message armadra.v1.WorkerGitUpcall
+ */
+export type WorkerGitUpcall = Message<"armadra.v1.WorkerGitUpcall"> & {
+  /**
+   * @generated from field: string workspace_id = 1;
+   */
+  workspaceId: string;
+
+  /**
+   * Empty for a repository or worktree change: those are observations about a
+   * checkout, not about anything the Host queued.
+   *
+   * @generated from field: string operation_id = 2;
+   */
+  operationId: string;
+
+  /**
+   * @generated from field: string repository_path = 3;
+   */
+  repositoryPath: string;
+
+  /**
+   * @generated from field: uint32 progress = 10;
+   */
+  progress: number;
+
+  /**
+   * @generated from field: repeated string affected = 11;
+   */
+  affected: string[];
+
+  /**
+   * Present on REPOSITORY_CHANGED, so the Host's cache is refreshed by the
+   * same frame that announced the change rather than by a follow-up read that
+   * could observe a third state.
+   *
+   * @generated from field: armadra.v1.RepositoryState repository = 12;
+   */
+  repository?: RepositoryState;
+
+  /**
+   * @generated from field: armadra.v1.GitOperationState state = 30;
+   */
+  state: GitOperationState;
+
+  /**
+   * @generated from field: armadra.v1.WorkerGitUpcallKind kind = 31;
+   */
+  kind: WorkerGitUpcallKind;
+
+  /**
+   * @generated from field: string reason_code = 39;
+   */
+  reasonCode: string;
+
+  /**
+   * @generated from field: int64 observed_at_unix_ms = 40;
+   */
+  observedAtUnixMs: bigint;
+};
+
+/**
+ * Describes the message armadra.v1.WorkerGitUpcall.
+ * Use `create(WorkerGitUpcallSchema)` to create a new message.
+ */
+export const WorkerGitUpcallSchema: GenMessage<WorkerGitUpcall> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_worker_channel, 4);
+
+/**
  * @generated from enum armadra.v1.WorkerChannelState
  */
 export enum WorkerChannelState {
@@ -387,3 +477,45 @@ export enum WorkerUpcallDisposition {
 export const WorkerUpcallDispositionSchema: GenEnum<WorkerUpcallDisposition> =
   /*@__PURE__*/
   enumDesc(file_armadra_v1_worker_channel, 2);
+
+/**
+ * @generated from enum armadra.v1.WorkerGitUpcallKind
+ */
+export enum WorkerGitUpcallKind {
+  /**
+   * @generated from enum value: WORKER_GIT_UPCALL_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: WORKER_GIT_UPCALL_KIND_OPERATION_PROGRESS = 1;
+   */
+  OPERATION_PROGRESS = 1,
+
+  /**
+   * @generated from enum value: WORKER_GIT_UPCALL_KIND_OPERATION_FINISHED = 2;
+   */
+  OPERATION_FINISHED = 2,
+
+  /**
+   * @generated from enum value: WORKER_GIT_UPCALL_KIND_REPOSITORY_CHANGED = 3;
+   */
+  REPOSITORY_CHANGED = 3,
+
+  /**
+   * @generated from enum value: WORKER_GIT_UPCALL_KIND_CONFLICT_DETECTED = 4;
+   */
+  CONFLICT_DETECTED = 4,
+
+  /**
+   * @generated from enum value: WORKER_GIT_UPCALL_KIND_WORKTREE_CHANGED = 5;
+   */
+  WORKTREE_CHANGED = 5,
+}
+
+/**
+ * Describes the enum armadra.v1.WorkerGitUpcallKind.
+ */
+export const WorkerGitUpcallKindSchema: GenEnum<WorkerGitUpcallKind> =
+  /*@__PURE__*/
+  enumDesc(file_armadra_v1_worker_channel, 3);

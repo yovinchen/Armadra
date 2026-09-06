@@ -8,6 +8,7 @@ import "armadra/v1/canvas.proto";
 import "armadra/v1/common.proto";
 import "armadra/v1/settings.proto";
 import "armadra/v1/filesystem.proto";
+import "armadra/v1/git.proto";
 
 // The Host -> client business event stream (host business migration §2.3).
 //
@@ -103,6 +104,13 @@ message EventEnvelope {
     SettingsDocument settings_document = 120;
     ExecutionHost settings_execution_host = 121;
     WorkspaceRoot filesystem_root = 140;
+    // The git domain (§2.8). An operation is the entry a client follows
+    // from queued to finished; the repository state is the cache it renders
+    // between observations; a clone job is neither, because it exists before
+    // the repository it will produce.
+    GitOperation git_operation = 220;
+    RepositoryState git_repository_state = 221;
+    GitCloneJob git_clone_job = 222;
   }
 }
 

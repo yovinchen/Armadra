@@ -1,6 +1,7 @@
 syntax = "proto3";
 package armadra.v1;
 option go_package = "armadra.local/host/gen/armadra/v1";
+import "armadra/v1/git.proto";
 
 // The Worker's upward half of the resident bidirectional channel (Go Host
 // business migration §2.9, §2.10). The first phase spoke only when spoken to:
@@ -77,9 +78,12 @@ message WorkerUpcall {
   uint32 attempt = 4;
   int64 emitted_at_unix_ms = 40;
   // One member per business domain, twenty numbers apart as §2.1 requires:
-  // 100 settings, 120 filesystem, 140 session, 160 agent, 180 git. Only the
-  // agent member exists in this batch; the rest arrive with their domains.
-  oneof event { WorkerAgentUpcall agent = 160; }
+  // 100 settings, 120 filesystem, 140 session, 160 agent, 180 git. The
+  // settings, filesystem and session members arrive with their domains.
+  oneof event {
+    WorkerAgentUpcall agent = 160;
+    WorkerGitUpcall git = 180;
+  }
 }
 
 // An agent-domain report from the execution host: something the Worker
@@ -131,4 +135,40 @@ enum WorkerUpcallDisposition {
   // Malformed or out of window. The frame is dropped rather than replayed
   // forever; `reason_code` says which, and the Worker keeps its channel.
   WORKER_UPCALL_DISPOSITION_REJECTED = 3;
+}
+
+// A git-domain report from the execution host (business migration §2.8,
+// Git 设计 §10): progress on a running operation, the outcome of one that
+// finished, a repository that changed under an external `git`, a conflict that
+// stopped an integration, or a worktree that appeared or vanished.
+//
+// It is a report, not a decision. The Worker says what it observed; whether a
+// finished push counts as SUCCEEDED or UNKNOWN_OUTCOME is a reading of the
+// execution host's own state, which is why the state travels here rather than
+// being inferred by the Host from the absence of an error.
+message WorkerGitUpcall {
+  string workspace_id = 1;
+  // Empty for a repository or worktree change: those are observations about a
+  // checkout, not about anything the Host queued.
+  string operation_id = 2;
+  string repository_path = 3;
+  uint32 progress = 10;
+  repeated string affected = 11;
+  // Present on REPOSITORY_CHANGED, so the Host's cache is refreshed by the
+  // same frame that announced the change rather than by a follow-up read that
+  // could observe a third state.
+  RepositoryState repository = 12;
+  GitOperationState state = 30;
+  WorkerGitUpcallKind kind = 31;
+  string reason_code = 39;
+  int64 observed_at_unix_ms = 40;
+}
+
+enum WorkerGitUpcallKind {
+  WORKER_GIT_UPCALL_KIND_UNSPECIFIED = 0;
+  WORKER_GIT_UPCALL_KIND_OPERATION_PROGRESS = 1;
+  WORKER_GIT_UPCALL_KIND_OPERATION_FINISHED = 2;
+  WORKER_GIT_UPCALL_KIND_REPOSITORY_CHANGED = 3;
+  WORKER_GIT_UPCALL_KIND_CONFLICT_DETECTED = 4;
+  WORKER_GIT_UPCALL_KIND_WORKTREE_CHANGED = 5;
 }

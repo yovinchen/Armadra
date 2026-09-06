@@ -4,6 +4,7 @@ export * from "./gen/armadra/v1/identity_pb.js";
 export * from "./gen/armadra/v1/agent_pb.js";
 export * from "./gen/armadra/v1/canvas_pb.js";
 export * from "./gen/armadra/v1/filesystem_pb.js";
+export * from "./gen/armadra/v1/git_pb.js";
 export * from "./gen/armadra/v1/events_pb.js";
 export * from "./gen/armadra/v1/ownership_pb.js";
 export * from "./gen/armadra/v1/settings_pb.js";

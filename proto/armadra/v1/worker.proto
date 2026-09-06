@@ -6,6 +6,7 @@ import "armadra/v1/common.proto";
 import "armadra/v1/command.proto";
 import "armadra/v1/canvas.proto";
 import "armadra/v1/filesystem.proto";
+import "armadra/v1/git.proto";
 import "armadra/v1/worker_channel.proto";
 import "armadra/v1/language.proto";
 import "armadra/v1/migration.proto";
@@ -339,6 +340,11 @@ message WorkerRequest {
     // The filesystem domain (business migration §2.9). 25 belongs to the
     // settings domain; this one is 26 so the two land independently.
     FilesystemWorkerRequest filesystem = 26;
+    // The git domain (§2.8). 27 and 28 belong to the session and agent
+    // domains, whose batches land independently, so this one is 29 rather
+    // than the next free number: a frame renumbered at merge time would be a
+    // released field number changing meaning.
+    GitWorkerRequest git = 29;
   }
 }
 message WorkerResponse {
@@ -370,5 +376,6 @@ message WorkerResponse {
     ReverseImportReport reverse_import = 23;
     WorkerSettingsSnapshot settings = 25;
     FilesystemWorkerResponse filesystem = 26;
+    GitWorkerResponse git = 29;
   }
 }

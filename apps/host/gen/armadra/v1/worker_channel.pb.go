@@ -182,6 +182,64 @@ func (WorkerUpcallDisposition) EnumDescriptor() ([]byte, []int) {
 	return file_armadra_v1_worker_channel_proto_rawDescGZIP(), []int{2}
 }
 
+type WorkerGitUpcallKind int32
+
+const (
+	WorkerGitUpcallKind_WORKER_GIT_UPCALL_KIND_UNSPECIFIED        WorkerGitUpcallKind = 0
+	WorkerGitUpcallKind_WORKER_GIT_UPCALL_KIND_OPERATION_PROGRESS WorkerGitUpcallKind = 1
+	WorkerGitUpcallKind_WORKER_GIT_UPCALL_KIND_OPERATION_FINISHED WorkerGitUpcallKind = 2
+	WorkerGitUpcallKind_WORKER_GIT_UPCALL_KIND_REPOSITORY_CHANGED WorkerGitUpcallKind = 3
+	WorkerGitUpcallKind_WORKER_GIT_UPCALL_KIND_CONFLICT_DETECTED  WorkerGitUpcallKind = 4
+	WorkerGitUpcallKind_WORKER_GIT_UPCALL_KIND_WORKTREE_CHANGED   WorkerGitUpcallKind = 5
+)
+
+// Enum value maps for WorkerGitUpcallKind.
+var (
+	WorkerGitUpcallKind_name = map[int32]string{
+		0: "WORKER_GIT_UPCALL_KIND_UNSPECIFIED",
+		1: "WORKER_GIT_UPCALL_KIND_OPERATION_PROGRESS",
+		2: "WORKER_GIT_UPCALL_KIND_OPERATION_FINISHED",
+		3: "WORKER_GIT_UPCALL_KIND_REPOSITORY_CHANGED",
+		4: "WORKER_GIT_UPCALL_KIND_CONFLICT_DETECTED",
+		5: "WORKER_GIT_UPCALL_KIND_WORKTREE_CHANGED",
+	}
+	WorkerGitUpcallKind_value = map[string]int32{
+		"WORKER_GIT_UPCALL_KIND_UNSPECIFIED":        0,
+		"WORKER_GIT_UPCALL_KIND_OPERATION_PROGRESS": 1,
+		"WORKER_GIT_UPCALL_KIND_OPERATION_FINISHED": 2,
+		"WORKER_GIT_UPCALL_KIND_REPOSITORY_CHANGED": 3,
+		"WORKER_GIT_UPCALL_KIND_CONFLICT_DETECTED":  4,
+		"WORKER_GIT_UPCALL_KIND_WORKTREE_CHANGED":   5,
+	}
+)
+
+func (x WorkerGitUpcallKind) Enum() *WorkerGitUpcallKind {
+	p := new(WorkerGitUpcallKind)
+	*p = x
+	return p
+}
+
+func (x WorkerGitUpcallKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (WorkerGitUpcallKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_armadra_v1_worker_channel_proto_enumTypes[3].Descriptor()
+}
+
+func (WorkerGitUpcallKind) Type() protoreflect.EnumType {
+	return &file_armadra_v1_worker_channel_proto_enumTypes[3]
+}
+
+func (x WorkerGitUpcallKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use WorkerGitUpcallKind.Descriptor instead.
+func (WorkerGitUpcallKind) EnumDescriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_channel_proto_rawDescGZIP(), []int{3}
+}
+
 // What a Worker reports about its own upcall channel during the handshake,
 // carried in WorkerHelloResponse.channel. Absent means this Worker has no
 // durable outbox and will never send an upcall, which is a different statement
@@ -316,12 +374,13 @@ type WorkerUpcall struct {
 	Attempt         uint32 `protobuf:"varint,4,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	EmittedAtUnixMs int64  `protobuf:"varint,40,opt,name=emitted_at_unix_ms,json=emittedAtUnixMs,proto3" json:"emitted_at_unix_ms,omitempty"`
 	// One member per business domain, twenty numbers apart as §2.1 requires:
-	// 100 settings, 120 filesystem, 140 session, 160 agent, 180 git. Only the
-	// agent member exists in this batch; the rest arrive with their domains.
+	// 100 settings, 120 filesystem, 140 session, 160 agent, 180 git. The
+	// settings, filesystem and session members arrive with their domains.
 	//
 	// Types that are valid to be assigned to Event:
 	//
 	//	*WorkerUpcall_Agent
+	//	*WorkerUpcall_Git
 	Event         isWorkerUpcall_Event `protobuf_oneof:"event"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -408,6 +467,15 @@ func (x *WorkerUpcall) GetAgent() *WorkerAgentUpcall {
 	return nil
 }
 
+func (x *WorkerUpcall) GetGit() *WorkerGitUpcall {
+	if x != nil {
+		if x, ok := x.Event.(*WorkerUpcall_Git); ok {
+			return x.Git
+		}
+	}
+	return nil
+}
+
 type isWorkerUpcall_Event interface {
 	isWorkerUpcall_Event()
 }
@@ -416,7 +484,13 @@ type WorkerUpcall_Agent struct {
 	Agent *WorkerAgentUpcall `protobuf:"bytes,160,opt,name=agent,proto3,oneof"`
 }
 
+type WorkerUpcall_Git struct {
+	Git *WorkerGitUpcall `protobuf:"bytes,180,opt,name=git,proto3,oneof"`
+}
+
 func (*WorkerUpcall_Agent) isWorkerUpcall_Event() {}
+
+func (*WorkerUpcall_Git) isWorkerUpcall_Event() {}
 
 // An agent-domain report from the execution host: something the Worker
 // observed, not something it decided. The body stays an opaque payload with its
@@ -628,12 +702,142 @@ func (x *WorkerUpcallReply) GetReceivedAtUnixMs() int64 {
 	return 0
 }
 
+// A git-domain report from the execution host (business migration §2.8,
+// Git 设计 §10): progress on a running operation, the outcome of one that
+// finished, a repository that changed under an external `git`, a conflict that
+// stopped an integration, or a worktree that appeared or vanished.
+//
+// It is a report, not a decision. The Worker says what it observed; whether a
+// finished push counts as SUCCEEDED or UNKNOWN_OUTCOME is a reading of the
+// execution host's own state, which is why the state travels here rather than
+// being inferred by the Host from the absence of an error.
+type WorkerGitUpcall struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	WorkspaceId string                 `protobuf:"bytes,1,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	// Empty for a repository or worktree change: those are observations about a
+	// checkout, not about anything the Host queued.
+	OperationId    string   `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	RepositoryPath string   `protobuf:"bytes,3,opt,name=repository_path,json=repositoryPath,proto3" json:"repository_path,omitempty"`
+	Progress       uint32   `protobuf:"varint,10,opt,name=progress,proto3" json:"progress,omitempty"`
+	Affected       []string `protobuf:"bytes,11,rep,name=affected,proto3" json:"affected,omitempty"`
+	// Present on REPOSITORY_CHANGED, so the Host's cache is refreshed by the
+	// same frame that announced the change rather than by a follow-up read that
+	// could observe a third state.
+	Repository       *RepositoryState    `protobuf:"bytes,12,opt,name=repository,proto3" json:"repository,omitempty"`
+	State            GitOperationState   `protobuf:"varint,30,opt,name=state,proto3,enum=armadra.v1.GitOperationState" json:"state,omitempty"`
+	Kind             WorkerGitUpcallKind `protobuf:"varint,31,opt,name=kind,proto3,enum=armadra.v1.WorkerGitUpcallKind" json:"kind,omitempty"`
+	ReasonCode       string              `protobuf:"bytes,39,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	ObservedAtUnixMs int64               `protobuf:"varint,40,opt,name=observed_at_unix_ms,json=observedAtUnixMs,proto3" json:"observed_at_unix_ms,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *WorkerGitUpcall) Reset() {
+	*x = WorkerGitUpcall{}
+	mi := &file_armadra_v1_worker_channel_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkerGitUpcall) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkerGitUpcall) ProtoMessage() {}
+
+func (x *WorkerGitUpcall) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_worker_channel_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkerGitUpcall.ProtoReflect.Descriptor instead.
+func (*WorkerGitUpcall) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_worker_channel_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *WorkerGitUpcall) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *WorkerGitUpcall) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *WorkerGitUpcall) GetRepositoryPath() string {
+	if x != nil {
+		return x.RepositoryPath
+	}
+	return ""
+}
+
+func (x *WorkerGitUpcall) GetProgress() uint32 {
+	if x != nil {
+		return x.Progress
+	}
+	return 0
+}
+
+func (x *WorkerGitUpcall) GetAffected() []string {
+	if x != nil {
+		return x.Affected
+	}
+	return nil
+}
+
+func (x *WorkerGitUpcall) GetRepository() *RepositoryState {
+	if x != nil {
+		return x.Repository
+	}
+	return nil
+}
+
+func (x *WorkerGitUpcall) GetState() GitOperationState {
+	if x != nil {
+		return x.State
+	}
+	return GitOperationState_GIT_OPERATION_STATE_UNSPECIFIED
+}
+
+func (x *WorkerGitUpcall) GetKind() WorkerGitUpcallKind {
+	if x != nil {
+		return x.Kind
+	}
+	return WorkerGitUpcallKind_WORKER_GIT_UPCALL_KIND_UNSPECIFIED
+}
+
+func (x *WorkerGitUpcall) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+func (x *WorkerGitUpcall) GetObservedAtUnixMs() int64 {
+	if x != nil {
+		return x.ObservedAtUnixMs
+	}
+	return 0
+}
+
 var File_armadra_v1_worker_channel_proto protoreflect.FileDescriptor
 
 const file_armadra_v1_worker_channel_proto_rawDesc = "" +
 	"\n" +
 	"\x1farmadra/v1/worker_channel.proto\x12\n" +
-	"armadra.v1\"\xcc\x02\n" +
+	"armadra.v1\x1a\x14armadra/v1/git.proto\"\xcc\x02\n" +
 	"\x17WorkerChannelCapability\x12,\n" +
 	"\x12worker_instance_id\x18\x01 \x01(\tR\x10workerInstanceId\x12\x16\n" +
 	"\x06socket\x18\x02 \x01(\tR\x06socket\x12\x12\n" +
@@ -644,7 +848,7 @@ const file_armadra_v1_worker_channel_proto_rawDesc = "" +
 	"\x12max_unacknowledged\x18\f \x01(\rR\x11maxUnacknowledged\x124\n" +
 	"\x05state\x18\x1e \x01(\x0e2\x1e.armadra.v1.WorkerChannelStateR\x05state\x12\x1f\n" +
 	"\vreason_code\x18' \x01(\tR\n" +
-	"reasonCode\"\xff\x01\n" +
+	"reasonCode\"\xb1\x02\n" +
 	"\fWorkerUpcall\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12,\n" +
@@ -652,7 +856,8 @@ const file_armadra_v1_worker_channel_proto_rawDesc = "" +
 	"\bsequence\x18\x03 \x01(\x04R\bsequence\x12\x18\n" +
 	"\aattempt\x18\x04 \x01(\rR\aattempt\x12+\n" +
 	"\x12emitted_at_unix_ms\x18( \x01(\x03R\x0femittedAtUnixMs\x126\n" +
-	"\x05agent\x18\xa0\x01 \x01(\v2\x1d.armadra.v1.WorkerAgentUpcallH\x00R\x05agentB\a\n" +
+	"\x05agent\x18\xa0\x01 \x01(\v2\x1d.armadra.v1.WorkerAgentUpcallH\x00R\x05agent\x120\n" +
+	"\x03git\x18\xb4\x01 \x01(\v2\x1b.armadra.v1.WorkerGitUpcallH\x00R\x03gitB\a\n" +
 	"\x05event\"\xdd\x02\n" +
 	"\x11WorkerAgentUpcall\x12!\n" +
 	"\fworkspace_id\x18\x01 \x01(\tR\vworkspaceId\x12\x17\n" +
@@ -677,7 +882,22 @@ const file_armadra_v1_worker_channel_proto_rawDesc = "" +
 	"\vdisposition\x18\x1e \x01(\x0e2#.armadra.v1.WorkerUpcallDispositionR\vdisposition\x12\x1f\n" +
 	"\vreason_code\x18' \x01(\tR\n" +
 	"reasonCode\x12-\n" +
-	"\x13received_at_unix_ms\x18( \x01(\x03R\x10receivedAtUnixMs*\xa1\x01\n" +
+	"\x13received_at_unix_ms\x18( \x01(\x03R\x10receivedAtUnixMs\"\xaf\x03\n" +
+	"\x0fWorkerGitUpcall\x12!\n" +
+	"\fworkspace_id\x18\x01 \x01(\tR\vworkspaceId\x12!\n" +
+	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12'\n" +
+	"\x0frepository_path\x18\x03 \x01(\tR\x0erepositoryPath\x12\x1a\n" +
+	"\bprogress\x18\n" +
+	" \x01(\rR\bprogress\x12\x1a\n" +
+	"\baffected\x18\v \x03(\tR\baffected\x12;\n" +
+	"\n" +
+	"repository\x18\f \x01(\v2\x1b.armadra.v1.RepositoryStateR\n" +
+	"repository\x123\n" +
+	"\x05state\x18\x1e \x01(\x0e2\x1d.armadra.v1.GitOperationStateR\x05state\x123\n" +
+	"\x04kind\x18\x1f \x01(\x0e2\x1f.armadra.v1.WorkerGitUpcallKindR\x04kind\x12\x1f\n" +
+	"\vreason_code\x18' \x01(\tR\n" +
+	"reasonCode\x12-\n" +
+	"\x13observed_at_unix_ms\x18( \x01(\x03R\x10observedAtUnixMs*\xa1\x01\n" +
 	"\x12WorkerChannelState\x12$\n" +
 	" WORKER_CHANNEL_STATE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dWORKER_CHANNEL_STATE_DISABLED\x10\x01\x12\x1e\n" +
@@ -691,7 +911,14 @@ const file_armadra_v1_worker_channel_proto_rawDesc = "" +
 	"%WORKER_UPCALL_DISPOSITION_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"WORKER_UPCALL_DISPOSITION_ACCEPTED\x10\x01\x12'\n" +
 	"#WORKER_UPCALL_DISPOSITION_DUPLICATE\x10\x02\x12&\n" +
-	"\"WORKER_UPCALL_DISPOSITION_REJECTED\x10\x03B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	"\"WORKER_UPCALL_DISPOSITION_REJECTED\x10\x03*\xa5\x02\n" +
+	"\x13WorkerGitUpcallKind\x12&\n" +
+	"\"WORKER_GIT_UPCALL_KIND_UNSPECIFIED\x10\x00\x12-\n" +
+	")WORKER_GIT_UPCALL_KIND_OPERATION_PROGRESS\x10\x01\x12-\n" +
+	")WORKER_GIT_UPCALL_KIND_OPERATION_FINISHED\x10\x02\x12-\n" +
+	")WORKER_GIT_UPCALL_KIND_REPOSITORY_CHANGED\x10\x03\x12,\n" +
+	"(WORKER_GIT_UPCALL_KIND_CONFLICT_DETECTED\x10\x04\x12+\n" +
+	"'WORKER_GIT_UPCALL_KIND_WORKTREE_CHANGED\x10\x05B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_worker_channel_proto_rawDescOnce sync.Once
@@ -705,27 +932,35 @@ func file_armadra_v1_worker_channel_proto_rawDescGZIP() []byte {
 	return file_armadra_v1_worker_channel_proto_rawDescData
 }
 
-var file_armadra_v1_worker_channel_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_armadra_v1_worker_channel_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_armadra_v1_worker_channel_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_armadra_v1_worker_channel_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_armadra_v1_worker_channel_proto_goTypes = []any{
 	(WorkerChannelState)(0),         // 0: armadra.v1.WorkerChannelState
 	(WorkerAgentUpcallKind)(0),      // 1: armadra.v1.WorkerAgentUpcallKind
 	(WorkerUpcallDisposition)(0),    // 2: armadra.v1.WorkerUpcallDisposition
-	(*WorkerChannelCapability)(nil), // 3: armadra.v1.WorkerChannelCapability
-	(*WorkerUpcall)(nil),            // 4: armadra.v1.WorkerUpcall
-	(*WorkerAgentUpcall)(nil),       // 5: armadra.v1.WorkerAgentUpcall
-	(*WorkerUpcallReply)(nil),       // 6: armadra.v1.WorkerUpcallReply
+	(WorkerGitUpcallKind)(0),        // 3: armadra.v1.WorkerGitUpcallKind
+	(*WorkerChannelCapability)(nil), // 4: armadra.v1.WorkerChannelCapability
+	(*WorkerUpcall)(nil),            // 5: armadra.v1.WorkerUpcall
+	(*WorkerAgentUpcall)(nil),       // 6: armadra.v1.WorkerAgentUpcall
+	(*WorkerUpcallReply)(nil),       // 7: armadra.v1.WorkerUpcallReply
+	(*WorkerGitUpcall)(nil),         // 8: armadra.v1.WorkerGitUpcall
+	(*RepositoryState)(nil),         // 9: armadra.v1.RepositoryState
+	(GitOperationState)(0),          // 10: armadra.v1.GitOperationState
 }
 var file_armadra_v1_worker_channel_proto_depIdxs = []int32{
-	0, // 0: armadra.v1.WorkerChannelCapability.state:type_name -> armadra.v1.WorkerChannelState
-	5, // 1: armadra.v1.WorkerUpcall.agent:type_name -> armadra.v1.WorkerAgentUpcall
-	1, // 2: armadra.v1.WorkerAgentUpcall.kind:type_name -> armadra.v1.WorkerAgentUpcallKind
-	2, // 3: armadra.v1.WorkerUpcallReply.disposition:type_name -> armadra.v1.WorkerUpcallDisposition
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	0,  // 0: armadra.v1.WorkerChannelCapability.state:type_name -> armadra.v1.WorkerChannelState
+	6,  // 1: armadra.v1.WorkerUpcall.agent:type_name -> armadra.v1.WorkerAgentUpcall
+	8,  // 2: armadra.v1.WorkerUpcall.git:type_name -> armadra.v1.WorkerGitUpcall
+	1,  // 3: armadra.v1.WorkerAgentUpcall.kind:type_name -> armadra.v1.WorkerAgentUpcallKind
+	2,  // 4: armadra.v1.WorkerUpcallReply.disposition:type_name -> armadra.v1.WorkerUpcallDisposition
+	9,  // 5: armadra.v1.WorkerGitUpcall.repository:type_name -> armadra.v1.RepositoryState
+	10, // 6: armadra.v1.WorkerGitUpcall.state:type_name -> armadra.v1.GitOperationState
+	3,  // 7: armadra.v1.WorkerGitUpcall.kind:type_name -> armadra.v1.WorkerGitUpcallKind
+	8,  // [8:8] is the sub-list for method output_type
+	8,  // [8:8] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_worker_channel_proto_init() }
@@ -733,16 +968,18 @@ func file_armadra_v1_worker_channel_proto_init() {
 	if File_armadra_v1_worker_channel_proto != nil {
 		return
 	}
+	file_armadra_v1_git_proto_init()
 	file_armadra_v1_worker_channel_proto_msgTypes[1].OneofWrappers = []any{
 		(*WorkerUpcall_Agent)(nil),
+		(*WorkerUpcall_Git)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_worker_channel_proto_rawDesc), len(file_armadra_v1_worker_channel_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   4,
+			NumEnums:      4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

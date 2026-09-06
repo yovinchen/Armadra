@@ -22,6 +22,8 @@ import type { ExecutionHost, SettingsDocument } from "./settings_pb.js";
 import { file_armadra_v1_settings } from "./settings_pb.js";
 import type { WorkspaceRoot } from "./filesystem_pb.js";
 import { file_armadra_v1_filesystem } from "./filesystem_pb.js";
+import type { GitCloneJob, GitOperation, RepositoryState } from "./git_pb.js";
+import { file_armadra_v1_git } from "./git_pb.js";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -30,12 +32,13 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_events: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Chdhcm1hZHJhL3YxL2V2ZW50cy5wcm90bxIKYXJtYWRyYS52MSLmBQoNRXZlbnRFbnZlbG9wZRIQCghzZXF1ZW5jZRgBIAEoBBIWCg50cmFuc2FjdGlvbl9pZBgCIAEoBBIUCgxvcGVyYXRpb25faWQYAyABKAkSGQoRdHJhbnNhY3Rpb25faW5kZXgYBCABKA0SGAoQdHJhbnNhY3Rpb25fc2l6ZRgFIAEoDRIUCgx3b3Jrc3BhY2VfaWQYBiABKAkSJwoGZG9tYWluGAcgASgOMhcuYXJtYWRyYS52MS5FdmVudERvbWFpbhIMCgRraW5kGAggASgJEhEKCWVudGl0eV9pZBgJIAEoCRIrCghwcmlvcml0eRgKIAEoDjIZLmFybWFkcmEudjEuRXZlbnRQcmlvcml0eRIQCghyZXZpc2lvbhgyIAEoBBIPCgdkZWxldGVkGDMgASgIEjcKEGNhbnZhc193b3Jrc3BhY2UYZCABKAsyGy5hcm1hZHJhLnYxLkNhbnZhc1dvcmtzcGFjZUgAEiQKBmNhbnZhcxhlIAEoCzISLmFybWFkcmEudjEuQ2FudmFzSAASLQoLY2FudmFzX25vZGUYZiABKAsyFi5hcm1hZHJhLnYxLkNhbnZhc05vZGVIABItCgtjYW52YXNfZWRnZRhnIAEoCzIWLmFybWFkcmEudjEuQ2FudmFzRWRnZUgAEjkKEWNhbnZhc19hbm5vdGF0aW9uGGggASgLMhwuYXJtYWRyYS52MS5DYW52YXNBbm5vdGF0aW9uSAASOQoRc2V0dGluZ3NfZG9jdW1lbnQYeCABKAsyHC5hcm1hZHJhLnYxLlNldHRpbmdzRG9jdW1lbnRIABI8ChdzZXR0aW5nc19leGVjdXRpb25faG9zdBh5IAEoCzIZLmFybWFkcmEudjEuRXhlY3V0aW9uSG9zdEgAEjUKD2ZpbGVzeXN0ZW1fcm9vdBiMASABKAsyGS5hcm1hZHJhLnYxLldvcmtzcGFjZVJvb3RIAEIICgZlbnRpdHkitgEKFlN1YnNjcmliZUV2ZW50c1JlcXVlc3QSFgoOYWZ0ZXJfc2VxdWVuY2UYASABKAQSFQoNd29ya3NwYWNlX2lkcxgKIAMoCRIoCgdkb21haW5zGAsgAygOMhcuYXJtYWRyYS52MS5FdmVudERvbWFpbhISCgpwYWdlX2J5dGVzGAwgASgNEi8KDG1pbl9wcmlvcml0eRgNIAEoDjIZLmFybWFkcmEudjEuRXZlbnRQcmlvcml0eSK4AQoJRXZlbnRQYWdlEikKBmV2ZW50cxgKIAMoCzIZLmFybWFkcmEudjEuRXZlbnRFbnZlbG9wZRITCgtuZXh0X2N1cnNvchgLIAEoBBISCgptaW5fY3Vyc29yGAwgASgEEhYKDmhpZ2hfd2F0ZXJtYXJrGA0gASgEEhAKCGhhc19tb3JlGA4gASgIEi0KBnN0YXR1cxgeIAEoDjIdLmFybWFkcmEudjEuRXZlbnRDdXJzb3JTdGF0dXMiQQoORXZlbnRIZWFydGJlYXQSFgoOaGlnaF93YXRlcm1hcmsYCiABKAQSFwoPc2VudF9hdF91bml4X21zGCggASgDIoACChBFdmVudFN0cmVhbUZyYW1lEjcKCXN1YnNjcmliZRhkIAEoCzIiLmFybWFkcmEudjEuU3Vic2NyaWJlRXZlbnRzUmVxdWVzdEgAEiUKBHBhZ2UYZSABKAsyFS5hcm1hZHJhLnYxLkV2ZW50UGFnZUgAEi8KCWhlYXJ0YmVhdBhmIAEoCzIaLmFybWFkcmEudjEuRXZlbnRIZWFydGJlYXRIABIkCgNhY2sYZyABKAsyFS5hcm1hZHJhLnYxLlN0cmVhbUFja0gAEioKBWVycm9yGGggASgLMhkuYXJtYWRyYS52MS5FcnJvclJlc3BvbnNlSABCCQoHcGF5bG9hZCrEAQoLRXZlbnREb21haW4SHAoYRVZFTlRfRE9NQUlOX1VOU1BFQ0lGSUVEEAASFwoTRVZFTlRfRE9NQUlOX0NBTlZBUxABEhkKFUVWRU5UX0RPTUFJTl9TRVRUSU5HUxACEhsKF0VWRU5UX0RPTUFJTl9GSUxFU1lTVEVNEAMSGAoURVZFTlRfRE9NQUlOX1NFU1NJT04QBBIWChJFVkVOVF9ET01BSU5fQUdFTlQQBRIUChBFVkVOVF9ET01BSU5fR0lUEAYqYwoNRXZlbnRQcmlvcml0eRIeChpFVkVOVF9QUklPUklUWV9VTlNQRUNJRklFRBAAEhkKFUVWRU5UX1BSSU9SSVRZX05PUk1BTBABEhcKE0VWRU5UX1BSSU9SSVRZX0hJR0gQAiqlAQoRRXZlbnRDdXJzb3JTdGF0dXMSIwofRVZFTlRfQ1VSU09SX1NUQVRVU19VTlNQRUNJRklFRBAAEhoKFkVWRU5UX0NVUlNPUl9TVEFUVVNfT0sQARIpCiVFVkVOVF9DVVJTT1JfU1RBVFVTX1NOQVBTSE9UX1JFUVVJUkVEEAISJAogRVZFTlRfQ1VSU09SX1NUQVRVU19DVVJTT1JfQUhFQUQQA0IjWiFhcm1hZHJhLmxvY2FsL2hvc3QvZ2VuL2FybWFkcmEvdjFiBnByb3RvMw",
+    "Chdhcm1hZHJhL3YxL2V2ZW50cy5wcm90bxIKYXJtYWRyYS52MSKLBwoNRXZlbnRFbnZlbG9wZRIQCghzZXF1ZW5jZRgBIAEoBBIWCg50cmFuc2FjdGlvbl9pZBgCIAEoBBIUCgxvcGVyYXRpb25faWQYAyABKAkSGQoRdHJhbnNhY3Rpb25faW5kZXgYBCABKA0SGAoQdHJhbnNhY3Rpb25fc2l6ZRgFIAEoDRIUCgx3b3Jrc3BhY2VfaWQYBiABKAkSJwoGZG9tYWluGAcgASgOMhcuYXJtYWRyYS52MS5FdmVudERvbWFpbhIMCgRraW5kGAggASgJEhEKCWVudGl0eV9pZBgJIAEoCRIrCghwcmlvcml0eRgKIAEoDjIZLmFybWFkcmEudjEuRXZlbnRQcmlvcml0eRIQCghyZXZpc2lvbhgyIAEoBBIPCgdkZWxldGVkGDMgASgIEjcKEGNhbnZhc193b3Jrc3BhY2UYZCABKAsyGy5hcm1hZHJhLnYxLkNhbnZhc1dvcmtzcGFjZUgAEiQKBmNhbnZhcxhlIAEoCzISLmFybWFkcmEudjEuQ2FudmFzSAASLQoLY2FudmFzX25vZGUYZiABKAsyFi5hcm1hZHJhLnYxLkNhbnZhc05vZGVIABItCgtjYW52YXNfZWRnZRhnIAEoCzIWLmFybWFkcmEudjEuQ2FudmFzRWRnZUgAEjkKEWNhbnZhc19hbm5vdGF0aW9uGGggASgLMhwuYXJtYWRyYS52MS5DYW52YXNBbm5vdGF0aW9uSAASOQoRc2V0dGluZ3NfZG9jdW1lbnQYeCABKAsyHC5hcm1hZHJhLnYxLlNldHRpbmdzRG9jdW1lbnRIABI8ChdzZXR0aW5nc19leGVjdXRpb25faG9zdBh5IAEoCzIZLmFybWFkcmEudjEuRXhlY3V0aW9uSG9zdEgAEjUKD2ZpbGVzeXN0ZW1fcm9vdBiMASABKAsyGS5hcm1hZHJhLnYxLldvcmtzcGFjZVJvb3RIABIyCg1naXRfb3BlcmF0aW9uGNwBIAEoCzIYLmFybWFkcmEudjEuR2l0T3BlcmF0aW9uSAASPAoUZ2l0X3JlcG9zaXRvcnlfc3RhdGUY3QEgASgLMhsuYXJtYWRyYS52MS5SZXBvc2l0b3J5U3RhdGVIABIxCg1naXRfY2xvbmVfam9iGN4BIAEoCzIXLmFybWFkcmEudjEuR2l0Q2xvbmVKb2JIAEIICgZlbnRpdHkitgEKFlN1YnNjcmliZUV2ZW50c1JlcXVlc3QSFgoOYWZ0ZXJfc2VxdWVuY2UYASABKAQSFQoNd29ya3NwYWNlX2lkcxgKIAMoCRIoCgdkb21haW5zGAsgAygOMhcuYXJtYWRyYS52MS5FdmVudERvbWFpbhISCgpwYWdlX2J5dGVzGAwgASgNEi8KDG1pbl9wcmlvcml0eRgNIAEoDjIZLmFybWFkcmEudjEuRXZlbnRQcmlvcml0eSK4AQoJRXZlbnRQYWdlEikKBmV2ZW50cxgKIAMoCzIZLmFybWFkcmEudjEuRXZlbnRFbnZlbG9wZRITCgtuZXh0X2N1cnNvchgLIAEoBBISCgptaW5fY3Vyc29yGAwgASgEEhYKDmhpZ2hfd2F0ZXJtYXJrGA0gASgEEhAKCGhhc19tb3JlGA4gASgIEi0KBnN0YXR1cxgeIAEoDjIdLmFybWFkcmEudjEuRXZlbnRDdXJzb3JTdGF0dXMiQQoORXZlbnRIZWFydGJlYXQSFgoOaGlnaF93YXRlcm1hcmsYCiABKAQSFwoPc2VudF9hdF91bml4X21zGCggASgDIoACChBFdmVudFN0cmVhbUZyYW1lEjcKCXN1YnNjcmliZRhkIAEoCzIiLmFybWFkcmEudjEuU3Vic2NyaWJlRXZlbnRzUmVxdWVzdEgAEiUKBHBhZ2UYZSABKAsyFS5hcm1hZHJhLnYxLkV2ZW50UGFnZUgAEi8KCWhlYXJ0YmVhdBhmIAEoCzIaLmFybWFkcmEudjEuRXZlbnRIZWFydGJlYXRIABIkCgNhY2sYZyABKAsyFS5hcm1hZHJhLnYxLlN0cmVhbUFja0gAEioKBWVycm9yGGggASgLMhkuYXJtYWRyYS52MS5FcnJvclJlc3BvbnNlSABCCQoHcGF5bG9hZCrEAQoLRXZlbnREb21haW4SHAoYRVZFTlRfRE9NQUlOX1VOU1BFQ0lGSUVEEAASFwoTRVZFTlRfRE9NQUlOX0NBTlZBUxABEhkKFUVWRU5UX0RPTUFJTl9TRVRUSU5HUxACEhsKF0VWRU5UX0RPTUFJTl9GSUxFU1lTVEVNEAMSGAoURVZFTlRfRE9NQUlOX1NFU1NJT04QBBIWChJFVkVOVF9ET01BSU5fQUdFTlQQBRIUChBFVkVOVF9ET01BSU5fR0lUEAYqYwoNRXZlbnRQcmlvcml0eRIeChpFVkVOVF9QUklPUklUWV9VTlNQRUNJRklFRBAAEhkKFUVWRU5UX1BSSU9SSVRZX05PUk1BTBABEhcKE0VWRU5UX1BSSU9SSVRZX0hJR0gQAiqlAQoRRXZlbnRDdXJzb3JTdGF0dXMSIwofRVZFTlRfQ1VSU09SX1NUQVRVU19VTlNQRUNJRklFRBAAEhoKFkVWRU5UX0NVUlNPUl9TVEFUVVNfT0sQARIpCiVFVkVOVF9DVVJTT1JfU1RBVFVTX1NOQVBTSE9UX1JFUVVJUkVEEAISJAogRVZFTlRfQ1VSU09SX1NUQVRVU19DVVJTT1JfQUhFQUQQA0IjWiFhcm1hZHJhLmxvY2FsL2hvc3QvZ2VuL2FybWFkcmEvdjFiBnByb3RvMw",
     [
       file_armadra_v1_canvas,
       file_armadra_v1_common,
       file_armadra_v1_settings,
       file_armadra_v1_filesystem,
+      file_armadra_v1_git,
     ],
   );
 
@@ -182,6 +185,32 @@ export type EventEnvelope = Message<"armadra.v1.EventEnvelope"> & {
          */
         value: WorkspaceRoot;
         case: "filesystemRoot";
+      }
+    | {
+        /**
+         * The git domain (§2.8). An operation is the entry a client follows
+         * from queued to finished; the repository state is the cache it renders
+         * between observations; a clone job is neither, because it exists before
+         * the repository it will produce.
+         *
+         * @generated from field: armadra.v1.GitOperation git_operation = 220;
+         */
+        value: GitOperation;
+        case: "gitOperation";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.RepositoryState git_repository_state = 221;
+         */
+        value: RepositoryState;
+        case: "gitRepositoryState";
+      }
+    | {
+        /**
+         * @generated from field: armadra.v1.GitCloneJob git_clone_job = 222;
+         */
+        value: GitCloneJob;
+        case: "gitCloneJob";
       }
     | { case: undefined; value?: undefined };
 };

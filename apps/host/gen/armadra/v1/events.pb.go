@@ -256,6 +256,9 @@ type EventEnvelope struct {
 	//	*EventEnvelope_SettingsDocument
 	//	*EventEnvelope_SettingsExecutionHost
 	//	*EventEnvelope_FilesystemRoot
+	//	*EventEnvelope_GitOperation
+	//	*EventEnvelope_GitRepositoryState
+	//	*EventEnvelope_GitCloneJob
 	Entity        isEventEnvelope_Entity `protobuf_oneof:"entity"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -454,6 +457,33 @@ func (x *EventEnvelope) GetFilesystemRoot() *WorkspaceRoot {
 	return nil
 }
 
+func (x *EventEnvelope) GetGitOperation() *GitOperation {
+	if x != nil {
+		if x, ok := x.Entity.(*EventEnvelope_GitOperation); ok {
+			return x.GitOperation
+		}
+	}
+	return nil
+}
+
+func (x *EventEnvelope) GetGitRepositoryState() *RepositoryState {
+	if x != nil {
+		if x, ok := x.Entity.(*EventEnvelope_GitRepositoryState); ok {
+			return x.GitRepositoryState
+		}
+	}
+	return nil
+}
+
+func (x *EventEnvelope) GetGitCloneJob() *GitCloneJob {
+	if x != nil {
+		if x, ok := x.Entity.(*EventEnvelope_GitCloneJob); ok {
+			return x.GitCloneJob
+		}
+	}
+	return nil
+}
+
 type isEventEnvelope_Entity interface {
 	isEventEnvelope_Entity()
 }
@@ -490,6 +520,22 @@ type EventEnvelope_FilesystemRoot struct {
 	FilesystemRoot *WorkspaceRoot `protobuf:"bytes,140,opt,name=filesystem_root,json=filesystemRoot,proto3,oneof"`
 }
 
+type EventEnvelope_GitOperation struct {
+	// The git domain (§2.8). An operation is the entry a client follows
+	// from queued to finished; the repository state is the cache it renders
+	// between observations; a clone job is neither, because it exists before
+	// the repository it will produce.
+	GitOperation *GitOperation `protobuf:"bytes,220,opt,name=git_operation,json=gitOperation,proto3,oneof"`
+}
+
+type EventEnvelope_GitRepositoryState struct {
+	GitRepositoryState *RepositoryState `protobuf:"bytes,221,opt,name=git_repository_state,json=gitRepositoryState,proto3,oneof"`
+}
+
+type EventEnvelope_GitCloneJob struct {
+	GitCloneJob *GitCloneJob `protobuf:"bytes,222,opt,name=git_clone_job,json=gitCloneJob,proto3,oneof"`
+}
+
 func (*EventEnvelope_CanvasWorkspace) isEventEnvelope_Entity() {}
 
 func (*EventEnvelope_Canvas) isEventEnvelope_Entity() {}
@@ -505,6 +551,12 @@ func (*EventEnvelope_SettingsDocument) isEventEnvelope_Entity() {}
 func (*EventEnvelope_SettingsExecutionHost) isEventEnvelope_Entity() {}
 
 func (*EventEnvelope_FilesystemRoot) isEventEnvelope_Entity() {}
+
+func (*EventEnvelope_GitOperation) isEventEnvelope_Entity() {}
+
+func (*EventEnvelope_GitRepositoryState) isEventEnvelope_Entity() {}
+
+func (*EventEnvelope_GitCloneJob) isEventEnvelope_Entity() {}
 
 // One connection carries one subscription. Re-subscribing on the same
 // connection is refused rather than silently replacing the cursor.
@@ -870,7 +922,7 @@ var File_armadra_v1_events_proto protoreflect.FileDescriptor
 const file_armadra_v1_events_proto_rawDesc = "" +
 	"\n" +
 	"\x17armadra/v1/events.proto\x12\n" +
-	"armadra.v1\x1a\x17armadra/v1/canvas.proto\x1a\x17armadra/v1/common.proto\x1a\x19armadra/v1/settings.proto\x1a\x1barmadra/v1/filesystem.proto\"\xed\a\n" +
+	"armadra.v1\x1a\x17armadra/v1/canvas.proto\x1a\x17armadra/v1/common.proto\x1a\x19armadra/v1/settings.proto\x1a\x1barmadra/v1/filesystem.proto\x1a\x14armadra/v1/git.proto\"\xc1\t\n" +
 	"\rEventEnvelope\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12%\n" +
 	"\x0etransaction_id\x18\x02 \x01(\x04R\rtransactionId\x12!\n" +
@@ -894,7 +946,10 @@ const file_armadra_v1_events_proto_rawDesc = "" +
 	"\x11canvas_annotation\x18h \x01(\v2\x1c.armadra.v1.CanvasAnnotationH\x00R\x10canvasAnnotation\x12K\n" +
 	"\x11settings_document\x18x \x01(\v2\x1c.armadra.v1.SettingsDocumentH\x00R\x10settingsDocument\x12S\n" +
 	"\x17settings_execution_host\x18y \x01(\v2\x19.armadra.v1.ExecutionHostH\x00R\x15settingsExecutionHost\x12E\n" +
-	"\x0ffilesystem_root\x18\x8c\x01 \x01(\v2\x19.armadra.v1.WorkspaceRootH\x00R\x0efilesystemRootB\b\n" +
+	"\x0ffilesystem_root\x18\x8c\x01 \x01(\v2\x19.armadra.v1.WorkspaceRootH\x00R\x0efilesystemRoot\x12@\n" +
+	"\rgit_operation\x18\xdc\x01 \x01(\v2\x18.armadra.v1.GitOperationH\x00R\fgitOperation\x12P\n" +
+	"\x14git_repository_state\x18\xdd\x01 \x01(\v2\x1b.armadra.v1.RepositoryStateH\x00R\x12gitRepositoryState\x12>\n" +
+	"\rgit_clone_job\x18\xde\x01 \x01(\v2\x17.armadra.v1.GitCloneJobH\x00R\vgitCloneJobB\b\n" +
 	"\x06entity\"\xf4\x01\n" +
 	"\x16SubscribeEventsRequest\x12%\n" +
 	"\x0eafter_sequence\x18\x01 \x01(\x04R\rafterSequence\x12#\n" +
@@ -974,8 +1029,11 @@ var file_armadra_v1_events_proto_goTypes = []any{
 	(*SettingsDocument)(nil),       // 13: armadra.v1.SettingsDocument
 	(*ExecutionHost)(nil),          // 14: armadra.v1.ExecutionHost
 	(*WorkspaceRoot)(nil),          // 15: armadra.v1.WorkspaceRoot
-	(*StreamAck)(nil),              // 16: armadra.v1.StreamAck
-	(*ErrorResponse)(nil),          // 17: armadra.v1.ErrorResponse
+	(*GitOperation)(nil),           // 16: armadra.v1.GitOperation
+	(*RepositoryState)(nil),        // 17: armadra.v1.RepositoryState
+	(*GitCloneJob)(nil),            // 18: armadra.v1.GitCloneJob
+	(*StreamAck)(nil),              // 19: armadra.v1.StreamAck
+	(*ErrorResponse)(nil),          // 20: armadra.v1.ErrorResponse
 }
 var file_armadra_v1_events_proto_depIdxs = []int32{
 	0,  // 0: armadra.v1.EventEnvelope.domain:type_name -> armadra.v1.EventDomain
@@ -988,20 +1046,23 @@ var file_armadra_v1_events_proto_depIdxs = []int32{
 	13, // 7: armadra.v1.EventEnvelope.settings_document:type_name -> armadra.v1.SettingsDocument
 	14, // 8: armadra.v1.EventEnvelope.settings_execution_host:type_name -> armadra.v1.ExecutionHost
 	15, // 9: armadra.v1.EventEnvelope.filesystem_root:type_name -> armadra.v1.WorkspaceRoot
-	0,  // 10: armadra.v1.SubscribeEventsRequest.domains:type_name -> armadra.v1.EventDomain
-	1,  // 11: armadra.v1.SubscribeEventsRequest.min_priority:type_name -> armadra.v1.EventPriority
-	3,  // 12: armadra.v1.EventPage.events:type_name -> armadra.v1.EventEnvelope
-	2,  // 13: armadra.v1.EventPage.status:type_name -> armadra.v1.EventCursorStatus
-	4,  // 14: armadra.v1.EventStreamFrame.subscribe:type_name -> armadra.v1.SubscribeEventsRequest
-	5,  // 15: armadra.v1.EventStreamFrame.page:type_name -> armadra.v1.EventPage
-	6,  // 16: armadra.v1.EventStreamFrame.heartbeat:type_name -> armadra.v1.EventHeartbeat
-	16, // 17: armadra.v1.EventStreamFrame.ack:type_name -> armadra.v1.StreamAck
-	17, // 18: armadra.v1.EventStreamFrame.error:type_name -> armadra.v1.ErrorResponse
-	19, // [19:19] is the sub-list for method output_type
-	19, // [19:19] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	16, // 10: armadra.v1.EventEnvelope.git_operation:type_name -> armadra.v1.GitOperation
+	17, // 11: armadra.v1.EventEnvelope.git_repository_state:type_name -> armadra.v1.RepositoryState
+	18, // 12: armadra.v1.EventEnvelope.git_clone_job:type_name -> armadra.v1.GitCloneJob
+	0,  // 13: armadra.v1.SubscribeEventsRequest.domains:type_name -> armadra.v1.EventDomain
+	1,  // 14: armadra.v1.SubscribeEventsRequest.min_priority:type_name -> armadra.v1.EventPriority
+	3,  // 15: armadra.v1.EventPage.events:type_name -> armadra.v1.EventEnvelope
+	2,  // 16: armadra.v1.EventPage.status:type_name -> armadra.v1.EventCursorStatus
+	4,  // 17: armadra.v1.EventStreamFrame.subscribe:type_name -> armadra.v1.SubscribeEventsRequest
+	5,  // 18: armadra.v1.EventStreamFrame.page:type_name -> armadra.v1.EventPage
+	6,  // 19: armadra.v1.EventStreamFrame.heartbeat:type_name -> armadra.v1.EventHeartbeat
+	19, // 20: armadra.v1.EventStreamFrame.ack:type_name -> armadra.v1.StreamAck
+	20, // 21: armadra.v1.EventStreamFrame.error:type_name -> armadra.v1.ErrorResponse
+	22, // [22:22] is the sub-list for method output_type
+	22, // [22:22] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_events_proto_init() }
@@ -1013,6 +1074,7 @@ func file_armadra_v1_events_proto_init() {
 	file_armadra_v1_common_proto_init()
 	file_armadra_v1_settings_proto_init()
 	file_armadra_v1_filesystem_proto_init()
+	file_armadra_v1_git_proto_init()
 	file_armadra_v1_events_proto_msgTypes[0].OneofWrappers = []any{
 		(*EventEnvelope_CanvasWorkspace)(nil),
 		(*EventEnvelope_Canvas)(nil),
@@ -1022,6 +1084,9 @@ func file_armadra_v1_events_proto_init() {
 		(*EventEnvelope_SettingsDocument)(nil),
 		(*EventEnvelope_SettingsExecutionHost)(nil),
 		(*EventEnvelope_FilesystemRoot)(nil),
+		(*EventEnvelope_GitOperation)(nil),
+		(*EventEnvelope_GitRepositoryState)(nil),
+		(*EventEnvelope_GitCloneJob)(nil),
 	}
 	file_armadra_v1_events_proto_msgTypes[4].OneofWrappers = []any{
 		(*EventStreamFrame_Subscribe)(nil),
