@@ -133,9 +133,11 @@
 - **B1 settings 域**（`43913a3e`…`1e2dbfaa`）：`settings.proto`（文档为不透明字节 + sha256）、Host `settingshost`（文档与执行主机注册、Adopt 经 Worker 帧 25 读取、Release 反向导出 + Runtime 重读核验）、`ownership.Adoption` 把实时链路交给每个域、事件流按域授权放行 host-wide 变更、Runtime 在 Host 拥有 settings 后拒写（语言探测缓存也按归属决定是否持久化）、Web `settingsGateway` 按归属路由读写且 `maintenance/error` 显示只读原因；`pnpm ownership:e2e --domain settings` 33 项（含依赖顺序拒绝、HTTPS 保存/冲突/事件、回滚后 Runtime 读到 Host 期间改动）。
 - **B2 filesystem 域**（`2acbb55d`…`d2894307`）：`filesystem.proto`（根注册、权限、Register/Update/Unregister/List、Worker 帧 26）、Host v7 `workspace_roots` 与 `fshost`（决定文件在哪、谁能碰；文件 I/O 仍在 Worker）、`permissions_json` 归 filesystem 域独有（画布摘要不再含权限，两种语言的规范摘要同步）、Host 代理按自己的记录收窄转发的文件请求、Web 工作区注册经 filesystem 网关、复用 `files:read/write` scope；`pnpm ownership:e2e --domain filesystem` 30 项。两个域合入后依赖顺序完整生效：filesystem 场景改为 canvas→settings→filesystem 切换、逆序回滚，两个场景收进 `tools/ownership/` 由 `tools/ownership-e2e.mjs --domain` 分发。
 - **远端 4+5**（`2639098a`…`289bf8aa`）：整个工作区在执行主机上运行（`WorkerServiceOperation` 19–48、上传分块与 sha256 校验、监听事件推送取代 2 秒轮询、Worker 帧 16/17 与响应 17–19）、主机密钥确认与 SSH 认证提示对话框（askpass 助手、`StrictHostKeyChecking=yes`）、`worker/mod.rs` 拆为 `mod/service/transport`、`remote/client/` 四文件；合并 Agent 在当前主线上调和：语言链路也走 askpass、`settings_file` 在拆分后重新接线、Go `wire.go` 白名单不放主动帧；远端伪 SSH 套件 5 个。
-- **进行中**：B3 session 与 B5 git 域并行实施（预分配 Worker 帧 27/29、事件实体 160/180、Host v8/v9）；B4 agent 在 B3 后。
+- **B5 git 域**（`79adead0`…`4afd5abb` + 修正 `8f7212bb`）：`git.proto`（`RepositoryScope/State/Operation/Expectation`、封闭 `GitActionKind`、`Read` 单方法 + 封闭 `GitReadMethod`、事件实体 220–222、Worker 帧 29、上行帧 180）、Host `githost`（`git_operations` 队列同 worktree 串行、`RepositoryState` 缓存、`Enqueue` 唯一写入口、重启后按类型对账；记录走通用 `entities` 表，未加 Host 迁移）、Worker 每帧跑一个排队操作并在域切走后拒写（发现三处真 bug：29 不在响应白名单、`/var` 与 `/private/var` 路径比对、15 分钟帧超上限）、Web 网关把逐动作路由拼成 `Enqueue`；`pnpm ownership:e2e --domain git` 30 项（真实仓库 + 本地裸远程）。未做：clone 在 Worker 侧答 UNSUPPORTED、上行帧未接线、面板仍直连 `runtimeApi`。
+- **B3 session 域**（`9b7ff2bd`…`797af796`）：`session.proto`（意图 + 运行两种实体 160/161、Worker 帧 27、通道上行 140）、Host v8 `sessions/session_runs/session_claims` 与 `sessionhost`（`Create/Start/List/Get/Terminate/Recycle/Close`，`SuggestTitle/GetContextUsage` 转 Worker；终端 WebSocket 代理升级前按记录校验 `session_id/generation`；`command_sessions` 投影为 `kind=COMMAND`）、Worker 经 Runtime 私有端点起停会话并回报、Runtime 切走后创建/启动/终止答 409、Web 挂载终端只读不决策（缺会话经 `Create/Start`）、复用 `terminal:*` scope；`pnpm ownership:e2e --domain session` 39 项。未做：主动 `RunLost` 上行与周期对账（只在 Host 启动时对账一次）、远端执行主机会话、`terminal/mod.rs` 拆分。合并到远端 4+5 之后的主线时，`serve/serve_commands` 的 `session_data_dir` 参数移入 `worker/transport.rs`。
+- **进行中**：B4 agent 域（Worker 帧 28、事件实体 180–186、Host v9）。
 
-主树复核（远端 4+5 合入后）：Rust 全 workspace 通过（60 个测试二进制 1157 项）、`clippy -D warnings` 与 `fmt --check` 通过、Web 179 文件 1677 项、shared 144、host-client 238、协议 TS 112 与 Rust 全过、Go 27 包 race（含真实 Worker）、`pnpm check` 通过、settings e2e 33、filesystem e2e 30、canvas e2e 73、GitHub e2e 29。
+主树复核（B3 合入后）：Rust 全 workspace 通过、`clippy -D warnings` 与 `fmt --check` 通过、Web 181 文件 1692 项、shared 144、host-client 249、协议 TS 129 与 Rust 全过、Go 28 包 race（含真实 Worker）、`pnpm check` 通过、session e2e 39、git e2e 30、settings e2e 33、filesystem e2e 30、canvas e2e 73、GitHub e2e 29。session 与 git 的 e2e 在 Go race 套件刚结束、机器满载时各有一次首跑失败，随后连续 3–4 次通过。
 
 ## 本轮验证（2026-09-06 上午，四轮全部合入后于主树重跑，私有目标目录）
 
@@ -253,12 +255,12 @@
 
 - Go `1.26.5`（`go.mod` 要求 ≥ 1.24），macOS arm64；生成流程使用 vendored protoc `31.1`，不依赖系统 protoc `35.1`。
 - Rust 已安装 macOS arm64、Windows x64 MSVC、Linux x64 目标；安装 target 不代表能在本机运行 Windows/Linux 实机测试。
-- 业务写入所有权按域切换：画布、settings、filesystem 三个域可经 CLI/HTTPS 切到 Go Host 并回滚（Runtime 在切换后拒写、仍答读）；session、agent、git 域仍由 Rust Runtime 拥有，Host 对应表面在实施中。
+- 业务写入所有权按域切换：画布、settings、filesystem、session、git 五个域可经 CLI/HTTPS 切到 Go Host 并回滚（Runtime 在切换后拒写、仍答读）；agent 域仍由 Rust Runtime 拥有，Host 表面在实施中。
 - 真实 Worker 测试与桌面 `src-tauri` Rust 测试不在默认命令内，验收时需单独运行。
 
 ## 下一步
 
-1. 合入 B3 session、B5 git；之后 B4 agent、B6 `apps/runtime`→`apps/worker` 改名（§4.4 条件满足后）。
+1. 合入 B4 agent；之后 B6 `apps/runtime`→`apps/worker` 改名（§4.4 条件满足后）。
 2. 每轮合入后重跑 `pnpm check`、`cargo test --workspace`、`go -C apps/host test -race ./...`（含真实 Worker）、`pnpm protocol:test`、`pnpm ownership:e2e --domain settings|filesystem`、`pnpm canvas:e2e`；`main` 快进。
 3. 剩余 800–1500 行文件的收尾拆分（`migration_export.rs`、`settings.rs`、`GitRepositoryPanel.tsx`、`SourceControlDrawer.tsx`、`keybindings.ts` 等）在实施轮之间进行，避免与在飞批次冲突。
 4. 需要实机的验收保持未完成：Windows、手机、真实 GitHub/SSH、CI 真实 runner、签名密钥。
