@@ -227,10 +227,21 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "flag", flag: "--session" },
+      // Pi has no command hooks; its status source is an in-process TS
+      // extension on the same `hook.sock`, which is the same three layers of
+      // authentication over a different transport
+      // (docs/design/agent-collaboration-channels.md §3.1 channel B). So
+      // `hooks` here means "there is a status source", not "there is a
+      // `hooks` key in a settings file" — and `contextUsage` is the *reported*
+      // kind, because the extension can read the live window with
+      // `ctx.getContextUsage()` rather than estimating from a transcript.
       capabilities: [
+        "hooks",
         "resume",
         "contextLink",
         "browser",
+        "contextUsage",
+        "structuredInputAck",
         "supportsModelSelection",
       ],
       expectedProcess: ["pi"],
@@ -251,10 +262,14 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "flag", flag: "--resume" },
+      // Same extension API as Pi, under `~/.omp/agent/extensions/`.
       capabilities: [
+        "hooks",
         "resume",
         "contextLink",
         "browser",
+        "contextUsage",
+        "structuredInputAck",
         "supportsModelSelection",
       ],
       expectedProcess: ["omp"],
@@ -274,10 +289,18 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "flag", flag: "--resume" },
+      // Copilot's status source is a command hook like Claude's, written to
+      // `~/.copilot/hooks/armadra.json`. `contextUsage` is deliberately absent:
+      // it has no status line, and whether `session-state/*/events.jsonl`
+      // carries per-turn token counts is an unverified claim
+      // (docs/design/agent-collaboration-channels.md §6). A capability is not
+      // declared from a document.
       capabilities: [
+        "hooks",
         "resume",
         "contextLink",
         "browser",
+        "structuredInputAck",
         "supportsModelSelection",
       ],
       expectedProcess: ["copilot"],

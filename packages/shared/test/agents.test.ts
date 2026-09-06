@@ -123,7 +123,7 @@ describe("agent registry", () => {
 
 describe("hook events", () => {
   it("lists every provider's event names exactly once", () => {
-    expect(HOOK_CLIENT_REVISION).toBe(3);
+    expect(HOOK_CLIENT_REVISION).toBe(4);
     for (const id of AGENT_IDS) {
       const events = hookEventsFor(id);
       expect(events.length > 0).toBe(
@@ -138,6 +138,26 @@ describe("hook events", () => {
     expect(HOOK_EVENTS.opencode).toContain("session.idle");
     // Codex has no Notification event; the installer skipped it on every run.
     expect(HOOK_EVENTS.codex).not.toContain("Notification");
+  });
+
+  // Pi documents `agent_settled` as the event a status integration should use,
+  // and it is the only one of Pi's that says the CLI is idle rather than
+  // between two of its own steps. Without it the idle gate has nothing to read
+  // and handoff delivery stays refused.
+  it("subscribes the events each new adapter's state actually comes from", () => {
+    expect(HOOK_EVENTS.pi).toContain("agent_settled");
+    expect(HOOK_EVENTS.omp).toContain("agent_settled");
+    // OMP is a fork with its own compaction event, so its list is not Pi's.
+    expect(HOOK_EVENTS.omp).toContain("auto_compaction_end");
+    expect(HOOK_EVENTS.pi).not.toContain("auto_compaction_end");
+    expect(HOOK_EVENTS.copilot).toContain("agentStop");
+  });
+
+  // Copilot reads a non-zero exit or a crash on `preToolUse` as a denial. A
+  // missing binary or a moved path would then refuse every tool call, on a
+  // channel whose whole contract is that it fails open.
+  it("never subscribes Copilot's one blocking event", () => {
+    expect(HOOK_EVENTS.copilot).not.toContain("preToolUse");
   });
 });
 

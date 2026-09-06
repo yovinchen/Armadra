@@ -2,13 +2,21 @@ import { z } from "zod";
 
 import { timestampSchema } from "./internal.js";
 import { agentIdSchema } from "./node-data.js";
-import { agentStateSchema } from "./primitives.js";
+import { agentStateSchema, agentStateSourceSchema } from "./primitives.js";
 
 export const agentStatusSchema = z.object({
   nodeId: z.string().uuid(),
   workspaceId: z.string().uuid(),
   agentId: agentIdSchema,
   state: agentStateSchema.optional(),
+  /**
+   * Which channel `state` was learned through — migration `0013`,
+   * docs/design/agent-collaboration-channels.md §3.2. Absent means nothing has
+   * reported: a node header draws that as unknown, not as idle. `observed` is
+   * a hint only; §3.4 forbids it from standing in for a hook report anywhere a
+   * decision is taken.
+   */
+  stateSource: agentStateSourceSchema.optional(),
   unread: z.boolean().default(false),
   sessionId: z.string().max(200).optional(),
   pendingId: z.string().max(200).optional(),
@@ -52,6 +60,10 @@ export const agentEventSchema = z.object({
   agentId: agentIdSchema,
   kind: agentEventKindSchema,
   state: agentStateSchema.optional(),
+  /** The channel this report arrived on; the runtime derives it from the
+   * provider rather than trusting the payload, so a client cannot claim a
+   * stronger source than the one it used. */
+  stateSource: agentStateSourceSchema.optional(),
   newTurn: z.boolean().optional(),
   interrupted: z.boolean().optional(),
   errored: z.boolean().optional(),
