@@ -535,13 +535,18 @@ func (x *PairDeviceRequest) GetTicket() string {
 
 // Access/refresh secrets travel only in protected HttpOnly cookies on the
 // browser transport, never in this response or a URL. CSRF is session-bound.
+// The desktop shell's native transport (loopback HTTP from a native origin,
+// design docs/design/host-native-session.md §3) cannot rely on cookies; there
+// the Host sets `native` on Pair and Refresh responses instead, and the page
+// presents them as `Authorization: Bearer`. Browser responses never set it.
 type AuthenticatedSession struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	HostId          string                 `protobuf:"bytes,1,opt,name=host_id,json=hostId,proto3" json:"host_id,omitempty"`
-	Device          *DeviceIdentity        `protobuf:"bytes,2,opt,name=device,proto3" json:"device,omitempty"`
-	CsrfToken       string                 `protobuf:"bytes,3,opt,name=csrf_token,json=csrfToken,proto3" json:"csrf_token,omitempty"`
-	ExpiresAtUnixMs int64                  `protobuf:"varint,4,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
-	Scopes          []*AuthorizationGrant  `protobuf:"bytes,5,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	state           protoimpl.MessageState    `protogen:"open.v1"`
+	HostId          string                    `protobuf:"bytes,1,opt,name=host_id,json=hostId,proto3" json:"host_id,omitempty"`
+	Device          *DeviceIdentity           `protobuf:"bytes,2,opt,name=device,proto3" json:"device,omitempty"`
+	CsrfToken       string                    `protobuf:"bytes,3,opt,name=csrf_token,json=csrfToken,proto3" json:"csrf_token,omitempty"`
+	ExpiresAtUnixMs int64                     `protobuf:"varint,4,opt,name=expires_at_unix_ms,json=expiresAtUnixMs,proto3" json:"expires_at_unix_ms,omitempty"`
+	Scopes          []*AuthorizationGrant     `protobuf:"bytes,5,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	Native          *NativeSessionCredentials `protobuf:"bytes,6,opt,name=native,proto3" json:"native,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -611,6 +616,67 @@ func (x *AuthenticatedSession) GetScopes() []*AuthorizationGrant {
 	return nil
 }
 
+func (x *AuthenticatedSession) GetNative() *NativeSessionCredentials {
+	if x != nil {
+		return x.Native
+	}
+	return nil
+}
+
+// Bearer credentials for the native transport only. Held in page memory,
+// never persisted, and rotated together on Refresh exactly like the cookies.
+type NativeSessionCredentials struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AccessToken   string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
+	RefreshToken  string                 `protobuf:"bytes,2,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NativeSessionCredentials) Reset() {
+	*x = NativeSessionCredentials{}
+	mi := &file_armadra_v1_identity_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NativeSessionCredentials) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NativeSessionCredentials) ProtoMessage() {}
+
+func (x *NativeSessionCredentials) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_identity_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NativeSessionCredentials.ProtoReflect.Descriptor instead.
+func (*NativeSessionCredentials) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *NativeSessionCredentials) GetAccessToken() string {
+	if x != nil {
+		return x.AccessToken
+	}
+	return ""
+}
+
+func (x *NativeSessionCredentials) GetRefreshToken() string {
+	if x != nil {
+		return x.RefreshToken
+	}
+	return ""
+}
+
 type CurrentSessionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -619,7 +685,7 @@ type CurrentSessionRequest struct {
 
 func (x *CurrentSessionRequest) Reset() {
 	*x = CurrentSessionRequest{}
-	mi := &file_armadra_v1_identity_proto_msgTypes[8]
+	mi := &file_armadra_v1_identity_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -631,7 +697,7 @@ func (x *CurrentSessionRequest) String() string {
 func (*CurrentSessionRequest) ProtoMessage() {}
 
 func (x *CurrentSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_identity_proto_msgTypes[8]
+	mi := &file_armadra_v1_identity_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -644,7 +710,7 @@ func (x *CurrentSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CurrentSessionRequest.ProtoReflect.Descriptor instead.
 func (*CurrentSessionRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{8}
+	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{9}
 }
 
 type RefreshSessionRequest struct {
@@ -655,7 +721,7 @@ type RefreshSessionRequest struct {
 
 func (x *RefreshSessionRequest) Reset() {
 	*x = RefreshSessionRequest{}
-	mi := &file_armadra_v1_identity_proto_msgTypes[9]
+	mi := &file_armadra_v1_identity_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -667,7 +733,7 @@ func (x *RefreshSessionRequest) String() string {
 func (*RefreshSessionRequest) ProtoMessage() {}
 
 func (x *RefreshSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_identity_proto_msgTypes[9]
+	mi := &file_armadra_v1_identity_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -680,7 +746,7 @@ func (x *RefreshSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshSessionRequest.ProtoReflect.Descriptor instead.
 func (*RefreshSessionRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{9}
+	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{10}
 }
 
 type RenewCsrfRequest struct {
@@ -691,7 +757,7 @@ type RenewCsrfRequest struct {
 
 func (x *RenewCsrfRequest) Reset() {
 	*x = RenewCsrfRequest{}
-	mi := &file_armadra_v1_identity_proto_msgTypes[10]
+	mi := &file_armadra_v1_identity_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -703,7 +769,7 @@ func (x *RenewCsrfRequest) String() string {
 func (*RenewCsrfRequest) ProtoMessage() {}
 
 func (x *RenewCsrfRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_identity_proto_msgTypes[10]
+	mi := &file_armadra_v1_identity_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -716,7 +782,7 @@ func (x *RenewCsrfRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenewCsrfRequest.ProtoReflect.Descriptor instead.
 func (*RenewCsrfRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{10}
+	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{11}
 }
 
 type RenewCsrfResponse struct {
@@ -728,7 +794,7 @@ type RenewCsrfResponse struct {
 
 func (x *RenewCsrfResponse) Reset() {
 	*x = RenewCsrfResponse{}
-	mi := &file_armadra_v1_identity_proto_msgTypes[11]
+	mi := &file_armadra_v1_identity_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -740,7 +806,7 @@ func (x *RenewCsrfResponse) String() string {
 func (*RenewCsrfResponse) ProtoMessage() {}
 
 func (x *RenewCsrfResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_identity_proto_msgTypes[11]
+	mi := &file_armadra_v1_identity_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -753,7 +819,7 @@ func (x *RenewCsrfResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenewCsrfResponse.ProtoReflect.Descriptor instead.
 func (*RenewCsrfResponse) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{11}
+	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RenewCsrfResponse) GetCsrfToken() string {
@@ -771,7 +837,7 @@ type LogoutSessionRequest struct {
 
 func (x *LogoutSessionRequest) Reset() {
 	*x = LogoutSessionRequest{}
-	mi := &file_armadra_v1_identity_proto_msgTypes[12]
+	mi := &file_armadra_v1_identity_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -783,7 +849,7 @@ func (x *LogoutSessionRequest) String() string {
 func (*LogoutSessionRequest) ProtoMessage() {}
 
 func (x *LogoutSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_identity_proto_msgTypes[12]
+	mi := &file_armadra_v1_identity_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -796,7 +862,7 @@ func (x *LogoutSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutSessionRequest.ProtoReflect.Descriptor instead.
 func (*LogoutSessionRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{12}
+	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{13}
 }
 
 type SessionClosedResponse struct {
@@ -808,7 +874,7 @@ type SessionClosedResponse struct {
 
 func (x *SessionClosedResponse) Reset() {
 	*x = SessionClosedResponse{}
-	mi := &file_armadra_v1_identity_proto_msgTypes[13]
+	mi := &file_armadra_v1_identity_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -820,7 +886,7 @@ func (x *SessionClosedResponse) String() string {
 func (*SessionClosedResponse) ProtoMessage() {}
 
 func (x *SessionClosedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_identity_proto_msgTypes[13]
+	mi := &file_armadra_v1_identity_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -833,7 +899,7 @@ func (x *SessionClosedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionClosedResponse.ProtoReflect.Descriptor instead.
 func (*SessionClosedResponse) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{13}
+	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *SessionClosedResponse) GetClosed() bool {
@@ -853,7 +919,7 @@ type ListDevicesRequest struct {
 
 func (x *ListDevicesRequest) Reset() {
 	*x = ListDevicesRequest{}
-	mi := &file_armadra_v1_identity_proto_msgTypes[14]
+	mi := &file_armadra_v1_identity_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -865,7 +931,7 @@ func (x *ListDevicesRequest) String() string {
 func (*ListDevicesRequest) ProtoMessage() {}
 
 func (x *ListDevicesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_identity_proto_msgTypes[14]
+	mi := &file_armadra_v1_identity_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -878,7 +944,7 @@ func (x *ListDevicesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDevicesRequest.ProtoReflect.Descriptor instead.
 func (*ListDevicesRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{14}
+	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListDevicesRequest) GetAfterId() string {
@@ -906,7 +972,7 @@ type ListDevicesResponse struct {
 
 func (x *ListDevicesResponse) Reset() {
 	*x = ListDevicesResponse{}
-	mi := &file_armadra_v1_identity_proto_msgTypes[15]
+	mi := &file_armadra_v1_identity_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -918,7 +984,7 @@ func (x *ListDevicesResponse) String() string {
 func (*ListDevicesResponse) ProtoMessage() {}
 
 func (x *ListDevicesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_identity_proto_msgTypes[15]
+	mi := &file_armadra_v1_identity_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -931,7 +997,7 @@ func (x *ListDevicesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDevicesResponse.ProtoReflect.Descriptor instead.
 func (*ListDevicesResponse) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{15}
+	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListDevicesResponse) GetDevices() []*DeviceIdentity {
@@ -965,7 +1031,7 @@ type RevokeDeviceRequest struct {
 
 func (x *RevokeDeviceRequest) Reset() {
 	*x = RevokeDeviceRequest{}
-	mi := &file_armadra_v1_identity_proto_msgTypes[16]
+	mi := &file_armadra_v1_identity_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -977,7 +1043,7 @@ func (x *RevokeDeviceRequest) String() string {
 func (*RevokeDeviceRequest) ProtoMessage() {}
 
 func (x *RevokeDeviceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_identity_proto_msgTypes[16]
+	mi := &file_armadra_v1_identity_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -990,7 +1056,7 @@ func (x *RevokeDeviceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeDeviceRequest.ProtoReflect.Descriptor instead.
 func (*RevokeDeviceRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{16}
+	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RevokeDeviceRequest) GetDeviceId() string {
@@ -1017,7 +1083,7 @@ type RevokeDeviceResponse struct {
 
 func (x *RevokeDeviceResponse) Reset() {
 	*x = RevokeDeviceResponse{}
-	mi := &file_armadra_v1_identity_proto_msgTypes[17]
+	mi := &file_armadra_v1_identity_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1029,7 +1095,7 @@ func (x *RevokeDeviceResponse) String() string {
 func (*RevokeDeviceResponse) ProtoMessage() {}
 
 func (x *RevokeDeviceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_identity_proto_msgTypes[17]
+	mi := &file_armadra_v1_identity_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1042,7 +1108,7 @@ func (x *RevokeDeviceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeDeviceResponse.ProtoReflect.Descriptor instead.
 func (*RevokeDeviceResponse) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{17}
+	return file_armadra_v1_identity_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *RevokeDeviceResponse) GetDeviceId() string {
@@ -1105,14 +1171,18 @@ const file_armadra_v1_identity_proto_rawDesc = "" +
 	"\x11PairDeviceRequest\x12(\n" +
 	"\x10expected_host_id\x18\x01 \x01(\tR\x0eexpectedHostId\x120\n" +
 	"\x14expected_instance_id\x18\x02 \x01(\tR\x12expectedInstanceId\x12\x16\n" +
-	"\x06ticket\x18\x03 \x01(\tR\x06ticket\"\xe7\x01\n" +
+	"\x06ticket\x18\x03 \x01(\tR\x06ticket\"\xa5\x02\n" +
 	"\x14AuthenticatedSession\x12\x17\n" +
 	"\ahost_id\x18\x01 \x01(\tR\x06hostId\x122\n" +
 	"\x06device\x18\x02 \x01(\v2\x1a.armadra.v1.DeviceIdentityR\x06device\x12\x1d\n" +
 	"\n" +
 	"csrf_token\x18\x03 \x01(\tR\tcsrfToken\x12+\n" +
 	"\x12expires_at_unix_ms\x18\x04 \x01(\x03R\x0fexpiresAtUnixMs\x126\n" +
-	"\x06scopes\x18\x05 \x03(\v2\x1e.armadra.v1.AuthorizationGrantR\x06scopes\"\x17\n" +
+	"\x06scopes\x18\x05 \x03(\v2\x1e.armadra.v1.AuthorizationGrantR\x06scopes\x12<\n" +
+	"\x06native\x18\x06 \x01(\v2$.armadra.v1.NativeSessionCredentialsR\x06native\"b\n" +
+	"\x18NativeSessionCredentials\x12!\n" +
+	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12#\n" +
+	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken\"\x17\n" +
 	"\x15CurrentSessionRequest\"\x17\n" +
 	"\x15RefreshSessionRequest\"\x12\n" +
 	"\x10RenewCsrfRequest\"2\n" +
@@ -1148,7 +1218,7 @@ func file_armadra_v1_identity_proto_rawDescGZIP() []byte {
 	return file_armadra_v1_identity_proto_rawDescData
 }
 
-var file_armadra_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_armadra_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_armadra_v1_identity_proto_goTypes = []any{
 	(*AuthorizationGrant)(nil),        // 0: armadra.v1.AuthorizationGrant
 	(*BootstrapTicketRequest)(nil),    // 1: armadra.v1.BootstrapTicketRequest
@@ -1158,27 +1228,29 @@ var file_armadra_v1_identity_proto_goTypes = []any{
 	(*DeviceIdentity)(nil),            // 5: armadra.v1.DeviceIdentity
 	(*PairDeviceRequest)(nil),         // 6: armadra.v1.PairDeviceRequest
 	(*AuthenticatedSession)(nil),      // 7: armadra.v1.AuthenticatedSession
-	(*CurrentSessionRequest)(nil),     // 8: armadra.v1.CurrentSessionRequest
-	(*RefreshSessionRequest)(nil),     // 9: armadra.v1.RefreshSessionRequest
-	(*RenewCsrfRequest)(nil),          // 10: armadra.v1.RenewCsrfRequest
-	(*RenewCsrfResponse)(nil),         // 11: armadra.v1.RenewCsrfResponse
-	(*LogoutSessionRequest)(nil),      // 12: armadra.v1.LogoutSessionRequest
-	(*SessionClosedResponse)(nil),     // 13: armadra.v1.SessionClosedResponse
-	(*ListDevicesRequest)(nil),        // 14: armadra.v1.ListDevicesRequest
-	(*ListDevicesResponse)(nil),       // 15: armadra.v1.ListDevicesResponse
-	(*RevokeDeviceRequest)(nil),       // 16: armadra.v1.RevokeDeviceRequest
-	(*RevokeDeviceResponse)(nil),      // 17: armadra.v1.RevokeDeviceResponse
+	(*NativeSessionCredentials)(nil),  // 8: armadra.v1.NativeSessionCredentials
+	(*CurrentSessionRequest)(nil),     // 9: armadra.v1.CurrentSessionRequest
+	(*RefreshSessionRequest)(nil),     // 10: armadra.v1.RefreshSessionRequest
+	(*RenewCsrfRequest)(nil),          // 11: armadra.v1.RenewCsrfRequest
+	(*RenewCsrfResponse)(nil),         // 12: armadra.v1.RenewCsrfResponse
+	(*LogoutSessionRequest)(nil),      // 13: armadra.v1.LogoutSessionRequest
+	(*SessionClosedResponse)(nil),     // 14: armadra.v1.SessionClosedResponse
+	(*ListDevicesRequest)(nil),        // 15: armadra.v1.ListDevicesRequest
+	(*ListDevicesResponse)(nil),       // 16: armadra.v1.ListDevicesResponse
+	(*RevokeDeviceRequest)(nil),       // 17: armadra.v1.RevokeDeviceRequest
+	(*RevokeDeviceResponse)(nil),      // 18: armadra.v1.RevokeDeviceResponse
 }
 var file_armadra_v1_identity_proto_depIdxs = []int32{
 	0, // 0: armadra.v1.BootstrapTicketRequest.scopes:type_name -> armadra.v1.AuthorizationGrant
 	5, // 1: armadra.v1.AuthenticatedSession.device:type_name -> armadra.v1.DeviceIdentity
 	0, // 2: armadra.v1.AuthenticatedSession.scopes:type_name -> armadra.v1.AuthorizationGrant
-	5, // 3: armadra.v1.ListDevicesResponse.devices:type_name -> armadra.v1.DeviceIdentity
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	8, // 3: armadra.v1.AuthenticatedSession.native:type_name -> armadra.v1.NativeSessionCredentials
+	5, // 4: armadra.v1.ListDevicesResponse.devices:type_name -> armadra.v1.DeviceIdentity
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_identity_proto_init() }
@@ -1192,7 +1264,7 @@ func file_armadra_v1_identity_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_identity_proto_rawDesc), len(file_armadra_v1_identity_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   18,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

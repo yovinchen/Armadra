@@ -65,5 +65,25 @@ describe("device identity and pairing", () => {
       csrfToken: "fixture-not-a-secret",
       expiresAtUnixMs: 1788557900000n,
     });
+    // The desktop shell's native transport carries bearer credentials in the
+    // response body; a browser response leaves `native` unset.
+    check("identity_native_session", AuthenticatedSessionSchema, {
+      hostId: "host-1",
+      device: {
+        deviceId: "device-2",
+        principalId: "owner-1",
+        displayName: "本机桌面",
+        role: "owner",
+        createdAtUnixMs: 1788557000000n,
+        revision: 1n,
+      },
+      scopes: [{ permission: "identity:read" }],
+      csrfToken: "fixture-not-a-secret",
+      expiresAtUnixMs: 1788557900000n,
+      native: {
+        accessToken: "fixture-access-not-a-secret",
+        refreshToken: "fixture-refresh-not-a-secret",
+      },
+    });
   });
 });

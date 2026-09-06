@@ -71,6 +71,34 @@ fn bootstrap_scope_and_authenticated_device_revision() {
                 ..Default::default()
             }],
             expires_at_unix_ms: 1788557900000,
+            native: None,
+        },
+    );
+    // The desktop shell's native transport carries bearer credentials in the
+    // body; a browser response leaves `native` unset.
+    check(
+        "identity_native_session",
+        AuthenticatedSession {
+            host_id: "host-1".into(),
+            device: Some(DeviceIdentity {
+                device_id: "device-2".into(),
+                principal_id: "owner-1".into(),
+                display_name: "本机桌面".into(),
+                role: "owner".into(),
+                created_at_unix_ms: 1788557000000,
+                revoked_at_unix_ms: 0,
+                revision: 1,
+            }),
+            csrf_token: "fixture-not-a-secret".into(),
+            scopes: vec![AuthorizationGrant {
+                permission: "identity:read".into(),
+                ..Default::default()
+            }],
+            expires_at_unix_ms: 1788557900000,
+            native: Some(NativeSessionCredentials {
+                access_token: "fixture-access-not-a-secret".into(),
+                refresh_token: "fixture-refresh-not-a-secret".into(),
+            }),
         },
     );
 }

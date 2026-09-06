@@ -63,12 +63,23 @@ message PairDeviceRequest {
 }
 // Access/refresh secrets travel only in protected HttpOnly cookies on the
 // browser transport, never in this response or a URL. CSRF is session-bound.
+// The desktop shell's native transport (loopback HTTP from a native origin,
+// design docs/design/host-native-session.md §3) cannot rely on cookies; there
+// the Host sets `native` on Pair and Refresh responses instead, and the page
+// presents them as `Authorization: Bearer`. Browser responses never set it.
 message AuthenticatedSession {
   string host_id = 1;
   DeviceIdentity device = 2;
   string csrf_token = 3;
   int64 expires_at_unix_ms = 4;
   repeated AuthorizationGrant scopes = 5;
+  NativeSessionCredentials native = 6;
+}
+// Bearer credentials for the native transport only. Held in page memory,
+// never persisted, and rotated together on Refresh exactly like the cookies.
+message NativeSessionCredentials {
+  string access_token = 1;
+  string refresh_token = 2;
 }
 message CurrentSessionRequest {}
 message RefreshSessionRequest {}

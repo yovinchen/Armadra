@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_armadra_v1_identity: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "Chlhcm1hZHJhL3YxL2lkZW50aXR5LnByb3RvEgphcm1hZHJhLnYxIlkKEkF1dGhvcml6YXRpb25HcmFudBISCgpwZXJtaXNzaW9uGAEgASgJEhQKDHdvcmtzcGFjZV9pZBgCIAEoCRIZChFleGVjdXRpb25faG9zdF9pZBgDIAEoCSKlAQoWQm9vdHN0cmFwVGlja2V0UmVxdWVzdBIYChBleHBlY3RlZF9ob3N0X2lkGAEgASgJEhwKFGV4cGVjdGVkX2luc3RhbmNlX2lkGAIgASgJEg4KBm9yaWdpbhgDIAEoCRITCgtkZXZpY2VfbmFtZRgEIAEoCRIuCgZzY29wZXMYBSADKAsyHi5hcm1hZHJhLnYxLkF1dGhvcml6YXRpb25HcmFudCKAAQoXQm9vdHN0cmFwVGlja2V0UmVzcG9uc2USDwoHaG9zdF9pZBgBIAEoCRIYChBob3N0X2luc3RhbmNlX2lkGAIgASgJEg4KBnRpY2tldBgDIAEoCRIOCgZvcmlnaW4YBCABKAkSGgoSZXhwaXJlc19hdF91bml4X21zGAUgASgDImIKGE1haW50ZW5hbmNlVGlja2V0UmVxdWVzdBIYChBleHBlY3RlZF9ob3N0X2lkGAEgASgJEhwKFGV4cGVjdGVkX2luc3RhbmNlX2lkGAIgASgJEg4KBmRvbWFpbhgDIAEoCSKBAQoZTWFpbnRlbmFuY2VUaWNrZXRSZXNwb25zZRIPCgdob3N0X2lkGAEgASgJEhgKEGhvc3RfaW5zdGFuY2VfaWQYAiABKAkSDQoFdG9rZW4YAyABKAkSDgoGZG9tYWluGAQgASgJEhoKEmV4cGlyZXNfYXRfdW5peF9tcxgFIAEoAyKtAQoORGV2aWNlSWRlbnRpdHkSEQoJZGV2aWNlX2lkGAEgASgJEhQKDHByaW5jaXBhbF9pZBgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSDAoEcm9sZRgEIAEoCRIaChJjcmVhdGVkX2F0X3VuaXhfbXMYBiABKAMSGgoScmV2b2tlZF9hdF91bml4X21zGAcgASgDEhAKCHJldmlzaW9uGAggASgESgQIBRAGIlsKEVBhaXJEZXZpY2VSZXF1ZXN0EhgKEGV4cGVjdGVkX2hvc3RfaWQYASABKAkSHAoUZXhwZWN0ZWRfaW5zdGFuY2VfaWQYAiABKAkSDgoGdGlja2V0GAMgASgJIrMBChRBdXRoZW50aWNhdGVkU2Vzc2lvbhIPCgdob3N0X2lkGAEgASgJEioKBmRldmljZRgCIAEoCzIaLmFybWFkcmEudjEuRGV2aWNlSWRlbnRpdHkSEgoKY3NyZl90b2tlbhgDIAEoCRIaChJleHBpcmVzX2F0X3VuaXhfbXMYBCABKAMSLgoGc2NvcGVzGAUgAygLMh4uYXJtYWRyYS52MS5BdXRob3JpemF0aW9uR3JhbnQiFwoVQ3VycmVudFNlc3Npb25SZXF1ZXN0IhcKFVJlZnJlc2hTZXNzaW9uUmVxdWVzdCISChBSZW5ld0NzcmZSZXF1ZXN0IicKEVJlbmV3Q3NyZlJlc3BvbnNlEhIKCmNzcmZfdG9rZW4YASABKAkiFgoUTG9nb3V0U2Vzc2lvblJlcXVlc3QiJwoVU2Vzc2lvbkNsb3NlZFJlc3BvbnNlEg4KBmNsb3NlZBgBIAEoCCI1ChJMaXN0RGV2aWNlc1JlcXVlc3QSEAoIYWZ0ZXJfaWQYASABKAkSDQoFbGltaXQYAiABKA0iZQoTTGlzdERldmljZXNSZXNwb25zZRIrCgdkZXZpY2VzGAEgAygLMhouYXJtYWRyYS52MS5EZXZpY2VJZGVudGl0eRIPCgduZXh0X2lkGAIgASgJEhAKCGhhc19tb3JlGAMgASgIIkMKE1Jldm9rZURldmljZVJlcXVlc3QSEQoJZGV2aWNlX2lkGAEgASgJEhkKEWV4cGVjdGVkX3JldmlzaW9uGAIgASgEIjoKFFJldm9rZURldmljZVJlc3BvbnNlEhEKCWRldmljZV9pZBgBIAEoCRIPCgdyZXZva2VkGAIgASgIQiNaIWFybWFkcmEubG9jYWwvaG9zdC9nZW4vYXJtYWRyYS92MWIGcHJvdG8z",
+    "Chlhcm1hZHJhL3YxL2lkZW50aXR5LnByb3RvEgphcm1hZHJhLnYxIlkKEkF1dGhvcml6YXRpb25HcmFudBISCgpwZXJtaXNzaW9uGAEgASgJEhQKDHdvcmtzcGFjZV9pZBgCIAEoCRIZChFleGVjdXRpb25faG9zdF9pZBgDIAEoCSKlAQoWQm9vdHN0cmFwVGlja2V0UmVxdWVzdBIYChBleHBlY3RlZF9ob3N0X2lkGAEgASgJEhwKFGV4cGVjdGVkX2luc3RhbmNlX2lkGAIgASgJEg4KBm9yaWdpbhgDIAEoCRITCgtkZXZpY2VfbmFtZRgEIAEoCRIuCgZzY29wZXMYBSADKAsyHi5hcm1hZHJhLnYxLkF1dGhvcml6YXRpb25HcmFudCKAAQoXQm9vdHN0cmFwVGlja2V0UmVzcG9uc2USDwoHaG9zdF9pZBgBIAEoCRIYChBob3N0X2luc3RhbmNlX2lkGAIgASgJEg4KBnRpY2tldBgDIAEoCRIOCgZvcmlnaW4YBCABKAkSGgoSZXhwaXJlc19hdF91bml4X21zGAUgASgDImIKGE1haW50ZW5hbmNlVGlja2V0UmVxdWVzdBIYChBleHBlY3RlZF9ob3N0X2lkGAEgASgJEhwKFGV4cGVjdGVkX2luc3RhbmNlX2lkGAIgASgJEg4KBmRvbWFpbhgDIAEoCSKBAQoZTWFpbnRlbmFuY2VUaWNrZXRSZXNwb25zZRIPCgdob3N0X2lkGAEgASgJEhgKEGhvc3RfaW5zdGFuY2VfaWQYAiABKAkSDQoFdG9rZW4YAyABKAkSDgoGZG9tYWluGAQgASgJEhoKEmV4cGlyZXNfYXRfdW5peF9tcxgFIAEoAyKtAQoORGV2aWNlSWRlbnRpdHkSEQoJZGV2aWNlX2lkGAEgASgJEhQKDHByaW5jaXBhbF9pZBgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSDAoEcm9sZRgEIAEoCRIaChJjcmVhdGVkX2F0X3VuaXhfbXMYBiABKAMSGgoScmV2b2tlZF9hdF91bml4X21zGAcgASgDEhAKCHJldmlzaW9uGAggASgESgQIBRAGIlsKEVBhaXJEZXZpY2VSZXF1ZXN0EhgKEGV4cGVjdGVkX2hvc3RfaWQYASABKAkSHAoUZXhwZWN0ZWRfaW5zdGFuY2VfaWQYAiABKAkSDgoGdGlja2V0GAMgASgJIukBChRBdXRoZW50aWNhdGVkU2Vzc2lvbhIPCgdob3N0X2lkGAEgASgJEioKBmRldmljZRgCIAEoCzIaLmFybWFkcmEudjEuRGV2aWNlSWRlbnRpdHkSEgoKY3NyZl90b2tlbhgDIAEoCRIaChJleHBpcmVzX2F0X3VuaXhfbXMYBCABKAMSLgoGc2NvcGVzGAUgAygLMh4uYXJtYWRyYS52MS5BdXRob3JpemF0aW9uR3JhbnQSNAoGbmF0aXZlGAYgASgLMiQuYXJtYWRyYS52MS5OYXRpdmVTZXNzaW9uQ3JlZGVudGlhbHMiRwoYTmF0aXZlU2Vzc2lvbkNyZWRlbnRpYWxzEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIVCg1yZWZyZXNoX3Rva2VuGAIgASgJIhcKFUN1cnJlbnRTZXNzaW9uUmVxdWVzdCIXChVSZWZyZXNoU2Vzc2lvblJlcXVlc3QiEgoQUmVuZXdDc3JmUmVxdWVzdCInChFSZW5ld0NzcmZSZXNwb25zZRISCgpjc3JmX3Rva2VuGAEgASgJIhYKFExvZ291dFNlc3Npb25SZXF1ZXN0IicKFVNlc3Npb25DbG9zZWRSZXNwb25zZRIOCgZjbG9zZWQYASABKAgiNQoSTGlzdERldmljZXNSZXF1ZXN0EhAKCGFmdGVyX2lkGAEgASgJEg0KBWxpbWl0GAIgASgNImUKE0xpc3REZXZpY2VzUmVzcG9uc2USKwoHZGV2aWNlcxgBIAMoCzIaLmFybWFkcmEudjEuRGV2aWNlSWRlbnRpdHkSDwoHbmV4dF9pZBgCIAEoCRIQCghoYXNfbW9yZRgDIAEoCCJDChNSZXZva2VEZXZpY2VSZXF1ZXN0EhEKCWRldmljZV9pZBgBIAEoCRIZChFleHBlY3RlZF9yZXZpc2lvbhgCIAEoBCI6ChRSZXZva2VEZXZpY2VSZXNwb25zZRIRCglkZXZpY2VfaWQYASABKAkSDwoHcmV2b2tlZBgCIAEoCEIjWiFhcm1hZHJhLmxvY2FsL2hvc3QvZ2VuL2FybWFkcmEvdjFiBnByb3RvMw",
   );
 
 /**
@@ -285,6 +285,10 @@ export const PairDeviceRequestSchema: GenMessage<PairDeviceRequest> =
 /**
  * Access/refresh secrets travel only in protected HttpOnly cookies on the
  * browser transport, never in this response or a URL. CSRF is session-bound.
+ * The desktop shell's native transport (loopback HTTP from a native origin,
+ * design docs/design/host-native-session.md §3) cannot rely on cookies; there
+ * the Host sets `native` on Pair and Refresh responses instead, and the page
+ * presents them as `Authorization: Bearer`. Browser responses never set it.
  *
  * @generated from message armadra.v1.AuthenticatedSession
  */
@@ -314,6 +318,11 @@ export type AuthenticatedSession =
      * @generated from field: repeated armadra.v1.AuthorizationGrant scopes = 5;
      */
     scopes: AuthorizationGrant[];
+
+    /**
+     * @generated from field: armadra.v1.NativeSessionCredentials native = 6;
+     */
+    native?: NativeSessionCredentials;
   };
 
 /**
@@ -323,6 +332,33 @@ export type AuthenticatedSession =
 export const AuthenticatedSessionSchema: GenMessage<AuthenticatedSession> =
   /*@__PURE__*/
   messageDesc(file_armadra_v1_identity, 7);
+
+/**
+ * Bearer credentials for the native transport only. Held in page memory,
+ * never persisted, and rotated together on Refresh exactly like the cookies.
+ *
+ * @generated from message armadra.v1.NativeSessionCredentials
+ */
+export type NativeSessionCredentials =
+  Message<"armadra.v1.NativeSessionCredentials"> & {
+    /**
+     * @generated from field: string access_token = 1;
+     */
+    accessToken: string;
+
+    /**
+     * @generated from field: string refresh_token = 2;
+     */
+    refreshToken: string;
+  };
+
+/**
+ * Describes the message armadra.v1.NativeSessionCredentials.
+ * Use `create(NativeSessionCredentialsSchema)` to create a new message.
+ */
+export const NativeSessionCredentialsSchema: GenMessage<NativeSessionCredentials> =
+  /*@__PURE__*/
+  messageDesc(file_armadra_v1_identity, 8);
 
 /**
  * @generated from message armadra.v1.CurrentSessionRequest
@@ -336,7 +372,7 @@ export type CurrentSessionRequest =
  */
 export const CurrentSessionRequestSchema: GenMessage<CurrentSessionRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 8);
+  messageDesc(file_armadra_v1_identity, 9);
 
 /**
  * @generated from message armadra.v1.RefreshSessionRequest
@@ -350,7 +386,7 @@ export type RefreshSessionRequest =
  */
 export const RefreshSessionRequestSchema: GenMessage<RefreshSessionRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 9);
+  messageDesc(file_armadra_v1_identity, 10);
 
 /**
  * @generated from message armadra.v1.RenewCsrfRequest
@@ -363,7 +399,7 @@ export type RenewCsrfRequest = Message<"armadra.v1.RenewCsrfRequest"> & {};
  */
 export const RenewCsrfRequestSchema: GenMessage<RenewCsrfRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 10);
+  messageDesc(file_armadra_v1_identity, 11);
 
 /**
  * @generated from message armadra.v1.RenewCsrfResponse
@@ -381,7 +417,7 @@ export type RenewCsrfResponse = Message<"armadra.v1.RenewCsrfResponse"> & {
  */
 export const RenewCsrfResponseSchema: GenMessage<RenewCsrfResponse> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 11);
+  messageDesc(file_armadra_v1_identity, 12);
 
 /**
  * @generated from message armadra.v1.LogoutSessionRequest
@@ -395,7 +431,7 @@ export type LogoutSessionRequest =
  */
 export const LogoutSessionRequestSchema: GenMessage<LogoutSessionRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 12);
+  messageDesc(file_armadra_v1_identity, 13);
 
 /**
  * @generated from message armadra.v1.SessionClosedResponse
@@ -414,7 +450,7 @@ export type SessionClosedResponse =
  */
 export const SessionClosedResponseSchema: GenMessage<SessionClosedResponse> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 13);
+  messageDesc(file_armadra_v1_identity, 14);
 
 /**
  * @generated from message armadra.v1.ListDevicesRequest
@@ -437,7 +473,7 @@ export type ListDevicesRequest = Message<"armadra.v1.ListDevicesRequest"> & {
  */
 export const ListDevicesRequestSchema: GenMessage<ListDevicesRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 14);
+  messageDesc(file_armadra_v1_identity, 15);
 
 /**
  * @generated from message armadra.v1.ListDevicesResponse
@@ -465,7 +501,7 @@ export type ListDevicesResponse = Message<"armadra.v1.ListDevicesResponse"> & {
  */
 export const ListDevicesResponseSchema: GenMessage<ListDevicesResponse> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 15);
+  messageDesc(file_armadra_v1_identity, 16);
 
 /**
  * @generated from message armadra.v1.RevokeDeviceRequest
@@ -488,7 +524,7 @@ export type RevokeDeviceRequest = Message<"armadra.v1.RevokeDeviceRequest"> & {
  */
 export const RevokeDeviceRequestSchema: GenMessage<RevokeDeviceRequest> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 16);
+  messageDesc(file_armadra_v1_identity, 17);
 
 /**
  * @generated from message armadra.v1.RevokeDeviceResponse
@@ -512,4 +548,4 @@ export type RevokeDeviceResponse =
  */
 export const RevokeDeviceResponseSchema: GenMessage<RevokeDeviceResponse> =
   /*@__PURE__*/
-  messageDesc(file_armadra_v1_identity, 17);
+  messageDesc(file_armadra_v1_identity, 18);
