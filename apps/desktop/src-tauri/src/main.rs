@@ -1,7 +1,7 @@
-use std::{sync::Mutex, time::Duration};
+use std::sync::Mutex;
 
 use tauri::{
-    Manager, RunEvent, WebviewWindow, WindowEvent,
+    Listener, Manager, RunEvent, WebviewWindow, WindowEvent,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
@@ -11,7 +11,7 @@ use armadra_desktop::{
     host,
     lifecycle::DesktopLifecycle,
     native_session, runtime_data_dir,
-    runtime_process::{RuntimeProcess, external_runtime_health_url, wait_for_runtime},
+    runtime_process::{RuntimeProcess, external_runtime_health_url, runtime_get, wait_for_runtime},
     trace_lifecycle, transport,
     transport::{RuntimeAddress, RuntimeTransport, WebSocketForwarder},
     updates, usage,
@@ -194,12 +194,27 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let week = MenuItem::with_id(app, "tray-usage-week", week_text, false, None::<&str>)?;
     let show = MenuItem::with_id(app, "tray-show", locale.show_window(), true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "tray-quit", locale.quit(), true, None::<&str>)?;
+    // "Restart to finish updating" exists only while bytes are actually staged
+    // (design §4.1): a permanently visible item that usually does nothing would
+    // teach people to ignore the one time it matters.
+    let restart = MenuItem::with_id(
+        app,
+        "tray-update-restart",
+        updates::notify::restart_menu_label(locale),
+        true,
+        None::<&str>,
+    )?;
     let separator = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(app, &[&session, &week, &separator, &show, &quit])?;
     app.manage(TrayUsage {
         session: Mutex::new(session),
         week: Mutex::new(week),
         locale,
+    });
+    app.manage(TrayUpdate {
+        menu: menu.clone(),
+        restart,
+        shown: Mutex::new(false),
     });
 
     let mut builder = TrayIconBuilder::with_id("main")
@@ -214,6 +229,14 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                 }
             }
             "tray-quit" => request_quit(app),
+            // The same confirmed restart the settings page runs — the tray is
+            // a second door to it, not a second, quieter path.
+            "tray-update-restart" => {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    updates::updates_install(app).await;
+                });
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
@@ -239,6 +262,56 @@ struct TrayUsage {
     session: Mutex<MenuItem<tauri::Wry>>,
     week: Mutex<MenuItem<tauri::Wry>>,
     locale: usage::Locale,
+}
+
+/// The tray's staged-update item and the menu it comes and goes from.
+///
+/// A menu item cannot be hidden — `muda` has no visibility — so the item is
+/// inserted and removed instead. That is also the more honest rendering: an
+/// item that is present but disabled still says the feature exists and is
+/// unavailable, when the truth is that there is nothing to restart into.
+struct TrayUpdate {
+    menu: Menu<tauri::Wry>,
+    restart: MenuItem<tauri::Wry>,
+    shown: Mutex<bool>,
+}
+
+/// Where the restart item sits: directly under the usage rows and their
+/// separator, above "show window".
+const TRAY_RESTART_POSITION: usize = 3;
+
+/// Shows the tray's restart item exactly while an update is staged.
+///
+/// The announcement is a state, not a pulse: repeating it is harmless, and an
+/// install that failed retracts it rather than leaving behind an item that
+/// would only fail the same way.
+fn watch_staged_updates(app: &tauri::AppHandle) {
+    let handle = app.clone();
+    app.listen(updates::notify::STAGED_EVENT, move |event| {
+        let Ok(staged) = serde_json::from_str::<updates::notify::Staged>(event.payload()) else {
+            return;
+        };
+        let Some(state) = handle.try_state::<TrayUpdate>() else {
+            return;
+        };
+        let Ok(mut shown) = state.shown.lock() else {
+            return;
+        };
+        if *shown == staged.ready {
+            return;
+        }
+        let changed = if staged.ready {
+            state
+                .menu
+                .insert(&state.restart, TRAY_RESTART_POSITION)
+                .is_ok()
+        } else {
+            state.menu.remove(&state.restart).is_ok()
+        };
+        if changed {
+            *shown = staged.ready;
+        }
+    });
 }
 
 /// Poll `GET /api/usage/mini` and keep the strip current (roadmap §3.9).
@@ -268,42 +341,6 @@ fn start_usage_strip(app: &tauri::AppHandle) {
     });
 }
 
-/// One GET on whichever Runtime channel this shell has. An empty body means
-/// "no reading", which the caller treats as "leave the strip alone".
-async fn runtime_get(app: &tauri::AppHandle, path: &str) -> Vec<u8> {
-    if app.state::<RuntimeProcess>().owns() {
-        let transport = app.state::<RuntimeTransport>().inner().clone();
-        let Ok(request) = http::Request::builder()
-            .uri(format!("armadra://localhost{path}"))
-            .body(Vec::new())
-        else {
-            return Vec::new();
-        };
-        let response = transport::forward(&transport, request).await;
-        return if response.status().is_success() {
-            response.into_body()
-        } else {
-            Vec::new()
-        };
-    }
-    // A development Runtime the shell did not start is still on a loopback port.
-    let url = external_runtime_health_url().replace("/health", path);
-    let Ok(client) = reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
-        .build()
-    else {
-        return Vec::new();
-    };
-    match client.get(url).send().await {
-        Ok(response) if response.status().is_success() => response
-            .bytes()
-            .await
-            .map(|body| body.to_vec())
-            .unwrap_or_default(),
-        _ => Vec::new(),
-    }
-}
-
 fn main() {
     let application = tauri::Builder::default()
         // Thin shell only (plan §0): the folder picker, "open in the system
@@ -321,6 +358,7 @@ fn main() {
             updates::updates_state,
             updates::updates_check,
             updates::updates_dismiss,
+            updates::updates_cancel,
             updates::updates_download,
             updates::updates_install,
             updates::updates_restart_report,
@@ -413,6 +451,7 @@ fn main() {
                 .ok_or_else(|| "Main window is unavailable".to_owned())?;
             apply_window_material(&window);
             build_tray(app.handle())?;
+            watch_staged_updates(app.handle());
             start_usage_strip(app.handle());
             let host_config = (|| {
                 let development = cfg!(not(feature = "custom-protocol"));

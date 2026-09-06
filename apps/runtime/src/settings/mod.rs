@@ -73,6 +73,12 @@ const DEFAULT_UPDATE_AUTO_CHECK: bool = true;
 /// asked. Off by default: it spends somebody's bandwidth and disk, and design
 /// §2.4 makes that an explicit choice rather than a discovered one.
 const DEFAULT_UPDATE_AUTO_DOWNLOAD: bool = false;
+/// `updates.notify` — whether the desktop shell posts one system notification
+/// when an update finishes downloading (design §4.1, last rule). On by default:
+/// the tray item and this notification are the only two places outside the
+/// settings page that say a restart is waiting, and a person who never opens
+/// the settings page would otherwise never find out.
+const DEFAULT_UPDATE_NOTIFY: bool = true;
 /// `power.policy` — which lease sources may hold off idle sleep (T02, design
 /// §9). The default is the most conservative one that still gives the user a
 /// switch: nothing keeps the machine awake unless a person asked for it.

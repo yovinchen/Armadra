@@ -143,6 +143,17 @@ export async function shellDismiss(): Promise<ShellUpdateState> {
   );
 }
 
+/**
+ * Stops the transfer in flight and goes back to the offer.
+ *
+ * The bytes are discarded rather than kept: Tauri cannot resume, so a partial
+ * package is not a head start on anything — it is a file that would have to be
+ * fetched again in full.
+ */
+export async function shellCancel(): Promise<ShellUpdateState> {
+  return (await invoke<ShellUpdateState>("updates_cancel")) ?? UNSUPPORTED_HERE;
+}
+
 /** Fetches and verifies the offered bundle. Installs nothing. */
 export async function shellDownload(): Promise<ShellUpdateState> {
   return (
@@ -170,6 +181,12 @@ export interface ShellProgress {
   totalBytes: number;
 }
 
+/** The tray/notification announcement, mirrored to the page (design §4.1). */
+export interface ShellStaged {
+  ready: boolean;
+  version: string;
+}
+
 /**
  * Subscribes to the shell's transfer progress. Returns the unsubscribe
  * function; on the web it is a no-op, because nothing there downloads.
@@ -177,19 +194,32 @@ export interface ShellProgress {
 export function onShellProgress(
   callback: (progress: ShellProgress) => void,
 ): () => void {
+  return onShellEvent("updates://progress", callback);
+}
+
+/**
+ * Subscribes to the staged-update announcement — the same one the tray item
+ * and the notification come from. The page uses it to re-read the state after
+ * an `autoDownload` transfer nobody was watching.
+ */
+export function onShellStaged(
+  callback: (staged: ShellStaged) => void,
+): () => void {
+  return onShellEvent("updates://staged", callback);
+}
+
+function onShellEvent<T>(name: string, callback: (payload: T) => void) {
   if (!isTauri()) return () => undefined;
   let unlisten: (() => void) | null = null;
   let cancelled = false;
   void (async () => {
     try {
       const { listen } = await import("@tauri-apps/api/event");
-      const stop = await listen<ShellProgress>("updates://progress", (event) =>
-        callback(event.payload),
-      );
+      const stop = await listen<T>(name, (event) => callback(event.payload));
       if (cancelled) stop();
       else unlisten = stop;
     } catch (cause) {
-      console.error("onShellProgress failed", cause);
+      console.error(`listening to ${name} failed`, cause);
     }
   })();
   return () => {

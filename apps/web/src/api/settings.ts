@@ -126,6 +126,7 @@ export const runtimeSettingsSchema = z.looseObject({
       channel: z.enum(["stable", "beta"]).catch("stable").optional(),
       autoCheck: z.boolean().optional(),
       autoDownload: z.boolean().optional(),
+      notify: z.boolean().optional(),
     })
     .optional(),
   /** 防休眠策略（T02，终端宿主设计 §9）；哪些来源的租约可以生效。 */
@@ -178,6 +179,7 @@ export interface RuntimeSettingsPatch {
     channel?: "stable" | "beta";
     autoCheck?: boolean;
     autoDownload?: boolean;
+    notify?: boolean;
   };
   /**
    * 语言服务。`servers` 是按 serverId 的浅合并，所以关掉一个 server 只要

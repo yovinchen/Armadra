@@ -36,12 +36,18 @@ const updates = vi.hoisted(() => ({
   download: vi.fn(async () => {}),
   install: vi.fn(async () => {}),
   dismiss: vi.fn(async () => {}),
+  cancel: vi.fn(async () => {}),
   acknowledgeRestart: vi.fn(),
 }));
 
 const settings = vi.hoisted(() => ({
   data: {
-    updates: { channel: "stable", autoCheck: true, autoDownload: false },
+    updates: {
+      channel: "stable",
+      autoCheck: true,
+      autoDownload: false,
+      notify: true,
+    },
   },
 }));
 const save = vi.hoisted(() => ({ mutate: vi.fn() }));
@@ -141,10 +147,16 @@ beforeEach(() => {
   updates.download.mockClear();
   updates.install.mockClear();
   updates.dismiss.mockClear();
+  updates.cancel.mockClear();
   updates.host = { kind: "notAsked" };
   updates.restart = null;
   settings.data = {
-    updates: { channel: "stable", autoCheck: true, autoDownload: false },
+    updates: {
+      channel: "stable",
+      autoCheck: true,
+      autoDownload: false,
+      notify: true,
+    },
   };
   opened.urls.length = 0;
   health.version = "0.1.0";
@@ -289,6 +301,34 @@ describe("UpdatesPage", () => {
     expect(screen.queryByRole("button", { name: "重启并更新" })).toBeNull();
   });
 
+  it("cancels a transfer and keeps the offer to restart it from", async () => {
+    draw(
+      {
+        state: "downloading",
+        offer,
+        receivedBytes: 1_048_576,
+        totalBytes: 4_194_304,
+      },
+      answered("available"),
+    );
+    await waitFor(() => expect(status()).toBe("正在下载"));
+    // Downloading again is not on offer: it would start a second transfer.
+    expect(screen.queryByRole("button", { name: "下载" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(updates.cancel).toHaveBeenCalled();
+  });
+
+  it("cancels a check that is still in flight", async () => {
+    draw({ state: "checking" }, { kind: "checking" });
+    await waitFor(() => expect(status()).toBe("正在检查…"));
+    // Every other button is disabled while checking; this one has to work,
+    // or the state would be a dead end until the request times out.
+    const cancel = screen.getByRole("button", { name: "取消" });
+    expect(cancel.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(cancel);
+    expect(updates.cancel).toHaveBeenCalled();
+  });
+
   it("shows the transfer as bytes rather than a fraction of nothing", async () => {
     draw(
       { state: "downloading", offer, receivedBytes: 1_048_576, totalBytes: 0 },
@@ -306,6 +346,10 @@ describe("UpdatesPage", () => {
     expect(save.mutate).toHaveBeenCalledWith({
       updates: { autoDownload: true },
     });
+    // Turning the notification off leaves the tray item: the design keeps one
+    // way of learning a restart is waiting without opening this page.
+    fireEvent.click(screen.getByRole("switch", { name: "下载完成后通知" }));
+    expect(save.mutate).toHaveBeenCalledWith({ updates: { notify: false } });
   });
 
   it("reports a restart that did not deliver what it promised", async () => {

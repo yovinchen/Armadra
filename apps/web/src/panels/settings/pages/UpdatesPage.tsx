@@ -55,6 +55,7 @@ export function UpdatesPage() {
   const download = useUpdateState((store) => store.download);
   const install = useUpdateState((store) => store.install);
   const dismiss = useUpdateState((store) => store.dismiss);
+  const cancel = useUpdateState((store) => store.cancel);
   const acknowledgeRestart = useUpdateState(
     (store) => store.acknowledgeRestart,
   );
@@ -70,6 +71,7 @@ export function UpdatesPage() {
   const channel = preferences?.channel ?? "stable";
   const autoCheck = preferences?.autoCheck ?? true;
   const autoDownload = preferences?.autoDownload ?? false;
+  const notify = preferences?.notify ?? true;
 
   React.useEffect(() => {
     void connect();
@@ -109,6 +111,8 @@ export function UpdatesPage() {
     switch (action) {
       case "check":
         return runCheck();
+      case "cancel":
+        return void cancel();
       case "download":
         return void download();
       case "skip":
@@ -214,6 +218,19 @@ export function UpdatesPage() {
           />
         </SettingsRow>
 
+        <SettingsRow
+          label={t("updates.notify")}
+          footnote={t("updates.notify.note")}
+        >
+          <Switch
+            checked={notify}
+            aria-label={t("updates.notify")}
+            onCheckedChange={(next) =>
+              save.mutate({ updates: { notify: next } })
+            }
+          />
+        </SettingsRow>
+
         <SettingsRow label={t("updates.status")}>
           <span
             role="status"
@@ -245,7 +262,7 @@ export function UpdatesPage() {
                   className="min-h-10"
                   variant={index === 0 ? "default" : "secondary"}
                   disabled={
-                    busy ||
+                    (busy && action !== "cancel") ||
                     (action === "check" && !installed) ||
                     (action === "notes" && !notesUrl)
                   }

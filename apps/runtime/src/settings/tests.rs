@@ -32,13 +32,19 @@ fn update_preferences_default_to_checking_but_not_downloading() {
     // Spending somebody's bandwidth is a choice they make, not one they
     // discover (design §2.4).
     assert_eq!(document["updates"]["autoDownload"], false);
+    // The notification and the tray item are the only two ways of learning a
+    // restart is waiting without opening this page, so it starts on.
+    assert_eq!(document["updates"]["notify"], true);
 
     let chosen = normalize(&serde_json::json!({
-        "updates": { "channel": "beta", "autoCheck": false, "autoDownload": true }
+        "updates": {
+            "channel": "beta", "autoCheck": false, "autoDownload": true, "notify": false
+        }
     }));
     assert_eq!(chosen["updates"]["channel"], "beta");
     assert_eq!(chosen["updates"]["autoCheck"], false);
     assert_eq!(chosen["updates"]["autoDownload"], true);
+    assert_eq!(chosen["updates"]["notify"], false);
 }
 
 /// A channel nobody offers — including "development", which describes a
@@ -53,10 +59,11 @@ fn an_unknown_update_channel_snaps_back_to_stable() {
         assert_eq!(document["updates"]["channel"], "stable", "{channel}");
     }
     let broken = normalize(&serde_json::json!({
-        "updates": { "autoCheck": "yes", "autoDownload": 1 }
+        "updates": { "autoCheck": "yes", "autoDownload": 1, "notify": "off" }
     }));
     assert_eq!(broken["updates"]["autoCheck"], true);
     assert_eq!(broken["updates"]["autoDownload"], false);
+    assert_eq!(broken["updates"]["notify"], true);
 }
 
 #[test]

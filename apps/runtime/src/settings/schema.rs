@@ -138,6 +138,11 @@ pub fn normalize(raw: &Value) -> Value {
         .and_then(Value::as_bool)
         .unwrap_or(DEFAULT_UPDATE_AUTO_DOWNLOAD);
     updates.insert("autoDownload".into(), Value::Bool(auto_download));
+    let notify = updates
+        .get("notify")
+        .and_then(Value::as_bool)
+        .unwrap_or(DEFAULT_UPDATE_NOTIFY);
+    updates.insert("notify".into(), Value::Bool(notify));
     document.insert("updates".into(), Value::Object(updates));
 
     // `power.policy` (T02). An unknown value snaps back to the default rather

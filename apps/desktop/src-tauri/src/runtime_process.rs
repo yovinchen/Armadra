@@ -223,6 +223,47 @@ pub async fn wait_for_runtime(app: &tauri::AppHandle) -> Result<(), String> {
     Err("Runtime did not become healthy within 10 seconds".into())
 }
 
+/// One GET on whichever Runtime channel this shell has.
+///
+/// An empty body means "no reading": every caller here is a garnish — the tray
+/// strip, the update notification's opt-out — and none of them may invent a
+/// value when the Runtime did not answer. Which channel is used is not a
+/// choice: a packaged shell owns a Runtime that holds no port at all, so the
+/// request is replayed on the socket; a development Runtime is somebody else's
+/// process and still has one.
+pub async fn runtime_get(app: &tauri::AppHandle, path: &str) -> Vec<u8> {
+    if app.state::<RuntimeProcess>().owns() {
+        let transport = app.state::<RuntimeTransport>().inner().clone();
+        let Ok(request) = http::Request::builder()
+            .uri(format!("armadra://localhost{path}"))
+            .body(Vec::new())
+        else {
+            return Vec::new();
+        };
+        let response = transport::forward(&transport, request).await;
+        return if response.status().is_success() {
+            response.into_body()
+        } else {
+            Vec::new()
+        };
+    }
+    let url = external_runtime_health_url().replace("/health", path);
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+    else {
+        return Vec::new();
+    };
+    match client.get(url).send().await {
+        Ok(response) if response.status().is_success() => response
+            .bytes()
+            .await
+            .map(|body| body.to_vec())
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
 pub async fn socket_health(transport: &RuntimeTransport) -> Option<HealthResponse> {
     let request = http::Request::builder()
         .uri("armadra://localhost/health")

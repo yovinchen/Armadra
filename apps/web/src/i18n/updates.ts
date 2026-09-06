@@ -36,6 +36,9 @@ export const updates: MessageModule = {
     "updates.autoDownload": "自动下载更新",
     "updates.autoDownload.note":
       "打开后会在后台下载安装包，安装与重启仍需你确认。",
+    "updates.notify": "下载完成后通知",
+    "updates.notify.note":
+      "关掉后只有托盘菜单里会出现「重启以完成更新」，不再发系统通知。",
     "updates.missing.pubkey": "此构建没有内置签名公钥，无法验证任何安装包。",
     "updates.missing.endpoints":
       "此构建没有内置发布地址；更新地址来自后台服务给出的同一次发布。",
@@ -51,6 +54,7 @@ export const updates: MessageModule = {
     "updates.checkedAt": "上次检查：{value}",
     "updates.downloaded.note":
       "重启后会安装新版本。终端会话会保留，自动化计划会暂停到重启完成。",
+    "updates.action.cancel": "取消",
     "updates.action.download": "下载",
     "updates.action.skip": "跳过此版本",
     "updates.action.restart": "重启并更新",
@@ -153,6 +157,9 @@ export const updates: MessageModule = {
     "updates.autoDownload": "Download automatically",
     "updates.autoDownload.note":
       "Downloads the package in the background. Installing and restarting still need your confirmation.",
+    "updates.notify": "Notify when downloaded",
+    "updates.notify.note":
+      "With this off, only the tray menu offers \u201cRestart to finish updating\u201d; no system notification is sent.",
     "updates.missing.pubkey":
       "This build carries no signing key, so it could not verify any package.",
     "updates.missing.endpoints":
@@ -170,6 +177,7 @@ export const updates: MessageModule = {
     "updates.checkedAt": "Last checked: {value}",
     "updates.downloaded.note":
       "Restarting installs the new version. Terminal sessions are kept; automation is paused until the restart finishes.",
+    "updates.action.cancel": "Cancel",
     "updates.action.download": "Download",
     "updates.action.skip": "Skip this version",
     "updates.action.restart": "Restart and update",

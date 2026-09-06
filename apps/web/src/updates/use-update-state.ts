@@ -20,6 +20,8 @@ import {
 import { useUpdatesSession } from "../host/updates-session";
 import {
   onShellProgress,
+  onShellStaged,
+  shellCancel,
   shellCheck,
   shellDismiss,
   shellDownload,
@@ -142,6 +144,8 @@ export interface UpdatesStore {
   download: () => Promise<void>;
   install: () => Promise<void>;
   dismiss: () => Promise<void>;
+  /** Stops a transfer or a check in flight and reports where that left it. */
+  cancel: () => Promise<void>;
   acknowledgeRestart: () => void;
 }
 
@@ -162,16 +166,23 @@ export const useUpdateState = create<UpdatesStore>((set, get) => {
         const report = await shellRestartReport();
         if (report) set({ restart: report });
       })();
-      const stop = onShellProgress((progress) => {
+      const stopProgress = onShellProgress((progress) => {
         // Progress is only meaningful while a transfer is the current state;
         // a late event must not resurrect one that already ended.
         const shell = get().shell;
         if (shell.state !== "downloading") return;
         set({ shell: { ...shell, ...progress } });
       });
+      // The tray and the notification are driven by the same announcement. A
+      // page that was not open when an `autoDownload` transfer finished reads
+      // the state back rather than guessing it from the payload.
+      const stopStaged = onShellStaged(() => {
+        void (async () => set({ shell: await shellState() }))();
+      });
       return () => {
         started = false;
-        stop();
+        stopProgress();
+        stopStaged();
       };
     },
 
@@ -235,6 +246,14 @@ export const useUpdateState = create<UpdatesStore>((set, get) => {
 
     async dismiss() {
       set({ shell: await shellDismiss() });
+    },
+
+    async cancel() {
+      const shell = await shellCancel();
+      // A cancelled check leaves the Host side mid-request too; reporting it as
+      // "checking" for ever would be the one thing this section must not do.
+      if (get().host.kind === "checking") set({ host: { kind: "notAsked" } });
+      set({ shell });
     },
 
     acknowledgeRestart() {
