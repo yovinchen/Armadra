@@ -7,6 +7,7 @@
 pub mod agent_bridge;
 pub mod channel;
 pub mod filesystem;
+pub mod git;
 pub mod language_link;
 pub mod outbox;
 pub mod service;
@@ -416,6 +417,13 @@ impl Worker {
                             // against a Worker that cannot answer it.
                             capabilities.push(filesystem::CAPABILITY.into());
                         }
+                        // The git domain needs neither a database nor a state
+                        // directory: a command runs in the workspace root the
+                        // frame names, so every Worker can answer. Advertising
+                        // it unconditionally is what lets a switch establish
+                        // that the queue is empty over the same link it moves
+                        // the epoch on.
+                        capabilities.push(git::CAPABILITY.into());
                         // Only a Worker with a durable outbox claims it can
                         // report upward. Claiming it without one would promise
                         // a delivery this process cannot survive a crash to
@@ -493,6 +501,10 @@ impl Worker {
             // query about this database's own rows, and a Worker that never
             // opened one answers UNSUPPORTED rather than an empty list the
             // Host would compare against its package and read as agreement.
+            // The git domain (§2.8). It runs commands rather than moving
+            // records, so it needs no ownership database -- what it needs is
+            // the workspace root, which travels in the frame.
+            Action::Git(input) => Ok(Response::Git(git::handle(input).await?)),
             Action::Filesystem(input) => {
                 let Some(pool) = self.canvas.as_ref() else {
                     return Ok(unsupported_ownership());

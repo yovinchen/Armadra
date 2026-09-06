@@ -187,6 +187,37 @@ impl RepositoryService {
         Ok(snapshot.clone())
     }
 
+    /// What this process still has in flight, across every workspace.
+    ///
+    /// A write-ownership switch reads it and refuses to move the git domain
+    /// while it is not zero (business migration §3.3, `git.queue_empty`): a
+    /// domain moved while a push was running would leave the only record of
+    /// that push in a process that is about to stop being the writer, and
+    /// "did it reach the remote?" would then have no answer at all.
+    ///
+    /// It counts this process's own registry, which is the only queue there
+    /// is — the records are in memory and die with the Runtime, so a stopped
+    /// Runtime has an empty queue by construction rather than by report.
+    pub fn active_operations(&self) -> (u32, u32, Vec<String>) {
+        let registry = self.inner.operations.lock().expect("Git operations");
+        let order = self.inner.order.lock().expect("Git operation order");
+        let (mut queued, mut running, mut ids) = (0, 0, Vec::new());
+        for id in order.iter() {
+            let Some(operation) = registry.get(id) else {
+                continue;
+            };
+            match operation.snapshot.lock().expect("Git operation").state {
+                OperationState::Queued => queued += 1,
+                OperationState::Running => running += 1,
+                _ => continue,
+            }
+            if ids.len() < 32 {
+                ids.push(id.clone());
+            }
+        }
+        (queued, running, ids)
+    }
+
     /// Recover this Runtime's operation history after a frontend reload. The
     /// Host will persist these records after ownership migration; this service
     /// intentionally does not claim persistence across Runtime restarts.

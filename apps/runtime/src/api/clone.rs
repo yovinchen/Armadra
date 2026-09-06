@@ -50,6 +50,10 @@ pub async fn git_clone(
     State(state): State<AppState>,
     Json(request): Json<CloneRequest>,
 ) -> AppResult<Json<CloneStartedResponse>> {
+    // Starting a clone is a git write: it makes the machine fetch a repository
+    // and lands a directory on disk (business migration §2.8).
+    crate::ownership::require_local_write(&state.pool, crate::ownership::OwnershipDomain::Git)
+        .await?;
     // A new project has no grant yet. If its destination is inside existing
     // workspaces, preserve every ancestor's restrictions instead of bypassing
     // them through this global creation endpoint.

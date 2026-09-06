@@ -117,6 +117,8 @@ pub async fn apply_hunk(
     AxumPath(id): AxumPath<String>,
     Json(request): Json<crate::git_hunks::GitHunkMutation>,
 ) -> AppResult<JsonAnswer> {
+    crate::ownership::require_local_write(&state.pool, crate::ownership::OwnershipDomain::Git)
+        .await?;
     let workspace = workspace(&state, &id, true).await?;
     if let Some(answer) = proxied(
         &state,

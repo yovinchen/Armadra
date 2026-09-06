@@ -58,6 +58,13 @@ pub async fn start(
     AxumPath(id): AxumPath<String>,
     Json(request): Json<StartOperation>,
 ) -> AppResult<Json<OperationSnapshot>> {
+    // The queue is the git domain's whole write surface, so the guard is here
+    // (business migration §2.8). Once the Host owns the domain this answers 409
+    // `ownership_moved`; listing, reading and cancelling an operation this
+    // Runtime already started keep working, because those are about entries it
+    // still holds.
+    crate::ownership::require_local_write(&state.pool, crate::ownership::OwnershipDomain::Git)
+        .await?;
     let workspace = workspace(&state, &id, true).await?;
     crate::git::access::require_execution(
         workspace.permissions.execute,

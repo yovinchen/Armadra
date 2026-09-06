@@ -16,6 +16,7 @@ use crate::{
     error::{AppError, AppResult},
     git,
     model::Workspace,
+    ownership,
     remote::{self, JsonAnswer},
 };
 
@@ -129,6 +130,11 @@ pub async fn git_init(
     State(state): State<AppState>,
     AxumPath(workspace_id): AxumPath<String>,
 ) -> AppResult<JsonAnswer> {
+    // Creating a repository is a git write, and it is the one write that does
+    // not go through `git_write_workspace`: there is no repository to take a
+    // queue key from yet, so its permission check is inline and so is its
+    // ownership guard.
+    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Git).await?;
     let workspace = db::get_workspace(&state.pool, &workspace_id).await?;
     if !workspace.permissions.read || !workspace.permissions.write {
         return Err(AppError::Forbidden(
@@ -199,7 +205,16 @@ pub async fn git_stage(
 /// The permission gate every Git write shares: read, write and the execution
 /// grant, in that order. The remote path checks it here *and* again on the
 /// execution host, which is where the repository actually is.
+/// Every index, worktree and commit write goes through here, which is why the
+/// ownership guard lives here too (business migration §2.8): one gate rather
+/// than seven, so a route added later cannot forget it.
+///
+/// Reads are deliberately not gated. A Runtime that handed the git domain over
+/// still answers `status`, `diff` and `history`, because the panel has to keep
+/// showing the repository it no longer writes -- the switch moves who decides,
+/// not what a person can look at.
 async fn git_write_workspace(state: &AppState, workspace_id: &str) -> AppResult<Workspace> {
+    ownership::require_local_write(&state.pool, ownership::OwnershipDomain::Git).await?;
     let workspace = db::get_workspace(&state.pool, workspace_id).await?;
     if !workspace.permissions.read || !workspace.permissions.write {
         return Err(AppError::Forbidden(
