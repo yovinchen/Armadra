@@ -15,7 +15,20 @@
  *   3. `canvas ack` is what acknowledges it, and only from the session the
  *      handoff was addressed to.
  *
- * Usage: node tools/handoff-read-smoke.mjs <armadra-runtime> <armadra-hook>
+ * The source and target Agents are arguments, because the fourth thing this
+ * covers is which CLIs can be handed off *to* at all. Delivery is gated on the
+ * target having reported an idle turn through a hook the runtime believes
+ * (`readiness` in `handoff/delivery.rs`), and before Pi, Oh My Pi and Copilot
+ * had adapters that gate refused them with `idleHookUnavailable` and the
+ * handoff stopped at `queued`. So the script asserts the state reaches
+ * `notified`, which is the difference those adapters make.
+ *
+ * Each fixture speaks its own provider's payload shape and event names — the
+ * point is to exercise the real normalizer, and Copilot in particular sends no
+ * event name at all. See `EVENTS`.
+ *
+ * Usage: node tools/handoff-read-smoke.mjs <armadra-runtime> <armadra-hook> [source] [target]
+ *   e.g. node tools/handoff-read-smoke.mjs … claude pi
  */
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
@@ -26,16 +39,83 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
-const [runtimeBinary, hookBinary] = process.argv.slice(2);
-if (!runtimeBinary || !hookBinary) {
+/**
+ * The turn each fixture reports, in the shape its own provider sends.
+ *
+ * Three payloads each: open the session, start a turn, end it idle. The order
+ * is not decoration — `reduce` treats a session event as "forget the last
+ * turn", and rule 2 drops an idle report for a node that was not working. A
+ * fixture that skipped either step would leave the delivery gate waiting
+ * forever for a `done` that never arrives.
+ */
+const EVENTS = {
+  claude: [
+    '{"hook_event_name":"SessionStart"}',
+    '{"hook_event_name":"UserPromptSubmit"}',
+    '{"hook_event_name":"Stop"}',
+  ],
+  codex: [
+    '{"hook_event_name":"SessionStart"}',
+    '{"hook_event_name":"UserPromptSubmit"}',
+    '{"hook_event_name":"Stop"}',
+  ],
+  gemini: [
+    '{"hook_event_name":"SessionStart"}',
+    '{"hook_event_name":"UserPromptSubmit"}',
+    '{"hook_event_name":"Stop"}',
+  ],
+  // The generated extension posts flat camelCase names over the same socket.
+  // Pi settles through `agent_settled`, which is the event that carries `idle`.
+  pi: [
+    '{"hookEventName":"session_start"}',
+    '{"hookEventName":"before_agent_start"}',
+    '{"hookEventName":"agent_settled"}',
+  ],
+  // Oh My Pi 18.x settles through `session_stop` instead.
+  omp: [
+    '{"hookEventName":"session_start"}',
+    '{"hookEventName":"before_agent_start"}',
+    '{"hookEventName":"session_stop"}',
+  ],
+  // Copilot names no event: each payload is recognised by its shape alone
+  // (`hook/normalize/copilot.rs`), so these are the real field sets.
+  copilot: [
+    '{"sessionId":"fixture","cwd":".","source":"new"}',
+    '{"sessionId":"fixture","cwd":".","prompt":"go"}',
+    '{"sessionId":"fixture","cwd":".","stopReason":"end_turn"}',
+  ],
+};
+
+const [
+  runtimeArgument,
+  hookArgument,
+  sourceAgent = "claude",
+  targetAgent = "codex",
+] = process.argv.slice(2);
+if (
+  !runtimeArgument ||
+  !hookArgument ||
+  !EVENTS[sourceAgent] ||
+  !EVENTS[targetAgent]
+) {
   console.error(
-    "usage: node tools/handoff-read-smoke.mjs <armadra-runtime> <armadra-hook>",
+    `usage: node tools/handoff-read-smoke.mjs <armadra-runtime> <armadra-hook> [source] [target]\n` +
+      `  agents: ${Object.keys(EVENTS).join(" ")}`,
   );
   process.exit(2);
 }
+if (sourceAgent === targetAgent) {
+  console.error("the source and the target must be different Agents");
+  process.exit(2);
+}
+// Absolute: the fixture runs it from the terminal's own working directory, so
+// a relative path resolves against the temporary project and silently fails to
+// launch — which looks exactly like a CLI that reported nothing.
+const runtimeBinary = resolve(runtimeArgument);
+const hookBinary = resolve(hookArgument);
 
 // Not the platform temp directory: the Runtime puts a Unix socket in here, and
 // the usual macOS temp path is longer than a socket path may be.
@@ -49,10 +129,16 @@ mkdirSync(binDir, { recursive: true });
  * client — same binary, same endpoint file, same node token a real CLI uses —
  * and then sits reading, so the pane keeps naming the Agent it claims to be.
  */
-for (const name of ["claude", "codex"]) {
+for (const name of [sourceAgent, targetAgent]) {
+  const reports = EVENTS[name]
+    .map(
+      (payload) =>
+        `printf %s ${JSON.stringify(payload)} | ${JSON.stringify(hookBinary)} ${name} >/dev/null 2>&1`,
+    )
+    .join("\n");
   writeFileSync(
     join(binDir, name),
-    `#!/bin/sh\nprintf '{"hook_event_name":"SessionStart"}' | ${JSON.stringify(hookBinary)} ${name} >/dev/null 2>&1\nprintf '{"hook_event_name":"Stop"}' | ${JSON.stringify(hookBinary)} ${name} >/dev/null 2>&1\nwhile IFS= read -r line; do :; done\n`,
+    `#!/bin/sh\n${reports}\nwhile IFS= read -r line; do :; done\n`,
     { mode: 0o700 },
   );
 }
@@ -80,7 +166,7 @@ const runtime = spawn(runtimeBinary, ["--listen", "tcp:127.0.0.1:0"], {
 let failure = null;
 try {
   await main();
-  console.log("handoff-read smoke passed");
+  console.log(`handoff-read smoke passed for ${sourceAgent} → ${targetAgent}`);
 } catch (error) {
   failure = error;
 } finally {
@@ -137,7 +223,7 @@ async function main() {
     `/api/workspaces/${workspace.id}/boards/${boardId}/document`,
     {
       expectedUpdatedAt: document.board.updatedAt,
-      nodes: [node(source, "claude"), node(target, "codex")],
+      nodes: [node(source, sourceAgent), node(target, targetAgent)],
       edges: [],
       viewport: document.board.viewport,
     },
@@ -148,13 +234,13 @@ async function main() {
     base,
     "PUT",
     `/api/workspaces/${workspace.id}/context-links/${source}`,
-    { links: [{ id: target, title: "codex", kind: "node" }] },
+    { links: [{ id: target, title: targetAgent, kind: "node" }] },
   );
 
   const sessions = {};
   for (const [id, agent] of [
-    [source, "claude"],
-    [target, "codex"],
+    [source, sourceAgent],
+    [target, targetAgent],
   ]) {
     sessions[id] = await call(base, "POST", "/api/terminals", {
       workspaceId: workspace.id,
@@ -192,13 +278,29 @@ async function main() {
   assert.equal(accepted.state, "queued", "accepting did not queue the handoff");
   assert.ok(accepted.mailboxId, "no mailbox message was created");
 
+  // `queued` is where a handoff to an Agent with no status source stops: the
+  // delivery gate wants an idle turn it can believe, and without an adapter
+  // there is none. Reaching `notified` is the whole point of giving Pi, Oh My
+  // Pi and Copilot one.
+  const notified = await awaitState(
+    base,
+    workspace.id,
+    prepared.bundle.handoffId,
+    "notified",
+  );
+  assert.equal(
+    notified.errorCode ?? null,
+    null,
+    `delivery to ${targetAgent} was refused: ${notified.errorCode}`,
+  );
+
   // The target Agent reads the bundle with the real client, from inside its own
   // session — the node token, the session binding and the generation all come
   // from the environment that terminal was started with.
   const read = JSON.parse(
     hook(["canvas", "handoff-read", "--id", prepared.bundle.handoffId], {
       node: target,
-      agent: "codex",
+      agent: targetAgent,
       session: sessions[target],
     }),
   );
@@ -229,7 +331,7 @@ async function main() {
   // it is the one that wrote it.
   const refused = hook(
     ["canvas", "handoff-read", "--id", prepared.bundle.handoffId],
-    { node: source, agent: "claude", session: sessions[source] },
+    { node: source, agent: sourceAgent, session: sessions[source] },
     true,
   );
   assert.match(
@@ -242,7 +344,7 @@ async function main() {
   const acknowledged = JSON.parse(
     hook(["canvas", "ack", "--id", accepted.mailboxId], {
       node: target,
-      agent: "codex",
+      agent: targetAgent,
       session: sessions[target],
     }),
   );
@@ -271,8 +373,8 @@ async function main() {
   );
   assert.ok(row, "the workspace history did not list the handoff");
   assert.equal(row.state, "acknowledged");
-  assert.equal(row.bundle.source.agentId, "claude");
-  assert.equal(row.bundle.target.agentId, "codex");
+  assert.equal(row.bundle.source.agentId, sourceAgent);
+  assert.equal(row.bundle.target.agentId, targetAgent);
   assert.ok(
     typeof row.attempts === "number",
     "the history did not report delivery attempts",
@@ -343,8 +445,9 @@ async function awaitEndpoint() {
 /** Waits for the fixture Agents' own hook reports; nothing is written by hand. */
 async function awaitIdle(base, workspaceId, nodes) {
   const deadline = Date.now() + 30_000;
+  let sessions = [];
   while (Date.now() < deadline) {
-    const sessions = await call(
+    sessions = await call(
       base,
       "GET",
       `/api/workspaces/${workspaceId}/sessions`,
@@ -355,7 +458,9 @@ async function awaitIdle(base, workspaceId, nodes) {
     if (nodes.every((node) => done.has(node))) return;
     await sleep(200);
   }
-  throw new Error("a fixture Agent never reported a finished turn");
+  throw new Error(
+    `a fixture Agent never reported a finished turn: ${JSON.stringify(sessions)}`,
+  );
 }
 
 async function awaitState(base, workspaceId, handoffId, state) {
