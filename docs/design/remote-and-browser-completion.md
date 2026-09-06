@@ -439,7 +439,27 @@ SIGKILL 后恢复：Runtime 被 `kill -9` 时来不及结束浏览器，Chrome �
 
 合并后验证：`cargo test -p armadra-runtime --lib browser::` 59 项全绿（批次 1 的 27 + 批次 2 的 10 + 批次 3 的 22），`--test browser_stream` 2 项通过、本机路径「点击 → 新帧」p95 70 ms（中位 68 ms，20 次）；`cargo test -p armadra-runtime`、`cargo test -p armadra-hook`、`cargo clippy --workspace --exclude armadra-desktop --all-targets -D warnings`、`cargo fmt --all --check`、`pnpm protocol:check`、`pnpm --filter @armadra/web test` 与 `typecheck`、`pnpm check`、`go -C apps/host test ./internal/server/...` 通过。Host 侧不需要改：`browserClass` 按「读=read、`subscription`=write、其余=execute」分类，批次 2 的 `tabs` / `dialog` / `upload` 路由已经落在正确的一档。
 
-合并未做：`browser.tabs` / `browser.dialog` / `browser.fileChooser` 三个事件仍不在 `packages/shared` 的事件联合里，Web 的 `safeParse` 只会丢掉它们并告警——标签条与对话框的界面本就是批次 2 记下的未做项，补 schema 而不补界面只是把缺口挪个位置。批次 2 与批次 3 各自的未做项都仍然成立。
+合并未做（已在下面的「浏览器收尾」里补上）：`browser.tabs` / `browser.dialog` / `browser.fileChooser` 三个事件仍不在 `packages/shared` 的事件联合里，Web 的 `safeParse` 只会丢掉它们并告警——标签条与对话框的界面本就是批次 2 记下的未做项，补 schema 而不补界面只是把缺口挪个位置。批次 2 与批次 3 各自的未做项都仍然成立。
+
+实施状态 · 浏览器收尾（已完成，本机 macOS + 本机 Chrome 152）：把上面记下的浏览器未做项一次补齐。
+
+**事件联合**：`packages/shared/src/api/events.ts` 加入 `browser.tabs`（带整张 `BrowserTabList`）、`browser.dialog` 与 `browser.fileChooser`（两者的载荷可缺席，缺席即「已答复 / 已超时」）。整张标签表一起推而不是逐条差分：一次 `window.open` 同时改活动标签和标签数量，分两条推会让标签条在中间那一刻显示一个从未存在过的状态。
+
+**标签条**：`apps/web/src/nodes/browser/TabStrip.tsx`——先取一次 `GET …/tabs` 再听事件（节点是后挂上来的，会话可能已经开了三个标签），一个标签时整条不显示（标题在节点头部，地址在地址栏）。加载中与待答复对话框是两个不同的记号：前者自己会结束，后者要人答复。手机焦点页渲染的就是同一个 `BrowserNode`，所以标签条、对话框、文件选择器在焦点页上一并生效，不另写一套。
+
+**图标**：`BrowserTab.favicon = 9` 是 `data:` URL，不是地址。给地址意味着每个画标签条的客户端用**自己**的浏览器和 cookie 去访问那个站点——包括 Host 另一头的手机——而正在访问它的是受控会话。所以由页面自己 `fetch` 自己的图标（`dom::FAVICON` 固定脚本，`credentials: "omit"`、8 KB 上限），在 `Page.loadEventFired` 后经 `session/favicon.rs` 取一次；导航提交即清空旧图标，取不到就是空串，界面退回站点首字母。
+
+**对话框与文件选择**：`Prompts.tsx` 用 shadcn `Dialog` 呈现 `alert/confirm/prompt/beforeunload` 并回传 `POST …/dialog`；`alert` 只给一个按钮（给「取消」等于暗示有第二种答复），关掉弹层等于「不接受」而不是「当作没看见」——页面还停在那里。文件选择两条路：桌面端用 Tauri 对话框拿到绝对路径、换算成工作空间相对路径直接回填（文件不进项目），Web 端只拿得到字节，先经 `POST …/imports` 落到 `.armadra/imports/` 再按路径回填，这一步在文案里写明。远端工作空间即使在桌面端也走 Web 那条：`rootPath` 是**那台**主机上的路径，本机选择器选出来的文件在那边不存在。越界路径在选完的那一刻就拒，不发一个注定 400 的请求。
+
+**受管清单的真实 sha256**：Chrome for Testing **不发布任何摘要**——`last-known-good-versions-with-downloads.json` 每个平台只有 `platform` 与 `url`，没有同名 `.sha256`（实测 404），响应头只有 GCS 自己的 `x-goog-hash`（crc32c + md5），与字节同源，证明不了同源之外的任何事（2026-09-07 对线上端点核对）。因此摘要只能**观测**：`tools/browser-manifest.mjs`（`pnpm browser:manifest`）在有网络的机器上下载一次、算 sha256、用 `unzip -Z1` 核对可执行文件路径确实在包里，再写进清单；本轮只提交 macos-arm64（`152.0.7977.82`，187 616 945 字节），其余平台留空并在清单的 `$comment` 里写明原因与补法。没有条目的平台改走 TOFU：`launch/managed.rs` 在首次安装成功后把观测到的摘要记进 `<data_dir>/browser-managed/pinned.json`，之后每次安装都按它校验；同一版本同一 URL 的字节变了是 `sha256_mismatch`，同一版本换了 URL 是 `pin_url_changed`（这里分不出哪个是真的，就不替人选）。失败的安装不落 pin。下载默认仍关（`ARMADRA_BROWSER_MANAGED_DOWNLOAD`）：180 MB 与「首次信任」都是该由人做的决定。
+
+**WebP 帧流**：Chrome 的协议自述里 `Page.startScreencast` 的 `format` 只列 `jpeg` / `png`，但真实 Chrome 152 对 `format: "webp"` 返回的是货真价实的 VP8 WebP（`RIFF … WEBP`），实机验证过。于是订阅者用 `BrowserSubscribeRequest.accepted_encodings` 声明自己解得开什么，订阅回执 `BrowserSubscription.encoding` 如实回报这条流实际发的编码。一个页面只有一路 screencast、本模块不逐订阅者转码，所以**所有**在线订阅者都接受 WebP 时才用 WebP——一个老客户端拖累大家用 JPEG，好过给它一张画不出来的图。真按枚举办事的浏览器会拒绝，那一次拒绝被接住并回落 JPEG，此后本会话不再问。质量按编码各自的标尺换算（同一个数字在两种编码里是不同的画质），差值由 `ARMADRA_BROWSER_WEBP_QUALITY_SHIFT`（默认 10）配置。工作空间事件通道保持 JPEG：它的订阅者早于专用帧流，没有地方声明自己解得开什么。实测本地静态页 800×600 首帧：JPEG 3 609 字节，WebP 1 510 字节。
+
+**上传回包**：新增 `BrowserUploadResponse`（`BrowserActionResult.upload = 22`）与 `browserUploadedSchema`，补上批次 2 记下的「`POST …/upload` 的响应没有对应消息」。
+
+验证：`cargo test -p armadra-runtime --lib browser::` 63 项全绿（新增标签图标、WebP 协商、TOFU 首次信任与 `pin_url_changed`）、`--test browser_stream` 3 项通过；`cargo test -p armadra-runtime`、`cargo clippy --workspace --exclude armadra-desktop --all-targets -D warnings`、`cargo fmt --all --check`、`pnpm protocol:check`、`pnpm protocol:test`、`pnpm --filter @armadra/shared test`、`pnpm --filter @armadra/web test`（1985 项）与 `typecheck`、`pnpm check` 通过。Host 侧不需要改：新界面用的都是已有路由，`browserClass` 已经把它们分在正确的一档。
+
+浏览器收尾未做：`pinned.json` 的 TOFU 路径只有单元测试覆盖（本机是已固定摘要的 macos-arm64，走不到 TOFU 那一支）；Windows / Linux 的清单条目仍空，要在那些平台上各跑一次 `pnpm browser:manifest`；`favicon` 只取 `link[rel~=icon]` 与 `/favicon.ico`，不解析 manifest 里的图标，也不挑尺寸；标签条没有拖拽排序（CDP 也没有对应命令）。§7 的「不做的事」不变。
 实施状态 · 批次 4（已完成，本机 macOS + 伪 SSH）：`remote/service/{mod,git,files,assets,replay}.rs`、`remote/{upload,download,imports}.rs`、`worker/upload.rs` 落地仓库面板、文件管理、资产导入与 `WorkerUpload` 分块上传；`api/files.rs` 的 9 处与 `api/assets.rs` 的 1 处 `refuse_remote` 已删除，`git/api.rs::workspace` 的整块 501 换成逐 handler 的 `proxied`。伪 SSH 集成测试新增 `remote_panel`（分支/历史/stash 明细/worktree/仓库扫描、操作队列 start→succeeded→list→cancel、file-entries 新建/改名/移动/删除/列表/还原、file-info 与二进制下载、SIGKILL 后写操作重连）与 `remote_upload`（3 MiB 十二块上传后核对落盘 sha256、无残留临时文件、下载回读一致、资产 blob 与按路径导入去重到同一 id）。
 
 三处与设计不同，都是设计表未覆盖的空缺：① 回收站**列表**是读、还原是写，两者重放规则相反，不能共用一个编号，因此占用了设计里留白的 `39` 作 `FILE_ENTRY_TRASH_LIST`（`reserved 49` 未动）；② `WorkerReadFileRequest` 追加 `bool raw = 6`（加字段不改任何既有编号，默认 false 时编码不变），否则 §3.1 说的「下载复用分块读」对二进制与图片资产不成立——`files::read_text_file` 会拒绝含零字节的文件，远端白板资产将只能写不能读；③ `import-local-files` 与 `assets/import` 都按路径导入，但设计只给后者定了「源文件已在执行主机」，前者没有编号，实现为控制端读取字节后经 `WorkerUpload` 上传，与 multipart 上传同路；差异记在此处而非悄悄对齐。另有 `POST …/assets` 与 `GET …/assets/{id}` 两条原本就会写/读控制端磁盘的路由一并接上远端（不在 11 处之列，属同一功能的正确性缺口）。
@@ -481,7 +501,7 @@ SIGKILL 后恢复：Runtime 被 `kill -9` 时来不及结束浏览器，Chrome �
 | 项                                | 原因                                                                                              |
 | --------------------------------- | ------------------------------------------------------------------------------------------------- |
 | 浏览器 session 运行在远端执行主机 | 需要 §3.4 的事件通道承载帧流与输入；本轮先落通道，远端工作空间上的浏览器节点继续 501 并写明功能名 |
-| 视频通道（WebRTC / H.264）        | 设计 §8 保留为后续替换帧载荷；本轮只做 JPEG 帧 + 背压                                             |
+| 视频通道（WebRTC / H.264）        | 设计 §8 保留为后续替换帧载荷；本轮只做逐帧图片（JPEG，能协商时 WebP）+ 背压                       |
 | Cookie / 凭据导出给 Agent         | 设计 §7 要求另设能力与审计                                                                        |
 | 扩展、DRM、音视频、同步账号       | 设计 §5 明确不在验收目标                                                                          |
 | 通用 `eval` 与裸 CDP              | 不变的边界                                                                                        |
