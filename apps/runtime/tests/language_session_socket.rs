@@ -220,8 +220,7 @@ async fn open_and_wait(socket: &mut Socket, uri: &str) -> bool {
             let Ok(value) = serde_json::from_str::<Value>(&text) else {
                 continue;
             };
-            if value["method"] == "textDocument/publishDiagnostics"
-                && value["params"]["uri"] == uri
+            if value["method"] == "textDocument/publishDiagnostics" && value["params"]["uri"] == uri
             {
                 return true;
             }
@@ -244,20 +243,14 @@ async fn a_closed_socket_ends_its_session_so_the_next_one_owns_the_document() {
     // told `server_not_found` on a machine that has the server.
     let (status, body) = get(
         &fixture.socket,
-        &format!(
-            "/api/workspaces/{}/language-service",
-            fixture.workspace_id
-        ),
+        &format!("/api/workspaces/{}/language-service", fixture.workspace_id),
     )
     .await;
     assert_eq!(status, 200, "{body}");
 
     let (status, body) = post(
         &fixture.socket,
-        &format!(
-            "/api/workspaces/{}/language/sessions",
-            fixture.workspace_id
-        ),
+        &format!("/api/workspaces/{}/language/sessions", fixture.workspace_id),
         r#"{"languageId":"markdown","clientId":"node-1"}"#,
     )
     .await;
@@ -291,16 +284,16 @@ async fn a_closed_socket_ends_its_session_so_the_next_one_owns_the_document() {
         }
     })
     .await;
-    assert!(released.is_ok(), "the closed socket left its documents open");
+    assert!(
+        released.is_ok(),
+        "the closed socket left its documents open"
+    );
 
     // And the next session is an owner, not a follower: it sends `didOpen`,
     // and the diagnostics come back.
     let (status, body) = post(
         &fixture.socket,
-        &format!(
-            "/api/workspaces/{}/language/sessions",
-            fixture.workspace_id
-        ),
+        &format!("/api/workspaces/{}/language/sessions", fixture.workspace_id),
         r#"{"languageId":"markdown","clientId":"node-2"}"#,
     )
     .await;
