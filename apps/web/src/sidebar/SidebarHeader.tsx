@@ -27,7 +27,6 @@ import { CloneRepoDialog } from "../panels/CloneRepoDialog";
 import { NewFolderDialog } from "../panels/NewFolderDialog";
 import { useCanvasStore } from "../store/canvas-store";
 import { Button } from "@/ui/button";
-import { ColorDot } from "@/ui/color-dot";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -73,7 +72,6 @@ export function SidebarHeader() {
               checked={row.id === workspace?.id}
               onSelect={() => openWorkspace(row)}
             >
-              <ColorDot color={row.color} size={8} />
               <span className="truncate">{row.name}</span>
             </DropdownMenuCheckboxItem>
           ))}

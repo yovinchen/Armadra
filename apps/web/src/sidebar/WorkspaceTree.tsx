@@ -34,7 +34,6 @@ import {
 import { NewFolderDialog } from "../panels/NewFolderDialog";
 import { useCanvasStore } from "../store/canvas-store";
 import { Button } from "@/ui/button";
-import { ColorDot } from "@/ui/color-dot";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -415,7 +414,6 @@ function WorkspaceRow({
           className="min-w-0 flex-1 justify-start gap-1.5 px-1 text-[length:var(--text-body)] font-normal hover:bg-transparent"
           onClick={() => onToggle(!collapsed)}
         >
-          <ColorDot color={summary.color} size={8} />
           <span className="truncate">{summary.name}</span>
         </Button>
         <DropdownMenu>
