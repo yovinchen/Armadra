@@ -110,6 +110,14 @@ pub struct AgentEvent {
     /// `AgentEvent`, and no hook client can set it.
     #[serde(skip)]
     pub silent: bool,
+    /// A session start that the prompt already in flight created, rather than
+    /// one that precedes any work. Copilot CLI opens the session *from* the
+    /// first prompt and echoes that prompt back as `initialPrompt`, so its
+    /// `sessionStart` lands after the turn it belongs to has begun.
+    ///
+    /// Never serialized, for the same reason as `silent`.
+    #[serde(skip)]
+    pub session_opened_by_prompt: bool,
 }
 
 impl AgentEvent {
@@ -141,6 +149,7 @@ impl AgentEvent {
             client_revision: None,
             transcript_path: None,
             silent: false,
+            session_opened_by_prompt: false,
         }
     }
 

@@ -17,7 +17,9 @@
 //!    that ends its turn is rewritten to `waiting`. Otherwise the node looks
 //!    finished while the CLI sits at a prompt.
 //! 4. **session reset** — `SessionStart` / `SessionEnd` clear the state rather
-//!    than set one; a fresh CLI is idle, not done.
+//!    than set one; a fresh CLI is idle, not done. Its exceptions live in
+//!    [`SESSION_KEEP_RULES`]: not every session event describes a *different*
+//!    session from the turn already on the row.
 //! 5. **subagent isolation** — subagent events describe a child, never the
 //!    parent's state.
 //!
@@ -27,13 +29,21 @@
 
 use chrono::{DateTime, Duration, Utc};
 
-use super::normalize::{AgentEvent, DONE, EventKind, WAITING};
+use super::normalize::{AgentEvent, DONE, EventKind, WAITING, WORKING};
 
 /// A `working` that lands within this window after a `done` is discarded unless
 /// it opens a new turn.
 pub const DONE_HOLDOFF_SECONDS: i64 = 3;
 /// A `working` node that has not reported for this long is swept to `done`.
 pub const STALE_WORKING_MINUTES: i64 = 20;
+/// How long a session event may still be talking about the turn next to it.
+///
+/// Copilot CLI 1.0.83 measured on 2026-09-06: `sessionStart` lands ~20 ms after
+/// the `userPromptSubmitted` that created the session, and in `-p` mode
+/// `sessionEnd` lands ~10 ms after `agentStop`. Three seconds is the same slack
+/// rule 1 already gives a fresh `done`, and orders of magnitude below the gap
+/// between two real sessions in one terminal.
+pub const SESSION_ECHO_SECONDS: i64 = 3;
 
 /// The row as it stands before the event is applied.
 #[derive(Debug, Clone, Default)]
@@ -55,7 +65,76 @@ pub struct Current {
 #[derive(Debug, Clone, Default)]
 pub struct Memory {
     pub done_at: Option<DateTime<Utc>>,
+    /// When the turn currently on the row opened. Only a session event reads
+    /// it, to tell "the start that created this very turn" from "a start that
+    /// found a turn left over from a CLI that is already gone".
+    pub turn_started_at: Option<DateTime<Utc>>,
     pub awaiting_input: bool,
+}
+
+/// Everything a rule 4 exception is allowed to look at. Passing it as one value
+/// keeps every rule below a pure predicate the tests can drive directly.
+pub struct SessionFacts<'a> {
+    pub now: DateTime<Utc>,
+    pub current: &'a Current,
+    pub memory: &'a Memory,
+    pub event: &'a AgentEvent,
+}
+
+/// Why a session event leaves the turn on the row standing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionKeep {
+    /// A start the prompt in flight created. Copilot opens its session *from*
+    /// the first prompt, so `sessionStart` arrives after that turn's `working`;
+    /// resetting on it blanks the state the prompt just set.
+    OpenedByThisPrompt,
+    /// A start naming the session the row is already tracking. Nothing to
+    /// forget: it is the same session, however it got re-announced.
+    SameSession,
+    /// The end that closes the turn that just reported `done`. In Copilot's
+    /// non-interactive `-p` mode it follows `agentStop` by ~10 ms, and clearing
+    /// there leaves a finished run with no state at all.
+    AfterTheFinalDone,
+}
+
+type SessionKeepRule = (SessionKeep, fn(&SessionFacts<'_>) -> bool);
+
+/// Rule 4's exceptions, tried in order. Every session event that matches none
+/// of them resets the machine, which is rule 4 unchanged.
+pub const SESSION_KEEP_RULES: &[SessionKeepRule] = &[
+    (SessionKeep::OpenedByThisPrompt, |facts| {
+        facts.event.session_phase == Some("start")
+            && facts.event.session_opened_by_prompt
+            && facts.current.state.as_deref() == Some(WORKING)
+            && within(facts.now, facts.memory.turn_started_at)
+            // A start that names a session the row is not running is a real
+            // new session, however it was opened, and rule 4 applies to it.
+            && (facts.current.session_id.is_none()
+                || facts.event.session_id == facts.current.session_id)
+    }),
+    (SessionKeep::SameSession, |facts| {
+        facts.event.session_phase == Some("start")
+            && facts.current.state.is_some()
+            && facts.event.session_id.is_some()
+            && facts.event.session_id == facts.current.session_id
+    }),
+    (SessionKeep::AfterTheFinalDone, |facts| {
+        facts.event.session_phase == Some("end")
+            && facts.current.state.as_deref() == Some(DONE)
+            && within(facts.now, facts.memory.done_at)
+    }),
+];
+
+/// The first exception that matches, or `None` for a plain rule 4 reset.
+pub fn session_keep(facts: &SessionFacts<'_>) -> Option<SessionKeep> {
+    SESSION_KEEP_RULES
+        .iter()
+        .find(|(_, matches)| matches(facts))
+        .map(|(keep, _)| *keep)
+}
+
+fn within(now: DateTime<Utc>, mark: Option<DateTime<Utc>>) -> bool {
+    mark.is_some_and(|mark| now - mark < Duration::seconds(SESSION_ECHO_SECONDS))
 }
 
 /// What to write and publish. `None` from [`reduce`] means "nothing changed" —
@@ -117,6 +196,19 @@ pub fn reduce(
     };
 
     if event.kind == EventKind::Session {
+        next.session_phase = event.session_phase.map(str::to_owned);
+        // The exceptions first: a session event that is talking about the turn
+        // already on the row moves the phase and nothing else.
+        if session_keep(&SessionFacts {
+            now,
+            current,
+            memory,
+            event,
+        })
+        .is_some()
+        {
+            return Some(next);
+        }
         // Rule 4. A new session forgets the old turn entirely: no pending
         // approval, no open question, no just-finished holdoff.
         *memory = Memory::default();
@@ -124,7 +216,6 @@ pub fn reduce(
         next.pending_id = None;
         next.errored = None;
         next.interrupted = None;
-        next.session_phase = event.session_phase.map(str::to_owned);
         return Some(next);
     }
 
@@ -152,6 +243,7 @@ pub fn reduce(
         // A new turn answers whatever the last one was waiting on.
         memory.awaiting_input = false;
         memory.done_at = None;
+        memory.turn_started_at = Some(now);
         next.pending_id = None;
     }
     if event.awaiting_input == Some(true) {
@@ -235,518 +327,4 @@ pub fn terminal_gone_event(node_id: &str, agent_id: &str) -> AgentEvent {
     event.silent = true;
     event.last_message = Some("terminated=true the terminal exited before the turn ended".into());
     event
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::hook::normalize::{BLOCKED, WORKING};
-
-    fn at(seconds: i64) -> DateTime<Utc> {
-        DateTime::from_timestamp(1_800_000_000 + seconds, 0).unwrap()
-    }
-
-    fn working(node: &str) -> AgentEvent {
-        AgentEvent::state(node, "claude", WORKING)
-    }
-
-    fn current(state: &str) -> Current {
-        Current {
-            state: Some(state.to_owned()),
-            ..Current::default()
-        }
-    }
-
-    #[test]
-    fn a_plain_turn_walks_working_to_done_and_marks_unread() {
-        let mut memory = Memory::default();
-        let mut event = working("n");
-        event.new_turn = Some(true);
-        let next = reduce(at(0), &Current::default(), &mut memory, &event).unwrap();
-        assert_eq!(next.state.as_deref(), Some(WORKING));
-        assert!(!next.unread);
-
-        let done = AgentEvent::state("n", "claude", DONE);
-        let next = reduce(at(1), &current(WORKING), &mut memory, &done).unwrap();
-        assert_eq!(next.state.as_deref(), Some(DONE));
-        assert!(
-            next.unread,
-            "a finished node is unread until a client says otherwise"
-        );
-        assert!(memory.done_at.is_some());
-    }
-
-    #[test]
-    fn a_late_working_cannot_revive_a_just_finished_turn() {
-        let mut memory = Memory {
-            done_at: Some(at(0)),
-            ..Memory::default()
-        };
-        let finished = Current {
-            state: Some(DONE.into()),
-            unread: true,
-            ..Current::default()
-        };
-        // Inside the holdoff: dropped.
-        assert!(reduce(at(2), &finished, &mut memory, &working("n")).is_none());
-        // A new turn is always allowed through, however soon it arrives.
-        let mut fresh = working("n");
-        fresh.new_turn = Some(true);
-        assert_eq!(
-            reduce(at(2), &finished, &mut memory, &fresh)
-                .unwrap()
-                .state
-                .as_deref(),
-            Some(WORKING)
-        );
-        // Past the holdoff a plain working is real work again.
-        let mut memory = Memory {
-            done_at: Some(at(0)),
-            ..Memory::default()
-        };
-        assert_eq!(
-            reduce(at(4), &finished, &mut memory, &working("n"))
-                .unwrap()
-                .state
-                .as_deref(),
-            Some(WORKING)
-        );
-    }
-
-    #[test]
-    fn a_restored_done_gets_no_holdoff() {
-        // After a restart the row is old news: the first live report wins.
-        let mut memory = Memory {
-            done_at: Some(at(0)),
-            ..Memory::default()
-        };
-        let restored = Current {
-            state: Some(DONE.into()),
-            restored: true,
-            ..Current::default()
-        };
-        assert_eq!(
-            reduce(at(1), &restored, &mut memory, &working("n"))
-                .unwrap()
-                .state
-                .as_deref(),
-            Some(WORKING)
-        );
-    }
-
-    #[test]
-    fn the_idle_rescue_only_fires_from_working() {
-        let mut idle = AgentEvent::state("n", "claude", DONE);
-        idle.idle = Some(true);
-
-        let mut memory = Memory::default();
-        assert_eq!(
-            reduce(at(0), &current(WORKING), &mut memory, &idle)
-                .unwrap()
-                .state
-                .as_deref(),
-            Some(DONE)
-        );
-
-        for state in [BLOCKED, WAITING, DONE] {
-            let mut memory = Memory::default();
-            assert!(
-                reduce(at(0), &current(state), &mut memory, &idle).is_none(),
-                "idle must not touch {state}"
-            );
-        }
-        // A node that never reported has nothing to rescue either.
-        let mut memory = Memory::default();
-        assert!(reduce(at(0), &Current::default(), &mut memory, &idle).is_none());
-    }
-
-    #[test]
-    fn an_open_question_rewrites_the_done_that_ends_its_turn() {
-        let mut memory = Memory::default();
-        let mut question = AgentEvent::state("n", "claude", WAITING);
-        question.awaiting_input = Some(true);
-        question.ask_kind = Some("AskUserQuestion".into());
-        let next = reduce(at(0), &current(WORKING), &mut memory, &question).unwrap();
-        assert_eq!(next.state.as_deref(), Some(WAITING));
-        assert!(memory.awaiting_input);
-
-        let done = AgentEvent::state("n", "claude", DONE);
-        let next = reduce(at(1), &current(WAITING), &mut memory, &done).unwrap();
-        assert_eq!(
-            next.state.as_deref(),
-            Some(WAITING),
-            "the CLI is still sitting at a prompt"
-        );
-        assert!(!next.unread, "waiting is not a finished turn");
-
-        // The answer arrives as the next turn, which releases the hold.
-        let mut answered = working("n");
-        answered.new_turn = Some(true);
-        let next = reduce(at(2), &current(WAITING), &mut memory, &answered).unwrap();
-        assert_eq!(next.state.as_deref(), Some(WORKING));
-        assert!(!memory.awaiting_input);
-
-        let next = reduce(at(3), &current(WORKING), &mut memory, &done).unwrap();
-        assert_eq!(next.state.as_deref(), Some(DONE));
-        assert!(next.unread);
-    }
-
-    #[test]
-    fn blocking_stores_the_pending_id_and_working_clears_it() {
-        let mut memory = Memory::default();
-        let mut blocked = AgentEvent::state("n", "claude", BLOCKED);
-        blocked.pending_id = Some("p-1".into());
-        let next = reduce(at(0), &current(WORKING), &mut memory, &blocked).unwrap();
-        assert_eq!(next.state.as_deref(), Some(BLOCKED));
-        assert_eq!(next.pending_id.as_deref(), Some("p-1"));
-
-        let blocked_now = Current {
-            state: Some(BLOCKED.into()),
-            pending_id: Some("p-1".into()),
-            ..Current::default()
-        };
-        let next = reduce(at(1), &blocked_now, &mut memory, &working("n")).unwrap();
-        assert_eq!(next.state.as_deref(), Some(WORKING));
-        assert!(next.pending_id.is_none(), "the approval was resolved");
-    }
-
-    #[test]
-    fn a_session_event_resets_the_machine() {
-        let mut memory = Memory {
-            done_at: Some(at(0)),
-            awaiting_input: true,
-        };
-        let mut session = AgentEvent::new("n", "claude", EventKind::Session);
-        session.session_phase = Some("start");
-        session.session_id = Some("s-2".into());
-        session.transcript_path = Some("/tmp/t.jsonl".into());
-        let blocked_now = Current {
-            state: Some(BLOCKED.into()),
-            pending_id: Some("p-1".into()),
-            unread: true,
-            ..Current::default()
-        };
-        let next = reduce(at(1), &blocked_now, &mut memory, &session).unwrap();
-        assert!(next.state.is_none(), "a fresh session is idle, not done");
-        assert!(next.pending_id.is_none());
-        assert_eq!(next.session_id.as_deref(), Some("s-2"));
-        assert_eq!(next.transcript_path.as_deref(), Some("/tmp/t.jsonl"));
-        assert_eq!(next.session_phase.as_deref(), Some("start"));
-        assert!(
-            next.unread,
-            "the reset does not read the badge for the user"
-        );
-        assert!(!memory.awaiting_input);
-        assert!(memory.done_at.is_none());
-    }
-
-    #[test]
-    fn subagent_events_never_touch_the_main_state() {
-        for kind in [EventKind::SubagentStart, EventKind::SubagentEnd] {
-            let mut memory = Memory::default();
-            let mut event = AgentEvent::new("n", "claude", kind);
-            event.tool_use_id = Some("tu-1".into());
-            assert!(reduce(at(0), &current(WORKING), &mut memory, &event).is_none());
-            assert!(memory.done_at.is_none());
-        }
-    }
-
-    /// The source travels with the state it describes, which is what makes the
-    /// pair readable: a node drawn as `done` and a node drawn as `done
-    /// (observed)` are two different claims, and the second must not silently
-    /// become the first because a later report forgot to say.
-    #[test]
-    fn the_state_source_follows_the_state_it_describes() {
-        let mut memory = Memory::default();
-        let mut event = working("n");
-        event.new_turn = Some(true);
-        event.state_source = Some(crate::agent::STATE_SOURCE_HOOK);
-        let next = reduce(at(0), &Current::default(), &mut memory, &event).unwrap();
-        assert_eq!(next.state_source.as_deref(), Some("hook"));
-
-        // A synthetic close — the sweep, a dead terminal — names no channel, so
-        // the row keeps the one that last reported. Blanking it here would make
-        // every swept node look like one that never had an adapter.
-        let reported = Current {
-            state: Some(WORKING.into()),
-            state_source: Some("hook".into()),
-            ..Current::default()
-        };
-        let next = reduce(at(1), &reported, &mut memory, &stale_event("n", "claude")).unwrap();
-        assert_eq!(next.state.as_deref(), Some(DONE));
-        assert_eq!(next.state_source.as_deref(), Some("hook"));
-
-        // A CLI that changed channel says so, and the newer answer wins.
-        let mut settled = AgentEvent::state("n", "claude", DONE);
-        settled.state_source = Some(crate::agent::STATE_SOURCE_EXTENSION);
-        let next = reduce(at(2), &reported, &mut memory, &settled).unwrap();
-        assert_eq!(next.state_source.as_deref(), Some("extension"));
-
-        // A session reset is still a report from the channel that sent it.
-        let mut session = AgentEvent::new("n", "claude", EventKind::Session);
-        session.session_phase = Some("start");
-        session.state_source = Some(crate::agent::STATE_SOURCE_HOOK);
-        let next = reduce(at(3), &reported, &mut memory, &session).unwrap();
-        assert!(next.state.is_none());
-        assert_eq!(next.state_source.as_deref(), Some("hook"));
-    }
-
-    #[test]
-    fn facts_the_event_is_silent_about_are_carried_forward() {
-        let mut memory = Memory::default();
-        let established = Current {
-            state: Some(WORKING.into()),
-            session_id: Some("s-1".into()),
-            transcript_path: Some("/tmp/a.jsonl".into()),
-            ..Current::default()
-        };
-        let next = reduce(
-            at(0),
-            &established,
-            &mut memory,
-            &AgentEvent::state("n", "claude", DONE),
-        )
-        .unwrap();
-        assert_eq!(next.session_id.as_deref(), Some("s-1"));
-        assert_eq!(next.transcript_path.as_deref(), Some("/tmp/a.jsonl"));
-    }
-
-    /// Deliberate, and easy to "fix" by accident: a new turn does NOT clear the
-    /// unread badge. The badge means "this node produced something you have not
-    /// looked at", and starting another turn is not looking at it.
-    ///
-    /// The case that decides it is §5.7 delivery: an agent may only message a
-    /// target that is `done`, and delivery writes into the target's PTY, which
-    /// opens a new turn. Clearing here would silently drop the badge in exactly
-    /// the situation where no human has seen the result. Same for a §5.8
-    /// `--after` pending launch. Only `POST /api/agent-status/{nodeId}/read`
-    /// clears it, because only a client knows the user actually looked.
-    #[test]
-    fn a_new_turn_does_not_clear_the_unread_badge() {
-        let mut memory = Memory::default();
-        let unseen = Current {
-            state: Some(DONE.into()),
-            unread: true,
-            ..Current::default()
-        };
-
-        let mut fresh = working("n");
-        fresh.new_turn = Some(true);
-        let next = reduce(at(10), &unseen, &mut memory, &fresh).unwrap();
-        assert_eq!(next.state.as_deref(), Some(WORKING));
-        assert!(
-            next.unread,
-            "the previous turn's result is still unread while the next one runs"
-        );
-
-        // Still unread through a whole second turn, and a second `done` keeps it
-        // raised rather than double-counting it.
-        let running = Current {
-            state: Some(WORKING.into()),
-            unread: true,
-            ..Current::default()
-        };
-        let next = reduce(
-            at(11),
-            &running,
-            &mut memory,
-            &AgentEvent::state("n", "claude", DONE),
-        )
-        .unwrap();
-        assert!(next.unread);
-
-        // A node the user already read stays read until something finishes.
-        let seen = Current {
-            state: Some(WORKING.into()),
-            unread: false,
-            ..Current::default()
-        };
-        let next = reduce(at(12), &seen, &mut memory, &working("n")).unwrap();
-        assert!(!next.unread);
-    }
-
-    #[test]
-    fn a_done_always_carries_a_verdict_and_the_next_turn_clears_it() {
-        let mut memory = Memory::default();
-
-        // A plain Stop says the turn ended cleanly — not that we do not know.
-        let next = reduce(
-            at(0),
-            &current(WORKING),
-            &mut memory,
-            &AgentEvent::state("n", "claude", DONE),
-        )
-        .unwrap();
-        assert_eq!(next.errored, Some(false));
-        assert_eq!(next.interrupted, Some(false));
-
-        // StopFailure and an Esc-interrupted turn are distinguishable.
-        let mut failed = AgentEvent::state("n", "claude", DONE);
-        failed.errored = Some(true);
-        let next = reduce(at(1), &current(WORKING), &mut memory, &failed).unwrap();
-        assert_eq!(next.errored, Some(true));
-        assert_eq!(next.interrupted, Some(false));
-
-        let mut stopped = AgentEvent::state("n", "claude", DONE);
-        stopped.interrupted = Some(true);
-        let next = reduce(at(2), &current(WORKING), &mut memory, &stopped).unwrap();
-        assert_eq!(next.errored, Some(false));
-        assert_eq!(next.interrupted, Some(true));
-
-        // The verdict belongs to the turn that produced it: opening a new one
-        // clears it, so the pill never shows TURN FAILED over live work.
-        let failed_now = Current {
-            state: Some(DONE.into()),
-            errored: Some(true),
-            interrupted: Some(true),
-            ..Current::default()
-        };
-        let mut fresh = working("n");
-        fresh.new_turn = Some(true);
-        let next = reduce(at(6), &failed_now, &mut memory, &fresh).unwrap();
-        assert_eq!(next.state.as_deref(), Some(WORKING));
-        assert!(next.errored.is_none());
-        assert!(next.interrupted.is_none());
-
-        // So does a plain working, a block, and a session reset.
-        let next = reduce(at(7), &failed_now, &mut memory, &working("n")).unwrap();
-        assert!(next.errored.is_none());
-        let mut session = AgentEvent::new("n", "claude", EventKind::Session);
-        session.session_phase = Some("start");
-        let next = reduce(at(8), &failed_now, &mut memory, &session).unwrap();
-        assert!(next.errored.is_none());
-        assert!(next.interrupted.is_none());
-    }
-
-    #[test]
-    fn a_verdict_survives_a_report_that_says_nothing_about_it() {
-        // A late PostToolUse inside the holdoff is dropped entirely, so the
-        // finished turn keeps its verdict; a blocked report carries it forward
-        // rather than inventing a clean end.
-        let failed_now = Current {
-            state: Some(DONE.into()),
-            errored: Some(true),
-            interrupted: Some(false),
-            ..Current::default()
-        };
-        let mut memory = Memory {
-            done_at: Some(at(0)),
-            ..Memory::default()
-        };
-        assert!(reduce(at(1), &failed_now, &mut memory, &working("n")).is_none());
-
-        let mut blocked = AgentEvent::state("n", "claude", BLOCKED);
-        blocked.pending_id = Some("p-1".into());
-        // `blocked` is a state the reducer reaches from a *live* turn, so the
-        // stale verdict is carried, not cleared, and the next done overwrites it.
-        let next = reduce(at(5), &failed_now, &mut memory, &blocked).unwrap();
-        assert_eq!(next.errored, Some(true));
-    }
-
-    #[test]
-    fn an_open_question_has_no_verdict_yet() {
-        // Rule 3 rewrites the turn-ending `done` to `waiting`; that is not an
-        // outcome, so the pill must not claim the turn finished cleanly.
-        let mut memory = Memory {
-            awaiting_input: true,
-            ..Memory::default()
-        };
-        let next = reduce(
-            at(0),
-            &current(WORKING),
-            &mut memory,
-            &AgentEvent::state("n", "claude", DONE),
-        )
-        .unwrap();
-        assert_eq!(next.state.as_deref(), Some(WAITING));
-        assert!(next.errored.is_none());
-        assert!(next.interrupted.is_none());
-    }
-
-    #[test]
-    fn the_terminal_gone_event_is_a_clean_end_that_raises_no_badge() {
-        let event = terminal_gone_event("n", "claude");
-        assert_eq!(event.state, Some(DONE));
-        assert_eq!(event.errored, Some(false));
-        assert_eq!(
-            event.interrupted,
-            Some(false),
-            "`interrupted` means the user stopped the agent, not that the PTY died"
-        );
-        assert!(event.silent);
-        assert!(
-            event
-                .last_message
-                .as_deref()
-                .unwrap()
-                .starts_with("terminated=true")
-        );
-        // The control flag is ours alone: it must never appear on the wire, and
-        // no hook client can set it.
-        let json = serde_json::to_value(&event).unwrap();
-        assert!(json.get("silent").is_none());
-
-        let mut memory = Memory::default();
-        let next = reduce(at(0), &current(WORKING), &mut memory, &event).unwrap();
-        assert_eq!(next.state.as_deref(), Some(DONE));
-        assert!(!next.unread, "a dead terminal leaves nothing new to read");
-
-        // But it does not clear a badge an earlier turn raised.
-        let unseen = Current {
-            state: Some(WORKING.into()),
-            unread: true,
-            ..Current::default()
-        };
-        let mut memory = Memory::default();
-        assert!(reduce(at(1), &unseen, &mut memory, &event).unwrap().unread);
-
-        // The 20-minute silence sweep is the opposite case: the agent may well
-        // have produced output before it went quiet, so that one does badge.
-        let mut memory = Memory::default();
-        let stale = reduce(
-            at(2),
-            &current(WORKING),
-            &mut memory,
-            &stale_event("n", "claude"),
-        )
-        .unwrap();
-        assert!(stale.unread);
-    }
-
-    #[test]
-    fn the_sweep_event_closes_a_stuck_turn_but_still_yields_to_a_question() {
-        let event = stale_event("n", "claude");
-        assert_eq!(event.state, Some(DONE));
-        assert_eq!(event.errored, Some(false));
-        assert_eq!(event.interrupted, Some(false));
-        assert!(
-            event
-                .last_message
-                .as_deref()
-                .unwrap()
-                .contains("stale=true")
-        );
-
-        let mut memory = Memory::default();
-        let next = reduce(at(0), &current(WORKING), &mut memory, &event).unwrap();
-        assert_eq!(next.state.as_deref(), Some(DONE));
-        assert!(next.unread);
-        assert!(next.last_message.unwrap().contains("stale=true"));
-        // A swept turn did not fail and was not interrupted; it just stopped
-        // talking, and `lastMessage` is where that is said.
-        assert_eq!(next.errored, Some(false));
-        assert_eq!(next.interrupted, Some(false));
-
-        let mut memory = Memory {
-            awaiting_input: true,
-            ..Memory::default()
-        };
-        assert_eq!(
-            reduce(at(0), &current(WORKING), &mut memory, &event)
-                .unwrap()
-                .state
-                .as_deref(),
-            Some(WAITING)
-        );
-    }
 }

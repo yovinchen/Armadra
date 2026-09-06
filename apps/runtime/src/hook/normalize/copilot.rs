@@ -46,6 +46,13 @@ pub fn normalize(node_id: &str, agent_id: &str, payload: &Value) -> Option<Agent
         "sessionStart" => {
             let mut event = AgentEvent::new(node_id, agent_id, EventKind::Session);
             event.session_phase = Some("start");
+            // 1.0.83 creates the session *from* the first prompt: this arrives
+            // roughly 20 ms after that prompt's `userPromptSubmitted`, with the
+            // prompt echoed back. Told apart from a start that precedes any
+            // work, the reducer can leave the turn already in flight alone
+            // instead of resetting the `working` it just wrote (§5.4 rule 4).
+            event.session_opened_by_prompt =
+                text(payload, "initial_prompt", "initialPrompt").is_some();
             event
         }
         "sessionEnd" => {
@@ -210,6 +217,10 @@ mod tests {
             Some("94d20c9c-212a-4352-bd1e-5e783ccba452")
         );
         assert!(start.state.is_none());
+        // This start arrived 46 ms *after* the prompt below, because that
+        // prompt is what created the session. The reducer needs to know that
+        // to keep the turn already running (§5.4 rule 4).
+        assert!(start.session_opened_by_prompt);
 
         let prompt = run(json!({
             "sessionId": "s-1",
@@ -268,6 +279,28 @@ mod tests {
         .unwrap();
         assert_eq!(end.kind, EventKind::Session);
         assert_eq!(end.session_phase, Some("end"));
+        assert!(!end.session_opened_by_prompt);
+    }
+
+    /// A session the user opened before typing anything carries no
+    /// `initialPrompt`, and it is the one that must still reset the row.
+    #[test]
+    fn a_start_without_an_initial_prompt_is_not_marked_as_opened_by_one() {
+        let start = run(json!({
+            "sessionId": "s-1",
+            "timestamp": 1_788_699_265_758u64,
+            "cwd": "/repo",
+            "source": "new"
+        }))
+        .unwrap();
+        assert_eq!(start.session_phase, Some("start"));
+        assert!(!start.session_opened_by_prompt);
+
+        // An empty string is not a prompt either: `text` drops it, and a start
+        // that opened nothing must not claim a turn.
+        let blank =
+            run(json!({ "sessionId": "s-1", "source": "resume", "initialPrompt": "" })).unwrap();
+        assert!(!blank.session_opened_by_prompt);
     }
 
     #[test]
