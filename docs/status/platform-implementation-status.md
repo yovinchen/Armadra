@@ -136,9 +136,9 @@
 - **B5 git 域**（`79adead0`…`4afd5abb` + 修正 `8f7212bb`）：`git.proto`（`RepositoryScope/State/Operation/Expectation`、封闭 `GitActionKind`、`Read` 单方法 + 封闭 `GitReadMethod`、事件实体 220–222、Worker 帧 29、上行帧 180）、Host `githost`（`git_operations` 队列同 worktree 串行、`RepositoryState` 缓存、`Enqueue` 唯一写入口、重启后按类型对账；记录走通用 `entities` 表，未加 Host 迁移）、Worker 每帧跑一个排队操作并在域切走后拒写（发现三处真 bug：29 不在响应白名单、`/var` 与 `/private/var` 路径比对、15 分钟帧超上限）、Web 网关把逐动作路由拼成 `Enqueue`；`pnpm ownership:e2e --domain git` 30 项（真实仓库 + 本地裸远程）。未做：clone 在 Worker 侧答 UNSUPPORTED、上行帧未接线、面板仍直连 `runtimeApi`。
 - **B3 session 域**（`9b7ff2bd`…`797af796`）：`session.proto`（意图 + 运行两种实体 160/161、Worker 帧 27、通道上行 140）、Host v8 `sessions/session_runs/session_claims` 与 `sessionhost`（`Create/Start/List/Get/Terminate/Recycle/Close`，`SuggestTitle/GetContextUsage` 转 Worker；终端 WebSocket 代理升级前按记录校验 `session_id/generation`；`command_sessions` 投影为 `kind=COMMAND`）、Worker 经 Runtime 私有端点起停会话并回报、Runtime 切走后创建/启动/终止答 409、Web 挂载终端只读不决策（缺会话经 `Create/Start`）、复用 `terminal:*` scope；`pnpm ownership:e2e --domain session` 39 项。未做：主动 `RunLost` 上行与周期对账（只在 Host 启动时对账一次）、远端执行主机会话、`terminal/mod.rs` 拆分。合并到远端 4+5 之后的主线时，`serve/serve_commands` 的 `session_data_dir` 参数移入 `worker/transport.rs`。
 - **桌面打包与首启**（`1cff1e00`、`8f560ae5`）：`pnpm --filter @armadra/desktop build` 产出 macOS arm64 `Armadra.app`（79 MB，含 Runtime/Host/Hook 三个 sidecar）与 `.dmg`；本机打包需一次性 updater 签名密钥（`TAURI_SIGNING_PRIVATE_KEY` 取密钥内容而非路径），配置里公钥为空时最后的 `.sig` 步骤报错但 `.app`/`.dmg` 已完整。打包实测发现开屏动画在 WKWebView 里停在第一帧并锁住整个界面（窗口隐藏加载、显示后 rAF 不恢复），改为 rAF 与定时器双驱动并加两道到点必撤的保险；首次启动对空数据库在 `<数据目录>/workspaces/default` 建「Default」项目（读写执行全开、自带 Default 画布），前端无记忆时打开最近的工作空间。两项均在重新打包的 `.app` 上用空数据目录实机核验。注意 `tauri build` 单独运行不会重建 sidecar，须走 `pnpm --filter @armadra/desktop build`。
-- **进行中**：B4 agent 域（Worker 帧 28、事件实体 180–186、Host v9）。
+- **B4 agent 域**（`3100ef16`…`9faa7429` 在主线的对应提交）：`agent.proto` 扩展（状态、审批、消息箱、投递、交接、上下文连线；事件实体 180–186、Worker 帧 28）、Host v9 `agent_*` 表（含 bundle 冻结触发器，`validateSchema` 学会 TRIGGER/UNIQUE INDEX）与 `agenthost`（HTTPS 方法与 Worker 通道；Hook 事件为拉取而非推送，游标为毫秒戳）、Runtime 交出 agent 域并答帧 28、Web 按归属路由 agent 写入、复用 `terminal:*` scope；`pnpm ownership:e2e --domain agent` 47 项。git 域现在依赖全部五个前置域（§1.2）。未做：向目标 pane 写入交接/消息（`DeliverHandoff/DeliverMessage` 答 NOT_WRITTEN）、`ReadTranscript/CaptureScreen`、Hook 的 post/inbox/ack/link 仍由 Runtime 本地答复、`hook_event` 无 Host 表。六个业务域至此全部可切换；B6 改名待 §4.4 条件评估。
 
-主树复核（B3 合入后）：Rust 全 workspace 通过、`clippy -D warnings` 与 `fmt --check` 通过、Web 181 文件 1692 项、shared 144、host-client 249、协议 TS 129 与 Rust 全过、Go 28 包 race（含真实 Worker）、`pnpm check` 通过、session e2e 39、git e2e 30、settings e2e 33、filesystem e2e 30、canvas e2e 73、GitHub e2e 29。session 与 git 的 e2e 在 Go race 套件刚结束、机器满载时各有一次首跑失败，随后连续 3–4 次通过。
+主树复核（B4 合入后）：Rust 全 workspace 通过、`clippy -D warnings` 与 `fmt --check` 通过、Web 182 文件 1702 项、shared 144、host-client 260、协议 TS 137 与 Rust 全过、Go 全部包 race（含真实 Worker）、`pnpm check` 通过、agent e2e 47、session e2e 39、git e2e 32、settings e2e 33、filesystem e2e 30、canvas e2e 73（改为接受每工作空间一个反向导出文件）。session 与 git 的 e2e 在 Go race 套件刚结束、机器满载时各有一次首跑失败，随后连续 3–4 次通过。
 
 ## 本轮验证（2026-09-06 上午，四轮全部合入后于主树重跑，私有目标目录）
 
@@ -256,14 +256,14 @@
 
 - Go `1.26.5`（`go.mod` 要求 ≥ 1.24），macOS arm64；生成流程使用 vendored protoc `31.1`，不依赖系统 protoc `35.1`。
 - Rust 已安装 macOS arm64、Windows x64 MSVC、Linux x64 目标；安装 target 不代表能在本机运行 Windows/Linux 实机测试。
-- 业务写入所有权按域切换：画布、settings、filesystem、session、git 五个域可经 CLI/HTTPS 切到 Go Host 并回滚（Runtime 在切换后拒写、仍答读）；agent 域仍由 Rust Runtime 拥有，Host 表面在实施中。
+- 业务写入所有权按域切换：画布、settings、filesystem、session、agent、git 六个域均可经 CLI/HTTPS 切到 Go Host 并回滚（Runtime 在切换后拒写、仍答读）；`apps/runtime`→`apps/worker` 改名（B6）待 §4.4 条件评估。
 - 真实 Worker 测试与桌面 `src-tauri` Rust 测试不在默认命令内，验收时需单独运行。
 - **tldraw 许可证**：tldraw 5.4 在非开发来源（打包桌面的 `tauri://localhost`）上没有许可证密钥时，挂载 5 秒后把编辑器整个卸掉（画布内容与工具消失，终端 socket 随之关闭），浏览器开发不受影响。已接 `VITE_TLDRAW_LICENSE_KEY`（构建时注入，CI secret `TLDRAW_LICENSE_KEY`）；密钥需从 tldraw.dev 获取（免费试用 / hobby 许可 / 商业许可），未取得前打包版画布不可用。用 debug 壳的诊断桥（`ARMADRA_DESKTOP_DIAGNOSTIC_WS`）定位。
 - 数据目录：macOS `~/Library/Application Support/Armadra`、Windows `%LOCALAPPDATA%\Armadra`、Linux `$XDG_DATA_HOME/armadra`（默认 `~/.local/share/armadra`），`ARMADRA_DATA_DIR` 可覆盖；Host 用其下 `host/`，默认项目在 `workspaces/default/`。
 
 ## 下一步
 
-1. 合入 B4 agent；之后 B6 `apps/runtime`→`apps/worker` 改名（§4.4 条件满足后）。
+1. 画布从 tldraw 迁到 React Flow（设计文档进行中，见 `docs/design/canvas-react-flow.md`）；之后评估 B6 `apps/runtime`→`apps/worker` 改名（§4.4 条件满足后）。
 2. 每轮合入后重跑 `pnpm check`、`cargo test --workspace`、`go -C apps/host test -race ./...`（含真实 Worker）、`pnpm protocol:test`、`pnpm ownership:e2e --domain settings|filesystem`、`pnpm canvas:e2e`；`main` 快进。
 3. 剩余 800–1500 行文件的收尾拆分（`migration_export.rs`、`settings.rs`、`GitRepositoryPanel.tsx`、`SourceControlDrawer.tsx`、`keybindings.ts` 等）在实施轮之间进行，避免与在飞批次冲突。
 4. 需要实机的验收保持未完成：Windows、手机、真实 GitHub/SSH、CI 真实 runner、签名密钥。
