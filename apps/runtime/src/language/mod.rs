@@ -66,6 +66,9 @@ pub mod reason {
     pub const CRASHED: &str = "crashed";
     pub const RESTART_BUDGET_EXHAUSTED: &str = "restart_budget_exhausted";
     pub const WORKSPACE_CLOSED: &str = "workspace_closed";
+    /// The remote execution host's language link went away. The controller
+    /// holds nothing current for that host until a new link is opened.
+    pub const LINK_LOST: &str = "link_lost";
 }
 
 /* --------------------------------- limits --------------------------------- */

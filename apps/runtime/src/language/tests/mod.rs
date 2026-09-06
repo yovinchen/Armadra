@@ -4,6 +4,7 @@ mod documents;
 mod edits;
 mod jsonrpc;
 mod lifecycle;
+mod link;
 mod mux;
 mod policy;
 mod uri;

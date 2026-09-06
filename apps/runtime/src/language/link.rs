@@ -144,3 +144,135 @@ pub fn status_frame(status: armadra_protocol::v1::LanguageSessionStatus) -> Lang
         payload: Some(language_frame::Payload::Status(status)),
     }
 }
+
+/* ------------------------------- flow control ----------------------------- */
+
+/// Unacknowledged bytes one direction of a link may hold before its writer
+/// waits (design §2.7, §3.3).
+///
+/// Four mebibytes is roughly four oversized responses, or thousands of
+/// ordinary ones. Past it the writer stops, which for the execution host means
+/// it stops draining the server's stdout — and a language server that cannot
+/// write blocks rather than losing messages, which is the property the whole
+/// scheme exists for.
+pub const CREDIT_BYTES: u64 = 4 * 1024 * 1024;
+
+/// The sending half of one direction's credit window.
+///
+/// Every message frame reserves its own byte count and gets a sequence number.
+/// The peer acknowledges a sequence, which releases that frame and everything
+/// before it. Acks are not themselves counted — an ack that needed credit to
+/// travel could not release the credit it was waiting for.
+pub struct Window {
+    limit: u64,
+    state: std::sync::Mutex<WindowState>,
+    notify: tokio::sync::Notify,
+}
+
+#[derive(Default)]
+struct WindowState {
+    next: u64,
+    used: u64,
+    /// `(sequence, bytes)` in send order.
+    outstanding: std::collections::VecDeque<(u64, u64)>,
+    closed: bool,
+}
+
+impl Window {
+    pub fn new(limit: u64) -> Self {
+        Self {
+            limit,
+            state: std::sync::Mutex::new(WindowState::default()),
+            notify: tokio::sync::Notify::new(),
+        }
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, WindowState> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Claims room for one frame and returns its sequence number.
+    ///
+    /// Waits while the window is full. A frame larger than the whole window is
+    /// admitted when nothing else is outstanding: refusing it would be a
+    /// deadlock, and the message ceiling has already bounded how large it can
+    /// be. `None` means the link closed while waiting.
+    pub async fn reserve(&self, bytes: usize) -> Option<u64> {
+        let bytes = bytes as u64;
+        loop {
+            let notified = self.notify.notified();
+            tokio::pin!(notified);
+            // Registered before the state is read, so an acknowledgement that
+            // lands between the check and the await still wakes this waiter.
+            notified.as_mut().enable();
+            {
+                let mut state = self.lock();
+                if state.closed {
+                    return None;
+                }
+                if state.used == 0 || state.used + bytes <= self.limit {
+                    state.next += 1;
+                    state.used += bytes;
+                    let sequence = state.next;
+                    state.outstanding.push_back((sequence, bytes));
+                    return Some(sequence);
+                }
+            }
+            notified.await;
+        }
+    }
+
+    /// Releases everything up to and including `through`.
+    pub fn acknowledge(&self, through: u64) {
+        {
+            let mut state = self.lock();
+            while let Some((sequence, bytes)) = state.outstanding.front().copied() {
+                if sequence > through {
+                    break;
+                }
+                state.outstanding.pop_front();
+                state.used = state.used.saturating_sub(bytes);
+            }
+        }
+        self.notify.notify_waiters();
+    }
+
+    /// What the peer would be told it may still send.
+    pub fn available(&self) -> u32 {
+        let state = self.lock();
+        u32::try_from(self.limit.saturating_sub(state.used)).unwrap_or(u32::MAX)
+    }
+
+    pub fn used(&self) -> u64 {
+        self.lock().used
+    }
+
+    /// The link is gone. Every waiter is released so no task is left parked on
+    /// credit that will never be returned.
+    pub fn close(&self) {
+        self.lock().closed = true;
+        self.notify.notify_waiters();
+    }
+}
+
+impl Default for Window {
+    fn default() -> Self {
+        Self::new(CREDIT_BYTES)
+    }
+}
+
+/// Wraps one acknowledgement for the wire.
+pub fn ack_frame(session_id: &str, received_through: u64, available: u32) -> LanguageFrame {
+    LanguageFrame {
+        link_epoch: String::new(),
+        payload: Some(language_frame::Payload::Ack(
+            armadra_protocol::v1::LanguageAck {
+                session_id: session_id.to_owned(),
+                received_through,
+                available_credit_bytes: available,
+            },
+        )),
+    }
+}
