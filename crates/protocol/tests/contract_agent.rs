@@ -332,3 +332,111 @@ fn every_agent_record_has_its_own_member() {
         );
     }
 }
+
+/// Prompt delivery evidence. `no_effect_proven` belongs to NOT_WRITTEN alone:
+/// an UNKNOWN receipt that gained it would authorize a second paste into a
+/// terminal that may already have received the first one.
+#[test]
+fn agent_prompt_delivery_evidence() {
+    check(
+        "agent_target_status",
+        AgentTargetStatus {
+            state: AgentTargetState::Absent as i32,
+            session_id: "会话-1".into(),
+            generation: u64::MAX,
+            reason_code: "SESSION_ABSENT".into(),
+        },
+    );
+    check(
+        "agent_target_request",
+        AgentTargetRequest {
+            workspace_id: "workspace-1".into(),
+            node_id: "node-1".into(),
+            session_id: "session-1".into(),
+            generation: 9_007_199_254_740_993,
+            expected: Some(AgentLaunchSpec {
+                agent_id: "claude".into(),
+                working_directory: "/项目/仓库".into(),
+                account_id: "default".into(),
+                ..Default::default()
+            }),
+            cold_start: Some(AgentLaunchSpec {
+                agent_id: "claude".into(),
+                working_directory: "/项目/仓库".into(),
+                args: vec!["--flag".into(), "值📦".into()],
+                permission_mode: "acceptEdits".into(),
+                model_id: "sonnet".into(),
+                account_id: "default".into(),
+            }),
+        },
+    );
+    check(
+        "agent_prompt_request",
+        AgentPromptRequest {
+            operation_id:
+                "automation/principal-1/host-0123456789abcdef0123456789abcdef/workspace-1/dispatch/run-1"
+                    .into(),
+            request_sha256: vec![5; 32],
+            workspace_id: "workspace-1".into(),
+            node_id: "node-1".into(),
+            session_id: "session-1".into(),
+            generation: 9_007_199_254_740_993,
+            prompt: "每晚复盘：读取 diff 后写结论\n".as_bytes().to_vec(),
+            expected: Some(AgentLaunchSpec {
+                agent_id: "claude".into(),
+                working_directory: "/项目/仓库".into(),
+                args: vec!["--flag".into(), "值📦".into()],
+                permission_mode: "acceptEdits".into(),
+                model_id: "sonnet".into(),
+                account_id: "default".into(),
+            }),
+        },
+    );
+    check(
+        "agent_prompt_not_written",
+        AgentPromptReceipt {
+            operation_id: "operation-1".into(),
+            request_sha256: vec![6; 32],
+            phase: AgentPromptPhase::NotWritten as i32,
+            sequence: 1,
+            observed_at_unix_ms: 1788557000000,
+            reason_code: "TARGET_BUSY".into(),
+            session_id: "session-1".into(),
+            generation: 3,
+            cold_started: false,
+            no_effect_proven: true,
+        },
+    );
+    check(
+        "agent_prompt_unknown",
+        AgentPromptReceipt {
+            operation_id: "operation-1".into(),
+            request_sha256: vec![6; 32],
+            phase: 999,
+            sequence: u64::MAX,
+            observed_at_unix_ms: 1788557900000,
+            reason_code: "UNATTRIBUTED".into(),
+            session_id: "session-2".into(),
+            generation: u64::MAX,
+            cold_started: true,
+            no_effect_proven: false,
+        },
+    );
+    check(
+        "automation_agent_target",
+        AutomationTarget {
+            execution_host_id: "0123456789abcdef0123456789abcdef".into(),
+            session_id: "session-1".into(),
+            generation: 7,
+            kind: AutomationTargetKind::AgentSessionPrompt as i32,
+            node_id: "node-1".into(),
+            cold_start_policy: AutomationColdStartPolicy::LaunchFrozen as i32,
+            agent_launch: Some(AgentLaunchSpec {
+                agent_id: "codex".into(),
+                working_directory: "/项目/仓库".into(),
+                account_id: "default".into(),
+                ..Default::default()
+            }),
+        },
+    );
+}

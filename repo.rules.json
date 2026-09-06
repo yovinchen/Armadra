@@ -74,11 +74,6 @@
     "excludeSegments": ["/gen/", "/node_modules/"],
     "exemptions": [
       {
-        "path": "crates/protocol/tests/contract.rs",
-        "lines": 1736,
-        "note": "§5 第 6 步：按 proto 文件拆契约测试（updates、browser 已拆出）"
-      },
-      {
         "path": "tools/canvas-ownership-e2e.mjs",
         "lines": 2115,
         "note": "§5 第 6 步：端到端脚本按阶段拆分"
