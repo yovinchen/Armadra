@@ -29,6 +29,9 @@ import { usePreferencesStore } from "../app/preferences-store";
 const mocks = vi.hoisted(() => ({ read: vi.fn(), write: vi.fn() }));
 vi.mock("@/api/client", () => ({
   isConflict: () => false,
+  // 语言客户端在开会话失败时会问「这是不是一个 Runtime 的错误」。这个 mock
+  // 里没有语言服务的方法，所以它必然失败——少了这个导出，失败路径本身会抛。
+  RuntimeRequestError: class RuntimeRequestError extends Error {},
   runtimeApi: {
     // 编辑器挂载时读一次 `language.formatOnSave`（语言服务设计 §2.3）。
     settings: () => Promise.resolve({}),

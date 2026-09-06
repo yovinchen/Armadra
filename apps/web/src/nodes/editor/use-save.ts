@@ -8,12 +8,14 @@ import type { ExternalChange } from "./types";
 
 export interface SaveActions {
   save: () => Promise<void>;
-  onKeyDown: (event: React.KeyboardEvent) => void;
 }
 
 /**
  * 保存：内容版本是唯一的凭据，冲突时把磁盘版本取回来重新挂提示条。
- * `⌘S` / `Ctrl+S` 与头部按钮走的是同一条路。
+ *
+ * 键位不在这里。它曾经是这个文件里一个手写的 `metaKey || ctrlKey` 比对——
+ * 改不了，而且连 ⌘⇧S / ⌘⌥S 也一起保存。现在是命令表里的 `editor.save`，
+ * 派发在 `use-editor-keys.ts`，和头部按钮走同一条路。
  */
 export function useFileSave(
   refs: EditorRefs,
@@ -125,15 +127,5 @@ export function useFileSave(
     }
   }, [path, identity, workspaceId, writable, beforeSave, afterSave]);
 
-  const onKeyDown = React.useCallback(
-    (event: React.KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        void save();
-      }
-    },
-    [save],
-  );
-
-  return { save, onKeyDown };
+  return { save };
 }

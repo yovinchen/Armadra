@@ -18,6 +18,7 @@ import { runtimeApi } from "@/api/client";
 import { openExternal } from "@/platform";
 import { useCanvasStore } from "@/store/canvas-store";
 import { useResolvedTheme, useT } from "@/app/preferences-store";
+import { useKeybindings } from "@/keybindings";
 
 import { NodeShell } from "../NodeShell";
 import type { NodeBodyProps } from "../registry";
@@ -233,6 +234,24 @@ export function BrowserNode({ id, node, selected, focused }: NodeBodyProps) {
       );
   }
 
+  /* ------------------------------- 节点内键位 ------------------------------ */
+
+  // `browser` 作用域的四条。监听器装在这个节点自己的根元素上，`when` 再挡
+  // 一道，所以同时开着的几个浏览器节点里只有键盘所在的那个会响应。
+  const [keyboardRoot, setKeyboardRoot] = React.useState<HTMLElement | null>(
+    null,
+  );
+  const addressRef = React.useRef<HTMLInputElement | null>(null);
+  useKeybindings(
+    {
+      "browser.reload": () => reload(),
+      "browser.back": () => step(-1),
+      "browser.forward": () => step(1),
+      "browser.focusAddress": () => addressRef.current?.select(),
+    },
+    { scopes: ["browser"], target: keyboardRoot },
+  );
+
   /* --------------------------------- 渲染 -------------------------------- */
   const unsupportedPanel =
     controlled && availability && !availability.available;
@@ -347,10 +366,20 @@ export function BrowserNode({ id, node, selected, focused }: NodeBodyProps) {
       }
       headerActions={headerActions}
     >
-      <div className="flex h-full w-full flex-col">
+      {/*
+       * `data-keybinding-scope` 是 `when: "browserFocus"` 的依据：节点的画面
+       * 是一个把按键原样转发给远端会话的 textarea，所以这几条键必须限死在这
+       * 棵子树里——在别处截走 ⌘R / ⌘L 就是把浏览器的键从整个应用里偷走。
+       */}
+      <div
+        ref={setKeyboardRoot}
+        data-keybinding-scope="browser"
+        className="flex h-full w-full flex-col"
+      >
         {!unsupportedPanel && (
           <div className="flex shrink-0 items-center gap-1.5 p-1.5">
             <Input
+              ref={addressRef}
               aria-label={t("browser.address")}
               className="h-6 min-w-0 flex-1 font-mono text-[11px]"
               value={address}

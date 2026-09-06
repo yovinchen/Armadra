@@ -6,6 +6,7 @@ import {
   isReservedChord,
   isWindowShortcut,
   isMacPlatform,
+  whenOverlaps,
   type CommandId,
   type PlatformKeys,
 } from "../../keybindings";
@@ -41,8 +42,15 @@ export type StoredKeymap = Record<PlatformName, KeymapLayer>;
 /** 合并后的键位，`useKeybindings` / `commandKeys` 直接认这个形状。 */
 export type Keymap = Partial<Record<CommandId, PlatformKeys>>;
 
-/** 一条键位当前由哪一层决定。 */
-export type KeymapSource = "default" | "global" | "device";
+/**
+ * 一条键位当前由哪一层决定。
+ *
+ * `profile` 和 `global` 同属「全局」那一层（见 `keymap-profiles.ts`）：
+ * 前者是当前配置档自带的预设，后者是用户在这个档里自己改的。分开报是因为
+ * 「重置」要说得出会落到哪儿——从自己的修改退回预设，和退回内置默认，
+ * 是两个不同的结果。
+ */
+export type KeymapSource = "default" | "profile" | "global" | "device";
 
 const COMMAND_IDS = new Set<string>(COMMANDS.map((command) => command.id));
 
@@ -214,15 +222,22 @@ export function resolveKeymap(
   return keymap;
 }
 
-/** 这条命令在这个平台上由哪一层决定。 */
+/**
+ * 这条命令在这个平台上由哪一层决定。
+ *
+ * `preset` 是当前配置档自带的那张表；不传就是「没有预设」，行为与从前完全
+ * 一样（只有 default / global / device 三种答案）。
+ */
 export function keymapSource(
   id: CommandId,
   platform: PlatformName,
   global: StoredKeymap,
   device: StoredKeymap = emptyKeymap(),
+  preset: StoredKeymap = emptyKeymap(),
 ): KeymapSource {
   if (device[platform][id] !== undefined) return "device";
-  if (global[platform][id] !== undefined) return "global";
+  if (global[platform][id] !== undefined)
+    return preset[platform][id] === global[platform][id] ? "profile" : "global";
   return "default";
 }
 
@@ -234,10 +249,16 @@ export function keysBelow(
   platform: PlatformName,
   source: KeymapSource,
   global: StoredKeymap,
+  preset: StoredKeymap = emptyKeymap(),
 ): string | null {
   if (source === "device") {
     const above = global[platform][id];
     if (above !== undefined) return above;
+  }
+  // 在一个带预设的配置档里，重置自己的修改会落回预设，而不是内置默认。
+  if (source === "global") {
+    const below = preset[platform][id];
+    if (below !== undefined) return below;
   }
   return COMMAND_BY_ID[id].defaultKeys[platform];
 }
@@ -320,7 +341,7 @@ export function keymapConflicts(
   keymap: Keymap,
   mac = isMacPlatform(),
 ): Set<CommandId> {
-  const seen = new Map<string, CommandId>();
+  const seen = new Map<string, CommandId[]>();
   const conflicts = new Set<CommandId>();
   for (const command of COMMANDS) {
     const keys = commandKeys(command.id, { mac, keymap });
@@ -329,35 +350,67 @@ export function keymapConflicts(
       if (isReservedChord(chord, mac)) conflicts.add(command.id);
       const token = chordSignature(chord, mac);
       if (!token) continue;
-      const owner = seen.get(token);
-      if (owner === undefined) {
-        seen.set(token, command.id);
+      const owners = seen.get(token);
+      if (owners === undefined) {
+        seen.set(token, [command.id]);
         continue;
       }
-      if (owner === command.id) continue;
-      conflicts.add(owner);
-      conflicts.add(command.id);
+      for (const owner of owners) {
+        if (owner === command.id) continue;
+        // 同一个组合键在互斥的条件下不算撞车：编辑器里的 ⌘R 和浏览器里的
+        // ⌘R 永远不会同时有机会触发，标成冲突只是在制造假警报。
+        if (!whenOverlaps(whenOf(owner), whenOf(command.id))) continue;
+        conflicts.add(owner);
+        conflicts.add(command.id);
+      }
+      owners.push(command.id);
     }
   }
   return conflicts;
 }
 
+/** 命令表是 `as const`，只有写了 `when` 的那几条才有这个键。 */
+function whenOf(id: CommandId): string | undefined {
+  const command = COMMAND_BY_ID[id];
+  return "when" in command ? command.when : undefined;
+}
+
 /* ------------------------------ 导入 / 导出 ------------------------------- */
 
-export const KEYMAP_EXPORT_VERSION = 1;
+export const KEYMAP_EXPORT_VERSION = 2;
 
 export interface KeymapExport {
   version: number;
+  /** 当前选中的配置档。 */
+  profile: string;
+  /** 每个配置档的用户修改（不含内置预设）。 */
+  profiles: Record<string, StoredKeymap>;
+  /**
+   * 兼容字段：版本 1 只有一份全局覆盖。导出时它等于默认档那一份，
+   * 导入旧文件时它就是默认档——两个方向都不需要用户知道版本号变过。
+   */
   global: StoredKeymap;
   device: StoredKeymap;
 }
 
-/** 导出的是覆盖，不是最终结果：默认键位跟着版本走，不该被冻进文件。 */
+/**
+ * 导出的是覆盖，不是最终结果：默认键位与配置档预设都跟着版本走，
+ * 不该被冻进一份文件里，否则升级之后这份配置就永远停在导出那天。
+ */
 export function exportKeymap(
   global: StoredKeymap,
   device: StoredKeymap,
+  profiles: Record<string, StoredKeymap> = {},
+  profile = "default",
 ): string {
-  return `${JSON.stringify({ version: KEYMAP_EXPORT_VERSION, global, device }, null, 2)}\n`;
+  const document: KeymapExport = {
+    version: KEYMAP_EXPORT_VERSION,
+    profile,
+    profiles: { ...profiles, default: global },
+    global,
+    device,
+  };
+  return `${JSON.stringify(document, null, 2)}\n`;
 }
 
 /**
@@ -377,11 +430,32 @@ export function importKeymap(text: string): KeymapExport {
   const document = parsed as Record<string, unknown>;
   if (
     document.version !== undefined &&
-    document.version !== KEYMAP_EXPORT_VERSION
+    typeof document.version === "number" &&
+    document.version > KEYMAP_EXPORT_VERSION
   )
     throw new Error("keymap import version is not supported");
-  // 旧格式（扁平表）也接受：那就是一份全局覆盖。
+  // 旧格式（扁平表、或版本 1 的 `global`）也接受：那就是默认档那一份。
   const global = parseStoredKeymap(document.global ?? document);
   const device = parseStoredKeymap(document.device);
-  return { version: KEYMAP_EXPORT_VERSION, global, device };
+  const profiles: Record<string, StoredKeymap> = { default: global };
+  if (
+    document.profiles &&
+    typeof document.profiles === "object" &&
+    !Array.isArray(document.profiles)
+  )
+    for (const [id, value] of Object.entries(
+      document.profiles as Record<string, unknown>,
+    ))
+      profiles[id] = parseStoredKeymap(value);
+  // 文件里没有的档不能当当前档，否则导入完就没有键位可用了。
+  const wanted =
+    typeof document.profile === "string" ? document.profile : "default";
+  const profile = wanted in profiles ? wanted : "default";
+  return {
+    version: KEYMAP_EXPORT_VERSION,
+    profile,
+    profiles,
+    global: profiles.default ?? global,
+    device,
+  };
 }

@@ -42,6 +42,7 @@ import {
 import { useEditorRefs } from "./editor/refs";
 import type { ExternalChange, LoadState, ViewMode } from "./editor/types";
 import { useExternalChanges } from "./editor/use-external-changes";
+import { useEditorKeybindings } from "./editor/use-editor-keys";
 import { useFileSave } from "./editor/use-save";
 import { useLanguageService } from "@/editor/language/use-language";
 import { languageIdFor } from "@/editor/language/language-ids";
@@ -300,7 +301,11 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
 
   /* --------------------------------- 保存 --------------------------------- */
 
-  const { save, onKeyDown } = useFileSave(refs, {
+  const [keyboardRoot, setKeyboardRoot] = React.useState<HTMLElement | null>(
+    null,
+  );
+
+  const { save } = useFileSave(refs, {
     path,
     workspaceId,
     identity,
@@ -310,6 +315,14 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     setExternal,
     beforeSave: language.beforeSave,
     afterSave: language.afterSave,
+  });
+
+  // 编辑器内部的五条键位（`editor` 作用域）。监听器装在这个节点自己的根元素
+  // 上，所以同时开着的几个编辑器节点里只有键盘所在的那个会响应。
+  useEditorKeybindings({
+    root: keyboardRoot,
+    view: refs.viewRef.current,
+    save: () => void save(),
   });
 
   /* --------------------------------- 渲染 --------------------------------- */
@@ -439,7 +452,16 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
 
   return (
     <NodeShell node={node} selected={selected} headerActions={headerActions}>
-      <div className="h-full w-full overflow-hidden" onKeyDown={onKeyDown}>
+      {/*
+       * `data-keybinding-scope` 是 `when: "editorFocus"` 唯一的依据：焦点
+       * 判定发生在一个只拿得到 EventTarget 的监听器里，`closest()` 是从它
+       * 问出「我在谁里面」的唯一手段。
+       */}
+      <div
+        ref={setKeyboardRoot}
+        data-keybinding-scope="editor"
+        className="h-full w-full overflow-hidden"
+      >
         {state.kind === "too-large" && (
           <Centered>
             <Badge variant="outline">{t("editor.tooLarge")}</Badge>

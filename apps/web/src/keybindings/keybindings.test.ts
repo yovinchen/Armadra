@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render } from "@testing-library/react";
-import { t } from "./app/preferences-store";
+import { t } from "../app/preferences-store";
 import {
   COMMANDS,
   COMMAND_BY_ID,
@@ -16,7 +16,7 @@ import {
   matchKeyboardEvent,
   useKeybindings,
   type CommandId,
-} from "./keybindings";
+} from "./index";
 
 const MAC = { mac: true } as const;
 const PC = { mac: false } as const;

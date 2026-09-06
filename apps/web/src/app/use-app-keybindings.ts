@@ -4,16 +4,17 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { runtimeApi } from "../api/client";
 import {
   COMMANDS,
+  GLOBAL_SHORTCUT_ACTIONS,
+  globalBindings,
+  onGlobalShortcut,
   setActiveKeymap,
+  useGlobalShortcuts,
   useKeybindings,
   type KeybindingHandlers,
 } from "../keybindings";
 import { useDeviceKeymapStore } from "../panels/settings/device-keymap-store";
-import {
-  keymapMigrationPatch,
-  parseStoredKeymap,
-  resolveKeymap,
-} from "../panels/settings/keymap";
+import { keymapMigrationPatch, resolveKeymap } from "../panels/settings/keymap";
+import { activeGlobalLayer } from "../panels/settings/keymap-profiles";
 import type { CommandDispatch } from "./commands";
 
 /**
@@ -21,7 +22,7 @@ import type { CommandDispatch } from "./commands";
  * 每条命令都接到 `dispatch.run`，避免各处再各自监听 keydown。
  *
  * 键位是三层合并的结果（终端宿主设计 §10）：内置默认 → Runtime
- * `settings.keymap` 里的用户全局覆盖 → 本设备覆盖。前者跟着同一个
+ * `settings.keymap` 里当前配置档的全局覆盖 → 本设备覆盖。前者跟着同一个
  * `["settings"]` 查询读回来，设置页保存后缓存立刻更新；后者在 localStorage
  * 里，两边读同一个 store，所以改完下一帧就生效，不需要重启。
  */
@@ -33,8 +34,10 @@ export function useAppKeybindings(dispatch: CommandDispatch): void {
     retry: false,
     staleTime: 30_000,
   });
+  // 全局那一层装的是当前配置档：预设 + 用户在这个档里的修改
+  // （`keymap-profiles.ts`）。换档之后下一帧就生效，因为这份查询变了。
   const global = useMemo(
-    () => parseStoredKeymap(settings.data?.keymap),
+    () => activeGlobalLayer(settings.data?.keymap),
     [settings.data],
   );
   const device = useDeviceKeymapStore((state) => state.keymap);
@@ -72,4 +75,22 @@ export function useAppKeybindings(dispatch: CommandDispatch): void {
   }, [dispatch]);
 
   useKeybindings(handlers, { keymap });
+
+  // 系统全局热键：键位一变就整表重新注册（壳先全部释放再装，所以不会残留
+  // 上一轮的组合键）。浏览器里 `apply` 是空操作。
+  const applyGlobal = useGlobalShortcuts((store) => store.apply);
+  useEffect(() => {
+    void applyGlobal(globalBindings(keymap));
+  }, [applyGlobal, keymap]);
+
+  // 热键触发时跑的是**同一条**画布命令，不是壳里另写一份：壳不知道什么是
+  // 终端节点，让它自己去建就会有两套不一致的实现。
+  useEffect(
+    () =>
+      onGlobalShortcut((id) => {
+        const action = GLOBAL_SHORTCUT_ACTIONS[id];
+        if (action) dispatch.run(action);
+      }),
+    [dispatch],
+  );
 }

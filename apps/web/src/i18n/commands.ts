@@ -55,6 +55,21 @@ export const commands: MessageModule = {
 
     "cmd.terminal.search": "终端内搜索",
 
+    "cmd.editor.save": "保存文件",
+    "cmd.editor.rename": "重命名符号",
+    "cmd.editor.format": "格式化文件",
+    "cmd.editor.goToDefinition": "跳转到定义",
+    "cmd.editor.findReferences": "查找引用",
+    "cmd.editor.codeActions": "代码操作",
+
+    "cmd.browser.reload": "重新加载页面",
+    "cmd.browser.back": "后退",
+    "cmd.browser.forward": "前进",
+    "cmd.browser.focusAddress": "定位到地址栏",
+
+    "cmd.global.toggleWindow": "显示 / 隐藏主窗口",
+    "cmd.global.newTerminal": "新建终端节点",
+
     "cmd.scm.commit": "提交",
 
     /* 按键展示：其余键位是符号或拉丁字母，不需要翻译 */
@@ -105,6 +120,21 @@ export const commands: MessageModule = {
     "cmd.canvas.tool.frame": "Frame tool",
 
     "cmd.terminal.search": "Find in terminal",
+
+    "cmd.editor.save": "Save file",
+    "cmd.editor.rename": "Rename symbol",
+    "cmd.editor.format": "Format file",
+    "cmd.editor.goToDefinition": "Go to definition",
+    "cmd.editor.findReferences": "Find references",
+    "cmd.editor.codeActions": "Code actions",
+
+    "cmd.browser.reload": "Reload page",
+    "cmd.browser.back": "Back",
+    "cmd.browser.forward": "Forward",
+    "cmd.browser.focusAddress": "Focus the address bar",
+
+    "cmd.global.toggleWindow": "Show / hide the main window",
+    "cmd.global.newTerminal": "New terminal node",
 
     "cmd.scm.commit": "Commit",
 

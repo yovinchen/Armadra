@@ -372,6 +372,74 @@ describe("KeybindingsPage", () => {
     );
   });
 
+  it("换配置档换的是全局那一层，各档的修改互不覆盖", async () => {
+    fetchSettings.mockResolvedValue(
+      documentWith({
+        profile: "vscode",
+        [here]: { "canvas.tidy": "Mod+Alt+K" },
+        profiles: { vscode: { [here]: { "canvas.undo": "Mod+Alt+Z" } } },
+      }),
+    );
+    view();
+    // VS Code 档的预设：命令面板是 ⌘⇧P，来源写「配置档」而不是「全局」。
+    await waitFor(() =>
+      expect(paletteSource()).toContain(zh("settings.shortcut.source.profile")),
+    );
+    // 默认档里改的那条在这个档里不生效。
+    const tidy = screen
+      .getByRole("button", { name: zh("cmd.canvas.tidy") })
+      .closest(".settings-row")!.textContent;
+    expect(tidy).toContain(zh("settings.shortcut.source.default"));
+  });
+
+  it("预设那一行没有重置按钮：它不是谁的覆盖", async () => {
+    fetchSettings.mockResolvedValue(documentWith({ profile: "vscode" }));
+    view();
+    await waitFor(() =>
+      expect(paletteSource()).toContain(zh("settings.shortcut.source.profile")),
+    );
+    expect(screen.queryByRole("button", { name: resetLabel() })).toBeNull();
+  });
+
+  it("写入落在当前档里，不落在一张全局表上", async () => {
+    fetchSettings.mockResolvedValue(documentWith({ profile: "vscode" }));
+    view();
+    fireEvent.click(
+      await screen.findByRole("button", { name: zh("cmd.canvas.tidy") }),
+    );
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "j",
+        code: "KeyJ",
+        shiftKey: true,
+        cancelable: true,
+        bubbles: true,
+        ...mod(),
+      }),
+    );
+    await waitFor(() =>
+      expect(patchSettings).toHaveBeenCalledWith({
+        keymap: {
+          profiles: { vscode: { [here]: { "canvas.tidy": "Mod+Shift+J" } } },
+        },
+      }),
+    );
+  });
+
+  it("编辑器与浏览器节点各有一节，系统热键在浏览器里整节不显示", async () => {
+    view();
+    for (const scope of ["editor", "browser"])
+      expect(
+        await screen.findByText(zh(`settings.scope.${scope}`)),
+      ).toBeTruthy();
+    // 全局热键要靠桌面壳向系统注册。在浏览器里显示一组按了没反应的键位，
+    // 比不显示更糟。
+    expect(screen.queryByText(zh("settings.scope.global"))).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: zh("cmd.global.toggleWindow") }),
+    ).toBeNull();
+  });
+
   it("录制期间的按键不会顺带触发默认行为", async () => {
     view();
     fireEvent.click(

@@ -226,7 +226,18 @@ export const modals: MessageModule = {
     "settings.shortcut.note": "Esc 取消，Backspace 重置本层。", // i18n-exempt
     "settings.shortcut.source.default": "默认",
     "settings.shortcut.source.global": "全局",
+    "settings.shortcut.source.profile": "配置档",
     "settings.shortcut.source.device": "本设备",
+    "settings.shortcut.profile": "配置档",
+    "settings.shortcut.profile.note":
+      "一整套键位。换档立刻生效，各档的修改互不覆盖。",
+    "settings.shortcut.profile.default": "默认",
+    "settings.shortcut.profile.vscode": "VS Code 风格",
+    "settings.shortcut.profile.create": "新建配置档",
+    "settings.shortcut.profile.create.note":
+      "只用小写字母、数字和连字符。新档从默认键位开始，不复制当前档。",
+    "settings.shortcut.profile.invalid": "这个名字不能用，或者已经有同名的档。",
+    "settings.shortcut.profile.delete": "删除这个配置档",
     "settings.shortcut.layer": "保存到",
     "settings.shortcut.layer.note":
       "全局键位跟随设置同步到其它设备；本设备键位只留在这台机器上。",
@@ -247,7 +258,14 @@ export const modals: MessageModule = {
     "settings.scope.app": "应用",
     "settings.scope.canvas": "画布",
     "settings.scope.terminal": "终端",
+    "settings.scope.editor": "编辑器节点",
+    "settings.scope.browser": "浏览器节点",
     "settings.scope.scm": "源码控制",
+    "settings.scope.global": "系统全局热键",
+    "settings.scope.global.note":
+      "这两个在应用没有焦点时也会触发，所以默认都不绑；被别的程序占用时这里会写明。",
+    "settings.shortcut.global.taken": "已被其它程序占用",
+    "settings.shortcut.global.invalid": "系统不接受这个组合",
 
     "settings.version": "版本",
     "settings.checkUpdate": "检查更新",
@@ -490,7 +508,19 @@ export const modals: MessageModule = {
     "settings.shortcut.note": "Esc cancels, Backspace resets this layer.",
     "settings.shortcut.source.default": "Default",
     "settings.shortcut.source.global": "Global",
+    "settings.shortcut.source.profile": "Profile",
     "settings.shortcut.source.device": "This device",
+    "settings.shortcut.profile": "Profile",
+    "settings.shortcut.profile.note":
+      "A whole set of keys. Switching takes effect at once, and each profile keeps its own changes.",
+    "settings.shortcut.profile.default": "Default",
+    "settings.shortcut.profile.vscode": "VS Code style",
+    "settings.shortcut.profile.create": "New profile",
+    "settings.shortcut.profile.create.note":
+      "Lowercase letters, digits and hyphens. A new profile starts from the built-in keys; it does not copy this one.",
+    "settings.shortcut.profile.invalid":
+      "That name cannot be used, or a profile already has it.",
+    "settings.shortcut.profile.delete": "Delete this profile",
     "settings.shortcut.layer": "Save to",
     "settings.shortcut.layer.note":
       "Global shortcuts follow your settings to other devices; device shortcuts stay on this machine.",
@@ -512,7 +542,15 @@ export const modals: MessageModule = {
     "settings.scope.app": "App",
     "settings.scope.canvas": "Canvas",
     "settings.scope.terminal": "Terminal",
+    "settings.scope.editor": "Editor nodes",
+    "settings.scope.browser": "Browser nodes",
     "settings.scope.scm": "Source control",
+    "settings.scope.global": "System-wide hotkeys",
+    "settings.scope.global.note":
+      "These fire even when the app has no focus, so none is bound by default; a combination another program already holds is reported here.",
+    "settings.shortcut.global.taken": "Another program holds this",
+    "settings.shortcut.global.invalid":
+      "The system will not take this combination",
 
     "settings.version": "Version",
     "settings.checkUpdate": "Check for updates",

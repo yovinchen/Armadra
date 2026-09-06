@@ -196,11 +196,19 @@ PowerService 在实际执行主机管理租约：reason、session/runId、expire
 
 ### 10.1 实现状态（S01，M7）
 
-已交付三层存储与继承：内置默认（`apps/web/src/keybindings.ts`，mac / other 各一套）→ 用户全局覆盖（Runtime `settings.keymap`，按平台分格）→ 本设备覆盖（`localStorage`，按设备 id，不上行）。合并、来源判定、冲突、导入导出在 `apps/web/src/panels/settings/keymap.ts`，本设备那一层在 `device-keymap-store.ts`。录制只写当前平台那一格；旧的扁平写法（两个平台共用一条）在首次加载时由 `use-app-keybindings.ts` 一次性迁移到两个平台，键位不变，PATCH 失败不影响读取。
+已交付三层存储与继承：内置默认（`apps/web/src/keybindings/commands.ts`，mac / other 各一套）→ 用户全局覆盖（Runtime `settings.keymap`，按平台分格）→ 本设备覆盖（`localStorage`，按设备 id，不上行）。合并、来源判定、冲突、导入导出在 `apps/web/src/panels/settings/keymap.ts`，本设备那一层在 `device-keymap-store.ts`。录制只写当前平台那一格；旧的扁平写法（两个平台共用一条）在首次加载时由 `use-app-keybindings.ts` 一次性迁移到两个平台，键位不变，PATCH 失败不影响读取。
 
-设置页每行显示来源（默认 / 全局 / 本设备），↺ 只重置最上面那一层并落到下一层，另有全部重置与导入/导出（JSON 文本框，不走文件选择器）。可切到另一个平台只读预览其默认与覆盖。冲突检测跑在三层合并后的结果上，跨 scope 与窗口保留键都算，且不自动改判谁赢。命令面板、Dock 与菜单通过 `setActiveKeymap` 读同一份合并结果，显示的键与实际派发一致。
+设置页每行显示来源（默认 / 配置档 / 全局 / 本设备），↺ 只重置最上面那一层并落到下一层，另有全部重置与导入/导出（JSON 文本框，不走文件选择器）。可切到另一个平台只读预览其默认与覆盖。冲突检测跑在三层合并后的结果上，跨 scope 与窗口保留键都算，且不自动改判谁赢。命令面板、Dock 与菜单通过 `setActiveKeymap` 读同一份合并结果，显示的键与实际派发一致。
 
-未实现：`profile`、`when` 条件、editor/browser scope、显式“清空绑定”（只能重置到上一层）、多组替代键的界面录制（存储支持逗号分隔）、OS 全局热键注册。
+**配置档**（`panels/settings/keymap-profiles.ts`）：命名的一整套键位，切换即生效。三层合并没变——配置档决定的是「全局」那一层装什么。内置两个：`default`（无预设）与 `vscode`（预设表在代码里，只读，跟着版本走），用户可另建自定义档。存储沿用旧形状：顶层的 `mac` / `other` 就是默认档的用户修改，其余在 `profiles.<id>` 下，`profile` 记当前选中哪个；因此不需要迁移。导入 / 导出版本升到 2，带上 `profile` 与 `profiles`，仍然读得进版本 1 与更早的扁平文件。
+
+**`when` 条件**（`keybindings/when.ts`）：VS Code 那套语法的真子集——标识符、`!`、`&&`、`||`、括号、与短词的 `==` / `!=`。没有正则和字符串字面量，所以「两条绑定的条件能不能同时成立」可以精确回答（`whenContexts()` 穷举 30 种上下文），冲突检测据此不再把编辑器里的 ⌘R 和浏览器里的 ⌘R 报成撞车。解析失败一律求值为假：一条看不懂的条件不该在任何地方抢键。上下文键：`terminalFocus` / `editorFocus` / `browserFocus` / `canvasFocus` / `editing` / `platform`，由 `keybindings/context.ts` 从事件目标推出，节点用 `data-keybinding-scope` 标出自己。
+
+**editor / browser scope**：编辑器节点的 ⌘S、F2、F12、⇧F12、⇧⌥F 与浏览器节点的刷新 / 前进 / 后退 / 定位地址栏都登记进命令表，设置页看得见也改得动。监听器装在各自节点的根元素上（同时开着几个节点时只有键盘所在的那个响应），`when` 再限定在节点内部。语言命令的实现留在 `editor/language/extensions.ts` 的 `LANGUAGE_EDITOR_COMMANDS`，派发在 `nodes/editor/use-editor-keys.ts`。
+
+**OS 全局热键**（`global` scope，仅桌面壳）：`global.toggleWindow` 与 `global.newTerminal`，默认都不绑——一个全局热键在别的应用里也会触发，装上它必须是用户明确做的事。页面把和弦翻成 Tauri accelerator（`keybindings/accelerator.ts`，无修饰键的组合一律拒绝）交给壳，壳用 `tauri-plugin-global-shortcut` 整表替换式注册（`src-tauri/src/shortcuts.rs`），逐条回报 `bound` / `unbound` / `invalid` / `taken`，被别的程序占住时设置页写明，绝不「显示已保存就当注册成功」。「新建终端节点」由壳发事件、页面跑同一条画布命令，壳里不另写一份。浏览器里整节不显示。
+
+未实现：显式「清空绑定」（只能重置到上一层）、多组替代键的界面录制（存储支持逗号分隔）、`when` 的自定义编辑（只有内置命令带条件，页面不提供表达式输入框）。
 
 ## 11. 更新与 GitHub 发布预留
 

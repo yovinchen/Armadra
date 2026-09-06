@@ -138,14 +138,14 @@ export const runtimeSettingsSchema = z.looseObject({
   /**
    * 用户改过的键位（§24.1 快捷键页；终端宿主设计 §10）。
    *
-   * 按平台分开存：`{ mac: { "canvas.tidy": "Mod+Shift+K" }, other: { … } }`。
+   * 按平台分开存：`{ mac: { "canvas.tidy": "Mod+Shift+K" }, other: { … } }`；
+   * 顶层那两格就是「默认」配置档，其余的档在 `profiles.<id>` 下面同样分平台，
+   * `profile` 记当前选中哪个档（`panels/settings/keymap-profiles.ts`）。
    * 旧版本写的扁平 `{ "canvas.tidy": "Mod+Shift+K" }`（两个平台共用一条）
-   * 仍然读得进来，前端首次加载时迁移一次；所以这里两种形状都收，
-   * 由 `panels/settings/keymap.ts` 归一。
+   * 仍然读得进来，前端首次加载时迁移一次；所以这里几种形状都收，
+   * 由 `panels/settings/keymap.ts` 归一。Runtime 不认识这一段，原样存取。
    */
-  keymap: z
-    .record(z.string(), z.union([z.string(), z.record(z.string(), z.string())]))
-    .optional(),
+  keymap: z.record(z.string(), z.unknown()).optional(),
   /**
    * SSH 主机表（§21）。Runtime 在 `normalize` 里丢掉校验不过的条目，
    * 所以这里读到的一定是可以直接建终端的主机；`catch` 兜住旧 Runtime
@@ -200,13 +200,11 @@ export interface RuntimeSettingsPatch {
   /** 资源面板采样间隔；Runtime 侧会夹回 500ms–60s。 */
   resources?: { intervalMs?: number };
   /**
-   * 分平台的键位覆盖：`{ mac: { "canvas.tidy": "Mod+Shift+K" } }`。
-   * `null` 删掉一条（回到上一层），迁移时也用它删掉旧的扁平键。
+   * 分平台的键位覆盖：`{ mac: { "canvas.tidy": "Mod+Shift+K" } }`，外加
+   * `profile` 与 `profiles.<id>`。`null` 删掉一条（回到上一层），
+   * 迁移与删档也用它。形状由前端保证，Runtime 只做递归合并。
    */
-  keymap?: Record<
-    string,
-    string | null | Record<string, string | null> | undefined
-  >;
+  keymap?: Record<string, unknown>;
 }
 
 export const settingsApi = {
