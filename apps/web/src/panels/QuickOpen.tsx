@@ -144,6 +144,7 @@ export function QuickOpen() {
       open={open}
       onOpenChange={(next) => setPanel("quickOpen", next)}
       title={t("quickOpen.title")}
+      description={t("quickOpen.description")}
       shouldFilter={false}
       className="z-[var(--z-dialog)]"
     >

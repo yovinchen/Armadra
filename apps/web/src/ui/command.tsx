@@ -29,16 +29,21 @@ function Command({
 }
 
 function CommandDialog({
-  title = "Command Palette",
-  description = "Search for a command to run...",
+  title,
+  description,
   children,
   className,
   showCloseButton = false,
   shouldFilter,
   ...props
 }: React.ComponentProps<typeof Dialog> & {
-  title?: string;
-  description?: string;
+  /**
+   * 无障碍名称与说明。两者都是必填、都必须是**已翻译**的文案：它们进
+   * DOM（`sr-only` 的标题与描述），生成的组件自带的英文默认值会被读屏
+   * 念出来，跟界面语言对不上。
+   */
+  title: string;
+  description: string;
   className?: string;
   showCloseButton?: boolean;
   /** `false` when the list is already filtered by the runtime, not by cmdk. */

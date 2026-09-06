@@ -279,6 +279,7 @@ export const modals: MessageModule = {
     "permission.plan": "计划",
 
     "palette.placeholder": "搜索命令",
+    "palette.description": "搜索并执行一条命令",
     "palette.empty": "无匹配",
     "palette.new": "新建",
     "palette.goto": "跳转",
@@ -564,6 +565,7 @@ export const modals: MessageModule = {
     "permission.plan": "Plan",
 
     "palette.placeholder": "Search commands",
+    "palette.description": "Search for a command to run",
     "palette.empty": "No results",
     "palette.new": "New",
     "palette.goto": "Go to",

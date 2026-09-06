@@ -14,6 +14,7 @@ import { useEnabledAgents } from "../app/use-agents";
 import { useT } from "../app/preferences-store";
 import { sshMenuItems } from "../canvas/menus/add-menu";
 import { requestCenterOnNode } from "../canvas/flow/flow-context";
+import { nodeDropPosition } from "../canvas/placement";
 import { useSshHosts } from "./settings/ssh-hosts";
 import {
   CommandDialog,
@@ -71,7 +72,7 @@ export function CommandPalette() {
     if (!command) return;
     close();
     addNode("terminal", {
-      position: centerPosition(),
+      position: nodeDropPosition("terminal"),
       title: conversation.title,
       data: {
         kind: "terminal",
@@ -93,6 +94,7 @@ export function CommandPalette() {
       onOpenChange={(next) => setPanel("palette", next)}
       className="z-[var(--z-dialog)]"
       title={t("cluster.palette")}
+      description={t("palette.description")}
     >
       <CommandInput
         placeholder={t("palette.placeholder")}

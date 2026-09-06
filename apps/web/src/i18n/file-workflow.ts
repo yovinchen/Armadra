@@ -10,6 +10,7 @@ export const fileWorkflow: MessageModule = {
   "zh-CN": {
     "quickOpen.title": "快速打开",
     "quickOpen.placeholder": "按文件名查找",
+    "quickOpen.description": "按文件名查找并打开工作空间里的文件",
     "quickOpen.empty": "没有匹配的文件",
     "quickOpen.truncated": "结果已截断",
     "quickOpen.failed": "读取索引失败",
@@ -55,6 +56,8 @@ export const fileWorkflow: MessageModule = {
   en: {
     "quickOpen.title": "Quick open",
     "quickOpen.placeholder": "Find by file name",
+    "quickOpen.description":
+      "Find a file in this workspace by name and open it",
     "quickOpen.empty": "No matching file",
     "quickOpen.truncated": "Results truncated",
     "quickOpen.failed": "Could not read the index",
