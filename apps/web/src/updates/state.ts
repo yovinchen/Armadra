@@ -36,13 +36,14 @@ export type UpdatesViewState =
 /**
  * What a person may do from here. The page renders these in order.
  *
- * There is deliberately no "cancel": this build cannot abort a transfer that
- * Tauri has already started, and a button that only pretended to would be
- * worse than none. The state machine models the cancellation the design calls
- * for, so wiring it up later is a command, not a redesign.
+ * "cancel" stops a transfer by dropping the future the updater is running in —
+ * Tauri hands out no abort handle, so that is the whole of the mechanism. It
+ * really does stop the bytes arriving, and it really does throw them away:
+ * there is no resume, so the button says "cancel", not "pause".
  */
 export type UpdatesAction =
   | "check"
+  | "cancel"
   | "download"
   | "skip"
   | "restart"
@@ -228,7 +229,7 @@ export function mergeUpdatesState(
     });
   }
   if (host.kind === "checking" || shell.state === "checking") {
-    return view({ state: "checking" });
+    return view({ state: "checking", actions: ["cancel"] });
   }
   if (host.kind === "notAsked" || shell.state === "idle") {
     return view({ state: "idle", actions: ["check"] });
@@ -290,6 +291,9 @@ export function mergeUpdatesState(
           receivedBytes: shell.receivedBytes,
           totalBytes: shell.totalBytes,
         },
+        // Cancelling goes back to the offer, so nothing about the release is
+        // lost — only the partial file, which was worth nothing anyway.
+        actions: ["cancel"],
       });
     case "downloaded":
       return view({

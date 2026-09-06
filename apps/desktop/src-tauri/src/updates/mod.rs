@@ -12,17 +12,22 @@
 //! - [`machine`] is the state machine, pure;
 //! - [`offer`] turns the Host's answer plus the release manifest into one
 //!   offer, pure;
+//! - [`cancel`] is the only handle there is on a transfer already running;
+//! - [`notify`] holds the two out-of-page announcements and their strings;
 //! - [`coordinate`] decides what may be stopped and whether a restart worked;
-//! - this file is the Tauri surface: four commands and one progress event.
+//! - this file is the Tauri surface: the commands and one progress event.
 
+pub mod cancel;
 pub mod coordinate;
 pub mod machine;
+pub mod notify;
 pub mod offer;
 
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_updater::{Update, UpdaterExt};
 use url::Url;
 
@@ -123,6 +128,8 @@ pub struct UpdatesController {
     /// The updater's own handle for the offer in hand. Kept so "restart and
     /// update" installs the bytes that were verified, not a second download.
     staged: Mutex<Option<(Update, Vec<u8>)>>,
+    /// The token the transfer in flight selects on. See [`cancel`].
+    cancellation: cancel::Cancellation,
 }
 
 impl UpdatesController {
@@ -249,6 +256,30 @@ pub fn updates_dismiss(app: AppHandle) -> UpdateState {
         .apply(&app, Event::OfferDismissed)
 }
 
+/// Stops what is in flight: a transfer, or a check.
+///
+/// A cancelled transfer discards its bytes and goes back to the offer
+/// (design §2.1). Tauri cannot resume, so half a package is not something to
+/// keep, and the shell says "available" again rather than pretending the
+/// partial file is worth anything.
+#[tauri::command]
+pub fn updates_cancel(app: AppHandle) -> UpdateState {
+    let controller = app.state::<UpdatesController>();
+    match controller.snapshot(&app) {
+        // The transfer future is dropped by the download command as soon as it
+        // sees this token, which closes the response body.
+        UpdateState::Downloading { .. } => {
+            controller.cancellation.cancel();
+            controller.apply(&app, Event::CheckCancelled)
+        }
+        // A check in flight is one await that cannot be interrupted; leaving
+        // `Checking` is enough, because its answer is only accepted from
+        // `Checking` and will be ignored when it lands.
+        UpdateState::Checking => controller.apply(&app, Event::CheckCancelled),
+        other => other,
+    }
+}
+
 async fn resolve_offer(app: &AppHandle, verdict: &HostVerdict) -> Result<Offer, Reason> {
     let insecure = development_override();
     let pointer = offer::pointer(&verdict.answer, &verdict.target, insecure)?;
@@ -306,19 +337,57 @@ pub async fn updates_download(app: AppHandle) -> UpdateState {
     let UpdateState::Downloading { offer, .. } = started else {
         return started;
     };
-    match transfer(&app, &offer).await {
+    // The transfer runs against a cancellation token rather than to completion:
+    // dropping the future is the only way to stop the updater's download, so
+    // whichever of the two finishes first decides what happens next.
+    let token = app.state::<UpdatesController>().cancellation.arm();
+    let outcome = tokio::select! {
+        result = transfer(&app, &offer) => Some(result),
+        () = token.notified() => None,
+    };
+    let controller = app.state::<UpdatesController>();
+    controller.cancellation.finish(&token);
+    let Some(result) = outcome else {
+        // `updates_cancel` already moved the machine back to the offer; report
+        // where things actually stand rather than a second, racing transition.
+        return controller.snapshot(&app);
+    };
+    match result {
         Ok((update, bytes)) => {
-            *app.state::<UpdatesController>()
-                .staged
-                .lock()
-                .expect("staged update lock") = Some((update, bytes));
-            app.state::<UpdatesController>()
-                .apply(&app, Event::DownloadFinished)
+            let state = controller.apply(&app, Event::DownloadFinished);
+            // A transfer that finished *while* it was being cancelled is not a
+            // staged update: the machine refused the event, and keeping the
+            // bytes would let a later restart install something nobody chose.
+            if !matches!(state, UpdateState::Downloaded { .. }) {
+                return state;
+            }
+            *controller.staged.lock().expect("staged update lock") = Some((update, bytes));
+            announce_staged(&app, &offer).await;
+            state
         }
-        Err(reason) => app
-            .state::<UpdatesController>()
-            .apply(&app, Event::DownloadFailed { reason }),
+        Err(reason) => controller.apply(&app, Event::DownloadFailed { reason }),
     }
+}
+
+/// Tells the tray and the person that a restart is all that is left
+/// (design §4.1, last rule).
+///
+/// Both announcements are best-effort: an update that is staged stays staged
+/// whether or not the notification could be shown, and the settings page says
+/// the same thing without either of them.
+async fn announce_staged(app: &AppHandle, offer: &Offer) {
+    let _ = app.emit(notify::STAGED_EVENT, notify::Staged::ready(&offer.version));
+    let settings = crate::runtime_process::runtime_get(app, "/api/settings").await;
+    if !notify::wants_notification(&settings) {
+        return;
+    }
+    let locale = crate::usage::Locale::from_environment();
+    let _ = app
+        .notification()
+        .builder()
+        .title(notify::notification_title(locale))
+        .body(notify::notification_body(locale, &offer.version))
+        .show();
 }
 
 async fn transfer(app: &AppHandle, offer: &Offer) -> Result<(Update, Vec<u8>), Reason> {
@@ -441,8 +510,10 @@ pub async fn updates_install(app: AppHandle) -> UpdateState {
         Ok(()) => app.restart(),
         Err(error) => {
             // The install did not happen, so nothing should tell the next
-            // start that it did.
+            // start that it did — and the tray must stop offering a restart
+            // that would only fail the same way.
             let _ = coordinate::clear_pending(&crate::runtime_data_dir());
+            let _ = app.emit(notify::STAGED_EVENT, notify::Staged::cleared());
             app.state::<UpdatesController>().apply(
                 &app,
                 Event::InstallFailed {

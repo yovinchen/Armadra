@@ -184,7 +184,7 @@ describe("mergeUpdatesState", () => {
     expect(view.offer).toEqual(offer);
   });
 
-  it("reports progress while transferring and offers nothing to press", () => {
+  it("reports progress while transferring and offers only cancel", () => {
     const view = mergeUpdatesState(answered("available"), {
       state: "downloading",
       offer,
@@ -192,7 +192,22 @@ describe("mergeUpdatesState", () => {
       totalBytes: 4096,
     });
     expect(view.progress).toEqual({ receivedBytes: 2048, totalBytes: 4096 });
-    expect(view.actions).toEqual([]);
+    // Nothing else: downloading again would start a second transfer, and
+    // "skip" while bytes are arriving is just a cancel with a worse name.
+    expect(view.actions).toEqual(["cancel"]);
+    // The offer survives a cancel, so the release row keeps describing it.
+    expect(view.offer).toEqual(offer);
+  });
+
+  it("lets a check in flight be cancelled from either side", () => {
+    for (const [host, shell] of [
+      [answered("available"), { state: "checking" } as const],
+      [{ kind: "checking" } as const, { state: "idle" } as const],
+    ] as const) {
+      const view = mergeUpdatesState(host, shell);
+      expect(view.state).toBe("checking");
+      expect(view.actions).toEqual(["cancel"]);
+    }
   });
 
   it("offers the restart only while it has not started", () => {
