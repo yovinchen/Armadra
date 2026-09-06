@@ -42,6 +42,16 @@ try {
 
 浏览器仍需 Host 的 CORS / TLS / 认证配置；跨源 Cookie 不自动携带。
 
+## 原生传输
+
+`HostIdentityClient` 默认是浏览器 Cookie 传输：基址必须是 HTTPS 且与页面同源。打包桌面壳的页面来源
+（`tauri://localhost`、`http(s)://tauri.localhost`）传 `transport: { kind: "native", credentials }`：
+只接受回环 HTTP 基址 + 原生页面来源这一种组合，access / refresh 以 `Authorization: Bearer` 发送、
+`credentials: "omit"`，并放在一份共享的 `HostNativeCredentials` 里（页面内存，不落存储）。
+多个客户端共用同一份凭据时经它的串行队列排队，轮转不会互相作废；`resume()` 在没有凭据或凭据被
+Host 拒绝时经 `ticket` 回调向壳取一张一次性票据并配对。其余浏览器规则一概不变，见
+[桌面壳原生 Host 会话](../../docs/design/host-native-session.md)。
+
 ## 错误
 
 `HostClientError` 仅包含 code、retryable、可选 httpStatus / hostCode，不保留服务端原文、URL、凭据或 cause。

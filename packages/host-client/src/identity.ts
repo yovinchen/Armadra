@@ -20,15 +20,32 @@ import {
   type ListDevicesResponse,
 } from "@armadra/protocol";
 import type { HostClientErrorCode } from "./index.js";
+import type { HostNativeCredentials } from "./native.js";
 
-export type HostIdentitySession = Omit<AuthenticatedSession, "csrfToken">;
+/** Secrets never reach a caller: neither the CSRF nor the native bearers. */
+export type HostIdentitySession = Omit<
+  AuthenticatedSession,
+  "csrfToken" | "native"
+>;
 export type HostIdentityDevices = ListDevicesResponse;
+/**
+ * How credentials travel. The browser transport is the default: HttpOnly
+ * cookies on the Host's HTTPS origin, which has to be the page's own. The
+ * native transport is the packaged desktop shell's: plain loopback HTTP from
+ * a native page origin, bearer secrets held in page memory, shared between
+ * every client built on the same {@link HostNativeCredentials}
+ * (docs/design/host-native-session.md §3).
+ */
+export type HostIdentityTransport =
+  | { kind: "browser" }
+  | { kind: "native"; credentials: HostNativeCredentials };
 export interface HostIdentityClientOptions {
   baseUrl: string;
   hostId: string;
   hostInstanceId: string;
   /** Defaults to the actual browser page origin; required in non-browser tests. */
   pageOrigin?: string;
+  transport?: HostIdentityTransport;
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
   /**
@@ -73,11 +90,49 @@ const remoteCodes = new Set([
   "UNKNOWN_OUTCOME",
   "INTERNAL",
 ]);
+/** IdentityService methods whose bearer is the refresh secret, not access. */
+const refreshBearer = new Set(["Refresh", "RenewCsrf", "Logout"]);
+const nativePageOrigins = new Set([
+  "tauri://localhost",
+  "http://tauri.localhost",
+  "https://tauri.localhost",
+]);
 function invalid(): never {
   throw new HostIdentityError("INVALID_OPTIONS");
 }
+function unauthenticated(error: unknown): error is HostIdentityError {
+  return (
+    error instanceof HostIdentityError &&
+    error.hostCode === "UNAUTHENTICATED" &&
+    !error.outcomeUnknown
+  );
+}
+function loopbackHost(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname === "[::1]" ||
+    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
+  );
+}
+/**
+ * The page origin as the Host will see it in the `Origin` header. `URL.origin`
+ * is `"null"` for a non-special scheme such as `tauri:`, so it is spelled out
+ * from the two parts that do survive.
+ */
+function currentPageOrigin(): string | undefined {
+  const location = globalThis.location;
+  if (!location) return undefined;
+  if (location.origin && location.origin !== "null") return location.origin;
+  if (location.protocol && location.host)
+    return `${location.protocol}//${location.host}`;
+  return undefined;
+}
 
-function identityEndpoint(value: string, pageOrigin: string | undefined): URL {
+function identityEndpoint(
+  value: string,
+  pageOrigin: string | undefined,
+  native: boolean,
+): URL {
   if (
     typeof value !== "string" ||
     value !== value.trim() ||
@@ -91,14 +146,24 @@ function identityEndpoint(value: string, pageOrigin: string | undefined): URL {
     return invalid();
   }
   if (
-    url.protocol !== "https:" ||
     url.username ||
     url.password ||
     value.includes("?") ||
-    value.includes("#") ||
-    pageOrigin !== url.origin
+    value.includes("#")
   )
     invalid();
+  if (native) {
+    // The one combination the browser rule can never admit, and the only one
+    // the native transport does: a loopback HTTP Host, asked by the desktop
+    // shell's own page origin.
+    if (
+      url.protocol !== "http:" ||
+      !loopbackHost(url.hostname) ||
+      !pageOrigin ||
+      !nativePageOrigins.has(pageOrigin)
+    )
+      invalid();
+  } else if (url.protocol !== "https:" || pageOrigin !== url.origin) invalid();
   return url;
 }
 function cancelBody(body: ReadableStream<Uint8Array> | null) {
@@ -152,26 +217,42 @@ async function bounded(
   }
 }
 
-/** Browser Cookie transport only. Access/refresh are never read by JavaScript.
- * Mutations are serialized, never automatically retried, and CSRF is private
- * memory. Dispose on Host changes; a late transport cannot revive old state. */
+/** Browser Cookie transport by default: access/refresh are never read by
+ * JavaScript. Mutations are serialized, never automatically retried, and CSRF
+ * is private memory. Dispose on Host changes; a late transport cannot revive
+ * old state. The native transport keeps the same rules with the secrets in a
+ * shared {@link HostNativeCredentials} instead of cookies. */
 export class HostIdentityClient {
   #url: URL;
   #hostId: string;
   #instanceId: string;
+  #pageOrigin: string;
   #fetch: typeof fetch;
   #timeout: number;
   #csrf = "";
   #onCsrf?: (token: string) => void;
   #deviceId = "";
+  #native?: HostNativeCredentials;
   #lifetime = new AbortController();
   #tail: Promise<unknown> = Promise.resolve();
   constructor(options: HostIdentityClientOptions) {
     this.#onCsrf = options.onCsrfToken;
+    const transport = options.transport ?? { kind: "browser" };
+    if (transport.kind === "native") {
+      if (
+        !transport.credentials ||
+        typeof transport.credentials.serial !== "function"
+      )
+        invalid();
+      this.#native = transport.credentials;
+    } else if (transport.kind !== "browser") invalid();
+    const pageOrigin = options.pageOrigin ?? currentPageOrigin();
     this.#url = identityEndpoint(
       options.baseUrl,
-      options.pageOrigin ?? globalThis.location?.origin,
+      pageOrigin,
+      this.#native !== undefined,
     );
+    this.#pageOrigin = pageOrigin ?? "";
     if (!id.test(options.hostId) || !id.test(options.hostInstanceId)) invalid();
     this.#hostId = options.hostId;
     this.#instanceId = options.hostInstanceId;
@@ -186,10 +267,14 @@ export class HostIdentityClient {
     if (typeof fetcher !== "function") invalid();
     this.#fetch = fetcher.bind(globalThis);
   }
+  #csrfToken(): string {
+    return this.#native ? this.#native.csrf : this.#csrf;
+  }
   // One assignment point, so every rotation and every drop is observed. A
   // listener that throws must not take the request down with it.
   #setCsrf(token: string): void {
-    this.#csrf = token;
+    if (this.#native) this.#native.setCsrf(token);
+    else this.#csrf = token;
     try {
       this.#onCsrf?.(token);
     } catch {
@@ -197,12 +282,19 @@ export class HostIdentityClient {
     }
   }
   dispose(): void {
-    this.#setCsrf("");
+    // Shared native credentials outlive this client; only its own view ends.
+    if (this.#native) {
+      try {
+        this.#onCsrf?.("");
+      } catch {
+        /* As above. */
+      }
+    } else this.#setCsrf("");
     this.#deviceId = "";
     this.#lifetime.abort(new HostIdentityError("CANCELLED"));
   }
   #serial<T>(action: () => Promise<T>): Promise<T> {
-    const result = this.#tail.then(() => {
+    const run = () => {
       if (this.#lifetime.signal.aborted)
         throw new HostIdentityError("CANCELLED");
       return action().then((value) => {
@@ -210,7 +302,11 @@ export class HostIdentityClient {
           throw new HostIdentityError("CANCELLED");
         return value;
       });
-    });
+    };
+    // Clients sharing native credentials share one queue, so a rotation by
+    // one never races a request from another.
+    if (this.#native) return this.#native.serial(run);
+    const result = this.#tail.then(run);
     this.#tail = result.catch(() => {});
     return result;
   }
@@ -239,7 +335,7 @@ export class HostIdentityClient {
     );
     try {
       if (controller.signal.aborted) throw controller.signal.reason;
-      if (csrf && !this.#csrf)
+      if (csrf && !this.#csrfToken())
         throw new HostIdentityError(
           "REMOTE_ERROR",
           false,
@@ -252,13 +348,32 @@ export class HostIdentityClient {
         "Content-Type": media,
         Accept: media,
       };
-      if (csrf) headers["X-Armadra-CSRF"] = this.#csrf;
+      if (csrf) headers["X-Armadra-CSRF"] = this.#csrfToken();
+      if (
+        this.#native &&
+        !(service === "IdentityService" && action === "Pair")
+      ) {
+        // Same secret, same purpose as the cookie the browser would send:
+        // refresh for the three refresh-bound methods, access for the rest.
+        const token =
+          service === "IdentityService" && refreshBearer.has(action)
+            ? this.#native.refresh
+            : this.#native.access;
+        if (!token)
+          throw new HostIdentityError(
+            "REMOTE_ERROR",
+            false,
+            401,
+            "UNAUTHENTICATED",
+          );
+        headers.Authorization = `Bearer ${token}`;
+      }
       dispatched = true;
       const pending = this.#fetch(url.href, {
         method: "POST",
         headers,
         body: new Uint8Array(body),
-        credentials: "include",
+        credentials: this.#native ? "omit" : "include",
         redirect: "error",
         cache: "no-store",
         signal: controller.signal,
@@ -359,9 +474,21 @@ export class HostIdentityClient {
       (needsCSRF && !secret.test(value.csrfToken))
     )
       throw new HostIdentityError("MALFORMED_RESPONSE");
+    if (needsCSRF && this.#native) {
+      // Pair and Refresh answer the native transport with the bearers the
+      // cookies would otherwise carry; `expiresAtUnixMs` is the access expiry.
+      const native = value.native;
+      if (!native) throw new HostIdentityError("MALFORMED_RESPONSE");
+      this.#native.store(
+        native.accessToken,
+        native.refreshToken,
+        value.csrfToken,
+        Number(value.expiresAtUnixMs),
+      );
+    }
     if (needsCSRF) this.#setCsrf(value.csrfToken);
     this.#deviceId = value.device.deviceId;
-    const { csrfToken: _, ...visible } = value;
+    const { csrfToken: _, native: __, ...visible } = value;
     return visible;
   }
   #current(): Promise<HostIdentitySession> {
@@ -402,9 +529,49 @@ export class HostIdentityClient {
       true,
     );
   }
+  /** Rotate the native session: recover a CSRF if none is held, then refresh. */
+  async #refreshNative(): Promise<HostIdentitySession> {
+    if (!this.#csrfToken()) await this.#renew();
+    return this.#refresh();
+  }
+  /** Bring a held native access token back within its validity window. */
+  async #freshen(): Promise<void> {
+    const native = this.#native;
+    if (native?.signedIn && !native.accessFresh(Date.now()))
+      await this.#refreshNative();
+  }
+  /**
+   * The native reopen flow. Held credentials are reused — refreshed only when
+   * the access token is near expiry — and a session the Host no longer knows
+   * (a restart, a revocation) is replaced by pairing with a fresh ticket from
+   * the shell rather than reported as signed out: in the shell there is
+   * nobody to paste a ticket.
+   */
+  async #resumeNative(
+    native: HostNativeCredentials,
+  ): Promise<HostIdentitySession> {
+    if (native.signedIn) {
+      try {
+        if (native.accessFresh(Date.now())) return await this.#current();
+        return await this.#refreshNative();
+      } catch (error) {
+        if (!unauthenticated(error)) throw error;
+      }
+      try {
+        return await this.#refreshNative();
+      } catch (error) {
+        if (!unauthenticated(error)) throw error;
+        native.clear();
+        this.#deviceId = "";
+      }
+    }
+    return this.#pair(await native.ticket());
+  }
   /** Reopen flow: read Current, recover a bound CSRF, then rotate credentials.
    * Only an explicit UNAUTHENTICATED response permits trying refresh recovery. */
   resume(): Promise<HostIdentitySession | null> {
+    const native = this.#native;
+    if (native) return this.#serial(() => this.#resumeNative(native));
     return this.#serial(async () => {
       this.#setCsrf("");
       try {
@@ -433,7 +600,10 @@ export class HostIdentityClient {
     });
   }
   current(): Promise<HostIdentitySession> {
-    return this.#serial(() => this.#current());
+    return this.#serial(async () => {
+      await this.#freshen();
+      return this.#current();
+    });
   }
   /**
    * Sends one request to another Host service over this signed-in session: the
@@ -455,62 +625,68 @@ export class HostIdentityClient {
         body.byteLength > MAX_FRAME_BYTES
       )
         invalid();
-      if (mutation && !this.#csrf) await this.#renew();
-      return this.#rpc(
-        service,
-        action,
-        body,
-        (wire) => wire,
-        mutation,
-        mutation,
-      );
+      await this.#freshen();
+      if (mutation && !this.#csrfToken()) await this.#renew();
+      const dispatch = () =>
+        this.#rpc(service, action, body, (wire) => wire, mutation, mutation);
+      if (!this.#native) return dispatch();
+      try {
+        return await dispatch();
+      } catch (error) {
+        // A 401 means the Host did not run the request, so one rotation and
+        // one retry are safe even for a mutation. Anything else propagates.
+        if (!unauthenticated(error)) throw error;
+        await this.#refreshNative();
+        return dispatch();
+      }
     });
   }
-  pair(material: string): Promise<HostIdentitySession> {
-    return this.#serial(async () => {
-      let ticket = material.trim();
-      if (ticket.length > 8192) invalid();
-      if (ticket.startsWith("{")) {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(ticket);
-        } catch {
-          return invalid();
-        }
-        if (!parsed || typeof parsed !== "object") invalid();
-        const value = parsed as Record<string, unknown>;
-        if (
-          value.hostId !== this.#hostId ||
-          value.hostInstanceId !== this.#instanceId ||
-          value.origin !== this.#url.origin ||
-          typeof value.ticket !== "string" ||
-          typeof value.expiresAtUnixMs !== "string" ||
-          !/^\d{1,19}$/.test(value.expiresAtUnixMs) ||
-          BigInt(value.expiresAtUnixMs) <= BigInt(Date.now())
-        )
-          invalid();
-        ticket = value.ticket;
+  async #pair(material: string): Promise<HostIdentitySession> {
+    let ticket = material.trim();
+    if (ticket.length > 8192) invalid();
+    if (ticket.startsWith("{")) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(ticket);
+      } catch {
+        return invalid();
       }
-      if (!ticketPattern.test(ticket)) invalid();
-      return this.#rpc(
-        "IdentityService",
-        "Pair",
-        toBinary(
-          PairDeviceRequestSchema,
-          create(PairDeviceRequestSchema, {
-            expectedHostId: this.#hostId,
-            expectedInstanceId: this.#instanceId,
-            ticket,
-          }),
-        ),
-        (wire) => this.#session(wire, true),
-        true,
-      );
-    });
+      if (!parsed || typeof parsed !== "object") invalid();
+      const value = parsed as Record<string, unknown>;
+      if (
+        value.hostId !== this.#hostId ||
+        value.hostInstanceId !== this.#instanceId ||
+        value.origin !== this.#pageOrigin ||
+        typeof value.ticket !== "string" ||
+        typeof value.expiresAtUnixMs !== "string" ||
+        !/^\d{1,19}$/.test(value.expiresAtUnixMs) ||
+        BigInt(value.expiresAtUnixMs) <= BigInt(Date.now())
+      )
+        invalid();
+      ticket = value.ticket;
+    }
+    if (!ticketPattern.test(ticket)) invalid();
+    return this.#rpc(
+      "IdentityService",
+      "Pair",
+      toBinary(
+        PairDeviceRequestSchema,
+        create(PairDeviceRequestSchema, {
+          expectedHostId: this.#hostId,
+          expectedInstanceId: this.#instanceId,
+          ticket,
+        }),
+      ),
+      (wire) => this.#session(wire, true),
+      true,
+    );
+  }
+  pair(material: string): Promise<HostIdentitySession> {
+    return this.#serial(() => this.#pair(material));
   }
   refresh(): Promise<HostIdentitySession> {
     return this.#serial(async () => {
-      if (!this.#csrf) await this.#renew();
+      if (!this.#csrfToken()) await this.#renew();
       return this.#refresh();
     });
   }
@@ -556,7 +732,8 @@ export class HostIdentityClient {
         expectedRevision > 9_223_372_036_854_775_807n
       )
         invalid();
-      if (!this.#csrf) await this.#renew();
+      await this.#freshen();
+      if (!this.#csrfToken()) await this.#renew();
       const value = await this.#rpc(
         "IdentityService",
         "RevokeDevice",
@@ -571,6 +748,7 @@ export class HostIdentityClient {
       if (!value.revoked || value.deviceId !== deviceId)
         throw new HostIdentityError("MALFORMED_RESPONSE", true);
       if (deviceId === this.#deviceId) {
+        this.#native?.clear();
         this.#setCsrf("");
         this.#deviceId = "";
       }
@@ -578,7 +756,7 @@ export class HostIdentityClient {
   }
   logout(): Promise<void> {
     return this.#serial(async () => {
-      if (!this.#csrf) await this.#renew();
+      if (!this.#csrfToken()) await this.#renew();
       const value = await this.#rpc(
         "IdentityService",
         "Logout",
@@ -592,6 +770,7 @@ export class HostIdentityClient {
       );
       if (!value.closed)
         throw new HostIdentityError("MALFORMED_RESPONSE", true);
+      this.#native?.clear();
       this.#setCsrf("");
       this.#deviceId = "";
     });

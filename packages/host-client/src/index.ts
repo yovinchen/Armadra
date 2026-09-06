@@ -319,6 +319,7 @@ export class HostClient {
   }
 }
 export * from "./identity.js";
+export * from "./native.js";
 export * from "./agent.js";
 export * from "./automation.js";
 export * from "./canvas.js";
