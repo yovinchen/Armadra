@@ -276,10 +276,9 @@ async fn scenario() {
     assert_eq!(status, StatusCode::CONFLICT, "{answer}");
     assert_eq!(answer["code"], "conflict", "{answer}");
 
-    // What genuinely cannot move keeps its own code. A language server is a
-    // process this Runtime started and holds the handle to, so restarting one
-    // for a workspace on another machine is not a missing feature — it is a
-    // workspace on the wrong machine, and the two have different remedies.
+    // Language servers live on the execution host too: restarting one is
+    // dispatched over the language link, so with no server running there the
+    // answer is the host's own "nothing to restart", not a local refusal.
     let (status, answer) = call(
         app,
         json_request(
@@ -289,8 +288,8 @@ async fn scenario() {
         ),
     )
     .await;
-    assert_eq!(status, StatusCode::NOT_IMPLEMENTED, "{answer}");
-    assert_eq!(answer["code"], "unsupported_on_remote", "{answer}");
+    assert_eq!(status, StatusCode::NOT_FOUND, "{answer}");
+    assert_eq!(answer["code"], "not_found", "{answer}");
 }
 
 /// A host whose Worker cannot be started is refused, and refused as
