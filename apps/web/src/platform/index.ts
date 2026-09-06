@@ -18,13 +18,21 @@ export function isTauri(): boolean {
 /**
  * Opens the system folder picker. Resolves to `null` when the user cancels —
  * and always on the web, where no picker exists (callers fall back to the
- * manual path field of the New Workspace modal).
+ * manual path field of the New folder dialog).
+ *
+ * `canCreateDirectories` is macOS-only and on by default, but it is spelled out
+ * here because the New folder flow leans on it: the panel's own "New Folder"
+ * button is how the user creates the directory they are about to open.
  */
 export async function pickDirectory(): Promise<string | null> {
   if (!isTauri()) return null;
   try {
     const { open } = await import("@tauri-apps/plugin-dialog");
-    const picked = await open({ directory: true, multiple: false });
+    const picked = await open({
+      directory: true,
+      multiple: false,
+      canCreateDirectories: true,
+    });
     // `multiple: false` narrows to `string | null`, but the union type keeps
     // the array arm; collapse it defensively.
     if (Array.isArray(picked)) return picked[0] ?? null;
