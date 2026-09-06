@@ -10,10 +10,11 @@
 // Nothing touches the operator's data directory, keychain, or the ports the
 // application reserves (1420, 1421, 43120, 43121).
 //
-// `tools/canvas-ownership-e2e.mjs` still carries its own copy of this
-// scaffolding. Moving it across is a separate change: it would touch every step
-// of a 2000-line script that currently passes, and the point of this file is to
-// let the next domain's check exist without a third copy.
+// The canvas scenario keeps its own copy of this scaffolding in
+// `tools/ownership/canvas/harness.mjs`, and so does the settings one in
+// `tools/ownership/settings/harness.mjs`. Both serve the page from a separate
+// same-origin proxy rather than from the Host's own TLS port, so moving them
+// across is a change to what they exercise, not a move.
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import { createHash, randomBytes } from "node:crypto";

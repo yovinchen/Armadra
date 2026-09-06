@@ -72,13 +72,7 @@
     "roots": ["apps", "crates", "packages", "tools"],
     "extensions": [".rs", ".ts", ".tsx", ".go", ".mjs", ".js"],
     "excludeSegments": ["/gen/", "/node_modules/"],
-    "exemptions": [
-      {
-        "path": "tools/canvas-ownership-e2e.mjs",
-        "lines": 2115,
-        "note": "§5 第 6 步：端到端脚本按阶段拆分"
-      }
-    ]
+    "exemptions": []
   },
   "migrations": {
     "lock": "migrations.lock",
