@@ -6,7 +6,8 @@ import type { HandoffView } from "@armadra/shared";
 import { Badge } from "@/ui/badge";
 import { IconButton } from "@/ui/icon-button";
 import { ScrollArea } from "@/ui/scroll-area";
-import { Sheet, SheetContent, SheetTitle } from "@/ui/sheet";
+import { SheetTitle } from "@/ui/sheet";
+import { WorkPanelSheet } from "../WorkPanelSheet";
 import { runtimeApi } from "@/api/client";
 import { usePreferencesStore, useT } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
@@ -51,61 +52,53 @@ export function HandoffHistoryDrawer() {
   };
 
   return (
-    <Sheet
+    <WorkPanelSheet
+      panel="handoff"
       open={open}
-      onOpenChange={(next) => {
-        if (!next) setPanel("handoff", "closed");
-      }}
+      onClose={() => setPanel("handoff", "closed")}
     >
-      <SheetContent
-        side="right"
-        showCloseButton={false}
-        aria-describedby={undefined}
-        className="max-w-full gap-0 p-0 data-[side=right]:w-[min(100vw,var(--scm-w))] data-[side=right]:sm:max-w-none"
-      >
-        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-3">
-          <SheetTitle className="shrink-0 truncate text-[13px] font-semibold">
-            {t("handoff.historyTitle")}
-          </SheetTitle>
-          <div className="flex-1" />
-          <IconButton
-            label={t("handoff.reload")}
-            onClick={() => void history.refetch()}
-          >
-            <RotateCw />
-          </IconButton>
-          <IconButton
-            label={t("handoff.close")}
-            onClick={() => setPanel("handoff", "closed")}
-          >
-            <X />
-          </IconButton>
-        </div>
+      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-3">
+        <SheetTitle className="shrink-0 truncate text-[13px] font-semibold">
+          {t("handoff.historyTitle")}
+        </SheetTitle>
+        <div className="flex-1" />
+        <IconButton
+          label={t("handoff.reload")}
+          onClick={() => void history.refetch()}
+        >
+          <RotateCw />
+        </IconButton>
+        <IconButton
+          label={t("handoff.close")}
+          onClick={() => setPanel("handoff", "closed")}
+        >
+          <X />
+        </IconButton>
+      </div>
 
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="min-w-0 space-y-2 p-3">
-            {!workspaceId && (
-              <p role="status" className="text-[12px] text-muted-foreground">
-                {t("handoff.noWorkspace")}
-              </p>
-            )}
-            {history.isError && (
-              <p role="status" className="text-[12px] text-destructive">
-                {t("handoff.historyFailed")}
-              </p>
-            )}
-            {history.isSuccess && history.data.length === 0 && (
-              <p className="text-[12px] text-muted-foreground">
-                {t("handoff.noHistory")}
-              </p>
-            )}
-            {history.data?.map((view) => (
-              <HandoffRow key={view.bundle.handoffId} view={view} at={at} />
-            ))}
-          </div>
-        </ScrollArea>
-      </SheetContent>
-    </Sheet>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="min-w-0 space-y-2 p-3">
+          {!workspaceId && (
+            <p role="status" className="text-[12px] text-muted-foreground">
+              {t("handoff.noWorkspace")}
+            </p>
+          )}
+          {history.isError && (
+            <p role="status" className="text-[12px] text-destructive">
+              {t("handoff.historyFailed")}
+            </p>
+          )}
+          {history.isSuccess && history.data.length === 0 && (
+            <p className="text-[12px] text-muted-foreground">
+              {t("handoff.noHistory")}
+            </p>
+          )}
+          {history.data?.map((view) => (
+            <HandoffRow key={view.bundle.handoffId} view={view} at={at} />
+          ))}
+        </div>
+      </ScrollArea>
+    </WorkPanelSheet>
   );
 }
 

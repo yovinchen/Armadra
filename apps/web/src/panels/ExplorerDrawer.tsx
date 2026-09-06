@@ -14,7 +14,8 @@ import { PROJECT_SEARCH_EVENT } from "../app/commands";
 import { useT } from "../app/preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
 import { ScrollArea } from "../ui/scroll-area";
-import { Sheet, SheetContent, SheetTitle } from "../ui/sheet";
+import { SheetTitle } from "../ui/sheet";
+import { WorkPanelSheet } from "./WorkPanelSheet";
 import { IconButton } from "../ui/icon-button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { ExecutionHostBadge } from "./ExecutionHostBadge";
@@ -104,22 +105,13 @@ export function ExplorerDrawer() {
   }
 
   return (
-    <Sheet
+    <WorkPanelSheet
+      panel="explorer"
       open
-      modal={false}
-      onOpenChange={(open) => {
-        if (!open) setPanel("explorer", "closed");
-      }}
+      onClose={() => setPanel("explorer", "closed")}
     >
-      <SheetContent
-        side="right"
-        showCloseButton={false}
-        aria-describedby={undefined}
-        className="w-[var(--drawer-w)] gap-0 p-0 sm:max-w-none"
-      >
-        {renderHeader(SheetTitle)}
-        {body}
-      </SheetContent>
-    </Sheet>
+      {renderHeader(SheetTitle)}
+      {body}
+    </WorkPanelSheet>
   );
 }

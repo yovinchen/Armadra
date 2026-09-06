@@ -13,7 +13,8 @@ import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
 import { IconButton } from "@/ui/icon-button";
 import { ScrollArea } from "@/ui/scroll-area";
-import { Sheet, SheetContent, SheetTitle } from "@/ui/sheet";
+import { SheetTitle } from "@/ui/sheet";
+import { WorkPanelSheet } from "../WorkPanelSheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { usePreferencesStore, useT } from "@/app/preferences-store";
 import { useGithubSession } from "@/host/github-session";
@@ -222,242 +223,234 @@ export function GithubDrawer() {
   const openPull = (pull: GithubPullRequest) => focus("pulls", pull.number);
 
   return (
-    <Sheet
+    <WorkPanelSheet
+      panel="github"
       open={open}
-      onOpenChange={(next) => {
-        if (!next) setPanel("github", "closed");
-      }}
+      onClose={() => setPanel("github", "closed")}
     >
-      <SheetContent
-        side="right"
-        showCloseButton={false}
-        aria-describedby={undefined}
-        className="max-w-full gap-0 p-0 data-[side=right]:w-[min(100vw,var(--scm-w))] data-[side=right]:sm:max-w-none"
-      >
-        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-3">
-          <SheetTitle className="shrink-0 truncate text-[13px] font-semibold">
-            {t("github.title")}
-          </SheetTitle>
-          {state.status === "ready" && !canWrite && (
-            <Badge variant="outline" className="ml-2 truncate">
-              {t("github.readOnly")}
-            </Badge>
-          )}
-          <div className="flex-1" />
-          {client && (
-            <IconButton label={t("github.reload")} onClick={invalidate}>
-              <RotateCw />
-            </IconButton>
-          )}
-          <IconButton
-            label={t("github.close")}
-            onClick={() => setPanel("github", "closed")}
-          >
-            <X />
+      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-3">
+        <SheetTitle className="shrink-0 truncate text-[13px] font-semibold">
+          {t("github.title")}
+        </SheetTitle>
+        {state.status === "ready" && !canWrite && (
+          <Badge variant="outline" className="ml-2 truncate">
+            {t("github.readOnly")}
+          </Badge>
+        )}
+        <div className="flex-1" />
+        {client && (
+          <IconButton label={t("github.reload")} onClick={invalidate}>
+            <RotateCw />
           </IconButton>
-        </div>
+        )}
+        <IconButton
+          label={t("github.close")}
+          onClick={() => setPanel("github", "closed")}
+        >
+          <X />
+        </IconButton>
+      </div>
 
-        {blocked ? (
-          <div
-            role="status"
-            className="min-w-0 space-y-3 p-4 text-[13px] leading-5"
-          >
-            <p className="text-muted-foreground">
-              {t(`github.blocked.${blocked}`)}
-            </p>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="min-h-10"
-              onClick={() => {
-                setPanel("github", "closed");
-                usePreferencesStore
-                  .getState()
-                  .setLastSettingsSection(
-                    blocked === "noCredential" ? "github" : "host",
-                  );
-                setPanel("settings", true);
-              }}
-            >
-              {t(
-                blocked === "noCredential"
-                  ? "github.blocked.credentialAction"
-                  : "github.blocked.action",
-              )}
-            </Button>
-          </div>
-        ) : !client ? (
-          <p role="status" className="p-4 text-[13px] text-muted-foreground">
-            {t("github.loading")}
+      {blocked ? (
+        <div
+          role="status"
+          className="min-w-0 space-y-3 p-4 text-[13px] leading-5"
+        >
+          <p className="text-muted-foreground">
+            {t(`github.blocked.${blocked}`)}
           </p>
-        ) : (
-          <Tabs
-            value={tab}
-            onValueChange={(value) => {
-              setTab(value as GithubTab);
-              focus(value as GithubTab, null);
+          <Button
+            size="sm"
+            variant="secondary"
+            className="min-h-10"
+            onClick={() => {
+              setPanel("github", "closed");
+              usePreferencesStore
+                .getState()
+                .setLastSettingsSection(
+                  blocked === "noCredential" ? "github" : "host",
+                );
+              setPanel("settings", true);
             }}
-            className="min-h-0 min-w-0 flex-1 gap-0"
           >
-            <TabsList
-              className="h-10 w-full shrink-0 rounded-none border-b border-border"
-              variant="line"
-            >
-              {(["issues", "pulls"] as const).map((value) => (
-                <TabsTrigger
-                  key={value}
-                  value={value}
-                  className="min-w-0 text-xs"
-                >
-                  {t(`github.tab.${value}`)}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-
-            <ScrollArea className="min-h-0 flex-1">
-              <RepositoryPicker
-                remoteUrl={remoteUrl}
-                onRemoteUrl={setRemoteUrl}
-                onResolve={() => setResolveUrl(remoteUrl.trim())}
-                busy={resolved.isFetching}
-                resolved={resolved.data}
-              />
-              {resolved.isError && (
-                <p
-                  role="status"
-                  className="px-3 py-2 text-[12px] text-destructive"
-                >
-                  {t(failureKey(resolved.error))}
-                </p>
-              )}
-              {repository && (
-                <FilterBar
-                  tab={tab}
-                  value={draft}
-                  onChange={setDraft}
-                  onApply={() => setApplied(draft)}
-                  busy={busy}
-                />
-              )}
-
-              <TabsContent
-                value="issues"
-                className="mt-0 min-w-0 data-[state=inactive]:hidden"
+            {t(
+              blocked === "noCredential"
+                ? "github.blocked.credentialAction"
+                : "github.blocked.action",
+            )}
+          </Button>
+        </div>
+      ) : !client ? (
+        <p role="status" className="p-4 text-[13px] text-muted-foreground">
+          {t("github.loading")}
+        </p>
+      ) : (
+        <Tabs
+          value={tab}
+          onValueChange={(value) => {
+            setTab(value as GithubTab);
+            focus(value as GithubTab, null);
+          }}
+          className="min-h-0 min-w-0 flex-1 gap-0"
+        >
+          <TabsList
+            className="h-10 w-full shrink-0 rounded-none border-b border-border"
+            variant="line"
+          >
+            {(["issues", "pulls"] as const).map((value) => (
+              <TabsTrigger
+                key={value}
+                value={value}
+                className="min-w-0 text-xs"
               >
-                {!repository ? (
-                  <p className="p-3 text-[12px] text-muted-foreground">
-                    {t("github.noRepository")}
-                  </p>
-                ) : focusNumber !== null && focusTab === "issues" ? (
-                  <IssueDetail
-                    client={client}
-                    workspaceId={workspaceId ?? ""}
-                    repository={repository}
-                    number={focusNumber}
-                    locale={locale}
-                    canWrite={canWrite}
-                    open={open}
-                    onBack={() => focus("issues", null)}
-                  />
-                ) : (
-                  <>
-                    <div className="min-w-0 px-3 pt-3">
-                      <StatusMappingEditor
-                        client={client}
-                        repository={repository}
-                        mapping={mapping.data}
-                        canWrite={canWrite}
+                {t(`github.tab.${value}`)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          <ScrollArea className="min-h-0 flex-1">
+            <RepositoryPicker
+              remoteUrl={remoteUrl}
+              onRemoteUrl={setRemoteUrl}
+              onResolve={() => setResolveUrl(remoteUrl.trim())}
+              busy={resolved.isFetching}
+              resolved={resolved.data}
+            />
+            {resolved.isError && (
+              <p
+                role="status"
+                className="px-3 py-2 text-[12px] text-destructive"
+              >
+                {t(failureKey(resolved.error))}
+              </p>
+            )}
+            {repository && (
+              <FilterBar
+                tab={tab}
+                value={draft}
+                onChange={setDraft}
+                onApply={() => setApplied(draft)}
+                busy={busy}
+              />
+            )}
+
+            <TabsContent
+              value="issues"
+              className="mt-0 min-w-0 data-[state=inactive]:hidden"
+            >
+              {!repository ? (
+                <p className="p-3 text-[12px] text-muted-foreground">
+                  {t("github.noRepository")}
+                </p>
+              ) : focusNumber !== null && focusTab === "issues" ? (
+                <IssueDetail
+                  client={client}
+                  workspaceId={workspaceId ?? ""}
+                  repository={repository}
+                  number={focusNumber}
+                  locale={locale}
+                  canWrite={canWrite}
+                  open={open}
+                  onBack={() => focus("issues", null)}
+                />
+              ) : (
+                <>
+                  <div className="min-w-0 px-3 pt-3">
+                    <StatusMappingEditor
+                      client={client}
+                      repository={repository}
+                      mapping={mapping.data}
+                      canWrite={canWrite}
+                    />
+                  </div>
+                  {issues.isError && (
+                    <p
+                      role="status"
+                      className="px-3 pt-3 text-[12px] text-destructive"
+                    >
+                      {t(failureKey(issues.error))}
+                    </p>
+                  )}
+                  {issues.data && (
+                    <IssueList
+                      page={issues.data}
+                      mapping={mapping.data}
+                      locale={locale}
+                      canWrite={canWrite}
+                      busy={busy}
+                      onOpen={openIssue}
+                      onMove={(request) => move.mutate(request)}
+                      onSetState={(issue, next) =>
+                        setIssueState.mutate({ issue, state: next })
+                      }
+                    />
+                  )}
+                  {canWrite && (
+                    <div className="min-w-0 p-3 pt-0">
+                      <CreateIssueForm
+                        busy={busy}
+                        onCreate={(request) => createIssue.mutate(request)}
                       />
                     </div>
-                    {issues.isError && (
-                      <p
-                        role="status"
-                        className="px-3 pt-3 text-[12px] text-destructive"
-                      >
-                        {t(failureKey(issues.error))}
-                      </p>
-                    )}
-                    {issues.data && (
-                      <IssueList
-                        page={issues.data}
-                        mapping={mapping.data}
-                        locale={locale}
-                        canWrite={canWrite}
-                        busy={busy}
-                        onOpen={openIssue}
-                        onMove={(request) => move.mutate(request)}
-                        onSetState={(issue, next) =>
-                          setIssueState.mutate({ issue, state: next })
-                        }
-                      />
-                    )}
-                    {canWrite && (
-                      <div className="min-w-0 p-3 pt-0">
-                        <CreateIssueForm
-                          busy={busy}
-                          onCreate={(request) => createIssue.mutate(request)}
-                        />
-                      </div>
-                    )}
-                  </>
-                )}
-              </TabsContent>
+                  )}
+                </>
+              )}
+            </TabsContent>
 
-              <TabsContent
-                value="pulls"
-                className="mt-0 min-w-0 data-[state=inactive]:hidden"
-              >
-                {!repository ? (
-                  <p className="p-3 text-[12px] text-muted-foreground">
-                    {t("github.noRepository")}
-                  </p>
-                ) : focusNumber !== null && focusTab === "pulls" ? (
-                  <PullDetail
-                    client={client}
-                    workspaceId={workspaceId ?? ""}
-                    repository={repository}
-                    number={focusNumber}
-                    locale={locale}
-                    canWrite={canWrite}
-                    open={open}
-                    onBack={() => focus("pulls", null)}
-                  />
-                ) : (
-                  <>
-                    {pulls.isError && (
-                      <p
-                        role="status"
-                        className="px-3 pt-3 text-[12px] text-destructive"
-                      >
-                        {t(failureKey(pulls.error))}
-                      </p>
-                    )}
-                    {pulls.data && (
-                      <PullList
-                        page={pulls.data}
-                        locale={locale}
-                        onOpen={openPull}
+            <TabsContent
+              value="pulls"
+              className="mt-0 min-w-0 data-[state=inactive]:hidden"
+            >
+              {!repository ? (
+                <p className="p-3 text-[12px] text-muted-foreground">
+                  {t("github.noRepository")}
+                </p>
+              ) : focusNumber !== null && focusTab === "pulls" ? (
+                <PullDetail
+                  client={client}
+                  workspaceId={workspaceId ?? ""}
+                  repository={repository}
+                  number={focusNumber}
+                  locale={locale}
+                  canWrite={canWrite}
+                  open={open}
+                  onBack={() => focus("pulls", null)}
+                />
+              ) : (
+                <>
+                  {pulls.isError && (
+                    <p
+                      role="status"
+                      className="px-3 pt-3 text-[12px] text-destructive"
+                    >
+                      {t(failureKey(pulls.error))}
+                    </p>
+                  )}
+                  {pulls.data && (
+                    <PullList
+                      page={pulls.data}
+                      locale={locale}
+                      onOpen={openPull}
+                    />
+                  )}
+                  {canWrite && (
+                    <div className="min-w-0 p-3 pt-0">
+                      <CreatePullForm
+                        busy={busy}
+                        workspaceId={workspaceId ?? ""}
+                        defaultBaseRef={
+                          resolved.data?.repository?.defaultBranch ?? ""
+                        }
+                        onCreate={(input) => createPull.mutate(input)}
                       />
-                    )}
-                    {canWrite && (
-                      <div className="min-w-0 p-3 pt-0">
-                        <CreatePullForm
-                          busy={busy}
-                          workspaceId={workspaceId ?? ""}
-                          defaultBaseRef={
-                            resolved.data?.repository?.defaultBranch ?? ""
-                          }
-                          onCreate={(input) => createPull.mutate(input)}
-                        />
-                      </div>
-                    )}
-                  </>
-                )}
-              </TabsContent>
-            </ScrollArea>
-          </Tabs>
-        )}
-      </SheetContent>
-    </Sheet>
+                    </div>
+                  )}
+                </>
+              )}
+            </TabsContent>
+          </ScrollArea>
+        </Tabs>
+      )}
+    </WorkPanelSheet>
   );
 }

@@ -14,7 +14,8 @@ import { openFileInEditor } from "@/files/open-editor";
 import { useCanvasStore } from "@/store/canvas-store";
 import { IconButton } from "@/ui/icon-button";
 import { ScrollArea } from "@/ui/scroll-area";
-import { Sheet, SheetContent, SheetTitle } from "@/ui/sheet";
+import { SheetTitle } from "@/ui/sheet";
+import { WorkPanelSheet } from "../WorkPanelSheet";
 
 /**
  * 问题面板（语言服务设计 §1.1「诊断」、§4.2）。
@@ -33,66 +34,58 @@ export function ProblemsPanel() {
   const counts = React.useMemo(() => countDiagnostics(byUri), [byUri]);
 
   return (
-    <Sheet
+    <WorkPanelSheet
+      panel="problems"
       open={mode === "drawer"}
-      onOpenChange={(next) => {
-        if (!next) setPanel("problems", "closed");
-      }}
+      onClose={() => setPanel("problems", "closed")}
     >
-      <SheetContent
-        side="right"
-        showCloseButton={false}
-        aria-describedby={undefined}
-        className="max-w-full gap-0 p-0 data-[side=right]:w-[min(100vw,var(--drawer-w))] data-[side=right]:sm:max-w-none"
-      >
-        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-3">
-          <SheetTitle className="flex-1 truncate text-[13px] font-semibold">
-            {t("problems.title")}
-          </SheetTitle>
-          <span className="text-[length:var(--text-caption)] text-muted-foreground">
-            {t("problems.summary", {
-              errors: String(counts.errors),
-              warnings: String(counts.warnings),
-            })}
-          </span>
-          <IconButton
-            label={t("problems.close")}
-            onClick={() => setPanel("problems", "closed")}
-          >
-            <X />
-          </IconButton>
-        </div>
+      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-3">
+        <SheetTitle className="flex-1 truncate text-[13px] font-semibold">
+          {t("problems.title")}
+        </SheetTitle>
+        <span className="text-[length:var(--text-caption)] text-muted-foreground">
+          {t("problems.summary", {
+            errors: String(counts.errors),
+            warnings: String(counts.warnings),
+          })}
+        </span>
+        <IconButton
+          label={t("problems.close")}
+          onClick={() => setPanel("problems", "closed")}
+        >
+          <X />
+        </IconButton>
+      </div>
 
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="flex flex-col gap-3 p-3">
-            {groups.length === 0 && (
-              <p className="text-[12px] text-muted-foreground">
-                {t("problems.empty")}
-              </p>
-            )}
-            {groups.map((group) => {
-              const path = pathOfUri(group.uri);
-              return (
-                <div key={group.uri} className="min-w-0">
-                  <p className="truncate pb-1 text-[12px] font-medium">
-                    {path ?? group.uri}
-                  </p>
-                  <ul className="flex flex-col">
-                    {group.diagnostics.map((diagnostic, index) => (
-                      <DiagnosticRow
-                        key={`${diagnostic.range.start.line}:${diagnostic.range.start.character}:${index}`}
-                        diagnostic={diagnostic}
-                        path={path}
-                      />
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
-          </div>
-        </ScrollArea>
-      </SheetContent>
-    </Sheet>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="flex flex-col gap-3 p-3">
+          {groups.length === 0 && (
+            <p className="text-[12px] text-muted-foreground">
+              {t("problems.empty")}
+            </p>
+          )}
+          {groups.map((group) => {
+            const path = pathOfUri(group.uri);
+            return (
+              <div key={group.uri} className="min-w-0">
+                <p className="truncate pb-1 text-[12px] font-medium">
+                  {path ?? group.uri}
+                </p>
+                <ul className="flex flex-col">
+                  {group.diagnostics.map((diagnostic, index) => (
+                    <DiagnosticRow
+                      key={`${diagnostic.range.start.line}:${diagnostic.range.start.character}:${index}`}
+                      diagnostic={diagnostic}
+                      path={path}
+                    />
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      </ScrollArea>
+    </WorkPanelSheet>
   );
 }
 

@@ -23,7 +23,8 @@ import { ProviderCard } from "./usage/ProviderCard";
 import { IconButton } from "../ui/icon-button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Separator } from "../ui/separator";
-import { Sheet, SheetContent, SheetTitle } from "../ui/sheet";
+import { SheetTitle } from "../ui/sheet";
+import { WorkPanelSheet } from "./WorkPanelSheet";
 
 export function UsageDashboard() {
   const mode = useCanvasStore((state) => state.panels.usage);
@@ -78,23 +79,14 @@ export function UsageDashboard() {
   }
 
   return (
-    <Sheet
+    <WorkPanelSheet
+      panel="usage"
       open
-      modal={false}
-      onOpenChange={(open) => {
-        if (!open) setPanel("usage", "closed");
-      }}
+      onClose={() => setPanel("usage", "closed")}
     >
-      <SheetContent
-        side="right"
-        showCloseButton={false}
-        aria-describedby={undefined}
-        className="w-[400px] gap-0 p-0 sm:max-w-none"
-      >
-        {header(SheetTitle)}
-        {body}
-      </SheetContent>
-    </Sheet>
+      {header(SheetTitle)}
+      {body}
+    </WorkPanelSheet>
   );
 }
 

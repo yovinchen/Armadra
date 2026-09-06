@@ -187,6 +187,34 @@ describe("面板", () => {
       explorer: "closed",
     });
   });
+
+  /**
+   * 右侧工作面板共用同一块地方（画布平台设计 §4）。两个抽屉同时开着时后开的
+   * 那个正好压在前一个上，用户看到的是「点了没反应」。
+   */
+  it("右侧抽屉一次只开一个", () => {
+    state().setPanel("scm", "drawer");
+    state().setPanel("explorer", "drawer");
+    expect(state().panels).toMatchObject({ scm: "closed", explorer: "drawer" });
+    state().setPanel("usage", "drawer");
+    expect(state().panels).toMatchObject({
+      explorer: "closed",
+      usage: "drawer",
+    });
+  });
+
+  it("pin 成浮卡的不被别的抽屉挤掉", () => {
+    state().setPanel("explorer", "pinned");
+    state().setPanel("scm", "drawer");
+    expect(state().panels).toMatchObject({ explorer: "pinned", scm: "drawer" });
+  });
+
+  it("左侧栏和对话框不参与右侧那条规则", () => {
+    state().setPanel("scm", "drawer");
+    state().setPanel("sidebar", "open");
+    state().setPanel("palette", true);
+    expect(state().panels).toMatchObject({ scm: "drawer", palette: true });
+  });
 });
 
 describe("选择", () => {

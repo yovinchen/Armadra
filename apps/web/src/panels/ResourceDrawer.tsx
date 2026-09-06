@@ -14,7 +14,8 @@ import { RotateCw, X } from "lucide-react";
 import { useT } from "../app/preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
 import { ScrollArea } from "../ui/scroll-area";
-import { Sheet, SheetContent, SheetTitle } from "../ui/sheet";
+import { SheetTitle } from "../ui/sheet";
+import { WorkPanelSheet } from "./WorkPanelSheet";
 import { IconButton } from "../ui/icon-button";
 import { ComponentList } from "./resources/ComponentList";
 import { HostCard } from "./resources/HostCard";
@@ -35,86 +36,78 @@ export function ResourceDrawer() {
   const { snapshot, error, loading, refresh } = useResources(workspaceId, open);
 
   return (
-    <Sheet
+    <WorkPanelSheet
+      panel="resources"
       open={open}
-      onOpenChange={(next) => {
-        if (!next) setPanel("resources", "closed");
-      }}
+      onClose={() => setPanel("resources", "closed")}
     >
-      <SheetContent
-        side="right"
-        showCloseButton={false}
-        aria-describedby={undefined}
-        className="max-w-full gap-0 p-0 data-[side=right]:w-[min(100vw,var(--drawer-w))] data-[side=right]:sm:max-w-none"
-      >
-        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-3">
-          <SheetTitle className="flex-1 truncate text-[13px] font-semibold">
-            {t("resources.title")}
-          </SheetTitle>
-          <IconButton label={t("resources.refresh")} onClick={refresh}>
-            <RotateCw />
-          </IconButton>
-          <IconButton
-            label={t("resources.close")}
-            onClick={() => setPanel("resources", "closed")}
-          >
-            <X />
-          </IconButton>
-        </div>
+      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-3">
+        <SheetTitle className="flex-1 truncate text-[13px] font-semibold">
+          {t("resources.title")}
+        </SheetTitle>
+        <IconButton label={t("resources.refresh")} onClick={refresh}>
+          <RotateCw />
+        </IconButton>
+        <IconButton
+          label={t("resources.close")}
+          onClick={() => setPanel("resources", "closed")}
+        >
+          <X />
+        </IconButton>
+      </div>
 
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="flex flex-col gap-3 p-3">
-            {error && !snapshot && (
-              <p className="text-[12px] text-[var(--danger)]">{error}</p>
-            )}
-            {/* 还没有过样本时不画表格骨架：等第一份真实数字，别先显示一屏 0。 */}
-            {loading && !snapshot && (
-              <p className="text-[12px] text-muted-foreground">
-                {t("resources.loading")}
-              </p>
-            )}
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="flex flex-col gap-3 p-3">
+          {error && !snapshot && (
+            <p className="text-[12px] text-[var(--danger)]">{error}</p>
+          )}
+          {/* 还没有过样本时不画表格骨架：等第一份真实数字，别先显示一屏 0。 */}
+          {loading && !snapshot && (
+            <p className="text-[12px] text-muted-foreground">
+              {t("resources.loading")}
+            </p>
+          )}
 
-            {snapshot && (
-              <>
-                <HostCard host={snapshot.host} />
+          {snapshot && (
+            <>
+              <HostCard host={snapshot.host} />
 
-                <section>
-                  <h3 className="mb-1 text-[13px] font-semibold">
-                    {t("resources.sessions")}
-                  </h3>
-                  <SessionTable
-                    sessions={snapshot.sessions}
-                    sort={sort}
-                    onSorted={setSort}
+              <section>
+                <h3 className="mb-1 text-[13px] font-semibold">
+                  {t("resources.sessions")}
+                </h3>
+                <SessionTable
+                  sessions={snapshot.sessions}
+                  sort={sort}
+                  onSorted={setSort}
+                />
+              </section>
+
+              <section>
+                <h3 className="mb-1 text-[13px] font-semibold">
+                  {t("resources.components")}
+                </h3>
+                <ComponentList components={snapshot.components} />
+              </section>
+
+              <section>
+                <h3 className="mb-1 text-[13px] font-semibold">
+                  {t("resources.orphans")}
+                </h3>
+                {workspaceId && (
+                  <OrphanList
+                    workspaceId={workspaceId}
+                    orphans={snapshot.orphans}
+                    onChanged={refresh}
                   />
-                </section>
+                )}
+              </section>
 
-                <section>
-                  <h3 className="mb-1 text-[13px] font-semibold">
-                    {t("resources.components")}
-                  </h3>
-                  <ComponentList components={snapshot.components} />
-                </section>
-
-                <section>
-                  <h3 className="mb-1 text-[13px] font-semibold">
-                    {t("resources.orphans")}
-                  </h3>
-                  {workspaceId && (
-                    <OrphanList
-                      workspaceId={workspaceId}
-                      orphans={snapshot.orphans}
-                      onChanged={refresh}
-                    />
-                  )}
-                </section>
-
-                <PowerSection power={snapshot.power} onChanged={refresh} />
-              </>
-            )}
-          </div>
-        </ScrollArea>
-      </SheetContent>
-    </Sheet>
+              <PowerSection power={snapshot.power} onChanged={refresh} />
+            </>
+          )}
+        </div>
+      </ScrollArea>
+    </WorkPanelSheet>
   );
 }

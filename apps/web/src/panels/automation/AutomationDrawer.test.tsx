@@ -43,8 +43,8 @@ vi.mock("@/host/automation-session", () => {
   return { useAutomationSession };
 });
 
-vi.mock("../viewport", () => ({
-  currentViewportCenter: () => ({ x: 0, y: 0 }),
+vi.mock("@/canvas/placement", () => ({
+  nodeDropPosition: () => ({ x: 0, y: 0 }),
 }));
 
 import { AutomationDrawer, failureKey } from "./AutomationDrawer";

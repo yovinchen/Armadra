@@ -34,7 +34,8 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { IconButton } from "../ui/icon-button";
 import { ScrollArea } from "../ui/scroll-area";
-import { Sheet, SheetContent, SheetTitle } from "../ui/sheet";
+import { SheetTitle } from "../ui/sheet";
+import { WorkPanelSheet } from "./WorkPanelSheet";
 import { ExecutionHostBadge } from "./ExecutionHostBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import {
@@ -58,7 +59,7 @@ import {
   useRepositories,
   type RepositorySelection,
 } from "./git/Repositories";
-import { currentViewportCenter } from "./viewport";
+import { nodeDropPosition } from "@/canvas/placement";
 import { ChangesHunks } from "./git/ChangesHunks";
 import { invalidateGitQueries } from "./git/queries";
 import { CommitMessageAssistant } from "./git/CommitMessageAssistant";
@@ -307,7 +308,7 @@ export function SourceControlDrawer() {
     if (!workspace) return;
     addNode("diff", {
       title: path,
-      position: currentViewportCenter(),
+      position: nodeDropPosition("diff"),
       data: {
         kind: "diff",
         // 路径是相对被选中的仓库的，diff 节点也必须开在那个仓库上。
@@ -347,300 +348,292 @@ export function SourceControlDrawer() {
 
   return (
     <>
-      <Sheet
+      <WorkPanelSheet
+        panel="scm"
         open={open}
-        onOpenChange={(next) => {
-          if (!next) setPanel("scm", "closed");
-        }}
+        onClose={() => setPanel("scm", "closed")}
       >
-        <SheetContent
-          side="right"
-          showCloseButton={false}
-          aria-describedby={undefined}
-          className="max-w-full gap-0 p-0 data-[side=right]:w-[min(100vw,var(--scm-w))] data-[side=right]:sm:max-w-none"
-        >
-          <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-3">
-            <SheetTitle className="shrink-0 truncate text-[13px] font-semibold">
-              {t("scm.title")}
-            </SheetTitle>
-            <ExecutionHostBadge />
-            {status.data?.branch && (
-              <Badge
-                variant="outline"
-                className="ml-2 max-w-[35%] gap-1 truncate font-mono"
-              >
-                <GitBranch />
-                {status.data.branch}
-              </Badge>
-            )}
-            {Boolean(status.data?.ahead) && (
-              <Badge variant="ghost" className="tabular-nums">
-                ↑{status.data?.ahead}
-              </Badge>
-            )}
-            {Boolean(status.data?.behind) && (
-              <Badge variant="ghost" className="tabular-nums">
-                ↓{status.data?.behind}
-              </Badge>
-            )}
-            <div className="flex-1" />
-            <IconButton label={t("scm.refresh")} onClick={invalidate}>
-              <RotateCw />
-            </IconButton>
-            <IconButton
-              label={t("scm.close")}
-              onClick={() => setPanel("scm", "closed")}
+        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-3">
+          <SheetTitle className="shrink-0 truncate text-[13px] font-semibold">
+            {t("scm.title")}
+          </SheetTitle>
+          <ExecutionHostBadge />
+          {status.data?.branch && (
+            <Badge
+              variant="outline"
+              className="ml-2 max-w-[35%] gap-1 truncate font-mono"
             >
-              <X />
-            </IconButton>
-          </div>
-
-          {records.length > 1 && (
-            <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5">
-              <RepositorySwitcher
-                repositories={records}
-                value={selection}
-                allowAll={tab === "changes"}
-                pending={repositories.isPending}
-                onChange={setSelection}
-              />
-            </div>
+              <GitBranch />
+              {status.data.branch}
+            </Badge>
           )}
-          {compact && !drilled && (
-            <nav
-              aria-label={t("scm.sections")}
-              data-slot="scm-sections"
-              className="min-h-0 flex-1 overflow-y-auto"
-            >
-              {SCM_SECTIONS.map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  className="flex min-h-12 w-full items-center gap-2 border-b border-border/60 px-4 text-left text-[13px] hover:bg-muted"
-                  onClick={() => {
-                    setTab(value);
-                    setDrilled(true);
-                  }}
-                >
-                  <span className="min-w-0 flex-1 truncate">
-                    {t(`gitRepo.${value}`)}
-                  </span>
-                  {value === "changes" && files.length > 0 && (
-                    <Badge variant="ghost" className="tabular-nums">
-                      {files.length}
-                    </Badge>
-                  )}
-                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                </button>
-              ))}
-            </nav>
+          {Boolean(status.data?.ahead) && (
+            <Badge variant="ghost" className="tabular-nums">
+              ↑{status.data?.ahead}
+            </Badge>
           )}
-          {compact && drilled && (
-            <div className="flex min-h-12 shrink-0 items-center gap-1 border-b border-border px-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                className="min-h-10 shrink-0 px-2"
-                onClick={() => (hunk ? setHunk(null) : setDrilled(false))}
-              >
-                <ChevronLeft aria-hidden />
-                <span>{t("scm.back")}</span>
-              </Button>
-              <span className="min-w-0 flex-1 truncate text-[13px]">
-                {hunk ? hunk.file : t(`gitRepo.${tab}`)}
-              </span>
-            </div>
+          {Boolean(status.data?.behind) && (
+            <Badge variant="ghost" className="tabular-nums">
+              ↓{status.data?.behind}
+            </Badge>
           )}
-          <Tabs
-            value={tab}
-            onValueChange={(value) => {
-              const next = value as "changes" | RepositoryTab;
-              setTab(next);
-              // 只有 Changes 有聚合视图；离开时落回一个明确的仓库。
-              if (next !== "changes" && selection === ALL_REPOSITORIES)
-                setSelection(".");
-            }}
-            className={cn(
-              "min-h-0 min-w-0 flex-1 gap-0",
-              compact && !drilled && "hidden",
-            )}
+          <div className="flex-1" />
+          <IconButton label={t("scm.refresh")} onClick={invalidate}>
+            <RotateCw />
+          </IconButton>
+          <IconButton
+            label={t("scm.close")}
+            onClick={() => setPanel("scm", "closed")}
           >
-            <TabsList
-              className={cn(
-                "h-10 w-full shrink-0 rounded-none border-b border-border",
-                compact && "hidden",
-              )}
-              variant="line"
-            >
-              {SCM_SECTIONS.map((value) => (
-                <TabsTrigger
-                  key={value}
-                  value={value}
-                  className="min-w-0 text-xs"
-                >
+            <X />
+          </IconButton>
+        </div>
+
+        {records.length > 1 && (
+          <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5">
+            <RepositorySwitcher
+              repositories={records}
+              value={selection}
+              allowAll={tab === "changes"}
+              pending={repositories.isPending}
+              onChange={setSelection}
+            />
+          </div>
+        )}
+        {compact && !drilled && (
+          <nav
+            aria-label={t("scm.sections")}
+            data-slot="scm-sections"
+            className="min-h-0 flex-1 overflow-y-auto"
+          >
+            {SCM_SECTIONS.map((value) => (
+              <button
+                key={value}
+                type="button"
+                className="flex min-h-12 w-full items-center gap-2 border-b border-border/60 px-4 text-left text-[13px] hover:bg-muted"
+                onClick={() => {
+                  setTab(value);
+                  setDrilled(true);
+                }}
+              >
+                <span className="min-w-0 flex-1 truncate">
                   {t(`gitRepo.${value}`)}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            <TabsContent
-              value="changes"
-              className="mt-0 flex min-h-0 flex-col data-[state=inactive]:hidden"
+                </span>
+                {value === "changes" && files.length > 0 && (
+                  <Badge variant="ghost" className="tabular-nums">
+                    {files.length}
+                  </Badge>
+                )}
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+              </button>
+            ))}
+          </nav>
+        )}
+        {compact && drilled && (
+          <div className="flex min-h-12 shrink-0 items-center gap-1 border-b border-border px-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="min-h-10 shrink-0 px-2"
+              onClick={() => (hunk ? setHunk(null) : setDrilled(false))}
             >
-              <ScrollArea className="min-h-0 flex-1">
-                {workspaceId && status.data?.repository && (
-                  <details className="m-3 rounded-md border border-border p-2 text-xs">
-                    <summary className="cursor-pointer">
-                      {t("gitMessage.title")}
-                    </summary>
-                    <CommitMessageAssistant
-                      workspaceId={workspaceId}
-                      message={message}
-                      onFill={setMessage}
-                      providers={runtimeApi.gitMessageProviders}
-                      source={runtimeApi.gitMessageSource}
-                      generate={runtimeApi.gitMessageGenerate}
-                    />
-                  </details>
-                )}
-                {hunk && hunk.workspaceId === workspaceId && (
-                  <section className="border-b border-border p-3">
-                    {!compact && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setHunk(null)}
-                      >
-                        {t("gitHunk.close")}
-                      </Button>
-                    )}
-                    <ChangesHunks
-                      key={`${hunk.workspaceId}:${hunk.scope}:${hunk.file}`}
-                      {...hunk}
-                      load={runtimeApi.gitHunks}
-                      apply={runtimeApi.gitApplyHunk}
-                      onChanged={(id) => {
-                        invalidateGitQueries(queryClient, id);
-                      }}
-                    />
-                  </section>
-                )}
-                {/* 多仓库时左侧按仓库分组，点一行就切换到那个仓库。 */}
-                {records.length > 1 && (
-                  <div className="border-b border-border p-2">
-                    <RepositoryList
-                      repositories={records}
-                      value={selection}
-                      allowAll
-                      onChange={setSelection}
-                    />
-                  </div>
-                )}
-                {aggregate ? (
-                  everything.isPending ? (
-                    <p role="status" className="px-4 py-3 text-xs">
-                      {t("gitRepo.loading")}
-                    </p>
-                  ) : everything.error ? (
-                    <p
-                      role="alert"
-                      className="break-words px-4 py-3 text-xs text-destructive"
+              <ChevronLeft aria-hidden />
+              <span>{t("scm.back")}</span>
+            </Button>
+            <span className="min-w-0 flex-1 truncate text-[13px]">
+              {hunk ? hunk.file : t(`gitRepo.${tab}`)}
+            </span>
+          </div>
+        )}
+        <Tabs
+          value={tab}
+          onValueChange={(value) => {
+            const next = value as "changes" | RepositoryTab;
+            setTab(next);
+            // 只有 Changes 有聚合视图；离开时落回一个明确的仓库。
+            if (next !== "changes" && selection === ALL_REPOSITORIES)
+              setSelection(".");
+          }}
+          className={cn(
+            "min-h-0 min-w-0 flex-1 gap-0",
+            compact && !drilled && "hidden",
+          )}
+        >
+          <TabsList
+            className={cn(
+              "h-10 w-full shrink-0 rounded-none border-b border-border",
+              compact && "hidden",
+            )}
+            variant="line"
+          >
+            {SCM_SECTIONS.map((value) => (
+              <TabsTrigger
+                key={value}
+                value={value}
+                className="min-w-0 text-xs"
+              >
+                {t(`gitRepo.${value}`)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          <TabsContent
+            value="changes"
+            className="mt-0 flex min-h-0 flex-col data-[state=inactive]:hidden"
+          >
+            <ScrollArea className="min-h-0 flex-1">
+              {workspaceId && status.data?.repository && (
+                <details className="m-3 rounded-md border border-border p-2 text-xs">
+                  <summary className="cursor-pointer">
+                    {t("gitMessage.title")}
+                  </summary>
+                  <CommitMessageAssistant
+                    workspaceId={workspaceId}
+                    message={message}
+                    onFill={setMessage}
+                    providers={runtimeApi.gitMessageProviders}
+                    source={runtimeApi.gitMessageSource}
+                    generate={runtimeApi.gitMessageGenerate}
+                  />
+                </details>
+              )}
+              {hunk && hunk.workspaceId === workspaceId && (
+                <section className="border-b border-border p-3">
+                  {!compact && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setHunk(null)}
                     >
-                      {everything.error.message}
-                    </p>
-                  ) : files.length === 0 ? (
-                    <p className="px-4 py-3 text-xs text-muted-foreground">
-                      {t("scm.clean")}
-                    </p>
-                  ) : (
-                    <>
-                      <p className="px-4 pt-3 text-xs text-muted-foreground">
-                        {t("gitRepo.aggregateReadOnly")}
-                      </p>
-                      {section(t("scm.staged"), staged, "staged")}
-                      {section(t("scm.changes"), changes, "worktree")}
-                    </>
-                  )
-                ) : compact && hunk ? null : status.isPending ? (
+                      {t("gitHunk.close")}
+                    </Button>
+                  )}
+                  <ChangesHunks
+                    key={`${hunk.workspaceId}:${hunk.scope}:${hunk.file}`}
+                    {...hunk}
+                    load={runtimeApi.gitHunks}
+                    apply={runtimeApi.gitApplyHunk}
+                    onChanged={(id) => {
+                      invalidateGitQueries(queryClient, id);
+                    }}
+                  />
+                </section>
+              )}
+              {/* 多仓库时左侧按仓库分组，点一行就切换到那个仓库。 */}
+              {records.length > 1 && (
+                <div className="border-b border-border p-2">
+                  <RepositoryList
+                    repositories={records}
+                    value={selection}
+                    allowAll
+                    onChange={setSelection}
+                  />
+                </div>
+              )}
+              {aggregate ? (
+                everything.isPending ? (
                   <p role="status" className="px-4 py-3 text-xs">
                     {t("gitRepo.loading")}
                   </p>
-                ) : status.error ? (
+                ) : everything.error ? (
                   <p
                     role="alert"
                     className="break-words px-4 py-3 text-xs text-destructive"
                   >
-                    {status.error.message}
+                    {everything.error.message}
                   </p>
-                ) : status.data?.repository === false ? (
-                  <div className="space-y-2 px-4 py-3">
-                    <p className="text-xs text-muted-foreground">
-                      {t("scm.noRepository")}
-                    </p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={init.isPending}
-                      onClick={() => setConfirmInit(true)}
-                    >
-                      {t("scm.init")}
-                    </Button>
-                  </div>
                 ) : files.length === 0 ? (
                   <p className="px-4 py-3 text-xs text-muted-foreground">
                     {t("scm.clean")}
                   </p>
                 ) : (
                   <>
+                    <p className="px-4 pt-3 text-xs text-muted-foreground">
+                      {t("gitRepo.aggregateReadOnly")}
+                    </p>
                     {section(t("scm.staged"), staged, "staged")}
                     {section(t("scm.changes"), changes, "worktree")}
                   </>
-                )}
-              </ScrollArea>
+                )
+              ) : compact && hunk ? null : status.isPending ? (
+                <p role="status" className="px-4 py-3 text-xs">
+                  {t("gitRepo.loading")}
+                </p>
+              ) : status.error ? (
+                <p
+                  role="alert"
+                  className="break-words px-4 py-3 text-xs text-destructive"
+                >
+                  {status.error.message}
+                </p>
+              ) : status.data?.repository === false ? (
+                <div className="space-y-2 px-4 py-3">
+                  <p className="text-xs text-muted-foreground">
+                    {t("scm.noRepository")}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={init.isPending}
+                    onClick={() => setConfirmInit(true)}
+                  >
+                    {t("scm.init")}
+                  </Button>
+                </div>
+              ) : files.length === 0 ? (
+                <p className="px-4 py-3 text-xs text-muted-foreground">
+                  {t("scm.clean")}
+                </p>
+              ) : (
+                <>
+                  {section(t("scm.staged"), staged, "staged")}
+                  {section(t("scm.changes"), changes, "worktree")}
+                </>
+              )}
+            </ScrollArea>
 
-              <CommitComposer
-                message={message}
-                setMessage={setMessage}
-                head={head}
-                amend={amend}
-                amendable={amendable}
-                toggleAmend={toggleAmend}
-                acknowledgePublished={acknowledgePublished}
-                setAcknowledgePublished={setAcknowledgePublished}
-                canCommit={canCommit}
-                commit={commit.mutate}
-                compact={compact}
-                hunkOpen={Boolean(hunk)}
-              />
+            <CommitComposer
+              message={message}
+              setMessage={setMessage}
+              head={head}
+              amend={amend}
+              amendable={amendable}
+              toggleAmend={toggleAmend}
+              acknowledgePublished={acknowledgePublished}
+              setAcknowledgePublished={setAcknowledgePublished}
+              canCommit={canCommit}
+              commit={commit.mutate}
+              compact={compact}
+              hunkOpen={Boolean(hunk)}
+            />
+          </TabsContent>
+          {(
+            [
+              "branches",
+              "history",
+              "worktrees",
+              "stashes",
+              "tags",
+              "remotes",
+              "integration",
+            ] as const
+          ).map((value) => (
+            <TabsContent
+              key={value}
+              value={value}
+              className="mt-0 flex min-h-0 min-w-0 flex-col data-[state=inactive]:hidden"
+            >
+              {workspaceId && tab === value && (
+                <GitRepositoryPanel
+                  key={`${workspaceId}:${repositoryPath}`}
+                  workspaceId={workspaceId}
+                  tab={value}
+                  repositoryPath={repositoryPath}
+                />
+              )}
             </TabsContent>
-            {(
-              [
-                "branches",
-                "history",
-                "worktrees",
-                "stashes",
-                "tags",
-                "remotes",
-                "integration",
-              ] as const
-            ).map((value) => (
-              <TabsContent
-                key={value}
-                value={value}
-                className="mt-0 flex min-h-0 min-w-0 flex-col data-[state=inactive]:hidden"
-              >
-                {workspaceId && tab === value && (
-                  <GitRepositoryPanel
-                    key={`${workspaceId}:${repositoryPath}`}
-                    workspaceId={workspaceId}
-                    tab={value}
-                    repositoryPath={repositoryPath}
-                  />
-                )}
-              </TabsContent>
-            ))}
-          </Tabs>
-        </SheetContent>
-      </Sheet>
+          ))}
+        </Tabs>
+      </WorkPanelSheet>
 
       <SourceControlDialogs
         confirmInit={confirmInit}

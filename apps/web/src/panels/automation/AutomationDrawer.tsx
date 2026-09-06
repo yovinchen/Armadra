@@ -11,12 +11,13 @@ import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
 import { IconButton } from "@/ui/icon-button";
 import { ScrollArea } from "@/ui/scroll-area";
-import { Sheet, SheetContent, SheetTitle } from "@/ui/sheet";
+import { SheetTitle } from "@/ui/sheet";
+import { WorkPanelSheet } from "../WorkPanelSheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { usePreferencesStore, useT } from "@/app/preferences-store";
 import { useAutomationSession } from "@/host/automation-session";
 import { useCanvasStore } from "@/store/canvas-store";
-import { currentViewportCenter } from "../viewport";
+import { nodeDropPosition } from "@/canvas/placement";
 import { CreatePlanForm, type CreatePlanRequest } from "./CreatePlanForm";
 import { PlanRow } from "./PlanRow";
 import { RunHistory } from "./RunHistory";
@@ -156,7 +157,7 @@ export function AutomationDrawer() {
         : undefined;
     addNode("automation", {
       title: plan.config?.title || plan.id,
-      position: currentViewportCenter(),
+      position: nodeDropPosition("automation"),
       data: {
         kind: "automation",
         planId: plan.id,
@@ -180,181 +181,173 @@ export function AutomationDrawer() {
   );
 
   return (
-    <Sheet
+    <WorkPanelSheet
+      panel="automation"
       open={open}
-      onOpenChange={(next) => {
-        if (!next) setPanel("automation", "closed");
-      }}
+      onClose={() => setPanel("automation", "closed")}
     >
-      <SheetContent
-        side="right"
-        showCloseButton={false}
-        aria-describedby={undefined}
-        className="max-w-full gap-0 p-0 data-[side=right]:w-[min(100vw,var(--scm-w))] data-[side=right]:sm:max-w-none"
-      >
-        <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-3">
-          <SheetTitle className="shrink-0 truncate text-[13px] font-semibold">
-            {t("automation.title")}
-          </SheetTitle>
-          {state.status === "ready" && !canManage && (
-            <Badge variant="outline" className="ml-2 truncate">
-              {t("automation.readOnly")}
-            </Badge>
-          )}
-          <div className="flex-1" />
-          {client && (
-            <IconButton label={t("automation.reload")} onClick={invalidate}>
-              <RotateCw />
-            </IconButton>
-          )}
-          <IconButton
-            label={t("automation.cancel")}
-            onClick={() => setPanel("automation", "closed")}
-          >
-            <X />
+      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-3">
+        <SheetTitle className="shrink-0 truncate text-[13px] font-semibold">
+          {t("automation.title")}
+        </SheetTitle>
+        {state.status === "ready" && !canManage && (
+          <Badge variant="outline" className="ml-2 truncate">
+            {t("automation.readOnly")}
+          </Badge>
+        )}
+        <div className="flex-1" />
+        {client && (
+          <IconButton label={t("automation.reload")} onClick={invalidate}>
+            <RotateCw />
           </IconButton>
-        </div>
+        )}
+        <IconButton
+          label={t("automation.cancel")}
+          onClick={() => setPanel("automation", "closed")}
+        >
+          <X />
+        </IconButton>
+      </div>
 
-        {blocked ? (
-          <div
-            role="status"
-            className="min-w-0 space-y-3 p-4 text-[13px] leading-5"
-          >
-            <p className="text-muted-foreground">
-              {t(`automation.blocked.${blocked}`)}
-            </p>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="min-h-10"
-              onClick={() => {
-                setPanel("automation", "closed");
-                usePreferencesStore.getState().setLastSettingsSection("host");
-                setPanel("settings", true);
-              }}
-            >
-              {t("automation.blocked.action")}
-            </Button>
-          </div>
-        ) : !client ? (
-          <p role="status" className="p-4 text-[13px] text-muted-foreground">
-            {t("automation.loading")}
+      {blocked ? (
+        <div
+          role="status"
+          className="min-w-0 space-y-3 p-4 text-[13px] leading-5"
+        >
+          <p className="text-muted-foreground">
+            {t(`automation.blocked.${blocked}`)}
           </p>
-        ) : (
-          <Tabs
-            value={tab}
-            onValueChange={(value) =>
-              setTab(value as "plans" | "runs" | "create")
-            }
-            className="min-h-0 min-w-0 flex-1 gap-0"
+          <Button
+            size="sm"
+            variant="secondary"
+            className="min-h-10"
+            onClick={() => {
+              setPanel("automation", "closed");
+              usePreferencesStore.getState().setLastSettingsSection("host");
+              setPanel("settings", true);
+            }}
           >
-            <TabsList
-              className="h-10 w-full shrink-0 rounded-none border-b border-border"
-              variant="line"
-            >
-              {(["plans", "runs", "create"] as const).map((value) => (
-                <TabsTrigger
-                  key={value}
-                  value={value}
-                  className="min-w-0 text-xs"
-                  disabled={value === "create" && !canManage}
-                >
-                  {t(`automation.tab.${value}`)}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+            {t("automation.blocked.action")}
+          </Button>
+        </div>
+      ) : !client ? (
+        <p role="status" className="p-4 text-[13px] text-muted-foreground">
+          {t("automation.loading")}
+        </p>
+      ) : (
+        <Tabs
+          value={tab}
+          onValueChange={(value) =>
+            setTab(value as "plans" | "runs" | "create")
+          }
+          className="min-h-0 min-w-0 flex-1 gap-0"
+        >
+          <TabsList
+            className="h-10 w-full shrink-0 rounded-none border-b border-border"
+            variant="line"
+          >
+            {(["plans", "runs", "create"] as const).map((value) => (
+              <TabsTrigger
+                key={value}
+                value={value}
+                className="min-w-0 text-xs"
+                disabled={value === "create" && !canManage}
+              >
+                {t(`automation.tab.${value}`)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
-            <TabsContent
-              value="plans"
-              className="mt-0 flex min-h-0 flex-col data-[state=inactive]:hidden"
-            >
-              <ScrollArea className="min-h-0 flex-1">
-                <div className="min-w-0 space-y-2 p-3">
-                  {plans.isError && (
-                    <p role="status" className="text-[12px] text-destructive">
-                      {t(failureKey(plans.error))}
-                    </p>
-                  )}
-                  {plans.isSuccess && plans.data.length === 0 && (
-                    <p className="text-[12px] text-muted-foreground">
-                      {t("automation.empty")}
-                    </p>
-                  )}
-                  {plans.data?.map((snapshot) => (
-                    <PlanRow
-                      key={snapshot.plan?.id}
-                      snapshot={snapshot}
-                      locale={locale}
-                      canManage={canManage}
-                      busy={busy}
-                      hasCard={Boolean(cardFor(snapshot.plan?.id ?? ""))}
-                      onActivate={() => activate.mutate(snapshot)}
-                      onPause={() => pause.mutate(snapshot)}
-                      onRunNow={() => runNow.mutate(snapshot)}
-                      onViewRuns={() => revealRuns(snapshot.plan?.id ?? "")}
-                      onShowOnCanvas={() => showOnCanvas(snapshot)}
-                      onDetach={() => {
-                        const card = cardFor(snapshot.plan?.id ?? "");
-                        if (card) removeNodes([card.id]);
-                      }}
-                      onDisableAndDetach={async () => {
-                        await pause.mutateAsync(snapshot).catch(() => null);
-                        const card = cardFor(snapshot.plan?.id ?? "");
-                        if (card) removeNodes([card.id]);
-                      }}
-                    />
-                  ))}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-
-            <TabsContent
-              value="runs"
-              className="mt-0 flex min-h-0 flex-col data-[state=inactive]:hidden"
-            >
-              <ScrollArea className="min-h-0 flex-1">
-                <RunHistory
-                  client={client}
-                  workspaceId={workspaceId ?? ""}
-                  plans={plans.data ?? []}
-                  planId={focused?.plan?.id ?? focusPlanId}
-                  locale={locale}
-                  onSelect={(planId) => focus(planId)}
-                />
-              </ScrollArea>
-            </TabsContent>
-
-            <TabsContent
-              value="create"
-              className="mt-0 flex min-h-0 flex-col data-[state=inactive]:hidden"
-            >
-              <ScrollArea className="min-h-0 flex-1">
-                {canManage && workspaceId ? (
-                  <CreatePlanForm
-                    // A prefilled draft is one request, not a mode: remounting
-                    // on `compose` is what makes a second request start over
-                    // instead of quietly reusing the first one's state.
-                    key={`create-${compose}`}
-                    client={client}
-                    hostId={hostId}
-                    workspaceId={workspaceId}
-                    busy={busy}
-                    prefill={prefill}
-                    onCreate={(request) => {
-                      clearPrefill();
-                      createPlan.mutate(request);
-                    }}
-                  />
-                ) : (
-                  <p className="p-3 text-[12px] text-muted-foreground">
-                    {t("automation.readOnly")}
+          <TabsContent
+            value="plans"
+            className="mt-0 flex min-h-0 flex-col data-[state=inactive]:hidden"
+          >
+            <ScrollArea className="min-h-0 flex-1">
+              <div className="min-w-0 space-y-2 p-3">
+                {plans.isError && (
+                  <p role="status" className="text-[12px] text-destructive">
+                    {t(failureKey(plans.error))}
                   </p>
                 )}
-              </ScrollArea>
-            </TabsContent>
-          </Tabs>
-        )}
-      </SheetContent>
-    </Sheet>
+                {plans.isSuccess && plans.data.length === 0 && (
+                  <p className="text-[12px] text-muted-foreground">
+                    {t("automation.empty")}
+                  </p>
+                )}
+                {plans.data?.map((snapshot) => (
+                  <PlanRow
+                    key={snapshot.plan?.id}
+                    snapshot={snapshot}
+                    locale={locale}
+                    canManage={canManage}
+                    busy={busy}
+                    hasCard={Boolean(cardFor(snapshot.plan?.id ?? ""))}
+                    onActivate={() => activate.mutate(snapshot)}
+                    onPause={() => pause.mutate(snapshot)}
+                    onRunNow={() => runNow.mutate(snapshot)}
+                    onViewRuns={() => revealRuns(snapshot.plan?.id ?? "")}
+                    onShowOnCanvas={() => showOnCanvas(snapshot)}
+                    onDetach={() => {
+                      const card = cardFor(snapshot.plan?.id ?? "");
+                      if (card) removeNodes([card.id]);
+                    }}
+                    onDisableAndDetach={async () => {
+                      await pause.mutateAsync(snapshot).catch(() => null);
+                      const card = cardFor(snapshot.plan?.id ?? "");
+                      if (card) removeNodes([card.id]);
+                    }}
+                  />
+                ))}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent
+            value="runs"
+            className="mt-0 flex min-h-0 flex-col data-[state=inactive]:hidden"
+          >
+            <ScrollArea className="min-h-0 flex-1">
+              <RunHistory
+                client={client}
+                workspaceId={workspaceId ?? ""}
+                plans={plans.data ?? []}
+                planId={focused?.plan?.id ?? focusPlanId}
+                locale={locale}
+                onSelect={(planId) => focus(planId)}
+              />
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent
+            value="create"
+            className="mt-0 flex min-h-0 flex-col data-[state=inactive]:hidden"
+          >
+            <ScrollArea className="min-h-0 flex-1">
+              {canManage && workspaceId ? (
+                <CreatePlanForm
+                  // A prefilled draft is one request, not a mode: remounting
+                  // on `compose` is what makes a second request start over
+                  // instead of quietly reusing the first one's state.
+                  key={`create-${compose}`}
+                  client={client}
+                  hostId={hostId}
+                  workspaceId={workspaceId}
+                  busy={busy}
+                  prefill={prefill}
+                  onCreate={(request) => {
+                    clearPrefill();
+                    createPlan.mutate(request);
+                  }}
+                />
+              ) : (
+                <p className="p-3 text-[12px] text-muted-foreground">
+                  {t("automation.readOnly")}
+                </p>
+              )}
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
+      )}
+    </WorkPanelSheet>
   );
 }
