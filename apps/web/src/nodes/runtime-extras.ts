@@ -1,44 +1,19 @@
-import { runtimeApi } from "@/api/client";
+import { agentGateway } from "@/agent";
 
 /**
- * 权限直答的软引用。
+ * 权限直答。
  *
- * 写文件已经进 `runtimeApi.writeFile`，这里只剩 `answerApproval`：
- * 它的 Runtime 端归另一个 agent，所以保留「client 有就用、没有退回裸
- * fetch」这一层，等那边落定后本文件可以整体删掉。
+ * 走网关而不是直接打 Runtime：agent 域搬到 Host 之后，`POST /api/approvals/
+ * {id}/answer` 会回 409 `ownership_moved`，而记录已经换了一侧（业务迁移
+ * §2.7）。网关按最后一次探到的归属决定往哪边发，调用方不需要知道。
+ *
+ * 答复本身仍然只有执行主机能兑现——待答文件在那台机器上——搬走的只是「谁来
+ * 决定、谁来记下这个决定」。
  */
-
-const RUNTIME_BASE: string =
-  (import.meta.env.VITE_RUNTIME_URL as string | undefined) ??
-  "http://127.0.0.1:43120";
-
-interface OptionalRuntimeApi {
-  answerApproval?: (
-    pendingId: string,
-    decision: "allow" | "deny",
-  ) => Promise<unknown>;
-}
-
-const optional = runtimeApi as unknown as OptionalRuntimeApi;
-
-/** 权限直答：`POST /api/approvals/{pendingId}/answer`（§5.5）。 */
 export async function answerApproval(
+  workspaceId: string,
   pendingId: string,
   decision: "allow" | "deny",
 ): Promise<void> {
-  if (typeof optional.answerApproval === "function") {
-    await optional.answerApproval(pendingId, decision);
-    return;
-  }
-  const response = await fetch(
-    `${RUNTIME_BASE}/api/approvals/${encodeURIComponent(pendingId)}/answer`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision }),
-    },
-  );
-  if (!response.ok) {
-    throw new Error(`approval answer failed (${response.status})`);
-  }
+  await agentGateway.answerApproval(workspaceId, pendingId, decision);
 }

@@ -216,7 +216,7 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
             // 先收起按钮：Runtime 的下一条 `agent.status` 未必立刻到，
             // 让用户对着一个已经答过的请求再点一次是最糟的。
             useAgentStatusStore.getState().resolveApproval(pendingId);
-            void answerApproval(pendingId, decision);
+            void answerApproval(workspaceId ?? "", pendingId, decision);
           },
         }
       : undefined;

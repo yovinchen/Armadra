@@ -24,6 +24,7 @@ import type {
 import type { StatusTone } from "../ui/status-pill";
 import { runtimeApi } from "../api/client";
 import { useCanvasStore } from "../store/canvas-store";
+import { agentGateway } from "./gateway";
 
 /** 迟到的 `working` 在这个窗口内不能覆盖 `done`。 */
 export const DONE_HOLDOFF_MS = 3_000;
@@ -92,11 +93,20 @@ interface OptionalRuntimeApi {
 }
 
 /**
- * `POST /api/agent-status/{nodeId}/read`。
- * `api/client.ts` 由另一位 agent 归属，方法可能还没补上，所以做成软引用：
- * 有同名方法就走它（带鉴权头与错误映射），没有就退回裸 fetch。
+ * 清掉一个节点的未读标记。
+ *
+ * 带上 workspace 就走网关：agent 域搬到 Host 之后这张标记是 Host 的记录，
+ * `POST /api/agent-status/{id}/read` 会回 409 `ownership_moved`（业务迁移
+ * §2.7）。不带 workspace 的调用（旧调用点、测试）保留原来的软引用路径。
  */
-export async function postAgentRead(nodeId: string): Promise<void> {
+export async function postAgentRead(
+  nodeId: string,
+  workspaceId?: string,
+): Promise<void> {
+  if (workspaceId) {
+    await agentGateway.markRead(workspaceId, nodeId);
+    return;
+  }
   const optional = runtimeApi as unknown as OptionalRuntimeApi;
   if (typeof optional.markAgentRead === "function") {
     await optional.markAgentRead(nodeId);
