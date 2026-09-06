@@ -296,6 +296,13 @@ pub fn routes() -> Router<AppState> {
             "/automation/session-context-usage",
             post(crate::terminal::bridge::context_usage_route),
         )
+        // The agent domain's one execution door (business migration §2.7). The
+        // Host decides who may answer and records it; only this process can put
+        // the answer where the CLI is looking.
+        .route(
+            "/automation/agent-approval",
+            post(crate::terminal::bridge::approval_route),
+        )
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
 }
 

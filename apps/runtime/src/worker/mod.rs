@@ -5,6 +5,7 @@
 //! Runtime that owns the terminal (see [`agent_bridge`]). This process still
 //! opens no PTY of its own.
 pub mod agent_bridge;
+pub mod agent_host;
 pub mod channel;
 pub mod filesystem;
 pub mod git;
@@ -66,6 +67,11 @@ pub struct Worker {
     /// execution-shaped session action answers UNSUPPORTED rather than
     /// pretending it started something.
     sessions: Option<session::Bridge>,
+    /// The same door, for the agent domain's one execution verb: writing an
+    /// answer into the file a blocked CLI is reading (§2.7). It is a separate
+    /// value rather than a method on the session bridge because the two are
+    /// different domains that happen to knock on one door.
+    agents_host: Option<agent_host::Bridge>,
     /// The Runtime's `settings.json`, the file frame 25 reads and writes
     /// (Go Host 业务所有权迁移 §2.4). Absent unless `--settings-file` named
     /// one, and then the settings action answers UNSUPPORTED rather than
@@ -103,6 +109,7 @@ impl Default for Worker {
             agents: None,
             canvas: None,
             sessions: None,
+            agents_host: None,
             settings_file: None,
             upcalls: None,
             bearer: (None, None),
@@ -234,6 +241,7 @@ impl Worker {
     /// `hook-endpoint.env` sit side by side — so a controller that named the
     /// database has already named this, and no second flag can drift from it.
     pub fn with_session_bridge(mut self, data_dir: PathBuf) -> Self {
+        self.agents_host = Some(agent_host::Bridge::new(data_dir.clone()));
         self.sessions = Some(session::Bridge::new(data_dir));
         self
     }
@@ -442,6 +450,11 @@ impl Worker {
                             // controller that needs a handback verified must
                             // not plan one against a Worker that cannot answer.
                             capabilities.push(session::CAPABILITY.into());
+                            // And the agent domain.s, which is a fifth: a
+                            // controller that plans a switch has to know
+                            // this Worker can read the rows it will compare
+                            // against, and a Worker with no database cannot.
+                            capabilities.push(agent_host::CAPABILITY.into());
                         }
                         // The git domain needs neither a database nor a state
                         // directory: a command runs in the workspace root the
@@ -543,6 +556,13 @@ impl Worker {
             // travel between two processes.
             Action::Session(input) => Ok(Response::Session(
                 session::handle(self.canvas.as_ref(), self.sessions.as_ref(), input).await?,
+            )),
+            // The agent domain (§2.7). The listing and the drain are answered
+            // from this Worker's own database; the one execution verb — writing
+            // an answer where a blocked CLI is looking — goes to the resident
+            // Runtime that holds the pending directory.
+            Action::AgentHost(input) => Ok(Response::AgentHost(
+                agent_host::handle(self.canvas.as_ref(), self.agents_host.as_ref(), input).await?,
             )),
             // The rollback direction. Applying the Host's reverse export is a
             // write to this database and nothing else: the epoch stays where

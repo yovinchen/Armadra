@@ -440,3 +440,45 @@ pub async fn context_usage_route(
         AppError::Internal("The context usage snapshot is not encodable".into())
     })?))
 }
+
+/* -------------------------------------------------------------- approvals */
+
+/// What the Host asks this process to tell a blocked CLI.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApprovalAnswer {
+    approval_id: String,
+    decision: String,
+    /// The principal the Host recorded. It travels for the diagnostic and is
+    /// not re-recorded here: the Host's row is the audit entry, and a second
+    /// copy written by this side could disagree with it.
+    #[serde(default)]
+    answered_by: String,
+}
+
+/// `POST /automation/agent-approval` — put an answer in front of a CLI that
+/// stopped (Go Host 业务所有权迁移 §2.7).
+///
+/// The Host has already recorded the decision, under CAS, before this arrives.
+/// What is left is the half only this process can do: write the pending file
+/// the CLI is blocked on reading, or type into its pane. The answer says which
+/// of the two happened, because "the file was written" and "nobody could be
+/// told" are the difference between an agent that continues and one that does
+/// not — and the Host draws them differently.
+///
+/// A second answer is refused by `collab::approvals::answer` itself, which is
+/// where that rule belongs: this route is a door, not a second decision.
+pub async fn approval_route(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<ApprovalAnswer>,
+) -> AppResult<Json<serde_json::Value>> {
+    crate::hook::ingest::require_bearer(&state, &headers)?;
+    let _ = &request.answered_by;
+    let (approval, route) =
+        crate::collab::approvals::answer(&state, &request.approval_id, &request.decision).await?;
+    Ok(Json(serde_json::json!({
+        "approvalId": approval.id,
+        "route": route,
+    })))
+}

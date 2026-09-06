@@ -22,6 +22,8 @@
 //! Execution stays here whoever owns a domain: PTYs, the filesystem, Git
 //! commands and Hook endpoints are not ownership, they are the machine.
 
+pub mod agent;
+pub mod agent_import;
 pub mod domains;
 pub mod filesystem;
 pub mod filesystem_import;
@@ -317,6 +319,8 @@ pub async fn all(State(state): State<AppState>) -> AppResult<Json<Vec<WriteOwner
     Ok(Json(read_all(&state.pool).await?))
 }
 
+#[cfg(test)]
+mod agent_tests;
 #[cfg(test)]
 mod filesystem_tests;
 #[cfg(test)]

@@ -63,6 +63,13 @@ pub async fn answer_approval(
     AxumPath(pending_id): AxumPath<String>,
     Json(request): Json<AnswerApprovalRequest>,
 ) -> AppResult<Json<serde_json::Value>> {
+    // Answering is a decision, and once the agent domain has moved the Host is
+    // the one place it is taken — recorded under CAS there before the answer
+    // file is written here, which is what stops two devices answering one
+    // question two different ways (business migration §2.7). Writing the file
+    // stays this process's job whichever side decided; only the deciding moved.
+    crate::ownership::require_local_write(&state.pool, crate::ownership::OwnershipDomain::Agent)
+        .await?;
     let (approval, route) =
         collab::approvals::answer(&state, &pending_id, &request.decision).await?;
     let mut body = serde_json::to_value(&approval).unwrap_or(serde_json::Value::Null);

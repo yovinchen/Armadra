@@ -194,6 +194,16 @@ impl WorkspaceRecords {
                 Some(Entity::Session(_) | Entity::SessionRun(_)) => {
                     return Err(unsupported("a canvas package carries a session record"));
                 }
+                Some(
+                    Entity::AgentStatus(_)
+                    | Entity::Approval(_)
+                    | Entity::MailboxMessage(_)
+                    | Entity::Delivery(_)
+                    | Entity::Handoff(_)
+                    | Entity::ContextLinks(_),
+                ) => {
+                    return Err(unsupported("a canvas package carries an agent record"));
+                }
                 None => return Err(unsupported("an entity record names no known entity")),
             }
         }

@@ -84,7 +84,13 @@ impl Bridge {
         let Some(upcalls) = self.upcalls.as_ref() else {
             return;
         };
+        // `generation` and `entity_id` belong to the agent domain's own record
+        // half (§2.7) and are absent here: this report is about a prompt
+        // delivery, not about a record, and filling them in would name an
+        // entity the Host has never been told about.
         let event = worker_upcall::Event::Agent(WorkerAgentUpcall {
+            generation: 0,
+            entity_id: String::new(),
             workspace_id: String::new(),
             node_id: node_id.to_owned(),
             session_id: session_id.to_owned(),

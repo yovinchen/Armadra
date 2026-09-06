@@ -136,6 +136,12 @@ pub async fn mark_agent_status_read(
     State(state): State<AppState>,
     AxumPath(node_id): AxumPath<String>,
 ) -> AppResult<Json<AgentStatus>> {
+    // Once the agent domain has moved, this row is the Host's record and the
+    // badge is cleared there (business migration §2.7). Reading a status keeps
+    // answering from here, which is what makes the switch reversible: this
+    // table stays the rollback baseline until migration 0012 retires it.
+    crate::ownership::require_local_write(&state.pool, crate::ownership::OwnershipDomain::Agent)
+        .await?;
     let receipt = db::mark_agent_status_read(&state.pool, &node_id)
         .await?
         .ok_or_else(|| AppError::NotFound("This node has never reported".into()))?;
