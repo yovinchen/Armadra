@@ -1228,6 +1228,8 @@ type ReverseExportRecord struct {
 	//	*ReverseExportRecord_Edge
 	//	*ReverseExportRecord_Annotation
 	//	*ReverseExportRecord_WorkspaceRoot
+	//	*ReverseExportRecord_Session
+	//	*ReverseExportRecord_SessionRun
 	Entity        isReverseExportRecord_Entity `protobuf_oneof:"entity"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1324,6 +1326,24 @@ func (x *ReverseExportRecord) GetWorkspaceRoot() *WorkspaceRoot {
 	return nil
 }
 
+func (x *ReverseExportRecord) GetSession() *Session {
+	if x != nil {
+		if x, ok := x.Entity.(*ReverseExportRecord_Session); ok {
+			return x.Session
+		}
+	}
+	return nil
+}
+
+func (x *ReverseExportRecord) GetSessionRun() *SessionRun {
+	if x != nil {
+		if x, ok := x.Entity.(*ReverseExportRecord_SessionRun); ok {
+			return x.SessionRun
+		}
+	}
+	return nil
+}
+
 type isReverseExportRecord_Entity interface {
 	isReverseExportRecord_Entity()
 }
@@ -1356,6 +1376,17 @@ type ReverseExportRecord_WorkspaceRoot struct {
 	WorkspaceRoot *WorkspaceRoot `protobuf:"bytes,6,opt,name=workspace_root,json=workspaceRoot,proto3,oneof"`
 }
 
+type ReverseExportRecord_Session struct {
+	// The session domain's records. A session package carries both members,
+	// because a session without its runs would roll back a row that claims a
+	// generation nothing accounts for.
+	Session *Session `protobuf:"bytes,7,opt,name=session,proto3,oneof"`
+}
+
+type ReverseExportRecord_SessionRun struct {
+	SessionRun *SessionRun `protobuf:"bytes,8,opt,name=session_run,json=sessionRun,proto3,oneof"`
+}
+
 func (*ReverseExportRecord_Workspace) isReverseExportRecord_Entity() {}
 
 func (*ReverseExportRecord_Canvas) isReverseExportRecord_Entity() {}
@@ -1367,6 +1398,10 @@ func (*ReverseExportRecord_Edge) isReverseExportRecord_Entity() {}
 func (*ReverseExportRecord_Annotation) isReverseExportRecord_Entity() {}
 
 func (*ReverseExportRecord_WorkspaceRoot) isReverseExportRecord_Entity() {}
+
+func (*ReverseExportRecord_Session) isReverseExportRecord_Entity() {}
+
+func (*ReverseExportRecord_SessionRun) isReverseExportRecord_Entity() {}
 
 // Apply a reverse export package to the Runtime's own database. The Runtime is
 // in the rolling_back phase when this arrives, and nothing here moves an epoch.
@@ -1575,7 +1610,7 @@ var File_armadra_v1_migration_proto protoreflect.FileDescriptor
 const file_armadra_v1_migration_proto_rawDesc = "" +
 	"\n" +
 	"\x1aarmadra/v1/migration.proto\x12\n" +
-	"armadra.v1\x1a\x17armadra/v1/canvas.proto\x1a\x1barmadra/v1/filesystem.proto\"\x92\x06\n" +
+	"armadra.v1\x1a\x17armadra/v1/canvas.proto\x1a\x1barmadra/v1/filesystem.proto\x1a\x18armadra/v1/session.proto\"\x92\x06\n" +
 	"\x17MigrationExportManifest\x12%\n" +
 	"\x0eformat_version\x18\x01 \x01(\rR\rformatVersion\x12\x1b\n" +
 	"\texport_id\x18\x02 \x01(\tR\bexportId\x12-\n" +
@@ -1678,7 +1713,7 @@ const file_armadra_v1_migration_proto_rawDesc = "" +
 	"\x0eevent_sequence\x18\x04 \x01(\x04R\reventSequence\x12\x16\n" +
 	"\x06domain\x18\x05 \x01(\tR\x06domain\x123\n" +
 	"\x05files\x18\x06 \x03(\v2\x1d.armadra.v1.ReverseExportFileR\x05files\x12!\n" +
-	"\fentity_count\x18\a \x01(\x04R\ventityCount\"\xea\x02\n" +
+	"\fentity_count\x18\a \x01(\x04R\ventityCount\"\xd6\x03\n" +
 	"\x13ReverseExportRecord\x12;\n" +
 	"\tworkspace\x18\x01 \x01(\v2\x1b.armadra.v1.CanvasWorkspaceH\x00R\tworkspace\x12,\n" +
 	"\x06canvas\x18\x02 \x01(\v2\x12.armadra.v1.CanvasH\x00R\x06canvas\x12,\n" +
@@ -1687,7 +1722,10 @@ const file_armadra_v1_migration_proto_rawDesc = "" +
 	"\n" +
 	"annotation\x18\x05 \x01(\v2\x1c.armadra.v1.CanvasAnnotationH\x00R\n" +
 	"annotation\x12B\n" +
-	"\x0eworkspace_root\x18\x06 \x01(\v2\x19.armadra.v1.WorkspaceRootH\x00R\rworkspaceRootB\b\n" +
+	"\x0eworkspace_root\x18\x06 \x01(\v2\x19.armadra.v1.WorkspaceRootH\x00R\rworkspaceRoot\x12/\n" +
+	"\asession\x18\a \x01(\v2\x13.armadra.v1.SessionH\x00R\asession\x129\n" +
+	"\vsession_run\x18\b \x01(\v2\x16.armadra.v1.SessionRunH\x00R\n" +
+	"sessionRunB\b\n" +
 	"\x06entity\"\xbd\x01\n" +
 	"\x19ApplyReverseExportRequest\x12\x16\n" +
 	"\x06domain\x18\x01 \x01(\tR\x06domain\x12!\n" +
@@ -1747,6 +1785,8 @@ var file_armadra_v1_migration_proto_goTypes = []any{
 	(*CanvasEdge)(nil),                // 20: armadra.v1.CanvasEdge
 	(*CanvasAnnotation)(nil),          // 21: armadra.v1.CanvasAnnotation
 	(*WorkspaceRoot)(nil),             // 22: armadra.v1.WorkspaceRoot
+	(*Session)(nil),                   // 23: armadra.v1.Session
+	(*SessionRun)(nil),                // 24: armadra.v1.SessionRun
 }
 var file_armadra_v1_migration_proto_depIdxs = []int32{
 	1,  // 0: armadra.v1.MigrationExportManifest.migrations:type_name -> armadra.v1.ExportMigration
@@ -1767,14 +1807,16 @@ var file_armadra_v1_migration_proto_depIdxs = []int32{
 	20, // 15: armadra.v1.ReverseExportRecord.edge:type_name -> armadra.v1.CanvasEdge
 	21, // 16: armadra.v1.ReverseExportRecord.annotation:type_name -> armadra.v1.CanvasAnnotation
 	22, // 17: armadra.v1.ReverseExportRecord.workspace_root:type_name -> armadra.v1.WorkspaceRoot
-	12, // 18: armadra.v1.ReverseImportReport.reexported:type_name -> armadra.v1.ReverseExportFile
-	2,  // 19: armadra.v1.ReverseImportReport.tables:type_name -> armadra.v1.ExportTable
-	7,  // 20: armadra.v1.ReverseImportReport.issues:type_name -> armadra.v1.ExportIssue
-	21, // [21:21] is the sub-list for method output_type
-	21, // [21:21] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	23, // 18: armadra.v1.ReverseExportRecord.session:type_name -> armadra.v1.Session
+	24, // 19: armadra.v1.ReverseExportRecord.session_run:type_name -> armadra.v1.SessionRun
+	12, // 20: armadra.v1.ReverseImportReport.reexported:type_name -> armadra.v1.ReverseExportFile
+	2,  // 21: armadra.v1.ReverseImportReport.tables:type_name -> armadra.v1.ExportTable
+	7,  // 22: armadra.v1.ReverseImportReport.issues:type_name -> armadra.v1.ExportIssue
+	23, // [23:23] is the sub-list for method output_type
+	23, // [23:23] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_migration_proto_init() }
@@ -1784,6 +1826,7 @@ func file_armadra_v1_migration_proto_init() {
 	}
 	file_armadra_v1_canvas_proto_init()
 	file_armadra_v1_filesystem_proto_init()
+	file_armadra_v1_session_proto_init()
 	file_armadra_v1_migration_proto_msgTypes[9].OneofWrappers = []any{
 		(*ImportedSqlColumn_NullValue)(nil),
 		(*ImportedSqlColumn_TextValue)(nil),
@@ -1798,6 +1841,8 @@ func file_armadra_v1_migration_proto_init() {
 		(*ReverseExportRecord_Edge)(nil),
 		(*ReverseExportRecord_Annotation)(nil),
 		(*ReverseExportRecord_WorkspaceRoot)(nil),
+		(*ReverseExportRecord_Session)(nil),
+		(*ReverseExportRecord_SessionRun)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

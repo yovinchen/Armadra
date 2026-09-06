@@ -7,6 +7,7 @@ import "armadra/v1/command.proto";
 import "armadra/v1/canvas.proto";
 import "armadra/v1/filesystem.proto";
 import "armadra/v1/git.proto";
+import "armadra/v1/session.proto";
 import "armadra/v1/worker_channel.proto";
 import "armadra/v1/language.proto";
 import "armadra/v1/migration.proto";
@@ -340,6 +341,11 @@ message WorkerRequest {
     // The filesystem domain (business migration §2.9). 25 belongs to the
     // settings domain; this one is 26 so the two land independently.
     FilesystemWorkerRequest filesystem = 26;
+    // The session domain (§2.6, §2.9). It carries both halves the Host needs
+    // from the execution side: the reads a switch and a handback are verified
+    // against, and the run commands — start, signal, reclaim, capture — that
+    // the Host issues once it owns the intent but never the process.
+    SessionWorkerRequest session = 27;
     // The git domain (§2.8). 27 and 28 belong to the session and agent
     // domains, whose batches land independently, so this one is 29 rather
     // than the next free number: a frame renumbered at merge time would be a
@@ -376,6 +382,7 @@ message WorkerResponse {
     ReverseImportReport reverse_import = 23;
     WorkerSettingsSnapshot settings = 25;
     FilesystemWorkerResponse filesystem = 26;
+    SessionWorkerResponse session = 27;
     GitWorkerResponse git = 29;
   }
 }

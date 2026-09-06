@@ -8,6 +8,7 @@ export * from "./gen/armadra/v1/git_pb.js";
 export * from "./gen/armadra/v1/events_pb.js";
 export * from "./gen/armadra/v1/ownership_pb.js";
 export * from "./gen/armadra/v1/settings_pb.js";
+export * from "./gen/armadra/v1/session_pb.js";
 export * from "./gen/armadra/v1/worker_pb.js";
 export * from "./gen/armadra/v1/worker_channel_pb.js";
 export * from "./gen/armadra/v1/automation_pb.js";

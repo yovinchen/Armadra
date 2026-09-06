@@ -2119,6 +2119,7 @@ type WorkerRequest struct {
 	//	*WorkerRequest_ApplyReverseExport
 	//	*WorkerRequest_Settings
 	//	*WorkerRequest_Filesystem
+	//	*WorkerRequest_Session
 	//	*WorkerRequest_Git
 	Action        isWorkerRequest_Action `protobuf_oneof:"action"`
 	unknownFields protoimpl.UnknownFields
@@ -2370,6 +2371,15 @@ func (x *WorkerRequest) GetFilesystem() *FilesystemWorkerRequest {
 	return nil
 }
 
+func (x *WorkerRequest) GetSession() *SessionWorkerRequest {
+	if x != nil {
+		if x, ok := x.Action.(*WorkerRequest_Session); ok {
+			return x.Session
+		}
+	}
+	return nil
+}
+
 func (x *WorkerRequest) GetGit() *GitWorkerRequest {
 	if x != nil {
 		if x, ok := x.Action.(*WorkerRequest_Git); ok {
@@ -2483,6 +2493,14 @@ type WorkerRequest_Filesystem struct {
 	Filesystem *FilesystemWorkerRequest `protobuf:"bytes,26,opt,name=filesystem,proto3,oneof"`
 }
 
+type WorkerRequest_Session struct {
+	// The session domain (§2.6, §2.9). It carries both halves the Host needs
+	// from the execution side: the reads a switch and a handback are verified
+	// against, and the run commands — start, signal, reclaim, capture — that
+	// the Host issues once it owns the intent but never the process.
+	Session *SessionWorkerRequest `protobuf:"bytes,27,opt,name=session,proto3,oneof"`
+}
+
 type WorkerRequest_Git struct {
 	// The git domain (§2.8). 27 and 28 belong to the session and agent
 	// domains, whose batches land independently, so this one is 29 rather
@@ -2531,6 +2549,8 @@ func (*WorkerRequest_Settings) isWorkerRequest_Action() {}
 
 func (*WorkerRequest_Filesystem) isWorkerRequest_Action() {}
 
+func (*WorkerRequest_Session) isWorkerRequest_Action() {}
+
 func (*WorkerRequest_Git) isWorkerRequest_Action() {}
 
 type WorkerResponse struct {
@@ -2560,6 +2580,7 @@ type WorkerResponse struct {
 	//	*WorkerResponse_ReverseImport
 	//	*WorkerResponse_Settings
 	//	*WorkerResponse_Filesystem
+	//	*WorkerResponse_Session
 	//	*WorkerResponse_Git
 	Result        isWorkerResponse_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
@@ -2804,6 +2825,15 @@ func (x *WorkerResponse) GetFilesystem() *FilesystemWorkerResponse {
 	return nil
 }
 
+func (x *WorkerResponse) GetSession() *SessionWorkerResponse {
+	if x != nil {
+		if x, ok := x.Result.(*WorkerResponse_Session); ok {
+			return x.Session
+		}
+	}
+	return nil
+}
+
 func (x *WorkerResponse) GetGit() *GitWorkerResponse {
 	if x != nil {
 		if x, ok := x.Result.(*WorkerResponse_Git); ok {
@@ -2901,6 +2931,10 @@ type WorkerResponse_Filesystem struct {
 	Filesystem *FilesystemWorkerResponse `protobuf:"bytes,26,opt,name=filesystem,proto3,oneof"`
 }
 
+type WorkerResponse_Session struct {
+	Session *SessionWorkerResponse `protobuf:"bytes,27,opt,name=session,proto3,oneof"`
+}
+
 type WorkerResponse_Git struct {
 	Git *GitWorkerResponse `protobuf:"bytes,29,opt,name=git,proto3,oneof"`
 }
@@ -2945,6 +2979,8 @@ func (*WorkerResponse_Settings) isWorkerResponse_Result() {}
 
 func (*WorkerResponse_Filesystem) isWorkerResponse_Result() {}
 
+func (*WorkerResponse_Session) isWorkerResponse_Result() {}
+
 func (*WorkerResponse_Git) isWorkerResponse_Result() {}
 
 var File_armadra_v1_worker_proto protoreflect.FileDescriptor
@@ -2952,7 +2988,7 @@ var File_armadra_v1_worker_proto protoreflect.FileDescriptor
 const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"\x17armadra/v1/worker.proto\x12\n" +
-	"armadra.v1\x1a\x16armadra/v1/agent.proto\x1a\x17armadra/v1/common.proto\x1a\x18armadra/v1/command.proto\x1a\x17armadra/v1/canvas.proto\x1a\x1barmadra/v1/filesystem.proto\x1a\x14armadra/v1/git.proto\x1a\x1farmadra/v1/worker_channel.proto\x1a\x19armadra/v1/language.proto\x1a\x1aarmadra/v1/migration.proto\x1a\x19armadra/v1/settings.proto\"M\n" +
+	"armadra.v1\x1a\x16armadra/v1/agent.proto\x1a\x17armadra/v1/common.proto\x1a\x18armadra/v1/command.proto\x1a\x17armadra/v1/canvas.proto\x1a\x1barmadra/v1/filesystem.proto\x1a\x14armadra/v1/git.proto\x1a\x18armadra/v1/session.proto\x1a\x1farmadra/v1/worker_channel.proto\x1a\x19armadra/v1/language.proto\x1a\x1aarmadra/v1/migration.proto\x1a\x19armadra/v1/settings.proto\"M\n" +
 	"\x12WorkerHelloRequest\x127\n" +
 	"\bprotocol\x18\x01 \x01(\v2\x1b.armadra.v1.ProtocolVersionR\bprotocol\"\xd3\x04\n" +
 	"\x13WorkerHelloResponse\x127\n" +
@@ -3094,7 +3130,7 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12%\n" +
 	"\x0ereceived_bytes\x18\x02 \x01(\x04R\rreceivedBytes\x12\x16\n" +
 	"\x06sha256\x18\x03 \x01(\tR\x06sha256\x12\x12\n" +
-	"\x04path\x18\x04 \x01(\tR\x04path\"\xa0\r\n" +
+	"\x04path\x18\x04 \x01(\tR\x04path\"\xde\r\n" +
 	"\rWorkerRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -3124,9 +3160,10 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\bsettings\x18\x19 \x01(\v2!.armadra.v1.WorkerSettingsRequestH\x00R\bsettings\x12E\n" +
 	"\n" +
 	"filesystem\x18\x1a \x01(\v2#.armadra.v1.FilesystemWorkerRequestH\x00R\n" +
-	"filesystem\x120\n" +
+	"filesystem\x12<\n" +
+	"\asession\x18\x1b \x01(\v2 .armadra.v1.SessionWorkerRequestH\x00R\asession\x120\n" +
 	"\x03git\x18\x1d \x01(\v2\x1c.armadra.v1.GitWorkerRequestH\x00R\x03gitB\b\n" +
-	"\x06action\"\xdc\v\n" +
+	"\x06action\"\x9b\f\n" +
 	"\x0eWorkerResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
@@ -3157,7 +3194,8 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\bsettings\x18\x19 \x01(\v2\".armadra.v1.WorkerSettingsSnapshotH\x00R\bsettings\x12F\n" +
 	"\n" +
 	"filesystem\x18\x1a \x01(\v2$.armadra.v1.FilesystemWorkerResponseH\x00R\n" +
-	"filesystem\x121\n" +
+	"filesystem\x12=\n" +
+	"\asession\x18\x1b \x01(\v2!.armadra.v1.SessionWorkerResponseH\x00R\asession\x121\n" +
 	"\x03git\x18\x1d \x01(\v2\x1d.armadra.v1.GitWorkerResponseH\x00R\x03gitB\b\n" +
 	"\x06result*\xfa\x0f\n" +
 	"\x16WorkerServiceOperation\x12(\n" +
@@ -3266,17 +3304,19 @@ var file_armadra_v1_worker_proto_goTypes = []any{
 	(*ApplyReverseExportRequest)(nil),   // 40: armadra.v1.ApplyReverseExportRequest
 	(*WorkerSettingsRequest)(nil),       // 41: armadra.v1.WorkerSettingsRequest
 	(*FilesystemWorkerRequest)(nil),     // 42: armadra.v1.FilesystemWorkerRequest
-	(*GitWorkerRequest)(nil),            // 43: armadra.v1.GitWorkerRequest
-	(*ErrorResponse)(nil),               // 44: armadra.v1.ErrorResponse
-	(*CommandResponse)(nil),             // 45: armadra.v1.CommandResponse
-	(*AgentResponse)(nil),               // 46: armadra.v1.AgentResponse
-	(*LanguageCapabilities)(nil),        // 47: armadra.v1.LanguageCapabilities
-	(*LanguageSession)(nil),             // 48: armadra.v1.LanguageSession
-	(*LanguageApplyEditResult)(nil),     // 49: armadra.v1.LanguageApplyEditResult
-	(*ReverseImportReport)(nil),         // 50: armadra.v1.ReverseImportReport
-	(*WorkerSettingsSnapshot)(nil),      // 51: armadra.v1.WorkerSettingsSnapshot
-	(*FilesystemWorkerResponse)(nil),    // 52: armadra.v1.FilesystemWorkerResponse
-	(*GitWorkerResponse)(nil),           // 53: armadra.v1.GitWorkerResponse
+	(*SessionWorkerRequest)(nil),        // 43: armadra.v1.SessionWorkerRequest
+	(*GitWorkerRequest)(nil),            // 44: armadra.v1.GitWorkerRequest
+	(*ErrorResponse)(nil),               // 45: armadra.v1.ErrorResponse
+	(*CommandResponse)(nil),             // 46: armadra.v1.CommandResponse
+	(*AgentResponse)(nil),               // 47: armadra.v1.AgentResponse
+	(*LanguageCapabilities)(nil),        // 48: armadra.v1.LanguageCapabilities
+	(*LanguageSession)(nil),             // 49: armadra.v1.LanguageSession
+	(*LanguageApplyEditResult)(nil),     // 50: armadra.v1.LanguageApplyEditResult
+	(*ReverseImportReport)(nil),         // 51: armadra.v1.ReverseImportReport
+	(*WorkerSettingsSnapshot)(nil),      // 52: armadra.v1.WorkerSettingsSnapshot
+	(*FilesystemWorkerResponse)(nil),    // 53: armadra.v1.FilesystemWorkerResponse
+	(*SessionWorkerResponse)(nil),       // 54: armadra.v1.SessionWorkerResponse
+	(*GitWorkerResponse)(nil),           // 55: armadra.v1.GitWorkerResponse
 }
 var file_armadra_v1_worker_proto_depIdxs = []int32{
 	29, // 0: armadra.v1.WorkerHelloRequest.protocol:type_name -> armadra.v1.ProtocolVersion
@@ -3313,33 +3353,35 @@ var file_armadra_v1_worker_proto_depIdxs = []int32{
 	40, // 31: armadra.v1.WorkerRequest.apply_reverse_export:type_name -> armadra.v1.ApplyReverseExportRequest
 	41, // 32: armadra.v1.WorkerRequest.settings:type_name -> armadra.v1.WorkerSettingsRequest
 	42, // 33: armadra.v1.WorkerRequest.filesystem:type_name -> armadra.v1.FilesystemWorkerRequest
-	43, // 34: armadra.v1.WorkerRequest.git:type_name -> armadra.v1.GitWorkerRequest
-	2,  // 35: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
-	4,  // 36: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
-	7,  // 37: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
-	9,  // 38: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
-	44, // 39: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
-	14, // 40: armadra.v1.WorkerResponse.file_written:type_name -> armadra.v1.WorkerFileWritten
-	16, // 41: armadra.v1.WorkerResponse.service:type_name -> armadra.v1.WorkerServiceResponse
-	20, // 42: armadra.v1.WorkerResponse.watch_event:type_name -> armadra.v1.WorkerWatchEvent
-	18, // 43: armadra.v1.WorkerResponse.watch:type_name -> armadra.v1.WorkerWatchSubscription
-	26, // 44: armadra.v1.WorkerResponse.upload:type_name -> armadra.v1.WorkerUploadResponse
-	45, // 45: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
-	46, // 46: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
-	12, // 47: armadra.v1.WorkerResponse.write_ownership:type_name -> armadra.v1.WorkerWriteOwnership
-	47, // 48: armadra.v1.WorkerResponse.language_capabilities:type_name -> armadra.v1.LanguageCapabilities
-	48, // 49: armadra.v1.WorkerResponse.language_session:type_name -> armadra.v1.LanguageSession
-	38, // 50: armadra.v1.WorkerResponse.language_frame:type_name -> armadra.v1.LanguageFrame
-	49, // 51: armadra.v1.WorkerResponse.language_apply_edit:type_name -> armadra.v1.LanguageApplyEditResult
-	50, // 52: armadra.v1.WorkerResponse.reverse_import:type_name -> armadra.v1.ReverseImportReport
-	51, // 53: armadra.v1.WorkerResponse.settings:type_name -> armadra.v1.WorkerSettingsSnapshot
-	52, // 54: armadra.v1.WorkerResponse.filesystem:type_name -> armadra.v1.FilesystemWorkerResponse
-	53, // 55: armadra.v1.WorkerResponse.git:type_name -> armadra.v1.GitWorkerResponse
-	56, // [56:56] is the sub-list for method output_type
-	56, // [56:56] is the sub-list for method input_type
-	56, // [56:56] is the sub-list for extension type_name
-	56, // [56:56] is the sub-list for extension extendee
-	0,  // [0:56] is the sub-list for field type_name
+	43, // 34: armadra.v1.WorkerRequest.session:type_name -> armadra.v1.SessionWorkerRequest
+	44, // 35: armadra.v1.WorkerRequest.git:type_name -> armadra.v1.GitWorkerRequest
+	2,  // 36: armadra.v1.WorkerResponse.hello:type_name -> armadra.v1.WorkerHelloResponse
+	4,  // 37: armadra.v1.WorkerResponse.registered_root:type_name -> armadra.v1.RegisteredRoot
+	7,  // 38: armadra.v1.WorkerResponse.directory:type_name -> armadra.v1.WorkerDirectory
+	9,  // 39: armadra.v1.WorkerResponse.file_chunk:type_name -> armadra.v1.WorkerFileChunk
+	45, // 40: armadra.v1.WorkerResponse.error:type_name -> armadra.v1.ErrorResponse
+	14, // 41: armadra.v1.WorkerResponse.file_written:type_name -> armadra.v1.WorkerFileWritten
+	16, // 42: armadra.v1.WorkerResponse.service:type_name -> armadra.v1.WorkerServiceResponse
+	20, // 43: armadra.v1.WorkerResponse.watch_event:type_name -> armadra.v1.WorkerWatchEvent
+	18, // 44: armadra.v1.WorkerResponse.watch:type_name -> armadra.v1.WorkerWatchSubscription
+	26, // 45: armadra.v1.WorkerResponse.upload:type_name -> armadra.v1.WorkerUploadResponse
+	46, // 46: armadra.v1.WorkerResponse.command:type_name -> armadra.v1.CommandResponse
+	47, // 47: armadra.v1.WorkerResponse.agent:type_name -> armadra.v1.AgentResponse
+	12, // 48: armadra.v1.WorkerResponse.write_ownership:type_name -> armadra.v1.WorkerWriteOwnership
+	48, // 49: armadra.v1.WorkerResponse.language_capabilities:type_name -> armadra.v1.LanguageCapabilities
+	49, // 50: armadra.v1.WorkerResponse.language_session:type_name -> armadra.v1.LanguageSession
+	38, // 51: armadra.v1.WorkerResponse.language_frame:type_name -> armadra.v1.LanguageFrame
+	50, // 52: armadra.v1.WorkerResponse.language_apply_edit:type_name -> armadra.v1.LanguageApplyEditResult
+	51, // 53: armadra.v1.WorkerResponse.reverse_import:type_name -> armadra.v1.ReverseImportReport
+	52, // 54: armadra.v1.WorkerResponse.settings:type_name -> armadra.v1.WorkerSettingsSnapshot
+	53, // 55: armadra.v1.WorkerResponse.filesystem:type_name -> armadra.v1.FilesystemWorkerResponse
+	54, // 56: armadra.v1.WorkerResponse.session:type_name -> armadra.v1.SessionWorkerResponse
+	55, // 57: armadra.v1.WorkerResponse.git:type_name -> armadra.v1.GitWorkerResponse
+	58, // [58:58] is the sub-list for method output_type
+	58, // [58:58] is the sub-list for method input_type
+	58, // [58:58] is the sub-list for extension type_name
+	58, // [58:58] is the sub-list for extension extendee
+	0,  // [0:58] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_worker_proto_init() }
@@ -3353,6 +3395,7 @@ func file_armadra_v1_worker_proto_init() {
 	file_armadra_v1_canvas_proto_init()
 	file_armadra_v1_filesystem_proto_init()
 	file_armadra_v1_git_proto_init()
+	file_armadra_v1_session_proto_init()
 	file_armadra_v1_worker_channel_proto_init()
 	file_armadra_v1_language_proto_init()
 	file_armadra_v1_migration_proto_init()
@@ -3387,6 +3430,7 @@ func file_armadra_v1_worker_proto_init() {
 		(*WorkerRequest_ApplyReverseExport)(nil),
 		(*WorkerRequest_Settings)(nil),
 		(*WorkerRequest_Filesystem)(nil),
+		(*WorkerRequest_Session)(nil),
 		(*WorkerRequest_Git)(nil),
 	}
 	file_armadra_v1_worker_proto_msgTypes[27].OneofWrappers = []any{
@@ -3410,6 +3454,7 @@ func file_armadra_v1_worker_proto_init() {
 		(*WorkerResponse_ReverseImport)(nil),
 		(*WorkerResponse_Settings)(nil),
 		(*WorkerResponse_Filesystem)(nil),
+		(*WorkerResponse_Session)(nil),
 		(*WorkerResponse_Git)(nil),
 	}
 	type x struct{}

@@ -9,6 +9,7 @@ import "armadra/v1/common.proto";
 import "armadra/v1/settings.proto";
 import "armadra/v1/filesystem.proto";
 import "armadra/v1/git.proto";
+import "armadra/v1/session.proto";
 
 // The Host -> client business event stream (host business migration §2.3).
 //
@@ -104,6 +105,12 @@ message EventEnvelope {
     SettingsDocument settings_document = 120;
     ExecutionHost settings_execution_host = 121;
     WorkspaceRoot filesystem_root = 140;
+    // The session domain (§2.6). Two members rather than one: a session's
+    // intent and one run of it change for different reasons and at different
+    // rates, and a client that only tracks lifecycle must not have to decode a
+    // backend reference to find out whether anything it cares about moved.
+    Session session = 160;
+    SessionRun session_run = 161;
     // The git domain (§2.8). An operation is the entry a client follows
     // from queued to finished; the repository state is the cache it renders
     // between observations; a clone job is neither, because it exists before

@@ -3,6 +3,8 @@ package armadra.v1;
 option go_package = "armadra.local/host/gen/armadra/v1";
 import "armadra/v1/git.proto";
 
+import "armadra/v1/session.proto";
+
 // The Worker's upward half of the resident bidirectional channel (Go Host
 // business migration §2.9, §2.10). The first phase spoke only when spoken to:
 // the Host wrote a WorkerRequest and read exactly one WorkerResponse back. The
@@ -78,9 +80,12 @@ message WorkerUpcall {
   uint32 attempt = 4;
   int64 emitted_at_unix_ms = 40;
   // One member per business domain, twenty numbers apart as §2.1 requires:
-  // 100 settings, 120 filesystem, 140 session, 160 agent, 180 git. The
-  // settings, filesystem and session members arrive with their domains.
+  // 100 settings, 120 filesystem, 140 session, 160 agent, 180 git. The number
+  // is the domain's slot, not the order the batches landed: continuing from
+  // the highest member in use would have put the session domain past the agent
+  // one and made the scheme mean nothing.
   oneof event {
+    WorkerSessionUpcall session = 140;
     WorkerAgentUpcall agent = 160;
     WorkerGitUpcall git = 180;
   }

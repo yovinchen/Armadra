@@ -374,11 +374,14 @@ type WorkerUpcall struct {
 	Attempt         uint32 `protobuf:"varint,4,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	EmittedAtUnixMs int64  `protobuf:"varint,40,opt,name=emitted_at_unix_ms,json=emittedAtUnixMs,proto3" json:"emitted_at_unix_ms,omitempty"`
 	// One member per business domain, twenty numbers apart as §2.1 requires:
-	// 100 settings, 120 filesystem, 140 session, 160 agent, 180 git. The
-	// settings, filesystem and session members arrive with their domains.
+	// 100 settings, 120 filesystem, 140 session, 160 agent, 180 git. The number
+	// is the domain's slot, not the order the batches landed: continuing from
+	// the highest member in use would have put the session domain past the agent
+	// one and made the scheme mean nothing.
 	//
 	// Types that are valid to be assigned to Event:
 	//
+	//	*WorkerUpcall_Session
 	//	*WorkerUpcall_Agent
 	//	*WorkerUpcall_Git
 	Event         isWorkerUpcall_Event `protobuf_oneof:"event"`
@@ -458,6 +461,15 @@ func (x *WorkerUpcall) GetEvent() isWorkerUpcall_Event {
 	return nil
 }
 
+func (x *WorkerUpcall) GetSession() *WorkerSessionUpcall {
+	if x != nil {
+		if x, ok := x.Event.(*WorkerUpcall_Session); ok {
+			return x.Session
+		}
+	}
+	return nil
+}
+
 func (x *WorkerUpcall) GetAgent() *WorkerAgentUpcall {
 	if x != nil {
 		if x, ok := x.Event.(*WorkerUpcall_Agent); ok {
@@ -480,6 +492,10 @@ type isWorkerUpcall_Event interface {
 	isWorkerUpcall_Event()
 }
 
+type WorkerUpcall_Session struct {
+	Session *WorkerSessionUpcall `protobuf:"bytes,140,opt,name=session,proto3,oneof"`
+}
+
 type WorkerUpcall_Agent struct {
 	Agent *WorkerAgentUpcall `protobuf:"bytes,160,opt,name=agent,proto3,oneof"`
 }
@@ -487,6 +503,8 @@ type WorkerUpcall_Agent struct {
 type WorkerUpcall_Git struct {
 	Git *WorkerGitUpcall `protobuf:"bytes,180,opt,name=git,proto3,oneof"`
 }
+
+func (*WorkerUpcall_Session) isWorkerUpcall_Event() {}
 
 func (*WorkerUpcall_Agent) isWorkerUpcall_Event() {}
 
@@ -837,7 +855,7 @@ var File_armadra_v1_worker_channel_proto protoreflect.FileDescriptor
 const file_armadra_v1_worker_channel_proto_rawDesc = "" +
 	"\n" +
 	"\x1farmadra/v1/worker_channel.proto\x12\n" +
-	"armadra.v1\x1a\x14armadra/v1/git.proto\"\xcc\x02\n" +
+	"armadra.v1\x1a\x14armadra/v1/git.proto\x1a\x18armadra/v1/session.proto\"\xcc\x02\n" +
 	"\x17WorkerChannelCapability\x12,\n" +
 	"\x12worker_instance_id\x18\x01 \x01(\tR\x10workerInstanceId\x12\x16\n" +
 	"\x06socket\x18\x02 \x01(\tR\x06socket\x12\x12\n" +
@@ -848,14 +866,15 @@ const file_armadra_v1_worker_channel_proto_rawDesc = "" +
 	"\x12max_unacknowledged\x18\f \x01(\rR\x11maxUnacknowledged\x124\n" +
 	"\x05state\x18\x1e \x01(\x0e2\x1e.armadra.v1.WorkerChannelStateR\x05state\x12\x1f\n" +
 	"\vreason_code\x18' \x01(\tR\n" +
-	"reasonCode\"\xb1\x02\n" +
+	"reasonCode\"\xef\x02\n" +
 	"\fWorkerUpcall\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12,\n" +
 	"\x12worker_instance_id\x18\x02 \x01(\tR\x10workerInstanceId\x12\x1a\n" +
 	"\bsequence\x18\x03 \x01(\x04R\bsequence\x12\x18\n" +
 	"\aattempt\x18\x04 \x01(\rR\aattempt\x12+\n" +
-	"\x12emitted_at_unix_ms\x18( \x01(\x03R\x0femittedAtUnixMs\x126\n" +
+	"\x12emitted_at_unix_ms\x18( \x01(\x03R\x0femittedAtUnixMs\x12<\n" +
+	"\asession\x18\x8c\x01 \x01(\v2\x1f.armadra.v1.WorkerSessionUpcallH\x00R\asession\x126\n" +
 	"\x05agent\x18\xa0\x01 \x01(\v2\x1d.armadra.v1.WorkerAgentUpcallH\x00R\x05agent\x120\n" +
 	"\x03git\x18\xb4\x01 \x01(\v2\x1b.armadra.v1.WorkerGitUpcallH\x00R\x03gitB\a\n" +
 	"\x05event\"\xdd\x02\n" +
@@ -944,23 +963,25 @@ var file_armadra_v1_worker_channel_proto_goTypes = []any{
 	(*WorkerAgentUpcall)(nil),       // 6: armadra.v1.WorkerAgentUpcall
 	(*WorkerUpcallReply)(nil),       // 7: armadra.v1.WorkerUpcallReply
 	(*WorkerGitUpcall)(nil),         // 8: armadra.v1.WorkerGitUpcall
-	(*RepositoryState)(nil),         // 9: armadra.v1.RepositoryState
-	(GitOperationState)(0),          // 10: armadra.v1.GitOperationState
+	(*WorkerSessionUpcall)(nil),     // 9: armadra.v1.WorkerSessionUpcall
+	(*RepositoryState)(nil),         // 10: armadra.v1.RepositoryState
+	(GitOperationState)(0),          // 11: armadra.v1.GitOperationState
 }
 var file_armadra_v1_worker_channel_proto_depIdxs = []int32{
 	0,  // 0: armadra.v1.WorkerChannelCapability.state:type_name -> armadra.v1.WorkerChannelState
-	6,  // 1: armadra.v1.WorkerUpcall.agent:type_name -> armadra.v1.WorkerAgentUpcall
-	8,  // 2: armadra.v1.WorkerUpcall.git:type_name -> armadra.v1.WorkerGitUpcall
-	1,  // 3: armadra.v1.WorkerAgentUpcall.kind:type_name -> armadra.v1.WorkerAgentUpcallKind
-	2,  // 4: armadra.v1.WorkerUpcallReply.disposition:type_name -> armadra.v1.WorkerUpcallDisposition
-	9,  // 5: armadra.v1.WorkerGitUpcall.repository:type_name -> armadra.v1.RepositoryState
-	10, // 6: armadra.v1.WorkerGitUpcall.state:type_name -> armadra.v1.GitOperationState
-	3,  // 7: armadra.v1.WorkerGitUpcall.kind:type_name -> armadra.v1.WorkerGitUpcallKind
-	8,  // [8:8] is the sub-list for method output_type
-	8,  // [8:8] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	9,  // 1: armadra.v1.WorkerUpcall.session:type_name -> armadra.v1.WorkerSessionUpcall
+	6,  // 2: armadra.v1.WorkerUpcall.agent:type_name -> armadra.v1.WorkerAgentUpcall
+	8,  // 3: armadra.v1.WorkerUpcall.git:type_name -> armadra.v1.WorkerGitUpcall
+	1,  // 4: armadra.v1.WorkerAgentUpcall.kind:type_name -> armadra.v1.WorkerAgentUpcallKind
+	2,  // 5: armadra.v1.WorkerUpcallReply.disposition:type_name -> armadra.v1.WorkerUpcallDisposition
+	10, // 6: armadra.v1.WorkerGitUpcall.repository:type_name -> armadra.v1.RepositoryState
+	11, // 7: armadra.v1.WorkerGitUpcall.state:type_name -> armadra.v1.GitOperationState
+	3,  // 8: armadra.v1.WorkerGitUpcall.kind:type_name -> armadra.v1.WorkerGitUpcallKind
+	9,  // [9:9] is the sub-list for method output_type
+	9,  // [9:9] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_worker_channel_proto_init() }
@@ -969,7 +990,9 @@ func file_armadra_v1_worker_channel_proto_init() {
 		return
 	}
 	file_armadra_v1_git_proto_init()
+	file_armadra_v1_session_proto_init()
 	file_armadra_v1_worker_channel_proto_msgTypes[1].OneofWrappers = []any{
+		(*WorkerUpcall_Session)(nil),
 		(*WorkerUpcall_Agent)(nil),
 		(*WorkerUpcall_Git)(nil),
 	}

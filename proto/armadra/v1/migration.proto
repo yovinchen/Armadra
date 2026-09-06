@@ -3,6 +3,7 @@ package armadra.v1;
 option go_package = "armadra.local/host/gen/armadra/v1";
 import "armadra/v1/canvas.proto";
 import "armadra/v1/filesystem.proto";
+import "armadra/v1/session.proto";
 
 // Offline export manifest, maximum 64 MiB. Not a network control frame.
 // The referenced SQLite file is a consistent snapshot. Asset files have their
@@ -153,6 +154,11 @@ message ReverseExportRecord {
     // domain named in the index refuses the package instead of applying half
     // of it (`reverse.unsupported_entity`).
     WorkspaceRoot workspace_root = 6;
+    // The session domain's records. A session package carries both members,
+    // because a session without its runs would roll back a row that claims a
+    // generation nothing accounts for.
+    Session session = 7;
+    SessionRun session_run = 8;
   }
 }
 
