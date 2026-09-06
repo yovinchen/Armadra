@@ -12,8 +12,15 @@ import (
 // cursor advanced past a sequence must not receive that sequence on a second
 // page under different rules.
 type filter struct {
-	workspaces  map[string]struct{}
-	domains     map[pb.EventDomain]struct{}
+	workspaces map[string]struct{}
+	domains    map[pb.EventDomain]struct{}
+	// hostWide is the subset of `domains` the session may read without naming a
+	// workspace. It is what admits a host-wide envelope: the settings document
+	// belongs to every workspace the session follows, so attributing it to one
+	// of them would hide the change from the others, and it carries no
+	// workspace at all. A session whose grant is narrowed to a workspace has
+	// not been given the machine's document and does not appear here.
+	hostWide    map[pb.EventDomain]struct{}
 	minPriority pb.EventPriority
 	pageBytes   int
 }
@@ -70,6 +77,7 @@ func resolve(caller Caller, request *pb.SubscribeEventsRequest, maxPageBytes int
 	result := filter{
 		workspaces:  make(map[string]struct{}, len(request.GetWorkspaceIds())),
 		domains:     make(map[pb.EventDomain]struct{}),
+		hostWide:    make(map[pb.EventDomain]struct{}),
 		minPriority: request.GetMinPriority(),
 		pageBytes:   maxPageBytes,
 	}
@@ -137,7 +145,26 @@ func resolve(caller Caller, request *pb.SubscribeEventsRequest, maxPageBytes int
 	if len(result.domains) == 0 {
 		return filter{}, ErrSubscriptionDenied
 	}
+	// A domain the session may read without naming a workspace is the only one
+	// whose host-wide events it may receive. This is asked once, here, for the
+	// same reason everything else about the filter is: a grant re-checked later
+	// could answer differently for a page the client was already told about.
+	for domain := range result.domains {
+		if permitsHostWide(caller, domain) {
+			result.hostWide[domain] = struct{}{}
+		}
+	}
 	return result, nil
+}
+
+// permitsHostWide reports whether the session holds a domain's grant over the
+// whole machine rather than over one workspace of it.
+func permitsHostWide(caller Caller, domain pb.EventDomain) bool {
+	permission, known := domainRead[domain]
+	if !known {
+		return false
+	}
+	return auth.Permits(caller.Scopes, []auth.Scope{{Permission: permission, ExecutionHostID: caller.HostID}})
 }
 
 // admits reports whether one projected envelope belongs on this subscription.
@@ -147,10 +174,18 @@ func (f filter) admits(envelope *pb.EventEnvelope) bool {
 	if envelope == nil {
 		return false
 	}
-	if _, ok := f.workspaces[envelope.GetWorkspaceId()]; !ok {
+	if _, ok := f.domains[envelope.GetDomain()]; !ok {
 		return false
 	}
-	if _, ok := f.domains[envelope.GetDomain()]; !ok {
+	if workspace := envelope.GetWorkspaceId(); workspace == "" {
+		// A host-wide change — the settings document and the execution hosts it
+		// projects to — belongs to every workspace this subscription follows.
+		// It is delivered on the machine-wide grant, because pinning it to one
+		// of the named workspaces would hide it from the others.
+		if _, ok := f.hostWide[envelope.GetDomain()]; !ok {
+			return false
+		}
+	} else if _, ok := f.workspaces[workspace]; !ok {
 		return false
 	}
 	return envelope.GetPriority() >= f.minPriority
