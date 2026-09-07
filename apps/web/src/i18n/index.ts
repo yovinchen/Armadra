@@ -26,6 +26,7 @@ import { legacyArchives } from "./legacy-archives";
 import { contextUsage } from "./context-usage";
 import { gitHunks } from "./git-hunks";
 import { handoff } from "./handoff";
+import { gitCommit } from "./git-commit";
 import { gitMessage } from "./git-message";
 import { gitStashes } from "./git-stashes";
 import { github } from "./github";
@@ -82,6 +83,7 @@ export const MESSAGE_MODULES = {
   "git-repository": gitRepository,
   "frame-binding": frameBinding,
   "git-hunks": gitHunks,
+  "git-commit": gitCommit,
   "git-message": gitMessage,
   "git-stashes": gitStashes,
   "git-integration": gitIntegration,
