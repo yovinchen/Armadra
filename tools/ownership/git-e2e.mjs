@@ -817,12 +817,59 @@ try {
       rootTree.branches.find((branch) => branch.name === "main")?.upstream ===
         "origin/main" &&
       typeof rootTree.stashCount === "number" &&
+      Array.isArray(rootTree.stashes) &&
+      rootTree.stashes.length === rootTree.stashCount &&
       // A branch with no upstream reports null, never zero: "nothing to push"
       // and "nowhere to push" are different answers.
       rootTree.branches.find((branch) => branch.name === "发布")?.ahead ===
         null &&
       nestedTree.remotes.length === 0,
     `HTTP ${tree.httpStatus} repos=${repositoryTrees.length ?? 0}${refusal(tree)}`,
+  );
+
+  // The stash group is a menu, not a badge: every action on it names the
+  // object it observed, because `stash@{n}` renumbers the moment another stash
+  // is pushed or dropped. So the tree carries the entries, not only the count.
+  writeFileSync(join(harness.project, "暂存.txt"), "stashed\n");
+  git(harness.project, ["add", "暂存.txt"]);
+  git(harness.project, ["stash", "push", "-m", "工具窗口"]);
+  const stashed = await driver.git("read", [
+    { method: GitReadMethod.REFS, scope, requestJson: body({}) },
+  ]);
+  const stashedRoot =
+    stashed.httpStatus === 200
+      ? decode(stashed).find((entry) => entry.repositoryPath === ".")
+      : null;
+  step(
+    "the branch tree carries each stash, not only how many there are",
+    stashed.httpStatus === 200 &&
+      stashedRoot?.stashCount === 1 &&
+      stashedRoot.stashes?.length === 1 &&
+      stashedRoot.stashes[0].index === 0 &&
+      /^[0-9a-f]{40,64}$/.test(stashedRoot.stashes[0].oid ?? "") &&
+      String(stashedRoot.stashes[0].message ?? "").includes("工具窗口") &&
+      typeof stashedRoot.stashes[0].createdAt === "string",
+    `HTTP ${stashed.httpStatus} stashes=${JSON.stringify(stashedRoot?.stashes ?? null)}`,
+  );
+  git(harness.project, ["stash", "drop"]);
+
+  // Who a commit from this checkout would be attributed to. The window's
+  // "mine" filter reads it instead of guessing from the newest reflog entry —
+  // which is the last person who wrote here, not the person sitting here.
+  const identity = await driver.git("read", [
+    {
+      method: GitReadMethod.IDENTITY,
+      scope,
+      requestJson: body({ path: "." }),
+    },
+  ]);
+  const who = identity.httpStatus === 200 ? decode(identity) : null;
+  step(
+    "the Host forwards the checkout's configured commit identity",
+    identity.httpStatus === 200 &&
+      typeof who?.email === "string" &&
+      who.email.length > 0,
+    `HTTP ${identity.httpStatus} ${JSON.stringify(who)}${refusal(identity)}`,
   );
 
   /* ---------------------------------------- 7c. a clone through the Host */
