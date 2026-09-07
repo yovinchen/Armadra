@@ -97,8 +97,32 @@ describe("MergeDialog", () => {
     // 写盘带的是打开合并视图时读到的那一版，不是「不管现在是什么都覆盖」。
     expect(expectedSha).toBe("f".repeat(64));
     // 保存不等于解决：仍然由现有的 `git/resolve` 重读文件后才入索引。
-    expect(gitMarkResolved).toHaveBeenCalledWith("w1", ["src/a.ts"]);
+    expect(gitMarkResolved).toHaveBeenCalledWith("w1", ["src/a.ts"], ".");
     expect(await screen.findByText("已写入并标记已解决")).toBeTruthy();
+  });
+
+  it("addresses a nested checkout's conflict by checkout, not by the root index", async () => {
+    render(<MergeDialog />);
+    await openMergeView("w1", "src/a.ts", "vendor/lib");
+    // 冲突快照与「标记已解决」按检出寻址、收仓库相对路径；读写文件按工作空间
+    // 寻址。同一个文件在两条路上是两种写法，这里正是它们分岔的地方。
+    expect(gitRepositoryIntegration).toHaveBeenCalledWith(
+      "w1",
+      undefined,
+      "vendor/lib",
+    );
+    expect(readFile).toHaveBeenCalledWith("w1", "vendor/lib/src/a.ts");
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "保存并标记已解决" }),
+    );
+    await waitFor(() => expect(writeFile).toHaveBeenCalled());
+    expect(writeFile.mock.calls[0]![1]).toBe("vendor/lib/src/a.ts");
+    expect(gitMarkResolved).toHaveBeenCalledWith(
+      "w1",
+      ["src/a.ts"],
+      "vendor/lib",
+    );
   });
 
   it("writes the file without staging it when only saving", async () => {

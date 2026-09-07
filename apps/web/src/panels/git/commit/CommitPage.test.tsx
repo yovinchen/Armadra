@@ -72,7 +72,9 @@ function batch(
         repository: true,
         branch: "main",
         changedCount: entry.files.length,
-        files: entry.files,
+        // `originPath` 是重命名的来源，Runtime 现在会给出来；这些用例不关心它，
+        // 但缺了它这份桩就不再是一份 `git status` 了。
+        files: entry.files.map((file) => ({ ...file, originPath: null })),
       },
     })),
     observedAt: timestamp,

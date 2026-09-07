@@ -1,4 +1,10 @@
-import { readStored, storedBoolean, storedIds, storedNumber } from "./storage";
+import {
+  readStored,
+  storedBoolean,
+  storedEnum,
+  storedIds,
+  storedNumber,
+} from "./storage";
 
 /**
  * Git 工具窗口的偏好（Git 工具窗口设计 §3.2「日志筛选、分支树展开与收藏、
@@ -21,6 +27,14 @@ export const GIT_LOG_DATE_RANGES = [
   "custom",
 ] as const;
 export type GitLogDateRange = (typeof GIT_LOG_DATE_RANGES)[number];
+
+/**
+ * 提交页变更树的排列方式。故意不从 `panels/git/commit/build-change-tree` 引
+ * `ChangeLayout`：偏好这一层不该反过来依赖某一个面板，两边是结构相同的字面量
+ * 联合，赋值本来就通得过。
+ */
+export const GIT_CHANGE_LAYOUTS = ["tree", "flat"] as const;
+export type GitChangeLayout = (typeof GIT_CHANGE_LAYOUTS)[number];
 
 export interface GitPreferences {
   /** 底部窗口高度，px。`0` = 还没拖过，用 `--git-window-h`（40vh）。 */
@@ -59,6 +73,8 @@ export interface GitPreferences {
   showHashColumn: boolean;
   /** 详情里的变更文件：树形（false）还是平铺（true）。 */
   flatFiles: boolean;
+  /** 提交页变更树的排列方式。 */
+  changeLayout: GitChangeLayout;
 }
 
 export const GIT_KEYS: Record<keyof GitPreferences, string> = {
@@ -85,6 +101,9 @@ export const GIT_KEYS: Record<keyof GitPreferences, string> = {
   compactRows: KEY("compactRows"),
   showHashColumn: KEY("showHashColumn"),
   flatFiles: KEY("flatFiles"),
+  // 键名与字段名不一致是故意的：这一项原来住在提交页自己的 `preferences.ts`
+  // 里，沿用旧键，已经存过的人搬过来之后仍然停在自己选的那个排列上。
+  changeLayout: KEY("commitLayout"),
 };
 
 /** 数组值走 JSON，其余走 `String()`；读回时按同一张表还原。 */
@@ -125,5 +144,6 @@ export function storedGitPreferences(): GitPreferences {
     compactRows: storedBoolean(GIT_KEYS.compactRows, false),
     showHashColumn: storedBoolean(GIT_KEYS.showHashColumn, true),
     flatFiles: storedBoolean(GIT_KEYS.flatFiles, false),
+    changeLayout: storedEnum(GIT_KEYS.changeLayout, GIT_CHANGE_LAYOUTS, "tree"),
   };
 }

@@ -5,7 +5,7 @@
  * 提交按钮。跨仓库勾选时按仓库各提交一次、用同一条信息——设计 §4 明说不做跨
  * 仓库的一次提交，所以这里的进度是一个仓库一行的结果，而不是一个转圈。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -14,14 +14,13 @@ import {
   ChevronLeft,
   ListTree,
   Rows3,
-  RotateCw,
   Undo2,
 } from "lucide-react";
 import type { GitRestoreSource } from "@armadra/shared";
 import { runtimeApi } from "../../../api/client";
 import { gitGateway } from "../../../git/gateway";
 import { gitTarget, useGitTarget } from "../../../git/target";
-import { useT } from "../../../app/preferences-store";
+import { usePreferencesStore, useT } from "../../../app/preferences-store";
 import { useCanvasStore } from "../../../store/canvas-store";
 import { useCompactLayout } from "../../../platform/layout";
 import { openMergeView } from "../../../editor/merge/conflict";
@@ -48,24 +47,35 @@ import { ChangeTree } from "./ChangeTree";
 import { CommitMessage, type CommitOutcome } from "./CommitMessage";
 import { OperationBanner } from "./OperationBanner";
 import { StashDialog, UnstashDialog } from "./StashDialogs";
-import {
-  rememberMessage,
-  storedChangeLayout,
-  storedMessages,
-  writeChangeLayout,
-} from "./preferences";
+import { rememberMessage, storedMessages } from "./preferences";
 import { useRepositoryWrites } from "./use-repository-writes";
 import { useStaging } from "./use-staging";
 
 const stagedCount = (group: RepositoryChangeGroup) =>
   group.sections.find((section) => section.group === "staged")?.count ?? 0;
 
-export function CommitPage({ workspaceId }: { workspaceId: string }) {
+export function CommitPage({
+  workspaceId,
+  refreshToken = 0,
+}: {
+  workspaceId: string;
+  /**
+   * 窗口壳每按一次刷新就换一个值。刷新按钮只在壳上有一个（设计 §2.1），而
+   * 「重读」还要顺带清掉上一次提交的逐仓库结论——那些结论说的是刷新之前的那份
+   * 状态。用一个 prop 而不是全局事件：这件事只在壳与这一页之间发生，走事件总线
+   * 就得多一个谁都能发的信号；也不用 `key` 重挂，那会把还没提交的信息草稿一起
+   * 扔掉。
+   */
+  refreshToken?: number;
+}) {
   const t = useT();
   const client = useQueryClient();
   const compact = useCompactLayout();
   const workspaceRoot = useCanvasStore((state) => state.workspace?.rootPath);
-  const [layout, setLayout] = useState(storedChangeLayout);
+  const layout = usePreferencesStore((state) => state.git.changeLayout);
+  const setGitPreference = usePreferencesStore(
+    (state) => state.setGitPreference,
+  );
   const [selected, setSelected] = useState<ChangeFileNode | null>(null);
   const [drilled, setDrilled] = useState(false);
   const [message, setMessage] = useState("");
@@ -162,28 +172,19 @@ export function CommitPage({ workspaceId }: { workspaceId: string }) {
     staged.length > 0 ? staged : amend && amendTarget ? [amendTarget] : [];
   const busy = writes.busy || committing;
 
-  const refresh = () => {
-    invalidateGitQueries(client, workspaceId);
-    setOutcomes([]);
-  };
-  const toggleLayout = () => {
-    const next = layout === "tree" ? "flat" : "tree";
-    setLayout(next);
-    writeChangeLayout(next);
-  };
+  // 壳上的刷新已经把查询全都失效了，这里只清结论。首次挂载也会跑一次，那时
+  // 结论本来就是空的。
+  useEffect(() => setOutcomes([]), [refreshToken]);
+  const toggleLayout = () =>
+    setGitPreference("changeLayout", layout === "tree" ? "flat" : "tree");
   const select = (node: ChangeFileNode) => {
     setSelected(node);
     if (compact) setDrilled(true);
   };
-  const resolve = (node: ChangeFileNode) => {
-    // 三方合并读的是工作空间根仓库的索引（`editor/merge/conflict.ts`），别的
-    // 检出没有入口可走，说清楚好过打开一个空的合并视图。
-    if (node.repositoryPath !== ".") {
-      toast.error(t("gitCommit.mergeRootOnly"));
-      return;
-    }
-    void openMergeView(workspaceId, node.path);
-  };
+  // `node.path` 是仓库相对的，`node.repositoryPath` 说的是哪个检出——两个一起
+  // 送过去，嵌套仓库的冲突才不会被拿到根仓库的索引里去找。
+  const resolve = (node: ChangeFileNode) =>
+    void openMergeView(workspaceId, node.path, node.repositoryPath);
   const push = async (repositoryPath: string) => {
     const snapshot = await gitGateway.branches(at(repositoryPath));
     const current = snapshot.branches.find(
@@ -330,9 +331,7 @@ export function CommitPage({ workspaceId }: { workspaceId: string }) {
           </Button>
         ) : (
           <>
-            <IconButton label={t("gitRepo.refresh")} onClick={refresh}>
-              <RotateCw />
-            </IconButton>
+            {/* 刷新在窗口壳的工具条上，两页共用一个（设计 §2.1）。 */}
             <IconButton
               label={t(layout === "tree" ? "gitCommit.flat" : "gitCommit.tree")}
               onClick={toggleLayout}

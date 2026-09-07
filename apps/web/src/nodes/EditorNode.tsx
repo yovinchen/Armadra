@@ -433,7 +433,8 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
       {conflicted && writable && workspaceId && (
         <IconButton
           label={t("merge.open")}
-          onClick={() => void openMergeView(workspaceId, path)}
+          // 编辑器节点拿到的是工作空间相对路径，也就是根检出里的路径。
+          onClick={() => void openMergeView(workspaceId, path, ".")}
         >
           <GitMerge />
         </IconButton>

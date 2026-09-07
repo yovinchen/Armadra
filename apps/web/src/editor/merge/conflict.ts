@@ -22,14 +22,32 @@ export function hasConflictMarkers(text: string): boolean {
   return MARKER.test(text);
 }
 
+/** 文件读写按工作空间寻址；冲突快照按检出寻址。这里做那一次换算。 */
+export function workspaceRelative(
+  repositoryPath: string,
+  path: string,
+): string {
+  return repositoryPath === "." ? path : `${repositoryPath}/${path}`;
+}
+
+/**
+ * `path` 是**仓库相对**的文件路径，`repositoryPath` 是它所在的检出（工作空间
+ * 相对，`"."` 是根）。两个分开传是因为它们各有各的去处：冲突快照与「标记已
+ * 解决」按检出寻址、路径是仓库相对的，而读写文件走的是工作空间相对路径。
+ */
 export async function openMergeView(
   workspaceId: string,
   path: string,
+  repositoryPath = ".",
 ): Promise<void> {
   const store = useMergeStore.getState();
-  store.begin({ workspaceId, path });
+  store.begin({ workspaceId, path, repositoryPath });
   try {
-    const snapshot = await runtimeApi.gitRepositoryIntegration(workspaceId);
+    const snapshot = await runtimeApi.gitRepositoryIntegration(
+      workspaceId,
+      undefined,
+      repositoryPath,
+    );
     const entry = snapshot.conflicts.find((file) => file.path === path);
     if (!entry) {
       useMergeStore.getState().refuse("notConflicted");
@@ -42,7 +60,10 @@ export async function openMergeView(
     }
     // 工作区文件只用来取内容版本与 BOM：合并结果要写回它，而写回需要
     // 「读到的是哪一版」。正文本身来自索引里的三个 blob。
-    const current = await runtimeApi.readFile(workspaceId, path);
+    const current = await runtimeApi.readFile(
+      workspaceId,
+      workspaceRelative(repositoryPath, path),
+    );
     useMergeStore.getState().ready({
       regions: merge3(
         entry.base?.preview ?? "",

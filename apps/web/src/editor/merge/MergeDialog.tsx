@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@/ui/dialog";
 import { ScrollArea } from "@/ui/scroll-area";
+import { workspaceRelative } from "./conflict";
 import { useMergeStore } from "./merge-store";
 
 /**
@@ -49,19 +50,23 @@ export function MergeDialog() {
   );
 
   const save = async (markResolved: boolean) => {
-    const { workspaceId, path, expectedSha256, bom } = store.getState();
+    const { workspaceId, path, repositoryPath, expectedSha256, bom } =
+      store.getState();
     if (!workspaceId || !path) return;
     store.getState().setSaving(true);
     try {
+      // 写盘按工作空间寻址，`git/resolve` 按检出寻址、收的是仓库相对路径——
+      // 同一个文件在两条路上是两种写法，换算在 `conflict.ts` 里只有一处。
       await runtimeApi.writeFile(
         workspaceId,
-        path,
+        workspaceRelative(repositoryPath, path),
         merged,
         undefined,
         expectedSha256 ?? undefined,
         bom,
       );
-      if (markResolved) await runtimeApi.gitMarkResolved(workspaceId, [path]);
+      if (markResolved)
+        await runtimeApi.gitMarkResolved(workspaceId, [path], repositoryPath);
       store.getState().finish();
     } catch (error) {
       store

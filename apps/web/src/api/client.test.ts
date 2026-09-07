@@ -483,6 +483,9 @@ describe("git", () => {
       status: "M",
       staged: true,
       unstaged: true,
+      // A Runtime that predates the rename origin omits the key; the row is
+      // still a row, it just has no arrow to draw.
+      originPath: null,
     });
   });
 

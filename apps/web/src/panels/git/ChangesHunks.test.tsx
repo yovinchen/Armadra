@@ -94,6 +94,8 @@ describe("individual changes hunks", () => {
     fireEvent.click(buttons[1]!);
     await screen.findByText("Hunk operation completed");
     expect(props.apply).toHaveBeenCalledWith("workspace", {
+      // 检出路径跟着请求走，缺省是根：同名文件在两个仓库里是两个文件。
+      path: ".",
       file: "file with spaces.txt",
       scope: "worktree",
       diffDigest: digest,
@@ -111,6 +113,7 @@ describe("individual changes hunks", () => {
       "diffDigest",
       "file",
       "hunkId",
+      "path",
       "scope",
     ]);
   });
@@ -142,7 +145,7 @@ describe("individual changes hunks", () => {
     const changed = { ...diff(), diffDigest: "d".repeat(64) };
     act(() =>
       client.setQueryData(
-        ["git-hunks", "workspace", "file with spaces.txt", "worktree"],
+        ["git-hunks", "workspace", ".", "file with spaces.txt", "worktree"],
         changed,
       ),
     );

@@ -13,7 +13,10 @@ import type { Choice, MergeRegion } from "@/lib/merge3";
 export interface MergeState {
   open: boolean;
   workspaceId: string | null;
+  /** 仓库相对的文件路径。对话框标题显示的也是它。 */
   path: string | null;
+  /** 文件所在检出，工作空间相对；`"."` 是根。写盘与标记已解决都要它。 */
+  repositoryPath: string;
   loading: boolean;
   /** 打不开合并视图的原因（不是冲突文件、是二进制、正文被截断…）。 */
   unavailable: string | null;
@@ -31,7 +34,11 @@ export interface MergeState {
   error: string | null;
   /** 已经写盘并且索引里标了已解决。 */
   resolved: boolean;
-  begin: (context: { workspaceId: string; path: string }) => void;
+  begin: (context: {
+    workspaceId: string;
+    path: string;
+    repositoryPath: string;
+  }) => void;
   ready: (loaded: {
     regions: MergeRegion[];
     expectedSha256: string | null;
@@ -63,6 +70,7 @@ function empty(): MergeData {
     open: false,
     workspaceId: null,
     path: null,
+    repositoryPath: ".",
     loading: false,
     unavailable: null,
     regions: [],
@@ -78,8 +86,15 @@ function empty(): MergeData {
 
 export const useMergeStore = create<MergeState>()((set) => ({
   ...empty(),
-  begin: ({ workspaceId, path }) =>
-    set({ ...empty(), open: true, loading: true, workspaceId, path }),
+  begin: ({ workspaceId, path, repositoryPath }) =>
+    set({
+      ...empty(),
+      open: true,
+      loading: true,
+      workspaceId,
+      path,
+      repositoryPath,
+    }),
   ready: ({ regions, expectedSha256, bom, trailingNewline }) =>
     set({
       loading: false,

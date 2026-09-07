@@ -24,6 +24,12 @@ import {
 
 export interface ChangesHunksProps {
   workspaceId: string;
+  /**
+   * 文件所在的**检出**，工作空间相对，`"."` 是根。缺省是根：源码控制抽屉里的
+   * hunk 视图只服务根仓库，那个调用点不必跟着改。
+   */
+  repositoryPath?: string;
+  /** 仓库相对的文件路径——同名文件在两个检出里是两个文件。 */
   file: string;
   scope: GitHunkScope;
   load: (
@@ -31,6 +37,7 @@ export interface ChangesHunksProps {
     file: string,
     scope: GitHunkScope,
     signal?: AbortSignal,
+    repositoryPath?: string,
   ) => Promise<GitHunkDiff>;
   apply: (
     workspaceId: string,
@@ -43,7 +50,7 @@ export interface ChangesHunksProps {
 export function ChangesHunks(props: ChangesHunksProps) {
   return (
     <HunkSession
-      key={`${props.workspaceId}:${props.file}:${props.scope}`}
+      key={`${props.workspaceId}:${props.repositoryPath ?? "."}:${props.file}:${props.scope}`}
       {...props}
     />
   );
@@ -72,6 +79,7 @@ const reasons = new Set([
 ]);
 function HunkSession({
   workspaceId,
+  repositoryPath = ".",
   file,
   scope,
   load,
@@ -88,9 +96,17 @@ function HunkSession({
     };
   }, []);
   const query = useQuery({
-    queryKey: ["git-hunks", workspaceId, file, scope],
+    // 检出路径必须进键：两个仓库里的同名文件是两份差异，共用一个键会把别人的
+    // hunk 当成自己的显示出来，连带那份 `diffDigest` 也是别人的。
+    queryKey: ["git-hunks", workspaceId, repositoryPath, file, scope],
     queryFn: async ({ signal }) => {
-      const value = await load(workspaceId, file, scope, signal);
+      const value = await load(
+        workspaceId,
+        file,
+        scope,
+        signal,
+        repositoryPath,
+      );
       if (value.file !== file || value.scope !== scope)
         throw new Error(t("gitHunk.invalidResponse"));
       return value;
@@ -139,6 +155,7 @@ function HunkSession({
   ) => {
     if (busy || query.isError || !query.data?.supported || !digest) return;
     mutation.mutate({
+      path: repositoryPath,
       file,
       scope,
       diffDigest: digest,
