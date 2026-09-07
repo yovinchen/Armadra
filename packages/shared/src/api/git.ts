@@ -17,6 +17,14 @@ export const gitFileStatusSchema = z.object({
   status: diffFileStatusSchema,
   staged: z.boolean(),
   unstaged: z.boolean(),
+  /**
+   * Where a renamed or copied entry came from; `null` for every other status.
+   *
+   * Nullish rather than required: a Runtime older than this version omits the
+   * key, and a change tree that throws on the whole status because one row
+   * predates a field is worse than one row without an arrow.
+   */
+  originPath: z.string().nullish().default(null),
 });
 
 export const gitStatusSchema = z.object({

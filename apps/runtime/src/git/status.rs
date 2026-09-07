@@ -60,14 +60,22 @@ pub struct GitFileStatus {
     /// `Y` of the porcelain `XY` pair: the working tree differs from the index.
     /// Untracked files count as unstaged.
     pub unstaged: bool,
+    /// Where a renamed or copied entry came from, as the record's second `-z`
+    /// field spells it; `null` for every other status.
+    ///
+    /// The porcelain already reports it — it is the field the parser used to
+    /// read and drop — and the change tree needs it to draw one `new ← old`
+    /// row instead of an addition beside an unexplained deletion.
+    pub origin_path: Option<String>,
 }
 
 /// Parse `git status --porcelain=v1 -z` output.
 ///
 /// Each record is `XY <path>`, NUL-terminated. `X` is the index status and `Y`
 /// the working-tree status; for renames and copies the origin path follows as
-/// its own NUL-terminated field and is skipped — the UI addresses the
-/// destination.
+/// its own NUL-terminated field. The entry is still addressed by its
+/// destination — that is the path every write takes — and the origin travels
+/// beside it so a row can say where the file came from.
 pub fn parse_porcelain_z(output: &str) -> Vec<GitFileStatus> {
     let mut fields = output.split('\0');
     let mut entries = Vec::new();
@@ -79,9 +87,16 @@ pub fn parse_porcelain_z(output: &str) -> Vec<GitFileStatus> {
         let index = codes.next().unwrap_or(' ');
         let worktree = codes.next().unwrap_or(' ');
         let path = record[3..].to_owned();
-        if index == 'R' || index == 'C' || worktree == 'R' || worktree == 'C' {
-            let _origin = fields.next();
-        }
+        // The extra field is consumed whether or not the entry survives: leave
+        // it in the iterator and the *next* record is read as a status line.
+        let origin_path = if index == 'R' || index == 'C' || worktree == 'R' || worktree == 'C' {
+            fields
+                .next()
+                .filter(|origin| !origin.is_empty())
+                .map(str::to_owned)
+        } else {
+            None
+        };
         // `!!` only appears with --ignored, which we never pass; skip it anyway
         // so an ignored file can never be rendered as a change.
         if index == '!' || worktree == '!' {
@@ -92,6 +107,7 @@ pub fn parse_porcelain_z(output: &str) -> Vec<GitFileStatus> {
             path,
             staged: index != ' ' && index != '?',
             unstaged: worktree != ' ',
+            origin_path,
         });
     }
     entries

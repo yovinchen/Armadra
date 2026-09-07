@@ -88,6 +88,7 @@ fn parses_porcelain_z_records() {
             status: "M".into(),
             staged: false,
             unstaged: true,
+            origin_path: None,
         }
     );
     assert_eq!(
@@ -97,6 +98,7 @@ fn parses_porcelain_z_records() {
             status: "M".into(),
             staged: true,
             unstaged: false,
+            origin_path: None,
         }
     );
     let both = by_path("src/c.ts");
@@ -105,10 +107,14 @@ fn parses_porcelain_z_records() {
     let untracked = by_path("new file.ts");
     assert_eq!(untracked.status, "?");
     assert!(!untracked.staged && untracked.unstaged);
-    // The rename's origin field is consumed, not mistaken for a record.
+    // The rename's origin field is consumed, not mistaken for a record — and it
+    // is reported rather than dropped, so the row can say where the file came
+    // from instead of showing an addition beside an unexplained deletion.
     let renamed = by_path("dst.ts");
     assert_eq!(renamed.status, "R");
     assert!(renamed.staged);
+    assert_eq!(renamed.origin_path.as_deref(), Some("src.ts"));
+    assert_eq!(by_path("src/a.ts").origin_path, None);
     assert!(entries.iter().all(|entry| entry.path != "src.ts"));
     assert_eq!(by_path("gone.ts").status, "D");
 }
