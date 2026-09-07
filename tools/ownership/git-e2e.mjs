@@ -692,23 +692,29 @@ try {
         Date.parse(commit.committerTime),
   );
   // The rows that share the newest instant are the tie the fixture arranged.
-  // They come back in the repositories' discovery order — the same order the
-  // colours are numbered in — which is the whole point: "whichever `git`
-  // answered first" is not an order anybody can page through.
+  // They come back grouped by the repositories' discovery order — the same
+  // order the colours are numbered in — which is the whole point: "whichever
+  // `git` answered first" is not an order anybody can page through. Within a
+  // repository the tie keeps that repository's own order, so the colour never
+  // goes backwards but may repeat.
   const newest = rows.filter(
     (commit) => commit.committerTime === rows[0]?.committerTime,
   );
   const tieInColourOrder = newest.every(
     (commit, index) =>
       index === 0 ||
-      colours.get(newest[index - 1].repositoryPath) <
+      colours.get(newest[index - 1].repositoryPath) <=
         colours.get(commit.repositoryPath),
   );
+  // …and the tie really does span more than one repository, or it would not be
+  // testing the rule.
+  const tieSpansRepositories =
+    new Set(newest.map((commit) => commit.repositoryPath)).size > 1;
   step(
     "one page merges every repository, newest first, each row naming its checkout",
     merged.httpStatus === 200 &&
       ordered &&
-      newest.length > 1 &&
+      tieSpansRepositories &&
       tieInColourOrder &&
       rows.some((commit) => commit.repositoryPath === ".") &&
       rows.some((commit) => commit.repositoryPath === "嵌套") &&
