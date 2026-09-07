@@ -634,8 +634,17 @@ fn nonempty(value: &str) -> Option<String> {
 fn malformed() -> AppError {
     AppError::Internal("Git returned unsupported or malformed machine-readable output".into())
 }
+/// A page cursor that no longer describes the page it was taken from.
+///
+/// It is `InvalidCursor` rather than a plain bad request, and named the same
+/// way the merged log names it, because the client's repair is automatic and
+/// identical in all three cases: drop the cursor and read the first page. A
+/// generic `bad_request` there is indistinguishable from a mistake the client
+/// has to be told about.
 fn invalid_cursor() -> AppError {
-    AppError::BadRequest("History cursor does not match this repository/reference".into())
+    AppError::InvalidCursor(
+        "The cursor does not match this repository or reference; reload the first page".into(),
+    )
 }
 fn shutting_down() -> AppError {
     AppError::Conflict("Git repository service is shutting down".into())
