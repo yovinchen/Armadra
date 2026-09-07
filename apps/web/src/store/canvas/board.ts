@@ -33,6 +33,19 @@ function isWorkPanel(key: keyof PanelState): key is WorkPanel {
   return (WORK_PANELS as readonly string[]).includes(key);
 }
 
+/**
+ * 「这块工作面板现在占着地方」的那几个值。
+ *
+ * 抽屉只有 `drawer` 一种形态时这是一次相等判断；Git 工具窗口停到底部之后
+ * 多了 `bottom` 与 `maximized`（Git 工具窗口设计 §2.1），它们同样占着那块
+ * 地方，所以「一次只开一个」必须把它们算进来——否则底部的 Git 窗口和右侧
+ * 的资源管理器会同时开着，而它们本来就是同一个容器的两种停靠方向。
+ */
+const OPEN_WORK_PANEL = ["drawer", "bottom", "maximized"] as const;
+function occupies(value: PanelState[keyof PanelState]): boolean {
+  return (OPEN_WORK_PANEL as readonly unknown[]).includes(value);
+}
+
 export function createBoardSlice(
   set: CanvasSet,
   get: CanvasGet,
@@ -188,9 +201,9 @@ export function createBoardSlice(
       }
       set((state) => {
         const panels: PanelState = { ...state.panels, [key]: value };
-        if (value !== "drawer" || !isWorkPanel(key)) return { panels };
+        if (!occupies(value) || !isWorkPanel(key)) return { panels };
         for (const other of WORK_PANELS) {
-          if (other !== key && panels[other] === "drawer") {
+          if (other !== key && occupies(panels[other])) {
             panels[other] = "closed";
           }
         }

@@ -125,6 +125,10 @@ export function MobileBottomNav() {
               closeOthers(panels, setPanel, destination.panel);
               if (destination.panel === null) return;
               if (destination.panel === "settings") setPanel("settings", true);
+              // Git 是底部停靠的工具窗口（Git 工具窗口设计 §2.1）；手机上它
+              // 直接铺满，四级导航在窗口里面。其余几块仍然是右侧抽屉。
+              else if (destination.panel === "scm")
+                setPanel("scm", "maximized");
               else setPanel(destination.panel, "drawer");
             }}
           >

@@ -203,6 +203,26 @@ describe("面板", () => {
     });
   });
 
+  /**
+   * Git 工具窗口停在底部（Git 工具窗口设计 §2.1），但它占的还是那一块地方，
+   * 所以「一次只开一个」必须把 `bottom` / `maximized` 也算进来。
+   */
+  it("底部停靠的 Git 窗口与右侧抽屉共用那条规则", () => {
+    state().setPanel("explorer", "drawer");
+    state().setPanel("scm", "bottom");
+    expect(state().panels).toMatchObject({
+      explorer: "closed",
+      scm: "bottom",
+    });
+    state().setPanel("github", "drawer");
+    expect(state().panels).toMatchObject({ scm: "closed", github: "drawer" });
+    state().setPanel("scm", "maximized");
+    expect(state().panels).toMatchObject({
+      github: "closed",
+      scm: "maximized",
+    });
+  });
+
   it("pin 成浮卡的不被别的抽屉挤掉", () => {
     state().setPanel("explorer", "pinned");
     state().setPanel("scm", "drawer");

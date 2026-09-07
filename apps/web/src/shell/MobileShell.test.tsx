@@ -99,7 +99,7 @@ describe("the phone bottom navigation", () => {
   it("opens one destination at a time and back to the canvas", () => {
     render(<MobileBottomNav />);
     fireEvent.click(screen.getByRole("button", { name: "Git" }));
-    expect(useCanvasStore.getState().panels.scm).toBe("drawer");
+    expect(useCanvasStore.getState().panels.scm).toBe("maximized");
     fireEvent.click(screen.getByRole("button", { name: "文件" }));
     const panels = useCanvasStore.getState().panels;
     expect(panels.explorer).toBe("drawer");

@@ -101,7 +101,8 @@ export function ControlsCluster() {
           command="app.sourceControl"
           active={panels.scm !== "closed"}
           onClick={() =>
-            setPanel("scm", panels.scm === "closed" ? "drawer" : "closed")
+            // 底部停靠：Git 工具窗口的三栏要的是宽度（Git 工具窗口设计 §2.1）。
+            setPanel("scm", panels.scm === "closed" ? "bottom" : "closed")
           }
         >
           <GitBranch />

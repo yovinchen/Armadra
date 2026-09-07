@@ -61,7 +61,8 @@ export function useCommandDispatch(): CommandDispatch {
           );
           return;
         case "app.sourceControl":
-          setPanel("scm", panels.scm === "closed" ? "drawer" : "closed");
+          // Git 工具窗口停在底部（Git 工具窗口设计 §2.1）。
+          setPanel("scm", panels.scm === "closed" ? "bottom" : "closed");
           return;
         case "app.resources":
           setPanel(

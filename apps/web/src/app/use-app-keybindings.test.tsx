@@ -94,7 +94,7 @@ describe("useAppKeybindings", () => {
     press("e", { shiftKey: true });
     expect(useCanvasStore.getState().panels.explorer).toBe("drawer");
     press("g", { shiftKey: true });
-    expect(useCanvasStore.getState().panels.scm).toBe("drawer");
+    expect(useCanvasStore.getState().panels.scm).toBe("bottom");
     press("l", { shiftKey: true });
     expect(useCanvasStore.getState().panels.sidebar).toBe("collapsed");
     press("l", { shiftKey: true });
