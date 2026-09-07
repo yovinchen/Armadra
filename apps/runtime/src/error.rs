@@ -8,6 +8,14 @@ pub enum AppError {
     BadRequest(String),
     #[error("{0}")]
     Forbidden(String),
+    /// A paging cursor that no longer describes the window it was taken over —
+    /// different filters, a different repository set, a page that moved under
+    /// the reader. Separate from `BadRequest` because the client's repair is
+    /// specific and automatic: drop the cursor and re-read the first page. A
+    /// generic `bad_request` cannot be told apart from a malformed request,
+    /// which is not something re-reading fixes (Git 工具窗口设计 §3.1).
+    #[error("{0}")]
+    InvalidCursor(String),
     #[error("{0}")]
     GitExecutionRequired(String),
     #[error("{0}")]
@@ -100,6 +108,7 @@ impl AppError {
         match self {
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, "bad_request", message),
             Self::Forbidden(message) => (StatusCode::FORBIDDEN, "forbidden", message),
+            Self::InvalidCursor(message) => (StatusCode::BAD_REQUEST, "invalid_cursor", message),
             Self::GitExecutionRequired(message) => {
                 (StatusCode::FORBIDDEN, "git_execution_required", message)
             }

@@ -26,8 +26,10 @@ use std::{
 };
 
 pub mod queue;
+pub mod workspace;
 
 pub use queue::{cancel, operation, operations, owned_operations, start};
+pub use workspace::{log, refs};
 
 use queue::OWNERS;
 

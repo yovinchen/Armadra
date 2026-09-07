@@ -40,12 +40,14 @@ mod commits;
 mod execute;
 mod history;
 mod integration;
+mod log;
 mod parse;
 mod queue;
 mod reflog;
 mod refs;
 mod remotes;
 mod stash;
+mod tree;
 mod worktrees;
 
 pub use actions::{
@@ -56,10 +58,14 @@ pub use branches::{BranchRecord, BranchSnapshot};
 pub use commits::{CommitDetail, CommitFile, CommitFileDiff};
 pub use history::{CommitRecord, HistoryPage, HistoryRequest};
 pub use integration::{CherryPickPreview, ConflictFile, ConflictSide, IntegrationSnapshot};
+pub use log::{LogCommit, LogPage, LogRefKind, LogRefs, LogRepository, LogRequest, LogText};
 pub use queue::{OperationSnapshot, OperationState};
 pub use reflog::{ReflogEntry, ReflogPage, ReflogRequest};
 pub use refs::{RemoteRecord, TagRecord, TagSnapshot};
 pub use stash::{StashDetail, StashRecord, StashSnapshot};
+pub use tree::{
+    RefsBranch, RefsHead, RefsRemote, RefsRemoteBranch, RefsSnapshot, RefsTag, RefsWorktree,
+};
 pub use worktrees::{WorktreeBindingRequest, WorktreeBindingVerdict, WorktreeRecord};
 
 use self::{command::*, execute::*, parse::*, worktrees::*};

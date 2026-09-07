@@ -159,6 +159,15 @@ pub fn router_with_state(state: AppState) -> Router {
             "/api/workspaces/{workspace_id}/git/repositories",
             get(git_api::repositories),
         )
+        // The Git window's two workspace-level reads (Git 工具窗口设计 §3.1).
+        // The log is a POST that writes nothing: its filters are a record, and
+        // a ref selection plus a search plus a cursor in a query string is
+        // where escaping goes wrong.
+        .route(
+            "/api/workspaces/{workspace_id}/git/log",
+            post(git_api::log),
+        )
+        .route("/api/workspaces/{workspace_id}/git/refs", get(git_api::refs))
         .route(
             "/api/workspaces/{workspace_id}/git/repository/branches",
             get(git_api::branches),
