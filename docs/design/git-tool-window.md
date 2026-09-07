@@ -56,6 +56,8 @@
 
 ### 3.1 多仓库日志
 
+> 数据层已实现（2026-09-07）。Runtime `apps/runtime/src/git/repository/log.rs` 与 `tree.rs`、路由 `apps/runtime/src/git/api/workspace.rs`、schema `packages/shared/src/git-repository.ts`、网关 `apps/web/src/git/gateway.ts` 的 `log()` / `refs()`。下面的字段名就是实现的字段名。
+
 新增工作空间级读取 `POST /api/workspaces/{id}/git/log`：
 
 ```jsonc
@@ -68,11 +70,25 @@
 }
 ```
 
-响应 `{ commits: LogCommit[], nextCursor, repositories: [{path, color}] }`，`LogCommit` = 现有 `CommitRecord` + `repositoryPath`。实现：每个仓库一次 `git log --format=… --date=unix` 加 `--all` / 分支名、`--author`、`--since/--until`、`--grep`（`-i` / `-E`）、`-- paths`，各自按 committer time 降序；合并时每轮取时间戳最大的（同戳按仓库顺序再按各自原顺序，保证确定性）；游标是每个仓库各自的 `(anchor_oid, offset)` 集合，绑定筛选条件的哈希，条件变了游标作废（沿用现有 `history` 的游标规则）。上限 200 / 页；仓库数超过 32 时只合并前 32 个并报 `truncated`。
+响应 `{ commits: LogCommit[], nextCursor, repositories: [{path, color}], truncated }`，`LogCommit` = 现有 `CommitRecord` + `repositoryPath`（即 `oid`、`parents`、`subject`、`authorName`、`authorEmail`、`authorTime`、`committerTime`、`refs`，再加 `repositoryPath`；提交者姓名不在 `CommitRecord` 里，详情栏需要时走单仓库的 `commit` 读取）。实现：每个仓库一次 `git log --date-order --decorate=full --ignore-missing -z --format=…%cI…%ct…%D…` 加 `--all` / 分支名、`--author`、`--since/--until`、`--grep`（`--fixed-strings` / `--extended-regexp`，`--regexp-ignore-case`）、`-- paths`。
 
-`GET /api/workspaces/{id}/git/refs`：所有仓库的分支树数据，一次返回 `[{repositoryPath, name, head, branches: [{name, oid, upstream, ahead, behind, current}], remotes: [{name, branches}], tags, worktrees, stashCount}]`，供左栏一次构树；单仓库接口保留给右键动作。
+几处实现细节：
 
-Host 模式：两条读取加进 git 域的 `GitReadMethod`（worker.proto 请求 / 响应号从当前最大值 +1），`git-e2e` 加用例；写动作全部复用现有 `GitRepositoryAction`，不新增写路径。
+- **合并顺序**用 `%ct`（epoch 秒）比较而不是 `%cI` 字符串——同一工作空间的两个仓库可能带不同时区，字符串比较会把 `+08:00` 和 `+00:00` 排错。同戳按仓库在发现列表里的顺序，再按各自原顺序。
+- **`refs` 里 `named` 的名字是工作空间级的**：多数仓库没有那个分支。`--ignore-missing` 让「没有」等于「这个仓库不贡献行」，而不是一次失败的读——匹配 Git 自己的报错文本在中文机器上会失效。未出生的 `HEAD` 同理。
+- **`color` 恒等于该检出在发现列表（`git_discovery`，同一套跳过规则与上限）里的序号**，缩窄 `repositories` 不改变它。请求里的 `repositories` 必须是发现列表里的路径，否则 404：颜色是那个列表里的位置，列表外的路径没有颜色。
+- **游标**是每个仓库各自的 `(anchorOid, offset)` 加筛选条件的 SHA-256。`limit` 不参与哈希（offset 是绝对计数）。条件变了、仓库集合变了、或某个仓库在这套筛选下最新的提交不再是 `anchorOid`（页面在读者脚下移动了），都返回 HTTP 400 `{ "code": "invalid_cursor" }`——这是新增的 `AppError::InvalidCursor`，与普通 `bad_request` 分开，因为客户端的修复是自动的：丢掉游标重读第一页。
+- `limit` 1–200，默认 100；仓库数超过 32（或发现本身触顶）时只合并前 32 个并报 `truncated`。
+- `paths` 是**仓库相对**的 pathspec，在每个参与合并的仓库里各自生效（与单仓库 `history` 的拼写一致）。
+
+`GET /api/workspaces/{id}/git/refs`：所有仓库的分支树数据，一次返回 `[{repositoryPath, repositoryId, kind, name, head: {oid, branch}, branches: [{name, oid, upstream, ahead, behind, current}], remotes: [{name, branches: [{name, oid}]}], tags: [{name, oid, annotated}], worktrees: [{path, branch, oid, locked}], stashCount}]`，供左栏一次构树；单仓库接口保留给右键动作。实现：每个仓库一次 `for-each-ref`（含 `%(upstream:short)` 与 `%(upstream:track,nobracket)`，不为每个分支起子进程），加 `worktree list --porcelain` 与一次 `rev-list --walk-reflogs --count refs/stash`。
+
+- `head.oid` 在未出生分支上是 `null`，`head.branch` 在游离 HEAD 上是 `null`。
+- `upstream` 是短名（`origin/main`），和这份载荷里其余的短名一致；没有上游时 `ahead`/`behind` 是 `null` 而不是 0（「没有可推的」和「没地方推」不是一回事）。
+- `tags[].oid` 是标签指向的**提交**（附注标签取 peel 后的对象），因为树节点跳转的是提交。
+- 读不出来的检出被略过而不是让整个请求失败：一个坏掉的 vendored clone 不该让分支树整块消失。该读取需要执行权限（要跑 `worktree list` 与 stash 计数），与单仓库的 `worktrees` / `stashes` 一致。
+
+Host 模式：两条读取加进 git 域的 `GitReadMethod`（`LOG = 28`、`REFS = 29`），SSH 远端走 `WorkerServiceOperation`（`GIT_LOG = 54`、`GIT_REFS = 55`，`CONTRACT_VERSION` 升到 3）。两条都是**工作空间级**的，Go Host 的 `workspaceWideRead` 把它们和 `REPOSITORIES` 一起豁免检出作用域检查——工作空间根仍由文件系统域的注册决定，从不取自请求。`git-e2e` 加了用例；写动作全部复用现有 `GitRepositoryAction`，不新增写路径。
 
 ### 3.2 前端
 
