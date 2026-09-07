@@ -135,6 +135,135 @@ export type GitCommitFileDiff = z.infer<typeof gitCommitFileDiffSchema>;
 export type GitRepositoryKind = z.infer<typeof gitRepositoryKindSchema>;
 export type GitRepositoryRecord = z.infer<typeof gitRepositoryRecordSchema>;
 export type GitRepositoryList = z.infer<typeof gitRepositoryListSchema>;
+
+/* ------------------ the Git window's workspace-level reads ---------------- */
+
+/**
+ * Which refs the merged log walks (Git 工具窗口设计 §3.1).
+ *
+ * `head` is each repository's own HEAD — the default view. `all` is every ref
+ * in every repository. `named` is the branch tree's selection, and a name only
+ * one repository has narrows the graph to that repository rather than failing
+ * the others' reads.
+ */
+export const gitLogRefKindSchema = z.enum(["head", "all", "named"]);
+export const gitLogRefsSchema = z.object({
+  kind: gitLogRefKindSchema,
+  names: z.array(z.string().min(1)).max(64).optional(),
+});
+/** The search box and its two switches, applied by Git rather than by the client. */
+export const gitLogTextSchema = z.object({
+  query: z.string(),
+  regex: z.boolean().optional(),
+  matchCase: z.boolean().optional(),
+});
+/**
+ * One page of the merged commit log.
+ *
+ * `repositories` absent means every discovered checkout; naming some narrows
+ * the merge to those, and they must be checkouts discovery found, because the
+ * colour a row is drawn with is a position in that list.
+ *
+ * `cursor` belongs to the filters it was taken under: `--skip` counts commits
+ * that passed the filter, so a cursor offered back under different filters is
+ * refused with `invalid_cursor` rather than answered with a window over neither
+ * set. Reload from the first page when that happens.
+ */
+export const gitLogRequestSchema = z.object({
+  repositories: z.array(z.string().min(1)).max(64).optional(),
+  refs: gitLogRefsSchema.optional(),
+  authors: z.array(z.string().min(1)).max(64).optional(),
+  since: z.string().min(1).optional(),
+  until: z.string().min(1).optional(),
+  /** Repository-relative pathspecs, applied in every repository the merge walks. */
+  paths: z.array(z.string().min(1)).optional(),
+  text: gitLogTextSchema.optional(),
+  cursor: z.string().nullable().optional(),
+  /** 1–200; the service defaults to 100. */
+  limit: z.number().int().min(1).max(200).optional(),
+});
+/** One row of the merged graph: the commit record, plus the checkout it is from. */
+export const gitLogCommitSchema = gitCommitRecordSchema.extend({
+  /** Workspace-relative, `.` for the root. */
+  repositoryPath: z.string().min(1),
+});
+export const gitLogRepositorySchema = z.object({
+  path: z.string().min(1),
+  /**
+   * The checkout's position in the workspace's discovery list — the index the
+   * row stripe takes its colour from. Unchanged when the log is narrowed, so a
+   * repository keeps its colour whether or not the others are shown.
+   */
+  color: count,
+});
+export const gitLogPageSchema = z.object({
+  commits: z.array(gitLogCommitSchema),
+  nextCursor: z.string().nullable(),
+  repositories: z.array(gitLogRepositorySchema),
+  /** The workspace has more repositories than one merge walks. */
+  truncated: z.boolean(),
+});
+
+export const gitRefsHeadSchema = z.object({
+  /** Null on an unborn branch, which has no commit yet. */
+  oid: oid.nullable(),
+  /** Null on a detached HEAD. */
+  branch: z.string().nullable(),
+});
+export const gitRefsBranchSchema = z.object({
+  name: z.string().min(1),
+  oid,
+  /** The upstream's short name (`origin/main`), or null when there is none. */
+  upstream: z.string().nullable(),
+  /**
+   * Only meaningful with an upstream. Null says "not tracking", never zero:
+   * "nothing to push" and "nowhere to push" are different answers.
+   */
+  ahead: count.nullable(),
+  behind: count.nullable(),
+  current: z.boolean(),
+});
+export const gitRefsRemoteSchema = z.object({
+  name: z.string().min(1),
+  /** Names inside the remote, without the remote's own prefix. */
+  branches: z.array(z.object({ name: z.string().min(1), oid })),
+});
+export const gitRefsTagSchema = z.object({
+  name: z.string().min(1),
+  /** The commit the tag names — an annotated tag reports its peeled object. */
+  oid,
+  annotated: z.boolean(),
+});
+export const gitRefsWorktreeSchema = z.object({
+  /** Absolute, as Git reports it. */
+  path: z.string().min(1),
+  /** Null on a detached or bare checkout. */
+  branch: z.string().nullable(),
+  oid: oid.nullable(),
+  locked: z.boolean(),
+});
+/**
+ * One discovered checkout's whole branch tree (Git 工具窗口设计 §3.1).
+ *
+ * The whole workspace comes back in one answer, so the window's left column is
+ * one request rather than five per repository. A checkout that cannot be read
+ * is left out rather than failing the request: a branch tree that vanishes
+ * because one vendored clone is broken is worse than one missing that clone.
+ */
+export const gitRefsSnapshotSchema = z.array(
+  z.object({
+    repositoryPath: z.string().min(1),
+    repositoryId: z.string().min(1),
+    kind: gitRepositoryKindSchema,
+    name: z.string().min(1),
+    head: gitRefsHeadSchema,
+    branches: z.array(gitRefsBranchSchema),
+    remotes: z.array(gitRefsRemoteSchema),
+    tags: z.array(gitRefsTagSchema),
+    worktrees: z.array(gitRefsWorktreeSchema),
+    stashCount: count,
+  }),
+);
 /**
  * What an interactive rebase does with one replayed commit. Deliberately small:
  * no `edit`, no `exec`, and no `reword` — each would need an interactive editor
@@ -615,6 +744,21 @@ export const gitWorktreeBindingVerdictSchema = z.object({
   locked: z.boolean(),
   prunable: z.boolean(),
 });
+export type GitLogRefKind = z.infer<typeof gitLogRefKindSchema>;
+export type GitLogRefs = z.infer<typeof gitLogRefsSchema>;
+export type GitLogText = z.infer<typeof gitLogTextSchema>;
+export type GitLogRequest = z.infer<typeof gitLogRequestSchema>;
+export type GitLogCommit = z.infer<typeof gitLogCommitSchema>;
+export type GitLogRepository = z.infer<typeof gitLogRepositorySchema>;
+export type GitLogPage = z.infer<typeof gitLogPageSchema>;
+export type GitRefsHead = z.infer<typeof gitRefsHeadSchema>;
+export type GitRefsBranch = z.infer<typeof gitRefsBranchSchema>;
+export type GitRefsRemote = z.infer<typeof gitRefsRemoteSchema>;
+export type GitRefsTag = z.infer<typeof gitRefsTagSchema>;
+export type GitRefsWorktree = z.infer<typeof gitRefsWorktreeSchema>;
+export type GitRefsSnapshot = z.infer<typeof gitRefsSnapshotSchema>;
+/** One repository's row in the branch tree, which is what a tree node draws. */
+export type GitRefsRepository = GitRefsSnapshot[number];
 export type GitExpectedState = z.infer<typeof gitExpectedStateSchema>;
 export type GitBranchSnapshot = z.infer<typeof gitBranchSnapshotSchema>;
 export type GitBranchRecord = z.infer<typeof gitBranchRecordSchema>;

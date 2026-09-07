@@ -7,6 +7,8 @@ import {
   gitExpectedStateSchema,
   gitHistoryPageSchema,
   gitIntegrationSnapshotSchema,
+  gitLogPageSchema,
+  gitRefsSnapshotSchema,
   gitRebaseTodoPreviewSchema,
   gitRemotesSchema,
   gitReflogPageSchema,
@@ -20,6 +22,7 @@ import {
   gitWorktreeBindingVerdictSchema,
   gitWorktreesSchema,
   type GitExpectedState,
+  type GitLogRequest,
   type GitRepositoryAction,
 } from "@armadra/shared";
 import { json, query, request } from "./request";
@@ -85,6 +88,37 @@ export const gitRepositoryApi = {
         paths && paths.length > 0 ? `&paths=${query(paths.join(","))}` : ""
       }`,
       gitHistoryPageSchema,
+      { signal },
+    ),
+  /**
+   * One page of the workspace's merged commit log (Git 工具窗口设计 §3.1).
+   *
+   * A POST that writes nothing: the filters are a record — a ref selection, an
+   * author list, a date range, pathspecs, a search with two switches and a page
+   * cursor — and putting that in a query string is where escaping goes wrong.
+   *
+   * The cursor belongs to the filters it was taken under. Changing any of them
+   * and sending the cursor back is refused with `invalid_cursor`; the repair is
+   * to drop the cursor and read the first page again.
+   */
+  gitLog: (
+    workspaceId: string,
+    filters: GitLogRequest = {},
+    signal?: AbortSignal,
+  ) =>
+    request(`/api/workspaces/${query(workspaceId)}/git/log`, gitLogPageSchema, {
+      method: "POST",
+      signal,
+      ...json(filters),
+    }),
+  /**
+   * Every discovered repository's branch tree in one answer, so the Git
+   * window's left column is one request rather than five per repository.
+   */
+  gitRefs: (workspaceId: string, signal?: AbortSignal) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/refs`,
+      gitRefsSnapshotSchema,
       { signal },
     ),
   gitRepositoryWorktrees: (

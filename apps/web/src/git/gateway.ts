@@ -12,8 +12,10 @@ import {
   gitCommitFileDiffSchema,
   gitHistoryPageSchema,
   gitIntegrationSnapshotSchema,
+  gitLogPageSchema,
   gitRebaseTodoPreviewSchema,
   gitReflogPageSchema,
+  gitRefsSnapshotSchema,
   gitRemotesSchema,
   gitRepositoryActionSchema,
   gitRepositoryListSchema,
@@ -25,6 +27,7 @@ import {
   gitWorktreeBindingVerdictSchema,
   gitWorktreesSchema,
   type GitExpectedState,
+  type GitLogRequest,
   type GitRepositoryAction,
   type GitRepositoryOperation,
   type GitRestoreSource,
@@ -708,6 +711,29 @@ export const gitGateway = {
           binding,
           signal,
         ),
+    );
+  },
+
+  /**
+   * 整个工作空间的合并提交图（Git 工具窗口设计 §3.1）。
+   *
+   * 它不是「某个仓库的历史」：有哪些仓库本身就是答案的一部分，所以它不带
+   * 检出路径，两侧的作用域也都只认工作空间。
+   *
+   * 游标绑定在筛选条件上。条件变了还把旧游标送回去，两侧都以
+   * `invalid_cursor` 拒绝——`--skip` 数的是通过筛选的提交，换一套条件继续
+   * 翻页只会给出一个谁都没见过的窗口。调用方的修复是丢掉游标重读第一页。
+   */
+  log(target: GitTarget, filters: GitLogRequest = {}, signal?: AbortSignal) {
+    return route(target, GitReadMethod.LOG, filters, gitLogPageSchema, () =>
+      runtimeApi.gitLog(target.workspaceId, filters, signal),
+    );
+  },
+
+  /** 所有仓库的分支树，一次读完（Git 工具窗口设计 §3.1）。 */
+  refs(target: GitTarget, signal?: AbortSignal) {
+    return route(target, GitReadMethod.REFS, {}, gitRefsSnapshotSchema, () =>
+      runtimeApi.gitRefs(target.workspaceId, signal),
     );
   },
 
