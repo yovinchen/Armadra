@@ -1,0 +1,35 @@
+{
+  "capability": "remote.git.panel.v1",
+  "operation": 54,
+  "replay": "safe",
+  "request": {
+    "request": {
+      "authors": [
+        "yovinchen"
+      ],
+      "cursor": null,
+      "limit": 100,
+      "paths": [
+        "apps/web"
+      ],
+      "refs": {
+        "kind": "named",
+        "names": [
+          "main"
+        ]
+      },
+      "repositories": [
+        ".",
+        "packages/web"
+      ],
+      "since": "2026-01-01",
+      "text": {
+        "matchCase": false,
+        "query": "fix",
+        "regex": false
+      },
+      "until": null
+    }
+  },
+  "responseType": "git_repository::LogPage"
+}

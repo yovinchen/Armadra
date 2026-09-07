@@ -305,6 +305,11 @@ async fn dispatch(
             git::rebase_todo(root, decode(&request_json)?, allow_execute).await
         }
         Operation::GitReflog => git::reflog(root, decode(&request_json)?, allow_execute).await,
+        Operation::GitLog => git::log(root, decode(&request_json)?, allow_execute).await,
+        Operation::GitRefs => {
+            let _: git::RootPayload = decode(&request_json)?;
+            git::refs(root, allow_execute).await
+        }
         Operation::GitStatusBatch => {
             git::status_batch(root, decode(&request_json)?, allow_execute).await
         }

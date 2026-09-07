@@ -14,12 +14,18 @@ use armadra_protocol::v1::WorkerServiceOperation;
 /// behind any `WorkerServiceOperation` changes in a way an older peer would
 /// misread — `apps/runtime/tests/remote_contract.rs` fails until you do.
 ///
+/// 3: `GIT_LOG` and `GIT_REFS`, the Git window's two workspace-level reads.
+/// They join the repository panel's capability rather than getting one of their
+/// own, so a Worker that advertises the panel and predates them would answer
+/// UNSUPPORTED for the log alone; the version lock turns that into a refusal at
+/// the handshake, where it can be read.
+///
 /// 2: `GIT_MESSAGE_CAPTURE`. It joins the repository panel's existing
 /// capability rather than getting one of its own, so a Worker that advertises
 /// the panel and does not know the operation would answer an unhelpful
 /// UNSUPPORTED for the AI draft alone; the version lock is what turns that into
 /// a refusal at the handshake, where it can be read.
-pub const CONTRACT_VERSION: u32 = 2;
+pub const CONTRACT_VERSION: u32 = 3;
 
 /// Capabilities a Worker advertises per group of operations. A Worker that
 /// omits one answers that group with 501 naming the capability, and keeps
@@ -73,6 +79,8 @@ pub fn replay(operation: WorkerServiceOperation) -> Replay {
         | Operation::GitReflog
         | Operation::GitStatusBatch
         | Operation::GitWorktreeBinding
+        | Operation::GitLog
+        | Operation::GitRefs
         | Operation::FileInfo
         | Operation::FileEntryTrashList
         | Operation::WatchSubscribe
@@ -125,7 +133,9 @@ pub fn capability(operation: WorkerServiceOperation) -> Option<&'static str> {
         | Operation::GitApplyHunk
         | Operation::GitReflog
         | Operation::GitStatusBatch
-        | Operation::GitWorktreeBinding => Some(GIT_PANEL_CAPABILITY),
+        | Operation::GitWorktreeBinding
+        | Operation::GitLog
+        | Operation::GitRefs => Some(GIT_PANEL_CAPABILITY),
         Operation::FileInfo
         | Operation::FileEntryTrashList
         | Operation::FileEntryCreate
@@ -194,6 +204,8 @@ pub const ALL: &[WorkerServiceOperation] = {
         Operation::WatchSubscribe,
         Operation::WatchUnsubscribe,
         Operation::GitMessageCapture,
+        Operation::GitLog,
+        Operation::GitRefs,
     ]
 };
 
@@ -266,6 +278,6 @@ mod tests {
             let _ = replay(*operation);
             let _ = capability(*operation);
         }
-        assert_eq!(ALL.len(), 48, "an operation was added without a snapshot");
+        assert_eq!(ALL.len(), 50, "an operation was added without a snapshot");
     }
 }

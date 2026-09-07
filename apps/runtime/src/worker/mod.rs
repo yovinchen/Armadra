@@ -166,7 +166,7 @@ fn host_id(value: &str) -> bool {
 }
 fn error_response(error: AppError) -> ErrorResponse {
     let code = match &error {
-        AppError::BadRequest(_) => "INVALID_ARGUMENT",
+        AppError::BadRequest(_) | AppError::InvalidCursor(_) => "INVALID_ARGUMENT",
         AppError::Unsupported(_) => "UNSUPPORTED",
         AppError::Forbidden(_) => "PERMISSION_DENIED",
         AppError::NotFound(_) => "NOT_FOUND",

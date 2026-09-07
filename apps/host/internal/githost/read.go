@@ -43,8 +43,9 @@ func (s *Service) Read(ctx context.Context, caller Caller, request *pb.ReadGitRe
 		return nil, ErrInvalid
 	}
 	// A workspace-wide query names no checkout: `Repositories` is the scan that
-	// finds them, so it cannot be asked to name one first.
-	if read.GetMethod() == pb.GitReadMethod_GIT_READ_METHOD_REPOSITORIES {
+	// finds them, and the Git window's log and branch tree are answers *about*
+	// that set, so none of the three can be asked to name one first.
+	if workspaceWideRead(read.GetMethod()) {
 		if scope := read.GetScope(); scope != nil && scope.GetWorkspaceId() != caller.WorkspaceID {
 			return nil, ErrAuthorization
 		}
@@ -72,7 +73,7 @@ func (s *Service) Read(ctx context.Context, caller Caller, request *pb.ReadGitRe
 	// checkout outside the registered root is a read of a directory this
 	// workspace's grants never covered. The workspace-wide scan names no
 	// checkout, so it is exempt by construction.
-	if read.GetMethod() != pb.GitReadMethod_GIT_READ_METHOD_REPOSITORIES &&
+	if !workspaceWideRead(read.GetMethod()) &&
 		!insideRoot(root, read.GetScope().GetRepositoryPath()) {
 		return nil, ErrOutsideRoot
 	}
@@ -100,6 +101,26 @@ func (s *Service) Read(ctx context.Context, caller Caller, request *pb.ReadGitRe
 		return nil, ErrUnsupported
 	}
 	return &pb.ReadGitResponse{Result: result}, nil
+}
+
+// workspaceWideRead names the reads whose subject is the workspace rather than
+// one checkout in it: the repository scan, and the Git window's merged log and
+// branch tree, which are drawn from that scan.
+//
+// They are exempt from the scope check because there is nothing for a caller to
+// scope them to — the set of repositories is what they answer. The workspace
+// root they run against is still resolved from the filesystem domain's
+// registration, so the exemption widens what may be *asked*, never which
+// directory is read.
+func workspaceWideRead(method pb.GitReadMethod) bool {
+	switch method {
+	case pb.GitReadMethod_GIT_READ_METHOD_REPOSITORIES,
+		pb.GitReadMethod_GIT_READ_METHOD_LOG,
+		pb.GitReadMethod_GIT_READ_METHOD_REFS:
+		return true
+	default:
+		return false
+	}
 }
 
 // executeRead names the reads that make the machine run something beyond `git`

@@ -229,6 +229,18 @@ pub struct StatusBatchPayload {
     pub pathspecs: Vec<String>,
 }
 
+/// One page of the workspace's merged commit log (Git 工具窗口设计 §3.1).
+///
+/// The whole request travels as one field rather than being spread out, because
+/// its identity is what the page cursor is bound to: a controller that
+/// re-assembled the filters field by field could reorder or drop one, and the
+/// execution host would then answer a window the cursor was not taken over.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogPayload {
+    pub request: git_repository::LogRequest,
+}
+
 /// Whether a Frame's worktree binding still describes a checkout.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -255,6 +267,21 @@ pub async fn reflog(root: PathBuf, payload: ReflogPayload, execute: bool) -> App
             )
             .await?,
     )
+}
+
+/// The merged commit log. The discovery cache on the execution host is keyed by
+/// the canonical root, which is what a Worker has instead of a workspace table.
+pub async fn log(root: PathBuf, payload: LogPayload, execute: bool) -> AppResult<Vec<u8>> {
+    let service = git_api::REPOSITORIES.with_execution(execute);
+    let key = discovery_key(&root);
+    super::encode(&service.log(&root, &key, payload.request).await?)
+}
+
+/// Every discovered repository's branch tree.
+pub async fn refs(root: PathBuf, execute: bool) -> AppResult<Vec<u8>> {
+    let service = git_api::REPOSITORIES.with_execution(execute);
+    let key = discovery_key(&root);
+    super::encode(&service.refs_snapshot(&root, &key).await?)
 }
 
 pub async fn status_batch(

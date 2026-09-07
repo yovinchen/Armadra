@@ -159,10 +159,19 @@ where
 /// meaning rather than becoming "the body was unreadable".
 pub fn decode<T: for<'a> serde::Deserialize<'a>>(status: u16, body: &[u8]) -> AppResult<T> {
     if status != 200 {
-        let message = serde_json::from_slice::<serde_json::Value>(body)
-            .ok()
+        let failure = serde_json::from_slice::<serde_json::Value>(body).ok();
+        let code = failure
+            .as_ref()
+            .and_then(|value| value["code"].as_str().map(str::to_owned));
+        let message = failure
+            .as_ref()
             .and_then(|value| value["message"].as_str().map(str::to_owned))
             .unwrap_or_else(|| "The execution host refused the request".to_owned());
+        // A cursor refusal is the one 400 whose repair is automatic, so it is
+        // read back from the code rather than flattened into `bad_request`.
+        if code.as_deref() == Some("invalid_cursor") {
+            return Err(AppError::InvalidCursor(message));
+        }
         return Err(match status {
             400 => AppError::BadRequest(message),
             403 => AppError::Forbidden(message),

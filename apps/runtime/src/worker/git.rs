@@ -260,7 +260,7 @@ fn result(status: u16, body: Vec<u8>) -> GitReadResult {
 /// would have produced.
 fn status_of(error: &AppError) -> u16 {
     match error {
-        AppError::BadRequest(_) => 400,
+        AppError::BadRequest(_) | AppError::InvalidCursor(_) => 400,
         AppError::Forbidden(_) => 403,
         AppError::NotFound(_) => 404,
         AppError::Conflict(_) => 409,
@@ -273,6 +273,11 @@ fn status_of(error: &AppError) -> u16 {
 fn failure(error: &AppError) -> GitReadResult {
     let code = match error {
         AppError::BadRequest(_) => "bad_request",
+        // A cursor refusal keeps its own code through the forward. The client's
+        // repair — drop the cursor, re-read page one — is automatic, and a
+        // generic `bad_request` would make it indistinguishable from a request
+        // that re-reading cannot fix.
+        AppError::InvalidCursor(_) => "invalid_cursor",
         AppError::Forbidden(_) => "forbidden",
         AppError::NotFound(_) => "not_found",
         AppError::Conflict(_) => "conflict",

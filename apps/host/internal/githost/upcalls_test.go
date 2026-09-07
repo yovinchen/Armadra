@@ -223,13 +223,38 @@ func TestACheckoutOutsideTheRegisteredRootIsRefusedByName(t *testing.T) {
 		t.Fatalf("repository state: %v", err)
 	}
 
-	// The workspace-wide scan names no checkout, so it is exempt by
-	// construction rather than by an exception somebody has to remember.
+	// The workspace-wide reads name no checkout, so they are exempt by
+	// construction rather than by an exception somebody has to remember: the
+	// scan that finds the repositories, and the Git window's merged log and
+	// branch tree, which are answers about that same set.
+	for _, method := range []pb.GitReadMethod{
+		pb.GitReadMethod_GIT_READ_METHOD_REPOSITORIES,
+		pb.GitReadMethod_GIT_READ_METHOD_LOG,
+		pb.GitReadMethod_GIT_READ_METHOD_REFS,
+	} {
+		if _, err = f.service.Read(fixtureContext, f.writer(), &pb.ReadGitRequest{
+			Meta: &pb.CommandMeta{RequestId: "scan", Scope: &pb.Scope{WorkspaceId: workspaceID}},
+			Read: &pb.GitRead{Scope: &pb.RepositoryScope{WorkspaceId: workspaceID}, Method: method},
+		}); err != nil {
+			t.Fatalf("%v was refused: %v", method, err)
+		}
+		// The root still comes from the filesystem registration, never from the
+		// request: the exemption widens what may be asked, not what is read.
+		forwarded := f.executor.readCalls[len(f.executor.readCalls)-1]
+		if forwarded.GetWorkspaceRoot() != "/home/用户/项目" {
+			t.Fatalf("%v ran against %q", method, forwarded.GetWorkspaceRoot())
+		}
+	}
+
+	// Naming another workspace is still refused, exemption or not.
 	if _, err = f.service.Read(fixtureContext, f.writer(), &pb.ReadGitRequest{
-		Meta: &pb.CommandMeta{RequestId: "scan", Scope: &pb.Scope{WorkspaceId: workspaceID}},
-		Read: &pb.GitRead{Scope: &pb.RepositoryScope{WorkspaceId: workspaceID}, Method: pb.GitReadMethod_GIT_READ_METHOD_REPOSITORIES},
-	}); err != nil {
-		t.Fatalf("the repository scan was refused: %v", err)
+		Meta: &pb.CommandMeta{RequestId: "other", Scope: &pb.Scope{WorkspaceId: workspaceID}},
+		Read: &pb.GitRead{
+			Scope:  &pb.RepositoryScope{WorkspaceId: "另一个工作空间"},
+			Method: pb.GitReadMethod_GIT_READ_METHOD_LOG,
+		},
+	}); !errors.Is(err, ErrAuthorization) {
+		t.Fatalf("a log for another workspace was accepted: %v", err)
 	}
 }
 

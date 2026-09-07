@@ -27,7 +27,7 @@ use crate::{
     error::{AppError, AppResult},
     git,
     git_hunks::GitHunkScope,
-    git_repository::{HistoryRequest, ReflogRequest, WorktreeBindingRequest},
+    git_repository::{HistoryRequest, LogRequest, ReflogRequest, WorktreeBindingRequest},
 };
 
 #[derive(Default, Deserialize)]
@@ -130,7 +130,9 @@ async fn answer(read: GitRead) -> AppResult<GitReadResult> {
             // by the same code a single status goes through. A batch is a
             // saving in round trips, never a way past a check.
             let request: git::StatusBatchRequest = serde_json::from_slice(&read.request_json)
-                .map_err(|error| invalid(&format!("the batch status body does not parse: {error}")))?;
+                .map_err(|error| {
+                    invalid(&format!("the batch status body does not parse: {error}"))
+                })?;
             let value = tokio::task::spawn_blocking({
                 let workspace = workspace.clone();
                 move || git::read_status_batch(&workspace, &request)
@@ -185,6 +187,20 @@ async fn answer(read: GitRead) -> AppResult<GitReadResult> {
                 paths: body.paths,
             };
             json(&repositories.history(&workspace, &path, request).await?)
+        }
+        // The Git window's two workspace-level reads. They take no checkout:
+        // which repositories there are is part of the answer, and the scan that
+        // finds them is keyed by the canonical root, which is what this process
+        // has instead of a workspace table.
+        GitReadMethod::Log => {
+            let request: LogRequest = serde_json::from_slice(&read.request_json)
+                .map_err(|error| invalid(&format!("the log body does not parse: {error}")))?;
+            let key = workspace.to_string_lossy().into_owned();
+            json(&repositories.log(&workspace, &key, request).await?)
+        }
+        GitReadMethod::Refs => {
+            let key = workspace.to_string_lossy().into_owned();
+            json(&repositories.refs_snapshot(&workspace, &key).await?)
         }
         GitReadMethod::Reflog => {
             let request = ReflogRequest {

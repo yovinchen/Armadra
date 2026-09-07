@@ -152,6 +152,31 @@ fn examples() -> BTreeMap<WorkerServiceOperation, (Value, &'static str)> {
             "git_repository::ReflogPage",
         ),
     );
+    // The Git window's two workspace-level reads. The log's whole filter record
+    // travels as one field, because the page cursor is bound to its identity.
+    examples.insert(
+        Operation::GitLog,
+        (
+            json!({
+                "request": {
+                    "repositories": [".", "packages/web"],
+                    "refs": { "kind": "named", "names": ["main"] },
+                    "authors": ["yovinchen"],
+                    "since": "2026-01-01",
+                    "until": null,
+                    "paths": ["apps/web"],
+                    "text": { "query": "fix", "regex": false, "matchCase": false },
+                    "cursor": null,
+                    "limit": 100,
+                },
+            }),
+            "git_repository::LogPage",
+        ),
+    );
+    examples.insert(
+        Operation::GitRefs,
+        (json!({}), "Vec<git_repository::RefsSnapshot>"),
+    );
     examples.insert(
         Operation::GitStatusBatch,
         (
@@ -388,6 +413,8 @@ fn every_request_example_still_deserializes_into_the_type_the_worker_decodes() {
     serde_json::from_value::<service::git::ReflogPayload>(decode(Operation::GitReflog)).unwrap();
     serde_json::from_value::<service::git::StatusBatchPayload>(decode(Operation::GitStatusBatch))
         .unwrap();
+    serde_json::from_value::<service::git::LogPayload>(decode(Operation::GitLog)).unwrap();
+    serde_json::from_value::<service::git::RootPayload>(decode(Operation::GitRefs)).unwrap();
     serde_json::from_value::<service::git::WorktreeBindingPayload>(decode(
         Operation::GitWorktreeBinding,
     ))
