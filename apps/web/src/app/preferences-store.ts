@@ -39,9 +39,16 @@ import {
   WHITEBOARD_KEYS,
   type WhiteboardPreferences,
 } from "./preferences/whiteboard";
+import {
+  GIT_KEYS,
+  serializeGitPreference,
+  storedGitPreferences,
+  type GitPreferences,
+} from "./preferences/git";
 
 export * from "./preferences/terminal";
 export * from "./preferences/whiteboard";
+export * from "./preferences/git";
 
 /**
  * 应用级偏好（主题 / 语言 / 已打开的工作空间）。
@@ -251,6 +258,11 @@ export interface PreferencesState {
   terminal: TerminalPreferences;
   /** 白板配置；`use-canvas-preferences.ts` 与 `flow-options.ts` 负责消费。 */
   whiteboard: WhiteboardPreferences;
+  /**
+   * Git 工具窗口：面板宽高、分支树展开与收藏、日志筛选
+   * （Git 工具窗口设计 §3.2）。
+   */
+  git: GitPreferences;
   setTheme: (theme: ThemePreference) => void;
   setLocale: (locale: Locale) => void;
   setSystemTheme: (theme: ResolvedTheme) => void;
@@ -285,6 +297,10 @@ export interface PreferencesState {
   setWhiteboardPreference: <K extends keyof WhiteboardPreferences>(
     key: K,
     value: WhiteboardPreferences[K],
+  ) => void;
+  setGitPreference: <K extends keyof GitPreferences>(
+    key: K,
+    value: GitPreferences[K],
   ) => void;
 }
 
@@ -352,6 +368,7 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
   settingsSubpage: null,
   terminal: storedTerminalPreferences(),
   whiteboard: storedWhiteboardPreferences(),
+  git: storedGitPreferences(),
 
   setTheme(theme) {
     writeStored(THEME_KEY, theme);
@@ -530,6 +547,13 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
   setTerminalPreference(key, value) {
     writeStored(TERMINAL_KEYS[key], String(value));
     set((state) => ({ terminal: { ...state.terminal, [key]: value } }));
+  },
+  setGitPreference(key, value) {
+    // 数组值每次都是新引用，比较没有意义；标量沿用白板那条「值没变就
+    // 不动」的规矩，免得工具栏每敲一个字都把整块偏好换掉。
+    if (!Array.isArray(value) && get().git[key] === value) return;
+    writeStored(GIT_KEYS[key], serializeGitPreference(value));
+    set((state) => ({ git: { ...state.git, [key]: value } }));
   },
   setWhiteboardPreference(key, value) {
     // 值没变就整块不动：偏好菜单与设置页可能连着写同一个值，
