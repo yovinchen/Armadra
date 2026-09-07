@@ -54,7 +54,8 @@ function Banner({
   return (
     <section
       aria-label={t(`gitIntegration.kind.${state.kind}`)}
-      className="min-w-0 space-y-2 border-b border-border bg-[color-mix(in_oklab,var(--warn)_12%,transparent)] px-3 py-2 text-xs"
+      // 横幅可以很长（未被接管的会话要解释两句），但它不该把变更树挤没了。
+      className="max-h-28 min-w-0 space-y-2 overflow-auto border-b border-border bg-[color-mix(in_oklab,var(--warn)_12%,transparent)] px-3 py-2 text-xs"
     >
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <AlertTriangle

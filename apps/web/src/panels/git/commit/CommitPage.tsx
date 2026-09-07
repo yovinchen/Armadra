@@ -389,12 +389,15 @@ export function CommitPage({
         showRepositories={showRepositories}
         onResume={writes.request}
       />
+      {/* 变更树这一行有下限：窗口默认只有 40vh，一条进行中的整合横幅加上底部的
+          消息区就能把一个 `flex-1` 压到零高——那时页面上有全部的说明文字，唯独
+          没有要提交的东西。 */}
       {compact ? (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex min-h-32 min-w-0 flex-1 flex-col">
           {drilled ? diff : tree}
         </div>
       ) : (
-        <div className="flex min-h-0 min-w-0 flex-1">
+        <div className="flex min-h-32 min-w-0 flex-1">
           <div className="flex min-h-0 w-[min(45%,26rem)] shrink-0 flex-col border-r border-border">
             {tree}
           </div>
