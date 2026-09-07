@@ -24,6 +24,17 @@ node tools/probes/browser-cdp.mjs
 
 探测导航、表单输入和点击、英文/中文/emoji 文本插入、Canvas/表单 PNG、滚动和 screencast ACK。中文文本插入不等于操作系统 IME composition 验证；没有验证画布节点裁剪/缩放、移动端、完整 Browser Worker 或性能预算。跨平台分支需在各自平台运行后才算验证。
 
+## Git 提交页截图
+
+真机渲染 [Git 工具窗口](../../docs/design/git-tool-window.md) §2.3 的提交页：临时数据目录里的 Rust Runtime、含两个仓库的临时工作空间（根仓库有已暂存 / 未暂存 / 未跟踪的改动，嵌套仓库停在一次 merge 冲突上）、Vite 开发服务器，以及新 profile 的无头 Chrome。
+
+```sh
+CARGO_TARGET_DIR=$PWD/target cargo build -p armadra-runtime
+node tools/probes/git-commit-page.mjs [输出目录]
+```
+
+产物默认在 `target/git-commit-page/`：`desktop.png`（1440×900）、`mobile.png` 与 `mobile-diff.png`（390×844 的两级导航），加一份 `result.json`。端口随机（不用 1420 / 1421 / 43120 / 43121），数据目录与浏览器 profile 都是 `mktemp` 出来的，跑完删除；不读写操作员自己的数据目录、凭据或任何远端。页面入口（`apps/web/git-commit-probe.html` 与 `src/git-commit-probe.tsx`）由脚本临时写入、结束时删除——提交页还没被窗口壳挂上去，这两个文件只为这一次渲染存在。
+
 ## Windows ConPTY 编译探针
 
 独立 Cargo workspace，锁定 windows-sys 0.61.2 及 Cargo.lock。仅引用 CreatePipe / CreatePseudoConsole / ResizePseudoConsole / ClosePseudoConsole API，没有创建 CLI 子进程、命名管道服务或持久会话。
