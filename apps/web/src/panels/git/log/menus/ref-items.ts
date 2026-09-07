@@ -21,6 +21,7 @@ export type RefMenuIntent =
   | { kind: "reflog"; repositoryPath: string }
   | { kind: "stashDiff"; repositoryPath: string; oid: string }
   | { kind: "worktreeFrame"; path: string; branch: string }
+  | { kind: "createWorktree"; repositoryPath: string }
   | { kind: "favorite"; key: string }
   | { kind: "compare"; base: string | null };
 
@@ -147,18 +148,33 @@ export function refMenuItems(input: RefMenuInput): RefMenuItem[] {
   }
 
   if (node.kind === "group") {
-    if (node.group !== "remotes") return [];
-    return [
-      {
-        id: "addRemote",
-        labelKey: "gitRepo.addRemote",
-        disabled: busy,
-        intent: {
-          kind: "prompt",
-          prompt: { kind: "addRemote", repositoryPath: repository },
+    if (node.group === "remotes") {
+      return [
+        {
+          id: "addRemote",
+          labelKey: "gitRepo.addRemote",
+          disabled: busy,
+          intent: {
+            kind: "prompt",
+            prompt: { kind: "addRemote", repositoryPath: repository },
+          },
         },
-      },
-    ];
+      ];
+    }
+    // 新建 checkout 是这棵树上唯一一处能做的地方（旧的 worktree 抽屉已经没
+    // 了），入口只能挂在 Worktree 组上：它是仓库级的动作，不属于任何一条
+    // 已有的 checkout。
+    if (node.group === "worktrees") {
+      return [
+        {
+          id: "createWorktree",
+          labelKey: "gitLog.menu.newWorktree",
+          disabled: busy,
+          intent: { kind: "createWorktree", repositoryPath: repository },
+        },
+      ];
+    }
+    return [];
   }
 
   if (node.kind === "remote") {

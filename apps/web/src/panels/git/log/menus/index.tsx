@@ -14,6 +14,7 @@ export { CommitContextMenu } from "./commit-menu";
 export { BranchContextMenu } from "./ref-menu";
 export { NamePromptDialog, StashDiffDialog } from "./dialogs";
 export { CherryPickDialog, RebaseTodoDialog } from "./integration-dialogs";
+export { WorktreeCreateDialog } from "./worktree-dialog";
 export {
   promptAction,
   promptFields,

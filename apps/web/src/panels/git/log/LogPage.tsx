@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useInfiniteQuery,
   useMutation,
@@ -39,7 +39,13 @@ import { LogToolbar } from "./LogToolbar";
 import { filterKey, logRequestFromPreferences } from "./filters";
 import { commitKey } from "./graph";
 import { defaultExpanded, refKey, type BranchTreeNode } from "./build-tree";
-import { openWorktreeFrame, WORKTREE_FRAME_SIZE } from "./worktree-frame";
+import {
+  fulfilWorktreeIntent,
+  openWorktreeFrame,
+  worktreeIntentFulfilled,
+  WORKTREE_FRAME_SIZE,
+  type WorktreeFrameIntent,
+} from "./worktree-frame";
 import {
   BranchContextMenu,
   CherryPickDialog,
@@ -47,6 +53,7 @@ import {
   NamePromptDialog,
   RebaseTodoDialog,
   StashDiffDialog,
+  WorktreeCreateDialog,
   promptAction,
   type CommitDialogTarget,
   type MenuContext,
@@ -92,6 +99,8 @@ export function LogPage({ workspaceId }: LogPageProps) {
   const [rebaseTodo, setRebaseTodo] = useState<CommitDialogTarget | null>(null);
   const [cherryPick, setCherryPick] = useState<CommitDialogTarget | null>(null);
   const [reflog, setReflog] = useState<string | null>(null);
+  /** 「新建 Worktree…」开在哪个仓库上；`null` = 没开。 */
+  const [newWorktree, setNewWorktree] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
   /** 手机上的四级导航；桌面上永远停在 `tree`（三栏同时可见）。 */
@@ -110,6 +119,30 @@ export function LogPage({ workspaceId }: LogPageProps) {
     retry: false,
   });
   const repositories = useMemo(() => refs.data ?? [], [refs.data]);
+
+  /**
+   * 「新建 worktree 时同时建 Frame」的意图。
+   *
+   * 放 ref 而不是 state：它只驱动一次副作用，不参与渲染。兑现的凭据是
+   * `git worktree list`——写成功之后 `git-refs` 已经被失效重读，这个 effect
+   * 就跟着那份新快照跑一次。检出没建成，快照里就不会多出这条 checkout，
+   * 画布上也就不会多出一个指向空目录的 Frame。
+   */
+  const worktreeIntent = useRef<WorktreeFrameIntent | null>(null);
+  useEffect(() => {
+    const pending = worktreeIntent.current;
+    if (!pending) return;
+    const worktrees = repositories.flatMap(
+      (repository) => repository.worktrees,
+    );
+    if (!worktreeIntentFulfilled(worktrees, pending, workspaceRoot)) return;
+    worktreeIntent.current = null;
+    fulfilWorktreeIntent(useCanvasStore.getState(), pending, {
+      workspaceRoot,
+      terminalTitle: t("frameBinding.initTerminalTitle"),
+      position: nodeDropPosition("group", { size: WORKTREE_FRAME_SIZE }),
+    });
+  }, [repositories, t, workspaceRoot]);
 
   const key = filterKey(git);
   const log = useInfiniteQuery({
@@ -266,6 +299,7 @@ export function LogPage({ workspaceId }: LogPageProps) {
         position: nodeDropPosition("group", { size: WORKTREE_FRAME_SIZE }),
       });
     },
+    onCreateWorktree: setNewWorktree,
     onInteractiveRebase: setRebaseTodo,
     onCherryPick: setCherryPick,
     onToggleFavorite: (value) =>
@@ -461,6 +495,22 @@ export function LogPage({ workspaceId }: LogPageProps) {
           const action = promptAction(value, input);
           if (action) request(value.repositoryPath, action);
           setPrompt(null);
+        }}
+      />
+      <WorktreeCreateDialog
+        repositoryPath={newWorktree}
+        workspaceId={workspaceId}
+        busy={submit.isPending}
+        loadBranches={(repository, signal) =>
+          gitGateway.branches(at(repository), signal)
+        }
+        onClose={() => setNewWorktree(null)}
+        onSubmit={({ repositoryPath, action, intent }) => {
+          // 意图先记下来，请求仍然走确认门：用户在确认框上取消时，这条意图
+          // 会一直等不到那条 checkout 出现，也就永远不会兑现。
+          worktreeIntent.current = intent;
+          request(repositoryPath, action);
+          setNewWorktree(null);
         }}
       />
       <StashDiffDialog

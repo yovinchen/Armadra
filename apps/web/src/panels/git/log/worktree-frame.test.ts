@@ -1,11 +1,20 @@
-import { describe, expect, it, vi } from "vitest";
-import type { CanvasNode } from "@armadra/shared";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { CanvasNode, GitBranchRecord } from "@armadra/shared";
 
 import {
+  clearArmedInitScripts,
+  consumeArmedInitScript,
+} from "../../../canvas/frame-binding";
+import {
+  EMPTY_WORKTREE_FORM,
   existingWorktreeFrame,
+  fulfilWorktreeIntent,
   openWorktreeFrame,
   workspaceRelativePath,
+  worktreeFormReady,
   worktreeFrameBinding,
+  worktreeFrameIntent,
+  worktreeIntentFulfilled,
 } from "./worktree-frame";
 
 /**
@@ -94,5 +103,178 @@ describe("打开 Frame", () => {
         }),
       }),
     );
+  });
+});
+
+/* ------------------------------ 新建 worktree ----------------------------- */
+
+function branchRecord(name: string): GitBranchRecord {
+  return {
+    name,
+    fullRef: `refs/heads/${name}`,
+    oid: "c".repeat(40),
+    remote: false,
+    current: false,
+    upstream: null,
+    ahead: null,
+    behind: null,
+    upstreamMissing: false,
+    symbolicTarget: null,
+  };
+}
+
+describe("新建表单", () => {
+  it("新建分支只要路径和名字", () => {
+    expect(
+      worktreeFormReady(
+        { ...EMPTY_WORKTREE_FORM, path: " checkouts/a ", branch: "feat/x" },
+        [],
+      ),
+    ).toBe(true);
+    expect(
+      worktreeFormReady({ ...EMPTY_WORKTREE_FORM, branch: "feat/x" }, []),
+    ).toBe(false);
+  });
+
+  it("检出已有分支时必须认得那条分支（否则没有 OID 可带）", () => {
+    const value = {
+      ...EMPTY_WORKTREE_FORM,
+      path: "checkouts/a",
+      branch: "main",
+      createBranch: false,
+    };
+    expect(worktreeFormReady(value, [])).toBe(false);
+    expect(worktreeFormReady(value, [branchRecord("main")])).toBe(true);
+  });
+
+  it("没勾「同时创建 Frame」就没有意图，勾了的意图去掉两头空白", () => {
+    const value = {
+      ...EMPTY_WORKTREE_FORM,
+      path: " checkouts/a ",
+      branch: " feat/x ",
+      initScript: " pnpm i ",
+    };
+    expect(worktreeFrameIntent(value)).toBeNull();
+    expect(worktreeFrameIntent({ ...value, createFrame: true })).toEqual({
+      path: "checkouts/a",
+      branch: "feat/x",
+      script: "pnpm i",
+    });
+  });
+});
+
+describe("意图的兑现条件", () => {
+  const intent = { path: "checkouts/a", branch: "feat/x", script: "" };
+
+  it("worktree list 里出现这条路径、且检出的是这条分支才算兑现", () => {
+    expect(worktreeIntentFulfilled([], intent, "/w")).toBe(false);
+    expect(
+      worktreeIntentFulfilled(
+        [{ path: "/w/checkouts/a", branch: "feat/x" }],
+        intent,
+        "/w",
+      ),
+    ).toBe(true);
+  });
+
+  it("同一个位置上的另一条分支不算：那不是这一次创建的结果", () => {
+    expect(
+      worktreeIntentFulfilled(
+        [{ path: "/w/checkouts/a", branch: "old" }],
+        intent,
+        "/w",
+      ),
+    ).toBe(false);
+    expect(
+      worktreeIntentFulfilled(
+        [{ path: "/w/checkouts/b", branch: "feat/x" }],
+        intent,
+        "/w",
+      ),
+    ).toBe(false);
+  });
+
+  it("游离的检出没有分支，也就永远兑现不了一个带分支的意图", () => {
+    expect(
+      worktreeIntentFulfilled(
+        [{ path: "/w/checkouts/a", branch: null }],
+        intent,
+        "/w",
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("兑现意图", () => {
+  beforeEach(() => clearArmedInitScripts());
+
+  function store(nodes: CanvasNode[] = []) {
+    const ids = ["frame-new", "terminal-new"];
+    return {
+      document: { nodes } as never,
+      addNode: vi.fn(() => ids.shift() ?? ""),
+      updateNodeData: vi.fn(),
+    };
+  }
+
+  it("填了脚本就建终端、回写 initScriptNodeId 并开闸", () => {
+    const target = store();
+    const id = fulfilWorktreeIntent(
+      target,
+      { path: "checkouts/a", branch: "feat/x", script: "pnpm i" },
+      { workspaceRoot: "/w", terminalTitle: "init" },
+    );
+    expect(id).toBe("frame-new");
+    expect(target.addNode).toHaveBeenNthCalledWith(
+      1,
+      "group",
+      expect.objectContaining({
+        title: "feat/x",
+        data: {
+          kind: "group",
+          binding: expect.objectContaining({
+            worktreePath: "checkouts/a",
+            initScript: "pnpm i",
+            initScriptState: "pending",
+            initScriptNodeId: null,
+          }),
+        },
+      }),
+    );
+    expect(target.addNode).toHaveBeenNthCalledWith(
+      2,
+      "terminal",
+      expect.objectContaining({ parentId: "frame-new", title: "init" }),
+    );
+    expect(target.updateNodeData).toHaveBeenCalledWith("frame-new", {
+      binding: expect.objectContaining({ initScriptNodeId: "terminal-new" }),
+    });
+    expect(consumeArmedInitScript("frame-new")).toBe(true);
+  });
+
+  it("没填脚本就只有一个 Frame，闸也不开", () => {
+    const target = store();
+    expect(
+      fulfilWorktreeIntent(
+        target,
+        { path: "checkouts/a", branch: "feat/x", script: "" },
+        { workspaceRoot: "/w", terminalTitle: "init" },
+      ),
+    ).toBe("frame-new");
+    expect(target.addNode).toHaveBeenCalledTimes(1);
+    expect(target.updateNodeData).not.toHaveBeenCalled();
+    expect(consumeArmedInitScript("frame-new")).toBe(false);
+  });
+
+  it("这条 checkout 已经有 Frame 了就一个都不建", () => {
+    const target = store([frame("checkouts/a")]);
+    expect(
+      fulfilWorktreeIntent(
+        target,
+        { path: "checkouts/a", branch: "feat/x", script: "pnpm i" },
+        { workspaceRoot: "/w", terminalTitle: "init" },
+      ),
+    ).toBeNull();
+    expect(target.addNode).not.toHaveBeenCalled();
   });
 });

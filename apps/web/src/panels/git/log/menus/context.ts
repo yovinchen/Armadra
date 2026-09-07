@@ -82,6 +82,8 @@ export interface MenuContext {
   onStashDiff: (target: StashDiffTarget) => void;
   /** 在画布上打开绑定这条 worktree 的 Frame。 */
   onWorktreeFrame: (input: { path: string; branch: string }) => void;
+  /** 打开「新建 Worktree…」对话框。 */
+  onCreateWorktree: (repositoryPath: string) => void;
   /** 可审阅的交互式 rebase todo。 */
   onInteractiveRebase: (target: CommitDialogTarget) => void;
   /** 带 mainline 选择与差异预览的 cherry-pick。 */

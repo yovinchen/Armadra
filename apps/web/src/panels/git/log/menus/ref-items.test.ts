@@ -204,13 +204,36 @@ describe("远端与分组", () => {
     });
   });
 
-  it("只有远端分组有「新增远端」，别的分组没有菜单", () => {
+  it("只有远端与 Worktree 分组有菜单，别的分组没有", () => {
     expect(
       items({ kind: "group", group: "remotes", reference: null }),
     ).toHaveLength(1);
     expect(items({ kind: "group", group: "tags", reference: null })).toEqual(
       [],
     );
+  });
+
+  it("新建 worktree 挂在 Worktree 组上，带的是这个仓库", () => {
+    const list = items({
+      kind: "group",
+      group: "worktrees",
+      repositoryPath: "vendor/lib",
+      reference: null,
+    });
+    expect(pick(list, "createWorktree").intent).toEqual({
+      kind: "createWorktree",
+      repositoryPath: "vendor/lib",
+    });
+    // 有写在跑的时候不给再排一次队。
+    expect(
+      pick(
+        items(
+          { kind: "group", group: "worktrees", reference: null },
+          { busy: true },
+        ),
+        "createWorktree",
+      ).disabled,
+    ).toBe(true);
   });
 });
 

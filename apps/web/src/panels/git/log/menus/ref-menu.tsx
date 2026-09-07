@@ -127,6 +127,9 @@ function dispatch(intent: RefMenuIntent, context: MenuContext) {
     case "worktreeFrame":
       context.onWorktreeFrame({ path: intent.path, branch: intent.branch });
       return;
+    case "createWorktree":
+      context.onCreateWorktree(intent.repositoryPath);
+      return;
     case "favorite":
       context.onToggleFavorite(intent.key);
       return;
