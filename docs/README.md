@@ -35,6 +35,7 @@
 | [Host 与协议](design/host-protocol-design.md)        | Go Host、Rust Worker、数据所有权与设备接入 |
 | [Agent 自动化](design/agent-automation-design.md)    | 交接、循环卡片、计划与命名                 |
 | [Git / GitHub](design/git-github-design.md)          | worktree、提交、Issues 与 PR               |
+| [Git 工具窗口](design/git-tool-window.md)            | IDEA 式日志三栏、提交页、多仓库合并图      |
 | [编辑器与浏览器](design/editor-browser-design.md)    | 语言服务、远程文件与受控浏览器             |
 | [终端宿主](design/terminal-host-design.md)           | 持久终端、ConPTY、资源与快捷键             |
 | [Windows 早期方案](design/windows-session-daemon.md) | 早期设计，本轮目标以终端宿主方案为准       |
