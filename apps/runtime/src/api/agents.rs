@@ -278,7 +278,9 @@ pub async fn read_agent_transcript(
         status.session_id.as_deref(),
     )
     .ok_or_else(|| {
-        AppError::Unsupported(format!("{provider} keeps no transcript this machine can read"))
+        AppError::Unsupported(format!(
+            "{provider} keeps no transcript this machine can read"
+        ))
     })?;
     let budget = query
         .max_bytes

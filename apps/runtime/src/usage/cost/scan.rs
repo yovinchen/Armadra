@@ -859,7 +859,10 @@ mod tests {
         first.save_to(&cache);
 
         use std::io::Write;
-        let mut file = std::fs::OpenOptions::new().append(true).open(&path).unwrap();
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
         writeln!(
             file,
             r#"{{"type":"assistant","requestId":"req-3","timestamp":"2026-09-05T11:00:00Z","message":{{"model":"claude-opus-5","usage":{{"output_tokens":7}}}}}}"#
@@ -918,7 +921,10 @@ mod tests {
             let mut state = ScanState::load_from(&cache);
             assert!(state.files.is_empty(), "{content}");
             assert!(state.seen.is_empty(), "{content}");
-            assert_eq!(totals(&state.scan_roots(&fixture_roots(home.path()))), expected);
+            assert_eq!(
+                totals(&state.scan_roots(&fixture_roots(home.path()))),
+                expected
+            );
         }
         // A cache that is not there at all is the same empty state.
         std::fs::remove_file(&cache).unwrap();

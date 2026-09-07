@@ -630,10 +630,9 @@ async fn a_package_that_no_longer_names_a_record_removes_it() {
     );
     // The outbox goes with its parent: an entry naming a handoff that is gone
     // is work nothing can finish.
-    let outbox: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM agent_handoff_outbox")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let outbox: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_handoff_outbox")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(outbox, 0);
 }

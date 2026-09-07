@@ -103,16 +103,14 @@ pub async fn list_execution_hosts(
 }
 
 async fn workspace_counts(state: &AppState) -> AppResult<Vec<(String, u32)>> {
-    Ok(
-        sqlx::query_as::<_, (String, i64)>(
-            "SELECT execution_host_id, count(*) FROM workspaces GROUP BY execution_host_id",
-        )
-        .fetch_all(&state.pool)
-        .await?
-        .into_iter()
-        .map(|(id, count)| (id, count.max(0) as u32))
-        .collect(),
+    Ok(sqlx::query_as::<_, (String, i64)>(
+        "SELECT execution_host_id, count(*) FROM workspaces GROUP BY execution_host_id",
     )
+    .fetch_all(&state.pool)
+    .await?
+    .into_iter()
+    .map(|(id, count)| (id, count.max(0) as u32))
+    .collect())
 }
 
 /* ---------------------------------- writes --------------------------------- */
@@ -184,7 +182,10 @@ pub async fn delete_execution_host(
     }
     write_hosts(
         &state,
-        hosts.into_iter().filter(|host| host.id != host_id).collect(),
+        hosts
+            .into_iter()
+            .filter(|host| host.id != host_id)
+            .collect(),
     )
     .await?;
     list_execution_hosts(State(state)).await

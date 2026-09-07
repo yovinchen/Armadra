@@ -339,7 +339,10 @@ async fn a_deleted_node_loses_its_live_rows_and_keeps_its_receipts() {
     // Receipts stay. `0004_agent_handoffs.sql` says so outright: identities
     // survive node deletion so historical receipts remain honest.
     assert_eq!(count(&pool, "SELECT COUNT(*) FROM agent_handoffs").await, 1);
-    assert_eq!(count(&pool, "SELECT COUNT(*) FROM agent_deliveries").await, 1);
+    assert_eq!(
+        count(&pool, "SELECT COUNT(*) FROM agent_deliveries").await,
+        1
+    );
     // The process outlives the node on purpose. `resources::orphans` lists it
     // as having no node, with adopt and terminate next to it, and a person
     // decides what happens to a running program.

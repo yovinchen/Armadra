@@ -103,7 +103,11 @@ fn report_progress(line: &[u8], observer: &Arc<dyn Fn(u32) + Send + Sync>) {
     let Some((before, _)) = text.split_once('%') else {
         return;
     };
-    let digits: String = before.chars().rev().take_while(char::is_ascii_digit).collect();
+    let digits: String = before
+        .chars()
+        .rev()
+        .take_while(char::is_ascii_digit)
+        .collect();
     if digits.is_empty() {
         return;
     }

@@ -288,7 +288,9 @@ pub fn gemini_home() -> PathBuf {
 /// The rule on its own, with the environment passed in so a test can state it
 /// without mutating a process-global the rest of the suite also reads.
 pub fn gemini_home_in(cli_home: Option<PathBuf>, home: &Path) -> PathBuf {
-    cli_home.unwrap_or_else(|| home.to_path_buf()).join(".gemini")
+    cli_home
+        .unwrap_or_else(|| home.to_path_buf())
+        .join(".gemini")
 }
 
 /// A bounded breadth-first walk. Neither CLI documents its directory layout, so

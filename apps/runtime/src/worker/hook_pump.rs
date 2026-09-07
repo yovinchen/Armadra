@@ -205,7 +205,8 @@ async fn statuses(pool: &SqlitePool) -> Vec<armadra_protocol::v1::AgentStatus> {
     };
     let mut all = Vec::new();
     for workspace_id in workspaces {
-        let Ok(records) = ownership::agent::records_for(&mut connection, &workspace_id).await else {
+        let Ok(records) = ownership::agent::records_for(&mut connection, &workspace_id).await
+        else {
             continue;
         };
         all.extend(records.statuses);

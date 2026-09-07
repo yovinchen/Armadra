@@ -672,12 +672,13 @@ async fn apply_server_edit(hub: &Arc<Hub>, params: &Value) -> Value {
     let events = hub.events.clone();
     let outcome = tokio::task::spawn_blocking(move || {
         let expected = super::edits::current_versions(&root, &files)?;
-        super::edits::apply(&root, &workspace_id, &files, &expected, &events)
-            .map_err(|error| super::edits::FailedFile {
+        super::edits::apply(&root, &workspace_id, &files, &expected, &events).map_err(|error| {
+            super::edits::FailedFile {
                 path: String::new(),
                 code: "write_failed".into(),
                 message: error.to_string(),
-            })
+            }
+        })
     })
     .await;
     let result = match outcome {

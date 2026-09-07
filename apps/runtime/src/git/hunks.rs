@@ -106,7 +106,9 @@ pub async fn read_hunks(
     file: &str,
     scope: GitHunkScope,
 ) -> AppResult<GitHunkDiff> {
-    let guard = REPOSITORIES.mutation_guard(workspace_root, checkout).await?;
+    let guard = REPOSITORIES
+        .mutation_guard(workspace_root, checkout)
+        .await?;
     Ok(observe(&guard.context, file, scope).await?.public)
 }
 

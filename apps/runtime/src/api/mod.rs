@@ -31,6 +31,6 @@ mod tests;
 
 pub use self::{
     agents::*, approvals::*, assets::*, boards::*, clone::*, context_links::*, data::*, events::*,
-    execution_hosts::*, exports::*, files::*, git::*, health::*, search::*, settings::*, ssh::*, support::*,
-    terminals::*, usage::*, workspaces::*,
+    execution_hosts::*, exports::*, files::*, git::*, health::*, search::*, settings::*, ssh::*,
+    support::*, terminals::*, usage::*, workspaces::*,
 };

@@ -208,7 +208,11 @@ impl RepositoryService {
                 )
                 .await?;
                 if self
-                    .resolve(&context.repository, &format!("refs/heads/{new_name}"), token)
+                    .resolve(
+                        &context.repository,
+                        &format!("refs/heads/{new_name}"),
+                        token,
+                    )
                     .await?
                     != *expected_oid
                 {

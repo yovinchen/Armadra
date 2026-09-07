@@ -141,11 +141,7 @@ pub fn start_clone(url: &str, parent: &str, name: Option<&str>) -> AppResult<Clo
 /// a root somebody registered. This entry point exists so that decision is made
 /// once, where the root is known, instead of being re-derived by loosening the
 /// allowlist for everybody.
-pub fn start_clone_from(
-    source: &str,
-    parent: &str,
-    name: Option<&str>,
-) -> AppResult<CloneStarted> {
+pub fn start_clone_from(source: &str, parent: &str, name: Option<&str>) -> AppResult<CloneStarted> {
     let name = match name.map(str::trim).filter(|name| !name.is_empty()) {
         Some(name) => valid_directory_name(name)?.to_owned(),
         None => clone_directory_name(source)?,

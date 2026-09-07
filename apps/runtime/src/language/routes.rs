@@ -555,9 +555,7 @@ async fn control(
         crate::remote::Execution::Local => {
             match action {
                 super::Control::Stop => state.language.stop(&workspace.id, server_id).await?,
-                super::Control::Restart => {
-                    state.language.restart(&workspace.id, server_id).await?
-                }
+                super::Control::Restart => state.language.restart(&workspace.id, server_id).await?,
             }
             descriptor(state, &workspace.id, server_id)
         }

@@ -36,7 +36,9 @@ impl RepositoryService {
         let context = self.context(workspace_root, requested).await?;
         let token = Cancellation::default();
         Ok(IdentityRecord {
-            name: self.config_value(&context.repository, "user.name", &token).await?,
+            name: self
+                .config_value(&context.repository, "user.name", &token)
+                .await?,
             email: self
                 .config_value(&context.repository, "user.email", &token)
                 .await?,

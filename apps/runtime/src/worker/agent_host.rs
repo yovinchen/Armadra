@@ -245,25 +245,26 @@ async fn transcript(
     let path = String::from_utf8(request.transcript_ref.clone())
         .ok()
         .filter(|path| !path.is_empty())
-        .or_else(|| status.as_ref().and_then(|status| status.transcript_path.clone()));
+        .or_else(|| {
+            status
+                .as_ref()
+                .and_then(|status| status.transcript_path.clone())
+        });
     let session_id = Some(request.session_id.clone())
         .filter(|id| !id.is_empty())
         .or_else(|| status.as_ref().and_then(|status| status.session_id.clone()));
-    let located = crate::collab::transcript::locate(
-        &provider,
-        path.as_deref(),
-        session_id.as_deref(),
-    )
-    .ok_or_else(|| {
-        AppError::Unsupported(format!(
-            "No transcript this execution host can read for {}",
-            if provider.is_empty() {
-                "this node"
-            } else {
-                provider.as_str()
-            }
-        ))
-    })?;
+    let located =
+        crate::collab::transcript::locate(&provider, path.as_deref(), session_id.as_deref())
+            .ok_or_else(|| {
+                AppError::Unsupported(format!(
+                    "No transcript this execution host can read for {}",
+                    if provider.is_empty() {
+                        "this node"
+                    } else {
+                        provider.as_str()
+                    }
+                ))
+            })?;
     let budget = match request.max_bytes {
         0 => crate::collab::transcript::MAX_TAIL_BYTES,
         bytes => u64::from(bytes).min(crate::collab::transcript::MAX_TAIL_BYTES),

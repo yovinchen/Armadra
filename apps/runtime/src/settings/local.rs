@@ -59,9 +59,9 @@ pub fn local_paths() -> Vec<String> {
 /// travels with `language.servers`.
 pub fn is_local(path: &str) -> bool {
     let segments: Vec<&str> = path.split('.').collect();
-    LOCAL_PATHS.iter().any(|local| {
-        segments.len() >= local.len() && segments[..local.len()] == **local
-    })
+    LOCAL_PATHS
+        .iter()
+        .any(|local| segments.len() >= local.len() && segments[..local.len()] == **local)
 }
 
 fn take(document: &mut Map<String, Value>, path: &[&str]) -> Option<Value> {
@@ -219,8 +219,12 @@ mod tests {
 
     #[test]
     fn a_document_written_before_the_split_is_recognised() {
-        assert!(carries_local(&serde_json::json!({ "power": { "policy": "manual" } })));
+        assert!(carries_local(
+            &serde_json::json!({ "power": { "policy": "manual" } })
+        ));
         assert!(!carries_local(&serde_json::json!({ "power": {} })));
-        assert!(!carries_local(&serde_json::json!({ "editor": { "fontSize": 13 } })));
+        assert!(!carries_local(
+            &serde_json::json!({ "editor": { "fontSize": 13 } })
+        ));
     }
 }

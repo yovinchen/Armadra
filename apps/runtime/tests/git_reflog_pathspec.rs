@@ -46,7 +46,10 @@ async fn the_reflog_pages_newest_first_and_carries_the_selector_a_recovery_uses(
     );
     // The previous value is the next row's OID, which is how a person finds the
     // commit a reset threw away.
-    assert_eq!(page.entries[0].previous_oid.as_deref(), Some(second.as_str()));
+    assert_eq!(
+        page.entries[0].previous_oid.as_deref(),
+        Some(second.as_str())
+    );
     assert!(page.next_cursor.is_some(), "there are more entries");
 
     let rest = fixture
@@ -124,11 +127,17 @@ async fn a_pathspec_narrows_the_status_count_and_the_rows_together() {
 
     // A pathspec that would leave the repository is refused rather than
     // resolved.
-    assert!(read_status_filtered(fixture.root(), &fixture.requested(), &["../..".to_owned()]).is_err());
+    assert!(
+        read_status_filtered(fixture.root(), &fixture.requested(), &["../..".to_owned()]).is_err()
+    );
     // And one Git would read as an option is refused before it becomes one.
     assert!(
-        read_status_filtered(fixture.root(), &fixture.requested(), &["--exclude".to_owned()])
-            .is_err()
+        read_status_filtered(
+            fixture.root(),
+            &fixture.requested(),
+            &["--exclude".to_owned()]
+        )
+        .is_err()
     );
 }
 
@@ -231,12 +240,18 @@ async fn a_batch_reads_every_checkout_and_keeps_one_broken_one_to_itself() {
     assert!(answer.observed_at.contains('T'));
     let first = &answer.repositories[0];
     assert_eq!(first.status.as_ref().unwrap().changed_count, 1);
-    assert_eq!(first.status.as_ref().unwrap().branch.as_deref(), Some("main"));
+    assert_eq!(
+        first.status.as_ref().unwrap().branch.as_deref(),
+        Some("main")
+    );
     let second = &answer.repositories[1];
     assert_eq!(second.status.as_ref().unwrap().changed_count, 0);
     let broken = &answer.repositories[2];
     assert!(broken.status.is_none());
-    assert!(broken.error.is_some(), "the missing checkout reports itself");
+    assert!(
+        broken.error.is_some(),
+        "the missing checkout reports itself"
+    );
 
     // A pathspec applies to every checkout in the batch.
     let narrowed = read_status_batch(

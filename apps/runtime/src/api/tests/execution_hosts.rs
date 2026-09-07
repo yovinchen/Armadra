@@ -97,13 +97,7 @@ async fn an_entry_the_runtime_would_drop_is_refused_with_the_field_that_is_wrong
     let (router, _directory) = router_fixture("api-execution-hosts-invalid").await;
     let mut evil = host("build-box");
     evil["host"] = json!("a;rm -rf /");
-    let (status, error) = call(
-        &router,
-        "PUT",
-        "/api/execution-hosts/build-box",
-        Some(evil),
-    )
-    .await;
+    let (status, error) = call(&router, "PUT", "/api/execution-hosts/build-box", Some(evil)).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(error["message"].as_str().unwrap().contains("host"));
 
@@ -131,15 +125,9 @@ async fn a_host_that_still_has_workspaces_is_not_removed() {
         Some(host("build-box")),
     )
     .await;
-    crate::db::create_remote_workspace(
-        &state.pool,
-        "Remote",
-        "build-box",
-        "/srv/project",
-        None,
-    )
-    .await
-    .unwrap();
+    crate::db::create_remote_workspace(&state.pool, "Remote", "build-box", "/srv/project", None)
+        .await
+        .unwrap();
 
     let (status, hosts) = call(&router, "GET", "/api/execution-hosts", None).await;
     assert_eq!(status, StatusCode::OK);
@@ -198,13 +186,7 @@ async fn the_package_round_trips_and_a_collision_is_refused_unless_overwrite_is_
     // A shape this build does not read is refused rather than guessed at.
     let mut future = package.clone();
     future["version"] = json!(99);
-    let (status, _) = call(
-        &router,
-        "POST",
-        "/api/execution-hosts/import",
-        Some(future),
-    )
-    .await;
+    let (status, _) = call(&router, "POST", "/api/execution-hosts/import", Some(future)).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 

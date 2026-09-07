@@ -429,7 +429,10 @@ impl Host {
     /// would start it is the machine that must refuse. Stopping needs no
     /// grant — ending something already running is never the dangerous
     /// direction.
-    pub async fn control(&self, request: LanguageControlRequest) -> AppResult<LanguageControlResult> {
+    pub async fn control(
+        &self,
+        request: LanguageControlRequest,
+    ) -> AppResult<LanguageControlResult> {
         let action = LanguageControlAction::try_from(request.action)
             .unwrap_or(LanguageControlAction::Unspecified);
         match action {

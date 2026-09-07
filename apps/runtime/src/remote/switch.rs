@@ -273,10 +273,7 @@ async fn stop(state: &AppState, workspace: &Workspace) -> AppResult<Vec<Blocker>
         // workspace no longer uses, which is the thing being removed.
         state
             .terminals
-            .terminate(
-                &session.session_id,
-                crate::terminal::TerminateMode::Session,
-            )
+            .terminate(&session.session_id, crate::terminal::TerminateMode::Session)
             .await?;
         stopped.push(Blocker {
             kind: "terminal".into(),

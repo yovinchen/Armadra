@@ -210,10 +210,7 @@ fn the_renderer_reads_a_whole_file_document_and_a_codex_wrapper() {
 fn the_gemini_root_is_a_home_with_dot_gemini_under_it() {
     use std::path::{Path, PathBuf};
     let home = Path::new("/home/dev");
-    assert_eq!(
-        transcript::gemini_home_in(None, home),
-        home.join(".gemini")
-    );
+    assert_eq!(transcript::gemini_home_in(None, home), home.join(".gemini"));
     assert_eq!(
         transcript::gemini_home_in(Some(PathBuf::from("/tmp/gemini-job-123")), home),
         Path::new("/tmp/gemini-job-123/.gemini")
@@ -353,7 +350,10 @@ async fn a_frame_reference_reads_like_any_other_whiteboard_reference() {
     let fixture = fixture("collab-frame-reference").await;
     std::fs::create_dir_all(fixture.directory.path().join(".armadra/exports")).unwrap();
     std::fs::write(
-        fixture.directory.path().join(".armadra/exports/frame-agg.png"),
+        fixture
+            .directory
+            .path()
+            .join(".armadra/exports/frame-agg.png"),
         b"png",
     )
     .unwrap();

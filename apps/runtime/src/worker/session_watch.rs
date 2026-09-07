@@ -299,11 +299,7 @@ mod tests {
         assert!(watcher.plan(&rows, &held(&["s-held"])).is_empty());
 
         // A pane that comes back and disappears again is two separate facts.
-        assert!(
-            watcher
-                .plan(&rows, &held(&["s-held", "s-gone"]))
-                .is_empty()
-        );
+        assert!(watcher.plan(&rows, &held(&["s-held", "s-gone"])).is_empty());
         assert_eq!(watcher.plan(&rows, &held(&["s-held"])).len(), 1);
     }
 

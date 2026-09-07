@@ -39,10 +39,7 @@ pub async fn delete_absent(
     workspace_id: &str,
     kept: &Kept<'_>,
 ) -> AppResult<u64> {
-    let mut sql = format!(
-        "DELETE FROM {} WHERE workspace_id = ?",
-        kept.table
-    );
+    let mut sql = format!("DELETE FROM {} WHERE workspace_id = ?", kept.table);
     if !kept.ids.is_empty() {
         sql.push_str(&format!(" AND {} NOT IN (", kept.id_column));
         for index in 0..kept.ids.len() {

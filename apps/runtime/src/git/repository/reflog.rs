@@ -108,7 +108,9 @@ fn split_subject(subject: &str) -> (String, String) {
         Some((action, rest)) => match action.split_once(' ') {
             Some((verb, qualifier)) => (
                 verb.to_owned(),
-                format!("{qualifier} {}", rest.trim_start()).trim().to_owned(),
+                format!("{qualifier} {}", rest.trim_start())
+                    .trim()
+                    .to_owned(),
             ),
             None => (action.to_owned(), rest.trim_start().to_owned()),
         },
@@ -137,7 +139,9 @@ impl RepositoryService {
         request: ReflogRequest,
     ) -> AppResult<ReflogPage> {
         if request.limit == 0 || request.limit > MAX_REFLOG_PAGE {
-            return Err(AppError::BadRequest("Reflog page size must be 1–200".into()));
+            return Err(AppError::BadRequest(
+                "Reflog page size must be 1–200".into(),
+            ));
         }
         let context = self.context(workspace_root, requested).await?;
         let token = Cancellation::default();
