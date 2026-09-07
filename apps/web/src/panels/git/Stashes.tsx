@@ -10,6 +10,12 @@ import { useT } from "../../app/preferences-store";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Check, Field, ReadError } from "./forms";
+import {
+  createStashAction,
+  isUniqueStash,
+  stashEntryAction,
+  type StashEntryAction,
+} from "./actions/stash";
 
 export interface StashesProps {
   workspaceId: string;
@@ -88,26 +94,13 @@ function StashSession({
     detail.data?.oid === selected.oid &&
     !detail.isFetching &&
     !detail.isError;
-  const unique =
-    selected &&
-    state?.stashes.filter((entry) => entry.oid === selected.oid).length === 1;
-  const act = (kind: "applyStash" | "popStash" | "dropStash") => {
-    if (
-      currentlyBlocked() ||
-      !state ||
-      !selected ||
-      !confirmedDetail ||
-      !unique
-    )
-      return;
-    if (kind !== "dropStash" && state.hasConflicts) return;
-    const common = { oid: selected.oid, expectedStateToken: state.stateToken };
-    request(
-      kind === "dropStash"
-        ? { kind, ...common }
-        : { kind, ...common, reinstateIndex },
-      { ...state.head },
-    );
+  const unique = isUniqueStash(state, selected);
+  const act = (kind: StashEntryAction) => {
+    if (currentlyBlocked() || !confirmedDetail) return;
+    const requested = stashEntryAction(state, selected, kind, {
+      reinstateIndex,
+    });
+    if (requested) request(requested.action, requested.expected);
   };
   return (
     <div className="min-w-0 space-y-3 p-3 text-xs">
@@ -130,21 +123,12 @@ function StashSession({
         className="space-y-2 rounded-md border border-border p-3"
         onSubmit={(event) => {
           event.preventDefault();
-          if (
-            !currentlyBlocked() &&
-            state?.dirty &&
-            !state.hasConflicts &&
-            state.head.headOid
-          )
-            request(
-              {
-                kind: "createStash",
-                message,
-                includeUntracked,
-                expectedStateToken: state.stateToken,
-              },
-              { ...state.head },
-            );
+          if (currentlyBlocked()) return;
+          const created = createStashAction(state, {
+            message,
+            includeUntracked,
+          });
+          if (created) request(created.action, created.expected);
         }}
       >
         <fieldset

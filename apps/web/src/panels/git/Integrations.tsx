@@ -16,6 +16,13 @@ import { Field, ReadError, selectClass } from "./forms";
 import { CherryPick } from "./CherryPick";
 import { RebaseTodo } from "./RebaseTodo";
 import { invalidateGitQueries } from "./queries";
+import {
+  integrationStatusKey,
+  offersSkip,
+  recoveryLabel,
+  resumeAction,
+  type IntegrationResume,
+} from "./actions/integration";
 
 export interface IntegrationsProps {
   workspaceId: string;
@@ -40,16 +47,6 @@ export interface IntegrationsProps {
    * holds conflict markers, so the failure text carries their line numbers.
    */
   markResolved: (path: string) => Promise<unknown>;
-}
-// Only owned kinds reach the recovery buttons, so merge is the safe default.
-function recoveryLabel(kind: GitIntegrationSnapshot["kind"]) {
-  return kind === "cherryPick"
-    ? "Pick"
-    : kind === "rebase"
-      ? "Rebase"
-      : kind === "revert"
-        ? "Revert"
-        : "Merge";
 }
 export function Integrations(props: IntegrationsProps) {
   return (
@@ -140,28 +137,10 @@ function IntegrationSession({
     !state.conflicts.length &&
     state.head.branch &&
     state.head.headOid;
-  const resume = (mode: "continue" | "abort" | "skip") => {
-    if (
-      currentlyBlocked() ||
-      !state?.owned ||
-      !state.sessionId ||
-      (mode === "continue" && !state.canContinue) ||
-      (mode === "skip" && !state.canSkip)
-    )
-      return;
-    request(
-      {
-        kind:
-          mode === "abort"
-            ? "abortIntegration"
-            : mode === "skip"
-              ? "skipIntegration"
-              : "continueIntegration",
-        sessionId: state.sessionId,
-        expectedStateToken: state.stateToken,
-      },
-      { ...state.head },
-    );
+  const resume = (mode: IntegrationResume) => {
+    if (currentlyBlocked()) return;
+    const resumed = resumeAction(state, mode);
+    if (resumed) request(resumed.action, resumed.expected);
   };
   return (
     <div className="min-w-0 space-y-3 p-3 text-xs">
@@ -326,19 +305,7 @@ function IntegrationSession({
           )}
           {state.owned && (
             <>
-              <p role="status">
-                {t(
-                  state.empty
-                    ? "gitIntegration.emptyPick"
-                    : state.canContinue
-                      ? state.kind === "cherryPick"
-                        ? "gitIntegration.pickReady"
-                        : state.kind === "rebase"
-                          ? "gitIntegration.rebaseReady"
-                          : "gitIntegration.pending"
-                      : "gitIntegration.stageFirst",
-                )}
-              </p>
+              <p role="status">{t(integrationStatusKey(state))}</p>
               <p className="text-muted-foreground">
                 {t("gitIntegration.abortSafety")}
               </p>
@@ -358,8 +325,7 @@ function IntegrationSession({
                 >
                   {t(`gitIntegration.abort${recoveryLabel(state.kind)}`)}
                 </Button>
-                {((state.kind === "cherryPick" && state.empty) ||
-                  state.kind === "rebase") && (
+                {offersSkip(state) && (
                   <Button
                     size="sm"
                     variant={
