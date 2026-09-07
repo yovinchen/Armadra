@@ -402,6 +402,17 @@ enum GitReadMethod {
   // are different things for a person to fix, and a binding that is merely
   // stale must not be reported as one that was never allowed.
   GIT_READ_METHOD_WORKTREE_BINDING = 27;
+  // The workspace's whole commit log, and its whole branch tree — both
+  // workspace-level rather than checkout-level (Git 工具窗口设计 §3.1).
+  //
+  // They name no repository, which is why they are exempt from the scope check
+  // the other reads pass: the Git window draws one graph across every
+  // discovered checkout and one tree grouped by them, so "which repository is
+  // this about" is part of the answer rather than of the question. The
+  // workspace root still comes from the filesystem domain's registration and
+  // never from the request.
+  GIT_READ_METHOD_LOG = 28;
+  GIT_READ_METHOD_REFS = 29;
 }
 
 // One forwarded read. The body is the same version-locked JSON the action

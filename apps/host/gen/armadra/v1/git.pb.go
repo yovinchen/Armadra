@@ -388,6 +388,17 @@ const (
 	// are different things for a person to fix, and a binding that is merely
 	// stale must not be reported as one that was never allowed.
 	GitReadMethod_GIT_READ_METHOD_WORKTREE_BINDING GitReadMethod = 27
+	// The workspace's whole commit log, and its whole branch tree — both
+	// workspace-level rather than checkout-level (Git 工具窗口设计 §3.1).
+	//
+	// They name no repository, which is why they are exempt from the scope check
+	// the other reads pass: the Git window draws one graph across every
+	// discovered checkout and one tree grouped by them, so "which repository is
+	// this about" is part of the answer rather than of the question. The
+	// workspace root still comes from the filesystem domain's registration and
+	// never from the request.
+	GitReadMethod_GIT_READ_METHOD_LOG  GitReadMethod = 28
+	GitReadMethod_GIT_READ_METHOD_REFS GitReadMethod = 29
 )
 
 // Enum value maps for GitReadMethod.
@@ -421,6 +432,8 @@ var (
 		25: "GIT_READ_METHOD_REFLOG",
 		26: "GIT_READ_METHOD_STATUS_BATCH",
 		27: "GIT_READ_METHOD_WORKTREE_BINDING",
+		28: "GIT_READ_METHOD_LOG",
+		29: "GIT_READ_METHOD_REFS",
 	}
 	GitReadMethod_value = map[string]int32{
 		"GIT_READ_METHOD_UNSPECIFIED":         0,
@@ -451,6 +464,8 @@ var (
 		"GIT_READ_METHOD_REFLOG":              25,
 		"GIT_READ_METHOD_STATUS_BATCH":        26,
 		"GIT_READ_METHOD_WORKTREE_BINDING":    27,
+		"GIT_READ_METHOD_LOG":                 28,
+		"GIT_READ_METHOD_REFS":                29,
 	}
 )
 
@@ -3187,7 +3202,7 @@ const file_armadra_v1_git_proto_rawDesc = "" +
 	"\x17GIT_CLONE_STATE_RUNNING\x10\x01\x12\x1d\n" +
 	"\x19GIT_CLONE_STATE_SUCCEEDED\x10\x02\x12\x1a\n" +
 	"\x16GIT_CLONE_STATE_FAILED\x10\x03\x12\x1d\n" +
-	"\x19GIT_CLONE_STATE_CANCELLED\x10\x04*\x9d\a\n" +
+	"\x19GIT_CLONE_STATE_CANCELLED\x10\x04*\xd0\a\n" +
 	"\rGitReadMethod\x12\x1f\n" +
 	"\x1bGIT_READ_METHOD_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cGIT_READ_METHOD_REPOSITORIES\x10\x01\x12\x1a\n" +
@@ -3217,7 +3232,9 @@ const file_armadra_v1_git_proto_rawDesc = "" +
 	"\x1cGIT_READ_METHOD_CLONE_CANCEL\x10\x18\x12\x1a\n" +
 	"\x16GIT_READ_METHOD_REFLOG\x10\x19\x12 \n" +
 	"\x1cGIT_READ_METHOD_STATUS_BATCH\x10\x1a\x12$\n" +
-	" GIT_READ_METHOD_WORKTREE_BINDING\x10\x1bB#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	" GIT_READ_METHOD_WORKTREE_BINDING\x10\x1b\x12\x17\n" +
+	"\x13GIT_READ_METHOD_LOG\x10\x1c\x12\x18\n" +
+	"\x14GIT_READ_METHOD_REFS\x10\x1dB#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_git_proto_rawDescOnce sync.Once

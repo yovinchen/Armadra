@@ -212,6 +212,13 @@ enum WorkerServiceOperation {
   // where its credentials are, which is the controller. Neither the worktree
   // nor the credentials travel.
   WORKER_SERVICE_OPERATION_GIT_MESSAGE_CAPTURE = 53;
+  // The Git window's two workspace-level reads: the merged commit log across
+  // every discovered checkout, and the branch tree for all of them at once
+  // (Git 工具窗口设计 §3.1). Neither takes a repository path — which
+  // repositories there are is part of the answer — so they sit beside the
+  // panel's per-checkout reads rather than inside them.
+  WORKER_SERVICE_OPERATION_GIT_LOG = 54;
+  WORKER_SERVICE_OPERATION_GIT_REFS = 55;
 }
 // A version-locked payload, not a cross-version wire contract: both ends are
 // the same Armadra build, asserted by WorkerHelloResponse.runtime_version, and
