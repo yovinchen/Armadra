@@ -28,6 +28,7 @@ import { gitHunks } from "./git-hunks";
 import { handoff } from "./handoff";
 import { gitCommit } from "./git-commit";
 import { gitMessage } from "./git-message";
+import { gitLog } from "./git-log";
 import { gitStashes } from "./git-stashes";
 import { github } from "./github";
 import { gitIntegration } from "./git-integration";
@@ -85,6 +86,7 @@ export const MESSAGE_MODULES = {
   "git-hunks": gitHunks,
   "git-commit": gitCommit,
   "git-message": gitMessage,
+  "git-log": gitLog,
   "git-stashes": gitStashes,
   "git-integration": gitIntegration,
   github,
