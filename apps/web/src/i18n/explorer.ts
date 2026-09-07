@@ -22,7 +22,6 @@ export const explorer: MessageModule = {
     "explorer.status.?": "未跟踪",
 
     "scm.title": "源码控制",
-    "scm.sections": "源码控制分区",
     "scm.back": "返回",
     "scm.close": "关闭",
     "scm.refresh": "刷新",
@@ -44,7 +43,6 @@ export const explorer: MessageModule = {
     "scm.commit": "提交",
     "scm.committed": "已提交 {commit}",
     "scm.amend": "改写上一个提交（amend）",
-    "scm.amendCommit": "改写提交",
     "scm.amendTarget": "将被改写的提交",
     "scm.amendSafety":
       "amend 用新提交替换上面这个提交，历史因此被改写。只提交索引里的内容，不会自动推送，也不会强制推送。",
@@ -53,13 +51,11 @@ export const explorer: MessageModule = {
     "scm.amendUnavailable":
       "上一个提交的信息超出可重新提交的长度，改写会丢内容，因此不提供 amend。",
     "scm.clean": "没有变更",
-    "scm.noRepository": "不是 Git 仓库",
     "scm.init": "初始化 Git 仓库",
     "scm.initTitle": "在此工作区初始化 Git 仓库？",
     "scm.initDescription":
       "在工作区根目录执行 git init，创建 .git 目录。现有文件不会被改动，也不会自动暂存或提交。已属于其他仓库的目录会被拒绝，不会嵌套第二个仓库。",
     "scm.initConfirm": "初始化仓库",
-    "scm.initialized": "已在 {branch} 上初始化仓库",
     "scm.failed": "操作失败",
     "scm.ahead": "领先 {count}",
     "scm.behind": "落后 {count}",
@@ -84,7 +80,6 @@ export const explorer: MessageModule = {
     "explorer.status.?": "Untracked",
 
     "scm.title": "Source control",
-    "scm.sections": "Source control sections",
     "scm.back": "Back",
     "scm.close": "Close",
     "scm.refresh": "Refresh",
@@ -107,7 +102,6 @@ export const explorer: MessageModule = {
     "scm.commit": "Commit",
     "scm.committed": "Committed {commit}",
     "scm.amend": "Amend the previous commit",
-    "scm.amendCommit": "Amend commit",
     "scm.amendTarget": "Commit this rewrites",
     "scm.amendSafety":
       "Amend replaces the commit above with a new one, so it rewrites history. It commits only what is in the index, and it never pushes or force-pushes.",
@@ -116,13 +110,11 @@ export const explorer: MessageModule = {
     "scm.amendUnavailable":
       "The previous commit's message is longer than an amend may resend, so rewriting it would drop content. Amend is unavailable.",
     "scm.clean": "No changes",
-    "scm.noRepository": "Not a Git repository",
     "scm.init": "Initialize Git repository",
     "scm.initTitle": "Initialize a Git repository in this workspace?",
     "scm.initDescription":
       "Runs git init in the workspace root and creates a .git directory. Existing files are left alone and nothing is staged or committed. A directory that already belongs to another repository is refused rather than nested.",
     "scm.initConfirm": "Initialize repository",
-    "scm.initialized": "Repository initialized on {branch}",
     "scm.failed": "The operation failed",
     "scm.ahead": "Ahead {count}",
     "scm.behind": "Behind {count}",

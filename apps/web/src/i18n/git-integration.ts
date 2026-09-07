@@ -39,7 +39,6 @@ export const gitIntegration: MessageModule = {
     "gitIntegration.rebaseReady": "冲突结果已暂存，可继续重放剩余提交。",
     "gitIntegration.continueRebase": "继续变基",
     "gitIntegration.abortRebase": "中止变基",
-    "gitIntegration.originalBranch": "原分支",
     "gitRepo.continueIntegration": "继续 Git 操作",
     "gitRepo.abortIntegration": "中止 Git 操作",
     "gitRepo.state.awaitingResolution": "等待解决或确认提交",
@@ -60,8 +59,6 @@ export const gitIntegration: MessageModule = {
     "gitIntegration.none": "没有正在进行的 Git 整合操作。",
     "gitIntegration.open": "在编辑器打开",
     "gitIntegration.markResolved": "标记已解决",
-    "gitIntegration.markResolvedSafety":
-      "保存文件不等于解决冲突：标记已解决会把该文件加入索引，前提是文件里已经没有冲突标记；仍有标记时会被拒绝，并给出所在行号。",
     "gitIntegration.failed": "标记已解决失败",
     "gitIntegration.base": "Base · 共同基础",
     "gitIntegration.ours": "Ours · 当前侧",
@@ -121,7 +118,6 @@ export const gitIntegration: MessageModule = {
       "The resolved changes are staged. Continue to replay the remaining commits.",
     "gitIntegration.continueRebase": "Continue rebase",
     "gitIntegration.abortRebase": "Abort rebase",
-    "gitIntegration.originalBranch": "Original branch",
     "gitRepo.continueIntegration": "Continue Git operation",
     "gitRepo.abortIntegration": "Abort Git operation",
     "gitRepo.state.awaitingResolution":
@@ -146,8 +142,6 @@ export const gitIntegration: MessageModule = {
     "gitIntegration.none": "No Git integration is in progress.",
     "gitIntegration.open": "Open in editor",
     "gitIntegration.markResolved": "Mark resolved",
-    "gitIntegration.markResolvedSafety":
-      "Saving the file is not the same as resolving it. Mark resolved adds the file to the index, and only once it no longer contains conflict markers; while any remain the request is refused and their line numbers are reported.",
     "gitIntegration.failed": "Could not mark the file resolved",
     "gitIntegration.base": "Base · common ancestor",
     "gitIntegration.ours": "Ours · current side",

@@ -16,12 +16,7 @@ export const gitCommit: MessageModule = {
     "gitCommit.unstageAll": "把 {path} 下的全部文件移出这次提交",
     "gitCommit.renamedFrom": "重命名自 {path}",
     "gitCommit.selectFile": "选一个文件查看差异。",
-    "gitCommit.noDiff": "没有可显示的差异。",
     "gitCommit.binary": "二进制文件，不显示差异。",
-    "gitCommit.hunksRootOnly":
-      "按 hunk 暂存只在工作空间根仓库可用，其他检出这里是只读差异。",
-    "gitCommit.mergeRootOnly":
-      "三方合并只能打开工作空间根仓库的冲突文件，请在该仓库中解决。",
     "gitCommit.message": "提交信息",
     "gitCommit.messagePlaceholder": "这次改了什么，以及为什么",
     "gitCommit.history": "最近用过的信息",
@@ -58,12 +53,7 @@ export const gitCommit: MessageModule = {
     "gitCommit.unstageAll": "Exclude every file under {path} from this commit",
     "gitCommit.renamedFrom": "Renamed from {path}",
     "gitCommit.selectFile": "Select a file to see its diff.",
-    "gitCommit.noDiff": "No differences to show.",
     "gitCommit.binary": "Binary file; no diff is shown.",
-    "gitCommit.hunksRootOnly":
-      "Per-hunk staging is available in the workspace root repository only; other checkouts show a read-only diff here.",
-    "gitCommit.mergeRootOnly":
-      "The three-way merge view only opens conflicts in the workspace root repository; resolve this one in its own repository.",
     "gitCommit.message": "Commit message",
     "gitCommit.messagePlaceholder": "What changed, and why",
     "gitCommit.history": "Recent messages",

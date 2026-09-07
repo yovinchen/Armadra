@@ -23,11 +23,8 @@ export const gitStashes: MessageModule = {
       "暂存区存在冲突，请解决后再保存或应用 Stash。",
     "gitStash.view": "查看差异",
     "gitStash.patch": "工作区快照差异",
-    "gitStash.stagedPatch": "暂存区快照差异",
-    "gitStash.untrackedPatch": "未跟踪文件快照",
     "gitStash.noPatch": "此快照没有差异。",
     "gitStash.changed": "仓库或所选 Stash 已变化，请刷新并重新确认。",
-    "gitStash.parents": "基础与快照对象",
     "gitStash.duplicate": "同一对象存在多条记录，请使用 Git 处理后再继续。",
   },
   en: {
@@ -52,12 +49,9 @@ export const gitStashes: MessageModule = {
       "Resolve the existing index conflicts before creating or applying a stash.",
     "gitStash.view": "View diff",
     "gitStash.patch": "Worktree snapshot diff",
-    "gitStash.stagedPatch": "Index snapshot diff",
-    "gitStash.untrackedPatch": "Untracked file snapshot",
     "gitStash.noPatch": "This snapshot has no differences.",
     "gitStash.changed":
       "The repository or selected stash changed. Refresh and confirm again.",
-    "gitStash.parents": "Base and snapshot objects",
     "gitStash.duplicate":
       "This object appears more than once. Resolve the duplicate entries with Git first.",
   },

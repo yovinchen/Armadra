@@ -17,8 +17,6 @@ export const frameBinding: MessageModule = {
     "frameBinding.initSucceeded": "初始化脚本已完成",
     "frameBinding.initFailed": "初始化脚本失败",
     "frameBinding.missing": "找不到这个 worktree",
-    "frameBinding.missingHint":
-      "磁盘上已经没有这个 checkout：可以按原分支重新创建，或者解绑这个 Frame。",
     // 绑定坏掉的方式不止一种，修法也不一样：目录没了可以重建，分支被切走
     // 了不能——那个检出还在，重建只会失败。
     "frameBinding.reason.missing": "找不到这个 worktree",
@@ -35,9 +33,6 @@ export const frameBinding: MessageModule = {
     "frameBinding.unbindFrame": "解绑 Frame",
     "frameBinding.unbindHint":
       "解绑只清除画布上的绑定，磁盘上的 checkout 原样保留。",
-    "frameBinding.removeHint":
-      "「移除 worktree」删的是磁盘上的 checkout；有未提交改动时会被拒绝，不提供强制。",
-    "frameBinding.boundFrame": "已绑定 Frame：{title}",
     "frameBinding.createFrame": "同时创建绑定这个 worktree 的 Frame",
     "frameBinding.initScript": "初始化脚本（在新 worktree 里只运行一次）",
     "frameBinding.initTerminalTitle": "初始化脚本",
@@ -53,8 +48,6 @@ export const frameBinding: MessageModule = {
     "frameBinding.initSucceeded": "Init script finished",
     "frameBinding.initFailed": "Init script failed",
     "frameBinding.missing": "Worktree not found",
-    "frameBinding.missingHint":
-      "The checkout is gone from disk. Recreate it on the same branch, or unbind this Frame.",
     "frameBinding.reason.missing": "Worktree not found",
     "frameBinding.reasonHint.missing":
       "The checkout is gone from disk. Recreate it on the same branch, or unbind this Frame.",
@@ -70,9 +63,6 @@ export const frameBinding: MessageModule = {
     "frameBinding.unbindFrame": "Unbind Frame",
     "frameBinding.unbindHint":
       "Unbinding only clears the binding on the canvas; the checkout stays on disk.",
-    "frameBinding.removeHint":
-      "Remove worktree deletes the checkout on disk. It is refused while anything is uncommitted, and there is no force.",
-    "frameBinding.boundFrame": "Bound Frame: {title}",
     "frameBinding.createFrame": "Also create a Frame bound to this worktree",
     "frameBinding.initScript": "Init script (runs once in the new worktree)",
     "frameBinding.initTerminalTitle": "Init script",
