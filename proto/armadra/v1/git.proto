@@ -413,6 +413,12 @@ enum GitReadMethod {
   // never from the request.
   GIT_READ_METHOD_LOG = 28;
   GIT_READ_METHOD_REFS = 29;
+  // Who a commit from this checkout would be attributed to: `user.name` and
+  // `user.email` as Git itself resolves them. The window's "mine" filter used
+  // to infer it from the most recent reflog entry, which is the last person who
+  // wrote *here* rather than the person sitting here — and on a fresh clone
+  // there is no entry at all. Unset is null, never a failure.
+  GIT_READ_METHOD_IDENTITY = 30;
 }
 
 // One forwarded read. The body is the same version-locked JSON the action

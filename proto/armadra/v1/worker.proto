@@ -219,6 +219,10 @@ enum WorkerServiceOperation {
   // panel's per-checkout reads rather than inside them.
   WORKER_SERVICE_OPERATION_GIT_LOG = 54;
   WORKER_SERVICE_OPERATION_GIT_REFS = 55;
+  // The checkout's configured commit identity. It is a plain `git config`
+  // read, and it is here rather than derived on the controller because the
+  // configuration that decides it lives next to the repository.
+  WORKER_SERVICE_OPERATION_GIT_IDENTITY = 56;
 }
 // A version-locked payload, not a cross-version wire contract: both ends are
 // the same Armadra build, asserted by WorkerHelloResponse.runtime_version, and

@@ -264,6 +264,7 @@ async fn answer(read: GitRead) -> AppResult<GitReadResult> {
                     .await?,
             )
         }
+        GitReadMethod::Identity => json(&repositories.identity(&workspace, &path).await?),
         GitReadMethod::Integration => {
             json(&repositories.integration_status(&workspace, &path).await?)
         }

@@ -28,6 +28,10 @@ use super::*;
 /// reported without its tags rather than failing the workspace's answer.
 const MAX_TREE_REFS: usize = 5_000;
 
+/// The stash stack the tree will render. Past this the checkout is reported
+/// without its stashes rather than failing the workspace's answer.
+const MAX_TREE_STASHES: usize = 1_000;
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RefsHead {
@@ -86,6 +90,24 @@ pub struct RefsWorktree {
     pub locked: bool,
 }
 
+/// One entry of a checkout's stash stack.
+///
+/// The tree needs more than a count: a right-click on a stash node applies,
+/// pops, drops or shows *one* stash, and each of those names the entry by the
+/// object it observed. A count can only draw a number.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefsStash {
+    /// Position in the stack — the `n` of `stash@{n}` at the moment of reading.
+    pub index: u64,
+    /// The stash commit. Every write names this rather than the selector,
+    /// because the selector moves when another stash is pushed or dropped.
+    pub oid: String,
+    /// The reflog subject, which is what `stash list` shows.
+    pub message: String,
+    pub created_at: String,
+}
+
 /// One discovered checkout's whole branch tree.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -101,7 +123,10 @@ pub struct RefsSnapshot {
     pub remotes: Vec<RefsRemote>,
     pub tags: Vec<RefsTag>,
     pub worktrees: Vec<RefsWorktree>,
+    /// Kept beside `stashes` because it is what the group's label draws, and a
+    /// collapsed group should not have to count a list to render its heading.
     pub stash_count: u64,
+    pub stashes: Vec<RefsStash>,
 }
 
 impl RepositoryService {
@@ -153,6 +178,7 @@ impl RepositoryService {
         let token = Cancellation::default();
         let head = self.head(directory, &token).await?;
         let (branches, remotes, tags) = self.tree_refs(directory, &head, &token).await?;
+        let stashes = self.tree_stashes(directory, &token).await?;
         Ok(RefsSnapshot {
             repository_path: record.repository_path.clone(),
             repository_id: record.repository_id.clone(),
@@ -166,7 +192,8 @@ impl RepositoryService {
             remotes,
             tags,
             worktrees: self.tree_worktrees(directory, &token).await?,
-            stash_count: self.stash_count(directory, &token).await?,
+            stash_count: stashes.len() as u64,
+            stashes,
         })
     }
 
@@ -286,31 +313,51 @@ impl RepositoryService {
             .collect())
     }
 
-    /// How many stashes the checkout holds.
+    /// The checkout's stash stack.
     ///
-    /// The count comes from the reflog of `refs/stash` rather than from
-    /// `stash list`, so an empty stash — where the ref does not exist at all —
-    /// is zero rather than a failed command.
-    async fn stash_count(&self, directory: &Path, token: &Cancellation) -> AppResult<u64> {
+    /// `stash list` rather than a reflog count, because the tree draws entries
+    /// and not only a number, and because a checkout that never stashed has no
+    /// `refs/stash` at all — which `stash list` reports as an empty list rather
+    /// than as a failure.
+    ///
+    /// The index is the entry's position at this moment. It is *not* what a
+    /// write names: pushing or dropping another stash renumbers every entry
+    /// below it, so the actions bind to `oid`.
+    async fn tree_stashes(
+        &self,
+        directory: &Path,
+        token: &Cancellation,
+    ) -> AppResult<Vec<RefsStash>> {
         let output = self
-            .output(
+            .read(
                 directory,
-                args(&[
-                    "rev-list",
-                    "--walk-reflogs",
-                    "--count",
-                    "--end-of-options",
-                    "refs/stash",
-                ]),
-                self.command_timeout.min(Duration::from_secs(15)),
+                args(&["stash", "list", "-z", "--format=%H%x00%gs%x00%aI"]),
                 token,
-                None,
             )
             .await?;
-        if output.status != Some(0) {
-            // No `refs/stash` at all: nothing was ever stashed here.
-            return Ok(0);
+        let fields: Vec<_> = output.split(|byte| *byte == 0).collect();
+        let fields = if fields.last() == Some(&&b""[..]) {
+            &fields[..fields.len() - 1]
+        } else {
+            &fields[..]
+        };
+        if fields.len() % 3 != 0 || fields.len() / 3 > MAX_TREE_STASHES {
+            return Err(malformed());
         }
-        one_line(&output.stdout)?.parse().map_err(|_| malformed())
+        let mut stashes = Vec::with_capacity(fields.len() / 3);
+        for (index, chunk) in fields.chunks_exact(3).enumerate() {
+            let text = |i: usize| String::from_utf8(chunk[i].to_vec()).map_err(|_| malformed());
+            let oid = text(0)?;
+            if !valid_oid(&oid) {
+                return Err(malformed());
+            }
+            stashes.push(RefsStash {
+                index: index as u64,
+                oid,
+                message: text(1)?,
+                created_at: text(2)?,
+            });
+        }
+        Ok(stashes)
     }
 }

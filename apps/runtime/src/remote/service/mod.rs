@@ -310,6 +310,7 @@ async fn dispatch(
             let _: git::RootPayload = decode(&request_json)?;
             git::refs(root, allow_execute).await
         }
+        Operation::GitIdentity => git::identity(root, decode(&request_json)?, allow_execute).await,
         Operation::GitStatusBatch => {
             git::status_batch(root, decode(&request_json)?, allow_execute).await
         }

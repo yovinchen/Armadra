@@ -168,6 +168,13 @@ pub fn router_with_state(state: AppState) -> Router {
             post(git_api::log),
         )
         .route("/api/workspaces/{workspace_id}/git/refs", get(git_api::refs))
+        // Who a commit from a checkout would be attributed to. It is a
+        // per-checkout read — a vendored clone may well be configured with a
+        // different address — so it takes the same `path` the others do.
+        .route(
+            "/api/workspaces/{workspace_id}/git/identity",
+            get(git_api::identity),
+        )
         .route(
             "/api/workspaces/{workspace_id}/git/repository/branches",
             get(git_api::branches),

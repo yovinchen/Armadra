@@ -7,6 +7,7 @@ import {
   gitExpectedStateSchema,
   gitHistoryPageSchema,
   gitIntegrationSnapshotSchema,
+  gitIdentitySchema,
   gitLogPageSchema,
   gitRefsSnapshotSchema,
   gitRebaseTodoPreviewSchema,
@@ -119,6 +120,17 @@ export const gitRepositoryApi = {
     request(
       `/api/workspaces/${query(workspaceId)}/git/refs`,
       gitRefsSnapshotSchema,
+      { signal },
+    ),
+  /**
+   * Who a commit from this checkout would be attributed to — `git config`'s
+   * own answer, not one inferred from the reflog. Both fields are null when
+   * nothing is configured.
+   */
+  gitIdentity: (workspaceId: string, signal?: AbortSignal, path = ".") =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/git/identity?path=${query(path)}`,
+      gitIdentitySchema,
       { signal },
     ),
   gitRepositoryWorktrees: (

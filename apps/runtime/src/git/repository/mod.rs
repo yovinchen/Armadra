@@ -39,6 +39,7 @@ mod command;
 mod commits;
 mod execute;
 mod history;
+mod identity;
 mod integration;
 mod log;
 mod parse;
@@ -57,6 +58,7 @@ pub use actions::{
 pub use branches::{BranchRecord, BranchSnapshot};
 pub use commits::{CommitDetail, CommitFile, CommitFileDiff};
 pub use history::{CommitRecord, HistoryPage, HistoryRequest};
+pub use identity::IdentityRecord;
 pub use integration::{CherryPickPreview, ConflictFile, ConflictSide, IntegrationSnapshot};
 pub use log::{LogCommit, LogPage, LogRefKind, LogRefs, LogRepository, LogRequest, LogText};
 pub use queue::{OperationSnapshot, OperationState};
@@ -64,7 +66,8 @@ pub use reflog::{ReflogEntry, ReflogPage, ReflogRequest};
 pub use refs::{RemoteRecord, TagRecord, TagSnapshot};
 pub use stash::{StashDetail, StashRecord, StashSnapshot};
 pub use tree::{
-    RefsBranch, RefsHead, RefsRemote, RefsRemoteBranch, RefsSnapshot, RefsTag, RefsWorktree,
+    RefsBranch, RefsHead, RefsRemote, RefsRemoteBranch, RefsSnapshot, RefsStash, RefsTag,
+    RefsWorktree,
 };
 pub use worktrees::{WorktreeBindingRequest, WorktreeBindingVerdict, WorktreeRecord};
 

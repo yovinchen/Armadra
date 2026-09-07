@@ -107,6 +107,10 @@ const (
 	// panel's per-checkout reads rather than inside them.
 	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_LOG  WorkerServiceOperation = 54
 	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_REFS WorkerServiceOperation = 55
+	// The checkout's configured commit identity. It is a plain `git config`
+	// read, and it is here rather than derived on the controller because the
+	// configuration that decides it lives next to the repository.
+	WorkerServiceOperation_WORKER_SERVICE_OPERATION_GIT_IDENTITY WorkerServiceOperation = 56
 )
 
 // Enum value maps for WorkerServiceOperation.
@@ -163,6 +167,7 @@ var (
 		53: "WORKER_SERVICE_OPERATION_GIT_MESSAGE_CAPTURE",
 		54: "WORKER_SERVICE_OPERATION_GIT_LOG",
 		55: "WORKER_SERVICE_OPERATION_GIT_REFS",
+		56: "WORKER_SERVICE_OPERATION_GIT_IDENTITY",
 	}
 	WorkerServiceOperation_value = map[string]int32{
 		"WORKER_SERVICE_OPERATION_UNSPECIFIED":             0,
@@ -216,6 +221,7 @@ var (
 		"WORKER_SERVICE_OPERATION_GIT_MESSAGE_CAPTURE":     53,
 		"WORKER_SERVICE_OPERATION_GIT_LOG":                 54,
 		"WORKER_SERVICE_OPERATION_GIT_REFS":                55,
+		"WORKER_SERVICE_OPERATION_GIT_IDENTITY":            56,
 	}
 )
 
@@ -3309,7 +3315,7 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"\n" +
 	"agent_host\x18\x1c \x01(\v2\x1f.armadra.v1.AgentWorkerResponseH\x00R\tagentHost\x121\n" +
 	"\x03git\x18\x1d \x01(\v2\x1d.armadra.v1.GitWorkerResponseH\x00R\x03gitB\b\n" +
-	"\x06result*\x84\x12\n" +
+	"\x06result*\xaf\x12\n" +
 	"\x16WorkerServiceOperation\x12(\n" +
 	"$WORKER_SERVICE_OPERATION_UNSPECIFIED\x10\x00\x12)\n" +
 	"%WORKER_SERVICE_OPERATION_FILE_VERSION\x10\x01\x12+\n" +
@@ -3362,7 +3368,8 @@ const file_armadra_v1_worker_proto_rawDesc = "" +
 	"-WORKER_SERVICE_OPERATION_GIT_WORKTREE_BINDING\x104\x120\n" +
 	",WORKER_SERVICE_OPERATION_GIT_MESSAGE_CAPTURE\x105\x12$\n" +
 	" WORKER_SERVICE_OPERATION_GIT_LOG\x106\x12%\n" +
-	"!WORKER_SERVICE_OPERATION_GIT_REFS\x107\"\x04\b1\x101B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	"!WORKER_SERVICE_OPERATION_GIT_REFS\x107\x12)\n" +
+	"%WORKER_SERVICE_OPERATION_GIT_IDENTITY\x108\"\x04\b1\x101B#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_worker_proto_rawDescOnce sync.Once

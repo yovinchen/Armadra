@@ -829,6 +829,37 @@ pub async fn remotes(
             .await?,
     )
 }
+/// `GET …/git/identity` — who a commit from this checkout would be from.
+///
+/// A plain `git config` read, so it needs no execution grant: nothing about it
+/// runs a repository filter. Both fields are `null` on a machine that has not
+/// configured an identity, which is a normal machine and not a failure.
+pub async fn identity(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<RepositoryQuery>,
+) -> AppResult<JsonAnswer> {
+    let workspace = workspace(&state, &id, false).await?;
+    if let Some(answer) = proxied(
+        &state,
+        &workspace,
+        WorkerServiceOperation::GitIdentity,
+        &service::PathPayload {
+            path: query.path.clone(),
+        },
+    )
+    .await?
+    {
+        return Ok(answer);
+    }
+    JsonAnswer::local(
+        &REPOSITORIES
+            .with_execution(workspace.permissions.execute)
+            .identity(Path::new(&workspace.root_path), &query.path)
+            .await?,
+    )
+}
+
 pub async fn worktrees(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,

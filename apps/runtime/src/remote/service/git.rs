@@ -329,6 +329,12 @@ pub async fn worktree_binding(
     )
 }
 
+/// Who a commit from this checkout would be attributed to.
+pub async fn identity(root: PathBuf, payload: PathPayload, execute: bool) -> AppResult<Vec<u8>> {
+    let service = git_api::REPOSITORIES.with_execution(execute);
+    super::encode(&service.identity(&root, &payload.path).await?)
+}
+
 pub async fn tags(root: PathBuf, payload: PathPayload, execute: bool) -> AppResult<Vec<u8>> {
     let service = git_api::REPOSITORIES.with_execution(execute);
     super::encode(&service.tags(&root, &payload.path).await?)

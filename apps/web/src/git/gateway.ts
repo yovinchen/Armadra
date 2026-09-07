@@ -11,6 +11,7 @@ import {
   gitCommitDetailSchema,
   gitCommitFileDiffSchema,
   gitHistoryPageSchema,
+  gitIdentitySchema,
   gitIntegrationSnapshotSchema,
   gitLogPageSchema,
   gitRebaseTodoPreviewSchema,
@@ -734,6 +735,24 @@ export const gitGateway = {
   refs(target: GitTarget, signal?: AbortSignal) {
     return route(target, GitReadMethod.REFS, {}, gitRefsSnapshotSchema, () =>
       runtimeApi.gitRefs(target.workspaceId, signal),
+    );
+  },
+
+  /**
+   * 这个检出提交出去会署谁的名（`git config user.name` / `user.email`）。
+   *
+   * 日志页的「我的」筛选与提交页的署名读的是它，而不是从 reflog 最后一条推
+   * 出来的那个人——那是**上一个在这里写过东西的人**，未必是坐在这里的人；
+   * 刚克隆下来的仓库更是一条 reflog 都没有。没配置就是两个 `null`。
+   */
+  identity(target: GitTarget, signal?: AbortSignal) {
+    return route(
+      target,
+      GitReadMethod.IDENTITY,
+      at(target),
+      gitIdentitySchema,
+      () =>
+        runtimeApi.gitIdentity(target.workspaceId, signal, target.path ?? "."),
     );
   },
 

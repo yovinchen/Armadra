@@ -399,6 +399,12 @@ const (
 	// never from the request.
 	GitReadMethod_GIT_READ_METHOD_LOG  GitReadMethod = 28
 	GitReadMethod_GIT_READ_METHOD_REFS GitReadMethod = 29
+	// Who a commit from this checkout would be attributed to: `user.name` and
+	// `user.email` as Git itself resolves them. The window's "mine" filter used
+	// to infer it from the most recent reflog entry, which is the last person who
+	// wrote *here* rather than the person sitting here — and on a fresh clone
+	// there is no entry at all. Unset is null, never a failure.
+	GitReadMethod_GIT_READ_METHOD_IDENTITY GitReadMethod = 30
 )
 
 // Enum value maps for GitReadMethod.
@@ -434,6 +440,7 @@ var (
 		27: "GIT_READ_METHOD_WORKTREE_BINDING",
 		28: "GIT_READ_METHOD_LOG",
 		29: "GIT_READ_METHOD_REFS",
+		30: "GIT_READ_METHOD_IDENTITY",
 	}
 	GitReadMethod_value = map[string]int32{
 		"GIT_READ_METHOD_UNSPECIFIED":         0,
@@ -466,6 +473,7 @@ var (
 		"GIT_READ_METHOD_WORKTREE_BINDING":    27,
 		"GIT_READ_METHOD_LOG":                 28,
 		"GIT_READ_METHOD_REFS":                29,
+		"GIT_READ_METHOD_IDENTITY":            30,
 	}
 )
 
@@ -3202,7 +3210,7 @@ const file_armadra_v1_git_proto_rawDesc = "" +
 	"\x17GIT_CLONE_STATE_RUNNING\x10\x01\x12\x1d\n" +
 	"\x19GIT_CLONE_STATE_SUCCEEDED\x10\x02\x12\x1a\n" +
 	"\x16GIT_CLONE_STATE_FAILED\x10\x03\x12\x1d\n" +
-	"\x19GIT_CLONE_STATE_CANCELLED\x10\x04*\xd0\a\n" +
+	"\x19GIT_CLONE_STATE_CANCELLED\x10\x04*\xee\a\n" +
 	"\rGitReadMethod\x12\x1f\n" +
 	"\x1bGIT_READ_METHOD_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cGIT_READ_METHOD_REPOSITORIES\x10\x01\x12\x1a\n" +
@@ -3234,7 +3242,8 @@ const file_armadra_v1_git_proto_rawDesc = "" +
 	"\x1cGIT_READ_METHOD_STATUS_BATCH\x10\x1a\x12$\n" +
 	" GIT_READ_METHOD_WORKTREE_BINDING\x10\x1b\x12\x17\n" +
 	"\x13GIT_READ_METHOD_LOG\x10\x1c\x12\x18\n" +
-	"\x14GIT_READ_METHOD_REFS\x10\x1dB#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
+	"\x14GIT_READ_METHOD_REFS\x10\x1d\x12\x1c\n" +
+	"\x18GIT_READ_METHOD_IDENTITY\x10\x1eB#Z!armadra.local/host/gen/armadra/v1b\x06proto3"
 
 var (
 	file_armadra_v1_git_proto_rawDescOnce sync.Once

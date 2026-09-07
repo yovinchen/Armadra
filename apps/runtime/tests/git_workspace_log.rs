@@ -485,6 +485,22 @@ async fn the_branch_tree_answers_for_every_repository_at_once() {
     assert!(main["head"]["oid"].is_string(), "{main}");
     assert_eq!(main["stashCount"], json!(1), "{main}");
 
+    // The stash group is a menu, not a badge: applying, popping or dropping one
+    // names the object it observed, because the `stash@{n}` selector moves the
+    // moment another stash is pushed.
+    let stashes = main["stashes"].as_array().unwrap();
+    assert_eq!(stashes.len(), 1, "{stashes:?}");
+    assert_eq!(stashes[0]["index"], json!(0), "{stashes:?}");
+    assert!(
+        stashes[0]["oid"].as_str().unwrap().len() >= 40,
+        "{stashes:?}"
+    );
+    assert!(
+        stashes[0]["message"].as_str().unwrap().contains("wip"),
+        "{stashes:?}"
+    );
+    assert!(stashes[0]["createdAt"].is_string(), "{stashes:?}");
+
     let branches = main["branches"].as_array().unwrap();
     let current = branches
         .iter()
@@ -544,6 +560,50 @@ async fn the_branch_tree_answers_for_every_repository_at_once() {
     let nested = &repositories[paths.iter().position(|path| *path == "nested").unwrap()];
     assert_eq!(nested["kind"], json!("nested"));
     assert_eq!(nested["stashCount"], json!(0), "{nested}");
+    assert_eq!(nested["stashes"], json!([]), "{nested}");
     assert_eq!(nested["remotes"], json!([]));
     assert_eq!(nested["tags"], json!([]));
+}
+
+/// The identity a commit from a checkout would carry.
+///
+/// It is asked of Git rather than inferred, and it is asked *per checkout*: the
+/// nested repository below is configured with a different address, which is
+/// exactly the case one workspace-wide guess gets wrong.
+#[cfg(unix)]
+#[tokio::test]
+async fn each_checkout_reports_the_identity_it_would_commit_as() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("workspace");
+    two_repositories(&root);
+    // Written into each repository's own config rather than relied on from the
+    // machine's: this test must answer the same on every machine.
+    git(&root, &["config", "user.name", "Root Author"]);
+    git(&root, &["config", "user.email", "root@example.test"]);
+    git(
+        &root.join("nested"),
+        &["config", "user.email", "nested@example.test"],
+    );
+    let (app, id) = workspace_app(&root, directory.path()).await;
+
+    let (status, identity) = request(
+        &app,
+        "GET",
+        &format!("/api/workspaces/{id}/git/identity?path=."),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{identity}");
+    assert_eq!(identity["name"], json!("Root Author"), "{identity}");
+    assert_eq!(identity["email"], json!("root@example.test"), "{identity}");
+
+    let (status, nested) = request(
+        &app,
+        "GET",
+        &format!("/api/workspaces/{id}/git/identity?path=nested"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{nested}");
+    assert_eq!(nested["email"], json!("nested@example.test"), "{nested}");
 }

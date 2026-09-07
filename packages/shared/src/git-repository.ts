@@ -243,6 +243,20 @@ export const gitRefsWorktreeSchema = z.object({
   locked: z.boolean(),
 });
 /**
+ * One entry of a checkout's stash stack.
+ *
+ * The tree needs entries and not only a count: the stash node's context menu
+ * applies, pops, drops or shows *one* stash, and each of those names it by the
+ * object that was observed — the `stash@{n}` selector moves the moment another
+ * stash is pushed or dropped.
+ */
+export const gitRefsStashSchema = z.object({
+  index: count,
+  oid,
+  message: z.string(),
+  createdAt: z.string(),
+});
+/**
  * One discovered checkout's whole branch tree (Git 工具窗口设计 §3.1).
  *
  * The whole workspace comes back in one answer, so the window's left column is
@@ -261,9 +275,22 @@ export const gitRefsSnapshotSchema = z.array(
     remotes: z.array(gitRefsRemoteSchema),
     tags: z.array(gitRefsTagSchema),
     worktrees: z.array(gitRefsWorktreeSchema),
+    /** What the group's heading draws, without counting the list. */
     stashCount: count,
+    stashes: z.array(gitRefsStashSchema),
   }),
 );
+
+/**
+ * Who a commit from this checkout would be attributed to.
+ *
+ * Both fields are null on a machine that has configured no identity, which is
+ * a normal machine — the log's "mine" filter simply has nothing to filter by.
+ */
+export const gitIdentitySchema = z.object({
+  name: z.string().nullable(),
+  email: z.string().nullable(),
+});
 /**
  * What an interactive rebase does with one replayed commit. Deliberately small:
  * no `edit`, no `exec`, and no `reword` — each would need an interactive editor
@@ -756,6 +783,8 @@ export type GitRefsBranch = z.infer<typeof gitRefsBranchSchema>;
 export type GitRefsRemote = z.infer<typeof gitRefsRemoteSchema>;
 export type GitRefsTag = z.infer<typeof gitRefsTagSchema>;
 export type GitRefsWorktree = z.infer<typeof gitRefsWorktreeSchema>;
+export type GitRefsStash = z.infer<typeof gitRefsStashSchema>;
+export type GitIdentity = z.infer<typeof gitIdentitySchema>;
 export type GitRefsSnapshot = z.infer<typeof gitRefsSnapshotSchema>;
 /** One repository's row in the branch tree, which is what a tree node draws. */
 export type GitRefsRepository = GitRefsSnapshot[number];
