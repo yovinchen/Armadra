@@ -57,13 +57,7 @@ export const ExplorerDrawer = lazy(() =>
   })),
 );
 
-export const SourceControlDrawer = lazy(() =>
-  import("@/panels/SourceControlDrawer").then((module) => ({
-    default: module.SourceControlDrawer,
-  })),
-);
-
-/** Git 工具窗口（Git 工具窗口设计 §2.1）；底部停靠，取代右侧的源码控制抽屉。 */
+/** Git 工具窗口（Git 工具窗口设计 §2.1）；底部停靠，日志与提交两个页签。 */
 export const GitToolWindow = lazy(() =>
   import("@/panels/git/window/GitToolWindow").then((module) => ({
     default: module.GitToolWindow,

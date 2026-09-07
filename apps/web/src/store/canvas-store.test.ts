@@ -193,9 +193,12 @@ describe("面板", () => {
    * 那个正好压在前一个上，用户看到的是「点了没反应」。
    */
   it("右侧抽屉一次只开一个", () => {
-    state().setPanel("scm", "drawer");
+    state().setPanel("github", "drawer");
     state().setPanel("explorer", "drawer");
-    expect(state().panels).toMatchObject({ scm: "closed", explorer: "drawer" });
+    expect(state().panels).toMatchObject({
+      github: "closed",
+      explorer: "drawer",
+    });
     state().setPanel("usage", "drawer");
     expect(state().panels).toMatchObject({
       explorer: "closed",
@@ -225,15 +228,15 @@ describe("面板", () => {
 
   it("pin 成浮卡的不被别的抽屉挤掉", () => {
     state().setPanel("explorer", "pinned");
-    state().setPanel("scm", "drawer");
-    expect(state().panels).toMatchObject({ explorer: "pinned", scm: "drawer" });
+    state().setPanel("scm", "bottom");
+    expect(state().panels).toMatchObject({ explorer: "pinned", scm: "bottom" });
   });
 
   it("左侧栏和对话框不参与右侧那条规则", () => {
-    state().setPanel("scm", "drawer");
+    state().setPanel("scm", "bottom");
     state().setPanel("sidebar", "open");
     state().setPanel("palette", true);
-    expect(state().panels).toMatchObject({ scm: "drawer", palette: true });
+    expect(state().panels).toMatchObject({ scm: "bottom", palette: true });
   });
 });
 

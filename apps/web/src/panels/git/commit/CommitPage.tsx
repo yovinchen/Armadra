@@ -20,6 +20,7 @@ import type { GitRestoreSource } from "@armadra/shared";
 import { runtimeApi } from "../../../api/client";
 import { gitGateway } from "../../../git/gateway";
 import { gitTarget, useGitTarget } from "../../../git/target";
+import { SCM_COMMIT_EVENT } from "../../../app/commands";
 import { usePreferencesStore, useT } from "../../../app/preferences-store";
 import { useCanvasStore } from "../../../store/canvas-store";
 import { useCompactLayout } from "../../../platform/layout";
@@ -268,6 +269,15 @@ export function CommitPage({
       if (options.push) for (const path of committed) await push(path);
     }
   };
+  // ⌘⏎ 走一个窗口事件（`app/commands.ts` 的 `scm.commit`），而不是一次直接
+  // 调用：那条命令的第一件事是把窗口开出来，此刻这一页还没挂上，没有函数可
+  // 以被调。故意不写依赖数组——监听要看到的是**这一次渲染**里的消息与勾选，
+  // 一个捕获了旧闭包的监听会提交上一秒的内容。
+  useEffect(() => {
+    const submit = () => void commit({ push: false });
+    window.addEventListener(SCM_COMMIT_EVENT, submit);
+    return () => window.removeEventListener(SCM_COMMIT_EVENT, submit);
+  });
   const revert = (input: {
     path: string;
     source: GitRestoreSource;

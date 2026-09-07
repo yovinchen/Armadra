@@ -11,7 +11,7 @@ import { commandKeysLabel, type CommandId } from "../keybindings";
 import { useCanvasStore, type PanelState } from "../store/canvas-store";
 import { useT } from "../app/preferences-store";
 import { CanvasPreferencesMenu } from "../canvas/menus/CanvasPreferencesMenu";
-import { WORK_PANEL_WIDTH, type WorkPanelKey } from "../panels/WorkPanelSheet";
+import { WORK_PANEL_WIDTH, type RightPanelKey } from "../panels/WorkPanelSheet";
 import { cn } from "@/lib/cn";
 import { DropdownMenu, DropdownMenuTrigger } from "@/ui/dropdown-menu";
 import { IconButton } from "@/ui/icon-button";
@@ -42,8 +42,8 @@ const BAR =
  * 正好盖在这条工具簇上；不让开的话开着抽屉时这几个按钮一个都按不到——
  * 用户点「资源管理器」以为没反应，其实点在抽屉上。
  */
-function openWorkPanel(panels: PanelState): WorkPanelKey | null {
-  for (const key of Object.keys(WORK_PANEL_WIDTH) as WorkPanelKey[]) {
+function openWorkPanel(panels: PanelState): RightPanelKey | null {
+  for (const key of Object.keys(WORK_PANEL_WIDTH) as RightPanelKey[]) {
     if (panels[key] === "drawer") return key;
   }
   return null;

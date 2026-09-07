@@ -43,11 +43,11 @@ export interface PanelState {
   /**
    * Git 工具窗口（Git 工具窗口设计 §2.1）。
    *
-   * `drawer` 是旧的右侧源码控制抽屉；`bottom` 是底部停靠的工具窗口，
-   * `maximized` 是它铺满整块画布区的样子。三者都占用「同一块工作面板」，
-   * 所以 `setPanel` 对它们一视同仁地关掉别的面板。
+   * 它**停在底部**而不是右侧：日志页是三栏，要的是宽度。`maximized` 是同一个
+   * 窗口铺满整块画布区。两者都占用「同一块工作面板」，所以 `setPanel` 会像对
+   * 待一个 `drawer` 那样关掉别的面板。
    */
-  scm: "closed" | "drawer" | "bottom" | "maximized";
+  scm: "closed" | "bottom" | "maximized";
   /** 主机 / 会话资源面板（T02）。开着时 Runtime 才采样。 */
   resources: "closed" | "drawer";
   /** 右侧工作面板的「自动化」页（自动化设计 §3 / 画布平台设计 §4）。 */

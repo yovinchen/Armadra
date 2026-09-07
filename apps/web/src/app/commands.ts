@@ -8,7 +8,7 @@ import { usePreferencesStore, useT } from "./preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
 import { useEnabledAgents } from "./use-agents";
 
-/** 源码控制抽屉监听它来触发提交（⌘⏎，§13.5）。 */
+/** Git 工具窗口的提交页监听它来触发提交（⌘⏎，§13.5）。 */
 export const SCM_COMMIT_EVENT = "armadra:scm-commit";
 
 /** 资源管理器抽屉监听它来切到「搜索」页签（E01/M4）。 */
@@ -118,7 +118,8 @@ export function useCommandDispatch(): CommandDispatch {
           return;
         }
         case "scm.commit":
-          setPanel("scm", "drawer");
+          // 窗口先开到底部，事件再发：提交页要先挂上才听得到这一次。
+          setPanel("scm", "bottom");
           window.dispatchEvent(new CustomEvent(SCM_COMMIT_EVENT));
           return;
         default:

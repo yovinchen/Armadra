@@ -1,83 +1,14 @@
-// 仓库面板的纯逻辑层：标签集合、进行中判定、快照合并，以及确认框复述一次
-// 动作时用的那一行文字。这里不渲染任何东西，所以可以被面板与确认框共用。
+// Git 工具窗口的纯逻辑层：一次写在不在跑，以及确认框复述那次写时用的那一行
+// 文字。这里不渲染任何东西，所以日志页、提交页与确认框共用它。
 import type {
   GitExpectedState,
   GitRepositoryAction,
   GitRepositoryOperation,
 } from "@armadra/shared";
-import { redactRemoteUrl } from "./Remotes";
-
-export type RepositoryTab =
-  | "branches"
-  | "history"
-  /** 引用日志：找回被 reset 或 rebase 丢下的提交（Git 设计 §3）。 */
-  | "reflog"
-  | "worktrees"
-  | "stashes"
-  | "tags"
-  | "remotes"
-  | "integration";
+import { redactRemoteUrl } from "./actions/refs";
 
 export const running = (operation: GitRepositoryOperation | null | undefined) =>
   operation?.state === "queued" || operation?.state === "running";
-
-// Merge network snapshots monotonically. An integration's initial command can
-// progress from awaitingResolution/unknownOutcome to a reconciled final state;
-// delayed polling and list responses must not bring that command back to life.
-export function mergeOperation(
-  current: GitRepositoryOperation | null | undefined,
-  incoming: GitRepositoryOperation,
-): GitRepositoryOperation {
-  if (!current || current.id !== incoming.id) return incoming;
-  const rank = {
-    queued: 0,
-    running: 1,
-    awaitingResolution: 2,
-    unknownOutcome: 3,
-    succeeded: 4,
-    failed: 4,
-    cancelled: 4,
-  };
-  let result = incoming;
-  if (
-    rank[incoming.state] < rank[current.state] ||
-    (rank[current.state] === 4 && incoming.state !== current.state)
-  )
-    result = current;
-  else if (
-    incoming.state === current.state &&
-    current.finishedAt &&
-    incoming.finishedAt &&
-    Date.parse(incoming.finishedAt) < Date.parse(current.finishedAt)
-  )
-    result = current;
-  const cancellationRequested =
-    current.cancellationRequested || result.cancellationRequested;
-  if (
-    result.state === current.state &&
-    result.finishedAt === current.finishedAt &&
-    result.message === current.message &&
-    cancellationRequested === current.cancellationRequested
-  )
-    return current;
-  return cancellationRequested === result.cancellationRequested
-    ? result
-    : { ...result, cancellationRequested };
-}
-
-export type Tracking = {
-  operation: GitRepositoryOperation | null;
-  pending: boolean;
-  uncertain: boolean;
-  error: string | null;
-};
-
-export const emptyTracking: Tracking = {
-  operation: null,
-  pending: false,
-  uncertain: false,
-  error: null,
-};
 
 /** 一次等待确认的写操作：动作本身、它被比对的期望状态，以及要复述的提交。 */
 export type Confirmation = {
@@ -140,6 +71,8 @@ export function actionTarget(action: GitRepositoryAction): string {
     case "switchBranch":
     case "deleteBranch":
       return `${action.name} (${action.expectedOid})`;
+    case "renameBranch":
+      return `${action.name} → ${action.newName} (${action.expectedOid})`;
     case "createWorktree":
       return `${action.path} · ${action.branch} ← ${action.createBranch ? (action.startPoint ?? "HEAD") : action.expectedOid}`;
     case "removeWorktree":

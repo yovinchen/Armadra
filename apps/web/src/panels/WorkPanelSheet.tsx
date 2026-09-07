@@ -32,23 +32,33 @@ import { Sheet, SheetContent } from "@/ui/sheet";
  */
 
 /**
- * 每块面板的抽屉宽度。
+ * 右侧停靠的面板与它们的抽屉宽度。
  *
  * 右上工具簇也读这张表：抽屉是窗口级的固定层，盖住了工具簇那一条，不让开
  * 的话开着抽屉时那几个按钮一个都按不到（`shell/ControlsCluster`）。
+ *
+ * Git 工具窗口**不在表里**：它停在底部，横向不盖住任何东西，高度由偏好决定
+ * （`--git-window-h`）。给它一个用不到的宽度只会让下一个读这张表的人以为它
+ * 也是右侧抽屉。
  */
 export const WORK_PANEL_WIDTH = {
   explorer: "var(--drawer-w)",
   resources: "var(--drawer-w)",
   problems: "var(--drawer-w)",
   usage: "400px",
-  scm: "var(--scm-w)",
   github: "var(--scm-w)",
   automation: "var(--scm-w)",
   handoff: "var(--scm-w)",
 } as const;
 
-export type WorkPanelKey = keyof typeof WORK_PANEL_WIDTH;
+/** 右侧停靠的那几块。 */
+export type RightPanelKey = keyof typeof WORK_PANEL_WIDTH;
+/** 全部工作面板：右侧那几块，加上底部停靠的 Git 工具窗口。 */
+export type WorkPanelKey = RightPanelKey | "scm";
+
+function rightDocked(panel: WorkPanelKey): panel is RightPanelKey {
+  return panel !== "scm";
+}
 
 /** 底部停靠时高度的上下限（px）。上限留出一点画布，最大化才是「铺满」。 */
 export const BOTTOM_PANEL_MIN_HEIGHT = 160;
@@ -170,7 +180,9 @@ export function WorkPanelSheet({
                     : "var(--git-window-h)",
                 maxHeight: "100dvh",
               }
-            : { width: `min(100vw, ${WORK_PANEL_WIDTH[panel]})` }
+            : rightDocked(panel)
+              ? { width: `min(100vw, ${WORK_PANEL_WIDTH[panel]})` }
+              : undefined
         }
         // `data-[side=right]:sm:max-w-none` 必须照抄这个变体：生成组件里的
         // `data-[side=right]:sm:max-w-sm`（384px）比裸 `sm:max-w-none` 特异性

@@ -106,11 +106,11 @@ describe("useAppKeybindings", () => {
     expect(runCanvasCommand).toHaveBeenCalledWith("canvas.undo");
   });
 
-  it("⌘⏎ 打开源码控制抽屉并广播提交事件", () => {
+  it("⌘⏎ 打开 Git 工具窗口并广播提交事件", () => {
     const listener = vi.fn();
     window.addEventListener(SCM_COMMIT_EVENT, listener);
     press("Enter");
-    expect(useCanvasStore.getState().panels.scm).toBe("drawer");
+    expect(useCanvasStore.getState().panels.scm).toBe("bottom");
     expect(listener).toHaveBeenCalled();
     window.removeEventListener(SCM_COMMIT_EVENT, listener);
   });

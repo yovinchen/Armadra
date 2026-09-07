@@ -4,7 +4,6 @@ import type { GitCommitRecord } from "@armadra/shared";
 import { installDomPolyfills } from "@/app/test-harness";
 import { usePreferencesStore } from "@/app/preferences-store";
 import { CommitGraphLanes, commitGraph, refBadges } from "./CommitGraph";
-import { filterCommits, relativeTime } from "./History";
 
 installDomPolyfills();
 
@@ -118,73 +117,5 @@ describe("ref badges", () => {
       { label: "origin/main", kind: "remote" },
     ]);
     expect(refBadges([" ", ""])).toEqual([]);
-  });
-});
-
-describe("history filters", () => {
-  const rows = [
-    commit(a, [], {
-      authorName: "Ada",
-      subject: "fix parser",
-      authorTime: "2026-09-04T12:00:00Z",
-    }),
-    commit(b, [], {
-      authorName: "Grace",
-      authorEmail: "grace@example.invalid",
-      subject: "add tests",
-      authorTime: "2026-08-01T12:00:00Z",
-    }),
-  ];
-  const filters = {
-    author: "",
-    since: "",
-    until: "",
-    path: "",
-    text: "",
-  };
-
-  it("matches an author by name or address", () => {
-    expect(
-      filterCommits(rows, { ...filters, author: "grace@" }).map((r) => r.oid),
-    ).toEqual([b]);
-    expect(
-      filterCommits(rows, { ...filters, author: "ada" }).map((r) => r.oid),
-    ).toEqual([a]);
-  });
-
-  it("includes the whole of the end day rather than cutting it off at midnight", () => {
-    // A commit at noon on the 4th must survive an `until` of the 4th.
-    expect(
-      filterCommits(rows, { ...filters, until: "2026-09-04" }).map(
-        (r) => r.oid,
-      ),
-    ).toEqual([a, b]);
-    expect(
-      filterCommits(rows, { ...filters, since: "2026-09-01" }).map(
-        (r) => r.oid,
-      ),
-    ).toEqual([a]);
-  });
-
-  it("matches subject and hash but leaves everything through when empty", () => {
-    expect(
-      filterCommits(rows, { ...filters, text: "parser" }).map((r) => r.oid),
-    ).toEqual([a]);
-    expect(
-      filterCommits(rows, { ...filters, text: b.slice(0, 8) }).map(
-        (r) => r.oid,
-      ),
-    ).toEqual([b]);
-    expect(filterCommits(rows, filters)).toHaveLength(2);
-  });
-});
-
-describe("relative time", () => {
-  it("falls back to the raw value rather than rendering an invalid date", () => {
-    const now = Date.parse("2026-09-06T00:00:00Z");
-    expect(relativeTime("2026-09-05T00:00:00Z", now, "en")).toContain(
-      "yesterday",
-    );
-    expect(relativeTime("not a date", now, "en")).toBe("not a date");
   });
 });

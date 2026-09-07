@@ -26,7 +26,6 @@ import {
   QuickOpen,
   SettingsDialog,
   GitToolWindow,
-  SourceControlDrawer,
   SshPromptDialog,
   UsageDashboard,
 } from "./lazy";
@@ -134,7 +133,6 @@ function AppShell() {
       <Banners />
       <Suspense fallback={null}>
         <ExplorerDrawer />
-        <SourceControlDrawer />
         <GitToolWindow />
         <ProblemsPanel />
         <ReferencesPanel />
