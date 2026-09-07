@@ -31,7 +31,33 @@ export interface GraphEdge {
   index: number;
 }
 
-export function commitGraph(commits: readonly GitCommitRecord[]) {
+/**
+ * 节点身份。缺省是 `oid`，单仓库的图因此一个字都不用改。
+ *
+ * 多仓库日志（Git 工具窗口设计 §2.2）把它换成 `仓库路径:oid`：不同仓库的
+ * DAG 之间没有边，各自占各自的车道，而两个仓库里碰巧同 oid 的提交（cherry
+ * -pick 过去的、或者同一个仓库的两个 worktree）也不会被连成一条线。
+ */
+export interface GraphKeys<T> {
+  key: (commit: T) => string;
+  /** 某个父提交在这张图里的身份；同一个仓库里就是父 oid 本身。 */
+  parent: (commit: T, parentOid: string) => string;
+}
+
+export interface GraphCommit {
+  oid: string;
+  parents: readonly string[];
+}
+
+const oidKeys: GraphKeys<GraphCommit> = {
+  key: (commit) => commit.oid,
+  parent: (_commit, parent) => parent,
+};
+
+export function commitGraph<T extends GraphCommit>(
+  commits: readonly T[],
+  keys: GraphKeys<T> = oidKeys as unknown as GraphKeys<T>,
+) {
   const lanes: (string | null)[] = [];
   const points = new Map<string, GraphPoint>();
   const free = () => {
@@ -39,14 +65,17 @@ export function commitGraph(commits: readonly GitCommitRecord[]) {
     return slot < 0 ? lanes.length : slot;
   };
   for (const [row, commit] of commits.entries()) {
-    let lane = lanes.indexOf(commit.oid);
+    const self = keys.key(commit);
+    let lane = lanes.indexOf(self);
     if (lane < 0) lane = free();
-    points.set(commit.oid, { row, lane });
+    points.set(self, { row, lane });
     // 回收：其他也在等这个提交的车道到此为止，空出来给后面的分支复用。
     for (const [index, pending] of lanes.entries()) {
-      if (pending === commit.oid) lanes[index] = null;
+      if (pending === self) lanes[index] = null;
     }
-    const [first, ...rest] = commit.parents;
+    const [first, ...rest] = commit.parents.map((parent) =>
+      keys.parent(commit, parent),
+    );
     // 第一父提交沿用本车道；除非已经有别的车道在等它，那样会画出两条同名线。
     lanes[lane] = first && !lanes.includes(first) ? first : null;
     for (const parent of rest) {
@@ -55,13 +84,16 @@ export function commitGraph(commits: readonly GitCommitRecord[]) {
     }
   }
   const edges: GraphEdge[] = commits.flatMap((commit) =>
-    commit.parents.map((parent, index) => ({
-      child: commit.oid,
-      parent,
-      index,
-      from: points.get(commit.oid)!,
-      to: points.get(parent),
-    })),
+    commit.parents.map((parent, index) => {
+      const parentKey = keys.parent(commit, parent);
+      return {
+        child: keys.key(commit),
+        parent: parentKey,
+        index,
+        from: points.get(keys.key(commit))!,
+        to: points.get(parentKey),
+      };
+    }),
   );
   return {
     points,
@@ -88,8 +120,9 @@ export function laneColor(lane: number) {
 }
 
 export const ROW_HEIGHT = 44;
-const LANE_WIDTH = 14;
-const MAX_LANES = 12;
+/** 车道间距与上限；日志页的虚拟表格按同一套画线，所以都导出。 */
+export const LANE_WIDTH = 14;
+export const MAX_LANES = 12;
 
 /**
  * 行内徽标：`refs` 里的 `refs/heads/x`、`refs/remotes/o/x`、`refs/tags/x`
