@@ -25,6 +25,7 @@ import {
   ResourceDrawer,
   QuickOpen,
   SettingsDialog,
+  GitToolWindow,
   SourceControlDrawer,
   SshPromptDialog,
   UsageDashboard,
@@ -134,6 +135,7 @@ function AppShell() {
       <Suspense fallback={null}>
         <ExplorerDrawer />
         <SourceControlDrawer />
+        <GitToolWindow />
         <ProblemsPanel />
         <ReferencesPanel />
         <EditPreviewDialog />
