@@ -104,6 +104,18 @@ async fn hunk_routes_reject_stale_writes_and_enforce_workspace_permissions() {
     git(&repo, &["add", "file.txt"]);
     git(&repo, &["commit", "-m", "fixture"]);
     std::fs::write(repo.join("file.txt"), "first\nchanged\nthird\n").unwrap();
+
+    // A nested repository holding a file of the same name. Without `path` both
+    // reads answered about the root's `file.txt`, and the apply staged that one
+    // — a different repository, and the wrong file.
+    let nested = repo.join("嵌套");
+    std::fs::create_dir(&nested).unwrap();
+    git(&nested, &["init", "-b", "main"]);
+    std::fs::write(nested.join("file.txt"), "alpha\nbeta\ngamma\n").unwrap();
+    git(&nested, &["add", "file.txt"]);
+    git(&nested, &["commit", "-m", "nested fixture"]);
+    std::fs::write(nested.join("file.txt"), "alpha\nDELTA\ngamma\n").unwrap();
+
     let endpoint = format!("/api/workspaces/{}/git/hunks", workspace.id);
     let (code, diff) = request(
         &app,
@@ -122,6 +134,42 @@ async fn hunk_routes_reject_stale_writes_and_enforce_workspace_permissions() {
     let (code, result) = request(&app, "POST", &endpoint, mutation.clone()).await;
     assert_eq!(code, StatusCode::OK, "{result}");
     assert_eq!(result["applied"], true);
+
+    // The nested checkout's own hunk, addressed by `path`. Its content is the
+    // nested file's, and staging it leaves the root's index alone.
+    let (code, inner) = request(
+        &app,
+        "GET",
+        &format!("{endpoint}?path=%E5%B5%8C%E5%A5%97&file=file.txt&scope=worktree"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(code, StatusCode::OK, "{inner}");
+    assert!(
+        inner["hunks"][0]["content"]
+            .as_str()
+            .unwrap()
+            .contains("DELTA"),
+        "{inner}"
+    );
+    let (code, staged) = request(
+        &app,
+        "POST",
+        &endpoint,
+        json!({"path":"嵌套","file":"file.txt","scope":"worktree","diffDigest":inner["diffDigest"],"hunkId":inner["hunks"][0]["id"],"action":"stage"}),
+    )
+    .await;
+    assert_eq!(code, StatusCode::OK, "{staged}");
+    let root_index = std::process::Command::new("git")
+        .args(["diff", "--cached", "--name-only"])
+        .current_dir(&repo)
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&root_index.stdout).trim(),
+        "file.txt",
+        "the nested apply must not add anything to the root's index"
+    );
     sqlx::query("UPDATE workspaces SET permissions_json = ? WHERE id = ?")
         .bind(r#"{"read":true,"write":false,"execute":false}"#)
         .bind(&workspace.id)

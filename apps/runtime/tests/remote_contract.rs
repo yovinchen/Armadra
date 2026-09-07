@@ -178,6 +178,10 @@ fn examples() -> BTreeMap<WorkerServiceOperation, (Value, &'static str)> {
         (json!({}), "Vec<git_repository::RefsSnapshot>"),
     );
     examples.insert(
+        Operation::GitIdentity,
+        (repository(), "git_repository::IdentityRecord"),
+    );
+    examples.insert(
         Operation::GitStatusBatch,
         (
             json!({ "paths": [".", "packages/web"], "pathspecs": ["src"] }),
@@ -250,17 +254,19 @@ fn examples() -> BTreeMap<WorkerServiceOperation, (Value, &'static str)> {
             "git_repository::CherryPickPreview",
         ),
     );
+    // Both hunk payloads name the checkout. Without it a nested repository's
+    // hunk was read from — and applied to — the workspace root's index.
     examples.insert(
         Operation::GitHunks,
         (
-            json!({ "file": "a.txt", "scope": "worktree" }),
+            json!({ "path": "packages/web", "file": "a.txt", "scope": "worktree" }),
             "git_hunks::GitHunkDiff",
         ),
     );
     examples.insert(
         Operation::GitApplyHunk,
         (
-            json!({ "file": "a.txt", "scope": "worktree", "diffDigest": "abc", "hunkId": "h1", "action": "stage" }),
+            json!({ "path": "packages/web", "file": "a.txt", "scope": "worktree", "diffDigest": "abc", "hunkId": "h1", "action": "stage" }),
             "git_hunks::GitHunkResult",
         ),
     );

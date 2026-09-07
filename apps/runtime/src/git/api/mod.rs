@@ -38,6 +38,11 @@ pub static REPOSITORIES: LazyLock<RepositoryService> = LazyLock::new(RepositoryS
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct HunkQuery {
+    /// The checkout the file belongs to, workspace-relative. A nested
+    /// repository's hunks are its own; reading them against the root's index
+    /// answers about a different repository.
+    #[serde(default = "root_path")]
+    path: String,
     file: String,
     scope: crate::git_hunks::GitHunkScope,
 }
@@ -123,6 +128,7 @@ pub async fn hunks(
         &workspace,
         WorkerServiceOperation::GitHunks,
         &service::git::HunksPayload {
+            path: query.path.clone(),
             file: query.file.clone(),
             scope: query.scope,
         },
@@ -136,8 +142,13 @@ pub async fn hunks(
         "Git hunk worktree validation",
     )?;
     JsonAnswer::local(
-        &crate::git_hunks::read_hunks(Path::new(&workspace.root_path), &query.file, query.scope)
-            .await?,
+        &crate::git_hunks::read_hunks(
+            Path::new(&workspace.root_path),
+            &query.path,
+            &query.file,
+            query.scope,
+        )
+        .await?,
     )
 }
 

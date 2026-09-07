@@ -4,6 +4,7 @@
   "replay": "safe",
   "request": {
     "file": "a.txt",
+    "path": "packages/web",
     "scope": "worktree"
   },
   "responseType": "git_hunks::GitHunkDiff"

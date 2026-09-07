@@ -37,6 +37,11 @@ pub enum GitHunkScope {
     Worktree,
     Staged,
 }
+/// The workspace root, for a request that names no checkout.
+pub fn root_checkout() -> String {
+    ".".to_owned()
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum GitHunkAction {
@@ -47,6 +52,12 @@ pub enum GitHunkAction {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GitHunkMutation {
+    /// Which checkout the file lives in, workspace-relative; `.` is the root.
+    ///
+    /// A nested repository's hunk used to be applied against the root's
+    /// index — a different repository, and a patch that does not describe it.
+    #[serde(default = "root_checkout")]
+    pub path: String,
     pub file: String,
     pub scope: GitHunkScope,
     pub diff_digest: String,
@@ -91,10 +102,11 @@ struct Observed {
 
 pub async fn read_hunks(
     workspace_root: &Path,
+    checkout: &str,
     file: &str,
     scope: GitHunkScope,
 ) -> AppResult<GitHunkDiff> {
-    let guard = REPOSITORIES.mutation_guard(workspace_root, ".").await?;
+    let guard = REPOSITORIES.mutation_guard(workspace_root, checkout).await?;
     Ok(observe(&guard.context, file, scope).await?.public)
 }
 
@@ -106,7 +118,7 @@ pub async fn apply_hunk(
 ) -> AppResult<GitHunkResult> {
     let root = workspace_root.to_owned();
     tokio::spawn(async move {
-        let guard = REPOSITORIES.mutation_guard(&root, ".").await?;
+        let guard = REPOSITORIES.mutation_guard(&root, &request.path).await?;
         let valid = matches!(
             (request.scope, request.action),
             (
@@ -340,6 +352,12 @@ fn unsupported(mut public: GitHunkDiff, reason: &str) -> AppResult<Observed> {
     })
 }
 
+/// Resolve one file inside the checkout the guard opened.
+///
+/// The path is **repository-relative**, which is how every other Git read
+/// spells a file and how the change tree already addresses one. It used to be
+/// resolved against the workspace root, which was the same directory only
+/// because the caller could not name any checkout but the root.
 fn safe_file(context: &RepositoryContext, raw: &str) -> AppResult<PathBuf> {
     if raw.is_empty()
         || raw.len() > 4096
@@ -352,7 +370,7 @@ fn safe_file(context: &RepositoryContext, raw: &str) -> AppResult<PathBuf> {
                 || part.contains(':')
         })
     {
-        return Err(bad("File must be a safe workspace-relative path"));
+        return Err(bad("File must be a safe repository-relative path"));
     }
     let path = Path::new(raw);
     if path.is_absolute()
@@ -360,9 +378,9 @@ fn safe_file(context: &RepositoryContext, raw: &str) -> AppResult<PathBuf> {
             .components()
             .any(|part| !matches!(part, Component::Normal(_)))
     {
-        return Err(bad("File must be workspace-relative"));
+        return Err(bad("File must be repository-relative"));
     }
-    let mut current = context.workspace_root.clone();
+    let mut current = context.repository.clone();
     for part in path.components() {
         current.push(part.as_os_str());
         match std::fs::symlink_metadata(&current) {

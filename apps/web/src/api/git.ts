@@ -51,14 +51,20 @@ export const gitApi = {
       gitMessageDraftSchema,
       { method: "POST", ...json(gitMessageRequestSchema.parse(value)) },
     ),
+  /**
+   * `path` is the checkout the file belongs to. Without it a nested
+   * repository's `src/a.ts` was read against the workspace root's index — a
+   * different repository, and, for the apply below, a different file.
+   */
   gitHunks: (
     workspaceId: string,
     file: string,
     scope: GitHunkScope,
     signal?: AbortSignal,
+    path = ".",
   ) =>
     request(
-      `/api/workspaces/${query(workspaceId)}/git/hunks?file=${query(file)}&scope=${scope}`,
+      `/api/workspaces/${query(workspaceId)}/git/hunks?path=${query(path)}&file=${query(file)}&scope=${scope}`,
       gitHunkDiffSchema,
       { signal },
     ),

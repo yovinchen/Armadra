@@ -163,6 +163,7 @@ async fn answer(read: GitRead) -> AppResult<GitReadResult> {
                 .ok_or_else(|| invalid("a hunk read names no file"))?;
             let value = crate::git_hunks::read_hunks(
                 &workspace,
+                &path,
                 &file,
                 body.scope.unwrap_or(GitHunkScope::Worktree),
             )

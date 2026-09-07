@@ -231,8 +231,12 @@ async fn run(root: &Path, operation: &GitOperation) -> AppResult<GitOperation> {
             )
         }
         GitActionKind::ApplyHunk => {
-            let request: crate::git_hunks::GitHunkMutation = parse(body)?;
+            let mut request: crate::git_hunks::GitHunkMutation = parse(body)?;
             let file = request.file.clone();
+            // The checkout the frame scoped this operation to is combined with
+            // the one the body names, exactly as a repository action's is: the
+            // scope is what the Host authorized, the body is where inside it.
+            request.path = resolve(&checkout, &request.path);
             crate::git_hunks::apply_hunk(&workspace, request).await?;
             (vec![file], GitOperationState::Succeeded, String::new())
         }

@@ -38,6 +38,7 @@ fn fixture(name: &str) -> (TempDir, String, String) {
 }
 fn mutation(diff: &GitHunkDiff, index: usize, action: GitHunkAction) -> GitHunkMutation {
     GitHunkMutation {
+        path: ".".to_owned(),
         file: diff.file.clone(),
         scope: diff.scope,
         diff_digest: diff.diff_digest.clone(),
@@ -49,7 +50,7 @@ fn mutation(diff: &GitHunkDiff, index: usize, action: GitHunkAction) -> GitHunkM
 #[tokio::test]
 async fn stages_one_of_two_hunks_and_leaves_other_changes_unstaged() {
     let (dir, original, changed) = fixture("file.txt");
-    let diff = read_hunks(dir.path(), "file.txt", GitHunkScope::Worktree)
+    let diff = read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Worktree)
         .await
         .unwrap();
     assert!(diff.supported);
@@ -68,10 +69,10 @@ async fn stages_one_of_two_hunks_and_leaves_other_changes_unstaged() {
         fs::read_to_string(dir.path().join("file.txt")).unwrap(),
         changed
     );
-    let unstaged = read_hunks(dir.path(), "file.txt", GitHunkScope::Worktree)
+    let unstaged = read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Worktree)
         .await
         .unwrap();
-    let staged = read_hunks(dir.path(), "file.txt", GitHunkScope::Staged)
+    let staged = read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Staged)
         .await
         .unwrap();
     assert_eq!(unstaged.hunks.len(), 1);
@@ -84,7 +85,7 @@ async fn stages_one_of_two_hunks_and_leaves_other_changes_unstaged() {
 async fn unstaging_selected_hunk_preserves_worktree_and_other_staged_hunk() {
     let (dir, original, changed) = fixture("file.txt");
     command(dir.path(), &["add", "--", "file.txt"]);
-    let diff = read_hunks(dir.path(), "file.txt", GitHunkScope::Staged)
+    let diff = read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Staged)
         .await
         .unwrap();
     assert_eq!(diff.hunks.len(), 2);
@@ -100,7 +101,7 @@ async fn unstaging_selected_hunk_preserves_worktree_and_other_staged_hunk() {
         changed
     );
     assert!(
-        read_hunks(dir.path(), "file.txt", GitHunkScope::Worktree)
+        read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Worktree)
             .await
             .unwrap()
             .hunks[0]
@@ -112,14 +113,14 @@ async fn unstaging_selected_hunk_preserves_worktree_and_other_staged_hunk() {
 #[tokio::test]
 async fn reverting_one_worktree_hunk_never_changes_the_index() {
     let (dir, original, _) = fixture("file.txt");
-    let diff = read_hunks(dir.path(), "file.txt", GitHunkScope::Worktree)
+    let diff = read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Worktree)
         .await
         .unwrap();
     apply_hunk(dir.path(), mutation(&diff, 0, GitHunkAction::Stage))
         .await
         .unwrap();
     let index = command(dir.path(), &["show", ":file.txt"]);
-    let remaining = read_hunks(dir.path(), "file.txt", GitHunkScope::Worktree)
+    let remaining = read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Worktree)
         .await
         .unwrap();
     apply_hunk(dir.path(), mutation(&remaining, 0, GitHunkAction::Revert))
@@ -135,7 +136,7 @@ async fn reverting_one_worktree_hunk_never_changes_the_index() {
 #[tokio::test]
 async fn stale_full_diff_and_changed_branch_are_rejected_before_mutation() {
     let (dir, original, changed) = fixture("file.txt");
-    let diff = read_hunks(dir.path(), "file.txt", GitHunkScope::Worktree)
+    let diff = read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Worktree)
         .await
         .unwrap();
     let newer = changed.replace("original line 39\n", "concurrent line 39\n");
@@ -167,7 +168,7 @@ async fn supports_spaces_quotes_and_literal_option_looking_filenames() {
         "中文.txt",
     ] {
         let (dir, original, changed) = fixture(name);
-        let diff = read_hunks(dir.path(), name, GitHunkScope::Worktree)
+        let diff = read_hunks(dir.path(), ".", name, GitHunkScope::Worktree)
             .await
             .unwrap();
         assert!(diff.supported, "{name}: {:?}", diff.unsupported_reason);
@@ -188,7 +189,7 @@ async fn unsupported_binary_new_deleted_and_mode_files_never_authorize_patch_wri
     let (dir, _, _) = fixture("file.txt");
     fs::write(dir.path().join("file.txt"), b"binary\0content").unwrap();
     assert_eq!(
-        read_hunks(dir.path(), "file.txt", GitHunkScope::Worktree)
+        read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Worktree)
             .await
             .unwrap()
             .unsupported_reason
@@ -199,7 +200,7 @@ async fn unsupported_binary_new_deleted_and_mode_files_never_authorize_patch_wri
     // patch is still binary for the hunk UI and must not be advertised.
     fs::write(dir.path().join(".gitattributes"), "file.txt diff\n").unwrap();
     assert_eq!(
-        read_hunks(dir.path(), "file.txt", GitHunkScope::Worktree)
+        read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Worktree)
             .await
             .unwrap()
             .unsupported_reason
@@ -209,21 +210,21 @@ async fn unsupported_binary_new_deleted_and_mode_files_never_authorize_patch_wri
     fs::remove_file(dir.path().join(".gitattributes")).unwrap();
     fs::write(dir.path().join("new.txt"), "new text").unwrap();
     assert!(
-        !read_hunks(dir.path(), "new.txt", GitHunkScope::Worktree)
+        !read_hunks(dir.path(), ".", "new.txt", GitHunkScope::Worktree)
             .await
             .unwrap()
             .supported
     );
     command(dir.path(), &["add", "--", "new.txt"]);
     assert!(
-        !read_hunks(dir.path(), "new.txt", GitHunkScope::Staged)
+        !read_hunks(dir.path(), ".", "new.txt", GitHunkScope::Staged)
             .await
             .unwrap()
             .supported
     );
     fs::remove_file(dir.path().join("file.txt")).unwrap();
     assert!(
-        !read_hunks(dir.path(), "file.txt", GitHunkScope::Worktree)
+        !read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Worktree)
             .await
             .unwrap()
             .supported
@@ -233,7 +234,7 @@ async fn unsupported_binary_new_deleted_and_mode_files_never_authorize_patch_wri
 #[tokio::test]
 async fn invalid_scope_unknown_hunk_arbitrary_patch_and_escaping_path_are_rejected() {
     let (dir, original, _) = fixture("file.txt");
-    let diff = read_hunks(dir.path(), "file.txt", GitHunkScope::Worktree)
+    let diff = read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Worktree)
         .await
         .unwrap();
     assert!(
@@ -255,7 +256,7 @@ async fn invalid_scope_unknown_hunk_arbitrary_patch_and_escaping_path_are_reject
         "sub/../file.txt",
     ] {
         assert!(
-            read_hunks(dir.path(), path, GitHunkScope::Worktree)
+            read_hunks(dir.path(), ".", path, GitHunkScope::Worktree)
                 .await
                 .is_err()
         );
@@ -275,7 +276,7 @@ async fn refuses_custom_content_filters_before_reading_diff_content() {
     command(dir.path(), &["config", "filter.untrusted.clean", "false"]);
     command(dir.path(), &["config", "filter.untrusted.required", "true"]);
     assert_eq!(
-        read_hunks(dir.path(), "file.txt", GitHunkScope::Worktree)
+        read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Worktree)
             .await
             .unwrap()
             .unsupported_reason
@@ -284,7 +285,7 @@ async fn refuses_custom_content_filters_before_reading_diff_content() {
     );
     fs::write(dir.path().join(".gitattributes"), "*.txt filter=\n").unwrap();
     assert_eq!(
-        read_hunks(dir.path(), "file.txt", GitHunkScope::Worktree)
+        read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Worktree)
             .await
             .unwrap()
             .unsupported_reason
@@ -304,7 +305,7 @@ async fn symlinks_and_file_mode_changes_are_not_partial_text_edits() {
     )
     .unwrap();
     assert_eq!(
-        read_hunks(dir.path(), "file.txt", GitHunkScope::Worktree)
+        read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Worktree)
             .await
             .unwrap()
             .unsupported_reason
@@ -314,7 +315,7 @@ async fn symlinks_and_file_mode_changes_are_not_partial_text_edits() {
     let outside = tempfile::tempdir().unwrap();
     symlink(outside.path(), dir.path().join("escape")).unwrap();
     assert!(matches!(
-        read_hunks(dir.path(), "escape/file.txt", GitHunkScope::Worktree).await,
+        read_hunks(dir.path(), ".", "escape/file.txt", GitHunkScope::Worktree).await,
         Err(AppError::Forbidden(_))
     ));
 }
@@ -343,7 +344,7 @@ async fn insertion_offsets_and_missing_final_newline_remain_exact() {
         )
         .replace("original line 28\n", "changed line 28\n");
     fs::write(dir.path().join("file.txt"), &changed).unwrap();
-    let diff = read_hunks(dir.path(), "file.txt", GitHunkScope::Worktree)
+    let diff = read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Worktree)
         .await
         .unwrap();
     assert_eq!(diff.hunks.len(), 2);
@@ -361,7 +362,7 @@ async fn insertion_offsets_and_missing_final_newline_remain_exact() {
     let (eof, original, _) = fixture("eof.txt");
     let changed = original.replace("original line 40\n", "last line without newline");
     fs::write(eof.path().join("eof.txt"), &changed).unwrap();
-    let diff = read_hunks(eof.path(), "eof.txt", GitHunkScope::Worktree)
+    let diff = read_hunks(eof.path(), ".", "eof.txt", GitHunkScope::Worktree)
         .await
         .unwrap();
     assert_eq!(diff.hunks.len(), 1);
@@ -384,7 +385,7 @@ async fn configured_crlf_worktree_preserves_index_and_line_endings() {
     let (dir, original, changed) = fixture("file.txt");
     command(dir.path(), &["config", "core.autocrlf", "true"]);
     fs::write(dir.path().join("file.txt"), changed.replace('\n', "\r\n")).unwrap();
-    let diff = read_hunks(dir.path(), "file.txt", GitHunkScope::Worktree)
+    let diff = read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Worktree)
         .await
         .unwrap();
     assert_eq!(diff.hunks.len(), 2);
@@ -407,7 +408,7 @@ async fn an_empty_tracked_file_can_stage_a_text_hunk_without_creating_an_untrack
     command(dir.path(), &["add", "--", "file.txt"]);
     command(dir.path(), &["commit", "-m", "empty tracked file"]);
     fs::write(dir.path().join("file.txt"), "new text\n").unwrap();
-    let diff = read_hunks(dir.path(), "file.txt", GitHunkScope::Worktree)
+    let diff = read_hunks(dir.path(), ".", "file.txt", GitHunkScope::Worktree)
         .await
         .unwrap();
     assert!(diff.supported);

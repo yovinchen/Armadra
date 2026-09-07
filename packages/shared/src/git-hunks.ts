@@ -23,6 +23,12 @@ export const gitHunkDiffSchema = z.object({
 });
 export const gitHunkMutationSchema = z
   .object({
+    /**
+     * The checkout the file lives in, workspace-relative; `.` is the root.
+     * A nested repository's hunk used to be applied against the root's index,
+     * which is a different repository and a patch that does not describe it.
+     */
+    path: z.string().min(1).default("."),
     file: z.string().min(1),
     scope: gitHunkScopeSchema,
     diffDigest: digest,

@@ -89,6 +89,10 @@ pub struct CherryPickPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HunksPayload {
+    /// The checkout, workspace-relative. `default` so a controller of an older
+    /// build, which named none, still reads the workspace root.
+    #[serde(default = "git_hunks::root_checkout")]
+    pub path: String,
     pub file: String,
     pub scope: git_hunks::GitHunkScope,
 }
@@ -376,7 +380,9 @@ pub async fn cherry_pick_preview(
 }
 
 pub async fn hunks(root: PathBuf, payload: HunksPayload) -> AppResult<Vec<u8>> {
-    super::encode(&git_hunks::read_hunks(&root, &payload.file, payload.scope).await?)
+    super::encode(
+        &git_hunks::read_hunks(&root, &payload.path, &payload.file, payload.scope).await?,
+    )
 }
 
 pub async fn apply_hunk(root: PathBuf, payload: git_hunks::GitHunkMutation) -> AppResult<Vec<u8>> {
