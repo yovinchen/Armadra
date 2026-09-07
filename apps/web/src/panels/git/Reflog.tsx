@@ -11,6 +11,11 @@ import { Button } from "../../ui/button";
 import { Check, Field, ReadError, selectClass } from "./forms";
 import { Input } from "../../ui/input";
 import { writeClipboard } from "../../terminal/TerminalSurface";
+import {
+  branchFromCommit,
+  checkoutCommit,
+  resetToCommit,
+} from "./actions/commit";
 
 export interface ReflogProps {
   workspaceId: string;
@@ -194,9 +199,7 @@ function ReflogActions({
           size="sm"
           variant="outline"
           disabled={busy}
-          onClick={() =>
-            request({ kind: "checkoutCommit", targetOid: entry.oid })
-          }
+          onClick={() => request(checkoutCommit(entry.oid))}
         >
           {t("gitRepo.checkoutCommit")}
         </Button>
@@ -207,12 +210,7 @@ function ReflogActions({
         onSubmit={(event) => {
           event.preventDefault();
           if (!busy && branchName.trim())
-            request({
-              kind: "createBranch",
-              name: branchName.trim(),
-              startPoint: entry.oid,
-              switch: false,
-            });
+            request(branchFromCommit(branchName.trim(), entry.oid, false));
         }}
       >
         <fieldset disabled={busy} className="min-w-0 space-y-2">
@@ -233,13 +231,14 @@ function ReflogActions({
         onSubmit={(event) => {
           event.preventDefault();
           if (resetBlocked || !state) return;
-          request({
-            kind: "reset",
-            mode: resetMode,
-            targetOid: entry.oid,
-            expectedStateToken: state.stateToken,
-            discardChanges,
-          });
+          request(
+            resetToCommit(
+              resetMode,
+              entry.oid,
+              state.stateToken,
+              discardChanges,
+            ),
+          );
         }}
       >
         <fieldset disabled={busy} className="min-w-0 space-y-2">

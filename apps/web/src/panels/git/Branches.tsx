@@ -5,6 +5,15 @@ import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Badge } from "../../ui/badge";
 import { Check, Field, selectClass } from "./forms";
+import {
+  createBranch as createBranchAction,
+  deleteBranch,
+  fetchRemote,
+  pullBranch,
+  pushBranch,
+  switchBranch,
+  syncBranch,
+} from "./actions/refs";
 
 export function Branches({
   snapshot,
@@ -23,7 +32,7 @@ export function Branches({
   const remote = snapshot.remotes.includes(chosenRemote)
     ? chosenRemote
     : (snapshot.remotes[0] ?? "");
-  const [pullBranch, setPullBranch] = useState("");
+  const [pullBranchName, setPullBranchName] = useState("");
   const [setUpstream, setSetUpstream] = useState(false);
   const [leaseForce, setLeaseForce] = useState(false);
   const branch = snapshot.head.branch;
@@ -70,9 +79,9 @@ export function Branches({
         </Field>
         <Field label={t("gitRepo.remoteBranch")}>
           <Input
-            value={pullBranch}
+            value={pullBranchName}
             placeholder={branch ?? ""}
-            onChange={(event) => setPullBranch(event.target.value)}
+            onChange={(event) => setPullBranchName(event.target.value)}
           />
         </Field>
         <Check
@@ -97,20 +106,16 @@ export function Branches({
             size="sm"
             variant="outline"
             disabled={!remote}
-            onClick={() => request({ kind: "fetch", remote, prune: false })}
+            onClick={() => request(fetchRemote(remote, false))}
           >
             {t("gitRepo.fetch")}
           </Button>
           <Button
             size="sm"
             variant="outline"
-            disabled={!remote || !branch || !(pullBranch.trim() || branch)}
+            disabled={!remote || !branch || !(pullBranchName.trim() || branch)}
             onClick={() =>
-              request({
-                kind: "pull",
-                remote,
-                branch: pullBranch.trim() || branch!,
-              })
+              request(pullBranch(remote, pullBranchName.trim() || branch!))
             }
           >
             {t("gitRepo.pull")}
@@ -125,13 +130,7 @@ export function Branches({
               (leaseForce && !remoteOid)
             }
             onClick={() =>
-              request({
-                kind: "push",
-                remote,
-                branch: branch!,
-                setUpstream,
-                forceWithLease: lease,
-              })
+              request(pushBranch(remote, branch!, setUpstream, lease))
             }
           >
             {t(lease ? "gitRepo.forcePush" : "gitRepo.push")}
@@ -140,14 +139,7 @@ export function Branches({
             size="sm"
             variant="outline"
             disabled={!remote || !branch || !snapshot.head.headOid}
-            onClick={() =>
-              request({
-                kind: "sync",
-                remote,
-                branch: branch!,
-                expectedRemoteOid: remoteOid,
-              })
-            }
+            onClick={() => request(syncBranch(remote, branch!, remoteOid))}
           >
             {t("gitRepo.sync")}
           </Button>
@@ -159,12 +151,13 @@ export function Branches({
         onSubmit={(event) => {
           event.preventDefault();
           if (!busy && name.trim())
-            request({
-              kind: "createBranch",
-              name: name.trim(),
-              startPoint: startPoint.trim() || null,
-              switch: switchAfter,
-            });
+            request(
+              createBranchAction(
+                name.trim(),
+                startPoint.trim() || null,
+                switchAfter,
+              ),
+            );
         }}
       >
         <fieldset disabled={busy} className="min-w-0 space-y-2">
@@ -240,11 +233,7 @@ export function Branches({
                       variant="outline"
                       disabled={busy || branch.current}
                       onClick={() =>
-                        request({
-                          kind: "switchBranch",
-                          name: branch.name,
-                          expectedOid: branch.oid,
-                        })
+                        request(switchBranch(branch.name, branch.oid))
                       }
                     >
                       {t("gitRepo.switchBranch")}
@@ -254,11 +243,7 @@ export function Branches({
                       variant="ghost"
                       disabled={busy || branch.current}
                       onClick={() =>
-                        request({
-                          kind: "deleteBranch",
-                          name: branch.name,
-                          expectedOid: branch.oid,
-                        })
+                        request(deleteBranch(branch.name, branch.oid))
                       }
                     >
                       {t("gitRepo.deleteBranch")}

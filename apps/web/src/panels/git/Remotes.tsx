@@ -10,6 +10,12 @@ import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Badge } from "../../ui/badge";
 import { Field, ReadError } from "./forms";
+import {
+  addRemote,
+  removeRemote,
+  renameRemote,
+  setRemoteUrl,
+} from "./actions/refs";
 
 /**
  * 展示用的 URL 脱敏，和 Runtime 的规则一致：http/https/ssh 里的 userinfo
@@ -68,7 +74,7 @@ export function Remotes({
         onSubmit={(event) => {
           event.preventDefault();
           if (busy || !name.trim() || !url.trim()) return;
-          request({ kind: "addRemote", name: name.trim(), url: url.trim() });
+          request(addRemote(name.trim(), url.trim()));
         }}
       >
         <fieldset disabled={busy} className="min-w-0 space-y-2">
@@ -126,7 +132,7 @@ export function Remotes({
               event.preventDefault();
               const next = (edits[remote.name] ?? "").trim();
               if (busy || !next) return;
-              request({ kind: "setRemoteUrl", name: remote.name, url: next });
+              request(setRemoteUrl(remote.name, next));
             }}
           >
             <fieldset disabled={busy} className="min-w-0 space-y-2">
@@ -172,11 +178,12 @@ export function Remotes({
                     (renames[remote.name] ?? "").trim() === remote.name
                   }
                   onClick={() =>
-                    request({
-                      kind: "renameRemote",
-                      name: remote.name,
-                      newName: (renames[remote.name] ?? "").trim(),
-                    })
+                    request(
+                      renameRemote(
+                        remote.name,
+                        (renames[remote.name] ?? "").trim(),
+                      ),
+                    )
                   }
                 >
                   {t("gitRepo.renameRemote")}
@@ -185,9 +192,7 @@ export function Remotes({
                   size="sm"
                   type="button"
                   variant="ghost"
-                  onClick={() =>
-                    request({ kind: "removeRemote", name: remote.name })
-                  }
+                  onClick={() => request(removeRemote(remote.name))}
                 >
                   {t("gitRepo.removeRemote")}
                 </Button>

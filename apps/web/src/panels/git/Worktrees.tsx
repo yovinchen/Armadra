@@ -15,6 +15,7 @@ import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
 import { Check, Field, ReadError, selectClass } from "./forms";
 import { createWorktreeAction, localBranch } from "./worktree";
+import { removeWorktree } from "./actions/refs";
 
 /** 绑定 Frame 的默认尺寸：装得下一个默认终端还留出边距。 */
 const FRAME_SIZE = { width: 720, height: 560 };
@@ -289,12 +290,7 @@ export function Worktrees({
                   !tree.headOid
                 }
                 onClick={() =>
-                  request({
-                    kind: "removeWorktree",
-                    path: tree.path,
-                    expectedOid: tree.headOid!,
-                    allowUnpublished: false,
-                  })
+                  request(removeWorktree(tree.path, tree.headOid!, false))
                 }
               >
                 {t("gitRepo.removeWorktree")}

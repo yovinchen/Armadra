@@ -10,6 +10,7 @@ import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Badge } from "../../ui/badge";
 import { Check, Field, ReadError, selectClass } from "./forms";
+import { createTag, deleteTag, pushTag } from "./actions/refs";
 
 export interface TagsProps {
   workspaceId: string;
@@ -67,12 +68,9 @@ export function Tags({
         onSubmit={(event) => {
           event.preventDefault();
           if (busy || !name.trim() || !targetOid) return;
-          request({
-            kind: "createTag",
-            name: name.trim(),
-            targetOid,
-            message: annotated ? message : null,
-          });
+          request(
+            createTag(name.trim(), targetOid, annotated ? message : null),
+          );
         }}
       >
         <fieldset disabled={busy} className="min-w-0 space-y-2">
@@ -167,14 +165,7 @@ export function Tags({
               size="sm"
               variant="outline"
               disabled={busy || !remote}
-              onClick={() =>
-                request({
-                  kind: "pushTag",
-                  remote,
-                  name: tag.name,
-                  expectedOid: tag.oid,
-                })
-              }
+              onClick={() => request(pushTag(remote, tag.name, tag.oid))}
             >
               {t("gitRepo.pushTag")}
             </Button>
@@ -182,13 +173,7 @@ export function Tags({
               size="sm"
               variant="ghost"
               disabled={busy}
-              onClick={() =>
-                request({
-                  kind: "deleteTag",
-                  name: tag.name,
-                  expectedOid: tag.oid,
-                })
-              }
+              onClick={() => request(deleteTag(tag.name, tag.oid))}
             >
               {t("gitRepo.deleteTag")}
             </Button>

@@ -13,6 +13,14 @@ import { Button } from "../../ui/button";
 import { cn } from "../../lib/cn";
 import { Check, Field, ReadError, selectClass } from "./forms";
 import {
+  branchFromCommit,
+  checkoutCommit,
+  cherryPickCommit,
+  mainlineOf,
+  resetToCommit,
+  revertCommit,
+} from "./actions/commit";
+import {
   CommitGraphLanes,
   ROW_HEIGHT,
   commitGraph,
@@ -613,7 +621,7 @@ function CommitActions({
   const [resetMode, setResetMode] = useState<"soft" | "mixed" | "hard">("soft");
   const [discardChanges, setDiscardChanges] = useState(false);
   // 合并提交的 cherry-pick / revert 必须先明确主线，这里不替用户猜。
-  const mainline = commit.parents.length > 1 ? 1 : null;
+  const mainline = mainlineOf(commit.parents);
   // 只有 hard 会丢未提交的内容；工作区脏时必须先明确勾选确认。
   const resetBlocked =
     busy ||
@@ -624,19 +632,8 @@ function CommitActions({
     if (!idle || !state) return;
     request(
       kind === "revert"
-        ? {
-            kind: "revert",
-            targetOid: commit.oid,
-            mainline,
-            expectedStateToken: state.stateToken,
-          }
-        : {
-            kind: "startCherryPick",
-            targetOid: commit.oid,
-            mainline,
-            recordOrigin: true,
-            expectedStateToken: state.stateToken,
-          },
+        ? revertCommit(commit.oid, mainline, state.stateToken)
+        : cherryPickCommit(commit.oid, mainline, state.stateToken),
     );
   };
   return (
@@ -656,9 +653,7 @@ function CommitActions({
           size="sm"
           variant="outline"
           disabled={busy}
-          onClick={() =>
-            request({ kind: "checkoutCommit", targetOid: commit.oid })
-          }
+          onClick={() => request(checkoutCommit(commit.oid))}
         >
           {t("gitRepo.checkoutCommit")}
         </Button>
@@ -689,12 +684,9 @@ function CommitActions({
         onSubmit={(event) => {
           event.preventDefault();
           if (!busy && branchName.trim())
-            request({
-              kind: "createBranch",
-              name: branchName.trim(),
-              startPoint: commit.oid,
-              switch: switchAfter,
-            });
+            request(
+              branchFromCommit(branchName.trim(), commit.oid, switchAfter),
+            );
         }}
       >
         <fieldset disabled={busy} className="min-w-0 space-y-2">
@@ -720,13 +712,14 @@ function CommitActions({
         onSubmit={(event) => {
           event.preventDefault();
           if (resetBlocked || !state) return;
-          request({
-            kind: "reset",
-            mode: resetMode,
-            targetOid: commit.oid,
-            expectedStateToken: state.stateToken,
-            discardChanges,
-          });
+          request(
+            resetToCommit(
+              resetMode,
+              commit.oid,
+              state.stateToken,
+              discardChanges,
+            ),
+          );
         }}
       >
         <fieldset disabled={busy} className="min-w-0 space-y-2">
