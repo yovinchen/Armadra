@@ -9,5 +9,6 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - "@xyflow/react@12.11.3"
   - "@xyflow/system@0.0.80"
+  - react-resizable-panels@4.12.4
 
 storeDir: .pnpm-store
