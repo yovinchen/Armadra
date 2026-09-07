@@ -273,6 +273,7 @@ func refKind(kind pb.GitActionKind) bool {
 	case pb.GitActionKind_GIT_ACTION_KIND_CREATE_BRANCH,
 		pb.GitActionKind_GIT_ACTION_KIND_SWITCH_BRANCH,
 		pb.GitActionKind_GIT_ACTION_KIND_DELETE_BRANCH,
+		pb.GitActionKind_GIT_ACTION_KIND_RENAME_BRANCH,
 		pb.GitActionKind_GIT_ACTION_KIND_CREATE_TAG,
 		pb.GitActionKind_GIT_ACTION_KIND_DELETE_TAG,
 		pb.GitActionKind_GIT_ACTION_KIND_FETCH,

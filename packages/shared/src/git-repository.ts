@@ -545,6 +545,24 @@ export const gitRepositoryActionSchema = z.discriminatedUnion("kind", [
       expectedOid: oid,
     })
     .strict(),
+  /**
+   * `git branch -m`, and nothing else: no force, so a name something already
+   * holds is Git's own refusal rather than a silent overwrite. The upstream
+   * follows the branch because Git moves it, and `expectedOid` is the commit
+   * the tree drew — a branch that advanced since then is a conflict.
+   */
+  z
+    .object({
+      kind: z.literal("renameBranch"),
+      name: z.string().min(1),
+      newName: z.string().min(1),
+      expectedOid: oid,
+    })
+    .strict()
+    .refine((action) => action.name !== action.newName, {
+      path: ["newName"],
+      message: "The new branch name is the current one",
+    }),
   z
     .object({
       kind: z.literal("fetch"),

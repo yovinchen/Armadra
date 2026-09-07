@@ -185,6 +185,40 @@ impl RepositoryService {
                 };
                 self.mutate(context, args(&arguments), operation).await
             }
+            RepositoryAction::RenameBranch {
+                name,
+                new_name,
+                expected_oid,
+            } => {
+                if self
+                    .resolve(&context.repository, &format!("refs/heads/{name}"), token)
+                    .await?
+                    != *expected_oid
+                {
+                    return Err(AppError::Conflict(
+                        "Selected branch changed; reload before retrying".into(),
+                    ));
+                }
+                // No `--force`: a destination that already exists is Git's
+                // refusal, not an overwrite of somebody else's branch.
+                self.mutate(
+                    context,
+                    args(&["branch", "--move", "--", name, new_name]),
+                    operation,
+                )
+                .await?;
+                if self
+                    .resolve(&context.repository, &format!("refs/heads/{new_name}"), token)
+                    .await?
+                    != *expected_oid
+                {
+                    return Err(AppError::Conflict(
+                        "The renamed branch does not name the reviewed commit; inspect it with Git"
+                            .into(),
+                    ));
+                }
+                Ok(())
+            }
             RepositoryAction::Fetch { remote, prune } => {
                 self.validate_remote(&context.repository, remote, token)
                     .await?;

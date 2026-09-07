@@ -147,6 +147,7 @@ const REPOSITORY_KINDS: Record<GitRepositoryAction["kind"], GitActionKind> = {
   createBranch: GitActionKind.CREATE_BRANCH,
   switchBranch: GitActionKind.SWITCH_BRANCH,
   deleteBranch: GitActionKind.DELETE_BRANCH,
+  renameBranch: GitActionKind.RENAME_BRANCH,
   fetch: GitActionKind.FETCH,
   pull: GitActionKind.PULL,
   push: GitActionKind.PUSH,

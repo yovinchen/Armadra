@@ -132,6 +132,10 @@ enum GitActionKind {
   GIT_ACTION_KIND_DELETE_BRANCH = 42;
   GIT_ACTION_KIND_CREATE_TAG = 43;
   GIT_ACTION_KIND_DELETE_TAG = 44;
+  // Renaming a branch. The number sits after the tags rather than beside the
+  // other branch kinds because the branch block was already full and numbers
+  // never move: an operation an SSH host already answers must keep its value.
+  GIT_ACTION_KIND_RENAME_BRANCH = 45;
 
   // Network. Also ref work, and also the only kinds whose outcome can be
   // unknown in a way no local reading resolves.

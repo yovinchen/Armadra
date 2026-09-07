@@ -216,6 +216,18 @@ pub enum RepositoryAction {
         name: String,
         expected_oid: String,
     },
+    /// Rename a branch to a name nothing else holds.
+    ///
+    /// `git branch -m` and nothing more: no `--force`, so an existing
+    /// destination is Git's own refusal rather than a silent overwrite, and the
+    /// upstream configuration moves with the branch because Git moves it. The
+    /// object ID the caller reviewed is checked first, so renaming a branch
+    /// that advanced since the tree was drawn is a conflict.
+    RenameBranch {
+        name: String,
+        new_name: String,
+        expected_oid: String,
+    },
     Fetch {
         remote: String,
         #[serde(default)]
@@ -467,6 +479,22 @@ impl RepositoryService {
             | RepositoryAction::DeleteBranch { name, expected_oid } => {
                 self.validate_branch(&context.repository, name, &token)
                     .await?;
+                require_oid(expected_oid)?;
+            }
+            RepositoryAction::RenameBranch {
+                name,
+                new_name,
+                expected_oid,
+            } => {
+                self.validate_branch(&context.repository, name, &token)
+                    .await?;
+                self.validate_branch(&context.repository, new_name, &token)
+                    .await?;
+                if name == new_name {
+                    return Err(AppError::BadRequest(
+                        "The new branch name is the current one".into(),
+                    ));
+                }
                 require_oid(expected_oid)?;
             }
             RepositoryAction::Fetch { remote, .. } => {

@@ -144,6 +144,10 @@ const (
 	GitActionKind_GIT_ACTION_KIND_DELETE_BRANCH GitActionKind = 42
 	GitActionKind_GIT_ACTION_KIND_CREATE_TAG    GitActionKind = 43
 	GitActionKind_GIT_ACTION_KIND_DELETE_TAG    GitActionKind = 44
+	// Renaming a branch. The number sits after the tags rather than beside the
+	// other branch kinds because the branch block was already full and numbers
+	// never move: an operation an SSH host already answers must keep its value.
+	GitActionKind_GIT_ACTION_KIND_RENAME_BRANCH GitActionKind = 45
 	// Network. Also ref work, and also the only kinds whose outcome can be
 	// unknown in a way no local reading resolves.
 	GitActionKind_GIT_ACTION_KIND_FETCH    GitActionKind = 50
@@ -193,6 +197,7 @@ var (
 		42: "GIT_ACTION_KIND_DELETE_BRANCH",
 		43: "GIT_ACTION_KIND_CREATE_TAG",
 		44: "GIT_ACTION_KIND_DELETE_TAG",
+		45: "GIT_ACTION_KIND_RENAME_BRANCH",
 		50: "GIT_ACTION_KIND_FETCH",
 		51: "GIT_ACTION_KIND_PULL",
 		52: "GIT_ACTION_KIND_PUSH",
@@ -234,6 +239,7 @@ var (
 		"GIT_ACTION_KIND_DELETE_BRANCH":            42,
 		"GIT_ACTION_KIND_CREATE_TAG":               43,
 		"GIT_ACTION_KIND_DELETE_TAG":               44,
+		"GIT_ACTION_KIND_RENAME_BRANCH":            45,
 		"GIT_ACTION_KIND_FETCH":                    50,
 		"GIT_ACTION_KIND_PULL":                     51,
 		"GIT_ACTION_KIND_PUSH":                     52,
@@ -3162,7 +3168,7 @@ const file_armadra_v1_git_proto_rawDesc = "" +
 	"\x1aGIT_OPERATION_STATE_FAILED\x10\x04\x12!\n" +
 	"\x1dGIT_OPERATION_STATE_CANCELLED\x10\x05\x12'\n" +
 	"#GIT_OPERATION_STATE_UNKNOWN_OUTCOME\x10\x06\x12+\n" +
-	"'GIT_OPERATION_STATE_AWAITING_RESOLUTION\x10\a*\x90\n" +
+	"'GIT_OPERATION_STATE_AWAITING_RESOLUTION\x10\a*\xb3\n" +
 	"\n" +
 	"\rGitActionKind\x12\x1f\n" +
 	"\x1bGIT_ACTION_KIND_UNSPECIFIED\x10\x00\x12\x1f\n" +
@@ -3193,7 +3199,8 @@ const file_armadra_v1_git_proto_rawDesc = "" +
 	"\x1dGIT_ACTION_KIND_SWITCH_BRANCH\x10)\x12!\n" +
 	"\x1dGIT_ACTION_KIND_DELETE_BRANCH\x10*\x12\x1e\n" +
 	"\x1aGIT_ACTION_KIND_CREATE_TAG\x10+\x12\x1e\n" +
-	"\x1aGIT_ACTION_KIND_DELETE_TAG\x10,\x12\x19\n" +
+	"\x1aGIT_ACTION_KIND_DELETE_TAG\x10,\x12!\n" +
+	"\x1dGIT_ACTION_KIND_RENAME_BRANCH\x10-\x12\x19\n" +
 	"\x15GIT_ACTION_KIND_FETCH\x102\x12\x18\n" +
 	"\x14GIT_ACTION_KIND_PULL\x103\x12\x18\n" +
 	"\x14GIT_ACTION_KIND_PUSH\x104\x12\x18\n" +
