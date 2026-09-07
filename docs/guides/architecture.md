@@ -59,6 +59,22 @@ opencode 等 CLI Agent 作为终端节点放在一块无限画布上，节点之
 重置时间。数据采集时间与额度重置时间分开显示；后台刷新和手动刷新共用串行化
 与冷却时间，前端只轮询缓存，不把缓存轮询时间当成数据更新时间。
 
+**工作面板一次只开一个**（`panels/WorkPanelSheet.tsx`）：资源管理器、资源、
+问题、用量、GitHub、自动化、交接停在右侧，宽度来自一张表——右上工具簇也读
+那张表，好让开着抽屉时它自己让开。Git 是唯一停在**底部**的一块
+（[Git 工具窗口](../design/git-tool-window.md)）：它是「日志 / 提交」两个页签
+的窗口，日志页三栏要的是宽度而不是高度，所以它不在那张宽度表里，高度记进偏
+好、可拖动、可最大化。占地方这件事仍然共用同一条规则，所以打开它照样会关掉
+右侧那一块。
+
+Git 的读分两级。逐检出的那一批（status、diff、branches、history、reflog、
+worktrees、stashes、tags、remotes、integration、hunks、commit / commit-file）
+都带一个工作空间相对的 `path`，缺省是工作空间根。工作空间级的三条不带：
+`POST …/git/log` 把所有已发现检出的提交合并成一张图，`GET …/git/refs` 一次
+给出所有检出的分支树，`GET …/git/identity` 说这个检出提交出去会署谁的名。写
+全部经仓库队列（`GitRepositoryAction`），队列在 Host 接管 git 域之后搬到
+Host，Git 命令始终在执行主机上跑。
+
 画布引擎是 React Flow 12（`@xyflow/react`，MIT），白板层自写。
 **`canvas-store` 是画布在内存里的唯一真相**，React Flow 只是受控视图：
 `nodes` / `edges` 由 `document.nodes / edges` 与白板文档投影出来

@@ -1,6 +1,6 @@
 # Git 工具窗口：IDEA 式日志与提交
 
-> 状态：目标设计（2026-09-07）。取代 [git-github-design.md](./git-github-design.md) §1 的页签式 `SourceControlPanel` 与 §4.2 的单仓库历史图；§2、§3、§5–§12 的仓库服务、功能范围、worktree、AI 提交信息与 GitHub 部分不变。
+> 状态：已实施（2026-09-07）。取代 [git-github-design.md](./git-github-design.md) §1 的页签式 `SourceControlPanel` 与 §4.2 的单仓库历史图；§2、§3、§5–§12 的仓库服务、功能范围、worktree、AI 提交信息与 GitHub 部分不变。实现与本文的偏离记在 §6。
 
 ## 1. 为什么改
 
@@ -81,14 +81,15 @@
 - `limit` 1–200，默认 100；仓库数超过 32（或发现本身触顶）时只合并前 32 个并报 `truncated`。
 - `paths` 是**仓库相对**的 pathspec，在每个参与合并的仓库里各自生效（与单仓库 `history` 的拼写一致）。
 
-`GET /api/workspaces/{id}/git/refs`：所有仓库的分支树数据，一次返回 `[{repositoryPath, repositoryId, kind, name, head: {oid, branch}, branches: [{name, oid, upstream, ahead, behind, current}], remotes: [{name, branches: [{name, oid}]}], tags: [{name, oid, annotated}], worktrees: [{path, branch, oid, locked}], stashCount}]`，供左栏一次构树；单仓库接口保留给右键动作。实现：每个仓库一次 `for-each-ref`（含 `%(upstream:short)` 与 `%(upstream:track,nobracket)`，不为每个分支起子进程），加 `worktree list --porcelain` 与一次 `rev-list --walk-reflogs --count refs/stash`。
+`GET /api/workspaces/{id}/git/refs`：所有仓库的分支树数据，一次返回 `[{repositoryPath, repositoryId, kind, name, head: {oid, branch}, branches: [{name, oid, upstream, ahead, behind, current}], remotes: [{name, branches: [{name, oid}]}], tags: [{name, oid, annotated}], worktrees: [{path, branch, oid, locked}], stashCount, stashes: [{index, oid, message, createdAt}]}]`，供左栏一次构树；单仓库接口保留给右键动作。实现：每个仓库一次 `for-each-ref`（含 `%(upstream:short)` 与 `%(upstream:track,nobracket)`，不为每个分支起子进程），加 `worktree list --porcelain` 与一次 `stash list -z`。
 
 - `head.oid` 在未出生分支上是 `null`，`head.branch` 在游离 HEAD 上是 `null`。
 - `upstream` 是短名（`origin/main`），和这份载荷里其余的短名一致；没有上游时 `ahead`/`behind` 是 `null` 而不是 0（「没有可推的」和「没地方推」不是一回事）。
 - `tags[].oid` 是标签指向的**提交**（附注标签取 peel 后的对象），因为树节点跳转的是提交。
+- `stashes[].index` 是**这一刻**的 `stash@{n}`，只用来显示；每个 stash 动作绑的是 `oid`——别人 push 或 drop 一条之后序号整体挪位，对象不会。`stashCount` 保留给折叠时的组标题。
 - 读不出来的检出被略过而不是让整个请求失败：一个坏掉的 vendored clone 不该让分支树整块消失。该读取需要执行权限（要跑 `worktree list` 与 stash 计数），与单仓库的 `worktrees` / `stashes` 一致。
 
-Host 模式：两条读取加进 git 域的 `GitReadMethod`（`LOG = 28`、`REFS = 29`），SSH 远端走 `WorkerServiceOperation`（`GIT_LOG = 54`、`GIT_REFS = 55`，`CONTRACT_VERSION` 升到 3）。两条都是**工作空间级**的，Go Host 的 `workspaceWideRead` 把它们和 `REPOSITORIES` 一起豁免检出作用域检查——工作空间根仍由文件系统域的注册决定，从不取自请求。`git-e2e` 加了用例；写动作全部复用现有 `GitRepositoryAction`，不新增写路径。
+Host 模式：两条读取加进 git 域的 `GitReadMethod`（`LOG = 28`、`REFS = 29`），SSH 远端走 `WorkerServiceOperation`（`GIT_LOG = 54`、`GIT_REFS = 55`）。两条都是**工作空间级**的，Go Host 的 `workspaceWideRead` 把它们和 `REPOSITORIES` 一起豁免检出作用域检查——工作空间根仍由文件系统域的注册决定，从不取自请求。后加的 `GET …/git/identity`（`IDENTITY = 30`、`GIT_IDENTITY = 56`）不是工作空间级的：它按检出回答，因为一个 vendored clone 完全可能配着另一个地址。`CONTRACT_VERSION` 升到 4——除了这条新操作，hunk 载荷多了 `path`、状态行多了 `originPath`、分支树多了 stash 列表，每一处都是旧对端会读漏的形状。`git-e2e` 加了用例；写动作除新增的 `renameBranch` 外全部复用现有 `GitRepositoryAction`，不新增写路径。
 
 ### 3.2 前端
 
@@ -110,3 +111,44 @@ Host 模式：两条读取加进 git 域的 `GitReadMethod`（`LOG = 28`、`REFS
 - 筛选（用户 / 日期 / 路径 / 文本 / 正则）都在服务端生效，翻页游标在筛选变化后作废。
 - 提交页：勾选即暂存、跨仓库提交按仓库拆分、操作横幅与冲突组、Stash / Unstash。
 - Runtime 直连与 Host 模式（`pnpm ownership:e2e --domain git`）都通过；Web 测试覆盖树构造、多仓库车道、游标合并、勾选↔暂存映射；手机 390×844 四级导航可用。
+
+## 6. 实施与偏离
+
+代码位置：窗口壳 `apps/web/src/panels/git/window/GitToolWindow.tsx`，日志页
+`panels/git/log/`（分支树、图表格、详情、`menus/` 下的各类右键菜单），提交页
+`panels/git/commit/`。数据层见 §3.1；`GET …/git/identity` 是后加的第三条工作
+空间外的**逐检出**读取（`GitReadMethod.IDENTITY = 30`）。
+
+实现与上文的差别，逐条：
+
+- **「我的」不再靠猜。** §2.2 只说作者列表里有「我的」，没说这个「我」从哪来。
+  第一版从最近一条 reflog 里取提交者邮箱——那是**上一个在这里写过东西的人**，
+  在共享检出上是别人，在刚克隆的仓库里一条都没有。改成 `git config
+user.name/user.email`，按检出问，读不到就是两个 `null`。
+- **Stash 组交出条目，不只是数字。** §3.1 的 `refs` 快照原本只有 `stashCount`，
+  但右键要应用 / 弹出 / 删除 / 看差异**某一条**，而每个动作都绑在对象上——
+  `stash@{n}` 会在别人 push 或 drop 之后整体挪位。所以加了 `stashes[]`，
+  `stashCount` 保留给折叠时的组标题。
+- **hunk 与三方合并对所有检出可用。** `git/hunks` 两条路由原来写死工作空间根，
+  嵌套仓库的同名文件会被暂存到根仓库去；两条请求现在都带 `path`，其中的
+  `file` 是仓库相对路径。提交页因此不再有「只有根仓库能按 hunk 勾选」这一条。
+- **重命名分支是新增的写动作**（`renameBranch`，`GIT_ACTION_KIND_RENAME_BRANCH
+= 45`）。§2.2 的分支菜单里列了「重命名」，但 §4 说不改写路径——它复用现有
+  队列，没有新写路径，只是多了一个种类。
+- **过期游标的错误码统一。** `history` 与 `reflog` 原来对过期游标回
+  `bad_request`，与 `log` 的 `invalid_cursor` 不一致；三者现在说同一句话，因为
+  客户端的修复是同一个自动动作。
+- **交互式 rebase 与 cherry-pick 的对话框是搬过来的**，不是重写的
+  （`RebaseTodo.tsx` / `CherryPick.tsx`）。cherry-pick 对话框**不预填 OID**：那
+  个组件的 OID 是它自己的内部状态，没有入口，所以对话框把提交的完整 OID 连同
+  一个复制按钮放在表单上方。
+- **没做的两件旧能力**：带信息的附注标签（新建标签只创建轻量标签），以及
+  `--force-with-lease` 推送。两者原来只在被删掉的页签里，§2.2 的菜单清单里都
+  没有列；需要时再加，届时确认门要复述被覆盖的那个远端提交。
+- **提交页的变更树有高度下限。** 窗口默认 40vh，一条进行中的整合横幅加上底部
+  的消息区就能把变更树压到零高——页面上有全部的说明文字，唯独没有要提交的
+  东西。横幅本身也限高可滚。
+
+截图探针：`tools/probes/git-tool-window.mjs`（真实 Runtime + 真实 Chrome，
+临时数据目录与随机端口，工作空间含根仓库 + 嵌套仓库（merge 冲突）+ 链接
+worktree）。
