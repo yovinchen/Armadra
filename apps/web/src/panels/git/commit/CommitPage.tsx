@@ -86,6 +86,7 @@ export function CommitPage({
   const [stashOpen, setStashOpen] = useState(false);
   const [unstashOpen, setUnstashOpen] = useState(false);
   const [restore, setRestore] = useState<RestoreTarget | null>(null);
+  const [confirmInit, setConfirmInit] = useState(false);
   const [outcomes, setOutcomes] = useState<CommitOutcome[]>([]);
   const [committing, setCommitting] = useState(false);
 
@@ -312,6 +313,21 @@ export function CommitPage({
           {t("gitRepo.loading")}
         </p>
       )}
+      {/* 发现跑完了却一个检出都没有：这个工作空间还不是仓库。此处是整个界面
+          里唯一说得出这件事的地方，所以初始化的入口也只能在这里。 */}
+      {repositories.isSuccess && records.length === 0 && (
+        <div className="space-y-2 px-4 py-3 text-xs">
+          <p className="text-muted-foreground">{t("gitCommit.noRepository")}</p>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => setConfirmInit(true)}
+          >
+            {t("scm.init")}
+          </Button>
+        </div>
+      )}
       <ChangeTree
         groups={groups}
         showRepositories={showRepositories}
@@ -446,9 +462,18 @@ export function CommitPage({
       {/* 丢弃走的是抽屉里那扇门：从索引还原和从 HEAD 还原丢掉的东西不一样，
           所以它问的是两个动作，而不是一个「还原」。新建仓库那半在这里用不到。 */}
       <SourceControlDialogs
-        confirmInit={false}
-        setConfirmInit={() => undefined}
-        init={() => undefined}
+        confirmInit={confirmInit}
+        setConfirmInit={setConfirmInit}
+        init={() => {
+          void gitGateway
+            .init(rootTarget, `init/${crypto.randomUUID()}`)
+            .then(() => invalidateGitQueries(client, workspaceId))
+            .catch((error: unknown) =>
+              toast.error(
+                error instanceof Error ? error.message : t("scm.failed"),
+              ),
+            );
+        }}
         restore={restore}
         setRestore={setRestore}
         revert={revert}
