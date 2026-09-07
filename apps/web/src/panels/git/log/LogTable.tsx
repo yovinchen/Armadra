@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import type { GitLogCommit } from "@armadra/shared";
 
 import { useT, usePreferencesStore } from "../../../app/preferences-store";
 import { cn } from "../../../lib/cn";
@@ -11,7 +12,6 @@ import {
   refBadges,
 } from "../CommitGraph";
 import { commitKey, logGraphKeys, repositoryColor } from "./graph";
-import type { LogCommit } from "./types";
 
 /**
  * 提交图表格（Git 工具窗口设计 §2.2「提交图表格」）。
@@ -32,12 +32,12 @@ export const LOG_ROW_HEIGHT = 24;
 export const LOG_COMPACT_ROW_HEIGHT = 20;
 
 export interface LogTableProps {
-  commits: readonly LogCommit[];
+  commits: readonly GitLogCommit[];
   /** 仓库路径 → 调色板序号；只有一个仓库时不画颜色条。 */
   colors: ReadonlyMap<string, number>;
   /** 被选中的行（`commitKey`）；`"uncommitted"` 是那条合成行。 */
   selected: string | null;
-  onSelect: (key: string, commit: LogCommit | null) => void;
+  onSelect: (key: string, commit: GitLogCommit | null) => void;
   /** HEAD 有未提交变更的仓库；空 = 不显示那条虚线行。 */
   uncommitted: readonly string[];
   compact: boolean;
@@ -53,14 +53,14 @@ export interface LogTableProps {
   loading: boolean;
   onLoadMore: () => void;
   /** 右键：把这一行交给菜单；合成行不触发。 */
-  renderRowMenu?: (commit: LogCommit, row: ReactNode) => ReactNode;
+  renderRowMenu?: (commit: GitLogCommit, row: ReactNode) => ReactNode;
 }
 
 export const UNCOMMITTED_KEY = "uncommitted";
 
 type Row =
   | { kind: "uncommitted"; key: string }
-  | { kind: "commit"; key: string; commit: LogCommit };
+  | { kind: "commit"; key: string; commit: GitLogCommit };
 
 /** 今天的提交显示时刻，更早的显示日期——列窄，两者只能二选一。 */
 function formatWhen(iso: string, now: number, locale: string): string {
@@ -361,7 +361,7 @@ function CommitRow({
   selected,
   onSelect,
 }: {
-  commit: LogCommit;
+  commit: GitLogCommit;
   gutter: number;
   height: number;
   color: string | null;

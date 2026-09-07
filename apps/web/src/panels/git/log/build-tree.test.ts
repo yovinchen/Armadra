@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { GitRefsBranch, GitRefsRepository } from "@armadra/shared";
 
 import {
   buildBranchTree,
@@ -7,7 +8,6 @@ import {
   refKey,
   type BranchTreeNode,
 } from "./build-tree";
-import type { GitRefsBranch, GitRefsRepository } from "./types";
 
 const branch = (
   name: string,
@@ -26,13 +26,16 @@ const repository = (
   overrides: Partial<GitRefsRepository> = {},
 ): GitRefsRepository => ({
   repositoryPath: ".",
+  repositoryId: "id",
+  kind: "root",
   name: "armadra",
-  head: "main",
+  head: { oid: "a".repeat(40), branch: "main" },
   branches: [branch("main", { current: true })],
   remotes: [],
   tags: [],
   worktrees: [],
   stashCount: 0,
+  stashes: [],
   ...overrides,
 });
 
@@ -72,12 +75,81 @@ describe("分支树的构造", () => {
     ]);
   });
 
-  it("Stash 只在有条目时出现，并带上条数", () => {
-    const tree = buildBranchTree([repository({ stashCount: 3 })]);
+  it("Stash 只在有条目时出现，一条一个子节点，组上带总数", () => {
+    const tree = buildBranchTree([
+      repository({
+        stashCount: 2,
+        stashes: [
+          {
+            index: 0,
+            oid: "d".repeat(40),
+            message: "WIP on main: 前一半",
+            createdAt: "2026-09-01T00:00:00Z",
+          },
+          {
+            index: 1,
+            oid: "e".repeat(40),
+            message: "WIP on main: 后一半",
+            createdAt: "2026-08-31T00:00:00Z",
+          },
+        ],
+      }),
+    ]);
     const stashes = tree[1]!.children.find(
       (child) => child.group === "stashes",
-    );
-    expect(stashes?.count).toBe(3);
+    )!;
+    expect(stashes.count).toBe(2);
+    expect(stashes.children.map((child) => child.label)).toEqual([
+      "WIP on main: 前一半",
+      "WIP on main: 后一半",
+    ]);
+    // 身份与写动作的期望值都是那个对象，不是会挪动的 `stash@{n}`。
+    expect(stashes.children.map((child) => child.id)).toEqual([
+      `.::stash::${"d".repeat(40)}`,
+      `.::stash::${"e".repeat(40)}`,
+    ]);
+    expect(stashes.children[1]!.oid).toBe("e".repeat(40));
+    expect(stashes.children[1]!.index).toBe(1);
+  });
+
+  it("标签节点带上它剥出来的提交", () => {
+    const tree = buildBranchTree([
+      repository({
+        tags: [{ name: "v1.0.0", oid: "f".repeat(40), annotated: true }],
+      }),
+    ]);
+    const tag = find(tree, ".::tag::v1.0.0")!;
+    expect(tag.reference).toBe("v1.0.0");
+    expect(tag.oid).toBe("f".repeat(40));
+  });
+
+  it("worktree 节点带上绝对路径与锁定状态，不假装自己是分支", () => {
+    const tree = buildBranchTree([
+      repository({
+        worktrees: [
+          {
+            path: "/tmp/wt",
+            branch: "feat/x",
+            oid: "c".repeat(40),
+            locked: true,
+          },
+        ],
+      }),
+    ]);
+    const worktree = find(tree, ".::worktree::/tmp/wt")!;
+    expect(worktree.path).toBe("/tmp/wt");
+    expect(worktree.locked).toBe(true);
+    expect(worktree.oid).toBe("c".repeat(40));
+    expect(worktree.current).toBeUndefined();
+  });
+
+  it("分离 HEAD 的仓库根不算停在某条分支上", () => {
+    const attached = buildBranchTree([repository()]);
+    expect(attached[1]!.current).toBe(true);
+    const detached = buildBranchTree([
+      repository({ head: { oid: "a".repeat(40), branch: null } }),
+    ]);
+    expect(detached[1]!.current).toBe(false);
   });
 
   it("同一段下的多条分支折进一个段，单独一条不折", () => {

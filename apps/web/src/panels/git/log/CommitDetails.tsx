@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Copy, FileDiff, Folder } from "lucide-react";
+import type { GitLogCommit } from "@armadra/shared";
 
 import { useT, usePreferencesStore } from "../../../app/preferences-store";
 import { gitGateway, type GitTarget } from "../../../git/gateway";
@@ -10,7 +11,6 @@ import { Button } from "../../../ui/button";
 import { ReadError } from "../forms";
 import { refBadges } from "../CommitGraph";
 import { buildFileRows } from "./file-tree";
-import type { LogCommit } from "./types";
 
 /**
  * 详情栏（Git 工具窗口设计 §2.2「详情」）。
@@ -28,7 +28,7 @@ export interface CommitDetailsProps {
   workspaceId: string;
   /** 这个提交所在的检出；读写走同一条归属判定。 */
   target: GitTarget;
-  commit: LogCommit;
+  commit: GitLogCommit;
   /**
    * 与哪个基线比。`null` = 服务端的缺省（第一父）；合并提交的父切换与右键
    * 菜单的「与本地比较 / 与分支比较」写的是同一个值，所以两处不会打架。

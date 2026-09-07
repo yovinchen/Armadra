@@ -1,19 +1,22 @@
+import type { GitLogRequest } from "@armadra/shared";
+
 import type { GitPreferences } from "../../../app/preferences/git";
 import { REF_SEPARATOR } from "./build-tree";
-import { GIT_LOG_PAGE_SIZE } from "./log-client";
-import type { GitLogRequest } from "./types";
 
 /**
- * 工具栏筛选 → `POST …/git/log` 的请求体（Git 工具窗口设计 §2.2、§3.1）。
+ * 工具栏筛选 → `gitGateway.log` 的筛选记录（Git 工具窗口设计 §2.2、§3.1）。
  *
  * **筛选全部在服务端执行**，前端一条都不过滤。理由是翻页：客户端筛选会让
  * 「没找到」和「还没翻到」长得一模一样——用户看到空列表，不知道该再滚一页
- * 还是改条件。所以这里只做一件事：把偏好里那一堆开关翻译成一个请求体，翻译
+ * 还是改条件。所以这里只做一件事：把偏好里那一堆开关翻译成一份请求，翻译
  * 本身是纯函数，测试能逐条钉住。
  *
  * 日期档位在这里落成绝对时刻。「7 天」这种相对说法必须在**发请求的那一刻**
  * 定死，否则同一个游标在跨过午夜之后指向的是另一段历史。
  */
+
+/** 服务端一页的上限是 200（§3.1）；界面按 100 一页要。 */
+export const GIT_LOG_PAGE_SIZE = 100;
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -43,6 +46,12 @@ export function referenceOf(key: string): string {
   return separator < 0 ? key : key.slice(separator + REF_SEPARATOR.length);
 }
 
+/**
+ * 空的集合、空串与「没选」一律**整项省略**，而不是发一个空值。
+ *
+ * 「没有筛选」和「筛选成空集」在服务端是两件事——`repositories: []` 不该被
+ * 读成「一个仓库都不要」，所以空的一律不发，让服务端用自己的缺省。
+ */
 export function logRequestFromPreferences(
   git: GitPreferences,
   options: { now: number; cursor?: string | null; limit?: number } = {
@@ -51,27 +60,33 @@ export function logRequestFromPreferences(
 ): GitLogRequest {
   const references = [...new Set(git.selectedRefs.map(referenceOf))];
   const custom = git.dateRange === "custom";
+  const since = custom ? git.since : rangeSince(git.dateRange, options.now);
+  const until = custom ? git.until : null;
+  const cursor = options.cursor ?? null;
   return {
-    repositories: [...git.repositories],
     refs: git.showAllBranches
-      ? { kind: "all", names: [] }
+      ? { kind: "all" }
       : references.length > 0
         ? { kind: "named", names: references }
-        : { kind: "head", names: [] },
-    authors: [...git.authors],
-    since: custom ? git.since || null : rangeSince(git.dateRange, options.now),
-    until: custom ? git.until || null : null,
-    paths: [...git.paths],
-    text:
-      git.searchText.trim() === ""
-        ? null
-        : {
+        : { kind: "head" },
+    limit: options.limit ?? GIT_LOG_PAGE_SIZE,
+    ...(git.repositories.length > 0
+      ? { repositories: [...git.repositories] }
+      : {}),
+    ...(git.authors.length > 0 ? { authors: [...git.authors] } : {}),
+    ...(since ? { since } : {}),
+    ...(until ? { until } : {}),
+    ...(git.paths.length > 0 ? { paths: [...git.paths] } : {}),
+    ...(git.searchText.trim() === ""
+      ? {}
+      : {
+          text: {
             query: git.searchText,
             regex: git.searchRegex,
             matchCase: git.searchMatchCase,
           },
-    cursor: options.cursor ?? null,
-    limit: options.limit ?? GIT_LOG_PAGE_SIZE,
+        }),
+    ...(cursor ? { cursor } : {}),
   };
 }
 

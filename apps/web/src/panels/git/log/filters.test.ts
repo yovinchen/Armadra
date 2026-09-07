@@ -6,7 +6,6 @@ import {
 } from "@/app/preferences/git";
 import { refKey } from "./build-tree";
 import { filterKey, logRequestFromPreferences, referenceOf } from "./filters";
-import { logRequestBody } from "./log-client";
 
 const NOW = Date.parse("2026-09-07T10:00:00Z");
 
@@ -14,15 +13,10 @@ function preferences(overrides: Partial<GitPreferences> = {}): GitPreferences {
   return { ...storedGitPreferences(), ...overrides };
 }
 
-describe("工具栏筛选 → 请求体", () => {
-  it("什么都没选时问 HEAD，一页 100 条", () => {
+describe("工具栏筛选 → 请求", () => {
+  it("什么都没选时只问 HEAD 与页大小，别的一项都不发", () => {
     const request = logRequestFromPreferences(preferences(), { now: NOW });
-    expect(request.refs).toEqual({ kind: "head", names: [] });
-    expect(request.limit).toBe(100);
-    expect(logRequestBody(request)).toEqual({
-      refs: { kind: "head" },
-      limit: 100,
-    });
+    expect(request).toEqual({ refs: { kind: "head" }, limit: 100 });
   });
 
   it("选中的分支变成 named，跨仓库的同名分支只发一次", () => {
@@ -40,10 +34,6 @@ describe("工具栏筛选 → 请求体", () => {
       kind: "named",
       names: ["main", "feat/x"],
     });
-    expect(logRequestBody(request).refs).toEqual({
-      kind: "named",
-      names: ["main", "feat/x"],
-    });
   });
 
   it("「显示所有分支」压过选中的分支", () => {
@@ -54,8 +44,7 @@ describe("工具栏筛选 → 请求体", () => {
       }),
       { now: NOW },
     );
-    expect(request.refs.kind).toBe("all");
-    expect(logRequestBody(request).refs).toEqual({ kind: "all" });
+    expect(request.refs).toEqual({ kind: "all" });
   });
 
   it("日期档位落成绝对时刻，自定义档直接用两个日期", () => {
@@ -74,10 +63,21 @@ describe("工具栏筛选 → 请求体", () => {
     );
     expect(custom.since).toBe("2026-01-01");
     expect(custom.until).toBe("2026-02-01");
-    expect(
-      logRequestFromPreferences(preferences({ dateRange: "any" }), { now: NOW })
-        .since,
-    ).toBeNull();
+    // 不限日期时整项不出现：服务端的 zod 收的是 optional，`null` 会被拒。
+    const any = logRequestFromPreferences(preferences({ dateRange: "any" }), {
+      now: NOW,
+    });
+    expect("since" in any).toBe(false);
+    expect("until" in any).toBe(false);
+  });
+
+  it("自定义档里空着的那一头也整项省略", () => {
+    const request = logRequestFromPreferences(
+      preferences({ dateRange: "custom", since: "2026-01-01", until: "" }),
+      { now: NOW },
+    );
+    expect(request.since).toBe("2026-01-01");
+    expect("until" in request).toBe(false);
   });
 
   it("搜索框的两个开关原样进请求；空搜索整块不发", () => {
@@ -89,18 +89,17 @@ describe("工具栏筛选 → 请求体", () => {
       }),
       { now: NOW },
     );
-    expect(logRequestBody(request).text).toEqual({
+    expect(request.text).toEqual({
       query: "fix\\(.*\\)",
       regex: true,
       matchCase: true,
     });
     expect(
-      logRequestBody(
+      "text" in
         logRequestFromPreferences(preferences({ searchText: "   " }), {
           now: NOW,
         }),
-      ).text,
-    ).toBeUndefined();
+    ).toBe(false);
   });
 
   it("作者、仓库与路径原样带上，空集合一律略去", () => {
@@ -112,13 +111,10 @@ describe("工具栏筛选 → 请求体", () => {
       }),
       { now: NOW },
     );
-    const body = logRequestBody(request);
-    expect(body.authors).toEqual(["ada@example.invalid"]);
-    expect(body.repositories).toEqual(["packages/foo"]);
-    expect(body.paths).toEqual(["apps/web"]);
-    const empty = logRequestBody(
-      logRequestFromPreferences(preferences(), { now: NOW }),
-    );
+    expect(request.authors).toEqual(["ada@example.invalid"]);
+    expect(request.repositories).toEqual(["packages/foo"]);
+    expect(request.paths).toEqual(["apps/web"]);
+    const empty = logRequestFromPreferences(preferences(), { now: NOW });
     expect("authors" in empty).toBe(false);
     expect("repositories" in empty).toBe(false);
     expect("paths" in empty).toBe(false);
@@ -126,10 +122,13 @@ describe("工具栏筛选 → 请求体", () => {
 
   it("游标只在给了的时候出现", () => {
     expect(
-      logRequestBody(
-        logRequestFromPreferences(preferences(), { now: NOW, cursor: "abc" }),
-      ).cursor,
+      logRequestFromPreferences(preferences(), { now: NOW, cursor: "abc" })
+        .cursor,
     ).toBe("abc");
+    expect(
+      "cursor" in
+        logRequestFromPreferences(preferences(), { now: NOW, cursor: null }),
+    ).toBe(false);
   });
 });
 

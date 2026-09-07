@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, Star } from "lucide-react";
+import type { GitRefsRepository } from "@armadra/shared";
 
 import { useT } from "../../../app/preferences-store";
 import { cn } from "../../../lib/cn";
@@ -11,7 +12,6 @@ import {
   type BranchTreeNode,
 } from "./build-tree";
 import { repositoryColor } from "./graph";
-import type { GitRefsRepository } from "./types";
 
 /**
  * 左栏分支树（Git 工具窗口设计 §2.2）。

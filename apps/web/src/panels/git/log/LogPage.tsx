@@ -8,7 +8,11 @@ import {
 } from "@tanstack/react-query";
 import { ChevronLeft, PanelLeft, PanelRight, X } from "lucide-react";
 import { toast } from "sonner";
-import type { GitExpectedState, GitRepositoryAction } from "@armadra/shared";
+import type {
+  GitExpectedState,
+  GitLogCommit,
+  GitRepositoryAction,
+} from "@armadra/shared";
 
 import { useT, usePreferencesStore } from "../../../app/preferences-store";
 import { useCompactLayout } from "../../../platform/layout";
@@ -28,31 +32,37 @@ import { Reflog } from "../Reflog";
 import { RepositoryConfirmDialog } from "../RepositoryConfirmDialog";
 import type { Confirmation } from "../operations";
 import { invalidateGitQueries } from "../queries";
-import { branchFromCommit, tagAtCommit } from "../actions/commit";
 import { BranchTree } from "./BranchTree";
 import { CommitDetails } from "./CommitDetails";
 import { LogTable, UNCOMMITTED_KEY } from "./LogTable";
 import { LogToolbar } from "./LogToolbar";
 import { filterKey, logRequestFromPreferences } from "./filters";
-import { gitLog, gitRefs } from "./log-client";
 import { commitKey } from "./graph";
 import { defaultExpanded, refKey, type BranchTreeNode } from "./build-tree";
+import { openWorktreeFrame, WORKTREE_FRAME_SIZE } from "./worktree-frame";
 import {
   BranchContextMenu,
+  CherryPickDialog,
   CommitContextMenu,
   NamePromptDialog,
+  RebaseTodoDialog,
+  StashDiffDialog,
+  promptAction,
+  type CommitDialogTarget,
   type MenuContext,
   type NamePrompt,
+  type StashDiffTarget,
 } from "./menus";
-import type { LogCommit } from "./types";
 
 /**
  * 日志页（Git 工具窗口设计 §2.2）：分支树 | 提交图表格 | 详情。
  *
  * 三件事在这里汇合，别处都不合适：
  *
- * - **一次读，三处用**。`GET …/git/refs` 一次给出所有仓库的分支树；
- *   `POST …/git/log` 按工具栏的条件在**服务端**筛选并合并多仓库的提交。
+ * - **一次读，三处用**。`gitGateway.refs` 一次给出所有仓库的分支树；
+ *   `gitGateway.log` 按工具栏的条件在**服务端**筛选并合并多仓库的提交。
+ *   两条都是工作空间级的读，所以目标一律是 `at(".")`——有哪些仓库本身就是
+ *   答案的一部分，指定某个检出反而问错了问题。
  * - **写仍然走老路**。右键菜单造出 `GitRepositoryAction`，这里接上已有的
  *   `RepositoryConfirmDialog` 与 `gitGateway.operate`——没有新的写路径，
  *   确认与串行都还是那一套。
@@ -75,9 +85,12 @@ export function LogPage({ workspaceId }: LogPageProps) {
 
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
-  const [commit, setCommit] = useState<LogCommit | null>(null);
+  const [commit, setCommit] = useState<GitLogCommit | null>(null);
   const [compareBase, setCompareBase] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<NamePrompt | null>(null);
+  const [stashDiff, setStashDiff] = useState<StashDiffTarget | null>(null);
+  const [rebaseTodo, setRebaseTodo] = useState<CommitDialogTarget | null>(null);
+  const [cherryPick, setCherryPick] = useState<CommitDialogTarget | null>(null);
   const [reflog, setReflog] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
@@ -93,7 +106,7 @@ export function LogPage({ workspaceId }: LogPageProps) {
 
   const refs = useQuery({
     queryKey: ["git-refs", workspaceId],
-    queryFn: ({ signal }) => gitRefs(workspaceId, signal),
+    queryFn: ({ signal }) => gitGateway.refs(at("."), signal),
     retry: false,
   });
   const repositories = useMemo(() => refs.data ?? [], [refs.data]);
@@ -102,8 +115,8 @@ export function LogPage({ workspaceId }: LogPageProps) {
   const log = useInfiniteQuery({
     queryKey: ["git-log", workspaceId, key],
     queryFn: ({ pageParam, signal }) =>
-      gitLog(
-        workspaceId,
+      gitGateway.log(
+        at("."),
         logRequestFromPreferences(git, {
           now: Date.now(),
           cursor: pageParam,
@@ -162,17 +175,15 @@ export function LogPage({ workspaceId }: LogPageProps) {
   );
 
   /**
-   * 「我的」= `git config user.email`。Runtime 目前没有单独交出这个值的读，
-   * 所以取根仓库 reflog 最近一条的提交者邮箱——那条记录正是本机这个人写的。
-   * 读不到就整项不出现，而不是猜一个。
+   * 「我的」= 这台机器 `user.email` 配的那个人。读不到就整项不出现，而不是
+   * 猜一个——猜错的高亮比没有高亮更难发现。
    */
   const identity = useQuery({
     queryKey: ["git-log-identity", workspaceId],
-    queryFn: ({ signal }) =>
-      gitGateway.reflog(at("."), { reference: "HEAD", limit: 1 }, signal),
+    queryFn: ({ signal }) => gitGateway.identity(at("."), signal),
     retry: false,
   });
-  const myEmail = identity.data?.entries[0]?.committerEmail ?? null;
+  const myEmail = identity.data?.email ?? null;
 
   const invalidate = () => {
     invalidateGitQueries(client, workspaceId);
@@ -222,12 +233,17 @@ export function LogPage({ workspaceId }: LogPageProps) {
     },
     stateToken: (repository) => snapshots.get(repository)?.stateToken ?? null,
     currentBranch: (repository) =>
-      repositories.find((entry) => entry.repositoryPath === repository)?.head ??
-      null,
+      repositories.find((entry) => entry.repositoryPath === repository)?.head
+        .branch ?? null,
     branches: (repository) =>
       repositories
         .find((entry) => entry.repositoryPath === repository)
         ?.branches.map((branch) => branch.name) ?? [],
+    // 远端名字这一份读已经在分支树里了，右键菜单不必再问一次单仓库接口。
+    remotes: (repository) =>
+      repositories
+        .find((entry) => entry.repositoryPath === repository)
+        ?.remotes.map((remote) => remote.name) ?? [],
     onCompare: setCompareBase,
     onReference: (entry) => {
       addNode("sticky", {
@@ -241,6 +257,17 @@ export function LogPage({ workspaceId }: LogPageProps) {
     },
     onReflog: setReflog,
     onPrompt: setPrompt,
+    onStashDiff: setStashDiff,
+    onWorktreeFrame: ({ path, branch }) => {
+      openWorktreeFrame(useCanvasStore.getState(), {
+        path,
+        branch,
+        workspaceRoot,
+        position: nodeDropPosition("group", { size: WORKTREE_FRAME_SIZE }),
+      });
+    },
+    onInteractiveRebase: setRebaseTodo,
+    onCherryPick: setCherryPick,
     onToggleFavorite: (value) =>
       set(
         "favorites",
@@ -427,15 +454,49 @@ export function LogPage({ workspaceId }: LogPageProps) {
       <NamePromptDialog
         prompt={prompt}
         onClose={() => setPrompt(null)}
-        onSubmit={(value, name) => {
-          request(
-            value.repositoryPath,
-            value.kind === "branch"
-              ? branchFromCommit(name, value.oid, false)
-              : tagAtCommit(name, value.oid, null),
-          );
+        loadRemotes={(repository, signal) =>
+          gitGateway.remotes(at(repository), signal)
+        }
+        onSubmit={(value, input) => {
+          const action = promptAction(value, input);
+          if (action) request(value.repositoryPath, action);
           setPrompt(null);
         }}
+      />
+      <StashDiffDialog
+        target={stashDiff}
+        onClose={() => setStashDiff(null)}
+        load={(repository, oid, signal) =>
+          gitGateway.stashDetail(at(repository), oid, signal)
+        }
+      />
+      <RebaseTodoDialog
+        target={rebaseTodo}
+        workspaceId={workspaceId}
+        state={
+          rebaseTodo
+            ? (snapshots.get(rebaseTodo.repositoryPath) ?? undefined)
+            : undefined
+        }
+        busy={submit.isPending}
+        loadPreview={(repository, onto, signal) =>
+          gitGateway.rebaseTodo(at(repository), onto, signal)
+        }
+        request={request}
+        onClose={() => setRebaseTodo(null)}
+      />
+      <CherryPickDialog
+        target={cherryPick}
+        workspaceId={workspaceId}
+        state={
+          cherryPick ? (snapshots.get(cherryPick.repositoryPath) ?? null) : null
+        }
+        busy={submit.isPending}
+        loadPreview={(repository, oid, mainline, signal) =>
+          gitGateway.cherryPickPreview(at(repository), oid, mainline, signal)
+        }
+        request={request}
+        onClose={() => setCherryPick(null)}
       />
       <RepositoryConfirmDialog
         confirmation={confirmation}

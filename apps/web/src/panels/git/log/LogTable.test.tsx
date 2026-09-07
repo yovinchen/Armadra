@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import type { GitLogCommit } from "@armadra/shared";
 
 import { installDomPolyfills } from "@/app/test-harness";
 import { usePreferencesStore } from "@/app/preferences-store";
 import { LogTable } from "./LogTable";
-import type { LogCommit } from "./types";
 
 installDomPolyfills();
 
@@ -33,7 +33,7 @@ afterEach(cleanup);
 
 const oid = (index: number) => index.toString(16).padStart(40, "0");
 
-const commit = (index: number, repositoryPath = "."): LogCommit => ({
+const commit = (index: number, repositoryPath = "."): GitLogCommit => ({
   repositoryPath,
   oid: oid(index),
   parents: index > 0 ? [oid(index - 1)] : [],

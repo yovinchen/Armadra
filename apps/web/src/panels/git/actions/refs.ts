@@ -26,6 +26,18 @@ export function deleteBranch(
   return { kind: "deleteBranch", name, expectedOid };
 }
 
+/**
+ * 改名。带的是**树上画出来的那个** OID：分支在读回来之后动过，就该是一次冲突
+ * 而不是把它现在指向的东西改名。上游跟着分支走，因为 Git 自己会搬。
+ */
+export function renameBranch(
+  name: string,
+  newName: string,
+  expectedOid: string,
+): GitRepositoryAction {
+  return { kind: "renameBranch", name, newName, expectedOid };
+}
+
 export function createBranch(
   name: string,
   startPoint: string | null,
@@ -51,6 +63,15 @@ export function rebaseOnto(
 }
 
 /* --------------------------------- 远端 ----------------------------------- */
+
+/**
+ * 展示用的 URL 脱敏，和 Runtime 的规则一致：http/https/ssh 里的 userinfo
+ * 一律换成 `[redacted]`。用户刚输入的 URL 也会经过它，免得凭据留在本次会话的
+ * 操作列表里。
+ */
+export function redactRemoteUrl(url: string): string {
+  return url.replace(/^(https?|ssh):\/\/[^/\s@]+@/i, "$1://[redacted]@");
+}
 
 export function fetchRemote(
   remote: string,

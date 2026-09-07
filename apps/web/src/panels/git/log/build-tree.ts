@@ -1,4 +1,4 @@
-import type { GitRefsBranch, GitRefsRepository } from "./types";
+import type { GitRefsBranch, GitRefsRepository } from "@armadra/shared";
 
 /**
  * 左栏分支树的构造（Git 工具窗口设计 §2.2「分支树」）。
@@ -52,8 +52,9 @@ export interface BranchTreeNode {
   /** 固定组的身份，只有 `kind === "group"` 时有。 */
   group?: BranchTreeGroup;
   /**
-   * 分支节点观察到的对象 ID。写动作（检出、删除）拿它当期望值，所以它必须
-   * 是**这一次读回来的那个**，不是稍后再查一次的那个。
+   * 分支、标签、worktree 与 stash 节点观察到的对象 ID。写动作（检出、删除、
+   * 应用某一条 stash）拿它当期望值，所以它必须是**这一次读回来的那个**，而不
+   * 是稍后再查一次的那个。
    */
   oid?: string;
   current?: boolean;
@@ -62,6 +63,15 @@ export interface BranchTreeNode {
   behind?: number | null;
   /** Stash 组的条目数、仓库根的颜色序号这类附带数字。 */
   count?: number;
+  /** worktree 在执行主机上的绝对路径；「移除 worktree」按它定位那个检出。 */
+  path?: string;
+  /** worktree 被锁住：删除与剪枝对它无效，菜单据此禁用。 */
+  locked?: boolean;
+  /**
+   * stash 在栈里的位置，只用来显示。它**不是身份**：一次 push 或 drop 就把
+   * `stash@{n}` 整体挪一格，写动作认的是 `oid`。
+   */
+  index?: number;
   /** 仓库根的调色板序号，与提交表左侧的颜色条同一套。 */
   color?: number;
   children: BranchTreeNode[];
@@ -105,6 +115,16 @@ function matches(value: string, filter: string) {
 }
 
 /**
+ * 一个叶子用得上的那几项。
+ *
+ * 上游与 ahead / behind 只有本地分支才有——它们是本地那一条跟它的上游比出来
+ * 的差额，远端快照里那一侧只交出名字和 oid，所以这里把它们放宽成可选，而不是
+ * 给远端分支编两个零。
+ */
+type TreeBranch = Pick<GitRefsBranch, "name" | "oid"> &
+  Partial<Pick<GitRefsBranch, "current" | "ahead" | "behind">>;
+
+/**
  * 把一组分支按 `/` 折成子树。
  *
  * `prefix` 是 id 前缀，`base` 是已经吃掉的名字段——叶子的 `reference` 要的是
@@ -113,11 +133,11 @@ function matches(value: string, filter: string) {
 function segmentBranches(
   prefix: string,
   repositoryPath: string,
-  branches: readonly { name: string; branch: GitRefsBranch }[],
+  branches: readonly { name: string; branch: TreeBranch }[],
   favorites: ReadonlySet<string>,
 ): BranchTreeNode[] {
   const leaves: BranchTreeNode[] = [];
-  const groups = new Map<string, { name: string; branch: GitRefsBranch }[]>();
+  const groups = new Map<string, { name: string; branch: TreeBranch }[]>();
   for (const entry of branches) {
     const slash = entry.name.indexOf("/");
     if (slash <= 0) {
@@ -162,7 +182,7 @@ function segmentBranches(
 function branchNode(
   prefix: string,
   repositoryPath: string,
-  entry: { name: string; branch: GitRefsBranch },
+  entry: { name: string; branch: TreeBranch },
   favorites: ReadonlySet<string>,
 ): BranchTreeNode {
   const reference = entry.branch.name;
@@ -289,12 +309,14 @@ export function buildBranchTree(
         "tags",
         sortNodes(
           repository.tags.map((tag) => ({
-            id: `${path}::tag::${tag}`,
+            id: `${path}::tag::${tag.name}`,
             kind: "tag" as const,
-            label: tag,
+            label: tag.name,
             repositoryPath: path,
-            reference: tag,
-            favorite: favorites.has(refKey(path, tag)),
+            reference: tag.name,
+            // 附注标签交出的是剥出来的那个提交，右键要打在它上面。
+            oid: tag.oid,
+            favorite: favorites.has(refKey(path, tag.name)),
             children: [],
           })),
         ),
@@ -311,7 +333,9 @@ export function buildBranchTree(
           repositoryPath: path,
           // worktree 节点选中时看它检出的那条分支；分离时没有引用可看。
           reference: worktree.branch,
-          current: worktree.isMain,
+          path: worktree.path,
+          oid: worktree.oid ?? undefined,
+          locked: worktree.locked,
           children: [],
         })),
       ),
@@ -322,17 +346,18 @@ export function buildBranchTree(
       groups.push(
         groupNode(
           "stashes",
-          [
-            {
-              id: `${path}::stash::list`,
-              kind: "stash" as const,
-              label: String(repository.stashCount),
-              repositoryPath: path,
-              reference: null,
-              count: repository.stashCount,
-              children: [],
-            },
-          ],
+          repository.stashes.map((stash) => ({
+            // 身份是这条 stash 自己那个对象，不是 `stash@{n}`：序号会随着别的
+            // push 或 drop 整体挪一格，展开与选中就跟着挪到了别人身上。
+            id: `${path}::stash::${stash.oid}`,
+            kind: "stash" as const,
+            label: stash.message,
+            repositoryPath: path,
+            reference: null,
+            oid: stash.oid,
+            index: stash.index,
+            children: [],
+          })),
           repository.stashCount,
         ),
       );
@@ -348,7 +373,8 @@ export function buildBranchTree(
       label: repository.name,
       repositoryPath: path,
       reference: null,
-      current: repository.head !== null,
+      // 分离 HEAD 的检出没有停在任何一条分支上。
+      current: repository.head.branch !== null,
       color: colors?.get(path),
       children: ordered,
     });

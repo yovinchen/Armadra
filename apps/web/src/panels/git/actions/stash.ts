@@ -4,13 +4,38 @@
  * 冲突未解决时不许应用、同一个对象出现多条记录时不许动、每个动作都绑着读到的
  * 那一版 `stateToken` 与 HEAD。
  */
-import type { GitStashRecord, GitStashSnapshot } from "@armadra/shared";
+import type {
+  GitRepositoryAction,
+  GitStashRecord,
+  GitStashSnapshot,
+} from "@armadra/shared";
 import type { RepositoryRequest } from "./integration";
 
 export type StashEntryAction = "applyStash" | "popStash" | "dropStash";
 
 /** Stash 的动作和别的仓库写没有区别：动作 + 被比对的 HEAD。 */
 export type StashRequest = RepositoryRequest;
+
+/**
+ * 分支树上那个 stash 节点的动作。
+ *
+ * 和上面那组不同，它手上只有**这一行读回来的那个对象**加仓库的 state token，
+ * 没有整份 `GitStashSnapshot`——分支树一次读回所有仓库的 stash 列表，为了给一
+ * 个右键菜单再去读一遍单仓库快照，只会让菜单和树各自看到一个时刻。绑定在
+ * `oid` 上是这里成立的原因：`stash@{n}` 这个选择器会在别人 push 或 drop 之后
+ * 整体挪位，而对象不会。
+ */
+export function stashActionAt(
+  oid: string,
+  expectedStateToken: string,
+  kind: StashEntryAction,
+  options: { reinstateIndex: boolean } = { reinstateIndex: false },
+): GitRepositoryAction {
+  const common = { oid, expectedStateToken };
+  return kind === "dropStash"
+    ? { kind, ...common }
+    : { kind, ...common, reinstateIndex: options.reinstateIndex };
+}
 
 /** 有东西可存、没有待解决的冲突、HEAD 存在，才谈得上保存一个 stash。 */
 export function canCreateStash(

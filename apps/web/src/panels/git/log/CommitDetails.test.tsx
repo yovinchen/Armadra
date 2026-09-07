@@ -7,12 +7,15 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { GitCommitDetail, GitCommitFileDiff } from "@armadra/shared";
+import type {
+  GitCommitDetail,
+  GitCommitFileDiff,
+  GitLogCommit,
+} from "@armadra/shared";
 
 import { installDomPolyfills } from "@/app/test-harness";
 import { usePreferencesStore } from "@/app/preferences-store";
 import { CommitDetails } from "./CommitDetails";
-import type { LogCommit } from "./types";
 
 installDomPolyfills();
 
@@ -28,7 +31,7 @@ vi.mock("../../../git/gateway", () => ({
 
 const oid = (char: string) => char.repeat(40);
 
-const commit: LogCommit = {
+const commit: GitLogCommit = {
   repositoryPath: ".",
   oid: oid("a"),
   parents: [oid("b")],

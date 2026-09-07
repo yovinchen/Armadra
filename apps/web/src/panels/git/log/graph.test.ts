@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
+import type { GitLogCommit } from "@armadra/shared";
 
 import { commitGraph } from "../CommitGraph";
 import { commitKey, logGraphKeys, repositoryColor } from "./graph";
-import type { LogCommit } from "./types";
 
 const oid = (char: string) => char.repeat(40);
 
@@ -10,7 +10,7 @@ const commit = (
   repositoryPath: string,
   id: string,
   parents: string[],
-): LogCommit => ({
+): GitLogCommit => ({
   repositoryPath,
   oid: id,
   parents,
@@ -32,7 +32,8 @@ describe("多仓库的车道", () => {
       commit("packages/foo", oid("d"), []),
     ];
     const graph = commitGraph(commits, logGraphKeys);
-    const lane = (entry: LogCommit) => graph.points.get(commitKey(entry))!.lane;
+    const lane = (entry: GitLogCommit) =>
+      graph.points.get(commitKey(entry))!.lane;
     expect(lane(commits[0]!)).toBe(0);
     expect(lane(commits[2]!)).toBe(0);
     // 第二个仓库拿到自己的车道，而不是挤进第一个仓库的那条。

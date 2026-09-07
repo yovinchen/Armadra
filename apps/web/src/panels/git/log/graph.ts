@@ -1,5 +1,6 @@
+import type { GitLogCommit } from "@armadra/shared";
+
 import type { GraphKeys } from "../CommitGraph";
-import type { LogCommit } from "./types";
 
 /**
  * 多仓库日志里一个提交的身份（Git 工具窗口设计 §2.2）。
@@ -16,7 +17,7 @@ export function commitKey(commit: {
 }
 
 /** 父提交永远在同一个仓库里，所以父的身份也带同一个仓库路径。 */
-export const logGraphKeys: GraphKeys<LogCommit> = {
+export const logGraphKeys: GraphKeys<GitLogCommit> = {
   key: commitKey,
   parent: (commit, parent) => `${commit.repositoryPath}:${parent}`,
 };

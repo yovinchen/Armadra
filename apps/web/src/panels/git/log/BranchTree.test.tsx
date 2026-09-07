@@ -1,19 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { GitRefsRepository } from "@armadra/shared";
 
 import { installDomPolyfills } from "@/app/test-harness";
 import { usePreferencesStore } from "@/app/preferences-store";
 import { BranchTree } from "./BranchTree";
 import { refKey } from "./build-tree";
-import type { GitRefsRepository } from "./types";
 
 installDomPolyfills();
 
 const repositories: GitRefsRepository[] = [
   {
     repositoryPath: ".",
+    repositoryId: "id",
+    kind: "root",
     name: "armadra",
-    head: "main",
+    head: { oid: "a".repeat(40), branch: "main" },
     branches: [
       {
         name: "main",
@@ -44,6 +46,7 @@ const repositories: GitRefsRepository[] = [
     tags: [],
     worktrees: [],
     stashCount: 0,
+    stashes: [],
   },
 ];
 
