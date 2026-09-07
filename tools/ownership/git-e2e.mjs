@@ -89,6 +89,29 @@ function git(cwd, args) {
   });
 }
 
+/**
+ * The same, with both timestamps pinned. The merged log is ordered by committer
+ * time, so a check about that order has to decide the times rather than observe
+ * whatever the machine was doing that second.
+ */
+function gitAt(cwd, when, args) {
+  return execFileSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_SYSTEM: "/dev/null",
+      GIT_AUTHOR_NAME: "\u6d4b\u8bd5",
+      GIT_AUTHOR_EMAIL: "test@example.invalid",
+      GIT_COMMITTER_NAME: "\u6d4b\u8bd5",
+      GIT_COMMITTER_EMAIL: "test@example.invalid",
+      GIT_AUTHOR_DATE: when,
+      GIT_COMMITTER_DATE: when,
+    },
+  });
+}
+
 const encoder = new TextEncoder();
 const body = (value) => encoder.encode(JSON.stringify(value));
 
@@ -623,6 +646,177 @@ try {
     outside?.error?.hostCode === "PERMISSION_DENIED" &&
       outsideBinding?.error?.hostCode === "PERMISSION_DENIED",
     `scope=${outside?.error?.hostCode ?? "accepted"} binding=${outsideBinding?.error?.hostCode ?? "accepted"}`,
+  );
+
+  /* ------------------- 7bb. the Git window's workspace reads -------------- */
+
+  // The Git window does not switch between repositories: it draws one graph
+  // across every checkout the workspace has, and one branch tree grouped by
+  // them. So both of these reads are about the workspace, not about a checkout,
+  // and the Host has to forward them without a repository path to check.
+  //
+  // The workspace here is the three kinds a real project has: the root
+  // repository, an independent nested one, and a linked worktree of the root.
+  const nested = join(harness.project, "嵌套");
+  mkdirSync(nested, { recursive: true });
+  git(nested, ["init", "--initial-branch=main"]);
+  writeFileSync(join(nested, "说明.md"), "# 嵌套\n");
+  git(nested, ["add", "说明.md"]);
+  // The nested repository commits at exactly the instant the root's HEAD
+  // already carries. A tie is where a merge stops being obvious, and the answer
+  // still has to be one order. Nothing is committed on the root itself: later
+  // checks read its HEAD, and moving it would make this section change their
+  // subject rather than add one.
+  const rootHead = git(harness.project, ["log", "-1", "--format=%cI"]).trim();
+  gitAt(nested, rootHead, ["commit", "-m", "嵌套：初始"]);
+  // A branch the nested repository does not have, so a named-ref filter has to
+  // leave it out rather than fail its read. It names the commit `main` already
+  // points at, so no history moves.
+  git(harness.project, ["branch", "发布"]);
+
+  const logPage = (request) =>
+    driver.git("read", [
+      { method: GitReadMethod.LOG, scope, requestJson: body(request) },
+    ]);
+
+  const merged = await logPage({ limit: 50 });
+  const page = merged.httpStatus === 200 ? decode(merged) : {};
+  const rows = page.commits ?? [];
+  const colours = new Map(
+    (page.repositories ?? []).map((entry) => [entry.path, entry.color]),
+  );
+  const ordered = rows.every(
+    (commit, index) =>
+      index === 0 ||
+      Date.parse(rows[index - 1].committerTime) >=
+        Date.parse(commit.committerTime),
+  );
+  // The rows that share the newest instant are the tie the fixture arranged.
+  // They come back in the repositories' discovery order — the same order the
+  // colours are numbered in — which is the whole point: "whichever `git`
+  // answered first" is not an order anybody can page through.
+  const newest = rows.filter(
+    (commit) => commit.committerTime === rows[0]?.committerTime,
+  );
+  const tieInColourOrder = newest.every(
+    (commit, index) =>
+      index === 0 ||
+      colours.get(newest[index - 1].repositoryPath) <
+        colours.get(commit.repositoryPath),
+  );
+  step(
+    "one page merges every repository, newest first, each row naming its checkout",
+    merged.httpStatus === 200 &&
+      ordered &&
+      newest.length > 1 &&
+      tieInColourOrder &&
+      rows.some((commit) => commit.repositoryPath === ".") &&
+      rows.some((commit) => commit.repositoryPath === "嵌套") &&
+      rows.every((commit) => colours.has(commit.repositoryPath)) &&
+      page.truncated === false,
+    `HTTP ${merged.httpStatus} rows=${rows.length} tie=${newest.map((commit) => commit.repositoryPath).join(">")} repos=${[...colours.keys()].join(",")}${refusal(merged)}`,
+  );
+
+  // The colour is the checkout's position in the discovery list, and it does
+  // not move when the log is narrowed: a row's stripe means the same thing in
+  // both views.
+  const narrowedLog = await logPage({ limit: 50, repositories: ["嵌套"] });
+  const onlyNested = narrowedLog.httpStatus === 200 ? decode(narrowedLog) : {};
+  step(
+    "narrowing the log to one repository keeps that repository's colour",
+    narrowedLog.httpStatus === 200 &&
+      onlyNested.repositories?.length === 1 &&
+      onlyNested.repositories[0].path === "嵌套" &&
+      onlyNested.repositories[0].color === colours.get("嵌套") &&
+      (onlyNested.commits ?? []).every(
+        (commit) => commit.repositoryPath === "嵌套",
+      ),
+    `HTTP ${narrowedLog.httpStatus} color=${onlyNested.repositories?.[0]?.color} of ${colours.get("嵌套")}${refusal(narrowedLog)}`,
+  );
+
+  // A ref the nested repository does not have. It contributes nothing instead
+  // of failing, and every repository is still listed with its colour. The
+  // linked worktree does contribute: it is a checkout of the same repository,
+  // so `发布` is its ref too — which is exactly why the filter is answered per
+  // repository rather than assumed to name one.
+  const named = await logPage({
+    limit: 50,
+    refs: { kind: "named", names: ["发布"] },
+  });
+  const release = named.httpStatus === 200 ? decode(named) : {};
+  step(
+    "a named ref only some repositories have leaves the others out, not failing",
+    named.httpStatus === 200 &&
+      (release.commits ?? []).length > 0 &&
+      (release.commits ?? []).every(
+        (commit) => commit.repositoryPath !== "嵌套",
+      ) &&
+      (release.repositories ?? []).length === colours.size,
+    `HTTP ${named.httpStatus} rows=${release.commits?.length} repos=${(release.commits ?? []).map((commit) => commit.repositoryPath).join(",")}${refusal(named)}`,
+  );
+
+  // A page cursor belongs to the filters it was taken under: `--skip` counts
+  // commits that passed the filter, so continuing under another filter would
+  // hand back a window over neither set. The refusal is named, because the
+  // repair — drop the cursor, read the first page — is automatic.
+  const firstPage = await logPage({ limit: 1 });
+  const cursor =
+    firstPage.httpStatus === 200 ? decode(firstPage).nextCursor : null;
+  const continued = cursor ? await logPage({ limit: 1, cursor }) : null;
+  const refiltered = cursor
+    ? await logPage({ limit: 1, cursor, authors: ["没有这个人"] })
+    : null;
+  const refilteredCode =
+    refiltered?.httpStatus >= 400 ? decode(refiltered).code : null;
+  step(
+    "a log cursor continues under its own filters and is refused under others",
+    typeof cursor === "string" &&
+      continued?.httpStatus === 200 &&
+      (decode(continued).commits ?? []).length === 1 &&
+      refiltered?.httpStatus === 400 &&
+      refilteredCode === "invalid_cursor",
+    `cursor=${typeof cursor} continued=${continued?.httpStatus} refiltered=${refiltered?.httpStatus}/${refilteredCode}`,
+  );
+
+  // The branch tree: every repository at once, so the window's left column is
+  // one request rather than five per repository.
+  const tree = await driver.git("read", [
+    { method: GitReadMethod.REFS, scope, requestJson: body({}) },
+  ]);
+  const repositoryTrees = tree.httpStatus === 200 ? decode(tree) : [];
+  const rootTree = repositoryTrees.find?.(
+    (entry) => entry.repositoryPath === ".",
+  );
+  const nestedTree = repositoryTrees.find?.(
+    (entry) => entry.repositoryPath === "嵌套",
+  );
+  const worktreeTree = repositoryTrees.find?.(
+    (entry) => entry.repositoryPath === "worktrees/功能",
+  );
+  step(
+    "one branch tree covers the root, the nested repository and the worktree",
+    tree.httpStatus === 200 &&
+      rootTree?.kind === "root" &&
+      nestedTree?.kind === "nested" &&
+      worktreeTree?.kind === "worktree" &&
+      rootTree.head.branch === "main" &&
+      rootTree.branches.some(
+        (branch) => branch.name === "main" && branch.current === true,
+      ) &&
+      rootTree.branches.some((branch) => branch.name === "发布") &&
+      // The bare remote this check pushed to earlier, read back as a remote
+      // with the branch it holds — and `main`'s upstream named short, which is
+      // what a tree node draws.
+      rootTree.remotes.some((entry) => entry.name === "origin") &&
+      rootTree.branches.find((branch) => branch.name === "main")?.upstream ===
+        "origin/main" &&
+      typeof rootTree.stashCount === "number" &&
+      // A branch with no upstream reports null, never zero: "nothing to push"
+      // and "nowhere to push" are different answers.
+      rootTree.branches.find((branch) => branch.name === "发布")?.ahead ===
+        null &&
+      nestedTree.remotes.length === 0,
+    `HTTP ${tree.httpStatus} repos=${repositoryTrees.length ?? 0}${refusal(tree)}`,
   );
 
   /* ---------------------------------------- 7c. a clone through the Host */
