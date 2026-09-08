@@ -62,17 +62,31 @@ type Row =
   | { kind: "uncommitted"; key: string }
   | { kind: "commit"; key: string; commit: GitLogCommit };
 
-/** 今天的提交显示时刻，更早的显示日期——列窄，两者只能二选一。 */
-function formatWhen(iso: string, now: number, locale: string): string {
+/**
+ * 日期列按 IDEA 的写法：`2026/9/6 21:43`——日期与时刻同列，今天的提交只留时刻。
+ * 窄布局（手机）没有这一列的宽度，退回只显示日期。
+ */
+function formatWhen(
+  iso: string,
+  now: number,
+  locale: string,
+  narrow = false,
+): string {
   const at = Date.parse(iso);
   if (Number.isNaN(at)) return iso;
   const sameDay = new Date(at).toDateString() === new Date(now).toDateString();
-  return new Intl.DateTimeFormat(
-    locale,
-    sameDay
-      ? { hour: "2-digit", minute: "2-digit" }
-      : { year: "numeric", month: "2-digit", day: "2-digit" },
-  ).format(at);
+  const time = new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(at);
+  if (sameDay) return time;
+  const date = new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).format(at);
+  return narrow ? date : `${date} ${time}`;
 }
 
 export function LogTable({
@@ -282,6 +296,7 @@ export function LogTable({
                     row.commit.committerTime,
                     Date.now(),
                     locale,
+                    narrow,
                   )}
                   selected={selected === row.key}
                   onSelect={() => onSelect(row.key, row.commit)}

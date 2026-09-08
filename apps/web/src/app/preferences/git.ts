@@ -139,7 +139,9 @@ export function storedGitPreferences(): GitPreferences {
     until: readStored(GIT_KEYS.until) ?? "",
     repositories: storedIds(GIT_KEYS.repositories),
     paths: storedIds(GIT_KEYS.paths),
-    showAllBranches: storedBoolean(GIT_KEYS.showAllBranches, false),
+    // IDEA 的日志默认就是整张图：只看 HEAD 可达的提交时每个分支都是一条直线，
+    // 分支徽标与合并车道全部不可见，用户第一眼看到的就是「分支信息没展示」。
+    showAllBranches: storedBoolean(GIT_KEYS.showAllBranches, true),
     highlightMine: storedBoolean(GIT_KEYS.highlightMine, false),
     compactRows: storedBoolean(GIT_KEYS.compactRows, false),
     showHashColumn: storedBoolean(GIT_KEYS.showHashColumn, true),

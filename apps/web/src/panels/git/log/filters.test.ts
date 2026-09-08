@@ -14,9 +14,17 @@ function preferences(overrides: Partial<GitPreferences> = {}): GitPreferences {
 }
 
 describe("工具栏筛选 → 请求", () => {
-  it("什么都没选时只问 HEAD 与页大小，别的一项都不发", () => {
+  it("什么都没选时默认整张图（所有分支）与页大小，别的一项都不发", () => {
     const request = logRequestFromPreferences(preferences(), { now: NOW });
-    expect(request).toEqual({ refs: { kind: "head" }, limit: 100 });
+    expect(request).toEqual({ refs: { kind: "all" }, limit: 100 });
+  });
+
+  it("关掉「显示所有分支」且没选分支时只问 HEAD", () => {
+    const request = logRequestFromPreferences(
+      preferences({ showAllBranches: false }),
+      { now: NOW },
+    );
+    expect(request.refs).toEqual({ kind: "head" });
   });
 
   it("选中的分支变成 named，跨仓库的同名分支只发一次", () => {
@@ -36,7 +44,7 @@ describe("工具栏筛选 → 请求", () => {
     });
   });
 
-  it("「显示所有分支」压过选中的分支", () => {
+  it("选中的分支压过「显示所有分支」", () => {
     const request = logRequestFromPreferences(
       preferences({
         showAllBranches: true,
@@ -44,7 +52,7 @@ describe("工具栏筛选 → 请求", () => {
       }),
       { now: NOW },
     );
-    expect(request.refs).toEqual({ kind: "all" });
+    expect(request.refs).toEqual({ kind: "named", names: ["main"] });
   });
 
   it("日期档位落成绝对时刻，自定义档直接用两个日期", () => {

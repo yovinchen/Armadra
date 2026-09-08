@@ -451,7 +451,16 @@ fn log_arguments(request: &LogRequest) -> AppResult<LogArguments> {
     let mut revisions = Vec::new();
     match request.refs.kind {
         LogRefKind::Head => revisions.push("HEAD".into()),
-        LogRefKind::All => options.push("--all".into()),
+        // Not `--all`: that also walks `refs/stash`, and a stash's two
+        // synthetic commits ("index on main: …") are not history anybody
+        // asked to see. Branches, remotes and tags are what "all branches"
+        // means in the tool window, plus the current `HEAD` so a detached
+        // checkout still shows where it stands.
+        LogRefKind::All => options.extend(
+            ["HEAD", "--branches", "--remotes", "--tags"]
+                .into_iter()
+                .map(Into::into),
+        ),
         LogRefKind::Named => {
             if request.refs.names.is_empty() {
                 return Err(AppError::BadRequest(

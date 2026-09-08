@@ -64,11 +64,14 @@ export function logRequestFromPreferences(
   const until = custom ? git.until : null;
   const cursor = options.cursor ?? null;
   return {
-    refs: git.showAllBranches
-      ? { kind: "all" }
-      : references.length > 0
+    // 树里点了分支就只看那些分支——「显示所有分支」是没选任何东西时的默认
+    // 视图（IDEA 同此），不是压过选择的开关。
+    refs:
+      references.length > 0
         ? { kind: "named", names: references }
-        : { kind: "head" },
+        : git.showAllBranches
+          ? { kind: "all" }
+          : { kind: "head" },
     limit: options.limit ?? GIT_LOG_PAGE_SIZE,
     ...(git.repositories.length > 0
       ? { repositories: [...git.repositories] }
