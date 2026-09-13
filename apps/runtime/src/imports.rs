@@ -299,6 +299,16 @@ fn reject_symlink_components(path: &Path) -> AppResult<()> {
     let mut current = PathBuf::new();
     for component in path.components() {
         current.push(component);
+        // A Windows prefix is not a filesystem entry of its own: statting the
+        // bare `C:` fails with "Incorrect function" and would turn every
+        // absolute path on that platform into an import error. Neither a drive
+        // nor a root can be a symlink, so only what hangs below them is checked.
+        if matches!(
+            component,
+            std::path::Component::Prefix(_) | std::path::Component::RootDir
+        ) {
+            continue;
+        }
         if fs::symlink_metadata(&current)?.file_type().is_symlink() {
             return Err(AppError::Forbidden(
                 "Symbolic links cannot be imported".into(),
@@ -472,7 +482,7 @@ mod tests {
     #[test]
     fn directory_sources_reject_files_and_traversal() {
         let root = tempfile::tempdir().unwrap();
-        let root = root.path().canonicalize().unwrap();
+        let root = crate::paths::canonicalize(root.path()).unwrap();
         fs::write(root.join("file.txt"), "x").unwrap();
         assert!(directory_source(root.to_str().unwrap()).is_ok());
         assert!(directory_source(root.join("file.txt").to_str().unwrap()).is_err());
@@ -505,7 +515,7 @@ mod tests {
     fn desktop_copies_with_the_same_basename_preserve_every_file() {
         let root = tempfile::tempdir().unwrap();
         let sources = tempfile::tempdir().unwrap();
-        let sources = sources.path().canonicalize().unwrap();
+        let sources = crate::paths::canonicalize(sources.path()).unwrap();
         fs::create_dir(sources.join("a")).unwrap();
         fs::create_dir(sources.join("b")).unwrap();
         let originals: [&[u8]; 2] = [b"first\0payload", b"second\0payload"];
@@ -552,7 +562,9 @@ mod tests {
     fn desktop_copy_suffixes_skip_directories_and_existing_suffixes() {
         let root = tempfile::tempdir().unwrap();
         let sources = tempfile::tempdir().unwrap();
-        let source = sources.path().canonicalize().unwrap().join("report.txt");
+        let source = crate::paths::canonicalize(sources.path())
+            .unwrap()
+            .join("report.txt");
         fs::write(&source, b"new copy").unwrap();
         let mut batch = ImportBatch::new(root.path()).unwrap();
         batch
@@ -583,7 +595,7 @@ mod tests {
     fn desktop_copy_suffixes_keep_dotfiles_and_extensionless_names() {
         let root = tempfile::tempdir().unwrap();
         let sources = tempfile::tempdir().unwrap();
-        let sources = sources.path().canonicalize().unwrap();
+        let sources = crate::paths::canonicalize(sources.path()).unwrap();
         let mut batch = ImportBatch::new(root.path()).unwrap();
         for name in [".env", "Makefile"] {
             let source = sources.join(name);
@@ -606,7 +618,9 @@ mod tests {
     fn failed_batches_still_roll_back_after_renaming_copies() {
         let root = tempfile::tempdir().unwrap();
         let sources = tempfile::tempdir().unwrap();
-        let source = sources.path().canonicalize().unwrap().join("report.txt");
+        let source = crate::paths::canonicalize(sources.path())
+            .unwrap()
+            .join("report.txt");
         fs::write(&source, b"source unchanged").unwrap();
         let mut batch = ImportBatch::new(root.path()).unwrap();
         batch.copy(root.path(), source.to_str().unwrap()).unwrap();
