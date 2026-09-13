@@ -1,5 +1,6 @@
 import {
   agentListSchema,
+  agentModelListSchema,
   agentStatusSchema,
   answerApprovalResponseSchema,
   contextLinksRequestSchema,
@@ -68,6 +69,13 @@ export const agentsApi = {
 
   /* ----------------------------------- Agent ---------------------------- */
   agents: () => request("/api/agents", agentListSchema),
+  /**
+   * 节点头部「模型」菜单的候选（F7）。按发布日期倒序，每条注明来自 CLI 自己、
+   * models.dev 目录，还是离线兜底表。Runtime 侧缓存 10 分钟，所以开菜单时
+   * 反复请求不会反复起进程。
+   */
+  agentModels: (agentId: string) =>
+    request(`/api/agents/${query(agentId)}/models`, agentModelListSchema),
   /** 装 / 卸 hook 配置（§5.3）。返回写到哪个配置文件、装的是哪一版客户端。 */
   installAgentHooks: (agentId: string) =>
     request(

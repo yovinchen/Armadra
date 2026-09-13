@@ -398,6 +398,9 @@ fn install(catalog: Catalog) -> Arc<Catalog> {
     *CATALOG
         .write()
         .unwrap_or_else(std::sync::PoisonError::into_inner) = Arc::clone(&shared);
+    // The per-agent menus were built from the previous catalog; a user who
+    // just asked for an update should not have to wait out their TTL.
+    super::agents::forget();
     shared
 }
 

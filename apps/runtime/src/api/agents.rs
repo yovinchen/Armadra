@@ -99,6 +99,32 @@ pub async fn agents(State(state): State<AppState>) -> AppResult<Json<Vec<AgentIn
     Ok(Json(detected))
 }
 
+/// `GET /api/agents/{agent_id}/models` — what this CLI's model menu may offer
+/// (用户实测反馈 F7).
+///
+/// Newest first, each entry saying whether the CLI itself named it, the
+/// models.dev catalog did, or it is the offline fallback. A `custom:` entry
+/// borrows its base adapter's list, the same way it borrows its hooks — but it
+/// is probed through *its own* launch program, because that is the binary its
+/// terminals will actually run.
+pub async fn agent_models(
+    State(state): State<AppState>,
+    AxumPath(agent_id): AxumPath<String>,
+) -> AppResult<Json<Vec<crate::models::agents::AgentModel>>> {
+    let custom = state.settings.custom_agent(&agent_id);
+    let (base, launch_cmd) = match &custom {
+        Some(entry) => (entry.base_agent.clone(), entry.launch_cmd.clone()),
+        None => {
+            let definition = agent::definition(&agent_id)
+                .ok_or_else(|| AppError::NotFound(format!("Unknown agent {agent_id}")))?;
+            (definition.id.to_owned(), definition.launch_cmd.to_owned())
+        }
+    };
+    Ok(Json(
+        crate::models::agents::models_for(&base, Some(&launch_cmd)).await,
+    ))
+}
+
 /// Installs (or reinstalls) this provider's hooks. Idempotent by construction —
 /// see `hook::install`.
 pub async fn install_hooks(

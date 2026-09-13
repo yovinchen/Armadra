@@ -216,13 +216,21 @@ export function effectiveCapabilities(
 /* ------------------------------ model catalogue --------------------------- */
 
 /**
- * Model ids the header menu may offer, per CLI.
+ * The **offline fallback** for the header menu, per CLI.
  *
- * Suggestions, not an inventory: each CLI keeps its own account, entitlements
- * and default (docs/guides/agent-collaboration.md), and we do not query any provider
- * for a list. Only aliases the CLI itself documents are listed, and picking
- * none leaves the CLI's own default untouched — which is why `""` is a valid
- * selection everywhere rather than a fourth pseudo-model.
+ * This used to be the whole menu, and it went stale the day it shipped: a user
+ * whose Codex was already running `gpt-6-astra-high` found neither that model
+ * nor any way to reach it (用户实测反馈 F7). The live list now comes from
+ * `GET /api/agents/{id}/models`, which asks the CLI itself first and the
+ * models.dev catalog second; this table is what answers when the Runtime is
+ * unreachable and nothing else has been read yet.
+ *
+ * Mirrored by `builtin_models` in `apps/runtime/src/models/agents.rs` — the
+ * same ids, for the same reason. Still suggestions rather than an inventory:
+ * each CLI keeps its own account, entitlements and default
+ * (docs/guides/agent-collaboration.md), and picking none leaves that default
+ * untouched, which is why `""` is a valid selection everywhere rather than a
+ * fourth pseudo-model.
  */
 export const AGENT_MODEL_SUGGESTIONS: Readonly<
   Record<BuiltinAgentId, readonly string[]>

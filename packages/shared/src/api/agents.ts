@@ -42,6 +42,34 @@ export const agentInfoSchema = z.object({
 export const agentListSchema = z.array(agentInfoSchema);
 
 /**
+ * `GET /api/agents/{id}/models` — 节点头部「模型」菜单的候选（用户实测反馈 F7）。
+ *
+ * `source` 说的是这一条**从哪来**，因为三种来源不是一回事：
+ *
+ *   * `cli` —— CLI 自己说的（`claude --help` 的别名、Codex `config.toml` 里
+ *     配好的模型）。它反映的是这台机器、这个账号的实际情况，所以排在最前；
+ *   * `catalog` —— models.dev 上该 provider 的条目，按发布日期倒序；
+ *   * `builtin` —— 离线兜底，只在前两者都拿不到时出现。
+ *
+ * 没有 `releaseDate` 的条目排在有日期的之前：别名永远指向该系列的最新模型，
+ * 不可能比下面任何一条更旧，而且那是 CLI 自己文档里的写法。
+ */
+export const agentModelSourceSchema = z.enum(["cli", "catalog", "builtin"]);
+export type AgentModelSource = z.infer<typeof agentModelSourceSchema>;
+
+export const agentModelSchema = z.object({
+  /** 原样放到启动行 `--model` 后面的值。 */
+  id: z.string().min(1),
+  label: z.string(),
+  source: agentModelSourceSchema,
+  /** `YYYY-MM-DD`，目录里有才有。 */
+  releaseDate: z.string().optional(),
+});
+export type AgentModel = z.infer<typeof agentModelSchema>;
+
+export const agentModelListSchema = z.array(agentModelSchema);
+
+/**
  * `POST /api/agents/{id}/hooks/install|uninstall`.
  *
  * Loose on purpose: the runtime omits `clientBin` and `warning` when they are

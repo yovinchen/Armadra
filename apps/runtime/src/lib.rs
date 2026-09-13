@@ -714,6 +714,9 @@ pub fn router_with_state(state: AppState) -> Router {
             "/api/models/catalog/refresh",
             post(api::refresh_model_catalog),
         )
+        // The node header's model menu (F7). A read that may start one short
+        // `--help`, cached for ten minutes.
+        .route("/api/agents/{agent_id}/models", get(api::agent_models))
         .route(
             "/api/agents/{agent_id}/hooks/install",
             post(api::install_hooks),
