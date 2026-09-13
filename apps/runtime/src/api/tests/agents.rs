@@ -7,6 +7,7 @@ use axum::{Router, http::StatusCode};
 use serde_json::json;
 
 use super::support::*;
+#[cfg(unix)]
 use crate::terminal::TerminateMode;
 use crate::{AppState, db, events::EventHub};
 

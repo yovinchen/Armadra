@@ -13,8 +13,10 @@ use armadra_runtime::worker::{
     Worker,
     channel::{self, Channel, KIND_CALL, KIND_UPCALL, KIND_UPCALL_REPLY},
     outbox::Outbox,
-    socket,
 };
+// Only the socket bearer case needs this, and that bearer is a Unix socket.
+#[cfg(unix)]
+use armadra_runtime::worker::socket;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     sync::Mutex,

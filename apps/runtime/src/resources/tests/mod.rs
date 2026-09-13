@@ -5,7 +5,12 @@
 //! The shared fixture lives here; the cases are grouped by subject in the
 //! modules beside it.
 
+// `components` and `orphan_sessions` measure real children of a real shell, so
+// every case in them spawns `/bin/sh`; there is no Windows equivalent to point
+// them at yet (T01 is what would give them one).
+#[cfg(unix)]
 mod components;
+#[cfg(unix)]
 mod orphan_sessions;
 mod power;
 mod sampling;
@@ -15,17 +20,22 @@ use std::time::Duration;
 
 use tempfile::TempDir;
 
-use super::{
-    ResourceService, SubscribeRequest, orphans, platform,
-    power::{LeaseRequest, LeaseSource, PowerService, RenewRequest},
-    sample::{self, Sampler},
-};
+use super::{ResourceService, SubscribeRequest, sample::Sampler};
+// Everything below belongs to a case that spawns a real shell, which is what
+// the Unix-only modules above do.
+#[cfg(unix)]
+use super::{orphans, platform, sample};
+#[cfg(unix)]
+use crate::terminal::{SpawnRequest, TerminateMode};
+// The lease cases in `power` drive the real macOS inhibitor; on the other
+// platforms that module compiles to nothing and these names have no user.
+#[cfg(target_os = "macos")]
+use super::power::{LeaseRequest, LeaseSource, PowerService, RenewRequest};
 use crate::{
     AppState, db,
     events::{EventHub, WorkspaceEvent},
     hook::HookService,
     settings::SettingsStore,
-    terminal::{SpawnRequest, TerminateMode},
     usage::UsageService,
 };
 
@@ -34,6 +44,7 @@ use crate::{
 struct Fixture {
     state: AppState,
     workspace_id: String,
+    #[cfg(unix)]
     root: String,
     _directory: TempDir,
 }
@@ -43,6 +54,7 @@ impl Fixture {
         &self.state.resources
     }
 
+    #[cfg(unix)]
     fn terminals(&self) -> &crate::terminal::TerminalManager {
         &self.state.terminals
     }
@@ -51,10 +63,12 @@ impl Fixture {
         &self.state.events
     }
 
+    #[cfg(unix)]
     fn pool(&self) -> &sqlx::SqlitePool {
         &self.state.pool
     }
 
+    #[cfg(unix)]
     async fn snapshot(&self, prime: bool) -> super::ResourceSnapshot {
         self.resources()
             .snapshot(&self.state, &self.workspace_id, prime)
@@ -100,6 +114,7 @@ async fn fixture_with(settings: serde_json::Value) -> Fixture {
     };
     Fixture {
         state,
+        #[cfg(unix)]
         root: directory.path().to_string_lossy().into_owned(),
         workspace_id: workspace.id,
         _directory: directory,

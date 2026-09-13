@@ -5,6 +5,7 @@ use super::*;
 
 /// The panel's headline claim: a session that is actually burning CPU reports a
 /// number, not `unknown`, and its memory is a real figure.
+#[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
 async fn a_busy_session_reports_real_cpu_and_memory() {
     let fixture = fixture().await;
@@ -58,6 +59,7 @@ async fn a_busy_session_reports_real_cpu_and_memory() {
 
 /// A session whose process is gone is removed from the list, not listed with
 /// dashes in every column: "已退出的会话直接移除，不保留".
+#[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
 async fn an_ended_session_is_dropped_from_the_sample() {
     let fixture = fixture().await;
@@ -98,6 +100,7 @@ async fn an_ended_session_is_dropped_from_the_sample() {
 
 /// An SSH session runs somewhere else; the local `ssh` client's footprint is
 /// not the session's, so it carries no numbers at all.
+#[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
 async fn ssh_sessions_are_remote_and_carry_no_numbers() {
     let fixture = fixture().await;
@@ -158,6 +161,7 @@ fn the_first_sample_reports_unknown_cpu_instead_of_a_fake_zero() {
 /// unless `prime` lays down a baseline for it. That zero is exactly the lie
 /// the panel must not tell, and it is what a user sees when they open the
 /// panel right after starting something.
+#[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
 async fn a_process_that_started_since_the_last_sample_is_still_measured() {
     let fixture = fixture().await;

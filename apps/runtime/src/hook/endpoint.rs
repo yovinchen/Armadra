@@ -123,6 +123,7 @@ fn unquote(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use tempfile::tempdir;
 
     fn fixture() -> Endpoint {

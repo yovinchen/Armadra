@@ -1,3 +1,8 @@
+// Every case in this file drives the real `git` CLI over a POSIX
+// temporary tree and a Unix-socket Runtime; there is nothing left to run on
+// Windows, so the whole file compiles away instead of leaving dead helpers.
+#![cfg(unix)]
+
 //! Multi-repository discovery, per-repository status and commit-graph data
 //! against real temporary repositories (roadmap §4.1).
 //!
@@ -92,7 +97,6 @@ fn repositories(list: &Value) -> Vec<(&str, &str)> {
         .collect()
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn discovers_every_checkout_and_scopes_status_and_graph_data_per_repository() {
     let directory = tempfile::tempdir().unwrap();
@@ -343,7 +347,6 @@ async fn discovers_every_checkout_and_scopes_status_and_graph_data_per_repositor
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn discovery_reports_an_unknown_dirty_count_without_an_execution_grant() {
     let directory = tempfile::tempdir().unwrap();

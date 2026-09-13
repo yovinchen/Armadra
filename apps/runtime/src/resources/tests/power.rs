@@ -1,5 +1,6 @@
 //! The lease lifecycle against the real platform inhibitor.
 
+#[cfg(target_os = "macos")]
 use super::*;
 
 /// The power tests count `caffeinate` children of *this* process, so they

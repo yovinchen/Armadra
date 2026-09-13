@@ -1,3 +1,8 @@
+// Every case in this file drives the real `git` CLI over a POSIX
+// temporary tree and a Unix-socket Runtime; there is nothing left to run on
+// Windows, so the whole file compiles away instead of leaving dead helpers.
+#![cfg(unix)]
+
 //! The Git window's workspace-level log and branch tree (Git 工具窗口设计 §3.1).
 //!
 //! Everything here runs against repositories this test creates in a temporary
@@ -166,7 +171,6 @@ fn two_repositories(root: &Path) {
     commit(&root.join("nested"), "lib.rs", "fix logout", late);
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn merges_every_repository_into_one_ordered_page_and_binds_the_cursor_to_the_filters() {
     let directory = tempfile::tempdir().unwrap();
@@ -272,7 +276,6 @@ async fn merges_every_repository_into_one_ordered_page_and_binds_the_cursor_to_t
     );
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn filters_the_graph_on_the_server_and_keeps_the_colour_when_narrowed() {
     let directory = tempfile::tempdir().unwrap();
@@ -434,7 +437,6 @@ async fn filters_the_graph_on_the_server_and_keeps_the_colour_when_narrowed() {
     assert_eq!(status, StatusCode::NOT_FOUND, "{refused}");
 }
 
-#[cfg(unix)]
 #[tokio::test]
 async fn the_branch_tree_answers_for_every_repository_at_once() {
     let directory = tempfile::tempdir().unwrap();
@@ -570,7 +572,6 @@ async fn the_branch_tree_answers_for_every_repository_at_once() {
 /// It is asked of Git rather than inferred, and it is asked *per checkout*: the
 /// nested repository below is configured with a different address, which is
 /// exactly the case one workspace-wide guess gets wrong.
-#[cfg(unix)]
 #[tokio::test]
 async fn each_checkout_reports_the_identity_it_would_commit_as() {
     let directory = tempfile::tempdir().unwrap();

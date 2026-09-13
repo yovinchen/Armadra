@@ -233,7 +233,9 @@ impl TerminalManager {
 
     /// Moves a session's idle clock back so a test can reach the dormancy
     /// deadline without sleeping through it.
-    #[cfg(test)]
+    // `terminal::tests::dormancy` is the only caller and it needs a real tmux
+    // session, so it does not exist on Windows.
+    #[cfg(all(test, unix))]
     pub(super) fn backdate_idle_for_test(&self, session_id: &str, by: Duration) {
         let mut attachments = self
             .inner

@@ -4,12 +4,17 @@
 use tempfile::tempdir;
 
 use axum::http::StatusCode;
-use serde_json::{Value, json};
+use serde_json::json;
 
 use super::support::*;
 use crate::api::workspaces::register_imported_workspace;
 use crate::imports;
+// Only the cascade test below needs these, and it is Unix-only because it
+// drives a real terminal session.
+#[cfg(unix)]
 use crate::{AppState, db, error::AppError, events::EventHub};
+#[cfg(unix)]
+use serde_json::Value;
 
 #[tokio::test]
 async fn workspace_import_registration_failure_removes_its_owned_directory() {

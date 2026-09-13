@@ -1,6 +1,9 @@
 use super::*;
 use std::fs;
 use tempfile::TempDir;
+// Both of these belong to the cases that run a real provider CLI through a
+// shell script, which only the Unix cases below do.
+#[cfg(unix)]
 const HELP: &str = "--bare --tools --strict-mcp-config --mcp-config --disable-slash-commands --setting-sources --no-session-persistence --output-format --max-budget-usd";
 fn git_cmd(root: &Path, args: &[&str]) {
     let result = std::process::Command::new("git")
@@ -76,6 +79,7 @@ print(json.dumps({{'type':'result','subtype':'success','is_error':False,'result'
         timeout: Duration::from_secs(3),
     }
 }
+#[cfg(unix)]
 fn request(source: &GitMessageSource) -> GitMessageRequest {
     GitMessageRequest {
         provider: PROVIDER.into(),

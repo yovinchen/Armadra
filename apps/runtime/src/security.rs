@@ -262,15 +262,16 @@ mod tests {
         assert!(matches!(result, Err(AppError::Forbidden(_))));
     }
 
+    // Creating a symlink on Windows needs a privilege the CI account does not
+    // have, so the escape this asserts cannot be staged there at all.
+    #[cfg(unix)]
     #[test]
     fn rejects_symlink_escape() {
         let workspace = tempdir().unwrap();
         let outside = tempdir().unwrap();
         fs::write(outside.path().join("secret.txt"), "nope").unwrap();
-        #[cfg(unix)]
         std::os::unix::fs::symlink(outside.path(), workspace.path().join("escape")).unwrap();
 
-        #[cfg(unix)]
         assert!(matches!(
             resolve_in_root(workspace.path(), "escape/secret.txt"),
             Err(AppError::Forbidden(_))

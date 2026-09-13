@@ -1,3 +1,8 @@
+// Every case in this file drives the real `git` CLI over a POSIX
+// temporary tree and a Unix-socket Runtime; there is nothing left to run on
+// Windows, so the whole file compiles away instead of leaving dead helpers.
+#![cfg(unix)]
+
 use armadra_runtime::{
     AppState, db, events::EventHub, hook::HookService, router_with_state, settings::SettingsStore,
     terminal::TerminalManager, usage::UsageService,
@@ -55,7 +60,6 @@ fn git(root: &std::path::Path, args: &[&str]) {
         String::from_utf8_lossy(&out.stderr)
     );
 }
-#[cfg(unix)]
 #[tokio::test]
 async fn message_routes_read_staged_source_and_require_execution_authority() {
     let directory = tempfile::tempdir().unwrap();

@@ -1,14 +1,17 @@
 //! Tests for the desktop's Host discovery adapter.
 
-use std::{
-    io::{Read, Write},
-    process::Stdio,
-};
+use std::io::{Read, Write};
 
 use armadra_protocol::{Message, PROTOCOL_MAJOR, PROTOCOL_MINOR};
 
-use super::launch::{binary_name, read_limited, run_start_observed};
+use super::launch::{binary_name, read_limited};
+// The launch cases below stage a detached child with a shell script, which is
+// the Unix half of this adapter.
+#[cfg(unix)]
+use super::launch::run_start_observed;
 use super::*;
+#[cfg(unix)]
+use std::process::Stdio;
 
 fn status() -> v1::HostStatus {
     v1::HostStatus {
