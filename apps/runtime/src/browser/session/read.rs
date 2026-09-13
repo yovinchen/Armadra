@@ -25,13 +25,15 @@ pub async fn read_in(
 ) -> AppResult<ReadResponse> {
     let place = live.place(address)?;
     // The title lands through `Page.loadEventFired`, which can still be in
-    // flight when a read arrives right after opening a session. Asking the page
-    // is cheap and makes every read self-consistent.
+    // flight when a read arrives right after opening a session — and until it
+    // does, Chrome's target info carries the URL *as* the title, so an empty
+    // check is not enough (the Linux runner read exactly that). Asking the
+    // page is cheap and makes every read self-consistent.
     if place.active
         && place.frame_id.is_empty()
-        && live.snapshot().title.is_empty()
         && let Ok(Value::String(title)) = live.evaluate_in(&place, dom::TITLE).await
         && !title.is_empty()
+        && live.snapshot().title != title
     {
         live.edit(|record| record.title = title);
     }
