@@ -51,6 +51,7 @@
 | [发布、更新与服务安装](design/updates-and-service-install.md)   | S03：下载、自动更新、签名发布与系统服务     |
 | [React Flow 画布](design/canvas-react-flow.md)                  | 画布换成 React Flow：能力映射与批次         |
 | [Agent 协作通道](design/agent-collaboration-channels.md)        | Pi / OMP / Copilot 的 Hook 适配与省资源通道 |
+| [Agent 接入归一](design/agent-integration-mcp.md)               | MCP 做操作 API、Hook 只报事件、旧残留修复   |
 | [桌面壳原生 Host 会话](design/host-native-session.md)           | 打包桌面壳经私有通道取票、Bearer 会话       |
 
 ## status/ 已验证进度
