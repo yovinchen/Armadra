@@ -23,7 +23,6 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/ui/dropdown-menu";
-import { modelSuggestions } from "@armadra/shared";
 import { useT } from "@/app/preferences-store";
 import { useAgentsQuery } from "@/app/use-agents";
 import { useCanvasStore } from "@/store/canvas-store";
@@ -31,6 +30,7 @@ import { AccountBindingBadge } from "@/agent/account/AccountBindingBadge";
 import { ContextUsageMenu } from "@/agent/context-usage/ContextUsageMenu";
 import { useContextUsage } from "@/agent/context-usage/use-context-usage";
 import { agentLabel } from "@/agent/launch";
+import { useAgentModels } from "../agent/models";
 import { useNodeCapabilities } from "@/agent/capabilities";
 import { PendingLaunchButton } from "@/agent/PendingLaunchButton";
 import { StateSourceBadge } from "@/agent/StateSourceBadge";
@@ -137,15 +137,9 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
   const executionHost = data?.ssh ? "ssh" : "local";
   const capabilities = useNodeCapabilities(agent?.id, executionHost);
   const modelSelectable = capabilities.includes("supportsModelSelection");
-  const models = React.useMemo(
-    () =>
-      modelSuggestions(
-        agents.data?.find((entry) => entry.id === agent?.id)?.baseAgent ??
-          agent?.id ??
-          "",
-      ),
-    [agents.data, agent?.id],
-  );
+  // 列表由 Runtime 拼（CLI 自己报的 → models.dev 目录 → 离线写死表），
+  // 用户实测过写死表里只有两个过时的 Codex 模型。
+  const { models } = useAgentModels(agent?.id);
   const selectModel = React.useCallback(
     (model: string | undefined) => {
       if (!agent) return;
@@ -427,11 +421,16 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
             </DropdownMenuItem>
             {models.map((model) => (
               <DropdownMenuItem
-                key={model}
-                disabled={agent.model === model}
-                onSelect={() => selectModel(model)}
+                key={model.id}
+                disabled={agent.model === model.id}
+                onSelect={() => selectModel(model.id)}
               >
-                {model}
+                {model.label}
+                {model.source === "cli" && (
+                  <span className="ml-auto pl-3 text-[11px] text-muted-foreground">
+                    CLI
+                  </span>
+                )}
               </DropdownMenuItem>
             ))}
           </DropdownMenuSubContent>
