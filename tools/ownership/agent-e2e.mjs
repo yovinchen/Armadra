@@ -29,7 +29,12 @@
 //   6. **A handoff is frozen, then settled honestly.** Preparing sends nothing;
 //      accepting puts the bundle in the target's inbox; an outcome nobody can
 //      attribute is not retried.
-//   7. **A rollback is a rollback.** The reverse export goes back into the
+//   7. **Integration is execution, not record.** Reading, installing,
+//      uninstalling and repairing a CLI's hook-and-skill unit are forwarded to
+//      the machine that runs the CLI and performed there
+//      (docs/design/agent-integration.md §2, §5). A Host that wrote those files
+//      itself would be writing into a configuration it cannot read back.
+//   8. **A rollback is a rollback.** The reverse export goes back into the
 //      Runtime's own six tables, so what the Host recorded during its tenure is
 //      readable from the Runtime afterwards, and the Runtime decides again.
 //
@@ -46,6 +51,7 @@ import { prepareAgentRecords } from "./agent/stages/prepare.mjs";
 import { switchAgentToHost } from "./agent/stages/switch.mjs";
 import { hostServesAgentRecords } from "./agent/stages/host-records.mjs";
 import { settleHandoff } from "./agent/stages/handoff.mjs";
+import { integrationIsForwarded } from "./agent/stages/integration.mjs";
 import { rollbackAgentToRuntime } from "./agent/stages/rollback.mjs";
 
 const domain = "agent";
@@ -85,6 +91,10 @@ try {
     workspaceId,
     nodeId,
     targetId,
+  });
+  await integrationIsForwarded(harness, {
+    driver,
+    claudeConfigHome: harness.claudeConfigHome,
   });
   await rollbackAgentToRuntime(harness, {
     workspaceId,
