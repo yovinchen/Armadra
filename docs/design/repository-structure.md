@@ -135,18 +135,25 @@ go -C apps/host test ./...
 ./armadra.sh check       # 本地一键：以上全部
 ```
 
-CI（`.github/workflows/ci.yml`）按改动路径分作业：
+CI（`.github/workflows/ci.yml`）是一个三平台矩阵作业，不按路径分：平台差异出在
+Runtime（tmux / Unix socket 对 ConPTY / 命名管道），而这类问题只有在三个系统上
+都编译过才暴露，按路径裁剪会正好跳过它。作业内容与发布流水线见
+[CI 与发布](../guides/ci-release.md)。
 
-| 作业     | 触发路径                                 | 内容                                            |
-| -------- | ---------------------------------------- | ----------------------------------------------- |
-| repo     | 任意                                     | `pnpm check`、`pnpm repo:check`                 |
-| web      | `apps/web`、`packages/`                  | test、typecheck、build                          |
-| rust     | `apps/worker`、`crates/`、`apps/desktop` | fmt、clippy `-D warnings`、test                 |
-| host     | `apps/host`、`proto/`                    | vet、test `-race`、Windows/Linux 交叉编译       |
-| protocol | `proto/`                                 | generate 后 diff 为空、三端契约测试             |
-| desktop  | `apps/desktop`                           | prepare-sidecar、`tauri build --debug`（macOS） |
+| 矩阵行           | 内容                                                  |
+| ---------------- | ----------------------------------------------------- |
+| `ubuntu-latest`  | 下列全部，外加 Host 对另外三个 GOOS/GOARCH 的交叉编译 |
+| `macos-14`       | 下列全部                                              |
+| `windows-latest` | 下列全部，Go 不开 `-race`（需要 cgo）                 |
 
-分支保护要求 repo 与受影响作业通过；发布分支额外跑 desktop。
+每行：`pnpm check`、`pnpm repo:test` / `release:test`、`pnpm -r test` /
+`typecheck`、web build、`pnpm protocol:test`、`cargo clippy -D warnings`、
+`cargo test`（均 `--exclude armadra-desktop`）、Go `vet` 与 `test`、桌面壳
+`cargo check`。分支保护要求这三行都通过。
+
+平台专属用例用 `cfg(unix)` / `cfg(target_os = ...)` 门控，CI 不做按名字过滤的
+排除；`pnpm ci:workflows` 会校验工作流里没有这类过滤，也会校验 runner 标签与
+发布矩阵的三元组与 `tools/release/artifacts.mjs` 一致。
 
 ## 5. 调整顺序
 
