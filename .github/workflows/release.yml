@@ -41,13 +41,6 @@ env:
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
   CARGO_PROFILE_TEST_DEBUG: line-tables-only
   CARGO_INCREMENTAL: "0"
-  # Runtime 的 Git 操作（merge / cherry-pick / amend）用仓库或全局配置里的身份
-  # 提交；runner 两者都没有，Git 会在动树之前拒绝，测试就把它记成
-  # unknownOutcome。开发机上是全局配置在兜底，这里由环境变量兜。
-  GIT_AUTHOR_NAME: Armadra CI
-  GIT_AUTHOR_EMAIL: ci@armadra.invalid
-  GIT_COMMITTER_NAME: Armadra CI
-  GIT_COMMITTER_EMAIL: ci@armadra.invalid
 
 jobs:
   verify:
@@ -61,6 +54,16 @@ jobs:
     steps:
       # 手动补发一个标签时要构建那个标签的树，而不是触发分支的 HEAD。
       - uses: actions/checkout@v4
+      # Runtime 的 Git 操作（merge / cherry-pick / amend）用仓库或全局配置里的
+      # 身份提交；runner 两者都没有，Git 会在动树之前拒绝，测试就把它记成
+      # unknownOutcome。开发机上是全局配置在兜底，这里也放一份全局配置——
+      # 不用环境变量，因为 GIT_AUTHOR_* 会压过测试夹具自己 `-c user.name` 写的作者。
+      - name: 给 Git 一个身份
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global user.name "Armadra CI"
+          git config --global user.email "ci@armadra.invalid"
         with:
           ref: ${{ inputs.tag || github.sha }}
       # ubuntu runner 预装的 .NET / Android / Haskell / CodeQL 占掉十几 GB；
