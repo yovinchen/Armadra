@@ -90,6 +90,24 @@ function which(name) {
 }
 
 /** Create one archive holding one executable. */
+/**
+ * Which `tar` to run.
+ *
+ * On a Windows runner the first `tar` on PATH is usually Git's GNU tar, which
+ * reads `C:\Users\…` as `host:path` and answers "Cannot connect to C". The
+ * bsdtar Windows ships in System32 takes drive letters and `--numeric-owner`
+ * alike, so it is preferred whenever it is there.
+ */
+export function tarCommand() {
+  if (process.platform !== "win32") return "tar";
+  const system = join(
+    process.env.SystemRoot ?? "C:\\Windows",
+    "System32",
+    "tar.exe",
+  );
+  return existsSync(system) ? system : "tar";
+}
+
 export function archive({ source, outDir, assetName, target }) {
   mkdirSync(outDir, { recursive: true });
   const staging = mkdtempSync(join(tmpdir(), "armadra-package-"));
@@ -106,7 +124,7 @@ export function archive({ source, outDir, assetName, target }) {
       // --numeric-owner and a fixed mtime keep two runs of one release from
       // producing two different archives of the same bytes.
       execFileSync(
-        "tar",
+        tarCommand(),
         ["--numeric-owner", "-czf", output, "-C", staging, basename(inner)],
         {
           stdio: "inherit",
