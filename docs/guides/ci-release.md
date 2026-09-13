@@ -72,7 +72,7 @@
 | runner             | target          | triple                    |
 | ------------------ | --------------- | ------------------------- |
 | `macos-14`         | darwin-aarch64  | aarch64-apple-darwin      |
-| `macos-13`         | darwin-x86_64   | x86_64-apple-darwin       |
+| `macos-15-intel`   | darwin-x86_64   | x86_64-apple-darwin       |
 | `ubuntu-24.04`     | linux-x86_64    | x86_64-unknown-linux-gnu  |
 | `ubuntu-24.04-arm` | linux-aarch64   | aarch64-unknown-linux-gnu |
 | `windows-2022`     | windows-x86_64  | x86_64-pc-windows-msvc    |

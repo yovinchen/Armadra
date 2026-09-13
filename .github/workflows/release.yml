@@ -117,7 +117,7 @@ jobs:
           - runner: macos-14
             target: darwin-aarch64
             triple: aarch64-apple-darwin
-          - runner: macos-13
+          - runner: macos-15-intel
             target: darwin-x86_64
             triple: x86_64-apple-darwin
           - runner: ubuntu-24.04
