@@ -71,7 +71,7 @@ function repairDescription(
 function AgentIntegrationRow({ agent }: { agent: AgentInfo }) {
   const t = useT();
   const refresh = useIntegrationRefresh();
-  const { integration, supported } = useAgentIntegration(agent);
+  const { integration } = useAgentIntegration(agent);
 
   const install = useMutation({
     mutationFn: (action: "install" | "uninstall") =>
@@ -107,9 +107,20 @@ function AgentIntegrationRow({ agent }: { agent: AgentInfo }) {
 
   // 能力位说的是「这个适配器有没有 Hook 通道」；没有的话装什么都没有对象。
   const hooked = agent.capabilities.includes("hooks");
-  const installed = integration.hook.installed;
   const busy = install.isPending || repair.isPending;
-  const legacy = integration.legacy.found;
+  // 第一次读还没回来：只画标签与一个「读取中」徽标，不猜任何状态。
+  if (!integration) {
+    return (
+      <SettingsRow label={agent.label}>
+        <Badge variant="outline">{t("integration.loading")}</Badge>
+      </SettingsRow>
+    );
+  }
+  const installed = integration.hook.installed;
+  // 每条残留是磁盘上的一处：配置里的一个条目或一个目录，连同它的样子。
+  const legacy = integration.legacy.found.map(
+    (finding) => `${finding.path} (${finding.detail})`,
+  );
 
   return (
     <SettingsRow
@@ -180,9 +191,7 @@ function AgentIntegrationRow({ agent }: { agent: AgentInfo }) {
         </Button>
       )}
 
-      {/* Runtime 还没有这条路由时不画「修复」：一个必然 404 的按钮比没有
-          按钮更糟——F1 的整条误诊就是从一个 404 开始的。 */}
-      {supported && legacy.length > 0 && (
+      {legacy.length > 0 && (
         <Button
           variant="destructive"
           size="sm"

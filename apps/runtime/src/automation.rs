@@ -414,7 +414,14 @@ async fn cold_start(
         .await
         .map_err(|_| "COLD_START_SPAWN_FAILED".to_owned())?;
     let mut line = quote(&program);
-    for arg in &spec.args {
+    // The adapter's own argv is resolved here rather than frozen into the plan:
+    // the path is this data directory's and the flag is this CLI version's
+    // (docs/design/agent-integration.md §3). A plan stored yesterday points at
+    // an agent id; what that id needs to load its hooks is answered today.
+    let injected = crate::hook::install::integration::launch_args(
+        state.settings.base_agent(&spec.agent_id).as_str(),
+    );
+    for arg in injected.iter().chain(spec.args.iter()) {
         line.push(' ');
         line.push_str(&quote(arg));
     }

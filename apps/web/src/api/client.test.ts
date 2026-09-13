@@ -569,58 +569,114 @@ describe("写文件", () => {
   });
 });
 
-describe("hook 安装", () => {
-  it("装 / 卸都是 POST，并返回写到哪个配置文件", async () => {
-    const fetchMock = stubJson({
+describe("集成安装", () => {
+  /** 一份装好的集成状态（设计 agent-integration §5）。 */
+  function installed(overrides: Record<string, unknown> = {}) {
+    return {
       agentId: "claude",
-      configPath: "/home/u/.claude/settings.json",
-      clientRevision: 2,
-      installed: true,
-    });
+      mode: "launch",
+      hook: {
+        installed: true,
+        path: "/data/integration/claude/settings.json",
+        revision: 4,
+      },
+      skill: {
+        installed: true,
+        path: "/home/u/.claude/skills/armadra/SKILL.md",
+        revision: 6,
+      },
+      legacy: { found: [] },
+      revision: 406,
+      installedRevision: 406,
+      stale: false,
+      launchArgs: ["--settings", "/data/integration/claude/settings.json"],
+      ...overrides,
+    };
+  }
 
-    const report = await runtimeApi.installAgentHooks("claude");
-    expect(report.installed).toBe(true);
-    expect(report.configPath).toContain("settings.json");
+  it("读状态是 GET，装 / 卸是 POST，两半一起答", async () => {
+    const fetchMock = stubJson(installed());
+    const state = await runtimeApi.agentIntegration("claude");
+    expect(state.mode).toBe("launch");
+    expect(state.hook.installed && state.skill.installed).toBe(true);
+    expect(state.launchArgs).toEqual([
+      "--settings",
+      "/data/integration/claude/settings.json",
+    ]);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("http://127.0.0.1:43120/api/agents/claude/hooks/install");
-    expect(init.method).toBe("POST");
+    expect(url).toBe("http://127.0.0.1:43120/api/agents/claude/integration");
+    expect(init?.method ?? "GET").toBe("GET");
 
-    stubJson({
-      agentId: "custom:x",
-      configPath: "/tmp/hooks.json",
-      clientRevision: 2,
-      installed: false,
-    });
+    const installMock = stubJson(installed());
     await expect(
-      runtimeApi.uninstallAgentHooks("custom:x"),
-    ).resolves.toMatchObject({ installed: false });
+      runtimeApi.installAgentIntegration("claude"),
+    ).resolves.toMatchObject({ stale: false });
+    const [installUrl, installInit] = installMock.mock.calls[0] as [
+      string,
+      RequestInit,
+    ];
+    expect(installUrl).toBe(
+      "http://127.0.0.1:43120/api/agents/claude/integration/install",
+    );
+    expect(installInit.method).toBe("POST");
+
+    stubJson(
+      installed({
+        agentId: "custom:x",
+        hook: { installed: false, revision: 0 },
+        skill: { installed: false, revision: 0 },
+        launchArgs: [],
+      }),
+    );
+    const removed = await runtimeApi.uninstallAgentIntegration("custom:x");
+    expect(removed.hook.installed || removed.skill.installed).toBe(false);
   });
 
-  it("技能装 / 卸走自己的路由，并回报改过哪些文件", async () => {
+  /** 装了旧版本：两半都在，但修订不是这一版的。 */
+  it("旧修订读出来就是 stale，旧残留原样带回来", async () => {
+    stubJson(
+      installed({
+        installedRevision: 305,
+        stale: true,
+        legacy: {
+          found: [
+            {
+              kind: "hook_entry",
+              path: "/home/u/.claude/settings.json",
+              detail: "/usr/local/bin/aicc-hook claude",
+            },
+          ],
+        },
+      }),
+    );
+    const state = await runtimeApi.agentIntegration("claude");
+    expect(state.stale).toBe(true);
+    expect(state.legacy.found[0]?.kind).toBe("hook_entry");
+  });
+
+  it("修复报告说清删了什么、留了什么、备份在哪", async () => {
     const fetchMock = stubJson({
       agentId: "claude",
-      installed: true,
-      revision: 5,
-      paths: ["/home/u/.claude/skills/armadra/SKILL.md"],
+      found: [
+        {
+          kind: "codex_unknown_key",
+          path: "/home/u/.codex/hooks.json",
+          detail: "version",
+        },
+      ],
+      removed: ["/home/u/.codex/hooks.json: version"],
+      kept: ["/home/u/.codex/hooks.json: session_start → /opt/audit.sh"],
+      backup: "/home/u/.codex/hooks.json.armadra-backup-20260913101500",
+      backups: ["/home/u/.codex/hooks.json.armadra-backup-20260913101500"],
     });
-    const report = await runtimeApi.installAgentSkills("claude");
-    expect(report.revision).toBe(5);
-    expect(report.paths).toHaveLength(1);
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("http://127.0.0.1:43120/api/agents/claude/skills/install");
-    expect(init.method).toBe("POST");
-
-    // 内容没变时 `paths` 是空的，文件一个字节都没写。
-    stubJson({ agentId: "codex", installed: true, revision: 5, paths: [] });
-    await expect(runtimeApi.installAgentSkills("codex")).resolves.toMatchObject(
-      {
-        paths: [],
-      },
+    const report = await runtimeApi.repairAgentIntegration("claude");
+    expect(report.removed).toHaveLength(1);
+    expect(report.kept[0]).toContain("/opt/audit.sh");
+    expect(report.backup).toContain(".armadra-backup-");
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "http://127.0.0.1:43120/api/agents/claude/integration/repair",
     );
-    stubJson({ agentId: "codex", installed: false, paths: [] });
-    await expect(
-      runtimeApi.uninstallAgentSkills("codex"),
-    ).resolves.toMatchObject({ installed: false });
   });
 
   it("清未读标记打到 agent-status 路由", async () => {
