@@ -193,6 +193,22 @@ async fn main() -> anyhow::Result<()> {
     if restored > 0 {
         tracing::info!(restored, "marked agent status rows as restored");
     }
+    // What an earlier product name left in the user's CLI configuration
+    // (docs/design/agent-integration.md §4). Detected on every start and
+    // *never* repaired here: a machine that boots and silently edits the
+    // user's `~/.claude` or `~/.codex` is the problem this check exists to
+    // report. The settings page's Repair button is the only writer.
+    let residue = armadra_runtime::hook::install::repair::scan_all();
+    if !residue.is_empty() {
+        tracing::warn!(
+            found = residue.len(),
+            paths = ?residue
+                .iter()
+                .map(|finding| format!("{}: {} ({})", finding.kind, finding.path, finding.detail))
+                .collect::<Vec<_>>(),
+            "an earlier install left entries behind; the settings page can repair them"
+        );
+    }
     let events = EventHub::new();
     let settings = SettingsStore::load();
     let terminals = TerminalManager::new(pool.clone(), events.clone());
