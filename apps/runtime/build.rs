@@ -20,10 +20,12 @@ use std::{path::PathBuf, process::Command};
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=ARMADRA_BUILD");
-    // A new commit (or a checkout) rewrites HEAD, so the stamp follows the
-    // tree rather than going stale until build.rs itself is edited.
-    if let Some(head) = git_head_file() {
-        println!("cargo:rerun-if-changed={}", head.display());
+    // A checkout rewrites HEAD, but a new commit on the same branch rewrites
+    // only the ref HEAD points at (or packed-refs after a gc), so all three
+    // are watched; otherwise the stamp goes stale until build.rs is edited —
+    // which is exactly what a packaged Runtime reported once.
+    for path in git_watch_files() {
+        println!("cargo:rerun-if-changed={}", path.display());
     }
     let build = std::env::var("ARMADRA_BUILD")
         .ok()
@@ -68,12 +70,26 @@ fn git_build() -> Option<String> {
     })
 }
 
-/// `.git/HEAD` for this checkout, resolving the `gitdir:` pointer a worktree
-/// leaves behind. `None` when there is no git here, which is not an error.
-fn git_head_file() -> Option<PathBuf> {
-    let git_path = git(&["rev-parse", "--absolute-git-dir"])?;
-    let head = PathBuf::from(git_path).join("HEAD");
-    head.exists().then_some(head)
+/// The files whose change means "HEAD now names another commit": `HEAD`
+/// itself, the ref it points at, and `packed-refs`. Paths resolve through the
+/// `gitdir:` pointer a worktree leaves behind; an empty list means there is no
+/// git here, which is not an error.
+fn git_watch_files() -> Vec<PathBuf> {
+    let Some(git_path) = git(&["rev-parse", "--absolute-git-dir"]) else {
+        return Vec::new();
+    };
+    let git_dir = PathBuf::from(git_path);
+    let mut files = vec![git_dir.join("HEAD"), git_dir.join("packed-refs")];
+    if let Some(reference) = git(&["symbolic-ref", "-q", "HEAD"]).filter(|value| !value.is_empty())
+    {
+        // Branch refs live in the common dir even for a linked worktree.
+        let common = git(&["rev-parse", "--git-common-dir"])
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute())
+            .unwrap_or_else(|| git_dir.clone());
+        files.push(common.join(reference));
+    }
+    files.into_iter().filter(|path| path.exists()).collect()
 }
 
 fn timestamp_build() -> String {
