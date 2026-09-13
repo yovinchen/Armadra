@@ -38,6 +38,8 @@ pub(super) fn hash_reader(file: &mut File, limit: u64) -> AppResult<(u64, Vec<u8
 }
 
 pub(super) fn private_directory(path: &Path) -> AppResult<()> {
+    // The only mutation is the Unix-only `mode` below.
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut builder = fs::DirBuilder::new();
     #[cfg(unix)]
     {

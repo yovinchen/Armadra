@@ -374,7 +374,9 @@ impl PowerService {
 
     /// Move a lease's expiry into the past so the expiry path can be exercised
     /// without a test waiting out [`MIN_TTL`].
-    #[cfg(test)]
+    // Only the macOS lease cases reach this; elsewhere the inhibitor has no
+    // helper to count and the whole `resources::tests::power` module is empty.
+    #[cfg(all(test, target_os = "macos"))]
     pub(crate) fn expire_for_test(&self, id: &str) {
         if let Some(lease) = self.leases().get_mut(id) {
             lease.expires_at = Utc::now() - chrono::Duration::seconds(1);

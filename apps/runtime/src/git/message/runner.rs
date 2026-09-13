@@ -7,6 +7,8 @@ impl Scratch {
     fn create() -> AppResult<Self> {
         let path =
             std::env::temp_dir().join(format!("armadra-git-message-{}", uuid::Uuid::new_v4()));
+        // The only mutation is the Unix-only `mode` below.
+        #[cfg_attr(not(unix), allow(unused_mut))]
         let mut builder = std::fs::DirBuilder::new();
         #[cfg(unix)]
         {

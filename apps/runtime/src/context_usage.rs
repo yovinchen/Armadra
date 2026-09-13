@@ -27,6 +27,8 @@ pub fn initialize_sequence(
         return Err(std::io::Error::other("invalid context session"));
     }
     let directory = data_dir.join("context-sequences");
+    // The only mutation is the Unix-only `mode` below.
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut builder = std::fs::DirBuilder::new();
     #[cfg(unix)]
     {

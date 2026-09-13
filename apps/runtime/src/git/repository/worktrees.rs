@@ -364,6 +364,8 @@ pub(super) fn create_worktree_parents(
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 operation.mutation_started.store(true, Ordering::SeqCst);
+                // The only mutation is the Unix-only `mode` below.
+                #[cfg_attr(not(unix), allow(unused_mut))]
                 let mut builder = std::fs::DirBuilder::new();
                 #[cfg(unix)]
                 {
