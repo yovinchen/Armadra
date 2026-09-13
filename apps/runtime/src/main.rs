@@ -3,8 +3,9 @@ use std::{env, net::SocketAddr, time::Duration};
 use anyhow::Context;
 use armadra_runtime::{
     AppState, DEFAULT_PORT, db, desktop_control, endpoints, events::EventHub, hook,
-    hook::HookService, index, listen, paths::data_dir, resources::ResourceService,
-    router_with_state, settings::SettingsStore, terminal::TerminalManager, usage::UsageService,
+    hook::HookService, index, listen, paths::data_dir, paths::sqlite_file_url,
+    resources::ResourceService, router_with_state, settings::SettingsStore,
+    terminal::TerminalManager, usage::UsageService,
 };
 use tracing_subscriber::EnvFilter;
 
@@ -157,10 +158,7 @@ async fn main() -> anyhow::Result<()> {
         Err(_) => {
             let data_directory = data_dir();
             std::fs::create_dir_all(&data_directory)?;
-            format!(
-                "sqlite://{}?mode=rwc",
-                data_directory.join("canvas.db").display()
-            )
+            sqlite_file_url(data_directory.join("canvas.db"))
         }
     };
     let pool = db::connect(&database_url).await?;

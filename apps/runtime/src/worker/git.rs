@@ -109,10 +109,9 @@ fn requested(root: &Path, scope: &RepositoryScope) -> AppResult<String> {
     // A path that cannot be resolved is not silently accepted: it is compared
     // as written, which is the conservative reading, and the mismatch is then
     // the refusal below.
-    let resolved_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-    let resolved = candidate
-        .canonicalize()
-        .unwrap_or_else(|_| candidate.to_path_buf());
+    let resolved_root = crate::paths::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let resolved =
+        crate::paths::canonicalize(candidate).unwrap_or_else(|_| candidate.to_path_buf());
     match resolved.strip_prefix(&resolved_root) {
         Ok(relative) if relative.as_os_str().is_empty() => Ok(".".into()),
         Ok(relative) => Ok(relative.to_string_lossy().replace('\\', "/")),

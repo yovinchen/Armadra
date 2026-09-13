@@ -97,12 +97,8 @@ async fn an_empty_database_gets_a_default_workspace_once() {
         .unwrap()
         .expect("a fresh database gets the default workspace");
     assert_eq!(created.name, DEFAULT_WORKSPACE_NAME);
-    let expected = directory
-        .path()
-        .join("workspaces")
-        .join("default")
-        .canonicalize()
-        .unwrap();
+    let expected =
+        crate::paths::canonicalize(directory.path().join("workspaces").join("default")).unwrap();
     assert_eq!(created.root_path, expected.to_string_lossy());
     assert!(created.permissions.execute);
     let boards = list_boards(&pool, &created.id).await.unwrap();

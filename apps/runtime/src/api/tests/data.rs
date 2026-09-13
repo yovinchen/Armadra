@@ -55,7 +55,11 @@ async fn the_data_page_reads_an_info_document_and_backs_the_database_up() {
     let path = std::path::Path::new(backup["path"].as_str().unwrap());
     assert_eq!(
         path.parent(),
-        Some(directory.path().canonicalize().unwrap().as_path())
+        Some(
+            crate::paths::canonicalize(directory.path())
+                .unwrap()
+                .as_path()
+        )
     );
     assert!(
         path.file_name()
@@ -145,7 +149,11 @@ async fn data_backup_includes_uncheckpointed_wal_with_an_active_reader() {
     );
     assert_eq!(
         Path::new(&backup.path).parent(),
-        Some(directory.path().canonicalize().unwrap().as_path())
+        Some(
+            crate::paths::canonicalize(directory.path())
+                .unwrap()
+                .as_path()
+        )
     );
     #[cfg(unix)]
     {

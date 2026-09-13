@@ -75,7 +75,7 @@ async fn export_owned(
     // This is exclusive, including for an existing empty directory. Do not
     // recursively delete partial packages: they may contain the only backup.
     private_directory(destination)?;
-    let destination = fs::canonicalize(destination)?;
+    let destination = crate::paths::canonicalize(destination)?;
     let database = destination.join("source.sqlite");
     crate::sqlite_snapshot::snapshot_to(pool, &database).await?;
     let mut connection = SqliteConnection::connect_with(

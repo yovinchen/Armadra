@@ -314,8 +314,7 @@ fn read_untracked_file(workspace_root: &Path, repository: &Path, path: &str) -> 
             "Untracked file is too large to preview".into(),
         ));
     }
-    let canonical = candidate
-        .canonicalize()
+    let canonical = crate::paths::canonicalize(&candidate)
         .map_err(|_| AppError::BadRequest("Untracked file cannot be resolved".into()))?;
     if !canonical.starts_with(workspace_root) || !canonical.starts_with(repository) {
         return Err(AppError::Forbidden(

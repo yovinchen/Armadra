@@ -105,9 +105,10 @@ fn repo_context_with_execution(
         &["rev-parse", "--show-toplevel"],
         execute,
     )?;
-    let repository = Path::new(repository.strip_suffix('\n').unwrap_or(&repository))
-        .canonicalize()
-        .map_err(|_| AppError::Internal("Git repository root cannot be resolved".into()))?;
+    let repository = crate::paths::canonicalize(Path::new(
+        repository.strip_suffix('\n').unwrap_or(&repository),
+    ))
+    .map_err(|_| AppError::Internal("Git repository root cannot be resolved".into()))?;
     if repository != workspace_root && !repository.starts_with(&workspace_root) {
         return Err(AppError::Forbidden(
             "Git repository root is outside the authorized workspace".into(),
@@ -205,8 +206,7 @@ fn prepare_paths(context: &RepoContext, paths: &[String]) -> AppResult<Vec<(Stri
                 _ => break ancestor,
             }
         };
-        let canonical = existing
-            .canonicalize()
+        let canonical = crate::paths::canonicalize(existing)
             .map_err(|_| AppError::NotFound("Requested path does not exist".into()))?;
         if !canonical.starts_with(&context.workspace_root)
             || !canonical.starts_with(&context.repository)

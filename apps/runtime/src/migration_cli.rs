@@ -70,7 +70,7 @@ pub async fn run(args: &[String]) -> AppResult<()> {
         return Ok(());
     }
     let options = parse(args)?;
-    let source = std::fs::canonicalize(&options.database)?;
+    let source = crate::paths::canonicalize(&options.database)?;
     if !source.is_file() {
         return Err(AppError::BadRequest(
             "Export source must be a database file".into(),

@@ -234,7 +234,7 @@ fn rejects_untracked_symlinks_that_point_outside_the_workspace() {
 #[test]
 fn untracked_binary_file_does_not_fail_the_scan() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let root = dir.path().canonicalize().expect("canonical");
+    let root = crate::paths::canonicalize(dir.path()).expect("canonical");
     let run = |args: &[&str]| {
         let status = Command::new("git")
             .args(args)

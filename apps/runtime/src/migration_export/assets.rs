@@ -292,7 +292,7 @@ fn open_managed(root: &Path, relative: &Path) -> std::io::Result<File> {
     #[cfg(windows)]
     {
         use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
-        let root = fs::canonicalize(root)?;
+        let root = crate::paths::canonicalize(root)?;
         let mut path = root;
         let mut parents = Vec::new();
         for component in std::iter::once(None).chain(relative.components().map(Some)) {

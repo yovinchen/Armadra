@@ -139,11 +139,10 @@ fn source(workspace: &Path, url: &str) -> AppResult<String> {
         return Ok(remote);
     }
     let candidate = if Path::new(url).is_absolute() {
-        let resolved = std::fs::canonicalize(url)
+        let resolved = crate::paths::canonicalize(url)
             .map_err(|_| AppError::BadRequest("Repository URL is invalid".into()))?;
-        let root = workspace
-            .canonicalize()
-            .unwrap_or_else(|_| workspace.to_path_buf());
+        let root =
+            crate::paths::canonicalize(workspace).unwrap_or_else(|_| workspace.to_path_buf());
         if !resolved.starts_with(&root) {
             return Err(AppError::Forbidden(
                 "A local clone source must be inside the workspace".into(),

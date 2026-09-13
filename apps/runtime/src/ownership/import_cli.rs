@@ -113,14 +113,14 @@ pub async fn run(args: &[String]) -> AppResult<()> {
         return Ok(());
     }
     let options = parse(args)?;
-    let package = std::fs::canonicalize(&options.package)?;
+    let package = crate::paths::canonicalize(&options.package)?;
     if !package.is_dir() {
         return Err(AppError::BadRequest(
             "The import package must be a directory".into(),
         ));
     }
     let database = match options.database {
-        Some(path) => std::fs::canonicalize(path)?,
+        Some(path) => crate::paths::canonicalize(path)?,
         None => crate::paths::data_dir().join("canvas.db"),
     };
     let pool = crate::worker::open_canvas_database(&database)

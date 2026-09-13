@@ -665,7 +665,7 @@ fn hash_untracked(root: &Path, name: &str, digest: &mut Sha256, budget: &mut u64
         return Err(malformed());
     }
     let path = root.join(relative);
-    let parent = path.parent().ok_or_else(malformed)?.canonicalize()?;
+    let parent = crate::paths::canonicalize(path.parent().ok_or_else(malformed)?)?;
     if !parent.starts_with(root) {
         return Err(AppError::BadRequest(
             "Untracked path escapes the repository".into(),
