@@ -345,7 +345,7 @@ impl RepositoryService {
             return Err(malformed());
         }
         let mut stashes = Vec::with_capacity(fields.len() / 3);
-        for (index, chunk) in fields.chunks_exact(3).enumerate() {
+        for (index, chunk) in fields.as_chunks::<3>().0.iter().enumerate() {
             let text = |i: usize| String::from_utf8(chunk[i].to_vec()).map_err(|_| malformed());
             let oid = text(0)?;
             if !valid_oid(&oid) {
