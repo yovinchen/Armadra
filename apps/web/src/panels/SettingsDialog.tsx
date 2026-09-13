@@ -9,7 +9,7 @@ import { AgentPage } from "./settings/pages/AgentPage";
 import { DataPage } from "./settings/pages/DataPage";
 import { GeneralPage } from "./settings/pages/GeneralPage";
 import { GithubPage } from "./settings/pages/GithubPage";
-import { HooksPage } from "./settings/pages/HooksPage";
+import { IntegrationPage } from "./settings/pages/IntegrationPage";
 import { HostPage } from "./settings/pages/HostPage";
 import { KeybindingsPage } from "./settings/pages/KeybindingsPage";
 import { NotificationsPage } from "./settings/pages/NotificationsPage";
@@ -39,7 +39,7 @@ const SECTION_PAGES: Record<string, () => React.ReactElement> = {
   notifications: NotificationsPage,
   whiteboard: WhiteboardPage,
   agent: AgentPage,
-  hooks: HooksPage,
+  integration: IntegrationPage,
   host: HostPage,
   github: GithubPage,
   terminal: TerminalPage,

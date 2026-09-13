@@ -19,6 +19,10 @@ const installAgentHooks = vi.fn();
 const uninstallAgentHooks = vi.fn();
 const installAgentSkills = vi.fn();
 const uninstallAgentSkills = vi.fn();
+const agentIntegration = vi.fn();
+const repairAgentIntegration = vi.fn();
+const installAgentIntegration = vi.fn();
+const uninstallAgentIntegration = vi.fn();
 const testSshHost = vi.fn();
 
 vi.mock("../api/client", () => ({
@@ -37,6 +41,10 @@ vi.mock("../api/client", () => ({
     uninstallAgentHooks: (id: string) => uninstallAgentHooks(id),
     installAgentSkills: (id: string) => installAgentSkills(id),
     uninstallAgentSkills: (id: string) => uninstallAgentSkills(id),
+    agentIntegration: (id: string) => agentIntegration(id),
+    repairAgentIntegration: (id: string) => repairAgentIntegration(id),
+    installAgentIntegration: (id: string) => installAgentIntegration(id),
+    uninstallAgentIntegration: (id: string) => uninstallAgentIntegration(id),
     testSshHost: (id: string) => testSshHost(id),
     /** 设置页经归属网关路由：探不到归属，整个域就是只读的。 */
     ownershipDomains: () => Promise.resolve(settledDomains()),
@@ -156,6 +164,37 @@ describe("SettingsDialog", () => {
       paths: ["/home/u/.claude/skills/armadra/SKILL.md"],
     });
     uninstallAgentSkills.mockReset();
+    agentIntegration.mockReset().mockResolvedValue({
+      agentId: "claude",
+      mode: "launch",
+      hook: { installed: true, revision: 3 },
+      skill: { installed: false },
+      legacy: { found: ["~/.claude/settings.json → hooks.SessionStart[0]"] },
+      revision: 3,
+    });
+    repairAgentIntegration.mockReset().mockResolvedValue({
+      agentId: "claude",
+      found: ["~/.claude/settings.json → hooks.SessionStart[0]"],
+      removed: ["~/.claude/settings.json → hooks.SessionStart[0]"],
+      kept: [],
+      backup: "~/.claude/settings.json.armadra-backup-20260913",
+    });
+    installAgentIntegration.mockReset().mockResolvedValue({
+      agentId: "claude",
+      mode: "launch",
+      hook: { installed: true, revision: 4 },
+      skill: { installed: true, revision: 4 },
+      legacy: { found: [] },
+      revision: 4,
+    });
+    uninstallAgentIntegration.mockReset().mockResolvedValue({
+      agentId: "claude",
+      mode: "launch",
+      hook: { installed: false },
+      skill: { installed: false },
+      legacy: { found: [] },
+      revision: 4,
+    });
     testSshHost.mockReset();
     usePreferencesStore.setState({
       lastSettingsSection: null,
@@ -312,56 +351,50 @@ describe("SettingsDialog", () => {
     expect(usePreferencesStore.getState().agentModes.claude).toBeUndefined();
   });
 
-  it("Hook 页按 rev 显示状态，并能装 / 卸", async () => {
+  /**
+   * 接入归一（Agent 接入归一 §2）：一种 CLI 一行，一行里注入方式、Hook、
+   * 技能、旧残留全都在，「安装 / 卸载」一个按钮同时管 Hook 与技能。
+   */
+  it("集成页一行说清注入方式、Hook、技能与旧残留", async () => {
     open();
-    fireEvent.click(navItem(zh("settings.section.hooks")));
+    fireEvent.click(navItem(zh("integration.nav")));
+    // 旧残留逐条列出来，用户在按「修复」之前看得见将要动哪些东西。
+    // 它也是「Runtime 真的答了这一行」的证据：`GET /api/agents` 那份兜底
+    // 报不出残留，所以等它出现就等于等接口落地。
+    expect(await screen.findByText(/hooks\.SessionStart\[0\]/)).toBeTruthy();
     expect(
-      await screen.findByText(
-        zh("settings.hooks.revision").replace("{value}", "3"),
-      ),
+      screen.getByText(zh("integration.hook.revision").replace("{value}", "3")),
     ).toBeTruthy();
+    expect(screen.getByText(zh("integration.mode.launch"))).toBeTruthy();
+    expect(screen.getByText(zh("integration.skill.missing"))).toBeTruthy();
 
-    // 技能与 Hook 是两张卡片，按钮字面一样，所以按卡片定位。
-    const hooks = settingsGroup(zh("settings.hooks"));
     fireEvent.click(
-      within(hooks).getByRole("button", {
-        name: zh("settings.hooks.reinstall"),
-      }),
+      screen.getByRole("button", { name: zh("integration.reinstall") }),
     );
     await waitFor(() =>
-      expect(installAgentHooks).toHaveBeenCalledWith("claude"),
+      expect(installAgentIntegration).toHaveBeenCalledWith("claude"),
     );
+    // 一个安装单元：不再各调一次老的两条路由。
+    expect(installAgentHooks).not.toHaveBeenCalled();
+    expect(installAgentSkills).not.toHaveBeenCalled();
+
     fireEvent.click(
-      within(hooks).getByRole("button", {
-        name: zh("settings.hooks.uninstall"),
-      }),
+      screen.getByRole("button", { name: zh("integration.uninstall") }),
     );
     await waitFor(() =>
-      expect(uninstallAgentHooks).toHaveBeenCalledWith("claude"),
+      expect(uninstallAgentIntegration).toHaveBeenCalledWith("claude"),
     );
   });
 
-  it("协作技能是独立的一组，装它不碰 Hook", async () => {
+  it("「修复」按 found / removed / kept / backup 报结果", async () => {
     open();
-    fireEvent.click(navItem(zh("settings.section.hooks")));
-    // 等 agents 落地：Hook 那一行的 rev 一出现，两组都已经渲染完。
-    await screen.findByText(
-      zh("settings.hooks.revision").replace("{value}", "3"),
-    );
-    const skills = settingsGroup(zh("settings.skills"));
-    // 没有 skillsRevision = 没装，按钮是「安装」。
-    expect(
-      within(skills).getByText(zh("settings.skills.missing")),
-    ).toBeTruthy();
+    fireEvent.click(navItem(zh("integration.nav")));
     fireEvent.click(
-      within(skills).getByRole("button", {
-        name: zh("settings.skills.install"),
-      }),
+      await screen.findByRole("button", { name: zh("integration.repair") }),
     );
     await waitFor(() =>
-      expect(installAgentSkills).toHaveBeenCalledWith("claude"),
+      expect(repairAgentIntegration).toHaveBeenCalledWith("claude"),
     );
-    expect(installAgentHooks).not.toHaveBeenCalled();
   });
 
   it("数据页读 info 并按选项 PATCH 日志保留天数", async () => {

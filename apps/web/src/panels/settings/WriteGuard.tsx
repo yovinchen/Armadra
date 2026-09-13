@@ -11,7 +11,7 @@ import { useSettingsWritable } from "./use-runtime-settings";
  */
 export const SETTINGS_DOCUMENT_SECTIONS = new Set([
   "agent",
-  "hooks",
+  "integration",
   "terminal",
   "workspace",
   "ssh",

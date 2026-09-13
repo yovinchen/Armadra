@@ -66,9 +66,11 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     icon: Bot,
   },
   {
-    id: "hooks",
+    // 接入归一之后只有一页：注入方式、Hook、技能、旧残留都在同一行里
+    // （Agent 接入归一 §2「一处管理」）。
+    id: "integration",
     groupKey: "settings.group.ai",
-    labelKey: "settings.section.hooks",
+    labelKey: "integration.nav",
     icon: Webhook,
   },
   {

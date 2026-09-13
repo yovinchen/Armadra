@@ -20,6 +20,7 @@ import { sessions } from "./sessions";
 import { shell } from "./shell";
 import { ssh } from "./ssh";
 import { host } from "./host";
+import { integration } from "./integration";
 import { hostIdentity } from "./host-identity";
 import { hostNative } from "./host-native";
 import { legacyArchives } from "./legacy-archives";
@@ -78,6 +79,7 @@ export const MESSAGE_MODULES = {
   host,
   "host-identity": hostIdentity,
   "host-native": hostNative,
+  integration,
   "external-service": externalService,
   "legacy-archives": legacyArchives,
   "context-usage": contextUsage,

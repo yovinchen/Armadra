@@ -19,6 +19,10 @@ import {
   uploadAssetResponseSchema,
   type ContextLink,
 } from "@armadra/shared";
+import {
+  agentIntegrationSchema,
+  integrationRepairSchema,
+} from "../panels/settings/pages/integration/types";
 import { RUNTIME_URL, json, query, request } from "./request";
 
 export const agentsApi = {
@@ -91,6 +95,46 @@ export const agentsApi = {
       skillReportSchema,
       { method: "POST" },
     ),
+  /**
+   * 接入状态（[Agent 接入归一](../../../../docs/design/agent-integration-mcp.md) §6）。
+   *
+   * 一次读出「注入方式、Hook、技能、旧残留」四件事：设置页要在**一行**里
+   * 回答它们，分四个请求问只会让四段状态在不同的时刻到达，那一行会跳。
+   *
+   * schema 现在声明在设置页自己的 `integration/types.ts`，等 Runtime 那批
+   * 改动把类型加进 `@armadra/shared` 之后换成从那里引入。
+   */
+  agentIntegration: (agentId: string, signal?: AbortSignal) =>
+    request(
+      `/api/agents/${query(agentId)}/integration`,
+      agentIntegrationSchema,
+      signal ? { signal } : {},
+    ),
+  /** 装 / 卸接入物：Hook 与技能是**一个**安装单元，不分两个按钮。 */
+  installAgentIntegration: (agentId: string) =>
+    request(
+      `/api/agents/${query(agentId)}/integration/install`,
+      agentIntegrationSchema,
+      { method: "POST" },
+    ),
+  uninstallAgentIntegration: (agentId: string) =>
+    request(
+      `/api/agents/${query(agentId)}/integration/uninstall`,
+      agentIntegrationSchema,
+      { method: "POST" },
+    ),
+  /**
+   * 清掉旧产品名时期的残留（设计 §5）：`aicc-hook` / `nodeterm` 的 hook 条目、
+   * `aicc-canvas` 这些技能目录、Codex `hooks.json` 里被现行 schema 拒绝的
+   * `version`。先备份原文件，只动认得出来的条目。
+   */
+  repairAgentIntegration: (agentId: string) =>
+    request(
+      `/api/agents/${query(agentId)}/integration/repair`,
+      integrationRepairSchema,
+      { method: "POST" },
+    ),
+
   /** 清掉某个节点的未读标记；其它窗口通过 workspace 事件流同步。 */
   markAgentRead: (nodeId: string) =>
     request(`/api/agent-status/${query(nodeId)}/read`, agentStatusSchema, {
