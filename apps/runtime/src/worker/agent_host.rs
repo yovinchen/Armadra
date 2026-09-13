@@ -38,9 +38,9 @@ use armadra_protocol::Message as _;
 use armadra_protocol::v1::{
     AgentDeliveryReceipt, AgentStatus, AgentWorkerRequest, AgentWorkerResponse, Approval,
     CaptureAgentScreenRequest, CapturedAgentScreen, DeliverApprovalAnswerRequest, DeliveryOutcome,
-    DrainAgentEventsRequest, DrainedAgentEvents, HookEvent, HookEventKind, HookInstallState,
-    ReadTranscriptRequest, TranscriptExcerpt, WorkerAgentStates, agent_worker_request,
-    agent_worker_response,
+    DrainAgentEventsRequest, DrainedAgentEvents, HookEvent, HookEventKind, IntegrationHalf,
+    IntegrationRepairReport, IntegrationState, LegacyIntegrationFinding, ReadTranscriptRequest,
+    TranscriptExcerpt, WorkerAgentStates, agent_worker_request, agent_worker_response,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -348,15 +348,30 @@ pub async fn handle(
                 unsupported_delivery(input.trace_id, "agent.delivery.pane_unsupported"),
             )))
         }
-        Some(agent_worker_request::Action::InstallHooks(input)) => {
-            let client = install::resolve_client_binary()?;
-            Ok(answer(agent_worker_response::Result::Hooks(state(
-                install::install(&input.agent_id, &client)?,
+        // Hook and skill are one install unit with one state
+        // (docs/design/agent-integration.md §2). All four touch files on this
+        // machine and only this machine, which is why they are forwarded here
+        // rather than performed on the Host.
+        Some(agent_worker_request::Action::GetIntegration(input)) => {
+            Ok(answer(agent_worker_response::Result::Integration(
+                integration(install::integration::state(&input.agent_id)?),
+            )))
+        }
+        Some(agent_worker_request::Action::InstallIntegration(input)) => {
+            Ok(answer(agent_worker_response::Result::Integration(
+                integration(install::integration::install(&input.agent_id)?),
+            )))
+        }
+        Some(agent_worker_request::Action::UninstallIntegration(input)) => {
+            Ok(answer(agent_worker_response::Result::Integration(
+                integration(install::integration::uninstall(&input.agent_id)?),
+            )))
+        }
+        Some(agent_worker_request::Action::RepairIntegration(input)) => {
+            Ok(answer(agent_worker_response::Result::Repair(repaired(
+                install::repair::repair(&input.agent_id)?,
             ))))
         }
-        Some(agent_worker_request::Action::UninstallHooks(input)) => Ok(answer(
-            agent_worker_response::Result::Hooks(state(install::uninstall(&input.agent_id)?)),
-        )),
         Some(agent_worker_request::Action::ReadTranscript(input)) => Ok(answer(
             agent_worker_response::Result::Transcript(transcript(database(pool)?, &input).await?),
         )),
@@ -398,14 +413,47 @@ fn unsupported_delivery(trace_id: String, reason: &str) -> AgentDeliveryReceipt 
     }
 }
 
-fn state(report: install::InstallReport) -> HookInstallState {
-    HookInstallState {
+fn integration(state: install::integration::IntegrationState) -> IntegrationState {
+    IntegrationState {
+        agent_id: state.agent_id,
+        mode: state.mode.to_owned(),
+        hook: Some(half(state.hook)),
+        skill: Some(half(state.skill)),
+        legacy: state.legacy.found.into_iter().map(finding).collect(),
+        revision: state.revision,
+        installed_revision: state.installed_revision.unwrap_or_default(),
+        stale: state.stale,
+        launch_args: state.launch_args,
+        client_bin: state.client_bin.unwrap_or_default(),
+        reason_code: state.warning.unwrap_or_default(),
+        observed_at_unix_ms: chrono::Utc::now().timestamp_millis(),
+    }
+}
+
+fn half(part: install::integration::IntegrationPart) -> IntegrationHalf {
+    IntegrationHalf {
+        installed: part.installed,
+        path: part.path.unwrap_or_default(),
+        revision: part.revision,
+    }
+}
+
+fn finding(found: install::repair::LegacyFinding) -> LegacyIntegrationFinding {
+    LegacyIntegrationFinding {
+        kind: found.kind,
+        path: found.path,
+        detail: found.detail,
+    }
+}
+
+fn repaired(report: install::repair::RepairReport) -> IntegrationRepairReport {
+    IntegrationRepairReport {
         agent_id: report.agent_id,
-        installed: report.installed,
-        client_revision: report.client_revision.max(0) as u32,
-        config_path: report.config_path,
-        reason_code: report.warning.unwrap_or_default(),
-        installed_at_unix_ms: chrono::Utc::now().timestamp_millis(),
+        found: report.found.into_iter().map(finding).collect(),
+        removed: report.removed,
+        kept: report.kept,
+        backups: report.backups,
+        observed_at_unix_ms: chrono::Utc::now().timestamp_millis(),
     }
 }
 

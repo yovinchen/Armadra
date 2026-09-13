@@ -10,6 +10,7 @@ import (
 	pb "armadra.local/host/gen/armadra/v1"
 	auth "armadra.local/host/internal/identity"
 	"armadra.local/host/internal/storage"
+	"armadra.local/host/internal/worker"
 )
 
 // Caller is the already-authenticated device. Nothing in a request supplies
@@ -46,8 +47,11 @@ type Executor interface {
 	DeliverHandoff(ctx context.Context, request *pb.DeliverHandoffRequest) (*pb.AgentDeliveryReceipt, error)
 	// DeliverMessage puts one message in front of an agent.
 	DeliverMessage(ctx context.Context, request *pb.DeliverMessageRequest) (*pb.AgentDeliveryReceipt, error)
-	// Hooks installs or removes a CLI's Hook configuration on that machine.
-	Hooks(ctx context.Context, agentID string, install bool) (*pb.HookInstallState, error)
+	// Integration reads or changes a CLI's hook-and-skill install on that
+	// machine (docs/design/agent-integration.md §2).
+	Integration(ctx context.Context, agentID string, action worker.IntegrationAction) (*pb.IntegrationState, error)
+	// RepairIntegration clears what an earlier product name left behind (§4).
+	RepairIntegration(ctx context.Context, agentID string) (*pb.IntegrationRepairReport, error)
 	// ReadTranscript reads the tail of a node's conversation, or refuses with
 	// the reason when that provider keeps none this Host can read.
 	ReadTranscript(ctx context.Context, request *pb.ReadTranscriptRequest) (*pb.TranscriptExcerpt, error)
@@ -304,38 +308,75 @@ func (s *Service) MarkRead(ctx context.Context, caller Caller, request *pb.MarkA
 	return &pb.MarkAgentReadResponse{Status: value, Receipt: stored}, nil
 }
 
-/* -------------------------------------------------------------------- hooks */
+/* -------------------------------------------------------------- integration */
 
-// InstallHooks and UninstallHooks are execution, forwarded unchanged.
+// The four integration calls are execution, forwarded unchanged.
 //
-// Installing a Hook edits a CLI's own configuration file on the execution host.
-// This Host resolves who is asking and whether they may, and forwards; it never
-// writes the file, because the file is that machine's and the CLI's version is
-// that machine's, and a Host that wrote it would be writing into a
-// configuration it cannot read back.
+// Installing an integration writes a CLI's adapter and the collaboration skill
+// on the execution host. This Host resolves who is asking and whether they may,
+// and forwards; it never writes the files, because they are that machine's and
+// the CLI's version is that machine's, and a Host that wrote them would be
+// writing into a configuration it cannot read back.
+//
+// Hook and skill are one unit with one state (设计 §2), so there is one pair of
+// verbs here and not two.
 
-func (s *Service) InstallHooks(ctx context.Context, caller Caller, request *pb.InstallHooksRequest) (*pb.InstallHooksResponse, error) {
-	state, err := s.hooks(ctx, caller, request.GetAgentId(), true)
+// GetIntegration reads the state of both halves on the execution host.
+//
+// A read, but it still needs a reachable execution host, so it has a write's
+// shape — the same reason ReadTranscript does.
+func (s *Service) GetIntegration(ctx context.Context, caller Caller, request *pb.GetIntegrationRequest) (*pb.GetIntegrationResponse, error) {
+	state, err := s.integration(ctx, caller, request.GetAgentId(), worker.IntegrationRead, ScopeRead)
 	if err != nil {
 		return nil, err
 	}
-	return &pb.InstallHooksResponse{State: state}, nil
+	return &pb.GetIntegrationResponse{State: state}, nil
 }
 
-func (s *Service) UninstallHooks(ctx context.Context, caller Caller, request *pb.UninstallHooksRequest) (*pb.UninstallHooksResponse, error) {
-	state, err := s.hooks(ctx, caller, request.GetAgentId(), false)
+func (s *Service) InstallIntegration(ctx context.Context, caller Caller, request *pb.InstallIntegrationRequest) (*pb.InstallIntegrationResponse, error) {
+	state, err := s.integration(ctx, caller, request.GetAgentId(), worker.IntegrationInstall, ScopeWrite)
 	if err != nil {
 		return nil, err
 	}
-	return &pb.UninstallHooksResponse{State: state}, nil
+	return &pb.InstallIntegrationResponse{State: state}, nil
 }
 
-func (s *Service) hooks(ctx context.Context, caller Caller, agentID string, install bool) (*pb.HookInstallState, error) {
-	// Installing a Hook makes a CLI on this machine call back into the Runtime.
-	// That is execution, and it is checked as execution even though this Host
-	// stores nothing about it — the ownership of the domain is beside the
-	// point, because the file is on the machine either way.
+func (s *Service) UninstallIntegration(ctx context.Context, caller Caller, request *pb.UninstallIntegrationRequest) (*pb.UninstallIntegrationResponse, error) {
+	state, err := s.integration(ctx, caller, request.GetAgentId(), worker.IntegrationUninstall, ScopeWrite)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.UninstallIntegrationResponse{State: state}, nil
+}
+
+// RepairIntegration removes what an earlier product name left in that machine's
+// CLI configuration (设计 §4). A write, and the only one that edits a file the
+// user may also have edited.
+func (s *Service) RepairIntegration(ctx context.Context, caller Caller, request *pb.RepairIntegrationRequest) (*pb.RepairIntegrationResponse, error) {
 	if err := s.authorize(caller, ScopeWrite); err != nil {
+		return nil, err
+	}
+	if !validID(request.GetAgentId()) {
+		return nil, ErrInvalid
+	}
+	executor, done, err := s.open(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+	report, err := executor.RepairIntegration(ctx, request.GetAgentId())
+	if err != nil {
+		return nil, err
+	}
+	return &pb.RepairIntegrationResponse{Report: report}, nil
+}
+
+func (s *Service) integration(ctx context.Context, caller Caller, agentID string, action worker.IntegrationAction, scope string) (*pb.IntegrationState, error) {
+	// Installing an adapter makes a CLI on this machine call back into the
+	// Runtime. That is execution, and it is checked as execution even though
+	// this Host stores nothing about it — the ownership of the domain is beside
+	// the point, because the files are on the machine either way.
+	if err := s.authorize(caller, scope); err != nil {
 		return nil, err
 	}
 	if !validID(agentID) {
@@ -346,5 +387,5 @@ func (s *Service) hooks(ctx context.Context, caller Caller, agentID string, inst
 		return nil, err
 	}
 	defer done()
-	return executor.Hooks(ctx, agentID, install)
+	return executor.Integration(ctx, agentID, action)
 }

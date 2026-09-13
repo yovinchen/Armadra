@@ -219,31 +219,74 @@ func (c *Client) CaptureScreen(ctx context.Context, request *pb.CaptureAgentScre
 	return clone, nil
 }
 
-// Hooks installs or removes a CLI's Hook configuration on the execution host.
-func (c *Client) Hooks(ctx context.Context, agentID string, install bool) (*pb.HookInstallState, error) {
+// IntegrationAction names which of the four integration calls to forward.
+// Hook and skill are one install unit with one state
+// (docs/design/agent-integration.md §2), so there is one verb set, not two.
+type IntegrationAction string
+
+const (
+	IntegrationRead      IntegrationAction = "read"
+	IntegrationInstall   IntegrationAction = "install"
+	IntegrationUninstall IntegrationAction = "uninstall"
+)
+
+// Integration reads or changes a CLI's integration on the execution host.
+func (c *Client) Integration(ctx context.Context, agentID string, action IntegrationAction) (*pb.IntegrationState, error) {
 	if agentID == "" {
 		return nil, &Error{Code: CodeInvalid}
 	}
-	action := &pb.AgentWorkerRequest{
-		Action: &pb.AgentWorkerRequest_UninstallHooks{UninstallHooks: &pb.UninstallHooksRequest{AgentId: agentID}},
-	}
-	if install {
-		action = &pb.AgentWorkerRequest{
-			Action: &pb.AgentWorkerRequest_InstallHooks{InstallHooks: &pb.InstallHooksRequest{AgentId: agentID}},
+	var request *pb.AgentWorkerRequest
+	switch action {
+	case IntegrationRead:
+		request = &pb.AgentWorkerRequest{
+			Action: &pb.AgentWorkerRequest_GetIntegration{GetIntegration: &pb.GetIntegrationRequest{AgentId: agentID}},
 		}
+	case IntegrationInstall:
+		request = &pb.AgentWorkerRequest{
+			Action: &pb.AgentWorkerRequest_InstallIntegration{InstallIntegration: &pb.InstallIntegrationRequest{AgentId: agentID}},
+		}
+	case IntegrationUninstall:
+		request = &pb.AgentWorkerRequest{
+			Action: &pb.AgentWorkerRequest_UninstallIntegration{UninstallIntegration: &pb.UninstallIntegrationRequest{AgentId: agentID}},
+		}
+	default:
+		return nil, &Error{Code: CodeInvalid}
 	}
-	result, err := c.agentHostExchange(ctx, action)
+	result, err := c.agentHostExchange(ctx, request)
 	if err != nil {
 		return nil, err
 	}
-	state := result.GetHooks()
+	state := result.GetIntegration()
 	if state == nil || state.GetAgentId() != agentID {
 		// A Worker answering about a different CLI is answering a question
-		// nobody asked, and recording it would say a Hook was installed for
-		// something else.
+		// nobody asked, and recording it would say an integration was
+		// installed for something else.
 		return nil, &Error{Code: CodeProtocol}
 	}
-	clone, ok := proto.Clone(state).(*pb.HookInstallState)
+	clone, ok := proto.Clone(state).(*pb.IntegrationState)
+	if !ok {
+		return nil, &Error{Code: CodeProtocol}
+	}
+	return clone, nil
+}
+
+// RepairIntegration clears what an earlier product name left on that machine
+// (docs/design/agent-integration.md §4).
+func (c *Client) RepairIntegration(ctx context.Context, agentID string) (*pb.IntegrationRepairReport, error) {
+	if agentID == "" {
+		return nil, &Error{Code: CodeInvalid}
+	}
+	result, err := c.agentHostExchange(ctx, &pb.AgentWorkerRequest{
+		Action: &pb.AgentWorkerRequest_RepairIntegration{RepairIntegration: &pb.RepairIntegrationRequest{AgentId: agentID}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	report := result.GetRepair()
+	if report == nil || report.GetAgentId() != agentID {
+		return nil, &Error{Code: CodeProtocol}
+	}
+	clone, ok := proto.Clone(report).(*pb.IntegrationRepairReport)
 	if !ok {
 		return nil, &Error{Code: CodeProtocol}
 	}
@@ -299,10 +342,20 @@ func validAgentResult(input *pb.AgentWorkerRequest, result *pb.AgentWorkerRespon
 		return true
 	case input.GetDeliverApproval() != nil, input.GetDeliverHandoff() != nil, input.GetDeliverMessage() != nil:
 		return result.GetDelivery() != nil
-	case input.GetInstallHooks() != nil:
-		return result.GetHooks().GetInstalled()
-	case input.GetUninstallHooks() != nil:
-		return result.GetHooks() != nil && !result.GetHooks().GetInstalled()
+	case input.GetGetIntegration() != nil:
+		// A read may honestly answer "nothing is installed", so the only thing
+		// to screen is that an answer came back at all.
+		return result.GetIntegration() != nil
+	case input.GetInstallIntegration() != nil:
+		// Both halves, or the install did not happen. A Worker reporting a hook
+		// with no skill has done half of a unit that has no half.
+		state := result.GetIntegration()
+		return state.GetHook().GetInstalled() && state.GetSkill().GetInstalled()
+	case input.GetUninstallIntegration() != nil:
+		state := result.GetIntegration()
+		return state != nil && !state.GetHook().GetInstalled() && !state.GetSkill().GetInstalled()
+	case input.GetRepairIntegration() != nil:
+		return result.GetRepair() != nil
 	case input.GetReadTranscript() != nil:
 		return result.GetTranscript() != nil
 	case input.GetCaptureScreen() != nil:

@@ -16,8 +16,10 @@ import {
   HandoffState,
   CaptureAgentScreenCommandSchema,
   CaptureAgentScreenCommandResponseSchema,
-  InstallHooksRequestSchema,
-  InstallHooksResponseSchema,
+  GetIntegrationRequestSchema,
+  GetIntegrationResponseSchema,
+  InstallIntegrationRequestSchema,
+  InstallIntegrationResponseSchema,
   ReadAgentTranscriptRequestSchema,
   ReadAgentTranscriptResponseSchema,
   ListAgentStatusRequestSchema,
@@ -36,14 +38,19 @@ import {
   MarkAgentReadResponseSchema,
   PrepareHandoffRequestSchema,
   PrepareHandoffResponseSchema,
-  UninstallHooksRequestSchema,
-  UninstallHooksResponseSchema,
+  RepairIntegrationRequestSchema,
+  RepairIntegrationResponseSchema,
+  UninstallIntegrationRequestSchema,
+  UninstallIntegrationResponseSchema,
   type Approval,
   type AgentStatus,
   type ContextLinks,
   type Delivery,
   type Handoff,
-  type HookInstallState,
+  type IntegrationHalf,
+  type IntegrationRepairReport,
+  type IntegrationState,
+  type LegacyIntegrationFinding,
   type MailboxMessage,
 } from "@armadra/protocol";
 import type { HostAuthenticatedTransport } from "./automation.js";
@@ -227,13 +234,56 @@ export interface TranscriptExcerptRecord {
   observedAtUnixMs: bigint;
 }
 
-export interface HookInstallRecord {
-  agentId: string;
+/** One half of an install unit — the adapter, or the skill. */
+export interface IntegrationHalfRecord {
   installed: boolean;
-  clientRevision: number;
-  configPath: string;
+  /** Where it lives, present even when it is not installed. */
+  path: string;
+  /** The revision on disk; 0 when this half is not installed. */
+  revision: number;
+}
+
+/** Something an earlier product name left behind (设计 §4). */
+export interface LegacyIntegrationRecord {
+  kind: string;
+  path: string;
+  detail: string;
+}
+
+/**
+ * Hook and skill as one install unit (docs/design/agent-integration.md §2, §5).
+ *
+ * `mode` says whether integrating writes a file the user also edits:
+ * `launch` passes the adapter on the command line, `extension` writes a
+ * generated module only we ever touch, `file` merges into the CLI's own
+ * configuration.
+ */
+export interface IntegrationRecord {
+  agentId: string;
+  mode: string;
+  hook: IntegrationHalfRecord;
+  skill: IntegrationHalfRecord;
+  legacy: LegacyIntegrationRecord[];
+  /** What a fresh install writes. */
+  revision: bigint;
+  /** What the files on disk were written by; 0 when nothing is installed. */
+  installedRevision: bigint;
+  stale: boolean;
+  /** Argv a session must carry; empty for every mode but `launch`. */
+  launchArgs: string[];
+  clientBin: string;
   reasonCode: string;
-  installedAtUnixMs: bigint;
+  observedAtUnixMs: bigint;
+}
+
+export interface IntegrationRepairRecord {
+  agentId: string;
+  found: LegacyIntegrationRecord[];
+  removed: string[];
+  /** Foreign entries in the rewritten files, left as they were. */
+  kept: string[];
+  backups: string[];
+  observedAtUnixMs: bigint;
 }
 
 const stateNames: Record<number, AgentStateName> = {
@@ -399,15 +449,55 @@ function decodeLinks(links: ContextLinks): ContextLinksRecord {
   };
 }
 
-function decodeHooks(state: HookInstallState | undefined): HookInstallRecord {
+function decodeHalf(half: IntegrationHalf | undefined): IntegrationHalfRecord {
+  return {
+    installed: half?.installed ?? false,
+    path: half?.path ?? "",
+    revision: Number(half?.revision ?? 0n),
+  };
+}
+
+function decodeLegacy(
+  found: readonly LegacyIntegrationFinding[],
+): LegacyIntegrationRecord[] {
+  return found.map((entry) => ({
+    kind: entry.kind,
+    path: entry.path,
+    detail: entry.detail,
+  }));
+}
+
+function decodeIntegration(
+  state: IntegrationState | undefined,
+): IntegrationRecord {
   if (!state?.agentId) throw new HostCanvasError("response");
   return {
     agentId: state.agentId,
-    installed: state.installed,
-    clientRevision: state.clientRevision,
-    configPath: state.configPath,
+    mode: state.mode,
+    hook: decodeHalf(state.hook),
+    skill: decodeHalf(state.skill),
+    legacy: decodeLegacy(state.legacy),
+    revision: state.revision,
+    installedRevision: state.installedRevision,
+    stale: state.stale,
+    launchArgs: [...state.launchArgs],
+    clientBin: state.clientBin,
     reasonCode: state.reasonCode,
-    installedAtUnixMs: state.installedAtUnixMs,
+    observedAtUnixMs: state.observedAtUnixMs,
+  };
+}
+
+function decodeRepair(
+  report: IntegrationRepairReport | undefined,
+): IntegrationRepairRecord {
+  if (!report?.agentId) throw new HostCanvasError("response");
+  return {
+    agentId: report.agentId,
+    found: decodeLegacy(report.found),
+    removed: [...report.removed],
+    kept: [...report.kept],
+    backups: [...report.backups],
+    observedAtUnixMs: report.observedAtUnixMs,
   };
 }
 
@@ -838,43 +928,90 @@ export class HostAgentClient {
     );
   }
 
-  /** Installs a CLI's Hook configuration on the execution host. */
-  async installHooks(input: {
-    operationId: string;
-    agentId: string;
-  }): Promise<HookInstallRecord> {
-    if (!validOperationId(input?.operationId) || !input.agentId)
-      throw new HostCanvasError("invalid");
-    const request = create(InstallHooksRequestSchema, {
+  /**
+   * Reads a CLI's integration — adapter and skill — on the execution host.
+   *
+   * A read with a write's shape: nothing changes, but the answer is a set of
+   * files this Host never sees, so it still needs a reachable machine.
+   */
+  async getIntegration(input: { agentId: string }): Promise<IntegrationRecord> {
+    if (!input?.agentId) throw new HostCanvasError("invalid");
+    const request = create(GetIntegrationRequestSchema, {
       meta: this.#meta(),
-      operationId: input.operationId,
       agentId: input.agentId,
     });
     return this.#call(
-      "InstallHooks",
-      toBinary(InstallHooksRequestSchema, request),
-      true,
-      (wire) => decodeHooks(fromBinary(InstallHooksResponseSchema, wire).state),
+      "GetIntegration",
+      toBinary(GetIntegrationRequestSchema, request),
+      false,
+      (wire) =>
+        decodeIntegration(fromBinary(GetIntegrationResponseSchema, wire).state),
     );
   }
 
-  async uninstallHooks(input: {
+  /** Installs the adapter and the skill together on the execution host. */
+  async installIntegration(input: {
     operationId: string;
     agentId: string;
-  }): Promise<HookInstallRecord> {
+  }): Promise<IntegrationRecord> {
     if (!validOperationId(input?.operationId) || !input.agentId)
       throw new HostCanvasError("invalid");
-    const request = create(UninstallHooksRequestSchema, {
+    const request = create(InstallIntegrationRequestSchema, {
       meta: this.#meta(),
       operationId: input.operationId,
       agentId: input.agentId,
     });
     return this.#call(
-      "UninstallHooks",
-      toBinary(UninstallHooksRequestSchema, request),
+      "InstallIntegration",
+      toBinary(InstallIntegrationRequestSchema, request),
       true,
       (wire) =>
-        decodeHooks(fromBinary(UninstallHooksResponseSchema, wire).state),
+        decodeIntegration(
+          fromBinary(InstallIntegrationResponseSchema, wire).state,
+        ),
+    );
+  }
+
+  async uninstallIntegration(input: {
+    operationId: string;
+    agentId: string;
+  }): Promise<IntegrationRecord> {
+    if (!validOperationId(input?.operationId) || !input.agentId)
+      throw new HostCanvasError("invalid");
+    const request = create(UninstallIntegrationRequestSchema, {
+      meta: this.#meta(),
+      operationId: input.operationId,
+      agentId: input.agentId,
+    });
+    return this.#call(
+      "UninstallIntegration",
+      toBinary(UninstallIntegrationRequestSchema, request),
+      true,
+      (wire) =>
+        decodeIntegration(
+          fromBinary(UninstallIntegrationResponseSchema, wire).state,
+        ),
+    );
+  }
+
+  /** Clears what an earlier product name left on that machine (设计 §4). */
+  async repairIntegration(input: {
+    operationId: string;
+    agentId: string;
+  }): Promise<IntegrationRepairRecord> {
+    if (!validOperationId(input?.operationId) || !input.agentId)
+      throw new HostCanvasError("invalid");
+    const request = create(RepairIntegrationRequestSchema, {
+      meta: this.#meta(),
+      operationId: input.operationId,
+      agentId: input.agentId,
+    });
+    return this.#call(
+      "RepairIntegration",
+      toBinary(RepairIntegrationRequestSchema, request),
+      true,
+      (wire) =>
+        decodeRepair(fromBinary(RepairIntegrationResponseSchema, wire).report),
     );
   }
 }

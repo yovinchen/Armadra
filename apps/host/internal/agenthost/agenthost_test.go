@@ -332,20 +332,52 @@ func TestContextLinksFollowTheCanvasEdges(t *testing.T) {
 	}
 }
 
-// Installing a Hook edits a file on the execution host. It is forwarded, and it
-// is checked as execution because it makes a CLI on that machine call back.
-func TestHooksAreForwardedAndNeedExecution(t *testing.T) {
+// Installing an integration writes files on the execution host. All four calls
+// are forwarded, and the three that change something are checked as execution
+// because they make a CLI on that machine call back.
+func TestIntegrationIsForwardedAndTheWritesNeedExecution(t *testing.T) {
 	f := newFixture(t)
 	f.own()
-	if _, err := f.service.InstallHooks(fixtureContext, f.caller(ScopeRead, workspaceID), &pb.InstallHooksRequest{AgentId: "claude"}); !errors.Is(err, ErrAuthorization) {
-		t.Fatalf("a read grant installed a Hook: %v", err)
+	// The read is a read: a read grant is enough, and nothing is installed.
+	read, err := f.service.GetIntegration(fixtureContext, f.caller(ScopeRead, workspaceID), &pb.GetIntegrationRequest{AgentId: "claude"})
+	if err != nil || read.GetState().GetMode() != "launch" {
+		t.Fatalf("the read was not forwarded: %v %+v", err, read.GetState())
 	}
-	state, err := f.service.InstallHooks(fixtureContext, f.caller(ScopeWrite, workspaceID), &pb.InstallHooksRequest{AgentId: "claude"})
-	if err != nil || !state.GetState().GetInstalled() {
-		t.Fatalf("the install was not forwarded: %v %+v", err, state.GetState())
+	if got := read.GetState().GetLaunchArgs(); len(got) != 2 || got[0] != "--settings" {
+		t.Fatalf("the launch argv did not survive the forward: %v", got)
 	}
-	if len(f.machine.installs) != 1 || f.machine.installs[0] != "claude" {
+
+	if _, err := f.service.InstallIntegration(fixtureContext, f.caller(ScopeRead, workspaceID), &pb.InstallIntegrationRequest{AgentId: "claude"}); !errors.Is(err, ErrAuthorization) {
+		t.Fatalf("a read grant installed an integration: %v", err)
+	}
+	state, err := f.service.InstallIntegration(fixtureContext, f.caller(ScopeWrite, workspaceID), &pb.InstallIntegrationRequest{AgentId: "claude"})
+	if err != nil || !state.GetState().GetHook().GetInstalled() || !state.GetState().GetSkill().GetInstalled() {
+		t.Fatalf("the install was not forwarded as one unit: %v %+v", err, state.GetState())
+	}
+	removed, err := f.service.UninstallIntegration(fixtureContext, f.caller(ScopeWrite, workspaceID), &pb.UninstallIntegrationRequest{AgentId: "claude"})
+	if err != nil || removed.GetState().GetHook().GetInstalled() || removed.GetState().GetSkill().GetInstalled() {
+		t.Fatalf("the uninstall was not forwarded as one unit: %v %+v", err, removed.GetState())
+	}
+	want := []string{"read:claude", "install:claude", "uninstall:claude"}
+	if len(f.machine.installs) != len(want) {
 		t.Fatalf("the machine was not asked: %v", f.machine.installs)
+	}
+	for index, asked := range want {
+		if f.machine.installs[index] != asked {
+			t.Fatalf("the machine was asked %v, wanted %v", f.machine.installs, want)
+		}
+	}
+
+	// Repair edits a file the user may also have edited, so it is a write too.
+	if _, err := f.service.RepairIntegration(fixtureContext, f.caller(ScopeRead, workspaceID), &pb.RepairIntegrationRequest{AgentId: "claude"}); !errors.Is(err, ErrAuthorization) {
+		t.Fatalf("a read grant repaired a configuration: %v", err)
+	}
+	repair, err := f.service.RepairIntegration(fixtureContext, f.caller(ScopeWrite, workspaceID), &pb.RepairIntegrationRequest{AgentId: "claude"})
+	if err != nil || len(repair.GetReport().GetBackups()) != 1 {
+		t.Fatalf("the repair was not forwarded with its backup: %v %+v", err, repair.GetReport())
+	}
+	if len(f.machine.repairs) != 1 || f.machine.repairs[0] != "claude" {
+		t.Fatalf("the machine was not asked to repair: %v", f.machine.repairs)
 	}
 }
 
