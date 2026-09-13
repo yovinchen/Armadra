@@ -1,0 +1,24 @@
+# Line endings are part of the build here, not a preference.
+#
+# The Windows runner checks out with `core.autocrlf=true` unless told
+# otherwise, and three checks compare bytes: `prettier --check`,
+# `cargo fmt --check` and `tools/protocol.mjs check`, which diffs freshly
+# generated Go/TypeScript against the committed files. Any of them fails on a
+# CRLF working copy. Normalising to LF in the repository and on checkout keeps
+# the three platforms byte-identical.
+* text=auto eol=lf
+
+# Binary assets are never text, whatever the heuristic decides.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.bin binary
+*.db binary
