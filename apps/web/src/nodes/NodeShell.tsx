@@ -8,6 +8,7 @@ import {
   Maximize2,
   Minimize2,
   MoreHorizontal,
+  PencilLine,
   X,
 } from "lucide-react";
 
@@ -291,6 +292,9 @@ export function NodeHeader({
   approval?: NodeShellProps["approval"];
 }) {
   const t = useT();
+  // 改名的开合放在头部：标题与 `···` 里的「重命名」是同一个入口，触屏上
+  // 双击不好按，那一项就是它唯一能用的路。
+  const [renaming, setRenaming] = React.useState(false);
   return (
     <div
       data-slot="node-header"
@@ -305,7 +309,7 @@ export function NodeHeader({
     >
       {headerMark}
 
-      <NodeTitle node={node} />
+      <NodeTitle node={node} editing={renaming} onEditing={setRenaming} />
 
       <span className="node-header-chips flex min-w-0 items-center gap-1.5">
         {headerChips}
@@ -353,6 +357,7 @@ export function NodeHeader({
         collapsed={collapsed}
         maximized={maximized}
         items={menuItems}
+        onRename={() => setRenaming(true)}
       />
 
       <IconButton
@@ -378,6 +383,7 @@ function NodeMenu(props: {
   collapsed: boolean;
   maximized: boolean;
   items?: React.ReactNode;
+  onRename?: () => void;
 }) {
   const t = useT();
   return (
@@ -398,11 +404,13 @@ export function NodeMenuContent({
   collapsed,
   maximized,
   items,
+  onRename,
 }: {
   node: CanvasNode;
   collapsed: boolean;
   maximized: boolean;
   items?: React.ReactNode;
+  onRename?: () => void;
 }) {
   const t = useT();
   const compact = useCompactLayout();
@@ -410,6 +418,14 @@ export function NodeMenuContent({
     <DropdownMenuContent align="end" className="min-w-52">
       {items}
       {items ? <DropdownMenuSeparator /> : null}
+      {/* 改名的第二个入口。触屏上双击标题不好按，而这一项和双击翻的是同一个
+          开关，所以它不是「另一种改名」，只是同一条路的另一个门。 */}
+      {onRename && (
+        <DropdownMenuItem onSelect={onRename}>
+          <PencilLine />
+          {t("node.rename")}
+        </DropdownMenuItem>
+      )}
       <DropdownMenuItem
         onSelect={() => {
           focusNode(node.id);
@@ -456,19 +472,36 @@ export function NodeMenuContent({
  * 变成打开输入框（F4）。双击既不与拖拽冲突（React Flow 的拖拽阈值是 4px，
  * 两次原地点击不会触发），也和画布上其它「双击进入」的手势一致。
  */
-function NodeTitle({ node }: { node: CanvasNode }) {
+function NodeTitle({
+  node,
+  editing,
+  onEditing,
+}: {
+  node: CanvasNode;
+  editing: boolean;
+  onEditing: (editing: boolean) => void;
+}) {
   const t = useT();
-  const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(node.title);
   const active = React.useRef(false);
   const composing = React.useRef(false);
   const titleRef = React.useRef<HTMLSpanElement>(null);
 
-  function begin() {
+  // 菜单里的「重命名」只翻一个布尔，草稿与「这次编辑还活着吗」由这里补。
+  React.useEffect(() => {
+    if (!editing) return;
     active.current = true;
     composing.current = false;
     setDraft(node.title);
-    setEditing(true);
+  }, [editing, node.title]);
+
+  function begin() {
+    onEditing(true);
+  }
+
+  function stop() {
+    active.current = false;
+    onEditing(false);
   }
 
   function restoreFocus() {
@@ -478,8 +511,7 @@ function NodeTitle({ node }: { node: CanvasNode }) {
   function commit(value: string, focus = false) {
     // A cancelled/committed input may still emit blur before React removes it.
     if (!active.current) return;
-    active.current = false;
-    setEditing(false);
+    stop();
     const title = value.trim();
     if (title && title !== node.title) {
       useCanvasStore.getState().updateNode(node.id, { title });
@@ -521,9 +553,8 @@ function NodeTitle({ node }: { node: CanvasNode }) {
           if (event.key === "Escape") {
             event.preventDefault();
             event.stopPropagation();
-            active.current = false;
             setDraft(node.title);
-            setEditing(false);
+            stop();
             restoreFocus();
           }
         }}

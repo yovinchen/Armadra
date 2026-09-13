@@ -43,7 +43,7 @@ import {
 } from "@/canvas/flow/flow-context";
 import { openNodeAnnotation } from "@/meta/annotations";
 import { DropdownMenu } from "@/ui/dropdown-menu";
-import { NodeMenuContent, NodeShell } from "./NodeShell";
+import { NodeHeader, NodeMenuContent, NodeShell } from "./NodeShell";
 import { COLLAPSED_HEIGHT, HEADER_HEIGHT } from "./geometry";
 
 beforeAll(installDomPolyfills);
@@ -250,10 +250,14 @@ describe("NodeShell", () => {
     expect(screen.getByLabelText("标题")).toBeTruthy();
   });
 
-  it("keeps touch dragging events bubbling without arming the enclosing long-press menu", () => {
+  /**
+   * 标题不再自己认一次点按（改名是双击），所以触屏上按住它就该和按住头部
+   * 其它地方一样：事件原样冒泡出去，画布的长按右键菜单照常武装。
+   */
+  it("leaves a touch press on the title untouched for the long-press menu", () => {
     renderShell();
     const escaped = vi.fn((event: Event) =>
-      expect(event.defaultPrevented).toBe(true),
+      expect(event.defaultPrevented).toBe(false),
     );
     document.addEventListener("pointerdown", escaped);
     try {
@@ -269,6 +273,28 @@ describe("NodeShell", () => {
     } finally {
       document.removeEventListener("pointerdown", escaped);
     }
+  });
+
+  /** 触屏上双击不好按，`···` 里的「重命名」是同一个入口。 */
+  it("offers rename from the shared node menu", () => {
+    const onRename = vi.fn();
+    openMenu({ onRename });
+    fireEvent.click(screen.getByRole("menuitem", { name: "重命名" }));
+    expect(onRename).toHaveBeenCalledTimes(1);
+  });
+
+  /** 菜单里那一项翻的是同一个开关：标题当场变成输入框。 */
+  it("enters rename when the header is told to", () => {
+    const node = makeNode();
+    render(<NodeHeader node={node} collapsed={false} maximized={false} />);
+    expect(screen.queryByLabelText("标题")).toBeNull();
+    fireEvent.doubleClick(screen.getByText("便签 1"));
+    const input = screen.getByLabelText("标题");
+    fireEvent.change(input, { target: { value: "菜单改的名" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(store.updateNode).toHaveBeenCalledWith("n1", {
+      title: "菜单改的名",
+    });
   });
 
   it("does not rename after dragging away and back to the starting point", async () => {
