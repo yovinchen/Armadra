@@ -1,16 +1,22 @@
 # 发布流水线，见 docs/design/updates-and-service-install.md §1 与
 # docs/guides/ci-release.md。
-# 五个作业：verify 拦住版本不一致的标签，build 按目标矩阵打包，web 打前端产物，
-# assemble 汇总校验清单与签名并只创建 draft Release，notarize 在缺少 secret 时
-# 跳过并在说明里标注。发布是人的动作：本工作流永远不会把 Release 从 draft 转正。
+# 五个作业：verify 拦住版本与标签不一致的发布，build 按目标矩阵打包并把打包器
+# 的产物改名成发布用的名字，web 打前端产物，assemble 汇总校验清单与签名并只创建
+# draft Release，notarize 在缺少 secret 时跳过并在说明里标注。
+# 发布是人的动作：本工作流永远不会把 Release 从 draft 转正。
 name: release
 
 on:
   push:
     tags: ["v*"]
-  # 手动触发用于演练：dry_run 为真时 assemble 只上传构建产物，不创建 Release。
+  # 手动触发有两种用法：给 tag 就是补发那个标签（照样要求四处版本与它一致），
+  # 不给就是在当前分支上演练。dry_run 为真时不创建任何 Release。
   workflow_dispatch:
     inputs:
+      tag:
+        description: 要发布的标签，例如 v0.1.0；留空则在当前分支上演练
+        type: string
+        default: ""
       dry_run:
         description: 只构建与校验，不创建 draft Release
         type: boolean
@@ -42,9 +48,14 @@ jobs:
     timeout-minutes: 60
     outputs:
       version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
       publish: ${{ steps.version.outputs.publish }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
+      # 手动补发一个标签时要构建那个标签的树，而不是触发分支的 HEAD。
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.sha }}
       # ubuntu runner 预装的 .NET / Android / Haskell / CodeQL 占掉十几 GB；
       # 这个作业要编译整个 workspace 的测试，先把它们腾出来。
       - name: 腾出磁盘
@@ -68,25 +79,55 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
+      # 版本住在仓库里（Cargo.toml 是源，另外三处与它一致），标签只是指向它的
+      # 名字。所以这里不是从标签解出版本，而是要求标签等于版本；不等就拒绝，
+      # 因为发的包会自报仓库里的那个版本，而更新检查比的正是版本。
       - name: 四处版本与标签一致，兼容范围包含本版本
         id: version
         shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
-          node tools/release/version.mjs check
           version="$(node tools/release/version.mjs print)"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          # 只有推标签才会创建 Release；手动触发默认是演练，取消勾选才发布。
-          if [ "${{ github.ref_type }}" = "tag" ] && [ "${{ inputs.dry_run }}" != "true" ]; then
-            echo "publish=true" >> "$GITHUB_OUTPUT"
+          tag="${INPUT_TAG:-}"
+          if [ -z "$tag" ] && [ "$REF_TYPE" = "tag" ]; then
+            tag="$REF_NAME"
+          fi
+          # 分支上的演练没有标签可比，用仓库版本推出来的那个名字占位，
+          # 后面的产物命名与 latest.json 才有一致的下载地址可写。
+          [ -n "$tag" ] || tag="v$version"
+          node tools/release/version.mjs check --tag "$tag"
+          {
+            printf 'version=%s\n' "$version"
+            printf 'tag=%s\n' "$tag"
+          } >> "$GITHUB_OUTPUT"
+          # 预发布由标签里的 "-" 判定（v0.2.0-rc.1），与 semver 的读法一致。
+          case "$tag" in
+            *-*) printf 'prerelease=true\n' >> "$GITHUB_OUTPUT" ;;
+            *) printf 'prerelease=false\n' >> "$GITHUB_OUTPUT" ;;
+          esac
+          # 只有真的有标签、且不是演练，才会创建 Release。
+          if [ "$REF_TYPE" = "tag" ] || [ -n "$INPUT_TAG" ]; then
+            if [ "$DRY_RUN" = "true" ]; then
+              printf 'publish=false\n' >> "$GITHUB_OUTPUT"
+            else
+              printf 'publish=true\n' >> "$GITHUB_OUTPUT"
+            fi
           else
-            echo "publish=false" >> "$GITHUB_OUTPUT"
+            printf 'publish=false\n' >> "$GITHUB_OUTPUT"
           fi
       - run: node tools/ci/validate-workflows.mjs
       - run: node --test tools/release/*.test.mjs
       - run: pnpm libs:build
       - run: pnpm check
       - run: pnpm test
+      # protoc 不装：crates/protocol 的 build.rs 用 protoc-bin-vendored 自带的
+      # 一份，Go 侧的 *.pb.go 已入库，protocol:check 是拿同一份 vendored protoc
+      # 重新生成后比对字节。runner 上再装一个只会引入版本漂移。
       - run: pnpm protocol:check
       - run: pnpm protocol:test
       # 桌面壳留给 build 作业：它要 WebKitGTK 与真实 sidecar，这里只验业务代码。
@@ -99,6 +140,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.sha }}
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -135,12 +178,18 @@ jobs:
           - runner: macos-15-intel
             target: darwin-x86_64
             triple: x86_64-apple-darwin
-          - runner: ubuntu-24.04
+          # glibc 的符号版本是单向的：在 24.04（glibc 2.39）上链接出来的二进制
+          # 会记下 GLIBC_2.38/2.39，到 22.04 上动态链接器直接拒绝启动，而构建
+          # 本身一切正常。LiveAgent 就是这样发出去过一个版本（#714），修法是把
+          # Linux 行钉在 22.04 并在产物上断言基线。
+          # 这两个 runner 与 Ubuntu 22.04 LTS 的标准支持同在 2027-04 退役，
+          # 届时换成 ubuntu:22.04 容器构建。
+          - runner: ubuntu-22.04
             target: linux-x86_64
             triple: x86_64-unknown-linux-gnu
           # arm64 的 Linux/Windows runner 只对公开仓库免费；仓库转私有时这两行
           # 要换成自托管 runner 或删掉，对应目标也就不再发布。
-          - runner: ubuntu-24.04-arm
+          - runner: ubuntu-22.04-arm
             target: linux-aarch64
             triple: aarch64-unknown-linux-gnu
           - runner: windows-2022
@@ -152,6 +201,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.sha }}
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -168,38 +219,103 @@ jobs:
         with:
           key: ${{ matrix.target }}
       # Tauri 2 在 Linux 上要 WebKitGTK 与 libsoup3；AppImage 还要 file 与
-      # patchelf，托盘图标要 ayatana-appindicator。缺任何一个都是打到一半才报错。
+      # patchelf，托盘图标要 ayatana-appindicator，.rpm 要 rpmbuild（rpm 包）。
+      # 缺任何一个都是打到一半才报错。
       - name: 安装 Tauri 的 Linux 系统依赖
         if: startsWith(matrix.target, 'linux-')
         shell: bash
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
             build-essential curl wget file \
             libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
             libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
-            libssl-dev libxdo-dev patchelf
+            libssl-dev libxdo-dev patchelf rpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm libs:build
-      # 只有真的存在的 secret 才进环境：tauri 看到空字符串的 APPLE_CERTIFICATE
-      # 会当成「有证书」去导入，然后在钥匙串那一步失败；没有密钥时要的是跳过。
-      - name: 解出本次可用的签名与公证变量
+
+      # LiveAgent 的做法：证书自己导进一个临时钥匙串并当场 find-identity，
+      # 而不是把 APPLE_CERTIFICATE 交给 tauri 去导。理由是失败的时刻——
+      # 证书或口令不对时这一步十秒内就红，交给打包器则要等整个构建跑完。
+      # 两种机制不能并用：APPLE_CERTIFICATE 一旦非空，tauri 会另建一个钥匙串
+      # 并把它设为默认，把这里导入的那张顶掉。
+      - name: 导入 Apple 证书到临时钥匙串
+        if: startsWith(matrix.target, 'darwin-')
+        shell: bash
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 || secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APPLE_CERTIFICATE_P12_BASE64:-}" ] || [ -z "${APPLE_CERTIFICATE_PASSWORD:-}" ]; then
+            echo "::warning::没有 APPLE_CERTIFICATE_P12_BASE64 与 APPLE_CERTIFICATE_PASSWORD，macOS 产物不签名，首次打开会有 Gatekeeper 提示"
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/armadra-release.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          certificate="$RUNNER_TEMP/developer-id-application.p12"
+          printf '%s' "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$certificate"
+          security create-keychain -p "$keychain_password" "$keychain"
+          # 锁定超时比最长的一次构建还长；钥匙串锁上就再也签不动了。
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          # 没有这一行，codesign 会弹一个没人能点的「允许访问」对话框并超时。
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain"
+          security default-keychain -s "$keychain"
+          rm -f "$certificate"
+          security find-identity -v -p codesigning "$keychain"
+          identity="${SIGNING_IDENTITY:-}"
+          if [ -z "$identity" ]; then
+            identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(.*\)".*/\1/p' | head -1)"
+          fi
+          if [ -z "$identity" ]; then
+            echo "::error::钥匙串里没有可用于 codesign 的身份"
+            exit 1
+          fi
+          printf 'APPLE_SIGNING_IDENTITY=%s\n' "$identity" >> "$GITHUB_ENV"
+
+      # store-credentials --validate 会真的去问一次 Apple。凭据不对时它在这里
+      # 报错，而不是在打包最后一步排队等公证时。
+      - name: 预检公证凭据
+        if: startsWith(matrix.target, 'darwin-')
+        shell: bash
+        env:
+          NOTARY_APPLE_ID: ${{ secrets.APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NOTARY_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD || secrets.APPLE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NOTARY_APPLE_ID:-}" ] || [ -z "${NOTARY_TEAM_ID:-}" ] || [ -z "${NOTARY_PASSWORD:-}" ]; then
+            echo "::warning::缺少 APPLE_ID / APPLE_TEAM_ID / APPLE_APP_SPECIFIC_PASSWORD，macOS 产物不公证"
+            exit 0
+          fi
+          xcrun notarytool store-credentials armadra-notary \
+            --apple-id "$NOTARY_APPLE_ID" \
+            --team-id "$NOTARY_TEAM_ID" \
+            --password "$NOTARY_PASSWORD" \
+            --validate
+          # tauri 的 bundler 认这三个变量，公证与装订由它在打包末尾做。
+          {
+            printf 'APPLE_ID=%s\n' "$NOTARY_APPLE_ID"
+            printf 'APPLE_TEAM_ID=%s\n' "$NOTARY_TEAM_ID"
+            printf 'APPLE_PASSWORD=%s\n' "$NOTARY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      # 只有真的存在的 secret 才进环境：tauri 看到空字符串的签名变量会当成
+      # 「有密钥」，然后在最后一步失败；没有密钥时要的是跳过。
+      - name: 解出本次可用的更新签名变量
         shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
           # printenv rather than ${!name}: the macOS runners still run bash 3.2.
-          for name in TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD \
-            APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
-            APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+          for name in TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD; do
             value="$(printenv "$name" || true)"
             [ -n "$value" ] || continue
             {
@@ -211,14 +327,59 @@ jobs:
           if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
             echo "::warning::没有 TAURI_SIGNING_PRIVATE_KEY，桌面更新包不会被签名，assemble 会把它排除在 latest.json 之外"
           fi
+
       # scripts/build.mjs 先做签名判断再编译（signing.mjs），并把更新地址与
       # 这个判断合成同一个 --config；仓库里的 endpoints 始终为空，免得本地构建
-      # 也去联系发布来源。
+      # 也去联系发布来源。每平台的 bundle.targets 来自自动合并的
+      # tauri.<平台>.conf.json，不用在命令行再传一遍。
       - name: 打桌面包
         shell: bash
         env:
           ARMADRA_UPDATER_ENDPOINTS: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
         run: pnpm --filter @armadra/desktop build
+
+      # 产物已经落地，先断言它能在承诺的系统上启动，再去改名上传。
+      - name: 校验 Linux 的 glibc 基线
+        if: startsWith(matrix.target, 'linux-')
+        shell: bash
+        run: bash tools/release/verify-linux-glibc-baseline.sh
+
+      # AppImage 里自带的 libwayland 会和宿主的 EGL/合成器撞车，剥掉之后用
+      # 宿主自己的那份。重新打包会让 Tauri 的 .sig 失效，所以紧接着再签一次。
+      - name: 剥掉 AppImage 里自带的 Wayland 库并重新签名
+        if: startsWith(matrix.target, 'linux-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          appimage="$(find target/release/bundle/appimage -maxdepth 1 -type f -name '*.AppImage' -print -quit 2>/dev/null || true)"
+          if [ -z "$appimage" ]; then
+            echo "::error::没有找到 AppImage，tauri.linux.conf.json 的 bundle.targets 与这一步不一致"
+            exit 1
+          fi
+          had_signature=false
+          if [ -f "$appimage.sig" ]; then had_signature=true; fi
+          bash tools/release/postprocess-linux-appimage.sh "$appimage"
+          # 没签过就不用补签：没有 TAURI_SIGNING_PRIVATE_KEY 时 signing.mjs 早已
+          # 关掉 createUpdaterArtifacts，本来就不会有 .sig。
+          if [ "$had_signature" = true ] && [ ! -f "$appimage.sig" ]; then
+            pnpm --filter @armadra/desktop exec tauri signer sign "$appimage"
+            test -s "$appimage.sig"
+          fi
+
+      # 打包器的名字（Armadra_0.1.0_x64_en-US.msi、armadra_0.1.0_amd64.deb）
+      # 里读不出 Host 认得的目标，所以这里统一改名，顺带打出 Windows 便携版。
+      - name: 收集并改名桌面产物
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/release/stage-desktop.mjs \
+            --target "${{ matrix.target }}" \
+            --triple "${{ matrix.triple }}" \
+            --from target/release \
+            --out artifacts \
+            --version "${{ needs.verify.outputs.version }}" \
+            ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && '--require-updater' || '' }}
+
       - name: 打组件包
         shell: bash
         run: |
@@ -229,25 +390,23 @@ jobs:
             --from target/release \
             --out artifacts \
             --version "${{ needs.verify.outputs.version }}"
-      - name: 收集桌面产物
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts
-          bundle="target/release/bundle"
-          if [ -d "$bundle" ]; then
-            find "$bundle" -type f \
-              \( -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.app.tar.gz.sig' \
-                 -o -name '*setup.exe' -o -name '*setup.exe.sig' -o -name '*.msi' \
-                 -o -name '*.AppImage' -o -name '*.AppImage.sig' -o -name '*.deb' -o -name '*.rpm' \) \
-              -exec cp {} artifacts/ \;
-          fi
-          ls -l artifacts
+
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.target }}
           path: artifacts
           if-no-files-found: error
+
+      # 临时钥匙串里有 Developer ID 私钥。runner 是一次性的，但删掉它是一行。
+      - name: 清掉临时钥匙串
+        if: always() && startsWith(matrix.target, 'darwin-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/armadra-release.keychain-db"
+          [ -f "$keychain" ] || exit 0
+          security default-keychain -s login.keychain-db || true
+          security delete-keychain "$keychain" || true
 
   # 公证与 Authenticode 都由 build 作业里的 Tauri 完成；本作业只报告哪些目标缺
   # 少 secret，assemble 会把结论写进 Release 说明顶部。缺 secret 不阻断发布。
@@ -261,12 +420,15 @@ jobs:
       - id: report
         shell: bash
         env:
-          HAS_APPLE: ${{ secrets.APPLE_ID != '' }}
+          HAS_APPLE_CERT: ${{ (secrets.APPLE_CERTIFICATE_P12_BASE64 || secrets.APPLE_CERTIFICATE) != '' }}
+          HAS_APPLE_NOTARY: ${{ secrets.APPLE_ID != '' && (secrets.APPLE_APP_SPECIFIC_PASSWORD || secrets.APPLE_PASSWORD) != '' }}
           HAS_WINDOWS: ${{ secrets.WINDOWS_CERT_BASE64 != '' }}
         run: |
           set -euo pipefail
           missing=()
-          [ "$HAS_APPLE" = "true" ] || missing+=("macOS")
+          if [ "$HAS_APPLE_CERT" != "true" ] || [ "$HAS_APPLE_NOTARY" != "true" ]; then
+            missing+=("macOS")
+          fi
           [ "$HAS_WINDOWS" = "true" ] || missing+=("Windows")
           printf 'unnotarized=%s\n' "$(IFS=,; echo "${missing[*]:-}")" >> "$GITHUB_OUTPUT"
           if [ ${#missing[@]} -gt 0 ]; then
@@ -279,6 +441,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+          # generate-notes 要能看到上一个标签，浅克隆里没有。
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -287,19 +453,38 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: artifacts
+      # 变更清单交给 GitHub 自己生成：它按两个标签之间合并的 PR 写，比任何我们
+      # 自己维护的清单都更接近真实发生的事。标签还不存在时（分支演练）它会失败，
+      # 那就退回一行标题，说明照样有兼容性围栏。
+      - name: 取 GitHub 生成的变更说明
+        id: notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+        run: |
+          set -euo pipefail
+          path="$RUNNER_TEMP/generated-notes.md"
+          if ! gh api "repos/$GH_REPO/releases/generate-notes" \
+            -f tag_name="$RELEASE_TAG" --jq ".body" > "$path" 2>/dev/null; then
+            printf 'Armadra %s\n' "$RELEASE_TAG" > "$path"
+          fi
+          [ -s "$path" ] || printf 'Armadra %s\n' "$RELEASE_TAG" > "$path"
+          printf 'path=%s\n' "$path" >> "$GITHUB_OUTPUT"
       - name: 生成清单、校验列表与说明
         shell: bash
         env:
           ARMADRA_RELEASE_SIGNING_KEY: ${{ secrets.ARMADRA_RELEASE_SIGNING_KEY }}
         run: |
           set -euo pipefail
-          version="${{ needs.verify.outputs.version }}"
           node tools/release/assemble.mjs \
             --dir artifacts \
-            --version "$version" \
+            --version "${{ needs.verify.outputs.version }}" \
             --repo "${{ github.repository }}" \
-            --tag "v$version" \
+            --tag "${{ needs.verify.outputs.tag }}" \
             --unnotarized "${{ needs.notarize.outputs.unnotarized }}" \
+            --notes-from "${{ steps.notes.outputs.path }}" \
             --note release-note.md
       - uses: actions/upload-artifact@v4
         with:
@@ -313,15 +498,13 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
         run: |
           set -euo pipefail
-          version="${{ needs.verify.outputs.version }}"
-          prerelease=""
-          case "$version" in
-            *-*) prerelease="--prerelease" ;;
-          esac
-          gh release create "v$version" \
-            --draft $prerelease \
-            --title "Armadra $version" \
-            --notes-file release-note.md \
-            artifacts/*
+          args=(--draft --verify-tag --title "Armadra ${{ needs.verify.outputs.version }}" --notes-file release-note.md)
+          # --verify-tag：标签不存在时拒绝，而不是替我们建一个指向当前提交的。
+          if [ "$PRERELEASE" = "true" ]; then
+            args+=(--prerelease)
+          fi
+          gh release create "$RELEASE_TAG" "${args[@]}" artifacts/*
