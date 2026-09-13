@@ -134,15 +134,27 @@ func TestAgentWritesAreRefusedWhileTheRuntimeOwnsTheDomain(t *testing.T) {
 	}
 }
 
-// Installing a Hook makes a CLI on the machine call back into the Runtime. It
-// is execution, and a Host with no channel to that machine says so rather than
-// reporting a Hook it never wrote.
-func TestInstallingHooksWithoutAReachableWorkerIsUnavailable(t *testing.T) {
+// Installing an integration makes a CLI on the machine call back into the
+// Runtime. It is execution, and a Host with no channel to that machine says so
+// rather than reporting an adapter it never wrote. The same holds for reading
+// the state and for repairing an older install: all three answers come from
+// files this Host cannot see.
+func TestIntegrationCallsWithoutAReachableWorkerAreUnavailable(t *testing.T) {
 	f := newAuthFixture(t, withAgents)
 	client := f.client(t)
 	session, _ := f.pair(t, client, "手机", agentScopes())
 	hostOwnsAgents(t, f.store)
-	expectAuthStatus(t, f.agent(t, client, "InstallHooks", &pb.InstallHooksRequest{
+	expectAuthStatus(t, f.agent(t, client, "InstallIntegration", &pb.InstallIntegrationRequest{
 		Meta: scope("workspace"), OperationId: "install-1", AgentId: "claude",
+	}, session.CsrfToken), http.StatusServiceUnavailable, "UNAVAILABLE")
+	expectAuthStatus(t, f.agent(t, client, "UninstallIntegration", &pb.UninstallIntegrationRequest{
+		Meta: scope("workspace"), OperationId: "uninstall-1", AgentId: "claude",
+	}, session.CsrfToken), http.StatusServiceUnavailable, "UNAVAILABLE")
+	expectAuthStatus(t, f.agent(t, client, "RepairIntegration", &pb.RepairIntegrationRequest{
+		Meta: scope("workspace"), OperationId: "repair-1", AgentId: "claude",
+	}, session.CsrfToken), http.StatusServiceUnavailable, "UNAVAILABLE")
+	// The read needs the machine too, and is the one call a read grant reaches.
+	expectAuthStatus(t, f.agent(t, client, "GetIntegration", &pb.GetIntegrationRequest{
+		Meta: scope("workspace"), AgentId: "claude",
 	}, session.CsrfToken), http.StatusServiceUnavailable, "UNAVAILABLE")
 }

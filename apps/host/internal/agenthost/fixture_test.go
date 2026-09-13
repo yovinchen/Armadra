@@ -12,6 +12,7 @@ import (
 	auth "armadra.local/host/internal/identity"
 	"armadra.local/host/internal/ownership"
 	"armadra.local/host/internal/storage"
+	"armadra.local/host/internal/worker"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -46,6 +47,7 @@ type machine struct {
 	failDeliver bool
 	handoffs    []*pb.DeliverHandoffRequest
 	installs    []string
+	repairs     []string
 	// reads records the transcript and screen requests that reached the
 	// machine, so a test can assert what this Host filled in for the caller
 	// rather than only what came back.
@@ -100,9 +102,30 @@ func (m *machine) DeliverMessage(_ context.Context, request *pb.DeliverMessageRe
 	return &pb.AgentDeliveryReceipt{TraceId: request.GetTraceId(), Outcome: m.outcome}, nil
 }
 
-func (m *machine) Hooks(_ context.Context, agentID string, install bool) (*pb.HookInstallState, error) {
-	m.installs = append(m.installs, agentID)
-	return &pb.HookInstallState{AgentId: agentID, Installed: install, ClientRevision: 3, ConfigPath: "/home/用户/.claude/settings.json"}, nil
+func (m *machine) Integration(_ context.Context, agentID string, action worker.IntegrationAction) (*pb.IntegrationState, error) {
+	m.installs = append(m.installs, string(action)+":"+agentID)
+	installed := action == worker.IntegrationInstall
+	return &pb.IntegrationState{
+		AgentId:           agentID,
+		Mode:              "launch",
+		Hook:              &pb.IntegrationHalf{Installed: installed, Path: "/home/用户/Library/Application Support/Armadra/integration/claude/settings.json", Revision: 4},
+		Skill:             &pb.IntegrationHalf{Installed: installed, Path: "/home/用户/.claude/skills/armadra/SKILL.md", Revision: 6},
+		Revision:          406,
+		InstalledRevision: 406,
+		LaunchArgs:        []string{"--settings", "/home/用户/Library/Application Support/Armadra/integration/claude/settings.json"},
+	}, nil
+}
+
+func (m *machine) RepairIntegration(_ context.Context, agentID string) (*pb.IntegrationRepairReport, error) {
+	m.repairs = append(m.repairs, agentID)
+	return &pb.IntegrationRepairReport{
+		AgentId: agentID,
+		Found: []*pb.LegacyIntegrationFinding{
+			{Kind: "hook_entry", Path: "/home/用户/.claude/settings.json", Detail: "/usr/local/bin/aicc-hook claude"},
+		},
+		Removed: []string{"/home/用户/.claude/settings.json: Stop hooks → /usr/local/bin/aicc-hook claude"},
+		Backups: []string{"/home/用户/.claude/settings.json.armadra-backup-20260913101500"},
+	}, nil
 }
 
 func (m *machine) ReadTranscript(_ context.Context, request *pb.ReadTranscriptRequest) (*pb.TranscriptExcerpt, error) {

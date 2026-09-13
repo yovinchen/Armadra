@@ -625,33 +625,84 @@ message ListContextLinksRequest {
 }
 message ListContextLinksResponse { repeated ContextLinks links = 10; }
 
-// armadra.v1.AgentService/InstallHooks and /UninstallHooks — execution.
+// armadra.v1.AgentService/GetIntegration, /InstallIntegration,
+// /UninstallIntegration and /RepairIntegration — execution.
 //
-// Installing a Hook edits a CLI's own configuration file on the execution host.
-// It is forwarded, never performed here: the file is that machine's and the
-// CLI's version is that machine's, and a Host that wrote it would be writing
+// The hook adapter and the collaboration skill are one install unit with one
+// state (docs/design/agent-integration.md §2). Both live in files on the
+// execution host, and the CLI's version is that machine's, so all four are
+// forwarded and none is performed here: a Host that wrote them would be writing
 // into a configuration it cannot read back.
-message InstallHooksRequest {
-  CommandMeta meta = 1;
-  string operation_id = 2;
-  string agent_id = 10;
+//
+// `GetIntegration` is a read with a write's shape, for the same reason
+// `ReadTranscript` is: the answer is a set of files this Host never sees.
+message IntegrationHalf {
+  bool installed = 1;
+  // The file this half lives in, present even when it is not installed: the
+  // settings page's answer to "why not" is usually "look here".
+  string path = 2;
+  // The revision on disk; 0 when this half is not installed.
+  int64 revision = 3;
 }
-message HookInstallState {
+// Something an earlier product name left behind (设计 §4). Reported by
+// `GetIntegration`, removed only by `RepairIntegration`.
+message LegacyIntegrationFinding {
+  // `hook_entry` / `skill_dir` / `codex_unknown_key` / `status_line`.
+  string kind = 1;
+  string path = 2;
+  string detail = 3;
+}
+message IntegrationState {
   string agent_id = 1;
-  bool installed = 10;
-  uint32 client_revision = 11;
-  // The configuration file the Worker actually touched, for a person to check.
-  string config_path = 12;
+  // `launch` / `file` / `extension` — how the adapter reaches the CLI, and so
+  // whether integrating writes a file the user also edits.
+  string mode = 10;
+  IntegrationHalf hook = 11;
+  IntegrationHalf skill = 12;
+  repeated LegacyIntegrationFinding legacy = 13;
+  // What a fresh install writes, and what the files on disk were written by.
+  int64 revision = 14;
+  int64 installed_revision = 15;
+  bool stale = 16;
+  // Argv a session of this agent must carry for its adapter to load. Empty for
+  // every mode but `launch`.
+  repeated string launch_args = 17;
+  string client_bin = 18;
   string reason_code = 39;
-  int64 installed_at_unix_ms = 40;
+  int64 observed_at_unix_ms = 40;
 }
-message InstallHooksResponse { HookInstallState state = 1; }
-message UninstallHooksRequest {
+message GetIntegrationRequest {
+  CommandMeta meta = 1;
+  string agent_id = 10;
+}
+message GetIntegrationResponse { IntegrationState state = 1; }
+message InstallIntegrationRequest {
   CommandMeta meta = 1;
   string operation_id = 2;
   string agent_id = 10;
 }
-message UninstallHooksResponse { HookInstallState state = 1; }
+message InstallIntegrationResponse { IntegrationState state = 1; }
+message UninstallIntegrationRequest {
+  CommandMeta meta = 1;
+  string operation_id = 2;
+  string agent_id = 10;
+}
+message UninstallIntegrationResponse { IntegrationState state = 1; }
+message RepairIntegrationRequest {
+  CommandMeta meta = 1;
+  string operation_id = 2;
+  string agent_id = 10;
+}
+message IntegrationRepairReport {
+  string agent_id = 1;
+  repeated LegacyIntegrationFinding found = 10;
+  repeated string removed = 11;
+  // Foreign entries in the files that were rewritten, left as they were.
+  repeated string kept = 12;
+  repeated string backups = 13;
+  int64 observed_at_unix_ms = 40;
+}
+message RepairIntegrationResponse { IntegrationRepairReport report = 1; }
 
 // armadra.v1.AgentService/ReadTranscript and /CaptureScreen — one node's own
 // material, forwarded and never stored.
@@ -818,9 +869,15 @@ message AgentWorkerRequest {
     DeliverMessageRequest deliver_message = 104;
     ReadTranscriptRequest read_transcript = 105;
     CaptureAgentScreenRequest capture_screen = 106;
-    InstallHooksRequest install_hooks = 107;
-    UninstallHooksRequest uninstall_hooks = 108;
+    // 107 and 108 were `install_hooks` / `uninstall_hooks`. Hook and skill are
+    // one install unit now (设计 §2), so the pair was replaced rather than kept
+    // alongside a second switch for the same state.
+    GetIntegrationRequest get_integration = 109;
+    InstallIntegrationRequest install_integration = 110;
+    UninstallIntegrationRequest uninstall_integration = 111;
+    RepairIntegrationRequest repair_integration = 112;
   }
+  reserved 107, 108;
 }
 
 message AgentWorkerResponse {
@@ -830,6 +887,8 @@ message AgentWorkerResponse {
     AgentDeliveryReceipt delivery = 102;
     TranscriptExcerpt transcript = 105;
     CapturedAgentScreen screen = 106;
-    HookInstallState hooks = 107;
+    IntegrationState integration = 109;
+    IntegrationRepairReport repair = 110;
   }
+  reserved 107;
 }

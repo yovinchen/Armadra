@@ -34,7 +34,8 @@ func agentMethod(path string) bool {
 	switch strings.TrimPrefix(path, AgentPrefix) {
 	case "ListStatus", "MarkRead", "ListApprovals", "AnswerApproval", "ListDeliveries",
 		"ListMailbox", "PrepareHandoff", "AcceptHandoff", "CancelHandoff", "ListHandoffs",
-		"GetHandoff", "ListContextLinks", "InstallHooks", "UninstallHooks":
+		"GetHandoff", "ListContextLinks",
+		"GetIntegration", "InstallIntegration", "UninstallIntegration", "RepairIntegration":
 		return true
 	}
 	return false
@@ -255,25 +256,46 @@ func agentRequest(w http.ResponseWriter, r *http.Request, host Identity, service
 				return agents.ListContextLinks(ctx, caller, in)
 			},
 		}, new(pb.ListContextLinksRequest))
-	// Installing a Hook makes a CLI on the machine call back into the Runtime.
-	// It is execution, and it is checked as execution even though this Host
-	// stores nothing about it.
-	case "InstallHooks":
-		serveAgent(w, r, host, service, agents, agentCall[pb.InstallHooksRequest, pb.InstallHooksResponse]{
-			permission: agenthost.ScopeWrite, mutating: true,
-			meta: func(in *pb.InstallHooksRequest) *pb.CommandMeta { return in.GetMeta() },
-			act: func(caller agenthost.Caller, in *pb.InstallHooksRequest) (*pb.InstallHooksResponse, error) {
-				return agents.InstallHooks(ctx, caller, in)
+	// Installing an adapter makes a CLI on the machine call back into the
+	// Runtime. It is execution, and it is checked as execution even though this
+	// Host stores nothing about it. Hook and skill are one unit with one state
+	// (docs/design/agent-integration.md §2), so there is one verb set here.
+	//
+	// `GetIntegration` is a read that leaves no trace: `mutating` stays false
+	// because there is no operation id to replay and nothing a second call
+	// could double.
+	case "GetIntegration":
+		serveAgent(w, r, host, service, agents, agentCall[pb.GetIntegrationRequest, pb.GetIntegrationResponse]{
+			permission: agenthost.ScopeRead,
+			meta:       func(in *pb.GetIntegrationRequest) *pb.CommandMeta { return in.GetMeta() },
+			act: func(caller agenthost.Caller, in *pb.GetIntegrationRequest) (*pb.GetIntegrationResponse, error) {
+				return agents.GetIntegration(ctx, caller, in)
 			},
-		}, new(pb.InstallHooksRequest))
-	case "UninstallHooks":
-		serveAgent(w, r, host, service, agents, agentCall[pb.UninstallHooksRequest, pb.UninstallHooksResponse]{
+		}, new(pb.GetIntegrationRequest))
+	case "InstallIntegration":
+		serveAgent(w, r, host, service, agents, agentCall[pb.InstallIntegrationRequest, pb.InstallIntegrationResponse]{
 			permission: agenthost.ScopeWrite, mutating: true,
-			meta: func(in *pb.UninstallHooksRequest) *pb.CommandMeta { return in.GetMeta() },
-			act: func(caller agenthost.Caller, in *pb.UninstallHooksRequest) (*pb.UninstallHooksResponse, error) {
-				return agents.UninstallHooks(ctx, caller, in)
+			meta: func(in *pb.InstallIntegrationRequest) *pb.CommandMeta { return in.GetMeta() },
+			act: func(caller agenthost.Caller, in *pb.InstallIntegrationRequest) (*pb.InstallIntegrationResponse, error) {
+				return agents.InstallIntegration(ctx, caller, in)
 			},
-		}, new(pb.UninstallHooksRequest))
+		}, new(pb.InstallIntegrationRequest))
+	case "UninstallIntegration":
+		serveAgent(w, r, host, service, agents, agentCall[pb.UninstallIntegrationRequest, pb.UninstallIntegrationResponse]{
+			permission: agenthost.ScopeWrite, mutating: true,
+			meta: func(in *pb.UninstallIntegrationRequest) *pb.CommandMeta { return in.GetMeta() },
+			act: func(caller agenthost.Caller, in *pb.UninstallIntegrationRequest) (*pb.UninstallIntegrationResponse, error) {
+				return agents.UninstallIntegration(ctx, caller, in)
+			},
+		}, new(pb.UninstallIntegrationRequest))
+	case "RepairIntegration":
+		serveAgent(w, r, host, service, agents, agentCall[pb.RepairIntegrationRequest, pb.RepairIntegrationResponse]{
+			permission: agenthost.ScopeWrite, mutating: true,
+			meta: func(in *pb.RepairIntegrationRequest) *pb.CommandMeta { return in.GetMeta() },
+			act: func(caller agenthost.Caller, in *pb.RepairIntegrationRequest) (*pb.RepairIntegrationResponse, error) {
+				return agents.RepairIntegration(ctx, caller, in)
+			},
+		}, new(pb.RepairIntegrationRequest))
 	// Both of these are reads that leave no trace here: they resolve the node,
 	// forward to the machine the CLI runs on, and pass the answer through.
 	// `mutating` stays false for exactly that reason — there is no operation id

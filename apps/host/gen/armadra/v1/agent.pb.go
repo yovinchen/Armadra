@@ -3782,35 +3782,43 @@ func (x *ListContextLinksResponse) GetLinks() []*ContextLinks {
 	return nil
 }
 
-// armadra.v1.AgentService/InstallHooks and /UninstallHooks — execution.
+// armadra.v1.AgentService/GetIntegration, /InstallIntegration,
+// /UninstallIntegration and /RepairIntegration — execution.
 //
-// Installing a Hook edits a CLI's own configuration file on the execution host.
-// It is forwarded, never performed here: the file is that machine's and the
-// CLI's version is that machine's, and a Host that wrote it would be writing
+// The hook adapter and the collaboration skill are one install unit with one
+// state (docs/design/agent-integration.md §2). Both live in files on the
+// execution host, and the CLI's version is that machine's, so all four are
+// forwarded and none is performed here: a Host that wrote them would be writing
 // into a configuration it cannot read back.
-type InstallHooksRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	OperationId   string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
-	AgentId       string                 `protobuf:"bytes,10,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+//
+// `GetIntegration` is a read with a write's shape, for the same reason
+// `ReadTranscript` is: the answer is a set of files this Host never sees.
+type IntegrationHalf struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Installed bool                   `protobuf:"varint,1,opt,name=installed,proto3" json:"installed,omitempty"`
+	// The file this half lives in, present even when it is not installed: the
+	// settings page's answer to "why not" is usually "look here".
+	Path string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	// The revision on disk; 0 when this half is not installed.
+	Revision      int64 `protobuf:"varint,3,opt,name=revision,proto3" json:"revision,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *InstallHooksRequest) Reset() {
-	*x = InstallHooksRequest{}
+func (x *IntegrationHalf) Reset() {
+	*x = IntegrationHalf{}
 	mi := &file_armadra_v1_agent_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *InstallHooksRequest) String() string {
+func (x *IntegrationHalf) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*InstallHooksRequest) ProtoMessage() {}
+func (*IntegrationHalf) ProtoMessage() {}
 
-func (x *InstallHooksRequest) ProtoReflect() protoreflect.Message {
+func (x *IntegrationHalf) ProtoReflect() protoreflect.Message {
 	mi := &file_armadra_v1_agent_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3822,138 +3830,132 @@ func (x *InstallHooksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InstallHooksRequest.ProtoReflect.Descriptor instead.
-func (*InstallHooksRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use IntegrationHalf.ProtoReflect.Descriptor instead.
+func (*IntegrationHalf) Descriptor() ([]byte, []int) {
 	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{40}
 }
 
-func (x *InstallHooksRequest) GetMeta() *CommandMeta {
-	if x != nil {
-		return x.Meta
-	}
-	return nil
-}
-
-func (x *InstallHooksRequest) GetOperationId() string {
-	if x != nil {
-		return x.OperationId
-	}
-	return ""
-}
-
-func (x *InstallHooksRequest) GetAgentId() string {
-	if x != nil {
-		return x.AgentId
-	}
-	return ""
-}
-
-type HookInstallState struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	AgentId        string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
-	Installed      bool                   `protobuf:"varint,10,opt,name=installed,proto3" json:"installed,omitempty"`
-	ClientRevision uint32                 `protobuf:"varint,11,opt,name=client_revision,json=clientRevision,proto3" json:"client_revision,omitempty"`
-	// The configuration file the Worker actually touched, for a person to check.
-	ConfigPath        string `protobuf:"bytes,12,opt,name=config_path,json=configPath,proto3" json:"config_path,omitempty"`
-	ReasonCode        string `protobuf:"bytes,39,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
-	InstalledAtUnixMs int64  `protobuf:"varint,40,opt,name=installed_at_unix_ms,json=installedAtUnixMs,proto3" json:"installed_at_unix_ms,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
-}
-
-func (x *HookInstallState) Reset() {
-	*x = HookInstallState{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[41]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *HookInstallState) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*HookInstallState) ProtoMessage() {}
-
-func (x *HookInstallState) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[41]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use HookInstallState.ProtoReflect.Descriptor instead.
-func (*HookInstallState) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{41}
-}
-
-func (x *HookInstallState) GetAgentId() string {
-	if x != nil {
-		return x.AgentId
-	}
-	return ""
-}
-
-func (x *HookInstallState) GetInstalled() bool {
+func (x *IntegrationHalf) GetInstalled() bool {
 	if x != nil {
 		return x.Installed
 	}
 	return false
 }
 
-func (x *HookInstallState) GetClientRevision() uint32 {
+func (x *IntegrationHalf) GetPath() string {
 	if x != nil {
-		return x.ClientRevision
-	}
-	return 0
-}
-
-func (x *HookInstallState) GetConfigPath() string {
-	if x != nil {
-		return x.ConfigPath
+		return x.Path
 	}
 	return ""
 }
 
-func (x *HookInstallState) GetReasonCode() string {
+func (x *IntegrationHalf) GetRevision() int64 {
 	if x != nil {
-		return x.ReasonCode
-	}
-	return ""
-}
-
-func (x *HookInstallState) GetInstalledAtUnixMs() int64 {
-	if x != nil {
-		return x.InstalledAtUnixMs
+		return x.Revision
 	}
 	return 0
 }
 
-type InstallHooksResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	State         *HookInstallState      `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
+// Something an earlier product name left behind (设计 §4). Reported by
+// `GetIntegration`, removed only by `RepairIntegration`.
+type LegacyIntegrationFinding struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// `hook_entry` / `skill_dir` / `codex_unknown_key` / `status_line`.
+	Kind          string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	Path          string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	Detail        string `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *InstallHooksResponse) Reset() {
-	*x = InstallHooksResponse{}
+func (x *LegacyIntegrationFinding) Reset() {
+	*x = LegacyIntegrationFinding{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LegacyIntegrationFinding) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LegacyIntegrationFinding) ProtoMessage() {}
+
+func (x *LegacyIntegrationFinding) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LegacyIntegrationFinding.ProtoReflect.Descriptor instead.
+func (*LegacyIntegrationFinding) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *LegacyIntegrationFinding) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *LegacyIntegrationFinding) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *LegacyIntegrationFinding) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+type IntegrationState struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	AgentId string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	// `launch` / `file` / `extension` — how the adapter reaches the CLI, and so
+	// whether integrating writes a file the user also edits.
+	Mode   string                      `protobuf:"bytes,10,opt,name=mode,proto3" json:"mode,omitempty"`
+	Hook   *IntegrationHalf            `protobuf:"bytes,11,opt,name=hook,proto3" json:"hook,omitempty"`
+	Skill  *IntegrationHalf            `protobuf:"bytes,12,opt,name=skill,proto3" json:"skill,omitempty"`
+	Legacy []*LegacyIntegrationFinding `protobuf:"bytes,13,rep,name=legacy,proto3" json:"legacy,omitempty"`
+	// What a fresh install writes, and what the files on disk were written by.
+	Revision          int64 `protobuf:"varint,14,opt,name=revision,proto3" json:"revision,omitempty"`
+	InstalledRevision int64 `protobuf:"varint,15,opt,name=installed_revision,json=installedRevision,proto3" json:"installed_revision,omitempty"`
+	Stale             bool  `protobuf:"varint,16,opt,name=stale,proto3" json:"stale,omitempty"`
+	// Argv a session of this agent must carry for its adapter to load. Empty for
+	// every mode but `launch`.
+	LaunchArgs       []string `protobuf:"bytes,17,rep,name=launch_args,json=launchArgs,proto3" json:"launch_args,omitempty"`
+	ClientBin        string   `protobuf:"bytes,18,opt,name=client_bin,json=clientBin,proto3" json:"client_bin,omitempty"`
+	ReasonCode       string   `protobuf:"bytes,39,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
+	ObservedAtUnixMs int64    `protobuf:"varint,40,opt,name=observed_at_unix_ms,json=observedAtUnixMs,proto3" json:"observed_at_unix_ms,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *IntegrationState) Reset() {
+	*x = IntegrationState{}
 	mi := &file_armadra_v1_agent_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *InstallHooksResponse) String() string {
+func (x *IntegrationState) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*InstallHooksResponse) ProtoMessage() {}
+func (*IntegrationState) ProtoMessage() {}
 
-func (x *InstallHooksResponse) ProtoReflect() protoreflect.Message {
+func (x *IntegrationState) ProtoReflect() protoreflect.Message {
 	mi := &file_armadra_v1_agent_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3965,19 +3967,192 @@ func (x *InstallHooksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use InstallHooksResponse.ProtoReflect.Descriptor instead.
-func (*InstallHooksResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use IntegrationState.ProtoReflect.Descriptor instead.
+func (*IntegrationState) Descriptor() ([]byte, []int) {
 	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{42}
 }
 
-func (x *InstallHooksResponse) GetState() *HookInstallState {
+func (x *IntegrationState) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *IntegrationState) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *IntegrationState) GetHook() *IntegrationHalf {
+	if x != nil {
+		return x.Hook
+	}
+	return nil
+}
+
+func (x *IntegrationState) GetSkill() *IntegrationHalf {
+	if x != nil {
+		return x.Skill
+	}
+	return nil
+}
+
+func (x *IntegrationState) GetLegacy() []*LegacyIntegrationFinding {
+	if x != nil {
+		return x.Legacy
+	}
+	return nil
+}
+
+func (x *IntegrationState) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *IntegrationState) GetInstalledRevision() int64 {
+	if x != nil {
+		return x.InstalledRevision
+	}
+	return 0
+}
+
+func (x *IntegrationState) GetStale() bool {
+	if x != nil {
+		return x.Stale
+	}
+	return false
+}
+
+func (x *IntegrationState) GetLaunchArgs() []string {
+	if x != nil {
+		return x.LaunchArgs
+	}
+	return nil
+}
+
+func (x *IntegrationState) GetClientBin() string {
+	if x != nil {
+		return x.ClientBin
+	}
+	return ""
+}
+
+func (x *IntegrationState) GetReasonCode() string {
+	if x != nil {
+		return x.ReasonCode
+	}
+	return ""
+}
+
+func (x *IntegrationState) GetObservedAtUnixMs() int64 {
+	if x != nil {
+		return x.ObservedAtUnixMs
+	}
+	return 0
+}
+
+type GetIntegrationRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	AgentId       string                 `protobuf:"bytes,10,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetIntegrationRequest) Reset() {
+	*x = GetIntegrationRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetIntegrationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetIntegrationRequest) ProtoMessage() {}
+
+func (x *GetIntegrationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetIntegrationRequest.ProtoReflect.Descriptor instead.
+func (*GetIntegrationRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *GetIntegrationRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *GetIntegrationRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+type GetIntegrationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	State         *IntegrationState      `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetIntegrationResponse) Reset() {
+	*x = GetIntegrationResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetIntegrationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetIntegrationResponse) ProtoMessage() {}
+
+func (x *GetIntegrationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetIntegrationResponse.ProtoReflect.Descriptor instead.
+func (*GetIntegrationResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *GetIntegrationResponse) GetState() *IntegrationState {
 	if x != nil {
 		return x.State
 	}
 	return nil
 }
 
-type UninstallHooksRequest struct {
+type InstallIntegrationRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
 	OperationId   string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
@@ -3986,21 +4161,21 @@ type UninstallHooksRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *UninstallHooksRequest) Reset() {
-	*x = UninstallHooksRequest{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[43]
+func (x *InstallIntegrationRequest) Reset() {
+	*x = InstallIntegrationRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *UninstallHooksRequest) String() string {
+func (x *InstallIntegrationRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*UninstallHooksRequest) ProtoMessage() {}
+func (*InstallIntegrationRequest) ProtoMessage() {}
 
-func (x *UninstallHooksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[43]
+func (x *InstallIntegrationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4011,54 +4186,54 @@ func (x *UninstallHooksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UninstallHooksRequest.ProtoReflect.Descriptor instead.
-func (*UninstallHooksRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{43}
+// Deprecated: Use InstallIntegrationRequest.ProtoReflect.Descriptor instead.
+func (*InstallIntegrationRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{45}
 }
 
-func (x *UninstallHooksRequest) GetMeta() *CommandMeta {
+func (x *InstallIntegrationRequest) GetMeta() *CommandMeta {
 	if x != nil {
 		return x.Meta
 	}
 	return nil
 }
 
-func (x *UninstallHooksRequest) GetOperationId() string {
+func (x *InstallIntegrationRequest) GetOperationId() string {
 	if x != nil {
 		return x.OperationId
 	}
 	return ""
 }
 
-func (x *UninstallHooksRequest) GetAgentId() string {
+func (x *InstallIntegrationRequest) GetAgentId() string {
 	if x != nil {
 		return x.AgentId
 	}
 	return ""
 }
 
-type UninstallHooksResponse struct {
+type InstallIntegrationResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	State         *HookInstallState      `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
+	State         *IntegrationState      `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *UninstallHooksResponse) Reset() {
-	*x = UninstallHooksResponse{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[44]
+func (x *InstallIntegrationResponse) Reset() {
+	*x = InstallIntegrationResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *UninstallHooksResponse) String() string {
+func (x *InstallIntegrationResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*UninstallHooksResponse) ProtoMessage() {}
+func (*InstallIntegrationResponse) ProtoMessage() {}
 
-func (x *UninstallHooksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[44]
+func (x *InstallIntegrationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4069,14 +4244,307 @@ func (x *UninstallHooksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UninstallHooksResponse.ProtoReflect.Descriptor instead.
-func (*UninstallHooksResponse) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{44}
+// Deprecated: Use InstallIntegrationResponse.ProtoReflect.Descriptor instead.
+func (*InstallIntegrationResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{46}
 }
 
-func (x *UninstallHooksResponse) GetState() *HookInstallState {
+func (x *InstallIntegrationResponse) GetState() *IntegrationState {
 	if x != nil {
 		return x.State
+	}
+	return nil
+}
+
+type UninstallIntegrationRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	OperationId   string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	AgentId       string                 `protobuf:"bytes,10,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UninstallIntegrationRequest) Reset() {
+	*x = UninstallIntegrationRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UninstallIntegrationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UninstallIntegrationRequest) ProtoMessage() {}
+
+func (x *UninstallIntegrationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UninstallIntegrationRequest.ProtoReflect.Descriptor instead.
+func (*UninstallIntegrationRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *UninstallIntegrationRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *UninstallIntegrationRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *UninstallIntegrationRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+type UninstallIntegrationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	State         *IntegrationState      `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UninstallIntegrationResponse) Reset() {
+	*x = UninstallIntegrationResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UninstallIntegrationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UninstallIntegrationResponse) ProtoMessage() {}
+
+func (x *UninstallIntegrationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UninstallIntegrationResponse.ProtoReflect.Descriptor instead.
+func (*UninstallIntegrationResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *UninstallIntegrationResponse) GetState() *IntegrationState {
+	if x != nil {
+		return x.State
+	}
+	return nil
+}
+
+type RepairIntegrationRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *CommandMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	OperationId   string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	AgentId       string                 `protobuf:"bytes,10,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RepairIntegrationRequest) Reset() {
+	*x = RepairIntegrationRequest{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RepairIntegrationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RepairIntegrationRequest) ProtoMessage() {}
+
+func (x *RepairIntegrationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RepairIntegrationRequest.ProtoReflect.Descriptor instead.
+func (*RepairIntegrationRequest) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *RepairIntegrationRequest) GetMeta() *CommandMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *RepairIntegrationRequest) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *RepairIntegrationRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+type IntegrationRepairReport struct {
+	state   protoimpl.MessageState      `protogen:"open.v1"`
+	AgentId string                      `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	Found   []*LegacyIntegrationFinding `protobuf:"bytes,10,rep,name=found,proto3" json:"found,omitempty"`
+	Removed []string                    `protobuf:"bytes,11,rep,name=removed,proto3" json:"removed,omitempty"`
+	// Foreign entries in the files that were rewritten, left as they were.
+	Kept             []string `protobuf:"bytes,12,rep,name=kept,proto3" json:"kept,omitempty"`
+	Backups          []string `protobuf:"bytes,13,rep,name=backups,proto3" json:"backups,omitempty"`
+	ObservedAtUnixMs int64    `protobuf:"varint,40,opt,name=observed_at_unix_ms,json=observedAtUnixMs,proto3" json:"observed_at_unix_ms,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *IntegrationRepairReport) Reset() {
+	*x = IntegrationRepairReport{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IntegrationRepairReport) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IntegrationRepairReport) ProtoMessage() {}
+
+func (x *IntegrationRepairReport) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IntegrationRepairReport.ProtoReflect.Descriptor instead.
+func (*IntegrationRepairReport) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *IntegrationRepairReport) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *IntegrationRepairReport) GetFound() []*LegacyIntegrationFinding {
+	if x != nil {
+		return x.Found
+	}
+	return nil
+}
+
+func (x *IntegrationRepairReport) GetRemoved() []string {
+	if x != nil {
+		return x.Removed
+	}
+	return nil
+}
+
+func (x *IntegrationRepairReport) GetKept() []string {
+	if x != nil {
+		return x.Kept
+	}
+	return nil
+}
+
+func (x *IntegrationRepairReport) GetBackups() []string {
+	if x != nil {
+		return x.Backups
+	}
+	return nil
+}
+
+func (x *IntegrationRepairReport) GetObservedAtUnixMs() int64 {
+	if x != nil {
+		return x.ObservedAtUnixMs
+	}
+	return 0
+}
+
+type RepairIntegrationResponse struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Report        *IntegrationRepairReport `protobuf:"bytes,1,opt,name=report,proto3" json:"report,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RepairIntegrationResponse) Reset() {
+	*x = RepairIntegrationResponse{}
+	mi := &file_armadra_v1_agent_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RepairIntegrationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RepairIntegrationResponse) ProtoMessage() {}
+
+func (x *RepairIntegrationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_armadra_v1_agent_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RepairIntegrationResponse.ProtoReflect.Descriptor instead.
+func (*RepairIntegrationResponse) Descriptor() ([]byte, []int) {
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *RepairIntegrationResponse) GetReport() *IntegrationRepairReport {
+	if x != nil {
+		return x.Report
 	}
 	return nil
 }
@@ -4103,7 +4571,7 @@ type ReadAgentTranscriptRequest struct {
 
 func (x *ReadAgentTranscriptRequest) Reset() {
 	*x = ReadAgentTranscriptRequest{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[45]
+	mi := &file_armadra_v1_agent_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4115,7 +4583,7 @@ func (x *ReadAgentTranscriptRequest) String() string {
 func (*ReadAgentTranscriptRequest) ProtoMessage() {}
 
 func (x *ReadAgentTranscriptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[45]
+	mi := &file_armadra_v1_agent_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4128,7 +4596,7 @@ func (x *ReadAgentTranscriptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadAgentTranscriptRequest.ProtoReflect.Descriptor instead.
 func (*ReadAgentTranscriptRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{45}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *ReadAgentTranscriptRequest) GetMeta() *CommandMeta {
@@ -4161,7 +4629,7 @@ type ReadAgentTranscriptResponse struct {
 
 func (x *ReadAgentTranscriptResponse) Reset() {
 	*x = ReadAgentTranscriptResponse{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[46]
+	mi := &file_armadra_v1_agent_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4173,7 +4641,7 @@ func (x *ReadAgentTranscriptResponse) String() string {
 func (*ReadAgentTranscriptResponse) ProtoMessage() {}
 
 func (x *ReadAgentTranscriptResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[46]
+	mi := &file_armadra_v1_agent_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4186,7 +4654,7 @@ func (x *ReadAgentTranscriptResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadAgentTranscriptResponse.ProtoReflect.Descriptor instead.
 func (*ReadAgentTranscriptResponse) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{46}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *ReadAgentTranscriptResponse) GetExcerpt() *TranscriptExcerpt {
@@ -4207,7 +4675,7 @@ type CaptureAgentScreenCommand struct {
 
 func (x *CaptureAgentScreenCommand) Reset() {
 	*x = CaptureAgentScreenCommand{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[47]
+	mi := &file_armadra_v1_agent_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4219,7 +4687,7 @@ func (x *CaptureAgentScreenCommand) String() string {
 func (*CaptureAgentScreenCommand) ProtoMessage() {}
 
 func (x *CaptureAgentScreenCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[47]
+	mi := &file_armadra_v1_agent_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4232,7 +4700,7 @@ func (x *CaptureAgentScreenCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CaptureAgentScreenCommand.ProtoReflect.Descriptor instead.
 func (*CaptureAgentScreenCommand) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{47}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *CaptureAgentScreenCommand) GetMeta() *CommandMeta {
@@ -4265,7 +4733,7 @@ type CaptureAgentScreenCommandResponse struct {
 
 func (x *CaptureAgentScreenCommandResponse) Reset() {
 	*x = CaptureAgentScreenCommandResponse{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[48]
+	mi := &file_armadra_v1_agent_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4277,7 +4745,7 @@ func (x *CaptureAgentScreenCommandResponse) String() string {
 func (*CaptureAgentScreenCommandResponse) ProtoMessage() {}
 
 func (x *CaptureAgentScreenCommandResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[48]
+	mi := &file_armadra_v1_agent_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4290,7 +4758,7 @@ func (x *CaptureAgentScreenCommandResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use CaptureAgentScreenCommandResponse.ProtoReflect.Descriptor instead.
 func (*CaptureAgentScreenCommandResponse) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{48}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *CaptureAgentScreenCommandResponse) GetScreen() *CapturedAgentScreen {
@@ -4313,7 +4781,7 @@ type ListWorkerAgentsRequest struct {
 
 func (x *ListWorkerAgentsRequest) Reset() {
 	*x = ListWorkerAgentsRequest{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[49]
+	mi := &file_armadra_v1_agent_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4325,7 +4793,7 @@ func (x *ListWorkerAgentsRequest) String() string {
 func (*ListWorkerAgentsRequest) ProtoMessage() {}
 
 func (x *ListWorkerAgentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[49]
+	mi := &file_armadra_v1_agent_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4338,7 +4806,7 @@ func (x *ListWorkerAgentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWorkerAgentsRequest.ProtoReflect.Descriptor instead.
 func (*ListWorkerAgentsRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{49}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{56}
 }
 
 // What the Worker knows about one agent node right now. No revisions anywhere:
@@ -4366,7 +4834,7 @@ type WorkerAgentState struct {
 
 func (x *WorkerAgentState) Reset() {
 	*x = WorkerAgentState{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[50]
+	mi := &file_armadra_v1_agent_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4378,7 +4846,7 @@ func (x *WorkerAgentState) String() string {
 func (*WorkerAgentState) ProtoMessage() {}
 
 func (x *WorkerAgentState) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[50]
+	mi := &file_armadra_v1_agent_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4391,7 +4859,7 @@ func (x *WorkerAgentState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkerAgentState.ProtoReflect.Descriptor instead.
 func (*WorkerAgentState) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{50}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *WorkerAgentState) GetNodeId() string {
@@ -4513,7 +4981,7 @@ type WorkerAgentStates struct {
 
 func (x *WorkerAgentStates) Reset() {
 	*x = WorkerAgentStates{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[51]
+	mi := &file_armadra_v1_agent_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4525,7 +4993,7 @@ func (x *WorkerAgentStates) String() string {
 func (*WorkerAgentStates) ProtoMessage() {}
 
 func (x *WorkerAgentStates) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[51]
+	mi := &file_armadra_v1_agent_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4538,7 +5006,7 @@ func (x *WorkerAgentStates) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkerAgentStates.ProtoReflect.Descriptor instead.
 func (*WorkerAgentStates) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{51}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *WorkerAgentStates) GetWorkerInstanceId() string {
@@ -4581,7 +5049,7 @@ type DrainAgentEventsRequest struct {
 
 func (x *DrainAgentEventsRequest) Reset() {
 	*x = DrainAgentEventsRequest{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[52]
+	mi := &file_armadra_v1_agent_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4593,7 +5061,7 @@ func (x *DrainAgentEventsRequest) String() string {
 func (*DrainAgentEventsRequest) ProtoMessage() {}
 
 func (x *DrainAgentEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[52]
+	mi := &file_armadra_v1_agent_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4606,7 +5074,7 @@ func (x *DrainAgentEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DrainAgentEventsRequest.ProtoReflect.Descriptor instead.
 func (*DrainAgentEventsRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{52}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *DrainAgentEventsRequest) GetAfterSequence() uint64 {
@@ -4637,7 +5105,7 @@ type DrainedAgentEvents struct {
 
 func (x *DrainedAgentEvents) Reset() {
 	*x = DrainedAgentEvents{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[53]
+	mi := &file_armadra_v1_agent_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4649,7 +5117,7 @@ func (x *DrainedAgentEvents) String() string {
 func (*DrainedAgentEvents) ProtoMessage() {}
 
 func (x *DrainedAgentEvents) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[53]
+	mi := &file_armadra_v1_agent_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4662,7 +5130,7 @@ func (x *DrainedAgentEvents) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DrainedAgentEvents.ProtoReflect.Descriptor instead.
 func (*DrainedAgentEvents) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{53}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *DrainedAgentEvents) GetNextSequence() uint64 {
@@ -4720,7 +5188,7 @@ type DeliverApprovalAnswerRequest struct {
 
 func (x *DeliverApprovalAnswerRequest) Reset() {
 	*x = DeliverApprovalAnswerRequest{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[54]
+	mi := &file_armadra_v1_agent_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4732,7 +5200,7 @@ func (x *DeliverApprovalAnswerRequest) String() string {
 func (*DeliverApprovalAnswerRequest) ProtoMessage() {}
 
 func (x *DeliverApprovalAnswerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[54]
+	mi := &file_armadra_v1_agent_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4745,7 +5213,7 @@ func (x *DeliverApprovalAnswerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeliverApprovalAnswerRequest.ProtoReflect.Descriptor instead.
 func (*DeliverApprovalAnswerRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{54}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *DeliverApprovalAnswerRequest) GetApprovalId() string {
@@ -4806,7 +5274,7 @@ type DeliverHandoffRequest struct {
 
 func (x *DeliverHandoffRequest) Reset() {
 	*x = DeliverHandoffRequest{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[55]
+	mi := &file_armadra_v1_agent_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4818,7 +5286,7 @@ func (x *DeliverHandoffRequest) String() string {
 func (*DeliverHandoffRequest) ProtoMessage() {}
 
 func (x *DeliverHandoffRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[55]
+	mi := &file_armadra_v1_agent_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4831,7 +5299,7 @@ func (x *DeliverHandoffRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeliverHandoffRequest.ProtoReflect.Descriptor instead.
 func (*DeliverHandoffRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{55}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *DeliverHandoffRequest) GetHandoffId() string {
@@ -4900,7 +5368,7 @@ type DeliverMessageRequest struct {
 
 func (x *DeliverMessageRequest) Reset() {
 	*x = DeliverMessageRequest{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[56]
+	mi := &file_armadra_v1_agent_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4912,7 +5380,7 @@ func (x *DeliverMessageRequest) String() string {
 func (*DeliverMessageRequest) ProtoMessage() {}
 
 func (x *DeliverMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[56]
+	mi := &file_armadra_v1_agent_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4925,7 +5393,7 @@ func (x *DeliverMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeliverMessageRequest.ProtoReflect.Descriptor instead.
 func (*DeliverMessageRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{56}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *DeliverMessageRequest) GetTraceId() string {
@@ -4985,7 +5453,7 @@ type AgentDeliveryReceipt struct {
 
 func (x *AgentDeliveryReceipt) Reset() {
 	*x = AgentDeliveryReceipt{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[57]
+	mi := &file_armadra_v1_agent_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4997,7 +5465,7 @@ func (x *AgentDeliveryReceipt) String() string {
 func (*AgentDeliveryReceipt) ProtoMessage() {}
 
 func (x *AgentDeliveryReceipt) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[57]
+	mi := &file_armadra_v1_agent_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5010,7 +5478,7 @@ func (x *AgentDeliveryReceipt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentDeliveryReceipt.ProtoReflect.Descriptor instead.
 func (*AgentDeliveryReceipt) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{57}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *AgentDeliveryReceipt) GetTraceId() string {
@@ -5068,7 +5536,7 @@ type ReadTranscriptRequest struct {
 
 func (x *ReadTranscriptRequest) Reset() {
 	*x = ReadTranscriptRequest{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[58]
+	mi := &file_armadra_v1_agent_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5080,7 +5548,7 @@ func (x *ReadTranscriptRequest) String() string {
 func (*ReadTranscriptRequest) ProtoMessage() {}
 
 func (x *ReadTranscriptRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[58]
+	mi := &file_armadra_v1_agent_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5093,7 +5561,7 @@ func (x *ReadTranscriptRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadTranscriptRequest.ProtoReflect.Descriptor instead.
 func (*ReadTranscriptRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{58}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *ReadTranscriptRequest) GetNodeId() string {
@@ -5137,7 +5605,7 @@ type TranscriptExcerpt struct {
 
 func (x *TranscriptExcerpt) Reset() {
 	*x = TranscriptExcerpt{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[59]
+	mi := &file_armadra_v1_agent_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5149,7 +5617,7 @@ func (x *TranscriptExcerpt) String() string {
 func (*TranscriptExcerpt) ProtoMessage() {}
 
 func (x *TranscriptExcerpt) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[59]
+	mi := &file_armadra_v1_agent_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5162,7 +5630,7 @@ func (x *TranscriptExcerpt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TranscriptExcerpt.ProtoReflect.Descriptor instead.
 func (*TranscriptExcerpt) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{59}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *TranscriptExcerpt) GetNodeId() string {
@@ -5211,7 +5679,7 @@ type CaptureAgentScreenRequest struct {
 
 func (x *CaptureAgentScreenRequest) Reset() {
 	*x = CaptureAgentScreenRequest{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[60]
+	mi := &file_armadra_v1_agent_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5223,7 +5691,7 @@ func (x *CaptureAgentScreenRequest) String() string {
 func (*CaptureAgentScreenRequest) ProtoMessage() {}
 
 func (x *CaptureAgentScreenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[60]
+	mi := &file_armadra_v1_agent_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5236,7 +5704,7 @@ func (x *CaptureAgentScreenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CaptureAgentScreenRequest.ProtoReflect.Descriptor instead.
 func (*CaptureAgentScreenRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{60}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *CaptureAgentScreenRequest) GetNodeId() string {
@@ -5270,7 +5738,7 @@ type CapturedAgentScreen struct {
 
 func (x *CapturedAgentScreen) Reset() {
 	*x = CapturedAgentScreen{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[61]
+	mi := &file_armadra_v1_agent_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5282,7 +5750,7 @@ func (x *CapturedAgentScreen) String() string {
 func (*CapturedAgentScreen) ProtoMessage() {}
 
 func (x *CapturedAgentScreen) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[61]
+	mi := &file_armadra_v1_agent_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5295,7 +5763,7 @@ func (x *CapturedAgentScreen) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CapturedAgentScreen.ProtoReflect.Descriptor instead.
 func (*CapturedAgentScreen) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{61}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *CapturedAgentScreen) GetNodeId() string {
@@ -5323,8 +5791,10 @@ type AgentWorkerRequest struct {
 	//	*AgentWorkerRequest_DeliverMessage
 	//	*AgentWorkerRequest_ReadTranscript
 	//	*AgentWorkerRequest_CaptureScreen
-	//	*AgentWorkerRequest_InstallHooks
-	//	*AgentWorkerRequest_UninstallHooks
+	//	*AgentWorkerRequest_GetIntegration
+	//	*AgentWorkerRequest_InstallIntegration
+	//	*AgentWorkerRequest_UninstallIntegration
+	//	*AgentWorkerRequest_RepairIntegration
 	Action        isAgentWorkerRequest_Action `protobuf_oneof:"action"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -5332,7 +5802,7 @@ type AgentWorkerRequest struct {
 
 func (x *AgentWorkerRequest) Reset() {
 	*x = AgentWorkerRequest{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[62]
+	mi := &file_armadra_v1_agent_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5344,7 +5814,7 @@ func (x *AgentWorkerRequest) String() string {
 func (*AgentWorkerRequest) ProtoMessage() {}
 
 func (x *AgentWorkerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[62]
+	mi := &file_armadra_v1_agent_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5357,7 +5827,7 @@ func (x *AgentWorkerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentWorkerRequest.ProtoReflect.Descriptor instead.
 func (*AgentWorkerRequest) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{62}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *AgentWorkerRequest) GetAction() isAgentWorkerRequest_Action {
@@ -5430,19 +5900,37 @@ func (x *AgentWorkerRequest) GetCaptureScreen() *CaptureAgentScreenRequest {
 	return nil
 }
 
-func (x *AgentWorkerRequest) GetInstallHooks() *InstallHooksRequest {
+func (x *AgentWorkerRequest) GetGetIntegration() *GetIntegrationRequest {
 	if x != nil {
-		if x, ok := x.Action.(*AgentWorkerRequest_InstallHooks); ok {
-			return x.InstallHooks
+		if x, ok := x.Action.(*AgentWorkerRequest_GetIntegration); ok {
+			return x.GetIntegration
 		}
 	}
 	return nil
 }
 
-func (x *AgentWorkerRequest) GetUninstallHooks() *UninstallHooksRequest {
+func (x *AgentWorkerRequest) GetInstallIntegration() *InstallIntegrationRequest {
 	if x != nil {
-		if x, ok := x.Action.(*AgentWorkerRequest_UninstallHooks); ok {
-			return x.UninstallHooks
+		if x, ok := x.Action.(*AgentWorkerRequest_InstallIntegration); ok {
+			return x.InstallIntegration
+		}
+	}
+	return nil
+}
+
+func (x *AgentWorkerRequest) GetUninstallIntegration() *UninstallIntegrationRequest {
+	if x != nil {
+		if x, ok := x.Action.(*AgentWorkerRequest_UninstallIntegration); ok {
+			return x.UninstallIntegration
+		}
+	}
+	return nil
+}
+
+func (x *AgentWorkerRequest) GetRepairIntegration() *RepairIntegrationRequest {
+	if x != nil {
+		if x, ok := x.Action.(*AgentWorkerRequest_RepairIntegration); ok {
+			return x.RepairIntegration
 		}
 	}
 	return nil
@@ -5480,12 +5968,23 @@ type AgentWorkerRequest_CaptureScreen struct {
 	CaptureScreen *CaptureAgentScreenRequest `protobuf:"bytes,106,opt,name=capture_screen,json=captureScreen,proto3,oneof"`
 }
 
-type AgentWorkerRequest_InstallHooks struct {
-	InstallHooks *InstallHooksRequest `protobuf:"bytes,107,opt,name=install_hooks,json=installHooks,proto3,oneof"`
+type AgentWorkerRequest_GetIntegration struct {
+	// 107 and 108 were `install_hooks` / `uninstall_hooks`. Hook and skill are
+	// one install unit now (设计 §2), so the pair was replaced rather than kept
+	// alongside a second switch for the same state.
+	GetIntegration *GetIntegrationRequest `protobuf:"bytes,109,opt,name=get_integration,json=getIntegration,proto3,oneof"`
 }
 
-type AgentWorkerRequest_UninstallHooks struct {
-	UninstallHooks *UninstallHooksRequest `protobuf:"bytes,108,opt,name=uninstall_hooks,json=uninstallHooks,proto3,oneof"`
+type AgentWorkerRequest_InstallIntegration struct {
+	InstallIntegration *InstallIntegrationRequest `protobuf:"bytes,110,opt,name=install_integration,json=installIntegration,proto3,oneof"`
+}
+
+type AgentWorkerRequest_UninstallIntegration struct {
+	UninstallIntegration *UninstallIntegrationRequest `protobuf:"bytes,111,opt,name=uninstall_integration,json=uninstallIntegration,proto3,oneof"`
+}
+
+type AgentWorkerRequest_RepairIntegration struct {
+	RepairIntegration *RepairIntegrationRequest `protobuf:"bytes,112,opt,name=repair_integration,json=repairIntegration,proto3,oneof"`
 }
 
 func (*AgentWorkerRequest_ListAgents) isAgentWorkerRequest_Action() {}
@@ -5502,9 +6001,13 @@ func (*AgentWorkerRequest_ReadTranscript) isAgentWorkerRequest_Action() {}
 
 func (*AgentWorkerRequest_CaptureScreen) isAgentWorkerRequest_Action() {}
 
-func (*AgentWorkerRequest_InstallHooks) isAgentWorkerRequest_Action() {}
+func (*AgentWorkerRequest_GetIntegration) isAgentWorkerRequest_Action() {}
 
-func (*AgentWorkerRequest_UninstallHooks) isAgentWorkerRequest_Action() {}
+func (*AgentWorkerRequest_InstallIntegration) isAgentWorkerRequest_Action() {}
+
+func (*AgentWorkerRequest_UninstallIntegration) isAgentWorkerRequest_Action() {}
+
+func (*AgentWorkerRequest_RepairIntegration) isAgentWorkerRequest_Action() {}
 
 type AgentWorkerResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -5515,7 +6018,8 @@ type AgentWorkerResponse struct {
 	//	*AgentWorkerResponse_Delivery
 	//	*AgentWorkerResponse_Transcript
 	//	*AgentWorkerResponse_Screen
-	//	*AgentWorkerResponse_Hooks
+	//	*AgentWorkerResponse_Integration
+	//	*AgentWorkerResponse_Repair
 	Result        isAgentWorkerResponse_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -5523,7 +6027,7 @@ type AgentWorkerResponse struct {
 
 func (x *AgentWorkerResponse) Reset() {
 	*x = AgentWorkerResponse{}
-	mi := &file_armadra_v1_agent_proto_msgTypes[63]
+	mi := &file_armadra_v1_agent_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5535,7 +6039,7 @@ func (x *AgentWorkerResponse) String() string {
 func (*AgentWorkerResponse) ProtoMessage() {}
 
 func (x *AgentWorkerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_armadra_v1_agent_proto_msgTypes[63]
+	mi := &file_armadra_v1_agent_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5548,7 +6052,7 @@ func (x *AgentWorkerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentWorkerResponse.ProtoReflect.Descriptor instead.
 func (*AgentWorkerResponse) Descriptor() ([]byte, []int) {
-	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{63}
+	return file_armadra_v1_agent_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *AgentWorkerResponse) GetResult() isAgentWorkerResponse_Result {
@@ -5603,10 +6107,19 @@ func (x *AgentWorkerResponse) GetScreen() *CapturedAgentScreen {
 	return nil
 }
 
-func (x *AgentWorkerResponse) GetHooks() *HookInstallState {
+func (x *AgentWorkerResponse) GetIntegration() *IntegrationState {
 	if x != nil {
-		if x, ok := x.Result.(*AgentWorkerResponse_Hooks); ok {
-			return x.Hooks
+		if x, ok := x.Result.(*AgentWorkerResponse_Integration); ok {
+			return x.Integration
+		}
+	}
+	return nil
+}
+
+func (x *AgentWorkerResponse) GetRepair() *IntegrationRepairReport {
+	if x != nil {
+		if x, ok := x.Result.(*AgentWorkerResponse_Repair); ok {
+			return x.Repair
 		}
 	}
 	return nil
@@ -5636,8 +6149,12 @@ type AgentWorkerResponse_Screen struct {
 	Screen *CapturedAgentScreen `protobuf:"bytes,106,opt,name=screen,proto3,oneof"`
 }
 
-type AgentWorkerResponse_Hooks struct {
-	Hooks *HookInstallState `protobuf:"bytes,107,opt,name=hooks,proto3,oneof"`
+type AgentWorkerResponse_Integration struct {
+	Integration *IntegrationState `protobuf:"bytes,109,opt,name=integration,proto3,oneof"`
+}
+
+type AgentWorkerResponse_Repair struct {
+	Repair *IntegrationRepairReport `protobuf:"bytes,110,opt,name=repair,proto3,oneof"`
 }
 
 func (*AgentWorkerResponse_Agents) isAgentWorkerResponse_Result() {}
@@ -5650,7 +6167,9 @@ func (*AgentWorkerResponse_Transcript) isAgentWorkerResponse_Result() {}
 
 func (*AgentWorkerResponse_Screen) isAgentWorkerResponse_Result() {}
 
-func (*AgentWorkerResponse_Hooks) isAgentWorkerResponse_Result() {}
+func (*AgentWorkerResponse_Integration) isAgentWorkerResponse_Result() {}
+
+func (*AgentWorkerResponse_Repair) isAgentWorkerResponse_Result() {}
 
 var File_armadra_v1_agent_proto protoreflect.FileDescriptor
 
@@ -5975,31 +6494,67 @@ const file_armadra_v1_agent_proto_rawDesc = "" +
 	" \x01(\tR\x06nodeId\"J\n" +
 	"\x18ListContextLinksResponse\x12.\n" +
 	"\x05links\x18\n" +
-	" \x03(\v2\x18.armadra.v1.ContextLinksR\x05links\"\x80\x01\n" +
-	"\x13InstallHooksRequest\x12+\n" +
+	" \x03(\v2\x18.armadra.v1.ContextLinksR\x05links\"_\n" +
+	"\x0fIntegrationHalf\x12\x1c\n" +
+	"\tinstalled\x18\x01 \x01(\bR\tinstalled\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x1a\n" +
+	"\brevision\x18\x03 \x01(\x03R\brevision\"Z\n" +
+	"\x18LegacyIntegrationFinding\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x16\n" +
+	"\x06detail\x18\x03 \x01(\tR\x06detail\"\xd4\x03\n" +
+	"\x10IntegrationState\x12\x19\n" +
+	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x12\n" +
+	"\x04mode\x18\n" +
+	" \x01(\tR\x04mode\x12/\n" +
+	"\x04hook\x18\v \x01(\v2\x1b.armadra.v1.IntegrationHalfR\x04hook\x121\n" +
+	"\x05skill\x18\f \x01(\v2\x1b.armadra.v1.IntegrationHalfR\x05skill\x12<\n" +
+	"\x06legacy\x18\r \x03(\v2$.armadra.v1.LegacyIntegrationFindingR\x06legacy\x12\x1a\n" +
+	"\brevision\x18\x0e \x01(\x03R\brevision\x12-\n" +
+	"\x12installed_revision\x18\x0f \x01(\x03R\x11installedRevision\x12\x14\n" +
+	"\x05stale\x18\x10 \x01(\bR\x05stale\x12\x1f\n" +
+	"\vlaunch_args\x18\x11 \x03(\tR\n" +
+	"launchArgs\x12\x1d\n" +
+	"\n" +
+	"client_bin\x18\x12 \x01(\tR\tclientBin\x12\x1f\n" +
+	"\vreason_code\x18' \x01(\tR\n" +
+	"reasonCode\x12-\n" +
+	"\x13observed_at_unix_ms\x18( \x01(\x03R\x10observedAtUnixMs\"_\n" +
+	"\x15GetIntegrationRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x19\n" +
+	"\bagent_id\x18\n" +
+	" \x01(\tR\aagentId\"L\n" +
+	"\x16GetIntegrationResponse\x122\n" +
+	"\x05state\x18\x01 \x01(\v2\x1c.armadra.v1.IntegrationStateR\x05state\"\x86\x01\n" +
+	"\x19InstallIntegrationRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12!\n" +
+	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12\x19\n" +
+	"\bagent_id\x18\n" +
+	" \x01(\tR\aagentId\"P\n" +
+	"\x1aInstallIntegrationResponse\x122\n" +
+	"\x05state\x18\x01 \x01(\v2\x1c.armadra.v1.IntegrationStateR\x05state\"\x88\x01\n" +
+	"\x1bUninstallIntegrationRequest\x12+\n" +
+	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12!\n" +
+	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12\x19\n" +
+	"\bagent_id\x18\n" +
+	" \x01(\tR\aagentId\"R\n" +
+	"\x1cUninstallIntegrationResponse\x122\n" +
+	"\x05state\x18\x01 \x01(\v2\x1c.armadra.v1.IntegrationStateR\x05state\"\x85\x01\n" +
+	"\x18RepairIntegrationRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12!\n" +
 	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12\x19\n" +
 	"\bagent_id\x18\n" +
 	" \x01(\tR\aagentId\"\xe7\x01\n" +
-	"\x10HookInstallState\x12\x19\n" +
-	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x1c\n" +
-	"\tinstalled\x18\n" +
-	" \x01(\bR\tinstalled\x12'\n" +
-	"\x0fclient_revision\x18\v \x01(\rR\x0eclientRevision\x12\x1f\n" +
-	"\vconfig_path\x18\f \x01(\tR\n" +
-	"configPath\x12\x1f\n" +
-	"\vreason_code\x18' \x01(\tR\n" +
-	"reasonCode\x12/\n" +
-	"\x14installed_at_unix_ms\x18( \x01(\x03R\x11installedAtUnixMs\"J\n" +
-	"\x14InstallHooksResponse\x122\n" +
-	"\x05state\x18\x01 \x01(\v2\x1c.armadra.v1.HookInstallStateR\x05state\"\x82\x01\n" +
-	"\x15UninstallHooksRequest\x12+\n" +
-	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12!\n" +
-	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12\x19\n" +
-	"\bagent_id\x18\n" +
-	" \x01(\tR\aagentId\"L\n" +
-	"\x16UninstallHooksResponse\x122\n" +
-	"\x05state\x18\x01 \x01(\v2\x1c.armadra.v1.HookInstallStateR\x05state\"\x7f\n" +
+	"\x17IntegrationRepairReport\x12\x19\n" +
+	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12:\n" +
+	"\x05found\x18\n" +
+	" \x03(\v2$.armadra.v1.LegacyIntegrationFindingR\x05found\x12\x18\n" +
+	"\aremoved\x18\v \x03(\tR\aremoved\x12\x12\n" +
+	"\x04kept\x18\f \x03(\tR\x04kept\x12\x18\n" +
+	"\abackups\x18\r \x03(\tR\abackups\x12-\n" +
+	"\x13observed_at_unix_ms\x18( \x01(\x03R\x10observedAtUnixMs\"X\n" +
+	"\x19RepairIntegrationResponse\x12;\n" +
+	"\x06report\x18\x01 \x01(\v2#.armadra.v1.IntegrationRepairReportR\x06report\"\x7f\n" +
 	"\x1aReadAgentTranscriptRequest\x12+\n" +
 	"\x04meta\x18\x01 \x01(\v2\x17.armadra.v1.CommandMetaR\x04meta\x12\x17\n" +
 	"\anode_id\x18\n" +
@@ -6120,7 +6675,7 @@ const file_armadra_v1_agent_proto_rawDesc = "" +
 	"\x13CapturedAgentScreen\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x12\n" +
 	"\x04data\x18\n" +
-	" \x01(\tR\x04data\"\xd7\x05\n" +
+	" \x01(\tR\x04data\"\xac\a\n" +
 	"\x12AgentWorkerRequest\x12F\n" +
 	"\vlist_agents\x18d \x01(\v2#.armadra.v1.ListWorkerAgentsRequestH\x00R\n" +
 	"listAgents\x12H\n" +
@@ -6129,10 +6684,12 @@ const file_armadra_v1_agent_proto_rawDesc = "" +
 	"\x0fdeliver_handoff\x18g \x01(\v2!.armadra.v1.DeliverHandoffRequestH\x00R\x0edeliverHandoff\x12L\n" +
 	"\x0fdeliver_message\x18h \x01(\v2!.armadra.v1.DeliverMessageRequestH\x00R\x0edeliverMessage\x12L\n" +
 	"\x0fread_transcript\x18i \x01(\v2!.armadra.v1.ReadTranscriptRequestH\x00R\x0ereadTranscript\x12N\n" +
-	"\x0ecapture_screen\x18j \x01(\v2%.armadra.v1.CaptureAgentScreenRequestH\x00R\rcaptureScreen\x12F\n" +
-	"\rinstall_hooks\x18k \x01(\v2\x1f.armadra.v1.InstallHooksRequestH\x00R\finstallHooks\x12L\n" +
-	"\x0funinstall_hooks\x18l \x01(\v2!.armadra.v1.UninstallHooksRequestH\x00R\x0euninstallHooksB\b\n" +
-	"\x06action\"\x84\x03\n" +
+	"\x0ecapture_screen\x18j \x01(\v2%.armadra.v1.CaptureAgentScreenRequestH\x00R\rcaptureScreen\x12L\n" +
+	"\x0fget_integration\x18m \x01(\v2!.armadra.v1.GetIntegrationRequestH\x00R\x0egetIntegration\x12X\n" +
+	"\x13install_integration\x18n \x01(\v2%.armadra.v1.InstallIntegrationRequestH\x00R\x12installIntegration\x12^\n" +
+	"\x15uninstall_integration\x18o \x01(\v2'.armadra.v1.UninstallIntegrationRequestH\x00R\x14uninstallIntegration\x12U\n" +
+	"\x12repair_integration\x18p \x01(\v2$.armadra.v1.RepairIntegrationRequestH\x00R\x11repairIntegrationB\b\n" +
+	"\x06actionJ\x04\bk\x10lJ\x04\bl\x10m\"\xd5\x03\n" +
 	"\x13AgentWorkerResponse\x127\n" +
 	"\x06agents\x18d \x01(\v2\x1d.armadra.v1.WorkerAgentStatesH\x00R\x06agents\x128\n" +
 	"\x06events\x18e \x01(\v2\x1e.armadra.v1.DrainedAgentEventsH\x00R\x06events\x12>\n" +
@@ -6140,9 +6697,10 @@ const file_armadra_v1_agent_proto_rawDesc = "" +
 	"\n" +
 	"transcript\x18i \x01(\v2\x1d.armadra.v1.TranscriptExcerptH\x00R\n" +
 	"transcript\x129\n" +
-	"\x06screen\x18j \x01(\v2\x1f.armadra.v1.CapturedAgentScreenH\x00R\x06screen\x124\n" +
-	"\x05hooks\x18k \x01(\v2\x1c.armadra.v1.HookInstallStateH\x00R\x05hooksB\b\n" +
-	"\x06result*\xd4\x01\n" +
+	"\x06screen\x18j \x01(\v2\x1f.armadra.v1.CapturedAgentScreenH\x00R\x06screen\x12@\n" +
+	"\vintegration\x18m \x01(\v2\x1c.armadra.v1.IntegrationStateH\x00R\vintegration\x12=\n" +
+	"\x06repair\x18n \x01(\v2#.armadra.v1.IntegrationRepairReportH\x00R\x06repairB\b\n" +
+	"\x06resultJ\x04\bk\x10l*\xd4\x01\n" +
 	"\x10AgentTargetState\x12\"\n" +
 	"\x1eAGENT_TARGET_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18AGENT_TARGET_STATE_READY\x10\x01\x12\x1b\n" +
@@ -6213,7 +6771,7 @@ func file_armadra_v1_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_armadra_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_armadra_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 64)
+var file_armadra_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 71)
 var file_armadra_v1_agent_proto_goTypes = []any{
 	(AgentTargetState)(0),                     // 0: armadra.v1.AgentTargetState
 	(AgentPromptPhase)(0),                     // 1: armadra.v1.AgentPromptPhase
@@ -6263,33 +6821,40 @@ var file_armadra_v1_agent_proto_goTypes = []any{
 	(*GetHandoffResponse)(nil),                // 45: armadra.v1.GetHandoffResponse
 	(*ListContextLinksRequest)(nil),           // 46: armadra.v1.ListContextLinksRequest
 	(*ListContextLinksResponse)(nil),          // 47: armadra.v1.ListContextLinksResponse
-	(*InstallHooksRequest)(nil),               // 48: armadra.v1.InstallHooksRequest
-	(*HookInstallState)(nil),                  // 49: armadra.v1.HookInstallState
-	(*InstallHooksResponse)(nil),              // 50: armadra.v1.InstallHooksResponse
-	(*UninstallHooksRequest)(nil),             // 51: armadra.v1.UninstallHooksRequest
-	(*UninstallHooksResponse)(nil),            // 52: armadra.v1.UninstallHooksResponse
-	(*ReadAgentTranscriptRequest)(nil),        // 53: armadra.v1.ReadAgentTranscriptRequest
-	(*ReadAgentTranscriptResponse)(nil),       // 54: armadra.v1.ReadAgentTranscriptResponse
-	(*CaptureAgentScreenCommand)(nil),         // 55: armadra.v1.CaptureAgentScreenCommand
-	(*CaptureAgentScreenCommandResponse)(nil), // 56: armadra.v1.CaptureAgentScreenCommandResponse
-	(*ListWorkerAgentsRequest)(nil),           // 57: armadra.v1.ListWorkerAgentsRequest
-	(*WorkerAgentState)(nil),                  // 58: armadra.v1.WorkerAgentState
-	(*WorkerAgentStates)(nil),                 // 59: armadra.v1.WorkerAgentStates
-	(*DrainAgentEventsRequest)(nil),           // 60: armadra.v1.DrainAgentEventsRequest
-	(*DrainedAgentEvents)(nil),                // 61: armadra.v1.DrainedAgentEvents
-	(*DeliverApprovalAnswerRequest)(nil),      // 62: armadra.v1.DeliverApprovalAnswerRequest
-	(*DeliverHandoffRequest)(nil),             // 63: armadra.v1.DeliverHandoffRequest
-	(*DeliverMessageRequest)(nil),             // 64: armadra.v1.DeliverMessageRequest
-	(*AgentDeliveryReceipt)(nil),              // 65: armadra.v1.AgentDeliveryReceipt
-	(*ReadTranscriptRequest)(nil),             // 66: armadra.v1.ReadTranscriptRequest
-	(*TranscriptExcerpt)(nil),                 // 67: armadra.v1.TranscriptExcerpt
-	(*CaptureAgentScreenRequest)(nil),         // 68: armadra.v1.CaptureAgentScreenRequest
-	(*CapturedAgentScreen)(nil),               // 69: armadra.v1.CapturedAgentScreen
-	(*AgentWorkerRequest)(nil),                // 70: armadra.v1.AgentWorkerRequest
-	(*AgentWorkerResponse)(nil),               // 71: armadra.v1.AgentWorkerResponse
-	(*SessionAddress)(nil),                    // 72: armadra.v1.SessionAddress
-	(*CommandMeta)(nil),                       // 73: armadra.v1.CommandMeta
-	(*CanvasOperationReceipt)(nil),            // 74: armadra.v1.CanvasOperationReceipt
+	(*IntegrationHalf)(nil),                   // 48: armadra.v1.IntegrationHalf
+	(*LegacyIntegrationFinding)(nil),          // 49: armadra.v1.LegacyIntegrationFinding
+	(*IntegrationState)(nil),                  // 50: armadra.v1.IntegrationState
+	(*GetIntegrationRequest)(nil),             // 51: armadra.v1.GetIntegrationRequest
+	(*GetIntegrationResponse)(nil),            // 52: armadra.v1.GetIntegrationResponse
+	(*InstallIntegrationRequest)(nil),         // 53: armadra.v1.InstallIntegrationRequest
+	(*InstallIntegrationResponse)(nil),        // 54: armadra.v1.InstallIntegrationResponse
+	(*UninstallIntegrationRequest)(nil),       // 55: armadra.v1.UninstallIntegrationRequest
+	(*UninstallIntegrationResponse)(nil),      // 56: armadra.v1.UninstallIntegrationResponse
+	(*RepairIntegrationRequest)(nil),          // 57: armadra.v1.RepairIntegrationRequest
+	(*IntegrationRepairReport)(nil),           // 58: armadra.v1.IntegrationRepairReport
+	(*RepairIntegrationResponse)(nil),         // 59: armadra.v1.RepairIntegrationResponse
+	(*ReadAgentTranscriptRequest)(nil),        // 60: armadra.v1.ReadAgentTranscriptRequest
+	(*ReadAgentTranscriptResponse)(nil),       // 61: armadra.v1.ReadAgentTranscriptResponse
+	(*CaptureAgentScreenCommand)(nil),         // 62: armadra.v1.CaptureAgentScreenCommand
+	(*CaptureAgentScreenCommandResponse)(nil), // 63: armadra.v1.CaptureAgentScreenCommandResponse
+	(*ListWorkerAgentsRequest)(nil),           // 64: armadra.v1.ListWorkerAgentsRequest
+	(*WorkerAgentState)(nil),                  // 65: armadra.v1.WorkerAgentState
+	(*WorkerAgentStates)(nil),                 // 66: armadra.v1.WorkerAgentStates
+	(*DrainAgentEventsRequest)(nil),           // 67: armadra.v1.DrainAgentEventsRequest
+	(*DrainedAgentEvents)(nil),                // 68: armadra.v1.DrainedAgentEvents
+	(*DeliverApprovalAnswerRequest)(nil),      // 69: armadra.v1.DeliverApprovalAnswerRequest
+	(*DeliverHandoffRequest)(nil),             // 70: armadra.v1.DeliverHandoffRequest
+	(*DeliverMessageRequest)(nil),             // 71: armadra.v1.DeliverMessageRequest
+	(*AgentDeliveryReceipt)(nil),              // 72: armadra.v1.AgentDeliveryReceipt
+	(*ReadTranscriptRequest)(nil),             // 73: armadra.v1.ReadTranscriptRequest
+	(*TranscriptExcerpt)(nil),                 // 74: armadra.v1.TranscriptExcerpt
+	(*CaptureAgentScreenRequest)(nil),         // 75: armadra.v1.CaptureAgentScreenRequest
+	(*CapturedAgentScreen)(nil),               // 76: armadra.v1.CapturedAgentScreen
+	(*AgentWorkerRequest)(nil),                // 77: armadra.v1.AgentWorkerRequest
+	(*AgentWorkerResponse)(nil),               // 78: armadra.v1.AgentWorkerResponse
+	(*SessionAddress)(nil),                    // 79: armadra.v1.SessionAddress
+	(*CommandMeta)(nil),                       // 80: armadra.v1.CommandMeta
+	(*CanvasOperationReceipt)(nil),            // 81: armadra.v1.CanvasOperationReceipt
 }
 var file_armadra_v1_agent_proto_depIdxs = []int32{
 	8,  // 0: armadra.v1.AgentTargetRequest.expected:type_name -> armadra.v1.AgentLaunchSpec
@@ -6306,78 +6871,89 @@ var file_armadra_v1_agent_proto_depIdxs = []int32{
 	3,  // 11: armadra.v1.HookEvent.kind:type_name -> armadra.v1.HookEventKind
 	4,  // 12: armadra.v1.Approval.state:type_name -> armadra.v1.ApprovalState
 	5,  // 13: armadra.v1.Delivery.outcome:type_name -> armadra.v1.DeliveryOutcome
-	72, // 14: armadra.v1.Handoff.source:type_name -> armadra.v1.SessionAddress
-	72, // 15: armadra.v1.Handoff.target:type_name -> armadra.v1.SessionAddress
+	79, // 14: armadra.v1.Handoff.source:type_name -> armadra.v1.SessionAddress
+	79, // 15: armadra.v1.Handoff.target:type_name -> armadra.v1.SessionAddress
 	6,  // 16: armadra.v1.Handoff.state:type_name -> armadra.v1.HandoffState
 	7,  // 17: armadra.v1.ContextLink.direction:type_name -> armadra.v1.ContextLinkDirection
 	22, // 18: armadra.v1.ContextLinks.links:type_name -> armadra.v1.ContextLink
-	73, // 19: armadra.v1.ListAgentStatusRequest.meta:type_name -> armadra.v1.CommandMeta
+	80, // 19: armadra.v1.ListAgentStatusRequest.meta:type_name -> armadra.v1.CommandMeta
 	16, // 20: armadra.v1.ListAgentStatusResponse.statuses:type_name -> armadra.v1.AgentStatus
-	73, // 21: armadra.v1.MarkAgentReadRequest.meta:type_name -> armadra.v1.CommandMeta
+	80, // 21: armadra.v1.MarkAgentReadRequest.meta:type_name -> armadra.v1.CommandMeta
 	16, // 22: armadra.v1.MarkAgentReadResponse.status:type_name -> armadra.v1.AgentStatus
-	74, // 23: armadra.v1.MarkAgentReadResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
-	73, // 24: armadra.v1.ListApprovalsRequest.meta:type_name -> armadra.v1.CommandMeta
+	81, // 23: armadra.v1.MarkAgentReadResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
+	80, // 24: armadra.v1.ListApprovalsRequest.meta:type_name -> armadra.v1.CommandMeta
 	18, // 25: armadra.v1.ListApprovalsResponse.approvals:type_name -> armadra.v1.Approval
-	73, // 26: armadra.v1.AnswerApprovalRequest.meta:type_name -> armadra.v1.CommandMeta
+	80, // 26: armadra.v1.AnswerApprovalRequest.meta:type_name -> armadra.v1.CommandMeta
 	18, // 27: armadra.v1.AnswerApprovalResponse.approval:type_name -> armadra.v1.Approval
-	74, // 28: armadra.v1.AnswerApprovalResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
-	73, // 29: armadra.v1.ListDeliveriesRequest.meta:type_name -> armadra.v1.CommandMeta
+	81, // 28: armadra.v1.AnswerApprovalResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
+	80, // 29: armadra.v1.ListDeliveriesRequest.meta:type_name -> armadra.v1.CommandMeta
 	20, // 30: armadra.v1.ListDeliveriesResponse.deliveries:type_name -> armadra.v1.Delivery
-	73, // 31: armadra.v1.ListMailboxRequest.meta:type_name -> armadra.v1.CommandMeta
+	80, // 31: armadra.v1.ListMailboxRequest.meta:type_name -> armadra.v1.CommandMeta
 	19, // 32: armadra.v1.ListMailboxResponse.messages:type_name -> armadra.v1.MailboxMessage
-	73, // 33: armadra.v1.PrepareHandoffRequest.meta:type_name -> armadra.v1.CommandMeta
-	72, // 34: armadra.v1.PrepareHandoffRequest.source:type_name -> armadra.v1.SessionAddress
-	72, // 35: armadra.v1.PrepareHandoffRequest.target:type_name -> armadra.v1.SessionAddress
+	80, // 33: armadra.v1.PrepareHandoffRequest.meta:type_name -> armadra.v1.CommandMeta
+	79, // 34: armadra.v1.PrepareHandoffRequest.source:type_name -> armadra.v1.SessionAddress
+	79, // 35: armadra.v1.PrepareHandoffRequest.target:type_name -> armadra.v1.SessionAddress
 	21, // 36: armadra.v1.PrepareHandoffResponse.handoff:type_name -> armadra.v1.Handoff
-	74, // 37: armadra.v1.PrepareHandoffResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
-	73, // 38: armadra.v1.AcceptHandoffRequest.meta:type_name -> armadra.v1.CommandMeta
+	81, // 37: armadra.v1.PrepareHandoffResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
+	80, // 38: armadra.v1.AcceptHandoffRequest.meta:type_name -> armadra.v1.CommandMeta
 	21, // 39: armadra.v1.AcceptHandoffResponse.handoff:type_name -> armadra.v1.Handoff
-	74, // 40: armadra.v1.AcceptHandoffResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
-	73, // 41: armadra.v1.CancelHandoffRequest.meta:type_name -> armadra.v1.CommandMeta
+	81, // 40: armadra.v1.AcceptHandoffResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
+	80, // 41: armadra.v1.CancelHandoffRequest.meta:type_name -> armadra.v1.CommandMeta
 	21, // 42: armadra.v1.CancelHandoffResponse.handoff:type_name -> armadra.v1.Handoff
-	74, // 43: armadra.v1.CancelHandoffResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
-	73, // 44: armadra.v1.ListHandoffsRequest.meta:type_name -> armadra.v1.CommandMeta
+	81, // 43: armadra.v1.CancelHandoffResponse.receipt:type_name -> armadra.v1.CanvasOperationReceipt
+	80, // 44: armadra.v1.ListHandoffsRequest.meta:type_name -> armadra.v1.CommandMeta
 	21, // 45: armadra.v1.ListHandoffsResponse.handoffs:type_name -> armadra.v1.Handoff
-	73, // 46: armadra.v1.GetHandoffRequest.meta:type_name -> armadra.v1.CommandMeta
+	80, // 46: armadra.v1.GetHandoffRequest.meta:type_name -> armadra.v1.CommandMeta
 	21, // 47: armadra.v1.GetHandoffResponse.handoff:type_name -> armadra.v1.Handoff
-	73, // 48: armadra.v1.ListContextLinksRequest.meta:type_name -> armadra.v1.CommandMeta
+	80, // 48: armadra.v1.ListContextLinksRequest.meta:type_name -> armadra.v1.CommandMeta
 	23, // 49: armadra.v1.ListContextLinksResponse.links:type_name -> armadra.v1.ContextLinks
-	73, // 50: armadra.v1.InstallHooksRequest.meta:type_name -> armadra.v1.CommandMeta
-	49, // 51: armadra.v1.InstallHooksResponse.state:type_name -> armadra.v1.HookInstallState
-	73, // 52: armadra.v1.UninstallHooksRequest.meta:type_name -> armadra.v1.CommandMeta
-	49, // 53: armadra.v1.UninstallHooksResponse.state:type_name -> armadra.v1.HookInstallState
-	73, // 54: armadra.v1.ReadAgentTranscriptRequest.meta:type_name -> armadra.v1.CommandMeta
-	67, // 55: armadra.v1.ReadAgentTranscriptResponse.excerpt:type_name -> armadra.v1.TranscriptExcerpt
-	73, // 56: armadra.v1.CaptureAgentScreenCommand.meta:type_name -> armadra.v1.CommandMeta
-	69, // 57: armadra.v1.CaptureAgentScreenCommandResponse.screen:type_name -> armadra.v1.CapturedAgentScreen
-	2,  // 58: armadra.v1.WorkerAgentState.state:type_name -> armadra.v1.AgentState
-	58, // 59: armadra.v1.WorkerAgentStates.agents:type_name -> armadra.v1.WorkerAgentState
-	18, // 60: armadra.v1.WorkerAgentStates.approvals:type_name -> armadra.v1.Approval
-	17, // 61: armadra.v1.DrainedAgentEvents.events:type_name -> armadra.v1.HookEvent
-	18, // 62: armadra.v1.DrainedAgentEvents.approvals:type_name -> armadra.v1.Approval
-	20, // 63: armadra.v1.DrainedAgentEvents.deliveries:type_name -> armadra.v1.Delivery
-	72, // 64: armadra.v1.DeliverHandoffRequest.target:type_name -> armadra.v1.SessionAddress
-	5,  // 65: armadra.v1.AgentDeliveryReceipt.outcome:type_name -> armadra.v1.DeliveryOutcome
-	57, // 66: armadra.v1.AgentWorkerRequest.list_agents:type_name -> armadra.v1.ListWorkerAgentsRequest
-	60, // 67: armadra.v1.AgentWorkerRequest.drain_events:type_name -> armadra.v1.DrainAgentEventsRequest
-	62, // 68: armadra.v1.AgentWorkerRequest.deliver_approval:type_name -> armadra.v1.DeliverApprovalAnswerRequest
-	63, // 69: armadra.v1.AgentWorkerRequest.deliver_handoff:type_name -> armadra.v1.DeliverHandoffRequest
-	64, // 70: armadra.v1.AgentWorkerRequest.deliver_message:type_name -> armadra.v1.DeliverMessageRequest
-	66, // 71: armadra.v1.AgentWorkerRequest.read_transcript:type_name -> armadra.v1.ReadTranscriptRequest
-	68, // 72: armadra.v1.AgentWorkerRequest.capture_screen:type_name -> armadra.v1.CaptureAgentScreenRequest
-	48, // 73: armadra.v1.AgentWorkerRequest.install_hooks:type_name -> armadra.v1.InstallHooksRequest
-	51, // 74: armadra.v1.AgentWorkerRequest.uninstall_hooks:type_name -> armadra.v1.UninstallHooksRequest
-	59, // 75: armadra.v1.AgentWorkerResponse.agents:type_name -> armadra.v1.WorkerAgentStates
-	61, // 76: armadra.v1.AgentWorkerResponse.events:type_name -> armadra.v1.DrainedAgentEvents
-	65, // 77: armadra.v1.AgentWorkerResponse.delivery:type_name -> armadra.v1.AgentDeliveryReceipt
-	67, // 78: armadra.v1.AgentWorkerResponse.transcript:type_name -> armadra.v1.TranscriptExcerpt
-	69, // 79: armadra.v1.AgentWorkerResponse.screen:type_name -> armadra.v1.CapturedAgentScreen
-	49, // 80: armadra.v1.AgentWorkerResponse.hooks:type_name -> armadra.v1.HookInstallState
-	81, // [81:81] is the sub-list for method output_type
-	81, // [81:81] is the sub-list for method input_type
-	81, // [81:81] is the sub-list for extension type_name
-	81, // [81:81] is the sub-list for extension extendee
-	0,  // [0:81] is the sub-list for field type_name
+	48, // 50: armadra.v1.IntegrationState.hook:type_name -> armadra.v1.IntegrationHalf
+	48, // 51: armadra.v1.IntegrationState.skill:type_name -> armadra.v1.IntegrationHalf
+	49, // 52: armadra.v1.IntegrationState.legacy:type_name -> armadra.v1.LegacyIntegrationFinding
+	80, // 53: armadra.v1.GetIntegrationRequest.meta:type_name -> armadra.v1.CommandMeta
+	50, // 54: armadra.v1.GetIntegrationResponse.state:type_name -> armadra.v1.IntegrationState
+	80, // 55: armadra.v1.InstallIntegrationRequest.meta:type_name -> armadra.v1.CommandMeta
+	50, // 56: armadra.v1.InstallIntegrationResponse.state:type_name -> armadra.v1.IntegrationState
+	80, // 57: armadra.v1.UninstallIntegrationRequest.meta:type_name -> armadra.v1.CommandMeta
+	50, // 58: armadra.v1.UninstallIntegrationResponse.state:type_name -> armadra.v1.IntegrationState
+	80, // 59: armadra.v1.RepairIntegrationRequest.meta:type_name -> armadra.v1.CommandMeta
+	49, // 60: armadra.v1.IntegrationRepairReport.found:type_name -> armadra.v1.LegacyIntegrationFinding
+	58, // 61: armadra.v1.RepairIntegrationResponse.report:type_name -> armadra.v1.IntegrationRepairReport
+	80, // 62: armadra.v1.ReadAgentTranscriptRequest.meta:type_name -> armadra.v1.CommandMeta
+	74, // 63: armadra.v1.ReadAgentTranscriptResponse.excerpt:type_name -> armadra.v1.TranscriptExcerpt
+	80, // 64: armadra.v1.CaptureAgentScreenCommand.meta:type_name -> armadra.v1.CommandMeta
+	76, // 65: armadra.v1.CaptureAgentScreenCommandResponse.screen:type_name -> armadra.v1.CapturedAgentScreen
+	2,  // 66: armadra.v1.WorkerAgentState.state:type_name -> armadra.v1.AgentState
+	65, // 67: armadra.v1.WorkerAgentStates.agents:type_name -> armadra.v1.WorkerAgentState
+	18, // 68: armadra.v1.WorkerAgentStates.approvals:type_name -> armadra.v1.Approval
+	17, // 69: armadra.v1.DrainedAgentEvents.events:type_name -> armadra.v1.HookEvent
+	18, // 70: armadra.v1.DrainedAgentEvents.approvals:type_name -> armadra.v1.Approval
+	20, // 71: armadra.v1.DrainedAgentEvents.deliveries:type_name -> armadra.v1.Delivery
+	79, // 72: armadra.v1.DeliverHandoffRequest.target:type_name -> armadra.v1.SessionAddress
+	5,  // 73: armadra.v1.AgentDeliveryReceipt.outcome:type_name -> armadra.v1.DeliveryOutcome
+	64, // 74: armadra.v1.AgentWorkerRequest.list_agents:type_name -> armadra.v1.ListWorkerAgentsRequest
+	67, // 75: armadra.v1.AgentWorkerRequest.drain_events:type_name -> armadra.v1.DrainAgentEventsRequest
+	69, // 76: armadra.v1.AgentWorkerRequest.deliver_approval:type_name -> armadra.v1.DeliverApprovalAnswerRequest
+	70, // 77: armadra.v1.AgentWorkerRequest.deliver_handoff:type_name -> armadra.v1.DeliverHandoffRequest
+	71, // 78: armadra.v1.AgentWorkerRequest.deliver_message:type_name -> armadra.v1.DeliverMessageRequest
+	73, // 79: armadra.v1.AgentWorkerRequest.read_transcript:type_name -> armadra.v1.ReadTranscriptRequest
+	75, // 80: armadra.v1.AgentWorkerRequest.capture_screen:type_name -> armadra.v1.CaptureAgentScreenRequest
+	51, // 81: armadra.v1.AgentWorkerRequest.get_integration:type_name -> armadra.v1.GetIntegrationRequest
+	53, // 82: armadra.v1.AgentWorkerRequest.install_integration:type_name -> armadra.v1.InstallIntegrationRequest
+	55, // 83: armadra.v1.AgentWorkerRequest.uninstall_integration:type_name -> armadra.v1.UninstallIntegrationRequest
+	57, // 84: armadra.v1.AgentWorkerRequest.repair_integration:type_name -> armadra.v1.RepairIntegrationRequest
+	66, // 85: armadra.v1.AgentWorkerResponse.agents:type_name -> armadra.v1.WorkerAgentStates
+	68, // 86: armadra.v1.AgentWorkerResponse.events:type_name -> armadra.v1.DrainedAgentEvents
+	72, // 87: armadra.v1.AgentWorkerResponse.delivery:type_name -> armadra.v1.AgentDeliveryReceipt
+	74, // 88: armadra.v1.AgentWorkerResponse.transcript:type_name -> armadra.v1.TranscriptExcerpt
+	76, // 89: armadra.v1.AgentWorkerResponse.screen:type_name -> armadra.v1.CapturedAgentScreen
+	50, // 90: armadra.v1.AgentWorkerResponse.integration:type_name -> armadra.v1.IntegrationState
+	58, // 91: armadra.v1.AgentWorkerResponse.repair:type_name -> armadra.v1.IntegrationRepairReport
+	92, // [92:92] is the sub-list for method output_type
+	92, // [92:92] is the sub-list for method input_type
+	92, // [92:92] is the sub-list for extension type_name
+	92, // [92:92] is the sub-list for extension extendee
+	0,  // [0:92] is the sub-list for field type_name
 }
 
 func init() { file_armadra_v1_agent_proto_init() }
@@ -6397,8 +6973,8 @@ func file_armadra_v1_agent_proto_init() {
 		(*AgentResponse_Receipt)(nil),
 	}
 	file_armadra_v1_agent_proto_msgTypes[8].OneofWrappers = []any{}
-	file_armadra_v1_agent_proto_msgTypes[50].OneofWrappers = []any{}
-	file_armadra_v1_agent_proto_msgTypes[62].OneofWrappers = []any{
+	file_armadra_v1_agent_proto_msgTypes[57].OneofWrappers = []any{}
+	file_armadra_v1_agent_proto_msgTypes[69].OneofWrappers = []any{
 		(*AgentWorkerRequest_ListAgents)(nil),
 		(*AgentWorkerRequest_DrainEvents)(nil),
 		(*AgentWorkerRequest_DeliverApproval)(nil),
@@ -6406,16 +6982,19 @@ func file_armadra_v1_agent_proto_init() {
 		(*AgentWorkerRequest_DeliverMessage)(nil),
 		(*AgentWorkerRequest_ReadTranscript)(nil),
 		(*AgentWorkerRequest_CaptureScreen)(nil),
-		(*AgentWorkerRequest_InstallHooks)(nil),
-		(*AgentWorkerRequest_UninstallHooks)(nil),
+		(*AgentWorkerRequest_GetIntegration)(nil),
+		(*AgentWorkerRequest_InstallIntegration)(nil),
+		(*AgentWorkerRequest_UninstallIntegration)(nil),
+		(*AgentWorkerRequest_RepairIntegration)(nil),
 	}
-	file_armadra_v1_agent_proto_msgTypes[63].OneofWrappers = []any{
+	file_armadra_v1_agent_proto_msgTypes[70].OneofWrappers = []any{
 		(*AgentWorkerResponse_Agents)(nil),
 		(*AgentWorkerResponse_Events)(nil),
 		(*AgentWorkerResponse_Delivery)(nil),
 		(*AgentWorkerResponse_Transcript)(nil),
 		(*AgentWorkerResponse_Screen)(nil),
-		(*AgentWorkerResponse_Hooks)(nil),
+		(*AgentWorkerResponse_Integration)(nil),
+		(*AgentWorkerResponse_Repair)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -6423,7 +7002,7 @@ func file_armadra_v1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_armadra_v1_agent_proto_rawDesc), len(file_armadra_v1_agent_proto_rawDesc)),
 			NumEnums:      8,
-			NumMessages:   64,
+			NumMessages:   71,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
