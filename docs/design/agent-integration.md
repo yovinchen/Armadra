@@ -1,6 +1,12 @@
 # Agent 接入统一管理：Hook 报事件，技能给动词
 
-> 状态：目标设计（2026-09-08）。保留 [agent-collaboration-channels.md](./agent-collaboration-channels.md) 的两条通道（Hook / 进程内扩展报事件，技能教 CLI 用 `armadra-hook canvas …` 动词），只改**安装、注入与管理**的方式。不引入 MCP（用户决定）。
+> 状态：**已实施（2026-09-13）**，偏离与未竟之处见 §8。保留
+> [agent-collaboration-channels.md](./agent-collaboration-channels.md) 的两条通道（Hook / 进程内扩展报事件，技能教 CLI 用 `armadra-hook canvas …` 动词），只改**安装、注入与管理**的方式。不引入 MCP（用户决定）。
+>
+> 落点：`apps/runtime/src/hook/install/{mod,integration,repair,claude}.rs`、`collab/skills.rs`、
+> `api/agents.rs`、`worker/agent_host.rs`；`proto/armadra/v1/agent.proto`（worker 动作 109–112，107/108 已 reserved）；
+> `apps/host/internal/{agenthost,server,worker}`；`packages/shared/src/api/agents.ts`、`packages/host-client/src/agent.ts`、
+> `apps/web/src/api/agents.ts`。现状文档见 [Agent 适配与低干扰协作](../guides/agent-collaboration.md)。
 
 ## 1. 现状与问题
 
@@ -59,3 +65,52 @@
 - 七种 CLI：`pnpm agent:smoke` 覆盖「安装一次 → Hook 事件到达 + 技能文件在位 + `armadra-hook canvas` 动词可用 → 卸载后两者都不在」。
 - 用户机器的旧残留样本（`aicc-hook`、`aicc-canvas`、Codex `version`）作为测试夹具，`repair` 后各 CLI 正常启动。
 - 设置页「集成」在打包版可用。
+
+## 8. 实施记录：偏离与未竟
+
+### 8.1 Claude 的会话文件是**每台机器一份**，不是每会话一份
+
+设计写的是「会话临时文件放 `<data_dir>/sessions/<id>/`，会话结束删除」。实际落在
+`<data_dir>/integration/claude/settings.json`——装一次写一份，卸载删掉。
+
+原因是启动行不在 Runtime 手里：`assembleLaunchArgv` 在 Web 侧拼好，由前端敲进 shell（`apps/web/src/agent/launch.ts`），
+Runtime 只负责建 PTY。要让路径随会话变，就得把会话 id 从建终端的响应一路穿回敲启动行的地方，还要同时改
+Host 模式的 `session.proto` 投影——为了一份内容永远相同的文件。所以改成：Runtime 在 `GET /api/agents` 的
+`launchArgs` 里现答这份 argv，前端原样附加。
+
+设计真正要的那条性质**保住了**：`~/.claude/settings.json` 一个字节都不写，用户自己在别处开的 `claude` 完全不受影响，
+卸载就是删我们自己数据目录里的一个文件。放弃的是「会话结束即消失」——那份文件在两次会话之间仍然存在，
+但它只在启动行点名时才被读到，所以对不经 Armadra 起的会话没有任何作用。
+
+### 8.2 Copilot 与 OpenCode 仍是文件安装
+
+Copilot 1.0.8x 的 `--plugin-dir <目录>` 确实能给一次会话挂一个插件，`plugin.json` 里带 `hooks` 也被接受
+（`copilot --plugin-dir … plugin list` 能列出来）。但同一个插件目录里的 `skills/<name>/SKILL.md` 在
+`copilot skill list` 和 `copilot plugins list` 里都**没有出现**，插件根目录下的 `SKILL.md` 同样没有。
+一个只能带走一半的会话通道不如现有的文件安装，所以 Copilot 保持 `~/.copilot/hooks/armadra.json` + `~/.copilot/skills/`。
+
+OpenCode 本机入口跑不起来（npm postinstall 未执行，`opencode --help` 直接报错），没法核实它的会话级配置，
+因此沿用已有的插件文件安装。两者都记在 `hook/install/<cli>.rs` 顶部。
+
+Pi / Oh My Pi 另有 `-e <扩展>` 与 `--skill <路径>` 两个启动参数，可以做到完全的会话级注入。没有改：它们现在的
+扩展文件安装是可用的，而这一轮的目标是把用户**全局配置**里的写入减到最少，Pi 家族本来就不写全局配置。
+
+### 8.3 Codex 0.153 的 hook 信任：本轮未解决
+
+`hook/install/codex.rs` 复现的 `trusted_hash`（对着 Codex 0.149.1 逐字节核过）在 **0.153.4 上不再匹配**：
+装完之后 TUI 弹「Hooks need review — 8 hooks are new or changed」，在用户按 `t` 之前一条事件都不会到。
+另外 **`codex exec` 根本不跑 hook**（0.153.4 上一个已信任的 `session_start` 条目在 `exec` 下也不触发），
+所以 `pnpm agent:smoke codex` 改成了交互式 + 粘贴，与 Copilot 同路。
+
+这不是本轮改动引入的：`codex.rs` 的哈希算法这一轮没有动，`HOOK_CLIENT_REVISION` 也没有动。要修需要把
+0.153+ 的 `NormalizedHookIdentity` 重新读一遍——一个线索是 0.153.4 里 `chrome@openai-bundled` 与
+`browser@openai-bundled` 两个不同插件的 `stop` 条目共用同一个 `trusted_hash`，说明身份里已经不含命令或路径。
+在此之前 Codex 的状态通道需要用户在 TUI 里确认一次。
+
+### 8.4 接口形状的两处补充
+
+§5 的字段一个没少，另外加了三个读得更直白的：`installedRevision`（磁盘上那份是哪一版）、`stale`（装了但不是这一版）、
+`launchArgs`（这台机器上这个 CLI 的启动 argv）。`revision` 按 §5 的字面意思是「一次全新安装会写的那一版」。
+
+旧的 `/hooks/*`、`/skills/*` 路由已删除。`apps/web/src/api/agents.ts` 暂时保留同名薄包装并标 `@deprecated`，
+它们打的都是同一个安装单元，只把答案折回旧形状，好让还没换成「集成」的设置页继续编译。

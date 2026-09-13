@@ -20,25 +20,68 @@ Pi 的 `--resume` 打开选择器；指定会话要用 `--session`。OMP 的 `--
 
 节点头部的「更多 → 模型」只对求交集后仍具备 `supportsModelSelection` 的 Agent 出现，选项是各 CLI 自己文档里的别名，不查询任何提供方的模型清单；选完写进节点数据、下一次启动才带上 `--model`，当前会话既不重启也不受影响。CLI 版本探测（`<launchCmd> --version`）失败时能力为 unknown，菜单不出现，不做名称推断。上下文占用见下节。终端节点在首个 Hook 回合后按占位标题自动命名一次，人工改名即锁定，详见 [Agent 自动化设计 §8](../design/agent-automation-design.md)。
 
-2026-09-06 用真实 CLI 跑过 Pi 0.84.4、OMP 18.1.8、Copilot 1.0.83 的状态通道（`pnpm agent:smoke`，见[开发指南](./development.md)）；2026-09-05 核对了它们的 `--help`，并参照 [Pi 官方源码](https://github.com/earendil-works/pi/tree/main/packages/coding-agent)、[OMP 官方项目](https://github.com/can1357/oh-my-pi)、[Copilot CLI 官方参考](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference)、[OpenCode CLI 官方参考](https://opencode.ai/docs/cli/)。OpenCode 本机入口执行返回 permission denied，因此该提供商参数由官方文档核对，未声称本机交互验证成功。发现器会检查 Unix 执行权限，不再只因路径上存在普通文件就标记已安装。
+2026-09-13 用真实 CLI 跑过 Claude Code 2.1.260、Pi 0.84.4、OMP 18.1.8、Copilot 1.0.8x 的完整集成（`pnpm agent:smoke`，
+见[开发指南](./development.md)）：装一次 → 事件到达 → 动词可用 → 卸载后干净。三个没跑通，但都不是卡在安装上：
+Codex 0.153.4 装完弹「Hooks need review」（`trusted_hash` 与该版本不再匹配，见 [设计 §8.3](../design/agent-integration.md)），
+Gemini 0.58.0 本机账号被判 `IneligibleTierError` 起不了会话，OpenCode 本机入口 npm postinstall 未执行、根本启动不了。
+2026-09-06 曾跑过 Pi / OMP / Copilot 的状态通道；2026-09-05 核对了它们的 `--help`，并参照 [Pi 官方源码](https://github.com/earendil-works/pi/tree/main/packages/coding-agent)、[OMP 官方项目](https://github.com/can1357/oh-my-pi)、[Copilot CLI 官方参考](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference)、[OpenCode CLI 官方参考](https://opencode.ai/docs/cli/)。OpenCode 本机入口执行返回 permission denied，因此该提供商参数由官方文档核对，未声称本机交互验证成功。发现器会检查 Unix 执行权限，不再只因路径上存在普通文件就标记已安装。
 
 ## 状态通道与来源徽标
 
 节点头部的状态（RUNNING / NEEDS YOU / DONE）、自动化调度的空闲判断、以及单会话上下文占用，
 都来自同一件事：CLI 自己告诉 Runtime 它在做什么。这条通道按 CLI 分两种形式，能力完全相同：
 
-| 形式       | CLI                                     | 装在哪                                                                                                | 怎么工作                                                               |
-| ---------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| 命令 Hook  | Claude Code、Codex、Gemini CLI、Copilot | Claude / Gemini `settings.json`；Codex `hooks.json`；Copilot 单独一个 `~/.copilot/hooks/armadra.json` | CLI 每个事件 fork 一次 `armadra-hook`，它连 Runtime 的本地 socket 回报 |
-| 进程内扩展 | Pi、Oh My Pi                            | `<配置目录>/extensions/armadra-status.ts`（Pi 是 `~/.pi/agent/`，OMP 是 `~/.omp/agent/`）             | 生成的 TS 扩展在 CLI 进程内连同一个 socket，不 fork 进程               |
-| 插件       | OpenCode                                | `~/.config/opencode/plugin/`                                                                          | 插件在事件里调 `armadra-hook`                                          |
-
-安装与卸载都在「设置 → Hook 与 Skills」，一个 CLI 一个开关，必须用户显式触发。安装写的文件名固定以
-`armadra` 开头，识别规则只认文件里出现 `armadra-hook` 标记的条目；用户自己写的 hook、扩展和插件一律不动，
-卸载也只删自己写的那些。重装写出的字节完全相同。
+| 形式       | CLI                                     | 装在哪                                                                                                                                    | 怎么工作                                                               |
+| ---------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 命令 Hook  | Claude Code、Codex、Gemini CLI、Copilot | Claude 是**启动参数指向的会话文件**（见下）；Gemini `settings.json`；Codex `hooks.json`；Copilot 单独一个 `~/.copilot/hooks/armadra.json` | CLI 每个事件 fork 一次 `armadra-hook`，它连 Runtime 的本地 socket 回报 |
+| 进程内扩展 | Pi、Oh My Pi                            | `<配置目录>/extensions/armadra-status.ts`（Pi 是 `~/.pi/agent/`，OMP 是 `~/.omp/agent/`）                                                 | 生成的 TS 扩展在 CLI 进程内连同一个 socket，不 fork 进程               |
+| 插件       | OpenCode                                | `~/.config/opencode/plugins/armadra-status.js`                                                                                            | 插件在 CLI 进程内连同一个 socket，连不上时才退回 fork `armadra-hook`   |
 
 进程内扩展**不比**命令 Hook 更可信：两者用同一个 bearer、同一份每节点令牌、同一条终端绑定发同样的请求，
 Runtime 分不出也不会因此多给任何权限。区别只是省掉每个事件一次 fork。
+
+## 集成：Hook 与技能是一个安装单元
+
+一个 CLI 只有一个「已集成 / 未集成」状态。设置页的「集成」一行一次装好两样东西——上报事件的适配器，和教模型
+用 `armadra-hook canvas …` 动词的技能文件 `skills/armadra/SKILL.md`——一次卸载两样都清掉。两者的修订号合成一个
+`INTEGRATION_REVISION`（`<Hook 修订>×100 + <技能修订>`），任一变了都提示重新安装；Hook 事件契约本身
+（`HOOK_CLIENT_REVISION`）不随之变。设计见 [Agent 接入统一管理](../design/agent-integration.md)。
+
+**注入方式**决定「装我会不会动你自己也在编辑的文件」，设置页按这三种标注：
+
+| 方式        | CLI                        | 落点                                                                               | 动全局配置吗 |
+| ----------- | -------------------------- | ---------------------------------------------------------------------------------- | ------------ |
+| `launch`    | Claude Code                | `<数据目录>/integration/claude/settings.json`，启动时 `--settings <该文件>` 指过去 | 不动         |
+| `extension` | OpenCode、Pi、Oh My Pi     | 各 CLI 自己的扩展目录里一个**只有我们写**的文件                                    | 不动         |
+| `file`      | Codex、Gemini CLI、Copilot | 合并进 CLI 自己的配置文件，幂等、带 `armadra-hook` 标记、可修复                    | 动，可撤     |
+
+Claude Code 的 `--settings <file-or-json>` 官方说明是「load **additional** settings from」，实测 2.1.260：
+用户 `settings.json` 里的 `SessionStart` 与 `--settings` 文件里的 `SessionStart` **两条都会跑**。所以画布起的会话
+多我们这一份 Hook，用户自己在别处开的 `claude` 一点没变——这正是把它从 `~/.claude/settings.json` 搬出来的理由。
+上下文占用的 `statusLine` 是单数、且 `--settings` 会盖过用户那份，因此只在用户没有自己的状态行时才写，
+否则原样保留并在安装结果里说明。启动参数由 `GET /api/agents` 的 `launchArgs` 给出，前端拼到启动行上；
+它是**当场现答**的，不写进节点数据，也不冻结进后台计划——路径是这台机器的，开关是这个 CLI 版本的。
+
+技能没有启动参数可注入，七种 CLI 都是文件安装，落在各自的用户级技能目录 `<配置目录>/skills/armadra/SKILL.md`
+（Codex 的 `$CODEX_HOME/skills`、Gemini 的 `$GEMINI_CLI_HOME/.gemini/skills`、Pi 的 `<agent 目录>/skills` 等，
+均按各 CLI 自己的加载代码核实）。
+
+安装必须用户显式触发。识别规则只认文件里出现 `armadra-hook` 标记的条目；用户自己写的 hook、扩展和插件一律不动，
+卸载也只删自己写的那些。重装写出的字节完全相同。
+
+### 旧残留与修复
+
+旧产品名时期留下的东西不会自己消失：指向 `aicc-hook`、`nodeterm`、`.nodeterm` 或某人 `target/debug/` 的 hook 条目；
+技能目录 `aicc-canvas`、`aicc-linked-context`、`get-linked-context`、`manage-nodeterm-canvas`，以及改版前的
+`armadra-canvas` / `armadra-linked-context`；还有 Codex `hooks.json` 顶层的 `version`——Codex 用 `deny_unknown_fields`
+解析这个文件，多一个陌生键，**整份文件的 hook 全都不跑**，包括用户自己的。
+
+Runtime 每次启动扫描并在日志里报出来，`GET /api/agents/{id}/integration` 的 `legacy.found` 也带着它，
+但**只报不改**。真正动手的只有设置页的「修复」按钮：先把要重写的文件备份成 `<file>.armadra-backup-<时间戳>`，
+只删认得出是我们写的条目，其余原样写回，然后按现行写法重写（Codex 那份顺带去掉顶层未知键）。
+报告给出 `{found, removed, kept, backup}`，`kept` 就是它认出来「不是我们的、原样留下」的那些。
+旧技能目录不备份：里面是我们自己生成的说明书，没有用户的东西，而 `SKILL.md` 旁边多一个备份文件反而要教 CLI 忽略；
+目录里若还有用户自己放的文件，只删 `SKILL.md`，目录留下并在 `kept` 里写明。
 
 ### 各 CLI 的配置目录覆盖
 
@@ -178,5 +221,12 @@ Armadra 不把一个 Agent 的话打进另一个 Agent 的终端。原有的 `ca
 ## 验证
 
 使用独立临时 SQLite 数据库测试完整 HTTP 路由：节点 token 缺失/伪造、未连线、跨工作空间移动、正文超限、重复 key 冲突、满容量、分页、过期清理、重复确认、数据库重新连接后确认状态仍保留，以及没有终端会话时仍可完成收发确认。共享包测试覆盖七种 CLI 命令和不支持权限模式拒绝。所有测试不修改真实 CLI 的凭据、配置或会话。
+
+集成的验证分三层：`hook/install/**` 的单元测试断言每个安装器写出的字节与重装的幂等；`hook/install/repair.rs`
+用用户真实报上来的三种形状（`aicc-hook` 的 Claude `settings.json`、带顶层 `version` 的 Codex `hooks.json`、
+`aicc-canvas` 这类技能目录）当夹具，夹具写在测试里，不读任何真实目录；`pnpm agent:smoke <cli>` 在临时 `HOME`
+下用真实 CLI 跑「装一次 → Hook 事件到达 + 技能文件在位 + `armadra-hook canvas/context` 动词可用 → 卸载后两者都不在」，
+并连线两个节点验证 `context summary` 能读到对方的真实转录。`pnpm ownership:e2e --domain agent` 证明 Host 模式下这四个
+动作是**转发**给执行主机的，Host 一个字节也不写。
 
 交接的路由测试（`apps/runtime/tests/handoff_api.rs`）另外覆盖：预览不产生任何收件箱条目、跨工作空间的路径读不到也批不了、错误 digest 被 409 拒绝、重复确认复用同一条收件箱记录、撤回后收件箱条目消失，以及 `agent_deliveries` 与 `agent_handoff_outbox` 保持为空。`tools/handoff-read-smoke.mjs` 用真实进程、真实 PTY 和真实 hook 客户端跑完整轮：批准后目标收件箱出现 `handoff:<id>`、读包不等于确认、`ack` 后状态变 `acknowledged`、撤回后那条消失。共享包用 Runtime 真实返回的一份包校验 schema。
