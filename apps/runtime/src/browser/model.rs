@@ -570,6 +570,23 @@ pub enum FrameEncoding {
 }
 
 impl FrameEncoding {
+    /// What the bytes themselves are, from their magic number.
+    ///
+    /// Chrome keeps delivering frames of the old format for a moment after a
+    /// screencast restarts in another one, so labelling by "what the stream
+    /// is running" is wrong exactly while a viewer is being switched over.
+    /// JPEG opens with `FF D8`; WebP is a RIFF container whose form type is
+    /// `WEBP`. Anything else is left to the caller's word.
+    pub fn sniff(bytes: &[u8]) -> Option<Self> {
+        if bytes.starts_with(&[0xff, 0xd8]) {
+            Some(Self::Jpeg)
+        } else if bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+            Some(Self::Webp)
+        } else {
+            None
+        }
+    }
+
     /// What Chrome is told, and what the frame says it is.
     pub fn as_str(self) -> &'static str {
         match self {

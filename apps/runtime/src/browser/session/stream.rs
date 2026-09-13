@@ -260,7 +260,9 @@ pub(super) fn publish_frame_as(
             height,
             device_scale_factor: record.viewport.device_scale_factor,
             captured_at_unix_ms: Utc::now().timestamp_millis(),
-            encoding,
+            // The bytes outrank the caller: a frame captured before a restart
+            // arrives after it, still in the old format.
+            encoding: FrameEncoding::sniff(&bytes).unwrap_or(encoding),
             data: bytes,
         });
         let subscriptions = live
