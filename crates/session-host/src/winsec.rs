@@ -59,10 +59,7 @@ fn wide(value: &str) -> Vec<u16> {
 }
 
 fn last_error(context: &str) -> io::Error {
-    io::Error::new(
-        io::ErrorKind::Other,
-        format!("{context}: {}", io::Error::last_os_error()),
-    )
+    io::Error::other(format!("{context}: {}", io::Error::last_os_error()))
 }
 
 /// The SID of the user this process runs as, as a string.
