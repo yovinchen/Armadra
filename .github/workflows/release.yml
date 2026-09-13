@@ -156,6 +156,7 @@ jobs:
       # patchelf，托盘图标要 ayatana-appindicator。缺任何一个都是打到一半才报错。
       - name: 安装 Tauri 的 Linux 系统依赖
         if: startsWith(matrix.target, 'linux-')
+        shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \

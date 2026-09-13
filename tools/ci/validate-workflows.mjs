@@ -187,6 +187,21 @@ export function checkWorkflow(name, document) {
         problems.push(
           `${stepWhere} uses ${step.uses} without pinning a version`,
         );
+      // On Windows the default shell is pwsh, and GitHub's wrapper only checks
+      // the exit code of the *last* command in a multi-line `run`. A step that
+      // installs and then verifies would report success when the install
+      // failed, so a Windows-capable job has to name its shell.
+      if (
+        typeof step.run === "string" &&
+        step.run.trimEnd().includes("\n") &&
+        !step.shell &&
+        !job.defaults?.run?.shell &&
+        runnerLabels(job).some((label) => label.startsWith("windows-"))
+      ) {
+        problems.push(
+          `${stepWhere} runs several commands on Windows without naming a shell, so only the last exit code counts`,
+        );
+      }
       if (step.id) {
         if (stepIds.has(step.id))
           problems.push(`${stepWhere} repeats the id ${step.id}`);

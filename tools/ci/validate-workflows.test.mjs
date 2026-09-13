@@ -59,6 +59,43 @@ test("the three platforms are all in the matrix, and none is filtered out", () =
   assert.doesNotMatch(body, /go -C apps\/host test[^\n]*-run /);
 });
 
+test("a multi-command Windows step with no shell is reported", () => {
+  const windows = `
+name: x
+on:
+  push:
+jobs:
+  build:
+    runs-on: \${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+          - runner: windows-latest
+    steps:
+      - run: |
+          install-something
+          verify-it
+`;
+  const problems = check(windows);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /only the last exit code counts/);
+  // Naming the shell, or running one command, is enough.
+  assert.deepEqual(
+    check(windows.replace("- run: |", "- shell: bash\n        run: |")),
+    [],
+  );
+  assert.deepEqual(
+    check(windows.replace(/- run: \|\n.*\n.*\n/, "- run: verify-it\n")),
+    [],
+  );
+  // A job that never lands on Windows keeps its default shell.
+  assert.deepEqual(
+    check(windows.replace("          - runner: windows-latest\n", "")),
+    [],
+  );
+});
+
 test("an unserved runner label is reported", () => {
   const problems = check(`
 name: x

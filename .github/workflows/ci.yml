@@ -74,6 +74,7 @@ jobs:
       # cargo check 都过不去（glib-sys 的 build script 先用 pkg-config 找它们）。
       - name: 安装 Tauri 的 Linux 系统依赖
         if: runner.os == 'Linux'
+        shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
@@ -87,8 +88,12 @@ jobs:
       # 三个平台都跑：换行、路径分隔符与生成物字节比对都是平台差异的常见出口。
       - run: pnpm check
 
+      # shell: bash 不是装饰：Windows 默认的 pwsh 只看多行 run 里最后一条命令的
+      # 退出码，前面失败了照样算通过。
       - name: 仓库与发布脚本自检
+        shell: bash
         run: |
+          set -euo pipefail
           pnpm repo:test
           pnpm release:test
 
@@ -116,7 +121,9 @@ jobs:
       # 桌面壳只做 cargo check：打包是发布流水线的事，这里要的是「三个平台的
       # Rust 代码都编译得过」。externalBin 必须存在，但不必是真的二进制。
       - name: 桌面壳 cargo check
+        shell: bash
         run: |
+          set -euo pipefail
           pnpm --filter @armadra/desktop prepare:sidecar-placeholders
           cargo check -p armadra-desktop --all-targets
 
