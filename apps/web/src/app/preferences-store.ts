@@ -97,6 +97,14 @@ const SHOW_USAGE_KEY = "armadra.showUsage";
 /** 开屏动画（§24.1 通用页）。默认开；关掉后每次打开都直接进壳。 */
 const SPLASH_KEY = "armadra.splashAnimation";
 /**
+ * 文件列表里显示 `.DS_Store` 这类系统文件（用户实测反馈 F4）。
+ *
+ * 默认关：它们既不是用户写的，也不是用户能改的，出现在一个 240px 宽的
+ * 文件管理器节点里只会把真正的文件挤下去。开关而不是硬过滤——一个要修
+ * Finder 元数据的人有权看见它们。
+ */
+const SHOW_SYSTEM_FILES_KEY = "armadra.showSystemFiles";
+/**
  * 单会话上下文的提醒阈值（Agent 自动化设计 §2.2「80%/95% 为初始提醒阈值，
  * 可设置」）。只改徽标与 Popover 的措辞，不会自动压缩、清空或打断 CLI。
  */
@@ -234,6 +242,8 @@ export interface PreferencesState {
   showUsage: boolean;
   /** 打开时播放开屏动画（§24.1 通用页）。 */
   splashAnimation: boolean;
+  /** 文件列表里显示 `.DS_Store` / `Thumbs.db` / `desktop.ini`（F4）。 */
+  showSystemFiles: boolean;
   /** 上下文提醒阈值（设计 §2.2）；`dangerPercent` 不会低于 `warnPercent`。 */
   contextThresholds: ContextThresholds;
   /** 会话内存徽标的变色阈值，字节（路线图 §4.3）。默认 2 GiB。 */
@@ -281,6 +291,7 @@ export interface PreferencesState {
   setSoundVolume: (volume: number) => void;
   setShowUsage: (enabled: boolean) => void;
   setSplashAnimation: (enabled: boolean) => void;
+  setShowSystemFiles: (enabled: boolean) => void;
   setContextThresholds: (thresholds: Partial<ContextThresholds>) => void;
   setSessionMemoryWarnBytes: (bytes: number) => void;
   setRenderBudget: (limit: number) => void;
@@ -332,6 +343,7 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
   soundVolume: storedNumber(SOUND_VOLUME_KEY, 60, ...SOUND_VOLUME_RANGE),
   showUsage: storedBoolean(SHOW_USAGE_KEY, true),
   splashAnimation: storedBoolean(SPLASH_KEY, true),
+  showSystemFiles: storedBoolean(SHOW_SYSTEM_FILES_KEY, false),
   contextThresholds: normalizeContextThresholds({
     warnPercent: storedNumber(
       CONTEXT_WARN_KEY,
@@ -493,6 +505,10 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
   setSplashAnimation(splashAnimation) {
     writeStored(SPLASH_KEY, String(splashAnimation));
     set({ splashAnimation });
+  },
+  setShowSystemFiles(showSystemFiles) {
+    writeStored(SHOW_SYSTEM_FILES_KEY, String(showSystemFiles));
+    set({ showSystemFiles });
   },
   setContextThresholds(patch) {
     set((state) => {

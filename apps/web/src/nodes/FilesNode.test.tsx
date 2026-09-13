@@ -40,6 +40,7 @@ vi.mock("@/api/client", () => ({
   terminalWebSocketUrl: (id: string) => `ws://x/${id}`,
 }));
 
+import { usePreferencesStore } from "@/app/preferences-store";
 import { FilesNode } from "./FilesNode";
 import { WORKSPACE_FILES_MIME } from "../files/workspace-drag";
 
@@ -142,6 +143,44 @@ describe("FilesNode", () => {
     expect(store.updateNodeData).toHaveBeenCalledWith("f1", {
       path: "src/nodes",
     });
+  });
+
+  /**
+   * F4：`.DS_Store` 这类文件不是用户写的，也不是用户要打开的；在一个 340px
+   * 宽的节点里它们只会把真正的文件挤下去。默认藏起来，偏好一开就回来。
+   */
+  it("hides operating system metadata files unless the preference is on", async () => {
+    api.listFiles.mockResolvedValue({
+      path: "src",
+      truncated: false,
+      entries: [
+        { name: ".DS_Store", path: "src/.DS_Store", kind: "file", size: 1 },
+        { name: "Thumbs.db", path: "src/Thumbs.db", kind: "file", size: 1 },
+        { name: "desktop.ini", path: "src/desktop.ini", kind: "file", size: 1 },
+        // 点开头但是用户自己的文件：一条「隐藏点文件」的规则会把它也藏掉。
+        { name: ".gitignore", path: "src/.gitignore", kind: "file", size: 1 },
+        { name: "a.ts", path: "src/a.ts", kind: "file", size: 1 },
+      ],
+    });
+    const view = renderFiles();
+    expect(await screen.findByText("a.ts")).toBeTruthy();
+    expect(screen.getByText(".gitignore")).toBeTruthy();
+    expect(screen.queryByText(".DS_Store")).toBeNull();
+    expect(screen.queryByText("Thumbs.db")).toBeNull();
+    expect(screen.queryByText("desktop.ini")).toBeNull();
+
+    usePreferencesStore.setState({ showSystemFiles: true });
+    view.rerenderNode(
+      <FilesNode
+        id="f1"
+        node={node}
+        selected={false}
+        collapsed={false}
+        focused={false}
+      />,
+    );
+    expect(await screen.findByText(".DS_Store")).toBeTruthy();
+    usePreferencesStore.setState({ showSystemFiles: false });
   });
 
   it("opens a file as an editor node to the right", async () => {

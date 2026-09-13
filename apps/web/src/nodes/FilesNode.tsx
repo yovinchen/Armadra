@@ -6,7 +6,7 @@ import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { ScrollArea } from "@/ui/scroll-area";
 import { runtimeApi } from "@/api/client";
-import { useT } from "@/app/preferences-store";
+import { usePreferencesStore, useT } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
 import { NodeShell } from "./NodeShell";
 import { NODE_META, type NodeBodyProps } from "./registry";
@@ -14,6 +14,7 @@ import { useWorkspaceFileDrag } from "../files/use-workspace-file-drag";
 import { FileTypeIcon } from "./files/file-icons";
 import { FilesBreadcrumb } from "./files/FilesBreadcrumb";
 import { breadcrumbs, rootLabelFor, tailSizeFor } from "./files/breadcrumb";
+import { isSystemFile } from "./files/system-files";
 
 /** 新开的编辑器节点放在文件节点右边这么远。 */
 const SPAWN_GAP = 24;
@@ -32,6 +33,10 @@ const STATUS_COLOR: Record<GitFileStatus["status"], string> = {
  * [`breadcrumb`](./files/breadcrumb.ts)。
  * 单击文件夹进入，双击文件在右边开一个编辑器节点。
  *
+ * 标题与整条头部归 `NodeShell`：静态标题、双击改名、整行都能拖（F4）。
+ * 列表默认不显示 `.DS_Store` 这类系统文件（设置 → 通用可打开），
+ * 目录排在文件前面，同类按名字排。
+ *
  * Git 字母徽标取自 `gitStatus().files`（一次 porcelain 扫描）；
  * 不去要 diff——那要为每个文件跑一遍 `git diff`。
  */
@@ -43,6 +48,7 @@ export function FilesNode({ id, node, selected }: NodeBodyProps) {
   const workspaceName = useCanvasStore((state) => state.workspace?.name);
   const workspaceRoot = useCanvasStore((state) => state.workspace?.rootPath);
   const dragProps = useWorkspaceFileDrag(workspaceId);
+  const showSystemFiles = usePreferencesStore((state) => state.showSystemFiles);
 
   const [entries, setEntries] = React.useState<FileEntry[] | null>(null);
   const [failed, setFailed] = React.useState(false);
@@ -109,14 +115,16 @@ export function FilesNode({ id, node, selected }: NodeBodyProps) {
   const visible = React.useMemo(() => {
     if (!entries) return [];
     const needle = filter.trim().toLowerCase();
-    const matched = needle
-      ? entries.filter((entry) => entry.name.toLowerCase().includes(needle))
-      : entries;
-    return [...matched].sort((left, right) => {
+    const matched = entries.filter(
+      (entry) =>
+        (showSystemFiles || !isSystemFile(entry.name)) &&
+        (!needle || entry.name.toLowerCase().includes(needle)),
+    );
+    return matched.sort((left, right) => {
       if (left.kind !== right.kind) return left.kind === "directory" ? -1 : 1;
       return left.name.localeCompare(right.name);
     });
-  }, [entries, filter]);
+  }, [entries, filter, showSystemFiles]);
 
   const crumbs = breadcrumbs(
     path,
