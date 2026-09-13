@@ -37,6 +37,20 @@ export const agentInfoSchema = z.object({
    * never to supported.
    */
   probe: agentProbeSchema.nullish(),
+  /**
+   * Argv a session of this agent must carry for its adapter to load
+   * (docs/design/agent-integration.md §3) — `--settings <file>` for Claude
+   * Code, empty for everyone else and for an uninstalled integration.
+   *
+   * It is answered per request rather than frozen into a launch definition
+   * because both halves are the runtime's: the path is that data directory's
+   * and the flag is that CLI version's.
+   *
+   * Optional rather than defaulted: the runtime omits it when there is nothing
+   * to add, and "this agent needs no argv" and "this runtime predates the
+   * field" are the same instruction to the caller — add nothing.
+   */
+  launchArgs: z.array(z.string()).optional(),
 });
 
 export const agentListSchema = z.array(agentInfoSchema);
@@ -70,33 +84,84 @@ export type AgentModel = z.infer<typeof agentModelSchema>;
 export const agentModelListSchema = z.array(agentModelSchema);
 
 /**
- * `POST /api/agents/{id}/hooks/install|uninstall`.
+ * How a provider's hook adapter reaches its CLI
+ * (docs/design/agent-integration.md §3).
  *
- * Loose on purpose: the runtime omits `clientBin` and `warning` when they are
- * empty, and adds fields faster than the settings page reads them.
+ * The distinction the settings page shows is "does integrating me edit a file
+ * you also edit": `launch` passes the adapter on the command line and `extension`
+ * writes a generated module only we ever touch, so neither goes near the user's
+ * own configuration; `file` merges into it, idempotently and repairably.
  */
-export const hookInstallReportSchema = z.looseObject({
-  agentId: agentIdSchema,
-  configPath: z.string(),
-  clientBin: z.string().optional(),
-  clientRevision: z.number().int().nonnegative(),
+export const INJECTION_MODES = ["launch", "file", "extension"] as const;
+
+/** One half of an install unit — the adapter, or the skill. */
+export const integrationHalfSchema = z.object({
   installed: z.boolean(),
+  /** Where it lives. Present even when it is not installed: the answer to
+   * "why is this not on" is usually "look here". */
+  path: z.string().optional(),
+  /** The revision on disk; `0` when this half is not installed. */
+  revision: z.number().int().nonnegative().default(0),
+});
+
+/** Something an earlier product name left behind (设计 §4). */
+export const legacyIntegrationFindingSchema = z.object({
+  /** `hook_entry` / `skill_dir` / `codex_unknown_key` / `status_line`. */
+  kind: z.string(),
+  path: z.string(),
+  /** The command, key or directory name, so a person can recognise their own. */
+  detail: z.string(),
+});
+
+/**
+ * `GET /api/agents/{id}/integration`, and what install / uninstall answer with
+ * (docs/design/agent-integration.md §5).
+ *
+ * Hook and skill are **one** install unit with one state: before this, a CLI
+ * had two switches and three ways to be half-integrated, and no single screen
+ * could say which. `revision` is what a fresh install writes — the hook
+ * revision and the skill revision folded together — and `stale` is the only
+ * question the page has to ask about it.
+ *
+ * Loose on purpose: the runtime omits what is empty and adds fields faster than
+ * the settings page reads them.
+ */
+export const integrationStateSchema = z.looseObject({
+  agentId: agentIdSchema,
+  mode: z.enum(INJECTION_MODES),
+  hook: integrationHalfSchema,
+  skill: integrationHalfSchema,
+  legacy: z.object({
+    found: z.array(legacyIntegrationFindingSchema).default([]),
+  }),
+  revision: z.number().int().nonnegative(),
+  /** What the files on disk were written by; absent when nothing is installed. */
+  installedRevision: z.number().int().nonnegative().optional(),
+  stale: z.boolean().default(false),
+  /**
+   * Argv a session of this agent must carry for its adapter to load. Empty for
+   * every mode but `launch`, and for an integration that is not installed.
+   */
+  launchArgs: z.array(z.string()).default([]),
+  clientBin: z.string().optional(),
   /** Something worked but deserves a sentence in the settings page. */
   warning: z.string().optional(),
 });
 
 /**
- * `POST /api/agents/{id}/skills/install|uninstall` — the collaboration skill,
- * installed separately from the status hooks.
+ * `POST /api/agents/{id}/integration/repair` — what the pass actually did.
  *
- * `paths` is what actually changed on disk: an install that found the file
- * already current answers with an empty list and leaves the mtime alone.
+ * `kept` is the point of the report: everything this repair recognised as not
+ * ours and wrote back exactly as it read it.
  */
-export const skillReportSchema = z.looseObject({
+export const integrationRepairReportSchema = z.looseObject({
   agentId: agentIdSchema,
-  installed: z.boolean(),
-  revision: z.number().int().nonnegative().optional(),
-  paths: z.array(z.string()).default([]),
+  found: z.array(legacyIntegrationFindingSchema).default([]),
+  removed: z.array(z.string()).default([]),
+  kept: z.array(z.string()).default([]),
+  /** The newest backup, for the sentence the settings page shows. */
+  backup: z.string().optional(),
+  backups: z.array(z.string()).default([]),
 });
 
 export const answerApprovalRequestSchema = z.object({
@@ -168,8 +233,15 @@ export const contextLinkSchema = z.object({
 export type SuggestTitleResponse = z.infer<typeof suggestTitleResponseSchema>;
 export type AgentTranscript = z.infer<typeof agentTranscriptSchema>;
 export type AgentInfo = z.infer<typeof agentInfoSchema>;
-export type HookInstallReport = z.infer<typeof hookInstallReportSchema>;
-export type SkillReport = z.infer<typeof skillReportSchema>;
+export type InjectionMode = (typeof INJECTION_MODES)[number];
+export type IntegrationHalf = z.infer<typeof integrationHalfSchema>;
+export type LegacyIntegrationFinding = z.infer<
+  typeof legacyIntegrationFindingSchema
+>;
+export type IntegrationState = z.infer<typeof integrationStateSchema>;
+export type IntegrationRepairReport = z.infer<
+  typeof integrationRepairReportSchema
+>;
 export type AnswerApprovalRequest = z.infer<typeof answerApprovalRequestSchema>;
 export type ContextLink = z.infer<typeof contextLinkSchema>;
 export type ContextLinkContent = z.infer<typeof contextLinkContentSchema>;

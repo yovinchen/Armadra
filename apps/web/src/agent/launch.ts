@@ -162,6 +162,11 @@ function launchInput(agent: TerminalAgent, prompt?: string) {
     registryEntry(agent.id)?.resolvedPath ||
     undefined;
   const custom = customAgentFor(agent.id);
+  // Runtime 说这个 CLI 的适配器得靠启动行加载时，加上它给的 argv
+  // （设计 agent-integration §3）：Claude Code 是 `--settings <文件>`，
+  // 其余为空。路径与开关都是 Runtime 那台机器的，所以由它现答，不落进节点
+  // 数据，也不进后台计划——存下来的计划只认 agent id。
+  const injected = registryEntry(agent.id)?.launchArgs ?? [];
   return {
     agentId: agent.id,
     ...(custom ? { custom } : {}),
@@ -169,6 +174,7 @@ function launchInput(agent: TerminalAgent, prompt?: string) {
     ...(agent.permissionMode ? { permissionMode: agent.permissionMode } : {}),
     ...(agent.model ? { model: agent.model } : {}),
     ...(agent.sessionId ? { sessionId: agent.sessionId } : {}),
+    ...(injected.length > 0 ? { extraArgs: injected } : {}),
     ...(prompt ? { prompt } : {}),
   };
 }

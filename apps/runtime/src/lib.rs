@@ -717,21 +717,25 @@ pub fn router_with_state(state: AppState) -> Router {
         // The node header's model menu (F7). A read that may start one short
         // `--help`, cached for ten minutes.
         .route("/api/agents/{agent_id}/models", get(api::agent_models))
+        // Hook and skill are one unit with one switch
+        // (docs/design/agent-integration.md §5). The `/hooks/*` and `/skills/*`
+        // routes this replaced are gone, not deprecated: two switches for one
+        // state is the bug.
         .route(
-            "/api/agents/{agent_id}/hooks/install",
-            post(api::install_hooks),
+            "/api/agents/{agent_id}/integration",
+            get(api::read_integration),
         )
         .route(
-            "/api/agents/{agent_id}/hooks/uninstall",
-            post(api::uninstall_hooks),
+            "/api/agents/{agent_id}/integration/install",
+            post(api::install_integration),
         )
         .route(
-            "/api/agents/{agent_id}/skills/install",
-            post(api::install_skills),
+            "/api/agents/{agent_id}/integration/uninstall",
+            post(api::uninstall_integration),
         )
         .route(
-            "/api/agents/{agent_id}/skills/uninstall",
-            post(api::uninstall_skills),
+            "/api/agents/{agent_id}/integration/repair",
+            post(api::repair_integration),
         )
         .route(
             "/api/agent-status/{node_id}/read",

@@ -4,7 +4,6 @@ import {
   gitFileDiffSchema,
   gitStatusSchema,
   gitUnstageResponseSchema,
-  hookInstallReportSchema,
 } from "../src/index.js";
 
 describe("runtime git API", () => {
@@ -62,18 +61,9 @@ describe("runtime git API", () => {
     ).toBe(false);
   });
 
-  it("types the unstage response and the hook install report", () => {
+  it("types the unstage response", () => {
     expect(
       gitUnstageResponseSchema.parse({ unstaged: ["a.ts"] }).unstaged,
     ).toEqual(["a.ts"]);
-    const report = hookInstallReportSchema.parse({
-      agentId: "claude",
-      configPath: "/home/u/.claude/settings.json",
-      clientRevision: 2,
-      installed: true,
-      extraKeyFromANewerRuntime: 1,
-    });
-    expect(report.installed).toBe(true);
-    expect(report.warning).toBeUndefined();
   });
 });

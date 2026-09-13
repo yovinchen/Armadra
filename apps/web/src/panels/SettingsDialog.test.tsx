@@ -15,10 +15,6 @@ const fetchHealth = vi.fn();
 const fetchUsage = vi.fn();
 const fetchDataInfo = vi.fn();
 const patchSettings = vi.fn();
-const installAgentHooks = vi.fn();
-const uninstallAgentHooks = vi.fn();
-const installAgentSkills = vi.fn();
-const uninstallAgentSkills = vi.fn();
 const agentIntegration = vi.fn();
 const repairAgentIntegration = vi.fn();
 const installAgentIntegration = vi.fn();
@@ -37,10 +33,6 @@ vi.mock("../api/client", () => ({
     refreshConversations: () =>
       Promise.resolve({ scanned: 0, indexed: 0, removed: 0, total: 0 }),
     updateSettings: (patch: unknown) => patchSettings(patch),
-    installAgentHooks: (id: string) => installAgentHooks(id),
-    uninstallAgentHooks: (id: string) => uninstallAgentHooks(id),
-    installAgentSkills: (id: string) => installAgentSkills(id),
-    uninstallAgentSkills: (id: string) => uninstallAgentSkills(id),
     agentIntegration: (id: string) => agentIntegration(id),
     repairAgentIntegration: (id: string) => repairAgentIntegration(id),
     installAgentIntegration: (id: string) => installAgentIntegration(id),
@@ -155,26 +147,31 @@ describe("SettingsDialog", () => {
       .mockImplementation((patch: Record<string, unknown>) =>
         Promise.resolve(settingsDocument(patch)),
       );
-    installAgentHooks.mockReset();
-    uninstallAgentHooks.mockReset();
-    installAgentSkills.mockReset().mockResolvedValue({
-      agentId: "claude",
-      installed: true,
-      revision: 5,
-      paths: ["/home/u/.claude/skills/armadra/SKILL.md"],
-    });
-    uninstallAgentSkills.mockReset();
     agentIntegration.mockReset().mockResolvedValue({
       agentId: "claude",
       mode: "launch",
       hook: { installed: true, revision: 3 },
       skill: { installed: false },
-      legacy: { found: ["~/.claude/settings.json → hooks.SessionStart[0]"] },
+      legacy: {
+        found: [
+          {
+            kind: "hook_entry",
+            path: "~/.claude/settings.json",
+            detail: "hooks.SessionStart[0]",
+          },
+        ],
+      },
       revision: 3,
     });
     repairAgentIntegration.mockReset().mockResolvedValue({
       agentId: "claude",
-      found: ["~/.claude/settings.json → hooks.SessionStart[0]"],
+      found: [
+        {
+          kind: "hook_entry",
+          path: "~/.claude/settings.json",
+          detail: "hooks.SessionStart[0]",
+        },
+      ],
       removed: ["~/.claude/settings.json → hooks.SessionStart[0]"],
       kept: [],
       backup: "~/.claude/settings.json.armadra-backup-20260913",
@@ -375,8 +372,6 @@ describe("SettingsDialog", () => {
       expect(installAgentIntegration).toHaveBeenCalledWith("claude"),
     );
     // 一个安装单元：不再各调一次老的两条路由。
-    expect(installAgentHooks).not.toHaveBeenCalled();
-    expect(installAgentSkills).not.toHaveBeenCalled();
 
     fireEvent.click(
       screen.getByRole("button", { name: zh("integration.uninstall") }),

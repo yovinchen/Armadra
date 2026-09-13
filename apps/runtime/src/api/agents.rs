@@ -1,7 +1,7 @@
 //! `/api/agents`, `/api/conversations` and `/api/agent-status` — agent
-//! discovery, hook installs and the session status surfaces.
+//! discovery, the integration switch and the session status surfaces.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use axum::{
     Json,
@@ -15,7 +15,7 @@ use crate::{
     agent_probe, db,
     error::{AppError, AppResult},
     events::WorkspaceEvent,
-    hook::install::{self, InstallReport},
+    hook::install::{integration, repair},
     index,
     model::{AgentStatus, Conversation},
     ownership,
@@ -87,6 +87,10 @@ pub async fn agents(State(state): State<AppState>) -> AppResult<Json<Vec<AgentIn
         // state, so a user who deletes it by hand sees that here without
         // anything having to notice.
         info.skills_revision = crate::collab::skills::installed_revision_for(hook_provider);
+        // What a session of this agent has to be launched with for its adapter
+        // to load at all (设计 §3). Empty for every provider but Claude Code,
+        // and for an integration that is not installed.
+        info.launch_args = integration::launch_args(hook_provider);
         // Version probing is what decides whether a gated capability is
         // `supported` or `unknown` on the client (design §1). A program that
         // is not installed is not run: there is nothing to ask.
@@ -125,108 +129,86 @@ pub async fn agent_models(
     ))
 }
 
-/// Installs (or reinstalls) this provider's hooks. Idempotent by construction —
-/// see `hook::install`.
-pub async fn install_hooks(
-    State(state): State<AppState>,
-    AxumPath(agent_id): AxumPath<String>,
-) -> AppResult<Json<InstallReport>> {
-    let client_bin = install::resolve_client_binary()?;
-    let report = install::install(&agent_id, &client_bin)?;
-    db::upsert_hook_install(
-        &state.pool,
-        &report.agent_id,
-        report.client_revision,
-        Some(&report.config_path),
-    )
-    .await?;
-    if let Some(warning) = &report.warning {
-        tracing::warn!(%agent_id, %warning, "hooks installed with a caveat");
-    }
-    Ok(Json(report))
-}
+/* ------------------------------- integration ------------------------------ */
 
-pub async fn uninstall_hooks(
-    State(state): State<AppState>,
-    AxumPath(agent_id): AxumPath<String>,
-) -> AppResult<Json<InstallReport>> {
-    let report = install::uninstall(&agent_id)?;
-    db::remove_hook_install(&state.pool, &report.agent_id).await?;
-    Ok(Json(report))
-}
-
-/* ---------------------------------- skills -------------------------------- */
-
-/// What a skill install or uninstall did.
-///
-/// `paths` is what actually changed on disk, so an install that found the file
-/// already current answers with an empty list and an unchanged mtime.
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SkillReport {
-    pub agent_id: String,
-    pub installed: bool,
-    /// The revision now on disk; absent once the skill has been removed.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub revision: Option<u32>,
-    pub paths: Vec<String>,
-}
-
-/// The provider whose skill directory a row writes into. A `custom:` entry
-/// borrows its base agent's, the same way it borrows its hooks.
-fn skill_provider(state: &AppState, agent_id: &str) -> String {
-    if let Some(custom) = state
+/// The provider whose files an integration request writes. A `custom:` entry
+/// borrows its base agent's hooks *and* its skill directory: that is the
+/// adapter that will actually fire for it (plan §24.1).
+fn integration_provider(state: &AppState, agent_id: &str) -> String {
+    state
         .settings
         .custom_agents()
         .iter()
         .find(|custom| custom.id == agent_id)
-    {
-        return custom.base_agent.clone();
+        .map(|custom| custom.base_agent.clone())
+        .unwrap_or_else(|| agent_id.to_owned())
+}
+
+/// `GET /api/agents/{id}/integration` — one answer for one switch
+/// (docs/design/agent-integration.md §5).
+///
+/// A read, so it answers under either ownership: the files are this machine's
+/// and the Worker channel's `GetIntegration` reads the very same ones.
+pub async fn read_integration(
+    State(state): State<AppState>,
+    AxumPath(agent_id): AxumPath<String>,
+) -> AppResult<Json<integration::IntegrationState>> {
+    Ok(Json(integration::state(&integration_provider(
+        &state, &agent_id,
+    ))?))
+}
+
+/// `POST /api/agents/{id}/integration/install` — hook and skill together.
+/// Idempotent by construction; see `hook::install`.
+pub async fn install_integration(
+    State(state): State<AppState>,
+    AxumPath(agent_id): AxumPath<String>,
+) -> AppResult<Json<integration::IntegrationState>> {
+    let provider = integration_provider(&state, &agent_id);
+    let installed = integration::install(&provider)?;
+    // The row is the Host's view of this machine's install state; the files on
+    // disk remain the truth this Runtime reads back.
+    db::upsert_hook_install(
+        &state.pool,
+        &provider,
+        installed.hook.revision,
+        installed.hook.path.as_deref(),
+    )
+    .await?;
+    if let Some(warning) = &installed.warning {
+        tracing::warn!(%agent_id, %warning, "the integration was installed with a caveat");
     }
-    agent_id.to_owned()
+    Ok(Json(installed))
 }
 
-/// `POST /api/agents/{id}/skills/install` — writes the collaboration skill.
-/// Separate from the hooks install: a CLI can report status with no skill, and
-/// can read its mailbox with no hooks.
-pub async fn install_skills(
+pub async fn uninstall_integration(
     State(state): State<AppState>,
     AxumPath(agent_id): AxumPath<String>,
-) -> AppResult<Json<SkillReport>> {
-    let provider = skill_provider(&state, &agent_id);
-    let paths = crate::collab::skills::install_for(&provider)?;
-    Ok(Json(SkillReport {
-        installed: true,
-        revision: crate::collab::skills::installed_revision_for(&provider),
-        paths: paths
-            .iter()
-            .map(PathBuf::as_path)
-            .map(display_path)
-            .collect(),
-        agent_id,
-    }))
+) -> AppResult<Json<integration::IntegrationState>> {
+    let provider = integration_provider(&state, &agent_id);
+    let removed = integration::uninstall(&provider)?;
+    db::remove_hook_install(&state.pool, &provider).await?;
+    Ok(Json(removed))
 }
 
-pub async fn uninstall_skills(
+/// `POST /api/agents/{id}/integration/repair` — the only thing that edits what
+/// an earlier product name left behind (设计 §4). Startup detects and reports;
+/// this writes.
+pub async fn repair_integration(
     State(state): State<AppState>,
     AxumPath(agent_id): AxumPath<String>,
-) -> AppResult<Json<SkillReport>> {
-    let provider = skill_provider(&state, &agent_id);
-    let paths = crate::collab::skills::uninstall_for(&provider)?;
-    Ok(Json(SkillReport {
-        installed: false,
-        revision: None,
-        paths: paths
-            .iter()
-            .map(PathBuf::as_path)
-            .map(display_path)
-            .collect(),
-        agent_id,
-    }))
-}
-
-fn display_path(path: &Path) -> String {
-    path.display().to_string()
+) -> AppResult<Json<repair::RepairReport>> {
+    let provider = integration_provider(&state, &agent_id);
+    let report = repair::repair(&provider)?;
+    if !report.removed.is_empty() {
+        tracing::info!(
+            agent = %provider,
+            removed = report.removed.len(),
+            backup = ?report.backup,
+            "repaired an older install"
+        );
+    }
+    Ok(Json(report))
 }
 
 /// Clears the unread badge a finished turn raised. The client that read the

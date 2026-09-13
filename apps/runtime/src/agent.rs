@@ -243,6 +243,16 @@ pub struct AgentInfo {
     /// not installed. Filled in by the API layer, which reads the file.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub skills_revision: Option<u32>,
+    /// Argv a session of this agent must carry for its adapter to load
+    /// (docs/design/agent-integration.md §3) — `--settings <file>` for Claude
+    /// Code, empty for everyone else and for an uninstalled integration.
+    ///
+    /// It is answered here rather than frozen into a launch definition because
+    /// both halves are this machine's: the path is this data directory's and
+    /// the flag is this CLI version's. A plan stored yesterday must not be able
+    /// to resurrect either.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub launch_args: Vec<String>,
     /// Cached `--version` probe (`agent_probe.rs`), filled in by the API layer.
     /// `None` means "not probed", which resolves gated capabilities to unknown
     /// on the client — never to supported.
@@ -266,6 +276,7 @@ impl AgentInfo {
             resolved_path: resolved.map(|path| path.to_string_lossy().into_owned()),
             client_revision: None,
             skills_revision: None,
+            launch_args: Vec::new(),
             probe: None,
         }
     }
@@ -307,6 +318,7 @@ pub fn custom_info(custom: &crate::settings::CustomAgent) -> AgentInfo {
         resolved_path: resolved.map(|path| path.to_string_lossy().into_owned()),
         client_revision: None,
         skills_revision: None,
+        launch_args: Vec::new(),
         probe: None,
     }
 }
