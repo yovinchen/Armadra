@@ -244,21 +244,23 @@ mod tests {
 
     #[tokio::test]
     async fn a_program_that_prints_no_version_still_counts_as_answered() {
-        // `/bin/echo --version` prints a coreutils banner on GNU and the flag
-        // itself on BSD; either way the program ran, so the probe is `ok`.
-        let result = probe("echo", "/bin/echo").await;
+        // The test binary rejects `--version` and exits; the program ran, so
+        // the probe is `ok` with no version, on every platform.
+        let result = probe("echo", &crate::agent::a_real_program()).await;
         assert_eq!(result.status, "ok");
+        assert_eq!(result.version, None);
     }
 
     #[tokio::test]
     async fn a_cached_probe_is_reused_until_the_launch_command_changes() {
         let settings = crate::settings::SettingsStore::in_memory(serde_json::json!({}));
-        let first = cached(&settings, "echo", "/bin/echo", true).await;
+        let program = crate::agent::a_real_program();
+        let first = cached(&settings, "echo", &program, true).await;
         assert_eq!(first.status, "ok");
         let stored_now = stored(&settings.document(), "echo").unwrap();
         assert_eq!(stored_now, first);
         // Same command: the stored answer is returned verbatim, timestamp and all.
-        assert_eq!(cached(&settings, "echo", "/bin/echo", true).await, first);
+        assert_eq!(cached(&settings, "echo", &program, true).await, first);
         // A different program is a different question.
         let other = cached(&settings, "echo", "definitely-not-a-real-binary-xyz", true).await;
         assert_eq!(other.status, "failed");
@@ -271,7 +273,7 @@ mod tests {
     #[tokio::test]
     async fn a_probe_is_not_persisted_once_the_settings_document_moved() {
         let settings = crate::settings::SettingsStore::in_memory(serde_json::json!({}));
-        let answered = cached(&settings, "echo", "/bin/echo", false).await;
+        let answered = cached(&settings, "echo", &crate::agent::a_real_program(), false).await;
         assert_eq!(answered.status, "ok");
         assert!(stored(&settings.document(), "echo").is_none());
     }

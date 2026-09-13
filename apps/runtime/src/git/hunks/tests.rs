@@ -24,6 +24,12 @@ fn fixture(name: &str) -> (TempDir, String, String) {
     command(dir.path(), &["init", "-b", "main"]);
     command(dir.path(), &["config", "user.name", "Hunk Test"]);
     command(dir.path(), &["config", "user.email", "hunks@example.test"]);
+    // In the repository, not in this helper's environment: the code under test
+    // runs its own `git`, which on Windows reads `core.autocrlf = true` out of
+    // the system config and would hand back CRLF where the fixture wrote LF.
+    // `configured_crlf_worktree_preserves_index_and_line_endings` turns it back
+    // on where that is the subject.
+    command(dir.path(), &["config", "core.autocrlf", "false"]);
     let original = (1..=40)
         .map(|line| format!("original line {line}\n"))
         .collect::<String>();
@@ -161,12 +167,20 @@ async fn stale_full_diff_and_changed_branch_are_rejected_before_mutation() {
 
 #[tokio::test]
 async fn supports_spaces_quotes_and_literal_option_looking_filenames() {
-    for name in [
+    // A double quote is not a legal character in a Windows filename, so that
+    // one name is checked where it can exist. The rest — spaces, an
+    // option-looking name and non-ASCII — run everywhere.
+    #[cfg(unix)]
+    let names = [
         "file with spaces.txt",
         "file 'single' and \"double\".txt",
         "--output=other.txt",
         "中文.txt",
-    ] {
+    ]
+    .as_slice();
+    #[cfg(not(unix))]
+    let names = ["file with spaces.txt", "--output=other.txt", "中文.txt"].as_slice();
+    for name in names.iter().copied() {
         let (dir, original, changed) = fixture(name);
         let diff = read_hunks(dir.path(), ".", name, GitHunkScope::Worktree)
             .await

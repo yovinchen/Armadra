@@ -14,12 +14,15 @@ use crate::{AppState, db, events::EventHub};
 #[tokio::test]
 async fn custom_agents_are_listed_after_the_built_ins_and_borrow_their_base() {
     let (router, _directory) = router_fixture("api-custom-agents").await;
+    // A real program, so the resolution below is the product's and not the
+    // host's idea of which fixture path happens to exist.
+    let program = crate::agent::a_real_program();
     let (status, _) = call(
         &router,
         "PATCH",
         "/api/settings",
         Some(json!({ "agents": { "custom": [
-            { "id": "custom:echo", "label": "Echo", "launchCmd": "/bin/echo",
+            { "id": "custom:echo", "label": "Echo", "launchCmd": program,
               "args": ["hello"], "baseAgent": "gemini",
               "env": { "GREETING": "hi" } },
             { "id": "custom:broken", "label": "", "launchCmd": "x" },
@@ -36,7 +39,7 @@ async fn custom_agents_are_listed_after_the_built_ins_and_borrow_their_base() {
     let custom = agents.last().unwrap();
     assert_eq!(custom["id"], "custom:echo");
     assert_eq!(custom["label"], "Echo");
-    assert_eq!(custom["launchCmd"], "/bin/echo");
+    assert_eq!(custom["launchCmd"], program);
     assert_eq!(custom["args"], json!(["hello"]));
     assert_eq!(custom["baseAgent"], "gemini");
     // Colour, prompt mode and capabilities are the base agent's.
@@ -45,7 +48,7 @@ async fn custom_agents_are_listed_after_the_built_ins_and_borrow_their_base() {
     assert_eq!(custom["promptMode"], gemini["promptMode"]);
     assert_eq!(custom["capabilities"], gemini["capabilities"]);
     // An absolute program resolves even though it is on no PATH entry.
-    assert_eq!(custom["resolvedPath"], "/bin/echo");
+    assert_eq!(custom["resolvedPath"], program);
     assert_eq!(custom["installed"], true);
 }
 

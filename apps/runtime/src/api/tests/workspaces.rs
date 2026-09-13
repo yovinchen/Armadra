@@ -59,7 +59,9 @@ async fn workspace_import_validates_names_and_manifest_before_creating_a_directo
 #[tokio::test]
 async fn desktop_directory_open_registers_the_original_path_without_copying() {
     let (router, directory) = router_fixture("open-directory").await;
-    let root = directory.path().canonicalize().unwrap().join("project");
+    let root = crate::paths::canonicalize(directory.path())
+        .unwrap()
+        .join("project");
     std::fs::create_dir(&root).unwrap();
     std::fs::write(root.join("a.txt"), "original").unwrap();
     let (status, first) = call(
@@ -109,7 +111,11 @@ async fn creates_the_workspace_folder_when_asked() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert!(root.is_dir());
-    assert!(workspace["rootPath"].as_str().unwrap().ends_with("/fresh"));
+    // Compared as a path, not as text: the separator is the host's.
+    assert_eq!(
+        std::path::Path::new(workspace["rootPath"].as_str().unwrap()).file_name(),
+        Some(std::ffi::OsStr::new("fresh"))
+    );
 
     // The same call again must not silently reuse the directory.
     let (status, error) = call(

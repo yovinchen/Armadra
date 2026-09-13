@@ -422,6 +422,21 @@ fn executable_with_platform_suffix(candidate: &Path) -> Option<PathBuf> {
     }
 }
 
+/// An absolute path to a program that really exists on this host, for the tests
+/// that need a launch command which resolves without being on `PATH`.
+///
+/// The test binary itself, because `/bin/echo` is a Unix fixture and every
+/// Windows stand-in for it either takes no `--version` or opens a shell. This
+/// one answers `error: Unrecognized option: 'version'` and exits, which is
+/// exactly the "ran, printed no version" case the probe has to call `ok`.
+#[cfg(test)]
+pub(crate) fn a_real_program() -> String {
+    std::env::current_exe()
+        .expect("the test binary has a path")
+        .to_string_lossy()
+        .into_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -507,11 +522,12 @@ mod tests {
 
     #[test]
     fn a_command_with_a_path_is_resolved_as_a_path_not_searched_on_path() {
-        // `/bin/echo` is not in any PATH directory as `bin/echo`, so the only
-        // way this resolves is by treating it as the path it is.
+        // The test binary sits in no PATH directory under its own name, so the
+        // only way this resolves is by treating it as the path it is.
+        let program = a_real_program();
         assert_eq!(
-            resolve_command("/bin/echo").as_deref(),
-            Some(Path::new("/bin/echo"))
+            resolve_command(&program).as_deref(),
+            Some(Path::new(&program))
         );
         assert!(resolve_command("/bin/definitely-not-here").is_none());
         assert!(resolve_command("./definitely-not-here").is_none());
@@ -519,11 +535,12 @@ mod tests {
 
     #[test]
     fn a_custom_agent_inherits_everything_but_its_name_and_program() {
+        let program = a_real_program();
         let custom = crate::settings::CustomAgent {
             id: "custom:echo".into(),
             label: "Echo".into(),
             color: "#ffffff".into(),
-            launch_cmd: "/bin/echo".into(),
+            launch_cmd: program.clone(),
             args: vec!["hello".into()],
             env: serde_json::Map::new(),
             base_agent: "gemini".into(),
@@ -532,7 +549,7 @@ mod tests {
         let info = custom_info(&custom);
         assert_eq!(info.id, "custom:echo");
         assert_eq!(info.label, "Echo");
-        assert_eq!(info.launch_cmd, "/bin/echo");
+        assert_eq!(info.launch_cmd, program);
         assert_eq!(info.args, vec!["hello".to_owned()]);
         assert_eq!(info.base_agent, Some("gemini"));
         // Prompt mode, capabilities and colour come from the base agent.
@@ -541,7 +558,7 @@ mod tests {
         assert_eq!(info.capabilities, base.capabilities);
         assert_eq!(info.color, base.color);
         assert!(info.installed);
-        assert_eq!(info.resolved_path.as_deref(), Some("/bin/echo"));
+        assert_eq!(info.resolved_path.as_deref(), Some(program.as_str()));
 
         // A malformed direct caller never gains another adapter's abilities.
         let orphan = custom_info(&crate::settings::CustomAgent {
