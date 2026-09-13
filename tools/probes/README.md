@@ -35,6 +35,21 @@ node tools/probes/git-tool-window.mjs [输出目录]
 
 产物默认在 `target/git-tool-window/`：桌面 1440×900 的 `log-desktop.png`（三栏）、`log-maximized.png`、`commit-desktop.png`、`commit-maximized.png`，手机 390×844 的 `mobile-commits.png` / `mobile-branches.png` / `mobile-details.png` / `mobile-diff.png`（日志页的四级导航）与 `mobile-commit.png`，加一份 `result.json`。手机那几张按应用自己的行为开成最大化（`shell/MobileBottomNav.tsx`），桌面停在底部。端口随机（不用 1420 / 1421 / 43120 / 43121），数据目录与浏览器 profile 都是 `mktemp` 出来的，跑完删除；不读写操作员自己的数据目录、凭据或任何远端。页面入口（`apps/web/git-window-probe.html` 与 `src/git-window-probe.tsx`）由脚本临时写入、结束时删除——应用首页要先选工作空间，而这次要看的是窗口本身。
 
+## 连线拖拽成功率
+
+复现并守住[用户实测反馈](../../docs/status/platform-implementation-status.md) F6「Agent 圆点之间拖拽有时拉不出箭头」。用 CDP 的真实鼠标事件从一个终端节点的右把手拖到另一个节点身上，重复 N 次（默认 20），每次成功后点 Dock 的「撤销」把边收回来再拖下一次。
+
+```sh
+CARGO_TARGET_DIR=$PWD/target cargo build -p armadra-runtime
+node tools/probes/connection-drag.mjs [输出目录] [次数]
+```
+
+跑的是应用自己的首页（`?workspace=…&board=…` 深链，见 `apps/web/src/app/use-board-sync.ts`），底下是临时数据目录里的 Rust Runtime、临时工作空间与新 profile 的无头 Chrome；端口随机（不用 1420 / 1421 / 43120 / 43121），跑完全部删除，不读写操作员自己的数据目录或凭据。
+
+产物默认在 `target/connection-drag/`：`result.json` 记成功次数、把手实测尺寸与每次失败时指针底下的元素，第一次失败时另存一张 `failure.png`。把手量到小于 12px 直接失败——那说明 React Flow 自己的样式表又盖过了 `apps/web/src/styles/nodes.css`，圆点和它的 34px 命中区会一起被推到节点外面，正是 F6 的根因。
+
+只覆盖鼠标：触屏的 pointer 事件、缩放后的坐标换算与多显示器缩放都没有验证。
+
 ## Windows ConPTY 编译探针
 
 独立 Cargo workspace，锁定 windows-sys 0.61.2 及 Cargo.lock。仅引用 CreatePipe / CreatePseudoConsole / ResizePseudoConsole / ClosePseudoConsole API，没有创建 CLI 子进程、命名管道服务或持久会话。

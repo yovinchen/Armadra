@@ -12,9 +12,21 @@
 
 /* ------------------------------ 上下文链接把手 ----------------------------- */
 
-/* Visible ports stay on the node edge. Their larger hit regions extend
-   outward, leaving body text and terminal input unobstructed. */
-.node-connection-handle {
+/*
+ * Visible ports stay on the node edge. Their larger hit regions extend
+ * outward, leaving body text and terminal input unobstructed.
+ *
+ * Every rule below is qualified with `.react-flow__handle` on purpose. The
+ * library's own stylesheet is imported from `canvas/FlowWorkspace.tsx`, which
+ * the entry module evaluates *after* this file, so at equal specificity its
+ * `.react-flow__handle { width: 6px; height: 6px; transform: translate(50%,-50%) }`
+ * used to win: the port rendered as the library's 6px navy dot pushed clear of
+ * the node, and its 34px hit region went with it. Aiming at where the designed
+ * 14px dot straddles the border then missed, which is the "sometimes you can't
+ * pull out an arrow" report (user feedback F6). One extra class beats import
+ * order for good, whichever file ends up last.
+ */
+.react-flow__handle.node-connection-handle {
   --connection-port-size: 14px;
   --connection-hit-size: 34px;
   position: absolute;
@@ -27,7 +39,7 @@
   background: var(--muted-foreground);
   box-shadow: 0 0 0 1px var(--border-strong);
   opacity: 0.85;
-  transform: translateY(-50%) scale(max(1, var(--tl-scale, 1)));
+  transform: translateY(-50%);
   transition:
     opacity var(--dur-fast) var(--ease-out),
     background-color var(--dur-fast) var(--ease-out);
@@ -36,7 +48,7 @@
 }
 
 /* Keep the visible circle centred; only the transparent hit area is offset. */
-.node-connection-handle::before {
+.react-flow__handle.node-connection-handle::before {
   position: absolute;
   top: 50%;
   width: var(--connection-hit-size);
@@ -46,15 +58,15 @@
   content: "";
 }
 
-.node-connection-handle[data-side="left"]::before {
+.react-flow__handle.node-connection-handle[data-side="left"]::before {
   right: -2px;
 }
-.node-connection-handle[data-side="right"]::before {
+.react-flow__handle.node-connection-handle[data-side="right"]::before {
   left: -2px;
 }
 
 @media (hover: none), (any-pointer: coarse) {
-  .node-connection-handle {
+  .react-flow__handle.node-connection-handle {
     --connection-port-size: 16px;
     --connection-hit-size: 36px;
     opacity: 1;
@@ -125,7 +137,7 @@
 @media (prefers-reduced-motion: reduce) {
   .node-frame,
   .node-secondary-action,
-  .node-connection-handle {
+  .react-flow__handle.node-connection-handle {
     transition: none;
   }
 }
@@ -175,17 +187,18 @@
   }
 }
 
-.node-connection-handle[data-side="left"] {
+.react-flow__handle.node-connection-handle[data-side="left"] {
   left: calc(var(--connection-port-size) * -0.5);
 }
 
-.node-connection-handle[data-side="right"] {
+.react-flow__handle.node-connection-handle[data-side="right"] {
   right: calc(var(--connection-port-size) * -0.5);
 }
 
-.node-connection-handle:hover,
-[data-slot="node-shell"]:hover .node-connection-handle,
-[data-slot="node-shell"][data-selected="true"] .node-connection-handle {
+.react-flow__handle.node-connection-handle:hover,
+[data-slot="node-shell"]:hover .react-flow__handle.node-connection-handle,
+[data-slot="node-shell"][data-selected="true"]
+  .react-flow__handle.node-connection-handle {
   opacity: 1;
   background: var(--foreground);
 }
