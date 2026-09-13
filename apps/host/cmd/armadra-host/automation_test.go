@@ -18,7 +18,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -115,7 +114,7 @@ func killStateDirWorker(t *testing.T, stateDir string) {
 		if convert != nil || pid <= 1 || pid == os.Getpid() {
 			continue
 		}
-		if syscall.Kill(pid, syscall.SIGKILL) == nil {
+		if worker, find := os.FindProcess(pid); find == nil && worker.Kill() == nil {
 			killed++
 		}
 	}
