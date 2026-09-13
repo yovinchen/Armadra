@@ -735,6 +735,10 @@ mod tests {
         );
     }
 
+    /// Unix-only: `process_table` is one `ps -Ao pid=,ppid=,args=` call, and
+    /// the tree it walks here is rooted in a `/bin/sh` child. Windows has
+    /// neither, and the parser above is covered on every platform.
+    #[cfg(unix)]
     #[test]
     fn the_process_table_walks_a_real_tree() {
         let table = process_table();

@@ -4,7 +4,10 @@
 use tempfile::tempdir;
 
 use axum::http::StatusCode;
-use serde_json::{Value, json};
+use serde_json::json;
+// Only the two PTY tests below read raw frames, and they are Unix-only.
+#[cfg(unix)]
+use serde_json::Value;
 
 use super::support::*;
 use crate::terminal::agent_environment;
@@ -247,6 +250,11 @@ async fn ssh_terminals_resolve_the_host_from_the_settings() {
 }
 
 /// The §15 routes, checked against the shapes in packages/shared/src/api.ts.
+///
+/// Unix-only: the session it drives is a `/bin/sh` that installs `trap '' INT`,
+/// which is what makes the interrupt assertion a behaviour rather than a race.
+/// There is no Windows shell with those semantics to substitute.
+#[cfg(unix)]
 #[tokio::test]
 async fn the_terminal_backend_routes_speak_the_v15_shapes() {
     let (router, directory) = router_fixture("api-terminal-backend").await;
@@ -367,6 +375,10 @@ async fn the_terminal_backend_routes_speak_the_v15_shapes() {
 /// Plan §15.5 over a real socket: `hello` first, `snapshot` for the direct
 /// backend, then `output`; a recycle underneath the socket produces
 /// `stale` instead of a silent close.
+///
+/// Unix-only: the snapshot it waits for is what `/bin/sh -c 'printf …; sleep'`
+/// paints into the PTY.
+#[cfg(unix)]
 #[tokio::test]
 async fn the_terminal_socket_says_hello_then_snapshot_then_stale() {
     use futures_util::{SinkExt, StreamExt};

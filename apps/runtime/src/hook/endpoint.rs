@@ -158,18 +158,23 @@ mod tests {
         let parsed = parse(&awkward.render());
         assert_eq!(parsed["ARMADRA_HOOK_SOCK"], "/tmp/it's here/hook.sock");
         assert_eq!(parsed["ARMADRA_HOOK_TOKEN"], "V4uYb0Q");
-        // And a shell agrees with our parser.
-        let rendered = awkward.render();
-        let script = format!("{rendered}\nprintf '%s' \"$ARMADRA_HOOK_SOCK\"");
-        let output = std::process::Command::new("/bin/sh")
-            .arg("-c")
-            .arg(&script)
-            .output()
-            .unwrap();
-        assert_eq!(
-            String::from_utf8_lossy(&output.stdout),
-            "/tmp/it's here/hook.sock"
-        );
+        // And a shell agrees with our parser. Unix-only because the agreement
+        // is with `sh`: the file exists to be `.`-sourced by one, and Windows
+        // has no shell that reads this dialect.
+        #[cfg(unix)]
+        {
+            let rendered = awkward.render();
+            let script = format!("{rendered}\nprintf '%s' \"$ARMADRA_HOOK_SOCK\"");
+            let output = std::process::Command::new("/bin/sh")
+                .arg("-c")
+                .arg(&script)
+                .output()
+                .unwrap();
+            assert_eq!(
+                String::from_utf8_lossy(&output.stdout),
+                "/tmp/it's here/hook.sock"
+            );
+        }
     }
 
     #[test]

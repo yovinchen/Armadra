@@ -498,6 +498,10 @@ async fn a_refused_close_leaves_the_board_alone() {
 
 /// The only write left into somebody else's terminal, and the gates that keep
 /// it from becoming the delivery primitive it replaced.
+///
+/// Unix-only: the last gate is checked against a live PTY running
+/// `/bin/sh -c 'sleep 30'`.
+#[cfg(unix)]
 #[tokio::test]
 async fn interrupt_needs_a_link_and_writes_nothing_but_escape() {
     let fixture = fixture("collab-interrupt").await;
