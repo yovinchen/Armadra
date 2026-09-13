@@ -5,6 +5,15 @@
 //! the rule this table exists to keep: "分母来自该会话实际模型与配置的上下文上限；无法确认
 //! 模型或上限时显示未知." A model nobody here recognises returns `None`, and a
 //! `None` capacity is rendered as unknown rather than as a percentage.
+//!
+//! The table below is the *fallback*. The published window for an exact model
+//! id comes from the models.dev catalog in the data directory
+//! (`models::catalog`, 用户实测反馈 F10), which is both more current and more
+//! specific: a family rule says every Claude holds 200k, while the catalog
+//! knows that this particular Sonnet has since moved to a megatoken. The rules
+//! still answer for a model the catalog has never heard of — a private
+//! deployment, an alias a CLI resolves locally — and for every reading taken
+//! before the first fetch lands.
 
 /// Matched in order, most specific first, against the normalized id.
 ///
@@ -69,15 +78,36 @@ pub fn normalize_model_id(model_id: &str) -> String {
     }
 }
 
-/// Documented context window, or `None` when this table cannot vouch for one.
+/// Documented context window, or `None` when nothing can vouch for one.
+///
+/// The catalog first, then the family rules. Both may decline, and declining
+/// is a real answer: the reading is shown as unknown rather than as a
+/// percentage of a number we made up.
 pub fn context_capacity(model_id: Option<&str>) -> Option<u64> {
+    context_capacity_in(&crate::models::catalog::current(), model_id)
+}
+
+/// [`context_capacity`] against a specific catalog, for tests and for a caller
+/// that already holds one.
+pub fn context_capacity_in(
+    catalog: &crate::models::catalog::Catalog,
+    model_id: Option<&str>,
+) -> Option<u64> {
     let id = normalize_model_id(model_id?);
     if id.is_empty() {
         return None;
     }
+    catalog
+        .model(&id)
+        .and_then(|model| model.limit.context)
+        .or_else(|| built_in_context_capacity(&id))
+}
+
+/// The family rules alone, against an already-normalized id.
+fn built_in_context_capacity(id: &str) -> Option<u64> {
     WINDOWS
         .iter()
-        .find(|(rule, _)| rule.matches(&id))
+        .find(|(rule, _)| rule.matches(id))
         .map(|(_, capacity)| *capacity)
 }
 
@@ -99,6 +129,42 @@ mod tests {
         assert_eq!(context_capacity(Some("some-local-llm")), None);
         assert_eq!(context_capacity(Some("  ")), None);
         assert_eq!(context_capacity(None), None);
+    }
+
+    #[test]
+    fn a_published_window_beats_the_family_rule_but_does_not_replace_it() {
+        use crate::models::catalog::{Catalog, CatalogLimit, CatalogModel};
+        let catalog = Catalog {
+            models: vec![CatalogModel {
+                provider: "anthropic".into(),
+                model_id: "claude-sonnet-4-6".into(),
+                name: "Claude Sonnet 4.6".into(),
+                cost: None,
+                limit: CatalogLimit {
+                    context: Some(1_000_000),
+                    output: Some(128_000),
+                },
+                release_date: None,
+                reasoning: true,
+            }],
+            ..Catalog::default()
+        };
+        // The rule would say 200k for every Claude; the vendor moved this one.
+        assert_eq!(
+            context_capacity_in(&catalog, Some("claude-sonnet-4-6")),
+            Some(1_000_000)
+        );
+        assert_eq!(
+            context_capacity_in(&catalog, Some("Anthropic/Claude-Sonnet-4-6")),
+            Some(1_000_000)
+        );
+        // A model the catalog has never heard of still gets the family answer…
+        assert_eq!(
+            context_capacity_in(&catalog, Some("claude-opus-4-5")),
+            Some(200_000)
+        );
+        // …and one nothing recognises still has no denominator at all.
+        assert_eq!(context_capacity_in(&catalog, Some("some-local-llm")), None);
     }
 
     #[test]

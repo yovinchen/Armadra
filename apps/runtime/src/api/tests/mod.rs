@@ -12,6 +12,7 @@ mod execution_hosts;
 mod exports;
 mod files;
 mod language;
+mod models;
 mod search;
 mod settings;
 mod terminals;

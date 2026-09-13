@@ -29,6 +29,7 @@ pub mod listen;
 pub mod migration_cli;
 pub mod migration_export;
 pub mod model;
+pub mod models;
 pub mod ownership;
 pub mod paths;
 pub mod remote;
@@ -706,6 +707,13 @@ pub fn router_with_state(state: AppState) -> Router {
             post(api::refresh_conversations),
         )
         .route("/api/agents", get(api::agents))
+        // Where the prices and context windows come from (F10). The refresh is
+        // the only route that reaches models.dev; the page never does.
+        .route("/api/models/catalog", get(api::model_catalog))
+        .route(
+            "/api/models/catalog/refresh",
+            post(api::refresh_model_catalog),
+        )
         .route(
             "/api/agents/{agent_id}/hooks/install",
             post(api::install_hooks),

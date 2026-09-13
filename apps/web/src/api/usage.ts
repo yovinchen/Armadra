@@ -2,6 +2,7 @@ import {
   copilotAuthSchema,
   copilotPollSchema,
   costSummarySchema,
+  modelCatalogSchema,
   usageMiniSchema,
   usageSchema,
 } from "@armadra/shared";
@@ -27,6 +28,20 @@ export const usageApi = {
   /** 立刻重扫，Runtime 侧 30s 内只真扫一次。 */
   refreshUsageCost: () =>
     request("/api/usage/cost/refresh", costSummarySchema, { method: "POST" }),
+
+  /* -------------------------------- 模型目录 ---------------------------- */
+  /**
+   * 价格与上下文上限的出处（F10）。只读内存里那份，不会触发对外请求。
+   */
+  modelCatalog: () => request("/api/models/catalog", modelCatalogSchema),
+  /**
+   * 立刻去 models.dev 取一次。联网只发生在 Runtime 侧；取不到时仍回 200，
+   * 带上 `refreshError`，其余字段描述的还是当前在用的那份目录。
+   */
+  refreshModelCatalog: () =>
+    request("/api/models/catalog/refresh", modelCatalogSchema, {
+      method: "POST",
+    }),
 
   /* -------------------------------- Copilot ----------------------------- */
   /** 是否已登录、token 存在哪、有没有进行中的 device flow。 */

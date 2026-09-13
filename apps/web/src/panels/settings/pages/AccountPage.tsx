@@ -10,6 +10,7 @@ import { SettingsRow } from "../SettingsRow";
 import { useRuntimeSettings } from "../use-runtime-settings";
 import { CopilotSignIn } from "./CopilotSignIn";
 import { CONTROL_WIDTH } from "./GeneralPage";
+import { ModelCatalogPanel } from "./ModelCatalogPanel";
 import { Button } from "@/ui/button";
 import {
   Select,
@@ -162,6 +163,8 @@ export function AccountPage() {
           />
         </SettingsRow>
       </SettingsGroup>
+
+      <ModelCatalogPanel />
 
       {!usageEnabled && (
         <p role="status" className="text-xs text-muted-foreground">

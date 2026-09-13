@@ -16,6 +16,7 @@ mod exports;
 mod files;
 mod git;
 mod health;
+mod models;
 mod search;
 mod settings;
 pub mod ssh;
@@ -31,6 +32,6 @@ mod tests;
 
 pub use self::{
     agents::*, approvals::*, assets::*, boards::*, clone::*, context_links::*, data::*, events::*,
-    execution_hosts::*, exports::*, files::*, git::*, health::*, search::*, settings::*, ssh::*,
-    support::*, terminals::*, usage::*, workspaces::*,
+    execution_hosts::*, exports::*, files::*, git::*, health::*, models::*, search::*, settings::*,
+    ssh::*, support::*, terminals::*, usage::*, workspaces::*,
 };

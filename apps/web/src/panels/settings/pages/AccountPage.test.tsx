@@ -15,6 +15,8 @@ const copilotAuth = vi.fn();
 const copilotLogin = vi.fn();
 const copilotPoll = vi.fn();
 const copilotLogout = vi.fn();
+const modelCatalog = vi.fn();
+const refreshModelCatalog = vi.fn();
 vi.mock("../../../api/client", () => ({
   runtimeApi: {
     settings: () => getSettings(),
@@ -25,6 +27,8 @@ vi.mock("../../../api/client", () => ({
     copilotLogin: () => copilotLogin(),
     copilotPoll: () => copilotPoll(),
     copilotLogout: () => copilotLogout(),
+    modelCatalog: () => modelCatalog(),
+    refreshModelCatalog: () => refreshModelCatalog(),
     /** 设置页经归属网关路由：探不到归属，整个域就是只读的。 */
     ownershipDomains: () => Promise.resolve(settledDomains()),
   },
@@ -57,6 +61,14 @@ const emptyUsage = {
   ],
 };
 
+/** 还没取到过目录：来源就是内置表，更新时间是「尚未取到」（F10）。 */
+const builtInCatalog = {
+  source: "builtIn" as const,
+  url: "https://models.dev/api.json",
+  pricedModels: 18,
+  models: [],
+};
+
 describe("AccountPage usage controls", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -65,6 +77,7 @@ describe("AccountPage usage controls", () => {
     getUsage.mockResolvedValue(emptyUsage);
     refreshUsage.mockResolvedValue(emptyUsage);
     copilotAuth.mockResolvedValue({ signedIn: false, backend: "keychain" });
+    modelCatalog.mockResolvedValue(builtInCatalog);
   });
 
   /** 总开关：其余开关都有各自的 `aria-label`，只有它叫「获取用量」。 */
@@ -196,5 +209,38 @@ describe("AccountPage usage controls", () => {
     expect(
       screen.getByText("本平台没有可用的钥匙串，令牌存在权限 0600 的文件里。"),
     ).toBeTruthy();
+  });
+
+  it("价格来源写明是谁的价格，更新失败也不换掉正在用的那份", async () => {
+    getSettings.mockResolvedValue({ usage: { enabled: true } });
+    modelCatalog.mockResolvedValue({
+      source: "cache",
+      url: "https://models.dev/api.json",
+      fetchedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+      ageHours: 3,
+      pricedModels: 42,
+      models: [],
+    });
+    render(
+      <TestProviders>
+        <AccountPage />
+      </TestProviders>,
+    );
+    await screen.findByText("models.dev（本地缓存）");
+    expect(screen.getByText(/3 小时前 · 42 个模型有报价/)).toBeTruthy();
+
+    // 取不到时 Runtime 仍回 200：来源不变，另加一行说明没更新成。
+    refreshModelCatalog.mockResolvedValue({
+      source: "cache",
+      url: "https://models.dev/api.json",
+      fetchedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+      ageHours: 3,
+      pricedModels: 42,
+      refreshError: "models.dev answered 503",
+      models: [],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "更新目录" }));
+    await screen.findByText("更新失败，仍在用现有目录。");
+    expect(screen.getByText("models.dev（本地缓存）")).toBeTruthy();
   });
 });

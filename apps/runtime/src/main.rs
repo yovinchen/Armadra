@@ -248,6 +248,10 @@ async fn main() -> anyhow::Result<()> {
     resources.power().start();
     // Endpoint file, unix socket listener and the 60s stale-agent sweep.
     hook::start(state.clone(), bound_port);
+    // Prices and context windows from models.dev (F10). Reads the cache now
+    // and fetches in the background: a first launch with no network still gets
+    // a canvas, it just prices the models this build knows about.
+    armadra_runtime::models::catalog::start(data_dir());
     // Controlled browser sessions outlive the Runtime (B01, design §9): every
     // kept session is relaunched from its own profile and re-navigated to the
     // URL it was on. Its page state does not come back, and the design says so
