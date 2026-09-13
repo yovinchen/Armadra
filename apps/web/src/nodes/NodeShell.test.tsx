@@ -1,6 +1,12 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import * as React from "react";
-import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import type { CanvasNode } from "@armadra/shared";
 
 const store = vi.hoisted(() => ({
@@ -36,7 +42,8 @@ import {
   type FlowHandle,
 } from "@/canvas/flow/flow-context";
 import { openNodeAnnotation } from "@/meta/annotations";
-import { NodeShell } from "./NodeShell";
+import { DropdownMenu } from "@/ui/dropdown-menu";
+import { NodeMenuContent, NodeShell } from "./NodeShell";
 import { COLLAPSED_HEIGHT, HEADER_HEIGHT } from "./geometry";
 
 beforeAll(installDomPolyfills);
@@ -69,6 +76,25 @@ function renderShell(
       <div>body</div>
     </NodeShell>,
     { nodeId: node.id },
+  );
+}
+
+/**
+ * 折叠 / 最大化 / 标注全部收进了头部的 `···`（F5），而 Radix 的菜单正文只有
+ * open 时才挂进 DOM，所以这些动作直接渲染菜单正文本身来断言。
+ */
+function openMenu(
+  props: Partial<React.ComponentProps<typeof NodeMenuContent>> = {},
+) {
+  return render(
+    <DropdownMenu open>
+      <NodeMenuContent
+        node={makeNode()}
+        collapsed={false}
+        maximized={false}
+        {...props}
+      />
+    </DropdownMenu>,
   );
 }
 
@@ -193,7 +219,11 @@ describe("NodeShell", () => {
     },
   );
 
-  it("opens rename after pointerup is captured by the canvas", async () => {
+  /**
+   * F4：单击只是选中 / 开始拖，双击才改名。文件管理器那种窄头部里，单击进
+   * 编辑让「想拖节点」几乎必然变成「打开了一个输入框」。
+   */
+  it("renames on double click and leaves a single click to the drag", async () => {
     renderShell();
     const title = screen.getByText("便签 1");
     fireEvent.pointerDown(title, {
@@ -213,6 +243,10 @@ describe("NodeShell", () => {
       });
       await Promise.resolve();
     });
+    fireEvent.click(title, { detail: 1 });
+    expect(screen.queryByLabelText("标题")).toBeNull();
+
+    fireEvent.doubleClick(title);
     expect(screen.getByLabelText("标题")).toBeTruthy();
   });
 
@@ -267,7 +301,7 @@ describe("NodeShell", () => {
 
   it("lets IME confirm or cancel composition without committing the node title", () => {
     renderShell();
-    fireEvent.click(screen.getByText("便签 1"));
+    fireEvent.doubleClick(screen.getByText("便签 1"));
     const input = screen.getByLabelText("标题");
     fireEvent.compositionStart(input);
     fireEvent.change(input, { target: { value: "中文标题" } });
@@ -285,7 +319,7 @@ describe("NodeShell", () => {
 
   it("does not send composition keys to canvas keyboard handlers", () => {
     renderShell();
-    fireEvent.click(screen.getByText("便签 1"));
+    fireEvent.doubleClick(screen.getByText("便签 1"));
     const escaped = vi.fn();
     const canvas = screen
       .getByLabelText("标题")
@@ -309,7 +343,7 @@ describe("NodeShell", () => {
 
   it("ignores blur after Escape cancels a rename in the same event batch", () => {
     renderShell();
-    fireEvent.click(screen.getByText("便签 1"));
+    fireEvent.doubleClick(screen.getByText("便签 1"));
     const input = screen.getByLabelText("标题");
     fireEvent.change(input, { target: { value: "cancelled draft" } });
     act(() => {
@@ -344,7 +378,7 @@ describe("NodeShell", () => {
 
   it("commits an edited title on Enter", () => {
     renderShell();
-    fireEvent.click(screen.getByText("便签 1"));
+    fireEvent.doubleClick(screen.getByText("便签 1"));
     const input = screen.getByLabelText("标题");
     fireEvent.change(input, { target: { value: "改过的标题" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -355,7 +389,7 @@ describe("NodeShell", () => {
 
   it("drops the draft on Escape", () => {
     renderShell();
-    fireEvent.click(screen.getByText("便签 1"));
+    fireEvent.doubleClick(screen.getByText("便签 1"));
     const input = screen.getByLabelText("标题");
     fireEvent.change(input, { target: { value: "不要" } });
     fireEvent.keyDown(input, { key: "Escape" });
@@ -364,15 +398,29 @@ describe("NodeShell", () => {
   });
 
   it("toggles collapse through the store", () => {
-    renderShell();
-    fireEvent.click(screen.getByLabelText("折叠"));
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "折叠" }));
     expect(store.setCollapsed).toHaveBeenCalledWith("n1", true);
   });
 
   it("expands again when the node is collapsed", () => {
-    renderShell({ node: makeNode({ collapsed: true }) });
-    fireEvent.click(screen.getByLabelText("展开"));
+    openMenu({ node: makeNode({ collapsed: true }), collapsed: true });
+    fireEvent.click(screen.getByRole("menuitem", { name: "展开" }));
     expect(store.setCollapsed).toHaveBeenCalledWith("n1", false);
+  });
+
+  /** 头部只剩标题、常驻徽标、`···` 与关闭（F5）。 */
+  it("keeps only the title, the chips, the menu and close in the header", () => {
+    const { container } = renderShell();
+    const header = container.querySelector(
+      '[data-slot="node-header"]',
+    ) as HTMLElement;
+    const labels = [...header.querySelectorAll("button")].map((button) =>
+      button.getAttribute("aria-label"),
+    );
+    expect(labels).toEqual(["更多", "关闭"]);
+    expect(screen.queryByLabelText("折叠")).toBeNull();
+    expect(screen.queryByLabelText("最大化")).toBeNull();
   });
 
   it("keeps the body mounted but hidden while collapsed", () => {
@@ -401,31 +449,29 @@ describe("NodeShell", () => {
    * 头部按钮改文档之前必须先同步选中态：按钮自己吃掉了 pointerdown（否则
    * 一按就开始拖节点），React Flow 的选择不会经手这次点击。
    */
-  it("selects the node before mutating it from the header", () => {
-    renderShell();
-    fireEvent.click(screen.getByLabelText("折叠"));
+  it("selects the node before mutating it from the menu", () => {
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "折叠" }));
     expect(store.selectNodes).toHaveBeenCalledWith(["n1"]);
     expect(store.setCollapsed).toHaveBeenCalledWith("n1", true);
 
     store.selectNodes.mockClear();
-    fireEvent.click(screen.getByLabelText("最大化"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "最大化" }));
     expect(store.selectNodes).toHaveBeenCalledWith(["n1"]);
   });
 
   it("maximizes with a canvas rect and restores without one", () => {
-    renderShell();
-    fireEvent.click(screen.getByLabelText("最大化"));
+    openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "最大化" }));
     expect(store.maximizeNode).toHaveBeenCalledWith(
       "n1",
       expect.objectContaining({ x: expect.any(Number) }),
     );
 
-    store.maximized = { n1: {} };
     cleanup();
-    renderShell();
-    fireEvent.click(screen.getByLabelText("还原"));
+    openMenu({ maximized: true });
+    fireEvent.click(screen.getByRole("menuitem", { name: "还原" }));
     expect(store.restoreNode).toHaveBeenCalledWith("n1");
-    store.maximized = {};
   });
 
   it("renders a status pill only when a status is given", () => {
@@ -454,20 +500,22 @@ describe("NodeShell", () => {
       el.getAttribute("data-slot"),
     );
     expect(children).toEqual(["node-header", "node-body"]);
-    // 终端的 AI 命名 / 评论在自己的「更多」下拉里，头部不多按钮
+    // AI 命名 / 评论在每种节点共用的 `···` 里，头部不多按钮
     expect(screen.queryByLabelText("评论")).toBeNull();
     expect(screen.queryByLabelText("AI 命名")).toBeNull();
   });
 
-  it("puts the comment button in the header of non-terminal nodes", () => {
-    renderShell();
-    expect(screen.getByLabelText("评论")).toBeTruthy();
-    expect(screen.queryByLabelText("AI 命名")).toBeNull();
+  it("puts the annotation entries in the shared node menu", () => {
+    openMenu();
+    expect(screen.getByRole("menuitem", { name: /评论/ })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /标签/ })).toBeTruthy();
+    // 便签没有会话，猜不出标题，所以 AI 命名不出现。
+    expect(screen.queryByRole("menuitem", { name: "AI 命名" })).toBeNull();
   });
 
   it("edits the comment in a dialog, not inside the node", () => {
     renderShell();
-    fireEvent.click(screen.getByLabelText("评论"));
+    act(() => openNodeAnnotation("n1", "note"));
     const textarea = screen
       .getAllByLabelText("评论")
       .find((element) => element.tagName === "TEXTAREA") as HTMLTextAreaElement;

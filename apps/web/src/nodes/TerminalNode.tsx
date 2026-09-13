@@ -3,15 +3,10 @@ import {
   ArrowUpDown,
   Ban,
   Boxes,
-  Copy,
   Moon,
-  Network,
-  MessageSquare,
-  MoreHorizontal,
   RotateCw,
   Search,
   Share2,
-  Sparkles,
   Square,
   Unplug,
 } from "lucide-react";
@@ -20,23 +15,20 @@ import { toast } from "sonner";
 import { Badge } from "@/ui/badge";
 import { IconButton } from "@/ui/icon-button";
 import { Input } from "@/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent } from "@/ui/popover";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
+  DropdownMenuLabel,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { modelSuggestions } from "@armadra/shared";
 import { useT } from "@/app/preferences-store";
 import { useAgentsQuery } from "@/app/use-agents";
 import { useCanvasStore } from "@/store/canvas-store";
 import { AccountBindingBadge } from "@/agent/account/AccountBindingBadge";
-import { ContextUsageBadge } from "@/agent/context-usage/ContextUsageBadge";
+import { ContextUsageMenu } from "@/agent/context-usage/ContextUsageMenu";
 import { useContextUsage } from "@/agent/context-usage/use-context-usage";
 import { agentLabel } from "@/agent/launch";
 import { useNodeCapabilities } from "@/agent/capabilities";
@@ -53,12 +45,7 @@ import {
   type TerminalSurfaceHandle,
   type TerminalSurfaceStatus,
 } from "@/terminal/TerminalSurface";
-import {
-  autoNameNode,
-  canSuggestTitle,
-  openNodeAnnotation,
-  suggestNodeTitle,
-} from "@/meta/annotations";
+import { autoNameNode } from "@/meta/annotations";
 import { HandoffBadge } from "@/agent/handoff/HandoffBadge";
 import { MemoryBadge } from "@/panels/resources/MemoryBadge";
 import { openHandoff } from "@/agent/handoff/handoff-targets";
@@ -229,24 +216,16 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
   const exited =
     surface.connection === "exited" || surface.connection === "failed";
 
+  /**
+   * 头部只留「一眼就要看到」的那几样（F5）。
+   *
+   * 内存常驻；账号 / 交接 / GitHub 三个徽标只在真的有绑定、有进行中的交接、
+   * 有关联条目时才出现，所以它们不算常驻噪音；退出码与掉线是异常，必须说。
+   * 上下文占用、Agent 名、SSH 主机名都挪进了 `···`：用户的原话是「只想看
+   * 内存」，而那三样在多数时刻要么是「未知」，要么是一句重复的品牌名。
+   */
   const headerChips = (
     <>
-      {/* 状态来源（协作通道 §3.2）。会话结束之后不再说来源：那时头部说的
-          是「已退出」，「谁报的」已经没有对象了。 */}
-      {agent && !exited && (
-        <StateSourceBadge source={agentStatus?.stateSource} />
-      )}
-      {agent && (
-        <ContextUsageBadge
-          nodeId={id}
-          sessionId={sessionId}
-          generation={generation}
-          usage={context.usage}
-          unavailableReason={
-            exited ? "session_ended" : context.unavailableReason
-          }
-        />
-      )}
       {/*
         内存徽标（路线图 §4.3）。Agent 和普通 shell 都有：一个跑 `cargo build`
         的普通终端和一个 Agent 一样会吃掉几个 GB。SSH 会话的进程树在别的机器
@@ -264,20 +243,6 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
       {agent && <AccountBindingBadge agent={agent} />}
       {agent && <HandoffBadge nodeId={id} />}
       <GithubReferenceBadge nodeId={id} />
-      {sshLabel !== null && (
-        <Badge
-          variant="outline"
-          className="h-[18px] px-1.5 text-[length:var(--text-caption)]"
-        >
-          <ArrowUpDown className="size-2.5" />
-          <span className="truncate">{sshLabel}</span>
-        </Badge>
-      )}
-      {agent && node.title !== agentLabel(agent.id) && (
-        <span className="truncate text-[length:var(--text-caption)] text-muted-foreground">
-          {agentLabel(agent.id)}
-        </span>
-      )}
       {exited && (
         <Badge
           variant="outline"
@@ -333,25 +298,15 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
           <RotateCw />
         </IconButton>
       )}
-      {!exited && (
-        <IconButton
-          className="node-secondary-action terminal-secondary-action"
-          label={t("terminal.interrupt")}
-          onClick={() => surfaceRef.current?.terminate("interrupt")}
-        >
-          <Square />
-        </IconButton>
-      )}
 
+      {/*
+        搜索框进了 `···`，但它仍然要挂在头部右端：`PopoverAnchor` 是一个
+        零尺寸的锚点，⌘F 与菜单里的「搜索」都只是把 `findOpen` 打开。
+      */}
       <Popover open={findOpen} onOpenChange={setFindOpen}>
-        <PopoverTrigger asChild>
-          <IconButton
-            className="node-secondary-action terminal-secondary-action"
-            label={t("terminal.find")}
-          >
-            <Search />
-          </IconButton>
-        </PopoverTrigger>
+        <PopoverAnchor asChild>
+          <span aria-hidden className="block size-0" />
+        </PopoverAnchor>
         <PopoverContent align="end" className="w-[220px] p-1.5">
           <Input
             autoFocus
@@ -374,149 +329,132 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
           />
         </PopoverContent>
       </Popover>
-
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <IconButton label={t("terminal.more")}>
-            <MoreHorizontal />
-          </IconButton>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-52">
-          <DropdownMenuItem onSelect={() => setFindOpen(true)}>
-            <Search />
-            {t("terminal.find")}
-          </DropdownMenuItem>
-          {!exited && (
-            <DropdownMenuItem
-              onSelect={() => surfaceRef.current?.terminate("interrupt")}
-            >
-              <Square />
-              {t("terminal.interrupt")}
-            </DropdownMenuItem>
-          )}
-          {/* Escape，不是 Ctrl+C。上一项把 SIGINT 发给前台进程组，对一个 Agent
-              CLI 来说往往是把它整个打断掉；这一项只发一个 Escape——各家 CLI 用
-              它停下当前这一轮，会话和上下文都还在。走的是用户自己按键的那条
-              socket，不经 hook 路由：这就是用户按了一下 Esc。 */}
-          {!exited && agent && (
-            <DropdownMenuItem
-              onSelect={() => surfaceRef.current?.sendKeys(ESCAPE)}
-            >
-              <Ban />
-              {t("terminal.stopTurn")}
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <Network />
-              {t("terminal.collaboration")}
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-64 max-w-[calc(100vw-24px)]">
-              <p className="px-2 py-2 text-xs leading-relaxed text-muted-foreground">
-                {t("terminal.collaborationHint")}
-              </p>
-              <code className="block select-text px-2 pb-2 text-xs">
-                armadra-hook canvas help
-              </code>
-              <DropdownMenuItem
-                onSelect={() => {
-                  void navigator.clipboard
-                    .writeText("armadra-hook canvas help")
-                    .then(
-                      () => toast.success(t("terminal.commandCopied")),
-                      () => toast.error(t("terminal.copyFailed")),
-                    );
-                }}
-              >
-                <Copy />
-                {t("terminal.copyHelpCommand")}
-              </DropdownMenuItem>
-              {/* 交接（design §7）：只有 Agent 终端、只有连上了这条 PTY 才
-                  给得出会话身份，Runtime 按 generation 校验，所以断开时不给
-                  入口，而不是让用户填完表再被拒。 */}
-              {agent && surface.binding && (
-                <DropdownMenuItem
-                  onSelect={() =>
-                    openHandoff({
-                      nodeId: id,
-                      sessionId: surface.binding!.sessionId,
-                      generation: surface.binding!.generation,
-                    })
-                  }
-                >
-                  <Share2 />
-                  {t("handoff.open")}
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          {/* 模型选择（Agent 自动化设计 §1、§2.1）。
-              只在 CLI 真的支持、版本探测答得上来、执行主机也允许时出现——
-              `supportsModelSelection` 是求交集之后的结果，探测失败是 unknown，
-              unknown 不画按钮，免得点开一个用不了的菜单。
-              改模型不重启已经在跑的会话：那会杀掉用户正在进行的对话。写进
-              节点数据，下一次启动的启动行带上它，并如实说明这一点。 */}
-          {agent && modelSelectable && (
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <Boxes />
-                {t("agent.model")}
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent className="w-60 max-w-[calc(100vw-24px)]">
-                <p className="px-2 py-2 text-xs leading-relaxed text-muted-foreground">
-                  {t("agent.modelHint")}
-                </p>
-                <DropdownMenuItem
-                  disabled={!agent.model}
-                  onSelect={() => selectModel(undefined)}
-                >
-                  {t("agent.modelDefault")}
-                </DropdownMenuItem>
-                {models.map((model) => (
-                  <DropdownMenuItem
-                    key={model}
-                    disabled={agent.model === model}
-                    onSelect={() => selectModel(model)}
-                  >
-                    {model}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          )}
-          <DropdownMenuSeparator />
-          {/* AI 命名 / 评论（§17）。头部不再加按钮、也不加行：终端节点的头部
-              永远是一行 34px，下面直接是 xterm，多一行就会触发 fit 抖动。 */}
-          {canSuggestTitle(node) && (
-            <DropdownMenuItem onSelect={() => void suggestNodeTitle(id)}>
-              <Sparkles />
-              {t("meta.suggestTitle")}
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem onSelect={() => openNodeAnnotation(id, "note")}>
-            <MessageSquare />
-            {t("meta.note")}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() => surfaceRef.current?.terminate("process")}
-          >
-            {t("terminal.killProcess")}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            variant="destructive"
-            onSelect={() => surfaceRef.current?.terminate("session")}
-          >
-            {t("terminal.destroySession")}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => surfaceRef.current?.recycle()}>
-            {t("terminal.recycle")}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => surfaceRef.current?.restart()}>
-            {t("terminal.rerun")}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
     </span>
+  );
+
+  /** 收进 `···` 的那些：这个终端自己能做的事，排在通用的视图项之前。 */
+  const menuItems = (
+    <>
+      {/* 「这是什么」先说：Agent 名与 SSH 主机名以前常驻头部，现在是菜单里
+          一行静态说明——它们从来不需要每秒看一眼。 */}
+      {(agent || sshLabel !== null) && (
+        <DropdownMenuLabel className="flex items-center gap-1.5 font-normal text-muted-foreground">
+          {agent && <span className="truncate">{agentLabel(agent.id)}</span>}
+          {sshLabel !== null && (
+            <>
+              <ArrowUpDown className="size-3 shrink-0" />
+              <span className="truncate">{sshLabel}</span>
+            </>
+          )}
+        </DropdownMenuLabel>
+      )}
+      {/* 上下文占用（F5）：有来源时这一行直接写百分比，展开才是诊断表。 */}
+      {agent && (
+        <ContextUsageMenu
+          nodeId={id}
+          sessionId={sessionId}
+          generation={generation}
+          usage={context.usage}
+          unavailableReason={
+            exited ? "session_ended" : context.unavailableReason
+          }
+        />
+      )}
+      <DropdownMenuItem onSelect={() => setFindOpen(true)}>
+        <Search />
+        {t("terminal.find")}
+      </DropdownMenuItem>
+      {!exited && (
+        <DropdownMenuItem
+          onSelect={() => surfaceRef.current?.terminate("interrupt")}
+        >
+          <Square />
+          {t("terminal.interrupt")}
+        </DropdownMenuItem>
+      )}
+      {/* Escape，不是 Ctrl+C。上一项把 SIGINT 发给前台进程组，对一个 Agent
+          CLI 来说往往是把它整个打断掉；这一项只发一个 Escape——各家 CLI 用
+          它停下当前这一轮，会话和上下文都还在。走的是用户自己按键的那条
+          socket，不经 hook 路由：这就是用户按了一下 Esc。 */}
+      {!exited && agent && (
+        <DropdownMenuItem onSelect={() => surfaceRef.current?.sendKeys(ESCAPE)}>
+          <Ban />
+          {t("terminal.stopTurn")}
+        </DropdownMenuItem>
+      )}
+      {/* 协作只剩「交接给…」（用户实测反馈 F8）：发消息、读上下文这些动词
+          归 CLI 自己的技能，画布这边再摆一份入口只会多一处坏掉的路。
+          「引用到 Agent」不在这里重复——它的来源必须是一个白板对象或 Frame，
+          入口在那些对象自己的右键菜单里（`menus/reference-menu.tsx`）。
+          交接（design §7）：只有 Agent 终端、只有连上了这条 PTY 才给得出会话
+          身份，Runtime 按 generation 校验，所以断开时不给入口，而不是让用户
+          填完表再被拒。 */}
+      {agent && surface.binding && (
+        <DropdownMenuItem
+          onSelect={() =>
+            openHandoff({
+              nodeId: id,
+              sessionId: surface.binding!.sessionId,
+              generation: surface.binding!.generation,
+            })
+          }
+        >
+          <Share2 />
+          {t("handoff.open")}
+        </DropdownMenuItem>
+      )}
+      {/* 模型选择（Agent 自动化设计 §1、§2.1）。
+          只在 CLI 真的支持、版本探测答得上来、执行主机也允许时出现——
+          `supportsModelSelection` 是求交集之后的结果，探测失败是 unknown，
+          unknown 不画按钮，免得点开一个用不了的菜单。
+          改模型不重启已经在跑的会话：那会杀掉用户正在进行的对话。写进
+          节点数据，下一次启动的启动行带上它，并如实说明这一点。 */}
+      {agent && modelSelectable && (
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Boxes />
+            {t("agent.model")}
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-60 max-w-[calc(100vw-24px)]">
+            <p className="px-2 py-2 text-xs leading-relaxed text-muted-foreground">
+              {t("agent.modelHint")}
+            </p>
+            <DropdownMenuItem
+              disabled={!agent.model}
+              onSelect={() => selectModel(undefined)}
+            >
+              {t("agent.modelDefault")}
+            </DropdownMenuItem>
+            {models.map((model) => (
+              <DropdownMenuItem
+                key={model}
+                disabled={agent.model === model}
+                onSelect={() => selectModel(model)}
+              >
+                {model}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+      )}
+      <DropdownMenuItem
+        onSelect={() => surfaceRef.current?.terminate("process")}
+      >
+        {t("terminal.killProcess")}
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        variant="destructive"
+        onSelect={() => surfaceRef.current?.terminate("session")}
+      >
+        {t("terminal.destroySession")}
+      </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => surfaceRef.current?.recycle()}>
+        {t("terminal.recycle")}
+      </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => surfaceRef.current?.restart()}>
+        {t("terminal.rerun")}
+      </DropdownMenuItem>
+    </>
   );
 
   if (!data) return null;
@@ -552,8 +490,16 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
           : {})}
         {...(header.glow ? { glow: header.glow } : {})}
         {...(approval ? { approval } : {})}
+        {...(agent && !exited
+          ? {
+              headerMark: (
+                <StateSourceBadge source={agentStatus?.stateSource} />
+              ),
+            }
+          : {})}
         headerChips={headerChips}
         headerActions={headerActions}
+        menuItems={menuItems}
       >
         <TerminalSurface
           ref={surfaceRef}

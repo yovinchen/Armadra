@@ -1,5 +1,5 @@
 import * as React from "react";
-import { MessageSquare, Sparkles, X } from "lucide-react";
+import { MessageSquare, Sparkles, Tag, X } from "lucide-react";
 import type { CanvasNode } from "@armadra/shared";
 
 import { useT } from "@/app/preferences-store";
@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/ui/dialog";
+import { DropdownMenuItem } from "@/ui/dropdown-menu";
 import { IconButton } from "@/ui/icon-button";
 import { Input } from "@/ui/input";
 import { Textarea } from "@/ui/textarea";
@@ -31,49 +32,46 @@ import { MAX_LABELS, nodeLabels, nodeNote } from "./model";
  *
  * **不占节点里的任何高度**。终端节点的头部必须永远是一行 34px、下面直接是
  * xterm：多出一条标签行会改变节点体高度，xterm 会跟着重新 fit，画面来回跳。
- * 所以三个入口都不在节点体里：
- *
- *  - 终端：AI 命名 / 评论在头部已有的「更多」下拉里；标签走右键菜单「标签…」。
- *  - 便签：标签 chip 画在便签自己的正文里（`StickyNode`），评论走头部图标钮。
- *  - 其它类型：头部一个「评论」图标钮。
+ * 所以三个入口都不在节点体里，而是在每种节点共用的 `···` 菜单里
+ * （`NodeShell`）；便签另外把标签 chip 画在自己的正文里（`StickyNode`）。
  *
  * 编辑面板一律是 Dialog（Radix портal 到 body），无论开合都不改变节点尺寸。
  */
 
-/* ------------------------------ 头部图标钮 ------------------------------- */
+/* ------------------------------ 头部菜单项 ------------------------------- */
 
 /**
- * 非终端节点头部右侧的标注按钮。只有图标钮，不改变头部高度；
- * 终端节点不用它（它的两项在 `TerminalNode` 的「更多」下拉里）。
+ * 节点头部 `···` 菜单里的标注两项（F5：头部只留标题 / 内存 / `···` / 关闭）。
+ *
+ * 每种节点都走同一个 `NodeShell` 菜单，所以这两项对终端、编辑器、浏览器、
+ * 文件管理器和便签一视同仁——以前终端有自己的一份，其余类型是两个图标钮。
  */
-export function NodeMetaActions({ node }: { node: CanvasNode }) {
+export function NodeMetaMenuItems({ node }: { node: CanvasNode }) {
   const t = useT();
   const hasNote = nodeNote(node).length > 0;
 
   return (
     <>
       {canSuggestTitle(node) && (
-        <IconButton
-          className="nodrag"
-          label={t("meta.suggestTitle")}
-          onClick={() => void suggestNodeTitle(node.id)}
-        >
+        <DropdownMenuItem onSelect={() => void suggestNodeTitle(node.id)}>
           <Sparkles />
-        </IconButton>
+          {t("meta.suggestTitle")}
+        </DropdownMenuItem>
       )}
-      <IconButton
-        className="nodrag relative"
-        label={t("meta.note")}
-        onClick={() => openNodeAnnotation(node.id, "note")}
-      >
+      <DropdownMenuItem onSelect={() => openNodeAnnotation(node.id, "note")}>
         <MessageSquare />
+        {t("meta.note")}
         {hasNote && (
           <span
             aria-hidden
-            className="absolute top-1 right-1 size-1.5 rounded-full bg-[var(--brand)]"
+            className="ml-auto size-1.5 rounded-full bg-[var(--brand)]"
           />
         )}
-      </IconButton>
+      </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => openNodeAnnotation(node.id, "labels")}>
+        <Tag />
+        {t("meta.labels")}
+      </DropdownMenuItem>
     </>
   );
 }

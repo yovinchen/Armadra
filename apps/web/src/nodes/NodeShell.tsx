@@ -7,11 +7,19 @@ import {
   Expand,
   Maximize2,
   Minimize2,
+  MoreHorizontal,
   X,
 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { Button } from "@/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
 import { IconButton } from "@/ui/icon-button";
 import { Input } from "@/ui/input";
 import { StatusPill, type StatusTone } from "@/ui/status-pill";
@@ -26,12 +34,12 @@ import {
   isZoomWheel,
   zoomCanvasByWheel,
 } from "@/canvas/interaction/wheel-zoom";
-import { NodeAnnotationHost, NodeMetaActions } from "@/meta/NodeMeta";
+import { NodeAnnotationHost, NodeMetaMenuItems } from "@/meta/NodeMeta";
 import { COLLAPSED_HEIGHT, DRAG_HANDLE_CLASS, nodeMeta } from "./registry";
 import { HEADER_HEIGHT } from "./geometry";
 
 /* -------------------------------------------------------------------------- */
-/* 契约（计划书 §13.2）                                                        */
+/* 契约（计划书 §13.2；头部精简见用户实测反馈 F5）                              */
 /* -------------------------------------------------------------------------- */
 
 export interface NodeShellProps {
@@ -41,10 +49,20 @@ export interface NodeShellProps {
   status?: { tone: StatusTone; label: string; pulse?: boolean };
   /** 光晕。包裹层伪元素只动画 opacity，不动画 box-shadow（§3.4）。 */
   glow?: "working" | "attention" | "unread";
-  /** 状态胶囊左边的 chip（Agent 品牌色标、退出码…）。 */
+  /**
+   * 标题**左边**的一个小标记（状态来源的色点）。只放「一个点 + 悬停提示」
+   * 这一量级的东西：它常驻在每个节点上，多一个词就是每个节点多一个词。
+   */
+  headerMark?: React.ReactNode;
+  /**
+   * 状态胶囊左边的常驻徽标。F5 之后这里只留「一眼就要看到」的那几个
+   * （内存，以及只在异常时才出现的提示），其余一律进 `···` 菜单。
+   */
   headerChips?: React.ReactNode;
-  /** 右侧图标钮，排在「最大化 / 关闭」之前。 */
+  /** 仍然留在头部的主操作图标钮，排在 `···` 之前。次要动作进菜单。 */
   headerActions?: React.ReactNode;
+  /** `···` 菜单里由节点类型自己提供的条目，排在通用的视图项之前。 */
+  menuItems?: React.ReactNode;
   /** `blocked` 且有 pendingId 时头部直接出现允许/拒绝两个内联按钮。 */
   approval?: {
     pendingId: string;
@@ -156,16 +174,16 @@ function useNodeBodyGuards(ref: React.RefObject<HTMLElement | null>): void {
 }
 
 /**
- * 头部里的控件（按钮、输入框、标题）自己吃掉 pointerdown，其余头部区域
- * 放行给 React Flow 去拖动。
+ * 头部里的控件（按钮、输入框）自己吃掉 pointerdown，其余头部区域——包括
+ * 那个只读标题——放行给 React Flow 去拖动（F4：整个头部都是拖拽区）。
  */
 const HEADER_CONTROLS =
-  'button, input, textarea, select, [role="textbox"], [contenteditable="true"], [data-no-drag="true"]';
+  'button, input, textarea, select, [contenteditable="true"], [data-no-drag="true"]';
 
 function onHeaderPointerDown(event: React.PointerEvent<HTMLElement>): void {
   const target = event.target as HTMLElement | null;
   // A read-only title fills the header's free space and remains a drag target.
-  // Its click handler enters rename only when the pointer did not move.
+  // Renaming is a double click, so a press on it must reach the node drag.
   if (target?.closest('[data-node-title="true"]')) return;
   if (target?.closest(HEADER_CONTROLS)) event.stopPropagation();
 }
@@ -175,8 +193,10 @@ export function NodeShell({
   selected,
   status,
   glow,
+  headerMark,
   headerChips,
   headerActions,
+  menuItems,
   approval,
   children,
 }: NodeShellProps) {
@@ -212,8 +232,10 @@ export function NodeShell({
           collapsed={collapsed}
           maximized={maximized}
           status={status}
+          headerMark={headerMark}
           headerChips={headerChips}
           headerActions={headerActions}
+          menuItems={menuItems}
           approval={approval}
         />
 
@@ -240,25 +262,35 @@ export function NodeShell({
 
 /* ---------------------------------- 头部 ---------------------------------- */
 
+/**
+ * 一行 34px，从左到右只有五样东西（F5）：
+ * 来源色点 → 标题 → 常驻徽标（内存）→ 状态胶囊 → `···` → ×。
+ *
+ * 折叠、最大化、搜索、上下文占用、Agent 名全部收进 `···`：用户的原话是
+ * 「头部信息太多，只想看内存」。
+ */
 export function NodeHeader({
   node,
   collapsed,
   maximized,
   status,
+  headerMark,
   headerChips,
   headerActions,
+  menuItems,
   approval,
 }: {
   node: CanvasNode;
   collapsed: boolean;
   maximized: boolean;
   status?: NodeShellProps["status"];
+  headerMark?: React.ReactNode;
   headerChips?: React.ReactNode;
   headerActions?: React.ReactNode;
+  menuItems?: React.ReactNode;
   approval?: NodeShellProps["approval"];
 }) {
   const t = useT();
-  const compact = useCompactLayout();
   return (
     <div
       data-slot="node-header"
@@ -271,16 +303,7 @@ export function NodeHeader({
       // 头部是拖拽区：只有里面的控件吃掉 pointerdown，其余放行给 select 工具
       onPointerDown={onHeaderPointerDown}
     >
-      <IconButton
-        className="size-[20px]"
-        label={collapsed ? t("node.expand") : t("node.collapse")}
-        onClick={() => {
-          focusNode(node.id);
-          useCanvasStore.getState().setCollapsed(node.id, !collapsed);
-        }}
-      >
-        {collapsed ? <ChevronRight /> : <ChevronDown />}
-      </IconButton>
+      {headerMark}
 
       <NodeTitle node={node} />
 
@@ -325,37 +348,12 @@ export function NodeHeader({
 
       {headerActions}
 
-      {/* 评论 / AI 命名（§17）。终端不走这里：它的两项在自己的「更多」下拉里，
-          头部必须保持一行 34px，多一个按钮也不能多一行。 */}
-      {node.type !== "terminal" && <NodeMetaActions node={node} />}
-
-      {/* 手机上「最大化」没有意义——画布本身就只有一屏宽。这一格换成进入
-          单节点焦点页的入口，同一个 `focusNodeId`。 */}
-      {compact && canFocusOnPhone(node.type) ? (
-        <IconButton
-          className="node-secondary-action"
-          label={t("mobile.focus.open")}
-          onClick={() => {
-            focusNode(node.id);
-            useCanvasStore.getState().setFocusNode(node.id);
-          }}
-        >
-          <Expand />
-        </IconButton>
-      ) : (
-        <IconButton
-          className="node-secondary-action"
-          label={maximized ? t("node.restore") : t("node.maximize")}
-          onClick={() => {
-            focusNode(node.id);
-            const store = useCanvasStore.getState();
-            if (maximized) store.restoreNode(node.id);
-            else store.maximizeNode(node.id, maximizeRect());
-          }}
-        >
-          {maximized ? <Minimize2 /> : <Maximize2 />}
-        </IconButton>
-      )}
+      <NodeMenu
+        node={node}
+        collapsed={collapsed}
+        maximized={maximized}
+        items={menuItems}
+      />
 
       <IconButton
         className="node-secondary-action hover:text-[var(--danger)]"
@@ -368,7 +366,96 @@ export function NodeHeader({
   );
 }
 
-/** A click or Enter edits; dragging the title still moves the node. */
+/**
+ * 每种节点共用的 `···`。
+ *
+ * 顺序是「这个节点能做什么」→「怎么看它」→「怎么标注它」：节点自己的条目
+ * 在最上面（终端的搜索 / 打断 / 模型…），然后是折叠与最大化，最后是 AI 命名
+ * 与备注。所有节点类型走的都是这一个组件，所以菜单结构天然一致。
+ */
+function NodeMenu(props: {
+  node: CanvasNode;
+  collapsed: boolean;
+  maximized: boolean;
+  items?: React.ReactNode;
+}) {
+  const t = useT();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <IconButton label={t("node.more")}>
+          <MoreHorizontal />
+        </IconButton>
+      </DropdownMenuTrigger>
+      <NodeMenuContent {...props} />
+    </DropdownMenu>
+  );
+}
+
+/** 菜单正文单独导出：它是这些动作唯一的入口，测试要够得到它。 */
+export function NodeMenuContent({
+  node,
+  collapsed,
+  maximized,
+  items,
+}: {
+  node: CanvasNode;
+  collapsed: boolean;
+  maximized: boolean;
+  items?: React.ReactNode;
+}) {
+  const t = useT();
+  const compact = useCompactLayout();
+  return (
+    <DropdownMenuContent align="end" className="min-w-52">
+      {items}
+      {items ? <DropdownMenuSeparator /> : null}
+      <DropdownMenuItem
+        onSelect={() => {
+          focusNode(node.id);
+          useCanvasStore.getState().setCollapsed(node.id, !collapsed);
+        }}
+      >
+        {collapsed ? <ChevronRight /> : <ChevronDown />}
+        {collapsed ? t("node.expand") : t("node.collapse")}
+      </DropdownMenuItem>
+      {/* 手机上「最大化」没有意义——画布本身就只有一屏宽。这一格换成进入
+            单节点焦点页的入口，同一个 `focusNodeId`。 */}
+      {compact && canFocusOnPhone(node.type) ? (
+        <DropdownMenuItem
+          onSelect={() => {
+            focusNode(node.id);
+            useCanvasStore.getState().setFocusNode(node.id);
+          }}
+        >
+          <Expand />
+          {t("mobile.focus.open")}
+        </DropdownMenuItem>
+      ) : (
+        <DropdownMenuItem
+          onSelect={() => {
+            focusNode(node.id);
+            const store = useCanvasStore.getState();
+            if (maximized) store.restoreNode(node.id);
+            else store.maximizeNode(node.id, maximizeRect());
+          }}
+        >
+          {maximized ? <Minimize2 /> : <Maximize2 />}
+          {maximized ? t("node.restore") : t("node.maximize")}
+        </DropdownMenuItem>
+      )}
+      <NodeMetaMenuItems node={node} />
+    </DropdownMenuContent>
+  );
+}
+
+/**
+ * 静态标题：双击（或按 Enter / F2）改名，其余时候整块都是拖拽区。
+ *
+ * 以前是「短按一下就进编辑」，结果是文件管理器那种窄头部里想拖节点常常
+ * 变成打开输入框（F4）。双击既不与拖拽冲突（React Flow 的拖拽阈值是 4px，
+ * 两次原地点击不会触发），也和画布上其它「双击进入」的手势一致。
+ */
 function NodeTitle({ node }: { node: CanvasNode }) {
   const t = useT();
   const [editing, setEditing] = React.useState(false);
@@ -376,15 +463,8 @@ function NodeTitle({ node }: { node: CanvasNode }) {
   const active = React.useRef(false);
   const composing = React.useRef(false);
   const titleRef = React.useRef<HTMLSpanElement>(null);
-  const pointerStart = React.useRef<{ x: number; y: number } | null>(null);
-  const gestureCleanup = React.useRef<(() => void) | null>(null);
-  const suppressClick = React.useRef(false);
-
-  React.useEffect(() => () => gestureCleanup.current?.(), []);
 
   function begin() {
-    gestureCleanup.current?.();
-    suppressClick.current = false;
     active.current = true;
     composing.current = false;
     setDraft(node.title);
@@ -393,71 +473,6 @@ function NodeTitle({ node }: { node: CanvasNode }) {
 
   function restoreFocus() {
     window.requestAnimationFrame(() => titleRef.current?.focus());
-  }
-
-  function startTitleGesture(event: React.PointerEvent<HTMLSpanElement>) {
-    if (
-      event.button !== 0 ||
-      event.isPrimary === false ||
-      event.shiftKey ||
-      event.ctrlKey ||
-      event.metaKey ||
-      event.altKey
-    )
-      return;
-    // This title owns the touch gesture. Prevent Radix's enclosing canvas menu
-    // from arming its long-press timer while the canvas captures the pointer.
-    // Keep bubbling so the node drag state still receives pointerdown.
-    if (event.pointerType === "touch" || event.pointerType === "pen")
-      event.preventDefault();
-    gestureCleanup.current?.();
-    const start = { x: event.clientX, y: event.clientY };
-    pointerStart.current = start;
-    suppressClick.current = false;
-    let dragged = false;
-    const distance = (next: PointerEvent) =>
-      Math.hypot(next.clientX - start.x, next.clientY - start.y);
-    const move = (next: PointerEvent) => {
-      if (next.pointerId === event.pointerId && distance(next) > 4)
-        dragged = true;
-    };
-    const cancel = () => {
-      suppressClick.current = true;
-      cleanup();
-    };
-    const key = (next: KeyboardEvent) => {
-      if (next.key === "Escape") cancel();
-    };
-    const finish = (next: PointerEvent) => {
-      if (next.pointerId !== event.pointerId) return;
-      suppressClick.current =
-        dragged ||
-        distance(next) > 4 ||
-        next.shiftKey ||
-        next.ctrlKey ||
-        next.metaKey ||
-        next.altKey;
-      cleanup();
-      // The canvas captures pointerup and click. Wait until its pointing state
-      // settles, then turn a short press into inline rename.
-      if (!suppressClick.current)
-        queueMicrotask(() => {
-          if (titleRef.current?.isConnected) begin();
-        });
-    };
-    const cleanup = () => {
-      window.removeEventListener("pointermove", move, true);
-      window.removeEventListener("pointerup", finish);
-      window.removeEventListener("pointercancel", cancel);
-      window.removeEventListener("keydown", key);
-      pointerStart.current = null;
-      gestureCleanup.current = null;
-    };
-    gestureCleanup.current = cleanup;
-    window.addEventListener("pointermove", move, true);
-    window.addEventListener("pointerup", finish);
-    window.addEventListener("pointercancel", cancel);
-    window.addEventListener("keydown", key);
   }
 
   function commit(value: string, focus = false) {
@@ -523,26 +538,18 @@ function NodeTitle({ node }: { node: CanvasNode }) {
       role="textbox"
       tabIndex={0}
       title={node.title}
-      className="node-title min-w-0 flex-1 cursor-text truncate rounded-sm text-[length:var(--text-body)] font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      onPointerDown={startTitleGesture}
-      onClick={(event) => {
+      className="node-title min-w-0 flex-1 truncate rounded-sm text-[length:var(--text-body)] font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      onDoubleClick={(event) => {
         if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey)
           return;
-        const start = pointerStart.current;
-        pointerStart.current = null;
-        if (suppressClick.current) return;
-        if (
-          start &&
-          Math.hypot(event.clientX - start.x, event.clientY - start.y) > 4
-        )
-          return;
-        // Screen readers and synthetic clicks have no pointer gesture.
-        if (event.detail === 0) begin();
+        event.preventDefault();
+        event.stopPropagation();
+        begin();
       }}
       onKeyDownCapture={(event) => {
         if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey)
           return;
-        if (event.key === "Enter") {
+        if (event.key === "Enter" || event.key === "F2") {
           event.preventDefault();
           event.stopPropagation();
           begin();

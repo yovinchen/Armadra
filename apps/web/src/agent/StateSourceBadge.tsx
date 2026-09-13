@@ -1,8 +1,6 @@
-import { Eye, Plug, Puzzle } from "lucide-react";
 import type { AgentStateSource } from "@armadra/shared";
 
 import { useT } from "@/app/preferences-store";
-import { Badge } from "@/ui/badge";
 
 /**
  * 节点头部的状态来源提示（协作通道 §3.2 / §3.4）。
@@ -16,10 +14,16 @@ import { Badge } from "@/ui/badge";
  * 上报，不是它。没有来源就什么都不画——那是「还没有人报过」，说成 idle 是
  * 另一回事。
  *
- * 只给图标：这一行常驻在每个 Agent 节点上，多一个词就是每个节点多一个词。
- * 三种来源三个图标，说明留在 tooltip 与无障碍名里。
+ * F5 之后它是标题**左边的一个 6px 色点**，不是徽标：这一行常驻在每个 Agent
+ * 节点上，一个图标加一圈描边已经是头部里最贵的东西。上报（hook / extension）
+ * 是实心的品牌色，猜测（observed）是空心的灰点——一眼就分得出「有人报过」
+ * 和「我们自己看出来的」，说明留在悬停提示与无障碍名里。
  */
-const SOURCE_ICONS = { hook: Plug, extension: Puzzle, observed: Eye } as const;
+const SOURCE_STYLES: Record<AgentStateSource, string> = {
+  hook: "bg-[var(--brand)]",
+  extension: "bg-[var(--brand)]",
+  observed: "border border-[var(--border-strong)] bg-transparent",
+};
 
 export function StateSourceBadge({
   source,
@@ -28,20 +32,17 @@ export function StateSourceBadge({
 }) {
   const t = useT();
   if (!source) return null;
-  const Icon = SOURCE_ICONS[source];
   const label = t(`agent.stateSource.${source}`);
   return (
-    <Badge
-      variant="outline"
-      className="h-[18px] px-1 text-[length:var(--text-caption)] text-muted-foreground"
-      title={`${label} — ${t(`agent.stateSource.${source}.note`)}`}
-      // 一个只有图标的标记，没有 role 就是一段没有名字的空白：读屏什么都
-      // 不会念，`title` 也只对鼠标有用。
+    <span
+      // 一个只有颜色的点，没有 role 就是一段没有名字的空白：读屏什么都不会
+      // 念，`title` 也只对鼠标有用，所以两样都给。
       role="img"
       aria-label={label}
+      title={`${label} — ${t(`agent.stateSource.${source}.note`)}`}
       data-state-source={source}
-    >
-      <Icon className="size-2.5" />
-    </Badge>
+      data-slot="state-source-dot"
+      className={`size-1.5 shrink-0 rounded-full ${SOURCE_STYLES[source]}`}
+    />
   );
 }
