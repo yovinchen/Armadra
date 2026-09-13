@@ -199,14 +199,31 @@ pub fn assemble(
         );
     }
 
-    // Newest first. An entry with no date — a CLI alias like `opus`, or an
-    // offline fallback — sorts ahead of every dated one: an alias always
-    // resolves to the newest model in its family, so it is never *older* than
-    // anything below it, and it is the name the CLI itself documents.
-    fn sort_key(model: &AgentModel) -> &str {
-        model.release_date.as_deref().unwrap_or("9")
+    // Newest first, in three bands.
+    //
+    // What the CLI named comes first even though it has no date: an alias
+    // resolves to the newest model in its family, and the model the user
+    // configured is the one they are running — neither is ever *older* than
+    // what follows. Then everything with a date, newest first. The offline
+    // fallback goes last: an id this build happened to ship is not evidence
+    // about anything, and it must not outrank a model the vendor published
+    // since.
+    fn band(model: &AgentModel) -> u8 {
+        match (model.source, model.release_date.is_some()) {
+            (ModelSource::Cli, false) => 0,
+            (_, true) => 1,
+            _ => 2,
+        }
     }
-    models.sort_by(|left, right| sort_key(right).cmp(sort_key(left)));
+    models.sort_by(|left, right| {
+        band(left).cmp(&band(right)).then_with(|| {
+            right
+                .release_date
+                .as_deref()
+                .unwrap_or("")
+                .cmp(left.release_date.as_deref().unwrap_or(""))
+        })
+    });
     models
 }
 

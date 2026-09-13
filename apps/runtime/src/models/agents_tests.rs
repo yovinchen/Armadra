@@ -104,13 +104,16 @@ fn what_the_cli_says_comes_first_and_the_catalog_fills_in_the_rest() {
         ["gpt-6-astra", "gpt-5.3-codex", "gpt-5", "gpt-5-mini"]
     );
     // The built-in fallback only contributes what nothing else did: `gpt-5` is
-    // already in the catalog, `gpt-5-codex` is not in this snapshot.
+    // already in the catalog, `gpt-5-codex` is not in this snapshot — and it
+    // goes last, because an id this build shipped is no evidence against a
+    // model the vendor has published since.
     let builtin: Vec<&str> = models
         .iter()
         .filter(|model| model.source == ModelSource::Builtin)
         .map(|model| model.id.as_str())
         .collect();
     assert_eq!(builtin, ["gpt-5-codex"]);
+    assert_eq!(ids(&models).last(), Some(&"gpt-5-codex"));
 }
 
 #[test]
@@ -138,10 +141,20 @@ fn a_model_is_listed_once_however_many_sources_name_it() {
 }
 
 #[test]
-fn the_dated_entries_are_newest_first_and_aliases_sit_above_them() {
+fn the_dated_entries_are_newest_first_between_the_cli_and_the_fallback() {
     let models = assemble("claude", &["opus".to_owned()], &catalog());
     assert_eq!(models[0].id, "opus");
+    assert_eq!(models[0].source, ModelSource::Cli);
     assert_eq!(models[0].release_date, None);
+    // The offline table sinks below everything the catalog dated.
+    assert!(
+        models
+            .iter()
+            .skip_while(|model| model.source != ModelSource::Builtin)
+            .all(|model| model.source == ModelSource::Builtin),
+        "{:?}",
+        ids(&models)
+    );
     let dates: Vec<&str> = models
         .iter()
         .filter_map(|model| model.release_date.as_deref())
