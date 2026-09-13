@@ -320,6 +320,24 @@ go run github.com/rhysd/actionlint/cmd/actionlint@latest \
 - Apple 证书导入、`notarytool --validate` 与 bundler 的公证（要真 secret）；
 - Windows 便携 zip 里那五个 exe 解压后能不能真的互相找到。
 
+### Windows 上的 `cargo test -p armadra-runtime`
+
+首次三平台真跑（2026-09-13）Linux 与 macOS 全绿，Windows lib 测试 38 条失败。
+根因归成五类，都已改在代码或夹具里，**修好没有的确认只能由 Windows runner 给**：
+
+| 类别                | 根因                                                                                         | 现在怎么做                                                       |
+| ------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| SQLite 连接 URL     | SQLx 的 `to_url_lossy` 把文件名过一遍 URL 解析器，`C:\Users\…` 出来变成主机 `C` 加路径 `/\…` | `paths::sqlite_file_url` 自己拼，`paths::database_file` 是它的逆 |
+| `\\?\` 扩展长度前缀 | `std::fs::canonicalize` 在 Windows 一律返回 verbatim 形式，git 当成 UNC 主机名拒绝           | 全仓改走 `paths::canonicalize`，只在 Win32 表达得出时去掉前缀    |
+| 驱动器盘符不是目录  | `imports` 逐段 stat 路径时 `C:` 这一段返回 "Incorrect function"                              | 跳过 `Prefix` 与 `RootDir`，只查它们下面的段                     |
+| `--listen unix:`    | 用 `Path::is_absolute` 判断，同一个参数在 Linux 能解析、Windows 不能                         | 改判首字符是不是 `/`；绑定失败仍然是绑定时的事                   |
+| 只有 Unix 有的东西  | `/bin/sh`、`ps -Ao`、POSIX 权限位、文件名里的 `"` 和 `?`                                     | 按用例加 `#[cfg(unix)]` 并写清原因，绝不按名字在 CI 里过滤       |
+
+另外两处夹具与平台有关，而不是产品缺陷：Git for Windows 的**系统**配置开着
+`core.autocrlf`，而测试自己的 `git` 带 `GIT_CONFIG_NOSYSTEM`，两边看到的换行规则
+因此不同——夹具改为在仓库里钉死 `core.autocrlf=false`；Codex 的 trust key 里是
+反斜杠，TOML 会把它转义，断言改成解析后再比。
+
 跨平台编译可以在一台机器上先过一遍，前提是有目标平台的 C 工具链
 （Windows SDK 或 glibc sysroot）；没有的话这两条只能由 CI 回答：
 
