@@ -2,6 +2,7 @@
   "$comment": "docs/design/repository-structure.md §3 的机器可读版本，由 tools/repo-check.mjs 执行。",
   "root": [
     ".claude",
+    ".gitattributes",
     ".github",
     ".gitignore",
     ".prettierignore",
