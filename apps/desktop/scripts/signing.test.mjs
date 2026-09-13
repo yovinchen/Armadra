@@ -5,8 +5,10 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import {
+  ENDPOINTS_ENV,
   PRIVATE_KEY_ENV,
   REQUIRE_ENV,
+  configOverride,
   signingPlan,
   tauriArgs,
 } from "./signing.mjs";
@@ -121,4 +123,33 @@ test("the checked-in configuration builds without a key today", () => {
     signed.mode,
     repositoryConfig().plugins.updater.pubkey.trim() === "" ? "refuse" : "sign",
   );
+});
+
+test("the injected endpoints and the signing decision arrive as one --config", () => {
+  // `tauri build` keeps only the last --config, so a release build that both
+  // skips signing and needs a fallback manifest address must not send two.
+  const skipped = signingPlan({ env: {}, config: config({ pubkey: "" }) });
+  const env = { [ENDPOINTS_ENV]: " https://example.invalid/latest.json , " };
+  assert.deepEqual(configOverride(skipped, env), {
+    bundle: { createUpdaterArtifacts: false },
+    plugins: {
+      updater: { endpoints: ["https://example.invalid/latest.json"] },
+    },
+  });
+  const args = tauriArgs(skipped, env);
+  assert.equal(args.length, 2);
+  assert.equal(args[0], "--config");
+  assert.deepEqual(JSON.parse(args[1]), configOverride(skipped, env));
+});
+
+test("no endpoint variable leaves the checked-in empty endpoints alone", () => {
+  const signed = signingPlan({
+    env: { [PRIVATE_KEY_ENV]: "dW50cnVzdGVk" },
+    config: config({ pubkey: "dW50cnVzdGVk" }),
+  });
+  assert.equal(signed.mode, "sign");
+  for (const env of [{}, { [ENDPOINTS_ENV]: "" }, { [ENDPOINTS_ENV]: " , " }]) {
+    assert.equal(configOverride(signed, env), null);
+    assert.deepEqual(tauriArgs(signed, env), []);
+  }
 });

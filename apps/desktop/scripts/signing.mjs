@@ -102,9 +102,38 @@ export function signingPlan({ env = {}, config = {} } = {}) {
   };
 }
 
+/**
+ * Where a built shell looks for the update manifest.
+ *
+ * `tauri.conf.json` keeps `endpoints` empty on purpose (see the `$comment`
+ * there): at runtime the address comes from the Host, and a value baked into
+ * the repository would send a beta build to the stable manifest. The release
+ * workflow injects the published fallback through this variable instead, so
+ * the address lives in exactly one place — the workflow that publishes to it.
+ */
+export const ENDPOINTS_ENV = "ARMADRA_UPDATER_ENDPOINTS";
+
+/**
+ * The single `--config` object a build needs, or `null`.
+ *
+ * `tauri build` takes one `--config`, so the signing decision and the injected
+ * endpoints have to arrive merged rather than as two flags where the second
+ * silently replaces the first.
+ */
+export function configOverride(plan, env = {}) {
+  const endpoints = (env[ENDPOINTS_ENV] ?? "")
+    .split(",")
+    .map((endpoint) => endpoint.trim())
+    .filter(Boolean);
+  if (endpoints.length === 0) return plan.configOverride;
+  return {
+    ...(plan.configOverride ?? {}),
+    plugins: { updater: { endpoints } },
+  };
+}
+
 /** The extra `tauri build` arguments a plan implies. */
-export function tauriArgs(plan) {
-  return plan.configOverride
-    ? ["--config", JSON.stringify(plan.configOverride)]
-    : [];
+export function tauriArgs(plan, env = {}) {
+  const override = configOverride(plan, env);
+  return override ? ["--config", JSON.stringify(override)] : [];
 }

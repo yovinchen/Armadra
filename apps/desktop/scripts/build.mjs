@@ -9,6 +9,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 import { main as prepareSidecar } from "./prepare-sidecar.mjs";
@@ -16,6 +17,20 @@ import { REQUIRE_ENV, signingPlan, tauriArgs } from "./signing.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const app = resolve(here, "..");
+
+/**
+ * Run the Tauri CLI through Node rather than through `pnpm exec`.
+ *
+ * On Windows the package manager is a `.cmd` shim, and `execFileSync` without a
+ * shell cannot start one — Node refuses outright since 20.12. Resolving the
+ * CLI's own JavaScript entry point sidesteps that, and it also means the build
+ * does not depend on which package manager happened to invoke this script.
+ */
+export function tauriEntry(from = app) {
+  return createRequire(join(from, "package.json")).resolve(
+    "@tauri-apps/cli/tauri.js",
+  );
+}
 
 export function build({ env = process.env, argv = [] } = {}) {
   const config = JSON.parse(
@@ -34,8 +49,8 @@ export function build({ env = process.env, argv = [] } = {}) {
 
   prepareSidecar();
   execFileSync(
-    "pnpm",
-    ["exec", "tauri", "build", ...tauriArgs(plan), ...argv],
+    process.execPath,
+    [tauriEntry(), "build", ...tauriArgs(plan, env), ...argv],
     {
       cwd: app,
       stdio: "inherit",
