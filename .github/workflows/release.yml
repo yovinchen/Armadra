@@ -54,6 +54,8 @@ jobs:
     steps:
       # 手动补发一个标签时要构建那个标签的树，而不是触发分支的 HEAD。
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.sha }}
       # Runtime 的 Git 操作（merge / cherry-pick / amend）用仓库或全局配置里的
       # 身份提交；runner 两者都没有，Git 会在动树之前拒绝，测试就把它记成
       # unknownOutcome。开发机上是全局配置在兜底，这里也放一份全局配置——
@@ -64,8 +66,6 @@ jobs:
           set -euo pipefail
           git config --global user.name "Armadra CI"
           git config --global user.email "ci@armadra.invalid"
-        with:
-          ref: ${{ inputs.tag || github.sha }}
       # ubuntu runner 预装的 .NET / Android / Haskell / CodeQL 占掉十几 GB；
       # 这个作业要编译整个 workspace 的测试，先把它们腾出来。
       - name: 腾出磁盘
