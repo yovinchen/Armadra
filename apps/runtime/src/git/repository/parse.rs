@@ -83,7 +83,9 @@ pub(super) fn parse_history(
         return Err(malformed());
     }
     fields
-        .chunks_exact(7)
+        .as_chunks::<7>()
+        .0
+        .iter()
         .map(|row| {
             let oid = text(row[0])?.to_owned();
             let parents: Vec<String> = text(row[1])?

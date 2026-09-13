@@ -182,7 +182,7 @@ impl RepositoryService {
             ));
         }
         let mut records = Vec::new();
-        for (index, fields) in fields.chunks_exact(5).enumerate() {
+        for (index, fields) in fields.as_chunks::<5>().0.iter().enumerate() {
             let text = |i: usize| String::from_utf8(fields[i].to_vec()).map_err(|_| malformed());
             let oid = text(0)?;
             let selector = text(1)?;

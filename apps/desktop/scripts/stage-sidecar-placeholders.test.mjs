@@ -21,7 +21,9 @@ test("a Windows target gets the session host placeholder too", () => {
     target: selectTarget({ host, target: "x86_64-pc-windows-msvc" }),
   });
   assert.deepEqual(
-    staged.map((path) => path.slice(directory.length + 1)),
+    staged.map((path) =>
+      path.slice(directory.length + 1).replaceAll("\\", "/"),
+    ),
     [
       "target/release/armadra-runtime-x86_64-pc-windows-msvc.exe",
       "target/release/armadra-hook-x86_64-pc-windows-msvc.exe",
@@ -41,7 +43,9 @@ test("elsewhere only the three sidecars that ship are staged", () => {
       target: selectTarget({ host, target: triple }),
     });
     assert.deepEqual(
-      staged.map((path) => path.slice(directory.length + 1)),
+      staged.map((path) =>
+        path.slice(directory.length + 1).replaceAll("\\", "/"),
+      ),
       [
         `target/release/armadra-runtime-${triple}`,
         `target/release/armadra-hook-${triple}`,

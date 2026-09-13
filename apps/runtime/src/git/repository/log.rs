@@ -676,7 +676,9 @@ fn parse_log(bytes: &[u8]) -> AppResult<Vec<LoggedCommit>> {
         return Err(malformed());
     }
     fields
-        .chunks_exact(9)
+        .as_chunks::<9>()
+        .0
+        .iter()
         .map(|row| {
             let oid = text(row[0])?.to_owned();
             let parents: Vec<String> = text(row[1])?

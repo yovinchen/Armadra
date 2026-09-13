@@ -223,7 +223,9 @@ async fn observe(
         return Err(bad("Malformed Git attribute response"));
     }
     if attribute_fields
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .any(|field| field[2] != b"unspecified" && field[2] != b"unset")
     {
         return unsupported(public, "filter");
