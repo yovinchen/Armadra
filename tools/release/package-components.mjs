@@ -9,9 +9,9 @@
  * target suffix, because the Host unpacks it expecting that one name and
  * refuses anything else.
  *
- * Archiving uses the platform's own `tar` and `zip`. Both are present on every
- * runner in the matrix, and reimplementing either here would add a dependency
- * to save nothing.
+ * Archiving uses the platform's own `tar` and `zip`, falling back to 7-Zip on
+ * Windows, where `zip` is not on the default PATH of every runner image.
+ * Reimplementing either here would add a dependency to save nothing.
  */
 import { execFileSync } from "node:child_process";
 import {
@@ -55,6 +55,40 @@ export function locateBinary({ from, binary, target, triple }) {
   return null;
 }
 
+/**
+ * How to produce a zip on this machine.
+ *
+ * `zip` is the first choice everywhere because its arguments are the same on
+ * every platform. The Windows runner images ship 7-Zip but do not always put
+ * `zip` on PATH, and an arm64 image is the likeliest one to be missing it, so
+ * the alternative is tried before the release fails at packaging time.
+ */
+export function zipCommand(exists = (name) => which(name)) {
+  for (const [command, argv] of [
+    ["zip", (output, inner) => ["-q", "-X", "-j", output, inner]],
+    // -bso0/-bse0 keep 7-Zip's banner out of the log; -mx=9 matches `zip -9`
+    // closely enough that the archives are the same order of magnitude.
+    ["7z", (output, inner) => ["a", "-tzip", "-bso0", "-bse0", output, inner]],
+    ["7zz", (output, inner) => ["a", "-tzip", "-bso0", "-bse0", output, inner]],
+  ]) {
+    if (exists(command)) return { command, argv };
+  }
+  throw new Error(
+    "No zip archiver found: install `zip` or 7-Zip before packaging Windows components",
+  );
+}
+
+function which(name) {
+  const probe = process.platform === "win32" ? "where" : "command";
+  const args = process.platform === "win32" ? [name] : ["-v", name];
+  try {
+    execFileSync(probe, args, { stdio: "ignore", shell: probe === "command" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Create one archive holding one executable. */
 export function archive({ source, outDir, assetName, target }) {
   mkdirSync(outDir, { recursive: true });
@@ -66,9 +100,8 @@ export function archive({ source, outDir, assetName, target }) {
     const output = resolve(outDir, assetName);
     rmSync(output, { force: true });
     if (archiveExtension(target) === ".zip") {
-      execFileSync("zip", ["-q", "-X", "-j", output, inner], {
-        stdio: "inherit",
-      });
+      const zip = zipCommand();
+      execFileSync(zip.command, zip.argv(output, inner), { stdio: "inherit" });
     } else {
       // --numeric-owner and a fixed mtime keep two runs of one release from
       // producing two different archives of the same bytes.

@@ -30,7 +30,11 @@ import {
   readCompatibility,
   releaseNote,
 } from "./compatibility.mjs";
-import { locateBinary, packageComponents } from "./package-components.mjs";
+import {
+  locateBinary,
+  packageComponents,
+  zipCommand,
+} from "./package-components.mjs";
 import { assemble } from "./assemble.mjs";
 
 function scratch() {
@@ -482,4 +486,31 @@ test("an unplaceable file fails assembly", async () => {
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+// Windows components are .zip, and `zip` is not on every Windows runner's
+// PATH. Falling back to the 7-Zip that is there beats a release that fails at
+// the packaging step with "zip: command not found".
+test("the zip archiver falls back to 7-Zip and refuses to guess", () => {
+  assert.deepEqual(zipCommand((name) => name === "zip").command, "zip");
+  assert.deepEqual(zipCommand((name) => name === "7z").command, "7z");
+  assert.deepEqual(zipCommand((name) => name === "7zz").command, "7zz");
+  // Preference order: zip first, whatever else is also installed.
+  assert.equal(zipCommand(() => true).command, "zip");
+  assert.deepEqual(zipCommand(() => true).argv("out.zip", "inner"), [
+    "-q",
+    "-X",
+    "-j",
+    "out.zip",
+    "inner",
+  ]);
+  assert.deepEqual(zipCommand((name) => name === "7z").argv("out.zip", "in"), [
+    "a",
+    "-tzip",
+    "-bso0",
+    "-bse0",
+    "out.zip",
+    "in",
+  ]);
+  assert.throws(() => zipCommand(() => false), /No zip archiver found/);
 });
