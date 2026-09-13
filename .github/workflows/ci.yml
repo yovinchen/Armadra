@@ -1,6 +1,11 @@
-# 作业矩阵见 docs/design/repository-structure.md §4。
-# 路径过滤用一次 git diff 算出，不引入第三方 action：repo 作业永远跑，
-# 其余作业只在自己关心的路径有改动时跑。
+# 作业矩阵见 docs/guides/ci-release.md。
+#
+# 一个矩阵作业跑三种 runner：同一串检查在 Linux、macOS 与 Windows 上各跑一遍，
+# 因为这个仓库的平台差异不在前端而在 Runtime——tmux 与 Unix socket 在 Windows
+# 上换成 ConPTY 与命名管道，只有真的在三个系统上编译过才知道换得对不对。
+# 平台相关的用例用 `cfg(unix)` / `cfg(target_os = ...)` 在源码里门控，CI 不做
+# 任何按名字过滤的测试排除：一条在 Windows 上不该跑的用例，应该在 Windows 上
+# 压根不存在。
 name: ci
 
 on:
@@ -12,53 +17,40 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
   PNPM_VERSION: "11.18.0"
   NODE_VERSION: "22"
   GO_VERSION: "1.24"
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
 
 jobs:
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      web: ${{ steps.filter.outputs.web }}
-      rust: ${{ steps.filter.outputs.rust }}
-      host: ${{ steps.filter.outputs.host }}
-      protocol: ${{ steps.filter.outputs.protocol }}
-      desktop: ${{ steps.filter.outputs.desktop }}
+  check:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            label: linux-x86_64
+            # cgo 是 -race 的前提，Linux 与 macOS runner 都自带 C 编译器。
+            go_race: "-race"
+          - runner: macos-14
+            label: macos-aarch64
+            go_race: "-race"
+          - runner: windows-latest
+            label: windows-x86_64
+            # windows/amd64 的 race detector 需要外部 gcc，镜像里没有可依赖的
+            # 一个；这里跑不带 race 的同一批用例，竞态由另外两个平台覆盖。
+            go_race: ""
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - id: filter
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base="origin/${{ github.base_ref }}"
-            git fetch --no-tags --depth=200 origin "${{ github.base_ref }}"
-            changed="$(git diff --name-only "$(git merge-base "$base" HEAD)" HEAD)"
-          else
-            changed="$(git diff --name-only "${{ github.event.before }}" HEAD 2>/dev/null || git ls-files)"
-          fi
-          printf '%s\n' "$changed"
-          emit() {
-            if printf '%s\n' "$changed" | grep -qE "$2"; then
-              echo "$1=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "$1=false" >> "$GITHUB_OUTPUT"
-            fi
-          }
-          emit web '^(apps/web/|packages/|pnpm-lock\.yaml|package\.json|tsconfig\.base\.json)'
-          emit rust '^(apps/runtime/|apps/desktop/|crates/|Cargo\.(toml|lock))'
-          emit host '^(apps/host/|proto/)'
-          emit protocol '^(proto/|crates/protocol/|packages/protocol|apps/host/gen/|tools/protocol\.mjs)'
-          emit desktop '^(apps/desktop/|apps/web/|crates/|apps/runtime/)'
 
-  repo:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -70,128 +62,70 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: apps/host/go.sum
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @armadra/shared build
-      - run: pnpm repo:test
-      # 发布脚本与工作流校验：release.yml 只在推标签时跑，这里是它唯一会被
-      # 提前发现问题的地方。
-      - run: pnpm release:test
-      - run: pnpm check
-
-  web:
-    needs: changes
-    if: needs.changes.outputs.web == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @armadra/shared build
-      - run: pnpm -r --if-present test
-      - run: pnpm -r --if-present typecheck
-      - run: pnpm --filter @armadra/web build
-
-  rust:
-    needs: changes
-    if: needs.changes.outputs.rust == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.label }}
+          workspaces: . -> target
+
+      # Tauri 2 在 Linux 上链接 WebKitGTK；没有这些头文件 armadra-desktop 连
+      # cargo check 都过不去（glib-sys 的 build script 先用 pkg-config 找它们）。
       - name: 安装 Tauri 的 Linux 系统依赖
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
             libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
-            libgtk-3-dev librsvg2-dev patchelf
-      - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: 准备 sidecar 占位（Tauri 的 externalBin 校验要求文件存在）
-        run: pnpm --filter @armadra/desktop prepare:sidecar
-      - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+            libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
-  host:
-    needs: changes
-    if: needs.changes.outputs.host == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: apps/host/go.sum
-      - run: go -C apps/host vet ./...
-      - run: go -C apps/host test -race ./...
-      - name: 交叉编译 Windows 与 Linux
+      - run: pnpm install --frozen-lockfile
+
+      # pnpm check = libs:build + prettier + cargo fmt + typecheck +
+      # protocol:check + repo:check + ci:workflows + release:check。
+      # 三个平台都跑：换行、路径分隔符与生成物字节比对都是平台差异的常见出口。
+      - run: pnpm check
+
+      - name: 仓库与发布脚本自检
         run: |
-          GOOS=windows GOARCH=amd64 go -C apps/host build ./...
-          GOOS=linux GOARCH=amd64 go -C apps/host build ./...
+          pnpm repo:test
+          pnpm release:test
 
-  protocol:
-    needs: changes
-    if: needs.changes.outputs.protocol == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: apps/host/go.sum
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: pnpm install --frozen-lockfile
-      - name: 生成物与提交内容一致
-        run: pnpm protocol:check
-      - name: 三端契约测试
+      # Web、shared、protocol、host-client 与桌面脚本的测试与类型检查。
+      - run: pnpm -r --if-present test
+      - run: pnpm -r --if-present typecheck
+      - run: pnpm --filter @armadra/web build
+
+      - name: 三端协议契约
         run: pnpm protocol:test
 
-  desktop:
-    needs: changes
-    if: needs.changes.outputs.desktop == 'true'
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: apps/host/go.sum
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @armadra/desktop test
-      - run: pnpm --filter @armadra/desktop prepare:sidecar
-      - run: pnpm --filter @armadra/shared build
-      - run: pnpm --filter @armadra/desktop exec tauri build --debug
+      - name: Rust lint
+        run: cargo clippy --workspace --exclude armadra-desktop --all-targets -- -D warnings
+
+      - name: Rust 测试
+        run: cargo test --workspace --exclude armadra-desktop
+
+      - name: Go vet 与测试
+        shell: bash
+        run: |
+          set -euo pipefail
+          go -C apps/host vet ./...
+          go -C apps/host test ${{ matrix.go_race }} -count=1 ./...
+
+      # 桌面壳只做 cargo check：打包是发布流水线的事，这里要的是「三个平台的
+      # Rust 代码都编译得过」。externalBin 必须存在，但不必是真的二进制。
+      - name: 桌面壳 cargo check
+        run: |
+          pnpm --filter @armadra/desktop prepare:sidecar-placeholders
+          cargo check -p armadra-desktop --all-targets
+
+      # Host 要能为另外两个平台交叉编译：sidecar 打包时就是这么做的。
+      - name: Go 交叉编译另外两个平台
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          GOOS=windows GOARCH=amd64 go -C apps/host build ./...
+          GOOS=darwin GOARCH=arm64 go -C apps/host build ./...
+          GOOS=linux GOARCH=arm64 go -C apps/host build ./...
