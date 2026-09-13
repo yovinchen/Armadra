@@ -22,6 +22,9 @@ opencode 等 CLI Agent 作为终端节点放在一块无限画布上，节点之
 ┌──────────────────────────── apps/desktop ────────────────────────────┐
 │ Tauri 2 薄壳：启动 / 健康检查 / 停止 sidecar、系统目录选择器、        │
 │ 外部链接、拖入文件的真实路径、托盘与通知                              │
+│ 健康检查只认自己拉起的那个实例（`/health` 的 instanceId 与子进程      │
+│ 启动时打到 stdout 的一致）；不一致时按 endpoints.json 与进程表确认    │
+│ 是同一数据目录、由桌面启动的旧 Runtime 后发 SIGTERM 再重拉            │
 │  └── sidecar: armadra-runtime、armadra-hook                          │
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │ 加载同一套页面
@@ -126,6 +129,16 @@ Agent 节点就是终端节点里跑着一个 CLI，没有中间协议：
 权限模式对应的 argv、resume 方式、能力位），Runtime 侧只镜像 id 与启动程序
 （`apps/runtime/src/agent.rs`）。自定义 CLI 用 `custom:<id>`。
 
+模型列表不写死：`GET /api/agents/{id}/models` 依次取 CLI 自己的说法
+（`claude --help` 的 `--model` 别名、Codex `config.toml` 里配好的 `model` 与各
+profile）、models.dev 目录中该 provider 的条目、以及离线兜底表，按发布日期倒序
+并标注每条的来源（`apps/runtime/src/models/agents.rs`）。目录本身由
+`apps/runtime/src/models/catalog.rs` 维护：启动时读 `<数据目录>/models-catalog.json`，
+缓存超过 24 小时就拉一次 `https://models.dev/api.json`，之后每天一次；联网只发生在
+Runtime 侧。同一份目录供计费（`usage/cost/pricing.rs`：内置表 → 目录 →
+`model-pricing.json`）与上下文上限（`context_models.rs`：目录 → 家族规则）使用，
+来源与更新时间在设置页「账号与用量」里显示（`GET /api/models/catalog`）。
+
 Agent 之间的协作走 Runtime 的两个动词表面：
 
 - `POST /context-link/{verb}`：读取被链接节点的转录、摘要或终端画面。
@@ -210,6 +223,8 @@ Go Host 已增加独立私有设备认证表与 Protobuf 会话接口。浏览�
 | 待答权限            | `<数据目录>/pending/`                             | —                                               |
 | Runtime 偏好        | `<数据目录>/settings.json`                        | —                                               |
 | 本机偏好            | `<数据目录>/worker-settings.json`                 | —                                               |
+| 模型目录缓存        | `<数据目录>/models-catalog.json`（0600）          | —                                               |
+| 价格覆盖            | `<数据目录>/model-pricing.json`                   | —                                               |
 | 私有 tmux server    | `<数据目录>/tmux.sock` + `tmux.conf`（0700 目录） | —                                               |
 | 工作区产物          | `<工作区>/.armadra/`（assets、exports、板日志）   | —                                               |
 

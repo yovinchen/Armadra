@@ -369,7 +369,10 @@ async fn run_help(program: &Path) -> Option<String> {
 
 /* ---------------------------------- cache --------------------------------- */
 
-static CACHE: LazyLock<RwLock<HashMap<String, (Instant, Vec<AgentModel>)>>> =
+/// One remembered list and when it was assembled.
+type CachedModels = (Instant, Vec<AgentModel>);
+
+static CACHE: LazyLock<RwLock<HashMap<String, CachedModels>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
 fn cached(key: &str) -> Option<Vec<AgentModel>> {
