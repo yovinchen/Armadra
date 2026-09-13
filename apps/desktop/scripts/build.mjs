@@ -5,6 +5,16 @@
  * and reported *before* the sidecars are compiled, so a build that could not be
  * signed says so in the first second rather than in the last one
  * (see `signing.mjs`).
+ *
+ * Which bundles come out is *not* decided here. Tauri merges
+ * `tauri.<platform>.conf.json` into the configuration on its own, and the three
+ * of them next to `tauri.conf.json` name the bundle targets for each platform —
+ * `app`/`dmg`, `msi`/`nsis`, `appimage`/`deb`/`rpm`. Those files hold no comment
+ * explaining that, because `tauri-build` rejects any field it does not know,
+ * `$comment` included; the reasoning lives in docs/guides/ci-release.md §2.2,
+ * and the short version is that the list has to match `desktopAssets()` in
+ * tools/release/artifacts.mjs one for one, which `"targets": "all"` cannot
+ * promise across Tauri versions.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";

@@ -64,12 +64,20 @@ export function locateBinary({ from, binary, target, triple }) {
  * the alternative is tried before the release fails at packaging time.
  */
 export function zipCommand(exists = (name) => which(name)) {
+  // `...inner` rather than one file: the Windows portable bundle is the shell
+  // plus its sidecars, and they have to land in one flat archive together.
   for (const [command, argv] of [
-    ["zip", (output, inner) => ["-q", "-X", "-j", output, inner]],
+    ["zip", (output, ...inner) => ["-q", "-X", "-j", output, ...inner]],
     // -bso0/-bse0 keep 7-Zip's banner out of the log; -mx=9 matches `zip -9`
     // closely enough that the archives are the same order of magnitude.
-    ["7z", (output, inner) => ["a", "-tzip", "-bso0", "-bse0", output, inner]],
-    ["7zz", (output, inner) => ["a", "-tzip", "-bso0", "-bse0", output, inner]],
+    [
+      "7z",
+      (output, ...inner) => ["a", "-tzip", "-bso0", "-bse0", output, ...inner],
+    ],
+    [
+      "7zz",
+      (output, ...inner) => ["a", "-tzip", "-bso0", "-bse0", output, ...inner],
+    ],
   ]) {
     if (exists(command)) return { command, argv };
   }
