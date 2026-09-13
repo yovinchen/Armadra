@@ -493,6 +493,15 @@ fn main() {
             tauri::async_runtime::spawn(async move {
                 if let Err(error) = wait_for_runtime(&app_handle).await {
                     eprintln!("{error}");
+                    // A Runtime that never became ours is not a degraded
+                    // window, it is a window whose every request will fail
+                    // (用户实测反馈 F1 was read as "install failed, 404").
+                    // Say so where the user is looking.
+                    app_handle
+                        .dialog()
+                        .message(error)
+                        .title("Armadra 后台未就绪")
+                        .show(|_| {});
                 }
                 if app_handle.state::<DesktopLifecycle>().should_show() {
                     let _ = window.show();

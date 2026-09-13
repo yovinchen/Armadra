@@ -1,5 +1,18 @@
 //! Explicit control from the desktop that owns this Runtime child. This is not
-//! an HTTP API. EOF means the parent disappeared, not permission to stop work.
+//! an HTTP API.
+//!
+//! Two different messages arrive on this one pipe, and they must not be
+//! confused:
+//!
+//!   * a **shutdown frame** is the shell quitting on purpose. Sessions it owns
+//!     are torn down, because the user asked for the application to stop.
+//!   * **EOF** is the shell having disappeared — crashed, killed, force-quit.
+//!     Nobody asked for anything, but this process must not outlive its owner:
+//!     an orphan keeps the data directory's socket, and the next shell finds
+//!     the address taken by a Runtime that is no longer anybody's
+//!     (用户实测反馈 F1). So the parent going away ends this process too, the
+//!     same way a restart signal does — persistent sessions are detached and
+//!     left running, not killed.
 
 use std::io::{self, Read};
 
@@ -19,22 +32,37 @@ use crate::terminal::TerminalManager;
 
 pub const MAX_CONTROL_BYTES: usize = 4096;
 
+/// Why the control channel ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParentSignal {
+    /// The shell sent a canonical shutdown frame: an intentional quit.
+    Shutdown,
+    /// The pipe closed or went unreadable. The shell is gone; we go with it.
+    Disconnected,
+}
+
 /// A dedicated OS thread avoids Tokio stdin's uncancellable blocking-pool read
 /// holding Runtime exit open after an ordinary SIGTERM. The thread is not joined.
-pub fn listen_to_parent() -> io::Result<oneshot::Receiver<()>> {
+pub fn listen_to_parent() -> io::Result<oneshot::Receiver<ParentSignal>> {
     let (sender, receiver) = oneshot::channel();
     std::thread::Builder::new()
         .name("desktop-control-stdin".into())
-        .spawn(move || match read_shutdown(&mut io::stdin().lock()) {
-            Ok(true) => {
-                let _ = sender.send(());
-            }
-            Ok(false) => {
-                tracing::info!("desktop control stdin closed; keeping Runtime lifecycle unchanged")
-            }
-            Err(error) => {
-                tracing::warn!(%error, "desktop control stream rejected; no shutdown requested")
-            }
+        .spawn(move || {
+            let signal = match read_shutdown(&mut io::stdin().lock()) {
+                Ok(true) => ParentSignal::Shutdown,
+                Ok(false) => {
+                    tracing::info!("desktop control stdin closed; the shell is gone");
+                    ParentSignal::Disconnected
+                }
+                Err(error) => {
+                    // A pipe we can no longer read is a pipe that can no longer
+                    // carry the shutdown frame, so staying alive would only
+                    // produce the orphan this channel exists to prevent.
+                    tracing::warn!(%error, "desktop control stream ended unreadable");
+                    ParentSignal::Disconnected
+                }
+            };
+            let _ = sender.send(signal);
         })?;
     Ok(receiver)
 }

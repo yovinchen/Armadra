@@ -98,6 +98,14 @@ async fn health_reports_the_hook_endpoint() {
     assert_eq!(body["status"], "ok");
     assert_eq!(body["hook"]["port"], 43199);
     assert_eq!(body["hook"]["ok"], true);
+    // Which Runtime answered, not merely that one did: the desktop shell
+    // compares this with the id its own child announced (用户实测反馈 F1).
+    assert_eq!(
+        body["instanceId"].as_str(),
+        Some(crate::instance::instance_id())
+    );
+    assert_eq!(body["build"].as_str(), Some(crate::instance::BUILD));
+    assert_eq!(body["version"].as_str(), Some(env!("CARGO_PKG_VERSION")));
     #[cfg(unix)]
     assert!(
         body["hook"]["sock"]

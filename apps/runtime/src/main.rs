@@ -130,7 +130,17 @@ async fn main() -> anyhow::Result<()> {
             return Ok(());
         }
     };
+    // Announced before anything can fail, so a Runtime that cannot bind —
+    // because a stale one still holds the socket — has nonetheless told the
+    // shell which id to expect. Without that the shell cannot tell its own
+    // child from whatever else answers on the address (用户实测反馈 F1).
+    let instance_id = armadra_runtime::instance::instance_id().to_owned();
     let desktop = if serve.desktop_control_stdin {
+        use std::io::Write as _;
+        let mut stdout = std::io::stdout().lock();
+        let _ = writeln!(stdout, "{}", armadra_runtime::instance::announcement());
+        let _ = stdout.flush();
+        drop(stdout);
         Some(desktop_control::listen_to_parent()?)
     } else {
         None
@@ -209,7 +219,6 @@ async fn main() -> anyhow::Result<()> {
         .collect();
     let bound_port = listeners.iter().find_map(listen::BoundListener::tcp_port);
     let endpoints_file = endpoints::default_file();
-    let instance_id = uuid::Uuid::new_v4().to_string();
     if let Err(error) = endpoints::publish(
         &endpoints_file,
         endpoints::RUNTIME_SERVICE,
@@ -534,7 +543,9 @@ enum ShutdownReason {
     RestartSignal,
 }
 
-async fn shutdown_signal(desktop: Option<tokio::sync::oneshot::Receiver<()>>) -> ShutdownReason {
+async fn shutdown_signal(
+    desktop: Option<tokio::sync::oneshot::Receiver<desktop_control::ParentSignal>>,
+) -> ShutdownReason {
     let ctrl_c = async {
         let _ = tokio::signal::ctrl_c().await;
     };
@@ -552,17 +563,24 @@ async fn shutdown_signal(desktop: Option<tokio::sync::oneshot::Receiver<()>>) ->
     let terminate = std::future::pending::<()>();
     let desktop = async move {
         if let Some(receiver) = desktop
-            && receiver.await.is_ok()
+            && let Ok(signal) = receiver.await
         {
-            return;
+            return match signal {
+                // The user quit the application: stop what this Runtime owns.
+                desktop_control::ParentSignal::Shutdown => ShutdownReason::DesktopQuit,
+                // The shell vanished. Exit rather than become an orphan holding
+                // the socket, but detach persistent sessions instead of ending
+                // them — nobody asked for the work to stop (F1).
+                desktop_control::ParentSignal::Disconnected => ShutdownReason::RestartSignal,
+            };
         }
-        // EOF, malformed streams or disabled control do not become shutdown.
-        std::future::pending::<()>().await;
+        // Control disabled, or the listener thread died without answering.
+        std::future::pending::<ShutdownReason>().await
     };
     tokio::select! {
         _ = ctrl_c => ShutdownReason::RestartSignal,
         _ = terminate => ShutdownReason::RestartSignal,
-        _ = desktop => ShutdownReason::DesktopQuit,
+        reason = desktop => reason,
     }
 }
 

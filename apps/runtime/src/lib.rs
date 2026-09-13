@@ -23,6 +23,7 @@ pub mod handoff;
 pub mod hook;
 pub mod imports;
 pub mod index;
+pub mod instance;
 pub mod language;
 pub mod listen;
 pub mod migration_cli;
