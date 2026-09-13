@@ -59,6 +59,19 @@ func socketInfo(path string) (os.FileInfo, error) {
 	return info, nil
 }
 
+// sameSocket says whether current is the very socket previous described.
+//
+// os.SameFile compares device and inode, and Linux hands a freshly unlinked
+// inode number straight back to the next socket created on the same
+// filesystem — so a replacement listener at the same path looked identical to
+// the crashed one it replaced, and closing the old handle deleted the new
+// endpoint. The modification time settles it: a socket's mtime is the moment
+// it was created, and a replacement is created later. (The field names for
+// the change time differ between Darwin and Linux; mtime is portable.)
+func sameSocket(previous, current os.FileInfo) bool {
+	return os.SameFile(previous, current) && previous.ModTime().Equal(current.ModTime())
+}
+
 func removeMatchingSocket(path string, previous os.FileInfo) (bool, error) {
 	current, err := socketInfo(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -67,7 +80,7 @@ func removeMatchingSocket(path string, previous os.FileInfo) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if !os.SameFile(previous, current) {
+	if !sameSocket(previous, current) {
 		return false, nil
 	}
 	return true, os.Remove(path)
@@ -151,7 +164,7 @@ func (listener *unixListener) Close() error {
 			listener.err = errors.Join(listener.err, err)
 			return
 		}
-		if !os.SameFile(current, listener.info) {
+		if !sameSocket(listener.info, current) {
 			return
 		}
 		_, err = removeMatchingSocket(listener.path, listener.info)
