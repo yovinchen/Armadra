@@ -1,4 +1,5 @@
-# 发布流水线，见 docs/design/updates-and-service-install.md §1。
+# 发布流水线，见 docs/design/updates-and-service-install.md §1 与
+# docs/guides/ci-release.md。
 # 五个作业：verify 拦住版本不一致的标签，build 按目标矩阵打包，web 打前端产物，
 # assemble 汇总校验清单与签名并只创建 draft Release，notarize 在缺少 secret 时
 # 跳过并在说明里标注。发布是人的动作：本工作流永远不会把 Release 从 draft 转正。
@@ -7,7 +8,7 @@ name: release
 on:
   push:
     tags: ["v*"]
-  # 手动触发用于演练：不带标签时 verify 仍会比对四处版本，assemble 不会创建 Release。
+  # 手动触发用于演练：dry_run 为真时 assemble 只上传构建产物，不创建 Release。
   workflow_dispatch:
     inputs:
       dry_run:
@@ -27,10 +28,12 @@ env:
   NODE_VERSION: "22"
   GO_VERSION: "1.24"
   ARMADRA_RELEASE_CHANNEL: stable
+  CARGO_TERM_COLOR: always
 
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     outputs:
       version: ${{ steps.version.outputs.version }}
       publish: ${{ steps.version.outputs.publish }}
@@ -58,7 +61,8 @@ jobs:
           node tools/release/version.mjs check
           version="$(node tools/release/version.mjs print)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          if [ "${{ github.ref_type }}" = "tag" ]; then
+          # 只有推标签才会创建 Release；手动触发默认是演练，取消勾选才发布。
+          if [ "${{ github.ref_type }}" = "tag" ] && [ "${{ inputs.dry_run }}" != "true" ]; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
           else
             echo "publish=false" >> "$GITHUB_OUTPUT"
@@ -70,12 +74,14 @@ jobs:
       - run: pnpm test
       - run: pnpm protocol:check
       - run: pnpm protocol:test
-      - run: cargo test --workspace
+      # 桌面壳留给 build 作业：它要 WebKitGTK 与真实 sidecar，这里只验业务代码。
+      - run: cargo test --workspace --exclude armadra-desktop
       - run: go -C apps/host test ./...
 
   web:
     needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -103,6 +109,7 @@ jobs:
 
   build:
     needs: verify
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -116,6 +123,8 @@ jobs:
           - runner: ubuntu-24.04
             target: linux-x86_64
             triple: x86_64-unknown-linux-gnu
+          # arm64 的 Linux/Windows runner 只对公开仓库免费；仓库转私有时这两行
+          # 要换成自托管 runner 或删掉，对应目标也就不再发布。
           - runner: ubuntu-24.04-arm
             target: linux-aarch64
             triple: aarch64-unknown-linux-gnu
@@ -141,20 +150,24 @@ jobs:
           cache-dependency-path: apps/host/go.sum
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      # Tauri 2 在 Linux 上要 WebKitGTK 与 libsoup3；AppImage 还要 file 与
+      # patchelf，托盘图标要 ayatana-appindicator。缺任何一个都是打到一半才报错。
       - name: 安装 Tauri 的 Linux 系统依赖
         if: startsWith(matrix.target, 'linux-')
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
+            build-essential curl wget file \
             libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
-            libgtk-3-dev librsvg2-dev patchelf
+            libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
+            libssl-dev libxdo-dev patchelf
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @armadra/shared build
-      # sidecar 构建同时产出组件二进制与 Tauri 需要的 externalBin。
-      - run: pnpm --filter @armadra/desktop prepare:sidecar
-      # 更新地址只在 CI 注入：仓库里的 tauri.conf.json 保持 endpoints 为空，
-      # 否则一个本地构建也会去联系发布来源。
-      - name: 打桌面包
+      # 只有真的存在的 secret 才进环境：tauri 看到空字符串的 APPLE_CERTIFICATE
+      # 会当成「有证书」去导入，然后在钥匙串那一步失败；没有密钥时要的是跳过。
+      - name: 解出本次可用的签名与公证变量
         shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -167,11 +180,29 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
+          # printenv rather than ${!name}: the macOS runners still run bash 3.2.
+          for name in TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD \
+            APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+            APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            value="$(printenv "$name" || true)"
+            [ -n "$value" ] || continue
+            {
+              printf '%s<<ARMADRA_SECRET_EOF\n' "$name"
+              printf '%s\n' "$value"
+              printf 'ARMADRA_SECRET_EOF\n'
+            } >> "$GITHUB_ENV"
+          done
           if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
             echo "::warning::没有 TAURI_SIGNING_PRIVATE_KEY，桌面更新包不会被签名，assemble 会把它排除在 latest.json 之外"
           fi
-          pnpm --filter @armadra/desktop exec tauri build \
-            --config '{"plugins":{"updater":{"endpoints":["https://github.com/yovinchen/Armadra/releases/latest/download/latest.json"]}}}'
+      # scripts/build.mjs 先做签名判断再编译（signing.mjs），并把更新地址与
+      # 这个判断合成同一个 --config；仓库里的 endpoints 始终为空，免得本地构建
+      # 也去联系发布来源。
+      - name: 打桌面包
+        shell: bash
+        env:
+          ARMADRA_UPDATER_ENDPOINTS: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
+        run: pnpm --filter @armadra/desktop build
       - name: 打组件包
         shell: bash
         run: |
@@ -207,6 +238,7 @@ jobs:
   notarize:
     needs: [verify, build]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       unnotarized: ${{ steps.report.outputs.unnotarized }}
     steps:
@@ -228,6 +260,7 @@ jobs:
   assemble:
     needs: [verify, build, web, notarize]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
