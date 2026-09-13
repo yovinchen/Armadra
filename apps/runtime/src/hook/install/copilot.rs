@@ -26,6 +26,20 @@
 //! other event is fail-open, which is the contract this channel relies on. The
 //! event list lives in [`super::COPILOT_HOOK_EVENTS`] and its absence there is
 //! asserted by a test.
+//!
+//! ## Why not the session-scoped route (agent-integration §3)
+//!
+//! Copilot does have one: `copilot --plugin-dir <directory>` loads a plugin
+//! "for this session only", and `copilot plugin --help` says plugins carry
+//! "skills, agents, hooks, MCP servers, and LSP servers" — which would be the
+//! whole install unit in one flag. Probed against 1.0.8x on 2026-09-13:
+//! a directory with a `plugin.json` carrying `hooks` **is** accepted
+//! (`copilot --plugin-dir … plugin list` lists it under "External Plugins"),
+//! but a `skills/<name>/SKILL.md` inside that same directory appeared in
+//! neither `copilot skill list` nor `copilot plugins list`, and neither did a
+//! `SKILL.md` at the plugin root. A session flag that can carry only half of a
+//! unit that has no half is worse than the file install, so this stays a file
+//! install until a plugin's skills are demonstrably loaded.
 
 use std::path::{Path, PathBuf};
 
@@ -78,6 +92,7 @@ pub fn install(config_home: &Path, client_bin: &Path) -> AppResult<InstallReport
         client_bin: Some(client_bin.to_string_lossy().into_owned()),
         client_revision: HOOK_CLIENT_REVISION,
         installed: true,
+        launch_args: Vec::new(),
         warning: None,
     })
 }
@@ -104,6 +119,7 @@ pub fn uninstall(config_home: &Path) -> AppResult<InstallReport> {
         client_bin: None,
         client_revision: HOOK_CLIENT_REVISION,
         installed: false,
+        launch_args: Vec::new(),
         warning: None,
     })
 }

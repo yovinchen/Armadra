@@ -1,9 +1,15 @@
 //! Gemini CLI — merges into `<config home>/settings.json` under `hooks`.
 //!
-//! Structurally identical to Claude's file, with two differences worth writing
-//! down: Gemini's `timeout` is **milliseconds** (default 60_000), and an
-//! optional `name` shows up in `gemini hooks` listings and in the CLI's logs,
-//! which is the only place a user can see who installed what.
+//! Structurally the shape Claude's file used to have, with two differences
+//! worth writing down: Gemini's `timeout` is **milliseconds** (default 60_000),
+//! and an optional `name` shows up in `gemini hooks` listings and in the CLI's
+//! logs, which is the only place a user can see who installed what.
+//!
+//! This one is still a `file` install (agent-integration §3): `gemini --help`
+//! on 0.58.0 offers `gemini hooks migrate` and nothing that points the CLI at a
+//! settings file for one run, so there is no launch argument to move to. The
+//! skill goes to `<GEMINI_CLI_HOME>/.gemini/skills/<name>/SKILL.md`, verified
+//! by putting one there and reading it back out of `gemini skills list --all`.
 
 use std::path::Path;
 
@@ -47,6 +53,7 @@ pub fn install(config_home: &Path, client_bin: &Path) -> AppResult<InstallReport
         client_bin: Some(client_bin.to_string_lossy().into_owned()),
         client_revision: HOOK_CLIENT_REVISION,
         installed: true,
+        launch_args: Vec::new(),
         warning: None,
     })
 }
@@ -70,6 +77,7 @@ pub fn uninstall(config_home: &Path) -> AppResult<InstallReport> {
         client_bin: None,
         client_revision: HOOK_CLIENT_REVISION,
         installed: false,
+        launch_args: Vec::new(),
         warning: None,
     })
 }

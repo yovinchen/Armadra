@@ -20,9 +20,11 @@ pub mod codex;
 pub mod copilot;
 pub mod extension_template;
 pub mod gemini;
+pub mod integration;
 pub mod omp;
 pub mod opencode;
 pub mod pi;
+pub mod repair;
 
 use std::{
     env, fs, io,
@@ -36,10 +38,70 @@ use crate::error::{AppError, AppResult};
 
 /// Mirrors `HOOK_CLIENT_REVISION` in packages/shared/src/hook-events.ts.
 /// Bumping it marks every installed configuration as stale.
+///
+/// This is the **event contract** between the client and the runtime, not the
+/// integration's version: the design keeps it fixed while the way the adapter
+/// is injected changes (docs/design/agent-integration.md §2).
 pub const HOOK_CLIENT_REVISION: i64 = 4;
+
+/// One number for "is this CLI integrated, and is it current" — the hook
+/// revision and the skill revision folded together
+/// (docs/design/agent-integration.md §2).
+///
+/// Hook and skill are one install unit, so they have one staleness question.
+/// The composition is positional rather than a sum so that a report can be read
+/// back: `<hook>×100 + <skill>` names both halves, and either one moving moves
+/// the whole. It is not a wire constant — nobody parses it apart — but a number
+/// a person reading a bug report can decompose is worth the arithmetic.
+pub const fn integration_revision() -> i64 {
+    HOOK_CLIENT_REVISION * 100 + crate::collab::skills::SKILLS_REVISION as i64
+}
+
+/// The revision a fresh install writes. See [`integration_revision`].
+pub const INTEGRATION_REVISION: i64 = integration_revision();
 
 /// The substring that identifies a command as ours.
 pub const CLIENT_NAME: &str = "armadra-hook";
+
+/// How a provider's hook adapter reaches its CLI
+/// (docs/design/agent-integration.md §3).
+///
+/// The distinction the settings page shows is "does integrating me edit a file
+/// you also edit": `Launch` and `Extension` never touch the CLI's own
+/// configuration, `File` does — idempotently, marked, and repairable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InjectionMode {
+    /// Passed on the launch line; nothing of the CLI's is written.
+    Launch,
+    /// Merged into a configuration file the CLI owns.
+    File,
+    /// A generated module the CLI auto-discovers, in a file only we write.
+    Extension,
+}
+
+impl InjectionMode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Launch => "launch",
+            Self::File => "file",
+            Self::Extension => "extension",
+        }
+    }
+}
+
+/// Which mode a provider uses. An unknown id has no installer at all, so the
+/// caller's own "no installer" error is the one worth showing; `File` is the
+/// conservative answer for the read paths that only want a label.
+pub fn injection_mode(agent_id: &str) -> InjectionMode {
+    match agent_id {
+        // `--settings <file>` — verified against Claude Code 2.1.x, see claude.rs.
+        "claude" => InjectionMode::Launch,
+        // Generated modules the CLI discovers in its own extension directory.
+        "opencode" | "pi" | "omp" => InjectionMode::Extension,
+        // Codex `hooks.json`, Gemini `settings.json`, Copilot `hooks/armadra.json`.
+        _ => InjectionMode::File,
+    }
+}
 
 /// Event lists, mirroring packages/shared/src/hook-events.ts exactly.
 pub const CLAUDE_HOOK_EVENTS: &[&str] = &[
@@ -134,7 +196,7 @@ pub const COPILOT_HOOK_EVENTS: &[&str] = &[
     "sessionEnd",
 ];
 
-/// What `POST /api/agents/{id}/hooks/install|uninstall` answers with.
+/// What one half of an integration install did — the hook half.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstallReport {
@@ -146,9 +208,32 @@ pub struct InstallReport {
     pub client_bin: Option<String>,
     pub client_revision: i64,
     pub installed: bool,
+    /// Argv this provider's launch line must carry for the adapter to load —
+    /// empty unless [`injection_mode`] is [`InjectionMode::Launch`].
+    ///
+    /// It is reported rather than stored because the path is this machine's and
+    /// the flag is this CLI version's: a plan frozen yesterday must not be able
+    /// to resurrect either.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub launch_args: Vec<String>,
     /// Something worked but deserves a sentence in the settings page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
+}
+
+impl InstallReport {
+    /// The "nothing is installed" answer, used by every uninstaller.
+    pub fn removed(agent_id: &str, config_path: String) -> Self {
+        Self {
+            agent_id: agent_id.to_owned(),
+            config_path,
+            client_bin: None,
+            client_revision: HOOK_CLIENT_REVISION,
+            installed: false,
+            launch_args: Vec::new(),
+            warning: None,
+        }
+    }
 }
 
 /// Where the hook client lives. In order: an explicit override, the sidecar

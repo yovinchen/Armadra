@@ -85,6 +85,13 @@ fn subdir_or_refuse(agent_id: &str) -> AppResult<&'static str> {
         .ok_or_else(|| AppError::BadRequest(format!("{agent_id} has no skill directory")))
 }
 
+/// The file this provider's skill lives in, installed or not. The settings
+/// page shows it either way: "where it would go" is the answer to "why is this
+/// not installed".
+pub fn skill_file(agent_id: &str, config_home: &Path) -> AppResult<PathBuf> {
+    Ok(skill_path(config_home, subdir_or_refuse(agent_id)?))
+}
+
 /// Installs the skill for one provider, resolving that provider's own config
 /// home. Returns the files written — empty when the file was already current.
 pub fn install_for(agent_id: &str) -> AppResult<Vec<PathBuf>> {

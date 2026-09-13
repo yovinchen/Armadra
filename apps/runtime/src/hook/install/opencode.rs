@@ -24,6 +24,12 @@
 //! themselves the variable is absent, the factory returns no handlers, and
 //! opencode behaves exactly as if the plugin were not there.
 //!
+//! Not session-scoped (agent-integration §3): opencode's own entry point could
+//! not be started on the development machine on 2026-09-13 — `opencode --help`
+//! exits with "opencode-ai's postinstall script was not run" — so whether it
+//! has a session-level configuration that could carry this module was not
+//! verifiable. A flag nobody has run is not a claim; the plugin file stays.
+//!
 //! Sources (checked 2026-09-06): plugins run on bun, load from
 //! `~/.config/opencode/plugins/` and `.opencode/plugins/`, and export a factory
 //! returning a hooks object whose `event` hook is `async ({ event }) => …` with
@@ -60,6 +66,7 @@ pub fn install(config_home: &Path, client_bin: &Path) -> AppResult<InstallReport
         client_bin: Some(client_bin.to_string_lossy().into_owned()),
         client_revision: HOOK_CLIENT_REVISION,
         installed: true,
+        launch_args: Vec::new(),
         warning: None,
     })
 }
@@ -79,6 +86,7 @@ pub fn uninstall(config_home: &Path) -> AppResult<InstallReport> {
         client_bin: None,
         client_revision: HOOK_CLIENT_REVISION,
         installed: false,
+        launch_args: Vec::new(),
         warning: None,
     })
 }

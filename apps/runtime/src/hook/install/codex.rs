@@ -23,6 +23,25 @@
 //! The state key is `<absolute hooks.json path>:<snake_case event>:<group
 //! index>:<handler index>`, which is why our group is always appended last:
 //! moving a foreign group would invalidate the user's own trust entries.
+//!
+//! ## Known broken on Codex 0.153.4 (2026-09-13)
+//!
+//! The hash above no longer matches. After a clean install the TUI opens
+//! "Hooks need review — 8 hooks are new or changed" and runs none of them until
+//! a person presses `t`. The keys are right (they appear in that panel); the
+//! identity Codex hashes has changed. One lead: in 0.153.4 the bundled
+//! `chrome@openai-bundled` and `browser@openai-bundled` `stop` entries carry
+//! the *same* `trusted_hash`, so the identity can no longer include the command
+//! or the source path.
+//!
+//! Two things follow for anyone picking this up. There is no session-scoped
+//! alternative to fall back on — `codex -c key=value` overrides `config.toml`,
+//! and hooks live in `hooks.json` — and **`codex exec` runs no hooks at all**
+//! (a trusted `session_start` entry does not fire under it on 0.153.4), so the
+//! smoke test drives the interactive TUI the way a canvas node does.
+//!
+//! Nothing here writes a hash it cannot justify: an entry whose hash is stale
+//! is one Codex refuses until a person approves it, which is the safe failure.
 
 use std::path::{Path, PathBuf};
 
@@ -126,6 +145,7 @@ pub fn install(config_home: &Path, client_bin: &Path) -> AppResult<InstallReport
         client_bin: Some(client_bin.to_string_lossy().into_owned()),
         client_revision: HOOK_CLIENT_REVISION,
         installed: true,
+        launch_args: Vec::new(),
         warning,
     })
 }
@@ -158,6 +178,7 @@ pub fn uninstall(config_home: &Path) -> AppResult<InstallReport> {
         client_bin: None,
         client_revision: HOOK_CLIENT_REVISION,
         installed: false,
+        launch_args: Vec::new(),
         warning: None,
     })
 }

@@ -1,15 +1,39 @@
-//! Claude Code — merges into `<config home>/settings.json` under `hooks`.
+//! Claude Code — injected on the launch line, never written into the user's
+//! `settings.json` (docs/design/agent-integration.md §3).
 //!
-//! `settings.json` is the user's own file: it holds their model, their
-//! permissions and their MCP servers. Only our hook entries and an unclaimed
-//! or previously managed `statusLine` are changed. A foreign status line is
-//! preserved and reported as not connected to context telemetry.
+//! ## How, and how it was verified
+//!
+//! `claude --settings <file-or-json>` is documented by `claude --help` as
+//! "Path to a settings JSON file or a JSON string to load additional settings
+//! from". *Additional* is the load-bearing word, and it was checked rather than
+//! assumed: with a `SessionStart` hook in `$CLAUDE_CONFIG_DIR/settings.json`
+//! and a different one in the file passed to `--settings`, Claude Code 2.1.260
+//! ran **both**. So pointing the flag at a file of ours adds our hooks to
+//! whatever the user configured instead of replacing it, and a session started
+//! outside Armadra — where the flag is absent — behaves exactly as if we had
+//! never been installed.
+//!
+//! The file therefore lives in our own data directory
+//! ([`crate::paths::integration_dir`]), not in `~/.claude`: integrating claude
+//! writes nothing the user also edits, and uninstalling deletes a file only we
+//! ever wrote. What install *does* touch in `~/.claude/settings.json` is the
+//! removal of entries an earlier Armadra (or a predecessor product name) left
+//! there — see [`retire_global_entries`] and `repair.rs`.
+//!
+//! ## The status line
+//!
+//! Context telemetry rides the same file's `statusLine`. Unlike a hook, a
+//! status line is singular: `--settings` would win over the user's own. So it
+//! is written only when `~/.claude/settings.json` has no `statusLine` of its
+//! own (or has one that is recognisably ours), and the report says so
+//! otherwise. A foreign status line is never wrapped or chained: its command
+//! may have side effects and chaining would alter its lifecycle.
 //!
 //! Claude's hook timeouts are **seconds**. The client is a fire-and-forget POST
 //! with its own 1.5s deadline, so a short timeout here only bounds the damage
 //! when the binary is missing or the disk is stuck.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value, json};
 
@@ -22,16 +46,45 @@ use crate::error::AppResult;
 const AGENT_ID: &str = "claude";
 /// Seconds. See the module note.
 const TIMEOUT_SECONDS: u64 = 5;
+/// The flag the launch line carries. Named once so the settings page, the
+/// smoke test and this writer cannot drift apart.
+pub const SETTINGS_FLAG: &str = "--settings";
 
-pub fn settings_path(config_home: &Path) -> std::path::PathBuf {
+/// The user's own file. We only ever *remove* from it now.
+pub fn settings_path(config_home: &Path) -> PathBuf {
     config_home.join("settings.json")
 }
 
+/// The file `--settings` points at: ours, in our data directory.
+pub fn managed_settings_path(integration_home: &Path) -> PathBuf {
+    integration_home.join("settings.json")
+}
+
 pub fn install(config_home: &Path, client_bin: &Path) -> AppResult<InstallReport> {
-    let path = settings_path(config_home);
-    let mut settings = read_json_object(&path)?;
-    let mut events = take_events(&mut settings);
-    strip_managed_handlers(&mut events);
+    install_into(
+        config_home,
+        &crate::paths::integration_dir(AGENT_ID),
+        client_bin,
+    )
+}
+
+pub fn uninstall(config_home: &Path) -> AppResult<InstallReport> {
+    uninstall_from(config_home, &crate::paths::integration_dir(AGENT_ID))
+}
+
+/// The install, with both homes passed in so it can be exercised without
+/// touching the process-global data directory.
+pub fn install_into(
+    config_home: &Path,
+    integration_home: &Path,
+    client_bin: &Path,
+) -> AppResult<InstallReport> {
+    let path = managed_settings_path(integration_home);
+    // Anything an earlier Armadra wrote into the user's own file is no longer
+    // read by us and would fire a second time on every event.
+    let retired = retire_global_entries(config_home)?;
+
+    let mut events = Map::new();
     append_managed_group(
         &mut events,
         CLAUDE_HOOK_EVENTS,
@@ -41,36 +94,89 @@ pub fn install(config_home: &Path, client_bin: &Path) -> AppResult<InstallReport
             "timeout": TIMEOUT_SECONDS,
         }),
     );
+    let mut settings = Map::new();
     settings.insert("hooks".to_owned(), Value::Object(events));
-    // A foreign status line is user-owned. Never wrap or replace it: its
-    // command may have side effects and chaining would alter its lifecycle.
-    let context_command = hook_command(client_bin, "context-usage");
-    let owns_status_line = settings
-        .get("statusLine")
-        .and_then(|value| value.get("command"))
-        .and_then(Value::as_str)
-        .is_some_and(managed_context_command);
-    let context_installed = !settings.contains_key("statusLine") || owns_status_line;
+
+    // A status line is singular and `--settings` outranks the user's file, so
+    // ours is written only when theirs is absent.
+    let context_installed = !has_foreign_status_line(config_home);
     if context_installed {
         settings.insert(
             "statusLine".into(),
-            json!({ "type": "command", "command": context_command }),
+            json!({ "type": "command", "command": hook_command(client_bin, "context-usage") }),
         );
     }
     write_json_object(&path, &settings)?;
+
+    let warning = match (context_installed, retired) {
+        (false, _) => Some("context_statusline_preserved".to_owned()),
+        (true, true) => Some("legacy_global_hooks_removed".to_owned()),
+        (true, false) => None,
+    };
     Ok(InstallReport {
         agent_id: AGENT_ID.to_owned(),
         config_path: path.to_string_lossy().into_owned(),
         client_bin: Some(client_bin.to_string_lossy().into_owned()),
         client_revision: HOOK_CLIENT_REVISION,
         installed: true,
-        warning: (!context_installed).then(|| "context_statusline_preserved".into()),
+        launch_args: launch_args(&path),
+        warning,
     })
 }
 
-pub fn uninstall(config_home: &Path) -> AppResult<InstallReport> {
+pub fn uninstall_from(config_home: &Path, integration_home: &Path) -> AppResult<InstallReport> {
+    let path = managed_settings_path(integration_home);
+    if path.is_file() {
+        std::fs::remove_file(&path)?;
+        // Only our own directory, and only when nothing else landed in it.
+        let _ = std::fs::remove_dir(integration_home);
+    }
+    retire_global_entries(config_home)?;
+    Ok(InstallReport::removed(
+        AGENT_ID,
+        path.to_string_lossy().into_owned(),
+    ))
+}
+
+/// The argv a claude session must carry. Empty when the file is not there:
+/// pointing the CLI at a settings file that does not exist is an error it
+/// prints on every start, which is worse than starting with no hooks.
+pub fn launch_args(settings_file: &Path) -> Vec<String> {
+    if !settings_file.is_file() {
+        return Vec::new();
+    }
+    vec![
+        SETTINGS_FLAG.to_owned(),
+        settings_file.to_string_lossy().into_owned(),
+    ]
+}
+
+/// The launch argv for the installed integration, or empty when there is none.
+pub fn installed_launch_args() -> Vec<String> {
+    launch_args(&managed_settings_path(&crate::paths::integration_dir(
+        AGENT_ID,
+    )))
+}
+
+/// True when `<integration home>/settings.json` is there to be pointed at.
+pub fn is_installed(integration_home: &Path) -> bool {
+    managed_settings_path(integration_home).is_file()
+}
+
+/// Removes our hook entries and our status line from the user's own
+/// `settings.json`, leaving everything else exactly as it was. Answers whether
+/// anything was there.
+///
+/// This runs on install as well as on uninstall: a machine upgrading from the
+/// file-injected era has our entries in two places, and the one in `~/.claude`
+/// would fire for every session the user starts outside Armadra.
+pub fn retire_global_entries(config_home: &Path) -> AppResult<bool> {
     let path = settings_path(config_home);
+    if !path.exists() {
+        return Ok(false);
+    }
     let mut settings = read_json_object(&path)?;
+    let mut changed = false;
     if settings
         .get("statusLine")
         .and_then(|value| value.get("command"))
@@ -78,26 +184,37 @@ pub fn uninstall(config_home: &Path) -> AppResult<InstallReport> {
         .is_some_and(managed_context_command)
     {
         settings.remove("statusLine");
+        changed = true;
     }
     let mut events = take_events(&mut settings);
-    strip_managed_handlers(&mut events);
+    let stripped = strip_managed_handlers(&mut events) > 0;
+    changed |= stripped;
     if events.is_empty() {
         // Leaving `"hooks": {}` behind would be a diff the user did not ask for.
-        settings.remove("hooks");
+        changed |= settings.remove("hooks").is_some() && stripped;
     } else {
         settings.insert("hooks".to_owned(), Value::Object(events));
     }
-    if path.exists() {
+    if changed {
         write_json_object(&path, &settings)?;
     }
-    Ok(InstallReport {
-        agent_id: AGENT_ID.to_owned(),
-        config_path: path.to_string_lossy().into_owned(),
-        client_bin: None,
-        client_revision: HOOK_CLIENT_REVISION,
-        installed: false,
-        warning: None,
-    })
+    Ok(changed)
+}
+
+/// Whether the user's own settings claim the status line. A file we cannot
+/// parse counts as claimed: replacing a status line we could not read would be
+/// taking something over rather than filling a gap.
+fn has_foreign_status_line(config_home: &Path) -> bool {
+    let Ok(settings) = read_json_object(&settings_path(config_home)) else {
+        return true;
+    };
+    let Some(status_line) = settings.get("statusLine") else {
+        return false;
+    };
+    !status_line
+        .get("command")
+        .and_then(Value::as_str)
+        .is_some_and(managed_context_command)
 }
 
 fn managed_context_command(command: &str) -> bool {
@@ -141,59 +258,37 @@ fn take_events(settings: &mut Map<String, Value>) -> Map<String, Value> {
 mod tests {
     use super::*;
     use std::fs;
-    use tempfile::tempdir;
+    use tempfile::{TempDir, tempdir};
 
     fn client() -> &'static Path {
         Path::new("/opt/armadra/armadra-hook")
     }
 
-    #[test]
-    fn context_status_line_is_added_only_when_unclaimed_and_removed_only_when_managed() {
-        let home = tempdir().unwrap();
-        install(home.path(), client()).unwrap();
-        let path = settings_path(home.path());
-        let settings: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-        assert_eq!(
-            settings["statusLine"]["command"],
-            "/opt/armadra/armadra-hook context-usage"
-        );
-        uninstall(home.path()).unwrap();
-        let settings: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-        assert!(settings.get("statusLine").is_none());
+    /// `(the user's config home, our integration home)`.
+    fn homes() -> (TempDir, TempDir) {
+        (tempdir().unwrap(), tempdir().unwrap())
+    }
 
-        let foreign = json!({"type":"command", "command":"/my/statusline", "padding":3});
-        fs::write(
-            &path,
-            serde_json::to_vec(&json!({"statusLine":foreign})).unwrap(),
+    fn managed(integration: &TempDir) -> Value {
+        serde_json::from_str(
+            &fs::read_to_string(managed_settings_path(integration.path())).unwrap(),
         )
-        .unwrap();
-        assert!(install(home.path(), client()).unwrap().warning.is_some());
-        uninstall(home.path()).unwrap();
-        let settings: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-        assert_eq!(settings["statusLine"], foreign);
-        assert!(!managed_context_command(
-            "echo /opt/armadra/armadra-hook context-usage"
-        ));
-        assert!(!managed_context_command(
-            "/tmp/armadra-hook context-usage; echo other"
-        ));
-        assert!(managed_context_command(
-            "\"C:/Program Files/Armadra/armadra-hook.exe\" context-usage"
-        ));
-        assert!(managed_context_command(
-            "\"/Applications/Armadra App/armadra-hook\" context-usage"
-        ));
+        .unwrap()
     }
 
     #[test]
-    fn a_fresh_install_subscribes_every_shared_event() {
-        let home = tempdir().unwrap();
-        let report = install(home.path(), client()).unwrap();
+    fn a_fresh_install_writes_our_file_and_never_the_users() {
+        let (config, integration) = homes();
+        let report = install_into(config.path(), integration.path(), client()).unwrap();
         assert!(report.installed);
         assert_eq!(report.client_revision, HOOK_CLIENT_REVISION);
+        // The one thing this whole change is for.
+        assert!(
+            !settings_path(config.path()).exists(),
+            "install created a file in the user's config home"
+        );
 
-        let settings: Value =
-            serde_json::from_str(&fs::read_to_string(settings_path(home.path())).unwrap()).unwrap();
+        let settings = managed(&integration);
         for event in CLAUDE_HOOK_EVENTS {
             let handler = &settings["hooks"][event][0]["hooks"][0];
             assert_eq!(handler["type"], "command", "{event}");
@@ -207,34 +302,66 @@ mod tests {
             settings["hooks"].as_object().unwrap().len(),
             CLAUDE_HOOK_EVENTS.len()
         );
+        assert_eq!(
+            settings["statusLine"]["command"],
+            "/opt/armadra/armadra-hook context-usage"
+        );
+    }
+
+    #[test]
+    fn the_launch_line_points_at_the_file_and_says_nothing_when_it_is_gone() {
+        let (config, integration) = homes();
+        let report = install_into(config.path(), integration.path(), client()).unwrap();
+        assert_eq!(
+            report.launch_args,
+            vec![
+                "--settings".to_owned(),
+                managed_settings_path(integration.path())
+                    .to_string_lossy()
+                    .into_owned(),
+            ]
+        );
+        assert!(is_installed(integration.path()));
+
+        uninstall_from(config.path(), integration.path()).unwrap();
+        assert!(!is_installed(integration.path()));
+        // A flag pointing at a file that is not there is an error claude prints
+        // on every start, so there is no flag at all.
+        assert!(launch_args(&managed_settings_path(integration.path())).is_empty());
     }
 
     #[test]
     fn installing_twice_produces_an_identical_file() {
-        let home = tempdir().unwrap();
-        install(home.path(), client()).unwrap();
-        let first = fs::read(settings_path(home.path())).unwrap();
-        install(home.path(), client()).unwrap();
-        let second = fs::read(settings_path(home.path())).unwrap();
-        assert_eq!(first, second);
+        let (config, integration) = homes();
+        install_into(config.path(), integration.path(), client()).unwrap();
+        let first = fs::read(managed_settings_path(integration.path())).unwrap();
+        install_into(config.path(), integration.path(), client()).unwrap();
+        assert_eq!(
+            first,
+            fs::read(managed_settings_path(integration.path())).unwrap()
+        );
     }
 
+    /// The upgrade path: a machine integrated by the file-writing era has our
+    /// entries in `~/.claude/settings.json`, where they would keep firing for
+    /// every session the user starts outside Armadra.
     #[test]
-    fn foreign_settings_and_foreign_hooks_survive_the_round_trip() {
-        let home = tempdir().unwrap();
-        let path = settings_path(home.path());
-        fs::create_dir_all(home.path()).unwrap();
+    fn installing_retires_entries_an_earlier_armadra_left_in_the_users_file() {
+        let (config, integration) = homes();
+        let path = settings_path(config.path());
+        fs::create_dir_all(config.path()).unwrap();
         fs::write(
             &path,
             serde_json::to_string_pretty(&json!({
                 "model": "opus",
-                "permissions": { "allow": ["Bash(ls:*)"] },
+                "statusLine": { "type": "command", "command": "/old/armadra-hook context-usage" },
                 "hooks": {
                     "Stop": [
-                        { "hooks": [{ "type": "command", "command": "/usr/local/bin/notify.sh" }] }
+                        { "hooks": [{ "type": "command", "command": "/usr/local/bin/notify.sh" }] },
+                        { "hooks": [{ "type": "command", "command": "/old/armadra-hook claude" }] }
                     ],
-                    "PreCompact": [
-                        { "hooks": [{ "type": "command", "command": "/usr/local/bin/save.sh" }] }
+                    "SessionEnd": [
+                        { "hooks": [{ "type": "command", "command": "/old/armadra-hook claude" }] }
                     ]
                 }
             }))
@@ -242,80 +369,98 @@ mod tests {
         )
         .unwrap();
 
-        install(home.path(), client()).unwrap();
-        let settings: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-        assert_eq!(settings["model"], "opus");
-        assert_eq!(settings["permissions"]["allow"][0], "Bash(ls:*)");
-        // Their Stop hook stays first; ours is appended.
+        let report = install_into(config.path(), integration.path(), client()).unwrap();
         assert_eq!(
-            settings["hooks"]["Stop"][0]["hooks"][0]["command"],
-            "/usr/local/bin/notify.sh"
-        );
-        assert_eq!(
-            settings["hooks"]["Stop"][1]["hooks"][0]["command"],
-            "/opt/armadra/armadra-hook claude"
-        );
-        // An event we never subscribe to is left exactly as it was.
-        assert_eq!(
-            settings["hooks"]["PreCompact"][0]["hooks"][0]["command"],
-            "/usr/local/bin/save.sh"
+            report.warning.as_deref(),
+            Some("legacy_global_hooks_removed")
         );
 
-        uninstall(home.path()).unwrap();
-        let settings: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let rendered = fs::read_to_string(&path).unwrap();
+        assert!(!rendered.contains("armadra-hook"), "{rendered}");
+        let settings: Value = serde_json::from_str(&rendered).unwrap();
         assert_eq!(settings["model"], "opus");
+        // Theirs survives; the event that was only ours is gone entirely.
         assert_eq!(settings["hooks"]["Stop"].as_array().unwrap().len(), 1);
         assert_eq!(
             settings["hooks"]["Stop"][0]["hooks"][0]["command"],
             "/usr/local/bin/notify.sh"
         );
-        assert_eq!(
-            settings["hooks"]["PreCompact"][0]["hooks"][0]["command"],
-            "/usr/local/bin/save.sh"
-        );
-        // No trace of us is left in the events we did own outright.
-        let rendered = fs::read_to_string(&path).unwrap();
-        assert!(!rendered.contains("armadra-hook"));
+        assert!(settings["hooks"].get("SessionEnd").is_none());
+        assert!(settings.get("statusLine").is_none());
     }
 
     #[test]
-    fn uninstalling_a_clean_install_removes_the_hooks_key_entirely() {
-        let home = tempdir().unwrap();
-        fs::create_dir_all(home.path()).unwrap();
+    fn a_users_file_with_nothing_of_ours_in_it_is_left_byte_for_byte() {
+        let (config, integration) = homes();
+        let path = settings_path(config.path());
+        fs::create_dir_all(config.path()).unwrap();
+        let original = "{\n  \"model\":\"opus\",\n  \"hooks\":{\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"theirs.sh\"}]}]}\n}\n";
+        fs::write(&path, original).unwrap();
+
+        install_into(config.path(), integration.path(), client()).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), original);
+        uninstall_from(config.path(), integration.path()).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), original);
+    }
+
+    #[test]
+    fn a_foreign_status_line_keeps_ours_out_of_the_file_entirely() {
+        let (config, integration) = homes();
+        let path = settings_path(config.path());
+        fs::create_dir_all(config.path()).unwrap();
+        let foreign = json!({ "type": "command", "command": "/my/statusline", "padding": 3 });
         fs::write(
-            settings_path(home.path()),
-            json!({ "model": "opus" }).to_string(),
+            &path,
+            serde_json::to_vec(&json!({ "statusLine": foreign })).unwrap(),
         )
         .unwrap();
-        install(home.path(), client()).unwrap();
-        uninstall(home.path()).unwrap();
-        let settings: Value =
-            serde_json::from_str(&fs::read_to_string(settings_path(home.path())).unwrap()).unwrap();
-        assert!(settings.get("hooks").is_none());
-        assert_eq!(settings["model"], "opus");
+
+        let report = install_into(config.path(), integration.path(), client()).unwrap();
+        assert_eq!(
+            report.warning.as_deref(),
+            Some("context_statusline_preserved")
+        );
+        // Not written at all: `--settings` outranks the user's file, so writing
+        // one would silently replace theirs for every Armadra session.
+        assert!(managed(&integration).get("statusLine").is_none());
+        let settings: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(settings["statusLine"], foreign);
+    }
+
+    /// An unreadable `settings.json` must not read as "the status line is free".
+    #[test]
+    fn an_unparseable_user_file_counts_as_claiming_the_status_line() {
+        let (config, integration) = homes();
+        fs::create_dir_all(config.path()).unwrap();
+        fs::write(settings_path(config.path()), "{ not json").unwrap();
+        assert!(has_foreign_status_line(config.path()));
+        // The install itself refuses, because retiring old entries would mean
+        // rewriting a file we could not read.
+        assert!(install_into(config.path(), integration.path(), client()).is_err());
     }
 
     #[test]
     fn uninstalling_when_nothing_was_installed_is_not_an_error() {
-        let home = tempdir().unwrap();
-        let report = uninstall(home.path()).unwrap();
+        let (config, integration) = homes();
+        let report = uninstall_from(config.path(), integration.path()).unwrap();
         assert!(!report.installed);
-        assert!(!settings_path(home.path()).exists());
+        assert!(!settings_path(config.path()).exists());
+        assert!(uninstall_from(config.path(), integration.path()).is_ok());
     }
 
     #[test]
-    fn a_hooks_key_of_the_wrong_type_is_replaced_rather_than_merged() {
-        let home = tempdir().unwrap();
-        fs::create_dir_all(home.path()).unwrap();
-        fs::write(
-            settings_path(home.path()),
-            json!({ "hooks": "nonsense", "model": "opus" }).to_string(),
-        )
-        .unwrap();
-        install(home.path(), client()).unwrap();
-        let settings: Value =
-            serde_json::from_str(&fs::read_to_string(settings_path(home.path())).unwrap()).unwrap();
-        assert!(settings["hooks"].is_object());
-        assert_eq!(settings["model"], "opus");
+    fn the_status_line_command_is_recognised_only_when_it_is_plainly_ours() {
+        assert!(!managed_context_command(
+            "echo /opt/armadra/armadra-hook context-usage"
+        ));
+        assert!(!managed_context_command(
+            "/tmp/armadra-hook context-usage; echo other"
+        ));
+        assert!(managed_context_command(
+            "\"C:/Program Files/Armadra/armadra-hook.exe\" context-usage"
+        ));
+        assert!(managed_context_command(
+            "\"/Applications/Armadra App/armadra-hook\" context-usage"
+        ));
     }
 }

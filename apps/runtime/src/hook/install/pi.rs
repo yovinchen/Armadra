@@ -8,6 +8,15 @@
 //! The module is gated on `ARMADRA_NODE_ID`: in a terminal the user opened
 //! themselves the variable is absent, the factory registers no handler at all,
 //! and Pi behaves exactly as if the file were not there.
+//!
+//! Pi does have a session-scoped route — `pi --extension <path>` and
+//! `pi --skill <path>`, both on `pi --help` 0.84.4 — and it is deliberately not
+//! used. What agent-integration §3 is trying to keep out of is the user's
+//! **global configuration**, and this file is not in it: it is a file only we
+//! write, in a directory Pi scans, gated so that it does nothing outside a
+//! canvas node. Moving it to a flag would buy nothing and cost the ability to
+//! see what is installed. The skills root is `<agent dir>/skills`, read off
+//! Pi's own `core/skills.js` (`join(resolvedAgentDir, "skills")`).
 
 use std::{fs, path::Path};
 
@@ -56,6 +65,7 @@ pub fn install_as(
         client_bin: Some(client_bin.to_string_lossy().into_owned()),
         client_revision: HOOK_CLIENT_REVISION,
         installed: true,
+        launch_args: Vec::new(),
         warning: None,
     })
 }
@@ -75,6 +85,7 @@ pub fn uninstall_as(agent_id: &str, config_home: &Path) -> AppResult<InstallRepo
         client_bin: None,
         client_revision: HOOK_CLIENT_REVISION,
         installed: false,
+        launch_args: Vec::new(),
         warning: None,
     })
 }

@@ -63,6 +63,16 @@ pub fn pending_dir() -> PathBuf {
     data_dir().join("pending")
 }
 
+/// Where the launch-injected adapters live (`<data>/integration/<agent>/`).
+///
+/// A CLI that takes its hook configuration as a startup argument never has its
+/// own configuration written to: the file it is pointed at is ours, in our own
+/// data directory, and removing the integration removes the file. See
+/// `hook/install/claude.rs` for the one provider this applies to today.
+pub fn integration_dir(agent_id: &str) -> PathBuf {
+    data_dir().join("integration").join(agent_id)
+}
+
 /// Runtime preferences (plan §15.1: `terminal.backend`).
 pub fn settings_file() -> PathBuf {
     data_dir().join("settings.json")
