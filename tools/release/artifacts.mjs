@@ -119,24 +119,52 @@ export function assetTarget(name) {
 }
 
 /**
- * The desktop bundles a target produces. Only the first of each platform takes
- * part in automatic updates; the rest exist so a first install is possible.
- * Names come from Tauri's bundler, so this describes rather than dictates them.
+ * The desktop bundles a target produces. Exactly one per platform takes part
+ * in automatic updates; the rest exist so a first install is possible.
+ *
+ * `kind` names the bundler output each one comes from, because the names below
+ * are *not* the bundler's own. Tauri writes `Armadra_0.1.0_x64_en-US.msi` and
+ * `armadra_0.1.0_amd64.deb`, and neither declares a target the Host can read
+ * (`assetTarget` finds nothing in `x64` or `amd64`). `stage-desktop.mjs` looks
+ * each bundle up by `kind` and renames it to the name here, so the rename is
+ * stated once rather than repeated as a `find` in every release job.
+ *
+ * `portable` has no bundler output at all: it is the plain `release/` exe plus
+ * its sidecars, zipped. Windows users who cannot run an installer are the
+ * reason it exists; it is not an updater target because there is no installed
+ * location to replace.
  */
 export function desktopAssets(version, target) {
   if (target.startsWith("darwin-"))
     return [
-      { name: `Armadra_${version}_${target}.app.tar.gz`, updater: true },
-      { name: `Armadra_${version}_${target}.dmg`, updater: false },
+      {
+        name: `Armadra_${version}_${target}.app.tar.gz`,
+        updater: true,
+        kind: "app.tar.gz",
+      },
+      { name: `Armadra_${version}_${target}.dmg`, updater: false, kind: "dmg" },
     ];
   if (target.startsWith("windows-"))
     return [
-      { name: `Armadra_${version}_${target}-setup.exe`, updater: true },
-      { name: `Armadra_${version}_${target}.msi`, updater: false },
+      {
+        name: `Armadra_${version}_${target}-setup.exe`,
+        updater: true,
+        kind: "nsis",
+      },
+      { name: `Armadra_${version}_${target}.msi`, updater: false, kind: "msi" },
+      {
+        name: `Armadra_${version}_${target}-portable.zip`,
+        updater: false,
+        kind: "portable",
+      },
     ];
   return [
-    { name: `Armadra_${version}_${target}.AppImage`, updater: true },
-    { name: `Armadra_${version}_${target}.deb`, updater: false },
-    { name: `Armadra_${version}_${target}.rpm`, updater: false },
+    {
+      name: `Armadra_${version}_${target}.AppImage`,
+      updater: true,
+      kind: "appimage",
+    },
+    { name: `Armadra_${version}_${target}.deb`, updater: false, kind: "deb" },
+    { name: `Armadra_${version}_${target}.rpm`, updater: false, kind: "rpm" },
   ];
 }

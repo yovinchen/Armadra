@@ -128,6 +128,29 @@ test("exactly one desktop bundle per target takes part in updates", () => {
   );
 });
 
+// A portable zip is unpacked wherever its owner likes, so there is no
+// installed location for the updater to replace. Listing it in latest.json
+// would promise an update nothing can apply.
+test("Windows publishes a portable zip and never offers it as an update", () => {
+  for (const target of ["windows-x86_64", "windows-aarch64"]) {
+    const portable = desktopAssets("0.2.0", target).find(
+      (asset) => asset.kind === "portable",
+    );
+    assert.ok(portable, `${target} publishes no portable bundle`);
+    assert.equal(portable.updater, false);
+    assert.equal(portable.name, `Armadra_0.2.0_${target}-portable.zip`);
+    assert.equal(assetTarget(portable.name), target);
+    assert.equal(assetComponent(portable.name), "desktop");
+  }
+  for (const target of TARGETS.filter((name) => !name.startsWith("windows-"))) {
+    assert.equal(
+      desktopAssets("0.2.0", target).some((asset) => asset.kind === "portable"),
+      false,
+      target,
+    );
+  }
+});
+
 test("a name that follows no convention declares nothing", () => {
   for (const name of [
     "notes.txt",
