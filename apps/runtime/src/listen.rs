@@ -49,11 +49,15 @@ impl ListenSpec {
             return parse_tcp(rest);
         }
         if let Some(rest) = spec.strip_prefix("unix:") {
-            let path = PathBuf::from(rest);
-            if rest.is_empty() || !path.is_absolute() {
+            // A leading `/`, not `Path::is_absolute`: the spec describes a Unix
+            // socket path, and asking the *host* platform what "absolute" means
+            // would make the same argument parse on Linux and be rejected on
+            // Windows, where binding it is what has to fail, with a message
+            // that says which transport is missing.
+            if !rest.starts_with('/') {
                 return Err(format!("--listen unix:PATH needs an absolute path: {rest}"));
             }
-            return Ok(Self::Unix(path));
+            return Ok(Self::Unix(PathBuf::from(rest)));
         }
         if let Some(rest) = spec.strip_prefix("pipe:") {
             return parse_pipe(rest);
