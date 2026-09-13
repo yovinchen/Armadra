@@ -29,6 +29,12 @@ env:
   GO_VERSION: "1.24"
   ARMADRA_RELEASE_CHANNEL: stable
   CARGO_TERM_COLOR: always
+  # 一次 `cargo test --workspace` 要链接四十多个测试二进制；带完整调试信息时
+  # 它们在 ubuntu runner 的 14 GB 磁盘上放不下，链接器会以 Bus error 收场
+  # （2026-09-13 的第一次真实 dry-run）。测试不需要行号以外的调试信息。
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_PROFILE_TEST_DEBUG: line-tables-only
+  CARGO_INCREMENTAL: "0"
 
 jobs:
   verify:
@@ -39,6 +45,15 @@ jobs:
       publish: ${{ steps.version.outputs.publish }}
     steps:
       - uses: actions/checkout@v4
+      # ubuntu runner 预装的 .NET / Android / Haskell / CodeQL 占掉十几 GB；
+      # 这个作业要编译整个 workspace 的测试，先把它们腾出来。
+      - name: 腾出磁盘
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h / | tail -1
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}

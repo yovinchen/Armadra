@@ -25,6 +25,12 @@ env:
   NODE_VERSION: "22"
   GO_VERSION: "1.24"
   CARGO_TERM_COLOR: always
+  # 一次 `cargo test --workspace` 要链接四十多个测试二进制；带完整调试信息时
+  # 它们在 ubuntu runner 的 14 GB 磁盘上放不下，链接器会以 Bus error 收场
+  # （2026-09-13 的第一次真实 dry-run）。测试不需要行号以外的调试信息。
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_PROFILE_TEST_DEBUG: line-tables-only
+  CARGO_INCREMENTAL: "0"
   RUST_BACKTRACE: "1"
 
 jobs:
