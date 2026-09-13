@@ -22,6 +22,7 @@ import { isTauri, openExternal } from "@/platform";
 import { useCanvasStore } from "@/store/canvas-store";
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
+import { DropdownMenuItem } from "@/ui/dropdown-menu";
 import { IconButton } from "@/ui/icon-button";
 import { NodeShell } from "./NodeShell";
 import { onEditorReveal, takePendingReveal } from "./editor-reveal";
@@ -348,6 +349,11 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     state.identity === identity &&
     hasConflictMarkers(state.content);
 
+  /**
+   * 头部只留「一眼要看到」的状态与两个常按的控件（F5：所有节点头部一个样）。
+   * 脏点说的是「有没有没存的东西」，预览挡是写 Markdown 时一直在切的，保存
+   * 有它自己的快捷键但也必须看得见；其余命令进 `···`。
+   */
   const headerActions = (
     <>
       {state.kind === "text" && !state.sha256 && (
@@ -371,18 +377,6 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
           title={t("editor.dirty")}
           className="size-[7px] shrink-0 rounded-full bg-[var(--warn)]"
         />
-      )}
-      {state.kind === "text" && (
-        <IconButton
-          label={t("editor.find")}
-          onClick={() => {
-            const view = refs.viewRef.current;
-            if (view && refs.coreRef.current)
-              refs.coreRef.current.openSearch(view);
-          }}
-        >
-          <Search />
-        </IconButton>
       )}
       {markdown && state.kind === "text" && (
         <IconButton
@@ -413,32 +407,6 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
           )}
         </IconButton>
       )}
-      {/* 代码操作没有别的入口：⌘. 要先把焦点放进编辑器，而一块画布上的
-          编辑器常常还没有焦点。灯泡只在会话真的在跑时出现。 */}
-      {language.status?.state === "running" && state.kind === "text" && (
-        <IconButton
-          label={t("lsp.action.title")}
-          onClick={() => {
-            const view = refs.viewRef.current;
-            if (!view || refs.viewIdentityRef.current !== identity) return;
-            view.focus();
-            void import("@/editor/language/code-actions").then((module) =>
-              module.showCodeActions(view),
-            );
-          }}
-        >
-          <Lightbulb />
-        </IconButton>
-      )}
-      {conflicted && writable && workspaceId && (
-        <IconButton
-          label={t("merge.open")}
-          // 编辑器节点拿到的是工作空间相对路径，也就是根检出里的路径。
-          onClick={() => void openMergeView(workspaceId, path, ".")}
-        >
-          <GitMerge />
-        </IconButton>
-      )}
       {writable && state.kind === "text" && (
         <IconButton
           label={t("editor.save")}
@@ -451,8 +419,56 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     </>
   );
 
+  const menuItems = (
+    <>
+      {state.kind === "text" && (
+        <DropdownMenuItem
+          onSelect={() => {
+            const view = refs.viewRef.current;
+            if (view && refs.coreRef.current)
+              refs.coreRef.current.openSearch(view);
+          }}
+        >
+          <Search />
+          {t("editor.find")}
+        </DropdownMenuItem>
+      )}
+      {/* 代码操作没有别的入口：⌘. 要先把焦点放进编辑器，而一块画布上的
+          编辑器常常还没有焦点。只在会话真的在跑时出现。 */}
+      {language.status?.state === "running" && state.kind === "text" && (
+        <DropdownMenuItem
+          onSelect={() => {
+            const view = refs.viewRef.current;
+            if (!view || refs.viewIdentityRef.current !== identity) return;
+            view.focus();
+            void import("@/editor/language/code-actions").then((module) =>
+              module.showCodeActions(view),
+            );
+          }}
+        >
+          <Lightbulb />
+          {t("lsp.action.title")}
+        </DropdownMenuItem>
+      )}
+      {conflicted && writable && workspaceId && (
+        <DropdownMenuItem
+          // 编辑器节点拿到的是工作空间相对路径，也就是根检出里的路径。
+          onSelect={() => void openMergeView(workspaceId, path, ".")}
+        >
+          <GitMerge />
+          {t("merge.open")}
+        </DropdownMenuItem>
+      )}
+    </>
+  );
+
   return (
-    <NodeShell node={node} selected={selected} headerActions={headerActions}>
+    <NodeShell
+      node={node}
+      selected={selected}
+      headerActions={headerActions}
+      menuItems={menuItems}
+    >
       {/*
        * `data-keybinding-scope` 是 `when: "editorFocus"` 唯一的依据：焦点
        * 判定发生在一个只拿得到 EventTarget 的监听器里，`closest()` 是从它

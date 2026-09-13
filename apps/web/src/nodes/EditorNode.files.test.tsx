@@ -52,21 +52,29 @@ vi.mock("@/store/canvas-store", () => ({
   useCanvasStore: (select: (state: unknown) => unknown) =>
     select({ workspace: { id: "w1" } }),
 }));
+// F5 之后编辑器的搜索 / 代码操作 / 合并都在 `NodeShell` 的 `···` 里，所以
+// 这个替身要把菜单正文也挂出来——Radix 的菜单项必须在一个展开的菜单之下。
 vi.mock("./NodeShell", () => ({
   NodeShell: ({
     children,
     headerActions,
+    menuItems,
   }: {
     children: ReactNode;
     headerActions: ReactNode;
+    menuItems: ReactNode;
   }) => (
     <div>
       {headerActions}
+      <DropdownMenu open modal={false}>
+        <DropdownMenuContent>{menuItems}</DropdownMenuContent>
+      </DropdownMenu>
       {children}
     </div>
   ),
 }));
 
+import { DropdownMenu, DropdownMenuContent } from "@/ui/dropdown-menu";
 import { EditorNode } from "./EditorNode";
 import { revealInEditor } from "./editor-reveal";
 
@@ -218,7 +226,7 @@ describe("editor file information", () => {
   it("opens the find panel with a replace row only when the file is writable", async () => {
     render(<EditorNode {...props()} />);
     await view();
-    fireEvent.click(screen.getByRole("button", { name: "Find / replace" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Find / replace" }));
     await waitFor(() =>
       expect(document.querySelector(".cm-search")).toBeTruthy(),
     );
@@ -239,7 +247,7 @@ describe("editor file information", () => {
     });
     render(<EditorNode {...props()} />);
     await view();
-    fireEvent.click(screen.getByRole("button", { name: "Find / replace" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Find / replace" }));
     await waitFor(() =>
       expect(document.querySelector(".cm-search")).toBeTruthy(),
     );
