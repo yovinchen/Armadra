@@ -558,7 +558,7 @@ mod tests {
 
     fn open(content: &str) -> Fixture {
         let directory = tempdir().unwrap();
-        let root = directory.path().canonicalize().unwrap();
+        let root = crate::paths::canonicalize(directory.path()).unwrap();
         let path = root.join("note.txt");
         fs::write(&path, content).unwrap();
         let id = workspace_id();

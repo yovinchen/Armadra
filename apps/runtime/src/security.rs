@@ -5,7 +5,7 @@ use regex::Regex;
 use crate::error::{AppError, AppResult};
 
 pub fn canonical_directory(path: impl AsRef<Path>) -> AppResult<PathBuf> {
-    let path = path.as_ref().canonicalize().map_err(|_| {
+    let path = crate::paths::canonicalize(path.as_ref()).map_err(|_| {
         AppError::BadRequest("Workspace root does not exist or cannot be accessed".into())
     })?;
     if !path.is_dir() {
@@ -58,10 +58,12 @@ pub fn valid_directory_name(name: &str) -> AppResult<&str> {
 
 /// Whether `path` is one of the protected locations, or lives inside one.
 fn is_protected(path: &Path) -> bool {
-    let text = path.to_string_lossy();
+    // Compared component by component, not as text: the Windows entries below
+    // are spelled with `\`, and a `{prefix}/` string test never matched a
+    // single one of them.
     PROTECTED_PREFIXES
         .iter()
-        .any(|prefix| text == *prefix || text.starts_with(&format!("{prefix}/")))
+        .any(|prefix| path.starts_with(Path::new(prefix)))
 }
 
 /// Check that `parent` is somewhere a new directory may appear: an existing
@@ -110,8 +112,7 @@ pub fn resolve_in_root(root: impl AsRef<Path>, requested: &str) -> AppResult<Pat
             root.join(requested_path)
         }
     };
-    let candidate = candidate
-        .canonicalize()
+    let candidate = crate::paths::canonicalize(&candidate)
         .map_err(|_| AppError::NotFound("Requested path does not exist".into()))?;
     if candidate != root && !candidate.starts_with(&root) {
         return Err(AppError::Forbidden(
@@ -141,8 +142,7 @@ pub fn resolve_import_source(root: impl AsRef<Path>, requested: &str) -> AppResu
     let resolved = if Path::new(trimmed).is_absolute() {
         // `canonicalize` also resolves the symlinks, so the checks below see
         // the file that would actually be read, not the link pointing at it.
-        let path = Path::new(trimmed)
-            .canonicalize()
+        let path = crate::paths::canonicalize(Path::new(trimmed))
             .map_err(|_| AppError::NotFound("Requested path does not exist".into()))?;
         if is_protected(&path) {
             return Err(AppError::Forbidden(
@@ -303,7 +303,7 @@ mod tests {
         fs::create_dir(workspace.path().join("src")).unwrap();
 
         let target = resolve_writable_in_root(workspace.path(), "src/new.txt").unwrap();
-        assert!(target.starts_with(workspace.path().canonicalize().unwrap()));
+        assert!(target.starts_with(crate::paths::canonicalize(workspace.path()).unwrap()));
         assert!(!target.exists());
 
         // A missing parent directory is a 400, not a silent mkdir.
@@ -479,6 +479,29 @@ mod tests {
             "/var/folders/x",
             "/Users/me/Projects",
         ] {
+            assert!(ensure_creatable_parent(Path::new(good)).is_ok(), "{good}");
+        }
+    }
+
+    /// The same rule on the other separator. It never held: the check joined
+    /// the prefix with a `/`, so `C:\Windows\System32` matched nothing.
+    #[cfg(windows)]
+    #[test]
+    fn refuses_protected_parents_on_windows() {
+        for bad in [
+            r"C:\Windows",
+            r"C:\Windows\System32",
+            r"C:\Program Files\Armadra",
+        ] {
+            assert!(
+                matches!(
+                    ensure_creatable_parent(Path::new(bad)),
+                    Err(AppError::Forbidden(_))
+                ),
+                "{bad} must be refused"
+            );
+        }
+        for good in [r"C:\Users\me\Projects", r"D:\work"] {
             assert!(ensure_creatable_parent(Path::new(good)).is_ok(), "{good}");
         }
     }

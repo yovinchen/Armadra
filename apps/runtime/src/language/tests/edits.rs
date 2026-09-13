@@ -24,13 +24,13 @@ impl Project {
         let root = tempfile::tempdir().expect("a temporary project");
         // The rewriter has to hold the canonical path: on macOS a temporary
         // directory is a symlink, and a server answers with the resolved one.
-        let canonical = std::fs::canonicalize(root.path()).expect("canonical root");
+        let canonical = crate::paths::canonicalize(root.path()).expect("canonical root");
         let rewriter = Rewriter::new(&canonical);
         Self { root, rewriter }
     }
 
     fn path(&self) -> std::path::PathBuf {
-        std::fs::canonicalize(self.root.path()).expect("canonical root")
+        crate::paths::canonicalize(self.root.path()).expect("canonical root")
     }
 
     fn write(&self, name: &str, text: &str) {

@@ -200,7 +200,7 @@ impl Manager {
         if !executable.is_absolute() {
             anyhow::bail!("command executable must be absolute")
         }
-        let executable = executable.canonicalize()?;
+        let executable = crate::paths::canonicalize(&executable)?;
         if !executable.is_file() {
             anyhow::bail!("command executable is not a file")
         }
@@ -220,10 +220,10 @@ impl Manager {
             anyhow::bail!("invalid working directory")
         }
         let root_path = PathBuf::from(&root.canonical_path);
-        if root_path.canonicalize()? != root_path {
+        if crate::paths::canonicalize(&root_path)? != root_path {
             anyhow::bail!("root changed")
         }
-        let cwd = root_path.join(relative).canonicalize()?;
+        let cwd = crate::paths::canonicalize(root_path.join(relative))?;
         if !cwd.is_dir() || !cwd.starts_with(&root_path) {
             anyhow::bail!("working directory leaves root")
         }
@@ -484,8 +484,8 @@ fn execution_digest(session: &CommandSession, request: &RunCommandRequest) -> Ve
 fn validate_frozen(session: &CommandSession) -> anyhow::Result<()> {
     let root = PathBuf::from(&session.canonical_root);
     let cwd = PathBuf::from(&session.canonical_working_directory);
-    if root.canonicalize()? != root
-        || cwd.canonicalize()? != cwd
+    if crate::paths::canonicalize(&root)? != root
+        || crate::paths::canonicalize(&cwd)? != cwd
         || !cwd.starts_with(&root)
         || !cwd.is_dir()
     {
@@ -496,7 +496,7 @@ fn validate_frozen(session: &CommandSession) -> anyhow::Result<()> {
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("frozen launch missing"))?;
     let exe = PathBuf::from(&launch.executable);
-    if exe.canonicalize()? != exe
+    if crate::paths::canonicalize(&exe)? != exe
         || !exe.is_file()
         || Sha256::digest(launch.encode_to_vec()).to_vec() != session.launch_sha256
     {
@@ -652,7 +652,7 @@ mod tests {
         let state = private_dir();
         let root = private_dir();
         let manager = Manager::open(
-            state.path().canonicalize().unwrap(),
+            crate::paths::canonicalize(state.path()).unwrap(),
             "0123456789abcdef0123456789abcdef".into(),
         )
         .await
@@ -661,7 +661,11 @@ mod tests {
             .bind(BindCommandRootRequest {
                 root_id: "root-1".into(),
                 workspace_id: "workspace-1".into(),
-                path: root.path().canonicalize().unwrap().to_str().unwrap().into(),
+                path: crate::paths::canonicalize(root.path())
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .into(),
             })
             .await
             .unwrap();

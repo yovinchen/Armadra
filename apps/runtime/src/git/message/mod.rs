@@ -151,7 +151,8 @@ struct ProviderConfig {
 }
 impl ProviderConfig {
     fn environment() -> Self {
-        let binary = agent::resolve_command("claude").and_then(|path| path.canonicalize().ok());
+        let binary = agent::resolve_command("claude")
+            .and_then(|path| crate::paths::canonicalize(&path).ok());
         let key = std::env::var_os("ANTHROPIC_API_KEY").filter(|value| !value.is_empty());
         let endpoint_supported = std::env::var_os("ANTHROPIC_BASE_URL").is_none()
             && [

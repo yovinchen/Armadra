@@ -17,8 +17,8 @@ fn init_creates_one_repository_and_never_nests_a_second() {
     assert!(created.repository);
     assert!(root.path().join(".git").is_dir());
     assert_eq!(
-        Path::new(&created.path).canonicalize().unwrap(),
-        root.path().canonicalize().unwrap()
+        crate::paths::canonicalize(Path::new(&created.path)).unwrap(),
+        crate::paths::canonicalize(root.path()).unwrap()
     );
     assert!(read_status(root.path()).unwrap().repository);
     // A second call sees its own repository and refuses rather than

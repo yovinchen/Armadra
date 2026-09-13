@@ -16,7 +16,7 @@ impl Scratch {
             builder.mode(0o700);
         }
         builder.create(&path)?;
-        Ok(Self(path.canonicalize()?, true))
+        Ok(Self(crate::paths::canonicalize(&path)?, true))
     }
 }
 impl Drop for Scratch {

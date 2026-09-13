@@ -29,7 +29,7 @@ pub fn private_directory(path: &Path) -> anyhow::Result<PathBuf> {
     }
     #[cfg(windows)]
     super::platform_windows::verify_private_directory(path)?;
-    Ok(std::fs::canonicalize(path)?)
+    Ok(crate::paths::canonicalize(path)?)
 }
 #[cfg(windows)]
 pub(crate) fn private_file(path: &Path) -> anyhow::Result<File> {

@@ -1,7 +1,7 @@
 //! Shared fixtures for the database tests: a throwaway pool, the migration
 //! ledger helpers and the node builders the document tests reuse.
 
-use sqlx::{ConnectOptions, SqlitePool, sqlite::SqliteConnectOptions};
+use sqlx::SqlitePool;
 use tempfile::tempdir;
 
 use crate::db::*;
@@ -17,10 +17,7 @@ pub(super) fn migration_count() -> i64 {
 
 pub(super) async fn fixture(name: &str) -> (SqlitePool, tempfile::TempDir, Workspace) {
     let directory = tempdir().unwrap();
-    let database_url = format!(
-        "sqlite://{}?mode=rwc",
-        directory.path().join(format!("{name}.db")).display()
-    );
+    let database_url = database_url(&directory.path().join(format!("{name}.db")));
     let pool = connect(&database_url).await.unwrap();
     let workspace = create_workspace(
         &pool,
@@ -75,12 +72,12 @@ pub(super) async fn seed_foreign_database(database_url: &str, version: i64, chec
     pool.close().await;
 }
 
+/// The same URL `main.rs` builds. Never SQLx's own `to_url_lossy`: that one
+/// runs the filename through a URL parser, which turns `C:\Users\…` into the
+/// host `C` and the path `/\Users\…` — the database then "cannot be opened" on
+/// Windows and nowhere else.
 pub(super) fn database_url(path: &std::path::Path) -> String {
-    SqliteConnectOptions::new()
-        .filename(path)
-        .create_if_missing(true)
-        .to_url_lossy()
-        .to_string()
+    crate::paths::sqlite_file_url(path)
 }
 
 pub(super) fn assert_no_legacy(directory: &std::path::Path) {

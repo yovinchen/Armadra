@@ -153,10 +153,10 @@ impl RepositoryService {
         // may have been written before a symlinked root was resolved. Both
         // sides are canonicalized before they are compared, which is the same
         // rule the Worker frame uses for a repository path.
-        let target = absolute.canonicalize().unwrap_or_else(|_| absolute.clone());
+        let target = crate::paths::canonicalize(&absolute).unwrap_or_else(|_| absolute.clone());
         let found = records.into_iter().find(|record| {
             let path = Path::new(&record.path);
-            path.canonicalize().unwrap_or_else(|_| path.to_path_buf()) == target
+            crate::paths::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()) == target
         });
         let Some(record) = found else {
             return Ok(WorktreeBindingVerdict {
@@ -227,7 +227,7 @@ impl RepositoryService {
         let mut records = parse_worktrees(&output)?;
         for record in &mut records {
             let path = Path::new(&record.path);
-            if let Ok(canonical) = path.canonicalize() {
+            if let Ok(canonical) = crate::paths::canonicalize(path) {
                 record.accessible = canonical.starts_with(&context.workspace_root);
                 if record.accessible && !record.bare {
                     record.dirty = Some(

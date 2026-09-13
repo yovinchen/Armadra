@@ -22,7 +22,7 @@ pub async fn snapshot_to(pool: &sqlx::SqlitePool, target: &Path) -> AppResult<Sn
             .parent()
             .filter(|p| !p.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."));
-        let target = std::fs::canonicalize(parent)?.join(name);
+        let target = crate::paths::canonicalize(parent)?.join(name);
         let mut connection = pool.acquire().await?;
         snapshot_to_target(&mut connection, &target).await
     })
@@ -54,7 +54,7 @@ async fn connected_database_file(
                 "In-memory or temporary databases cannot be backed up to a sibling file".into(),
             )
         })?;
-    let source = std::fs::canonicalize(filename).map_err(|error| {
+    let source = crate::paths::canonicalize(filename).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             AppError::BadRequest("The connected database file no longer exists".into())
         } else {
@@ -285,7 +285,9 @@ mod tests {
         let result = snapshot_to(&pool, &target).await.unwrap();
         assert_eq!(
             result.path,
-            std::fs::canonicalize(&target).unwrap().to_string_lossy()
+            crate::paths::canonicalize(&target)
+                .unwrap()
+                .to_string_lossy()
         );
         assert!(result.bytes > 0);
         let mut snapshot = sqlx::SqliteConnection::connect_with(

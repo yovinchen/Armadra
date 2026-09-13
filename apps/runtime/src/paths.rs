@@ -1,4 +1,79 @@
-use std::{env, path::PathBuf};
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
+
+/// `Path::canonicalize` with the Windows extended-length prefix removed.
+///
+/// On Windows `std::fs::canonicalize` always answers in the verbatim form
+/// (`\\?\C:\Users\…`). Nothing else in this process speaks it: `git` rejects
+/// such a path as a clone target ("Invalid argument") and reads `\\?\…` as a
+/// UNC hostname, the protected-location check in `security.rs` compares against
+/// `C:\Windows`, and the shell shows the root path to a person. So every
+/// canonicalization in the Runtime goes through here and the whole process
+/// agrees on one spelling — mixing the two forms would break the `starts_with`
+/// containment checks that authorize every filesystem route.
+///
+/// A path that genuinely needs the prefix (a UNC share, a device name, or one
+/// too long for a Win32 call) keeps it.
+pub fn canonicalize(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
+    path.as_ref().canonicalize().map(shed_verbatim_prefix)
+}
+
+/// The prefix-stripping half of [`canonicalize`]. A no-op off Windows.
+fn shed_verbatim_prefix(path: PathBuf) -> PathBuf {
+    #[cfg(windows)]
+    if let Some(plain) = path.to_str().and_then(plain_win32_spelling) {
+        return PathBuf::from(plain);
+    }
+    path
+}
+
+/// `\\?\C:\Users\dev` → `C:\Users\dev`, or `None` when the verbatim form is the
+/// only one that can name this path.
+///
+/// Compiled on every platform so it can be tested on every platform; only
+/// Windows ever asks.
+#[cfg(any(windows, test))]
+fn plain_win32_spelling(text: &str) -> Option<&str> {
+    let rest = text.strip_prefix(r"\\?\")?;
+    let bytes = rest.as_bytes();
+    // `\\?\UNC\…` and the device namespaces do not start with a drive letter.
+    if bytes.len() <= 2 || !bytes[0].is_ascii_alphabetic() || bytes[1] != b':' || bytes[2] != b'\\'
+    {
+        return None;
+    }
+    // Beyond a drive, the verbatim form can also express what a Win32 call
+    // cannot: a path past the length limit, a `/` inside a component, and
+    // trailing dots or spaces, which the Win32 layer would silently trim into a
+    // *different* file. Those keep the prefix.
+    let expressible = rest.len() <= 240
+        && !rest.contains('/')
+        && rest
+            .trim_end_matches('\\')
+            .split('\\')
+            .skip(1)
+            .all(|part| !part.is_empty() && !part.ends_with(' ') && !part.ends_with('.'));
+    expressible.then_some(rest)
+}
+
+/// A `sqlite:` URL for a database file, in the one spelling SQLx reads back
+/// unchanged on every platform.
+///
+/// SQLx parses a connection URL by trimming the scheme and splitting at the
+/// first `?`, then percent-decoding the rest — it never runs the string through
+/// a URL parser. Its own `to_url_lossy` does, which is why a Windows path comes
+/// back out of it as `C/\Users\…`: `C:` is read as a host and a port. So the
+/// URL is built here instead, escaping exactly the two characters that parse
+/// step is sensitive to. [`database_file`] is the inverse.
+pub fn sqlite_file_url(path: impl AsRef<Path>) -> String {
+    let encoded = path
+        .as_ref()
+        .to_string_lossy()
+        .replace('%', "%25")
+        .replace('?', "%3F");
+    format!("sqlite://{encoded}?mode=rwc")
+}
 
 /// Per-user data directory: the SQLite database, the hook endpoint file, node
 /// tokens and pending approval files all live here.
@@ -30,19 +105,44 @@ pub fn data_dir() -> PathBuf {
 /// the resolution has to agree with the one `main.rs` does — hence one function
 /// both can be checked against instead of two literals.
 pub fn database_file() -> PathBuf {
-    if let Some(raw) = env::var_os("ARMADRA_DATABASE_URL") {
-        let url = raw.to_string_lossy().into_owned();
-        let rest = url
-            .strip_prefix("sqlite://")
-            .or_else(|| url.strip_prefix("sqlite:"));
-        if let Some(rest) = rest {
-            let file = rest.split('?').next().unwrap_or(rest);
-            if !file.is_empty() && file != ":memory:" {
-                return PathBuf::from(file);
+    env::var_os("ARMADRA_DATABASE_URL")
+        .and_then(|raw| file_in_sqlite_url(&raw.to_string_lossy()))
+        .unwrap_or_else(|| data_dir().join("canvas.db"))
+}
+
+/// The file half of a `sqlite:` URL, read the way SQLx reads it: trim the
+/// scheme, cut at the first `?`, percent-decode the rest. The inverse of
+/// [`sqlite_file_url`]. `None` for the memory databases, which name no file.
+fn file_in_sqlite_url(url: &str) -> Option<PathBuf> {
+    let rest = url
+        .strip_prefix("sqlite://")
+        .or_else(|| url.strip_prefix("sqlite:"))?;
+    let file = percent_decode(rest.split('?').next().unwrap_or(rest));
+    (!file.is_empty() && file != ":memory:").then(|| PathBuf::from(file))
+}
+
+/// The decode SQLx performs on the filename half of a connection URL. Kept here
+/// so [`database_file`] names the same file the pool opened.
+fn percent_decode(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        let decoded = (bytes[index] == b'%' && index + 2 < bytes.len())
+            .then(|| u8::from_str_radix(&value[index + 1..index + 3], 16).ok())
+            .flatten();
+        match decoded {
+            Some(byte) => {
+                out.push(byte);
+                index += 3;
+            }
+            None => {
+                out.push(bytes[index]);
+                index += 1;
             }
         }
     }
-    data_dir().join("canvas.db")
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// 0600 file the `armadra-hook` client re-reads on every invocation to find the
@@ -142,5 +242,55 @@ mod tests {
         );
         assert!(node_token_dir().starts_with(data_dir()));
         assert!(pending_dir().starts_with(data_dir()));
+    }
+
+    /// Checked on every platform: the rule is about what Windows can spell, and
+    /// a rule only the Windows runner exercises is a rule nobody reviews.
+    #[test]
+    fn a_verbatim_path_loses_its_prefix_only_when_win32_can_name_the_same_file() {
+        assert_eq!(
+            plain_win32_spelling(r"\\?\C:\Users\dev\canvas.db"),
+            Some(r"C:\Users\dev\canvas.db")
+        );
+        assert_eq!(plain_win32_spelling(r"\\?\C:\"), Some(r"C:\"));
+        // Not a drive, so `C:\…` cannot name it.
+        assert_eq!(plain_win32_spelling(r"\\?\UNC\server\share\file"), None);
+        assert_eq!(plain_win32_spelling(r"\\?\Volume{0}\x"), None);
+        // Win32 would trim the trailing dot or space and open another file.
+        assert_eq!(plain_win32_spelling(r"\\?\C:\Users\dev.\x"), None);
+        assert_eq!(plain_win32_spelling(r"\\?\C:\Users\dev \x"), None);
+        // A forward slash is a name inside a verbatim path and a separator
+        // outside it; so is a path past what a Win32 call accepts.
+        assert_eq!(plain_win32_spelling(r"\\?\C:\a/b\c"), None);
+        assert_eq!(
+            plain_win32_spelling(&format!(r"\\?\C:\{}", "a".repeat(300))),
+            None
+        );
+        // Anything that was never verbatim is left alone.
+        assert_eq!(plain_win32_spelling(r"C:\Users\dev"), None);
+        assert_eq!(plain_win32_spelling("/home/dev"), None);
+    }
+
+    /// `main.rs` writes the URL and the settings page reads the file back out
+    /// of it; a path SQLx re-encodes differently would name two files.
+    #[test]
+    fn a_database_file_survives_the_url_it_is_announced_in() {
+        for original in [
+            "/tmp/armadra/canvas.db",
+            r"C:\Users\dev\AppData\Local\Armadra\canvas.db",
+            "/tmp/100% armadra/canvas ?# 空间.db",
+        ] {
+            let url = sqlite_file_url(original);
+            assert!(url.ends_with("?mode=rwc"), "{url}");
+            assert_eq!(file_in_sqlite_url(&url), Some(PathBuf::from(original)));
+        }
+        // The memory forms name no file, so the data directory answers.
+        for url in [
+            "sqlite::memory:",
+            "sqlite://:memory:?cache=shared",
+            "http://",
+        ] {
+            assert_eq!(file_in_sqlite_url(url), None, "{url}");
+        }
     }
 }

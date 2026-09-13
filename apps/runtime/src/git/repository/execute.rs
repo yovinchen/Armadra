@@ -347,7 +347,7 @@ impl RepositoryService {
                 // so a later Stage All cannot stage a repository inside itself.
                 for worktree in self.worktree_records(context, token).await? {
                     if !worktree.bare
-                        && let Ok(root) = Path::new(&worktree.path).canonicalize()
+                        && let Ok(root) = crate::paths::canonicalize(Path::new(&worktree.path))
                     {
                         protect_nested_worktree(context, &root, &target, operation)?;
                     }
@@ -370,7 +370,10 @@ impl RepositoryService {
                 let record = records
                     .iter()
                     .find(|record| {
-                        Path::new(&record.path).canonicalize().ok().as_ref() == Some(&target)
+                        crate::paths::canonicalize(Path::new(&record.path))
+                            .ok()
+                            .as_ref()
+                            == Some(&target)
                     })
                     .ok_or_else(|| {
                         AppError::BadRequest("Path is not a registered worktree".into())

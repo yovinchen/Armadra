@@ -332,8 +332,8 @@ mod tests {
         assert!(output.status.success());
         let actual = std::path::PathBuf::from(String::from_utf8(output.stdout).unwrap().trim());
         assert_eq!(
-            actual.canonicalize().unwrap(),
-            root.path().canonicalize().unwrap()
+            crate::paths::canonicalize(&actual).unwrap(),
+            crate::paths::canonicalize(root.path()).unwrap()
         );
         assert!(!other.path().join("unrelated-index").exists());
     }
