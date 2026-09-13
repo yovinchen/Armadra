@@ -1,10 +1,11 @@
 import { useViewport } from "@xyflow/react";
-import { Gauge, LayoutGrid, Plus, Redo2, Undo2 } from "lucide-react";
+import { LayoutGrid, Plus, Redo2, Undo2 } from "lucide-react";
 import {
   ADD_MENU_CONTENT_CLASS,
   AddMenuContent,
 } from "../canvas/menus/AddMenuContent";
 import { DockTools } from "./DockTools";
+import { DockUsage } from "./DockUsage";
 import { useMenuTooltip } from "./menu-tooltip";
 import { currentViewportCenter } from "../canvas/placement";
 import { fitView, zoomToLevel } from "../canvas/flow/use-flow-viewport";
@@ -29,8 +30,10 @@ import { cn } from "@/lib/cn";
 const ZOOM_STEPS = [0.5, 1, 1.5] as const;
 
 /**
- * 底部 Dock（§3.1）：`+` / 撤销 / 重做 / 保存点 / 缩放。
+ * 底部 Dock（§3.1）：`+` / 撤销 / 重做 / 整理 / 工具 / 保存点 / 缩放 / 用量。
  * 保存状态只用一个点表示，不写文字（§14 第 4 条）。
+ *
+ * 用量在最右端（F9）：它以前是右下角一个独立浮层，用户要求并进 Dock。
  */
 export function Dock() {
   const t = useT();
@@ -44,8 +47,6 @@ export function Dock() {
   const canUndo = useCanUndo();
   const canRedo = useCanRedo();
   const agents = useEnabledAgents();
-  const usagePanel = useCanvasStore((state) => state.panels.usage);
-  const setPanel = useCanvasStore((state) => state.setPanel);
   const addMenu = useMenuTooltip();
   const zoomMenu = useMenuTooltip();
 
@@ -135,22 +136,6 @@ export function Dock() {
         <TooltipContent>{t("dock.tidy")}</TooltipContent>
       </Tooltip>
 
-      <Tooltip delayDuration={500}>
-        <TooltipTrigger asChild>
-          <IconButton
-            size="dock"
-            label={t("usage.dashboard.open")}
-            active={usagePanel !== "closed"}
-            onClick={() =>
-              setPanel("usage", usagePanel === "closed" ? "drawer" : "closed")
-            }
-          >
-            <Gauge />
-          </IconButton>
-        </TooltipTrigger>
-        <TooltipContent>{t("usage.dashboard.open")}</TooltipContent>
-      </Tooltip>
-
       {/* 白板工具组（§5）；画布没挂载时整组连同分隔线一起不渲染。 */}
       <DockTools />
 
@@ -196,6 +181,8 @@ export function Dock() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <DockUsage />
     </div>
   );
 }

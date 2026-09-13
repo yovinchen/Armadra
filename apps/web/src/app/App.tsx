@@ -36,7 +36,6 @@ import { Dock } from "../shell/Dock";
 import { LeftSidebar } from "../shell/LeftSidebar";
 import { MobileBottomNav } from "../shell/MobileBottomNav";
 import { MobileFocusPage } from "../shell/MobileFocusPage";
-import { UsageOrb } from "../shell/UsageOrb";
 import { WindowDragLayer } from "../shell/WindowDragLayer";
 import { useCanvasStore } from "../store/canvas-store";
 import { onHostSessionChange } from "../host/proxy-session";
@@ -122,7 +121,6 @@ function AppShell() {
           <>
             <ControlsCluster />
             <Dock />
-            <UsageOrb />
           </>
         )}
       </div>

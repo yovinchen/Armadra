@@ -184,12 +184,6 @@
   display: none;
 }
 
-.canvas-usage-orb {
-  position: absolute;
-  right: calc(14px + var(--minimap-w) + 10px);
-  bottom: var(--navigation-bottom);
-}
-
 @container workspace (max-width: 1000px) {
   .canvas-dock {
     --dock-bottom: 38px;
@@ -202,15 +196,13 @@
   .dock-tools-compact {
     display: block;
   }
-  .canvas-stage .react-flow__minimap,
-  .canvas-usage-orb {
+  .canvas-stage .react-flow__minimap {
     --navigation-bottom: calc(38px + var(--dock-h) + 12px);
   }
 }
 
 @container workspace (max-width: 760px) {
-  .canvas-stage .react-flow__minimap,
-  .canvas-usage-orb {
+  .canvas-stage .react-flow__minimap {
     --minimap-w: 160px;
     --minimap-h: 120px;
   }
@@ -230,8 +222,7 @@
       var(--mobile-nav-h) + env(safe-area-inset-bottom) + 10px
     );
   }
-  .canvas-stage .react-flow__minimap,
-  .canvas-usage-orb {
+  .canvas-stage .react-flow__minimap {
     --navigation-bottom: calc(
       var(--mobile-nav-h) + env(safe-area-inset-bottom) + 10px + var(--dock-h) +
         12px
@@ -240,19 +231,9 @@
 }
 
 .workspace-surface[data-minimap-collapsed="true"],
-.workspace-surface[data-minimap-collapsed="true"] .react-flow__minimap,
-.workspace-surface[data-minimap-collapsed="true"] .canvas-usage-orb {
+.workspace-surface[data-minimap-collapsed="true"] .react-flow__minimap {
   --minimap-w: 36px;
   --minimap-h: 36px;
-}
-.canvas-usage-orb {
-  transition: right 160ms ease-out;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .canvas-usage-orb {
-    transition: none;
-  }
 }
 
 /*

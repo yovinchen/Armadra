@@ -1,11 +1,11 @@
 import type { MessageModule } from "./index";
 
 /**
- * 用量球（计划书 §19 + §19.1）。
+ * 用量（计划书 §19 + §19.1；并进 Dock 见用户实测反馈 F9）。
  *
- * 球体只有一个百分比数字，没有文字标签；完整摘要走 `usage.orbLabel`
- * 的无障碍名称，明细全在 Popover 面板里（§14 第 1 条）；
- * Claude / Codex 是 CLI 名，保留原文（§14 第 2 条）。
+ * Dock 里那一格只有一个百分比数字，没有文字标签；完整摘要走
+ * `usage.dockLabel` 的无障碍名称与悬停提示，明细全在用量面板里
+ * （§14 第 1 条）；Claude / Codex 是 CLI 名，保留原文（§14 第 2 条）。
  */
 export const usage: MessageModule = {
   "zh-CN": {
@@ -17,7 +17,6 @@ export const usage: MessageModule = {
     "usage.refreshError": "刷新失败，请稍后重试",
     "usage.cooldown": "{seconds} 秒后可刷新",
     "usage.cadence": "每 5 分钟自动更新",
-    "usage.summaryHint": "显示所有额度窗口中的最高已用比例",
     "usage.status.unavailable": "未找到可用的登录凭据",
     "usage.recoveryHint": "请稍后刷新，或在对应 CLI 中查看",
     "usage.source.opencode": "请在 OpenCode 或所用服务商查看",
@@ -57,11 +56,10 @@ export const usage: MessageModule = {
     "usage.cost.empty": "本机没有可读的转录",
     "usage.cost.error": "读取本地成本失败",
 
-    "usage.label": "用量",
     "usage.close": "关闭用量详情",
     "usage.paused": "已暂停用量查询",
     "usage.refresh": "刷新",
-    "usage.orbLabel": "用量 {value}",
+    "usage.dockLabel": "用量 {value}",
     "usage.provider.claude": "Claude", // i18n-exempt
     "usage.provider.codex": "Codex", // i18n-exempt
     "usage.provider.gemini": "Gemini", // i18n-exempt
@@ -83,7 +81,6 @@ export const usage: MessageModule = {
     "usage.refreshError": "Refresh failed. Try again later.",
     "usage.cooldown": "Refresh in {seconds}s",
     "usage.cadence": "Updates automatically every 5 minutes",
-    "usage.summaryHint": "Highest usage across all quota windows",
     "usage.status.unavailable": "No usable sign-in credentials found",
     "usage.recoveryHint": "Refresh later, or check usage in the CLI",
     "usage.source.opencode": "View in OpenCode or your model provider",
@@ -123,11 +120,10 @@ export const usage: MessageModule = {
     "usage.cost.empty": "No readable transcripts on this machine",
     "usage.cost.error": "Could not read local cost",
 
-    "usage.label": "Usage",
     "usage.close": "Close usage details",
     "usage.paused": "Usage checks are paused",
     "usage.refresh": "Refresh",
-    "usage.orbLabel": "Usage {value}",
+    "usage.dockLabel": "Usage {value}",
     "usage.provider.claude": "Claude",
     "usage.provider.codex": "Codex",
     "usage.provider.gemini": "Gemini",
