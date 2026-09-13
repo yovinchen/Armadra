@@ -16,9 +16,60 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseYaml } from "./workflow-yaml.mjs";
+import { goTarget } from "../../apps/desktop/scripts/sidecar-targets.mjs";
+import { TARGETS } from "../release/artifacts.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const WORKFLOW_DIR = join(root, ".github/workflows");
+
+/**
+ * The runner labels GitHub actually offers.
+ *
+ * A label nobody serves is not an error: the job queues forever and the run
+ * shows as pending, which is the one failure mode a person waits out instead of
+ * reading. Kept explicit rather than pattern-matched so a retired image has to
+ * be removed here deliberately.
+ */
+export const RUNNERS = new Set([
+  "ubuntu-latest",
+  "ubuntu-24.04",
+  "ubuntu-22.04",
+  "ubuntu-24.04-arm",
+  "ubuntu-22.04-arm",
+  "macos-latest",
+  "macos-15",
+  "macos-14",
+  "macos-13",
+  "windows-latest",
+  "windows-2025",
+  "windows-2022",
+  "windows-11-arm",
+]);
+
+/** Every value a matrix gives one key, across both `include` and list form. */
+function matrixValues(job, key) {
+  const matrix = job?.strategy?.matrix;
+  if (!matrix || typeof matrix !== "object") return [];
+  const values = [];
+  const direct = matrix[key];
+  if (Array.isArray(direct)) values.push(...direct);
+  if (Array.isArray(matrix.include)) {
+    for (const entry of matrix.include) {
+      if (entry && typeof entry === "object" && entry[key] !== undefined)
+        values.push(entry[key]);
+    }
+  }
+  return values.map(String);
+}
+
+/** The labels a job can end up running on, matrix expressions resolved. */
+function runnerLabels(job) {
+  const runsOn = job["runs-on"];
+  if (typeof runsOn !== "string") return [];
+  const expression = runsOn.match(/^\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}$/);
+  if (expression) return matrixValues(job, expression[1]);
+  return /\$\{\{/.test(runsOn) ? [] : [runsOn];
+}
 
 /** Every ${{ needs.<job>. }} reference in a value, however deeply nested. */
 function neededJobs(value, found = new Set()) {
@@ -67,6 +118,29 @@ export function checkWorkflow(name, document) {
     }
     if (!job["runs-on"] && !job.uses)
       problems.push(`${where} names no runner and reuses no workflow`);
+    for (const label of runnerLabels(job)) {
+      if (!RUNNERS.has(label))
+        problems.push(`${where} runs on ${label}, which GitHub does not offer`);
+    }
+    // A build matrix names the same two things the packaging code names: the
+    // Rust triple it compiles for and the "<os>-<arch>" a release publishes. A
+    // spelling only one side knows is discovered at tag time, in the job that
+    // was supposed to produce the artifact.
+    for (const triple of matrixValues(job, "triple")) {
+      try {
+        goTarget(triple);
+      } catch {
+        problems.push(
+          `${where} builds ${triple}, which apps/desktop/scripts/sidecar-targets.mjs cannot map`,
+        );
+      }
+    }
+    for (const target of matrixValues(job, "target")) {
+      if (!TARGETS.includes(target))
+        problems.push(
+          `${where} builds ${target}, which is not a target in tools/release/artifacts.mjs`,
+        );
+    }
     const declared = new Set(
       job.needs === undefined
         ? []

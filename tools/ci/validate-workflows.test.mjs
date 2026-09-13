@@ -30,11 +30,73 @@ test("the parser reads the shapes a workflow actually uses", () => {
   assert.equal(document.name, "ci");
   // Nested mappings, flow sequences, block scalars and lists of mappings.
   assert.deepEqual(document.on.push.branches, ["main"]);
-  assert.equal(document.jobs.host["runs-on"], "ubuntu-latest");
-  assert.equal(document.jobs.host.steps[0].uses, "actions/checkout@v4");
-  const cross = document.jobs.host.steps.at(-1);
-  assert.match(cross.run, /^GOOS=windows[\s\S]*\nGOOS=linux/);
-  assert.equal(document.jobs.web.needs, "changes");
+  assert.equal(document.jobs.check["runs-on"], "${{ matrix.runner }}");
+  assert.equal(document.jobs.check.steps[0].uses, "actions/checkout@v4");
+  assert.deepEqual(
+    document.jobs.check.strategy.matrix.include.map((entry) => entry.runner),
+    ["ubuntu-latest", "macos-14", "windows-latest"],
+  );
+  const cross = document.jobs.check.steps.at(-1);
+  assert.match(cross.run, /GOOS=windows[\s\S]*GOOS=darwin/);
+});
+
+test("the three platforms are all in the matrix, and none is filtered out", () => {
+  const document = parseYaml(
+    readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"),
+  );
+  const runners = document.jobs.check.strategy.matrix.include.map(
+    (entry) => entry.runner,
+  );
+  for (const prefix of ["ubuntu-", "macos-", "windows-"])
+    assert.ok(
+      runners.some((runner) => runner.startsWith(prefix)),
+      `${prefix} is missing from the matrix`,
+    );
+  // Platform differences belong in `cfg(...)`, not in a CI filter: a test the
+  // workflow skips by name is a test nobody deletes when it starts passing.
+  const body = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
+  assert.doesNotMatch(body, /cargo test[^\n]*--skip/);
+  assert.doesNotMatch(body, /go -C apps\/host test[^\n]*-run /);
+});
+
+test("an unserved runner label is reported", () => {
+  const problems = check(`
+name: x
+on:
+  push:
+jobs:
+  build:
+    runs-on: macOS-14
+    steps:
+      - run: echo hi
+`);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /GitHub does not offer/);
+});
+
+test("a matrix triple or target the packaging code cannot map is reported", () => {
+  const problems = check(`
+name: x
+on:
+  push:
+jobs:
+  build:
+    runs-on: \${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: linux-riscv64
+            triple: riscv64gc-unknown-linux-gnu
+    steps:
+      - run: echo hi
+`);
+  assert.equal(problems.length, 2);
+  assert.match(problems.join("\n"), /sidecar-targets\.mjs cannot map/);
+  assert.match(
+    problems.join("\n"),
+    /not a target in tools\/release\/artifacts\.mjs/,
+  );
 });
 
 test("a job that needs a job nobody defined is reported", () => {
