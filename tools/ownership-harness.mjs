@@ -235,7 +235,20 @@ export async function openHarness({ label }) {
     process.platform === "win32" ? "armadra-host.exe" : "armadra-host",
   );
   const hostData = join(workspace, "host");
-  const hostEnv = { ...process.env, ARMADRA_GITHUB_SECRET_STORE: "file" };
+  // The Worker the Host starts is a Runtime, and it inherits this environment.
+  // Both redirections exist so that nothing it is asked to do can reach the
+  // developer's own files: `ARMADRA_DATA_DIR` keeps its endpoint file, tokens
+  // and integration directory inside this run, and `CLAUDE_CONFIG_DIR` is where
+  // an agent-integration install would otherwise write into `~/.claude`
+  // (docs/design/agent-integration.md §3).
+  const claudeConfigHome = join(workspace, "cli-home", ".claude");
+  mkdirSync(claudeConfigHome, { recursive: true });
+  const hostEnv = {
+    ...process.env,
+    ARMADRA_GITHUB_SECRET_STORE: "file",
+    ARMADRA_DATA_DIR: runtimeData,
+    CLAUDE_CONFIG_DIR: claudeConfigHome,
+  };
   let host = null;
   let hostDiagnostics = "";
 
@@ -618,6 +631,7 @@ export async function openHarness({ label }) {
     hostBinary,
     hostData,
     hostEnv,
+    claudeConfigHome,
     jar,
     transport,
     hostApi,

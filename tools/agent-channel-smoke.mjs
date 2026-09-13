@@ -1,19 +1,32 @@
 /**
- * The status channel of one real Agent CLI, end to end.
+ * One real Agent CLI's whole integration, end to end.
  *
- * Unit tests cover both halves apart: installers write the bytes they should,
+ * Unit tests cover the halves apart: installers write the bytes they should,
  * normalizers turn a recorded payload into an `AgentEvent`. Neither answers the
- * question that decides whether the channel works — does *this* CLI, on *this*
- * machine, fire the events we subscribed, through the transport we generated,
- * with the node token and terminal binding of a session the runtime created?
- * (设计 docs/design/agent-collaboration-channels.md §5.2, 真实 CLI row.)
+ * question that decides whether the integration works — does *this* CLI, on
+ * *this* machine, fire the events we subscribed, through the transport we
+ * generated, with the node token and terminal binding of a session the runtime
+ * created, *and* can the model it runs actually use the verbs the skill teaches
+ * it? (设计 docs/design/agent-collaboration-channels.md §5.2 真实 CLI row,
+ * docs/design/agent-integration.md §7.)
  *
- * For one provider it asserts: installing writes an adapter the CLI reads and
- * touches nothing else; a turn moves the node `working → done`; `stateSource`
- * names the channel that adapter really uses, on the event *and* on the
- * sessions list a reloaded client rebuilds from; Pi and Oh My Pi report a
- * measured context window rather than an estimate; and uninstalling removes
- * every file of ours and leaves every file that is not ours byte for byte.
+ * Hook and skill are one install unit (agent-integration §2), so this script
+ * checks them as one. For one provider it asserts:
+ *
+ *   * **installing once** writes an adapter the CLI reads *and* the skill file,
+ *     and touches nothing else the CLI owns;
+ *   * a `launch`-mode CLI gets its adapter on the command line and nothing at
+ *     all in its own configuration home;
+ *   * a turn moves the node `working → done`, and `stateSource` names the
+ *     channel that adapter really uses — on the event *and* on the sessions
+ *     list a reloaded client rebuilds from;
+ *   * `armadra-hook canvas` and `armadra-hook context` answer from inside that
+ *     session, with the node token that terminal was issued;
+ *   * a second node linked to the first can read its transcript through
+ *     `context summary` — the collaboration claim, on a real transcript;
+ *   * Pi and Oh My Pi report a measured context window rather than an estimate;
+ *   * and **uninstalling** removes the adapter *and* the skill, leaving every
+ *     file that is not ours byte for byte.
  *
  * ## The user's own configuration is never touched
  *
@@ -30,15 +43,27 @@
  * keychain through `$HOME`. The real config home is never opened for writing,
  * so there is no backup/restore step to get wrong.
  *
- * ## Known result, 2026-09-06
+ * ## Known result, 2026-09-13
  *
- * `pi`, `omp` and `copilot` pass; `opencode` cannot start on this machine.
+ * `claude` (2.1.260), `pi` (0.84.4), `omp` (18.1.8) and `copilot` (1.0.8x)
+ * pass. Three do not, and none of the three fails at the install:
+ *
+ *   * `codex` 0.153.4 installs both halves and then shows "Hooks need review —
+ *     8 hooks are new or changed": the `trusted_hash` `hook/install/codex.rs`
+ *     reproduces (verified byte-for-byte against 0.149.1) no longer matches, so
+ *     nothing fires until a person presses `t`. See that module's note.
+ *   * `gemini` 0.58.0 installs both halves and then cannot run a turn on this
+ *     machine at all — `IneligibleTierError: this client is no longer supported
+ *     for Gemini Code Assist for individuals`. An account fact, not a channel.
+ *   * `opencode` cannot start: its npm postinstall was never run, so the entry
+ *     point exits before parsing arguments.
+ *
  * Copilot passes with one caveat recorded in 协作通道 §6: its `sessionStart`
  * arrives *after* the first turn's `userPromptSubmitted`, and a session event
  * resets the node by design, so the `working` this script sees on the event
  * socket lives about 20 ms in the row a reloading client would read.
  *
- * Usage: node tools/agent-channel-smoke.mjs <armadra-runtime> <armadra-hook> <pi|omp|copilot|opencode>
+ * Usage: node tools/agent-channel-smoke.mjs <armadra-runtime> <armadra-hook> <claude|codex|gemini|pi|omp|copilot|opencode>
  */
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
@@ -80,8 +105,87 @@ import { setTimeout as sleep } from "node:timers/promises";
  * because opencode is mid-migration: its plugin forks the client today (`hook`)
  * and moves in-process (`extension`) with B3, and this script has no business
  * deciding which the runtime it drives implements. It prints what it saw.
+ *
+ * `edits` are files under the config home the installer is *allowed* to change
+ * — Codex's `config.toml` carries the trust hashes for the entries it wrote, so
+ * a changed byte there is the install working rather than a file being
+ * trampled. Everything not listed must come out of install and uninstall
+ * unchanged.
+ *
+ * `transcript` says this provider keeps a conversation the runtime can render,
+ * which is what makes the linked-context check meaningful rather than a test of
+ * the refusal message.
  */
 const PROVIDERS = {
+  claude: {
+    // `-p` is Claude Code's non-interactive mode. The hooks that matter here —
+    // `SessionStart`, `UserPromptSubmit`, `Stop`, `SessionEnd` — all fire in it,
+    // and they arrive from the session settings file `--settings` points at
+    // (agent-integration §3), not from anything in `~/.claude`.
+    deliver: "argv",
+    args: (prompt) => ["-p", prompt],
+    seed: [".claude/.credentials.json", ".claude/statsig"],
+    configHome: ".claude",
+    stateSource: ["hook"],
+    contextUsage: null,
+    transcript: true,
+  },
+  codex: {
+    // Interactive, not `codex exec`: `exec` runs no hooks at all (verified on
+    // 0.153.4 — a trusted `session_start` entry never fires under it), which is
+    // reasonable for a one-shot pipe and useless here. A canvas node runs the
+    // CLI's own session, which is what this does.
+    // `--skip-git-repo-check` is an `exec` flag; the TUI rejects it outright.
+    // The project directory is trusted through `config.toml` instead.
+    deliver: "paste",
+    args: () => [],
+    seed: [".codex/auth.json", ".codex/config.toml"],
+    configHome: ".codex",
+    // Codex keys its hook trust by index into `hooks.json`, and the hashes live
+    // in `config.toml`. Writing them *is* the install.
+    edits: ["config.toml"],
+    stateSource: ["hook"],
+    contextUsage: null,
+    transcript: true,
+    // Interactive Codex asks whether it may work in a folder it has not seen,
+    // and a modal waiting for a keypress swallows the pasted prompt.
+    prepare(home, cwd) {
+      const path = join(home, ".codex", "config.toml");
+      let text = "";
+      try {
+        text = readFileSync(path, "utf8");
+      } catch {
+        // No seeded config: start from an empty one.
+      }
+      // Both spellings: `/tmp` is a symlink on macOS and the pane opens in the
+      // resolved path, which is the one Codex compares against.
+      for (const directory of new Set([cwd, realpathSync(cwd)])) {
+        text += `\n[projects.${JSON.stringify(directory)}]\ntrust_level = "trusted"\n`;
+      }
+      mkdirSync(join(path, ".."), { recursive: true });
+      writeFileSync(path, text, { mode: 0o600 });
+    },
+  },
+  gemini: {
+    // `--skip-trust`: the pane opens in a throwaway directory the CLI has never
+    // seen, and headless Gemini refuses to work in an untrusted one.
+    deliver: "argv",
+    args: (prompt) => ["--skip-trust", "-p", prompt],
+    // `settings.json` carries the auth method as well as the hooks; without it
+    // gemini refuses to start ("Please set an Auth method"). It is therefore
+    // both seeded *and* declared as a file the installer edits.
+    seed: [
+      ".gemini/oauth_creds.json",
+      ".gemini/google_accounts.json",
+      ".gemini/installation_id",
+      ".gemini/settings.json",
+    ],
+    configHome: ".gemini",
+    edits: ["settings.json"],
+    stateSource: ["hook"],
+    contextUsage: null,
+    transcript: true,
+  },
   pi: {
     // `-p` is Pi's non-interactive mode; the extension loads the same way.
     deliver: "argv",
@@ -238,15 +342,32 @@ writeFileSync(
   { mode: 0o600 },
 );
 
-// See `deliver` on the provider table for why only one of the two is wrapped.
-const launcher =
-  definition.deliver === "paste" ? resolved : join(binDir, `${provider}-turn`);
-if (definition.deliver === "argv") {
+/**
+ * The program the terminal runs, built *after* the install because a
+ * `launch`-mode CLI is told where its adapter is on the command line
+ * (agent-integration §3). `extra` is what `GET /api/agents` answers with, which
+ * is the same argv the web app appends to a node's launch line.
+ *
+ * See `deliver` on the provider table for why only one of the two is wrapped.
+ */
+function buildLauncher(extra) {
+  if (definition.deliver === "paste") return resolved;
+  const path = join(binDir, `${provider}-turn`);
   writeFileSync(
-    launcher,
-    `#!/bin/sh\n${shellWords([resolved, ...definition.args(PROMPT)])}\nwhile IFS= read -r line; do :; done\n`,
+    path,
+    `#!/bin/sh\n${shellWords([resolved, ...extra, ...definition.args(PROMPT)])}\nwhile IFS= read -r line; do :; done\n`,
     { mode: 0o700 },
   );
+  return path;
+}
+
+/** A shell that stays open, for a node that exists only to read another's. */
+function idleLauncher() {
+  const path = join(binDir, "idle");
+  writeFileSync(path, "#!/bin/sh\nwhile IFS= read -r line; do :; done\n", {
+    mode: 0o700,
+  });
+  return path;
 }
 
 const runtime = spawn(runtimeBinary, ["--listen", "tcp:127.0.0.1:0"], {
@@ -294,24 +415,75 @@ async function main() {
   // Everything the seeding put there, before the installer touches it.
   const before = digestTree(configHome);
 
+  // One call, both halves (agent-integration §2). Before this there were two
+  // switches and three ways to be half-integrated.
   const install = await call(
     base,
     "POST",
-    `/api/agents/${provider}/hooks/install`,
+    `/api/agents/${provider}/integration/install`,
     {},
   );
-  assert.equal(install.installed, true, "the installer reported no install");
-  assert.ok(
-    install.configPath.startsWith(cliHome),
-    `the adapter was written outside the temporary home: ${install.configPath}`,
-  );
-  assert.ok(existsSync(install.configPath), "the adapter file was not written");
-  // Installing adds our own files and touches nothing else. Checked here,
-  // before the CLI runs, because afterwards the CLI has rewritten its own.
-  unchanged(before, configHome, "install");
-  console.log(`installed ${install.configPath}`);
+  assert.equal(install.hook.installed, true, "the adapter was not installed");
+  assert.equal(install.skill.installed, true, "the skill was not installed");
+  assert.equal(install.stale, false, "a fresh install reported itself stale");
+  assert.ok(existsSync(install.hook.path), "the adapter file was not written");
 
-  const { workspaceId, nodeId } = await createBoard(base);
+  // Where the adapter went is the whole point of the mode. `launch` writes
+  // nothing the CLI owns; the other two write a file we can name.
+  if (install.mode === "launch") {
+    assert.ok(
+      !install.hook.path.startsWith(cliHome),
+      `a launch-injected adapter was written into the CLI's own home: ${install.hook.path}`,
+    );
+    assert.ok(
+      install.launchArgs.length >= 2 && install.launchArgs[0].startsWith("-"),
+      `a launch-injected CLI reported no argv: ${JSON.stringify(install.launchArgs)}`,
+    );
+  } else {
+    assert.ok(
+      install.hook.path.startsWith(cliHome),
+      `the adapter was written outside the temporary home: ${install.hook.path}`,
+    );
+    assert.deepEqual(
+      install.launchArgs,
+      [],
+      "a file-installed adapter asked for launch arguments",
+    );
+  }
+
+  // The skill is a file in the directory that CLI actually scans, and it is the
+  // document that teaches the verbs checked further down.
+  assert.ok(
+    install.skill.path.startsWith(configHome),
+    `the skill was written outside ${configHome}: ${install.skill.path}`,
+  );
+  assert.ok(existsSync(install.skill.path), "the skill file was not written");
+  assert.match(
+    readFileSync(install.skill.path, "utf8"),
+    /armadra-hook canvas/,
+    "the installed skill does not teach the canvas verbs",
+  );
+
+  // Installing adds our own files and touches nothing else it did not declare.
+  // Checked here, before the CLI runs, because afterwards the CLI has rewritten
+  // its own.
+  unchanged(before, configHome, "install", definition.edits ?? []);
+  console.log(
+    `installed (${install.mode}) ${install.hook.path} + ${install.skill.path}`,
+  );
+
+  // The launch argv the runtime answers with, which is the same one the web app
+  // appends to a node's line.
+  const registry = await call(base, "GET", "/api/agents");
+  const entry = registry.find((row) => row.id === provider);
+  assert.deepEqual(
+    entry?.launchArgs ?? [],
+    install.launchArgs,
+    "the agent list disagreed with the install about the launch argv",
+  );
+  const launcher = buildLauncher(install.launchArgs);
+
+  const { workspaceId, nodeId, peerId } = await createBoard(base);
   // Opened before the terminal, so no frame can be missed.
   const stream = await watchStatus(base, workspaceId, nodeId);
   const session = await call(base, "POST", "/api/terminals", {
@@ -380,6 +552,69 @@ async function main() {
     );
   }
 
+  // The verbs the skill teaches, run the way the model would run them: as a
+  // child of that session, with only the addresses the PTY carries. Nothing
+  // here is mocked — the node token comes out of the file the terminal was
+  // issued, and a failure means the model would have seen the same error.
+  const listing = runVerb(nodeId, ["canvas", "list"]);
+  assert.equal(
+    listing.status,
+    0,
+    `armadra-hook canvas list failed: ${listing.stderr || listing.stdout}`,
+  );
+  assert.ok(
+    listing.stdout.includes(nodeId),
+    `canvas list did not name this node: ${listing.stdout.slice(0, 400)}`,
+  );
+  console.log("armadra-hook canvas list — ok");
+
+  // And the collaboration half: a *second* node, linked to the first, reading
+  // what the first actually said. The link is the permission — a node with no
+  // edge reads nothing, and that is the design, not a failure.
+  const peer = await call(base, "POST", "/api/terminals", {
+    workspaceId,
+    cwd: ".",
+    nodeId: peerId,
+    command: idleLauncher(),
+    args: [],
+    agent: { id: provider },
+  });
+  const links = runVerb(peerId, ["context", "list"]);
+  assert.equal(
+    links.status,
+    0,
+    `armadra-hook context list failed: ${links.stderr || links.stdout}`,
+  );
+  assert.ok(
+    links.stdout.includes(nodeId),
+    `the linked node was not listed: ${links.stdout.slice(0, 400)}`,
+  );
+  if (definition.transcript) {
+    const peek = runVerb(peerId, [
+      "context",
+      "summary",
+      "--node",
+      nodeId,
+      "-n",
+      "20",
+    ]);
+    assert.equal(
+      peek.status,
+      0,
+      `armadra-hook context summary failed: ${peek.stderr || peek.stdout}`,
+    );
+    // The prompt this script sent is in the first node's own transcript, so a
+    // reader that found the right conversation quotes it back.
+    assert.ok(
+      peek.stdout.includes("reply with the single word ok"),
+      `the peer's transcript did not come back: ${peek.stdout.slice(0, 400)}`,
+    );
+    console.log("armadra-hook context summary — read the linked node");
+  }
+  await call(base, "POST", `/api/terminals/${peer.id}/terminate`, {
+    mode: "session",
+  });
+
   await call(base, "POST", `/api/terminals/${session.id}/terminate`, {
     mode: "session",
   });
@@ -391,17 +626,32 @@ async function main() {
   const settled = digestTree(configHome);
   const ours = new Set([
     ...markedFiles(configHome),
-    relative(configHome, install.configPath),
+    relative(configHome, install.hook.path),
+    relative(configHome, install.skill.path),
   ]);
+  // A file the installer edits rather than owns survives the uninstall; only
+  // its entries go, and the "not ours, so it must be byte-identical" rule below
+  // would read that as damage.
+  const edited = new Set(definition.edits ?? []);
 
   const removed = await call(
     base,
     "POST",
-    `/api/agents/${provider}/hooks/uninstall`,
+    `/api/agents/${provider}/integration/uninstall`,
     {},
   );
-  assert.equal(removed.installed, false);
+  assert.equal(removed.hook.installed, false, "the adapter survived uninstall");
+  assert.equal(removed.skill.installed, false, "the skill survived uninstall");
+  assert.ok(
+    !existsSync(install.skill.path),
+    `uninstall left the skill file behind: ${install.skill.path}`,
+  );
+  assert.ok(
+    !existsSync(install.hook.path),
+    `uninstall left the adapter behind: ${install.hook.path}`,
+  );
   for (const [path, digest] of settled) {
+    if (edited.has(path)) continue;
     if (ours.has(path)) {
       assert.ok(
         !existsSync(join(configHome, path)),
@@ -440,7 +690,24 @@ async function createBoard(base) {
     `/api/workspaces/${workspace.id}/boards/${boardId}/document`,
   );
   const nodeId = crypto.randomUUID();
+  // The reader. Two nodes and one edge, because reading another node's
+  // transcript is what the edge *is*: without it `context` refuses, by design.
+  const peerId = crypto.randomUUID();
   const now = new Date().toISOString();
+  const node = (id, title, x) => ({
+    id,
+    boardId,
+    type: "terminal",
+    title,
+    color: "#0a84ff",
+    position: { x, y: 0 },
+    size: { width: 480, height: 320 },
+    labels: [],
+    note: "",
+    data: { kind: "terminal", cwd: ".", agent: { id: provider } },
+    createdAt: now,
+    updatedAt: now,
+  });
   await call(
     base,
     "PUT",
@@ -448,26 +715,40 @@ async function createBoard(base) {
     {
       expectedUpdatedAt: document.board.updatedAt,
       nodes: [
+        node(nodeId, provider, 0),
+        node(peerId, `${provider} reader`, 560),
+      ],
+      edges: [
         {
-          id: nodeId,
+          id: crypto.randomUUID(),
           boardId,
-          type: "terminal",
-          title: provider,
-          color: "#0a84ff",
-          position: { x: 0, y: 0 },
-          size: { width: 480, height: 320 },
-          labels: [],
-          note: "",
-          data: { kind: "terminal", cwd: ".", agent: { id: provider } },
+          source: peerId,
+          target: nodeId,
+          kind: "link",
           createdAt: now,
           updatedAt: now,
         },
       ],
-      edges: [],
       viewport: document.board.viewport,
     },
   );
-  return { workspaceId: workspace.id, nodeId };
+  // The edge is what a person draws; the link *document* is what the canvas
+  // derives from it and what a node's `context` verbs are authorized against
+  // (`db/context_links.rs`). The web app writes it whenever the board changes,
+  // so this script writes it too rather than reaching into the table.
+  await call(
+    base,
+    "PUT",
+    `/api/workspaces/${workspace.id}/context-links/${peerId}`,
+    { links: [{ id: nodeId, title: provider, kind: "terminal" }] },
+  );
+  await call(
+    base,
+    "PUT",
+    `/api/workspaces/${workspace.id}/context-links/${nodeId}`,
+    { links: [{ id: peerId, title: `${provider} reader`, kind: "terminal" }] },
+  );
+  return { workspaceId: workspace.id, nodeId, peerId };
 }
 
 /* --------------------------------- the home ------------------------------- */
@@ -523,6 +804,33 @@ function cleanEnvironment() {
 
 /* --------------------------------- helpers -------------------------------- */
 
+/**
+ * Runs one `armadra-hook` verb as the model would: a child of the agent's
+ * session, carrying only the addresses `terminal::agent_environment` puts in a
+ * node's PTY. The per-node token is *not* here — the client reads it from the
+ * 0600 file the terminal was issued, because any process of the same user can
+ * read another's environment.
+ */
+function runVerb(nodeId, argv) {
+  const result = spawnSync(hookBinary, argv, {
+    encoding: "utf8",
+    timeout: 60_000,
+    env: {
+      ...cleanEnvironment(),
+      HOME: cliHome,
+      ARMADRA_NODE_ID: nodeId,
+      ARMADRA_AGENT_ID: provider,
+      ARMADRA_ENDPOINT_FILE: join(dataDir, "hook-endpoint.env"),
+      ARMADRA_CANVAS_CONTROL: "1",
+    },
+  });
+  return {
+    status: result.status ?? -1,
+    stdout: result.stdout ?? "",
+    stderr: `${result.stderr ?? ""}${result.error ? ` ${result.error}` : ""}`,
+  };
+}
+
 /** First executable named `command` on `PATH`, or null. No shell, no guessing. */
 function which(command) {
   for (const directory of (process.env.PATH ?? "").split(":")) {
@@ -566,9 +874,13 @@ function digestTree(root, base = root, into = new Map()) {
   return into;
 }
 
-/** Asserts every file in `snapshot` still has the bytes it had. */
-function unchanged(snapshot, root, what) {
+/**
+ * Asserts every file in `snapshot` still has the bytes it had, except the ones
+ * the provider declared the installer may edit (`edits` on the provider table).
+ */
+function unchanged(snapshot, root, what, allowed = []) {
   for (const [path, digest] of snapshot) {
+    if (allowed.includes(path)) continue;
     assert.equal(
       digestFile(join(root, path)),
       digest,
