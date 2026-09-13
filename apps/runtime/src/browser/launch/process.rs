@@ -281,7 +281,15 @@ pub fn started_at(pid: u32) -> Option<i64> {
     // spaces and parentheses, so the split starts after the last ')'.
     let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
     let tail = &stat[stat.rfind(')')? + 1..];
-    let ticks: u64 = tail.split_whitespace().nth(19)?.parse().ok()?;
+    let mut fields = tail.split_whitespace();
+    // Field 3 is the state. A zombie still has a /proc entry and the same
+    // start time, and it is not running: a killed browser nobody reaped must
+    // read as gone here exactly as it does on macOS, or it looks like a
+    // session to re-attach to.
+    if fields.next()?.starts_with('Z') {
+        return None;
+    }
+    let ticks: u64 = fields.nth(18)?.parse().ok()?;
     let hertz = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
     if hertz <= 0 {
         return None;
