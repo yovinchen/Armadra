@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   goTarget,
@@ -18,11 +19,25 @@ test("imports expose entrypoints without running a build", () => {
   assert.equal(typeof sidecarMain, "function");
 });
 
+test("the Tauri CLI is started as JavaScript, not through a .cmd shim", async () => {
+  // `execFileSync` cannot start a Windows `.cmd` without a shell, so a build
+  // that shelled out to `pnpm exec tauri` worked everywhere except the one
+  // platform whose installers only CI produces.
+  const { tauriEntry } = await import("./build.mjs");
+  const entry = tauriEntry();
+  assert.match(entry, /@tauri-apps[\\/]cli[\\/]tauri\.js$/);
+  assert.ok(existsSync(entry), entry);
+});
+
 test("explicit supported Rust triples map to Go OS and architecture", () => {
+  // Every triple the release matrix names has to be in here, or the packaging
+  // job discovers it at tag time.
   for (const [triple, GOOS, GOARCH] of [
     ["aarch64-apple-darwin", "darwin", "arm64"],
     ["x86_64-apple-darwin", "darwin", "amd64"],
     ["aarch64-unknown-linux-gnu", "linux", "arm64"],
+    ["x86_64-unknown-linux-gnu", "linux", "amd64"],
+    ["aarch64-unknown-linux-musl", "linux", "arm64"],
     ["x86_64-unknown-linux-musl", "linux", "amd64"],
     ["aarch64-pc-windows-msvc", "windows", "arm64"],
     ["x86_64-pc-windows-msvc", "windows", "amd64"],

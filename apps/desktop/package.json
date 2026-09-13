@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "tauri dev",
     "prepare:sidecar": "node scripts/prepare-sidecar.mjs",
+    "prepare:sidecar-placeholders": "node scripts/stage-sidecar-placeholders.mjs",
     "build": "node scripts/build.mjs",
     "predev": "pnpm prepare:host --native",
     "prepare:host": "node scripts/prepare-host.mjs",
