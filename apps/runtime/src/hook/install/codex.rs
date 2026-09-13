@@ -193,8 +193,14 @@ fn take_events(document: &mut Map<String, Value>) -> Map<String, Value> {
 /// Codex resolves `CODEX_HOME` before it builds a state key, so a path that
 /// goes through a symlink (`/tmp` → `/private/tmp` on macOS) must be resolved
 /// here too or the key will never match.
+///
+/// Which of the two Windows spellings Codex writes — `C:\…` or the `\\?\C:\…`
+/// its own `canonicalize` would hand it — is untested against a real Codex, and
+/// the test below only checks that we agree with ourselves. This uses the one
+/// spelling the rest of the process uses; if Windows hooks turn out never to
+/// fire, that is the first thing to compare against a live `config.toml`.
 fn canonical_key_source(hooks_file: &Path) -> String {
-    std::fs::canonicalize(hooks_file)
+    crate::paths::canonicalize(hooks_file)
         .unwrap_or_else(|_| hooks_file.to_path_buf())
         .to_string_lossy()
         .into_owned()
@@ -469,8 +475,13 @@ mod tests {
 
         let config = fs::read_to_string(config_path(home.path())).unwrap();
         let key_source = canonical_key_source(&hooks_path(home.path()));
-        assert!(config.contains(&format!("[hooks.state.\"{key_source}:stop:0:0\"]")));
-        assert!(config.contains("enabled = true"));
+        // Read back through TOML rather than as text: a Windows key source
+        // carries backslashes, and the file spells those escaped.
+        let document: DocumentMut = config.parse().unwrap();
+        let entry = document["hooks"]["state"][&format!("{key_source}:stop:0:0")]
+            .as_table()
+            .expect("a trust entry for the stop handler");
+        assert_eq!(entry["enabled"].as_bool(), Some(true));
         // SessionEnd hashes with the 1s timeout, not the 600s default.
         let session_end = hook_hash(
             "session_end",

@@ -400,6 +400,13 @@ mod tests {
         );
     }
 
+    /// A local repository named where Git expects a URL. Git reads the argument
+    /// as one, so a Windows path goes in with forward slashes: a backslash is
+    /// an escape there and a leading pair reads as a UNC hostname.
+    fn local_source(path: &Path) -> String {
+        path.to_string_lossy().replace('\\', "/")
+    }
+
     fn repository(path: &Path) {
         std::fs::create_dir_all(path).expect("directory");
         git(path, &["init", "-q", "-b", "main"]);
@@ -414,7 +421,7 @@ mod tests {
             let root = std::env::temp_dir()
                 .join(format!("armadra-discovery-{name}-{}", uuid::Uuid::now_v7()));
             std::fs::create_dir_all(&root).expect("workspace root");
-            Self(std::fs::canonicalize(&root).expect("canonical workspace"))
+            Self(crate::paths::canonicalize(&root).expect("canonical workspace"))
         }
         fn path(&self) -> &Path {
             &self.0
@@ -529,7 +536,7 @@ mod tests {
                 "submodule",
                 "add",
                 "-q",
-                upstream.path().to_str().expect("path"),
+                &local_source(upstream.path()),
                 "libs/dep",
             ],
         );

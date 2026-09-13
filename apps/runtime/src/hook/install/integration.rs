@@ -230,6 +230,20 @@ fn write_marker(agent_id: &str, report: &InstallReport) -> AppResult<()> {
 mod tests {
     use super::*;
 
+    /// A config home that is absolute on the host running the test: a
+    /// `/home/dev/...` literal is a relative path on Windows, where every
+    /// assertion below about an absolute adapter path would then be vacuous.
+    fn fake_home(name: &str) -> PathBuf {
+        #[cfg(windows)]
+        {
+            PathBuf::from(format!(r"C:\Users\dev\{name}"))
+        }
+        #[cfg(not(windows))]
+        {
+            PathBuf::from(format!("/home/dev/{name}"))
+        }
+    }
+
     /// The composed revision is what makes hook and skill one switch: a change
     /// to either half has to move it, or a stale install reads as current.
     #[test]
@@ -243,7 +257,8 @@ mod tests {
 
     #[test]
     fn every_built_in_provider_has_an_adapter_path_and_a_mode() {
-        let home = Path::new("/home/dev/.config");
+        let home = fake_home(".config");
+        let home = home.as_path();
         for agent_id in crate::agent::AGENT_IDS {
             let path = adapter_path(agent_id, home).expect(agent_id);
             assert!(path.is_absolute(), "{agent_id}: {}", path.display());
@@ -259,7 +274,8 @@ mod tests {
     /// adapter must sit outside the CLI's own config home.
     #[test]
     fn the_launch_mode_provider_keeps_its_adapter_out_of_the_users_config_home() {
-        let home = Path::new("/home/dev/.claude");
+        let home = fake_home(".claude");
+        let home = home.as_path();
         let path = adapter_path("claude", home).unwrap();
         assert!(!path.starts_with(home), "{}", path.display());
         assert_eq!(

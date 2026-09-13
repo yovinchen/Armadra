@@ -380,7 +380,13 @@ async fn later_startup_failure_rolls_back_new_migrations_and_releases_lock() {
 #[tokio::test]
 async fn sqlx_encoded_filenames_and_memory_urls_use_the_same_preflight() {
     let directory = tempdir().unwrap();
+    // `?` is not a character a Windows filename may contain, so the name that
+    // exercises the URL escaping is the one the filesystem under the test can
+    // hold. `#`, the space and the non-ASCII run everywhere.
+    #[cfg(unix)]
     let path = directory.path().join("canvas ?# 空间.db");
+    #[cfg(not(unix))]
+    let path = directory.path().join("canvas # 空间.db");
     let url = database_url(&path);
     let pool = connect(&url).await.unwrap();
     pool.close().await;
@@ -429,7 +435,7 @@ async fn sqlx_encoded_filenames_and_memory_urls_use_the_same_preflight() {
 async fn a_database_written_by_this_build_is_reopened_untouched() {
     let directory = tempdir().unwrap();
     let path = directory.path().join("canvas.db");
-    let database_url = format!("sqlite://{}?mode=rwc", path.display());
+    let database_url = database_url(&path);
     let pool = connect(&database_url).await.unwrap();
     let workspace = create_workspace(
         &pool,
