@@ -339,6 +339,16 @@ pub fn started_at(pid: u32) -> Option<i64> {
 pub struct Containment;
 
 #[cfg(not(windows))]
+impl Containment {
+    /// A containment that holds nothing, for the re-attach path: the browser
+    /// outlived the Runtime that launched it, so there is no [`Child`] to put
+    /// in a Job Object and the original one died with its creator.
+    pub fn detached() -> Self {
+        Containment
+    }
+}
+
+#[cfg(not(windows))]
 fn contain(_child: &Child) -> Containment {
     Containment
 }
@@ -364,6 +374,14 @@ mod windows {
     // The handle is only ever closed on drop, never used concurrently.
     unsafe impl Send for Containment {}
     unsafe impl Sync for Containment {}
+
+    impl Containment {
+        /// See the non-Windows twin: the re-attach path has no child process,
+        /// so there is no Job Object to own.
+        pub fn detached() -> Self {
+            Containment(None)
+        }
+    }
 
     impl Drop for Containment {
         fn drop(&mut self) {

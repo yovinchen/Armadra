@@ -296,6 +296,17 @@ pub mod windows_pipe {
         pending: Option<NamedPipeServer>,
     }
 
+    // `NamedPipeServer` has no `Debug`, and the handle would say nothing
+    // anyway; the pipe name is the part a log line needs.
+    impl std::fmt::Debug for NamedPipeListener {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter
+                .debug_struct("NamedPipeListener")
+                .field("address", &self.address)
+                .finish_non_exhaustive()
+        }
+    }
+
     impl NamedPipeListener {
         pub fn bind(name: &str) -> anyhow::Result<Self> {
             let address = format!("{}{name}", super::PIPE_PREFIX);

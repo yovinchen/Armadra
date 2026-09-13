@@ -259,7 +259,14 @@ pub(super) async fn reattach(
     stored.reason_code = String::new();
     stored.process.cdp_port = cdp_port;
     let pid = stored.process.pid;
-    let live = adopt(state, &stored, client, None, pid, launch::Containment);
+    let live = adopt(
+        state,
+        &stored,
+        client,
+        None,
+        pid,
+        launch::Containment::detached(),
+    );
     spawn_pump(live.clone(), receiver);
     let _ =
         crate::browser::persist_process(&state.pool, &stored.id, stored.process, &stored.url).await;
