@@ -2,11 +2,12 @@
 //! in and renewing OAuth credentials; this module never changes its files.
 //! Endpoint and bucket fields follow google-gemini/gemini-cli's code_assist API.
 
-use anyhow::{Context, bail};
+use anyhow::Context;
 use serde::Deserialize;
 
 use super::{
-    CredentialSource, ProviderReport, ProviderResult, UsageWindow, clamp_percent, home_dir,
+    CredentialSource, ProviderReport, ProviderResult, UsageFailure, UsageWindow, clamp_percent,
+    home_dir,
 };
 
 pub const ID: &str = "gemini";
@@ -20,15 +21,22 @@ struct Credentials {
 }
 
 fn token_from_payload(raw: &str, now: i64) -> anyhow::Result<String> {
-    let credentials: Credentials =
-        serde_json::from_str(raw).context("Gemini credentials did not parse")?;
+    let credentials: Credentials = serde_json::from_str(raw).map_err(|error| {
+        UsageFailure::UnreadableCredentials
+            .with(error)
+            .context("Gemini credentials did not parse")
+    })?;
     if credentials.expiry_date.is_some_and(|expiry| expiry <= now) {
-        bail!("Gemini credentials have expired; run the CLI to renew them");
+        return Err(UsageFailure::ExpiredCredentials
+            .with("Gemini credentials have expired; run the CLI to renew them"));
     }
     credentials
         .access_token
         .filter(|token| !token.trim().is_empty())
-        .context("Gemini credentials do not contain an access token")
+        .ok_or_else(|| {
+            UsageFailure::UnreadableCredentials
+                .with("Gemini credentials do not contain an access token")
+        })
 }
 
 pub async fn fetch(client: &reqwest::Client) -> (ProviderResult, CredentialSource) {
@@ -43,7 +51,8 @@ pub async fn fetch(client: &reqwest::Client) -> (ProviderResult, CredentialSourc
         }
         Err(_) => {
             return (
-                Err(anyhow::anyhow!("Gemini credentials could not be read")),
+                Err(UsageFailure::UnreadableCredentials
+                    .with("Gemini credentials could not be read")),
                 CredentialSource::File,
             );
         }
@@ -67,15 +76,23 @@ async fn post(
         .json(&body)
         .send()
         .await
-        .context("request to Gemini quota service failed")?;
+        .map_err(|error| {
+            UsageFailure::Network
+                .with(error)
+                .context("request to Gemini quota service failed")
+        })?;
     if !response.status().is_success() {
         // Do not read the error body: it may contain account or project data.
-        bail!("Gemini quota service answered {}", response.status());
+        return Err(UsageFailure::from_status(response.status()).with(format!(
+            "Gemini quota service answered {}",
+            response.status()
+        )));
     }
-    response
-        .json()
-        .await
-        .context("Gemini quota response did not parse")
+    response.json().await.map_err(|error| {
+        UsageFailure::Parse
+            .with(error)
+            .context("Gemini quota response did not parse")
+    })
 }
 
 async fn fetch_token(client: &reqwest::Client, token: &str) -> ProviderResult {

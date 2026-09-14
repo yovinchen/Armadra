@@ -9,9 +9,12 @@
 //! 2. **`GET /api/usage` only ever exposes percentages and reset times.** The
 //!    upstream payloads carry account ids, e-mail addresses and plan names;
 //!    none of that is mapped into [`UsageSnapshot`].
-//! 3. **Failures are silent.** A 401, a network error or a shape change turns
-//!    into `status: "error"` with no message; the detail is logged at debug
-//!    level with the URL only.
+//! 3. **Failures carry a reason, never a message.** A 401, a network error or
+//!    a shape change turns into `status: "error"` plus a [`UsageFailure`]
+//!    code the dashboard can phrase (expired sign-in, network, …); the
+//!    upstream text is logged with the URL only. A user who sees「取不到
+//!    用量」and nothing else cannot tell an expired token from a proxy
+//!    problem — the 2026-09-15 report was exactly that.
 
 pub mod claude;
 pub mod codex;
@@ -57,6 +60,60 @@ pub enum UsageStatus {
     Unavailable,
     /// Credentials exist but the fetch or the parse failed.
     Error,
+}
+
+/// Why a provider is `error`, as a code. Providers return it as the root of
+/// their `anyhow::Error` (with whatever context they like on top); `finish`
+/// downcasts it back out. Nothing here names an account, a URL or a token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, thiserror::Error)]
+#[serde(rename_all = "snake_case")]
+pub enum UsageFailure {
+    /// The stored sign-in has passed its expiry; the CLI renews it on its
+    /// next run, this module never does (it does not write credentials).
+    #[error("credentials have expired")]
+    ExpiredCredentials,
+    #[error("credentials could not be read")]
+    UnreadableCredentials,
+    #[error("provider answered 401")]
+    Unauthorized,
+    #[error("provider answered 403")]
+    Forbidden,
+    #[error("provider answered 429")]
+    RateLimited,
+    #[error("provider answered an unexpected status")]
+    ProviderError,
+    #[error("request did not reach the provider")]
+    Network,
+    #[error("response did not parse")]
+    Parse,
+    #[error("response contained no usable windows")]
+    NoWindows,
+}
+
+impl UsageFailure {
+    pub fn from_status(status: reqwest::StatusCode) -> Self {
+        match status.as_u16() {
+            401 => Self::Unauthorized,
+            403 => Self::Forbidden,
+            429 => Self::RateLimited,
+            _ => Self::ProviderError,
+        }
+    }
+
+    /// The code at the root of a provider error, or the generic one when the
+    /// provider did not say.
+    pub fn of(error: &anyhow::Error) -> Self {
+        error
+            .downcast_ref::<UsageFailure>()
+            .copied()
+            .unwrap_or(Self::ProviderError)
+    }
+
+    /// `anyhow::Error` with this code at the root and `context` on top, so the
+    /// log line reads well and the code still downcasts.
+    pub fn with(self, context: impl std::fmt::Display + Send + Sync + 'static) -> anyhow::Error {
+        anyhow::Error::new(self).context(context)
+    }
 }
 
 /// One rate-limit window. `label` is a unit abbreviation (`5h`, `7d`), not
@@ -125,6 +182,9 @@ impl ProviderReport {
 pub struct ProviderUsage {
     pub id: &'static str,
     pub status: UsageStatus,
+    /// Only with `status: "error"`: why, as a code.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<UsageFailure>,
     pub credential_source: CredentialSource,
     pub windows: Vec<UsageWindow>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -139,6 +199,7 @@ impl ProviderUsage {
         Self {
             id,
             status: UsageStatus::Unavailable,
+            reason: None,
             credential_source: CredentialSource::None,
             windows: Vec::new(),
             credits: None,
@@ -411,7 +472,7 @@ async fn optional(
 }
 
 /// Maps a provider result onto the wire shape. The error text is logged, not
-/// returned: the pill shows a grey dash and says nothing (plan §19「刷新」).
+/// returned; what the dashboard gets is the reason code (plan §19「刷新」).
 fn finish(
     id: &'static str,
     result: ProviderResult,
@@ -424,6 +485,7 @@ fn finish(
             ProviderUsage {
                 id,
                 status: UsageStatus::Ok,
+                reason: None,
                 credential_source,
                 windows: report.windows,
                 credits: report.credits,
@@ -438,18 +500,14 @@ fn finish(
             credential_source,
             ..ProviderUsage::unavailable(id)
         },
-        Ok(Some(_)) => finish(
-            id,
-            Err(anyhow::anyhow!(
-                "usage response contained no usable windows"
-            )),
-            credential_source,
-        ),
+        Ok(Some(_)) => finish(id, Err(UsageFailure::NoWindows.into()), credential_source),
         Err(error) => {
-            tracing::debug!(provider = id, %error, "usage fetch failed");
+            let reason = UsageFailure::of(&error);
+            tracing::warn!(provider = id, ?reason, %error, "usage fetch failed");
             ProviderUsage {
                 id,
                 status: UsageStatus::Error,
+                reason: Some(reason),
                 credential_source,
                 ..ProviderUsage::unavailable(id)
             }
@@ -666,9 +724,34 @@ mod tests {
         assert!(provider.windows.is_empty());
         let json = serde_json::to_string(&provider).unwrap();
         assert!(!json.contains("401"), "{json}");
+        // An error the provider did not classify is the generic code.
+        assert!(json.contains("\"reason\":\"provider_error\""), "{json}");
         // The location survives an error so the settings page can still say
         // where the (rejected) credential came from.
         assert!(json.contains("\"credentialSource\":\"keychain\""), "{json}");
+    }
+
+    /// The case the 2026-09-15 report was about: a keychain token past its
+    /// expiry. The dashboard has to be able to say so, and nothing else.
+    #[test]
+    fn an_expired_credential_is_reported_as_such_without_its_details() {
+        let provider = finish(
+            "claude",
+            Err(UsageFailure::ExpiredCredentials.with("keychain token sk-… expired at 1")),
+            CredentialSource::Keychain,
+        );
+        assert_eq!(provider.status, UsageStatus::Error);
+        assert_eq!(provider.reason, Some(UsageFailure::ExpiredCredentials));
+        let json = serde_json::to_string(&provider).unwrap();
+        assert!(
+            json.contains("\"reason\":\"expired_credentials\""),
+            "{json}"
+        );
+        assert!(!json.contains("sk-"), "{json}");
+        assert_eq!(
+            UsageFailure::from_status(reqwest::StatusCode::FORBIDDEN),
+            UsageFailure::Forbidden
+        );
     }
 
     #[test]

@@ -24,8 +24,8 @@ use base64::Engine;
 use serde::Deserialize;
 
 use super::{
-    CredentialSource, ProviderReport, ProviderResult, UsageCredits, UsageWindow, clamp_percent,
-    duration_label, home_dir,
+    CredentialSource, ProviderReport, ProviderResult, UsageCredits, UsageFailure, UsageWindow,
+    clamp_percent, duration_label, home_dir,
 };
 
 pub const ID: &str = "codex";
@@ -188,15 +188,21 @@ async fn fetch_token(
         .header("accept", "application/json")
         .send()
         .await
-        .context("request to the Codex usage endpoint failed")?;
+        .map_err(|error| {
+            UsageFailure::Network
+                .with(error)
+                .context("request to the Codex usage endpoint failed")
+        })?;
     let status = response.status();
     if !status.is_success() {
-        bail!("Codex usage endpoint answered {status}");
+        return Err(UsageFailure::from_status(status)
+            .with(format!("Codex usage endpoint answered {status}")));
     }
-    let usage: UsageResponse = response
-        .json()
-        .await
-        .context("Codex usage response did not parse")?;
+    let usage: UsageResponse = response.json().await.map_err(|error| {
+        UsageFailure::Parse
+            .with(error)
+            .context("Codex usage response did not parse")
+    })?;
     Ok(Some(report(usage)))
 }
 
