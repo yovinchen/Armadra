@@ -416,13 +416,15 @@ func TestABinaryInsideAnApplicationBundleIsRefused(t *testing.T) {
 // process, so a command that silently picked between them would be choosing
 // which release gets installed.
 func TestUpgradeModesAreMutuallyExclusive(t *testing.T) {
+	// The flag wants an absolute path, which /tmp is not on Windows.
+	binary := filepath.Join(t.TempDir(), "armadra-host")
 	for _, args := range [][]string{
 		{"upgrade"},
-		{"upgrade", "--binary", "/tmp/armadra-host", "--from-release"},
+		{"upgrade", "--binary", binary, "--from-release"},
 		{"upgrade", "--from-release", "--rollback"},
-		{"upgrade", "--binary", "/tmp/armadra-host", "--rollback"},
+		{"upgrade", "--binary", binary, "--rollback"},
 		{"upgrade", "--rollback", "--channel", "beta"},
-		{"upgrade", "--binary", "/tmp/armadra-host", "--version", "0.2.0"},
+		{"upgrade", "--binary", binary, "--version", "0.2.0"},
 		{"upgrade", "--from-release", "--channel", "development"},
 		{"upgrade", "--binary", "relative/path"},
 		{"upgrade", "--from-release", "--updates-pubkey", "relative.pub"},
@@ -432,7 +434,7 @@ func TestUpgradeModesAreMutuallyExclusive(t *testing.T) {
 		}
 	}
 	for _, args := range [][]string{
-		{"upgrade", "--binary", "/tmp/armadra-host"},
+		{"upgrade", "--binary", binary},
 		{"upgrade", "--from-release"},
 		{"upgrade", "--from-release", "--channel", "beta", "--version", "0.2.0"},
 		{"upgrade", "--rollback"},

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -63,7 +64,7 @@ func CanonicalDir(platform, scope string, home string) (string, error) {
 		if home == "" {
 			return "", fmt.Errorf("%w: no home directory to place a LaunchAgent in", ErrRegister)
 		}
-		return filepath.Join(home, "Library", "LaunchAgents"), nil
+		return path.Join(home, "Library", "LaunchAgents"), nil
 	case PlatformLinux:
 		if scope == ScopeSystem {
 			return "/etc/systemd/system", nil
@@ -71,7 +72,7 @@ func CanonicalDir(platform, scope string, home string) (string, error) {
 		if home == "" {
 			return "", fmt.Errorf("%w: no home directory to place a user unit in", ErrRegister)
 		}
-		return filepath.Join(home, ".config", "systemd", "user"), nil
+		return path.Join(home, ".config", "systemd", "user"), nil
 	case PlatformWindows:
 		if scope == ScopeUser {
 			return "", fmt.Errorf("%w: Windows has no user-level services", ErrUnsupported)

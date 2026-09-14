@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -16,18 +17,25 @@ import (
 func sample(t *testing.T, platform string) Spec {
 	t.Helper()
 	root := t.TempDir()
+	// A launchd or systemd definition carries POSIX paths whatever host renders
+	// it; a Windows temporary directory would come out escaped.
+	join := filepath.Join
+	if platform != PlatformWindows {
+		root = filepath.ToSlash(root)
+		join = path.Join
+	}
 	return Spec{
 		Identifier:     "local.armadra.host",
 		Platform:       platform,
-		Executable:     filepath.Join(root, "bin", "armadra-host"),
+		Executable:     join(root, "bin", "armadra-host"),
 		RunAs:          "armadra",
-		DataDir:        filepath.Join(root, "state"),
-		LogPath:        filepath.Join(root, "state", "host.log"),
+		DataDir:        join(root, "state"),
+		LogPath:        join(root, "state", "host.log"),
 		Listen:         "127.0.0.1:45991",
-		EndpointsDir:   filepath.Join(root, "state"),
+		EndpointsDir:   join(root, "state"),
 		AllowedOrigins: []string{"https://canvas.example"},
-		WorkerBinary:   filepath.Join(root, "bin", "armadra-runtime"),
-		WorkerStateDir: filepath.Join(root, "worker"),
+		WorkerBinary:   join(root, "bin", "armadra-runtime"),
+		WorkerStateDir: join(root, "worker"),
 		Environment:    []string{"ARMADRA_LOG=info"},
 	}
 }
