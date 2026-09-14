@@ -1,10 +1,11 @@
 import { useViewport } from "@xyflow/react";
-import { LayoutGrid, Plus, Redo2, Undo2 } from "lucide-react";
+import { LayoutGrid, Lock, LockOpen, Plus, Redo2, Undo2 } from "lucide-react";
 import {
   ADD_MENU_CONTENT_CLASS,
   AddMenuContent,
 } from "../canvas/menus/AddMenuContent";
 import { DockTools } from "./DockTools";
+import { setCanvasLocked, useCanvasLocked } from "../canvas/canvas-lock";
 import { DockUsage } from "./DockUsage";
 import { useMenuTooltip } from "./menu-tooltip";
 import { currentViewportCenter } from "../canvas/placement";
@@ -34,9 +35,12 @@ const ZOOM_STEPS = [0.5, 1, 1.5] as const;
  * 保存状态只用一个点表示，不写文字（§14 第 4 条）。
  *
  * 用量在最右端（F9）：它以前是右下角一个独立浮层，用户要求并进 Dock。
+ * 锁定视图在最左端（2026-09-14 反馈）：它以前是左下角一个独立的浮钮，
+ * 用户要求并进 Dock，Dock 本身居中。
  */
 export function Dock() {
   const t = useT();
+  const locked = useCanvasLocked();
   // `useViewport` 要在 `<ReactFlowProvider>` 之下：Dock 挂在 `App` 里，
   // provider 包着整棵树（§2.9），所以这里读得到。
   const { zoom } = useViewport();
@@ -57,6 +61,26 @@ export function Dock() {
       data-slot="dock"
       className="canvas-dock z-[var(--z-dock)] flex h-[var(--dock-h)] items-center gap-1 rounded-[var(--r-panel)] border border-border bg-[var(--panel)]/90 px-1.5 shadow-[var(--shadow-pill)] backdrop-blur-[12px]"
     >
+      <Tooltip delayDuration={500}>
+        <TooltipTrigger asChild>
+          <IconButton
+            size="dock"
+            data-slot="canvas-lock"
+            label={locked ? t("canvas.unlock") : t("canvas.lock")}
+            aria-pressed={locked}
+            active={locked}
+            onClick={() => setCanvasLocked(!locked)}
+          >
+            {locked ? <Lock /> : <LockOpen />}
+          </IconButton>
+        </TooltipTrigger>
+        <TooltipContent>
+          {locked ? t("canvas.unlock") : t("canvas.lock")}
+        </TooltipContent>
+      </Tooltip>
+
+      <Separator orientation="vertical" className="mx-1 h-5" />
+
       <DropdownMenu {...addMenu.menuProps}>
         <Tooltip delayDuration={500}>
           <TooltipTrigger asChild {...addMenu.tooltipTriggerProps}>

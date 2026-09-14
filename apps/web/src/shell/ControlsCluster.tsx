@@ -20,7 +20,8 @@ import { useMenuTooltip } from "./menu-tooltip";
 import type { ReactNode } from "react";
 
 /**
- * 右上工具簇：首个按钮与 44px 标题栏中心线对齐。
+ * 右上工具簇：离上边与右边各 14px，与右下缩略图、底部 Dock 同一套边距
+ * （2026-09-14 反馈；此前是贴着标题栏中心线的 3px）。
  *
  * §24.3-2：不再是一排各自带毛玻璃的圆钮，而是**一整条** `--panel` 底、
  * 圆角 10 的条子，里面是 28×28 的 ghost 钮、间距 8。
@@ -69,7 +70,7 @@ export function ControlsCluster() {
         }}
         className={cn(
           BAR,
-          "absolute top-[3px] right-[14px] z-[var(--z-cluster)]",
+          "absolute top-[14px] right-[14px] z-[var(--z-cluster)]",
           "transition-[right] duration-150 ease-out motion-reduce:transition-none",
         )}
       >
