@@ -338,6 +338,26 @@ go run github.com/rhysd/actionlint/cmd/actionlint@latest \
 因此不同——夹具改为在仓库里钉死 `core.autocrlf=false`；Codex 的 trust key 里是
 反斜杠，TOML 会把它转义，断言改成解析后再比。
 
+### 第二轮真跑（2026-09-14）：三平台全绿
+
+Windows runner 确认了上面五类修法，然后 `--no-fail-fast`（此前 cargo 在第一个失败的
+二进制处就停，六十多个集成套件根本没跑到）又列出了另外几批，连同 Linux / macOS
+上的三处偶发，全部改在代码或夹具里，`5bce0440d` 三平台全部通过
+（Linux 14 分钟、macOS 10 分钟、Windows 33 分钟）：
+
+| 在哪                            | 是什么                                                                                                                              | 怎么改                                                                              |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Rust 集成夹具（Windows）        | `/private/armadra` 不是绝对路径；文件名里的换行；worktree 路径用反斜杠；私有状态目录要的是受保护的两条 ACL 而不是 0700              | 夹具按平台给：盘符前缀、空格代替换行、比较前换成正斜杠、`icacls` 写 Host 同款描述符 |
+| Go 夹具（Windows）              | `/tmp`、POSIX 权限位、目录名里的 `?`、Windows 临时目录喂给 systemd/launchd 渲染器                                                   | 同上按平台给；渲染器测试对 POSIX 平台用正斜杠样例                                   |
+| Go 真缺陷：事件流关闭           | `Hub.Close` 只标记不等待，pump 还在读 outbox 时 store 已关；`database/sql` 又把被取消的事务放到自己的 goroutine 上回滚              | `done` 通道 + `WaitGroup`，Close 等到所有 pump 离开；分页读用 `WithoutCancel`       |
+| Go 真缺陷：服务定义按宿主规范化 | Windows 上 `filepath.Clean` 把 launchd/systemd 定义里的 `/` 改成 `\`，渲染器再转义，`Owns` 认不出自己写的文件                       | 按定义所属平台 `path.Clean` / `filepath.Clean`                                      |
+| Rust 真缺陷：终端 stale         | resize 过了代次检查才碰到被回收的 pty，非 Conflict 错误直接关 socket，客户端把计划内回收当成掉线                                    | 任何写失败都先问代次动没动，动了先发 `stale`                                        |
+| Rust 偶发（Linux / macOS）      | 会话 `ready` 早于文档解析完；跨站 iframe 首次点击被 Chrome 丢掉；旧 screencast 的 WebP 帧还在路上；hook 序号锁 150 ms 不够 8 个并发 | `open()` 等文档文本；循环点击直到帧记录；等到 JPEG 帧为止；等待放宽到 500 ms        |
+
+Windows 上原本担心的三件事都由 runner 回答了：Codex `config.toml` 的路径拼写、
+Git for Windows 的系统级 `autocrlf`（夹具钉死后不再影响）、`git submodule add` 的
+正斜杠 URL，都没有再出问题。
+
 跨平台编译可以在一台机器上先过一遍，前提是有目标平台的 C 工具链
 （Windows SDK 或 glibc sysroot）；没有的话这两条只能由 CI 回答：
 
