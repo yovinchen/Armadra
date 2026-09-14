@@ -19,13 +19,16 @@
 # and the workflow step can be deleted.
 #
 # Usage: postprocess-linux-appimage.sh <appimage-path>
-# APPIMAGETOOL_PATH overrides the packer; otherwise the one Tauri already
-# downloaded into ~/.cache/tauri is reused before anything is fetched.
+# APPIMAGETOOL_PATH overrides the packer; otherwise a pinned appimagetool
+# release is fetched for this architecture and checked against its digest.
+# (Tauri 2.11 caches linuxdeploy-plugin-appimage, not a standalone
+# appimagetool, so there is nothing of Tauri's to reuse here.)
 set -euo pipefail
 
 readonly APPIMAGETOOL_VERSION="1.9.1"
-readonly APPIMAGETOOL_SHA256="ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
-readonly APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/appimagetool-x86_64.AppImage"
+# One digest per build of the same release; both verified on 2026-09-14.
+readonly APPIMAGETOOL_SHA256_X86_64="ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
+readonly APPIMAGETOOL_SHA256_AARCH64="f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158"
 
 fail() {
   echo "postprocess-linux-appimage: $*" >&2
@@ -88,23 +91,18 @@ if [ -n "${APPIMAGETOOL_PATH:-}" ]; then
   appimagetool_path="$(realpath "$APPIMAGETOOL_PATH")"
   test -x "$appimagetool_path" || fail "APPIMAGETOOL_PATH is not executable: $appimagetool_path"
 else
-  # Tauri's own bundler already downloaded an appimagetool for this
-  # architecture. Reusing it is both faster and the only way this works on
-  # arm64, where the pinned x86_64 download below cannot run.
-  cached="$(find "${HOME}/.cache/tauri" -maxdepth 1 -type f -name 'appimagetool*' -print -quit 2>/dev/null || true)"
-  if [ -n "$cached" ]; then
-    appimagetool_path="$cached"
-    chmod +x "$appimagetool_path"
-  elif [ "$architecture" = "x86_64" ]; then
-    appimagetool_path="$work_dir/appimagetool-x86_64.AppImage"
-    curl --fail --location --retry 3 --silent --show-error \
-      --output "$appimagetool_path" "$APPIMAGETOOL_URL"
-    echo "$APPIMAGETOOL_SHA256  $appimagetool_path" | sha256sum --check --status ||
-      fail "appimagetool checksum verification failed"
-    chmod +x "$appimagetool_path"
-  else
-    fail "no appimagetool for $architecture: set APPIMAGETOOL_PATH, or run this only where Tauri cached one"
-  fi
+  case "$architecture" in
+    x86_64) expected_sha256="$APPIMAGETOOL_SHA256_X86_64" ;;
+    aarch64) expected_sha256="$APPIMAGETOOL_SHA256_AARCH64" ;;
+    *) fail "no pinned appimagetool for $architecture: set APPIMAGETOOL_PATH" ;;
+  esac
+  appimagetool_path="$work_dir/appimagetool-$architecture.AppImage"
+  curl --fail --location --retry 3 --silent --show-error \
+    --output "$appimagetool_path" \
+    "https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/appimagetool-${architecture}.AppImage"
+  echo "$expected_sha256  $appimagetool_path" | sha256sum --check --status ||
+    fail "appimagetool checksum verification failed for $architecture"
+  chmod +x "$appimagetool_path"
 fi
 
 repacked_path="$work_dir/repacked.AppImage"

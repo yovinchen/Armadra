@@ -171,13 +171,14 @@ EGL 与 libdecor 模块。镜像里自带一份，等于把同一套协议的两
 
 几点与 LiveAgent 不同：
 
-- **是否还需要，只有真 runner 能回答。** Tauri 2.11 是否仍然打包这些库没法在本机
-  验证，所以脚本在「一个都没找到」时打印一行说明并 **exit 0**，而不是像 LiveAgent
-  那样失败。看到那行说明就意味着这一步可以删了。
-- **appimagetool 优先复用 Tauri 已下载的那份**（`~/.cache/tauri/`），
-  其次才是钉了 sha256 的 x86_64 官方发布。LiveAgent 只发 x86_64，我们有 arm64 行，
-  而 `appimagetool-x86_64.AppImage` 在 arm64 上根本跑不起来；复用 Tauri 自己按架构
-  取的那份是唯一在两边都成立的做法。
+- **仍然需要。** 首次打标签（`v0.1.0`，2026-09-14）两条 Linux 行都在 AppImage 里找到了
+  `libwayland-client/cursor/egl/server` 四个库，脚本剥掉后重新打包。脚本在「一个都没找到」
+  时仍打印一行说明并 **exit 0**，看到那行说明就意味着这一步可以删了。
+- **appimagetool 按架构钉版本与 sha256**（1.9.1 的 x86_64 与 aarch64 两个构建）。
+  LiveAgent 只发 x86_64；我们有 arm64 行，而 `appimagetool-x86_64.AppImage` 在 arm64
+  上跑不起来。原先想复用 Tauri 自己下载的那份，但 Tauri 2.11 缓存的是
+  `linuxdeploy-plugin-appimage-<arch>.AppImage`，并没有独立的 appimagetool——
+  首次打标签时 arm64 行就是在这里停下的。`APPIMAGETOOL_PATH` 仍可覆盖。
 - 重新打包会让 Tauri 的 `.sig` 对不上字节，脚本因此删掉它，工作流紧接着用
   `tauri signer sign` 补签（只在本来就签过时补）。
 
@@ -315,8 +316,8 @@ go run github.com/rhysd/actionlint/cmd/actionlint@latest \
 
 - `ubuntu-22.04` / `ubuntu-22.04-arm` 上 WebKitGTK 与 Tauri 2.11 的组合是否打得出
   三种包（22.04 的 `libwebkit2gtk-4.1-dev` 比 24.04 老一档）；
-- Tauri 2.11 是否仍然往 AppImage 里塞 libwayland（§2.4 的脚本会说）；
-- arm64 上 Tauri 的 AppImage 打包与 `~/.cache/tauri` 里 appimagetool 的文件名；
+- ~~Tauri 2.11 是否仍然往 AppImage 里塞 libwayland~~（会，见 §2.4）；
+- ~~arm64 上 Tauri 的 AppImage 打包~~（打得出；appimagetool 改为按架构钉版本，见 §2.4）；
 - Apple 证书导入、`notarytool --validate` 与 bundler 的公证（要真 secret）；
 - Windows 便携 zip 里那五个 exe 解压后能不能真的互相找到。
 
