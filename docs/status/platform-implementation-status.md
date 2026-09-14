@@ -204,6 +204,15 @@
 - 反馈清单 F1–F10 的处理结果见上表「计划」列。
 - 主树复核（`ee6039c1`）：`pnpm check`（含 rustfmt 门禁）、协议 140、shared 153、host-client 288、Web 232 文件 2275 项、clippy 全 workspace、Runtime / hook / 桌面 cargo 全部套件、Go Host 全部包 race（真实 Worker）、canvas 73、settings 35、filesystem 30、session 39、git 46、agent 57、GitHub 42、原生会话 smoke 全部通过；Go Windows/Linux vet 与 build 通过；Rust Linux 交叉 `cargo check` 在本机因 `aws-lc-sys` 需要目标 C 工具链而停在 build script（代码本身在带桩工具链下 0 错误，见 ci-release.md），由 CI 的 ubuntu 行回答。
 
+## 第十二轮：三平台 CI 收口（2026-09-13 深夜至 09-14 上午）
+
+- **计费阻断**：私有仓库的 Actions 额度被这两天的三平台跑与两次六目标打包耗尽，作业起不来；仓库改为公开后恢复（公开仓库 Actions 免费，两个 arm runner 也只对公开仓库免费）。
+- **`ci.yml` 改 `--no-fail-fast`**（`680235cf`）：此前 Windows 在 Runtime 单测处就停，60 多个集成套件从未跑到；现在一次运行列全一个平台的所有失败。
+- **Windows 第一次跑完整套**：Rust 集成夹具 21 处、Go 夹具 8 处按平台给（`699b32f6`、`7daec3df`、`cc1cefa2`）；三处真缺陷改在产品里——事件流 `Hub.Close` 不等待 pump、分页读被连接取消后交给 `database/sql` 自己的 goroutine 回滚（`c6cbde71`、`2742f7fb`）；服务定义按宿主而非目标平台规范化路径（`3a0f2676`）；终端 resize 撞上回收时不发 `stale`（`d6f22612`）。
+- **Linux / macOS 偶发四处**（`8d4cb7aa`、`c8276477`、`5bce0440`）：浏览器会话 `ready` 早于文档解析、跨站 iframe 首次点击被丢、旧 screencast 的 WebP 帧在路上、hook 序号锁 150 ms 等不到 8 个并发。
+- **结果**：`5bce0440d` 三平台全绿（Linux 14 分钟、macOS 10 分钟、Windows 33 分钟）；明细见 [ci-release.md](../guides/ci-release.md) §4。打包只在 `v*` 标签或手动触发时进行；Linux arm64 的 `xdg-utils` 修正与 Apple 签名路径仍待首次打标签验证。
+- 公开后 Dependabot 报 `glib 0.18`（Tauri 2 固定的 gtk 0.18 栈，仅 Linux，`VariantStrIter` 未用到）中危一条，待 Tauri 3 才能升；其余 vitest 告警已随 vitest 4 升级关闭。
+
 ## 本轮验证（2026-09-06 上午，四轮全部合入后于主树重跑，私有目标目录）
 
 | 范围                       | 命令                                                                                                                          | 结果                                                                                               |
@@ -331,4 +340,4 @@
 1. 待用户决定：协作模型批 5（画布上直接允许/拒绝权限）；`handoff-read` 是否算确认；`workspace/executeCommand` 是否放开（语言服务 §6.2）；配置覆盖变量（`GEMINI_CLI_HOME`/`CODEX_HOME`/`COPILOT_HOME`/`PI_CODING_AGENT_DIR`）是否加入终端子进程白名单；远端 Worker `service_contract_version` 升到 2 是否改为能力位；是否推送 `origin`。之后评估 B6 `apps/runtime`→`apps/worker` 改名与 Host 内核分配端口。
 2. 每轮合入后重跑 `pnpm check`、`cargo test --workspace`、`go -C apps/host test -race ./...`（含真实 Worker）、`pnpm protocol:test`、`pnpm ownership:e2e --domain settings|filesystem`、`pnpm canvas:e2e`；`main` 快进。
 3. 剩余 800–1500 行文件的收尾拆分（`migration_export.rs`、`settings.rs`、`GitRepositoryPanel.tsx`、`SourceControlDrawer.tsx`、`keybindings.ts` 等）在实施轮之间进行，避免与在飞批次冲突。
-4. 需要实机的验收保持未完成：Windows、手机、真实 GitHub/SSH、CI 真实 runner、签名密钥。
+4. 需要实机的验收保持未完成：手机、真实 GitHub/SSH、签名密钥；Windows 与 CI 真实 runner 已由第十二轮回答（三平台检查全绿），Windows 打包产物仍待首次打标签。
