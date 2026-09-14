@@ -574,10 +574,23 @@ async fn a_subscriber_that_decodes_webp_is_sent_webp() {
     .unwrap();
     let old_receipt = next_receipt(&mut old).await;
     assert_eq!(old_receipt["encoding"], "jpeg");
-    let downgraded = next_frame(&mut socket, Duration::from_secs(20))
-        .await
-        .expect("the webp viewer keeps getting frames, in the other encoding");
-    assert_eq!(downgraded.encoding, "jpeg");
+    // A WebP frame the old screencast had already produced can still be in
+    // flight when the restart lands; it is labelled by its bytes, so the
+    // viewer can decode it. The one after the restart is what matters.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+    let downgraded = loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        let frame = next_frame(&mut socket, remaining)
+            .await
+            .expect("the webp viewer keeps getting frames, in the other encoding");
+        if frame.encoding == "jpeg" {
+            break frame;
+        }
+        assert_eq!(
+            frame.encoding, "webp",
+            "a frame is one of the two encodings"
+        );
+    };
     assert!(downgraded.data.starts_with(&[0xff, 0xd8]));
 
     old.close(None).await.unwrap();

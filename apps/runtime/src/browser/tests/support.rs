@@ -430,6 +430,16 @@ pub(super) async fn open(
     let live = session::require_live(&fixture.state, &session.session_id)
         .await
         .unwrap();
+    // `ready` is said as soon as the navigation was accepted, not once the
+    // document has parsed; every fixture page has visible text, and the tests
+    // address that document right away. A slow host answers `ready` first.
+    until(&live, "the page to have a document", async || {
+        session::read(&live, ReadMode::Text, 20, 4_096)
+            .await
+            .map(|read| !read.text.trim().is_empty())
+            .unwrap_or(false)
+    })
+    .await;
     (workspace, live)
 }
 
