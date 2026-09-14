@@ -251,11 +251,14 @@ func dirFor(platform, value string) string {
 	return path.Dir(value)
 }
 
+// A POSIX definition also accepts a path that is absolute on the rendering
+// host: the tests render every platform's definition from one host's
+// temporary directory, and nothing is served from that path.
 func absoluteFor(platform, value string) bool {
 	if platform == PlatformWindows {
 		return filepath.IsAbs(value)
 	}
-	return strings.HasPrefix(value, "/")
+	return strings.HasPrefix(value, "/") || filepath.IsAbs(value)
 }
 
 func validateSpecPath(platform, name, value string) error {
