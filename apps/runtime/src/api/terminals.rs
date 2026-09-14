@@ -359,7 +359,15 @@ async fn handle_terminal_socket(
                                 break;
                             }
                         }
-                        Err(_) => break,
+                        // Any other failure may also be the recycle itself:
+                        // the resize passed the generation check and then met
+                        // a pty that was destroyed a moment later. Saying
+                        // `stale` when the generation moved keeps a planned
+                        // recycle from looking like a dropped connection.
+                        Err(_) => {
+                            announce_stale(&state, &session_id, generation, &mut sender).await;
+                            break;
+                        }
                     }
                 }
                 Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
