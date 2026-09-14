@@ -1,7 +1,6 @@
 package servicedef
 
 import (
-	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -74,7 +73,7 @@ func renderSystemd(spec Spec) []byte {
 // rendered line is stable.
 func readWritePaths(spec Spec) []string {
 	unique := map[string]bool{}
-	for _, path := range []string{spec.DataDir, spec.WorkingDir, spec.EndpointsDir, spec.WorkerStateDir, filepath.Dir(spec.LogPath)} {
+	for _, path := range []string{spec.DataDir, spec.WorkingDir, spec.EndpointsDir, spec.WorkerStateDir, dirFor(spec.Platform, spec.LogPath)} {
 		if path != "" && path != "." {
 			unique[path] = true
 		}
