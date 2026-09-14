@@ -71,9 +71,18 @@ export async function assemble({
     targets: TARGETS,
     downloadUrl: download,
   });
+  // A build without TAURI_SIGNING_PRIVATE_KEY signs nothing, and that is a
+  // release that admits it cannot update itself, not a broken one: every
+  // bundle is still shipped for a manual install and the note says so below.
+  // A hole — some bundles signed, one not, or a bundle missing outright — is
+  // still a problem, because the manifest would then quietly offer less than
+  // the release claims.
+  const updaterUnsigned =
+    Object.keys(manifest.platforms).length === 0 &&
+    skipped.length > 0 &&
+    skipped.every((skip) => skip.reason === "signatureMissing");
   for (const skip of skipped) {
-    // An unsigned or missing bundle is left out of the manifest rather than
-    // offered; the release still ships it for a manual install.
+    if (updaterUnsigned) continue;
     problems.push(
       `latest.json has no entry for ${skip.target}: ${skip.reason}`,
     );
@@ -94,6 +103,9 @@ export async function assemble({
 
   const compatibility = readCompatibility();
   const unsigned = secret ? [] : ["component packages (no signing key)"];
+  if (updaterUnsigned) {
+    unsigned.push("desktop updater packages (no Tauri signing key)");
+  }
   const note = releaseNote({
     version,
     notes,

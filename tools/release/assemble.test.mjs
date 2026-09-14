@@ -443,6 +443,35 @@ test("no signing key produces a release that admits it is unsigned", async () =>
   }
 });
 
+// A build without a Tauri signing key writes no .sig at all. That release
+// cannot update itself, and says so; it is not a failed assembly. The bundles
+// are still there for a manual install, and latest.json offers nothing.
+test("no updater signature anywhere is an admitted unsigned release, not a hole", async () => {
+  const directory = scratch();
+  try {
+    stageAssets({ directory, version: "0.2.0" });
+    for (const name of readdirSync(directory)) {
+      if (name.endsWith(".sig")) rmSync(join(directory, name));
+    }
+    const result = await assemble({
+      directory,
+      version: "0.2.0",
+      repo: "yovinchen/Armadra",
+      tag: "v0.2.0",
+      secret: "",
+    });
+    assert.deepEqual(result.problems, []);
+    assert.deepEqual(Object.keys(result.manifest.platforms), []);
+    assert.deepEqual(result.missing, TARGETS);
+    assert.match(
+      result.note,
+      /desktop updater packages \(no Tauri signing key\)/,
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("a target with no updater bundle is a reported hole, not a silent one", async () => {
   const directory = scratch();
   try {
