@@ -105,7 +105,15 @@ pub fn next_revision(path: &Path) -> io::Result<u64> {
             Err(std::fs::TryLockError::WouldBlock) if Instant::now() < deadline => {
                 std::thread::sleep(Duration::from_millis(5))
             }
-            Err(error) => return Err(io::Error::other(error)),
+            // Distinguishable, so a caller that can afford to try again knows
+            // this was contention and not a broken file.
+            Err(std::fs::TryLockError::WouldBlock) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "context sequence is held by another hook",
+                ));
+            }
+            Err(std::fs::TryLockError::Error(error)) => return Err(error),
         }
     }
     let length = file.metadata()?.len();
@@ -198,11 +206,20 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("session.seq");
         fs::write(&path, [0u64.to_be_bytes(), u64::MAX.to_be_bytes()].concat()).unwrap();
+        // The subject here is monotonicity, not the bounded wait (which has
+        // its own test below): eight holders each sync the file, and on a
+        // loaded host the last of them can legitimately be told to try again.
         let mut values = std::thread::scope(|scope| {
             (0..8)
                 .map(|_| {
                     let path = &path;
-                    scope.spawn(move || next_revision(path).unwrap())
+                    scope.spawn(move || loop {
+                        match next_revision(path) {
+                            Ok(value) => break value,
+                            Err(error) if error.kind() == io::ErrorKind::WouldBlock => continue,
+                            Err(error) => panic!("{error}"),
+                        }
+                    })
                 })
                 .collect::<Vec<_>>()
                 .into_iter()
