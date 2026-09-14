@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -123,16 +124,16 @@ func (s *Spec) Normalize() error {
 	}
 	required := map[string]*string{"executable": &s.Executable, "data directory": &s.DataDir}
 	for name, value := range required {
-		if err := validatePath(name, *value, true); err != nil {
+		if err := validateSpecPath(s.Platform, name, *value); err != nil {
 			return err
 		}
-		*value = filepath.Clean(*value)
+		*value = cleanFor(s.Platform, *value)
 	}
 	if s.WorkingDir == "" {
 		s.WorkingDir = s.DataDir
 	}
 	if s.LogPath == "" {
-		s.LogPath = filepath.Join(s.DataDir, "host.log")
+		s.LogPath = joinFor(s.Platform, s.DataDir, "host.log")
 	}
 	optional := map[string]*string{
 		"working directory":  &s.WorkingDir,
@@ -147,10 +148,10 @@ func (s *Spec) Normalize() error {
 		if *value == "" {
 			continue
 		}
-		if err := validatePath(name, *value, true); err != nil {
+		if err := validateSpecPath(s.Platform, name, *value); err != nil {
 			return err
 		}
-		*value = filepath.Clean(*value)
+		*value = cleanFor(s.Platform, *value)
 	}
 	if (s.WorkerBinary == "") != (s.WorkerStateDir == "") {
 		return fmt.Errorf("%w: scheduled execution needs both the worker binary and its state directory", ErrInvalid)
@@ -221,6 +222,48 @@ func validateValue(name, value string) error {
 		if unicode.IsControl(char) {
 			return fmt.Errorf("%w: %s must not contain control characters", ErrInvalid, name)
 		}
+	}
+	return nil
+}
+
+// A launchd or systemd definition carries POSIX paths whatever host renders
+// it; only a Windows definition follows the host's own path rules. Cleaning a
+// POSIX path with the host's filepath on Windows would turn its slashes into
+// backslashes, which the renderer then escapes.
+func cleanFor(platform, value string) string {
+	if platform == PlatformWindows {
+		return filepath.Clean(value)
+	}
+	return path.Clean(value)
+}
+
+func joinFor(platform string, elements ...string) string {
+	if platform == PlatformWindows {
+		return filepath.Join(elements...)
+	}
+	return path.Join(elements...)
+}
+
+func dirFor(platform, value string) string {
+	if platform == PlatformWindows {
+		return filepath.Dir(value)
+	}
+	return path.Dir(value)
+}
+
+func absoluteFor(platform, value string) bool {
+	if platform == PlatformWindows {
+		return filepath.IsAbs(value)
+	}
+	return strings.HasPrefix(value, "/")
+}
+
+func validateSpecPath(platform, name, value string) error {
+	if err := validateValue(name, value); err != nil {
+		return err
+	}
+	if !absoluteFor(platform, value) {
+		return fmt.Errorf("%w: %s must be an absolute path", ErrInvalid, name)
 	}
 	return nil
 }
