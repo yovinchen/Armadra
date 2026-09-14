@@ -680,6 +680,16 @@ mod tests {
 
     /// The two shapes the Go Host already launches must keep working, and the
     /// canvas database and the settings file stay opt-in.
+    /// A path the parser accepts as absolute on the platform under test:
+    /// `/private/armadra` is relative on Windows, `C:/private/armadra` is not.
+    fn absolute(path: &str) -> String {
+        if cfg!(windows) {
+            format!("C:{path}")
+        } else {
+            path.to_owned()
+        }
+    }
+
     #[test]
     fn worker_arguments_keep_the_existing_launches_and_add_the_canvas_database() {
         let parse = |arguments: &[&str]| {
@@ -692,23 +702,23 @@ mod tests {
         };
         assert_eq!(parse(&["--stdio"]).unwrap(), WorkerArguments::default());
         assert_eq!(
-            parse(&["--stdio", "--state-dir", "/private/armadra"])
+            parse(&["--stdio", "--state-dir", &absolute("/private/armadra")])
                 .unwrap()
                 .state_dir,
-            Some("/private/armadra".into())
+            Some(absolute(&absolute("/private/armadra")).into())
         );
         assert_eq!(
             parse(&[
                 "--stdio",
                 "--canvas-database",
-                "/data/canvas.db",
+                &absolute("/data/canvas.db"),
                 "--state-dir",
-                "/private/armadra",
+                &absolute("/private/armadra"),
             ])
             .unwrap(),
             WorkerArguments {
-                state_dir: Some("/private/armadra".into()),
-                canvas_database: Some("/data/canvas.db".into()),
+                state_dir: Some(absolute(&absolute("/private/armadra")).into()),
+                canvas_database: Some(absolute(&absolute("/data/canvas.db")).into()),
                 language_link: false,
                 settings_file: None,
             }
@@ -720,11 +730,11 @@ mod tests {
                 "--stdio",
                 "--language-link",
                 "--state-dir",
-                "/private/armadra"
+                &absolute("/private/armadra")
             ])
             .unwrap(),
             WorkerArguments {
-                state_dir: Some("/private/armadra".into()),
+                state_dir: Some(absolute(&absolute("/private/armadra")).into()),
                 canvas_database: None,
                 language_link: true,
                 settings_file: None,
@@ -736,39 +746,49 @@ mod tests {
             parse(&[
                 "--stdio",
                 "--settings-file",
-                "/data/settings.json",
+                &absolute("/data/settings.json"),
                 "--canvas-database",
-                "/data/canvas.db",
+                &absolute("/data/canvas.db"),
             ])
             .unwrap(),
             WorkerArguments {
                 state_dir: None,
-                canvas_database: Some("/data/canvas.db".into()),
+                canvas_database: Some(absolute(&absolute("/data/canvas.db")).into()),
                 language_link: false,
-                settings_file: Some("/data/settings.json".into()),
+                settings_file: Some(absolute(&absolute("/data/settings.json")).into()),
             }
         );
         for arguments in [
             vec![],
-            vec!["--canvas-database", "/data/canvas.db"],
+            vec!["--canvas-database", &absolute("/data/canvas.db")],
             vec!["--stdio", "--canvas-database"],
-            vec!["--stdio", "--state-dir", "/a", "--state-dir", "/b"],
-            vec!["--stdio", "--write-everything", "/data/canvas.db"],
+            vec![
+                "--stdio",
+                "--state-dir",
+                &absolute("/a"),
+                "--state-dir",
+                &absolute("/b"),
+            ],
+            vec![
+                "--stdio",
+                "--write-everything",
+                &absolute("/data/canvas.db"),
+            ],
             vec!["--stdio", "--language-link", "--language-link"],
             // Two processes behind one ownership handoff is not a handoff.
             vec![
                 "--stdio",
                 "--language-link",
                 "--canvas-database",
-                "/data/canvas.db",
+                &absolute("/data/canvas.db"),
             ],
             vec!["--stdio", "--settings-file"],
             vec![
                 "--stdio",
                 "--settings-file",
-                "/a/settings.json",
+                &absolute("/a/settings.json"),
                 "--settings-file",
-                "/b/settings.json",
+                &absolute("/b/settings.json"),
             ],
             // A relative path resolves against the controller's working
             // directory, which is not where any of these files live.

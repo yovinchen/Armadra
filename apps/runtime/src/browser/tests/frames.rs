@@ -64,23 +64,27 @@ async fn elements_inside_same_origin_and_cross_origin_frames_are_addressable() {
     }
 
     // Clicking one of them changes that frame's own document, and only it.
+    // The click is repeated until the frame records it: a cross-site frame
+    // has its own renderer, and Chrome drops input aimed at it until that
+    // renderer has submitted its first compositor frame — which, on a slow
+    // headless host, can be after the DOM read above already saw the button.
     let target = buttons[0].element_ref.clone();
     let frame = buttons[0].frame_id.clone();
     let tab = buttons[0].tab_id.clone();
-    session::click(
-        &live,
-        Target::ElementRef(&target),
-        &TargetRef::default(),
-        0,
-        1,
-    )
-    .await
-    .unwrap();
     let address = TargetRef {
         tab_id: tab.clone(),
         frame_id: frame.clone(),
     };
     until(&live, "the frame to record the click", async || {
+        session::click(
+            &live,
+            Target::ElementRef(&target),
+            &TargetRef::default(),
+            0,
+            1,
+        )
+        .await
+        .unwrap();
         session::read_in(&live, &address, ReadMode::Text, 20, 4_096)
             .await
             .map(|read| read.text.contains("clicked"))
