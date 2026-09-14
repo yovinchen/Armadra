@@ -45,7 +45,7 @@
 
 `hook/install/repair.rs`，设置页按钮 + Runtime 启动时自动检测（只报不改）：
 
-- 识别：各 CLI 配置里指向 `aicc-hook`、`nodeterm`、`.nodeterm`、`target/debug/…` 的 hook 条目；技能目录 `aicc-canvas`、`aicc-linked-context`、`get-linked-context`、`manage-nodeterm-canvas`、旧版 `armadra`（内容修订号落后）；Codex `hooks.json` 顶层的 `version`。
+- 识别：各 CLI 配置里指向 `aicc-hook`、`nodeterm`、`.nodeterm`、`target/debug/…` 的 hook 条目；技能目录 `aicc-canvas`、`aicc-linked-context`、`get-linked-context`、`manage-nodeterm-canvas`、旧版 `armadra`（内容修订号落后）；Codex `hooks.json` 顶层的 `version`；全局 `AGENTS.md` / `GEMINI.md` / `CLAUDE.md` 里 `<!-- nodeterm:…:start/end -->`（或 `aicc:`）围起来的指令块（2026-09-15 补）。
 - 动作：列出 → 备份为 `<file>.armadra-backup-<时间戳>` → 删条目 / 目录 → 按现行写法重写；只动我们认得的条目，其余原样。
 - 报告：每种 CLI 一份 `{found, removed, kept, backup}`。
 

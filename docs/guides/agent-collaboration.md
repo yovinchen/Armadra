@@ -73,15 +73,24 @@ Claude Code 的 `--settings <file-or-json>` 官方说明是「load **additional*
 
 旧产品名时期留下的东西不会自己消失：指向 `aicc-hook`、`nodeterm`、`.nodeterm` 或某人 `target/debug/` 的 hook 条目；
 技能目录 `aicc-canvas`、`aicc-linked-context`、`get-linked-context`、`manage-nodeterm-canvas`，以及改版前的
-`armadra-canvas` / `armadra-linked-context`；还有 Codex `hooks.json` 顶层的 `version`——Codex 用 `deny_unknown_fields`
-解析这个文件，多一个陌生键，**整份文件的 hook 全都不跑**，包括用户自己的。
+`armadra-canvas` / `armadra-linked-context`；Codex `hooks.json` 顶层的 `version`——Codex 用 `deny_unknown_fields`
+解析这个文件，多一个陌生键，**整份文件的 hook 全都不跑**，包括用户自己的；还有全局 `AGENTS.md` / `GEMINI.md` /
+`CLAUDE.md` 里 `<!-- nodeterm:<名字>:start -->` … `:end -->`（或 `aicc:`）围起来的指令块——两百行教模型去跑
+`nodeterm.sh open-claude …`，那个脚本只会回答「not a nodeterm agent node」，而模型信了指令就不会再找现行技能
+（2026-09-15 用户实测：Codex 在画布里被要求「创建一个 Claude Code」时跑的正是它）。
 
 Runtime 每次启动扫描并在日志里报出来，`GET /api/agents/{id}/integration` 的 `legacy.found` 也带着它，
 但**只报不改**。真正动手的只有设置页的「修复」按钮：先把要重写的文件备份成 `<file>.armadra-backup-<时间戳>`，
 只删认得出是我们写的条目，其余原样写回，然后按现行写法重写（Codex 那份顺带去掉顶层未知键）。
 报告给出 `{found, removed, kept, backup}`，`kept` 就是它认出来「不是我们的、原样留下」的那些。
 旧技能目录不备份：里面是我们自己生成的说明书，没有用户的东西，而 `SKILL.md` 旁边多一个备份文件反而要教 CLI 忽略；
-目录里若还有用户自己放的文件，只删 `SKILL.md`，目录留下并在 `kept` 里写明。
+目录里若还有用户自己放的文件，只删 `SKILL.md`，目录留下并在 `kept` 里写明。指令文件只删标记块本身，
+块外的每个字节原样保留（备份整份），块删空了的文件才删除。
+
+修复之前，这些残留的后果是可以直接观察到的：Codex 启动时报 `failed to parse hooks config … unknown field \`version\``，
+于是没有任何 hook 跑，节点的「会话上下文」全是「未知」（Codex 的占用是按 hook 报来的会话 id 去读转录估算的，
+没有会话 id 就无从估算）；而旧指令块让模型去跑 `nodeterm.sh`。画布启动时若任一 CLI 有残留，顶部会有一条
+通知条指向 设置 → 集成。
 
 ### 各 CLI 的配置目录覆盖
 
