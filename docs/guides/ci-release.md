@@ -321,6 +321,12 @@ go run github.com/rhysd/actionlint/cmd/actionlint@latest \
 - Apple 证书导入、`notarytool --validate` 与 bundler 的公证（要真 secret）；
 - Windows 便携 zip 里那五个 exe 解压后能不能真的互相找到。
 
+首次打标签 `v0.1.0`（2026-09-14）跑了四遍才到 draft：arm64 行缺 appimagetool（见 §2.4）；
+`assemble` 把「一个 `.sig` 都没有」当成六个洞而不是未签名发布，与 §3 的承诺相反，
+现在只有部分签名或缺包才算洞；`verify` 的 Linux 行两次撞上 hook 序号锁测试的偶发。
+最终六个桌面目标全部成功，draft Release 带 37 个文件（六平台桌面包 + 组件包 +
+Web 包 + 空的 `latest.json` + `SHA256SUMS`）。上面两条带 secret 的项仍未验证。
+
 ### Windows 上的 `cargo test -p armadra-runtime`
 
 首次三平台真跑（2026-09-13）Linux 与 macOS 全绿，Windows lib 测试 38 条失败。

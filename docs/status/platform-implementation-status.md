@@ -210,7 +210,8 @@
 - **`ci.yml` 改 `--no-fail-fast`**（`680235cf`）：此前 Windows 在 Runtime 单测处就停，60 多个集成套件从未跑到；现在一次运行列全一个平台的所有失败。
 - **Windows 第一次跑完整套**：Rust 集成夹具 21 处、Go 夹具 8 处按平台给（`699b32f6`、`7daec3df`、`cc1cefa2`）；三处真缺陷改在产品里——事件流 `Hub.Close` 不等待 pump、分页读被连接取消后交给 `database/sql` 自己的 goroutine 回滚（`c6cbde71`、`2742f7fb`）；服务定义按宿主而非目标平台规范化路径（`3a0f2676`）；终端 resize 撞上回收时不发 `stale`（`d6f22612`）。
 - **Linux / macOS 偶发四处**（`8d4cb7aa`、`c8276477`、`5bce0440`）：浏览器会话 `ready` 早于文档解析、跨站 iframe 首次点击被丢、旧 screencast 的 WebP 帧在路上、hook 序号锁 150 ms 等不到 8 个并发。
-- **结果**：`5bce0440d` 三平台全绿（Linux 14 分钟、macOS 10 分钟、Windows 33 分钟）；明细见 [ci-release.md](../guides/ci-release.md) §4。打包只在 `v*` 标签或手动触发时进行；Linux arm64 的 `xdg-utils` 修正与 Apple 签名路径仍待首次打标签验证。
+- **结果**：`5bce0440d` 三平台全绿（Linux 14 分钟、macOS 10 分钟、Windows 33 分钟）；明细见 [ci-release.md](../guides/ci-release.md) §4。打包只在 `v*` 标签或手动触发时进行。
+- **首次打标签 `v0.1.0`**（`0e4a43bf`）：六个桌面目标全部打出，draft Release 37 个文件；路上修了三处——arm64 的 appimagetool 按架构钉版本（`f6d3b322`）、`assemble` 对全无签名的发布不再报洞（`0fcbab70`）、hook 序号锁的并发测试改为重试并把超时报成 `WouldBlock`（`0e4a43bf`）。未配置任何 secret，所以 macOS 仅 ad-hoc 签名、不公证，`latest.json` 为空；draft 未发布，由人审阅。
 - 公开后 Dependabot 报 `glib 0.18`（Tauri 2 固定的 gtk 0.18 栈，仅 Linux，`VariantStrIter` 未用到）中危一条，待 Tauri 3 才能升；其余 vitest 告警已随 vitest 4 升级关闭。
 
 ## 本轮验证（2026-09-06 上午，四轮全部合入后于主树重跑，私有目标目录）
