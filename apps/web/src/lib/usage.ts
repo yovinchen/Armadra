@@ -46,3 +46,25 @@ export function usageResetLabel(
     value: formatRelativeTime(window.resetsAt, now),
   });
 }
+
+/** 前端能说清楚的原因代码；Runtime 的 `UsageFailure`（`usage/mod.rs`）。 */
+const USAGE_REASONS: ReadonlySet<string> = new Set([
+  "expired_credentials",
+  "unreadable_credentials",
+  "unauthorized",
+  "forbidden",
+  "rate_limited",
+  "provider_error",
+  "network",
+  "parse",
+  "no_windows",
+]);
+
+/**
+ * `status: "error"` 那一行的 i18n 键。一个 Runtime 新加的、前端还不认识的
+ * 代码按通用原因显示，而不是把代码原样打在界面上。
+ */
+export function usageReasonKey(reason: string | undefined): string {
+  const known = reason !== undefined && USAGE_REASONS.has(reason);
+  return `usage.reason.${known ? reason : "provider_error"}`;
+}

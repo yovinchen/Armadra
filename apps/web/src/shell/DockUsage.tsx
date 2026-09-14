@@ -8,7 +8,11 @@ import {
   useT,
   type Translate,
 } from "../app/preferences-store";
-import { usagePercent, usageWindowLabel as windowLabel } from "../lib/usage";
+import {
+  usagePercent,
+  usageReasonKey,
+  usageWindowLabel as windowLabel,
+} from "../lib/usage";
 import { useCanvasStore } from "../store/canvas-store";
 import { useCompactLayout } from "../platform/layout";
 import { IconButton } from "@/ui/icon-button";
@@ -71,7 +75,10 @@ function summary(
     .map((provider) => {
       const name = t(`usage.provider.${provider.id}`);
       if (provider.status === "error")
-        return `${name} ${t("usage.status.error")}`;
+        return `${name} ${t("usage.status.error")} · ${t(
+          usageReasonKey(provider.reason),
+          { provider: name },
+        )}`;
       const windows = provider.windows
         .map(
           (w) =>

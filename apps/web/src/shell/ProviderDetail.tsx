@@ -4,6 +4,7 @@ import { formatRelativeTime } from "../lib/format";
 import {
   usageIsStale,
   usagePercent,
+  usageReasonKey,
   usageResetLabel,
   usageWindowLabel,
 } from "../lib/usage";
@@ -56,7 +57,11 @@ export function ProviderDetail({
               : "usage.status.unavailable",
           )}
           {provider.status === "error" && (
-            <span className="block">{t("usage.recoveryHint")}</span>
+            <span className="block">
+              {t(usageReasonKey(provider.reason), {
+                provider: t(`usage.provider.${provider.id}`),
+              })}
+            </span>
           )}
         </p>
       ) : (

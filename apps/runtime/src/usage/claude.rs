@@ -13,11 +13,11 @@
 //! tokens are not `x-api-key`). The response carries a lot more than we
 //! surface; only `five_hour` and `seven_day` are mapped.
 
-use anyhow::{Context, bail};
 use serde::Deserialize;
 
 use super::{
-    CredentialSource, ProviderReport, ProviderResult, UsageWindow, clamp_percent, home_dir,
+    CredentialSource, ProviderReport, ProviderResult, UsageFailure, UsageWindow, clamp_percent,
+    home_dir,
 };
 
 pub const ID: &str = "claude";
@@ -136,7 +136,12 @@ pub async fn fetch(client: &reqwest::Client) -> (ProviderResult, CredentialSourc
     let result = match token {
         Some(token) => fetch_token(client, token).await,
         None if source == CredentialSource::None => Ok(None),
-        None => Err(anyhow::anyhow!("Claude credentials are expired or invalid")),
+        // A payload was found but carries no token that is still valid. The
+        // CLI renews it on its next run; this module does not write
+        // credentials, so the dashboard says so rather than refreshing.
+        None => {
+            Err(UsageFailure::ExpiredCredentials.with("Claude credentials are expired or invalid"))
+        }
     };
     (result, source)
 }
@@ -149,16 +154,22 @@ async fn fetch_token(client: &reqwest::Client, token: String) -> ProviderResult 
         .header("content-type", "application/json")
         .send()
         .await
-        .context("request to the Claude usage endpoint failed")?;
+        .map_err(|error| {
+            UsageFailure::Network
+                .with(error)
+                .context("request to the Claude usage endpoint failed")
+        })?;
     let status = response.status();
     if !status.is_success() {
         // The body can echo account details; the status is all we keep.
-        bail!("Claude usage endpoint answered {status}");
+        return Err(UsageFailure::from_status(status)
+            .with(format!("Claude usage endpoint answered {status}")));
     }
-    let usage: UsageResponse = response
-        .json()
-        .await
-        .context("Claude usage response did not parse")?;
+    let usage: UsageResponse = response.json().await.map_err(|error| {
+        UsageFailure::Parse
+            .with(error)
+            .context("Claude usage response did not parse")
+    })?;
     Ok(Some(ProviderReport::from_windows(windows(usage))))
 }
 

@@ -53,6 +53,12 @@ export const usageCreditsSchema = z.object({ balance: z.number() });
 export const usageProviderSchema = z.object({
   id: usageProviderIdSchema,
   status: usageProviderStatusSchema,
+  /**
+   * `status: "error"` 的原因代码（Runtime `UsageFailure`：`expired_credentials`、
+   * `network`、`unauthorized` …）。只有代码，没有上游文本；新 Runtime 可能多出
+   * 前端还不认识的值，所以是字符串而不是枚举，前端认不出的按通用原因显示。
+   */
+  reason: z.string().optional(),
   credentialSource: usageCredentialSourceSchema,
   windows: z.array(usageWindowSchema),
   credits: usageCreditsSchema.optional(),

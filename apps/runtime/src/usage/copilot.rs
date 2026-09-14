@@ -25,7 +25,7 @@ use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    CredentialSource, ProviderReport, ProviderResult, UsageWindow, clamp_percent,
+    CredentialSource, ProviderReport, ProviderResult, UsageFailure, UsageWindow, clamp_percent,
     secret_store::{SecretBackend, SecretStore},
 };
 
@@ -296,16 +296,22 @@ async fn fetch_token(client: &reqwest::Client, token: String) -> ProviderResult 
         .header("accept", "application/json")
         .send()
         .await
-        .context("request to the Copilot usage endpoint failed")?;
+        .map_err(|error| {
+            UsageFailure::Network
+                .with(error)
+                .context("request to the Copilot usage endpoint failed")
+        })?;
     let status = response.status();
     if !status.is_success() {
         // The body echoes account details; the status is all we keep.
-        bail!("Copilot usage endpoint answered {status}");
+        return Err(UsageFailure::from_status(status)
+            .with(format!("Copilot usage endpoint answered {status}")));
     }
-    let user: CopilotUser = response
-        .json()
-        .await
-        .context("Copilot usage response did not parse")?;
+    let user: CopilotUser = response.json().await.map_err(|error| {
+        UsageFailure::Parse
+            .with(error)
+            .context("Copilot usage response did not parse")
+    })?;
     Ok(Some(ProviderReport::from_windows(windows(user))))
 }
 
