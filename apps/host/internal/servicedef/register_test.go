@@ -63,7 +63,7 @@ func TestCanonicalDirNamesWhatEachManagerReads(t *testing.T) {
 		{PlatformWindows, ScopeSystem, ""},
 	} {
 		got, err := CanonicalDir(want.platform, want.scope, home)
-		if err != nil || got != filepath.FromSlash(want.dir) {
+		if err != nil || got != want.dir {
 			t.Fatalf("%s/%s produced %q (%v)", want.platform, want.scope, got, err)
 		}
 	}

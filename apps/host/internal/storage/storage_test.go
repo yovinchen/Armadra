@@ -51,7 +51,11 @@ func create(t *testing.T, store *Store, id string) ApplyResult {
 }
 
 func TestFileReopenHostBindingAndUntouchedCanvas(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "private host # 中文 ?")
+	name := "private host # 中文 ?"
+	if runtime.GOOS == "windows" {
+		name = "private host # 中文 !"
+	}
+	dir := filepath.Join(t.TempDir(), name)
 	if err := os.Mkdir(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
