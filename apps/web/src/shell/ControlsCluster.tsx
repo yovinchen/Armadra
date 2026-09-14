@@ -3,7 +3,6 @@ import {
   FolderTree,
   GitBranch,
   GitPullRequest,
-  Search,
   Shrink,
   SlidersHorizontal,
 } from "lucide-react";
@@ -32,6 +31,9 @@ import type { ReactNode } from "react";
  * 2026-09-05 用户反馈：最后一个钮不再是应用设置，而是**画布偏好**
  * （`canvas/menus/CanvasPreferencesMenu`）。应用设置只剩侧栏左下角那一个入口，
  * 快捷键 ⌘, 照旧。
+ *
+ * 2026-09-15 用户反馈：命令面板的「搜索」钮去掉——它只是打开面板，快捷键
+ * （`app.commandPalette`）与侧栏顶部的入口都还在。
  */
 
 /** 工具簇/侧栏钮共用的那条底。 */
@@ -74,15 +76,6 @@ export function ControlsCluster() {
           "transition-[right] duration-150 ease-out motion-reduce:transition-none",
         )}
       >
-        <ClusterButton
-          label={t("cluster.palette")}
-          command="app.commandPalette"
-          active={panels.palette}
-          onClick={() => setPanel("palette", !panels.palette)}
-        >
-          <Search />
-        </ClusterButton>
-
         <ClusterButton
           label={t("cluster.explorer")}
           command="app.explorer"
