@@ -26,8 +26,8 @@ import type { CanvasFlowNode } from "../sync/project";
  * DPR、主题重读全部由库负责。
  *
  * 保留的行为：三种状态描边、点一下定位到那个节点、可收起（收起状态在
- * `app/minimap-preferences.ts`，用量球跟着同一个 CSS 变量走）、位置右下并
- * 为「React Flow」归属链接让出 24px（`styles/canvas.css`）。
+ * `app/minimap-preferences.ts`）、位置右下角、离右边与下边各 14px
+ * （「React Flow」归属链接挪到了左下角，`styles/canvas.css`）。
  *
  * 放弃的行为：视口框的自定义描边（`maskColor` 只有一个颜色）与「拖着走」时
  * 的 200ms 动画（`pannable` 是即时跟随，比动画跟手）。
@@ -215,9 +215,8 @@ export function Minimap() {
        * 收起按钮不进 `<MiniMap>`（它只渲染一张 SVG，没有插槽），所以贴着
        * 缩略图右上角单独摆一个。
        *
-       * 用 `<Panel>` 包一层不是为了它的默认角落，而是为了那 15px 的
-       * `margin`——`<MiniMap>` 自己就是一个 Panel，`styles/canvas.css` 里
-       * 的 `right: 14px` 实际落在 29px 上。同一个盒模型才对得齐。
+       * 用 `<Panel>` 包一层是为了与 `<MiniMap>`（它自己就是一个 Panel）
+       * 用同一个盒模型；两边的 Panel margin 都归零，数值才是真实边距。
        *
        * 收起时 `--minimap-w/h` 变成 36px（`App` 在 `.workspace-surface` 上写
        * `data-minimap-collapsed`），按钮自然落到缩略图原来的位置，用量球也
@@ -226,9 +225,11 @@ export function Minimap() {
       <Panel
         position="bottom-right"
         style={
+          // Panel 自带 15px margin，归零后数值才是离画布边的真实距离。
           collapsed
-            ? { right: 14, bottom: "var(--navigation-bottom)" }
+            ? { margin: 0, right: 14, bottom: "var(--navigation-bottom)" }
             : {
+                margin: 0,
                 right: 18,
                 bottom:
                   "calc(var(--navigation-bottom) + var(--minimap-h) - 32px)",

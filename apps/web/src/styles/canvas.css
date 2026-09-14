@@ -125,11 +125,12 @@
 /* ------------------------------ 浮层与归属 -------------------------------- */
 
 /*
- * 右下角的「React Flow」链接保留（MIT 礼节，不传 `proOptions`）。
- * 它钉在容器右下角，所以缩略图、锁按钮与用量球都为它让出 24px。
+ * 「React Flow」链接保留（MIT 礼节，不传 `proOptions`），挪到左下角：
+ * 右下角整个让给缩略图，缩略图才能与右边、下边各留同样的 14px。
  */
 .canvas-stage .react-flow__attribution {
-  right: 12px;
+  right: auto;
+  left: 12px;
   bottom: 4px;
   padding: 2px 5px;
   border-radius: 5px;
@@ -140,6 +141,8 @@
 }
 
 .canvas-stage .react-flow__minimap {
+  /* `<MiniMap>` 是一个 Panel，自带 15px margin；归零后 14px 才是真的 14px。 */
+  margin: 0;
   right: 14px;
   bottom: var(--navigation-bottom);
   left: auto;
@@ -152,28 +155,31 @@
   backdrop-filter: blur(12px);
 }
 
-.canvas-lock-button {
-  bottom: var(--attribution-clearance);
-}
-
 /* 浮层以真实画布宽度布局；侧栏折叠后容器查询也会重新计算。 */
 .workspace-surface {
   container: workspace / inline-size;
   isolation: isolate;
   --minimap-w: 200px;
   --minimap-h: 150px;
-  /* 4（边距）+ 22（归属链接高）+ 8（间隙） */
-  --attribution-clearance: 34px;
-  --navigation-bottom: 44px;
+  /*
+   * 四个角的浮层离边都是 14px：右上工具簇（上、右）、右下缩略图（右、下）、
+   * 底部 Dock（下）。窄画布时缩略图挪到 Dock 上方（下面的容器查询）。
+   */
+  --navigation-bottom: 14px;
 }
 
+/*
+ * Dock 在画布里**居中**，而不是在缩略图左侧那段里居中。宽度够时它与
+ * 缩略图互不相碰（Dock 约 480px，缩略图 200px + 14px，1000px 以下缩略图
+ * 已经挪到 Dock 上方）。
+ */
 .canvas-dock {
   position: absolute;
   bottom: var(--dock-bottom, 14px);
   left: 14px;
-  right: calc(var(--minimap-w) + 76px);
+  right: 14px;
   width: max-content;
-  max-width: calc(100% - var(--minimap-w) - 90px);
+  max-width: calc(100% - 28px);
   margin-inline: auto;
 }
 
@@ -184,11 +190,19 @@
   display: none;
 }
 
+/*
+ * 居中的 Dock 与右下缩略图相碰之前（Dock 约 700px，缩略图 200px + 边距），
+ * 缩略图先挪到 Dock 上方；工具组仍然展开。
+ */
+@container workspace (max-width: 1150px) {
+  .canvas-stage .react-flow__minimap {
+    --navigation-bottom: calc(14px + var(--dock-h) + 12px);
+  }
+}
+
 @container workspace (max-width: 1000px) {
   .canvas-dock {
     --dock-bottom: 38px;
-    right: 14px;
-    max-width: calc(100% - 28px);
   }
   .dock-tools-expanded {
     display: none;
@@ -237,13 +251,13 @@
 }
 
 /*
- * 专注模式（§2.10 的 `focus`）：缩略图、收起钮、锁按钮一起收走，画布上
- * 只剩内容与 Dock。属性由 `app/use-canvas-preferences.ts` 写在根元素上。
+ * 专注模式（§2.10 的 `focus`）：缩略图与收起钮一起收走，画布上只剩内容
+ * 与 Dock（锁定钮现在在 Dock 里，跟着 Dock 留下）。属性由
+ * `app/use-canvas-preferences.ts` 写在根元素上。
  *
  * 归属链接不收：MIT 礼节不看模式（§0 归属标识）。
  */
 :root[data-canvas-focus="true"] .canvas-stage .react-flow__minimap,
-:root[data-canvas-focus="true"] .canvas-stage .minimap-toggle,
-:root[data-canvas-focus="true"] .canvas-lock-button {
+:root[data-canvas-focus="true"] .canvas-stage .minimap-toggle {
   display: none;
 }

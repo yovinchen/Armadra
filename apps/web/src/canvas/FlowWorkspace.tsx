@@ -7,7 +7,6 @@ import {
   ViewportPortal,
   useReactFlow,
 } from "@xyflow/react";
-import { Lock, LockOpen } from "lucide-react";
 import type { BoardDocument, CanvasNode } from "@armadra/shared";
 import "@xyflow/react/dist/style.css";
 import "../styles/canvas.css";
@@ -22,7 +21,6 @@ import {
   AlertDialogTitle,
 } from "@/ui/alert-dialog";
 import { ContextMenu, ContextMenuTrigger } from "@/ui/context-menu";
-import { IconButton } from "@/ui/icon-button";
 import { useT } from "@/app/preferences-store";
 import { usePreferencesStore, useResolvedTheme } from "@/app/preferences-store";
 import { canvasColorScheme } from "@/app/use-canvas-preferences";
@@ -445,14 +443,6 @@ export function FlowWorkspace() {
             <ToolLayer />
           </ReactFlow>
           <CanvasStylePanel />
-          <IconButton
-            label={locked ? t("canvas.unlock") : t("canvas.lock")}
-            aria-pressed={locked}
-            className="canvas-lock-button absolute left-3 z-[var(--z-dock)] border border-border bg-[var(--panel)]/90 backdrop-blur-[12px]"
-            onClick={() => setCanvasLocked(!locked)}
-          >
-            {locked ? <Lock /> : <LockOpen />}
-          </IconButton>
         </div>
       </ContextMenuTrigger>
 
