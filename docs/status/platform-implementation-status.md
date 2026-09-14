@@ -212,6 +212,7 @@
 - **Linux / macOS 偶发四处**（`8d4cb7aa`、`c8276477`、`5bce0440`）：浏览器会话 `ready` 早于文档解析、跨站 iframe 首次点击被丢、旧 screencast 的 WebP 帧在路上、hook 序号锁 150 ms 等不到 8 个并发。
 - **结果**：`5bce0440d` 三平台全绿（Linux 14 分钟、macOS 10 分钟、Windows 33 分钟）；明细见 [ci-release.md](../guides/ci-release.md) §4。打包只在 `v*` 标签或手动触发时进行。
 - **首次打标签 `v0.1.0`**（`0e4a43bf`）：六个桌面目标全部打出，draft Release 37 个文件；路上修了三处——arm64 的 appimagetool 按架构钉版本（`f6d3b322`）、`assemble` 对全无签名的发布不再报洞（`0fcbab70`）、hook 序号锁的并发测试改为重试并把超时报成 `WouldBlock`（`0e4a43bf`）。未配置任何 secret，所以 macOS 仅 ad-hoc 签名、不公证，`latest.json` 为空；draft 未发布，由人审阅。
+- **09-15 打包版反馈**：画布四角统一 14px、锁定钮并入 Dock、缩略图钉在右下角、去掉 React Flow 标识与右上「搜索」钮（`a08f083d`、`792f5608`、`90130b99`）；Codex 节点「会话上下文全未知」与「在画布里创建 Claude Code 失败」同源——用户机器上 `~/.codex/hooks.json` 仍是旧版带 `version` 的文件（Codex 0.154 整份拒绝，hook 一条不跑）、`~/.codex/AGENTS.md` 仍有 nodeterm 指令块（模型去跑 `nodeterm.sh`），修复逻辑补上指令块识别并在画布顶部加残留通知条（`a8fc76e6`、`06ec821d`）；用量看板「取不到用量」是 Claude 钥匙串令牌过期 8 小时、Gemini 凭据过期 7 天，Runtime 只读不续期且把原因吞掉，现在按 `reason` 代码逐条说明（`981c80e3`）。
 - 公开后 Dependabot 报 `glib 0.18`（Tauri 2 固定的 gtk 0.18 栈，仅 Linux，`VariantStrIter` 未用到）中危一条，待 Tauri 3 才能升；其余 vitest 告警已随 vitest 4 升级关闭。
 
 ## 本轮验证（2026-09-06 上午，四轮全部合入后于主树重跑，私有目标目录）
