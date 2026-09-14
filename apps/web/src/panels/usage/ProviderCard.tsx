@@ -6,6 +6,7 @@ import { paceDelta } from "../../lib/cost";
 import {
   usageIsStale,
   usagePercent,
+  usageReasonKey,
   usageResetLabel,
   usageWindowLabel,
 } from "../../lib/usage";
@@ -16,7 +17,8 @@ import {
  * 和用量球共用 `lib/usage` 的判定，但多三件事：pace（按时间推算的预期
  * 用量）、credits 余额、以及数字是否来自本地 CLI 回退。
  *
- * `unavailable / error / stale` 一律显示状态文字，不显示 0。
+ * `unavailable / error / stale` 一律显示状态文字，不显示 0；`error` 再补一句
+ * 原因（登录过期、连不上、401 …），与画布弹层 `shell/ProviderDetail` 同一套键。
  */
 export function ProviderCard({
   provider,
@@ -56,6 +58,12 @@ export function ProviderCard({
             provider.status === "error"
               ? "usage.status.error"
               : "usage.status.unavailable",
+          )}
+          {/* 原因代码来自 Runtime（`reason`）；没有的按通用原因说。 */}
+          {provider.status === "error" && (
+            <span className="block">
+              {t(usageReasonKey(provider.reason), { provider: name })}
+            </span>
           )}
         </p>
       ) : (
