@@ -59,6 +59,9 @@ impl Fixture {
         git(&repo, &["config", "core.hooksPath", ".git/hooks"]);
         git(&repo, &["config", "core.fsmonitor", "false"]);
         git(&repo, &["config", "core.excludesFile", "/dev/null"]);
+        // Git for Windows' system config turns on `core.autocrlf`; the tests
+        // compare working-tree bytes with what they wrote.
+        git(&repo, &["config", "core.autocrlf", "false"]);
         Self {
             directory,
             repo,

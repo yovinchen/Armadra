@@ -57,6 +57,7 @@ impl Repo {
             ("core.fsmonitor", "false"),
             ("core.hooksPath", ".git/hooks"),
             ("core.excludesFile", "/dev/null"),
+            ("core.autocrlf", "false"),
         ] {
             git(&path, &["config", key, value]);
         }

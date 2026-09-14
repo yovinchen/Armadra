@@ -705,7 +705,7 @@ mod tests {
             parse(&["--stdio", "--state-dir", &absolute("/private/armadra")])
                 .unwrap()
                 .state_dir,
-            Some(absolute(&absolute("/private/armadra")).into())
+            Some(absolute("/private/armadra").into())
         );
         assert_eq!(
             parse(&[
@@ -717,8 +717,8 @@ mod tests {
             ])
             .unwrap(),
             WorkerArguments {
-                state_dir: Some(absolute(&absolute("/private/armadra")).into()),
-                canvas_database: Some(absolute(&absolute("/data/canvas.db")).into()),
+                state_dir: Some(absolute("/private/armadra").into()),
+                canvas_database: Some(absolute("/data/canvas.db").into()),
                 language_link: false,
                 settings_file: None,
             }
@@ -734,7 +734,7 @@ mod tests {
             ])
             .unwrap(),
             WorkerArguments {
-                state_dir: Some(absolute(&absolute("/private/armadra")).into()),
+                state_dir: Some(absolute("/private/armadra").into()),
                 canvas_database: None,
                 language_link: true,
                 settings_file: None,
@@ -753,9 +753,9 @@ mod tests {
             .unwrap(),
             WorkerArguments {
                 state_dir: None,
-                canvas_database: Some(absolute(&absolute("/data/canvas.db")).into()),
+                canvas_database: Some(absolute("/data/canvas.db").into()),
                 language_link: false,
-                settings_file: Some(absolute(&absolute("/data/settings.json")).into()),
+                settings_file: Some(absolute("/data/settings.json").into()),
             }
         );
         for arguments in [

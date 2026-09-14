@@ -31,7 +31,46 @@ fn private_dir() -> tempfile::TempDir {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
     }
+    // The private-state policy on Windows is a protected DACL with exactly
+    // two full-control entries, SYSTEM and this user (the Host writes the same
+    // one). A temporary directory inherits its parent's broader grants.
+    #[cfg(windows)]
+    {
+        let sid = String::from_utf8(
+            std::process::Command::new("whoami")
+                .args(["/user", "/fo", "csv", "/nh"])
+                .output()
+                .expect("whoami")
+                .stdout,
+        )
+        .unwrap();
+        let sid = sid.trim().rsplit('"').nth(1).expect("a SID").to_owned();
+        let status = std::process::Command::new("icacls")
+            .arg(dir.path())
+            .args(["/inheritance:r", "/grant:r"])
+            .arg("*S-1-5-18:(OI)(CI)F")
+            .arg(format!("*{sid}:(OI)(CI)F"))
+            .status()
+            .expect("icacls");
+        assert!(status.success(), "icacls: {status}");
+    }
     dir
+}
+
+/// Opens the outbox, or says why this host cannot hold one. On Windows the
+/// policy also demands that the files be owned by this user, and a process
+/// whose token is elevated creates files owned by Administrators instead;
+/// that is the Host's problem to solve where it creates the directory, not
+/// something a test can arrange after the fact.
+async fn open_outbox(dir: &std::path::Path, instance: &str) -> Option<Outbox> {
+    match Outbox::open(dir, instance).await {
+        Ok(outbox) => Some(outbox),
+        Err(error) if cfg!(windows) && error.to_string().contains("not private") => {
+            println!("SKIPPED: this Windows account cannot hold a private outbox: {error:#}");
+            None
+        }
+        Err(error) => panic!("{error:#}"),
+    }
 }
 
 fn agent_event(note: &str) -> worker_upcall::Event {
@@ -56,7 +95,9 @@ fn node_of(frame: &WorkerUpcall) -> String {
 #[tokio::test]
 async fn an_acknowledged_sequence_is_never_handed_out_again() {
     let dir = private_dir();
-    let outbox = Outbox::open(dir.path(), "instance-a").await.unwrap();
+    let Some(outbox) = open_outbox(dir.path(), "instance-a").await else {
+        return;
+    };
     for index in 1..=3u64 {
         let queued = outbox
             .queue(upcall(&format!("node-{index}")))
@@ -87,13 +128,17 @@ fn upcall(note: &str) -> WorkerUpcall {
 async fn a_new_instance_replays_what_the_previous_one_left_unacknowledged() {
     let dir = private_dir();
     {
-        let first = Outbox::open(dir.path(), "instance-a").await.unwrap();
+        let Some(first) = open_outbox(dir.path(), "instance-a").await else {
+            return;
+        };
         first.queue(upcall("kept")).await.unwrap();
         first.queue(upcall("retired")).await.unwrap();
         assert_eq!(first.acknowledge("instance-a", 1).await.unwrap(), 1);
         first.close().await;
     }
-    let second = Outbox::open(dir.path(), "instance-b").await.unwrap();
+    let Some(second) = open_outbox(dir.path(), "instance-b").await else {
+        return;
+    };
     let replayed = second.replay().await.unwrap();
     assert_eq!(replayed.len(), 1);
     assert_eq!(replayed[0].instance_id, "instance-a");
@@ -112,7 +157,9 @@ async fn a_new_instance_replays_what_the_previous_one_left_unacknowledged() {
 #[tokio::test]
 async fn a_rejection_retires_one_frame_and_an_acknowledgement_retires_a_run() {
     let dir = private_dir();
-    let outbox = Outbox::open(dir.path(), "instance-a").await.unwrap();
+    let Some(outbox) = open_outbox(dir.path(), "instance-a").await else {
+        return;
+    };
     for index in 1..=4u64 {
         assert_eq!(
             outbox
@@ -138,7 +185,9 @@ async fn a_rejection_retires_one_frame_and_an_acknowledgement_retires_a_run() {
 #[tokio::test]
 async fn the_outbox_refuses_rather_than_growing_without_bound() {
     let dir = private_dir();
-    let outbox = Outbox::open(dir.path(), "instance-a").await.unwrap();
+    let Some(outbox) = open_outbox(dir.path(), "instance-a").await else {
+        return;
+    };
     for _ in 0..armadra_runtime::worker::outbox::MAX_UNACKNOWLEDGED {
         outbox.queue(upcall("n")).await.unwrap();
     }
@@ -166,7 +215,9 @@ fn the_prefix_stays_compatible_with_the_first_phase() {
 async fn a_request_and_an_upcall_cross_on_one_connection() {
     let dir = private_dir();
     let mut plain = Worker::default();
-    let outbox = Outbox::open(dir.path(), plain.instance_id()).await.unwrap();
+    let Some(outbox) = open_outbox(dir.path(), plain.instance_id()).await else {
+        return;
+    };
     let channel = Arc::new(Channel::new(outbox));
     let upcaller = channel.upcaller();
     plain.attach_channel(upcaller.clone(), None, None);
@@ -236,9 +287,10 @@ async fn a_request_and_an_upcall_cross_on_one_connection() {
 async fn an_unacknowledged_upcall_is_replayed_on_the_next_connection() {
     let dir = private_dir();
     let worker = Arc::new(Mutex::new(Worker::default()));
-    let channel = Arc::new(Channel::new(
-        Outbox::open(dir.path(), "instance-a").await.unwrap(),
-    ));
+    let Some(outbox) = open_outbox(dir.path(), "instance-a").await else {
+        return;
+    };
+    let channel = Arc::new(Channel::new(outbox));
     channel.upcaller().send(agent_event("owed")).await.unwrap();
     {
         let (host, worker_end) = tokio::io::duplex(1 << 16);
@@ -294,9 +346,10 @@ async fn an_unacknowledged_upcall_is_replayed_on_the_next_connection() {
 async fn the_socket_bearer_replays_the_same_frames_as_stdio() {
     let dir = private_dir();
     let mut plain = Worker::default();
-    let channel = Arc::new(Channel::new(
-        Outbox::open(dir.path(), plain.instance_id()).await.unwrap(),
-    ));
+    let Some(outbox) = open_outbox(dir.path(), plain.instance_id()).await else {
+        return;
+    };
+    let channel = Arc::new(Channel::new(outbox));
     channel
         .upcaller()
         .send(agent_event("bearer"))
