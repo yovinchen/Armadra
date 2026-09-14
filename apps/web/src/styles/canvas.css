@@ -124,22 +124,6 @@
 
 /* ------------------------------ 浮层与归属 -------------------------------- */
 
-/*
- * 「React Flow」链接保留（MIT 礼节，不传 `proOptions`），挪到左下角：
- * 右下角整个让给缩略图，缩略图才能与右边、下边各留同样的 14px。
- */
-.canvas-stage .react-flow__attribution {
-  right: auto;
-  left: 12px;
-  bottom: 4px;
-  padding: 2px 5px;
-  border-radius: 5px;
-  font-size: var(--text-caption);
-}
-.canvas-stage .react-flow__attribution a {
-  color: var(--muted-foreground);
-}
-
 .canvas-stage .react-flow__minimap {
   /* `<MiniMap>` 是一个 Panel，自带 15px margin；归零后 14px 才是真的 14px。 */
   margin: 0;
@@ -163,24 +147,34 @@
   --minimap-h: 150px;
   /*
    * 四个角的浮层离边都是 14px：右上工具簇（上、右）、右下缩略图（右、下）、
-   * 底部 Dock（下）。窄画布时缩略图挪到 Dock 上方（下面的容器查询）。
+   * 底部 Dock（下）。缩略图始终在右下角；画布不够宽时是 Dock 向左让。
    */
   --navigation-bottom: 14px;
 }
 
 /*
- * Dock 在画布里**居中**，而不是在缩略图左侧那段里居中。宽度够时它与
- * 缩略图互不相碰（Dock 约 480px，缩略图 200px + 14px，1000px 以下缩略图
- * 已经挪到 Dock 上方）。
+ * Dock 所在的那一行：三格网格，两侧留白相等时 Dock 在画布正中；右侧留白
+ * 的下限是缩略图的宽度加两个边距，所以画布变窄时 Dock 先向左滑，
+ * 而不是压到缩略图上。行本身不接指针，只有 Dock 接。
  */
-.canvas-dock {
+.canvas-dock-row {
   position: absolute;
   bottom: var(--dock-bottom, 14px);
   left: 14px;
   right: 14px;
+  z-index: var(--z-dock);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(
+      calc(var(--minimap-w) + 14px),
+      1fr
+    );
+  pointer-events: none;
+}
+.canvas-dock {
+  grid-column: 2;
   width: max-content;
-  max-width: calc(100% - 28px);
-  margin-inline: auto;
+  max-width: 100%;
+  pointer-events: auto;
 }
 
 .dock-tools-expanded {
@@ -190,28 +184,13 @@
   display: none;
 }
 
-/*
- * 居中的 Dock 与右下缩略图相碰之前（Dock 约 700px，缩略图 200px + 边距），
- * 缩略图先挪到 Dock 上方；工具组仍然展开。
- */
-@container workspace (max-width: 1150px) {
-  .canvas-stage .react-flow__minimap {
-    --navigation-bottom: calc(14px + var(--dock-h) + 12px);
-  }
-}
-
+/* 窄画布：工具组折进一个弹层，Dock 变短；缩略图不动。 */
 @container workspace (max-width: 1000px) {
-  .canvas-dock {
-    --dock-bottom: 38px;
-  }
   .dock-tools-expanded {
     display: none;
   }
   .dock-tools-compact {
     display: block;
-  }
-  .canvas-stage .react-flow__minimap {
-    --navigation-bottom: calc(38px + var(--dock-h) + 12px);
   }
 }
 
@@ -231,10 +210,12 @@
  * 放在容器查询之后，同权重下由它接管 `--dock-bottom`。
  */
 @media (max-width: 767px) {
-  .canvas-dock {
+  .canvas-dock-row {
     --dock-bottom: calc(
       var(--mobile-nav-h) + env(safe-area-inset-bottom) + 10px
     );
+    /* 手机上 Dock 要用整个宽度，缩略图改到它上方（下面那条规则）。 */
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   }
   .canvas-stage .react-flow__minimap {
     --navigation-bottom: calc(
