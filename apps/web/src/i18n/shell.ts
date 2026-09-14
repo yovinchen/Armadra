@@ -105,6 +105,9 @@ export const shell: MessageModule = {
     "banner.runtimeRetry": "重连",
     "banner.tmuxFallback": "终端已降级为直连",
     "banner.backendSettings": "设置",
+    "banner.legacyResidue":
+      "{agents} 的配置里有旧版接入残留，hook 与画布技能不会生效",
+    "banner.legacyRepair": "去修复",
     "banner.dismiss": "忽略",
   },
   en: {
@@ -208,6 +211,9 @@ export const shell: MessageModule = {
     "banner.runtimeRetry": "Reconnect",
     "banner.tmuxFallback": "Terminals fell back to direct mode",
     "banner.backendSettings": "Settings",
+    "banner.legacyResidue":
+      "{agents} still carry integration left over from an older version; hooks and the canvas skill will not work",
+    "banner.legacyRepair": "Repair",
     "banner.dismiss": "Dismiss",
   },
 };
