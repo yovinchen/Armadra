@@ -94,7 +94,11 @@ pub fn next_revision(path: &Path) -> io::Result<u64> {
         options.mode(0o600);
     }
     let mut file = options.open(path)?;
-    let deadline = Instant::now() + Duration::from_millis(150);
+    // Bounded, so a hook never hangs a CLI on a stuck holder — but wide
+    // enough for the holders that are merely slow: each one reads, writes and
+    // syncs the file, and eight of them on a loaded host add up to more than
+    // the first bound of 150 ms.
+    let deadline = Instant::now() + Duration::from_millis(500);
     loop {
         match file.try_lock() {
             Ok(()) => break,
