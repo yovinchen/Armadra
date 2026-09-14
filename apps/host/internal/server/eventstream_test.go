@@ -31,6 +31,9 @@ func withEvents(f *authFixture, options *Options) {
 	if err != nil {
 		panic(err)
 	}
+	// Registered after the store's own cleanup, so it runs before it: the
+	// hub waits for its subscribers, and only then does the store close.
+	f.t.Cleanup(hub.Close)
 	f.store.SetCommitNotifier(hub.Notify)
 	options.Events = hub
 }

@@ -308,7 +308,11 @@ func (h *Hub) pump(ctx context.Context, conn *socket, sub *subscription, wake <-
 			return
 		default:
 		}
-		page, err := h.page(ctx, sub.cursor, sub.filter)
+		// The read is bounded by the page limits, so the connection going
+		// away mid-read is not worth interrupting it for: a cancelled
+		// transaction is rolled back on a goroutine of database/sql's own,
+		// which releases the file after Close believed it was done.
+		page, err := h.page(context.WithoutCancel(ctx), sub.cursor, sub.filter)
 		if err != nil {
 			h.fail(conn, CloseInternalError, "INTERNAL", "The event outbox could not be read")
 			return

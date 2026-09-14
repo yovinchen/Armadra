@@ -25,6 +25,7 @@ const authHost = "11111111111111111111111111111111"
 const authInstance = "22222222222222222222222222222222"
 
 type authFixture struct {
+	t        *testing.T
 	store    *storage.Store
 	identity *auth.Service
 	server   *httptest.Server
@@ -44,7 +45,7 @@ type authReply struct {
 // to know it exists.
 func newAuthFixture(t *testing.T, configure ...func(*authFixture, *Options)) *authFixture {
 	t.Helper()
-	f := &authFixture{}
+	f := &authFixture{t: t}
 	f.clock.Store(time.Now().UnixMilli())
 	var err error
 	f.store, err = storage.Open(t.TempDir(), authHost)
