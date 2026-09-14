@@ -11,7 +11,12 @@
 //!     and the revision-4 pair `armadra-canvas` / `armadra-linked-context`;
 //!   * Codex's `hooks.json` with a top-level `version`, which that CLI parses
 //!     with `deny_unknown_fields` — one stale key and *every* hook in the file
-//!     stops running, the user's included.
+//!     stops running, the user's included;
+//!   * instruction blocks in the CLI's global `AGENTS.md` / `GEMINI.md` /
+//!     `CLAUDE.md`, fenced `<!-- nodeterm:<name>:start -->` … `:end -->`
+//!     (or `aicc:`), two hundred lines telling the model to drive the canvas
+//!     through a `nodeterm.sh` that answers "not a nodeterm agent node" — the
+//!     model believes the instructions and never looks for the current skill.
 //!
 //! Three rules, in order of how much they matter:
 //!
@@ -48,6 +53,10 @@ const LEGACY_MARKERS: &[&str] = &["aicc-hook", "nodeterm", ".nodeterm"];
 /// it resolves to nothing now, so it is residue either way.
 const DEVELOPMENT_BUILD_MARKERS: &[&str] = &["target/debug/", "target\\debug\\"];
 
+/// Comment-marker prefixes earlier versions fenced their instruction blocks
+/// with: `<!-- nodeterm:manage-canvas:start -->` … `<!-- nodeterm:manage-canvas:end -->`.
+const LEGACY_BLOCK_PREFIXES: &[&str] = &["nodeterm:", "aicc:"];
+
 /// Skill directories earlier versions installed, under the CLI's skills root.
 /// `armadra` itself is not here: it is the current one, and a stale revision of
 /// it is reinstalled rather than removed.
@@ -64,7 +73,8 @@ pub const LEGACY_SKILL_DIRS: &[&str] = &[
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LegacyFinding {
-    /// `hook_entry` / `skill_dir` / `codex_unknown_key` / `status_line`.
+    /// `hook_entry` / `skill_dir` / `codex_unknown_key` / `status_line` /
+    /// `instruction_block`.
     pub kind: String,
     /// The file or directory it was found in.
     pub path: String,
@@ -143,7 +153,97 @@ pub fn scan_in(agent_id: &str, config_home: &Path) -> Vec<LegacyFinding> {
         }
     }
     found.extend(scan_skills(config_home));
+    for path in instruction_files(agent_id, config_home) {
+        if let Ok(text) = fs::read_to_string(&path) {
+            for (name, _) in legacy_blocks(&text) {
+                found.push(LegacyFinding::new("instruction_block", &path, name));
+            }
+        }
+    }
     found
+}
+
+/// The global instruction files a provider reads and earlier versions wrote
+/// blocks into. Claude reads `CLAUDE.md`; the current installer's own block
+/// goes to `AGENTS.md` for everything but Gemini, and old ones may be in either.
+fn instruction_files(agent_id: &str, config_home: &Path) -> Vec<PathBuf> {
+    let mut files = vec![crate::collab::skills::instruction_file(
+        agent_id,
+        config_home,
+    )];
+    if agent_id == "claude" {
+        files.push(config_home.join("CLAUDE.md"));
+    }
+    files.retain(|path| path.is_file());
+    files
+}
+
+/// Every legacy block in an instruction file: its name and its byte range,
+/// start marker through end marker inclusive. A start without its end is not a
+/// block we recognise, and is left alone.
+pub fn legacy_blocks(text: &str) -> Vec<(String, std::ops::Range<usize>)> {
+    let mut blocks = Vec::new();
+    let mut cursor = 0;
+    while let Some(offset) = text[cursor..].find("<!-- ") {
+        let start = cursor + offset;
+        let name_start = start + "<!-- ".len();
+        let Some(close) = text[name_start..].find(" -->") else {
+            break;
+        };
+        let marker = &text[name_start..name_start + close];
+        cursor = name_start + close + " -->".len();
+        let Some(name) = marker.strip_suffix(":start") else {
+            continue;
+        };
+        if !LEGACY_BLOCK_PREFIXES
+            .iter()
+            .any(|prefix| name.starts_with(prefix))
+        {
+            continue;
+        }
+        let end_marker = format!("<!-- {name}:end -->");
+        let Some(end_offset) = text[cursor..].find(&end_marker) else {
+            continue;
+        };
+        let end = cursor + end_offset + end_marker.len();
+        blocks.push((name.to_owned(), start..end));
+        cursor = end;
+    }
+    blocks
+}
+
+/// The file without its legacy blocks, and the names of what went. The text
+/// around them is kept byte for byte; only the blank lines a removed block
+/// leaves behind are collapsed to one.
+pub fn strip_legacy_blocks(text: &str) -> (String, Vec<String>) {
+    let blocks = legacy_blocks(text);
+    if blocks.is_empty() {
+        return (text.to_owned(), Vec::new());
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut cursor = 0;
+    let mut names = Vec::new();
+    for (name, range) in blocks {
+        out.push_str(&text[cursor..range.start]);
+        cursor = range.end;
+        names.push(name);
+    }
+    out.push_str(&text[cursor..]);
+    let mut collapsed = String::with_capacity(out.len());
+    let mut blank = 0;
+    for line in out.lines() {
+        if line.trim().is_empty() {
+            blank += 1;
+            if blank > 1 {
+                continue;
+            }
+        } else {
+            blank = 0;
+        }
+        collapsed.push_str(line);
+        collapsed.push('\n');
+    }
+    (collapsed, names)
 }
 
 /// The JSON files a provider keeps hook entries in. Copilot merges a whole
@@ -318,8 +418,42 @@ pub fn repair_in(agent_id: &str, config_home: &Path) -> AppResult<RepairReport> 
             }
         }
     }
+    for path in instruction_files(agent_id, config_home) {
+        repair_instruction_file(&path, &stamp, &mut report)?;
+    }
     report.backup = report.backups.last().cloned();
     Ok(report)
+}
+
+/// Backs the instruction file up, drops the marked blocks, and writes the rest
+/// back exactly as it was — or removes the file if nothing else was in it.
+fn repair_instruction_file(path: &Path, stamp: &str, report: &mut RepairReport) -> AppResult<()> {
+    let Ok(text) = fs::read_to_string(path) else {
+        return Ok(());
+    };
+    let (stripped, names) = strip_legacy_blocks(&text);
+    if names.is_empty() {
+        return Ok(());
+    }
+    let backup = backup_path(path, stamp);
+    fs::copy(path, &backup)?;
+    report.backups.push(backup.to_string_lossy().into_owned());
+    if stripped.trim().is_empty() {
+        fs::remove_file(path)?;
+        report.removed.push(path.to_string_lossy().into_owned());
+    } else {
+        fs::write(path, stripped)?;
+        report.kept.push(format!(
+            "{}: everything outside the marked blocks",
+            path.display()
+        ));
+    }
+    for name in names {
+        report
+            .removed
+            .push(format!("{}: <!-- {name} -->", path.display()));
+    }
+    Ok(())
 }
 
 fn repair_hook_file(
@@ -460,6 +594,52 @@ mod tests {
     use super::*;
     use serde_json::json;
     use tempfile::{TempDir, tempdir};
+
+    /// The `~/.codex/AGENTS.md` one user actually had: two nodeterm-era blocks
+    /// around their own text. Only the blocks go; the backup keeps the whole.
+    #[test]
+    fn an_instruction_file_from_the_nodeterm_era_loses_only_its_marked_blocks() {
+        let home = tempdir().unwrap();
+        let path = home.path().join("AGENTS.md");
+        let text = "# Mine\n\nkeep this line\n\n\
+<!-- nodeterm:get-linked-context:start -->\nold words\n<!-- nodeterm:get-linked-context:end -->\n\n\
+<!-- nodeterm:manage-canvas:start -->\nsh nodeterm.sh open-claude\n<!-- nodeterm:manage-canvas:end -->\n\n\
+<!-- somebody:else:start -->\ntheirs\n<!-- somebody:else:end -->\n\n\
+<!-- aicc:dangling:start -->\nno end marker\n";
+        fs::write(&path, text).unwrap();
+
+        let found = scan_in("codex", home.path());
+        let blocks: Vec<&str> = found
+            .iter()
+            .filter(|finding| finding.kind == "instruction_block")
+            .map(|finding| finding.detail.as_str())
+            .collect();
+        assert_eq!(
+            blocks,
+            ["nodeterm:get-linked-context", "nodeterm:manage-canvas"]
+        );
+
+        let report = repair_in("codex", home.path()).unwrap();
+        let after = fs::read_to_string(&path).unwrap();
+        assert!(after.contains("keep this line"), "{after}");
+        assert!(after.contains("<!-- somebody:else:start -->"), "{after}");
+        assert!(after.contains("<!-- aicc:dangling:start -->"), "{after}");
+        assert!(!after.contains("nodeterm"), "{after}");
+        assert!(!after.contains("\n\n\n"), "{after}");
+        assert!(
+            report
+                .removed
+                .iter()
+                .any(|entry| entry.contains("nodeterm:manage-canvas"))
+        );
+        let backup = report.backup.unwrap();
+        assert!(fs::read_to_string(&backup).unwrap().contains("open-claude"));
+        assert!(
+            scan_in("codex", home.path())
+                .iter()
+                .all(|f| f.kind != "instruction_block")
+        );
+    }
 
     /// The three shapes users actually reported, written here rather than read
     /// off a real machine: a fixture that reads `~/.claude` would repair the

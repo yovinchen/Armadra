@@ -106,7 +106,7 @@ export const integrationHalfSchema = z.object({
 
 /** Something an earlier product name left behind (设计 §4). */
 export const legacyIntegrationFindingSchema = z.object({
-  /** `hook_entry` / `skill_dir` / `codex_unknown_key` / `status_line`. */
+  /** `hook_entry` / `skill_dir` / `codex_unknown_key` / `status_line` / `instruction_block`. */
   kind: z.string(),
   path: z.string(),
   /** The command, key or directory name, so a person can recognise their own. */
