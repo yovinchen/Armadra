@@ -319,7 +319,13 @@ async fn a_frame_binding_is_verified_against_the_worktree_it_claims() {
         assert_eq!(ok.code, "ok");
         assert_eq!(ok.branch.as_deref(), Some("feature/binding"));
         assert!(!ok.is_main);
-        assert!(ok.absolute_path.ends_with("worktrees/绑定"));
+        assert!(
+            ok.absolute_path
+                .replace('\\', "/")
+                .ends_with("worktrees/绑定"),
+            "{}",
+            ok.absolute_path
+        );
         ok.repository_id
     };
 

@@ -51,6 +51,10 @@ impl Repo {
             ("core.fsmonitor", "false"),
             ("core.hooksPath", ".git/hooks"),
             ("core.excludesFile", "/dev/null"),
+            // Git for Windows ships a system `core.autocrlf=true`; the
+            // assertions below compare working-tree bytes with what was
+            // written.
+            ("core.autocrlf", "false"),
         ] {
             git(&path, &["config", key, value]);
         }
@@ -374,14 +378,21 @@ async fn abort_never_overwrites_an_ignored_file_recreated_after_merge_deletion()
 
 #[tokio::test]
 async fn binary_and_large_conflict_sides_keep_oids_and_paths_without_unbounded_previews() {
+    // A name porcelain has to quote: a newline where the file system allows
+    // one, a space where it does not (Windows refuses control characters).
+    const BINARY: &str = if cfg!(windows) {
+        "binary file"
+    } else {
+        "binary\nfile"
+    };
     let repo = Repo::new();
-    repo.commit("binary\nfile", "base\0bytes");
+    repo.commit(BINARY, "base\0bytes");
     repo.commit("large", "base\n");
     git(&repo.path, &["switch", "-c", "topic"]);
-    repo.commit("binary\nfile", "their\0bytes");
+    repo.commit(BINARY, "their\0bytes");
     let target = repo.commit("large", &"t".repeat(70_000));
     git(&repo.path, &["switch", "main"]);
-    repo.commit("binary\nfile", "ours\0bytes");
+    repo.commit(BINARY, "ours\0bytes");
     repo.commit("large", &"o".repeat(70_000));
     assert_eq!(
         repo.merge(&target).await.state,
@@ -391,7 +402,7 @@ async fn binary_and_large_conflict_sides_keep_oids_and_paths_without_unbounded_p
     let binary = state
         .conflicts
         .iter()
-        .find(|file| file.path == "binary\nfile")
+        .find(|file| file.path == BINARY)
         .unwrap();
     assert_eq!(binary.theirs.as_ref().unwrap().binary, Some(true));
     assert!(binary.theirs.as_ref().unwrap().preview.is_empty());
