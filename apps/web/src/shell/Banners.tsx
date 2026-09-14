@@ -1,9 +1,17 @@
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Lock, PlugZap, TerminalSquare, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Lock,
+  PlugZap,
+  Recycle,
+  TerminalSquare,
+  X,
+} from "lucide-react";
 import { runtimeApi } from "../api/client";
 import { canEditCanvas, useCanvasOwnership } from "../canvas-ownership";
-import { useT } from "../app/preferences-store";
+import { usePreferencesStore, useT } from "../app/preferences-store";
+import { useEnabledAgents } from "../app/use-agents";
 import { useCanvasStore } from "../store/canvas-store";
 import { Button } from "@/ui/button";
 import { IconButton } from "@/ui/icon-button";
@@ -14,13 +22,18 @@ export const SAVE_RETRY_EVENT = "armadra:save-retry";
 /**
  * 通知条堆栈（§3.1，`top:46` 居中）。
  *
- * 只放“需要用户知道且会持续存在”的三件事：保存失败、Runtime 断开、
- * 终端后端降级。一次性的信息用 sonner toast，不占画布。
+ * 只放“需要用户知道且会持续存在”的四件事：保存失败、Runtime 断开、
+ * 终端后端降级、CLI 配置里的旧版接入残留。一次性的信息用 sonner toast，
+ * 不占画布。
  */
 export function Banners() {
   const t = useT();
   const saveState = useCanvasStore((state) => state.saveState);
   const setPanel = useCanvasStore((state) => state.setPanel);
+  const setSettingsSection = usePreferencesStore(
+    (state) => state.setLastSettingsSection,
+  );
+  const agents = useEnabledAgents();
   const ownership = useCanvasOwnership((state) => state.status);
   const probeOwnership = useCanvasOwnership((state) => state.probe);
   const [dismissed, setDismissed] = useState<string[]>([]);
@@ -38,6 +51,32 @@ export function Banners() {
     queryFn: runtimeApi.terminalBackend,
     retry: false,
     staleTime: 60_000,
+  });
+
+  /**
+   * 旧版接入残留（agent-integration.md §4）。Runtime 启动时只扫描不改，
+   * 设置页又不是每天都开；用户实测过两次「Codex 的 hook 整份不跑、模型去跑
+   * 旧脚本」都没意识到是残留在作怪，所以这里点名哪些 CLI 有，指向修复。
+   * 只问一次：残留不会自己出现，修复之后由设置页那边刷新。
+   */
+  const residue = useQuery({
+    queryKey: ["integration-residue", agents.map((agent) => agent.id)],
+    queryFn: async () => {
+      const names = await Promise.all(
+        agents.map(async (agent) => {
+          try {
+            const state = await runtimeApi.agentIntegration(agent.id);
+            return state.legacy.found.length > 0 ? agent.label : null;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      return names.filter((name): name is string => name !== null);
+    },
+    enabled: agents.length > 0,
+    retry: false,
+    staleTime: Infinity,
   });
 
   const items: ReactNode[] = [];
@@ -101,6 +140,27 @@ export function Banners() {
         actionLabel={t("banner.backendSettings")}
         onAction={() => setPanel("settings", true)}
         onDismiss={() => setDismissed((list) => [...list, "backend"])}
+      />,
+    );
+  }
+
+  if (
+    residue.data &&
+    residue.data.length > 0 &&
+    !dismissed.includes("residue")
+  ) {
+    items.push(
+      <Banner
+        key="residue"
+        tone="warn"
+        icon={<Recycle />}
+        text={t("banner.legacyResidue", { agents: residue.data.join(" · ") })}
+        actionLabel={t("banner.legacyRepair")}
+        onAction={() => {
+          setSettingsSection("integration");
+          setPanel("settings", true);
+        }}
+        onDismiss={() => setDismissed((list) => [...list, "residue"])}
       />,
     );
   }
