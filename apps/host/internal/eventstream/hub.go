@@ -96,6 +96,13 @@ type Hub struct {
 	mu          sync.Mutex
 	subscribers map[chan struct{}]struct{}
 	closed      bool
+	// done is closed by Close; a pump blocked on an ack or on the next commit
+	// selects on it. serving counts the pumps Close has to wait for: a
+	// subscriber still reading the outbox when the store closes underneath it
+	// is a torn read, and on Windows an open database file that cannot be
+	// removed.
+	done    chan struct{}
+	serving sync.WaitGroup
 }
 
 func New(options Options) (*Hub, error) {
@@ -126,6 +133,7 @@ func New(options Options) (*Hub, error) {
 		projectors:  options.Projectors,
 		options:     options,
 		subscribers: make(map[chan struct{}]struct{}),
+		done:        make(chan struct{}),
 	}, nil
 }
 
@@ -149,14 +157,18 @@ func (h *Hub) Notify(uint64) {
 // this only stops the hub from handing out new ones.
 func (h *Hub) Close() {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.closed = true
+	if !h.closed {
+		h.closed = true
+		close(h.done)
+	}
 	for wake := range h.subscribers {
 		select {
 		case wake <- struct{}{}:
 		default:
 		}
 	}
+	h.mu.Unlock()
+	h.serving.Wait()
 }
 
 // Subscribers reports the live connection count. Tests read it; nothing in the
@@ -177,6 +189,7 @@ func (h *Hub) register() (chan struct{}, bool) {
 	// A fresh subscriber looks once without waiting: history may already exist.
 	wake <- struct{}{}
 	h.subscribers[wake] = struct{}{}
+	h.serving.Add(1)
 	return wake, true
 }
 
@@ -184,6 +197,7 @@ func (h *Hub) unregister(wake chan struct{}) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	delete(h.subscribers, wake)
+	h.serving.Done()
 }
 
 // Serve upgrades the request and runs one subscription to completion.
@@ -289,6 +303,9 @@ func (h *Hub) pump(ctx context.Context, conn *socket, sub *subscription, wake <-
 		case <-ctx.Done():
 			conn.closeWith(CloseNormal, "")
 			return
+		case <-h.done:
+			h.fail(conn, CloseTryAgainLater, "DISCONNECTED", "This Host is shutting the stream down")
+			return
 		default:
 		}
 		page, err := h.page(ctx, sub.cursor, sub.filter)
@@ -330,6 +347,9 @@ func (h *Hub) pump(ctx context.Context, conn *socket, sub *subscription, wake <-
 		case <-ctx.Done():
 			conn.closeWith(CloseNormal, "")
 			return
+		case <-h.done:
+			h.fail(conn, CloseTryAgainLater, "DISCONNECTED", "This Host is shutting the stream down")
+			return
 		case <-wake:
 		case <-sweep.C:
 		case through := <-acks:
@@ -363,6 +383,8 @@ func (h *Hub) awaitAck(ctx context.Context, budget *budget, acks <-chan uint64, 
 	for {
 		select {
 		case <-ctx.Done():
+			return false
+		case <-h.done:
 			return false
 		case <-deadline.C:
 			return false
