@@ -124,8 +124,10 @@ jobs:
       - name: Rust lint
         run: cargo clippy --workspace --exclude armadra-desktop --all-targets -- -D warnings
 
+      # 不在第一个失败的二进制处停下：一次运行就要把一个平台上所有失败的
+      # 套件都列出来，而不是修一个、推一次、再看下一个。
       - name: Rust 测试
-        run: cargo test --workspace --exclude armadra-desktop
+        run: cargo test --workspace --exclude armadra-desktop --no-fail-fast
 
       - name: Go vet 与测试
         shell: bash
