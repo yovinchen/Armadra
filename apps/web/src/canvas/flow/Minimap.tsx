@@ -26,8 +26,8 @@ import type { CanvasFlowNode } from "../sync/project";
  * DPR、主题重读全部由库负责。
  *
  * 保留的行为：三种状态描边、点一下定位到那个节点、可收起（收起状态在
- * `app/minimap-preferences.ts`）、位置右下角、离右边与下边各 14px
- * （「React Flow」归属链接挪到了左下角，`styles/canvas.css`）。
+ * `app/minimap-preferences.ts`）、位置右下角、离右边与下边各 14px，
+ * 画布再窄也不挪（是 Dock 向左让，`styles/canvas.css`）。
  *
  * 放弃的行为：视口框的自定义描边（`maskColor` 只有一个颜色）与「拖着走」时
  * 的 200ms 动画（`pannable` 是即时跟随，比动画跟手）。

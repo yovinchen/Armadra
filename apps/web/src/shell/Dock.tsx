@@ -57,156 +57,163 @@ export function Dock() {
   if (!workspace) return null;
 
   return (
-    <div
-      data-slot="dock"
-      className="canvas-dock z-[var(--z-dock)] flex h-[var(--dock-h)] items-center gap-1 rounded-[var(--r-panel)] border border-border bg-[var(--panel)]/90 px-1.5 shadow-[var(--shadow-pill)] backdrop-blur-[12px]"
-    >
-      <Tooltip delayDuration={500}>
-        <TooltipTrigger asChild>
-          <IconButton
-            size="dock"
-            data-slot="canvas-lock"
-            label={locked ? t("canvas.unlock") : t("canvas.lock")}
-            aria-pressed={locked}
-            active={locked}
-            onClick={() => setCanvasLocked(!locked)}
-          >
-            {locked ? <Lock /> : <LockOpen />}
-          </IconButton>
-        </TooltipTrigger>
-        <TooltipContent>
-          {locked ? t("canvas.unlock") : t("canvas.lock")}
-        </TooltipContent>
-      </Tooltip>
-
-      <Separator orientation="vertical" className="mx-1 h-5" />
-
-      <DropdownMenu {...addMenu.menuProps}>
+    // 外层是一条贯穿画布底部的网格行（`styles/canvas.css`）：中间那格装
+    // Dock，两侧留白相等时 Dock 就在画布正中；右侧留白有下限（缩略图的
+    // 宽度加边距），画布不够宽时 Dock 向左让，缩略图永远留在右下角。
+    <div className="canvas-dock-row">
+      <div
+        data-slot="dock"
+        className="canvas-dock z-[var(--z-dock)] flex h-[var(--dock-h)] items-center gap-1 rounded-[var(--r-panel)] border border-border bg-[var(--panel)]/90 px-1.5 shadow-[var(--shadow-pill)] backdrop-blur-[12px]"
+      >
         <Tooltip delayDuration={500}>
-          <TooltipTrigger asChild {...addMenu.tooltipTriggerProps}>
-            <DropdownMenuTrigger asChild>
-              <IconButton
-                size="dock"
-                label={t("dock.add")}
-                active={addMenu.menuOpen}
-              >
-                <Plus />
-              </IconButton>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          {/* 菜单展开时不再挂提示：它会压在第一条菜单项上。 */}
-          {addMenu.menuOpen ? null : (
-            <TooltipContent>{t("dock.add")}</TooltipContent>
-          )}
-        </Tooltip>
-        <DropdownMenuContent
-          align="center"
-          side="top"
-          className={cn("z-[var(--z-menu)]", ADD_MENU_CONTENT_CLASS)}
-        >
-          {/* 落点在**展开这一刻**算：菜单开着时相机还能动。 */}
-          {addMenu.menuOpen && (
-            <AddMenuContent
-              kind="dropdown"
-              ctx={{
-                addNode,
-                position: currentViewportCenter(),
-                workspace,
-                agents,
-              }}
-            />
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <Tooltip delayDuration={500}>
-        <TooltipTrigger asChild>
-          <IconButton
-            size="dock"
-            label={t("dock.undo")}
-            disabled={!canUndo}
-            onClick={() => undo()}
-          >
-            <Undo2 />
-          </IconButton>
-        </TooltipTrigger>
-        <TooltipContent>{t("dock.undo")}</TooltipContent>
-      </Tooltip>
-
-      <Tooltip delayDuration={500}>
-        <TooltipTrigger asChild>
-          <IconButton
-            size="dock"
-            label={t("dock.redo")}
-            disabled={!canRedo}
-            onClick={() => redo()}
-          >
-            <Redo2 />
-          </IconButton>
-        </TooltipTrigger>
-        <TooltipContent>{t("dock.redo")}</TooltipContent>
-      </Tooltip>
-
-      <Tooltip delayDuration={500}>
-        <TooltipTrigger asChild>
-          <IconButton
-            size="dock"
-            label={t("dock.tidy")}
-            onClick={() => runCanvasCommand("canvas.tidy")}
-          >
-            <LayoutGrid />
-          </IconButton>
-        </TooltipTrigger>
-        <TooltipContent>{t("dock.tidy")}</TooltipContent>
-      </Tooltip>
-
-      {/* 白板工具组（§5）；画布没挂载时整组连同分隔线一起不渲染。 */}
-      <DockTools />
-
-      <Separator orientation="vertical" className="mx-1 h-5" />
-
-      <SaveDot />
-
-      <DropdownMenu {...zoomMenu.menuProps}>
-        <Tooltip delayDuration={500}>
-          <TooltipTrigger asChild {...zoomMenu.tooltipTriggerProps}>
-            <DropdownMenuTrigger asChild>
-              <IconButton
-                size="dock"
-                label={t("dock.zoom")}
-                active={zoomMenu.menuOpen}
-                className="w-[52px] text-[length:var(--text-caption)] font-medium tabular-nums"
-              >
-                {Math.round(zoom * 100)}%
-              </IconButton>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          {zoomMenu.menuOpen ? null : (
-            <TooltipContent>{t("dock.zoom")}</TooltipContent>
-          )}
-        </Tooltip>
-        <DropdownMenuContent
-          align="center"
-          side="top"
-          className="z-[var(--z-menu)] w-auto min-w-32"
-        >
-          {ZOOM_STEPS.map((step) => (
-            <DropdownMenuItem
-              key={step}
-              data-checked={Math.abs(zoom - step) < 0.005 ? "true" : undefined}
-              onSelect={() => zoomToLevel(step)}
+          <TooltipTrigger asChild>
+            <IconButton
+              size="dock"
+              data-slot="canvas-lock"
+              label={locked ? t("canvas.unlock") : t("canvas.lock")}
+              aria-pressed={locked}
+              active={locked}
+              onClick={() => setCanvasLocked(!locked)}
             >
-              {Math.round(step * 100)}%
-            </DropdownMenuItem>
-          ))}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={fitView}>
-            {t("dock.zoomFit")}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+              {locked ? <Lock /> : <LockOpen />}
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>
+            {locked ? t("canvas.unlock") : t("canvas.lock")}
+          </TooltipContent>
+        </Tooltip>
 
-      <DockUsage />
+        <Separator orientation="vertical" className="mx-1 h-5" />
+
+        <DropdownMenu {...addMenu.menuProps}>
+          <Tooltip delayDuration={500}>
+            <TooltipTrigger asChild {...addMenu.tooltipTriggerProps}>
+              <DropdownMenuTrigger asChild>
+                <IconButton
+                  size="dock"
+                  label={t("dock.add")}
+                  active={addMenu.menuOpen}
+                >
+                  <Plus />
+                </IconButton>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            {/* 菜单展开时不再挂提示：它会压在第一条菜单项上。 */}
+            {addMenu.menuOpen ? null : (
+              <TooltipContent>{t("dock.add")}</TooltipContent>
+            )}
+          </Tooltip>
+          <DropdownMenuContent
+            align="center"
+            side="top"
+            className={cn("z-[var(--z-menu)]", ADD_MENU_CONTENT_CLASS)}
+          >
+            {/* 落点在**展开这一刻**算：菜单开着时相机还能动。 */}
+            {addMenu.menuOpen && (
+              <AddMenuContent
+                kind="dropdown"
+                ctx={{
+                  addNode,
+                  position: currentViewportCenter(),
+                  workspace,
+                  agents,
+                }}
+              />
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <Tooltip delayDuration={500}>
+          <TooltipTrigger asChild>
+            <IconButton
+              size="dock"
+              label={t("dock.undo")}
+              disabled={!canUndo}
+              onClick={() => undo()}
+            >
+              <Undo2 />
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>{t("dock.undo")}</TooltipContent>
+        </Tooltip>
+
+        <Tooltip delayDuration={500}>
+          <TooltipTrigger asChild>
+            <IconButton
+              size="dock"
+              label={t("dock.redo")}
+              disabled={!canRedo}
+              onClick={() => redo()}
+            >
+              <Redo2 />
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>{t("dock.redo")}</TooltipContent>
+        </Tooltip>
+
+        <Tooltip delayDuration={500}>
+          <TooltipTrigger asChild>
+            <IconButton
+              size="dock"
+              label={t("dock.tidy")}
+              onClick={() => runCanvasCommand("canvas.tidy")}
+            >
+              <LayoutGrid />
+            </IconButton>
+          </TooltipTrigger>
+          <TooltipContent>{t("dock.tidy")}</TooltipContent>
+        </Tooltip>
+
+        {/* 白板工具组（§5）；画布没挂载时整组连同分隔线一起不渲染。 */}
+        <DockTools />
+
+        <Separator orientation="vertical" className="mx-1 h-5" />
+
+        <SaveDot />
+
+        <DropdownMenu {...zoomMenu.menuProps}>
+          <Tooltip delayDuration={500}>
+            <TooltipTrigger asChild {...zoomMenu.tooltipTriggerProps}>
+              <DropdownMenuTrigger asChild>
+                <IconButton
+                  size="dock"
+                  label={t("dock.zoom")}
+                  active={zoomMenu.menuOpen}
+                  className="w-[52px] text-[length:var(--text-caption)] font-medium tabular-nums"
+                >
+                  {Math.round(zoom * 100)}%
+                </IconButton>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            {zoomMenu.menuOpen ? null : (
+              <TooltipContent>{t("dock.zoom")}</TooltipContent>
+            )}
+          </Tooltip>
+          <DropdownMenuContent
+            align="center"
+            side="top"
+            className="z-[var(--z-menu)] w-auto min-w-32"
+          >
+            {ZOOM_STEPS.map((step) => (
+              <DropdownMenuItem
+                key={step}
+                data-checked={
+                  Math.abs(zoom - step) < 0.005 ? "true" : undefined
+                }
+                onSelect={() => zoomToLevel(step)}
+              >
+                {Math.round(step * 100)}%
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={fitView}>
+              {t("dock.zoomFit")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DockUsage />
+      </div>
     </div>
   );
 }

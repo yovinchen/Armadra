@@ -137,6 +137,8 @@ function onBoardOpened(document: BoardDocument): void {
   applyBoardViewport(document);
 }
 
+const ATTRIBUTION = { hideAttribution: true } as const;
+
 export function FlowWorkspace() {
   const t = useT();
   const flow = useReactFlow();
@@ -403,6 +405,9 @@ export function FlowWorkspace() {
           <ReactFlow
             {...bindings}
             {...options}
+            // 右下角的「React Flow」链接不显示（2026-09-14 反馈）。MIT 许可
+            // 不要求它；React Flow 只对商业项目提出订阅 Pro 的请求，与此无关。
+            proOptions={ATTRIBUTION}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             colorMode={canvasColorScheme(preferences.background, theme)}
