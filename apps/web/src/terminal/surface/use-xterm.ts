@@ -15,6 +15,7 @@ import {
 } from "../scrollback";
 import { terminalAppearance, terminalTheme } from "./appearance";
 import { writeClipboard } from "./clipboard";
+import { compensateScaledPointer } from "./scaled-pointer";
 import { applyOscTitle } from "./title";
 import { RESIZE_DEBOUNCE_MS, TERMINAL_SCROLLBACK } from "./constants";
 import type { SurfaceRefs } from "./refs";
@@ -59,6 +60,8 @@ export function useXtermInstance(
     terminal.loadAddon(fit);
 
     terminal.open(container);
+    // 画布缩放时选区与鼠标上报的坐标要按缩放比折回（`scaled-pointer.ts`）。
+    const restorePointer = compensateScaledPointer(terminal);
     refs.terminalRef.current = terminal;
     refs.fitRef.current = fit;
 
@@ -229,6 +232,7 @@ export function useXtermInstance(
       bell.dispose();
       title.dispose();
       releaseIme();
+      restorePointer();
       terminal.dispose();
       /*
        * **不要在这里 `forgetOscTitle(nodeId)`**（2026-09-04 Phase 4 复跑时
