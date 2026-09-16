@@ -173,6 +173,11 @@ armadra-hook canvas inbox --limit 10 --after 0
 armadra-hook canvas ack --id <message-id>
 ```
 
+`armadra-hook` 是随 Armadra 打包的 sidecar（macOS 在 `Armadra.app/Contents/MacOS/`），画布里开的每个终端的 PATH 末尾
+都带着它所在的目录，环境里另有 `ARMADRA_HOOK_BIN` 指向它的绝对路径——技能里写的是裸命令名，shell 配置若整个重写了
+PATH，模型按技能的说明改用 `"$ARMADRA_HOOK_BIN"`（2026-09-16 补：此前 sidecar 目录不在 PATH 上，打包版里模型按技能
+跑 `armadra-hook` 只会得到 command not found）。
+
 不安装新的 MCP 服务、不追加启动提示、不轮询 CLI、不改变 CLI 配置即可使用。可选的 Hook 安装仍需用户显式触发；它将两个独立的按需技能放入 provider 的 `skills/` 目录，移除以前由 Armadra 标记的长篇全局指令区块，保留用户的其他内容。普通启动不会修改全局 `AGENTS.md`、`GEMINI.md` 或 provider 配置。
 
 ### 可复用边界
