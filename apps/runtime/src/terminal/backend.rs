@@ -413,6 +413,14 @@ pub fn child_environment() -> Vec<(String, String)> {
         "PATH".to_owned(),
         agent_path().to_string_lossy().into_owned(),
     ));
+    // The sidecar's directory is on that PATH, but an rc file may replace
+    // PATH wholesale; the skill then says to use this instead.
+    if let Ok(binary) = crate::hook::install::resolve_client_binary() {
+        env.push((
+            "ARMADRA_HOOK_BIN".to_owned(),
+            binary.to_string_lossy().into_owned(),
+        ));
+    }
     // What the CLI on the other end thinks it is talking to (plan §18.3, TERM
     // row). xterm.js implements xterm-256color and renders 24-bit SGR natively.
     env.push(("TERM".to_owned(), "xterm-256color".to_owned()));

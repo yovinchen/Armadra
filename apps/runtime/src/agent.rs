@@ -380,7 +380,28 @@ pub fn agent_path() -> std::ffi::OsString {
 
     push_unique(&mut directories, PathBuf::from("/opt/homebrew/bin"));
     push_unique(&mut directories, PathBuf::from("/usr/local/bin"));
+    // The skill tells the model to run a bare `armadra-hook`. In the packaged
+    // app that binary is a sidecar next to this executable and on nobody's
+    // PATH (2026-09-16: a Claude node could not open a Codex node for exactly
+    // this reason). Last, so a user's own tool of the same name still wins.
+    if let Some(directory) = hook_client_directory() {
+        push_unique(&mut directories, directory);
+    }
     env::join_paths(directories).unwrap_or_default()
+}
+
+/// Where the `armadra-hook` client lives: the `ARMADRA_HOOK_BIN` override's
+/// directory, else this executable's own.
+fn hook_client_directory() -> Option<PathBuf> {
+    if let Some(binary) = env::var_os("ARMADRA_HOOK_BIN") {
+        let binary = PathBuf::from(binary);
+        if binary.is_file() {
+            return binary.parent().map(Path::to_path_buf);
+        }
+    }
+    env::current_exe()
+        .ok()
+        .and_then(|executable| executable.parent().map(Path::to_path_buf))
 }
 
 fn push_unique(directories: &mut Vec<PathBuf>, candidate: PathBuf) {
@@ -605,9 +626,13 @@ mod tests {
     #[test]
     fn agent_path_retains_the_process_path() {
         let process_path = env::var_os("PATH").unwrap_or_default();
-        let resolved = agent_path();
+        let resolved = env::split_paths(&agent_path()).collect::<Vec<_>>();
         for directory in env::split_paths(&process_path) {
-            assert!(env::split_paths(&resolved).any(|candidate| candidate == directory));
+            assert!(resolved.contains(&directory));
         }
+        // A bare `armadra-hook` in a terminal has to resolve to the sidecar
+        // beside the runtime; the test binary stands in for it here.
+        let own = env::current_exe().unwrap().parent().unwrap().to_path_buf();
+        assert!(resolved.contains(&own), "{resolved:?}");
     }
 }

@@ -20,7 +20,7 @@ pub const END_MARKER: &str = "<!-- armadra:skills:end -->";
 
 /// Bumped when the wording changes; written into the file so a stale install is
 /// visible in a diff and readable by the settings page.
-pub const SKILLS_REVISION: u32 = 6;
+pub const SKILLS_REVISION: u32 = 7;
 
 /// The directory name we own under a CLI's skills root.
 pub const SKILL_NAME: &str = "armadra";
@@ -266,6 +266,9 @@ pub fn skill() -> String {
 没有任何命令会把文字打进别人的终端。画布改动会立刻显示在用户屏幕上，所以只做用户要求的事。\n\
 This terminal runs inside an Armadra node. Collaboration is pull-only: you leave a handoff, the peer reads it \
 when it suits them. Nothing here injects text into another terminal.\n\n\
+`armadra-hook` 随 Armadra 一起安装，画布里开的终端已经把它放进 PATH；如果 shell 配置重写了 PATH 而找不到它，\
+用 `\"$ARMADRA_HOOK_BIN\"` 代替命令名。The `armadra-hook` command ships with Armadra and is on PATH in \
+terminals opened from the board; if a shell profile rewrote PATH, run `\"$ARMADRA_HOOK_BIN\"` instead.\n\n\
 ## 读相连节点 / Read linked context\n\n\
 只能读画布上**连到本节点**的节点；没有连线的读不到，这是有意的。\n\n\
 ```sh\n\
