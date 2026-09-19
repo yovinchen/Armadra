@@ -29,7 +29,11 @@ import type { DescMessage, MessageShape } from "@bufbuild/protobuf";
 import { EventBus } from "../bus";
 import { openDatabase, type OpenedDatabase } from "../db/open";
 import { CoreServer } from "../http/server";
-import { IdentityService, IdentityStore, identityInstanceId } from "../identity";
+import {
+  IdentityService,
+  IdentityStore,
+  identityInstanceId,
+} from "../identity";
 import { allScopes } from "../identity/scopes";
 import { createLog, nodePlatform } from "../platform";
 import { CredentialService } from "./credentials";
@@ -237,19 +241,22 @@ describe("GitHub 的两张 HTTP 面", () => {
   });
 
   it("没有 Origin 的请求一律 403", async () => {
-    const response = await fetch(`${harnessed.base}${RPC_PREFIX}GetCredential`, {
-      method: "POST",
-      headers: {
-        "content-type": MEDIA_TYPE,
-        authorization: `Bearer ${harnessed.accessToken}`,
+    const response = await fetch(
+      `${harnessed.base}${RPC_PREFIX}GetCredential`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": MEDIA_TYPE,
+          authorization: `Bearer ${harnessed.accessToken}`,
+        },
+        body: toBinary(
+          GetGithubCredentialRequestSchema,
+          create(GetGithubCredentialRequestSchema, {
+            meta: { scope: { workspaceId: harnessed.workspaceId } },
+          }),
+        ) as BodyInit,
       },
-      body: toBinary(
-        GetGithubCredentialRequestSchema,
-        create(GetGithubCredentialRequestSchema, {
-          meta: { scope: { workspaceId: harnessed.workspaceId } },
-        }),
-      ) as BodyInit,
-    });
+    );
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({
       code: "PERMISSION_DENIED",
@@ -309,15 +316,18 @@ describe("GitHub 的两张 HTTP 面", () => {
   });
 
   it("不是 protobuf 的请求体是 415", async () => {
-    const response = await fetch(`${harnessed.base}${RPC_PREFIX}GetCredential`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        origin: ORIGIN,
-        authorization: `Bearer ${harnessed.accessToken}`,
+    const response = await fetch(
+      `${harnessed.base}${RPC_PREFIX}GetCredential`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: ORIGIN,
+          authorization: `Bearer ${harnessed.accessToken}`,
+        },
+        body: "{}",
       },
-      body: "{}",
-    });
+    );
     expect(response.status).toBe(415);
   });
 
@@ -353,18 +363,21 @@ describe("GitHub 的两张 HTTP 面", () => {
   });
 
   it("新面答同一批动词的 JSON", async () => {
-    const response = await fetch(`${harnessed.base}${API_PREFIX}get-credential`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        origin: ORIGIN,
-        authorization: `Bearer ${harnessed.accessToken}`,
-        "x-armadra-csrf": harnessed.csrfToken,
+    const response = await fetch(
+      `${harnessed.base}${API_PREFIX}get-credential`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: ORIGIN,
+          authorization: `Bearer ${harnessed.accessToken}`,
+          "x-armadra-csrf": harnessed.csrfToken,
+        },
+        body: JSON.stringify({
+          meta: { scope: { workspaceId: harnessed.workspaceId } },
+        }),
       },
-      body: JSON.stringify({
-        meta: { scope: { workspaceId: harnessed.workspaceId } },
-      }),
-    });
+    );
     expect(response.status).toBe(200);
     const body = (await response.json()) as Record<string, unknown>;
     expect(body.accountLogin).toBe("octocat");

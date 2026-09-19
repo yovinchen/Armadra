@@ -35,7 +35,13 @@
 
 import { execFileSync } from "node:child_process";
 import { statfsSync } from "node:fs";
-import { loadavg, platform as osPlatform, totalmem, freemem, uptime } from "node:os";
+import {
+  loadavg,
+  platform as osPlatform,
+  totalmem,
+  freemem,
+  uptime,
+} from "node:os";
 
 /** CPU 基线超过这么久就不再是可用基线：进程表已经变了，差会摊在一个未知窗口上。 */
 export const MAX_CPU_BASELINE_AGE_MS = 60_000;
@@ -325,10 +331,7 @@ export class Sampler {
 
   constructor(
     private readonly now: () => number = () => Date.now(),
-    private readonly read: () => Map<
-      number,
-      ProcessRow
-    > = readProcessTable,
+    private readonly read: () => Map<number, ProcessRow> = readProcessTable,
   ) {}
 
   /** 刷新一次，并把上一次的表（如果还算数）一起交出去。 */
@@ -397,7 +400,11 @@ export function collectTree(
 ): number[] {
   const tree = [root];
   const seen = new Set([root]);
-  for (let index = 0; index < tree.length && tree.length < MAX_TREE; index += 1) {
+  for (
+    let index = 0;
+    index < tree.length && tree.length < MAX_TREE;
+    index += 1
+  ) {
     for (const pid of children.get(tree[index] as number) ?? []) {
       if (tree.length >= MAX_TREE) break;
       if (seen.has(pid)) continue;
@@ -566,7 +573,8 @@ export function sessionResources(
   // 最重的在前，被截掉的尾巴是没人在找的那部分。并列时保持 pid 顺序，样本不抖。
   listed.sort(
     (left, right) =>
-      (right.memoryBytes ?? 0) - (left.memoryBytes ?? 0) || left.pid - right.pid,
+      (right.memoryBytes ?? 0) - (left.memoryBytes ?? 0) ||
+      left.pid - right.pid,
   );
 
   return {

@@ -11,7 +11,11 @@
  */
 
 import type { CoreContext } from "../main";
-import { IdentityService, IdentityStore, identityInstanceId } from "../identity";
+import {
+  IdentityService,
+  IdentityStore,
+  identityInstanceId,
+} from "../identity";
 import { CredentialService, openSecretStore } from "./credentials";
 import { API_PREFIX, GithubHttp, RPC_METHODS, RPC_PREFIX } from "./http";
 import { GithubService } from "./service";

@@ -58,9 +58,7 @@ export function addTokens(target: TokenTotals, other: TokenTotals): void {
 }
 
 export function totalTokens(tokens: TokenTotals): number {
-  return (
-    tokens.input + tokens.output + tokens.cacheRead + tokens.cacheCreation
-  );
+  return tokens.input + tokens.output + tokens.cacheRead + tokens.cacheCreation;
 }
 
 export function isEmptyTokens(tokens: TokenTotals): boolean {
@@ -212,7 +210,9 @@ export function undated(model: string): string | undefined {
   const third = head.slice(0, second).lastIndexOf("-");
   if (third <= 0) return undefined;
   const year = head.slice(0, second).slice(third + 1);
-  return /^\d{4}$/.test(year) ? head.slice(0, second).slice(0, third) : undefined;
+  return /^\d{4}$/.test(year)
+    ? head.slice(0, second).slice(0, third)
+    : undefined;
 }
 
 export type PriceTable = Readonly<Record<string, ModelPrice>>;
@@ -378,7 +378,9 @@ export class ScanState {
   constructor(private readonly now: () => number = () => Date.now()) {}
 
   /** 对两棵记录树跑一趟。 */
-  scan(roots: readonly (readonly [Provider, string])[] = scanRoots()): ScanResult {
+  scan(
+    roots: readonly (readonly [Provider, string])[] = scanRoots(),
+  ): ScanResult {
     const result: ScanResult = {
       buckets: new Map(),
       files: {},
@@ -467,7 +469,11 @@ export class ScanState {
     };
     this.files.delete(path);
     // 同样的长度和同样的 mtime 意味着什么都没被追加。
-    if (state.len === info.size && state.mtimeMs === mtimeMs && state.offset > 0) {
+    if (
+      state.len === info.size &&
+      state.mtimeMs === mtimeMs &&
+      state.offset > 0
+    ) {
       state.modifiedMs = mtimeMs;
       this.files.set(path, state);
       return;
@@ -604,7 +610,8 @@ function windowFrom(
   )) {
     addTokens(total, tokens);
     const price = priceFor(prices, model);
-    const priced = price === undefined ? null : roundCents(costOf(price, tokens));
+    const priced =
+      price === undefined ? null : roundCents(costOf(price, tokens));
     if (priced !== null) cost += priced;
     else if (!isEmptyTokens(tokens)) complete = false;
     models.push({ model, tokens, costUsd: priced });
@@ -671,7 +678,8 @@ export function summarize(
       provider: session.provider,
       models: session.models,
       tokens: session.tokens,
-      costUsd: price === undefined ? 0 : roundCents(costOf(price, session.tokens)),
+      costUsd:
+        price === undefined ? 0 : roundCents(costOf(price, session.tokens)),
       complete: price !== undefined,
       updatedAt: new Date(session.updatedMs).toISOString(),
     };

@@ -200,7 +200,9 @@ export async function deleteBranch(
     throw service.translate(error);
   }
   if (current !== request.expectedSha) {
-    return create(DeleteGithubBranchResponseSchema, { reasonCode: "REF_MOVED" });
+    return create(DeleteGithubBranchResponseSchema, {
+      reasonCode: "REF_MOVED",
+    });
   }
   try {
     await api.deleteRef(client, ref, branch);
@@ -227,10 +229,14 @@ export async function deleteBranch(
       });
     }
     if (isGithubError(translated, "notFound")) {
-      return create(DeleteGithubBranchResponseSchema, { reasonCode: "NOT_FOUND" });
+      return create(DeleteGithubBranchResponseSchema, {
+        reasonCode: "NOT_FOUND",
+      });
     }
     if (isGithubError(translated, "conflict")) {
-      return create(DeleteGithubBranchResponseSchema, { reasonCode: "REF_MOVED" });
+      return create(DeleteGithubBranchResponseSchema, {
+        reasonCode: "REF_MOVED",
+      });
     }
     throw translated;
   }

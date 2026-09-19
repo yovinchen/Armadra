@@ -147,15 +147,12 @@ export class GithubService {
    */
   repository(ref: GithubRepositoryRef | undefined): GithubRepositoryRef {
     const client = this.client();
-    if (
-      ref === undefined ||
-      !validName(ref.owner) ||
-      !validName(ref.name)
-    ) {
+    if (ref === undefined || !validName(ref.owner) || !validName(ref.name)) {
       throw githubError("invalid");
     }
     const base = client.apiBase();
-    if (ref.apiBase !== "" && ref.apiBase !== base) throw githubError("invalid");
+    if (ref.apiBase !== "" && ref.apiBase !== base)
+      throw githubError("invalid");
     const host = webHostFor(base);
     // 指名另一个 web 主机的引用会把这个仓库的名字送到错误的服务上去；它被拒绝
     // 而不是被改写。

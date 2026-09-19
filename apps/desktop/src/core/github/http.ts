@@ -109,7 +109,12 @@ import {
   unlinkReference,
 } from "./references";
 import { getStatusMapping, putStatusMapping } from "./status";
-import { SCOPE_READ, SCOPE_WRITE, type Caller, type GithubService } from "./service";
+import {
+  SCOPE_READ,
+  SCOPE_WRITE,
+  type Caller,
+  type GithubService,
+} from "./service";
 
 export const MEDIA_TYPE = "application/x-protobuf";
 export const RPC_PREFIX = "/rpc/armadra.v1.GithubService/";
@@ -149,33 +154,35 @@ export const RPC_METHODS = [
 export type RpcMethod = (typeof RPC_METHODS)[number];
 
 /** 每个方法要哪个权限，以及它是不是一次写（写要 CSRF）。 */
-const PERMISSIONS: Record<RpcMethod, { permission: string; mutating: boolean }> =
-  {
-    GetCredential: { permission: SCOPE_READ, mutating: false },
-    ConfigureCredential: { permission: SCOPE_WRITE, mutating: true },
-    RevokeCredential: { permission: SCOPE_WRITE, mutating: true },
-    ResolveRepository: { permission: SCOPE_READ, mutating: false },
-    ListIssues: { permission: SCOPE_READ, mutating: false },
-    GetIssue: { permission: SCOPE_READ, mutating: false },
-    CreateIssue: { permission: SCOPE_WRITE, mutating: true },
-    UpdateIssue: { permission: SCOPE_WRITE, mutating: true },
-    SetIssueState: { permission: SCOPE_WRITE, mutating: true },
-    CommentIssue: { permission: SCOPE_WRITE, mutating: true },
-    GetStatusMapping: { permission: SCOPE_READ, mutating: false },
-    PutStatusMapping: { permission: SCOPE_WRITE, mutating: true },
-    MoveIssue: { permission: SCOPE_WRITE, mutating: true },
-    ListPulls: { permission: SCOPE_READ, mutating: false },
-    GetPull: { permission: SCOPE_READ, mutating: false },
-    CreatePull: { permission: SCOPE_WRITE, mutating: true },
-    SubmitReview: { permission: SCOPE_WRITE, mutating: true },
-    GetChecks: { permission: SCOPE_READ, mutating: false },
-    RerunChecks: { permission: SCOPE_WRITE, mutating: true },
-    MergePull: { permission: SCOPE_WRITE, mutating: true },
-    DeleteBranch: { permission: SCOPE_WRITE, mutating: true },
-    LinkReference: { permission: SCOPE_WRITE, mutating: true },
-    UnlinkReference: { permission: SCOPE_WRITE, mutating: true },
-    ListReferences: { permission: SCOPE_READ, mutating: false },
-  };
+const PERMISSIONS: Record<
+  RpcMethod,
+  { permission: string; mutating: boolean }
+> = {
+  GetCredential: { permission: SCOPE_READ, mutating: false },
+  ConfigureCredential: { permission: SCOPE_WRITE, mutating: true },
+  RevokeCredential: { permission: SCOPE_WRITE, mutating: true },
+  ResolveRepository: { permission: SCOPE_READ, mutating: false },
+  ListIssues: { permission: SCOPE_READ, mutating: false },
+  GetIssue: { permission: SCOPE_READ, mutating: false },
+  CreateIssue: { permission: SCOPE_WRITE, mutating: true },
+  UpdateIssue: { permission: SCOPE_WRITE, mutating: true },
+  SetIssueState: { permission: SCOPE_WRITE, mutating: true },
+  CommentIssue: { permission: SCOPE_WRITE, mutating: true },
+  GetStatusMapping: { permission: SCOPE_READ, mutating: false },
+  PutStatusMapping: { permission: SCOPE_WRITE, mutating: true },
+  MoveIssue: { permission: SCOPE_WRITE, mutating: true },
+  ListPulls: { permission: SCOPE_READ, mutating: false },
+  GetPull: { permission: SCOPE_READ, mutating: false },
+  CreatePull: { permission: SCOPE_WRITE, mutating: true },
+  SubmitReview: { permission: SCOPE_WRITE, mutating: true },
+  GetChecks: { permission: SCOPE_READ, mutating: false },
+  RerunChecks: { permission: SCOPE_WRITE, mutating: true },
+  MergePull: { permission: SCOPE_WRITE, mutating: true },
+  DeleteBranch: { permission: SCOPE_WRITE, mutating: true },
+  LinkReference: { permission: SCOPE_WRITE, mutating: true },
+  UnlinkReference: { permission: SCOPE_WRITE, mutating: true },
+  ListReferences: { permission: SCOPE_READ, mutating: false },
+};
 
 /** 每个方法的请求与响应 schema。 */
 const SCHEMAS: Record<
@@ -371,8 +378,14 @@ export class GithubHttp {
       return;
     }
     try {
-      const result = withoutBodies(method, await this.invoke(method, caller, input));
-      const wire = toBinary(schema.response, result as MessageShape<DescMessage>);
+      const result = withoutBodies(
+        method,
+        await this.invoke(method, caller, input),
+      );
+      const wire = toBinary(
+        schema.response,
+        result as MessageShape<DescMessage>,
+      );
       if (wire.byteLength > MAX_FRAME_BYTES) {
         // 一个不合规的客户端读不了的帧不发出去：超出预算是调用方能应对的错误，
         // 不是一段会被截成它认不出的东西的正文。
@@ -485,10 +498,7 @@ export class GithubHttp {
     const workspaceId = meta?.scope?.workspaceId ?? "";
     if (workspaceId === "") throw new IdentityError("invalid");
     const hostId = this.options.service.hostId;
-    if (
-      (meta?.scope?.hostId ?? "") !== "" &&
-      meta?.scope?.hostId !== hostId
-    ) {
+    if ((meta?.scope?.hostId ?? "") !== "" && meta?.scope?.hostId !== hostId) {
       throw new IdentityError("permission");
     }
     if (

@@ -118,12 +118,7 @@ export async function getPull(
   const allowed = await mergeMethods(service, client, ref);
   try {
     const read = await api.pull(client, ref, request.number, allowed, now);
-    const files = await api.pullFiles(
-      client,
-      ref,
-      read.pull.number,
-      MAX_FILES,
-    );
+    const files = await api.pullFiles(client, ref, read.pull.number, MAX_FILES);
     const reviews = await api.pullReviews(
       client,
       ref,
@@ -240,7 +235,10 @@ export async function createPull(
   }
   // 调用方传的是它认为已经推上去的那个 head；从那以后动过的分支会为错误的提交开
   // 一个 PR。
-  if (request.expectedHeadSha !== "" && request.expectedHeadSha !== remoteHead) {
+  if (
+    request.expectedHeadSha !== "" &&
+    request.expectedHeadSha !== remoteHead
+  ) {
     throw githubError("conflict");
   }
   const body: Record<string, unknown> = {

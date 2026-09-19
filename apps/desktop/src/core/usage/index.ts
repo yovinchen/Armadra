@@ -134,7 +134,10 @@ export function install(context: CoreContext): UsageDomain {
 
   router.handle("POST", "/api/usage/copilot/login", async () => {
     try {
-      return { status: 200, body: await service.copilot.begin(globalThis.fetch) };
+      return {
+        status: 200,
+        body: await service.copilot.begin(globalThis.fetch),
+      };
     } catch (error) {
       // 规矩 3：上游细节被记录，不被返回。
       context.log.debug("Copilot 设备流启动失败", {

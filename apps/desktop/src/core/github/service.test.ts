@@ -33,11 +33,7 @@ import {
   resolveRepository,
   setIssueState,
 } from "./issues";
-import {
-  linkReference,
-  listReferences,
-  unlinkReference,
-} from "./references";
+import { linkReference, listReferences, unlinkReference } from "./references";
 import { getStatusMapping, putStatusMapping } from "./status";
 import { scope } from "../identity/scopes";
 import { encodeMapping, referenceId } from "./service";
@@ -253,9 +249,7 @@ describe("GitHub 服务", () => {
           repository: REF,
           number: 7n,
           state: GithubIssueState.CLOSED,
-          expectedUpdatedAtUnixMs: BigInt(
-            Date.parse("2026-09-02T00:00:00Z"),
-          ),
+          expectedUpdatedAtUnixMs: BigInt(Date.parse("2026-09-02T00:00:00Z")),
         }),
       ),
     ).rejects.toThrow(githubError("conflict").message);

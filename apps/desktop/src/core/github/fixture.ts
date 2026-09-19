@@ -53,9 +53,7 @@ export interface FakeReply {
   readonly etag?: string;
 }
 
-export type FakeHandler = (
-  request: RecordedRequest,
-) => FakeReply | undefined;
+export type FakeHandler = (request: RecordedRequest) => FakeReply | undefined;
 
 export interface FakeGithub {
   readonly base: string;
@@ -79,16 +77,16 @@ export async function fakeGithub(): Promise<FakeGithub> {
       requests.push(recorded);
       const key = `${recorded.method} ${recorded.path}`;
       const queue = pending.get(key);
-      const rule = queue !== undefined && queue.length > 0
-        ? queue.shift()
-        : routes.get(key);
+      const rule =
+        queue !== undefined && queue.length > 0
+          ? queue.shift()
+          : routes.get(key);
       if (rule === undefined) {
         response.writeHead(404, { "content-type": "application/json" });
         response.end(JSON.stringify({ message: "no fake route" }));
         return;
       }
-      const reply =
-        typeof rule === "function" ? rule(recorded) : rule;
+      const reply = typeof rule === "function" ? rule(recorded) : rule;
       if (reply === undefined) {
         response.writeHead(404, { "content-type": "application/json" });
         response.end(JSON.stringify({ message: "no fake route" }));
@@ -107,9 +105,7 @@ export async function fakeGithub(): Promise<FakeGithub> {
         }
       }
       response.writeHead(reply.status ?? 200, headers);
-      response.end(
-        reply.body === undefined ? "" : JSON.stringify(reply.body),
-      );
+      response.end(reply.body === undefined ? "" : JSON.stringify(reply.body));
     })();
   });
 
@@ -141,7 +137,9 @@ export async function fakeGithub(): Promise<FakeGithub> {
             init,
           ),
         sleep: async () => {},
-        ...(options.attempts === undefined ? {} : { attempts: options.attempts }),
+        ...(options.attempts === undefined
+          ? {}
+          : { attempts: options.attempts }),
       });
       return client;
     },
@@ -209,11 +207,13 @@ export interface GithubFixture {
 }
 
 /** 一个配好 token_ref 凭据、指向假 GitHub 的 GitHub 服务。 */
-export async function githubFixture(options: {
-  readonly scopes?: readonly Scope[];
-  readonly workspaceId?: string;
-  readonly now?: () => number;
-} = {}): Promise<GithubFixture> {
+export async function githubFixture(
+  options: {
+    readonly scopes?: readonly Scope[];
+    readonly workspaceId?: string;
+    readonly now?: () => number;
+  } = {},
+): Promise<GithubFixture> {
   const github = await fakeGithub();
   const dataDir = mkdtempSync(join(tmpdir(), "armadra-github-"));
   const db = openDatabase({
@@ -249,13 +249,11 @@ export async function githubFixture(options: {
     deviceId: "device-1",
     deviceEpoch: 1,
     workspaceId,
-    scopes:
-      options.scopes ??
-      [
-        scope("github:read", workspaceId, "host-1"),
-        scope("github:write", workspaceId, "host-1"),
-        scope("settings:write", workspaceId, "host-1"),
-      ],
+    scopes: options.scopes ?? [
+      scope("github:read", workspaceId, "host-1"),
+      scope("github:write", workspaceId, "host-1"),
+      scope("settings:write", workspaceId, "host-1"),
+    ],
   };
   return {
     github,

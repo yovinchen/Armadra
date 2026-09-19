@@ -14,7 +14,12 @@ import {
   ResourceService,
 } from "./service";
 import { Sampler, type ProcessRow } from "./sample";
-import { listOrphans, adoptOrphan, orphanTarget, OrphanError } from "./sessions";
+import {
+  listOrphans,
+  adoptOrphan,
+  orphanTarget,
+  OrphanError,
+} from "./sessions";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -115,22 +120,27 @@ describe("资源采样的订阅", () => {
 
   it("要求更慢的被满足，要求比设置更快的不被满足", () => {
     // 默认 2 s 是设置的下限，也是预算。
-    expect(state.service.subscribe(state.workspaceId, { intervalMs: 500 }).intervalMs).toBe(
-      2_000,
-    );
     expect(
-      state.service.subscribe(state.workspaceId, { intervalMs: 30_000 }).intervalMs,
+      state.service.subscribe(state.workspaceId, { intervalMs: 500 })
+        .intervalMs,
+    ).toBe(2_000);
+    expect(
+      state.service.subscribe(state.workspaceId, { intervalMs: 30_000 })
+        .intervalMs,
     ).toBe(30_000);
     // 60 s 是上限，客户端没法停一个一小时采一次的订阅。
     expect(
-      state.service.subscribe(state.workspaceId, { intervalMs: 3_600_000 }).intervalMs,
+      state.service.subscribe(state.workspaceId, { intervalMs: 3_600_000 })
+        .intervalMs,
     ).toBe(MAX_REQUESTED_INTERVAL_MS);
   });
 
   it("循环按所有活订阅里最快的那个跑", () => {
     state.service.subscribe(state.workspaceId, { intervalMs: 30_000 });
     expect(state.service.effectiveInterval()).toBe(30_000);
-    const fast = state.service.subscribe(state.workspaceId, { intervalMs: 2_000 });
+    const fast = state.service.subscribe(state.workspaceId, {
+      intervalMs: 2_000,
+    });
     expect(state.service.effectiveInterval()).toBe(2_000);
     state.service.unsubscribe(fast.subscriptionId);
     expect(state.service.effectiveInterval()).toBe(30_000);
@@ -164,7 +174,9 @@ describe("资源采样的订阅", () => {
   });
 
   it("TTL 至少是下限，哪怕间隔很小", () => {
-    const subscription = state.service.subscribe(state.workspaceId, { intervalMs: 2_000 });
+    const subscription = state.service.subscribe(state.workspaceId, {
+      intervalMs: 2_000,
+    });
     const ttl = Date.parse(subscription.expiresAt) - state.clock;
     expect(ttl).toBeGreaterThanOrEqual(MIN_SUBSCRIPTION_TTL_MS);
   });
@@ -193,7 +205,9 @@ describe("资源采样的订阅", () => {
     expect(snapshot.power.policy).toBe("manual");
     expect(snapshot.power.leases).toEqual([]);
     // core 自己那一行永远在。
-    expect(snapshot.components.some((one) => one.kind === "runtime")).toBe(true);
+    expect(snapshot.components.some((one) => one.kind === "runtime")).toBe(
+      true,
+    );
   });
 });
 
@@ -259,9 +273,9 @@ describe("孤立会话", () => {
 
   it("key 不是 UUID 的行没有可用的节点身份", () => {
     insertSession({ id: "s-2", ownerNodeId: null, sessionKey: "hand-edited" });
-    expect(() => adoptOrphan(state.db.database, state.workspaceId, "s-2")).toThrow(
-      /node identity/,
-    );
+    expect(() =>
+      adoptOrphan(state.db.database, state.workspaceId, "s-2"),
+    ).toThrow(/node identity/);
   });
 
   it("已经被另一个会话占着的节点不会被抢走", () => {
@@ -271,24 +285,28 @@ describe("孤立会话", () => {
       ownerNodeId: "6f1b4c2e-1111-7111-8111-111111111111",
       sessionKey: "6f1b4c2e-2222-7222-8222-222222222222",
     });
-    expect(() => adoptOrphan(state.db.database, state.workspaceId, "s-1")).toThrow(
-      /already owns/,
-    );
+    expect(() =>
+      adoptOrphan(state.db.database, state.workspaceId, "s-1"),
+    ).toThrow(/already owns/);
   });
 
   it("孤立 id 只有两种形状，别的一律 400", () => {
     insertSession({ id: "s-1", ownerNodeId: null });
-    expect(orphanTarget(state.db.database, state.workspaceId, "session:s-1")).toEqual({
+    expect(
+      orphanTarget(state.db.database, state.workspaceId, "session:s-1"),
+    ).toEqual({
       kind: "session",
       sessionId: "s-1",
     });
-    expect(orphanTarget(state.db.database, state.workspaceId, "ref:armadra-x")).toEqual({
+    expect(
+      orphanTarget(state.db.database, state.workspaceId, "ref:armadra-x"),
+    ).toEqual({
       kind: "ref",
       reference: "armadra-x",
     });
     // 一个任意的 pid 根本不能通过这条路寻址。
-    expect(() => orphanTarget(state.db.database, state.workspaceId, "1234")).toThrow(
-      /session:<id>/,
-    );
+    expect(() =>
+      orphanTarget(state.db.database, state.workspaceId, "1234"),
+    ).toThrow(/session:<id>/);
   });
 });
