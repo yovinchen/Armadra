@@ -4,7 +4,7 @@ import type { Workspace, WorkspaceSummary } from "@armadra/shared";
 import { toast } from "sonner";
 import { isConflict, runtimeApi } from "../api/client";
 import { filesGateway } from "../files/gateway";
-import { isTauri, pickDirectory } from "../platform";
+import { isDesktop, pickDirectory } from "../platform";
 import { useCanvasStore } from "../store/canvas-store";
 import {
   rememberBoard,
@@ -94,9 +94,9 @@ export function useOpenFolder(fallback: () => void) {
   const openWorkspace = useOpenWorkspace();
 
   return useCallback(async () => {
-    const picked = isTauri() ? await pickDirectory() : null;
+    const picked = isDesktop() ? await pickDirectory() : null;
     if (!picked) {
-      if (!isTauri()) fallback();
+      if (!isDesktop()) fallback();
       return;
     }
     try {

@@ -18,7 +18,7 @@ import { useT } from "@/app/preferences-store";
 import { cn } from "@/lib/cn";
 import { formatBytes } from "@/lib/format";
 import { unifiedLineDiff } from "@/lib/line-diff";
-import { isTauri, openExternal } from "@/platform";
+import { isDesktop, openExternal } from "@/platform";
 import { useCanvasStore } from "@/store/canvas-store";
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
@@ -506,7 +506,7 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
                 href={runtimeApi.fileDownloadUrl(workspaceId, path)}
                 download={state.info.name}
                 onClick={(event) => {
-                  if (!isTauri()) return;
+                  if (!isDesktop()) return;
                   event.preventDefault();
                   void openExternal(
                     runtimeApi.fileDownloadUrl(workspaceId, path),

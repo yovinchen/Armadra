@@ -14,7 +14,7 @@ import {
 import { Input } from "@/ui/input";
 import { runtimeApi } from "@/api/client";
 import { useT } from "@/app/preferences-store";
-import { isTauri, pickFiles } from "@/platform";
+import { isDesktop, pickFiles } from "@/platform";
 
 import { relativeToRoot } from "./geometry";
 
@@ -159,7 +159,7 @@ export function FileChooserPrompt({
   if (!chooser || !workspaceId || !sessionId) return null;
   // Asked only when a page is actually waiting: nothing about the platform is
   // worth touching for a node that has no chooser open.
-  const native = isTauri() && !remote && workspaceRoot.length > 0;
+  const native = isDesktop() && !remote && workspaceRoot.length > 0;
 
   const fill = (paths: string[]) => {
     if (paths.length === 0) return;

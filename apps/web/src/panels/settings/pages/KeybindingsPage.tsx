@@ -61,7 +61,7 @@ import {
 } from "@/ui/select";
 import { Textarea } from "@/ui/textarea";
 import { cn } from "@/lib/cn";
-import { isTauri } from "@/platform";
+import { isDesktop } from "@/platform";
 
 const SCOPES: readonly CommandScope[] = [
   "app",
@@ -253,7 +253,7 @@ export function KeybindingsPage() {
     <>
       <p className="px-1 text-xs text-muted-foreground">
         {t(
-          !isTauri()
+          !isDesktop()
             ? "settings.shortcut.windowBrowser"
             : isMacPlatform()
               ? "settings.shortcut.windowMac"
@@ -375,7 +375,7 @@ export function KeybindingsPage() {
       {SCOPES.filter(
         // 全局热键要靠桌面壳去向系统注册；浏览器里连能不能注册都无从谈起，
         // 显示一组按了没反应的键位比不显示更糟。
-        (scope) => scope !== "global" || isTauri(),
+        (scope) => scope !== "global" || isDesktop(),
       ).map((scope) => (
         <SettingsGroup key={scope} title={t(`settings.scope.${scope}`)}>
           {COMMANDS.filter((command) => command.scope === scope).map(

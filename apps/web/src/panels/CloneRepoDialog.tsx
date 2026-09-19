@@ -4,7 +4,7 @@ import { FolderOpen } from "lucide-react";
 import type { WorkspaceSummary } from "@armadra/shared";
 import { toast } from "sonner";
 import { runtimeApi } from "../api/client";
-import { isTauri, pickDirectory } from "../platform";
+import { isDesktop, pickDirectory } from "../platform";
 import { useT } from "../app/preferences-store";
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
@@ -177,7 +177,7 @@ export function CloneRepoDialog({
               disabled={running}
               onChange={(event) => setParent(event.target.value)}
             />
-            {isTauri() && (
+            {isDesktop() && (
               <Button
                 variant="outline"
                 size="icon"

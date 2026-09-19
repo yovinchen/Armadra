@@ -3,7 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { FolderOpen } from "lucide-react";
 import type { Workspace } from "@armadra/shared";
 import { toast } from "sonner";
-import { isTauri, pickDirectory } from "../platform";
+import { isDesktop, pickDirectory } from "../platform";
 import { useT } from "../app/preferences-store";
 import { useCreateWorkspace } from "../app/workspace-actions";
 import { Button } from "@/ui/button";
@@ -72,7 +72,7 @@ export function NewFolderDialog({
               value={path}
               onChange={(event) => setPath(event.target.value)}
             />
-            {isTauri() && (
+            {isDesktop() && (
               <Button
                 variant="outline"
                 size="icon"

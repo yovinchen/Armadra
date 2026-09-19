@@ -26,7 +26,7 @@ vi.mock("../api/client", () => ({
 }));
 
 vi.mock("../platform", () => ({
-  isTauri: () => false,
+  isDesktop: () => false,
   pickDirectory: vi.fn().mockResolvedValue(null),
   onFileDrop: () => () => undefined,
 }));

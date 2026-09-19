@@ -32,7 +32,7 @@ import { useSessions } from "../agent/sessions";
 import { useT, usePreferencesStore } from "../app/preferences-store";
 import { useOpenWorkspace } from "../app/workspace-actions";
 import { useProjectFolderImport } from "../app/use-project-folder-import";
-import { isTauri } from "../platform";
+import { isDesktop } from "../platform";
 import { useWorkspacesQuery } from "../app/workspaces-query";
 import {
   RemoveWorkspaceDialog,
@@ -231,7 +231,7 @@ export function WorkspaceTree() {
                 {t(
                   folderImport.busy
                     ? "folderImport.busy"
-                    : isTauri()
+                    : isDesktop()
                       ? "folderImport.dropOpen"
                       : "folderImport.dropCopy",
                 )}
@@ -311,9 +311,11 @@ function AddProjectButton({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={() => void choose()}>
-            {isTauri() ? <FolderOpen /> : <Upload />}
+            {isDesktop() ? <FolderOpen /> : <Upload />}
             {t(
-              isTauri() ? "folderImport.chooseOpen" : "folderImport.chooseCopy",
+              isDesktop()
+                ? "folderImport.chooseOpen"
+                : "folderImport.chooseCopy",
             )}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setDialog(true)}>
