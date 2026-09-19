@@ -27,6 +27,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const coreRoot = resolve(here, "../core");
+const sessionHostRoot = resolve(here, "../session-host");
 
 function walk(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -120,5 +121,27 @@ describe("core boundary", () => {
     ]) {
       expect(CORE_OFFENDERS.test(ok), ok).toBe(false);
     }
+  });
+});
+
+/**
+ * The Windows session host (R6d) is a third program in this tree, and it has
+ * the core's rule for the core's reason: it is started as plain Node through
+ * `ELECTRON_RUN_AS_NODE=1`, where `require("electron")` resolves to the npm
+ * wrapper and tries to *download* Electron. It may reach into `../core/` —
+ * the wire protocol and the auth helpers are shared with the client on
+ * purpose, so that one definition of the frame exists rather than two — but
+ * not into the shell.
+ */
+describe("session-host boundary", () => {
+  it("is a real directory with source in it", () => {
+    expect(walk(sessionHostRoot).length).toBeGreaterThan(4);
+  });
+
+  it("no file under src/session-host imports electron, ../main or ../shell-core", () => {
+    const offenders = walk(sessionHostRoot).filter((file) =>
+      CORE_OFFENDERS.test(readFileSync(file, "utf8")),
+    );
+    expect(offenders).toEqual([]);
   });
 });
