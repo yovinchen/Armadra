@@ -1,7 +1,10 @@
+import { compileGrants } from "./authorize";
 import { IdentityError } from "./errors";
 import { validOrigin } from "./origin";
+import { CURRENT_KDF, derivePassword, verifyPassword } from "./passwords";
 import {
   type Scope,
+  allScopes,
   decodeScopes,
   encodeScopes,
   normalizeScopes,
@@ -45,7 +48,14 @@ export const BOOTSTRAP_TTL_MS = 2 * 60 * 1000;
 export const ACCESS_TTL_MS = 15 * 60 * 1000;
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-export type Role = "owner";
+/**
+ * 设备在它的 principal 上的角色。
+ *
+ * 0019 之前 CHECK 把它钉死在 `'owner'`；现在放开成两种，因为一台设备属于一个
+ * principal，而 principal 可以不是 owner。判定不看这个字段——授权只看 scope
+ * （设计 S3）——它只用来在界面上区分「这是主人的设备」和「这是成员的设备」。
+ */
+export type Role = "owner" | "member";
 
 export interface Principal {
   readonly hostId: string;
@@ -255,6 +265,136 @@ export class IdentityService {
     });
   }
 
+  /**
+   * 口令登录。
+   *
+   * 和票据兑换（{@link consumeBootstrap}）落在同一张会话表上，区别只有两处：
+   * 凭据是口令而不是一次性票，授权快照是**编译出来的**而不是票里带的。
+   *
+   * 快照的算法就是设计 §2 的那一句：owner 拿全量，其余 principal 拿
+   * 「`identity:read` + 自己和自己所在组的授予编译出来的 scope」。空授权不能
+   * 入库（`normalizeScopes` 拒绝空列表），所以 `identity:read` 也是一个没有任
+   * 何共享的成员登录之后仍然看得见自己设备列表的底线。
+   *
+   * 派生跑在事务里：一次 scrypt 约几十毫秒，而把它挪到事务外换来的是「校验用
+   * 的行和写入用的行可能不是同一行」。登录不是热路径，一致性更值钱。
+   */
+  loginWithPassword(request: {
+    principalId: string;
+    password: string;
+    hostId: string;
+    origin: string;
+    deviceName: string;
+  }): SessionCredentials {
+    if (
+      !ID_PATTERN.test(request.principalId) ||
+      !this.audience(request.hostId, request.origin) ||
+      !validName(request.deviceName)
+    ) {
+      throw new IdentityError("unauthenticated");
+    }
+    const sessionId = newId();
+    const deviceId = newId();
+    const secrets = makeSecrets(sessionId);
+    const credentials = this.store.transaction((tx) => {
+      const now = this.now();
+      const principal = tx.accounts.principal(request.principalId);
+      const stored = tx.accounts.livePassword(request.principalId);
+      if (
+        principal === undefined ||
+        principal.disabledAtMs !== 0 ||
+        stored === undefined
+      ) {
+        // 账号不存在、被停用、没设口令，对调用方是同一个 401：区分它们等于
+        // 把「这个账号存在吗」做成一个探测接口。
+        throw new IdentityError("unauthenticated");
+      }
+      const verified = verifyPassword(request.password, {
+        hash: stored.secretHash,
+        salt: stored.salt,
+        kdf: stored.kdf,
+        cost: stored.cost,
+        block: stored.block,
+        parallel: stored.parallel,
+        length: stored.length,
+      });
+      if (!verified.ok) throw new IdentityError("unauthenticated");
+      if (verified.upgrade) {
+        // 参数升级只发生在这一刻：明文口令在手，而且这一次已经校验通过。
+        const derived = derivePassword(request.password, CURRENT_KDF);
+        tx.accounts.updateCredentialSecret(
+          stored.credentialId,
+          derived.hash,
+          derived.salt,
+          {
+            kdf: derived.parameters.kdf,
+            cost: derived.parameters.cost,
+            block: derived.parameters.block,
+            parallel: derived.parameters.parallel,
+            length: derived.parameters.length,
+          },
+        );
+      }
+      const granted =
+        principal.kind === "owner"
+          ? allScopes()
+          : [
+              scope("identity:read"),
+              ...compileGrants(tx.accounts, principal.principalId),
+            ];
+      const encoded = encodeScopes(granted);
+      const device: IdentityDevice = {
+        deviceId,
+        principalId: principal.principalId,
+        name: request.deviceName,
+        role: principal.kind === "owner" ? "owner" : "member",
+        epoch: 1,
+        createdAtMs: now,
+        revokedAtMs: 0,
+      };
+      tx.createDevice(device);
+      const accessExpiresAtMs = now + ACCESS_TTL_MS;
+      const expiresAtMs = now + SESSION_TTL_MS;
+      const session: IdentitySession = {
+        sessionId,
+        deviceId,
+        deviceEpoch: 1,
+        origin: request.origin,
+        scopes: encoded,
+        accessHash: digest("access", secrets.accessToken),
+        refreshHash: digest("refresh", secrets.refreshToken),
+        csrfHash: digest("csrf", secrets.csrfToken),
+        rotation: 1,
+        createdAtMs: now,
+        accessExpiresAtMs,
+        expiresAtMs,
+        revokedAtMs: 0,
+      };
+      tx.createSession(session);
+      tx.accounts.appendAudit({
+        atMs: now,
+        principalId: principal.principalId,
+        deviceId,
+        action: "identity.login",
+        target: sessionId,
+        workspaceId: "",
+        detailJson: JSON.stringify({ method: "password" }),
+      });
+      return {
+        ...secrets,
+        accessExpiresAtMs,
+        expiresAtMs,
+        principal: principalOf(
+          this.store.hostId(),
+          session,
+          device,
+          decodeScopes(encoded),
+        ),
+      };
+    });
+    return credentials;
+  }
+
   authenticate(request: AccessRequest): Principal {
     return this.store.transaction((tx) =>
       this.authenticateIn(tx, request, this.now()),
@@ -410,6 +550,17 @@ export class IdentityService {
       }
       if (expectedEpoch !== device.epoch) throw new IdentityError("conflict");
       tx.revokeDevice(deviceId, device.epoch, now);
+      // 设备撤销是 §4.5 的五个审计写入点之一。写在同一笔事务里：一次没有记录
+      // 的撤销和一次没发生的撤销，事后分不出来。
+      tx.accounts.appendAudit({
+        atMs: now,
+        principalId: principal.principalId,
+        deviceId: principal.deviceId,
+        action: "identity.device.revoke",
+        target: deviceId,
+        workspaceId: "",
+        detailJson: JSON.stringify({ epoch: device.epoch }),
+      });
     });
   }
 
@@ -467,7 +618,7 @@ export class IdentityService {
           deviceId: value.deviceId,
           principalId: value.principalId,
           name: value.name,
-          role: "owner",
+          role: value.role === "member" ? "member" : "owner",
           epoch: value.epoch,
           createdAtMs: value.createdAtMs,
           revokedAtMs: value.revokedAtMs,
@@ -539,15 +690,17 @@ export class IdentityService {
       throw new IdentityError("unauthenticated");
     }
     const device = tx.device(session.deviceId);
-    const owner = tx.owner();
-    if (device === undefined || owner === undefined) {
-      throw new IdentityError("unauthenticated");
-    }
+    if (device === undefined) throw new IdentityError("unauthenticated");
+    // 0019 之前这里核对的是「设备属于那个唯一的 owner」。现在核对的是「设备
+    // 属于一个存在且没被停用的 principal」：停用一个账号必须在下一个请求上
+    // 生效，和撤销一台设备同一条规矩——认证每次都读库，没有缓存。
+    const principal = tx.accounts.principal(device.principalId);
     if (
+      principal === undefined ||
+      principal.disabledAtMs !== 0 ||
       device.revokedAtMs !== 0 ||
       device.epoch !== session.deviceEpoch ||
-      device.role !== "owner" ||
-      device.principalId !== owner.principalId
+      (principal.kind === "owner") !== (device.role === "owner")
     ) {
       throw new IdentityError("unauthenticated");
     }
@@ -581,7 +734,7 @@ function principalOf(
     deviceCreatedAtMs: device.createdAtMs,
     sessionId: session.sessionId,
     origin: session.origin,
-    role: "owner",
+    role: device.role === "member" ? "member" : "owner",
     deviceEpoch: device.epoch,
     accessExpiresAtMs: session.accessExpiresAtMs,
     scopes,

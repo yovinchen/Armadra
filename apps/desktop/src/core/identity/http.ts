@@ -20,6 +20,8 @@ import {
   toBinary,
 } from "@armadra/protocol";
 import type { CoreRequest } from "../http/router";
+import type { AccountsService } from "./accounts";
+import { handleAccounts } from "./accounts-http";
 import { IdentityError, identityFailure } from "./errors";
 import { nativeOrigin } from "./origin";
 import type {
@@ -73,6 +75,11 @@ const REFRESH_BEARER = new Set(["Refresh", "RenewCsrf", "Logout"]);
 export interface IdentityHttpOptions {
   readonly service: IdentityService;
   readonly instanceId: string;
+  /**
+   * 账号 / 组 / 共享（R6b）。没有它时那几条路径按 404 回答，和这个 core 没有
+   * 应用 0019 的事实一致。
+   */
+  readonly accounts?: AccountsService;
   /** 额外的能力名，各域装配时追加。 */
   readonly capabilities?: () => readonly string[];
 }
@@ -458,12 +465,38 @@ export class IdentityHttp {
           });
           return;
         }
-        default:
+        default: {
+          // 账号 / 组 / 共享这一面（R6b）。认证在它内部按需发生：`login` 与
+          // 邀请接受之前调用方可能还没有会话，而其余动作都要求一个。
+          const accounts = this.options.accounts;
+          const answered =
+            accounts === undefined
+              ? undefined
+              : handleAccounts(action, request, {
+                  accounts,
+                  authenticate: () => this.service.authenticate(actor),
+                  login: (input) => {
+                    const credentials = this.service.loginWithPassword({
+                      ...input,
+                      hostId,
+                      origin,
+                    });
+                    // 和配对同一条规矩：原生传输的密钥在响应体里，浏览器会话
+                    // 才发 Cookie（而且只在 HTTPS 的权威来源上带 Secure）。
+                    sessionCookies(request, response, hostId, credentials);
+                    return this.credentialJson(request, credentials);
+                  },
+                });
+          if (answered !== undefined) {
+            this.json(response, cors, answered.status, answered.body);
+            return;
+          }
           this.json(response, cors, 404, {
             code: "NOT_FOUND",
             message: `没有这个接口：${request.path}`,
           });
           return;
+        }
       }
     } catch (error) {
       const failure = identityFailure(

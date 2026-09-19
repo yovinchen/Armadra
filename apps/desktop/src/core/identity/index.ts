@@ -1,14 +1,34 @@
 import type { CoreContext } from "../main";
 import { instanceId } from "../instance";
 import { coreCapabilities } from "../schedule/capabilities";
+import { AccountsService } from "./accounts";
+import { installAuditSink } from "./audit";
+import { Authorizer } from "./authorize";
 import { startControlChannel } from "./control";
+import { installAccessGate } from "./gate";
 import { API_PREFIX, IdentityHttp, RPC_PREFIX } from "./http";
+import { allScopes } from "./scopes";
 import { IdentityService } from "./service";
 import { IdentityStore } from "./store";
 
 export { IdentityService } from "./service";
 export { IdentityStore } from "./store";
 export { IdentityError } from "./errors";
+export { AccountsService } from "./accounts";
+export { Authorizer, compileGrants, permitsSubject } from "./authorize";
+export type { AuthorizationSubject } from "./authorize";
+export { audit, installAuditSink, resetAuditSink } from "./audit";
+export type { AuditEvent } from "./audit";
+export {
+  OWNER_GATE,
+  accessGate,
+  allows,
+  installAccessGate,
+  resetAccessGate,
+} from "./gate";
+export type { AccessGate } from "./gate";
+export { SHARE_ROLES, rolePermissions, roleScopes } from "./roles";
+export type { ShareRole } from "./roles";
 export {
   API_PREFIX,
   BROWSER_SESSION_CAPABILITY,
@@ -53,10 +73,38 @@ export function installIdentity(context: CoreContext): void {
   // Hello 报的能力名里多出的那些来自各域自己的注册表（`core/schedule/capabilities`）。
   // 身份域不该知道有哪些域存在，所以这里只转发；自动化面板认的
   // `automation.plans.v1` 就是这样传到页面的。
+  const accounts = new AccountsService({ store });
   const http = new IdentityHttp({
     service,
+    accounts,
     instanceId: runInstance,
     capabilities: coreCapabilities,
+  });
+
+  // 判定入口与审计写入点（设计 §4）。装上之后它们仍然对 owner 恒真、对每条
+  // 动作各写一条——真正变了的只有「问的是库，而不是那个恒真的兜底实现」。
+  const authorizer = new Authorizer(store);
+  installAccessGate({
+    // 域路由今天还不携带会话（服务器壳才会让匿名请求成为可能），所以主体恒为
+    // 本机 owner，授权是配对时签给壳的那一份。
+    subject: () => ({ principalId: "", kind: "owner", scopes: allScopes() }),
+    permits: (subject, required) => authorizer.permits(subject, required),
+  });
+  installAuditSink((event) => {
+    store.transaction((tx) => {
+      tx.accounts.appendAudit({
+        atMs: Date.now(),
+        principalId: event.principalId ?? "",
+        deviceId: event.deviceId ?? "",
+        action: event.action,
+        target: (event.target ?? "").slice(0, 256),
+        workspaceId: (event.workspaceId ?? "").slice(0, 256),
+        detailJson:
+          event.detail === undefined
+            ? ""
+            : JSON.stringify(event.detail).slice(0, 8192),
+      });
+    });
   });
 
   context.server.raw(RPC_PREFIX, (request, response, cors) =>
