@@ -5,16 +5,16 @@
 
 ## 1. 阶段状态
 
-| 阶段   | 范围                                                                               | 状态                             |
-| ------ | ---------------------------------------------------------------------------------- | -------------------------------- |
-| **R0** | core 进程骨架、三种监听、`/health`、SQLite 账本                                    | 已合入（`c1644c10d`）            |
-| **R1** | 画布 / 工作空间 / 设置 / 身份、统一库迁移                                          | 已合入（`0b098c650`）            |
-| **R2** | 终端域：tmux 纵切、direct / sessionHost、SSH、GC                                   | 已合入（`aa180c6e7`）            |
-| **R3** | Hook 面、Agent / 协作、TS `armadra-hook`                                           | 已合入（`aa180c6e7`）            |
-| **R4** | Git、文件 / 导入导出、定时与事件 outbox                                            | 已合入（`601095795`）            |
-| **R5** | 语言服务、GitHub / 资源 / 用量、浏览器授权与租约                                   | 已合入（`601095795`）            |
-| **R6** | 服务器壳（R6a）、账号与共享（R6b）、远程浏览器（R6c）、Windows session-host（R6d） | R6a、R6b、R6d 已合入，R6c 进行中 |
-| R7     | 收尾                                                                               | 未开始                           |
+| 阶段   | 范围                                                                               | 状态                  |
+| ------ | ---------------------------------------------------------------------------------- | --------------------- |
+| **R0** | core 进程骨架、三种监听、`/health`、SQLite 账本                                    | 已合入（`c1644c10d`） |
+| **R1** | 画布 / 工作空间 / 设置 / 身份、统一库迁移                                          | 已合入（`0b098c650`） |
+| **R2** | 终端域：tmux 纵切、direct / sessionHost、SSH、GC                                   | 已合入（`aa180c6e7`） |
+| **R3** | Hook 面、Agent / 协作、TS `armadra-hook`                                           | 已合入（`aa180c6e7`） |
+| **R4** | Git、文件 / 导入导出、定时与事件 outbox                                            | 已合入（`601095795`） |
+| **R5** | 语言服务、GitHub / 资源 / 用量、浏览器授权与租约                                   | 已合入（`601095795`） |
+| **R6** | 服务器壳（R6a）、账号与共享（R6b）、远程浏览器（R6c）、Windows session-host（R6d） | 全部已合入            |
+| R7     | 收尾                                                                               | 未开始                |
 
 ## 2. R2 纵切：只有 tmux 后端的建 / 附 / 输入 / 断
 
@@ -371,3 +371,37 @@ Rust 版用受保护 DACL（`D:P(A;;GA;;;SY)(A;;GA;;;<sid>)`）加每连接 `Get
 **只能在 Windows 上验证的**，都在 `src/session-host/windows.integration.test.ts`（`skipIf` 非 Windows，或 node-pty 载不起来时带原因跳过）：真 ConPTY 的建 / 跑命令 / 附 / 断 / 重附重放 / destroy / 进程自退 / 关停，以及同名管道上第二个宿主必须 `EADDRINUSE`。CI 的 Windows 矩阵（`windows-latest`）本来就跑 `pnpm -r --if-present test`，这批用例随之进去，不另加 job；预计多花 10 s 上下（每例起一个 shell 并等它说话）。
 
 还没在真机上看过的：`icacls` 收紧密钥文件、`\\.\pipe\` 名字派生的实际连通、ConPTY 的 `exit` 到底多快、以及宿主被强杀后进程树的实际下场。
+
+## 14. R6c：服务器壳上的远程浏览器节点
+
+浏览器节点现在有两套后端，按**这个 core 是怎么被启动的**分：环境里有 `ARMADRA_SHELL_DRIVE_WS` 就是桌面壳，页面是本窗口的一个 `<webview>`，走原来的 `DriveClient`；没有就是服务器壳，core 自己起 headless Chromium（`core/browser/headless/`）。授权三规则、租约状态机、17 个动词与四个错误码两边共用同一份，不同的只是页面在哪。
+
+### 14.1 先做的一步：CDP 动词执行下沉
+
+`core/browser/cdp/` 现在持有允许列表与参数校验、frozen script 表、ref 代际、workspace 路径牢笼，以及 17 个动词的 CDP 调用序列与结果整形。`main/browser` 只剩 Electron 那一半（`webContents.debugger` 的 attach/detach 与事件），`shell-core/browser` 只改了 import 指向。动词里非 CDP 的那部分抽成 `VerbHost`（标签表、暂存下载、文件选择器、对话框），两个后端各实现一份。
+
+`sendCommand(` 仍然只出现在 `main/browser/cdp.ts` 一个文件里，`sole-call-site.test.ts` 的扫描照旧；`Runtime.evaluate` 这串字面量现在只出现在 `core/browser/cdp/allowlist.ts`（拒绝它的地方）。纯搬家，用例原样跟着走。
+
+### 14.2 headless 后端
+
+- **找浏览器**：`ARMADRA_BROWSER_PATH` > 三平台常见的 Chrome / Chromium / Edge 路径。**不做按需下载**（与设计里「或按需下载」的措辞不同，这是本批的决定）：找不到时每个动词回 `browser_unavailable`，`status()` 里带着找过的每一条路径，够运维一条命令修好。配置了却不存在时**不回退**到别的浏览器——那是另一套登录态。
+- **启动**：`--headless=new --remote-debugging-pipe`，**全程不开调试端口**（回环上的调试端口等于一扇谁都能走的门），协议走子进程 fd 3/4 的 NUL 分帧 JSON；管道一关 Chromium 就退，所以 core 死了浏览器跟着走，不需要 Job Object。每个节点一个 `<dataDir>/browser-profiles/<nodeId>`，登录态按节点保留。
+- **CDP 客户端**：自写，`Target.attachToTarget { flatten: true }` 一条管道跑所有 target；标签就是 page target，页面自己开的窗口被收成标签。
+- **画面流**：`Page.startScreencast`（JPEG、quality 60、`maxWidth/maxHeight` 由观看者的框决定），一条 JSON 元数据配一帧二进制，逐帧 `Page.screencastFrameAck`，没有观看者就 `stopScreencast`。`everyNthFrame` **必须是 1**：Chromium 在页面重绘时才发帧，已经加载完的静态页只重绘一次，设成 2 就把唯一那一帧丢掉了——这是真机上量出来的，不是推演。
+- **输入**：观看者的输入按「人在操作」处理，发 `humanInput` 事件进原来的 `onShellEvent`，租约转给人、Agent 的下一个动词照旧得到 `LEASE_HELD_BY_HUMAN`。这条路**不走 Agent 的允许列表**（一个人在自己的浏览器里按 q 不是 Agent 行为），但方法面仍然只有四个：`Input.dispatchMouseEvent` / `dispatchKeyEvent` / `insertText` 与 `Emulation.setDeviceMetricsOverride`，坐标一律夹进本进程设定的视口。
+
+### 14.3 单观看者：第二个回 409，不接管
+
+`GET /api/workspaces/{workspaceId}/browser/{nodeId}/stream` 在升级之前就判：节点不存在 / 不是浏览器节点 / 不在这个工作空间 → 都回同一个 404（区分开就成了探测别人画布的工具）；桌面壳 → 501；已经有人在看 → **409**。
+
+选 409 而不是接管：这个页面只有一个租约，两个人同时打字时谁都分不清哪一下是自己的；接管还会把正在看的人踢掉，而浏览器节点的全部价值就是「有人正看着它」。扇出被否掉的理由更直白——编码器是贵的那一头，一路扇出就是 N 份 JPEG。
+
+### 14.4 验证
+
+- `pnpm --filter @armadra/desktop test`（2245 通过 / 14 跳过）与 `pnpm --filter @armadra/web test`（2520 通过），两边 `typecheck` 与 `pnpm check` 全绿。
+- 假 CDP 端（进程内管道 + 一个会应答的假浏览器）覆盖：目标/标签管理、截屏帧逐帧 ack（包括观看者已经走了仍然要 ack）、输入映射与夹取、单观看者、崩溃后 `guestLost` 与 `isAlive` 转假、被允许列表拒掉的 `Runtime.evaluate`、撤销后再驱动。
+- **真浏览器**跑过：`src/core/browser/headless/live.integration.test.ts`，本机 Chrome 153.0.8010.48（`/Applications/Google Chrome.app/…`，Apple Silicon、Darwin 25.6）——起进程到第一个标签 **593 ms**，挂上观看者到第一帧 **52 ms**，`read` 动词读回 `data:` 页面的正文。机器上找不到浏览器时这条用例 `skip` 并打印找过的路径，不是失败。
+
+### 14.5 路由表多了一条
+
+`/api/workspaces/{workspaceId}/browser/{nodeId}/stream` 是 Rust Runtime 没有的（那边没有 headless 后端可流）。它在 `ROUTES` 里带 `beyondContract: true`，对账用例按名字把这类条目剔除后再与 Rust 比对，契约的 163 条仍然逐条相等——放松断言会让下一条溜进来。
