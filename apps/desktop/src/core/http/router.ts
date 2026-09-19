@@ -27,13 +27,36 @@ export interface RouteMatch {
   readonly params: Readonly<Record<string, string>>;
 }
 
+/**
+ * What a handler may read of the request. The body is already buffered (and
+ * already under the size ceiling) by the time a handler runs, so a handler
+ * never touches the socket; `raw` is there for the few that need a header the
+ * fields below do not name.
+ */
+export interface CoreRequest {
+  readonly method: string;
+  readonly path: string;
+  readonly query: URLSearchParams;
+  readonly headers: import("node:http").IncomingHttpHeaders;
+  readonly body: Buffer;
+  readonly raw: import("node:http").IncomingMessage;
+  /** `body` parsed as JSON on demand; throws `SyntaxError` on a bad document. */
+  json<T = unknown>(): T;
+}
+
 export type Handler = (
   match: RouteMatch,
+  request: CoreRequest,
 ) => Promise<HandlerResult> | HandlerResult;
 
 export interface HandlerResult {
   readonly status: number;
-  readonly body: unknown;
+  /** JSON-serialised unless `raw` is given. */
+  readonly body?: unknown;
+  /** Extra response headers (content-type may be overridden here). */
+  readonly headers?: Readonly<Record<string, string>>;
+  /** A pre-encoded body sent verbatim (protobuf, files); `body` is ignored. */
+  readonly raw?: Buffer;
 }
 
 interface Compiled {
@@ -115,6 +138,7 @@ export class Router {
   async dispatch(
     method: string,
     path: string,
+    request: CoreRequest = emptyRequest(method, path),
   ): Promise<HandlerResult | ErrorResponse> {
     const found = this.match(path);
     if (found === undefined) return notFound(path);
@@ -129,8 +153,22 @@ export class Router {
         found.entry.phase ?? 1,
       );
     }
-    return handler(found);
+    return handler(found, request);
   }
+}
+
+/** A request with nothing in it — for tests and for dispatching by path alone. */
+export function emptyRequest(method: string, path: string): CoreRequest {
+  const body = Buffer.alloc(0);
+  return {
+    method: method.toUpperCase(),
+    path,
+    query: new URLSearchParams(),
+    headers: {},
+    body,
+    raw: undefined as unknown as import("node:http").IncomingMessage,
+    json: <T>() => JSON.parse(body.toString("utf8") || "null") as T,
+  };
 }
 
 function key(method: string, path: string): string {
