@@ -233,6 +233,12 @@ export class UpdatesController {
     // saw published. Ask for the whole artifact so the two statements — the
     // Host's sha256 and these bytes — are about the same thing.
     autoUpdater.disableDifferentialDownload = true;
+    // A development build has no `app-update.yml`, so electron-updater would
+    // refuse to do anything at all. Measured while walking a local release
+    // server: `setFeedURL` is enough for the *check*, but the download path
+    // re-reads the update config from disk, so a development walkthrough also
+    // needs a `dev-app-update.yml` beside the app — otherwise the transfer
+    // fails with ENOENT on that file and nothing says why.
     autoUpdater.forceDevUpdateConfig = !app.isPackaged;
 
     const onProgress = (progress: { transferred: number; total: number }) => {
