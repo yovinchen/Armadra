@@ -98,6 +98,19 @@ pub async fn run(
     let workspace = super::readable_workspace(state, &target.workspace_id)
         .await
         .map_err(refuse)?;
+
+    // The three rules above are the whole of the authorization, and they are
+    // the same on both routes. What differs below is only WHERE the page is:
+    // in a guest of the desktop window, or in a Chromium this Runtime started.
+    //
+    // A shell-started Runtime takes the shell route unconditionally, including
+    // when the shell has not dialled back yet — in which case the verb answers
+    // `browser_unavailable`. Falling back to launching a second browser nobody
+    // can see would be worse than saying so (§4.2).
+    if super::shell::configured() {
+        return via_shell(state, caller, verb, args, &target, &workspace).await;
+    }
+
     let availability = super::availability(state);
     if !availability.available {
         return Err(Refusal {
@@ -204,6 +217,251 @@ pub async fn run(
         )),
     }
     outcome
+}
+
+/* ------------------------------ the shell route --------------------------- */
+
+/// The same seventeen verbs, executed in the desktop shell (W3.4).
+///
+/// Everything that decides WHETHER this may happen already happened: the
+/// caller is verified, the node is linked, in this workspace, and a browser.
+/// What is left is the lease — which stays here, because it is a fact about
+/// people and agents rather than about pages — and one narrow send.
+async fn via_shell(
+    state: &AppState,
+    caller: &Caller,
+    verb: &str,
+    args: &Args<'_>,
+    target: &crate::collab::NodeRef,
+    workspace: &crate::model::Workspace,
+) -> Result<String, Refusal> {
+    let service = super::shell::service(state);
+    let url = target
+        .data
+        .get("url")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    let session = super::shell::ensure_session(
+        &service.sessions,
+        &state.pool,
+        &state.events,
+        &target.id,
+        &target.workspace_id,
+        url,
+    )
+    .await
+    .map_err(refuse)?;
+
+    // Two verbs whose whole meaning is in a flag. Refusing here rather than
+    // defaulting: "dismiss" and "accept" are not the same thing to a person
+    // whose page is holding a dialog open, and neither is a safe guess.
+    if verb == "dialog" && !args.flag("accept") && !args.flag("dismiss") && !args.flag("reject") {
+        return Err(Refusal::bad_request(
+            "请给出 --accept 或 --dismiss；对话框不会自己消失。",
+        ));
+    }
+    if verb == "download"
+        && args.text("id").is_some()
+        && !args.flag("accept")
+        && !args.flag("reject")
+        && !args.flag("decline")
+    {
+        return Err(Refusal::bad_request(
+            "要处理一个下载，请给出 --accept 或 --reject。",
+        ));
+    }
+
+    let actor = session::Actor::agent(&caller.node.id, &session.session_id, &caller.node.title);
+    if needs_lease(verb, args)
+        && let Err(error) = session.acquire(&actor).await
+    {
+        let reason = error.to_string();
+        session.record_activity(activity(
+            &session.session_id,
+            &caller.node.id,
+            verb,
+            describe_target(args),
+            "refused",
+            &reason,
+        ));
+        return Err(refuse(error));
+    }
+
+    // `lease` never reaches the shell. There is nothing on a page for it to
+    // do: it is a question about who may drive, answered here.
+    let outcome = if verb == "lease" {
+        if args.flag("release") {
+            session
+                .release(&actor)
+                .await
+                .map(|lease| format!("已交还租约。{}", render_lease(&lease)))
+                .map_err(refuse)
+        } else {
+            Ok(render_lease(&session.lease_snapshot()))
+        }
+    } else {
+        let payload =
+            super::shell::with_workspace(shell_args(verb, args), &workspace.root_path);
+        super::shell::drive(&service, &target.id, verb, payload)
+            .await
+            .map(|result| super::shell::render(verb, args, &result))
+            .map_err(refuse)
+    };
+
+    trace(
+        state,
+        &workspace.root_path,
+        &caller.node.id,
+        &target.id,
+        verb,
+        outcome
+            .as_ref()
+            .err()
+            .map(|refusal| refusal.message.as_str()),
+    );
+    match outcome.as_ref() {
+        Ok(_) => session.record_activity(activity(
+            &session.session_id,
+            &caller.node.id,
+            verb,
+            describe_target(args),
+            "ok",
+            "",
+        )),
+        Err(refusal) => session.record_activity(activity(
+            &session.session_id,
+            &caller.node.id,
+            verb,
+            describe_target(args),
+            "refused",
+            &refusal.message,
+        )),
+    }
+    outcome
+}
+
+/// The hook's flags, as the drive channel's camelCase arguments.
+///
+/// Written out per verb rather than forwarded wholesale. A pass-through would
+/// mean the shell's verbs taking whatever a caller typed, and the point of a
+/// verb interface is that the set of things one can say is closed.
+pub(crate) fn shell_args(verb: &str, args: &Args<'_>) -> serde_json::Map<String, serde_json::Value> {
+    use serde_json::json;
+    let mut map = serde_json::Map::new();
+    let mut put = |name: &str, value: serde_json::Value| {
+        if !value.is_null() {
+            map.insert(name.to_owned(), value);
+        }
+    };
+    let opt = |value: Option<&str>| match value {
+        Some(text) => json!(text),
+        None => serde_json::Value::Null,
+    };
+    // Targeting, which almost every verb accepts.
+    put("ref", opt(args.text("ref")));
+    put("selector", opt(args.text("selector")));
+    if let (Some(x), Some(y)) = (args.count(&["x"]), args.count(&["y"])) {
+        put("x", json!(x));
+        put("y", json!(y));
+    }
+    match verb {
+        "navigate" => {
+            put("url", opt(args.text("url")));
+            put(
+                "action",
+                json!(
+                    args.text("action")
+                        .unwrap_or(if args.text("url").is_some() {
+                            "goto"
+                        } else {
+                            "reload"
+                        })
+                ),
+            );
+        }
+        "back" | "forward" => put("action", json!(verb)),
+        "read" => {
+            put("mode", json!(args.text("mode").unwrap_or("text")));
+            put(
+                "limit",
+                json!(
+                    args.count(&["n", "limit"])
+                        .unwrap_or(DEFAULT_ELEMENT_LIMIT as i64)
+                ),
+            );
+            put(
+                "maxBytes",
+                json!(
+                    args.count(&["max-bytes", "maxBytes"])
+                        .unwrap_or(DEFAULT_READ_BYTES as i64)
+                ),
+            );
+        }
+        "type" => {
+            put("text", json!(args.text("text").unwrap_or_default()));
+            put("replace", json!(args.flag("replace")));
+            put("submit", json!(args.flag("submit") || args.flag("enter")));
+        }
+        "press" => {
+            put("key", opt(args.text("key")));
+            put("repeat", json!(args.count(&["repeat"]).unwrap_or(1)));
+            put("modifiers", json!(modifiers_of(args)));
+        }
+        "select" => {
+            put("values", json!(repeated(args, "value")));
+            put("labels", json!(repeated(args, "label")));
+        }
+        "scroll" => {
+            put("direction", opt(args.text("direction")));
+            if let Some(amount) = args.count(&["amount"]) {
+                put("amount", json!(amount));
+            }
+        }
+        "wait" => {
+            put("urlContains", opt(args.text("url-contains").or_else(|| args.text("urlContains"))));
+            put(
+                "titleContains",
+                opt(args.text("title-contains").or_else(|| args.text("titleContains"))),
+            );
+            put(
+                "timeoutMs",
+                json!(
+                    args.count(&["timeout", "timeout-ms", "timeoutMs"])
+                        .unwrap_or(15_000)
+                ),
+            );
+        }
+        "capture" => {
+            // A default inside the workspace rather than a required flag: the
+            // jail is what keeps the write safe, so there is nothing to gain
+            // from making every caller name a directory.
+            put(
+                "path",
+                json!(args.text("path").map(str::to_owned).unwrap_or_else(|| {
+                    format!(".armadra/browser/{}.png", chrono::Utc::now().timestamp_millis())
+                })),
+            );
+            put("fullPage", json!(args.flag("full-page") || args.flag("fullPage")));
+            put("format", opt(args.text("format")));
+        }
+        "upload" => put("paths", json!(repeated(args, "path"))),
+        "download" => {
+            put("id", opt(args.text("id")));
+            put("accept", json!(args.flag("accept")));
+        }
+        "tabs" => {
+            put("switch", opt(args.text("switch")));
+            put("new", opt(args.text("new")));
+        }
+        "close" => put("tab", opt(args.text("tab"))),
+        "dialog" => {
+            put("id", opt(args.text("id")));
+            put("accept", json!(args.flag("accept")));
+            put("text", opt(args.text("text")));
+        }
+        _ => {}
+    }
+    map
 }
 
 /// Verbs that drive the page rather than read it. `read`, `wait` and

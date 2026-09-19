@@ -34,6 +34,7 @@ pub mod model;
 pub mod policy;
 pub mod routes;
 pub mod session;
+pub mod shell;
 pub mod store;
 
 #[cfg(test)]
