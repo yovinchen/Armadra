@@ -58,6 +58,23 @@ describe("lane layout", () => {
     expect(graph.lanes).toBe(2);
   });
 
+  it("keeps the mainline in its lane when a side tip is listed before it", () => {
+    // d is a one-commit branch off b, dated between a and the mainline
+    // commit c. d claims a lane for b first; c must still keep lane 0 and b
+    // must land under it, with d's edge curving in — not the mainline
+    // hopping over to d's lane for the rest of the page.
+    const graph = commitGraph([
+      commit(a, [c]),
+      commit(d, [b]),
+      commit(c, [b]),
+      commit(b, []),
+    ]);
+    expect([a, d, c, b].map((id) => graph.points.get(id)!.lane)).toEqual([
+      0, 1, 0, 0,
+    ]);
+    expect(graph.lanes).toBe(2);
+  });
+
   it("never invents adjacency for a parent outside the page", () => {
     const graph = commitGraph([commit(a, [b, c])]);
     expect(graph.edges.map((edge) => [edge.child, edge.parent])).toEqual([

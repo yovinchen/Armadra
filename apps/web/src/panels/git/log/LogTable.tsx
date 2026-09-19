@@ -194,7 +194,8 @@ export function LogTable({
           <svg
             aria-label={t("gitLog.table.graph")}
             role="img"
-            className="pointer-events-none absolute top-0 left-0"
+            // 压在行的上面：选中与悬停的底色不能把这一行的点和线盖掉。
+            className="pointer-events-none absolute top-0 left-0 z-10"
             width={gutter}
             height={virtualizer.getTotalSize()}
           >

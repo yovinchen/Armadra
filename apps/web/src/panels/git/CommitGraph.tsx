@@ -77,7 +77,20 @@ export function commitGraph<T extends GraphCommit>(
       keys.parent(commit, parent),
     );
     // 第一父提交沿用本车道；除非已经有别的车道在等它，那样会画出两条同名线。
-    lanes[lane] = first && !lanes.includes(first) ? first : null;
+    // 两条车道抢同一个父提交时，靠左的那条留下：它是更早开始的主线，右边
+    // 那条是后来分出去的尖端，画成汇入主线。反过来让主线让位会把整条主线
+    // 从这一行起挪到右边的车道去，看起来像凭空多出一条线。
+    const waiting = first ? lanes.indexOf(first) : -1;
+    if (!first) {
+      lanes[lane] = null;
+    } else if (waiting < 0) {
+      lanes[lane] = first;
+    } else if (waiting > lane) {
+      lanes[waiting] = null;
+      lanes[lane] = first;
+    } else {
+      lanes[lane] = null;
+    }
     for (const parent of rest) {
       if (lanes.includes(parent) || points.has(parent)) continue;
       lanes[free()] = parent;
