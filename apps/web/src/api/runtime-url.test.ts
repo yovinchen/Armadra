@@ -153,6 +153,19 @@ describe("Runtime addresses inside the desktop shell", () => {
     ).toBe("http://127.0.0.1:43120");
   });
 
+  it("does not let the dev server's proxy opt-in override the shell", () => {
+    // `""` is what apps/web's Vite config defines once it has found a Runtime:
+    // a browser tab then proxies through 1420. Inside the shell that would
+    // route every socket through the dev proxy, unlike the packaged build.
+    shell();
+    expect(resolveRuntimeUrl("", "http://127.0.0.1:1420/")).toBe(
+      "http://127.0.0.1:52341",
+    );
+    expect(resolveSocketBase("http://127.0.0.1:52341")).toBe(
+      "ws://127.0.0.1:52341",
+    );
+  });
+
   it("uses the shell's WebSocket base without asking for a forwarder", () => {
     shell();
     const base = resolveRuntimeUrl(undefined, "http://127.0.0.1:1420/");
