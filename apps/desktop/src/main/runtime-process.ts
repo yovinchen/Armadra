@@ -1,4 +1,4 @@
-import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { type ChildProcess, execFile, fork, spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -42,6 +42,61 @@ import { repoRoot } from "./repo-root";
  */
 let driveEnvironment: Record<string, string> = {};
 
+/* ------------------------- which core this shell runs --------------------- */
+
+/**
+ * `ARMADRA_CORE=rust|ts`, the only switch for the changeover.
+ *
+ * `rust` — the shell spawns the `armadra-runtime` binary and starts the Go
+ * Host, exactly as it always has. `ts` — the shell forks
+ * `out/core/main.js` and starts **no Host**: the TypeScript core is the merge
+ * of both, so a Host beside it would be a second writer of one database, which
+ * is precisely the arrangement the merge exists to remove.
+ *
+ * Everything downstream of the spawn is deliberately shared: the announcement
+ * line is byte-identical, `/health` reports the same `instanceId`, and the
+ * stale-process takeover reads the same `endpoints.json`. That is what makes
+ * the switch a switch and not a fork of the shell.
+ *
+ * The default stays `rust` until R6.
+ */
+export type CoreImplementation = "rust" | "ts";
+
+export function coreImplementation(
+  env: NodeJS.ProcessEnv = process.env,
+): CoreImplementation {
+  return env.ARMADRA_CORE === "ts" ? "ts" : "rust";
+}
+
+/** Whether this shell also starts the Go Host. Never while the TS core runs. */
+export function startsHost(env: NodeJS.ProcessEnv = process.env): boolean {
+  return coreImplementation(env) === "rust";
+}
+
+/**
+ * The core bundle. `out/core/main.js` sits beside `out/main/index.js` in both
+ * layouts — development and inside `app.asar` — so one relative path answers
+ * for both. `ARMADRA_CORE_ENTRY` overrides it for a core built elsewhere.
+ */
+export function coreEntry(
+  env: NodeJS.ProcessEnv = process.env,
+  mainDir: string = __dirname,
+): string {
+  return env.ARMADRA_CORE_ENTRY ?? join(mainDir, "../core/main.js");
+}
+
+/**
+ * The substring that proves a command line belongs to a core this shell
+ * started, for the orphan sweep. The Rust half is the binary name plus
+ * `--desktop-control-stdin`; the TypeScript half is the bundle path plus the
+ * same flag, which the core accepts for exactly this reason.
+ */
+export function coreProcessMarker(
+  implementation: CoreImplementation = coreImplementation(),
+): string {
+  return implementation === "ts" ? "core/main.js" : runtimeBinaryName();
+}
+
 export function setDriveEnvironment(address: string, token: string): void {
   driveEnvironment = { [DRIVE_ADDRESS_ENV]: address, [DRIVE_TOKEN_ENV]: token };
 }
@@ -76,6 +131,12 @@ export class RuntimeProcess {
   /** Remembered so a replacement can be started on the same address. */
   private address: RuntimeAddress | null = null;
   private exited = false;
+  /** Which implementation the running child is; decided at spawn time. */
+  private implementation: CoreImplementation = "rust";
+
+  runningImplementation(): CoreImplementation {
+    return this.implementation;
+  }
 
   /** True when this shell started the Runtime, and so may stop it. */
   owns(): boolean {
@@ -115,7 +176,9 @@ export class RuntimeProcess {
   }
 
   private spawn(address: RuntimeAddress): void {
-    const executable = runtimeExecutable();
+    const implementation = coreImplementation();
+    const executable =
+      implementation === "ts" ? coreEntry() : runtimeExecutable();
     const args = [
       "--desktop-control-stdin",
       "--listen",
@@ -134,17 +197,33 @@ export class RuntimeProcess {
       "--listen",
       process.env.ARMADRA_RUNTIME_LISTEN || "tcp:127.0.0.1:0",
     );
-    const child = spawn(executable, args, {
-      // stdout is piped, not discarded: the first line identifies this run and
-      // the rest is the Runtime's own log, which the Rust shell used to throw
-      // away entirely in a packaged build.
-      stdio: ["pipe", "pipe", "ignore"],
-      // The browser drive channel (§4.2). The address is a kernel-assigned
-      // loopback port and the token is one random value per shell run, so both
-      // exist only here and in the environment of this one child. Nothing is
-      // written to disk, and a Runtime this shell did not start has no channel.
-      env: { ...process.env, ...driveEnvironment },
-    });
+    // The browser drive channel (§4.2). The address is a kernel-assigned
+    // loopback port and the token is one random value per shell run, so both
+    // exist only here and in the environment of this one child. Nothing is
+    // written to disk, and a Runtime this shell did not start has no channel.
+    const env = { ...process.env, ...driveEnvironment };
+    const child =
+      implementation === "ts"
+        ? // `child_process.fork`, not `utilityProcess.fork`: everything below
+          // this line — the announcement reader, the exit bookkeeping, the
+          // SIGKILL fallback — is written against a `ChildProcess`, and
+          // `utilityProcess` has neither `exitCode` nor a signal-taking
+          // `kill`. `silent` is what gives us the stdout pipe the announcement
+          // arrives on. `ELECTRON_RUN_AS_NODE` makes `process.execPath` — the
+          // Electron binary, the only interpreter a packaged install is sure
+          // to have — behave as plain Node.
+          fork(executable, args, {
+            silent: true,
+            env: { ...env, ELECTRON_RUN_AS_NODE: "1" },
+          })
+        : spawn(executable, args, {
+            // stdout is piped, not discarded: the first line identifies this
+            // run and the rest is the Runtime's own log, which the Rust shell
+            // used to throw away entirely in a packaged build.
+            stdio: ["pipe", "pipe", "ignore"],
+            env,
+          });
+    this.implementation = implementation;
     child.on("error", (error) => {
       this.exited = true;
       process.stderr.write(
@@ -192,6 +271,22 @@ export class RuntimeProcess {
         throw new Error(
           "A previous Runtime shutdown failed; managed sessions require inspection",
         );
+      }
+      return;
+    }
+    // The TypeScript core speaks no stdin control frame: it has no tmux
+    // sessions to confirm the shutdown of until R2, and SIGTERM already runs
+    // its handler — withdraw the endpoint record, close the listeners, close
+    // the database. When R2 lands, this branch grows the same confirmation the
+    // Rust one has rather than losing it.
+    if (this.implementation === "ts") {
+      child.kill("SIGTERM");
+      const status = await waitForExit(child, 12_000);
+      if (status === undefined) {
+        this.shutdownFailed = true;
+        child.kill("SIGKILL");
+        await waitForExit(child, 2_000);
+        throw new Error("Core shutdown timed out");
       }
       return;
     }
@@ -507,7 +602,11 @@ export async function stopStaleRuntime(record: RuntimeRecord): Promise<void> {
       `process ${record.processId} from endpoints.json is no longer running`,
     );
   }
-  if (!isDesktopStartedRuntime(commandLine)) {
+  // The marker depends on which implementation this shell would start: a TS
+  // core's command line names the bundle, not the Rust binary. The
+  // `--desktop-control-stdin` half of the check is unchanged and is what keeps
+  // a development core somebody is running from a terminal out of reach.
+  if (!isDesktopStartedRuntime(commandLine, coreProcessMarker())) {
     throw new Error(
       `process ${record.processId} is not an Armadra Runtime started by a desktop shell (${commandLine})`,
     );

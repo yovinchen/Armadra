@@ -14,8 +14,12 @@ import type { RuntimeRecord } from "../shell-core/runtime/identity";
 import {
   RuntimeProcess,
   addressIsHeld,
+  coreEntry,
+  coreImplementation,
+  coreProcessMarker,
   externalRuntimeBase,
   processCommandLine,
+  startsHost,
   isPackagedShell,
   runtimeExecutable,
   setPackagedShell,
@@ -309,5 +313,35 @@ describe("the external development Runtime", () => {
     expect(externalRuntimeBase({ ARMADRA_RUNTIME_PORT: "0" })).toBe(
       "http://127.0.0.1:43120",
     );
+  });
+});
+
+describe("which core this shell runs", () => {
+  it("defaults to the Rust Runtime and only the exact string switches it", () => {
+    expect(coreImplementation({})).toBe("rust");
+    expect(coreImplementation({ ARMADRA_CORE: "rust" })).toBe("rust");
+    expect(coreImplementation({ ARMADRA_CORE: "TS" })).toBe("rust");
+    expect(coreImplementation({ ARMADRA_CORE: "" })).toBe("rust");
+    expect(coreImplementation({ ARMADRA_CORE: "ts" })).toBe("ts");
+  });
+
+  it("starts the Host only beside the Rust Runtime", () => {
+    // Two writers of one database is the arrangement the merge removes.
+    expect(startsHost({})).toBe(true);
+    expect(startsHost({ ARMADRA_CORE: "ts" })).toBe(false);
+  });
+
+  it("finds the core bundle beside the main bundle in both layouts", () => {
+    expect(coreEntry({}, "/app/out/main")).toBe("/app/out/core/main.js");
+    expect(coreEntry({ ARMADRA_CORE_ENTRY: "/elsewhere/main.js" })).toBe(
+      "/elsewhere/main.js",
+    );
+  });
+
+  it("looks for the right process marker when sweeping orphans", () => {
+    // A TypeScript core's command line names the bundle, not the Rust binary,
+    // so the orphan sweep would otherwise never recognise its own child.
+    expect(coreProcessMarker("rust")).toMatch(/^armadra-runtime(\.exe)?$/);
+    expect(coreProcessMarker("ts")).toBe("core/main.js");
   });
 });

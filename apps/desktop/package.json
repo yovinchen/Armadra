@@ -16,12 +16,14 @@
   },
   "dependencies": {
     "@armadra/protocol": "workspace:*",
-    "electron-updater": "6.8.9"
+    "electron-updater": "6.8.9",
+    "ws": "8.18.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
     "@types/js-yaml": "4.0.9",
     "@types/node": "24.3.0",
+    "@types/ws": "8.18.1",
     "@vitejs/plugin-react": "6.0.5",
     "electron": "42.11.6",
     "electron-builder": "26.15.3",

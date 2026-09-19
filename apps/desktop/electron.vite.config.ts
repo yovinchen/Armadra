@@ -1,14 +1,13 @@
 import { resolve } from "node:path";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
-import type { UserConfig } from "vite";
+import { type Plugin, type UserConfig, build } from "vite";
 import webConfig from "../web/vite.config";
 
 const here = __dirname;
 const web = resolve(here, "../web");
 
 /**
- * Two rules for the main and preload bundles, both learned the hard way in
- * nodeterm (`electron.vite.config.ts:18-30`):
+ * Two rules for the main and preload bundles, both learned the hard way:
  *
  *   1. `electron` is a devDependency, so `externalizeDepsPlugin` — which reads
  *      `dependencies` — does not externalize it. Left alone, the npm wrapper
@@ -79,9 +78,62 @@ function renderer(command: "serve" | "build", mode: string): UserConfig {
   };
 }
 
+/**
+ * The fourth target: the Electron-free core.
+ *
+ * It is built here rather than in its own tool because it shares this shell's
+ * `node_modules` and, from R2, this shell's native-module rebuild. But it is
+ * emitted as its own entry so that `node out/core/main.js` runs it directly —
+ * which is both how the server shell will start it and how a developer can
+ * exercise it without a window.
+ *
+ * `electron` stays external even though the core never imports it: if a stray
+ * import ever appears, an external reference fails loudly at require time
+ * instead of quietly bundling the npm wrapper. The real guard is the source
+ * scan in `shell-core/no-electron.test.ts`, which covers `src/core/**`.
+ *
+ * `ws` and `node:sqlite` need nothing here: `ws` is pure JavaScript and is
+ * bundled, and `node:sqlite` is built into Node, which is the whole reason it
+ * was chosen. R2 brings the first real native module (`node-pty`) and with it
+ * the `asarUnpack` entry `electron-builder.yml` is holding open.
+ *
+ * electron-vite itself only knows three targets, so the core rides along as a
+ * plugin on the main build: one extra `vite build` after the main bundle
+ * closes, in both `build` and `dev` (where the main target is a watcher, so the
+ * core rebuilds with it).
+ */
+const coreConfig: UserConfig = {
+  // The core is not a renderer and must not inherit a web target's defaults.
+  build: {
+    outDir: resolve(here, "out/core"),
+    emptyOutDir: true,
+    target: "node22",
+    ssr: true,
+    rollupOptions: {
+      input: { main: resolve(here, "src/core/main.ts") },
+      external: EXTERNAL,
+      output: cjs,
+    },
+  },
+  ssr: { noExternal: true },
+};
+
+function buildCore(): Plugin {
+  return {
+    name: "armadra-core-bundle",
+    apply: "build",
+    async closeBundle() {
+      await build(coreConfig);
+    },
+  };
+}
+
 export default defineConfig(({ command, mode }) => ({
   main: {
-    plugins: [externalizeDepsPlugin({ exclude: BUNDLED_WORKSPACE_PACKAGES })],
+    plugins: [
+      externalizeDepsPlugin({ exclude: BUNDLED_WORKSPACE_PACKAGES }),
+      buildCore(),
+    ],
     build: {
       rollupOptions: {
         input: { index: resolve(here, "src/main/index.ts") },
