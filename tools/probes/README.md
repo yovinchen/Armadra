@@ -50,6 +50,24 @@ node tools/probes/connection-drag.mjs [输出目录] [次数]
 
 只覆盖鼠标：触屏的 pointer 事件、缩放后的坐标换算与多显示器缩放都没有验证。
 
+## 画布压力（30 个终端 + 真实会话）
+
+既有基线（[React Flow 画布](../../docs/design/canvas-react-flow.md) §6.5）的 30 个终端节点**没有会话**，量不到用户报的卡顿。这个脚本把那一列补上：每个终端节点都真的连着一个 Runtime PTY。
+
+```sh
+pnpm libs:build
+CARGO_TARGET_DIR=$PWD/target cargo build -p armadra-runtime
+node tools/probes/canvas-stress.mjs [输出目录] [终端数]
+```
+
+`pnpm libs:build` 不能省：Vite 从 `packages/*/dist` 解析 `@armadra/shared` 与 `@armadra/protocol`，没构建过的工作区只会得到一块 Vite 错误遮罩，而画布一个节点都不挂——脚本会在「挂载情况」那一步报 0 个 RF 节点。
+
+量四段（空闲 3 s / 手形平移 10 s / 拖一个节点 6 s / 便签连续输入 100 字符），每段记平均 fps、p50、p95 帧时、最慢一帧、超过 33.4 ms 的帧数与 JS 堆；另外单独量一次「销毁一个会话」引发多少个组件重渲。重渲计数注入 React DevTools 的 hook 垫片（React 只在 hook 先于它就位时才给 fiber 打开 ProfileMode），判据抄 DevTools 自己的 `didFiberRender`，并且只走这次 commit 真正碰过的子树——React 在高层 bail out 时不克隆子节点，不设这道门会把没渲染的子树全部数进来。
+
+视口写死在 `zoom 0.35`，30 个终端全部在视口里、React Flow 不裁剪，与既有基线同一个最坏情况。产物默认在 `target/canvas-stress/`：`result.json` 与 `canvas.png` / `mounted.png`。
+
+无头 Chrome 的 rAF 上限是 60 Hz（既有基线在有屏幕的 120 Hz 窗口里跑，所以那张表的 fps 不能和这张直接比）。fps 在这里很快撞顶，**真正有判别力的是重渲组件数与最慢帧**。撤销栈深度放在最后数——数法是一直点到按钮灰掉，那会真的把改动撤回去。
+
 ## Windows ConPTY 编译探针
 
 独立 Cargo workspace，锁定 windows-sys 0.61.2 及 Cargo.lock。仅引用 CreatePipe / CreatePseudoConsole / ResizePseudoConsole / ClosePseudoConsole API，没有创建 CLI 子进程、命名管道服务或持久会话。
