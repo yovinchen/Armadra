@@ -33,6 +33,7 @@
     "target/",
     "out/",
     "apps/desktop/release/",
+    "apps/desktop/resources/",
     ".idea/",
     ".playwright-cli/",
     "*.db",

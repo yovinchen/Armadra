@@ -2,6 +2,7 @@
 
 > 状态：目标设计。本文把 [Host 与协议设计](./host-protocol-design.md) §4 的六步切换从画布推广到其余五个业务域；已交付的第一阶段（画布）以该文 §4.1、[架构](../guides/architecture.md) §5 与[实施记录](../status/platform-implementation-status.md) H01 行为准，本文不复述，也不把任何目标行为写成已上线。
 > 范围：settings、session、agent、filesystem、git 五个域的所有权切换、契约、数据、代码布局、实施批次与验收；画布域只在需要对齐时引用。
+> 2026-09-19：桌面壳已换成 Electron，本文提到 Tauri 的部分是换壳之前写下的，只作为当时的方案记录；壳的现状见 [Electron 迁移](./electron-migration.md) 与 [架构](../guides/architecture.md)。
 
 ## 0. 结论
 

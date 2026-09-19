@@ -210,7 +210,12 @@ describe("what a ticket has to prove", () => {
         1e6,
       ],
       ["expired", ticketWire(), "http://127.0.0.1:54321", 2_000_000],
-      ["empty ticket", ticketWire({ ticket: "" }), "http://127.0.0.1:54321", 1e6],
+      [
+        "empty ticket",
+        ticketWire({ ticket: "" }),
+        "http://127.0.0.1:54321",
+        1e6,
+      ],
       [
         "malformed ticket",
         ticketWire({ ticket: "not a ticket" }),

@@ -134,7 +134,9 @@ test("exactly one desktop bundle per target takes part in updates", () => {
 test("Windows publishes a portable zip and never offers it as an update", () => {
   for (const target of ["windows-x86_64", "windows-aarch64"]) {
     const assets = desktopAssets("0.2.0", target);
-    const portable = assets.find((asset) => asset.name.endsWith("-portable.zip"));
+    const portable = assets.find((asset) =>
+      asset.name.endsWith("-portable.zip"),
+    );
     assert.ok(portable, `${target} publishes no portable bundle`);
     assert.equal(portable.updater, false);
     assert.equal(portable.name, `Armadra_0.2.0_${target}-portable.zip`);
@@ -142,11 +144,7 @@ test("Windows publishes a portable zip and never offers it as an update", () => 
     assert.equal(assetComponent(portable.name), "desktop");
     // The installer is what updates in place; the zip records no location to
     // replace, so it is a first install only.
-    assert.equal(
-      assets.find((asset) => asset.updater).kind,
-      "nsis",
-      target,
-    );
+    assert.equal(assets.find((asset) => asset.updater).kind, "nsis", target);
   }
   for (const target of TARGETS.filter((name) => !name.startsWith("windows-"))) {
     assert.equal(

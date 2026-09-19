@@ -6,6 +6,7 @@
 > 状态：**只是设计，Phase 4 不实现**。日期：2026-09-04。归属：desktop-packaging。
 > 上游契约：[v3-agent-terminal-plan.md §15](../contracts/v3-agent-terminal-plan.md)（终端后端选择树、`TerminalBackend` trait、WS 协议、回收策略）。
 > 本文只描述 Windows 侧第三种后端 `SessionDaemonBackend` 的形状；macOS / Linux 继续走 tmux，无 tmux 时走 direct，两者都不受影响。
+> 2026-09-19：桌面壳已换成 Electron，本文提到 Tauri 的部分是换壳之前写下的，只作为当时的方案记录；壳的现状见 [Electron 迁移](./electron-migration.md) 与 [架构](../guides/architecture.md)。
 
 ## 1. 为什么 Windows 需要一个独立进程
 
@@ -32,7 +33,7 @@
 ## 2. 进程模型
 
 ```text
-桌面壳 (Tauri)
+桌面壳
   └─ armadra-runtime.exe        ← 可以随时重启
        └─ 命名管道 client（每会话一条 attach 流）
              ↕  \\.\pipe\armadra-session-<user-hash>

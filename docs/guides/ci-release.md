@@ -27,8 +27,7 @@
 6. `cargo clippy --workspace --exclude armadra-desktop --all-targets -- -D warnings`
 7. `cargo test --workspace --exclude armadra-desktop`
 8. `go -C apps/host vet ./...` 与 `go -C apps/host test [-race] -count=1 ./...`
-9. 桌面壳 `cargo check -p armadra-desktop --all-targets`
-10. 只在 Linux 上：Host 交叉编译 windows/amd64、darwin/arm64、linux/arm64
+9. 只在 Linux 上：Host 交叉编译 windows/amd64、darwin/arm64、linux/arm64
 
 几条不显然的决定：
 
@@ -42,11 +41,11 @@
 - **`.gitattributes` 把全仓统一成 LF。** Windows runner 默认
   `core.autocrlf=true`，而 `prettier --check`、`cargo fmt --check` 和
   `protocol:check` 都是按字节比对，CRLF 工作副本会让三个检查一起红。
-- **桌面壳只 `cargo check`。** 打包是发布流水线的事。`tauri-build` 要求
-  `externalBin` 指向的文件存在，所以 CI 先跑
-  `pnpm --filter @armadra/desktop prepare:sidecar-placeholders`，落四个空文件；
-  真正要出包时用 `prepare:sidecar`（会完整 `--release` 编译 Runtime、hook 与
-  Go Host）。
+- **桌面壳只构建，不打包。** `pnpm --filter @armadra/desktop build` 把
+  main / preload / renderer 三个 target 过一遍 electron-vite，要的是三个平台上
+  构建图都通得过。打包要真的受管二进制与平台特定的证书 / 公证输入，是发布流水线
+  的事。壳自己的单测（vitest + `node --test scripts/*.test.mjs`）在第 5 步的
+  `pnpm -r --if-present test` 里已经跑过，不重复。
 
 缓存：`actions/setup-node` 的 `cache: pnpm`、`actions/setup-go` 按
 `apps/host/go.sum`、`Swatinem/rust-cache` 按矩阵标签分键。
@@ -59,8 +58,8 @@
 
 **版本住在仓库里，标签只是指向它的名字。** 这一点与许多流水线相反，也与
 LiveAgent 相反——它用 `prepare-app-version-from-tag.mjs` 从标签解出版本、写进一份
-生成的 Tauri 配置，仓库里根本不存版本。我们不这么做，因为版本在四个文件里
-（`Cargo.toml` 是源，另外三处与它一致，见 `tools/release/version.mjs`），Host 与
+生成的打包配置，仓库里根本不存版本。我们不这么做，因为版本在三个文件里
+（`Cargo.toml` 是源，另外两处与它一致，见 `tools/release/version.mjs`），Host 与
 外壳都会自报它，更新检查比的也是它。于是方向反过来：`verify` 要求
 **标签等于仓库版本**，不等就拒绝发布，而不是让标签去覆盖代码里的版本。
 
@@ -69,7 +68,7 @@ LiveAgent 相反——它用 `prepare-app-version-from-tag.mjs` 从标签解出�
 
 | 作业       | runner         | 做什么                                                  |
 | ---------- | -------------- | ------------------------------------------------------- |
-| `verify`   | ubuntu-latest  | 四处版本与标签一致、全量测试、工作流与发布脚本自检      |
+| `verify`   | ubuntu-latest  | 三处版本与标签一致、全量测试、工作流与发布脚本自检      |
 | `build`    | 六行矩阵，见下 | 打桌面包与组件包、改名，上传 `release-<target>`         |
 | `web`      | ubuntu-latest  | 打前端产物 `armadra-web_<version>.tar.gz`               |
 | `notarize` | ubuntu-latest  | 只报告哪些平台缺签名 secret，不阻断                     |
@@ -115,83 +114,60 @@ arm64 用 `ubuntu-22.04-arm`：GitHub 的确提供这个标签，glibc 同样是
 
 ### 2.2 打包器的名字不是发布的名字
 
-Tauri 的 bundler 按各平台自己的习惯命名：`Armadra_0.1.0_x64_en-US.msi`、
-`armadra_0.1.0_amd64.deb`、`Armadra_0.1.0_aarch64.dmg`。这些名字里读不出 Host
-认得的目标——`assetTarget` 在 `x64`、`amd64` 和光秃秃的 `aarch64` 里什么都找不到，
+electron-builder 按各平台自己的习惯命名：`Armadra-0.1.0-arm64.dmg`、
+`Armadra Setup 0.1.0.exe`、`armadra_0.1.0_amd64.deb`。这些名字里读不出 Host
+认得的目标——`assetTarget` 在 `arm64`、`amd64` 里什么都找不到，其中一个还带空格——
 于是 `assemble` 会判它们「declares no target the Host can read」。直接上传等于发了
 一堆 Host 永远不会提供给任何客户端的桌面产物。
 
 `tools/release/stage-desktop.mjs` 负责这次改名：按 `desktopAssets()` 声明的 `kind`
-去 `bundle/<子目录>` 里按后缀找到那一个文件，复制成 `artifacts.mjs` 规定的名字，
-并把 Tauri 写在旁边的 `.sig` 一起带走（`latest.json` 要读它）。按后缀而不是按全名
-匹配，是因为上面那些名字里的语言代码、小写产品名和架构拼写随时可能被 Tauri 改掉。
-缺了本该有的包就在这里失败，而不是等 `assemble`。
+在 `apps/desktop/release/` 里按扩展名找到那一个文件，复制成 `artifacts.mjs` 规定的
+名字。按扩展名而不是按全名匹配，是因为上面那些名字里的产品名大小写与架构拼写随时
+可能被 electron-builder 改掉。缺了本该有的包就在这里失败，而不是等 `assemble`。
 
-没有 `TAURI_SIGNING_PRIVATE_KEY` 时 `signing.mjs` 会关掉 `createUpdaterArtifacts`，
-macOS 的 `.app.tar.gz` 根本不会产出——这是正常的未签名构建，所以 `--require-updater`
-只在有密钥时传，缺了签名包才算失败。
+产物落在**一个平铺目录**里，旁边还有不是发布产物的文件：`latest*.yml`（electron-updater
+自己的清单，本发布不发它）、`*.blockmap`（差分下载索引）、`builder-*.yml` 与
+`*-unpacked/`。`isReleaseAsset()` 把它们挡在外面——`.blockmap` 按名字排序还排在它索引的
+`.dmg` 前面，只看扩展名会挑错文件。
 
-每平台的 `bundle.targets` 写在 `tauri.linux.conf.json`、`tauri.macos.conf.json`、
-`tauri.windows.conf.json` 里（Tauri 2 自动合并这三个文件名，不必在命令行传
-`--config`；LiveAgent 用的是 `tauri.<平台>.release.conf.json` 这种不会被自动合并的
-名字，所以它必须显式传）。写死目标列表而不是沿用 `"all"`：`"all"` 的含义由 Tauri
-版本决定，而这份列表必须和 `desktopAssets()` 一一对应。
+每平台的 target 列表写在 `apps/desktop/electron-builder.yml`，与 `desktopAssets()`
+一一对应，由 `apps/desktop/scripts/artifact-targets.test.mjs` 钉住两端（矩阵与文件名
+都钉）。
 
-| 平台    | bundle.targets           | 发布的桌面产物                            |
-| ------- | ------------------------ | ----------------------------------------- |
-| macOS   | `app`、`dmg`             | `.app.tar.gz`（updater）、`.dmg`          |
-| Windows | `msi`、`nsis`            | `-setup.exe`（updater）、`.msi`、便携 zip |
-| Linux   | `appimage`、`deb`、`rpm` | `.AppImage`（updater）、`.deb`、`.rpm`    |
+| 平台    | electron-builder target  | 发布的桌面产物                         |
+| ------- | ------------------------ | -------------------------------------- |
+| macOS   | `dmg`、`zip`             | `.zip`（updater）、`.dmg`              |
+| Windows | `nsis`、`zip`            | `-setup.exe`（updater）、便携 zip      |
+| Linux   | `AppImage`、`deb`、`rpm` | `.AppImage`（updater）、`.deb`、`.rpm` |
 
-macOS 的 `app` 不是可选的：`.app.tar.gz` 是从 `.app` 产出的，只打 `dmg` 就没有
-updater 能应用的包。
+哪一个能原地更新不是选择，是 electron-updater 的规则：它替换的是 app bundle，
+所以 macOS 更新走 zip 而不是 `.dmg`（后者是一个要挂载的磁盘映像），Windows 走安装器
+而不是便携包。
 
 ### 2.3 Windows 便携版
 
-便携 zip 不是 Tauri 的产物，由 `stage-desktop.mjs` 从 `target/release/` 直接打包。
-LiveAgent 的便携版就是一个 exe，我们不能照抄：外壳在生产构建里是**从自己旁边**找
-`armadra-host`（`apps/desktop/src-tauri/src/host/launch.rs`）与其余 sidecar 的，
-只装一个 `Armadra.exe` 的 zip 会启动然后找不到任何东西。所以 zip 里是平铺的
-`Armadra.exe` + `armadra-runtime.exe` + `armadra-hook.exe` +
-`armadra-session-host.exe` + `armadra-host.exe`，名字都去掉了三元组后缀——
-Tauri 暂存 sidecar 时写的是 `<binary>-<triple>.exe`，装好之后旁边的那份是不带的。
-少任何一个就直接失败，不会打出一个装得上、跑不起来的 zip。
+便携 zip 就是 electron-builder 的 `zip` target：它打的是解包后的整个目录，`extraResources`
+暂存的四个二进制本来就在里面。外壳在生产构建里是从 `process.resourcesPath` 找
+`armadra-host` 与其余受管二进制的，所以整目录压缩正好是它需要的形状——上一代壳要靠
+脚本手工拼一个平铺 zip，是因为那时二进制暂存成 `<binary>-<triple>.exe`，装好之后旁边
+的那份却不带后缀。
 
 便携版不是 updater 目标：解压到哪儿由用户决定，没有一个「已安装的位置」可供替换，
 写进 `latest.json` 等于承诺一次做不到的更新。
 
-### 2.4 AppImage 里自带的 Wayland 库
+### 2.4 AppImage
 
-linuxdeploy 会把 `libwayland-client/cursor/egl` 随 GTK 栈一起塞进 AppImage。
-Wayland 客户端库不是自包含的：它要和**宿主**正在跑的合成器说话，还会加载宿主自己的
-EGL 与 libdecor 模块。镜像里自带一份，等于把同一套协议的两个版本混在一起，结果是
-在 AppImage 本来要服务的那些机器上开出一个白窗口，或者死在 `wl_display_connect`。
-`tools/release/postprocess-linux-appimage.sh`（照搬 LiveAgent 的思路）把它们删掉
-再重新打包，让镜像用宿主自己的那份。
-
-几点与 LiveAgent 不同：
-
-- **仍然需要。** 首次打标签（`v0.1.0`，2026-09-14）两条 Linux 行都在 AppImage 里找到了
-  `libwayland-client/cursor/egl/server` 四个库，脚本剥掉后重新打包。脚本在「一个都没找到」
-  时仍打印一行说明并 **exit 0**，看到那行说明就意味着这一步可以删了。
-- **appimagetool 按架构钉版本与 sha256**（1.9.1 的 x86_64 与 aarch64 两个构建）。
-  LiveAgent 只发 x86_64；我们有 arm64 行，而 `appimagetool-x86_64.AppImage` 在 arm64
-  上跑不起来。原先想复用 Tauri 自己下载的那份，但 Tauri 2.11 缓存的是
-  `linuxdeploy-plugin-appimage-<arch>.AppImage`，并没有独立的 appimagetool——
-  首次打标签时 arm64 行就是在这里停下的。`APPIMAGETOOL_PATH` 仍可覆盖。
-- 重新打包会让 Tauri 的 `.sig` 对不上字节，脚本因此删掉它，工作流紧接着用
-  `tauri signer sign` 补签（只在本来就签过时补）。
+electron-builder 的 AppImage 由 app-builder 自己打，不经 linuxdeploy，因此不会把
+宿主的 GTK/Wayland 栈拷进镜像——Electron 自带 Chromium，运行时才链接系统 GTK。
+上一代壳需要一个剥离 `libwayland-client/cursor/egl` 的后处理步骤（那些库不是自包含的，
+镜像里自带一份等于把同一套协议的两个版本混在一起），随那个打包器一起删掉了。
 
 ### 2.5 各平台的系统依赖与缓存
 
-- **Linux**：`libwebkit2gtk-4.1-dev`、`libsoup-3.0-dev`、
-  `libjavascriptcoregtk-4.1-dev`、`libgtk-3-dev`、
-  `libayatana-appindicator3-dev`、`librsvg2-dev`、`libssl-dev`、`libxdo-dev`、
-  `patchelf`、`rpm`、`build-essential`、`curl`、`wget`、`file`。AppImage 要 `file`
-  与 `patchelf`，托盘要 appindicator，`.rpm` 要 `rpm` 包提供的 `rpmbuild`
-  （LiveAgent 也装它）。`objdump` 由 `build-essential` 带来的 binutils 提供，
-  §2.1 的基线校验需要它。
-- **Windows**：WiX（MSI）与 NSIS（setup.exe）由 `tauri-cli` 自己下载，不需要
+- **Linux**：只要 `file`（AppImage 用）与 `rpm` 包提供的 `rpmbuild`。
+  electron-builder 自带 Chromium，不链接 WebKitGTK，原先那一长串 `-dev` 包不再需要。
+  §2.1 的基线校验要 `objdump`，runner 镜像自带 binutils。
+- **Windows**：NSIS 由 electron-builder 自己下载，不需要
   预装。组件包是 `.zip`，而 `zip` 不在每个 Windows runner 的默认 PATH 上，
   `tools/release/package-components.mjs` 会退回镜像自带的 7-Zip，不额外装东西。
   打 `.tar.gz` 时用的是 `System32\tar.exe`（bsdtar），不是 PATH 上排在前面的
@@ -213,14 +189,11 @@ EGL 与 libdecor 模块。镜像里自带一份，等于把同一套协议的两
 
 ### 2.6 macOS 签名与公证
 
-证书自己导进一个临时钥匙串，而不是把 `APPLE_CERTIFICATE` 交给 tauri 去导
-（LiveAgent 的做法）。差别只有一个，但是决定性的：**失败的时刻**。证书或口令不对
-时，`security import` + `security find-identity` 在十秒内就红；交给打包器则要等
-整个 Rust 构建、前端构建和 bundling 跑完才在最后一步失败。这和
-`apps/desktop/scripts/signing.mjs` 把更新签名判断提到编译之前是同一个道理。
-
-两种机制不能并用：`APPLE_CERTIFICATE` 一旦非空，tauri 会另建一个钥匙串并设为默认，
-把这里导入的那张顶掉。所以工作流不再向环境注入 `APPLE_CERTIFICATE`。
+证书先自己导进一个临时钥匙串并当场 `find-identity`，再把同一份 base64 交给
+electron-builder 的 `CSC_LINK` / `CSC_KEY_PASSWORD`。多这一步只为了**失败的时刻**：
+证书或口令不对时，`security import` + `security find-identity` 在十秒内就红；只交给
+打包器则要等整个前端构建和 bundling 跑完才在最后一步失败。这和
+`apps/desktop/scripts/signing-electron.mjs` 把签名判断提到构建之前是同一个道理。
 
 关键的几行与它们的理由：
 
@@ -228,14 +201,15 @@ EGL 与 libdecor 模块。镜像里自带一份，等于把同一套协议的两
   钥匙串锁上就再也签不动了。
 - `security set-key-partition-list -S apple-tool:,apple:,codesign:`：没有它，
   `codesign` 会弹一个没人能点的「允许访问」对话框并超时。
-- `security default-keychain -s`：tauri 从默认钥匙串里找身份。
+- `security default-keychain -s`：codesign 从默认钥匙串里找身份。
 - 没给 `APPLE_SIGNING_IDENTITY` 时，从 `find-identity` 的输出里取第一条。
 - 构建结束后 `if: always()` 删掉钥匙串。
 
 公证用 `xcrun notarytool store-credentials armadra-notary --validate` 预检：
 `--validate` 会真的去问一次 Apple，凭据不对在这里报错，而不是在打包末尾排队等公证
-时。预检通过后把 `APPLE_ID` / `APPLE_TEAM_ID` / `APPLE_PASSWORD` 写进 `GITHUB_ENV`，
-公证与装订由 tauri 的 bundler 在打包末尾完成。
+时。预检通过后把 `APPLE_ID` / `APPLE_TEAM_ID` / `APPLE_APP_SPECIFIC_PASSWORD`
+写进 `GITHUB_ENV`——这正是 `signing-electron.mjs` 读的三个名字——公证与装订由
+electron-builder 在打包末尾完成。
 
 任何一半缺失就整段跳过并 `::warning::`，`notarize` 作业把 macOS 列进未签名平台，
 `assemble` 把这句话写在 Release 说明顶部。缺 secret 从不阻断发布。
@@ -266,60 +240,65 @@ LiveAgent 还用 `dmgbuild` 重建 DMG 并自己 `notarytool submit` + `stapler 
 `assemble` 会把这件事写进 Release 说明顶部，`latest.json` 会把没有签名的
 updater 包排除在外。
 
-| Secret                               | 谁用                             | 缺了会怎样                                 |
-| ------------------------------------ | -------------------------------- | ------------------------------------------ |
-| `TAURI_SIGNING_PRIVATE_KEY`          | tauri updater 签名               | `signing.mjs` 判为 skip，关掉 updater 产物 |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 同上（密钥有口令时）             | 密钥有口令却没给 → tauri 在签名那步失败    |
-| `APPLE_CERTIFICATE_P12_BASE64`       | macOS 代码签名（base64 的 .p12） | 不签名，首次打开有 Gatekeeper 提示         |
-| `APPLE_CERTIFICATE_PASSWORD`         | 导入上面的证书                   | 同上                                       |
-| `APPLE_SIGNING_IDENTITY`             | 指定用哪张证书；缺则取第一张     | 钥匙串里有多张时可能选错                   |
-| `APPLE_ID` / `APPLE_TEAM_ID`         | 公证                             | 不公证，`notarize` 作业把 macOS 列进说明   |
-| `APPLE_APP_SPECIFIC_PASSWORD`        | 公证用的 app 专用密码            | 同上                                       |
-| `ARMADRA_RELEASE_SIGNING_KEY`        | `SHA256SUMS` 的 minisign 签名    | 校验列表不带签名                           |
-| `WINDOWS_CERT_BASE64`                | 只用于「有没有」的判断           | Windows 被列进未签名平台                   |
+| Secret                         | 谁用                                                                 | 缺了会怎样                                   |
+| ------------------------------ | -------------------------------------------------------------------- | -------------------------------------------- |
+| `APPLE_CERTIFICATE_P12_BASE64` | macOS 代码签名（base64 的 .p12）                                     | 不签名，首次打开有 Gatekeeper 提示           |
+| `APPLE_CERTIFICATE_PASSWORD`   | 导入上面的证书                                                       | 同上                                         |
+| `APPLE_SIGNING_IDENTITY`       | 指定用哪张证书；缺则取第一张                                         | 钥匙串里有多张时可能选错                     |
+| `APPLE_ID` / `APPLE_TEAM_ID`   | 公证                                                                 | 不公证，`notarize` 作业把 macOS 列进说明     |
+| `APPLE_APP_SPECIFIC_PASSWORD`  | 公证用的 app 专用密码                                                | 同上                                         |
+| `WINDOWS_CERT_BASE64`          | Windows Authenticode                                                 | 不签名，SmartScreen 会提示                   |
+| `WINDOWS_CERT_PASSWORD`        | 导入上面的证书                                                       | 同上                                         |
+| `ARMADRA_RELEASE_SIGNING_KEY`  | 每个产物与 `SHA256SUMS` 的 minisign 签名，`latest.json` 引用的也是它 | 产物不带签名，`latest.json` 为空，说明里写明 |
 
 证书与公证密码两个名字沿用 LiveAgent 的拼写；工作流同时接受早先的
 `APPLE_CERTIFICATE` 与 `APPLE_PASSWORD`（`${{ secrets.A || secrets.B }}`），
 已经配好的仓库不用改 secret。
 
-工作流只把**非空**的 secret 写进环境（`解出本次可用的更新签名变量` 那一步）。
-原因：`tauri` 看到空字符串的签名变量会当成「有密钥」，然后在打包最后一步失败；
-没有密钥时要的是跳过，不是一个更晚、更难读的错误。macOS 的证书与公证凭据走
-§2.6 的两个预检步骤，同样是「缺了就跳过并告警」。
+工作流只把**非空**的 secret 写进环境：空字符串的证书变量会被当成「有密钥」，
+然后在打包最后一步失败；没有密钥时要的是跳过，不是一个更晚、更难读的错误。
+macOS 的证书与公证凭据走 §2.6 的两个预检步骤，Windows 的证书走同一对
+`CSC_LINK` / `CSC_KEY_PASSWORD`，都是「缺了就跳过并告警」。
+
+**签名在写清单之前。** 上一代打包器在构建过程中就给每个 updater 包签出一份分离
+签名，所以 `assemble.mjs` 读得到一个已经在盘上的 `.sig`；electron-builder 只做平台
+代码签名，不产出分离签名。于是 `assemble.mjs` 自己先签一遍，再用刚签出的东西写
+`latest.json`，最后写 `SHA256SUMS` 并补签那两个当时还不存在的文件。整条链上只剩
+`ARMADRA_RELEASE_SIGNING_KEY` 一把钥匙，组件包和桌面包共用。
 
 `GITHUB_TOKEN`：`release.yml` 顶层声明 `permissions: contents: write`，
 `assemble` 用它 `gh release create --draft`。`ci.yml` 是 `contents: read`。
 工作流永远不会把 Release 从 draft 转正——那一步是人的动作。
 
-更新地址不写进仓库。`tauri.conf.json` 的 `plugins.updater.endpoints` 保持为空，
-CI 通过 `ARMADRA_UPDATER_ENDPOINTS` 注入，`signing.mjs` 把它与签名判断合成同一个
-`--config`（`tauri build` 只认最后一个 `--config`）。
+更新地址不写进仓库。`electron-builder.yml` 的 `publish.url` 是占位，CI 通过
+`ARMADRA_UPDATER_ENDPOINTS` 注入，`signing-electron.mjs` 把它与签名判断合成同一个
+`--config`。
 
-打包这一步走 `pnpm --filter @armadra/desktop build`，也就是
-`apps/desktop/scripts/build.mjs`，而不是直接 `tauri build`：签名判断必须发生在
-编译之前，否则缺密钥的失败要等二十分钟才出现。该脚本用 Node 直接启动
-`@tauri-apps/cli/tauri.js`——Windows 上包管理器是 `.cmd`，`execFileSync` 不带
-shell 启动不了它。
+打包这一步走 `pnpm --filter @armadra/desktop dist`，也就是
+`apps/desktop/scripts/dist.mjs`，而不是直接 `electron-builder`：签名判断必须发生在
+构建之前，否则缺密钥的失败要等到最后一步才出现。该脚本用 Node 直接启动
+electron-vite 的入口——Windows 上包管理器是 `.cmd`，`execFileSync` 不带 shell
+启动不了它。受管二进制在它之前由单独一步 `cargo build --release` 与
+`prepare:host --release --native` 产出，两条都不带 `--target`：runner 就是本机。
 
 ## 4. 本地怎么先验
 
 ```sh
 pnpm ci:workflows      # 两份工作流的结构、runner 标签与矩阵三元组
 pnpm release:test      # tools/release 与 tools/ci 的单元测试
-pnpm release:check     # 四处版本一致、兼容范围包含本版本
-pnpm release:dry-run   # 把一次完整发布（38 个产物）落到临时目录并校验
+pnpm release:check     # 三处版本一致、兼容范围包含本版本
+pnpm release:dry-run   # 把一次完整发布（36 个产物）落到临时目录并校验
 go run github.com/rhysd/actionlint/cmd/actionlint@latest \
   .github/workflows/ci.yml .github/workflows/release.yml
 ```
 
 下面这些只有真 runner 能回答，本机无从验证，列在这里免得下次有人以为它们已经过：
 
-- `ubuntu-22.04` / `ubuntu-22.04-arm` 上 WebKitGTK 与 Tauri 2.11 的组合是否打得出
-  三种包（22.04 的 `libwebkit2gtk-4.1-dev` 比 24.04 老一档）；
-- ~~Tauri 2.11 是否仍然往 AppImage 里塞 libwayland~~（会，见 §2.4）；
-- ~~arm64 上 Tauri 的 AppImage 打包~~（打得出；appimagetool 改为按架构钉版本，见 §2.4）；
-- Apple 证书导入、`notarytool --validate` 与 bundler 的公证（要真 secret）；
-- Windows 便携 zip 里那五个 exe 解压后能不能真的互相找到。
+- `ubuntu-22.04` / `ubuntu-22.04-arm` 上 electron-builder 能否打出 AppImage / deb / rpm
+  三种包（换打包器后未在真 runner 上跑过）；
+- Apple 证书导入、`notarytool --validate` 与 electron-builder 的公证（要真 secret）；
+- Windows Authenticode 走同一对 `CSC_*` 变量是否成立（要真 secret）；
+- Windows 便携 zip 解压后壳能不能在 `resources/` 里找到四个受管二进制。
 
 首次打标签 `v0.1.0`（2026-09-14）跑了四遍才到 draft：arm64 行缺 appimagetool（见 §2.4）；
 `assemble` 把「一个 `.sig` 都没有」当成六个洞而不是未签名发布，与 §3 的承诺相反，

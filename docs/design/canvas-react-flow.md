@@ -3,6 +3,7 @@
 > 状态：目标设计。本文是 [tldraw 画布契约](../history/tldraw-canvas-plan.md)的替代方案：把画布引擎从 tldraw 5.4 整体换成 React Flow（`@xyflow/react`，MIT），白板层自写。tldraw 契约的 §N 编号仍被源码注释引用，该文件保留不动；本文实施完成后由收尾批把它标为「已被取代」并移入 `history/`。
 > 范围：`apps/web/src/canvas/` 及画布外的 tldraw 依赖、`boards.whiteboard_json` 的新格式与客户端一次性转换、实施批次与验收。Runtime、Host、`proto/`、数据库迁移一概不改（§3.5 给出核实结果）。
 > 输入：2026-09-06 基线 `1a212504` 的代码盘点（`apps/web/src/canvas` 80 个文件、源码 9,186 行、测试 6,536 行、`vitest` 343 项 / 35 个测试文件；全树 40 个文件 import `tldraw` / `@tldraw/*`，其中非测试 32 个）；`@xyflow/react` 12.11.3（MIT，pnpm store 里已有），`perfect-freehand`（MIT）。
+> 2026-09-19：桌面壳已换成 Electron，本文提到 Tauri 的部分是换壳之前写下的，只作为当时的方案记录；壳的现状见 [Electron 迁移](./electron-migration.md) 与 [架构](../guides/architecture.md)。
 
 ## 0. 结论
 

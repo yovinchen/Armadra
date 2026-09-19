@@ -11,10 +11,7 @@ import {
   PairDeviceRequestSchema,
 } from "@armadra/protocol";
 import { HostIdentityClient, HostIdentityError } from "../src/identity.js";
-import {
-  HostNativeCredentials,
-  isNativePageOrigin,
-} from "../src/native.js";
+import { HostNativeCredentials, isNativePageOrigin } from "../src/native.js";
 
 const hostId = "1".repeat(32),
   hostInstanceId = "2".repeat(32),

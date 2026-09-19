@@ -38,16 +38,23 @@ Runtime 的 `--listen` 可重复，每次一个：`tcp:IP:PORT`（端口 `0` 由
 含地址、instance id、pid 与写入时间；正常退出时撤回自己那段。
 `./armadra.sh run web` 与 Vite 开发代理都从这个文件读地址，`VITE_RUNTIME_URL` 显式覆盖时不装代理。
 
-打包后的桌面壳自己不监听端口：它以 `--listen unix:<数据目录>/runtime.sock`（Windows 为命名管道）
-启动 Runtime。WebView 的 HTTP 走 `armadra://` 自定义协议转发到该 socket；
-WebSocket 无法经自定义协议传输，由壳在 `127.0.0.1` 的随机端口上做回环转发，端口登记在 `endpoints.json`，
-页面通过 `armadra://localhost/__armadra/transport` 取得。Go Host 则以 `--listen 127.0.0.1:43121`
-加原生来源的 `--allow-origin` 启动：页面经壳的私有控制通道取票、再向这个回环端口换取 Bearer 会话
-（[桌面壳原生 Host 会话](../design/host-native-session.md)）。因此 `lsof -i -P | grep -i Armadra` 在
-「对外服务未开启」时会看到回环转发端口与 Host 的 43121。
+桌面壳自己提供页面：主进程在 `127.0.0.1` 的一个内核分配端口上跑一个静态服务，
+`BrowserWindow` 加载的就是这个地址。Runtime 以 `--listen tcp:127.0.0.1:0` 启动并在 stdout
+公告实例与端口，页面经 preload 的 `transport:endpoints` 一次性取得
+`{ httpBase, wsBase, hostBase, dataDir }`，`fetch` 与 `WebSocket` 直连
+（[迁移设计](../design/electron-migration.md) §2.1）。没有自定义协议，也没有 WebSocket
+回环转发端口。
+
+Go Host 以 `--listen 127.0.0.1:43121` 加页面来源的 `--allow-origin` 启动：页面经壳的私有
+控制通道取票、再向这个回环端口换取 Bearer 会话
+（[桌面壳原生 Host 会话](../design/host-native-session.md)）。票据链保留而不是换成 Cookie，
+因为 Cookie 按 host 不按 port 隔离，`127.0.0.1:A` 的 Cookie 会发往同一 profile 的任何
+`127.0.0.1:B`。因此 `lsof -i -P | grep -i Armadra` 在「对外服务未开启」时会看到静态服务、
+Runtime 与 Host 的 43121 三个回环端口。
 
 桌面包与 `./armadra.sh run desktop` 会持有自己的 Runtime；后者额外用 `ARMADRA_RUNTIME_LISTEN`
-加一个回环端口，因为开发页面在 `http://127.0.0.1:1420`，那里用不了自定义协议。直接执行桌面 `dev` 默认连接外部 Runtime。
+钉一个回环端口，因为开发页面在 Vite 的 `http://127.0.0.1:1420`，不是壳的静态服务，拿不到
+壳注入的基址。直接执行桌面 `dev` 默认连接外部 Runtime。
 Command W / 关闭窗口隐藏前台；Command Q / 托盘退出停止配置的 Host、桌面持有的 Runtime 及受管会话。
 独立启动的 Runtime 由启动它的终端管理。详见[桌面说明](../../apps/desktop/README.md)。
 
@@ -67,8 +74,9 @@ Command W / 关闭窗口隐藏前台；Command Q / 托盘退出停止配置的 H
 | 协议                | `pnpm protocol:check`、`pnpm protocol:test`                                                 |
 | 全部 JS 包 / Rust   | `pnpm test`、`cargo test --workspace`                                                       |
 | 格式 / 类型         | `pnpm format:check`、`pnpm typecheck`                                                       |
-| Rust workspace 检查 | `pnpm check:rust`（先准备 sidecar）                                                         |
-| 桌面打包            | `pnpm --filter @armadra/desktop build`                                                      |
+| Rust workspace 检查 | `pnpm check:rust`                                                                           |
+| 桌面构建（不打包）  | `pnpm --filter @armadra/desktop build`                                                      |
+| 桌面打包            | `pnpm --filter @armadra/desktop dist`                                                       |
 
 `pnpm canvas:e2e` 端到端验证画布写入所有权：在临时目录里跑真实 Runtime 与 Host，写入嵌套 Frame、终端与便签、
 标注、上下文连线和白板快照，再走导出 → 导入 → `ownership switch`，逐项断言迁移前后的 sha256、Runtime 的
@@ -99,35 +107,37 @@ CLI 不在 PATH 或起不来时打印原因并以 0 退出。真实凭据不动�
 每个 `.proto` 的 fixture 与三端契约测试引用。规则说明见[仓库结构与校验](../design/repository-structure.md)。
 仓库级脚本都在 `tools/`，各 app 自己的脚本仍在各自的 `scripts/`。
 
-打包会构建 Runtime、Hook 和 Go Host，再按 target triple 暂存 sidecar。
-目标、缓存与交叉构建规则见[桌面构建说明](../../apps/desktop/README.md)。
+打包分两步，两步都在[桌面说明](../../apps/desktop/README.md)里：先 `cargo build --release`
+与 `prepare:host` 产出受管二进制，再 `dist` 把它们按原名拷进 `apps/desktop/resources/`
+并调用 electron-builder（`stage-binaries.mjs` 只复制、不构建，缺哪个就一次报齐）。
+产物落在 `apps/desktop/release/`。
 
 ### 更新签名
 
-桌面包的更新验签用一对 minisign 密钥：私钥签 updater 包，公钥内嵌进壳，
-壳只接受由内嵌公钥签出的清单（[发布、更新与服务安装 §2.5](../design/updates-and-service-install.md#25-引入步骤一次性)）。
-仓库里**没有**真实密钥，`plugins.updater.pubkey` 是空串。
+桌面包的信任分两层，各自有自己的密钥：
 
-生成与注入：
+- **平台代码签名**（macOS Developer ID + 公证、Windows Authenticode）由 electron-builder 做，
+  也是 electron-updater 安装前校验的东西。密钥经 `CSC_LINK` / `CSC_KEY_PASSWORD` 与
+  `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` 传入。
+- **发布清单签名**：`latest.json` 里每个平台条目带一份 minisign 分离签名，由
+  `tools/release/assemble.mjs` 用 `ARMADRA_RELEASE_SIGNING_KEY` 在写清单之前签出，
+  和组件包用的是同一把钥匙（[发布、更新与服务安装 §2.5](../design/updates-and-service-install.md#25-引入步骤一次性)）。
 
-```sh
-pnpm --filter @armadra/desktop exec tauri signer generate -w "$TMPDIR/armadra.key"
-# 公钥（.key.pub 的内容）填进 apps/desktop/src-tauri/tauri.conf.json 的 plugins.updater.pubkey，可入库
-# 私钥与口令只进 GitHub secret：TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD
-export TAURI_SIGNING_PRIVATE_KEY="$(cat "$TMPDIR/armadra.key")"
-export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=…   # 生成时设了口令才需要
-```
+仓库里**没有**真实密钥。`pnpm --filter @armadra/desktop dist` 在开工前就决定这次要不要签名
+（`scripts/signing-electron.mjs`），而不是把失败留到打包最后一步：
 
-`pnpm --filter @armadra/desktop build` 在开工前就决定这次要不要签名（`scripts/signing.mjs`），
-而不是把失败留到打包最后一步：
+| `CSC_LINK` | 其余条件                          | 结果                                                          |
+| ---------- | --------------------------------- | ------------------------------------------------------------- |
+| 有         | 有 `CSC_KEY_PASSWORD`             | 正常签名；公证凭据齐全时一并公证，缺了就只签不公证            |
+| 有         | 没有 `CSC_KEY_PASSWORD`           | **立即报错**：electron-builder 会在签名那一步以钥匙串错误收场 |
+| 无         | `ARMADRA_REQUIRE_SIGNED_BUNDLE=1` | **立即报错**：发布不能是无签名的                              |
+| 无         | 其余                              | 跳过签名，命令行明确告警                                      |
 
-| `TAURI_SIGNING_PRIVATE_KEY` | 配置里的 `pubkey` | 结果                                                                  |
-| --------------------------- | ----------------- | --------------------------------------------------------------------- |
-| 有                          | 有                | 正常签名                                                              |
-| 有                          | 空                | **立即报错**：签出的包这个壳自己会拒绝，先补上公钥                    |
-| 无                          | 任意              | 跳过签名，并关掉 `createUpdaterArtifacts`：只出安装包，命令行明确告警 |
+本机 `dist` 还会经 `extraMetadata` 往打进包里的 `package.json` 写一个
+`armadraUpdates: "disabled"` 标记：`app.isPackaged` 对本机包和发布包都是 true，没有这个
+标记它就会去轮询一个从未发布过这个版本的生产 feed。发布脚本不写这个标记，所以正式包不受影响
+（`apps/desktop/src/shell-core/updates/availability.ts` 是读的那一半）。
 
-CI 发布作业设 `ARMADRA_REQUIRE_SIGNED_BUNDLE=1`，把「跳过」变成失败——发布不能是无签名的。
 本机想演练完整的清单 + 签名 + 校验用 `pnpm release:dry-run`，它自带一次性密钥，不碰任何真实密钥。
 
 ## Host 连接
@@ -142,27 +152,35 @@ go -C apps/host run ./cmd/armadra-host --allow-origin http://127.0.0.1:1420
 检查只读服务身份，不切换 Runtime 或触发启动；通过后仅在本设备保存地址。
 编辑、取消或离开检查页会使旧检查失效。已有服务配置不兼容时报告失败，不自动重配。
 
-Origin 不含路径或末尾 `/`，可多次传入。桌面按平台使用 `tauri://localhost`、
-`http://tauri.localhost` 或 `https://tauri.localhost`，打包与开发都把 Host 起在 `127.0.0.1:43121` 并放行这些来源；
-打包 CSP 只允许 `armadra:` 自定义协议、回环 WebSocket 与 `http://127.0.0.1:43121`，
-不再默认放开 `http://127.0.0.1:43120`，开发模式的放行写在 `devCsp`。
-浏览器来源的 CORS 只允许读取元数据；壳内的原生来源经票据换取 Bearer 会话（[设备认证](./host-device-auth.md)），
-远程执行另属未完成能力。详见[Host 说明](../../apps/host/README.md)。
+Origin 不含路径或末尾 `/`，可多次传入，且**必须是 http(s)**——自定义 scheme 一律拒绝。
+桌面壳放行的是自己静态服务的回环 HTTP 来源（端口由内核分配，所以这一行每次启动都不同），
+开发时再加上 Vite 的 `http://127.0.0.1:1420`；打包与开发都把 Host 起在 `127.0.0.1:43121`。
+CSP（`apps/desktop/src/shell-core/csp.ts`）只允许本机 Runtime 与 Host 的 http/ws。
+浏览器来源的 CORS 只允许读取元数据；壳的回环 HTTP 来源经票据换取 Bearer 会话
+（[设备认证](./host-device-auth.md)），远程执行另属未完成能力。详见[Host 说明](../../apps/host/README.md)。
 
 ## 环境变量与数据
 
-| 变量                                            | 作用                                                                                                                                                                                                                                                                                                                                |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ARMADRA_RUNTIME_HOST` / `ARMADRA_RUNTIME_PORT` | 没有 `--listen` 时的监听地址，默认 `127.0.0.1:43120`；设置后 `armadra.sh run web` 用固定端口而非随机端口                                                                                                                                                                                                                            |
-| `ARMADRA_RUNTIME_LISTEN`                        | 桌面壳持有的 Runtime 在私有 socket 之外额外监听的一个 `--listen` spec（开发用）                                                                                                                                                                                                                                                     |
-| `ARMADRA_WEB_PORT`                              | `armadra.sh run web` 的前端端口                                                                                                                                                                                                                                                                                                     |
-| `VITE_RUNTIME_URL`                              | 前端连接地址；设置后 Vite 不装代理。不设时浏览器开发走 Vite 代理（地址取自 endpoints.json），打包桌面走 `armadra://`                                                                                                                                                                                                                |
-| `ARMADRA_DATA_DIR`                              | Runtime 数据目录，`endpoints.json` 与 Runtime socket 都在这里                                                                                                                                                                                                                                                                       |
-| `ARMADRA_DATABASE_URL`                          | SQLite 连接，例如 `sqlite://…?mode=rwc`                                                                                                                                                                                                                                                                                             |
-| `RUST_LOG`                                      | 日志过滤，默认 `info,tower_http=info`                                                                                                                                                                                                                                                                                               |
-| `ARMADRA_HOOK_DEBUG`                            | Hook 调试                                                                                                                                                                                                                                                                                                                           |
-| `ARMADRA_DESKTOP_DIAGNOSTIC_WS`                 | debug 构建（或 `tauri build --features diagnostic-bridge` 的 release 二进制）的桌面壳：`ws://127.0.0.1:<port>`，页面的 console.error/warn、未捕获异常、fetch 结果、WebSocket 生命周期与 DOM 探针逐条发到这个回环 WebSocket（打包后的 WKWebView 没有开发者工具）；`ARMADRA_DESKTOP_DIAGNOSTIC_PRELUDE` 是在页面脚本之前执行的一段 JS |
-| `ARMADRA_REMOTE_WORKER_LAUNCHER`                | 替换远端 Worker 启动行的 argv[0]（默认 `ssh`）。必须是绝对路径、不含空白；SSH 选项与远端命令原样保留。测试与自建隧道用                                                                                                                                                                                                              |
+| 变量                                            | 作用                                                                                                                            |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `ARMADRA_RUNTIME_HOST` / `ARMADRA_RUNTIME_PORT` | 没有 `--listen` 时的监听地址，默认 `127.0.0.1:43120`；设置后 `armadra.sh run web` 用固定端口而非随机端口                        |
+| `ARMADRA_RUNTIME_LISTEN`                        | 桌面壳持有的 Runtime 在私有 socket 之外额外监听的一个 `--listen` spec（开发用）                                                 |
+| `ARMADRA_WEB_PORT`                              | `armadra.sh run web` 的前端端口                                                                                                 |
+| `VITE_RUNTIME_URL`                              | 前端连接地址；设置后 Vite 不装代理。不设时浏览器开发走 Vite 代理（地址取自 endpoints.json），桌面壳里取 preload 给的 `httpBase` |
+| `ARMADRA_DATA_DIR`                              | Runtime 数据目录，`endpoints.json` 与 Runtime socket 都在这里                                                                   |
+| `ARMADRA_DATABASE_URL`                          | SQLite 连接，例如 `sqlite://…?mode=rwc`                                                                                         |
+| `RUST_LOG`                                      | 日志过滤，默认 `info,tower_http=info`                                                                                           |
+| `ARMADRA_HOOK_DEBUG`                            | Hook 调试                                                                                                                       |
+| `ARMADRA_HOST_LISTEN`                           | 开发桌面壳把 Host 起在别的回环地址（已装的 Armadra 占住 43121 时）；打包的壳忽略它                                              |
+| `ARMADRA_HOST_BINARY` / `ARMADRA_HOST_DATA_DIR` | 开发用的 Host 绝对路径与独立数据目录；打包的壳忽略前者                                                                          |
+| `ARMADRA_RUNTIME_BINARY`                        | 开发用的 Runtime 绝对路径                                                                                                       |
+| `ARMADRA_DESKTOP_OWNS_RUNTIME`                  | 开发也由壳持有 Runtime（默认连外部 Runtime）                                                                                    |
+| `ARMADRA_DESKTOP_PACKAGED`                      | 按打包布局解析受管二进制的位置，不必真打包                                                                                      |
+| `ARMADRA_DESKTOP_LIFECYCLE_TRACE`               | 打印启动 / 退出编排的事件                                                                                                       |
+| `ARMADRA_UPDATES_DEV`                           | `=1` 让未打包的构建也接更新器，用来对着本地发布服务走一遍流程；它不放松安装校验，未签名的包照样会被拒                           |
+| `ARMADRA_UPDATER_ENDPOINTS`                     | 逗号分隔的更新清单地址，覆盖 `electron-builder.yml` 里的占位 `publish.url`；仓库里从不写死真实地址                              |
+| `ARMADRA_HOOK_TIMEOUT_MS`                       | Agent 扩展模块上报的超时（默认 1500 ms，上限 60000）。只有测试驱动会调大它：进程级回退路径要在同一预算里起一个子进程            |
+| `ARMADRA_REMOTE_WORKER_LAUNCHER`                | 替换远端 Worker 启动行的 argv[0]（默认 `ssh`）。必须是绝对路径、不含空白；SSH 选项与远端命令原样保留。测试与自建隧道用          |
 
 脚本发现 Runtime 端口占用时直接报错。节点身份、Hook token、端点与权限等待变量由 Runtime 注入 Agent 终端，无需手工配置。
 Runtime 不监听 TCP 时 `hook-endpoint.env` 不写 `ARMADRA_HOOK_PORT`，Hook 客户端只走 `hook.sock`。

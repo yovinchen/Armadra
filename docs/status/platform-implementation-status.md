@@ -215,7 +215,66 @@
 - **09-15 打包版反馈**：画布四角统一 14px、锁定钮并入 Dock、缩略图钉在右下角、去掉 React Flow 标识与右上「搜索」钮（`a08f083d`、`792f5608`、`90130b99`）；Codex 节点「会话上下文全未知」与「在画布里创建 Claude Code 失败」同源——用户机器上 `~/.codex/hooks.json` 仍是旧版带 `version` 的文件（Codex 0.154 整份拒绝，hook 一条不跑）、`~/.codex/AGENTS.md` 仍有 nodeterm 指令块（模型去跑 `nodeterm.sh`），修复逻辑补上指令块识别并在画布顶部加残留通知条（`a8fc76e6`、`06ec821d`）；用量看板「取不到用量」是 Claude 钥匙串令牌过期 8 小时、Gemini 凭据过期 7 天，Runtime 只读不续期且把原因吞掉，现在按 `reason` 代码逐条说明（`981c80e3`）。
 - **09-16 打包版反馈**：终端里「不能指哪复制哪」是 xterm 在 React Flow 缩放后的坐标换算没有除以缩放比（62% 时点第 100 列落到第 62 列），前端包一层 xterm 内部 `MouseService` 的两个坐标函数按容器实际缩放比折回；Claude 在画布里开不出 Codex 节点有两层：用户机器上 Claude 从未装过 Armadra 技能、`~/.claude` 还是 nodeterm 时代的 hook 与四个旧技能（同 Codex，走「修复 → 安装」），以及产品侧 `armadra-hook` sidecar 目录不在画布终端的 PATH 上、技能却写裸命令名——现在 PATH 末尾带 sidecar 目录、环境里另给 `ARMADRA_HOOK_BIN`，技能修订号 6 → 7。
 - **09-19 移除 Gemini CLI**：`AGENT_IDS` 收成 claude / codex / opencode / pi / omp / copilot 六种；Runtime 删 `hook/install/gemini.rs`、`hook/normalize/gemini.rs`、`index/gemini.rs`、`usage/gemini.rs`，shared 注册表、Hook 事件表、用量 provider（现为 claude / codex / copilot）、会话索引 provider（现为 claude / codex）、模型上下文窗口表的 `gemini-*` 条目、web 品牌色令牌与 i18n 一并删除；技能指令文件不再区分 `GEMINI.md`，一律 `AGENTS.md`。迁移 `0014_retire_gemini.sql`：删 `conversations` / `agent_status` / `hook_installs` 中的 gemini 行，`terminal_sessions.agent_id` 置空，终端节点 `data_json` 里 `agent.id == "gemini"` 的去掉 `agent` 变为普通终端；不动用户机器上 `~/.gemini` 的任何文件。
-- 公开后 Dependabot 报 `glib 0.18`（Tauri 2 固定的 gtk 0.18 栈，仅 Linux，`VariantStrIter` 未用到）中危一条，待 Tauri 3 才能升；其余 vitest 告警已随 vitest 4 升级关闭。
+- 公开后 Dependabot 报 `glib 0.18`（旧壳固定的 gtk 0.18 栈，仅 Linux，`VariantStrIter` 未用到）中危一条；随旧壳删除，这条告警的来源已不在依赖树里。其余 vitest 告警已随 vitest 4 升级关闭。
+
+## Electron 壳迁移（2026-09-19）
+
+桌面壳从 Tauri 换成 Electron，路径与包名不变（`apps/desktop` / `@armadra/desktop`）。
+设计与批次编号见 [electron-migration.md](../design/electron-migration.md)；本节只记已合入的部分与它的验证证据。
+
+- **W0 前置修正**（`f8b3dd6a8`、`12c402f2b`、`5303ddc9e`、`a03bf39e1`…`d8cf6c118`）：
+  tmux idle 改判 `#{window_activity}`（`session_activity` 每次 attach 被顶到 now）、
+  `paste-buffer -r` 与 copy-mode 退出并进同一次 tmux 调用；hook 端点候选遍历改为本地优先、
+  采纳新端点后重读 node token，只有传输层失败才转移；画布 P0–P3（相机不再重建整份投影、
+  资源快照与 document 不再进 30 个订阅者、文本输入路径审计）。
+  基线数据在 [画布性能基线](canvas-performance-baseline.md)。
+- **W1 壳核心**（`766434c7a`、`d8385bde7`、`6ed73681d`、`de50ff826`、`f3906c111`、`36651597a`、
+  `ff1e6f880`、`da6a0ec9e`、`ff70ec0af`）：electron-vite 三 target、`shell-core/` 禁止 import
+  electron 的边界扫描、Runtime / Host 子进程监管、三态退出编排；传输层整体删除——页面改由壳的
+  回环 HTTP 静态服务提供（内核分配端口），Runtime 以 `tcp:127.0.0.1:0` 启动并在 stdout 公告，
+  页面从 preload 一次性取 `{ httpBase, wsBase, hostBase, dataDir }`。
+  Rust 侧 `runtime_process_tests.rs`（306 行）与 `host/tests.rs`（754 行）的断言逐条移植成 vitest。
+- **W2 系统集成、更新、打包**（`9d8ca71cb`、`3a0311e4b`、`5072e65c3`、`37b8fcb4d`、`9b220ea4e`、
+  `2cf469689`、`2f122da10`、`7b2aa5446`）：对话框、外链白名单、通知 retain、托盘 + 用量、
+  应用菜单与 keydown-intercept 封闭清单、全局热键、毛玻璃、关闭即隐藏、拖放路径、
+  `-webkit-app-region`；更新状态机（十一态）整段移植成 TS 并接 electron-updater，
+  保留「先停 Host 再装」与 `hostStopFailed` / `installFailed` 的区分，以及
+  「没有签名 = `notConfigured`，绝不报 `upToDate`」；打包换 electron-builder。
+- **W3.0–W3.2 浏览器节点**（`0c7d70664`、`5b547f1d0`、`ac9f297fb`、`19ffda68e`、`4c7d4502f`）：
+  go/no-go 探针（记录在 [webview 探针](../research/nodeterm/webview-probe.md)）通过后，
+  浏览器节点改成进程内 `<webview>`，生命周期不变量（pool region、顺序稳定、`display:none`
+  不卸载、后台上限、隐藏回收）就位。**W3.1–3.2 已合入，驱动接通中**（W3.3–W3.5 未完成，
+  旧 screencast 路径仍在，是唯一回退）。
+- **W4 终端渲染侧**（`dc303b810`）：WebGL 上下文预算在一处协调，acquire 去抖、
+  context loss 单次延迟重授、回退 DOM 时字距重算门、内存压力释放隐藏持有者。
+- **W5 收尾**（`f4cf0d91f`、`a145462e2`、`a9720cc00`、`2ac536a8f`）：
+  删 `apps/desktop/src-tauri/` 与根 `Cargo.toml` 成员、四个只服务旧打包器的脚本；
+  「壳来源」从三个硬编码拼写收缩成「任意回环 HTTP 来源」，Go Host、壳、页面与
+  `--allow-origin` 解析四处同步（自定义 scheme 一律拒绝）；发布切到 electron-builder，
+  签名移到写清单之前，只剩 `ARMADRA_RELEASE_SIGNING_KEY` 一把钥匙；
+  Runtime 的信号处理器提前到发布端点之前注册。
+
+**能力回退**：**手机远端观看浏览器页面的能力已移除（D6）**。这是本轮唯一实打实的损失：
+`<webview>` 是本机进程内的 OOPIF，画面不经 Host 转发，所以经 Host 从手机看同一页面这条路没有了。
+今天也只验证到 macOS 本机（§23），降级为「截图 + 元素快照 + 看见并撤销租约」的控制面，
+不保留两套渲染路径。
+
+**Tauri 壳基线未记录**：设计 D7 要求 P0 画布基线在 Tauri 壳与 Chrome 各记一次，实际只记了
+Chrome 一份（[画布性能基线](canvas-performance-baseline.md)）。换壳后若出现无法二分定位的卡顿，
+没有旧壳那一份可比——旧壳已删除，补记需要从 `ff70ec0af` 之前的提交重建。
+
+| 范围        | 命令                                                    | 结果                                                             |
+| ----------- | ------------------------------------------------------- | ---------------------------------------------------------------- |
+| 桌面壳      | `pnpm --filter @armadra/desktop test`                   | vitest 441 项（33 文件）+ `node --test scripts/*.test.mjs` 40 项 |
+| Web         | `pnpm --filter @armadra/web test`                       | 2366 项（239 文件）；typecheck 通过                              |
+| host-client | `pnpm --filter @armadra/host-client test`               | 291 项                                                           |
+| Runtime     | `cargo test --workspace`（连跑三次）                    | runtime lib 1023 项 + 集成套件全绿；hook 51 + 14                 |
+| Go Host     | `go -C apps/host test -count=1 ./...`                   | 30 个包全绿                                                      |
+| 原生会话    | `pnpm host:native-session-smoke`                        | 真实 Host + CLI，两个不同回环端口各走一遍票据链                  |
+| 发布        | `pnpm release:check`、`release:dry-run`、`ci:workflows` | 三处版本一致；36 个产物落地并校验；两份工作流结构通过            |
+
+换打包器后的产物矩阵未在真 runner 上跑过（macOS/Windows/Linux 的 electron-builder 输出、
+Authenticode 走同一对 `CSC_*` 变量），列在 [ci-release.md](../guides/ci-release.md) §4 的待验清单里。
 
 ## 本轮验证（2026-09-06 上午，四轮全部合入后于主树重跑，私有目标目录）
 
@@ -334,9 +393,10 @@
 - Go `1.26.5`（`go.mod` 要求 ≥ 1.24），macOS arm64；生成流程使用 vendored protoc `31.1`，不依赖系统 protoc `35.1`。
 - Rust 已安装 macOS arm64、Windows x64 MSVC、Linux x64 目标；安装 target 不代表能在本机运行 Windows/Linux 实机测试。
 - 业务写入所有权按域切换：画布、settings、filesystem、session、agent、git 六个域均可经 CLI/HTTPS 切到 Go Host 并回滚（Runtime 在切换后拒写、仍答读）；`apps/runtime`→`apps/worker` 改名（B6）待 §4.4 条件评估。
-- 真实 Worker 测试与桌面 `src-tauri` Rust 测试不在默认命令内，验收时需单独运行。
+- 真实 Worker 测试不在默认命令内，验收时需单独运行。桌面壳已无 Rust 代码：
+  `pnpm --filter @armadra/desktop test` 是 vitest + `node --test scripts/*.test.mjs`。
 - **tldraw 许可证（已解决）**：tldraw 5.4 在非开发来源上无密钥时挂载 5 秒后卸掉编辑器（打包版画布消失）；用 debug 壳的诊断桥定位后，画布整体改为 React Flow（MIT），tldraw 依赖已移除。
-- 桌面壳的 Host 形态：为了让打包版用上 GitHub/自动化/更新等需要身份会话的功能，壳启动的 Host 改为 `--listen 127.0.0.1:43121 --allow-origin <原生来源>`（此前打包版 `--listen none`），页面经 OS 私有通道签发的一次性票据换取回环 Bearer 会话（[host-native-session.md](../design/host-native-session.md)）；§4.4「零监听端口」对 Host 不再成立，内核分配端口列为后续。每次启动壳都会登记一台「本机桌面」设备。
+- 桌面壳的 Host 形态：为了让打包版用上 GitHub/自动化/更新等需要身份会话的功能，壳启动的 Host 是 `--listen 127.0.0.1:43121 --allow-origin <壳的回环 HTTP 来源>`，页面经 OS 私有通道签发的一次性票据换取回环 Bearer 会话（[host-native-session.md](../design/host-native-session.md)）；§4.4「零监听端口」对 Host 不再成立。壳自己的静态服务与它拉起的 Runtime 都用内核分配端口，Host 的 43121 是唯一还钉死的那个。每次启动壳都会登记一台「本机桌面」设备。
 - 数据目录：macOS `~/Library/Application Support/Armadra`、Windows `%LOCALAPPDATA%\Armadra`、Linux `$XDG_DATA_HOME/armadra`（默认 `~/.local/share/armadra`），`ARMADRA_DATA_DIR` 可覆盖；Host 用其下 `host/`，默认项目在 `workspaces/default/`。
 
 ## 下一步

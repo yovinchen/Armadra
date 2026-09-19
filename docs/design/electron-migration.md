@@ -1,6 +1,6 @@
 # 桌面壳迁移到 Electron
 
-> 状态：目标设计。本文把桌面壳从 Tauri 换成 Electron，并借此把浏览器节点从「CDP 截屏流」换成进程内 `<webview>`。业务仍由 Rust Runtime 执行，Go Host 迁移方向不变；终端（tmux 已是主后端）、Agent、持久化三个域**原地不动**。
+> 状态：部分已实施：W0–W2、W3.0–W3.2、W4 已合入；W3.3–W3.5 进行中。本文把桌面壳从 Tauri 换成 Electron，并借此把浏览器节点从「CDP 截屏流」换成进程内 `<webview>`。业务仍由 Rust Runtime 执行，Go Host 迁移方向不变；终端（tmux 已是主后端）、Agent、持久化三个域**原地不动**。
 > 范围：`apps/desktop`（整体重写）、`apps/web` 的壳耦合面（9 个文件 + 14 处 `isTauri()`）、`apps/runtime/src/browser/` 的瘦身、Go Host 的原生来源判定、发布与更新管线、以及一组与换壳无关但必须先做的画布性能修正。
 > 输入：2026-09-19 基线 `c29cf841f` 上的六份调研（`docs/research/nodeterm/`），参照项目 nodeterm `d76b4996`（Electron 42 + React Flow，约 19 万行）。行数与测试数以 [现状盘点](../research/nodeterm/armadra-inventory.md) 为准。
 

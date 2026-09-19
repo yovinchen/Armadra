@@ -20,19 +20,22 @@ opencode 等 CLI Agent 作为终端节点放在一块无限画布上，节点之
 
 ```text
 ┌──────────────────────────── apps/desktop ────────────────────────────┐
-│ Tauri 2 薄壳：启动 / 健康检查 / 停止 sidecar、系统目录选择器、        │
+│ Electron 薄壳：启动 / 健康检查 / 停止受管进程、系统目录选择器、        │
 │ 外部链接、拖入文件的真实路径、托盘与通知                              │
 │ 健康检查只认自己拉起的那个实例（`/health` 的 instanceId 与子进程      │
 │ 启动时打到 stdout 的一致）；不一致时按 endpoints.json 与进程表确认    │
 │ 是同一数据目录、由桌面启动的旧 Runtime 后发 SIGTERM 再重拉            │
-│  └── sidecar: armadra-runtime、armadra-hook                          │
+│  └── 受管二进制: armadra-runtime、armadra-hook、armadra-host         │
+│      （Windows 另有 armadra-session-host）                            │
+│  └── 回环 HTTP 静态服务：内核分配端口，页面从这里加载                 │
 └───────────────────────────────┬──────────────────────────────────────┘
-                                │ 加载同一套页面
+                                │ 加载同一套页面（preload 给出三个基址）
 ┌───────────────────────────────▼──────────────────────────────────────┐
 │ apps/web  React 19 + Vite + React Flow 12 + shadcn/ui + Tailwind v4   │
 │ 画布、节点、终端 UI（xterm.js）、编辑器（CodeMirror 6）、设置、会话侧栏 │
+│ 浏览器节点在壳里是进程内 `<webview>`（W3.1–3.2 已合入，驱动接通中）   │
 └───────────────────────────────┬──────────────────────────────────────┘
-                                │ HTTP + WebSocket，127.0.0.1:43120
+                                │ HTTP + WebSocket 直连，无协议转发
 ┌───────────────────────────────▼──────────────────────────────────────┐
 │ apps/runtime  Rust + Axum + Tokio + SQLx/SQLite                       │
 │ 工作空间与画布、终端（tmux / 直连 PTY / SSH）、文件、Git、Hook 服务、  │
@@ -48,8 +51,9 @@ opencode 等 CLI Agent 作为终端节点放在一块无限画布上，节点之
 
 - **apps/web 是唯一页面**。桌面壳与浏览器加载同一份构建产物。
 - **apps/runtime 是唯一执行服务**。所有进程、文件、Git、权限判定都在这里，
-  业务逻辑不写进 Tauri command，避免出现第二套后端。
-- **apps/desktop 只做壳**。插件提供目录选择、外部链接与系统通知。
+  业务逻辑不写进壳的 IPC 处理器，避免出现第二套后端。
+- **apps/desktop 只做壳**。主进程提供目录选择、外部链接、系统通知与窗口，
+  能给页面的东西只有 `src/shared/ipc.ts` 那张表。
 
 ## 3. 画布层
 
@@ -208,25 +212,28 @@ Go Host 现在独占私有 `host.db`，通用实体 revision、操作收据和�
 
 ## 6. 进程、端口与文件位置
 
-Go Host 已增加独立私有设备认证表与 Protobuf 会话接口。浏览器认证只在配置证书和准确公共来源的 HTTPS 上开放，本机 OS 控制通道签发两分钟配对票据；默认 HTTP 对浏览器来源仍不能登录。打包桌面壳是唯一例外：页面来源 `tauri://localhost` 经同一条控制通道取票，向回环 HTTP 的 Host 换取 Bearer 会话，凭据只在页面内存（[设计](../design/host-native-session.md)）。会话轮转、CSRF 与设备撤销由 Host 校验，详细使用与当前边界见[设备认证](./host-device-auth.md)。
+Go Host 已增加独立私有设备认证表与 Protobuf 会话接口。浏览器认证只在配置证书和准确公共来源的 HTTPS 上开放，本机 OS 控制通道签发两分钟配对票据；默认 HTTP 对浏览器来源仍不能登录。桌面壳是唯一例外：页面来源是壳自己的回环 HTTP 静态服务（端口由内核分配），经同一条控制通道取票，向回环 HTTP 的 Host 换取 Bearer 会话，凭据只在页面内存（[设计](../design/host-native-session.md)）。票据链保留而不是换成 Cookie，理由是 Cookie 按 host 不按 port 隔离（electron-migration §2.1）。会话轮转、CSRF 与设备撤销由 Host 校验，详细使用与当前边界见[设备认证](./host-device-auth.md)。
 
-| 项                  | 值                                                | 覆盖方式                                        |
-| ------------------- | ------------------------------------------------- | ----------------------------------------------- |
-| Runtime 监听        | `127.0.0.1:43120`                                 | `ARMADRA_RUNTIME_HOST` / `ARMADRA_RUNTIME_PORT` |
-| Web 开发服务器      | `127.0.0.1:1420`                                  | `vite --port`                                   |
-| 数据目录（macOS）   | `~/Library/Application Support/Armadra`           | `ARMADRA_DATA_DIR`                              |
-| 数据目录（Windows） | `%LOCALAPPDATA%\Armadra`                          | 同上                                            |
-| 数据目录（Linux）   | `$XDG_DATA_HOME/armadra`                          | 同上                                            |
-| 数据库              | `<数据目录>/canvas.db`                            | `ARMADRA_DATABASE_URL`                          |
-| Hook 端点文件       | `<数据目录>/hook-endpoint.env`（0600）            | —                                               |
-| 节点 token          | `<数据目录>/node-tokens/<nodeId>`                 | —                                               |
-| 待答权限            | `<数据目录>/pending/`                             | —                                               |
-| Runtime 偏好        | `<数据目录>/settings.json`                        | —                                               |
-| 本机偏好            | `<数据目录>/worker-settings.json`                 | —                                               |
-| 模型目录缓存        | `<数据目录>/models-catalog.json`（0600）          | —                                               |
-| 价格覆盖            | `<数据目录>/model-pricing.json`                   | —                                               |
-| 私有 tmux server    | `<数据目录>/tmux.sock` + `tmux.conf`（0700 目录） | —                                               |
-| 工作区产物          | `<工作区>/.armadra/`（assets、exports、板日志）   | —                                               |
+| 项                   | 值                                                | 覆盖方式                                        |
+| -------------------- | ------------------------------------------------- | ----------------------------------------------- |
+| Runtime 监听         | `127.0.0.1:43120`                                 | `ARMADRA_RUNTIME_HOST` / `ARMADRA_RUNTIME_PORT` |
+| Runtime 监听（壳内） | `tcp:127.0.0.1:0`，端口由内核分配、stdout 公告    | `ARMADRA_RUNTIME_LISTEN`                        |
+| 壳的静态服务         | `127.0.0.1:<内核分配>`，页面从这里加载            | —                                               |
+| Go Host 监听         | `127.0.0.1:43121`                                 | `ARMADRA_HOST_LISTEN`（仅开发）                 |
+| Web 开发服务器       | `127.0.0.1:1420`                                  | `vite --port`                                   |
+| 数据目录（macOS）    | `~/Library/Application Support/Armadra`           | `ARMADRA_DATA_DIR`                              |
+| 数据目录（Windows）  | `%LOCALAPPDATA%\Armadra`                          | 同上                                            |
+| 数据目录（Linux）    | `$XDG_DATA_HOME/armadra`                          | 同上                                            |
+| 数据库               | `<数据目录>/canvas.db`                            | `ARMADRA_DATABASE_URL`                          |
+| Hook 端点文件        | `<数据目录>/hook-endpoint.env`（0600）            | —                                               |
+| 节点 token           | `<数据目录>/node-tokens/<nodeId>`                 | —                                               |
+| 待答权限             | `<数据目录>/pending/`                             | —                                               |
+| Runtime 偏好         | `<数据目录>/settings.json`                        | —                                               |
+| 本机偏好             | `<数据目录>/worker-settings.json`                 | —                                               |
+| 模型目录缓存         | `<数据目录>/models-catalog.json`（0600）          | —                                               |
+| 价格覆盖             | `<数据目录>/model-pricing.json`                   | —                                               |
+| 私有 tmux server     | `<数据目录>/tmux.sock` + `tmux.conf`（0700 目录） | —                                               |
+| 工作区产物           | `<工作区>/.armadra/`（assets、exports、板日志）   | —                                               |
 
 偏好分两个文件：`settings.json` 跟着账号走，`worker-settings.json` 属于这台
 机器（`apps/runtime/src/settings/local.rs`：终端后端、浏览器可执行文件、电源
@@ -244,15 +251,19 @@ Runtime 启动时把 PATH 换成补齐过的版本（Homebrew、mise shims、mis
 
 ## 7. 安全边界
 
-- Runtime 只绑回环地址；CORS 只放行 `http://127.0.0.1:*`、`http://localhost:*`、
-  `tauri://localhost`、`https://tauri.localhost`。
+- Runtime 只绑回环地址；CORS 只放行回环 HTTP 来源（`http://127.0.0.1:*`、
+  `http://localhost:*`，以及 Unix socket / 命名管道调用者用的无端口形式）。
+  自定义 scheme 不在放行之列，页面也不再用任何一种。
 - Hook 表面有独立鉴权（per-node token）和独立 body 上限，优先走 Unix socket。
 - 所有路径参数经 `security::resolve_in_root` 限制在工作区根目录内；导入的图片
   字节复制进 `.armadra/assets/`，不暴露原位置。
-- 桌面壳 capability 只放行 `dialog:allow-open` 与 `opener:allow-open-url`，
-  后者 scope 限 `http://*` / `https://*`。
-- CSP 见 `apps/desktop/src-tauri/tauri.conf.json`：`connect-src` 只留本机 Runtime 的
-  http/ws，`frame-src` 供 Browser 节点使用。
+- 页面能让壳做的事只有 `apps/desktop/src/shared/ipc.ts` 那张表；`shell:open-external`
+  按 scheme 白名单限 `http` / `https`，对话框返回路径而不是字节。渲染进程
+  `contextIsolation: true`、`nodeIntegration: false`，唯一桥是 preload。
+- CSP 见 `apps/desktop/src/shell-core/csp.ts`：`connect-src` 只留本机 Runtime 与
+  Host 的 http/ws，`<webview>` 供浏览器节点使用。
+- Host 只把回环 HTTP 来源当作壳来源（`--allow-origin` 里还要明确列出），票据
+  只由同用户的私有控制通道签发；浏览器即便停在同样的来源上也拿不到票。
 
 ## 8. 未实现
 
@@ -261,7 +272,9 @@ Runtime 启动时把 PATH 换成补齐过的版本（Homebrew、mise shims、mis
 - **Windows 持久化会话**：只有设计文档。
 - **多人协同**：白板快照对 Runtime 是不透明字符串，跨端协议不会直接用画布引擎的
   内部数据结构；真要做实时协作时再引入 CRDT。
-- **自动更新**：`tauri.conf.json` 里是关闭的骨架，启用步骤写在该文件的注释里。
+- **自动更新**：electron-updater 已接通（`apps/desktop/src/main/updates/`），但未
+  签名的构建里更新器是关闭的——「没签名 = 什么也验证不了 = `notConfigured`」，
+  它绝不会报 `upToDate`（`shell-core/updates/availability.ts`）。
 
 ## 9. Worker 只读桥接
 

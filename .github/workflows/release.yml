@@ -9,7 +9,7 @@ name: release
 on:
   push:
     tags: ["v*"]
-  # 手动触发有两种用法：给 tag 就是补发那个标签（照样要求四处版本与它一致），
+  # 手动触发有两种用法：给 tag 就是补发那个标签（照样要求三处版本与它一致），
   # 不给就是在当前分支上演练。dry_run 为真时不创建任何 Release。
   workflow_dispatch:
     inputs:
@@ -89,10 +89,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
-      # 版本住在仓库里（Cargo.toml 是源，另外三处与它一致），标签只是指向它的
+      # 版本住在仓库里（Cargo.toml 是源，另外两处与它一致），标签只是指向它的
       # 名字。所以这里不是从标签解出版本，而是要求标签等于版本；不等就拒绝，
       # 因为发的包会自报仓库里的那个版本，而更新检查比的正是版本。
-      - name: 四处版本与标签一致，兼容范围包含本版本
+      - name: 三处版本与标签一致，兼容范围包含本版本
         id: version
         shell: bash
         env:

@@ -1,6 +1,6 @@
 # 桌面壳的原生 Host 会话
 
-> 状态：已实施；2026-09-19 起「壳来源」不再是固定拼写——除三个 Tauri 拼写外，任何被 `--allow-origin` 允许的回环 HTTP 来源（`http://127.0.0.1:<端口>` 等）同样走这条路径，Electron 壳因此沿用本文全部机制，不需要新的传输（[Electron 迁移](electron-migration.md) §2.1）。Cookie 会话保持 HTTPS 硬规则：Cookie 不按端口隔离，回环 HTTP 上无法把会话限定在一个端口内。
+> 状态：已实施，来源判定已放宽（[Electron 迁移](electron-migration.md) §2.1）。「壳来源」不是固定拼写：任何被 `--allow-origin` 允许的回环 HTTP 来源（`http://127.0.0.1:<内核分配端口>` 等）都走这条路径，自定义 scheme 一律不是。桌面壳因此沿用本文全部机制，不需要新的传输。Cookie 会话保持 HTTPS 硬规则：Cookie 不按端口隔离，回环 HTTP 上无法把会话限定在一个端口内。
 > 本文描述打包桌面壳如何在不削弱浏览器安全模型的前提下使用需要 Host 身份会话的功能（GitHub、自动化、经 Host 的设置、更新，以及六个业务域的 Host 客户端）。
 > 范围：Go Host 的身份/传输层、`@armadra/host-client` 的原生传输、`apps/web/src/host/` 的共用判定、桌面壳的取票命令与冒烟脚本。浏览器与手机端的 HTTPS 认证流程、真实 TLS 证书、多用户都不在范围内。
 
