@@ -126,9 +126,12 @@ function commitLaunch(nodeId: string, command: string): void {
   const node = store.document?.nodes.find((item) => item.id === nodeId);
   if (!node || node.data.kind !== "terminal" || !node.data.agent) return;
   const { pendingLaunch: _dropped, ...agent } = node.data.agent;
-  store.updateNodeData(nodeId, {
-    agent: { ...agent, initialCommand: command },
-  });
+  // 同 `use-launch.ts`：依赖满足之后自己敲出去的启动行是记账，不是用户的编辑。
+  store.updateNodeData(
+    nodeId,
+    { agent: { ...agent, initialCommand: command } },
+    { history: "ignore" },
+  );
 }
 
 function scheduleStallCheck(nodeId: string): void {

@@ -61,9 +61,13 @@ export function useLaunchSequence(
       const launch = buildAgentLaunch(agent);
       refs.transportRef.current?.input(`${launch.command}\r`);
       refs.freshSessionRef.current = false;
-      store.updateNodeData(nodeId, {
-        agent: { ...agent, initialCommand: launch.command },
-      });
+      // 启动行是这次连接的记账，和会话 id 同一类（`use-session.ts`）：要存盘，
+      // 但不该占一条撤销。
+      store.updateNodeData(
+        nodeId,
+        { agent: { ...agent, initialCommand: launch.command } },
+        { history: "ignore" },
+      );
       if (launch.stdinPrompt) {
         const prompt = launch.stdinPrompt;
         refs.promptTimerRef.current = setTimeout(() => {
