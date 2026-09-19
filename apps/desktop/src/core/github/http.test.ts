@@ -14,6 +14,8 @@ import type { AddressInfo } from "node:net";
 
 import {
   GetGithubCredentialRequestSchema,
+  GetGithubIssueRequestSchema,
+  GetGithubIssueResponseSchema,
   GithubCredentialStatusSchema,
   GithubIssueState,
   ListGithubIssuesRequestSchema,
@@ -38,6 +40,7 @@ import { allScopes } from "../identity/scopes";
 import { createLog, nodePlatform } from "../platform";
 import { CredentialService } from "./credentials";
 import {
+  API_METHODS,
   API_PREFIX,
   GithubHttp,
   MEDIA_TYPE,
@@ -150,6 +153,29 @@ async function harness(): Promise<Harness> {
       rmSync(dataDir, { recursive: true, force: true });
     },
   };
+}
+
+/** JSON 面的一次调用：工作空间在查询串上，身体里只有这个动词自己的参数。 */
+function apiCall(
+  harnessed: Harness,
+  verb: string,
+  body: Record<string, unknown>,
+  overrides: { headers?: Record<string, string> } = {},
+): Promise<Response> {
+  return fetch(
+    `${harnessed.base}${API_PREFIX}${verb}?workspaceId=${harnessed.workspaceId}`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: ORIGIN,
+        authorization: `Bearer ${harnessed.accessToken}`,
+        "x-armadra-csrf": harnessed.csrfToken,
+        ...overrides.headers,
+      },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 function rpcCall(
@@ -362,7 +388,32 @@ describe("GitHub 的两张 HTTP 面", () => {
     });
   });
 
-  it("新面答同一批动词的 JSON", async () => {
+  it("JSON 面答同一批动词，工作空间跟着查询串走", async () => {
+    const response = await apiCall(harnessed, "get-credential", {});
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body.accountLogin).toBe("octocat");
+    expect(body.available).toBe(true);
+    // 零值照写：页面的 zod 解的是一份**总是完整**的记录。
+    expect(body).toHaveProperty("source");
+    expect(body).toHaveProperty("revision");
+    // 这一面也不会把令牌带出去。
+    expect(JSON.stringify(body)).not.toContain("ghp_pasted_token_value");
+  });
+
+  it("JSON 面上的域错误也是 { code, message }，code 与兼容面一致", async () => {
+    const response = await apiCall(harnessed, "create-issue", {
+      repository: { owner: "octo", name: "repo" },
+      title: "",
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      code: "INVALID_ARGUMENT",
+      message: "Invalid GitHub request",
+    });
+  });
+
+  it("没报工作空间就是 INVALID_ARGUMENT，不是一次「空列表」", async () => {
     const response = await fetch(
       `${harnessed.base}${API_PREFIX}get-credential`,
       {
@@ -373,39 +424,106 @@ describe("GitHub 的两张 HTTP 面", () => {
           authorization: `Bearer ${harnessed.accessToken}`,
           "x-armadra-csrf": harnessed.csrfToken,
         },
-        body: JSON.stringify({
-          meta: { scope: { workspaceId: harnessed.workspaceId } },
-        }),
+        body: "{}",
       },
     );
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as Record<string, unknown>;
-    expect(body.accountLogin).toBe("octocat");
-    expect(body.available).toBe(true);
-    // 新面也不会把令牌带出去。
-    expect(JSON.stringify(body)).not.toContain("ghp_pasted_token_value");
+    expect(response.status).toBe(400);
+    expect((await response.json()).code).toBe("INVALID_ARGUMENT");
   });
 
-  it("新面上的域错误也是 { code, message }", async () => {
-    const response = await fetch(`${harnessed.base}${API_PREFIX}create-issue`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        origin: ORIGIN,
-        authorization: `Bearer ${harnessed.accessToken}`,
-        "x-armadra-csrf": harnessed.csrfToken,
-      },
-      body: JSON.stringify({
-        meta: { scope: { workspaceId: harnessed.workspaceId } },
+  it("没有这个动词就是 404，而不是一个看起来成功的空响应", async () => {
+    const response = await apiCall(harnessed, "not-a-verb", {});
+    expect(response.status).toBe(404);
+    expect((await response.json()).code).toBe("NOT_FOUND");
+  });
+
+  it("24 个动词各有一条 JSON 路由，拼法是方法名的 kebab-case", () => {
+    expect(Object.keys(API_METHODS)).toHaveLength(24);
+    expect(API_METHODS["get-credential"]).toBe("GetCredential");
+    expect(API_METHODS["put-status-mapping"]).toBe("PutStatusMapping");
+    expect(new Set(Object.values(API_METHODS))).toEqual(new Set(RPC_METHODS));
+  });
+
+  it("两张面对同一条记录说同一句话", async () => {
+    const issue = {
+      id: 1,
+      number: 7,
+      title: "An issue",
+      body: "body",
+      state: "open",
+      updated_at: "2026-09-02T00:00:00Z",
+    };
+    harnessed.github.route("GET /repos/octo/repo/issues/7", { body: issue });
+    harnessed.github.route("GET /repos/octo/repo/issues/7/comments", {
+      body: [],
+    });
+
+    const viaRpc = fromBinary(
+      GetGithubIssueResponseSchema,
+      new Uint8Array(
+        await (
+          await rpcCall(
+            harnessed,
+            "GetIssue",
+            GetGithubIssueRequestSchema,
+            create(GetGithubIssueRequestSchema, {
+              meta: { scope: { workspaceId: harnessed.workspaceId } },
+              repository: { owner: "octo", name: "repo" },
+              number: 7n,
+            }),
+          )
+        ).arrayBuffer(),
+      ),
+    );
+    const viaJson = (await (
+      await apiCall(harnessed, "get-issue", {
         repository: { owner: "octo", name: "repo" },
-        title: "",
-      }),
+        number: "7",
+      })
+    ).json()) as { issue: Record<string, unknown> };
+
+    // 同一份 schema 的两种外衣：JSON 那一份逐字段就是 protobuf 那一份。
+    expect(viaJson.issue.number).toBe("7");
+    expect(viaJson.issue.title).toBe(viaRpc.issue?.title);
+    expect(viaJson.issue.state).toBe("GITHUB_ISSUE_STATE_OPEN");
+    expect(viaJson.issue.updatedAtUnixMs).toBe(
+      String(viaRpc.issue?.updatedAtUnixMs ?? 0n),
+    );
+  });
+
+  it("JSON 面走完列表 → 关闭一条", async () => {
+    const issue = {
+      id: 1,
+      number: 7,
+      title: "An issue",
+      body: "body",
+      state: "open",
+      updated_at: "2026-09-02T00:00:00Z",
+    };
+    harnessed.github.route("GET /repos/octo/repo/issues", { body: [issue] });
+    harnessed.github.route("GET /repos/octo/repo/issues/7", { body: issue });
+    harnessed.github.route("PATCH /repos/octo/repo/issues/7", {
+      body: { ...issue, state: "closed" },
     });
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      code: "INVALID_ARGUMENT",
-      message: "Invalid GitHub request",
-    });
+
+    const listed = (await (
+      await apiCall(harnessed, "list-issues", {
+        repository: { owner: "octo", name: "repo" },
+      })
+    ).json()) as { issues: Record<string, unknown>[] };
+    expect(listed.issues[0]?.state).toBe("GITHUB_ISSUE_STATE_OPEN");
+    // 列表里不带正文，这一面和兼容面同一条规矩。
+    expect(listed.issues[0]?.body).toBe("");
+
+    const closed = (await (
+      await apiCall(harnessed, "set-issue-state", {
+        repository: { owner: "octo", name: "repo" },
+        number: "7",
+        state: "GITHUB_ISSUE_STATE_CLOSED",
+        expectedUpdatedAtUnixMs: listed.issues[0]?.updatedAtUnixMs,
+      })
+    ).json()) as Record<string, unknown>;
+    expect(closed.state).toBe("GITHUB_ISSUE_STATE_CLOSED");
   });
 
   it("兼容面能走完连接 → 列表 → 关闭一条", async () => {

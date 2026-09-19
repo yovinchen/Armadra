@@ -537,6 +537,52 @@ describe("the new face", () => {
     expect(revoked.status).toBe(200);
   });
 
+  it("答一份与 HostService/Hello 逐字段相同的能力表", async () => {
+    const fixture = await harness();
+    const json = await fetch(`${fixture.base}/api/identity/hello`, {
+      headers: { origin: fixture.origin },
+    });
+    expect(json.status).toBe(200);
+    const hello = (await json.json()) as {
+      protocol: { major: number; minor: number };
+      hostId: string;
+      hostInstanceId: string;
+      capabilities: string[];
+      maxFrameBytes: number;
+    };
+
+    const viaRpc = fromBinary(
+      HelloResponseSchema,
+      new Uint8Array(
+        await (
+          await rpc(
+            fixture,
+            "HostService/Hello",
+            toBinary(
+              HelloRequestSchema,
+              create(HelloRequestSchema, {
+                clientId: "test",
+                protocol: { major: PROTOCOL_MAJOR, minor: PROTOCOL_MINOR },
+              }),
+            ),
+          )
+        ).arrayBuffer(),
+      ),
+    );
+
+    // 页面靠这张表决定开不开一块面板，两张面对同一件事必须说同一句话。
+    expect(hello.hostId).toBe(viaRpc.hostId);
+    expect(hello.hostInstanceId).toBe(viaRpc.hostInstanceId);
+    expect(hello.capabilities).toEqual([...viaRpc.capabilities]);
+    expect(hello.maxFrameBytes).toBe(viaRpc.maxFrameBytes);
+    expect(hello.protocol).toEqual({
+      major: viaRpc.protocol?.major,
+      minor: viaRpc.protocol?.minor,
+    });
+    // 配对之前就要答得出来：它说的是「这台 core 是谁」。
+    expect(hello.capabilities).toContain(NATIVE_SESSION_CAPABILITY);
+  });
+
   it("reports a failure as { code, message }", async () => {
     const fixture = await harness();
     const response = await fetch(`${fixture.base}/api/identity/session`, {

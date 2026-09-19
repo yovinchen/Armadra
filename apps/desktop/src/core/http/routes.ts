@@ -1223,6 +1223,38 @@ export const ROUTES: readonly RouteEntry[] = [
     beyondContract: true,
   },
   {
+    // R7a：GitHub 域的 JSON 面。24 个动词各一条 POST，动词名是 RPC 方法名的
+    // kebab-case，工作空间跟着 `?workspaceId=` 走。Rust Runtime 从来没有这一张
+    // ——它那边 GitHub 在 Go Host 的 protobuf 面上，所以它不进逐条对账的 163。
+    path: "/api/github/{verb}",
+    methods: ["POST"],
+    surface: "runtime",
+    feature: "GitHub JSON 面",
+    phase: 5,
+    implemented: true,
+    beyondContract: true,
+  },
+  {
+    // R7a：自动化的 JSON 面。计划、运行、载荷与命令会话，同样是 Rust 没有的。
+    path: "/api/automations/{resource}",
+    methods: ["GET", "POST"],
+    surface: "runtime",
+    feature: "自动化 JSON 面",
+    phase: 4,
+    implemented: true,
+    beyondContract: true,
+  },
+  {
+    // R7a：Hello 的 JSON 形状。能力表与 `HostService/Hello` 是同一张。
+    path: "/api/identity/hello",
+    methods: ["GET"],
+    surface: "runtime",
+    feature: "Host 能力问询",
+    phase: 1,
+    implemented: true,
+    beyondContract: true,
+  },
+  {
     path: "/automation/agent-target",
     methods: ["POST"],
     surface: "hook",

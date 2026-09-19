@@ -17,8 +17,10 @@ describe("路由要求的 scope", () => {
     for (const entry of ROUTES) {
       if (entry.surface !== "runtime" || entry.implemented !== true) continue;
       for (const method of entry.methods) {
-        // `/api/health` 先于任何身份存在，是唯一允许不声明的那一条。
+        // 健康检查与 Hello 先于任何身份存在：前者答「core 起来了」，后者答
+        // 「这台 core 是谁、支持什么」，两者都要在一次配对之前就说得出来。
         if (entry.path.endsWith("/health")) continue;
+        if (entry.path === "/api/identity/hello") continue;
         if (router.requiredScope(method, entry.path) === undefined) {
           missing.push(`${method} ${entry.path}`);
         }

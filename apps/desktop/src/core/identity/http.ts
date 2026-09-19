@@ -399,6 +399,16 @@ export class IdentityHttp {
           );
           return;
         }
+        case "GET hello": {
+          // 能力表与 `HostService/Hello` 是同一张：页面靠 `automation.plans.v1`
+          // 与 `github.*` 这类名字决定开不开一块面板，两张面对同一件事必须说同
+          // 一句话（`http.test.ts` 有一条用例就是逐字段比对它们）。
+          //
+          // 这一条不要求凭据：它回答的是「这台 core 是谁、支持什么」，而那正是
+          // 一次配对之前就要知道的事。
+          this.json(response, cors, 200, this.helloJson());
+          return;
+        }
         case "GET session": {
           const principal = this.service.authenticate(actor);
           this.json(
@@ -681,6 +691,28 @@ export class IdentityHttp {
       default:
         this.fail(response, cors, 404, "NOT_FOUND", "No such method");
     }
+  }
+
+  /**
+   * Hello 的 JSON 形状：与 `HelloResponse` 逐字段对应。
+   *
+   * `maxFrameBytes` 是 `uint32`，所以它是个 `number`；`protocol` 摊开成两个数。
+   * 形状写在 `docs/contracts/core-json-api.md` §3。
+   */
+  helloJson(): {
+    readonly protocol: { readonly major: number; readonly minor: number };
+    readonly hostInstanceId: string;
+    readonly hostId: string;
+    readonly capabilities: readonly string[];
+    readonly maxFrameBytes: number;
+  } {
+    return {
+      protocol: { major: PROTOCOL_MAJOR, minor: PROTOCOL_MINOR },
+      hostInstanceId: this.options.instanceId,
+      hostId: this.service.hostId(),
+      capabilities: this.capabilities(),
+      maxFrameBytes: MAX_FRAME_BYTES,
+    };
   }
 
   private hello(

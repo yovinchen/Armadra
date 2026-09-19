@@ -75,7 +75,7 @@ import {
   type MessageShape,
 } from "@bufbuild/protobuf";
 
-import { bearerCredential } from "../identity/http";
+import { bearerCredential, credential, nativeRequest } from "../identity/http";
 import { IdentityError } from "../identity/errors";
 import type { IdentityService } from "../identity/service";
 import { scope } from "../identity/scopes";
@@ -445,7 +445,7 @@ export class GithubHttp {
     }
     let caller: Caller;
     try {
-      caller = this.caller(request, method, input);
+      caller = this.apiCaller(request, method);
     } catch (error) {
       const failure = this.authFailure(error);
       this.json(response, cors, failure.status, {
@@ -459,11 +459,15 @@ export class GithubHttp {
         method,
         await this.invoke(method, caller, input),
       );
+      // 零值照写：一份缺字段的 JSON 和一份字段为零的 JSON 对页面是两句话，而
+      // 同一条记录只该有一句。`apps/web/src/api/github.ts` 的 zod 按这个形状解。
       this.json(
         response,
         cors,
         200,
-        toJson(schema.response, result as MessageShape<DescMessage>),
+        toJson(schema.response, result as MessageShape<DescMessage>, {
+          alwaysEmitImplicit: true,
+        }),
       );
     } catch (error) {
       const failure = githubFailure(error);
@@ -511,6 +515,54 @@ export class GithubHttp {
     const principal = this.options.identity.authenticate({
       accessToken: bearerCredential(request),
       hostId: this.options.identity.hostId(),
+      origin,
+      csrfToken: header(request, "x-armadra-csrf") ?? "",
+      requireCsrf: rule.mutating,
+      requiredScopes: [scope(rule.permission, workspaceId, hostId)],
+    });
+    return {
+      principalId: principal.principalId,
+      deviceId: principal.deviceId,
+      deviceEpoch: principal.deviceEpoch,
+      workspaceId,
+      scopes: principal.scopes,
+    };
+  }
+
+  /**
+   * JSON 面的调用方。
+   *
+   * 和兼容面的两处不同：
+   *
+   *   1. **工作空间跟着查询串走**，不再藏在消息的 `meta.scope` 里。一次调用可以
+   *      说它想操作哪个工作空间，不能说它有什么权限——那仍然只来自会话。
+   *   2. **明文回环上的无凭据调用按本机主人处理**（{@link IdentityService.localOwner}）。
+   *      页面经 `apps/web/src/api/request.ts` 打这一面，而桌面壳的会话是原生的，
+   *      密钥在壳里：既不发 Cookie，也到不了那个 `fetch`。TLS 的服务器壳上这条
+   *      路不存在，凭据仍然是必须的。
+   */
+  private apiCaller(request: CoreRequest, method: RpcMethod): Caller {
+    const origin = header(request, "origin");
+    if (origin === undefined || countHeader(request, "origin") !== 1) {
+      throw new IdentityError("permission");
+    }
+    if (countHeader(request, "x-armadra-csrf") > 1) {
+      throw new IdentityError("permission");
+    }
+    const workspaceId = request.query.get("workspaceId") ?? "";
+    if (workspaceId === "") throw new IdentityError("invalid");
+    const hostId = this.options.service.hostId;
+    const rule = PERMISSIONS[method];
+    const identity = this.options.identity;
+    const token = credential(request, identity.hostId(), "access");
+    if (token === "" && nativeRequest(request)) {
+      const owner = identity.localOwner();
+      if (owner === undefined) throw new IdentityError("unauthenticated");
+      return { ...owner, workspaceId };
+    }
+    const principal = identity.authenticate({
+      accessToken: token,
+      hostId: identity.hostId(),
       origin,
       csrfToken: header(request, "x-armadra-csrf") ?? "",
       requireCsrf: rule.mutating,
