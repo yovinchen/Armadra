@@ -25,11 +25,32 @@ export interface Scope {
 export const MAX_SCOPES = 64;
 const MAX_SCOPE_BYTES = 16_384;
 
+/**
+ * 权限名。这张表是**授权的词汇表**：不在表里的名字进不了库（`normalizeScopes`
+ * 拒绝它），所以新增一条权限的成本就是往这里加一行，而拼错一条权限的代价是
+ * 一个 400 而不是一个静默放行的判定。
+ *
+ * 后半截（`events:read` 起）是 R6b 按
+ * `docs/design/server-accounts-and-sharing.md` §2 补的共享词汇。它们今天全部
+ * 落在 owner 的全量授权里、判定恒真；存在的意义是让路由的 scope 声明和角色
+ * 编译表（`roles.ts`）现在就写得出来，而不是等到有第二个 principal 才补。
+ */
 export const PERMISSIONS = [
   "canvas:read",
   "canvas:write",
   "terminal:read",
   "terminal:write",
+  // 自己开终端；`terminal:write` 是往已有会话里写，两者不是一回事。
+  "terminal:create",
+  // 向**别人**创建的终端 / Agent 写入（设计 S5）。
+  "terminal:drive",
+  "agent:launch",
+  "approval:answer",
+  "events:read",
+  "assets:read",
+  "assets:write",
+  "mermaid:import",
+  "workspace:share",
   "files:read",
   "files:write",
   "git:read",

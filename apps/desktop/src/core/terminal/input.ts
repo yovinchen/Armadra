@@ -225,3 +225,61 @@ export function writableState(state: string | null | undefined): boolean {
     state === null || state === undefined || !BLOCKED_STATES.includes(state)
   );
 }
+
+/* ------------------------------- drive gate -------------------------------- */
+
+/**
+ * 谁开的这个会话，以及一次写入是不是在写别人的终端。
+ *
+ * `docs/design/server-accounts-and-sharing.md` §4.4 / S5：向**自己**开的终端写
+ * 入不需要额外授权，向**别人**开的终端写入需要 `terminal:drive`。分出这一档的
+ * 理由不是礼貌，是终端写入会替 Agent 回答权限提示（契约 §15.6 的安全门就在这
+ * 个文件的上半截）——那是一次代答，必须是显式授予。
+ *
+ * 今天每一个会话的创建者都是本机 owner，每一个写入者也是，所以这道门恒通过。
+ * 它现在就在这里，是因为「哪些写入路径要判定」这件事等到有第二个 principal
+ * 时再找一遍，找漏一条就是一个人替另一个人点了「允许」。
+ */
+export interface TerminalWriter {
+  /** 空串 = 本机 owner（今天所有的写入者）。 */
+  readonly principalId: string;
+}
+
+export class DriveBook {
+  private readonly sessions = new Map<
+    string,
+    { readonly workspaceId: string; readonly creator: string }
+  >();
+
+  /** 记下创建者。`creator` 为空串表示本机 owner。 */
+  remember(sessionId: string, workspaceId: string, creator = ""): void {
+    this.sessions.set(sessionId, { workspaceId, creator });
+  }
+
+  forget(sessionId: string): void {
+    this.sessions.delete(sessionId);
+  }
+
+  creator(sessionId: string): string | undefined {
+    return this.sessions.get(sessionId)?.creator;
+  }
+
+  /**
+   * 这次写入允不允许。
+   *
+   * 写入者与创建者相同（含两者都是 owner 的今天）直接通过；不同才去问判定入口
+   * 要 `terminal:drive@workspace`。会话没被记过也通过：那是这个进程没见过其创
+   * 建的会话（重启后恢复的那些），拒绝它等于把人自己的终端锁上。
+   */
+  permits(
+    sessionId: string,
+    writer: TerminalWriter | undefined,
+    allow: (workspaceId: string) => boolean,
+  ): boolean {
+    const known = this.sessions.get(sessionId);
+    if (known === undefined) return true;
+    const writerId = writer?.principalId ?? "";
+    if (writerId === known.creator) return true;
+    return allow(known.workspaceId);
+  }
+}
