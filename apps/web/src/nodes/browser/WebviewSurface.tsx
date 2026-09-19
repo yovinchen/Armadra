@@ -1,5 +1,6 @@
 import * as React from "react";
 import { ArrowLeft, ArrowRight, ExternalLink, RotateCw, X } from "lucide-react";
+import { toast } from "sonner";
 
 import { IconButton } from "@/ui/icon-button";
 import { Input } from "@/ui/input";
@@ -19,7 +20,7 @@ import { WebviewGuest } from "./WebviewGuest";
 import { WebviewTabs } from "./WebviewTabs";
 import { browserPartition, searchOrUrl } from "./webview";
 import type { WebviewElement } from "./webview";
-import { useWebviewTabs } from "./webview-tabs";
+import { MAX_TABS, useWebviewTabs } from "./webview-tabs";
 
 /**
  * Electron 壳里的浏览器节点（W3.1 / W3.2）。
@@ -53,10 +54,32 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
    * 主进程能做的到不了标签，所以标签这三件事是被**请求**的，不是被执行的。
    * 动词回的是自己重测的标签表，所以请求落没落地看得出来，不需要回执。
    */
+  /**
+   * 请求落不了地就说一声。
+   *
+   * 三条请求都可能什么也不做——标签数到顶、只剩最后一个、id 指向一个已经关
+   * 掉的标签。发请求的人在另一个进程里，看不到这一侧的模型，所以静默在这里
+   * 等于「按了没反应」。
+   */
+  function refuseTab(): void {
+    toast.error(t("browser.tabs.failed"));
+  }
+
   const lease = useDrive(id, {
-    onSwitchTab: (tabId) => tabs.select(tabId),
-    onOpenTab: (next) => tabs.open(next),
-    onCloseTab: (tabId) => tabs.close(tabId),
+    onSwitchTab: (tabId) => {
+      if (!tabs.tabs.some((tab) => tab.id === tabId)) return refuseTab();
+      tabs.select(tabId);
+    },
+    onOpenTab: (next) => {
+      if (tabs.tabs.length >= MAX_TABS) return refuseTab();
+      tabs.open(next);
+    },
+    onCloseTab: (tabId) => {
+      if (tabs.tabs.length <= 1 || !tabs.tabs.some((tab) => tab.id === tabId)) {
+        return refuseTab();
+      }
+      tabs.close(tabId);
+    },
   });
   const driven = isDriven(lease);
   const [leaseBusy, setLeaseBusy] = React.useState(false);
@@ -141,7 +164,12 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
   async function handControl(action: "takeover" | "release") {
     setLeaseBusy(true);
     try {
-      await control(id, action);
+      // 拒绝与抛出是同一件事的两种形状：租约没换手。两者都要说出来，
+      // 否则按钮看起来生效了，而页面仍然在别人手里。
+      if (!(await control(id, action))) toast.error(t("browser.lease.failed"));
+    } catch (cause) {
+      console.error("browser lease request failed", cause);
+      toast.error(t("browser.lease.failed"));
     } finally {
       setLeaseBusy(false);
     }

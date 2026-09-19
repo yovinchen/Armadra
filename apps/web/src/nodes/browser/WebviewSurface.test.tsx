@@ -52,6 +52,8 @@ vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { error: vi.fn() }),
 }));
 
+import { toast } from "sonner";
+
 import { BrowserNode } from "./BrowserNode";
 import { BROWSER_DISCARD_MS, DISCARD_TICK_MS } from "./discard";
 
@@ -297,5 +299,90 @@ describe("隐藏回收（W3.2）", () => {
       );
     });
     expect(store.updateNodeData).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 请求方在另一个进程里，看不到这一侧的模型：这四条钉住「落不了地的请求会被
+ * 说出来」，而不是按了没反应。
+ */
+describe("请求落不了地时不再静默", () => {
+  type DriveCommand = {
+    kind: string;
+    nodeId: string;
+    action?: string;
+    tabId?: string;
+    url?: string;
+  };
+  let drive: ((command: DriveCommand) => void) | null = null;
+  const control = vi.fn(async () => ({ ok: false }));
+
+  beforeEach(() => {
+    drive = null;
+    control.mockClear();
+    vi.mocked(toast.error).mockClear();
+    (window as unknown as Record<string, unknown>).armadra = {
+      browser: {
+        register: vi.fn(async () => ({ ok: true })),
+        unregister: vi.fn(async () => ({ ok: true })),
+        view: vi.fn(async () => ({ ok: true })),
+        control,
+        onDrive: (listener: (command: DriveCommand) => void) => {
+          drive = listener;
+          return () => {};
+        },
+      },
+    };
+  });
+
+  function takeover(): HTMLElement {
+    return screen.getByRole("button", {
+      name: (name: string) =>
+        name.includes("接管") || name.includes("Take over"),
+    });
+  }
+
+  it("租约没换手时给出提示，而不是把按钮弹回去就算了", async () => {
+    paint();
+    await act(async () => {
+      fireEvent.click(takeover());
+    });
+    expect(control).toHaveBeenCalledWith({ nodeId: "b1", action: "takeover" });
+    expect(toast.error).toHaveBeenCalledTimes(1);
+  });
+
+  it("抛出的租约请求和被拒的一样要说出来", async () => {
+    control.mockRejectedValueOnce(new Error("socket closed"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    paint();
+    await act(async () => {
+      fireEvent.click(takeover());
+    });
+    expect(toast.error).toHaveBeenCalledTimes(1);
+  });
+
+  it("关掉最后一个标签、切到不存在的标签都会说一声", () => {
+    paint();
+    expect(drive).not.toBeNull();
+    act(() => {
+      drive!({ kind: "tabs", nodeId: "b1", action: "close", tabId: "wv-1" });
+    });
+    act(() => {
+      drive!({ kind: "tabs", nodeId: "b1", action: "switch", tabId: "gone" });
+    });
+    expect(toast.error).toHaveBeenCalledTimes(2);
+  });
+
+  it("别的节点的标签请求既不执行也不提示", () => {
+    paint();
+    act(() => {
+      drive!({
+        kind: "tabs",
+        nodeId: "other",
+        action: "switch",
+        tabId: "gone",
+      });
+    });
+    expect(toast.error).not.toHaveBeenCalled();
   });
 });
