@@ -10,6 +10,10 @@
 # checks that correspondence; changing either file without the other fails it.
 appId: dev.armadra.desktop
 productName: Armadra
+# The package is `@armadra/desktop`, and electron-builder would otherwise derive
+# the Linux binary name from it — `@armadradesktop`, which AppImage refuses as
+# a file name. Every platform gets the same short executable name.
+executableName: armadra
 directories:
   # Named to match the blacklist entry `apps/desktop/release/` already
   # reserved for this in repo.rules.json and .gitignore (both predate this
