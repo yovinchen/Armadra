@@ -173,11 +173,11 @@ pub fn router_with_state(state: AppState) -> Router {
         // The log is a POST that writes nothing: its filters are a record, and
         // a ref selection plus a search plus a cursor in a query string is
         // where escaping goes wrong.
+        .route("/api/workspaces/{workspace_id}/git/log", post(git_api::log))
         .route(
-            "/api/workspaces/{workspace_id}/git/log",
-            post(git_api::log),
+            "/api/workspaces/{workspace_id}/git/refs",
+            get(git_api::refs),
         )
-        .route("/api/workspaces/{workspace_id}/git/refs", get(git_api::refs))
         // Who a commit from a checkout would be attributed to. It is a
         // per-checkout read — a vendored clone may well be configured with a
         // different address — so it takes the same `path` the others do.
@@ -463,101 +463,11 @@ pub fn router_with_state(state: AppState) -> Router {
             "/api/workspaces/{workspace_id}/deliveries",
             get(api::list_deliveries),
         )
-        // Controlled embedded browser (B01). A session belongs to a node and
-        // outlives the node's picture, so `DELETE …/sessions/{id}` only stops
-        // the stream unless it is asked to terminate.
-        .route(
-            "/api/workspaces/{workspace_id}/browser/availability",
-            get(browser::routes::availability),
-        )
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions",
-            get(browser::routes::list).post(browser::routes::create),
-        )
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}",
-            get(browser::routes::get).delete(browser::routes::close),
-        )
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/navigate",
-            post(browser::routes::navigate),
-        )
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/viewport",
-            post(browser::routes::viewport),
-        )
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/input",
-            post(browser::routes::input),
-        )
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/subscription",
-            post(browser::routes::subscribe),
-        )
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/subscription/{subscription_id}",
-            delete(browser::routes::unsubscribe),
-        )
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/read",
-            get(browser::routes::read),
-        )
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/wait",
-            post(browser::routes::wait),
-        )
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/capture",
-            post(browser::routes::capture),
-        )
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/downloads",
-            get(browser::routes::downloads),
-        )
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/downloads/{download_id}",
-            post(browser::routes::decide_download),
-        )
-        // The dedicated picture stream (§2.9). Binary Protobuf both ways, and
-        // one socket per viewer: the connection *is* the subscription.
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/stream",
-            get(browser::routes::stream::stream),
-        )
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/lease",
-            post(browser::routes::lease),
-        )
-        // Tabs, dialogs and uploads (§2.2–§2.4). A tab is closed by name; the
-        // session itself is only ended by `DELETE …?terminate=true`.
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/tabs",
-            get(browser::routes::tabs).post(browser::routes::open_tab),
-        )
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/tabs/{tab_id}",
-            post(browser::routes::activate_tab).delete(browser::routes::close_tab),
-        )
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/dialog",
-            post(browser::routes::dialog),
-        )
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/upload",
-            post(browser::routes::upload),
-        )
-        .route(
-            "/api/workspaces/{workspace_id}/browser/sessions/{session_id}/activity",
-            get(browser::routes::activity),
-        )
-        // The pinned browser build belongs to the machine, not to a
-        // workspace: every workspace on this host sees the same one.
-        .route(
-            "/api/browser/managed",
-            get(browser::routes::managed)
-                .post(browser::routes::install_managed)
-                .delete(browser::routes::remove_managed),
-        )
+        // The controlled browser node's page lives in the desktop shell
+        // (electron-migration §4). Nothing about it is reachable over HTTP any
+        // more: the picture is a `<webview>` guest of the window, and the
+        // seventeen verbs arrive through `armadra-hook` and leave down the
+        // `browser:drive` socket. W3.5 removed the screencast surface.
         // Host / session resources (T02). Sampling is a subscription: the
         // panel renews while it is open and the sampler stops on its own once
         // the last subscription lapses, so a closed panel costs nothing.

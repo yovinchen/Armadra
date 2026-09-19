@@ -287,21 +287,10 @@ async fn main() -> anyhow::Result<()> {
     // and fetches in the background: a first launch with no network still gets
     // a canvas, it just prices the models this build knows about.
     armadra_runtime::models::catalog::start(data_dir());
-    // Controlled browser sessions outlive the Runtime (B01, design §9): every
-    // kept session is relaunched from its own profile and re-navigated to the
-    // URL it was on. Its page state does not come back, and the design says so
-    // rather than pretending it does. Off the request path, because launching
-    // browsers must not delay the first canvas load.
-    {
-        let state = state.clone();
-        tokio::spawn(async move {
-            match armadra_runtime::browser::session::restore(&state).await {
-                Ok(0) => {}
-                Ok(count) => tracing::info!(count, "restored browser sessions"),
-                Err(error) => tracing::warn!(%error, "could not restore browser sessions"),
-            }
-        });
-    }
+    // Nothing to restore for browser nodes: the page is a guest of the
+    // desktop window and comes back with the window, not with this process
+    // (electron-migration §4). The one column a restart needs —
+    // `active_tab_url` — is read when a verb first addresses the node.
     // The transcript index scans thousands of files on the first pass, so it
     // starts *after* the listener is bound and runs in its own task: the
     // command palette gets its history a second late, nobody waits for it.
@@ -340,9 +329,6 @@ async fn main() -> anyhow::Result<()> {
     // Filesystem watchers hold OS handles and a drain thread each; they are
     // released as soon as admission stops, before the slower cleanups run.
     armadra_runtime::file_watch::shutdown();
-    // No browser may outlive the Runtime that started it: the profile stays on
-    // disk (that is how a login survives a restart), the process does not.
-    armadra_runtime::browser::session::shutdown(&shutdown_state).await;
     // Nothing may keep the machine awake once the runtime is going away, and
     // this must not wait on the slower terminal / repository drains below
     // (T02: "租约全部释放或 Runtime 退出时立即释放").

@@ -327,9 +327,6 @@ async fn the_active_tab_url_has_exactly_one_writer() {
         .unwrap()
         .unwrap();
     assert_eq!(stored.active_tab_url, "https://example.com/two");
-    // The process columns stay empty: under the shell there is no Chromium of
-    // ours to identify, and a published migration is not edited to drop them.
-    assert!(!stored.process.is_recorded());
 }
 
 /* ------------------------------ the refusals ------------------------------ */

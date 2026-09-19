@@ -344,7 +344,6 @@ pub async fn ensure(
                 reason_code: String::new(),
                 created_at: now.clone(),
                 updated_at: now,
-                process: crate::browser::ProcessIdentity::default(),
                 lease_generation: 0,
                 active_tab_url: url.to_owned(),
             };

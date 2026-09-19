@@ -284,10 +284,11 @@ async fn stop(state: &AppState, workspace: &Workspace) -> AppResult<Vec<Blocker>
         if session.state == crate::browser::SessionState::Terminated {
             continue;
         }
-        // `terminate = true`: detaching the picture would leave the browser
-        // running against the old host's profile, which is exactly the binding
-        // the switch has to remove.
-        crate::browser::session::close(state, &session.id, true).await?;
+        // The row is what binds this node to the old host — there is no
+        // process of ours to stop any more, because the page is a guest of the
+        // desktop window (electron-migration §4). Dropping the row is the
+        // whole of the unbinding: the next verb on that node makes a new one.
+        crate::browser::delete_stored(&state.pool, &session.id).await?;
         stopped.push(Blocker {
             kind: "browser".into(),
             detail: session.node_id.clone(),

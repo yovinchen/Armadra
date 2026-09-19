@@ -60,19 +60,6 @@ fn a_viewport_is_clamped_to_something_a_browser_can_render() {
 }
 
 #[test]
-fn a_hidden_subscriber_asks_for_no_frames_at_all() {
-    assert!(Visibility::Focused > Visibility::Visible);
-    assert!(Visibility::Visible > Visibility::Hidden);
-    let (_, _, hidden_fps) = Visibility::Hidden.budget();
-    assert_eq!(hidden_fps, 0);
-    let (focused_quality, _, focused_fps) = Visibility::Focused.budget();
-    let (visible_quality, _, visible_fps) = Visibility::Visible.budget();
-    // Degradation is real, not cosmetic: a background node costs strictly less.
-    assert!(focused_quality > visible_quality);
-    assert!(focused_fps > visible_fps);
-}
-
-#[test]
 fn browser_events_serialize_with_the_shared_discriminants() {
     let session = crate::browser::BrowserSession {
         session_id: "browser-1".into(),
@@ -107,28 +94,6 @@ fn browser_events_serialize_with_the_shared_discriminants() {
     assert_eq!(json["session"]["navigationEpoch"], 3);
     assert_eq!(json["session"]["canGoBack"], true);
 
-    // The frame is flattened: the client reads `sessionId` off the event.
-    let json = serde_json::to_value(WorkspaceEvent::BrowserFrame {
-        frame: Box::new(crate::events::BrowserFramePayload {
-            session_id: "browser-1".into(),
-            generation: 2,
-            frame_seq: 9,
-            navigation_epoch: 3,
-            viewport_width: 1000,
-            viewport_height: 700,
-            device_scale_factor: 1.0,
-            encoding: "jpeg",
-            data: "AAA=".into(),
-            captured_at: "2026-09-06T00:00:01+00:00".into(),
-        }),
-    })
-    .unwrap();
-    assert_eq!(json["type"], "browser.frame");
-    assert_eq!(json["sessionId"], "browser-1");
-    assert_eq!(json["frameSeq"], 9);
-    assert_eq!(json["encoding"], "jpeg");
-    assert!(json.get("frame").is_none());
-
     let json = serde_json::to_value(WorkspaceEvent::BrowserDownload {
         download: Box::new(crate::browser::Download {
             download_id: "d-1".into(),
@@ -149,63 +114,6 @@ fn browser_events_serialize_with_the_shared_discriminants() {
     assert_eq!(json["type"], "browser.download");
     assert_eq!(json["download"]["state"], "pending");
     assert_eq!(json["download"]["reasonCode"], "awaiting_confirmation");
-}
-
-#[tokio::test]
-async fn a_host_with_no_browser_reports_unsupported_and_creates_nothing() {
-    let fixture = fixture("unsupported").await;
-    // A configured path that does not exist is never silently replaced by a
-    // detected browser: the user asked for that binary.
-    fixture
-        .state
-        .settings
-        .patch(&json!({ "browser": { "executablePath": "/nonexistent/armadra/chrome" } }))
-        .unwrap();
-    let availability = crate::browser::availability(&fixture.state);
-    assert!(!availability.available);
-    assert_eq!(availability.reason_code, "chrome_not_found");
-    assert_eq!(availability.source, "none");
-
-    let workspace = db::get_workspace(&fixture.state.pool, &fixture.workspace_id)
-        .await
-        .unwrap();
-    let session = session::ensure(
-        &fixture.state,
-        &workspace,
-        CreateRequest {
-            node_id: fixture.node_id.clone(),
-            ..Default::default()
-        },
-    )
-    .await
-    .unwrap();
-    assert_eq!(session.state, SessionState::Unsupported);
-    assert_eq!(session.reason_code, "chrome_not_found");
-    assert!(session.session_id.is_empty());
-    // Nothing was persisted and no profile was created for a browser we do not
-    // have — an unsupported host leaves no residue.
-    assert!(
-        crate::browser::stored_for_node(&fixture.state.pool, &fixture.node_id)
-            .await
-            .unwrap()
-            .is_none()
-    );
-}
-
-#[tokio::test]
-async fn an_unknown_session_is_not_found_rather_than_a_panic() {
-    let fixture = fixture("missing").await;
-    assert!(
-        session::require_live(&fixture.state, "browser-nope")
-            .await
-            .is_err()
-    );
-    assert!(
-        crate::browser::stored(&fixture.state.pool, "browser-nope")
-            .await
-            .unwrap()
-            .is_none()
-    );
 }
 
 #[tokio::test]
