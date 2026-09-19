@@ -198,7 +198,9 @@ async function main() {
 
     console.log("\nOK");
   } catch (error) {
-    failure = error;
+    failure = new Error(
+      `${error.message}\n--- core log ---\n${core.stderr().slice(-4000)}`,
+    );
   } finally {
     await core.stop();
     rmSync(dataDir, { recursive: true, force: true });

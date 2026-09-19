@@ -55,16 +55,62 @@ function ensureNodePty() {
     );
     process.exit(patch.status ?? 1);
   }
+  const app = join(here, "..");
   const rebuild = spawnSync(
     "npx",
-    ["--no-install", "electron-rebuild", "-f", "-w", "node-pty"],
-    { cwd: join(here, ".."), stdio: "inherit" },
+    [
+      "--no-install",
+      "electron-rebuild",
+      "-f",
+      "-w",
+      "node-pty",
+      // Explicit, because the default is not this machine's. Observed on an
+      // arm64 Mac: `electron-rebuild` without `--arch` produced an x86_64
+      // `pty.node` AND an x86_64 `spawn-helper`. The addon still loaded — it
+      // is N-API, so the ABI matched — and every spawn then failed with
+      // `posix_spawnp failed.`, because that is what exec'ing a Mach-O of the
+      // wrong architecture looks like from inside node-pty. Nothing in that
+      // message points at the architecture.
+      "--arch",
+      process.arch,
+    ],
+    { cwd: app, stdio: "inherit" },
   );
   if (rebuild.status !== 0) {
     process.stderr.write(
       "electron-rebuild failed for node-pty; terminals will not open\n",
     );
     process.exit(rebuild.status ?? 1);
+  }
+  assertNativeArch(join(app, "node_modules/node-pty/build/Release"));
+}
+
+/**
+ * Refuses a build for the wrong architecture, loudly and here.
+ *
+ * The failure it catches is silent everywhere else: the addon loads, the
+ * module resolves, and the only symptom is `posix_spawnp failed.` from the
+ * first terminal anybody opens. `file(1)` answers in one line what took an
+ * afternoon to find the first time.
+ */
+function assertNativeArch(releaseDir) {
+  const expected = process.arch === "arm64" ? "arm64" : "x86_64";
+  for (const name of ["pty.node", "spawn-helper"]) {
+    const path = join(releaseDir, name);
+    if (!existsSync(path)) {
+      process.stderr.write(`node-pty did not produce ${name}\n`);
+      process.exit(1);
+    }
+    const described = spawnSync("file", ["-b", path], {
+      encoding: "utf8",
+    }).stdout;
+    if (!described?.includes(expected)) {
+      process.stderr.write(
+        `node-pty's ${name} is not ${expected} (${described?.trim()}); ` +
+          "every terminal would fail with `posix_spawnp failed.`\n",
+      );
+      process.exit(1);
+    }
   }
 }
 
