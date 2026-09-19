@@ -133,6 +133,36 @@ function nodeFromRow(row: NodeRow): CanvasNode {
   return orderNode(node);
 }
 
+/**
+ * `data_json`, spelled the way `serde_json` spells it.
+ *
+ * A node's `data` is an opaque payload, and the Rust Runtime stored it through
+ * `serde_json::Value` — whose object is a `BTreeMap`, so every key came back
+ * **sorted**. Nothing reads `data` positionally, but the two implementations
+ * write into the same column of the same file, and a board saved by one and
+ * read by the other should come back byte for byte. Sorting here is what makes
+ * that true, and what makes a diff of the two answers empty rather than
+ * "identical except for key order".
+ *
+ * Sorted by UTF-16 code unit, which is the same order as `BTreeMap<String>`'s
+ * UTF-8 byte order for every key below U+10000 — and a node payload key
+ * outside the BMP is not a thing that exists.
+ */
+export function canonicalJson(value: unknown): string {
+  return JSON.stringify(canonical(value));
+}
+
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value === null || typeof value !== "object") return value;
+  const source = value as Record<string, unknown>;
+  const ordered: Record<string, unknown> = {};
+  for (const key of Object.keys(source).sort()) {
+    ordered[key] = canonical(source[key]);
+  }
+  return ordered;
+}
+
 /** Serde emits the struct's field order; a byte diff against Rust wants it. */
 function orderNode(node: Record<string, unknown>): CanvasNode {
   const ordered: Record<string, unknown> = {};
@@ -264,7 +294,7 @@ export function saveBoard(
         node.parentId ?? null,
         JSON.stringify(node.labels),
         node.note,
-        JSON.stringify(node.data),
+        canonicalJson(node.data),
         node.createdAt,
         node.updatedAt,
       );

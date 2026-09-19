@@ -158,12 +158,23 @@ export class CoreServer {
     headers: Record<string, string> = {},
     raw?: Buffer,
   ): void {
-    const payload =
-      raw ?? Buffer.from(`${JSON.stringify(body ?? null)}\n`, "utf8");
+    // 204 carries no body, and no `Content-Type` for a body that is not
+    // there. `null\n` under `application/json` is what a client sees as a
+    // document, and it is not the answer the Rust Runtime gives to a DELETE.
+    const empty = status === 204 || status === 304;
+    const payload = empty
+      ? Buffer.alloc(0)
+      : (raw ?? Buffer.from(`${JSON.stringify(body ?? null)}\n`, "utf8"));
     response.writeHead(status, {
-      "content-type": raw ? "application/octet-stream" : "application/json",
+      ...(empty
+        ? {}
+        : {
+            "content-type": raw
+              ? "application/octet-stream"
+              : "application/json",
+          }),
       ...headers,
-      "content-length": String(payload.byteLength),
+      ...(empty ? {} : { "content-length": String(payload.byteLength) }),
     });
     response.end(payload);
   }
