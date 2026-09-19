@@ -23,6 +23,9 @@ importers:
       '@armadra/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@bufbuild/protobuf':
+        specifier: 2.2.5
+        version: 2.2.5
       electron-updater:
         specifier: 6.8.9
         version: 6.8.9(supports-color@7.2.0)

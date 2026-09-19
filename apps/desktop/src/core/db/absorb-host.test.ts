@@ -159,6 +159,10 @@ describe("absorbing the old host database", () => {
       automation_activations: 0,
       automation_runs: 0,
       automation_gates: 0,
+      // 原库没有 GitHub 表；「没有这张表」和「有表但空着」在结果里长得一样。
+      github_config: 0,
+      github_status_mappings: 0,
+      github_references: 0,
     });
     expect(result.renamedTo).toBe(
       `${hostDatabaseFile(directory)}.absorbed-20260919T000000Z`,
@@ -240,6 +244,9 @@ describe("absorbing the old host database", () => {
       "automation_grants",
       "command_roots",
       "command_sessions",
+      "github_config",
+      "github_status_mappings",
+      "github_references",
     ]);
     // 这四张不在逐列照搬的名单里，因为 Host 那边它们根本不是表——它们由
     // `legacy.entities` 投影出来。空判断仍然把它们算上。
