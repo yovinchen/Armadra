@@ -36,9 +36,7 @@ export function validateMapping(
 }
 
 /** 只判不抛的那一半，给「想知道原因码」的调用方和测试。 */
-export function checkMapping(
-  mapping: GithubStatusMapping | undefined,
-): string {
+export function checkMapping(mapping: GithubStatusMapping | undefined): string {
   if (mapping === undefined) return "MAPPING_REQUIRED";
   if (mapping.groups.length > MAX_GROUPS) return "TOO_MANY_GROUPS";
   switch (mapping.source) {

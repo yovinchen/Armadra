@@ -14,7 +14,18 @@
  */
 
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync, fsyncSync, closeSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeSync,
+  fsyncSync,
+  closeSync,
+} from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -27,7 +38,12 @@ import {
 
 import { GithubClient, type GithubClientOptions } from "./client";
 import { codeOf, githubError } from "./errors";
-import { PUBLIC_API_BASE, apiHost, normalizeApiBase, webHostFor } from "./remote";
+import {
+  PUBLIC_API_BASE,
+  apiHost,
+  normalizeApiBase,
+  webHostFor,
+} from "./remote";
 import {
   GITHUB_SOURCE_GH_CLI,
   GITHUB_SOURCE_NONE,
@@ -117,7 +133,10 @@ function run(
         encoding: "utf8",
       },
       (error, stdout) => {
-        resolve({ ok: error === null, stdout: typeof stdout === "string" ? stdout : "" });
+        resolve({
+          ok: error === null,
+          stdout: typeof stdout === "string" ? stdout : "",
+        });
       },
     );
     if (options.stdin !== undefined) {
@@ -297,7 +316,10 @@ export class CredentialService {
   private readonly secrets: SecretStore;
   private readonly gh: GhCli;
   private readonly now: () => number;
-  private readonly clientOptions: Omit<GithubClientOptions, "token" | "apiBase">;
+  private readonly clientOptions: Omit<
+    GithubClientOptions,
+    "token" | "apiBase"
+  >;
   private readonly defaultBase: string;
 
   private token = "";
@@ -495,7 +517,8 @@ export class CredentialService {
           : pasted,
       );
     } catch (error) {
-      if (secretRef !== "") await this.secrets.delete(secretRef).catch(() => {});
+      if (secretRef !== "")
+        await this.secrets.delete(secretRef).catch(() => {});
       throw error;
     }
     record = { ...record, accountLogin: verified.login };
@@ -522,7 +545,8 @@ export class CredentialService {
     try {
       stored = this.store.putConfig(record, expectedRevision);
     } catch (error) {
-      if (secretRef !== "") await this.secrets.delete(secretRef).catch(() => {});
+      if (secretRef !== "")
+        await this.secrets.delete(secretRef).catch(() => {});
       throw error;
     }
     // 被替换掉的令牌引用只在新的那个落定之后才删，所以一次失败的写永远不会让这
@@ -588,8 +612,9 @@ export class CredentialService {
     }
     let login = "";
     try {
-      login = (JSON.parse(response.body.toString("utf8")) as { login?: string })
-        .login ?? "";
+      login =
+        (JSON.parse(response.body.toString("utf8")) as { login?: string })
+          .login ?? "";
     } catch {
       throw githubError("unavailable");
     }
@@ -632,7 +657,8 @@ function reasonFor(error: unknown): string {
 
 export function sourceOf(value: string): GithubCredentialSource {
   if (value === GITHUB_SOURCE_GH_CLI) return GithubCredentialSource.GH_CLI;
-  if (value === GITHUB_SOURCE_TOKEN_REF) return GithubCredentialSource.TOKEN_REF;
+  if (value === GITHUB_SOURCE_TOKEN_REF)
+    return GithubCredentialSource.TOKEN_REF;
   return GithubCredentialSource.NONE;
 }
 

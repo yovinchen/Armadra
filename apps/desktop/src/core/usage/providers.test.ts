@@ -53,10 +53,7 @@ describe("Claude", () => {
           }),
           "keychain",
         ],
-        [
-          JSON.stringify({ claudeAiOauth: { accessToken: "valid" } }),
-          "file",
-        ],
+        [JSON.stringify({ claudeAiOauth: { accessToken: "valid" } }), "file"],
       ],
       NOW,
     );
@@ -163,7 +160,10 @@ describe("Codex", () => {
             metered_feature: "code",
             limit_name: "Code",
             rate_limit: {
-              primary_window: { used_percent: 7, limit_window_seconds: 604_800 },
+              primary_window: {
+                used_percent: 7,
+                limit_window_seconds: 604_800,
+              },
             },
           },
         ],
@@ -199,7 +199,9 @@ describe("Codex", () => {
       ["primary", "5h", 33],
       ["secondary", "7d", 12],
     ]);
-    expect(codexCliWindows({ rateLimits: { primary: {} } }, NOW)).toHaveLength(0);
+    expect(codexCliWindows({ rateLimits: { primary: {} } }, NOW)).toHaveLength(
+      0,
+    );
     expect(codexCliWindows("nonsense", NOW)).toHaveLength(0);
   });
 });

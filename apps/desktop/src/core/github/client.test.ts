@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { MAX_CACHED_ISSUES, MAX_CACHE_BYTES, nextPage, perPage } from "./client";
+import {
+  MAX_CACHED_ISSUES,
+  MAX_CACHE_BYTES,
+  nextPage,
+  perPage,
+} from "./client";
 import { codeOf } from "./errors";
 import { fakeGithub, type FakeGithub } from "./fixture";
 
@@ -42,7 +47,9 @@ describe("GitHub 传输层", () => {
     // 一个 URL 形式的游标会让响应操纵下一次请求，所以只有页码被取出来。
     expect(nextPage('<https://evil.example/x?page=2>; rel="prev"')).toBe(0);
     expect(nextPage("")).toBe(0);
-    expect(nextPage('<https://api.github.com/x?page=99999>; rel="next"')).toBe(0);
+    expect(nextPage('<https://api.github.com/x?page=99999>; rel="next"')).toBe(
+      0,
+    );
   });
 
   it("读失败会退避重试，写一次都不重试", async () => {
@@ -58,9 +65,7 @@ describe("GitHub 传输层", () => {
       .write("POST", "/repos/a/b/issues", { title: "x" })
       .catch((value: unknown) => value);
     expect(codeOf(error)).toBe("UNKNOWN_OUTCOME");
-    expect(
-      github.requests.filter((r) => r.method === "POST"),
-    ).toHaveLength(1);
+    expect(github.requests.filter((r) => r.method === "POST")).toHaveLength(1);
   });
 
   it("403 只有在配额头说被限流时才读成限流", async () => {
@@ -69,16 +74,16 @@ describe("GitHub 传输层", () => {
       status: 403,
       headers: { "x-ratelimit-remaining": "17", "x-ratelimit-limit": "60" },
     });
-    expect(codeOf(await client.get("/repos/a/b").catch((e: unknown) => e))).toBe(
-      "PERMISSION_DENIED",
-    );
+    expect(
+      codeOf(await client.get("/repos/a/b").catch((e: unknown) => e)),
+    ).toBe("PERMISSION_DENIED");
     github.once("GET /repos/a/c", {
       status: 403,
       headers: { "x-ratelimit-remaining": "0", "x-ratelimit-limit": "60" },
     });
-    expect(codeOf(await client.get("/repos/a/c").catch((e: unknown) => e))).toBe(
-      "RESOURCE_EXHAUSTED",
-    );
+    expect(
+      codeOf(await client.get("/repos/a/c").catch((e: unknown) => e)),
+    ).toBe("RESOURCE_EXHAUSTED");
   });
 
   it("重定向被当成错误，而不是跟着走到另一个 authority", async () => {
@@ -87,7 +92,9 @@ describe("GitHub 传输层", () => {
       headers: { location: "https://evil.example/repos/a/b" },
     });
     const client = github.client({ attempts: 1 });
-    const error = await client.get("/repos/a/b").catch((value: unknown) => value);
+    const error = await client
+      .get("/repos/a/b")
+      .catch((value: unknown) => value);
     expect(codeOf(error)).toBe("INVALID_ARGUMENT");
     // 只联系了配置好的那个 base。
     expect(github.requests).toHaveLength(1);

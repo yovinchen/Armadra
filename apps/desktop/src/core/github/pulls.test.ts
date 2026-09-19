@@ -97,9 +97,15 @@ describe("Pull request", () => {
     fixture.github.route("GET /repos/octo/repo/pulls/3/files", { body: [] });
     fixture.github.route("GET /repos/octo/repo/pulls/3/reviews", { body: [] });
     fixture.github.route("GET /repos/octo/repo/pulls/3/comments", { body: [] });
-    fixture.github.route("GET /repos/octo/repo/issues/3/comments", { body: [] });
+    fixture.github.route("GET /repos/octo/repo/issues/3/comments", {
+      body: [],
+    });
     fixture.github.route(`GET /repos/octo/repo/commits/${SHA}/check-runs`, {
-      body: { check_runs: [{ name: "build", status: "completed", conclusion: "success" }] },
+      body: {
+        check_runs: [
+          { name: "build", status: "completed", conclusion: "success" },
+        ],
+      },
     });
     fixture.github.route(`GET /repos/octo/repo/commits/${SHA}/status`, {
       body: { statuses: [] },
@@ -150,7 +156,11 @@ describe("Pull request", () => {
   it("检查汇总和读者看到的不一样就拒绝", async () => {
     fixture.github.route("GET /repos/octo/repo/pulls/3", { body: pullJson() });
     fixture.github.route(`GET /repos/octo/repo/commits/${SHA}/check-runs`, {
-      body: { check_runs: [{ name: "build", status: "completed", conclusion: "failure" }] },
+      body: {
+        check_runs: [
+          { name: "build", status: "completed", conclusion: "failure" },
+        ],
+      },
     });
     fixture.github.route(`GET /repos/octo/repo/commits/${SHA}/status`, {
       body: { statuses: [] },
@@ -303,7 +313,9 @@ describe("检查重跑与分支清理", () => {
     await fixture.close();
   });
 
-  function summary(...runs: { name: string; conclusion: GithubCheckConclusion; id?: number }[]) {
+  function summary(
+    ...runs: { name: string; conclusion: GithubCheckConclusion; id?: number }[]
+  ) {
     return create(GithubCheckSummarySchema, {
       headSha: SHA,
       runs: runs.map((run) =>
@@ -362,7 +374,11 @@ describe("检查重跑与分支清理", () => {
   it("没有可重跑的运行时说出来，而不是按了没反应", async () => {
     fixture.github.route("GET /repos/octo/repo/pulls/3", { body: pullJson() });
     fixture.github.route(`GET /repos/octo/repo/commits/${SHA}/check-runs`, {
-      body: { check_runs: [{ name: "build", status: "completed", conclusion: "failure" }] },
+      body: {
+        check_runs: [
+          { name: "build", status: "completed", conclusion: "failure" },
+        ],
+      },
     });
     fixture.github.route(`GET /repos/octo/repo/commits/${SHA}/status`, {
       body: { statuses: [] },

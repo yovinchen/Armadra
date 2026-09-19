@@ -206,9 +206,9 @@ export class ResourceService {
         this.watchers.size >= MAX_SUBSCRIPTIONS
           ? // 每个位子都活着；复用最接近过期的那个，而不是无界地长。客户端从
             // 响应里得知它实际拿到的 id。
-            [...this.watchers.entries()].sort(
+            ([...this.watchers.entries()].sort(
               (left, right) => left[1].expiresAtMs - right[1].expiresAtMs,
-            )[0]?.[0] ?? uuid()
+            )[0]?.[0] ?? uuid())
           : uuid();
     }
     this.watchers.set(id, { workspaceId, intervalMs, expiresAtMs });
@@ -241,11 +241,7 @@ export class ResourceService {
   snapshot(workspaceId: string): ResourceSnapshot {
     const refresh = this.sampler.refresh();
     const pids = panePids();
-    const targets = sessionTargets(
-      this.options.database,
-      workspaceId,
-      pids,
-    );
+    const targets = sessionTargets(this.options.database, workspaceId, pids);
     const children = childrenByParent(refresh.table);
     const sessions = targets
       .map((target) =>
@@ -297,7 +293,8 @@ export class ResourceService {
 
   private powerState(): PowerState {
     const policy = this.options.settings?.get("power.policy");
-    const available = process.platform === "darwin" || process.platform === "linux";
+    const available =
+      process.platform === "darwin" || process.platform === "linux";
     return {
       policy: typeof policy === "string" ? policy : "manual",
       holding: false,
@@ -381,7 +378,11 @@ export class ResourceService {
  * 没有基线时是 `null`——第一次采样没有可减的东西，报 0 会画出一台空闲的机器。
  */
 function hostCpuPercent(
-  refresh: { table: Map<number, import("./sample").ProcessRow>; previousTable: Map<number, import("./sample").ProcessRow> | undefined; elapsedMs: number },
+  refresh: {
+    table: Map<number, import("./sample").ProcessRow>;
+    previousTable: Map<number, import("./sample").ProcessRow> | undefined;
+    elapsedMs: number;
+  },
   cores: number,
 ): number | null {
   if (refresh.previousTable === undefined || cores <= 0) return null;

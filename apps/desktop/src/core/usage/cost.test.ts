@@ -249,7 +249,12 @@ describe("汇总", () => {
     for (const [date, model, input] of entries) {
       buckets.set(bucketKey(date, model), tokensOf(input));
     }
-    return { buckets, files: { claude: 1 }, truncated: false, current: undefined };
+    return {
+      buckets,
+      files: { claude: 1 },
+      truncated: false,
+      current: undefined,
+    };
   }
 
   function tokensOf(input: number) {

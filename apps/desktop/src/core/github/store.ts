@@ -104,9 +104,11 @@ function validateKey(key: GithubRepositoryKey): void {
 
 function validateConfig(config: GithubConfig): void {
   if (
-    ![GITHUB_SOURCE_NONE, GITHUB_SOURCE_GH_CLI, GITHUB_SOURCE_TOKEN_REF].includes(
-      config.source,
-    )
+    ![
+      GITHUB_SOURCE_NONE,
+      GITHUB_SOURCE_GH_CLI,
+      GITHUB_SOURCE_TOKEN_REF,
+    ].includes(config.source)
   ) {
     throw githubError("invalid");
   }
@@ -121,7 +123,10 @@ function validateConfig(config: GithubConfig): void {
   }
   // 只有粘进来的令牌才由密钥存储持有；gh CLI 那一支在静态存储里什么都不留，
   // 所以那里出现一个引用名等于描述了一件不存在的事。
-  if ((config.source === GITHUB_SOURCE_TOKEN_REF) !== (config.secretRef !== "")) {
+  if (
+    (config.source === GITHUB_SOURCE_TOKEN_REF) !==
+    (config.secretRef !== "")
+  ) {
     throw githubError("invalid");
   }
   if (
@@ -297,8 +302,7 @@ export class GithubStore {
         name: text(row, "name"),
         webHost: text(row, "web_host"),
       },
-      mapping:
-        mapping instanceof Uint8Array ? mapping : new Uint8Array(0),
+      mapping: mapping instanceof Uint8Array ? mapping : new Uint8Array(0),
       revision,
       createdAtMs: integer(row, "created_at_ms"),
       updatedAtMs: integer(row, "updated_at_ms"),
@@ -325,7 +329,10 @@ export class GithubStore {
     validateKey(record.repository);
     this.database.exec("BEGIN IMMEDIATE");
     try {
-      const existing = this.statusMapping(record.workspaceId, record.repository);
+      const existing = this.statusMapping(
+        record.workspaceId,
+        record.repository,
+      );
       if (existing === undefined) {
         if (expectedRevision !== 0) throw githubError("conflict");
         this.database

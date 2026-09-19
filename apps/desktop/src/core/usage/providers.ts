@@ -42,7 +42,10 @@ export interface ProviderReport {
  * 一个 report = 解析成功（→ ok），抛出 {@link ProviderError} = 其余（→ error）。
  */
 export type ProviderResult =
-  | { readonly report: ProviderReport | undefined; readonly source: CredentialSource }
+  | {
+      readonly report: ProviderReport | undefined;
+      readonly source: CredentialSource;
+    }
   | never;
 
 export class ProviderError extends Error {
@@ -117,7 +120,9 @@ function record(value: unknown): Record<string, unknown> | undefined {
 }
 
 function num(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 /* ---------------------------------- Claude -------------------------------- */
@@ -232,7 +237,11 @@ export function claudeWindows(usage: ClaudeUsageResponse): UsageWindow[] {
     const utilization = num(value?.utilization);
     if (utilization === undefined) continue;
     const group =
-      model === "opus" ? "Opus" : model === "sonnet" ? "Sonnet" : model.replace(/_/g, " ");
+      model === "opus"
+        ? "Opus"
+        : model === "sonnet"
+          ? "Sonnet"
+          : model.replace(/_/g, " ");
     result.push({
       key,
       label: "7d",
@@ -575,8 +584,7 @@ export function codexCliWindows(result: unknown, nowMs: number): UsageWindow[] {
       minutes !== undefined
         ? minutes * 60
         : (num(window.limit_window_seconds) ?? num(window.windowSeconds));
-    const resets =
-      num(window.resets_in_seconds) ?? num(window.resetsInSeconds);
+    const resets = num(window.resets_in_seconds) ?? num(window.resetsInSeconds);
     windows.push({
       key,
       label:

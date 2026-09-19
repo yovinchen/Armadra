@@ -396,10 +396,7 @@ export async function commentIssue(
   service.authorize(caller, SCOPE_WRITE);
   const client = service.client();
   const ref = service.repository(request.repository);
-  if (
-    request.body === "" ||
-    Buffer.byteLength(request.body, "utf8") > 65536
-  ) {
+  if (request.body === "" || Buffer.byteLength(request.body, "utf8") > 65536) {
     throw githubError("invalid");
   }
   try {
@@ -550,13 +547,7 @@ async function moveLabels(
     requestedValue: target.id,
   });
   try {
-    await api.patchIssue(
-      client,
-      ref,
-      issue.number,
-      { labels },
-      service.now(),
-    );
+    await api.patchIssue(client, ref, issue.number, { labels }, service.now());
     outcome.state = GithubWriteState.APPLIED;
   } catch (error) {
     applyWriteFailure(outcome, service.translate(error));

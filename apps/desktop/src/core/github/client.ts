@@ -143,10 +143,7 @@ export class GithubClient {
   }
 
   /** 可缓存的读。ETag 命中就放回存着的正文，这就是轮询不超配额的做法。 */
-  get(
-    path: string,
-    query?: Record<string, string>,
-  ): Promise<GithubResponse> {
+  get(path: string, query?: Record<string, string>): Promise<GithubResponse> {
     return this.perform("GET", path, query, undefined, true);
   }
 
@@ -183,7 +180,11 @@ export class GithubClient {
     try {
       envelope = JSON.parse(response.body.toString("utf8")) as typeof envelope;
     } catch {
-      throw apiFailure("INVALID_ARGUMENT", response.status, "GRAPHQL_MALFORMED");
+      throw apiFailure(
+        "INVALID_ARGUMENT",
+        response.status,
+        "GRAPHQL_MALFORMED",
+      );
     }
     // GraphQL 会带着 errors 数组答 200；把那当成功就会报告一次并未发生的写。
     const first = envelope.errors?.[0];
@@ -208,11 +209,7 @@ export class GithubClient {
    * 东西一律拒绝，而不是转义掉。
    */
   private resolve(path: string, query?: Record<string, string>): string {
-    if (
-      !path.startsWith("/") ||
-      path.includes("//") ||
-      /[?#\\]/.test(path)
-    ) {
+    if (!path.startsWith("/") || path.includes("//") || /[?#\\]/.test(path)) {
       throw apiFailure("INVALID_ARGUMENT", 0, "PATH_INVALID");
     }
     for (const character of path) {
@@ -238,7 +235,9 @@ export class GithubClient {
   ): Promise<GithubResponse> {
     const target = this.resolve(path, query);
     const payload =
-      body === undefined ? undefined : Buffer.from(JSON.stringify(body), "utf8");
+      body === undefined
+        ? undefined
+        : Buffer.from(JSON.stringify(body), "utf8");
     const key = `${method} ${target}`;
     const attempts = cacheable ? this.attempts : 1;
     let last: unknown;
@@ -332,7 +331,8 @@ export class GithubClient {
     }
     if (result.status >= 200 && result.status < 300) {
       const link = result.headers.get("link") ?? "";
-      if (cacheable) this.store(key, result.headers.get("etag") ?? "", link, data);
+      if (cacheable)
+        this.store(key, result.headers.get("etag") ?? "", link, data);
       return {
         status: result.status,
         body: data,
@@ -438,18 +438,16 @@ function retryable(error: unknown, cacheable: boolean): boolean {
   if (!cacheable) return false;
   const code: GithubCode | undefined =
     error instanceof Error && "code" in error
-      ? ((error as { code: GithubCode }).code)
+      ? (error as { code: GithubCode }).code
       : undefined;
   return code === "UNAVAILABLE";
 }
 
-function classify(
-  status: number,
-  rate: RateLimit,
-  cacheable: boolean,
-): Error {
-  if (status === 401) return apiFailure("UNAUTHENTICATED", status, "TOKEN_REJECTED");
-  if (status === 429) return apiFailure("RESOURCE_EXHAUSTED", status, "RATE_LIMITED");
+function classify(status: number, rate: RateLimit, cacheable: boolean): Error {
+  if (status === 401)
+    return apiFailure("UNAUTHENTICATED", status, "TOKEN_REJECTED");
+  if (status === 429)
+    return apiFailure("RESOURCE_EXHAUSTED", status, "RATE_LIMITED");
   if (status === 403) {
     // GitHub 对「你不可以」和它的次级限流都答 403。只有配额头能分开它们。
     if (rate.throttled || (rate.remaining === 0 && rate.limit > 0)) {
@@ -459,8 +457,10 @@ function classify(
   }
   if (status === 404) return apiFailure("NOT_FOUND", status, "NOT_FOUND");
   if (status === 409) return apiFailure("CONFLICT", status, "CONFLICT");
-  if (status === 422) return apiFailure("INVALID_ARGUMENT", status, "UNPROCESSABLE");
-  if (status === 405) return apiFailure("UNSUPPORTED", status, "METHOD_NOT_ALLOWED");
+  if (status === 422)
+    return apiFailure("INVALID_ARGUMENT", status, "UNPROCESSABLE");
+  if (status === 405)
+    return apiFailure("UNSUPPORTED", status, "METHOD_NOT_ALLOWED");
   if (status >= 300 && status < 400) {
     return apiFailure("INVALID_ARGUMENT", status, "REDIRECT_REFUSED");
   }
@@ -501,12 +501,10 @@ export function nextPage(link: string): number {
   for (const section of link.split(",")) {
     const parts = section.trim().split(";");
     if (parts.length < 2) continue;
-    const relation = parts
-      .slice(1)
-      .some((attribute) => {
-        const value = attribute.trim();
-        return value === 'rel="next"' || value === "rel=next";
-      });
+    const relation = parts.slice(1).some((attribute) => {
+      const value = attribute.trim();
+      return value === 'rel="next"' || value === "rel=next";
+    });
     if (!relation) continue;
     const raw = (parts[0] as string).trim();
     if (!raw.startsWith("<") || !raw.endsWith(">")) continue;

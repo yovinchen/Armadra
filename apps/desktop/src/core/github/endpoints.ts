@@ -26,11 +26,7 @@ import {
   type GithubReviewComment,
 } from "@armadra/protocol";
 
-import {
-  type GithubClient,
-  type GithubResponse,
-  perPage,
-} from "./client";
+import { type GithubClient, type GithubResponse, perPage } from "./client";
 import { apiFailure, codeOf } from "./errors";
 import {
   checkSummary,
@@ -78,11 +74,7 @@ function repoPath(
   ref: GithubRepositoryRef | undefined,
   suffix: string,
 ): string {
-  if (
-    ref === undefined ||
-    !validName(ref.owner) ||
-    !validName(ref.name)
-  ) {
+  if (ref === undefined || !validName(ref.owner) || !validName(ref.name)) {
     throw apiFailure("INVALID_ARGUMENT", 0, "REPOSITORY_INVALID");
   }
   // 指向另一个服务的引用会把这个仓库的名字——和这个令牌——送到错误的 authority。
@@ -411,9 +403,12 @@ export async function pullReviewComments(
   number: bigint,
   limit: number,
 ): Promise<GithubReviewComment[]> {
-  const response = await client.get(pullPath(client, ref, number, "/comments"), {
-    per_page: perPage(limit),
-  });
+  const response = await client.get(
+    pullPath(client, ref, number, "/comments"),
+    {
+      per_page: perPage(limit),
+    },
+  );
   return decode<WireReviewComment[]>(response).map(toReviewComment);
 }
 
@@ -745,7 +740,9 @@ export async function setProjectField(
     item: itemId,
     field: fieldId,
     option: optionId,
-  })) as { updateProjectV2ItemFieldValue?: { projectV2Item?: { id?: string } } } | null;
+  })) as {
+    updateProjectV2ItemFieldValue?: { projectV2Item?: { id?: string } };
+  } | null;
   if ((data?.updateProjectV2ItemFieldValue?.projectV2Item?.id ?? "") === "") {
     throw apiFailure("INVALID_ARGUMENT", 0, "GRAPHQL_MALFORMED");
   }

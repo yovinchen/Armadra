@@ -184,7 +184,8 @@ function treeTotals(
   }
   listed.sort(
     (left, right) =>
-      (right.memoryBytes ?? 0) - (left.memoryBytes ?? 0) || left.pid - right.pid,
+      (right.memoryBytes ?? 0) - (left.memoryBytes ?? 0) ||
+      left.pid - right.pid,
   );
   return {
     memoryBytes: memory,

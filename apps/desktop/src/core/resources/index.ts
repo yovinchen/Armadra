@@ -19,12 +19,7 @@ import type { CoreContext } from "../main";
 import { settingsDomain } from "../settings";
 import { workspaceExists } from "../events/workspaces";
 import { ResourceService, type SubscribeRequest } from "./service";
-import {
-  OrphanError,
-  adoptOrphan,
-  orphanTarget,
-  panePids,
-} from "./sessions";
+import { OrphanError, adoptOrphan, orphanTarget, panePids } from "./sessions";
 
 export { ResourceService } from "./service";
 export type {

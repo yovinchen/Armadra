@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import {
-  GithubCredentialSource,
-  GithubSecretStore,
-} from "@armadra/protocol";
+import { GithubCredentialSource, GithubSecretStore } from "@armadra/protocol";
 
 import { apiFailure } from "./errors";
 import { githubFixture, type GithubFixture } from "./fixture";

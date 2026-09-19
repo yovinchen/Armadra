@@ -82,7 +82,11 @@ export function panePids(): Map<string, number> {
     output = execFileSync(
       "tmux",
       ["list-panes", "-a", "-F", "#{session_name} #{pane_pid}"],
-      { encoding: "utf8", maxBuffer: 4 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] },
+      {
+        encoding: "utf8",
+        maxBuffer: 4 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "ignore"],
+      },
     );
   } catch {
     // 「没有服务器在跑」是空的情况，不是失败。
@@ -267,9 +271,7 @@ export function listOrphans(
 export function aliveBackendReferences(
   pids: ReadonlyMap<string, number> = panePids(),
 ): string[] {
-  return [...pids.keys()]
-    .filter((name) => name.startsWith("armadra-"))
-    .sort();
+  return [...pids.keys()].filter((name) => name.startsWith("armadra-")).sort();
 }
 
 export class OrphanError extends Error {
@@ -301,7 +303,11 @@ export function adoptOrphan(
     )
     .get(sessionId) as Record<string, unknown> | undefined;
   if (raw === undefined) {
-    throw new OrphanError(404, "not_found", "This terminal session does not exist");
+    throw new OrphanError(
+      404,
+      "not_found",
+      "This terminal session does not exist",
+    );
   }
   const owning = text(raw, "workspace_id");
   if (owning !== workspaceId) {
@@ -311,7 +317,10 @@ export function adoptOrphan(
       "This terminal session belongs to another workspace",
     );
   }
-  if (text(raw, "status") !== "running" || text(raw, "attach_state") === "exited") {
+  if (
+    text(raw, "status") !== "running" ||
+    text(raw, "attach_state") === "exited"
+  ) {
     throw new OrphanError(
       409,
       "conflict",

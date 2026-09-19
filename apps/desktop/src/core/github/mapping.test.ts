@@ -196,11 +196,7 @@ describe("给 Issue 标注分组", () => {
     });
     const mapped = create(GithubIssueSchema, { number: 7n });
     const absent = create(GithubIssueSchema, { number: 8n });
-    applyProjectGroups(
-      mapping,
-      [mapped, absent],
-      new Map([[7, "opt-1"]]),
-    );
+    applyProjectGroups(mapping, [mapped, absent], new Map([[7, "opt-1"]]));
     expect(mapped.statusGroupId).toBe("a");
     expect(absent.statusGroupId).toBe("");
   });

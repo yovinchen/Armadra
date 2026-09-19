@@ -70,7 +70,9 @@ describe("git remote 与 API base 的本地解析", () => {
   it("web 主机与 API 主机分别报告", () => {
     expect(webHostFor(PUBLIC_API_BASE)).toBe("github.com");
     expect(apiHost(PUBLIC_API_BASE)).toBe("api.github.com");
-    expect(webHostFor("https://git.example.com/api/v3")).toBe("git.example.com");
+    expect(webHostFor("https://git.example.com/api/v3")).toBe(
+      "git.example.com",
+    );
   });
 
   it("owner 与仓库名不接受能改写请求路径的字符", () => {
