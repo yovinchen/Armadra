@@ -243,8 +243,25 @@
 - **W3.0–W3.2 浏览器节点**（`0c7d70664`、`5b547f1d0`、`ac9f297fb`、`19ffda68e`、`4c7d4502f`）：
   go/no-go 探针（记录在 [webview 探针](../research/nodeterm/webview-probe.md)）通过后，
   浏览器节点改成进程内 `<webview>`，生命周期不变量（pool region、顺序稳定、`display:none`
-  不卸载、后台上限、隐藏回收）就位。**W3.1–3.2 已合入，驱动接通中**（W3.3–W3.5 未完成，
-  旧 screencast 路径仍在，是唯一回退）。
+  不卸载、后台上限、隐藏回收）就位。
+- **W3.3–W3.4 驱动搬 Electron main**（`a77aa25ac`、`74e2a0d89`、`6a8414ce0`、`dcf5dcd85`）：
+  guest registry（`getType() === 'webview'` 校验）、默认拒绝且连参数校验的 CDP 白名单（唯一调用点由
+  源码扫描守住）、11 条冻结读取脚本与逐字节恒等校验、`@N` refs 按导航代失效、`will-navigate` /
+  `setWindowOpenHandler` 权威门、右键菜单坐标换算；`browser:drive` 是壳自写的回环 WS，地址与一次性
+  token 经 Runtime 的 spawn 环境交付，Runtime 保留授权三规则与租约裁决，17 个动词逐动词写出参数面。
+  验收闸门：能力关闭时 attach 次数为零；无权节点与不存在节点拒绝文本逐字节相同；录制式 CDP 用例
+  30+ 条命令零 `Runtime.evaluate` / `Debugger.*` / `expression`；`capture` 对 `../`、符号链接目录、
+  末段符号链接三种越界全拒；人接管后 Agent 收到 `LEASE_REVOKED` 且在途动作记 `unknown`。
+  真站点上的 17 动词手工跑与徽标翻转的真窗口确认**未做**（需要画布上手工建节点与连线）。
+- **W3.5 删除 screencast 旧路径**（`c3f6cbd76`、`f67b10f33`、`22ecb4d3b`、`7fe66ab48`）：浏览器节点
+  的页面只在 Electron 壳的 `<webview>` guest 里；`apps/runtime/src/browser/` 由 16,754 行降到 4,327 行，
+  只剩授权三规则、租约状态机、`browser:drive` 通道、URL 策略与 `active_tab_url` 一列。
+  `/api/workspaces/{id}/browser/*` 全部下线，`BrowserStreamFrame` / `BrowserStreamClient` /
+  `BrowserSubscribeRequest` / `BrowserSubscription` / `BrowserFrame` 及 `BrowserVisibility`、
+  `BrowserBandwidthClass` 从协议删除，`BrowserAction` 9 与 `BrowserActionResult` 14 保留 `reserved`。
+  17 个 Hook 动词面与 `browser_sessions` 表均未变动；受管 Chromium 下载（`browser-manifest.json`、
+  `pnpm browser:manifest`）随之删除；纯浏览器与 Host 托管模式下浏览器节点显示
+  `browser.unavailable.desktopOnly`，不再回退到沙箱 iframe。
 - **W4 终端渲染侧**（`dc303b810`）：WebGL 上下文预算在一处协调，acquire 去抖、
   context loss 单次延迟重授、回退 DOM 时字距重算门、内存压力释放隐藏持有者。
 - **W5 收尾**（`f4cf0d91f`、`a145462e2`、`a9720cc00`、`2ac536a8f`）：
@@ -254,7 +271,8 @@
   签名移到写清单之前，只剩 `ARMADRA_RELEASE_SIGNING_KEY` 一把钥匙；
   Runtime 的信号处理器提前到发布端点之前注册。
 
-**能力回退**：**手机远端观看浏览器页面的能力已移除（D6）**。这是本轮唯一实打实的损失：
+**能力回退**：**手机远端观看浏览器页面的能力已移除（D6）**（连同手机焦点页的浏览器控制条）；
+**受管 Chromium 下载已移除**（§2.1）。前者是本轮唯一实打实的损失：
 `<webview>` 是本机进程内的 OOPIF，画面不经 Host 转发，所以经 Host 从手机看同一页面这条路没有了。
 今天也只验证到 macOS 本机（§23），降级为「截图 + 元素快照 + 看见并撤销租约」的控制面，
 不保留两套渲染路径。
@@ -263,15 +281,15 @@
 Chrome 一份（[画布性能基线](canvas-performance-baseline.md)）。换壳后若出现无法二分定位的卡顿，
 没有旧壳那一份可比——旧壳已删除，补记需要从 `ff70ec0af` 之前的提交重建。
 
-| 范围        | 命令                                                    | 结果                                                             |
-| ----------- | ------------------------------------------------------- | ---------------------------------------------------------------- |
-| 桌面壳      | `pnpm --filter @armadra/desktop test`                   | vitest 441 项（33 文件）+ `node --test scripts/*.test.mjs` 40 项 |
-| Web         | `pnpm --filter @armadra/web test`                       | 2366 项（239 文件）；typecheck 通过                              |
-| host-client | `pnpm --filter @armadra/host-client test`               | 291 项                                                           |
-| Runtime     | `cargo test --workspace`（连跑三次）                    | runtime lib 1023 项 + 集成套件全绿；hook 51 + 14                 |
-| Go Host     | `go -C apps/host test -count=1 ./...`                   | 30 个包全绿                                                      |
-| 原生会话    | `pnpm host:native-session-smoke`                        | 真实 Host + CLI，两个不同回环端口各走一遍票据链                  |
-| 发布        | `pnpm release:check`、`release:dry-run`、`ci:workflows` | 三处版本一致；36 个产物落地并校验；两份工作流结构通过            |
+| 范围        | 命令                                                    | 结果                                                              |
+| ----------- | ------------------------------------------------------- | ----------------------------------------------------------------- |
+| 桌面壳      | `pnpm --filter @armadra/desktop test`                   | vitest 579 项（43 文件，含 W3.3 录制式动词用例）+ node:test 40 项 |
+| Web         | `pnpm --filter @armadra/web test`                       | 2354 项（239 文件，W3.5 后）；typecheck 通过                      |
+| host-client | `pnpm --filter @armadra/host-client test`               | 291 项                                                            |
+| Runtime     | `cargo test --workspace`（连跑三次）                    | runtime lib 1023 项 + 集成套件全绿；hook 51 + 14                  |
+| Go Host     | `go -C apps/host test -count=1 ./...`                   | 30 个包全绿                                                       |
+| 原生会话    | `pnpm host:native-session-smoke`                        | 真实 Host + CLI，两个不同回环端口各走一遍票据链                   |
+| 发布        | `pnpm release:check`、`release:dry-run`、`ci:workflows` | 三处版本一致；36 个产物落地并校验；两份工作流结构通过             |
 
 换打包器后的产物矩阵未在真 runner 上跑过（macOS/Windows/Linux 的 electron-builder 输出、
 Authenticode 走同一对 `CSC_*` 变量），列在 [ci-release.md](../guides/ci-release.md) §4 的待验清单里。
