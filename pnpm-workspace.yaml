@@ -5,10 +5,14 @@ packages:
 
 allowBuilds:
   esbuild: true
+  # Electron's postinstall is what downloads the runtime binary; without it
+  # `electron-vite dev` has nothing to launch.
+  electron: true
 
 minimumReleaseAgeExclude:
   - "@xyflow/react@12.11.3"
   - "@xyflow/system@0.0.80"
   - react-resizable-panels@4.12.4
+  - electron@42.11.6
 
 storeDir: .pnpm-store

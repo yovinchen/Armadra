@@ -1,0 +1,96 @@
+import { resolve } from "node:path";
+import { defineConfig, externalizeDepsPlugin } from "electron-vite";
+import type { UserConfig } from "vite";
+import webConfig from "../web/vite.config";
+
+const here = __dirname;
+const web = resolve(here, "../web");
+
+/**
+ * Two rules for the main and preload bundles, both learned the hard way in
+ * nodeterm (`electron.vite.config.ts:18-30`):
+ *
+ *   1. `electron` is a devDependency, so `externalizeDepsPlugin` — which reads
+ *      `dependencies` — does not externalize it. Left alone, the npm wrapper
+ *      at `node_modules/electron/index.js` gets bundled in and the app tries
+ *      to download Electron at runtime. It has to be listed explicitly.
+ *   2. Native modules' internal `require()` calls use relative paths that
+ *      break once bundled, so they stay external too. Armadra has none today
+ *      (the terminal domain is the Rust Runtime's), but the list is the place
+ *      one would go, so the rule is written down rather than rediscovered.
+ */
+const EXTERNAL = ["electron"];
+
+/**
+ * CJS output for both. electron-vite defaults to ESM (`.mjs`), and an
+ * asar-packaged Electron app needs a CJS entry point for the main process and
+ * for the preload script.
+ */
+const cjs = {
+  format: "cjs" as const,
+  entryFileNames: "[name].js",
+};
+
+/**
+ * The renderer is `apps/web`, verbatim. Its config is imported and called
+ * rather than re-declared: it owns the React and Tailwind plugins, the `@`
+ * alias, the rolldown chunk groups, and the dev-server proxy that finds the
+ * Runtime through `endpoints.json`. A second copy of any of that here would
+ * drift, and the shell is not allowed to change how the front end builds.
+ *
+ * In dev this serves apps/web on 127.0.0.1:1420 and electron-vite hands the
+ * URL to the main process as `ELECTRON_RENDERER_URL`. In a build it produces
+ * the same artifacts `pnpm --filter @armadra/web build` would, into
+ * `out/renderer`, which the packaged window loads from disk.
+ *
+ * `ARMADRA_DESKTOP_EXTERNAL_RENDERER=1` drops the renderer target entirely,
+ * for the flow where `pnpm --filter @armadra/web dev` is already running on
+ * 1420 — apps/web pins `strictPort`, so two servers cannot share it.
+ */
+const externalRenderer = process.env.ARMADRA_DESKTOP_EXTERNAL_RENDERER === "1";
+
+function renderer(command: "serve" | "build", mode: string): UserConfig {
+  const base = webConfig({ command, mode }) as UserConfig;
+  const build = base.build ?? {};
+  return {
+    ...base,
+    root: web,
+    build: {
+      ...build,
+      outDir: resolve(here, "out/renderer"),
+      emptyOutDir: true,
+      // Vite 8 builds with rolldown, so the entry belongs in
+      // `rolldownOptions` — `rollupOptions` is the deprecated spelling and
+      // electron-vite would report the input as missing. apps/web's own
+      // `codeSplitting.groups` live on the same object and must survive.
+      rolldownOptions: {
+        ...build.rolldownOptions,
+        input: { index: resolve(web, "index.html") },
+      },
+    },
+  };
+}
+
+export default defineConfig(({ command, mode }) => ({
+  main: {
+    plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: {
+        input: { index: resolve(here, "src/main/index.ts") },
+        external: EXTERNAL,
+        output: cjs,
+      },
+    },
+  },
+  preload: {
+    plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: {
+        input: { index: resolve(here, "src/preload/index.ts") },
+        external: EXTERNAL,
+        output: cjs,
+      },
+    },
+  },
+  ...(externalRenderer ? {} : { renderer: renderer(command, mode) }),
+}));

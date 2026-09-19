@@ -342,11 +342,14 @@ jobs:
       # 这个判断合成同一个 --config；仓库里的 endpoints 始终为空，免得本地构建
       # 也去联系发布来源。每平台的 bundle.targets 来自自动合并的
       # tauri.<平台>.conf.json，不用在命令行再传一遍。
+      # `tauri:build`（不是 `build`）：Electron 壳迁移期间两套壳共存于
+      # `@armadra/desktop`，`build` 已经是 electron-vite 的产物。发布仍然出
+      # Tauri 包，直到 W2.3 把打包切到 electron-builder。
       - name: 打桌面包
         shell: bash
         env:
           ARMADRA_UPDATER_ENDPOINTS: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
-        run: pnpm --filter @armadra/desktop build
+        run: pnpm --filter @armadra/desktop tauri:build
 
       # 产物已经落地，先断言它能在承诺的系统上启动，再去改名上传。
       - name: 校验 Linux 的 glibc 基线
