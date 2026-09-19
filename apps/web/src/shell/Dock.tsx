@@ -10,7 +10,6 @@ import { DockUsage } from "./DockUsage";
 import { useMenuTooltip } from "./menu-tooltip";
 import { currentViewportCenter } from "../canvas/placement";
 import { fitView, zoomToLevel } from "../canvas/flow/use-flow-viewport";
-import { canEditCanvas, useCanvasOwnership } from "../canvas-ownership";
 import { useCanUndo, useCanRedo, useCanvasStore } from "../store/canvas-store";
 import { useEnabledAgents } from "../app/use-agents";
 import { useT } from "../app/preferences-store";
@@ -222,33 +221,21 @@ export function Dock() {
 function SaveDot() {
   const t = useT();
   const saveState = useCanvasStore((state) => state.saveState);
-  const ownership = useCanvasOwnership((state) => state.status);
-  /**
-   * 归属没落定时这盏灯是「只读」，不是「已保存」（H01 §4）。
-   * 维护窗口里画布确实写不进去，把它显示成绿色等于报了个假平安。
-   */
-  const writable = canEditCanvas(ownership);
-  const state = writable ? saveState : "readonly";
-  const label = writable
-    ? t(`dock.save.${saveState}`)
-    : t("ownership.save.readonly");
+  const label = t(`dock.save.${saveState}`);
   return (
     <Tooltip delayDuration={500}>
       <TooltipTrigger asChild>
         <span
           data-slot="save-dot"
-          data-state={state}
+          data-state={saveState}
           role="status"
           aria-label={label}
           className={cn(
             "mx-1 size-2 shrink-0 rounded-full",
-            !writable && "bg-muted-foreground/60",
-            writable && saveState === "error" && "bg-danger",
-            writable && saveState === "saving" && "anim-dot-pulse bg-warn",
-            writable && saveState === "dirty" && "bg-warn",
-            writable &&
-              (saveState === "saved" || saveState === "idle") &&
-              "bg-success/70",
+            saveState === "error" && "bg-danger",
+            saveState === "saving" && "anim-dot-pulse bg-warn",
+            saveState === "dirty" && "bg-warn",
+            (saveState === "saved" || saveState === "idle") && "bg-success/70",
           )}
         />
       </TooltipTrigger>

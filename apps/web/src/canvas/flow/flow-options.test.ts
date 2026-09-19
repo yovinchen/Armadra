@@ -32,7 +32,6 @@ const options = (patch: Partial<WhiteboardPreferences> = {}, extra = {}) =>
   flowOptions({
     whiteboard: { ...preferences, ...patch },
     locked: false,
-    editable: true,
     ...extra,
   });
 
@@ -185,14 +184,5 @@ describe("偏好映射", () => {
       autoPanOnNodeDrag: false,
       autoPanOnConnect: false,
     });
-  });
-});
-
-describe("只读态", () => {
-  it("归属没落在本端时不能拖、不能连，但仍可选中", () => {
-    const readonly = options({}, { editable: false });
-    expect(readonly.nodesDraggable).toBe(false);
-    expect(readonly.nodesConnectable).toBe(false);
-    expect(readonly.elementsSelectable).toBe(true);
   });
 });

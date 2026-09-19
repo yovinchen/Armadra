@@ -5,14 +5,7 @@ import {
   type Viewport,
 } from "@armadra/shared";
 import { t } from "../app/preferences-store";
-import {
-  canEditCanvas,
-  canvasGateway,
-  isCanvasConflict,
-  useCanvasOwnership,
-  CanvasOwnershipMovedError,
-  CanvasReadOnlyError,
-} from "../canvas-ownership";
+import { isConflict, runtimeApi } from "../api/client";
 import { serializeWhiteboard } from "../canvas/whiteboard/serialize";
 import { useCanvasStore } from "../store/canvas-store";
 import { clearLocalEdits, localEdits } from "../store/canvas/pending";
@@ -82,7 +75,7 @@ async function resolveConflict(
   }
   let remote: BoardDocument;
   try {
-    remote = await canvasGateway.loadBoard(workspaceId, boardId);
+    remote = await runtimeApi.loadBoard(workspaceId, boardId);
   } catch (reason) {
     fail(reason);
     return;
@@ -104,7 +97,7 @@ function boardQueue(): CanvasSaveQueue {
   if (queue) return queue;
   queue = new CanvasSaveQueue(
     (workspaceId, boardId, document) =>
-      canvasGateway.saveBoard(workspaceId, boardId, document),
+      runtimeApi.saveBoard(workspaceId, boardId, document),
     (workspaceId, boardId, source, saved, reason) => {
       queue?.rebasePending(workspaceId, boardId, saved.board);
       conflictStreak.delete(`${workspaceId}:${boardId}`);
@@ -131,20 +124,8 @@ function boardQueue(): CanvasSaveQueue {
     },
     (workspaceId, boardId, cause) => {
       if (useCanvasStore.getState().boardId !== boardId) return;
-      /**
-       * 归属变了：这一次写不能重试，也不算失败。网关已经重新探过归属，
-       * 文档留在 dirty，下一轮防抖要么走新的写方，要么因为还在维护窗口
-       * 里而继续按兵不动。亮红灯会把「换了个写方」说成「改动丢了」。
-       */
-      if (
-        cause instanceof CanvasOwnershipMovedError ||
-        cause instanceof CanvasReadOnlyError
-      ) {
-        useCanvasStore.setState({ saveState: "dirty", saveError: null });
-        return;
-      }
       // 409 = 别的窗口先存了。自动变基重放，别急着亮红灯。
-      if (isCanvasConflict(cause)) {
+      if (isConflict(cause)) {
         void resolveConflict(workspaceId, boardId, cause);
         return;
       }
@@ -231,12 +212,6 @@ export function startAutosave(): () => void {
     editTimer = null;
     const state = useCanvasStore.getState();
     if (state.saveState !== "dirty") return;
-    /**
-     * 归属没落定就不写：维护窗口里两侧都拒写，`unknown` / `error` 则是
-     * 「不知道该写给谁」。保存态留在 dirty——这份改动确实还没落盘，
-     * 说成「已保存」是撒谎。
-     */
-    if (!canEditCanvas(useCanvasOwnership.getState().status)) return;
     if (!syncWhiteboard()) {
       useCanvasStore.setState({
         saveState: "error",
@@ -258,7 +233,6 @@ export function startAutosave(): () => void {
     const state = useCanvasStore.getState();
     // 有编辑在路上就不必单独存视口了，那次 PUT 会带上它。
     if (state.saveState !== "saved" && state.saveState !== "idle") return;
-    if (!canEditCanvas(useCanvasOwnership.getState().status)) return;
     const next = target();
     if (!next) return;
     // 刚刚那次编辑保存已经把这个视口带走了，不必再 PUT 一遍。

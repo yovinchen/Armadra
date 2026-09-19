@@ -24,7 +24,6 @@ import { ContextMenu, ContextMenuTrigger } from "@/ui/context-menu";
 import { useT } from "@/app/preferences-store";
 import { usePreferencesStore, useResolvedTheme } from "@/app/preferences-store";
 import { canvasColorScheme } from "@/app/use-canvas-preferences";
-import { canEditCanvas, useCanvasOwnership } from "@/canvas-ownership";
 import { useBoardAutosave } from "@/save/autosave";
 import { sessionGateway } from "@/session";
 import { useCanvasStore } from "@/store/canvas-store";
@@ -157,8 +156,6 @@ function FlowWorkspaceInner() {
   const flow = useReactFlow();
   const theme = useResolvedTheme();
   const preferences = usePreferencesStore((state) => state.whiteboard);
-  const ownership = useCanvasOwnership((state) => state.status);
-  const editable = canEditCanvas(ownership);
   // 锁定状态住在 `canvas-lock.ts`：Dock 的工具组在这棵树之外，要一起读。
   const locked = useCanvasLocked();
   const [pendingDelete, setPendingDelete] =
@@ -398,8 +395,8 @@ function FlowWorkspaceInner() {
   // （`flow-options`），所以当前工具也是这张表的输入。
   const tool = useTool();
   const options = React.useMemo(
-    () => flowOptions({ whiteboard: preferences, locked, editable, tool }),
-    [editable, locked, preferences, tool],
+    () => flowOptions({ whiteboard: preferences, locked, tool }),
+    [locked, preferences, tool],
   );
 
   return (

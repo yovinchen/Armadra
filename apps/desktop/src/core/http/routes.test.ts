@@ -70,6 +70,17 @@ function camel(path: string): string {
 const beyond = ROUTES.filter((route) => route.beyondContract);
 const contractual = ROUTES.filter((route) => !route.beyondContract);
 
+/**
+ * Paths the Rust Runtime still registers and this table deliberately does not.
+ *
+ * `/api/ownership*` answered "which of the two processes may write?" — a
+ * question with no second answer inside one core, so R7c deleted the mechanism
+ * on both sides of the wire (design §4.2 / §4.3). The Rust routes go with the
+ * crate in R7; until then they are subtracted by name here rather than by a
+ * looser comparison, so a second retirement is a decision made in this file.
+ */
+const RETIRED = ["/api/ownership", "/api/ownership/domains"];
+
 describe("the route table", () => {
   it("adds exactly one path the Rust Runtime never had", () => {
     expect(beyond.map((route) => route.path)).toEqual([
@@ -77,11 +88,22 @@ describe("the route table", () => {
     ]);
   });
 
-  it("holds the contractual 163, split 148 on the main surface and 15 on the hook one", () => {
-    expect(contractual).toHaveLength(163);
+  it("retires the two ownership paths the Rust Runtime still registers", () => {
+    const rust = rustRoutes().map((route) => camel(route.path));
+    for (const path of RETIRED) {
+      expect(rust, path).toContain(path);
+      expect(
+        ROUTES.map((route) => route.path),
+        path,
+      ).not.toContain(path);
+    }
+  });
+
+  it("holds the contractual 161, split 146 on the main surface and 15 on the hook one", () => {
+    expect(contractual).toHaveLength(161);
     expect(
       contractual.filter((route) => route.surface === "runtime"),
-    ).toHaveLength(148);
+    ).toHaveLength(146);
     expect(
       contractual.filter((route) => route.surface === "hook"),
     ).toHaveLength(15);
@@ -90,6 +112,7 @@ describe("the route table", () => {
   it("is exactly what the Rust Runtime registers, path for path", () => {
     const rust = rustRoutes()
       .map((route) => camel(route.path))
+      .filter((path) => !RETIRED.includes(path))
       .sort();
     const ours = contractual.map((route) => route.path).sort();
     expect(ours).toEqual(rust);
@@ -175,7 +198,7 @@ describe("the route table", () => {
     for (const phase of [1, 2, 3, 4, 5]) {
       expect(counts.get(phase), `R${phase}`).toBeGreaterThan(0);
     }
-    expect([...counts.values()].reduce((a, b) => a + b, 0)).toBe(162);
+    expect([...counts.values()].reduce((a, b) => a + b, 0)).toBe(160);
   });
 
   it("keeps the three inbound WebSocket paths in the table", () => {

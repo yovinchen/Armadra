@@ -21,8 +21,6 @@ export interface FlowOptionsInput {
   whiteboard: WhiteboardPreferences;
   /** 「锁定视图」（`canvas-lock.ts`）：锁相机，白板工具一并置灰。 */
   locked: boolean;
-  /** 归属网关说这块画布现在能不能写（`canEditCanvas`）。 */
-  editable: boolean;
   /** 当前工具（`interaction/tool-store`）：手形与绘图工具各改一组值。 */
   tool?: CanvasToolId;
 }
@@ -71,7 +69,6 @@ export interface FlowOptions {
 export function flowOptions({
   whiteboard,
   locked,
-  editable,
   tool = "select",
 }: FlowOptionsInput): FlowOptions {
   const mouse = whiteboard.inputMode === "mouse";
@@ -96,9 +93,8 @@ export function flowOptions({
     snapGrid: [grid, grid],
     autoPanOnNodeDrag: whiteboard.edgeScroll,
     autoPanOnConnect: whiteboard.edgeScroll,
-    nodesDraggable: editable && !hand && !drawing,
-    nodesConnectable: editable,
-    // 只读时仍然可选：看得见选中框才知道右键菜单作用在谁身上。
+    nodesDraggable: !hand && !drawing,
+    nodesConnectable: true,
     // 绘图时关掉：画过一个节点之后那一下 `click` 不该顺手把它选中。
     elementsSelectable: !drawing,
   };

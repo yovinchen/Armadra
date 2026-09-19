@@ -3,7 +3,6 @@ import { useReactFlow, useStoreApi } from "@xyflow/react";
 import type { Position } from "@armadra/shared";
 
 import { usePreferencesStore } from "@/app/preferences-store";
-import { canEditCanvas, useCanvasOwnership } from "@/canvas-ownership";
 import { isCanvasLocked } from "../../canvas-lock";
 import { getTool } from "../../interaction/tool-store";
 import { snapToGrid } from "./grid";
@@ -28,12 +27,10 @@ export function useDoubleClickText(): void {
   const flow = useReactFlow();
   const store = useStoreApi();
   const preferences = usePreferencesStore((state) => state.whiteboard);
-  const ownership = useCanvasOwnership((state) => state.status);
-  const editable = canEditCanvas(ownership);
 
   // 回调里要读最新的值，但 effect 不该因为改了一次网格间距就重挂。
-  const latest = React.useRef({ preferences, editable });
-  latest.current = { preferences, editable };
+  const latest = React.useRef({ preferences });
+  latest.current = { preferences };
 
   React.useEffect(() => {
     const dom = store.getState().domNode;
@@ -45,7 +42,7 @@ export function useDoubleClickText(): void {
       if (!event.target.classList.contains("react-flow__pane")) return;
       const active = latest.current;
       if (getTool() !== "select") return;
-      if (isCanvasLocked() || !active.editable) return;
+      if (isCanvasLocked()) return;
       event.preventDefault();
       const at: Position = snapToGrid(
         flow.screenToFlowPosition({ x: event.clientX, y: event.clientY }),

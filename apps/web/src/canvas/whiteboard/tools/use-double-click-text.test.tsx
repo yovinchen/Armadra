@@ -6,7 +6,7 @@ import { cleanup, render } from "@testing-library/react";
  *
  * 三条断言：空白处双击真的建出一条空文字并选中它（`TextNode` 的
  * `autoEdit` 靠「空文本」触发）、非空白处（节点、对象、输入框）一下都不建、
- * 绘图工具与锁定态下不建。
+ * 绘图工具与锁定视图下不建。
  */
 
 const mocks = vi.hoisted(() => ({
@@ -14,7 +14,6 @@ const mocks = vi.hoisted(() => ({
   selected: [] as string[],
   tool: "select",
   locked: false,
-  editable: true,
   snap: false,
   gridSize: 24,
 }));
@@ -30,10 +29,6 @@ vi.mock("@xyflow/react", () => ({
 vi.mock("@/app/preferences-store", () => ({
   usePreferencesStore: (select: (state: unknown) => unknown) =>
     select({ whiteboard: { snap: mocks.snap, gridSize: mocks.gridSize } }),
-}));
-vi.mock("@/canvas-ownership", () => ({
-  canEditCanvas: () => mocks.editable,
-  useCanvasOwnership: () => "owned",
 }));
 vi.mock("../../canvas-lock", () => ({
   isCanvasLocked: () => mocks.locked,
@@ -96,7 +91,6 @@ describe("空白处双击建文字", () => {
     mocks.selected = [];
     mocks.tool = "select";
     mocks.locked = false;
-    mocks.editable = true;
     mocks.snap = false;
     document.body.innerHTML = "";
   });
@@ -131,18 +125,10 @@ describe("空白处双击建文字", () => {
     expect(mocks.added).toEqual([]);
   });
 
-  it("锁定视图与只读态都不建", () => {
+  it("锁定视图下不建", () => {
     mocks.locked = true;
     const locked = mount();
     doubleClick(locked.pane);
-    expect(mocks.added).toEqual([]);
-    cleanup();
-
-    mocks.locked = false;
-    mocks.editable = false;
-    document.body.innerHTML = "";
-    const readonly = mount();
-    doubleClick(readonly.pane);
     expect(mocks.added).toEqual([]);
   });
 });

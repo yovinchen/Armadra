@@ -296,20 +296,6 @@ export const ROUTES: readonly RouteEntry[] = [
     phase: 4,
     implemented: true,
   },
-  {
-    path: "/api/ownership",
-    methods: ["GET"],
-    surface: "runtime",
-    feature: "写入所有权记录",
-    phase: 1,
-  },
-  {
-    path: "/api/ownership/domains",
-    methods: ["GET"],
-    surface: "runtime",
-    feature: "写入所有权记录",
-    phase: 1,
-  },
   { path: "/health", methods: ["GET"], surface: "runtime", implemented: true },
   {
     path: "/api/health",

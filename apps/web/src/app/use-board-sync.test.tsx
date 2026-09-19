@@ -94,15 +94,8 @@ vi.mock("../api/client", () => ({
   runtimeApi: {
     listBoards: vi.fn(async () => [board]),
     openWorkspace: vi.fn(async () => undefined),
-  },
-}));
-
-vi.mock("../canvas-ownership", () => ({
-  canvasGateway: {
     loadBoard: (...args: unknown[]) => loadBoard(...(args as [])),
   },
-  useCanvasOwnership: { getState: () => ({ probe: async () => undefined }) },
-  useCanvasEventFollower: () => undefined,
 }));
 
 vi.mock("./workspaces-query", () => ({
