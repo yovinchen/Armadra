@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_DEV_RENDERER_URL,
   closeAction,
-  rendererTarget,
+  pageSourceTarget,
   shouldHideOnClose,
 } from "./window-rules";
 
@@ -29,31 +29,39 @@ describe("closing the window", () => {
   });
 });
 
-describe("where the renderer comes from", () => {
+describe("where the page comes from", () => {
   it("uses apps/web's dev server while developing", () => {
-    expect(
-      rendererTarget("http://127.0.0.1:5173", false, "/out/index.html"),
-    ).toEqual({
-      kind: "url",
+    expect(pageSourceTarget("http://127.0.0.1:5173", false, "/out")).toEqual({
+      kind: "devServer",
       url: "http://127.0.0.1:5173",
     });
     // electron-vite did not start one: apps/web's own pinned port.
-    expect(rendererTarget(undefined, false, "/out/index.html")).toEqual({
-      kind: "url",
+    expect(pageSourceTarget(undefined, false, "/out")).toEqual({
+      kind: "devServer",
       url: DEFAULT_DEV_RENDERER_URL,
     });
-    expect(rendererTarget("", false, "/out/index.html")).toEqual({
-      kind: "url",
+    expect(pageSourceTarget("", false, "/out")).toEqual({
+      kind: "devServer",
       url: DEFAULT_DEV_RENDERER_URL,
     });
   });
 
-  it("uses apps/web's build output once packaged, never a dev server", () => {
-    expect(
-      rendererTarget("http://127.0.0.1:1420", true, "/out/index.html"),
-    ).toEqual({
-      kind: "file",
-      path: "/out/index.html",
+  it("serves apps/web's build output itself once packaged, never a dev server", () => {
+    expect(pageSourceTarget("http://127.0.0.1:1420", true, "/out")).toEqual({
+      kind: "static",
+      root: "/out",
     });
+  });
+
+  it("never yields a file: page, whose origin nothing can be granted to", () => {
+    // The whole reason the packaged shell runs a server at all (§2.1): a
+    // `file:` page has an opaque origin, so the Runtime could not allow it and
+    // the Host could not name it in --allow-origin.
+    for (const target of [
+      pageSourceTarget(undefined, true, "/out"),
+      pageSourceTarget(undefined, false, "/out"),
+    ]) {
+      expect(JSON.stringify(target)).not.toContain("file:");
+    }
   });
 });

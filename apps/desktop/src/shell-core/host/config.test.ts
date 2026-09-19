@@ -5,6 +5,7 @@ import {
   HOST_ENDPOINT,
   type HostLaunchConfig,
   hostBinaryName,
+  nativeOrigin,
   resolveBinary,
   startArguments,
   validate,
@@ -124,6 +125,80 @@ describe("the start line", () => {
   it("grants only the three native origins when the page is already one", () => {
     const args = startArguments(config(join(tmpdir(), name)));
     expect(args.filter((arg) => arg === "--allow-origin")).toHaveLength(3);
+  });
+
+  it("grants the shell's own kernel-assigned origin, once", () => {
+    const shell: HostLaunchConfig = {
+      ...config(join(tmpdir(), name)),
+      browserOrigin: "http://127.0.0.1:54321",
+      // Development also names apps/web's dev server, and a repeat of the
+      // page's own origin must not become a second --allow-origin: the Host
+      // refuses a repeated grant.
+      additionalOrigins: ["http://127.0.0.1:1420", "http://127.0.0.1:54321"],
+    };
+    expect(validate(shell)).toBeUndefined();
+    const granted = startArguments(shell)
+      .map((arg, index, all) =>
+        all[index - 1] === "--allow-origin" ? arg : null,
+      )
+      .filter((arg): arg is string => arg !== null);
+    expect(granted).toEqual([
+      "tauri://localhost",
+      "http://tauri.localhost",
+      "https://tauri.localhost",
+      "http://127.0.0.1:54321",
+      "http://127.0.0.1:1420",
+    ]);
+  });
+
+  it("refuses an additional origin that is not one", () => {
+    expect(
+      validate({
+        ...config(join(tmpdir(), name)),
+        additionalOrigins: ["http://127.0.0.1:1420/app"],
+      }),
+    ).toEqual({ kind: "invalidConfiguration" });
+  });
+});
+
+describe("which origins a shell can present", () => {
+  it("accepts the Tauri spellings and any loopback HTTP origin", () => {
+    // The same rule the Host applies in `native.go:loopbackHTTPOrigin` and the
+    // page in `packages/host-client/src/native.ts`. All three have to agree on
+    // the same string, or a ticket is minted for an origin that cannot spend
+    // it; each side pins the table.
+    for (const origin of [
+      "tauri://localhost",
+      "http://tauri.localhost",
+      "https://tauri.localhost",
+      "http://127.0.0.1:54321",
+      "http://127.0.0.1:1420",
+      "http://127.5.5.5:8080",
+      "http://localhost:3000",
+      "http://[::1]:9000",
+    ]) {
+      expect(nativeOrigin(origin), origin).toBe(true);
+    }
+  });
+
+  it("refuses anything that is not loopback, not HTTP, or not an origin", () => {
+    for (const origin of [
+      // HTTPS on loopback is a browser deployment, and its session is the
+      // cookie one; only plain loopback HTTP is the shell shape (§2.1).
+      "https://127.0.0.1:54321",
+      "http://192.168.1.20:54321",
+      "http://armadra.example",
+      // A name that merely ends in something loopback-looking.
+      "http://127.0.0.1.evil.example",
+      "http://localhost.evil.example",
+      // Not an origin at all.
+      "http://127.0.0.1:54321/app",
+      "http://user:pass@127.0.0.1:54321",
+      "",
+      "not a url",
+    ]) {
+      expect(nativeOrigin(origin), origin).toBe(false);
+    }
   });
 
   it("asks for no listener and grants no origin when there is no endpoint", () => {

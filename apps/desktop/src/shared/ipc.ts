@@ -46,8 +46,28 @@ export const IPC = {
    * Where the page should send its Runtime and Host traffic, plus the data
    * directory both processes agreed on without talking. Replaces the Tauri
    * shell's `__armadra/transport` port publication.
+   *
+   * Answered twice over: `invoke` re-reads, and `sendSync` on the same channel
+   * returns the snapshot taken before the window loaded. The page needs the
+   * Runtime base before its first `await` (`apps/web/src/api/request.ts:20`),
+   * which is the one case a promise cannot serve.
    */
   transportEndpoints: spec("transport:endpoints", "invoke", "shared"),
+
+  /**
+   * One native Host session ticket (docs/design/host-native-session.md §4.4).
+   *
+   * Read-only from the page's side and one ticket per call: the shell runs
+   * `armadra-host pair` over the Host's private control channel and hands back
+   * the result, bound to the Host observed at startup and to this page's own
+   * origin. The page never names the origin, never sees the command, and never
+   * gets the ability to pair anything else.
+   *
+   * `window`, not `shared`, and deliberately: a ticket is a credential for THIS
+   * window's origin. A remote peer asking for one would be asking the shell to
+   * mint a session for a page it is not.
+   */
+  identityTicket: spec("identity:ticket", "invoke", "window"),
 
   /**
    * Directory and file pickers. Both return absolute paths rather than bytes:
@@ -119,7 +139,7 @@ export type ChannelName = (typeof IPC)[keyof typeof IPC]["channel"];
 export const ALL_CHANNELS: readonly ChannelSpec[] = Object.values(IPC);
 
 /**
- * The channels that answer for real (W1.0/W1.1, W2.1's system integration
+ * The channels that answer for real (W1.0–W1.2, W2.1's system integration
  * and the seven of W2.2). Everything else in the table is registered too,
  * but rejects with `not_implemented` — a placeholder that fails loudly beats
  * a channel that is simply absent, which the page can only observe as a hang or an
@@ -127,6 +147,7 @@ export const ALL_CHANNELS: readonly ChannelSpec[] = Object.values(IPC);
  */
 export const IMPLEMENTED_CHANNELS: readonly string[] = [
   IPC.transportEndpoints.channel,
+  IPC.identityTicket.channel,
   IPC.appLocale.channel,
   IPC.windowIsFocused.channel,
   IPC.updatesState.channel,
@@ -216,3 +237,43 @@ export interface TransportEndpoints {
 
 /** The attribute the preload sets on `<html>`, replacing Tauri's `data-tauri`. */
 export const DESKTOP_DOCUMENT_ATTRIBUTE = "data-desktop";
+
+/**
+ * A native session ticket, exactly as `armadra-host pair` prints it, which is
+ * also the material `HostIdentityClient.pair()` accepts verbatim.
+ */
+export interface NativeSessionTicket {
+  readonly hostId: string;
+  readonly hostInstanceId: string;
+  readonly origin: string;
+  readonly ticket: string;
+  /** Milliseconds as a decimal string: the page compares it as a bigint. */
+  readonly expiresAtUnixMs: string;
+}
+
+/**
+ * Why no ticket could be issued. Stable tokens the page maps to its own
+ * sentences (`hostNative.blocked.*`); none carries a path, an exit code or
+ * subprocess output. `shellUnavailable` is the page's own, for "not in a
+ * shell at all", and never comes from here.
+ */
+export const NATIVE_TICKET_REASONS = [
+  "hostUnavailable",
+  "originUnsupported",
+  "cliFailed",
+  "timeout",
+  "malformed",
+] as const;
+
+/**
+ * What `identity:ticket` answers.
+ *
+ * A refusal is a result, not a rejection. Electron serializes a rejected
+ * `ipcMain.handle` down to its message, so a `{ code, message }` thrown there
+ * would reach the page as prose it has to parse back; and "no Host yet" is
+ * something the page acts on rather than a broken channel. The `{ code,
+ * message }` shape AGENTS.md requires is kept — it just travels in the value.
+ */
+export type NativeTicketAnswer =
+  | { readonly ok: true; readonly ticket: NativeSessionTicket }
+  | { readonly ok: false; readonly error: IpcError };

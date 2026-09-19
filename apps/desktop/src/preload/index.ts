@@ -5,6 +5,7 @@ import {
   type PickOptions,
   type ShortcutBinding,
   type ShortcutOutcome,
+  type NativeTicketAnswer,
   type TransportEndpoints,
 } from "../shared/ipc";
 
@@ -51,6 +52,19 @@ const onNotificationClick = subscribe<[{ nodeId: string }]>(
 export interface ArmadraDesktopApi {
   readonly transport: {
     endpoints(): Promise<TransportEndpoints>;
+    /**
+     * The same answer, before the page's first `await`.
+     *
+     * `apps/web/src/api/request.ts` resolves the Runtime base while its module
+     * is evaluating, which no promise can serve. The main process publishes a
+     * snapshot before the window loads, so this never blocks on work — it
+     * reads a value that is already decided.
+     */
+    endpointsSync(): TransportEndpoints;
+  };
+  /** One native Host session ticket. Pairing itself stays in the shell. */
+  readonly identity: {
+    ticket(): Promise<NativeTicketAnswer>;
   };
   readonly app: {
     locale(): Promise<string>;
@@ -108,6 +122,10 @@ export interface ArmadraDesktopApi {
 const api: ArmadraDesktopApi = {
   transport: {
     endpoints: () => ipcRenderer.invoke(IPC.transportEndpoints.channel),
+    endpointsSync: () => ipcRenderer.sendSync(IPC.transportEndpoints.channel),
+  },
+  identity: {
+    ticket: () => ipcRenderer.invoke(IPC.identityTicket.channel),
   },
   app: {
     locale: () => ipcRenderer.invoke(IPC.appLocale.channel),

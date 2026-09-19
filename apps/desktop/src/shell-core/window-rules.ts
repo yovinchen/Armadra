@@ -41,21 +41,33 @@ export function closeAction(
  */
 export const DEFAULT_DEV_RENDERER_URL = "http://127.0.0.1:1420";
 
-export type RendererTarget =
-  | { readonly kind: "url"; readonly url: string }
-  | { readonly kind: "file"; readonly path: string };
+export type PageSourceTarget =
+  /** Somebody else is serving apps/web; its origin is theirs. */
+  | { readonly kind: "devServer"; readonly url: string }
+  /** This shell serves apps/web's build output over loopback HTTP itself. */
+  | { readonly kind: "static"; readonly root: string };
 
 /**
- * Where the renderer comes from: apps/web's dev server while developing, and
- * apps/web's build output once packaged. The shell never builds the front end
- * a second way.
+ * Where the page comes from, and therefore what its ORIGIN is.
+ *
+ * Never `file:`. A `file:` page is an opaque origin: `fetch` to the Runtime is
+ * cross-origin with no origin to allow, and the Host's native session is
+ * granted to a named origin it could never present (§2.1). The packaged shell
+ * therefore serves apps/web's build output over its own loopback HTTP server,
+ * on a kernel-assigned port, and that URL is what the window loads.
+ *
+ * Development is unchanged: apps/web's dev server already is a loopback HTTP
+ * origin, so it needs no second server — which is the point of returning one
+ * shape for both modes. Whoever serves the page, the origin is one value.
  */
-export function rendererTarget(
+export function pageSourceTarget(
   devServerUrl: string | undefined,
   packaged: boolean,
-  packagedIndex: string,
-): RendererTarget {
-  if (!packaged)
-    return { kind: "url", url: devServerUrl || DEFAULT_DEV_RENDERER_URL };
-  return { kind: "file", path: packagedIndex };
+  staticRoot: string,
+): PageSourceTarget {
+  if (packaged) return { kind: "static", root: staticRoot };
+  return {
+    kind: "devServer",
+    url: devServerUrl || DEFAULT_DEV_RENDERER_URL,
+  };
 }
