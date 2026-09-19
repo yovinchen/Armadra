@@ -5,15 +5,16 @@
 
 ## 1. 阶段状态
 
-| 阶段   | 范围                                                 | 状态                   |
-| ------ | ---------------------------------------------------- | ---------------------- |
-| **R0** | core 进程骨架、三种监听、`/health`、SQLite 账本      | 已合入（`c1644c10d`）  |
-| **R1** | 画布 / 工作空间 / 设置 / 身份、统一库迁移            | 已合入（`0b098c650`）  |
-| **R2** | 终端域：tmux 纵切、direct / sessionHost、SSH、GC     | 已合入（`aa180c6e7`）  |
-| **R3** | Hook 面、Agent / 协作、TS `armadra-hook`             | 已合入（`aa180c6e7`）  |
-| **R4** | Git、文件 / 导入导出、定时与事件 outbox              | 进行中                 |
-| **R5** | 语言服务、GitHub / 资源监控，浏览器授权与租约（R5c） | R5c 已合入，其余进行中 |
-| R6–R7  | 服务器壳、收尾                                       | 未开始                 |
+| 阶段   | 范围                                               | 状态                  |
+| ------ | -------------------------------------------------- | --------------------- |
+| **R0** | core 进程骨架、三种监听、`/health`、SQLite 账本    | 已合入（`c1644c10d`） |
+| **R1** | 画布 / 工作空间 / 设置 / 身份、统一库迁移          | 已合入（`0b098c650`） |
+| **R2** | 终端域：tmux 纵切、direct / sessionHost、SSH、GC   | 已合入（`aa180c6e7`） |
+| **R3** | Hook 面、Agent / 协作、TS `armadra-hook`           | 已合入（`aa180c6e7`） |
+| **R4** | Git、文件 / 导入导出、定时与事件 outbox            | 已合入（`601095795`） |
+| **R5** | 语言服务、GitHub / 资源 / 用量、浏览器授权与租约   | 已合入（`601095795`） |
+| **R6** | 服务器壳、账号与共享、远程浏览器节点、session-host | 进行中                |
+| R7     | 收尾                                               | 未开始                |
 
 ## 2. R2 纵切：只有 tmux 后端的建 / 附 / 输入 / 断
 
@@ -208,3 +209,18 @@ Hook 服务（`apps/desktop/src/core/hook/`）只认证——bearer、per-node t
 TS `armadra-hook` 客户端由安装步骤写成 `<dataDir>/bin/armadra-hook` 启动器；启动约 79 ms（Rust 3.7 ms），输出字节一致。
 
 验证：`pnpm --filter @armadra/desktop test`（含 `hook-bridge.test.ts`、`core/browser/**` 60 例，以及对 Rust 用例的移植）。
+
+## 10. R4 / R5：路由表只剩电源租约与所有权两类未认领
+
+R4 与 R5 的六条线全部合入。迁移编号合入时重排为：`0017_event_outbox`（定时与事件 outbox）、`0018_github`（GitHub 三张表）；R6 的账号迁移预分配 `0019`。
+
+| 域                          | 位置                                             | 与 Rust / Go 的对账                                            | 测试   |
+| --------------------------- | ------------------------------------------------ | -------------------------------------------------------------- | ------ |
+| Git（37 条路由）            | `core/git/`                                      | `scripts/git-parity.mjs`：30 条读 + 14 条写逐字段相同          | 162    |
+| 文件 / 导入导出（15 条）    | `core/files/`、`core/imports/`                   | 42 组请求 40 组相同（差异：正则引擎报错原话、各自数据目录）    | 68     |
+| 定时 / 自动化 / 事件 outbox | `core/schedule/`、`core/events/outbox.ts`        | Go 的 43 + 6 个用例移植；`?cursor=` 断线续订走带外控制帧       | 100    |
+| 语言服务（7 条）            | `core/language/`                                 | 手写 LSP 分帧（理由见 `jsonrpc.ts`）；远端会话回 `unsupported` | 55 + 6 |
+| GitHub / 资源 / 用量        | `core/github/`、`core/resources/`、`core/usage/` | `/rpc/…GitHubService` 24 个方法；采样用 `ps` 一次全表读        | 166    |
+| 浏览器授权 / 租约 / 17 动词 | `core/browser/`                                  | 三个稳定错误码与 Rust 一致；`browser:drive` 出站回环 WS        | 60     |
+
+已知偏差（都写在对应模块的注释里）：用量后台刷新在第一次读时武装而非装配时；语言域 `$/cancelRequest` 归还在途额度（Rust 泄漏）；两条导入路由的请求体上限按路由抬到 65 MiB（`server.bodyLimit`）；调度的 `LAUNCH_FROZEN` 冷启动未接。
