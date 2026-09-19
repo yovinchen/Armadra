@@ -60,7 +60,12 @@ export interface ArmadraDesktopApi {
   };
   readonly updates: {
     state(): Promise<unknown>;
-    check(): Promise<unknown>;
+    /**
+     * The Host's answer, handed over verbatim. The page already holds the
+     * authenticated session that asked; the shell does not speak the Host
+     * protocol, and treats what arrives as untrusted input regardless.
+     */
+    check(verdict: unknown): Promise<unknown>;
     dismiss(): Promise<unknown>;
     cancel(): Promise<unknown>;
     download(): Promise<unknown>;
@@ -108,7 +113,7 @@ const api: ArmadraDesktopApi = {
   },
   updates: {
     state: () => ipcRenderer.invoke(IPC.updatesState.channel),
-    check: () => ipcRenderer.invoke(IPC.updatesCheck.channel),
+    check: (verdict) => ipcRenderer.invoke(IPC.updatesCheck.channel, verdict),
     dismiss: () => ipcRenderer.invoke(IPC.updatesDismiss.channel),
     cancel: () => ipcRenderer.invoke(IPC.updatesCancel.channel),
     download: () => ipcRenderer.invoke(IPC.updatesDownload.channel),

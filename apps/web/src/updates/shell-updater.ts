@@ -1,10 +1,18 @@
 /**
  * The bridge to the desktop shell's updater (design §4.2).
  *
- * Everything here is `isTauri() ? <shell> : unsupported`. A browser looking at
- * the same Host is not a thing that can be replaced by an installer, so it says
- * so rather than pretending: the settings page then shows the Host's answer and
- * how to install by hand.
+ * Everything here is `<a desktop shell> ? <ask it> : unsupported`. A browser
+ * looking at the same Host is not a thing that can be replaced by an
+ * installer, so it says so rather than pretending: the settings page then
+ * shows the Host's answer and how to install by hand.
+ *
+ * There are two desktop shells during the migration, and this module is where
+ * the page stops caring which one it is running in. Electron is asked through
+ * `window.armadra.updates` (the preload bridge, typed in
+ * `../platform/desktop-bridge-updates.d.ts`); Tauri is asked through `invoke`,
+ * unchanged. Both answer the same eleven states with the same tokens — the
+ * state machine was ported rather than re-designed — so nothing below the
+ * transport, and nothing in `state.ts`, changes with the shell.
  *
  * The shell owns the state; this module never keeps one of its own. A page that
  * cached the answer would keep rendering "downloading" after the shell had
@@ -110,7 +118,39 @@ export const UNSUPPORTED_HERE: ShellUpdateState = {
   reason: "notDesktop",
 };
 
-async function invoke<T>(command: string, args?: unknown): Promise<T | null> {
+/** The Electron shell's bridge, or `null` anywhere else. */
+function electron(): ArmadraUpdatesBridge | null {
+  if (typeof window === "undefined") return null;
+  return window.armadra?.updates ?? null;
+}
+
+/** Whether a desktop shell of either kind is listening. */
+export function hasShellUpdater(): boolean {
+  return electron() !== null || isTauri();
+}
+
+/**
+ * One call to whichever shell is there.
+ *
+ * `ask` is the Electron half and `command` the Tauri one; both are given so
+ * the two spellings of a single operation stay in one place instead of in two
+ * parallel modules that drift. `null` means "there is no shell to ask", which
+ * every caller below turns into `UNSUPPORTED_HERE` — never into an answer.
+ */
+async function shellCall<T>(
+  ask: (updates: ArmadraUpdatesBridge) => Promise<unknown>,
+  command: string,
+  args?: unknown,
+): Promise<T | null> {
+  const bridge = electron();
+  if (bridge !== null) {
+    try {
+      return (await ask(bridge)) as T;
+    } catch (cause) {
+      console.error(`${command} failed`, cause);
+      return null;
+    }
+  }
   if (!isTauri()) return null;
   try {
     const { invoke } = await import("@tauri-apps/api/core");
@@ -123,7 +163,12 @@ async function invoke<T>(command: string, args?: unknown): Promise<T | null> {
 
 /** The state as the shell holds it. Reads nothing off the network. */
 export async function shellState(): Promise<ShellUpdateState> {
-  return (await invoke<ShellUpdateState>("updates_state")) ?? UNSUPPORTED_HERE;
+  return (
+    (await shellCall<ShellUpdateState>(
+      (updates) => updates.state(),
+      "updates_state",
+    )) ?? UNSUPPORTED_HERE
+  );
 }
 
 /** Hands the Host's answer to the shell and returns the state it reached. */
@@ -131,15 +176,21 @@ export async function shellCheck(
   verdict: ShellHostVerdict,
 ): Promise<ShellUpdateState> {
   return (
-    (await invoke<ShellUpdateState>("updates_check", { verdict })) ??
-    UNSUPPORTED_HERE
+    (await shellCall<ShellUpdateState>(
+      (updates) => updates.check(verdict),
+      "updates_check",
+      { verdict },
+    )) ?? UNSUPPORTED_HERE
   );
 }
 
 /** "Skip this version": drops the offer, claims nothing about newer ones. */
 export async function shellDismiss(): Promise<ShellUpdateState> {
   return (
-    (await invoke<ShellUpdateState>("updates_dismiss")) ?? UNSUPPORTED_HERE
+    (await shellCall<ShellUpdateState>(
+      (updates) => updates.dismiss(),
+      "updates_dismiss",
+    )) ?? UNSUPPORTED_HERE
   );
 }
 
@@ -151,13 +202,21 @@ export async function shellDismiss(): Promise<ShellUpdateState> {
  * fetched again in full.
  */
 export async function shellCancel(): Promise<ShellUpdateState> {
-  return (await invoke<ShellUpdateState>("updates_cancel")) ?? UNSUPPORTED_HERE;
+  return (
+    (await shellCall<ShellUpdateState>(
+      (updates) => updates.cancel(),
+      "updates_cancel",
+    )) ?? UNSUPPORTED_HERE
+  );
 }
 
 /** Fetches and verifies the offered bundle. Installs nothing. */
 export async function shellDownload(): Promise<ShellUpdateState> {
   return (
-    (await invoke<ShellUpdateState>("updates_download")) ?? UNSUPPORTED_HERE
+    (await shellCall<ShellUpdateState>(
+      (updates) => updates.download(),
+      "updates_download",
+    )) ?? UNSUPPORTED_HERE
   );
 }
 
@@ -167,13 +226,19 @@ export async function shellDownload(): Promise<ShellUpdateState> {
  */
 export async function shellInstall(): Promise<ShellUpdateState> {
   return (
-    (await invoke<ShellUpdateState>("updates_install")) ?? UNSUPPORTED_HERE
+    (await shellCall<ShellUpdateState>(
+      (updates) => updates.install(),
+      "updates_install",
+    )) ?? UNSUPPORTED_HERE
   );
 }
 
 /** `null` when no update was pending, which is the ordinary case. */
 export async function shellRestartReport(): Promise<ShellRestartReport | null> {
-  return await invoke<ShellRestartReport>("updates_restart_report");
+  return await shellCall<ShellRestartReport>(
+    (updates) => updates.restartReport(),
+    "updates_restart_report",
+  );
 }
 
 export interface ShellProgress {
@@ -194,21 +259,33 @@ export interface ShellStaged {
 export function onShellProgress(
   callback: (progress: ShellProgress) => void,
 ): () => void {
-  return onShellEvent("updates://progress", callback);
+  const bridge = electron();
+  if (bridge !== null) {
+    return bridge.onProgress((progress) => callback(progress as ShellProgress));
+  }
+  return onTauriEvent("updates://progress", callback);
 }
 
 /**
  * Subscribes to the staged-update announcement — the same one the tray item
  * and the notification come from. The page uses it to re-read the state after
  * an `autoDownload` transfer nobody was watching.
+ *
+ * The Electron shell keeps `autoDownload` off, so no transfer finishes that
+ * the page did not ask for and there is nothing to be told about: the IPC
+ * table of migration design §2.2 declares no `updates:staged`, and this
+ * subscription is a no-op there rather than a channel invented to fill it.
+ * The shell's own tray subscribes in the main process instead
+ * (`installUpdates(...).onStaged`).
  */
 export function onShellStaged(
   callback: (staged: ShellStaged) => void,
 ): () => void {
-  return onShellEvent("updates://staged", callback);
+  if (electron() !== null) return () => undefined;
+  return onTauriEvent("updates://staged", callback);
 }
 
-function onShellEvent<T>(name: string, callback: (payload: T) => void) {
+function onTauriEvent<T>(name: string, callback: (payload: T) => void) {
   if (!isTauri()) return () => undefined;
   let unlisten: (() => void) | null = null;
   let cancelled = false;
