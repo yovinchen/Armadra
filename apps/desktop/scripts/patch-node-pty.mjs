@@ -305,9 +305,7 @@ export function run({
   root = moduleDir,
   log = (line) => process.stdout.write(`${line}\n`),
 } = {}) {
-  const manifest = JSON.parse(
-    readFileSync(join(root, "package.json"), "utf8"),
-  );
+  const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   if (manifest.version !== PINNED_VERSION) {
     throw new Error(
       `node-pty ${manifest.version} is installed, but this patch was written against ${PINNED_VERSION}. ` +

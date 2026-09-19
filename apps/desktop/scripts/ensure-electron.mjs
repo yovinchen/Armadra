@@ -42,11 +42,17 @@ process.exit(0);
  */
 function ensureNodePty() {
   const here = dirname(new URL(import.meta.url).pathname);
-  const patch = spawnSync(process.execPath, [join(here, "patch-node-pty.mjs")], {
-    stdio: "inherit",
-  });
+  const patch = spawnSync(
+    process.execPath,
+    [join(here, "patch-node-pty.mjs")],
+    {
+      stdio: "inherit",
+    },
+  );
   if (patch.status !== 0) {
-    process.stderr.write("node-pty could not be patched; refusing to build it\n");
+    process.stderr.write(
+      "node-pty could not be patched; refusing to build it\n",
+    );
     process.exit(patch.status ?? 1);
   }
   const rebuild = spawnSync(

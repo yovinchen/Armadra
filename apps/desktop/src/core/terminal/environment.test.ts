@@ -104,9 +104,7 @@ describe("agent injection", () => {
       "ARMADRA_ENDPOINT_FILE",
       "ARMADRA_CANVAS_CONTROL",
     ]);
-    expect(asRecord(env).ARMADRA_ENDPOINT_FILE).toBe(
-      "/data/hook-endpoint.env",
-    );
+    expect(asRecord(env).ARMADRA_ENDPOINT_FILE).toBe("/data/hook-endpoint.env");
     for (const [key, value] of env) {
       expect(key).not.toMatch(/TOKEN|SECRET|PASSWORD/i);
       expect(value).not.toMatch(/TOKEN|SECRET/i);
@@ -177,13 +175,13 @@ describe("the process table", () => {
       "/sbin/launchd",
     ]);
     expect(
-      parseProcessLine("10229     1 /Applications/Some.app/Contents/MacOS/Some"),
+      parseProcessLine(
+        "10229     1 /Applications/Some.app/Contents/MacOS/Some",
+      ),
     ).toEqual([10229, 1, "/Applications/Some.app/Contents/MacOS/Some"]);
-    expect(parseProcessLine(" 1733  4794 /bin/sh -c echo hello world")).toEqual([
-      1733,
-      4794,
-      "/bin/sh -c echo hello world",
-    ]);
+    expect(parseProcessLine(" 1733  4794 /bin/sh -c echo hello world")).toEqual(
+      [1733, 4794, "/bin/sh -c echo hello world"],
+    );
     // A header or a partial line must not become a process.
     expect(parseProcessLine("garbage")).toBeUndefined();
     expect(parseProcessLine("")).toBeUndefined();

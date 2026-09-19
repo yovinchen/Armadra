@@ -1,5 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -122,9 +129,7 @@ describe("the generated configuration", () => {
   it("probes the default terminal and falls back", () => {
     const terminal = defaultTerminal();
     expect(["tmux-256color", "screen-256color"]).toContain(terminal);
-    expect(renderedConf()).toContain(
-      `set -g default-terminal "${terminal}"`,
-    );
+    expect(renderedConf()).toContain(`set -g default-terminal "${terminal}"`);
   });
 });
 
@@ -139,13 +144,15 @@ describe("listing", () => {
   });
 
   it("ignores sessions that are not ours", () => {
-    expect(parseAliveLine("armadra-a-b-1 1 1770000000", SESSION_PREFIX)).toEqual(
-      { name: "armadra-a-b-1", attached: true },
-    );
-    expect(parseAliveLine("armadra-a-b-1 0 1770000000", SESSION_PREFIX)).toEqual(
-      { name: "armadra-a-b-1", attached: false },
-    );
-    expect(parseAliveLine("someones-own-session 1 1", SESSION_PREFIX)).toBeUndefined();
+    expect(
+      parseAliveLine("armadra-a-b-1 1 1770000000", SESSION_PREFIX),
+    ).toEqual({ name: "armadra-a-b-1", attached: true });
+    expect(
+      parseAliveLine("armadra-a-b-1 0 1770000000", SESSION_PREFIX),
+    ).toEqual({ name: "armadra-a-b-1", attached: false });
+    expect(
+      parseAliveLine("someones-own-session 1 1", SESSION_PREFIX),
+    ).toBeUndefined();
     expect(parseAliveLine("", SESSION_PREFIX)).toBeUndefined();
   });
 });
@@ -184,12 +191,7 @@ describe("the paste plan", () => {
       "-t",
       "armadra-session",
     ]);
-    expect(plan[2]).toEqual([
-      "send-keys",
-      "-t",
-      "armadra-session",
-      "Enter",
-    ]);
+    expect(plan[2]).toEqual(["send-keys", "-t", "armadra-session", "Enter"]);
   });
 
   it("skips Enter when it was not requested", () => {
@@ -291,9 +293,13 @@ describe.skipIf(!tmuxAvailable)("against a real tmux", () => {
     expect(await backend.list()).toEqual([]);
     // Leave nothing running behind us.
     try {
-      execFileSync("tmux", ["-S", join(directory, "tmux.sock"), "kill-server"], {
-        stdio: "ignore",
-      });
+      execFileSync(
+        "tmux",
+        ["-S", join(directory, "tmux.sock"), "kill-server"],
+        {
+          stdio: "ignore",
+        },
+      );
     } catch {
       // Already gone; `exit-empty on` does this for us.
     }

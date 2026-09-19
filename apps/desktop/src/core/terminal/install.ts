@@ -164,8 +164,7 @@ interface CreateTerminalRequest {
   readonly agent?: { readonly id: string };
 }
 
-const UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function validateCreate(body: CreateTerminalRequest): string | undefined {
   if (typeof body?.workspaceId !== "string" || body.workspaceId === "") {
