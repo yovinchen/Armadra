@@ -48,10 +48,19 @@ pub struct ShellSession {
     activity: Mutex<VecDeque<Activity>>,
     pool: SqlitePool,
     events: EventHub,
+    /// The drive channel, so a lease change reaches the badge in the window as
+    /// well as every other client. The badge is drawn by the page, and the page
+    /// is on the far side of the shell.
+    client: Option<Arc<super::client::Client>>,
 }
 
 impl ShellSession {
-    fn new(stored: &StoredSession, pool: SqlitePool, events: EventHub) -> Self {
+    fn new(
+        stored: &StoredSession,
+        pool: SqlitePool,
+        events: EventHub,
+        client: Option<Arc<super::client::Client>>,
+    ) -> Self {
         Self {
             node_id: stored.node_id.clone(),
             session_id: stored.id.clone(),
@@ -62,6 +71,7 @@ impl ShellSession {
             activity: Mutex::new(VecDeque::new()),
             pool,
             events,
+            client,
         }
     }
 
@@ -214,6 +224,17 @@ impl ShellSession {
         {
             tracing::warn!(%error, session = %self.session_id, "could not store the lease generation");
         }
+        // Two destinations, and both are needed. The workspace stream is how
+        // every client learns; the drive channel is how the badge on THIS
+        // window's node learns, because that node has no Runtime session of its
+        // own to subscribe to.
+        if let Some(client) = self.client.as_ref() {
+            client.notify(
+                &self.node_id,
+                "lease",
+                serde_json::to_value(&lease).unwrap_or(serde_json::Value::Null),
+            );
+        }
         self.events.publish(
             &self.workspace_id,
             WorkspaceEvent::BrowserLease {
@@ -294,6 +315,7 @@ pub async fn ensure(
     sessions: &Sessions,
     pool: &SqlitePool,
     events: &EventHub,
+    client: Option<Arc<super::client::Client>>,
     node_id: &str,
     workspace_id: &str,
     url: &str,
@@ -335,7 +357,12 @@ pub async fn ensure(
             "That browser node belongs to another workspace".into(),
         ));
     }
-    let session = Arc::new(ShellSession::new(&stored, pool.clone(), events.clone()));
+    let session = Arc::new(ShellSession::new(
+        &stored,
+        pool.clone(),
+        events.clone(),
+        client,
+    ));
     sessions.put(Arc::clone(&session));
     Ok(session)
 }
