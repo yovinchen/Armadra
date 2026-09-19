@@ -40,6 +40,18 @@ export interface TerminalPreferences {
 export const TERMINAL_FONT_SIZE_RANGE = [10, 20] as const;
 export const TERMINAL_LINE_HEIGHT_RANGE = [1, 1.6] as const;
 
+/**
+ * 默认字号与行高（契约 §3.4，2026-09-19：13/1.2 → 12/1.15）。
+ *
+ * 一个 960×600 的终端在 12px 下排得下约 120×36——120 列正好是 CLI 排版的
+ * 惯用宽度，13px 只有约 110 列，很多工具的表格会被折行。
+ *
+ * **只是默认值**：`storedNumber` 先读 localStorage，已经调过字号的用户
+ * 一个字都不会被改（`readStored` 拿到值就不看这里）。
+ */
+export const TERMINAL_DEFAULT_FONT_SIZE = 12;
+export const TERMINAL_DEFAULT_LINE_HEIGHT = 1.15;
+
 export const TERMINAL_KEYS: Record<keyof TerminalPreferences, string> = {
   fontFamily: TERM_FONT_FAMILY_KEY,
   fontSize: TERM_FONT_SIZE_KEY,
@@ -57,13 +69,13 @@ export function storedTerminalPreferences(): TerminalPreferences {
     fontFamily: readStored(TERM_FONT_FAMILY_KEY) ?? "",
     fontSize: storedNumber(
       TERM_FONT_SIZE_KEY,
-      13,
+      TERMINAL_DEFAULT_FONT_SIZE,
       TERMINAL_FONT_SIZE_RANGE[0],
       TERMINAL_FONT_SIZE_RANGE[1],
     ),
     lineHeight: storedNumber(
       TERM_LINE_HEIGHT_KEY,
-      1.2,
+      TERMINAL_DEFAULT_LINE_HEIGHT,
       TERMINAL_LINE_HEIGHT_RANGE[0],
       TERMINAL_LINE_HEIGHT_RANGE[1],
     ),
