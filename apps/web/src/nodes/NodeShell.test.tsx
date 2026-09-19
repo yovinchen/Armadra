@@ -168,6 +168,28 @@ describe("NodeShell", () => {
     expect(unmounted).not.toHaveBeenCalled();
   });
 
+  /**
+   * 头部密度（契约 §3.4，2026-09-19）：30px 一行、标题 12px、图标钮 24×24。
+   * 节点体拿走剩下的全部高度，所以内容是「按比例」铺满的，不靠固定像素。
+   */
+  it("keeps the header at 30px and the body on the remaining height", () => {
+    const view = renderShell();
+    const header = view.container.querySelector(
+      '[data-slot="node-header"]',
+    ) as HTMLElement;
+    expect(header.style.height).toBe("30px");
+    expect(HEADER_HEIGHT).toBe(30);
+
+    expect(screen.getByText("便签 1").className).toContain("text-[12px]");
+    expect(screen.getByLabelText("关闭").className).toContain("size-[24px]");
+
+    const body = view.container.querySelector(
+      '[data-slot="node-body"]',
+    ) as HTMLElement;
+    expect(body.className).toContain("flex-1");
+    expect(body.className).toContain("min-h-0");
+  });
+
   it("does not enter rename after dragging the title", async () => {
     renderShell();
     const title = screen.getByText("便签 1");

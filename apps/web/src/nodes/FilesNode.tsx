@@ -140,7 +140,7 @@ export function FilesNode({ id, node, selected }: NodeBodyProps) {
           onNavigate={navigate}
         />
 
-        <div className="shrink-0 p-1.5">
+        <div className="shrink-0 px-1 py-1">
           <Input
             aria-label={t("files.filter")}
             placeholder={t("files.filter")}

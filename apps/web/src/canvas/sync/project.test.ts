@@ -15,6 +15,7 @@ import {
   resetProjectionCache,
   toItemId,
 } from "./project";
+import { COLLAPSED_HEIGHT } from "../../store/defaults";
 
 /**
  * 文档 → React Flow 的投影（React Flow 计划 T01）。
@@ -109,13 +110,13 @@ describe("projectNodes", () => {
     expect(document.nodes[0]!.position).toEqual({ x: 10, y: 20 });
   });
 
-  it("折叠时高度钉死在 40px，宽度仍然听文档的", () => {
+  it("折叠时高度钉死在 COLLAPSED_HEIGHT，宽度仍然听文档的", () => {
     const projected = projectNodes(
       board([node(NODE, { collapsed: true })]),
       EMPTY,
       NO_DRAFTS,
     )[0]!;
-    expect(projected.height).toBe(40);
+    expect(projected.height).toBe(COLLAPSED_HEIGHT);
     expect(projected.width).toBe(240);
   });
 
@@ -131,7 +132,10 @@ describe("projectNodes", () => {
       EMPTY,
       NO_DRAFTS,
     )[0]!;
-    expect(projected.measured).toEqual({ width: 240, height: 40 });
+    expect(projected.measured).toEqual({
+      width: 240,
+      height: COLLAPSED_HEIGHT,
+    });
 
     const whiteboard: WhiteboardDoc = {
       ...emptyWhiteboard(),

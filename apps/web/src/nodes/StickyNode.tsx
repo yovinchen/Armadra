@@ -81,7 +81,7 @@ export function StickyNode({ id, node }: NodeBodyProps) {
           role="button"
           tabIndex={0}
           aria-label={t("node.sticky")}
-          className="sticky-markdown min-h-0 flex-1 cursor-text overflow-auto px-2.5 py-2 text-xs leading-relaxed"
+          className="sticky-markdown min-h-0 flex-1 cursor-text overflow-auto px-2 py-1.5 text-xs leading-relaxed"
           onClick={() => {
             setDraft(content);
             setEditing(true);
@@ -97,7 +97,7 @@ export function StickyNode({ id, node }: NodeBodyProps) {
         </div>
       )}
       {/* 标签（§17）：便签把它画在自己正文的底栏里——节点头部不许多出一行。 */}
-      <div className="flex shrink-0 items-center gap-1.5 px-2.5 pb-1.5 text-[length:var(--text-caption)] text-muted-foreground">
+      <div className="flex shrink-0 items-center gap-1.5 px-2 pb-1 text-[length:var(--text-caption)] text-muted-foreground">
         <NodeLabelChips node={node} />
         <Button
           variant="ghost"

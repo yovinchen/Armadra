@@ -8,8 +8,9 @@ import { Button } from "@/ui/button";
  * - `cluster` 28×28、图标 16px：工具簇与浮层标题行的按钮。
  *   自己不带底色——它总是坐在一条 `--panel` 的条子里，底色由那条给。
  * - `dock` 32×32、图标 18px：底部 Dock 的按钮（Dock 高 44，留 6px 内边距）。
- * - `inline` 26×26、图标 14px：节点头部右侧的 ⟳ / 最大化 / ×（§3.4），
- *   以及抽屉标题行里的小动作。
+ * - `inline` 24×24、图标 14px：节点头部右侧的 ⟳ / 最大化 / ×（§3.4），
+ *   以及抽屉标题行里的小动作。2026-09-19 从 26 收到 24：头部只有 30px 高，
+ *   26 的钮几乎顶满，留不出可读的上下留白。
  *
  * 它只是 shadcn `Button` 的尺寸/底色预设——变体逻辑、焦点环、disabled
  * 行为全部沿用生成的 Button。
@@ -50,7 +51,7 @@ export function IconButton({
       "[&_svg:not([class*='size-'])]:size-[18px] [&_svg]:[stroke-width:1.5]",
     ],
     inline: [
-      "size-[26px] rounded-[var(--r-control)] text-muted-foreground",
+      "size-[24px] rounded-[var(--r-control)] text-muted-foreground",
       "data-[active=true]:bg-accent data-[active=true]:text-accent-foreground",
       "[&_svg:not([class*='size-'])]:size-3.5 [&_svg]:[stroke-width:1.5]",
     ],

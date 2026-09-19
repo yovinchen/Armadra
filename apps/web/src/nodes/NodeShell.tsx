@@ -264,7 +264,7 @@ export function NodeShell({
 /* ---------------------------------- 头部 ---------------------------------- */
 
 /**
- * 一行 34px，从左到右只有五样东西（F5）：
+ * 一行 `HEADER_HEIGHT`（2026-09-19 起 30px），从左到右只有五样东西（F5）：
  * 来源色点 → 标题 → 常驻徽标（内存）→ 状态胶囊 → `···` → ×。
  *
  * 折叠、最大化、搜索、上下文占用、Agent 名全部收进 `···`：用户的原话是
@@ -300,7 +300,7 @@ export function NodeHeader({
       data-slot="node-header"
       className={cn(
         DRAG_HANDLE_CLASS,
-        "flex shrink-0 items-center gap-1.5 px-2",
+        "flex shrink-0 items-center gap-1 px-1.5",
         "bg-[var(--card)]",
       )}
       style={{ height: HEADER_HEIGHT }}
@@ -311,7 +311,7 @@ export function NodeHeader({
 
       <NodeTitle node={node} editing={renaming} onEditing={setRenaming} />
 
-      <span className="node-header-chips flex min-w-0 items-center gap-1.5">
+      <span className="node-header-chips flex min-w-0 items-center gap-1">
         {headerChips}
       </span>
 
@@ -524,7 +524,7 @@ function NodeTitle({
       <Input
         autoFocus
         aria-label={t("node.title")}
-        className="node-title h-7 min-w-0 flex-1 px-1.5 text-[length:var(--text-body)]"
+        className="node-title h-6 min-w-0 flex-1 px-1.5 text-[12px]"
         value={draft}
         onFocus={(event) => event.currentTarget.select()}
         onChange={(event) => setDraft(event.target.value)}
@@ -569,7 +569,7 @@ function NodeTitle({
       role="textbox"
       tabIndex={0}
       title={node.title}
-      className="node-title min-w-0 flex-1 truncate rounded-sm text-[length:var(--text-body)] font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="node-title min-w-0 flex-1 truncate rounded-sm text-[12px] font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
       onDoubleClick={(event) => {
         if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey)
           return;
