@@ -46,6 +46,16 @@ import {
   revealWindow,
   setPageUrl,
 } from "./window";
+import {
+  driveConnected,
+  handleRegister,
+  handleUnregister,
+  installBrowser,
+  publish,
+  setCanvasZoom,
+  setHostRect,
+} from "./browser";
+import { setDriveEnvironment } from "./runtime-process";
 import { pickDirectory, pickFiles } from "./dialogs";
 import { openExternal } from "./external";
 import { installApplicationMenu, installKeydownIntercept } from "./menu";
@@ -93,6 +103,36 @@ function registerIpc(): void {
       pickFiles(options as PickOptions | undefined),
     [IPC.shellOpenExternal.channel]: (url) => openExternal(url),
     [IPC.shortcutsApply.channel]: (bindings) => applyShortcuts(bindings),
+    // W3.3 / W3.4. Registration is validated in `main/browser/registry.ts`,
+    // including the `getType() === 'webview'` check the page cannot be trusted
+    // to have made: the id it sends later selects a webContents to attach a
+    // debugger to.
+    [IPC.browserRegister.channel]: (registration) => handleRegister(registration),
+    [IPC.browserUnregister.channel]: (id) => handleUnregister(id),
+    [IPC.browserView.channel]: (view) => {
+      const geometry = view as
+        | { webContentsId?: unknown; hostX?: unknown; hostY?: unknown; zoom?: unknown }
+        | undefined;
+      setHostRect(geometry?.webContentsId, geometry?.hostX, geometry?.hostY);
+      setCanvasZoom(geometry?.zoom);
+      return { ok: true };
+    },
+    // Stop travels ON, to the Runtime's lease machine. A Stop that stopped
+    // here would hide a badge and leave a debugger attached, which is the one
+    // failure the whole ownership design is written against.
+    [IPC.browserControl.channel]: (control) => {
+      const asked = control as { nodeId?: unknown; action?: unknown } | undefined;
+      if (typeof asked?.nodeId !== "string" || typeof asked.action !== "string") {
+        return { ok: false };
+      }
+      publish({
+        type: "event",
+        event: "control",
+        nodeId: asked.nodeId,
+        action: asked.action,
+      });
+      return { ok: driveConnected() };
+    },
   };
   // The page decides its Runtime base before its first `await`, so the same
   // channel also answers synchronously from the snapshot taken at startup.
@@ -239,6 +279,20 @@ async function start(): Promise<void> {
   // variable's: a double-clicked application inherits nobody's shell.
   setPackagedShell(app.isPackaged);
   registerIpc();
+
+  // The drive channel binds BEFORE the Runtime is spawned, because its address
+  // and one-time token only reach the Runtime through that spawn's environment.
+  // A shell that cannot bind it opens anyway: browser nodes then answer
+  // `browser_unavailable`, which is a named absence rather than a broken window.
+  try {
+    const wiring = await installBrowser(dataDir());
+    setDriveEnvironment(wiring.driveAddress, wiring.driveToken);
+    traceLifecycle("browser drive channel ready");
+  } catch (error) {
+    process.stderr.write(
+      `Browser drive channel unavailable: ${error instanceof Error ? error.message : error}\n`,
+    );
+  }
 
   // The system integration (W2.1). All of it is installed before the window
   // exists: the intercept is a per-window hook, so registering it afterwards

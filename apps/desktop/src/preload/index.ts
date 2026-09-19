@@ -2,6 +2,10 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 import {
   DESKTOP_DOCUMENT_ATTRIBUTE,
   IPC,
+  type BrowserControl,
+  type BrowserDriveCommand,
+  type BrowserRegistration,
+  type BrowserView,
   type PickOptions,
   type ShortcutBinding,
   type ShortcutOutcome,
@@ -43,7 +47,7 @@ function subscribe<A extends unknown[]>(channel: string) {
 
 const onUpdatesProgress = subscribe<[unknown]>(IPC.updatesProgress.channel);
 const onShortcutTriggered = subscribe<[string]>(IPC.shortcutsTriggered.channel);
-const onBrowserDrive = subscribe<[unknown]>(IPC.browserDrive.channel);
+const onBrowserDrive = subscribe<[BrowserDriveCommand]>(IPC.browserDrive.channel);
 const onKeyIntent = subscribe<[string]>(IPC.windowKeyIntent.channel);
 const onNotificationClick = subscribe<[{ nodeId: string }]>(
   IPC.windowNotificationClick.channel,
@@ -105,10 +109,21 @@ export interface ArmadraDesktopApi {
     apply(bindings: readonly ShortcutBinding[]): Promise<ShortcutOutcome[]>;
     onTriggered(listener: (id: string) => void): () => void;
   };
+  /**
+   * Browser nodes (W3.3 / W3.4).
+   *
+   * `register` hands the shell a `webContentsId` it then validates — the page
+   * can name any number, and the main process checks that it is really a
+   * `<webview>` before anything attaches a debugger to it. `view` carries only
+   * geometry. `control` is the lease badge's Stop, which travels on to the
+   * Runtime's lease machine rather than stopping at a component's state.
+   */
   readonly browser: {
-    register(registration: unknown): Promise<unknown>;
-    unregister(nodeId: string): Promise<unknown>;
-    onDrive(listener: (command: unknown) => void): () => void;
+    register(registration: BrowserRegistration): Promise<{ ok: boolean; reason?: string }>;
+    unregister(webContentsId: number): Promise<{ ok: boolean }>;
+    view(view: BrowserView): Promise<{ ok: boolean }>;
+    control(control: BrowserControl): Promise<{ ok: boolean }>;
+    onDrive(listener: (command: BrowserDriveCommand) => void): () => void;
   };
   /**
    * The absolute path of a dropped or picked `File`. The page hands the path
@@ -163,8 +178,10 @@ const api: ArmadraDesktopApi = {
   browser: {
     register: (registration) =>
       ipcRenderer.invoke(IPC.browserRegister.channel, registration),
-    unregister: (nodeId) =>
-      ipcRenderer.invoke(IPC.browserUnregister.channel, nodeId),
+    unregister: (webContentsId) =>
+      ipcRenderer.invoke(IPC.browserUnregister.channel, webContentsId),
+    view: (view) => ipcRenderer.invoke(IPC.browserView.channel, view),
+    control: (control) => ipcRenderer.invoke(IPC.browserControl.channel, control),
     onDrive: (listener) => onBrowserDrive(listener),
   },
   pathForFile: (file) => webUtils.getPathForFile(file),
