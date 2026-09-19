@@ -9,6 +9,29 @@ import { allowGuestNavigation } from "./webview";
 import type { WebviewTab } from "./webview-tabs";
 
 /**
+ * `getWebContentsId()` / `canGoBack()` **throw** until the element is attached
+ * to the DOM and `dom-ready` has fired ("The WebView must be attached to the
+ * DOM…"), and again once the guest instance is gone. StrictMode runs every
+ * effect twice on mount, so the first run always lands in that window; an
+ * uncaught throw there took the whole React tree down with it (empty `#root`,
+ * no overlay). Every guest method call goes through here and answers
+ * `undefined` instead.
+ */
+function guestCall<T>(read: () => T): T | undefined {
+  try {
+    return read();
+  } catch {
+    return undefined;
+  }
+}
+
+function guestWebContentsId(guest: WebviewElement): number | undefined {
+  if (typeof guest.getWebContentsId !== "function") return undefined;
+  const id = guestCall(() => guest.getWebContentsId());
+  return typeof id === "number" && id > 0 ? id : undefined;
+}
+
+/**
  * 一个标签 = 一个 guest（W3.1 / W3.2）。
  *
  * 这个组件**只渲染一个裸 `<webview>`**，没有遮罩、没有 hover-guard、没有缩
@@ -100,14 +123,19 @@ export function WebviewGuest({
      */
     const refreshNavState = () => {
       const current = ref.current;
+      const canGoBack =
+        current && typeof current.canGoBack === "function"
+          ? guestCall(() => current.canGoBack())
+          : undefined;
+      const canGoForward =
+        current && typeof current.canGoForward === "function"
+          ? guestCall(() => current.canGoForward())
+          : undefined;
       patchRef.current({
         loading: false,
-        ...(typeof current?.canGoBack === "function"
-          ? {
-              canGoBack: current.canGoBack(),
-              canGoForward: current.canGoForward(),
-            }
-          : {}),
+        ...(canGoBack === undefined || canGoForward === undefined
+          ? {}
+          : { canGoBack, canGoForward }),
       });
     };
 
@@ -200,9 +228,8 @@ export function WebviewGuest({
     if (!guest || discarded) return;
     let release: (() => void) | null = null;
     const announce = () => {
-      if (typeof guest.getWebContentsId !== "function") return;
-      const webContentsId = guest.getWebContentsId();
-      if (!webContentsId) return;
+      const webContentsId = guestWebContentsId(guest);
+      if (webContentsId === undefined) return;
       const box = guest.getBoundingClientRect();
       release?.();
       release = registerGuest({
@@ -235,9 +262,8 @@ export function WebviewGuest({
     const guest = ref.current;
     if (!guest || discarded || !activeTab) return;
     const box = guest.getBoundingClientRect();
-    if (typeof guest.getWebContentsId !== "function") return;
-    const webContentsId = guest.getWebContentsId();
-    if (!webContentsId) return;
+    const webContentsId = guestWebContentsId(guest);
+    if (webContentsId === undefined) return;
     reportView({ webContentsId, hostX: box.x, hostY: box.y, zoom });
   }, [zoom, activeTab, discarded, tab.src]);
 
@@ -319,7 +345,10 @@ export function WebviewGuest({
       }}
       src={tab.src || "about:blank"}
       partition={partition}
-      allowpopups={true}
+      // 必须是字符串：React 对它不认识的属性收到布尔 `true` 时**不写 DOM**
+      // 只发警告，于是 `allowpopups={true}` 从未真正生效。`@types/react` 把
+      // 它标成 boolean，所以这里只能绕过类型。
+      allowpopups={"true" as unknown as boolean}
       style={style}
       data-slot="browser-webview"
       data-tab-id={tab.id}

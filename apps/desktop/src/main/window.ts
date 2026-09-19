@@ -41,8 +41,11 @@ export function setPageUrl(url: string): void {
  * (`static-server.ts`); this covers the dev server's documents too, which
  * nobody else is in a position to protect.
  */
-export function applyContentSecurityPolicy(pageOrigin: string): void {
-  const policy = contentSecurityPolicy();
+export function applyContentSecurityPolicy(
+  pageOrigin: string,
+  options: { devServer?: boolean } = {},
+): void {
+  const policy = contentSecurityPolicy(options);
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     // Only OUR document. A browser node frames other people's pages, and
     // imposing `default-src 'self'` on those would break every site the user

@@ -15,6 +15,7 @@ import { browserPartition } from "./desktop";
 import { control, isDriven, useDrive } from "./drive";
 import { LeaseBadge } from "./Lease";
 import { useIsGhost } from "./pool";
+import { GuestBoundary } from "./GuestBoundary";
 import { WebviewGuest } from "./WebviewGuest";
 import { WebviewTabs } from "./WebviewTabs";
 import { searchOrUrl } from "./webview";
@@ -231,21 +232,34 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
               className="absolute inset-0"
               style={tab.id === tabs.activeId ? undefined : { display: "none" }}
             >
-              <WebviewGuest
-                nodeId={id}
-                zoom={zoom}
-                tab={tab}
-                partition={partition}
-                hidden={ghost || tab.id !== tabs.activeId}
-                ghost={ghost}
-                driven={driven}
-                onPatch={(change) => tabs.patch(tab.id, change)}
-                onNavigate={(next) => {
-                  if (tab.id === tabs.activeId) persist(next);
-                }}
-                onOpenTab={(next) => tabs.open(next)}
-                onElement={(element) => guestRefs.current.set(tab.id, element)}
-              />
+              <GuestBoundary
+                fallback={
+                  <div
+                    className="grid h-full w-full place-items-center px-6 text-center text-[11px] text-muted-foreground"
+                    data-slot="browser-guest-failed"
+                  >
+                    {t("browser.guestFailed")}
+                  </div>
+                }
+              >
+                <WebviewGuest
+                  nodeId={id}
+                  zoom={zoom}
+                  tab={tab}
+                  partition={partition}
+                  hidden={ghost || tab.id !== tabs.activeId}
+                  ghost={ghost}
+                  driven={driven}
+                  onPatch={(change) => tabs.patch(tab.id, change)}
+                  onNavigate={(next) => {
+                    if (tab.id === tabs.activeId) persist(next);
+                  }}
+                  onOpenTab={(next) => tabs.open(next)}
+                  onElement={(element) =>
+                    guestRefs.current.set(tab.id, element)
+                  }
+                />
+              </GuestBoundary>
             </div>
           ))}
         </div>
