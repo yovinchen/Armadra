@@ -75,7 +75,7 @@ describe("shell-core boundary", () => {
       `import { readFileSync } from 'node:fs'`,
       `import { dataDir } from './paths'`,
       `import { IPC } from '../shared/ipc'`,
-      `import { fromBinary } from '@armadra/protocol'`,
+      `import { PERMISSION_MODES } from '@armadra/shared'`,
       // The package is not Electron itself, and the substring must not fool us.
       `import electronBuilder from 'electron-builder'`,
     ]) {

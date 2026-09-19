@@ -6,9 +6,8 @@ import { RUNTIME_URL } from "./request";
 /**
  * 身份面的客户端 —— core 的 `/api/identity/*`（typescript-core D9）。
  *
- * 这一面以前是二进制 protobuf（`/rpc/armadra.v1.IdentityService/*`），由
- * `packages/host-client` 包着。core 把同一个服务另外开了一层 JSON 外衣，形状
- * 一样、错误信封是 `{ code, message }`，所以这里不需要生成码，只需要一份 zod。
+ * 形状与错误信封（`{ code, message }`）写在
+ * `docs/contracts/core-json-api.md` §3，所以这里不需要生成码，只需要一份 zod。
  *
  * 两条传输，选哪一条由环境决定，不由调用方决定：
  *

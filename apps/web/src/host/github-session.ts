@@ -1,35 +1,28 @@
 import { create } from "zustand";
-import {
-  type HostIdentityClient,
-  type HelloResponse,
-  type HostIdentitySession,
-} from "@armadra/host-client";
 
 import { GithubApi, type GithubCredentialStatus } from "../api/github";
-
-import { loadHostAddress, probeHostAt as probeHost } from "./connection";
 import {
-  HostNativeSessionError,
-  createHostIdentity,
-  hasHostSessionCapability,
-  hostSessionBlock,
-} from "./native-session";
+  type IdentityHello,
+  type IdentitySession,
+  hasSessionCapability,
+  identityHello,
+  permits,
+  resumeIdentity,
+} from "../api/identity";
+import { HostNativeSessionError } from "./native-session";
 
-/** Advertised only when the Host assembled a GitHub credential service. */
+/** core 装上了 GitHub 凭据服务才报的那个能力名。 */
 export const GITHUB_CAPABILITY = "github.issues.v1";
 
 /**
- * Why the GitHub surface cannot be used right now.
+ * GitHub 这一面现在为什么用不了。
  *
- * Same shape as the automation session: one value, one honest sentence, one
- * place to go and fix it. `unsupported` and `noCredential` are deliberately
- * separate — "this Host has no GitHub service at all" and "the service is
- * there but cannot produce a token" are repaired in different places.
+ * 和自动化那一面同一种形状：一个值，一句实话，一个去修它的地方。
+ * `unsupported` 与 `noCredential` 故意分开——「这台 core 根本没有 GitHub 这一
+ * 块」和「有，但拿不出令牌」要去修的地方不一样。
  */
 export type GithubBlockReason =
   | "noWorkspace"
-  | "tlsRequired"
-  | "sameOrigin"
   | "nativeSession"
   | "disconnected"
   | "unsupported"
@@ -45,91 +38,60 @@ export type GithubSessionState =
   | {
       status: "ready";
       client: GithubApi;
-      session: HostIdentitySession;
-      hello: HelloResponse;
-      /** False when the device only holds github:read for this workspace. */
+      session: IdentitySession;
+      hello: IdentityHello;
+      /** 这台设备只有 github:read 时是 false。 */
       canWrite: boolean;
-      /** The status readiness was decided on; it never carries a token. */
+      /** 判定可用时看的那份状态；它永远不带令牌。 */
       credential: GithubCredentialStatus;
     };
 
 export interface GithubSessionStore {
   state: GithubSessionState;
   /**
-   * The client, whenever one could be built at all.
+   * 只要建得出来就留着的那个客户端。
    *
-   * It outlives the readiness decision on purpose: the settings page has to be
-   * able to configure a credential precisely when there is none, which is the
-   * case the page itself reports as `noCredential`.
+   * 它故意活得比「可用」这个判断久：设置页必须能在**没有凭据**的时候去配一个，
+   * 而那正是页面自己报成 `noCredential` 的那一档。
    */
   client: GithubApi | null;
-  address: string;
-  /** Opens (or reuses) the session for one workspace; the newest call wins. */
+  /** 为一个工作空间开（或复用）会话；最新的那次赢。 */
   connect: (workspaceId: string | null) => Promise<void>;
-  /** Drops the session — used when the workspace changes or a view unmounts. */
+  /** 丢掉会话——换工作空间或视图卸载时用。 */
   reset: () => void;
 }
 
-function permits(
-  session: HostIdentitySession,
-  permission: string,
-  workspaceId: string,
-  hostId: string,
-): boolean {
-  return session.scopes.some(
-    (scope) =>
-      scope.permission === permission &&
-      (!scope.workspaceId || scope.workspaceId === workspaceId) &&
-      (!scope.executionHostId || scope.executionHostId === hostId),
-  );
-}
-
 export const useGithubSession = create<GithubSessionStore>((set, get) => {
-  let identity: HostIdentityClient | null = null;
   let attempt = 0;
-
-  function drop() {
-    identity?.dispose();
-    identity = null;
-  }
 
   return {
     state: { status: "idle" },
     client: null,
-    address: loadHostAddress(),
 
     reset: () => {
       attempt += 1;
-      drop();
       set({ state: { status: "idle" }, client: null });
     },
 
     connect: async (workspaceId) => {
       const ticket = (attempt += 1);
       const live = () => get() && attempt === ticket;
-      drop();
       set({ client: null });
       if (!workspaceId) {
         set({ state: { status: "blocked", reason: "noWorkspace" } });
         return;
       }
-      const address = loadHostAddress();
-      set({ address, state: { status: "connecting" } });
-      const blocked = hostSessionBlock(address);
-      if (blocked) {
-        set({ state: { status: "blocked", reason: blocked } });
-        return;
-      }
-      let hello: HelloResponse;
+      set({ state: { status: "connecting" } });
+      let hello: IdentityHello;
       try {
-        hello = await probeHost(address, new AbortController().signal);
+        hello = await identityHello();
       } catch {
         if (live())
           set({ state: { status: "blocked", reason: "disconnected" } });
         return;
       }
       if (!live()) return;
-      if (!hasHostSessionCapability(hello)) {
+      if (!hasSessionCapability(hello)) {
         set({ state: { status: "blocked", reason: "noSession" } });
         return;
       }
@@ -137,29 +99,15 @@ export const useGithubSession = create<GithubSessionStore>((set, get) => {
         set({ state: { status: "blocked", reason: "unsupported" } });
         return;
       }
-      let client: HostIdentityClient;
+      let session: IdentitySession | null;
       try {
-        client = createHostIdentity({
-          baseUrl: address,
-          hostId: hello.hostId,
-          hostInstanceId: hello.hostInstanceId,
-        });
-      } catch {
-        set({ state: { status: "blocked", reason: "tlsRequired" } });
-        return;
-      }
-      identity = client;
-      let session: HostIdentitySession | null;
-      try {
-        session = await client.resume();
+        session = await resumeIdentity();
       } catch (error) {
         if (live()) {
-          drop();
           set({
             state: {
               status: "blocked",
-              // In the desktop shell the session comes from a ticket the
-              // shell issues; when that fails the settings page knows why.
+              // 桌面壳里会话来自壳签的一张票；那一步失败时设置页说得出原因。
               reason:
                 error instanceof HostNativeSessionError
                   ? "nativeSession"
@@ -169,20 +117,18 @@ export const useGithubSession = create<GithubSessionStore>((set, get) => {
         }
         return;
       }
-      if (!live()) {
-        client.dispose();
-        return;
-      }
-      if (!session) {
+      if (!live()) return;
+      if (session === null) {
         set({ state: { status: "blocked", reason: "signedOut" } });
         return;
       }
-      if (!permits(session, "github:read", workspaceId, hello.hostId)) {
+      const scope = { workspaceId, hostId: hello.hostId };
+      if (!permits(session, "github:read", scope)) {
         set({ state: { status: "blocked", reason: "noPermission" } });
         return;
       }
-      // 调用面不再挂在这条会话上：它打的是 core 的 `/api/github/*`（R7a）。
-      // 会话仍然决定**能不能打开这块面板**——能力、授权位与那次配对都在它身上。
+      // 调用面打的是 core 的 `/api/github/*`；会话决定的是**能不能打开这块
+      // 面板**。
       let github: GithubApi;
       try {
         github = new GithubApi({ workspaceId });
@@ -191,9 +137,8 @@ export const useGithubSession = create<GithubSessionStore>((set, get) => {
         return;
       }
       set({ client: github });
-      // A session that cannot produce a token is not "ready with an empty
-      // list": every request would fail on authentication, so the panel says
-      // so and points at the GitHub settings section instead.
+      // 一条拿不出令牌的会话不是「可用，只是列表为空」：每一次请求都会栽在认证
+      // 上，所以面板直说，并指向 GitHub 那一节设置。
       let credential: GithubCredentialStatus;
       try {
         credential = await github.getCredential();
@@ -213,7 +158,7 @@ export const useGithubSession = create<GithubSessionStore>((set, get) => {
           client: github,
           session,
           hello,
-          canWrite: permits(session, "github:write", workspaceId, hello.hostId),
+          canWrite: permits(session, "github:write", scope),
           credential,
         },
       });

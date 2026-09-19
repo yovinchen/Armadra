@@ -1,14 +1,9 @@
 /**
  * GitHub 面板对 core 的调用面 —— `/api/github/*`（R7a）。
  *
- * 这一份取代 `@armadra/host-client` 的 `HostGithubClient`：方法名、参数与返回的
- * 形状逐条对得上，换掉的只是**传输**——protobuf 帧换成 JSON，`/rpc/` 换成
- * `/api/`。R7 要删 `proto/`、`packages/protocol` 与 `packages/host-client`，所以
- * 页面必须先不再依赖它们。
- *
  * ## 线上的形状
  *
- * core 发的是 protobuf 的 JSON 映射（`docs/contracts/core-json-api.md` §2）：
+ * 形状逐字段写在 `docs/contracts/core-json-api.md` §2 与 §5：
  * 字段名 camelCase、`int64` / `uint64` 是十进制**字符串**、枚举是枚举值名、零值
  * 照写。这里的 zod 把它解回页面一直在用的那套值：`int64` 回 `bigint`，枚举回
  * 那个字符串本身。

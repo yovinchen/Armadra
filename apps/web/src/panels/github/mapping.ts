@@ -13,7 +13,7 @@ import {
  *
  * A draft is what the person typed; `mappingFromDraft` turns it into the
  * message the Host stores. Nothing here decides whether a configuration is
- * acceptable beyond what `host-client` itself refuses before sending — the
+ * acceptable beyond what the API client itself refuses before sending — the
  * Host owns that judgement, including the cycle check, and pre-empting it here
  * would mean guessing a verdict the panel never observed.
  */
@@ -82,7 +82,7 @@ export function draftFromMapping(
 }
 
 /**
- * The mistakes `host-client` refuses locally, named one by one.
+ * The mistakes the API client refuses locally, named one by one.
  *
  * These are exactly the checks `putStatusMapping` performs before anything is
  * sent: a duplicate id, a missing or duplicate label or option, a coupling

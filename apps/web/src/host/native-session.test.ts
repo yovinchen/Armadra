@@ -1,32 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { HelloResponse } from "@armadra/host-client";
 
 const mocks = vi.hoisted(() => ({ bridgeTicket: vi.fn() }));
 
 import {
   HostNativeSessionError,
-  createHostIdentity,
   fetchNativeTicket,
-  hasHostSessionCapability,
-  hostSessionBlock,
   isNativeShell,
-  nativeCredentials,
   nativeSessionFailureKey,
   pageOrigin,
-  resetNativeSession,
 } from "./native-session";
-import { hostSessionCapability } from "./host-client-compat";
+import {
+  type IdentityHello,
+  hasSessionCapability,
+  sessionCapability,
+} from "../api/identity";
 
 const hostId = "1".repeat(32),
   hostInstanceId = "2".repeat(32);
-function hello(...capabilities: string[]): HelloResponse {
+function hello(...capabilities: string[]): IdentityHello {
   return {
-    $typeName: "armadra.v1.HelloResponse",
     hostId,
     hostInstanceId,
-    protocol: { $typeName: "armadra.v1.ProtocolVersion", major: 1, minor: 1 },
+    protocol: { major: 1, minor: 2 },
     capabilities,
-    capabilityStatus: [],
     maxFrameBytes: 1_048_576,
   };
 }
@@ -58,108 +54,55 @@ const ticket = {
 
 beforeEach(() => {
   mocks.bridgeTicket.mockReset();
-  resetNativeSession();
 });
 afterEach(() => {
   browser();
   vi.unstubAllGlobals();
 });
 
-describe("hostSessionBlock", () => {
-  it("keeps the browser rule outside the shell", () => {
-    browser();
-    expect(hostSessionBlock("http://127.0.0.1:43121")).toBe("tlsRequired");
-    expect(hostSessionBlock("https://other.test")).toBe("sameOrigin");
-    expect(hostSessionBlock("https://host.test")).toBeNull();
-    expect(hostSessionBlock("not a url")).toBe("tlsRequired");
-    expect(isNativeShell()).toBe(false);
-  });
-  it("is not fooled by a shell page origin without a shell, or a shell on a browser origin", () => {
-    // A page origin alone proves nothing: a browser can sit on a loopback HTTP
-    // origin too, and still has no channel to a ticket.
+describe("是不是壳里的这张页面", () => {
+  it("一个回环来源本身证明不了任何事", () => {
+    // 浏览器也可以停在一个回环 HTTP 来源上，而它没有任何通往票据的通道。
     browser("http://127.0.0.1:1420");
     expect(isNativeShell()).toBe(false);
-    expect(hostSessionBlock("http://127.0.0.1:43121")).toBe("tlsRequired");
 
-    // And a shell that loaded the page from somewhere off this machine is not
-    // a native session either, however real the shell is.
+    // 一个把页面从这台机器之外加载进来的壳也不是原生会话，不管它多真。
     shell("https://armadra.example");
     expect(isNativeShell()).toBe(false);
-    expect(hostSessionBlock("http://127.0.0.1:43121")).toBe("tlsRequired");
   });
 
   /**
-   * The shell (docs/design/electron-migration.md §2.1): the page is served over
-   * loopback HTTP on a kernel-assigned port, so the shell origin is not a fixed
-   * spelling and the judgement cannot be a constant. The ticket chain is
-   * unchanged — loopback HTTP cookies are not isolated by port, which is
-   * exactly why it had to stay.
+   * 壳（docs/design/electron-migration.md §2.1）：页面由回环 HTTP 上一个内核
+   * 分配端口的静态服务提供，所以壳的来源不是一个固定拼法，这个判断不能是常量。
    */
   it.each([
     "http://127.0.0.1:54321",
     "http://127.0.0.1:1420",
     "http://localhost:61000",
-  ])("treats the shell's own loopback origin %s as native", (origin) => {
+  ])("把壳自己的回环来源 %s 认成原生", (origin) => {
     shell(origin);
     expect(isNativeShell()).toBe(true);
     expect(pageOrigin()).toBe(origin);
-    expect(hostSessionBlock("http://127.0.0.1:43121")).toBeNull();
-    expect(hostSessionBlock("http://localhost:43121")).toBeNull();
-    expect(hostSessionCapability()).toBe("identity.native-session.v1");
-    // Not a licence for a remote Host: the shell rule still refuses one.
-    expect(hostSessionBlock("https://armadra.example")).toBe("sameOrigin");
-    expect(hostSessionBlock("http://192.168.1.20:43121")).toBe("tlsRequired");
+    expect(sessionCapability()).toBe("identity.native-session.v1");
   });
 });
 
-describe("capability negotiation and client construction", () => {
+describe("capability negotiation", () => {
   it("asks for the browser capability in a browser and the native one in the shell", () => {
     browser();
-    expect(hasHostSessionCapability(hello("identity.browser-session.v1"))).toBe(
+    expect(hasSessionCapability(hello("identity.browser-session.v1"))).toBe(
       true,
     );
-    expect(hasHostSessionCapability(hello("identity.native-session.v1"))).toBe(
+    expect(hasSessionCapability(hello("identity.native-session.v1"))).toBe(
       false,
     );
     shell();
-    expect(hasHostSessionCapability(hello("identity.native-session.v1"))).toBe(
+    expect(hasSessionCapability(hello("identity.native-session.v1"))).toBe(
       true,
     );
-    expect(hasHostSessionCapability(hello("identity.browser-session.v1"))).toBe(
+    expect(hasSessionCapability(hello("identity.browser-session.v1"))).toBe(
       false,
     );
-  });
-  it("builds a cookie client in a browser and a shared native client in the shell", async () => {
-    browser();
-    const fetcher = vi.fn();
-    expect(() =>
-      createHostIdentity({
-        baseUrl: "https://host.test",
-        hostId,
-        hostInstanceId,
-        fetch: fetcher,
-      }),
-    ).not.toThrow();
-    expect(() =>
-      createHostIdentity({
-        baseUrl: "http://127.0.0.1:43121",
-        hostId,
-        hostInstanceId,
-        fetch: fetcher,
-      }),
-    ).toThrow();
-    shell();
-    expect(() =>
-      createHostIdentity({
-        baseUrl: "http://127.0.0.1:43121",
-        hostId,
-        hostInstanceId,
-        fetch: fetcher,
-      }),
-    ).not.toThrow();
-    expect(nativeCredentials()).toBe(nativeCredentials());
-    expect(nativeCredentials().signedIn).toBe(false);
-    expect(fetcher).not.toHaveBeenCalled();
   });
 });
 
@@ -259,16 +202,4 @@ describe("fetchNativeTicket through the shell bridge", () => {
     expect(mocks.bridgeTicket).not.toHaveBeenCalled();
   });
 
-  it("builds the shared native client against the loopback Host", () => {
-    shell();
-    expect(() =>
-      createHostIdentity({
-        baseUrl: "http://127.0.0.1:43121",
-        hostId,
-        hostInstanceId,
-        fetch: vi.fn(),
-      }),
-    ).not.toThrow();
-    expect(nativeCredentials()).toBe(nativeCredentials());
-  });
 });
