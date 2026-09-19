@@ -1,0 +1,142 @@
+# electron-builder packaging configuration.
+#
+# `appId` and `productName` are copied from `src-tauri/tauri.conf.json`
+# (`identifier`, `productName`) rather than redeclared independently, so the
+# two shells keep the same application identity while they coexist
+# (docs/design/electron-migration.md D10). `apps/desktop/scripts/check-identity.mjs`
+# asserts the two stay in sync.
+#
+# The target list on every platform is one-for-one with
+# `tools/release/artifacts.mjs` (`desktopAssets()`): six `<os>-<arch>` entries,
+# three bundle kinds each. `apps/desktop/scripts/artifact-targets.test.mjs`
+# checks that correspondence; changing either file without the other fails it.
+appId: dev.armadra.desktop
+productName: Armadra
+directories:
+  # Named to match the blacklist entry `apps/desktop/release/` already
+  # reserved for this in repo.rules.json and .gitignore (both predate this
+  # file — see docs/guides/development.md §打包).
+  output: release
+  buildResources: build
+
+# Only the electron-vite output and the manifest electron-builder itself needs
+# to read (`main`, `version`, dependency list for asar-unpacking rules) are
+# part of the app. Everything else — src/, scripts/, tests — stays out of the
+# asar.
+files:
+  - out/**/*
+  - package.json
+
+# No native Node addon ships today (the terminal and PTY domains live in the
+# Rust Runtime, not in this shell — AGENTS.md "代码边界"). Left explicit and
+# empty rather than omitted, so the day a native module *is* added here, this
+# is the line that has to change and a reviewer sees it move.
+asarUnpack: []
+
+# The four sidecar binaries `scripts/stage-binaries.mjs` stages into
+# `resources/` before packaging. Electron's `process.resourcesPath` is exactly
+# this directory on every platform, which is what `runtime-process.ts`'s
+# `runtimeExecutable()` already resolves against — no `-<triple>` suffix
+# needed, unlike Tauri's `externalBin` convention (armadra-inventory.md §2 item 29).
+#
+# Listed by exact name per platform, not a `*` glob and not shared at the top
+# level: electron-builder resolves a `{from, to}` pair's `from` as a literal
+# path (file or directory) before any pattern matching runs —
+# `resources/armadra-runtime*` is not a glob here, it is a literal filename
+# that does not exist, and electron-builder logs "file source doesn't exist"
+# and silently packages without it rather than failing the build. Windows
+# binaries carry `.exe` (`stage-binaries.mjs`'s `goTarget().extension`) and
+# only Windows ships `armadra-session-host` (T01: ConPTY sessions have to
+# outlive the Worker there; tmux already does that job on macOS/Linux), so
+# each platform section lists its own four names in full rather than
+# layering a shared top-level list under a platform-specific one.
+mac:
+  extraResources:
+    - from: resources/armadra-runtime
+      to: .
+    - from: resources/armadra-host
+      to: .
+    - from: resources/armadra-hook
+      to: .
+  category: public.developer-tools
+  icon: src-tauri/icons/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Whether this build actually notarizes is decided by
+  # `scripts/signing-electron.mjs` before packaging starts (three-state sign /
+  # skip / refuse, ported from the Tauri-era `scripts/signing.mjs`): it reads
+  # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID from the
+  # environment and disables notarization here via `-c.mac.notarize=false`
+  # when they are absent, the same "decide before the twenty-minute build, not
+  # after" reasoning as docs/guides/ci-release.md §2.6.
+  notarize: true
+  extendInfo:
+    # macOS 15+ gates any connection to an address on the user's own subnet
+    # behind Local Network privacy, attributed to the RESPONSIBLE PROCESS —
+    # for everything this shell spawns (the Runtime, the Go Host, agent CLIs)
+    # that is Armadra.app, not the child. Without this string there is no
+    # prompt and no row in System Settings → Privacy & Security → Local
+    # Network: the denial is silent and ungrantable, and it surfaces as
+    # `EHOSTUNREACH` from an agent session while Apple-signed `/usr/bin/curl`
+    # succeeds at the same instant (docs/research/nodeterm/process-model-and-platform.md §4,
+    # nodeterm issue #589). Reviewed allowlist enforced by `build/info-plist.test.ts`.
+    NSLocalNetworkUsageDescription: "Armadra 的 Runtime 与已连接的 Agent CLI 需要访问本机局域网内的设备与服务。"
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+
+win:
+  icon: src-tauri/icons/icon.ico
+  extraResources:
+    - from: resources/armadra-runtime.exe
+      to: .
+    - from: resources/armadra-host.exe
+      to: .
+    - from: resources/armadra-hook.exe
+      to: .
+    # Windows-only sidecar: ConPTY sessions have to outlive the Worker and the
+    # shell, a job tmux already does on macOS/Linux (T01,
+    # apps/desktop/scripts/sidecar-targets.mjs `rustSidecars()`).
+    - from: resources/armadra-session-host.exe
+      to: .
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+
+linux:
+  icon: src-tauri/icons/icon.png
+  category: Development
+  extraResources:
+    - from: resources/armadra-runtime
+      to: .
+    - from: resources/armadra-host
+      to: .
+    - from: resources/armadra-hook
+      to: .
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64, arm64]
+    - target: rpm
+      arch: [x64, arm64]
+
+# Left empty in the repository, the same reasoning as `tauri.conf.json`'s
+# `plugins.updater.endpoints`: the address a *published* release polls must
+# never be baked into a build that isn't one. CI injects it from
+# ARMADRA_UPDATER_ENDPOINTS (scripts/signing-electron.mjs); a local `dist`
+# build sets `extraMetadata.armadraUpdates = "disabled"` instead (see
+# `scripts/dist.mjs`) so it never polls this even if it were filled in.
+publish:
+  provider: generic
+  url: https://armadra.dev/updates

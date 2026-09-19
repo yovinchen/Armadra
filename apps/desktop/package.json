@@ -13,6 +13,9 @@
     "prepare:sidecar": "node scripts/prepare-sidecar.mjs",
     "prepare:sidecar-placeholders": "node scripts/stage-sidecar-placeholders.mjs",
     "prepare:host": "node scripts/prepare-host.mjs",
+    "stage:binaries": "node scripts/stage-binaries.mjs",
+    "stage:binaries-placeholders": "node scripts/stage-binaries.mjs --placeholders",
+    "dist": "node scripts/dist.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run && node --test scripts/*.test.mjs"
   },
@@ -22,10 +25,13 @@
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
     "@tauri-apps/cli": "2.11.4",
+    "@types/js-yaml": "4.0.9",
     "@types/node": "24.3.0",
     "@vitejs/plugin-react": "6.0.5",
     "electron": "42.11.6",
+    "electron-builder": "26.15.3",
     "electron-vite": "6.0.0-beta.1",
+    "js-yaml": "5.4.2",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.2",
     "vite": "8.2.1",

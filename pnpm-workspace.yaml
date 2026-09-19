@@ -8,6 +8,9 @@ allowBuilds:
   # Electron's postinstall is what downloads the runtime binary; without it
   # `electron-vite dev` has nothing to launch.
   electron: true
+  # electron-builder's Squirrel.Windows dependency; unused (we ship NSIS, not
+  # Squirrel), so its postinstall script does not need to run.
+  electron-winstaller: false
 
 minimumReleaseAgeExclude:
   - "@xyflow/react@12.11.3"
