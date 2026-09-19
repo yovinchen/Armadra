@@ -26,7 +26,7 @@ import { ScheduleStore } from "./store";
 /**
  * 调度域的用例夹具。
  *
- * 只建 0018 那一批表：这个域不碰身份、画布或终端的表，把整条迁移链搬进一个
+ * 只建 0017 那一批表：这个域不碰身份、画布或终端的表，把整条迁移链搬进一个
  * 内存库只会让一次断言失败的原因变得更难读。
  *
  * 时钟和投递方都是可控的。Go 那边的用例也是这么搭的，理由一样：调度是一门关于
@@ -34,7 +34,7 @@ import { ScheduleStore } from "./store";
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
-const migration = resolve(here, "../db/migrations/0018_event_outbox.sql");
+const migration = resolve(here, "../db/migrations/0017_event_outbox.sql");
 
 export const HOST_ID = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
 export const PRINCIPAL = "0123456789abcdef0123456789abcdef";
