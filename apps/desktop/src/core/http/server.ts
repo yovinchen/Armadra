@@ -51,6 +51,7 @@ export class CoreServer {
   private readonly servers: Server[] = [];
   private readonly streams = new Map<string, StreamRegistration>();
   private readonly rawRoutes: { prefix: string; handler: RawHandler }[] = [];
+  private readonly bodyLimits = new Map<string, number>();
   private readonly options: CoreServerOptions;
 
   constructor(options: CoreServerOptions) {
@@ -108,10 +109,7 @@ export class CoreServer {
     const path = url.pathname;
     let answer: HandlerResult | ErrorResponse;
     try {
-      const body = await readBody(
-        request,
-        this.options.maxBodyBytes ?? MAX_BODY_BYTES,
-      );
+      const body = await readBody(request, this.bodyLimitFor(path));
       if (!body.ok) {
         answer = badRequest(body.reason);
       } else {
@@ -177,6 +175,27 @@ export class CoreServer {
       ...(empty ? {} : { "content-length": String(payload.byteLength) }),
     });
     response.end(payload);
+  }
+
+  /**
+   * Raises the body ceiling for one table route — the multipart imports,
+   * which the Rust Runtime let through at a batch plus a manifest. Keyed by
+   * the route's pattern, so a limit set before the route is claimed still
+   * applies once it is.
+   */
+  bodyLimit(path: string, bytes: number): void {
+    this.bodyLimits.set(path, bytes);
+  }
+
+  private bodyLimitFor(path: string): number {
+    const found = this.router.match(path);
+    return (
+      (found === undefined
+        ? undefined
+        : this.bodyLimits.get(found.entry.path)) ??
+      this.options.maxBodyBytes ??
+      MAX_BODY_BYTES
+    );
   }
 
   /**

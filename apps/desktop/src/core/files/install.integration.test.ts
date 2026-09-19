@@ -1,10 +1,17 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type RunningCore, run } from "../main";
 import { MAX_BODY_BYTES } from "../http/server";
+import { MAX_IMPORT_BODY_BYTES } from "../imports/routes";
 
 /**
  * The filesystem and import domains, assembled by the real `run()` under
@@ -213,27 +220,33 @@ describe("the assembled filesystem and import domains", () => {
   });
 
   /**
-   * The one place the core is stricter than the Runtime today.
-   *
-   * `apps/runtime/src/lib.rs` raises the axum body limit to
-   * `MAX_BATCH_BYTES + 1 MiB` for the two multipart import routes; the core
-   * has a single ceiling for every route, set in `core/http/server.ts`, and
-   * this domain may not reach into that file. So the *semantic* limits below
-   * are the Runtime's (16 MiB per file, 64 MiB per batch, 256 files) while the
-   * *transport* ceiling is 12 MiB, and an upload between the two is refused
-   * before the manifest is read. Asserted rather than left implicit so the
-   * divergence is visible the day `server.ts` grows a per-route ceiling.
+   * The two multipart routes carry the Runtime's ceiling (`MAX_BATCH_BYTES`
+   * plus a MiB, as `apps/runtime/src/lib.rs` gave axum), not the core's single
+   * 12 MiB one: a 12 MiB file is a legal import, and it reaches the manifest.
    */
-  it("refuses an upload above the core's single body ceiling", async () => {
-    const oversized = upload(
-      "edge",
-      '{"paths":["big.bin"]}',
-      Buffer.alloc(MAX_BODY_BYTES + 1024),
-    );
+  it("lets an upload above the core's single body ceiling reach the manifest", async () => {
+    const big = Buffer.alloc(MAX_BODY_BYTES + 1024, 0x61);
     const answer = await send(
       "POST",
       `/api/workspaces/${workspaceId}/imports`,
-      oversized,
+      upload("edge", '{"paths":["big.bin"]}', big),
+      { "content-type": "multipart/form-data; boundary=edge" },
+    );
+    expect(answer.status).toBe(200);
+    const landed = (answer.body as { files: { path: string }[] }).files[0]
+      ?.path as string;
+    expect(statSync(join(root, landed)).size).toBe(big.length);
+  });
+
+  it("still refuses a body above the import ceiling before reading it", async () => {
+    const answer = await send(
+      "POST",
+      `/api/workspaces/${workspaceId}/imports`,
+      upload(
+        "edge",
+        '{"paths":["huge.bin"]}',
+        Buffer.alloc(MAX_IMPORT_BODY_BYTES + 1024),
+      ),
       { "content-type": "multipart/form-data; boundary=edge" },
     ).catch(() => ({ status: 400, body: undefined, headers: new Headers() }));
     expect(answer.status).toBe(400);
