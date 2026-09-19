@@ -13,6 +13,9 @@ target/
 # electron-vite 的产物与 electron-builder 的打包输出（repo.rules.json 也拒绝跟踪）
 out/
 apps/desktop/release/
+# scripts/stage-binaries.mjs 拷贝进来的四个 sidecar 二进制，供 electron-builder 的
+# extraResources 打包；与 target/release 里的产物同源，不入库
+apps/desktop/resources/
 
 .env
 .env.*

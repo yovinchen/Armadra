@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <!--
+      electron-builder's own default hardened-runtime entitlements
+      (app-builder-lib/templates/entitlements.mac.plist), kept explicit here
+      rather than omitted so the allowlist test in build/info-plist.test.ts has
+      something to check and a reviewer sees the file move if it ever changes.
+      No entitlement narrower than this default is workable: hardened runtime
+      + notarization requires allow-jit and allow-unsigned-executable-memory
+      for V8's JIT (electron/electron-notarize#prerequisites), and
+      disable-library-validation for the unsigned-by-Apple dylibs Chromium
+      loads from inside the signed .app bundle
+      (electron-userland/electron-builder#3940).
+
+      Deliberately absent: com.apple.security.device.audio-input (no
+      microphone use), com.apple.security.app-sandbox (not sandboxed, so
+      com.apple.security.network.client would be meaningless here — see the
+      note on NSBonjourServices in build/info-plist.test.ts).
+    -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+  </dict>
+</plist>
