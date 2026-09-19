@@ -14,11 +14,28 @@
  *   * **枚举的值就是它的名字**（`"AUTOMATION_PLAN_STATE_ACTIVE"`）。契约里写的是
  *     名字，让内存里也是名字，编码这一步就没有一张可以对错的映射表。
  *
- * 描述符（`*Schema`）不是为了留着 protobuf，而是因为这个域有十五种记录、每种都
- * 要「建一份带默认值的」「编成 JSON」「从 JSON 读回来」三件事。写成一张字段表，
- * 这三件事各只有一份实现；写成三十份手写函数，它们会各自漂移。编解码在
- * `json.ts`，本文件只管类型、字段表与 `create`。
+ * 描述符（`*Schema`）是这些记录的字段表，编解码的实现在 `../contract/message`，
+ * 域内的入口在 `json.ts`。本文件只管类型与字段表。
  */
+
+import {
+  bool,
+  bytes,
+  create,
+  describe,
+  enumOf,
+  i64,
+  msg,
+  oneof,
+  str,
+  strings,
+  u32,
+  u64,
+  type MessageDesc,
+} from "../contract/message";
+
+export { create };
+export type { MessageDesc };
 
 /* ---------------------------------- 枚举 ---------------------------------- */
 
@@ -282,87 +299,39 @@ export interface AutomationCommandSession {
 
 /* --------------------------------- 字段表 --------------------------------- */
 
-export type FieldDesc =
-  | { readonly kind: "string" }
-  | { readonly kind: "bool" }
-  | { readonly kind: "uint32" }
-  | { readonly kind: "int64" }
-  | { readonly kind: "uint64" }
-  | { readonly kind: "bytes" }
-  | { readonly kind: "enum"; readonly unspecified: string }
-  | { readonly kind: "strings" }
-  | { readonly kind: "message"; readonly of: () => MessageDesc<never> }
-  | {
-      readonly kind: "oneof";
-      readonly cases: Readonly<Record<string, () => MessageDesc<never>>>;
-    };
-
-export interface MessageDesc<T> {
-  readonly name: string;
-  readonly fields: Readonly<Record<string, FieldDesc>>;
-  /** 只为把描述符和它描述的类型绑在一起，运行时永远是 `undefined`。 */
-  readonly _type?: T;
-}
-
-const str: FieldDesc = { kind: "string" };
-const bool: FieldDesc = { kind: "bool" };
-const u32: FieldDesc = { kind: "uint32" };
-const i64: FieldDesc = { kind: "int64" };
-const u64: FieldDesc = { kind: "uint64" };
-const bytes: FieldDesc = { kind: "bytes" };
-const strings: FieldDesc = { kind: "strings" };
-const enumOf = (unspecified: string): FieldDesc => ({
-  kind: "enum",
-  unspecified,
-});
-const msg = <T>(of: () => MessageDesc<T>): FieldDesc => ({
-  kind: "message",
-  of: of as () => MessageDesc<never>,
-});
-
-function desc<T>(
-  name: string,
-  fields: Readonly<Record<string, FieldDesc>>,
-): MessageDesc<T> {
-  return { name, fields };
-}
-
-export const AutomationOnceSchema = desc<AutomationOnce>("AutomationOnce", {
+export const AutomationOnceSchema = describe<AutomationOnce>("AutomationOnce", {
   atUnixMs: i64,
 });
 
-export const AutomationIntervalSchema = desc<AutomationInterval>(
+export const AutomationIntervalSchema = describe<AutomationInterval>(
   "AutomationInterval",
   { anchorUnixMs: i64, intervalMs: i64 },
 );
 
-export const AutomationCronSchema = desc<AutomationCron>("AutomationCron", {
+export const AutomationCronSchema = describe<AutomationCron>("AutomationCron", {
   expression: str,
   timezone: str,
 });
 
 export const AutomationLoopAfterCompletionSchema =
-  desc<AutomationLoopAfterCompletion>("AutomationLoopAfterCompletion", {
+  describe<AutomationLoopAfterCompletion>("AutomationLoopAfterCompletion", {
     delayMs: i64,
   });
 
-export const AutomationScheduleSchema = desc<AutomationSchedule>(
+export const AutomationScheduleSchema = describe<AutomationSchedule>(
   "AutomationSchedule",
   {
-    kind: {
-      kind: "oneof",
-      cases: {
-        once: () => AutomationOnceSchema as MessageDesc<never>,
-        interval: () => AutomationIntervalSchema as MessageDesc<never>,
-        cron: () => AutomationCronSchema as MessageDesc<never>,
-        loopAfterCompletion: () =>
-          AutomationLoopAfterCompletionSchema as MessageDesc<never>,
-      },
-    },
+    kind: oneof({
+      once: () => AutomationOnceSchema as MessageDesc<never>,
+      interval: () => AutomationIntervalSchema as MessageDesc<never>,
+      cron: () => AutomationCronSchema as MessageDesc<never>,
+      loopAfterCompletion: () =>
+        AutomationLoopAfterCompletionSchema as MessageDesc<never>,
+    }),
   },
 );
 
-export const AgentLaunchSpecSchema = desc<AgentLaunchSpec>("AgentLaunchSpec", {
+export const AgentLaunchSpecSchema = describe<AgentLaunchSpec>("AgentLaunchSpec", {
   agentId: str,
   workingDirectory: str,
   args: strings,
@@ -371,7 +340,7 @@ export const AgentLaunchSpecSchema = desc<AgentLaunchSpec>("AgentLaunchSpec", {
   accountId: str,
 });
 
-export const AutomationTargetSchema = desc<AutomationTarget>(
+export const AutomationTargetSchema = describe<AutomationTarget>(
   "AutomationTarget",
   {
     executionHostId: str,
@@ -384,7 +353,7 @@ export const AutomationTargetSchema = desc<AutomationTarget>(
   },
 );
 
-export const AutomationPlanConfigSchema = desc<AutomationPlanConfig>(
+export const AutomationPlanConfigSchema = describe<AutomationPlanConfig>(
   "AutomationPlanConfig",
   {
     workspaceId: str,
@@ -404,7 +373,7 @@ export const AutomationPlanConfigSchema = desc<AutomationPlanConfig>(
   },
 );
 
-export const AutomationActivationSchema = desc<AutomationActivation>(
+export const AutomationActivationSchema = describe<AutomationActivation>(
   "AutomationActivation",
   {
     planId: str,
@@ -419,7 +388,7 @@ export const AutomationActivationSchema = desc<AutomationActivation>(
   },
 );
 
-export const AutomationPlanSchema = desc<AutomationPlan>("AutomationPlan", {
+export const AutomationPlanSchema = describe<AutomationPlan>("AutomationPlan", {
   id: str,
   configVersion: u64,
   config: msg(() => AutomationPlanConfigSchema),
@@ -437,12 +406,12 @@ export const AutomationPlanSchema = desc<AutomationPlan>("AutomationPlan", {
   attentionStreak: u32,
 });
 
-export const AutomationRunRefSchema = desc<AutomationRunRef>(
+export const AutomationRunRefSchema = describe<AutomationRunRef>(
   "AutomationRunRef",
   { runId: str, planId: str, workspaceId: str },
 );
 
-export const AutomationTargetGateSchema = desc<AutomationTargetGate>(
+export const AutomationTargetGateSchema = describe<AutomationTargetGate>(
   "AutomationTargetGate",
   {
     executionHostId: str,
@@ -452,7 +421,7 @@ export const AutomationTargetGateSchema = desc<AutomationTargetGate>(
   },
 );
 
-export const AutomationRunSchema = desc<AutomationRun>("AutomationRun", {
+export const AutomationRunSchema = describe<AutomationRun>("AutomationRun", {
   id: str,
   planId: str,
   workspaceId: str,
@@ -481,7 +450,7 @@ export const AutomationRunSchema = desc<AutomationRun>("AutomationRun", {
   deliveryObserved: bool,
 });
 
-export const AutomationReceiptSchema = desc<AutomationReceipt>(
+export const AutomationReceiptSchema = describe<AutomationReceipt>(
   "AutomationReceipt",
   {
     operationId: str,
@@ -493,7 +462,7 @@ export const AutomationReceiptSchema = desc<AutomationReceipt>(
   },
 );
 
-export const CommandLaunchSpecSchema = desc<CommandLaunchSpec>(
+export const CommandLaunchSpecSchema = describe<CommandLaunchSpec>(
   "CommandLaunchSpec",
   {
     executable: str,
@@ -504,7 +473,7 @@ export const CommandLaunchSpecSchema = desc<CommandLaunchSpec>(
   },
 );
 
-export const AutomationCommandSessionSchema = desc<AutomationCommandSession>(
+export const AutomationCommandSessionSchema = describe<AutomationCommandSession>(
   "AutomationCommandSession",
   {
     sessionId: str,
@@ -521,91 +490,3 @@ export const AutomationCommandSessionSchema = desc<AutomationCommandSession>(
     updatedAtUnixMs: i64,
   },
 );
-
-/* ---------------------------------- 造一份 --------------------------------- */
-
-export type DeepPartial<T> = T extends
-  | string
-  | number
-  | boolean
-  | bigint
-  | Uint8Array
-  ? T
-  : T extends ReadonlyArray<infer U>
-    ? ReadonlyArray<DeepPartial<U>>
-    : T extends object
-      ? { [K in keyof T]?: DeepPartial<T[K]> }
-      : T;
-
-function zero(field: FieldDesc): unknown {
-  switch (field.kind) {
-    case "string":
-      return "";
-    case "bool":
-      return false;
-    case "uint32":
-      return 0;
-    case "int64":
-    case "uint64":
-      return 0n;
-    case "bytes":
-      return new Uint8Array(0);
-    case "enum":
-      return field.unspecified;
-    case "strings":
-      return [];
-    case "message":
-      // 消息字段有显式的「在不在」：缺席就是缺席，不是一份全零的子记录。
-      return undefined;
-    case "oneof":
-      return { case: undefined };
-  }
-}
-
-function coerce(field: FieldDesc, value: unknown): unknown {
-  switch (field.kind) {
-    case "int64":
-    case "uint64":
-      return typeof value === "bigint" ? value : BigInt(value as number);
-    case "uint32":
-      return Number(value);
-    case "bytes":
-      return value instanceof Uint8Array
-        ? value
-        : new Uint8Array(value as ArrayLike<number>);
-    case "strings":
-      return [...(value as readonly string[])];
-    case "message":
-      return create(field.of(), value as never);
-    case "oneof": {
-      const chosen = value as { case?: string; value?: unknown } | undefined;
-      if (chosen?.case === undefined) return { case: undefined };
-      const sub = field.cases[chosen.case];
-      if (sub === undefined) {
-        throw new Error(`未知的分支 ${chosen.case}`);
-      }
-      return { case: chosen.case, value: create(sub(), chosen.value as never) };
-    }
-    default:
-      return value;
-  }
-}
-
-/**
- * 造一份记录：给了的字段按它的类型归一化，没给的填零值。
- *
- * 「没给」和「给了零」得到同一份记录——线上也只有一种写法（零值照写），所以一条
- * 记录在内存里、库里和线上是同一句话。
- */
-export function create<T>(
-  schema: MessageDesc<T>,
-  init: DeepPartial<T> = {} as DeepPartial<T>,
-): T {
-  const out: Record<string, unknown> = {};
-  const given = init as Record<string, unknown>;
-  for (const [name, field] of Object.entries(schema.fields)) {
-    const value = given[name];
-    out[name] = value === undefined ? zero(field) : coerce(field, value);
-  }
-  return out as T;
-}
