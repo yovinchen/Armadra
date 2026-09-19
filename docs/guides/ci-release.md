@@ -292,7 +292,7 @@ Web 包 + 空的 `latest.json` + `SHA256SUMS`）。上面两条带 secret 的项
 首轮 Windows 上 38 条失败，根因归成五类（SQLite 连接 URL、`\\?\` 扩展长度前缀、
 驱动器盘符不是目录、`--listen unix:` 的绝对路径判断、只有 Unix 有的东西），第二轮
 `--no-fail-fast` 又列出了几批夹具与两处真缺陷（Go 的事件流关闭、服务定义按宿主
-规范化；Rust 的终端 stale 判定），`5bce0440d` 三平台全绿（Linux 14 分钟、macOS 10
+规范化；Rust 的终端 stale 判定），`71715cc29` 三平台全绿（Linux 14 分钟、macOS 10
 分钟、Windows 33 分钟）。这些结论随 R7d 一起失效：那两条工具链与它们的用例都已
 删除。当时的详细记录见 [实施批次记录](../history/platform-implementation-log.md)。
 留下的只有一条仍然适用的教训：**平台差异写在源码的门控里，不写成 CI 的名字过滤**。

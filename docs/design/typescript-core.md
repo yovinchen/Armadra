@@ -1,9 +1,9 @@
 # TypeScript Core：Go Host 与 Rust Runtime 合一
 
-> 状态：目标设计，待实施。基线 `359058afd`（`feature/host-protocol-foundation`）。
+> 状态：目标设计，待实施。基线 `d8c1a10ea`（`feature/host-protocol-foundation`）。
 > 决定：**不再维护三种后端语言**。把 Go Host（非生成码 51,304 行）与 Rust Runtime（`apps/runtime` 135,530 行 + `crates/` 12,855 行）合并重写为**一个 Electron-free 的 TypeScript core**，由两种壳装配：桌面 Electron 壳（`apps/desktop`，已实施）与新增的无窗口服务器壳（浏览器与手机）。
 > 直接后果：进程从三个（壳 / Host / Runtime）变成两个（壳 / core），跨进程业务协议**整体消失**——`proto/`、三处生成码、`crates/protocol`、`packages/protocol`、Host↔Worker stdio 帧、写入所有权切换机制全部删除。
-> 本文给结构、选型、吸收与删除清单、不可变契约、分阶段、并行、风险。盘点数字与统计命令在附录 A，全部实测于 `359058afd`。
+> 本文给结构、选型、吸收与删除清单、不可变契约、分阶段、并行、风险。盘点数字与统计命令在附录 A，全部实测于 `d8c1a10ea`。
 
 ## 1. 结论
 
@@ -318,7 +318,7 @@ LSP 发现与 mux（多客户端复用一个 server）、会话流 WS；主机�
 
 ## 附录 A：盘点
 
-全部实测于 `359058afd`。
+全部实测于 `d8c1a10ea`。
 
 ### A.1 Rust Runtime
 

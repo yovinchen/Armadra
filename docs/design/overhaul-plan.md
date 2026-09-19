@@ -2,7 +2,7 @@
 
 > 状态：目标设计（总纲）。本文是接下来一轮全部改动的唯一入口：把已经完成的 Electron 换壳收口，补齐用户提出的界面与功能要求，并按已拍板的方向把 Rust Runtime 与 Go Host 合并为**一个 TypeScript 核心**。各专项的细节在各自设计文档里，本文只定范围、顺序、团队与验收。
 > 范围：`apps/desktop`、`apps/web`、`apps/runtime`（逐域退役）、`apps/host`（逐域退役）、`crates/*`、`proto/`、`docs/`、CI 与发布。
-> 输入：主线 `359058afd`（Electron 壳已实施；全量测试全绿）；用户 2026-09-19 的四项要求（见 §1）。
+> 输入：主线 `d8c1a10ea`（Electron 壳已实施；全量测试全绿）；用户 2026-09-19 的四项要求（见 §1）。
 
 ## 1. 用户要求与硬性规则
 
@@ -18,7 +18,7 @@
 | R1  | **项目与一切内容统一采用 Armadra 自己的表述**（含文档、注释、提交信息、研究材料）。唯一例外：hook 修复逻辑里必须匹配的用户磁盘旧路径字面量                | §4 P4 清洗批；所有 Agent 提示词写明                                  |
 | R2  | 画布修改经 `canvas-store`；文案在 i18n；只用现有 shadcn 组件；Runtime JSON camelCase、错误 `{ code, message }`；迁移编号只增、未知库拒绝启动（AGENTS.md） | 各批验收                                                             |
 
-## 2. 现状（`359058afd`）
+## 2. 现状（`d8c1a10ea`）
 
 - 桌面壳：Electron，`apps/desktop`；回环 HTTP 静态服务；Runtime 双监听；`identity:ticket`；浏览器节点 `<webview>` + `browser:drive`；更新状态机 TS；electron-builder 三平台。Tauri 与截屏流已删除。
 - 执行层：Rust Runtime 135,530 行（终端 tmux/PTY/SSH、Hook、SQLite 14 迁移、Git、语言服务、浏览器授权、资源、Worker 协议）；`crates/hook` 3,241、`crates/protocol` 5,393、`crates/session-host` 4,221。
@@ -41,7 +41,7 @@ apps/server      无窗口壳：node:http + ws + HTTPS + 单 owner 认证，托�
 
 ### P0 合入与回归（已完成）
 
-`main` 快进到 `359058afd` 并推送；全量测试全绿。
+`main` 快进到 `d8c1a10ea` 并推送；全量测试全绿。
 
 ### P1 界面与功能补齐（进行中，4 个并行批）
 

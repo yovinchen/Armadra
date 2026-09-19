@@ -1,6 +1,6 @@
 # Electron 迁移后的产品复查
 
-> 状态：2026-09-19 只读复查，基线 `359058afd`（`feature/host-protocol-foundation`）。
+> 状态：2026-09-19 只读复查，基线 `d8c1a10ea`（`feature/host-protocol-foundation`）。
 > 目的：对照[功能预期总表](feature-roadmap.md) §3 逐行核查换壳后功能是否仍成立，并登记 UI 死角、
 > 文档漂移、设计缺口与测试盲区。本文不改任何代码，结论一律给文件:行号。
 > 换壳本身的批次与证据见[平台实施记录](platform-implementation-status.md)「Electron 壳迁移」一节，

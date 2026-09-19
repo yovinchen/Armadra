@@ -1,8 +1,8 @@
 # 桌面壳迁移到 Electron
 
-> 状态：已实施（2026-09-19，W0–W5 全部合入，主线 `7fe66ab48`）；未完成的只有真机手工验收（见 status）。本文把桌面壳从 Tauri 换成 Electron，并借此把浏览器节点从「CDP 截屏流」换成进程内 `<webview>`。业务仍由 Rust Runtime 执行，Go Host 迁移方向不变；终端（tmux 已是主后端）、Agent、持久化三个域**原地不动**。
+> 状态：已实施（2026-09-19，W0–W5 全部合入，主线 `9b989dbd3`）；未完成的只有真机手工验收（见 status）。本文把桌面壳从 Tauri 换成 Electron，并借此把浏览器节点从「CDP 截屏流」换成进程内 `<webview>`。业务仍由 Rust Runtime 执行，Go Host 迁移方向不变；终端（tmux 已是主后端）、Agent、持久化三个域**原地不动**。
 > 范围：`apps/desktop`（整体重写）、`apps/web` 的壳耦合面（9 个文件 + 14 处 `isTauri()`）、`apps/runtime/src/browser/` 的瘦身、Go Host 的原生来源判定、发布与更新管线、以及一组与换壳无关但必须先做的画布性能修正。
-> 基线：2026-09-19 的 Armadra `c29cf841f`，覆盖现状盘点、进程模型、终端与 tmux、浏览器节点、画布与状态、Agent 集成六个方面。本文行数与测试数均以该基线为准；Electron 42 + React Flow 的浏览器路径由 W3.0 探针验证。
+> 基线：2026-09-19 的 Armadra `34cd50497`，覆盖现状盘点、进程模型、终端与 tmux、浏览器节点、画布与状态、Agent 集成六个方面。本文行数与测试数均以该基线为准；Electron 42 + React Flow 的浏览器路径由 W3.0 探针验证。
 
 ## 1. 结论与决策
 
@@ -67,7 +67,7 @@ BrowserWindow ──load──▶ 上面的 URL；页面从 preload 读一次 { 
 ```
 
 - 页面来源是真实 HTTP 来源，`fetch`/`WebSocket` 直连 Runtime 与 Host，**不再需要**协议转发与 WS 回环转发（两条转发路径整体删除）。
-- Host 侧（**已验证并实施，`ecb6f3a8a`**）：回环 HTTP 来源**不能**走 cookie 会话——理由不是明文，而是 Cookie 按 host 不按 port 作用域（RFC 6265 §8.5），`127.0.0.1:A` 的 Cookie 会发往同一 profile 的任何 `127.0.0.1:B`，`Secure`/`__Host-` 都不提供端口隔离（`auth.go:28-29` 的既有不变量正确）。因此**保留 `pair` 票据 Bearer 路径**（`identity.native-session.v1`），原生来源判定从三个硬编码 `tauri://` 值放宽为「Tauri 拼写 ∪ `--allow-origin` 里的回环 HTTP 来源」（`native.go` 的 `loopbackHTTPOrigin()`）；信任根不变，浏览器即便合法持有该来源也拿不到票据。Tauri 拼写在 W5 删除。`docs/design/host-native-session.md` 改状态而非归档；`packages/host-client` 的 `NATIVE_PAGE_ORIGINS`（`native.ts:8-12`、`identity.ts:95-99`）在 W1.2 壳/前端半边同步放宽。
+- Host 侧（**已验证并实施，`403902701`**）：回环 HTTP 来源**不能**走 cookie 会话——理由不是明文，而是 Cookie 按 host 不按 port 作用域（RFC 6265 §8.5），`127.0.0.1:A` 的 Cookie 会发往同一 profile 的任何 `127.0.0.1:B`，`Secure`/`__Host-` 都不提供端口隔离（`auth.go:28-29` 的既有不变量正确）。因此**保留 `pair` 票据 Bearer 路径**（`identity.native-session.v1`），原生来源判定从三个硬编码 `tauri://` 值放宽为「Tauri 拼写 ∪ `--allow-origin` 里的回环 HTTP 来源」（`native.go` 的 `loopbackHTTPOrigin()`）；信任根不变，浏览器即便合法持有该来源也拿不到票据。Tauri 拼写在 W5 删除。`docs/design/host-native-session.md` 改状态而非归档；`packages/host-client` 的 `NATIVE_PAGE_ORIGINS`（`native.ts:8-12`、`identity.ts:95-99`）在 W1.2 壳/前端半边同步放宽。
 - Runtime 在壳模式下监听 TCP 回环而非 Unix socket：任何本机进程都能连到它，这一点与今天的 WS 回环转发端口等价，不引入新的暴露面；Hook 服务仍走 Unix socket + app bearer 不变。
 - Windows 不再有 `http(s)://tauri.localhost` 特例，与 macOS/Linux 同一条路。
 

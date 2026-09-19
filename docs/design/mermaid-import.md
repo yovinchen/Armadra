@@ -1,6 +1,6 @@
 # 画板导入 Mermaid 图
 
-> 状态：已实施（2026-09-19，基线 `359058afd`）。把一段 Mermaid 文本变成画板上的内容：flowchart 走「原生对象」路径，落成可编辑、可移动、一步撤销的几何形与连线；其余图种走「图片回退」，经现有资产导入路径落成图片对象。
+> 状态：已实施（2026-09-19，基线 `d8c1a10ea`）。把一段 Mermaid 文本变成画板上的内容：flowchart 走「原生对象」路径，落成可编辑、可移动、一步撤销的几何形与连线；其余图种走「图片回退」，经现有资产导入路径落成图片对象。
 > 范围：`apps/web/src/canvas/whiteboard/mermaid/`（新增）、`canvas/whiteboard/tools/use-clipboard.ts`、`canvas/menus/add-menu.ts`、`canvas/dnd/external-content.ts`、`keybindings/commands.ts`、`i18n/`。`vite.config.ts` 评估过但**没改**（§2.2：手工分组会把按需切分压成一个首屏大球）。白板文档格式（[React Flow 画布](canvas-react-flow.md) §3.1 的 v2）**不变**，不新增对象类型、不新增迁移。
 > 输入：mermaid 12.0.0 与 `@dagrejs/dagre` 3.1 在本仓 jsdom 环境下的实测（见 §2.1、§7）。
 

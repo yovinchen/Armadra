@@ -186,8 +186,8 @@
 | #   | 现象                                                                                                                                                                                | 根因（已核实）                                                                                                                                                                                                                                                                                                                                                                    | 计划                                                                                                                                                                                                                                                                             |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | F1  | 「Hook 与 Skills」安装失败 `Runtime 请求失败 (404)`；Git 日志页 `404`                                                                                                               | 机器上仍在跑 **9 月 6 日 13:12 启动的旧 Runtime**（pid 94097，持有 `runtime.sock`）；新壳的 sidecar 起动时发现「另一个 Runtime 已在监听」而退出，壳的健康检查只比对版本号 `0.1.0`（新旧相同）就把旧进程当成自己的，所有新路由（skills、`git/log`、`git/refs`）都不存在                                                                                                            | 已修 `66e528b6`：`/health` 带 `instanceId`/`build`，Runtime 启动先报实例 id，壳只接受自己 spawn 的实例，旧实例经 `endpoints.json` 核对 pid 后 SIGTERM 再重拉（一次）；壳被 kill -9 时 Runtime 自行退出。真实 release 二进制复现通过                                              |
-| F2  | Claude Code 里 `SessionStart hook error … target/debug/aicc-hook: No such file`；Codex 启动报 `field version, expected description or hooks`；技能 `aicc-canvas` 找不到 `aicc-hook` | 用户配置目录里残留 **旧产品名时期**的安装物：`~/.claude/settings.json` 的 hook 指向 `target/debug/aicc-hook`，`~/.claude/skills/` 有 `aicc-canvas`、`aicc-linked-context`、早期画布管理技能，`~/.codex/hooks.json` 带 Codex 现已拒绝的 `"version": 1` 并引用旧版接入残留（早期 hook 安装路径）中的 Codex 脚本。当前安装器只写新条目，不清理旧条目，且 F1 让新安装根本没到 Runtime | 已修 `82957aef`…`ee6039c1`：`hook/install/repair.rs` 识别并清理，备份原文件；Hook + 技能合成一个安装单元（`INTEGRATION_REVISION`），Claude 改为启动行 `--settings` 注入不再写全局文件；设置页「集成」（`7a6e1f73`）                                                              |
-| F3  | 节点连线后「上下文」不生效：Codex 自己去翻 `~/.claude/projects`                                                                                                                     | F1 + F2 的直接后果：技能未装、hook 未通，CLI 不知道 `armadra canvas` 动词                                                                                                                                                                                                                                                                                                         | `pnpm agent:smoke`（`ec7abb9d`）：Claude、Pi、OMP、Copilot 通过（含连线读对方转录）；Codex 0.153.4 的 hook 信任哈希变了，装上后要用户在 TUI 里按 `t` 确认一次，待单独处理；Gemini 账号不可用、OpenCode 未装 postinstall。「Agent 协作」子菜单已收成一项「交接到…」（`9825c4fe`） |
+| F2  | Claude Code 里 `SessionStart hook error … target/debug/aicc-hook: No such file`；Codex 启动报 `field version, expected description or hooks`；技能 `aicc-canvas` 找不到 `aicc-hook` | 用户配置目录里残留 **旧产品名时期**的安装物：`~/.claude/settings.json` 的 hook 指向 `target/debug/aicc-hook`，`~/.claude/skills/` 有 `aicc-canvas`、`aicc-linked-context`、早期画布管理技能，`~/.codex/hooks.json` 带 Codex 现已拒绝的 `"version": 1` 并引用旧版接入残留（早期 hook 安装路径）中的 Codex 脚本。当前安装器只写新条目，不清理旧条目，且 F1 让新安装根本没到 Runtime | 已修 `d5eabf35`…`ce881727`：`hook/install/repair.rs` 识别并清理，备份原文件；Hook + 技能合成一个安装单元（`INTEGRATION_REVISION`），Claude 改为启动行 `--settings` 注入不再写全局文件；设置页「集成」（`7a6e1f73`）                                                              |
+| F3  | 节点连线后「上下文」不生效：Codex 自己去翻 `~/.claude/projects`                                                                                                                     | F1 + F2 的直接后果：技能未装、hook 未通，CLI 不知道 `armadra canvas` 动词                                                                                                                                                                                                                                                                                                         | `pnpm agent:smoke`（`f660be04`）：Claude、Pi、OMP、Copilot 通过（含连线读对方转录）；Codex 0.153.4 的 hook 信任哈希变了，装上后要用户在 TUI 里按 `t` 确认一次，待单独处理；Gemini 账号不可用、OpenCode 未装 postinstall。「Agent 协作」子菜单已收成一项「交接到…」（`9825c4fe`） |
 | F4  | 文件管理器节点：标题输入框与「文件」名重叠、标题区太大、可拖拽区域太小；内容展示问题（`.DS_Store` 等）                                                                              | 节点头部整行是标题 `input`，只有边缘能抓取；文件列表不过滤系统文件                                                                                                                                                                                                                                                                                                                | 已修 `fff43907`、`20d050ce`：双击改名、整头可拖、按文件名隐藏 `.DS_Store`/`Thumbs.db`/`desktop.ini`（设置 → 通用可显示）                                                                                                                                                         |
 | F5  | 节点头部信息太多（`未知 295 MB Claude Code □ 🔍 ··· ⤢ ✕`），只想看内存                                                                                                              | 头部同时显示上下文占用（无来源时显示「未知」）、内存、Agent 名、多个按钮                                                                                                                                                                                                                                                                                                          | 已修 `20d050ce`：头部只剩来源色点、标题、常驻徽标、`···`、关闭；其余进统一的 `···` 菜单，五种节点一致                                                                                                                                                                            |
 | F6  | Agent 圆点之间拖拽有时拉不出箭头                                                                                                                                                    | 待定位：怀疑把手命中区太小与 `connectionRadius` / 节点拖拽抢占                                                                                                                                                                                                                                                                                                                    | 已修 `cd839681`：根因是 React Flow 自带样式后加载盖掉了把手样式（把手实际 6px 且被推到节点外）；提高选择器优先级后真实输入 20/20（`tools/probes/connection-drag.mjs`）                                                                                                           |
@@ -199,20 +199,20 @@
 ## 第十一轮：反馈修复、接入统一管理与多端 CI（2026-09-08）
 
 - **Git 日志默认整张图**（`6f03e193`）：默认 `--branches --remotes --tags`（不含 stash 合成提交），树里选分支才收窄；日期列带时刻。
-- **Agent 接入统一管理**（设计 [agent-integration.md](../design/agent-integration.md)，用户否决了 MCP 方案后改为 Hook + 技能一个安装单元）：`2fff88bf`…`ee6039c1`，见 F2/F3；Host 侧 worker 动作 109–112 转发；agent e2e 57 项。
+- **Agent 接入统一管理**（设计 [agent-integration.md](../design/agent-integration.md)，用户否决了 MCP 方案后改为 Hook + 技能一个安装单元）：`2fff88bf`…`ce881727`，见 F2/F3；Host 侧 worker 动作 109–112 转发；agent e2e 57 项。
 - **多端编译与 CI**（`673e14c7`…`119baf1f`）：Windows / Linux 交叉 `cargo check` 全 workspace 0 错误（3 处只在 Windows 出现的真错误 + `-D warnings` 阻断全部 `cfg` 门控），Go 三平台 vet/build；`ci.yml` 三平台矩阵、`release.yml` 补齐 Linux 依赖与签名预判、`.gitattributes` 统一 LF、`actionlint` 通过；只能在真实 runner 回答的项写在 [ci-release.md](../guides/ci-release.md)。
 - 反馈清单 F1–F10 的处理结果见上表「计划」列。
-- 主树复核（`ee6039c1`）：`pnpm check`（含 rustfmt 门禁）、协议 140、shared 153、host-client 288、Web 232 文件 2275 项、clippy 全 workspace、Runtime / hook / 桌面 cargo 全部套件、Go Host 全部包 race（真实 Worker）、canvas 73、settings 35、filesystem 30、session 39、git 46、agent 57、GitHub 42、原生会话 smoke 全部通过；Go Windows/Linux vet 与 build 通过；Rust Linux 交叉 `cargo check` 在本机因 `aws-lc-sys` 需要目标 C 工具链而停在 build script（代码本身在带桩工具链下 0 错误，见 ci-release.md），由 CI 的 ubuntu 行回答。
+- 主树复核（`ce881727`）：`pnpm check`（含 rustfmt 门禁）、协议 140、shared 153、host-client 288、Web 232 文件 2275 项、clippy 全 workspace、Runtime / hook / 桌面 cargo 全部套件、Go Host 全部包 race（真实 Worker）、canvas 73、settings 35、filesystem 30、session 39、git 46、agent 57、GitHub 42、原生会话 smoke 全部通过；Go Windows/Linux vet 与 build 通过；Rust Linux 交叉 `cargo check` 在本机因 `aws-lc-sys` 需要目标 C 工具链而停在 build script（代码本身在带桩工具链下 0 错误，见 ci-release.md），由 CI 的 ubuntu 行回答。
 
 ## 第十二轮：三平台 CI 收口（2026-09-13 深夜至 09-14 上午）
 
 - **计费阻断**：私有仓库的 Actions 额度被这两天的三平台跑与两次六目标打包耗尽，作业起不来；仓库改为公开后恢复（公开仓库 Actions 免费，两个 arm runner 也只对公开仓库免费）。
-- **`ci.yml` 改 `--no-fail-fast`**（`680235cf`）：此前 Windows 在 Runtime 单测处就停，60 多个集成套件从未跑到；现在一次运行列全一个平台的所有失败。
-- **Windows 第一次跑完整套**：Rust 集成夹具 21 处、Go 夹具 8 处按平台给（`699b32f6`、`7daec3df`、`cc1cefa2`）；三处真缺陷改在产品里——事件流 `Hub.Close` 不等待 pump、分页读被连接取消后交给 `database/sql` 自己的 goroutine 回滚（`c6cbde71`、`2742f7fb`）；服务定义按宿主而非目标平台规范化路径（`3a0f2676`）；终端 resize 撞上回收时不发 `stale`（`d6f22612`）。
-- **Linux / macOS 偶发四处**（`8d4cb7aa`、`c8276477`、`5bce0440`）：浏览器会话 `ready` 早于文档解析、跨站 iframe 首次点击被丢、旧 screencast 的 WebP 帧在路上、hook 序号锁 150 ms 等不到 8 个并发。
-- **结果**：`5bce0440d` 三平台全绿（Linux 14 分钟、macOS 10 分钟、Windows 33 分钟）；明细见 [ci-release.md](../guides/ci-release.md) §4。打包只在 `v*` 标签或手动触发时进行。
-- **首次打标签 `v0.1.0`**（`0e4a43bf`）：六个桌面目标全部打出，draft Release 37 个文件；路上修了三处——arm64 的 appimagetool 按架构钉版本（`f6d3b322`）、`assemble` 对全无签名的发布不再报洞（`0fcbab70`）、hook 序号锁的并发测试改为重试并把超时报成 `WouldBlock`（`0e4a43bf`）。未配置任何 secret，所以 macOS 仅 ad-hoc 签名、不公证，`latest.json` 为空；draft 未发布，由人审阅。
-- **09-15 打包版反馈**：画布四角统一 14px、锁定钮并入 Dock、缩略图钉在右下角、去掉 React Flow 标识与右上「搜索」钮（`a08f083d`、`792f5608`、`90130b99`）；Codex 节点「会话上下文全未知」与「在画布里创建 Claude Code 失败」同源——用户机器上 `~/.codex/hooks.json` 仍是旧版带 `version` 的文件（Codex 0.154 整份拒绝，hook 一条不跑）、`~/.codex/AGENTS.md` 仍有 旧版接入指令块（模型去跑旧版画布控制脚本），修复逻辑补上指令块识别并在画布顶部加残留通知条（`a8fc76e6`、`06ec821d`）；用量看板「取不到用量」是 Claude 钥匙串令牌过期 8 小时、Gemini 凭据过期 7 天，Runtime 只读不续期且把原因吞掉，现在按 `reason` 代码逐条说明（`981c80e3`）。
+- **`ci.yml` 改 `--no-fail-fast`**（`167068e8`）：此前 Windows 在 Runtime 单测处就停，60 多个集成套件从未跑到；现在一次运行列全一个平台的所有失败。
+- **Windows 第一次跑完整套**：Rust 集成夹具 21 处、Go 夹具 8 处按平台给（`fda93174`、`5c2e277b`、`dd9d298d`）；三处真缺陷改在产品里——事件流 `Hub.Close` 不等待 pump、分页读被连接取消后交给 `database/sql` 自己的 goroutine 回滚（`ded1be45`、`87680ccd`）；服务定义按宿主而非目标平台规范化路径（`cf659865`）；终端 resize 撞上回收时不发 `stale`（`e22de786`）。
+- **Linux / macOS 偶发四处**（`dcc49eba`、`a2812d4b`、`71715cc2`）：浏览器会话 `ready` 早于文档解析、跨站 iframe 首次点击被丢、旧 screencast 的 WebP 帧在路上、hook 序号锁 150 ms 等不到 8 个并发。
+- **结果**：`71715cc29` 三平台全绿（Linux 14 分钟、macOS 10 分钟、Windows 33 分钟）；明细见 [ci-release.md](../guides/ci-release.md) §4。打包只在 `v*` 标签或手动触发时进行。
+- **首次打标签 `v0.1.0`**（`2c49dd2c`）：六个桌面目标全部打出，draft Release 37 个文件；路上修了三处——arm64 的 appimagetool 按架构钉版本（`a09ad0d5`）、`assemble` 对全无签名的发布不再报洞（`a613d862`）、hook 序号锁的并发测试改为重试并把超时报成 `WouldBlock`（`2c49dd2c`）。未配置任何 secret，所以 macOS 仅 ad-hoc 签名、不公证，`latest.json` 为空；draft 未发布，由人审阅。
+- **09-15 打包版反馈**：画布四角统一 14px、锁定钮并入 Dock、缩略图钉在右下角、去掉 React Flow 标识与右上「搜索」钮（`13a13771`、`e063fa76`、`e2a5fde5`）；Codex 节点「会话上下文全未知」与「在画布里创建 Claude Code 失败」同源——用户机器上 `~/.codex/hooks.json` 仍是旧版带 `version` 的文件（Codex 0.154 整份拒绝，hook 一条不跑）、`~/.codex/AGENTS.md` 仍有 旧版接入指令块（模型去跑旧版画布控制脚本），修复逻辑补上指令块识别并在画布顶部加残留通知条（`5cc8da37`、`8a5b23ea`）；用量看板「取不到用量」是 Claude 钥匙串令牌过期 8 小时、Gemini 凭据过期 7 天，Runtime 只读不续期且把原因吞掉，现在按 `reason` 代码逐条说明（`30736924`）。
 - **09-16 打包版反馈**：终端里「不能指哪复制哪」是 xterm 在 React Flow 缩放后的坐标换算没有除以缩放比（62% 时点第 100 列落到第 62 列），前端包一层 xterm 内部 `MouseService` 的两个坐标函数按容器实际缩放比折回；Claude 在画布里开不出 Codex 节点有两层：用户机器上 Claude 从未装过 Armadra 技能、`~/.claude` 还是 早期接入的 hook 与四个旧技能（同 Codex，走「修复 → 安装」），以及产品侧 `armadra-hook` sidecar 目录不在画布终端的 PATH 上、技能却写裸命令名——现在 PATH 末尾带 sidecar 目录、环境里另给 `ARMADRA_HOOK_BIN`，技能修订号 6 → 7。
 - **09-19 移除 Gemini CLI**：`AGENT_IDS` 收成 claude / codex / opencode / pi / omp / copilot 六种；Runtime 删 `hook/install/gemini.rs`、`hook/normalize/gemini.rs`、`index/gemini.rs`、`usage/gemini.rs`，shared 注册表、Hook 事件表、用量 provider（现为 claude / codex / copilot）、会话索引 provider（现为 claude / codex）、模型上下文窗口表的 `gemini-*` 条目、web 品牌色令牌与 i18n 一并删除；技能指令文件不再区分 `GEMINI.md`，一律 `AGENTS.md`。迁移 `0014_retire_gemini.sql`：删 `conversations` / `agent_status` / `hook_installs` 中的 gemini 行，`terminal_sessions.agent_id` 置空，终端节点 `data_json` 里 `agent.id == "gemini"` 的去掉 `agent` 变为普通终端；不动用户机器上 `~/.gemini` 的任何文件。
 - 公开后 Dependabot 报 `glib 0.18`（旧壳固定的 gtk 0.18 栈，仅 Linux，`VariantStrIter` 未用到）中危一条；随旧壳删除，这条告警的来源已不在依赖树里。其余 vitest 告警已随 vitest 4 升级关闭。
@@ -222,25 +222,25 @@
 桌面壳从 Tauri 换成 Electron，路径与包名不变（`apps/desktop` / `@armadra/desktop`）。
 设计与批次编号见 [electron-migration.md](../design/electron-migration.md)；本节只记已合入的部分与它的验证证据。
 
-- **W0 前置修正**（`f8b3dd6a8`、`12c402f2b`、`5303ddc9e`、`a03bf39e1`…`d8cf6c118`）：
+- **W0 前置修正**（`c37c5c44b`、`b79f4b05b`、`c2e3b6d55`、`0133f2337`…`118feac30`）：
   tmux idle 改判 `#{window_activity}`（`session_activity` 每次 attach 被顶到 now）、
   `paste-buffer -r` 与 copy-mode 退出并进同一次 tmux 调用；hook 端点候选遍历改为本地优先、
   采纳新端点后重读 node token，只有传输层失败才转移；画布 P0–P3（相机不再重建整份投影、
   资源快照与 document 不再进 30 个订阅者、文本输入路径审计）。
   基线数据在 [画布性能基线](canvas-performance-baseline.md)。
-- **W1 壳核心**（`766434c7a`、`d8385bde7`、`6ed73681d`、`de50ff826`、`f3906c111`、`36651597a`、
-  `ff1e6f880`、`da6a0ec9e`、`ff70ec0af`）：electron-vite 三 target、`shell-core/` 禁止 import
+- **W1 壳核心**（`b7864f84e`、`bb8ce2bf9`、`932cbf039`、`9d4b4a4c9`、`cd3092a44`、`9c52781de`、
+  `a8502f423`、`b1bf1cf42`、`ac3629e95`）：electron-vite 三 target、`shell-core/` 禁止 import
   electron 的边界扫描、Runtime / Host 子进程监管、三态退出编排；传输层整体删除——页面改由壳的
   回环 HTTP 静态服务提供（内核分配端口），Runtime 以 `tcp:127.0.0.1:0` 启动并在 stdout 公告，
   页面从 preload 一次性取 `{ httpBase, wsBase, hostBase, dataDir }`。
   Rust 侧 `runtime_process_tests.rs`（306 行）与 `host/tests.rs`（754 行）的断言逐条移植成 vitest。
-- **W2 系统集成、更新、打包**（`9d8ca71cb`、`3a0311e4b`、`5072e65c3`、`37b8fcb4d`、`9b220ea4e`、
-  `2cf469689`、`2f122da10`、`7b2aa5446`）：对话框、外链白名单、通知 retain、托盘 + 用量、
+- **W2 系统集成、更新、打包**（`5098b33b9`、`2505a6016`、`057405c0f`、`b8a931018`、`78110b5db`、
+  `babd7b829`、`d6faa6aaa`、`b1294745b`）：对话框、外链白名单、通知 retain、托盘 + 用量、
   应用菜单与 keydown-intercept 封闭清单、全局热键、毛玻璃、关闭即隐藏、拖放路径、
   `-webkit-app-region`；更新状态机（十一态）整段移植成 TS 并接 electron-updater，
   保留「先停 Host 再装」与 `hostStopFailed` / `installFailed` 的区分，以及
   「没有签名 = `notConfigured`，绝不报 `upToDate`」；打包换 electron-builder。
-- **W3.0–W3.2 浏览器节点**（`0c7d70664`、`5b547f1d0`、`ac9f297fb`、`19ffda68e`、`4c7d4502f`）：
+- **W3.0–W3.2 浏览器节点**（`e5e0b3a7d`、`8d6dffdbd`、`33d6c2abe`、`7a1dcf6b8`、`32aac8f95`）：
   go/no-go 探针（见 [webview 探针说明](../../tools/probes/electron-webview/README.md)）通过后，
   浏览器节点改成进程内 `<webview>`，生命周期不变量（pool region、顺序稳定、`display:none`
   不卸载、后台上限、隐藏回收）就位。
@@ -253,7 +253,7 @@
   30+ 条命令零 `Runtime.evaluate` / `Debugger.*` / `expression`；`capture` 对 `../`、符号链接目录、
   末段符号链接三种越界全拒；人接管后 Agent 收到 `LEASE_REVOKED` 且在途动作记 `unknown`。
   真站点上的 17 动词手工跑与徽标翻转的真窗口确认**未做**（需要画布上手工建节点与连线）。
-- **W3.5 删除 screencast 旧路径**（`c3f6cbd76`、`f67b10f33`、`22ecb4d3b`、`7fe66ab48`）：浏览器节点
+- **W3.5 删除 screencast 旧路径**（`6d50969fe`、`d6a5927ac`、`53296e5be`、`9b989dbd3`）：浏览器节点
   的页面只在 Electron 壳的 `<webview>` guest 里；`apps/runtime/src/browser/` 由 16,754 行降到 4,327 行，
   只剩授权三规则、租约状态机、`browser:drive` 通道、URL 策略与 `active_tab_url` 一列。
   `/api/workspaces/{id}/browser/*` 全部下线，`BrowserStreamFrame` / `BrowserStreamClient` /
@@ -262,7 +262,7 @@
   17 个 Hook 动词面与 `browser_sessions` 表均未变动；受管 Chromium 下载（`browser-manifest.json`、
   `pnpm browser:manifest`）随之删除；纯浏览器与 Host 托管模式下浏览器节点显示
   `browser.unavailable.desktopOnly`，不再回退到沙箱 iframe。
-- **W4 终端渲染侧**（`dc303b810`）：WebGL 上下文预算在一处协调，acquire 去抖、
+- **W4 终端渲染侧**（`73cab2f21`）：WebGL 上下文预算在一处协调，acquire 去抖、
   context loss 单次延迟重授、回退 DOM 时字距重算门、内存压力释放隐藏持有者。
 - **W5 收尾**（`f4cf0d91f`、`a145462e2`、`a9720cc00`、`2ac536a8f`）：
   删 `apps/desktop/src-tauri/` 与根 `Cargo.toml` 成员、四个只服务旧打包器的脚本；
@@ -271,7 +271,7 @@
   签名移到写清单之前，只剩 `ARMADRA_RELEASE_SIGNING_KEY` 一把钥匙；
   Runtime 的信号处理器提前到发布端点之前注册。
 
-- **真机运行修正**（`7b2aa5446`、`6c0028dab`、`f13a323f5`，2026-09-19 晚）：在开发者机器上实跑开发壳与打包版撞出四处——
+- **真机运行修正**（`b1294745b`、`ec026d520`、`ebc872c5d`，2026-09-19 晚）：在开发者机器上实跑开发壳与打包版撞出四处——
   pnpm 对已缓存的 `electron` 不补跑 postinstall，`predev` 加 `ensure-electron.mjs` 自愈；壳的 CSP
   `default-src 'self'` 拦掉 Vite 开发模式注入的内联 React-refresh preamble，页面 `#root` 空白且无覆盖层，
   现在只对 dev server 文档加 `script-src 'self' 'unsafe-inline'`，打包版仍严格；`<webview>` 方法在
@@ -290,7 +290,7 @@
 
 **Tauri 壳基线未记录**：设计 D7 要求 P0 画布基线在 Tauri 壳与 Chrome 各记一次，实际只记了
 Chrome 一份（[画布性能基线](canvas-performance-baseline.md)）。换壳后若出现无法二分定位的卡顿，
-没有旧壳那一份可比——旧壳已删除，补记需要从 `ff70ec0af` 之前的提交重建。
+没有旧壳那一份可比——旧壳已删除，补记需要从 `ac3629e95` 之前的提交重建。
 
 | 范围        | 命令                                                    | 结果                                                              |
 | ----------- | ------------------------------------------------------- | ----------------------------------------------------------------- |
