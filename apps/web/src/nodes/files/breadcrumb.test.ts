@@ -55,7 +55,7 @@ describe("rootLabelFor", () => {
 
 describe("collapseCrumbs", () => {
   const deep = breadcrumbs(
-    "Users/yovinchen/Projects/Rust/Tauri/armadra/apps/web/src",
+    "Users/yovinchen/Projects/Code/Desktop/armadra/apps/web/src",
     "Armadra",
   );
 
@@ -67,8 +67,8 @@ describe("collapseCrumbs", () => {
       "Users",
       "yovinchen",
       "Projects",
-      "Rust",
-      "Tauri",
+      "Code",
+      "Desktop",
       "armadra",
       "apps",
     ]);
@@ -80,7 +80,7 @@ describe("collapseCrumbs", () => {
     const { hidden } = collapseCrumbs(deep, DEFAULT_TAIL);
     expect(hidden[0]).toEqual({ label: "Users", path: "Users" });
     expect(hidden.at(-1)?.path).toBe(
-      "Users/yovinchen/Projects/Rust/Tauri/armadra/apps",
+      "Users/yovinchen/Projects/Code/Desktop/armadra/apps",
     );
   });
 

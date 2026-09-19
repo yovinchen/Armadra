@@ -1,10 +1,9 @@
 /**
  * 系统全局热键的页面这一半。
  *
- * 壳负责向操作系统注册（Electron 是 `apps/desktop/src/main/shortcuts.ts`，
- * Tauri 是 `src-tauri/src/shortcuts.rs`），页面负责三件事：
- * 把当前键位里 `global` 作用域的那几条翻成 accelerator 交过去、把壳报回来的
- * 结果留给设置页显示、以及在热键触发时派发那条命令。
+ * 壳负责向操作系统注册（`apps/desktop/src/main/shortcuts.ts`），页面负责三件
+ * 事：把当前键位里 `global` 作用域的那几条翻成 accelerator 交过去、把壳报回
+ * 来的结果留给设置页显示、以及在热键触发时派发那条命令。
  *
  * 「新建终端节点」不在壳里实现：壳不知道什么是终端节点，让它自己去建就会
  * 出现第二套和画布不一致的实现。壳只把窗口叫回前台并发一条事件，真正的动作
@@ -27,7 +26,7 @@ export interface GlobalShortcutOutcome {
 
 export interface GlobalBinding {
   id: CommandId;
-  /** Tauri accelerator，空串表示「这一条没有绑」。 */
+  /** Electron accelerator，空串表示「这一条没有绑」。 */
   accelerator: string;
 }
 
@@ -41,21 +40,13 @@ export function globalBindings(
   }));
 }
 
-/**
- * 把这张表交给壳。Electron 走 `window.armadra.shortcuts`，Tauri 仍走
- * `invoke`——两个壳答复的形状是同一个（`{ id, state }[]`），所以分叉只到这里
- * 为止，上面的状态机一个字都不用改。
- */
+/** 把这张表交给壳（`window.armadra.shortcuts`），答复是 `{ id, state }[]`。 */
 async function applyInShell(
   bindings: GlobalBinding[],
 ): Promise<GlobalShortcutOutcome[]> {
   const shell = typeof window === "undefined" ? undefined : window.armadra;
-  if (shell)
-    return (await shell.shortcuts.apply(bindings)) as GlobalShortcutOutcome[];
-  const { invoke } = await import("@tauri-apps/api/core");
-  return (await invoke("global_shortcuts_apply", {
-    bindings,
-  })) as GlobalShortcutOutcome[];
+  if (!shell) return [];
+  return (await shell.shortcuts.apply(bindings)) as GlobalShortcutOutcome[];
 }
 
 interface GlobalShortcutStore {
@@ -91,29 +82,8 @@ export function onGlobalShortcut(
   callback: (id: CommandId) => void,
 ): () => void {
   const shell = typeof window === "undefined" ? undefined : window.armadra;
-  if (shell)
-    return shell.shortcuts.onTriggered((id) => callback(id as CommandId));
-  if (!isDesktop()) return () => undefined;
-  let unlisten: (() => void) | null = null;
-  let cancelled = false;
-  void (async () => {
-    try {
-      const { listen } = await import("@tauri-apps/api/event");
-      const stop = await listen<{ id: string }>(
-        "shortcut://triggered",
-        (event) => callback(event.payload.id as CommandId),
-      );
-      if (cancelled) stop();
-      else unlisten = stop;
-    } catch (cause) {
-      console.error("onGlobalShortcut failed", cause);
-    }
-  })();
-  return () => {
-    cancelled = true;
-    unlisten?.();
-    unlisten = null;
-  };
+  if (!shell) return () => undefined;
+  return shell.shortcuts.onTriggered((id) => callback(id as CommandId));
 }
 
 /** 哪条画布命令由哪个全局热键代跑。 */

@@ -112,12 +112,6 @@ func ParseOrigin(value string) (string, error) {
 	if host == "" || strings.HasSuffix(parsed.Host, ":") {
 		return invalid()
 	}
-	if scheme == "tauri" {
-		if host == "localhost" && port == "" && !strings.Contains(parsed.Host, "[") {
-			return "tauri://localhost", nil
-		}
-		return invalid()
-	}
 	if scheme != "http" && scheme != "https" {
 		return invalid()
 	}
@@ -145,9 +139,8 @@ func ParseOrigin(value string) (string, error) {
 			}
 		}
 	}
-	tauriHTTP := scheme == "http" && host == "tauri.localhost" && (port == "" || port == "80")
-	if scheme == "http" && host != "localhost" && (ipErr != nil || !ip.IsLoopback()) && !tauriHTTP {
-		return "", errors.New("http allowed origins must use a loopback host or the exact Tauri origin")
+	if scheme == "http" && host != "localhost" && (ipErr != nil || !ip.IsLoopback()) {
+		return "", errors.New("http allowed origins must use a loopback host")
 	}
 	if port != "" {
 		for _, c := range port {

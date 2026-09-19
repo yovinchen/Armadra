@@ -13,7 +13,6 @@ import {
 import { HostIdentityClient, HostIdentityError } from "../src/identity.js";
 import {
   HostNativeCredentials,
-  NATIVE_PAGE_ORIGINS,
   isNativePageOrigin,
 } from "../src/native.js";
 
@@ -32,7 +31,7 @@ const access = secretOf("a"),
 const csrf = "C".repeat(42) + "A",
   csrf2 = "D".repeat(42) + "A";
 const hostUrl = "http://127.0.0.1:43121";
-const pageOrigin = "tauri://localhost";
+const pageOrigin = "http://127.0.0.1:54321";
 const headers = { "Content-Type": "application/x-protobuf" };
 
 function session(
@@ -164,7 +163,11 @@ describe("native transport configuration", () => {
       "http://[::1]:43121",
       "http://127.0.0.1:43121/prefix",
     ])
-      for (const origin of NATIVE_PAGE_ORIGINS)
+      for (const origin of [
+        "http://127.0.0.1:54321",
+        "http://localhost:61000",
+        "http://[::1]:61000",
+      ])
         expect(() =>
           client(vi.fn(), store, { baseUrl, pageOrigin: origin }),
         ).not.toThrow();
@@ -184,7 +187,7 @@ describe("native transport configuration", () => {
     [hostUrl, "http://192.168.1.20:1420"],
     [hostUrl, "http://127.0.0.1.evil.example"],
     [hostUrl, "http://127.0.0.1:1420/app"],
-    [hostUrl, "tauri://other"],
+    [hostUrl, "app://localhost"],
     [hostUrl, undefined],
   ])("refuses %s from page %s without a request", (baseUrl, origin) => {
     const fetcher = vi.fn();
@@ -196,7 +199,7 @@ describe("native transport configuration", () => {
   });
   it("keeps the browser transport exactly as it was", () => {
     // The browser rule is not relaxed by the native transport existing: a
-    // loopback HTTP Host or a Tauri page origin still fails without it.
+    // loopback HTTP Host, or a shell page origin, still fails without it.
     for (const options of [
       { baseUrl: hostUrl, pageOrigin: hostUrl },
       { baseUrl: "https://host.test", pageOrigin },
@@ -249,9 +252,8 @@ describe("native transport configuration", () => {
    * loopback HTTP origin, and still cannot mint the ticket a session starts
    * from — only the shell's same-user control channel does that.
    */
-  it("treats the Tauri spellings and any loopback HTTP origin as a shell's", () => {
+  it("treats any loopback HTTP origin as a shell's, and nothing else", () => {
     for (const origin of [
-      ...NATIVE_PAGE_ORIGINS,
       "http://127.0.0.1:1420",
       "http://127.0.0.1:54321",
       "http://127.5.5.5:8080",
@@ -268,7 +270,8 @@ describe("native transport configuration", () => {
       "http://localhost.evil.example",
       "http://127.0.0.1:54321/app",
       "http://user:pass@127.0.0.1:54321",
-      "tauri://other",
+      // A custom scheme is not an HTTP origin, however local it looks.
+      "app://localhost",
       "",
       "not a url",
       undefined,
@@ -285,24 +288,6 @@ describe("native transport configuration", () => {
           pageOrigin: origin,
         }),
       ).not.toThrow();
-  });
-  it("derives a Tauri page origin from protocol and host when URL.origin is null", () => {
-    vi.stubGlobal("location", {
-      origin: "null",
-      protocol: "tauri:",
-      host: "localhost",
-    });
-    const { store } = credentials();
-    expect(
-      () =>
-        new HostIdentityClient({
-          baseUrl: hostUrl,
-          hostId,
-          hostInstanceId,
-          transport: { kind: "native", credentials: store },
-          fetch: vi.fn(),
-        }),
-    ).not.toThrow();
   });
 });
 

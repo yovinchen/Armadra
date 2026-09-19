@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HelloResponse } from "@armadra/host-client";
 
-const mocks = vi.hoisted(() => ({ invoke: vi.fn(), bridgeTicket: vi.fn() }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
+const mocks = vi.hoisted(() => ({ bridgeTicket: vi.fn() }));
 
 import {
   HostNativeSessionError,
@@ -31,16 +30,6 @@ function hello(...capabilities: string[]): HelloResponse {
     maxFrameBytes: 1_048_576,
   };
 }
-function shell(origin = "tauri://localhost") {
-  const url = new URL(origin);
-  vi.stubGlobal("location", {
-    origin: url.origin === "null" ? "null" : url.origin,
-    protocol: url.protocol,
-    host: url.host,
-  });
-  (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ =
-    {};
-}
 function browser(origin = "https://host.test") {
   const url = new URL(origin);
   vi.stubGlobal("location", {
@@ -48,13 +37,11 @@ function browser(origin = "https://host.test") {
     protocol: url.protocol,
     host: url.host,
   });
-  delete (window as Window & { __TAURI_INTERNALS__?: unknown })
-    .__TAURI_INTERNALS__;
   delete (window as Window & { armadra?: unknown }).armadra;
 }
 
-/** The Electron shell: no Tauri IPC, a preload bridge, a loopback origin. */
-function electron(origin = "http://127.0.0.1:54321") {
+/** The desktop shell: a preload bridge, on a loopback HTTP origin. */
+function shell(origin = "http://127.0.0.1:54321") {
   browser(origin);
   (window as unknown as { armadra?: unknown }).armadra = {
     transport: { endpoints: vi.fn(), endpointsSync: vi.fn() },
@@ -64,13 +51,12 @@ function electron(origin = "http://127.0.0.1:54321") {
 const ticket = {
   hostId,
   hostInstanceId,
-  origin: "tauri://localhost",
+  origin: "http://127.0.0.1:54321",
   ticket: "5".repeat(32) + "." + "T".repeat(42) + "A",
   expiresAtUnixMs: String(Date.now() + 60_000),
 };
 
 beforeEach(() => {
-  mocks.invoke.mockReset();
   mocks.bridgeTicket.mockReset();
   resetNativeSession();
 });
@@ -89,17 +75,11 @@ describe("hostSessionBlock", () => {
     expect(isNativeShell()).toBe(false);
   });
   it("is not fooled by a shell page origin without a shell, or a shell on a browser origin", () => {
-    // A page origin alone proves nothing: a browser can sit on a Tauri-looking
-    // origin, or on a loopback HTTP one, and still has no channel to a ticket.
-    vi.stubGlobal("location", {
-      origin: "null",
-      protocol: "tauri:",
-      host: "localhost",
-    });
-    expect(isNativeShell()).toBe(false);
-    expect(hostSessionBlock("http://127.0.0.1:43121")).toBe("tlsRequired");
+    // A page origin alone proves nothing: a browser can sit on a loopback HTTP
+    // origin too, and still has no channel to a ticket.
     browser("http://127.0.0.1:1420");
     expect(isNativeShell()).toBe(false);
+    expect(hostSessionBlock("http://127.0.0.1:43121")).toBe("tlsRequired");
 
     // And a shell that loaded the page from somewhere off this machine is not
     // a native session either, however real the shell is.
@@ -109,37 +89,26 @@ describe("hostSessionBlock", () => {
   });
 
   /**
-   * The Electron shell (docs/design/electron-migration.md §2.1): the page is
-   * served over loopback HTTP on a kernel-assigned port, so the shell origin
-   * is no longer one of three fixed spellings. The ticket chain is unchanged —
-   * loopback HTTP cookies are not isolated by port, which is exactly why it
-   * had to stay.
+   * The shell (docs/design/electron-migration.md §2.1): the page is served over
+   * loopback HTTP on a kernel-assigned port, so the shell origin is not a fixed
+   * spelling and the judgement cannot be a constant. The ticket chain is
+   * unchanged — loopback HTTP cookies are not isolated by port, which is
+   * exactly why it had to stay.
    */
-  it.each(["http://127.0.0.1:54321", "http://127.0.0.1:1420"])(
-    "treats the Electron shell's own loopback origin %s as native",
-    (origin) => {
-      electron(origin);
-      expect(isNativeShell()).toBe(true);
-      expect(pageOrigin()).toBe(origin);
-      expect(hostSessionBlock("http://127.0.0.1:43121")).toBeNull();
-      expect(hostSessionCapability()).toBe("identity.native-session.v1");
-      // Not a licence for a remote Host: the shell rule still refuses one.
-      expect(hostSessionBlock("https://armadra.example")).toBe("sameOrigin");
-      expect(hostSessionBlock("http://192.168.1.20:43121")).toBe("tlsRequired");
-    },
-  );
   it.each([
-    "tauri://localhost",
-    "http://tauri.localhost",
-    "https://tauri.localhost",
-  ])("accepts loopback HTTP inside the shell at %s", (origin) => {
+    "http://127.0.0.1:54321",
+    "http://127.0.0.1:1420",
+    "http://localhost:61000",
+  ])("treats the shell's own loopback origin %s as native", (origin) => {
     shell(origin);
     expect(isNativeShell()).toBe(true);
     expect(pageOrigin()).toBe(origin);
     expect(hostSessionBlock("http://127.0.0.1:43121")).toBeNull();
     expect(hostSessionBlock("http://localhost:43121")).toBeNull();
+    expect(hostSessionCapability()).toBe("identity.native-session.v1");
+    // Not a licence for a remote Host: the shell rule still refuses one.
+    expect(hostSessionBlock("https://armadra.example")).toBe("sameOrigin");
     expect(hostSessionBlock("http://192.168.1.20:43121")).toBe("tlsRequired");
-    expect(hostSessionBlock("https://host.test")).toBe("sameOrigin");
   });
 });
 
@@ -194,82 +163,41 @@ describe("capability negotiation and client construction", () => {
   });
 });
 
-describe("fetchNativeTicket", () => {
-  it("refuses outside the shell without touching the command", async () => {
+/**
+ * A refusal is a RESULT, not a rejection: Electron serializes a rejected
+ * `ipcMain.handle` down to its message, so the structure would not survive.
+ * The reasons, and therefore the i18n keys, are the stable set §4.3 names.
+ */
+describe("fetchNativeTicket through the shell bridge", () => {
+  const shellTicket = { ...ticket };
+
+  it("refuses outside the shell without touching the bridge", async () => {
     browser();
     await expect(fetchNativeTicket()).rejects.toMatchObject({
       reason: "shellUnavailable",
     });
-    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(mocks.bridgeTicket).not.toHaveBeenCalled();
   });
+
   it("returns the shell's ticket as the JSON pair() accepts", async () => {
     shell();
-    mocks.invoke.mockResolvedValue(ticket);
-    const material = await fetchNativeTicket();
-    expect(mocks.invoke).toHaveBeenCalledExactlyOnceWith("host_native_ticket");
-    expect(JSON.parse(material)).toEqual(ticket);
+    mocks.bridgeTicket.mockResolvedValue({ ok: true, ticket: shellTicket });
+    expect(JSON.parse(await fetchNativeTicket())).toEqual(shellTicket);
+    expect(mocks.bridgeTicket).toHaveBeenCalledOnce();
   });
-  it("maps the shell's stable reasons and treats anything else as unavailable", async () => {
-    shell();
-    for (const reason of [
-      "hostUnavailable",
-      "originUnsupported",
-      "cliFailed",
-      "timeout",
-      "malformed",
-    ]) {
-      mocks.invoke.mockRejectedValueOnce({ reason });
-      const failure = await fetchNativeTicket().catch((error) => error);
-      expect(failure).toBeInstanceOf(HostNativeSessionError);
-      expect(failure.reason).toBe(reason);
-      expect(nativeSessionFailureKey(failure)).toBe(
-        `hostNative.blocked.${reason}`,
-      );
-    }
-    mocks.invoke.mockRejectedValueOnce(new Error("command not found"));
-    await expect(fetchNativeTicket()).rejects.toMatchObject({
-      reason: "shellUnavailable",
-    });
-    mocks.invoke.mockRejectedValueOnce({ reason: "somethingNew" });
-    await expect(fetchNativeTicket()).rejects.toMatchObject({
-      reason: "shellUnavailable",
-    });
-    mocks.invoke.mockResolvedValueOnce({ ...ticket, expiresAtUnixMs: 5 });
-    await expect(fetchNativeTicket()).rejects.toMatchObject({
-      reason: "malformed",
-    });
-    expect(nativeSessionFailureKey(new Error("x"))).toBeNull();
-  });
+
   it("never writes the ticket to browser storage", async () => {
     shell();
     const setItem = vi.fn();
     vi.stubGlobal("localStorage", { setItem, getItem: () => null });
     vi.stubGlobal("sessionStorage", { setItem, getItem: () => null });
-    mocks.invoke.mockResolvedValue(ticket);
+    mocks.bridgeTicket.mockResolvedValue({ ok: true, ticket: shellTicket });
     await fetchNativeTicket();
     expect(setItem).not.toHaveBeenCalled();
   });
-});
-
-/**
- * The Electron half of the same contract. The channel differs — a refusal is
- * a RESULT there, because Electron serializes a rejected `ipcMain.handle`
- * down to its message — but the reasons, and therefore the i18n keys, are the
- * same set the Tauri shell reports.
- */
-describe("fetchNativeTicket through the Electron bridge", () => {
-  const shellTicket = { ...ticket, origin: "http://127.0.0.1:54321" };
-
-  it("returns the shell's ticket, and never touches the Tauri command", async () => {
-    electron();
-    mocks.bridgeTicket.mockResolvedValue({ ok: true, ticket: shellTicket });
-    expect(JSON.parse(await fetchNativeTicket())).toEqual(shellTicket);
-    expect(mocks.bridgeTicket).toHaveBeenCalledOnce();
-    expect(mocks.invoke).not.toHaveBeenCalled();
-  });
 
   it("maps the same stable reasons to the same message keys", async () => {
-    electron();
+    shell();
     for (const code of [
       "hostUnavailable",
       "originUnsupported",
@@ -293,7 +221,7 @@ describe("fetchNativeTicket through the Electron bridge", () => {
   });
 
   it("treats anything it does not recognise as no shell at all", async () => {
-    electron();
+    shell();
     for (const answer of [
       { ok: false, error: { code: "somethingNew", message: "x" } },
       { ok: false },
@@ -313,7 +241,7 @@ describe("fetchNativeTicket through the Electron bridge", () => {
   });
 
   it("still refuses a ticket that is not one", async () => {
-    electron();
+    shell();
     mocks.bridgeTicket.mockResolvedValue({
       ok: true,
       ticket: { ...shellTicket, expiresAtUnixMs: 5 },
@@ -324,7 +252,7 @@ describe("fetchNativeTicket through the Electron bridge", () => {
   });
 
   it("asks for nothing when the page is not on a shell origin", async () => {
-    electron("https://armadra.example");
+    shell("https://armadra.example");
     await expect(fetchNativeTicket()).rejects.toMatchObject({
       reason: "shellUnavailable",
     });
@@ -332,7 +260,7 @@ describe("fetchNativeTicket through the Electron bridge", () => {
   });
 
   it("builds the shared native client against the loopback Host", () => {
-    electron();
+    shell();
     expect(() =>
       createHostIdentity({
         baseUrl: "http://127.0.0.1:43121",

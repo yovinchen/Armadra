@@ -2,47 +2,25 @@
  * Desktop capabilities with a browser fallback (plan §5).
  *
  * Every function below is written as `isDesktop() ? <desktop branch> : <web
- * fallback>`, and the desktop branch itself forks once more: the Electron
- * shell answers on `window.armadra` (迁移设计 §2.2 的那张表), while the Tauri
- * shell still answers through `@tauri-apps/*`. Both are live — the Tauri shell
- * is kept until W5 — so a capability that works in one and not the other is a
- * regression, not a migration step.
- *
- * The Tauri branches stay lazily imported so a plain `vite dev` build never
- * pulls the Tauri IPC modules into the initial chunk; the Electron branch
- * needs no import at all, because the preload put everything on `window`.
+ * fallback>`. The desktop branch needs no import at all: the preload put the
+ * whole IPC surface (迁移设计 §2.2 的那张表) on `window.armadra`, so a plain
+ * `vite dev` build carries nothing shell-specific.
  */
-
-type TauriGlobals = {
-  __TAURI_INTERNALS__?: unknown;
-};
 
 /** The Electron bridge, or `undefined` outside that shell. */
 function bridge(): Window["armadra"] {
   return typeof window === "undefined" ? undefined : window.armadra;
 }
 
-function isTauriShell(): boolean {
-  if (typeof window === "undefined") return false;
-  return (window as Window & TauriGlobals).__TAURI_INTERNALS__ !== undefined;
-}
-
 /**
- * 在**某个**桌面壳里（Electron 或 Tauri）。
+ * 在桌面壳里。
  *
- * 两个壳同时存在的这段时间里，调用处关心的几乎总是「有没有壳」，而不是
- * 「是哪一个壳」——能不能弹系统选择器、要不要画拖拽区、`global` 作用域的
- * 热键页要不要显示。哪个壳的分支由本文件各个能力自己决定。
+ * 调用处关心的是「有没有壳」——能不能弹系统选择器、要不要画拖拽区、
+ * `global` 作用域的热键页要不要显示。
  */
 export function isDesktop(): boolean {
-  return bridge() !== undefined || isTauriShell();
+  return bridge() !== undefined;
 }
-
-/**
- * @deprecated 用 `isDesktop()`。名字留在这里只是为了那些还没读到这一行的
- * 代码；它从 W2.1 起对 Electron 壳也返回 true，所以名字已经在说谎了。
- */
-export const isTauri = isDesktop;
 
 /**
  * Opens the system folder picker. Resolves to `null` when the user cancels —
@@ -63,22 +41,7 @@ export async function pickDirectory(): Promise<string | null> {
       return null;
     }
   }
-  if (!isTauriShell()) return null;
-  try {
-    const { open } = await import("@tauri-apps/plugin-dialog");
-    const picked = await open({
-      directory: true,
-      multiple: false,
-      canCreateDirectories: true,
-    });
-    // `multiple: false` narrows to `string | null`, but the union type keeps
-    // the array arm; collapse it defensively.
-    if (Array.isArray(picked)) return picked[0] ?? null;
-    return typeof picked === "string" ? picked : null;
-  } catch (cause) {
-    console.error("pickDirectory failed", cause);
-    return null;
-  }
+  return null;
 }
 
 /**
@@ -105,19 +68,7 @@ export async function pickFiles(options: {
       return [];
     }
   }
-  if (!isTauriShell()) return [];
-  try {
-    const { open } = await import("@tauri-apps/plugin-dialog");
-    const picked = await open({
-      multiple: options.multiple,
-      ...(options.defaultPath ? { defaultPath: options.defaultPath } : {}),
-    });
-    if (Array.isArray(picked)) return picked;
-    return typeof picked === "string" ? [picked] : [];
-  } catch (cause) {
-    console.error("pickFiles failed", cause);
-    return [];
-  }
+  return [];
 }
 
 /** Opens a URL outside the app window. */
@@ -133,16 +84,7 @@ export async function openExternal(url: string): Promise<void> {
     }
     return;
   }
-  if (!isTauriShell()) {
-    window.open(url, "_blank", "noopener");
-    return;
-  }
-  try {
-    const { openUrl } = await import("@tauri-apps/plugin-opener");
-    await openUrl(url);
-  } catch (cause) {
-    console.error("openExternal failed", cause);
-  }
+  window.open(url, "_blank", "noopener");
 }
 
 export type FileDropPosition = { x: number; y: number };
@@ -156,13 +98,9 @@ export type FileDropHandler = (
  * function; on the web this is a no-op because the browser only exposes
  * `DataTransfer` drops, which the canvas handles itself (B2).
  *
- * 两个壳的机制完全不同，落点坐标的口径也不同：
- *
- * - **Electron**：拖放就是普通的 DOM `drop` 事件，`event.clientX/Y` 已经是
- *   CSS 像素，绝对路径由 `webUtils.getPathForFile(file)` 取（preload 暴露成
- *   `window.armadra.pathForFile`）。**不做物理像素换算**——这里没有那一步。
- * - **Tauri**：webview 收不到 `DataTransfer`，壳用自己的事件给路径，坐标是
- *   物理设备像素，所以要按 `devicePixelRatio` 换回 CSS 像素。
+ * 壳里拖放就是普通的 DOM `drop` 事件，`event.clientX/Y` 已经是 CSS 像素，
+ * 绝对路径由 `webUtils.getPathForFile(file)` 取（preload 暴露成
+ * `window.armadra.pathForFile`）。**不做物理像素换算**——这里没有那一步。
  */
 export function onFileDrop(callback: FileDropHandler): () => void {
   const shell = bridge();
@@ -198,36 +136,7 @@ export function onFileDrop(callback: FileDropHandler): () => void {
     };
   }
 
-  if (!isTauriShell()) return () => undefined;
-  let unlisten: (() => void) | null = null;
-  let cancelled = false;
-
-  void (async () => {
-    try {
-      const { getCurrentWebview } = await import("@tauri-apps/api/webview");
-      const stop = await getCurrentWebview().onDragDropEvent((event) => {
-        if (event.payload.type !== "drop") return;
-        const paths = event.payload.paths ?? [];
-        if (paths.length === 0) return;
-        const ratio = window.devicePixelRatio || 1;
-        const position = event.payload.position;
-        callback(paths, {
-          x: position.x / ratio,
-          y: position.y / ratio,
-        });
-      });
-      if (cancelled) stop();
-      else unlisten = stop;
-    } catch (cause) {
-      console.error("onFileDrop failed", cause);
-    }
-  })();
-
-  return () => {
-    cancelled = true;
-    unlisten?.();
-    unlisten = null;
-  };
+  return () => undefined;
 }
 
 /* ------------------------------- 系统通知 -------------------------------- */
@@ -257,9 +166,9 @@ async function ensureWebPermission(): Promise<boolean> {
  * 发一条系统通知（§5.4）。
  *
  * **一条路，不分壳**：`Notification` 在打包的 Electron 渲染进程里和在浏览器
- * 里是同一个 API，所以壳专用分支被删掉了（盘点第 23 项）。留着它的代价不是
- * 多几行——Tauri 那条路的点击回调落在壳里，页面这边的 `onClick` 会静默失效，
- * 于是「点通知跳到那个节点」在桌面端从来没生效过。
+ * 里是同一个 API，所以壳专用分支被删掉了（盘点第 23 项）。旧壳那条路的点击
+ * 回调落在壳里，页面这边的 `onClick` 会静默失效，于是「点通知跳到那个节点」
+ * 在桌面端从来没生效过。
  *
  * 主进程自己也能发通知（`apps/desktop/src/main/notifications.ts`），那是给
  * 页面根本没在跑的时候用的（更新流程），和这里不是一回事。

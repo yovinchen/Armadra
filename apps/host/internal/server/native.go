@@ -7,21 +7,11 @@ import (
 	"strings"
 )
 
-// The custom-scheme origins the Tauri shell's WebView presents: Tauri's own
-// scheme on macOS and Linux, and the two spellings WebView2 uses on Windows.
-// The Electron shell serves its page over loopback HTTP instead and is
-// covered by loopbackHTTPOrigin; these three stay accepted while both shells
-// exist (docs/design/electron-migration.md §2.1).
-var shellSchemeOrigins = map[string]bool{
-	"tauri://localhost":       true,
-	"http://tauri.localhost":  true,
-	"https://tauri.localhost": true,
-}
-
 // loopbackHTTPOrigin reports whether a canonical origin is plain HTTP on a
-// loopback host. The Electron shell serves its own bundle from a kernel
+// loopback host. The desktop shell serves its own bundle from a kernel
 // assigned port, so the origin cannot be a fixed constant; what makes it a
-// shell origin is that nothing off this machine can be behind it.
+// shell origin is that nothing off this machine can be behind it
+// (docs/design/electron-migration.md §2.1).
 func loopbackHTTPOrigin(origin string) bool {
 	canonical, err := ParseOrigin(origin)
 	if err != nil || canonical != origin {
@@ -40,15 +30,14 @@ func loopbackHTTPOrigin(origin string) bool {
 }
 
 // NativeOrigin reports whether a canonical origin is one a desktop shell
-// presents: a custom-scheme Tauri origin, or the loopback HTTP origin an
-// Electron shell's static server binds. It is a spelling check, not an
-// authorization: the shell still has to be listed with --allow-origin, and a
-// request still has to be a native session request, before anything is
-// answered to it. A browser page can hold a loopback HTTP origin, but it
-// still cannot mint the ticket a session starts from — only the same-user
-// control channel does that.
+// presents: the loopback HTTP origin its static server binds. It is a
+// spelling check, not an authorization: the shell still has to be listed with
+// --allow-origin, and a request still has to be a native session request,
+// before anything is answered to it. A browser page can hold a loopback HTTP
+// origin, but it still cannot mint the ticket a session starts from — only
+// the same-user control channel does that.
 func NativeOrigin(origin string) bool {
-	return shellSchemeOrigins[origin] || loopbackHTTPOrigin(origin)
+	return loopbackHTTPOrigin(origin)
 }
 
 // nativeSession reports whether a request may use the native session

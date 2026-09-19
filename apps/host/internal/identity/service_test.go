@@ -496,13 +496,13 @@ func TestWrongAudienceAndCredentialPurpose(t *testing.T) {
 
 func TestValidationRejectsUnscopedOrNoncanonicalBootstrap(t *testing.T) {
 	f := setup(t)
-	for _, origin := range []string{"", "null", "*", "https://example.test/", "https://user:pass@example.test", "https://example.test?q=secret", "https://example.test#secret", "https://example.test\n", "http://example.test", "https://EXAMPLE.test", "https://example.test:443", "https://*.example.test", "file://localhost", "https://example.test\\@other.test", "http://tauri.localhost:1234"} {
+	for _, origin := range []string{"", "null", "*", "https://example.test/", "https://user:pass@example.test", "https://example.test?q=secret", "https://example.test#secret", "https://example.test\n", "http://example.test", "https://EXAMPLE.test", "https://example.test:443", "https://*.example.test", "file://localhost", "https://example.test\\@other.test", "http://shell.localhost:1234", "app://localhost", "http://shell.localhost"} {
 		_, err := f.service.IssueBootstrap(testContext, BootstrapRequest{HostID: testHost, InstanceID: testInstance, Origin: origin, DeviceName: "browser", Scopes: AllScopes()})
 		if !errors.Is(err, ErrInvalid) {
 			t.Fatalf("accepted invalid origin %q: %v", origin, err)
 		}
 	}
-	for _, origin := range []string{"http://localhost:1420", "http://127.0.0.1:1420", "http://[::1]:1420", "tauri://localhost", "http://tauri.localhost", "https://tauri.localhost", testOrigin} {
+	for _, origin := range []string{"http://localhost:1420", "http://127.0.0.1:1420", "http://[::1]:1420", "http://127.0.0.1:54321", "http://127.0.0.2:8080", "https://shell.example", testOrigin} {
 		_, err := f.service.IssueBootstrap(testContext, BootstrapRequest{HostID: testHost, InstanceID: testInstance, Origin: origin, DeviceName: "browser", Scopes: AllScopes()})
 		if err != nil {
 			t.Fatalf("valid origin %s rejected: %v", origin, err)

@@ -135,7 +135,7 @@ const vendorGroups = [
 
 // 代理与 `VITE_RUNTIME_URL` 的覆盖只属于开发服务器：生产构建（打包桌面壳）
 // 必须让页面在运行时按来源自己解析 Runtime 地址，否则本机碰巧在跑的一个
-// 开发 Runtime 会把「空地址」烤进产物，`tauri://localhost` 上一启动就报错。
+// 开发 Runtime 会把「空地址」烤进产物，壳里一启动就报错。
 export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss()],
   resolve: {

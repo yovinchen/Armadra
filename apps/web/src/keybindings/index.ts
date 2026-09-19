@@ -12,7 +12,7 @@
  * | `context.ts`        | 焦点在哪里：DOM → `when` 上下文                  |
  * | `active.ts`         | 生效中的键位表与 `commandKeys` / `…Label`        |
  * | `use-keybindings.ts`| 那一个捕获阶段监听器                             |
- * | `accelerator.ts`    | 和弦 → Tauri accelerator（系统热键用）           |
+ * | `accelerator.ts`    | 和弦 → accelerator 写法（系统热键用）           |
  * | `global-shortcuts.ts`| 系统热键的注册请求、结果与触发事件              |
  *
  * 导入路径没变：`from "../keybindings"` 仍然解析到这里。

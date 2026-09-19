@@ -70,9 +70,7 @@ describe("bandwidthClass", () => {
   it("treats loopback as LAN and everything else as WAN", () => {
     expect(bandwidthClass({ hostname: "127.0.0.1" }, undefined)).toBe("lan");
     expect(bandwidthClass({ hostname: "localhost" }, undefined)).toBe("lan");
-    expect(bandwidthClass({ hostname: "tauri.localhost" }, undefined)).toBe(
-      "lan",
-    );
+    expect(bandwidthClass({ hostname: "[::1]" }, undefined)).toBe("lan");
     // Reached through the Host from a phone: not on this machine.
     expect(bandwidthClass({ hostname: "mac.local" }, undefined)).toBe("wan");
     expect(bandwidthClass({ hostname: "192.168.1.9" }, undefined)).toBe("wan");

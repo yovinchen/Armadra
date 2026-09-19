@@ -48,7 +48,7 @@
   /* ── 表面高度 ────────────────────────────────────────────────────── */
   --color-panel: var(--panel);
   --color-panel-header: var(--panel-header);
-  /* 侧栏材质（§24.2）：Tauri 下半透明 + backdrop-blur，网页下近乎纯色 */
+  /* 侧栏材质（§24.2）：桌面壳下半透明 + backdrop-blur，网页下近乎纯色 */
   --color-sidebar-material: var(--sidebar-material);
   --color-canvas: var(--canvas-bg);
   --color-canvas-dot: var(--canvas-dot);
@@ -173,7 +173,7 @@
   }
 
   /*
-   * 源列表侧栏的材质（§24.2）。Tauri 下 `--sidebar-material` 是半透明的，
+   * 源列表侧栏的材质（§24.2）。桌面壳下 `--sidebar-material` 是半透明的，
    * 底下是 macOS 的 sidebar 毛玻璃；浏览器里它近乎纯色，这条等于普通底色。
    */
   .material-sidebar {

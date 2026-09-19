@@ -141,18 +141,21 @@ describe("HostIdentityPanel inside the desktop shell", () => {
     ...hello,
     capabilities: ["identity.native-session.v1"],
   };
+  const shellOrigin = "http://127.0.0.1:54321";
   function shell() {
     vi.stubGlobal("location", {
-      origin: "null",
-      protocol: "tauri:",
-      host: "localhost",
+      origin: shellOrigin,
+      protocol: "http:",
+      host: "127.0.0.1:54321",
     });
-    (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ =
-      {};
+    // Only the ticket channel matters here; the rest of the bridge is not
+    // reached by this panel, so it is not stood up.
+    (window as unknown as { armadra?: unknown }).armadra = {
+      identity: { ticket: vi.fn() },
+    };
   }
   afterEach(() => {
-    delete (window as Window & { __TAURI_INTERNALS__?: unknown })
-      .__TAURI_INTERNALS__;
+    delete (window as Window & { armadra?: unknown }).armadra;
     resetNativeSession();
   });
   it("opens a native session against the loopback Host without asking for a ticket", async () => {
@@ -175,7 +178,7 @@ describe("HostIdentityPanel inside the desktop shell", () => {
       transport: { kind: string };
     };
     expect(options.baseUrl).toBe("http://127.0.0.1:43121");
-    expect(options.pageOrigin).toBe("tauri://localhost");
+    expect(options.pageOrigin).toBe(shellOrigin);
     expect(options.transport.kind).toBe("native");
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(setItem).not.toHaveBeenCalled();
@@ -214,8 +217,8 @@ describe("HostIdentityPanel", () => {
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(mocks.create).not.toHaveBeenCalled();
   });
-  it("does not pretend a Tauri or other-origin page can log into an HTTPS Host", () => {
-    vi.stubGlobal("location", { origin: "tauri://localhost" });
+  it("does not pretend an other-origin page can log into an HTTPS Host", () => {
+    vi.stubGlobal("location", { origin: "https://elsewhere.test" });
     render(<HostIdentityPanel address={origin} hello={hello} />);
     expect(screen.getByText(/当前页面来源不同/)).toBeTruthy();
     expect(mocks.create).not.toHaveBeenCalled();

@@ -2,17 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   hostServedOrigin,
   isShellTransport,
-  nativeShellRuntimeUrl,
   resetShellEndpoints,
   resolveRuntimeUrl,
   resolveSocketBase,
   runtimeSocketUrl,
   shellEndpoints,
-  TRANSPORT_PATH,
 } from "./runtime-url";
 
-/** Stands in for the Electron preload bridge. */
-function electronShell(
+/** Stands in for the shell's preload bridge. */
+function shell(
   endpoints: Partial<{
     httpBase: string;
     wsBase: string;
@@ -61,35 +59,21 @@ describe("Runtime addresses across desktop and web", () => {
     expect(
       resolveRuntimeUrl(undefined, "https://canvas.example/workspace/one"),
     ).toBe("https://canvas.example");
-    // The packaged desktop shell still wins: it has no port to talk to.
-    expect(resolveRuntimeUrl(undefined, "https://tauri.localhost/")).toBe(
-      "https://armadra.localhost",
-    );
     expect(hostServedOrigin("http://127.0.0.1:1420/")).toBe(null);
-    expect(hostServedOrigin("https://tauri.localhost/")).toBe(null);
     expect(hostServedOrigin("not a url")).toBe(null);
   });
-  it("uses the shell's custom protocol when the page is a packaged desktop page", () => {
-    // A packaged Runtime holds no port at all; this is the only way in.
-    expect(resolveRuntimeUrl(undefined, "tauri://localhost/")).toBe(
-      "armadra://localhost",
+  it("never treats a loopback HTTP page as Host-served", () => {
+    // The shell's own static server is loopback HTTP; it answers through the
+    // preload bridge, never by guessing from the page's address.
+    expect(hostServedOrigin("http://127.0.0.1:61000/")).toBe(null);
+    expect(resolveRuntimeUrl(undefined, "http://127.0.0.1:61000/")).toBe(
+      "http://127.0.0.1:43120",
     );
-    expect(
-      resolveRuntimeUrl(undefined, "http://tauri.localhost/index.html"),
-    ).toBe("http://armadra.localhost");
-    expect(resolveRuntimeUrl(undefined, "https://tauri.localhost/")).toBe(
-      "https://armadra.localhost",
-    );
-    // A page that merely looks similar is not a shell page.
-    expect(nativeShellRuntimeUrl("https://tauri.localhost.evil.example/")).toBe(
-      null,
-    );
-    expect(nativeShellRuntimeUrl("not a url")).toBe(null);
   });
-  it("lets an explicit address win over the shell protocol", () => {
+  it("lets an explicit address win", () => {
     // Desktop development still points at an external Runtime on its port.
     expect(
-      resolveRuntimeUrl("http://127.0.0.1:43120", "tauri://localhost/"),
+      resolveRuntimeUrl("http://127.0.0.1:43120", "http://127.0.0.1:61000/"),
     ).toBe("http://127.0.0.1:43120");
   });
   it("supports explicit same-origin and relative proxy prefixes", () => {
@@ -122,15 +106,15 @@ describe("Runtime addresses across desktop and web", () => {
 });
 
 /**
- * The Electron shell (docs/design/electron-migration.md §2.1). The page is
+ * The desktop shell (docs/design/electron-migration.md §2.1). The page is
  * served over loopback HTTP and talks to the Runtime directly; the Runtime's
  * port is the kernel's, so the only thing that knows it is the shell.
  */
-describe("Runtime addresses inside the Electron shell", () => {
+describe("Runtime addresses inside the desktop shell", () => {
   it("takes the base from the shell, not from the page's own address", () => {
     // In development the page is on Vite's port — which is not the Runtime's
     // and is not the documented default either.
-    electronShell();
+    shell();
     expect(resolveRuntimeUrl(undefined, "http://127.0.0.1:1420/")).toBe(
       "http://127.0.0.1:52341",
     );
@@ -163,20 +147,18 @@ describe("Runtime addresses inside the Electron shell", () => {
   });
 
   it("lets an explicit address win, as it always has", () => {
-    electronShell();
+    shell();
     expect(
       resolveRuntimeUrl("http://127.0.0.1:43120", "http://127.0.0.1:1420/"),
     ).toBe("http://127.0.0.1:43120");
   });
 
-  it("uses the shell's WebSocket base without asking for a forwarder", async () => {
-    electronShell();
-    const fetcher = vi.fn();
+  it("uses the shell's WebSocket base without asking for a forwarder", () => {
+    shell();
     const base = resolveRuntimeUrl(undefined, "http://127.0.0.1:1420/");
     // There is no custom scheme and no forwarding port any more: the socket
-    // base came with the HTTP one.
-    expect(await resolveSocketBase(base, fetcher)).toBe("ws://127.0.0.1:52341");
-    expect(fetcher).not.toHaveBeenCalled();
+    // base came with the HTTP one, so this resolution is synchronous.
+    expect(resolveSocketBase(base)).toBe("ws://127.0.0.1:52341");
     expect(isShellTransport(base)).toBe(true);
     expect(isShellTransport("http://127.0.0.1:43120")).toBe(false);
   });
@@ -188,7 +170,7 @@ describe("Runtime addresses inside the Electron shell", () => {
       "http://user:pass@127.0.0.1:43120",
       "not a url",
     ]) {
-      electronShell({ httpBase });
+      shell({ httpBase });
       // The bridge is refused outright rather than half-believed, so the page
       // falls back exactly as it would in a browser.
       expect(shellEndpoints(), httpBase).toBeNull();
@@ -198,72 +180,44 @@ describe("Runtime addresses inside the Electron shell", () => {
     }
   });
 
-  it("derives the socket base when the shell's is unusable", async () => {
-    electronShell({ wsBase: "wss://armadra.example" });
+  it("derives the socket base when the shell's is unusable", () => {
+    shell({ wsBase: "wss://armadra.example" });
     const base = resolveRuntimeUrl(undefined, "http://127.0.0.1:1420/");
-    expect(await resolveSocketBase(base, vi.fn())).toBe("ws://127.0.0.1:52341");
+    expect(resolveSocketBase(base)).toBe("ws://127.0.0.1:52341");
   });
 
-  it("is absent in a browser and in the Tauri shell", () => {
+  it("is absent in a browser", () => {
     vi.stubGlobal("window", {});
     resetShellEndpoints();
     expect(shellEndpoints()).toBeNull();
-    expect(resolveRuntimeUrl(undefined, "tauri://localhost/")).toBe(
-      "armadra://localhost",
+    expect(resolveRuntimeUrl(undefined, "http://127.0.0.1:1420/")).toBe(
+      "http://127.0.0.1:43120",
     );
   });
 });
 
 describe("WebSocket base resolution", () => {
-  it("leaves a real HTTP address alone and asks nobody", async () => {
-    const fetcher = vi.fn();
-    expect(await resolveSocketBase("http://127.0.0.1:43120", fetcher)).toBe(
+  it("leaves a real HTTP address alone and asks nobody", () => {
+    expect(resolveSocketBase("http://127.0.0.1:43120")).toBe(
       "http://127.0.0.1:43120",
     );
-    expect(fetcher).not.toHaveBeenCalled();
     expect(isShellTransport("http://127.0.0.1:43120")).toBe(false);
   });
 
-  it("asks the shell for the loopback forwarder it opened", async () => {
-    const fetcher = vi.fn(async () =>
-      Response.json({ websocket: "ws://127.0.0.1:51234" }),
+  it("keeps a Host-served origin as its own socket base", () => {
+    // `runtimeSocketUrl` is what upgrades the scheme; the base is unchanged.
+    expect(resolveSocketBase("https://canvas.example/runtime")).toBe(
+      "https://canvas.example/runtime",
     );
-    expect(await resolveSocketBase("armadra://localhost", fetcher)).toBe(
-      "ws://127.0.0.1:51234",
-    );
-    expect(fetcher).toHaveBeenCalledWith(
-      `armadra://localhost${TRANSPORT_PATH}`,
-    );
-    expect(isShellTransport("armadra://localhost")).toBe(true);
-    expect(isShellTransport("http://armadra.localhost")).toBe(true);
+    expect(isShellTransport("https://canvas.example/runtime")).toBe(false);
   });
 
-  it("never follows the shell to an address that is not a loopback socket", async () => {
-    for (const websocket of [
-      "wss://evil.example",
-      "ws://10.0.0.5:80",
-      "http://127.0.0.1:51234",
-      42,
-      undefined,
-    ]) {
-      const fetcher = vi.fn(async () => Response.json({ websocket }));
-      expect(await resolveSocketBase("armadra://localhost", fetcher)).toBe(
-        "armadra://localhost",
-      );
-    }
-  });
-
-  it("falls back to the HTTP base when the shell cannot answer", async () => {
-    for (const fetcher of [
-      vi.fn(async () => {
-        throw new Error("no shell");
-      }),
-      vi.fn(async () => new Response("nope", { status: 503 })),
-      vi.fn(async () => new Response("not json", { status: 200 })),
-    ]) {
-      expect(await resolveSocketBase("armadra://localhost", fetcher)).toBe(
-        "armadra://localhost",
-      );
-    }
+  it("does not hand the shell's socket base to a base the shell did not give", () => {
+    // Desktop development can point at an external Runtime; that Runtime's
+    // own port is its socket port, not the one the shell announced.
+    shell();
+    expect(resolveSocketBase("http://127.0.0.1:43120")).toBe(
+      "http://127.0.0.1:43120",
+    );
   });
 });

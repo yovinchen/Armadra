@@ -3,13 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { onFileDrop, type FileDropPosition } from "./index";
 
 /**
- * 系统级拖放的 Electron 那一半。
+ * 系统级拖放的壳那一半。
  *
- * 这条路和 Tauri 那条**口径不同**，所以值得钉住：Electron 收到的是普通的
- * DOM `drop`，`clientX/Y` 已经是 CSS 像素（Tauri 给的是物理设备像素，要按
- * `devicePixelRatio` 换算），绝对路径由 `window.armadra.pathForFile(file)`
- * 取而不是由事件带过来。测试里把两点都验一遍：换算别又被加回来，拿不到
- * 路径的 File 别被当成路径喂给 Runtime。
+ * 两条口径值得钉住：壳收到的是普通的 DOM `drop`，`clientX/Y` 已经是 CSS 像素
+ * （**不做** `devicePixelRatio` 换算——上一代壳给的是物理设备像素，那一步曾经
+ * 存在），绝对路径由 `window.armadra.pathForFile(file)` 取而不是由事件带过来。
+ * 测试里把两点都验一遍：换算别又被加回来，拿不到路径的 File 别被当成路径喂给
+ * Runtime。
  */
 
 type Bridge = { pathForFile: (file: File) => string };

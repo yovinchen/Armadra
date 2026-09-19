@@ -75,7 +75,7 @@ export function BrowserNode(props: NodeBodyProps) {
    * 分流（electron-migration.md §5 W3.1）。
    *
    * Electron 壳里页面就在本窗口的一个 OOPIF 里，走 `<webview>`；浏览器与
-   * Tauri 壳里没有那个元素，**继续走现有的 screencast 路径**。W3.5 之前旧路
+   * 浏览器里没有那个元素，**继续走现有的 screencast 路径**。W3.5 之前旧路
    * 径一行不删——webview 的生命周期陷阱只在真机上暴露，它是唯一的回退。
    *
    * 判定在渲染期间做一次就够：一个页面不会在运行中从 Electron 变成浏览器，

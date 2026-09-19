@@ -17,10 +17,12 @@ import (
 )
 
 const (
-	nativeOrigin = "tauri://localhost"
-	// electronOrigin is the shape the Electron shell presents: plain loopback
+	// nativeOrigin is the shape the desktop shell presents: plain loopback
 	// HTTP on the port its own static server was given by the kernel.
-	electronOrigin = "http://127.0.0.1:54321"
+	nativeOrigin = "http://127.0.0.1:54321"
+	// electronOrigin is a second shell origin on another kernel-assigned
+	// port: nothing about the rule is tied to one port.
+	electronOrigin = "http://localhost:61000"
 	// browserOrigin is a real browser origin — off this machine, so never a
 	// shell origin however explicitly it is allowed.
 	browserOrigin = "https://browser.example"
@@ -157,7 +159,7 @@ func TestNativeSessionIsAdvertisedOnlyToTheShellOrigin(t *testing.T) {
 		}
 	}
 	// The HTTPS shape keeps advertising the browser session and never the
-	// native one, even to an allowlisted Tauri origin.
+	// native one, even to an allowlisted loopback HTTP origin.
 	secure := newAuthFixture(t, func(_ *authFixture, options *Options) { options.AllowedOrigins = []string{nativeOrigin} })
 	request, _ := http.NewRequest("POST", secure.origin+HelloPath, bytes.NewReader(helloBytes(t, 1, ProtocolMinor)))
 	request.Header.Set("Origin", nativeOrigin)
@@ -363,23 +365,20 @@ func TestBearerCredentialParsing(t *testing.T) {
 	}
 }
 
-// The Electron shell has no custom scheme: its page comes from a loopback
-// HTTP static server on a kernel-assigned port, so what marks a shell origin
-// is "loopback HTTP and in --allow-origin", not a fixed spelling
+// The shell has no custom scheme: its page comes from a loopback HTTP static
+// server on a kernel-assigned port, so what marks a shell origin is "loopback
+// HTTP and in --allow-origin", not a fixed spelling
 // (docs/design/electron-migration.md §2.1).
 func TestLoopbackHTTPOriginIsAShellOrigin(t *testing.T) {
 	f := newNativeFixture(t)
 	if !hasCapability(f.hello(t, electronOrigin).Capabilities, "identity.native-session.v1") {
 		t.Fatal("the loopback HTTP shell origin was not offered the native session")
 	}
-	// The Tauri spellings keep working while both shells exist.
-	for _, origin := range []string{"tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"} {
-		if !NativeOrigin(origin) {
-			t.Fatalf("the Tauri origin %s stopped being a shell origin", origin)
+	// A custom scheme is not a shell origin: only loopback HTTP is.
+	for _, origin := range []string{"app://localhost", "armadra://localhost", "custom://localhost"} {
+		if NativeOrigin(origin) {
+			t.Fatalf("the non-loopback-HTTP origin %s was taken for a shell origin", origin)
 		}
-	}
-	if !hasCapability(f.hello(t, nativeOrigin).Capabilities, "identity.native-session.v1") {
-		t.Fatal("the Tauri origin lost the native session")
 	}
 	// An allowlisted origin that is not on this machine stays a browser
 	// origin, and browser origins still require configured HTTPS.
@@ -467,7 +466,6 @@ func TestConfiguredHTTPSKeepsTheBrowserRuleForLoopbackOrigins(t *testing.T) {
 
 func TestNativeOriginSpellings(t *testing.T) {
 	for _, origin := range []string{
-		"tauri://localhost", "http://tauri.localhost", "https://tauri.localhost",
 		"http://127.0.0.1:54321", "http://127.0.0.1", "http://127.0.0.2:8080",
 		"http://localhost:1420", "http://[::1]:54321",
 	} {
@@ -479,6 +477,8 @@ func TestNativeOriginSpellings(t *testing.T) {
 		"", "null", "https://127.0.0.1:54321", "https://localhost:1420",
 		"http://192.168.1.20:54321", "http://browser.example", "https://browser.example",
 		"http://127.0.0.1:54321/", "HTTP://127.0.0.1:54321", "http://127.0.0.1:54321?x=1",
+		// A custom scheme is not an HTTP origin, however local it looks.
+		"app://localhost", "armadra://localhost", "custom://localhost",
 	} {
 		if NativeOrigin(origin) {
 			t.Errorf("%s should not be a shell origin", origin)

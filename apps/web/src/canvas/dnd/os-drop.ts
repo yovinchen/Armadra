@@ -32,7 +32,7 @@ import { t, usePreferencesStore } from "../../app/preferences-store";
  *
  * | 场景 | 处理 |
  * | --- | --- |
- * | 桌面版 OS 拖放（Tauri 给真实路径，webview 收不到 `DataTransfer`） | 图片 → Runtime 按路径导入资产后建白板图片，目录 → `files` 节点，其余 → `editor` 节点 |
+ * | 桌面版 OS 拖放（壳给真实路径） | 图片 → Runtime 按路径导入资产后建白板图片，目录 → `files` 节点，其余 → `editor` 节点 |
  * | 浏览器拖放（`DataTransfer`） | 同一张规则表 |
  * | 工作区文件树拖入 | `addWorkspaceEntriesToCanvas` |
  * | 焦点在输入框 / 终端里的粘贴 | 拦下来，交给它们自己 |
@@ -53,7 +53,7 @@ export interface OsDropHandlers {
 }
 
 export function useOsDrop(): OsDropHandlers {
-  // 桌面版：Tauri 的 `onDragDropEvent` 吃掉了 webview 的拖放，只给路径。
+  // 桌面版：壳把落点上的 `File` 换成绝对路径交过来。
   useEffect(
     () =>
       onFileDrop((paths, point) => {
@@ -68,7 +68,7 @@ export function useOsDrop(): OsDropHandlers {
     [],
   );
 
-  // Windows Tauri's pointer fallback dispatches this after hit-testing. A
+  // The Windows pointer fallback dispatches this after hit-testing. A
   // terminal consumes it first; only an unconsumed canvas destination arrives.
   useEffect(() => {
     const dropped = (event: Event) => {

@@ -21,7 +21,7 @@ func TestInvalidOriginFailsBeforeStateCreation(t *testing.T) {
 }
 func TestRepeatedOriginFlags(t *testing.T) {
 	var flags allowedOriginFlags
-	for _, value := range []string{"http://localhost:1420", "https://EXAMPLE.COM:443", "tauri://localhost"} {
+	for _, value := range []string{"http://localhost:1420", "https://EXAMPLE.COM:443", "http://127.0.0.1:54321"} {
 		if err := flags.Set(value); err != nil {
 			t.Fatal(err)
 		}

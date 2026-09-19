@@ -38,8 +38,9 @@ Windows 使用 `armadra-host.exe`。省略子命令等同 `serve`（前台）；
 | `--output protobuf`  | 管理命令返回单个 `HostManagementResult`，无尾随换行；默认 JSON 供人阅读                                 |
 
 `--listen none` 且没有 TLS 参数时不建 TCP 监听，也不接受 `--allow-origin`；`HostStatus.httpEndpoint` 为空串表示「没有 HTTP 面」。
-回环 HTTP 加 `--allow-origin tauri://localhost`（或 `http(s)://tauri.localhost`）是打包桌面壳的形态：`pair --origin tauri://localhost`
-对这个来源出票，页面用它换取 `Authorization: Bearer` 会话，Hello 只对该来源报告 `identity.native-session.v1`；
+回环 HTTP 加 `--allow-origin http://127.0.0.1:<port>`（壳静态服务的来源，端口由内核分配）是桌面壳的形态：
+`pair --origin http://127.0.0.1:<port>` 对这个来源出票，页面用它换取 `Authorization: Bearer` 会话，
+Hello 只对该来源报告 `identity.native-session.v1`；
 浏览器来源在回环 HTTP 上仍然只能读元数据（[设备认证](../../docs/guides/host-device-auth.md)）。
 `--listen none` 配上 TLS 与 `--public-origin` 是「只服务其它设备」的形态：在对外服务打开之前不监听任何端口。
 启动后把本次地址写入 `<endpoints-dir>/endpoints.json`（0600，只改 `host` 段），正常退出时撤回；写不进去只告警不中止。
@@ -77,8 +78,7 @@ CSRF 与浏览器 Origin 停在 Host，Runtime 只看到本机回环来源。未
 ## Origin 与权限
 
 默认接受同源或无 Origin 的本机 CLI 请求；跨源页面须明确配置。主机与端口精确匹配，
-`localhost` 与 `127.0.0.1` 不等同。HTTPS 可配置；普通 HTTP 仅回环主机，桌面额外允许精确的
-`tauri://localhost`、`https://tauri.localhost`、`http://tauri.localhost`。
+`localhost` 与 `127.0.0.1` 不等同。HTTPS 可配置；普通 HTTP 仅回环主机，自定义 scheme 一律拒绝。
 
 拒绝通配、null、凭据、路径（含末尾 `/`）、query/hash 与控制字符；错误配置在监听和创建数据目录前失败。
 配置规范化 scheme/主机大小写与默认端口，收到的 Origin 必须符合标准序列化。

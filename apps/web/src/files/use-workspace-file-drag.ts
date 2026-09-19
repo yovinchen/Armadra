@@ -24,7 +24,7 @@ export function needsPointerFileDrag(): boolean {
   return isDesktop() && /Win/i.test(navigator.platform || navigator.userAgent);
 }
 
-/** Windows Tauri's native OS drop handler disables HTML5 DND. Internal files
+/** The Windows native OS drop handler disables HTML5 DND. Internal files
  * use pointer events there, without changing native Finder/Explorer importing. */
 export function useWorkspaceFileDrag(
   workspaceId: string | undefined,

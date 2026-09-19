@@ -5,7 +5,7 @@ import { commandsInScope } from "./commands";
 import { GLOBAL_SHORTCUT_ACTIONS, globalBindings } from "./global-shortcuts";
 
 describe("accelerator 转换", () => {
-  it("修饰键按 Tauri 的名字来", () => {
+  it("修饰键按 accelerator 的名字来", () => {
     expect(toAccelerator("Mod+Shift+K")).toBe("CmdOrCtrl+Shift+K");
     expect(toAccelerator("Ctrl+Alt+T")).toBe("Control+Alt+T");
     expect(toAccelerator("Meta+Comma")).toBe("Super+Comma");

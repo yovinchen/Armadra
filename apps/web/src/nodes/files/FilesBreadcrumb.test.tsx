@@ -11,7 +11,7 @@ import { usePreferencesStore } from "@/app/preferences-store";
  */
 
 const deep = breadcrumbs(
-  "Users/yovinchen/Projects/Rust/Tauri/armadra/apps/web/src",
+  "Users/yovinchen/Projects/Code/Desktop/armadra/apps/web/src",
   "Armadra",
 );
 
@@ -54,7 +54,7 @@ describe("面包屑那一行", () => {
       />,
     );
     expect(screen.getByRole("navigation").getAttribute("title")).toBe(
-      "Armadra / Users / yovinchen / Projects / Rust / Tauri / armadra / apps / web / src",
+      "Armadra / Users / yovinchen / Projects / Code / Desktop / armadra / apps / web / src",
     );
   });
 

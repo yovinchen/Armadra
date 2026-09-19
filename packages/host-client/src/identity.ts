@@ -112,8 +112,10 @@ function loopbackHost(hostname: string): boolean {
 }
 /**
  * The page origin as the Host will see it in the `Origin` header. `URL.origin`
- * is `"null"` for a non-special scheme such as `tauri:`, so it is spelled out
- * from the two parts that do survive.
+ * is `"null"` for a non-special scheme, so in that case it is spelled out from
+ * the two parts that do survive. Every origin this library accepts is HTTP or
+ * HTTPS, where `location.origin` is already the answer; the fallback is there
+ * so an exotic host does not silently report no origin at all.
  */
 function currentPageOrigin(): string | undefined {
   const location = globalThis.location;

@@ -112,7 +112,7 @@ describe("HTTPS browser identity configuration", () => {
       client(vi.fn(), { pageOrigin: "https://other.test" }),
     ).toThrow();
     expect(() =>
-      client(vi.fn(), { pageOrigin: "tauri://localhost" }),
+      client(vi.fn(), { pageOrigin: "http://127.0.0.1:54321" }),
     ).toThrow();
     expect(() => client(vi.fn(), { hostId: "legacy" })).toThrow();
     expect(() => client(vi.fn(), { timeoutMs: 2_147_483_648 })).toThrow();

@@ -11,14 +11,14 @@ import (
 
 func TestParseOrigin(t *testing.T) {
 	for input, want := range map[string]string{
-		"http://localhost:1420": "http://localhost:1420", "http://127.0.0.1:1420": "http://127.0.0.1:1420", "http://[::1]:1420": "http://[::1]:1420", "https://EXAMPLE.COM:443": "https://example.com", "http://LOCALHOST:80": "http://localhost", "https://tauri.localhost": "https://tauri.localhost", "tauri://localhost": "tauri://localhost", "http://tauri.localhost": "http://tauri.localhost",
+		"http://localhost:1420": "http://localhost:1420", "http://127.0.0.1:1420": "http://127.0.0.1:1420", "http://[::1]:1420": "http://[::1]:1420", "https://EXAMPLE.COM:443": "https://example.com", "http://LOCALHOST:80": "http://localhost", "http://127.0.0.2:8080": "http://127.0.0.2:8080", "https://shell.localhost": "https://shell.localhost",
 	} {
 		got, err := ParseOrigin(input)
 		if err != nil || got != want {
 			t.Errorf("%q = %q, %v; want %q", input, got, err, want)
 		}
 	}
-	for _, input := range []string{"", "*", "null", "http://example.com", "http://foo.tauri.localhost", "http://tauri.localhost:1420", "http://192.168.0.1:1420", "https://user:password@example.com", "https://example.com/", "https://example.com/path", "https://example.com?", "https://example.com#", "https://example.com?q=x", "https://example.com#fragment", "https://example.com\r\n", " https://example.com", "https://example.com https://other.example", "ftp://localhost", "tauri://other", "tauri://localhost:123", "https://example.com:", "https://[example.com]", "https://[127.0.0.1]", "https://example.com:65536", "https://example.com:0", "https://*.example.com", "https://[::1%25zone]", "https://example.com\\path"} {
+	for _, input := range []string{"", "*", "null", "http://example.com", "http://shell.localhost", "http://shell.localhost:1420", "http://192.168.0.1:1420", "https://user:password@example.com", "https://example.com/", "https://example.com/path", "https://example.com?", "https://example.com#", "https://example.com?q=x", "https://example.com#fragment", "https://example.com\r\n", " https://example.com", "https://example.com https://other.example", "ftp://localhost", "app://localhost", "custom://localhost", "https://example.com:", "https://[example.com]", "https://[127.0.0.1]", "https://example.com:65536", "https://example.com:0", "https://*.example.com", "https://[::1%25zone]", "https://example.com\\path"} {
 		if got, err := ParseOrigin(input); err == nil {
 			t.Errorf("accepted %q as %q", input, got)
 		}
@@ -30,13 +30,13 @@ func TestParseOrigin(t *testing.T) {
 
 func TestExplicitOriginMetadataHTTP(t *testing.T) {
 	const origin = "http://localhost:1420"
-	handler, err := NewHandlerWithOptions(Identity{HostID: "host", InstanceID: "instance"}, Options{AllowedOrigins: []string{origin, "tauri://localhost", "https://tauri.localhost", "http://tauri.localhost"}})
+	handler, err := NewHandlerWithOptions(Identity{HostID: "host", InstanceID: "instance"}, Options{AllowedOrigins: []string{origin, "http://127.0.0.1:54321", "http://[::1]:61000"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	for _, allowed := range []string{origin, "tauri://localhost", "https://tauri.localhost", "http://tauri.localhost"} {
+	for _, allowed := range []string{origin, "http://127.0.0.1:54321", "http://[::1]:61000"} {
 		for _, route := range []struct{ method, path string }{{"GET", "/health"}, {"POST", HelloPath}} {
 			request, _ := http.NewRequest(route.method, server.URL+route.path, bytes.NewReader(helloBytes(t, 1, 1)))
 			request.Header.Set("Origin", allowed)

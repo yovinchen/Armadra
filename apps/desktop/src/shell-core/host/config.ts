@@ -15,19 +15,8 @@ export const HOST_ENDPOINT = "http://127.0.0.1:43121";
 export const HELLO_PATH = "/rpc/armadra.v1.HostService/Hello";
 
 /**
- * The origins a packaged Tauri page is served from. They are kept while both
- * shells exist (design §2.1: the Tauri spellings go away in W5), so a Host
- * started by either shell answers both.
- */
-export const NATIVE_ORIGINS = [
-  "tauri://localhost",
-  "http://tauri.localhost",
-  "https://tauri.localhost",
-] as const;
-
-/**
- * Whether an origin is one a desktop shell can present — a Tauri spelling, or
- * the loopback HTTP origin the Electron shell's static server binds.
+ * Whether an origin is one a desktop shell can present: the loopback HTTP
+ * origin its static server binds.
  *
  * This is the shell's copy of the rule the Host enforces in
  * `apps/host/internal/server/native.go:loopbackHTTPOrigin`, and the one the
@@ -35,14 +24,13 @@ export const NATIVE_ORIGINS = [
  * agree on the same string or a ticket is minted for an origin that cannot
  * spend it; the tests on each side pin the same table.
  *
- * It is a spelling check, not an authorization. The Electron shell's port is
+ * It is a spelling check, not an authorization. The shell's port is
  * kernel-assigned, so there is no constant to compare against; what makes a
  * loopback HTTP origin a shell origin is that nothing off this machine can be
  * behind it, and the ticket still only ever comes from the same-user control
  * channel.
  */
 export function nativeOrigin(origin: string): boolean {
-  if ((NATIVE_ORIGINS as readonly string[]).includes(origin)) return true;
   let parsed: URL;
   try {
     parsed = new URL(origin);
@@ -78,8 +66,8 @@ export interface HostLaunchConfig {
    */
   readonly browserOrigin: string;
   /**
-   * Further origins the Host may answer, beyond the page's own and the Tauri
-   * spellings. Development adds apps/web's dev server here so the same Host
+   * Further origins the Host may answer, beyond the page's own.
+   * Development adds apps/web's dev server here so the same Host
    * serves the shell's window and a browser tab opened on the same front end;
    * neither can mint a ticket, which is what makes the extra grant cheap.
    */
@@ -99,7 +87,6 @@ export interface HostLaunchConfig {
 }
 
 export function validOrigin(origin: string): boolean {
-  if ((NATIVE_ORIGINS as readonly string[]).includes(origin)) return true;
   let parsed: URL;
   try {
     parsed = new URL(origin);
@@ -256,7 +243,6 @@ export function startArguments(config: HostLaunchConfig): string[] {
     // once: the Host refuses a repeated --allow-origin, and a line that
     // differs between two starts of the same shell is one nobody can diff.
     const granted = new Set<string>([
-      ...NATIVE_ORIGINS,
       config.browserOrigin,
       ...(config.additionalOrigins ?? []),
     ]);

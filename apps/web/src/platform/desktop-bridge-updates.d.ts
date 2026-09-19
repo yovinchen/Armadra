@@ -10,7 +10,7 @@
  * Only the seven commands and the one event appear here. The payloads stay
  * `unknown` on the way in — the preload hands over whatever the main process
  * answered, and `shell-updater.ts` is where it is given a type, exactly as it
- * does with Tauri's `invoke`.
+ * did with the previous shell's `invoke`.
  */
 
 declare global {
