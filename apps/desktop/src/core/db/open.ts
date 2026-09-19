@@ -1,13 +1,15 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
   CREATE_LEDGER,
+  LEDGER_TABLE,
   appliedVersions,
   preflight,
   recordApplied,
 } from "./ledger";
 import { type Migration, loadMigrations } from "./migrations";
+import { UNIFIED_VERSION, backupPath } from "./unified";
 
 /**
  * Opening the one database.
@@ -38,10 +40,20 @@ export interface OpenOptions {
   /** The directory holding the `.sql` files. */
   readonly migrationsDir: string;
   /**
+   * 统一库迁移所在目录，只有 `ARMADRA_CORE=ts` 才传。
+   *
+   * 传了就意味着这次启动愿意过单向门：这个目录里的迁移叠在
+   * {@link migrationsDir} 之后，应用它的那一次会先把整个库复制成
+   * `canvas.db.before-ts-core-<ts>`，因为之后 Rust Runtime 再也打不开它。
+   */
+  readonly unifiedMigrationsDir?: string;
+  /**
    * Stop after the preflight. R0's shell switch uses this to prove a database
    * opens without writing to it.
    */
   readonly migrate?: boolean;
+  /** 备份文件名里的时间戳来源；测试用它固定文件名。 */
+  readonly now?: () => Date;
 }
 
 export class DatabaseRefused extends Error {
@@ -54,13 +66,31 @@ export class DatabaseRefused extends Error {
 export interface OpenedDatabase {
   readonly database: DatabaseSync;
   readonly migrations: readonly Migration[];
+  /** 这次启动过单向门时写下的备份路径；没过就是 `null`。 */
+  readonly backup: string | null;
+  /** 统一库迁移是否已经在账本里（这次应用的，或早先应用的）。 */
+  readonly unified: boolean;
   close(): void;
 }
 
 export function openDatabase(options: OpenOptions): OpenedDatabase {
   const migrations = loadMigrations(options.migrationsDir);
+  if (options.unifiedMigrationsDir !== undefined) {
+    for (const migration of loadMigrations(options.unifiedMigrationsDir)) {
+      // 编号必须接在共读目录之后。放进来的东西如果和 Rust 也认识的迁移撞号，
+      // 账本里就会有两条同号不同校验和的记录，两边都再也打不开这个库。
+      if (migrations.some((known) => known.version === migration.version)) {
+        throw new Error(
+          `统一库迁移 ${migration.version} 与共读目录的编号重复：${migration.file}`,
+        );
+      }
+      migrations.push(migration);
+    }
+    migrations.sort((left, right) => left.version - right.version);
+  }
   mkdirSync(dirname(options.file), { recursive: true });
   const database = new DatabaseSync(options.file);
+  let backup: string | null = null;
   try {
     // A connection setting, not a file write.
     database.exec("PRAGMA foreign_keys = ON");
@@ -96,6 +126,34 @@ export function openDatabase(options: OpenOptions): OpenedDatabase {
       database.exec("PRAGMA journal_mode = WAL");
     }
 
+    // 单向门的备份。位置是刻意的：在 `BEGIN IMMEDIATE` 之外，因为 SQLite 的
+    // `VACUUM INTO` 不能在事务里跑；在 0015 应用之前，因为应用之后这个库对
+    // Rust Runtime 就是「多了一条不认识的迁移」，回滚只能靠替换文件。
+    //
+    // `VACUUM INTO` 而不是 `cp`：它在一次读事务里把整个库写成一个新文件，已
+    // 提交的 WAL 内容一起带上，也不会拷到一个写到一半的页。空库不备份——没有
+    // 数据可丢，多一个 0 字节文件只会让人以为回滚点在那儿。
+    if (
+      options.unifiedMigrationsDir !== undefined &&
+      options.migrate !== false &&
+      hasLedger(database) &&
+      !appliedVersions(database).includes(UNIFIED_VERSION)
+    ) {
+      const target = backupPath(
+        options.file,
+        (options.now ?? (() => new Date()))(),
+      );
+      if (existsSync(target)) {
+        throw new DatabaseRefused(
+          `单向门备份 ${target} 已存在；请先移走它再启动`,
+        );
+      }
+      database.exec(`VACUUM INTO ${quote(target)}`);
+      // 拷出来的东西要能打开，否则这个「回滚点」是假的。
+      verifyBackup(target);
+      backup = target;
+    }
+
     database.exec("BEGIN IMMEDIATE");
     let refusal: string | null;
     try {
@@ -128,8 +186,45 @@ export function openDatabase(options: OpenOptions): OpenedDatabase {
   return {
     database,
     migrations,
+    backup,
+    unified: hasLedger(database)
+      ? appliedVersions(database).includes(UNIFIED_VERSION)
+      : false,
     close: () => database.close(),
   };
+}
+
+function hasLedger(database: DatabaseSync): boolean {
+  const found = database
+    .prepare(`SELECT name FROM sqlite_schema WHERE type = 'table' AND name = ?`)
+    .get(LEDGER_TABLE);
+  return found !== undefined;
+}
+
+/** SQLite 的字符串字面量：单引号成对。路径不进 SQL 的任何其他位置。 */
+function quote(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+/**
+ * 备份要能被打开、要有账本、要有内容。做不到就不是回滚点，宁可在应用迁移前
+ * 报错，也不要留一个看着像备份的文件。
+ */
+function verifyBackup(path: string): void {
+  if (!existsSync(path) || statSync(path).size === 0) {
+    throw new DatabaseRefused(`单向门备份 ${path} 没有写出来`);
+  }
+  const copy = new DatabaseSync(path, { readOnly: true });
+  try {
+    const rows = copy
+      .prepare(`SELECT count(*) AS total FROM ${LEDGER_TABLE}`)
+      .get() as { total?: number } | undefined;
+    if (!rows || Number(rows.total ?? 0) === 0) {
+      throw new DatabaseRefused(`单向门备份 ${path} 里没有迁移账本`);
+    }
+  } finally {
+    copy.close();
+  }
 }
 
 /**
