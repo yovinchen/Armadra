@@ -42,6 +42,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Agent 上下文用量",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/hunks",
@@ -555,6 +556,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Agent 投递",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/resources",
@@ -625,6 +627,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "画布控制确认",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/handoffs",
@@ -632,6 +635,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Agent 交接",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/handoffs/{handoffId}",
@@ -639,6 +643,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Agent 交接",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/handoffs/{handoffId}/accept",
@@ -646,6 +651,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Agent 交接",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/handoffs/{handoffId}/cancel",
@@ -653,6 +659,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Agent 交接",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/context-links/{nodeId}",
@@ -838,6 +845,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "会话记录索引",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/conversations/refresh",
@@ -845,6 +853,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "会话记录索引",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/agents",
@@ -908,6 +917,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Agent 状态",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/agent-status/{nodeId}/suggest-title",
@@ -915,6 +925,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Agent 状态",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/agent-status/{nodeId}/transcript",
@@ -922,6 +933,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Agent 状态",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/terminals/{sessionId}/node-token/refresh",
@@ -1084,6 +1096,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Agent 审批",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/verify",
