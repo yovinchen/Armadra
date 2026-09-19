@@ -145,7 +145,9 @@ describe("absorbing the old host database", () => {
     expect(result.absorbed).toBe(true);
     expect(result.rows).toEqual({
       store_meta: 1,
-      identity_owner: 1,
+      // 旧库里那张单行的 `identity_owner` 进的是 0019 的 `identity_principals`
+      // （`kind='owner'`）：搬的是同一行，形状换了。
+      identity_principals: 1,
       identity_devices: 1,
       identity_sessions: 1,
       identity_bootstrap_tickets: 0,
@@ -174,6 +176,14 @@ describe("absorbing the old host database", () => {
     expect(
       opened.database.prepare("SELECT host_id FROM store_meta").get(),
     ).toEqual({ host_id: HOST_ID });
+    // owner 的标识必须一个字节都不变：设备、会话、票据全按它引用。
+    expect(
+      opened.database
+        .prepare(
+          "SELECT principal_id, kind, display_name FROM identity_principals",
+        )
+        .get(),
+    ).toEqual({ principal_id: PRINCIPAL, kind: "owner", display_name: "" });
     expect(
       opened.database
         .prepare("SELECT device_id, name, epoch FROM identity_devices")
@@ -236,7 +246,7 @@ describe("absorbing the old host database", () => {
   it("imports exactly the tables the unified core has taken over", () => {
     expect([...ABSORBED_TABLES]).toEqual([
       "store_meta",
-      "identity_owner",
+      "identity_principals",
       "identity_devices",
       "identity_sessions",
       "identity_bootstrap_tickets",

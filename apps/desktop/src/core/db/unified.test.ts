@@ -120,13 +120,16 @@ describe("applying the unified migration", () => {
     ).map((row) => row.name);
     for (const table of [
       "store_meta",
-      "identity_owner",
+      "identity_principals",
       "identity_devices",
       "identity_sessions",
       "identity_bootstrap_tickets",
     ]) {
       expect(tables).toContain(table);
     }
+    // 0019 之后单行的 `identity_owner` 不再存在：它的那一行搬进了
+    // `identity_principals`，而两张表同时在会让「owner 是谁」有两个答案。
+    expect(tables).not.toContain("identity_owner");
   });
 
   it("does not run without the overlay, and leaves the ledger at 14", () => {
