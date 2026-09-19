@@ -5,16 +5,16 @@
 
 ## 1. 阶段状态
 
-| 阶段   | 范围                                                                               | 状态                        |
-| ------ | ---------------------------------------------------------------------------------- | --------------------------- |
-| **R0** | core 进程骨架、三种监听、`/health`、SQLite 账本                                    | 已合入（`c1644c10d`）       |
-| **R1** | 画布 / 工作空间 / 设置 / 身份、统一库迁移                                          | 已合入（`0b098c650`）       |
-| **R2** | 终端域：tmux 纵切、direct / sessionHost、SSH、GC                                   | 已合入（`aa180c6e7`）       |
-| **R3** | Hook 面、Agent / 协作、TS `armadra-hook`                                           | 已合入（`aa180c6e7`）       |
-| **R4** | Git、文件 / 导入导出、定时与事件 outbox                                            | 已合入（`601095795`）       |
-| **R5** | 语言服务、GitHub / 资源 / 用量、浏览器授权与租约                                   | 已合入（`601095795`）       |
-| **R6** | 服务器壳（R6a）、账号与共享（R6b）、远程浏览器（R6c）、Windows session-host（R6d） | R6a、R6b 已合入，其余进行中 |
-| R7     | 收尾                                                                               | 未开始                      |
+| 阶段   | 范围                                                                               | 状态                             |
+| ------ | ---------------------------------------------------------------------------------- | -------------------------------- |
+| **R0** | core 进程骨架、三种监听、`/health`、SQLite 账本                                    | 已合入（`c1644c10d`）            |
+| **R1** | 画布 / 工作空间 / 设置 / 身份、统一库迁移                                          | 已合入（`0b098c650`）            |
+| **R2** | 终端域：tmux 纵切、direct / sessionHost、SSH、GC                                   | 已合入（`aa180c6e7`）            |
+| **R3** | Hook 面、Agent / 协作、TS `armadra-hook`                                           | 已合入（`aa180c6e7`）            |
+| **R4** | Git、文件 / 导入导出、定时与事件 outbox                                            | 已合入（`601095795`）            |
+| **R5** | 语言服务、GitHub / 资源 / 用量、浏览器授权与租约                                   | 已合入（`601095795`）            |
+| **R6** | 服务器壳（R6a）、账号与共享（R6b）、远程浏览器（R6c）、Windows session-host（R6d） | R6a、R6b、R6d 已合入，R6c 进行中 |
+| R7     | 收尾                                                                               | 未开始                           |
 
 ## 2. R2 纵切：只有 tmux 后端的建 / 附 / 输入 / 断
 
@@ -305,3 +305,69 @@ pnpm --filter @armadra/server build     # esbuild → apps/server/out/main.js
 ### 12.4 验证
 
 `pnpm --filter @armadra/desktop test`（2250 例通过，其中 R6b 新增 43 例：迁移升级、角色编译快照、判定入口、口令派生与参数升级、邀请一次性与过期、审计写入、路由 scope 声明无遗漏，以及 `ARMADRA_CORE=ts` 真起 core 跑通 `/api/identity/principals`、登录与 501 形状）、`typecheck`、`pnpm check`（除 10.1 那条迁移编号提示）。
+
+## 13. R6d：Windows session host 迁到 TypeScript
+
+`crates/session-host`（4,221 行 Rust）迁到 `apps/desktop/src/session-host/`（守护进程）与 `apps/desktop/src/core/terminal/session-host/auth.ts`（握手，客户端与宿主共用）。Rust crate **没有删**，`ARMADRA_SESSION_HOST=rust` 仍然拉得起它；两边说同一条线协议，R7 再删。
+
+**本机没有 Windows，下面凡是标「只能在 Windows 上验证」的，本批一次也没真机跑过。**
+
+### 13.1 协议没有换
+
+线协议原样保留：24 字节头 + JSON 控制帧 + 裸输出帧，`magic 0xA1`，四种 kind，generation / sequence 小端。理由是 R6 之前 `core/terminal/session-host/protocol.ts` 已经按 Rust 的单测向量写成第二个说话人，现在只是第三个说话人（宿主）接到同一条线上——换成别的格式要同时改三处、作废一批已经对过的向量，换来的是零收益。它本来就不是 protobuf，不受 R7 删 `proto/` 影响。
+
+唯一的增量是 `hello` 多了一个可选字段 `auth`。Rust 的 serde 忽略未知字段，所以带着它连 Rust 宿主也不会被拒；TS 宿主则**必须**有它。core 侧按 `ARMADRA_SESSION_HOST` 决定发不发。
+
+### 13.2 管道安全：DACL + SID 换成密钥文件 + 一次性 HMAC
+
+Rust 版用受保护 DACL（`D:P(A;;GA;;;SY)(A;;GA;;;<sid>)`）加每连接 `GetNamedPipeClientProcessId` 核对 SID。`node:net` 两样都够不到：它经 libuv 用默认安全描述符建管道，返回的是 `Socket` 不是 `HANDLE`。
+
+替代方案：`<userDataDir>/session-host.key`（32 字节随机数，0600；Windows 上 `icacls /inheritance:r /grant:r <user>:F`，**收紧失败就拒绝启动**），每条连接的 `hello` 带 `HMAC-SHA256(key, 上下文‖major‖endpoint‖nonce‖issuedAt)`，宿主校验后立即断开不合格的连接。
+
+残余风险三条，写在 `auth.ts` 的头注释里：
+
+1. 证明在 ±60 s 内可重放——前提是能看到管道字节，而那已经是本用户；
+2. 宿主只知道对端**能读密钥文件**，不知道它是哪个进程。Rust 版对同一用户的不同进程还能按 SID 区分，这里不能。对「同机另一个账户」这个真正的威胁，两者等价，因为文件的 ACL 就是管道原来那份 ACL；
+3. 收紧权限靠外部 `icacls`，没有进程内的 Win32 调用；`icacls` 不在或失败，宿主就不起。
+
+### 13.3 相对 Rust 版的退化
+
+| 项                                  | Rust                        | TS                                                                                 | 后果                                                  |
+| ----------------------------------- | --------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| 管道 ACL                            | 受保护 DACL                 | 默认描述符 + 密钥文件                                                              | 见 §10.2                                              |
+| 客户端身份                          | 逐连接核对 SID              | 逐连接核对 HMAC                                                                    | 同用户的进程之间不再区分                              |
+| Job Object `KILL_ON_JOB_CLOSE`      | 有                          | **没有**，Node 无此 API                                                            | 宿主被 `SIGKILL` 时进程树不会被系统带走               |
+| 进程树收容                          | Job Object + 按 pid 兜底    | ConPTY 自身 + 退出时逐会话显式关闭（`SIGINT/SIGTERM/SIGHUP/SIGBREAK` 都接）        | 有序退出等价；被强杀时不等价                          |
+| 并发闸                              | `first_pipe_instance(true)` | `listen` 的 `EADDRINUSE`（libuv 设了 `FILE_FLAG_FIRST_PIPE_INSTANCE`）+ 锁文件兜底 | 等价，但 libuv 的行为不是 Node 的文档承诺，故加锁文件 |
+| `--idle-exit-minutes`               | 有                          | **没有**，argv 只收一个                                                            | 空闲退出固定 30 分钟                                  |
+| 日志过滤 `ARMADRA_SESSION_HOST_LOG` | tracing EnvFilter           | 无，全量写 stderr                                                                  | 量很小（每连接一两行）                                |
+
+`useConpty: true` 显式写上（默认会在老版本 Windows 上退回 winpty，而 winpty 不满足「伪控制台活得比壳久」这个前提）。`conptyInheritCursor` **没有**打开：它正是让 ConPTY 先问光标位置再吐字节的开关，不开就少一次在无 UI 时会死锁的握手；`QueryResponder` 仍然保留，因为 CLI 自己随时会问同样的问题。
+
+### 13.4 ConPTY 关闭要阳性证明
+
+`ConsoleSession.close()` 先挂上等待再 kill，等 node-pty 的 `exit`；5 s 内没等到就抛 `CloseTimeout`（带 sessionKey 与等待时长），**不假设成功**。`destroy` 请求在这种情况下回 `error/internal` 而不是 `ok`——行还是会被忘掉，因为客户端不该继续握着一个还应答的 key，但「关掉了」这句话不会被说出口。状态机用假 pty 测了六例（正常关、超时、超时后重试成功、已退出、幂等、退出通知只发一次）。
+
+这正是 §4.3 那条竞态：宿主修不了 node-pty，但可以拒绝**汇报**一次它没看见的关闭，于是泄漏的 conhost 变成日志里一条具名错误，而不是一台慢慢被填满的机器。
+
+### 13.5 构建与拉起
+
+`electron.vite.config.ts` 多一个 target（第六个），产出 `out/session-host/host.cjs`（64 KB，`--external node-pty`）。用的是既有的 `vite build`（底层 rolldown/esbuild），不是单独调 esbuild——`esbuild` 不是这个包的直接依赖，而本批不新增依赖。
+
+拉起：`ELECTRON_RUN_AS_NODE=1 <Electron> <resources>/session-host/host.cjs <userDataDir>`，与 `armadra-hook` 启动器同一套路（打包机器不保证有系统 node）。`electron-builder.yml` 的 Windows 段加了 `extraResources`，`files` 里排除 `out/session-host/**`（必须是磁盘上的真文件）。Rust 的 `armadra-session-host.exe` 仍在列，R7 一起删。
+
+`scripts/sidecar-targets.mjs` 新增 `bundleResources(triple)`，`scripts/sidecar-targets.test.mjs` 拿它和 `electron-builder.yml` 逐条对账——electron-builder 对不存在的 `from` 是**静默跳过**，不对账就查不出改名。
+
+### 13.6 验证
+
+本机（macOS）跑过：
+
+- `pnpm --filter @armadra/desktop test` —— 2,307 passed / 19 skipped；新增 81 例。
+- `pnpm --filter @armadra/desktop typecheck`、`pnpm check` —— 全绿。
+- `ARMADRA_DESKTOP_EXTERNAL_RENDERER=1 pnpm --filter @armadra/desktop build` —— 产出 `out/session-host/host.cjs`；`node out/session-host/host.cjs /tmp/x --extra` 退 2 并打印「只在 Windows 上运行」。
+
+`server.test.ts` 把**整条协议**在 Unix socket 上跑通（握手四例、建 / 附 / 重放 / 截断告警、写 / 中断 / resize 夹紧、flow 与断连释放、代与冲突、destroy 与关闭超时、退出通知、关停清场），因为除了 ConPTY 与管道命名空间，两端的代码完全一样。
+
+**只能在 Windows 上验证的**，都在 `src/session-host/windows.integration.test.ts`（`skipIf` 非 Windows，或 node-pty 载不起来时带原因跳过）：真 ConPTY 的建 / 跑命令 / 附 / 断 / 重附重放 / destroy / 进程自退 / 关停，以及同名管道上第二个宿主必须 `EADDRINUSE`。CI 的 Windows 矩阵（`windows-latest`）本来就跑 `pnpm -r --if-present test`，这批用例随之进去，不另加 job；预计多花 10 s 上下（每例起一个 shell 并等它说话）。
+
+还没在真机上看过的：`icacls` 收紧密钥文件、`\\.\pipe\` 名字派生的实际连通、ConPTY 的 `exit` 到底多快、以及宿主被强杀后进程树的实际下场。

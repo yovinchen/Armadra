@@ -258,7 +258,15 @@ LSP 发现与 mux（多客户端复用一个 server）、会话流 WS；主机�
 
 `apps/server`：`node:http(s)` + `ws` + 托管 `apps/web` 产物（整棵树经 `os.Root` 式的根限定打开，符号链接无法指向包外）+ 单 owner 认证（配对码一次性短期有效、绑定 Host 指纹、确认设备名后颁发可撤销凭据；会话轮转、CSRF、Origin 校验；设备 token 不放 URL；二维码只含短期配对材料）+ `install | uninstall | status | logs | upgrade | version`（「只生成 launchd / systemd / `sc.exe` 定义，绝不调用 launchctl / systemctl / sc.exe」「必须显式 `--service-dir` 与 `--run-as`，拒绝特权账号」「定义不含凭据，`--env` 拒绝 TOKEN/SECRET/PASSWORD/CREDENTIAL 一类名字」「升级先校验候选、`--confirm` 前只打印计划、旁写改名替换、失败回滚」四条规则不变）。
 
-`crates/session-host` → `apps/desktop/src/session-host/`：node-pty 的 conpty 后端 + 独立守护进程，**只接受一个 argv（`userDataDir`），其余全部派生**（命令行不出现敏感信息）；esbuild 打成 `out/session-host/host.cjs`，`--external:node-pty`；以 `ELECTRON_RUN_AS_NODE=1` 拉起同一个 Electron 二进制（打包机器不保证有系统 node）。管道名派生（`\\.\pipe\armadra-session-<sid>-<hash>-v<major>`）、受保护 DACL、每条连接核对客户端 SID、`first_pipe_instance` 兼作并发闸、Job Object 的 `KILL_ON_JOB_CLOSE`、generation 栅栏、有界回放（最近 200 KiB，截断点避开 UTF-8 与转义序列中间）全部保留。ConPTY 的关闭必须拿到「确实关掉了这一个 HPCON」的阳性证明，拿不到就显式报错而不是假设成功。
+`crates/session-host` → `apps/desktop/src/session-host/`：node-pty 的 conpty 后端 + 独立守护进程，**只接受一个 argv（`userDataDir`），其余全部派生**（命令行不出现敏感信息）；打成 `out/session-host/host.cjs`，`--external:node-pty`；以 `ELECTRON_RUN_AS_NODE=1` 拉起同一个 Electron 二进制（打包机器不保证有系统 node）。管道名派生（`\\.\pipe\armadra-session-<sid>-<hash>-v<major>`）、generation 栅栏、有界回放（最近 200 KiB，截断点避开 UTF-8 与转义序列中间）、并发闸全部保留。ConPTY 的关闭必须拿到「确实关掉了这一个 HPCON」的阳性证明，拿不到就显式报错而不是假设成功。
+
+**R6d 已实施（2026-09-20），三处偏离本节原文**，实测与复现命令见 [实施进度 §10](../status/typescript-core-status.md#10-r6dwindows-session-host-迁到-typescript)：
+
+1. **受保护 DACL + 逐连接核对客户端 SID 做不到。** `node:net` 经 libuv 用默认安全描述符建管道，返回 `Socket` 而非 `HANDLE`，既设不了安全描述符也读不到对端 SID；补回去要一个原生模块，而去掉原生依赖正是 R6 的目的。换成**数据目录下 0600 的密钥文件 + 每条连接一次性 HMAC 握手**（Windows 上用 `icacls` 收紧，收紧失败拒绝启动），核对不过立刻断开。等价的是「同机另一个账户进不来」；不等价的是「同一用户的不同进程不再被区分」。残余风险三条列在 `apps/desktop/src/core/terminal/session-host/auth.ts` 的头注释与进度文档 §10.2。
+2. **Job Object 的 `KILL_ON_JOB_CLOSE` 没有等价物。** Node 没有 Job Object API。收容改由 ConPTY 自身（关闭伪控制台即结束附着其上的进程）加守护进程退出时逐会话显式关闭承担，四个信号都接。**有序退出等价，被 `SIGKILL` 时不等价**——那正是 Job Object 唯一多给的那一条。
+3. **`first_pipe_instance` 换成 `listen` 的 `EADDRINUSE`。** libuv 给第一个实例带了 `FILE_FLAG_FIRST_PIPE_INSTANCE`，所以行为等价；但这是 libuv 的实现而非 Node 的文档承诺，因此另加一个锁文件兜底——锁只在它指名的管道**应答**时才被相信，否则视为崩溃残留并接管。
+
+线协议不换：24 字节头 + JSON 控制帧 + 裸输出帧，`hello` 增加一个可选的 `auth` 字段（Rust 侧 serde 忽略未知字段，因此两个宿主共用同一个 major）。`ARMADRA_SESSION_HOST=rust|ts` 选宿主，默认 `ts`；Rust crate 留到 R7 一起删。
 
 **远程浏览器节点（2026-09-20 追加，用户决定）**：服务器壳上没有 `<webview>`，浏览器节点按壳分两套后端——桌面壳 `<webview>`（已做）；服务器壳 `core/browser/headless/`：headless Chromium（系统 Chromium 或按需下载）+ CDP `Page.startScreencast`（WebP/JPEG，单观看者、无扇出）+ `Input.*` 回传，租约/授权/17 个动词面复用 `core/browser` 已有的裁决，前端 `WebviewSurface` 之外恢复一个只服务远程的 `StreamSurface`（画到 `<canvas>`，输入映射）。体验预期是远程桌面级（100–200 ms、无原生选字与输入法精细行为），只在服务器壳启用。规模 +L、+1 Agent。
 
