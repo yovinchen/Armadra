@@ -29,7 +29,9 @@ export interface GuestRegistration {
  * newline) is not an id.
  */
 export function isSafeNodeId(value: unknown): value is string {
-  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value);
+  return (
+    typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value)
+  );
 }
 
 /** A tab id. Same shape, same reason. */
@@ -47,7 +49,9 @@ const SURFACES: readonly string[] = ["canvas", "modal"];
  */
 export function parseRegistration(
   raw: unknown,
-): { ok: true; registration: GuestRegistration } | { ok: false; reason: string } {
+):
+  | { ok: true; registration: GuestRegistration }
+  | { ok: false; reason: string } {
   if (typeof raw !== "object" || raw === null) {
     return { ok: false, reason: "malformed" };
   }
@@ -61,7 +65,8 @@ export function parseRegistration(
   if (typeof value.surface !== "string" || !SURFACES.includes(value.surface)) {
     return { ok: false, reason: "badSurface" };
   }
-  if (typeof value.active !== "boolean") return { ok: false, reason: "badActive" };
+  if (typeof value.active !== "boolean")
+    return { ok: false, reason: "badActive" };
   return {
     ok: true,
     registration: {

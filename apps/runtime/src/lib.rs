@@ -122,6 +122,14 @@ pub fn router(pool: SqlitePool) -> Router {
 }
 
 pub fn router_with_state(state: AppState) -> Router {
+    // The browser drive channel dials the shell that started this process
+    // (§4.2). It is started HERE rather than on the first verb because the
+    // channel also carries events in the other direction — a guest navigating,
+    // a person clicking into a page — and those have to be heard from the
+    // moment a window exists, not from the moment an agent first acts. A
+    // Runtime nobody's shell started has no address in its environment and
+    // this is a no-op.
+    browser::shell::service(&state);
     let cors = CorsLayer::new()
         .allow_methods([
             Method::GET,

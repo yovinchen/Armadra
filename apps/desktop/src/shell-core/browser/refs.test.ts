@@ -35,9 +35,10 @@ describe("a ref is scoped to a navigation generation", () => {
     table.mint(PAGE);
     table.bumpGeneration();
     const found = table.lookup(2);
-    expect(found.ok).toBe(false);
-    // The table is EMPTY, not merely marked: there is no path through which a
-    // later call could find the old element again.
+    // STALE, not unknown: the reader is told the page navigated, which tells
+    // them to read it again, rather than that they typed something wrong.
+    expect(found).toEqual({ ok: false, reason: "stale" });
+    // And nothing live is left, so no later call can find the old element.
     expect(table.size()).toBe(0);
   });
 
@@ -66,15 +67,29 @@ describe("a ref is scoped to a navigation generation", () => {
 });
 
 describe("verifyIdentity", () => {
-  const record = { ordinal: 1, index: 4, role: "button", name: "Sign in", generation: 1 };
+  const record = {
+    ordinal: 1,
+    index: 4,
+    role: "button",
+    name: "Sign in",
+    generation: 1,
+  };
 
   it("accepts the same element after a reflow", () => {
-    expect(verifyIdentity(record, { role: "button", name: "Sign  in" })).toBe(true);
-    expect(verifyIdentity(record, { role: "button", name: " Sign in " })).toBe(true);
+    expect(verifyIdentity(record, { role: "button", name: "Sign  in" })).toBe(
+      true,
+    );
+    expect(verifyIdentity(record, { role: "button", name: " Sign in " })).toBe(
+      true,
+    );
   });
 
   it("refuses an element that merely sits at the same position", () => {
-    expect(verifyIdentity(record, { role: "button", name: "Delete account" })).toBe(false);
-    expect(verifyIdentity(record, { role: "link", name: "Sign in" })).toBe(false);
+    expect(
+      verifyIdentity(record, { role: "button", name: "Delete account" }),
+    ).toBe(false);
+    expect(verifyIdentity(record, { role: "link", name: "Sign in" })).toBe(
+      false,
+    );
   });
 });

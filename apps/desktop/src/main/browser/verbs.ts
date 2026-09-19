@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
-import { BROWSER_KEYS, MAX_INSERT_TEXT } from "../../shell-core/browser/allowlist";
+import {
+  BROWSER_KEYS,
+  MAX_INSERT_TEXT,
+} from "../../shell-core/browser/allowlist";
 import { DRIVE_CODES, type DriveRequest } from "../../shell-core/browser/drive";
 import { allowGuestNavigation } from "../../shell-core/browser/navigation";
 import {
@@ -61,7 +64,9 @@ function text(args: Args, name: string): string | undefined {
 
 function num(args: Args, name: string): number | undefined {
   const value = args[name];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function flag(args: Args, name: string): boolean {
@@ -70,7 +75,8 @@ function flag(args: Args, name: string): boolean {
 
 function list(args: Args, name: string): string[] {
   const value = args[name];
-  if (Array.isArray(value)) return value.filter((e): e is string => typeof e === "string");
+  if (Array.isArray(value))
+    return value.filter((e): e is string => typeof e === "string");
   return typeof value === "string" ? [value] : [];
 }
 
@@ -131,35 +137,56 @@ async function locate(session: GuestSession, args: Args): Promise<Located> {
   const wanted = text(args, "ref");
   if (wanted) {
     const ordinal = parseRef(wanted);
-    if (ordinal === null) refuse(DRIVE_CODES.badArgument, `${wanted} is not a ref`);
+    if (ordinal === null)
+      refuse(DRIVE_CODES.badArgument, `${wanted} is not a ref`);
     const found = session.refs.lookup(ordinal);
     if (!found.ok) {
       refuse(
         DRIVE_CODES.staleRef,
-        found.reason === "stale" ? staleRefMessage(ordinal) : unknownRefMessage(ordinal),
+        found.reason === "stale"
+          ? staleRefMessage(ordinal)
+          : unknownRefMessage(ordinal),
       );
     }
     return await locateRef(session, found.record);
   }
 
   const selector = text(args, "selector");
-  if (!selector) refuse(DRIVE_CODES.badArgument, "give a --ref, a --selector or --x and --y");
+  if (!selector)
+    refuse(
+      DRIVE_CODES.badArgument,
+      "give a --ref, a --selector or --x and --y",
+    );
   const box = await session.run<Resolved>("resolveSelector", selector);
   if (!box?.found) {
-    if (box?.invalid) refuse(DRIVE_CODES.badArgument, "that is not a valid CSS selector");
+    if (box?.invalid)
+      refuse(DRIVE_CODES.badArgument, "that is not a valid CSS selector");
     refuse(DRIVE_CODES.notFound, `nothing on this page matches ${selector}`);
   }
-  if (!box.visible) refuse(DRIVE_CODES.notFound, `${selector} is on the page but not visible`);
-  return { ...center(box), role: box.role, name: box.name, visible: true, disabled: box.disabled };
+  if (!box.visible)
+    refuse(DRIVE_CODES.notFound, `${selector} is on the page but not visible`);
+  return {
+    ...center(box),
+    role: box.role,
+    name: box.name,
+    visible: true,
+    disabled: box.disabled,
+  };
 }
 
-async function locateRef(session: GuestSession, record: RefRecord): Promise<Located> {
+async function locateRef(
+  session: GuestSession,
+  record: RefRecord,
+): Promise<Located> {
   const box = await session.run<Resolved>("resolveRef", record.index);
   if (!box?.found || !verifyIdentity(record, box)) {
     refuse(DRIVE_CODES.staleRef, staleRefMessage(record.ordinal));
   }
   if (!box.visible) {
-    refuse(DRIVE_CODES.notFound, `@${record.ordinal} is on the page but not visible`);
+    refuse(
+      DRIVE_CODES.notFound,
+      `@${record.ordinal} is on the page but not visible`,
+    );
   }
   return {
     ...center(box),
@@ -173,11 +200,24 @@ async function locateRef(session: GuestSession, record: RefRecord): Promise<Loca
 
 /* --------------------------------- input ---------------------------------- */
 
-async function clickAt(session: GuestSession, point: { x: number; y: number }): Promise<void> {
+async function clickAt(
+  session: GuestSession,
+  point: { x: number; y: number },
+): Promise<void> {
   const common = { x: point.x, y: point.y, button: "left", clickCount: 1 };
-  await session.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: point.x, y: point.y });
-  await session.send("Input.dispatchMouseEvent", { type: "mousePressed", ...common });
-  await session.send("Input.dispatchMouseEvent", { type: "mouseReleased", ...common });
+  await session.send("Input.dispatchMouseEvent", {
+    type: "mouseMoved",
+    x: point.x,
+    y: point.y,
+  });
+  await session.send("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    ...common,
+  });
+  await session.send("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    ...common,
+  });
 }
 
 /** Where the page is, after whatever just happened. Always re-read. */
@@ -205,7 +245,8 @@ type Handler = (context: VerbContext, args: Args) => Promise<unknown>;
 const HANDLERS: Record<string, Handler> = {
   navigate: async ({ session }, args) => {
     const action = text(args, "action") ?? "goto";
-    if (action === "back" || action === "forward") return history(session, action);
+    if (action === "back" || action === "forward")
+      return history(session, action);
     if (action === "reload") {
       await session.send("Page.reload", {});
       await settle(session);
@@ -214,7 +255,10 @@ const HANDLERS: Record<string, Handler> = {
     const url = text(args, "url");
     if (!url) refuse(DRIVE_CODES.badArgument, "navigate needs a --url");
     if (!allowGuestNavigation(url)) {
-      refuse(DRIVE_CODES.refused, "a browser node only opens http and https addresses");
+      refuse(
+        DRIVE_CODES.refused,
+        "a browser node only opens http and https addresses",
+      );
     }
     await session.send("Page.navigate", { url });
     await settle(session);
@@ -227,16 +271,27 @@ const HANDLERS: Record<string, Handler> = {
   read: async ({ session }, args) => {
     const mode = text(args, "mode") ?? "text";
     const limit = Math.max(1, Math.min(num(args, "limit") ?? 40, 500));
-    const bytes = Math.max(1_024, Math.min(num(args, "maxBytes") ?? 24_576, 1_048_576));
+    const bytes = Math.max(
+      1_024,
+      Math.min(num(args, "maxBytes") ?? 24_576, 1_048_576),
+    );
     type Read = Record<string, unknown>;
-    if (mode === "title") return { mode, ...(await session.run<Read>("readTitle")) };
-    if (mode === "text") return { mode, ...(await session.run<Read>("readText", bytes)) };
-    if (mode === "links") return { mode, ...(await session.run<Read>("readLinks", limit)) };
+    if (mode === "title")
+      return { mode, ...(await session.run<Read>("readTitle")) };
+    if (mode === "text")
+      return { mode, ...(await session.run<Read>("readText", bytes)) };
+    if (mode === "links")
+      return { mode, ...(await session.run<Read>("readLinks", limit)) };
     if (mode !== "map" && mode !== "elements") {
       refuse(DRIVE_CODES.badArgument, `unknown read mode ${mode}`);
     }
     const seen = await session.run<{
-      elements: Array<{ index: number; role: string; name: string; detail: string }>;
+      elements: Array<{
+        index: number;
+        role: string;
+        name: string;
+        detail: string;
+      }>;
       title: string;
       url: string;
     }>("readMap", limit);
@@ -256,7 +311,8 @@ const HANDLERS: Record<string, Handler> = {
 
   click: async ({ session }, args) => {
     const target = await locate(session, args);
-    if (target.disabled) refuse(DRIVE_CODES.refused, "that control is disabled");
+    if (target.disabled)
+      refuse(DRIVE_CODES.refused, "that control is disabled");
     await clickAt(session, target);
     await settle(session);
     const state = await pageState(session);
@@ -266,12 +322,17 @@ const HANDLERS: Record<string, Handler> = {
   type: async ({ session }, args) => {
     const body = typeof args.text === "string" ? args.text : "";
     if (body.length > MAX_INSERT_TEXT) {
-      refuse(DRIVE_CODES.badArgument, "that is more text than one type may send");
+      refuse(
+        DRIVE_CODES.badArgument,
+        "that is more text than one type may send",
+      );
     }
     const target = await locate(session, args);
     if (target.disabled) refuse(DRIVE_CODES.refused, "that field is disabled");
     await clickAt(session, target);
-    const focused = await session.run<{ found: boolean; editable: boolean }>("activeField");
+    const focused = await session.run<{ found: boolean; editable: boolean }>(
+      "activeField",
+    );
     if (!focused?.found || !focused.editable) {
       refuse(DRIVE_CODES.refused, "that is not a field text can be typed into");
     }
@@ -288,9 +349,15 @@ const HANDLERS: Record<string, Handler> = {
     if (body.length > 0) await session.send("Input.insertText", { text: body });
     if (flag(args, "submit")) await pressKey(session, "Enter", 0, 1);
     await settle(session);
-    const after = await session.run<{ found: boolean; filled: boolean }>("activeField");
+    const after = await session.run<{ found: boolean; filled: boolean }>(
+      "activeField",
+    );
     const state = await pageState(session);
-    return { ...state, chars: [...body].length, filled: after?.filled === true };
+    return {
+      ...state,
+      chars: [...body].length,
+      filled: after?.filled === true,
+    };
   },
 
   press: async ({ session }, args) => {
@@ -322,7 +389,8 @@ const HANDLERS: Record<string, Handler> = {
       refuse(DRIVE_CODES.refused, "that is not a dropdown");
     }
     const wanted = new Set([...list(args, "values"), ...list(args, "labels")]);
-    if (wanted.size === 0) refuse(DRIVE_CODES.badArgument, "select needs a --value or a --label");
+    if (wanted.size === 0)
+      refuse(DRIVE_CODES.badArgument, "select needs a --value or a --label");
     // A native dropdown is an OS control that swallows synthesized keys, so
     // the option is reached by keyboard on the CLOSED element: focus it, then
     // step with ArrowDown until the selection is the wanted one. Every step is
@@ -334,7 +402,10 @@ const HANDLERS: Record<string, Handler> = {
         options: Array<{ value: string; label: string; selected: boolean }>;
       }>("describeElement", target.index ?? -1);
       const selected = current.options.find((option) => option.selected);
-      if (selected && (wanted.has(selected.value) || wanted.has(selected.label))) {
+      if (
+        selected &&
+        (wanted.has(selected.value) || wanted.has(selected.label))
+      ) {
         await pressKey(session, "Enter", 0, 1);
         return { chosen: [selected.label || selected.value] };
       }
@@ -344,9 +415,11 @@ const HANDLERS: Record<string, Handler> = {
   },
 
   scroll: async ({ session }, args) => {
-    const before = await session.run<{ top: number; left: number; height: number }>(
-      "scrollPosition",
-    );
+    const before = await session.run<{
+      top: number;
+      left: number;
+      height: number;
+    }>("scrollPosition");
     const toRef = text(args, "ref") ?? text(args, "selector");
     if (toRef) {
       // "Scroll to an element" is a wheel aimed at the difference between where
@@ -387,12 +460,18 @@ const HANDLERS: Record<string, Handler> = {
   },
 
   wait: async ({ session }, args) => {
-    const timeout = Math.max(0, Math.min(num(args, "timeoutMs") ?? 15_000, 30_000));
+    const timeout = Math.max(
+      0,
+      Math.min(num(args, "timeoutMs") ?? 15_000, 30_000),
+    );
     const selector = text(args, "selector");
     const urlContains = text(args, "urlContains");
     const titleContains = text(args, "titleContains");
     if (!selector && !urlContains && !titleContains) {
-      refuse(DRIVE_CODES.badArgument, "wait needs a --selector, --url-contains or --title-contains");
+      refuse(
+        DRIVE_CODES.badArgument,
+        "wait needs a --selector, --url-contains or --title-contains",
+      );
     }
     const started = Date.now();
     for (;;) {
@@ -403,15 +482,27 @@ const HANDLERS: Record<string, Handler> = {
         title: string;
         url: string;
       }>("waitProbe", selector ?? "");
-      if (probe?.invalid) refuse(DRIVE_CODES.badArgument, "that is not a valid CSS selector");
+      if (probe?.invalid)
+        refuse(DRIVE_CODES.badArgument, "that is not a valid CSS selector");
       const matched =
         (selector ? probe.visible : true) &&
         (urlContains ? probe.url.includes(urlContains) : true) &&
         (titleContains ? probe.title.includes(titleContains) : true);
       const waited = Date.now() - started;
-      if (matched) return { matched: true, waitedMs: waited, url: probe.url, title: probe.title };
+      if (matched)
+        return {
+          matched: true,
+          waitedMs: waited,
+          url: probe.url,
+          title: probe.title,
+        };
       if (waited >= timeout) {
-        return { matched: false, waitedMs: waited, url: probe.url, title: probe.title };
+        return {
+          matched: false,
+          waitedMs: waited,
+          url: probe.url,
+          title: probe.title,
+        };
       }
       await sleep(100);
     }
@@ -434,7 +525,10 @@ const HANDLERS: Record<string, Handler> = {
     const wanted = text(args, "switch");
     const opened = text(args, "new");
     if (opened && !allowGuestNavigation(opened)) {
-      refuse(DRIVE_CODES.refused, "a browser node only opens http and https addresses");
+      refuse(
+        DRIVE_CODES.refused,
+        "a browser node only opens http and https addresses",
+      );
     }
     if (wanted || opened) {
       await askRenderer({
@@ -451,14 +545,25 @@ const HANDLERS: Record<string, Handler> = {
   close: async ({ nodeId }, args) => {
     const tabId = text(args, "tab");
     if (!tabId) refuse(DRIVE_CODES.badArgument, "close needs a --tab");
-    const tabs = guestsOfNode(nodeId).filter((guest) => guest.surface === "canvas");
+    const tabs = guestsOfNode(nodeId).filter(
+      (guest) => guest.surface === "canvas",
+    );
     if (!tabs.some((guest) => guest.tabId === tabId)) {
       refuse(DRIVE_CODES.notFound, `this node has no tab ${tabId}`);
     }
     if (tabs.length <= 1) {
-      refuse(DRIVE_CODES.refused, "the last tab stays open; closing a node is not a verb");
+      refuse(
+        DRIVE_CODES.refused,
+        "the last tab stays open; closing a node is not a verb",
+      );
     }
-    await askRenderer({ kind: "tabs", nodeId, action: "close", tabId, url: "" });
+    await askRenderer({
+      kind: "tabs",
+      nodeId,
+      action: "close",
+      tabId,
+      url: "",
+    });
     return tabList(nodeId);
   },
 
@@ -489,7 +594,8 @@ const HANDLERS: Record<string, Handler> = {
 
   // The lease is the Runtime's, entirely. It reaches the shell only as the
   // revocation that detaches a debugger, which is `revokeNode`, not a verb.
-  lease: async () => refuse(DRIVE_CODES.unknownVerb, "the lease is not a shell verb"),
+  lease: async () =>
+    refuse(DRIVE_CODES.unknownVerb, "the lease is not a shell verb"),
 };
 
 /* ------------------------------- helpers ---------------------------------- */
@@ -569,7 +675,10 @@ async function wheel(session: GuestSession, deltaY: number): Promise<void> {
   }
 }
 
-async function history(session: GuestSession, action: "back" | "forward"): Promise<unknown> {
+async function history(
+  session: GuestSession,
+  action: "back" | "forward",
+): Promise<unknown> {
   const history = (await session.send("Page.getNavigationHistory", {})) as {
     currentIndex: number;
     entries: Array<{ id: number; url: string }>;
@@ -579,7 +688,9 @@ async function history(session: GuestSession, action: "back" | "forward"): Promi
   if (!entry) {
     refuse(
       DRIVE_CODES.refused,
-      action === "back" ? "there is nothing to go back to" : "there is nothing to go forward to",
+      action === "back"
+        ? "there is nothing to go back to"
+        : "there is nothing to go forward to",
     );
   }
   await session.send("Page.navigateToHistoryEntry", { entryId: entry.id });
@@ -656,12 +767,18 @@ async function capture(session: GuestSession, args: Args): Promise<unknown> {
 
 /* -------------------------------- upload ---------------------------------- */
 
-async function upload(session: GuestSession, nodeId: string, args: Args): Promise<unknown> {
+async function upload(
+  session: GuestSession,
+  nodeId: string,
+  args: Args,
+): Promise<unknown> {
   const root = text(args, "workspaceRoot");
   if (!root) refuse(DRIVE_CODES.badArgument, "no workspace to read from");
   const wanted = list(args, "paths");
-  if (wanted.length === 0) refuse(DRIVE_CODES.badArgument, "upload needs at least one --path");
-  if (wanted.length > 20) refuse(DRIVE_CODES.refused, "at most twenty files at a time");
+  if (wanted.length === 0)
+    refuse(DRIVE_CODES.badArgument, "upload needs at least one --path");
+  if (wanted.length > 20)
+    refuse(DRIVE_CODES.refused, "at most twenty files at a time");
   const paths: string[] = [];
   for (const each of wanted) {
     const jailed = jailReadPath(root, each);
@@ -687,13 +804,16 @@ async function upload(session: GuestSession, nodeId: string, args: Args): Promis
       "describeElement",
       target.index,
     );
-    if (!detail?.found) refuse(DRIVE_CODES.staleRef, "that element is no longer on the page");
-    if (!detail.accepts) refuse(DRIVE_CODES.refused, "that is not a file input");
+    if (!detail?.found)
+      refuse(DRIVE_CODES.staleRef, "that element is no longer on the page");
+    if (!detail.accepts)
+      refuse(DRIVE_CODES.refused, "that is not a file input");
   }
   await clickAt(session, target);
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const chooser = pendingChooser(nodeId);
-    if (chooser) return answerChooser(session, nodeId, chooser.backendNodeId, paths);
+    if (chooser)
+      return answerChooser(session, nodeId, chooser.backendNodeId, paths);
     await sleep(100);
   }
   refuse(DRIVE_CODES.notFound, "that control did not open a file chooser");
@@ -723,16 +843,20 @@ export async function runVerb(request: DriveRequest): Promise<unknown> {
   const handler = HANDLERS[request.verb];
   if (!handler) refuse(DRIVE_CODES.unknownVerb, "that is not a browser verb");
   const found = drivableSession(request.nodeId);
-  if (!found) refuse(DRIVE_CODES.notDrivable, notDrivableMessage(request.nodeId));
+  if (!found)
+    refuse(DRIVE_CODES.notDrivable, notDrivableMessage(request.nodeId));
   const { entry, session } = found;
   if (entry.contents.isDestroyed()) {
     refuse(DRIVE_CODES.discarded, discardedMessage(request.nodeId));
   }
   session.clearRevocation();
   if (session.listener === null) {
-    session.listener = (method, params) => onDomainEvent(entry.nodeId, method, params);
+    session.listener = (method, params) =>
+      onDomainEvent(entry.nodeId, method, params);
   }
   await session.attach();
-  return handler({ nodeId: entry.nodeId, tabId: entry.tabId, session }, request.args);
+  return handler(
+    { nodeId: entry.nodeId, tabId: entry.tabId, session },
+    request.args,
+  );
 }
-

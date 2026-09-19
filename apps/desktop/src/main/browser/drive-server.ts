@@ -52,7 +52,11 @@ export type VerbRunner = (request: {
  * the Runtime is not asking permission and must not wait: a revocation that can
  * be delayed by a busy page is a revocation that has not happened.
  */
-export type NoticeHandler = (notice: string, nodeId: string, detail: unknown) => void;
+export type NoticeHandler = (
+  notice: string,
+  nodeId: string,
+  detail: unknown,
+) => void;
 
 export interface DriveServer {
   readonly address: string;
@@ -82,19 +86,22 @@ export function startDriveServer(
     response.end();
   });
 
-  http.on("upgrade", (request: IncomingMessage, socket: Duplex, head: Buffer) => {
-    const key = request.headers["sec-websocket-key"];
-    if (request.url !== DRIVE_PATH || typeof key !== "string") {
-      socket.destroy();
-      return;
-    }
-    socket.write(handshakeResponse(key));
-    // `head` is whatever arrived in the same packet as the request line. A
-    // client that writes its hello immediately after the GET puts it there,
-    // and an upgrade handler that ignores it loses the first message — which
-    // looks exactly like a client that never authenticated.
-    attach(socket, head);
-  });
+  http.on(
+    "upgrade",
+    (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+      const key = request.headers["sec-websocket-key"];
+      if (request.url !== DRIVE_PATH || typeof key !== "string") {
+        socket.destroy();
+        return;
+      }
+      socket.write(handshakeResponse(key));
+      // `head` is whatever arrived in the same packet as the request line. A
+      // client that writes its hello immediately after the GET puts it there,
+      // and an upgrade handler that ignores it loses the first message — which
+      // looks exactly like a client that never authenticated.
+      attach(socket, head);
+    },
+  );
 
   function attach(socket: Duplex, head: Buffer): void {
     const reader = new MessageReader();
@@ -158,7 +165,10 @@ export function startDriveServer(
     }
     if (envelope.type === "notice") {
       // No answer, and no chance for a page to hold it up.
-      if (typeof envelope.notice === "string" && typeof envelope.nodeId === "string") {
+      if (
+        typeof envelope.notice === "string" &&
+        typeof envelope.nodeId === "string"
+      ) {
         notice(envelope.notice, envelope.nodeId, envelope.detail);
       }
       return;
@@ -166,7 +176,11 @@ export function startDriveServer(
     const request = parseDriveRequest(parsed);
     if (!request.ok) {
       const id = typeof envelope.id === "string" ? envelope.id : "";
-      send(self, { id, ok: false, error: request.error } satisfies DriveResponse);
+      send(self, {
+        id,
+        ok: false,
+        error: request.error,
+      } satisfies DriveResponse);
       return;
     }
     void dispatch(self, request.request);
@@ -174,7 +188,12 @@ export function startDriveServer(
 
   async function dispatch(
     self: Peer,
-    request: { id: string; nodeId: string; verb: string; args: Record<string, unknown> },
+    request: {
+      id: string;
+      nodeId: string;
+      verb: string;
+      args: Record<string, unknown>;
+    },
   ): Promise<void> {
     // A verb is bounded. A page that never settles must not hold the channel,
     // because the channel is one deep by design and the next verb behind it

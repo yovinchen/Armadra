@@ -163,11 +163,7 @@ fn read(result: &Value) -> String {
             out
         }
         "map" => {
-            let mut out = format!(
-                "地址：{}\n标题：{}\n",
-                text(result, "url"),
-                titled(result)
-            );
+            let mut out = format!("地址：{}\n标题：{}\n", text(result, "url"), titled(result));
             for element in result
                 .get("elements")
                 .and_then(Value::as_array)
@@ -198,7 +194,11 @@ fn read(result: &Value) -> String {
                 "地址：{}\n标题：{}\n\n{body}{}",
                 text(result, "url"),
                 titled(result),
-                if truncated { "\n…（已截断）\n" } else { "\n" }
+                if truncated {
+                    "\n…（已截断）\n"
+                } else {
+                    "\n"
+                }
             )
         }
     }
@@ -241,10 +241,7 @@ fn download(args: &crate::collab::Args<'_>, result: &Value) -> String {
             if sha.is_empty() { "（未知）" } else { &sha }
         );
     }
-    format!(
-        "已丢弃暂存文件：{}\n",
-        text(result, "suggestedFilename")
-    )
+    format!("已丢弃暂存文件：{}\n", text(result, "suggestedFilename"))
 }
 
 fn tabs(result: &Value) -> String {

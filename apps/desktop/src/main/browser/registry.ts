@@ -48,7 +48,8 @@ export function registerGuest(raw: unknown): RegisterOutcome {
     return { ok: false, reason: "noSuchWebContents" };
   }
   // The check this whole module exists for.
-  if (contents.getType() !== "webview") return { ok: false, reason: "notAWebview" };
+  if (contents.getType() !== "webview")
+    return { ok: false, reason: "notAWebview" };
 
   const existing = guests.get(registration.webContentsId);
   guests.set(registration.webContentsId, {

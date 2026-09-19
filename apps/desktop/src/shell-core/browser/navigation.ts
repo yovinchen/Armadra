@@ -42,10 +42,14 @@ export interface PopupDecision {
   readonly url: string;
 }
 
-export function decidePopup(url: string, fromRegisteredGuest: boolean): PopupDecision {
+export function decidePopup(
+  url: string,
+  fromRegisteredGuest: boolean,
+): PopupDecision {
   return {
     action: "deny",
-    report: fromRegisteredGuest && allowGuestNavigation(url) && url !== "about:blank",
+    report:
+      fromRegisteredGuest && allowGuestNavigation(url) && url !== "about:blank",
     url,
   };
 }

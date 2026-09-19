@@ -21,12 +21,18 @@ describe("inspectElement coordinates", () => {
   });
 
   it("divides by the canvas zoom when the canvas is scaled down", () => {
-    const host = { x: rect.x + guestCentre.x * 0.5, y: rect.y + guestCentre.y * 0.5 };
+    const host = {
+      x: rect.x + guestCentre.x * 0.5,
+      y: rect.y + guestCentre.y * 0.5,
+    };
     expect(inspectElementPoint(host, rect, 0.5)).toEqual(guestCentre);
   });
 
   it("divides by the canvas zoom when the canvas is scaled up", () => {
-    const host = { x: rect.x + guestCentre.x * 2, y: rect.y + guestCentre.y * 2 };
+    const host = {
+      x: rect.x + guestCentre.x * 2,
+      y: rect.y + guestCentre.y * 2,
+    };
     expect(inspectElementPoint(host, rect, 2)).toEqual(guestCentre);
   });
 
@@ -46,8 +52,14 @@ describe("inspectElement coordinates", () => {
   });
 
   it("falls back to an unscaled conversion rather than dividing by zero", () => {
-    expect(inspectElementPoint({ x: 30, y: 40 }, rect, 0)).toEqual({ x: 10, y: 20 });
-    expect(inspectElementPoint({ x: 30, y: 40 }, rect, Number.NaN)).toEqual({ x: 10, y: 20 });
+    expect(inspectElementPoint({ x: 30, y: 40 }, rect, 0)).toEqual({
+      x: 10,
+      y: 20,
+    });
+    expect(inspectElementPoint({ x: 30, y: 40 }, rect, Number.NaN)).toEqual({
+      x: 10,
+      y: 20,
+    });
   });
 });
 
@@ -61,20 +73,32 @@ describe("the menu template", () => {
   };
 
   it("offers editing roles only in an editable field", () => {
-    const editable = guestContextMenu({ ...base, isEditable: true, editFlags: { canCut: true } });
+    const editable = guestContextMenu({
+      ...base,
+      isEditable: true,
+      editFlags: { canCut: true },
+    });
     expect(editable.map((item) => item.role)).toContain("cut");
-    expect(guestContextMenu(base).map((item) => item.role)).not.toContain("cut");
+    expect(guestContextMenu(base).map((item) => item.role)).not.toContain(
+      "cut",
+    );
   });
 
   it("offers copy for a selection", () => {
-    const menu = guestContextMenu({ ...base, selectionText: "hello", editFlags: { canCopy: true } });
+    const menu = guestContextMenu({
+      ...base,
+      selectionText: "hello",
+      editFlags: { canCopy: true },
+    });
     expect(menu.some((item) => item.role === "copy")).toBe(true);
   });
 
   it("offers the link items only when there is a link", () => {
     const menu = guestContextMenu({ ...base, linkURL: "https://example.com" });
     expect(menu.map((item) => item.id)).toContain("copyLink");
-    expect(guestContextMenu(base).map((item) => item.id)).not.toContain("copyLink");
+    expect(guestContextMenu(base).map((item) => item.id)).not.toContain(
+      "copyLink",
+    );
   });
 
   it("puts DevTools behind exactly one entry, and drops it when the build has none", () => {

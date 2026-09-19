@@ -67,7 +67,12 @@ export class RefTable {
    */
   bumpGeneration(): number {
     this.generation += 1;
-    this.records.clear();
+    // The records are KEPT, stamped with the generation they were minted in.
+    // Clearing them would be simpler and worse: `@7` would then come back as
+    // "not a ref this page handed out", when what actually happened is that
+    // the page navigated. The distinction is the whole message — one tells the
+    // reader to read the page again, the other tells them they typed something
+    // wrong. They are replaced wholesale by the next mint either way.
     return this.generation;
   }
 
@@ -94,9 +99,14 @@ export class RefTable {
     return { ok: true, record };
   }
 
-  /** Only for tests and for the drive channel's diagnostics. */
+  /** Refs that are still usable. A stale record is still in the table, and is
+   * still refused; it is here so the refusal can say which thing happened. */
   size(): number {
-    return this.records.size;
+    let live = 0;
+    for (const record of this.records.values()) {
+      if (record.generation === this.generation) live += 1;
+    }
+    return live;
   }
 }
 
@@ -111,7 +121,10 @@ export function verifyIdentity(
   found: { readonly role: string; readonly name: string },
 ): boolean {
   const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
-  return record.role === found.role && normalize(record.name) === normalize(found.name);
+  return (
+    record.role === found.role &&
+    normalize(record.name) === normalize(found.name)
+  );
 }
 
 /** What a caller is told about a ref that is no longer usable. */

@@ -37,7 +37,12 @@ describe("the verb list", () => {
 });
 
 describe("parseDriveRequest", () => {
-  const good = { id: "r1", nodeId: "browser-1", verb: "read", args: { mode: "map" } };
+  const good = {
+    id: "r1",
+    nodeId: "browser-1",
+    verb: "read",
+    args: { mode: "map" },
+  };
 
   it("takes a well-formed request", () => {
     const parsed = parseDriveRequest(good);
@@ -97,7 +102,9 @@ describe("the token", () => {
 /** A client frame, masked, as the RFC requires of a client. */
 function clientFrame(opcode: number, payload: Buffer, fin = true): Buffer {
   const mask = Buffer.from([1, 2, 3, 4]);
-  const masked = Buffer.from(payload.map((byte, index) => byte ^ mask[index & 3]!));
+  const masked = Buffer.from(
+    payload.map((byte, index) => byte ^ mask[index & 3]!),
+  );
   const head =
     payload.length < 126
       ? Buffer.from([(fin ? 0x80 : 0) | opcode, 0x80 | payload.length])
@@ -114,7 +121,9 @@ function clientFrame(opcode: number, payload: Buffer, fin = true): Buffer {
 
 describe("websocket framing", () => {
   it("computes the handshake accept key from the RFC's own example", () => {
-    expect(acceptKey("dGhlIHNhbXBsZSBub25jZQ==")).toBe("s3pPLMBiTxaQ9kYGzzhZRbK+xOo=");
+    expect(acceptKey("dGhlIHNhbXBsZSBub25jZQ==")).toBe(
+      "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=",
+    );
   });
 
   it("reads a masked client text frame", () => {
@@ -144,14 +153,19 @@ describe("websocket framing", () => {
   it("handles two messages arriving in one chunk", () => {
     const reader = new MessageReader();
     const out = reader.push(
-      Buffer.concat([clientFrame(0x1, Buffer.from("a")), clientFrame(0x1, Buffer.from("b"))]),
+      Buffer.concat([
+        clientFrame(0x1, Buffer.from("a")),
+        clientFrame(0x1, Buffer.from("b")),
+      ]),
     );
     expect(out.map((each) => each.data.toString())).toEqual(["a", "b"]);
   });
 
   it("refuses a binary frame, which this protocol does not have", () => {
     const reader = new MessageReader();
-    expect(() => reader.push(clientFrame(0x2, Buffer.from([1, 2])))).toThrow(/binary/);
+    expect(() => reader.push(clientFrame(0x2, Buffer.from([1, 2])))).toThrow(
+      /binary/,
+    );
   });
 
   it("round-trips a server frame through its own header sizes", () => {

@@ -60,7 +60,10 @@ pub fn service(state: &AppState) -> Arc<ShellService> {
             client: client.clone(),
             sessions: Sessions::default(),
         });
-        if let Some(client) = client {
+        // `connect` spawns. A caller that built a router outside a Tokio
+        // runtime gets a service with no dialler rather than a panic: it has no
+        // shell to reach either way.
+        if let (Some(client), Ok(_)) = (client, tokio::runtime::Handle::try_current()) {
             let events = state.events.clone();
             let pool = state.pool.clone();
             let handle = Arc::clone(&service);
@@ -138,7 +141,11 @@ async fn on_event(
             match action {
                 "takeover" => {
                     session.takeover("local", "").await;
-                    detach(service, node_id, "the user stopped agent control of this node");
+                    detach(
+                        service,
+                        node_id,
+                        "the user stopped agent control of this node",
+                    );
                 }
                 "release" => {
                     let actor = crate::browser::session::lease::Actor::human("local", "");
@@ -158,45 +165,45 @@ async fn on_event(
         // a person.
         "dialog" => {
             events.publish(
-            &session.workspace_id,
-            crate::events::WorkspaceEvent::BrowserDialog {
-                session_id: session.session_id.clone(),
-                dialog: Some(Box::new(crate::browser::Dialog {
-                    dialog_id: string_of(&event, "id"),
-                    tab_id: string_of(&event, "tabId"),
-                    kind: crate::browser::DialogKind::parse(&string_of(&event, "kind")),
-                    message: string_of(&event, "message"),
-                    default_prompt: string_of(&event, "defaultPrompt"),
-                    url: session.active_tab_url(),
-                    opened_at: chrono::Utc::now().to_rfc3339(),
-                })),
-            },
-        );
+                &session.workspace_id,
+                crate::events::WorkspaceEvent::BrowserDialog {
+                    session_id: session.session_id.clone(),
+                    dialog: Some(Box::new(crate::browser::Dialog {
+                        dialog_id: string_of(&event, "id"),
+                        tab_id: string_of(&event, "tabId"),
+                        kind: crate::browser::DialogKind::parse(&string_of(&event, "kind")),
+                        message: string_of(&event, "message"),
+                        default_prompt: string_of(&event, "defaultPrompt"),
+                        url: session.active_tab_url(),
+                        opened_at: chrono::Utc::now().to_rfc3339(),
+                    })),
+                },
+            );
         }
         "dialogClosed" => {
             events.publish(
-            &session.workspace_id,
-            crate::events::WorkspaceEvent::BrowserDialog {
-                session_id: session.session_id.clone(),
-                dialog: None,
-            },
-        );
+                &session.workspace_id,
+                crate::events::WorkspaceEvent::BrowserDialog {
+                    session_id: session.session_id.clone(),
+                    dialog: None,
+                },
+            );
         }
         "fileChooser" => {
             events.publish(
-            &session.workspace_id,
-            crate::events::WorkspaceEvent::BrowserFileChooser {
-                session_id: session.session_id.clone(),
-                chooser: Some(Box::new(crate::browser::FileChooser {
-                    chooser_id: string_of(&event, "id"),
-                    tab_id: string_of(&event, "tabId"),
-                    frame_id: String::new(),
-                    multiple: string_of(&event, "mode") == "selectMultiple",
-                    accept: String::new(),
-                    opened_at: chrono::Utc::now().to_rfc3339(),
-                })),
-            },
-        );
+                &session.workspace_id,
+                crate::events::WorkspaceEvent::BrowserFileChooser {
+                    session_id: session.session_id.clone(),
+                    chooser: Some(Box::new(crate::browser::FileChooser {
+                        chooser_id: string_of(&event, "id"),
+                        tab_id: string_of(&event, "tabId"),
+                        frame_id: String::new(),
+                        multiple: string_of(&event, "mode") == "selectMultiple",
+                        accept: String::new(),
+                        opened_at: chrono::Utc::now().to_rfc3339(),
+                    })),
+                },
+            );
         }
         _ => {}
     }

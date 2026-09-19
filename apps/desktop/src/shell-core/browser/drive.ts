@@ -116,14 +116,27 @@ export function parseDriveRequest(
   raw: unknown,
 ): { ok: true; request: DriveRequest } | { ok: false; error: DriveError } {
   if (typeof raw !== "object" || raw === null) {
-    return { ok: false, error: driveError(DRIVE_CODES.badArgument, "malformed request") };
+    return {
+      ok: false,
+      error: driveError(DRIVE_CODES.badArgument, "malformed request"),
+    };
   }
   const value = raw as Record<string, unknown>;
-  if (typeof value.id !== "string" || value.id.length === 0 || value.id.length > 64) {
-    return { ok: false, error: driveError(DRIVE_CODES.badArgument, "missing request id") };
+  if (
+    typeof value.id !== "string" ||
+    value.id.length === 0 ||
+    value.id.length > 64
+  ) {
+    return {
+      ok: false,
+      error: driveError(DRIVE_CODES.badArgument, "missing request id"),
+    };
   }
   if (typeof value.nodeId !== "string" || value.nodeId.length === 0) {
-    return { ok: false, error: driveError(DRIVE_CODES.badArgument, "missing node id") };
+    return {
+      ok: false,
+      error: driveError(DRIVE_CODES.badArgument, "missing node id"),
+    };
   }
   if (typeof value.verb !== "string" || !DRIVE_VERBS.includes(value.verb)) {
     return {
@@ -132,8 +145,14 @@ export function parseDriveRequest(
     };
   }
   const args = value.args;
-  if (args !== undefined && (typeof args !== "object" || args === null || Array.isArray(args))) {
-    return { ok: false, error: driveError(DRIVE_CODES.badArgument, "args must be an object") };
+  if (
+    args !== undefined &&
+    (typeof args !== "object" || args === null || Array.isArray(args))
+  ) {
+    return {
+      ok: false,
+      error: driveError(DRIVE_CODES.badArgument, "args must be an object"),
+    };
   }
   return {
     ok: true,

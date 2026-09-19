@@ -9,9 +9,17 @@ import { openDialogs } from "./verbs";
  * agent is driving. A dialog a person raised on their own page is answered by
  * Chromium's own modal, as it should be.
  */
-export function onDomainEvent(nodeId: string, method: string, params: unknown): void {
+export function onDomainEvent(
+  nodeId: string,
+  method: string,
+  params: unknown,
+): void {
   if (method === "Page.javascriptDialogOpening") {
-    const dialog = params as { type?: string; message?: string; defaultPrompt?: string };
+    const dialog = params as {
+      type?: string;
+      message?: string;
+      defaultPrompt?: string;
+    };
     const record = {
       id: `dialog-${Date.now()}`,
       kind: dialog.type ?? "alert",
@@ -32,8 +40,17 @@ export function onDomainEvent(nodeId: string, method: string, params: unknown): 
   if (method === "Page.fileChooserOpened") {
     const chooser = params as { backendNodeId?: number; mode?: string };
     if (typeof chooser.backendNodeId === "number") {
-      noteChooser(nodeId, chooser.backendNodeId, chooser.mode ?? "selectSingle");
-      publishEvent({ type: "event", event: "fileChooser", nodeId, mode: chooser.mode ?? "" });
+      noteChooser(
+        nodeId,
+        chooser.backendNodeId,
+        chooser.mode ?? "selectSingle",
+      );
+      publishEvent({
+        type: "event",
+        event: "fileChooser",
+        nodeId,
+        mode: chooser.mode ?? "",
+      });
     }
   }
 }
